@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <map>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include <SDL3/SDL_misc.h>
@@ -18,6 +19,8 @@
 namespace ui {
 
 namespace {
+
+std::function<void(const std::string&)> g_action;   // what an action word does when clicked
 
 // ---- a tiny HTML tree ----
 struct Node {
@@ -109,7 +112,9 @@ void collect(const Node& n, bool bold, bool italic, bool small, bool sub, std::v
     if (n.tag == "br") { out.push_back({"", bold, italic, small, sub, true, 0, ""}); return; }
     if (n.tag == "span" && n.has("lrnDot")) { out.push_back({"", bold, italic, small, sub, false, cssColor(n.style.count("background") ? n.style.at("background") : ""), ""}); return; }
     const bool b = bold || n.tag == "b" || (n.tag == "span" && n.has("monoKey")), it = italic || n.tag == "i", sm = small || n.tag == "small", su = sub || n.tag == "sub";
-    for (const auto& k : n.kids) collect(*k, b, it, sm, su, out, n.tag == "a" ? n.href : href);
+    // a link; the Atom Lab guide's clickable "monochrome" word (.monoKey) is the action "#monoKey"
+    const std::string h = n.tag == "a" ? n.href : n.tag == "span" && n.has("monoKey") ? "#monoKey" : href;
+    for (const auto& k : n.kids) collect(*k, b, it, sm, su, out, h);
 }
 
 // Lays out runs from (x, y) to the right edge `right`; size in points; returns the y below the text.
@@ -144,7 +149,18 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
             const float wt = font->CalcTextSizeA(sz, FLT_MAX, 0, trimmed.c_str()).x, w = font->CalcTextSizeA(sz, FLT_MAX, 0, word.c_str()).x;
             if (!lineEmpty && x + wt > right) { x = x0; y += lineH; lineEmpty = true; if (word == " ") continue; }
             const ImVec2 at(x, y + (r.sub ? size * 0.35f : (size - sz) * 0.8f));
-            if (!r.href.empty()) {                           // a link (.srcBox a): accent colour, underlined; a click opens it in the browser
+            if (r.href[0] == '#') {                          // an action word (.monoKey): its own colour, a dotted underline (solid on hover)
+                const ImU32 tc = r.bold && !forceBold ? boldCol : col;
+                dl->AddText(font, sz, at, tc, word.c_str());
+                const bool hover = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, ImVec2(at.x + wt, at.y + sz + 4));
+                const float uy = at.y + sz + 2;
+                if (hover) dl->AddLine(ImVec2(at.x, uy), ImVec2(at.x + wt, uy), tc);
+                else for (float dx = 0; dx < wt; dx += 3) dl->AddLine(ImVec2(at.x + dx, uy), ImVec2(at.x + std::min(dx + 1.2f, wt), uy), tc);
+                if (hover) {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && g_action) g_action(r.href.substr(1));
+                }
+            } else if (!r.href.empty()) {                    // a link (.srcBox a): accent colour, underlined; a click opens it in the browser
                 const ImU32 lc = ui::col(look().c.accent);
                 dl->AddText(font, sz, at, lc, word.c_str());
                 dl->AddLine(ImVec2(at.x, at.y + sz + 1), ImVec2(at.x + wt, at.y + sz + 1), lc);
@@ -333,6 +349,8 @@ void block(const Node& n, const Ctx& cx, float left, float right, float sizePt, 
 }
 
 }  // namespace
+
+void setHtmlAction(std::function<void(const std::string&)> f) { g_action = std::move(f); }
 
 void htmlView(const std::string& html, const std::function<void()>& chips) {
     const auto root = parse(html);

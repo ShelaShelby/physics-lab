@@ -91,6 +91,7 @@ struct AtomState {
     bool decHeld = false;
     std::optional<DecayInfo> dec;
     std::optional<DecayFx> decFx;
+    int decays = 0;                        // decays seen so far (the web grants the Half-Life achievement at each one)
     std::vector<LogLine> decLog;
 };
 

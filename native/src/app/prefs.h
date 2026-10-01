@@ -57,4 +57,9 @@ int earnedAchievementCount(const Prefs& p);          // the ones in the native a
 void resetProgress(Prefs& p);                        // lock them all again (the web's PLTheme.reset)
 std::pair<int, int> unlockEverything(Prefs& p);      // {themes, achievements} newly unlocked
 
+// ---- achievements and secret themes ----
+bool grantAchievement(Prefs& p, const std::string& id, int64_t nowMs);   // true if it is new (the web's PLAch.grant)
+bool unlockTheme(Prefs& p, const std::string& id, int64_t nowMs);        // also earns its achievement; true if the theme is new
+std::string achievementDate(int64_t ms);         // the local date as the web's en-GB toLocaleDateString: "5 Sept 2026"
+
 }  // namespace app

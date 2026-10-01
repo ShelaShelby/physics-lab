@@ -295,6 +295,7 @@ void AtomLab::decTick(double dt) {
         fx.shots = {{{"fragment", "#d9a13a", 12}, ang}, {{"fragment", "#d9a13a", 11}, ang + kPi}};
     }
     s.decFx = fx;
+    s.decays++;                                                // PLAch.grant('decay')
     auto addStep = [&](std::optional<std::string> to, const std::string& how) {
         chain.push_back({"", how, lived, to});
         if (chain.size() > 41) chain.erase(chain.begin() + 1, chain.begin() + (chain.size() - 40));

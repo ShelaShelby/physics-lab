@@ -110,15 +110,51 @@ std::vector<Run> runsOf(const std::string& html) {        // <b> parts and <br> 
 }
 }  // namespace
 
+// .prev: the little picture of the theme a secret unlocks (Synthwave: a neon sun over a grid; Monochrome: the same in black and white)
+void giftPreview(bool mono) {
+    const float s = ImGui::GetFontSize() / 16, w = ImGui::GetContentRegionAvail().x, h = 88 * s;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float r = corner(12 * s);
+    dl->PushClipRect(p, ImVec2(p.x + w, p.y + h), true);
+    if (mono) dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), IM_COL32(255, 255, 255, 255), r);
+    else {
+        dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), col(app::hexRgb("#120a26")), r);
+        for (int i = 10; i >= 1; i--)                                          // radial-gradient(#3b1466 at the top, #120a26 at 70%)
+            dl->AddEllipseFilled(ImVec2(p.x + w / 2, p.y), ImVec2(0.6f * w * 0.7f * i / 10, 0.9f * h * 0.7f * i / 10), col(app::hexRgb("#3b1466"), 0.12f));
+    }
+    // the sun: 48 px, top 12 px (a gradient from #ffd166 to #ff4fd8; Monochrome: a black square)
+    const ImVec2 c(p.x + w / 2, p.y + 12 * s + 24 * s);
+    if (mono) dl->AddRectFilled(ImVec2(c.x - 24 * s, c.y - 24 * s), ImVec2(c.x + 24 * s, c.y + 24 * s), IM_COL32(0, 0, 0, 255));
+    else
+        for (int k = 0; k < 24; k++) {                                         // horizontal slices of the circle
+            const float y0 = c.y - 24 * s + k * 2 * s, y1 = y0 + 2 * s, ym = (y0 + y1) / 2 - c.y, hw = std::sqrt(std::max(0.f, 24 * s * 24 * s - ym * ym));
+            dl->AddRectFilled(ImVec2(c.x - hw, y0), ImVec2(c.x + hw, y1), col(mix(app::hexRgb("#ffd166"), app::hexRgb("#ff4fd8"), (k + 0.5f) / 24)));
+        }
+    // the grid: the bottom 36 px
+    const float gy = p.y + h - 36 * s;
+    dl->AddRectFilled(ImVec2(p.x, gy), ImVec2(p.x + w, p.y + h), mono ? IM_COL32(230, 230, 230, 255) : col(app::hexRgb("#1b1035")));
+    if (mono) for (float x = 0; x < w; x += 12 * s) dl->AddLine(ImVec2(p.x + x, gy), ImVec2(p.x + x, p.y + h), IM_COL32(0, 0, 0, 255));
+    else {
+        for (float y = 0; y < 36 * s; y += 9 * s) dl->AddLine(ImVec2(p.x, gy + y), ImVec2(p.x + w, gy + y), col(app::hexRgb("#ff4fd8")));
+        for (float x = 0; x < w; x += 16 * s) dl->AddLine(ImVec2(p.x + x, gy), ImVec2(p.x + x, p.y + h), col(app::hexRgb("#ff4fd8"), 0.33f));
+    }
+    dl->AddLine(ImVec2(p.x, gy), ImVec2(p.x + w, gy), mono ? IM_COL32(0, 0, 0, 255) : col(app::hexRgb("#ff4fd8")));
+    dl->PopClipRect();
+    dl->AddRect(p, ImVec2(p.x + w, p.y + h), mono ? IM_COL32(0, 0, 0, 255) : col(app::hexRgb("#4a2a85")), r);
+    ImGui::Dummy(ImVec2(w, h));
+}
+
 std::string giftPage(const std::string& html) {
     const float s = ImGui::GetFontSize() / 16 / g_look.textScale, ts = g_look.textScale;   // the web's px, times its text size
-    static const std::regex block(R"rx(<div class="gi">(.*?)</div>|<h2>(.*?)</h2>|<p( class="rstL")?>(.*?)</p>|<div class="row">(.*?)</div>)rx");
+    static const std::regex block(R"rx(<div class="gi">(.*?)</div>|<h2[^>]*>(.*?)</h2>|<p( class="rstL")?>(.*?)</p>|<div class="row">(.*?)</div>|<div class="prev( mono)?">)rx");
     static const std::regex btn(R"rx(<button type="button"(?: class="(\w+)")? id="(\w+)">([^<]*)</button>)rx");
     std::string clicked;
     for (std::sregex_iterator it(html.begin(), html.end(), block), end; it != end; ++it) {
         const std::smatch& m = *it;
         if (m[1].matched) centred({{m[1], false}}, 44 * s * ts, col(g_look.c.fg), col(g_look.c.fg));
         else if (m[2].matched) centred({{m[2], true}}, 20 * s * ts, col(g_look.c.fg), col(g_look.c.fg));
+        else if (m[6].matched || std::string(m[0]) == "<div class=\"prev\">") giftPreview(m[6].matched);
         else if (m[4].matched) {
             const bool list = m[3].matched;                // .rstL: the list of what gets locked, in the text colour
             centred(runsOf(m[4]), (list ? 15 : 14) * s * ts, col(list ? g_look.c.fg : g_look.c.muted), col(g_look.c.fg));

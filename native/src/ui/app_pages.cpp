@@ -5,6 +5,7 @@
 #include <string>
 
 #include "app/app_data.h"
+#include "app_tabs.h"
 #include "changelog.h"
 #include "fonts.h"
 #include "html_view.h"
@@ -144,6 +145,11 @@ void header(AppState& app) {
     ImGui::SameLine(0, 8 * s);
     if (pillButton(ver, app::kHdrVer.tip)) app.showLabLog = true;
     if (oneLine && ImGui::GetCursorPosY() < below) { ImGui::SetCursorPosY(below); ImGui::Dummy(ImVec2(0, 0)); }
+    // under it: the 💡 facts line, then the tabs
+    ImGui::Dummy(ImVec2(0, 2 * s));
+    factsLine(app);
+    ImGui::Dummy(ImVec2(0, 2 * s));
+    tabsBar(app);
     g_headerH = ImGui::GetWindowHeight();
     ImGui::End();
 }

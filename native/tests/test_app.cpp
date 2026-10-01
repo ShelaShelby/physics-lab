@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include "app/app_data.h"
 #include "app/prefs.h"
@@ -186,12 +187,58 @@ static void testPages() {
     }
 }
 
+static void testFactsAndTabs() {
+    // 💡 every fact, word for word and in the web's order
+    checkTrue("27 facts", count(kDyk) == count(kDykRef) && count(kDyk) == 27);
+    for (std::size_t i = 0; i < count(kDyk) && i < count(kDykRef); i++) checkStr("fact " + std::to_string(i + 1), kDyk[i], kDykRef[i]);
+    // the 🎁 and Monochrome pop-ups, first find and again
+    for (int k = 0; k < 2; k++) {
+        checkStr("Synthwave pop-up " + std::to_string(k), kGiftSynth[k], kGiftSynthRef[k]);
+        checkStr("Monochrome pop-up " + std::to_string(k), kGiftMono[k], kGiftMonoRef[k]);
+    }
+    // 🏆 the Achievements tab, built the native way from the same saved state as the web run (decay on 5 Sept 2026, galactic "earlier")
+    char count5[64];
+    std::snprintf(count5, sizeof count5, kAchCount, 2, 5);
+    checkStr("achievements head", std::string("<h2>") + kAchTitle + "</h2><div class=\"achCount\">" + count5 + "</div><div class=\"achBar\"><i style=\"width:40%\"></i></div>", kAchHeadRef);
+    Prefs p = loadPrefs("ach.decay=1788609600000\nach.galactic=0\n");
+    checkTrue("5 achievement cards", count(kAchievements) == count(kAchCardsRef));
+    for (std::size_t i = 0; i < count(kAchievements) && i < count(kAchCardsRef); i++) {
+        const AchDef& a = kAchievements[i];
+        const auto it = p.achievements.find(a.id);
+        const bool on = it != p.achievements.end();
+        std::string html = std::string(on ? "achCard" : "achCard locked") + "|<div class=\"achIc\">" + (on ? a.ic : kAchLockedIcon) + "</div><div class=\"achTx\"><b>" + a.name +
+                           "</b><span class=\"d\">" + (on ? a.done : a.how) + "</span>";
+        if (on) html += std::string("<small>") + (it->second ? std::string(kAchUnlockedOn) + achievementDate(it->second) : std::string(kAchUnlockedEarlier)) + "</small>";
+        html += "</div>";
+        checkStr(std::string("achievement card ") + a.id, html, kAchCardsRef[i]);
+    }
+    for (const DateRef& d : kDateRef) checkStr("date " + std::to_string(d.ms), achievementDate(d.ms), d.text);
+    // 📚 the Learn tab: the Atom Lab and Orbit Lab sections (the web's third one is the Spacetime Lab, not in the native app)
+    checkStr("learn head", std::string("<h2>") + kLearnTitle + "</h2><div class=\"achCount\">" + kLearnIntro + "</div>", kLearnHeadRef);
+    std::vector<std::string> mine;
+    for (const LearnSection& sec : kLearnSections) {
+        mine.push_back(std::string("h3|") + sec.heading);
+        for (const LearnCard& c : kLearnCards)
+            if (std::string(c.lab) == sec.lab)
+                mine.push_back(std::string("<div class=\"achIc\">") + c.icon + "</div><div class=\"achTx\"><b>" + c.title + "</b><span class=\"d\">" + c.d + "</span></div>");
+    }
+    checkTrue("learn: fewer entries than the web", mine.size() < count(kLearnRef));
+    for (std::size_t i = 0; i < mine.size() && i < count(kLearnRef); i++) checkStr("learn " + std::to_string(i), mine[i], kLearnRef[i]);
+    checkStr("learn: then the Spacetime Lab", std::string(kLearnRef[mine.size()]).substr(0, 3), "h3|");
+    // achievements and secret themes in the settings
+    Prefs q;
+    checkTrue("grant once", grantAchievement(q, "decay", 5) && !grantAchievement(q, "decay", 6) && q.achievements["decay"] == 5);
+    checkTrue("unknown achievement", !grantAchievement(q, "nope", 1));
+    checkTrue("unlock a theme earns its achievement", unlockTheme(q, "monochrome", 7) && q.achievements["monochrome"] == 7 && !unlockTheme(q, "monochrome", 8));
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
     testThemes();
     testProgress();
     testPages();
+    testFactsAndTabs();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

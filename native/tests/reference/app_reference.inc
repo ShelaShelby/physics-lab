@@ -107,3 +107,52 @@ static const char* const kHistoryRef[] = {"<div class=\"lrnY\">Physics Lab 8.6.2
   "<div class=\"lrnY\">Physics Lab 1</div><div class=\"lrnTt\">Physics Lab is born</div><div class=\"lrnD\">Orbit Lab: a star with planets you can add and launch, then a 3D view and click-for-info on anything. Then the real planets from NASA/JPL data with sizes, masses and gravity, real moons, the asteroid belt, Kuiper belt, dwarf planets and the Oort cloud (Orbit Lab 1–2).</div>"};
 static const char* const kHistoryRefFirst = "How Physics Lab itself has grown, newest first. Each lab also keeps its own detailed changelog: click the Update badge at the top right.";
 static const char* const kHistoryRefLast = "The earliest entries were put together from memory, so the order and the numbers may be slightly off.";
+static const char* const kDykRef[] = {"Sunlight takes about 8 minutes and 20 seconds to reach Earth.",
+  "A day on Venus (243 Earth days) is longer than its year (225 Earth days).",
+  "The Moon drifts away from Earth by about 3.8 cm every year, about as fast as your fingernails grow.",
+  "Lightning heats the air around it to about 30,000 K, roughly five times hotter than the surface of the Sun.",
+  "The Sun’s core is about 15 million °C, but its surface is only about 5,500 °C.",
+  "A teaspoon of neutron star would weigh millions to billions of tonnes. Sources give very different estimates.",
+  "Helium stays liquid down to absolute zero at normal pressure. To freeze it you need about 25 times air pressure.",
+  "Absolute zero is −273.15 °C, the lowest temperature possible. Nothing can be cooled all the way to it.",
+  "Iron-56 is often called the most tightly bound nucleus, but nickel-62 is slightly higher per nucleon.",
+  "Bismuth-209 does decay, but its half-life is about 2×10¹⁹ years: over a billion times the age of the universe.",
+  "Uranium-238 has a half-life of 4.47 billion years, about the age of Earth (4.5 billion years).",
+  "Tungsten has the highest melting point of any metal: 3,422 °C.",
+  "Gallium melts at about 29.8 °C, so a lump of it can melt in your hand.",
+  "Only two elements are liquid at normal room temperature (about 20 °C): mercury and bromine.",
+  "A proton weighs about 1,836 times as much as an electron.",
+  "The nucleus is about 100,000 times smaller across than the whole atom, yet it holds almost all of its weight.",
+  "Water is densest at about 4 °C. That is why ice floats and lakes freeze from the top down.",
+  "The speed of light is exactly 299,792,458 metres per second. Since 1983 the metre has been defined using it.",
+  "To leave Earth for good you need a speed of about 11.2 km/s, roughly 40,000 km/h.",
+  "The space station is always falling, but it moves sideways so fast that it keeps missing the ground.",
+  "Carbon-14 has a half-life of 5,730 years. Scientists use it to date things up to about 50,000 years old.",
+  "Diamond and graphite (pencil lead) are both pure carbon. Only the arrangement of the atoms is different.",
+  "Sound cannot travel through space, because there is almost no air to carry it.",
+  "Hydrogen is the most common element in the universe: about three quarters of ordinary matter by mass.",
+  "One light year is about 9.46 trillion km.",
+  "You are awesome! ✨",
+  "@gift"};
+static const char* const kGiftSynthRef[2] = {"<div class=\"gi\">🎁</div><h2 id=\"giftT\">You found a secret!</h2><div class=\"prev\"><span class=\"sun\"></span><span class=\"grid\"></span></div><p>The <b>Synthwave</b> theme is unlocked. It now sits in the 🎨 Theme list.</p><div class=\"row\"><button type=\"button\" class=\"primary\" id=\"giftUse\">Use it now</button><button type=\"button\" id=\"giftX\">Close</button></div>", "<div class=\"gi\">🎁</div><h2 id=\"giftT\">Synthwave is unlocked</h2><div class=\"prev\"><span class=\"sun\"></span><span class=\"grid\"></span></div><p>You already have the <b>Synthwave</b> theme. It now sits in the 🎨 Theme list.</p><div class=\"row\"><button type=\"button\" class=\"primary\" id=\"giftUse\">Use it now</button><button type=\"button\" id=\"giftX\">Close</button></div>"};
+static const char* const kGiftMonoRef[2] = {"<div class=\"gi\">🎁</div><h2 id=\"monoT\">You found a secret!</h2><div class=\"prev mono\"><span class=\"sun\"></span><span class=\"grid\"></span></div><p>You read closely. The <b>Monochrome</b> theme is unlocked. It now sits in the 🎨 Theme list.</p><div class=\"row\"><button type=\"button\" class=\"primary\" id=\"monoUse\">Use it now</button><button type=\"button\" id=\"monoX\">Close</button></div>", "<div class=\"gi\">🎁</div><h2 id=\"monoT\">Monochrome is unlocked</h2><div class=\"prev mono\"><span class=\"sun\"></span><span class=\"grid\"></span></div><p>You already have the <b>Monochrome</b> theme. It now sits in the 🎨 Theme list.</p><div class=\"row\"><button type=\"button\" class=\"primary\" id=\"monoUse\">Use it now</button><button type=\"button\" id=\"monoX\">Close</button></div>"};
+static const char* const kAchHeadRef = "<h2>🏆 Achievements</h2><div class=\"achCount\">2 of 5 unlocked</div><div class=\"achBar\"><i style=\"width:40%\"></i></div>";   // the web counts 5 achievements
+static const char* const kAchCardsRef[] = {"achCard locked|<div class=\"achIc\">🔒</div><div class=\"achTx\"><b>Neon Nights</b><span class=\"d\">A surprise is hiding in the 💡 facts.</span></div>",
+  "achCard locked|<div class=\"achIc\">🔒</div><div class=\"achTx\"><b>Sharp Eyes</b><span class=\"d\">A word in the ❓ Atom Lab guide holds the key.</span></div>",
+  "achCard locked|<div class=\"achIc\">🔒</div><div class=\"achTx\"><b>Point of No Return</b><span class=\"d\">Zoom in on the black hole in the Black Hole Lab as far as you can.</span></div>",
+  "achCard|<div class=\"achIc\">☢️</div><div class=\"achTx\"><b>Half-Life</b><span class=\"d\">You watched a nucleus decay on its own, at its real half-life.</span><small>Unlocked 5 Sept 2026</small></div>",
+  "achCard|<div class=\"achIc\">🌌</div><div class=\"achTx\"><b>Galactic Center</b><span class=\"d\">You found Sagittarius A*, the black hole at the centre of our galaxy, 27,000 light years away.</span><small>Unlocked earlier</small></div>"};
+struct DateRef { long long ms; const char* text; };
+static const DateRef kDateRef[] = {{1767268800000LL, "1 Jan 2026"}, {1770120000000LL, "3 Feb 2026"}, {1772712000000LL, "5 Mar 2026"}, {1775563200000LL, "7 Apr 2026"}, {1778328000000LL, "9 May 2026"}, {1781179200000LL, "11 Jun 2026"}, {1783944000000LL, "13 Jul 2026"}, {1786795200000LL, "15 Aug 2026"}, {1789646400000LL, "17 Sept 2026"}, {1792411200000LL, "19 Oct 2026"}, {1795262400000LL, "21 Nov 2026"}, {1798027200000LL, "23 Dec 2026"}};
+static const char* const kLearnHeadRef = "<h2>📚 Learn</h2><div class=\"achCount\">Plain-words guides and timelines for each lab. Tap one and the guide opens right here.</div>";
+static const char* const kLearnRef[] = {"h3|⚛️ Atom Lab",
+  "<div class=\"achIc\">❓</div><div class=\"achTx\"><b>What am I even looking at?</b><span class=\"d\">A plain-words guide to the atom on screen: what every part is, in each of the four pictures.</span></div>",
+  "<div class=\"achIc\">📏</div><div class=\"achTx\"><b>Scale · how empty is an atom?</b><span class=\"d\">Blow the nucleus up to a size you can picture, and step through powers of ten.</span></div>",
+  "<div class=\"achIc\">⚖</div><div class=\"achTx\"><b>Weight · what does an atom weigh?</b><span class=\"d\">The weight of the parts, the missing mass, how many atoms are in a grain, and what is inside a proton.</span></div>",
+  "<div class=\"achIc\">🕰</div><div class=\"achTx\"><b>Timeline of the atom</b><span class=\"d\">How our picture of the atom changed in 2,400 years, and how we learned to see, split and move atoms.</span></div>",
+  "h3|🪐 Orbit Lab",
+  "<div class=\"achIc\">❓</div><div class=\"achTx\"><b>What am I even looking at?</b><span class=\"d\">A plain-words guide to the picture: the rings, colours, labels, scale bar, the stars and the far-away things.</span></div>",
+  "<div class=\"achIc\">🌍</div><div class=\"achTx\"><b>Why do we have seasons?</b><span class=\"d\">It is not because Earth gets closer to the Sun. Jump to the real solstices and equinoxes, see day length and the Sun’s height in every part of the world, and how the other planets do.</span></div>",
+  "<div class=\"achIc\">🕰</div><div class=\"achTx\"><b>Timeline of the Solar System</b><span class=\"d\">How people came to understand where we live, from watching wandering stars to sending probes past every planet.</span></div>",
+  "h3|🌀 Spacetime Lab",
+  "<div class=\"achIc\">❓</div><div class=\"achTx\"><b>What am I even looking at?</b><span class=\"d\">A plain-words guide to the bending sheet: time and space, what the grid, dip, graph, colours, rings and marbles mean, what is to scale, and what is exact or simplified.</span></div>"};

@@ -25,7 +25,9 @@
 #include "ui/learn.h"
 #include "ui/look.h"
 #include "ui/settings.h"
+#include "orbit/sky.h"
 #include "ui/app_pages.h"
+#include "ui/app_tabs.h"
 #include "ui/atom_learn.h"
 #include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
@@ -115,9 +117,11 @@ int main(int, char**) {
     // PL_SCREENSHOT=file.bmp saves the last frame, PL_SELECT=Earth selects and follows a body, PL_ZOOM=2.3 sets the zoom.
     const int maxFrames = SDL_getenv("PL_EXIT_AFTER_FRAMES") ? std::atoi(SDL_getenv("PL_EXIT_AFTER_FRAMES")) : 0;
     const char* screenshot = SDL_getenv("PL_SCREENSHOT");
-    if (const char* name = SDL_getenv("PL_SELECT"))
+    if (const char* name = SDL_getenv("PL_SELECT")) {
         for (const auto& b : app.sys.bodies)
             if (b.name == name) app.view.select({orbit::Selection::Body, b.id}, true);
+        if (std::string(name).rfind("far:", 0) == 0) { app.set.far = true; app.view.select({orbit::Selection::Far, 0, orbit::farIndexOf(std::string(name).substr(4))}, true); }   // e.g. far:sgra
+    }
     if (const char* z = SDL_getenv("PL_ZOOM")) ui::setZoom(app, std::atof(z));
     if (SDL_getenv("PL_3D")) app.set.view3D = true;
     if (const char* d = SDL_getenv("PL_DATE")) { int64_t ms; if (ui::parseDateTime(d, "12:00", ms)) std::printf("%s\n", ui::jumpToDate(app, ms).c_str()); else std::printf("not a date\n"); }
@@ -212,7 +216,8 @@ int main(int, char**) {
         const double frameDt = static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
         last = now;
         const double dt = std::min(frameDt, units::kMaxFrameDt);
-        if (app.lab == 1) {                             // Atom Lab: tick every frame (decay clock, glides), fixed steps while running
+        if (app.pane) {                                 // the Learn or Achievements tab is open: the lab waits (the web draws nothing then)
+        } else if (app.lab == 1) {                      // Atom Lab: tick every frame (decay clock, glides), fixed steps while running
             app.atom.paused = app.paused;
             app.atom.tick(dt);
             if (!app.paused) {
@@ -244,12 +249,14 @@ int main(int, char**) {
         app.set.lightTheme = ui::look().c.light;
         app.set.theme = ui::look().c;
         app.set.textScale = ui::look().textScale;
-        if (app.lab == 1) ui::atomPanel(app, panelWidth);
+        if (app.pane) ui::paneWindow(app, headerH);
+        else if (app.lab == 1) ui::atomPanel(app, panelWidth);
         else ui::orbitPanel(app, panelWidth);
         renderer.begin(app.canvasW, app.canvasH);
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, headerH), ImVec2(canvasWinW, headerH + pictureWinH));
-        if (app.lab == 1) {
+        if (app.pane) text->PopClipRect();              // a tab page covers the lab: nothing to draw
+        else if (app.lab == 1) {
             app.atomView.draw(renderer, text, 0, headerH, scale, app.atom, app.canvasW, app.canvasH, ui::look().c, ui::look().textScale);
             text->PopClipRect();
             atomBarH = ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, false);
@@ -267,6 +274,7 @@ int main(int, char**) {
         if (app.lab == 1) ui::atomLearnWindow(app);
         else ui::learnWindow(app);
         ui::settingsWindow(app);
+        ui::appTabsFrame(app);                          // achievements and their pop-ups, the secret pop-ups
         ImGui::Render();
 
         // ---- draw: the picture first, then the panels and text on top ----
@@ -281,7 +289,8 @@ int main(int, char**) {
         renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        if (maxFrames && ++frame >= maxFrames) {
+        static const double maxSeconds = SDL_getenv("PL_EXIT_AFTER_SECONDS") ? std::atof(SDL_getenv("PL_EXIT_AFTER_SECONDS")) : 0;   // for automatic checks
+        if ((maxFrames && ++frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds)) {
             running = false;
             if (screenshot) {                           // read the finished frame back and save it
                 SDL_Surface* shot = SDL_CreateSurface(fbW, fbH, SDL_PIXELFORMAT_ABGR8888);

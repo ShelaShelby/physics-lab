@@ -60,5 +60,33 @@ o.push('};');
   o.push(`static const char* const kHistoryRefFirst = ${q(w.ctx.lastBox.children[0].innerHTML)};`);
   o.push(`static const char* const kHistoryRefLast = ${q(w.ctx.lastBox.children[w.ctx.lastBox.children.length - 1].innerHTML)};`);
 }
+// 💡 the facts, the 🎁 pop-up (tap the line until the 🎁 comes, then tap it) and the Monochrome pop-up, first find and again
+{
+  const w = loadAppWeb();
+  o.push(`static const char* const kDykRef[] = {${w.A.DYK.map(q).join(',\n  ')}};`);
+  // each tap shows the next fact (the fake page skips the 0.25 s fade); the tap that lands on the 🎁 opens its pop-up
+  const giftOf = w => { const bg = () => w.body.children.find(e => e.id === 'giftBg'); for (let i = 0; i < 60 && !bg(); i++) w.els('dyk').onclick(); return strip(bg().innerHTML.replace(/ aria-labelledby="giftT"/, '')); };
+  const g1 = giftOf(w);
+  const w2 = loadAppWeb({storage: {plUnlock: 'synthwave'}});
+  const g2 = giftOf(w2);
+  o.push(`static const char* const kGiftSynthRef[2] = {${q(g1)}, ${q(g2)}};`);
+  const m = st => { const v = loadAppWeb({storage: st}); v.A.PLTheme.secretMono(); return strip(v.body.children.find(e => e.id === 'giftBg').innerHTML.replace(/ aria-labelledby="monoT"/, '')); };
+  o.push(`static const char* const kGiftMonoRef[2] = {${q(m({}))}, ${q(m({plUnlock: 'monochrome'}))}};`);
+}
+// 🏆 the Achievements tab with two earned (one with a date at noon UTC, one "earlier"), and 📚 the Learn tab
+{
+  const ach = {decay: Date.UTC(2026, 8, 5, 12), galactic: 0};
+  const w = loadAppWeb({storage: {plAch: JSON.stringify(ach)}});
+  w.A.paintAch();
+  const P = w.ctx.achPane.children;
+  o.push(`static const char* const kAchHeadRef = ${q(P[0].innerHTML)};   // the web counts 5 achievements`);
+  o.push(`static const char* const kAchCardsRef[] = {${P[1].children.map(c => q(c.className + '|' + c.innerHTML)).join(',\n  ')}};`);
+  o.push('struct DateRef { long long ms; const char* text; };');
+  o.push(`static const DateRef kDateRef[] = {${[...Array(12).keys()].map(mo => { const t = Date.UTC(2026, mo, 1 + 2 * mo, 12); return `{${t}LL, ${q(new Date(t).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'}))}}`; }).join(', ')}};`);
+  w.A.paintLearn();
+  const L = w.ctx.achPane.children;
+  o.push(`static const char* const kLearnHeadRef = ${q(L[0].innerHTML)};`);
+  o.push(`static const char* const kLearnRef[] = {${L.filter(e => e.className === 'learnSec').flatMap(sec => [q('h3|' + sec.children[0].innerHTML), ...sec.children[1].children.map(c => q(c.innerHTML))]).join(',\n  ')}};`);
+}
 fs.writeFileSync(path.join(__dirname, 'app_reference.inc'), o.join('\n') + '\n');
 console.log('wrote app_reference.inc');

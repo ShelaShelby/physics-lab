@@ -170,3 +170,61 @@ static const LogEntry kAppLog[] = {
   {"2.5", "🧪", "The periodic table and isotopes", "Atom Lab: click any of the 118 elements, with real half-lives for all 3,557 known isotopes, X-rays for heavy atoms and realistic quarks with colour charge (Atom Lab 3.5–4).", "", ""},
   {"2", "⚛️", "Atom Lab", "A second lab appeared, so a lab menu was added. It began with a nucleus and one electron on an orbit, then grew a probability cloud, a rotatable 3D view, a zoom down to the nucleus and a zoom into the quarks (Atom Lab 1–3). Each lab now shows its own Update number, and clicking it opens that lab’s changelog. Your settings are remembered between visits, with a Defaults button.", "▶ Open Atom Lab", "Atom Lab"},
   {"1", "✨", "Physics Lab is born", "Orbit Lab: a star with planets you can add and launch, then a 3D view and click-for-info on anything. Then the real planets from NASA/JPL data with sizes, masses and gravity, real moons, the asteroid belt, Kuiper belt, dwarf planets and the Oort cloud (Orbit Lab 1–2).", "", ""}};
+static const char* const kDyk[] = {"Sunlight takes about 8 minutes and 20 seconds to reach Earth.",
+  "A day on Venus (243 Earth days) is longer than its year (225 Earth days).",
+  "The Moon drifts away from Earth by about 3.8 cm every year, about as fast as your fingernails grow.",
+  "Lightning heats the air around it to about 30,000 K, roughly five times hotter than the surface of the Sun.",
+  "The Sun’s core is about 15 million °C, but its surface is only about 5,500 °C.",
+  "A teaspoon of neutron star would weigh millions to billions of tonnes. Sources give very different estimates.",
+  "Helium stays liquid down to absolute zero at normal pressure. To freeze it you need about 25 times air pressure.",
+  "Absolute zero is −273.15 °C, the lowest temperature possible. Nothing can be cooled all the way to it.",
+  "Iron-56 is often called the most tightly bound nucleus, but nickel-62 is slightly higher per nucleon.",
+  "Bismuth-209 does decay, but its half-life is about 2×10¹⁹ years: over a billion times the age of the universe.",
+  "Uranium-238 has a half-life of 4.47 billion years, about the age of Earth (4.5 billion years).",
+  "Tungsten has the highest melting point of any metal: 3,422 °C.",
+  "Gallium melts at about 29.8 °C, so a lump of it can melt in your hand.",
+  "Only two elements are liquid at normal room temperature (about 20 °C): mercury and bromine.",
+  "A proton weighs about 1,836 times as much as an electron.",
+  "The nucleus is about 100,000 times smaller across than the whole atom, yet it holds almost all of its weight.",
+  "Water is densest at about 4 °C. That is why ice floats and lakes freeze from the top down.",
+  "The speed of light is exactly 299,792,458 metres per second. Since 1983 the metre has been defined using it.",
+  "To leave Earth for good you need a speed of about 11.2 km/s, roughly 40,000 km/h.",
+  "The space station is always falling, but it moves sideways so fast that it keeps missing the ground.",
+  "Carbon-14 has a half-life of 5,730 years. Scientists use it to date things up to about 50,000 years old.",
+  "Diamond and graphite (pencil lead) are both pure carbon. Only the arrangement of the atoms is different.",
+  "Sound cannot travel through space, because there is almost no air to carry it.",
+  "Hydrogen is the most common element in the universe: about three quarters of ordinary matter by mass.",
+  "One light year is about 9.46 trillion km.",
+  "You are awesome! ✨",
+  "@gift"};
+static const char* const kDykTip = "Tap for the next fact";
+static const char* const kDykIcon = "💡";
+static const char* const kDykLead = "Did you know?";
+static const char* const kDykGiftUnlocked = "🎁 Secret theme unlocked: Synthwave! Tap to use it.";
+static const char* const kDykGiftNew = "🎁 Click here for a surprise!";
+static const char* const kGiftSynth[2] = {"<div class=\"gi\">🎁</div><h2 id=\"giftT\">You found a secret!</h2><div class=\"prev\"><span class=\"sun\"></span><span class=\"grid\"></span></div><p>The <b>Synthwave</b> theme is unlocked. It now sits in the 🎨 Theme list.</p><div class=\"row\"><button type=\"button\" class=\"primary\" id=\"giftUse\">Use it now</button><button type=\"button\" id=\"giftX\">Close</button></div>",
+  "<div class=\"gi\">🎁</div><h2 id=\"giftT\">Synthwave is unlocked</h2><div class=\"prev\"><span class=\"sun\"></span><span class=\"grid\"></span></div><p>You already have the <b>Synthwave</b> theme. It now sits in the 🎨 Theme list.</p><div class=\"row\"><button type=\"button\" class=\"primary\" id=\"giftUse\">Use it now</button><button type=\"button\" id=\"giftX\">Close</button></div>"};   // first find, again
+static const char* const kGiftMono[2] = {"<div class=\"gi\">🎁</div><h2 id=\"monoT\">You found a secret!</h2><div class=\"prev mono\"><span class=\"sun\"></span><span class=\"grid\"></span></div><p>You read closely. The <b>Monochrome</b> theme is unlocked. It now sits in the 🎨 Theme list.</p><div class=\"row\"><button type=\"button\" class=\"primary\" id=\"monoUse\">Use it now</button><button type=\"button\" id=\"monoX\">Close</button></div>",
+  "<div class=\"gi\">🎁</div><h2 id=\"monoT\">Monochrome is unlocked</h2><div class=\"prev mono\"><span class=\"sun\"></span><span class=\"grid\"></span></div><p>You already have the <b>Monochrome</b> theme. It now sits in the 🎨 Theme list.</p><div class=\"row\"><button type=\"button\" class=\"primary\" id=\"monoUse\">Use it now</button><button type=\"button\" id=\"monoX\">Close</button></div>"};
+static const char* const kTabSims = "🔬 Simulations";
+static const char* const kTabLearn = "📚 Learn";
+static const char* const kTabAch = "🏆 Achievements";
+static const char* const kAchTitle = "🏆 Achievements";
+static const char* const kAchCount = "%d of %d unlocked";
+static const char* const kAchLockedIcon = "🔒";
+static const char* const kAchUnlockedOn = "Unlocked ";   // + the date, as en-GB "1 Oct 2026"
+static const char* const kAchUnlockedEarlier = "Unlocked earlier";
+static const char* const kAchPopLead = "Achievement unlocked";
+static const char* const kLearnTitle = "📚 Learn";
+static const char* const kLearnIntro = "Plain-words guides and timelines for each lab. Tap one and the guide opens right here.";
+struct LearnCard { const char* lab; const char* icon; const char* title; const char* d; int guide; };   // guide: the lab's guide number (1, 2, …)
+struct LearnSection { const char* lab; const char* heading; };
+static const LearnSection kLearnSections[] = {{"Atom Lab", "⚛️ Atom Lab"}, {"Orbit Lab", "🪐 Orbit Lab"}};
+static const LearnCard kLearnCards[] = {
+  {"Atom Lab", "❓", "What am I even looking at?", "A plain-words guide to the atom on screen: what every part is, in each of the four pictures.", 1},
+  {"Atom Lab", "📏", "Scale · how empty is an atom?", "Blow the nucleus up to a size you can picture, and step through powers of ten.", 2},
+  {"Atom Lab", "⚖", "Weight · what does an atom weigh?", "The weight of the parts, the missing mass, how many atoms are in a grain, and what is inside a proton.", 3},
+  {"Atom Lab", "🕰", "Timeline of the atom", "How our picture of the atom changed in 2,400 years, and how we learned to see, split and move atoms.", 4},
+  {"Orbit Lab", "❓", "What am I even looking at?", "A plain-words guide to the picture: the rings, colours, labels, scale bar, the stars and the far-away things.", 1},
+  {"Orbit Lab", "🌍", "Why do we have seasons?", "It is not because Earth gets closer to the Sun. Jump to the real solstices and equinoxes, see day length and the Sun’s height in every part of the world, and how the other planets do.", 2},
+  {"Orbit Lab", "🕰", "Timeline of the Solar System", "How people came to understand where we live, from watching wandering stars to sending probes past every planet.", 3}};

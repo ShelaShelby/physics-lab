@@ -21,7 +21,9 @@ function loadAppWeb(opts = {}) {
   const pageIds = ['dyk', 'dykT', 'dykC', 'themeBtn', 'langBtn', 'aboutBtn', 'settingsBtn', 'appLog', 'ver', 'kAch', 'kLearn', 'kSim', 'kGame', 'logBg', 'logList', 'logTitle', 'logX'];
   const findIn = (e, id) => { if (!e || typeof e !== 'object') return null; if (e.id === id) return e; for (const c of e.children || []) { const f = findIn(c, id); if (f) return f; } return null; };
   // the page's own elements always exist; anything else (pop-ups made later) only once it is on the page
-  const byId = id => pageIds.includes(id) ? (els[id] || (els[id] = makeEl(id === 'dyk' ? 'button' : 'div'))) : findIn(body, id);
+  // buttons the pop-ups write as HTML text (the fake page does not parse it): one stand-in button each, so their onclick can be pressed
+  const popIds = ['giftX', 'giftUse', 'monoX', 'monoUse'];
+  const byId = id => pageIds.includes(id) || popIds.includes(id) ? (els[id] || (els[id] = makeEl(id === 'dyk' ? 'button' : 'div'))) : findIn(body, id);
   const timers = [];
   const ctx = {
     Math: Object.assign(Object.create(Math), {random: () => 0.5}), JSON, console, Number, String, Array, Object, Set, Map, Event: function () {},

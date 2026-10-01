@@ -1,6 +1,7 @@
 #include "prefs.h"
 
 #include <cstdlib>
+#include <ctime>
 #include <cstring>
 #include <sstream>
 #include <vector>
@@ -131,6 +132,32 @@ std::pair<int, int> unlockEverything(app::Prefs& p) {
     for (const char* id : {"synthwave", "monochrome"})
         if (!p.unlocked.count(id)) { p.unlocked.insert(id); t++; }
     return {t, a};
+}
+
+bool grantAchievement(Prefs& p, const std::string& id, int64_t nowMs) {
+    bool known = false;
+    for (const AchDef& d : kAchievements) if (id == d.id) known = true;
+    if (!known || p.achievements.count(id)) return false;
+    p.achievements[id] = nowMs;
+    return true;
+}
+
+bool unlockTheme(Prefs& p, const std::string& id, int64_t nowMs) {
+    grantAchievement(p, id, nowMs);
+    return p.unlocked.insert(id).second;
+}
+
+std::string achievementDate(int64_t ms) {
+    // en-GB short months (as Chrome and Node write them: September is "Sept")
+    static const char* const kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"};
+    const std::time_t t = static_cast<std::time_t>(ms / 1000);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    return std::to_string(tm.tm_mday) + " " + kMonths[tm.tm_mon] + " " + std::to_string(tm.tm_year + 1900);
 }
 
 }  // namespace app

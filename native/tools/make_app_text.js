@@ -129,6 +129,57 @@ o.push(`static const char* const kHistoryYear = ${q(/<div class="lrnY">([^$]*)\$
 o.push('struct LogEntry { const char* v; const char* ic; const char* t; const char* d; const char* labButton; const char* lab; };');
 o.push(`static const LogEntry kAppLog[] = {${A.APP_LOG.map(e => `\n  {${q(e.v)}, ${q(e.ic || '✨')}, ${q(e.t)}, ${q(e.d)}, ${q(e.lab ? '▶ ' + e.lab[0] : '')}, ${q(e.lab ? e.lab[1] : '')}}`).join(',')}};`);
 
+// ---- 💡 "Did you know?" (DYK, line 5301): the facts in the web's order ('@gift' is the 🎁 surprise) ----
+o.push(`static const char* const kDyk[] = {${A.DYK.map(q).join(',\n  ')}};`);
+const dykBtn = /<button id="dyk" type="button" title="([^"]*)"><span class="dykI">([^<]*)<\/span><span class="dykB"><b>([^<]*)<\/b>/.exec(r.html);
+o.push(`static const char* const kDykTip = ${q(dykBtn[1])};`);
+o.push(`static const char* const kDykIcon = ${q(dykBtn[2])};`);
+o.push(`static const char* const kDykLead = ${q(dykBtn[3])};`);
+const giftT = /const giftText = \(\) => PLTheme\.unlocked\(\) \? '([^']*)' : '([^']*)';/.exec(r.html);
+o.push(`static const char* const kDykGiftUnlocked = ${q(giftT[1])};`);
+o.push(`static const char* const kDykGiftNew = ${q(giftT[2])};`);
+// the two secret pop-ups, for a first find and for a second time (their template literals, checked against a web run below)
+const gTmpl = /bg\.innerHTML = `(<div id="gift" role="dialog" aria-modal="true" aria-labelledby="giftT">.*?)`;/.exec(r.html)[1];
+const mTmpl = /mbg\.innerHTML = `(<div id="gift" role="dialog" aria-modal="true" aria-labelledby="monoT">.*?)`;/.exec(r.html)[1];
+const fill = (src, first) => new Function('first', 'return `' + src + '`;')(first);
+const inner = h => h.replace(/^<div id="gift"[^>]*>/, '').replace(/<\/div>$/, '');
+{
+  const w = loadAppWeb();
+  w.A.PLTheme.secretMono();
+  const got = w.body.children.find(e => e.id === 'giftBg').innerHTML;
+  if (got !== fill(mTmpl, true)) throw new Error('Monochrome pop-up differs from the web run');
+}
+o.push(`static const char* const kGiftSynth[2] = {${q(inner(fill(gTmpl, true)))},\n  ${q(inner(fill(gTmpl, false)))}};   // first find, again`);
+o.push(`static const char* const kGiftMono[2] = {${q(inner(fill(mTmpl, true)))},\n  ${q(inner(fill(mTmpl, false)))}};`);
+
+// ---- the tabs (🔬 Simulations, 🎮 Games, 📚 Learn, 🏆 Achievements; the native app has no games) ----
+const tab = id => new RegExp(`<button id="${id}" type="button">([^<]*)</button>`).exec(r.html)[1];
+o.push(`static const char* const kTabSims = ${q(tab('kSim'))};`);
+o.push(`static const char* const kTabLearn = ${q(tab('kLearn'))};`);
+o.push(`static const char* const kTabAch = ${q(tab('kAch'))};`);
+
+// ---- 🏆 the Achievements tab and the pop-up ----
+const achHead = /'achHead', `<h2>([^<]*)<\/h2><div class="achCount">\$\{got\} of \$\{list\.length\} unlocked<\/div>/.exec(r.html);
+o.push(`static const char* const kAchTitle = ${q(achHead[1])};`);
+o.push(`static const char* const kAchCount = "%d of %d unlocked";`);
+o.push(`static const char* const kAchLockedIcon = ${q(/\$\{on \? a\.ic : '([^']*)'\}/.exec(r.html)[1])};`);
+o.push(`static const char* const kAchUnlockedOn = ${q(/\$\{ts \? '([^']*)' \+ new Date/.exec(r.html)[1])};   // + the date, as en-GB "1 Oct 2026"`);
+o.push(`static const char* const kAchUnlockedEarlier = ${q(/\) : '(Unlocked earlier)'\}/.exec(r.html)[1])};`);
+o.push(`static const char* const kAchPopLead = ${q(/<div class="achTx"><small>([^<]*)<\/small><b>\$\{a\.name\}/.exec(r.html)[1])};`);
+
+// ---- 📚 the Learn tab: the heading, the intro and each lab's guides (the Spacetime Lab is not in the native app) ----
+r.ctx.paintLearn ? 0 : 0;
+A.paintLearn();
+const head = r.ctx.achPane.children[0];
+o.push(`static const char* const kLearnTitle = ${q(/<h2>([^<]*)<\/h2>/.exec(head.innerHTML)[1])};`);
+o.push(`static const char* const kLearnIntro = ${q(/<div class="achCount">([^<]*)<\/div>/.exec(head.innerHTML)[1])};`);
+const secs = r.ctx.achPane.children.filter(e => e.className === 'learnSec');
+o.push('struct LearnCard { const char* lab; const char* icon; const char* title; const char* d; int guide; };   // guide: the lab\'s guide number (1, 2, …)');
+o.push('struct LearnSection { const char* lab; const char* heading; };');
+const native = ['Atom Lab', 'Orbit Lab'];
+o.push(`static const LearnSection kLearnSections[] = {${secs.filter(e => native.includes(e.children[0].innerHTML.replace(/^\S+ /, ''))).map(e => `{${q(e.children[0].innerHTML.replace(/^\S+ /, ''))}, ${q(e.children[0].innerHTML)}}`).join(', ')}};`);
+o.push(`static const LearnCard kLearnCards[] = {${native.flatMap(lab => A.LEARN[lab].map((x, i) => `\n  {${q(lab)}, ${q(x.label.split(' ')[0])}, ${q(x.title)}, ${q(x.d)}, ${i + 1}}`)).join(',')}};`);
+
 fs.mkdirSync(path.join(__dirname, '../src/app'), {recursive: true});
 fs.writeFileSync(path.join(__dirname, '../src/app/app_text.inc'), o.join('\n') + '\n');
 console.log('wrote app_text.inc');

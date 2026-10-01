@@ -125,6 +125,7 @@ if(PL_BUILD_APP)
     src/atom/atom_view.cpp
     src/ui/orbit_panel.cpp
     src/ui/app_pages.cpp
+    src/ui/app_tabs.cpp
     src/ui/atom_panel.cpp
     src/ui/atom_learn.cpp
     src/ui/html_view.cpp

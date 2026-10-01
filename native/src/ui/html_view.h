@@ -10,5 +10,7 @@
 namespace ui {
 
 void htmlView(const std::string& html, const std::function<void()>& chips = nullptr);
+// What a click on an action word does (the guide's "monochrome" word calls it with "monoKey").
+void setHtmlAction(std::function<void(const std::string&)> f);
 
 }  // namespace ui
