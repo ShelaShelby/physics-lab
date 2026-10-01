@@ -185,6 +185,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             const Body* b = findBody(sys, sel.bodyId);
             ok = b && visible(*b) && (sel.kind != Selection::Moon || (set.moons && sel.moon < static_cast<int>(b->moons.size())));
         }
+        if (sel.kind == Selection::Belt) ok = set.belts && sel.moon >= 0 && sel.moon < static_cast<int>(sys.belts.size());
         if (!ok) { sel = Selection{}; follow = false; }
     }
 
@@ -269,6 +270,28 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             std::string label = (v == std::floor(v) ? fmt::commas(v) : fmt::fixed(v, 1)) + " AU";
             if (au >= 30000) label += " · " + fmtLy(au / kLightYearAU) + " light years";
             T.text(label, q.first, q.second + 3, 10, kMuted.withAlpha(0.75f));
+        }
+    }
+
+    if (set.belts && !sys.belts.empty()) {   // belts: thousands of rocks on Kepler orbits, one instanced draw call per belt
+        if (beltT_ != sys.t || beltEpoch_ != sys.epochMs || beltPos_.size() != sys.belts.size()) {
+            beltPos_.resize(sys.belts.size());
+            for (std::size_t gi = 0; gi < sys.belts.size(); gi++) {
+                const BeltGroup& g = sys.belts[gi];
+                beltPos_[gi].resize(g.n);
+                for (int k = 0; k < g.n; k++) beltPos_[gi][k] = beltPoint(g, k, sys.t);
+            }
+            beltT_ = sys.t; beltEpoch_ = sys.epochMs;
+        }
+        for (std::size_t gi = 0; gi < sys.belts.size(); gi++) {
+            const BeltGroup& g = sys.belts[gi];
+            const bool on = sel.kind == Selection::Belt && sel.moon == static_cast<int>(gi);   // the selected belt: bigger dots, in the look-here colour
+            beltScreen_.clear();
+            for (const Vec3& p : beltPos_[gi]) {
+                const auto q = proj(p.x, p.y);
+                if (q.first > -2 && q.first < W + 2 && q.second > -2 && q.second < H + 2) { beltScreen_.push_back(static_cast<float>(q.first)); beltScreen_.push_back(static_cast<float>(q.second)); }
+            }
+            R.squares(beltScreen_.data(), static_cast<int>(beltScreen_.size() / 2), on ? 2.6 : 1.4, on ? kHL : hexColor(g.color, g.alpha));
         }
     }
 
@@ -448,6 +471,26 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
     }
 
+    // ---- belt names (clickable) ----
+    struct BeltLabel { std::string name; double x, y; bool on; };
+    std::vector<BeltLabel> beltLabels;
+    if (set.belts) {
+        const auto put = [&](const char* key, double rAU, double ang, const char* name) {
+            for (std::size_t gi = 0; gi < sys.belts.size(); gi++) {
+                if (sys.belts[gi].key != key || rAU * kAU * px < 70) continue;
+                const auto q = proj(rAU * kAU * std::cos(ang), rAU * kAU * std::sin(ang));
+                const Selection s{Selection::Belt, 0, static_cast<int>(gi)};
+                beltLabels.push_back({name, q.first, q.second + 4, sel == s});
+                hits_.push_back({s, q.first, q.second + 4 - 5, 28});
+            }
+        };
+        put("main", 3.35, 3.7, "Asteroid belt");
+        put("kuiper", 50, 3.9, "Kuiper belt");
+        put("oort", 60000, 3.9, "Oort cloud");
+        for (const Body& b : sys.bodies)
+            if (b.name == "Jupiter") put("trojan", 5.2, std::atan2(b.pos.y, b.pos.x) + kPi / 3, "Jupiter's Trojans");
+    }
+
     // ---- labels: the selected one first; crowded labels are skipped ----
     {
         std::vector<std::array<double, 3>> placed;        // x, y, width of labels already drawn
@@ -461,6 +504,16 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         };
         put("Sun · 1 solar mass (M☉)", star.first, star.second - srd - (sunTiny ? 11 : 8), 12, kFg, true);
         std::stable_sort(labels.begin(), labels.end(), [](const Label& a, const Label& b) { return a.selected > b.selected; });
+        for (const BeltLabel& l : beltLabels) {
+            if (l.on) {                                   // the selected belt: white text on a pink pill
+                const double tw = T.width(l.name, 12);
+                const ImVec2 a(static_cast<float>(originX + (l.x - tw / 2 - 6) * uiScale), static_cast<float>(originY + (l.y - 12) * uiScale));
+                const ImVec2 b(static_cast<float>(originX + (l.x + tw / 2 + 6) * uiScale), static_cast<float>(originY + (l.y + 6) * uiScale));
+                dl->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(ImVec4(kHL.r, kHL.g, kHL.b, 1)), static_cast<float>(9 * uiScale));
+                T.text(l.name, l.x, l.y, 12, Color{1, 1, 1, 1}, 0.5, false);
+                placed.push_back({l.x, l.y, tw + 12});
+            } else put(l.name, l.x, l.y, 10, kMuted, false);
+        }
         for (const Label& l : labels) put(l.name, l.x, l.y, l.small ? 10 : 12, kFg, l.selected || l.force);
     }
 
@@ -468,7 +521,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     double gizY = H - 44, barY = H - 24;                  // the x y axes and the scale bar sit above the card when there is one
     Card card;
     CardOptions copt;
-    copt.tspeed = set.tspeed; copt.trueScale = TRUE_SCALE; copt.moonsOn = set.moons;
+    copt.tspeed = set.tspeed; copt.trueScale = TRUE_SCALE; copt.moonsOn = set.moons; copt.beltsOn = set.belts;
     if (sel.kind == Selection::Moon) { auto it = exag_.find({sel.bodyId, sel.moon}); copt.moonExaggeration = it == exag_.end() ? 1 : it->second; }
     if (sel.kind != Selection::None && !cardHidden && cardText(sys, sel, copt, card)) {
         const double k = std::max(0.74, std::min(1.0, W / 620)), LH = 13.5 * k, F = 10.5 * k, FT = 11 * k;

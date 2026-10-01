@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "belts.h"
 #include "solar_data.h"
 #include "vec3.h"
 
@@ -74,6 +75,7 @@ public:
     int64_t currentUnixMs() const;          // the same as Unix milliseconds
 
     std::vector<Body> bodies;
+    std::vector<BeltGroup> belts;           // asteroid belt, Trojans, Kuiper belt, Oort cloud (made for the start date)
     double t = 0;                           // simulated seconds since the epoch
     int64_t epochMs = 0;                    // the starting date (Unix ms, UTC)
     int crashed = 0, escaped = 0;

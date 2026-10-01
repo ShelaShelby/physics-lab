@@ -69,6 +69,23 @@ void main() {
 }
 )";
 
+// Squares for instanced drawing: a unit square's corners (per vertex) moved to each centre (per instance)
+static const char* kSquareVS = R"(#version 330 core
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec2 aCentre;
+uniform vec2 uSize;
+uniform float uSide;
+void main() {
+    vec2 p = aCentre + aCorner * uSide;
+    gl_Position = vec4(p.x / uSize.x * 2.0 - 1.0, 1.0 - p.y / uSize.y * 2.0, 0.0, 1.0);
+}
+)";
+static const char* kSquareFS = R"(#version 330 core
+uniform vec4 uColor;
+out vec4 fragColor;
+void main() { fragColor = uColor; }
+)";
+
 static GLuint compile(GLenum type, const char* src) {
     const GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -100,6 +117,33 @@ bool Renderer2D::init() {
         return false;
     }
     uSize_ = glGetUniformLocation(program_, "uSize");
+    {   // the instanced-squares program
+        const GLuint v = compile(GL_VERTEX_SHADER, kSquareVS), f = compile(GL_FRAGMENT_SHADER, kSquareFS);
+        sqProgram_ = glCreateProgram();
+        glAttachShader(sqProgram_, v);
+        glAttachShader(sqProgram_, f);
+        glLinkProgram(sqProgram_);
+        glDeleteShader(v);
+        glDeleteShader(f);
+        glGetProgramiv(sqProgram_, GL_LINK_STATUS, &ok);
+        if (!ok) { std::fprintf(stderr, "square shader link error\n"); return false; }
+        sqSize_ = glGetUniformLocation(sqProgram_, "uSize");
+        sqSide_ = glGetUniformLocation(sqProgram_, "uSide");
+        sqColor_ = glGetUniformLocation(sqProgram_, "uColor");
+        const float corners[12] = {-0.5f, -0.5f, 0.5f, -0.5f, 0.5f, 0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f};
+        glGenVertexArrays(1, &sqVao_);
+        glGenBuffers(1, &sqCornerVbo_);
+        glGenBuffers(1, &sqInstVbo_);
+        glBindVertexArray(sqVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, sqCornerVbo_);
+        glBufferData(GL_ARRAY_BUFFER, sizeof corners, corners, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), reinterpret_cast<void*>(0));
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, sqInstVbo_);
+        glEnableVertexAttribArray(1);
+        glVertexAttribDivisor(1, 1);                      // one centre per square, not per corner
+        glBindVertexArray(0);
+    }
     glGenVertexArrays(1, &vao_);
     glGenBuffers(1, &vbo_);
     glBindVertexArray(vao_);
@@ -115,6 +159,11 @@ bool Renderer2D::init() {
 }
 
 void Renderer2D::shutdown() {
+    if (sqCornerVbo_) glDeleteBuffers(1, &sqCornerVbo_);
+    if (sqInstVbo_) glDeleteBuffers(1, &sqInstVbo_);
+    if (sqVao_) glDeleteVertexArrays(1, &sqVao_);
+    if (sqProgram_) glDeleteProgram(sqProgram_);
+    sqCornerVbo_ = sqInstVbo_ = sqVao_ = sqProgram_ = 0;
     if (vbo_) glDeleteBuffers(1, &vbo_);
     if (vao_) glDeleteVertexArrays(1, &vao_);
     if (program_) glDeleteProgram(program_);
@@ -125,22 +174,56 @@ void Renderer2D::begin(double w, double h) {
     width_ = w > 1 ? w : 1;
     height_ = h > 1 ? h : 1;
     verts_.clear();
+    inst_.clear();
+    segments_.clear();
+    triStart_ = 0;
+}
+
+void Renderer2D::closeTriangles() {
+    if (verts_.size() > triStart_) segments_.push_back({false, static_cast<int>(triStart_), static_cast<int>(verts_.size() - triStart_), 0, {}});
+    triStart_ = verts_.size();
+}
+
+void Renderer2D::squares(const float* xy, int count, double size, Color c) {
+    if (count <= 0) return;
+    closeTriangles();
+    segments_.push_back({true, static_cast<int>(inst_.size() / 2), count, static_cast<float>(size), c});
+    inst_.insert(inst_.end(), xy, xy + 2 * count);
 }
 
 void Renderer2D::end(int fbW, int fbH) {
     glViewport(0, 0, fbW, fbH);                           // the picture fills the bottom-left fbW × fbH pixels of the window
-    if (verts_.empty()) return;
+    closeTriangles();
+    if (segments_.empty()) return;
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_SCISSOR_TEST);
-    glUseProgram(program_);
-    glUniform2f(uSize_, static_cast<float>(width_), static_cast<float>(height_));
-    glBindVertexArray(vao_);
+    // upload this frame's shapes and square centres once, then draw them in order
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(verts_.size() * sizeof(Vertex)), verts_.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts_.size()));
+    if (!inst_.empty()) {
+        glBindBuffer(GL_ARRAY_BUFFER, sqInstVbo_);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(inst_.size() * sizeof(float)), inst_.data(), GL_STREAM_DRAW);
+    }
+    for (const Segment& sg : segments_) {
+        if (!sg.squares) {
+            glUseProgram(program_);
+            glUniform2f(uSize_, static_cast<float>(width_), static_cast<float>(height_));
+            glBindVertexArray(vao_);
+            glDrawArrays(GL_TRIANGLES, sg.first, sg.count);
+        } else {
+            glUseProgram(sqProgram_);
+            glUniform2f(sqSize_, static_cast<float>(width_), static_cast<float>(height_));
+            glUniform1f(sqSide_, sg.size);
+            glUniform4f(sqColor_, sg.c.r, sg.c.g, sg.c.b, sg.c.a);
+            glBindVertexArray(sqVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, sqInstVbo_);
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), reinterpret_cast<void*>(static_cast<std::size_t>(sg.first) * 2 * sizeof(float)));
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, sg.count);
+        }
+    }
     glBindVertexArray(0);
     glUseProgram(0);
 }

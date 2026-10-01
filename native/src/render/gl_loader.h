@@ -33,6 +33,7 @@ typedef std::ptrdiff_t GLintptr;
 #define GL_COLOR_BUFFER_BIT 0x00004000
 #define GL_ARRAY_BUFFER 0x8892
 #define GL_STREAM_DRAW 0x88E0
+#define GL_STATIC_DRAW 0x88E4
 #define GL_FRAGMENT_SHADER 0x8B30
 #define GL_VERTEX_SHADER 0x8B31
 #define GL_COMPILE_STATUS 0x8B81
@@ -79,6 +80,11 @@ typedef std::ptrdiff_t GLintptr;
     X(void, glBufferData, (GLenum t, GLsizeiptr size, const void* data, GLenum usage))            \
     X(void, glVertexAttribPointer, (GLuint i, GLint n, GLenum t, GLboolean norm, GLsizei stride, const void* p)) \
     X(void, glEnableVertexAttribArray, (GLuint i))                                                 \
+    X(void, glDrawArraysInstanced, (GLenum mode, GLint first, GLsizei count, GLsizei instances))  \
+    X(void, glVertexAttribDivisor, (GLuint index, GLuint divisor))                                 \
+    X(void, glUniform4f, (GLint loc, GLfloat a, GLfloat b, GLfloat c, GLfloat d))                  \
+    X(void, glUniform1f, (GLint loc, GLfloat a))                                                   \
+    X(void, glBufferSubData, (GLenum t, GLintptr offset, GLsizeiptr size, const void* data))      \
     X(void, glReadPixels, (GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum t, void* data))
 
 // The function pointers live in their own namespace, so they never clash with the

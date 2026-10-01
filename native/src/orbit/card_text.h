@@ -11,10 +11,16 @@ namespace orbit {
 
 // What is selected in the picture.
 struct Selection {
-    enum Kind { None, Star, Bary, Body, Moon } kind = None;
+    enum Kind { None, Star, Bary, Body, Moon, Belt } kind = None;
     int bodyId = 0;     // Body and Moon: the body's id (for a moon: its planet)
-    int moon = 0;       // Moon: index into the planet's moons
-    bool operator==(const Selection& o) const { return kind == o.kind && (kind == None || kind == Star || kind == Bary || (bodyId == o.bodyId && (kind != Moon || moon == o.moon))); }
+    int moon = 0;       // Moon: index into the planet's moons; Belt: index into SolarSystem::belts
+    bool operator==(const Selection& o) const {
+        if (kind != o.kind) return false;
+        if (kind == Body) return bodyId == o.bodyId;
+        if (kind == Moon) return bodyId == o.bodyId && moon == o.moon;
+        if (kind == Belt) return moon == o.moon;
+        return true;
+    }
     bool operator!=(const Selection& o) const { return !(*this == o); }
 };
 
@@ -27,6 +33,7 @@ struct CardOptions {
     double tspeed = 0;          // Time speed slider value (moons: laps per second)
     bool trueScale = true;      // Sizes: True scale (else Easy to see)
     bool moonsOn = true;
+    bool beltsOn = true;
     double moonExaggeration = 1;   // how many times too wide the selected moon's orbit is drawn
 };
 

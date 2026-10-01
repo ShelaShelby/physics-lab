@@ -30,7 +30,7 @@ void resetToToday(AppState& app) {
     app.sys.loadAt(nowUnixMs());
     app.set.tspeed = kTspeedDefault;
     app.set.zoom = kZoomDefault;
-    app.set.moons = app.set.dwarfs = app.set.comets = true;
+    app.set.moons = app.set.dwarfs = app.set.comets = app.set.belts = true;
     app.view.sel = Selection{};
     app.view.follow = false;
     app.view.ox = app.view.oy = 0;
@@ -133,7 +133,7 @@ void orbitPanel(AppState& app, float width) {
     int trails = app.set.fullTrails ? 1 : 0;
     ImGui::SetNextItemWidth(-1);
     if (ImGui::Combo("##trails", &trails, "Short tail (a little tail behind each object)\0Full orbit trails\0")) app.set.fullTrails = trails == 1;
-    if (app.view.sel.kind != Selection::None) {
+    if (app.view.sel.kind != Selection::None && app.view.sel.kind != Selection::Belt) {
         if (ImGui::Button(app.view.follow ? "◉ Following" : "○ Follow", ImVec2(-1, 0))) app.view.follow = !app.view.follow;
     }
     if (app.set.moons && moonTarget(app)) {
@@ -153,6 +153,7 @@ void orbitPanel(AppState& app, float width) {
     ImGui::Checkbox("Moons", &app.set.moons);
     ImGui::Checkbox("Dwarf planets", &app.set.dwarfs);
     ImGui::Checkbox("Famous comets", &app.set.comets);
+    ImGui::Checkbox("Belts and Oort cloud", &app.set.belts);
 
     // ---- Performance ----
     ImGui::SeparatorText("Performance");
@@ -228,6 +229,23 @@ void orbitPanel(AppState& app, float width) {
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s · moon of %s", b.moons[j].data->name, b.name.c_str());
             next();
         }
+    newRow();
+    ImGui::TextDisabled("Belts and the far edge");
+    {   // belts: selected but not followed; each has a zoom that shows all of it
+        static const struct { const char* key; const char* name; const char* color; double zoom; } B[] = {
+            {"main", "Asteroid belt", "#8a7f72", -0.15}, {"trojan", "Jupiter’s Trojans", "#a08c6a", -0.55}, {"kuiper", "Kuiper belt", "#6f9fc0", -1.55}, {"oort", "Oort cloud", "#9aa5b8", -4.4}};
+        for (const auto& b : B)
+            for (std::size_t gi = 0; gi < app.sys.belts.size(); gi++) {
+                if (app.sys.belts[gi].key != b.key) continue;
+                const Selection s{Selection::Belt, 0, static_cast<int>(gi)};
+                if (tile(b.name, b.color, v.sel == s, tw)) {
+                    app.set.belts = true;
+                    if (v.sel == s) { v.sel = Selection{}; v.follow = false; }
+                    else { v.select(s, false); setZoom(app, b.zoom); v.ox = v.oy = 0; }
+                }
+                next();
+            }
+    }
     newRow();
     ImGui::Spacing();
     ImGui::TextWrapped("Click a tile to fly there. It stays in the middle of the picture. Your time speed is not changed.");

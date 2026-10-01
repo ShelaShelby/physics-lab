@@ -12,7 +12,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
-    {"0.2", "Frame timing and VSync switch",
+    {"0.2", "Belts and Oort cloud, frame timing and VSync switch",
+     "The asteroid belt (with its Kirkwood gaps), Jupiter's Trojans, the Kuiper belt and the Oort cloud are here, "
+     "with the same 6,000 stand-in rocks as the web version (same random seed, same orbits; the tests check they sit in "
+     "the same places). Each belt is drawn with a single draw call, and the rocks are only moved when time moves. "
+     "Click a belt's name or its Go to tile for its facts; a Belts and Oort cloud switch is under Solar System extras. "
      "A new Performance card shows how long each frame takes (the last one, the average and the worst of the last "
      "240 frames, with a small graph) and how much of it is the app's own work. A VSync switch turns off waiting for "
      "the screen, so you can see the real headroom instead of the monitor's refresh rate. Each Windows build is now "

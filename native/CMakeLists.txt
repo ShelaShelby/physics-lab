@@ -28,6 +28,7 @@ add_library(orbit_core STATIC
   src/orbit/solar_system.cpp
   src/orbit/format.cpp
   src/orbit/card_text.cpp
+  src/orbit/belts.cpp
 )
 target_include_directories(orbit_core PUBLIC src)
 if(NOT MSVC)

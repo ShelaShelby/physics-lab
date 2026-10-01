@@ -23,6 +23,7 @@ struct ViewSettings {
     bool moons = true;          // Solar System extras
     bool dwarfs = true;
     bool comets = true;
+    bool belts = true;          // Belts and Oort cloud
 };
 
 class OrbitView {
@@ -48,6 +49,12 @@ private:
     struct Hit { Selection sel; double x, y, r; };
     std::vector<Hit> hits_;
     std::map<std::pair<int, int>, double> exag_; // moon (body id, index) -> how many times too wide its orbit is drawn
+    // belt rocks: positions only change with the simulated time, so they are worked out
+    // once per time step (not again while paused, or when only the view moves)
+    std::vector<std::vector<Vec3>> beltPos_;
+    double beltT_ = -1;
+    int64_t beltEpoch_ = 0;
+    std::vector<float> beltScreen_;              // on-screen rock centres for one belt (reused every frame)
 };
 
 }  // namespace orbit

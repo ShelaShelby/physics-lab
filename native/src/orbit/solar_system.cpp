@@ -77,6 +77,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
         bodies.push_back(std::move(b));
     }
     for (Body& b : bodies) attachMoons(b);
+    belts = makeBelts(unixMs);
 }
 
 void SolarSystem::step(double dt, double tspeed) {

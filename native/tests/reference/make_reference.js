@@ -72,9 +72,12 @@ const code = [
   cutArray('const COMETS = ['),
   cutFunction('cometState'),
   cutFunction('baryOf'),
+  cutFunction('rng'),
+  cutFunction('makeBelts'),
+  cutFunction('beltPoint'),
   stepSrc,
   dtSrc,
-  'globalThis.R = {AU, YEAR, AU_KM, STAR_R, LOST_R, DT, orbitOf, keplerE, keplerState, solarBodies, baryOf, orbitStep, COMETS, cometState, MOONS};',
+  'globalThis.R = {AU, YEAR, AU_KM, STAR_R, LOST_R, DT, orbitOf, keplerE, keplerState, solarBodies, baryOf, orbitStep, COMETS, cometState, MOONS, rng, makeBelts, beltPoint};',
 ].join('\n');
 if (process.env.DUMP) fs.writeFileSync(process.env.DUMP, code);
 const ctx = {Math, Date, console};
@@ -129,6 +132,21 @@ for (const [name, ts, steps, note] of runs) {
 const ks = [[0, 30], [0.2, 100], [0.9, 1], [0.99917, -0.5], [0.99, 179.9], [0.5, -179]];
 out.push('struct KeplerCase { double e, Mdeg, E; };');
 out.push('inline const KeplerCase kKepler[] = {\n' + ks.map(([e, M]) => `  {${e}, ${M}, ${num(R.keplerE(e, M))}},`).join('\n') + '\n};');
+// 6) belts: the random numbers, and a sample of rocks at the start and 100 years later
+{
+  const r = R.rng(20260929);
+  out.push(`constexpr double kRng[5] = {${[r(), r(), r(), r(), r()].map(num).join(', ')}};`);
+  const belts = R.makeBelts(EPOCH_MS, true), o = [0, 0, 0], rows = [];
+  const pick = {main: [0, 1, 2, 777, 1799], trojan: [0, 1, 150, 299], kuiper: [0, 1, 450, 899], oort: [0, 1, 799, 800, 2999]};
+  const yrs100 = 100*R.YEAR;
+  for (const g of belts) for (const k of pick[g.key]) for (const t of [0, yrs100]) {
+    if (g.static) { o[0] = g.x[k]; o[1] = g.y[k]; o[2] = g.z[k]; } else R.beltPoint(g, k, t, 100, o);
+    rows.push(`  {"${g.key}", ${k}, ${num(t*T)}, ${num(o[0]*L)}, ${num(o[1]*L)}, ${num(o[2]*L)}},`);
+  }
+  out.push('struct BeltRock { const char* group; int k; double t, x, y, z; };  // t in s after the epoch; position in m');
+  out.push('inline const BeltRock kBeltRocks[] = {\n' + rows.join('\n') + '\n};');
+  out.push('constexpr int kBeltCounts[4] = {' + belts.map(g => g.n).join(', ') + '};  // main, trojan, kuiper, oort');
+}
 out.push('}  // namespace ref');
 
 fs.writeFileSync(path.join(__dirname, 'reference_values.h'), out.join('\n') + '\n');

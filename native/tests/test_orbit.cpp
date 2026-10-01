@@ -12,6 +12,7 @@
 #include <cstring>
 #include <string>
 
+#include "orbit/belts.h"
 #include "orbit/card_text.h"
 #include "orbit/format.h"
 #include "orbit/kepler.h"
@@ -36,7 +37,8 @@ static void near(double got, double want, double scale, double relTol, const std
     check(ok, what);
 }
 
-static double worstRel = 0;   // worst position error / distance from the Sun, for the summary
+static double worstRel = 0;
+static double worstBelt = 0;   // the same for belt rocks
 
 static void compareStates(const SolarSystem& sys, const ref::BodyState* want, std::size_t n, double relTol, const char* label) {
     check(sys.bodies.size() == n, std::string(label) + ": number of bodies");
@@ -132,7 +134,27 @@ int main() {
         near(e1, e0, e0, 1e-6, "Earth orbital energy conserved over one year");
     }
 
-    // 7) number and date wording (as JavaScript would write them)
+    // 7) belts: same random numbers, same rocks in the same places as the web version
+    {
+        Mulberry32 r(20260929);
+        for (double want : ref::kRng) near(r.next(), want, 1.0, 0, "rng");
+        const auto belts = makeBelts(ref::kEpochMs);
+        check(belts.size() == 4, "4 belt groups");
+        for (std::size_t i = 0; i < belts.size() && i < 4; i++) check(belts[i].n == ref::kBeltCounts[i], "belt count " + belts[i].key);
+        for (const auto& w : ref::kBeltRocks) {
+            const BeltGroup* g = nullptr;
+            for (const auto& b : belts) if (b.key == w.group) g = &b;
+            if (!g) { check(false, std::string("belt group ") + w.group); continue; }
+            const Vec3 p = beltPoint(*g, w.k, w.t);
+            const double r = std::sqrt(w.x * w.x + w.y * w.y + w.z * w.z);
+            const std::string tag = std::string("belt ") + w.group + " rock " + std::to_string(w.k) + (w.t > 0 ? " +100 y" : "");
+            // 1e-6: the web stores the Oort cloud in sim units as 32-bit floats, we store metres as 32-bit floats
+            near(p.x, w.x, r, 1e-6, tag + " x"); near(p.y, w.y, r, 1e-6, tag + " y"); near(p.z, w.z, r, 1e-6, tag + " z");
+            worstBelt = std::fmax(worstBelt, length(p - Vec3{w.x, w.y, w.z}) / r);
+        }
+    }
+
+    // 8) number and date wording (as JavaScript would write them)
     check(fmt::plainNumber(-110) == "-110", "plainNumber(-110) = " + fmt::plainNumber(-110));
     check(fmt::plainNumber(2439.7) == "2439.7", "plainNumber(2439.7) = " + fmt::plainNumber(2439.7));
     check(fmt::plainNumber(0.0553) == "0.0553", "plainNumber(0.0553) = " + fmt::plainNumber(0.0553));
@@ -145,7 +167,7 @@ int main() {
     check(fmt::years(0.05) == "18 days", "years(0.05) = " + fmt::years(0.05));
     check(fmt::years(0.2408) == "0.24 years", "years(0.2408) = " + fmt::years(0.2408));
 
-    // 8) the info cards (printed so they can be read and compared with the web version)
+    // 9) the info cards (printed so they can be read and compared with the web version)
     {
         SolarSystem s; s.loadAt(ref::kEpochMs);
         CardOptions opt; opt.tspeed = units::kTspeedDefault;
@@ -158,7 +180,7 @@ int main() {
         }
     }
 
-    std::printf("%d checks, %d failed. Worst position difference vs the web version: %.3g of the distance from the Sun.\n",
-                g_checks, g_failed, worstRel);
+    std::printf("%d checks, %d failed. Worst position difference vs the web version: %.3g of the distance from the Sun (belt rocks: %.3g).\n",
+                g_checks, g_failed, worstRel, worstBelt);
     return g_failed ? 1 : 0;
 }
