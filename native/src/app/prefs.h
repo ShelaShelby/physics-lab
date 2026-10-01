@@ -11,8 +11,24 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace app {
+
+// Where the window was: its size and (if known) its place, in the window system's own units, and whether it was maximised.
+// w, h, x, y describe the window as it is when NOT maximised, so un-maximising goes back to it.
+struct WindowState {
+    int w = 0, h = 0;
+    int x = 0, y = 0;
+    bool hasPos = false;
+    bool maximized = false;
+    bool operator==(const WindowState& o) const { return w == o.w && h == o.h && x == o.x && y == o.y && hasPos == o.hasPos && maximized == o.maximized; }
+};
+constexpr int kMinWindowW = 800, kMinWindowH = 500;      // the safe minimum: the header, the tabs and the panel all fit
+struct ScreenRect { int x, y, w, h; };                    // a screen (monitor) in the window system's units
+// What to open the window with: the saved state with its size at least the safe minimum (and at most the biggest screen),
+// and its place dropped (hasPos = false: centre it) if its title bar is not on any screen now (a monitor was unplugged).
+WindowState fitWindow(WindowState s, const std::vector<ScreenRect>& screens);
 
 struct Prefs {
     std::string theme = "auto";          // a THEMES id
@@ -24,6 +40,7 @@ struct Prefs {
     std::set<std::string> unlocked;      // secret themes: synthwave, monochrome
     std::map<std::string, int64_t> achievements;   // id -> when it was earned (Unix ms; 0 = earlier, or unlocked for testing)
     std::optional<bool> atomMore;        // the Atom Lab's More / Less info choice
+    std::optional<WindowState> window;   // the window as it was last time (none: the default size, centred)
     std::string lab = "Orbit Lab";       // the lab on screen
     std::map<std::string, std::string> orbit, atom;   // each lab's settings, as text (checked when they are used)
 };

@@ -53,6 +53,7 @@ Each lab keeps its state while the other one is on screen.
 - **⚙ Settings**: text size, font, units (metric or imperial), motion (Auto follows Windows'
   "Animation effects"; Reduced starts the labs paused and stops gliding and spinning), Reset my
   progress, and Developer → Unlock everything.
+- **The window** opens where and how big it was last time (and maximised, if it was); if that place is no longer on a screen it opens centred. **F11** turns full screen on and off.
 - **💡 Did you know?**: a fact under the header; click for the next one. Somewhere in the list is a 🎁.
 - **Tabs**: 🔬 Simulations (the labs), 📚 Learn (every guide of both labs; a click opens it in its lab)
   and 🏆 Achievements (four to find).

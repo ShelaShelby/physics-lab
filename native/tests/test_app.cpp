@@ -524,6 +524,44 @@ static void testFps() {
     checkStr("fps 1000", fpsText(1000), "1000 fps");
 }
 
+// ---- the window's size, place and maximised state in the settings file ----
+static void testWindow() {
+    Prefs p;
+    p.window = WindowState{1234, 777, -50, 80, true, true};
+    Prefs q = loadPrefs(savePrefs(p));
+    checkTrue("window round trip", q.window.has_value() && *q.window == *p.window);
+    p.window = WindowState{900, 600, 0, 0, false, false};          // no known place
+    q = loadPrefs(savePrefs(p));
+    checkTrue("window without a place", q.window && q.window->w == 900 && q.window->h == 600 && !q.window->hasPos && !q.window->maximized);
+    checkTrue("no window saved: none loaded", !loadPrefs(savePrefs(Prefs{})).window.has_value());
+    checkTrue("a window line in the file", savePrefs(Prefs{[] { Prefs x; x.window = WindowState{1000, 700, 10, 20, true, false}; return x; }()}).find("\nwindow=1000,700,10,20,0\n") != std::string::npos);
+    // bad or odd lines are ignored, like the other settings
+    for (const char* bad : {"window=\n", "window=abc\n", "window=1000,700\n", "window=1000,700,1,2\n", "window=1000,700,1,2,3\n", "window=0,700,1,2,0\n", "window=-5,700,1,2,0\n",
+                            "window=1000,700,x,2,0\n", "window=1000,700,1,2,0,9\n", "window=99999999,700,1,2,0\n", "window=1000,700,999999999,2,0\n", "window=1000;700;1;2;0\n", "window=1000,700,-,2,0\n"})
+        checkTrue(std::string("bad window line ignored: ") + bad, !loadPrefs(bad).window.has_value());
+    checkTrue("a bad line does not touch the other settings", loadPrefs("theme=paper\nwindow=oops\nfont=serif\n").theme == "paper" && loadPrefs("theme=paper\nwindow=oops\nfont=serif\n").font == "serif");
+    checkTrue("the last good line wins, a later bad one does not erase it", loadPrefs("window=1000,700,1,2,0\nwindow=bad\n").window && loadPrefs("window=1000,700,1,2,0\nwindow=bad\n").window->w == 1000);
+    // never smaller than the safe minimum
+    const Prefs tiny = loadPrefs("window=100,50,0,0,0\n");
+    checkTrue("a tiny window is raised to the minimum", tiny.window && tiny.window->w == kMinWindowW && tiny.window->h == kMinWindowH);
+    checkTrue("fitWindow raises a tiny size too", fitWindow(WindowState{10, 10, 0, 0, true, false}, {{0, 0, 1920, 1080}}).w == kMinWindowW);
+    // the place: on a screen, partly on a screen, off every screen
+    const std::vector<ScreenRect> one = {{0, 0, 1920, 1080}};
+    const std::vector<ScreenRect> two = {{0, 0, 1920, 1080}, {1920, 0, 1920, 1080}};
+    checkTrue("on the screen: kept", fitWindow(WindowState{1400, 860, 100, 50, true, false}, one).hasPos);
+    checkTrue("on the second screen: kept", fitWindow(WindowState{1400, 860, 2000, 50, true, false}, two).hasPos);
+    checkTrue("second monitor unplugged: centred", !fitWindow(WindowState{1400, 860, 2000, 50, true, false}, one).hasPos);
+    checkTrue("left of every screen: centred", !fitWindow(WindowState{1000, 700, -3000, 50, true, false}, one).hasPos);
+    checkTrue("below every screen: centred", !fitWindow(WindowState{1000, 700, 100, 2000, true, false}, one).hasPos);
+    checkTrue("only a sliver on screen: centred", !fitWindow(WindowState{1000, 700, 1850, 50, true, false}, one).hasPos);
+    checkTrue("title bar on screen, body hanging off the bottom: kept", fitWindow(WindowState{1000, 700, 100, 1000, true, false}, one).hasPos);
+    checkTrue("title bar above the screen: centred", !fitWindow(WindowState{1000, 700, 100, -300, true, false}, one).hasPos);
+    checkTrue("no screens known: the place is kept out", !fitWindow(WindowState{1000, 700, 100, 100, true, false}, {}).hasPos);
+    const WindowState big = fitWindow(WindowState{5000, 3000, 0, 0, true, false}, one);
+    checkTrue("bigger than the biggest screen: shrunk to it", big.w == 1920 && big.h == 1080);
+    checkTrue("maximised is kept", fitWindow(WindowState{1000, 700, 100, 100, true, true}, one).maximized);
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -533,6 +571,7 @@ int main() {
     testFactsAndTabs();
     testShot();
     testFps();
+    testWindow();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

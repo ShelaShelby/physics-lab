@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <vector>
 #include "prefs.h"
 
 #include <cstdlib>
@@ -39,6 +41,8 @@ std::string savePrefs(const Prefs& p) {
     o << "unlock=" << un << "\n";
     for (const auto& [id, t] : p.achievements) o << "ach." << clean(id) << "=" << t << "\n";
     if (p.atomMore) o << "atomMore=" << (*p.atomMore ? 1 : 0) << "\n";
+    if (p.window) o << "window=" << p.window->w << "," << p.window->h << "," << (p.window->hasPos ? std::to_string(p.window->x) : "-") << ","
+                    << (p.window->hasPos ? std::to_string(p.window->y) : "-") << "," << (p.window->maximized ? 1 : 0) << "\n";
     o << "lab=" << clean(p.lab) << "\n";
     for (const auto& [k, v] : p.orbit) o << "orbit." << clean(k) << "=" << clean(v) << "\n";
     for (const auto& [k, v] : p.atom) o << "atom." << clean(k) << "=" << clean(v) << "\n";
@@ -78,7 +82,24 @@ Prefs loadPrefs(const std::string& text) {
             const long long t = std::strtoll(v.c_str(), &end, 10);
             if (known && end && *end == 0 && !v.empty()) p.achievements[id] = t;
         } else if (k == "atomMore") { if (v == "1" || v == "0") p.atomMore = v == "1"; }
-        else if (k == "lab") { if (v == "Orbit Lab" || v == "Atom Lab") p.lab = v; }
+        else if (k == "window") {                                                  // w,h,x,y,max  (x and y are "-" when the place is not known)
+            std::vector<std::string> f;
+            std::size_t a = 0;
+            while (a <= v.size()) { std::size_t b = v.find(',', a); if (b == std::string::npos) b = v.size(); f.push_back(v.substr(a, b - a)); a = b + 1; }
+            auto num = [](const std::string& s, long long lo, long long hi, long long& out) {
+                char* end = nullptr;
+                const long long n = std::strtoll(s.c_str(), &end, 10);
+                if (s.empty() || !end || *end || n < lo || n > hi) return false;
+                out = n; return true;
+            };
+            long long w = 0, h = 0, x = 0, y = 0, m = 0;
+            if (f.size() == 5 && num(f[0], 1, 30000, w) && num(f[1], 1, 30000, h) && num(f[4], 0, 1, m) && ((f[2] == "-" && f[3] == "-") || (num(f[2], -100000, 100000, x) && num(f[3], -100000, 100000, y)))) {
+                WindowState ws;
+                ws.w = std::max<int>(kMinWindowW, int(w)); ws.h = std::max<int>(kMinWindowH, int(h));
+                ws.hasPos = f[2] != "-"; ws.x = int(x); ws.y = int(y); ws.maximized = m == 1;
+                p.window = ws;
+            }
+        } else if (k == "lab") { if (v == "Orbit Lab" || v == "Atom Lab") p.lab = v; }
         else if (k.rfind("orbit.", 0) == 0) p.orbit[k.substr(6)] = v;
         else if (k.rfind("atom.", 0) == 0) p.atom[k.substr(5)] = v;
     }
@@ -87,6 +108,24 @@ Prefs loadPrefs(const std::string& text) {
     // a secret theme that is not unlocked cannot be in use (as the web's start-up check)
     if (!themeUsable(p, p.theme)) p.theme = "auto";
     return p;
+}
+
+WindowState fitWindow(WindowState s, const std::vector<ScreenRect>& screens) {
+    s.w = std::max(s.w, kMinWindowW);
+    s.h = std::max(s.h, kMinWindowH);
+    int maxW = 0, maxH = 0;
+    for (const ScreenRect& r : screens) { maxW = std::max(maxW, r.w); maxH = std::max(maxH, r.h); }
+    if (maxW >= kMinWindowW && maxH >= kMinWindowH) { s.w = std::min(s.w, maxW); s.h = std::min(s.h, maxH); }   // never bigger than the biggest screen
+    if (s.hasPos) {
+        // the title bar (the top 40 units of the window) must show on some screen, at least 120 units wide
+        bool seen = false;
+        for (const ScreenRect& r : screens) {
+            const int x0 = std::max(s.x, r.x), x1 = std::min(s.x + s.w, r.x + r.w), y0 = std::max(s.y, r.y), y1 = std::min(s.y + 40, r.y + r.h);
+            if (x1 - x0 >= 120 && y1 - y0 >= 40) seen = true;
+        }
+        if (!seen) s.hasPos = false;                   // off every screen (a monitor was unplugged): centre it
+    }
+    return s;
 }
 
 Rgb hexRgb(const std::string& h) {

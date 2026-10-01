@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
@@ -36,7 +37,7 @@
 
 namespace {
 
-SDL_Window* createWindow(float scale, bool multisample) {
+SDL_Window* createWindow(float scale, bool multisample, const app::WindowState& ws) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -45,9 +46,10 @@ SDL_Window* createWindow(float scale, bool multisample) {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, multisample ? 1 : 0);   // smooth edges on lines and dots
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, multisample ? 4 : 0);
     const std::string title = std::string("Physics Lab ") + ui::appVersion() + " — Orbit Lab";
-    int w = 1400, h = 860;
-    if (const char* wh = SDL_getenv("PL_WINDOW")) std::sscanf(wh, "%dx%d", &w, &h);   // for automatic checks: PL_WINDOW=1000x640
-    return SDL_CreateWindow(title.c_str(), static_cast<int>(w * scale), static_cast<int>(h * scale),
+    int w = static_cast<int>(1400 * scale), h = static_cast<int>(860 * scale);          // the first time: 1400 × 860 points
+    if (ws.w > 0) { w = ws.w; h = ws.h; }                                              // later: where it was (window-system units)
+    if (const char* wh = SDL_getenv("PL_WINDOW")) { int a = 0, b = 0; if (std::sscanf(wh, "%dx%d", &a, &b) == 2) { w = static_cast<int>(a * scale); h = static_cast<int>(b * scale); } }   // for automatic checks: PL_WINDOW=1000x640
+    return SDL_CreateWindow(title.c_str(), w, h,
                             SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
 }
 
@@ -64,18 +66,34 @@ int main(int, char**) {
 
     float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());   // 1.5 on a Windows screen at 150 %
     if (scale <= 0) scale = 1;
-    SDL_Window* window = createWindow(scale, true);
+    // the saved settings come first: they say where the window was
+    ui::AppState app;
+    ui::resetToToday(app);
+    ui::loadSettings(app);                              // the theme, text size, font, motion, units, unlocks and both labs' settings, and the window
+    std::vector<app::ScreenRect> screens;
+    {
+        int n = 0;
+        SDL_DisplayID* ids = SDL_GetDisplays(&n);
+        for (int i = 0; ids && i < n; i++) { SDL_Rect r; if (SDL_GetDisplayBounds(ids[i], &r)) screens.push_back({r.x, r.y, r.w, r.h}); }
+        SDL_free(ids);
+    }
+    app::WindowState start;                             // size 0: the default
+    if (app.prefs.window) start = app::fitWindow(*app.prefs.window, screens);
+    SDL_Window* window = createWindow(scale, true, start);
     SDL_GLContext gl = window ? SDL_GL_CreateContext(window) : nullptr;
     if (!gl) {                                          // no multisampling available: try again without
         if (window) SDL_DestroyWindow(window);
-        window = createWindow(scale, false);
+        window = createWindow(scale, false, start);
         gl = window ? SDL_GL_CreateContext(window) : nullptr;
     }
     if (!window || !gl) { fail("Could not open an OpenGL 3.3 window"); return 1; }
     SDL_GL_MakeCurrent(window, gl);
     SDL_GL_SetSwapInterval(1);                          // vsync: smooth, and no wasted work
-    SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    if (start.w > 0 && start.hasPos) SDL_SetWindowPosition(window, start.x, start.y);
+    else SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);   // the first time, or the saved place is off every screen now
     SDL_ShowWindow(window);
+    Uint64 maximizeUntil = 0;                           // the window system maximises a moment later: do not record the old state meanwhile
+    if (start.w > 0 && start.maximized) { SDL_MaximizeWindow(window); maximizeUntil = SDL_GetTicks() + 1500; }
 
     const char* missing = nullptr;
     if (!plgl::loadGL(&missing)) { std::fprintf(stderr, "OpenGL function missing: %s\n", missing); fail("OpenGL 3.3 is not available"); return 1; }
@@ -96,9 +114,6 @@ int main(int, char**) {
     ImGui_ImplSDL3_InitForOpenGL(window, gl);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
-    ui::AppState app;
-    ui::resetToToday(app);
-    ui::loadSettings(app);                              // the theme, text size, font, motion, units, unlocks and both labs' settings
     if (SDL_getenv("PL_IMPERIAL")) fmt::setImperial(true);   // for automatic checks
     if (const char* t = SDL_getenv("PL_THEME")) { app.prefs.unlocked.insert(t); app.prefs.theme = t; }   // for automatic checks
     if (const char* t = SDL_getenv("PL_TEXTSIZE")) app.prefs.textSize = t;
@@ -174,6 +189,7 @@ int main(int, char**) {
             case SDL_EVENT_QUIT: running = false; break;
             case SDL_EVENT_WINDOW_CLOSE_REQUESTED: if (e.window.windowID == SDL_GetWindowID(window)) running = false; break;
             case SDL_EVENT_KEY_DOWN:
+                if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) app.paused = !app.paused;
                 break;
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
@@ -212,6 +228,20 @@ int main(int, char**) {
                 mouseDown = dragging = false;
                 break;
             default: break;
+            }
+        }
+        {   // remember the window: its size and place when it is a normal window, and whether it is maximised
+            const SDL_WindowFlags fl = SDL_GetWindowFlags(window);
+            if (fl & SDL_WINDOW_MAXIMIZED) maximizeUntil = 0;
+            if (!(fl & SDL_WINDOW_MINIMIZED) && SDL_GetTicks() >= maximizeUntil) {
+                app::WindowState ws = app.prefs.window ? *app.prefs.window : app::WindowState{};
+                if (!(fl & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_FULLSCREEN))) {
+                    SDL_GetWindowSize(window, &ws.w, &ws.h);
+                    SDL_GetWindowPosition(window, &ws.x, &ws.y);
+                    ws.hasPos = true;
+                    ws.maximized = false;
+                } else if (!(fl & SDL_WINDOW_FULLSCREEN)) ws.maximized = true;
+                if (ws.w > 0) app.prefs.window = ws;
             }
         }
         if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) { SDL_Delay(20); last = SDL_GetPerformanceCounter(); continue; }
