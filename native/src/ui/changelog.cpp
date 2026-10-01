@@ -17,6 +17,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9.1", "Sliders that look like sliders",
+     "The Time speed and Zoom sliders have a clearly visible track and a bigger, easier-to-grab thumb in every theme, and their values "
+     "are written above them instead of under the thumb. The \"Drag rotates the view\" button is no longer cut off."},
     {"0.9", "Keeps running while the window is moved or resized, a checked GPU timer, stress scenes",
      "The simulation and the drawing no longer freeze while you drag the window by its title bar or an edge (Windows pauses the app's own "
      "loop then; the app now draws from the window system's own refresh signal instead). The picture and the panels follow the new size "

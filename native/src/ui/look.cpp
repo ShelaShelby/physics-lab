@@ -227,6 +227,7 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     st.FrameRounding = r * 0.7f; st.GrabRounding = r * 0.5f; st.PopupRounding = r; st.ChildRounding = r; st.TabRounding = r * 0.7f;
     st.ScrollbarRounding = r; st.WindowRounding = 0;
     st.FrameBorderSize = 1;
+    st.GrabMinSize = 16.0f * st.FontScaleDpi * L.textScale;   // a thumb that is easy to see and grab
     const app::ThemeColors& c = L.c;
     ImVec4* k = st.Colors;
     k[ImGuiCol_Text] = vec(c.fg);
@@ -234,9 +235,9 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     k[ImGuiCol_WindowBg] = vec(c.bg);
     k[ImGuiCol_ChildBg] = vec(c.bg, 0);
     k[ImGuiCol_PopupBg] = vec(c.card);
-    k[ImGuiCol_Border] = vec(c.line);
+    k[ImGuiCol_Border] = vec(mix(c.line, c.fg, 0.25f));
     k[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
-    k[ImGuiCol_FrameBg] = vec(mix(c.card, c.fg, 0.07f));
+    k[ImGuiCol_FrameBg] = vec(mix(c.card, c.fg, 0.16f));
     k[ImGuiCol_FrameBgHovered] = vec(mix(c.card, c.accent, 0.18f));
     k[ImGuiCol_FrameBgActive] = vec(mix(c.card, c.accent, 0.3f));
     k[ImGuiCol_TitleBg] = vec(c.card);
@@ -248,7 +249,7 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     k[ImGuiCol_ScrollbarGrabHovered] = vec(mix(c.line, c.fg, 0.2f));
     k[ImGuiCol_ScrollbarGrabActive] = vec(c.accent);
     k[ImGuiCol_CheckMark] = vec(c.accent);
-    k[ImGuiCol_SliderGrab] = vec(c.accent);
+    k[ImGuiCol_SliderGrab] = vec(mix(c.accent, c.fg, 0.1f));
     k[ImGuiCol_SliderGrabActive] = vec(mix(c.accent, c.fg, 0.2f));
     k[ImGuiCol_Button] = vec(c.card);
     k[ImGuiCol_ButtonHovered] = vec(mix(c.card, c.accent, 0.22f));

@@ -159,10 +159,10 @@ void orbitPanel(AppState& app, float width) {
     // ---- Time ----
     ImGui::SeparatorText("Time");
     if (wideButton(app.paused ? "▶ Play" : "❚❚ Pause")) app.paused = !app.paused;
-    ImGui::TextUnformatted("Time speed");
+    ImGui::Text("Time speed: %s", tspeedText(app.set.tspeed).c_str());   // the value on its own line: the slider's thumb would cover it
     float ts = static_cast<float>(app.set.tspeed);
     ImGui::SetNextItemWidth(-1);
-    if (ImGui::SliderFloat("##tspeed", &ts, static_cast<float>(kTspeedMin), static_cast<float>(kTspeedMax), tspeedText(app.set.tspeed).c_str()))
+    if (ImGui::SliderFloat("##tspeed", &ts, static_cast<float>(kTspeedMin), static_cast<float>(kTspeedMax), ""))
         app.set.tspeed = ts;
     ImGui::TextDisabled("Space: play / pause");
 
@@ -174,16 +174,14 @@ void orbitPanel(AppState& app, float width) {
         if (ImGui::Combo("##view", &v3, "2D (top-down)\0" "3D (rotatable)\0")) app.set.view3D = v3 == 1;
     }
     if (app.set.view3D) {
-        const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
-        if (ImGui::Button(app.view.panMode ? "✥ Drag moves the view" : "⟲ Drag rotates the view", ImVec2(half, 0))) app.view.panMode = !app.view.panMode;
-        ImGui::SameLine();
+        if (wideButton(app.view.panMode ? "✥ Drag moves the view" : "⟲ Drag rotates the view")) app.view.panMode = !app.view.panMode;   // full width: it does not fit half a row at big text sizes
         if (wideButton(app.view.spin ? "⟳ Spin: on" : "⟳ Spin: off")) app.view.spin = !app.view.spin;
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("Right-drag or Shift-drag always moves the view"); ImGui::PopStyleColor();
     }
-    ImGui::TextUnformatted("Zoom");
+    ImGui::Text("Zoom: %s", zoomText(app.set.zoom).c_str());
     float z = static_cast<float>(app.set.zoom);
     ImGui::SetNextItemWidth(-1);
-    if (ImGui::SliderFloat("##zoom", &z, static_cast<float>(kZoomMin), static_cast<float>(kZoomMax), zoomText(app.set.zoom).c_str())) setZoom(app, z);
+    if (ImGui::SliderFloat("##zoom", &z, static_cast<float>(kZoomMin), static_cast<float>(kZoomMax), "")) setZoom(app, z);
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("Mouse wheel zooms, drag moves the view"); ImGui::PopStyleColor();
     ImGui::TextUnformatted("Sizes");
     int sizes = app.set.trueScale ? 0 : 1;
