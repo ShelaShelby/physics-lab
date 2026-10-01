@@ -17,6 +17,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.8", "Benchmark, history with the native updates on top",
+     "A Benchmark button in the Performance card (both labs): it runs four fixed scenes (the heaviest Orbit Lab view, the uranium-238 "
+     "nucleus, Cloud 3D, one nucleon) with VSync off at the window's size, 2 s of warm-up and 8 s counted each, and shows the average "
+     "frame time and fps, the 1 % low, the worst frame, the CPU work and the GPU time (where the driver gives it). The result is "
+     "copied to the clipboard and saved as a text file next to the saved pictures, with the graphics card, the OpenGL version and the "
+     "window size on top. It gives all your settings back, and Esc stops it. The 🕰 history now lists the native updates first, then "
+     "the web's own history with its note."},
     {"0.7", "fps counter in both labs, the window remembers itself, icon",
      "The frames-per-second counter is now in the Atom Lab too (it was only in the Orbit Lab): top right of the picture, in the "
      "web's small see-through rounded box, in every theme and text size, and it is drawn in one place for every lab. It is not in "

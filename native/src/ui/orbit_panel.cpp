@@ -14,6 +14,7 @@
 #include "app_pages.h"
 #include "look.h"
 #include "shot.h"
+#include "benchmark.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
@@ -116,6 +117,7 @@ void performanceCard(AppState& app) {
         st.ordered(hist);
         ImGui::PlotLines("##frametimes", hist, FrameStats::kHistory, 0, "frame time, last 240 frames", 0.0f, std::max(2 * avg, 1.0f), ImVec2(-1, 50));
     }
+    benchmarkButton(app);
 }
 
 void orbitPanel(AppState& app, float width) {

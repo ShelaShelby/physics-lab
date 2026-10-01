@@ -15,6 +15,9 @@
 #include "app/shot.h"
 #include "app/fps.h"
 #include "app/history.h"
+#include "app/bench.h"
+#include "atom/atom_bench.h"
+#include "orbit/solar_system.h"
 
 #include "reference/app_reference.inc"
 
@@ -573,6 +576,125 @@ static void testHistoryNotes() {
     // the web's own history text is still compared word for word in testPages (kAppLog against the web run, intro, closing note)
 }
 
+// ---- the benchmark: the numbers, the run, the text, and giving everything back ----
+static bool near(double a, double b, double eps = 1e-9) { return std::fabs(a - b) <= eps * std::max(1.0, std::fabs(b)); }
+
+static void testBench() {
+    // the statistics, with known inputs
+    BenchStats e = benchStats({});
+    checkTrue("no frames: zeros", e.frames == 0 && e.avgFps == 0 && e.worstMs == 0 && e.low1Fps == 0);
+    BenchStats a = benchStats({10, 10, 10, 10});
+    checkTrue("four frames of 10 ms: 100 fps", a.frames == 4 && near(a.avgMs, 10) && near(a.avgFps, 100) && near(a.worstMs, 10) && near(a.low1Fps, 100) && near(a.totalS, 0.04));
+    std::vector<double> v(200, 10.0);
+    v.push_back(100); v.insert(v.begin() + 7, 100);                         // 202 frames, two slow ones (not at the end)
+    BenchStats b = benchStats(v);
+    checkTrue("average of 202 frames", near(b.avgMs, (200 * 10.0 + 200) / 202) && near(b.avgFps, 1000 / ((2000.0 + 200) / 202)));
+    checkTrue("worst frame", near(b.worstMs, 100));
+    checkTrue("1 % low: the slowest ceil(1 %) = 3 frames (100, 100, 10)", near(b.low1Fps, 1000 / 70.0));
+    BenchStats one = benchStats({25});
+    checkTrue("one frame: it is its own 1 % low", near(one.low1Fps, 40) && near(one.avgFps, 40) && near(one.worstMs, 25));
+    std::vector<double> hundred(100, 5.0); hundred[42] = 50;
+    checkTrue("100 frames: the 1 % low is the single slowest frame", near(benchStats(hundred).low1Fps, 20));
+    std::vector<double> sorted = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, rev(sorted.rbegin(), sorted.rend());
+    checkTrue("order does not matter", near(benchStats(sorted).low1Fps, benchStats(rev).low1Fps) && near(benchStats(rev).low1Fps, 100));
+
+    // a run: 3 scenes, 2 s warm-up and 8 s counted, frames of 100 ms
+    BenchRun run(3);
+    checkTrue("the first scene is set up first", run.sceneToSetUp() == 0 && !run.finished());
+    run.frame(100, 5, 1);                                                    // before the set-up is done: ignored
+    checkTrue("a frame before the set-up does not count", run.sceneElapsedS() == 0);
+    run.setUpDone();
+    int setups = 1, frames = 0;
+    std::vector<int> order = {0};
+    while (!run.finished() && frames < 100000) {
+        if (run.sceneToSetUp() >= 0) { order.push_back(run.sceneToSetUp()); run.setUpDone(); setups++; }
+        run.frame(100, 4 + run.scene(), run.scene() == 1 ? -1 : 2);            // scene 1 has no GPU numbers
+        frames++;
+    }
+    checkTrue("3 scenes set up in order", setups == 3 && order == std::vector<int>({0, 1, 2}));
+    checkTrue("every scene takes 10 s: 100 frames of 100 ms", frames >= 300 && frames <= 303);
+    checkTrue("finished, total 30 s", run.finished() && near(run.totalS(), 30) && near(run.doneS(), 30));
+    for (int i = 0; i < 3; i++) {
+        const BenchScene r = run.result(i);
+        checkTrue("scene " + std::to_string(i) + ": about 80 counted frames, the warm-up not counted", r.frames.frames >= 79 && r.frames.frames <= 81);
+        checkTrue("scene " + std::to_string(i) + ": CPU average", near(r.cpuAvgMs, 4 + i));
+        checkTrue("scene " + std::to_string(i) + ": GPU average or not available", i == 1 ? (r.gpuAvgMs < 0 && r.gpuSamples == 0) : (near(r.gpuAvgMs, 2) && r.gpuSamples > 0));
+        checkTrue("scene " + std::to_string(i) + ": 10 fps", near(r.frames.avgFps, 10));
+    }
+    BenchRun early(2);
+    early.setUpDone();
+    for (int i = 0; i < 150; i++) early.frame(100, 1, -1);                  // 15 s: scene 0 done, scene 1 waiting for its set-up
+    checkTrue("a cancelled run knows how many scenes are done", !early.finished() && early.doneScenes() == 1 && early.sceneToSetUp() == 1);
+
+    // the text
+    BenchEnv env;
+    env.version = "0.8"; env.when = "2026-10-01 15:30:45"; env.gpu = "Test GPU 9000"; env.glVersion = "3.3.0 Test"; env.vendor = "Test Vendor";
+    env.windowW = 1400; env.windowH = 860; env.pictureW = 1040; env.pictureH = 713; env.refreshHz = 144; env.textSize = "xl"; env.theme = "paper"; env.fullscreen = true; env.gpuTimer = true;
+    BenchScene s1; s1.name = "1. First"; s1.what = "some settings"; s1.frames = benchStats({10, 10, 10, 10}); s1.cpuAvgMs = 3.5; s1.gpuAvgMs = 6.25;
+    BenchScene s2; s2.name = "2. Second"; s2.what = "other settings"; s2.frames = benchStats({20, 20}); s2.cpuAvgMs = 1; s2.gpuAvgMs = -1;
+    const std::string t = benchResultText(env, {s1, s2});
+    const char* want[] = {"Physics Lab (native) benchmark", "Version: 0.8", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "OpenGL: 3.3.0 Test", "Driver / vendor: Test Vendor",
+                          "Window: 1400 x 860 pixels, full screen", "Picture area: 1040 x 713 pixels", "Display refresh rate: 144 Hz", "Text size: xl, theme: paper",
+                          "VSync: off during the test. Each scene: 2 s warm-up (not counted), then 8 s counted.", "GPU timer (GL_TIME_ELAPSED): available"};
+    std::size_t at = 0;
+    bool inOrder = true;
+    for (const char* w : want) { const std::size_t p = t.find(w, at); if (p == std::string::npos) { inOrder = false; checkTrue(std::string("result text has: ") + w, false); break; } at = p; }
+    checkTrue("the result text starts with the version, date and graphics, in order", inOrder && t.rfind("Physics Lab (native) benchmark\n", 0) == 0);
+    checkTrue("result text: scene 1 numbers", t.find("  Average: 10.00 ms per frame = 100.0 fps\n  1 % low: 100.0 fps") != std::string::npos && t.find("  Worst frame: 10.00 ms\n  CPU work per frame: 3.50 ms\n  GPU time per frame: 6.25 ms") != std::string::npos);
+    checkTrue("result text: no GPU time says not available, it does not guess", t.find("2. Second\n") != std::string::npos && t.find("GPU time per frame: not available") != std::string::npos);
+    checkTrue("result text: the average over the scenes", t.find("Average fps over the scenes: 75.0") != std::string::npos);
+    BenchEnv none = env; none.gpuTimer = false; none.refreshHz = 0; none.vendor = ""; none.fullscreen = false; none.cancelled = true;
+    const std::string t2 = benchResultText(none, {s1});
+    checkTrue("unknown things are said to be unknown", t2.find("Display refresh rate: not available") != std::string::npos && t2.find("Driver / vendor: not available") != std::string::npos &&
+                                                      t2.find("GPU timer (GL_TIME_ELAPSED): not available") != std::string::npos && t2.find("not full screen") != std::string::npos && t2.find("THE TEST WAS CANCELLED") != std::string::npos);
+    checkStr("benchmark file name", benchFileName({2026, 10, 1, 9, 5, 7}), "physics-lab-benchmark-2026-10-01-090507.txt");
+
+    // giving everything back: the Atom Lab and the Solar System are copied before, put back after, and come back exactly
+    atom::AtomLab L;
+    L.setParam("Z", 6.0); L.setParam("N", 6.0); L.setParam("view", std::string("Slice")); L.setParam("zoom", 1.5); L.setParam("n", 3.0);
+    for (int i = 0; i < 500; i++) L.step(1.0 / 240);
+    const auto describe = [](atom::AtomLab x) {
+        std::string d;
+        for (const std::string& l : x.info()) d += l + "|";
+        return d + x.p.view + x.p.qstyle + x.p.detail + x.p.style + x.p.orb + std::to_string(x.p.Z) + "," + std::to_string(x.p.N) + "," + std::to_string(x.p.zoom) + "," + std::to_string(x.p.n) + "," +
+               std::to_string(x.p.speed) + "," + std::to_string(x.s.t) + "," + std::to_string(x.s.k) + "," + std::to_string(x.s.focus) + "," + std::to_string(x.s.nucSeed) + "," + std::to_string(x.s.spin);
+    };
+    const std::string before = describe(L);
+    const atom::AtomLab saved = L;
+    std::vector<std::string> sceneText;
+    for (int sc = 0; sc < 3; sc++) {
+        atom::benchSetup(L, sc, 1040, 713);
+        checkTrue("scene " + std::to_string(sc + 1) + " changes the lab", describe(L) != before && L.p.Z == 92 && L.p.N == 146);
+        sceneText.push_back(describe(L));
+    }
+    checkTrue("scenes 1 to 3 differ from each other", sceneText[0] != sceneText[1] && sceneText[1] != sceneText[2] && sceneText[0] != sceneText[2]);
+    checkTrue("scene 2 is Cloud 3D with all the dots", [&] { atom::benchSetup(L, 1, 1040, 713); return L.p.view == "Cloud 3D" && L.s.k >= atom::kCap && L.p.orb == "4f"; }());
+    checkTrue("scene 3 is zoomed into the first nucleon", [&] { atom::benchSetup(L, 2, 1040, 713); return L.s.focus == 0 && L.p.qstyle == "Accurate" && L.p.detail == "+ Sea"; }());
+    L = saved;
+    checkStr("the Atom Lab is exactly as it was after the benchmark", describe(L), before);
+    // repeatable: the same scene twice gives the same cloud and the same readout
+    atom::benchSetup(L, 1, 1040, 713);
+    const std::vector<float> cloud1(L.s.pts.begin(), L.s.pts.begin() + 3000);
+    const std::string d1 = describe(L);
+    atom::benchSetup(L, 1, 1040, 713);
+    checkTrue("the cloud scene is repeatable (same dots)", std::equal(cloud1.begin(), cloud1.end(), L.s.pts.begin()) && describe(L) == d1);
+    atom::benchSetup(L, 0, 1040, 713); const std::string n1 = describe(L);
+    atom::benchSetup(L, 2, 1040, 713); atom::benchSetup(L, 0, 1040, 713);
+    checkStr("the nucleus scene is repeatable", describe(L), n1);
+
+    orbit::SolarSystem sys;
+    sys.loadAt(1790769600000LL);
+    std::vector<double> x0;
+    for (const auto& body : sys.bodies) x0.push_back(body.pos.x + body.pos.y + body.pos.z);
+    const orbit::SolarSystem keep = sys;
+    for (int i = 0; i < 2000; i++) sys.step(1.0 / 240, 2.5);                 // the benchmark's fastest time speed
+    checkTrue("the Solar System moved during the benchmark", sys.t != keep.t);
+    sys = keep;
+    bool same = sys.bodies.size() == x0.size() && sys.t == keep.t;
+    for (std::size_t i = 0; same && i < sys.bodies.size(); i++) same = sys.bodies[i].pos.x + sys.bodies[i].pos.y + sys.bodies[i].pos.z == x0[i];
+    checkTrue("the Solar System is back exactly as it was", same);
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -584,6 +706,7 @@ int main() {
     testFps();
     testHistoryNotes();
     testWindow();
+    testBench();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

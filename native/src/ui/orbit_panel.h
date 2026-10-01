@@ -9,9 +9,12 @@
 #include "ui/frame_stats.h"
 #include "ui/journey_dates.h"
 
+#include <memory>
 #include <string>
 
 namespace ui {
+
+struct BenchState;                     // the benchmark (ui/benchmark.cpp)
 
 // 📷 Save image: what the button says and shows after a save (see ui/shot.h)
 struct ShotUi {
@@ -34,6 +37,8 @@ struct AppState {
     int learnBack = -1;                    // a guide opened from the Learn tab in another lab: the lab to go back to when it closes
     bool showSettings = false;
     ShotUi shot;
+    std::shared_ptr<BenchState> bench;     // the benchmark: its window, its run and the settings it will give back
+    bool benchRunning = false;             // a benchmark is running: nothing is written to the settings file
     double canvasW = 800, canvasH = 600;   // picture size in points (for the Go to zoom levels)
     bool vsync = true;                     // wait for the screen's refresh (off: draw as fast as possible, to measure headroom)
     FrameStats stats;

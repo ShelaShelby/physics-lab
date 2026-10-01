@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.7**: **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
+Version **0.8**: **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -53,6 +53,11 @@ Each lab keeps its state while the other one is on screen.
 - **⚙ Settings**: text size, font, units (metric or imperial), motion (Auto follows Windows'
   "Animation effects"; Reduced starts the labs paused and stops gliding and spinning), Reset my
   progress, and Developer → Unlock everything.
+- **Benchmark** (Performance card at the bottom of the panel, in both labs → **Benchmark...**): a test of about 40 seconds that gives one set of numbers to compare between runs, versions and PCs.
+  Click **Start**. It runs 4 fixed scenes (the heaviest Orbit Lab view, the uranium-238 nucleus, Cloud 3D, one nucleon), each with 2 s of warm-up that is not counted and 8 s that are, with VSync off, at the window's size
+  (so use the same window size, or full screen with F11, when you compare). **Esc** or **Cancel** stops it. Everything is put back as it was. At the end a table shows the average frame time and fps, the 1 % low, the worst frame,
+  the CPU work and (if the graphics driver allows it) the GPU time of each scene; the same result is on the clipboard (**Copy result** puts it there again) and saved as `physics-lab-benchmark-DATE-TIME.txt` in your Pictures folder
+  (Downloads if that fails). **To send it:** paste the text into your message. Close other programs first; do not move or resize the window while it runs.
 - **The window** opens where and how big it was last time (and maximised, if it was); if that place is no longer on a screen it opens centred. **F11** turns full screen on and off.
 - **The icon** (an atom) is on `PhysicsLab.exe`, in the taskbar and in the window. If the window or OpenGL 3.3 cannot start, a message box says so in plain words and suggests updating the graphics driver.
 - **💡 Did you know?**: a fact under the header; click for the next one. Somewhere in the list is a 🎁.

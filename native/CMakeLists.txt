@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.7 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.8 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -43,6 +43,7 @@ add_library(atom_core STATIC
   src/atom/atom_core.cpp
   src/atom/atom_sim.cpp
   src/atom/atom_learn.cpp
+  src/atom/atom_bench.cpp
 )
 target_link_libraries(atom_core PUBLIC orbit_core)
 target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
@@ -52,6 +53,7 @@ add_library(app_core STATIC
   src/app/prefs.cpp
   src/app/shot.cpp
   src/app/fps.cpp
+  src/app/bench.cpp
 )
 target_include_directories(app_core PUBLIC src)
 target_compile_options(app_core PRIVATE ${PL_WARNINGS})
@@ -71,7 +73,7 @@ if(PL_BUILD_TESTS)
   add_test(NAME atom_physics COMMAND atom_tests)
   add_executable(app_tests tests/test_app.cpp)
   target_include_directories(app_tests PRIVATE tests)
-  target_link_libraries(app_tests PRIVATE app_core)
+  target_link_libraries(app_tests PRIVATE app_core atom_core)
   target_compile_options(app_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME app_settings COMMAND app_tests)
 endif()
@@ -140,7 +142,8 @@ if(PL_BUILD_APP)
     src/ui/svg_icon.cpp
     src/ui/settings.cpp
     src/ui/shot.cpp
-    src/ui/fps_counter.cpp)
+    src/ui/fps_counter.cpp
+    src/ui/benchmark.cpp)
   target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core app_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)

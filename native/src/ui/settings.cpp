@@ -190,6 +190,7 @@ void loadSettings(AppState& app) {
 }
 
 void saveSettingsWhenChanged(AppState& app, double nowS) {
+    if (app.benchRunning) return;                             // the benchmark changes the labs on purpose and gives them back: not written
     labsToPrefs(app, app.prefs);
     const std::string text = app::savePrefs(app.prefs);
     if (text == g_written) { g_changedAt = -1; return; }

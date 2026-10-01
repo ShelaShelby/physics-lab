@@ -28,6 +28,7 @@
 #include "ui/settings.h"
 #include "ui/shot.h"
 #include "ui/fps_counter.h"
+#include "ui/benchmark.h"
 #include "orbit/sky.h"
 #include "ui/app_pages.h"
 #include "ui/app_tabs.h"
@@ -275,6 +276,8 @@ int main(int, char**) {
         }
         if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) { SDL_Delay(20); last = SDL_GetPerformanceCounter(); continue; }
 
+        ui::benchmarkTestHook(app);
+        ui::benchmarkBeginFrame(app);                   // a benchmark scene is set up here, before the frame
         // ---- time and physics (fixed steps, as in the web version) ----
         const Uint64 now = SDL_GetPerformanceCounter();   // the frame starts here
         const double frameDt = static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
@@ -340,10 +343,12 @@ int main(int, char**) {
         if (app.lab == 1) ui::atomLearnWindow(app);
         else ui::learnWindow(app);
         ui::settingsWindow(app);
+        ui::benchmarkWindow(app);                       // the benchmark: what it will do, the progress, the result
         ui::appTabsFrame(app);                          // achievements and their pop-ups, the secret pop-ups
         ImGui::Render();
 
         // ---- draw: the picture first, then the panels and text on top ----
+        ui::benchmarkGpuBegin(app);                     // the GPU time of this frame (only while the benchmark runs)
         plgl::glViewport(0, 0, fbW, fbH);
         const app::Rgb pageBg = ui::look().c.bg;           // the theme's page colour
         plgl::glClearColor(pageBg.r, pageBg.g, pageBg.b, 1);
@@ -355,6 +360,7 @@ int main(int, char**) {
         renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        ui::benchmarkGpuEnd(app);
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
             app.shot.requested = false;
             ui::takeShot(app, renderer, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
@@ -372,6 +378,7 @@ int main(int, char**) {
         }
         const double workMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();
         app.stats.add(frameDt * 1000.0, workMs);
+        ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs);
         SDL_GL_SwapWindow(window);
         ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0);
         if (app.vsync != vsyncOn) { vsyncOn = app.vsync; SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
