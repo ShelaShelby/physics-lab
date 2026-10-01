@@ -35,6 +35,7 @@ struct CardOptions {
     bool moonsOn = true;
     bool beltsOn = true;
     bool farOn = true;
+    bool paused = false;        // a fast spin is only "held still" while time runs
     double moonExaggeration = 1;   // how many times too wide the selected moon's orbit is drawn
 };
 

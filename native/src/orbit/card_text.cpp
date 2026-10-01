@@ -4,6 +4,7 @@
 
 #include "format.h"
 #include "sky.h"
+#include "spin.h"
 #include "units.h"
 
 namespace orbit {
@@ -124,10 +125,11 @@ bool cardText(const SolarSystem& sys, const Selection& sel, const CardOptions& o
                    "Radius: " + fmt::fixed(sp.R, 2) + " Suns (" + fmt::km(sp.R * 696000) + ")",
                    "Surface: about " + fmt::commas(t) + " K  ·  " + fmt::fixed(sp.L, sp.L < 10 ? 2 : 1) + " Suns bright",
                    "Habitable zone: " + fmt::fixed(sp.hzIn, 2) + " – " + fmt::fixed(sp.hzOut, 2) + " AU",
-                   "Frost line: " + fmt::fixed(sp.frost, 1) + " AU (rock inside, giants outside)",
-                   "Wobbles a little, mostly pulled by Jupiter",
-                   "Lifetime: about " + (sp.life < 1 ? fmt::fixed(sp.life, 1) : fmt::commas(sp.life)) + " billion years",
-                   "Rough main-sequence estimates"};
+                   "Frost line: " + fmt::fixed(sp.frost, 1) + " AU (rock inside, giants outside)"};
+        for (auto& l : sunSpinLines(sys, opt.tspeed, opt.paused)) c.lines.push_back(l);
+        c.lines.push_back("Wobbles a little, mostly pulled by Jupiter");
+        c.lines.push_back("Lifetime: about " + (sp.life < 1 ? fmt::fixed(sp.life, 1) : fmt::commas(sp.life)) + " billion years");
+        c.lines.push_back("Rough main-sequence estimates");
         return true;
     }
 
@@ -153,6 +155,8 @@ bool cardText(const SolarSystem& sys, const Selection& sel, const CardOptions& o
                    o.bound ? "One lap: " + fmt::years(o.periodYears) : "One lap: never (it leaves)",
                    b.hasTemp ? "Temperature: " + fmt::celsius(b.tempC) + " (real, " + b.tempNote + ")"
                              : "Temperature: " + fmt::celsius(std::round(Teq)) + " (no atmosphere)"};
+        for (auto& l : spinLines(b, sys, opt.tspeed, opt.paused)) c.lines.push_back(l);   // how it turns (planets and Pluto)
+        for (auto& l : seasonLines(b, sys)) c.lines.push_back(l);                        // Earth: which season it is
         if (!b.giant) c.lines.push_back(d >= sp.hzIn && d <= sp.hzOut ? "In the habitable zone" : "Outside the habitable zone");
         c.lines.push_back(b.note);
         if (!b.moons.empty())

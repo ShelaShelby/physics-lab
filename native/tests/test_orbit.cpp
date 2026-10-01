@@ -16,6 +16,7 @@
 #include "orbit/card_text.h"
 #include "orbit/format.h"
 #include "orbit/kepler.h"
+#include "orbit/spin.h"
 #include "orbit/solar_system.h"
 #include "orbit/units.h"
 #include "reference/reference_values.h"
@@ -154,7 +155,38 @@ int main() {
         }
     }
 
-    // 8) number and date wording (as JavaScript would write them)
+    // 8) spin, axis tilt and seasons: the same card lines as the web version
+    {
+        SpinFrame f;
+        spinFrame("Mars", 2461041.5, f);
+        const double* w = ref::kMarsFrame;
+        near(f.P.x, w[0], 1, 1e-12, "Mars pole x"); near(f.P.y, w[1], 1, 1e-12, "Mars pole y"); near(f.P.z, w[2], 1, 1e-12, "Mars pole z");
+        near(f.A.x, w[3], 1, 1e-9, "Mars meridian x"); near(f.B.z, w[8], 1, 1e-9, "Mars east z"); near(f.W, w[9], 360, 1e-12, "Mars W");
+        for (const auto& c : ref::kSpinCases) {
+            SolarSystem s; s.loadAt(c.ms);
+            std::vector<std::string> got;
+            if (std::string(c.body) == "Sun") got = sunSpinLines(s, c.tspeed, false);
+            else
+                for (const Body& b : s.bodies)
+                    if (b.name == c.body) { got = spinLines(b, s, c.tspeed, false); for (auto& l : seasonLines(b, s)) got.push_back(l); }
+            // The web writes "Turns N times a second" with its rounded 58.13 days per second; we use the exact
+            // 58.1302, so N may differ in its last digit. Everything else must be word for word the same.
+            const auto norm = [](std::vector<std::string> v) {
+                for (auto& l : v)
+                    if (l.rfind("Turns ", 0) == 0 && l.find("times a second") != std::string::npos) l = "Turns N times a second" + l.substr(l.find(" times a second") + 15);
+                return v;
+            };
+            const bool same = norm(got) == norm(c.lines);
+            if (!same) {
+                std::printf("   %s (%lld, tspeed %g):\n", c.body, c.ms, c.tspeed);
+                for (auto& l : got) std::printf("     got  %s\n", l.c_str());
+                for (auto& l : c.lines) std::printf("     want %s\n", l.c_str());
+            }
+            check(same, std::string("spin/season lines ") + c.body);
+        }
+    }
+
+    // 9) number and date wording (as JavaScript would write them)
     check(fmt::plainNumber(-110) == "-110", "plainNumber(-110) = " + fmt::plainNumber(-110));
     check(fmt::plainNumber(2439.7) == "2439.7", "plainNumber(2439.7) = " + fmt::plainNumber(2439.7));
     check(fmt::plainNumber(0.0553) == "0.0553", "plainNumber(0.0553) = " + fmt::plainNumber(0.0553));
@@ -167,7 +199,7 @@ int main() {
     check(fmt::years(0.05) == "18 days", "years(0.05) = " + fmt::years(0.05));
     check(fmt::years(0.2408) == "0.24 years", "years(0.2408) = " + fmt::years(0.2408));
 
-    // 9) the info cards (printed so they can be read and compared with the web version)
+    // 10) the info cards (printed so they can be read and compared with the web version)
     {
         SolarSystem s; s.loadAt(ref::kEpochMs);
         CardOptions opt; opt.tspeed = units::kTspeedDefault;
