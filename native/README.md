@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.2**: **Orbit Lab only** (see the Update badge in the app for what is new). The web version (`../index.html`) is the
+Version **0.3**: **Orbit Lab only**, with everything of the web Orbit Lab except a few small items listed in `REPORT.md` (see the Update badge in the app for what is new). The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -52,6 +52,10 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 - **Journey and dates** card: the Journey (touch anything to stop it; your settings come back),
   and Jump to a date (1800–2100, Greenwich time).
 - **Performance** card: frame time and a VSync switch (turn VSync off to see the real headroom).
+- **Learn** card: What am I even looking at?, Why do we have seasons?, and the Solar System
+  timeline (the web text, word for word; ▶ buttons take the lab there).
+- **⚙ Settings** (top of the panel): metric or imperial units (remembered between runs).
+- **Defaults** (top of the panel): puts Orbit Lab's settings back to how they started, after asking.
 - **Update** badge (top of the panel): what is new.
 
 ## How it is organised
@@ -68,9 +72,10 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 | `src/orbit/card_text.*`, `format.*` | The info card and how numbers are written |
 | `src/orbit/orbit_view.*` | Drawing the picture, clicks, dragging, zoom |
 | `src/render/` | OpenGL 3.3 loader, batched 2D renderer (instanced dots, planet shader), Earth map |
-| `src/ui/` | The ImGui panel, the changelog and fonts |
+| `src/ui/` | The ImGui panel, Learn guides (rich-text layout), Settings, Journey and dates, changelog, fonts |
 | `tests/` | Unit tests that compare the physics with the web version |
 | `tools/make_sky_data.js` | Copies the sky, far-away and Earth-outline data out of `index.html` |
+| `tools/make_learn_data.js` | Copies the Learn text out of `index.html` by running the web's own guide code |
 
 All physics is in SI units (metres, seconds, m/s). The web version uses "sim units"
 (GM of the Sun = 100, 1 year = 2π); `units.h` converts them exactly, so both versions
@@ -93,4 +98,6 @@ three Time speeds, the belt rocks, and the spin / axis / season lines on the car
 These do nothing in normal use: `PL_EXIT_AFTER_FRAMES=n` quits after n frames,
 `PL_SCREENSHOT=file.bmp` saves the last frame, `PL_SELECT=Earth` selects and follows a
 body, `PL_ZOOM=2.3` sets the zoom, `PL_3D=1` starts in 3D, `PL_CONS=1` shows constellation
-names, `PL_DATE=2003-08-27` jumps to a date (and prints the note), `PL_JOURNEY=1` starts a Journey.
+names, `PL_DATE=2003-08-27` jumps to a date (and prints the note), `PL_JOURNEY=1` starts a Journey,
+`PL_LEARN=1|2|3` opens a Learn guide, `PL_IMPERIAL=1` shows imperial units, `PL_SKYOFF=1` turns the
+stars off and `PL_LIGHT=1` pretends the system theme is light.

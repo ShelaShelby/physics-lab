@@ -23,11 +23,15 @@ using render::rgba;
 namespace {
 
 // Colours of the dark picture (the web version with the night sky on)
-const Color kBg = rgba(4, 6, 13);
-const Color kFg = rgba(230, 235, 245);
-const Color kMuted = rgba(154, 166, 189);
-const Color kCard = rgba(11, 15, 26);
-const Color kLine = {1, 1, 1, 0.22f};
+// The picture's colours. With the night sky on, the picture is dark whatever the theme (as in the web
+// version); with Stars Off they follow the theme (the web's light and dark page colours). Set each frame.
+Color kBg, kFg, kMuted, kCard, kLine;
+void setPictureColours(bool sky, bool lightTheme) {
+    if (sky) { kBg = rgba(4, 6, 13); kFg = rgba(230, 235, 245); kMuted = rgba(154, 166, 189); kCard = rgba(11, 15, 26); kLine = {1, 1, 1, 0.22f}; }
+    else if (lightTheme) { kBg = hexColor("#f7f7f5"); kFg = hexColor("#1c1c1a"); kMuted = hexColor("#6b6b66"); kCard = hexColor("#ffffff"); kLine = hexColor("#dcdcd6"); }
+    else { kBg = hexColor("#151517"); kFg = hexColor("#eeeeee"); kMuted = hexColor("#9a9a94"); kCard = hexColor("#1e1e21"); kLine = hexColor("#333338"); }
+}
+bool g_skyHalo = true;   // the thin dark edge round labels is only needed on top of the stars
 const Color kHL = hexColor("#ff2bd6");   // the "look here" pink: nothing else in the picture is this colour
 
 // The Sun's colour from its surface temperature (5,772 K), as in the web's starColor()
@@ -127,7 +131,9 @@ struct TextPainter {
         return font->CalcTextSizeA(static_cast<float>(size * s), FLT_MAX, 0, t.c_str()).x / s;
     }
     // align: 0 left, 0.5 centre
-    void text(const std::string& t, double x, double y, double size, Color c, double align = 0.5, bool halo = true, Color haloColor = {4 / 255.f, 6 / 255.f, 13 / 255.f, 0.85f}) {
+    // haloColor with alpha < 0: the dark edge for text on the night sky (left out when the stars are off)
+    void text(const std::string& t, double x, double y, double size, Color c, double align = 0.5, bool halo = true, Color haloColor = {4 / 255.f, 6 / 255.f, 13 / 255.f, -0.85f}) {
+        if (haloColor.a < 0) { if (!g_skyHalo) halo = false; haloColor.a = -haloColor.a; }
         const float px = static_cast<float>(size * s);
         const float ascent = font->GetFontBaked(px)->Ascent;
         const double w = width(t, size);
@@ -332,6 +338,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
     const auto proj = [&](double x, double y, double z) { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; };
 
+    setPictureColours(set.sky != SkyMode::Off, set.lightTheme);
+    g_skyHalo = set.sky != SkyMode::Off;
     R.rect(0, 0, W, H, kBg);
     hits_.clear();
     if (set.sky != SkyMode::Off) {                        // the night sky: dim close up, brighter as you zoom out

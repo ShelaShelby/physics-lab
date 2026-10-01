@@ -183,6 +183,9 @@ int main(int, char**) {
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, 0), ImVec2(canvasWinW, static_cast<float>(winH)));
         app.set.paused = app.paused;
+        app.set.lightTheme = SDL_GetSystemTheme() == SDL_SYSTEM_THEME_LIGHT;   // Windows' light/dark setting (the web's "Auto")
+        if (SDL_getenv("PL_LIGHT")) app.set.lightTheme = true;              // for automatic checks
+        if (SDL_getenv("PL_SKYOFF") && frame == 0) app.set.sky = orbit::SkyMode::Off;
         app.view.draw(renderer, text, 0, 0, scale, app.sys, app.set, app.canvasW, app.canvasH, fps);
         text->PopClipRect();
         ui::changelogWindow(&app.showChangelog);

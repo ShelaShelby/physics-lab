@@ -38,7 +38,7 @@ struct Stop {
     bool end;             // the last stop
     const char* cap;
 };
-// each stop: how far out, and what to say (the web's JNY; the last caption now says your view comes back)
+// each stop: how far out, and what to say (the web's JNY, word for word)
 const Stop kStops[] = {
     {0, true, false, "Earth, where we live: 12,742 km across. It turns once in 23 h 56 min, with its axis leaning 23.4°. That lean gives us the seasons."},
     {0.0075, true, false, "The Moon circles Earth 384,400 km away. Light from it takes 1.3 seconds to reach us."},
@@ -48,7 +48,7 @@ const Stop kStops[] = {
     {60000, false, false, "The Oort cloud (never seen directly): maybe trillions of icy comets, 2,000 to 200,000 AU out. Voyager 1 needs about 300 years to reach it."},
     {1.0e6, false, false, "The nearest star system, Alpha Centauri, is 4.3 light years away: the light we see from it is 4.3 years old."},
     {2.5e8, false, false, "Real stars at their real places: the Pleiades (444 light years) and the Orion Nebula (1,267 light years)."},
-    {0, false, true, "The centre of our galaxy, 27,000 light years away, where a black hole of 4.3 million Suns sits (Sagittarius A*). Then your own view and settings come back."},
+    {0, false, true, "The centre of our galaxy, 27,000 light years away, where a black hole of 4.3 million Suns sits (Sagittarius A*). Tap Reset view to come back."},
 };
 constexpr int kStopCount = sizeof(kStops) / sizeof(kStops[0]);
 constexpr double kSpeed = 0.65;              // decades of zoom per second between stops
