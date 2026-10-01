@@ -286,7 +286,7 @@ void OrbitView::select(Selection s, bool f) {
 }
 
 void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, double originY, double uiScale,
-                     const SolarSystem& sys, const ViewSettings& set, double W, double H, double fps) {
+                     const SolarSystem& sys, const ViewSettings& set, double W, double H) {
     TextPainter T{dl, ImGui::GetFont(), originX, originY, uiScale};
     const double px = std::min(W, H) / 34 * std::pow(10.0, set.zoom) / kSimLength;   // points per metre
     const bool TRUE_SCALE = set.trueScale;
@@ -913,9 +913,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             T.text(lines[i], W / 2, 62 + i * 19.0, 13.5, Color{1, 1, 1, static_cast<float>(captionAlpha)}, 0.5, true, Color{4 / 255.f, 6 / 255.f, 13 / 255.f, 0.92f});
     }
 
-    {   // top left: the date, which moves on with the simulated time; top right: frames per second
+    {   // top left: the date, which moves on with the simulated time (the frames-per-second counter is drawn by main.cpp, for every lab)
         T.text(dateLine(sys), 12, 20, 13, kFg, 0, true);
-        if (fps >= 0) T.text(fmt::fixed(fps, 0) + " fps", W - 12, 20, 11, kMuted, 1, true);   // fps < 0: no counter (the picture is being saved; the web's counter is not part of its canvas)
     }
 }
 

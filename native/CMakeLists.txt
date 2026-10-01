@@ -51,6 +51,7 @@ target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
 add_library(app_core STATIC
   src/app/prefs.cpp
   src/app/shot.cpp
+  src/app/fps.cpp
 )
 target_include_directories(app_core PUBLIC src)
 target_compile_options(app_core PRIVATE ${PL_WARNINGS})
@@ -138,7 +139,8 @@ if(PL_BUILD_APP)
     src/ui/rich_text.cpp
     src/ui/svg_icon.cpp
     src/ui/settings.cpp
-    src/ui/shot.cpp)
+    src/ui/shot.cpp
+    src/ui/fps_counter.cpp)
   target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core app_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)

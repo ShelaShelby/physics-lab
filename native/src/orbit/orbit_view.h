@@ -47,7 +47,7 @@ public:
     // points in the window (for the text, which Dear ImGui draws). `uiScale` turns points
     // into window pixels.
     void draw(render::Renderer2D& r, ImDrawList* text, double originX, double originY, double uiScale,
-              const SolarSystem& sys, const ViewSettings& set, double width, double height, double fps);
+              const SolarSystem& sys, const ViewSettings& set, double width, double height);
 
     void click(double x, double y);              // picture points
     void drag(double dx, double dy, bool rotate); // moves the view, or (3D) turns it

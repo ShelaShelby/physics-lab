@@ -13,6 +13,7 @@
 #include "app/app_data.h"
 #include "app/prefs.h"
 #include "app/shot.h"
+#include "app/fps.h"
 
 #include "reference/app_reference.inc"
 
@@ -513,6 +514,16 @@ static void testNativeEdits() {
     checkTrue("every native edit was used", g_editUses == 1 + 3 + 1 + 8 + 1);
 }
 
+// ---- the frames-per-second counter text (the web: Math.round(frames * 1000 / ms) + ' fps') ----
+static void testFps() {
+    checkStr("fps before the first measurement", fpsText(-1), "");
+    checkStr("fps zero", fpsText(0), "0 fps");
+    checkStr("fps 59.49 rounds down", fpsText(59.49), "59 fps");
+    checkStr("fps 59.5 rounds up like Math.round", fpsText(59.5), "60 fps");
+    checkStr("fps 144.2", fpsText(144.2), "144 fps");
+    checkStr("fps 1000", fpsText(1000), "1000 fps");
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -521,6 +532,7 @@ int main() {
     testPages();
     testFactsAndTabs();
     testShot();
+    testFps();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

@@ -26,6 +26,7 @@
 #include "ui/look.h"
 #include "ui/settings.h"
 #include "ui/shot.h"
+#include "ui/fps_counter.h"
 #include "orbit/sky.h"
 #include "ui/app_pages.h"
 #include "ui/app_tabs.h"
@@ -112,7 +113,7 @@ int main(int, char**) {
     double acc = 0;                                     // real time not yet simulated, s
     Uint64 last = SDL_GetPerformanceCounter();
     bool vsyncOn = true;
-    double fps = 0, fpsTime = 0;
+    double fps = -1, fpsTime = 0;                      // fps < 0: not measured yet (the web shows nothing for the first half second)
     int fpsFrames = 0;
     bool mouseDown = false, dragging = false, rightDrag = false;
     float downX = 0, downY = 0, lastX = 0, lastY = 0;
@@ -269,9 +270,11 @@ int main(int, char**) {
             atomBarH = 0;
             app.set.paused = app.paused;
             if (SDL_getenv("PL_SKYOFF") && frame == 0) app.set.sky = orbit::SkyMode::Off;
-            app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH, app.shot.requested ? -1.0 : fps);
+            app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH);
             text->PopClipRect();
         }
+        // the frames-per-second counter, top right of the picture, for every lab (the web's #fps); not in a saved picture, not under a tab page
+        if (!app.pane && !app.shot.requested) ui::drawFpsCounter(text, canvasWinW, headerH, scale, fps);
         ui::labLogWindow(&app.showLabLog, app.lab);
         ui::aboutWindow(app);
         ui::historyWindow(app);
