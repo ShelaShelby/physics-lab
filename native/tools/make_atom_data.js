@@ -30,6 +30,8 @@ o.push('struct Famous { int Z, N; const char* why; };');
 o.push('static const Famous kFamous[] = {' + W.FAMOUS.map(f => `{${f[0]}, ${f[1]}, ${q(f[2])}}`).join(', ') + '};');
 o.push('struct BetaKnown { int Z, A; double be2, sign; };   // measured B(E2; 0+ -> 2+) in e² b², and the sign of the deformation');
 o.push('static const BetaKnown kBetaKnown[] = {' + Object.entries(W.BETA_KNOWN).map(([k, v]) => `{${k.split(',')[0]}, ${k.split(',')[1]}, ${v[0]}, ${v[1]}}`).join(', ') + '};');
+o.push('// "Where you meet it" for each element (nullptr: the web uses a category fallback)');
+o.push('static const char* const kEveryday[119] = {nullptr,\n' + Array.from({length: 118}, (_, i) => '    ' + (W.EVERYDAY[i + 1] ? q(W.EVERYDAY[i + 1]) : 'nullptr') + ',').join('\n') + '\n};');
 o.push('static const int kMagicN[] = {' + W.MAGIC_N.join(', ') + '};');
 o.push('static const int kMagicZ[] = {' + W.MAGIC_Z.join(', ') + '};');
 fs.writeFileSync(path.join(__dirname, '../src/atom/atom_data.inc'), o.join('\n') + '\n');

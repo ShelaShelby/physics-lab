@@ -9,7 +9,9 @@
 namespace ui {
 
 // Draws `html` at the cursor, as wide as the space left in the window.
-void richText(const std::string& html);
+// mutedBase: plain text in the muted colour and bold text in the normal one (the web's small "info"
+// style); size: the text size relative to the normal font; gap: space after each block, in text heights.
+void richText(const std::string& html, bool mutedBase = false, float size = 1.0f, float gap = 0.55f);
 
 // A heading line (bold, a little larger).
 void richHeading(const std::string& text);

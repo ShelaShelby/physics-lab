@@ -99,14 +99,16 @@ if(PL_BUILD_APP)
     src/render/renderer2d.cpp
     src/render/earth_texture.cpp
     src/orbit/orbit_view.cpp
+    src/atom/atom_view.cpp
     src/ui/orbit_panel.cpp
+    src/ui/atom_panel.cpp
     src/ui/changelog.cpp
     src/ui/fonts.cpp
     src/ui/journey_dates.cpp
     src/ui/learn.cpp
     src/ui/rich_text.cpp
     src/ui/settings.cpp)
-  target_link_libraries(PhysicsLab PRIVATE orbit_core imgui SDL3::SDL3-static)
+  target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)
     target_link_libraries(PhysicsLab PRIVATE opengl32)

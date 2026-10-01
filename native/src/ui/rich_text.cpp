@@ -78,11 +78,11 @@ void richHeading(const std::string& t) {
     ImGui::PopFont();
 }
 
-void richText(const std::string& html) {
+void richText(const std::string& html, bool mutedBase, float sizeScale, float gap) {
     const Fonts& F = fonts();
     const std::vector<Block> blocks = parse(html);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float base = ImGui::GetFontSize(), pad = base * 0.6f;
+    const float base = ImGui::GetFontSize() * sizeScale, pad = base * 0.6f;
     const ImU32 fg = ImGui::GetColorU32(ImGuiCol_Text), muted = ImGui::GetColorU32(ImGuiCol_TextDisabled);
     std::size_t i = 0;
     while (i < blocks.size()) {
@@ -95,11 +95,12 @@ void richText(const std::string& html) {
         do {   // one block (or all the blocks of one card)
             const Block& b = blocks[i];
             const float size = b.style == Style::CardBig ? base * 1.08f : b.style == Style::CardSmall ? base * 0.92f : base;
-            const ImU32 col = b.style == Style::Muted || b.style == Style::CardSmall ? muted : fg;
+            const ImU32 blockCol = b.style == Style::Muted || b.style == Style::CardSmall || mutedBase ? muted : fg;
             float x = left, lineH = size * 1.35f;
             bool lineEmpty = true;
             for (const Run& r : b.runs) {
                 ImFont* font = r.bold || b.style == Style::CardBig ? F.bold : r.italic ? F.italic : F.regular;
+                const ImU32 col = mutedBase && r.bold ? fg : blockCol;
                 const float sz = r.small ? size * 0.85f : size;
                 // words with their following space; '\n' (from <br>) starts a new line
                 std::size_t p = 0;
@@ -122,7 +123,7 @@ void richText(const std::string& html) {
                     lineEmpty = false;
                 }
             }
-            y += lineH + (card ? size * 0.25f : size * 0.55f);
+            y += lineH + (card ? size * 0.25f : size * gap);
             i++;
         } while (card && i < blocks.size() && blocks[i].inCard && blocks[i - 1].style != Style::CardSmall);
         if (card) {

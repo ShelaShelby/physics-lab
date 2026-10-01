@@ -136,5 +136,15 @@ Binding massBinding(int Z, int N);
 std::optional<std::string> tempState(int Z, double T);   // "solid" / "liquid" / "gas", none if never measured
 std::string tempLine(int Z);                  // follows the metric/imperial setting
 std::string fK(double k), fC(double k), fF(double k);
+std::string tAll(double k);                   // "<b>1,811 K</b> · 1,538 °C · 2,800 °F"
+const char* stateIcon(const std::string& st); // 🧊 💧 ☁️
+
+// ---- the element card and the facts (web: elemCardHTML, factsHTML) ----
+std::string everyday(int Z);                  // "Where you meet it" (units follow the metric/imperial setting)
+int periodOf(int Z);
+std::vector<std::string> elementChips(int Z); // category, period · group, state at room temperature, radioactive
+std::string factsLinesHtml(int Z);            // the melting / boiling / room-temperature lines (<div> each, <b> bold)
+std::string factsNotesHtml(int Z);            // the notes under the bar ("" if none)
+extern const char* const kFactsFootnote;      // "Values are for a lump of the element ..."
 
 }  // namespace atom

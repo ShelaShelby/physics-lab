@@ -1,4 +1,5 @@
 #include "orbit_panel.h"
+#include "atom_panel.h"
 
 #include <algorithm>
 #include <chrono>
@@ -105,6 +106,7 @@ void orbitPanel(AppState& app, float width) {
     const bool journeyWasActive = app.journey.active;
     if (journeyWasActive && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) journeyStop(app);
 
+    labPicker(app);
     // ---- title and update badge ----
     ImGui::TextUnformatted("Physics Lab · Orbit Lab");
     ImGui::SameLine();

@@ -28,7 +28,7 @@ public:
     // Start a frame for a picture `width` × `height` points.
     void begin(double width, double height);
     // Draw everything that was added. The framebuffer is fbWidth × fbHeight pixels.
-    void end(int fbWidth, int fbHeight);
+    void end(int fbWidth, int fbHeight, int fbY = 0);   // fbY: the picture's bottom edge, pixels from the window's bottom
 
     void rect(double x, double y, double w, double h, Color c);
     void line(double x0, double y0, double x1, double y1, double width, Color c);
@@ -44,14 +44,32 @@ public:
     // thousands of rocks). xy holds the squares' centres, 2 floats each, in picture points.
     void squares(const float* xy, int count, double size, Color c);
 
+    // Many round or square "blobs" with their own colours, drawn with ONE instanced draw call (the
+    // Atom Lab's cloud dots, glowing nucleons, gluon-field particles, quarks). Each blob is a disc of
+    // radius r filled like a canvas radial gradient: colour c0 at the focal circle (centre fx, fy and
+    // radius f0, in units of r from the blob's centre) through c1 at stop s1 to c2 at the edge.
+    // additive: colours add up (the canvas "lighter" mode).
+    struct Blob {
+        float x, y, r;
+        float kind;          // 0 gradient disc, 1 fuzzy nucleon profile (colour c0), 2 square of side 2r (c0), 3 flat disc (c0)
+        float fx, fy, f0, s1;
+        Color c0, c1, c2;
+    };
+    void blobs(const Blob* b, int count, bool additive = false);
+    // Everything drawn between beginSoftLayer() and endSoftLayer() goes into an offscreen picture at
+    // `scale` of the resolution, which is then stretched over the picture in one go (the web's soft layer:
+    // blurry things cost a fraction of the pixels, and out-of-focus things look soft).
+    void beginSoftLayer(float scale);
+    void endSoftLayer();
+
     // A turning planet. K turns screen directions into the planet's own frame (rows: its 0° meridian,
     // 90° east, north pole; columns: screen right, up, towards you). earth: the Earth map, else a plain
     // colour with a grid of latitude and longitude and the 0° meridian marked (as in the web version).
     void planet(double x, double y, double r, Color base, double lightX, double lightY, const float K[9], bool earth);
 
 private:
-    enum class Kind { Triangles, Squares, Planet };
-    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; bool earth; float r; };   // draw calls, in the order they were added
+    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd };
+    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; bool earth; float r; bool additive; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
     std::vector<float> inst_;                 // square centres for all square draws of this frame
@@ -60,6 +78,14 @@ private:
     GLint sqSize_ = -1, sqSide_ = -1, sqColor_ = -1;
     GLuint plProgram_ = 0, earthTex_ = 0;
     GLint plSize_ = -1, plK_ = -1, plEarth_ = -1, plPa_ = -1, plLod_ = -1, plTex_ = -1;
+
+    std::vector<Blob> blobs_;                 // all blobs of this frame
+    GLuint blProgram_ = 0, blVao_ = 0, blInstVbo_ = 0;
+    GLint blSize_ = -1, blFuzz_ = -1;
+    GLuint layerFbo_ = 0, layerTex_ = 0, cmpProgram_ = 0, cmpVao_ = 0;
+    GLint cmpTex_ = -1;
+    int layerW_ = 0, layerH_ = 0;
+    float layerScale_ = 0.5f;
 
     struct Vertex { float x, y, u, v, r, g, b, a, mode, p1, p2, p3; };
     void quad(double cx, double cy, double half, Color c, float mode, float p1, float p2, float uvScale);

@@ -58,6 +58,8 @@ typedef std::ptrdiff_t GLintptr;
 #define GL_UNPACK_ALIGNMENT 0x0CF5
 #define GL_UNSIGNED_BYTE 0x1401
 #define GL_RENDERER 0x1F01
+#define GL_FRAMEBUFFER 0x8D40
+#define GL_COLOR_ATTACHMENT0 0x8CE0
 
 #define PL_GL_FUNCTIONS(X)                                                                         \
     X(void, glClear, (GLbitfield mask))                                                            \
@@ -104,6 +106,12 @@ typedef std::ptrdiff_t GLintptr;
     X(void, glTexImage2D, (GLenum t, GLint lvl, GLint ifmt, GLsizei w, GLsizei h, GLint b, GLenum f, GLenum ty, const void* d)) \
     X(void, glTexParameteri, (GLenum t, GLenum p, GLint v))                                        \
     X(void, glGenerateMipmap, (GLenum t))                                                          \
+    X(void, glGenFramebuffers, (GLsizei n, GLuint* f))                                             \
+    X(void, glDeleteFramebuffers, (GLsizei n, const GLuint* f))                                    \
+    X(void, glBindFramebuffer, (GLenum t, GLuint f))                                               \
+    X(void, glFramebufferTexture2D, (GLenum t, GLenum att, GLenum tt, GLuint tex, GLint lvl))      \
+    X(void, glBlendFunc, (GLenum s, GLenum d))                                                     \
+    X(void, glUniform1fv, (GLint loc, GLsizei n, const GLfloat* v))                                \
     X(void, glPixelStorei, (GLenum p, GLint v))                                                    \
     X(void, glUniform1i, (GLint loc, GLint v))                                                     \
     X(void, glUniformMatrix3fv, (GLint loc, GLsizei n, GLboolean tr, const GLfloat* v))           \

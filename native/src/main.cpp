@@ -24,6 +24,7 @@
 #include "ui/fonts.h"
 #include "ui/learn.h"
 #include "ui/settings.h"
+#include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
 
 namespace {
@@ -43,6 +44,7 @@ SDL_Window* createWindow(float scale, bool multisample) {
 
 void fail(const char* what) {
     std::fprintf(stderr, "%s: %s\n", what, SDL_GetError());
+    if (SDL_getenv("PL_EXIT_AFTER_FRAMES")) return;    // an automatic check: no window waiting for a click
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Physics Lab", (std::string(what) + "\n" + SDL_GetError()).c_str(), nullptr);
 }
 
@@ -111,14 +113,36 @@ int main(int, char**) {
     if (SDL_getenv("PL_JOURNEY")) ui::journeyStart(app);
     if (const char* l = SDL_getenv("PL_LEARN")) app.learn = std::atoi(l);     // open a Learn guide (1, 2 or 3)
     if (SDL_getenv("PL_CONS")) app.set.cons = orbit::ConsMode::LinesAndNames;
+    // Atom Lab checks: PL_ATOM=1 opens the Atom Lab, PL_ATOM_SET="Z=26;view=Cloud;zoom=4.5" sets its settings,
+    // PL_ATOM_DO="absorb" presses Emit / Absorb / Auto photons (or ⌕ Nucleus / ⌕ Nucleon: "nucleus", "nucleon"), PL_ATOM_FOCUS=n dives into nucleon n
+    if (SDL_getenv("PL_ATOM")) app.lab = 1;
+    if (const char* a = SDL_getenv("PL_ATOM_SET")) {
+        std::string list = a;
+        std::size_t i = 0;
+        while (i < list.size()) {
+            std::size_t e = list.find(';', i);
+            if (e == std::string::npos) e = list.size();
+            const std::string item = list.substr(i, e - i), key = item.substr(0, item.find('=')), val = item.substr(item.find('=') + 1);
+            char* end = nullptr;
+            const double v = std::strtod(val.c_str(), &end);
+            if (end && *end == 0 && !val.empty()) app.atom.setParam(key, v); else app.atom.setParam(key, val);
+            i = e + 1;
+        }
+    }
+    if (const char* d = SDL_getenv("PL_ATOM_DO")) { const std::string a = d; if (a == "emit") app.atom.emit(); else if (a == "absorb") app.atom.absorb(); else if (a == "auto") app.atom.toggleAuto();
+                                               else if (a == "nucleus") app.atom.zoomNucleus(); else if (a == "nucleon") app.atom.zoomNucleon(); }
+    if (const char* f = SDL_getenv("PL_ATOM_FOCUS")) app.atom.s.focus = std::atoi(f);
     int frame = 0;
     bool running = true;
+    float atomBarH = 0;                                 // the bar under the Atom Lab picture, window coordinates
 
     while (running) {
         int winW = 0, winH = 0, fbW = 0, fbH = 0;
         SDL_GetWindowSize(window, &winW, &winH);
         SDL_GetWindowSizeInPixels(window, &fbW, &fbH);
         const float canvasWinW = std::max(1.0f, winW - panelWidth);   // the picture's width in window coordinates
+        // the Atom Lab has a bar under its picture (view buttons and the hint); its height is measured each frame
+        const float pictureWinH = app.lab == 1 ? std::max(1.0f, winH - atomBarH) : static_cast<float>(winH);
 
         // ---- input ----
         SDL_Event e;
@@ -131,12 +155,20 @@ int main(int, char**) {
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) app.paused = !app.paused;
                 break;
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
+                if (app.lab == 1) {                     // Atom Lab: zoom −= deltaY × 0.004, 0.4 per wheel notch
+                    if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y < pictureWinH) app.atom.setParam("zoom", app.atom.p.zoom + e.wheel.y * 0.4);
+                    break;
+                }
                 if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW) {
                     if (app.journey.active) ui::journeyStop(app);   // touching the picture stops a Journey (and brings your settings back)
                     else ui::setZoom(app, app.set.zoom + e.wheel.y * 0.07);
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                if (app.lab == 1) {
+                    if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y < pictureWinH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
+                    break;
+                }
                 if (!io.WantCaptureMouse && e.button.x < canvasWinW && app.journey.active) { ui::journeyStop(app); break; }
                 if (!io.WantCaptureMouse && e.button.x < canvasWinW) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
                 break;
@@ -145,12 +177,16 @@ int main(int, char**) {
                     if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) dragging = true;
                     // 3D: dragging turns the view, unless "Drag moves the view" is on, or with the right button or Shift held
                     const bool rotate = app.set.view3D && !app.view.panMode && !rightDrag && !(SDL_GetModState() & SDL_KMOD_SHIFT);
-                    if (dragging) app.view.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rotate);
+                    if (dragging && app.lab == 1) app.atom.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));
+                    else if (dragging) app.view.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rotate);
                     lastX = e.motion.x; lastY = e.motion.y;
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                if (mouseDown && !dragging && e.button.button == SDL_BUTTON_LEFT) app.view.click(e.button.x / scale, e.button.y / scale);
+                if (mouseDown && !dragging && e.button.button == SDL_BUTTON_LEFT) {
+                    if (app.lab == 1) app.atom.click(e.button.x / scale, e.button.y / scale);
+                    else app.view.click(e.button.x / scale, e.button.y / scale);
+                }
                 mouseDown = dragging = false;
                 break;
             default: break;
@@ -163,11 +199,20 @@ int main(int, char**) {
         const double frameDt = static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
         last = now;
         const double dt = std::min(frameDt, units::kMaxFrameDt);
-        app.view.tick(dt, app.set);
-        ui::journeyTick(app, dt);
-        if (!app.paused) {
-            acc += dt;
-            while (acc >= units::kPhysicsStep) { app.sys.step(units::kPhysicsStep, app.set.tspeed); acc -= units::kPhysicsStep; }
+        if (app.lab == 1) {                             // Atom Lab: tick every frame (decay clock, glides), fixed steps while running
+            app.atom.paused = app.paused;
+            app.atom.tick(dt);
+            if (!app.paused) {
+                acc += dt;
+                while (acc >= units::kPhysicsStep) { app.atom.step(units::kPhysicsStep); acc -= units::kPhysicsStep; }
+            }
+        } else {
+            app.view.tick(dt, app.set);
+            ui::journeyTick(app, dt);
+            if (!app.paused) {
+                acc += dt;
+                while (acc >= units::kPhysicsStep) { app.sys.step(units::kPhysicsStep, app.set.tspeed); acc -= units::kPhysicsStep; }
+            }
         }
         fpsFrames++; fpsTime += frameDt;
         if (fpsTime >= 0.5) { fps = fpsFrames / fpsTime; fpsFrames = 0; fpsTime = 0; }
@@ -177,17 +222,26 @@ int main(int, char**) {
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
-        app.canvasH = winH / scale;
-        ui::orbitPanel(app, panelWidth);
-        renderer.begin(app.canvasW, app.canvasH);
-        ImDrawList* text = ImGui::GetBackgroundDrawList();
-        text->PushClipRect(ImVec2(0, 0), ImVec2(canvasWinW, static_cast<float>(winH)));
-        app.set.paused = app.paused;
+        app.canvasH = pictureWinH / scale;
         app.set.lightTheme = SDL_GetSystemTheme() == SDL_SYSTEM_THEME_LIGHT;   // Windows' light/dark setting (the web's "Auto")
         if (SDL_getenv("PL_LIGHT")) app.set.lightTheme = true;              // for automatic checks
-        if (SDL_getenv("PL_SKYOFF") && frame == 0) app.set.sky = orbit::SkyMode::Off;
-        app.view.draw(renderer, text, 0, 0, scale, app.sys, app.set, app.canvasW, app.canvasH, fps);
-        text->PopClipRect();
+        if (app.lab == 1) ui::atomPanel(app, panelWidth);
+        else ui::orbitPanel(app, panelWidth);
+        renderer.begin(app.canvasW, app.canvasH);
+        ImDrawList* text = ImGui::GetBackgroundDrawList();
+        text->PushClipRect(ImVec2(0, 0), ImVec2(canvasWinW, pictureWinH));
+        if (app.lab == 1) {
+            app.atomView.draw(renderer, text, 0, 0, scale, app.atom, app.canvasW, app.canvasH, app.set.lightTheme);
+            text->PopClipRect();
+            atomBarH = ui::atomBottomBar(app, 0, pictureWinH, canvasWinW, false);
+            ui::atomBottomBar(app, 0, pictureWinH, canvasWinW, true);
+        } else {
+            atomBarH = 0;
+            app.set.paused = app.paused;
+            if (SDL_getenv("PL_SKYOFF") && frame == 0) app.set.sky = orbit::SkyMode::Off;
+            app.view.draw(renderer, text, 0, 0, scale, app.sys, app.set, app.canvasW, app.canvasH, fps);
+            text->PopClipRect();
+        }
         ui::changelogWindow(&app.showChangelog);
         ui::learnWindow(app);
         ui::settingsWindow(app);
@@ -198,7 +252,8 @@ int main(int, char**) {
         plgl::glClearColor(0.016f, 0.024f, 0.05f, 1);
         plgl::glClear(GL_COLOR_BUFFER_BIT);
         const int canvasFbW = static_cast<int>(std::lround(canvasWinW * fbW / std::max(1, winW)));
-        renderer.end(canvasFbW, fbH);
+        const int pictureFbH = static_cast<int>(std::lround(pictureWinH * fbH / std::max(1, winH)));
+        renderer.end(canvasFbW, pictureFbH, fbH - pictureFbH);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         if (maxFrames && ++frame >= maxFrames) {
             running = false;

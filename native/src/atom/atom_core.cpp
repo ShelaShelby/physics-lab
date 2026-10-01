@@ -672,4 +672,74 @@ std::string tempLine(int Z) {
     return bits + (st ? " · " + *st + " at room temperature" : "");
 }
 
+std::string tAll(double k) {
+    const double r = jsRound(k);
+    return "<b>" + (r >= 1000 ? fmt::jsLocale(r) : fK(k)) + " K</b> · " + fC(k) + " °C · " + fF(k) + " °F";
+}
+const char* stateIcon(const std::string& st) { return st == "solid" ? "🧊" : st == "liquid" ? "💧" : "☁️"; }
+
+// ---------------------------------------------------------------- the element card and facts
+std::string everyday(int Z) {
+    if (kEveryday[Z]) return fmt::unitText(kEveryday[Z]);
+    const std::string cat = categoryName(Z);
+    if (cat == "lanthanide") return "One of the “rare earth” metals, used in magnets, lasers, screens and lamps.";
+    if (Z >= 104) return "Made a few atoms at a time in particle accelerators. The atoms decay again quickly, often within seconds.";
+    if (Z > 92 || cat == "actinide") return "Radioactive. Made in reactors or particle accelerators, or found only in tiny traces in nature.";
+    return "You rarely meet this one directly, but it has its uses in industry and science.";
+}
+int periodOf(int Z) { return Z <= 2 ? 1 : Z <= 10 ? 2 : Z <= 18 ? 3 : Z <= 36 ? 4 : Z <= 54 ? 5 : Z <= 86 ? 6 : 7; }
+std::vector<std::string> elementChips(int Z) {
+    const std::string cat = categoryName(Z);
+    const bool f = cat == "lanthanide" || cat == "actinide";
+    const auto st = tempState(Z, kTRoom);
+    std::vector<std::string> chips = {cat, f ? "period " + std::to_string(periodOf(Z)) : "period " + std::to_string(periodOf(Z)) + " · group " + std::to_string(ptPos(Z).second),
+                                      st ? std::string(stateIcon(*st)) + " " + *st + " at room temperature" : "state at room temperature unknown"};
+    if (!hasStable(Z)) chips.push_back("☢ radioactive: no stable isotope");
+    return chips;
+}
+std::string factsLinesHtml(int Z) {
+    const Temp& t = tempData(Z);
+    const double m = t.melt, b = t.boil;
+    const char f = t.flag;
+    const std::string est = f == 'e' ? " (estimated)" : "";
+    const auto st = tempState(Z, kTRoom);
+    if (std::isnan(m) && std::isnan(b))
+        return std::string("<div><b>Melting and boiling point:</b> unknown. Only a few atoms of ") + name(Z) + " have ever been made, so nobody has measured them (heavy elements like this are usually predicted to be solid).</div>";
+    std::string L;
+    if (f == 's') L += "<div><b>Melting point:</b> none at normal pressure. It <b>sublimes</b> (solid → gas) at " + tAll(b) + ".</div>";
+    else {
+        L += "<div><b>Melting point:</b> " + (std::isnan(m) ? std::string(f == 'p' ? "none at normal pressure (it needs squeezing to about 25 atmospheres to freeze)" : "unknown")
+                                                       : tAll(m) + (f == 'e' && Z != 85 ? est : "")) + "</div>";
+        L += "<div><b>Boiling point:</b> " + (std::isnan(b) ? std::string("unknown") : tAll(b) + est) + "</div>";
+    }
+    std::string dens;
+    const double d = t.density;
+    if (!std::isnan(d) && d != 0) {
+        if (d < 0.01) dens = " · density " + fmt::fixed(d * 1000, 2) + " g/L (as a gas)";
+        else {
+            std::string v = fmt::jsToPrecision(d, 3);   // then the web's .replace(/\.?0+$/, '')
+            std::size_t e = v.size();
+            while (e > 0 && v[e - 1] == '0') e--;
+            if (e < v.size()) { if (e > 0 && v[e - 1] == '.') e--; v = v.substr(0, e); }
+            dens = " · density " + v + " g/cm³";
+        }
+    }
+    L += std::string("<div><b>At room temperature (") + (fmt::imperial() ? "68 °F" : "20 °C") + "):</b> " + (st ? std::string(stateIcon(*st)) + " " + *st : std::string("unknown")) + dens + "</div>";
+    return L;
+}
+std::string factsNotesHtml(int Z) {
+    const char f = tempData(Z).flag;
+    std::vector<std::string> notes;
+    if (f == 'a') notes.push_back(std::string(name(Z)) + " has several forms (allotropes); these numbers are for " + (Z == 15 ? "white phosphorus" : "ordinary yellow (α) sulfur") + ".");
+    if (f == 'p') notes.push_back("Helium is the only element that stays liquid at absolute zero unless squeezed.");
+    if (Z == 6) notes.push_back("Only under enormous pressure does carbon melt.");
+    if (Z == 33) notes.push_back("Under pressure arsenic melts at about 1,090 K.");
+    if (Z == 80 || Z == 35) notes.push_back(std::string(name(Z)) + " is one of only two elements that are liquid at room temperature.");
+    if (Z == 31 || Z == 55) notes.push_back(std::string(name(Z)) + " melts just above room temperature: it would melt in your hand or on a hot day.");
+    std::string out;
+    for (const std::string& n : notes) out += (out.empty() ? "" : " ") + n;
+    return out;
+}
+const char* const kFactsFootnote = "Values are for a lump of the element at normal air pressure, not for the single atom drawn here.";
+
 }  // namespace atom
