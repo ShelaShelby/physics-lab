@@ -1,4 +1,4 @@
-// The update badge and its changelog panel.
+// The native app's version and history, and the web's changelog pop-up for each lab (the Update badge).
 #pragma once
 
 namespace ui {
@@ -6,7 +6,11 @@ namespace ui {
 // The version of the native app (whole number = major update, .5 = medium, other decimals = small).
 const char* appVersion();
 
-// Draws the changelog window while *open is true (the window's close button clears it).
-void changelogWindow(bool* open);
+// The native app's own updates, newest first (shown in 🕰 history after the web's).
+struct NativeEntry { const char* version; const char* title; const char* text; };
+const NativeEntry* nativeHistory(int& count);
+
+// The lab's changelog (the web's, word for word) while *open is true; lab: 0 Orbit Lab, 1 Atom Lab.
+void labLogWindow(bool* open, int lab);
 
 }  // namespace ui

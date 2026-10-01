@@ -1,6 +1,11 @@
 #include "changelog.h"
 
+#include <algorithm>
 #include <string>
+
+#include "app/app_data.h"
+#include "fonts.h"
+#include "look.h"
 
 #include "imgui.h"
 
@@ -12,6 +17,15 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.5", "The web app's own features: settings, themes, header, history",
+     "Settings as in the web version: text size (Small, Normal, Large, Extra large), font (Theme default, Serif, Easy to read, "
+     "Rounded, Monospace; Atkinson Hyperlegible and Nunito are built in, under the SIL Open Font License), units, motion (Auto "
+     "follows Windows' animation setting; Reduced starts the labs paused, makes camera moves jump, stops Cloud 3D spinning), "
+     "Reset my progress with the web's two pop-ups, and Developer > Unlock everything. The 🎨 Theme menu has the web's eleven "
+     "themes, including the secret Synthwave and Monochrome; the panels, cards, text and pictures all follow it. Everything is "
+     "remembered between runs in the app-data folder: the look, units, unlocks and every setting of both labs. A header across "
+     "the top has the web's buttons: 🎨 Theme, 🌐 language (English; Eesti keel is coming), 👤 About (the web's page with its "
+     "sources), ⚙ Settings, 🕰 history (the web's history, then this list) and the lab's Update badge with its changelog."},
     {"0.4", "Atom Lab",
      "The second lab: pick Orbit Lab or Atom Lab at the top of the panel (each keeps its state while the other is shown). "
      "Atom Lab is the web version's, feature for feature: any nucleus from hydrogen to oganesson with one electron, in four "
@@ -71,7 +85,7 @@ const Entry kNative[] = {
      "planets, Journey, Jump to a date, Learn and the other labs."},
 };
 
-// The web Orbit Lab's history, for reference (the native version started from web Orbit Lab 7.7.2).
+// The web Orbit Lab's changelog (the native Orbit Lab follows web Orbit Lab 7.7.2).
 const Entry kWeb[] = {
 #include "web_orbit_changelog.inc"
 };
@@ -87,29 +101,55 @@ const char* const kWebAtomNote =
 
 const char* appVersion() { return PL_VERSION; }
 
-void changelogWindow(bool* open) {
+const NativeEntry* nativeHistory(int& count) {
+    count = int(sizeof kNative / sizeof kNative[0]);
+    static NativeEntry out[sizeof kNative / sizeof kNative[0]];
+    for (int i = 0; i < count; i++) out[i] = {kNative[i].version, kNative[i].title, kNative[i].text};
+    return out;
+}
+
+// The web's changelog pop-up for the lab on screen ("Orbit Lab · changelog"): each update's number, title and text
+void labLogWindow(bool* open, int lab) {
     if (!*open) return;
+    const app::LabInfo& L = app::kLabInfo[lab];
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowSize(ImVec2(vp->WorkSize.x * 0.5f, vp->WorkSize.y * 0.75f), ImGuiCond_Appearing);
+    const float s = ImGui::GetFontSize() / 16;
+    ImGui::SetNextWindowSize(ImVec2(std::min(vp->WorkSize.x - 32, 620 * s), vp->WorkSize.y * 0.8f), ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::Begin("What's new in Physics Lab (native)", open, ImGuiWindowFlags_NoCollapse)) {
-        for (const Entry& e : kNative) {
-            ImGui::SeparatorText((std::string("Update ") + e.version + " · " + e.title).c_str());
-            ImGui::TextWrapped("%s", e.text);
+    const std::string title = std::string(L.name) + app::kLogTitleTail + "###labLog";
+    if (ImGui::Begin(title.c_str(), open, ImGuiWindowFlags_NoCollapse)) {
+        const Entry* rows = lab == 1 ? kWebAtom : kWeb;
+        const int n = lab == 1 ? int(sizeof kWebAtom / sizeof kWebAtom[0]) : int(sizeof kWeb / sizeof kWeb[0]);
+        const ImU32 accent = col(look().c.accent), line = col(look().c.line);
+        for (int i = 0; i < n; i++) {
+            // .logRow: the number in a 52-point column (accent, bold), then the title and the text (muted, smaller)
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float x1 = p.x + 62 * s, w = ImGui::GetContentRegionAvail().x;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddText(fonts().bold, ImGui::GetFontSize(), ImVec2(p.x, p.y + 10 * s), accent, rows[i].version);
+            ImGui::SetCursorScreenPos(ImVec2(x1, p.y + 10 * s));
+            ImGui::PushTextWrapPos(p.x + w - ImGui::GetWindowPos().x);   // window-relative
+            ImGui::PushFont(fonts().bold, 0);
+            ImGui::TextUnformatted(displayable(rows[i].title, fonts().bold).c_str());
+            ImGui::PopFont();
+            ImGui::SetCursorScreenPos(ImVec2(x1, ImGui::GetCursorScreenPos().y + 2 * s));
+            ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 13 / 16);
+            ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.muted));
+            ImGui::TextUnformatted(displayable(rows[i].text).c_str());
+            ImGui::PopStyleColor();
+            ImGui::PopFont();
+            ImGui::PopTextWrapPos();
+            const float y = ImGui::GetCursorScreenPos().y + 10 * s;
+            if (i + 1 < n) dl->AddLine(ImVec2(p.x, y), ImVec2(p.x + w, y), line);
+            ImGui::SetCursorScreenPos(ImVec2(p.x, y));
+            ImGui::Dummy(ImVec2(w, 0));
         }
-        ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Web version history (Orbit Lab, for reference)")) {
-            for (const Entry& e : kWeb) {
-                ImGui::SeparatorText((std::string(e.version) + " · " + e.title).c_str());
-                ImGui::TextWrapped("%s", e.text);
-            }
-        }
-        if (ImGui::CollapsingHeader("Web version history (Atom Lab, for reference)")) {
-            for (const Entry& e : kWebAtom) {
-                ImGui::SeparatorText((std::string(e.version) + " · " + e.title).c_str());
-                ImGui::TextWrapped("%s", e.text);
-            }
-            ImGui::TextDisabled("%s", kWebAtomNote);
+        const char* note = lab == 1 ? kWebAtomNote : app::kOrbitLogNote;
+        if (*note) {
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.muted));
+            ImGui::TextWrapped("%s", displayable(note).c_str());
+            ImGui::PopStyleColor();
         }
     }
     ImGui::End();

@@ -15,6 +15,7 @@
 #include "changelog.h"
 #include "fonts.h"
 #include "imgui.h"
+#include "app_pages.h"
 #include "look.h"
 #include "orbit/format.h"
 #include "atom/atom_learn.h"
@@ -433,6 +434,13 @@ TempBox g_tempBox;
 }  // namespace
 
 // ---------------------------------------------------------------- the lab picker
+void openLab(AppState& app, int lab) {
+    if (app.lab == lab) return;
+    app.lab = lab;
+    if (!app.visited[lab] && look().reduced) app.paused = true;   // reduced motion: a lab starts still (the web's load())
+    app.visited[lab] = true;
+}
+
 void labPicker(AppState& app) {
     const float w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
     const char* names[2] = {"Orbit Lab", "Atom Lab"};
@@ -440,11 +448,7 @@ void labPicker(AppState& app) {
         if (i) ImGui::SameLine();
         const bool on = app.lab == i;
         if (on) pushOn();
-        if (ImGui::Button(names[i], ImVec2(w, 0)) && !on) {
-            app.lab = i;
-            if (!app.visited[i] && look().reduced) app.paused = true;   // reduced motion: a lab starts still (the web's load())
-            app.visited[i] = true;
-        }
+        if (ImGui::Button(names[i], ImVec2(w, 0))) openLab(app, i);
         if (on) popOn();
     }
 }
@@ -454,8 +458,8 @@ void atomPanel(AppState& app, float width) {
     AtomLab& L = app.atom;
     const AtomParams& p = L.p;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y));
-    ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y));
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
+    ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
     ImGui::Begin("Atom controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
     if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
         const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -463,21 +467,10 @@ void atomPanel(AppState& app, float width) {
     }
     if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
     labPicker(app);
-    ImGui::TextUnformatted("Physics Lab · Atom Lab");
-    ImGui::SameLine();
-    pushOn();
-    if (ImGui::SmallButton((std::string("Update ") + appVersion()).c_str())) app.showChangelog = true;
-    popOn();
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("What's new");
-    themeButton(app);
-    ImGui::SameLine();
-    if (ImGui::SmallButton(displayable("⚙ Settings").c_str())) app.showSettings = true;
-    ImGui::SameLine();
     defaultsButton(app);
     ImGui::SameLine();
     if (ImGui::Button("Reset")) L.restart();                  // the web's Reset: a fresh atom, the same settings
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Restart this lab's simulation");
-    ImGui::TextWrapped("any nucleus from hydrogen to oganesson + one electron: Bohr orbit, quantum cloud, 3D, photon jumps, and a zoom down to quarks");
     if (ImGui::Button(app.paused ? "▶ Play" : "❚❚ Pause", ImVec2(-1, 0))) app.paused = !app.paused;
     ImGui::TextDisabled("Space: play / pause");
     atomHelpButton(app);

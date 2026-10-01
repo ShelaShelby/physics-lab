@@ -16,6 +16,7 @@
 #include "fonts.h"
 #include "html_view.h"
 #include "imgui.h"
+#include "app_pages.h"
 #include "look.h"
 #include "orbit/format.h"
 #include "orbit/units.h"
@@ -285,8 +286,7 @@ void settingsWindow(AppState& app) {
 // 🎨 Theme: the web's theme menu (a swatch, the name and its small line, ✓ on the one in use; the two
 // secret themes are "???" with a hint until they are unlocked)
 void themeButton(AppState& app) {
-    if (ImGui::SmallButton(displayable("🎨 Theme").c_str())) ImGui::OpenPopup("##themes");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", app::kThemeBtnTip);
+    if (pillButton(app::kHdrTheme.label, app::kHdrTheme.tip)) ImGui::OpenPopup("##themes");
     if (!ImGui::BeginPopup("##themes")) return;
     const float s = ImGui::GetFontSize() / 16, h = 40 * s;
     float w = 240 * s;                                   // wide enough for the longest line

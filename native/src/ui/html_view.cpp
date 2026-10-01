@@ -9,7 +9,10 @@
 #include <memory>
 #include <vector>
 
+#include <SDL3/SDL_misc.h>
+
 #include "fonts.h"
+#include "look.h"
 #include "imgui.h"
 
 namespace ui {
@@ -18,7 +21,7 @@ namespace {
 
 // ---- a tiny HTML tree ----
 struct Node {
-    std::string tag, cls, text;           // text: for text nodes (tag empty)
+    std::string tag, cls, text, href;     // text: for text nodes (tag empty); href: for links
     std::map<std::string, std::string> style;
     std::vector<std::unique_ptr<Node>> kids;
     bool has(const char* c) const { return (" " + cls + " ").find(std::string(" ") + c + " ") != std::string::npos; }
@@ -67,6 +70,7 @@ std::unique_ptr<Node> parse(const std::string& h) {
         auto n = std::make_unique<Node>();
         n->tag = tag.substr(0, tag.find_first_of(" /"));
         n->cls = attr(tag, "class");
+        n->href = attr(tag, "href");
         const std::string st = attr(tag, "style");
         for (std::size_t a = 0; a < st.size();) {
             std::size_t b = st.find(';', a);
@@ -85,7 +89,7 @@ std::unique_ptr<Node> parse(const std::string& h) {
 }
 
 bool isInline(const Node& n) {
-    return n.tag.empty() || n.tag == "b" || n.tag == "i" || n.tag == "small" || n.tag == "sub" || n.tag == "span" || n.tag == "br";
+    return n.tag.empty() || n.tag == "a" || n.tag == "b" || n.tag == "i" || n.tag == "small" || n.tag == "sub" || n.tag == "span" || n.tag == "br";
 }
 
 ImU32 cssColor(const std::string& c, float alpha = 1) {
@@ -99,13 +103,13 @@ ImU32 cssColor(const std::string& c, float alpha = 1) {
 float S() { return ImGui::GetFontSize() / 16.0f; }
 
 // ---- inline text: runs laid out word by word ----
-struct Run { std::string text; bool bold, italic, small, sub, br; ImU32 dot; };
-void collect(const Node& n, bool bold, bool italic, bool small, bool sub, std::vector<Run>& out) {
-    if (n.tag.empty()) { out.push_back({n.text, bold, italic, small, sub, false, 0}); return; }
-    if (n.tag == "br") { out.push_back({"", bold, italic, small, sub, true, 0}); return; }
-    if (n.tag == "span" && n.has("lrnDot")) { out.push_back({"", bold, italic, small, sub, false, cssColor(n.style.count("background") ? n.style.at("background") : "")}); return; }
+struct Run { std::string text; bool bold, italic, small, sub, br; ImU32 dot; std::string href; };
+void collect(const Node& n, bool bold, bool italic, bool small, bool sub, std::vector<Run>& out, const std::string& href = "") {
+    if (n.tag.empty()) { out.push_back({n.text, bold, italic, small, sub, false, 0, href}); return; }
+    if (n.tag == "br") { out.push_back({"", bold, italic, small, sub, true, 0, ""}); return; }
+    if (n.tag == "span" && n.has("lrnDot")) { out.push_back({"", bold, italic, small, sub, false, cssColor(n.style.count("background") ? n.style.at("background") : ""), ""}); return; }
     const bool b = bold || n.tag == "b" || (n.tag == "span" && n.has("monoKey")), it = italic || n.tag == "i", sm = small || n.tag == "small", su = sub || n.tag == "sub";
-    for (const auto& k : n.kids) collect(*k, b, it, sm, su, out);
+    for (const auto& k : n.kids) collect(*k, b, it, sm, su, out, n.tag == "a" ? n.href : href);
 }
 
 // Lays out runs from (x, y) to the right edge `right`; size in points; returns the y below the text.
@@ -139,7 +143,17 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
             while (!trimmed.empty() && trimmed.back() == ' ') trimmed.pop_back();
             const float wt = font->CalcTextSizeA(sz, FLT_MAX, 0, trimmed.c_str()).x, w = font->CalcTextSizeA(sz, FLT_MAX, 0, word.c_str()).x;
             if (!lineEmpty && x + wt > right) { x = x0; y += lineH; lineEmpty = true; if (word == " ") continue; }
-            dl->AddText(font, sz, ImVec2(x, y + (r.sub ? size * 0.35f : (size - sz) * 0.8f)), r.bold && !forceBold ? boldCol : col, word.c_str());
+            const ImVec2 at(x, y + (r.sub ? size * 0.35f : (size - sz) * 0.8f));
+            if (!r.href.empty()) {                           // a link (.srcBox a): accent colour, underlined; a click opens it in the browser
+                const ImU32 lc = ui::col(look().c.accent);
+                dl->AddText(font, sz, at, lc, word.c_str());
+                dl->AddLine(ImVec2(at.x, at.y + sz + 1), ImVec2(at.x + wt, at.y + sz + 1), lc);
+                if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, ImVec2(at.x + w, at.y + sz + 2))) {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    ImGui::SetTooltip("%s", r.href.c_str());
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) SDL_OpenURL(r.href.c_str());
+                }
+            } else dl->AddText(font, sz, at, r.bold && !forceBold ? boldCol : col, word.c_str());
             x += w;
             lineEmpty = false; any = true;
         }
@@ -187,13 +201,29 @@ void block(const Node& n, const Ctx& cx, float left, float right, float sizePt, 
         return;
     }
     if (n.tag == "ul") {
+        const bool src = n.has("srcL");                          // the About page's source lists: smaller, muted, closer together
+        const float sz = src ? 13 : 14;
         for (const auto& li : n.kids) {
             if (li->tag != "li") continue;
             const ImVec2 c = ImGui::GetCursorScreenPos();
-            dl->AddText(ImGui::GetFont(), 14 * s, ImVec2(left + 6 * s, c.y), muted ? mu : fg, "•");
-            blocks(*li, cx, left + 20 * s, right, 14, muted);
-            ImGui::Dummy(ImVec2(0, 4 * s));
+            dl->AddText(ImGui::GetFont(), sz * s, ImVec2(left + 6 * s, c.y), muted || src ? mu : fg, "•");
+            blocks(*li, cx, left + 20 * s, right, sz, muted || src);
+            ImGui::Dummy(ImVec2(0, (src ? 0 : 4) * s));
         }
+        ImGui::Dummy(ImVec2(0, 4 * s));
+        return;
+    }
+    if (n.tag == "div" && n.has("srcH")) {                       // a heading in the source lists
+        ImGui::Dummy(ImVec2(0, 6 * s));
+        std::vector<Run> runs;
+        collect(n, true, false, false, false, runs);
+        const float y = flow(runs, left, ImGui::GetCursorScreenPos().y, right, 13, fg, fg, true);
+        ImGui::SetCursorScreenPos(ImVec2(left, y));
+        ImGui::Dummy(ImVec2(right - left, 0));
+        return;
+    }
+    if (n.tag == "div" && n.has("lrnMuted")) {                   // a muted note inside a block
+        blocks(n, cx, left, right, 13, true);
         ImGui::Dummy(ImVec2(0, 4 * s));
         return;
     }

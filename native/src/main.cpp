@@ -25,6 +25,7 @@
 #include "ui/learn.h"
 #include "ui/look.h"
 #include "ui/settings.h"
+#include "ui/app_pages.h"
 #include "ui/atom_learn.h"
 #include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
@@ -152,8 +153,9 @@ int main(int, char**) {
         SDL_GetWindowSize(window, &winW, &winH);
         SDL_GetWindowSizeInPixels(window, &fbW, &fbH);
         const float canvasWinW = std::max(1.0f, winW - panelWidth);   // the picture's width in window coordinates
-        // the Atom Lab has a bar under its picture (view buttons and the hint); its height is measured each frame
-        const float pictureWinH = app.lab == 1 ? std::max(1.0f, winH - atomBarH) : static_cast<float>(winH);
+        // the header is across the top; the Atom Lab has a bar under its picture (view buttons and the hint); both are measured each frame
+        float headerH = ui::headerHeight();
+        float pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 ? atomBarH : 0));
 
         // ---- input ----
         SDL_Event e;
@@ -167,21 +169,21 @@ int main(int, char**) {
                 break;
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
                 if (app.lab == 1) {                     // Atom Lab: zoom −= deltaY × 0.004, 0.4 per wheel notch
-                    if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y < pictureWinH) app.atom.setParam("zoom", app.atom.p.zoom + e.wheel.y * 0.4);
+                    if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH && e.wheel.mouse_y < headerH + pictureWinH) app.atom.setParam("zoom", app.atom.p.zoom + e.wheel.y * 0.4);
                     break;
                 }
-                if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW) {
+                if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) {
                     if (app.journey.active) ui::journeyStop(app);   // touching the picture stops a Journey (and brings your settings back)
                     else ui::setZoom(app, app.set.zoom + e.wheel.y * 0.07);
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (app.lab == 1) {
-                    if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y < pictureWinH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
+                    if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && e.button.y < headerH + pictureWinH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
                     break;
                 }
-                if (!io.WantCaptureMouse && e.button.x < canvasWinW && app.journey.active) { ui::journeyStop(app); break; }
-                if (!io.WantCaptureMouse && e.button.x < canvasWinW) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
+                if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && app.journey.active) { ui::journeyStop(app); break; }
+                if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
                 break;
             case SDL_EVENT_MOUSE_MOTION:
                 if (mouseDown) {
@@ -195,8 +197,8 @@ int main(int, char**) {
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
                 if (mouseDown && !dragging && e.button.button == SDL_BUTTON_LEFT) {
-                    if (app.lab == 1) app.atom.click(e.button.x / scale, e.button.y / scale);
-                    else app.view.click(e.button.x / scale, e.button.y / scale);
+                    if (app.lab == 1) app.atom.click(e.button.x / scale, (e.button.y - headerH) / scale);
+                    else app.view.click(e.button.x / scale, (e.button.y - headerH) / scale);
                 }
                 mouseDown = dragging = false;
                 break;
@@ -234,6 +236,9 @@ int main(int, char**) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
+        ui::header(app);                                // across the top: title, subtitle and the app's buttons
+        headerH = ui::headerHeight();
+        pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 ? atomBarH : 0));
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
         app.canvasH = pictureWinH / scale;
         app.set.lightTheme = ui::look().c.light;
@@ -243,20 +248,22 @@ int main(int, char**) {
         else ui::orbitPanel(app, panelWidth);
         renderer.begin(app.canvasW, app.canvasH);
         ImDrawList* text = ImGui::GetBackgroundDrawList();
-        text->PushClipRect(ImVec2(0, 0), ImVec2(canvasWinW, pictureWinH));
+        text->PushClipRect(ImVec2(0, headerH), ImVec2(canvasWinW, headerH + pictureWinH));
         if (app.lab == 1) {
-            app.atomView.draw(renderer, text, 0, 0, scale, app.atom, app.canvasW, app.canvasH, ui::look().c, ui::look().textScale);
+            app.atomView.draw(renderer, text, 0, headerH, scale, app.atom, app.canvasW, app.canvasH, ui::look().c, ui::look().textScale);
             text->PopClipRect();
-            atomBarH = ui::atomBottomBar(app, 0, pictureWinH, canvasWinW, false);
-            ui::atomBottomBar(app, 0, pictureWinH, canvasWinW, true);
+            atomBarH = ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, false);
+            ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, true);
         } else {
             atomBarH = 0;
             app.set.paused = app.paused;
             if (SDL_getenv("PL_SKYOFF") && frame == 0) app.set.sky = orbit::SkyMode::Off;
-            app.view.draw(renderer, text, 0, 0, scale, app.sys, app.set, app.canvasW, app.canvasH, fps);
+            app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH, fps);
             text->PopClipRect();
         }
-        ui::changelogWindow(&app.showChangelog);
+        ui::labLogWindow(&app.showLabLog, app.lab);
+        ui::aboutWindow(app);
+        ui::historyWindow(app);
         if (app.lab == 1) ui::atomLearnWindow(app);
         else ui::learnWindow(app);
         ui::settingsWindow(app);
@@ -269,8 +276,9 @@ int main(int, char**) {
         plgl::glClear(GL_COLOR_BUFFER_BIT);
         const int canvasFbW = static_cast<int>(std::lround(canvasWinW * fbW / std::max(1, winW)));
         const int pictureFbH = static_cast<int>(std::lround(pictureWinH * fbH / std::max(1, winH)));
+        const int headerFbH = static_cast<int>(std::lround(headerH * fbH / std::max(1, winH)));
         renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
-        renderer.end(canvasFbW, pictureFbH, fbH - pictureFbH);
+        renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         if (maxFrames && ++frame >= maxFrames) {

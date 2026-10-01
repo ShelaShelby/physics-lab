@@ -90,6 +90,45 @@ o.push(`static const char* const kSettingsBtnTip = ${q(/id="settingsBtn" class="
 o.push('struct AchDef { const char* id; const char* ic; const char* name; const char* how; const char* done; };');
 o.push(`static const AchDef kAchievements[] = {${A.PLAch.list.map(a => `\n  {${q(a.id)}, ${q(a.ic)}, ${q(a.name)}, ${q(a.how)}, ${q(a.done)}}`).join(',')}};`);
 
+// ---- the header: the buttons' labels and tooltips (index.html line 219), the labs' subtitles and Update numbers ----
+const hdr = /<header>.*<\/header>/.exec(r.html)[0];
+const hb = id => { const m = new RegExp(`<button id="${id}" class="ver" title="([^"]*)"[^>]*>([^<]*)</button>`).exec(hdr); return [m[2], m[1]]; };
+o.push('struct HeaderBtn { const char* label; const char* tip; };');
+for (const [name, id] of [['kHdrTheme', 'themeBtn'], ['kHdrLang', 'langBtn'], ['kHdrAbout', 'aboutBtn'], ['kHdrSettings', 'settingsBtn'], ['kHdrHistory', 'appLog'], ['kHdrVer', 'ver']]) {
+  const [label, tip] = hb(id);
+  o.push(`static const HeaderBtn ${name} = {${q(label)}, ${q(tip)}};`);
+}
+o.push(`static const char* const kHdrTitle = ${q(/<header><h1>([^<]*)<\/h1>/.exec(hdr)[1])};`);
+const simField = (lab, field) => { const a = r.html.indexOf(`SIMS['${lab}'] = {`) >= 0 ? r.html.indexOf(`SIMS['${lab}'] = {`) : r.html.indexOf(`'${lab}': {`); const m = new RegExp(`\\n  ${field}: '((?:[^'\\\\]|\\\\.)*)',`).exec(r.html.slice(a)); return m[1].replace(/\\'/g, "'"); };
+o.push('struct LabInfo { const char* name; const char* update; const char* subtitle; };');
+o.push(`static const LabInfo kLabInfo[] = {${['Orbit Lab', 'Atom Lab'].map(l => `{${q(l)}, ${q(simField(l, 'update'))}, ${q(simField(l, 'subtitle'))}}`).join(', ')}};`);
+o.push(`static const char* const kLogTitleTail = ${q(/textContent = curName \+ '([^']*)';/.exec(r.html)[1])};   // "Orbit Lab" + this`);
+o.push(`static const char* const kOrbitLogNote = "";   // the web Orbit Lab has no changelog note`);
+
+// ---- 🌐 the language menu ----
+r.els('langBtn').onclick();
+const lm = r.body.children.find(e => e.id === 'langMenu');
+o.push(`static const char* const kLangLabel = ${q(r.els('langBtn').textContent)};`);
+o.push('struct LangOpt { const char* flag; const char* name; const char* soon; };   // soon: "Coming soon" (cannot be picked yet)');
+o.push(`static const LangOpt kLangs[] = {${lm.children.map(b => { const m = /<span style="font-size:18px">(.*?)<\/span><span class="nm">(.*?)<\/span>(?:<span class="soon">(.*?)<\/span>)?/.exec(b.innerHTML); return `{${q(m[1])}, ${q(m[2])}, ${q(m[3] || '')}}`; }).join(', ')}};`);
+
+// ---- 👤 About: the web's page, with the lab list of the native app (the sandbox's SIMS holds only Orbit Lab and Atom Lab) ----
+r.ctx.SIMS = {'Orbit Lab': {update: simField('Orbit Lab', 'update')}, 'Atom Lab': {update: simField('Atom Lab', 'update')}};
+r.els('aboutBtn').onclick();
+o.push(`static const char* const kAboutTitle = ${q(r.ctx.lastTitle)};`);
+o.push(`static const char* const kAboutHtml = ${q(r.ctx.lastBox.children.map(serialize).join(''))};`);
+
+// ---- 🕰 history: the web's APP_LOG and the page's texts ----
+r.els('appLog').onclick();
+const H = r.ctx.lastBox.children;
+o.push(`static const char* const kHistoryTitle = ${q(r.ctx.lastTitle)};`);
+o.push(`static const char* const kHistoryIntro = ${q(H[0].innerHTML)};`);
+o.push(`static const char* const kHistoryNote = ${q(H[H.length - 1].innerHTML)};`);
+o.push(`static const char* const kHistoryHere = ${q(/\$\{i === 0 \? '([^']*)' : ''\}/.exec(r.html)[1])};`);
+o.push(`static const char* const kHistoryYear = ${q(/<div class="lrnY">([^$]*)\$\{e\.v\}/.exec(r.html)[1])};   // + version`);
+o.push('struct LogEntry { const char* v; const char* ic; const char* t; const char* d; const char* labButton; const char* lab; };');
+o.push(`static const LogEntry kAppLog[] = {${A.APP_LOG.map(e => `\n  {${q(e.v)}, ${q(e.ic || '✨')}, ${q(e.t)}, ${q(e.d)}, ${q(e.lab ? '▶ ' + e.lab[0] : '')}, ${q(e.lab ? e.lab[1] : '')}}`).join(',')}};`);
+
 fs.mkdirSync(path.join(__dirname, '../src/app'), {recursive: true});
 fs.writeFileSync(path.join(__dirname, '../src/app/app_text.inc'), o.join('\n') + '\n');
 console.log('wrote app_text.inc');

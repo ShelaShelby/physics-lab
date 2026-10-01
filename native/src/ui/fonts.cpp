@@ -121,7 +121,8 @@ std::string displayable(const std::string& text, ImFont* font) {
         const int n = ImTextCharFromUtf8(&c, p, end);
         if (n <= 0) break;
         // U+FE0F only asks for colour-emoji style: never drawn on its own
-        const bool drawable = c == 0xFE0F ? false : (c < 0x80 || font->IsGlyphInFont(static_cast<ImWchar>(c)));
+        // U+1F1E6–1F1FF pair up into flags, which the fonts here cannot draw (they would show as boxed letters)
+        const bool drawable = c == 0xFE0F || (c >= 0x1F1E6 && c <= 0x1F1FF) ? false : (c < 0x80 || font->IsGlyphInFont(static_cast<ImWchar>(c)));
         if (drawable) {
             if (!(skippedSpace && c == ' ')) out.append(p, n);   // no double space where a symbol was taken out
             skippedSpace = false;

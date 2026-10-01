@@ -151,11 +151,47 @@ static void testProgress() {
     checkTrue("text sizes", textSizeFactor("small") == 0.9 && textSizeFactor("xl") == 1.3 && textSizeFactor("bad") == 1);
 }
 
+static void testPages() {
+    // the header buttons (index.html line 219)
+    const HeaderBtn* mine[] = {&kHdrTheme, &kHdrLang, &kHdrAbout, &kHdrSettings, &kHdrHistory, &kHdrVer};
+    checkTrue("6 header buttons", count(kHeaderRef) == 6);
+    for (std::size_t i = 0; i < 6 && i < count(kHeaderRef); i++) {
+        checkStr(std::string("header ") + kHeaderRef[i].id + " label", mine[i]->label, kHeaderRef[i].label);
+        checkStr(std::string("header ") + kHeaderRef[i].id + " tip", mine[i]->tip, kHeaderRef[i].tip);
+    }
+    // 👤 About, word for word (the web run lists the native app's two labs)
+    checkStr("About title", kAboutTitle, kAboutRefTitle);
+    checkStr("About page", kAboutHtml, kAboutRef);
+    checkTrue("About names only the native labs", std::string(kAboutHtml).find("Labs: Orbit Lab 7.7.2 · Atom Lab 7.7.3.") != std::string::npos);
+    // 🌐 the language menu
+    checkStr("language label", kLangLabel, kLangLabelRef);
+    checkTrue("2 languages", count(kLangs) == count(kLangRef));
+    for (std::size_t i = 0; i < count(kLangs) && i < count(kLangRef); i++) {
+        const LangOpt& L = kLangs[i];
+        const std::string html = std::string("<span style=\"font-size:18px\">") + L.flag + "</span><span class=\"nm\">" + L.name + "</span>" +
+                                 (*L.soon ? std::string("<span class=\"soon\">") + L.soon + "</span>" : std::string("<span class=\"ck\">✓</span>"));
+        checkStr("language " + std::to_string(i), html, kLangRef[i]);
+    }
+    // 🕰 history: every APP_LOG entry, as the web's timeline shows it
+    checkStr("history title", kHistoryTitle, kHistoryRefTitle);
+    checkStr("history intro", kHistoryIntro, kHistoryRefFirst);
+    checkStr("history note", kHistoryNote, kHistoryRefLast);
+    checkTrue("history length", count(kAppLog) == count(kHistoryRef));
+    for (std::size_t i = 0; i < count(kAppLog) && i < count(kHistoryRef); i++) {
+        const LogEntry& e = kAppLog[i];
+        std::string html = std::string("<div class=\"lrnY\">") + kHistoryYear + e.v + (i == 0 ? kHistoryHere : "") + "</div><div class=\"lrnTt\">" + e.t +
+                           "</div><div class=\"lrnD\">" + e.d + "</div>";
+        if (*e.labButton) html += std::string("|") + e.labButton;
+        checkStr(std::string("history ") + e.v, html, kHistoryRef[i]);
+    }
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
     testThemes();
     testProgress();
+    testPages();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

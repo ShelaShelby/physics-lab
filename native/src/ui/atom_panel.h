@@ -9,6 +9,7 @@ struct AppState;
 
 // The two buttons at the top of every panel: Orbit Lab / Atom Lab.
 void labPicker(AppState& app);
+void openLab(AppState& app, int lab);          // switch to a lab (0 Orbit Lab, 1 Atom Lab)
 
 // Draws the Atom Lab panel in a window `width` points wide on the right of the main window.
 void atomPanel(AppState& app, float width);

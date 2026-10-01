@@ -11,6 +11,7 @@
 #include "settings.h"
 #include "fonts.h"
 #include "imgui.h"
+#include "app_pages.h"
 #include "look.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
@@ -118,8 +119,8 @@ void performanceCard(AppState& app) {
 
 void orbitPanel(AppState& app, float width) {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y));
-    ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y));
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
+    ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
     ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
     if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
         const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -130,19 +131,7 @@ void orbitPanel(AppState& app, float width) {
     if (journeyWasActive && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) journeyStop(app);
 
     labPicker(app);
-    // ---- title and update badge ----
-    ImGui::TextUnformatted("Physics Lab · Orbit Lab");
-    ImGui::SameLine();
-    pushOn();
-    if (ImGui::SmallButton((std::string("Update ") + appVersion()).c_str())) app.showChangelog = true;
-    popOn();
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("What's new");
-    themeButton(app);
-    ImGui::SameLine();
-    if (ImGui::SmallButton(displayable("⚙ Settings").c_str())) app.showSettings = true;
-    ImGui::SameLine();
     defaultsButton(app);
-    ImGui::TextWrapped("The real Solar System, where everything is today: planets, moons, dwarf planets and comets. Click anything for details.");
 
     // ---- Presets ----
     ImGui::SeparatorText("Presets");

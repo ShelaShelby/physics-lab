@@ -37,5 +37,28 @@ for (let t = 0; t <= 2; t++) for (let a = 0; a <= ids.length; a++) {
   o.push(`  {${t}, ${a}, ${q(ask)},\n   ${q(done)},\n   ${q(unlock)}},`);
 }
 o.push('};');
+
+// the header, About, the language menu and the history, from one more run of the web page
+{
+  const w = loadAppWeb();
+  const hdr = /<header>.*<\/header>/.exec(w.html)[0];
+  o.push('struct HeaderRef { const char* id; const char* label; const char* tip; };');
+  o.push('static const HeaderRef kHeaderRef[] = {' + [...hdr.matchAll(/<button id="(\w+)" class="ver" title="([^"]*)"[^>]*>([^<]*)<\/button>/g)].map(m => `{${q(m[1])}, ${q(m[3])}, ${q(m[2])}}`).join(', ') + '};');
+  w.ctx.SIMS = {'Orbit Lab': {update: '7.7.2'}, 'Atom Lab': {update: '7.7.3'}};
+  w.els('aboutBtn').onclick();
+  const {serialize} = require('./fake_dom.js');
+  o.push(`static const char* const kAboutRefTitle = ${q(w.ctx.lastTitle)};`);
+  o.push(`static const char* const kAboutRef = ${q(w.ctx.lastBox.children.map(serialize).join(''))};`);
+  w.els('langBtn').onclick();
+  o.push(`static const char* const kLangRef[] = {${w.body.children.find(e => e.id === 'langMenu').children.map(b => q(b.innerHTML)).join(', ')}};`);
+  o.push(`static const char* const kLangLabelRef = ${q(w.els('langBtn').textContent)};`);
+  w.els('appLog').onclick();
+  o.push(`static const char* const kHistoryRefTitle = ${q(w.ctx.lastTitle)};`);
+  // each timeline row's text part: "<div class=\"lrnY\">…</div><div class=\"lrnTt\">…</div><div class=\"lrnD\">…</div>" and its button
+  const rows = w.ctx.lastBox.children.find(e => e.className === 'lrnTl').children;
+  o.push(`static const char* const kHistoryRef[] = {${rows.map(r => q(r.children[1].innerHTML + (r.children[1].children.length ? '|' + r.children[1].children.map(c => c.innerHTML).join('|') : ''))).join(',\n  ')}};`);
+  o.push(`static const char* const kHistoryRefFirst = ${q(w.ctx.lastBox.children[0].innerHTML)};`);
+  o.push(`static const char* const kHistoryRefLast = ${q(w.ctx.lastBox.children[w.ctx.lastBox.children.length - 1].innerHTML)};`);
+}
 fs.writeFileSync(path.join(__dirname, 'app_reference.inc'), o.join('\n') + '\n');
 console.log('wrote app_reference.inc');

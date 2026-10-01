@@ -787,7 +787,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             dl->AddRectFilled(ImVec2(float(ox + 6 * uiScale), float(oy + 4 * uiScale)), ImVec2(float(ox + (6 + bw) * uiScale), float(oy + (4 + bh) * uiScale)),
                               ImGui::ColorConvertFloat4ToU32(ImVec4(css.card.r, css.card.g, css.card.b, 0.72f)), float(8 * uiScale));
         }
-        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 21 + 17.0 * i, 13, css.muted, 0, &css.card);
+        // on their see-through panel the rows need no halo (in light themes its 8 copies left faint grey marks between letters)
+        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 21 + 17.0 * i, 13, css.muted, 0, any ? nullptr : &css.card);
     }
 }
 
