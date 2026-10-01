@@ -7,6 +7,7 @@
 #include "app/app_data.h"
 #include "app_tabs.h"
 #include "changelog.h"
+#include "app/history.h"
 #include "fonts.h"
 #include "html_view.h"
 #include "imgui.h"
@@ -164,16 +165,12 @@ void aboutWindow(AppState& app) {
     ImGui::End();
 }
 
-// 🕰 history: the web's APP_LOG word for word, then the native app's own updates
+// 🕰 history: the web's intro, then the native app's own updates (newest first), then the web's APP_LOG word for word
 void historyWindow(AppState& app) {
     if (!app.showHistory) return;
     if (beginPage(app::kHistoryTitle, "history", &app.showHistory)) {
         const float s = S(), ts = look().textScale;
         htmlView(std::string("<p class=\"lrnP\">") + app::kHistoryIntro + "</p>");
-        // native only: the web's entries below are its history word for word, and some are about parts the native app does not have
-        htmlView("<p class=\"lrnP lrnMuted\">Native app: the entries below are the web app's history, word for word. Some of them are about "
-                 "the Black Hole Lab, the Spacetime Lab, the Slingshot game and the Games tab. The native app does not have those: it has the Orbit Lab and the Atom Lab. "
-                 "Its own updates are listed after them.</p>");
         // .lrnTi: an icon box (60 px), then the version line, the title, the text and the ▶ button
         auto item = [&](int i, const std::string& ic, const std::string& year, const char* title, const char* text, const char* button, const char* lab) {
             ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -218,16 +215,18 @@ void historyWindow(AppState& app) {
             ImGui::SetCursorScreenPos(ImVec2(p.x, bottom));
             ImGui::Dummy(ImVec2(w, 0));
         };
-        int i = 0;
-        for (const app::LogEntry& e : app::kAppLog) { item(i, e.ic, std::string(app::kHistoryYear) + e.v, e.t, e.d, e.labButton, e.lab); i++; }
-        htmlView(std::string("<p class=\"lrnP lrnMuted\">") + app::kHistoryNote + "</p>");
-        // the native app's own updates, newest first ("you are here" is the native version you are running)
-        ImGui::Spacing();
-        richHeading("Physics Lab (native)");
-        int n = 0;
+        // the native app's own updates first, newest first ("you are here" is the native version you are running)
+        int i = 0, n = 0;
+        richHeading(app::kHistoryNativeHeading);
         const NativeEntry* nat = nativeHistory(n);
         for (int k = 0; k < n; k++, i++)
             item(i, "✨", std::string("Physics Lab (native) ") + nat[k].version + (k == 0 ? app::kHistoryHere : ""), nat[k].title, nat[k].text, "", "");
+        // then the web's, word for word, with a note above them
+        ImGui::Spacing();
+        richHeading(app::kHistoryWebHeading);
+        htmlView(std::string("<p class=\"lrnP lrnMuted\">") + app::kHistoryWebNote + "</p>");
+        for (const app::LogEntry& e : app::kAppLog) { item(i, e.ic, std::string(app::kHistoryYear) + e.v, e.t, e.d, e.labButton, e.lab); i++; }
+        htmlView(std::string("<p class=\"lrnP lrnMuted\">") + app::kHistoryNote + "</p>");
     }
     ImGui::End();
 }

@@ -40,7 +40,7 @@ const Entry kNative[] = {
      "themes, including the secret Synthwave and Monochrome; the panels, cards, text and pictures all follow it. Everything is "
      "remembered between runs in the app-data folder: the look, units, unlocks and every setting of both labs. A header across "
      "the top has the web's buttons: 🎨 Theme, 🌐 language (English; Eesti keel is coming), 👤 About (the web's page with its "
-     "sources), ⚙ Settings, 🕰 history (the web's history, then this list) and the lab's Update badge with its changelog. "
+     "sources), ⚙ Settings, 🕰 history (the web's history, and this list) and the lab's Update badge with its changelog. "
      "Under it, the 💡 Did you know? line with all the web's facts (tap for the next one; it waits while the mouse is on it) "
      "and its hidden 🎁 surprise, and the tabs: 📚 Learn lists every guide and timeline of both labs and opens them in their "
      "lab; 🏆 Achievements shows Neon Nights, Sharp Eyes, Half-Life and Galactic Center, locked until earned, with the "

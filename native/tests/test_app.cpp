@@ -14,6 +14,7 @@
 #include "app/prefs.h"
 #include "app/shot.h"
 #include "app/fps.h"
+#include "app/history.h"
 
 #include "reference/app_reference.inc"
 
@@ -562,6 +563,16 @@ static void testWindow() {
     checkTrue("maximised is kept", fitWindow(WindowState{1000, 700, 100, 100, true, true}, one).maximized);
 }
 
+// ---- the native additions to the 🕰 history page ----
+static void testHistoryNotes() {
+    const std::string note = kHistoryWebNote;
+    checkTrue("web note says the entries are the web's history", note.find("the entries below are the web app's history, word for word") != std::string::npos);
+    checkTrue("web note names what native lacks", note.find("Black Hole Lab") != std::string::npos && note.find("Games tab") != std::string::npos && note.find("it has the Orbit Lab and the Atom Lab") != std::string::npos);
+    checkTrue("web note no longer points to a list after it", note.find("listed after") == std::string::npos && note.find("after them") == std::string::npos);
+    checkTrue("two different headings", std::string(kHistoryNativeHeading) != kHistoryWebHeading && std::string(kHistoryWebHeading).find("web") != std::string::npos);
+    // the web's own history text is still compared word for word in testPages (kAppLog against the web run, intro, closing note)
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -571,6 +582,7 @@ int main() {
     testFactsAndTabs();
     testShot();
     testFps();
+    testHistoryNotes();
     testWindow();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
