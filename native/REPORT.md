@@ -1,145 +1,196 @@
-# Native Physics Lab 0.4 — report
+# Native Physics Lab 0.5 — report
 
-0.4 adds the **Atom Lab**, ported from the web version (web Atom Lab update 7.7.3). It was done in
-four stages, each committed to `native` and built by GitHub Actions. The plan is in `ATOM_PLAN.md`.
-The 0.3 report is in the git history (`git show e30a67a:native/REPORT.md`).
+0.5 brings over the web app's own features: Settings, themes, saving, the header with About and
+history, the "Did you know?" line, the Learn and Achievements tabs. It was done in four stages,
+each committed to `native` and built by GitHub Actions. The plan, with the `index.html` line
+numbers of every item, is in `APP_PLAN.md`.
+
+The Black Hole Lab, the Spacetime Lab and the Slingshot game were not started, as asked. Orbit Lab
+and Atom Lab behave as in 0.4, apart from the changes listed under stage 4.
+
+The 0.4 report is in the git history (`git show 4e25469:native/REPORT.md`).
 
 ## What works (checked)
 
-**Stage 1: physics core and tests**
-- Everything the Atom Lab calculates is in `src/atom/`. It uses SI units inside, the web's own
-  rounded constants (0.529 Å, 27.211 eV, 24.19 as, FM_AU) and its steps (fixed 1/240 s steps;
-  h = dt·speed/Z²).
-- Data is generated from `index.html`, never retyped: 3,557 nuclides, NUBASE2020 decays, binding
-  energies, temperatures, categories, famous isotopes and nuclear shapes.
-- `tests/test_atom.cpp` has about 17,800 checks, all passing on Linux and on the Windows build.
-  The reference values come from the web's own JavaScript run in Node, with `Math.random` replaced
-  by the same seeded generator the app uses. Even the random parts compare step by step:
-  - the cloud dots;
-  - photon jumps;
-  - nucleon positions;
-  - decays (which way, after how long) and the decay history.
-- The tests check every nuclide's one-line description, all decay-mode words, ψ for all 30
-  orbitals, the dipole rule for all 900 pairs, spectral lines, binding energies, and the readout
-  and hint lines along whole scripted runs.
-- To get JavaScript's exact number wording, `format.cpp` gained helpers for `String`,
-  `toPrecision`, `toExponential` and `toLocaleString`. `toFixed` now rounds exact halves up, as
-  JavaScript does. The Orbit tests still pass unchanged.
+All three test programs pass on Linux:
+- `app_tests`: 427 checks (new);
+- `atom_tests`: 17,818 checks;
+- `orbit_tests`: 1,370 checks.
 
-**Stage 2: picture and panel**
-- **Views:** Orbit (Modern, and Bohr 1913 with its circles), Cloud, Cloud 3D (three depth bands,
-  auto spin) and Slice.
-- **The nucleus at its real size:**
-  - fuzzy nucleons (the web's charge-density profile) or hard balls;
-  - jitter and depth order;
-  - click a nucleon to dive into it.
-- **Quarks:** Classic, Accurate and Cinematic, with:
-  - colour-charge swaps and the travelling gluon;
-  - the gluon field and sea pairs;
-  - depth fog and focus, and the 45-nucleon limit with fade in and out;
-  - the dark backdrop and the mass-budget bar.
-- **Drawing:**
-  - cloud dots, glows and gluon particles are instanced draws (a new "blob" primitive);
-  - blurry things go through a half-resolution soft layer, like the web's;
-  - the Performance card shows the picture's draw calls and instanced shapes.
-- **Also drawn:**
-  - photons as wave packets with their labels;
-  - the spectral-line strip;
-  - decay flashes, flying particles and the decay log;
-  - the scale bar, the readout on its plate, the ⓘ More/Less info button and the nuclide label.
-- **Panel:** a lab picker at the top (Orbit Lab / Atom Lab), then:
-  - the periodic table (hues, dashed edges for no stable isotope, tooltips, * and ** marks);
-  - the bigger table window with its legend;
-  - the isotope line, element card and facts with the temperature bar;
-  - Protons and Neutrons with − and +, and Famous isotopes;
-  - Build another and Reshuffle;
-  - the Decay history;
-  - View & zoom, Electron and Photons, with every web setting as a row of buttons with its note;
-  - the Light spectrum picture and note;
-  - Temperature, with the slider, state line, atom speed, particle box, four jump buttons and
-    "What is temperature, really?".
-- **Under the picture:** ⌕ Atom / Nucleus / Nucleon, ⌖ Centre, ✥ Drag, ↺ Reset view, and the hint.
-- **Visual check:** the web page was screenshotted in headless Chromium and compared with the
-  native app.
-  - The fuzzy-nucleon brightness profile matches within a few levels (peak 138 native, 135 web).
-  - The Cinematic and Classic quark views look the same, though not pixel for pixel, as the
-    nucleon placement is random on both.
+Stages 1 and 2 also built and passed their tests on GitHub's Windows runner. For stages 3 and 4,
+check the `latest` release.
 
-**Stage 3: Learn and texts, word for word**
-- The four guides:
-  - **What am I even looking at?** with the element bar, view chips, jump bar and 8 sections,
-    including the live readout;
-  - **Scale**, with both tabs and all five objects;
-  - **Weight**, with five tabs;
-  - **the timeline**: 22 steps, with the web's small icons drawn from their SVG. Its 11 ▶ buttons
-    set up the lab and close the guide (checked with a real click: radium-226).
-- The guides' text is made by C++ functions. The tests compare them with the web's own `lrnLook`,
-  `lrnScale` and `lrnMass` run in Node with a small fake page, for 17 atoms and all views
-  (imperial too).
-- The panel's texts are compared with what the web's own `buildUI` writes for 20 isotopes:
-  - isotope line, element card, facts and spectrum note;
-  - temperature and atom-speed lines;
-  - decay history.
-- For all 118 elements, the card, the facts and "Where you meet it" are compared in both units.
-- Metric/imperial follows ⚙ Settings wherever the web converts. This covers °F, mph, miles, feet
-  and inches in the Scale guide, "20 °C / 68 °F", and the km/h and °C inside the element notes.
+Screens were checked on Linux (Xvfb) with real mouse clicks sent to the window, and compared with
+the web page in headless Chromium where useful.
 
-**Stage 4: polish**
-- **Defaults** asks "Put Atom Lab back?" first. Checked with real clicks:
-  - "Yes" gives hydrogen-1, the Orbit view and a fresh atom;
-  - "Cancel" keeps everything.
-- **Reset** (the web's top-bar button) starts a fresh atom with the same settings.
-- **More/Less info** is remembered between runs. Checked: saved on click, restored on the next start.
-- The **Performance** card is on the Atom Lab panel too.
-- **Changelog:** the 0.4 entry, plus the web Atom Lab history (27 entries and its note) for reference.
-  The version is 0.4.
-- **Orbit Lab:** the same as 0.3. Its Performance card was moved into a shared function, unchanged,
-  and the lab picker sits above its title. Its tests still pass.
+**Stage 1: Settings, saving, themes**
+- **⚙ Settings** has the web's sections and texts, word for word:
+  - **Text size:** Small, Normal, Large, Extra large (0.9 / 1 / 1.15 / 1.3), with the sample line.
+    It changes the panels, the guides and the labels drawn in both pictures.
+  - **Font:** the web's five choices.
+    - Theme default: Segoe UI on Windows.
+    - Serif: Georgia.
+    - Easy to read: Atkinson Hyperlegible.
+    - Rounded: Nunito.
+    - Monospace: Consolas.
+  - **Units:** as before.
+  - **Motion:** Auto, Reduced, Full. Reduced does this:
+    - the labs start paused, with a ▶ Play button;
+    - the Atom Lab camera jumps instead of gliding;
+    - Cloud 3D does not spin by itself;
+    - the facts line changes only when you tap it (checked: it stays on 1/27);
+    - the achievement pop-up fades instead of sliding.
+  - **Progress:** Reset my progress with the web's two pop-ups and the Done line. Checked with clicks
+    from start to end: the settings file then has no unlocks.
+  - **🛠 Developer:** Unlock everything.
+- **Fonts I bundled:** Atkinson Hyperlegible and Nunito, both under the SIL Open Font License.
+  - They come from the @fontsource packages (v5.3.0). The latin and latin-ext parts were converted
+    to TTF, 400 kB in all.
+  - They are built into the .exe by `cmake/embed_fonts.cmake`.
+  - The two licences are in `assets/fonts` and in the zip's `font-licences` folder.
+  - Georgia, Consolas and Segoe UI are not shipped: they come with Windows.
+- **🎨 Themes:** all eleven, with the web's colours read from its CSS by a tool:
+  - Auto, Light, Dark, Black, Midnight, Solar, Paper, Sage, High contrast;
+  - the secret Synthwave and Monochrome, shown as "???" with their hints until found.
+- **Each theme colours** the ImGui panels, the cards, the pop-ups, all text and the pictures.
+  - Paper switches to its book font (Georgia).
+  - Monochrome uses monospace, square corners and a grey picture (a grey pass on the GPU).
+  - Synthwave has its purple glow and the pink glow on the title.
+  - All eleven were looked at side by side.
+- **Saving:** everything is remembered between runs.
+  - Where: `%APPDATA%\PhysicsLab\PhysicsLab\settings.txt`, one `key=value` per line.
+  - What: theme, text size, font, motion, units, unlocks, achievements (with the time they were
+    earned), the lab on screen, and every setting of both labs (view, zoom, sliders, isotope,
+    switches, sky, constellations…).
+  - When: it is written a quarter second after something changes.
+  - Bad or unknown lines are ignored, and every value is checked when it is read.
+  - Defaults still puts a lab back to the web's starting settings.
 
-**Also checked with real mouse input:**
-- switching labs and clicking an element;
-- dragging to turn the orbit (the axes and ↺ Reset view appear);
-- the wheel zoom (0.4 per notch, as the web's 0.004 per wheel unit);
-- the ⓘ button.
+**Stage 2: header, About, history, language**
+- **The header across the top:** Physics Lab, the lab's subtitle (word for word), then the web's
+  buttons with their tooltips:
+  - 🎨 Theme;
+  - 🌐 English: Eesti keel is greyed out with "Coming soon";
+  - 👤 About;
+  - ⚙ Settings;
+  - 🕰 history;
+  - the lab's Update badge (Update 7.7.2 / 7.7.3), which opens that lab's web changelog word for
+    word, with its note.
+- **👤 About:** the web page word for word.
+  - It has the card, the developer line, "Built with Claude" and "Where the facts come from" with
+    every source and licence.
+  - The links are clickable and open in the browser.
+  - The version line lists only the native labs: "Labs: Orbit Lab 7.7.2 · Atom Lab 7.7.3."
+  - Under it, a line gives the native version.
+- **🕰 history:** the web's intro, all 42 APP_LOG entries word for word with their icons, and its
+  closing note.
+  - ▶ buttons appear only for Orbit Lab and Atom Lab.
+  - Then come the native entries 0.5 → 0.1, with "you are here" on 0.5.
+- **The panels and the picture** start under the header. Checked: a click on Neptune still selects
+  Neptune.
+
+**Stage 3: achievements, the facts line, the Learn tab**
+- **💡 Did you know?:** all 27 web facts (the 🎁 is one of them) in a shuffled order. It has:
+  - the counter (1/27);
+  - a tap for the next fact, with a quarter-second fade;
+  - a wait of 6 s plus 55 ms per character, as the web;
+  - the accent border while the mouse is on it, and it waits then.
+- **The 🎁 surprise:** opens the web's pop-up, with its little sun-and-grid picture.
+  - It unlocks Synthwave, and "Use it now" switches to it.
+  - Checked with clicks: the file then has `theme=synthwave`, `unlock=synthwave` and the
+    achievement.
+- **The "monochrome" word** in the Atom Lab guide (What is to scale) is clickable, with a dotted
+  underline. It opens the Monochrome pop-up and unlocks the theme and Sharp Eyes (checked with
+  clicks).
+- **Tabs:** 🔬 Simulations · 📚 Learn · 🏆 Achievements. While Learn or Achievements is open, the lab
+  is not drawn and does not run, as on the web.
+- **🏆 Achievements:** the count ("2 of 4 unlocked"), the bar and the grid of cards. Locked cards
+  are dimmed with 🔒 and the hint. Earned cards show "Unlocked 5 Sept 2026" (the web's en-GB date)
+  or "Unlocked earlier".
+- **The pop-up when one is earned:** it comes 0.7 s later at the bottom right, slides up, stays
+  5.2 s and fades. Later ones queue.
+- **The four achievements and their triggers**, each checked:
+  - **Neon Nights:** the 🎁.
+  - **Sharp Eyes:** the word.
+  - **Half-Life:** any nucleus decaying on its own. Checked with polonium-212.
+  - **Galactic Center:** Sagittarius A* selected in the Orbit Lab.
+  - Point of No Return is skipped, and the native changelog says so.
+- **📚 Learn:** the web's heading and intro, then all seven guides in two sections, Atom Lab and
+  Orbit Lab: Atom guide, Scale, Weight, the atom timeline, the Orbit guide, Seasons, the Solar
+  System timeline.
+  - A click opens the guide in its lab.
+  - If that is the other lab, it goes back to the lab you were in when you close the guide, as the
+    web does (checked with clicks).
+
+**Stage 4: polish and tests**
+- **The Sun's glowing patches:** 16 soft bright and orange patches. They turn with the Sun's real
+  axis and rate and are squashed towards the edge, as the web's `drawSun`. They look like the web's
+  at the same zoom.
+- **Antiquark rings in Cinematic** are now drawn with added-up light, the web's "lighter" mode
+  (checked in the proton with + Sea).
+- **Atom Lab readout:** the rows on their see-through panel no longer get the 8-copy halo. In light
+  themes it left faint grey marks between the letters (found while checking the themes).
+- **Tests** (`tests/test_app.cpp`, against runs of the web's own code):
+  - **Settings file:** save and load every field, the defaults, broken and unknown lines, a locked
+    secret theme, line breaks in values.
+  - **Themes:** all 11 in the web's order, every colour present for the panels and the pictures,
+    "light" matching the background, enough contrast between text and background.
+  - **Texts:**
+    - the reset pop-ups for all 18 counts;
+    - "Unlock everything";
+    - the header;
+    - About;
+    - the language menu;
+    - the 42 history entries;
+    - the 27 facts;
+    - both secret pop-ups (first find and again);
+    - the Achievements and Learn tabs, built from the same saved state as the web run;
+    - the en-GB date for every month.
+- **Version** 0.5 in CMake, the 🕰 history entry for 0.5, and the README.
 
 ## Not tested / be aware
-- **On Windows:** stages 1–3 built and passed their tests on GitHub's Windows runner (check that
-  the `latest` release says "native 0.4 stage 4"). But I have not run the Atom Lab on a real
-  Windows PC with a graphics card.
-  - The new parts that only a real GPU will prove are the blob shader, the offscreen soft layer
-    and additive blending.
-  - Please try the deep zoom (⌕ Nucleon with Cinematic quarks) and a big nucleus (uranium) at
-    Nucleus zoom.
-- **Speed:** not judged here (no GPU). The Performance card now shows draw calls, so you can see
-  the instancing at work on your PC.
-- **One rounding tie:** the uranium-233 orbit radius is exactly 0.575 pm. MSVC's sin/cos round
-  its last bit differently, so the Windows build shows 0.58 pm where the web shows 0.57. The test
-  allows exactly this case (off by one in the last digit) and prints a note when it happens.
-- **Emoji** in buttons (🎲, 🏠, 🔥, 💨, 🌡, 🔟 …) show only if Segoe UI Symbol has them. Any that
-  are missing are left out, so the words still read correctly.
-- **Layout:** checked at one window size on Linux, not on a small screen or a 4K screen.
-- **Mouse wheel:** the zoom step assumes the usual 100 units per notch in the browser.
-  Touchpads and pinch were not tried.
+- **On Windows:** I could not try these on a real Windows PC.
+  - Auto theme following Windows' light/dark setting.
+  - Auto motion following "Animation effects".
+  - The settings file in `%APPDATA%`.
+  - Links opening in the browser.
+  - Segoe UI Emoji as a fallback: it should make the icons (🎨, 🏆, 💡, ⚛️ …) visible as plain
+    outlines. On Linux most emoji are missing and are left out of the text.
+  - The Windows build compiles and its tests pass on GitHub.
+- **Flags:** 🇬🇧 and 🇪🇪 are left out of the language menu. No bundled font can draw them, and they
+  would show as boxed letters.
+- **Speed:** not judged here (no GPU). The Monochrome grey pass draws the picture once more
+  offscreen.
+- **Sizes:** layout checked at 1400 × 860 only, at every text size. The header wraps its subtitle,
+  and puts its buttons under the title when the window is narrow. I did not check a very small
+  window.
+- **A lab running before its tab:** the lab does not run while a tab is open. A Journey in progress
+  just waits.
 
-## Still different from the web Atom Lab
-- **Text layering:** labels and the u/d letters are drawn on top of the picture, so a letter can
-  sit over a nucleon nearer to you. On the web they are drawn in depth order.
-- **Rings:** antiquark rings in Cinematic are drawn with normal blending, not "lighter".
-- **Timeline icons:** their gradients are drawn as rings of colour.
-- **Line breaks:** the readout wraps by the native font's widths, so it may break at slightly
-  different places.
-- **Settings memory:** the lab's settings are not remembered between runs; only units and
-  More/Less info are. The web remembers every setting of every lab. (Orbit Lab has the same
-  difference.)
-- **App-wide web features not ported:**
-  - achievements (the decay one);
-  - the theme picker, so the guide's "monochrome" word is plain bold text and not the hidden
-    theme switch;
-  - reduced-motion mode;
-  - text size settings;
-  - touch pinch-zoom.
-- **Theme:** the picture follows Windows' light or dark theme. The panels stay dark, as in Orbit Lab.
-- **Temperature box:** the particle box uses its own random numbers. It looks the same, but the
-  particles do not match the web's.
-
-The Atom Lab is done. I have not started another lab.
+## Still different from the web
+- **Skipped (not cheap):** Atom Lab labels and u/d letters are still drawn on top of the picture,
+  not in depth order. All text is drawn by ImGui after the whole picture.
+- **Not in the native app, on purpose:**
+  - the 🎮 Games tab;
+  - the Spacetime Lab section of the Learn tab, and its note "The Black Hole Lab and the Slingshot
+    game do not have guides yet.";
+  - the "Planned next" card in the history;
+  - Point of No Return.
+  - So the native app counts 4 achievements, and "Unlock everything" and the reset pop-ups count 4
+    where the web counts 5. The texts themselves are the web's, and the tests check them for every
+    count.
+- **Kept word for word although they name parts the native app does not have:**
+  - About's card ("real orbits, atoms, black holes and a little space game");
+  - its sources for black holes and spacetime;
+  - the Units note ("the Black Hole readout");
+  - the history entries about the other labs, which have no ▶ button.
+  - None of the 27 facts names a lab.
+- **History:** "you are here" is on native 0.5, not on the web's 8.6.2. The 🕰 button says "v0.5"
+  (the native version) where the web says "v8.6.2".
+- **Settings** is a window. On the web it is a page that slides over the lab.
+- **No animation:** the theme and language menus and the secret pop-ups appear without the web's
+  small grow animation.
+- **Saving:** the native app writes one text file. The web uses the browser's storage, so the two
+  do not share progress.
+- **The facts' order** is shuffled with a different random generator, so it differs from the web's
+  run by run, as the web's own order does.

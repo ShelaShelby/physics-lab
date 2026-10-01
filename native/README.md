@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.4**: **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md` (see the Update badge in the app for what is new). The web version (`../index.html`) is the
+Version **0.5**: **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -44,6 +44,25 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 Pick the lab with the two buttons at the top of the panel: **Orbit Lab** or **Atom Lab**.
 Each lab keeps its state while the other one is on screen.
 
+### Across the app (as in the web version)
+
+- **Header**: 🎨 Theme (eleven themes; Synthwave and Monochrome are secret until found), 🌐 language
+  (English; Eesti keel is coming), 👤 About (the developer, and where the facts come from, with links),
+  ⚙ Settings, 🕰 history (the web's history, then the native versions) and the lab's **Update** badge
+  (that lab's changelog).
+- **⚙ Settings**: text size, font, units (metric or imperial), motion (Auto follows Windows'
+  "Animation effects"; Reduced starts the labs paused and stops gliding and spinning), Reset my
+  progress, and Developer → Unlock everything.
+- **💡 Did you know?**: a fact under the header; click for the next one. Somewhere in the list is a 🎁.
+- **Tabs**: 🔬 Simulations (the labs), 📚 Learn (every guide of both labs; a click opens it in its lab)
+  and 🏆 Achievements (four to find).
+- **Remembered between runs**: everything above and every setting of both labs, in
+  `%APPDATA%\PhysicsLab\PhysicsLab\settings.txt` (a plain text file; delete it to start fresh).
+  **Defaults** still puts a lab back to the web's starting settings.
+- **Fonts**: Atkinson Hyperlegible (Easy to read) and Nunito (Rounded) are built into the .exe,
+  under the SIL Open Font License (`assets/fonts`, licences in the zip's `font-licences` folder).
+  Georgia (Serif and the Paper theme), Consolas (Monospace) and Segoe UI come with Windows.
+
 ### Orbit Lab
 
 - **Play / Pause**: the button in the Time card, or the Space bar.
@@ -59,9 +78,7 @@ Each lab keeps its state while the other one is on screen.
 - **Performance** card: frame time and a VSync switch (turn VSync off to see the real headroom).
 - **Learn** card: What am I even looking at?, Why do we have seasons?, and the Solar System
   timeline (the web text, word for word; ▶ buttons take the lab there).
-- **⚙ Settings** (top of the panel): metric or imperial units (remembered between runs).
 - **Defaults** (top of the panel): puts Orbit Lab's settings back to how they started, after asking.
-- **Update** badge (top of the panel): what is new.
 
 ### Atom Lab
 - **Nucleus** card: click an element in the periodic table (⤢ Bigger table for a large one), or use the
@@ -98,11 +115,14 @@ Each lab keeps its state while the other one is on screen.
 | `src/atom/atom_learn.*` | The Atom Lab's guide and panel texts (the web's, word for word) |
 | `src/atom/atom_view.*` | Drawing the Atom Lab picture (instanced clouds, glows and gluon fields, a soft layer) |
 | `src/render/` | OpenGL 3.3 loader, batched 2D renderer (instanced dots, planet shader), Earth map |
-| `src/ui/` | The ImGui panels of both labs, Learn guides (rich-text and HTML layout), Settings, Journey and dates, changelog, fonts |
+| `src/app/prefs.*`, `app_text.inc` | What is remembered (the settings file), themes, achievements; the app-wide web texts |
+| `src/ui/` | The ImGui panels of both labs, Learn guides (rich-text and HTML layout), Settings, themes and the look (`look.*`), the header, About and history (`app_pages.*`), the facts line, tabs and achievements (`app_tabs.*`), Journey and dates, changelogs, fonts |
+| `assets/fonts`, `cmake/embed_fonts.cmake` | The bundled free fonts, built into the .exe |
 | `tests/` | Unit tests that compare the physics with the web version |
 | `tools/make_sky_data.js` | Copies the sky, far-away and Earth-outline data out of `index.html` |
 | `tools/make_learn_data.js` | Copies the Learn text out of `index.html` by running the web's own guide code |
 | `tools/make_atom_data.js`, `tools/make_atom_learn.js` | Copy the Atom Lab data, timeline and history out of `index.html` |
+| `tools/make_app_text.js` | Copies the app-wide texts (Settings, themes, header, About, history, facts, tabs, achievements) out of `index.html` by running the web's own code |
 
 All physics is in SI units (metres, seconds, m/s). The web version uses "sim units"
 (GM of the Sun = 100, 1 year = 2π); `units.h` converts them exactly, so both versions
@@ -128,6 +148,11 @@ dots, photon jumps, decays, readout and hint lines). `make_atom_learn_reference.
 panel texts with a small fake page (`fake_dom.js`) for many atoms, in metric and imperial. Rerun both (from the
 repository root) if the web Atom Lab changes.
 
+`tests/test_app.cpp` checks the settings file (saving, loading, broken or unknown lines), every theme's colours,
+and the app-wide texts against runs of the web's own code (`make_app_reference.js` with `app_web.js`): the reset
+pop-ups for every count, the header, About, the language menu, the history, the 27 facts, the secret pop-ups, the
+Achievements and Learn tabs, and the dates.
+
 ## Command-line helpers for automatic checks
 
 These do nothing in normal use: `PL_EXIT_AFTER_FRAMES=n` quits after n frames,
@@ -138,4 +163,6 @@ names, `PL_DATE=2003-08-27` jumps to a date (and prints the note), `PL_JOURNEY=1
 stars off and `PL_LIGHT=1` pretends the system theme is light. For Atom Lab: `PL_ATOM=1` opens it,
 `PL_ATOM_SET="Z=26;view=Cloud;zoom=4.5"` sets its settings, `PL_ATOM_DO=emit|absorb|auto|nucleus|nucleon` presses a
 button, `PL_ATOM_FOCUS=n` follows nucleon n, `PL_ATOM_LEARN=1..4` (with `PL_ATOM_TAB=ten|miss|...`) opens a guide,
-and `PL_SCROLL=y` scrolls the Atom Lab panel.
+and `PL_SCROLL=y` scrolls the Atom Lab panel. App-wide: `PL_SETTINGS=file` uses another settings file,
+`PL_THEME=paper`, `PL_TEXTSIZE=xl`, `PL_FONT=easy` and `PL_MOTION=on` set the look, `PL_SELECT=far:sgra` picks a
+far-away thing, `PL_DYK_FIRST=26` puts that fact first (26 is the 🎁), and `PL_EXIT_AFTER_SECONDS=s` quits after s seconds.

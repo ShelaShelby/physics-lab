@@ -577,7 +577,12 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     const double anti[3] = {255 - col[0], 255 - col[1], 255 - col[2]};
                     const double r = std::max(1.5, (cine ? 0.026 : 0.02) * rn), al = 0.85 * env * Af;
                     put(c, flat(X + (c0x + dvx) * k, Y - (c0y + dvy) * k, r, rgbaC(col, al)), cine);
-                    ringTo(c, X + (c0x - dvx) * k, Y - (c0y - dvy) * k, r, 1.2, rgbaC(anti, al));
+                    const double rx = X + (c0x - dvx) * k, ry = Y - (c0y - dvy) * k;
+                    if (cine) {                                    // Cinematic adds light ("lighter"): the 1.2 px ring as an added-up blob, peaked on the circle
+                        const Color ac = rgbaC(anti, al), R0 = ac.withAlpha(0);
+                        const double Rb = r + 1.2;
+                        put(c, grad3(rx, ry, Rb, R0, r / Rb, ac, R0, 0, 0, std::max(0.0, (r - 1.2) / Rb)), true);
+                    } else ringTo(c, rx, ry, r, 1.2, rgbaC(anti, al));
                 }
             int ord[3] = {0, 1, 2};                                        // the three valence quarks: points, far ones first
             std::stable_sort(ord, ord + 3, [&](int a, int b) { return Q.P[a].dep > Q.P[b].dep; });

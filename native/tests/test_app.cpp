@@ -3,6 +3,7 @@
 // (tests/reference/make_app_reference.js runs index.html's Settings code in Node).
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -108,6 +109,17 @@ static void testThemes() {
     checkTrue("paper background", pa.bg.r == want.r && pa.bg.g == want.g && pa.bg.b == want.b);
     checkTrue("#fff", hexRgb("#fff").r == 1 && hexRgb("#fff").b == 1);
     checkTrue("#000000", hexRgb("#000000").g == 0);
+    // every theme gives the panels and both pictures a full set of colours, and "light" matches its background
+    for (const ThemeDef& t : kThemes) {
+        const ThemeColors c = themeColors(t.id, false);
+        bool ok = true;
+        for (const Rgb& v : {c.bg, c.fg, c.muted, c.card, c.line, c.accent, c.onacc})
+            for (float x : {v.r, v.g, v.b}) ok = ok && x >= 0 && x <= 1;
+        checkTrue(std::string(t.id) + " colours in range", ok);
+        const double lum = 0.2126 * c.bg.r + 0.7152 * c.bg.g + 0.0722 * c.bg.b;
+        checkTrue(std::string(t.id) + " light flag", c.light == (lum > 0.5));
+        checkTrue(std::string(t.id) + " text stands out", std::fabs((0.2126 * c.fg.r + 0.7152 * c.fg.g + 0.0722 * c.fg.b) - lum) > 0.4);
+    }
     // secret themes need unlocking
     Prefs p;
     checkTrue("synthwave locked", !themeUsable(p, "synthwave") && themeUsable(p, "paper"));

@@ -537,6 +537,39 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     if (hasSunSpin) spinAxis("Sun", sunSpin, star.first, star.second, sr, true);
     R.glow(star.first, star.second, sr * 3, sunCol);
     R.sunDisc(star.first, star.second, sr, sunCol);
+    if (sr > 9) {   // soft bright and orange patches of glowing gas, so the spin can be seen (the web's drawSun: made-up places, the real axis and rate)
+        const auto hsh = [](double n) { const double v = std::sin(n * 127.1 + 311.7) * 43758.5453; return v - std::floor(v); };
+        const double x = star.first, y = star.second;
+        for (int i = 0; i < 16; i++) {
+            const double lon = hsh(i * 3 + 60) * 6.283, lat = (hsh(i * 3 + 61) - .5) * 1.7, cl = std::cos(lat), b0 = cl * std::cos(lon), b1 = cl * std::sin(lon), b2 = std::sin(lat);
+            double X, Y, mu;
+            if (hasSunSpin) { const float* K = sunSpin.K; X = K[0] * b0 + K[3] * b1 + K[6] * b2; Y = K[1] * b0 + K[4] * b1 + K[7] * b2; mu = K[2] * b0 + K[5] * b1 + K[8] * b2; }
+            else { X = b1; Y = b2; mu = b0; }               // no real spin known: a still ball
+            if (mu <= 0.05) continue;
+            const double sx = x + X * sr, sy = y - Y * sr, sz = sr * (.14 + .12 * hsh(i + 70)), rr = sz * 1.4;
+            if (sx + rr < 0 || sx - rr > W || sy + rr < 0 || sy - rr > H) continue;
+            const bool bright = i % 2 == 0;
+            const float a = float((bright ? .22 : .16) * std::min(1.0, mu * 2));
+            const Color c0 = bright ? rgba(255, 248, 190, a) : rgba(215, 110, 20, a), c1 = c0.withAlpha(0);
+            // squashed along the direction to the edge of the disc; points outside the disc are pulled onto its edge (the web clips to it)
+            const double ang = std::atan2(-Y, X), ca2 = std::cos(ang), sa2 = std::sin(ang), sq = std::max(mu, .25);
+            const auto edge = [&](double t, double& ex, double& ey) {
+                const double u = rr * std::cos(t) * sq, v = rr * std::sin(t);
+                ex = sx + u * ca2 - v * sa2; ey = sy + u * sa2 + v * ca2;
+                const double d = std::hypot(ex - x, ey - y);
+                if (d > sr) { ex = x + (ex - x) * sr / d; ey = y + (ey - y) * sr / d; }
+            };
+            const int n = 28;
+            double px0, py0;
+            edge(0, px0, py0);
+            for (int k = 1; k <= n; k++) {
+                double px1, py1;
+                edge(2 * kPi * k / n, px1, py1);
+                R.triangle(sx, sy, c0, px0, py0, c1, px1, py1, c1);
+                px0 = px1; py0 = py1;
+            }
+        }
+    }
     if (hasSunSpin) spinAxis("Sun", sunSpin, star.first, star.second, sr, false);
     if (sunTiny) R.ring(star.first, star.second, 7, 1.6, sunCol.withAlpha(0.9f));   // smaller than a pixel: a ring shows where it is
     if (sel.kind == Selection::Star) hiRing(star.first, star.second, srd + (sunTiny ? 8 : 6));

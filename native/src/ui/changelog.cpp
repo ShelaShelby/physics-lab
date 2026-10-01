@@ -30,7 +30,9 @@ const Entry kNative[] = {
      "and its hidden 🎁 surprise, and the tabs: 📚 Learn lists every guide and timeline of both labs and opens them in their "
      "lab; 🏆 Achievements shows Neon Nights, Sharp Eyes, Half-Life and Galactic Center, locked until earned, with the "
      "web's pop-up when one is earned. Point of No Return is left out: it belongs to the Black Hole Lab, which is not in "
-     "the native app. The \"monochrome\" word in the Atom Lab guide unlocks the Monochrome theme and Sharp Eyes."},
+     "the native app. The \"monochrome\" word in the Atom Lab guide unlocks the Monochrome theme and Sharp Eyes. "
+     "Also: the Sun has the web's soft glowing patches that turn with it, antiquark rings in Cinematic add up their light "
+     "as on the web, and the Atom Lab readout lost faint grey marks it had in light themes."},
     {"0.4", "Atom Lab",
      "The second lab: pick Orbit Lab or Atom Lab at the top of the panel (each keeps its state while the other is shown). "
      "Atom Lab is the web version's, feature for feature: any nucleus from hydrogen to oganesson with one electron, in four "
