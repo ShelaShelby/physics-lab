@@ -30,7 +30,8 @@ struct RockElements {
 
 }  // namespace
 
-std::vector<BeltGroup> makeBelts(int64_t ms) {
+std::vector<BeltGroup> makeBelts(int64_t ms, int scale) {
+    scale = scale < 1 ? 1 : scale;
     Mulberry32 R(20260929);
     const auto rnd = [&]() { return R.next(); };
     const auto norm = [&]() { const double u = std::sqrt(-2 * std::log(rnd() + 1e-9)); return u * std::cos(2 * kPi * rnd()); };   // normal distribution
@@ -61,7 +62,7 @@ std::vector<BeltGroup> makeBelts(int64_t ms) {
     };
 
     // main belt, 2.1–3.3 AU, with gaps where Jupiter's gravity has cleared the orbits (Kirkwood gaps)
-    build("main", "#8a7f72", 1800, [&](int) {
+    build("main", "#8a7f72", 1800 * scale, [&](int) {
         double a;
         const auto inGap = [](double a) { return std::fabs(a - 2.5) < 0.03 || std::fabs(a - 2.82) < 0.02 || std::fabs(a - 2.95) < 0.015; };
         do { a = 2.1 + 1.2 * rnd(); } while (inGap(a));
@@ -72,7 +73,7 @@ std::vector<BeltGroup> makeBelts(int64_t ms) {
         return d;
     });
     // Jupiter's Trojans: share Jupiter's orbit, 60° ahead (L4) and behind (L5), swaying around those points
-    build("trojan", "#c4783a", 300, [&](int k) {
+    build("trojan", "#c4783a", 300 * scale, [&](int k) {
         RockElements d{};
         d.a = aJ + 0.05 * norm();
         d.aN = aJ;
@@ -83,7 +84,7 @@ std::vector<BeltGroup> makeBelts(int64_t ms) {
         return d;
     });
     // Kuiper belt: the classical belt, Pluto's resonant "plutinos", and a few scattered objects
-    build("kuiper", "#4a6f9e", 900, [&](int) {
+    build("kuiper", "#4a6f9e", 900 * scale, [&](int) {
         const double r = rnd();
         double a, e, i;
         if (r < 0.6) { a = 41.5 + 6.5 * rnd(); e = std::fmin(0.2, ray(0.05)); i = std::fmin(35, rnd() < 0.6 ? ray(3.5) : ray(12)); }
@@ -94,10 +95,10 @@ std::vector<BeltGroup> makeBelts(int64_t ms) {
     });
     {   // Oort cloud: a flattened inner (Hills) cloud, 2,000–20,000 AU, and a round outer cloud, 20,000–200,000 AU
         BeltGroup g;
-        g.key = "oort"; g.color = "#8c98bb"; g.n = 3000; g.isStatic = true; g.alpha = 0.55f;
+        g.key = "oort"; g.color = "#8c98bb"; g.n = 3000 * scale; g.isStatic = true; g.alpha = 0.55f;
         g.x.resize(g.n); g.y.resize(g.n); g.z.resize(g.n);
         for (int k = 0; k < g.n; k++) {
-            const bool inner = k < 800;
+            const bool inner = k < 800 * scale;
             const double r = (inner ? 2000 * std::pow(10.0, rnd()) : 20000 + 180000 * rnd()) * kAU;
             const double zz = 2 * rnd() - 1, ph = rnd() * 6.2832, sq = std::sqrt(1 - zz * zz);
             g.x[k] = static_cast<float>(r * sq * std::cos(ph));

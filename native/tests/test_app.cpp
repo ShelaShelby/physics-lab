@@ -18,6 +18,7 @@
 #include "app/bench.h"
 #include "app/frame_time.h"
 #include "app/gpu_timer.h"
+#include "orbit/belts.h"
 #include "atom/atom_bench.h"
 #include "orbit/solar_system.h"
 
@@ -699,7 +700,7 @@ static void testBench() {
     checkTrue("the Solar System is back exactly as it was", same);
 }
 
-// ---- the time step, the live-frame counters, the GPU timer ring and its verdict (version 0.9) ----
+// ---- the time step, the live-frame counters, the GPU timer ring and its verdict, the stress belts (version 0.9) ----
 static void testLiveAndGpu() {
     // the time step of a frame
     checkTrue("step: a normal frame counts as it is", near(stepSeconds(0.016, 0.05), 0.016));
@@ -770,6 +771,21 @@ static void testLiveAndGpu() {
     checkTrue("text: a reliable timer but a bad scene still says not reliable", benchResultText(okEnv, {bad}).find("not reliable (only 1 of 4 frames gave a result)") != std::string::npos);
     checkTrue("text: it says what the GPU time covers", t.find("up to just before the buffer swap") != std::string::npos);
 
+    // the stress belts: scale 1 is the app's normal belts; scale 8 has 8 times the rocks of the same kinds, always the same
+    const int64_t day = 1790000000000LL;
+    const auto base = orbit::makeBelts(day), same = orbit::makeBelts(day, 1), big = orbit::makeBelts(day, 8), big2 = orbit::makeBelts(day, 8);
+    bool equal = base.size() == same.size(), eight = big.size() == base.size(), repeat = true;
+    for (std::size_t g = 0; g < base.size() && equal && eight; g++) {
+        equal = equal && base[g].n == same[g].n && base[g].a == same[g].a && base[g].x == same[g].x;
+        eight = eight && big[g].n == 8 * base[g].n && big[g].key == base[g].key;
+        repeat = repeat && big[g].n == big2[g].n && big[g].a == big2[g].a && big[g].x == big2[g].x;
+    }
+    checkTrue("belts: scale 1 is the normal belts, scale 8 has 8 times the rocks, scale 0 or less counts as 1", equal && eight && repeat && orbit::makeBelts(day, 0)[0].n == base[0].n);
+    checkTrue("belts: the first rocks of the big main belt are the normal ones (same kind of orbit, same seed)", std::equal(base[0].a.begin(), base[0].a.end(), big[0].a.begin()));
+    // the stress Atom Lab scene is repeatable and is the biggest nucleus
+    atom::AtomLab A1, A2;
+    atom::benchSetup(A1, 3, 800, 600); atom::benchSetup(A2, 3, 800, 600);
+    checkTrue("stress atom scene: oganesson-294, identical twice", A1.p.Z == 118 && A1.p.N == 176 && A1.p.zoom == A2.p.zoom && A1.p.qstyle == "Accurate");
 }
 
 int main() {

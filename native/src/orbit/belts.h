@@ -35,7 +35,8 @@ struct Mulberry32 {
 };
 
 // All belts for a start date (Unix ms). Jupiter's place on that date sets where the Trojans sit.
-std::vector<BeltGroup> makeBelts(int64_t unixMs);
+// scale 1 is the normal number of rocks (always, in the app); the benchmark's stress scene asks for more of the same kinds.
+std::vector<BeltGroup> makeBelts(int64_t unixMs, int scale = 1);
 
 // Where rock k of group g is, `t` seconds after the start date (m, Sun at the origin).
 Vec3 beltPoint(const BeltGroup& g, int k, double t);

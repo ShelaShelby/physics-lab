@@ -17,6 +17,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9", "Keeps running while the window is moved or resized, a checked GPU timer, stress scenes",
+     "The simulation and the drawing no longer freeze while you drag the window by its title bar or an edge (Windows pauses the app's own "
+     "loop then; the app now draws from the window system's own refresh signal instead). The picture and the panels follow the new size "
+     "while you drag, and after you let go nothing jumps or catches up. The Performance card counts the frames drawn during a drag. "
+     "The benchmark's GPU time now covers the whole frame's drawing, and the timer is checked with a known load before the test: if it "
+     "cannot be trusted, the result says \"not reliable\" instead of a number. A checkbox \"Include stress scenes\" adds two much "
+     "heavier scenes (the biggest nucleus, and eight times the belt rocks) after the four normal ones."},
     {"0.8", "Benchmark, history with the native updates on top",
      "A Benchmark button in the Performance card (both labs): it runs four fixed scenes (the heaviest Orbit Lab view, the uranium-238 "
      "nucleus, Cloud 3D, one nucleon) with VSync off at the window's size, 2 s of warm-up and 8 s counted each, and shows the average "

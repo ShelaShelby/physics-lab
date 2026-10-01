@@ -22,6 +22,13 @@ void still(AtomLab& L) { L.s.zoomTo.reset(); L.s.panTo.reset(); L.s.pan = Vec3d{
 }  // namespace
 
 void benchSetup(AtomLab& L, int which, double w, double h) {
+    if (which == 3) {                                    // stress: the biggest nucleus, every nucleon drawn large
+        fresh(L, 118, 176, w, h);
+        nucleus(L, "Accurate");
+        L.setParam("zoom", L.zoomForNucleus() + 0.6);
+        still(L);
+        return;
+    }
     fresh(L, 92, 146, w, h);
     if (which == 0) { nucleus(L, "Cinematic"); still(L); }
     else if (which == 1) {

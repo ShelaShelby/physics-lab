@@ -14,6 +14,7 @@
 #include "atom/atom_bench.h"
 #include "atom/atom_core.h"
 #include "imgui.h"
+#include "orbit/belts.h"
 #include "orbit/units.h"
 #include "render/gl_loader.h"
 #include "render/renderer2d.h"
@@ -28,6 +29,8 @@ namespace ui {
 namespace {
 
 struct SceneDef { BenchSceneInfo info; std::function<void(AppState&)> setup; };
+constexpr int kNormalScenes = 4;
+constexpr int kStressBeltScale = 8;      // scenes 1 to 4 never change, so results stay comparable between versions; the stress scenes come after them
 
 // ---- the scenes (chosen by measuring which settings cost the most, see REPORT.md) ----
 void commonSetup(AppState& app) {
@@ -53,6 +56,12 @@ void orbitHeaviest(AppState& app) {
     setZoom(app, 0.0);
 }
 
+// stress scene: the same view as scene 1, with 8 times as many rocks in the belts and the Oort cloud (the rocks do not touch each other: the physics is the same)
+void orbitStress(AppState& app) {
+    orbitHeaviest(app);
+    app.sys.belts = orbit::makeBelts(app.sys.epochMs, kStressBeltScale);
+}
+
 void atomScene(AppState& app, int which) {
     commonSetup(app);
     app.lab = 1;
@@ -61,6 +70,9 @@ void atomScene(AppState& app, int which) {
 void atomNucleus(AppState& app) { atomScene(app, 0); }
 void atomCloud(AppState& app) { atomScene(app, 1); }
 void atomNucleon(AppState& app) { atomScene(app, 2); }
+void atomStress(AppState& app) { atomScene(app, 3); }
+
+const char* const STRESS_ATOM_WHAT = "oganesson-294 (118 protons, 176 neutrons, the biggest nucleus the app has), Accurate quarks, + Sea detail, Fuzzy nucleons, zoomed in 0.6 (about 4 times) closer than the whole nucleus, so that every nucleon is drawn large";
 
 const std::vector<SceneDef>& scenes() {
     static const std::vector<SceneDef> v = {
@@ -69,6 +81,9 @@ const std::vector<SceneDef>& scenes() {
         {{"2. Atom Lab, uranium-238 nucleus", "uranium-238 (92 protons, 146 neutrons), zoomed to the whole nucleus, Cinematic quarks, + Sea detail, Fuzzy nucleons"}, atomNucleus},
         {{"3. Atom Lab, Cloud 3D", "uranium-238, Cloud 3D view, the 4f orbital (the biggest cloud), all 12,000 dots, fixed camera"}, atomCloud},
         {{"4. Atom Lab, one nucleon", "uranium-238, Accurate quarks, + Sea detail, zoomed all the way into one nucleon (the first one)"}, atomNucleon},
+        {{"5. Stress: Atom Lab, the biggest nucleus", STRESS_ATOM_WHAT}, atomStress},
+        {{"6. Stress: Orbit Lab, 8 times the rocks", "scene 1 (3D, everything on, true scale, zoom x1, fastest time) with 8 times as many rocks in the asteroid belt, the Trojans, the Kuiper belt and the Oort cloud "
+                                                     "(48,000 instead of 6,000; the same kinds of orbits, a fixed random seed). The rocks do not pull on each other, so the physics is unchanged"}, orbitStress},
     };
     return v;
 }
@@ -155,13 +170,14 @@ struct BenchState {
     std::vector<GpuSample> gpuReady;
     app::GpuVerdict gpuCheck;
     bool gpuChecked = false;
+    bool includeStress = false;               // the checkbox: run the stress scenes after the four normal ones
     double warm = app::kBenchWarmupS, measure = app::kBenchMeasureS;
     bool cancelled = false;
 };
 
 namespace {
 
-int activeScenes(const BenchState&) { return int(scenes().size()); }
+int activeScenes(const BenchState& b) { return b.includeStress ? int(scenes().size()) : kNormalScenes; }
 
 BenchState& st(AppState& app) {
     if (!app.bench) app.bench = std::make_shared<BenchState>();
@@ -287,6 +303,7 @@ void benchmarkTestHook(AppState& app) {
     static int frames = 0;
     const char* v = SDL_getenv("PL_BENCH");
     if (!v || ++frames != 5) return;
+    st(app).includeStress = SDL_getenv("PL_BENCH_STRESS") != nullptr;      // for automatic checks: the checkbox
     if (std::string(v) == "start") begin(app); else st(app).stage = BenchState::Stage::Ask;
 }
 
@@ -371,6 +388,8 @@ void benchmarkWindow(AppState& app) {
                                count, secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
             ImGui::Spacing();
             for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[i].info.name);
+            ImGui::Checkbox("Include stress scenes (2 extra, much heavier)", &b.includeStress);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what);
             ImGui::Spacing();
             ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "
                                "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "
