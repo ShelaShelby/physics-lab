@@ -4,11 +4,13 @@
 #include <array>
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 
 #include "format.h"
 #include "imgui.h"
 #include "kepler.h"
 #include "sky.h"
+#include "spin.h"
 #include "units.h"
 
 namespace orbit {
@@ -452,14 +454,67 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         for (const Vec3& p : cpts) { const Q q = proj(p.x, p.y, p.z); pen.to(q.first, q.second); }
     }
 
+    // ---- spin: how each planet is turned right now, seen on this screen ----
+    // The screen's right, up and towards-you directions in ecliptic coordinates (the camera above):
+    const Vec3 VX{ca, -sa, 0}, VY{sa * cb, ca * cb, -sb}, VZ{sa * sb, ca * sb, cb};
+    struct SpinCtx { float K[9]; double px, py, pz; };   // K: screen -> planet frame; (px, py, pz): the pole on screen
+    const double jdNow = sys.julianDay(), jd0 = sys.epochMs / 86400000.0 + 2440587.5;
+    const auto spinCtx = [&](const std::string& name, SpinCtx& c) {
+        // too fast to see (over 1.2 turns a second while time runs): held still, turned as on the start date
+        const bool fast = turnsPerSecond(name, set.tspeed) > 1.2 && !set.paused;
+        SpinFrame f;
+        if (!spinFrame(name, fast ? jd0 : jdNow, f)) return false;
+        const Vec3 axes[3] = {f.A, f.B, f.P}, V[3] = {VX, VY, VZ};
+        for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) c.K[3 * i + j] = static_cast<float>(dot(V[j], axes[i]));
+        c.px = dot(f.P, VX); c.py = dot(f.P, VY); c.pz = dot(f.P, VZ);
+        return true;
+    };
+    // the turning axis as a dashed line through the ball, N at the end it turns counter-clockwise around (right-hand rule)
+    const auto spinAxis = [&](const std::string& name, const SpinCtx& c, double x, double y, double r, bool back) {
+        if (r < 9 || bigR(W, H, r)) return;
+        const double sg = spinRateDegPerDay(name) < 0 ? -1 : 1, ux = sg * c.px, uy = -sg * c.py, uz = sg * c.pz, n = std::hypot(ux, uy);
+        if (n < 0.03) return;
+        const double L = r * 1.32, half = (back == (uz > 0)) ? -1 : 1;   // back: the half pointing away from you (hidden behind the ball)
+        for (int pass = 0; pass < 2; pass++) {
+            LinePen pen{R, W, H, pass ? 1.4 : 3.2, pass ? Color{1, 1, 1, 0.92f} : Color{0, 0, 0, 0.55f}, 5, 3};
+            pen.to(x, y); pen.to(x + half * ux * L, y + half * uy * L);
+        }
+        if (!back && r >= 13 && !(uz < 0 && L * n < r * 1.02))
+            T.text("N", x + ux * L + ux / n * 9, y + uy * L + uy / n * 9 + 4, 11, Color{1, 1, 1, 1});
+    };
+    // Saturn's rings: half behind the ball (back) and half in front, tilted with its real axis
+    const auto saturnRings = [&](const SpinCtx* c, double x, double y, double r, bool back) {
+        const double rot = c ? (std::hypot(c->px, c->py) > 1e-4 ? std::atan2(c->px, c->py) : 0) : -0.22;
+        const double flat = c ? std::max(std::fabs(c->pz), 0.004) : 0.34;
+        const bool upper = back == (c ? c->pz > 0 : true);    // the far side of the rings is the side towards the pole if the pole leans at you
+        const double a0 = upper ? kPi : 0, cr = std::cos(rot), srt = std::sin(rot);
+        const struct { double in, out; Color c; } bands[] = {{1.24, 1.52, rgba(140, 120, 95, .38f)}, {1.54, 1.94, rgba(232, 212, 168, .9f)}, {1.99, 2.26, rgba(206, 186, 146, .7f)}};
+        const auto pt = [&](double rho, double th, double& X, double& Y) {   // ring plane -> screen (as the web's canvas transform)
+            const double u = r * rho * std::cos(th), v = r * flat * rho * std::sin(th);
+            X = x + cr * u - srt * v; Y = y + srt * u + cr * v;
+        };
+        for (const auto& bd : bands)
+            for (int i = 0; i < 48; i++) {
+                const double t0 = a0 + kPi * i / 48, t1 = a0 + kPi * (i + 1) / 48;
+                double ax, ay, bx, by, cx2, cy2, dx2, dy2;
+                pt(bd.in, t0, ax, ay); pt(bd.out, t0, bx, by); pt(bd.out, t1, cx2, cy2); pt(bd.in, t1, dx2, dy2);
+                R.triangle(ax, ay, bd.c, bx, by, bd.c, cx2, cy2, bd.c);
+                R.triangle(ax, ay, bd.c, cx2, cy2, bd.c, dx2, dy2, bd.c);
+            }
+    };
+
     // ---- the Sun ----
     struct Label { std::string name; double x, y; bool selected, small, force; bool gc = false; };
     std::vector<Label> labels;
     const double sr = TRUE_SCALE ? kSunRadius * px : std::max(kCrashRadius * px, 3.5);
     const bool sunTiny = TRUE_SCALE && sr < 2.5;
     const double srd = TRUE_SCALE ? std::max(sr, 5.0) : sr;
+    SpinCtx sunSpin;
+    const bool hasSunSpin = spinCtx("Sun", sunSpin);
+    if (hasSunSpin) spinAxis("Sun", sunSpin, star.first, star.second, sr, true);
     R.glow(star.first, star.second, sr * 3, sunCol);
     R.sunDisc(star.first, star.second, sr, sunCol);
+    if (hasSunSpin) spinAxis("Sun", sunSpin, star.first, star.second, sr, false);
     if (sunTiny) R.ring(star.first, star.second, 7, 1.6, sunCol.withAlpha(0.9f));   // smaller than a pixel: a ring shows where it is
     if (sel.kind == Selection::Star) hiRing(star.first, star.second, srd + (sunTiny ? 8 : 6));
     hits_.push_back({{Selection::Star}, star.first, star.second, std::max(srd, sunTiny ? 10.0 : 0.0)});
@@ -528,8 +583,28 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             R.disc(g.first, g.second, 2, hexColor(b.color));
         }
         const double dx = star.first - q.first, dy = star.second - q.second, dlen = std::max(std::hypot(dx, dy), 1e-9);
-        if (q.first + rad > -2 && q.first - rad < W + 2 && q.second + rad > -2 && q.second - rad < H + 2)
-            R.sphere(q.first, q.second, rad, hexColor(b.color), dx / dlen, dy / dlen);   // lit from the Sun
+        if (q.first + rad > -12 && q.first - rad < W + 12 && q.second + rad > -12 && q.second - rad < H + 12) {
+            SpinCtx sc;
+            const bool spins = rad > 3 && spinCtx(b.name, sc);     // big enough to see it turn
+            const bool saturn = b.name == "Saturn";
+            if (b.name == "Earth" && rad > 3)                      // a thin blue edge of air
+                for (int i = 0; i < 64; i++) {
+                    const double t0 = 2 * kPi * i / 64, t1 = 2 * kPi * (i + 1) / 64, r0 = rad * 0.96, r1 = rad * 1.16;
+                    const Color in = rgba(120, 180, 255, 0.5f), out = rgba(120, 180, 255, 0);
+                    const double ax = q.first + r0 * std::cos(t0), ay = q.second + r0 * std::sin(t0), bx = q.first + r1 * std::cos(t0), by = q.second + r1 * std::sin(t0);
+                    const double cx2 = q.first + r1 * std::cos(t1), cy2 = q.second + r1 * std::sin(t1), ex = q.first + r0 * std::cos(t1), ey = q.second + r0 * std::sin(t1);
+                    R.triangle(ax, ay, in, bx, by, out, cx2, cy2, out);
+                    R.triangle(ax, ay, in, cx2, cy2, out, ex, ey, in);
+                }
+            if (saturn) saturnRings(spins ? &sc : nullptr, q.first, q.second, rad, true);
+            if (spins) {
+                spinAxis(b.name, sc, q.first, q.second, rad, true);
+                R.planet(q.first, q.second, rad, hexColor(b.color), dx / dlen, dy / dlen, sc.K, b.name == "Earth");
+                spinAxis(b.name, sc, q.first, q.second, rad, false);
+            } else
+                R.sphere(q.first, q.second, rad, hexColor(b.color), dx / dlen, dy / dlen);   // lit from the Sun
+            if (saturn) saturnRings(spins ? &sc : nullptr, q.first, q.second, rad, false);
+        }
         if (tiny) R.ring(q.first, q.second, 5, 1.6, hexColor(b.color, 0.9f));
         if (on) hiRing(q.first, q.second, rd + (tiny ? 5 : 6));
         labels.push_back({b.name, q.first, q.second - rd - 5, on, false, false});
@@ -690,9 +765,9 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     double gizY = H - 44, barY = H - 24;                  // the x y axes and the scale bar sit above the card when there is one
     Card card;
     CardOptions copt;
-    copt.tspeed = set.tspeed; copt.trueScale = TRUE_SCALE; copt.moonsOn = set.moons; copt.beltsOn = set.belts;
+    copt.paused = set.paused; copt.tspeed = set.tspeed; copt.trueScale = TRUE_SCALE; copt.moonsOn = set.moons; copt.beltsOn = set.belts;
     if (sel.kind == Selection::Moon) { auto it = exag_.find({sel.bodyId, sel.moon}); copt.moonExaggeration = it == exag_.end() ? 1 : it->second; }
-    if (sel.kind != Selection::None && !cardHidden && cardText(sys, sel, copt, card)) {
+    if (sel.kind != Selection::None && !cardHidden && !journey && cardText(sys, sel, copt, card)) {
         const double k = std::max(0.74, std::min(1.0, W / 620)), LH = 13.5 * k, F = 10.5 * k, FT = 11 * k;
         double cw = T.width(card.title, FT);
         for (const auto& l : card.lines) cw = std::max(cw, T.width(l, F));
@@ -763,10 +838,34 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
     }
 
+    if (journey && captionAlpha > 0.01 && !caption.empty()) {   // the Journey's caption, top middle
+        const std::size_t width = static_cast<std::size_t>(std::max(20.0, std::floor((W - 44) / 7.9)));
+        std::vector<std::string> lines;
+        {
+            std::string cur, word;
+            for (char ch : caption + " ") {
+                if (ch != ' ') { word += ch; continue; }
+                if (word.empty()) continue;
+                if (!cur.empty() && (cur + " " + word).size() > width) { lines.push_back(cur); cur = word; }
+                else cur = cur.empty() ? word : cur + " " + word;
+                word.clear();
+            }
+            if (!cur.empty()) lines.push_back(cur);
+        }
+        for (std::size_t i = 0; i < lines.size(); i++)
+            T.text(lines[i], W / 2, 62 + i * 19.0, 13.5, Color{1, 1, 1, static_cast<float>(captionAlpha)}, 0.5, true, Color{4 / 255.f, 6 / 255.f, 13 / 255.f, 0.92f});
+    }
+
     {   // top left: the date, which moves on with the simulated time; top right: frames per second
         const double yrs = sys.t / kYear;
-        const std::string epoch = fmt::dateUTC(sys.epochMs);
-        const std::string info = yrs * 365.25 < 1 ? "Solar System today, " + epoch
+        std::string epoch = fmt::dateUTC(sys.epochMs);
+        if (sys.jumped) {                                 // a picked date also shows its time of day (Greenwich time)
+            const int64_t m = ((sys.epochMs / 60000) % 1440 + 1440) % 1440;
+            char hm[16];
+            std::snprintf(hm, sizeof hm, ", %02d:%02d UT", static_cast<int>(m / 60), static_cast<int>(m % 60));
+            epoch += hm;
+        }
+        const std::string info = yrs * 365.25 < 1 ? (sys.jumped ? "Solar System on " : "Solar System today, ") + epoch
                                                   : "Solar System on " + fmt::simDate(sys.epochMs, yrs) + "  ·  " + fmt::years(yrs) + " after " + epoch;
         T.text(info, 12, 20, 13, kFg, 0, true);
         T.text(fmt::fixed(fps, 0) + " fps", W - 12, 20, 11, kMuted, 1, true);

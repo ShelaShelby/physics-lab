@@ -186,7 +186,22 @@ int main() {
         }
     }
 
-    // 9) number and date wording (as JavaScript would write them)
+    // 9) famous dates the web version quotes (Jump to a date): Mars 55.76 million km from Earth on
+    //    27 Aug 2003 (NASA), and Jupiter and Saturn 0.1° apart as seen from Earth on 21 Dec 2020
+    {
+        const auto find = [](const SolarSystem& s, const char* n) { for (const Body& b : s.bodies) if (b.name == n) return b.pos; return Vec3{}; };
+        SolarSystem s; s.loadAt(1061942400000LL + 10 * 3600000LL);   // 27 Aug 2003, 10:00 UT (closest at 09:51 UT)
+        const double mkm = length(find(s, "Mars") - find(s, "Earth")) / 1e9;
+        std::printf("  Mars–Earth on 27 Aug 2003: %.2f million km (NASA: 55.76)\n", mkm);
+        check(std::fabs(mkm - 55.76) < 0.3, "Mars–Earth distance on 27 Aug 2003");
+        s.loadAt(1608552000000LL);                                    // 21 Dec 2020, 12:00 UT
+        const Vec3 e = find(s, "Earth"), j = find(s, "Jupiter") - e, sa = find(s, "Saturn") - e;
+        const double sep = std::acos(dot(j, sa) / (length(j) * length(sa))) * 180 / units::kPi;
+        std::printf("  Jupiter–Saturn on 21 Dec 2020: %.3f° apart (real: 0.10°)\n", sep);
+        check(std::fabs(sep - 0.1) < 0.05, "Jupiter–Saturn great conjunction");
+    }
+
+    // 10) number and date wording (as JavaScript would write them)
     check(fmt::plainNumber(-110) == "-110", "plainNumber(-110) = " + fmt::plainNumber(-110));
     check(fmt::plainNumber(2439.7) == "2439.7", "plainNumber(2439.7) = " + fmt::plainNumber(2439.7));
     check(fmt::plainNumber(0.0553) == "0.0553", "plainNumber(0.0553) = " + fmt::plainNumber(0.0553));
@@ -199,7 +214,7 @@ int main() {
     check(fmt::years(0.05) == "18 days", "years(0.05) = " + fmt::years(0.05));
     check(fmt::years(0.2408) == "0.24 years", "years(0.2408) = " + fmt::years(0.2408));
 
-    // 10) the info cards (printed so they can be read and compared with the web version)
+    // 11) the info cards (printed so they can be read and compared with the web version)
     {
         SolarSystem s; s.loadAt(ref::kEpochMs);
         CardOptions opt; opt.tspeed = units::kTspeedDefault;

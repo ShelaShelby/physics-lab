@@ -1,8 +1,11 @@
 #include "renderer2d.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+
+#include "earth_texture.h"
 
 using namespace plgl;
 
@@ -86,6 +89,47 @@ out vec4 fragColor;
 void main() { fragColor = uColor; }
 )";
 
+// A turning planet: each pixel of the disc -> a point on the ball -> latitude and longitude on the
+// planet (through the matrix uK) -> the Earth map, or a latitude/longitude grid. Then lit from the Sun.
+static const char* kPlanetFS = R"(#version 330 core
+in vec2 vUV;
+in vec4 vColor;
+in vec4 vParam;
+uniform mat3 uK;
+uniform int uEarth;
+uniform float uPa;
+uniform float uLod;
+uniform sampler2D uTex;
+out vec4 fragColor;
+const float PI = 3.14159265358979;
+void main() {
+    float d = length(vUV);
+    float aa = max(fwidth(d), 1e-4);
+    float edge = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, d);
+    if (edge <= 0.0) discard;
+    vec3 n = vec3(vUV.x, -vUV.y, sqrt(max(0.0, 1.0 - d * d)));   // screen: right, up, towards you
+    vec3 b = uK * n;                                              // the planet's own frame: meridian, east, pole
+    float lat = atan(b.z, sqrt(max(0.0, 1.0 - b.z * b.z)));
+    float lon = atan(b.y, b.x);
+    vec3 c;
+    if (uEarth == 1) {
+        c = textureLod(uTex, vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI), uLod).rgb;
+    } else {                                                      // grid every 30°, the equator, and the 0° meridian brighter
+        float L30 = PI / 6.0, cl = cos(lat), al = abs(lat);
+        float dlat = abs(lat - round(lat / L30) * L30), dlon = abs(lon - round(lon / L30) * L30) * cl;
+        float f = max(0.0, 1.0 - dlat / uPa) * 0.3;
+        if (al < 1.45) f = max(f, max(0.0, 1.0 - dlon / uPa) * 0.3);
+        if (al < uPa) f = max(f, (1.0 - al / uPa) * 0.6);
+        float m0 = abs(lon) * cl;
+        if (al < 1.5 && m0 < uPa * 1.4) f = max(f, (1.0 - m0 / (uPa * 1.4)) * 0.8);
+        c = vColor.rgb + (vec3(1.0) - vColor.rgb) * f;
+    }
+    vec3 L = normalize(vec3(vParam.y, -vParam.z, 0.35));
+    float lit = max(dot(n, L), 0.0);
+    fragColor = vec4(c * (0.12 + 0.88 * lit) + vec3(0.2) * pow(lit, 12.0), vColor.a * edge);
+}
+)";
+
 static GLuint compile(GLenum type, const char* src) {
     const GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -144,6 +188,34 @@ bool Renderer2D::init() {
         glVertexAttribDivisor(1, 1);                      // one centre per square, not per corner
         glBindVertexArray(0);
     }
+    {   // the planet program (same vertex shader as the shapes) and the Earth map
+        const GLuint v = compile(GL_VERTEX_SHADER, kVertexShader), f = compile(GL_FRAGMENT_SHADER, kPlanetFS);
+        plProgram_ = glCreateProgram();
+        glAttachShader(plProgram_, v);
+        glAttachShader(plProgram_, f);
+        glLinkProgram(plProgram_);
+        glDeleteShader(v);
+        glDeleteShader(f);
+        glGetProgramiv(plProgram_, GL_LINK_STATUS, &ok);
+        if (!ok) { std::fprintf(stderr, "planet shader link error\n"); return false; }
+        plSize_ = glGetUniformLocation(plProgram_, "uSize");
+        plK_ = glGetUniformLocation(plProgram_, "uK");
+        plEarth_ = glGetUniformLocation(plProgram_, "uEarth");
+        plPa_ = glGetUniformLocation(plProgram_, "uPa");
+        plLod_ = glGetUniformLocation(plProgram_, "uLod");
+        plTex_ = glGetUniformLocation(plProgram_, "uTex");
+        const std::vector<uint8_t> map = makeEarthTexture();
+        glGenTextures(1, &earthTex_);
+        glBindTexture(GL_TEXTURE_2D, earthTex_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, kEarthTexW, kEarthTexH, 0, GL_RGBA, GL_UNSIGNED_BYTE, map.data());
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);         // longitude wraps round
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
     glGenVertexArrays(1, &vao_);
     glGenBuffers(1, &vbo_);
     glBindVertexArray(vao_);
@@ -159,6 +231,9 @@ bool Renderer2D::init() {
 }
 
 void Renderer2D::shutdown() {
+    if (earthTex_) glDeleteTextures(1, &earthTex_);
+    if (plProgram_) glDeleteProgram(plProgram_);
+    earthTex_ = plProgram_ = 0;
     if (sqCornerVbo_) glDeleteBuffers(1, &sqCornerVbo_);
     if (sqInstVbo_) glDeleteBuffers(1, &sqInstVbo_);
     if (sqVao_) glDeleteVertexArrays(1, &sqVao_);
@@ -180,14 +255,32 @@ void Renderer2D::begin(double w, double h) {
 }
 
 void Renderer2D::closeTriangles() {
-    if (verts_.size() > triStart_) segments_.push_back({false, static_cast<int>(triStart_), static_cast<int>(verts_.size() - triStart_), 0, {}});
+    if (verts_.size() > triStart_) {
+        Segment sg{};
+        sg.kind = Kind::Triangles; sg.first = static_cast<int>(triStart_); sg.count = static_cast<int>(verts_.size() - triStart_);
+        segments_.push_back(sg);
+    }
+    triStart_ = verts_.size();
+}
+
+void Renderer2D::planet(double x, double y, double r, Color base, double lx, double ly, const float K[9], bool earth) {
+    if (r <= 0) return;
+    closeTriangles();
+    const double half = r + 1.5;
+    quad(x, y, half, base, 2, static_cast<float>(lx), static_cast<float>(ly), static_cast<float>(half / r));
+    Segment sg{};
+    sg.kind = Kind::Planet; sg.first = static_cast<int>(triStart_); sg.count = 6; sg.earth = earth; sg.r = static_cast<float>(r);
+    for (int i = 0; i < 9; i++) sg.K[i] = K[i];
+    segments_.push_back(sg);
     triStart_ = verts_.size();
 }
 
 void Renderer2D::squares(const float* xy, int count, double size, Color c) {
     if (count <= 0) return;
     closeTriangles();
-    segments_.push_back({true, static_cast<int>(inst_.size() / 2), count, static_cast<float>(size), c});
+    Segment sg{};
+    sg.kind = Kind::Squares; sg.first = static_cast<int>(inst_.size() / 2); sg.count = count; sg.size = static_cast<float>(size); sg.c = c;
+    segments_.push_back(sg);
     inst_.insert(inst_.end(), xy, xy + 2 * count);
 }
 
@@ -208,7 +301,20 @@ void Renderer2D::end(int fbW, int fbH) {
         glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(inst_.size() * sizeof(float)), inst_.data(), GL_STREAM_DRAW);
     }
     for (const Segment& sg : segments_) {
-        if (!sg.squares) {
+        if (sg.kind == Kind::Planet) {
+            glUseProgram(plProgram_);
+            glUniform2f(plSize_, static_cast<float>(width_), static_cast<float>(height_));
+            // uK * n: GLSL matrices are column-major, so the rows of K go in as columns (transpose = true)
+            glUniformMatrix3fv(plK_, 1, GL_TRUE, sg.K);
+            glUniform1i(plEarth_, sg.earth ? 1 : 0);
+            glUniform1f(plPa_, 2.2f / std::max(2.0f * sg.r, 1.0f));        // grid line width: about one pixel
+            glUniform1f(plLod_, std::max(0.0f, std::log2(static_cast<float>(kEarthTexW) / (3.14159f * std::max(2.0f * sg.r, 1.0f)))));   // texels per pixel across the middle
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, earthTex_);
+            glUniform1i(plTex_, 0);
+            glBindVertexArray(vao_);
+            glDrawArrays(GL_TRIANGLES, sg.first, sg.count);
+        } else if (sg.kind == Kind::Triangles) {
             glUseProgram(program_);
             glUniform2f(uSize_, static_cast<float>(width_), static_cast<float>(height_));
             glBindVertexArray(vao_);

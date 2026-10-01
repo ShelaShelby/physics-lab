@@ -31,6 +31,7 @@ struct ViewSettings {
     SkyMode sky = SkyMode::Soft;
     ConsMode cons = ConsMode::Off;
     bool far = true;            // Far-away things (nearest stars, Voyagers, galactic centre)
+    bool paused = false;        // time is stopped (a fast spin is only held still while time runs)
 };
 
 class OrbitView {
@@ -55,6 +56,9 @@ public:
     double yaw = 0.6, pitch = 1.0;               // 3D view angles, radians
     double cdep = 0;                             // 3D: depth of the middle of the view (the followed object), m
     bool spin = false;                           // 3D: turn slowly by itself
+    bool journey = false;                        // a Journey is running: no info card, a caption instead
+    std::string caption;                         // the Journey's caption, and how visible it is (0–1)
+    double captionAlpha = 0;
     bool panMode = false;                        // 3D: dragging moves the view instead of turning it
 
 private:

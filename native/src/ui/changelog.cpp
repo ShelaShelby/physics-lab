@@ -12,7 +12,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
-    {"0.2", "3D view, night sky, belts and Oort cloud, frame timing and VSync switch",
+    {"0.2", "3D view, night sky, belts, spinning planets, Journey and Jump to a date",
+     "The planets now really spin, with the real IAU axes and rates: Earth shows its real coastlines, the others a grid of "
+     "latitude and longitude, each with a dashed axis and N; Saturn's rings tilt with its axis. The cards say how long a turn "
+     "takes and how far the axis leans, the Sun's card how it spins, and Earth's card which season it is. "
+     "Journey and dates card: the Journey zooms out from Earth to the centre of our galaxy, and when it ends (or you touch "
+     "anything) all your settings and your view come back. Jump to a date puts everything where it really was or will be "
+     "from 1800 to 2100 (Greenwich time); a date outside that range, or one that does not exist, now gets a note instead of "
+     "a silent jump. "
      "New 3D view (View card): drag to turn it, right-drag or Shift-drag (or the Drag button) to move it, Spin to turn it "
      "slowly. Nearer things look bigger, and dashed lines drop from each planet to the flat plane of the orbits. "
      "Behind everything is the real night sky: the 2,874 brightest stars at their true directions and colours, the band "

@@ -44,14 +44,22 @@ public:
     // thousands of rocks). xy holds the squares' centres, 2 floats each, in picture points.
     void squares(const float* xy, int count, double size, Color c);
 
+    // A turning planet. K turns screen directions into the planet's own frame (rows: its 0° meridian,
+    // 90° east, north pole; columns: screen right, up, towards you). earth: the Earth map, else a plain
+    // colour with a grid of latitude and longitude and the 0° meridian marked (as in the web version).
+    void planet(double x, double y, double r, Color base, double lightX, double lightY, const float K[9], bool earth);
+
 private:
-    struct Segment { bool squares; int first, count; float size; Color c; };   // draw calls, in the order they were added
+    enum class Kind { Triangles, Squares, Planet };
+    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; bool earth; float r; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
     std::vector<float> inst_;                 // square centres for all square draws of this frame
     std::size_t triStart_ = 0;
     GLuint sqProgram_ = 0, sqVao_ = 0, sqCornerVbo_ = 0, sqInstVbo_ = 0;
     GLint sqSize_ = -1, sqSide_ = -1, sqColor_ = -1;
+    GLuint plProgram_ = 0, earthTex_ = 0;
+    GLint plSize_ = -1, plK_ = -1, plEarth_ = -1, plPa_ = -1, plLod_ = -1, plTex_ = -1;
 
     struct Vertex { float x, y, u, v, r, g, b, a, mode, p1, p2, p3; };
     void quad(double cx, double cy, double half, Color c, float mode, float p1, float p2, float uvScale);

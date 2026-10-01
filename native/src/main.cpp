@@ -102,6 +102,8 @@ int main(int, char**) {
             if (b.name == name) app.view.select({orbit::Selection::Body, b.id}, true);
     if (const char* z = SDL_getenv("PL_ZOOM")) ui::setZoom(app, std::atof(z));
     if (SDL_getenv("PL_3D")) app.set.view3D = true;
+    if (const char* d = SDL_getenv("PL_DATE")) { int64_t ms; if (ui::parseDateTime(d, "12:00", ms)) std::printf("%s\n", ui::jumpToDate(app, ms).c_str()); else std::printf("not a date\n"); }
+    if (SDL_getenv("PL_JOURNEY")) ui::journeyStart(app);
     if (SDL_getenv("PL_CONS")) app.set.cons = orbit::ConsMode::LinesAndNames;
     int frame = 0;
     bool running = true;
@@ -123,9 +125,13 @@ int main(int, char**) {
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) app.paused = !app.paused;
                 break;
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
-                if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW) ui::setZoom(app, app.set.zoom + e.wheel.y * 0.07);
+                if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW) {
+                    if (app.journey.active) ui::journeyStop(app);   // touching the picture stops a Journey (and brings your settings back)
+                    else ui::setZoom(app, app.set.zoom + e.wheel.y * 0.07);
+                }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                if (!io.WantCaptureMouse && e.button.x < canvasWinW && app.journey.active) { ui::journeyStop(app); break; }
                 if (!io.WantCaptureMouse && e.button.x < canvasWinW) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
                 break;
             case SDL_EVENT_MOUSE_MOTION:
@@ -152,6 +158,7 @@ int main(int, char**) {
         last = now;
         const double dt = std::min(frameDt, units::kMaxFrameDt);
         app.view.tick(dt, app.set);
+        ui::journeyTick(app, dt);
         if (!app.paused) {
             acc += dt;
             while (acc >= units::kPhysicsStep) { app.sys.step(units::kPhysicsStep, app.set.tspeed); acc -= units::kPhysicsStep; }
@@ -169,6 +176,7 @@ int main(int, char**) {
         renderer.begin(app.canvasW, app.canvasH);
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, 0), ImVec2(canvasWinW, static_cast<float>(winH)));
+        app.set.paused = app.paused;
         app.view.draw(renderer, text, 0, 0, scale, app.sys, app.set, app.canvasW, app.canvasH, fps);
         text->PopClipRect();
         ui::changelogWindow(&app.showChangelog);

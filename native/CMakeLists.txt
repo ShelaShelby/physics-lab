@@ -83,10 +83,12 @@ if(PL_BUILD_APP)
     src/main.cpp
     src/render/gl_loader.cpp
     src/render/renderer2d.cpp
+    src/render/earth_texture.cpp
     src/orbit/orbit_view.cpp
     src/ui/orbit_panel.cpp
     src/ui/changelog.cpp
-    src/ui/fonts.cpp)
+    src/ui/fonts.cpp
+    src/ui/journey_dates.cpp)
   target_link_libraries(PhysicsLab PRIVATE orbit_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)

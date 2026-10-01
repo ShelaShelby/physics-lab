@@ -44,6 +44,18 @@ typedef std::ptrdiff_t GLintptr;
 #define GL_MULTISAMPLE 0x809D
 #define GL_VERSION 0x1F02
 #define GL_RGBA 0x1908
+#define GL_RGBA8 0x8058
+#define GL_TEXTURE_2D 0x0DE1
+#define GL_TEXTURE0 0x84C0
+#define GL_TEXTURE_MIN_FILTER 0x2801
+#define GL_TEXTURE_MAG_FILTER 0x2800
+#define GL_TEXTURE_WRAP_S 0x2802
+#define GL_TEXTURE_WRAP_T 0x2803
+#define GL_LINEAR 0x2601
+#define GL_LINEAR_MIPMAP_LINEAR 0x2703
+#define GL_REPEAT 0x2901
+#define GL_CLAMP_TO_EDGE 0x812F
+#define GL_UNPACK_ALIGNMENT 0x0CF5
 #define GL_UNSIGNED_BYTE 0x1401
 #define GL_RENDERER 0x1F01
 
@@ -85,6 +97,16 @@ typedef std::ptrdiff_t GLintptr;
     X(void, glUniform4f, (GLint loc, GLfloat a, GLfloat b, GLfloat c, GLfloat d))                  \
     X(void, glUniform1f, (GLint loc, GLfloat a))                                                   \
     X(void, glBufferSubData, (GLenum t, GLintptr offset, GLsizeiptr size, const void* data))      \
+    X(void, glGenTextures, (GLsizei n, GLuint* t))                                                 \
+    X(void, glDeleteTextures, (GLsizei n, const GLuint* t))                                        \
+    X(void, glBindTexture, (GLenum target, GLuint t))                                              \
+    X(void, glActiveTexture, (GLenum unit))                                                        \
+    X(void, glTexImage2D, (GLenum t, GLint lvl, GLint ifmt, GLsizei w, GLsizei h, GLint b, GLenum f, GLenum ty, const void* d)) \
+    X(void, glTexParameteri, (GLenum t, GLenum p, GLint v))                                        \
+    X(void, glGenerateMipmap, (GLenum t))                                                          \
+    X(void, glPixelStorei, (GLenum p, GLint v))                                                    \
+    X(void, glUniform1i, (GLint loc, GLint v))                                                     \
+    X(void, glUniformMatrix3fv, (GLint loc, GLsizei n, GLboolean tr, const GLfloat* v))           \
     X(void, glReadPixels, (GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum t, void* data))
 
 // The function pointers live in their own namespace, so they never clash with the

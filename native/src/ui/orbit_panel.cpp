@@ -29,6 +29,7 @@ void setZoom(AppState& app, double zoom) {
 
 void resetToToday(AppState& app) {
     app.sys.loadAt(nowUnixMs());
+    app.sys.jumped = false;
     app.set.tspeed = kTspeedDefault;
     app.set.zoom = kZoomDefault;
     app.set.moons = app.set.dwarfs = app.set.comets = app.set.belts = true;
@@ -96,6 +97,9 @@ void orbitPanel(AppState& app, float width) {
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y));
     ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y));
     ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    // touching the panel during a Journey stops it first (your settings come back), then the click does its job
+    const bool journeyWasActive = app.journey.active;
+    if (journeyWasActive && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) journeyStop(app);
 
     // ---- title and update badge ----
     ImGui::TextUnformatted("Physics Lab · Orbit Lab");
@@ -108,7 +112,10 @@ void orbitPanel(AppState& app, float width) {
 
     // ---- Presets ----
     ImGui::SeparatorText("Presets");
-    if (ImGui::Button("☉ Reset to today", ImVec2(-1, 0))) resetToToday(app);
+    if (ImGui::Button("☉ Reset to today", ImVec2(-1, 0))) { resetToToday(app); app.dateNote.clear(); }
+
+    // ---- Journey and dates ----
+    journeyDatesCard(app, journeyWasActive);
 
     // ---- Time ----
     ImGui::SeparatorText("Time");
@@ -151,7 +158,7 @@ void orbitPanel(AppState& app, float width) {
         if (ImGui::Button(app.view.follow ? "◉ Following" : "○ Follow", ImVec2(-1, 0))) app.view.follow = !app.view.follow;
     }
     if (app.set.moons && moonTarget(app)) {
-        if (ImGui::Button("⏱ Slow time to watch moons", ImVec2(-1, 0))) {
+        if (ImGui::Button("Slow time to watch moons", ImVec2(-1, 0))) {
             const Body* b = moonTarget(app);
             double P = 1e300;                             // the selected moon's period, or the fastest moon's
             if (app.view.sel.kind == Selection::Moon) P = b->moons[app.view.sel.moon].data->periodDays;

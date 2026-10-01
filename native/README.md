@@ -47,7 +47,12 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 - **Move the view**: drag with the mouse.
 - **Facts**: click a planet, moon, comet, the Sun or the barycentre. The first click
   afterwards closes the box. **Go to** tiles fly to a body and keep it in the middle.
-- **Update 0.1** badge (top of the panel): what is new.
+- **3D**: View card → 3D. Drag turns the view; right-drag or Shift-drag moves it.
+- **Sky** card: stars, constellations, far-away things (zoom far out to find them).
+- **Journey and dates** card: the Journey (touch anything to stop it; your settings come back),
+  and Jump to a date (1800–2100, Greenwich time).
+- **Performance** card: frame time and a VSync switch (turn VSync off to see the real headroom).
+- **Update** badge (top of the panel): what is new.
 
 ## How it is organised
 
@@ -57,11 +62,15 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 | `src/orbit/solar_data.*` | The real Solar System data (NASA/JPL), copied from the web version |
 | `src/orbit/kepler.*` | Orbital elements → position and velocity (Kepler's equation) |
 | `src/orbit/solar_system.*` | The simulation: leapfrog steps around the Sun, barycentre, orbit shape |
+| `src/orbit/belts.*` | Asteroid belt, Trojans, Kuiper belt, Oort cloud (same random rocks as the web) |
+| `src/orbit/sky.*`, `sky_data.inc` | Night sky, constellations, far-away things |
+| `src/orbit/spin.*` | IAU spin of the planets and the Sun, axis tilt, Earth's seasons |
 | `src/orbit/card_text.*`, `format.*` | The info card and how numbers are written |
 | `src/orbit/orbit_view.*` | Drawing the picture, clicks, dragging, zoom |
-| `src/render/` | A small OpenGL 3.3 loader and a batched 2D renderer |
+| `src/render/` | OpenGL 3.3 loader, batched 2D renderer (instanced dots, planet shader), Earth map |
 | `src/ui/` | The ImGui panel, the changelog and fonts |
 | `tests/` | Unit tests that compare the physics with the web version |
+| `tools/make_sky_data.js` | Copies the sky, far-away and Earth-outline data out of `index.html` |
 
 All physics is in SI units (metres, seconds, m/s). The web version uses "sim units"
 (GM of the Sun = 100, 1 year = 2π); `units.h` converts them exactly, so both versions
@@ -73,12 +82,15 @@ follow the same orbits.
 version's **own** JavaScript: `tests/reference/make_reference.js` cuts the Orbit Lab
 functions out of `index.html`, runs them in Node and writes `reference_values.h`.
 It checks the starting positions of all planets, dwarf planets and comets, their orbit
-shapes, the barycentre, and the positions after fixed runs of the leapfrog integrator at
-three Time speeds. If the web physics ever changes, run
+shapes, the barycentre, the positions after fixed runs of the leapfrog integrator at
+three Time speeds, the belt rocks, and the spin / axis / season lines on the cards
+(word for word). It also checks two dates the web quotes: Mars 55.8 million km away on
+27 Aug 2003, and Jupiter and Saturn 0.1° apart on 21 Dec 2020. If the web physics ever changes, run
 `node native/tests/reference/make_reference.js` from the repository root and rebuild.
 
 ## Command-line helpers for automatic checks
 
 These do nothing in normal use: `PL_EXIT_AFTER_FRAMES=n` quits after n frames,
 `PL_SCREENSHOT=file.bmp` saves the last frame, `PL_SELECT=Earth` selects and follows a
-body, `PL_ZOOM=2.3` sets the zoom.
+body, `PL_ZOOM=2.3` sets the zoom, `PL_3D=1` starts in 3D, `PL_CONS=1` shows constellation
+names, `PL_DATE=2003-08-27` jumps to a date (and prints the note), `PL_JOURNEY=1` starts a Journey.

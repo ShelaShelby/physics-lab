@@ -1,78 +1,97 @@
-# Native Physics Lab 0.1 — pilot report (Orbit Lab)
+# Native Physics Lab 0.2 — report
+
+0.2 was built in four stages, each committed and pushed to `native` as it was finished.
+The 0.1 pilot report is in the git history (`git show a71e6d6:native/REPORT.md`).
 
 ## What works (checked)
 
-**Physics, ported from the web Orbit Lab (index.html, Orbit Lab update 7.7.2)**
-- Same data: the 8 planets (NASA/JPL Keplerian elements 1800–2050 with rates per century),
-  5 dwarf planets (JPL Small-Body Database), 14 moons, 6 famous comets. Only the real
-  Solar System; no custom star or planets.
-- Same method: leapfrog (kick-drift-kick) around the Sun, sub-steps of at most
-  0.004 sim units (about 5.6 h), fixed physics step of 1/240 s of real time, frames capped
-  at 0.05 s, the same softening, crash and escape radii, trail spacing, comets set from
-  their exact Kepler orbit each step, moons on fixed Kepler ellipses.
-- All in SI units (m, s, m/s); `units.h` converts the web's "sim units" exactly.
-- **Unit tests (643 checks, all pass)** against numbers produced by running the web
-  version's **own JavaScript**, cut out of index.html by a script, not retyped:
-  starting positions/velocities of all 19 bodies, orbit shapes (a, e, tilt, period),
-  barycentre, positions after 10 s at the default Time speed, 1 s at the fastest
-  (≈50 years) and 1 s at real time. Worst difference: **2.6 × 10⁻¹¹** of the distance
-  from the Sun (rounding only). A deliberately broken step size makes 43 checks fail,
-  so the tests do catch mistakes. Also checked: Earth returns to its start after one
-  year and its orbital energy stays constant to 1 part in a million.
-- Info-card numbers (distance, speed, escape speed, lap, perihelion/aphelion, barycentre)
-  were compared with the web formulas for Earth, Pluto and Halley: identical.
+**Stage 1: frame timing, VSync, fixed download page**
+- A Performance card shows the last frame time, the average and worst of the last 240 frames
+  (with a graph), and the CPU work per frame (physics plus building the frame, before
+  waiting for the screen). A VSync switch turns waiting for the monitor on and off.
+- Every Windows build is also published to the GitHub Release tagged `latest`
+  (`…/releases/tag/latest`, file `PhysicsLab-windows-x64.zip`). The run for Stage 2 passed
+  on GitHub's Windows runner, including this release step.
 
-**App (checked on Linux with software OpenGL, Mesa llvmpipe, under a virtual screen)**
-- Window opens, OpenGL 3.3 core renderer works, the picture draws: Sun with glow, lit
-  planets, dwarf planets, moons (shown as in the web: when zoomed in or their planet is
-  picked; fast moons as a lit orbit), comets with tails and dotted orbits, short or full
-  trails, habitable zone, distance rings, barycentre marker, labels, scale bar with light
-  time, x/y/z arrows, date line, fps.
-- Play/pause (button and Space), Time speed slider, zoom (wheel and slider), drag to pan,
-  click to select with the info card (first click closes it), Follow, Reset view,
-  Reset to today, Sizes (True scale / Easy to see), Trails, Moons/Dwarf planets/Comets
-  switches, Go to tiles, "Slow time to watch moons", Update 0.1 badge with changelog
-  (native history + the web Orbit Lab history for reference).
-- Real mouse input was sent with XTest: wheel zoom, click on the Sun (card appears), drag.
-- Deep zoom (Earth filling the picture) draws correctly; the maths stays in double
-  precision until points are on screen.
+**Stage 2: asteroid belt, Jupiter's Trojans, Kuiper belt, Oort cloud**
+- Same data and behaviour as the web: the same random generator (mulberry32), seed, order of
+  draws, 32-bit storage, orbits and 150-year Trojan sway. Belt cards, clickable belt names,
+  Go to tiles and the on/off switch work.
+- Tested against the web's own JS output for 18 sample rocks, at the start and 100 years
+  later. They match to 4×10⁻⁸ (32-bit float rounding).
+- Drawing: each belt is **one instanced draw call** (the web used thousands of canvas
+  operations). Rock positions are computed on the CPU in double precision, and only when
+  simulated time moves (paused or just panning: nothing is recomputed). On this cloud CPU
+  that is about 0.7 ms per frame for all 6,000 rocks.
+  - I did not move the Kepler maths onto the GPU on purpose. OpenGL 3.3 shaders only have
+    32-bit floats, and the mean anomaly n·t would drift by thousands of km after a few
+    decades, so the rocks would stop matching the web physics.
 
-## Not tested / not known yet (be aware)
+**Stage 3: 3D view, night sky, far-away things**
+- 3D view with the web's exact camera maths (yaw, pitch, perspective, follow depth).
+  Drag turns it, right-drag or Shift-drag moves it, plus the Drag-mode and Spin buttons.
+  Drop lines, perspective sizes, ≈ on the scale bar and the turning x/y/z arrows are there.
+- Night sky: 2,874 stars at true directions and colours, the Milky Way band, and
+  constellation lines and names. Stars are drawn as instanced dots grouped by colour and
+  size (36 draw calls).
+- Far-away things: nearest stars, the Pleiades, the Orion Nebula, the galactic centre and
+  the Voyagers. The Voyagers move on with time and are hidden before 1990. Each has a card
+  and a Go to tile.
 
-- **The Windows build itself has not been run by me.** It was only compiled and run on
-  Linux. The GitHub Actions workflow is written for Windows (MSVC) but, at the time of
-  writing, I could not confirm a finished run (see the end of this file). Windows-only
-  code paths (Segoe UI font loading, static MSVC runtime with static SDL3, WinMain via
-  SDL) are untested.
-- **Speed on a real PC is unknown.** The cloud machine has no GPU; its frame rate says
-  nothing. The design is light (one draw call for the picture; physics is ~1 million
-  simple steps per second at the fastest Time speed), but it needs checking on Alex's PC.
-- High-DPI: the app scales with the Windows display scale at start-up; moving the window
-  to a screen with a different scale is not handled yet.
-- Emoji used in the web (🚀, ⏱ in some fonts) may show as boxes if a font lacks them.
+**Stage 4: spinning planets, Jump to a date, Journey**
+- IAU spin data (with the Mars and Neptune wobble terms). Earth's globe uses the same
+  Natural Earth coastlines as the web; the other planets get a latitude/longitude grid and
+  the 0° meridian. Each has a dashed axis with N, Saturn's rings tilt with its real axis,
+  and Earth has its thin blue air.
+- The card lines (turn time, axis tilt, "upside down", too fast to see, the Sun's spin,
+  Earth's season and where the Sun is overhead) match the web **word for word** on three
+  test dates. The only exception is the "turns N times a second" number: the web uses a
+  rounded 58.13 days/s, the native app the exact 58.1302, so that number can differ in its
+  last digit.
+- Jump to a date: 1800–2100, Greenwich time, with the 7 quick tiles. The selected body
+  stays selected. Checks the web quotes: Mars to Earth on 27 Aug 2003 is 55.80 million km
+  (NASA: 55.76), and Jupiter–Saturn on 21 Dec 2020 is 0.13° apart (about 0.1° in reality,
+  given the approximate JPL elements).
+- **Web bug fixed:** a date outside 1800–2100 gets a note saying it is out of range and
+  which date is shown instead. An impossible date (30 Feb) or bad input gets a note too.
+  Before, the web jumped silently.
+- **Web bug fixed:** Journey saves all your settings and your view (zoom, time speed,
+  2D/3D, sizes, belts, moons, far things, selection, follow, pan, 3D angles, pause) and
+  puts them all back when it ends or is interrupted. The web only restored the Time speed.
+  Checked: a Journey started in 3D and stopped by a click came back to the same 3D view,
+  zoom and time speed.
 
-## Small differences from the web version (on purpose, or not ported)
+**Tests:** 829 checks, all passing (physics, belts, spin and season wording, dates and
+number formats). Run with `ctest`. GitHub Actions runs the same tests on Windows.
 
-- Speeds are worked out in exact SI. The web multiplies by a rounded factor
-  (29.78 km/s based), so a speed can differ in the last shown digit (≈0.02 %).
-- Dragging moves the view at any zoom (the web only allows it once zoomed in, because on
-  a phone a drag must scroll the page).
-- The card says "click anywhere to close this box" instead of "tap".
-- Background is the dark night-sky colour, but **without the stars**.
-- **Not ported in this pilot:** 3D view, night sky / constellations, far-away things
-  (Voyagers, nearest stars, galactic centre), asteroid belt / Trojans / Kuiper belt /
-  Oort cloud, spinning planets with axes and Earth's continents, Saturn's rings, seasons
-  and Sun spin lines on the cards, Journey, Jump to a date, Learn (timeline and guides),
-  "What am I looking at?", achievements, metric/imperial switch, the other labs.
+## Not tested / be aware
+- **Speed on a real PC:** the cloud machine has no GPU, so I could not judge it. Please
+  use the new Performance card with VSync off on your PC. Places that may cost the most:
+  - the planet shader when a planet fills the screen;
+  - the 2,874-star sky (recomputed every frame, cheap on a desktop CPU);
+  - Earth's map is painted once at start-up (about 0.3 s here), so the window may open a
+    moment later.
+- **The Stage 3 and Stage 4 builds on Windows:** pushed, but I only saw the Stage 1 and
+  Stage 2 runs pass. Check the Actions tab, or that the `latest` release has the newest
+  commit.
+- Fonts on Windows: Segoe UI and Segoe UI Symbol. I removed the 🚀 and ⏱ emoji from
+  buttons because the fonts have no emoji; other symbols (☉, ⟲, ✥, ◉) were checked on
+  Linux only.
+- Real-mouse 3D rotation was not driven by a test. Rotation uses the web's formulas, but
+  please try right-drag and Shift-drag on your PC.
 
-## What to do next (suggested order)
+## Still different from the web (not ported, or on purpose)
+- Not ported: the Sun's decorative glowing patches; the planets' sprite caching (not needed
+  with a shader); Learn / timeline / "What am I looking at?"; achievements; the
+  metric/imperial switch; the other labs.
+- Lighting: plain Lambert shading from the Sun's direction, not the web's exact radial
+  gradient. It looks similar but is not identical pixel for pixel.
+- With Stars set to Off, the background stays dark (the web uses the light/dark page theme).
+- The last Journey caption says your view comes back, instead of "Tap Reset view to come back".
+- A click that stops a Journey only stops it. It does not also select or move anything.
 
-1. Download the Actions artifact, run it on Windows, check it opens and feels smooth.
-   Report anything odd (fonts, scaling, speed).
-2. 3D view (the camera code is small and already understood).
-3. Belts and Oort cloud, then the night sky and far-away things (large data tables).
-4. Spinning planets, Saturn's rings, seasons, Jump to a date and Journey.
-5. Learn content with custom text rendering, then the metric/imperial switch.
-6. Then the next lab (Atom Lab, Black Hole Lab, Spacetime Lab, Slingshot).
-
-Each of these is an update: the version number will be asked before starting.
+## Suggested next steps
+1. Measure on your PC with VSync off, and tell me any slow spot.
+2. Learn content (the timeline and the guides) with custom text rendering.
+3. The metric/imperial switch.
+4. The next lab.

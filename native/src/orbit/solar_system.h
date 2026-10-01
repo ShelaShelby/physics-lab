@@ -78,6 +78,7 @@ public:
     std::vector<BeltGroup> belts;           // asteroid belt, Trojans, Kuiper belt, Oort cloud (made for the start date)
     double t = 0;                           // simulated seconds since the epoch
     int64_t epochMs = 0;                    // the starting date (Unix ms, UTC)
+    bool jumped = false;                    // the start date was picked with Jump to a date (not today)
     int crashed = 0, escaped = 0;
 
 private:
