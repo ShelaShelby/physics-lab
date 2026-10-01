@@ -21,6 +21,7 @@
 #include "render/renderer2d.h"
 #include "ui/changelog.h"
 #include "ui/fonts.h"
+#include "ui/learn.h"
 #include "ui/orbit_panel.h"
 
 namespace {
@@ -104,6 +105,7 @@ int main(int, char**) {
     if (SDL_getenv("PL_3D")) app.set.view3D = true;
     if (const char* d = SDL_getenv("PL_DATE")) { int64_t ms; if (ui::parseDateTime(d, "12:00", ms)) std::printf("%s\n", ui::jumpToDate(app, ms).c_str()); else std::printf("not a date\n"); }
     if (SDL_getenv("PL_JOURNEY")) ui::journeyStart(app);
+    if (const char* l = SDL_getenv("PL_LEARN")) app.learn = std::atoi(l);     // open a Learn guide (1, 2 or 3)
     if (SDL_getenv("PL_CONS")) app.set.cons = orbit::ConsMode::LinesAndNames;
     int frame = 0;
     bool running = true;
@@ -180,6 +182,7 @@ int main(int, char**) {
         app.view.draw(renderer, text, 0, 0, scale, app.sys, app.set, app.canvasW, app.canvasH, fps);
         text->PopClipRect();
         ui::changelogWindow(&app.showChangelog);
+        ui::learnWindow(app);
         ImGui::Render();
 
         // ---- draw: the picture first, then the panels and text on top ----

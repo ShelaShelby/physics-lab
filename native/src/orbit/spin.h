@@ -33,6 +33,20 @@ std::vector<std::string> spinLines(const Body& b, const SolarSystem& sys, double
 std::vector<std::string> sunSpinLines(const SolarSystem& sys, double tspeed, bool paused);
 std::vector<std::string> seasonLines(const Body& earth, const SolarSystem& sys);
 
+// Earth's season, from the real tilt and Earth's place on its orbit (the web's earthSeason)
+struct EarthSeason {
+    int k;           // 0 northern spring, 1 summer, 2 autumn, 3 winter
+    double since;    // days since this season began
+    double until;    // days until the next one
+    double dlat;     // latitude where the Sun is straight overhead, deg (+ north)
+    double distAU;   // Earth's distance from the Sun, AU
+};
+bool earthSeason(const Body& earth, const SolarSystem& sys, EarthSeason& out);
+// How far a planet's axis leans from upright (straight up from its orbit), 0–180°; over 90° is upside down
+double axisTilt(const Body& b, const SolarSystem& sys);
+extern const char* const kSeasonNorth[4];
+extern const char* const kSeasonSouth[4];
+
 std::vector<std::string> wrapWords(const std::string& text, std::size_t width);   // the web's wrapTxt
 
 }  // namespace orbit

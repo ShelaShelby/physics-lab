@@ -6,6 +6,7 @@
 #include <string>
 
 #include "changelog.h"
+#include "learn.h"
 #include "imgui.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
@@ -41,7 +42,7 @@ void resetToToday(AppState& app) {
 }
 
 // "1 s = 29.1 days": what the Time speed slider means (as in the web version)
-static std::string tspeedText(double v) {
+std::string tspeedText(double v) {
     const double d = kSimTime / kDay * std::pow(10.0, v), sec = d * 86400;   // simulated days / seconds per real second
     if (sec < 1.05) return "1 s = 1 second (real time)";
     std::string t;
@@ -59,7 +60,7 @@ static std::string zoomText(double v) {
 }
 
 // The zoom at which something `km` in radius is `wantPx` points on screen, at true scale (the web's zoomFor)
-static double zoomFor(const AppState& app, double km, double wantPx) {
+double zoomFor(const AppState& app, double km, double wantPx) {
     const double m = std::min(app.canvasW, app.canvasH) / 34;
     return std::clamp(std::log10(wantPx / (km * kKm / kSimLength) / m), -5.0, 5.5);
 }
@@ -117,6 +118,9 @@ void orbitPanel(AppState& app, float width) {
 
     // ---- Journey and dates ----
     journeyDatesCard(app, journeyWasActive);
+
+    // ---- Learn ----
+    learnButtons(app);
 
     // ---- Time ----
     ImGui::SeparatorText("Time");

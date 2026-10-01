@@ -77,6 +77,7 @@ if(PL_BUILD_APP)
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
   target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+  target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32)   # characters beyond U+FFFF (e.g. 🌍 in the Learn headings)
   target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
 
   add_executable(PhysicsLab WIN32
@@ -88,7 +89,9 @@ if(PL_BUILD_APP)
     src/ui/orbit_panel.cpp
     src/ui/changelog.cpp
     src/ui/fonts.cpp
-    src/ui/journey_dates.cpp)
+    src/ui/journey_dates.cpp
+    src/ui/learn.cpp
+    src/ui/rich_text.cpp)
   target_link_libraries(PhysicsLab PRIVATE orbit_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)

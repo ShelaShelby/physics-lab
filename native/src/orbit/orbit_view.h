@@ -34,6 +34,9 @@ struct ViewSettings {
     bool paused = false;        // time is stopped (a fast spin is only held still while time runs)
 };
 
+// The line at the top left of the picture: the date shown, and how long after the start date.
+std::string dateLine(const SolarSystem& sys);
+
 class OrbitView {
 public:
     // Draw one frame. The picture is width × height points, placed at (originX, originY)

@@ -32,12 +32,6 @@ int64_t utcMs(int y, int mo, int d, int h = 0, int mi = 0) { return (daysFromCiv
 // NASA's orbital elements are made for 1800–2050; the lab goes to 2100, a little less exact
 const int64_t kDateMin = utcMs(1800, 1, 1), kDateMax = utcMs(2100, 12, 31, 23, 59), kTableEnd = utcMs(2050, 12, 31);
 
-// The zoom at which something km in radius is wantPx points on screen (the web's zoomFor)
-double zoomFor(const AppState& app, double km, double wantPx) {
-    const double m = std::min(app.canvasW, app.canvasH) / 34;
-    return std::clamp(std::log10(wantPx / (km * kKm / kSimLength) / m), -5.0, 5.5);
-}
-
 struct Stop {
     double span;          // width of the picture in AU (0: use zoomFn)
     bool earth;           // stay on Earth

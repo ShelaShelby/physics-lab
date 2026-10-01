@@ -234,6 +234,19 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
 
 }  // namespace
 
+std::string dateLine(const SolarSystem& sys) {
+    const double yrs = sys.t / kYear;
+    std::string epoch = fmt::dateUTC(sys.epochMs);
+    if (sys.jumped) {                                     // a picked date also shows its time of day (Greenwich time)
+        const int64_t m = ((sys.epochMs / 60000) % 1440 + 1440) % 1440;
+        char hm[16];
+        std::snprintf(hm, sizeof hm, ", %02d:%02d UT", static_cast<int>(m / 60), static_cast<int>(m % 60));
+        epoch += hm;
+    }
+    return yrs * 365.25 < 1 ? (sys.jumped ? "Solar System on " : "Solar System today, ") + epoch
+                            : "Solar System on " + fmt::simDate(sys.epochMs, yrs) + "  ·  " + fmt::years(yrs) + " after " + epoch;
+}
+
 void OrbitView::click(double x, double y) {
     if (sel.kind != Selection::None && !cardHidden) { cardHidden = true; return; }   // the first click only closes the info box
     const Hit* best = nullptr;
@@ -857,17 +870,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     {   // top left: the date, which moves on with the simulated time; top right: frames per second
-        const double yrs = sys.t / kYear;
-        std::string epoch = fmt::dateUTC(sys.epochMs);
-        if (sys.jumped) {                                 // a picked date also shows its time of day (Greenwich time)
-            const int64_t m = ((sys.epochMs / 60000) % 1440 + 1440) % 1440;
-            char hm[16];
-            std::snprintf(hm, sizeof hm, ", %02d:%02d UT", static_cast<int>(m / 60), static_cast<int>(m % 60));
-            epoch += hm;
-        }
-        const std::string info = yrs * 365.25 < 1 ? (sys.jumped ? "Solar System on " : "Solar System today, ") + epoch
-                                                  : "Solar System on " + fmt::simDate(sys.epochMs, yrs) + "  ·  " + fmt::years(yrs) + " after " + epoch;
-        T.text(info, 12, 20, 13, kFg, 0, true);
+        T.text(dateLine(sys), 12, 20, 13, kFg, 0, true);
         T.text(fmt::fixed(fps, 0) + " fps", W - 12, 20, 11, kMuted, 1, true);
     }
 }

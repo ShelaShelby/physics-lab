@@ -12,7 +12,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
-    {"0.3", "Orbit Lab complete: watch a planet turn",
+    {"0.3", "Orbit Lab complete: Learn guides, watch a planet turn",
+     "New Learn card with the three guides of the web version, word for word: What am I even looking at? (one page "
+     "with a row of headings to jump to, following your 2D/3D and Sizes choice and the live date), Why do we have "
+     "seasons? (with the lab's own Earth: day length and noon Sun height from pole to pole, and each planet's lean), "
+     "and the Solar System timeline, whose ▶ buttons take the lab there. "
      "New button in the View card: pick a planet and press Slow time to watch it turn; time slows down so one turn "
      "takes about 24 seconds, and the view follows and zooms in on it."},
     {"0.2", "3D view, night sky, belts, spinning planets, Journey and Jump to a date",

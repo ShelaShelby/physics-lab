@@ -125,11 +125,13 @@ std::vector<std::string> sunSpinLines(const SolarSystem& sys, double tspeed, boo
     return lines;
 }
 
-std::vector<std::string> seasonLines(const Body& b, const SolarSystem& sys) {
-    // Earth's season from the real tilt and Earth's place on its orbit
-    if (b.name != "Earth") return {};
+const char* const kSeasonNorth[4] = {"spring", "summer", "autumn", "winter"};
+const char* const kSeasonSouth[4] = {"autumn", "winter", "spring", "summer"};
+
+bool earthSeason(const Body& b, const SolarSystem& sys, EarthSeason& out) {
+    if (b.name != "Earth") return false;
     const OrbitShape o = orbitOf(b);
-    if (!o.bound || o.e > 0.9) return {};
+    if (!o.bound || o.e > 0.9) return false;
     const double GM = kGMSun, TAU = 2 * kPi;
     SpinFrame sf;
     spinFrame("Earth", sys.julianDay(), sf);
@@ -137,7 +139,7 @@ std::vector<std::string> seasonLines(const Body& b, const SolarSystem& sys) {
     const double rn = length(r);
     const Vec3 h = cross(r, v), L = h * (1 / length(h)), nv = cross(P, L);
     const double nn = length(nv);
-    if (nn < 0.05) return {};
+    if (nn < 0.05) return false;
     const Vec3 nx = nv * (1 / nn), m = cross(L, nx), sun = r * (-1 / rn);   // nx: where the Sun is seen from Earth at the March equinox
     const auto wrap = [&](double a) { return std::fmod(std::fmod(a, TAU) + TAU, TAU); };
     const double psi = wrap(std::atan2(dot(sun, m), dot(sun, nx)));          // the Sun's angle from it says the season
@@ -152,17 +154,32 @@ std::vector<std::string> seasonLines(const Body& b, const SolarSystem& sys) {
     const double nu0 = std::atan2(dot(r, m), dot(r, nx)) - th, Mnow = M(nu0), rate = TAU / (o.periodYears * 365.25);   // radians per day
     const int k = std::min(3, static_cast<int>(std::floor(psi / (kPi / 2))));
     const auto at = [&](int j) { return M((j * kPi / 2 - kPi) - th); };
-    const double since = wrap(Mnow - at(k)) / rate, until = wrap(at((k + 1) % 4) - Mnow) / rate;
-    const double dlat = std::asin(std::clamp(dot(sun, P), -1.0, 1.0)) / RAD;   // latitude where the Sun is straight overhead
-    static const char* N[] = {"spring", "summer", "autumn", "winter"};
-    static const char* S[] = {"autumn", "winter", "spring", "summer"};
+    out.k = k;
+    out.since = wrap(Mnow - at(k)) / rate;
+    out.until = wrap(at((k + 1) % 4) - Mnow) / rate;
+    out.dlat = std::asin(std::clamp(dot(sun, P), -1.0, 1.0)) / RAD;
+    out.distAU = rn / kAU;
+    return true;
+}
+
+std::vector<std::string> seasonLines(const Body& b, const SolarSystem& sys) {
+    EarthSeason q;
+    if (!earthSeason(b, sys, q)) return {};
     const auto dy = [](double x) { return x < 0.5 ? std::string("today") : std::llround(x) == 1 ? std::string("1 day ago") : std::to_string(std::llround(x)) + " days ago"; };
     const auto dy2 = [](double x) { return std::llround(x) <= 0 ? std::string("today") : std::llround(x) == 1 ? std::string("in 1 day") : "in " + std::to_string(std::llround(x)) + " days"; };
-    std::string capN = N[k];
+    std::string capN = kSeasonNorth[q.k];
     capN[0] = static_cast<char>(std::toupper(capN[0]));
-    return {std::string("Northern ") + N[k] + ", southern " + S[k],
-            capN + " began " + dy(since) + "; " + N[(k + 1) % 4] + " starts " + dy2(until),
-            std::fabs(dlat) < 0.05 ? "Sun straight overhead on the equator" : "Sun straight overhead at " + fmt::fixed(std::fabs(dlat), 1) + "° " + (dlat > 0 ? "north" : "south")};
+    return {std::string("Northern ") + kSeasonNorth[q.k] + ", southern " + kSeasonSouth[q.k],
+            capN + " began " + dy(q.since) + "; " + kSeasonNorth[(q.k + 1) % 4] + " starts " + dy2(q.until),
+            std::fabs(q.dlat) < 0.05 ? "Sun straight overhead on the equator" : "Sun straight overhead at " + fmt::fixed(std::fabs(q.dlat), 1) + "° " + (q.dlat > 0 ? "north" : "south")};
+}
+
+double axisTilt(const Body& b, const SolarSystem& sys) {
+    SpinFrame f;
+    if (!spinFrame(b.name, sys.julianDay(), f)) return 0;
+    const Vec3 L = cross(b.pos, b.vel);
+    const double sg = spinRateDegPerDay(b.name) < 0 ? -1 : 1;
+    return std::acos(std::clamp(sg * dot(f.P, L) / std::max(length(L), 1e-300), -1.0, 1.0)) / RAD;
 }
 
 }  // namespace orbit
