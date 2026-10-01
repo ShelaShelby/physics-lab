@@ -1,0 +1,50 @@
+# Builds the native Windows version of Physics Lab (native/) and uploads PhysicsLab.exe
+# as a downloadable artifact. Runs only when started by hand (Actions tab → Run workflow)
+# or on a push to the `native` branch that changes native/ or this file, to save build minutes.
+name: Native Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [native]
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-windows.yml'
+
+# a newer push cancels a build that is still running, so minutes are not spent twice
+concurrency:
+  group: native-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            native
+            .github
+
+      - name: Configure (CMake, Visual Studio, 64-bit)
+        run: cmake -S native -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Physics unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Collect files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item build/Release/PhysicsLab.exe out/
+          Copy-Item native/README.md out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhysicsLab-windows-x64
+          path: out/
+          retention-days: 30

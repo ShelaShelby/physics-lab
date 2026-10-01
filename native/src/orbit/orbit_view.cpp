@@ -1,0 +1,552 @@
+#include "orbit_view.h"
+
+#include <algorithm>
+#include <array>
+#include <cfloat>
+#include <cmath>
+
+#include "format.h"
+#include "imgui.h"
+#include "kepler.h"
+#include "units.h"
+
+namespace orbit {
+
+using namespace units;
+using render::Color;
+using render::hexColor;
+using render::rgba;
+
+namespace {
+
+// Colours of the dark picture (the web version with the night sky on)
+const Color kBg = rgba(4, 6, 13);
+const Color kFg = rgba(230, 235, 245);
+const Color kMuted = rgba(154, 166, 189);
+const Color kCard = rgba(11, 15, 26);
+const Color kLine = {1, 1, 1, 0.22f};
+const Color kHL = hexColor("#ff2bd6");   // the "look here" pink: nothing else in the picture is this colour
+
+// The Sun's colour from its surface temperature (5,772 K), as in the web's starColor()
+Color starColor(double T) {
+    static const double st[][4] = {{2500, 217, 72, 43}, {3800, 238, 138, 46}, {5000, 245, 185, 66}, {5800, 247, 208, 72}, {7500, 240, 230, 170}, {10000, 200, 220, 255}};
+    if (T <= st[0][0]) return rgba(217, 72, 43);
+    for (int i = 1; i < 6; i++)
+        if (T <= st[i][0]) {
+            const double f = (T - st[i - 1][0]) / (st[i][0] - st[i - 1][0]);
+            int c[3];
+            for (int k = 0; k < 3; k++) c[k] = static_cast<int>(std::lround(st[i - 1][k + 1] + f * (st[i][k + 1] - st[i - 1][k + 1])));
+            return rgba(c[0], c[1], c[2]);
+        }
+    return rgba(200, 220, 255);
+}
+
+// Liang–Barsky: the part of a segment inside a rectangle. Zoomed far in, pieces of a
+// trail or an orbit are millions of points long, so only the visible part is drawn.
+bool clipSeg(double x0, double y0, double x1, double y1, double xa, double ya, double xb, double yb, double out[4]) {
+    const double dx = x1 - x0, dy = y1 - y0;
+    if (x0 >= xa && x0 <= xb && x1 >= xa && x1 <= xb && y0 >= ya && y0 <= yb && y1 >= ya && y1 <= yb) {
+        out[0] = x0; out[1] = y0; out[2] = x1; out[3] = y1;
+        return true;
+    }
+    double t0 = 0, t1 = 1;
+    for (int k = 0; k < 4; k++) {
+        const double p = k == 0 ? -dx : k == 1 ? dx : k == 2 ? -dy : dy;
+        const double q = k == 0 ? x0 - xa : k == 1 ? xb - x0 : k == 2 ? y0 - ya : yb - y0;
+        if (p == 0) { if (q < 0) return false; }
+        else {
+            const double r = q / p;
+            if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+            else { if (r < t0) return false; if (r < t1) t1 = r; }
+        }
+    }
+    out[0] = x0 + t0 * dx; out[1] = y0 + t0 * dy; out[2] = x0 + t1 * dx; out[3] = y0 + t1 * dy;
+    return true;
+}
+
+// Draws a polyline clipped to the picture (with a 20-point margin), optionally dashed.
+struct LinePen {
+    render::Renderer2D& r;
+    double W, H, width;
+    Color c;
+    double dashOn = 0, dashOff = 0;   // dash lengths in points (0 = solid)
+    bool havePrev = false;
+    double px = 0, py = 0, dashPos = 0;
+
+    void to(double x, double y) {
+        if (havePrev) {
+            double cl[4];
+            if (clipSeg(px, py, x, y, -20, -20, W + 20, H + 20, cl)) {
+                if (dashOn <= 0) r.line(cl[0], cl[1], cl[2], cl[3], width, c);
+                else dashed(cl[0], cl[1], cl[2], cl[3]);
+            }
+        }
+        px = x; py = y; havePrev = true;
+    }
+    void dashed(double x0, double y0, double x1, double y1) {
+        const double len = std::hypot(x1 - x0, y1 - y0), period = dashOn + dashOff;
+        double s = 0;
+        while (s < len) {
+            const double inPeriod = std::fmod(dashPos, period);
+            const double step = std::min(len - s, inPeriod < dashOn ? dashOn - inPeriod : period - inPeriod);
+            if (inPeriod < dashOn) r.line(x0 + (x1 - x0) * s / len, y0 + (y1 - y0) * s / len, x0 + (x1 - x0) * (s + step) / len, y0 + (y1 - y0) * (s + step) / len, width, c);
+            s += step; dashPos += step;
+        }
+    }
+};
+
+// A circle far bigger than the picture: is the picture inside it, outside it, or which
+// short stretch of angles (screen angles, y down) can be seen? As in the web's circWin().
+enum class Win { All, In, Out, Arc };
+Win circWin(double W, double H, double x, double y, double r, double& a0, double& a1) {
+    const double dg = 1.5 * std::hypot(W, H) / 2 + 20, d = std::hypot(x - W / 2, y - H / 2);
+    if (d + dg < r) return Win::In;
+    if (d - dg > r) return Win::Out;
+    const double th = std::atan2(H / 2 - y, W / 2 - x), dl = std::min(kPi, std::asin(std::min(1.0, dg / r)) + 0.02);
+    a0 = th - dl; a1 = th + dl;
+    return Win::Arc;
+}
+std::string fmtLy(double v) { return v < 10 ? fmt::fixed(v, 2) : v < 100 ? fmt::fixed(v, 1) : fmt::commas(std::stod(fmt::precision(v, 3))); }
+
+bool bigR(double W, double H, double r) { return r > 6 * (1.5 * std::hypot(W, H) / 2 + 20); }
+
+// Text drawn with Dear ImGui on top of the picture. Positions are in picture points with
+// y at the text's baseline, like the canvas fillText() of the web version.
+struct TextPainter {
+    ImDrawList* dl;
+    ImFont* font;
+    double originX, originY, s;
+
+    double width(const std::string& t, double size) const {
+        return font->CalcTextSizeA(static_cast<float>(size * s), FLT_MAX, 0, t.c_str()).x / s;
+    }
+    // align: 0 left, 0.5 centre
+    void text(const std::string& t, double x, double y, double size, Color c, double align = 0.5, bool halo = true, Color haloColor = {4 / 255.f, 6 / 255.f, 13 / 255.f, 0.85f}) {
+        const float px = static_cast<float>(size * s);
+        const float ascent = font->GetFontBaked(px)->Ascent;
+        const double w = width(t, size);
+        const float X = static_cast<float>(originX + (x - w * align) * s), Y = static_cast<float>(originY + y * s) - ascent;
+        if (halo) {                                   // a thin dark edge so text stays readable on anything
+            const ImU32 hc = ImGui::ColorConvertFloat4ToU32(ImVec4(haloColor.r, haloColor.g, haloColor.b, haloColor.a * c.a));
+            const float o = static_cast<float>(1.2 * s);
+            for (int k = 0; k < 8; k++) {
+                const float a = k * 0.785398f;
+                dl->AddText(font, px, ImVec2(X + o * std::cos(a), Y + o * std::sin(a)), hc, t.c_str());
+            }
+        }
+        dl->AddText(font, px, ImVec2(X, Y), ImGui::ColorConvertFloat4ToU32(ImVec4(c.r, c.g, c.b, c.a)), t.c_str());
+    }
+};
+
+}  // namespace
+
+void OrbitView::click(double x, double y) {
+    if (sel.kind != Selection::None && !cardHidden) { cardHidden = true; return; }   // the first click only closes the info box
+    const Hit* best = nullptr;
+    double bd = 1e9;
+    for (const Hit& h : hits_) {
+        const double d = std::hypot(x - h.x, y - h.y);
+        if (d < std::max(h.r + 6, 12.0) && d < bd) { best = &h; bd = d; }
+    }
+    sel = best ? best->sel : Selection{};
+    cardHidden = false;
+    if (!best) follow = false;
+}
+
+void OrbitView::drag(double dx, double dy) {
+    ox += dx; oy += dy;
+    follow = false;
+}
+
+void OrbitView::zoomChanged(double oldZoom, double newZoom) {   // zoom about the middle of the picture
+    const double f = std::pow(10.0, newZoom - oldZoom);
+    ox *= f; oy *= f;
+}
+
+void OrbitView::resetView() { ox = oy = 0; follow = false; }
+
+void OrbitView::select(Selection s, bool f) {
+    sel = s; follow = f; cardHidden = false;
+    ox = oy = 0;
+}
+
+void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, double originY, double uiScale,
+                     const SolarSystem& sys, const ViewSettings& set, double W, double H, double fps) {
+    TextPainter T{dl, ImGui::GetFont(), originX, originY, uiScale};
+    const double px = std::min(W, H) / 34 * std::pow(10.0, set.zoom) / kSimLength;   // points per metre
+    const bool TRUE_SCALE = set.trueScale;
+    const Vec3 bc = sys.barycentre();                     // everything is drawn around the barycentre, so the Sun is the one that wobbles
+
+    // the selected thing may be gone (removed, or switched off)
+    const auto visible = [&](const Body& b) { return (b.type != BodyKind::Dwarf || set.dwarfs) && (b.type != BodyKind::Comet || set.comets); };
+    {
+        bool ok = true;
+        if (sel.kind == Selection::Body || sel.kind == Selection::Moon) {
+            const Body* b = findBody(sys, sel.bodyId);
+            ok = b && visible(*b) && (sel.kind != Selection::Moon || (set.moons && sel.moon < static_cast<int>(b->moons.size())));
+        }
+        if (!ok) { sel = Selection{}; follow = false; }
+    }
+
+    // screen position of a point (metres), without and with the view offset
+    const auto base = [&](double x, double y) { return std::pair<double, double>(W / 2 + (x - bc.x) * px, H / 2 - (y - bc.y) * px); };
+    if (follow && sel.kind != Selection::None) {          // keep the followed object in the middle
+        Vec3 t;
+        if (sel.kind == Selection::Bary) t = bc;
+        else if (sel.kind == Selection::Body || sel.kind == Selection::Moon) { const Body* b = findBody(sys, sel.bodyId); if (b) t = b->pos; }
+        const auto q = base(t.x, t.y);
+        ox = W / 2 - q.first; oy = H / 2 - q.second;
+    }
+    const auto proj = [&](double x, double y) { auto q = base(x, y); q.first += ox; q.second += oy; return q; };
+
+    R.rect(0, 0, W, H, kBg);
+    hits_.clear();
+
+    // the Sun as a star of 1 solar mass (the web's starProps for GM = 100)
+    const double hzIn = 0.95, hzOut = 1.67;               // habitable zone, AU
+    const Color sunCol = starColor(5772);
+    const auto star = proj(0, 0);
+    const auto ringPoints = [&](double cx, double cy, double rPx, std::vector<std::pair<double, double>>& pts) {   // a circle on screen (only the visible bit of a giant one)
+        pts.clear();
+        double a0 = 0, a1 = 2 * kPi;
+        if (bigR(W, H, rPx)) {
+            const Win w = circWin(W, H, cx, cy, rPx, a0, a1);
+            if (w != Win::Arc) return;
+        }
+        const int n = (a1 - a0 < 6.2) ? static_cast<int>(std::min(400.0, std::max(8.0, std::ceil((a1 - a0) * rPx / 6))))
+                                      : static_cast<int>(std::min(720.0, std::max(48.0, std::ceil(rPx / 4))));
+        for (int i = 0; i <= n; i++) { const double a = a0 + (a1 - a0) * i / n; pts.push_back({cx + rPx * std::cos(a), cy + rPx * std::sin(a)}); }
+    };
+    std::vector<std::pair<double, double>> pts;
+    const auto hiRing = [&](double x, double y, double r) {   // a pink ring with a dark edge, shows on any background
+        ringPoints(x, y, r, pts);
+        for (int pass = 0; pass < 2; pass++) {
+            LinePen pen{R, W, H, pass ? 3.0 : 6.0, pass ? kHL : Color{0, 0, 0, 0.65f}};
+            for (auto& p : pts) pen.to(p.first, p.second);
+        }
+    };
+
+    {   // habitable zone: a faint green band
+        const Color band = {70 / 255.f, 180 / 255.f, 100 / 255.f, 0.13f};
+        if (bigR(W, H, hzOut * kAU * px)) {               // zoomed far in: draw just the strip of it that crosses the picture
+            const double X0 = -ox / px + bc.x, Y0 = oy / px + bc.y, r0 = std::max(std::hypot(X0, Y0), 1e-9);
+            const double nx = X0 / r0, ny = -Y0 / r0, tx = -ny, ty = nx, cx0 = W / 2, cy0 = H / 2, L = 4000;
+            const double dI = std::clamp((hzIn * kAU - r0) * px, -L, L), dO = std::clamp((hzOut * kAU - r0) * px, -L, L);
+            if (dO > dI) {
+                const double ax = cx0 + nx * dI - tx * L, ay = cy0 + ny * dI - ty * L, bx = cx0 + nx * dI + tx * L, by = cy0 + ny * dI + ty * L;
+                const double cx = cx0 + nx * dO + tx * L, cy = cy0 + ny * dO + ty * L, ex = cx0 + nx * dO - tx * L, ey = cy0 + ny * dO - ty * L;
+                R.triangle(ax, ay, band, bx, by, band, cx, cy, band);
+                R.triangle(ax, ay, band, cx, cy, band, ex, ey, band);
+            }
+        } else {
+            const double ri = hzIn * kAU * px, ro = hzOut * kAU * px;
+            for (int i = 0; i < 96; i++) {
+                const double t0 = i / 96.0 * 2 * kPi, t1 = (i + 1) / 96.0 * 2 * kPi;
+                const double ax = star.first + ro * std::cos(t0), ay = star.second - ro * std::sin(t0), bx = star.first + ro * std::cos(t1), by = star.second - ro * std::sin(t1);
+                const double cx = star.first + ri * std::cos(t1), cy = star.second - ri * std::sin(t1), ex = star.first + ri * std::cos(t0), ey = star.second - ri * std::sin(t0);
+                R.triangle(ax, ay, band, bx, by, band, cx, cy, band);
+                R.triangle(ax, ay, band, cx, cy, band, ex, ey, band);
+            }
+        }
+        const auto q = proj(hzOut * kAU * std::cos(2.4), hzOut * kAU * std::sin(2.4));
+        if (q.second > 60 && q.second < H + 20 && q.first > -60 && q.first < W + 60 && hzOut * kAU * px > 70)
+            T.text("habitable zone", q.first, q.second - 3, 10, hexColor("#3d9a5c", 0.85f), 0.5, true);
+    }
+
+    {   // distance rings, labelled in AU
+        static const double steps[] = {0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000,
+                                       1e6, 2e6, 5e6, 1e7, 2e7, 5e7, 1e8, 2e8, 5e8, 1e9, 2e9, 5e9, 1e10};
+        double stepAU = 1e10;
+        for (double v : steps) if (v * kAU * px >= 55) { stepAU = v; break; }
+        const double diag = std::hypot(W, H);
+        for (int k = 1; k * stepAU * kAU * px <= diag && k < 60; k++) {
+            const double Rm = k * stepAU * kAU;
+            LinePen pen{R, W, H, 1.0, kMuted.withAlpha(0.22f)};
+            for (int i = 0; i <= 96; i++) { const double t = i / 96.0 * 2 * kPi; const auto q = proj(Rm * std::cos(t), Rm * std::sin(t)); pen.to(q.first, q.second); }
+            const auto q = proj(Rm * std::cos(-0.8), Rm * std::sin(-0.8));
+            const double au = k * stepAU;
+            const double v = std::round(au * 10) / 10;
+            std::string label = (v == std::floor(v) ? fmt::commas(v) : fmt::fixed(v, 1)) + " AU";
+            if (au >= 30000) label += " · " + fmtLy(au / kLightYearAU) + " light years";
+            T.text(label, q.first, q.second + 3, 10, kMuted.withAlpha(0.75f));
+        }
+    }
+
+    std::vector<const Body*> vis;
+    for (const Body& b : sys.bodies) if (visible(b)) vis.push_back(&b);
+
+    for (const Body* bp : vis) {   // trails: a short tail behind each object (or every lap, with Full orbit trails)
+        const Body& b = *bp;
+        const auto& tr = b.trail;
+        const int n = static_cast<int>(tr.size());
+        if (n == 0) continue;
+        int st0 = 0;
+        if (!set.fullTrails && n > 1) {                   // only the last stretch, about 0.6 of the distance to the Sun
+            const double lim = 0.6 * std::max(length(b.pos), kSimLength);
+            double acc = length(b.pos - tr[n - 1]);
+            st0 = n - 1;
+            while (st0 > 0 && acc < lim) { acc += length(tr[st0] - tr[st0 - 1]); st0--; }
+        }
+        const int nn = n - st0;
+        const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
+        for (int part = 0; part < 4; part++) {           // fades in 4 steps, oldest faintest
+            const int i0 = st0 + part * nn / 4, i1 = std::min(n, st0 + (part + 1) * nn / 4 + 1);
+            LinePen pen{R, W, H, on ? 2.0 : 1.5, hexColor(b.color, 0.15f + 0.2f * part)};
+            for (int i = i0; i < i1; i++) { const auto q = proj(tr[i].x, tr[i].y); pen.to(q.first, q.second); }
+            if (part == 3) { const auto q = proj(b.pos.x, b.pos.y); pen.to(q.first, q.second); }   // always end at the body itself
+        }
+    }
+
+    std::vector<Vec3> cpts;
+    for (const Body* bp : vis) if (bp->comet) {         // the comets' whole orbits, thin and dotted
+        const bool on = sel.kind == Selection::Body && sel.bodyId == bp->id;
+        cometLocalPath(*bp->comet, sys.julianDay(), px, cpts);
+        LinePen pen{R, W, H, on ? 1.6 : 1.0, hexColor(bp->color, on ? 0.85f : 0.35f), 2, 4};
+        for (const Vec3& p : cpts) { const auto q = proj(p.x, p.y); pen.to(q.first, q.second); }
+    }
+
+    // ---- the Sun ----
+    struct Label { std::string name; double x, y; bool selected, small, force; };
+    std::vector<Label> labels;
+    const double sr = TRUE_SCALE ? kSunRadius * px : std::max(kCrashRadius * px, 3.5);
+    const bool sunTiny = TRUE_SCALE && sr < 2.5;
+    const double srd = TRUE_SCALE ? std::max(sr, 5.0) : sr;
+    R.glow(star.first, star.second, sr * 3, sunCol);
+    R.sunDisc(star.first, star.second, sr, sunCol);
+    if (sunTiny) R.ring(star.first, star.second, 7, 1.6, sunCol.withAlpha(0.9f));   // smaller than a pixel: a ring shows where it is
+    if (sel.kind == Selection::Star) hiRing(star.first, star.second, srd + (sunTiny ? 8 : 6));
+    hits_.push_back({{Selection::Star}, star.first, star.second, std::max(srd, sunTiny ? 10.0 : 0.0)});
+
+    {   // the barycentre: a crosshair in a ring (hidden while it would sit on the Sun's centre)
+        const auto bq = proj(bc.x, bc.y);
+        const bool on = sel.kind == Selection::Bary;
+        if (std::hypot(bq.first - star.first, bq.second - star.second) > 5 || on) {
+            for (int pass = 0; pass < 2; pass++) {
+                const Color c = pass ? (on ? kHL : Color{1, 1, 1, 1}) : Color{0, 0, 0, 0.6f};
+                const double w = pass ? 1.8 : 4;
+                R.ring(bq.first, bq.second, 6, w, c);
+                R.line(bq.first - 10, bq.second, bq.first + 10, bq.second, w, c);
+                R.line(bq.first, bq.second - 10, bq.first, bq.second + 10, w, c);
+            }
+            hits_.push_back({{Selection::Bary}, bq.first, bq.second, 12});
+            labels.push_back({"Barycentre", bq.first, bq.second + 22, on, false, false});
+        }
+    }
+
+    // ---- planets, dwarf planets and comets (far ones first) ----
+    std::vector<const Body*> order = vis;
+    std::stable_sort(order.begin(), order.end(), [](const Body* a, const Body* b) { return a->pos.z < b->pos.z; });
+    const double grow = !TRUE_SCALE && set.zoom > 0 ? std::min(3.2, std::pow(10.0, 0.5 * set.zoom)) : 1;   // Easy to see: a little bigger as you zoom in
+    const auto drawnRadius = [&](const Body& b) { return TRUE_SCALE ? b.radius * px : (3 + 1.6 * std::sqrt(b.radius / kEarthRadius)) * grow; };
+    for (const Body* bp : order) {
+        const Body& b = *bp;
+        const auto q = proj(b.pos.x, b.pos.y);
+        const double rad = drawnRadius(b);
+        const bool tiny = TRUE_SCALE && rad < 2.5;
+        const double rd = tiny ? 5 : rad;
+        const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
+        if (b.comet) {   // a glowing head and two tails (blue gas tail straight, yellow dust tail curved), pointing away from the Sun
+            const double r = length(b.pos), rA = r / kAU, act = std::clamp((4 - rA) / 3.2, 0.0, 1.0);
+            const double L = b.comet->tail * act * std::min(1.5, 1 / rA) * kAU;   // tail length, m
+            const Vec3 u = b.pos * (1 / r);
+            const double vm = std::max(length(b.vel), 1e-9);
+            if (L * px > 4) {
+                const Vec3 dirs[2] = {u, u - b.vel * (0.7 / vm)};
+                const double lens[2] = {1, 0.8}, wds[2] = {0.05, 0.09};
+                const Color cols[2] = {rgba(140, 205, 255), rgba(255, 232, 180)};
+                for (int k = 0; k < 2; k++) {
+                    const Vec3 d = dirs[k] * (1 / std::max(length(dirs[k]), 1e-12));
+                    const auto e = proj(b.pos.x + d.x * L * lens[k], b.pos.y + d.y * L * lens[k]);
+                    const double ex = e.first - q.first, ey = e.second - q.second, ln = std::hypot(ex, ey);
+                    if (ln < 3) continue;
+                    const double nx = -ey / ln, ny = ex / ln, w2 = std::min(14.0, ln * wds[k] + 2);
+                    const Color c0 = cols[k].withAlpha(0.85f), c1 = cols[k].withAlpha(0);
+                    R.triangle(q.first + nx, q.second + ny, c0, e.first + nx * w2, e.second + ny * w2, c1, e.first - nx * w2, e.second - ny * w2, c1);
+                    R.triangle(q.first + nx, q.second + ny, c0, e.first - nx * w2, e.second - ny * w2, c1, q.first - nx, q.second - ny, c0);
+                }
+            }
+            const double cr = 3 + 8 * act;
+            R.fadeDisc(q.first, q.second, cr, Color{1, 1, 1, static_cast<float>(0.5 + 0.4 * act)});
+            R.disc(q.first, q.second, std::max(1.3, rad), Color{1, 1, 1, 1});
+            R.ring(q.first, q.second, 6 + 3 * act, 1.6, hexColor(b.color, 0.9f));
+            if (on) hiRing(q.first, q.second, 10 + 3 * act);
+            labels.push_back({b.name, q.first, q.second - 13 - 3 * act, on, false, false});
+            hits_.push_back({{Selection::Body, b.id}, q.first, q.second, 12});
+            continue;
+        }
+        const double dx = star.first - q.first, dy = star.second - q.second, dlen = std::max(std::hypot(dx, dy), 1e-9);
+        if (q.first + rad > -2 && q.first - rad < W + 2 && q.second + rad > -2 && q.second - rad < H + 2)
+            R.sphere(q.first, q.second, rad, hexColor(b.color), dx / dlen, dy / dlen);   // lit from the Sun
+        if (tiny) R.ring(q.first, q.second, 5, 1.6, hexColor(b.color, 0.9f));
+        if (on) hiRing(q.first, q.second, rd + (tiny ? 5 : 6));
+        labels.push_back({b.name, q.first, q.second - rd - 5, on, false, false});
+        hits_.push_back({{Selection::Body, b.id}, q.first, q.second, std::max(rd, tiny ? 9.0 : 0.0)});
+    }
+
+    // ---- moons: drawn on their real Kepler ellipse, but much wider than real until you zoom far in ----
+    if (set.moons) for (const Body* bp : order) {
+        const Body& b = *bp;
+        if (b.moons.empty()) continue;
+        const double rad = drawnRadius(b), rKm = b.radius / kKm, distPx = length(b.pos) * px;
+        std::vector<double> disp;
+        double maxDisp = 0;
+        for (const Moon& m : b.moons) { disp.push_back(rad + 7 + 13 * std::log(std::max(m.data->aKm / rKm, 1.2))); maxDisp = std::max(maxDisp, disp.back()); }
+        const bool here = (sel.kind == Selection::Body || sel.kind == Selection::Moon) && sel.bodyId == b.id;
+        if (!here && maxDisp > 0.3 * distPx) continue;    // hidden while it would crowd the map: zoom in or click the planet
+        const double dps = kSimTime / kDay * std::pow(10.0, set.tspeed);   // simulated days per real second
+        const auto pc = proj(b.pos.x, b.pos.y);
+        for (std::size_t j = 0; j < b.moons.size(); j++) {
+            const MoonData& m = *b.moons[j].data;
+            const double aM = m.aKm * kKm;                // real distance, m
+            const double dW = std::max(disp[j] / px, TRUE_SCALE ? aM : 0.0);   // drawn distance, m
+            const double tl = m.tiltDeg * kPi / 180, ct = std::cos(tl);
+            const bool fast = dps / m.periodDays > 8;     // a lap in under ~8 frames would flicker: the whole orbit is lit instead
+            const bool on = sel.kind == Selection::Moon && sel.bodyId == b.id && sel.moon == static_cast<int>(j);
+            // mean anomaly grows by 2π per period; Kepler's equation by 3 Newton steps (moon orbits are nearly round)
+            const double Mn = b.moons[j].phase + (fast ? 0 : (m.retrograde ? -1 : 1) * 2 * kPi * (sys.t / kDay) / m.periodDays);
+            double E = Mn + m.e * std::sin(Mn);
+            for (int i = 0; i < 3; i++) E += (Mn - (E - m.e * std::sin(E))) / (1 - m.e * std::cos(E));
+            const double xr = std::cos(E) - m.e, yr = std::sqrt(1 - m.e * m.e) * std::sin(E), sgn = m.retrograde ? -1 : 1;
+            {   // the orbit (seen from above, the tilted circle looks like an ellipse)
+                const double rPx = dW * px;
+                double t0 = 0, t1 = 2 * kPi;
+                int NN = static_cast<int>(std::min(720.0, std::max(48.0, std::ceil(rPx / 4))));
+                bool drawIt = true;
+                if (bigR(W, H, rPx)) {                    // a giant orbit: only the visible stretch is worked out
+                    double a0, a1;
+                    const Win w = circWin(W, H, pc.first, pc.second, rPx, a0, a1);
+                    if (w != Win::Arc) drawIt = false;
+                    else { t0 = -a1; t1 = -a0; NN = static_cast<int>(std::min(400.0, std::max(8.0, std::ceil((t1 - t0) * rPx / 6)))); }
+                }
+                if (drawIt) {
+                    for (int pass = 0; pass < (fast ? 2 : 1); pass++) {
+                        const Color c = pass ? (on ? kHL : hexColor(b.color)).withAlpha(0.55f) : hexColor(b.color, on ? 0.55f : 0.28f);
+                        LinePen pen{R, W, H, pass ? 3.0 : 1.0, c};
+                        for (int i = 0; i <= NN; i++) {
+                            const double t = t0 + (t1 - t0) * i / NN, Y = dW * std::sin(t);
+                            const auto qq = proj(b.pos.x + dW * std::cos(t), b.pos.y + Y * ct);
+                            pen.to(qq.first, qq.second);
+                        }
+                    }
+                }
+            }
+            const double Y = dW * yr * sgn;
+            const auto mp = proj(b.pos.x + dW * xr, b.pos.y + Y * ct);
+            const double mr = TRUE_SCALE ? m.radiusKm * kKm * px : 1.6 + 0.9 * std::max(0.0, std::log10(m.radiusKm / 50));
+            const bool mtiny = TRUE_SCALE && mr < 1.2;
+            const double md = mtiny ? 3.5 : mr;
+            if (!fast) {
+                const double dx = star.first - mp.first, dy = star.second - mp.second, dlen = std::max(std::hypot(dx, dy), 1e-9);
+                R.disc(mp.first, mp.second, mr + 0.8, kCard);
+                R.sphere(mp.first, mp.second, mr, hexColor("#a4a4a4"), dx / dlen, dy / dlen);
+                if (mtiny) R.ring(mp.first, mp.second, 3.5, 1.4, hexColor("#9b9b9b", 0.9f));
+                if (on) hiRing(mp.first, mp.second, md + 5);
+            }
+            exag_[{b.id, static_cast<int>(j)}] = dW / aM;
+            hits_.push_back({{Selection::Moon, b.id, static_cast<int>(j)}, mp.first, mp.second, std::max(md, mtiny ? 9.0 : 0.0)});
+            if (here) labels.push_back({m.name, mp.first, mp.second - md - 4, on, true, false});
+        }
+    }
+
+    // ---- labels: the selected one first; crowded labels are skipped ----
+    {
+        std::vector<std::array<double, 3>> placed;        // x, y, width of labels already drawn
+        const auto put = [&](const std::string& t, double x, double y, double size, Color c, bool force) {
+            const double wd = T.width(t, size) + 4;
+            if (!force)
+                for (const auto& o : placed)
+                    if (std::fabs(o[0] - x) < (o[2] + wd) / 2 && std::fabs(o[1] - y) < 13) return;
+            placed.push_back({x, y, wd});
+            T.text(t, x, y, size, c);
+        };
+        put("Sun · 1 solar mass (M☉)", star.first, star.second - srd - (sunTiny ? 11 : 8), 12, kFg, true);
+        std::stable_sort(labels.begin(), labels.end(), [](const Label& a, const Label& b) { return a.selected > b.selected; });
+        for (const Label& l : labels) put(l.name, l.x, l.y, l.small ? 10 : 12, kFg, l.selected || l.force);
+    }
+
+    // ---- info card, bottom right (the first click closes it) ----
+    double gizY = H - 44, barY = H - 24;                  // the x y axes and the scale bar sit above the card when there is one
+    Card card;
+    CardOptions copt;
+    copt.tspeed = set.tspeed; copt.trueScale = TRUE_SCALE; copt.moonsOn = set.moons;
+    if (sel.kind == Selection::Moon) { auto it = exag_.find({sel.bodyId, sel.moon}); copt.moonExaggeration = it == exag_.end() ? 1 : it->second; }
+    if (sel.kind != Selection::None && !cardHidden && cardText(sys, sel, copt, card)) {
+        const double k = std::max(0.74, std::min(1.0, W / 620)), LH = 13.5 * k, F = 10.5 * k, FT = 11 * k;
+        double cw = T.width(card.title, FT);
+        for (const auto& l : card.lines) cw = std::max(cw, T.width(l, F));
+        cw = std::min(cw + 20 * k, W - 16);
+        const double ch = 26 * k + LH * (card.lines.size() + 1) + 6 * k, x0 = W - cw - 8, y0 = H - ch - 8;
+        gizY = y0 - 30; barY = y0 - 26;
+        // drawn with Dear ImGui so it sits above the picture's text
+        const ImVec2 a(static_cast<float>(originX + x0 * uiScale), static_cast<float>(originY + y0 * uiScale));
+        const ImVec2 b(static_cast<float>(originX + (x0 + cw) * uiScale), static_cast<float>(originY + (y0 + ch) * uiScale));
+        dl->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(ImVec4(kCard.r, kCard.g, kCard.b, 0.84f)), static_cast<float>(9 * k * uiScale));
+        dl->AddRect(a, b, ImGui::ColorConvertFloat4ToU32(ImVec4(kLine.r, kLine.g, kLine.b, kLine.a)), static_cast<float>(9 * k * uiScale));
+        T.text(card.title, x0 + 10 * k, y0 + 17 * k, FT, kFg, 0, false);
+        for (std::size_t i = 0; i < card.lines.size(); i++) T.text(card.lines[i], x0 + 10 * k, y0 + 32 * k + LH * i, F, kMuted, 0, false);
+        T.text("click anywhere to close this box", x0 + 10 * k, y0 + 32 * k + LH * card.lines.size() + 2, 9.5 * k, kMuted.withAlpha(0.7f), 0, false);
+    }
+
+    {   // scale bar: how long a round distance is at this zoom, and how long light takes to cross it
+        const double kmPerPt = 1 / (px * kKm);
+        const double raw = 100 * kmPerPt, pw = std::pow(10.0, std::floor(std::log10(raw))), mm = raw / pw;
+        const double km = pw * (mm >= 5 ? 5 : mm >= 2 ? 2 : 1), len = km / kmPerPt, au = km * kKm / kAU, sec = km * kKm / kLightSpeed;
+        const auto nf = [](double v) { return v >= 1 ? fmt::commas(v) : fmt::precision(v, 1); };
+        const auto pl = [&](double v, const char* u) { return nf(v) + " " + u + (std::llround(v) == 1 && v >= 0.95 ? "" : "s"); };
+        const std::string main = km < 1e6 ? nf(km) + " km" : au < 0.05 ? nf(km / 1e6) + " million km" : nf(au) + " AU";
+        const std::string lt = sec < 1 ? nf(sec * 1000) + " ms" : sec < 60 ? pl(sec, "second") : sec < 3600 ? pl(sec / 60, "minute")
+                             : sec < 86400 ? pl(sec / 3600, "hour") : sec < 86400 * 365.25 ? pl(sec / 86400, "day") : fmt::precision(sec / 86400 / 365.25, 2) + " years";
+        const double spanAU = W / px / kAU, spanLy = spanAU / kLightYearAU;
+        if (spanAU >= 1500) {                             // zoomed far out: say where you are
+            const std::string sp2 = spanLy >= 1 ? fmtLy(spanLy) + " light years" : fmt::commas(std::stod(fmt::precision(spanAU, 2))) + " AU (" + fmt::fixed(spanLy, 2) + " light years)";
+            const std::string msg = "Zoomed far out: this picture is about " + sp2 + " across, so the whole Solar System is now just the ringed dot (the Sun).";
+            // wrap to the picture width
+            const std::size_t maxChars = static_cast<std::size_t>(std::max(24.0, std::floor((W - 28) / 5.6)));
+            std::vector<std::string> lines; std::string cur, word;
+            for (char ch : msg + " ") {
+                if (ch != ' ') { word += ch; continue; }
+                const std::string t = cur.empty() ? word : cur + " " + word;
+                if (t.size() > maxChars && !cur.empty()) { lines.push_back(cur); cur = word; } else cur = t;
+                word.clear();
+            }
+            if (!cur.empty()) lines.push_back(cur);
+            for (std::size_t i = 0; i < lines.size(); i++) T.text(lines[i], 14, barY - 34 - (lines.size() - 1 - i) * 14.0, 11, kFg, 0, true, kCard);
+        }
+        const double x0 = 14, y = barY;
+        for (int pass = 0; pass < 2; pass++) {
+            const Color c = pass ? kFg : kCard;
+            const double w = pass ? 1.6 : 5;
+            R.line(x0, y - 4, x0, y + 4, w, c);
+            R.line(x0, y, x0 + len, y, w, c);
+            R.line(x0 + len, y - 4, x0 + len, y + 4, w, c);
+        }
+        T.text(main, x0, y - 8, 11, kFg, 0, true, kCard);
+        T.text("light takes " + lt, x0, y + 15, 10, kMuted, 0, true, kCard);
+    }
+
+    {   // axis gizmo: which way x, y and z point (2D: x right, y up, z towards you)
+        const double gx = W - 40, gy = gizY;
+        const struct { const char* n; double X, Y; Color c; } ax[] = {{"x", 24, 0, hexColor("#e5484d")}, {"y", 0, 24, hexColor("#30a46c")}, {"z", 0, 0, hexColor("#3e63dd")}};
+        for (const auto& a : ax) {
+            if (std::hypot(a.X, a.Y) < 5) {               // pointing at you: a dot
+                R.ring(gx, gy, 3.5, 1.5, a.c);
+                R.disc(gx, gy, 1.2, a.c);
+                T.text(a.n, gx + 11, gy + 4, 11, a.c, 0.5, false);
+                continue;
+            }
+            R.line(gx, gy, gx + a.X, gy - a.Y, 1.5, a.c);
+            T.text(a.n, gx + a.X * 1.35, gy - a.Y * 1.35 + 4, 11, a.c, 0.5, false);
+        }
+    }
+
+    {   // top left: the date, which moves on with the simulated time; top right: frames per second
+        const double yrs = sys.t / kYear;
+        const std::string epoch = fmt::dateUTC(sys.epochMs);
+        const std::string info = yrs * 365.25 < 1 ? "Solar System today, " + epoch
+                                                  : "Solar System on " + fmt::simDate(sys.epochMs, yrs) + "  ·  " + fmt::years(yrs) + " after " + epoch;
+        T.text(info, 12, 20, 13, kFg, 0, true);
+        T.text(fmt::fixed(fps, 0) + " fps", W - 12, 20, 11, kMuted, 1, true);
+    }
+}
+
+}  // namespace orbit
