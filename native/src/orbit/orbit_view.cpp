@@ -8,6 +8,7 @@
 #include "format.h"
 #include "imgui.h"
 #include "kepler.h"
+#include "sky.h"
 #include "units.h"
 
 namespace orbit {
@@ -110,6 +111,9 @@ std::string fmtLy(double v) { return v < 10 ? fmt::fixed(v, 2) : v < 100 ? fmt::
 
 bool bigR(double W, double H, double r) { return r > 6 * (1.5 * std::hypot(W, H) / 2 + 20); }
 
+// A point on screen: x, y (points), depth (m, > 0 towards the viewer) and perspective scale
+struct Q { double first, second, dep, f; };
+
 // Text drawn with Dear ImGui on top of the picture. Positions are in picture points with
 // y at the text's baseline, like the canvas fillText() of the web version.
 struct TextPainter {
@@ -138,6 +142,94 @@ struct TextPainter {
     }
 };
 
+// The night sky behind everything (the web's skyDraw). It is so far away that it does not move
+// when you zoom or move the view, only when you turn the 3D view. Stars are grouped by colour and
+// size, and each group is one instanced draw call. lv = how bright the sky is drawn (0–1).
+void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double ca, double sa, double cb, double sb, ConsMode cons, double lv) {
+    const Sky& S = skyData();
+    const double cx = W / 2, cy = H / 2, diag = std::hypot(W, H) / 2, K = diag / 1.75;   // K: points per radian away from the middle (100° reaches the corner)
+    // a direction -> screen: the angle from straight ahead becomes the distance from the middle
+    const auto scr = [&](const Vec3& v, double& X, double& Y) {
+        const double x1 = v.x * ca - v.y * sa, y1 = v.x * sa + v.y * ca, y2 = y1 * cb - v.z * sb, dep = y1 * sb + v.z * cb;
+        const double th = std::acos(std::clamp(-dep, -1.0, 1.0));   // the viewer is on the +depth side and looks the other way
+        if (th > 1.75) return false;
+        const double rho = std::max(std::hypot(x1, y2), 1e-9), r = th * K;
+        X = cx + x1 / rho * r; Y = cy - y2 / rho * r;
+        return true;
+    };
+    {   // the Milky Way: three soft bands along the plane of our galaxy, brightest towards its centre
+        const Vec3 A = S.galCentre, P = S.galPole, B = cross(P, A);
+        const double wds[3] = {0.46 * K, 0.27 * K, 0.12 * K}, als[3] = {0.03, 0.042, 0.055};
+        for (int pass = 0; pass < 3; pass++) {
+            double px = 0, py = 0; bool prev = false;
+            for (int i = 0; i <= 120; i++) {
+                const double l = i / 120.0 * 2 * kPi, c = std::cos(l), sn = std::sin(l);
+                double X, Y;
+                const bool ok = scr(A * c + B * sn, X, Y);
+                if (prev && ok && std::hypot(X - px, Y - py) < 0.7 * diag)
+                    R.line(px, py, X, Y, wds[pass], Color{178 / 255.f, 192 / 255.f, 1, static_cast<float>(als[pass] * lv * (0.4 + 0.6 * (0.5 + 0.5 * c)))});
+                prev = ok; px = X; py = Y;
+            }
+        }
+    }
+    // stars: screen positions, then one draw per colour bucket and size class
+    static std::vector<float> pos;
+    static std::vector<float> groups[kSkyColourBuckets][3];
+    pos.assign(S.stars.size() * 2, -1e9f);
+    for (auto& g : groups) for (auto& c : g) c.clear();
+    std::vector<int> glow;
+    for (std::size_t i = 0; i < S.stars.size(); i++) {
+        double X, Y;
+        if (!scr(S.stars[i].dir, X, Y)) continue;
+        pos[i * 2] = static_cast<float>(X); pos[i * 2 + 1] = static_cast<float>(Y);
+        if (X < -4 || X > W + 4 || Y < -4 || Y > H + 4) continue;
+        const float m = S.stars[i].mag;
+        if (m < 2.2f) { glow.push_back(static_cast<int>(i)); continue; }   // the brightest: drawn below with a glow
+        const int cl = m > 4.6f ? 0 : m > 3.4f ? 1 : 2;
+        groups[S.stars[i].bucket][cl].push_back(static_cast<float>(X));
+        groups[S.stars[i].bucket][cl].push_back(static_cast<float>(Y));
+    }
+    const double sizes[3] = {1.1, 1.5, 2.1}, alphas[3] = {0.55, 0.78, 0.95};
+    const auto col = [&](int k, double a) { const auto& c = S.colours[k]; return rgba(c[0], c[1], c[2], static_cast<float>(a)); };
+    for (int k = 0; k < kSkyColourBuckets; k++)
+        for (int cl = 0; cl < 3; cl++) R.squares(groups[k][cl].data(), static_cast<int>(groups[k][cl].size() / 2), sizes[cl], col(k, alphas[cl] * lv));
+    for (int i : glow) {                                  // a soft glow that grows with the star's brightness
+        const double x = pos[i * 2], y = pos[i * 2 + 1], m = S.stars[i].mag, rr = (3.2 + (2.2 - m) * 2.4) * (0.55 + 0.45 * lv);
+        const int k = S.stars[i].bucket;
+        R.fadeDisc(x, y, rr * 2.6, col(k, 0.25 * lv));
+        R.fadeDisc(x, y, rr * 1.0, col(k, 0.35 * lv));
+        R.disc(x, y, std::max(1.3, rr * 0.42), col(k, std::min(1.0, 0.25 + lv)));
+    }
+    if (cons != ConsMode::Off) {                          // constellation lines (Stellarium's modern sky culture)
+        const double cl2 = std::max(lv, 0.6);
+        const Color lc{115 / 255.f, 155 / 255.f, 235 / 255.f, static_cast<float>(0.42 * cl2)};
+        for (const auto& L : S.lines)
+            for (const auto& ab : L) {
+                const double xa = pos[ab.first * 2], ya = pos[ab.first * 2 + 1], xb = pos[ab.second * 2], yb = pos[ab.second * 2 + 1];
+                if (xa < -1e8 || xb < -1e8 || std::hypot(xa - xb, ya - yb) > 0.7 * diag) continue;
+                R.line(xa, ya, xb, yb, 0.9, lc);
+            }
+        if (cons == ConsMode::LinesAndNames) {
+            std::vector<std::pair<double, double>> used;
+            for (const auto& c : S.cons) {
+                double X, Y;
+                if (!scr(c.second, X, Y) || X < 20 || X > W - 20 || Y < 20 || Y > H - 20) continue;
+                bool clash = false;
+                for (const auto& o : used) if (std::fabs(o.first - X) < 60 && std::fabs(o.second - Y) < 14) clash = true;
+                if (clash) continue;
+                used.push_back({X, Y});
+                T.text(c.first, X, Y, 11, Color{150 / 255.f, 178 / 255.f, 240 / 255.f, static_cast<float>(0.78 * cl2)}, 0.5, false);
+            }
+            for (const auto& nm : S.names) {              // the brightest stars' names
+                if (S.stars[nm.first].mag > 1.9f) continue;
+                const double x = pos[nm.first * 2], y = pos[nm.first * 2 + 1];
+                if (x < 4 || x > W - 50 || y < 12 || y > H - 4) continue;
+                T.text(nm.second, x + 7, y + 3, 10, Color{232 / 255.f, 238 / 255.f, 1, static_cast<float>(0.72 * cl2)}, 0, false);
+            }
+        }
+    }
+}
+
 }  // namespace
 
 void OrbitView::click(double x, double y) {
@@ -153,7 +245,8 @@ void OrbitView::click(double x, double y) {
     if (!best) follow = false;
 }
 
-void OrbitView::drag(double dx, double dy) {
+void OrbitView::drag(double dx, double dy, bool rotate) {
+    if (rotate) { yaw += dx * 0.01; pitch = std::clamp(pitch + dy * 0.01, -1.5, 1.5); return; }   // 3D: drag turns the view
     ox += dx; oy += dy;
     follow = false;
 }
@@ -163,11 +256,11 @@ void OrbitView::zoomChanged(double oldZoom, double newZoom) {   // zoom about th
     ox *= f; oy *= f;
 }
 
-void OrbitView::resetView() { ox = oy = 0; follow = false; }
+void OrbitView::resetView() { ox = oy = 0; follow = false; yaw = 0.6; pitch = 1.0; cdep = 0; }
 
 void OrbitView::select(Selection s, bool f) {
     sel = s; follow = f; cardHidden = false;
-    ox = oy = 0;
+    ox = oy = 0; cdep = 0;
 }
 
 void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, double originY, double uiScale,
@@ -185,28 +278,56 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             const Body* b = findBody(sys, sel.bodyId);
             ok = b && visible(*b) && (sel.kind != Selection::Moon || (set.moons && sel.moon < static_cast<int>(b->moons.size())));
         }
+        if (sel.kind == Selection::Far) { FarItem f; ok = set.far && farItem(sys, sel.moon, f); }
         if (sel.kind == Selection::Belt) ok = set.belts && sel.moon >= 0 && sel.moon < static_cast<int>(sys.belts.size());
         if (!ok) { sel = Selection{}; follow = false; }
     }
 
-    // screen position of a point (metres), without and with the view offset
-    const auto base = [&](double x, double y) { return std::pair<double, double>(W / 2 + (x - bc.x) * px, H / 2 - (y - bc.y) * px); };
-    if (follow && sel.kind != Selection::None) {          // keep the followed object in the middle
+    // ---- the camera (the web's base()): turn by yaw about z, tilt by pitch towards the viewer, then a mild perspective ----
+    const bool d3 = set.view3D;
+    const double yawA = d3 ? yaw + kPi : 0, pitchA = d3 ? -pitch : 0;   // 3D the right way up: the ecliptic north pole points up the screen
+    const double ca = std::cos(yawA), sa = std::sin(yawA), cb = std::cos(pitchA), sb = std::sin(pitchA);
+    const double D = std::max(90.0, 3 * 34 / std::pow(10.0, set.zoom)) * kSimLength;   // camera distance, m: grows with the visible span
+    double cd = cdep;                                     // depth of the middle of the view
+    // screen position of a point (m): x, y in points; dep > 0 is towards the viewer; f is the perspective scale
+    const auto base = [&](double x, double y, double z) {
+        x -= bc.x; y -= bc.y; z -= bc.z;
+        const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, y2 = y1 * cb - z * sb, dep = y1 * sb + z * cb;
+        const double f = d3 ? D / std::max(D - (dep - cd), 0.05 * D) : 1;
+        return Q{W / 2 + x1 * px * f, H / 2 - y2 * px * f, dep, f};
+    };
+    const auto flat = [&](double x, double y, double z) {  // far-away stars are seen flat: too far for this little scene's perspective
+        x -= bc.x; y -= bc.y; z -= bc.z;
+        const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, y2 = y1 * cb - z * sb;
+        return Q{W / 2 + x1 * px, H / 2 - y2 * px, cd, 1};
+    };
+    if (follow && sel.kind == Selection::Far) {           // keep a far-away thing in the middle
+        FarItem f;
+        if (farItem(sys, sel.moon, f)) {
+            if (f.kind != "probe") { cd = cdep = 0; const Q q = flat(f.pos.x, f.pos.y, f.pos.z); ox = W / 2 - q.first; oy = H / 2 - q.second; }
+            else { cd = cdep = base(f.pos.x, f.pos.y, f.pos.z).dep; const Q q = base(f.pos.x, f.pos.y, f.pos.z); ox = W / 2 - q.first; oy = H / 2 - q.second; }
+        }
+    } else if (follow && sel.kind != Selection::None) {   // keep the followed object in the middle
         Vec3 t;
         if (sel.kind == Selection::Bary) t = bc;
         else if (sel.kind == Selection::Body || sel.kind == Selection::Moon) { const Body* b = findBody(sys, sel.bodyId); if (b) t = b->pos; }
-        const auto q = base(t.x, t.y);
+        cd = cdep = base(t.x, t.y, t.z).dep;              // depth first, so the followed object sits in the middle with no perspective shift
+        const Q q = base(t.x, t.y, t.z);
         ox = W / 2 - q.first; oy = H / 2 - q.second;
     }
-    const auto proj = [&](double x, double y) { auto q = base(x, y); q.first += ox; q.second += oy; return q; };
+    const auto proj = [&](double x, double y, double z) { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; };
 
     R.rect(0, 0, W, H, kBg);
     hits_.clear();
+    if (set.sky != SkyMode::Off) {                        // the night sky: dim close up, brighter as you zoom out
+        const double zt = std::clamp(-set.zoom / 3.5, 0.0, 1.0), lv = set.sky == SkyMode::Full ? 0.45 + 0.55 * zt : 0.16 + 0.6 * zt;
+        drawSky(R, T, W, H, ca, sa, cb, sb, set.cons, lv);
+    }
 
     // the Sun as a star of 1 solar mass (the web's starProps for GM = 100)
     const double hzIn = 0.95, hzOut = 1.67;               // habitable zone, AU
     const Color sunCol = starColor(5772);
-    const auto star = proj(0, 0);
+    const Q star = proj(0, 0, 0);
     const auto ringPoints = [&](double cx, double cy, double rPx, std::vector<std::pair<double, double>>& pts) {   // a circle on screen (only the visible bit of a giant one)
         pts.clear();
         double a0 = 0, a1 = 2 * kPi;
@@ -230,9 +351,12 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     {   // habitable zone: a faint green band
         const Color band = {70 / 255.f, 180 / 255.f, 100 / 255.f, 0.13f};
         if (bigR(W, H, hzOut * kAU * px)) {               // zoomed far in: draw just the strip of it that crosses the picture
-            const double X0 = -ox / px + bc.x, Y0 = oy / px + bc.y, r0 = std::max(std::hypot(X0, Y0), 1e-9);
-            const double nx = X0 / r0, ny = -Y0 / r0, tx = -ny, ty = nx, cx0 = W / 2, cy0 = H / 2, L = 4000;
-            const double dI = std::clamp((hzIn * kAU - r0) * px, -L, L), dO = std::clamp((hzOut * kAU - r0) * px, -L, L);
+            // the point of the ecliptic under the middle of the picture, and the band's direction there
+            const double wx = -ox / px, wy = (oy / px) / std::max(std::fabs(cb), 0.05);
+            const double X0 = wx * ca + wy * sa + bc.x, Y0 = -wx * sa + wy * ca + bc.y, r0 = std::max(std::hypot(X0, Y0), 1e-9), ux = X0 / r0, uy = Y0 / r0;
+            const double nx0 = ux * ca - uy * sa, ny0 = -(ux * sa + uy * ca) * cb, nl = std::max(std::hypot(nx0, ny0), 1e-9), nx = nx0 / nl, ny = ny0 / nl, k = px * nl;
+            const double tx = -ny, ty = nx, cx0 = W / 2, cy0 = H / 2, L = 4000;
+            const double dI = std::clamp((hzIn * kAU - r0) * k, -L, L), dO = std::clamp((hzOut * kAU - r0) * k, -L, L);
             if (dO > dI) {
                 const double ax = cx0 + nx * dI - tx * L, ay = cy0 + ny * dI - ty * L, bx = cx0 + nx * dI + tx * L, by = cy0 + ny * dI + ty * L;
                 const double cx = cx0 + nx * dO + tx * L, cy = cy0 + ny * dO + ty * L, ex = cx0 + nx * dO - tx * L, ey = cy0 + ny * dO - ty * L;
@@ -240,16 +364,16 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 R.triangle(ax, ay, band, cx, cy, band, ex, ey, band);
             }
         } else {
-            const double ri = hzIn * kAU * px, ro = hzOut * kAU * px;
+            const double ri = hzIn * kAU, ro = hzOut * kAU;  // m, in the ecliptic plane round the Sun
             for (int i = 0; i < 96; i++) {
                 const double t0 = i / 96.0 * 2 * kPi, t1 = (i + 1) / 96.0 * 2 * kPi;
-                const double ax = star.first + ro * std::cos(t0), ay = star.second - ro * std::sin(t0), bx = star.first + ro * std::cos(t1), by = star.second - ro * std::sin(t1);
-                const double cx = star.first + ri * std::cos(t1), cy = star.second - ri * std::sin(t1), ex = star.first + ri * std::cos(t0), ey = star.second - ri * std::sin(t0);
-                R.triangle(ax, ay, band, bx, by, band, cx, cy, band);
-                R.triangle(ax, ay, band, cx, cy, band, ex, ey, band);
+                const Q a = proj(ro * std::cos(t0), ro * std::sin(t0), 0), b = proj(ro * std::cos(t1), ro * std::sin(t1), 0);
+                const Q c = proj(ri * std::cos(t1), ri * std::sin(t1), 0), e = proj(ri * std::cos(t0), ri * std::sin(t0), 0);
+                R.triangle(a.first, a.second, band, b.first, b.second, band, c.first, c.second, band);
+                R.triangle(a.first, a.second, band, c.first, c.second, band, e.first, e.second, band);
             }
         }
-        const auto q = proj(hzOut * kAU * std::cos(2.4), hzOut * kAU * std::sin(2.4));
+        const Q q = proj(hzOut * kAU * std::cos(2.4), hzOut * kAU * std::sin(2.4), 0);
         if (q.second > 60 && q.second < H + 20 && q.first > -60 && q.first < W + 60 && hzOut * kAU * px > 70)
             T.text("habitable zone", q.first, q.second - 3, 10, hexColor("#3d9a5c", 0.85f), 0.5, true);
     }
@@ -263,8 +387,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         for (int k = 1; k * stepAU * kAU * px <= diag && k < 60; k++) {
             const double Rm = k * stepAU * kAU;
             LinePen pen{R, W, H, 1.0, kMuted.withAlpha(0.22f)};
-            for (int i = 0; i <= 96; i++) { const double t = i / 96.0 * 2 * kPi; const auto q = proj(Rm * std::cos(t), Rm * std::sin(t)); pen.to(q.first, q.second); }
-            const auto q = proj(Rm * std::cos(-0.8), Rm * std::sin(-0.8));
+            for (int i = 0; i <= 96; i++) { const double t = i / 96.0 * 2 * kPi; const Q q = proj(Rm * std::cos(t), Rm * std::sin(t), 0); pen.to(q.first, q.second); }
+            const Q q = proj(Rm * std::cos(-0.8), Rm * std::sin(-0.8), 0);
             const double au = k * stepAU;
             const double v = std::round(au * 10) / 10;
             std::string label = (v == std::floor(v) ? fmt::commas(v) : fmt::fixed(v, 1)) + " AU";
@@ -288,7 +412,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             const bool on = sel.kind == Selection::Belt && sel.moon == static_cast<int>(gi);   // the selected belt: bigger dots, in the look-here colour
             beltScreen_.clear();
             for (const Vec3& p : beltPos_[gi]) {
-                const auto q = proj(p.x, p.y);
+                const Q q = proj(p.x, p.y, p.z);
                 if (q.first > -2 && q.first < W + 2 && q.second > -2 && q.second < H + 2) { beltScreen_.push_back(static_cast<float>(q.first)); beltScreen_.push_back(static_cast<float>(q.second)); }
             }
             R.squares(beltScreen_.data(), static_cast<int>(beltScreen_.size() / 2), on ? 2.6 : 1.4, on ? kHL : hexColor(g.color, g.alpha));
@@ -315,8 +439,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         for (int part = 0; part < 4; part++) {           // fades in 4 steps, oldest faintest
             const int i0 = st0 + part * nn / 4, i1 = std::min(n, st0 + (part + 1) * nn / 4 + 1);
             LinePen pen{R, W, H, on ? 2.0 : 1.5, hexColor(b.color, 0.15f + 0.2f * part)};
-            for (int i = i0; i < i1; i++) { const auto q = proj(tr[i].x, tr[i].y); pen.to(q.first, q.second); }
-            if (part == 3) { const auto q = proj(b.pos.x, b.pos.y); pen.to(q.first, q.second); }   // always end at the body itself
+            for (int i = i0; i < i1; i++) { const Q q = proj(tr[i].x, tr[i].y, tr[i].z); pen.to(q.first, q.second); }
+            if (part == 3) { const Q q = proj(b.pos.x, b.pos.y, b.pos.z); pen.to(q.first, q.second); }   // always end at the body itself
         }
     }
 
@@ -325,11 +449,11 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const bool on = sel.kind == Selection::Body && sel.bodyId == bp->id;
         cometLocalPath(*bp->comet, sys.julianDay(), px, cpts);
         LinePen pen{R, W, H, on ? 1.6 : 1.0, hexColor(bp->color, on ? 0.85f : 0.35f), 2, 4};
-        for (const Vec3& p : cpts) { const auto q = proj(p.x, p.y); pen.to(q.first, q.second); }
+        for (const Vec3& p : cpts) { const Q q = proj(p.x, p.y, p.z); pen.to(q.first, q.second); }
     }
 
     // ---- the Sun ----
-    struct Label { std::string name; double x, y; bool selected, small, force; };
+    struct Label { std::string name; double x, y; bool selected, small, force; bool gc = false; };
     std::vector<Label> labels;
     const double sr = TRUE_SCALE ? kSunRadius * px : std::max(kCrashRadius * px, 3.5);
     const bool sunTiny = TRUE_SCALE && sr < 2.5;
@@ -341,7 +465,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     hits_.push_back({{Selection::Star}, star.first, star.second, std::max(srd, sunTiny ? 10.0 : 0.0)});
 
     {   // the barycentre: a crosshair in a ring (hidden while it would sit on the Sun's centre)
-        const auto bq = proj(bc.x, bc.y);
+        const Q bq = proj(bc.x, bc.y, bc.z);
         const bool on = sel.kind == Selection::Bary;
         if (std::hypot(bq.first - star.first, bq.second - star.second) > 5 || on) {
             for (int pass = 0; pass < 2; pass++) {
@@ -358,13 +482,13 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
 
     // ---- planets, dwarf planets and comets (far ones first) ----
     std::vector<const Body*> order = vis;
-    std::stable_sort(order.begin(), order.end(), [](const Body* a, const Body* b) { return a->pos.z < b->pos.z; });
+    std::stable_sort(order.begin(), order.end(), [&](const Body* a, const Body* b) { return base(a->pos.x, a->pos.y, a->pos.z).dep < base(b->pos.x, b->pos.y, b->pos.z).dep; });   // far ones first
     const double grow = !TRUE_SCALE && set.zoom > 0 ? std::min(3.2, std::pow(10.0, 0.5 * set.zoom)) : 1;   // Easy to see: a little bigger as you zoom in
     const auto drawnRadius = [&](const Body& b) { return TRUE_SCALE ? b.radius * px : (3 + 1.6 * std::sqrt(b.radius / kEarthRadius)) * grow; };
     for (const Body* bp : order) {
         const Body& b = *bp;
-        const auto q = proj(b.pos.x, b.pos.y);
-        const double rad = drawnRadius(b);
+        const Q q = proj(b.pos.x, b.pos.y, b.pos.z);
+        const double rad = drawnRadius(b) * (d3 ? q.f : 1);     // in 3D, nearer things look bigger
         const bool tiny = TRUE_SCALE && rad < 2.5;
         const double rd = tiny ? 5 : rad;
         const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
@@ -379,7 +503,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 const Color cols[2] = {rgba(140, 205, 255), rgba(255, 232, 180)};
                 for (int k = 0; k < 2; k++) {
                     const Vec3 d = dirs[k] * (1 / std::max(length(dirs[k]), 1e-12));
-                    const auto e = proj(b.pos.x + d.x * L * lens[k], b.pos.y + d.y * L * lens[k]);
+                    const Q e = proj(b.pos.x + d.x * L * lens[k], b.pos.y + d.y * L * lens[k], b.pos.z + d.z * L * lens[k]);
                     const double ex = e.first - q.first, ey = e.second - q.second, ln = std::hypot(ex, ey);
                     if (ln < 3) continue;
                     const double nx = -ey / ln, ny = ex / ln, w2 = std::min(14.0, ln * wds[k] + 2);
@@ -397,6 +521,12 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             hits_.push_back({{Selection::Body, b.id}, q.first, q.second, 12});
             continue;
         }
+        if (d3 && std::fabs(b.pos.z) > 0.05 * kSimLength) {   // 3D: a dashed drop line to the ecliptic plane shows the height
+            const Q g = proj(b.pos.x, b.pos.y, 0);
+            LinePen pen{R, W, H, 1.0, hexColor(b.color, 0.35f), 3, 3};
+            pen.to(q.first, q.second); pen.to(g.first, g.second);
+            R.disc(g.first, g.second, 2, hexColor(b.color));
+        }
         const double dx = star.first - q.first, dy = star.second - q.second, dlen = std::max(std::hypot(dx, dy), 1e-9);
         if (q.first + rad > -2 && q.first - rad < W + 2 && q.second + rad > -2 && q.second - rad < H + 2)
             R.sphere(q.first, q.second, rad, hexColor(b.color), dx / dlen, dy / dlen);   // lit from the Sun
@@ -410,19 +540,19 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     if (set.moons) for (const Body* bp : order) {
         const Body& b = *bp;
         if (b.moons.empty()) continue;
-        const double rad = drawnRadius(b), rKm = b.radius / kKm, distPx = length(b.pos) * px;
+        const Q pc = proj(b.pos.x, b.pos.y, b.pos.z);
+        const double kf = d3 ? pc.f : 1, rad = drawnRadius(b) * kf, rKm = b.radius / kKm, distPx = length(b.pos) * px;   // true distance from the Sun: the same from every viewing angle
         std::vector<double> disp;
         double maxDisp = 0;
         for (const Moon& m : b.moons) { disp.push_back(rad + 7 + 13 * std::log(std::max(m.data->aKm / rKm, 1.2))); maxDisp = std::max(maxDisp, disp.back()); }
         const bool here = (sel.kind == Selection::Body || sel.kind == Selection::Moon) && sel.bodyId == b.id;
         if (!here && maxDisp > 0.3 * distPx) continue;    // hidden while it would crowd the map: zoom in or click the planet
         const double dps = kSimTime / kDay * std::pow(10.0, set.tspeed);   // simulated days per real second
-        const auto pc = proj(b.pos.x, b.pos.y);
         for (std::size_t j = 0; j < b.moons.size(); j++) {
             const MoonData& m = *b.moons[j].data;
             const double aM = m.aKm * kKm;                // real distance, m
-            const double dW = std::max(disp[j] / px, TRUE_SCALE ? aM : 0.0);   // drawn distance, m
-            const double tl = m.tiltDeg * kPi / 180, ct = std::cos(tl);
+            const double dW = std::max(disp[j] / (px * kf), TRUE_SCALE ? aM : 0.0);   // drawn distance, m
+            const double tl = m.tiltDeg * kPi / 180, ct = std::cos(tl), st = std::sin(tl);
             const bool fast = dps / m.periodDays > 8;     // a lap in under ~8 frames would flicker: the whole orbit is lit instead
             const bool on = sel.kind == Selection::Moon && sel.bodyId == b.id && sel.moon == static_cast<int>(j);
             // mean anomaly grows by 2π per period; Kepler's equation by 3 Newton steps (moon orbits are nearly round)
@@ -435,7 +565,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 double t0 = 0, t1 = 2 * kPi;
                 int NN = static_cast<int>(std::min(720.0, std::max(48.0, std::ceil(rPx / 4))));
                 bool drawIt = true;
-                if (bigR(W, H, rPx)) {                    // a giant orbit: only the visible stretch is worked out
+                if (!d3 && bigR(W, H, rPx)) {             // a giant flat orbit: only the visible stretch is worked out
                     double a0, a1;
                     const Win w = circWin(W, H, pc.first, pc.second, rPx, a0, a1);
                     if (w != Win::Arc) drawIt = false;
@@ -447,14 +577,14 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                         LinePen pen{R, W, H, pass ? 3.0 : 1.0, c};
                         for (int i = 0; i <= NN; i++) {
                             const double t = t0 + (t1 - t0) * i / NN, Y = dW * std::sin(t);
-                            const auto qq = proj(b.pos.x + dW * std::cos(t), b.pos.y + Y * ct);
+                            const Q qq = proj(b.pos.x + dW * std::cos(t), b.pos.y + Y * ct, b.pos.z + Y * st);
                             pen.to(qq.first, qq.second);
                         }
                     }
                 }
             }
             const double Y = dW * yr * sgn;
-            const auto mp = proj(b.pos.x + dW * xr, b.pos.y + Y * ct);
+            const Q mp = proj(b.pos.x + dW * xr, b.pos.y + Y * ct, b.pos.z + Y * st);
             const double mr = TRUE_SCALE ? m.radiusKm * kKm * px : 1.6 + 0.9 * std::max(0.0, std::log10(m.radiusKm / 50));
             const bool mtiny = TRUE_SCALE && mr < 1.2;
             const double md = mtiny ? 3.5 : mr;
@@ -471,6 +601,45 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
     }
 
+    // ---- far-away things: real stars, clusters, the galactic centre and the Voyagers at their true direction and distance ----
+    if (set.far) {
+        const auto fmtLyS = [](double v) { return fmtLy(v); };
+        const auto inView = [&](const Q& q) { return q.dep - cd < 0.9 * D && q.first > -30 && q.first < W + 30 && q.second > -30 && q.second < H + 30; };
+        const Color gold = hexColor("#ffd27a");
+        for (int i = 0; i < farCount(); i++) {
+            FarItem f;
+            if (!farItem(sys, i, f)) continue;
+            const Selection s{Selection::Far, 0, i};
+            const bool on = sel == s, probe = f.kind == "probe";
+            if (probe && !(set.zoom <= -1.5 || on)) continue;   // the Voyagers are far beyond the planets: shown once you zoom out (or pick one)
+            if (probe) {                                  // its path since about Neptune (a straight line), and where it left the Sun's wind
+                const Vec3 a = f.dir * (40 * kAU), h = f.dir * (f.probe->cross * kAU);
+                const Q qa = proj(a.x, a.y, a.z), qb = proj(f.pos.x, f.pos.y, f.pos.z), hq = proj(h.x, h.y, h.z);
+                LinePen pen{R, W, H, 1.0, gold.withAlpha(0.5f)};
+                pen.to(qa.first, qa.second); pen.to(qb.first, qb.second);
+                if (inView(hq)) {
+                    R.ring(hq.first, hq.second, 3.5, 1, gold.withAlpha(0.9f));
+                    if (f.probe->cross * kAU * px > 40)
+                        labels.push_back({f.name + " left the Sun’s wind here (" + std::to_string(f.probe->crossYear) + ")", hq.first, hq.second + 14, false, true, false});
+                }
+            }
+            Q q = probe ? proj(f.pos.x, f.pos.y, f.pos.z) : flat(f.pos.x, f.pos.y, f.pos.z);
+            if (!probe) { q.first += ox; q.second += oy; }
+            if (!inView(q)) continue;
+            if (probe) { R.disc(q.first, q.second, 2.6, Color{1, 1, 1, 1}); R.ring(q.first, q.second, 6, 1, gold); }
+            else if (f.kind == "bh") { R.disc(q.first, q.second, 5.3, Color{1, 1, 1, 1}); R.disc(q.first, q.second, 4.5, Color{0, 0, 0, 1}); }
+            else if (f.kind == "object") { R.ring(q.first, q.second, 6, 1, hexColor("#8fd0ff")); R.disc(q.first, q.second, 1.6, hexColor("#8fd0ff")); }
+            else { const auto c = bvRGB(spBV(f.far->sp)); R.disc(q.first, q.second, 2.8, rgba(c[0], c[1], c[2])); R.ring(q.first, q.second, 6, 1, Color{1, 1, 1, 0.45f}); }
+            if (on) hiRing(q.first, q.second, 11);
+            if (f.kind == "bh") {
+                labels.push_back({"Galactic centre · " + fmtLyS(f.ly) + " light years", q.first, q.second - 11, on, false, true, true});
+                labels.push_back({f.name + " (black hole)", q.first, q.second + 19, on, false, true, true});
+            } else
+                labels.push_back({f.name + " · " + (probe ? fmt::commas(f.au) + " AU" : fmtLyS(f.ly) + " light years"), q.first, q.second - 11, on, true, false});
+            hits_.push_back({s, q.first, q.second, 10});
+        }
+    }
+
     // ---- belt names (clickable) ----
     struct BeltLabel { std::string name; double x, y; bool on; };
     std::vector<BeltLabel> beltLabels;
@@ -478,7 +647,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const auto put = [&](const char* key, double rAU, double ang, const char* name) {
             for (std::size_t gi = 0; gi < sys.belts.size(); gi++) {
                 if (sys.belts[gi].key != key || rAU * kAU * px < 70) continue;
-                const auto q = proj(rAU * kAU * std::cos(ang), rAU * kAU * std::sin(ang));
+                const Q q = proj(rAU * kAU * std::cos(ang), rAU * kAU * std::sin(ang), 0);
                 const Selection s{Selection::Belt, 0, static_cast<int>(gi)};
                 beltLabels.push_back({name, q.first, q.second + 4, sel == s});
                 hits_.push_back({s, q.first, q.second + 4 - 5, 28});
@@ -514,7 +683,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 placed.push_back({l.x, l.y, tw + 12});
             } else put(l.name, l.x, l.y, 10, kMuted, false);
         }
-        for (const Label& l : labels) put(l.name, l.x, l.y, l.small ? 10 : 12, kFg, l.selected || l.force);
+        for (const Label& l : labels) put(l.name, l.x, l.y, l.gc ? 11 : l.small ? 10 : 12, kFg, l.selected || l.force);
     }
 
     // ---- info card, bottom right (the first click closes it) ----
@@ -546,7 +715,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const double km = pw * (mm >= 5 ? 5 : mm >= 2 ? 2 : 1), len = km / kmPerPt, au = km * kKm / kAU, sec = km * kKm / kLightSpeed;
         const auto nf = [](double v) { return v >= 1 ? fmt::commas(v) : fmt::precision(v, 1); };
         const auto pl = [&](double v, const char* u) { return nf(v) + " " + u + (std::llround(v) == 1 && v >= 0.95 ? "" : "s"); };
-        const std::string main = km < 1e6 ? nf(km) + " km" : au < 0.05 ? nf(km / 1e6) + " million km" : nf(au) + " AU";
+        const std::string main = std::string(d3 ? "≈ " : "") + (km < 1e6 ? nf(km) + " km" : au < 0.05 ? nf(km / 1e6) + " million km" : nf(au) + " AU");
         const std::string lt = sec < 1 ? nf(sec * 1000) + " ms" : sec < 60 ? pl(sec, "second") : sec < 3600 ? pl(sec / 60, "minute")
                              : sec < 86400 ? pl(sec / 3600, "hour") : sec < 86400 * 365.25 ? pl(sec / 86400, "day") : fmt::precision(sec / 86400 / 365.25, 2) + " years";
         const double spanAU = W / px / kAU, spanLy = spanAU / kLightYearAU;
@@ -577,9 +746,11 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         T.text("light takes " + lt, x0, y + 15, 10, kMuted, 0, true, kCard);
     }
 
-    {   // axis gizmo: which way x, y and z point (2D: x right, y up, z towards you)
+    {   // axis gizmo: which way x, y and z point on screen
         const double gx = W - 40, gy = gizY;
-        const struct { const char* n; double X, Y; Color c; } ax[] = {{"x", 24, 0, hexColor("#e5484d")}, {"y", 0, 24, hexColor("#30a46c")}, {"z", 0, 0, hexColor("#3e63dd")}};
+        const auto axis = [&](double X, double Y, double Z, double& sx, double& sy) { const double x1 = X * ca - Y * sa, y1 = X * sa + Y * ca; sx = 24 * x1; sy = 24 * (y1 * cb - Z * sb); };
+        struct Ax { const char* n; double X, Y; Color c; } ax[] = {{"x", 0, 0, hexColor("#e5484d")}, {"y", 0, 0, hexColor("#30a46c")}, {"z", 0, 0, hexColor("#3e63dd")}};
+        axis(1, 0, 0, ax[0].X, ax[0].Y); axis(0, 1, 0, ax[1].X, ax[1].Y); axis(0, 0, 1, ax[2].X, ax[2].Y);
         for (const auto& a : ax) {
             if (std::hypot(a.X, a.Y) < 5) {               // pointing at you: a dot
                 R.ring(gx, gy, 3.5, 1.5, a.c);

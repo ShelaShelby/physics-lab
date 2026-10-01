@@ -91,7 +91,7 @@ int main(int, char**) {
     bool vsyncOn = true;
     double fps = 0, fpsTime = 0;
     int fpsFrames = 0;
-    bool mouseDown = false, dragging = false;
+    bool mouseDown = false, dragging = false, rightDrag = false;
     float downX = 0, downY = 0, lastX = 0, lastY = 0;
     // For automatic checks (no effect in normal use): PL_EXIT_AFTER_FRAMES=n quits after n frames,
     // PL_SCREENSHOT=file.bmp saves the last frame, PL_SELECT=Earth selects and follows a body, PL_ZOOM=2.3 sets the zoom.
@@ -101,6 +101,8 @@ int main(int, char**) {
         for (const auto& b : app.sys.bodies)
             if (b.name == name) app.view.select({orbit::Selection::Body, b.id}, true);
     if (const char* z = SDL_getenv("PL_ZOOM")) ui::setZoom(app, std::atof(z));
+    if (SDL_getenv("PL_3D")) app.set.view3D = true;
+    if (SDL_getenv("PL_CONS")) app.set.cons = orbit::ConsMode::LinesAndNames;
     int frame = 0;
     bool running = true;
 
@@ -124,12 +126,14 @@ int main(int, char**) {
                 if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW) ui::setZoom(app, app.set.zoom + e.wheel.y * 0.07);
                 break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                if (!io.WantCaptureMouse && e.button.x < canvasWinW) { mouseDown = true; dragging = false; downX = lastX = e.button.x; downY = lastY = e.button.y; }
+                if (!io.WantCaptureMouse && e.button.x < canvasWinW) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
                 break;
             case SDL_EVENT_MOUSE_MOTION:
                 if (mouseDown) {
                     if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) dragging = true;
-                    if (dragging) app.view.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale);
+                    // 3D: dragging turns the view, unless "Drag moves the view" is on, or with the right button or Shift held
+                    const bool rotate = app.set.view3D && !app.view.panMode && !rightDrag && !(SDL_GetModState() & SDL_KMOD_SHIFT);
+                    if (dragging) app.view.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rotate);
                     lastX = e.motion.x; lastY = e.motion.y;
                 }
                 break;
@@ -147,6 +151,7 @@ int main(int, char**) {
         const double frameDt = static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
         last = now;
         const double dt = std::min(frameDt, units::kMaxFrameDt);
+        app.view.tick(dt, app.set);
         if (!app.paused) {
             acc += dt;
             while (acc >= units::kPhysicsStep) { app.sys.step(units::kPhysicsStep, app.set.tspeed); acc -= units::kPhysicsStep; }

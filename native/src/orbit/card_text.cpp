@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "format.h"
+#include "sky.h"
 #include "units.h"
 
 namespace orbit {
@@ -67,6 +68,13 @@ bool cardText(const SolarSystem& sys, const Selection& sel, const CardOptions& o
     switch (sel.kind) {
     case Selection::None:
         return false;
+
+    case Selection::Far: {
+        FarItem f;
+        if (!opt.farOn || !farItem(sys, sel.moon, f)) return false;
+        farCard(f, c);
+        return true;
+    }
 
     case Selection::Belt: {
         if (!opt.beltsOn || sel.moon < 0 || sel.moon >= static_cast<int>(sys.belts.size())) return false;

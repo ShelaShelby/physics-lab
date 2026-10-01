@@ -8,6 +8,7 @@
 #include "changelog.h"
 #include "imgui.h"
 #include "orbit/format.h"
+#include "orbit/sky.h"
 #include "orbit/units.h"
 
 namespace ui {
@@ -34,6 +35,7 @@ void resetToToday(AppState& app) {
     app.view.sel = Selection{};
     app.view.follow = false;
     app.view.ox = app.view.oy = 0;
+    app.view.cdep = 0;
 }
 
 // "1 s = 29.1 days": what the Time speed slider means (as in the web version)
@@ -120,6 +122,18 @@ void orbitPanel(AppState& app, float width) {
 
     // ---- View ----
     ImGui::SeparatorText("View");
+    {
+        int v3 = app.set.view3D ? 1 : 0;
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::Combo("##view", &v3, "2D (top-down)\0" "3D (rotatable)\0")) app.set.view3D = v3 == 1;
+    }
+    if (app.set.view3D) {
+        const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
+        if (ImGui::Button(app.view.panMode ? "✥ Drag moves the view" : "⟲ Drag rotates the view", ImVec2(half, 0))) app.view.panMode = !app.view.panMode;
+        ImGui::SameLine();
+        if (ImGui::Button(app.view.spin ? "⟳ Spin: on" : "⟳ Spin: off", ImVec2(-1, 0))) app.view.spin = !app.view.spin;
+        ImGui::TextDisabled("Right-drag or Shift-drag always moves the view");
+    }
     ImGui::TextUnformatted("Zoom");
     float z = static_cast<float>(app.set.zoom);
     ImGui::SetNextItemWidth(-1);
@@ -147,6 +161,22 @@ void orbitPanel(AppState& app, float width) {
         }
     }
     if (ImGui::Button("↺ Reset view", ImVec2(-1, 0))) { app.view.resetView(); setZoom(app, 0); app.view.ox = app.view.oy = 0; }
+
+    // ---- Sky ----
+    ImGui::SeparatorText("Sky");
+    {
+        ImGui::TextUnformatted("Stars in the background");
+        int sky = static_cast<int>(app.set.sky);
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::Combo("##sky", &sky, "Soft (dim close up, brighter as you zoom out)\0" "Full (always bright)\0" "Off (plain background)\0")) app.set.sky = static_cast<SkyMode>(sky);
+        if (app.set.sky != SkyMode::Off) {
+            ImGui::TextUnformatted("Constellations");
+            int c = static_cast<int>(app.set.cons);
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::Combo("##cons", &c, "Off\0" "Lines (the patterns people drew)\0" "Lines and names\0")) app.set.cons = static_cast<ConsMode>(c);
+        }
+        ImGui::Checkbox("Far-away things (zoom out to find them)", &app.set.far);
+    }
 
     // ---- Solar System extras ----
     ImGui::SeparatorText("Solar System extras");
@@ -245,6 +275,28 @@ void orbitPanel(AppState& app, float width) {
                 }
                 next();
             }
+    }
+    newRow();
+    ImGui::TextDisabled("Far away");
+    {
+        static const struct { const char* key; const char* name; const char* color; } F[] = {
+            {"v1", "Voyager 1", "#ffd27a"}, {"v2", "Voyager 2", "#ffd27a"}, {"acen", "Alpha Centauri", "#ffe9b0"}, {"sirius", "Sirius", "#cfe0ff"},
+            {"vega", "Vega", "#cfe0ff"}, {"pleia", "Pleiades", "#8fd0ff"}, {"m42", "Orion Nebula", "#8fd0ff"}, {"sgra", "Galactic centre", "#cfd6e6"}};
+        for (const auto& f : F) {
+            const int idx = farIndexOf(f.key);
+            const Selection s{Selection::Far, 0, idx};
+            if (tile(f.name, f.color, v.sel == s, tw)) {
+                app.set.far = true;
+                FarItem it;
+                if (v.sel == s) { v.sel = Selection{}; v.follow = false; }
+                else if (farItem(app.sys, idx, it)) {   // far enough out that the Sun and the target are both in the picture
+                    v.select(s, true);
+                    setZoom(app, std::log10(13.6 / (it.au * kAU / kSimLength)));
+                    v.ox = v.oy = 0;
+                }
+            }
+            next();
+        }
     }
     newRow();
     ImGui::Spacing();

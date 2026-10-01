@@ -14,8 +14,12 @@ struct ImDrawList;
 
 namespace orbit {
 
+enum class SkyMode { Soft, Full, Off };         // Stars in the background
+enum class ConsMode { Off, Lines, LinesAndNames };   // Constellations
+
 // The settings that change the picture (the web version's params).
 struct ViewSettings {
+    bool view3D = false;        // View: 2D (top-down) / 3D (rotatable)
     double zoom = -1.2;         // log10 of the zoom factor (×0.06 at -1.2)
     double tspeed = -0.3;       // Time speed slider
     bool trueScale = true;      // Sizes: True scale / Easy to see
@@ -24,6 +28,9 @@ struct ViewSettings {
     bool dwarfs = true;
     bool comets = true;
     bool belts = true;          // Belts and Oort cloud
+    SkyMode sky = SkyMode::Soft;
+    ConsMode cons = ConsMode::Off;
+    bool far = true;            // Far-away things (nearest stars, Voyagers, galactic centre)
 };
 
 class OrbitView {
@@ -35,15 +42,20 @@ public:
               const SolarSystem& sys, const ViewSettings& set, double width, double height, double fps);
 
     void click(double x, double y);              // picture points
-    void drag(double dx, double dy);             // moves the view
+    void drag(double dx, double dy, bool rotate); // moves the view, or (3D) turns it
     void zoomChanged(double oldZoom, double newZoom);   // keeps the middle of the picture in place
     void resetView();                            // the web's "↺ Reset view" (zoom is reset by the caller)
+    void tick(double dt, const ViewSettings& set) { if (set.view3D && spin) yaw += 0.15 * dt; }   // ⟳ Spin: the 3D view turns slowly
     void select(Selection s, bool follow);       // the Go to tiles: select and keep it in the middle
 
     Selection sel;
     bool follow = false;
     bool cardHidden = false;
     double ox = 0, oy = 0;                       // how far the view is moved, points
+    double yaw = 0.6, pitch = 1.0;               // 3D view angles, radians
+    double cdep = 0;                             // 3D: depth of the middle of the view (the followed object), m
+    bool spin = false;                           // 3D: turn slowly by itself
+    bool panMode = false;                        // 3D: dragging moves the view instead of turning it
 
 private:
     struct Hit { Selection sel; double x, y, r; };

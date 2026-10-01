@@ -12,7 +12,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
-    {"0.2", "Belts and Oort cloud, frame timing and VSync switch",
+    {"0.2", "3D view, night sky, belts and Oort cloud, frame timing and VSync switch",
+     "New 3D view (View card): drag to turn it, right-drag or Shift-drag (or the Drag button) to move it, Spin to turn it "
+     "slowly. Nearer things look bigger, and dashed lines drop from each planet to the flat plane of the orbits. "
+     "Behind everything is the real night sky: the 2,874 brightest stars at their true directions and colours, the band "
+     "of the Milky Way, and (Sky card) constellation lines and names. Zoom far out to find the far-away things at their "
+     "real distance: the nearest stars, the Pleiades, the Orion Nebula, the galactic centre and the two Voyagers, all "
+     "clickable and in Go to. "
      "The asteroid belt (with its Kirkwood gaps), Jupiter's Trojans, the Kuiper belt and the Oort cloud are here, "
      "with the same 6,000 stand-in rocks as the web version (same random seed, same orbits; the tests check they sit in "
      "the same places). Each belt is drawn with a single draw call, and the rocks are only moved when time moves. "
