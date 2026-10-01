@@ -7,6 +7,8 @@
 
 #include "changelog.h"
 #include "learn.h"
+#include "settings.h"
+#include "fonts.h"
 #include "imgui.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
@@ -110,6 +112,9 @@ void orbitPanel(AppState& app, float width) {
     if (ImGui::SmallButton((std::string("Update ") + appVersion()).c_str())) app.showChangelog = true;
     ImGui::PopStyleColor();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("What's new");
+    if (ImGui::SmallButton(displayable("⚙ Settings").c_str())) app.showSettings = true;
+    ImGui::SameLine();
+    defaultsButton(app);
     ImGui::TextWrapped("The real Solar System, where everything is today: planets, moons, dwarf planets and comets. Click anything for details.");
 
     // ---- Presets ----

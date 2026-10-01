@@ -8,6 +8,7 @@
 // Run:  ctest --test-dir build   (or run the orbit_tests program directly)
 
 #include <cmath>
+#include <regex>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -16,6 +17,7 @@
 #include "orbit/card_text.h"
 #include "orbit/format.h"
 #include "orbit/kepler.h"
+#include "orbit/sky.h"
 #include "orbit/spin.h"
 #include "orbit/solar_system.h"
 #include "orbit/units.h"
@@ -214,7 +216,47 @@ int main() {
     check(fmt::years(0.05) == "18 days", "years(0.05) = " + fmt::years(0.05));
     check(fmt::years(0.2408) == "0.24 years", "years(0.2408) = " + fmt::years(0.2408));
 
-    // 11) the info cards (printed so they can be read and compared with the web version)
+    // 11) metric / imperial: in imperial every facts line must be converted (no km or °C left anywhere),
+    //     with the web version's rounding rules
+    {
+        check(fmt::celsius(15) == "15 °C", "15 °C metric");
+        fmt::setImperial(true);
+        check(fmt::celsius(15) == "59 °F", "15 °C -> " + fmt::celsius(15));
+        check(fmt::celsius(-65) == "-85 °F", "-65 °C -> " + fmt::celsius(-65));
+        check(fmt::km(6371) == "3,959 mi", "6,371 km -> " + fmt::km(6371));
+        check(fmt::kmPlain(11.1) == "6.9 mi", "11.1 km -> " + fmt::kmPlain(11.1));
+        check(fmt::millionKm(149.6) == "93 million mi", "149.6 million km -> " + fmt::millionKm(149.6));
+        check(fmt::kms(29.78) == "18.5 mi/s", "29.78 km/s -> " + fmt::kms(29.78));
+        check(fmt::unitText("Winds over 2,000 km/h, the fastest known") == "Winds over 1,240 mph, the fastest known", fmt::unitText("Winds over 2,000 km/h, the fastest known"));
+        check(fmt::unitText("Only about 12 km across") == "Only about 7.5 mi across", fmt::unitText("Only about 12 km across"));
+        check(fmt::unitText("It is −65 °C there") == "It is −85 °F there", fmt::unitText("It is −65 °C there"));
+        SolarSystem s; s.loadAt(ref::kEpochMs);
+        CardOptions opt;
+        std::vector<Selection> all = {{Selection::Star}, {Selection::Bary}};
+        for (const Body& b : s.bodies) {
+            all.push_back({Selection::Body, b.id});
+            for (std::size_t j = 0; j < b.moons.size(); j++) all.push_back({Selection::Moon, b.id, static_cast<int>(j)});
+        }
+        for (std::size_t g = 0; g < s.belts.size(); g++) all.push_back({Selection::Belt, 0, static_cast<int>(g)});
+        for (int f = 0; f < farCount(); f++) all.push_back({Selection::Far, 0, f});
+        int cards = 0;
+        for (const Selection& sel : all) {
+            Card c;
+            if (!cardText(s, sel, opt, c)) continue;
+            cards++;
+            for (const std::string& l : std::vector<std::string>{c.title} ) (void)l;
+            std::vector<std::string> lines = c.lines; lines.push_back(c.title);
+            for (const auto& l : lines) {
+                const bool metricLeft = std::regex_search(l, std::regex(R"(\d km|°C| km/)"));
+                if (metricLeft) std::printf("   still metric: [%s] %s\n", c.title.c_str(), l.c_str());
+                check(!metricLeft, "imperial card line converted");
+            }
+        }
+        std::printf("  imperial: %d cards checked\n", cards);
+        fmt::setImperial(false);
+    }
+
+    // 12) the info cards (printed so they can be read and compared with the web version)
     {
         SolarSystem s; s.loadAt(ref::kEpochMs);
         CardOptions opt; opt.tspeed = units::kTspeedDefault;

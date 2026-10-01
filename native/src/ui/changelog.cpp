@@ -12,7 +12,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
-    {"0.3", "Orbit Lab complete: Learn guides, watch a planet turn",
+    {"0.3", "Orbit Lab complete: Learn guides, Settings with metric or imperial, watch a planet turn",
+     "New ⚙ Settings: show distances, speeds and temperatures in metric (km, km/s, °C) or imperial (miles, mi/s, °F). "
+     "Every line of every facts card follows it, including the km/h and °C inside the notes, and so does the scale bar; "
+     "the choice is remembered. The lab still works in metres and seconds inside. The Defaults button now asks before it "
+     "puts Orbit Lab's settings back to how they started. "
      "New Learn card with the three guides of the web version, word for word: What am I even looking at? (one page "
      "with a row of headings to jump to, following your 2D/3D and Sizes choice and the live date), Why do we have "
      "seasons? (with the lab's own Earth: day length and noon Sun height from pole to pole, and each planet's lean), "

@@ -16,12 +16,14 @@
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl3.h"
+#include "orbit/format.h"
 #include "orbit/units.h"
 #include "render/gl_loader.h"
 #include "render/renderer2d.h"
 #include "ui/changelog.h"
 #include "ui/fonts.h"
 #include "ui/learn.h"
+#include "ui/settings.h"
 #include "ui/orbit_panel.h"
 
 namespace {
@@ -85,6 +87,8 @@ int main(int, char**) {
 
     ui::AppState app;
     ui::resetToToday(app);
+    ui::loadSettings(app);
+    if (SDL_getenv("PL_IMPERIAL")) fmt::setImperial(true);   // for automatic checks
 
     const float panelWidth = 360 * scale;              // window coordinates
     double acc = 0;                                     // real time not yet simulated, s
@@ -183,6 +187,7 @@ int main(int, char**) {
         text->PopClipRect();
         ui::changelogWindow(&app.showChangelog);
         ui::learnWindow(app);
+        ui::settingsWindow(app);
         ImGui::Render();
 
         // ---- draw: the picture first, then the panels and text on top ----

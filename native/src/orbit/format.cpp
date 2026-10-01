@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
+#include <regex>
 
 namespace fmt {
 
@@ -53,11 +54,48 @@ std::string superscript(int n) {
     return s;
 }
 
-std::string km(double v) { return commas(v) + " km"; }
-std::string kmPlain(double v) { return plainNumber(v) + " km"; }
-std::string millionKm(double mkm) { return commas(mkm) + " million km"; }
-std::string kms(double v, int d) { return fixed(v, d) + " km/s"; }
-std::string celsius(double c) { return plainNumber(c) + " °C"; }
+static bool g_imperial = false;
+void setImperial(bool on) { g_imperial = on; }
+bool imperial() { return g_imperial; }
+
+// as the web version's uLen, uLenD, uMil, uSpd, uSpdN and uTemp
+std::string km(double v) { return g_imperial ? commas(v * kMilesPerKm) + " mi" : commas(v) + " km"; }
+std::string kmPlain(double v) {
+    if (!g_imperial) return plainNumber(v) + " km";
+    const double mi = v * kMilesPerKm;
+    return (mi >= 100 ? commas(mi) : precision(mi, 3)) + " mi";
+}
+std::string millionKm(double mkm) { return g_imperial ? commas(mkm * kMilesPerKm) + " million mi" : commas(mkm) + " million km"; }
+std::string kmsNumber(double v, int d) { return fixed(g_imperial ? v * kMilesPerKm : v, d); }
+std::string kms(double v, int d) { return kmsNumber(v, d) + (g_imperial ? " mi/s" : " km/s"); }
+std::string celsius(double c) { return g_imperial ? commas(c * 9 / 5 + 32) + " °F" : plainNumber(c) + " °C"; }
+
+std::string unitText(const std::string& t) {
+    if (!g_imperial) return t;
+    // a number (with commas and decimals), maybe " million", then " km", " km/h" or " km/s" (not followed by a letter);
+    // and a temperature "−65 °C". The same rules as the web version's uText.
+    static const std::regex len(R"((\d[\d,]*(?:\.\d+)?)( million)? km(/h|/s)?(?![A-Za-z]))");
+    static const std::regex temp(R"((−|-)?(\d[\d,]*(?:\.\d+)?) ?°C)");
+    const auto num = [](const std::string& s) { std::string d; for (char c : s) if (c != ',') d += c; return std::stod(d); };
+    const auto uNum = [](double x) { return x >= 100 ? commas(std::stod(precision(x, 3))) : precision(x, 2); };   // 2–3 significant figures
+    std::string out, rest = t;
+    std::smatch m;
+    while (std::regex_search(rest, m, len)) {
+        const std::string per = m[3].str();
+        out += m.prefix().str() + uNum(num(m[1].str()) * kMilesPerKm) + m[2].str() + (per == "/h" ? " mph" : per == "/s" ? " mi/s" : " mi");
+        rest = m.suffix().str();
+    }
+    out += rest;
+    rest = out; out.clear();
+    while (std::regex_search(rest, m, temp)) {
+        const double c = (m[1].matched ? -1 : 1) * num(m[2].str());
+        std::string f = commas(c * 9 / 5 + 32);
+        if (!f.empty() && f[0] == '-') f = "−" + f.substr(1);
+        out += m.prefix().str() + f + " °F";
+        rest = m.suffix().str();
+    }
+    return out + rest;
+}
 std::string au(double x) { return (x < 10 ? fixed(x, 2) : fixed(x, 1)) + " AU"; }
 
 std::string years(double y) {

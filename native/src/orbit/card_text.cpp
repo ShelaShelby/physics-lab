@@ -63,7 +63,7 @@ static void cometCard(const SolarSystem& sys, const Body& b, Card& c) {
     if (!cur.empty()) c.lines.push_back(cur);
 }
 
-bool cardText(const SolarSystem& sys, const Selection& sel, const CardOptions& opt, Card& c) {
+static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOptions& opt, Card& c) {
     c = Card{};
     const StarProps sp = sunProps();
     switch (sel.kind) {
@@ -150,7 +150,7 @@ bool cardText(const SolarSystem& sys, const Selection& sel, const CardOptions& o
         c.lines = {"Size: " + fmt::fixed(Rp, Rp < 1 ? 2 : 1) + " × Earth (radius " + fmt::km(Rp * 6371) + ")",
                    "Mass: " + mass + "  ·  gravity " + fmt::fixed(g, g < 0.1 ? 3 : 1) + " g",
                    "Distance: " + fmt::au(d) + " (" + fmt::millionKm(d * kAU / kKm / 1e6) + ")",
-                   "Speed: " + fmt::kms(o.v / kKm) + " (escape here " + fmt::fixed(vEsc / kKm, 1) + ")",
+                   "Speed: " + fmt::kms(o.v / kKm) + " (escape here " + fmt::kmsNumber(vEsc / kKm) + ")",
                    "Orbit: " + shape,
                    o.bound ? "One lap: " + fmt::years(o.periodYears) : "One lap: never (it leaves)",
                    b.hasTemp ? "Temperature: " + fmt::celsius(b.tempC) + " (real, " + b.tempNote + ")"
@@ -165,6 +165,17 @@ bool cardText(const SolarSystem& sys, const Selection& sel, const CardOptions& o
     }
     }
     return false;
+}
+
+// The card with every distance, speed and temperature in the chosen units: the numbers worked out
+// here already follow the switch, and km, km/h and °C written inside the data's notes are turned too.
+bool cardText(const SolarSystem& sys, const Selection& sel, const CardOptions& opt, Card& c) {
+    if (!cardText0(sys, sel, opt, c)) return false;
+    if (fmt::imperial()) {
+        c.title = fmt::unitText(c.title);
+        for (auto& l : c.lines) l = fmt::unitText(l);
+    }
+    return true;
 }
 
 }  // namespace orbit

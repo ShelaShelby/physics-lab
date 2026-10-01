@@ -16,6 +16,7 @@ struct AppState {
     orbit::OrbitView view;
     bool paused = false;
     bool showChangelog = false;
+    bool showSettings = false;
     double canvasW = 800, canvasH = 600;   // picture size in points (for the Go to zoom levels)
     bool vsync = true;                     // wait for the screen's refresh (off: draw as fast as possible, to measure headroom)
     FrameStats stats;

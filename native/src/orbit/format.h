@@ -13,11 +13,20 @@ std::string plainNumber(double x);                  // shortest form, like JavaS
 std::string superscript(int n);                     // 30 -> ³⁰, -5 -> ⁻⁵
 std::string precision(double x, int digits);        // like JavaScript +x.toPrecision(digits), then shortest form
 
-std::string km(double km);                          // "6,371 km"
-std::string kmPlain(double km);                     // "11.1 km" (as written in the data)
-std::string millionKm(double mkm);                  // "150 million km"
-std::string kms(double kmPerS, int decimals = 1);   // "29.8 km/s"
-std::string celsius(double c);                      // "15 °C"
+// ---- units on screen: metric or imperial (the Settings switch). Only the words change;
+// every number inside the app stays in SI units. These follow the switch: ----
+void setImperial(bool on);
+bool imperial();
+constexpr double kMilesPerKm = 0.621371192;
+std::string km(double km);                          // "6,371 km" / "3,959 mi"
+std::string kmPlain(double km);                     // "11.1 km" (as written in the data) / "6.9 mi"
+std::string millionKm(double mkm);                  // "150 million km" / "93 million mi"
+std::string kms(double kmPerS, int decimals = 1);   // "29.8 km/s" / "18.5 mi/s"
+std::string kmsNumber(double kmPerS, int decimals = 1);   // the number only, in the same unit
+std::string celsius(double c);                      // "15 °C" / "59 °F"
+// A sentence with km, km/h, km/s or °C in it (the data's notes), in miles / mph / mi/s / °F when imperial is on
+std::string unitText(const std::string& text);
+
 std::string au(double x);                           // "1.00 AU" / "30.1 AU"
 std::string years(double y);                        // "88 days" / "1.88 years" / "165 years"
 std::string kg(double kg);                          // "1.3×10²² kg"

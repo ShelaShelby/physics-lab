@@ -798,12 +798,13 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     {   // scale bar: how long a round distance is at this zoom, and how long light takes to cross it
-        const double kmPerPt = 1 / (px * kKm);
-        const double raw = 100 * kmPerPt, pw = std::pow(10.0, std::floor(std::log10(raw))), mm = raw / pw;
-        const double km = pw * (mm >= 5 ? 5 : mm >= 2 ? 2 : 1), len = km / kmPerPt, au = km * kKm / kAU, sec = km * kKm / kLightSpeed;
+        const double kmPerPt = 1 / (px * kKm), uf = fmt::imperial() ? fmt::kMilesPerKm : 1;   // the bar's length is a round number in the chosen unit
+        const double raw = 100 * kmPerPt * uf, pw = std::pow(10.0, std::floor(std::log10(raw))), mm = raw / pw;
+        const double ku = pw * (mm >= 5 ? 5 : mm >= 2 ? 2 : 1), km = ku / uf, len = km / kmPerPt, au = km * kKm / kAU, sec = km * kKm / kLightSpeed;
+        const char* unm = fmt::imperial() ? "mi" : "km";
         const auto nf = [](double v) { return v >= 1 ? fmt::commas(v) : fmt::precision(v, 1); };
         const auto pl = [&](double v, const char* u) { return nf(v) + " " + u + (std::llround(v) == 1 && v >= 0.95 ? "" : "s"); };
-        const std::string main = std::string(d3 ? "≈ " : "") + (km < 1e6 ? nf(km) + " km" : au < 0.05 ? nf(km / 1e6) + " million km" : nf(au) + " AU");
+        const std::string main = std::string(d3 ? "≈ " : "") + (ku < 1e6 ? nf(ku) + " " + unm : au < 0.05 ? nf(ku / 1e6) + " million " + unm : nf(au) + " AU");
         const std::string lt = sec < 1 ? nf(sec * 1000) + " ms" : sec < 60 ? pl(sec, "second") : sec < 3600 ? pl(sec / 60, "minute")
                              : sec < 86400 ? pl(sec / 3600, "hour") : sec < 86400 * 365.25 ? pl(sec / 86400, "day") : fmt::precision(sec / 86400 / 365.25, 2) + " years";
         const double spanAU = W / px / kAU, spanLy = spanAU / kLightYearAU;
