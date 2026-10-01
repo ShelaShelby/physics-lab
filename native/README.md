@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.3**: **Orbit Lab only**, with everything of the web Orbit Lab except a few small items listed in `REPORT.md` (see the Update badge in the app for what is new). The web version (`../index.html`) is the
+Version **0.4**: **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md` (see the Update badge in the app for what is new). The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -41,6 +41,11 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 
 ## Using it
 
+Pick the lab with the two buttons at the top of the panel: **Orbit Lab** or **Atom Lab**.
+Each lab keeps its state while the other one is on screen.
+
+### Orbit Lab
+
 - **Play / Pause**: the button in the Time card, or the Space bar.
 - **Time speed**: the slider (from real time up to 1 s = 50 years).
 - **Zoom**: the mouse wheel over the picture, or the Zoom slider.
@@ -58,6 +63,23 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 - **Defaults** (top of the panel): puts Orbit Lab's settings back to how they started, after asking.
 - **Update** badge (top of the panel): what is new.
 
+### Atom Lab
+- **Nucleus** card: click an element in the periodic table (⤢ Bigger table for a large one), or use the
+  Protons and Neutrons sliders with − and +, or Famous isotopes. The card shows the element and its facts;
+  🎲 Reshuffle nucleons draws a new arrangement; ☢ Build another appears after a fission.
+- **Decay history**: unstable nuclei decay by themselves, with their real half-lives and odds; each step is listed.
+- **Electron** card: View (Orbit, Cloud, Cloud 3D, Slice), Orbit style (Modern / Bohr 1913), Orbital and its
+  orientation, the cut for Slice, Energy level and Playback speed for Orbit.
+- **Photons** card: Emit, Absorb, Auto photons. The lines you make collect on the picture and in **Light spectrum**.
+- **View & zoom**: Scale, Zoom (also the mouse wheel), and at deep zoom the quark style and nucleon detail.
+  Under the picture: ⌕ Atom / Nucleus / Nucleon, ⌖ Centre, ✥ Drag, ↺ Reset view, and the hint.
+- **Mouse**: drag turns the atom (Orbit), rotates (Cloud 3D), slides the cut (Slice) or moves the picture (Cloud);
+  right-drag or Shift-drag always moves it. Click a nucleon to dive into it; ⓘ shows more or less information
+  (remembered between runs).
+- **Temperature** card: the slider, solid / liquid / gas, the typical atom speed and a little box of atoms.
+- **Learn**: What am I even looking at?, Scale, Weight and the timeline (the web text, word for word).
+- **Defaults** (asks first) puts the Atom Lab settings back; **Reset** starts a fresh atom.
+
 ## How it is organised
 
 | Folder | What is in it |
@@ -71,11 +93,16 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 | `src/orbit/spin.*` | IAU spin of the planets and the Sun, axis tilt, Earth's seasons |
 | `src/orbit/card_text.*`, `format.*` | The info card and how numbers are written |
 | `src/orbit/orbit_view.*` | Drawing the picture, clicks, dragging, zoom |
+| `src/atom/atom_core.*`, `atom_data.inc` | Atom Lab physics: elements and nuclides, orbitals, cloud sampling, spectrum, nucleus, decay, mass, temperature |
+| `src/atom/atom_sim.*` | The Atom Lab simulation: settings, the electron's orbit, photon jumps, the decay clock, readout and hint |
+| `src/atom/atom_learn.*` | The Atom Lab's guide and panel texts (the web's, word for word) |
+| `src/atom/atom_view.*` | Drawing the Atom Lab picture (instanced clouds, glows and gluon fields, a soft layer) |
 | `src/render/` | OpenGL 3.3 loader, batched 2D renderer (instanced dots, planet shader), Earth map |
-| `src/ui/` | The ImGui panel, Learn guides (rich-text layout), Settings, Journey and dates, changelog, fonts |
+| `src/ui/` | The ImGui panels of both labs, Learn guides (rich-text and HTML layout), Settings, Journey and dates, changelog, fonts |
 | `tests/` | Unit tests that compare the physics with the web version |
 | `tools/make_sky_data.js` | Copies the sky, far-away and Earth-outline data out of `index.html` |
 | `tools/make_learn_data.js` | Copies the Learn text out of `index.html` by running the web's own guide code |
+| `tools/make_atom_data.js`, `tools/make_atom_learn.js` | Copy the Atom Lab data, timeline and history out of `index.html` |
 
 All physics is in SI units (metres, seconds, m/s). The web version uses "sim units"
 (GM of the Sun = 100, 1 year = 2π); `units.h` converts them exactly, so both versions
@@ -93,6 +120,14 @@ three Time speeds, the belt rocks, and the spin / axis / season lines on the car
 27 Aug 2003, and Jupiter and Saturn 0.1° apart on 21 Dec 2020. If the web physics ever changes, run
 `node native/tests/reference/make_reference.js` from the repository root and rebuild.
 
+`tests/test_atom.cpp` does the same for Atom Lab (about 17,800 checks). `tests/reference/make_atom_reference.js`
+loads the web Atom Lab code into Node (`atom_web.js`), with `Math.random` replaced by the same seeded generator the
+native lab uses, and records: every nuclide's description, decay modes, binding energies, shapes, number formats,
+ψ for every orbital, the dipole rule, spectral lines, seeded nuclei, and whole seeded runs of the lab (orbit, cloud
+dots, photon jumps, decays, readout and hint lines). `make_atom_learn_reference.js` records the Learn guides and the
+panel texts with a small fake page (`fake_dom.js`) for many atoms, in metric and imperial. Rerun both (from the
+repository root) if the web Atom Lab changes.
+
 ## Command-line helpers for automatic checks
 
 These do nothing in normal use: `PL_EXIT_AFTER_FRAMES=n` quits after n frames,
@@ -100,4 +135,7 @@ These do nothing in normal use: `PL_EXIT_AFTER_FRAMES=n` quits after n frames,
 body, `PL_ZOOM=2.3` sets the zoom, `PL_3D=1` starts in 3D, `PL_CONS=1` shows constellation
 names, `PL_DATE=2003-08-27` jumps to a date (and prints the note), `PL_JOURNEY=1` starts a Journey,
 `PL_LEARN=1|2|3` opens a Learn guide, `PL_IMPERIAL=1` shows imperial units, `PL_SKYOFF=1` turns the
-stars off and `PL_LIGHT=1` pretends the system theme is light.
+stars off and `PL_LIGHT=1` pretends the system theme is light. For Atom Lab: `PL_ATOM=1` opens it,
+`PL_ATOM_SET="Z=26;view=Cloud;zoom=4.5"` sets its settings, `PL_ATOM_DO=emit|absorb|auto|nucleus|nucleon` presses a
+button, `PL_ATOM_FOCUS=n` follows nucleon n, `PL_ATOM_LEARN=1..4` (with `PL_ATOM_TAB=ten|miss|...`) opens a guide,
+and `PL_SCROLL=y` scrolls the Atom Lab panel.

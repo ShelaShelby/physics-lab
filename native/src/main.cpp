@@ -186,7 +186,7 @@ int main(int, char**) {
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
                 if (mouseDown && !dragging && e.button.button == SDL_BUTTON_LEFT) {
-                    if (app.lab == 1) app.atom.click(e.button.x / scale, e.button.y / scale);
+                    if (app.lab == 1) { app.atom.click(e.button.x / scale, e.button.y / scale); ui::saveAtomMore(app); }
                     else app.view.click(e.button.x / scale, e.button.y / scale);
                 }
                 mouseDown = dragging = false;
@@ -257,6 +257,7 @@ int main(int, char**) {
         const int canvasFbW = static_cast<int>(std::lround(canvasWinW * fbW / std::max(1, winW)));
         const int pictureFbH = static_cast<int>(std::lround(pictureWinH * fbH / std::max(1, winH)));
         renderer.end(canvasFbW, pictureFbH, fbH - pictureFbH);
+        app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         if (maxFrames && ++frame >= maxFrames) {
             running = false;

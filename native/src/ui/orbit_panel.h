@@ -39,6 +39,7 @@ struct AppState {
     std::string atomLearnJump;             // a section to scroll to ("top", "bar" or a section key)
     std::string scaleTab = "scale", massTab = "parts";
     int scaleObj = 3;                      // the Scale guide's object (a football)
+    int drawCalls = 0, drawInstances = 0;  // what the renderer drew last frame (the Atom Lab's Performance card)
 };
 
 // Puts everything back where it is today and resets the view and time speed (the web's "☉ Reset to today").
@@ -51,6 +52,9 @@ double zoomFor(const AppState& app, double km, double wantPx);
 
 // Changes the zoom, keeping the middle of the picture in place.
 void setZoom(AppState& app, double zoom);
+
+// The Performance card: frame times (last, average, worst, a graph) and the VSync switch.
+void performanceCard(AppState& app);
 
 // Draws the panel in a window `width` points wide on the right of the main window.
 void orbitPanel(AppState& app, float width);

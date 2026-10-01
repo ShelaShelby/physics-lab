@@ -97,6 +97,24 @@ static bool tile(const char* label, const char* hex, bool selected, float width)
     return clicked;
 }
 
+// The Performance card (both labs): frame times and the VSync switch
+void performanceCard(AppState& app) {
+    ImGui::SeparatorText("Performance");
+    ImGui::Checkbox("VSync (wait for the screen)", &app.vsync);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
+    {
+        const FrameStats& st = app.stats;
+        const float avg = st.avgFrame();
+        ImGui::Text("Frame: %.2f ms   average %.2f ms", st.last(), avg);
+        ImGui::Text("= %.0f fps on average   worst %.2f ms", avg > 0 ? 1000.0f / avg : 0.0f, st.worst());
+        ImGui::Text("Work per frame (CPU): %.2f ms", st.avgWork());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Time to run the physics and build the frame, before waiting for the screen.\nThe graphics card may still be drawing after this.");
+        float hist[FrameStats::kHistory];
+        st.ordered(hist);
+        ImGui::PlotLines("##frametimes", hist, FrameStats::kHistory, 0, "frame time, last 240 frames", 0.0f, std::max(2 * avg, 1.0f), ImVec2(-1, 50));
+    }
+}
+
 void orbitPanel(AppState& app, float width) {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y));
@@ -213,21 +231,7 @@ void orbitPanel(AppState& app, float width) {
     ImGui::Checkbox("Famous comets", &app.set.comets);
     ImGui::Checkbox("Belts and Oort cloud", &app.set.belts);
 
-    // ---- Performance ----
-    ImGui::SeparatorText("Performance");
-    ImGui::Checkbox("VSync (wait for the screen)", &app.vsync);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
-    {
-        const FrameStats& st = app.stats;
-        const float avg = st.avgFrame();
-        ImGui::Text("Frame: %.2f ms   average %.2f ms", st.last(), avg);
-        ImGui::Text("= %.0f fps on average   worst %.2f ms", avg > 0 ? 1000.0f / avg : 0.0f, st.worst());
-        ImGui::Text("Work per frame (CPU): %.2f ms", st.avgWork());
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Time to run the physics and build the frame, before waiting for the screen.\nThe graphics card may still be drawing after this.");
-        float hist[FrameStats::kHistory];
-        st.ordered(hist);
-        ImGui::PlotLines("##frametimes", hist, FrameStats::kHistory, 0, "frame time, last 240 frames", 0.0f, std::max(2 * avg, 1.0f), ImVec2(-1, 50));
-    }
+    performanceCard(app);
 
     // ---- Go to ----
     ImGui::SeparatorText("Go to");

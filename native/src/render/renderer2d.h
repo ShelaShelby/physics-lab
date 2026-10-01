@@ -62,6 +62,10 @@ public:
     void beginSoftLayer(float scale);
     void endSoftLayer();
 
+    // What the last end() drew: draw calls, and shapes drawn by the instanced calls (squares and blobs)
+    int lastDrawCalls() const { return lastCalls_; }
+    int lastInstances() const { return lastInstances_; }
+
     // A turning planet. K turns screen directions into the planet's own frame (rows: its 0° meridian,
     // 90° east, north pole; columns: screen right, up, towards you). earth: the Earth map, else a plain
     // colour with a grid of latitude and longitude and the 0° meridian marked (as in the web version).
@@ -86,6 +90,7 @@ private:
     GLint cmpTex_ = -1;
     int layerW_ = 0, layerH_ = 0;
     float layerScale_ = 0.5f;
+    int lastCalls_ = 0, lastInstances_ = 0;
 
     struct Vertex { float x, y, u, v, r, g, b, a, mode, p1, p2, p3; };
     void quad(double cx, double cy, double half, Color c, float mode, float p1, float p2, float uvScale);

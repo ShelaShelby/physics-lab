@@ -8,6 +8,7 @@ struct AppState;
 
 void loadSettings(AppState& app);      // at start-up
 void settingsWindow(AppState& app);    // the Settings window, when open
-void defaultsButton(AppState& app);    // the "Defaults" button and its "are you sure?" question
+void defaultsButton(AppState& app);    // the "Defaults" button and its "are you sure?" question (for the lab on screen)
+void saveAtomMore(AppState& app);      // keeps the Atom Lab's More / Less info choice (when it changed)
 
 }  // namespace ui

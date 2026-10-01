@@ -12,6 +12,20 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.4", "Atom Lab",
+     "The second lab: pick Orbit Lab or Atom Lab at the top of the panel (each keeps its state while the other is shown). "
+     "Atom Lab is the web version's, feature for feature: any nucleus from hydrogen to oganesson with one electron, in four "
+     "pictures (Orbit, as Bohr's 1913 circles or with the real nucleus; Cloud; Cloud 3D; Slice), photons that make the electron "
+     "jump and build a spectrum, a zoom from the whole atom down to the protons and neutrons and the quarks inside them "
+     "(Cinematic, Accurate or Classic quarks), every known nuclide with its real half-life and decay odds, decays happening on "
+     "their own with a decay history, the periodic table with element cards and facts, the light spectrum, and the "
+     "Temperature card with its little box of atoms. The four Learn guides are here too: What am I even looking at?, Scale, "
+     "Weight and the 22-step timeline, whose buttons set the lab up. "
+     "The physics uses the web's constants and steps (SI units inside), and the tests compare it with the web's own code: "
+     "the electron's orbit, the sampled cloud, photon jumps and decays step by step with the same random numbers, and every "
+     "text word for word. Cloud dots, glows and gluon particles are drawn as instanced shapes, a few draw calls for thousands. "
+     "Units follow Settings (°F, mph, miles where the web converts them). Defaults asks first; Reset starts a fresh atom; "
+     "More / Less info is remembered. The Performance card is on the Atom Lab panel too, with the picture's draw calls."},
     {"0.3", "Orbit Lab complete: Learn guides, Settings with metric or imperial, watch a planet turn",
      "New ⚙ Settings: show distances, speeds and temperatures in metric (km, km/s, °C) or imperial (miles, mi/s, °F). "
      "Every line of every facts card follows it, including the km/h and °C inside the notes, and so does the scale bar; "
@@ -61,6 +75,13 @@ const Entry kNative[] = {
 const Entry kWeb[] = {
 #include "web_orbit_changelog.inc"
 };
+// The web Atom Lab's history (the native Atom Lab follows web Atom Lab 7.7.3).
+const Entry kWebAtom[] = {
+#include "web_atom_changelog.inc"
+};
+const char* const kWebAtomNote =
+#include "web_atom_changelog_note.inc"
+    ;
 
 }  // namespace
 
@@ -82,6 +103,13 @@ void changelogWindow(bool* open) {
                 ImGui::SeparatorText((std::string(e.version) + " · " + e.title).c_str());
                 ImGui::TextWrapped("%s", e.text);
             }
+        }
+        if (ImGui::CollapsingHeader("Web version history (Atom Lab, for reference)")) {
+            for (const Entry& e : kWebAtom) {
+                ImGui::SeparatorText((std::string(e.version) + " · " + e.title).c_str());
+                ImGui::TextWrapped("%s", e.text);
+            }
+            ImGui::TextDisabled("%s", kWebAtomNote);
         }
     }
     ImGui::End();

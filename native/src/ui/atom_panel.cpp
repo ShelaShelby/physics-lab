@@ -20,6 +20,7 @@
 #include "atom_learn.h"
 #include "orbit_panel.h"
 #include "rich_text.h"
+#include "settings.h"
 
 namespace ui {
 
@@ -465,6 +466,11 @@ void atomPanel(AppState& app, float width) {
     ImGui::PopStyleColor();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("What's new");
     if (ImGui::SmallButton(displayable("⚙ Settings").c_str())) app.showSettings = true;
+    ImGui::SameLine();
+    defaultsButton(app);
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) L.restart();                  // the web's Reset: a fresh atom, the same settings
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Restart this lab's simulation");
     ImGui::TextWrapped("any nucleus from hydrogen to oganesson + one electron: Bohr orbit, quantum cloud, 3D, photon jumps, and a zoom down to quarks");
     if (ImGui::Button(app.paused ? "▶ Play" : "❚❚ Pause", ImVec2(-1, 0))) app.paused = !app.paused;
     ImGui::TextDisabled("Space: play / pause");
@@ -597,6 +603,11 @@ void atomPanel(AppState& app, float width) {
         }
         mutedWrapped(kTempNote, 12.0f / 16);
     }
+    // ---- Performance ----
+    performanceCard(app);
+    ImGui::TextDisabled("Picture: %d draw calls, %d instanced shapes", app.drawCalls, app.drawInstances);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Cloud dots, glows and gluon-field particles are drawn as instanced shapes,\na few draw calls for thousands of them.");
+
     // a slider or button held down: the decay clock waits (the web's PL_HOLD)
     L.hold = ImGui::IsAnyItemActive() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
     ImGui::End();
