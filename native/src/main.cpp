@@ -88,6 +88,7 @@ int main(int, char**) {
     const float panelWidth = 360 * scale;              // window coordinates
     double acc = 0;                                     // real time not yet simulated, s
     Uint64 last = SDL_GetPerformanceCounter();
+    bool vsyncOn = true;
     double fps = 0, fpsTime = 0;
     int fpsFrames = 0;
     bool mouseDown = false, dragging = false;
@@ -142,7 +143,7 @@ int main(int, char**) {
         if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) { SDL_Delay(20); last = SDL_GetPerformanceCounter(); continue; }
 
         // ---- time and physics (fixed steps, as in the web version) ----
-        const Uint64 now = SDL_GetPerformanceCounter();
+        const Uint64 now = SDL_GetPerformanceCounter();   // the frame starts here
         const double frameDt = static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
         last = now;
         const double dt = std::min(frameDt, units::kMaxFrameDt);
@@ -185,7 +186,10 @@ int main(int, char**) {
                 SDL_DestroySurface(shot);
             }
         }
+        const double workMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();
+        app.stats.add(frameDt * 1000.0, workMs);
         SDL_GL_SwapWindow(window);
+        if (app.vsync != vsyncOn) { vsyncOn = app.vsync; SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
     }
 
     ImGui_ImplOpenGL3_Shutdown();

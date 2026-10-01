@@ -1,10 +1,16 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.1**: a pilot with **Orbit Lab only**. The web version (`../index.html`) is the
+Version **0.2**: **Orbit Lab only** (see the Update badge in the app for what is new). The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
+
+The newest build is always on one fixed page: the GitHub **Release tagged `latest`**
+(`https://github.com/ShelaShelby/physics-lab/releases/tag/latest`). Download
+`PhysicsLab-windows-x64.zip`, unzip it and run `PhysicsLab.exe`.
+
+It is also attached to each workflow run:
 
 1. On GitHub, open the **Actions** tab and pick **Native Windows build**.
 2. Either open the latest run (it runs on every push to the `native` branch that changes

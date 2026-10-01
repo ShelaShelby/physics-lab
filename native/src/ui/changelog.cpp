@@ -12,6 +12,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.2", "Frame timing and VSync switch",
+     "A new Performance card shows how long each frame takes (the last one, the average and the worst of the last "
+     "240 frames, with a small graph) and how much of it is the app's own work. A VSync switch turns off waiting for "
+     "the screen, so you can see the real headroom instead of the monitor's refresh rate. Each Windows build is now "
+     "also published on one fixed GitHub Release page, tagged \"latest\"."},
     {"0.1", "First native version: Orbit Lab (pilot)",
      "A native Windows version of Physics Lab, written in C++ with SDL3, OpenGL 3.3 and Dear ImGui. "
      "It has Orbit Lab only: the real Solar System where everything is today (the eight planets, the five dwarf planets, "

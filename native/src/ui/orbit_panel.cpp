@@ -154,6 +154,22 @@ void orbitPanel(AppState& app, float width) {
     ImGui::Checkbox("Dwarf planets", &app.set.dwarfs);
     ImGui::Checkbox("Famous comets", &app.set.comets);
 
+    // ---- Performance ----
+    ImGui::SeparatorText("Performance");
+    ImGui::Checkbox("VSync (wait for the screen)", &app.vsync);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
+    {
+        const FrameStats& st = app.stats;
+        const float avg = st.avgFrame();
+        ImGui::Text("Frame: %.2f ms   average %.2f ms", st.last(), avg);
+        ImGui::Text("= %.0f fps on average   worst %.2f ms", avg > 0 ? 1000.0f / avg : 0.0f, st.worst());
+        ImGui::Text("Work per frame (CPU): %.2f ms", st.avgWork());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Time to run the physics and build the frame, before waiting for the screen.\nThe graphics card may still be drawing after this.");
+        float hist[FrameStats::kHistory];
+        st.ordered(hist);
+        ImGui::PlotLines("##frametimes", hist, FrameStats::kHistory, 0, "frame time, last 240 frames", 0.0f, std::max(2 * avg, 1.0f), ImVec2(-1, 50));
+    }
+
     // ---- Go to ----
     ImGui::SeparatorText("Go to");
     const float avail = ImGui::GetContentRegionAvail().x, gap = ImGui::GetStyle().ItemSpacing.x, tw = (avail - gap) / 2;
