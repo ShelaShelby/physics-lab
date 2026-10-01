@@ -43,6 +43,8 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
     t += "Text size: " + e.textSize + ", theme: " + e.theme + "\n";
     t += "VSync: off during the test. Each scene: " + f("%.0f", e.warmupS) + " s warm-up (not counted), then " + f("%.0f", e.measureS) + " s counted.\n";
     t += std::string("GPU timer (GL_TIME_ELAPSED): ") + (e.gpuTimer ? "available" : "not available") + "\n";
+    if (e.gpuTimer) t += std::string("GPU timer check: ") + (e.gpuReliable ? "reliable, " : "NOT RELIABLE, ") + (e.gpuCheck.empty() ? "no check was made" : e.gpuCheck) + "\n";
+    t += "GPU time covers the whole drawing of a frame (clear, picture with its soft layer and instanced draws, panels and text), up to just before the buffer swap.\n";
     if (e.cancelled) t += "THE TEST WAS CANCELLED: only the finished scenes are listed.\n";
     t += "\n";
     for (const BenchScene& s : scenes) {
@@ -53,7 +55,15 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
         t += "  1 % low: " + f("%.1f", s.frames.low1Fps) + " fps (average of the slowest 1 % of the frames)\n";
         t += "  Worst frame: " + f("%.2f", s.frames.worstMs) + " ms\n";
         t += "  CPU work per frame: " + f("%.2f", s.cpuAvgMs) + " ms\n";
-        t += "  GPU time per frame: " + (s.gpuAvgMs >= 0 ? f("%.2f", s.gpuAvgMs) + " ms" : std::string("not available")) + "\n";
+        if (s.gpuSamples <= 0) t += "  GPU time per frame: not available\n";
+        else if (e.gpuReliable && s.gpuProblem.empty()) {
+            t += "  GPU time per frame: " + f("%.2f", s.gpuAvgMs) + " ms\n";
+            t += "  GPU span per frame: " + f("%.2f", s.gpuSpanAvgMs) + " ms (from the first to the last GPU command of the frame, waiting included)\n";
+        } else {
+            const std::string why = !s.gpuProblem.empty() ? s.gpuProblem : std::string("the timer failed its self-check");
+            t += "  GPU time per frame: not reliable (" + why + ")\n";
+            t += "  (raw values, do not trust them: busy " + f("%.2f", s.gpuAvgMs) + " ms, span " + f("%.2f", s.gpuSpanAvgMs) + " ms, " + std::to_string(s.gpuSamples) + " of " + std::to_string(s.frames.frames) + " frames)\n";
+        }
     }
     if (!scenes.empty()) {
         double sum = 0;
@@ -70,9 +80,14 @@ std::string benchFileName(const ShotTime& t) {
 }
 
 BenchRun::BenchRun(int sceneCount, double warmupS, double measureS)
-    : count_(sceneCount), warm_(warmupS), measure_(measureS), frameMs_(sceneCount), cpuSum_(sceneCount), gpuSum_(sceneCount), cpuN_(sceneCount), gpuN_(sceneCount) {}
+    : count_(sceneCount), warm_(warmupS), measure_(measureS), frameMs_(sceneCount), cpuSum_(sceneCount), gpuSum_(sceneCount), spanSum_(sceneCount), cpuN_(sceneCount), gpuN_(sceneCount) {}
 
-void BenchRun::frame(double frameMs, double cpuMs, double gpuMs) {
+void BenchRun::gpuSample(double busyMs, double spanMs) {
+    if (finished_ || setup_ >= 0 || !measuring_) return;
+    gpuSum_[scene_] += busyMs; spanSum_[scene_] += spanMs; gpuN_[scene_]++;
+}
+
+void BenchRun::frame(double frameMs, double cpuMs) {
     if (finished_ || setup_ >= 0) return;
     elapsed_ += frameMs / 1000;
     if (!measuring_) {
@@ -81,7 +96,6 @@ void BenchRun::frame(double frameMs, double cpuMs, double gpuMs) {
     }
     frameMs_[scene_].push_back(frameMs);
     cpuSum_[scene_] += cpuMs; cpuN_[scene_]++;
-    if (gpuMs >= 0) { gpuSum_[scene_] += gpuMs; gpuN_[scene_]++; }
     if (elapsed_ >= measure_) {
         measuring_ = false; elapsed_ = 0;
         if (++scene_ >= count_) finished_ = true; else setup_ = scene_;
@@ -99,6 +113,8 @@ BenchScene BenchRun::result(int i) const {
     s.cpuAvgMs = cpuN_[i] ? cpuSum_[i] / cpuN_[i] : 0;
     s.gpuSamples = gpuN_[i];
     s.gpuAvgMs = gpuN_[i] ? gpuSum_[i] / gpuN_[i] : -1;
+    s.gpuSpanAvgMs = gpuN_[i] ? spanSum_[i] / gpuN_[i] : -1;
+    s.gpuProblem = gpuN_[i] ? gpuSceneProblem(s.frames.frames, gpuN_[i], s.gpuAvgMs, s.gpuSpanAvgMs, s.frames.avgMs) : "";
     return s;
 }
 

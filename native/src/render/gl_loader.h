@@ -45,6 +45,7 @@ typedef std::ptrdiff_t GLintptr;
 #define GL_VERSION 0x1F02
 #define GL_VENDOR 0x1F00
 #define GL_TIME_ELAPSED 0x88BF
+#define GL_TIMESTAMP 0x8E28
 #define GL_QUERY_RESULT 0x8866
 #define GL_QUERY_RESULT_AVAILABLE 0x8867
 #define GL_RGB 0x1907
@@ -127,6 +128,8 @@ typedef std::ptrdiff_t GLintptr;
     X(void, glEndQuery, (GLenum target))                                                           \
     X(void, glGetQueryObjectiv, (GLuint id, GLenum pname, GLint* params))                          \
     X(void, glGetQueryObjectui64v, (GLuint id, GLenum pname, unsigned long long* params))          \
+    X(void, glQueryCounter, (GLuint id, GLenum target))                                            \
+    X(void, glFinish, ())                                                                          \
     X(void, glReadPixels, (GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum t, void* data))
 
 // The function pointers live in their own namespace, so they never clash with the

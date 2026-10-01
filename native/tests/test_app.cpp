@@ -17,6 +17,7 @@
 #include "app/history.h"
 #include "app/bench.h"
 #include "app/frame_time.h"
+#include "app/gpu_timer.h"
 #include "atom/atom_bench.h"
 #include "orbit/solar_system.h"
 
@@ -602,14 +603,15 @@ static void testBench() {
     // a run: 3 scenes, 2 s warm-up and 8 s counted, frames of 100 ms
     BenchRun run(3);
     checkTrue("the first scene is set up first", run.sceneToSetUp() == 0 && !run.finished());
-    run.frame(100, 5, 1);                                                    // before the set-up is done: ignored
+    run.gpuSample(1, 1); run.frame(100, 5);                                  // before the set-up is done: ignored
     checkTrue("a frame before the set-up does not count", run.sceneElapsedS() == 0);
     run.setUpDone();
     int setups = 1, frames = 0;
     std::vector<int> order = {0};
     while (!run.finished() && frames < 100000) {
         if (run.sceneToSetUp() >= 0) { order.push_back(run.sceneToSetUp()); run.setUpDone(); setups++; }
-        run.frame(100, 4 + run.scene(), run.scene() == 1 ? -1 : 2);            // scene 1 has no GPU numbers
+        if (run.scene() != 1) run.gpuSample(2, 3);                              // scene 1 has no GPU numbers
+        run.frame(100, 4 + run.scene());
         frames++;
     }
     checkTrue("3 scenes set up in order", setups == 3 && order == std::vector<int>({0, 1, 2}));
@@ -619,29 +621,30 @@ static void testBench() {
         const BenchScene r = run.result(i);
         checkTrue("scene " + std::to_string(i) + ": about 80 counted frames, the warm-up not counted", r.frames.frames >= 79 && r.frames.frames <= 81);
         checkTrue("scene " + std::to_string(i) + ": CPU average", near(r.cpuAvgMs, 4 + i));
-        checkTrue("scene " + std::to_string(i) + ": GPU average or not available", i == 1 ? (r.gpuAvgMs < 0 && r.gpuSamples == 0) : (near(r.gpuAvgMs, 2) && r.gpuSamples > 0));
+        checkTrue("scene " + std::to_string(i) + ": GPU average or not available", i == 1 ? (r.gpuAvgMs < 0 && r.gpuSamples == 0) : (near(r.gpuAvgMs, 2) && near(r.gpuSpanAvgMs, 3) && r.gpuSamples > 0 && r.gpuProblem.empty()));
         checkTrue("scene " + std::to_string(i) + ": 10 fps", near(r.frames.avgFps, 10));
     }
     BenchRun early(2);
     early.setUpDone();
-    for (int i = 0; i < 150; i++) early.frame(100, 1, -1);                  // 15 s: scene 0 done, scene 1 waiting for its set-up
+    for (int i = 0; i < 150; i++) early.frame(100, 1);                  // 15 s: scene 0 done, scene 1 waiting for its set-up
     checkTrue("a cancelled run knows how many scenes are done", !early.finished() && early.doneScenes() == 1 && early.sceneToSetUp() == 1);
 
     // the text
     BenchEnv env;
-    env.version = "0.8"; env.when = "2026-10-01 15:30:45"; env.gpu = "Test GPU 9000"; env.glVersion = "3.3.0 Test"; env.vendor = "Test Vendor";
-    env.windowW = 1400; env.windowH = 860; env.pictureW = 1040; env.pictureH = 713; env.refreshHz = 144; env.textSize = "xl"; env.theme = "paper"; env.fullscreen = true; env.gpuTimer = true;
-    BenchScene s1; s1.name = "1. First"; s1.what = "some settings"; s1.frames = benchStats({10, 10, 10, 10}); s1.cpuAvgMs = 3.5; s1.gpuAvgMs = 6.25;
+    env.version = "0.9"; env.when = "2026-10-01 15:30:45"; env.gpu = "Test GPU 9000"; env.glVersion = "3.3.0 Test"; env.vendor = "Test Vendor";
+    env.windowW = 1400; env.windowH = 860; env.pictureW = 1040; env.pictureH = 713; env.refreshHz = 144; env.textSize = "xl"; env.theme = "paper"; env.fullscreen = true; env.gpuTimer = true; env.gpuReliable = true; env.gpuCheck = "self-check with a known load: timer 3.10 ms, clock 3.20 ms";
+    BenchScene s1; s1.name = "1. First"; s1.what = "some settings"; s1.frames = benchStats({10, 10, 10, 10}); s1.cpuAvgMs = 3.5; s1.gpuAvgMs = 6.25; s1.gpuSpanAvgMs = 7.5; s1.gpuSamples = 4;
     BenchScene s2; s2.name = "2. Second"; s2.what = "other settings"; s2.frames = benchStats({20, 20}); s2.cpuAvgMs = 1; s2.gpuAvgMs = -1;
     const std::string t = benchResultText(env, {s1, s2});
-    const char* want[] = {"Physics Lab (native) benchmark", "Version: 0.8", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "OpenGL: 3.3.0 Test", "Driver / vendor: Test Vendor",
+    const char* want[] = {"Physics Lab (native) benchmark", "Version: 0.9", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "OpenGL: 3.3.0 Test", "Driver / vendor: Test Vendor",
                           "Window: 1400 x 860 pixels, full screen", "Picture area: 1040 x 713 pixels", "Display refresh rate: 144 Hz", "Text size: xl, theme: paper",
-                          "VSync: off during the test. Each scene: 2 s warm-up (not counted), then 8 s counted.", "GPU timer (GL_TIME_ELAPSED): available"};
+                          "VSync: off during the test. Each scene: 2 s warm-up (not counted), then 8 s counted.", "GPU timer (GL_TIME_ELAPSED): available", "GPU timer check: reliable, self-check with a known load: timer 3.10 ms, clock 3.20 ms"};
     std::size_t at = 0;
     bool inOrder = true;
     for (const char* w : want) { const std::size_t p = t.find(w, at); if (p == std::string::npos) { inOrder = false; checkTrue(std::string("result text has: ") + w, false); break; } at = p; }
     checkTrue("the result text starts with the version, date and graphics, in order", inOrder && t.rfind("Physics Lab (native) benchmark\n", 0) == 0);
     checkTrue("result text: scene 1 numbers", t.find("  Average: 10.00 ms per frame = 100.0 fps\n  1 % low: 100.0 fps") != std::string::npos && t.find("  Worst frame: 10.00 ms\n  CPU work per frame: 3.50 ms\n  GPU time per frame: 6.25 ms") != std::string::npos);
+    checkTrue("result text: the GPU span line", t.find("  GPU span per frame: 7.50 ms") != std::string::npos);
     checkTrue("result text: no GPU time says not available, it does not guess", t.find("2. Second\n") != std::string::npos && t.find("GPU time per frame: not available") != std::string::npos);
     checkTrue("result text: the average over the scenes", t.find("Average fps over the scenes: 75.0") != std::string::npos);
     BenchEnv none = env; none.gpuTimer = false; none.refreshHz = 0; none.vendor = ""; none.fullscreen = false; none.cancelled = true;
@@ -696,8 +699,8 @@ static void testBench() {
     checkTrue("the Solar System is back exactly as it was", same);
 }
 
-// ---- the time step and the live-frame counters (version 0.9) ----
-static void testLive() {
+// ---- the time step, the live-frame counters, the GPU timer ring and its verdict (version 0.9) ----
+static void testLiveAndGpu() {
     // the time step of a frame
     checkTrue("step: a normal frame counts as it is", near(stepSeconds(0.016, 0.05), 0.016));
     checkTrue("step: a slow frame counts as at most 0.05 s", near(stepSeconds(0.2, 0.05), 0.05) && near(stepSeconds(0.9, 0.05), 0.05));
@@ -718,6 +721,55 @@ static void testLive() {
     LiveStats none; none.frame(false, 16); none.frame(false, 16);
     checkTrue("live counters: no drag, no live frames", none.frames == 0 && none.drags == 0);
 
+    // the ring of GPU queries
+    QueryRing ring(3);
+    const int a = ring.acquire(); ring.submitted(a);
+    const int b = ring.acquire(); ring.submitted(b);
+    const int c = ring.acquire(); ring.submitted(c);
+    checkTrue("ring: three slots in turn", a == 0 && b == 1 && c == 2 && ring.slots() == 3);
+    checkTrue("ring: all busy, nothing free", ring.acquire() == -1 && ring.waiting() == 3);
+    std::vector<int> got;
+    std::vector<bool> ready(3, false);
+    ring.collect([&](int s) { return bool(ready[s]); }, [](int s) { return s; }, got);
+    checkTrue("ring: nothing is read before it is ready", got.empty() && ring.waiting() == 3);
+    ready[1] = true;                                       // a later slot ready while the oldest is not: wait for the oldest (the GPU finishes in order)
+    ring.collect([&](int s) { return bool(ready[s]); }, [](int s) { return s; }, got);
+    checkTrue("ring: results come oldest first, a younger one does not jump the queue", got.empty());
+    ready[0] = true;
+    ring.collect([&](int s) { return bool(ready[s]); }, [](int s) { return s; }, got);
+    checkTrue("ring: two results, oldest first, and their slots are free again", got == std::vector<int>({0, 1}) && ring.waiting() == 1 && ring.acquire() == 0);
+    ring.reset();
+    checkTrue("ring: reset frees everything", ring.waiting() == 0 && ring.acquire() == 0);
+
+    // is the timer to be trusted?
+    checkTrue("verdict: timer and clock agree: reliable", judgeGpuTimer(3.0, 3.2).reliable && judgeGpuTimer(3.0, 3.2).why.find("timer 3.00 ms, clock 3.20 ms") != std::string::npos);
+    const GpuVerdict low = judgeGpuTimer(0.09, 3.0);
+    checkTrue("verdict: the timer says 0.09 ms for a load the clock needs 3 ms for: not reliable, and the text says both numbers", !low.reliable && low.why.find("0.09") != std::string::npos && low.why.find("3.00") != std::string::npos);
+    checkTrue("verdict: a timer that says far too much is not reliable either", !judgeGpuTimer(9, 3).reliable);
+    checkTrue("verdict: 0 is not reliable", !judgeGpuTimer(0, 3).reliable);
+    checkTrue("verdict: a load that is too small tells nothing", !judgeGpuTimer(0.1, 0.1).reliable && judgeGpuTimer(0.1, 0.1).why.find("too small") != std::string::npos);
+    checkTrue("verdict: the edges 60 % and 130 % are accepted", judgeGpuTimer(1.8, 3.0).reliable && judgeGpuTimer(3.9, 3.0).reliable && !judgeGpuTimer(1.7, 3.0).reliable);
+
+    // one scene's numbers
+    checkTrue("scene check: fine", gpuSceneProblem(1000, 900, 1.0, 1.5, 2.0).empty());
+    checkTrue("scene check: no results", !gpuSceneProblem(1000, 0, -1, -1, 2.0).empty());
+    checkTrue("scene check: fewer than half of the frames gave a result", gpuSceneProblem(1000, 400, 1.0, 1.5, 2.0).find("400 of 1000") != std::string::npos);
+    checkTrue("scene check: a span shorter than the busy time inside it is a contradiction", gpuSceneProblem(1000, 900, 1.4, 0.88, 2.0).find("contradict") != std::string::npos && gpuSceneProblem(1000, 900, 1.0, 0.8, 2.0).empty());
+    checkTrue("scene check: longer than the frame itself", !gpuSceneProblem(1000, 900, 5.0, 6.0, 2.0).empty());
+
+    // the text when the timer is not reliable: no number that looks real
+    BenchEnv env;
+    env.version = "0.9"; env.gpuTimer = true; env.gpuReliable = false; env.gpuCheck = low.why;
+    BenchScene s; s.name = "1. First"; s.frames = benchStats({2, 2, 2, 2}); s.gpuAvgMs = 0.09; s.gpuSpanAvgMs = 0.5; s.gpuSamples = 4;
+    const std::string t = benchResultText(env, {s});
+    checkTrue("text: says not reliable instead of a number", t.find("GPU time per frame: not reliable (") != std::string::npos && t.find("GPU time per frame: 0.09") == std::string::npos &&
+                                                             t.find("GPU timer check: NOT RELIABLE") != std::string::npos);
+    checkTrue("text: the raw values are kept, marked as not to be trusted", t.find("raw values, do not trust them: busy 0.09 ms, span 0.50 ms, 4 of 4 frames") != std::string::npos);
+    BenchEnv okEnv = env; okEnv.gpuReliable = true;
+    BenchScene bad = s; bad.gpuProblem = "only 1 of 4 frames gave a result";
+    checkTrue("text: a reliable timer but a bad scene still says not reliable", benchResultText(okEnv, {bad}).find("not reliable (only 1 of 4 frames gave a result)") != std::string::npos);
+    checkTrue("text: it says what the GPU time covers", t.find("up to just before the buffer swap") != std::string::npos);
+
 }
 
 int main() {
@@ -732,7 +784,7 @@ int main() {
     testHistoryNotes();
     testWindow();
     testBench();
-    testLive();
+    testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

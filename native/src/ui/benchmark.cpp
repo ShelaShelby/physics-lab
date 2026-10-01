@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "app/bench.h"
+#include "app/gpu_timer.h"
 #include "app/shot.h"
 #include "atom/atom_bench.h"
 #include "atom/atom_core.h"
@@ -72,16 +73,55 @@ const std::vector<SceneDef>& scenes() {
     return v;
 }
 
-// ---- the GPU timer: a few queries in a ring, read when they are ready ----
+// ---- the GPU timer ----
+// For every measured frame, from the first GL call of the drawing (the clear) to the last one before the buffer swap (the panels and text):
+//   q[0] GL_TIME_ELAPSED   the time the GPU was busy on it, all passes together (the picture, its soft layer, the instanced draws, ImGui)
+//   q[1] / q[2] GL_TIMESTAMP at the start and at the end: the span from the first to the last GPU command, waiting included
+// The results come a frame or two late; a ring of slots is used in turn, and read oldest first (app/gpu_timer.h).
 struct GpuTimer {
-    static constexpr int kN = 4;
-    unsigned q[kN] = {};
-    bool inUse[kN] = {};
-    int next = 0, active = -1;
+    static constexpr int kSlots = 8;
+    unsigned q[kSlots][3] = {};
+    app::QueryRing ring{kSlots};
+    int active = -1;
     bool ok = false, made = false;
-    void make() { if (!made) { made = true; plgl::glGenQueries(kN, q); ok = true; } }
-    void destroy() { if (made) { plgl::glDeleteQueries(kN, q); made = false; } }
+    long framesSkipped = 0;                      // frames whose slots were all still waiting (not measured)
+    void make() { if (!made) { made = true; ok = true; ring.reset(); for (auto& s : q) plgl::glGenQueries(3, s); } }
+    void destroy() { if (made) { for (auto& s : q) plgl::glDeleteQueries(3, s); made = false; } }
 };
+
+struct GpuSample { double busyMs, spanMs; };
+
+// Is GL_TIME_ELAPSED believable on this PC? A known heavy load (many see-through full-picture rectangles) is drawn a few times; the timer
+// and a clock (up to glFinish) must roughly agree. The load is doubled until it takes about 2 ms.
+app::GpuVerdict checkGpuTimer(render::Renderer2D& r, double wPts, double hPts, int fbW, int fbH) {
+    unsigned q = 0;
+    plgl::glGenQueries(1, &q);
+    const double toMs = 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+    double qMed = 0, wMed = 0;
+    for (int n = 16; n <= 16384; n *= 2) {
+        std::vector<double> qs, ws;
+        for (int rep = 0; rep < 9; rep++) {
+            r.begin(wPts, hPts);
+            for (int k = 0; k < n; k++) r.rect(0, 0, wPts, hPts, render::Color{0.5f, 0.5f, 0.5f, 0.02f});
+            plgl::glViewport(0, 0, fbW, fbH);
+            plgl::glFinish();
+            const Uint64 t0 = SDL_GetPerformanceCounter();
+            plgl::glBeginQuery(GL_TIME_ELAPSED, q);
+            r.end(fbW, fbH, 0);
+            plgl::glEndQuery(GL_TIME_ELAPSED);
+            plgl::glFinish();
+            const double wall = static_cast<double>(SDL_GetPerformanceCounter() - t0) * toMs;
+            unsigned long long ns = 0;
+            plgl::glGetQueryObjectui64v(q, GL_QUERY_RESULT, &ns);
+            if (rep >= 2) { qs.push_back(ns / 1e6); ws.push_back(wall); }      // the first two are warm-up (the GPU may still be raising its clock)
+        }
+        std::sort(qs.begin(), qs.end()); std::sort(ws.begin(), ws.end());
+        qMed = qs[qs.size() / 2]; wMed = ws[ws.size() / 2];
+        if (wMed >= 2.0) break;
+    }
+    plgl::glDeleteQueries(1, &q);
+    return app::judgeGpuTimer(qMed, wMed);
+}
 
 }  // namespace
 
@@ -112,12 +152,16 @@ struct BenchState {
     std::string text, note;
     bool noteFailed = false;
     GpuTimer gpu;
-    double lastGpuMs = -1;
+    std::vector<GpuSample> gpuReady;
+    app::GpuVerdict gpuCheck;
+    bool gpuChecked = false;
     double warm = app::kBenchWarmupS, measure = app::kBenchMeasureS;
     bool cancelled = false;
 };
 
 namespace {
+
+int activeScenes(const BenchState&) { return int(scenes().size()); }
 
 BenchState& st(AppState& app) {
     if (!app.bench) app.bench = std::make_shared<BenchState>();
@@ -181,9 +225,9 @@ void begin(AppState& app) {
     b.atom = std::make_unique<atom::AtomLab>(app.atom);
     b.atomView = std::make_unique<atom::AtomView>(app.atomView);
     b.set = app.set; b.journey = app.journey;
-    b.results.clear(); b.text.clear(); b.note.clear(); b.cancelled = false; b.lastGpuMs = -1;
+    b.results.clear(); b.text.clear(); b.note.clear(); b.cancelled = false; b.gpuChecked = false; b.gpuCheck = app::GpuVerdict(); b.gpuReady.clear();
     b.gpu.make();
-    b.run = std::make_unique<app::BenchRun>(int(scenes().size()), b.warm, b.measure);
+    b.run = std::make_unique<app::BenchRun>(activeScenes(b), b.warm, b.measure);
     b.stage = BenchState::Stage::Running;
     app.benchRunning = true;
 }
@@ -215,6 +259,8 @@ void finish(AppState& app, BenchState& b, bool cancelled) {
     }
     b.env.cancelled = cancelled;
     b.env.gpuTimer = b.gpu.ok && std::any_of(b.results.begin(), b.results.end(), [](const app::BenchScene& s) { return s.gpuSamples > 0; });
+    b.env.gpuReliable = b.env.gpuTimer && b.gpuChecked && b.gpuCheck.reliable;
+    b.env.gpuCheck = b.gpuChecked ? b.gpuCheck.why : std::string();
     restore(app, b);
     b.gpu.destroy();
     b.cancelled = cancelled;
@@ -244,11 +290,16 @@ void benchmarkTestHook(AppState& app) {
     if (std::string(v) == "start") begin(app); else st(app).stage = BenchState::Stage::Ask;
 }
 
-void benchmarkBeginFrame(AppState& app, render::Renderer2D&, int, int) {
+void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, int fbH) {
     if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
     BenchState& b = *app.bench;
     if (app.liveFrame) { std::printf("Benchmark stopped: the window was moved or resized\n"); finish(app, b, true); return; }   // the numbers would be wrong
     if (whyNot(app) && std::string(whyNot(app)) != "The benchmark is already running.") { finish(app, b, true); return; }   // something got in the way: stop and give everything back
+    if (!b.gpuChecked) {                                 // once, before the first scene
+        b.gpuChecked = true;
+        b.gpuCheck = checkGpuTimer(renderer, app.canvasW, app.canvasH, fbW, fbH);
+        std::printf("GPU timer check: %s: %s\n", b.gpuCheck.reliable ? "reliable" : "NOT reliable", b.gpuCheck.why.c_str());
+    }
     const int i = b.run->sceneToSetUp();
     if (i >= 0) { scenes()[i].setup(app); b.run->setUpDone(); }
     app.vsync = false;
@@ -257,9 +308,12 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D&, int, int) {
 void benchmarkGpuBegin(AppState& app) {
     if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
     GpuTimer& g = app.bench->gpu;
-    if (!g.ok || g.active >= 0 || g.inUse[g.next]) return;
-    plgl::glBeginQuery(GL_TIME_ELAPSED, g.q[g.next]);
-    g.active = g.next;
+    if (!g.ok || g.active >= 0) return;
+    const int s = g.ring.acquire();
+    if (s < 0) { g.framesSkipped++; return; }            // every slot still waits for its result: this frame is not measured
+    plgl::glQueryCounter(g.q[s][1], GL_TIMESTAMP);
+    plgl::glBeginQuery(GL_TIME_ELAPSED, g.q[s][0]);
+    g.active = s;
 }
 
 void benchmarkGpuEnd(AppState& app) {
@@ -267,29 +321,34 @@ void benchmarkGpuEnd(AppState& app) {
     GpuTimer& g = app.bench->gpu;
     if (g.active < 0) return;
     plgl::glEndQuery(GL_TIME_ELAPSED);
-    g.inUse[g.active] = true;
-    g.next = (g.active + 1) % GpuTimer::kN;
+    plgl::glQueryCounter(g.q[g.active][2], GL_TIMESTAMP);
+    g.ring.submitted(g.active);
     g.active = -1;
 }
 
 void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
     if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
     BenchState& b = *app.bench;
-    // a finished GPU measurement, if one is ready (they come a frame or two late)
-    double gpuMs = -1;
+    // the GPU results that are ready now (they come a frame or two late), oldest first
     GpuTimer& g = b.gpu;
-    for (int k = 0; k < GpuTimer::kN; k++) {
-        if (!g.inUse[k]) continue;
-        GLint ready = 0;
-        plgl::glGetQueryObjectiv(g.q[k], GL_QUERY_RESULT_AVAILABLE, &ready);
-        if (!ready) continue;
-        unsigned long long ns = 0;
-        plgl::glGetQueryObjectui64v(g.q[k], GL_QUERY_RESULT, &ns);
-        g.inUse[k] = false;
-        gpuMs = ns / 1e6;
-        b.lastGpuMs = gpuMs;
-    }
-    b.run->frame(frameMs, cpuMs, gpuMs);
+    b.gpuReady.clear();
+    g.ring.collect(
+        [&](int s) {
+            GLint a = 0, c = 0;
+            plgl::glGetQueryObjectiv(g.q[s][0], GL_QUERY_RESULT_AVAILABLE, &a);
+            plgl::glGetQueryObjectiv(g.q[s][2], GL_QUERY_RESULT_AVAILABLE, &c);
+            return a && c;
+        },
+        [&](int s) {
+            unsigned long long busy = 0, t0 = 0, t1 = 0;
+            plgl::glGetQueryObjectui64v(g.q[s][0], GL_QUERY_RESULT, &busy);
+            plgl::glGetQueryObjectui64v(g.q[s][1], GL_QUERY_RESULT, &t0);
+            plgl::glGetQueryObjectui64v(g.q[s][2], GL_QUERY_RESULT, &t1);
+            return GpuSample{busy / 1e6, (t1 >= t0 ? t1 - t0 : 0) / 1e6};
+        },
+        b.gpuReady);
+    for (const GpuSample& r : b.gpuReady) b.run->gpuSample(r.busyMs, r.spanMs);
+    b.run->frame(frameMs, cpuMs);
     if (b.run->finished()) finish(app, b, false);
 }
 
@@ -306,14 +365,16 @@ void benchmarkWindow(AppState& app) {
         ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0));
         bool open = true;
         if (ImGui::Begin("Benchmark###bench", &open, fl)) {
-            const int secs = int(scenes().size() * (app::kBenchWarmupS + app::kBenchMeasureS));
+            const int count = activeScenes(b);
+            const int secs = int(count * (app::kBenchWarmupS + app::kBenchMeasureS));
             ImGui::TextWrapped("This runs %d scenes one after the other, about %d seconds in all. Each one has %d seconds of warm-up that is not counted, then %d seconds that are counted.",
-                               int(scenes().size()), secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
+                               count, secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
             ImGui::Spacing();
-            for (const SceneDef& s : scenes()) ImGui::BulletText("%s", s.info.name);
+            for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[i].info.name);
             ImGui::Spacing();
-            ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now, so do not resize the window. "
-                               "Close other programs for the most useful number. Your settings, the lab and the view are put back when it ends, and Esc stops it.");
+            ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "
+                               "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "
+                               "Before the first scene the graphics card's timer is checked with a known load (about a second).");
             ImGui::Spacing();
             if (ImGui::Button("Start") && !whyNot(app)) begin(app);
             ImGui::SameLine();
@@ -356,7 +417,9 @@ void benchmarkWindow(AppState& app) {
                     ImGui::TableNextColumn(); ImGui::Text("%.1f fps", s.frames.low1Fps);
                     ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.frames.worstMs);
                     ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.cpuAvgMs);
-                    ImGui::TableNextColumn(); if (s.gpuAvgMs >= 0) ImGui::Text("%.2f ms", s.gpuAvgMs); else ImGui::TextDisabled("not available");
+                    ImGui::TableNextColumn(); if (s.gpuSamples <= 0) ImGui::TextDisabled("not available");
+                    else if (b.env.gpuReliable && s.gpuProblem.empty()) ImGui::Text("%.2f ms", s.gpuAvgMs);
+                    else ImGui::TextDisabled("not reliable");
                 }
                 ImGui::EndTable();
             }

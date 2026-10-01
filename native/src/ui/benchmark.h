@@ -16,10 +16,10 @@ void benchmarkButton(AppState& app);
 // The benchmark's own window: what it will do (Start / Cancel), the progress while it runs, the result. Call every frame.
 void benchmarkWindow(AppState& app);
 // Call at the start of every frame (sets up the next scene) and at the end of it with that frame's numbers.
-// The renderer and the framebuffer size are for the GPU timer check (added in the next stage).
 void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, int fbH);
 void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs);
-// Around the drawing of the frame: the GPU time (GL_TIME_ELAPSED), only measured while the benchmark runs.
+// Around the whole GL work of the frame (from the clear to just before the buffer swap, the picture, its soft layer and the panels included):
+// the GPU time (GL_TIME_ELAPSED and timestamps), only measured while the benchmark runs. The first frame of a run also checks the timer with a known load.
 void benchmarkGpuBegin(AppState& app);
 void benchmarkGpuEnd(AppState& app);
 

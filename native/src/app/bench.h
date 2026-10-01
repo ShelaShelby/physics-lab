@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "app/gpu_timer.h"
 #include "app/shot.h"
 
 namespace app {
@@ -28,8 +29,10 @@ struct BenchScene {
     std::string what;            // the settings, in words
     BenchStats frames;
     double cpuAvgMs = 0;         // work per frame on the CPU (the card's "Work per frame")
-    double gpuAvgMs = -1;        // GPU time per frame (GL_TIME_ELAPSED); < 0: not available
-    int gpuSamples = 0;
+    double gpuAvgMs = -1;        // GPU busy time per frame (GL_TIME_ELAPSED over the whole drawing of the frame); < 0: no result
+    double gpuSpanAvgMs = -1;    // first to last GPU command of the frame (timestamps), waiting included; < 0: no result
+    int gpuSamples = 0;          // frames that gave a GPU result
+    std::string gpuProblem;      // "" if the GPU numbers look right; else why they are not reliable
 };
 
 struct BenchEnv {
@@ -39,7 +42,9 @@ struct BenchEnv {
     int pictureW = 0, pictureH = 0;              // the picture area, in pixels
     double refreshHz = 0;                        // the display's refresh rate (0: unknown)
     std::string textSize, theme;
-    bool fullscreen = false, gpuTimer = false;
+    bool fullscreen = false, gpuTimer = false;   // gpuTimer: the driver gave GPU times
+    bool gpuReliable = false;                    // ... and the self-check with a known load agreed with a clock
+    std::string gpuCheck;                        // the self-check in words (how well it agreed, or why it did not)
     double warmupS = kBenchWarmupS, measureS = kBenchMeasureS;
     bool cancelled = false;                      // stopped before the end: only the scenes done are listed
 };
@@ -55,8 +60,10 @@ public:
     BenchRun(int sceneCount, double warmupS = kBenchWarmupS, double measureS = kBenchMeasureS);
     int sceneToSetUp() const { return setup_; }
     void setUpDone() { setup_ = -1; }
-    // One finished frame: its time (ms), the CPU work (ms), and the GPU time (ms; < 0 if not measured).
-    void frame(double frameMs, double cpuMs, double gpuMs);
+    // One finished frame: its time (ms) and the CPU work (ms).
+    void frame(double frameMs, double cpuMs);
+    // A GPU result that came in (a frame or two late): the busy time and the span (ms). Counted only while a scene is being measured.
+    void gpuSample(double busyMs, double spanMs);
     bool finished() const { return finished_; }
     int scene() const { return scene_; }
     int sceneCount() const { return count_; }
@@ -72,7 +79,7 @@ private:
     double warm_, measure_, elapsed_ = 0;
     bool measuring_ = false, finished_ = false;
     std::vector<std::vector<double>> frameMs_;
-    std::vector<double> cpuSum_, gpuSum_;
+    std::vector<double> cpuSum_, gpuSum_, spanSum_;
     std::vector<int> cpuN_, gpuN_;
 };
 

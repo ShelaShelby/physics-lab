@@ -54,6 +54,7 @@ add_library(app_core STATIC
   src/app/shot.cpp
   src/app/fps.cpp
   src/app/bench.cpp
+  src/app/gpu_timer.cpp
 )
 target_include_directories(app_core PUBLIC src)
 target_compile_options(app_core PRIVATE ${PL_WARNINGS})
