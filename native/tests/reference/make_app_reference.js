@@ -88,5 +88,19 @@ o.push('};');
   o.push(`static const char* const kLearnHeadRef = ${q(L[0].innerHTML)};`);
   o.push(`static const char* const kLearnRef[] = {${L.filter(e => e.className === 'learnSec').flatMap(sec => [q('h3|' + sec.children[0].innerHTML), ...sec.children[1].children.map(c => q(c.innerHTML))]).join(',\n  ')}};`);
 }
+// the 📷 Save image button, from the page's HTML and its click handler
+{
+  const w = loadAppWeb();
+  const m = /<button id="shot" title="([^"]*)">([^<]*)<\/button>/.exec(w.html);
+  const code = /shotBtn\.onclick = async \(\) => \{(.*?)\n\};/s.exec(w.html)[1];
+  o.push(`static const char* const kShotTitleRef = ${q(m[1])};`);
+  o.push(`static const char* const kShotLabelRef = ${q(m[2])};`);
+  o.push(`static const char* const kShotSavedRef = ${q(/flash\('(Saved [^']*)'\); return; \}\n/.exec(code)[1])};`);
+  o.push(`static const char* const kShotFailedRef = ${q(/: '(Could not save)'/.exec(code)[1])};`);
+  // the web's picture name, run for two labs (the code's own template and rule)
+  const nameOf = (lab, Z, N) => (lab === 'Atom Lab' ? `atom-lab-Z${Z}-N${N}` : lab.toLowerCase().replace(/\W+/g, '-')) + '.png';
+  if (!code.includes("`atom-lab-Z${params.Z}-N${params.N}`") || !code.includes(".toLowerCase().replace(/\\W+/g, '-')")) throw new Error('the web names its picture differently now');
+  o.push(`static const char* const kShotNameRef[] = {${q(nameOf('Orbit Lab'))}, ${q(nameOf('Atom Lab', 6, 6))}, ${q(nameOf('Some other-lab 2'))}};`);
+}
 fs.writeFileSync(path.join(__dirname, 'app_reference.inc'), o.join('\n') + '\n');
 console.log('wrote app_reference.inc');

@@ -228,3 +228,7 @@ static const LearnCard kLearnCards[] = {
   {"Orbit Lab", "❓", "What am I even looking at?", "A plain-words guide to the picture: the rings, colours, labels, scale bar, the stars and the far-away things.", 1},
   {"Orbit Lab", "🌍", "Why do we have seasons?", "It is not because Earth gets closer to the Sun. Jump to the real solstices and equinoxes, see day length and the Sun’s height in every part of the world, and how the other planets do.", 2},
   {"Orbit Lab", "🕰", "Timeline of the Solar System", "How people came to understand where we live, from watching wandering stars to sending probes past every planet.", 3}};
+static const char* const kShotTitle = "Save what you see as a PNG picture";
+static const char* const kShotLabel = "📷 Save image";
+static const char* const kShotSaved = "Saved ✓";
+static const char* const kShotFailed = "Could not save";

@@ -156,3 +156,8 @@ static const char* const kLearnRef[] = {"h3|⚛️ Atom Lab",
   "<div class=\"achIc\">🕰</div><div class=\"achTx\"><b>Timeline of the Solar System</b><span class=\"d\">How people came to understand where we live, from watching wandering stars to sending probes past every planet.</span></div>",
   "h3|🌀 Spacetime Lab",
   "<div class=\"achIc\">❓</div><div class=\"achTx\"><b>What am I even looking at?</b><span class=\"d\">A plain-words guide to the bending sheet: time and space, what the grid, dip, graph, colours, rings and marbles mean, what is to scale, and what is exact or simplified.</span></div>"};
+static const char* const kShotTitleRef = "Save what you see as a PNG picture";
+static const char* const kShotLabelRef = "📷 Save image";
+static const char* const kShotSavedRef = "Saved ✓";
+static const char* const kShotFailedRef = "Could not save";
+static const char* const kShotNameRef[] = {"orbit-lab.png", "atom-lab-Z6-N6.png", "some-other-lab-2.png"};

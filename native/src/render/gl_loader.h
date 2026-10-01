@@ -43,7 +43,9 @@ typedef std::ptrdiff_t GLintptr;
 #define GL_SCISSOR_TEST 0x0C11
 #define GL_MULTISAMPLE 0x809D
 #define GL_VERSION 0x1F02
+#define GL_RGB 0x1907
 #define GL_RGBA 0x1908
+#define GL_PACK_ALIGNMENT 0x0D05
 #define GL_RGBA8 0x8058
 #define GL_TEXTURE_2D 0x0DE1
 #define GL_TEXTURE0 0x84C0

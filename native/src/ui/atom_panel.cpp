@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "changelog.h"
+#include "shot.h"
 #include "fonts.h"
 #include "imgui.h"
 #include "app_pages.h"
@@ -471,6 +472,8 @@ void atomPanel(AppState& app, float width) {
     ImGui::SameLine();
     if (ImGui::Button("Reset")) L.restart();                  // the web's Reset: a fresh atom, the same settings
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Restart this lab's simulation");
+    shotButton(app, true);                                    // the web's 📷 Save image
+    shotNote(app);
     if (ImGui::Button(app.paused ? "▶ Play" : "❚❚ Pause", ImVec2(-1, 0))) app.paused = !app.paused;
     ImGui::TextDisabled("Space: play / pause");
     atomHelpButton(app);

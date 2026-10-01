@@ -180,6 +180,15 @@ const native = ['Atom Lab', 'Orbit Lab'];
 o.push(`static const LearnSection kLearnSections[] = {${secs.filter(e => native.includes(e.children[0].innerHTML.replace(/^\S+ /, ''))).map(e => `{${q(e.children[0].innerHTML.replace(/^\S+ /, ''))}, ${q(e.children[0].innerHTML)}}`).join(', ')}};`);
 o.push(`static const LearnCard kLearnCards[] = {${native.flatMap(lab => A.LEARN[lab].map((x, i) => `\n  {${q(lab)}, ${q(x.label.split(' ')[0])}, ${q(x.title)}, ${q(x.d)}, ${i + 1}}`)).join(',')}};`);
 
+// ---- 📷 Save image: the button's label and tooltip, and what it says afterwards (the web's flash) ----
+{
+  const m = /<button id="shot" title="([^"]*)">([^<]*)<\/button>/.exec(r.html);
+  o.push(`static const char* const kShotTitle = ${q(m[1])};`);
+  o.push(`static const char* const kShotLabel = ${q(m[2])};`);
+  o.push(`static const char* const kShotSaved = ${q(/flash\('(Saved [^']*)'\)/.exec(r.html)[1])};`);
+  o.push(`static const char* const kShotFailed = ${q(/: '(Could not save)'\)/.exec(r.html)[1])};`);
+}
+
 fs.mkdirSync(path.join(__dirname, '../src/app'), {recursive: true});
 fs.writeFileSync(path.join(__dirname, '../src/app/app_text.inc'), o.join('\n') + '\n');
 console.log('wrote app_text.inc');

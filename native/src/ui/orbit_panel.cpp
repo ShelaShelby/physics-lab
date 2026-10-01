@@ -13,6 +13,7 @@
 #include "imgui.h"
 #include "app_pages.h"
 #include "look.h"
+#include "shot.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
@@ -132,6 +133,8 @@ void orbitPanel(AppState& app, float width) {
 
     labPicker(app);
     defaultsButton(app);
+    shotButton(app, true);                                    // the web's 📷 Save image, beside Defaults
+    shotNote(app);
 
     // ---- Presets ----
     ImGui::SeparatorText("Presets");

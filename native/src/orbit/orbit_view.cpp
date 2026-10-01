@@ -915,7 +915,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
 
     {   // top left: the date, which moves on with the simulated time; top right: frames per second
         T.text(dateLine(sys), 12, 20, 13, kFg, 0, true);
-        T.text(fmt::fixed(fps, 0) + " fps", W - 12, 20, 11, kMuted, 1, true);
+        if (fps >= 0) T.text(fmt::fixed(fps, 0) + " fps", W - 12, 20, 11, kMuted, 1, true);   // fps < 0: no counter (the picture is being saved; the web's counter is not part of its canvas)
     }
 }
 

@@ -13,6 +13,16 @@
 
 namespace ui {
 
+// 📷 Save image: what the button says and shows after a save (see ui/shot.h)
+struct ShotUi {
+    bool requested = false;                // the button was pressed: the main loop saves this frame's picture
+    double flashUntil = 0;                 // the button's label shows `flash` ("Saved ✓" / "Could not save") until this time (ImGui time)
+    std::string flash;
+    double noteUntil = 0;                  // the line under the buttons: where the file went, or why it was not saved
+    std::string note;
+    bool failed = false;
+};
+
 struct AppState {
     orbit::SolarSystem sys;
     orbit::ViewSettings set;
@@ -23,6 +33,7 @@ struct AppState {
     int pane = 0;                          // the tabs: 0 the labs (🔬 Simulations), 1 📚 Learn, 2 🏆 Achievements
     int learnBack = -1;                    // a guide opened from the Learn tab in another lab: the lab to go back to when it closes
     bool showSettings = false;
+    ShotUi shot;
     double canvasW = 800, canvasH = 600;   // picture size in points (for the Go to zoom levels)
     bool vsync = true;                     // wait for the screen's refresh (off: draw as fast as possible, to measure headroom)
     FrameStats stats;

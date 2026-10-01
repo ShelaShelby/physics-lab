@@ -471,7 +471,9 @@ static const float* fuzzTable() {
     return t;
 }
 
-void Renderer2D::end(int fbW, int fbH, int fbY) {
+void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
+    if (outFbo) fbY = 0;
+    glBindFramebuffer(GL_FRAMEBUFFER, outFbo);
     glViewport(0, fbY, fbW, fbH);                         // the picture fills fbW × fbH pixels of the window, fbY above its bottom edge
     closeTriangles();
     lastCalls_ = 0; lastInstances_ = 0;
@@ -481,7 +483,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY) {
     }
     if (segments_.empty()) return;
     // Monochrome: draw into an offscreen picture first, then copy it over in grey (at the bottom of end())
-    GLuint target = 0;
+    GLuint target = outFbo;
     int vx = 0, vy = fbY;
     if (gray_) {
         if (!grayFbo_) { glGenFramebuffers(1, &grayFbo_); glGenTextures(1, &grayTex_); }
@@ -604,7 +606,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY) {
         }
     }
     if (gray_) {                                          // copy the offscreen picture over the window, in grey
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, outFbo);
         glViewport(0, fbY, fbW, fbH);
         glDisable(GL_BLEND);
         glUseProgram(grayProgram_);

@@ -50,6 +50,7 @@ target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
 # App-wide settings, themes and achievements (the saved settings file; no graphics)
 add_library(app_core STATIC
   src/app/prefs.cpp
+  src/app/shot.cpp
 )
 target_include_directories(app_core PUBLIC src)
 target_compile_options(app_core PRIVATE ${PL_WARNINGS})
@@ -135,7 +136,8 @@ if(PL_BUILD_APP)
     src/ui/learn.cpp
     src/ui/look.cpp
     src/ui/rich_text.cpp
-    src/ui/settings.cpp)
+    src/ui/settings.cpp
+    src/ui/shot.cpp)
   target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core app_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)

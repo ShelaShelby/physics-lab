@@ -25,6 +25,7 @@
 #include "ui/learn.h"
 #include "ui/look.h"
 #include "ui/settings.h"
+#include "ui/shot.h"
 #include "orbit/sky.h"
 #include "ui/app_pages.h"
 #include "ui/app_tabs.h"
@@ -265,7 +266,7 @@ int main(int, char**) {
             atomBarH = 0;
             app.set.paused = app.paused;
             if (SDL_getenv("PL_SKYOFF") && frame == 0) app.set.sky = orbit::SkyMode::Off;
-            app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH, fps);
+            app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH, app.shot.requested ? -1.0 : fps);
             text->PopClipRect();
         }
         ui::labLogWindow(&app.showLabLog, app.lab);
@@ -289,6 +290,10 @@ int main(int, char**) {
         renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
+            app.shot.requested = false;
+            ui::takeShot(app, renderer, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
+        }
         static const double maxSeconds = SDL_getenv("PL_EXIT_AFTER_SECONDS") ? std::atof(SDL_getenv("PL_EXIT_AFTER_SECONDS")) : 0;   // for automatic checks
         if ((maxFrames && ++frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds)) {
             running = false;

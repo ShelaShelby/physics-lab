@@ -28,7 +28,9 @@ public:
     // Start a frame for a picture `width` × `height` points.
     void begin(double width, double height);
     // Draw everything that was added. The framebuffer is fbWidth × fbHeight pixels.
-    void end(int fbWidth, int fbHeight, int fbY = 0);   // fbY: the picture's bottom edge, pixels from the window's bottom
+    // fbY: the picture's bottom edge, pixels from the window's bottom. outFbo: draw into this framebuffer
+    // (fbWidth × fbHeight, from its bottom-left corner) instead of the window: used by 📷 Save image.
+    void end(int fbWidth, int fbHeight, int fbY = 0, GLuint outFbo = 0);
 
     void rect(double x, double y, double w, double h, Color c);
     void line(double x0, double y0, double x1, double y1, double width, Color c);
