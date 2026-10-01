@@ -101,6 +101,29 @@ static bool tile(const char* label, const char* hex, bool selected, float width)
     return clicked;
 }
 
+// A drop-down whose closed box shows only the short name (the long text would be cut off at big Text sizes);
+// the open list shows each short name with its explanation under it, wrapped.
+struct ComboItem { const char* name; const char* note; };
+bool shortCombo(const char* id, int* cur, std::initializer_list<ComboItem> items) {
+    bool changed = false;
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::BeginCombo(id, items.begin()[*cur].name)) {
+        int i = 0;
+        for (const ComboItem& it : items) {
+            if (ImGui::Selectable(it.name, *cur == i)) { *cur = i; changed = true; }
+            if (it.note[0]) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+                ImGui::TextWrapped("%s", it.note);
+                ImGui::PopTextWrapPos(); ImGui::PopStyleColor();
+            }
+            i++;
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
 // The Performance card (both labs): frame times and the VSync switch
 void performanceCard(AppState& app) {
     ImGui::SeparatorText("Performance");
@@ -185,12 +208,10 @@ void orbitPanel(AppState& app, float width) {
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("Mouse wheel zooms, drag moves the view"); ImGui::PopStyleColor();
     ImGui::TextUnformatted("Sizes");
     int sizes = app.set.trueScale ? 0 : 1;
-    ImGui::SetNextItemWidth(-1);
-    if (ImGui::Combo("##sizes", &sizes, "True scale (planets and Sun as big as they really are)\0Easy to see (planets drawn bigger)\0")) app.set.trueScale = sizes == 0;
+    if (shortCombo("##sizes", &sizes, {{"True scale", "planets and Sun as big as they really are"}, {"Easy to see", "planets drawn bigger"}})) app.set.trueScale = sizes == 0;
     ImGui::TextUnformatted("Trails");
     int trails = app.set.fullTrails ? 1 : 0;
-    ImGui::SetNextItemWidth(-1);
-    if (ImGui::Combo("##trails", &trails, "Short tail (a little tail behind each object)\0Full orbit trails\0")) app.set.fullTrails = trails == 1;
+    if (shortCombo("##trails", &trails, {{"Short tail", "a little tail behind each object"}, {"Full orbit trails", ""}})) app.set.fullTrails = trails == 1;
     if (app.view.sel.kind != Selection::None && app.view.sel.kind != Selection::Belt) {
         if (wideButton(app.view.follow ? "◉ Following" : "○ Follow")) app.view.follow = !app.view.follow;
     }
@@ -220,13 +241,11 @@ void orbitPanel(AppState& app, float width) {
     {
         ImGui::TextUnformatted("Stars in the background");
         int sky = static_cast<int>(app.set.sky);
-        ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##sky", &sky, "Soft (dim close up, brighter as you zoom out)\0" "Full (always bright)\0" "Off (plain background)\0")) app.set.sky = static_cast<SkyMode>(sky);
+        if (shortCombo("##sky", &sky, {{"Soft", "dim close up, brighter as you zoom out"}, {"Full", "always bright"}, {"Off", "plain background"}})) app.set.sky = static_cast<SkyMode>(sky);
         if (app.set.sky != SkyMode::Off) {
             ImGui::TextUnformatted("Constellations");
             int c = static_cast<int>(app.set.cons);
-            ImGui::SetNextItemWidth(-1);
-            if (ImGui::Combo("##cons", &c, "Off\0" "Lines (the patterns people drew)\0" "Lines and names\0")) app.set.cons = static_cast<ConsMode>(c);
+            if (shortCombo("##cons", &c, {{"Off", ""}, {"Lines", "the patterns people drew"}, {"Lines and names", ""}})) app.set.cons = static_cast<ConsMode>(c);
         }
         wrappedCheckbox("Far-away things (zoom out to find them)", &app.set.far);
     }

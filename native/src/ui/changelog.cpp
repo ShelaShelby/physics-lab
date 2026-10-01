@@ -17,6 +17,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9.2", "Drop-down text fits",
+     "The Orbit Lab's drop-downs (Sizes, Trails, Stars in the background, Constellations) show only the short name in the closed box, so "
+     "it is never cut off at big Text sizes; the explanation is under each choice in the open list."},
     {"0.9.1", "Sliders that look like sliders",
      "The Time speed and Zoom sliders have a clearly visible track and a bigger, easier-to-grab thumb in every theme, and their values "
      "are written above them instead of under the thumb. The \"Drag rotates the view\" button is no longer cut off."},

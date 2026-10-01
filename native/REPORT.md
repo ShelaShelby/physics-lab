@@ -1,21 +1,24 @@
-# Native Physics Lab 0.9.1 — report
+# Native Physics Lab 0.9.2 — report
 
-A small update: the sliders look like sliders, and one cut-off button is fixed. The 0.9 report (freeze fix, GPU timer, stress scenes, Alex's 0.8 benchmark numbers) is in the git history: `git show 44f563a:native/REPORT.md`.
+Small update: the Orbit Lab's drop-down boxes are no longer cut off at big Text sizes. Older reports are in git history.
 `index.html` was not touched.
 
 ## What changed
-- **Sliders (both labs, all themes)**, in `ui/look.cpp`:
-  - the track (frame colour) is stronger: 16 % of the text colour mixed into the card, was 7 %;
-  - the borders are stronger (the line colour mixed 25 % toward the text colour), so the track has an outline on white panels;
-  - the thumb is at least 16 px, scaled with the window's DPI scale and the Text size (`GrabMinSize`); its colour is the accent, slightly darker.
-- **Value text no longer under the thumb** (`ui/orbit_panel.cpp`): the Time speed and Zoom values are written on the line above the slider ("Time speed: 1 s = 60 minutes", "Zoom: x20067"), and the slider's own text is empty. The Atom Lab's sliders already had no text inside; they get the new track and thumb.
-- **"Drag rotates the view"** is now a full-width button (it did not fit half a row at big Text sizes); "Spin" is full width on the next line.
-- Version 0.9.1 in CMake and a 0.9.1 entry in the 🕰 history.
+- `ui/orbit_panel.cpp`: a small helper `shortCombo` replaces the four drop-downs that had long closed-box text:
+  - **Sizes:** "True scale" / "Easy to see";
+  - **Trails:** "Short tail" / "Full orbit trails";
+  - **Stars in the background:** "Soft" / "Full" / "Off";
+  - **Constellations:** "Off" / "Lines" / "Lines and names".
+  The closed box shows only the short name. The open list shows each short name with its explanation under it in muted, wrapped text ("planets and Sun as big as they really are"). All the words are the ones that were there; none of the texts the tests compare were changed.
+- The "3D (rotatable)" box was already short. The Atom Lab panel has only one drop-down ("Pick one…" for a famous nucleus); I did not change it.
+- Version 0.9.2 in CMake and a 0.9.2 entry in the 🕰 history.
 
 ## Checked (Linux, Xvfb, software OpenGL)
 - `orbit_tests` 1,369, `atom_tests` 17,818, `app_tests` 1,006 checks: all pass.
-- One screenshot, Orbit Lab, 3D, Paper (light) theme, Extra large text: both sliders have a clearly visible grey track with an outline and a big dark-red thumb; the values are readable above them; "Drag rotates the view" is complete. (A first screenshot only showed the top of the panel and was used to find where the sliders are.)
+- Screenshot 1, Orbit Lab, Paper (light) theme, Extra large text: "True scale", "Short tail" and "Soft" show in full, with the arrow visible; the 0.9.1 slider and the full-width Drag button still look right. The open list was not looked at (no mouse clicks).
+- Screenshot 2, Atom Lab, dark theme, Extra large text: shows the top of the panel only (buttons, periodic table, Hydrogen card), nothing cut off there. The sliders are further down the panel and **were not seen**: the limit of two screenshots was used up.
 
 ## Not tested / still to do
-- No Windows PC: not seen on the real PC or with Windows' own scaling (the thumb size uses the DPI scale; checked only at 1.0). Other light themes and the Atom Lab sliders were not looked at (same style code, no separate screenshot: two screenshots were the limit).
-- Seen but not changed (not in the same row): the dropdowns "Sizes", "Trails" and "Stars in the background" cut their long selected text at Extra large ("True scale (planets and Sun as b").
+- No Windows PC: not seen on the real PC or at Windows scaling above 100 %.
+- The open drop-down list (the wrapped explanations, the width of the popup) was not looked at on screen.
+- The 0.9.1 slider look in the Atom Lab (dark theme) is still unchecked; it uses the same style code as the Orbit Lab sliders that were checked.
