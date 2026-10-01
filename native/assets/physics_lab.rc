@@ -1,0 +1,3 @@
+// Windows resources of PhysicsLab.exe: the icon (shown on the file, in the taskbar and in the window's title bar).
+// Resource number 1 is the one SDL looks for. Made by tools/make_icon.py.
+1 ICON "physics_lab.ico"

@@ -37,6 +37,8 @@
 
 namespace {
 
+#include "ui/icon_data.inc"      // kIconRgba: the window icon (64 x 64)
+
 SDL_Window* createWindow(float scale, bool multisample, const app::WindowState& ws) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -53,16 +55,38 @@ SDL_Window* createWindow(float scale, bool multisample, const app::WindowState& 
                             SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
 }
 
-void fail(const char* what) {
-    std::fprintf(stderr, "%s: %s\n", what, SDL_GetError());
-    if (SDL_getenv("PL_EXIT_AFTER_FRAMES")) return;    // an automatic check: no window waiting for a click
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Physics Lab", (std::string(what) + "\n" + SDL_GetError()).c_str(), nullptr);
+// line breaks at about 70 characters (not every message box wraps long lines by itself)
+std::string wrap70(const std::string& s) {
+    std::string out, line;
+    std::size_t i = 0;
+    while (i <= s.size()) {
+        std::size_t e = s.find_first_of(" \n", i);
+        if (e == std::string::npos) e = s.size();
+        const std::string word = s.substr(i, e - i);
+        if (!line.empty() && line.size() + 1 + word.size() > 70) { out += line + "\n"; line = word; } else line += (line.empty() ? "" : " ") + word;
+        if (e < s.size() && s[e] == '\n') { out += line + "\n"; line.clear(); }
+        i = e + 1;
+    }
+    return out + line;
 }
+
+// A start-up problem: say it in plain words, and what to try. `what` is the short technical name of the problem, kept on the last line.
+void fail(const char* what, const char* explain, const char* tryThis) {
+    std::fprintf(stderr, "%s: %s\n", what, SDL_GetError());
+    if (SDL_getenv("PL_EXIT_AFTER_FRAMES") || SDL_getenv("PL_EXIT_AFTER_SECONDS")) return;    // an automatic check: no window waiting for a click
+    const std::string text = std::string(explain) + "\n\nWhat to try:\n" + tryThis + "\n\n(Technical detail: " + what + ": " + SDL_GetError() + ")";
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Physics Lab cannot start", wrap70(text).c_str(), nullptr);
+}
+
+const char* const kDriverAdvice =
+    "1. Update the graphics driver: get the newest one from the maker of your graphics card (NVIDIA, AMD or Intel), or run Windows Update.\n"
+    "2. Restart the computer and try again.\n"
+    "3. If you are using Remote Desktop or a virtual machine, run Physics Lab on the computer itself: those often have no 3D graphics.";
 
 }  // namespace
 
 int main(int, char**) {
-    if (!SDL_Init(SDL_INIT_VIDEO)) { fail("Could not start SDL"); return 1; }
+    if (!SDL_Init(SDL_INIT_VIDEO)) { fail("Could not start the window system", "Physics Lab could not start its window system, so it has nothing to draw on.", "Restart the computer and try again. If it still fails, tell Alex what Windows version you have."); return 1; }
 
     float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());   // 1.5 on a Windows screen at 150 %
     if (scale <= 0) scale = 1;
@@ -86,7 +110,12 @@ int main(int, char**) {
         window = createWindow(scale, false, start);
         gl = window ? SDL_GL_CreateContext(window) : nullptr;
     }
-    if (!window || !gl) { fail("Could not open an OpenGL 3.3 window"); return 1; }
+    if (SDL_getenv("PL_FAKE_GLFAIL")) { if (gl) SDL_GL_DestroyContext(gl); gl = nullptr; if (window) SDL_DestroyWindow(window); window = nullptr; }   // for automatic checks: pretend OpenGL is missing
+    if (!window || !gl) { fail("Could not open an OpenGL 3.3 window", "Physics Lab draws with OpenGL 3.3 (3D graphics), and your computer did not give it a window to draw in. This usually means the graphics driver is too old, or missing.", kDriverAdvice); return 1; }
+    if (SDL_Surface* icon = SDL_CreateSurfaceFrom(64, 64, SDL_PIXELFORMAT_RGBA32, const_cast<unsigned char*>(kIconRgba), 64 * 4)) {   // the window's icon (title bar, taskbar)
+        SDL_SetWindowIcon(window, icon);
+        SDL_DestroySurface(icon);
+    }
     SDL_GL_MakeCurrent(window, gl);
     SDL_GL_SetSwapInterval(1);                          // vsync: smooth, and no wasted work
     if (start.w > 0 && start.hasPos) SDL_SetWindowPosition(window, start.x, start.y);
@@ -96,10 +125,10 @@ int main(int, char**) {
     if (start.w > 0 && start.maximized) { SDL_MaximizeWindow(window); maximizeUntil = SDL_GetTicks() + 1500; }
 
     const char* missing = nullptr;
-    if (!plgl::loadGL(&missing)) { std::fprintf(stderr, "OpenGL function missing: %s\n", missing); fail("OpenGL 3.3 is not available"); return 1; }
+    if (!plgl::loadGL(&missing)) { std::fprintf(stderr, "OpenGL function missing: %s\n", missing); fail("OpenGL 3.3 is not available", "Physics Lab needs OpenGL 3.3 (3D graphics), and your graphics driver does not offer all of it.", kDriverAdvice); return 1; }
     std::printf("OpenGL: %s | %s\n", plgl::glGetString(GL_VERSION), plgl::glGetString(GL_RENDERER));
     render::Renderer2D renderer;
-    if (!renderer.init()) { fail("Could not set up the OpenGL shaders"); return 1; }
+    if (!renderer.init()) { fail("Could not set up the OpenGL shaders", "Your graphics driver started, but would not accept the drawing programs Physics Lab sends it.", kDriverAdvice); return 1; }
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
