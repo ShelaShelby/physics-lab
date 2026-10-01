@@ -12,6 +12,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.3", "Orbit Lab complete: watch a planet turn",
+     "New button in the View card: pick a planet and press Slow time to watch it turn; time slows down so one turn "
+     "takes about 24 seconds, and the view follows and zooms in on it."},
     {"0.2", "3D view, night sky, belts, spinning planets, Journey and Jump to a date",
      "The planets now really spin, with the real IAU axes and rates: Earth shows its real coastlines, the others a grid of "
      "latitude and longitude, each with a dashed axis and N; Saturn's rings tilt with its axis. The cards say how long a turn "

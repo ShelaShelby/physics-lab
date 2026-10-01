@@ -9,6 +9,7 @@
 #include "imgui.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
+#include "orbit/spin.h"
 #include "orbit/units.h"
 
 namespace ui {
@@ -165,6 +166,15 @@ void orbitPanel(AppState& app, float width) {
             else for (const Moon& m : b->moons) P = std::min(P, m.data->periodDays);
             app.set.tspeed = std::clamp(std::log10(P / 4 / (kSimTime / kDay)), kTspeedMin, kTspeedMax);   // one lap in 4 seconds
             app.view.follow = true;
+        }
+    }
+    {   // a selected planet with real spin data: slow time so one turn takes about 24 seconds
+        const Body* b = app.view.sel.kind == Selection::Body ? findBody(app.sys, app.view.sel.bodyId) : nullptr;
+        if (b && hasSpin(b->name) && ImGui::Button("Slow time to watch it turn", ImVec2(-1, 0))) {
+            const double daysPerTurn = 360 / std::fabs(spinRateDegPerDay(b->name));
+            app.set.tspeed = std::clamp(std::log10(daysPerTurn / 24 / (kSimTime / kDay)), kTspeedMin, kTspeedMax);   // 1 s = 1/24 of a turn
+            app.view.follow = true;
+            if (app.set.trueScale) setZoom(app, zoomFor(app, b->radius / kKm, 80));   // close enough to see it turn
         }
     }
     if (ImGui::Button("↺ Reset view", ImVec2(-1, 0))) { app.view.resetView(); setZoom(app, 0); app.view.ox = app.view.oy = 0; }
