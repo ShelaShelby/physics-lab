@@ -215,8 +215,8 @@ void setMotion(AppState& app, const std::string& k) {        // the web's setMot
 void settingsWindow(AppState& app) {
     if (!app.showSettings) return;
     app::Prefs& P = app.prefs;
-    ImGui::SetNextWindowSize(ImVec2(30 * ImGui::GetFontSize(), 40 * ImGui::GetFontSize()), ImGuiCond_Appearing);
     const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowSize(ImVec2(std::min(30 * ImGui::GetFontSize(), vp->WorkSize.x * 0.95f), std::min(40 * ImGui::GetFontSize(), vp->WorkSize.y * 0.92f)), ImGuiCond_Appearing);   // never bigger than the window (small window, big text)
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     if (ImGui::Begin((std::string(app::kSettingsTitle) + "###settings").c_str(), &app.showSettings, ImGuiWindowFlags_NoCollapse)) {
         const float avail = ImGui::GetContentRegionAvail().x, gap = ImGui::GetStyle().ItemSpacing.x;

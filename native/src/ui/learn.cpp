@@ -204,7 +204,7 @@ void seasonsGuide(AppState& app) {
                     if (parseDateTime(d, t, ms)) app.dateNote = jumpToDate(app, ms + 30 * 60000);
                 }
             }
-            if (ImGui::Button("Today", ImVec2(-1, 0))) { journeyStop(app); resetToToday(app); app.dateNote = "Back to today."; }
+            if (wideButton("Today")) { journeyStop(app); resetToToday(app); app.dateNote = "Back to today."; }
         } else if (std::string(b.html) == "live") {       // the lab's own Earth, live
             const Body* e = bodyNamed(app, "Earth");
             EarthSeason q;
@@ -284,9 +284,9 @@ void timeline(AppState& app) {
 
 void learnButtons(AppState& app) {
     ImGui::SeparatorText("Learn");
-    if (ImGui::Button(displayable("❓ What am I even looking at?").c_str(), ImVec2(-1, 0))) { app.learn = 1; app.learnJump = "top"; }
-    if (ImGui::Button(displayable("🌍 Why do we have seasons?").c_str(), ImVec2(-1, 0))) { app.learn = 2; app.learnJump = "top"; }
-    if (ImGui::Button(displayable("🕰 Timeline: how we understood the Solar System").c_str(), ImVec2(-1, 0))) { app.learn = 3; app.learnJump = "top"; }
+    if (wideButton(displayable("❓ What am I even looking at?").c_str())) { app.learn = 1; app.learnJump = "top"; }
+    if (wideButton(displayable("🌍 Why do we have seasons?").c_str())) { app.learn = 2; app.learnJump = "top"; }
+    if (wideButton(displayable("🕰 Timeline: how we understood the Solar System").c_str())) { app.learn = 3; app.learnJump = "top"; }
 }
 
 void learnWindow(AppState& app) {

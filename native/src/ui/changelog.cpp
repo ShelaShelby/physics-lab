@@ -17,6 +17,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.6", "Save image, timeline pictures, cleaner text, small windows",
+     "📷 Save image, next to Defaults in both labs, saves exactly the picture you see (the readout included, in every theme, "
+     "grey in Monochrome) as a PNG in your Pictures folder (Downloads if that fails), named with the lab and the date and "
+     "time. The button says Saved ✓ and the path is shown under it; if saving fails it says so. The Orbit Lab's timeline "
+     "now has the web's small step pictures, like the Atom Lab's. The words that name the Black Hole Lab, the Spacetime Lab "
+     "and the slingshot game are taken out of About, the Units note, the Sagittarius A* card and the guides, and the dead "
+     "\"Try the slingshot game\" button is gone. Small windows: long button labels wrap instead of being cut off, and the "
+     "Settings window and the big periodic table never get bigger than the window."},
     {"0.5", "The web app's own features: settings, themes, header, history",
      "Settings as in the web version: text size (Small, Normal, Large, Extra large), font (Theme default, Serif, Easy to read, "
      "Rounded, Monospace; Atkinson Hyperlegible and Nunito are built in, under the SIL Open Font License), units, motion (Auto "

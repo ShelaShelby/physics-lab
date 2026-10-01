@@ -103,7 +103,7 @@ static bool tile(const char* label, const char* hex, bool selected, float width)
 // The Performance card (both labs): frame times and the VSync switch
 void performanceCard(AppState& app) {
     ImGui::SeparatorText("Performance");
-    ImGui::Checkbox("VSync (wait for the screen)", &app.vsync);
+    wrappedCheckbox("VSync (wait for the screen)", &app.vsync);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
     {
         const FrameStats& st = app.stats;
@@ -138,7 +138,7 @@ void orbitPanel(AppState& app, float width) {
 
     // ---- Presets ----
     ImGui::SeparatorText("Presets");
-    if (ImGui::Button("☉ Reset to today", ImVec2(-1, 0))) { resetToToday(app); app.dateNote.clear(); }
+    if (wideButton("☉ Reset to today")) { resetToToday(app); app.dateNote.clear(); }
 
     // ---- Journey and dates ----
     journeyDatesCard(app, journeyWasActive);
@@ -148,7 +148,7 @@ void orbitPanel(AppState& app, float width) {
 
     // ---- Time ----
     ImGui::SeparatorText("Time");
-    if (ImGui::Button(app.paused ? "▶ Play" : "❚❚ Pause", ImVec2(-1, 0))) app.paused = !app.paused;
+    if (wideButton(app.paused ? "▶ Play" : "❚❚ Pause")) app.paused = !app.paused;
     ImGui::TextUnformatted("Time speed");
     float ts = static_cast<float>(app.set.tspeed);
     ImGui::SetNextItemWidth(-1);
@@ -167,14 +167,14 @@ void orbitPanel(AppState& app, float width) {
         const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
         if (ImGui::Button(app.view.panMode ? "✥ Drag moves the view" : "⟲ Drag rotates the view", ImVec2(half, 0))) app.view.panMode = !app.view.panMode;
         ImGui::SameLine();
-        if (ImGui::Button(app.view.spin ? "⟳ Spin: on" : "⟳ Spin: off", ImVec2(-1, 0))) app.view.spin = !app.view.spin;
-        ImGui::TextDisabled("Right-drag or Shift-drag always moves the view");
+        if (wideButton(app.view.spin ? "⟳ Spin: on" : "⟳ Spin: off")) app.view.spin = !app.view.spin;
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("Right-drag or Shift-drag always moves the view"); ImGui::PopStyleColor();
     }
     ImGui::TextUnformatted("Zoom");
     float z = static_cast<float>(app.set.zoom);
     ImGui::SetNextItemWidth(-1);
     if (ImGui::SliderFloat("##zoom", &z, static_cast<float>(kZoomMin), static_cast<float>(kZoomMax), zoomText(app.set.zoom).c_str())) setZoom(app, z);
-    ImGui::TextDisabled("Mouse wheel zooms, drag moves the view");
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("Mouse wheel zooms, drag moves the view"); ImGui::PopStyleColor();
     ImGui::TextUnformatted("Sizes");
     int sizes = app.set.trueScale ? 0 : 1;
     ImGui::SetNextItemWidth(-1);
@@ -184,10 +184,10 @@ void orbitPanel(AppState& app, float width) {
     ImGui::SetNextItemWidth(-1);
     if (ImGui::Combo("##trails", &trails, "Short tail (a little tail behind each object)\0Full orbit trails\0")) app.set.fullTrails = trails == 1;
     if (app.view.sel.kind != Selection::None && app.view.sel.kind != Selection::Belt) {
-        if (ImGui::Button(app.view.follow ? "◉ Following" : "○ Follow", ImVec2(-1, 0))) app.view.follow = !app.view.follow;
+        if (wideButton(app.view.follow ? "◉ Following" : "○ Follow")) app.view.follow = !app.view.follow;
     }
     if (app.set.moons && moonTarget(app)) {
-        if (ImGui::Button("Slow time to watch moons", ImVec2(-1, 0))) {
+        if (wideButton("Slow time to watch moons")) {
             const Body* b = moonTarget(app);
             double P = 1e300;                             // the selected moon's period, or the fastest moon's
             if (app.view.sel.kind == Selection::Moon) P = b->moons[app.view.sel.moon].data->periodDays;
@@ -198,14 +198,14 @@ void orbitPanel(AppState& app, float width) {
     }
     {   // a selected planet with real spin data: slow time so one turn takes about 24 seconds
         const Body* b = app.view.sel.kind == Selection::Body ? findBody(app.sys, app.view.sel.bodyId) : nullptr;
-        if (b && hasSpin(b->name) && ImGui::Button("Slow time to watch it turn", ImVec2(-1, 0))) {
+        if (b && hasSpin(b->name) && wideButton("Slow time to watch it turn")) {
             const double daysPerTurn = 360 / std::fabs(spinRateDegPerDay(b->name));
             app.set.tspeed = std::clamp(std::log10(daysPerTurn / 24 / (kSimTime / kDay)), kTspeedMin, kTspeedMax);   // 1 s = 1/24 of a turn
             app.view.follow = true;
             if (app.set.trueScale) setZoom(app, zoomFor(app, b->radius / kKm, 80));   // close enough to see it turn
         }
     }
-    if (ImGui::Button("↺ Reset view", ImVec2(-1, 0))) { app.view.resetView(); setZoom(app, 0); app.view.ox = app.view.oy = 0; }
+    if (wideButton("↺ Reset view")) { app.view.resetView(); setZoom(app, 0); app.view.ox = app.view.oy = 0; }
 
     // ---- Sky ----
     ImGui::SeparatorText("Sky");
@@ -220,7 +220,7 @@ void orbitPanel(AppState& app, float width) {
             ImGui::SetNextItemWidth(-1);
             if (ImGui::Combo("##cons", &c, "Off\0" "Lines (the patterns people drew)\0" "Lines and names\0")) app.set.cons = static_cast<ConsMode>(c);
         }
-        ImGui::Checkbox("Far-away things (zoom out to find them)", &app.set.far);
+        wrappedCheckbox("Far-away things (zoom out to find them)", &app.set.far);
     }
 
     // ---- Solar System extras ----

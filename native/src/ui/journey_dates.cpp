@@ -1,3 +1,4 @@
+#include "fonts.h"
 #include "journey_dates.h"
 
 #include <algorithm>
@@ -180,7 +181,7 @@ std::string jumpToDate(AppState& app, int64_t ms) {
 
 void journeyDatesCard(AppState& app, bool wasActive) {
     ImGui::SeparatorText("Journey and dates");
-    if (ImGui::Button(app.journey.active ? "■ Stop the journey" : "Journey: Earth to the galactic centre", ImVec2(-1, 0))) {
+    if (wideButton(app.journey.active ? "■ Stop the journey" : "Journey: Earth to the galactic centre")) {
         if (app.journey.active) journeyStop(app);
         else if (!wasActive) journeyStart(app);   // this click already stopped a running Journey
     }
@@ -193,7 +194,7 @@ void journeyDatesCard(AppState& app, bool wasActive) {
     ImGui::SetNextItemWidth(w * 0.2f);
     ImGui::InputTextWithHint("##time", "HH:MM", app.timeText, sizeof app.timeText);
     ImGui::SameLine();
-    if (ImGui::Button("Jump", ImVec2(-1, 0))) {
+    if (wideButton("Jump")) {
         int64_t ms;
         if (!app.dateText[0]) app.dateNote = "Pick a date first.";
         else if (!parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = "That is not a date the lab can read: write it as YYYY-MM-DD (for example 2003-08-27), and the time as HH:MM.";
@@ -208,7 +209,7 @@ void journeyDatesCard(AppState& app, bool wasActive) {
                               {"Great conjunction, 2020", "2020-12-21", "Jupiter and Saturn looked almost touching: 21 Dec 2020"},
                               {"Halley returns, 2061", "2061-07-28", "Halley’s Comet is due back on 28 Jul 2061 (a prediction)"}};
     for (int i = 0; i < 7; i++) {                         // one tile per row, so the names fit
-        if (ImGui::Button(jumps[i].name, ImVec2(-1, 0))) {
+        if (wideButton(jumps[i].name)) {
             if (!jumps[i].date) { journeyStop(app); resetToToday(app); app.dateNote = "Back to today."; }
             else {
                 std::snprintf(app.dateText, sizeof app.dateText, "%s", jumps[i].date);

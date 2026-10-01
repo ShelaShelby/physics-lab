@@ -132,4 +132,31 @@ std::string displayable(const std::string& text, ImFont* font) {
     return out;
 }
 
+std::string wrapLabel(const std::string& text, float width) {
+    std::string out, line;
+    std::size_t i = 0;
+    while (i <= text.size()) {
+        std::size_t e = text.find(' ', i);
+        if (e == std::string::npos) e = text.size();
+        const std::string word = text.substr(i, e - i);
+        const std::string tryLine = line.empty() ? word : line + " " + word;
+        if (!line.empty() && ImGui::CalcTextSize(tryLine.c_str()).x > width) { out += line + "\n"; line = word; }
+        else line = tryLine;
+        i = e + 1;
+    }
+    return out + line;
+}
+
+bool wideButton(const char* label) {
+    const ImGuiStyle& st = ImGui::GetStyle();
+    const std::string shown = wrapLabel(label, ImGui::GetContentRegionAvail().x - 2 * st.FramePadding.x - 2);
+    return ImGui::Button((shown + "###" + label).c_str(), ImVec2(-1, 0));
+}
+
+bool wrappedCheckbox(const char* label, bool* v) {
+    const ImGuiStyle& st = ImGui::GetStyle();
+    const std::string shown = wrapLabel(label, ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - st.ItemInnerSpacing.x - 2);
+    return ImGui::Checkbox((shown + "###" + label).c_str(), v);
+}
+
 }  // namespace ui

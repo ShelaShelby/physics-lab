@@ -474,7 +474,7 @@ void atomPanel(AppState& app, float width) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Restart this lab's simulation");
     shotButton(app, true);                                    // the web's 📷 Save image
     shotNote(app);
-    if (ImGui::Button(app.paused ? "▶ Play" : "❚❚ Pause", ImVec2(-1, 0))) app.paused = !app.paused;
+    if (wideButton(app.paused ? "▶ Play" : "❚❚ Pause")) app.paused = !app.paused;
     ImGui::TextDisabled("Space: play / pause");
     atomHelpButton(app);
 
@@ -616,7 +616,7 @@ void atomPanel(AppState& app, float width) {
 
     // ---- the large periodic table ----
     if (app.bigTable) {
-        ImGui::SetNextWindowSize(ImVec2(760 * S(), 560 * S()), ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(ImVec2(std::min(760 * S(), vp->WorkSize.x * 0.95f), std::min(560 * S(), vp->WorkSize.y * 0.95f)), ImGuiCond_Appearing);
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x / 2, vp->WorkPos.y + vp->WorkSize.y / 2), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         if (ImGui::Begin("Periodic table", &app.bigTable, ImGuiWindowFlags_NoCollapse)) {
             mutedWrapped("Tap an element to load its most common (or longest-lived) isotope. Dashed edges are elements with no stable isotope.", 13.0f / 16);

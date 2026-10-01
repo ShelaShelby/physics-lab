@@ -130,6 +130,7 @@ int main(int, char**) {
     if (const char* d = SDL_getenv("PL_DATE")) { int64_t ms; if (ui::parseDateTime(d, "12:00", ms)) std::printf("%s\n", ui::jumpToDate(app, ms).c_str()); else std::printf("not a date\n"); }
     if (SDL_getenv("PL_JOURNEY")) ui::journeyStart(app);
     if (const char* l = SDL_getenv("PL_LEARN")) app.learn = std::atoi(l);     // open a Learn guide (1, 2 or 3)
+    if (const char* o = SDL_getenv("PL_OPEN")) { const std::string w = o; app.showSettings = w == "settings"; app.showAbout = w == "about"; app.showHistory = w == "history"; app.showLabLog = w == "log"; }   // for automatic checks: open a window
     if (SDL_getenv("PL_CONS")) app.set.cons = orbit::ConsMode::LinesAndNames;
     // Atom Lab checks: PL_ATOM=1 opens the Atom Lab, PL_ATOM_SET="Z=26;view=Cloud;zoom=4.5" sets its settings,
     // PL_ATOM_DO="absorb" presses Emit / Absorb / Auto photons (or ⌕ Nucleus / ⌕ Nucleon: "nucleus", "nucleon"), PL_ATOM_FOCUS=n dives into nucleon n
