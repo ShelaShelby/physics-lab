@@ -38,6 +38,14 @@ if(NOT MSVC)
 endif()
 target_compile_options(orbit_core PRIVATE ${PL_WARNINGS})
 
+# Atom Lab physics (uses the number formats and the random generator of orbit_core)
+add_library(atom_core STATIC
+  src/atom/atom_core.cpp
+  src/atom/atom_sim.cpp
+)
+target_link_libraries(atom_core PUBLIC orbit_core)
+target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
+
 # ---- tests ----
 if(PL_BUILD_TESTS)
   enable_testing()
@@ -46,6 +54,11 @@ if(PL_BUILD_TESTS)
   target_link_libraries(orbit_tests PRIVATE orbit_core)
   target_compile_options(orbit_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME orbit_physics COMMAND orbit_tests)
+  add_executable(atom_tests tests/test_atom.cpp)
+  target_include_directories(atom_tests PRIVATE tests)
+  target_link_libraries(atom_tests PRIVATE atom_core)
+  target_compile_options(atom_tests PRIVATE ${PL_WARNINGS})
+  add_test(NAME atom_physics COMMAND atom_tests)
 endif()
 
 # ---- the app ----

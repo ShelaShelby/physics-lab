@@ -31,6 +31,12 @@ std::string au(double x);                           // "1.00 AU" / "30.1 AU"
 std::string years(double y);                        // "88 days" / "1.88 years" / "165 years"
 std::string kg(double kg);                          // "1.3×10²² kg"
 
+// ---- JavaScript's own number wording (the Atom Lab text uses these all over) ----
+std::string jsString(double x);                      // String(x): 0.000054, 5.4e-7, 1e+21
+std::string jsToPrecision(double x, int digits);     // x.toPrecision(d): "4.47", "5.4e-5"
+std::string jsToExponential(double x, int digits);   // x.toExponential(d): "1e+18"
+std::string jsLocale(double x, int maxFrac = 3);      // x.toLocaleString('en'): commas, at most 3 decimals: "5,700", "0.054"
+
 std::string dateUTC(int64_t unixMs);                // "1 Jan 2026" (Greenwich time)
 std::string simDate(int64_t epochMs, double years); // the date after `years` of simulated time (plain years when far away)
 int yearUTC(int64_t unixMs);

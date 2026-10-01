@@ -1,0 +1,675 @@
+#include "atom_core.h"
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+
+#include "orbit/belts.h"
+#include "orbit/format.h"
+
+namespace atom {
+
+#include "atom_data.inc"
+
+// ---------------------------------------------------------------- random numbers
+static orbit::Mulberry32 g_rng(0x9e3779b9u);
+double random() { return g_rng.next(); }
+void seedRandom(uint32_t seed) { g_rng = orbit::Mulberry32(seed); }
+
+// ---------------------------------------------------------------- small JavaScript helpers
+// parseFloat: the number at the start of the text, NaN when there is none
+static double parseFloat(const std::string& s) {
+    const char* b = s.c_str();
+    char* e = nullptr;
+    const double v = std::strtod(b, &e);
+    return e == b ? NAN : v;
+}
+// Math.round: halves go up, and a small negative rounds to −0
+static double jsRound(double x) {
+    const double r = std::floor(x + 0.5);
+    return r == 0 && x < 0 ? -0.0 : r;
+}
+static std::vector<std::string> split(const std::string& s, char sep) {
+    std::vector<std::string> out;
+    std::size_t a = 0;
+    for (;;) {
+        const std::size_t b = s.find(sep, a);
+        out.push_back(s.substr(a, b == std::string::npos ? std::string::npos : b - a));
+        if (b == std::string::npos) return out;
+        a = b + 1;
+    }
+}
+std::string jsNum(double x, int digits) { return fmt::jsString(std::strtod(fmt::jsToPrecision(x, digits).c_str(), nullptr)); }
+
+// ---------------------------------------------------------------- element and nuclide data
+const char* name(int Z) { return Z >= 0 && Z <= 118 ? kName[Z] : ""; }
+const char* symbol(int Z) { return Z >= 0 && Z <= 118 ? kSymbol[Z] : ""; }
+int defaultN(int Z) { return kDefaultN[Z]; }
+
+// NUC: parsed once from the web's lines "Z|neutrons:code,..."
+static const std::vector<std::map<int, std::string>>& nucTable() {
+    static std::vector<std::map<int, std::string>> t = [] {
+        std::vector<std::map<int, std::string>> v(119);
+        for (const char* line : kNucLines) {
+            const std::string l = line;
+            const std::size_t bar = l.find('|');
+            const int z = std::atoi(l.substr(0, bar).c_str());
+            for (const std::string& e : split(l.substr(bar + 1), ',')) {
+                const std::size_t c = e.find(':');
+                v[z][std::atoi(e.substr(0, c).c_str())] = e.substr(c + 1);
+            }
+        }
+        return v;
+    }();
+    return t;
+}
+const std::map<int, std::string>& nuclides(int Z) { return nucTable()[Z]; }
+const std::string* nucCode(int Z, int N) {
+    if (Z < 1 || Z > 118) return nullptr;
+    const auto& m = nucTable()[Z];
+    const auto it = m.find(N);
+    return it == m.end() ? nullptr : &it->second;
+}
+// the neutron slider: from 3 below the lightest known isotope to 3 above the heaviest (0 to 180)
+std::pair<int, int> nRange(int Z) {
+    const auto& m = nuclides(Z);
+    return {std::max(0, m.begin()->first - 3), std::min(180, m.rbegin()->first + 3)};
+}
+// stable, or a half-life of over 10¹⁵ years
+bool hasStable(int Z) {
+    for (const auto& [n, c] : nuclides(Z))
+        if (c == "S" || (c[0] != '~' && parseFloat(c) >= 1e15 * kYearS)) return true;
+    return false;
+}
+const Temp& tempData(int Z) {
+    static_assert(sizeof(Temp) == sizeof(TempData), "same layout");
+    return reinterpret_cast<const Temp&>(kTempD[Z]);
+}
+int categoryIndex(int Z) { return kCatOf[Z]; }
+const char* categoryName(int Z) { return kCats[kCatOf[Z]].name; }
+int categoryHue(int Z) { return kCats[kCatOf[Z]].hue; }
+const std::vector<FamousIsotope>& famous() {
+    static std::vector<FamousIsotope> v = [] {
+        std::vector<FamousIsotope> out;
+        for (const Famous& f : kFamous) out.push_back({f.Z, f.N, f.why});
+        return out;
+    }();
+    return v;
+}
+std::pair<int, int> ptPos(int Z) {   // lanthanides and actinides sit in two rows below
+    if (Z <= 2) return {1, Z == 1 ? 1 : 18};
+    if (Z <= 10) return {2, Z <= 4 ? Z - 2 : Z + 8};
+    if (Z <= 18) return {3, Z <= 12 ? Z - 10 : Z};
+    if (Z <= 36) return {4, Z - 18};
+    if (Z <= 54) return {5, Z - 36};
+    if (Z <= 56) return {6, Z - 54};
+    if (Z <= 71) return {9, Z - 54};
+    if (Z <= 86) return {6, Z - 68};
+    if (Z <= 88) return {7, Z - 86};
+    if (Z <= 103) return {10, Z - 86};
+    return {7, Z - 100};
+}
+
+// ---------------------------------------------------------------- how numbers are written
+static const char* const kSup[10] = {"⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"};
+std::string supDigits(long n) {
+    std::string out;
+    for (char c : std::to_string(n)) out += c == '-' ? "⁻" : kSup[c - '0'];
+    return out;
+}
+std::string sci(double x) {
+    const int e = static_cast<int>(std::floor(std::log10(x)));
+    const double m = x / std::pow(10.0, e);
+    return fmt::fixed(m, 1) + "×10" + supDigits(e);
+}
+std::string metres(double x) {
+    int e = static_cast<int>(std::floor(std::log10(x) + 1e-9));
+    double m = jsRound(x / std::pow(10.0, e) * 10) / 10;
+    if (m >= 10) { m /= 10; e++; }
+    return (m == 1 ? std::string("10") : fmt::jsString(m) + "×10") + supDigits(e) + " m";
+}
+std::string fmtLam(double l) { return l < 0.1 ? fmt::fixed(l * 1000, 1) + " pm" : fmt::fixed(l, l < 100 ? 1 : 0) + " nm"; }
+std::string fmtLen(double a) { return a < 0.1 ? fmt::fixed(a * 100, a < 0.01 ? 2 : 1) + " pm" : fmt::fixed(a, 2) + " Å"; }
+std::string fmtT(double as) { return as < 1 ? fmt::fixed(as * 1000, as < 0.01 ? 1 : 0) + " zs" : fmt::fixed(as, 0) + " as"; }
+std::string fmtEV(double e) {
+    return e >= 1e5 ? fmt::fixed(e / 1e3, 0) + " keV" : e >= 1e3 ? fmt::fixed(e / 1e3, 1) + " keV" : fmt::fixed(e, 2) + " eV";
+}
+std::string fmtHalf(double t, int sf) {
+    auto num = [&](double x, const char* u, bool pl) {
+        const double v = std::strtod(fmt::jsToPrecision(x, sf).c_str(), nullptr);
+        return fmt::jsLocale(v) + " " + u + (pl && v != 1 ? "s" : "");
+    };
+    if (t < 1e-6) return num(t * 1e9, "ns", false);
+    if (t < 1e-3) return num(t * 1e6, "µs", false);
+    if (t < 1) return num(t * 1e3, "ms", false);
+    if (t < 60) return num(t, "s", false);
+    if (t < 3600) return num(t / 60, "minute", true);
+    if (t < 86400) return num(t / 3600, "hour", true);
+    if (t < 200 * 86400) return num(t / 86400, "day", true);
+    const double y = t / kYearS;
+    return y < 1e6 ? num(y, "year", true) : y < 1e9 ? num(y / 1e6, "million year", true)
+         : y < 1e12 ? num(y / 1e9, "billion year", true) : sci(y) + " years";
+}
+std::string fmtLife(double t) { return !(t > 0) ? "an instant" : t < 1e-6 ? sci(t) + " s" : fmtHalf(t); }
+// the one-electron ion: H, He⁺, Li²⁺ ... Fe²⁵⁺
+std::string ionLabel(int Z) { return Z < 2 ? symbol(Z) : std::string(symbol(Z)) + (Z > 2 ? supDigits(Z - 1) : "") + "⁺"; }
+std::string nuclideLabel(int Z, int N) {
+    const int A = Z + N;
+    const char* extra = Z == 1 && N == 1 ? "deuterium" : Z == 1 && N == 2 ? "tritium" : nullptr;
+    return std::string(name(Z)) + "-" + std::to_string(A) + " (" + supDigits(A) + symbol(Z) + ")" + (extra ? std::string("  ·  ") + extra : "");
+}
+static std::string supAbs(int e) { return (e < 0 ? "⁻" : "") + supDigits(std::abs(e)); }
+std::string lrnSci(double x) {
+    if (!std::isfinite(x) || x <= 0) return "0";
+    if (x >= 0.1 && x < 10000) return x < 10 ? fmt::fixed(x, 1) : fmt::jsLocale(jsRound(x));
+    const int e = static_cast<int>(std::floor(std::log10(x)));
+    return fmt::fixed(x / std::pow(10.0, e), 1) + "×10" + supAbs(e);
+}
+std::string lrnSci3(double x, int d) {
+    if (!std::isfinite(x) || x <= 0) return "0";
+    const int e = static_cast<int>(std::floor(std::log10(x)));
+    if (e >= -2 && e < 4) {
+        std::string s = fmt::jsToPrecision(x, d);
+        if (s.find('.') != std::string::npos) {   // drop trailing zeros, then a trailing point
+            while (!s.empty() && s.back() == '0') s.pop_back();
+            if (!s.empty() && s.back() == '.') s.pop_back();
+        }
+        return s.find('e') != std::string::npos ? s : fmt::jsLocale(std::strtod(s.c_str(), nullptr), 6);
+    }
+    return fmt::fixed(x / std::pow(10.0, e), d - 1) + "×10" + supAbs(e);
+}
+std::string lrnLen(double m) {
+    if (fmt::imperial())
+        return m >= 1609.344 ? lrnSci(m / 1609.344) + " mi" : m >= 0.3048 ? lrnSci(m * 3.28084) + " ft" : lrnSci(m * 39.3701) + " in";
+    return m >= 1000 ? lrnSci(m / 1000) + " km" : m >= 1 ? lrnSci(m) + " m" : m >= 0.01 ? lrnSci(m * 100) + " cm" : lrnSci(m * 1000) + " mm";
+}
+
+// ---------------------------------------------------------------- orbitals
+// ψ = (radial part) × (angular polynomial), exact up to a constant (the sampling only uses ratios of |ψ|²).
+// Radial part: e^(−ρ/n) · L(2ρ/n), L = generalised Laguerre polynomial L_(n−l−1)^(2l+1), ρ = Z·r.
+// The angular polynomial holds the r^l factor (the real "cubic harmonics": pz = z, dxy = xy, fxyz = xyz ...).
+struct AngDef { char letter; const char* ori; const char* lab; };
+static const AngDef kAng[16] = {
+    {'s', "", ""},
+    {'p', "x", "x"}, {'p', "y", "y"}, {'p', "z", "z"},
+    {'d', "z2", "z²"}, {'d', "xz", "xz"}, {'d', "yz", "yz"}, {'d', "xy", "xy"}, {'d', "x2y2", "x²−y²"},
+    {'f', "z3", "z³"}, {'f', "xz2", "xz²"}, {'f', "yz2", "yz²"}, {'f', "xyz", "xyz"}, {'f', "zx2y2", "z(x²−y²)"},
+    {'f', "xx23y2", "x(x²−3y²)"}, {'f', "y3x2y2", "y(3x²−y²)"},
+};
+double angular(int a, double x, double y, double z) {
+    const double r2 = x * x + y * y + z * z;
+    switch (a) {
+        case 0: return 1;
+        case 1: return x;
+        case 2: return y;
+        case 3: return z;
+        case 4: return 3 * z * z - r2;
+        case 5: return x * z;
+        case 6: return y * z;
+        case 7: return x * y;
+        case 8: return x * x - y * y;
+        case 9: return z * (5 * z * z - 3 * r2);
+        case 10: return x * (5 * z * z - r2);
+        case 11: return y * (5 * z * z - r2);
+        case 12: return x * y * z;
+        case 13: return z * (x * x - y * y);
+        case 14: return x * (x * x - 3 * y * y);
+        default: return y * (3 * x * x - y * y);
+    }
+}
+// L_k^a(x) = Σ (−1)^i C(k+a, k−i) x^i / i!
+std::vector<double> lagCoef(int k, double a) {
+    std::vector<double> c;
+    for (int i = 0; i <= k; i++) {
+        double bin = 1;
+        for (int j = 1; j <= k - i; j++) bin *= (a + i + j) / j;
+        double f = 1;
+        for (int j = 2; j <= i; j++) f *= j;
+        c.push_back((i % 2 ? -1 : 1) * bin / f);
+    }
+    return c;
+}
+const std::vector<Orbital>& orbitals() {
+    static std::vector<Orbital> v = [] {
+        std::vector<Orbital> out;
+        const char* letters = "spdf";
+        for (int n = 1; n <= 4; n++)
+            for (int l = 0; l < n; l++)
+                for (int a = 0; a < 16; a++) {
+                    if (kAng[a].letter != letters[l]) continue;
+                    Orbital o;
+                    o.n = n; o.l = l;
+                    o.shell = std::to_string(n) + letters[l];
+                    o.ori = kAng[a].ori;
+                    o.key = o.shell + "|" + o.ori;
+                    o.lab = o.shell + (*kAng[a].lab ? std::string("<sub>") + kAng[a].lab + "</sub>" : "");
+                    o.txt = o.shell + kAng[a].lab;
+                    o.lag = lagCoef(n - l - 1, 2 * l + 1);
+                    o.sgn = (n - l - 1) % 2 ? -1 : 1;   // the sign is a free choice: the outermost part of every orbital is +
+                    o.ang = a;
+                    out.push_back(o);
+                }
+        return out;
+    }();
+    return v;
+}
+int orbIndex(const std::string& key) {
+    const auto& v = orbitals();
+    for (std::size_t i = 0; i < v.size(); i++) if (v[i].key == key) return static_cast<int>(i);
+    for (std::size_t i = 0; i < v.size(); i++) if (v[i].shell == key) return static_cast<int>(i);   // a shell: its first orientation
+    return -1;
+}
+double radial(const Orbital& o, double q) {
+    const double x = 2 * q / o.n;
+    double L = 0;
+    for (int i = static_cast<int>(o.lag.size()) - 1; i >= 0; i--) L = L * x + o.lag[i];
+    return o.sgn * L * std::exp(-q / o.n);
+}
+double psi(int orb, int Z, double x, double y, double z) {
+    const Orbital& o = orbitals()[orb < 0 ? 0 : orb];
+    return radial(o, Z * std::hypot(x, y, z)) * angular(o.ang, x, y, z) * std::pow(static_cast<double>(Z), o.l);
+}
+double psi(const std::string& key, int Z, double x, double y, double z) { return psi(orbIndex(key), Z, x, y, z); }
+
+// The dipole rule: light connects two orbitals only if the angular integral of
+// (orbital A) × (x, y or z) × (orbital B) over a sphere is not zero. Worked out numerically on
+// 1,500 evenly spread points (a Fibonacci sphere), as in the web.
+bool dipoleOK(int a, int b) {
+    static std::vector<std::array<double, 3>> sphere = [] {
+        std::vector<std::array<double, 3>> P;
+        const int N = 1500;
+        const double g = kPi * (3 - std::sqrt(5.0));
+        for (int i = 0; i < N; i++) {
+            const double z = 1 - 2 * (i + 0.5) / N, r = std::sqrt(1 - z * z);
+            P.push_back({r * std::cos(g * i), r * std::sin(g * i), z});
+        }
+        return P;
+    }();
+    static std::map<std::pair<int, int>, bool> cache;
+    const auto it = cache.find({a, b});
+    if (it != cache.end()) return it->second;
+    const int A = orbitals()[a].ang, B = orbitals()[b].ang;
+    double best = 0, na = 0, nb = 0;
+    for (int c = 0; c < 3; c++) {
+        double sum = 0;
+        for (const auto& v : sphere) sum += angular(A, v[0], v[1], v[2]) * v[c] * angular(B, v[0], v[1], v[2]);
+        best = std::max(best, std::fabs(sum));
+    }
+    for (const auto& v : sphere) {
+        na += std::pow(angular(A, v[0], v[1], v[2]), 2);
+        nb += std::pow(angular(B, v[0], v[1], v[2]), 2);
+    }
+    const bool ok = best / std::sqrt(na * nb + 1e-30) > 1e-3;
+    cache[{a, b}] = cache[{b, a}] = ok;
+    return ok;
+}
+
+// ---------------------------------------------------------------- light
+// The electron and the nucleus both circle their common centre: the Rydberg energy with the
+// reduced mass. M = the nucleus's mass in electron masses (its binding energy changes this by under 10⁻⁶).
+double rydM(int Z, int N) {
+    const double M = Z == 1 && N == 0 ? 1836.15267 : (Z + N) * kMeU - Z;
+    return kRydInf * M / (M + 1);
+}
+const char* const kSeries[6] = {"", "Lyman", "Balmer", "Paschen", "Brackett", "Pfund"};
+// every line with the lower level 1 to 5 and the upper level up to 20 above it, plus each series limit (nm, vacuum)
+std::vector<SpecLine> specLines(int Z, int N) {
+    const double R = rydM(Z, N) * Z * Z;
+    std::vector<SpecLine> out;
+    for (int lo = 1; lo <= 5; lo++) {
+        for (int hi = lo + 1; hi <= lo + 20; hi++) out.push_back({lo, hi, kHcEVnm / (R * (1.0 / (lo * lo) - 1.0 / (hi * hi)))});
+        out.push_back({lo, 0, kHcEVnm / (R / (lo * lo))});
+    }
+    return out;
+}
+// wavelength (nm) -> colour; UV and IR get stand-in colours
+Rgb lamColor(double l) {
+    if (l < 380) return {0xb0, 0x6c, 0xff};
+    if (l > 780) return {0xd2, 0x4a, 0x3c};
+    double r = 0, g = 0, b = 0;
+    if (l < 440) { r = (440 - l) / 60; b = 1; }
+    else if (l < 490) { g = (l - 440) / 50; b = 1; }
+    else if (l < 510) { g = 1; b = (510 - l) / 20; }
+    else if (l < 580) { r = (l - 510) / 70; g = 1; }
+    else if (l < 645) { r = 1; g = (645 - l) / 65; }
+    else r = 1;
+    const double f = l < 420 ? 0.3 + 0.7 * (l - 380) / 40 : l > 700 ? 0.3 + 0.7 * (780 - l) / 80 : 1;
+    auto c = [&](double v) { return static_cast<int>(jsRound(255 * std::pow(v * f, 0.8))); };
+    return {c(r), c(g), c(b)};
+}
+std::string lamColorCss(double l) {
+    if (l < 380) return "#b06cff";
+    if (l > 780) return "#d24a3c";
+    const Rgb c = lamColor(l);
+    return "rgb(" + std::to_string(c.r) + "," + std::to_string(c.g) + "," + std::to_string(c.b) + ")";
+}
+double nuclearR(int A) { return A == 1 ? kNucleonR : 1.2 * std::cbrt(static_cast<double>(A)); }   // r = 1.2 A^(1/3) fm
+
+// ---------------------------------------------------------------- the nucleus
+static const BetaKnown* betaKnown(int Z, int A) {
+    for (const BetaKnown& b : kBetaKnown) if (b.Z == Z && b.A == A) return &b;
+    return nullptr;
+}
+// quadrupole deformation β₂: + stretched (rugby ball), − flattened (pancake)
+double nucBeta(int Z, int N) {
+    const int A = Z + N;
+    if (A < 12) return 0;
+    int dZ = 1 << 30, dN = 1 << 30;
+    for (int m : kMagicZ) dZ = std::min(dZ, std::abs(Z - m));
+    for (int m : kMagicN) dN = std::min(dN, std::abs(N - m));
+    if (const BetaKnown* k = betaKnown(Z, A)) {   // β₂ = 4π / (3 Z R0²) · √B(E2↑)
+        const double R0 = 1.2 * std::cbrt(static_cast<double>(A));
+        return k->sign * 4 * kPi / (3 * Z * R0 * R0) * std::sqrt(k->be2 * 1e4);
+    }
+    if (dZ == 0 && dN == 0) return 0;              // doubly magic: round
+    const double P = static_cast<double>(dZ) * dN / (dZ + dN);   // Casten's P-factor: valence protons × neutrons / their sum
+    return A <= 40 ? 0.6 * (1 - std::exp(-P / 1.5)) : 0.35 * (1 - std::exp(-P / 3));
+}
+bool nucMeasured(int Z, int N) {
+    if (betaKnown(Z, Z + N)) return true;
+    return std::find(std::begin(kMagicZ), std::end(kMagicZ), Z) != std::end(kMagicZ) &&
+           std::find(std::begin(kMagicN), std::end(kMagicN), N) != std::end(kMagicN);
+}
+const char* nucShapeWord(double b) {
+    return b >= 0.15 ? "stretched like a rugby ball" : b <= -0.15 ? "flattened like a pancake"
+         : b >= 0.07 || b <= -0.07 ? "slightly deformed" : "nearly round";
+}
+// Nucleon positions are sampled from the real density profile (Woods–Saxon, as in heavy-ion
+// Glauber Monte Carlo codes; a Gaussian for light nuclei), with a hard core so nucleons do not
+// overlap, a neutron skin and the measured quadrupole deformation. One possible snapshot: really,
+// every nucleon is a wave spread through the nucleus. Worked out in fm, stored in metres (kFmLab).
+std::vector<Nucleon> buildNucleus(int Z, int N) {
+    const int A = Z + N;
+    std::vector<Nucleon> out;
+    auto gs = [] { double u = 0; while (!u) u = random(); const double v = random(); return std::sqrt(-2 * std::log(u)) * std::cos(2 * kPi * v); };
+    auto toMetres = [&] { for (Nucleon& q : out) { q.x *= kFmLab; q.y *= kFmLab; q.z *= kFmLab; } return out; };
+    if (A == 1) { out.push_back({0, 0, 0, Z != 0, 0}); return out; }
+    std::vector<int> types;
+    for (int i = 0; i < Z; i++) types.push_back(1);
+    for (int i = 0; i < N; i++) types.push_back(0);
+    for (int i = static_cast<int>(types.size()) - 1; i > 0; i--) {   // shuffle
+        const int j = static_cast<int>(std::floor(random() * (i + 1)));
+        std::swap(types[i], types[j]);
+    }
+    if (A == 2) {                                  // the deuteron is a loose pair
+        const double a = random() * 6.28, c = std::cos(a), sn = std::sin(a);
+        out.push_back({1.6 * c, 1.6 * sn, 0, types[0] != 0, 0});
+        out.push_back({-1.6 * c, -1.6 * sn, 0, types[1] != 0, 1.7});
+        return toMetres();
+    }
+    const double beta = nucBeta(Z, N), cA = std::cbrt(static_cast<double>(A)), R0 = 1.12 * cA - 0.86 / cA, a = 0.54;
+    const double skin = std::max(-0.3, std::min(0.6, 1.7 * (N - Z) / A));   // neutron minus proton radius (measured 0.28 fm for lead-208)
+    const bool gauss = A <= 16;
+    const double rms = A == 3 ? 1.76 : 1.68 + 0.085 * (A - 4), sg = std::sqrt(std::max(0.5, rms * rms - 0.84 * 0.84)) / std::sqrt(3.0);
+    double dmin = 1.0;
+    for (int i = 0; i < A; i++) {
+        const bool isP = types[i] != 0;
+        const double Ri = R0 + (isP ? -0.5 : 0.5) * skin;
+        bool found = false;
+        double px = 0, py = 0, pz = 0;
+        for (int tries = 0; !found; tries++) {
+            double x, y, z;
+            if (gauss) {
+                x = sg * gs(); y = sg * gs(); z = sg * gs();
+                if (beta) z *= 1 + beta;
+            } else {
+                const double Rmax = R0 + 9 * a + 1, u = random() * 2 - 1, f = random() * 6.2832, sn = std::sqrt(1 - u * u);
+                const double Rth = Ri * (1 + beta * 0.3154 * (3 * u * u - 1));
+                const double r = Rmax * std::cbrt(random());
+                if (random() > 1 / (1 + std::exp((r - Rth) / a))) continue;   // Woods–Saxon: keep it with the density's odds
+                x = r * sn * std::cos(f); y = r * sn * std::sin(f); z = r * u;
+            }
+            bool ok = true;
+            for (const Nucleon& q : out) {
+                const double dx = q.x - x, dy = q.y - y, dz = q.z - z;
+                if (dx * dx + dy * dy + dz * dz < dmin * dmin) { ok = false; break; }
+            }
+            if (ok) { found = true; px = x; py = y; pz = z; }
+            else if (tries > 60) { dmin = std::max(0.55, dmin * 0.93); tries = 0; }   // crowded: let them sit a little closer
+        }
+        out.push_back({px, py, pz, isP, i * 1.7});
+    }
+    double mx = 0, my = 0, mz = 0;
+    for (const Nucleon& q : out) { mx += q.x; my += q.y; mz += q.z; }
+    mx /= A; my /= A; mz /= A;
+    // tilt the symmetry axis so the shape shows from the side
+    const double ty = 0.95, tz = random() * 6.28, c1 = std::cos(ty), s1 = std::sin(ty), c2 = std::cos(tz), s2 = std::sin(tz);
+    for (Nucleon& q : out) {
+        const double x = q.x - mx, y = q.y - my, z = q.z - mz, x1 = x * c1 + z * s1, z1 = -x * s1 + z * c1;
+        q.x = x1 * c2 - y * s2; q.y = x1 * s2 + y * c2; q.z = z1;
+    }
+    return toMetres();
+}
+
+// ---------------------------------------------------------------- radioactive decay
+static const std::vector<std::map<int, std::string>>& decTable() {
+    static std::vector<std::map<int, std::string>> t = [] {
+        std::vector<std::map<int, std::string>> v(119);
+        for (const char* line : kDecayLines) {
+            const std::string l = line;
+            const std::size_t bar = l.find('|');
+            const int z = std::atoi(l.substr(0, bar).c_str());
+            for (const std::string& e : split(l.substr(bar + 1), ';')) {
+                const std::size_t i = e.find(':');
+                v[z][std::atoi(e.substr(0, i).c_str())] = e.substr(i + 1);
+            }
+        }
+        return v;
+    }();
+    return t;
+}
+// half-life in s (none = not measured), whether the odds were measured, and the modes with their odds; none when stable
+std::optional<DecayInfo> decInfo(int Z, int N) {
+    if (Z < 1 || Z > 118) return std::nullopt;
+    const auto& m = decTable()[Z];
+    const auto it = m.find(N);
+    if (it == m.end()) return std::nullopt;
+    std::string r = it->second;
+    double T = NAN;
+    const std::size_t sl = r.find('/');
+    if (sl != std::string::npos) { T = parseFloat(r.substr(0, sl)); r = r.substr(sl + 1); }
+    DecayInfo d;
+    d.unk = !r.empty() && r[0] == '?';
+    if (d.unk) r = r.substr(1);
+    for (const std::string& x : split(r, ',')) {
+        const std::size_t eq = x.find('=');
+        d.br.push_back({x.substr(0, eq), eq == std::string::npos ? NAN : parseFloat(x.substr(eq + 1))});
+    }
+    const std::string* c = nucCode(Z, N);
+    if (c && *c != "U" && *c != "?" && *c != "S") T = parseFloat((*c)[0] == '~' ? c->substr(1) : *c);
+    if (c && *c == "U" && !(T > 0)) T = 1e-22;   // unbound, no measured time: it comes apart at once
+    if (T > 0) d.T = T;
+    return d;
+}
+std::optional<std::pair<int, int>> decMove(const std::string& m) {
+    static const std::map<std::string, std::pair<int, int>> mv = {
+        {"A", {-2, -2}}, {"B-", {1, -1}}, {"B-n", {1, -2}}, {"B-2n", {1, -3}}, {"B-3n", {1, -4}}, {"B-4n", {1, -5}}, {"B-p", {0, -1}},
+        {"B-A", {-1, -3}}, {"B-t", {0, -3}}, {"B-d", {0, -2}}, {"B+", {-1, 1}}, {"B+p", {-2, 1}}, {"B+2p", {-3, 1}}, {"B+3p", {-4, 1}},
+        {"B+A", {-3, -1}}, {"B+pA", {-4, -1}}, {"p", {-1, 0}}, {"2p", {-2, 0}}, {"3p", {-3, 0}}, {"n", {0, -1}}, {"2n", {0, -2}},
+        {"3n", {0, -3}}, {"2B-", {2, -2}}, {"2B+", {-2, 2}}};
+    static const std::map<std::string, int> decZ = {{"C", 6}, {"O", 8}, {"F", 9}, {"Ne", 10}, {"Mg", 12}, {"Si", 14}};
+    const auto it = mv.find(m);
+    if (it != mv.end()) return it->second;
+    // cluster decay "14C", "24Ne": a small nucleus is thrown out
+    std::size_t i = 0;
+    while (i < m.size() && std::isdigit(static_cast<unsigned char>(m[i]))) i++;
+    if (i > 0 && i < m.size()) {
+        const std::string el = m.substr(i);
+        const auto z = decZ.find(el);
+        const bool shape = std::isupper(static_cast<unsigned char>(el[0])) && (el.size() == 1 || (el.size() == 2 && std::islower(static_cast<unsigned char>(el[1]))));
+        if (shape && z != decZ.end()) { const int a = std::atoi(m.substr(0, i).c_str()); return std::make_pair(-z->second, -(a - z->second)); }
+    }
+    return std::nullopt;   // SF, B-SF, B+SF: the nucleus splits in two
+}
+// "14C" -> {"14", "C"} when it is a cluster mode
+static bool clusterParts(const std::string& m, std::string& a, std::string& el) {
+    std::size_t i = 0;
+    while (i < m.size() && std::isdigit(static_cast<unsigned char>(m[i]))) i++;
+    if (i == 0 || i == m.size()) return false;
+    el = m.substr(i);
+    if (!std::isupper(static_cast<unsigned char>(el[0])) || el.size() > 2 || (el.size() == 2 && !std::islower(static_cast<unsigned char>(el[1])))) return false;
+    a = m.substr(0, i);
+    return true;
+}
+std::string decWord(const std::string& m) {
+    static const std::map<std::string, std::string> w = {
+        {"A", "alpha (α)"}, {"B-", "beta minus (β⁻)"}, {"B+", "beta plus or electron capture (β⁺/EC)"}, {"n", "neutron emission"},
+        {"2n", "two-neutron emission"}, {"3n", "three-neutron emission"}, {"p", "proton emission"}, {"2p", "two-proton emission"},
+        {"3p", "three-proton emission"}, {"SF", "spontaneous fission"}, {"B-SF", "β⁻ then fission"}, {"B+SF", "β⁺/EC then fission"},
+        {"2B-", "double beta minus"}, {"2B+", "double beta plus"}};
+    const auto it = w.find(m);
+    if (it != w.end()) return it->second;
+    if (m.size() >= 3 && m[0] == 'B' && (m[1] == '+' || m[1] == '-')) {   // a beta decay followed at once by more particles
+        std::string rest = m.substr(2);
+        const std::size_t ai = rest.find('A');
+        if (ai != std::string::npos) rest.replace(ai, 1, "α");
+        // /^(\d)?([a-zα]+)$/: an optional count, then the particle letters
+        std::string k, q = rest;
+        if (!q.empty() && std::isdigit(static_cast<unsigned char>(q[0]))) { k = q.substr(0, 1); q = q.substr(1); }
+        bool letters = !q.empty();
+        for (std::size_t i = 0; i < q.size(); ) {
+            if (q.compare(i, strlen("α"), "α") == 0) { i += strlen("α"); continue; }
+            if (q[i] >= 'a' && q[i] <= 'z') { i++; continue; }
+            letters = false; break;
+        }
+        std::string tail = rest;
+        if (letters) {
+            static const std::map<std::string, std::string> nm = {{"n", "neutron"}, {"p", "proton"}, {"d", "deuteron"}, {"t", "triton"}, {"α", "α"}, {"pα", "proton + α"}};
+            const auto f = nm.find(q);
+            tail = (k.empty() ? "" : k + " ") + (f == nm.end() ? std::string("undefined") : f->second) + (k.empty() ? "" : "s");
+        }
+        return std::string("β") + (m[1] == '-' ? "⁻" : "⁺") + " then " + tail;
+    }
+    std::string a, el;
+    if (clusterParts(m, a, el)) return "cluster decay (throws out " + el + "-" + a + ")";
+    return m;
+}
+// what flies out, for the picture: label, colour, size
+std::vector<Shot> decShots(const std::string& m) {
+    const Shot E{"e⁻", "#4f8df0", 3}, AE{"ν̄", "#9aa0aa", 2}, P{"e⁺", "#f07a3a", 3}, NU{"ν", "#9aa0aa", 2},
+               AL{"α", "#e0506a", 6}, NN{"n", "#969692", 4}, PP{"p", "#e0506a", 4};
+    if (m == "A") return {AL};
+    if (m == "B-") return {E, AE};
+    if (m == "2B-") return {E, E, AE, AE};
+    if (m == "B+") return {P, NU};
+    if (m == "2B+") return {P, P, NU, NU};
+    if (m == "n" || (m.size() == 2 && std::isdigit(static_cast<unsigned char>(m[0])) && m[1] == 'n')) return std::vector<Shot>(m[0] == 'n' ? 1 : m[0] - '0', NN);
+    if (m == "p" || (m.size() == 2 && std::isdigit(static_cast<unsigned char>(m[0])) && m[1] == 'p')) return std::vector<Shot>(m[0] == 'p' ? 1 : m[0] - '0', PP);
+    // /^B([+-])(\d?)([a-zA]+)$/
+    if (m.size() >= 3 && m[0] == 'B' && (m[1] == '+' || m[1] == '-')) {
+        std::size_t i = 2;
+        int k = 1;
+        if (i < m.size() && std::isdigit(static_cast<unsigned char>(m[i]))) { k = m[i] - '0'; i++; }
+        const std::string q = m.substr(i);
+        bool ok = !q.empty();
+        for (char ch : q) if (!((ch >= 'a' && ch <= 'z') || ch == 'A')) ok = false;
+        if (ok) {
+            std::vector<Shot> out = m[1] == '-' ? std::vector<Shot>{E, AE} : std::vector<Shot>{P, NU};
+            for (char ch : q) {
+                if (ch == 'n') for (int j = 0; j < k; j++) out.push_back(NN);
+                if (ch == 'p') for (int j = 0; j < k; j++) out.push_back(PP);
+                if (ch == 'A') out.push_back(AL);
+                if (ch == 'd') out.push_back({"d", "#e0506a", 5});
+                if (ch == 't') out.push_back({"t", "#e0506a", 5});
+            }
+            return out;
+        }
+    }
+    std::string a, el;
+    if (clusterParts(m, a, el)) return {{el + "-" + a, "#d9a13a", 8}};
+    return {};
+}
+std::string decShort(const std::string& m) {
+    static const std::map<std::string, std::string> s = {
+        {"A", "α"}, {"B-", "β⁻"}, {"B+", "β⁺ or electron capture"}, {"SF", "split in two (fission)"}, {"B-SF", "β⁻, then split in two"},
+        {"B+SF", "β⁺/EC, then split in two"}, {"2B-", "double β⁻"}, {"2B+", "double β⁺"}, {"n", "neutron out"}, {"2n", "2 neutrons out"},
+        {"3n", "3 neutrons out"}, {"p", "proton out"}, {"2p", "2 protons out"}, {"3p", "3 protons out"}};
+    const auto it = s.find(m);
+    return it != s.end() ? it->second : decWord(m);
+}
+static std::string pct(double v) { return v >= 1e-4 ? jsNum(v * 100, 2) : sci(v * 100); }
+// one line about a nucleus: stable, or its half-life and how it decays
+std::string isoLine(int Z, int N) {
+    const auto d = decInfo(Z, N);
+    const std::string nm = std::string(name(Z)) + "-" + std::to_string(Z + N);
+    if (!d) return nm + ": " + isoInfo(Z, N);
+    std::string modes;
+    for (std::size_t i = 0; i < d->br.size() && i < 2; i++) {
+        const auto& [m, v] = d->br[i];
+        if (i) modes += ", ";
+        modes += decWord(m) + (v < 0.9995 ? " " + pct(v) + " %" : "");
+    }
+    return nm + ": " + (d->T ? "half-life " + fmtLife(*d->T) : std::string("no half-life measured")) + " · decays by " + modes + (d->br.size() > 2 ? " …" : "");
+}
+static const char* kUnbound = "unbound: falls apart almost instantly (~10⁻²² s)";
+// what this nucleus is like in real life
+std::string isoInfo(int Z, int N) {
+    const std::string* c = nucCode(Z, N);
+    if (Z == 4 && N == 4) return "unbound: splits into two helium-4 nuclei in ~10⁻¹⁶ s";
+    if (!c) return "never observed: it either falls apart instantly or nobody has made it yet";
+    if (*c == "S") return "stable";
+    if (*c == "U") return kUnbound;
+    if (*c == "?") return "seen only fleetingly in labs: no half-life measured (extremely short-lived or unbound)";
+    const bool approx = (*c)[0] == '~';
+    const double t = parseFloat(approx ? c->substr(1) : *c);
+    if (t >= 1e15 * kYearS) return "practically stable (half-life " + fmtHalf(t) + ", far longer than the age of the universe)";
+    return approx ? "radioactive (half-life about " + fmtHalf(t, 2) + "; superheavy values are approximate, and some of these nuclides are claimed but not confirmed)"
+                  : "radioactive (half-life " + fmtHalf(t) + ")";
+}
+
+// ---------------------------------------------------------------- mass
+// total nuclear binding energy in MeV: measured (AME) where known, else the Bethe–Weizsäcker formula
+Binding massBinding(int Z, int N) {
+    const int A = Z + N;
+    static std::vector<std::pair<int, std::vector<std::string>>> bea = [] {
+        std::vector<std::pair<int, std::vector<std::string>>> v(119, {0, {}});
+        for (const char* line : kBeaLines) {
+            const auto parts = split(line, '|');
+            v[std::atoi(parts[0].c_str())] = {std::atoi(parts[1].c_str()), split(parts[2], ',')};
+        }
+        return v;
+    }();
+    if (Z >= 1 && Z <= 118 && !bea[Z].second.empty()) {
+        const int k = N - bea[Z].first;
+        if (k >= 0 && k < static_cast<int>(bea[Z].second.size()) && !bea[Z].second[k].empty())
+            return {std::strtod(bea[Z].second[k].c_str(), nullptr) * A / 1000, true};
+    }
+    if (A < 2) return {0, true};
+    const double d = A % 2 ? 0 : (Z % 2 ? -1 : 1) * 11.18 / std::sqrt(static_cast<double>(A));
+    return {15.75 * A - 17.8 * std::pow(A, 2.0 / 3) - 0.711 * Z * (Z - 1) / std::pow(A, 1.0 / 3) - 23.7 * std::pow(A - 2 * Z, 2) / A + d, false};
+}
+
+// ---------------------------------------------------------------- temperature
+std::optional<std::string> tempState(int Z, double T) {
+    const Temp& t = tempData(Z);
+    if (t.flag == 's') return std::string(T < t.boil ? "solid" : "gas");     // sublimes: solid → gas, no liquid at normal pressure
+    if (t.flag == 'p') return std::string(T < t.boil ? "liquid" : "gas");    // helium: no solid at normal pressure
+    if (std::isnan(t.melt)) return std::nullopt;
+    if (T < t.melt) return std::string("solid");
+    return std::string(std::isnan(t.boil) || T < t.boil ? "liquid" : "gas");
+}
+std::string fK(double k) { return k < 100 ? fmt::fixed(k, 1) : fmt::jsString(jsRound(k)); }
+std::string fC(double k) { const double c = k - 273.15; return (c < 0 ? "−" : "") + fmt::jsLocale(std::fabs(jsRound(c))); }
+std::string fF(double k) { const double f = k * 9 / 5 - 459.67; return (f < 0 ? "−" : "") + fmt::jsLocale(std::fabs(jsRound(f))); }
+// one short line for the ⓘ readout
+std::string tempLine(int Z) {
+    const Temp& t = tempData(Z);
+    const auto st = tempState(Z, kTRoom);
+    auto c = [](double k) {
+        if (fmt::imperial()) return fF(k) + " °F";
+        std::string s = fmt::jsLocale(jsRound(k - 273.15));
+        const std::size_t i = s.find('-');
+        if (i != std::string::npos) s.replace(i, 1, "−");
+        return s + " °C";
+    };
+    if (std::isnan(t.melt) && std::isnan(t.boil)) return "melting/boiling point: never measured (too few atoms made)";
+    std::string bits = t.flag == 's' ? "sublimes at " + c(t.boil)
+        : (std::isnan(t.melt) ? std::string("no melting point at normal pressure") : "melts at " + c(t.melt)) + ", " +
+          (std::isnan(t.boil) ? std::string("boiling point unknown") : "boils at " + c(t.boil));
+    return bits + (st ? " · " + *st + " at room temperature" : "");
+}
+
+}  // namespace atom
