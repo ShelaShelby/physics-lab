@@ -23,6 +23,7 @@
 #include "ui/changelog.h"
 #include "ui/fonts.h"
 #include "ui/learn.h"
+#include "ui/look.h"
 #include "ui/settings.h"
 #include "ui/atom_learn.h"
 #include "ui/atom_panel.h"
@@ -90,8 +91,16 @@ int main(int, char**) {
 
     ui::AppState app;
     ui::resetToToday(app);
-    ui::loadSettings(app);
+    ui::loadSettings(app);                              // the theme, text size, font, motion, units, unlocks and both labs' settings
     if (SDL_getenv("PL_IMPERIAL")) fmt::setImperial(true);   // for automatic checks
+    if (const char* t = SDL_getenv("PL_THEME")) { app.prefs.unlocked.insert(t); app.prefs.theme = t; }   // for automatic checks
+    if (const char* t = SDL_getenv("PL_TEXTSIZE")) app.prefs.textSize = t;
+    if (const char* t = SDL_getenv("PL_FONT")) app.prefs.font = t;
+    if (const char* t = SDL_getenv("PL_MOTION")) app.prefs.motion = t;
+    auto systemLight = [] { return SDL_GetSystemTheme() == SDL_SYSTEM_THEME_LIGHT || SDL_getenv("PL_LIGHT"); };   // Windows' light/dark setting (the web's "Auto")
+    ui::updateLook(app.prefs, systemLight(), ui::systemReducedMotion());
+    if (ui::look().reduced) app.paused = true;          // reduced motion: the lab starts still, with a ▶ Play button
+    app.visited[app.lab] = true;
 
     const float panelWidth = 360 * scale;              // window coordinates
     double acc = 0;                                     // real time not yet simulated, s
@@ -186,7 +195,7 @@ int main(int, char**) {
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
                 if (mouseDown && !dragging && e.button.button == SDL_BUTTON_LEFT) {
-                    if (app.lab == 1) { app.atom.click(e.button.x / scale, e.button.y / scale); ui::saveAtomMore(app); }
+                    if (app.lab == 1) app.atom.click(e.button.x / scale, e.button.y / scale);
                     else app.view.click(e.button.x / scale, e.button.y / scale);
                 }
                 mouseDown = dragging = false;
@@ -220,20 +229,23 @@ int main(int, char**) {
         if (fpsTime >= 0.5) { fps = fpsFrames / fpsTime; fpsFrames = 0; fpsTime = 0; }
 
         // ---- build the frame ----
+        ui::updateLook(app.prefs, systemLight(), ui::systemReducedMotion());   // theme, text size, font, motion
+        app.atom.reducedMotion = ui::look().reduced;
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
         app.canvasH = pictureWinH / scale;
-        app.set.lightTheme = SDL_GetSystemTheme() == SDL_SYSTEM_THEME_LIGHT;   // Windows' light/dark setting (the web's "Auto")
-        if (SDL_getenv("PL_LIGHT")) app.set.lightTheme = true;              // for automatic checks
+        app.set.lightTheme = ui::look().c.light;
+        app.set.theme = ui::look().c;
+        app.set.textScale = ui::look().textScale;
         if (app.lab == 1) ui::atomPanel(app, panelWidth);
         else ui::orbitPanel(app, panelWidth);
         renderer.begin(app.canvasW, app.canvasH);
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, 0), ImVec2(canvasWinW, pictureWinH));
         if (app.lab == 1) {
-            app.atomView.draw(renderer, text, 0, 0, scale, app.atom, app.canvasW, app.canvasH, app.set.lightTheme);
+            app.atomView.draw(renderer, text, 0, 0, scale, app.atom, app.canvasW, app.canvasH, ui::look().c, ui::look().textScale);
             text->PopClipRect();
             atomBarH = ui::atomBottomBar(app, 0, pictureWinH, canvasWinW, false);
             ui::atomBottomBar(app, 0, pictureWinH, canvasWinW, true);
@@ -252,10 +264,12 @@ int main(int, char**) {
 
         // ---- draw: the picture first, then the panels and text on top ----
         plgl::glViewport(0, 0, fbW, fbH);
-        plgl::glClearColor(0.016f, 0.024f, 0.05f, 1);
+        const app::Rgb pageBg = ui::look().c.bg;           // the theme's page colour
+        plgl::glClearColor(pageBg.r, pageBg.g, pageBg.b, 1);
         plgl::glClear(GL_COLOR_BUFFER_BIT);
         const int canvasFbW = static_cast<int>(std::lround(canvasWinW * fbW / std::max(1, winW)));
         const int pictureFbH = static_cast<int>(std::lround(pictureWinH * fbH / std::max(1, winH)));
+        renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
         renderer.end(canvasFbW, pictureFbH, fbH - pictureFbH);
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -272,6 +286,7 @@ int main(int, char**) {
         const double workMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();
         app.stats.add(frameDt * 1000.0, workMs);
         SDL_GL_SwapWindow(window);
+        ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0);
         if (app.vsync != vsyncOn) { vsyncOn = app.vsync; SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
     }
 

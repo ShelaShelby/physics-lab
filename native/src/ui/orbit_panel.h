@@ -1,6 +1,7 @@
 // The Orbit Lab controls on the right: Reset to today, Time, View, extras and Go to.
 #pragma once
 
+#include "app/prefs.h"
 #include "atom/atom_sim.h"
 #include "atom/atom_view.h"
 #include "orbit/orbit_view.h"
@@ -29,7 +30,9 @@ struct AppState {
     int learn = 0;                         // the open Learn guide: 0 none, 1 What am I looking at?, 2 seasons, 3 timeline
     std::string learnJump;                 // a section to scroll to in the open guide ("bar" = back to the list of headings)
     // ---- Atom Lab ----
+    app::Prefs prefs;                      // everything remembered between runs (theme, text size, unlocks, ...); see ui/settings.h
     int lab = 0;                           // the lab on screen: 0 Orbit Lab, 1 Atom Lab (each keeps its state while the other is shown)
+    bool visited[2] = {false, false};      // labs already opened this run (reduced motion pauses a lab the first time it opens)
     atom::AtomLab atom;
     atom::AtomView atomView;
     double tempK = 293.15;                 // the Temperature slider, K (kept while you switch elements, as in the web)

@@ -8,6 +8,7 @@
 
 #include "fonts.h"
 #include "imgui.h"
+#include "look.h"
 #include "orbit/card_text.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
@@ -107,9 +108,9 @@ void jumpBar(AppState& app, const LearnSection* secs, int n) {
 void lookGuide(AppState& app) {
     richText(std::string("<p class=\"lrnP\">") + kLookIntro + "</p>");
     const auto chip = [](const char* label, bool on) {
-        if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        if (on) pushOn();
         const bool clicked = ImGui::SmallButton(label);
-        if (on) ImGui::PopStyleColor();
+        if (on) popOn();
         return clicked;
     };
     ImGui::TextDisabled("View");

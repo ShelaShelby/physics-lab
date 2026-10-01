@@ -11,6 +11,7 @@
 #include "settings.h"
 #include "fonts.h"
 #include "imgui.h"
+#include "look.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
@@ -120,6 +121,10 @@ void orbitPanel(AppState& app, float width) {
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y));
     ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y));
     ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
+    }
     // touching the panel during a Journey stops it first (your settings come back), then the click does its job
     const bool journeyWasActive = app.journey.active;
     if (journeyWasActive && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) journeyStop(app);
@@ -128,10 +133,12 @@ void orbitPanel(AppState& app, float width) {
     // ---- title and update badge ----
     ImGui::TextUnformatted("Physics Lab · Orbit Lab");
     ImGui::SameLine();
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.44f, 0.93f, 0.85f));
+    pushOn();
     if (ImGui::SmallButton((std::string("Update ") + appVersion()).c_str())) app.showChangelog = true;
-    ImGui::PopStyleColor();
+    popOn();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("What's new");
+    themeButton(app);
+    ImGui::SameLine();
     if (ImGui::SmallButton(displayable("⚙ Settings").c_str())) app.showSettings = true;
     ImGui::SameLine();
     defaultsButton(app);

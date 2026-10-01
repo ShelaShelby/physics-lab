@@ -62,6 +62,9 @@ public:
     void beginSoftLayer(float scale);
     void endSoftLayer();
 
+    // Monochrome theme: the whole picture in shades of grey (the web's canvas{filter:grayscale(1)})
+    void setGrayscale(bool on, Color bg) { gray_ = on; grayBg_ = bg; }   // bg: the page colour under the picture
+
     // What the last end() drew: draw calls, and shapes drawn by the instanced calls (squares and blobs)
     int lastDrawCalls() const { return lastCalls_; }
     int lastInstances() const { return lastInstances_; }
@@ -91,6 +94,11 @@ private:
     int layerW_ = 0, layerH_ = 0;
     float layerScale_ = 0.5f;
     int lastCalls_ = 0, lastInstances_ = 0;
+    bool gray_ = false;
+    Color grayBg_{0, 0, 0, 1};
+    GLuint grayFbo_ = 0, grayTex_ = 0, grayProgram_ = 0;
+    GLint grayTexLoc_ = -1;
+    int grayW_ = 0, grayH_ = 0;
 
     struct Vertex { float x, y, u, v, r, g, b, a, mode, p1, p2, p3; };
     void quad(double cx, double cy, double half, Color c, float mode, float p1, float p2, float uvScale);

@@ -13,11 +13,17 @@ struct Fonts {
     ImFont* italic = nullptr;    // same as regular if no italic face was found
 };
 
-// Uses the system's fonts: Segoe UI (+ Segoe UI Symbol) on Windows, DejaVu Sans on Linux.
-// Falls back to Dear ImGui's built-in font (plain ASCII) if none is found.
-// Returns the name of the font file used, or "built-in".
+// Loads the five font families of Settings → Font (the web's PL_FONTS):
+//   auto  = Segoe UI (Windows) / DejaVu Sans (Linux)      serif = Georgia / DejaVu Serif
+//   mono  = Consolas / DejaVu Sans Mono                     easy  = Atkinson Hyperlegible (built in)
+//   round = Nunito (built in)
+// with Segoe UI and Segoe UI Symbol filling in letters a face lacks. Falls back to Dear ImGui's
+// built-in font (plain ASCII) if none is found. Returns the name of the main font file, or "built-in".
 const char* loadFonts(float sizePixels);
-const Fonts& fonts();
+const Fonts& fonts();                                   // the family in use
+const Fonts& fontFamily(const std::string& key);        // any family (the Settings samples)
+bool fontFamilyAvailable(const std::string& key);
+void useFontFamily(const std::string& key);             // switch the whole app's text (call before NewFrame)
 
 // The text without characters the font cannot draw (such as an emoji the system font lacks),
 // so a label never shows an empty box. Text that can be drawn is unchanged.

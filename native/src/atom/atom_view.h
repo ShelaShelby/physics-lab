@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "app/prefs.h"
 #include "atom_sim.h"
 #include "render/renderer2d.h"
 
@@ -17,6 +18,7 @@ namespace atom {
 // The page colours the web reads from its CSS (light or dark theme).
 struct Theme { render::Color fg, muted, accent, card, line, onacc; bool light; };
 Theme theme(bool light);
+Theme theme(const app::ThemeColors& c);          // the colours of the theme picked with 🎨
 
 class AtomView {
 public:
@@ -24,7 +26,7 @@ public:
     // points into window pixels (for the text, which Dear ImGui draws). Also sets lab.s.layer, the
     // nucleon hit targets and the ⓘ button's place, as the web's draw() does.
     void draw(render::Renderer2D& r, ImDrawList* text, double originX, double originY, double uiScale,
-              AtomLab& lab, double w, double h, bool light);
+              AtomLab& lab, double w, double h, const app::ThemeColors& colours, double textScale = 1);
 
 private:
     std::string quarkKey_;                 // which nucleus the quark bookkeeping below belongs to

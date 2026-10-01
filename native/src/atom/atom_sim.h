@@ -106,6 +106,9 @@ public:
     std::optional<bool> moreStored;      // the remembered ⓘ choice (web: localStorage plAtomMore)
     double viewW = 1000, viewH = 700;    // the picture's size in points (the web's canvas size)
     std::function<double()> nowMs;       // the wall clock in ms (web: performance.now / Date.now)
+    bool reducedMotion = false;          // Settings → Motion: camera moves jump, Cloud 3D does not spin by itself (web: plRM())
+    // the values a setting may take (for settings loaded from the file): a select's options, or a number's range
+    static bool validChoice(const std::string& key, const std::string& value);
 
     void restart();                      // the web's init(p) for a fresh lab
     // One entry point for every change of a setting (sliders, wheel, buttons), as the web's setParam:

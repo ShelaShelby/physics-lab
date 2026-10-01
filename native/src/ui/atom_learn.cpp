@@ -13,6 +13,7 @@
 #include "fonts.h"
 #include "html_view.h"
 #include "imgui.h"
+#include "look.h"
 #include "orbit_panel.h"
 #include "rich_text.h"
 
@@ -33,11 +34,11 @@ int chipRow(const std::vector<std::string>& labels, int on) {
         const std::string t = displayable(labels[i]);
         const float w = ImGui::CalcTextSize(t.c_str()).x + ImGui::GetStyle().FramePadding.x * 2;
         if (i > 0 && ImGui::GetItemRectMax().x + 6 * S() + w < right) ImGui::SameLine(0, 6 * S());
-        if (i == on) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
+        if (i == on) pushOn();
         ImGui::PushID(i);
         if (ImGui::Button(t.c_str())) clicked = i;
         ImGui::PopID();
-        if (i == on) ImGui::PopStyleColor();
+        if (i == on) popOn();
     }
     return clicked;
 }
@@ -251,7 +252,7 @@ void timelineGuide(AppState& app) {
         ImGui::BeginGroup();
         ImGui::PushTextWrapPos(0);
         ImGui::PushFont(fonts().bold, 0.0f);
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.42f, 0.61f, 1.0f, 1));
+        ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.accent));   // the year, in the accent colour (.lrnY)
         ImGui::TextUnformatted(st.y);
         ImGui::PopStyleColor();
         ImGui::TextUnformatted(st.t);

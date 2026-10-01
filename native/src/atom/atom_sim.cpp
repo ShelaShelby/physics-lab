@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <map>
 
 #include "orbit/format.h"
 
@@ -21,6 +22,16 @@ AtomLab::AtomLab() {
     restart();
 }
 
+bool AtomLab::validChoice(const std::string& key, const std::string& v) {
+    static const std::map<std::string, std::vector<std::string>> opts = {
+        {"scale", {"Auto", "Fixed"}}, {"qstyle", {"Cinematic", "Accurate", "Classic"}}, {"detail", {"Valence", "+ Gluons", "+ Sea"}},
+        {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice"}}, {"ostyle", {"Modern", "Bohr 1913"}},
+        {"orb", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"pAx", {"x", "y", "z"}}, {"dAx", {"z2", "xz", "yz", "xy", "x2y2"}},
+        {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2"}}, {"cutAxis", {"Vertical", "Horizontal"}}};
+    const auto it = opts.find(key);
+    return it != opts.end() && std::find(it->second.begin(), it->second.end(), v) != it->second.end();
+}
+
 void AtomLab::restart() {
     s = AtomState();
     init();
@@ -35,7 +46,7 @@ void AtomLab::init() {
     s.t = 0; s.Zprev = p.Z; s.more = moreStored; s.pan = {}; s.panTo.reset(); s.dragMode = "rotate";
     s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a); s.trail.clear();
     s.pts.assign(kCap * 3, 0.f); s.sg.assign(kCap, 0); s.k = 0; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
-    s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = true;   // (the web: on unless reduced motion)
+    s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
     s.trans.reset(); s.photon.reset(); s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
     s.last.clear(); s.msg.clear(); s.szCur.reset();
@@ -332,8 +343,9 @@ std::string AtomLab::decLine() const {                        // the readout lin
 // ---------------------------------------------------------------- every frame / every step
 void AtomLab::tick(double dt) {                               // runs every frame, even when paused: smooth dive and pan
     decTick(dt);                                               // radioactive decay: only while not paused
+    const bool rmv = reducedMotion;                            // reduced motion: camera moves jump to the end instead of gliding
     if (s.zoomTo) {
-        const double d = *s.zoomTo - p.zoom;
+        const double d = rmv ? 0 : *s.zoomTo - p.zoom;
         s.selfSet = true;
         if (std::fabs(d) < 0.004) { setParam("zoom", *s.zoomTo); s.zoomTo.reset(); }
         else setParam("zoom", p.zoom + d * (1 - std::exp(-4 * dt)));
@@ -344,12 +356,12 @@ void AtomLab::tick(double dt) {                               // runs every fram
     if (p.view == "Orbit") { const double nn = p.ostyle == "Bohr 1913" ? std::max(3, p.n) : p.n; sz = nn * nn / p.Z * kA0; }
     else sz = kExt[orbitals()[s.trans ? s.trans->to : orbIndex(p.orb)].n] / p.Z * kA0;
     sz = fitSize(p, sz);
-    s.szCur = !s.szCur ? sz : *s.szCur + (sz - *s.szCur) * (1 - std::exp(-4 * dt));
+    s.szCur = !s.szCur || rmv ? sz : *s.szCur + (sz - *s.szCur) * (1 - std::exp(-4 * dt));
     const Vec3d tg = s.focus >= 0 && s.focus < int(s.nuc.size()) ? Vec3d{s.nuc[s.focus].x, s.nuc[s.focus].y, s.nuc[s.focus].z} : Vec3d{};
-    const double k = 1 - std::exp(-5 * dt), m = std::min(viewW, viewH);
+    const double k = rmv ? 1 : 1 - std::exp(-5 * dt), m = std::min(viewW, viewH);
     const double px = pxPerM(m, s.szCur) * std::pow(10, p.zoom);   // points per metre
     if (s.panTo) {
-        const double k2 = 1 - std::exp(-6 * dt);
+        const double k2 = rmv ? 1 : 1 - std::exp(-6 * dt);
         s.pan.x += (s.panTo->x - s.pan.x) * k2; s.pan.y += (s.panTo->y - s.pan.y) * k2;
         if (std::hypot(s.pan.x - s.panTo->x, s.pan.y - s.panTo->y) * px < 0.5) { s.pan.x = s.panTo->x; s.pan.y = s.panTo->y; s.panTo.reset(); }
     }

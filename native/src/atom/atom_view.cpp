@@ -24,8 +24,14 @@ Theme theme(bool light) {
     return {hexColor("#eeeeee"), hexColor("#9a9a94"), hexColor("#6c9cff"), hexColor("#1e1e21"), hexColor("#333338"), hexColor("#ffffff"), false};
 }
 
+Theme theme(const app::ThemeColors& c) {
+    auto C = [](const app::Rgb& v) { return Color{v.r, v.g, v.b, 1}; };
+    return {C(c.fg), C(c.muted), C(c.accent), C(c.card), C(c.line), C(c.onacc), c.light};
+}
+
 namespace {
 
+double g_textScale = 1;   // Settings → Text size, for the labels drawn in the picture
 const Color kPhaseNeg = hexColor("#f08a3c");       // the − half of the wave (the + half uses the accent colour)
 
 Color withA(Color c, double a) { c.a = static_cast<float>(std::max(0.0, std::min(1.0, a)) * c.a); return c; }
@@ -62,13 +68,13 @@ struct Text {
     double ox, oy, s;
     ImFont* font(bool bold) const { return bold ? ui::fonts().bold : ui::fonts().regular; }
     double width(const std::string& t, double size, bool bold = false) const {
-        return font(bold)->CalcTextSizeA(float(size * s), FLT_MAX, 0, t.c_str()).x / s;
+        return font(bold)->CalcTextSizeA(float(size * g_textScale * s), FLT_MAX, 0, t.c_str()).x / s;
     }
     // align: 0 left, 0.5 centre, 1 right. middle: y is the text's middle instead of its baseline.
     void draw(const std::string& t0, double x, double y, double size, Color c, double align = 0, const Color* halo = nullptr, bool bold = false, bool middle = false) const {
         if (c.a <= 0.003f) return;
         const std::string t = ui::displayable(t0, font(bold));
-        const float px = float(size * s);
+        const float px = float(size * g_textScale * s);
         ImFont* f = font(bold);
         const ImFontBaked* bk = f->GetFontBaked(px);
         const double w = width(t, size, bold);
@@ -215,10 +221,11 @@ QuarkPts quarkPts(const Nucleon& q, double X, double Y, double rn, double now, c
 }  // namespace
 
 // ---------------------------------------------------------------- the frame
-void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy, double uiScale, AtomLab& lab, double w, double h, bool lightTheme) {
+void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy, double uiScale, AtomLab& lab, double w, double h, const app::ThemeColors& colours, double textScale) {
     const AtomParams& p = lab.p;
     AtomState& s = lab.s;
-    const Theme css = theme(lightTheme);
+    const Theme css = theme(colours);
+    g_textScale = textScale;
     const Text T{dl, ox, oy, uiScale};
     lab.viewW = w; lab.viewH = h;
     R.rect(0, 0, w, h, css.card);                                          // the canvas background (the web: var(--card))

@@ -15,6 +15,7 @@
 #include "changelog.h"
 #include "fonts.h"
 #include "imgui.h"
+#include "look.h"
 #include "orbit/format.h"
 #include "atom/atom_learn.h"
 #include "atom_learn.h"
@@ -42,7 +43,7 @@ ImU32 hsl(double h, double s, double l, double a) {
     const double m = l - c / 2;
     return ImGui::ColorConvertFloat4ToU32(ImVec4(float(r + m), float(g + m), float(b + m), float(a)));
 }
-Theme panelTheme() { return theme(false); }       // the panel is always dark (as the Orbit Lab panel)
+Theme panelTheme() { return theme(look().c); }    // the panel follows the theme picked with 🎨
 
 void dashedRect(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 col, float th, float dash) {
     auto seg = [&](ImVec2 p, ImVec2 q) {
@@ -82,7 +83,6 @@ void selectRow(AppState& app, const char* key, const char* label, const std::vec
     const float avail = ImGui::GetContentRegionAvail().x, gap = 6 * S();
     float x = 0;
     std::string note;
-    const Theme th = panelTheme();
     for (std::size_t i = 0; i < options.size(); i++) {
         const auto [text, sub] = splitLabel(options[i].second);
         const bool on = options[i].first == cur;
@@ -90,12 +90,9 @@ void selectRow(AppState& app, const char* key, const char* label, const std::vec
         const std::string t = displayable(text);
         float w = options.size() == 2 ? (avail - gap) / 2 : ImGui::CalcTextSize(t.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x + 8 * S();
         if (i > 0) { if (x + gap + w <= avail) { ImGui::SameLine(0, gap); x += gap; } else x = 0; }
-        if (on) {
-            ImGui::PushStyleColor(ImGuiCol_Button, U32(th.accent));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, U32(th.accent));
-        }
+        if (on) pushOn();
         if (ImGui::Button(t.c_str(), ImVec2(w, 0)) && !on) app.atom.setParam(key, options[i].first);
-        if (on) ImGui::PopStyleColor(2);
+        if (on) popOn();
         x += w;
     }
     if (!note.empty()) mutedWrapped(note, 13.0f / 16);
@@ -437,15 +434,18 @@ TempBox g_tempBox;
 
 // ---------------------------------------------------------------- the lab picker
 void labPicker(AppState& app) {
-    const Theme th = panelTheme();
     const float w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
     const char* names[2] = {"Orbit Lab", "Atom Lab"};
     for (int i = 0; i < 2; i++) {
         if (i) ImGui::SameLine();
         const bool on = app.lab == i;
-        if (on) { ImGui::PushStyleColor(ImGuiCol_Button, U32(th.accent)); ImGui::PushStyleColor(ImGuiCol_ButtonHovered, U32(th.accent)); }
-        if (ImGui::Button(names[i], ImVec2(w, 0)) && !on) app.lab = i;
-        if (on) ImGui::PopStyleColor(2);
+        if (on) pushOn();
+        if (ImGui::Button(names[i], ImVec2(w, 0)) && !on) {
+            app.lab = i;
+            if (!app.visited[i] && look().reduced) app.paused = true;   // reduced motion: a lab starts still (the web's load())
+            app.visited[i] = true;
+        }
+        if (on) popOn();
     }
 }
 
@@ -457,14 +457,20 @@ void atomPanel(AppState& app, float width) {
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y));
     ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y));
     ImGui::Begin("Atom controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
+    }
     if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
     labPicker(app);
     ImGui::TextUnformatted("Physics Lab · Atom Lab");
     ImGui::SameLine();
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.44f, 0.93f, 0.85f));
+    pushOn();
     if (ImGui::SmallButton((std::string("Update ") + appVersion()).c_str())) app.showChangelog = true;
-    ImGui::PopStyleColor();
+    popOn();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("What's new");
+    themeButton(app);
+    ImGui::SameLine();
     if (ImGui::SmallButton(displayable("⚙ Settings").c_str())) app.showSettings = true;
     ImGui::SameLine();
     defaultsButton(app);

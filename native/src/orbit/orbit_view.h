@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "app/prefs.h"
 #include "card_text.h"
 #include "render/renderer2d.h"
 #include "solar_system.h"
@@ -32,7 +33,9 @@ struct ViewSettings {
     ConsMode cons = ConsMode::Off;
     bool far = true;            // Far-away things (nearest stars, Voyagers, galactic centre)
     bool paused = false;        // time is stopped (a fast spin is only held still while time runs)
-    bool lightTheme = false;    // the system's light or dark theme (the picture follows it when Stars are Off)
+    bool lightTheme = false;    // the theme is a light one (the picture follows the theme when Stars are Off)
+    app::ThemeColors theme = app::themeColors("dark", false);   // the theme's colours (⚙ / 🎨)
+    float textScale = 1;        // Settings → Text size: the labels drawn in the picture
 };
 
 // The line at the top left of the picture: the date shown, and how long after the start date.

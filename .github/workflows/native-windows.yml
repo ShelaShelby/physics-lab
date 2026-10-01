@@ -46,6 +46,8 @@ jobs:
           New-Item -ItemType Directory -Force out | Out-Null
           Copy-Item build/Release/PhysicsLab.exe out/
           Copy-Item native/README.md out/
+          New-Item -ItemType Directory -Force out/font-licences | Out-Null
+          Copy-Item native/assets/fonts/OFL-*.txt out/font-licences/
 
       - uses: actions/upload-artifact@v4
         with:

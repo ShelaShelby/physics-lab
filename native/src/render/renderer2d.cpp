@@ -169,6 +169,14 @@ out vec4 fragColor;
 void main() { fragColor = texture(uTex, vUV); }
 )";
 
+// The grey pass: the picture's colours turned into their brightness (CSS grayscale(1) uses these weights)
+static const char* kGrayFS = R"(#version 330 core
+in vec2 vUV;
+uniform sampler2D uTex;
+out vec4 fragColor;
+void main() { vec4 c = texture(uTex, vUV); float y = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722)); fragColor = vec4(vec3(y), c.a); }
+)";
+
 // A turning planet: each pixel of the disc -> a point on the ball -> latitude and longitude on the
 // planet (through the matrix uK) -> the Earth map, or a latitude/longitude grid. Then lit from the Sun.
 static const char* kPlanetFS = R"(#version 330 core
@@ -300,6 +308,16 @@ bool Renderer2D::init() {
         glGetProgramiv(cmpProgram_, GL_LINK_STATUS, &ok);
         if (!ok) { std::fprintf(stderr, "composite shader link error\n"); return false; }
         cmpTex_ = glGetUniformLocation(cmpProgram_, "uTex");
+        const GLuint gv = compile(GL_VERTEX_SHADER, kCompositeVS), gf = compile(GL_FRAGMENT_SHADER, kGrayFS);
+        grayProgram_ = glCreateProgram();
+        glAttachShader(grayProgram_, gv);
+        glAttachShader(grayProgram_, gf);
+        glLinkProgram(grayProgram_);
+        glDeleteShader(gv);
+        glDeleteShader(gf);
+        glGetProgramiv(grayProgram_, GL_LINK_STATUS, &ok);
+        if (!ok) { std::fprintf(stderr, "grey shader link error\n"); return false; }
+        grayTexLoc_ = glGetUniformLocation(grayProgram_, "uTex");
         glGenVertexArrays(1, &cmpVao_);
         glBindVertexArray(cmpVao_);
         glBindBuffer(GL_ARRAY_BUFFER, sqCornerVbo_);
@@ -357,6 +375,10 @@ void Renderer2D::shutdown() {
     if (blVao_) glDeleteVertexArrays(1, &blVao_);
     if (blProgram_) glDeleteProgram(blProgram_);
     if (cmpVao_) glDeleteVertexArrays(1, &cmpVao_);
+    if (grayProgram_) glDeleteProgram(grayProgram_);
+    if (grayTex_) glDeleteTextures(1, &grayTex_);
+    if (grayFbo_) glDeleteFramebuffers(1, &grayFbo_);
+    grayProgram_ = grayTex_ = grayFbo_ = 0;
     if (cmpProgram_) glDeleteProgram(cmpProgram_);
     if (layerTex_) glDeleteTextures(1, &layerTex_);
     if (layerFbo_) glDeleteFramebuffers(1, &layerFbo_);
@@ -458,6 +480,29 @@ void Renderer2D::end(int fbW, int fbH, int fbY) {
         if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs) lastInstances_ += sg.count;
     }
     if (segments_.empty()) return;
+    // Monochrome: draw into an offscreen picture first, then copy it over in grey (at the bottom of end())
+    GLuint target = 0;
+    int vx = 0, vy = fbY;
+    if (gray_) {
+        if (!grayFbo_) { glGenFramebuffers(1, &grayFbo_); glGenTextures(1, &grayTex_); }
+        if (fbW != grayW_ || fbH != grayH_) {
+            grayW_ = fbW; grayH_ = fbH;
+            glBindTexture(GL_TEXTURE_2D, grayTex_);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, fbW, fbH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindFramebuffer(GL_FRAMEBUFFER, grayFbo_);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, grayTex_, 0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        target = grayFbo_; vy = 0;
+        glBindFramebuffer(GL_FRAMEBUFFER, grayFbo_);
+        glViewport(0, 0, fbW, fbH);
+        glClearColor(grayBg_.r, grayBg_.g, grayBg_.b, 1);   // the page behind the picture, so the copy is opaque
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
@@ -498,8 +543,8 @@ void Renderer2D::end(int fbW, int fbH, int fbY) {
             continue;
         }
         if (sg.kind == Kind::LayerEnd) {
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            glViewport(0, fbY, fbW, fbH);
+            glBindFramebuffer(GL_FRAMEBUFFER, target);
+            glViewport(vx, vy, fbW, fbH);
             glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);     // the layer holds premultiplied colours
             glUseProgram(cmpProgram_);
             glActiveTexture(GL_TEXTURE0);
@@ -557,6 +602,20 @@ void Renderer2D::end(int fbW, int fbH, int fbY) {
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), reinterpret_cast<void*>(static_cast<std::size_t>(sg.first) * 2 * sizeof(float)));
             glDrawArraysInstanced(GL_TRIANGLES, 0, 6, sg.count);
         }
+    }
+    if (gray_) {                                          // copy the offscreen picture over the window, in grey
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, fbY, fbW, fbH);
+        glDisable(GL_BLEND);
+        glUseProgram(grayProgram_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, grayTex_);
+        glUniform1i(grayTexLoc_, 0);
+        glBindVertexArray(cmpVao_);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glEnable(GL_BLEND);
+        normalBlend();
     }
     glBindVertexArray(0);
     glUseProgram(0);
