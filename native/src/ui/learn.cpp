@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -15,6 +16,7 @@
 #include "orbit/spin.h"
 #include "orbit/units.h"
 #include "rich_text.h"
+#include "svg_icon.h"
 #include "ui/journey_dates.h"
 #include "ui/orbit_panel.h"
 
@@ -251,6 +253,12 @@ void timeline(AppState& app) {
     int i = 0;
     for (const TimelineStep& st : kTimeline) {
         ImGui::Separator();
+        const float s = ImGui::GetFontSize() / 16.0f;      // the step picture on the left, as in the Atom Lab's timeline (the web's .lrnIc, 60 px wide)
+        const ImVec2 o = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), IM_COL32(120, 140, 200, 31), 12 * s);
+        svgIcon(st.svg, ImVec2(o.x + 2 * s, o.y + 6 * s), s);
+        ImGui::SetCursorScreenPos(ImVec2(o.x + 72 * s, o.y + 4 * s));
+        ImGui::BeginGroup();
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::TextUnformatted(st.when);
         ImGui::PopStyleColor();
@@ -272,7 +280,9 @@ void timeline(AppState& app) {
             }
             ImGui::PopID();
         }
-        ImGui::Spacing();
+        ImGui::EndGroup();
+        ImGui::SetCursorScreenPos(ImVec2(o.x, std::max(ImGui::GetItemRectMax().y, o.y + 64 * s) + 8 * s));
+        ImGui::Dummy(ImVec2(0, 0));
         i++;
     }
 }
@@ -295,6 +305,7 @@ void learnWindow(AppState& app) {
     const std::string title = std::string(kTitles[app.learn]) + "###learn";   // one window; the title changes with the guide
     if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
         if (app.learnJump == "top") { ImGui::SetScrollY(0); app.learnJump.clear(); }
+        if (const char* sc = std::getenv("PL_LEARN_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
         ImGui::PushTextWrapPos(0);
         if (app.learn == 1) lookGuide(app);
         else if (app.learn == 2) seasonsGuide(app);

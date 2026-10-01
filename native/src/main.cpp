@@ -44,7 +44,9 @@ SDL_Window* createWindow(float scale, bool multisample) {
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, multisample ? 1 : 0);   // smooth edges on lines and dots
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, multisample ? 4 : 0);
     const std::string title = std::string("Physics Lab ") + ui::appVersion() + " — Orbit Lab";
-    return SDL_CreateWindow(title.c_str(), static_cast<int>(1400 * scale), static_cast<int>(860 * scale),
+    int w = 1400, h = 860;
+    if (const char* wh = SDL_getenv("PL_WINDOW")) std::sscanf(wh, "%dx%d", &w, &h);   // for automatic checks: PL_WINDOW=1000x640
+    return SDL_CreateWindow(title.c_str(), static_cast<int>(w * scale), static_cast<int>(h * scale),
                             SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
 }
 

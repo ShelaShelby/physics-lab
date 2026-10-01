@@ -118,11 +118,11 @@ globalThis.TL = ORB_TL;`;
     let a = {kind: ''};
     if (e.lab) { recs.length = 0; e.lab[1](() => recs.push({kind: 'sun'})); a = recs[0] || {kind: 'sun'}; if (a.kind === 'look' && false) {} }
     const ms = a.ms || 0;
-    return `    {${q(e.y)}, ${q(e.who)}, ${q(e.t)},\n     ${lit(e.d)},\n     ${q(e.lab ? e.lab[0] : '')}, ${q(a.kind)}, ${q(a.name || a.key || '')}, ${a.zoom ?? 0}, ${a.km ?? 0}, ${a.moons ? 'true' : 'false'}, ${ms}LL},`;
+    return `    {${q(e.y)}, ${q(e.who)}, ${q(e.t)},\n     ${lit(e.d)},\n     ${q(e.lab ? e.lab[0] : '')}, ${q(a.kind)}, ${q(a.name || a.key || '')}, ${a.zoom ?? 0}, ${a.km ?? 0}, ${a.moons ? 'true' : 'false'}, ${ms}LL,\n     ${q(e.svg)}},`;
   });
   out.push(`static const char* const kTimelineIntro = ${q(intro)};`);
   out.push('// lab: what the ▶ button does: go (name or "", zoom, moons), look (name, km), far (key, optional date), date (ms, name, km), sun, game (another lab)');
-  out.push('struct TimelineStep { const char* when; const char* who; const char* title; const char* text; const char* button; const char* lab; const char* target; double zoom, km; bool moons; long long ms; };');
+  out.push('struct TimelineStep { const char* when; const char* who; const char* title; const char* text; const char* button; const char* lab; const char* target; double zoom, km; bool moons; long long ms; const char* svg; };   // svg: the step picture, drawn in a 56 × 56 box');
   out.push('static const TimelineStep kTimeline[] = {\n' + rows.join('\n') + '\n};');
 }
 

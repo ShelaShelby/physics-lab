@@ -16,6 +16,7 @@
 #include "look.h"
 #include "orbit_panel.h"
 #include "rich_text.h"
+#include "svg_icon.h"
 
 namespace ui {
 
@@ -75,109 +76,6 @@ void elemBar(AppState& app) {
     if (ImGui::Button("usual")) L.setParam("N", defaultN(L.p.Z));
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("the usual isotope");
     ImGui::Separator();
-}
-
-// ---------------------------------------------------------------- a tiny SVG painter for the timeline icons
-// It knows what the web's 22 icons use: circle, rect, path (M, L, Q, T), text, and a radial gradient fill.
-std::string svgAttr(const std::string& tag, const char* name) {
-    const std::string key = std::string(" ") + name + "=\"";
-    const std::size_t a = tag.find(key);
-    if (a == std::string::npos) return "";
-    const std::size_t b = tag.find('"', a + key.size());
-    return tag.substr(a + key.size(), b - a - key.size());
-}
-ImVec4 svgColor(const std::string& c) {
-    if (c.size() == 7 && c[0] == '#') {
-        const unsigned long v = std::strtoul(c.c_str() + 1, nullptr, 16);
-        return ImVec4(((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f, 1);
-    }
-    if (c == "#fff") return ImVec4(1, 1, 1, 1);
-    return ImVec4(0.5f, 0.5f, 0.5f, 1);
-}
-void svgIcon(const std::string& svg, ImVec2 o, float scale) {
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    auto P = [&](double x, double y) { return ImVec2(o.x + float(x) * scale, o.y + float(y) * scale); };
-    std::map<std::string, std::vector<std::pair<float, ImVec4>>> grads;   // id -> stops (offset, colour with opacity)
-    std::string curGrad;
-    for (std::size_t i = 0; i < svg.size();) {
-        const std::size_t a = svg.find('<', i);
-        if (a == std::string::npos) break;
-        const std::size_t b = svg.find('>', a);
-        const std::string tag = svg.substr(a, b - a + 1);
-        i = b + 1;
-        const std::string nm = tag.substr(1, tag.find_first_of(" />", 1) - 1);
-        auto num = [&](const char* k, double d = 0) { const std::string v = svgAttr(tag, k); return v.empty() ? d : std::atof(v.c_str()); };
-        if (nm == "radialGradient") { curGrad = svgAttr(tag, "id"); grads[curGrad].clear(); continue; }
-        if (nm == "stop") {
-            ImVec4 c = svgColor(svgAttr(tag, "stop-color"));
-            c.w = float(num("stop-opacity", 1));
-            grads[curGrad].push_back({float(num("offset")), c});
-            continue;
-        }
-        const float op = float(num("opacity", 1));
-        const std::string fill = svgAttr(tag, "fill"), stroke = svgAttr(tag, "stroke");
-        const float sw = float(num("stroke-width", 1)) * scale;
-        const bool dashed = !svgAttr(tag, "stroke-dasharray").empty();
-        auto col = [&](const std::string& c) { ImVec4 v = svgColor(c); v.w *= op; return ImGui::ColorConvertFloat4ToU32(v); };
-        if (nm == "circle") {
-            const ImVec2 c = P(num("cx"), num("cy"));
-            const float r = float(num("r")) * scale;
-            if (fill.rfind("url(#", 0) == 0) {                            // a radial gradient: rings from the outside in
-                const auto& st = grads[fill.substr(5, fill.size() - 6)];
-                if (st.size() >= 2)
-                    for (int k = 24; k >= 1; k--) {
-                        const float t = k / 24.f;
-                        const auto& s0 = st.front(); const auto& s1 = st.back();
-                        const float f = std::max(0.f, std::min(1.f, (t - s0.first) / std::max(1e-3f, s1.first - s0.first)));
-                        ImVec4 v(s0.second.x + (s1.second.x - s0.second.x) * f, s0.second.y + (s1.second.y - s0.second.y) * f, s0.second.z + (s1.second.z - s0.second.z) * f, s0.second.w + (s1.second.w - s0.second.w) * f);
-                        dl->AddCircleFilled(c, r * t, ImGui::ColorConvertFloat4ToU32(v));
-                    }
-            } else if (!fill.empty() && fill != "none") dl->AddCircleFilled(c, r, col(fill));
-            else if (fill.empty() && stroke.empty()) dl->AddCircleFilled(c, r, col("#000000"));
-            if (!stroke.empty()) {
-                if (dashed) for (int k = 0; k < 24; k += 2) dl->PathArcTo(c, r, k * 6.2832f / 24, (k + 1) * 6.2832f / 24, 4), dl->PathStroke(col(stroke), 0, sw);
-                else dl->AddCircle(c, r, col(stroke), 0, sw);
-            }
-        } else if (nm == "rect") {
-            const ImVec2 p0 = P(num("x"), num("y")), p1 = P(num("x") + num("width"), num("y") + num("height"));
-            if (!fill.empty() && fill != "none") dl->AddRectFilled(p0, p1, col(fill));
-            if (!stroke.empty()) dl->AddRect(p0, p1, col(stroke), 0, 0, sw);
-        } else if (nm == "path") {
-            const std::string d = svgAttr(tag, "d");
-            std::vector<double> nums;
-            char cmd = 0;
-            double cx = 0, cy = 0, qx = 0, qy = 0;
-            std::size_t k = 0;
-            auto readNums = [&](int n) {
-                nums.clear();
-                while ((int)nums.size() < n && k < d.size()) {
-                    while (k < d.size() && (d[k] == ' ' || d[k] == ',')) k++;
-                    char* end = nullptr;
-                    nums.push_back(std::strtod(d.c_str() + k, &end));
-                    k = end - d.c_str();
-                }
-            };
-            while (k < d.size()) {
-                while (k < d.size() && d[k] == ' ') k++;
-                if (k < d.size() && std::isalpha(static_cast<unsigned char>(d[k]))) cmd = d[k++];
-                if (cmd == 'M') { readNums(2); cx = nums[0]; cy = nums[1]; dl->PathLineTo(P(cx, cy)); }
-                else if (cmd == 'L') { readNums(2); cx = nums[0]; cy = nums[1]; dl->PathLineTo(P(cx, cy)); }
-                else if (cmd == 'Q') { readNums(4); qx = nums[0]; qy = nums[1]; dl->PathBezierQuadraticCurveTo(P(qx, qy), P(nums[2], nums[3]), 12); cx = nums[2]; cy = nums[3]; }
-                else if (cmd == 'T') { readNums(2); qx = 2 * cx - qx; qy = 2 * cy - qy; dl->PathBezierQuadraticCurveTo(P(qx, qy), P(nums[0], nums[1]), 12); cx = nums[0]; cy = nums[1]; }
-                else break;
-            }
-            dl->PathStroke(col(stroke.empty() ? "#7a86a0" : stroke), 0, sw);
-        } else if (nm == "text") {
-            const std::size_t e = svg.find("</text>", i);
-            const std::string t = svg.substr(i, e - i);
-            i = e + 7;
-            const float fs = float(num("font-size", 12)) * scale;
-            ImFont* f = svgAttr(tag, "font-weight") == "700" ? fonts().bold : fonts().regular;
-            const ImVec2 ts = f->CalcTextSizeA(fs, FLT_MAX, 0, t.c_str());
-            const ImVec2 at = P(num("x"), num("y"));
-            dl->AddText(f, fs, ImVec2(at.x - (svgAttr(tag, "text-anchor") == "middle" ? ts.x / 2 : 0), at.y - f->GetFontBaked(fs)->Ascent), col(fill.empty() ? "#000000" : fill), t.c_str());
-        }
-    }
 }
 
 // ---------------------------------------------------------------- the four guides
@@ -305,6 +203,7 @@ void atomLearnWindow(AppState& app) {
     const std::string title = std::string(kTitles[app.atomLearn]) + "###atomlearn";
     if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
         if (app.atomLearnJump == "top") { ImGui::SetScrollY(0); app.atomLearnJump.clear(); }
+        if (const char* sc = std::getenv("PL_LEARN_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
         ImGui::PushTextWrapPos(0);
         if (app.atomLearn == 1) lookGuide(app);
         else if (app.atomLearn == 2) scaleGuide(app);

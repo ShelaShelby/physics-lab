@@ -136,6 +136,7 @@ if(PL_BUILD_APP)
     src/ui/learn.cpp
     src/ui/look.cpp
     src/ui/rich_text.cpp
+    src/ui/svg_icon.cpp
     src/ui/settings.cpp
     src/ui/shot.cpp)
   target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core app_core imgui SDL3::SDL3-static)
