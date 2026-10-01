@@ -35,6 +35,10 @@ struct AppState {
     double tempK = 293.15;                 // the Temperature slider, K (kept while you switch elements, as in the web)
     bool bigTable = false;                 // the large periodic table window is open
     bool tempDetails = false;              // "What is temperature, really?" is open
+    int atomLearn = 0;                     // the open Atom Lab guide: 0 none, 1 look, 2 scale, 3 weight, 4 timeline
+    std::string atomLearnJump;             // a section to scroll to ("top", "bar" or a section key)
+    std::string scaleTab = "scale", massTab = "parts";
+    int scaleObj = 3;                      // the Scale guide's object (a football)
 };
 
 // Puts everything back where it is today and resets the view and time speed (the web's "☉ Reset to today").

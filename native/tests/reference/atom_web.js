@@ -4,6 +4,7 @@
 // be repeated exactly and compared with the native app, which uses the same generator.
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
+const {makeEl} = require('./fake_dom.js');
 
 function mulberry32(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; }; }
 
@@ -14,7 +15,7 @@ function loadAtomWeb() {
   const a = find(/^\/\* --- Atom Lab: hydrogen-like atom in atomic units/);
   const b = find(/^SIMS\['Black Hole Lab'\] = \{/);
   // the units helpers the Atom Lab uses come from the Orbit Lab part of the page
-  const unitsStart = find(/^const MI_KM = 0\.621371192/), unitsEnd = find(/^const uText = /);
+  const unitsStart = find(/^const MI_KM = 0\.621371192/), unitsEnd = find(/^const fmtSun = /);   // up to and including uText
   const src = lines.slice(unitsStart, unitsEnd).join('\n') + '\n' + lines.slice(a, b).join('\n')
     .replace('/* ============ 2. ENGINE ============ */', '');
   const engine = src.indexOf('const cv = document.getElementById(\'cv\')');
@@ -25,14 +26,14 @@ function loadAtomWeb() {
   const ctx = {
     Math: M, JSON, Date, console, Number, String, Array, Object, Float32Array, Int8Array, Uint8Array, Float64Array, Set, Map, Infinity, NaN, isFinite, parseFloat, parseInt,
     window: {devicePixelRatio: 1}, localStorage: {getItem: () => null, setItem() {}, removeItem() {}},
-    document: {addEventListener() {}, createElement: el, getElementById: el, body: el()},
+    document: {addEventListener() {}, createElement: makeEl, getElementById: el, body: el()},
     performance: {now: () => 0}, addEventListener() {},
-    PL_UN: 'metric', PLAch: {grant() {}}, plRM: () => false, paused: false, SIMS: {},
+    PL_UN: 'metric', PLAch: {grant() {}}, Option: function (t, v) { this.text = t; this.value = v; }, plRM: () => false, paused: false, SIMS: {},
     setParam: (k, v) => { ctx.params[k] = v; }, params: {}, state: null, cv: {clientWidth: 1000, clientHeight: 700},
   };
   vm.createContext(ctx);
   vm.runInContext(code + `
-    globalThis.W = {NAME, SYMBOL, NUC, DEFAULT_N, N_RANGE, decInfo, decMove, decWord, decShots, DEC_SHORT, isoLine, isoInfo, fmtLife, fmtHalf, decTick, decLine,
+    globalThis.W = {uText, NAME, SYMBOL, NUC, DEFAULT_N, N_RANGE, decInfo, decMove, decWord, decShots, DEC_SHORT, isoLine, isoInfo, fmtLife, fmtHalf, decTick, decLine,
       hasStable, fmtLam, fmtLen, fmtT, fmtEV, CATS, CAT, FAMOUS, ptPos, nuclideLabel, ANG, ORB, lagCoef, fullOrb, EXT, psi, psi2, walk, dipoleOK, mcmc,
       FM_AU, NUCLEON_R, nuclearR, fitSize, sizeA0, px0, nucR, sci, cutOffset, supDigits, metres, MAGIC_N, MAGIC_Z, BETA_KNOWN, nucBeta, nucMeasured, nucShapeWord,
       buildNucleus, lvlN, lvl, curLevel, targets, rydM, specLines, photonInfo, lamColor, startJump, beginTransition, manualJump, advance, ionLabel, A0, HARTREE, AU_T,

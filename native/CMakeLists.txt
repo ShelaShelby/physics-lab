@@ -42,6 +42,7 @@ target_compile_options(orbit_core PRIVATE ${PL_WARNINGS})
 add_library(atom_core STATIC
   src/atom/atom_core.cpp
   src/atom/atom_sim.cpp
+  src/atom/atom_learn.cpp
 )
 target_link_libraries(atom_core PUBLIC orbit_core)
 target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
@@ -102,6 +103,8 @@ if(PL_BUILD_APP)
     src/atom/atom_view.cpp
     src/ui/orbit_panel.cpp
     src/ui/atom_panel.cpp
+    src/ui/atom_learn.cpp
+    src/ui/html_view.cpp
     src/ui/changelog.cpp
     src/ui/fonts.cpp
     src/ui/journey_dates.cpp

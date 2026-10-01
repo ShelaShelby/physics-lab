@@ -16,6 +16,8 @@
 #include "fonts.h"
 #include "imgui.h"
 #include "orbit/format.h"
+#include "atom/atom_learn.h"
+#include "atom_learn.h"
 #include "orbit_panel.h"
 #include "rich_text.h"
 
@@ -350,20 +352,6 @@ void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen) {
     ImGui::Dummy(ImVec2(W * s, H * s));
 }
 
-std::string spectrumNote(int Z, int N) {
-    double ha = 0;
-    for (const SpecLine& l : specLines(Z, N)) if (l.lo == 2 && l.hi == 3) ha = l.lam;
-    std::string ion;
-    if (Z != 1) ion = std::string(symbol(Z)) + (Z - 1 > 1 ? supDigits(Z - 1) : "") + "⁺";
-    std::string lower = name(Z);
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-    std::string t = Z == 1 ? "<b>This is hydrogen’s real spectrum:</b> the light it gives off when its electron drops from a higher level to a lower one. The visible lines are the Balmer series (drops to level 2): Hα at " + fmt::fixed(ha, 2) + " nm is the red glow of hydrogen in nebulae."
-                           : "<b>The spectrum of " + std::string(name(Z)) + " with only one electron left (" + ion + ")</b>, the atom on screen. It is real: ions like this glow in very hot plasmas and stars. A normal " + lower + " atom, with all " + std::to_string(Z) + " electrons, has a very different spectrum, which this lab does not model.";
-    t += " Each group is a series of drops to one level; its dashed line is the series limit. ▼ = lines your photon jumps made. Vacuum wavelengths, with the nucleus’s real mass. Line heights are not brightness. Not included: fine structure (relativity splits each line slightly: about 0.005 % for hydrogen, much more for heavy ions)";
-    t += Z >= 20 ? " (for " + std::string(name(Z)) + " the true lines are shifted and split noticeably, so these are approximate)." : ".";
-    return t;
-}
-
 // the little particle box of the Temperature card (web: tempPicture): solid = locked and jiggling, liquid = flowing, gas = flying
 struct TempBox {
     struct P { double sx, sy, x, y, vx, vy, a, b, w1, w2; };
@@ -480,6 +468,7 @@ void atomPanel(AppState& app, float width) {
     ImGui::TextWrapped("any nucleus from hydrogen to oganesson + one electron: Bohr orbit, quantum cloud, 3D, photon jumps, and a zoom down to quarks");
     if (ImGui::Button(app.paused ? "▶ Play" : "❚❚ Pause", ImVec2(-1, 0))) app.paused = !app.paused;
     ImGui::TextDisabled("Space: play / pause");
+    atomHelpButton(app);
 
     // ---- Nucleus ----
     ImGui::SeparatorText("Nucleus");
@@ -488,10 +477,10 @@ void atomPanel(AppState& app, float width) {
         if (z) pickElement(app, z);
         if (ImGui::Button(displayable("⤢ Bigger table").c_str())) app.bigTable = true;
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Open the periodic table large, with bigger buttons");
-        mutedWrapped((decInfo(p.Z, p.N) ? "☢ " : "● ") + isoLine(p.Z, p.N), 12.0f / 16);
+        mutedWrapped(isotopeLine(p.Z, p.N), 12.0f / 16);
         ImGui::Dummy(ImVec2(0, 4 * S()));
         elementCard(p.Z);
-        mutedWrapped("Click an element for its most common isotope (longest-lived if none is stable). Dashed outline = no stable isotope.", 12.0f / 16);
+        mutedWrapped(kTableNote, 12.0f / 16);
         ImGui::Dummy(ImVec2(0, 4 * S()));
         factsCard(p.Z, app.tempK);
         if (L.showBuildAnother() && ImGui::Button(displayable("☢ Build another").c_str())) L.buildAnother();
@@ -516,30 +505,22 @@ void atomPanel(AppState& app, float width) {
     // ---- Decay history ----
     ImGui::SeparatorText("Decay history");
     {
-        const auto& ch = L.chain;
-        if (ch.size() < 2) {
-            mutedWrapped(ch.empty() ? "No decays yet."
-                         : decInfo(p.Z, p.N) ? ch[0].nuc + ": no decays yet. When it decays, each step of the chain is listed here with how long it lived."
-                                             : ch[0].nuc + " does not decay (as far as anyone has measured). Build an unstable nucleus to start a decay history.", 13.0f / 16);
-        } else {
-            ImGui::BeginChild("##hist", ImVec2(-1, std::min(320 * S(), (ch.size() * 2 + 1) * ImGui::GetTextLineHeightWithSpacing() + 8)), ImGuiChildFlags_None);
-            ImGui::PushFont(fonts().bold, 0.0f);
-            ImGui::TextUnformatted(ch[0].nuc.c_str());
-            ImGui::PopFont();
-            double tot = 0;
-            for (std::size_t i = 1; i < ch.size(); i++) {
-                ImGui::Indent(10 * S());
-                ImGui::TextDisabled("%s", displayable("↓ " + ch[i].how + ", after " + fmtLife(ch[i].lived)).c_str());
-                ImGui::Unindent(10 * S());
-                ImGui::PushFont(fonts().bold, 0.0f);
-                ImGui::TextUnformatted(displayable(ch[i].to ? *ch[i].to : ch[i].how.find("split") != std::string::npos ? "✂ two smaller nuclei" : "something this lab cannot build").c_str());
-                ImGui::PopFont();
-                tot += ch[i].lived;
+        const auto hist = decayHistory(L.chain, p.Z, p.N);
+        if (hist.size() == 1) mutedWrapped(hist[0].second, 13.0f / 16);
+        else {
+            ImGui::BeginChild("##hist", ImVec2(-1, std::min(320 * S(), (hist.size() - 1) * ImGui::GetTextLineHeightWithSpacing() + 8)), ImGuiChildFlags_None);
+            for (std::size_t i = 0; i + 1 < hist.size(); i++) {
+                const std::string t = displayable(hist[i].second);
+                if (hist[i].first == "decStep") { ImGui::Indent(10 * S()); ImGui::TextDisabled("%s", t.c_str()); ImGui::Unindent(10 * S()); }
+                else { ImGui::PushFont(fonts().bold, 0.0f); ImGui::TextUnformatted(t.c_str()); ImGui::PopFont(); }
             }
             ImGui::EndChild();
-            mutedWrapped(std::to_string(ch.size() - 1) + " decay" + (ch.size() > 2 ? "s" : "") + " in " + fmtLife(tot) + " of real time", 13.0f / 16);
+            mutedWrapped(hist.back().second, 13.0f / 16);
         }
     }
+
+    // ---- Learn ----
+    atomLearnButtons(app);
 
     // ---- View & zoom ----
     ImGui::SeparatorText("View & zoom");
@@ -598,21 +579,8 @@ void atomPanel(AppState& app, float width) {
         ImGui::SetNextItemWidth(-1);
         if (ImGui::SliderInt("##temp", &tv, 0, 1000, "")) app.tempK = v2T(tv);
         const int Zs = p.Z;
-        const auto st = tempState(Zs, app.tempK);
-        const double K = app.tempK;
-        const std::string kk = K < 1000 ? fmt::fixed(K, K < 100 ? 1 : 0) : fmt::jsLocale(std::floor(K + 0.5));
-        richText("<b>" + kk + " K</b> · " + fC(K) + " °C · " + fF(K) + " °F  →  " + name(Zs) + " is " + (st ? "<b>" + std::string(stateIcon(*st)) + " " + *st + "</b>" : "<b>unknown</b> (never measured)") +
-                 (st && *st == "gas" && tempData(Zs).flag == 's' ? " (it sublimed)" : ""), true, 13.0f / 16, 0.2f);
-        const double mA = (Zs + defaultN(Zs)) * 1.66054e-27, vv = std::sqrt(3 * 1.380649e-23 * K / mA);   // typical speed: ½mv² = (3/2)kT
-        const std::string sp = vv >= 1000 ? fmt::fixed(vv / 1000, 2) + " km/s" : vv >= 10 ? fmt::jsString(std::floor(vv + 0.5)) + " m/s" : fmt::fixed(vv, 1) + " m/s";
-        std::string sx;
-        if (K < 0.05) sx = "At this temperature the atoms have almost no motion.";
-        else {
-            const double mph = vv * 2.23694;
-            sx = "Typical atom speed here: ≈ <b>" + (fmt::imperial() ? (mph >= 10 ? fmt::jsLocale(std::floor(mph + 0.5)) : fmt::fixed(mph, 1)) + " mph" : sp) + "</b>" +
-                 (fmt::imperial() ? "" : " (" + (fmt::fixed(vv * 3.6, 0) == "0" ? std::string() : "≈ " + fmt::jsLocale(std::floor(vv * 3.6 + 0.5)) + " km/h") + ")") + ". Hotter = faster.";
-        }
-        richText(sx, true, 12.0f / 16, 0.2f);
+        richText(tempStateHtml(Zs, app.tempK), true, 13.0f / 16, 0.2f);
+        richText(tempSpeedHtml(Zs, app.tempK), true, 12.0f / 16, 0.2f);
         g_tempBox.draw(Zs, app.tempK, std::min(0.05, double(ImGui::GetIO().DeltaTime)));
         auto jump = [&](const char* txt, double T) { if (ImGui::Button(displayable(txt).c_str())) { if (!std::isnan(T)) app.tempK = std::max(0.0, std::min(kTMax, T)); } };
         const Temp& td = tempData(Zs);
@@ -624,14 +592,10 @@ void atomPanel(AppState& app, float width) {
         app.tempDetails = ImGui::TreeNodeEx(displayable("🌡 What is temperature, really?").c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen);
         if (app.tempDetails) {
             ImGui::PushTextWrapPos(0);
-            richText("<p><b>Temperature is how fast the atoms are jiggling and flying about, on average.</b> Hot means fast, cold means slow. There is no “hotness” stuff inside things: it is only motion. More precisely, it measures the average energy of that random motion.</p>"
-                     "<p><b>Heat</b> is different: it is energy moving from something hot to something cold, because fast atoms bump into slow ones and speed them up.</p>"
-                     "<p><b>0 K (−273.15 °C)</b> is the coldest possible temperature, where the atoms have almost no motion left (quantum physics never lets them stop completely). Kelvin starts there on purpose: 600 K has twice the motion energy of 300 K.</p>"
-                     "<p><b>Melting</b> happens when the jiggling gets strong enough to break the atoms out of their places. <b>Boiling</b> happens when they move so fast that they fly apart from each other.</p>"
-                     "<p>Drag the slider and watch: the atoms are the same, only their speed changes.</p>", true, 13.0f / 16, 0.4f);
+            richText(kTempDetailsHtml, true, 13.0f / 16, 0.4f);
             ImGui::PopTextWrapPos();
         }
-        mutedWrapped("States belong to big crowds of atoms, not to one atom. Solid: atoms locked in place, jiggling. Liquid: atoms touch but slide past each other. Gas: atoms fly freely. Real temperature is just how fast the atoms jiggle.", 12.0f / 16);
+        mutedWrapped(kTempNote, 12.0f / 16);
     }
     // a slider or button held down: the decay clock waits (the web's PL_HOLD)
     L.hold = ImGui::IsAnyItemActive() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);

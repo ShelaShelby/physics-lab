@@ -10,10 +10,12 @@
 #include <vector>
 
 #include "atom/atom_core.h"
+#include "atom/atom_learn.h"
 #include "atom/atom_sim.h"
 #include "orbit/format.h"
 
 #include "reference/atom_reference.inc"
+#include "reference/atom_learn_reference.inc"
 
 using namespace atom;
 
@@ -219,6 +221,82 @@ static void testRuns() {
     }
 }
 
+// runs of spaces and line breaks fold into one space, as in a browser
+static std::string fold(const std::string& s) {
+    std::string o;
+    for (char c : s) {
+        const bool sp = c == ' ' || c == '\n' || c == '\t' || c == '\r';
+        if (sp) { if (!o.empty() && o.back() != ' ') o += ' '; } else o += c;
+    }
+    while (!o.empty() && o.back() == ' ') o.pop_back();
+    return o;
+}
+
+// The Learn guides, word for word against the web's own guide functions
+static void testLearn() {
+    for (const LearnRef& r : kLearnRef) {
+        fmt::setImperial(r.imperial);
+        AtomParams p;
+        p.Z = r.Z; p.N = r.N; p.view = r.view; p.ostyle = r.ostyle; p.orb = r.orb;
+        const std::string w = std::string(name(r.Z)) + "-" + std::to_string(r.Z + r.N) + " " + r.view + (r.imperial ? " (imperial)" : "");
+        const auto secs = lookSections(p, r.live);
+        checkNum(w + " look sections", secs.size(), r.look.size(), 0);
+        for (std::size_t i = 0; i < secs.size() && i < r.look.size(); i++)
+            checkStr(w + " look " + secs[i].key, secs[i].key + "|" + secs[i].title + "|" + fold(secs[i].html), r.look[i]);
+        checkStr(w + " scale: powers of ten", fold(scaleHtml(p, "ten", 0)), r.scale[0]);
+        for (int o = 0; o < 5; o++) checkStr(w + " scale: " + kScaleObjects[o], fold(scaleHtml(p, "scale", o)), r.scale[o + 1]);
+        const char* tabs[5] = {"parts", "miss", "count", "proton", "ladder"};
+        for (int t = 0; t < 5; t++) checkStr(w + " weight: " + tabs[t], fold(massHtml(p, tabs[t])), r.mass[t]);
+    }
+    fmt::setImperial(false);
+    // the panel's texts, against what the web's own buildUI wrote
+    for (const PanelRef& r : kPanelRef) {
+        fmt::setImperial(r.imperial);
+        const std::string w = "panel " + std::string(name(r.Z)) + "-" + std::to_string(r.Z + r.N) + (r.imperial ? " (imperial)" : "");
+        checkStr(w + " isotope line", isotopeLine(r.Z, r.N), r.iso);
+        checkStr(w + " element card", elemCardHtml(r.Z) + "<div>" + kTableNote + "</div>", r.card);
+        checkStr(w + " facts", factsHtml(r.Z), r.facts);
+        checkStr(w + " spectrum note", spectrumNote(r.Z, r.N), r.spectrum);
+        checkStr(w + " temperature", tempStateHtml(r.Z, r.tempK), r.tState);
+        checkStr(w + " atom speed", tempSpeedHtml(r.Z, r.tempK), r.tSpeed);
+        std::vector<ChainStep> chain;
+        for (const std::string& c : r.chain) {
+            const std::size_t a = c.find('|');
+            if (a == std::string::npos) { chain.push_back({c, "", 0, std::nullopt}); continue; }
+            const std::size_t b = c.find('|', a + 1);
+            const std::string to = c.substr(b + 1);
+            chain.push_back({"", c.substr(0, a), std::strtod(c.substr(a + 1, b - a - 1).c_str(), nullptr), to.empty() ? std::nullopt : std::optional<std::string>(to)});
+        }
+        const auto hist = decayHistory(chain, r.Z, r.N);
+        checkNum(w + " history lines", hist.size(), r.hist.size(), 0);
+        for (std::size_t i = 0; i < hist.size() && i < r.hist.size(); i++) checkStr(w + " history " + std::to_string(i), hist[i].first + "|" + hist[i].second, r.hist[i]);
+    }
+    fmt::setImperial(false);
+    // the timeline (copied from the web by tools/make_atom_learn.js): 22 steps, 11 with a ▶ button
+    int buttons = 0;
+    for (const TimelineStep& st : timelineSteps()) if (*st.lab) buttons++;
+    checkNum("timeline steps", timelineSteps().size(), 22, 0);
+    checkNum("timeline buttons", buttons, 11, 0);
+    // every element: the card, the facts and "where you meet it", by their hashes (both units)
+    auto fnv = [](const std::string& t) { uint64_t h = 0xcbf29ce484222325ull; for (unsigned char b : t) { h ^= b; h *= 0x100000001b3ull; } return h; };
+    for (const ElementTextRef& r : kElementTextRef) {
+        const std::string w = std::string(name(r.Z)) + " ";
+        auto hashCheck = [&](const std::string& what, const std::string& text, uint64_t want) {
+            g_checks++;
+            if (fnv(text) == want) return;
+            if (++g_failed <= 40) std::printf("FAIL %s%s differs from the web (rerun the generator for its text):\n   %s\n", w.c_str(), what.c_str(), text.c_str());
+        };
+        fmt::setImperial(false);
+        hashCheck("element card", elemCardHtml(r.Z), r.card);
+        hashCheck("facts", factsHtml(r.Z), r.factsM);
+        hashCheck("where you meet it", everyday(r.Z), r.everyM);
+        fmt::setImperial(true);
+        hashCheck("facts (imperial)", factsHtml(r.Z), r.factsI);
+        hashCheck("where you meet it (imperial)", everyday(r.Z), r.everyI);
+    }
+    fmt::setImperial(false);
+}
+
 int main() {
     testElements();
     testNuclides();
@@ -227,6 +305,7 @@ int main() {
     testLight();
     testNuclei();
     testRuns();
+    testLearn();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }
