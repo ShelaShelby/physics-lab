@@ -9,6 +9,7 @@
 // Run from the repository root:   node native/tools/make_learn_data.js
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
+const {apply, EDITS} = require('./native_edits.js');   // the few places where the native text differs from the web's
 const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
 
 function matchBlock(text, from, open, close) {
@@ -57,7 +58,7 @@ globalThis.run = (view, scale, hasCard) => {
     const box = ctx.run(d3 ? '3D' : '2D', ts ? 'True scale' : 'Easy to see', card);
     const intro = box.kids[0].html, outEl = box.kids[5];
     const bdText = (0.123456789/(696000/149.6e6*Math.cbrt(100))).toFixed(1);    // the barycentre distance as the stub makes it: replaced by a marker
-    const secs = outEl.kids.filter(k => k.sec).map(s => ({key: s.key, title: s.title, html: s.html.replace('<b>' + bdText + ' Sun radii</b>', '<b>{BARY} Sun radii</b>').trim()}));
+    const secs = outEl.kids.filter(k => k.sec).map(s => ({key: s.key, title: s.title, html: (s.key === 'sky' ? apply('lookSky', s.html) : s.html).replace('<b>' + bdText + ' Sun radii</b>', '<b>{BARY} Sun radii</b>').trim()}));
     variants.push({d3, ts, card, intro, secs});
   }
   out.push('// "What am I even looking at?": index = (3D ? 4 : 0) + (Easy to see ? 2 : 0) + (something selected ? 1 : 0)');
@@ -110,18 +111,19 @@ globalThis.TL = ORB_TL;`;
     orbLook: (name, km, set) => recs.push({kind: 'look', name, km}),
     orbFar: (key, ms) => () => recs.push({kind: 'far', key, ms: ms || 0}),
     orbDate: (ms, name, km) => () => recs.push({kind: 'date', ms, name, km}),
-    showKind: k => recs.push({kind: 'game'}),
+    showKind: k => recs.push({kind: 'game'}),   // (the Slingshot button is dropped below; the native app has no such lab)
     state: {}, trueScale: () => true, zoomFor: () => 0};
   vm.createContext(ctx); vm.runInContext(code, ctx);
   const intro = html.match(/lrnTimeline\(box, set, ORB_TL, '([^']*)'/)[1];
   const rows = ctx.TL.map(e => {
     let a = {kind: ''};
+    if (e.lab && e.lab[0] === EDITS.slingshotButton) e = {...e, lab: null};   // the Slingshot game is not in the native app: no button
     if (e.lab) { recs.length = 0; e.lab[1](() => recs.push({kind: 'sun'})); a = recs[0] || {kind: 'sun'}; if (a.kind === 'look' && false) {} }
     const ms = a.ms || 0;
     return `    {${q(e.y)}, ${q(e.who)}, ${q(e.t)},\n     ${lit(e.d)},\n     ${q(e.lab ? e.lab[0] : '')}, ${q(a.kind)}, ${q(a.name || a.key || '')}, ${a.zoom ?? 0}, ${a.km ?? 0}, ${a.moons ? 'true' : 'false'}, ${ms}LL,\n     ${q(e.svg)}},`;
   });
   out.push(`static const char* const kTimelineIntro = ${q(intro)};`);
-  out.push('// lab: what the ▶ button does: go (name or "", zoom, moons), look (name, km), far (key, optional date), date (ms, name, km), sun, game (another lab)');
+  out.push('// lab: what the ▶ button does: go (name or "", zoom, moons), look (name, km), far (key, optional date), date (ms, name, km), sun');
   out.push('struct TimelineStep { const char* when; const char* who; const char* title; const char* text; const char* button; const char* lab; const char* target; double zoom, km; bool moons; long long ms; const char* svg; };   // svg: the step picture, drawn in a 56 × 56 box');
   out.push('static const TimelineStep kTimeline[] = {\n' + rows.join('\n') + '\n};');
 }

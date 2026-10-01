@@ -16,6 +16,17 @@
 
 #include "reference/app_reference.inc"
 
+// The native app's own data files, which name nothing of the web's other parts: Orbit Lab texts (the guide, the timeline, the far-away things)
+#include "orbit/sky.h"
+namespace nativeorbit {
+using orbit::FarData;
+using orbit::ProbeData;
+#include "orbit/sky_data.inc"
+}
+namespace nativeui {
+#include "ui/learn_data.inc"
+}
+
 using namespace app;
 
 static int g_checks = 0, g_failed = 0;
@@ -177,7 +188,7 @@ static void testPages() {
     }
     // 👤 About, word for word (the web run lists the native app's two labs)
     checkStr("About title", kAboutTitle, kAboutRefTitle);
-    checkStr("About page", kAboutHtml, kAboutRef);
+    // the page itself: see testNativeEdits (the web's page with the few native edits)
     checkTrue("About names only the native labs", std::string(kAboutHtml).find("Labs: Orbit Lab 7.7.2 · Atom Lab 7.7.3.") != std::string::npos);
     // 🌐 the language menu
     checkStr("language label", kLangLabel, kLangLabelRef);
@@ -404,6 +415,104 @@ static void testShot() {
     }
 }
 
+// ---- native edits ----
+// The native app has the Orbit Lab and the Atom Lab only. The words that name the Black Hole Lab, the Spacetime Lab and
+// the Slingshot game are taken out of the web's texts, and NOTHING else is changed. This is the whole list. Each text is
+// compared with the web's own text (from the web run in tests/reference) after exactly these edits, so any other
+// difference fails. An edit must match exactly once in its text. (tools/native_edits.js makes the native texts from the
+// same list, written separately.)
+struct NativeEdit {
+    const char* what;
+    const char* from;           // this text...
+    const char* to;             // ...becomes this
+    const char* until = nullptr;   // if set: remove from `from` up to (not including) `until`
+};
+static const NativeEdit kEditUnits = {"Settings → Units note: no Black Hole readout", ", the Black Hole readout", ""};
+static const NativeEdit kEditsAbout[] = {
+    {"About card: no black holes or space game", "real orbits, atoms, black holes and a little space game.", "real orbits and atoms."},
+    {"About sources: no Black holes, no Spacetime and real objects", "<div class=\"srcH\">🕳️ Black holes</div>", "", "<div class=\"srcH\">🌌 Stars and far-away things</div>"},
+    // the Orbit Lab still says Sagittarius A* weighs 4.3 million Suns: that source stays, in the far-away things
+    {"About sources: keep the GRAVITY Collaboration source (Sagittarius A*)", "(27,000 light years)</li></ul>",
+     "(27,000 light years)</li><li><a href=\"https://arxiv.org/abs/2112.07478\" target=\"_blank\" rel=\"noopener noreferrer\">GRAVITY Collaboration, 2022: mass distribution in the Galactic Centre</a> (Sagittarius A*, 4.3 million Suns)</li></ul>"},
+};
+static const NativeEdit kEditSgrA = {"Sagittarius A* card: no Spacetime Lab", " (see the Spacetime Lab)", ""};
+static const NativeEdit kEditGuideSky = {"Orbit guide, stars and far-away things: no Spacetime Lab", " (the Spacetime Lab shows what a black hole like it does)", ""};
+static const NativeEdit kEditSlingshot = {"Timeline 1977–1989: no slingshot game button", "Try the slingshot game", ""};
+
+static int g_editUses = 0;
+// the web's text with one edit; a failed match is a failed check (the edit would do nothing, or too much)
+static std::string withEdit(const std::string& text, const NativeEdit& e) {
+    std::size_t at = text.find(e.from), n = 0;
+    for (std::size_t p = text.find(e.from); p != std::string::npos; p = text.find(e.from, p + 1)) n++;
+    if (n != 1) { checkTrue(std::string(e.what) + ": the web text has the words exactly once", false); return text; }
+    g_editUses++;
+    if (!e.until) return text.substr(0, at) + e.to + text.substr(at + std::strlen(e.from));
+    const std::size_t end = text.find(e.until, at);
+    if (end == std::string::npos) { checkTrue(std::string(e.what) + ": the end of the cut is there", false); return text; }
+    return text.substr(0, at) + e.to + text.substr(end);
+}
+static bool mentionsMissingParts(const std::string& t) {
+    for (const char* w : {"Black Hole Lab", "Spacetime Lab", "Slingshot", "slingshot", "space game", "Black Hole readout", "Games tab"})
+        if (t.find(w) != std::string::npos) return true;
+    return false;
+}
+
+static void testNativeEdits() {
+    // Settings → Units note
+    checkStr("Units note", kUnitsNote, withEdit(kUnitsNoteRef, kEditUnits));
+    checkTrue("Units note names no missing part", !mentionsMissingParts(kUnitsNote));
+    // About
+    std::string about = kAboutRef;
+    for (const NativeEdit& e : kEditsAbout) about = withEdit(about, e);
+    checkStr("About page (the web's, with the native edits)", kAboutHtml, about);
+    checkTrue("About names no missing part", !mentionsMissingParts(kAboutHtml) && std::string(kAboutHtml).find("🕳️") == std::string::npos);
+    checkTrue("About still lists the sources of both labs", std::string(kAboutHtml).find("NASA/JPL: planet positions") != std::string::npos && std::string(kAboutHtml).find("NUBASE") != std::string::npos);
+    // the far-away things: every note is the web's, the Sagittarius A* one with its edit
+    using nativeorbit::kFar;
+    checkTrue("19 far-away things", count(kFar) == count(kFarNoteRef) && count(kFar) == 19);
+    int sgra = 0;
+    for (std::size_t i = 0; i < count(kFar) && i < count(kFarNoteRef); i++) {
+        checkStr(std::string("far key ") + std::to_string(i), kFar[i].key, kFarNoteRef[i].key);
+        const bool isSgra = std::string(kFarNoteRef[i].key) == "sgra";
+        sgra += isSgra;
+        checkStr(std::string("far note ") + kFar[i].key, kFar[i].note, isSgra ? withEdit(kFarNoteRef[i].note, kEditSgrA) : std::string(kFarNoteRef[i].note));
+        checkTrue(std::string("far note names no missing part ") + kFar[i].key, !mentionsMissingParts(kFar[i].note));
+    }
+    checkTrue("one Sagittarius A*", sgra == 1);
+    // the Orbit guide "The stars and the far-away things", in all 8 cases
+    for (int v = 0; v < 8; v++) {
+        int found = 0;
+        for (int k = 0; k < nativeui::kLookSectionCount; k++) {
+            const nativeui::LearnSection& sec = nativeui::kLook[v][k];
+            if (std::string(sec.key) != "sky") { checkTrue(std::string("guide section ") + sec.key + " names no missing part", !mentionsMissingParts(sec.html)); continue; }
+            found++;
+            checkStr("guide sky section, case " + std::to_string(v), sec.html, withEdit(kLookSkyRef[v], kEditGuideSky));
+        }
+        checkTrue("guide has one sky section, case " + std::to_string(v), found == 1);
+    }
+    // the Solar System timeline: every step is the web's (text, who, title, year and picture), only the slingshot button is gone
+    using nativeui::kTimeline;
+    checkTrue("timeline length", count(kTimeline) == count(kTimelineRef) && count(kTimeline) == 29);
+    int slingshot = 0;
+    for (std::size_t i = 0; i < count(kTimeline) && i < count(kTimelineRef); i++) {
+        const std::string n = "timeline " + std::to_string(i) + " ";
+        checkStr(n + "year", kTimeline[i].when, kTimelineRef[i].y);
+        checkStr(n + "who", kTimeline[i].who, kTimelineRef[i].who);
+        checkStr(n + "title", kTimeline[i].title, kTimelineRef[i].t);
+        checkStr(n + "text", kTimeline[i].text, kTimelineRef[i].d);
+        checkStr(n + "picture", kTimeline[i].svg, kTimelineRef[i].svg);
+        const bool game = std::string(kTimelineRef[i].button) == kEditSlingshot.from;
+        slingshot += game;
+        checkStr(n + "button", kTimeline[i].button, game ? withEdit(kTimelineRef[i].button, kEditSlingshot) : std::string(kTimelineRef[i].button));
+        checkTrue(n + "no game button left", std::string(kTimeline[i].lab) != "game" && !mentionsMissingParts(std::string(kTimeline[i].button) + kTimeline[i].text + kTimeline[i].title));
+        checkTrue(n + "has a picture", kTimeline[i].svg[0] == '<');
+        checkTrue(n + "a button has an action and the other way round", (*kTimeline[i].button != 0) == (*kTimeline[i].lab != 0));
+    }
+    checkTrue("exactly one slingshot button in the web", slingshot == 1);
+    // every edit was used (nothing in the list is left over): units 1 + about 3 + sgra 1 + guide 8 + slingshot 1
+    checkTrue("every native edit was used", g_editUses == 1 + 3 + 1 + 8 + 1);
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -412,6 +521,7 @@ int main() {
     testPages();
     testFactsAndTabs();
     testShot();
+    testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

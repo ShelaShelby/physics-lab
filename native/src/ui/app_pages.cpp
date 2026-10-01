@@ -170,6 +170,10 @@ void historyWindow(AppState& app) {
     if (beginPage(app::kHistoryTitle, "history", &app.showHistory)) {
         const float s = S(), ts = look().textScale;
         htmlView(std::string("<p class=\"lrnP\">") + app::kHistoryIntro + "</p>");
+        // native only: the web's entries below are its history word for word, and some are about parts the native app does not have
+        htmlView("<p class=\"lrnP lrnMuted\">Native app: the entries below are the web app's history, word for word. Some of them are about "
+                 "the Black Hole Lab, the Spacetime Lab, the Slingshot game and the Games tab. The native app does not have those: it has the Orbit Lab and the Atom Lab. "
+                 "Its own updates are listed after them.</p>");
         // .lrnTi: an icon box (60 px), then the version line, the title, the text and the ▶ button
         auto item = [&](int i, const std::string& ic, const std::string& year, const char* title, const char* text, const char* button, const char* lab) {
             ImDrawList* dl = ImGui::GetWindowDrawList();

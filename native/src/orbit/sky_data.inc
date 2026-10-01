@@ -317,7 +317,7 @@ static const FarData kFar[] = {
     {"m42", "Orion Nebula", "object", 82.98, -28.68, 1267, "", "Orion",
      "A cloud where new stars are being born."},
     {"sgra", "Sagittarius A*", "bh", 266.85, -5.61, 26996, "", "Sagittarius",
-     "The black hole at the centre of our galaxy, about 4.3 million Suns (see the Spacetime Lab)."},
+     "The black hole at the centre of our galaxy, about 4.3 million Suns."},
 };
 // The Voyagers: direction (deg) and distance (AU) on 30 Sep 2026, speed away from the Sun (km/s), launch year, heliopause crossing (AU, year)
 static const ProbeData kProbes[] = {

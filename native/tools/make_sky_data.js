@@ -6,6 +6,7 @@
 // Run from the repository root:   node native/tools/make_sky_data.js
 'use strict';
 const fs = require('fs'), path = require('path');
+const {apply} = require('./native_edits.js');   // the few places where the native text differs from the web's
 const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
 const line = start => { const at = html.indexOf(start); if (at < 0) throw new Error('missing ' + start); return html.slice(at, html.indexOf('\n', at)); };
 const skyLine = line('const SKY = {');
@@ -29,7 +30,7 @@ o.push('static const SkyName kSkyNames[] = {\n' + SKY.names.map(n => `    {${n[0
 o.push(`static const double kGalCentre[2] = {${SKY.gcen[0]}, ${SKY.gcen[1]}};   // ecliptic lon, lat of the galactic centre (deg)`);
 o.push(`static const double kGalPole[2] = {${SKY.gpole[0]}, ${SKY.gpole[1]}};     // ecliptic lon, lat of the north galactic pole (deg)`);
 o.push('// Far-away things: real direction (ecliptic lon, lat, deg) and distance (light years)');
-o.push('static const FarData kFar[] = {\n' + FAR.map(f => `    {${q(f.key)}, ${q(f.name)}, ${q(f.kind)}, ${f.lon}, ${f.lat}, ${f.ly}, ${q(f.sp)}, ${q(f.con)},\n     ${q(f.note)}},`).join('\n') + '\n};');
+o.push('static const FarData kFar[] = {\n' + FAR.map(f => `    {${q(f.key)}, ${q(f.name)}, ${q(f.kind)}, ${f.lon}, ${f.lat}, ${f.ly}, ${q(f.sp)}, ${q(f.con)},\n     ${q(f.key === 'sgra' ? apply('sgra', f.note) : f.note)}},`).join('\n') + '\n};');
 o.push('// The Voyagers: direction (deg) and distance (AU) on 30 Sep 2026, speed away from the Sun (km/s), launch year, heliopause crossing (AU, year)');
 o.push('static const ProbeData kProbes[] = {\n' + PROBES.map(f => `    {${q(f.key)}, ${q(f.name)}, ${f.lon}, ${f.lat}, ${f.au}, ${f.kms}, ${f.year}, ${f.cross}, ${f.crossYear}},`).join('\n') + '\n};');
 fs.writeFileSync(path.join(__dirname, '../src/orbit/sky_data.inc'), o.join('\n') + '\n');

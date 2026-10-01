@@ -102,5 +102,63 @@ o.push('};');
   if (!code.includes("`atom-lab-Z${params.Z}-N${params.N}`") || !code.includes(".toLowerCase().replace(/\\W+/g, '-')")) throw new Error('the web names its picture differently now');
   o.push(`static const char* const kShotNameRef[] = {${q(nameOf('Orbit Lab'))}, ${q(nameOf('Atom Lab', 6, 6))}, ${q(nameOf('Some other-lab 2'))}};`);
 }
+// Texts that name the Black Hole Lab, the Spacetime Lab or the Slingshot game, as the web has them (the native app
+// takes those words out; test_app.cpp checks each text against these with its list of "native edits")
+{
+  const vm = require('vm');
+  const w = loadAppWeb();
+  const html = w.html;
+  // Settings → Units note
+  w.els('settingsBtn').onclick();
+  o.push(`static const char* const kUnitsNoteRef = ${q(w.ctx.lastBox.children.filter(e => e.tagName === 'p').map(e => e.innerHTML)[2])};`);
+  // the far-away things (the Sagittarius A* card and the others)
+  const farLine = html.slice(html.indexOf('const FAR = ['), html.indexOf('\n', html.indexOf('const FAR = [')));
+  const FAR = eval(farLine.slice(farLine.indexOf('['), farLine.indexOf('], FAR_PROBES') + 1));
+  o.push('struct FarNoteRef { const char* key; const char* note; };');
+  o.push(`static const FarNoteRef kFarNoteRef[] = {${FAR.map(f => `{${q(f.key)}, ${q(f.note)}}`).join(', ')}};`);
+  // the web code for lrnOrbitLook and the timeline, cut out of the page
+  const matchBlock = (text, from, open, close) => {
+    let i = text.indexOf(open, from), depth = 0, qt = null;
+    for (; i < text.length; i++) {
+      const c = text[i];
+      if (qt) { if (c === '\\') i++; else if (qt === '`' && c === '$' && text[i + 1] === '{') { i = matchBlock(text, i, '{', '}') - 1; } else if (c === qt) qt = null; continue; }
+      if (c === '/' && text[i + 1] === '/') { i = text.indexOf('\n', i); continue; }
+      if (c === '/' && text[i + 1] === '*') { i = text.indexOf('*/', i) + 1; continue; }
+      if (c === "'" || c === '"' || c === '`') { qt = c; continue; }
+      if (c === open) depth++;
+      else if (c === close && --depth === 0) return i + 1;
+    }
+    throw new Error('no match');
+  };
+  const cutFunction = name => { const at = html.indexOf('function ' + name + '('); return html.slice(at, matchBlock(html, at, '{', '}')); };
+  const cutLine = start => { const at = html.indexOf(start); return html.slice(at, html.indexOf('\n', at)); };
+  const stubs = `
+const lrnEl = (tag, cls, h) => ({tag, cls: cls || '', html: h === undefined ? '' : h, kids: [], set textContent(v) { this.kids = []; this.html = ''; }, set innerHTML(v) { this.html = v; },
+  append(...k) { this.kids.push(...k); }, appendChild(k) { this.kids.push(k); }, style: {}, dataset: {}, firstChild: {appendChild() {}}});
+const lrnSecP = (key, title, h) => ({sec: true, key, title, html: h});
+const lrnJumpBar = list => ({jumpbar: true});
+`;
+  // the Orbit guide "The stars and the far-away things", for each of the 8 cases the web's text depends on
+  const code = stubs + [cutLine('const AU = Math.cbrt(100)'), cutLine('const MAX_PLANETS = 12'), cutFunction('starProps'), cutFunction('lrnOrbitLook')].join('\n') + `
+globalThis.run = (view, scale, hasCard) => {
+  const box = lrnEl('div');
+  globalThis.SIMS = {'Orbit Lab': {info: () => '{WHEN}', params: [{key: 'tspeed', fmt: () => '{TSPEED}'}]}};
+  globalThis.cardText = () => hasCard ? {title: '{CARD}'} : null;
+  globalThis.baryOf = () => ({x: 0.123456789, y: 0, z: 0});
+  globalThis.skyData = () => ({n: 2874});
+  lrnOrbitLook(box, {}, {view, scale, GM: 100, tspeed: 0}, null);
+  return box;
+};`;
+  const lctx = {Math, JSON, console}; vm.createContext(lctx); vm.runInContext(code, lctx);
+  const sky = [];
+  for (const d3 of [false, true]) for (const ts of [true, false]) for (const card of [false, true])
+    sky.push(lctx.run(d3 ? '3D' : '2D', ts ? 'True scale' : 'Easy to see', card).kids[5].kids.filter(k => k.sec && k.key === 'sky')[0].html.trim());
+  o.push(`static const char* const kLookSkyRef[8] = {${sky.map(q).join(',\n  ')}};   // index = (3D ? 4 : 0) + (Easy to see ? 2 : 0) + (something selected ? 1 : 0)`);
+  // the Solar System timeline
+  const tctx = {Math, JSON, Date, console, orbGo() {}, orbLook() {}, orbFar: () => () => {}, orbDate: () => () => {}, showKind() {}, state: {}, trueScale: () => true, zoomFor: () => 0};
+  vm.createContext(tctx); vm.runInContext((() => { const at = html.indexOf('const ORB_TL = ['); return html.slice(at, matchBlock(html, at, '[', ']')) + ';'; })() + '\nglobalThis.TL = ORB_TL;', tctx);
+  o.push('struct TimelineRef { const char* y; const char* who; const char* t; const char* d; const char* button; const char* svg; };   // button: the ▶ button\'s label, or ""');
+  o.push(`static const TimelineRef kTimelineRef[] = {\n${tctx.TL.map(e => `  {${q(e.y)}, ${q(e.who)}, ${q(e.t)},\n   ${q(e.d)},\n   ${q(e.lab ? e.lab[0] : '')}, ${q(e.svg)}}`).join(',\n')}};`);
+}
 fs.writeFileSync(path.join(__dirname, 'app_reference.inc'), o.join('\n') + '\n');
 console.log('wrote app_reference.inc');

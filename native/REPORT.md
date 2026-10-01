@@ -194,3 +194,23 @@ the web page in headless Chromium where useful.
   do not share progress.
 - **The facts' order** is shuffled with a different random generator, so it differs from the web's
   run by run, as the web's own order does.
+
+## 0.6 stage 3: every spot in the native text that names the Black Hole Lab, the Spacetime Lab or the slingshot game
+(Found by searching all native text and code for: black hole, Black Hole Lab, spacetime, Spacetime Lab, slingshot, game, Games, space game, Point of No Return, "other lab".)
+
+Changed (the words that name the missing part are taken out, nothing else):
+1. **About, the card line:** "…real orbits, atoms, black holes and a little space game." → "…real orbits and atoms."
+2. **About, sources "🕳️ Black holes"** (3 sources of the Black Hole Lab): removed.
+3. **About, sources "🌀 Spacetime and real objects"** (10 sources of the Spacetime Lab) and the neutron-star note under them: removed. One of the 10, GRAVITY Collaboration 2022 (Sagittarius A*, 4.3 million Suns), is kept and moved under the Sagittarius A* source in "Stars and far-away things", because the Orbit Lab still says Sagittarius A* is 4.3 million Suns.
+4. **Settings → Units note:** "…the scale bar, the Black Hole readout, element melting points…" → "…the scale bar, element melting points…".
+5. **Sagittarius A* card:** "…about 4.3 million Suns (see the Spacetime Lab)." → "…about 4.3 million Suns."
+6. **Orbit guide "What am I even looking at?", section "The stars and the far-away things"** (found by the search; it is in all 8 cases of the guide): " (the Spacetime Lab shows what a black hole like it does)" removed.
+7. **Timeline, step 1977–1989 "Voyager's Grand Tour":** the button "Try the slingshot game" is gone, not only its text. The code that drew it as a greyed-out button with "(the Slingshot game is not in the native app yet)" is deleted too.
+
+Looked at and kept (these name the missing parts, but are history, or never shown):
+8. **🕰 history, the web's 42 entries, word for word.** These entries name the missing parts: 8.5 Unit switch (Black Hole readout), 8.4.4 (Black Hole Lab 3.3, Spacetime Lab 2.6.1), 8.4.3 (Spacetime Lab guide), 8.1 and 8 (Spacetime Lab), 7.6 and 6.9 (Black Hole Lab Quality setting), 7.5 and 7 (the Games tab, Point of No Return), 5.1 (the ▶ button to "the lab or game"), 4 (Slingshot), 3 (Black Hole Lab); 8.4.1 and 8.4 are about the black hole in the sky, not the lab. Their ▶ buttons for the other labs and the game are not shown in the native app (as in 0.5). Because some entries are present tense ("A new Learn tab sits next to Simulations, Games and Achievements"), one short line was **added** above the list: "Native app: the entries below are the web app's history, word for word. Some of them are about the Black Hole Lab, the Spacetime Lab, the Slingshot game and the Games tab. The native app does not have those…". No web text was changed.
+9. **Achievements data:** the card of Point of No Return ("Zoom in on the black hole in the Black Hole Lab as far as you can.") is still in the data table, but the native app never shows it (the count is 4).
+10. **Native history 0.5 and 0.1:** 0.5 says Point of No Return is left out because the Black Hole Lab is not in the native app; 0.1 says "Not here yet: … the other labs". Both are true statements about those versions.
+11. **Sagittarius A*, "black hole" as an object:** the Orbit Lab guide, the Journey caption, the timeline step "Weighing the black hole" and the Orbit changelog talk about the black hole at the centre of the galaxy. That is a thing in the sky, not a lab, so it stays.
+
+The tests: `tests/test_app.cpp` has a list "native edits" (6 edits, 14 uses). Every changed text (About, Units note, all 19 far-away notes, the guide's sky section in all 8 cases, all 29 timeline steps) is compared with the web's own text, run by `tests/reference/make_app_reference.js`, after exactly those edits. An edit must match exactly once, so a stray extra change fails.

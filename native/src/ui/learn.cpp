@@ -266,15 +266,8 @@ void timeline(AppState& app) {
         richText(std::string("<p class=\"lrnP lrnMuted\">") + st.who + "</p>");
         richText(std::string("<p class=\"lrnP\">") + st.text + "</p>");
         if (st.button[0]) {
-            const std::string lab = st.lab;
             ImGui::PushID(i);
-            if (lab == "game") {                           // another lab: not in the native app yet
-                ImGui::BeginDisabled();
-                ImGui::Button((std::string("▶ ") + st.button).c_str());
-                ImGui::EndDisabled();
-                ImGui::SameLine();
-                ImGui::TextDisabled("(the Slingshot game is not in the native app yet)");
-            } else if (ImGui::Button((std::string("▶ ") + st.button).c_str())) {
+            if (ImGui::Button((std::string("▶ ") + st.button).c_str())) {
                 runStep(app, st);
                 app.learn = 0;                             // close the guide, so you see the lab
             }
