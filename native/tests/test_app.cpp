@@ -16,6 +16,7 @@
 #include "app/fps.h"
 #include "app/history.h"
 #include "app/bench.h"
+#include "app/frame_time.h"
 #include "atom/atom_bench.h"
 #include "orbit/solar_system.h"
 
@@ -695,6 +696,30 @@ static void testBench() {
     checkTrue("the Solar System is back exactly as it was", same);
 }
 
+// ---- the time step and the live-frame counters (version 0.9) ----
+static void testLive() {
+    // the time step of a frame
+    checkTrue("step: a normal frame counts as it is", near(stepSeconds(0.016, 0.05), 0.016));
+    checkTrue("step: a slow frame counts as at most 0.05 s", near(stepSeconds(0.2, 0.05), 0.05) && near(stepSeconds(0.9, 0.05), 0.05));
+    checkTrue("step: a stall (the window held by the system, 3 s) counts as nothing, no giant step", stepSeconds(3.0, 0.05) == 0 && stepSeconds(kStallS + 0.001, 0.05) == 0);
+    checkTrue("step: zero, negative and not-a-number gaps count as nothing", stepSeconds(0, 0.05) == 0 && stepSeconds(-1, 0.05) == 0 && stepSeconds(std::nan(""), 0.05) == 0);
+    const auto physicsSteps = [](const std::vector<double>& raws) {     // fixed 1/240 s steps, as the main loop does
+        double acc = 0; int steps = 0;
+        for (double raw : raws) { acc += stepSeconds(raw, 0.05); while (acc >= 1.0 / 240) { acc -= 1.0 / 240; steps++; } }
+        return steps;
+    };
+    checkTrue("a 5 s freeze in the middle adds no physics steps: no jump, no catching up", physicsSteps({0.016, 0.016, 5.0, 0.016, 0.016}) == physicsSteps({0.016, 0.016, 0.016, 0.016}) && physicsSteps({0.016, 0.016, 0.016, 0.016}) == 15);
+
+    // frames drawn while the window system holds the loop
+    LiveStats ls;
+    ls.frame(false, 16); ls.frame(true, 700); ls.frame(true, 10); ls.frame(true, 14); ls.frame(false, 16); ls.frame(false, 16); ls.frame(true, 300); ls.frame(true, 12);
+    checkTrue("live counters: 5 live frames in 2 drags", ls.frames == 5 && ls.drags == 2);
+    checkTrue("live counters: the worst gap inside a drag is 14 ms, the longest lead-in 700 ms", near(ls.worstGapMs, 14) && near(ls.leadInMs, 700));
+    LiveStats none; none.frame(false, 16); none.frame(false, 16);
+    checkTrue("live counters: no drag, no live frames", none.frames == 0 && none.drags == 0);
+
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -707,6 +732,7 @@ int main() {
     testHistoryNotes();
     testWindow();
     testBench();
+    testLive();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

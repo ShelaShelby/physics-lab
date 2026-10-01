@@ -11,9 +11,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <string>
 #include <vector>
 
+#include "app/frame_time.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl3.h"
@@ -77,6 +79,21 @@ void fail(const char* what, const char* explain, const char* tryThis) {
     if (SDL_getenv("PL_EXIT_AFTER_FRAMES") || SDL_getenv("PL_EXIT_AFTER_SECONDS")) return;    // an automatic check: no window waiting for a click
     const std::string text = std::string(explain) + "\n\nWhat to try:\n" + tryThis + "\n\n(Technical detail: " + what + ": " + SDL_GetError() + ")";
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Physics Lab cannot start", wrap70(text).c_str(), nullptr);
+}
+
+// While the window system has the window in its own move / resize loop (Windows: a drag by the title bar or an edge) the normal main
+// loop does not run. SDL then sends SDL_EVENT_WINDOW_EXPOSED with data1 = 1 about every 10 ms, from the main thread, straight to the event
+// watchers, and asks the app to redraw from there. This is the documented way (see SDL_EVENT_WINDOW_EXPOSED in SDL_events.h); it keeps
+// everything, Dear ImGui included, on one thread. `draw` runs one whole frame (physics, picture and panels, without reading events).
+struct LiveWatch {
+    std::function<void()> draw;
+    bool busy = false;                                  // a frame is being built: do not start another inside it
+};
+bool SDLCALL onLiveExpose(void* userdata, SDL_Event* ev) {
+    if (ev->type != SDL_EVENT_WINDOW_EXPOSED || ev->window.data1 != 1 || !SDL_IsMainThread()) return true;
+    LiveWatch* w = static_cast<LiveWatch*>(userdata);
+    if (!w->busy && w->draw) w->draw();
+    return true;
 }
 
 const char* const kDriverAdvice =
@@ -202,18 +219,41 @@ int main(int, char**) {
     bool running = true;
     float atomBarH = 0;                                 // the bar under the Atom Lab picture, window coordinates
 
-    while (running) {
+    LiveWatch live;
+    int normalFrames = 0;
+    double maxPhysicsDt = 0;                            // the biggest time step any frame gave the simulation (PL_LIVE_REPORT prints it)
+    const double fakeModalS = SDL_getenv("PL_FAKE_MODAL") ? std::atof(SDL_getenv("PL_FAKE_MODAL")) : 0;   // for automatic checks: pretend the window system holds the loop for n seconds
+    const bool fakeResize = SDL_getenv("PL_FAKE_MODAL_RESIZE") != nullptr;
+    // One frame. live: drawn from the event watch while the window system holds the loop (no events are read then).
+    const auto runFrame = [&](bool isLive) {
+        app.liveFrame = isLive;
         int winW = 0, winH = 0, fbW = 0, fbH = 0;
-        SDL_GetWindowSize(window, &winW, &winH);
-        SDL_GetWindowSizeInPixels(window, &fbW, &fbH);
-        const float canvasWinW = std::max(1.0f, winW - panelWidth);   // the picture's width in window coordinates
-        // the header is across the top; the Atom Lab has a bar under its picture (view buttons and the hint); both are measured each frame
-        float headerH = ui::headerHeight();
-        float pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 ? atomBarH : 0));
+        float canvasWinW = 1, headerH = 0, pictureWinH = 1;
+        const auto measure = [&] {                      // the window as it is now (it can change while the window system has the loop)
+            SDL_GetWindowSize(window, &winW, &winH);
+            SDL_GetWindowSizeInPixels(window, &fbW, &fbH);
+            canvasWinW = std::max(1.0f, winW - panelWidth);   // the picture's width in window coordinates
+            // the header is across the top; the Atom Lab has a bar under its picture (view buttons and the hint); both are measured each frame
+            headerH = ui::headerHeight();
+            pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 ? atomBarH : 0));
+        };
+        measure();
 
         // ---- input ----
+        if (!isLive && fakeModalS > 0 && ++normalFrames == 60) {   // automatic check: what the window system does during a drag, from inside the event loop
+            const Uint64 t0 = SDL_GetTicks();
+            int w0 = 0, h0 = 0, i = 0;
+            SDL_GetWindowSize(window, &w0, &h0);
+            while ((SDL_GetTicks() - t0) / 1000.0 < fakeModalS) {
+                SDL_Delay(10);
+                if (fakeResize) { i++; SDL_SetWindowSize(window, w0 + (i % 40) * 8, h0 + (i % 40) * 4); }   // a live resize
+                SDL_Event ex; SDL_zero(ex);
+                ex.type = SDL_EVENT_WINDOW_EXPOSED; ex.window.windowID = SDL_GetWindowID(window); ex.window.data1 = 1;
+                SDL_PushEvent(&ex);                     // the event watchers see it at once, like SDL's own timer in the window system's loop
+            }
+        }
         SDL_Event e;
-        while (SDL_PollEvent(&e)) {
+        while (!isLive && SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             switch (e.type) {
             case SDL_EVENT_QUIT: running = false; break;
@@ -260,7 +300,8 @@ int main(int, char**) {
             default: break;
             }
         }
-        {   // remember the window: its size and place when it is a normal window, and whether it is maximised
+        measure();                                      // a drag may have changed the window while the events were read
+        if (!isLive) {   // remember the window: its size and place when it is a normal window, and whether it is maximised
             const SDL_WindowFlags fl = SDL_GetWindowFlags(window);
             if (fl & SDL_WINDOW_MAXIMIZED) maximizeUntil = 0;
             if (!(fl & SDL_WINDOW_MINIMIZED) && SDL_GetTicks() >= maximizeUntil) {
@@ -274,15 +315,18 @@ int main(int, char**) {
                 if (ws.w > 0) app.prefs.window = ws;
             }
         }
-        if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) { SDL_Delay(20); last = SDL_GetPerformanceCounter(); continue; }
+        if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) { SDL_Delay(20); last = SDL_GetPerformanceCounter(); return; }
+        struct Busy { bool& f; explicit Busy(bool& x) : f(x) { f = true; } ~Busy() { f = false; } } busyGuard(live.busy);
 
         ui::benchmarkTestHook(app);
-        ui::benchmarkBeginFrame(app);                   // a benchmark scene is set up here, before the frame
+        if (const char* at = SDL_getenv("PL_SAVE_IMAGE")) { static int n = 0; if (++n == std::atoi(at)) app.shot.requested = true; }   // for automatic checks: press 📷 Save image at frame n
+        ui::benchmarkBeginFrame(app, renderer, fbW, fbH);   // a benchmark scene is set up here, before the frame
         // ---- time and physics (fixed steps, as in the web version) ----
         const Uint64 now = SDL_GetPerformanceCounter();   // the frame starts here
         const double frameDt = static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
         last = now;
-        const double dt = std::min(frameDt, units::kMaxFrameDt);
+        const double dt = app::stepSeconds(frameDt, units::kMaxFrameDt);   // a slow frame counts as at most 0.05 s, a stall (window held by the system) as nothing: no jump, no catching up
+        maxPhysicsDt = std::max(maxPhysicsDt, dt);
         if (app.pane) {                                 // the Learn or Achievements tab is open: the lab waits (the web draws nothing then)
         } else if (app.lab == 1) {                      // Atom Lab: tick every frame (decay clock, glides), fixed steps while running
             app.atom.paused = app.paused;
@@ -378,11 +422,19 @@ int main(int, char**) {
         }
         const double workMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();
         app.stats.add(frameDt * 1000.0, workMs);
+        app.live.frame(isLive, frameDt * 1000.0);
         ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs);
         SDL_GL_SwapWindow(window);
         ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0);
         if (app.vsync != vsyncOn) { vsyncOn = app.vsync; SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
-    }
+    };
+
+    live.draw = [&] { runFrame(true); };
+    SDL_AddEventWatch(onLiveExpose, &live);
+    while (running) runFrame(false);
+    SDL_RemoveEventWatch(onLiveExpose, &live);
+    if (SDL_getenv("PL_LIVE_REPORT"))
+        std::printf("Live frames: %ld in %d drags, worst gap %.1f ms, lead-in %.1f ms, biggest physics step %.4f s\n", app.live.frames, app.live.drags, app.live.worstGapMs, app.live.leadInMs, maxPhysicsDt);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL3_Shutdown();

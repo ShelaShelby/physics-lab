@@ -15,6 +15,7 @@
 #include "imgui.h"
 #include "orbit/units.h"
 #include "render/gl_loader.h"
+#include "render/renderer2d.h"
 #include "ui/app_pages.h"
 #include "ui/changelog.h"
 #include "ui/fonts.h"
@@ -243,9 +244,10 @@ void benchmarkTestHook(AppState& app) {
     if (std::string(v) == "start") begin(app); else st(app).stage = BenchState::Stage::Ask;
 }
 
-void benchmarkBeginFrame(AppState& app) {
+void benchmarkBeginFrame(AppState& app, render::Renderer2D&, int, int) {
     if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
     BenchState& b = *app.bench;
+    if (app.liveFrame) { std::printf("Benchmark stopped: the window was moved or resized\n"); finish(app, b, true); return; }   // the numbers would be wrong
     if (whyNot(app) && std::string(whyNot(app)) != "The benchmark is already running.") { finish(app, b, true); return; }   // something got in the way: stop and give everything back
     const int i = b.run->sceneToSetUp();
     if (i >= 0) { scenes()[i].setup(app); b.run->setUpDone(); }

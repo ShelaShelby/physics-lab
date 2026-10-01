@@ -1,6 +1,7 @@
 // The Orbit Lab controls on the right: Reset to today, Time, View, extras and Go to.
 #pragma once
 
+#include "app/frame_time.h"
 #include "app/prefs.h"
 #include "atom/atom_sim.h"
 #include "atom/atom_view.h"
@@ -42,6 +43,8 @@ struct AppState {
     double canvasW = 800, canvasH = 600;   // picture size in points (for the Go to zoom levels)
     bool vsync = true;                     // wait for the screen's refresh (off: draw as fast as possible, to measure headroom)
     FrameStats stats;
+    app::LiveStats live;                   // frames drawn while the window system had the window in its move / resize loop
+    bool liveFrame = false;                // the frame being built now is one of those
     Journey journey;
     char dateText[16] = "";                // Jump to a date: what is typed in
     char timeText[8] = "12:00";

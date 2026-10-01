@@ -117,6 +117,14 @@ void performanceCard(AppState& app) {
         st.ordered(hist);
         ImGui::PlotLines("##frametimes", hist, FrameStats::kHistory, 0, "frame time, last 240 frames", 0.0f, std::max(2 * avg, 1.0f), ImVec2(-1, 50));
     }
+    {   // frames drawn while the window system had the window in its move / resize loop (Windows: dragging the title bar or an edge)
+        const app::LiveStats& lv = app.live;
+        if (lv.frames == 0) ImGui::TextDisabled("Window drag / resize: no frames drawn during one yet");
+        else ImGui::TextDisabled("Window drag / resize: %ld frames drawn during %d drags, longest gap %.0f ms", lv.frames, lv.drags, lv.worstGapMs);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("While you hold or drag the window's title bar or edge, Windows pauses the app's own loop.\n"
+                                                      "Frames drawn in that time are counted here (the longest time between two of them, and the longest pause before the first: %.0f ms).\n"
+                                                      "If the picture or the fps counter still freezes while you drag, and this stays at 0, tell Alex.", lv.leadInMs);
+    }
     benchmarkButton(app);
 }
 
