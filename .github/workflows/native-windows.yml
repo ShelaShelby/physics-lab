@@ -55,6 +55,7 @@ jobs:
           path: out/
           retention-days: 30
 
+      # While the app is labelled alpha (kStage in src/ui/changelog.cpp) the release is marked Pre-release; change --prerelease and the title with it.
       # Replace the release tagged "latest" with this build, so it is always on one fixed page:
       # https://github.com/<owner>/<repo>/releases/tag/latest
       - name: Publish to the "latest" release
@@ -66,6 +67,6 @@ jobs:
           gh release delete latest --yes --cleanup-tag -R $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { Write-Host "No earlier 'latest' release to replace." }
           $notes = "Newest Windows build of the native Physics Lab, from commit $($env:GITHUB_SHA.Substring(0,7)) on branch $env:GITHUB_REF_NAME. Download PhysicsLab-windows-x64.zip, unzip it and run PhysicsLab.exe."
-          gh release create latest PhysicsLab-windows-x64.zip -R $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Physics Lab native (latest build)" --notes $notes --latest
+          gh release create latest PhysicsLab-windows-x64.zip -R $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Physics Lab native (latest build, alpha)" --notes $notes --prerelease
           if ($LASTEXITCODE -ne 0) { exit 1 }
           exit 0

@@ -17,9 +17,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
-    {"0.9.2", "Drop-down text fits",
+    {"0.9.2", "Alpha label, drop-down text fits",
      "The Orbit Lab's drop-downs (Sizes, Trails, Stars in the background, Constellations) show only the short name in the closed box, so "
-     "it is never cut off at big Text sizes; the explanation is under each choice in the open list."},
+     "it is never cut off at big Text sizes; the explanation is under each choice in the open list. "
+     "The app is now labelled alpha: features are still being added. Beta will follow when everything planned for 1.0 is in, then the plain release."},
     {"0.9.1", "Sliders that look like sliders",
      "The Time speed and Zoom sliders have a clearly visible track and a bigger, easier-to-grab thumb in every theme, and their values "
      "are written above them instead of under the thumb. The \"Drag rotates the view\" button is no longer cut off."},
@@ -141,7 +142,12 @@ const char* const kWebAtomNote =
 
 }  // namespace
 
+// The stage word shown after the version number (change this one word to move from alpha to beta, then "" for 1.0)
+constexpr const char* kStage = "alpha";
+
 const char* appVersion() { return PL_VERSION; }
+const char* appStage() { return kStage; }
+std::string appVersionLabel() { return *kStage ? std::string(PL_VERSION) + " " + kStage : std::string(PL_VERSION); }
 
 const NativeEntry* nativeHistory(int& count) {
     count = int(sizeof kNative / sizeof kNative[0]);

@@ -28,7 +28,7 @@ float S() { return ImGui::GetFontSize() / 16 / look().textScale; }   // one web 
 std::string historyLabel() {
     std::string l = app::kHdrHistory.label;
     const std::size_t v = l.find(" v"), e = l.find(' ', v + 2);
-    if (v != std::string::npos && e != std::string::npos) l = l.substr(0, v + 2) + appVersion() + l.substr(e);
+    if (v != std::string::npos && e != std::string::npos) l = l.substr(0, v + 2) + appVersionLabel() + l.substr(e);
     return l;
 }
 
@@ -160,7 +160,7 @@ void aboutWindow(AppState& app) {
     if (!app.showAbout) return;
     if (beginPage(app::kAboutTitle, "about", &app.showAbout)) {
         htmlView(app::kAboutHtml);
-        htmlView(std::string("<p class=\"lrnP lrnMuted\">Native app: Physics Lab (native) ") + appVersion() + ".</p>");
+        htmlView(std::string("<p class=\"lrnP lrnMuted\">Native app: Physics Lab (native) ") + appVersionLabel() + ".</p>");
     }
     ImGui::End();
 }
@@ -220,7 +220,7 @@ void historyWindow(AppState& app) {
         richHeading(app::kHistoryNativeHeading);
         const NativeEntry* nat = nativeHistory(n);
         for (int k = 0; k < n; k++, i++)
-            item(i, "✨", std::string("Physics Lab (native) ") + nat[k].version + (k == 0 ? app::kHistoryHere : ""), nat[k].title, nat[k].text, "", "");
+            item(i, "✨", std::string("Physics Lab (native) ") + (k == 0 ? appVersionLabel() : std::string(nat[k].version)) + (k == 0 ? app::kHistoryHere : ""), nat[k].title, nat[k].text, "", "");
         // then the web's, word for word, with a note above them
         ImGui::Spacing();
         richHeading(app::kHistoryWebHeading);
