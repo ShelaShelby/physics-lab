@@ -34,6 +34,11 @@ struct AtomParams {
     double cut = 0;                      // cut position, −1 to 1
     int n = 1;                           // energy level (Orbit view)
     int speed = 5;                       // playback speed (Orbit view)
+    std::string cstyle = "Classic";      // how the cloud's dots are drawn: Classic (the web's small hard dots) / Glow (soft dots that add up)
+    std::string cdens = "Normal";        // how many dots the cloud keeps: Normal 12,000 (the web's) / High 24,000 / Ultra 48,000
+    // The struct's own values are the web's (the tests that compare the lab with the web's code step by step use them). What the app
+    // starts with, and what "Defaults" gives, is this: the web's settings plus the glowing, denser cloud.
+    static AtomParams appDefaults() { AtomParams p; p.cstyle = "Glow"; p.cdens = "High"; return p; }
 };
 
 struct Vec3d { double x = 0, y = 0, z = 0; };
@@ -110,6 +115,11 @@ public:
     bool reducedMotion = false;          // Settings → Motion: camera moves jump, Cloud 3D does not spin by itself (web: plRM())
     // the values a setting may take (for settings loaded from the file): a select's options, or a number's range
     static bool validChoice(const std::string& key, const std::string& value);
+
+    // How many dots the cloud keeps (a ring: the newest replace the oldest). Only this and the drawing change with the density,
+    // never the sampling of the dots.
+    static int capFor(const std::string& density);
+    int cloudCap() const { return capFor(p.cdens); }
 
     void restart();                      // the web's init(p) for a fresh lab
     // One entry point for every change of a setting (sliders, wheel, buttons), as the web's setParam:

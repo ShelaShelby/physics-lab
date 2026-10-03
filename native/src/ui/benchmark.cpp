@@ -72,6 +72,7 @@ void atomNucleus(AppState& app) { atomScene(app, 0); }
 void atomCloud(AppState& app) { atomScene(app, 1); }
 void atomNucleon(AppState& app) { atomScene(app, 2); }
 void atomStress(AppState& app) { atomScene(app, 3); }
+void atomCloudGlow(AppState& app) { atomScene(app, 4); }
 
 const char* const STRESS_ATOM_WHAT = "oganesson-294 (118 protons, 176 neutrons, the biggest nucleus the app has), Accurate quarks, + Sea detail, Fuzzy nucleons, zoomed in 0.6 (about 4 times) closer than the whole nucleus, so that every nucleon is drawn large";
 
@@ -80,11 +81,12 @@ const std::vector<SceneDef>& scenes() {
         {{"1. Orbit Lab, heaviest view", "3D view, belts and Oort cloud on, all Solar System extras on, full night sky with constellation lines and names, "
                                           "far-away things on, full orbit trails, true scale, fastest time speed (1 s = about 50 years), zoom x1, fixed camera"}, orbitHeaviest},
         {{"2. Atom Lab, uranium-238 nucleus", "uranium-238 (92 protons, 146 neutrons), zoomed to the whole nucleus, Cinematic quarks, + Sea detail, Fuzzy nucleons"}, atomNucleus},
-        {{"3. Atom Lab, Cloud 3D", "uranium-238, Cloud 3D view, the 4f orbital (the biggest cloud), all 12,000 dots, fixed camera"}, atomCloud},
+        {{"3. Atom Lab, Cloud 3D", "uranium-238, Cloud 3D view, the 4f orbital (the biggest cloud), cloud style Classic, density Normal (all 12,000 dots), fixed camera"}, atomCloud},
         {{"4. Atom Lab, one nucleon", "uranium-238, Accurate quarks, + Sea detail, zoomed all the way into one nucleon (the first one)"}, atomNucleon},
         {{"5. Stress: Atom Lab, the biggest nucleus", STRESS_ATOM_WHAT}, atomStress},
         {{"6. Stress: Orbit Lab, 8 times the rocks", "scene 1 (3D, everything on, true scale, zoom x1, fastest time) with 8 times as many rocks in the asteroid belt, the Trojans, the Kuiper belt and the Oort cloud "
                                                      "(48,000 instead of 6,000; the same kinds of orbits, a fixed random seed). The rocks do not pull on each other, so the physics is unchanged"}, orbitStress},
+        {{"7. Stress: Atom Lab, Cloud 3D, Glow, 48,000 dots", "scene 3 (uranium-238, Cloud 3D, the 4f orbital, fixed camera) with cloud style Glow (soft dots that add up) and density Ultra (48,000 dots)"}, atomCloudGlow},
     };
     return v;
 }
@@ -426,8 +428,8 @@ void benchmarkWindow(AppState& app) {
                                count, secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
             ImGui::Spacing();
             for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[i].info.name);
-            ImGui::Checkbox("Include stress scenes (2 extra, much heavier)", &b.includeStress);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what);
+            ImGui::Checkbox("Include stress scenes (3 extra, much heavier)", &b.includeStress);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
             ImGui::Spacing();
             ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "
                                "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "

@@ -1,4 +1,5 @@
 #include "atom_view.h"
+#include "cloud_light.h"
 
 #include <algorithm>
 #include <array>
@@ -59,6 +60,7 @@ Blob grad3(double x, double y, double r, Color c0, double s1, Color c1, Color c2
     return b;
 }
 Blob flat(double x, double y, double r, Color c) { Blob b{}; b.x = float(x); b.y = float(y); b.r = float(r); b.kind = 3; b.c0 = c; return b; }
+Blob soft(double x, double y, double r, Color c) { Blob b{}; b.x = float(x); b.y = float(y); b.r = float(r); b.kind = 4; b.c0 = c; return b; }
 Blob square(double x, double y, double half, Color c) { Blob b{}; b.x = float(x); b.y = float(y); b.r = float(half); b.kind = 2; b.c0 = c; return b; }
 
 // Text drawn with Dear ImGui on top of the picture; y is the baseline, like the canvas fillText().
@@ -218,6 +220,43 @@ QuarkPts quarkPts(const Nucleon& q, double X, double Y, double rn, double now, c
     return Q;
 }
 
+
+// ---- the cloud's Glow style ----
+// One dot of the cloud on screen: its place, size, depth weight (1 = the plain dot) and the sign of the wave there.
+struct GlowDot { float x, y, r, wt; bool pos; };
+
+// Draws the dots as soft round dots. Dark pages: the light adds up (additive), so dense places glow and thin ones fade. Light pages: ordinary
+// alpha blending with darker, more saturated colours (opacity builds up as 1 - exp(-light)). `base` is the brightest a single dot may be.
+// The exposure is chosen from the brightest 8 × 8 pixel place so it stays just under white; it is one number for all dots.
+void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bool light, Color cP, Color cN, double base, double w, double h, double& expo) {
+    if (D.empty()) return;
+    constexpr int kCell = 8;
+    const int gw = int(w / kCell) + 2, gh = int(h / kCell) + 2;
+    static std::vector<float> grid;
+    grid.assign(std::size_t(gw) * gh, 0.f);
+    for (const GlowDot& d : D) {                                           // the light one dot puts into its cell: its depth weight × footprint (pi r² / 4 of a Gaussian)
+        const int cx = std::max(0, std::min(gw - 1, int(d.x / kCell))), cy = std::max(0, std::min(gh - 1, int(d.y / kCell)));
+        float& g = grid[std::size_t(cy) * gw + cx];
+        g += d.wt * d.r * d.r * 0.785f;
+    }
+    static std::vector<float> used;                                        // the brightest places, ignoring the top 0.5 % of cells (single random clumps)
+    used.clear();
+    for (float g : grid) if (g > 0) used.push_back(g);
+    const std::size_t top = used.size() - 1 - std::min<std::size_t>(used.size() - 1, used.size() / 200);
+    std::nth_element(used.begin(), used.begin() + top, used.end());
+    const float peak = used[top];
+    const double summed = double(peak) / (kCell * kCell) * cloudDotWeight(cap);   // per unit of dot light, as if the cloud had 12,000 dots
+    const double e = cloudExposure(summed, light ? 2.4 : 1.0, base);
+    expo = expo <= 0 || e < expo ? e : std::exp(0.85 * std::log(expo) + 0.15 * std::log(e));   // never brighter than the picture can show; slowly brighter again
+    if (light) { cP = Color{cP.r * 0.85f, cP.g * 0.85f, cP.b * 0.85f, 1}; cN = Color{cN.r * 0.85f, cN.g * 0.62f, cN.b * 0.45f, 1}; }   // darker, more saturated
+    static std::vector<Blob> B;
+    B.clear();
+    B.reserve(D.size());
+    for (const GlowDot& d : D) B.push_back(soft(d.x, d.y, d.r, withA(d.pos ? cP : cN, cloudDotLight(cap, expo, base, d.wt))));
+    R.blobs(B.data(), int(B.size()), !light);
+    B.clear();
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------- the frame
@@ -249,7 +288,10 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     std::vector<Blob> B;
 
     if (cloud) {
-        const long cnt = std::min<long>(s.k, kCap);
+        const long cap = std::min<long>(lab.cloudCap(), long(s.sg.size())), cnt = std::min<long>(s.k, cap);
+        const bool glow = p.cstyle == "Glow";
+        std::vector<GlowDot> G;
+        G.reserve(glow ? std::size_t(cnt) : 0);
         const Color cP = css.accent, cN = kPhaseNeg;
         if (sl) {                                                          // slice: only dots inside a thin slab around the cut plane, seen face-on
             const double size = kExt[orbitals()[orbIndex(p.orb)].n] / p.Z * kA0, off = lab.cutOffsetM(), th = 0.07 * size;
@@ -258,9 +300,11 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 if (dist > th) continue;
                 const double X = cx + s.pts[3 * i] * pxm, Y = cy - (hz ? s.pts[3 * i + 1] : s.pts[3 * i + 2]) * pxm;
                 if (X < -2 || X > w || Y < -2 || Y > h) continue;
-                B.push_back(square(X - 1 + 1.25, Y - 1 + 1.25, 1.25, withA(s.sg[i] > 0 ? cP : cN, 0.6 * (1 - 0.6 * dist / th))));
+                if (glow) G.push_back({float(X), float(Y), 4.2f, float(1 - 0.6 * dist / th), s.sg[i] > 0});     // dots nearer the cut plane are brighter, as before
+                else B.push_back(square(X - 1 + 1.25, Y - 1 + 1.25, 1.25, withA(s.sg[i] > 0 ? cP : cN, 0.6 * (1 - 0.6 * dist / th) * cloudDotWeight(cap))));
             }
-            R.blobs(B.data(), int(B.size()));
+            if (glow) drawGlow(R, G, cap, css.light, cP, cN, 3.0, w, h, cloudExpo_);
+            else R.blobs(B.data(), int(B.size()));
             B.clear();
             const double gx = w - 44, gy = h - 44;                         // axes of the cut plane
             R.line(gx, gy, gx + 26, gy, 1.5, css.muted);
@@ -269,14 +313,17 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             T.draw(hz ? "y" : "z", gx, gy - 32, 12, css.muted, 0.5);
         } else if (!d3) {                                                  // side view: drop y, plot (x, z)
             for (int sgn : {1, -1}) {                                      // blue where the wave ψ is +, orange where it is −
-                const Color c = withA(sgn > 0 ? cP : cN, 0.3);
+                const Color c = withA(sgn > 0 ? cP : cN, 0.3 * cloudDotWeight(cap));
                 for (long i = 0; i < cnt; i++) {
                     if (s.sg[i] != sgn) continue;
                     const double X = cx + s.pts[3 * i] * pxm - 1, Y = cy - s.pts[3 * i + 2] * pxm - 1;
-                    if (X > -2 && X < w && Y > -2 && Y < h) B.push_back(square(X + 1, Y + 1, 1, c));
+                    if (!(X > -2 && X < w && Y > -2 && Y < h)) continue;
+                    if (glow) G.push_back({float(X + 1), float(Y + 1), 4.4f, 1.f, sgn > 0});
+                    else B.push_back(square(X + 1, Y + 1, 1, c));
                 }
             }
-            R.blobs(B.data(), int(B.size()));
+            if (glow) drawGlow(R, G, cap, css.light, cP, cN, 1.0, w, h, cloudExpo_);
+            else R.blobs(B.data(), int(B.size()));
             B.clear();
         } else {                                                           // rotate by yaw (about z), then pitch, then project
             const double ext = kExt[orbitals()[orbIndex(p.orb)].n] / p.Z * kA0;
@@ -289,11 +336,22 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 PX[i] = float(cx + x1 * pxm * f); PY[i] = float(cy - up * pxm * f); PD[i] = float(dep / ext);
                 if (PX[i] < 0 || PX[i] > w || PY[i] < 0 || PY[i] > h) PD[i] = NAN;   // off screen
             }
+            if (glow) {
+                // one pass: size and brightness change smoothly with depth (far = smaller, fainter; near = bigger, brighter), no bands
+                for (long i = 0; i < cnt; i++) {
+                    const float v = PD[i];
+                    if (std::isnan(v)) continue;
+                    const float t = std::max(-1.f, std::min(1.f, v));          // -1 nearest, +1 farthest
+                    const float near = 0.5f - 0.5f * t;                        // 1 near … 0 far
+                    G.push_back({PX[i], PY[i], 4.6f * (0.8f + 0.4f * near), 0.3f + 0.9f * near, s.sg[i] > 0});
+                }
+                drawGlow(R, G, cap, css.light, cP, cN, 1.0, w, h, cloudExpo_);
+            } else {
             // three depth bands: far = faint and small, near = bright and larger
             const double bands[3][2] = {{0.15, 1.6}, {0.3, 2}, {0.55, 2.4}};
             for (int bnd = 0; bnd < 3; bnd++)
                 for (int sgn : {1, -1}) {
-                    const Color c = withA(sgn > 0 ? cP : cN, bands[bnd][0]);
+                    const Color c = withA(sgn > 0 ? cP : cN, bands[bnd][0] * cloudDotWeight(cap));
                     const double sz = bands[bnd][1];
                     for (long i = 0; i < cnt; i++) {
                         const float v = PD[i];
@@ -303,6 +361,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 }
             R.blobs(B.data(), int(B.size()));
             B.clear();
+            }
             const double gx = w - 44, gy = h - 44;                         // axis gizmo (bottom right)
             const double axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
             const char* names[3] = {"x", "y", "z"};

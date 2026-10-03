@@ -554,6 +554,12 @@ void atomPanel(AppState& app, float width) {
         if (l == 3) selectRow(app, "fAx", "Orientation", {{"z3", "fz³ · two lobes and two rings"}, {"xz2", "fxz² · six lobes"}, {"yz2", "fyz² · six lobes"}, {"xyz", "fxyz · eight lobes"}, {"zx2y2", "fz(x²−y²) · eight lobes"},
                                                           {"xx23y2", "fx(x²−3y²) · six lobes, flat"}, {"y3x2y2", "fy(3x²−y²) · six lobes, flat"}}, p.fAx);
     }
+    if (p.view != "Orbit") {
+        selectRow(app, "cstyle", "Cloud style", {{"Classic", "Classic · small hard dots, as in the web version"}, {"Glow", "Glow · soft dots that add up: dense places glow, thin places fade"}}, p.cstyle);
+        selectRow(app, "cdens", "Cloud density", {{"Normal", "Normal · 12,000 dots. More dots show the same probability more smoothly. They do not change the physics."},
+                                                   {"High", "High · 24,000 dots. More dots show the same probability more smoothly. They do not change the physics."},
+                                                   {"Ultra", "Ultra · 48,000 dots. More dots show the same probability more smoothly. They do not change the physics."}}, p.cdens);
+    }
     if (p.view == "Slice") {
         selectRow(app, "cutAxis", "Cut direction", {{"Vertical", "Vertical (contains the z axis)"}, {"Horizontal", "Horizontal (across the z axis)"}}, p.cutAxis);
         sliderRow(app, "cut", "Cut position (0 = through the nucleus)", fmt::jsString(p.cut), p.cut, -1, 1, 0.01, false);

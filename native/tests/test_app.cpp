@@ -20,6 +20,7 @@
 #include "app/gpu_timer.h"
 #include "orbit/belts.h"
 #include "atom/atom_bench.h"
+#include "atom/cloud_light.h"
 #include "orbit/solar_system.h"
 
 #include "reference/app_reference.inc"
@@ -836,6 +837,118 @@ static void testBenchInputLock() {
     checkTrue("no Atom Lab line when no Atom Lab scene ran", benchResultText(BenchEnv(), {}).find("Atom Lab settings used") == std::string::npos);
 }
 
+// ---- 0.9.4: the glowing, denser electron cloud. Only how the dots are drawn and how many are kept change; the sampling does not. ----
+static void fillCloud(atom::AtomLab& L, const char* orb, const char* density, uint32_t seed, int Z = 1) {
+    atom::seedRandom(seed);
+    L.p = atom::AtomParams(); L.paused = false;
+    L.p.Z = Z; L.p.N = atom::defaultN(Z); L.p.view = "Cloud 3D"; L.p.orb = orb; L.p.cdens = density;
+    L.restart();
+    L.s.spin = false;
+    for (int i = 0; i < 100000 && L.s.k < L.cloudCap(); i++) L.step(1.0 / 240);
+}
+// mean and standard error of the mean of f over the dots, from batch means (the dots follow each other along one random walk, so
+// neighbours are not independent: the spread of the means of whole batches of 1,000 dots is the honest error)
+template <class F> static void batchMean(const atom::AtomLab& L, F f, double& mean, double& se) {
+    const long n = L.cloudCap(), B = 1000, nb = n / B;
+    std::vector<double> m(nb, 0.0);
+    for (long b = 0; b < nb; b++) { for (long i = b * B; i < (b + 1) * B; i++) m[b] += f(i); m[b] /= B; }
+    mean = 0; for (double v : m) mean += v / nb;
+    double var = 0; for (double v : m) var += (v - mean) * (v - mean) / (nb - 1);
+    se = std::sqrt(var / nb);
+}
+static void testCloud() {
+    using atom::kA0;
+    // the settings: values, defaults, bad values
+    atom::AtomParams web, app = atom::AtomParams::appDefaults();
+    checkTrue("the struct keeps the web's cloud (Classic, Normal): the step-by-step tests use it", web.cstyle == "Classic" && web.cdens == "Normal");
+    checkTrue("the app starts and Defaults give Glow and High", app.cstyle == "Glow" && app.cdens == "High");
+    checkTrue("only the cloud settings differ between the two", [&] { atom::AtomParams a = app; a.cstyle = web.cstyle; a.cdens = web.cdens;
+        return a.scale == web.scale && a.zoom == web.zoom && a.qstyle == web.qstyle && a.view == web.view && a.orb == web.orb && a.Z == web.Z && a.ostyle == web.ostyle; }());
+    checkTrue("dots kept: 12,000 / 24,000 / 48,000", atom::AtomLab::capFor("Normal") == 12000 && atom::AtomLab::capFor("High") == 24000 && atom::AtomLab::capFor("Ultra") == 48000 && atom::kCap == 12000);
+    checkTrue("good cloud settings are accepted", atom::AtomLab::validChoice("cstyle", "Classic") && atom::AtomLab::validChoice("cstyle", "Glow")
+        && atom::AtomLab::validChoice("cdens", "Normal") && atom::AtomLab::validChoice("cdens", "High") && atom::AtomLab::validChoice("cdens", "Ultra"));
+    checkTrue("bad cloud settings are refused (the loader keeps the default)", !atom::AtomLab::validChoice("cstyle", "Fancy") && !atom::AtomLab::validChoice("cstyle", "glow")
+        && !atom::AtomLab::validChoice("cdens", "Huge") && !atom::AtomLab::validChoice("cdens", "") && !atom::AtomLab::validChoice("cdens", "24000"));
+    Prefs p; p.atom = {{"cstyle", "Classic"}, {"cdens", "Ultra"}, {"view", "Slice"}};
+    const Prefs q = loadPrefs(savePrefs(p));
+    checkTrue("cloud settings go through the settings file unchanged", q.atom == p.atom && q.atom.at("cstyle") == "Classic" && q.atom.at("cdens") == "Ultra");
+    // the sampling is unchanged: with the same random numbers, the first 12,000 dots of a High / Ultra cloud are exactly the Normal cloud's dots
+    {
+        atom::AtomLab N, H, U;
+        fillCloud(N, "3d", "Normal", 777); fillCloud(H, "3d", "High", 777); fillCloud(U, "3d", "Ultra", 777);
+        bool same = N.s.k == 12000 && H.s.k == 24000 && U.s.k == 48000;
+        for (long i = 0; same && i < 12000 * 3; i++) same = N.s.pts[i] == H.s.pts[i] && N.s.pts[i] == U.s.pts[i];
+        for (long i = 0; same && i < 12000; i++) same = N.s.sg[i] == H.s.sg[i] && N.s.sg[i] == U.s.sg[i];
+        checkTrue("the first 12,000 dots (positions and signs) are the same at Normal, High and Ultra", same);
+        checkTrue("the arrays are the size of the density", N.s.pts.size() == 36000 && H.s.pts.size() == 72000 && U.s.pts.size() == 144000 && U.s.sg.size() == 48000);
+        // a density change refills the cloud (and never writes outside the arrays); more steps keep the ring, not grow it
+        U.setParam("cdens", std::string("Normal"));
+        checkTrue("changing the density starts a fresh cloud of the new size", U.s.k == 0 && U.s.pts.size() == 36000 && U.s.sg.size() == 12000);
+        for (int i = 0; i < 2000; i++) U.step(1.0 / 240);
+        checkTrue("the ring keeps 12,000 dots after many more steps", U.s.k > 12000 && U.s.pts.size() == 36000);
+        U.setParam("cdens", std::string("Ultra"));
+        for (int i = 0; i < 100000 && U.s.k < 48000; i++) U.step(1.0 / 240);
+        checkTrue("and refills to 48,000 after going back up", U.s.k == 48000);
+    }
+    // the mean radius of the dots is the exact hydrogen-like value <r> = (3 n² − l (l+1)) / 2 · a0 / Z, to within 4 standard errors
+    for (const char* orb : {"1s", "2s", "2p", "3d", "4f"}) {
+        atom::AtomLab L;
+        fillCloud(L, orb, "Ultra", 12345);
+        const atom::Orbital& o = atom::orbitals()[atom::orbIndex(orb)];
+        const double exact = (3.0 * o.n * o.n - o.l * (o.l + 1)) / 2;
+        double mean, se;
+        batchMean(L, [&](long i) { return std::hypot(double(L.s.pts[3 * i]), double(L.s.pts[3 * i + 1]), double(L.s.pts[3 * i + 2])) / kA0; }, mean, se);
+        std::printf("  %s at Ultra (48,000 dots): mean radius %.4f a0, exact %.4f, standard error %.4f, off by %.2f standard errors\n", orb, mean, exact, se, std::fabs(mean - exact) / se);
+        checkTrue(std::string(orb) + ": mean radius within 4 standard errors of the exact value", std::fabs(mean - exact) < 4 * se);
+    }
+    // the node of 2s (r = 2 a0): almost no dots in a thin shell around it, many in a shell of the same width at the density maximum
+    {
+        atom::AtomLab L;
+        fillCloud(L, "2s", "Ultra", 4242);
+        const auto P = [](double r) { return r * r * (2 - r) * (2 - r) * std::exp(-r) / 8; };        // exact radial probability density of 2s (Z = 1), integrates to 1
+        double rmax = 0; for (double r = 0.01; r < 20; r += 0.001) if (P(r) > P(rmax > 0 ? rmax : 0.01)) rmax = r;
+        const double half = 0.15;                                                                       // shells of width 0.3 a0
+        const auto exactFrac = [&](double c) { double s = 0; for (double r = c - half; r < c + half; r += 1e-4) s += P(r + 5e-5) * 1e-4; return s; };
+        const auto inShell = [&](double c) { return [&, c](long i) { const double r = std::hypot(double(L.s.pts[3 * i]), double(L.s.pts[3 * i + 1]), double(L.s.pts[3 * i + 2])) / kA0; return std::fabs(r - c) < half ? 1.0 : 0.0; }; };
+        double fn, sn, fp, sp;
+        batchMean(L, inShell(2.0), fn, sn); batchMean(L, inShell(rmax), fp, sp);
+        std::printf("  2s: density maximum at r = %.3f a0. Dots in the shell round the node (r = 2): %.5f (exact %.5f); in the same-width shell at the maximum: %.4f (exact %.4f)\n", rmax, fn, exactFrac(2.0), fp, exactFrac(rmax));
+        checkTrue("2s: node shell holds under a tenth of the fraction at the density maximum", fn < 0.1 * fp);
+        checkTrue("2s: fraction at the maximum within 4 standard errors of the exact one", std::fabs(fp - exactFrac(rmax)) < 4 * sp);
+        checkTrue("2s: fraction at the node within 4 standard errors (or 0.0005) of the exact one", std::fabs(fn - exactFrac(2.0)) < std::max(4 * sn, 0.0005));
+    }
+    // the benchmark: scene 3 is exactly the old cloud (Classic, Normal, 12,000 dots, the same dots), the new stress scene is Glow / Ultra
+    {
+        atom::AtomLab B3, B7, ref;
+        atom::benchSetup(B3, 1, 800, 600); atom::benchSetup(B7, 4, 800, 600);
+        checkTrue("benchmark scene 3: Classic, Normal, Cloud 3D 4f, cloud full", B3.p.cstyle == "Classic" && B3.p.cdens == "Normal" && B3.p.view == "Cloud 3D" && B3.p.orb == "4f" && B3.s.k >= 12000);
+        checkTrue("benchmark scene 7: Glow, Ultra, Cloud 3D 4f, cloud full", B7.p.cstyle == "Glow" && B7.p.cdens == "Ultra" && B7.p.view == "Cloud 3D" && B7.p.orb == "4f" && B7.s.k >= 48000 && B7.s.sg.size() == 48000);
+        atom::seedRandom(20260101);                                   // the older scene 3, written out: web settings, uranium-238, 4f, filled by stepping
+        ref.p = atom::AtomParams(); ref.viewW = 800; ref.viewH = 600; ref.setParam("Z", 92.0); ref.setParam("N", 146.0); ref.restart(); ref.s.nucSeed = 1; ref.s.spin = false;
+        ref.setParam("view", std::string("Cloud 3D")); ref.setParam("orb", std::string("4f")); ref.setParam("zoom", 0.0); ref.resetView();
+        for (int i = 0; i < 40000 && ref.s.k < atom::kCap; i++) ref.step(1.0 / 240);
+        bool same = B3.s.k == ref.s.k;
+        for (long i = 0; same && i < 12000 * 3; i++) same = B3.s.pts[i] == ref.s.pts[i];
+        checkTrue("benchmark scene 3 draws exactly the dots of the older versions", same);
+    }
+    // the total light of the cloud is the same at every density (a dot's light scales with 12,000 / dots kept)
+    {
+        const double base = 1.0, expo = 0.7;
+        double total[3]; int i = 0;
+        for (long cap : {12000L, 24000L, 48000L}) total[i++] = cap * atom::cloudDotLight(cap, expo, base);
+        checkTrue("total light: Normal = High = Ultra", std::fabs(total[0] - total[1]) < 1e-9 * total[0] && std::fabs(total[0] - total[2]) < 1e-9 * total[0]);
+        checkTrue("one dot at High / Ultra gives half / a quarter of a Normal dot", near(atom::cloudDotLight(24000, expo, base) * 2, atom::cloudDotLight(12000, expo, base)) && near(atom::cloudDotLight(48000, expo, base) * 4, atom::cloudDotLight(12000, expo, base)));
+        checkTrue("exposure: never above 1, never brighter than needed, falls as the picture gets brighter",
+                  atom::cloudExposure(0.1, 1.0, 1.0) == 1.0 && near(atom::cloudExposure(4.0, 1.0, 1.0), 0.25) && atom::cloudExposure(8.0, 1.0, 1.0) < atom::cloudExposure(4.0, 1.0, 1.0));
+        // the same peak (as if 12,000 dots) gives the same peak light at every density: peak × exposure-limited light is below the target
+        for (long cap : {12000L, 24000L, 48000L}) {
+            const double peakAtCap = 6.0 * (double(cap) / 12000);                    // the summed footprint of a place grows with the number of dots
+            const double normalised = peakAtCap * atom::cloudDotWeight(cap);
+            checkTrue("peak light after exposure is at the target at " + std::to_string(cap) + " dots", near(normalised * 1.0 * atom::cloudExposure(normalised, 1.0, 1.0), 1.0));
+        }
+    }
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -850,6 +963,7 @@ int main() {
     testBench();
     testBenchAtomScenes();
     testBenchInputLock();
+    testCloud();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);

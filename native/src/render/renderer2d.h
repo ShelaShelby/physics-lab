@@ -53,7 +53,7 @@ public:
     // additive: colours add up (the canvas "lighter" mode).
     struct Blob {
         float x, y, r;
-        float kind;          // 0 gradient disc, 1 fuzzy nucleon profile (colour c0), 2 square of side 2r (c0), 3 flat disc (c0)
+        float kind;          // 0 gradient disc, 1 fuzzy nucleon profile (colour c0), 2 square of side 2r (c0), 3 flat disc (c0), 4 soft Gaussian dot (c0; fades to 0 at r)
         float fx, fy, f0, s1;
         Color c0, c1, c2;
     };

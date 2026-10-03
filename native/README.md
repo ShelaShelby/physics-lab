@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.9.3 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
+Version **0.9.4 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -101,7 +101,7 @@ Each lab keeps its state while the other one is on screen.
   Protons and Neutrons sliders with − and +, or Famous isotopes. The card shows the element and its facts;
   🎲 Reshuffle nucleons draws a new arrangement; ☢ Build another appears after a fission.
 - **Decay history**: unstable nuclei decay by themselves, with their real half-lives and odds; each step is listed.
-- **Electron** card: View (Orbit, Cloud, Cloud 3D, Slice), Orbit style (Modern / Bohr 1913), Orbital and its
+- **Electron** card: View (Orbit, Cloud, Cloud 3D, Slice), Orbit style (Modern / Bohr 1913), and for the clouds **Cloud style** (Glow: soft dots that add up; Classic: the web's small hard dots) and **Cloud density** (Normal 12,000 dots, High 24,000, Ultra 48,000; more dots show the same probability more smoothly, the physics is the same), Orbital and its
   orientation, the cut for Slice, Energy level and Playback speed for Orbit.
 - **Photons** card: Emit, Absorb, Auto photons. The lines you make collect on the picture and in **Light spectrum**.
 - **View & zoom**: Scale, Zoom (also the mouse wheel), and at deep zoom the quark style and nucleon detail.

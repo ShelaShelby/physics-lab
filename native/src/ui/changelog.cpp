@@ -17,6 +17,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9.4", "A glowing, denser electron cloud",
+     "In the Atom Lab's Cloud, Cloud 3D and Slice views the electron cloud is drawn as soft glowing dots instead of tiny hard squares: where the electron is most likely to be "
+     "the light adds up and glows, and thin places fade. In Cloud 3D, size and brightness change smoothly with depth. The nodes, where the wave is zero, stay as clear gaps, "
+     "and the blue and orange phase colours are kept (on light themes the dots are darker so they show on white). Two new settings, Cloud style (Classic is the old look, "
+     "Glow is new) and Cloud density (Normal 12,000 dots, High 24,000, Ultra 48,000), are remembered and put back by Defaults. More dots show the same probability more "
+     "smoothly; they do not change the physics: the dots are found in exactly the same way, and the total light of the cloud is the same at every density. The benchmark's "
+     "Cloud 3D scene uses Classic and Normal, so its results stay comparable with older ones, and the stress scenes got a Glow, Ultra Cloud 3D scene."},
     {"0.9.3", "Four fixes: benchmark scenes, guide buttons, benchmark input lock, Time speed on Today",
      "1) The Atom Lab benchmark scenes no longer pick up your own Atom Lab settings: they start from the lab's defaults, so \"Bohr 1913\" can no "
      "longer hide the nucleons (earlier results for the nucleus, one-nucleon and biggest-nucleus scenes taken with Bohr 1913 on are not valid). "

@@ -33,6 +33,7 @@ private:
     std::vector<int> qset_;                // nucleons that show their quarks (web: s.qset), in the order they were added
     std::vector<float> qf_;                // how far each nucleon's quarks have faded in (web: s.qf)
     double qNow_ = 0;
+    double cloudExpo_ = 0;                 // the cloud's exposure (Glow), smoothed over frames; 0 = not set yet
 };
 
 }  // namespace atom

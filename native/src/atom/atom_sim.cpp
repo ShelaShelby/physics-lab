@@ -27,10 +27,13 @@ bool AtomLab::validChoice(const std::string& key, const std::string& v) {
         {"scale", {"Auto", "Fixed"}}, {"qstyle", {"Cinematic", "Accurate", "Classic"}}, {"detail", {"Valence", "+ Gluons", "+ Sea"}},
         {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice"}}, {"ostyle", {"Modern", "Bohr 1913"}},
         {"orb", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"pAx", {"x", "y", "z"}}, {"dAx", {"z2", "xz", "yz", "xy", "x2y2"}},
-        {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2"}}, {"cutAxis", {"Vertical", "Horizontal"}}};
+        {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2"}}, {"cutAxis", {"Vertical", "Horizontal"}},
+        {"cstyle", {"Classic", "Glow"}}, {"cdens", {"Normal", "High", "Ultra"}}};
     const auto it = opts.find(key);
     return it != opts.end() && std::find(it->second.begin(), it->second.end(), v) != it->second.end();
 }
+
+int AtomLab::capFor(const std::string& d) { return d == "Ultra" ? 4 * kCap : d == "High" ? 2 * kCap : kCap; }
 
 void AtomLab::restart() {
     s = AtomState();
@@ -45,7 +48,7 @@ void AtomLab::init() {
     const double k = double(o.n) / p.Z;
     s.t = 0; s.Zprev = p.Z; s.more = moreStored; s.pan = {}; s.panTo.reset(); s.dragMode = "rotate";
     s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a); s.trail.clear();
-    s.pts.assign(kCap * 3, 0.f); s.sg.assign(kCap, 0); s.k = 0; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
+    s.pts.assign(std::size_t(cloudCap()) * 3, 0.f); s.sg.assign(cloudCap(), 0); s.k = 0; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
     s.trans.reset(); s.photon.reset(); s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
@@ -85,6 +88,8 @@ void AtomLab::setParam(const std::string& key, const std::string& v) {
     else if (key == "dAx") p.dAx = v;
     else if (key == "fAx") p.fAx = v;
     else if (key == "cutAxis") p.cutAxis = v;
+    else if (key == "cstyle") p.cstyle = v;
+    else if (key == "cdens") p.cdens = v;
     else return;
     onParam(key);
 }
@@ -100,7 +105,7 @@ void AtomLab::onParam(const std::string& key) {
         if (p.zoom > 0) { s.selfSet = true; setParam("zoom", std::max(0.0, p.zoom + d)); s.selfSet = false; }
         if (s.zoomTo) s.zoomTo = clampZoom(*s.zoomTo + d);
     }
-    static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx"};
+    static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx", "cdens"};   // a new density refills the cloud
     if (std::find(std::begin(reinit), std::end(reinit), key) != std::end(reinit)) {
         const AtomState keep = s;
         init();
@@ -152,7 +157,7 @@ void AtomLab::walk(int orb, Vec3d& w, bool record) {
     const double fn = psi(orb, p.Z, nx, ny, nz);
     if (random() * pOld < fn * fn || pOld == 0) { w.x = nx; w.y = ny; w.z = nz; }
     if (record) {
-        const long i = s.k % kCap;
+        const long i = s.k % std::min<long>(cloudCap(), long(s.sg.size()));   // (the arrays are sized by restart(); never write outside them)
         s.sg[i] = psi(orb, p.Z, w.x, w.y, w.z) >= 0 ? 1 : -1;   // the sign of the wave here: the phase colour
         s.pts[3 * i] = float(w.x * kA0); s.pts[3 * i + 1] = float(w.y * kA0); s.pts[3 * i + 2] = float(w.z * kA0);
         s.k++;
@@ -379,12 +384,12 @@ void AtomLab::step(double dt) {
     if (p.view != "Orbit") {
         if (s.trans) {                                         // morph: new dots come from the target orbital with growing odds
             const double u0 = s.trans->t / s.trans->dur, u = u0 * u0 * (3 - 2 * u0);
-            for (int i = 0; i < 48; i++) {
+            for (int i = 0, n = 48 * cloudCap() / kCap; i < n; i++) {     // more dots to fill: more steps per frame (the dots themselves are sampled the same way)
                 if (random() < u) walk(s.trans->to, s.w2, true);
                 else walk(s.trans->from, s.w, true);
             }
         } else {
-            const int n = s.boost > 0 ? 48 : p.view == "Slice" ? 64 : 16;
+            const int n = (s.boost > 0 ? 48 : p.view == "Slice" ? 64 : 16) * (cloudCap() / kCap);
             for (int i = 0; i < n; i++) mcmc(true);
         }
         if (p.view == "Cloud 3D" && s.spin) s.yaw += 0.0015;   // slow auto-rotation
@@ -472,7 +477,7 @@ std::string AtomLab::info1() {
     const std::string head = std::string(name(p.Z)) + "-" + std::to_string(p.Z + p.N) + " (" + ionLabel(p.Z) + ")";
     if (p.view != "Orbit") {
         const Orbital& o = orbitals()[orbIndex(p.orb)];
-        const long cnt = std::min<long>(s.k, kCap);
+        const long cnt = std::min<long>(s.k, cloudCap());
         double sum = 0;
         for (long i = 0; i < cnt; i++) sum += std::hypot(double(s.pts[3 * i]), double(s.pts[3 * i + 1]), double(s.pts[3 * i + 2]));
         const std::string got = cnt > 300 ? fmtLen(sum / cnt * 1e10) : "…";

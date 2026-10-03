@@ -8,8 +8,9 @@
 namespace atom {
 
 // 0: uranium-238, the whole nucleus in view, Cinematic quarks, + Sea detail
-// 1: uranium-238, Cloud 3D, the 4f orbital, all kCap dots
+// 1: uranium-238, Cloud 3D, the 4f orbital, cloud style Classic, density Normal (12,000 dots, as in older versions)
 // 2: uranium-238, Accurate quarks, + Sea detail, zoomed all the way into the first nucleon
+// 4: stress: the same as 1, drawn as Glow with 48,000 dots (cloud style Glow, density Ultra)
 // 3: stress: oganesson-294 (118 protons, 176 neutrons), Accurate quarks, + Sea detail, zoomed 0.6 (about 4 times) closer than the whole nucleus, so every nucleon is large
 // width, height: the picture's size in points.
 // Every scene starts from the Atom Lab's default settings (AtomParams{}), then applies its own.

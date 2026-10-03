@@ -130,6 +130,11 @@ void main() {
     float aa = max(fwidth(d), 1e-4);
     float edge = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, d);
     if (kind == 3) { fragColor = vec4(vC0.rgb, vC0.a * edge); return; }
+    if (kind == 4) {                                         // soft round dot: a Gaussian falloff that reaches exactly 0 at the edge (the electron cloud's glow)
+        float g = (exp(-4.0 * d * d) - 0.0183156) * 1.018657;    // exp(-4) = 0.0183156
+        fragColor = vec4(vC0.rgb, vC0.a * g * step(d, 1.0));
+        return;
+    }
     if (kind == 1) {                                         // fuzzy nucleon: the tabulated column-density profile
         float x = clamp(d, 0.0, 1.0) * 16.0;
         int i = int(min(floor(x), 15.0));

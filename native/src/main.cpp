@@ -113,6 +113,7 @@ int main(int, char**) {
     // the saved settings come first: they say where the window was
     ui::AppState app;
     ui::resetToToday(app);
+    app.atom.p = atom::AtomParams::appDefaults(); app.atom.restart();   // the app starts with the glowing, denser cloud
     ui::loadSettings(app);                              // the theme, text size, font, motion, units, unlocks and both labs' settings, and the window
     std::vector<app::ScreenRect> screens;
     {
