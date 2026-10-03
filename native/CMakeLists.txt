@@ -25,6 +25,7 @@ endif()
 add_library(orbit_core STATIC
   src/orbit/solar_data.cpp
   src/orbit/kepler.cpp
+  src/orbit/nbody.cpp
   src/orbit/solar_system.cpp
   src/orbit/format.cpp
   src/orbit/card_text.cpp
@@ -78,6 +79,10 @@ if(PL_BUILD_TESTS)
   target_link_libraries(app_tests PRIVATE app_core atom_core)
   target_compile_options(app_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME app_settings COMMAND app_tests)
+  add_executable(nbody_tests tests/test_nbody.cpp)
+  target_link_libraries(nbody_tests PRIVATE orbit_core)
+  target_compile_options(nbody_tests PRIVATE ${PL_WARNINGS})
+  add_test(NAME nbody_physics COMMAND nbody_tests)
 endif()
 
 # ---- the app ----

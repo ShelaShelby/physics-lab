@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "belts.h"
+#include "kepler.h"
 #include "solar_data.h"
 #include "vec3.h"
 
@@ -43,6 +44,9 @@ struct Body {
     std::vector<Moon> moons;
     std::deque<Vec3> trail;    // past positions, m (at most 1000)
 };
+
+// A planet's position and velocity from its JPL elements on a Julian day (m, m/s, Sun at the origin; planet number 0 = Mercury ... 7 = Neptune).
+State planetStateAt(std::size_t i, double jd);
 
 // The orbit shape worked out from position and velocity (two-body formulas).
 struct OrbitShape {

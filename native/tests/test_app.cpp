@@ -452,7 +452,9 @@ static const NativeEdit kEditsAbout[] = {
     // 0.9.9 stage 2: the other sources named in the code (the star masses in far_masses.h; the textbooks named in the cloud and outline tests)
     {"About sources: a note on the star masses", "<div class=\"lrnP lrnMuted\">Distances of Polaris, Betelgeuse and Rigel are uncertain, so they are rounded.</div>",
      "<div class=\"lrnP lrnMuted\">Distances of Polaris, Betelgeuse and Rigel are uncertain, so they are rounded.</div><div class=\"lrnP lrnMuted\">The star masses are published estimates, in solar masses, and some are uncertain; the Fomalhaut and Arcturus masses come from stellar models, not from measuring an orbit. The numbers were taken from the papers&rsquo; summaries and have not been checked against their tables. Stars whose mass could not be sourced show none.</div>"},
-    {"About sources: the textbooks for the hydrogen-like orbitals", "(the 1913 paper behind the Bohr 1913 style)</li>", "(the 1913 paper behind the Bohr 1913 style)</li><li>Textbooks for the hydrogen-like orbitals (the average distance of the electron, the radial probability, the cloud tests): David J. Griffiths, <i>Introduction to Quantum Mechanics</i>; Hans A. Bethe and Edwin E. Salpeter, <i>Quantum Mechanics of One- and Two-Electron Atoms</i></li>"},
+    // 0.10: the sources of "Planet physics: Real"
+    {"About sources: the Real planet physics (GM values, the integrator, the Mercury check)", "(the moons: sizes and orbits)</li>", "(the moons: sizes and orbits)</li><li><a href=\"https://ssd.jpl.nasa.gov/astro_par.html\" target=\"_blank\" rel=\"noopener noreferrer\">NASA/JPL: astrodynamic parameters</a> (GM of the Sun and of each planet with its moons, DE440 values, for &ldquo;Planet physics: Real&rdquo;; read from an excerpt of the page)</li><li>Park et al., 2021, The Astronomical Journal: the DE440 and DE441 planetary and lunar ephemerides (the paper behind those DE440 values)</li><li><a href=\"https://doi.org/10.1086/115978\" target=\"_blank\" rel=\"noopener noreferrer\">Wisdom &amp; Holman, 1991: Symplectic maps for the N-body problem</a> (the method that moves the planets in &ldquo;Planet physics: Real&rdquo;)</li><li>Duncan, Levison &amp; Lee, 1998: A multiple time step symplectic algorithm for integrating close encounters (The Astronomical Journal; the variables that method is written in)</li><li>Bate, Mueller &amp; White, 1971: <i>Fundamentals of Astrodynamics</i> (moving a planet along its Kepler orbit with universal variables)</li><li>Clemence, 1947: The relativity effect in planetary motions (Reviews of Modern Physics; the 532 arcseconds per century of Mercury&rsquo;s perihelion advance from the other planets, used to check &ldquo;Planet physics: Real&rdquo;)</li>"},
+        {"About sources: the textbooks for the hydrogen-like orbitals", "(the 1913 paper behind the Bohr 1913 style)</li>", "(the 1913 paper behind the Bohr 1913 style)</li><li>Textbooks for the hydrogen-like orbitals (the average distance of the electron, the radial probability, the cloud tests): David J. Griffiths, <i>Introduction to Quantum Mechanics</i>; Hans A. Bethe and Edwin E. Salpeter, <i>Quantum Mechanics of One- and Two-Electron Atoms</i></li>"},
 };
 static const NativeEdit kEditSgrA = {"Sagittarius A* card: no Spacetime Lab", " (see the Spacetime Lab)", ""};
 static const NativeEdit kEditGuideSky = {"Orbit guide, stars and far-away things: no Spacetime Lab", " (the Spacetime Lab shows what a black hole like it does)", ""};
@@ -528,8 +530,8 @@ static void testNativeEdits() {
         checkTrue(n + "a button has an action and the other way round", (*kTimeline[i].button != 0) == (*kTimeline[i].lab != 0));
     }
     checkTrue("exactly one slingshot button in the web", slingshot == 1);
-    // every edit was used (nothing in the list is left over): units 1 + about 5 + sgra 1 + guide 8 + slingshot 1
-    checkTrue("every native edit was used", g_editUses == 1 + 5 + 1 + 8 + 1);
+    // every edit was used (nothing in the list is left over): units 1 + about 6 + sgra 1 + guide 8 + slingshot 1
+    checkTrue("every native edit was used", g_editUses == 1 + 6 + 1 + 8 + 1);
 }
 
 // ---- the frames-per-second counter text (the web: Math.round(frames * 1000 / ms) + ' fps') ----

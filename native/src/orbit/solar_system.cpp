@@ -23,6 +23,17 @@ static void attachMoons(Body& b) {
         if (b.name == kMoons[i].planet) b.moons.push_back({&kMoons[i], hashPhase(kMoons[i].name)});
 }
 
+// A planet's position and velocity (m, m/s, Sun at the origin, the web's GM for the velocity) from its JPL elements on Julian day `jd`.
+State planetStateAt(std::size_t i, double jd) {
+    const PlanetData& d = kPlanets[i];
+    const double T = (jd - 2451545.0) / 36525;           // Julian centuries since J2000
+    const double* el = d.el;
+    const double a = el[0] + el[1] * T, e = el[2] + el[3] * T, I = el[4] + el[5] * T;
+    const double L = el[6] + el[7] * T, w = el[8] + el[9] * T, O = el[10] + el[11] * T;
+    // argument of perihelion ω = ϖ − Ω; mean anomaly M = L − ϖ
+    return keplerState(a * kAU, e, I, O, w - O, L - w);
+}
+
 void SolarSystem::loadAt(int64_t unixMs) {
     bodies.clear();
     nextId_ = 0;
@@ -30,15 +41,10 @@ void SolarSystem::loadAt(int64_t unixMs) {
     crashed = escaped = 0;
     epochMs = unixMs;
     const double jd = unixMs / 86400000.0 + 2440587.5;   // Julian day
-    const double T = (jd - 2451545.0) / 36525;           // Julian centuries since J2000
 
     for (std::size_t i = 0; i < kPlanetCount; i++) {     // planets: JPL elements, each with its rate per century
         const PlanetData& d = kPlanets[i];
-        const double* el = d.el;
-        const double a = el[0] + el[1] * T, e = el[2] + el[3] * T, I = el[4] + el[5] * T;
-        const double L = el[6] + el[7] * T, w = el[8] + el[9] * T, O = el[10] + el[11] * T;
-        // argument of perihelion ω = ϖ − Ω; mean anomaly M = L − ϖ
-        const State st = keplerState(a * kAU, e, I, O, w - O, L - w);
+        const State st = planetStateAt(i, jd);
         Body b;
         b.id = ++nextId_;
         b.name = d.name; b.color = d.color; b.kind = d.kind; b.type = BodyKind::Planet;
