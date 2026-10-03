@@ -111,6 +111,9 @@ static const HeaderBtn kHdrAbout = {"👤 About", "About Physics Lab and its dev
 static const HeaderBtn kHdrSettings = {"⚙ Settings", "Settings: text size, font, units, motion"};
 static const HeaderBtn kHdrHistory = {"🕰 v8.6.2 · history", "See how Physics Lab itself has grown"};
 static const HeaderBtn kHdrVer = {"", "Click to see what changed in this lab"};
+// native: the Atom Lab follows the web Atom Lab; its header button and the window it opens say so (the version number comes from kLabInfo, as before)
+static const char* const kAtomHistoryName = "Web Atom Lab history";
+static const char* const kAtomHistoryTip = "History of the web Atom Lab that this Atom Lab follows";
 static const char* const kHdrTitle = "Physics Lab";
 struct LabInfo { const char* name; const char* update; const char* subtitle; };
 static const LabInfo kLabInfo[] = {{"Orbit Lab", "7.7.2", "the real Solar System, where everything is today: planets, moons, belts and dwarf planets, in front of the real night sky. Zoom far out to find the nearest stars. Click anything for details"}, {"Atom Lab", "7.7.3", "any nucleus from hydrogen to oganesson + one electron: Bohr orbit, quantum cloud, 3D, photon jumps, and a zoom down to quarks"}};

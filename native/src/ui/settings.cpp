@@ -11,8 +11,10 @@
 #include <cstdlib>
 #include <regex>
 #include <string>
+#include <vector>
 
 #include "app/app_data.h"
+#include "app/grid.h"
 #include "fonts.h"
 #include "html_view.h"
 #include "imgui.h"
@@ -285,45 +287,74 @@ void settingsWindow(AppState& app) {
     if (!app.showSettings) { g_resetDone = false; g_unlockMsg.clear(); }   // the Done lines belong to this visit of the page
 }
 
-// 🎨 Theme: the web's theme menu (a swatch, the name and its small line, ✓ on the one in use; the two
-// secret themes are "???" with a hint until they are unlocked)
+// 🎨 Theme: a grid of cards, 3 in a row (rows are added as themes are added): a colour dot, the name, ✓ on the one in use. The small description of a
+// theme is a tooltip. The two secret themes are "???" with their hint until they are unlocked. The cards are as wide as the longest name needs; if three of
+// them do not fit in the window, the cards get narrower and long names wrap onto a second line (a name is never cut off).
 void themeButton(AppState& app) {
     if (pillButton(app::kHdrTheme.label, app::kHdrTheme.tip)) ImGui::OpenPopup("##themes");
+    static const bool testOpen = SDL_getenv("PL_OPEN") && std::string(SDL_getenv("PL_OPEN")) == "themes";   // for automatic checks: open the picker (after the other windows have appeared)
+    static int frames = 0;
+    if (testOpen && ++frames == 12) ImGui::OpenPopup("##themes");
     if (!ImGui::BeginPopup("##themes")) return;
-    const float s = ImGui::GetFontSize() / 16, h = 40 * s;
-    float w = 240 * s;                                   // wide enough for the longest line
-    for (int i = 0; i < 2; i++) w = std::max(w, 70 * s + ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize() * 0.8f, FLT_MAX, 0, displayable(app::kThemeLocked[i]).c_str()).x);
-    for (const app::ThemeDef& t : app::kThemes) w = std::max(w, 70 * s + ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize() * 0.8f, FLT_MAX, 0, displayable(t.sub).c_str()).x);
+    constexpr int kColumns = 3;
+    constexpr float PI = 3.14159265f;
+    const float s = ImGui::GetFontSize() / 16, fs = ImGui::GetFontSize(), pad = 8 * s, gap = 6 * s, dot = 24 * s;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImFont* bold = fonts().bold;
+    const float tick = bold->CalcTextSizeA(fs, FLT_MAX, 0, "✓").x;
+    const float fixed = 2 * pad + dot + 2 * pad + tick;                  // everything on a card except the name
+    const float maxWidth = vp->WorkSize.x - 24 * s;                      // the popup must fit in the window
+    float nameW = 0;                                                     // the widest name (a secret theme shows "???")
+    for (const app::ThemeDef& t : app::kThemes) nameW = std::max(nameW, bold->CalcTextSizeA(fs, FLT_MAX, 0, displayable(t.secret ? "???" : t.name, bold).c_str()).x);
+    float cardW = fixed + nameW + 2 * s;
+    cardW = std::min(cardW, (maxWidth - (kColumns - 1) * gap - 2 * ImGui::GetStyle().WindowPadding.x) / kColumns);
+    const float textW = std::max(20 * s, cardW - fixed);
+    std::vector<std::string> shown;                                      // each card's name, wrapped to the card
+    std::size_t lines = 1;
+    for (const app::ThemeDef& t : app::kThemes) {
+        std::string n = wrapLabel(displayable(t.secret ? "???" : t.name, bold), textW);
+        lines = std::max<std::size_t>(lines, 1 + std::count(n.begin(), n.end(), '\n'));
+        shown.push_back(n);
+    }
+    const float cardH = std::max(dot, lines * fs * 1.2f) + 2 * pad;
+    const int count = int(sizeof(app::kThemes) / sizeof(app::kThemes[0])), rows = app::gridRows(count, kColumns);
+    const ImVec2 o = ImGui::GetCursorPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     int lockedIdx = 0;
-    for (const app::ThemeDef& t : app::kThemes) {
+    for (int i = 0; i < count; i++) {
+        const app::ThemeDef& t = app::kThemes[i];
+        const app::GridCell cell = app::gridCell(i, kColumns);
         const bool locked = t.secret && !app.prefs.unlocked.count(t.id), on = app.prefs.theme == t.id;
+        ImGui::SetCursorPos(ImVec2(o.x + cell.col * (cardW + gap), o.y + cell.row * (cardH + gap)));
         const ImVec2 p = ImGui::GetCursorScreenPos();
         ImGui::PushID(t.id);
         if (locked) ImGui::BeginDisabled();
-        if (ImGui::Selectable("##t", on, 0, ImVec2(w, h)) && !locked) { app.prefs.theme = t.id; ImGui::CloseCurrentPopup(); }
+        if (ImGui::Selectable("##t", on, 0, ImVec2(cardW, cardH)) && !locked) { app.prefs.theme = t.id; ImGui::CloseCurrentPopup(); }
         if (locked) ImGui::EndDisabled();
+        const std::string sub = locked ? app::kThemeLocked[lockedIdx] : t.sub;
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", displayable(sub).c_str());
         ImGui::PopID();
-        // the swatch: the theme's background with its accent; Auto is half light, half dark
-        const ImVec2 a(p.x + 4 * s, p.y + 6 * s), b(a.x + 28 * s, a.y + 28 * s);
+        // the colour dot: the theme's background with its accent; Auto is half light, half dark
+        const ImVec2 c(p.x + pad + dot / 2, p.y + cardH / 2);
         if (locked) {
-            dl->AddRectFilled(a, b, col(look().c.line), corner(7 * s));
-            const ImVec2 q = fonts().bold->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, 0, "?");
-            dl->AddText(fonts().bold, ImGui::GetFontSize(), ImVec2((a.x + b.x - q.x) / 2, (a.y + b.y - q.y) / 2), col(look().c.muted), "?");
+            dl->AddCircleFilled(c, dot / 2, col(look().c.line));
+            const ImVec2 q = bold->CalcTextSizeA(fs, FLT_MAX, 0, "?");
+            dl->AddText(bold, fs, ImVec2(c.x - q.x / 2, c.y - q.y / 2), col(look().c.muted), "?");
         } else if (*t.swatchBg) {
-            dl->AddRectFilled(a, b, col(app::hexRgb(t.swatchBg)), corner(7 * s));
-            dl->AddCircleFilled(ImVec2(b.x - 8 * s, b.y - 8 * s), 5 * s, col(app::hexRgb(t.swatchAccent)));
+            dl->AddCircleFilled(c, dot / 2, col(app::hexRgb(t.swatchBg)));
+            dl->AddCircleFilled(ImVec2(c.x + dot * 0.18f, c.y + dot * 0.18f), dot * 0.2f, col(app::hexRgb(t.swatchAccent)));
         } else {
-            dl->AddTriangleFilled(a, ImVec2(b.x, a.y), ImVec2(a.x, b.y), col(app::hexRgb("#f7f7f5")));
-            dl->AddTriangleFilled(ImVec2(b.x, a.y), b, ImVec2(a.x, b.y), col(app::hexRgb("#151517")));
+            dl->PathArcTo(c, dot / 2, PI * 0.5f, PI * 1.5f, 24); dl->PathFillConvex(col(app::hexRgb("#f7f7f5")));      // left half light
+            dl->PathArcTo(c, dot / 2, -PI * 0.5f, PI * 0.5f, 24); dl->PathFillConvex(col(app::hexRgb("#151517")));     // right half dark
         }
-        dl->AddRect(a, b, col(look().c.line), corner(7 * s));
-        const std::string name = locked ? "???" : t.name, sub = locked ? app::kThemeLocked[lockedIdx] : t.sub;
-        dl->AddText(fonts().bold, ImGui::GetFontSize(), ImVec2(b.x + 10 * s, p.y + 4 * s), col(look().c.fg, locked ? 0.6f : 1), displayable(name, fonts().bold).c_str());
-        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * 0.8f, ImVec2(b.x + 10 * s, p.y + 22 * s), col(look().c.muted), displayable(sub).c_str());
-        if (on) dl->AddText(fonts().bold, ImGui::GetFontSize(), ImVec2(p.x + w - 18 * s, p.y + 12 * s), col(look().c.accent), "✓");
+        dl->AddCircle(c, dot / 2, col(look().c.line), 0, 1.0f);
+        const float ty = p.y + cardH / 2 - (std::count(shown[i].begin(), shown[i].end(), '\n') + 1) * fs * 1.2f / 2;
+        dl->AddText(bold, fs, ImVec2(p.x + pad + dot + pad, ty), col(look().c.fg, locked ? 0.6f : 1), shown[i].c_str());
+        if (on) dl->AddText(bold, fs, ImVec2(p.x + cardW - pad - tick, p.y + cardH / 2 - fs / 2), col(look().c.accent), "✓");
         if (t.secret) lockedIdx++;
     }
+    ImGui::SetCursorPos(ImVec2(o.x, o.y + rows * (cardH + gap) - gap));    // the popup is exactly as tall and wide as the grid
+    ImGui::Dummy(ImVec2(kColumns * cardW + (kColumns - 1) * gap, 0));
     ImGui::EndPopup();
 }
 

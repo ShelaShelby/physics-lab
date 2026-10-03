@@ -104,7 +104,7 @@ void header(AppState& app) {
     ImGui::PopStyleVar(2);
     if (look().synthGlow) drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
     const app::LabInfo& L = app::kLabInfo[app.lab];
-    const std::string ver = std::string("Update ") + L.update, hist = historyLabel();
+    const std::string ver = app.lab == 1 ? std::string(app::kAtomHistoryName) + " " + L.update : std::string("Update ") + L.update, hist = historyLabel();   // the Atom Lab's button says whose history it is
     // the buttons' widths, so they can sit on the right of the first line (they move under the title when there is no room)
     ImGui::PushFont(fonts().bold, ImGui::GetStyle().FontSizeBase * 13 / 16);
     float bw = 0;
@@ -144,7 +144,7 @@ void header(AppState& app) {
     ImGui::SameLine(0, 8 * s);
     if (pillButton(hist, app::kHdrHistory.tip)) app.showHistory = true;
     ImGui::SameLine(0, 8 * s);
-    if (pillButton(ver, app::kHdrVer.tip)) app.showLabLog = true;
+    if (pillButton(ver, app.lab == 1 ? app::kAtomHistoryTip : app::kHdrVer.tip)) app.showLabLog = true;
     if (oneLine && ImGui::GetCursorPosY() < below) { ImGui::SetCursorPosY(below); ImGui::Dummy(ImVec2(0, 0)); }
     // under it: the 💡 facts line, then the tabs
     ImGui::Dummy(ImVec2(0, 2 * s));

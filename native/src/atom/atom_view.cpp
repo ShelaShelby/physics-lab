@@ -758,7 +758,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     }
     if (!bohr && (s.layer == "Atom" || s.layer == "Nucleus")) {           // labels only while the whole nucleus is in view
         const double off = std::min(std::max(Rpx * 1.25, 3.0) + 12, h / 2 - 22);
-        T.draw(nuclideLabel(p.Z, p.N) + "  ·  " + std::to_string(p.Z) + "p, " + std::to_string(p.N) + "n", cx, cy + off + 8, 12, css.fg, 0.5);
+        const Color olHalo = withA(css.card, 0.9);
+        T.draw(nuclideLabel(p.Z, p.N) + "  ·  " + std::to_string(p.Z) + "p, " + std::to_string(p.N) + "n", cx, cy + off + 8, 12, css.fg, 0.5, &olHalo);   // with a thin edge in the page colour, so it reads over the cloud dots
     }
     {   // the ⓘ More / Less info button, bottom left above the scale bar
         const std::string t = lab.moreShown() ? "Less info" : "More info";

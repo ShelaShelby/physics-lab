@@ -9,6 +9,7 @@ Plain list of what is done and what is planned. Nothing here has a date, and not
 - 0.9.6: quarks readable on light themes — done
 - 0.9.7: housekeeping (this roadmap, the version in the release, Windows warning help, "Reset to today" keeps the view choices) — done
 - 0.9.8: 90% probability outline for the electron cloud — done
+- 0.9.9: small UI fixes (theme picker as a grid, clearer Atom Lab history button, readable nucleus label) — done
 
 ## Planned small steps
 

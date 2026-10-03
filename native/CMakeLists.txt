@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.9.8 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.9.9 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build

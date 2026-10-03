@@ -16,6 +16,7 @@
 #include "app/fps.h"
 #include "app/history.h"
 #include "app/bench.h"
+#include "app/grid.h"
 #include "app/frame_time.h"
 #include "app/gpu_timer.h"
 #include "orbit/belts.h"
@@ -1176,6 +1177,25 @@ static void testOutline() {
     }
 }
 
+// ---- 0.9.9: the Theme picker's grid arithmetic ----
+static void testThemeGrid() {
+    const struct { int count, rows, lastRow, lastCol; } cases[] = {{1, 1, 0, 0}, {3, 1, 0, 2}, {4, 2, 1, 0}, {11, 4, 3, 1}, {13, 5, 4, 0}};
+    for (const auto& c : cases) {
+        const std::string w = std::to_string(c.count) + " themes in 3 columns: ";
+        checkTrue(w + "rows = ceil(count / 3)", app::gridRows(c.count, 3) == c.rows);
+        const app::GridCell last = app::gridCell(c.count - 1, 3);
+        checkTrue(w + "the last card is at row " + std::to_string(c.lastRow) + ", column " + std::to_string(c.lastCol), last.row == c.lastRow && last.col == c.lastCol);
+        bool ok = true;                                                 // every card in its own place, left to right then down, inside the grid
+        for (int i = 0; i < c.count; i++) {
+            const app::GridCell g = app::gridCell(i, 3);
+            ok = ok && g.row == i / 3 && g.col == i % 3 && g.row < app::gridRows(c.count, 3) && g.col < 3 && (i == 0 || g.row * 3 + g.col == i);
+        }
+        checkTrue(w + "all cards fill the grid in order", ok);
+    }
+    checkTrue("no cards, no rows", app::gridRows(0, 3) == 0);
+    checkTrue("the app has 11 themes now (4 rows)", int(sizeof(kThemes) / sizeof(kThemes[0])) == 11 && app::gridRows(int(sizeof(kThemes) / sizeof(kThemes[0])), 3) == 4);
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -1195,6 +1215,7 @@ int main() {
     testQuarkLight();
     testResetToToday();
     testOutline();
+    testThemeGrid();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
