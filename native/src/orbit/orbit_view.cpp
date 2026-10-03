@@ -639,7 +639,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     {   // the barycentre: a crosshair in a ring (hidden while it would sit on the Sun's centre)
         const Q bq = proj(bc.x, bc.y, bc.z);
         const bool on = sel.kind == Selection::Bary;
-        if (std::hypot(bq.first - star.first, bq.second - star.second) > 5 || on) {
+        if (std::hypot(bq.first - star.first, bq.second - star.second) > 5 || on || (sys.realPlanets() && set.exaggerateWobble)) {
             for (int pass = 0; pass < 2; pass++) {
                 const Color c = pass ? (on ? kHL : Color{1, 1, 1, 1}) : Color{0, 0, 0, 0.6f};
                 const double w = pass ? 1.8 : 4;
@@ -649,6 +649,22 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             }
             hits_.push_back({{Selection::Bary}, bq.first, bq.second, 12});
             labels.push_back({"Barycentre", bq.first, bq.second + 22, on, false, false});
+        }
+    }
+
+    if (sys.realPlanets()) {   // Real: the Sun's own path round the barycentre (it circles it, mostly because of Jupiter), kSunWobbleScale times too big when "Exaggerate" is on
+        const double k = set.exaggerateWobble ? kSunWobbleScale : 1;
+        const auto& tr = sys.sunTrail;
+        const int n = static_cast<int>(tr.size());
+        for (int part = 0; part < 4 && n > 1; part++) {   // fades in 4 steps, oldest faintest, like the planets' trails
+            const int i0 = part * n / 4, i1 = std::min(n, (part + 1) * n / 4 + 1);
+            LinePen pen{R, W, H, 1.5, sunCol.withAlpha(0.15f + 0.2f * part)};
+            for (int i = i0; i < i1; i++) { const Q q = proj(bc.x + k * tr[i].x, bc.y + k * tr[i].y, bc.z + k * tr[i].z); pen.to(q.first, q.second); }
+        }
+        if (set.exaggerateWobble) {                           // the Sun's place on the magnified path: a ring (the Sun itself is drawn at its true place)
+            const Q sq = proj(bc.x * (1 - k), bc.y * (1 - k), bc.z * (1 - k));   // the Sun is at -bc from the barycentre: bc + k * (-bc)
+            R.ring(sq.first, sq.second, 5, 1.6, sunCol.withAlpha(0.9f));
+            labels.push_back({"Sun's path ×" + std::to_string(static_cast<int>(kSunWobbleScale)) + ": exaggerated, not to scale", sq.first, sq.second + 16, false, true, false});
         }
     }
 

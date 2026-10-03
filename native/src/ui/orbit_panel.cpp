@@ -206,12 +206,23 @@ void orbitPanel(AppState& app, float width) {
                 ImGui::PopTextWrapPos();
                 ImGui::EndTooltip();
             }
+            wrappedCheckbox("Exaggerate the Sun's wobble (×50)", &app.set.exaggerateWobble);
+            if (ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
+                ImGui::TextUnformatted("The Sun is not fixed: it circles the balance point of the Solar System (the barycentre, the marked point), mostly because of Jupiter's pull. "
+                                       "The real circle is smaller than about two Sun radii, far too small to see here.\n\n"
+                                       "Ticked: the Sun's path is drawn 50 times too big, round the marked point, so you can see it. This is exaggerated, not to scale (the Sun itself and the planets are drawn at their true places).\n\n"
+                                       "Unticked: the path is drawn at its true size.");
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
         }
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::TextWrapped("%s", app.set.realPlanets
             ? "Real: the Sun and the eight planets pull on each other (Newtonian gravity; each planet stands for its whole system with its moons). No effects of moons, dwarf planets or asteroids on the planets. "
               "The start values are simplified orbital elements for 1 January 2026 (not JPL's ephemeris), so far from that date the planets drift away from their true positions (Mercury is off by about 12 degrees in 1800). Moons, dwarf planets, comets and belts move as in Simple. "
-              "The picture stays centred on the Sun; the Sun's own small wobble round the balance point is not drawn."
+              "The picture is drawn round the balance point (barycentre) of the Sun and the planets, and the Sun circles it, never farther than about two Sun radii: the Sun's own path is drawn as a trail."
             : "Simple: each planet moves on its own round the Sun, and the planets do not pull on each other (as in the web version).");
         if (app.set.realPlanets)
             ImGui::TextWrapped("%s", app.set.relativity

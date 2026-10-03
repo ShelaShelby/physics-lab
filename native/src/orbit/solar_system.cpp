@@ -36,6 +36,7 @@ State planetStateAt(std::size_t i, double jd) {
 
 void SolarSystem::loadAt(int64_t unixMs) {
     bodies.clear();
+    sunTrail.clear();
     nextId_ = 0;
     t = 0;
     crashed = escaped = 0;
@@ -84,7 +85,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
     }
     for (Body& b : bodies) attachMoons(b);
     belts = makeBelts(unixMs);
-    if (real_) applyReal(0);
+    if (real_) { applyReal(0); sunTrailPoint(); }
 }
 
 // the reference epoch of the N-body clock (Julian day kNBodyRefJD, 2026-01-01 12:00 UT) as Unix milliseconds
@@ -93,11 +94,16 @@ static constexpr double kRefUnixMs = (kNBodyRefJD - 2440587.5) * 86400000.0;
 void SolarSystem::applyReal(double extra) {
     Vec3 x[kNBodies], v[kNBodies];
     nb_.stateAt((double(epochMs) - kRefUnixMs) / 1000.0 + t + extra, x, v);
+    sunBary_ = x[0];                                     // the Sun's own place: the centre of mass of the whole system is at the origin
     for (std::size_t i = 0; i < kPlanetCount && i < bodies.size(); i++) {
         if (bodies[i].type != BodyKind::Planet || bodies[i].name != kPlanets[i].name) continue;
         bodies[i].pos = x[i + 1] - x[0];                 // the picture stays Sun-centred
         bodies[i].vel = v[i + 1] - v[0];
     }
+}
+
+void SolarSystem::sunTrailPoint() {                       // the Sun's path: a point whenever it has moved kSunTrailStep since the last one
+    if (sunTrail.empty() || length(sunBary_ - sunTrail.back()) >= kSunTrailStep) { sunTrail.push_back(sunBary_); if (sunTrail.size() > 1000) sunTrail.pop_front(); }
 }
 
 void SolarSystem::realTrail(Body& b) {                   // a trail point every 2 % of the distance to the Sun, as the leapfrog does
@@ -108,8 +114,8 @@ void SolarSystem::realTrail(Body& b) {                   // a trail point every 
 void SolarSystem::setRealPlanets(bool on) {
     if (on == real_) return;
     real_ = on;
-    if (on) applyReal(0);
-    else loadAt(currentUnixMs());                        // back to Simple: everything reloaded from the elements at the date shown
+    if (on) { applyReal(0); sunTrail.clear(); sunTrailPoint(); }
+    else loadAt(currentUnixMs());                        // back to Simple: everything reloaded from the elements at the date shown (and no Sun's path)
 }
 
 void SolarSystem::setRelativity(bool on) {
@@ -119,6 +125,7 @@ void SolarSystem::setRelativity(bool on) {
     if (real_) {
         applyReal(0);
         for (Body& b : bodies) if (b.type == BodyKind::Planet) b.trail.clear();
+        sunTrail.clear(); sunTrailPoint();                // (GR moves the Sun's path a little too)
     }
 }
 
@@ -177,6 +184,7 @@ void SolarSystem::step(double dt, double tspeed) {
             t += total / nSub;
             applyReal(0);
             for (Body& b : bodies) if (b.type == BodyKind::Planet) realTrail(b);
+            sunTrailPoint();
         }
     } else
         t += total;
@@ -189,6 +197,7 @@ void SolarSystem::step(double dt, double tspeed) {
 }
 
 Vec3 SolarSystem::barycentre() const {
+    if (real_) return sunBary_ * -1.0;                    // Real: the Sun's place seen from the barycentre, turned round
     double mt = kSunInEarthMasses;                        // the Sun weighs 333,000 Earths
     Vec3 s;
     for (const Body& b : bodies) { s = s + b.pos * b.massEarths; mt += b.massEarths; }

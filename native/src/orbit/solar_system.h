@@ -15,6 +15,7 @@
 #include "kepler.h"
 #include "nbody.h"
 #include "solar_data.h"
+#include "units.h"
 #include "vec3.h"
 
 namespace orbit {
@@ -64,6 +65,9 @@ struct OrbitShape {
 };
 OrbitShape orbitOf(const Body& b);
 
+// Real planets: the Sun's own path (its position from the barycentre) is kept as a trail with a point every 0.05 Sun radii of travel, at most 1,000 points.
+constexpr double kSunTrailStep = 0.05 * units::kSunRadius;
+
 class SolarSystem {
 public:
     // Put everything where it really is at `unixMs` (milliseconds since 1970, UTC).
@@ -83,13 +87,15 @@ public:
     void setRelativity(bool on);
     bool relativity() const { return gr_; }
 
-    // The balance point of the Sun and every planet, m from the Sun's centre.
+    // The balance point of the Sun and every planet, m from the Sun's centre. Simple: worked out from the bodies' masses as the web does (the Sun = 333,000
+    // Earths). Real: where the N-body integrator has it (the Sun's own barycentric position, minus), with the real GM values.
     Vec3 barycentre() const;
 
     double julianDay() const;               // the date being shown, as a Julian day
     int64_t currentUnixMs() const;          // the same as Unix milliseconds
 
     std::vector<Body> bodies;
+    std::deque<Vec3> sunTrail;              // Real only: the Sun's path, its positions from the barycentre (m); empty in Simple
     std::vector<BeltGroup> belts;           // asteroid belt, Trojans, Kuiper belt, Oort cloud (made for the start date)
     double t = 0;                           // simulated seconds since the epoch
     int64_t epochMs = 0;                    // the starting date (Unix ms, UTC)
@@ -100,9 +106,11 @@ private:
     int nextId_ = 0;
     bool real_ = false;
     bool gr_ = false;
+    Vec3 sunBary_;                         // Real: the Sun's position from the barycentre (m), as the N-body clock has it
     NBodyClock nb_;
     void applyReal(double extraSeconds);   // put the eight planets where the N-body clock has them `extraSeconds` after the shown date
     void realTrail(Body& b);
+    void sunTrailPoint();
 };
 
 }  // namespace orbit

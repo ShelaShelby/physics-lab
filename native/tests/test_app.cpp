@@ -1312,6 +1312,54 @@ static void testRelativity() {
     checkTrue("in Simple the GR setting changes nothing", same && !sb.realPlanets());
 }
 
+// ---- 0.10.1: the Sun's wobble round the barycentre (Real planets) ----
+static void testSunWobble() {
+    orbit::ViewSettings vs;
+    checkTrue("Sun's wobble: 'Exaggerate' is on by default", vs.exaggerateWobble && orbit::kSunWobbleScale == 50);
+    Prefs p; p.orbit = {{"physics", "Real"}, {"wobble", "0"}};
+    const Prefs q = loadPrefs(savePrefs(p));
+    checkTrue("Sun's wobble: the 'Exaggerate' setting goes through the settings file unchanged", q.orbit == p.orbit && q.orbit.at("wobble") == "0");
+    // Simple: the barycentre is the web's (every body's mass in Earth masses, the Sun = 333,000 Earths) and there is no Sun path
+    orbit::SolarSystem sm;
+    sm.loadAt(1790000000000LL);
+    for (int k = 0; k < 40; k++) sm.step(0.25, -0.3);
+    double mt = units::kSunInEarthMasses; orbit::Vec3 web;
+    for (const orbit::Body& b : sm.bodies) { web = web + b.pos * b.massEarths; mt += b.massEarths; }
+    web = web * (1.0 / mt);
+    const orbit::Vec3 bs = sm.barycentre();
+    checkTrue("Simple: the barycentre is the web's formula, unchanged", bs.x == web.x && bs.y == web.y && bs.z == web.z && sm.sunTrail.empty());
+    // Real: the barycentre is where the integrator has it: minus the Sun's barycentric position (the Sun moves against the planets)
+    const double refMs = (orbit::kNBodyRefJD - 2440587.5) * 86400000.0;
+    orbit::SolarSystem r;
+    r.setRealPlanets(true);
+    r.loadAt(int64_t(std::llround(refMs)));
+    for (int k = 0; k < 90; k++) r.step(1.0 / 60, 1.3);                          // about 130 years
+    orbit::NBodyClock clock;
+    orbit::Vec3 x[orbit::kNBodies], v[orbit::kNBodies];
+    clock.stateAt(r.t, x, v);
+    const orbit::Vec3 b = r.barycentre();
+    const double dev = orbit::length(b + x[0]);
+    checkTrue("Real: the barycentre is minus the Sun's barycentric position from the N-body clock (to 1 mm)", dev < 1e-3 && orbit::length(b) > 1e8 && orbit::length(b) < 2.3 * units::kSunRadius);
+    // independent of the clock's bookkeeping: with the centre of mass at rest at the origin, the Sun sits at -sum(GM_i Q_i) / sum(GM) from it
+    double total = 0; orbit::Vec3 sq;
+    for (int i = 0; i < orbit::kNBodies; i++) total += orbit::kRealGM[i];
+    for (int i = 1; i < orbit::kNBodies; i++) sq = sq + r.bodies[std::size_t(i - 1)].pos * orbit::kRealGM[i];
+    const double dev2 = orbit::length(b - sq * (1.0 / total));
+    checkTrue("Real: the barycentre equals sum(GM_i x_i) / sum(GM) of the planets' Sun-centred positions (to 1 mm)", dev2 < 1e-3);
+    // the Sun's path: a trail of its barycentric positions, spaced by kSunTrailStep, at most 1,000 points, ending near the Sun's present place
+    const std::size_t n = r.sunTrail.size();
+    bool spaced = n > 10, inside = true;
+    for (std::size_t i = 1; i < n; i++) spaced = spaced && orbit::length(r.sunTrail[i] - r.sunTrail[i - 1]) >= orbit::kSunTrailStep;
+    for (const orbit::Vec3& pt : r.sunTrail) inside = inside && orbit::length(pt) < 2.3 * units::kSunRadius;
+    checkTrue("Real: the Sun's path has many points, each at least kSunTrailStep from the last, all within 2.3 Sun radii of the barycentre", spaced && inside && n <= 1000);
+    checkTrue("Real: the end of the Sun's path is within one step of the Sun's present place", n > 0 && orbit::length(r.sunTrail.back() + b) < 2 * orbit::kSunTrailStep + 1e-3 * units::kSunRadius);
+    r.loadAt(1790000000000LL);
+    checkTrue("a jump to another date starts a new Sun's path", r.sunTrail.size() <= 1);
+    for (int k = 0; k < 30; k++) r.step(1.0 / 60, 1.3);
+    r.setRealPlanets(false);
+    checkTrue("back to Simple: no Sun's path, and the web's barycentre again", r.sunTrail.empty() && !r.realPlanets());
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -1334,6 +1382,7 @@ int main() {
     testThemeGrid();
     testPlanetPhysics();
     testRelativity();
+    testSunWobble();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);

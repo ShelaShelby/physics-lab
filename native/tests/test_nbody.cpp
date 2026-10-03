@@ -394,6 +394,77 @@ static void testGRMercuryEightPlanets() {
     check("GR: in the eight-planet model GR adds 42.98 arcseconds per century to Mercury's advance (to 2 %)", std::fabs((on - off) / 42.98 - 1) < 0.02);
 }
 
+// ================= The Sun's motion round the barycentre (0.10.1) =================
+// The Sun is not fixed: the integrator keeps the total momentum zero, so the Sun moves against the planets. Checked with exact relations, not with our own earlier output.
+
+// (1) Through the clock (what the app uses, with the Hermite interpolation): the centre of mass stays at the origin and the total momentum at zero.
+static void testBarycentreStays() {
+    for (int gr = 0; gr < 2; gr++) {
+        NBodyClock clock(kNBodyStep, gr == 1);
+        Vec3 x[kNBodies], v[kNBodies];
+        double maxCom = 0, maxP = 0, scaleP = 0;
+        for (int i = 0; i < kNBodies; i++) scaleP += kRealGM[i] * length(nbodyStartState().v[i]);
+        int n = 0;
+        for (double years = -226; years <= 75; years += 0.37, n++) {            // 1800 to 2100 (the app's date range), at odd times between the grid steps
+            clock.stateAt(years * kYearS, x, v);
+            NBodyState s; for (int i = 0; i < kNBodies; i++) { s.x[i] = x[i]; s.v[i] = v[i]; }
+            maxCom = std::max(maxCom, length(nbodyCentreOfMass(s)));
+            maxP = std::max(maxP, length(nbodyMomentum(s)) / scaleP);
+        }
+        std::printf("barycentre through the clock (GR %s), %d times in 1800-2100: max |centre of mass| = %.2e m, max |P| / sum(GM |v|) = %.2e\n", gr ? "on" : "off", n, maxCom, maxP);
+        // Limit 1 m (the Sun's own motion is ~1e9 m): the sum of GM_i x_i is a constant of the motion and the Hermite interpolation keeps a constant exactly; what is left
+        // is rounding (measured 1.2 mm after 1,000 years of stepping, REPORT 0.10.0). Momentum: rounding level, 1e-12.
+        check(std::string("barycentre: the centre of mass stays within 1 m of the origin over 1800-2100 (GR ") + (gr ? "on" : "off") + ")", maxCom < 1.0);
+        check(std::string("barycentre: the total momentum stays zero (below 1e-12 of sum GM |v|), GR ") + (gr ? "on" : "off"), maxP < 1e-12);
+    }
+}
+
+// (2) The Sun and Jupiter alone: the Sun's distance from the centre of mass is GM_J / (GM_S + GM_J) times the distance between them, at every moment (exact for two bodies:
+// the centre of mass lies on the line between them at that ratio). The GM values are JPL's DE440 ones (nbody.cpp).
+static void testSunJupiterBarycentre() {
+    const double gm[2] = {kRealGM[0], kRealGM[5]};
+    const double a = 5.2 * units::kAU, e = 0.3, mu = gm[0] + gm[1], T = 2 * units::kPi * std::sqrt(a * a * a / mu);
+    Vec3 rv; const Vec3 r0 = keplerRel(a, e, mu, 0, &rv);
+    Vec3 x[2], v[2];
+    x[0] = r0 * (-gm[1] / mu); x[1] = r0 * (gm[0] / mu); v[0] = rv * (-gm[1] / mu); v[1] = rv * (gm[0] / mu);
+    const double ratio = gm[1] / mu, h = kNBodyStep;
+    double worst = 0, maxSun = 0, minSun = 1e30;
+    const long n = long(5 * T / h);
+    for (long i = 0; i < n; i++) {
+        nbodyStepN(2, gm, x, v, h);
+        const double dSun = length(x[0]), dSep = length(x[1] - x[0]);                         // the centre of mass is at the origin
+        worst = std::max(worst, std::fabs(dSun / (ratio * dSep) - 1));
+        maxSun = std::max(maxSun, dSun); minSun = std::min(minSun, dSun);
+    }
+    std::printf("Sun + Jupiter (a = 5.2 AU, e = 0.3), 5 orbits: |Sun - centre of mass| / (GM_J/(GM_S+GM_J) x separation) differs from 1 by at most %.1e; the Sun's distance runs from %.3e to %.3e m (formula: ratio x a(1-+e) = %.3e to %.3e)\n",
+                worst, minSun, maxSun, ratio * a * (1 - e), ratio * a * (1 + e));
+    // Limit 1e-9: rounding of ~1e11 m positions (1e-16 of them, about 1e-5 m) against the Sun's 1e9 m distance is 1e-14; the integrator's own error does not enter the ratio.
+    check("Sun + Jupiter: the Sun's distance from the barycentre is GM_J/(GM_S+GM_J) times the separation, at every step (to 1e-9)", worst < 1e-9);
+    check("Sun + Jupiter: the Sun's nearest and farthest distance are ratio x a(1-e) and ratio x a(1+e) (to 1e-6, from sampling every day)",
+          std::fabs(minSun / (ratio * a * (1 - e)) - 1) < 1e-6 && std::fabs(maxSun / (ratio * a * (1 + e)) - 1) < 1e-6);
+}
+
+// (3) The eight planets, 1800 to 2100: how far the Sun gets from the barycentre. A sanity bound, not a published value (none could be reached: see REPORT.md):
+// since sum GM_i x_i = 0, x_sun = -sum_{i>=1} GM_i (x_i - x_sun) / sum GM, so |x_sun| <= sum GM_i |x_i - x_sun| / sum GM <= sum GM_i a_i (1 + e_i) / sum GM
+// (if every planet stayed inside its orbit's far point, with the app's elements). The planets' orbits change a little in 300 years, so the bound gets 5 % extra.
+static void testSunWobbleRange() {
+    NBodyClock clock;
+    Vec3 x[kNBodies], v[kNBodies];
+    double total = 0, bound = 0, maxD = 0, minD = 1e30, maxAt = 0;
+    for (int i = 0; i < kNBodies; i++) total += kRealGM[i];
+    for (int i = 1; i < kNBodies; i++) bound += kRealGM[i] * kPlanets[i - 1].el[0] * units::kAU * (1 + kPlanets[i - 1].el[2]) / total;
+    for (double years = -226; years <= 75; years += 0.02) {
+        clock.stateAt(years * kYearS, x, v);
+        const double d = length(x[0]);
+        if (d > maxD) { maxD = d; maxAt = years; }
+        minD = std::min(minD, d);
+    }
+    std::printf("the Sun's distance from the barycentre, 1800-2100 (Real, no GR): from %.2f to %.2f Sun radii (largest at %.0f years from 2026); upper bound from the planets' far points %.2f Sun radii (Sun radius %.0f km, units.h)\n",
+                minD / units::kSunRadius, maxD / units::kSunRadius, maxAt, bound / units::kSunRadius, units::kSunRadius / 1e3);
+    check("Sun's wobble: always below the upper bound from the planets' far points (+5 %)", maxD < 1.05 * bound);
+    check("Sun's wobble: it does reach more than one Sun radius in 300 years (Jupiter alone gives about 1.07 at its mean distance)", maxD > 1.0 * units::kSunRadius);
+}
+
 int main() {
     testTwoBody();
     testEightPlanets();
@@ -407,6 +478,9 @@ int main() {
     testGRConservation();
     testGRReversal();
     testGRMercuryEightPlanets();
+    testBarycentreStays();
+    testSunJupiterBarycentre();
+    testSunWobbleRange();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

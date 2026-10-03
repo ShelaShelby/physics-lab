@@ -19,6 +19,9 @@ enum class SkyMode { Soft, Full, Off };         // Stars in the background
 enum class ConsMode { Off, Lines, LinesAndNames };   // Constellations
 
 // The settings that change the picture (the web version's params).
+// Real planets: "Exaggerate the Sun's wobble" draws the Sun's path (and the Sun's place on it) this many times too big, round the barycentre.
+constexpr double kSunWobbleScale = 50;
+
 struct ViewSettings {
     bool view3D = false;        // View: 2D (top-down) / 3D (rotatable)
     double zoom = -1.2;         // log10 of the zoom factor (×0.06 at -1.2)
@@ -32,6 +35,7 @@ struct ViewSettings {
     SkyMode sky = SkyMode::Soft;
     ConsMode cons = ConsMode::Off;
     bool realPlanets = false;   // Planet physics: Simple (false) / Real (true), see orbit/nbody.h
+    bool exaggerateWobble = true;   // Real only: draw the Sun's path round the barycentre kSunWobbleScale times too big (on by default: the real path is under 2.3 Sun radii)
     bool relativity = true;     // Real only: "General relativity (1PN)" for the planets (on by default; no effect in Simple)
     bool far = true;            // Far-away things (nearest stars, Voyagers, galactic centre)
     bool paused = false;        // time is stopped (a fast spin is only held still while time runs)
