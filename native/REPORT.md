@@ -1,37 +1,39 @@
-# Native Physics Lab 0.10.3 (alpha) — final report (stages 1 and 2)
+# Native Physics Lab 0.10.4 stage 1 (alpha) — report
 
-Real planets now start from JPL Horizons data; relativity tick off by default; Real stays an option (Simple is the default) until the owner has tried it. Orbit Lab only; the Atom Lab and `index.html` were not touched. Older reports are in git history. Version, changelog (🕰 history), README, ROADMAP, RESUME, DECISIONS and OWNER-TODO are updated.
+The real Moon: data and validation only. **No app or UI change** except two text lines (About sources, 🕰 history). Orbit Lab and Atom Lab behave exactly as in 0.10.3. Older reports are in git history. Version, README, 🕰 history, ROADMAP, RESUME and DECISIONS are updated; nothing for OWNER-TODO.
 
 ## What changed
-- **Start state** (`nbody.*`): the clock's default start is the stage-1 JPL epoch state (`jpl_epoch.inc`, 2026-01-01 12:00 TDB) moved to the lab's own 9-body centre of mass (GM-weighted mean position and velocity subtracted; 128.5 km, 0.039 mm/s), so the centre of mass is at rest at the origin. Heliocentric values are exactly JPL's. The old elements start is kept as `nbodyElementsStartState`, marked legacy/test-only (the "before" column and the proof that the integrator is unchanged). Simple is unchanged.
-- **Time scale:** `kNBodyRefJD` is 12:00 TDB, not UT (comment fixed); dates are used as TDB without conversion, said in the app note and here. UT/TDB difference: "a small difference (not looked up)": IERS and USNO were not reachable from this session.
-- **Relativity** defaults to off (`ViewSettings::relativity`; Defaults uses `ViewSettings{}`). A `gr` value already in an old settings file is **kept** (`readBool` only overwrites the default when the file has 0 or 1), so users who saved gr=1 still have it on until they press Defaults. Tooltip and note now give the measured numbers.
-- **Real note** (under Planet physics): start from JPL Horizons (DE441), model, what is left out, dates as TDB, and the worst error of every planet 1800-2100 for the current relativity setting. 10 lines at normal text size. The numbers come from `orbit/real_errors.h` and a test checks them against the measurement.
-- **About:** added the Horizons API documentation, the JPL DE440/DE441 note and "Horizons data retrieved 2026-10-03"; the astrodynamic-parameters entry now says its values were read from the page itself and matched the code (the owner's statement, 2026-10-03; code comments updated). I did not open the DE440/DE441 page: its figures (span, "a little less accurate than DE440") are as the owner gave them, and the About entry says so.
+- `src/orbit/moon_elp.h/.cpp` (new, in `orbit_core`): `moonGeocentricElp(jdTDB)` = the Moon's centre seen from the Earth's centre, metres, mean dynamical ecliptic and inertial equinox of J2000, geometric (no light time). Meant for 1800-2100 (`kMoonElpFirstJD/LastJD`); outside that it runs but is not measured. The comment says what is left out.
+- `src/orbit/elp_data.inc` (new, 32 KB, generated): constants and terms of **ELP2000-82B** (Chapront-Touzé and Chapront, A&A 190, 342, 1988; CDS VI/79). `tools/make_elp_data.py` downloads ELP1..ELP36 and `elp82b.f`, checks the record counts against the ReadMe, **reads every constant out of the Fortran text** (nothing typed from memory), merges the 36 files into one term list, measures, truncates, writes the `.inc`. The series form, arguments and the change to J2000 are the subroutine's (copy in `example.f` checked identical).
+- `tools/make_moon_ref.py` + `tests/reference/moon_table.inc` (new): Horizons API, Moon (301) and Sun (10), `500@399`, ecliptic, km-s, geometric, TDB, DE441; source, the 6 queries and retrieval date (2026-10-03) in the header. 170 rows: 61 every 5 years 1800-2100 (1 Jan 12:00); 60 daily from 2025-12-02 (two lunar cycles); 49 hourly 2026-01-02..04. The Sun and the hourly group go beyond the brief: they are needed for the phase tests.
+- `tests/test_moon.cpp` (new, `moon_tests`), CMake 0.10.4. About "Where the facts come from": ELP2000-82B and the Horizons Moon table added (`app_text.inc` + matching entry in `test_app.cpp`).
 
-## Errors against Horizons (DE441, not DE440), heliocentric position, worst over 1800-2100, km
-| planet | before: elements start, GR on (max / at 2000) | after: JPL start, GR off, the new default (max / at 2000) | after: JPL start, GR on (max / at 2000) |
+## Measured error against Horizons (DE441, not DE440), position in km and arcsec as seen from the Earth
+| series | worst | rms | median |
 |---|---|---|---|
-| Mercury | 10,537,877 / 824,102 | 29,230 / 3,433 | 70,044 / 5,464 |
-| Venus | 6,456,597 / 736,292 | 4,762 / 541 | 45,430 / 5,200 |
-| Earth | 5,270,331 / 608,047 | 3,960 / 456 | 22,080 / 2,540 |
-| Mars | 7,522,474 / 828,348 | 7,292 / 867 | 22,340 / 2,672 |
-| Jupiter | 12,265,270 / 538,495 | 728 / 85 | 2,823 / 318 |
-| Saturn | 109,383,511 / 13,240,178 | 150 / 18 | 1,067 / 130 |
-| Uranus | 403,794,966 / 30,269,475 | 619 / 23 | 876 / 41 |
-| Neptune | 110,629,640 / 14,255,941 | 2,652 / 31 | 2,791 / 36 |
+| **all 37,872 terms** | 5.790 km (3.086") | 1.446 km (0.777") | 0.559 km (0.318") |
+| **kept 487 terms** (in the app code) | 5.212 km (2.879") | 1.541 km (0.781") | 0.761 km (0.323") |
 
-## Tests (full suite once, Linux GCC x86-64: orbit 1,377, atom 17,936, app 1,385, nbody 37, jpl 52; all pass)
-- **New:** the default start equals the JPL row minus the shift (heliocentric 7.6e-6 m, limit 1e-3), centre of mass and momentum zero; a clock with no start is bit for bit the JPL-started clock; the stage-1 guards hold through the default clock, GR off and on (limits unchanged, each ~1 % above the measurement, regression guards only); the quoted numbers equal the measured maxima rounded up; the GR default, Defaults, and a saved gr=1.
-- **Changed on purpose:** (1) nbody "start state is the elements' state" now tests the legacy function, plus a new check that the default is not the elements' (Mercury > 1,000 km apart); (2) nbody "GR off equals the saved 0.10.0 positions" uses the legacy start (those numbers come from it); (3) jpl "nothing changed" runs Real from the legacy start (equal to the 0.10.2 values, measured difference 0) and Simple (equal, 0); (4) app "General relativity on by default" is now "off by default"; (5) the About edit count 10 → 11. Conservation (energy 1e-8, angular momentum, momentum, centre of mass, reversal, GR conservation) passed unchanged with the new start; no limit was loosened.
-- The numbers in the app note round **up** ("measured, rounded up"), so some are 1 km above the owner's list (Mercury 29,231 not 29,230, 70,045 not 70,044; Mars 7,293; Saturn 151; Uranus 620; Neptune 2,653; Earth 22,081 and Mars 22,341 with GR on). The table above is rounded to the nearest km.
+By group, kept series: every 5 years 5.212 km (2.88"), daily 1.384 km (0.77"), hourly 0.755 km (0.20"). Smallest near 2000 (0.65 km), growing away from it (1900 2.7 km, 1850 3.0 km, 1800 5.2 km; 2050 1.1 km, 2100 3.4 km). So the accuracy is **a few km at worst, about 3" in the sky, over 1800-2100, at the 170 dates**; it is not claimed between them. The kept series is not "better" than the full one (5.21 vs 5.79): the dropped terms just happen to cancel a little at these dates.
+- **Truncation rule** (measured): sort terms by size (amplitude x the largest |T|^p over 1800-2100, in arcsec); drop from the smallest upward in steps of sqrt(2); stop when the worst error passes 1.5 x the full 5.790 km. **The brief's rule alone keeps 234 terms** (worst 7.357 km) **but** those differ from the full series by up to 9.353 km at 300 seeded dates not in the table (the table is only 170 dates). I added a second condition: at those 300 dates the kept series must stay within 0.5 x 5.790 km of the full one (then 1.5x holds there too by the triangle inequality). That gives **487 terms** (229 longitude, 128 latitude, 130 distance), 2.711 km from the full series at the 300 dates. The whole sweep is printed by the tool and the headline of `elp_data.inc` gives the numbers.
 
-## Looked at (Linux, Xvfb, software OpenGL)
-- The Real note at normal text (twice: the first draft was 11 lines, so I shortened it and looked at the final) and at Extra large text (once; my crop cut off the bottom half, so I saw only the first half wrapping cleanly). GR box off, version label 0.10.3.
+## Other results (all from `moon_tests`)
+- Moon distance: Horizons table 357,177-406,592 km; ELP scan every 0.25 day 1800-2100: 356,380-406,711 km. Both inside 356,000-407,000 km (the brief's bound; the NASA Moon fact sheet values I remember, about 356,400 and 406,700 km, were **not opened**).
+- Sidereal period from the ELP Moon alone, 120 one-year windows: mean 27.32206 d against Horizons' header "Orbit period = 27.321582 d" (+0.000475 d). A single year is off by up to 0.0737 d (range 27.248-27.379): a year holds 13.37 orbits, so the unfinished orbit matters. That is why the mean is tested.
+- Phases (ELP Moon + JPL Sun, elongation in longitude): eight crossings (new, first quarter, full, last quarter, twice) in the right order; worst difference of a crossing time against Horizons 0.023 minutes (daily samples, 4-point interpolation). Full moon of 2026-01-03: Horizons JD 2461043.91990 TDB (about 10:04 TDB), ELP differs by 0.0007 minutes (0.04 s). Longitudes are geometric: no light time, no aberration (a real full moon time differs by tens of seconds; not computed).
 
-## Doubtful points (not changed)
-- GR on is farther from JPL than GR off (stage 1); a better 1PN method is on the roadmap. `kAU` = 149.6e9 m vs IAU 149,597,870,700 m (1.4e-5, about 2,000 km at 1 au): roadmap, orbit audit. The Sun's GM: Horizons header 132712440041.93938 vs lab 132712440041.279419 (+4.97e-12); not changed (no named source shows the DE440 value is different).
-- Errors are measured only at the 301 tabulated dates (1 January 12:00 of each year), with a 1-day step; between them not measured. Moons, dwarfs, Pluto, asteroids are not in, as the note says.
+## Tests (full suite once, Linux GCC x86-64, warnings on: orbit 1,377, atom 17,936, app 1,385, nbody 37, jpl 52, **moon 23**; all pass)
+- Written from the Horizons table first (the test file existed before `moon_elp.cpp`); the error guards were filled in after the first measurement and are **regression guards about 1 % above the measured value**, each with the measured number beside it (worst 5.264 km, rms 1.556 km, 2.908", 0.788"; crossings 0.0233 min; full moon 0.00069 min; period mean 0.00048 d, single year 0.0744 d). Nothing was loosened.
+- A test checks the C++ against the Python port at 24 dates (worst 0.0007 m): this checks the port, not the theory.
+- **Changed on purpose:** `app_tests` "every native edit was used" counts About edits, 11 to 12 (one new edit); the full suite failed on that one check, and I re-ran only `app_tests` after the fix (1,385, 0 failed). No word-for-word reference was touched.
+- During work: the first run of the period test was wrong (a floating-point step count in my test, not the Moon); fixed to an integer step count.
 
 ## Not tested
-- Windows or another compiler; any speed or smoothness; Real at the fastest Time speed, trails, the Journey, planet cards, a narrow window, the Extra large note's lower half: all on the owner's try-out list. The saved-settings path (`readBool`) was read, not run (it is UI code the test programs do not link).
+- Windows, MSVC, any compiler but GCC; **speed**: one call sums 487 terms, no timing was made (`moon_tests` takes about 12 s on Linux, mostly the period test, which makes about 175,000 calls). The default cache folder of the tool (`native/data/elp_cache`, with its own `.gitignore`) was not used; I passed a scratch folder.
+- The Fortran itself was not run (no Fortran compiler here). Accuracy outside 1800-2100, between the 170 dates, UT versus TDB (dates are TDB), the Moon in the app.
+
+## Doubtful points (reported, nothing hidden)
+- The notice `elp82b.ps` (1.2 MB PostScript) was downloaded but **not read**: formulas and constants come from the Fortran subroutine and the series files, which the ReadMe presents as the same solution. Files 4-36 have no negative amplitudes (checked), so the subroutine's `x.lt.pre` test (no absolute value) cannot drop terms with no truncation.
+- ELP2000-82B is a 1988 theory fitted to DE200, so its differences from DE441 (above) are larger than JPL's own. Differences not modelled: ELP's fixed dynamical J2000 frame against the ICRS-based Horizons ecliptic (size not looked up), tidal acceleration and lunar-figure differences between DE200 and DE441. They are inside the measured numbers, not separated.
+- Horizons says its Moon is DE441; the 0.10.3 note says DE441 is "a little less accurate than DE440, mainly for the Moon" (the owner's reading of the JPL page, which no session opened). Errors here are against DE441.
+- 27.321582 d comes from the Horizons Moon header, which names no source for it.

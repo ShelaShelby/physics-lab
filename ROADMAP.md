@@ -13,10 +13,11 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10: real N-body planets as an option (Planet physics: Simple / Real; Real is not the default) — done
 - 0.10.1: general relativity (1PN) for the planets in Real mode (Mercury's extra turn), the Sun's wobble round the centre of mass drawn in Real mode, Milky Way band fix, secret theme names fix — done
 - 0.10.3: Real planets start from JPL (Horizons data, DE441); the relativity tick box is off by default; Real stays an option until the owner has tried it — done
+- 0.10.4 stage 1: the real Moon, data and validation only (ELP2000-82B checked against Horizons; not used by the app yet) — done
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- 0.10.4: real Moon positions and phases (feasibility first: needs a named, reachable source for the Moon's orbit; if there is none, it stays planned) — planned
+- 0.10.4 stage 2: use the ELP2000-82B Moon in the Orbit Lab: Real mode Moon, phases, card, About text — planned
 - Bug and speed audit before 1.0, in three separate passes (Orbit Lab, Atom Lab, app and settings): first a report only, then small fix tasks for the real findings — planned
 - 1.0 alpha stages — planned:
   - design plan (written in a fresh short chat)

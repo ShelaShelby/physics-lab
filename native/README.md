@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.10.3 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
+Version **0.10.4 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -52,6 +52,8 @@ native/build/Release/PhysicsLab.exe
 Or open the `native` folder in Visual Studio (File → Open → Folder) and press F5.
 
 The physics tests include `jpl_tests`, which compares the Real planets with JPL Horizons vector tables kept in `native/data/jpl/` (see the README.txt there; `native/tools/make_jpl_data.py` checks them and rewrites the generated `.inc` files). The Real planets' start state is the 2026 row of those tables (`src/orbit/jpl_epoch.inc`, made by the same tool).
+
+`moon_tests` (0.10.4) checks the Moon from the lunar theory ELP2000-82B (`src/orbit/moon_elp.*`, terms in `src/orbit/elp_data.inc`, made by `tools/make_elp_data.py` from the published files) against a Horizons Moon table (`tests/reference/moon_table.inc`, made by `tools/make_moon_ref.py`). Not used by the app yet.
 
 ## Using it
 
@@ -134,6 +136,7 @@ Each lab keeps its state while the other one is on screen.
 | --- | --- |
 | `src/orbit/units.h` | SI units and every physical constant, with comments |
 | `src/orbit/solar_data.*` | The real Solar System data (NASA/JPL), copied from the web version |
+| `src/orbit/moon_elp.*` | The Moon's position from ELP2000-82B (0.10.4: data and tests only, not used by the app yet) |
 | `src/orbit/kepler.*` | Orbital elements → position and velocity (Kepler's equation) |
 | `src/orbit/solar_system.*` | The simulation: leapfrog steps around the Sun, barycentre, orbit shape |
 | `src/orbit/belts.*` | Asteroid belt, Trojans, Kuiper belt, Oort cloud (same random rocks as the web) |

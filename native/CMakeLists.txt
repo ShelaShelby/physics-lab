@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.10.3 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.10.4 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -26,6 +26,7 @@ add_library(orbit_core STATIC
   src/orbit/solar_data.cpp
   src/orbit/kepler.cpp
   src/orbit/nbody.cpp
+  src/orbit/moon_elp.cpp
   src/orbit/solar_system.cpp
   src/orbit/format.cpp
   src/orbit/card_text.cpp
@@ -88,6 +89,11 @@ if(PL_BUILD_TESTS)
   target_link_libraries(jpl_tests PRIVATE orbit_core)
   target_compile_options(jpl_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME jpl_validation COMMAND jpl_tests)
+  add_executable(moon_tests tests/test_moon.cpp)
+  target_include_directories(moon_tests PRIVATE tests)
+  target_link_libraries(moon_tests PRIVATE orbit_core)
+  target_compile_options(moon_tests PRIVATE ${PL_WARNINGS})
+  add_test(NAME moon_validation COMMAND moon_tests)
 endif()
 
 # ---- the app ----

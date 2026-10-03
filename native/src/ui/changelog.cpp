@@ -17,6 +17,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.4", "The real Moon: data and checks only (Orbit Lab, nothing to see yet)",
+     "Behind the scenes: the Moon's position can now be computed from the published lunar theory ELP2000-82B (a 1988 theory fitted to JPL's older DE200) and was checked against NASA/JPL Horizons (DE441): at the "
+     "dates checked between 1800 and 2100 it is within 5.2 km (2.9 arcseconds as seen from the Earth) at worst, and the new, first quarter, full and last quarter Moon fall within a few hundredths of a minute of "
+     "Horizons' in the two lunar cycles checked. The Orbit Lab does not use it yet, so nothing you see has changed."},
     {"0.10.3", "Real planets start from JPL's data (Orbit Lab)",
      "With Planet physics set to Real, the planets now start from NASA/JPL Horizons' positions and velocities (the DE441 ephemeris) for 1 January 2026 12:00 TDB, instead of the lab's own simplified orbital "
      "elements. Measured against Horizons' tables for 1 January of every year from 1800 to 2100, the worst error of any planet's position is now under 30,000 km (Mercury) with relativity off, and under 8,000 km "
