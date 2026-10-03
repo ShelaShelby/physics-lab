@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <complex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -101,6 +102,24 @@ double angular(int ang, double x, double y, double z);
 double psi(const std::string& key, int Z, double x, double y, double z);   // x, y, z in Bohr radii
 double psi(int orb, int Z, double x, double y, double z);
 bool dipoleOK(int a, int b);                  // can light connect these two orbitals?
+
+// ---- complex orbitals (0.10.2): the states with a magnetic quantum number m = +-1 .. +-l, from the real angular parts above ----
+// Condon-Shortley phase: Y_l,+m ~ (-1)^m (Re + i c Im) / sqrt 2 and Y_l,-m ~ (Re - i c Im) / sqrt 2, where (Re, Im, c) is the real pair of the same |m| (p: x, y; d: xz, yz and
+// x2-y2, xy with c = 2; f: xz2, yz2 and z(x2-y2), xyz with c = 2 and x(x2-3y2), y(3x2-y2); c is 2 where the two real polynomials are Re and Im of (x + iy)^2 divided by 2).
+// A complex state is not one of the 30 real orbitals: it has its own id (>= kComplexBase) and shares its shell's radial part. The real orbitals and their indices are untouched.
+// Like psi(), the values are exact up to a constant that depends only on (l, |m|) (the app only ever uses ratios and |psi|^2). One electron, non-relativistic,
+// no fine structure: all l of one n have one energy, and so do all m of one l.
+constexpr int kComplexBase = 1000;
+int complexState(int shellOrb, int m);                 // the id of (the shell of real orbital shellOrb, m); -1 when m = 0 or |m| > l
+bool isComplexState(int id);
+int stateOrbital(int id);                              // the real orbital whose radial part, n and l the state shares (the id itself for a real orbital)
+int stateM(int id);                                    // m of a complex state, 0 for a real orbital
+bool oriIsComplex(const std::string& ori, int& m);     // "m+2" -> true, m = 2 (the Orientation setting's value)
+std::string oriKey(int m);                             // 2 -> "m+2", -1 -> "m-1"
+std::complex<double> angularComplex(int l, int m, double x, double y, double z);   // the angular part (with r^l), l = 1..3, m = +-1..+-l
+std::complex<double> psiComplex(int id, int Z, double x, double y, double z);      // psi of a complex state; x, y, z in Bohr radii
+double density(int id, int Z, double x, double y, double z);                       // |psi|^2 of a real orbital or a complex state
+std::string stateText(int id);                         // "2pz" or "2p (m = +1)"
 
 // ---- light: the reduced-mass Rydberg energy and the spectral lines ----
 double rydM(int Z, int N);                    // eV

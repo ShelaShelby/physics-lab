@@ -1,6 +1,7 @@
 #include "atom_view.h"
 #include "cloud_light.h"
 #include "outline.h"
+#include "phase_wheel.h"
 #include "quark_light.h"
 
 #include <algorithm>
@@ -224,13 +225,13 @@ QuarkPts quarkPts(const Nucleon& q, double X, double Y, double rn, double now, c
 
 
 // ---- the cloud's Glow style ----
-// One dot of the cloud on screen: its place, size, depth weight (1 = the plain dot) and the sign of the wave there.
-struct GlowDot { float x, y, r, wt; bool pos; };
+// One dot of the cloud on screen: its place, size, depth weight (1 = the plain dot) and the colour group (sign or phase) of the wave there.
+struct GlowDot { float x, y, r, wt; unsigned char g; };   // g: the dot's colour group (Sign: 0 = +, 1 = −; Wheel: the phase bin)
 
 // Draws the dots as soft round dots. Dark pages: the light adds up (additive), so dense places glow and thin ones fade. Light pages: ordinary
 // alpha blending with darker, more saturated colours (opacity builds up as 1 - exp(-light)). `base` is the brightest a single dot may be.
 // The exposure is chosen from the brightest 8 × 8 pixel place so it stays just under white; it is one number for all dots.
-void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bool light, Color cP, Color cN, double base, double w, double h, double& expo) {
+void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bool light, std::vector<Color> pal, bool darken, double base, double w, double h, double& expo) {
     if (D.empty()) return;
     constexpr int kCell = 8;
     const int gw = int(w / kCell) + 2, gh = int(h / kCell) + 2;
@@ -250,11 +251,14 @@ void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bo
     const double summed = double(peak) / (kCell * kCell) * cloudDotWeight(cap);   // per unit of dot light, as if the cloud had 12,000 dots
     const double e = cloudExposure(summed, light ? 2.4 : 1.0, base);
     expo = expo <= 0 || e < expo ? e : std::exp(0.85 * std::log(expo) + 0.15 * std::log(e));   // never brighter than the picture can show; slowly brighter again
-    if (light) { cP = Color{cP.r * 0.85f, cP.g * 0.85f, cP.b * 0.85f, 1}; cN = Color{cN.r * 0.85f, cN.g * 0.62f, cN.b * 0.45f, 1}; }   // darker, more saturated
+    if (light && darken) {                                                 // the Sign colours on a light page: darker, more saturated (the wheel has its own light-page colours)
+        const Color cP = pal[0], cN = pal[1];
+        pal[0] = Color{cP.r * 0.85f, cP.g * 0.85f, cP.b * 0.85f, 1}; pal[1] = Color{cN.r * 0.85f, cN.g * 0.62f, cN.b * 0.45f, 1};
+    }
     static std::vector<Blob> B;
     B.clear();
     B.reserve(D.size());
-    for (const GlowDot& d : D) B.push_back(soft(d.x, d.y, d.r, withA(d.pos ? cP : cN, cloudDotLight(cap, expo, base, d.wt))));
+    for (const GlowDot& d : D) B.push_back(soft(d.x, d.y, d.r, withA(pal[d.g], cloudDotLight(cap, expo, base, d.wt))));
     R.blobs(B.data(), int(B.size()), !light);
     B.clear();
 }
@@ -295,6 +299,14 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         std::vector<GlowDot> G;
         G.reserve(glow ? std::size_t(cnt) : 0);
         const Color cP = css.accent, cN = kPhaseNeg;
+        const bool wheel = lab.usesWheel();                                // Phase colours: Wheel (or a complex state) colours each dot by its phase, Sign by the sign of the wave
+        std::vector<Color> pal;
+        if (wheel) for (int g = 0; g < kPhaseBins; g++) { const PhaseRgb c = phaseRgb(phaseOfBin(g), css.light); pal.push_back(Color{c.r, c.g, c.b, 1}); }
+        else pal = {cP, cN};
+        const int ng = int(pal.size());
+        static std::vector<unsigned char> grp;                             // each dot's colour group
+        grp.resize(std::size_t(cnt));
+        for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = wheel ? (unsigned char)phaseBin(s.ph[std::size_t(i)]) : (unsigned char)(s.sg[i] > 0 ? 0 : 1);
         const bool outlineOn = p.outline == "On";
         const int fo = lab.fullOrb();
         const Color olCol = withA(css.fg, 0.6);                            // the 90 % outline: thin, the theme's text colour (light on dark pages, dark on light ones)
@@ -306,10 +318,10 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 if (dist > th) continue;
                 const double X = cx + s.pts[3 * i] * pxm, Y = cy - (hz ? s.pts[3 * i + 1] : s.pts[3 * i + 2]) * pxm;
                 if (X < -2 || X > w || Y < -2 || Y > h) continue;
-                if (glow) G.push_back({float(X), float(Y), 4.2f, float(1 - 0.6 * dist / th), s.sg[i] > 0});     // dots nearer the cut plane are brighter, as before
-                else B.push_back(square(X - 1 + 1.25, Y - 1 + 1.25, 1.25, withA(s.sg[i] > 0 ? cP : cN, 0.6 * (1 - 0.6 * dist / th) * cloudDotWeight(cap))));
+                if (glow) G.push_back({float(X), float(Y), 4.2f, float(1 - 0.6 * dist / th), grp[std::size_t(i)]});     // dots nearer the cut plane are brighter, as before
+                else B.push_back(square(X - 1 + 1.25, Y - 1 + 1.25, 1.25, withA(pal[grp[std::size_t(i)]], 0.6 * (1 - 0.6 * dist / th) * cloudDotWeight(cap))));
             }
-            if (glow) drawGlow(R, G, cap, css.light, cP, cN, 3.0, w, h, cloudExpo_);
+            if (glow) drawGlow(R, G, cap, css.light, pal, !wheel, 3.0, w, h, cloudExpo_);
             else R.blobs(B.data(), int(B.size()));
             B.clear();
             if (outlineOn) {                                               // the contour |psi|^2 = c in the cut plane (cached until the orbital or the cut changes)
@@ -323,17 +335,17 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             T.draw("x", gx + 34, gy + 4, 12, css.muted, 0.5);
             T.draw(hz ? "y" : "z", gx, gy - 32, 12, css.muted, 0.5);
         } else if (!d3) {                                                  // side view: drop y, plot (x, z)
-            for (int sgn : {1, -1}) {                                      // blue where the wave ψ is +, orange where it is −
-                const Color c = withA(sgn > 0 ? cP : cN, 0.3 * cloudDotWeight(cap));
+            for (int g = 0; g < ng; g++) {                                 // Sign: blue where the wave ψ is +, orange where it is −; Wheel: one colour per phase step
+                const Color c = withA(pal[g], 0.3 * cloudDotWeight(cap));
                 for (long i = 0; i < cnt; i++) {
-                    if (s.sg[i] != sgn) continue;
+                    if (grp[std::size_t(i)] != g) continue;
                     const double X = cx + s.pts[3 * i] * pxm - 1, Y = cy - s.pts[3 * i + 2] * pxm - 1;
                     if (!(X > -2 && X < w && Y > -2 && Y < h)) continue;
-                    if (glow) G.push_back({float(X + 1), float(Y + 1), 4.4f, 1.f, sgn > 0});
+                    if (glow) G.push_back({float(X + 1), float(Y + 1), 4.4f, 1.f, (unsigned char)g});
                     else B.push_back(square(X + 1, Y + 1, 1, c));
                 }
             }
-            if (glow) drawGlow(R, G, cap, css.light, cP, cN, 1.0, w, h, cloudExpo_);
+            if (glow) drawGlow(R, G, cap, css.light, pal, !wheel, 1.0, w, h, cloudExpo_);
             else R.blobs(B.data(), int(B.size()));
             B.clear();
             if (outlineOn)                                                 // the shadow of the 90 % region seen from the side
@@ -356,20 +368,20 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     if (std::isnan(v)) continue;
                     const float t = std::max(-1.f, std::min(1.f, v));          // -1 nearest, +1 farthest
                     const float near = 0.5f - 0.5f * t;                        // 1 near … 0 far
-                    G.push_back({PX[i], PY[i], 4.6f * (0.8f + 0.4f * near), 0.3f + 0.9f * near, s.sg[i] > 0});
+                    G.push_back({PX[i], PY[i], 4.6f * (0.8f + 0.4f * near), 0.3f + 0.9f * near, grp[std::size_t(i)]});
                 }
-                drawGlow(R, G, cap, css.light, cP, cN, 1.0, w, h, cloudExpo_);
+                drawGlow(R, G, cap, css.light, pal, !wheel, 1.0, w, h, cloudExpo_);
             } else {
             // three depth bands: far = faint and small, near = bright and larger
             const double bands[3][2] = {{0.15, 1.6}, {0.3, 2}, {0.55, 2.4}};
             for (int bnd = 0; bnd < 3; bnd++)
-                for (int sgn : {1, -1}) {
-                    const Color c = withA(sgn > 0 ? cP : cN, bands[bnd][0] * cloudDotWeight(cap));
+                for (int g = 0; g < ng; g++) {
+                    const Color c = withA(pal[g], bands[bnd][0] * cloudDotWeight(cap));
                     const double sz = bands[bnd][1];
                     for (long i = 0; i < cnt; i++) {
                         const float v = PD[i];
                         const bool in = bnd == 0 ? v > 0.35f : bnd == 1 ? (v <= 0.35f && v >= -0.35f) : v < -0.35f;
-                        if (s.sg[i] == sgn && in) B.push_back(square(PX[i], PY[i], sz / 2, c));
+                        if (grp[std::size_t(i)] == g && in) B.push_back(square(PX[i], PY[i], sz / 2, c));
                     }
                 }
             R.blobs(B.data(), int(B.size()));
@@ -396,6 +408,17 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 R.line(gx, gy, gx + 26 * x1, gy - 26 * up, 1.5, css.muted);
                 T.draw(names[a], gx + 34 * x1, gy - 34 * up + 4, 12, css.muted, 0.5);
             }
+        }
+        if (wheel) {                                                       // the legend: a ring of the phase colours, with 0, pi/2, pi, 3 pi/2 (the phase of the wave, not a place)
+            const double lx = w - 56, ly = 86, ro = 20;               // top right (bottom left has the ⓘ button and the scale bar, bottom right the axes)
+            for (int i = 0; i < 72; i++) {
+                const double a0 = 2 * kPi * i / 72, a1 = 2 * kPi * (i + 1.05) / 72;
+                const PhaseRgb c = phaseRgb(a0 + kPi / 72, css.light);
+                R.line(lx + ro * std::cos(a0), ly - ro * std::sin(a0), lx + ro * std::cos(a1), ly - ro * std::sin(a1), 6, Color{c.r, c.g, c.b, 1});
+            }
+            const struct { const char* t; double a; } marks[] = {{"0", 0}, {"π/2", kPi / 2}, {"π", kPi}, {"3π/2", 1.5 * kPi}};
+            for (const auto& mk : marks) T.draw(mk.t, lx + 34 * std::cos(mk.a), ly - 34 * std::sin(mk.a) + 4, 11, css.muted, 0.5);
+            T.draw("phase of ψ", lx, ly - 54, 11, css.muted, 0.5);
         }
     } else {                                                               // Orbit: the circle lies flat (x-y plane), projected so it can be turned
         auto op = [&](double x, double y, double& qx, double& qy) { const double x1 = x * ca - y * sa, y1 = x * sa + y * ca; qx = x1; qy = y1 * sb; };

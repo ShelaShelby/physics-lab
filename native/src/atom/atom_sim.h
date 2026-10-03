@@ -36,6 +36,7 @@ struct AtomParams {
     int speed = 5;                       // playback speed (Orbit view)
     std::string cstyle = "Classic";      // how the cloud's dots are drawn: Classic (the web's small hard dots) / Glow (soft dots that add up)
     std::string outline = "Off";         // 90 % outline on the cloud views: Off / On (atom/outline.h)
+    std::string phase = "Sign";          // Phase colours on the cloud views: Sign (two colours, the sign of the wave: today's look) / Wheel (the phase arg(psi), a colour ring)
     std::string cdens = "Normal";        // how many dots the cloud keeps: Normal 12,000 (the web's) / High 24,000 / Ultra 48,000
     // The struct's own values are the web's (the tests that compare the lab with the web's code step by step use them). What the app
     // starts with, and what "Defaults" gives, is this: the web's settings plus the glowing, denser cloud.
@@ -65,6 +66,7 @@ struct AtomState {
     std::deque<std::pair<double, double>> trail;   // its last 500 positions, m
     std::vector<float> pts;              // cloud dots, m (x, y, z for each of kCap)
     std::vector<signed char> sg;         // the sign of ψ at each dot (+1 / −1)
+    std::vector<float> ph;               // the phase arg(ψ) at each dot, radians in (−π, π]: 0 or π for a real orbital (its sign), the real phase for a complex state
     long k = 0;                          // dots recorded so far
     Vec3d w, w2;                         // the Metropolis walkers, in Bohr radii (see atom_core.h)
     double yaw = 0.6, pitch = 0.35;      // Cloud 3D view angles
@@ -165,7 +167,11 @@ public:
     bool moreShown() const { return s.more ? *s.more : viewW >= 760; }
 
     // ---- helpers the drawing needs too ----
-    int fullOrb() const;                                  // the orbital shown (shell + orientation)
+    int fullOrb() const;                                  // the orbital shown (shell + orientation); for a complex state: the real orbital the Orientation falls back to
+    int complexM() const;                                 // m of the complex state chosen in Orientation (+-1 .. +-l), 0 when a real orientation is chosen
+    int stateId() const;                                  // what the cloud shows: a complex state's id (atom_core.h), or fullOrb()
+    bool usesWheel() const { return p.phase == "Wheel" || complexM() != 0; }   // complex states always use the phase wheel
+    std::string stateText() const;                        // "2pz" or "2p (m = +1)"
     int fullOrb(const std::string& shell) const;
     double sizeM() const;                                 // the size the picture is fitted to, m
     double pxPerM(double m, std::optional<double> sz = std::nullopt) const;   // auto-fit points per metre
@@ -183,8 +189,8 @@ public:
 private:
     void init();                                          // the fields the web's init(p) sets
     void onParam(const std::string& key);
-    void walk(int orb, Vec3d& w, bool record);
-    void mcmc(bool record) { walk(fullOrb(), s.w, record); }
+    void walk(int orb, Vec3d& w, bool record);            // orb: a real orbital index or a complex state's id
+    void mcmc(bool record) { walk(stateId(), s.w, record); }
     void startJump(const std::string& kind, int to);
     void beginTransition(int from, int to);
     void manualJump(int dir);

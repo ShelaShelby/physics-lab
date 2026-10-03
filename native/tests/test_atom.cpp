@@ -6,16 +6,21 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cstdio>
+#include <algorithm>
+#include <complex>
 #include <string>
 #include <vector>
 
 #include "atom/atom_core.h"
 #include "atom/atom_learn.h"
 #include "atom/atom_sim.h"
+#include "atom/outline.h"
+#include "atom/phase_wheel.h"
 #include "orbit/format.h"
 
 #include "reference/atom_reference.inc"
 #include "reference/atom_learn_reference.inc"
+#include "reference/ylm_reference.inc"
 
 using namespace atom;
 
@@ -297,6 +302,323 @@ static void testLearn() {
     fmt::setImperial(false);
 }
 
+// ================= Complex orbitals and phase colours (0.10.2, stage 1) =================
+// States with a magnetic quantum number m = +-1..+-l (Condon-Shortley phase) made from the existing real angular parts. Checked against things that do not come from
+// the code: winding of the phase, the L_z eigenvalue, orthonormality by numerical integration, scipy's Y_lm, and the real orbitals' own densities.
+using Cd = std::complex<double>;
+static std::vector<int> complexIds() {                                // every complex state of every shell up to n = 4: id of (shell, m)
+    std::vector<int> ids;
+    for (int n = 2; n <= 4; n++)
+        for (int l = 1; l < n; l++) {
+            const int shell = orbIndex(std::to_string(n) + "spdf"[l]);
+            for (int m = 1; m <= l; m++) { ids.push_back(complexState(shell, m)); ids.push_back(complexState(shell, -m)); }
+        }
+    return ids;
+}
+
+static void testComplexBasics() {
+    const std::vector<int> ids = complexIds();
+    checkTrue("complex states: 2 per m: 2p (2); 3p, 3d (2 + 4); 4p, 4d, 4f (2 + 4 + 6) = 20 states", ids.size() == 20);
+    bool ok = true;
+    for (int id : ids) ok = ok && id >= kComplexBase && isComplexState(id) && stateM(id) != 0 && std::abs(stateM(id)) <= orbitals()[stateOrbital(id)].l;
+    checkTrue("complex states: ids are above kComplexBase and know their m and shell", ok);
+    checkTrue("complex states: none for m = 0 or |m| > l, and real orbitals are not complex", complexState(orbIndex("2p"), 0) < 0 && complexState(orbIndex("2p"), 2) < 0 && complexState(orbIndex("1s"), 1) < 0 && !isComplexState(orbIndex("4f|xyz")));
+    checkTrue("the 30 real orbitals are still the 30 real orbitals, in the same order", orbitals().size() == 30 && orbitals()[0].key == "1s|" && orbitals()[29].key == "4f|y3x2y2");
+    int m = 0; checkTrue("orientation keys: 'm+2' / 'm-3' are complex, 'xy' is not", oriIsComplex("m+2", m) && m == 2 && oriIsComplex("m-3", m) && m == -3 && !oriIsComplex("xy", m) && oriKey(1) == "m+1" && oriKey(-3) == "m-3");
+    for (const char* k : {"pAx", "dAx", "fAx"}) { checkTrue(std::string("the setting ") + k + " accepts m = +1 and still the real ones", AtomLab::validChoice(k, "m+1") && AtomLab::validChoice(k, "m-1")); }
+    checkTrue("settings: m = +-3 only for f, m = +-2 only for d and f", AtomLab::validChoice("fAx", "m+3") && !AtomLab::validChoice("dAx", "m+3") && AtomLab::validChoice("dAx", "m-2") && !AtomLab::validChoice("pAx", "m+2"));
+    checkTrue("the Phase colours setting: Sign (default) and Wheel, nothing else", AtomParams().phase == "Sign" && AtomParams::appDefaults().phase == "Sign" && AtomLab::validChoice("phase", "Wheel") && AtomLab::validChoice("phase", "Sign") && !AtomLab::validChoice("phase", "wheel") && !AtomLab::validChoice("phase", ""));
+}
+
+// (a) winding number: walk a circle round the z axis at fixed r and theta; the unwrapped arg(psi) changes by 2 pi m.
+static void testWinding() {
+    double worst = 0; int n = 0;
+    for (int id : complexIds()) {
+        const int m = stateM(id);
+        for (double r : {1.3, 2.7, 5.1}) {
+            const double th = 1.1;
+            double prev = 0, total = 0; bool first = true, usable = true;
+            const int steps = 720;
+            for (int k = 0; k <= steps; k++) {
+                const double ph = 2 * kPi * k / steps;
+                const Cd v = psiComplex(id, 1, r * std::sin(th) * std::cos(ph), r * std::sin(th) * std::sin(ph), r * std::cos(th));
+                if (std::abs(v) < 1e-9) { usable = false; break; }               // on a node: no phase to follow here
+                const double a = std::arg(v);
+                if (!first) { double d = a - prev; while (d > kPi) d -= 2 * kPi; while (d < -kPi) d += 2 * kPi; total += d; }
+                prev = a; first = false;
+            }
+            if (!usable) continue;
+            worst = std::max(worst, std::fabs(total - 2 * kPi * m)); n++;
+        }
+    }
+    std::printf("complex orbitals, winding: %d circles, largest |total phase change - 2 pi m| = %.2e rad\n", n, worst);
+    // limit 1e-9: the phase is exactly m*phi (+ a constant) and each of the 720 steps is far below pi, so only rounding (~1e-13 per step) remains.
+    checkTrue("winding: the phase changes by 2 pi m round the z axis, for every complex state (to 1e-9)", n >= 50 && worst < 1e-9);
+}
+
+// (b) L_z: -i d(psi)/d(phi) = m psi, by a central difference in phi.
+static void testLz() {
+    double worst = 0; int n = 0;
+    for (int id : complexIds()) {
+        const int m = stateM(id);
+        for (int k = 0; k < 12; k++) {
+            const double r = 0.8 + 0.7 * k, th = 0.4 + 0.19 * k, ph = 0.3 + 0.53 * k, d = 1e-5;
+            const auto at = [&](double f) { return psiComplex(id, 1, r * std::sin(th) * std::cos(f), r * std::sin(th) * std::sin(f), r * std::cos(th)); };
+            const Cd v = at(ph);
+            if (std::abs(v) < 1e-6) continue;
+            const Cd lz = Cd(0, -1) * (at(ph + d) - at(ph - d)) / (2 * d);
+            worst = std::max(worst, std::abs(lz - double(m) * v) / std::abs(v)); n++;
+        }
+    }
+    std::printf("complex orbitals, L_z: %d points, largest |(-i d/dphi) psi - m psi| / |psi| = %.2e\n", n, worst);
+    // limit 1e-7: the central difference's truncation error is d^2 m^3 / 6 = 1.7e-10 for m = 3 at d = 1e-5, its rounding error about 1e-16 / d = 1e-11.
+    checkTrue("L_z: -i d(psi)/d(phi) = m psi at many points (to 1e-7 relative)", n > 200 && worst < 1e-7);
+}
+
+// (c) normalised and orthogonal: integrals of conj(psi_a) psi_b over all space (midpoint rule in r, Gauss-Legendre in cos theta, uniform in phi).
+struct Quad { std::vector<double> r, wr, u, wu; int nphi; };
+static Quad makeQuad() {
+    Quad q; q.nphi = 24;
+    const int nr = 450, nu = 24; const double top = 60, dr = top / nr;
+    for (int i = 0; i < nr; i++) { q.r.push_back((i + 0.5) * dr); q.wr.push_back(dr); }
+    // Gauss-Legendre nodes by Newton's method on P_n
+    for (int i = 0; i < nu; i++) {
+        double x = std::cos(kPi * (i + 0.75) / (nu + 0.5)), dp = 1;
+        for (int it = 0; it < 100; it++) {
+            double p0 = 1, p1 = x;
+            for (int k = 2; k <= nu; k++) { const double p2 = ((2 * k - 1) * x * p1 - (k - 1) * p0) / k; p0 = p1; p1 = p2; }
+            dp = nu * (x * p1 - p0) / (x * x - 1);
+            const double dx = p1 / dp; x -= dx; if (std::fabs(dx) < 1e-15) break;
+        }
+        q.u.push_back(x); q.wu.push_back(2 / ((1 - x * x) * dp * dp));
+    }
+    return q;
+}
+static Cd overlap(const Quad& q, int a, int b) {                       // integral of conj(psi_a) psi_b dV, Z = 1
+    Cd s = 0;
+    for (std::size_t i = 0; i < q.r.size(); i++)
+        for (std::size_t j = 0; j < q.u.size(); j++) {
+            const double st = std::sqrt(1 - q.u[j] * q.u[j]);
+            Cd t = 0;
+            for (int k = 0; k < q.nphi; k++) {
+                const double f = 2 * kPi * (k + 0.5) / q.nphi, x = q.r[i] * st * std::cos(f), y = q.r[i] * st * std::sin(f), z = q.r[i] * q.u[j];
+                const Cd pa = isComplexState(a) ? psiComplex(a, 1, x, y, z) : Cd(psi(a, 1, x, y, z), 0), pb = isComplexState(b) ? psiComplex(b, 1, x, y, z) : Cd(psi(b, 1, x, y, z), 0);
+                t += std::conj(pa) * pb;
+            }
+            s += t * (2 * kPi / q.nphi) * q.wu[j] * q.r[i] * q.r[i] * q.wr[i];
+        }
+    return s;
+}
+static void testOrthonormal() {
+    const Quad q = makeQuad();
+    for (int n = 2; n <= 4; n++) {
+        std::vector<int> all;                                           // the complex states of shell family n and the real orbitals of the same n
+        for (int id : complexIds()) if (orbitals()[stateOrbital(id)].n == n) all.push_back(id);
+        const std::size_t nc = all.size();
+        for (int i = 0; i < int(orbitals().size()); i++) if (orbitals()[i].n == n) all.push_back(i);
+        std::vector<double> norm(all.size());
+        for (std::size_t i = 0; i < all.size(); i++) norm[i] = std::sqrt(overlap(q, all[i], all[i]).real());
+        double worstDiag = 0, worstCC = 0, worstDiffL = 0, worstComplete = 0;
+        for (std::size_t a = 0; a < nc; a++) {
+            const int la = orbitals()[stateOrbital(all[a])].l;
+            for (std::size_t b = 0; b < nc; b++) {                      // complex with complex: orthonormal
+                const Cd g = overlap(q, all[a], all[b]) / (norm[a] * norm[b]);
+                if (a == b) worstDiag = std::max(worstDiag, std::abs(g - 1.0)); else worstCC = std::max(worstCC, std::abs(g));
+            }
+            double sum = 0;                                             // complex with the real orbitals of the same n
+            for (std::size_t b = nc; b < all.size(); b++) {
+                const Cd g = overlap(q, all[a], all[b]) / (norm[a] * norm[b]);
+                if (orbitals()[all[b]].l != la) worstDiffL = std::max(worstDiffL, std::abs(g)); else sum += std::norm(g);
+            }
+            worstComplete = std::max(worstComplete, std::fabs(sum - 1));   // the state lies entirely in the span of the real orbitals of its own shell: sum of |overlap|^2 = 1
+        }
+        std::printf("complex orbitals, n = %d (%zu states): |<a|a> - 1| <= %.1e, |<a|b>| <= %.1e (complex-complex), <= %.1e (other l), |sum of squared overlaps with the shell's real orbitals - 1| <= %.1e\n",
+                    n, nc, worstDiag, worstCC, worstDiffL, worstComplete);
+        // limit 1e-3 (as the task says): the quadrature has 450 radial midpoints (step 0.13 a0), 24 Gauss points in cos theta (exact for polynomials of degree 47) and 24 in phi (exact for |m| <= 3 products), so the error for these smooth
+        // integrands is far below that; the 60 a0 cut-off leaves e^(-2*60/4) ~ 1e-13.
+        checkTrue("n = " + std::to_string(n) + ": complex states are normalised (|<a|a>/norm - 1| < 1e-3)", worstDiag < 1e-3);
+        checkTrue("n = " + std::to_string(n) + ": complex states are orthogonal to each other (< 1e-3)", worstCC < 1e-3);
+        checkTrue("n = " + std::to_string(n) + ": complex states are orthogonal to the real orbitals of another l (< 1e-3)", worstDiffL < 1e-3);
+        checkTrue("n = " + std::to_string(n) + ": each complex state lies in the span of the real orbitals of its own shell (sum of squared overlaps = 1, < 1e-3)", worstComplete < 1e-3);
+    }
+    // the real orbitals are still orthogonal to each other (the existing ones are not touched): 3p x, y, z and 3d xz with 3d z2
+    const int px = orbIndex("3p|x"), py = orbIndex("3p|y"), pz = orbIndex("3p|z"), dxz = orbIndex("3d|xz"), dz2 = orbIndex("3d|z2");
+    const double a = std::abs(overlap(q, px, py)) / std::sqrt(overlap(q, px, px).real() * overlap(q, py, py).real()), b = std::abs(overlap(q, pz, px)), c = std::abs(overlap(q, dxz, dz2));
+    checkTrue("the real orbitals stay orthogonal (3px-3py, 3pz-3px, 3dxz-3dz2; < 1e-3)", a < 1e-3 && b < 1e-3 && c < 1e-3);
+}
+
+// (d) Y_lm against scipy: our angular part = (a positive constant for each l, |m|) x r^l x Y_lm, so the ratio must be positive, real and the same in every direction.
+static void testAgainstScipy() {
+    double worstConst = 0, worstPhase = 0; int n = 0; bool equalPlusMinus = true;
+    for (const YRef& y : kYRef) {
+        double first = 0;
+        for (int k = 0; k < 6; k++) {
+            const double th = kYDir[k][0], ph = kYDir[k][1], r = 1.7;
+            const Cd mine = angularComplex(y.l, y.m, r * std::sin(th) * std::cos(ph), r * std::sin(th) * std::sin(ph), r * std::cos(th));
+            const Cd ref = std::pow(r, y.l) * Cd(y.re[k], y.im[k]);
+            if (std::abs(ref) < 1e-9) continue;                           // (a node of this state at that direction)
+            const Cd ratio = mine / ref;
+            worstPhase = std::max(worstPhase, std::fabs(ratio.imag()) / std::abs(ratio));   // 0 when the phase convention matches (the sign too: ratio > 0)
+            if (ratio.real() <= 0) worstPhase = 1;
+            if (first == 0) first = ratio.real(); else worstConst = std::max(worstConst, std::fabs(ratio.real() / first - 1));
+            n++;
+        }
+        if (y.m < 0) {                                                     // the +m and -m states have the same scale
+            for (const YRef& z : kYRef) if (z.l == y.l && z.m == -y.m) {
+                const Cd a = angularComplex(y.l, y.m, 1.0, 0.3, 0.5), b = angularComplex(z.l, z.m, 1.0, 0.3, 0.5);
+                equalPlusMinus = equalPlusMinus && std::fabs(std::abs(a) / std::abs(b) - 1) < 1e-12;
+            }
+        }
+    }
+    std::printf("complex orbitals vs scipy %s: %d values, ratio non-constant by at most %.1e, phase off by at most %.1e rad\n", "1.17.1 sph_harm_y", n, worstConst, worstPhase);
+    // limit 1e-12: scipy's values are given to 17 digits and our formula is a short polynomial, so only rounding remains.
+    checkTrue("Y_lm: our angular parts are scipy's Y_lm times a positive constant (same phase, Condon-Shortley), for l = 1..3, m = +-1..+-l", n > 60 && worstConst < 1e-12 && worstPhase < 1e-12);
+    checkTrue("Y_lm: the +m and -m states have the same size (Y_l,-m = (-1)^m conj(Y_lm))", equalPlusMinus);
+}
+
+// (e) |psi(m = +-1)|^2 = (|psi_x|^2 + |psi_y|^2) / 2 for p; and for every |m| the same with the real pair the state is made of.
+static void testDensityFromReal() {
+    double worst = 0;
+    for (int n = 2; n <= 4; n++)
+        for (int k = 0; k < 40; k++) {
+            const double x = 0.4 + 0.37 * k, y = -1.1 + 0.29 * k, z = 0.9 - 0.31 * k;
+            const int pShell = orbIndex(std::to_string(n) + "p"), px = orbIndex(std::to_string(n) + "p|x"), py = orbIndex(std::to_string(n) + "p|y");
+            const double want = (std::pow(psi(px, 1, x, y, z), 2) + std::pow(psi(py, 1, x, y, z), 2)) / 2;
+            for (int m : {1, -1}) worst = std::max(worst, std::fabs(std::norm(psiComplex(complexState(pShell, m), 1, x, y, z)) - want) / (std::fabs(want) + 1e-300));
+        }
+    // d and f: |psi(+-m)|^2 = (Re^2 + (c Im)^2) / 2 with the pair (Re, Im, c): d1 (xz, yz, 1), d2 (x2-y2, xy, 2), f1 (xz2, yz2, 1), f2 (zx2y2, xyz, 2), f3 (xx23y2, y3x2y2, 1)
+    struct Pair { const char* shell; int m; const char* re; const char* im; double c; } pairs[] = {
+        {"3d", 1, "3d|xz", "3d|yz", 1}, {"3d", 2, "3d|x2y2", "3d|xy", 2}, {"4d", 1, "4d|xz", "4d|yz", 1}, {"4d", 2, "4d|x2y2", "4d|xy", 2},
+        {"4f", 1, "4f|xz2", "4f|yz2", 1}, {"4f", 2, "4f|zx2y2", "4f|xyz", 2}, {"4f", 3, "4f|xx23y2", "4f|y3x2y2", 1}};
+    double worstD = 0;
+    for (const Pair& pr : pairs)
+        for (int k = 0; k < 40; k++) {
+            const double x = 0.5 + 0.41 * k, y = -0.7 + 0.23 * k, z = 1.3 - 0.37 * k;
+            const double want = (std::pow(psi(pr.re, 1, x, y, z), 2) + std::pow(pr.c * psi(pr.im, 1, x, y, z), 2)) / 2;
+            for (int s : {1, -1}) worstD = std::max(worstD, std::fabs(std::norm(psiComplex(complexState(orbIndex(pr.shell), s * pr.m), 1, x, y, z)) - want) / (std::fabs(want) + 1e-300));
+        }
+    std::printf("complex orbitals, density from the real ones: p: %.1e, d and f: %.1e (largest relative difference)\n", worst, worstD);
+    checkTrue("|psi(m = +-1)|^2 = (|psi_x|^2 + |psi_y|^2) / 2 for 2p, 3p, 4p (to 1e-12)", worst < 1e-12);
+    checkTrue("|psi(+-m)|^2 = (Re^2 + (c Im)^2) / 2 for the d and f states (to 1e-12)", worstD < 1e-12);
+}
+
+// (f) the real orbitals' dots are unchanged bit for bit, with Phase colours = Sign: the positions and signs of 4,800 dots (300 steps, seed 12345) hashed (FNV-1a 64) were
+// recorded from the code BEFORE this change (version 0.10.1). (The 17,818 existing checks also compare whole runs with the web version's.)
+static uint64_t fnv(const void* d, std::size_t n, uint64_t h = 1469598103934665603ULL) { const unsigned char* p = static_cast<const unsigned char*>(d); for (std::size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ULL; } return h; }
+static void testRealDotsUnchanged() {
+    struct C { const char* orb; const char* key; const char* ori; int Z; uint64_t hash; } cs[] = {
+{"2p", "pAx", "x", 1, 0x65b1818ec4437ad5ULL},   // 4800 dots
+    {"2p", "pAx", "z", 1, 0x30e2ae786ad49d82ULL},   // 4800 dots
+    {"3d", "dAx", "xz", 1, 0xea06110ad093f911ULL},   // 4800 dots
+    {"3d", "dAx", "x2y2", 2, 0x5a74c1621ce3d8f2ULL},   // 4800 dots
+    {"4f", "fAx", "xyz", 1, 0x50e7318a4f559379ULL},   // 4800 dots
+    {"3s", "", "", 1, 0xe6b701112cfefccdULL},   // 4800 dots
+    };
+    for (const C& c : cs) {
+        seedRandom(12345);
+        AtomLab lab; lab.nowMs = [] { return 0.0; };
+        lab.p = AtomParams(); lab.paused = false; lab.restart();
+        lab.setParam("view", std::string("Cloud")); lab.setParam("Z", double(c.Z)); lab.setParam("orb", std::string(c.orb));
+        if (*c.key) lab.setParam(c.key, std::string(c.ori));
+        for (int i = 0; i < 300; i++) lab.step(1.0 / 240);
+        uint64_t h = fnv(lab.s.pts.data(), lab.s.pts.size() * sizeof(float));
+        h = fnv(lab.s.sg.data(), lab.s.sg.size(), h);
+        checkTrue(std::string("real orbital dots unchanged (positions and signs) from 0.10.1: ") + c.orb + " " + c.ori + " Z=" + std::to_string(c.Z), h == c.hash);
+        // the new phase of each dot of a real orbital is 0 where the sign is + and pi where it is -
+        bool ok = lab.s.ph.size() == lab.s.sg.size();
+        for (std::size_t i = 0; ok && i < std::size_t(lab.s.k) && i < lab.s.sg.size(); i++) ok = lab.s.ph[i] == (lab.s.sg[i] > 0 ? 0.f : float(kPi));
+        checkTrue(std::string("real orbital dots carry phase 0 or pi matching their sign: ") + c.orb + " " + c.ori, ok);
+    }
+}
+
+// complex clouds: the dots carry arg(psi) of the state at their place; for 2p m = +-1 (no radial node, no theta sign change) that is m phi + (pi for +m)
+static void testComplexDots() {
+    for (int m : {1, -1}) {
+        seedRandom(777);
+        AtomLab lab; lab.nowMs = [] { return 0.0; };
+        lab.p = AtomParams(); lab.paused = false; lab.restart();
+        lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string("2p")); lab.setParam("pAx", oriKey(m));
+        for (int i = 0; i < 300; i++) lab.step(1.0 / 240);
+        const long cnt = std::min<long>(lab.s.k, long(lab.s.ph.size()));
+        double worst = 0, worstArg = 0; long usable = 0;
+        double sxx = 0, syy = 0, szz = 0;
+        for (long i = 0; i < cnt; i++) {
+            const double x = lab.s.pts[3 * i] / kA0, y = lab.s.pts[3 * i + 1] / kA0, z = lab.s.pts[3 * i + 2] / kA0;
+            sxx += x * x; syy += y * y; szz += z * z;
+            const double phi = std::atan2(y, x), want = m * phi + (m > 0 ? kPi : 0);
+            double d = std::fmod(lab.s.ph[i] - want, 2 * kPi); if (d > kPi) d -= 2 * kPi; if (d < -kPi) d += 2 * kPi;
+            worst = std::max(worst, std::fabs(d)); usable++;
+            const Cd v = psiComplex(complexState(orbIndex("2p"), m), 1, x, y, z);
+            double e = std::fmod(lab.s.ph[i] - std::arg(v), 2 * kPi); if (e > kPi) e -= 2 * kPi; if (e < -kPi) e += 2 * kPi;
+            worstArg = std::max(worstArg, std::fabs(e));
+        }
+        std::printf("complex 2p m = %+d cloud: %ld dots, phase vs m phi (+pi): %.1e rad, vs arg(psi) at the dot: %.1e rad; <x^2>:<y^2>:<z^2> = %.2f : %.2f : %.2f\n", m, usable, worst, worstArg, sxx / usable, syy / usable, szz / usable);
+        // limit 1e-4 rad: the dot positions are stored as 32-bit numbers (relative 6e-8), which moves the angle by about 1e-7.
+        checkTrue("complex 2p dots carry arg(psi): m phi (+ pi for m > 0), m = " + std::to_string(m), usable > 3000 && worst < 1e-4 && worstArg < 1e-4);
+        // the cloud is a doughnut round the z axis (|psi|^2 = f(r) sin^2(theta) for m = +-1): <x^2> = <y^2> (round the axis), both larger than <z^2> (flat)
+        // (2p m = +-1: exact ratios <x^2> : <y^2> : <z^2> = 1 : 1 : 0.5 for the density sin^2(theta) f(r); the dots are a Metropolis sample, so the limits are loose: 15 % on x:y, z below 0.7 of x)
+        checkTrue("complex 2p cloud: round the z axis (<x^2> = <y^2> within 15 %) and flat (<z^2> < 0.7 <x^2>)", std::fabs(sxx / syy - 1) < 0.15 && szz < 0.7 * sxx);
+    }
+}
+
+// the colour map: against scikit-image 0.26.0 (skimage.color.lab2rgb, D65, clipped to [0, 1]) for the same L*, C and hue; and it must be cyclic
+static void testPhaseWheel() {
+    struct Ref { bool light; int k; float rgb[3]; } ref[] = {
+        {false, 0, {1.0f, 0.5345799f, 0.6996457f}}, {false, 1, {1.0f, 0.5809391f, 0.4366234f}}, {false, 2, {0.8014520f, 0.6817521f, 0.3069459f}}, {false, 3, {0.5022609f, 0.7556829f, 0.4189309f}},
+        {false, 4, {0.0f, 0.7859955f, 0.6860444f}}, {false, 5, {0.0f, 0.7740075f, 0.9507833f}}, {false, 6, {0.3489737f, 0.7115779f, 1.0f}}, {false, 7, {0.8262902f, 0.6063740f, 0.9570877f}},
+        {true, 0, {0.8252200f, 0.2892619f, 0.4946457f}}, {true, 1, {0.7853675f, 0.3583448f, 0.2163298f}}, {true, 2, {0.5808809f, 0.4771553f, 0.0f}}, {true, 3, {0.2601518f, 0.5491062f, 0.1877637f}},
+        {true, 4, {0.0f, 0.5759984f, 0.4803519f}}, {true, 5, {0.0f, 0.5678036f, 0.7585976f}}, {true, 6, {0.0f, 0.5093147f, 0.8776893f}}, {true, 7, {0.6184071f, 0.3892127f, 0.7642639f}}};
+    double worst = 0;
+    for (const Ref& r : ref) {
+        const PhaseRgb c = phaseRgb(2 * kPi * r.k / 8, r.light);
+        worst = std::max({worst, double(std::fabs(c.r - r.rgb[0])), double(std::fabs(c.g - r.rgb[1])), double(std::fabs(c.b - r.rgb[2]))});
+    }
+    // cyclic, and the four marked phases (0, pi/2, pi, 3 pi/2) have clearly different colours
+    double cyc = 0, minApart = 9;
+    for (bool light : {false, true})
+        for (int k = 0; k < 40; k++) {
+            const double a = 0.37 * k - 5;
+            const PhaseRgb x = phaseRgb(a, light), y = phaseRgb(a + 2 * kPi, light);
+            cyc = std::max({cyc, double(std::fabs(x.r - y.r)), double(std::fabs(x.g - y.g)), double(std::fabs(x.b - y.b))});
+        }
+    for (bool light : {false, true})
+        for (int i = 0; i < 4; i++)
+            for (int j = i + 1; j < 4; j++) {
+                const PhaseRgb x = phaseRgb(i * kPi / 2, light), y = phaseRgb(j * kPi / 2, light);
+                minApart = std::min(minApart, std::sqrt(std::pow(x.r - y.r, 2) + std::pow(x.g - y.g, 2) + std::pow(x.b - y.b, 2)));
+            }
+    bool bins = true;
+    for (int b = 0; b < kPhaseBins; b++) bins = bins && phaseBin(phaseOfBin(b)) == b && phaseBin(phaseOfBin(b) + 2 * kPi) == b && phaseBin(phaseOfBin(b) - 2 * kPi) == b;
+    bins = bins && phaseBin(kPi) == kPhaseBins / 2 && phaseBin(-kPi) == kPhaseBins / 2 && phaseBin(0.0) == 0 && phaseBin(-1e-9) == 0;
+    std::printf("phase wheel: largest difference from scikit-image %.1e, cyclic to %.1e, nearest two of the four marked colours %.2f apart (sRGB)\n", worst, cyc, minApart);
+    // limit 2e-3: scikit-image inverts the sRGB matrix to more digits than the 4-digit matrix written here (about 1e-4 per channel), and both clip the same way.
+    checkTrue("phase wheel: colours equal scikit-image's CIELAB circle (2e-3)", worst < 2e-3);
+    checkTrue("phase wheel: cyclic (phase and phase + 2 pi give the same colour)", cyc < 1e-9);
+    // limit 0.25: the four marked hues are 90 degrees apart on a circle of chroma 52-58 (colour differences of 70-80 in L*a*b* units), far more than a visible step.
+    checkTrue("phase wheel: the four marked phases have clearly different colours (> 0.25 apart in sRGB)", minApart > 0.25);
+    checkTrue("phase wheel: the 24 colour bins are centred on their phases, wrap round, and pi is in bin 12", bins);
+}
+
+// the 90 % outline works for a complex state too: it holds 90 % of the probability (the grid's own count), is round about the z axis, and the density is as the cloud's
+static void testComplexOutline() {
+    const int id = complexState(orbIndex("2p"), 1), real = orbIndex("2p|z");
+    const Outline& O = outlineOf(id);
+    const double norm = orbitalNorm(id);
+    // the norm by another way: the numerical integral of |psi|^2 (Z = 1) over the sphere shell by shell: radial integral of r^2 R^2 times the angular mean of |A|^2 times 4 pi
+    double s = 0;
+    for (double r = 0.005; r < 40; r += 0.01) s += std::pow(radial(orbitals()[orbIndex("2p")], r), 2) * r * r * r * r * 0.01;     // r^(2l+2) with l = 1
+    // |A|^2 for m = +1: (x^2 + y^2) / 2 averaged over the sphere = r^2 / 3 (mean of sin^2(theta) = 2/3, halved): angular mean 1/3
+    const double expect = s * 4 * kPi / 3;
+    std::printf("complex 2p m = +1 outline: holds %.3f of the probability, reaches %.2f a0; norm %.6g, by hand %.6g\n", O.mass, O.rmax, norm, expect);
+    // limit 0.02 on the mass: the grid has 64 voxels per side, and the real orbitals' own outlines are held to the same reason (their mass is within the same few percent of 0.9)
+    checkTrue("complex 2p outline holds 90 % of the probability (0.88 to 0.92, from the 64^3 grid)", O.mass > 0.88 && O.mass < 0.92);
+    checkTrue("complex 2p norm equals the by-hand radial x angular integral (1e-3)", std::fabs(norm / expect - 1) < 1e-3);
+    checkTrue("complex 2p outline: a doughnut round z: its side view reaches farther across (x) than up (z)", outlineOf(real).rmax > 0 && O.rmax > 0);
+    double ax = 0, az = 0;
+    for (const OutSeg2& g : O.side) { ax = std::max({ax, double(std::fabs(g.x0)), double(std::fabs(g.x1))}); az = std::max({az, double(std::fabs(g.y0)), double(std::fabs(g.y1))}); }
+    checkTrue("complex 2p m = +1: the region is wider across than tall (|psi|^2 ~ sin^2(theta) f(r))", ax > az);
+}
+
 int main() {
     testElements();
     testNuclides();
@@ -306,6 +628,16 @@ int main() {
     testNuclei();
     testRuns();
     testLearn();
+    testComplexBasics();
+    testWinding();
+    testLz();
+    testOrthonormal();
+    testAgainstScipy();
+    testDensityFromReal();
+    testRealDotsUnchanged();
+    testComplexDots();
+    testPhaseWheel();
+    testComplexOutline();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

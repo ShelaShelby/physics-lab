@@ -274,6 +274,53 @@ double psi(int orb, int Z, double x, double y, double z) {
 }
 double psi(const std::string& key, int Z, double x, double y, double z) { return psi(orbIndex(key), Z, x, y, z); }
 
+// ---- complex orbitals (see atom_core.h) ----
+// For each l and |m|: which real angular polynomials are Re and Im (indices into angular()), and c.
+struct ComplexPair { int l, m, re, im; double c; };
+static const ComplexPair kPairs[] = {
+    {1, 1, 1, 2, 1},                       // x, y
+    {2, 1, 5, 6, 1}, {2, 2, 8, 7, 2},      // xz, yz;  x2-y2, xy
+    {3, 1, 10, 11, 1}, {3, 2, 13, 12, 2}, {3, 3, 14, 15, 1},   // xz2, yz2;  z(x2-y2), xyz;  x(x2-3y2), y(3x2-y2)
+};
+std::complex<double> angularComplex(int l, int m, double x, double y, double z) {
+    const int am = m < 0 ? -m : m;
+    for (const ComplexPair& p : kPairs) {
+        if (p.l != l || p.m != am) continue;
+        const std::complex<double> v(angular(p.re, x, y, z), (m < 0 ? -1.0 : 1.0) * p.c * angular(p.im, x, y, z));
+        return v * ((m > 0 && (am % 2)) ? -1.0 : 1.0) / std::sqrt(2.0);
+    }
+    return 0;
+}
+int complexState(int shellOrb, int m) {
+    if (shellOrb < 0 || shellOrb >= static_cast<int>(orbitals().size()) || m == 0) return -1;
+    const int l = orbitals()[shellOrb].l;
+    if (std::abs(m) > l) return -1;
+    return kComplexBase + shellOrb * 16 + (m + 8);
+}
+bool isComplexState(int id) { return id >= kComplexBase; }
+int stateOrbital(int id) { return isComplexState(id) ? (id - kComplexBase) / 16 : id; }
+int stateM(int id) { return isComplexState(id) ? (id - kComplexBase) % 16 - 8 : 0; }
+bool oriIsComplex(const std::string& ori, int& m) {
+    if (ori.size() != 3 || ori[0] != 'm' || (ori[1] != '+' && ori[1] != '-') || ori[2] < '1' || ori[2] > '3') return false;
+    m = (ori[1] == '-' ? -1 : 1) * (ori[2] - '0');
+    return true;
+}
+std::string oriKey(int m) { return std::string("m") + (m < 0 ? "-" : "+") + std::to_string(std::abs(m)); }
+std::complex<double> psiComplex(int id, int Z, double x, double y, double z) {
+    const Orbital& o = orbitals()[stateOrbital(id)];
+    return radial(o, Z * std::hypot(x, y, z)) * angularComplex(o.l, stateM(id), x, y, z) * std::pow(static_cast<double>(Z), o.l);
+}
+double density(int id, int Z, double x, double y, double z) {
+    if (!isComplexState(id)) { const double p = psi(id, Z, x, y, z); return p * p; }
+    return std::norm(psiComplex(id, Z, x, y, z));
+}
+std::string stateText(int id) {
+    const Orbital& o = orbitals()[stateOrbital(id)];
+    if (!isComplexState(id)) return o.txt;
+    const int m = stateM(id);
+    return o.shell + " (m = " + (m < 0 ? "−" : "+") + std::to_string(std::abs(m)) + ")";
+}
+
 // The dipole rule: light connects two orbitals only if the angular integral of
 // (orbital A) × (x, y or z) × (orbital B) over a sphere is not zero. Worked out numerically on
 // 1,500 evenly spread points (a Fibonacci sphere), as in the web.

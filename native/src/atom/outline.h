@@ -1,6 +1,7 @@
 // The 90 % outline of the electron cloud: the boundary of the smallest region that holds 90 % of the probability of finding the electron.
 // No graphics in here, so it can be tested.
 //
+// `orb` below is a real orbital's index or a complex state's id (atom_core.h): the region is {|psi|^2 >= c} for either.
 // The model is the one the cloud already uses (atom_core.h psi()): ONE electron, non-relativistic, hydrogen-like orbitals with the nuclear charge Z.
 // The region is {|psi|^2 >= c}, with c chosen so that the region holds exactly 90 % of the probability: for a fixed probability the region where the density
 // is highest is the one with the smallest volume (the standard textbook definition of "the boundary surface that contains 90 % of the electron density").

@@ -26,9 +26,9 @@ bool AtomLab::validChoice(const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> opts = {
         {"scale", {"Auto", "Fixed"}}, {"qstyle", {"Cinematic", "Accurate", "Classic"}}, {"detail", {"Valence", "+ Gluons", "+ Sea"}},
         {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice"}}, {"ostyle", {"Modern", "Bohr 1913"}},
-        {"orb", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"pAx", {"x", "y", "z"}}, {"dAx", {"z2", "xz", "yz", "xy", "x2y2"}},
-        {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2"}}, {"cutAxis", {"Vertical", "Horizontal"}},
-        {"cstyle", {"Classic", "Glow"}}, {"outline", {"Off", "On"}}, {"cdens", {"Normal", "High", "Ultra"}}};
+        {"orb", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"pAx", {"x", "y", "z", "m+1", "m-1"}}, {"dAx", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
+        {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2", "m+1", "m-1", "m+2", "m-2", "m+3", "m-3"}}, {"cutAxis", {"Vertical", "Horizontal"}},
+        {"cstyle", {"Classic", "Glow"}}, {"outline", {"Off", "On"}}, {"phase", {"Sign", "Wheel"}}, {"cdens", {"Normal", "High", "Ultra"}}};
     const auto it = opts.find(key);
     return it != opts.end() && std::find(it->second.begin(), it->second.end(), v) != it->second.end();
 }
@@ -48,7 +48,7 @@ void AtomLab::init() {
     const double k = double(o.n) / p.Z;
     s.t = 0; s.Zprev = p.Z; s.more = moreStored; s.pan = {}; s.panTo.reset(); s.dragMode = "rotate";
     s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a); s.trail.clear();
-    s.pts.assign(std::size_t(cloudCap()) * 3, 0.f); s.sg.assign(cloudCap(), 0); s.k = 0; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
+    s.pts.assign(std::size_t(cloudCap()) * 3, 0.f); s.sg.assign(cloudCap(), 0); s.ph.assign(cloudCap(), 0.f); s.k = 0; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
     s.trans.reset(); s.photon.reset(); s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
@@ -91,6 +91,7 @@ void AtomLab::setParam(const std::string& key, const std::string& v) {
     else if (key == "cstyle") p.cstyle = v;
     else if (key == "cdens") p.cdens = v;
     else if (key == "outline") p.outline = v;
+    else if (key == "phase") p.phase = v;
     else return;
     onParam(key);
 }
@@ -128,6 +129,14 @@ int AtomLab::fullOrb(const std::string& shell) const {
     return i >= 0 ? i : orbIndex(shell + "|" + def[o.l]);
 }
 int AtomLab::fullOrb() const { return fullOrb(p.orb); }
+int AtomLab::complexM() const {
+    const int l = orbitals()[orbIndex(p.orb)].l;
+    int m = 0;
+    if (l == 0 || !oriIsComplex(l == 1 ? p.pAx : l == 2 ? p.dAx : p.fAx, m) || std::abs(m) > l) return 0;
+    return m;
+}
+int AtomLab::stateId() const { const int m = complexM(); return m ? complexState(orbIndex(p.orb), m) : fullOrb(); }
+std::string AtomLab::stateText() const { return atom::stateText(stateId()); }
 
 // the size the picture is fitted to: Fixed uses one reference size (hydrogen n = 4 / 3s) for every atom and level
 static double fitSize(const AtomParams& p, double szM) { return p.scale == "Fixed" ? (p.view == "Orbit" ? 16 : 24) * kA0 : szM; }
@@ -150,16 +159,31 @@ double AtomLab::cutOffsetM() const { return p.cut * 0.5 * kExt[orbitals()[orbInd
 // One step: try a random move (a Gaussian step in each direction) and accept it with the odds
 // |ψ_new|² / |ψ_old|². The dots that pile up are spread like the electron's probability.
 void AtomLab::walk(int orb, Vec3d& w, bool record) {
-    const int n = orbitals()[orb].n;
+    const int n = orbitals()[stateOrbital(orb)].n;
     const double sg = 0.4 * n * (n >= 4 ? 1.8 : 1) / p.Z;     // bigger steps for the big n = 4 clouds, so the dots spread through them quickly
     auto gauss = [] { const double u = random(); return std::sqrt(-2 * std::log(1 - u)) * std::cos(2 * kPi * random()); };
     const double nx = w.x + sg * gauss(), ny = w.y + sg * gauss(), nz = w.z + sg * gauss();
+    if (isComplexState(orb)) {                                 // a complex state: the odds are |psi|^2 (same steps and random numbers as for a real orbital)
+        const double pOld = density(orb, p.Z, w.x, w.y, w.z), pNew = density(orb, p.Z, nx, ny, nz);
+        if (random() * pOld < pNew || pOld == 0) { w.x = nx; w.y = ny; w.z = nz; }
+        if (record) {
+            const long i = s.k % std::min<long>(cloudCap(), long(s.sg.size()));
+            const std::complex<double> v = psiComplex(orb, p.Z, w.x, w.y, w.z);
+            s.sg[i] = v.real() >= 0 ? 1 : -1;                  // (the sign of the real part: only used where a sign is wanted)
+            s.ph[i] = float(std::arg(v));                      // the phase of the wave here: the wheel colour
+            s.pts[3 * i] = float(w.x * kA0); s.pts[3 * i + 1] = float(w.y * kA0); s.pts[3 * i + 2] = float(w.z * kA0);
+            s.k++;
+        }
+        return;
+    }
     const double fo = psi(orb, p.Z, w.x, w.y, w.z), pOld = fo * fo;
     const double fn = psi(orb, p.Z, nx, ny, nz);
     if (random() * pOld < fn * fn || pOld == 0) { w.x = nx; w.y = ny; w.z = nz; }
     if (record) {
         const long i = s.k % std::min<long>(cloudCap(), long(s.sg.size()));   // (the arrays are sized by restart(); never write outside them)
-        s.sg[i] = psi(orb, p.Z, w.x, w.y, w.z) >= 0 ? 1 : -1;   // the sign of the wave here: the phase colour
+        const double pv = psi(orb, p.Z, w.x, w.y, w.z);
+        s.sg[i] = pv >= 0 ? 1 : -1;                            // the sign of the wave here: the phase colour
+        s.ph[i] = pv >= 0 ? 0.f : float(kPi);                  // the same as a phase: 0 or pi
         s.pts[3 * i] = float(w.x * kA0); s.pts[3 * i + 1] = float(w.y * kA0); s.pts[3 * i + 2] = float(w.z * kA0);
         s.k++;
     }
@@ -173,6 +197,7 @@ std::string AtomLab::lvl(int l) const { return p.view == "Orbit" ? "n=" + std::t
 std::vector<int> AtomLab::targets(int dir) const {          // dir −1: lower levels (emit), +1: higher levels (absorb)
     const int cur = curLevel(), n0 = lvlN(cur);
     std::vector<int> out;
+    if (p.view != "Orbit" && complexM() != 0) return out;      // a complex state: the dipole rule depends on the light's polarisation, which this lab does not model
     if (p.view == "Orbit") {
         for (int t = 1; t <= 4; t++) if (t != cur && (dir < 0 ? t < n0 : t > n0)) out.push_back(t);
         return out;
@@ -227,6 +252,11 @@ void AtomLab::manualJump(int dir) {
     if (s.trans || s.photon) return;
     const std::vector<int> list = targets(dir);
     const int cur = curLevel();
+    if (list.empty() && p.view != "Orbit" && complexM() != 0) {
+        s.msg = stateText() + " is a complex state. Photon jumps from it are not in the lab: which levels light can reach depends on the light's polarisation, which the lab does not model. Pick a real orientation (px, pz, ...) to emit or absorb.";
+        s.msgUntil = nowMs() + 6500;
+        return;
+    }
     if (list.empty()) {
         s.msg = dir < 0 ? (lvlN(cur) == 1 ? lvl(cur) + " is the lowest level: nothing to emit. Try Absorb."
                                            : lvl(cur) + " can't emit a photon (selection rule: l must change by 1), so it stays excited.")
@@ -484,7 +514,7 @@ std::string AtomLab::info1() {
         const std::string got = cnt > 300 ? fmtLen(sum / cnt * 1e10) : "…";
         const std::string th = fmtLen((3.0 * o.n * o.n - o.l * (o.l + 1)) / 2 / p.Z * kA0Ang);   // exact <r> for hydrogen-like atoms
         const double E = -0.5 * kHartreeEV * p.Z * p.Z / (o.n * o.n);
-        return head + "  ·  " + lvl(fullOrb()) + " orbital  ·  E −" + fmtEV(-E) + "  ·  avg r: sampled " + got + ", theory " + th;
+        return head + "  ·  " + stateText() + " orbital  ·  E −" + fmtEV(-E) + "  ·  avg r: sampled " + got + ", theory " + th;
     }
     const double r = std::hypot(s.x / kA0, s.y / kA0) * kA0Ang, E = orbitEnergyEV(s, p.Z);
     const double T = 2 * kPi * std::pow(p.n, 3) / (double(p.Z) * p.Z) * kAuTimeAs;   // the orbit's period, as
@@ -519,7 +549,7 @@ std::vector<std::string> AtomLab::info() {
         }
     }
     if (p.view == "Slice") lines.push_back("cut plane: " + std::string(p.cutAxis == "Horizontal" ? "z" : "y") + " = " + fmt::fixed(cutOffsetM() * 1e10, 2) + " Å");
-    if (p.view != "Orbit") lines.push_back("two colours = the + and − halves of the wave ψ (zero where they meet)");
+    if (p.view != "Orbit") lines.push_back(usesWheel() ? "colour = the phase of the wave ψ (see the colour ring); it is not a place" : "two colours = the + and − halves of the wave ψ (zero where they meet)");
     if (p.view != "Orbit" && p.outline == "On") {
         lines.push_back("thin line: the 90% outline (the electron is found inside it 90% of the time)");
         more.push_back(std::string(p.view == "Slice" ? "90% outline: the line where the cut plane crosses the 90% surface. " : p.view == "Cloud" ? "90% outline: the shadow of the 90% region seen from the side. " : "90% outline: faint lines across the 90% surface, turning with the cloud. ") + "One electron, non-relativistic, hydrogen-like orbital with nuclear charge " + std::to_string(p.Z) + ", the same model as the cloud. It is the boundary of the smallest region that holds 90% of the probability, which follows the orbital's real shape; atoms with more electrons have different shapes.");
@@ -565,7 +595,7 @@ std::string AtomLab::hint() const {
                            : p.view == "Cloud 3D" ? " Shift-drag or right-drag (or the ✥ button) moves the picture instead of rotating it."
                            : p.view == "Slice" ? " Drag up or down to slide the cut through the cloud. Shift-drag or right-drag (or the ✥ button) moves the picture." : "";
     if (p.view == "Slice")
-        return "A thin flat cut through the 3D cloud, seen face-on: only electron positions inside the slab are shown. Blue and orange are opposite signs of the wave (ψ); where they meet is a node, a place the electron is never found. Move the cut position to sweep the plane through the cloud. " + find + drag + note;
+        return "A thin flat cut through the 3D cloud, seen face-on: only electron positions inside the slab are shown. " + std::string(usesWheel() ? "The colours are the phase of the wave (ψ), shown by the colour ring; where the dots thin out to nothing is a node, a place the electron is never found." : "Blue and orange are opposite signs of the wave (ψ); where they meet is a node, a place the electron is never found.") + " Move the cut position to sweep the plane through the cloud. " + find + drag + note;
     if (p.view == "Cloud 3D") return "Drag to rotate; brighter dots are nearer. " + find + drag + note;
     if (p.view == "Cloud") return "Each dot is one possible position of the electron, sampled from |ψ|² (side view). There is no path, only probabilities. " + find + drag + note;
     std::string slow = fmt::jsToExponential(double(p.Z) * p.Z / (p.speed * kAuTimeAs * 1e-18), 0);

@@ -14,6 +14,11 @@
 - [ ] The Milky Way band at far zoom (about 9,200 and 13,000 AU across), 3D view turned to several angles: one stripe running right across, fading only at the edges.
 - [ ] The two secret themes, once unlocked, show their names in the Theme picker (not "???") and the cards still look right.
 
+## Try on the PC (0.10.2, stage 1: phase colours)
+- [ ] Atom Lab, Electron section: "Phase colours: Sign / Wheel". Sign must look exactly as before. Wheel: look at it on a dark theme AND a light theme, in Cloud, Cloud 3D and Slice, with Classic and Glow dots; the colour ring (0, π/2, π, 3π/2) shows top right.
+- [ ] Orientation of 2p, 3d and 4f now also has "m = +1", "m = −1" … (the 4f has m = ±1, ±2, ±3). Try Cloud 3D with the 4f m = +3 and m = −3 states: the colours should go round the z axis three times, in opposite directions for + and −.
+- [ ] Complex states always use the wheel; Emit/Absorb from them says why it is not offered. Check the text under the picture and the note under "Phase colours" read well, and that Defaults puts everything back.
+
 ## Still untested on a real PC from earlier versions
 - [x] Auto theme and motion following Windows.
 - [x] The settings file in %APPDATA%\PhysicsLab\PhysicsLab\settings.txt.

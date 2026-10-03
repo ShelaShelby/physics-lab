@@ -549,10 +549,16 @@ void atomPanel(AppState& app, float width) {
         selectRow(app, "orb", "Orbital", {{"1s", "1s · sphere"}, {"2s", "2s · sphere with a shell"}, {"2p", "2p · dumbbell"}, {"3s", "3s · sphere with two shells"}, {"3p", "3p · dumbbell with a shell"},
                                           {"3d", "3d · four lobes, or two and a ring"}, {"4s", "4s · sphere with three shells"}, {"4p", "4p · dumbbell with two shells"}, {"4d", "4d · d shape with a shell"}, {"4f", "4f · six or eight lobes"}}, p.orb);
         const int l = orbitals()[orbIndex(p.orb)].l;
-        if (l == 1) selectRow(app, "pAx", "Orientation", {{"x", "px · along x"}, {"y", "py · along y"}, {"z", "pz · along z (up)"}}, p.pAx);
-        if (l == 2) selectRow(app, "dAx", "Orientation", {{"z2", "dz² · two lobes and a ring"}, {"xz", "dxz · four lobes"}, {"yz", "dyz · four lobes"}, {"xy", "dxy · four lobes, flat"}, {"x2y2", "dx²−y² · four lobes on the axes"}}, p.dAx);
+        if (l == 1) selectRow(app, "pAx", "Orientation", {{"x", "px · along x"}, {"y", "py · along y"}, {"z", "pz · along z (up)"},
+                                                          {"m+1", "m = +1 · complex state: a doughnut round z; the phase turns once round the axis"}, {"m-1", "m = −1 · complex state: the same doughnut, the phase turns the other way"}}, p.pAx);
+        if (l == 2) selectRow(app, "dAx", "Orientation", {{"z2", "dz² · two lobes and a ring"}, {"xz", "dxz · four lobes"}, {"yz", "dyz · four lobes"}, {"xy", "dxy · four lobes, flat"}, {"x2y2", "dx²−y² · four lobes on the axes"},
+                                                          {"m+1", "m = +1 · complex state: the phase turns once round the z axis"}, {"m-1", "m = −1 · complex state: once round the z axis, the other way"},
+                                                          {"m+2", "m = +2 · complex state: the phase turns twice round the z axis"}, {"m-2", "m = −2 · complex state: twice round the z axis, the other way"}}, p.dAx);
         if (l == 3) selectRow(app, "fAx", "Orientation", {{"z3", "fz³ · two lobes and two rings"}, {"xz2", "fxz² · six lobes"}, {"yz2", "fyz² · six lobes"}, {"xyz", "fxyz · eight lobes"}, {"zx2y2", "fz(x²−y²) · eight lobes"},
-                                                          {"xx23y2", "fx(x²−3y²) · six lobes, flat"}, {"y3x2y2", "fy(3x²−y²) · six lobes, flat"}}, p.fAx);
+                                                          {"xx23y2", "fx(x²−3y²) · six lobes, flat"}, {"y3x2y2", "fy(3x²−y²) · six lobes, flat"},
+                                                          {"m+1", "m = +1 · complex state: the phase turns once round the z axis"}, {"m-1", "m = −1 · complex state: once round the z axis, the other way"},
+                                                          {"m+2", "m = +2 · complex state: the phase turns twice round the z axis"}, {"m-2", "m = −2 · complex state: twice round the z axis, the other way"},
+                                                          {"m+3", "m = +3 · complex state: the phase turns three times round the z axis"}, {"m-3", "m = −3 · complex state: three times round the z axis, the other way"}}, p.fAx);
     }
     if (p.view != "Orbit") {
         selectRow(app, "cstyle", "Cloud style", {{"Classic", "Classic · small hard dots, as in the web version"}, {"Glow", "Glow · soft dots that add up: dense places glow, thin places fade"}}, p.cstyle);
@@ -563,6 +569,13 @@ void atomPanel(AppState& app, float width) {
     if (p.view != "Orbit")
         selectRow(app, "outline", "90% outline", {{"Off", "Off · Shows where the electron is found 90% of the time (one-electron model)."},
                                                    {"On", "On · Thin line round the smallest region where the electron is found 90% of the time. One electron, hydrogen-like model; atoms with more electrons differ."}}, p.outline);
+    if (p.view != "Orbit") {
+        selectRow(app, "phase", "Phase colours", {{"Sign", "Sign · two colours: blue where the wave ψ is +, orange where it is −"},
+                                                   {"Wheel", "Wheel · a colour for every phase of the wave, shown by the colour ring in the corner"}}, p.phase);
+        mutedWrapped("What the colours mean: a wave rises and falls, and its phase says where in that cycle it is. The colour of a dot shows the phase of the wave there. It is not a place and not how likely the electron is there (that is how many dots there are). "
+                     "The orientations m = +1, −1, … are complex waves whose phase turns round the z axis (angular momentum about z of m ħ); they are mixtures of the real orientations and always use the wheel. "
+                     "One electron, non-relativistic, no fine structure: all l of one n have the same energy here, and so do all m.", 12.0f / 16);
+    }
     if (p.view == "Slice") {
         selectRow(app, "cutAxis", "Cut direction", {{"Vertical", "Vertical (contains the z axis)"}, {"Horizontal", "Horizontal (across the z axis)"}}, p.cutAxis);
         sliderRow(app, "cut", "Cut position (0 = through the nucleus)", fmt::jsString(p.cut), p.cut, -1, 1, 0.01, false);

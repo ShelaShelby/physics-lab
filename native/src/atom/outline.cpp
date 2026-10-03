@@ -45,14 +45,16 @@ void marching(const float* g, int nx, int ny, double c, double x0, double y0, do
         }
 }
 
-double angularMeanSq(int orb) {        // the average of A^2 over the sphere, A = the angular part of psi on the unit sphere: midpoint rule in cos(theta) (400) and phi (64)
-    const Orbital& o = orbitals()[orb];
+double angularMeanSq(int orb) {        // the average of |A|^2 over the sphere, A = the angular part of psi on the unit sphere: midpoint rule in cos(theta) (400) and phi (64)
+    const Orbital& o = orbitals()[stateOrbital(orb)];
     const int nu = 400, nphi = 64;
     double s = 0;
     for (int i = 0; i < nu; i++) {
         const double z = -1 + 2 * (i + 0.5) / nu, r = std::sqrt(std::max(0.0, 1 - z * z));
         for (int k = 0; k < nphi; k++) {
-            const double a = 2 * kPi * (k + 0.5) / nphi, A = angular(o.ang, r * std::cos(a), r * std::sin(a), z);
+            const double a = 2 * kPi * (k + 0.5) / nphi;
+            if (isComplexState(orb)) { s += std::norm(angularComplex(o.l, stateM(orb), r * std::cos(a), r * std::sin(a), z)); continue; }
+            const double A = angular(o.ang, r * std::cos(a), r * std::sin(a), z);
             s += A * A;
         }
     }
@@ -64,7 +66,7 @@ std::map<int, std::unique_ptr<Outline>>& cache() { static std::map<int, std::uni
 }  // namespace
 
 double orbitalNorm(int orb) {
-    const Orbital& o = orbitals()[orb];
+    const Orbital& o = orbitals()[stateOrbital(orb)];
     // |psi|^2 = radial(r)^2 × angular(x, y, z)^2, and angular is a polynomial of degree l in x, y, z: angular = r^l × A(unit vector)
     const double top = 2.5 * kExt[o.n] + 20, dr = 0.01;
     double s = 0;
@@ -78,7 +80,7 @@ const Outline& outlineOf(int orb) {
     if (it != m.end()) return *it->second;
     auto out = std::make_unique<Outline>();
     Outline& O = *out;
-    const Orbital& o = orbitals()[orb];
+    const Orbital& o = orbitals()[stateOrbital(orb)];
     const int N = kOutlineGrid;
     O.orb = orb;
     O.norm = orbitalNorm(orb);
@@ -88,7 +90,7 @@ const Outline& outlineOf(int orb) {
     std::vector<float> f(std::size_t(N) * N * N);
     for (int k = 0; k < N; k++)
         for (int j = 0; j < N; j++)
-            for (int i = 0; i < N; i++) { const double p = psi(orb, 1, at(i), at(j), at(k)); f[(std::size_t(k) * N + j) * N + i] = float(p * p); }
+            for (int i = 0; i < N; i++) f[(std::size_t(k) * N + j) * N + i] = float(density(orb, 1, at(i), at(j), at(k)));
     // the level: add the densest voxels first until they hold 90 % of the probability
     std::vector<float> sorted(f);
     std::sort(sorted.begin(), sorted.end(), std::greater<float>());
@@ -144,8 +146,7 @@ std::vector<OutSeg2> outlineSlice(int orb, bool horizontal, double offset, int n
     for (int b = 0; b < n; b++)
         for (int a = 0; a < n; a++) {
             const double u = -O.half + (a + 0.5) * h, v = -O.half + (b + 0.5) * h;
-            const double p = horizontal ? psi(orb, 1, u, v, offset) : psi(orb, 1, u, offset, v);   // horizontal: plane z = offset (x, y); vertical: plane y = offset (x, z)
-            g[std::size_t(b) * n + a] = float(p * p);
+            g[std::size_t(b) * n + a] = float(horizontal ? density(orb, 1, u, v, offset) : density(orb, 1, u, offset, v));   // horizontal: plane z = offset (x, y); vertical: plane y = offset (x, z)
         }
     marching(g.data(), n, n, O.c, -O.half + 0.5 * h, -O.half + 0.5 * h, h, [&](double x0, double y0, double x1, double y1) { out.push_back({float(x0), float(y0), float(x1), float(y1)}); });
     return out;

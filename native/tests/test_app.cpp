@@ -476,6 +476,8 @@ static const NativeEdit kEditsAbout[] = {
     {"About sources: the Real planet physics (GM values, the integrator, the Mercury check)", "(the moons: sizes and orbits)</li>", "(the moons: sizes and orbits)</li><li><a href=\"https://ssd.jpl.nasa.gov/astro_par.html\" target=\"_blank\" rel=\"noopener noreferrer\">NASA/JPL: astrodynamic parameters</a> (GM of the Sun and of each planet with its moons, DE440 values, for &ldquo;Planet physics: Real&rdquo;; read from an excerpt of the page)</li><li>Park et al., 2021, The Astronomical Journal: the DE440 and DE441 planetary and lunar ephemerides (the paper behind those DE440 values)</li><li><a href=\"https://doi.org/10.1086/115978\" target=\"_blank\" rel=\"noopener noreferrer\">Wisdom &amp; Holman, 1991: Symplectic maps for the N-body problem</a> (the method that moves the planets in &ldquo;Planet physics: Real&rdquo;)</li><li>Duncan, Levison &amp; Lee, 1998: A multiple time step symplectic algorithm for integrating close encounters (The Astronomical Journal; the variables that method is written in)</li><li>Bate, Mueller &amp; White, 1971: <i>Fundamentals of Astrodynamics</i> (moving a planet along its Kepler orbit with universal variables)</li><li>Clemence, 1947: The relativity effect in planetary motions (Reviews of Modern Physics; the 532 arcseconds per century of Mercury&rsquo;s perihelion advance from the other planets, used to check &ldquo;Planet physics: Real&rdquo;)</li>"},
         // 0.10.1: the sources of "General relativity (1PN)"
     {"About sources: general relativity for the planets (REBOUNDx potential, Nobili & Roxburgh, the published Mercury value)", "used to check &ldquo;Planet physics: Real&rdquo;)</li>", "used to check &ldquo;Planet physics: Real&rdquo;)</li><li><a href=\"https://github.com/dtamayo/reboundx/blob/main/src/gr_potential.c\" target=\"_blank\" rel=\"noopener noreferrer\">REBOUNDx, the file gr_potential.c</a> (Tamayo, Rein, Shi &amp; Hernandez, 2020, Monthly Notices of the Royal Astronomical Society 491, 2885: the simple potential of the Sun behind &ldquo;General relativity (1PN)&rdquo; for the planets; the formula was read in that source file)</li><li>Nobili &amp; Roxburgh, 1986: Simulation of general relativistic corrections in long term numerical integrations of planetary orbits (IAU Symposium 114; the idea of that potential; the paper itself was not read)</li><li><a href=\"https://arxiv.org/abs/1403.7377\" target=\"_blank\" rel=\"noopener noreferrer\">Will, 2014: The confrontation between general relativity and experiment</a> (Living Reviews in Relativity 17; Mercury&rsquo;s relativistic perihelion advance of 42.98 arcseconds per century, used to check &ldquo;General relativity (1PN)&rdquo;; read from a search excerpt, not from the paper)</li>"},
+    // 0.10.2: the sources of the complex orbitals and the phase colours
+    {"About sources: complex orbitals and the phase wheel (DLMF 14.30, SciPy, scikit-image, CIE L*a*b*)", "read from a search excerpt, not from the paper)</li>", "read from a search excerpt, not from the paper)</li><li><a href=\"https://dlmf.nist.gov/14.30\" target=\"_blank\" rel=\"noopener noreferrer\">NIST Digital Library of Mathematical Functions, section 14.30: spherical harmonics</a> (the definition and the Condon&ndash;Shortley phase of Y<sub>lm</sub> behind the complex orbitals m = +1, &minus;1, &hellip; in the Atom Lab; the page itself was not opened from the session that wrote this)</li><li>SciPy 1.17.1 (<code>scipy.special.sph_harm_y</code>) and scikit-image 0.26.0 (<code>skimage.color.lab2rgb</code>): used only in the tests, as independent checks of those spherical harmonics and of the phase colour wheel</li><li>CIE 1976 L*a*b* colour space and the sRGB standard (IEC 61966-2-1): the phase colour wheel is a circle of constant lightness in L*a*b*, so the colour shows the phase and not a brightness pattern (the formulas are the standard ones, written from knowledge, not looked up here)</li>"},
     {"About sources: the textbooks for the hydrogen-like orbitals", "(the 1913 paper behind the Bohr 1913 style)</li>", "(the 1913 paper behind the Bohr 1913 style)</li><li>Textbooks for the hydrogen-like orbitals (the average distance of the electron, the radial probability, the cloud tests): David J. Griffiths, <i>Introduction to Quantum Mechanics</i>; Hans A. Bethe and Edwin E. Salpeter, <i>Quantum Mechanics of One- and Two-Electron Atoms</i></li>"},
 };
 static const NativeEdit kEditSgrA = {"Sagittarius A* card: no Spacetime Lab", " (see the Spacetime Lab)", ""};
@@ -552,8 +554,8 @@ static void testNativeEdits() {
         checkTrue(n + "a button has an action and the other way round", (*kTimeline[i].button != 0) == (*kTimeline[i].lab != 0));
     }
     checkTrue("exactly one slingshot button in the web", slingshot == 1);
-    // every edit was used (nothing in the list is left over): units 1 + about 7 + sgra 1 + guide 8 + slingshot 1
-    checkTrue("every native edit was used", g_editUses == 1 + 7 + 1 + 8 + 1);
+    // every edit was used (nothing in the list is left over): units 1 + about 8 + sgra 1 + guide 8 + slingshot 1
+    checkTrue("every native edit was used", g_editUses == 1 + 8 + 1 + 8 + 1);
 }
 
 // ---- the frames-per-second counter text (the web: Math.round(frames * 1000 / ms) + ' fps') ----
@@ -1287,6 +1289,34 @@ static void testPlanetPhysics() {
 }
 
 // ---- 0.10.1: "General relativity (1PN)" for the Real planets ----
+// ---- 0.10.2 stage 1: the Atom Lab's "Phase colours" setting and the complex orientations ----
+static void testPhaseSetting() {
+    const atom::AtomParams web, app = atom::AtomParams::appDefaults();
+    checkStr("Phase colours: Sign by default (the web's struct and the app's defaults)", web.phase + "/" + app.phase, "Sign/Sign");
+    checkTrue("Phase colours: 'Sign' and 'Wheel' are accepted", atom::AtomLab::validChoice("phase", "Sign") && atom::AtomLab::validChoice("phase", "Wheel"));
+    checkTrue("Phase colours: a bad value is refused (the settings loader then keeps the default)", !atom::AtomLab::validChoice("phase", "Rainbow") && !atom::AtomLab::validChoice("phase", "wheel") && !atom::AtomLab::validChoice("phase", ""));
+    checkTrue("Orientation: m = +-1 is accepted for p, d and f; m = +-4 and m = 0 are not; m = +-3 not for d",
+              atom::AtomLab::validChoice("pAx", "m+1") && atom::AtomLab::validChoice("dAx", "m-2") && atom::AtomLab::validChoice("fAx", "m+3") &&
+              !atom::AtomLab::validChoice("fAx", "m+4") && !atom::AtomLab::validChoice("fAx", "m0") && !atom::AtomLab::validChoice("dAx", "m+3"));
+    Prefs p; p.atom = {{"phase", "Wheel"}, {"pAx", "m-1"}, {"cstyle", "Glow"}};
+    const Prefs q = loadPrefs(savePrefs(p));
+    checkTrue("Phase colours and a complex orientation go through the settings file unchanged", q.atom == p.atom && q.atom.at("phase") == "Wheel" && q.atom.at("pAx") == "m-1");
+    // Defaults puts it back: the app's Defaults assigns appDefaults() to the lab's settings
+    atom::AtomLab lab;
+    lab.p.phase = "Wheel"; lab.p.pAx = "m+1";
+    lab.p = atom::AtomParams::appDefaults(); lab.restart();
+    checkTrue("Defaults: Phase colours is Sign again and the orientation is back to the default", lab.p.phase == "Sign" && lab.p.pAx == "z" && lab.complexM() == 0 && !lab.usesWheel());
+    // the lab: a complex orientation turns the wheel on by itself, the real ones do not, and Sign stays Sign
+    lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string("3d"));
+    checkTrue("a real orientation with Sign does not use the wheel", !lab.usesWheel() && lab.complexM() == 0);
+    lab.setParam("dAx", std::string("m+2"));
+    checkTrue("a complex orientation (3d, m = +2) always uses the wheel, and says so", lab.complexM() == 2 && lab.usesWheel() && lab.p.phase == "Sign" && lab.stateText() == "3d (m = +2)");
+    lab.setParam("pAx", std::string("m-1"));                                   // the p setting does not matter while a d shell is shown
+    checkTrue("only the shown shell's orientation counts", lab.complexM() == 2);
+    lab.setParam("phase", std::string("Wheel")); lab.setParam("dAx", std::string("xy"));
+    checkTrue("Wheel with a real orientation uses the wheel", lab.usesWheel() && lab.complexM() == 0 && lab.stateText() == "3dxy");
+}
+
 static void testRelativity() {
     orbit::ViewSettings vs;
     checkTrue("General relativity (1PN): on by default (it only acts in Real)", vs.relativity);
@@ -1402,6 +1432,7 @@ int main() {
     testThemeGrid();
     testPlanetPhysics();
     testRelativity();
+    testPhaseSetting();
     testSunWobble();
     testLiveAndGpu();
     testNativeEdits();
