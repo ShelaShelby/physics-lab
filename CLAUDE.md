@@ -17,3 +17,5 @@
 - Be honest about limits: if a model is simplified (one electron, non-relativistic, test particles, approximate elements), the app text must say so. Never present an approximation as exact. If you find an error or doubtful value in existing code or text, do not hide it or silently change it: report it in REPORT.md with the source for the correct value.
 - Plans: see ROADMAP.md at the repo root (what is done and what is planned). Keep it up to date; do not promise anything that is not on it.
 - Every source used for a value, formula or method must also be listed in the About page, 'Where the facts come from'.
+
+Also add this line to CLAUDE.md: "While working, write one short plain-words sentence between steps saying what you are doing and why (the owner is not a programmer and follows along)."
