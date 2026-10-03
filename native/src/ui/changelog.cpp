@@ -17,6 +17,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.1", "General relativity, the Sun's wobble, and two fixes",
+     "With Planet physics set to Real there is a new tick box, \"General relativity (1PN)\" (on by default), that adds Einstein's first-order correction to the Sun's pull, so Mercury's "
+     "orbit turns about 43 arcseconds per century more, as measured. It is an approximation with the Sun's field only: it leaves out relativity between the planets, the Sun's spin and "
+     "shape, and higher orders. Also in Real: the picture is drawn round the true balance point (the barycentre) from the planets' motion, the Sun's own path round it is drawn as a "
+     "trail, and \"Exaggerate the Sun's wobble (x50)\" (on by default) draws that path 50 times too big so you can see it (it is labelled exaggerated, not to scale). "
+     "Fixed: the Milky Way band no longer stops in the middle of the sky or goes missing when you turn the 3D view (most of it had been dropped), and the two secret themes show "
+     "their names once unlocked instead of \"???\"."},
     {"0.10.0", "Planet physics: Simple or Real",
      "A new setting in the Orbit Lab, \"Planet physics\", has two choices. Simple (the default) is what the lab always did: every planet moves alone round the Sun and the planets do "
      "not pull on each other. Real lets the Sun and the eight planets pull on each other with Newtonian gravity, moved by a Wisdom-Holman integrator (a method made for planets). "

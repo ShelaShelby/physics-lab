@@ -1,13 +1,13 @@
 # Resume
 
 ## Current state
-- Version 0.10.0 alpha is the latest finished version.
-- The roadmap was updated after it. The next planned version is 0.10.1 (see ROADMAP.md).
+- Version 0.10.1 alpha is the latest finished version.
+- The roadmap was updated after it. The next planned version is 0.10.2 (see ROADMAP.md).
 - Test programs and their last known check counts:
-  - orbit_tests: 1,369
+  - orbit_tests: 1,377
   - atom_tests: 17,818
-  - app_tests: 1,332
-  - nbody_tests: 14
+  - app_tests: 1,357
+  - nbody_tests: 36
 
 ## How work flows
 - The owner pastes a written task into a new Claude Code session (Sonnet 5.5, branch box `native`).

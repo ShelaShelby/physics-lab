@@ -8,6 +8,12 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Try on the PC (0.10.1)
+- [ ] Planet physics Real: the "General relativity (1PN)" and "Exaggerate the Sun's wobble (×50)" tick boxes appear only in Real, their tooltips read well (hover), and they are still as you left them after closing and reopening the app. (Mercury's extra turn is only about 0.01 degrees per century: too small to see in the picture; the tests check it, not the eye.)
+- [ ] The Sun's wobble: in Real, run time at a fast Time speed and zoom in to the inner system: gold loops of the Sun's path round the Barycentre marker, labelled exaggerated.
+- [ ] The Milky Way band at far zoom (about 9,200 and 13,000 AU across), 3D view turned to several angles: one stripe running right across, fading only at the edges.
+- [ ] The two secret themes, once unlocked, show their names in the Theme picker (not "???") and the cards still look right.
+
 ## Still untested on a real PC from earlier versions
 - [x] Auto theme and motion following Windows.
 - [x] The settings file in %APPDATA%\PhysicsLab\PhysicsLab\settings.txt.
