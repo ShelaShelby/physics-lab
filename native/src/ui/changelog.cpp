@@ -21,7 +21,8 @@ const Entry kNative[] = {
      "The 🎨 Theme menu is now a grid of cards, three in a row, each with its colour dot, its name and a tick on the one in use; the short description of a theme shows when "
      "you hold the mouse over its card, and names are never cut off, even at Extra large text. In the Atom Lab the header button that used to say \"Update 7.7.3\" now says "
      "\"Web Atom Lab history 7.7.3\" (it shows the history of the web Atom Lab that this Atom Lab follows), and the window it opens has the same name. The nucleus label in the "
-     "Atom Lab (for example \"Cadmium-114 · 48p, 66n\") has a thin edge in the page colour, so it can be read over the electron cloud on dark and light themes."},
+     "Atom Lab (for example \"Cadmium-114 · 48p, 66n\") has a thin edge in the page colour, so it can be read over the electron cloud on dark and light themes. "
+     "Sources added to About: the papers behind the star masses and the textbooks for the hydrogen-like orbitals."},
     {"0.9.8", "A 90% outline for the electron cloud",
      "A new setting in the Atom Lab's Cloud, Cloud 3D and Slice views, \"90% outline\" (Off by default), draws a thin line round the smallest region where the electron is found "
      "90% of the time. It is not a sphere: for p, d and f orbitals it follows the real shape (dumbbells, rings, clovers), and an orbital with nodes can have several surfaces. "

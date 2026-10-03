@@ -448,7 +448,11 @@ static const NativeEdit kEditsAbout[] = {
     {"About sources: no Black holes, no Spacetime and real objects", "<div class=\"srcH\">🕳️ Black holes</div>", "", "<div class=\"srcH\">🌌 Stars and far-away things</div>"},
     // the Orbit Lab still says Sagittarius A* weighs 4.3 million Suns: that source stays, in the far-away things
     {"About sources: keep the GRAVITY Collaboration source (Sagittarius A*)", "(27,000 light years)</li></ul>",
-     "(27,000 light years)</li><li><a href=\"https://arxiv.org/abs/2112.07478\" target=\"_blank\" rel=\"noopener noreferrer\">GRAVITY Collaboration, 2022: mass distribution in the Galactic Centre</a> (Sagittarius A*, 4.3 million Suns)</li></ul>"},
+     "(27,000 light years)</li><li><a href=\"https://arxiv.org/abs/2112.07478\" target=\"_blank\" rel=\"noopener noreferrer\">GRAVITY Collaboration, 2022: mass distribution in the Galactic Centre</a> (the source of the Sagittarius A* mass shown in the Orbit Lab: 4.3 million Suns)</li><li><a href=\"https://arxiv.org/abs/1601.01636\" target=\"_blank\" rel=\"noopener noreferrer\">Pourbaix &amp; Boffin, 2016: Parallax and masses of alpha Centauri revisited</a> (the masses of Alpha Centauri A and B)</li><li><a href=\"https://arxiv.org/abs/1807.01318\" target=\"_blank\" rel=\"noopener noreferrer\">Zurlo et al., 2018: The gravitational mass of Proxima Centauri measured with SPHERE from a microlensing event</a> (the mass of Proxima Centauri)</li><li><a href=\"https://arxiv.org/abs/1703.10625\" target=\"_blank\" rel=\"noopener noreferrer\">Bond et al., 2017: The Sirius System and its Astrophysical Puzzles: Hubble Space Telescope and Ground-Based Astrometry</a> (the masses of Sirius A and B)</li><li><a href=\"https://arxiv.org/abs/1510.00485\" target=\"_blank\" rel=\"noopener noreferrer\">Bond et al., 2015: Hubble Space Telescope Astrometry of the Procyon System</a> (the masses of Procyon A and B)</li><li><a href=\"https://arxiv.org/abs/1206.6353\" target=\"_blank\" rel=\"noopener noreferrer\">Mamajek, 2012: On the Age and Binarity of Fomalhaut and its Giant Planet (ApJ 754, L20)</a> (the mass of Fomalhaut, worked out with stellar models)</li><li><a href=\"https://arxiv.org/abs/1109.4425\" target=\"_blank\" rel=\"noopener noreferrer\">Ram&iacute;rez &amp; Allende Prieto, 2011: Fundamental Parameters and Chemical Composition of Arcturus (ApJ 743, 135)</a> (the mass of Arcturus, worked out with stellar models)</li></ul>"},
+    // 0.9.9 stage 2: the other sources named in the code (the star masses in far_masses.h; the textbooks named in the cloud and outline tests)
+    {"About sources: a note on the star masses", "<div class=\"lrnP lrnMuted\">Distances of Polaris, Betelgeuse and Rigel are uncertain, so they are rounded.</div>",
+     "<div class=\"lrnP lrnMuted\">Distances of Polaris, Betelgeuse and Rigel are uncertain, so they are rounded.</div><div class=\"lrnP lrnMuted\">The star masses are published estimates, in solar masses, and some are uncertain; the Fomalhaut and Arcturus masses come from stellar models, not from measuring an orbit. The numbers were taken from the papers&rsquo; summaries and have not been checked against their tables. Stars whose mass could not be sourced show none.</div>"},
+    {"About sources: the textbooks for the hydrogen-like orbitals", "(the 1913 paper behind the Bohr 1913 style)</li>", "(the 1913 paper behind the Bohr 1913 style)</li><li>Textbooks for the hydrogen-like orbitals (the average distance of the electron, the radial probability, the cloud tests): David J. Griffiths, <i>Introduction to Quantum Mechanics</i>; Hans A. Bethe and Edwin E. Salpeter, <i>Quantum Mechanics of One- and Two-Electron Atoms</i></li>"},
 };
 static const NativeEdit kEditSgrA = {"Sagittarius A* card: no Spacetime Lab", " (see the Spacetime Lab)", ""};
 static const NativeEdit kEditGuideSky = {"Orbit guide, stars and far-away things: no Spacetime Lab", " (the Spacetime Lab shows what a black hole like it does)", ""};
@@ -524,8 +528,8 @@ static void testNativeEdits() {
         checkTrue(n + "a button has an action and the other way round", (*kTimeline[i].button != 0) == (*kTimeline[i].lab != 0));
     }
     checkTrue("exactly one slingshot button in the web", slingshot == 1);
-    // every edit was used (nothing in the list is left over): units 1 + about 3 + sgra 1 + guide 8 + slingshot 1
-    checkTrue("every native edit was used", g_editUses == 1 + 3 + 1 + 8 + 1);
+    // every edit was used (nothing in the list is left over): units 1 + about 5 + sgra 1 + guide 8 + slingshot 1
+    checkTrue("every native edit was used", g_editUses == 1 + 5 + 1 + 8 + 1);
 }
 
 // ---- the frames-per-second counter text (the web: Math.round(frames * 1000 / ms) + ' fps') ----

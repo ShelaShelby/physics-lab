@@ -21,3 +21,17 @@ Two attempts at the grid were blank mistakes of mine (the test popup opened at t
 
 ## Not tested
 - No Windows PC and no GPU: nothing about speed or the real-screen look.
+
+## Stage 2: sources added to the About page (same version, 0.9.9; no code or physics change)
+- **Added** to "Where the facts come from" (`app/app_text.inc`), in the same link style:
+  - Stars and far-away things: Pourbaix & Boffin 2016 (Alpha Centauri A, B; arXiv:1601.01636), Zurlo et al. 2018 (Proxima; arXiv:1807.01318), Bond et al. 2017 (Sirius A, B; arXiv:1703.10625), Bond et al. 2015 (Procyon A, B; arXiv:1510.00485), Mamajek 2012 (Fomalhaut, from stellar models; ApJ 754, L20; arXiv:1206.6353), Ramirez & Allende Prieto 2011 (Arcturus, from stellar models; ApJ 743, 135; arXiv:1109.4425). Each links to `https://arxiv.org/abs/<id>`; the ids are the ones written in `far_masses.h`.
+  - The existing GRAVITY Collaboration 2022 entry was **not** added again; its words now say it is the source of the Sagittarius A* mass (4.3 million Suns).
+  - A muted note: the masses are published estimates in solar masses, some uncertain, Fomalhaut and Arcturus come from stellar models, **the numbers were read from the papers' summaries and not checked against their tables** (as the 0.9.5 report says), and stars without a source show none.
+  - Atoms and particles: the two textbooks named in the 0.9.4 test comments, by author and title only: Griffiths, *Introduction to Quantum Mechanics*, and Bethe & Salpeter, *Quantum Mechanics of One- and Two-Electron Atoms*. No edition, chapter or equation numbers (they were never checked), and no link.
+- **Left out, and why:**
+  - **The galactic centre and north galactic pole** used for the Milky Way band (`kGalCentre`, `kGalPole` in `sky_data.inc`): the comment there names no source (the file is generated from the web version, which names none either). In 0.9.5 I checked them against the standard J2000 values quoted from memory, which is not a source I can name, so nothing was added.
+  - **The 90% region** (0.9.8): the code (`outline.h`) calls it "the standard textbook definition" but names no book, so no source was invented for it.
+  - Sources the code names only for the Orbit/Atom physics before 0.9.4 were not looked at (outside this task).
+- **Test reference changed on purpose:** "About page (the web's, with the native edits)" in `app_tests` builds the expected About from the web text plus a list of native edits. The existing GRAVITY edit now has the new wording and the six star entries after it, and two edits were added (the masses note after the "Distances of Polaris..." line, the textbooks after the Bohr 1913 entry). The counter "every native edit was used" went from 3 to 5 About edits. No check was loosened: the expected text is word for word the new About text.
+- `CLAUDE.md`: the rule that every source must also be listed in the About page. The 🕰 0.9.9 entry has one more line ("Sources added to About...").
+- **Tests** (full suite once, before the commit): `orbit_tests` 1,369, `atom_tests` 17,818, `app_tests` 1,321, all pass. The look of the About page was not checked on screen (no new screenshot).
