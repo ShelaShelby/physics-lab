@@ -15,7 +15,8 @@
 
 - Accuracy bar: this app is meant to be accurate enough for university students and PhD-level learners. Every value, formula and calculation must be correct and traceable. Take values from named sources (NIST/CODATA, NASA/JPL, NUBASE and so on) and put the source in a code comment. Never invent or guess a number, a reference value or a test expectation: if a source cannot be reached, say so and leave it out. Tests should check against independent references (known values, conservation laws, published data), not only against our own earlier output.
 - Be honest about limits: if a model is simplified (one electron, non-relativistic, test particles, approximate elements), the app text must say so. Never present an approximation as exact. If you find an error or doubtful value in existing code or text, do not hide it or silently change it: report it in REPORT.md with the source for the correct value.
-- Plans: see ROADMAP.md at the repo root (what is done and what is planned). Keep it up to date; do not promise anything that is not on it.
+- Plans and state: ROADMAP.md (what is done and planned), RESUME.md (current state and how work flows), DECISIONS.md (what the owner decided), OWNER-TODO.md (things only the owner can do). Read them only when the task says so, except that you update RESUME.md 'Current state' at the end of each version. Add anything the owner must do (for example a test on a real PC) to OWNER-TODO.md. Do not promise anything that is not on the roadmap.
+- Tests first: for new physics or logic, write the tests from independent references first, then the code. If a test has to change, say why in REPORT.md.
 - Every source used for a value, formula or method must also be listed in the About page, 'Where the facts come from'.
 
-Also add this line to CLAUDE.md: "While working, write one short plain-words sentence between steps saying what you are doing and why (the owner is not a programmer and follows along)."
+- While working, write one short plain-words sentence between steps saying what you are doing and why (the owner is not a programmer and follows along).
