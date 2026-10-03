@@ -1,7 +1,7 @@
 # Owner to-do (things only the owner can do)
 
 ## Try on the PC
-- [ ] Benchmark input lock: wheel, drag, click, Space and F11 do nothing while it runs; only Cancel and Esc work.
+- [x] Benchmark input lock: wheel, drag, click, Space and F11 do nothing while it runs; only Cancel and Esc work.
 - [ ] Milky Way band and star mass labels.
 - [ ] Quarks on light themes.
 - [ ] The 90% outline: Cloud side view, Slice on a dark theme, the 4f orbital.
