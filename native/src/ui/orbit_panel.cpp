@@ -18,6 +18,7 @@
 #include "orbit/format.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
+#include "orbit/today.h"
 #include "orbit/units.h"
 
 namespace ui {
@@ -36,17 +37,9 @@ void setZoom(AppState& app, double zoom) {
     app.set.zoom = zoom;
 }
 
-// Today: the Time speed is the user's own and is not touched (Defaults puts it back itself).
-void resetToToday(AppState& app) {
-    app.sys.loadAt(nowUnixMs());
-    app.sys.jumped = false;
-    app.set.zoom = kZoomDefault;
-    app.set.moons = app.set.dwarfs = app.set.comets = app.set.belts = true;
-    app.view.sel = Selection{};
-    app.view.follow = false;
-    app.view.ox = app.view.oy = 0;
-    app.view.cdep = 0;
-}
+// Today: only the date (and the selection, Follow and moved view) go back; the zoom, the four switches and the Time speed are the user's own
+// (orbit/today.h; Defaults puts them back itself).
+void resetToToday(AppState& app) { orbit::backToToday(app.sys, app.set, app.view, nowUnixMs()); }
 
 // "1 s = 29.1 days": what the Time speed slider means (as in the web version)
 std::string tspeedText(double v) {

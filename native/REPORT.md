@@ -1,24 +1,19 @@
-# Native Physics Lab 0.9.6 (alpha) — report
+# Native Physics Lab 0.9.7 (alpha) — report
 
-Atom Lab: quarks readable on light themes. Drawing only: no physics, sizes, positions or texts changed. Older reports are in git history. `index.html` was not touched.
+Housekeeping. No physics changes; the only code change is Part D. Older reports are in git history. `index.html` was not touched.
 
-## What changed (`atom/atom_view.cpp`, new `atom/quark_light.h`)
-- **Where the backdrops were.** Both dark backdrops (a dark disc behind a whole nucleus in the Cinematic quark view, and one behind each nucleon) are drawn **only for Cinematic quarks**, not for Classic or Accurate (those had none). Cinematic is the default quark style.
-- **Light themes (Light, Paper: the only two with a light page; Monochrome also counts as light):** no backdrop. The quarks, their halos, the gluon field, the gluon passing a colour, the sea pairs and the quark points are drawn with ordinary alpha blending instead of added-up light, in colours mixed 35 % towards black (`kLightQuarkDark`; the same idea as the cloud glow in `cloud_light.h`). The "u / d" letters use the theme's text colour there (they were white on the backdrop). The Accurate style on a light page gets the darker colours too (its blending was already ordinary).
-- **Dark themes: not changed, on purpose, including the backdrop.** The task says both "remove both backdrops" and "dark themes: keep the glow exactly as it looks today". I kept the second: on a dark page the backdrop also hides the nucleon's own pink/grey disc behind the glow, so removing it would change today's look. If you want it gone on dark themes too, it is the two `!css.light` / `add` conditions in the code. Dark colours and blending are the same numbers as before (the colour constants moved to `quark_light.h`).
-- **No "Quark backdrop" setting added:** every light theme looked acceptable, so, as the task says, there is no setting.
-- Test hook only: `PL_ATOM_FOCUS` is now read before `PL_ATOM_DO` in `main.cpp`, so `PL_ATOM_DO=nucleon` can dive into a nucleon.
-- Version 0.9.6, 🕰 history entry, README.
+## What changed
+- **A. `ROADMAP.md`** (repo root) with the list you gave, in your order, each item marked planned or done, no dates, nothing added. One line in `CLAUDE.md` points to it. Two notes: it lists 0.9.5, 0.9.6 and 0.9.7 as "planned" because that is how you worded the order ("Done: 0.9.3, 0.9.4"), although 0.9.5 and 0.9.6 are already built and pushed; and the "code signing" item says only "planned".
+- **B. Release text** (`.github/workflows/native-windows.yml`, the "Publish to the latest release" step only). The title is now "Physics Lab native 0.9.7 alpha (latest build)". The version is read in the step from `native/CMakeLists.txt` (`project(... VERSION ...)`, the source of `PL_VERSION`) and the stage from `kStage` in `native/src/ui/changelog.cpp`: no second copy. The text names the version, commit and branch and has the Windows help. `--prerelease` is added only when the stage is `alpha` or `beta`; an empty stage gives the title without a stage and a normal release. The title, tag `latest` and link are otherwise as before.
+- **C. Windows help.** New section "If Windows warns you" in `native/README.md` and the same text in the release. It says plainly the app is not code-signed yet, that this is a reputation warning and not a virus found, how to Unblock the zip (Properties, Unblock, OK), and More info, Run anyway. The only thing said about signing is that it is on the roadmap.
+- **D. "Reset to today"** (`orbit/today.h`, `ui/orbit_panel.cpp`). It now sets only the date and time to now, and still clears selection, Follow, the moved view and the 3D depth. It no longer resets the **zoom** or the **Moons / Dwarfs / Comets / Belts** switches (the Time speed was already left alone since 0.9.3). The same function is used by the Journey "Today" jump and the Learn "Today" button. Defaults is unaffected: it first puts every setting back to `ViewSettings{}` (zoom -1.2, switches on, default Time speed), then calls it. The benchmark sets all of these itself. The app's start-up call changes nothing (fresh settings are already the defaults, and the saved ones are loaded after it).
+- Version 0.9.7, 🕰 history entry, README.
 
-## Tests (`app_tests` 1,180 checks; `orbit_tests` 1,369 and `atom_tests` 17,818 unchanged; all pass; no saved reference changed)
-- New: for every theme with a light page (Light, Paper, Monochrome), each of the three darkened colour charges is darker than the page and card and has a WCAG contrast ratio of at least 3:1 against both (and better than the undarkened colour); the three colour charges stay more than 80 apart in RGB. These are numbers; **they do not prove how it looks.**
-
-## Looked at (Linux, Xvfb, software OpenGL; Helium-4, one nucleon, "+ Sea" detail)
-Six images in two groups plus one that was wasted (the first two attempts were not at the quark zoom, so I fixed the test hook).
-- **Paper:** Cinematic: soft red, green and blue halos and bright coloured quarks with letters, no dark patch; the three colours are clearly different, in spite of Paper's red-brown accent. Accurate: small, pale points and rings; readable but faint. Classic: yellow and teal balls with grey tubes; fine.
-- **Light:** Cinematic: good, like Paper. Accurate: faint but readable (the colour dots are small).
-- **Dark:** Cinematic, Accurate, Classic: as before (the Cinematic backdrop is still there). The dark pictures were taken after the change but not compared with older pictures pixel by pixel (the flicker depends on the clock).
-- Not looked at: Monochrome (greys only: the three colour charges differ only in brightness there, as before), a second Paper size, other nuclei, and the final refactor (colour constants moved to a header) was checked by the build and the tests only, not by a new picture.
+## Tests (full suite run once before the commit: `orbit_tests` 1,369, `atom_tests` 17,818, `app_tests` 1,187; all pass; no saved reference changed)
+- New (7 checks): after a jump to another date with a changed zoom, the four switches off, a changed Time speed, 3D, a selection, Follow and a moved view, `backToToday` gives today's date (not "jumped", time 0), planets at the same positions as a fresh load at that date, zoom / switches / Time speed / 3D / far-away things unchanged, selection and Follow reset. The settings are passed as a const reference, so the function cannot change them; the test mostly guards against someone adding a reset later.
+- Not covered by a test: the buttons themselves (the panel code is not linked into the test programs).
 
 ## Not tested
-- No Windows PC and no GPU: nothing about speed or the real-screen look.
+- **The workflow was NOT run.** I could only check that the YAML parses and that the two regular expressions find "0.9.6" and "alpha" in the files (before the bump to 0.9.7). PowerShell is not installed here, so the PowerShell code (here-string, argument list, Pre-release flag) has never been executed. The owner's push is the test: check that the release is titled "Physics Lab native 0.9.7 alpha (latest build)", shows **Pre-release**, and that its text has the version, commit, branch and the Windows help.
+- Windows behaviour, SmartScreen and the Unblock steps are written from the common Windows procedure and were not tried here.
+- Nothing about speed.

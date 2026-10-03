@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.9.6 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
+Version **0.9.7 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -17,6 +17,18 @@ It is also attached to each workflow run:
    `native/`), or press **Run workflow** to start one by hand.
 3. When it is green, download **PhysicsLab-windows-x64** at the bottom of the run page,
    unzip it and run `PhysicsLab.exe`. No installer and no extra DLLs are needed.
+
+### If Windows warns you
+
+The app is **not code-signed yet** (code signing is on the roadmap, `../ROADMAP.md`). Because of that Windows may
+warn when you open it. This is a Windows reputation warning for an app it does not know; it does **not** mean a virus
+was found. Either:
+
+- **Unblock the zip before unzipping:** right-click `PhysicsLab-windows-x64.zip`, choose **Properties**, tick
+  **Unblock**, press **OK**, then unzip; or
+- when **"Windows protected your PC"** (SmartScreen) appears, click **More info**, then **Run anyway**.
+
+The same help is in the text of the `latest` release.
 
 One build takes roughly 5–10 minutes. GitHub counts minutes on Windows runners double for
 private repositories, so a build uses about 10–20 of the 2,000 free minutes a month.

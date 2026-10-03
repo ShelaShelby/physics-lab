@@ -55,7 +55,8 @@ jobs:
           path: out/
           retention-days: 30
 
-      # While the app is labelled alpha (kStage in src/ui/changelog.cpp) the release is marked Pre-release; change --prerelease and the title with it.
+      # The release title and text take the version from the same places the app does: the project VERSION in native/CMakeLists.txt (it becomes PL_VERSION)
+      # and kStage in native/src/ui/changelog.cpp. While kStage is "alpha" or "beta" the release is marked Pre-release.
       # Replace the release tagged "latest" with this build, so it is always on one fixed page:
       # https://github.com/<owner>/<repo>/releases/tag/latest
       - name: Publish to the "latest" release
@@ -63,10 +64,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ver = (Select-String -Path native/CMakeLists.txt -Pattern 'project\(PhysicsLabNative VERSION ([0-9.]+)').Matches[0].Groups[1].Value
+          $stage = (Select-String -Path native/src/ui/changelog.cpp -Pattern 'kStage = "([^"]*)"').Matches[0].Groups[1].Value
+          if (-not $ver) { throw "No version found in native/CMakeLists.txt" }
+          $label = if ($stage) { "$ver $stage" } else { $ver }
           Compress-Archive -Path out/* -DestinationPath PhysicsLab-windows-x64.zip -Force
           gh release delete latest --yes --cleanup-tag -R $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { Write-Host "No earlier 'latest' release to replace." }
-          $notes = "Newest Windows build of the native Physics Lab, from commit $($env:GITHUB_SHA.Substring(0,7)) on branch $env:GITHUB_REF_NAME. Download PhysicsLab-windows-x64.zip, unzip it and run PhysicsLab.exe."
-          gh release create latest PhysicsLab-windows-x64.zip -R $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Physics Lab native (latest build, alpha)" --notes $notes --prerelease
+          $notes = @"
+          Physics Lab native $label, newest Windows build, from commit $($env:GITHUB_SHA.Substring(0,7)) on branch $env:GITHUB_REF_NAME.
+
+          Download PhysicsLab-windows-x64.zip, unzip it and run PhysicsLab.exe.
+
+          If Windows warns you: the app is not code-signed yet, so Windows may show a reputation warning. This is not a sign that a virus was found. Before unzipping, right-click the zip, choose Properties, tick Unblock and press OK. Or, when "Windows protected your PC" (SmartScreen) appears, click More info, then Run anyway.
+          "@
+          $ghArgs = @('release', 'create', 'latest', 'PhysicsLab-windows-x64.zip', '-R', $env:GITHUB_REPOSITORY, '--target', $env:GITHUB_SHA, '--title', "Physics Lab native $label (latest build)", '--notes', $notes)
+          if ($stage -eq 'alpha' -or $stage -eq 'beta') { $ghArgs += '--prerelease' }
+          gh @ghArgs
           if ($LASTEXITCODE -ne 0) { exit 1 }
           exit 0

@@ -17,6 +17,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9.7", "Reset to today keeps your view choices",
+     "\"Reset to today\" (and the Today buttons in the Journey card and the Learn window) now sets only the date and time back to today, and clears the selection and Follow. "
+     "It no longer changes your zoom or the Moons, Dwarf planets, Comets and Belts switches (it already kept your Time speed). Defaults still puts everything back. "
+     "There is also a new roadmap file, ROADMAP.md, in the project, and the Windows download page is set up to say what the version is and how to get past Windows' warning for an app that is not code-signed yet."},
     {"0.9.6", "Quarks readable on light themes",
      "In the Atom Lab's quark zoom, the dark patch that was drawn behind the glowing quarks is gone on the light themes (Light and Paper), where it looked like a dark "
      "smudge. There the quarks, their halos, the gluon field and the sea pairs are drawn in darker, more saturated colours that read on a light page, and the red, green "

@@ -20,6 +20,7 @@
 #include "app/gpu_timer.h"
 #include "orbit/belts.h"
 #include "orbit/far_masses.h"
+#include "orbit/today.h"
 #include "atom/atom_bench.h"
 #include "atom/cloud_light.h"
 #include "atom/quark_light.h"
@@ -1025,6 +1026,30 @@ static void testQuarkLight() {
         checkTrue("colour charges " + std::to_string(a) + " and " + std::to_string(b) + " stay apart (RGB distance over 80)", std::sqrt(std::pow(d[a][0] - d[b][0], 2) + std::pow(d[a][1] - d[b][1], 2) + std::pow(d[a][2] - d[b][2], 2)) > 80);
 }
 
+// ---- 0.9.7: "Reset to today" keeps the zoom and the four switches (and the Time speed), and resets the date, the selection and Follow ----
+static void testResetToToday() {
+    orbit::SolarSystem sys;
+    orbit::ViewSettings set;
+    orbit::OrbitView view;
+    const int64_t picked = 1060000000000LL, today = 1790000000000LL;      // a jumped-to date, and "now" (fixed numbers for the test)
+    sys.loadAt(picked); sys.jumped = true;
+    set.zoom = 1.7; set.moons = false; set.dwarfs = false; set.comets = true; set.belts = false; set.tspeed = 1.25; set.view3D = true; set.far = false;
+    view.sel = orbit::Selection{orbit::Selection::Body, 3, 0}; view.follow = true; view.ox = 40; view.oy = -12; view.cdep = 5e9;
+    const orbit::ViewSettings before = set;
+    orbit::backToToday(sys, set, view, today);
+    checkTrue("date: the Solar System is loaded at today's date and no longer 'jumped'", sys.epochMs == today && !sys.jumped && sys.t == 0);
+    checkTrue("zoom is unchanged", set.zoom == before.zoom && set.zoom == 1.7);
+    checkTrue("Moons, Dwarfs, Comets, Belts are unchanged", set.moons == false && set.dwarfs == false && set.comets == true && set.belts == false);
+    checkTrue("Time speed, 2D/3D and Far-away things are unchanged", set.tspeed == before.tspeed && set.view3D == before.view3D && set.far == before.far);
+    checkTrue("selection and Follow are reset", view.sel.kind == orbit::Selection::None && !view.follow);
+    checkTrue("the moved view is back in the middle", view.ox == 0 && view.oy == 0 && view.cdep == 0);
+    // the bodies really are at today's positions: the same as a fresh load at that date
+    orbit::SolarSystem fresh; fresh.loadAt(today);
+    bool same = fresh.bodies.size() == sys.bodies.size();
+    for (std::size_t i = 0; same && i < fresh.bodies.size(); i++) same = fresh.bodies[i].pos.x == sys.bodies[i].pos.x && fresh.bodies[i].pos.y == sys.bodies[i].pos.y;
+    checkTrue("the planets are where a fresh load at today's date puts them", same);
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -1042,6 +1067,7 @@ int main() {
     testCloud();
     testFarMasses();
     testQuarkLight();
+    testResetToToday();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
