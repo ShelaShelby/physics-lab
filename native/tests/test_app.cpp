@@ -890,6 +890,11 @@ static void testCloud() {
         for (int i = 0; i < 100000 && U.s.k < 48000; i++) U.step(1.0 / 240);
         checkTrue("and refills to 48,000 after going back up", U.s.k == 48000);
     }
+    // Independent references (not our own earlier output): for a hydrogen-like atom the expectation value of the radius is
+    // <r> = (a0 / 2Z) [3 n^2 - l (l+1)]  (e.g. D. J. Griffiths, Introduction to Quantum Mechanics, 3rd ed., problem 6.? / Bethe & Salpeter, Quantum
+    // Mechanics of One- and Two-Electron Atoms, section 3), and the 2s radial function is R20 = (2 a0)^(-3/2) (2 - r/a0) exp(-r/2a0)
+    // (Griffiths eq. 4.? ; the node is at r = 2 a0 / Z), so P(r) = r^2 R20^2 = r^2 (2 - r)^2 exp(-r) / 8 in units of a0 for Z = 1.
+    // The chapter / equation numbers are NOT checked here (no access to the books in this session); the formulas themselves are standard.
     // the mean radius of the dots is the exact hydrogen-like value <r> = (3 n² − l (l+1)) / 2 · a0 / Z, to within 4 standard errors
     for (const char* orb : {"1s", "2s", "2p", "3d", "4f"}) {
         atom::AtomLab L;

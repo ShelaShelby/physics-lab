@@ -19,6 +19,7 @@ A glowing, denser electron cloud (Atom Lab: Cloud, Cloud 3D, Slice). Older repor
 - 2s node (r = 2 a0): a shell of width 0.3 a0 around it holds 0.00027 of the dots (exact 0.00015); the same-width shell at the density maximum (r = 5.236) holds 0.0556 (exact 0.0573). The node is empty to under 1/100 of the maximum; both agree with the exact radial density.
 - Total light = dots x light of one dot is equal at Normal, High, Ultra; the exposure function is bounded and monotonic; the peak light after exposure is the target at every density.
 - Settings: values and defaults, good and bad choices (`validChoice`), file round trip. Benchmark scene 3 gives the same dots as the older code.
+- Reference formulas (standard hydrogen-like results: <r> = a0 (3n^2 - l(l+1)) / 2Z, and the 2s radial density r^2 (2-r)^2 e^-r / 8 with its node at 2 a0): quoted in a test comment with the books they appear in; **the equation numbers there were not checked** (no book access in this session). The model itself stays simplified (one electron, non-relativistic hydrogen-like orbitals; the app text already says so for the cloud's "avg r" line); nothing in this version changes that.
 - They do **not** prove how it looks, that the blending is right, or any speed.
 
 ## Looked at (Linux, Xvfb, software OpenGL)
