@@ -17,6 +17,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.0", "Planet physics: Simple or Real",
+     "A new setting in the Orbit Lab, \"Planet physics\", has two choices. Simple (the default) is what the lab always did: every planet moves alone round the Sun and the planets do "
+     "not pull on each other. Real lets the Sun and the eight planets pull on each other with Newtonian gravity, moved by a Wisdom-Holman integrator (a method made for planets). "
+     "It leaves out relativity and the pull of moons, dwarf planets and asteroids on the planets, and the picture stays centred on the Sun. The start values are the lab's own simplified "
+     "orbital elements for 1 January 2026, not NASA's ephemeris, so far from that date the planets drift away from their true positions (Mercury by about 12 degrees in 1800). "
+     "Dates and Time speed work in both. The benchmark always uses Simple."},
     {"0.9.9", "Theme grid, clearer history button, readable nucleus label",
      "The 🎨 Theme menu is now a grid of cards, three in a row, each with its colour dot, its name and a tick on the one in use; the short description of a theme shows when "
      "you hold the mouse over its card, and names are never cut off, even at Extra large text. In the Atom Lab the header button that used to say \"Update 7.7.3\" now says "

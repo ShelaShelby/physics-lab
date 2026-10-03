@@ -194,6 +194,7 @@ int main(int, char**) {
     }
     if (const char* z = SDL_getenv("PL_ZOOM")) ui::setZoom(app, std::atof(z));
     if (SDL_getenv("PL_3D")) app.set.view3D = true;
+    if (const char* ph = SDL_getenv("PL_PHYSICS")) { bool r = false; if (orbit::planetPhysicsFromText(ph, r)) app.set.realPlanets = r; }   // for automatic checks: Planet physics Simple / Real
     if (const char* d = SDL_getenv("PL_DATE")) { int64_t ms; if (ui::parseDateTime(d, "12:00", ms)) std::printf("%s\n", ui::jumpToDate(app, ms).c_str()); else std::printf("not a date\n"); }
     if (SDL_getenv("PL_JOURNEY")) ui::journeyStart(app);
     if (const char* l = SDL_getenv("PL_LEARN")) app.learn = std::atoi(l);     // open a Learn guide (1, 2 or 3)
@@ -328,6 +329,7 @@ int main(int, char**) {
         ui::benchmarkTestHook(app);
         if (const char* at = SDL_getenv("PL_SAVE_IMAGE")) { static int n = 0; if (++n == std::atoi(at)) app.shot.requested = true; }   // for automatic checks: press 📷 Save image at frame n
         ui::benchmarkBeginFrame(app, renderer, fbW, fbH);   // a benchmark scene is set up here, before the frame
+        app.sys.setRealPlanets(app.set.realPlanets);        // Planet physics: Simple / Real (does nothing when it has not changed)
         // ---- time and physics (fixed steps, as in the web version) ----
         const Uint64 now = SDL_GetPerformanceCounter();   // the frame starts here
         const double frameDt = static_cast<double>(now - last) / SDL_GetPerformanceFrequency();

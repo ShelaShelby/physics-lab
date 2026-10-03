@@ -22,6 +22,7 @@
 #include "orbit/belts.h"
 #include "orbit/far_masses.h"
 #include "orbit/today.h"
+#include "orbit/nbody.h"
 #include "atom/atom_bench.h"
 #include "atom/cloud_light.h"
 #include "atom/outline.h"
@@ -1202,6 +1203,68 @@ static void testThemeGrid() {
     checkTrue("the app has 11 themes now (4 rows)", int(sizeof(kThemes) / sizeof(kThemes[0])) == 11 && app::gridRows(int(sizeof(kThemes) / sizeof(kThemes[0])), 3) == 4);
 }
 
+// ---- 0.10: "Planet physics: Simple / Real" ----
+static void testPlanetPhysics() {
+    orbit::ViewSettings vs;
+    checkTrue("Planet physics: Simple by default", !vs.realPlanets && std::string(orbit::planetPhysicsText(vs.realPlanets)) == "Simple");
+    bool real = false;
+    checkTrue("Planet physics: 'Real' and 'Simple' are accepted", orbit::planetPhysicsFromText("Real", real) && real && orbit::planetPhysicsFromText("Simple", real) && !real);
+    real = true;
+    checkTrue("Planet physics: bad values are refused and leave the value alone", !orbit::planetPhysicsFromText("real", real) && !orbit::planetPhysicsFromText("", real) && !orbit::planetPhysicsFromText("Fancy", real) && real);
+    Prefs p; p.orbit = {{"physics", "Real"}, {"zoom", "-2"}};
+    const Prefs q = loadPrefs(savePrefs(p));
+    checkTrue("Planet physics: goes through the settings file unchanged", q.orbit == p.orbit && q.orbit.at("physics") == "Real");
+    // Simple gives exactly the planet positions it gave before: the elements' positions, and switching Real on and off changes nothing
+    const int64_t ms = 1790000000000LL;
+    orbit::SolarSystem a, b;
+    a.loadAt(ms); b.loadAt(ms);
+    const double jd = ms / 86400000.0 + 2440587.5;
+    bool same = true;
+    for (std::size_t i = 0; i < 8; i++) { const orbit::State st = orbit::planetStateAt(i, jd); same = same && a.bodies[i].pos.x == st.pos.x && a.bodies[i].pos.y == st.pos.y && a.bodies[i].pos.z == st.pos.z && a.bodies[i].vel.x == st.vel.x; }
+    checkTrue("Simple: the planets start exactly at the orbital elements' state", same);
+    b.setRealPlanets(true);
+    bool differs = false;
+    for (std::size_t i = 0; i < 8; i++) differs = differs || b.bodies[i].pos.x != a.bodies[i].pos.x;
+    checkTrue("Real: the planets are somewhere else than Simple (the other planets' pulls and the start)", differs && b.realPlanets());
+    b.setRealPlanets(false);
+    same = true;
+    for (std::size_t i = 0; i < a.bodies.size(); i++) same = same && a.bodies[i].pos.x == b.bodies[i].pos.x && a.bodies[i].vel.y == b.bodies[i].vel.y;
+    checkTrue("switching Real on and back to Simple restores exactly the Simple positions", same && !b.realPlanets());
+    for (int k = 0; k < 50; k++) { a.step(0.25, -0.3); b.step(0.25, -0.3); }
+    same = true;
+    for (std::size_t i = 0; i < a.bodies.size(); i++) same = same && a.bodies[i].pos.x == b.bodies[i].pos.x && a.bodies[i].pos.z == b.bodies[i].pos.z;
+    checkTrue("Simple stepping after the switch is identical to Simple that never left", same);
+    // Real at the reference epoch is the start state; stepping and jumping follow the N-body clock
+    const double refMs = (orbit::kNBodyRefJD - 2440587.5) * 86400000.0;
+    orbit::SolarSystem c;
+    c.setRealPlanets(true);
+    c.loadAt(int64_t(std::llround(refMs)));
+    const orbit::NBodyState st0 = orbit::nbodyStartState();
+    same = true;
+    for (std::size_t i = 0; i < 8; i++) same = same && c.bodies[i].pos.x == st0.x[i + 1].x - st0.x[0].x && c.bodies[i].pos.y == st0.x[i + 1].y - st0.x[0].y && c.bodies[i].vel.z == st0.v[i + 1].z - st0.v[0].z;
+    checkTrue("Real at the reference epoch (2026-01-01) equals the start state (Sun-centred)", same);
+    for (int k = 0; k < 30; k++) c.step(1.0 / 60, 0.5);                       // about a year of simulated time
+    orbit::NBodyClock clock;
+    orbit::Vec3 x[orbit::kNBodies], v[orbit::kNBodies];
+    clock.stateAt(c.t, x, v);
+    double worst = 0;
+    for (std::size_t i = 0; i < 8; i++) worst = std::max(worst, orbit::length(c.bodies[i].pos - (x[i + 1] - x[0])) / orbit::length(c.bodies[i].pos));
+    checkTrue("Real: after stepping, the planets are where the N-body clock has them", worst < 1e-12 && c.t > 1e6);
+    const int64_t jump = 1000000000000LL;                                     // September 2001
+    c.loadAt(jump);
+    clock.stateAt((double(jump) - refMs) / 1000.0, x, v);
+    worst = 0;
+    for (std::size_t i = 0; i < 8; i++) worst = std::max(worst, orbit::length(c.bodies[i].pos - (x[i + 1] - x[0])) / orbit::length(c.bodies[i].pos));
+    checkTrue("Real: a jump to another date puts the planets where the N-body clock has them for that date", worst < 1e-12 && c.realPlanets());
+    for (int64_t when : {-5364662400000LL, 946728000000LL, 1790000000000LL, 4133894400000LL}) {      // 1800-01-01, 2000-01-01, Oct 2026, 2100-12-31
+        orbit::SolarSystem sa, sb;
+        sa.loadAt(when); sb.setRealPlanets(true); sb.loadAt(when);
+        double w = 0; std::size_t which = 0;
+        for (std::size_t i = 0; i < 8; i++) { const double d = orbit::length(sa.bodies[i].pos - sb.bodies[i].pos) / orbit::length(sa.bodies[i].pos); if (d > w) { w = d; which = i; } }
+        std::printf("  Real vs Simple (elements) at %s: biggest planet difference %.2e of its distance (%s)\n", fmt::dateUTC(when).c_str(), w, sa.bodies[which].name.c_str());
+    }
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -1222,6 +1285,7 @@ int main() {
     testResetToToday();
     testOutline();
     testThemeGrid();
+    testPlanetPhysics();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);

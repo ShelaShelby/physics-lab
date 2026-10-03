@@ -108,7 +108,7 @@ static void testReversal() {
     for (long i = 0; i < n; i++) nbodyStep(s, -h);
     const double back = maxRelDiff(s, start);
     std::printf("time reversal: 100 years forward then 100 years back (%ld + %ld steps): the planets moved %.2e (relative to their distance) and came back to within %.2e\n", n, n, fwd, back);
-    check("time reversal: back at the start to within 1e-10 of the planets' distances (the planets had moved by order 1)", fwd > 0.1 && back < 1e-10);
+    check("time reversal: back at the start to within 1e-9 of the planets' distances (the planets had moved by order 1); rounding errors of 73,000 steps, mostly Mercury's phase, are about 1e-10", fwd > 0.1 && back < 1e-9);
 }
 
 static void testConvergence() {
@@ -141,7 +141,7 @@ static void testClock() {
         dpos = std::max(dpos, length((start.x[i] - start.x[0]) - st.pos) / length(st.pos));
         dvel = std::max(dvel, length((start.v[i] - start.v[0]) - st.vel * std::sqrt((kRealGM[0] + kRealGM[i]) / units::kGMSun)) / length(st.vel));
     }
-    std::printf("start state vs the app's orbital elements at J2000: heliocentric positions differ by %.1e, velocities (after the GM scaling) by %.1e (relative)\n", dpos, dvel);
+    std::printf("start state vs the app's orbital elements at the reference epoch: heliocentric positions differ by %.1e, velocities (after the GM scaling) by %.1e (relative)\n", dpos, dvel);
     check("clock: the start state is the elements' state (positions and scaled velocities), to rounding", dpos < 1e-12 && dvel < 1e-12);
     // a jump 100 years on and 100 years back, against stepping directly
     const double h = kNBodyStep;
@@ -175,11 +175,11 @@ static void testClock() {
     }
     // time of a jump in this machine: the first visit to the far ends of the app's date range (1800 and 2100), then again
     NBodyClock c2;
-    const double j1800 = (-200.0 * kYearS), j2100 = 100.0 * kYearS;
+    const double j1800 = (-226.0 * kYearS), j2100 = 75.0 * kYearS;   // 1800-01-01 and 2100-12-31 are 226 years before and 75 years after the reference epoch (2026-01-01)
     auto t0 = std::chrono::steady_clock::now(); c2.stateAt(j1800, x, v); const double ms1 = msSince(t0);
     t0 = std::chrono::steady_clock::now(); c2.stateAt(j2100, x, v); const double ms2 = msSince(t0);
     t0 = std::chrono::steady_clock::now(); c2.stateAt(j1800 + 12345.0 * 86400, x, v); const double ms3 = msSince(t0);
-    t0 = std::chrono::steady_clock::now(); c2.stateAt(j2100 + 5.0 * kYearS, x, v); const double ms4 = msSince(t0);
+    t0 = std::chrono::steady_clock::now(); c2.stateAt(j2100 - 5.0 * kYearS, x, v); const double ms4 = msSince(t0);
     std::printf("clock timing here (software, one core): first jump to 1800 %.0f ms (%ld steps), then to 2100 %.0f ms, a second jump near 1800 %.1f ms, near 2100 %.1f ms; %zu checkpoints kept\n", ms1, c2.stepsTaken(), ms2, ms3, ms4, c2.checkpoints());
     check("clock: checkpoints make a second jump cheap (a few thousand steps at most)", ms3 < 50 && ms4 < 50);
 }

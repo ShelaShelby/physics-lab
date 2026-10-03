@@ -16,7 +16,7 @@ Plain list of what is done and what is planned. Nothing here has a date, and not
 (none left in the list)
 
 ## 0.10: real physics
-- Stage 1: real N-body planets as an option (setting "Planet physics: Simple / Real") — planned
+- Stage 1: real N-body planets as an option (setting "Planet physics: Simple / Real"; Simple stays the default) — done
 - Stage 2: general relativity for Mercury (about 43 arcseconds per century) and the Sun's wobble; Real becomes the default only if it is validated — planned
 - Stage 3: Atom Lab quantum beats, smooth photon jumps, phase colours — planned
 - Stage 4: real Moon positions and phases — planned

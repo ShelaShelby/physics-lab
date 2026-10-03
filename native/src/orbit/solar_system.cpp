@@ -84,6 +84,32 @@ void SolarSystem::loadAt(int64_t unixMs) {
     }
     for (Body& b : bodies) attachMoons(b);
     belts = makeBelts(unixMs);
+    if (real_) applyReal(0);
+}
+
+// the reference epoch of the N-body clock (Julian day kNBodyRefJD, 2026-01-01 12:00 UT) as Unix milliseconds
+static constexpr double kRefUnixMs = (kNBodyRefJD - 2440587.5) * 86400000.0;
+
+void SolarSystem::applyReal(double extra) {
+    Vec3 x[kNBodies], v[kNBodies];
+    nb_.stateAt((double(epochMs) - kRefUnixMs) / 1000.0 + t + extra, x, v);
+    for (std::size_t i = 0; i < kPlanetCount && i < bodies.size(); i++) {
+        if (bodies[i].type != BodyKind::Planet || bodies[i].name != kPlanets[i].name) continue;
+        bodies[i].pos = x[i + 1] - x[0];                 // the picture stays Sun-centred
+        bodies[i].vel = v[i + 1] - v[0];
+    }
+}
+
+void SolarSystem::realTrail(Body& b) {                   // a trail point every 2 % of the distance to the Sun, as the leapfrog does
+    const double r = length(b.pos), lim = 0.02 * (r > kSimLength ? r : kSimLength);
+    if (b.trail.empty() || length(b.pos - b.trail.back()) > lim) { b.trail.push_back(b.pos); if (b.trail.size() > 1000) b.trail.pop_front(); }
+}
+
+void SolarSystem::setRealPlanets(bool on) {
+    if (on == real_) return;
+    real_ = on;
+    if (on) applyReal(0);
+    else loadAt(currentUnixMs());                        // back to Simple: everything reloaded from the elements at the date shown
 }
 
 void SolarSystem::step(double dt, double tspeed) {
@@ -101,6 +127,7 @@ void SolarSystem::step(double dt, double tspeed) {
     // worked out once and reused (as in the web version 7.7).
     for (Body& b : bodies) {
         if (b.type == BodyKind::Comet) continue;          // comets follow their exact orbit (set below)
+        if (real_ && b.type == BodyKind::Planet) continue;   // Real: the planets come from the N-body clock (below)
         double x = b.pos.x, y = b.pos.y, z = b.pos.z, vx = b.vel.x, vy = b.vel.y, vz = b.vel.z;
         double r2 = x * x + y * y + z * z, r = std::sqrt(r2), q = -GM / (r2 * r + kSoftening);
         double ax = q * x, ay = q * y, az = q * z;        // acceleration, m/s²
@@ -128,12 +155,21 @@ void SolarSystem::step(double dt, double tspeed) {
     // bodies that hit the Sun or fly far away are removed
     bodies.erase(std::remove_if(bodies.begin(), bodies.end(), [&](const Body& b) {
                      if (b.type == BodyKind::Comet) return false;
+                     if (real_ && b.type == BodyKind::Planet) return false;
                      const double r = length(b.pos);
                      if (r < kCrashRadius) { crashed++; return true; }
                      if (r > kLostRadius) { escaped++; return true; }
                      return false;
                  }), bodies.end());
-    t += total;
+    if (real_) {                                          // the planets: walk to the new date in steps of about 2 days, with a trail point where needed
+        const int nSub = std::max(1, std::min(2000, static_cast<int>(std::ceil(total / (2 * kDay)))));
+        for (int k = 1; k <= nSub; k++) {
+            t += total / nSub;
+            applyReal(0);
+            for (Body& b : bodies) if (b.type == BodyKind::Planet) realTrail(b);
+        }
+    } else
+        t += total;
     const double jd = julianDay();
     for (Body& b : bodies)
         if (b.type == BodyKind::Comet) {

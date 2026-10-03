@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.9.9 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
+Version **0.10.0 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -100,6 +100,7 @@ Each lab keeps its state while the other one is on screen.
 - **Facts**: click a planet, moon, comet, the Sun or the barycentre. The first click
   afterwards closes the box. **Go to** tiles fly to a body and keep it in the middle.
 - **3D**: View card → 3D. Drag turns the view; right-drag or Shift-drag moves it.
+- **Planet physics** (Orbit panel, Simple / Real, default Simple): Real lets the Sun and the eight planets pull on each other (Newtonian gravity, a Wisdom-Holman integrator with a one-day step, `src/orbit/nbody.*`). No relativity, no effect of moons or asteroids on the planets, and the start values are the app's simplified orbital elements for 1 January 2026, not JPL's ephemeris, so far from that date the planets drift from their true positions. Moons, dwarf planets, comets and belts move as in Simple.
 - **Sky** card: stars, constellations, far-away things (zoom far out to find them). The Milky Way is one smooth band (labelled with the constellation names on); the far-away stars show a published mass under their name where one could be sourced (`src/orbit/far_masses.h` lists each value with its paper).
 - **Journey and dates** card: the Journey (touch anything to stop it; your settings come back),
   and Jump to a date (1800–2100, Greenwich time).

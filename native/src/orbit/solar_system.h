@@ -13,6 +13,7 @@
 
 #include "belts.h"
 #include "kepler.h"
+#include "nbody.h"
 #include "solar_data.h"
 #include "vec3.h"
 
@@ -72,6 +73,12 @@ public:
     // (1 real second = kSimTime × 10^tspeed simulated seconds). Exactly the web's step().
     void step(double realSeconds, double tspeed);
 
+    // "Planet physics": Simple (false, the default: every planet alone on a Kepler orbit round the Sun, as in the web version) or Real (true: the Sun and
+    // the eight planets pull on each other, orbit/nbody.h; moons, dwarf planets, comets and belts are treated as in Simple). Switching on moves the planets
+    // to the N-body state for the date shown; switching off reloads the system at the date shown from the orbital elements.
+    void setRealPlanets(bool on);
+    bool realPlanets() const { return real_; }
+
     // The balance point of the Sun and every planet, m from the Sun's centre.
     Vec3 barycentre() const;
 
@@ -87,6 +94,10 @@ public:
 
 private:
     int nextId_ = 0;
+    bool real_ = false;
+    NBodyClock nb_;
+    void applyReal(double extraSeconds);   // put the eight planets where the N-body clock has them `extraSeconds` after the shown date
+    void realTrail(Body& b);
 };
 
 }  // namespace orbit

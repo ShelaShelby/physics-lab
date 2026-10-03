@@ -149,6 +149,7 @@ void orbitPanel(AppState& app, float width) {
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
     ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
     ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
     if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
         const ImGuiViewport* vp = ImGui::GetMainViewport();
         drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
@@ -181,6 +182,26 @@ void orbitPanel(AppState& app, float width) {
     if (ImGui::SliderFloat("##tspeed", &ts, static_cast<float>(kTspeedMin), static_cast<float>(kTspeedMax), ""))
         app.set.tspeed = ts;
     ImGui::TextDisabled("Space: play / pause");
+
+    // ---- Planet physics: Simple / Real ----
+    ImGui::SeparatorText("Planet physics");
+    {
+        const float gap = 6 * ImGui::GetFontSize() / 16, w = (ImGui::GetContentRegionAvail().x - gap) / 2;
+        for (int real = 0; real < 2; real++) {
+            if (real) ImGui::SameLine(0, gap);
+            const bool on = app.set.realPlanets == (real == 1);
+            if (on) pushOn();
+            if (ImGui::Button(real ? "Real" : "Simple", ImVec2(w, 0)) && !on) app.set.realPlanets = real == 1;
+            if (on) popOn();
+        }
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrapped("%s", app.set.realPlanets
+            ? "Real: the Sun and the eight planets pull on each other (Newtonian gravity; each planet stands for its whole system with its moons). No relativity, and no effects of moons, dwarf planets or asteroids on the planets. "
+              "The start values are simplified orbital elements for 1 January 2026 (not JPL's ephemeris), so far from that date the planets drift away from their true positions (Mercury is off by about 12 degrees in 1800). Moons, dwarf planets, comets and belts move as in Simple. "
+              "The picture stays centred on the Sun; the Sun's own small wobble round the balance point is not drawn."
+            : "Simple: each planet moves on its own round the Sun, and the planets do not pull on each other (as in the web version).");
+        ImGui::PopStyleColor();
+    }
 
     // ---- View ----
     ImGui::SeparatorText("View");

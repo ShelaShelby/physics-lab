@@ -38,6 +38,7 @@ void commonSetup(AppState& app) {
     app.vsync = false;
     app.learn = 0; app.atomLearn = 0; app.showSettings = app.showAbout = app.showHistory = app.showLabLog = false;
     app.journey.active = false;
+    app.set.realPlanets = false; app.sys.setRealPlanets(false);   // the benchmark always uses Simple planet physics, so the old numbers stay comparable
 }
 
 void orbitHeaviest(AppState& app) {
@@ -45,7 +46,7 @@ void orbitHeaviest(AppState& app) {
     app.lab = 0;
     resetToToday(app);                                   // the Solar System on a fixed day
     orbit::ViewSettings& s = app.set;
-    s = orbit::ViewSettings();
+    s = orbit::ViewSettings();                           // (Planet physics: Simple)
     s.view3D = true; s.trueScale = true; s.fullTrails = true;
     s.moons = s.dwarfs = s.comets = s.belts = s.far = true;
     s.sky = orbit::SkyMode::Full;

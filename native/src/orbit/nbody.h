@@ -4,7 +4,7 @@
 // What is in the model: Newtonian point-mass gravity between the Sun and the eight planets (each planet stands for its whole system, planet plus
 // moons, so its GM is the system's). What is NOT: general relativity, the Sun's shape, the pull of moons (apart from being inside the system's GM),
 // asteroids, dwarf planets or comets on the planets. The starting state is NOT from JPL's ephemeris (JPL Horizons could not be reached from the session
-// that wrote this): it is the app's own simplified orbital elements (Standish's JPL "approximate positions", 1800-2050) at J2000, turned into barycentric
+// that wrote this): it is the app's own simplified orbital elements (Standish's JPL "approximate positions", 1800-2050) at the reference epoch, turned into barycentric
 // positions and velocities, so the planets drift from their true positions over decades and more.
 //
 // The integrator: a Wisdom-Holman map, J. Wisdom & M. Holman, "Symplectic maps for the N-body problem", The Astronomical Journal 102 (1991) 1528-1538, in the
@@ -19,11 +19,20 @@
 
 #include <cstdint>
 #include <map>
+#include <string>
 #include <vector>
 
 #include "vec3.h"
 
 namespace orbit {
+
+// The setting's two values, as written in the settings file. A value that is not one of them is refused (the loader keeps the default).
+inline const char* planetPhysicsText(bool real) { return real ? "Real" : "Simple"; }
+inline bool planetPhysicsFromText(const std::string& s, bool& real) {
+    if (s == "Real") { real = true; return true; }
+    if (s == "Simple") { real = false; return true; }
+    return false;
+}
 
 constexpr int kNBodies = 9;                   // the Sun, then Mercury ... Neptune
 
@@ -53,10 +62,12 @@ Vec3 nbodyAngularMomentum(const NBodyState& s);  // sum GM_i x_i cross v_i
 Vec3 nbodyMomentum(const NBodyState& s);         // sum GM_i v_i
 Vec3 nbodyCentreOfMass(const NBodyState& s);     // sum GM_i x_i / sum GM_i
 
-// The starting state on Julian day `jd` (default J2000): the app's orbital elements for the eight planets, put into barycentric form with the real GMs.
+// The starting state on Julian day `jd` (default: the reference epoch below): the app's orbital elements for the eight planets, put into barycentric form with the real GMs.
 // Each planet's velocity from the elements is scaled by sqrt((GM_sun + GM_i) / kGMSun) so its orbit keeps the shape the elements give under the real GM.
-NBodyState nbodyStartState(double jd = 2451545.0);
-constexpr double kNBodyRefJD = 2451545.0;     // the reference epoch, J2000.0
+// The reference epoch is 2026-01-01 12:00 UT (Julian day 2461042.0), near "today": the elements are only mean elements, so the N-body planets drift away from
+// them the further the date is from the epoch (Saturn: about 0.1 degree per year); near the epoch they are where the elements put them.
+constexpr double kNBodyRefJD = 2461042.0;
+NBodyState nbodyStartState(double jd = kNBodyRefJD);
 
 // The state at any time, by stepping from the reference epoch forward or backward, with stored checkpoints so a jump does not start from the beginning.
 class NBodyClock {
