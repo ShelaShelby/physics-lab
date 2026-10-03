@@ -22,6 +22,7 @@
 #include "orbit/far_masses.h"
 #include "atom/atom_bench.h"
 #include "atom/cloud_light.h"
+#include "atom/quark_light.h"
 #include "orbit/solar_system.h"
 
 #include "reference/app_reference.inc"
@@ -994,6 +995,36 @@ static void testFarMasses() {
         checkTrue("Sagittarius A* note and sourced mass agree (4.3 million)", std::string(kFar[k].note).find("about 4.3 million Suns") != std::string::npos && orbit::kFarMass[orbit::kFarMassCount - 1].value > 4.25e6 && orbit::kFarMass[orbit::kFarMassCount - 1].value < 4.35e6);
 }
 
+// ---- 0.9.6: the quarks on light themes: darker colours, ordinary blending, no dark backdrop. A contrast check that can be computed (it does not prove the look). ----
+static double relLuminance(double r, double g, double b) {          // WCAG 2.x relative luminance of an sRGB colour (0-255)
+    const auto lin = [](double c) { c /= 255; return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); };
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+static void testQuarkLight() {
+    int lightThemes = 0;
+    for (const char* id : {"light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "synthwave", "monochrome"}) {
+        const ThemeColors t = themeColors(id, false);
+        if (!t.light) continue;
+        lightThemes++;
+        for (const Rgb& bg : {t.bg, t.card}) {
+            const double lb = relLuminance(bg.r * 255, bg.g * 255, bg.b * 255);
+            for (int c = 0; c < 3; c++) {
+                double d[3];
+                atom::lightQuarkColour(atom::kColourCharge[c], d);
+                const double ratio = (lb + 0.05) / (relLuminance(d[0], d[1], d[2]) + 0.05);
+                const double before = (lb + 0.05) / (relLuminance(atom::kColourCharge[c][0], atom::kColourCharge[c][1], atom::kColourCharge[c][2]) + 0.05);
+                checkTrue(std::string(id) + ": quark colour " + std::to_string(c) + " is darker than the page and at least 3:1 (WCAG graphics) against it", relLuminance(d[0], d[1], d[2]) < lb && ratio >= 3.0 && ratio > before);
+            }
+        }
+    }
+    checkTrue("the themes with light pages were checked", lightThemes >= 2);
+    // the three colour charges stay clearly different from each other after darkening (distance in RGB, 0-255 each)
+    double d[3][3];
+    for (int c = 0; c < 3; c++) atom::lightQuarkColour(atom::kColourCharge[c], d[c]);
+    for (int a = 0; a < 3; a++) for (int b = a + 1; b < 3; b++)
+        checkTrue("colour charges " + std::to_string(a) + " and " + std::to_string(b) + " stay apart (RGB distance over 80)", std::sqrt(std::pow(d[a][0] - d[b][0], 2) + std::pow(d[a][1] - d[b][1], 2) + std::pow(d[a][2] - d[b][2], 2)) > 80);
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -1010,6 +1041,7 @@ int main() {
     testBenchInputLock();
     testCloud();
     testFarMasses();
+    testQuarkLight();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);

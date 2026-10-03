@@ -1,5 +1,6 @@
 #include "atom_view.h"
 #include "cloud_light.h"
+#include "quark_light.h"
 
 #include <algorithm>
 #include <array>
@@ -136,7 +137,7 @@ std::vector<std::string> wrap(const Text& T, const std::string& text, double max
 // a deterministic "random" number from a seed (the web's rnd), for the flickering quark details
 double rnd(double a) { const double x = std::sin(a * 127.1 + 311.7) * 43758.5453; return x - std::floor(x); }
 double smooth(double x) { return x * x * (3 - 2 * x); }
-const double kCCol[3][3] = {{255, 72, 72}, {56, 214, 112}, {84, 132, 255}};    // colour charge: red, green, blue
+const double (&kCCol)[3][3] = kColourCharge;    // colour charge: red, green, blue
 const int kSwaps[6][2] = {{0, 1}, {1, 2}, {0, 1}, {1, 2}, {0, 1}, {1, 2}};      // gluon exchanges: two quarks trade colours
 struct Perms { int p[7][3]; };
 const Perms& perms() {
@@ -521,7 +522,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         auto letter = [&](char f, double x, double y, double size, double a, Color c) { letters.push_back({std::string(1, f), {x, y, size, a}}); letterCols.push_back(c); };
 
         const Ctx MAIN{false}, SOFT{true};
-        if (soft && cineQ && qa > 0) {                                     // Cinematic: one dark backdrop over the whole nucleus
+        if (soft && cineQ && qa > 0 && !css.light) {                       // Cinematic on a dark theme: one dark backdrop over the whole nucleus (light themes: none, see lightQuark)
             const double Rr = Rpx + 1.1 * rn;
             const Color dk = rgba(8, 10, 24, float(0.9 * qa));
             put(SOFT, grad3(cx, cy, Rr, dk, std::max(0.0, 1 - 1.1 * rn / Rr), dk, rgba(8, 10, 24, 0)));
@@ -568,14 +569,18 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 if (rn > 90 && !c.soft) letter(o.f, o.x, o.y - r - 4, std::max(12.0, std::min(20.0, 0.09 * rn)), A, css.fg);
             }
         };
+        // On a light theme the colours of the quarks and their glow are made darker and more saturated (mixed 35 % with black) and drawn with ordinary
+        // alpha blending, so they read on a light page with no dark backdrop; on a dark theme they are exactly as they were (cloud_light.h does the same for the cloud).
+        const auto lightQuark = [&](const double in[3], double out[3]) { double t[3] = {in[0], in[1], in[2]}; if (css.light) lightQuarkColour(t, out); else for (int i = 0; i < 3; i++) out[i] = t[i]; };
         // Accurate / Cinematic quarks: colour charge, gluon exchange, a flickering gluon field (web: drawQuarksField).
         // phase 0 = 'all', 1 = 'soft' (blurry parts into sc), 2 = 'sharp' (crisp parts, faded by fog)
         auto field = [&](const Ctx& c, const Nucleon& q, double X, double Y, double A, int pb, int phase, const Ctx& sc, double fog) {
             const bool cine = p.qstyle == "Cinematic";
+            const bool add = cine && !css.light;                           // Cinematic adds up light, which only shows on a dark page; on a light theme it is drawn with ordinary blending instead
             const QuarkPts Q = quarkPts(q, X, Y, rn, now, proj);
             const double k = Q.k, t = Q.t;
             if (phase != 2) {
-                if (cine) put(sc, grad3(X, Y, 1.05 * rn, rgba(8, 10, 24, float(0.9 * A)), 0.6, rgba(8, 10, 24, float(0.78 * A)), rgba(8, 10, 24, 0)));   // dark backdrop
+                if (add) put(sc, grad3(X, Y, 1.05 * rn, rgba(8, 10, 24, float(0.9 * A)), 0.6, rgba(8, 10, 24, float(0.78 * A)), rgba(8, 10, 24, 0)));   // dark backdrop
                 if (p.detail != "Valence") {                               // gluon field: a flickering cloud along the three tubes and round the middle
                     const int legN = int(std::lround(std::min(std::max(24.0, std::min(130.0, rn * 0.5)) * (cine ? 1.4 : 1), 0.85 * pb / 3)));
                     const int haloN = int(std::lround(std::min(46.0, 0.15 * pb)));
@@ -596,19 +601,22 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                         const double rr = 0.3 * rn * std::sqrt(-2 * std::log(1 - 0.999 * rnd(s2))), an = 6.2832 * rnd(s2 + 1);
                         F.push_back({X + rr * std::cos(an), Y + rr * std::sin(an), std::pow(std::sin(kPi * ph), 2) * al0 * 0.6, sz0 * (0.8 + rnd(s2 + 2)), 3});
                     }
-                    const int idx[4] = {palIndex(Q.cols[0]), palIndex(Q.cols[1]), palIndex(Q.cols[2]), cine ? 48 : css.light ? 49 : 50};
+                    const int idx[4] = {palIndex(Q.cols[0]), palIndex(Q.cols[1]), palIndex(Q.cols[2]), add ? 48 : css.light ? 49 : 50};
                     for (int g = 0; g < 4; g++)
                         for (const FP& f : F) {
                             if (f.g != g) continue;
-                            const double* pc = pal().c[idx[g]];
+                            double pc[3];
+                            lightQuark(pal().c[idx[g]], pc);
                             const Color c0 = rgb3(pc, f.a), c1 = rgb3(pc, 0.5 * f.a), c2 = rgb3(pc, 0);
-                            put(sc, grad3(f.x, f.y, f.s * 1.7, c0, 0.4, c1, c2), cine);
+                            put(sc, grad3(f.x, f.y, f.s * 1.7, c0, 0.4, c1, c2), add);
                         }
                 }
                 for (int i = 0; i < 3; i++) {                              // each quark's halo
                     const QPt& o = Q.P[i];
                     const double r = cine ? std::max(4.0, 0.06 * rn) : std::max(2.2, 0.03 * rn), Rr = (cine ? 5.5 : 4.5) * r;
-                    put(sc, grad2(o.x, o.y, Rr, rgbaC(Q.cols[i], (cine ? 0.6 : 0.4) * A), rgbaC(Q.cols[i], 0)), cine);
+                    double hc[3];
+                    lightQuark(Q.cols[i], hc);
+                    put(sc, grad2(o.x, o.y, Rr, rgbaC(hc, (cine ? 0.6 : 0.4) * A), rgbaC(hc, 0)), add);
                 }
             }
             if (phase == 1) return;
@@ -620,8 +628,9 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     const double ff = std::max(0.0, f - mm * 0.05);
                     double col[3];
                     mixC(kCCol[perms().p[Q.kk][Q.sw[0]]], kCCol[perms().p[Q.kk][Q.sw[1]]], ff, col);
+                    lightQuark(col, col);
                     const double r = std::max(1.5, (cine ? 0.034 : 0.022) * rn) * (1 - mm * 0.12);
-                    put(c, flat(a.x + (b.x - a.x) * ff, a.y + (b.y - a.y) * ff, r, rgbaC(col, Af * (1 - mm / 6.0))), cine);
+                    put(c, flat(a.x + (b.x - a.x) * ff, a.y + (b.y - a.y) * ff, r, rgbaC(col, Af * (1 - mm / 6.0))), add);
                 }
             }
             if (p.detail == "+ Sea")                                       // sea pairs: a colour and its anticolour
@@ -632,12 +641,14 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     proj(rr * std::sin(th) * std::cos(az), rr * std::sin(th) * std::sin(az), rr * std::cos(th), c0x, c0y, c0d);
                     const double dth = std::acos(1 - 2 * rnd(sd + 3)), daz = 2 * kPi * rnd(sd + 4), d = 0.05 + 0.08 * ph;
                     proj(d * std::sin(dth) * std::cos(daz), d * std::sin(dth) * std::sin(daz), d * std::cos(dth), dvx, dvy, dvd);
-                    const double* col = kCCol[int(std::floor(rnd(sd + 5) * 3))];
-                    const double anti[3] = {255 - col[0], 255 - col[1], 255 - col[2]};
+                    const double* col0 = kCCol[int(std::floor(rnd(sd + 5) * 3))];
+                    const double anti0[3] = {255 - col0[0], 255 - col0[1], 255 - col0[2]};
+                    double col[3], anti[3];
+                    lightQuark(col0, col); lightQuark(anti0, anti);
                     const double r = std::max(1.5, (cine ? 0.026 : 0.02) * rn), al = 0.85 * env * Af;
-                    put(c, flat(X + (c0x + dvx) * k, Y - (c0y + dvy) * k, r, rgbaC(col, al)), cine);
+                    put(c, flat(X + (c0x + dvx) * k, Y - (c0y + dvy) * k, r, rgbaC(col, al)), add);
                     const double rx = X + (c0x - dvx) * k, ry = Y - (c0y - dvy) * k;
-                    if (cine) {                                    // Cinematic adds light ("lighter"): the 1.2 px ring as an added-up blob, peaked on the circle
+                    if (add) {                                     // Cinematic adds light ("lighter"): the 1.2 px ring as an added-up blob, peaked on the circle
                         const Color ac = rgbaC(anti, al), R0 = ac.withAlpha(0);
                         const double Rb = r + 1.2;
                         put(c, grad3(rx, ry, Rb, R0, r / Rb, ac, R0, 0, 0, std::max(0.0, (r - 1.2) / Rb)), true);
@@ -647,7 +658,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             std::stable_sort(ord, ord + 3, [&](int a, int b) { return Q.P[a].dep > Q.P[b].dep; });
             for (int i : ord) {
                 const QPt& o = Q.P[i];
-                const double* cc = Q.cols[i];
+                double cc[3];
+                lightQuark(Q.cols[i], cc);
                 if (cine) {
                     const double r = std::max(4.0, 0.06 * rn);
                     double wh[3], dk[3];
@@ -655,7 +667,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     mixC(cc, white, 0.85, wh); mixC(cc, black, 0.5, dk);
                     put(c, grad3(o.x, o.y, r, rgbaC(wh, Af), 0.5, rgbaC(cc, Af), rgbaC(dk, Af), -0.3, -0.3, 0.05));
                 } else put(c, flat(o.x, o.y, std::max(2.2, 0.03 * rn), rgbaC(cc, Af)));
-                if (rn > 90 && !c.soft) letter(o.f, o.x, o.y - std::max(4.0, 0.06 * rn) - 6, std::max(12.0, std::min(20.0, 0.09 * rn)), Af, cine ? rgba(255, 255, 255) : css.fg);
+                if (rn > 90 && !c.soft) letter(o.f, o.x, o.y - std::max(4.0, 0.06 * rn) - 6, std::max(12.0, std::min(20.0, 0.09 * rn)), Af, add ? rgba(255, 255, 255) : css.fg);
             }
         };
         auto quarks = [&](const Ctx& c, const Nucleon& q, double X, double Y, double qai, int pb, double fg) {

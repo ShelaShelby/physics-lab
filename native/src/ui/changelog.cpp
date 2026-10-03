@@ -17,6 +17,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9.6", "Quarks readable on light themes",
+     "In the Atom Lab's quark zoom, the dark patch that was drawn behind the glowing quarks is gone on the light themes (Light and Paper), where it looked like a dark "
+     "smudge. There the quarks, their halos, the gluon field and the sea pairs are drawn in darker, more saturated colours that read on a light page, and the red, green "
+     "and blue colour charges are still easy to tell apart. On the dark themes nothing changes: the quarks glow as before. Only the drawing changed, not the physics."},
     {"0.9.5", "A smooth Milky Way, and star masses",
      "Orbit Lab: the Milky Way band in the night sky is now one smooth band with soft edges instead of three overlapping stripes, so there are no joints or "
      "stray grey streaks when you zoom far out; it is in the same place on the sky as before, and with the constellation names on it has its own label, "

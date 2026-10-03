@@ -215,9 +215,9 @@ int main(int, char**) {
             i = e + 1;
         }
     }
+    if (const char* f = SDL_getenv("PL_ATOM_FOCUS")) app.atom.s.focus = std::atoi(f);
     if (const char* d = SDL_getenv("PL_ATOM_DO")) { const std::string a = d; if (a == "emit") app.atom.emit(); else if (a == "absorb") app.atom.absorb(); else if (a == "auto") app.atom.toggleAuto();
                                                else if (a == "nucleus") app.atom.zoomNucleus(); else if (a == "nucleon") app.atom.zoomNucleon(); }
-    if (const char* f = SDL_getenv("PL_ATOM_FOCUS")) app.atom.s.focus = std::atoi(f);
     if (const char* l = SDL_getenv("PL_ATOM_LEARN")) { app.atomLearn = std::atoi(l); if (const char* t = SDL_getenv("PL_ATOM_TAB")) { app.scaleTab = t; app.massTab = t; } }   // open an Atom Lab guide (1–4), on a tab
     int frame = 0;
     bool running = true;
