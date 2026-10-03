@@ -20,6 +20,11 @@ static StarProps sunProps() {
     return {m, L, R, T, 0.95 * sq, 1.67 * sq, 2.7 * sq, 10 * m / L};          // habitable zone and frost line in AU, life in billion years
 }
 
+// Dwarf planets and comets are on one fixed two-body orbit (audit, 0.10.5 stage 1, row 1: against JPL Horizons the lab's Pluto is about 1.07 AU off in 1800).
+static void fixedOrbitLines(Card& c) {
+    for (auto& l : wrapWords("A simple orbit fixed at one date: the further the date is from it, the further this is from its real place", 46)) c.lines.push_back(l);
+}
+
 const Body* findBody(const SolarSystem& sys, int id) {
     for (const Body& b : sys.bodies)
         if (b.id == id) return &b;
@@ -50,6 +55,7 @@ static void cometCard(const SolarSystem& sys, const Body& b, Card& c) {
         c.lines.push_back("Comes back around the year " + fmt::commas(y + yrs));
     }
     c.lines.push_back(r < 4 ? "Warmed by the Sun: glowing head and two tails" : "Far from the Sun: frozen and dark, no tail");
+    fixedOrbitLines(c);
     // the note, wrapped to about 42 letters a line
     std::string cur, word, note = cm.note;
     note += ' ';
@@ -94,7 +100,7 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         const bool fast = lps > 8;
         const double speed = 2 * kPi * m.aKm / (m.periodDays * 86400);               // km/s, circular-orbit speed
         c.title = std::string(m.name) + " · moon of " + b->name;
-        c.lines = {"Radius: " + fmt::kmPlain(m.radiusKm) + " (" + fmt::fixed(m.radiusKm / 1737.4, m.radiusKm < 100 ? 3 : 2) + " × our Moon)",
+        c.lines = {"Radius: " + fmt::kmPlain(m.radiusKm) + (std::string(m.name) == "Moon" ? std::string() : " (" + fmt::fixed(m.radiusKm / 1737.4, m.radiusKm < 100 ? 3 : 2) + " × our Moon)"),
                    "Distance from " + b->name + ": " + fmt::km(m.aKm),
                    "Orbit: " + (m.periodDays < 10 ? fmt::fixed(m.periodDays, 2) : fmt::fixed(m.periodDays, 1)) + " days" + (m.retrograde ? ", going backwards" : ""),
                    "Speed: " + fmt::kms(speed, 2),
@@ -108,9 +114,10 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
                 c.lines.push_back(std::string("Phase now: ") + p.name + ", " + std::to_string(static_cast<int>(std::lround(100 * p.fraction))) + "% lit");
                 c.lines.push_back("It is " + fmt::fixed(p.elongationDeg, 0) + "° from the Sun in the sky. The lit part is (1 − cos of that angle) / 2, to first order (the geocentric elongation, not the exact phase angle)");
                 c.lines.push_back("Distance from " + b->name + " right now: " + fmt::km(length(sys.moonGeocentric()) / kKm) + " (the one above is the mean)");
-                c.lines.push_back("Real position and phase: ELP2000-82B, a 1988 theory; within " + fmt::fixed(kMoonElpWorstKm, 1) + " km of JPL Horizons at worst at the dates checked (1800 to 2100)");
+                c.lines.push_back("Real position and phase: ELP2000-82B, a 1988 theory; within " + fmt::fixed(kMoonElpWorstKm, 1) + " km of JPL Horizons at worst at the dates checked (1800 to 1 Jan 2100)");
+                for (auto& l : wrapWords("The four main phases (new, first quarter, full, last quarter) are exact; the names in between (crescent, gibbous) use this app’s own cut-offs: 2, 40, 60 and 98 % lit", 56)) c.lines.push_back(l);
             } else
-                c.lines.push_back("Outside 1800 to 2100 the real Moon (ELP2000-82B) is not used: this Moon is on a simple Kepler ellipse with a made-up starting angle, as in Simple, and has no phase here");
+                c.lines.push_back("Outside 1800 to 1 Jan 2100 the real Moon (ELP2000-82B) is not used: this Moon is on a simple Kepler ellipse with a made-up starting angle, as in Simple, and has no phase here");
         }
         return true;
     }
@@ -134,11 +141,11 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         c.lines = {"Mass: 1 solar mass (M☉), " + fmt::fixed(sp.m * 1.989, 2) + "×10³⁰ kg",
                    "Radius: " + fmt::fixed(sp.R, 2) + " Suns (" + fmt::km(sp.R * 696000) + ")",
                    "Surface: about " + fmt::commas(t) + " K  ·  " + fmt::fixed(sp.L, sp.L < 10 ? 2 : 1) + " Suns bright",
-                   "Habitable zone: " + fmt::fixed(sp.hzIn, 2) + " – " + fmt::fixed(sp.hzOut, 2) + " AU",
-                   "Frost line: " + fmt::fixed(sp.frost, 1) + " AU (rock inside, giants outside)"};
+                   "Habitable zone (rough): " + fmt::fixed(sp.hzIn, 2) + " – " + fmt::fixed(sp.hzOut, 2) + " AU",
+                   "Frost line (rough): " + fmt::fixed(sp.frost, 1) + " AU (rock inside, giants outside)"};
         for (auto& l : sunSpinLines(sys, opt.tspeed, opt.paused)) c.lines.push_back(l);
         c.lines.push_back("Wobbles a little, mostly pulled by Jupiter");
-        c.lines.push_back("Lifetime: about " + (sp.life < 1 ? fmt::fixed(sp.life, 1) : fmt::commas(sp.life)) + " billion years");
+        c.lines.push_back("Lifetime (rough): about " + (sp.life < 1 ? fmt::fixed(sp.life, 1) : fmt::commas(sp.life)) + " billion years");
         c.lines.push_back("Rough main-sequence estimates");
         return true;
     }
@@ -164,10 +171,10 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
                    "Orbit: " + shape,
                    o.bound ? "One lap: " + fmt::years(o.periodYears) : "One lap: never (it leaves)",
                    b.hasTemp ? "Temperature: " + fmt::celsius(b.tempC) + " (real, " + b.tempNote + ")"
-                             : "Temperature: " + fmt::celsius(std::round(Teq)) + " (no atmosphere)"};
+                             : "Temperature: " + fmt::celsius(std::round(Teq)) + " (no atmosphere; assumes 30 % reflected)"};
         for (auto& l : spinLines(b, sys, opt.tspeed, opt.paused)) c.lines.push_back(l);   // how it turns (planets and Pluto)
         for (auto& l : seasonLines(b, sys)) c.lines.push_back(l);                        // Earth: which season it is
-        if (!b.giant) c.lines.push_back(d >= sp.hzIn && d <= sp.hzOut ? "In the habitable zone" : "Outside the habitable zone");
+        if (b.type == BodyKind::Dwarf) fixedOrbitLines(c);
         c.lines.push_back(b.note);
         if (sys.realMoon() && b.name == "Earth")           // 0.10.4 stage 2: Earth is drawn off the Earth-Moon barycentre; its orbit numbers above are the barycentre's
             c.lines.push_back("Real: Earth is drawn off the Earth–Moon balance point by the Moon's pull (about 4,700 km); the speed and orbit above are the balance point's");

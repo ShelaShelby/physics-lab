@@ -120,6 +120,17 @@ const Sky& skyData() {
 
 int farCount() { return kFarStatic + kProbeCount; }
 
+double voyagerKms() { return kProbes[0].kms; }
+double voyagerYearsFromSun(double au) { return au / (kProbes[0].kms * kAuPerYearPerKms); }
+int probeLaunchYear(const char* key) {
+    for (int i = 0; i < kProbeCount; i++) if (std::strcmp(key, kProbes[i].key) == 0) return kProbes[i].year;
+    return 0;
+}
+double farDistanceLy(const char* key) {
+    for (int i = 0; i < kFarStatic; i++) if (std::strcmp(key, kFar[i].key) == 0) return kFar[i].ly;
+    return 0;
+}
+
 int farIndexOf(const std::string& key) {
     for (int i = 0; i < kFarStatic; i++) if (key == kFar[i].key) return i;
     for (int i = 0; i < kProbeCount; i++) if (key == kProbes[i].key) return kFarStatic + i;
@@ -140,11 +151,11 @@ bool farItem(const SolarSystem& sys, int index, FarItem& f) {
     }
     const ProbeData& p = kProbes[index - kFarStatic];
     const double nowMs = sys.epochMs + sys.t * 1000.0;
-    if (nowMs < 631152000000.0) return false;              // before 1 Jan 1990: not shown (as in the web version)
+    if (nowMs < kProbesShownFromMs) return false;              // before 1 Jan 1990: not shown (as in the web version)
     const double yrs = (nowMs - kSkyT0Ms) / (365.25 * 86400000.0);   // years since the positions were worked out
     f.key = p.key; f.name = p.name; f.kind = "probe"; f.probe = &p;
     f.dir = lonLat(p.lon, p.lat);
-    f.au = p.au + p.kms * 0.21095 * yrs;                   // a straight line outwards at its real speed (0.21095 AU per year for each km/s)
+    f.au = p.au + p.kms * kAuPerYearPerKms * yrs;           // a straight line outwards at its real speed (0.21095 AU per year for each km/s)
     f.pos = f.dir * (f.au * kAU);
     return true;
 }
@@ -176,7 +187,7 @@ void farCard(const FarItem& f, Card& c) {
     }
     const FarData& d = *f.far;
     const auto fmtLy = [](double v) { return v < 10 ? fmt::fixed(v, 2) : v < 100 ? fmt::fixed(v, 1) : fmt::commas(std::stod(fmt::precision(v, 3))); };
-    const double yrsV = f.au / (kProbes[0].kms * 0.21095);  // Voyager 1's years to get there (0.21095 AU per year for each km/s)
+    const double yrsV = voyagerYearsFromSun(f.au);          // Voyager 1's years to get there
     if (d.sp[0]) c.lines.push_back(std::string(d.sp) + " star, in " + d.con); else c.lines.push_back(std::string("In ") + d.con);
     c.lines.push_back("Distance: " + fmtLy(d.ly) + " light years (" + fmt::commas(std::stod(fmt::precision(f.au, 3))) + " AU)");
     c.lines.push_back("The light we see left it " + fmtLy(d.ly) + " years ago");

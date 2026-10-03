@@ -97,7 +97,7 @@ public:
     // The real Moon (0.10.4 stage 2; Real planet physics only). In Real the N-body body "Earth" is the Earth-Moon barycentre (EMB: its GM is Earth + Moon, its start state JPL's EMB). So Earth
     // itself is drawn at EMB - g * mu / (1 + mu) and the Moon is at EMB + g / (1 + mu), where g is the ELP2000-82B vector from Earth to the Moon (orbit/moon_elp.h) and mu = GM_Moon / GM_Earth
     // (JPL astrodynamic parameters, orbit/nbody.h). Earth's velocity (and so its orbit numbers on the card) stays the barycentre's. Earth's trail follows the barycentre.
-    // Only the Moon of Earth is real; every other moon stays on its Kepler ellipse as in Simple. Outside 1800-2100 realMoon() is false: the Moon falls back to its Kepler ellipse, Earth to the barycentre.
+    // Only the Moon of Earth is real; every other moon stays on its Kepler ellipse as in Simple. Outside 1800 to 1 Jan 2100 12:00 TDB realMoon() is false: the Moon falls back to its Kepler ellipse, Earth to the barycentre.
     bool realMoon() const { return real_ && moonValid_; }
     Vec3 moonGeocentric() const { return moonGeo_; }       // ELP vector Earth -> Moon at the date shown, m (valid when realMoon())
     Vec3 moonPosition() const;                             // the Moon's true place, from the Sun's centre (m), valid when realMoon()

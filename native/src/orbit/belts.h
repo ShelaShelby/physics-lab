@@ -41,6 +41,11 @@ std::vector<BeltGroup> makeBelts(int64_t unixMs, int scale = 1);
 // Where rock k of group g is, `t` seconds after the start date (m, Sun at the origin).
 Vec3 beltPoint(const BeltGroup& g, int k, double t);
 
+// The Oort cloud's edges as the lab states them, AU (the card, the Journey caption and the travel times all read these).
+constexpr double kOortInnerAU = 2000, kOortInnerEndAU = 20000, kOortOuterAU = 200000;
+// The Journey's Oort cloud caption; the travel time is worked out from Voyager 1's speed (orbit/sky.h), so it always agrees with the distances in it.
+std::string oortCaption();
+
 // The facts card of a belt (title + lines), as in the web version.
 const char* beltTitle(const std::string& key);
 std::vector<std::string> beltLines(const std::string& key);

@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "format.h"
+#include "sky.h"
 #include "solar_data.h"
 #include "units.h"
 
@@ -133,13 +135,23 @@ const char* beltTitle(const std::string& key) {
 std::vector<std::string> beltLines(const std::string& key) {
     if (key == "main") return {"Between Mars and Jupiter, about 2.1 – 3.3 AU", "More than 700,000 rocks wider than 1 km", "Total mass: only about 3% of our Moon",
                                "Ceres alone holds 39% of it", "Gaps are where Jupiter's pull clears orbits", "Dots here: 1,800 stand in for the millions"};
-    if (key == "oort") return {"Inner part 2,000 – 20,000 AU, outer part to about 200,000 AU", "Inferred from comets: the home of long-period comets",
-                               "Maybe trillions of icy bodies wider than 1 km", "Total mass: roughly 5 Earths (estimates vary a lot)",
-                               "Voyager 1 needs ~300 years to reach it, ~30,000 to cross", "The nearest star, Proxima Centauri, is 268,550 AU away", "Dots here: 3,000 stand in for trillions"};
+    if (key == "oort") {
+        const auto years = [](double au) { return fmt::commas(std::stod(fmt::precision(voyagerYearsFromSun(au), 2))); };   // two figures, as the far card does
+        const double ly = farDistanceLy("prox");                       // one value: the light years and the AU below both come from it
+        return {"Inner part " + fmt::commas(kOortInnerAU) + " – " + fmt::commas(kOortInnerEndAU) + " AU, outer part to about " + fmt::commas(kOortOuterAU) + " AU", "Inferred from comets: the home of long-period comets",
+                "Maybe trillions of icy bodies wider than 1 km", "Total mass: roughly 5 Earths (estimates vary a lot)",
+                "Voyager 1 (" + fmt::kms(voyagerKms()) + ") would need about " + years(kOortInnerAU) + " years to reach " + fmt::commas(kOortInnerAU) + " AU and about " + years(kOortOuterAU) + " years to reach " + fmt::commas(kOortOuterAU) + " AU",
+                "The nearest star, Proxima Centauri, is " + fmt::fixed(ly, 2) + " light years away (" + fmt::commas(std::stod(fmt::precision(ly * units::kLightYearAU, 3))) + " AU)", "Dots here: 3,000 stand in for trillions"};
+    }
     if (key == "trojan") return {"They share Jupiter's orbit: 60° ahead and behind", "About a million rocks wider than 1 km", "Some orbits tilt up to 40° from Jupiter's plane",
                                  "Held in place by the Sun and Jupiter together", "Dots here: 300 stand in for the rest"};
     return {"From Neptune's orbit (30 AU) out to about 50 AU", "More than 100,000 icy worlds wider than 100 km", "Total mass: only about 0.02 Earths",
             "Home of Pluto, Haumea and Makemake", "Dots here: 900 stand in for the rest"};
+}
+
+std::string oortCaption() {
+    const std::string years = fmt::commas(std::stod(fmt::precision(voyagerYearsFromSun(kOortInnerAU), 2)));
+    return "The Oort cloud (never seen directly): maybe trillions of icy comets, " + fmt::commas(kOortInnerAU) + " to " + fmt::commas(kOortOuterAU) + " AU out. Voyager 1 would need about " + years + " years to reach it.";
 }
 
 }  // namespace orbit

@@ -8,6 +8,13 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Try on the PC (0.10.5)
+- [ ] Planet physics Real: the note under it reads well and is 11 lines or fewer at normal text size, and also at Extra large text.
+- [ ] Select a comet and a dwarf planet (Ceres, Pluto): the card says its orbit is a simple one fixed at one date. Select Mars: no "In the habitable zone" line. Select the Sun: the habitable zone, frost line and lifetime say "(rough)".
+- [ ] Jump to a date in 1980 and select Voyager 1's tile / run the Journey: the caption says Voyager 1 launched in 1977 and is shown from 1990 on (not "not launched yet").
+- [ ] Press the "Venus crosses the Sun, 2012" tile: the date box shows 01:26 (the middle of the transit).
+- [ ] Select the Oort cloud: the travel times (about 560 and 56,000 years) fit the distances above them; the Moon's own card no longer compares it with itself.
+
 ## Try on the PC (0.10.4)
 - [ ] Planet physics Real, select the Moon (Earth's Moon): its card shows the phase and the lit percent, and they match the real Moon of that day (look at the sky, or an almanac). Try today, and a date with a full moon or a new moon.
 - [ ] Jump to 1800 and to 2100 with the Moon selected: the Moon is still real and the card still shows a phase; jump before 1800 or after 2100: the card says the real Moon is not used there.

@@ -103,7 +103,7 @@ public:
     bool gr() const { return gr_; }
     // Positions and velocities at `tau` seconds after the reference epoch (negative: before it), cubic-Hermite interpolated between the two nearest grid steps.
     void stateAt(double tau, Vec3* x, Vec3* v);
-    long stepsTaken() const { return steps_; }            // for tests: how many steps were computed so far
+    long long stepsTaken() const { return steps_; }            // for tests: how many steps were computed so far
     std::size_t checkpoints() const { return cp_.size(); }
 private:
     static constexpr long kEvery = 2000;                  // a checkpoint every 2,000 steps
@@ -114,7 +114,7 @@ private:
     NBodyState start_;
     long k_ = 0; bool have_ = false;                      // s0_ is the state at grid step k_, s1_ at k_ + 1
     NBodyState s0_, s1_, last_;
-    long steps_ = 0;
+    long long steps_ = 0;                                 // (long is 32 bits on Windows: this counter would wrap after about 32 hours at the top Time speed)
     const NBodyState& checkpoint(long j);
     void ensure(long k);
 };

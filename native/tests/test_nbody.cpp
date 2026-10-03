@@ -184,7 +184,7 @@ static void testClock() {
     t0 = std::chrono::steady_clock::now(); c2.stateAt(j2100, x, v); const double ms2 = msSince(t0);
     t0 = std::chrono::steady_clock::now(); c2.stateAt(j1800 + 12345.0 * 86400, x, v); const double ms3 = msSince(t0);
     t0 = std::chrono::steady_clock::now(); c2.stateAt(j2100 - 5.0 * kYearS, x, v); const double ms4 = msSince(t0);
-    std::printf("clock timing here (software, one core): first jump to 1800 %.0f ms (%ld steps), then to 2100 %.0f ms, a second jump near 1800 %.1f ms, near 2100 %.1f ms; %zu checkpoints kept\n", ms1, c2.stepsTaken(), ms2, ms3, ms4, c2.checkpoints());
+    std::printf("clock timing here (software, one core): first jump to 1800 %.0f ms (%lld steps), then to 2100 %.0f ms, a second jump near 1800 %.1f ms, near 2100 %.1f ms; %zu checkpoints kept\n", ms1, static_cast<long long>(c2.stepsTaken()), ms2, ms3, ms4, c2.checkpoints());
     check("clock: checkpoints make a second jump cheap (a few thousand steps at most)", ms3 < 50 && ms4 < 50);
 }
 

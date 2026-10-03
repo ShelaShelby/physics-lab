@@ -7,6 +7,8 @@
 #include <cstring>
 
 #include "imgui.h"
+#include "orbit/belts.h"
+#include "orbit/date_text.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
@@ -46,7 +48,7 @@ const Stop kStops[] = {
     {2.6, false, false, "Earth’s path round the Sun. Its distance, 149.6 million km, is 1 AU. Sunlight takes 8.3 minutes to get here."},
     {70, false, false, "All eight planets. Neptune is 30 AU out: sunlight takes 4 hours to reach it."},
     {420, false, false, nullptr},   // Voyager 1 (worked out for the date shown)
-    {60000, false, false, "The Oort cloud (never seen directly): maybe trillions of icy comets, 2,000 to 200,000 AU out. Voyager 1 needs about 300 years to reach it."},
+    {60000, false, false, nullptr},   // the Oort cloud: its travel time is worked out from Voyager 1's speed (orbit/belts.cpp)
     {1.0e6, false, false, "The nearest star system, Alpha Centauri, is 4.3 light years away: the light we see from it is 4.3 years old."},
     {2.5e8, false, false, "Real stars at their real places: the Pleiades (444 light years) and the Orion Nebula (1,267 light years)."},
     {0, false, true, "The centre of our galaxy, 27,000 light years away, where a black hole of 4.3 million Suns sits (Sagittarius A*). Tap Reset view to come back."},
@@ -56,11 +58,12 @@ constexpr double kSpeed = 0.65;              // decades of zoom per second betwe
 
 std::string caption(const AppState& app, int k) {
     if (kStops[k].cap) return kStops[k].cap;
+    if (k == 5) return oortCaption();
     FarItem f;
     if (farItem(app.sys, farIndexOf("v1"), f))
         return "Voyager 1 is the most distant spacecraft: " + fmt::commas(f.au) + " AU out, " + fmt::fixed(f.au * 499.005 / 3600, 0) +
                " light-hours. It left the Sun’s wind (the heliopause) at 121 AU in 2012.";
-    return "The Kuiper belt: icy worlds such as Pluto, out to about 50 AU. Voyager 1 is not launched yet on this date.";
+    return voyagerFallbackCaption(fmt::yearUTC(app.sys.currentUnixMs()), probeLaunchYear("v1"), kProbesShownFromYear);
 }
 double holdTime(const std::string& cap) { return 2.2 + cap.size() / 18.0; }   // seconds at a stop: longer text, longer stay
 double stopZoom(const AppState& app, int k) {
@@ -174,10 +177,7 @@ std::string jumpToDate(AppState& app, int64_t ms) {
         if (s.kind == Selection::None) app.view.follow = false;
     }
     if (note.empty()) note = "Showing " + fmt::dateUTC(ms) + ". ";
-    if (ms > kTableEnd) note += "After 2050 the planets’ places are extrapolated beyond NASA’s table (1800–2050), so they get slowly less exact. ";
-    note += app.set.realPlanets && app.sys.realMoon()
-        ? "Earth’s Moon is the real one (ELP2000-82B); the other moons start at made-up places (only the planets, dwarf planets, comets and belts are real)."
-        : "The moons start at made-up places (only the planets, dwarf planets, comets and belts are real).";
+    note += dateNotes(ms > kTableEnd, app.set.realPlanets, app.set.realPlanets && app.sys.realMoon());   // orbit/date_text.h (tested)
     return note;
 }
 
@@ -202,12 +202,14 @@ void journeyDatesCard(AppState& app, bool wasActive) {
         else if (!parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = "That is not a date the lab can read: write it as YYYY-MM-DD (for example 2003-08-27), and the time as HH:MM.";
         else app.dateNote = jumpToDate(app, ms);
     }
-    struct J { const char* name; const char* date; const char* tip; };
+    struct J { const char* name; const char* date; const char* tip; const char* time = "12:00"; };
     static const J jumps[] = {{"Today", nullptr, "Back to now"},
                               {"Halley at its closest, 1986", "1986-02-09", "Halley’s Comet at its closest to the Sun: 9 Feb 1986"},
                               {"Neptune found, 1846", "1846-09-23", "Johann Galle found Neptune on the night of 23 Sep 1846, where Le Verrier’s sums said it would be"},
                               {"Mars closest, 2003", "2003-08-27", "Mars at its closest to Earth in 2003: 55.76 million km on 27 Aug 2003"},
-                              {"Venus crosses the Sun, 2012", "2012-06-06", "The last transit of Venus: 5–6 Jun 2012"},
+                              // Time of closest approach: Venus is nearest the Sun's centre, 0.154 degrees, at 01:26 UT on 6 June 2012. JPL Horizons API (read 2026-10-03), Venus (299) seen from Earth (500@399),
+                              // QUANTITIES=23 (solar elongation), START_TIME 2012-06-06 00:30, STOP_TIME 02:30, STEP_SIZE 1 min: the minimum row is 2012-Jun-06 01:26, 0.154 degrees.
+                              {"Venus crosses the Sun, 2012", "2012-06-06", "The last transit of Venus: 5–6 Jun 2012 (the jump lands at its middle, 01:26 UT on 6 Jun)", "01:26"},
                               {"Great conjunction, 2020", "2020-12-21", "Jupiter and Saturn looked almost touching: 21 Dec 2020"},
                               {"Halley returns, 2061", "2061-07-28", "Halley’s Comet is due back on 28 Jul 2061 (a prediction)"}};
     for (int i = 0; i < 7; i++) {                         // one tile per row, so the names fit
@@ -215,14 +217,14 @@ void journeyDatesCard(AppState& app, bool wasActive) {
             if (!jumps[i].date) { journeyStop(app); resetToToday(app); app.dateNote = "Back to today."; }
             else {
                 std::snprintf(app.dateText, sizeof app.dateText, "%s", jumps[i].date);
-                std::snprintf(app.timeText, sizeof app.timeText, "12:00");
+                std::snprintf(app.timeText, sizeof app.timeText, "%s", jumps[i].time);
                 int64_t ms;
                 if (parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = jumpToDate(app, ms);
             }
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", jumps[i].tip);
     }
-    ImGui::TextWrapped("%s", app.dateNote.empty() ? "Pick any date from 1800 to 2100 (time in UT, Greenwich time): the planets, dwarf planets, comets and belts move to where they really were or will be." : app.dateNote.c_str());
+    ImGui::TextWrapped("%s", app.dateNote.empty() ? datePickHint() : app.dateNote.c_str());
 }
 
 }  // namespace ui

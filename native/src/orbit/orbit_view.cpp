@@ -387,7 +387,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     // the Sun as a star of 1 solar mass (the web's starProps for GM = 100)
-    const double hzIn = 0.95, hzOut = 1.67;               // habitable zone, AU
+    const double hzIn = 0.95, hzOut = 1.67;               // habitable zone, AU: a rough figure, no named source (audit 0.10.5 stage 1, row 8)
     const Color sunCol = starColor(5772);
     const Q star = proj(0, 0, 0);
     const auto ringPoints = [&](double cx, double cy, double rPx, std::vector<std::pair<double, double>>& pts) {   // a circle on screen (only the visible bit of a giant one)
@@ -437,7 +437,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
         const Q q = proj(hzOut * kAU * std::cos(2.4), hzOut * kAU * std::sin(2.4), 0);
         if (q.second > 60 && q.second < H + 20 && q.first > -60 && q.first < W + 60 && hzOut * kAU * px > 70)
-            T.text("habitable zone", q.first, q.second - 3, 10, hexColor("#3d9a5c", 0.85f), 0.5, true);
+            T.text("habitable zone (rough)", q.first, q.second - 3, 10, hexColor("#3d9a5c", 0.85f), 0.5, true);
     }
 
     {   // distance rings, labelled in AU

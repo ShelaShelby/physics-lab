@@ -215,7 +215,7 @@ static void testFallbackAndSimple() {
     check("fallback: the Moon card exists", cardText(sys, sel, opt, c));
     std::string all;
     for (auto& l : c.lines) all += l + "\n";
-    check("fallback: the card says the real Moon is not used outside 1800 to 2100", all.find("Outside 1800") != std::string::npos);
+    check("fallback: the card says the real Moon is not used outside 1800 to 1 Jan 2100", all.find("Outside 1800 to 1 Jan 2100") != std::string::npos);
     check("fallback: no phase is shown outside the span", all.find("Phase now") == std::string::npos);
     loadReal(sys, 2461043.91990);
     Card c2;
@@ -224,6 +224,10 @@ static void testFallbackAndSimple() {
     for (auto& l : c2.lines) all += l + "\n";
     check("card: the real Moon card names the phase (full moon at the Horizons full moon) and the percent lit", all.find("Phase now: full moon, 100% lit") != std::string::npos || all.find("Phase now: full moon, 99% lit") != std::string::npos);
     check("card: ... names ELP2000-82B", all.find("ELP2000-82B") != std::string::npos);
+    {   // the lines are wrapped, so look at them as one text
+        std::string one = all; for (char& ch : one) if (ch == '\n') ch = ' ';
+        check("card: ... says the four main phases are exact and the in-between phase names use this app's own cut-offs (2, 40, 60, 98 %)", one.find("The four main phases (new, first quarter, full, last quarter) are exact") != std::string::npos && one.find("(crescent, gibbous) use this app’s own cut-offs: 2, 40, 60 and 98 % lit") != std::string::npos);
+    }
     check("card: ... says the angle is the geocentric elongation, to first order", all.find("first order") != std::string::npos);
     // the card of another moon (Jupiter's Io) is not touched
     int ij = -1;

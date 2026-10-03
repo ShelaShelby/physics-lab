@@ -240,26 +240,19 @@ void orbitPanel(AppState& app, float width) {
             }
         }
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        char moonBuf[64];
-        std::snprintf(moonBuf, sizeof moonBuf, "%.1f km (%.1f arcsec)", orbit::kMoonElpWorstKm, orbit::kMoonElpWorstArcsec);
+        char moonBuf[32];
+        std::snprintf(moonBuf, sizeof moonBuf, "%.1f km", orbit::kMoonElpWorstKm);
         const std::string moonErr = moonBuf;
+        // 0.10.5 stage 2 (audit row 16): the whole Real note, one paragraph, no repeated relativity numbers (the checkbox tooltip says what relativity does; the Moon's card and About give the arcseconds and the light-time remark)
         const std::string realNote =
-            "Real: the Sun and the eight planets pull on each other (Newtonian; a planet = its whole system). "
-            "Start: JPL Horizons (DE441), 1 Jan 2026 12:00 TDB; dates used as TDB (UTC difference not looked up). "
-            "Earth's Moon: ELP2000-82B, a 1988 theory; geometric, no light time; other moons and other years as in Simple. "
-            "Not in: moons' pull, dwarf planets, asteroids. "
-            "Worst error vs Horizons, 1800-2100 (dates checked): Moon " + moonErr + "; planets, relativity " + std::string(app.set.relativity ? "on" : "off") + ": " + worstErrorList(app.set.relativity) + ".";
+            "Real: Sun and eight planets pull on each other (Newtonian; each planet with its moons). "
+            "Start: JPL Horizons (DE441), 1 Jan 2026 12:00 TDB; dates used as TDB. "
+            "Moon: ELP2000-82B, 1800 to 1 Jan 2100 only; other moons as in Simple. "
+            "Not in: dwarf planets, asteroids. "
+            "Worst error vs Horizons, 1800-2100: Moon " + moonErr + "; planets, relativity " + std::string(app.set.relativity ? "on" : "off") + ": " + worstErrorList(app.set.relativity) + ".";
         ImGui::TextWrapped("%s", app.set.realPlanets
             ? realNote.c_str()
             : "Simple: each planet moves on its own round the Sun, and the planets do not pull on each other (as in the web version).");
-        if (app.set.realPlanets) {
-            const std::string grNote = app.set.relativity
-                ? "General relativity is a first-order (1PN) approximation with the Sun's field only: Mercury's orbit turns about 43 arcseconds per century more, but, measured against JPL Horizons, every planet's position gets worse (Mercury, worst case 1800 to 2100: "
-                  + withCommas(orbit::kRealErrKmRelOn[0]) + " km with it, " + withCommas(orbit::kRealErrKmRelOff[0]) + " km without). The turn is right, the motion along the orbit slightly wrong. Left out: relativity between the planets, the Sun's spin and shape, and higher orders."
-                : "No relativity (the default): plain Newtonian gravity. Mercury's extra turn of about 43 arcseconds per century is missing, but the planets stay closer to JPL Horizons (Mercury's worst error 1800 to 2100: "
-                  + withCommas(orbit::kRealErrKmRelOff[0]) + " km, against " + withCommas(orbit::kRealErrKmRelOn[0]) + " km with the relativity tick on).";
-            ImGui::TextWrapped("%s", grNote.c_str());
-        }
         ImGui::PopStyleColor();
     }
 

@@ -17,6 +17,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.5", "Orbit Lab text fixes (stage 2)",
+     "The Orbit Lab's texts were corrected after the check. Dwarf planets and comets now say that they move on a simple orbit fixed at one date, so they drift from their real places the further the date is from it; the jump note after 2050 about extrapolation is only for Simple (Real says its errors were measured for 1800 to 1 Jan 2100); the Voyager caption is right for 1977 to 1989; the Oort cloud travel times are worked out from the distances next to them; the habitable zone, frost line and lifetime are marked rough and planet cards no longer say whether they are in the habitable zone; the real Moon's range is written 1800 to 1 Jan 2100; the Venus 2012 tile jumps to the middle of the transit; the no-atmosphere temperature says it assumes 30 % reflected; the Moon card says the phase names between the four main phases are this app's own; the Real note is shorter. No number or orbit changed."},
     {"0.10.5", "Orbit Lab checked for errors", "Orbit Lab checked for errors, fixes to follow; nothing changed yet."},
     {"0.10.4", "The real Moon (Orbit Lab, Real planet physics)",
      "With Planet physics set to Real, Earth's Moon is now the real one: its direction, distance and phase on the date shown come from the lunar theory ELP2000-82B (a 1988 theory), checked against NASA/JPL "

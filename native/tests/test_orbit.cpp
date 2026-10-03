@@ -15,6 +15,7 @@
 
 #include "orbit/belts.h"
 #include "orbit/card_text.h"
+#include "orbit/date_text.h"
 #include "orbit/format.h"
 #include "orbit/kepler.h"
 #include "orbit/sky.h"
@@ -347,6 +348,52 @@ int main() {
             for (const BandPoint& p : band) if (p.ok && std::hypot(p.X - 420, p.Y - 310) < 0.6 * std::hypot(840, 620) / 2) inner++;
             check(inner > 10, "Milky Way band: drawn inside the inner part of the map too (looking straight down)");
         }
+    }
+
+    // 14) 0.10.5 stage 2, Orbit Lab text fixes from the audit (REPORT of stage 1). The expected numbers are worked out by hand from the lab's own figures.
+    {
+        const auto has = [](const std::string& s, const char* w) { return s.find(w) != std::string::npos; };
+        const auto joined = [](const std::vector<std::string>& v) { std::string s; for (const auto& l : v) s += l + "\n"; return s; };
+        // row 7: Oort travel times come from Voyager 1's speed (16.94 km/s x 0.21095 AU per year per km/s = 3.5735 AU/yr) and the distances in the same text
+        const double auPerYear = 16.94 * 0.21095;
+        near(voyagerYearsFromSun(2000), 2000 / auPerYear, 560, 1e-9, "Oort: years to 2,000 AU (by hand 559.7)");
+        near(voyagerYearsFromSun(200000), 200000 / auPerYear, 56000, 1e-9, "Oort: years to 200,000 AU (by hand 55,968)");
+        near(voyagerYearsFromSun(200000) / voyagerYearsFromSun(2000), 100, 100, 1e-12, "Oort: 100 times the distance, 100 times the time");
+        const std::string oort = joined(beltLines("oort"));
+        check(has(oort, "about 560 years") && has(oort, "about 56,000 years") && has(oort, "2,000 AU") && has(oort, "200,000 AU"), "Oort card: travel times 560 and 56,000 years next to 2,000 and 200,000 AU");
+        check(has(oortCaption(), "2,000 to 200,000 AU") && has(oortCaption(), "about 560 years") && !has(oortCaption(), "300 years"), "Journey Oort caption: 560 years from the same distances");
+        check(!has(oort, "300 years") && !has(oort, "30,000"), "Oort card: the old 300 and 30,000 are gone");
+        check(has(oort, "4.24 light years") && has(oort, "268,000 AU"), "Oort card: Proxima 4.24 light years = 268,000 AU (4.24 x 63,241.077 = 268,142)");
+        check(probeLaunchYear("v1") == 1977 && probeLaunchYear("v2") == 1977, "probes: launch year 1977");
+        // row 1, 5, 10: the notes after a jump
+        const std::string simple2060 = dateNotes(true, false, false), real2060 = dateNotes(true, true, false), real2026 = dateNotes(false, true, true);
+        check(has(simple2060, "After 2050") && has(simple2060, "extrapolated"), "jump note: Simple after 2050 says extrapolated");
+        check(!has(real2060, "After 2050") && !has(real2060, "extrapolated") && !has(real2026, "extrapolated"), "jump note: Real never says extrapolated");
+        check(has(real2060, "measured against JPL for 1800 to 1 Jan 2100 only") && has(real2026, "measured against JPL for 1800 to 1 Jan 2100 only"), "jump note: Real says the errors were measured for 1800 to 1 Jan 2100 only");
+        check(!has(simple2060, "measured against JPL"), "jump note: Simple does not quote the Real errors");
+        for (const std::string& n : {simple2060, real2060, real2026}) check(has(n, "simple orbit fixed at one date") && has(n, "Pluto is about 1 AU off in 1800") && !has(n, "where they really"), "jump note: dwarf planets and comets are on a simple orbit");
+        check(has(real2026, "Earth’s Moon is the real one") && has(real2026, "1800 to 1 Jan 2100"), "jump note: real Moon, with its range");
+        check(has(real2060, "only from 1800 to 1 Jan 2100") && !has(real2060, "is the real one"), "jump note: Real but past the Moon's range says so");
+        check(has(simple2060, "The moons") && !has(simple2060, "Earth’s Moon is the real one"), "jump note: Simple has no real Moon");
+        check(has(datePickHint(), "simple orbit") && !has(datePickHint(), "where they really"), "date hint: no 'where they really were'");
+        // row 6: the Voyager caption before it can be shown
+        check(has(voyagerFallbackCaption(1960, 1977, 1990), "not launched yet"), "Voyager caption 1960: not launched yet");
+        check(has(voyagerFallbackCaption(1980, 1977, 1990), "launched in 1977") && has(voyagerFallbackCaption(1980, 1977, 1990), "from 1990 on") && !has(voyagerFallbackCaption(1980, 1977, 1990), "not launched yet"), "Voyager caption 1980: launched in 1977, shown from 1990 on");
+        // cards: rows 1, 8, 13, 19
+        SolarSystem s; s.loadAt(ref::kEpochMs);
+        const auto cardOf = [&](const SolarSystem& sys, const char* name, int moon = -1) {
+            for (const Body& b : sys.bodies) if (b.name == name) { Card c; CardOptions o; cardText(sys, moon < 0 ? Selection{Selection::Body, b.id} : Selection{Selection::Moon, b.id, moon}, o, c); return joined(c.lines); }
+            return std::string("(no such body)");
+        };
+        check(has(cardOf(s, "Ceres"), "simple orbit fixed at one date") && has(cardOf(s, "Halley"), "simple orbit fixed at one date"), "cards: dwarf planet and comet say their orbit is fixed at one date");
+        check(!has(cardOf(s, "Mars"), "habitable zone") && !has(cardOf(s, "Earth"), "habitable zone") && !has(cardOf(s, "Ceres"), "habitable zone"), "cards: no 'In the habitable zone' verdict on planets");
+        check(!has(cardOf(s, "Earth"), "simple orbit fixed"), "cards: planets do not carry the dwarf/comet line");
+        check(has(cardOf(s, "Ceres"), "assumes 30 % reflected") && !has(cardOf(s, "Earth"), "assumes 30 %"), "cards: the no-atmosphere temperature says it assumes 30 % reflected (Earth's is the real one)");
+        Card sc; CardOptions so; cardText(s, Selection{Selection::Star}, so, sc);
+        const std::string sun = joined(sc.lines);
+        check(has(sun, "Habitable zone (rough)") && has(sun, "Frost line (rough)") && has(sun, "Lifetime (rough)"), "Sun card: habitable zone, frost line and lifetime are marked rough");
+        check(!has(cardOf(s, "Earth", 0), "× our Moon") && has(cardOf(s, "Earth", 0), "Radius: 1737.4 km"), "Moon card: no comparison with itself");
+        check(has(cardOf(s, "Jupiter", 0), "× our Moon"), "Io card: still compared with our Moon");
     }
 
     std::printf("%d checks, %d failed. Worst position difference vs the web version: %.3g of the distance from the Sun (belt rocks: %.3g).\n",

@@ -72,6 +72,16 @@ bool farItem(const SolarSystem& sys, int index, FarItem& out);
 int farIndexOf(const std::string& key);             // -1 if unknown
 void farCard(const FarItem& f, Card& c);
 
+// 1 km/s is this many AU per year (31,557,600 km per Julian year / 149,597,870.7 km per AU = 0.210945, rounded as the web version did)
+constexpr double kAuPerYearPerKms = 0.21095;
+// The Voyagers are only shown from 1 Jan 1990 on (as in the web version).
+constexpr int kProbesShownFromYear = 1990;
+constexpr double kProbesShownFromMs = 631152000000.0;   // 1 Jan 1990 00:00 UTC
+double voyagerKms();                                    // Voyager 1's speed from the Sun, km/s (the lab's own figure)
+double voyagerYearsFromSun(double au);                  // years Voyager 1 would need to go `au` AU from the Sun in a straight line at that speed
+int probeLaunchYear(const char* key);                   // "v1" / "v2": the launch year in the lab's data (0 if unknown)
+double farDistanceLy(const char* key);                  // a far-away thing's distance in light years from the lab's table (0 if unknown)
+
 constexpr double kSkyT0Ms = 1790769600000.0;        // 30 Sep 2026 12:00 UTC: the date the Voyager positions were worked out for
 
 }  // namespace orbit
