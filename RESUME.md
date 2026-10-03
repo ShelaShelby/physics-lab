@@ -1,8 +1,8 @@
 # Resume
 
 ## Current state
-- Version 0.10.4 alpha is the latest finished version: the real Moon. Stage 1: ELP2000-82B (`src/orbit/moon_elp.*`) checked against Horizons. Stage 2: used in the Orbit Lab in Planet physics Real only (Earth's Moon at its real direction and phase, exaggerated distance; Earth drawn off the Earth-Moon barycentre; phase on the Moon's card; Real note and About updated). Simple is unchanged; Real is still an option, Simple the default, until the owner has tried it.
-- The roadmap was updated after it. The next planned item is the bug and speed audit (see ROADMAP.md).
+- Version 0.10.5 alpha, stage 1: the Orbit Lab audit, a report only (native/REPORT.md); nothing in the app changed. The real Moon (0.10.4) is the last version that changed the app. Real is still an option, Simple the default, until the owner has tried it.
+- Next: the owner reads the audit and picks the fix tasks; they are on the roadmap as planned (stage numbers not decided yet). After them: the audits of the Atom Lab and of the app and settings.
 - Test programs and their last known check counts:
   - orbit_tests: 1,377
   - atom_tests: 17,936

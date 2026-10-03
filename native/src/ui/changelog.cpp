@@ -17,6 +17,7 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.5", "Orbit Lab checked for errors", "Orbit Lab checked for errors, fixes to follow; nothing changed yet."},
     {"0.10.4", "The real Moon (Orbit Lab, Real planet physics)",
      "With Planet physics set to Real, Earth's Moon is now the real one: its direction, distance and phase on the date shown come from the lunar theory ELP2000-82B (a 1988 theory), checked against NASA/JPL "
      "Horizons (DE441): at the dates checked between 1800 and 2100 it is within 5.2 km (2.9 arcseconds as seen from the Earth) at worst. Select the Moon to see its phase (new moon, waxing crescent, first quarter and so on) "
