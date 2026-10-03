@@ -34,6 +34,23 @@ struct Sky {
 };
 const Sky& skyData();
 
+// The night sky's map: the angle from straight ahead becomes the distance from the middle of the picture, so 100 degrees (1.75 rad) reaches the corner. A direction (in
+// ecliptic coordinates) -> a point on a W x H picture, for the view given by the cosine and sine of the yaw (ca, sa) and of the pitch (cb, sb). False when the direction
+// is more than 100 degrees from straight ahead (off the map).
+bool skyScreen(const Vec3& v, double W, double H, double ca, double sa, double cb, double sb, double& X, double& Y);
+
+// The Milky Way: one band along the plane of our galaxy (a great circle through the galactic centre, brightest towards it), sampled at kBandPieces + 1 points
+// (the last is the first again). A point is `ok` (drawn) when it is on the map and has a neighbour on the map to take the direction of the band from.
+constexpr int kBandPieces = 240;
+struct BandPoint {
+    double X = 0, Y = 0;        // on the picture
+    double tx = 0, ty = 0;      // the band's unit normal there, on the picture
+    double fade = 0;            // 1 inside the map, falling smoothly to 0 over the last 0.2 rad before the map's edge
+    double bright = 0;          // 0.4 (away from the galactic centre) to 1 (towards it)
+    bool ok = false;
+};
+void milkyWayBand(const Sky& S, double W, double H, double ca, double sa, double cb, double sb, std::vector<BandPoint>& band);
+
 Vec3 lonLat(double lonDeg, double latDeg);          // unit vector from ecliptic longitude and latitude
 std::array<int, 3> bvRGB(double bv);                // a star's colour from its B−V index, a little paler, as the eye sees it
 double spBV(const char* spectralType);              // rough B−V from the spectral type letter

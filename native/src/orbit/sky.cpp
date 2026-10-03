@@ -49,6 +49,49 @@ double spBV(const char* sp) {
     }
 }
 
+// The night sky's map (see sky.h). Moved here from the drawing code so it can be tested.
+bool skyScreen(const Vec3& v, double W, double H, double ca, double sa, double cb, double sb, double& X, double& Y) {
+    const double cx = W / 2, cy = H / 2, K = std::hypot(W, H) / 2 / 1.75;           // K: points per radian away from the middle
+    const double x1 = v.x * ca - v.y * sa, y1 = v.x * sa + v.y * ca, y2 = y1 * cb - v.z * sb, dep = y1 * sb + v.z * cb;
+    const double th = std::acos(std::clamp(-dep, -1.0, 1.0));                    // the viewer is on the +depth side and looks the other way
+    if (th > 1.75) return false;
+    const double rho = std::max(std::hypot(x1, y2), 1e-9), r = th * K;
+    X = cx + x1 / rho * r; Y = cy - y2 / rho * r;
+    return true;
+}
+
+// The Milky Way band's points on the picture. Every sample that is on the map is drawn, as long as it has at least one neighbour on the map; the direction of the band
+// there is taken from the neighbours on the map (both: the difference between them; one: the difference to it). The circle is closed, so sample 0 and sample
+// kBandPieces are the same point and the neighbours wrap round. (Before 0.10.1 the neighbour test read the flags of points that the same loop had just switched
+// off, so after the first gap in the visible stretch every later point was dropped: the band stopped, or was only a thin arc, or was missing.)
+void milkyWayBand(const Sky& S, double W, double H, double ca, double sa, double cb, double sb, std::vector<BandPoint>& band) {
+    const double cx = W / 2, cy = H / 2, K = std::hypot(W, H) / 2 / 1.75;
+    const Vec3 A = S.galCentre, P = S.galPole, B = cross(P, A);
+    const int n = kBandPieces;
+    band.assign(n + 1, BandPoint{});
+    std::vector<char> onMap(n + 1, 0);
+    for (int i = 0; i <= n; i++) {
+        const double l = i / double(n) * 2 * kPi, c = std::cos(l);
+        BandPoint& p = band[i];
+        onMap[i] = skyScreen(A * c + B * std::sin(l), W, H, ca, sa, cb, sb, p.X, p.Y);
+        p.bright = 0.4 + 0.6 * (0.5 + 0.5 * c);
+        p.fade = onMap[i] ? std::clamp((1.75 - std::hypot(p.X - cx, p.Y - cy) / K) / 0.2, 0.0, 1.0) : 0.0;   // fades out where the map ends
+    }
+    const double diag = std::hypot(W, H) / 2;
+    for (int i = 0; i <= n; i++) {                                                // the direction along the band on screen, from the neighbours on the map
+        if (!onMap[i]) continue;
+        const int pv = i == 0 ? n - 1 : i - 1, nx = i == n ? 1 : i + 1;
+        const BandPoint& p = band[i];
+        const BandPoint& a = onMap[pv] ? band[pv] : p;                           // (a missing neighbour: use the point itself, a one-sided difference)
+        const BandPoint& b = onMap[nx] ? band[nx] : p;
+        if (!onMap[pv] && !onMap[nx]) continue;                                   // alone: no direction
+        const double dx = b.X - a.X, dy = b.Y - a.Y, len = std::hypot(dx, dy);
+        if (len < 1e-9 || len > 0.35 * diag) continue;                            // (a jump across the picture would be a break in the map; none happens inside the map)
+        band[i].tx = -dy / len; band[i].ty = dx / len;                            // the unit normal
+        band[i].ok = true;
+    }
+}
+
 const Sky& skyData() {
     static Sky S;
     static bool made = false;

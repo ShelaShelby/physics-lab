@@ -194,6 +194,7 @@ int main(int, char**) {
     }
     if (const char* z = SDL_getenv("PL_ZOOM")) ui::setZoom(app, std::atof(z));
     if (SDL_getenv("PL_3D")) app.set.view3D = true;
+    if (const char* tl = SDL_getenv("PL_TILT")) { double yw = 0, pt = 0; if (std::sscanf(tl, "%lf,%lf", &yw, &pt) == 2) { app.view.yaw = yw; app.view.pitch = pt; } }   // for automatic checks: PL_TILT=yaw,pitch (radians) of the 3D view
     if (const char* ph = SDL_getenv("PL_PHYSICS")) { bool r = false; if (orbit::planetPhysicsFromText(ph, r)) app.set.realPlanets = r; }   // for automatic checks: Planet physics Simple / Real
     if (const char* g = SDL_getenv("PL_GR")) app.set.relativity = std::atoi(g) != 0;   // for automatic checks: General relativity (1PN) on (1) / off (0)
     if (const char* d = SDL_getenv("PL_DATE")) { int64_t ms; if (ui::parseDateTime(d, "12:00", ms)) std::printf("%s\n", ui::jumpToDate(app, ms).c_str()); else std::printf("not a date\n"); }

@@ -269,6 +269,86 @@ int main() {
         }
     }
 
+    // 13) the Milky Way band (0.10.1): it must run smoothly across the sky and fade only at the edge of the map. Checked for 312 view directions (24 turns x 13 tilts, from
+    //     looking straight down to straight up) on two picture shapes, against what follows from the geometry (not against the old drawing, which dropped most of the band:
+    //     its neighbour test read flags that the same loop had just cleared, so one gap in the visible stretch removed everything after it).
+    {
+        const Sky& S = skyData();
+        const Vec3 A = S.galCentre, P = S.galPole, Bv = cross(P, A);
+        const double pic[2][2] = {{840, 620}, {400, 900}};
+        const int n = kBandPieces;
+        const double arc = 2 * units::kPi / n;                       // angle between two neighbouring samples on the sky
+        int views = 0, wrongSet = 0, manyRuns = 0, wrongPlace = 0, noBand = 0;
+        double worstEndFade = 0, worstFadeStep = 0, worstStep = 0;
+        for (const auto& wh : pic) {
+            const double W = wh[0], H = wh[1], K = std::hypot(W, H) / 2 / 1.75;
+            for (int ky = 0; ky < 24; ky++)
+                for (int kp = -6; kp <= 6; kp++) {
+                    const double yaw = ky * 2 * units::kPi / 24, pitch = kp * 0.25;
+                    const double ca = std::cos(yaw), sa = std::sin(yaw), cb = std::cos(pitch), sb = std::sin(pitch);
+                    std::vector<BandPoint> band;
+                    milkyWayBand(S, W, H, ca, sa, cb, sb, band);
+                    views++;
+                    if (int(band.size()) != n + 1) { wrongSet++; continue; }
+                    std::vector<char> vis(n + 1, 0);
+                    int drawn = 0;
+                    for (int i = 0; i <= n; i++) {                   // which samples of the great circle are on the map (100 degrees round the middle)?
+                        const double l = i * arc;
+                        double X = 0, Y = 0;
+                        vis[i] = skyScreen(A * std::cos(l) + Bv * std::sin(l), W, H, ca, sa, cb, sb, X, Y);
+                        if (vis[i] && (std::fabs(band[i].X - X) > 1e-9 || std::fabs(band[i].Y - Y) > 1e-9)) wrongPlace++;   // the band is still on the same great circle
+                    }
+                    for (int i = 0; i <= n; i++) {
+                        const int pv = i == 0 ? n - 1 : i - 1, nx = i == n ? 1 : i + 1;   // the circle is closed: sample n is sample 0
+                        const bool want = vis[i] && (vis[pv] || vis[nx]);              // on the map and not alone
+                        if (band[i].ok != want) wrongSet++;
+                        if (band[i].ok) drawn++;
+                    }
+                    if (drawn < 100) noBand++;                       // a great circle always has an arc of at least 160 degrees within 100 degrees of any direction
+                    int runs = 0;                                    // separate drawn stretches round the closed circle
+                    for (int i = 0; i < n; i++) {
+                        const int pv = i == 0 ? n - 1 : i - 1;
+                        if (band[i].ok && !band[pv].ok) {
+                            runs++;
+                            worstEndFade = std::max(worstEndFade, band[i].fade);   // where a stretch begins it must already be nearly faded out
+                        }
+                        const int nx = i + 1 == n ? 0 : i + 1;
+                        if (band[i].ok && !band[nx].ok) worstEndFade = std::max(worstEndFade, band[i].fade);
+                    }
+                    if (runs > 1) manyRuns++;
+                    for (int i = 0; i < n; i++) {
+                        const BandPoint &p = band[i], &q = band[i + 1];
+                        if (!p.ok || !q.ok) continue;
+                        worstFadeStep = std::max(worstFadeStep, std::fabs(q.fade - p.fade));
+                        worstStep = std::max(worstStep, std::hypot(q.X - p.X, q.Y - p.Y) / (K * arc));
+                    }
+                }
+        }
+        // limits from the geometry: (a) fade = (1.75 - theta) / 0.2 near the edge and neighbouring samples are `arc` apart on the sky, so the fade changes by at most
+        // arc / 0.2 = 0.131 per step; (b) a stretch ends where the map ends, where the fade is at most that same step above zero (one sample inside the edge), plus
+        // one more step if an end sample has to be left out: 2 steps = 0.262; (c) in this projection a step of `arc` on the sky is at most arc x K x theta / sin(theta)
+        // long on the picture (1.777 at the 100 degrees edge), so 1.8 x arc x K.
+        const double fadeStep = arc / 0.2;
+        std::printf("  Milky Way band, %d views: wrong set of drawn points %d, views with more than one stretch %d, views with almost no band %d, off the great circle %d; "
+                    "largest fade at the end of a stretch %.3f (limit %.3f), largest fade change per step %.3f (limit %.3f), longest step %.3f x arc x K (limit 1.8)\n",
+                    views, wrongSet, manyRuns, noBand, wrongPlace, worstEndFade, 2 * fadeStep, worstFadeStep, fadeStep, worstStep);
+        check(views == 624, "Milky Way band: all views tried");
+        check(wrongSet == 0, "Milky Way band: every point on the map that has a neighbour on the map is drawn, and no other (no dropped pieces, no stubs)");
+        check(manyRuns == 0 && noBand == 0, "Milky Way band: one connected run across the sky in every view");
+        check(wrongPlace == 0, "Milky Way band: still on the same great circle (the galactic centre and pole are unchanged)");
+        check(worstEndFade <= 2 * fadeStep + 1e-9, "Milky Way band: a run ends only where the map ends (nearly faded out there)");
+        check(worstFadeStep <= fadeStep + 1e-9, "Milky Way band: the fade changes smoothly along the band");
+        check(worstStep <= 1.8, "Milky Way band: no jumps in position along the band");
+        // the middle of the sky: looking straight down, the band must be drawn right through the middle region of the map, not only at its edge
+        {
+            std::vector<BandPoint> band;
+            milkyWayBand(S, 840, 620, 1, 0, 1, 0, band);
+            int inner = 0;
+            for (const BandPoint& p : band) if (p.ok && std::hypot(p.X - 420, p.Y - 310) < 0.6 * std::hypot(840, 620) / 2) inner++;
+            check(inner > 10, "Milky Way band: drawn inside the inner part of the map too (looking straight down)");
+        }
+    }
+
     std::printf("%d checks, %d failed. Worst position difference vs the web version: %.3g of the distance from the Sun (belt rocks: %.3g).\n",
                 g_checks, g_failed, worstRel, worstBelt);
     return g_failed ? 1 : 0;

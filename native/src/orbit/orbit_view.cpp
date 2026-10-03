@@ -158,41 +158,17 @@ struct TextPainter {
 void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double ca, double sa, double cb, double sb, ConsMode cons, double lv) {
     const Sky& S = skyData();
     const double cx = W / 2, cy = H / 2, diag = std::hypot(W, H) / 2, K = diag / 1.75;   // K: points per radian away from the middle (100° reaches the corner)
-    // a direction -> screen: the angle from straight ahead becomes the distance from the middle
-    const auto scr = [&](const Vec3& v, double& X, double& Y) {
-        const double x1 = v.x * ca - v.y * sa, y1 = v.x * sa + v.y * ca, y2 = y1 * cb - v.z * sb, dep = y1 * sb + v.z * cb;
-        const double th = std::acos(std::clamp(-dep, -1.0, 1.0));   // the viewer is on the +depth side and looks the other way
-        if (th > 1.75) return false;
-        const double rho = std::max(std::hypot(x1, y2), 1e-9), r = th * K;
-        X = cx + x1 / rho * r; Y = cy - y2 / rho * r;
-        return true;
-    };
+    // a direction -> screen: the angle from straight ahead becomes the distance from the middle (orbit/sky.cpp)
+    const auto scr = [&](const Vec3& v, double& X, double& Y) { return skyScreen(v, W, H, ca, sa, cb, sb, X, Y); };
     // The Milky Way: one smooth band along the plane of our galaxy (a great circle through the galactic centre A, brightest towards the centre).
     // A triangle mesh with a colour at each corner: it is a single surface, so there are no joints between pieces, and the light fades smoothly
     // to nothing on both edges (a cos² profile across the band). Three profiles of different width are added: a wide faint glow and a narrower,
     // brighter core, as the three lines of the older versions did. The position and direction on the sky are unchanged.
-    struct BandPoint { double X, Y, tx, ty, fade, bright; bool ok; };
     static std::vector<BandPoint> band;
     {
-        const Vec3 A = S.galCentre, P = S.galPole, B = cross(P, A);
-        constexpr int kN = 240, kRows = 17;                        // pieces along the band; rows across it (one side: kRows)
         const double wds[3] = {0.46 * K, 0.27 * K, 0.12 * K}, als[3] = {0.03, 0.042, 0.055};
-        band.assign(kN + 1, BandPoint{});
-        for (int i = 0; i <= kN; i++) {
-            const double l = i / double(kN) * 2 * kPi, c = std::cos(l);
-            BandPoint& p = band[i];
-            p.ok = scr(A * c + B * std::sin(l), p.X, p.Y);
-            p.bright = 0.4 + 0.6 * (0.5 + 0.5 * c);
-            p.fade = p.ok ? std::clamp((1.75 - std::hypot(p.X - cx, p.Y - cy) / K) / 0.2, 0.0, 1.0) : 0.0;   // fades out where the map ends
-        }
-        for (int i = 0; i <= kN; i++) {                            // the direction along the band on screen, from the neighbours
-            BandPoint& p = band[i];
-            const BandPoint& p0 = band[std::max(i - 1, 0)], &p1 = band[std::min(i + 1, kN)];
-            double dx = p1.X - p0.X, dy = p1.Y - p0.Y;
-            const double len = std::hypot(dx, dy);
-            if (!p.ok || !p0.ok || !p1.ok || len < 1e-9 || len > 0.35 * diag) { p.ok = false; continue; }
-            p.tx = -dy / len; p.ty = dx / len;                     // the unit normal
-        }
+        constexpr int kN = kBandPieces, kRows = 17;               // pieces along the band; rows across it (one side: kRows)
+        milkyWayBand(S, W, H, ca, sa, cb, sb, band);               // the points on the screen, with the direction and the fade at the edge of the map (orbit/sky.cpp, tested)
         const double halfW = 0.5 * wds[0];
         const auto profile = [&](double d) {                       // light at distance d from the band's middle line (per unit lv)
             double a = 0;
