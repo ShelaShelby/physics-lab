@@ -8,6 +8,13 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Try on the PC (0.10.4)
+- [ ] Planet physics Real, select the Moon (Earth's Moon): its card shows the phase and the lit percent, and they match the real Moon of that day (look at the sky, or an almanac). Try today, and a date with a full moon or a new moon.
+- [ ] Jump to 1800 and to 2100 with the Moon selected: the Moon is still real and the card still shows a phase; jump before 1800 or after 2100: the card says the real Moon is not used there.
+- [ ] Play at the fastest Time speed with the Moon selected: nothing flickers; the Moon is not drawn and its orbit is lit (the card says so), and Earth does not shake.
+- [ ] Simple mode: the Moon looks and moves as before (no phase on its card).
+- [ ] The Real note under Planet physics (11 lines or fewer at normal text size) reads well, also at Extra large text.
+
 ## Try on the PC (0.10.1)
 - [ ] Planet physics Real: the "General relativity (1PN)" and "Exaggerate the Sun's wobble (×50)" tick boxes appear only in Real, their tooltips read well (hover), and they are still as you left them after closing and reopening the app. (Mercury's extra turn is only about 0.01 degrees per century: too small to see in the picture; the tests check it, not the eye.)
 - [ ] The Sun's wobble: in Real, run time at a fast Time speed and zoom in to the inner system: gold loops of the Sun's path round the Barycentre marker, labelled exaggerated.

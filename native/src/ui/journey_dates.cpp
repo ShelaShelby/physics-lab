@@ -175,7 +175,9 @@ std::string jumpToDate(AppState& app, int64_t ms) {
     }
     if (note.empty()) note = "Showing " + fmt::dateUTC(ms) + ". ";
     if (ms > kTableEnd) note += "After 2050 the planets’ places are extrapolated beyond NASA’s table (1800–2050), so they get slowly less exact. ";
-    note += "The moons start at made-up places (only the planets, dwarf planets, comets and belts are real).";
+    note += app.set.realPlanets && app.sys.realMoon()
+        ? "Earth’s Moon is the real one (ELP2000-82B); the other moons start at made-up places (only the planets, dwarf planets, comets and belts are real)."
+        : "The moons start at made-up places (only the planets, dwarf planets, comets and belts are real).";
     return note;
 }
 

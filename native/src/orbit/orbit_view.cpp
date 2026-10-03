@@ -744,12 +744,19 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             double E = Mn + m.e * std::sin(Mn);
             for (int i = 0; i < 3; i++) E += (Mn - (E - m.e * std::sin(E))) / (1 - m.e * std::cos(E));
             const double xr = std::cos(E) - m.e, yr = std::sqrt(1 - m.e * m.e) * std::sin(E), sgn = m.retrograde ? -1 : 1;
+            // 0.10.4 stage 2, Real planet physics: Earth's Moon is at its real direction and phase (ELP2000-82B). It is drawn at the same exaggerated distance as any moon (dW, the label
+            // "Orbit drawn about N× too wide" is unchanged), scaled by the Moon's real distance over its mean one (so perigee and apogee show, and at true scale it is the real distance); the ring is the Moon's
+            // instantaneous orbit plane (geocentric position x velocity) through the Moon, so the Moon is always on it. Every other moon, and Earth's in Simple or outside 1800-2100, is as before.
+            const bool realM = sys.realMoon() && b.name == "Earth" && j == 0;
+            Vec3 rh, ph;
+            double dW2 = dW;
+            if (realM) { const Vec3 g = sys.moonGeocentric(); rh = g * (1 / length(g)); ph = cross(sys.moonOrbitNormal(), rh); dW2 = dW * length(g) / aM; }
             {   // the orbit (seen from above, the tilted circle looks like an ellipse)
-                const double rPx = dW * px;
+                const double rPx = dW2 * px;
                 double t0 = 0, t1 = 2 * kPi;
                 int NN = static_cast<int>(std::min(720.0, std::max(48.0, std::ceil(rPx / 4))));
                 bool drawIt = true;
-                if (!d3 && bigR(W, H, rPx)) {             // a giant flat orbit: only the visible stretch is worked out
+                if (!d3 && !realM && bigR(W, H, rPx)) {   // a giant flat orbit: only the visible stretch is worked out (not for the real Moon's ring: its plane is not the ecliptic)
                     double a0, a1;
                     const Win w = circWin(W, H, pc.first, pc.second, rPx, a0, a1);
                     if (w != Win::Arc) drawIt = false;
@@ -761,14 +768,15 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                         LinePen pen{R, W, H, pass ? 3.0 : 1.0, c};
                         for (int i = 0; i <= NN; i++) {
                             const double t = t0 + (t1 - t0) * i / NN, Y = dW * std::sin(t);
-                            const Q qq = proj(b.pos.x + dW * std::cos(t), b.pos.y + Y * ct, b.pos.z + Y * st);
+                            const Vec3 P = realM ? b.pos + (rh * std::cos(t) + ph * std::sin(t)) * dW2 : Vec3{b.pos.x + dW * std::cos(t), b.pos.y + Y * ct, b.pos.z + Y * st};
+                            const Q qq = proj(P.x, P.y, P.z);
                             pen.to(qq.first, qq.second);
                         }
                     }
                 }
             }
             const double Y = dW * yr * sgn;
-            const Q mp = proj(b.pos.x + dW * xr, b.pos.y + Y * ct, b.pos.z + Y * st);
+            const Q mp = realM ? proj(b.pos.x + dW2 * rh.x, b.pos.y + dW2 * rh.y, b.pos.z + dW2 * rh.z) : proj(b.pos.x + dW * xr, b.pos.y + Y * ct, b.pos.z + Y * st);
             const double mr = TRUE_SCALE ? m.radiusKm * kKm * px : 1.6 + 0.9 * std::max(0.0, std::log10(m.radiusKm / 50));
             const bool mtiny = TRUE_SCALE && mr < 1.2;
             const double md = mtiny ? 3.5 : mr;

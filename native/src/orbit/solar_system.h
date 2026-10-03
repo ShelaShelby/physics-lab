@@ -13,6 +13,7 @@
 
 #include "belts.h"
 #include "kepler.h"
+#include "moon_elp.h"
 #include "nbody.h"
 #include "solar_data.h"
 #include "units.h"
@@ -67,6 +68,8 @@ OrbitShape orbitOf(const Body& b);
 
 // Real planets: the Sun's own path (its position from the barycentre) is kept as a trail with a point every 0.05 Sun radii of travel, at most 1,000 points.
 constexpr double kSunTrailStep = 0.05 * units::kSunRadius;
+// A moon that goes round more than this many times a real second is not drawn as a body (the whole orbit is lit): the drawing's rule for every moon.
+constexpr double kMoonFastLaps = 8;
 
 class SolarSystem {
 public:
@@ -91,6 +94,19 @@ public:
     // Earths). Real: where the N-body integrator has it (the Sun's own barycentric position, minus), with the real GM values.
     Vec3 barycentre() const;
 
+    // The real Moon (0.10.4 stage 2; Real planet physics only). In Real the N-body body "Earth" is the Earth-Moon barycentre (EMB: its GM is Earth + Moon, its start state JPL's EMB). So Earth
+    // itself is drawn at EMB - g * mu / (1 + mu) and the Moon is at EMB + g / (1 + mu), where g is the ELP2000-82B vector from Earth to the Moon (orbit/moon_elp.h) and mu = GM_Moon / GM_Earth
+    // (JPL astrodynamic parameters, orbit/nbody.h). Earth's velocity (and so its orbit numbers on the card) stays the barycentre's. Earth's trail follows the barycentre.
+    // Only the Moon of Earth is real; every other moon stays on its Kepler ellipse as in Simple. Outside 1800-2100 realMoon() is false: the Moon falls back to its Kepler ellipse, Earth to the barycentre.
+    bool realMoon() const { return real_ && moonValid_; }
+    Vec3 moonGeocentric() const { return moonGeo_; }       // ELP vector Earth -> Moon at the date shown, m (valid when realMoon())
+    Vec3 moonPosition() const;                             // the Moon's true place, from the Sun's centre (m), valid when realMoon()
+    Vec3 embPosition() const { return emb_; }              // the Earth-Moon barycentre from the Sun's centre (m), Real only
+    Vec3 moonOrbitNormal() const { return moonNormal_; }   // unit normal of the Moon's instantaneous orbit plane (geocentric position x velocity, ELP), valid when realMoon()
+    // True while the Time speed makes the Moon go round more than kMoonFastLaps times a real second (the drawing then lights the whole orbit instead of drawing the Moon, as for every
+    // moon); Earth is then held at the barycentre, because its 4,300-5,000 km wobble at that rate would only flicker. Set by step().
+    bool moonFast() const { return moonFast_; }
+
     double julianDay() const;               // the date being shown, as a Julian day
     int64_t currentUnixMs() const;          // the same as Unix milliseconds
 
@@ -107,8 +123,11 @@ private:
     bool real_ = false;
     bool gr_ = false;
     Vec3 sunBary_;                         // Real: the Sun's position from the barycentre (m), as the N-body clock has it
+    Vec3 emb_, moonGeo_, moonNormal_;      // Real: the Earth-Moon barycentre (m, from the Sun), the ELP vector Earth -> Moon (m), the Moon's orbit-plane normal
+    bool moonValid_ = false;               // Real and the date is inside the span of ELP2000-82B
+    bool moonFast_ = false;
     NBodyClock nb_;
-    void applyReal(double extraSeconds);   // put the eight planets where the N-body clock has them `extraSeconds` after the shown date
+    void applyReal(double extraSeconds, bool withMoon = true);   // put the eight planets where the N-body clock has them `extraSeconds` after the shown date; withMoon: and split Earth and Moon (once per frame, not per sub-step)
     void realTrail(Body& b);
     void sunTrailPoint();
 };

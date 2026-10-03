@@ -23,6 +23,11 @@ const double kRealGM[kNBodies] = {
     6836527.100580e9,                         // Neptune system
 };
 
+// Earth alone and the Moon alone: https://ssd.jpl.nasa.gov/astro_par.html, "Planetary Masses" (JPL planetary ephemeris DE440), GM in km^3/s^2, read from the page itself on 2026-10-03.
+// (kRealGM[3] above is their sum, written in the same way as before so that nothing in the planets' numbers changes.)
+const double kRealGMEarthAlone = 398600.435507e9;
+const double kRealGMMoon = 4902.800118e9;
+
 void nbodyAccelN(int n, const double* gm, const Vec3* x, Vec3* a) {
     for (int i = 0; i < n; i++) a[i] = Vec3{};
     for (int i = 0; i < n; i++)

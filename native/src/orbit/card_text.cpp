@@ -102,6 +102,16 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         const double ex = opt.moonExaggeration;
         if (ex > 1.3) c.lines.push_back("Orbit drawn about " + fmt::commas(ex >= 100 ? std::round(ex / 10) * 10 : std::round(ex)) + "× too wide, so you can see it");
         if (fast) c.lines.push_back("Goes round " + (lps >= 100 ? fmt::commas(lps) : fmt::fixed(lps, 0)) + " times a second at this Time speed: too fast to see, so the whole orbit is lit");
+        if (sys.realPlanets() && b->name == "Earth" && sel.moon == 0) {    // 0.10.4 stage 2: Earth's Moon in Real mode is the real one (ELP2000-82B), the other moons are not
+            if (sys.realMoon()) {
+                const MoonPhase p = moonPhase(sys.moonGeocentric(), b->pos * -1.0);   // Sun (at the origin) seen from Earth
+                c.lines.push_back(std::string("Phase now: ") + p.name + ", " + std::to_string(static_cast<int>(std::lround(100 * p.fraction))) + "% lit");
+                c.lines.push_back("It is " + fmt::fixed(p.elongationDeg, 0) + "° from the Sun in the sky. The lit part is (1 − cos of that angle) / 2, to first order (the geocentric elongation, not the exact phase angle)");
+                c.lines.push_back("Distance from " + b->name + " right now: " + fmt::km(length(sys.moonGeocentric()) / kKm) + " (the one above is the mean)");
+                c.lines.push_back("Real position and phase: ELP2000-82B, a 1988 theory; within " + fmt::fixed(kMoonElpWorstKm, 1) + " km of JPL Horizons at worst at the dates checked (1800 to 2100)");
+            } else
+                c.lines.push_back("Outside 1800 to 2100 the real Moon (ELP2000-82B) is not used: this Moon is on a simple Kepler ellipse with a made-up starting angle, as in Simple, and has no phase here");
+        }
         return true;
     }
 
@@ -159,6 +169,8 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         for (auto& l : seasonLines(b, sys)) c.lines.push_back(l);                        // Earth: which season it is
         if (!b.giant) c.lines.push_back(d >= sp.hzIn && d <= sp.hzOut ? "In the habitable zone" : "Outside the habitable zone");
         c.lines.push_back(b.note);
+        if (sys.realMoon() && b.name == "Earth")           // 0.10.4 stage 2: Earth is drawn off the Earth-Moon barycentre; its orbit numbers above are the barycentre's
+            c.lines.push_back("Real: Earth is drawn off the Earth–Moon balance point by the Moon's pull (about 4,700 km); the speed and orbit above are the balance point's");
         if (!b.moons.empty())
             c.lines.push_back(std::to_string(b.moons.size()) + (b.moons.size() > 1 ? " big moons shown" : " moon shown") + (opt.moonsOn ? "" : " (Moons is off)"));
         return true;

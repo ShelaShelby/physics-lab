@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <string>
 
 #include "changelog.h"
@@ -16,6 +17,7 @@
 #include "shot.h"
 #include "benchmark.h"
 #include "orbit/format.h"
+#include "orbit/moon_elp.h"
 #include "orbit/real_errors.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
@@ -238,11 +240,15 @@ void orbitPanel(AppState& app, float width) {
             }
         }
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        char moonBuf[64];
+        std::snprintf(moonBuf, sizeof moonBuf, "%.1f km (%.1f arcsec)", orbit::kMoonElpWorstKm, orbit::kMoonElpWorstArcsec);
+        const std::string moonErr = moonBuf;
         const std::string realNote =
-            "Real: the Sun and the eight planets pull on each other (Newtonian; each planet stands for its whole system). "
-            "Start: JPL Horizons (DE441) state of 1 January 2026 12:00 TDB; dates are treated as TDB (no UTC conversion; the small difference was not looked up). "
-            "Left out: moons, dwarf planets (Pluto is not in) and asteroids pulling on the planets (they move as in Simple). "
-            "Worst error against Horizons, 1800 to 2100, relativity " + std::string(app.set.relativity ? "on" : "off") + ": " + worstErrorList(app.set.relativity) + ".";
+            "Real: the Sun and the eight planets pull on each other (Newtonian; a planet = its whole system). "
+            "Start: JPL Horizons (DE441), 1 Jan 2026 12:00 TDB; dates used as TDB (UTC difference not looked up). "
+            "Earth's Moon: ELP2000-82B, a 1988 theory; geometric, no light time; other moons and other years as in Simple. "
+            "Not in: moons' pull, dwarf planets, asteroids. "
+            "Worst error vs Horizons, 1800-2100 (dates checked): Moon " + moonErr + "; planets, relativity " + std::string(app.set.relativity ? "on" : "off") + ": " + worstErrorList(app.set.relativity) + ".";
         ImGui::TextWrapped("%s", app.set.realPlanets
             ? realNote.c_str()
             : "Simple: each planet moves on its own round the Sun, and the planets do not pull on each other (as in the web version).");

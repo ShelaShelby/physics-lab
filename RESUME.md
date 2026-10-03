@@ -1,15 +1,16 @@
 # Resume
 
 ## Current state
-- Version 0.10.3 alpha is the latest finished version (Real planets start from JPL Horizons data; relativity tick off by default; Real is still an option, Simple the default, until the owner has tried it).
-- 0.10.4 stage 1 (the real Moon: data and validation only, no app change) is done: the Moon from ELP2000-82B (`src/orbit/moon_elp.*`) checked against Horizons. Stage 2 (use it in the Orbit Lab) is planned (see ROADMAP.md).
+- Version 0.10.4 alpha is the latest finished version: the real Moon. Stage 1: ELP2000-82B (`src/orbit/moon_elp.*`) checked against Horizons. Stage 2: used in the Orbit Lab in Planet physics Real only (Earth's Moon at its real direction and phase, exaggerated distance; Earth drawn off the Earth-Moon barycentre; phase on the Moon's card; Real note and About updated). Simple is unchanged; Real is still an option, Simple the default, until the owner has tried it.
+- The roadmap was updated after it. The next planned item is the bug and speed audit (see ROADMAP.md).
 - Test programs and their last known check counts:
   - orbit_tests: 1,377
   - atom_tests: 17,936
   - app_tests: 1,385
   - nbody_tests: 37
   - jpl_tests: 52 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
-  - moon_tests: 23 (new in 0.10.4 stage 1: the ELP2000-82B Moon against the Horizons Moon table; takes about 12 s)
+  - moon_tests: 24 (new in 0.10.4 stage 1: the ELP2000-82B Moon against the Horizons Moon table; takes about 12 s)
+  - moon_real_tests: 58 (new in 0.10.4 stage 2: Real-mode Earth and Moon against the Horizons Earth table, phases, fast speeds, the other planets not worse)
 
 ## How work flows
 - The owner pastes a written task into a new Claude Code session (Sonnet 5.5, branch box `native`).

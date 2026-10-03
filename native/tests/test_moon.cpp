@@ -86,6 +86,7 @@ static void testPositionError() {
     std::vector<double> sk = km, sa = as;
     std::sort(sk.begin(), sk.end()); std::sort(sa.begin(), sa.end());
     std::printf("error ALL 170 rows: worst %.4f km (%.4f arcsec), rms %.4f km (%.4f arcsec), median %.4f km (%.4f arcsec)\n", wk, wa, rk, ra, sk[sk.size() / 2], sa[sa.size() / 2]);
+    check("error: the worst errors quoted in moon_elp.h (km and arcsec, used in the app's text) are the measured maxima (to 1e-3)", std::fabs(wk - kMoonElpWorstKm) < 1e-3 && std::fabs(wa - kMoonElpWorstArcsec) < 1e-3);
     std::printf("error: the worst row is JD %.1f (year %.1f)\n", worstJd, 2000.0 + (worstJd - 2451545.0) / 365.25);
     check("error: worst position error within the regression guard (km)", wk < kGuardWorstKm);
     check("error: rms position error within the regression guard (km)", rk < kGuardRmsKm);

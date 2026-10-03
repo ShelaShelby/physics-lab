@@ -190,6 +190,9 @@ int main(int, char**) {
     if (const char* name = SDL_getenv("PL_SELECT")) {
         for (const auto& b : app.sys.bodies)
             if (b.name == name) app.view.select({orbit::Selection::Body, b.id}, true);
+        if (std::string(name) == "moon:Earth")    // for automatic checks: select Earth's Moon (its card)
+            for (const auto& b : app.sys.bodies)
+                if (b.name == "Earth") { app.set.moons = true; app.view.select({orbit::Selection::Moon, b.id, 0}, true); }
         if (std::string(name).rfind("far:", 0) == 0) { app.set.far = true; app.view.select({orbit::Selection::Far, 0, orbit::farIndexOf(std::string(name).substr(4))}, true); }   // e.g. far:sgra
     }
     if (const char* z = SDL_getenv("PL_ZOOM")) ui::setZoom(app, std::atof(z));

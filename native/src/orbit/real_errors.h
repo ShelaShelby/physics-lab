@@ -2,6 +2,8 @@
 // (planet minus Sun) after integrating from the JPL start of 2026-01-01 12:00 TDB with a 1-day step, against Horizons' vector tables (source {source: DE441}, not DE440),
 // measured by tests/test_jpl.cpp at the 301 tabulated dates (1 January 12:00 of every year). Each number is the measured maximum rounded UP to a whole km; the test
 // checks that every one of them is that, so the text can only change together with a re-measurement. Between the tabulated dates the error is not measured.
+// 0.10.4 stage 2, Earth: the Earth entries below were measured for the Earth-Moon barycentre (the N-body body). The app now draws Earth itself (barycentre minus the Moon's share);
+// tests/test_moon_real.cpp measures that against Horizons' Earth (399): 3,959.9 km (relativity off) and 22,080.1 km (on), which round up to the same two numbers, 3,960 and 22,081.
 #pragma once
 
 namespace orbit {

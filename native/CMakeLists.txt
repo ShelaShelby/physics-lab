@@ -94,6 +94,11 @@ if(PL_BUILD_TESTS)
   target_link_libraries(moon_tests PRIVATE orbit_core)
   target_compile_options(moon_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME moon_validation COMMAND moon_tests)
+  add_executable(moon_real_tests tests/test_moon_real.cpp)
+  target_include_directories(moon_real_tests PRIVATE tests)
+  target_link_libraries(moon_real_tests PRIVATE orbit_core)
+  target_compile_options(moon_real_tests PRIVATE ${PL_WARNINGS})
+  add_test(NAME moon_real_validation COMMAND moon_real_tests)
 endif()
 
 # ---- the app ----

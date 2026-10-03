@@ -17,6 +17,7 @@
 //  * Geometric only: no light time, no aberration. The Moon's centre, not the Earth-Moon barycentre.
 #include "orbit/moon_elp.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace orbit {
@@ -87,6 +88,24 @@ Vec3 moonGeocentricElp(double jdTDB) {
     qw *= ra;
     // x, y, z in km -> metres
     return {1000.0 * (pw2 * x1 + pwqw * x2 + pw * x3), 1000.0 * (pwqw * x1 + qw2 * x2 - qw * x3), 1000.0 * (-pw * x1 + qw * x2 + (pw2 + qw2 - 1.0) * x3)};
+}
+
+MoonPhase moonPhase(Vec3 moonFromEarth, Vec3 sunFromEarth) {
+    static const char* const kNames[8] = {"new moon", "waxing crescent", "first quarter", "waxing gibbous", "full moon", "waning gibbous", "last quarter", "waning crescent"};
+    const double cosE = std::max(-1.0, std::min(1.0, dot(moonFromEarth, sunFromEarth) / (length(moonFromEarth) * length(sunFromEarth))));
+    const double rad = 180.0 / 3.14159265358979323846;
+    const double fraction = (1.0 - cosE) / 2.0;
+    double d = (std::atan2(moonFromEarth.y, moonFromEarth.x) - std::atan2(sunFromEarth.y, sunFromEarth.x)) * rad;   // Moon minus Sun, degrees of ecliptic longitude
+    d = std::fmod(d, 360.0);
+    if (d < 0) d += 360.0;
+    const bool waxing = d < 180.0;
+    int idx;
+    if (fraction < 0.02) idx = 0;
+    else if (fraction > 0.98) idx = 4;
+    else if (fraction < 0.40) idx = waxing ? 1 : 7;
+    else if (fraction <= 0.60) idx = waxing ? 2 : 6;
+    else idx = waxing ? 3 : 5;
+    return {std::acos(cosE) * rad, fraction, idx, kNames[idx]};
 }
 
 }  // namespace orbit

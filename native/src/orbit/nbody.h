@@ -52,6 +52,10 @@ constexpr int kNBodies = 9;                   // the Sun, then Mercury ... Neptu
 // (https://ssd.jpl.nasa.gov/astro_par.html), the DE440 values (Park et al. 2021, The Astronomical Journal). First read from an excerpt of that page; on 2026-10-03 the
 // owner read the values from the page itself and they matched the code. In nbody.cpp, with the source next to each number.
 extern const double kRealGM[kNBodies];
+// The Earth-system GM above is Earth + Moon. The two parts, from the same JPL page (DE440 values, read from the page itself on 2026-10-03: Earth 398600.435507, Moon 4902.800118 km^3/s^2),
+// used in Real mode to split the Earth-Moon barycentre into Earth and Moon (m^3/s^2). mu = kRealGMMoon / kRealGMEarthAlone = 0.0123000... (Horizons' header of the Moon, DE441, gives
+// Earth/Moon = 81.3005690769, which agrees to better than 1e-8; tests/test_moon_real.cpp checks it).
+extern const double kRealGMEarthAlone, kRealGMMoon;
 
 struct NBodyState {
     Vec3 x[kNBodies], v[kNBodies];            // barycentric positions (m) and velocities (m/s)

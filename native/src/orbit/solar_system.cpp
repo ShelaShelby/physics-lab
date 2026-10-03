@@ -39,6 +39,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
     sunTrail.clear();
     nextId_ = 0;
     t = 0;
+    moonValid_ = false;                                  // Real: applyReal sets it again below
     crashed = escaped = 0;
     epochMs = unixMs;
     const double jd = unixMs / 86400000.0 + 2440587.5;   // Julian day
@@ -91,7 +92,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
 // the reference epoch of the N-body clock (Julian day kNBodyRefJD, 2026-01-01 12:00 TDB, the time scale of the JPL data) as Unix milliseconds. The lab treats its calendar dates as TDB, with no conversion from UTC.
 static constexpr double kRefUnixMs = (kNBodyRefJD - 2440587.5) * 86400000.0;
 
-void SolarSystem::applyReal(double extra) {
+void SolarSystem::applyReal(double extra, bool withMoon) {
     Vec3 x[kNBodies], v[kNBodies];
     nb_.stateAt((double(epochMs) - kRefUnixMs) / 1000.0 + t + extra, x, v);
     sunBary_ = x[0];                                     // the Sun's own place: the centre of mass of the whole system is at the origin
@@ -100,20 +101,43 @@ void SolarSystem::applyReal(double extra) {
         bodies[i].pos = x[i + 1] - x[0];                 // the picture stays Sun-centred
         bodies[i].vel = v[i + 1] - v[0];
     }
+    emb_ = x[3] - x[0];                                  // the N-body "Earth" is the Earth-Moon barycentre
+    if (!withMoon) return;
+    // The real Moon: ELP2000-82B at the date shown (+ extra). mu = GM_Moon / GM_Earth (JPL page, nbody.h). This ignores ELP's own Earth-Moon mass ratio (its constants were fitted to DE200; its value was not
+    // looked up). The effect is that ratio's relative difference from the page's, times Earth's 4,300-5,000 km offset from the barycentre: for example 5 m if they differ by 1e-6 (for comparison, the
+    // page's ratio and Horizons' header agree to 1e-8, tests/test_moon_real.cpp). Nothing is done to hide it: Earth is drawn at the barycentre minus mu / (1 + mu) of the ELP vector.
+    const double jd = julianDay() + extra / kDay;
+    moonValid_ = jd >= kMoonElpFirstJD && jd <= kMoonElpLastJD;
+    if (!moonValid_) return;
+    static const double mu = kRealGMMoon / kRealGMEarthAlone;
+    moonGeo_ = moonGeocentricElp(jd);
+    const double h = 1.0 / 48;                           // half an hour: the direction of motion for the orbit plane
+    const Vec3 dv = moonGeocentricElp(jd + h) - moonGeocentricElp(jd - h);
+    const Vec3 nrm = cross(moonGeo_, dv);
+    moonNormal_ = nrm * (1.0 / length(nrm));
+    for (std::size_t i = 0; i < kPlanetCount && i < bodies.size(); i++)
+        if (bodies[i].type == BodyKind::Planet && bodies[i].name == "Earth" && !moonFast_) bodies[i].pos = emb_ - moonGeo_ * (mu / (1.0 + mu));
+}
+
+Vec3 SolarSystem::moonPosition() const {
+    static const double mu = kRealGMMoon / kRealGMEarthAlone;
+    return emb_ + moonGeo_ * (1.0 / (1.0 + mu));
 }
 
 void SolarSystem::sunTrailPoint() {                       // the Sun's path: a point whenever it has moved kSunTrailStep since the last one
     if (sunTrail.empty() || length(sunBary_ - sunTrail.back()) >= kSunTrailStep) { sunTrail.push_back(sunBary_); if (sunTrail.size() > 1000) sunTrail.pop_front(); }
 }
 
-void SolarSystem::realTrail(Body& b) {                   // a trail point every 2 % of the distance to the Sun, as the leapfrog does
-    const double r = length(b.pos), lim = 0.02 * (r > kSimLength ? r : kSimLength);
-    if (b.trail.empty() || length(b.pos - b.trail.back()) > lim) { b.trail.push_back(b.pos); if (b.trail.size() > 1000) b.trail.pop_front(); }
+void SolarSystem::realTrail(Body& b) {                   // a trail point every 2 % of the distance to the Sun, as the leapfrog does (Earth: the barycentre's path, without the Moon's 4,300-5,000 km wobble)
+    const Vec3 p = b.name == "Earth" ? emb_ : b.pos;
+    const double r = length(p), lim = 0.02 * (r > kSimLength ? r : kSimLength);
+    if (b.trail.empty() || length(p - b.trail.back()) > lim) { b.trail.push_back(p); if (b.trail.size() > 1000) b.trail.pop_front(); }
 }
 
 void SolarSystem::setRealPlanets(bool on) {
     if (on == real_) return;
     real_ = on;
+    if (!on) moonValid_ = false;
     if (on) { applyReal(0); sunTrail.clear(); sunTrailPoint(); }
     else loadAt(currentUnixMs());                        // back to Simple: everything reloaded from the elements at the date shown (and no Sun's path)
 }
@@ -180,9 +204,12 @@ void SolarSystem::step(double dt, double tspeed) {
                  }), bodies.end());
     if (real_) {                                          // the planets: walk to the new date in steps of about 2 days, with a trail point where needed
         const int nSub = std::max(1, std::min(2000, static_cast<int>(std::ceil(total / (2 * kDay)))));
+        double period = 27.3217;                          // the Moon's period in the data, days (the drawing's rule: more than kMoonFastLaps laps a real second is "fast")
+        for (std::size_t i = 0; i < kMoonCount; i++) if (std::string(kMoons[i].planet) == "Earth") period = kMoons[i].periodDays;
+        moonFast_ = kSimTime / kDay * std::pow(10.0, tspeed) / period > kMoonFastLaps;
         for (int k = 1; k <= nSub; k++) {
             t += total / nSub;
-            applyReal(0);
+            applyReal(0, k == nSub);                      // the Moon (a few hundred sine terms) only once, at the end
             for (Body& b : bodies) if (b.type == BodyKind::Planet) realTrail(b);
             sunTrailPoint();
         }
