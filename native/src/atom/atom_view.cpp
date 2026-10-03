@@ -306,16 +306,20 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const int ng = int(pal.size());
         static std::vector<unsigned char> grp;                             // each dot's colour group
         grp.resize(std::size_t(cnt));
+        if (lab.superOn()) {                                               // a superposition: each dot is thinned and coloured from the CURRENT beat phase (255 = not shown now)
+            const double th = lab.beatTheta();
+            for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = (unsigned char)lab.superGroup(i, th);
+        } else
         for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = wheel ? (unsigned char)phaseBin(s.ph[std::size_t(i)]) : (unsigned char)(s.sg[i] > 0 ? 0 : 1);
-        const bool outlineOn = p.outline == "On";
+        const bool outlineOn = p.outline == "On" && !lab.superOn();         // (the 90 % outline is of one orbital: not drawn for a superposition)
         const int fo = lab.fullOrb();
         const Color olCol = withA(css.fg, 0.6);                            // the 90 % outline: thin, the theme's text colour (light on dark pages, dark on light ones)
         const double olUnit = kA0 / p.Z * pxm;                             // points per Bohr radius at Z = 1 in the outline's own units
         if (sl) {                                                          // slice: only dots inside a thin slab around the cut plane, seen face-on
-            const double size = kExt[orbitals()[orbIndex(p.orb)].n] / p.Z * kA0, off = lab.cutOffsetM(), th = 0.07 * size;
+            const double size = kExt[lab.sizeN()] / p.Z * kA0, off = lab.cutOffsetM(), th = 0.07 * size;
             for (long i = 0; i < cnt; i++) {
                 const double dist = std::fabs((hz ? s.pts[3 * i + 2] : s.pts[3 * i + 1]) - off);
-                if (dist > th) continue;
+                if (dist > th || grp[std::size_t(i)] == 255) continue;
                 const double X = cx + s.pts[3 * i] * pxm, Y = cy - (hz ? s.pts[3 * i + 1] : s.pts[3 * i + 2]) * pxm;
                 if (X < -2 || X > w || Y < -2 || Y > h) continue;
                 if (glow) G.push_back({float(X), float(Y), 4.2f, float(1 - 0.6 * dist / th), grp[std::size_t(i)]});     // dots nearer the cut plane are brighter, as before
@@ -351,7 +355,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             if (outlineOn)                                                 // the shadow of the 90 % region seen from the side
                 for (const OutSeg2& g : outlineOf(fo).side) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
         } else {                                                           // rotate by yaw (about z), then pitch, then project
-            const double ext = kExt[orbitals()[orbIndex(p.orb)].n] / p.Z * kA0;
+            const double ext = kExt[lab.sizeN()] / p.Z * kA0;
             static std::vector<float> PX, PY, PD;
             PX.resize(cnt); PY.resize(cnt); PD.resize(cnt);
             for (long i = 0; i < cnt; i++) {
@@ -365,7 +369,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 // one pass: size and brightness change smoothly with depth (far = smaller, fainter; near = bigger, brighter), no bands
                 for (long i = 0; i < cnt; i++) {
                     const float v = PD[i];
-                    if (std::isnan(v)) continue;
+                    if (std::isnan(v) || grp[std::size_t(i)] == 255) continue;
                     const float t = std::max(-1.f, std::min(1.f, v));          // -1 nearest, +1 farthest
                     const float near = 0.5f - 0.5f * t;                        // 1 near … 0 far
                     G.push_back({PX[i], PY[i], 4.6f * (0.8f + 0.4f * near), 0.3f + 0.9f * near, grp[std::size_t(i)]});

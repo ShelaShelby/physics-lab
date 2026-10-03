@@ -3,9 +3,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <complex>
+#include <cstdint>
 #include <map>
 
 #include "orbit/format.h"
+#include "phase_wheel.h"
 
 namespace atom {
 
@@ -27,7 +30,10 @@ bool AtomLab::validChoice(const std::string& key, const std::string& v) {
         {"scale", {"Auto", "Fixed"}}, {"qstyle", {"Cinematic", "Accurate", "Classic"}}, {"detail", {"Valence", "+ Gluons", "+ Sea"}},
         {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice"}}, {"ostyle", {"Modern", "Bohr 1913"}},
         {"orb", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"pAx", {"x", "y", "z", "m+1", "m-1"}}, {"dAx", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
-        {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2", "m+1", "m-1", "m+2", "m-2", "m+3", "m-3"}}, {"cutAxis", {"Vertical", "Horizontal"}},
+        {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2", "m+1", "m-1", "m+2", "m-2", "m+3", "m-3"}},
+        {"pAx2", {"x", "y", "z", "m+1", "m-1"}}, {"dAx2", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
+        {"fAx2", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2", "m+1", "m-1", "m+2", "m-2", "m+3", "m-3"}},
+        {"orb2", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"super", {"Off", "On"}}, {"cutAxis", {"Vertical", "Horizontal"}},
         {"cstyle", {"Classic", "Glow"}}, {"outline", {"Off", "On"}}, {"phase", {"Sign", "Wheel"}}, {"cdens", {"Normal", "High", "Ultra"}}};
     const auto it = opts.find(key);
     return it != opts.end() && std::find(it->second.begin(), it->second.end(), v) != it->second.end();
@@ -48,7 +54,9 @@ void AtomLab::init() {
     const double k = double(o.n) / p.Z;
     s.t = 0; s.Zprev = p.Z; s.more = moreStored; s.pan = {}; s.panTo.reset(); s.dragMode = "rotate";
     s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a); s.trail.clear();
-    s.pts.assign(std::size_t(cloudCap()) * 3, 0.f); s.sg.assign(cloudCap(), 0); s.ph.assign(cloudCap(), 0.f); s.k = 0; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
+    s.pts.assign(std::size_t(cloudCap()) * 3, 0.f); s.sg.assign(cloudCap(), 0); s.ph.assign(cloudCap(), 0.f); s.k = 0;
+    s.sa.clear(); s.beatT = 0;
+    if (superOn()) { s.sa.assign(std::size_t(cloudCap()) * 4, 0.f); sup_ = superState(); nA_ = normFactor(sup_.idA, p.Z); nB_ = normFactor(sup_.idB, p.Z); } s.w = {0.7 * k, 0.4 * k, 1.1 * k};
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
     s.trans.reset(); s.photon.reset(); s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
@@ -65,6 +73,7 @@ void AtomLab::setParam(const std::string& key, double v) {
     else if (key == "cut") { lo = -1; hi = 1; }
     else if (key == "n") { lo = 1; hi = 4; }
     else if (key == "speed") { lo = 1; hi = 30; }
+    else if (key == "mix") { lo = 0; hi = 100; }
     else return;
     v = std::max(lo, std::min(hi, v));
     if (key == "zoom") p.zoom = v;
@@ -72,6 +81,7 @@ void AtomLab::setParam(const std::string& key, double v) {
     else if (key == "N") p.N = int(v);
     else if (key == "cut") p.cut = v;
     else if (key == "n") p.n = int(v);
+    else if (key == "mix") p.mix = v;
     else p.speed = int(v);
     onParam(key);
 }
@@ -92,6 +102,11 @@ void AtomLab::setParam(const std::string& key, const std::string& v) {
     else if (key == "cdens") p.cdens = v;
     else if (key == "outline") p.outline = v;
     else if (key == "phase") p.phase = v;
+    else if (key == "super") p.super = v;
+    else if (key == "orb2") p.orb2 = v;
+    else if (key == "pAx2") p.pAx2 = v;
+    else if (key == "dAx2") p.dAx2 = v;
+    else if (key == "fAx2") p.fAx2 = v;
     else return;
     onParam(key);
 }
@@ -107,7 +122,9 @@ void AtomLab::onParam(const std::string& key) {
         if (p.zoom > 0) { s.selfSet = true; setParam("zoom", std::max(0.0, p.zoom + d)); s.selfSet = false; }
         if (s.zoomTo) s.zoomTo = clampZoom(*s.zoomTo + d);
     }
-    static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx", "cdens"};   // a new density refills the cloud
+    if (key == "mix") { sup_.a = std::sqrt(1 - p.mix / 100); sup_.b = std::sqrt(p.mix / 100); return; }   // the shares change the time dependence only, never the dots
+    if ((key == "orb2" || key == "pAx2" || key == "dAx2" || key == "fAx2") && p.super != "On") return;    // (nothing shown depends on them while the superposition is off)
+    static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx", "cdens", "super", "orb2", "pAx2", "dAx2", "fAx2"};   // a new density refills the cloud
     if (std::find(std::begin(reinit), std::end(reinit), key) != std::end(reinit)) {
         const AtomState keep = s;
         init();
@@ -135,13 +152,33 @@ int AtomLab::complexM() const {
     if (l == 0 || !oriIsComplex(l == 1 ? p.pAx : l == 2 ? p.dAx : p.fAx, m) || std::abs(m) > l) return 0;
     return m;
 }
+int AtomLab::stateIdOf(const std::string& shell, const std::string& pAx, const std::string& dAx, const std::string& fAx) const {
+    const int si = orbIndex(shell), l = orbitals()[si].l;
+    int m = 0;
+    if (l > 0 && oriIsComplex(l == 1 ? pAx : l == 2 ? dAx : fAx, m) && std::abs(m) <= l) return complexState(si, m);
+    if (l == 0) return si;
+    static const char* const def[4] = {"", "z", "z2", "z3"};
+    const std::string& ori = l == 1 ? pAx : l == 2 ? dAx : fAx;
+    const int i = orbIndex(shell + "|" + (ori.empty() ? def[l] : ori));
+    return i >= 0 ? i : orbIndex(shell + "|" + def[l]);
+}
+Superposition AtomLab::superState() const {
+    Superposition u;
+    u.idA = stateId(); u.idB = stateIdOf(p.orb2, p.pAx2, p.dAx2, p.fAx2);
+    u.a = std::sqrt(1 - p.mix / 100); u.b = std::sqrt(p.mix / 100);
+    return u;
+}
+int AtomLab::sizeN() const {
+    const int nA = orbitals()[orbIndex(p.orb)].n;
+    return superOn() ? std::max(nA, orbitals()[orbIndex(p.orb2)].n) : nA;
+}
 int AtomLab::stateId() const { const int m = complexM(); return m ? complexState(orbIndex(p.orb), m) : fullOrb(); }
 std::string AtomLab::stateText() const { return atom::stateText(stateId()); }
 
 // the size the picture is fitted to: Fixed uses one reference size (hydrogen n = 4 / 3s) for every atom and level
 static double fitSize(const AtomParams& p, double szM) { return p.scale == "Fixed" ? (p.view == "Orbit" ? 16 : 24) * kA0 : szM; }
 double AtomLab::sizeM() const {
-    return fitSize(p, p.view == "Orbit" ? double(p.n) * p.n / p.Z * kA0 : kExt[orbitals()[orbIndex(p.orb)].n] / p.Z * kA0);
+    return fitSize(p, p.view == "Orbit" ? double(p.n) * p.n / p.Z * kA0 : kExt[sizeN()] / p.Z * kA0);
 }
 double AtomLab::pxPerM(double m, std::optional<double> sz) const { return (p.view == "Orbit" ? 0.42 : 0.45) * m / (sz ? *sz : sizeM()); }
 double AtomLab::nucRA0() const { return nuclearR(p.Z + p.N) / kFmPerA0; }
@@ -153,7 +190,7 @@ double AtomLab::zoomForNucleon() const {
     const double m = std::min(viewW, viewH);
     return clampZoom(std::log10(0.42 * m * kFmPerA0 / kNucleonR / (pxPerM(m) * kA0)));
 }
-double AtomLab::cutOffsetM() const { return p.cut * 0.5 * kExt[orbitals()[orbIndex(p.orb)].n] / p.Z * kA0; }
+double AtomLab::cutOffsetM() const { return p.cut * 0.5 * kExt[sizeN()] / p.Z * kA0; }
 
 // ---------------------------------------------------------------- the cloud: Metropolis sampling of |ψ|²
 // One step: try a random move (a Gaussian step in each direction) and accept it with the odds
@@ -189,6 +226,83 @@ void AtomLab::walk(int orb, Vec3d& w, bool record) {
     }
 }
 
+// ---------------------------------------------------------------- quantum beats: a superposition of two orbitals
+// The dots are samples of the time-INDEPENDENT mixture q = (|A|^2 + |B|^2) / 2 (A and B normalised). The density at beat phase theta is |a A + b B e^(-i theta)|^2, and
+// |a A + b B e^(-i theta)|^2 <= (a|A| + b|B|)^2 <= (a^2 + b^2)(|A|^2 + |B|^2) = 2 q (Cauchy-Schwarz), so a dot at x is shown with probability w / 2, w = |psi(x, theta)|^2 / q:
+// the shown dots are then exact samples of the CURRENT density, whatever the time, and no dot carries any memory of the past. (A fixed random number per dot decides, so
+// a dot appears and disappears smoothly as the density at its place rises and falls.)
+void AtomLab::walkSuper(Vec3d& w, bool record) {
+    const int nmax = std::max(orbitals()[stateOrbital(sup_.idA)].n, orbitals()[stateOrbital(sup_.idB)].n);
+    const double sg = 0.4 * nmax * (nmax >= 4 ? 1.8 : 1) / p.Z;
+    auto gauss = [] { const double u = random(); return std::sqrt(-2 * std::log(1 - u)) * std::cos(2 * kPi * random()); };
+    const auto amps = [&](double x, double y, double z, std::complex<double>& A, std::complex<double>& B) {
+        A = nA_ * (isComplexState(sup_.idA) ? psiComplex(sup_.idA, p.Z, x, y, z) : std::complex<double>(psi(sup_.idA, p.Z, x, y, z), 0));
+        B = nB_ * (isComplexState(sup_.idB) ? psiComplex(sup_.idB, p.Z, x, y, z) : std::complex<double>(psi(sup_.idB, p.Z, x, y, z), 0));
+    };
+    const double nx = w.x + sg * gauss(), ny = w.y + sg * gauss(), nz = w.z + sg * gauss();
+    std::complex<double> A0, B0, A1, B1;
+    amps(w.x, w.y, w.z, A0, B0); amps(nx, ny, nz, A1, B1);
+    const double pOld = std::norm(A0) + std::norm(B0), pNew = std::norm(A1) + std::norm(B1);
+    if (random() * pOld < pNew || pOld == 0) { w.x = nx; w.y = ny; w.z = nz; }
+    if (record) {
+        const long i = s.k % std::min<long>(cloudCap(), long(s.sg.size()));
+        std::complex<double> A, B;
+        amps(w.x, w.y, w.z, A, B);
+        if (std::size_t(4 * i + 3) < s.sa.size()) { s.sa[4 * i] = float(A.real()); s.sa[4 * i + 1] = float(A.imag()); s.sa[4 * i + 2] = float(B.real()); s.sa[4 * i + 3] = float(B.imag()); }
+        s.sg[i] = 1; s.ph[i] = 0.f;
+        s.pts[3 * i] = float(w.x * kA0); s.pts[3 * i + 1] = float(w.y * kA0); s.pts[3 * i + 2] = float(w.z * kA0);
+        s.k++;
+    }
+}
+
+double AtomLab::beatRealPeriodS() const { return beatPeriodS(p.Z, p.N, superState()); }
+double AtomLab::beatSlowdown() const { const double T = beatRealPeriodS(); return std::isinf(T) ? 0 : kBeatScreenS * 5.0 / p.speed / T; }
+double AtomLab::beatTheta() const {
+    const double dE = beatEV(p.Z, p.N, superState());
+    if (!superOn() || dE == 0) return 0;                       // equal energies: no beats, the density never changes
+    return (dE > 0 ? 1 : -1) * 2 * kPi * s.beatT / kBeatScreenS;
+}
+double AtomLab::superPhase(long i, double theta) const {
+    if (std::size_t(4 * i + 3) >= s.sa.size()) return 0;
+    const std::complex<double> A(s.sa[4 * i], s.sa[4 * i + 1]), B(s.sa[4 * i + 2], s.sa[4 * i + 3]);
+    return std::arg(sup_.a * A + sup_.b * B * std::exp(std::complex<double>(0, -theta)));
+}
+bool AtomLab::superShown(long i, double theta) const {
+    if (std::size_t(4 * i + 3) >= s.sa.size()) return false;
+    const std::complex<double> A(s.sa[4 * i], s.sa[4 * i + 1]), B(s.sa[4 * i + 2], s.sa[4 * i + 3]);
+    const double q = 0.5 * (std::norm(A) + std::norm(B));
+    if (q <= 0) return false;
+    const double w = std::norm(sup_.a * A + sup_.b * B * std::exp(std::complex<double>(0, -theta))) / q;
+    std::uint64_t z = std::uint64_t(i) * 0x9E3779B97F4A7C15ULL + 0x632BE59BD9B4E019ULL;          // splitmix64: a fixed uniform number for this dot
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL; z ^= z >> 31;
+    return double(z >> 11) * (1.0 / 9007199254740992.0) < w / 2;
+}
+int AtomLab::superGroup(long i, double theta) const {
+    if (!superShown(i, theta)) return 255;
+    return phaseBin(superPhase(i, theta));
+}
+std::string AtomLab::beatKindText() const {
+    const Superposition u = superState();
+    const Orbital &oa = orbitals()[stateOrbital(u.idA)], &ob = orbitals()[stateOrbital(u.idB)];
+    if (oa.n == ob.n) return "Same n: " + std::string(oa.n == 1 ? "" : "the same energy in this model, so NO beats (the density does not change). ") +
+                             "Fine structure and the Lamb shift, which make 2s and 2p differ a little in real hydrogen, are not modelled.";
+    double d[3];
+    if ((oa.l + ob.l) % 2 == 1) {
+        if (dipoleAxes(u, d)) {
+            const bool alongZ = d[2] > 0.5 * std::max(d[0], d[1]) && d[2] > 1e-3 && std::max(d[0], d[1]) < 1e-3;
+            return alongZ ? "Opposite parity: the cloud's centre sloshes back and forth along z: an oscillating dipole."
+                          : "Opposite parity: the cloud's centre moves (an oscillating or turning dipole across the z axis).";
+        }
+        return "Opposite parity, but light cannot connect these two states (no dipole), so the centre does not move: the cloud only changes shape.";
+    }
+    return "Same parity: the centre stays put and the cloud breathes (it changes shape and size).";
+}
+std::string AtomLab::beatSlowText() const {
+    const double T = beatRealPeriodS();
+    if (std::isinf(T)) return "no beats: both states have the same energy";
+    return "real beat period " + fmtT(T * 1e18) + ", slowed by " + sci(beatSlowdown());
+}
+
 // ---------------------------------------------------------------- photon jumps
 int AtomLab::curLevel() const { return p.view == "Orbit" ? p.n : fullOrb(); }
 int AtomLab::lvlN(int l) const { return p.view == "Orbit" ? l : orbitals()[l].n; }
@@ -197,6 +311,7 @@ std::string AtomLab::lvl(int l) const { return p.view == "Orbit" ? "n=" + std::t
 std::vector<int> AtomLab::targets(int dir) const {          // dir −1: lower levels (emit), +1: higher levels (absorb)
     const int cur = curLevel(), n0 = lvlN(cur);
     std::vector<int> out;
+    if (superOn()) return out;                                 // a superposition has no single level to jump from
     if (p.view != "Orbit" && complexM() != 0) return out;      // a complex state: the dipole rule depends on the light's polarisation, which this lab does not model
     if (p.view == "Orbit") {
         for (int t = 1; t <= 4; t++) if (t != cur && (dir < 0 ? t < n0 : t > n0)) out.push_back(t);
@@ -252,6 +367,11 @@ void AtomLab::manualJump(int dir) {
     if (s.trans || s.photon) return;
     const std::vector<int> list = targets(dir);
     const int cur = curLevel();
+    if (list.empty() && superOn()) {
+        s.msg = "A superposition has no single level to jump from. Switch Superposition off to emit or absorb a photon.";
+        s.msgUntil = nowMs() + 5500;
+        return;
+    }
     if (list.empty() && p.view != "Orbit" && complexM() != 0) {
         s.msg = stateText() + " is a complex state. Photon jumps from it are not in the lab: which levels light can reach depends on the light's polarisation, which the lab does not model. Pick a real orientation (px, pz, ...) to emit or absorb.";
         s.msgUntil = nowMs() + 6500;
@@ -391,7 +511,7 @@ void AtomLab::tick(double dt) {                               // runs every fram
     // the auto-fit size glides to the new level
     double sz;
     if (p.view == "Orbit") { const double nn = p.ostyle == "Bohr 1913" ? std::max(3, p.n) : p.n; sz = nn * nn / p.Z * kA0; }
-    else sz = kExt[orbitals()[s.trans ? s.trans->to : orbIndex(p.orb)].n] / p.Z * kA0;
+    else sz = kExt[s.trans ? orbitals()[s.trans->to].n : sizeN()] / p.Z * kA0;
     sz = fitSize(p, sz);
     s.szCur = !s.szCur || rmv ? sz : *s.szCur + (sz - *s.szCur) * (1 - std::exp(-4 * dt));
     const Vec3d tg = s.focus >= 0 && s.focus < int(s.nuc.size()) ? Vec3d{s.nuc[s.focus].x, s.nuc[s.focus].y, s.nuc[s.focus].z} : Vec3d{};
@@ -412,6 +532,7 @@ void AtomLab::tick(double dt) {                               // runs every fram
 
 void AtomLab::step(double dt) {
     advance(dt);
+    if (superOn()) s.beatT += dt * p.speed / 5.0;                // the beat clock: 4 s per beat at Playback speed 5, faster or slower with the speed (step() does not run while paused)
     if (p.view != "Orbit") {
         if (s.trans) {                                         // morph: new dots come from the target orbital with growing odds
             const double u0 = s.trans->t / s.trans->dur, u = u0 * u0 * (3 - 2 * u0);
@@ -506,6 +627,12 @@ static double orbitEnergyEV(const AtomState& s, int Z) {
 
 std::string AtomLab::info1() {
     const std::string head = std::string(name(p.Z)) + "-" + std::to_string(p.Z + p.N) + " (" + ionLabel(p.Z) + ")";
+    if (superOn()) {
+        const Superposition u = superState();
+        const double eA = levelEV(p.Z, p.N, orbitals()[stateOrbital(u.idA)].n), eB = levelEV(p.Z, p.N, orbitals()[stateOrbital(u.idB)].n);
+        return head + "  ·  superposition " + atom::stateText(u.idA) + " + " + atom::stateText(u.idB) + " (" + std::to_string(int(std::lround(100 - p.mix))) + " % / " + std::to_string(int(std::lround(p.mix))) +
+               " %)  ·  E −" + fmtEV(-eA) + " and −" + fmtEV(-eB) + "  ·  " + beatSlowText();
+    }
     if (p.view != "Orbit") {
         const Orbital& o = orbitals()[orbIndex(p.orb)];
         const long cnt = std::min<long>(s.k, cloudCap());
@@ -549,7 +676,8 @@ std::vector<std::string> AtomLab::info() {
         }
     }
     if (p.view == "Slice") lines.push_back("cut plane: " + std::string(p.cutAxis == "Horizontal" ? "z" : "y") + " = " + fmt::fixed(cutOffsetM() * 1e10, 2) + " Å");
-    if (p.view != "Orbit") lines.push_back(usesWheel() ? "colour = the phase of the wave ψ (see the colour ring); it is not a place" : "two colours = the + and − halves of the wave ψ (zero where they meet)");
+    if (superOn()) { lines.push_back(beatKindText()); lines.push_back("colour = the phase of the wave ψ relative to the first orbital (see the colour ring); it turns once per beat"); }
+    else if (p.view != "Orbit") lines.push_back(usesWheel() ? "colour = the phase of the wave ψ (see the colour ring); it is not a place" : "two colours = the + and − halves of the wave ψ (zero where they meet)");
     if (p.view != "Orbit" && p.outline == "On") {
         lines.push_back("thin line: the 90% outline (the electron is found inside it 90% of the time)");
         more.push_back(std::string(p.view == "Slice" ? "90% outline: the line where the cut plane crosses the 90% surface. " : p.view == "Cloud" ? "90% outline: the shadow of the 90% region seen from the side. " : "90% outline: faint lines across the 90% surface, turning with the cloud. ") + "One electron, non-relativistic, hydrogen-like orbital with nuclear charge " + std::to_string(p.Z) + ", the same model as the cloud. It is the boundary of the smallest region that holds 90% of the probability, which follows the orbital's real shape; atoms with more electrons have different shapes.");

@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <complex>
 #include <string>
 #include <vector>
@@ -377,9 +379,9 @@ static void testLz() {
 
 // (c) normalised and orthogonal: integrals of conj(psi_a) psi_b over all space (midpoint rule in r, Gauss-Legendre in cos theta, uniform in phi).
 struct Quad { std::vector<double> r, wr, u, wu; int nphi; };
-static Quad makeQuad() {
-    Quad q; q.nphi = 24;
-    const int nr = 450, nu = 24; const double top = 60, dr = top / nr;
+static Quad makeQuad(int nr = 450, int nphi = 24, double top = 60) {
+    Quad q; q.nphi = nphi;
+    const int nu = 24; const double dr = top / nr;
     for (int i = 0; i < nr; i++) { q.r.push_back((i + 0.5) * dr); q.wr.push_back(dr); }
     // Gauss-Legendre nodes by Newton's method on P_n
     for (int i = 0; i < nu; i++) {
@@ -619,6 +621,195 @@ static void testComplexOutline() {
     checkTrue("complex 2p m = +1: the region is wider across than tall (|psi|^2 ~ sin^2(theta) f(r))", ax > az);
 }
 
+// ================= Quantum beats: a superposition of two orbitals (0.10.2, stage 2) =================
+// psi(t) = a psiA e^(-i EA t/hbar) + b psiB e^(-i EB t/hbar), shown relative to state A (multiplied by e^(+i EA t/hbar)), so the colours turn only at the beat frequency.
+static Superposition mkSup(const char* shellA, const char* oriA, const char* shellB, const char* oriB, double mixB) {
+    const auto id = [](const char* shell, const char* ori) { int m = 0; return oriIsComplex(ori, m) ? complexState(orbIndex(shell), m) : orbIndex(std::string(shell) + "|" + ori); };
+    Superposition s; s.idA = id(shellA, oriA); s.idB = id(shellB, oriB); s.a = std::sqrt(1 - mixB); s.b = std::sqrt(mixB);
+    return s;
+}
+// <z> of the superposition at phase theta = dE t / hbar, by quadrature (axisymmetric states: one phi point)
+static double expectZ(const Quad& q, const Superposition& su, int Z, double theta) {
+    double s = 0;
+    for (std::size_t i = 0; i < q.r.size(); i++)
+        for (std::size_t j = 0; j < q.u.size(); j++) {
+            const double st = std::sqrt(1 - q.u[j] * q.u[j]), x = q.r[i] * st, z = q.r[i] * q.u[j];
+            s += std::norm(psiSuper(su, Z, theta, x, 0, z)) * z * 2 * kPi * q.wu[j] * q.r[i] * q.r[i] * q.wr[i];
+        }
+    return s;
+}
+
+static void testBeatPeriodAndAmplitude() {
+    const Superposition su = mkSup("1s", "", "2p", "z", 0.5);
+    const Quad q = makeQuad(1500, 1, 40);
+    // independent hydrogen functions written here: R10 = 2 e^-r, R21 = r e^(-r/2) / (2 sqrt 6), Y00 = 1/sqrt(4 pi), Y10 = sqrt(3/(4 pi)) cos(theta)
+    double radial = 0;
+    // own numerical integration of <1s|z|2p0>: radial part by the midpoint rule, angular part by Gauss-Legendre in cos(theta) (the pieces are the textbook ones above)
+    const int nr = 200000; const double top = 60, dr = top / nr;
+    for (int i = 0; i < nr; i++) { const double r = (i + 0.5) * dr; radial += 2 * std::exp(-r) * (r * std::exp(-r / 2) / (2 * std::sqrt(6.0))) * r * r * r * dr; }
+    double ang = 0;
+    for (std::size_t j = 0; j < q.u.size(); j++) ang += std::sqrt(1 / (4 * kPi)) * std::sqrt(3 / (4 * kPi)) * q.u[j] * q.u[j] * 2 * kPi * q.wu[j];
+    const double mOwn = radial * ang, mClosed = 128 * std::sqrt(2.0) / 243;
+    // the lab's amplitude of <z>(t) = 2 a b M cos(theta): at theta = 0 (Z = 1)
+    const double zLab = expectZ(q, su, 1, 0), zQuarter = expectZ(q, su, 1, kPi / 2);
+    std::printf("beats 1s + 2p(m=0), a = b: matrix element by my own integral %.6f a0, closed form 128 sqrt2/243 = %.6f; the lab's <z>(0) = %.6f (2ab M = %.6f), <z> at a quarter period %.1e\n", mOwn, mClosed, zLab, 2 * 0.5 * mClosed, zQuarter);
+    // limit 1e-4 as asked: the midpoint rule with 200,000 steps and 24 Gauss points are far better than that.
+    checkTrue("beats: <1s|z|2p0> by my own numerical integration equals 128 sqrt2 / 243 a0 = 0.74494 a0 (Fitzpatrick, 2P-1S transitions; 1e-4)", std::fabs(mOwn / mClosed - 1) < 1e-4);
+    checkTrue("beats: the amplitude of <z>(t) of 1s + 2p0 (a = b) is 2ab x 128 sqrt2/243 a0 (1e-4)", std::fabs(zLab / (2 * 0.5 * mClosed) - 1) < 1e-4);
+    checkTrue("beats: <z> is zero a quarter period later (|<z>| < 1e-4 a0)", std::fabs(zQuarter) < 1e-4);
+    // amplitude with other mixes: 2 a b M for a^2 = 0.8 / 0.2
+    const double z2 = expectZ(q, mkSup("1s", "", "2p", "z", 0.2), 1, 0);
+    checkTrue("beats: the amplitude follows 2ab: mix 20 % gives 2 sqrt(0.2 x 0.8) M (1e-4)", std::fabs(z2 / (2 * std::sqrt(0.2 * 0.8) * mClosed) - 1) < 1e-4);
+    // the period: found from the zero of <z>(t) in real seconds (a quarter period), against h / (E2 - E1) written here from CODATA 2018 values
+    const double hJs = 6.62607015e-34, eV = 1.602176634e-19, RyInf = 13.605693122994, mpMe = 1836.15267343;
+    const double RyRed = RyInf * mpMe / (mpMe + 1);                       // reduced-mass Rydberg energy for hydrogen (proton), eV
+    const double Tref = hJs / ((RyRed * eV) * (1.0 - 0.25));              // E2 - E1 = Ry (1 - 1/4)
+    double lo = 0, hi = 0.5 * Tref;                                        // <z> goes from + to - between t = 0 and T/2: bisection for the first zero
+    for (int it = 0; it < 60; it++) {
+        const double mid = 0.5 * (lo + hi);
+        const double th = beatEV(1, 0, su) * mid / (kPlanckEVs / (2 * kPi));
+        (expectZ(q, su, 1, th) > 0 ? lo : hi) = mid;
+    }
+    const double Tmeas = 4 * 0.5 * (lo + hi);
+    std::printf("beats 1s + 2p, hydrogen: period from the zero of <z>(t) %.9e s, h/(E2-E1) from CODATA %.9e s (relative difference %.1e); beatPeriodS %.9e\n", Tmeas, Tref, std::fabs(Tmeas / Tref - 1), beatPeriodS(1, 0, su));
+    // limit 1e-6 as asked: the lab's own constants are the web's hc and the Rydberg energy to 10 digits, plus the proton mass to 1e-9.
+    checkTrue("beats: the period of <z>(t) is h / (E2 - E1) (CODATA h, Rydberg energy, proton mass; 1e-6)", std::fabs(Tmeas / Tref - 1) < 1e-6 && std::fabs(beatPeriodS(1, 0, su) / Tref - 1) < 1e-6);
+    checkTrue("beats: about 4e-16 s for hydrogen 1s + 2p (the owner's h / 10.204 eV)", Tmeas > 4.0e-16 && Tmeas < 4.1e-16);
+    // Z = 2: a quarter of the period, up to the reduced-mass difference between hydrogen and helium
+    const double T2 = beatPeriodS(2, 2, su);
+    std::printf("beats Z = 2 (helium-4 ion): period %.6e s, ratio to Z = 1: %.6f (1/4 = 0.25)\n", T2, T2 / beatPeriodS(1, 0, su));
+    // limit 1e-3: the reduced-mass factor differs between a proton and a helium-4 nucleus by 4.1e-4 (mu/m_e = M/(M+1)): 1/4 x (1 + 4.1e-4)
+    checkTrue("beats: for Z = 2 the period is a quarter of Z = 1 (Z^2 scaling; 1e-3 for the reduced-mass difference)", std::fabs(T2 / beatPeriodS(1, 0, su) * 4 - 1) < 1e-3);
+}
+
+static void testBeatNormStationary() {
+    const Quad q = makeQuad(450, 24, 60);
+    double worst = 0;
+    const Superposition su = mkSup("2p", "m+1", "3d", "m+2", 0.3);
+    for (double th : {0.0, 1.0, 2.5, kPi}) {
+        double s = 0;
+        for (std::size_t i = 0; i < q.r.size(); i++)
+            for (std::size_t j = 0; j < q.u.size(); j++) {
+                const double st = std::sqrt(1 - q.u[j] * q.u[j]);
+                for (int k = 0; k < q.nphi; k++) {
+                    const double f = 2 * kPi * (k + 0.5) / q.nphi;
+                    s += std::norm(psiSuper(su, 1, th, q.r[i] * st * std::cos(f), q.r[i] * st * std::sin(f), q.r[i] * q.u[j])) * (2 * kPi / q.nphi) * q.wu[j] * q.r[i] * q.r[i] * q.wr[i];
+                }
+            }
+        worst = std::max(worst, std::fabs(s - 1));
+    }
+    std::printf("beats: integral of |psi(t)|^2 for 2p(m=+1) + 3d(m=+2), mix 30 %%, at 4 times: largest |norm - 1| = %.1e\n", worst);
+    checkTrue("beats: the superposition stays normalised in time (integral of |psi|^2 = 1, 1e-3)", worst < 1e-3);
+    // a single orbital (mix 0 or 100 %): the density does not change with time; 2s + 2p: same energy, so no beats at all
+    bool still = true;
+    for (const Superposition& one : {mkSup("1s", "", "2p", "z", 0.0), mkSup("1s", "", "2p", "z", 1.0)})
+        for (int k = 0; k < 20; k++) { const double x = 0.3 + 0.4 * k, y = 0.2 * k - 1, z = 1.1 - 0.17 * k; still = still && std::fabs(std::norm(psiSuper(one, 1, 0.0, x, y, z)) / std::norm(psiSuper(one, 1, 2.2, x, y, z)) - 1) < 1e-12; }
+    checkTrue("single orbital (mix 0 % or 100 %): the density does not change with time (1e-12)", still);
+    const Superposition same = mkSup("2s", "", "2p", "z", 0.5);
+    bool still2 = beatEV(1, 0, same) == 0 && std::isinf(beatPeriodS(1, 0, same));
+    for (int k = 0; k < 20; k++) { const double x = 0.3 + 0.4 * k, y = 0.2 * k - 1, z = 1.1 - 0.17 * k; still2 = still2 && std::norm(psiSuperT(same, 1, 0, 0.0, x, y, z)) == std::norm(psiSuperT(same, 1, 0, 3.7e-16, x, y, z)); }
+    checkTrue("2s + 2p: same n, same energy in this model: no beats, the density does not change (exactly)", still2);
+    // <z> of a single orbital is constant too
+    const Quad qz = makeQuad(900, 1, 40);
+    const double z0 = expectZ(qz, mkSup("1s", "", "2p", "z", 0.0), 1, 0.0), z1 = expectZ(qz, mkSup("1s", "", "2p", "z", 0.0), 1, 1.7);
+    checkTrue("single orbital: <z> does not change with time", std::fabs(z0 - z1) < 1e-12);
+    // the dipole check used for the text: 1s + 2p(z) moves along z; 1s + 2s does not move; 1s + 2p(m=+1) moves in the x-y plane
+    double d[3];
+    checkTrue("dipole: 1s + 2pz couples along z only", dipoleAxes(mkSup("1s", "", "2p", "z", 0.5), d) && std::fabs(d[2]) > 0.1 && d[0] < 1e-3 && d[1] < 1e-3);   // (1e-3: the 1,500-point sphere sum is exact to about 1e-4)
+    checkTrue("dipole: 1s + 2s has none, 1s + 3d has none, 2p + 3d does", !dipoleAxes(mkSup("1s", "", "2s", "", 0.5), d) && !dipoleAxes(mkSup("1s", "", "3d", "z2", 0.5), d) && dipoleAxes(mkSup("2p", "z", "3d", "z2", 0.5), d));
+    checkTrue("dipole: 1s + 2p(m=+1) moves in the x-y plane, not along z", dipoleAxes(mkSup("1s", "", "2p", "m+1", 0.5), d) && d[2] < 1e-3 && d[0] > 0.1 && d[1] > 0.1);
+}
+
+// the lab: dots (seeded) follow the CURRENT density. One dot per independent run (the chain's own dots are correlated), a fresh lab each.
+static void superSetup(AtomLab& lab, const char* a, const char* b, double mixPct, int Z = 1) {
+    lab.nowMs = [] { return 0.0; };
+    lab.p = AtomParams(); lab.paused = false; lab.restart();
+    lab.setParam("view", std::string("Cloud")); lab.setParam("Z", double(Z));
+    lab.setParam("orb", std::string(a)); lab.setParam("orb2", std::string(b)); lab.setParam("mix", mixPct); lab.setParam("super", std::string("On"));
+}
+static void testSuperDots() {
+    // the rate of new dots (the measurement behind the design): dots recorded per physics step and per second at 240 steps/s, and how long the ring buffer remembers
+    for (const char* dens : {"Normal", "High", "Ultra"}) {
+        AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart(); lab.setParam("view", std::string("Cloud")); lab.setParam("cdens", std::string(dens));
+        const long k0 = lab.s.k; for (int i = 0; i < 60; i++) lab.step(1.0 / 240);
+        const double perStep = double(lab.s.k - k0) / 60, perSec = perStep * 240;
+        std::printf("dot rate, density %s: %.0f dots per physics step, %.0f dots/s, the ring of %d dots remembers %.2f s (a 4 s beat needs well under 0.4 s)\n", dens, perStep, perSec, lab.cloudCap(), lab.cloudCap() / perSec);
+    }
+    // Several full rings of 1s + 2p(z), a = b, seeded. The dots are a Metropolis chain, so neighbours are correlated: only every 400th dot is used (slots with different fixed random
+    // numbers; the measured correlation of z falls like exp(-lag / 60), 0.75 at lag 16), after checking the correlation of z at that lag. The lab's own thinning (superShown) decides which are on screen.
+    seedRandom(2468);
+    const double M = 128 * std::sqrt(2.0) / 243;
+    const double thetas[4] = {0.0, 1.0, 2.2, 3.1};
+    double sum[4] = {0, 0, 0, 0}, sum2[4] = {0, 0, 0, 0}; long nShown[4] = {0, 0, 0, 0};
+    const int nb = 20; const double rmax = 12;
+    std::vector<double> obs[4]; for (auto& o : obs) o.assign(nb, 0);
+    double worstPhase = 0, rho1 = 0, rho16 = 0, rho64 = 0, rhoSum = 0; long usedDots = 0, nPhase = 0;
+    const int nLab = 170, stride = 400;
+    for (int k = 0; k < nLab; k++) {
+        AtomLab lab; superSetup(lab, "1s", "2p", 50);
+        for (int i = 0; i < 800; i++) lab.step(1.0 / 240);           // fills the 12,000-dot ring
+        const long cap = std::min<long>(lab.s.k, long(lab.s.sg.size()));
+        const Superposition su = lab.superState();
+        const double nA = normFactor(su.idA, 1), nB = normFactor(su.idB, 1);
+        {                                                              // autocorrelation of z along the chain at lags 1, 16, 400 (400: averaged over all the labs)
+            double m = 0, v = 0; for (long i = 0; i < cap; i++) m += lab.s.pts[3 * i + 2] / kA0; m /= cap;
+            for (long i = 0; i < cap; i++) { const double d = lab.s.pts[3 * i + 2] / kA0 - m; v += d * d; }
+            const auto rho = [&](long lag) { double c = 0; for (long i = 0; i + lag < cap; i++) c += (lab.s.pts[3 * i + 2] / kA0 - m) * (lab.s.pts[3 * (i + lag) + 2] / kA0 - m); return c / v; };
+            if (k == 0) { rho1 = rho(1); rho16 = rho(16); } rhoSum += rho(400);
+        }
+        for (long i = (long(k) * 7919) % stride; i < cap; i += stride) {      // (a different start slot in every lab, so every dot has its own fixed random number)
+            const double x = lab.s.pts[3 * i] / kA0, y = lab.s.pts[3 * i + 1] / kA0, z = lab.s.pts[3 * i + 2] / kA0, r = std::sqrt(x * x + y * y + z * z);
+            usedDots++;
+            for (int t = 0; t < 4; t++) {
+                if (lab.superShown(i, thetas[t])) {
+                    sum[t] += z; sum2[t] += z * z; nShown[t]++;
+                    if (r < rmax) obs[t][std::size_t(r / rmax * nb)] += 1;
+                }
+                if (k < 12) {                                          // the colour phase against the exact phase from the primitives (stored 32-bit values, so not exact to rounding)
+                    const Cd A = nA * psi(su.idA, 1, x, y, z), B = nB * psi(su.idB, 1, x, y, z);
+                    const Cd exact = su.a * A + su.b * B * std::exp(Cd(0, -thetas[t]));
+                    double d2 = std::fmod(lab.superPhase(i, thetas[t]) - std::arg(exact), 2 * kPi); if (d2 > kPi) d2 -= 2 * kPi; if (d2 < -kPi) d2 += 2 * kPi;
+                    worstPhase = std::max(worstPhase, std::fabs(d2)); nPhase++;
+                }
+            }
+        }
+    }
+    rho64 = rhoSum / nLab;
+    std::printf("dot chain: autocorrelation of z at lag 1: %.2f, 16: %.2f, 400: %.3f (stride %d); %ld dots used\n", rho1, rho16, rho64, stride, usedDots);
+    checkTrue("the dot chain is nearly uncorrelated at the stride used (|autocorrelation of z| < 0.05 at lag 400, averaged over the labs)", std::fabs(rho64) < 0.05);
+    // limit 1e-4 rad: the stored position is a 32-bit float (relative 6e-8) and the stored amplitudes are 32-bit too, so the phase moves by about 1e-6
+    std::printf("dot colour phase vs the exact arg(psi(x, t)) relative to state A: %ld dot-times, largest difference %.1e rad\n", nPhase, worstPhase);
+    checkTrue("a dot's colour phase equals the exact arg(psi(x, t)) relative to state A at 4 times (1e-4 rad)", nPhase > 1000 && worstPhase < 1e-4);
+    double worstZ = 0, worstChi = 0;
+    for (int t = 0; t < 4; t++) {
+        const double mean = sum[t] / nShown[t], sd = std::sqrt(sum2[t] / nShown[t] - mean * mean), se = sd / std::sqrt(double(nShown[t])), exact = 2 * 0.5 * M * std::cos(thetas[t]);
+        worstZ = std::max(worstZ, std::fabs(mean - exact) / se);
+        // the exact radial density a^2 P1s(r) + b^2 P2p(r) (the cross term has no radial part), 20 bins on 0 to 12 a0
+        std::vector<double> ex(nb, 0); double tot = 0, nin = 0;
+        for (int b = 0; b < nb; b++) {
+            double P = 0; const int sub = 200;
+            for (int j = 0; j < sub; j++) { const double r = (b + (j + 0.5) / sub) * rmax / nb; P += (0.5 * 4 * r * r * std::exp(-2 * r) + 0.5 * r * r * r * r * std::exp(-r) / 24) * rmax / nb / sub; }
+            ex[std::size_t(b)] = P; tot += P; nin += obs[t][std::size_t(b)];
+        }
+        double chi = 0;
+        for (int b = 0; b < nb; b++) { const double e = nin * ex[std::size_t(b)] / tot; chi += (obs[t][std::size_t(b)] - e) * (obs[t][std::size_t(b)] - e) / e; }
+        worstChi = std::max(worstChi, chi);
+        std::printf("dots at theta = %.1f: %ld of %ld shown, mean z %.4f +- %.4f, exact <z> %.4f; radial histogram (20 bins) chi-square %.1f\n", thetas[t], nShown[t], usedDots, mean, se, exact, chi);
+    }
+    // limits: 4 standard errors as asked; chi-square with 19 degrees of freedom: its 99.99 % point is 48, so a good match stays below it
+    checkTrue("shown dots: the mean z follows the exact <z>(t) within 4 standard errors at 4 times", worstZ < 4);
+    checkTrue("shown dots: the radial histogram matches the exact radial density (chi-square below 48, 19 dof) at 4 times", worstChi < 48);
+    // the cost of colouring and thinning every dot of a High-density cloud each frame (this machine, software, one core: not your PC)
+    AtomLab big; superSetup(big, "1s", "2p", 50); big.setParam("cdens", std::string("High")); superSetup(big, "1s", "2p", 50); big.setParam("cdens", std::string("High"));
+    for (int i = 0; i < 800; i++) big.step(1.0 / 240);
+    const long cap = std::min<long>(big.s.k, long(big.s.sg.size()));
+    const auto t0 = std::chrono::steady_clock::now();
+    long keepCount = 0; const int frames = 20;
+    for (int f = 0; f < frames; f++) for (long i = 0; i < cap; i++) keepCount += big.superGroup(i, 0.1 * f) < 255;
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count() / frames;
+    std::printf("cost of thinning and colouring %ld dots (High) per frame on this machine (software, one core): %.2f ms; %.0f%% shown\n", cap, ms, 100.0 * keepCount / (double(cap) * frames));
+}
+
 int main() {
     testElements();
     testNuclides();
@@ -638,6 +829,9 @@ int main() {
     testComplexDots();
     testPhaseWheel();
     testComplexOutline();
+    testBeatPeriodAndAmplitude();
+    testBeatNormStationary();
+    testSuperDots();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

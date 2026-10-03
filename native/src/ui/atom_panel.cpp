@@ -102,6 +102,21 @@ void selectRow(AppState& app, const char* key, const char* label, const std::vec
     ImGui::PopID();
 }
 
+// the choices of the Orbital and Orientation rows (used for the first orbital and for the second one of a superposition)
+using Choices = std::vector<std::pair<std::string, std::string>>;
+static const Choices SHELLS = {{"1s", "1s · sphere"}, {"2s", "2s · sphere with a shell"}, {"2p", "2p · dumbbell"}, {"3s", "3s · sphere with two shells"}, {"3p", "3p · dumbbell with a shell"},
+                                          {"3d", "3d · four lobes, or two and a ring"}, {"4s", "4s · sphere with three shells"}, {"4p", "4p · dumbbell with two shells"}, {"4d", "4d · d shape with a shell"}, {"4f", "4f · six or eight lobes"}};
+static const Choices P_AX = {{"x", "px · along x"}, {"y", "py · along y"}, {"z", "pz · along z (up)"},
+                                                          {"m+1", "m = +1 · complex state: a doughnut round z; the phase turns once round the axis"}, {"m-1", "m = −1 · complex state: the same doughnut, the phase turns the other way"}};
+static const Choices D_AX = {{"z2", "dz² · two lobes and a ring"}, {"xz", "dxz · four lobes"}, {"yz", "dyz · four lobes"}, {"xy", "dxy · four lobes, flat"}, {"x2y2", "dx²−y² · four lobes on the axes"},
+                                                          {"m+1", "m = +1 · complex state: the phase turns once round the z axis"}, {"m-1", "m = −1 · complex state: once round the z axis, the other way"},
+                                                          {"m+2", "m = +2 · complex state: the phase turns twice round the z axis"}, {"m-2", "m = −2 · complex state: twice round the z axis, the other way"}};
+static const Choices F_AX = {{"z3", "fz³ · two lobes and two rings"}, {"xz2", "fxz² · six lobes"}, {"yz2", "fyz² · six lobes"}, {"xyz", "fxyz · eight lobes"}, {"zx2y2", "fz(x²−y²) · eight lobes"},
+                                                          {"xx23y2", "fx(x²−3y²) · six lobes, flat"}, {"y3x2y2", "fy(3x²−y²) · six lobes, flat"},
+                                                          {"m+1", "m = +1 · complex state: the phase turns once round the z axis"}, {"m-1", "m = −1 · complex state: once round the z axis, the other way"},
+                                                          {"m+2", "m = +2 · complex state: the phase turns twice round the z axis"}, {"m-2", "m = −2 · complex state: twice round the z axis, the other way"},
+                                                          {"m+3", "m = +3 · complex state: the phase turns three times round the z axis"}, {"m-3", "m = −3 · complex state: three times round the z axis, the other way"}};
+
 // A number setting: its label with the value in bold, then the slider (optionally with − and +).
 void sliderRow(AppState& app, const char* key, const std::string& label, const std::string& value, double v, double lo, double hi, double step, bool plusMinus, const char* what = nullptr) {
     ImGui::PushID(key);
@@ -546,19 +561,11 @@ void atomPanel(AppState& app, float width) {
     selectRow(app, "view", "View", {{"Orbit", "Orbit (electron on a circle)"}, {"Cloud", "Cloud (quantum, side view)"}, {"Cloud 3D", "Cloud 3D (quantum, rotatable)"}, {"Slice", "Slice (cross-section of the cloud)"}}, p.view);
     if (p.view == "Orbit") selectRow(app, "ostyle", "Orbit style", {{"Modern", "Modern (real nucleus, quarks when you zoom in)"}, {"Bohr 1913", "Bohr 1913 (simple balls, as Bohr drew it)"}}, p.ostyle);
     if (p.view != "Orbit") {
-        selectRow(app, "orb", "Orbital", {{"1s", "1s · sphere"}, {"2s", "2s · sphere with a shell"}, {"2p", "2p · dumbbell"}, {"3s", "3s · sphere with two shells"}, {"3p", "3p · dumbbell with a shell"},
-                                          {"3d", "3d · four lobes, or two and a ring"}, {"4s", "4s · sphere with three shells"}, {"4p", "4p · dumbbell with two shells"}, {"4d", "4d · d shape with a shell"}, {"4f", "4f · six or eight lobes"}}, p.orb);
+        selectRow(app, "orb", p.super == "On" ? "First orbital" : "Orbital", SHELLS, p.orb);
         const int l = orbitals()[orbIndex(p.orb)].l;
-        if (l == 1) selectRow(app, "pAx", "Orientation", {{"x", "px · along x"}, {"y", "py · along y"}, {"z", "pz · along z (up)"},
-                                                          {"m+1", "m = +1 · complex state: a doughnut round z; the phase turns once round the axis"}, {"m-1", "m = −1 · complex state: the same doughnut, the phase turns the other way"}}, p.pAx);
-        if (l == 2) selectRow(app, "dAx", "Orientation", {{"z2", "dz² · two lobes and a ring"}, {"xz", "dxz · four lobes"}, {"yz", "dyz · four lobes"}, {"xy", "dxy · four lobes, flat"}, {"x2y2", "dx²−y² · four lobes on the axes"},
-                                                          {"m+1", "m = +1 · complex state: the phase turns once round the z axis"}, {"m-1", "m = −1 · complex state: once round the z axis, the other way"},
-                                                          {"m+2", "m = +2 · complex state: the phase turns twice round the z axis"}, {"m-2", "m = −2 · complex state: twice round the z axis, the other way"}}, p.dAx);
-        if (l == 3) selectRow(app, "fAx", "Orientation", {{"z3", "fz³ · two lobes and two rings"}, {"xz2", "fxz² · six lobes"}, {"yz2", "fyz² · six lobes"}, {"xyz", "fxyz · eight lobes"}, {"zx2y2", "fz(x²−y²) · eight lobes"},
-                                                          {"xx23y2", "fx(x²−3y²) · six lobes, flat"}, {"y3x2y2", "fy(3x²−y²) · six lobes, flat"},
-                                                          {"m+1", "m = +1 · complex state: the phase turns once round the z axis"}, {"m-1", "m = −1 · complex state: once round the z axis, the other way"},
-                                                          {"m+2", "m = +2 · complex state: the phase turns twice round the z axis"}, {"m-2", "m = −2 · complex state: twice round the z axis, the other way"},
-                                                          {"m+3", "m = +3 · complex state: the phase turns three times round the z axis"}, {"m-3", "m = −3 · complex state: three times round the z axis, the other way"}}, p.fAx);
+        if (l == 1) selectRow(app, "pAx", "Orientation", P_AX, p.pAx);
+        if (l == 2) selectRow(app, "dAx", "Orientation", D_AX, p.dAx);
+        if (l == 3) selectRow(app, "fAx", "Orientation", F_AX, p.fAx);
     }
     if (p.view != "Orbit") {
         selectRow(app, "cstyle", "Cloud style", {{"Classic", "Classic · small hard dots, as in the web version"}, {"Glow", "Glow · soft dots that add up: dense places glow, thin places fade"}}, p.cstyle);
@@ -575,6 +582,29 @@ void atomPanel(AppState& app, float width) {
         mutedWrapped("What the colours mean: a wave rises and falls, and its phase says where in that cycle it is. The colour of a dot shows the phase of the wave there. It is not a place and not how likely the electron is there (that is how many dots there are). "
                      "The orientations m = +1, −1, … are complex waves whose phase turns round the z axis (angular momentum about z of m ħ); they are mixtures of the real orientations and always use the wheel. "
                      "One electron, non-relativistic, no fine structure: all l of one n have the same energy here, and so do all m.", 12.0f / 16);
+    }
+    if (p.view == "Orbit") {                                           // a Bohr orbit has no superposition: the control is there but disabled
+        ImGui::BeginDisabled();
+        selectRow(app, "super", "Superposition", {{"Off", "Off · one orbital"}, {"On", "On · two orbitals at once"}}, "Off");
+        ImGui::EndDisabled();
+        mutedWrapped("A Bohr orbit has no superposition; switch to a cloud view.", 12.0f / 16);
+    } else {
+        selectRow(app, "super", "Superposition", {{"Off", "Off · one orbital"},
+                                                  {"On", "On · two orbitals at once: the cloud changes in time, at the beat frequency (quantum beats). Slowed down on screen."}}, p.super);
+        if (p.super == "On") {
+            selectRow(app, "orb2", "Second orbital", SHELLS, p.orb2);
+            const int l2 = orbitals()[orbIndex(p.orb2)].l;
+            if (l2 == 1) selectRow(app, "pAx2", "Second orientation", P_AX, p.pAx2);
+            if (l2 == 2) selectRow(app, "dAx2", "Second orientation", D_AX, p.dAx2);
+            if (l2 == 3) selectRow(app, "fAx2", "Second orientation", F_AX, p.fAx2);
+            sliderRow(app, "mix", "Mix (share of the second orbital)", fmt::jsLocale(std::round(p.mix)) + " %", p.mix, 0, 100, 1, false);
+            sliderRow(app, "speed", "Playback speed (beat speed)", std::to_string(p.speed), p.speed, 1, 30, 1, false);
+            mutedWrapped("Two orbitals at once, ψ = a·ψ₁ + b·ψ₂ with their own energies. The density then changes in time at the beat frequency (E₂ − E₁)/h, like two notes beating. "
+                         "Real beats are far too fast to see (hydrogen 1s + 2p: about 4×10⁻¹⁶ s), so the picture is slowed down; the line under the picture gives the real period and the slow-down. "
+                         "1s + 2p: the cloud's centre sloshes back and forth (an oscillating dipole). 1s + 2s: the cloud breathes. 2s + 2p: the same n has the same energy here, so there are no beats (fine structure and the Lamb shift are not modelled). "
+                         "Colours are the phase of the wave relative to the first orbital: a wave's overall phase means nothing, so the colours turn only once per beat. "
+                         "Playback speed sets the beat speed (4 s per beat at 5); Space pauses. One electron, non-relativistic. No photon jumps and no 90% outline while a superposition is shown.", 12.0f / 16);
+        }
     }
     if (p.view == "Slice") {
         selectRow(app, "cutAxis", "Cut direction", {{"Vertical", "Vertical (contains the z axis)"}, {"Horizontal", "Horizontal (across the z axis)"}}, p.cutAxis);

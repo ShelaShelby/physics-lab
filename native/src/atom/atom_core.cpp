@@ -1,4 +1,5 @@
 #include "atom_core.h"
+#include "outline.h"
 
 #include <algorithm>
 #include <array>
@@ -313,6 +314,49 @@ std::complex<double> psiComplex(int id, int Z, double x, double y, double z) {
 double density(int id, int Z, double x, double y, double z) {
     if (!isComplexState(id)) { const double p = psi(id, Z, x, y, z); return p * p; }
     return std::norm(psiComplex(id, Z, x, y, z));
+}
+// ---- quantum beats (see atom_core.h) ----
+double levelEV(int Z, int N, int n) { return -rydM(Z, N) * Z * Z / (double(n) * n); }
+double beatEV(int Z, int N, const Superposition& s) { return levelEV(Z, N, orbitals()[stateOrbital(s.idB)].n) - levelEV(Z, N, orbitals()[stateOrbital(s.idA)].n); }
+double beatPeriodS(int Z, int N, const Superposition& s) { const double d = std::fabs(beatEV(Z, N, s)); return d == 0 ? INFINITY : kPlanckEVs / d; }
+double normFactor(int id, int Z) {
+    static std::map<int, double> cache;                                    // at Z = 1; psi(Z) is psi(1) with lengths divided by Z, so its integral is the Z = 1 one over Z^3
+    auto it = cache.find(id);
+    if (it == cache.end()) it = cache.emplace(id, 1 / std::sqrt(orbitalNorm(id))).first;
+    return it->second * std::pow(double(Z), 1.5);
+}
+static std::complex<double> amp(int id, int Z, double x, double y, double z) {
+    return normFactor(id, Z) * (isComplexState(id) ? psiComplex(id, Z, x, y, z) : std::complex<double>(psi(id, Z, x, y, z), 0));
+}
+std::complex<double> psiSuper(const Superposition& s, int Z, double theta, double x, double y, double z) {
+    return s.a * amp(s.idA, Z, x, y, z) + s.b * amp(s.idB, Z, x, y, z) * std::exp(std::complex<double>(0, -theta));
+}
+std::complex<double> psiSuperT(const Superposition& s, int Z, int N, double tSeconds, double x, double y, double z) {
+    return psiSuper(s, Z, beatEV(Z, N, s) * tSeconds / (kPlanckEVs / (2 * kPi)), x, y, z);
+}
+bool dipoleAxes(const Superposition& s, double out[3]) {              // the angular integral of conj(A) (x, y, z) B over the sphere (1,500 evenly spread points, as dipoleOK)
+    static std::vector<std::array<double, 3>> sphere = [] {
+        std::vector<std::array<double, 3>> P;
+        const int N = 1500;
+        const double g = kPi * (3 - std::sqrt(5.0));
+        for (int i = 0; i < N; i++) { const double y = 1 - 2 * (i + 0.5) / N, r = std::sqrt(1 - y * y), a = g * i; P.push_back({r * std::cos(a), y, r * std::sin(a)}); }
+        return P;
+    }();
+    const auto ang = [](int id, double x, double y, double z) {
+        const Orbital& o = orbitals()[stateOrbital(id)];
+        return isComplexState(id) ? angularComplex(o.l, stateM(id), x, y, z) : std::complex<double>(angular(o.ang, x, y, z), 0);
+    };
+    std::complex<double> acc[3]; double na = 0, nb = 0;
+    for (const auto& p : sphere) {                                    // (the sphere's own axes: its y is the z axis here, so map back: x, y, z = p[0], p[2], p[1])
+        const double x = p[0], y = p[2], z = p[1];
+        const std::complex<double> A = ang(s.idA, x, y, z), B = ang(s.idB, x, y, z);
+        acc[0] += std::conj(A) * x * B; acc[1] += std::conj(A) * y * B; acc[2] += std::conj(A) * z * B;
+        na += std::norm(A); nb += std::norm(B);
+    }
+    const double scale = std::sqrt(na * nb + 1e-30);
+    double best = 0;
+    for (int i = 0; i < 3; i++) { out[i] = std::abs(acc[i]) / scale; best = std::max(best, out[i]); }
+    return best > 1e-3;
 }
 std::string stateText(int id) {
     const Orbital& o = orbitals()[stateOrbital(id)];

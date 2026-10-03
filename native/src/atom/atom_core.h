@@ -121,6 +121,21 @@ std::complex<double> psiComplex(int id, int Z, double x, double y, double z);   
 double density(int id, int Z, double x, double y, double z);                       // |psi|^2 of a real orbital or a complex state
 std::string stateText(int id);                         // "2pz" or "2p (m = +1)"
 
+// ---- quantum beats (0.10.2, stage 2): a superposition of two orbitals ----
+// psi(t) = a psiA e^(-i EA t/hbar) + b psiB e^(-i EB t/hbar), a^2 + b^2 = 1, with the lab's hydrogen-like energies E_n = -rydM(Z, N) Z^2 / n^2 (reduced mass, rydM above).
+// The states are NORMALISED here (normFactor), so a^2 and b^2 are the shares. The density changes with the beat phase theta = (EB - EA) t / hbar. A wave's overall phase has no
+// physical meaning, so psiSuper() is given relative to state A (multiplied by e^(+i EA t/hbar)): the colours then turn only at the beat frequency, not at the huge energy frequency.
+// Both ids may be real orbitals or complex states. In this model all l of one n share one energy: 2s + 2p do not beat (no fine structure, no Lamb shift).
+constexpr double kPlanckEVs = kHcEVnm * 1e-9 / 299792458.0;   // h in eV·s, from the lab's own h·c and the exact speed of light
+struct Superposition { int idA = 0, idB = 0; double a = 1, b = 0; };
+double levelEV(int Z, int N, int n);                   // E_n = -rydM(Z, N) Z^2 / n^2, eV
+double beatEV(int Z, int N, const Superposition& s);   // E_B - E_A, eV (signed)
+double beatPeriodS(int Z, int N, const Superposition& s);   // h / |E_B - E_A|, s (infinity when the energies are equal)
+double normFactor(int id, int Z);                      // 1 / sqrt(integral of |psi|^2), so that normFactor * psi is normalised (x, y, z in Bohr radii)
+std::complex<double> psiSuper(const Superposition& s, int Z, double theta, double x, double y, double z);   // a A + b B e^(-i theta), A and B normalised, relative to A
+std::complex<double> psiSuperT(const Superposition& s, int Z, int N, double tSeconds, double x, double y, double z);   // the same at real time t: theta = (EB - EA) t / hbar
+bool dipoleAxes(const Superposition& s, double out[3]);   // can light couple A and B? out = size of the angular dipole integral along x, y, z (relative); false when none
+
 // ---- light: the reduced-mass Rydberg energy and the spectral lines ----
 double rydM(int Z, int N);                    // eV
 struct SpecLine { int lo; int hi; double lam; };   // hi = 0 for a series limit; lam in nm

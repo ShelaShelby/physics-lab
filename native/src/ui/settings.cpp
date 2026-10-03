@@ -75,7 +75,7 @@ void labsToPrefs(const AppState& app, app::Prefs& p) {
     const atom::AtomParams& a = app.atom.p;
     p.atom = {{"scale", a.scale}, {"zoom", num(a.zoom)}, {"qstyle", a.qstyle}, {"detail", a.detail}, {"style", a.style}, {"Z", std::to_string(a.Z)},
               {"N", std::to_string(a.N)}, {"view", a.view}, {"ostyle", a.ostyle}, {"orb", a.orb}, {"pAx", a.pAx}, {"dAx", a.dAx}, {"fAx", a.fAx},
-              {"cutAxis", a.cutAxis}, {"cstyle", a.cstyle}, {"cdens", a.cdens}, {"outline", a.outline}, {"phase", a.phase}, {"cut", num(a.cut)}, {"n", std::to_string(a.n)}, {"speed", std::to_string(a.speed)}};
+              {"cutAxis", a.cutAxis}, {"cstyle", a.cstyle}, {"cdens", a.cdens}, {"outline", a.outline}, {"phase", a.phase}, {"super", a.super}, {"orb2", a.orb2}, {"pAx2", a.pAx2}, {"dAx2", a.dAx2}, {"fAx2", a.fAx2}, {"mix", num(a.mix)}, {"cut", num(a.cut)}, {"n", std::to_string(a.n)}, {"speed", std::to_string(a.speed)}};
     p.atomMore = app.atom.moreStored;
     p.lab = app.lab == 1 ? "Atom Lab" : "Orbit Lab";
     p.units = fmt::imperial() ? "imperial" : "metric";
@@ -111,19 +111,21 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
         if (p.orbit.count("cons") && p.orbit.at("cons") == kCons[i]) v.cons = orbit::ConsMode(i);
     }
     atom::AtomParams a = atom::AtomParams::appDefaults();
-    for (const char* k : {"scale", "qstyle", "detail", "style", "view", "ostyle", "orb", "pAx", "dAx", "fAx", "cutAxis", "cstyle", "cdens", "outline", "phase"}) {
+    for (const char* k : {"scale", "qstyle", "detail", "style", "view", "ostyle", "orb", "pAx", "dAx", "fAx", "cutAxis", "cstyle", "cdens", "outline", "phase", "super", "orb2", "pAx2", "dAx2", "fAx2"}) {
         const auto it = p.atom.find(k);
         if (it == p.atom.end() || !atom::AtomLab::validChoice(k, it->second)) continue;
         std::string& f = std::string(k) == "scale" ? a.scale : std::string(k) == "qstyle" ? a.qstyle : std::string(k) == "detail" ? a.detail
                        : std::string(k) == "style" ? a.style : std::string(k) == "view" ? a.view : std::string(k) == "ostyle" ? a.ostyle
                        : std::string(k) == "orb" ? a.orb : std::string(k) == "pAx" ? a.pAx : std::string(k) == "dAx" ? a.dAx
-                       : std::string(k) == "fAx" ? a.fAx : std::string(k) == "cstyle" ? a.cstyle : std::string(k) == "cdens" ? a.cdens : std::string(k) == "outline" ? a.outline : std::string(k) == "phase" ? a.phase : a.cutAxis;
+                       : std::string(k) == "fAx" ? a.fAx : std::string(k) == "cstyle" ? a.cstyle : std::string(k) == "cdens" ? a.cdens : std::string(k) == "outline" ? a.outline : std::string(k) == "phase" ? a.phase
+                       : std::string(k) == "super" ? a.super : std::string(k) == "orb2" ? a.orb2 : std::string(k) == "pAx2" ? a.pAx2 : std::string(k) == "dAx2" ? a.dAx2 : std::string(k) == "fAx2" ? a.fAx2 : a.cutAxis;
         f = it->second;
     }
     if (readNum(p.atom, "zoom", 0, 7, d)) a.zoom = d;
     if (readNum(p.atom, "Z", 1, 118, d)) { a.Z = int(d); a.N = atom::defaultN(a.Z); }
     if (readNum(p.atom, "N", atom::nRange(a.Z).first, atom::nRange(a.Z).second, d)) a.N = int(d);
     if (readNum(p.atom, "cut", -1, 1, d)) a.cut = d;
+    if (readNum(p.atom, "mix", 0, 100, d)) a.mix = d;
     if (readNum(p.atom, "n", 1, 4, d)) a.n = int(d);
     if (readNum(p.atom, "speed", 1, 30, d)) a.speed = int(d);
     app.atom.p = a;

@@ -478,6 +478,8 @@ static const NativeEdit kEditsAbout[] = {
     {"About sources: general relativity for the planets (REBOUNDx potential, Nobili & Roxburgh, the published Mercury value)", "used to check &ldquo;Planet physics: Real&rdquo;)</li>", "used to check &ldquo;Planet physics: Real&rdquo;)</li><li><a href=\"https://github.com/dtamayo/reboundx/blob/main/src/gr_potential.c\" target=\"_blank\" rel=\"noopener noreferrer\">REBOUNDx, the file gr_potential.c</a> (Tamayo, Rein, Shi &amp; Hernandez, 2020, Monthly Notices of the Royal Astronomical Society 491, 2885: the simple potential of the Sun behind &ldquo;General relativity (1PN)&rdquo; for the planets; the formula was read in that source file)</li><li>Nobili &amp; Roxburgh, 1986: Simulation of general relativistic corrections in long term numerical integrations of planetary orbits (IAU Symposium 114; the idea of that potential; the paper itself was not read)</li><li><a href=\"https://arxiv.org/abs/1403.7377\" target=\"_blank\" rel=\"noopener noreferrer\">Will, 2014: The confrontation between general relativity and experiment</a> (Living Reviews in Relativity 17; Mercury&rsquo;s relativistic perihelion advance of 42.98 arcseconds per century, used to check &ldquo;General relativity (1PN)&rdquo;; read from a search excerpt, not from the paper)</li>"},
     // 0.10.2: the sources of the complex orbitals and the phase colours
     {"About sources: complex orbitals and the phase wheel (DLMF 14.30, SciPy, scikit-image, CIE L*a*b*)", "read from a search excerpt, not from the paper)</li>", "read from a search excerpt, not from the paper)</li><li><a href=\"https://dlmf.nist.gov/14.30\" target=\"_blank\" rel=\"noopener noreferrer\">NIST Digital Library of Mathematical Functions, section 14.30: spherical harmonics</a> (the definition and the Condon&ndash;Shortley phase of Y<sub>lm</sub> behind the complex orbitals m = +1, &minus;1, &hellip; in the Atom Lab; the page itself was not opened from the session that wrote this)</li><li>SciPy 1.17.1 (<code>scipy.special.sph_harm_y</code>) and scikit-image 0.26.0 (<code>skimage.color.lab2rgb</code>): used only in the tests, as independent checks of those spherical harmonics and of the phase colour wheel</li><li>CIE 1976 L*a*b* colour space and the sRGB standard (IEC 61966-2-1): the phase colour wheel is a circle of constant lightness in L*a*b*, so the colour shows the phase and not a brightness pattern (the formulas are the standard ones, written from knowledge, not looked up here)</li>"},
+    // 0.10.2 stage 2: the sources of the quantum beats
+    {"About sources: quantum beats (Fitzpatrick, CODATA 2018)", "the formulas are the standard ones, written from knowledge, not looked up here)</li>", "the formulas are the standard ones, written from knowledge, not looked up here)</li><li>Richard Fitzpatrick, <i>Introductory Quantum Mechanics</i> (lecture notes, University of Texas at Austin), the section on the 2P&ndash;1S transitions in hydrogen: the matrix element &lang;1s|z|2p&rang; = 128&radic;2/243 a<sub>0</sub> that sets the size of the oscillating dipole in the Atom Lab&rsquo;s quantum beats (the page was not opened from the session that wrote this; the number was checked by numerical integration in the tests)</li><li>CODATA 2018 recommended values (NIST): the Planck constant, the Rydberg energy and the proton&ndash;electron mass ratio, used in the tests to check the beat period h/(E<sub>2</sub>&minus;E<sub>1</sub>) (the values were written from knowledge, not looked up here)</li>"},
     {"About sources: the textbooks for the hydrogen-like orbitals", "(the 1913 paper behind the Bohr 1913 style)</li>", "(the 1913 paper behind the Bohr 1913 style)</li><li>Textbooks for the hydrogen-like orbitals (the average distance of the electron, the radial probability, the cloud tests): David J. Griffiths, <i>Introduction to Quantum Mechanics</i>; Hans A. Bethe and Edwin E. Salpeter, <i>Quantum Mechanics of One- and Two-Electron Atoms</i></li>"},
 };
 static const NativeEdit kEditSgrA = {"Sagittarius A* card: no Spacetime Lab", " (see the Spacetime Lab)", ""};
@@ -554,8 +556,8 @@ static void testNativeEdits() {
         checkTrue(n + "a button has an action and the other way round", (*kTimeline[i].button != 0) == (*kTimeline[i].lab != 0));
     }
     checkTrue("exactly one slingshot button in the web", slingshot == 1);
-    // every edit was used (nothing in the list is left over): units 1 + about 8 + sgra 1 + guide 8 + slingshot 1
-    checkTrue("every native edit was used", g_editUses == 1 + 8 + 1 + 8 + 1);
+    // every edit was used (nothing in the list is left over): units 1 + about 9 + sgra 1 + guide 8 + slingshot 1
+    checkTrue("every native edit was used", g_editUses == 1 + 9 + 1 + 8 + 1);
 }
 
 // ---- the frames-per-second counter text (the web: Math.round(frames * 1000 / ms) + ' fps') ----
@@ -1317,6 +1319,51 @@ static void testPhaseSetting() {
     checkTrue("Wheel with a real orientation uses the wheel", lab.usesWheel() && lab.complexM() == 0 && lab.stateText() == "3dxy");
 }
 
+// ---- 0.10.2 stage 2: the Atom Lab's Superposition setting (quantum beats) ----
+static void testSuperSetting() {
+    const atom::AtomParams web, app = atom::AtomParams::appDefaults();
+    checkStr("Superposition: Off by default, second orbital 2p, mix 50 %", web.super + "/" + app.super + "/" + web.orb2 + "/" + std::to_string(int(web.mix)), "Off/Off/2p/50");
+    checkTrue("Superposition: 'On' and 'Off' accepted, anything else refused", atom::AtomLab::validChoice("super", "On") && atom::AtomLab::validChoice("super", "Off") && !atom::AtomLab::validChoice("super", "on") && !atom::AtomLab::validChoice("super", ""));
+    checkTrue("Second orbital and its orientation: the same choices as the first, bad values refused",
+              atom::AtomLab::validChoice("orb2", "4f") && !atom::AtomLab::validChoice("orb2", "5s") && atom::AtomLab::validChoice("fAx2", "m-3") && !atom::AtomLab::validChoice("dAx2", "m+3") && atom::AtomLab::validChoice("pAx2", "y"));
+    Prefs p; p.atom = {{"super", "On"}, {"orb2", "3d"}, {"dAx2", "m+2"}, {"mix", "30"}};
+    const Prefs q = loadPrefs(savePrefs(p));
+    checkTrue("Superposition, second orbital, orientation and mix go through the settings file unchanged", q.atom == p.atom);
+    atom::AtomLab lab; lab.nowMs = [] { return 0.0; };
+    lab.setParam("mix", 150.0);
+    checkTrue("Mix is held to 0 to 100 %", lab.p.mix == 100);
+    lab.setParam("mix", -5.0);
+    checkTrue("Mix is held to 0 to 100 % (low end)", lab.p.mix == 0);
+    lab.p.super = "On"; lab.p.mix = 30; lab.p.orb2 = "3d";
+    lab.p = atom::AtomParams::appDefaults(); lab.restart();
+    checkTrue("Defaults: Superposition Off, 2p, 50 % again", lab.p.super == "Off" && lab.p.orb2 == "2p" && lab.p.mix == 50 && !lab.superOn());
+    bool allOff = true;
+    for (int which = 0; which < 5; which++) { atom::AtomLab b; b.nowMs = [] { return 0.0; }; b.p.super = "On"; atom::benchSetup(b, which, 800, 600); allOff = allOff && b.p.super == "Off" && !b.superOn(); }
+    checkTrue("the benchmark scenes (all five) set Superposition Off, even if it was on", allOff);
+    // the lab: the control only works in the cloud views; the beat clock runs 4 s per beat at Playback speed 5, faster with the speed; equal energies: no beats; no photon jumps
+    lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string("1s")); lab.setParam("orb2", std::string("2p")); lab.setParam("super", std::string("On"));
+    checkTrue("Superposition is on in a cloud view", lab.superOn() && lab.usesWheel());
+    for (int i = 0; i < 960; i++) lab.step(1.0 / 240);                         // 4 s at speed 5
+    const double th4 = lab.beatTheta();
+    lab.setParam("speed", 10.0);
+    for (int i = 0; i < 480; i++) lab.step(1.0 / 240);                         // 2 s at speed 10 = 4 more s of beat time
+    const double th8 = lab.beatTheta();
+    std::printf("beat clock: after 4 s at speed 5 theta = %.9f (2 pi = %.9f); after 2 more s at speed 10 theta = %.9f (4 pi = %.9f)\n", th4, 2 * 3.14159265358979, th8, 4 * 3.14159265358979);
+    checkTrue("one beat takes 4 s on screen at Playback speed 5 (theta = 2 pi), and the speed scales it", std::fabs(th4 - 2 * 3.14159265358979) < 1e-9 && std::fabs(th8 - 4 * 3.14159265358979) < 1e-9);
+    const std::string txt = lab.beatSlowText();
+    checkTrue("the readout gives the real beat period and the slow-down (hydrogen 1s + 2p: about 406 as, slowed by 10^16)", txt.find("real beat period") != std::string::npos && txt.find("slowed by") != std::string::npos && lab.beatRealPeriodS() > 4.0e-16 && lab.beatRealPeriodS() < 4.1e-16);
+    checkTrue("no photon jumps from a superposition", lab.targets(-1).empty() && lab.targets(1).empty());
+    lab.setParam("orb", std::string("2s")); lab.setParam("orb2", std::string("2p"));
+    for (int i = 0; i < 480; i++) lab.step(1.0 / 240);
+    checkTrue("2s + 2p: same energy, no beats: theta stays 0, and the readout says so", lab.beatTheta() == 0 && lab.beatSlowText().find("no beats") != std::string::npos && lab.beatKindText().find("NO beats") != std::string::npos && lab.beatKindText().find("Lamb") != std::string::npos);
+    lab.setParam("orb", std::string("1s")); lab.setParam("orb2", std::string("2s"));
+    checkTrue("1s + 2s: same parity: the cloud breathes", lab.beatKindText().find("breathes") != std::string::npos);
+    lab.setParam("orb2", std::string("2p")); lab.setParam("pAx2", std::string("z"));
+    checkTrue("1s + 2p: opposite parity: the centre sloshes along z", lab.beatKindText().find("sloshes") != std::string::npos);
+    lab.setParam("view", std::string("Orbit"));
+    checkTrue("a Bohr orbit has no superposition: the setting does nothing in the Orbit view", !lab.superOn());
+}
+
 static void testRelativity() {
     orbit::ViewSettings vs;
     checkTrue("General relativity (1PN): on by default (it only acts in Real)", vs.relativity);
@@ -1433,6 +1480,7 @@ int main() {
     testPlanetPhysics();
     testRelativity();
     testPhaseSetting();
+    testSuperSetting();
     testSunWobble();
     testLiveAndGpu();
     testNativeEdits();

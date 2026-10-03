@@ -19,6 +19,12 @@
 - [ ] Orientation of 2p, 3d and 4f now also has "m = +1", "m = −1" … (the 4f has m = ±1, ±2, ±3). Try Cloud 3D with the 4f m = +3 and m = −3 states: the colours should go round the z axis three times, in opposite directions for + and −.
 - [ ] Complex states always use the wheel; Emit/Absorb from them says why it is not offered. Check the text under the picture and the note under "Phase colours" read well, and that Defaults puts everything back.
 
+## Try on the PC (0.10.2, stage 2: quantum beats)
+- [ ] Atom Lab, a cloud view, Electron card: "Superposition: On". Orbital 1s, Second orbital 2p (pz): the cloud's centre should slosh up and down once per 4 seconds (Playback speed 5); the line under the picture says "real beat period 406 as, slowed by …". Try the Mix slider (0 and 100 % = one still orbital) and the Playback speed (faster or slower beats). Space should pause it.
+- [ ] 1s + 2s: the cloud should breathe (change size), the centre staying put. 2s + 2p: nothing moves, and the text says why (no beats, no fine structure).
+- [ ] Cloud 3D and Slice with a superposition, on a dark and a light theme: smooth, no flicker or lag? (The dots are thinned and coloured every frame; I could only measure that on a cloud machine, not yours.) The colours are the phase of the wave relative to the first orbital; they should go round the colour ring once per beat.
+- [ ] Orbit view: the Superposition row is greyed out with the message. Defaults puts it back to Off. A benchmark run is not affected.
+
 ## Still untested on a real PC from earlier versions
 - [x] Auto theme and motion following Windows.
 - [x] The settings file in %APPDATA%\PhysicsLab\PhysicsLab\settings.txt.
