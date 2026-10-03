@@ -334,6 +334,14 @@ std::complex<double> psiSuper(const Superposition& s, int Z, double theta, doubl
 std::complex<double> psiSuperT(const Superposition& s, int Z, int N, double tSeconds, double x, double y, double z) {
     return psiSuper(s, Z, beatEV(Z, N, s) * tSeconds / (kPlanckEVs / (2 * kPi)), x, y, z);
 }
+void jumpFractions(std::complex<double> A, std::complex<double> B, double theta, double phi, double& fA, double& fB) {
+    const double a2 = std::norm(A), b2 = std::norm(B);
+    const double rho = std::norm(std::cos(theta) * A + std::sin(theta) * B * std::exp(std::complex<double>(0, -phi))), lam = std::cos(theta) * std::cos(theta);
+    const double aFirstA = a2 > 0 ? std::min(1.0, rho / a2) : 0, aFirstB = b2 > 0 ? std::max(0.0, (rho - a2 * aFirstA) / b2) : 0;     // the old dots fill first
+    const double bFirstB = b2 > 0 ? std::min(1.0, rho / b2) : 0, bFirstA = a2 > 0 ? std::max(0.0, (rho - b2 * bFirstB) / a2) : 0;     // the new dots fill first
+    fA = std::max(0.0, std::min(1.0, lam * aFirstA + (1 - lam) * bFirstA));
+    fB = std::max(0.0, std::min(1.0, lam * aFirstB + (1 - lam) * bFirstB));
+}
 bool dipoleAxes(const Superposition& s, double out[3]) {              // the angular integral of conj(A) (x, y, z) B over the sphere (1,500 evenly spread points, as dipoleOK)
     static std::vector<std::array<double, 3>> sphere = [] {
         std::vector<std::array<double, 3>> P;

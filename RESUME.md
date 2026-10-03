@@ -1,12 +1,12 @@
 # Resume
 
 ## Current state
-- Version 0.10.1 alpha is the latest finished version.
-- The roadmap was updated after it. The next planned version is 0.10.2 (see ROADMAP.md).
+- Version 0.10.2 alpha is the latest finished version.
+- The roadmap was updated after it. The next planned version is 0.10.3 (see ROADMAP.md).
 - Test programs and their last known check counts:
   - orbit_tests: 1,377
-  - atom_tests: 17,818
-  - app_tests: 1,357
+  - atom_tests: 17,936
+  - app_tests: 1,383
   - nbody_tests: 36
 
 ## How work flows

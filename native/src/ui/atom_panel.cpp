@@ -621,6 +621,13 @@ void atomPanel(AppState& app, float width) {
     ImGui::SameLine();
     if (ImGui::Button("↑ Absorb photon")) L.absorb();
     if (ImGui::Button(displayable(L.autoText()).c_str())) L.toggleAuto();
+    mutedWrapped(p.view == "Orbit"
+        ? "How a jump is drawn: the electron glides from one circle to the other over about 0.8 s, only to help the eye. Bohr's model has no path between circles: the electron is on one circle, and then on the other. "
+          "A photon you emit appears when the glide ends; an absorbed photon arrives first, and then the glide starts. With Reduced motion on (Settings, Motion) the electron leaps at once."
+        : "How a jump is drawn: the standard textbook picture of a transition, in which the electron's wave is a mixture of the old and the new state and slides from one shape to the other (1.2 s), "
+          "sloshing at the slowed-down beat frequency on the way. It is not a calculation of how a photon is absorbed or emitted. A real jump is very different from the screen: the screen is slowed down, and the real time is not shown. "
+          "The 90% outline fades out as the cloud leaves its orbital and back in after landing. A photon you emit appears when the jump ends; an absorbed photon arrives first, and then the jump starts. "
+          "With Reduced motion on (Settings, Motion) the jump is over at once.", 12.0f / 16);
 
     // ---- Light spectrum ----
     ImGui::SeparatorText("Light spectrum");

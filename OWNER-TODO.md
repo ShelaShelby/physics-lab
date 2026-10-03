@@ -14,16 +14,12 @@
 - [ ] The Milky Way band at far zoom (about 9,200 and 13,000 AU across), 3D view turned to several angles: one stripe running right across, fading only at the edges.
 - [ ] The two secret themes, once unlocked, show their names in the Theme picker (not "???") and the cards still look right.
 
-## Try on the PC (0.10.2, stage 1: phase colours)
-- [ ] Atom Lab, Electron section: "Phase colours: Sign / Wheel". Sign must look exactly as before. Wheel: look at it on a dark theme AND a light theme, in Cloud, Cloud 3D and Slice, with Classic and Glow dots; the colour ring (0, π/2, π, 3π/2) shows top right.
-- [ ] Orientation of 2p, 3d and 4f now also has "m = +1", "m = −1" … (the 4f has m = ±1, ±2, ±3). Try Cloud 3D with the 4f m = +3 and m = −3 states: the colours should go round the z axis three times, in opposite directions for + and −.
-- [ ] Complex states always use the wheel; Emit/Absorb from them says why it is not offered. Check the text under the picture and the note under "Phase colours" read well, and that Defaults puts everything back.
-
-## Try on the PC (0.10.2, stage 2: quantum beats)
-- [ ] Atom Lab, a cloud view, Electron card: "Superposition: On". Orbital 1s, Second orbital 2p (pz): the cloud's centre should slosh up and down once per 4 seconds (Playback speed 5); the line under the picture says "real beat period 406 as, slowed by …". Try the Mix slider (0 and 100 % = one still orbital) and the Playback speed (faster or slower beats). Space should pause it.
-- [ ] 1s + 2s: the cloud should breathe (change size), the centre staying put. 2s + 2p: nothing moves, and the text says why (no beats, no fine structure).
-- [ ] Cloud 3D and Slice with a superposition, on a dark and a light theme: smooth, no flicker or lag? (The dots are thinned and coloured every frame; I could only measure that on a cloud machine, not yours.) The colours are the phase of the wave relative to the first orbital; they should go round the colour ring once per beat.
-- [ ] Orbit view: the Superposition row is greyed out with the message. Defaults puts it back to Off. A benchmark run is not affected.
+## Try on the PC (0.10.2: phase colours, quantum beats, smooth jumps)
+- [ ] **Phase colours:** Atom Lab, Electron card: "Phase colours: Sign / Wheel". Sign must look as before. Wheel on a dark AND a light theme, in Cloud, Cloud 3D and Slice, Classic and Glow; the colour ring (0, π/2, π, 3π/2) top right. Orientation of 2p, 3d, 4f has "m = +1", "m = −1" … (4f up to ±3): the colours go round the z axis m times, opposite ways for + and −. Defaults puts everything back.
+- [ ] **Superposition:** 1s + 2p (pz): the cloud's centre sloshes up and down once per 4 s at Playback speed 5; the line under the picture gives the real beat period. 1s + 2s: the cloud breathes. 2s + 2p: nothing moves, and the text says why. **1s + 4f:** try it too (the dipole is zero, so the cloud only changes shape, and the text should say so). Mix slider (0 and 100 % = one still orbital), Playback speed (faster/slower beats), **Space pauses it**.
+- [ ] **Smooth photon jumps:** Emit and Absorb in Cloud, Cloud 3D and **Slice**, on a dark and a **light theme**, Classic and Glow dots: the cloud should slide from one shape to the other without any pop or reshuffle; the emitted photon should appear exactly when the cloud has landed, the absorbed one should start the jump exactly when it arrives. **Space in the middle of a jump** should freeze it; changing the orbital or element in the middle should give a clean new cloud. Auto photons for a minute: no pops. With the 90% outline on it should fade out and back in.
+- [ ] **Orbit view** (Modern and Bohr 1913): the electron glides between the circles (0.8 s) with the landing flash; Superposition is greyed out with its message. **Settings → Motion → Reduced motion:** jumps should be instant.
+- [ ] Is it smooth on your PC at Normal, High and Ultra density (per-frame work during a jump: more dots are handled than in a still cloud)? I could only measure on a cloud machine.
 
 ## Still untested on a real PC from earlier versions
 - [x] Auto theme and motion following Windows.

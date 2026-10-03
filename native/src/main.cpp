@@ -219,8 +219,11 @@ int main(int, char**) {
         }
     }
     if (const char* f = SDL_getenv("PL_ATOM_FOCUS")) app.atom.s.focus = std::atoi(f);
-    if (const char* d = SDL_getenv("PL_ATOM_DO")) { const std::string a = d; if (a == "emit") app.atom.emit(); else if (a == "absorb") app.atom.absorb(); else if (a == "auto") app.atom.toggleAuto();
-                                               else if (a == "nucleus") app.atom.zoomNucleus(); else if (a == "nucleon") app.atom.zoomNucleon(); }
+    const char* atomDo = SDL_getenv("PL_ATOM_DO");
+    const int atomDoFrame = SDL_getenv("PL_ATOM_DO_FRAME") ? std::atoi(SDL_getenv("PL_ATOM_DO_FRAME")) : 0;   // PL_ATOM_DO_FRAME=n: press it at frame n (after the cloud has filled), not at the start
+    const auto doAtom = [&] { if (!atomDo) return; const std::string a = atomDo; if (a == "emit") app.atom.emit(); else if (a == "absorb") app.atom.absorb(); else if (a == "auto") app.atom.toggleAuto();
+                                               else if (a == "nucleus") app.atom.zoomNucleus(); else if (a == "nucleon") app.atom.zoomNucleon(); };
+    if (atomDoFrame == 0) doAtom();
     if (const char* l = SDL_getenv("PL_ATOM_LEARN")) { app.atomLearn = std::atoi(l); if (const char* t = SDL_getenv("PL_ATOM_TAB")) { app.scaleTab = t; app.massTab = t; } }   // open an Atom Lab guide (1–4), on a tab
     int frame = 0;
     bool running = true;
@@ -232,8 +235,10 @@ int main(int, char**) {
     const double fakeModalS = SDL_getenv("PL_FAKE_MODAL") ? std::atof(SDL_getenv("PL_FAKE_MODAL")) : 0;   // for automatic checks: pretend the window system holds the loop for n seconds
     const bool fakeResize = SDL_getenv("PL_FAKE_MODAL_RESIZE") != nullptr;
     // One frame. live: drawn from the event watch while the window system holds the loop (no events are read then).
+    int atomDoCount = 0;
     const auto runFrame = [&](bool isLive) {
         app.liveFrame = isLive;
+        if (atomDoFrame > 0 && ++atomDoCount == atomDoFrame) doAtom();
         int winW = 0, winH = 0, fbW = 0, fbH = 0;
         float canvasWinW = 1, headerH = 0, pictureWinH = 1;
         const auto measure = [&] {                      // the window as it is now (it can change while the window system has the loop)

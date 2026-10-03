@@ -134,6 +134,13 @@ double beatPeriodS(int Z, int N, const Superposition& s);   // h / |E_B - E_A|, 
 double normFactor(int id, int Z);                      // 1 / sqrt(integral of |psi|^2), so that normFactor * psi is normalised (x, y, z in Bohr radii)
 std::complex<double> psiSuper(const Superposition& s, int Z, double theta, double x, double y, double z);   // a A + b B e^(-i theta), A and B normalised, relative to A
 std::complex<double> psiSuperT(const Superposition& s, int Z, int N, double tSeconds, double x, double y, double z);   // the same at real time t: theta = (EB - EA) t / hbar
+// ---- smooth photon jumps (0.10.2, stage 3) ----
+// A cloud jump shows psi = cos(theta) A + sin(theta) B e^(-i phi) (theta from 0 to pi/2). The picture is built from TWO fixed populations of dots: the cloud that was on screen (dots
+// sampled from |A|^2) and a new one of the target orbital (from |B|^2), N dots each. A dot of the first is shown with probability fA, of the second with fB, where
+//   |A|^2 fA + |B|^2 fB = |psi|^2   (so the shown dots are exact samples of N |psi|^2, at every moment), and 0 <= f <= 1 because |psi|^2 <= (cos|A| + sin|B|)^2 <= |A|^2 + |B|^2.
+// The fractions blend "the old dots fill the density first" (weight cos^2 theta) with "the new dots fill it first" (weight sin^2 theta): at theta = 0 only the old dots are shown,
+// at pi/2 only the new ones, so the cloud on screen never reshuffles at the start or the end.
+void jumpFractions(std::complex<double> A, std::complex<double> B, double theta, double phi, double& fA, double& fB);
 bool dipoleAxes(const Superposition& s, double out[3]);   // can light couple A and B? out = size of the angular dipole integral along x, y, z (relative); false when none
 
 // ---- light: the reduced-mass Rydberg energy and the spectral lines ----

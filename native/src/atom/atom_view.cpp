@@ -294,7 +294,16 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     std::vector<Blob> B;
 
     if (cloud) {
-        const long cap = std::min<long>(lab.cloudCap(), long(s.sg.size())), cnt = std::min<long>(s.k, cap);
+        const long cap = std::min<long>(lab.cloudCap(), long(s.sg.size()));
+        long cnt = std::min<long>(s.k, cap);
+        const bool jump = lab.jumpCloud();                                 // a photon jump: the old dots and the new ones are drawn together, each shown with its own odds
+        static std::vector<float> allPts;
+        const float* PTS = s.pts.data();
+        if (jump) {
+            const long jn = lab.jumpDots();
+            allPts.assign(s.pts.begin(), s.pts.begin() + 3 * jn); allPts.insert(allPts.end(), s.jp.begin(), s.jp.begin() + 3 * jn);
+            PTS = allPts.data(); cnt = 2 * jn;
+        }
         const bool glow = p.cstyle == "Glow";
         std::vector<GlowDot> G;
         G.reserve(glow ? std::size_t(cnt) : 0);
@@ -306,21 +315,25 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const int ng = int(pal.size());
         static std::vector<unsigned char> grp;                             // each dot's colour group
         grp.resize(std::size_t(cnt));
-        if (lab.superOn()) {                                               // a superposition: each dot is thinned and coloured from the CURRENT beat phase (255 = not shown now)
+        if (jump) {
+            const long jn = lab.jumpDots();
+            for (long i = 0; i < jn; i++) { grp[std::size_t(i)] = (unsigned char)lab.jumpGroup(0, i); grp[std::size_t(jn + i)] = (unsigned char)lab.jumpGroup(1, i); }
+        } else if (lab.superOn()) {                                        // a superposition: each dot is thinned and coloured from the CURRENT beat phase (255 = not shown now)
             const double th = lab.beatTheta();
             for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = (unsigned char)lab.superGroup(i, th);
         } else
         for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = wheel ? (unsigned char)phaseBin(s.ph[std::size_t(i)]) : (unsigned char)(s.sg[i] > 0 ? 0 : 1);
-        const bool outlineOn = p.outline == "On" && !lab.superOn();         // (the 90 % outline is of one orbital: not drawn for a superposition)
+        const bool outlineOn = p.outline == "On" && !lab.superOn() && lab.outlineAlpha() > 0.01;         // (the 90 % outline is of one orbital: not drawn for a superposition)
         const int fo = lab.fullOrb();
-        const Color olCol = withA(css.fg, 0.6);                            // the 90 % outline: thin, the theme's text colour (light on dark pages, dark on light ones)
+        const double olA = lab.outlineAlpha();                             // the outline fades out as a jump leaves its orbital and back in after landing
+        const Color olCol = withA(css.fg, 0.6 * olA);                            // the 90 % outline: thin, the theme's text colour (light on dark pages, dark on light ones)
         const double olUnit = kA0 / p.Z * pxm;                             // points per Bohr radius at Z = 1 in the outline's own units
         if (sl) {                                                          // slice: only dots inside a thin slab around the cut plane, seen face-on
             const double size = kExt[lab.sizeN()] / p.Z * kA0, off = lab.cutOffsetM(), th = 0.07 * size;
             for (long i = 0; i < cnt; i++) {
-                const double dist = std::fabs((hz ? s.pts[3 * i + 2] : s.pts[3 * i + 1]) - off);
+                const double dist = std::fabs((hz ? PTS[3 * i + 2] : PTS[3 * i + 1]) - off);
                 if (dist > th || grp[std::size_t(i)] == 255) continue;
-                const double X = cx + s.pts[3 * i] * pxm, Y = cy - (hz ? s.pts[3 * i + 1] : s.pts[3 * i + 2]) * pxm;
+                const double X = cx + PTS[3 * i] * pxm, Y = cy - (hz ? PTS[3 * i + 1] : PTS[3 * i + 2]) * pxm;
                 if (X < -2 || X > w || Y < -2 || Y > h) continue;
                 if (glow) G.push_back({float(X), float(Y), 4.2f, float(1 - 0.6 * dist / th), grp[std::size_t(i)]});     // dots nearer the cut plane are brighter, as before
                 else B.push_back(square(X - 1 + 1.25, Y - 1 + 1.25, 1.25, withA(pal[grp[std::size_t(i)]], 0.6 * (1 - 0.6 * dist / th) * cloudDotWeight(cap))));
@@ -343,7 +356,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 const Color c = withA(pal[g], 0.3 * cloudDotWeight(cap));
                 for (long i = 0; i < cnt; i++) {
                     if (grp[std::size_t(i)] != g) continue;
-                    const double X = cx + s.pts[3 * i] * pxm - 1, Y = cy - s.pts[3 * i + 2] * pxm - 1;
+                    const double X = cx + PTS[3 * i] * pxm - 1, Y = cy - PTS[3 * i + 2] * pxm - 1;
                     if (!(X > -2 && X < w && Y > -2 && Y < h)) continue;
                     if (glow) G.push_back({float(X + 1), float(Y + 1), 4.4f, 1.f, (unsigned char)g});
                     else B.push_back(square(X + 1, Y + 1, 1, c));
@@ -359,7 +372,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             static std::vector<float> PX, PY, PD;
             PX.resize(cnt); PY.resize(cnt); PD.resize(cnt);
             for (long i = 0; i < cnt; i++) {
-                const double x = s.pts[3 * i], y = s.pts[3 * i + 1], z = s.pts[3 * i + 2];
+                const double x = PTS[3 * i], y = PTS[3 * i + 1], z = PTS[3 * i + 2];
                 const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, dep = y1 * cb - z * sb, up = y1 * sb + z * cb;   // dep > 0: farther away
                 const double f = 1 / (1 + dep / (4 * ext));                 // mild perspective
                 PX[i] = float(cx + x1 * pxm * f); PY[i] = float(cy - up * pxm * f); PD[i] = float(dep / ext);
@@ -401,7 +414,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 for (const OutSeg3& g : outlineOf(fo).wire) {
                     double X0, Y0, t0, X1, Y1, t1;
                     pr(g.x0, g.y0, g.z0, X0, Y0, t0); pr(g.x1, g.y1, g.z1, X1, Y1, t1);
-                    R.line(X0, Y0, X1, Y1, 0.9, withA(css.fg, 0.42 - 0.22 * 0.5 * (t0 + t1 + 2) / 2));        // nearer lines are a little stronger
+                    R.line(X0, Y0, X1, Y1, 0.9, withA(css.fg, olA * (0.42 - 0.22 * 0.5 * (t0 + t1 + 2) / 2)));        // nearer lines are a little stronger
                 }
             }
             const double gx = w - 44, gy = h - 44;                         // axis gizmo (bottom right)

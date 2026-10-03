@@ -71,6 +71,13 @@ struct AtomState {
     std::vector<float> pts;              // cloud dots, m (x, y, z for each of kCap)
     std::vector<signed char> sg;         // the sign of ψ at each dot (+1 / −1)
     std::vector<float> sa;               // Superposition: the normalised amplitudes of the two states at each dot (A re, A im, B re, B im), made when the dot is made
+    // ---- a photon jump (smooth): the emitted photon waits here until the jump ends ----
+    std::optional<Photon> photonAfter;
+    std::vector<float> jp;               // cloud jump: the new dots (the target orbital's), m (x, y, z for each); the old dots stay in pts
+    std::vector<float> jA, jB;           // cloud jump: normalised amplitudes (A re, A im, B re, B im) at each old dot and at each new dot
+    long jn = 0;                         // dots in each population
+    double gAng = 0;                     // Orbit glide: the electron's angle
+    double landT = 99;                   // seconds since the last landing (the 90 % outline fades back in)
     double beatT = 0;                    // Superposition: seconds of beat time on screen so far (runs at 1 s per second at Playback speed 5; Space pauses it)
     std::vector<float> ph;               // the phase arg(ψ) at each dot, radians in (−π, π]: 0 or π for a real orbital (its sign), the real phase for a complex state
     long k = 0;                          // dots recorded so far
@@ -178,6 +185,17 @@ public:
     int stateId() const;                                  // what the cloud shows: a complex state's id (atom_core.h), or fullOrb()
     bool usesWheel() const { return p.phase == "Wheel" || complexM() != 0 || superOn(); }   // complex states and superpositions always use the phase wheel
     int stateIdOf(const std::string& shell, const std::string& pAx, const std::string& dAx, const std::string& fAx) const;   // the id of a shell + orientation (real or complex)
+    // ---- smooth photon jumps ----
+    bool webJumps = false;                                // the tests that compare with the web: its instant leap and dot-by-dot morph. The app never sets it.
+    void startJump(const std::string& kind, int to);      // emit: the jump runs first, the photon appears when it ends; absorb: the photon flies in, the jump starts when it arrives
+    bool jumpCloud() const { return s.trans && p.view != "Orbit" && !webJumps; }   // a cloud jump is on screen
+    double jumpU() const;                                 // 0 .. 1: smooth progress of the jump (theta = pi/2 u)
+    double jumpPhi() const;                               // the slowed beat phase during the jump
+    long jumpDots() const { return s.jn; }
+    bool jumpShown(int pop, long i) const;                // pop 0: the old dots, 1: the new ones
+    double jumpPhase(int pop, long i) const;              // arg of the wave at the dot (gauge: ends on the new orbital's own phase)
+    int jumpGroup(int pop, long i) const;                 // 255 = not shown, else the colour group (phase bin, or 0 / 1 for the sign)
+    double outlineAlpha() const;                          // how strongly the 90 % outline is drawn (it fades out as the cloud leaves its orbital, and back in after landing)
     // ---- quantum beats ----
     bool superOn() const { return p.super == "On" && p.view != "Orbit"; }
     Superposition superState() const;                     // the two states and the shares (a^2 = 1 - mix, b^2 = mix)
@@ -214,8 +232,9 @@ private:
     void mcmc(bool record) { if (superOn()) walkSuper(s.w, record); else walk(stateId(), s.w, record); }
     Superposition sup_;                                   // set when the cloud is (re)started and when a share changes
     double nA_ = 1, nB_ = 1;                              // normalisation factors of the two states at the current Z
-    void startJump(const std::string& kind, int to);
     void beginTransition(int from, int to);
+    void finishTransition(double overshoot);
+    void glideOrbit(double dt);
     void manualJump(int dir);
     void advance(double dt);
     void decTick(double dt);

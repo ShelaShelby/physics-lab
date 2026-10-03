@@ -12,9 +12,9 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.9.9: theme picker grid, clearer web history button, readable nucleus label, sources added to About — done
 - 0.10: real N-body planets as an option (Planet physics: Simple / Real; Real is not the default) — done
 - 0.10.1: general relativity (1PN) for the planets in Real mode (Mercury's extra turn), the Sun's wobble round the centre of mass drawn in Real mode, Milky Way band fix, secret theme names fix — done
+- 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- 0.10.2: Atom Lab: phase colours, quantum beats (superposition of two states), smooth photon jumps — planned
 - 0.10.3: JPL start state and validation for Real mode (needs a data file from JPL Horizons that the owner downloads; after that, decide whether Real becomes the default) — planned
 - 0.10.4: real Moon positions and phases (feasibility first: needs a named, reachable source for the Moon's orbit; if there is none, it stays planned) — planned
 - Bug and speed audit before 1.0, in three separate passes (Orbit Lab, Atom Lab, app and settings): first a report only, then small fix tasks for the real findings — planned

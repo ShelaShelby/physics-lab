@@ -59,7 +59,7 @@ void AtomLab::init() {
     if (superOn()) { s.sa.assign(std::size_t(cloudCap()) * 4, 0.f); sup_ = superState(); nA_ = normFactor(sup_.idA, p.Z); nB_ = normFactor(sup_.idB, p.Z); } s.w = {0.7 * k, 0.4 * k, 1.1 * k};
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
-    s.trans.reset(); s.photon.reset(); s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
+    s.trans.reset(); s.photon.reset(); s.photonAfter.reset(); s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0; s.landT = 99; s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
     s.last.clear(); s.msg.clear(); s.szCur.reset();
     for (int i = 0; i < 800; i++) mcmc(false);   // burn-in: let the walker forget where it started
 }
@@ -255,6 +255,48 @@ void AtomLab::walkSuper(Vec3d& w, bool record) {
     }
 }
 
+// ---- the shown dots of a cloud jump ----
+double AtomLab::jumpU() const {
+    if (!s.trans) return 0;
+    const double u = s.trans->dur > 0 ? std::max(0.0, std::min(1.0, s.trans->t / s.trans->dur)) : 1;
+    return u * u * (3 - 2 * u);
+}
+double AtomLab::jumpPhi() const {                                // the beat phase, slowed as in a superposition (4 s per beat at Playback speed 5)
+    if (!s.trans || p.view == "Orbit") return 0;
+    const double dE = levelEV(p.Z, p.N, orbitals()[s.trans->to].n) - levelEV(p.Z, p.N, orbitals()[s.trans->from].n);
+    return (dE > 0 ? 1 : -1) * 2 * kPi * (s.trans->t * p.speed / 5.0) / kBeatScreenS;
+}
+static double jumpUniform(int pop, long i) {                     // a fixed uniform number for each dot (splitmix64 of its index and population)
+    std::uint64_t z = (std::uint64_t(i) + (std::uint64_t(pop) << 40)) * 0x9E3779B97F4A7C15ULL + 0x632BE59BD9B4E019ULL;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL; z ^= z >> 31;
+    return double(z >> 11) * (1.0 / 9007199254740992.0);
+}
+bool AtomLab::jumpShown(int pop, long i) const {
+    if (!s.trans || i < 0 || i >= s.jn) return false;
+    const std::vector<float>& a = pop ? s.jB : s.jA;
+    const std::complex<double> A(a[4 * i], a[4 * i + 1]), B(a[4 * i + 2], a[4 * i + 3]);
+    double fA, fB;
+    jumpFractions(A, B, kPi / 2 * jumpU(), jumpPhi(), fA, fB);
+    return jumpUniform(pop, i) < (pop ? fB : fA);
+}
+double AtomLab::jumpPhase(int pop, long i) const {
+    const std::vector<float>& a = pop ? s.jB : s.jA;
+    const std::complex<double> A(a[4 * i], a[4 * i + 1]), B(a[4 * i + 2], a[4 * i + 3]);
+    const double th = kPi / 2 * jumpU(), phi = jumpPhi();
+    return std::arg(std::exp(std::complex<double>(0, phi * jumpU())) * (std::cos(th) * A + std::sin(th) * B * std::exp(std::complex<double>(0, -phi))));   // gauge: ends on B itself
+}
+int AtomLab::jumpGroup(int pop, long i) const {
+    if (!jumpShown(pop, i)) return 255;
+    const double ph = jumpPhase(pop, i);
+    return p.phase == "Wheel" ? phaseBin(ph) : (std::cos(ph) >= 0 ? 0 : 1);
+}
+double AtomLab::outlineAlpha() const {                          // the outline belongs to one orbital: it fades out as the cloud leaves it, and back in after landing
+    if (reducedMotion || webJumps) return 1;
+    const auto sm = [](double u) { u = std::max(0.0, std::min(1.0, u)); return u * u * (3 - 2 * u); };
+    if (s.trans && p.view != "Orbit") return 1 - sm(s.trans->t / 0.25);
+    return s.landT < 0.4 ? sm(s.landT / 0.4) : 1;
+}
+
 double AtomLab::beatRealPeriodS() const { return beatPeriodS(p.Z, p.N, superState()); }
 double AtomLab::beatSlowdown() const { const double T = beatRealPeriodS(); return std::isinf(T) ? 0 : kBeatScreenS * 5.0 / p.speed / T; }
 double AtomLab::beatTheta() const {
@@ -338,11 +380,13 @@ AtomLab::PhotonInfo AtomLab::photonInfo(int from, int to) const {
 
 template <class T> static T pick(const std::vector<T>& a) { return a[std::size_t(std::floor(random() * a.size()))]; }
 
-void AtomLab::startJump(const std::string& kind, int to) {   // emit: the photon leaves now; absorb: it arrives first
+void AtomLab::startJump(const std::string& kind, int to) {   // emit: the jump runs first, then the photon appears; absorb: the photon flies in first, the jump starts when it arrives
     const int from = curLevel();
     const PhotonInfo info = photonInfo(from, to);
     const std::string col = lamColorCss(info.lam);
-    s.photon = Photon{kind, from, to, info.E, info.lam, info.name, col, random() * kPi * 2, 0, 1.6};
+    const Photon ph{kind, from, to, info.E, info.lam, info.name, col, random() * kPi * 2, 0, 1.6};
+    if (webJumps || kind != "emit") s.photon = ph;              // (the web's emit: the photon leaves at once, with the jump)
+    else s.photonAfter = ph;                                    // the smooth emit: it appears at the atom exactly when the jump ends
     if (std::none_of(s.lines.begin(), s.lines.end(), [&](const SeenLine& L) { return std::fabs(L.lam - info.lam) < 0.05; }))
         s.lines.push_back({info.lam, col});
     s.last = "last photon: " + std::string(kind == "emit" ? "emitted" : "absorbed") + "  ·  " + (info.name.empty() ? "" : info.name + "  ·  ") +
@@ -350,17 +394,84 @@ void AtomLab::startJump(const std::string& kind, int to) {   // emit: the photon
     if (kind == "emit") beginTransition(from, to);
 }
 
+// A jump. Orbit view: the electron glides from one circle to the other (0.8 s). Cloud views: two fixed populations of dots (the cloud on screen, and a new one of the target orbital),
+// shown with the exact fractions of jumpFractions() while theta goes 0 -> pi/2 over 1.2 s (atom_core.h). Reduced motion: no glide, no cross-fade: the jump is over at once.
 void AtomLab::beginTransition(int from, int to) {
-    if (p.view == "Orbit") {                                   // Bohr picture: an instant leap to the new circular orbit
-        const double a = std::atan2(s.y, s.x), r = double(to) * to / p.Z * kA0, v = double(p.Z) / to * kAuSpeed;
-        s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a);
-        s.jumping = true; setParam("n", to); s.jumping = false; s.flash = 0;
-    } else {                                                   // quantum picture: the cloud morphs from one orbital to the other
-        const double k = double(orbitals()[to].n) / p.Z;
+    if (webJumps) {
+        if (p.view == "Orbit") {                               // the web's Bohr picture: an instant leap to the new circular orbit
+            const double a = std::atan2(s.y, s.x), r = double(to) * to / p.Z * kA0, v = double(p.Z) / to * kAuSpeed;
+            s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a);
+            s.jumping = true; setParam("n", to); s.jumping = false; s.flash = 0;
+        } else {                                               // the web's quantum picture: the cloud morphs, new dots replacing old ones with growing odds
+            const double k = double(orbitals()[to].n) / p.Z;
+            s.w2 = {0.7 * k, 0.4 * k, 1.1 * k};
+            for (int i = 0; i < 800; i++) walk(to, s.w2, false);
+            s.trans = Transition{from, to, 0, 1.2};
+        }
+        return;
+    }
+    const double dur = reducedMotion ? 0 : (p.view == "Orbit" ? 0.8 : 1.2);
+    if (p.view == "Orbit") {
+        s.gAng = std::atan2(s.y, s.x);
+    } else {
+        const long jn = std::min<long>(s.k, std::min<long>(cloudCap(), long(s.sg.size())));
+        const double nA = normFactor(from, p.Z), nB = normFactor(to, p.Z);
+        s.jn = jn; s.jp.assign(std::size_t(3 * jn), 0.f); s.jA.assign(std::size_t(4 * jn), 0.f); s.jB.assign(std::size_t(4 * jn), 0.f);
+        for (long i = 0; i < jn; i++) {                         // the old dots: the amplitudes of both orbitals at each
+            const double x = s.pts[3 * i] / kA0, y = s.pts[3 * i + 1] / kA0, z = s.pts[3 * i + 2] / kA0;
+            s.jA[4 * i] = float(nA * psi(from, p.Z, x, y, z)); s.jA[4 * i + 2] = float(nB * psi(to, p.Z, x, y, z));
+        }
+        const double k = double(orbitals()[to].n) / p.Z;        // the new dots: a Metropolis chain of the target orbital, one dot per step like the ring
         s.w2 = {0.7 * k, 0.4 * k, 1.1 * k};
         for (int i = 0; i < 800; i++) walk(to, s.w2, false);
-        s.trans = Transition{from, to, 0, 1.2};
+        for (long i = 0; i < jn; i++) {
+            walk(to, s.w2, false);
+            s.jp[3 * i] = float(s.w2.x * kA0); s.jp[3 * i + 1] = float(s.w2.y * kA0); s.jp[3 * i + 2] = float(s.w2.z * kA0);
+            s.jB[4 * i] = float(nA * psi(from, p.Z, s.w2.x, s.w2.y, s.w2.z)); s.jB[4 * i + 2] = float(nB * psi(to, p.Z, s.w2.x, s.w2.y, s.w2.z));
+        }
     }
+    s.trans = Transition{from, to, 0, dur};
+    if (dur == 0) finishTransition(0);
+}
+
+// The jump is over: the electron is on its new circle (Orbit), or the new dots become the cloud (cloud views); the emitted photon appears now.
+void AtomLab::finishTransition(double overshoot) {
+    if (p.view == "Orbit") {
+        const int to = s.trans->to;
+        const double a = s.gAng, r = double(to) * to / p.Z * kA0, v = double(p.Z) / to * kAuSpeed;
+        s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a);
+        s.jumping = true; setParam("n", to); s.jumping = false; s.flash = 0;                      // the landing flash
+    } else {
+        const Orbital& o = orbitals()[s.trans->to];
+        for (long i = 0; i < s.jn; i++) {                       // the new dots are the cloud now (the old ones were hidden at the end already)
+            s.pts[3 * i] = s.jp[3 * i]; s.pts[3 * i + 1] = s.jp[3 * i + 1]; s.pts[3 * i + 2] = s.jp[3 * i + 2];
+            const bool pos = s.jB[4 * i + 2] >= 0;
+            s.sg[i] = pos ? 1 : -1; s.ph[i] = pos ? 0.f : float(kPi);
+        }
+        if (s.jn > 0) s.k = s.jn;
+        s.jumping = true;
+        if (o.l > 0) setParam(o.l == 1 ? "pAx" : o.l == 2 ? "dAx" : "fAx", o.ori);
+        setParam("orb", o.shell);
+        s.jumping = false;
+        s.w = s.w2; s.boost = 0.6;
+        s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0;
+        s.landT = 0;
+    }
+    s.trans.reset();
+    if (s.photonAfter) { s.photon = *s.photonAfter; s.photon->t = overshoot; s.photonAfter.reset(); }
+}
+
+// Orbit view, during a jump: the electron's radius glides (smoothstep) from the old circle to the new one, turning at the rates of the two circles blended; no Coulomb stepping.
+void AtomLab::glideOrbit(double dt) {
+    const Transition& t = *s.trans;
+    const double u0 = t.dur > 0 ? std::min(1.0, t.t / t.dur) : 1, e = u0 * u0 * (3 - 2 * u0);
+    const double r1 = double(t.from) * t.from / p.Z * kA0, r2 = double(t.to) * t.to / p.Z * kA0, r = r1 + e * (r2 - r1);
+    s.gAng += dt * p.speed * ((1 - e) / std::pow(double(t.from), 3) + e / std::pow(double(t.to), 3));   // rad per step of a circular orbit n: dt x speed / n^3 (any Z)
+    const double v = (1 - e) * double(p.Z) / t.from * kAuSpeed + e * double(p.Z) / t.to * kAuSpeed;
+    s.x = r * std::cos(s.gAng); s.y = r * std::sin(s.gAng); s.vx = -v * std::sin(s.gAng); s.vy = v * std::cos(s.gAng);
+    s.t += dt * p.speed / (double(p.Z) * p.Z) * kAuTime;
+    s.trail.push_back({s.x, s.y});
+    if (s.trail.size() > 500) s.trail.pop_front();
 }
 
 void AtomLab::manualJump(int dir) {
@@ -389,24 +500,34 @@ void AtomLab::manualJump(int dir) {
 
 // photon flight, morph progress, auto mode (runs inside step, so Pause freezes it)
 void AtomLab::advance(double dt) {
+    const bool hadTrans = s.trans.has_value();
+    s.landT += dt;
     if (s.photon) {
         s.photon->t += dt;
         if (s.photon->t >= s.photon->dur) {
             const Photon ph = *s.photon;
             s.photon.reset();
-            if (ph.kind == "absorb") beginTransition(ph.from, ph.to);
+            if (ph.kind == "absorb") {
+                beginTransition(ph.from, ph.to);                // the jump starts exactly when the photon arrives
+                if (!webJumps && s.trans) s.trans->t = ph.t - ph.dur;
+            }
         }
     }
-    if (s.trans) {
-        s.trans->t += dt;
-        if (s.trans->t >= s.trans->dur) {
-            const Orbital& o = orbitals()[s.trans->to];
-            s.jumping = true;
-            if (o.l > 0) setParam(o.l == 1 ? "pAx" : o.l == 2 ? "dAx" : "fAx", o.ori);
-            setParam("orb", o.shell);
-            s.jumping = false;
-            s.w = s.w2; s.trans.reset(); s.boost = 0.6;
+    if (webJumps) {
+        if (s.trans) {
+            s.trans->t += dt;
+            if (s.trans->t >= s.trans->dur) {
+                const Orbital& o = orbitals()[s.trans->to];
+                s.jumping = true;
+                if (o.l > 0) setParam(o.l == 1 ? "pAx" : o.l == 2 ? "dAx" : "fAx", o.ori);
+                setParam("orb", o.shell);
+                s.jumping = false;
+                s.w = s.w2; s.trans.reset(); s.boost = 0.6;
+            }
         }
+    } else if (hadTrans && s.trans) {
+        s.trans->t += dt;
+        if (s.trans->t >= s.trans->dur) finishTransition(s.trans->t - s.trans->dur);
     }
     if (s.flash) { *s.flash += dt; if (*s.flash > 0.7) s.flash.reset(); }
     if (s.boost > 0) s.boost -= dt;
@@ -510,8 +631,9 @@ void AtomLab::tick(double dt) {                               // runs every fram
     }
     // the auto-fit size glides to the new level
     double sz;
-    if (p.view == "Orbit") { const double nn = p.ostyle == "Bohr 1913" ? std::max(3, p.n) : p.n; sz = nn * nn / p.Z * kA0; }
-    else sz = kExt[s.trans ? orbitals()[s.trans->to].n : sizeN()] / p.Z * kA0;
+    if (p.view == "Orbit") { const int lv = s.trans && !webJumps ? std::max(s.trans->from, s.trans->to) : p.n;   // during a jump the picture fits the bigger of the two circles
+        const double nn = p.ostyle == "Bohr 1913" ? std::max(3, lv) : lv; sz = nn * nn / p.Z * kA0; }
+    else sz = kExt[s.trans ? (webJumps ? orbitals()[s.trans->to].n : std::max(orbitals()[s.trans->from].n, orbitals()[s.trans->to].n)) : sizeN()] / p.Z * kA0;
     sz = fitSize(p, sz);
     s.szCur = !s.szCur || rmv ? sz : *s.szCur + (sz - *s.szCur) * (1 - std::exp(-4 * dt));
     const Vec3d tg = s.focus >= 0 && s.focus < int(s.nuc.size()) ? Vec3d{s.nuc[s.focus].x, s.nuc[s.focus].y, s.nuc[s.focus].z} : Vec3d{};
@@ -534,7 +656,9 @@ void AtomLab::step(double dt) {
     advance(dt);
     if (superOn()) s.beatT += dt * p.speed / 5.0;                // the beat clock: 4 s per beat at Playback speed 5, faster or slower with the speed (step() does not run while paused)
     if (p.view != "Orbit") {
-        if (s.trans) {                                         // morph: new dots come from the target orbital with growing odds
+        if (s.trans && !webJumps) {
+            // a cloud jump: the two populations of dots are fixed, nothing is sampled
+        } else if (s.trans) {                                  // the web's morph: new dots come from the target orbital with growing odds
             const double u0 = s.trans->t / s.trans->dur, u = u0 * u0 * (3 - 2 * u0);
             for (int i = 0, n = 48 * cloudCap() / kCap; i < n; i++) {     // more dots to fill: more steps per frame (the dots themselves are sampled the same way)
                 if (random() < u) walk(s.trans->to, s.w2, true);
@@ -547,6 +671,7 @@ void AtomLab::step(double dt) {
         if (p.view == "Cloud 3D" && s.spin) s.yaw += 0.0015;   // slow auto-rotation
         return;
     }
+    if (s.trans && !webJumps) { glideOrbit(dt); return; }      // Orbit, during a jump: the electron glides between the circles
     // Orbit: the electron on a Coulomb orbit, leapfrog (kick–drift–kick).
     // Time is slowed: h = dt·speed/Z² atomic time units per step (a nucleus with Z protons whirls the
     // electron Z² times faster, so it is slowed by Z² to keep the laps watchable).

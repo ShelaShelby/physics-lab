@@ -17,6 +17,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.2", "Phase colours, quantum beats and smooth photon jumps (Atom Lab)",
+     "The Atom Lab can now show the phase of the electron's wave. New orientations m = +1, −1 (and ±2, ±3 for d and f) are complex waves, and a new setting, \"Phase colours: Sign / Wheel\", "
+     "colours each dot by the phase of the wave with a colour ring (Sign is the old two-colour look and is still the default). New: \"Superposition\", two orbitals at once, such as 1s + 2p. "
+     "The cloud then changes in time at the beat frequency (E₂ − E₁)/h: 1s + 2p sloshes back and forth, 1s + 2s breathes, 2s + 2p does not change at all (same energy here; fine structure and the Lamb shift are not modelled). "
+     "Real beats are far too fast to see, so the picture is slowed down and the line under it says by how much. Photon jumps are now smooth: in the cloud views the cloud slides from one shape to the other, "
+     "and in the Orbit view the electron glides between the circles (only to help the eye: Bohr's model has no path between circles). An emitted photon appears when the jump ends, and an absorbed photon starts the jump when it arrives. "
+     "This is the textbook picture of a transition as a mixture of two states, not a calculation of how a photon is absorbed. With Reduced motion on, jumps are instant."},
     {"0.10.1", "General relativity, the Sun's wobble, and two fixes",
      "With Planet physics set to Real there is a new tick box, \"General relativity (1PN)\" (on by default), that adds Einstein's first-order correction to the Sun's pull, so Mercury's "
      "orbit turns about 43 arcseconds per century more, as measured. It is an approximation with the Sun's field only: it leaves out relativity between the planets, the Sun's spin and "

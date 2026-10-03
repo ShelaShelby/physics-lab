@@ -190,6 +190,7 @@ static void testRuns() {
         run++;
         AtomLab lab;
         lab.nowMs = [] { return 0.0; };
+        lab.webJumps = true;                                           // these runs compare with the web's own jumps (instant leap, dot-by-dot morph); the app itself uses the smooth ones
         std::size_t ci = 0;
         for (const Op& op : r.ops) {
             const std::string o = op.op;
@@ -810,6 +811,297 @@ static void testSuperDots() {
     std::printf("cost of thinning and colouring %ld dots (High) per frame on this machine (software, one core): %.2f ms; %.0f%% shown\n", cap, ms, 100.0 * keepCount / (double(cap) * frames));
 }
 
+// ================= Smooth photon jumps (0.10.2, stage 3) =================
+// Cloud views: psi = e^(i phi u) (cos(theta) A + sin(theta) B e^(-i phi)), theta = pi/2 smoothstep(t / 1.2 s), phi = the slowed beat phase. Two fixed populations of dots (the old
+// cloud, and a new one of the target orbital); a dot is shown with the exact fractions of jumpFractions().
+static double smoothstep(double u) { u = std::max(0.0, std::min(1.0, u)); return u * u * (3 - 2 * u); }
+
+static void testJumpFractions() {
+    uint64_t st = 88172645463325252ULL;
+    const auto rnd = [&] { st ^= st << 13; st ^= st >> 7; st ^= st << 17; return double(st >> 11) / 9007199254740992.0; };
+    double worstSum = 0, worstRange = 0, worstEnd = 0; int n = 0;
+    for (int k = 0; k < 20000; k++) {
+        const Cd A(rnd() * 2 - 1, rnd() * 2 - 1), B(rnd() * 2 - 1, rnd() * 2 - 1);
+        const double th = rnd() * kPi / 2, ph = rnd() * 2 * kPi;
+        double fA, fB; jumpFractions(A, B, th, ph, fA, fB);
+        const double rho = std::norm(std::cos(th) * A + std::sin(th) * B * std::exp(Cd(0, -ph)));
+        worstSum = std::max(worstSum, std::fabs(std::norm(A) * fA + std::norm(B) * fB - rho) / (std::norm(A) + std::norm(B)));
+        worstRange = std::max({worstRange, -fA, -fB, fA - 1, fB - 1});
+        jumpFractions(A, B, 0, ph, fA, fB); worstEnd = std::max({worstEnd, std::fabs(fA - 1), std::fabs(fB)});
+        jumpFractions(A, B, kPi / 2, ph, fA, fB); worstEnd = std::max({worstEnd, std::fabs(fA), std::fabs(fB - 1)});
+        n++;
+    }
+    std::printf("jump fractions, %d random cases: |A|^2 fA + |B|^2 fB - |psi|^2 <= %.1e (relative to |A|^2 + |B|^2); outside [0, 1] by at most %.1e; endpoints off by %.1e\n", n, worstSum, worstRange, worstEnd);
+    checkTrue("jump: the shown fractions of the two dot populations give exactly the density |psi|^2 (1e-12)", worstSum < 1e-12);
+    checkTrue("jump: the fractions stay between 0 and 1 (Cauchy-Schwarz: |psi|^2 <= |A|^2 + |B|^2)", worstRange < 1e-12);
+    // limit 1e-9: cos(pi/2) is 6e-17 in floating point, not 0, so the cross term at theta = pi/2 is ~1e-16 |A||B|, and divided by |A|^2 for the random test amplitudes (down to ~1e-4)
+    // that is a few 1e-12. At theta = 0 exactly (the jump's first moment) the dots test below shows it is exact; the jump ends at theta = pi/2 by swapping in the new dots.
+    checkTrue("jump: at the start only the old dots are shown (fA = 1, fB = 0) and at the end only the new ones (1e-9)", worstEnd < 1e-9);
+}
+
+static void jumpSetup(AtomLab& lab, const char* from, const char* fromOri, int Z = 1) {
+    lab.nowMs = [] { return 0.0; };
+    lab.p = AtomParams(); lab.paused = false; lab.restart();
+    lab.setParam("view", std::string("Cloud")); lab.setParam("Z", double(Z));
+    lab.setParam("orb", std::string(from));
+    if (*fromOri) lab.setParam(orbitals()[orbIndex(from)].l == 1 ? "pAx" : orbitals()[orbIndex(from)].l == 2 ? "dAx" : "fAx", std::string(fromOri));
+}
+static void runSteps(AtomLab& lab, int n) { for (int i = 0; i < n; i++) lab.step(1.0 / 240); }
+
+// norm along the jump, and the exact <r>: continuity per 1/60 s frame
+static void testJumpNormAndContinuity() {
+    AtomLab lab; jumpSetup(lab, "1s", "");
+    runSteps(lab, 100);
+    const int to = orbIndex("2p|z");
+    lab.startJump("absorb", to);
+    runSteps(lab, 400);                                                   // the photon flies in (1.6 s), then the jump starts
+    checkTrue("jump: the cloud jump starts when the photon arrives", lab.s.trans.has_value() && lab.jumpCloud() && lab.s.trans->to == to);
+    // own numbers: <r> of 1s and 2p by numerical integration of the textbook radial functions R10 = 2 e^-r, R21 = r e^(-r/2)/(2 sqrt 6)
+    double rA = 0, rB = 0; const double dr = 1e-4;
+    for (int i = 0; i < 400000; i++) { const double r = (i + 0.5) * dr; rA += std::pow(2 * std::exp(-r), 2) * r * r * r * dr; rB += std::pow(r * std::exp(-r / 2) / (2 * std::sqrt(6.0)), 2) * r * r * r * dr; }
+    const double gap = rB - rA;
+    // the norm at 21 times along the jump, and <r> = cos^2 rA + sin^2 rB against the full 2D integral (the cross term has no radial part)
+    const Quad q = makeQuad(900, 1, 40);
+    double worstNorm = 0, worstCross = 0, worstFrame = 0, prev = rA;
+    for (int k = 0; k <= 72; k++) {
+        lab.s.trans->t = std::min(1.2 - 1e-9, k / 60.0);                  // frame k at 60 frames a second
+        const double u = lab.jumpU(), th = kPi / 2 * u, phi = lab.jumpPhi();
+        const double rExact = std::cos(th) * std::cos(th) * rA + std::sin(th) * std::sin(th) * rB;
+        worstFrame = std::max(worstFrame, std::fabs(rExact - prev)); prev = rExact;
+        if (k % 6 == 0) {
+            Superposition su; su.idA = orbIndex("1s"); su.idB = to; su.a = std::cos(th); su.b = std::sin(th);
+            double nrm = 0, mr = 0;
+            for (std::size_t i = 0; i < q.r.size(); i++)
+                for (std::size_t j = 0; j < q.u.size(); j++) {
+                    const double st = std::sqrt(1 - q.u[j] * q.u[j]), w = 2 * kPi * q.wu[j] * q.r[i] * q.r[i] * q.wr[i];
+                    const double d = std::norm(psiSuper(su, 1, phi, q.r[i] * st, 0, q.r[i] * q.u[j]));
+                    nrm += d * w; mr += d * w * q.r[i];
+                }
+            worstNorm = std::max(worstNorm, std::fabs(nrm - 1)); worstCross = std::max(worstCross, std::fabs(mr - rExact));
+        }
+    }
+    std::printf("jump 1s -> 2p(z): <r> of 1s %.5f, of 2p %.5f a0 (by my own integral); norm along the jump: largest |norm - 1| = %.1e; <r> from the full integral vs cos^2 rA + sin^2 rB: %.1e; "
+                "largest change of the exact <r> per 1/60 s frame: %.4f of the gap %.4f (limit 0.1)\n", rA, rB, worstNorm, worstCross, worstFrame / gap, gap);
+    checkTrue("jump: <r> of 1s is 1.5 and of 2p is 5 a0 (own integral of the textbook radial functions, 1e-6)", std::fabs(rA - 1.5) < 1e-6 && std::fabs(rB - 5) < 1e-6);
+    checkTrue("jump: the wave stays normalised all along the jump (integral of |psi|^2 = 1, 1e-3)", worstNorm < 1e-3);
+    checkTrue("jump: <r> follows cos^2 rA + sin^2 rB (the cross term has no radial part, 1e-3 a0)", worstCross < 1e-3);
+    checkTrue("jump: the exact <r> changes by less than a tenth of the endpoint gap per 1/60 s frame", worstFrame < 0.1 * gap);
+    checkTrue("jump: the smooth step starts and ends flat (u = 0 at the start, 1 at the end; theta from 0 to pi/2)", smoothstep(0) == 0 && smoothstep(1) == 1);
+}
+
+// dots: endpoints and <r> in the middle, with independent dots (every 400th dot of full rings, a different start slot in every lab, so every dot has its own fixed random number)
+static void testJumpDots() {
+    seedRandom(13579);
+    const int nLab = 120, stride = 400, nb = 20; const double rmax = 14;
+    const double ths[5] = {0.0, 0.25, 0.5, 0.75, 1.0};
+    struct Acc { double sumR = 0, sumR2 = 0; long n = 0; std::vector<double> hist; };
+    std::vector<Acc> acc(5); for (auto& a : acc) a.hist.assign(nb, 0);
+    long oldDotsSame = 0, oldDotsTotal = 0; bool noNewAtStart = true, noOldAtEnd = true; double rhoSum = 0;
+    for (int k = 0; k < nLab; k++) {
+        AtomLab lab; jumpSetup(lab, "1s", "");
+        runSteps(lab, 800);                                               // the ring is full
+        const long cap = std::min<long>(lab.s.k, long(lab.s.sg.size()));
+        lab.startJump("absorb", orbIndex("2p|z"));
+        runSteps(lab, 378);
+        std::vector<float> before;
+        for (int guard = 0; guard < 20 && !lab.s.trans; guard++) { before.assign(lab.s.pts.begin(), lab.s.pts.begin() + 3 * cap); lab.step(1.0 / 240); }   // the photon arrives: the jump begins (the ring is not sampled in that step)
+        const long jn = lab.jumpDots();
+        if (k == 0) rhoSum = double(jn);
+        for (int t = 0; t < 5; t++) {
+            lab.s.trans->t = t == 4 ? 1.2 - 1e-9 : ths[t] * 1.2;
+            if (t == 0) lab.s.trans->t = 0;
+            for (int pop = 0; pop < 2; pop++) {
+                const float* P = pop ? lab.s.jp.data() : lab.s.pts.data();
+                for (long i = (long(k) * 7919) % stride; i < jn; i += stride) {
+                    if (!lab.jumpShown(pop, i)) continue;
+                    const double x = P[3 * i] / kA0, y = P[3 * i + 1] / kA0, z = P[3 * i + 2] / kA0, r = std::sqrt(x * x + y * y + z * z);
+                    acc[t].sumR += r; acc[t].sumR2 += r * r; acc[t].n++;
+                    if (r < rmax) acc[t].hist[std::size_t(r / rmax * nb)] += 1;
+                }
+            }
+        }
+        // at the start every old dot is shown, none of the new ones, and the old dots are exactly the ones that were on screen; at the end the other way round
+        lab.s.trans->t = 0;
+        for (long i = 0; i < jn; i++) { oldDotsTotal++; if (lab.jumpShown(0, i) && !lab.jumpShown(1, i) && lab.s.pts[3 * i] == before[3 * i] && lab.s.pts[3 * i + 2] == before[3 * i + 2]) oldDotsSame++; else noNewAtStart = false; }
+        lab.s.trans->t = 1.2 - 1e-9;
+        for (long i = 0; i < jn; i += 7) if (lab.jumpShown(0, i) || !lab.jumpShown(1, i)) noOldAtEnd = false;
+    }
+    (void)rhoSum;
+    // exact radial densities: P1s = 4 r^2 e^-2r, P2p = r^4 e^-r / 24; at theta the radial density is cos^2 P1s + sin^2 P2p (no cross term)
+    const double rA = 1.5, rB = 5.0;
+    const auto radialExact = [&](double th, std::vector<double>& ex) {
+        ex.assign(nb, 0); double tot = 0;
+        for (int b = 0; b < nb; b++) {
+            double P = 0; const int sub = 200;
+            for (int j = 0; j < sub; j++) { const double r = (b + (j + 0.5) / sub) * rmax / nb; P += (std::cos(th) * std::cos(th) * 4 * r * r * std::exp(-2 * r) + std::sin(th) * std::sin(th) * std::pow(r, 4) * std::exp(-r) / 24) * rmax / nb / sub; }
+            ex[std::size_t(b)] = P; tot += P;
+        }
+        for (double& e : ex) e /= tot;
+    };
+    std::printf("jump dots: at the start all %ld old dots are shown, identical to the ones on screen before the jump: %ld; no new dot shown: %s; at the end no old dot shown: %s\n", oldDotsTotal, oldDotsSame, noNewAtStart ? "yes" : "NO", noOldAtEnd ? "yes" : "NO");
+    checkTrue("jump: at the start the shown dots are exactly the cloud that was on screen (every old dot, no new one)", noNewAtStart && oldDotsSame == oldDotsTotal);
+    checkTrue("jump: at the end only the new dots are shown (no old one, every new one)", noOldAtEnd);
+    double worstChi = 0, worstR = 0;
+    for (int t = 0; t < 5; t++) {
+        const double u = t == 4 ? 1.0 : ths[t], th = kPi / 2 * smoothstep(u);
+        std::vector<double> ex; radialExact(th, ex);
+        double chi = 0; double nin = 0; for (double h : acc[t].hist) nin += h;
+        for (int b = 0; b < nb; b++) { const double e = nin * ex[std::size_t(b)]; if (e > 0) chi += (acc[t].hist[std::size_t(b)] - e) * (acc[t].hist[std::size_t(b)] - e) / e; }
+        const double mean = acc[t].sumR / acc[t].n, sd = std::sqrt(acc[t].sumR2 / acc[t].n - mean * mean), se = sd / std::sqrt(double(acc[t].n));
+        const double exactR = std::cos(th) * std::cos(th) * rA + std::sin(th) * std::sin(th) * rB;
+        worstChi = std::max(worstChi, chi); worstR = std::max(worstR, std::fabs(mean - exactR) / se);
+        std::printf("jump dots at u = %.2f (theta = %.3f): %ld shown dots, mean r %.4f +- %.4f, exact %.4f; radial chi-square %.1f (19 dof)\n", u, th, acc[t].n, mean, se, exactR, chi);
+    }
+    // limits as for the beats (stage 2): 4 standard errors; chi-square 19 dof, the 99.99 % point is 48
+    checkTrue("jump dots: the mean r follows the exact <r>(t) within 4 standard errors at the start, the end and 3 times between", worstR < 4);
+    checkTrue("jump dots: the radial histogram matches the exact radial density of the start orbital, the end orbital and the mixtures (chi-square below 48)", worstChi < 48);
+}
+
+// the Orbit view: the electron glides between the circles
+static void testOrbitGlide() {
+    const double a0CODATA = 5.29177210903e-11;                            // m, CODATA 2018 (written from knowledge)
+    for (int Z : {1, 2}) {
+        for (int dir : {1, -1}) {
+            AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.paused = false; lab.restart();
+            lab.setParam("Z", double(Z)); lab.setParam("speed", 5.0);
+            const int n1 = dir > 0 ? 1 : 3, n2 = dir > 0 ? 3 : 1;
+            lab.setParam("n", double(n1));
+            runSteps(lab, 10);
+            lab.startJump(dir > 0 ? "absorb" : "emit", n2);
+            double prevR = std::hypot(lab.s.x, lab.s.y), worstOver = 0, worstBack = 0, rLanding = -1; int steps = 0; bool started = dir < 0;
+            const double r1 = double(n1) * n1 / Z * kA0, r2 = double(n2) * n2 / Z * kA0;
+            int glideSteps = 0;
+            for (int i = 0; i < 1200 && (lab.s.photon || lab.s.trans || !started); i++) {
+                const bool hadTrans = lab.s.trans.has_value();
+                lab.step(1.0 / 240); steps++;
+                if (lab.s.trans) { started = true; glideSteps++; }
+                if (hadTrans && !lab.s.trans) rLanding = std::hypot(lab.s.x, lab.s.y);        // the radius at the moment of landing (after it the leapfrog orbit goes on)
+                const double r = std::hypot(lab.s.x, lab.s.y);
+                if (lab.s.trans) {
+                    worstBack = std::max(worstBack, dir > 0 ? prevR - r : r - prevR);                // monotone: never turns back
+                    worstOver = std::max({worstOver, (r - std::max(r1, r2)) / kA0, (std::min(r1, r2) - r) / kA0});   // never beyond the two circles
+                }
+                prevR = r;
+            }
+            const double rEnd = rLanding, want = double(n2) * n2 / Z * kA0;
+            std::printf("Orbit glide Z = %d, n %d -> %d: %d steps (%.3f s), radius at landing %.9e m, n^2 a0/Z with the lab's a0 = %.9e, with CODATA a0 = %.9e; went back by at most %.1e m, beyond the circles by %.1e a0\n",
+                        Z, n1, n2, glideSteps, glideSteps / 240.0, rEnd, want, double(n2) * n2 / Z * a0CODATA, worstBack, worstOver);
+            // limit 5e-4: in the step of landing the Orbit view's own leapfrog takes one step on the new circle, and a leapfrog circle wobbles by about (angle per step)^2 / 8 (1.3e-4 at n = 1,
+            // speed 5): measured 1.3e-4. The landing circle itself is exact: the reduced-motion test below (no leapfrog after the leap) holds it to 1e-9.
+            checkTrue("Orbit: the glide ends on the circle n^2 a0 / Z (the lab's a0, 5e-4: one leapfrog step of wobble)", std::fabs(rEnd / want - 1) < 5e-4 && lab.p.n == n2 && !lab.s.trans);
+            // the lab's Bohr radius is the web's rounded 0.529 Angstrom, 0.034 % below CODATA's 0.529177: stated in REPORT.md as an existing doubtful value
+            checkTrue("Orbit: the circle n^2 a0 / Z of the lab is within 4e-4 of the one with the CODATA Bohr radius (the lab's 0.529 Angstrom is rounded)", std::fabs(want / (double(n2) * n2 / Z * a0CODATA) - 1) < 4e-4);
+            checkTrue("Orbit: the glide is monotone (never turns back) and never overshoots either circle", worstBack < 1e-18 && worstOver < 1e-9);
+            checkTrue("Orbit: the glide takes about 0.8 s", glideSteps >= 190 && glideSteps <= 194);
+        }
+    }
+}
+
+// the hand-over of the photon, no pop; Auto photons back to back; pause; reset in the middle; the user's setting is left alone
+static void testJumpHandover() {
+    for (const char* view : {"Cloud", "Orbit"}) {
+        const bool orbit = std::string(view) == "Orbit";
+        // emit: the jump first, the photon appears exactly when it ends
+        AtomLab lab; jumpSetup(lab, "2p", "z");
+        if (orbit) { lab.setParam("view", std::string("Orbit")); lab.setParam("n", 2.0); }
+        runSteps(lab, 50);
+        lab.startJump("emit", orbit ? 1 : orbIndex("1s"));
+        bool noPhotonDuring = !lab.s.photon && lab.s.photonAfter.has_value(), appearedAtEnd = false; int jumpSteps = 0;
+        for (int i = 0; i < 400 && !appearedAtEnd; i++) {
+            const bool hadTrans = lab.s.trans.has_value();
+            lab.step(1.0 / 240); if (hadTrans) jumpSteps++;
+            if (lab.s.photon) { appearedAtEnd = hadTrans && !lab.s.trans && lab.s.photon->t < 1.0 / 240 + 1e-9 && !lab.s.photonAfter && lab.s.photon->kind == "emit"; break; }
+            if (lab.s.trans && lab.s.photon) noPhotonDuring = false;
+        }
+        std::printf("emit (%s): jump %.3f s, then the photon appears at its end (age %.2e s)\n", view, jumpSteps / 240.0, lab.s.photon ? lab.s.photon->t : -1.0);
+        checkTrue(std::string("emit (") + view + "): no photon while the jump runs, and it appears in the very step in which the jump ends", noPhotonDuring && appearedAtEnd);
+        // absorb: the photon first, the jump starts exactly when it arrives
+        AtomLab lab2; jumpSetup(lab2, "1s", "");
+        if (orbit) { lab2.setParam("view", std::string("Orbit")); lab2.setParam("n", 1.0); }
+        runSteps(lab2, 50);
+        lab2.startJump("absorb", orbit ? 2 : orbIndex("2p|z"));
+        bool startedAtArrival = false;
+        for (int i = 0; i < 500 && !startedAtArrival; i++) {
+            const bool hadPhoton = lab2.s.photon.has_value();
+            lab2.step(1.0 / 240);
+            if (lab2.s.trans) startedAtArrival = hadPhoton && !lab2.s.photon && lab2.s.trans->t < 1.0 / 240 + 1e-9;
+            if (lab2.s.trans && lab2.s.photon) break;
+        }
+        checkTrue(std::string("absorb (") + view + "): the jump starts in the very step in which the photon arrives", startedAtArrival);
+    }
+    // Auto photons, 60 s, cloud and Orbit: never a photon and a jump at once; no photon without the end of an emit jump; Orbit: no jump in the radius
+    for (const char* view : {"Cloud", "Orbit"}) {
+        const bool orbit = std::string(view) == "Orbit";
+        seedRandom(97531);
+        AtomLab lab; jumpSetup(lab, "3p", "z"); lab.setParam("view", std::string(view)); if (orbit) lab.setParam("n", 3.0);
+        lab.toggleAuto();
+        bool both = false, wrongStart = false; int jumps = 0; double worstStep = 0, rMax = 0;
+        double prevR = std::hypot(lab.s.x, lab.s.y);
+        for (int i = 0; i < 14400; i++) {
+            const bool hadTrans = lab.s.trans.has_value(), hadPhoton = lab.s.photon.has_value(), hadAfter = lab.s.photonAfter.has_value(); const std::string kind = hadPhoton ? lab.s.photon->kind : "";
+            lab.step(1.0 / 240);
+            if (lab.s.trans && lab.s.photon) both = true;
+            if (!hadPhoton && lab.s.photon && lab.s.photon->kind == "emit" && !(hadTrans && !lab.s.trans && hadAfter)) wrongStart = true;      // an emitted photon appears only when its jump ends
+            if (!hadTrans && lab.s.trans) { jumps++; if (!(hadPhoton && kind == "absorb" && !lab.s.photon) && !lab.s.photonAfter) wrongStart = true; }   // a jump starts when an absorbed photon arrives, or it is an emit
+            if (orbit) { const double r = std::hypot(lab.s.x, lab.s.y); worstStep = std::max(worstStep, std::fabs(r - prevR)); rMax = std::max(rMax, r); prevR = r; }
+        }
+        std::printf("Auto photons, %s, 60 s: %d jumps; a photon and a jump at once: %s; wrong hand-over: %s%s\n", view, jumps, both ? "YES" : "never", wrongStart ? "YES" : "none",
+                    orbit ? (std::string("; largest radius change in one 1/240 s step ") + std::to_string(worstStep / kA0) + " a0 (largest radius " + std::to_string(rMax / kA0) + " a0)").c_str() : "");
+        checkTrue(std::string("Auto photons (") + view + "): many jumps, never a photon and a jump together, and every hand-over exact", jumps >= 8 && !both && !wrongStart);
+        // limit for the Orbit radius: a glide of the biggest gap (n 1 <-> 4: 15 a0 at Z = 1) changes the radius by at most 1.5 x gap / (0.8 s x 240) = 0.12 a0 per step; the circular leapfrog orbit itself wobbles by far less
+        if (orbit) checkTrue("Auto photons (Orbit): the electron's radius never jumps (below 0.15 a0 per 1/240 s step)", worstStep / kA0 < 0.15);
+    }
+    // pause: the jump advances only inside step(), which the app does not call while paused; tick() (which runs every frame, even when paused) does not move it
+    AtomLab p1; jumpSetup(p1, "1s", ""); runSteps(p1, 100); p1.startJump("absorb", orbIndex("2p|z")); runSteps(p1, 400);
+    const double t0 = p1.s.trans->t; p1.paused = true; for (int i = 0; i < 600; i++) p1.tick(1.0 / 60);
+    checkTrue("pause: a jump in progress does not move while only tick() runs (the app's paused frames)", p1.s.trans && p1.s.trans->t == t0 && p1.jumpU() == smoothstep(t0 / 1.2));
+    // changing the orbital, the element or the view in the middle of a jump: a clean new cloud, no leftover jump
+    for (int what = 0; what < 3; what++) {
+        AtomLab m; jumpSetup(m, "1s", ""); runSteps(m, 100); m.startJump("absorb", orbIndex("2p|z")); runSteps(m, 400);
+        const bool inJump = m.s.trans.has_value() && m.s.jn > 0;
+        if (what == 0) m.setParam("orb", std::string("3d")); else if (what == 1) m.setParam("Z", 2.0); else m.setParam("view", std::string("Cloud 3D"));
+        const bool clean = !m.s.trans && !m.s.photon && !m.s.photonAfter && m.s.jn == 0 && m.s.jp.empty() && m.s.jA.empty() && m.s.jB.empty() && !m.jumpCloud();
+        runSteps(m, 300);
+        checkTrue(std::string("changing ") + (what == 0 ? "the orbital" : what == 1 ? "the element" : "the view") + " in the middle of a jump resets it cleanly", inJump && clean && m.s.k > 0);
+    }
+    // the user's Superposition setting is left alone by jumps; jumps work again after Superposition was switched on and off
+    AtomLab u; jumpSetup(u, "1s", "");
+    u.setParam("orb2", std::string("2p")); u.setParam("mix", 30.0);
+    u.setParam("super", std::string("On"));
+    runSteps(u, 100);
+    u.emit(); u.absorb();
+    checkTrue("a superposition shown: no jump starts (as in stage 2), and the setting is unchanged", !u.s.trans && !u.s.photon && !u.s.photonAfter && u.p.super == "On" && u.p.mix == 30 && u.p.orb2 == "2p");
+    u.setParam("super", std::string("Off"));
+    runSteps(u, 800);
+    u.startJump("absorb", orbIndex("2p|z"));
+    runSteps(u, 384 + 300);
+    checkTrue("jumps work again after Superposition was switched on and off: the orbital is now 2p", !u.s.trans && !u.s.photon && u.p.orb == "2p" && u.p.pAx == "z" && u.p.super == "Off" && u.p.orb2 == "2p" && u.p.mix == 30);
+    AtomLab j; jumpSetup(j, "1s", ""); runSteps(j, 800);
+    j.startJump("absorb", orbIndex("2p|z")); runSteps(j, 384 + 100);
+    checkTrue("a jump leaves the user's Superposition setting alone (Off, second orbital, mix)", j.p.super == "Off" && j.p.orb2 == "2p" && j.p.mix == 50 && !j.superOn() && j.s.trans.has_value());
+    // reduced motion: the jump is instant (no glide, no cross-fade); the emitted photon then appears at once, the absorbed one still flies in
+    AtomLab rm; jumpSetup(rm, "2p", "z"); rm.reducedMotion = true; runSteps(rm, 800);
+    rm.startJump("emit", orbIndex("1s"));
+    checkTrue("reduced motion (cloud): the emit jump is instant and the photon appears at once", !rm.s.trans && rm.s.photon.has_value() && rm.p.orb == "1s");
+    AtomLab ro; ro.nowMs = [] { return 0.0; }; ro.p = AtomParams(); ro.restart(); ro.reducedMotion = true; ro.setParam("n", 3.0); runSteps(ro, 20); ro.startJump("emit", 1);
+    checkTrue("reduced motion (Orbit): the electron leaps at once to the new circle, the flash and the photon appear", !ro.s.trans && ro.p.n == 1 && std::fabs(std::hypot(ro.s.x, ro.s.y) / kA0 - 1) < 1e-9 && ro.s.photon.has_value() && ro.s.flash.has_value());
+}
+
+static void testOutlineFade() {
+    AtomLab lab; jumpSetup(lab, "1s", ""); runSteps(lab, 100);
+    checkTrue("outline: fully there when no jump runs", lab.outlineAlpha() == 1);
+    lab.startJump("absorb", orbIndex("2p|z")); runSteps(lab, 400);
+    lab.s.trans->t = 0; const double a0 = lab.outlineAlpha();
+    lab.s.trans->t = 0.12; const double a1 = lab.outlineAlpha();
+    lab.s.trans->t = 0.6; const double a2 = lab.outlineAlpha();
+    for (int i = 0; i < 400 && lab.s.trans; i++) lab.step(1.0 / 240);       // the jump ends
+    const double a3 = lab.outlineAlpha();
+    runSteps(lab, 48); const double a4 = lab.outlineAlpha();                // 0.2 s after landing
+    runSteps(lab, 100); const double a5 = lab.outlineAlpha();               // 0.6 s after landing
+    std::printf("outline alpha: start %.2f, 0.12 s %.2f, middle %.2f, landing %.2f, 0.2 s later %.2f, 0.6 s later %.2f\n", a0, a1, a2, a3, a4, a5);
+    checkTrue("outline: starts at full strength, fades out, is hidden in the middle of the jump, fades back in after landing and is full again", a0 == 1 && a1 < 1 && a1 > 0 && a2 == 0 && a3 <= 0.05 && a4 > 0 && a4 < 1 && a5 == 1);
+}
+
 int main() {
     testElements();
     testNuclides();
@@ -832,6 +1124,12 @@ int main() {
     testBeatPeriodAndAmplitude();
     testBeatNormStationary();
     testSuperDots();
+    testJumpFractions();
+    testJumpNormAndContinuity();
+    testJumpDots();
+    testOrbitGlide();
+    testJumpHandover();
+    testOutlineFade();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }
