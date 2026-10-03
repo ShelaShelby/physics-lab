@@ -9,6 +9,7 @@
 #include "format.h"
 #include "imgui.h"
 #include "kepler.h"
+#include "far_masses.h"
 #include "sky.h"
 #include "spin.h"
 #include "units.h"
@@ -166,18 +167,56 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
         X = cx + x1 / rho * r; Y = cy - y2 / rho * r;
         return true;
     };
-    {   // the Milky Way: three soft bands along the plane of our galaxy, brightest towards its centre
+    // The Milky Way: one smooth band along the plane of our galaxy (a great circle through the galactic centre A, brightest towards the centre).
+    // A triangle mesh with a colour at each corner: it is a single surface, so there are no joints between pieces, and the light fades smoothly
+    // to nothing on both edges (a cos² profile across the band). Three profiles of different width are added: a wide faint glow and a narrower,
+    // brighter core, as the three lines of the older versions did. The position and direction on the sky are unchanged.
+    struct BandPoint { double X, Y, tx, ty, fade, bright; bool ok; };
+    static std::vector<BandPoint> band;
+    {
         const Vec3 A = S.galCentre, P = S.galPole, B = cross(P, A);
+        constexpr int kN = 240, kRows = 17;                        // pieces along the band; rows across it (one side: kRows)
         const double wds[3] = {0.46 * K, 0.27 * K, 0.12 * K}, als[3] = {0.03, 0.042, 0.055};
-        for (int pass = 0; pass < 3; pass++) {
-            double px = 0, py = 0; bool prev = false;
-            for (int i = 0; i <= 120; i++) {
-                const double l = i / 120.0 * 2 * kPi, c = std::cos(l), sn = std::sin(l);
-                double X, Y;
-                const bool ok = scr(A * c + B * sn, X, Y);
-                if (prev && ok && std::hypot(X - px, Y - py) < 0.7 * diag)
-                    R.line(px, py, X, Y, wds[pass], Color{178 / 255.f, 192 / 255.f, 1, static_cast<float>(als[pass] * lv * (0.4 + 0.6 * (0.5 + 0.5 * c)))});
-                prev = ok; px = X; py = Y;
+        band.assign(kN + 1, BandPoint{});
+        for (int i = 0; i <= kN; i++) {
+            const double l = i / double(kN) * 2 * kPi, c = std::cos(l);
+            BandPoint& p = band[i];
+            p.ok = scr(A * c + B * std::sin(l), p.X, p.Y);
+            p.bright = 0.4 + 0.6 * (0.5 + 0.5 * c);
+            p.fade = p.ok ? std::clamp((1.75 - std::hypot(p.X - cx, p.Y - cy) / K) / 0.2, 0.0, 1.0) : 0.0;   // fades out where the map ends
+        }
+        for (int i = 0; i <= kN; i++) {                            // the direction along the band on screen, from the neighbours
+            BandPoint& p = band[i];
+            const BandPoint& p0 = band[std::max(i - 1, 0)], &p1 = band[std::min(i + 1, kN)];
+            double dx = p1.X - p0.X, dy = p1.Y - p0.Y;
+            const double len = std::hypot(dx, dy);
+            if (!p.ok || !p0.ok || !p1.ok || len < 1e-9 || len > 0.35 * diag) { p.ok = false; continue; }
+            p.tx = -dy / len; p.ty = dx / len;                     // the unit normal
+        }
+        const double halfW = 0.5 * wds[0];
+        const auto profile = [&](double d) {                       // light at distance d from the band's middle line (per unit lv)
+            double a = 0;
+            for (int k = 0; k < 3; k++) {
+                const double t = std::fabs(d) / (0.5 * wds[k]);
+                if (t < 1) { const double q = std::cos(0.5 * kPi * t); a += als[k] * q * q; }
+            }
+            return a;
+        };
+        static std::vector<float> rowD;                            // row distances from the middle line: finer near the middle where the narrow core is
+        rowD.clear();
+        for (int r = -kRows; r <= kRows; r++) { const double u = r / double(kRows); rowD.push_back(float(halfW * u * std::fabs(u) * 0.5 + halfW * u * 0.5)); }
+        for (int i = 0; i < kN; i++) {
+            const BandPoint &p = band[i], &q = band[i + 1];
+            if (!p.ok || !q.ok || (p.fade <= 0 && q.fade <= 0) || std::hypot(q.X - p.X, q.Y - p.Y) > 0.35 * diag) continue;
+            for (std::size_t r = 0; r + 1 < rowD.size(); r++) {
+                const auto col = [&](const BandPoint& b, double d) {
+                    return Color{178 / 255.f, 192 / 255.f, 1, static_cast<float>(profile(d) * lv * b.bright * b.fade)};
+                };
+                const double d0 = rowD[r], d1 = rowD[r + 1];
+                const double ax = p.X + p.tx * d0, ay = p.Y + p.ty * d0, bx = p.X + p.tx * d1, by = p.Y + p.ty * d1;
+                const double cx2 = q.X + q.tx * d0, cy2 = q.Y + q.ty * d0, dx2 = q.X + q.tx * d1, dy2 = q.Y + q.ty * d1;
+                R.triangle(ax, ay, col(p, d0), bx, by, col(p, d1), cx2, cy2, col(q, d0));
+                R.triangle(bx, by, col(p, d1), dx2, dy2, col(q, d1), cx2, cy2, col(q, d0));
             }
         }
     }
@@ -220,6 +259,7 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
             }
         if (cons == ConsMode::LinesAndNames) {
             std::vector<std::pair<double, double>> used;
+            std::vector<std::array<double, 3>> boxes;       // x, y, half width of every sky label drawn, so the Milky Way's label keeps clear of them
             for (const auto& c : S.cons) {
                 double X, Y;
                 if (!scr(c.second, X, Y) || X < 20 || X > W - 20 || Y < 20 || Y > H - 20) continue;
@@ -228,12 +268,33 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
                 if (clash) continue;
                 used.push_back({X, Y});
                 T.text(c.first, X, Y, 11, Color{150 / 255.f, 178 / 255.f, 240 / 255.f, static_cast<float>(0.78 * cl2)}, 0.5, false);
+                boxes.push_back({X, Y, T.width(c.first, 11) / 2});
             }
             for (const auto& nm : S.names) {              // the brightest stars' names
                 if (S.stars[nm.first].mag > 1.9f) continue;
                 const double x = pos[nm.first * 2], y = pos[nm.first * 2 + 1];
                 if (x < 4 || x > W - 50 || y < 12 || y > H - 4) continue;
                 T.text(nm.second, x + 7, y + 3, 10, Color{232 / 255.f, 238 / 255.f, 1, static_cast<float>(0.72 * cl2)}, 0, false);
+                const double nw = T.width(nm.second, 10);
+                boxes.push_back({x + 7 + nw / 2, y + 3, nw / 2});
+            }
+            {   // the Milky Way's own label, on the band where it is on screen, at the free spot nearest the middle (skipped if there is none)
+                const std::string txt = "The Milky Way (the plane of our galaxy, simplified)";
+                const double hw = T.width(txt, 11) / 2;
+                std::vector<std::pair<double, int>> order;
+                for (int i = 0; i < static_cast<int>(band.size()); i++) {
+                    const BandPoint& p = band[i];
+                    if (p.ok && p.fade > 0.95 && p.X - hw > 8 && p.X + hw < W - 8 && p.Y > 20 && p.Y < H - 20) order.push_back({std::hypot(p.X - cx, p.Y - cy), i});
+                }
+                std::sort(order.begin(), order.end());
+                for (const auto& o : order) {
+                    const BandPoint& p = band[o.second];
+                    bool clash = false;
+                    for (const auto& b : boxes) if (std::fabs(b[0] - p.X) < b[2] + hw + 6 && std::fabs(b[1] - p.Y) < 15) { clash = true; break; }
+                    if (clash) continue;
+                    T.text(txt, p.X, p.Y, 11, Color{178 / 255.f, 192 / 255.f, 1, static_cast<float>(0.8 * cl2)}, 0.5, false);
+                    break;
+                }
             }
         }
     }
@@ -733,6 +794,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     // ---- far-away things: real stars, clusters, the galactic centre and the Voyagers at their true direction and distance ----
+    bool massShown = false;                               // a star's mass label is on screen: the note about masses is shown too
     if (set.far) {
         const auto fmtLyS = [](double v) { return fmtLy(v); };
         const auto inView = [&](const Q& q) { return q.dep - cd < 0.9 * D && q.first > -30 && q.first < W + 30 && q.second > -30 && q.second < H + 30; };
@@ -765,8 +827,13 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             if (f.kind == "bh") {
                 labels.push_back({"Galactic centre · " + fmtLyS(f.ly) + " light years", q.first, q.second - 11, on, false, true, true});
                 labels.push_back({f.name + " (black hole)", q.first, q.second + 19, on, false, true, true});
-            } else
+                const std::string mt = farMassText(f.key);                  // published mass (far_masses.h), under the name
+                if (!mt.empty()) { labels.push_back({mt, q.first, q.second + 32, on, true, false}); massShown = true; }
+            } else {
                 labels.push_back({f.name + " · " + (probe ? fmt::commas(f.au) + " AU" : fmtLyS(f.ly) + " light years"), q.first, q.second - 11, on, true, false});
+                const std::string mt = probe ? std::string() : farMassText(f.key);
+                if (!mt.empty()) { labels.push_back({mt, q.first, q.second + 19, on, true, false}); massShown = true; }
+            }
             hits_.push_back({s, q.first, q.second, 10});
         }
     }
@@ -851,6 +918,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const std::string lt = sec < 1 ? nf(sec * 1000) + " ms" : sec < 60 ? pl(sec, "second") : sec < 3600 ? pl(sec / 60, "minute")
                              : sec < 86400 ? pl(sec / 3600, "hour") : sec < 86400 * 365.25 ? pl(sec / 86400, "day") : fmt::precision(sec / 86400 / 365.25, 2) + " years";
         const double spanAU = W / px / kAU, spanLy = spanAU / kLightYearAU;
+        double noteY = barY - 34;                          // the line about the masses sits above the "zoomed far out" text
         if (spanAU >= 1500) {                             // zoomed far out: say where you are
             const std::string sp2 = spanLy >= 1 ? fmtLy(spanLy) + " light years" : fmt::commas(std::stod(fmt::precision(spanAU, 2))) + " AU (" + fmt::fixed(spanLy, 2) + " light years)";
             const std::string msg = "Zoomed far out: this picture is about " + sp2 + " across, so the whole Solar System is now just the ringed dot (the Sun).";
@@ -865,7 +933,9 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             }
             if (!cur.empty()) lines.push_back(cur);
             for (std::size_t i = 0; i < lines.size(); i++) T.text(lines[i], 14, barY - 34 - (lines.size() - 1 - i) * 14.0, 11, kFg, 0, true, kCard);
+            noteY = barY - 34 - lines.size() * 14.0;
         }
+        if (massShown) T.text("Star masses are published estimates, in solar masses (M☉); some are uncertain.", 14, noteY - 2, 10, kMuted, 0, true, kCard);
         const double x0 = 14, y = barY;
         for (int pass = 0; pass < 2; pass++) {
             const Color c = pass ? kFg : kCard;

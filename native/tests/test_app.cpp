@@ -19,6 +19,7 @@
 #include "app/frame_time.h"
 #include "app/gpu_timer.h"
 #include "orbit/belts.h"
+#include "orbit/far_masses.h"
 #include "atom/atom_bench.h"
 #include "atom/cloud_light.h"
 #include "orbit/solar_system.h"
@@ -954,6 +955,45 @@ static void testCloud() {
     }
 }
 
+// ---- 0.9.5: the published masses under the far-away stars' names ----
+static void testFarMasses() {
+    using nativeorbit::kFar;
+    const int nFar = int(sizeof(kFar) / sizeof(kFar[0]));
+    int withMass = 0;
+    std::vector<std::string> keys;
+    for (int i = 0; i < orbit::kFarMassCount; i++) {
+        const orbit::MassData& m = orbit::kFarMass[i];
+        const std::string w = std::string("mass of ") + m.key + (*m.part ? std::string(" ") + m.part : std::string()) + ": ";
+        bool known = false;
+        for (int k = 0; k < nFar; k++) if (std::string(kFar[k].key) == m.key) known = true;
+        checkTrue(w + "belongs to a far-away thing in the table", known);
+        checkTrue(w + "has a named source", m.source && std::strlen(m.source) > 12);                  // e.g. "Bond et al. 2017, arXiv:1703.10625"
+        checkTrue(w + "says what kind of number it is", !std::strcmp(m.how, "orbit") || !std::strcmp(m.how, "lensing") || !std::strcmp(m.how, "models"));
+        checkTrue(w + "value inside its stated range (low <= value <= high), range not empty", m.low <= m.value && m.value <= m.high && m.low < m.high && m.low > 0);
+        if (std::find(keys.begin(), keys.end(), m.key) == keys.end()) keys.push_back(m.key);
+    }
+    withMass = int(keys.size());
+    // a star shows a mass only if it has a sourced entry; the stars left out (no source reached in the session that wrote them) show none
+    for (int k = 0; k < nFar; k++) {
+        const bool listed = std::find(keys.begin(), keys.end(), std::string(kFar[k].key)) != keys.end();
+        checkTrue(std::string("far ") + kFar[k].key + ": a mass text exactly when it has a sourced entry", listed == !orbit::farMassText(kFar[k].key).empty());
+    }
+    for (const char* left : {"barn", "lal", "eri", "tau", "altair", "vega", "cyg61", "pol", "bet", "rig", "pleia", "m42"})
+        checkTrue(std::string("no mass shown for ") + left + " (not sourced)", orbit::farMassText(left).empty());
+    checkTrue("7 far-away things show a mass", withMass == 7);
+    // the text
+    checkStr("Sirius", orbit::farMassText("sirius"), "Mass: A 2.06 · B 1.02 M☉");
+    checkStr("Procyon", orbit::farMassText("procyon"), "Mass: A 1.48 · B 0.592 M☉");
+    checkStr("Alpha Centauri", orbit::farMassText("acen"), "Mass: A 1.13 · B 0.97 M☉");
+    checkStr("Proxima is shown with its wide range and as uncertain", orbit::farMassText("prox"), "Mass: 0.15 (0.099 to 0.21) M☉, uncertain");
+    checkStr("model-based masses say so", orbit::farMassText("fom"), "Mass: about 1.92 M☉ (from models)");
+    checkStr("Arcturus", orbit::farMassText("arct"), "Mass: about 1.08 M☉ (from models)");
+    checkStr("Sagittarius A*", orbit::farMassText("sgra"), "Mass: 4.3 million M☉");
+    // the existing note on Sagittarius A* ("about 4.3 million Suns") agrees with the sourced value
+    for (int k = 0; k < nFar; k++) if (std::string(kFar[k].key) == "sgra")
+        checkTrue("Sagittarius A* note and sourced mass agree (4.3 million)", std::string(kFar[k].note).find("about 4.3 million Suns") != std::string::npos && orbit::kFarMass[orbit::kFarMassCount - 1].value > 4.25e6 && orbit::kFarMass[orbit::kFarMassCount - 1].value < 4.35e6);
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -969,6 +1009,7 @@ int main() {
     testBenchAtomScenes();
     testBenchInputLock();
     testCloud();
+    testFarMasses();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);

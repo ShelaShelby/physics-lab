@@ -17,6 +17,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9.5", "A smooth Milky Way, and star masses",
+     "Orbit Lab: the Milky Way band in the night sky is now one smooth band with soft edges instead of three overlapping stripes, so there are no joints or "
+     "stray grey streaks when you zoom far out; it is in the same place on the sky as before, and with the constellation names on it has its own label, "
+     "\"The Milky Way (the plane of our galaxy, simplified)\". The far-away stars now show their mass under the name, in solar masses, taken from published "
+     "papers: Alpha Centauri, Sirius, Procyon (each star of the pair), Proxima Centauri, Fomalhaut, Arcturus and Sagittarius A*. Masses worked out "
+     "from stellar models say \"from models\", and a very uncertain one (Proxima) shows its range. Stars whose mass could not be checked against a "
+     "published source are left without one. A line near the bottom says the masses are published estimates and some are uncertain."},
     {"0.9.4", "A glowing, denser electron cloud",
      "In the Atom Lab's Cloud, Cloud 3D and Slice views the electron cloud is drawn as soft glowing dots instead of tiny hard squares: where the electron is most likely to be "
      "the light adds up and glows, and thin places fade. In Cloud 3D, size and brightness change smoothly with depth. The nodes, where the wave is zero, stay as clear gaps, "

@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.9.4 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
+Version **0.9.5 alpha**. The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
 reference; this folder does not change it.
 
 ## Getting the .exe without building
@@ -88,7 +88,7 @@ Each lab keeps its state while the other one is on screen.
 - **Facts**: click a planet, moon, comet, the Sun or the barycentre. The first click
   afterwards closes the box. **Go to** tiles fly to a body and keep it in the middle.
 - **3D**: View card → 3D. Drag turns the view; right-drag or Shift-drag moves it.
-- **Sky** card: stars, constellations, far-away things (zoom far out to find them).
+- **Sky** card: stars, constellations, far-away things (zoom far out to find them). The Milky Way is one smooth band (labelled with the constellation names on); the far-away stars show a published mass under their name where one could be sourced (`src/orbit/far_masses.h` lists each value with its paper).
 - **Journey and dates** card: the Journey (touch anything to stop it; your settings come back),
   and Jump to a date (1800–2100, Greenwich time).
 - **Performance** card: frame time and a VSync switch (turn VSync off to see the real headroom).
@@ -122,7 +122,7 @@ Each lab keeps its state while the other one is on screen.
 | `src/orbit/kepler.*` | Orbital elements → position and velocity (Kepler's equation) |
 | `src/orbit/solar_system.*` | The simulation: leapfrog steps around the Sun, barycentre, orbit shape |
 | `src/orbit/belts.*` | Asteroid belt, Trojans, Kuiper belt, Oort cloud (same random rocks as the web) |
-| `src/orbit/sky.*`, `sky_data.inc` | Night sky, constellations, far-away things |
+| `src/orbit/sky.*`, `sky_data.inc`, `far_masses.h` | Night sky, constellations, far-away things, and their published masses |
 | `src/orbit/spin.*` | IAU spin of the planets and the Sun, axis tilt, Earth's seasons |
 | `src/orbit/card_text.*`, `format.*` | The info card and how numbers are written |
 | `src/orbit/orbit_view.*` | Drawing the picture, clicks, dragging, zoom |
