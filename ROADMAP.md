@@ -14,6 +14,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.1: general relativity (1PN) for the planets in Real mode (Mercury's extra turn), the Sun's wobble round the centre of mass drawn in Real mode, Milky Way band fix, secret theme names fix — done
 - 0.10.3: Real planets start from JPL (Horizons data, DE441); the relativity tick box is off by default; Real stays an option until the owner has tried it — done
 - 0.10.4: the real Moon (ELP2000-82B checked against Horizons; used in the Orbit Lab's Real mode: Moon position, phases on its card, Real note and About text) — done (stage 1: data and validation, stage 2: the Orbit Lab)
+- 0.10.6 stage 1: Atom Lab audit report — done (report only, nothing in the app changed)
 - 0.10.5: Orbit Lab audit and fixes — done (stages 1-5: report, text fixes, data fixes, the IAU au, tests and sources)
 - 0.10.5 stage 5: Orbit tests and sources — done (audit rows 18, 20-23; the speed rows 24-27 wait for the owner's timing)
 - 0.10.5 stage 1: Orbit Lab audit report — done (report only, nothing in the app changed)
@@ -23,7 +24,8 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- Bug and speed audit before 1.0, the two passes still to do: Atom Lab, then app and settings (each: a report only, then small fix tasks for the real findings) — planned
+- 0.10.6 fix tasks from the Atom Lab audit (18 findings in native/REPORT.md: the outline of complex states, Superposition of equal states, one energy for hydrogen, the Bohr radius and constants from one source, heavy-atom text, timeline texts, speed checks on the PC, stronger tests; stage numbers decided after the owner reads the report) — planned
+- Bug and speed audit before 1.0, the last pass still to do: app and settings (a report only, then small fix tasks for the real findings) — planned
 - 1.0 alpha stages — planned:
   - design plan (written in a fresh short chat)
   - new layout (smaller header, readable text, real-looking sliders)

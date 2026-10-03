@@ -1,8 +1,8 @@
 # Resume
 
 ## Current state
-- Version 0.10.5 alpha is finished (stage 5, the last): the Orbit Lab audit and its fixes (stage 1 report, 2 text fixes, 3 data fixes, 4 the IAU astronomical unit, 5 tests and sources). native/REPORT.md is the stage 5 report. The year (365.25 d) and the Sun's GM built from it are unchanged (3.8e-5 above JPL's). The IAU's own text for the au (Resolution B2) could not be opened: the code still quotes JPL's page ("B1"). Real is still an option, Simple the default, until the owner has tried it.
-- Left from the audit: the speed rows (ROADMAP Later: wait for the owner's timing). Next on the roadmap: the audits of the Atom Lab and of the app and settings, each report-only first.
+- Version 0.10.6 alpha, stage 1: the Atom Lab audit, a report only (native/REPORT.md, 18 findings); nothing in the app changed. NIST was unreachable in that session (403), so no CODATA 2022 or NIST ASD value was compared. The Orbit Lab audit (0.10.5) is finished.
+- Next: the owner reads the Atom Lab audit and picks the fix tasks (on the roadmap as planned). After them: the audit of the app and settings. The Orbit speed rows still wait for the owner's timing.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
   - atom_tests: 17,936

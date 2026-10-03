@@ -1,46 +1,39 @@
-# Native Physics Lab 0.10.5 (alpha) — stage 5 report: Orbit tests and About sources (last stage of 0.10.5)
+# Native Physics Lab 0.10.6 (alpha) — stage 1 report: Atom Lab audit (report only)
 
-Audit rows 18, 20, 21, 22, 23 (`git show 5239fcd:native/REPORT.md`). Version stays 0.10.5; history, ROADMAP ("0.10.5 stage 5 — done", "0.10.5: Orbit Lab audit and fixes — done"; speed rows 24-27 stay in Later "after the owner's timing"), RESUME, About updated. OWNER-TODO unchanged.
+No source, test or data file was changed. Files read: `src/atom/*` (not `atom_data.inc`, `atom_bench`, `cloud_light.h`, `quark_light.h`), `ui/atom_panel.cpp`, the About sources in `app_text.inc`, `tests/test_atom.cpp`. **`ATOM_PLAN.md` was not read.** Findings are ranked, most serious first. "WfW" = would the fix change a word-for-word (web-compared) test.
 
-## 1. The AU resolution: not confirmed from the IAU
-`iauarchive.eso.org/static/resolutions/IAU2012_English.pdf` and the SYRTE page `syrte.obspm.fr/IAU_resolutions/IAUResol_2012_0.html` were both tried and **neither was reachable** (the proxy refused; so were the IAU 2015 PDF, arXiv, NIST, Wikipedia). So units.h and About keep **JPL's wording ("IAU 2012 Resolution B1")**, say the owner's decision calls it B2, and say the IAU text was not read. Only ssd.jpl.nasa.gov and ssd-api.jpl.nasa.gov answered.
+**NIST was not reachable** (`physics.nist.gov` answers 403 from the proxy, by curl and by WebFetch). So: no CODATA 2022 value is quoted, and no NIST ASD wavelength was compared (**not checked**). Where a reference is needed below it is the value already in the repo (About and tests: CODATA 2018, itself not re-read) or my own arithmetic from the lab's formulas.
 
-## 2. Row 18: every unsourced number, and what I did
-| number | action |
-|---|---|
-| c | JPL astro_par page: "speed of light in vacuum c 299792458 m/s 2018 CODATA recommended values" (read 2026-10-03). Comment in units.h, About; test `c == 299792458` |
-| kLightYearAU (63,241.077) | no source reachable, so **worked out** as c × 365.25 d / au = 63,241.07708 (`kLightYearAU = kLightSpeed * kYear / kAU`); About says so; test against 299,792,458 × 31,557,600 / 149,597,870,700 by hand |
-| Sun 25.38 days | Horizons' Sun header, "Adopted sid. rot. per.= 25.38 d": cited in About; test 360 / 14.1844 = 25.38 |
-| Sun equator 25 d, poles 34 d | no source: card line "the 25 and 34 days are rough" (the web-compared spin lines are untouched) |
-| 5,772 K | IAU text unreachable: Sun card "Surface (rough): about 5,770 K" |
-| habitable zone, frost line, lifetime | already "(rough)" (stage 2); no source opened (Kopparapu: arXiv blocked); listed in About |
-| 30 % reflected | the app's own assumption, already on the card (stage 2); listed in About |
-| belt counts and masses, Oort mass | no source: each belt card ends "The counts and masses above are rough figures (no named source)"; About |
-| NEOWISE 5 km | SBDB has no diameter: card "(rough: JPL gives no size)" (new `nucleusRough` flag); About |
-| other comet sizes | SBDB diameters (read 2026-10-03): Halley 11.0, Hale-Bopp 60, 67P 3.4, Swift-Tuttle 26 already equal; **Encke 4.9 → 4.8** (data fix, on purpose); source comment, test |
-| phase cut-offs | the app's own convention, on the card and in About since stage 2; named again in About's "no named source" line |
+## Findings
+| # | Place | What is wrong | How checked | Kind | Small fix | WfW |
+|---|---|---|---|---|---|---|
+| 1 | atom_view.cpp:327 | The 90 % outline of a complex state (m = ±1…±3) is drawn for the real orbital the Orientation falls back to (`fullOrb()`): 2p m=+1 (a doughnut) gets the outline of 2pz (a dumbbell). `outlineOf` itself handles complex ids (tested) but the view never passes one | probe: m=+1 gives `fullOrb`=2p\|z, `stateId`=1041 | bug | use `lab.stateId()` there and in the slice/side/wire calls | no |
+| 2 | atom_sim.cpp:312-320, atom_core.h:124, atom_sim.cpp:758 | Superposition assumes the two states are orthogonal. Same state twice (or 2px + 2p m=+1) is not: density = (a+b)²\|A\|², up to 2× not 1, dots shown 50 % (mix 0/100) to 100 % (mix 50); readout still says "50 % / 50 %" | probe: 2pz+2pz, mix 50: \|ψ\|² = 1.77 \|A\|² (θ=0.7) | bug | refuse equal / overlapping pairs with a message, or divide by the norm | no |
+| 3 | atom_sim.cpp:748, 768 | Level energy uses ½·27.211 eV·Z²/n² (infinite mass, rounded): hydrogen reads **−13.61 eV** in Orbit and Cloud. The lab's own reduced-mass level (`levelEV`, used by Superposition and the spectrum) is 13.598 → **13.60 eV**. Two energies for one atom | probe `info1()` (Cloud and Orbit) vs `rydM(1,0)`=13.598287 | wrong physics | use `levelEV(Z,N,n)`; Orbit: scale ½v²−Z/r by `rydM/kRydInf` | yes (readout lines) |
+| 4 | atom_core.h:26-35 | Rounded web constants. Against CODATA 2018 values in the repo: a0 0.529 Å is **−0.0335 %** (0.529177210903); Hartree 27.211 eV −1.4e-5; atomic time 24.19 as +4.8e-5; so a0/τ = 2.186854e6 m/s vs αc (α=1/137.036) 2.187691e6, **−0.038 %**; metres per fm 9.99666e-16 (−0.033 %). Header says "web's values" but About does not warn | arithmetic in probe | wrong physics (small, known) | one source for all four (see "Known item") | yes |
+| 5 | atom_core.cpp:410-414 | Nuclear mass `A·u − Z` ignores the atomic mass excess; comment says "binding energy … under 10⁻⁶". For H-2 it is ≈1.9e-6 (needs the deuteron mass, 3670.5 mₑ from memory, not sourced) = about 1.3 pm on Dα (lab: 656.2923 nm). Hydrogen-1 is special-cased, so it is fine | probe + arithmetic | wrong text / tiny physics | M = Z·mₚ + N·mₙ − B/c² from the existing binding table, after reading a source | yes (some specLines) |
+| 6 | atom_sim.cpp:799, 816, 835; atom_learn.cpp:263-264 | Relativity is flagged at Z ≥ 27 (readout, hint) but at Z ≥ 20 (spectrum note); (Zα)² is 2 % at 20, 3.9 % at 27, no cut-off is principled. The "chance inside the nucleus" line (≈ 4/3 Z³(R/a0)³/n³) is the non-relativistic \|ψ(0)\|² with no warning for heavy Z (relativistic size not checked) | read; Z=118: lab 189,443 eV vs Dirac point 251,178 eV (the readout does say so) | wrong text | one threshold, say "non-relativistic" in the readout for all Z, add the caveat to the nucleus line | yes (hint/readout in runs) |
+| 7 | atom_learn_data.inc:37-38, 63-65 (made from index.html) | Pauli step: button "See neon in the lab" shows Ne⁹⁺, one electron, next to a drawing of five. 2013 step calls the Stodolna image "a direct picture of the quantum cloud, the same kind of shape" and opens 2s: it is an interference pattern, not our 2s (source not read) | read | wrong text | reword both | no (only counts are tested) |
+| 8 | atom_sim.cpp:179 | Scale Fixed uses 24 a0 for every cloud (comment: "n=4 / 3s") but 4s, 4p, 4d have a 90 % radius of 34-36 a0 (outline `rmax`), so n=4 clouds are cut off | probe: 4s `rmax` 33.9 a0 | bug | use `kExt[4]` (40 a0) | maybe |
+| 9 | atom_core.h:41-42, atom_sim.cpp:817, atom_learn.cpp:30-31 | No source comment for kRydInf, kHcEVnm, kMeU, 510998.95 eV, 137.036, kM_*, kU_* (kU_MEV 931.49410242 looks like the 2018 value). About lists CODATA only "used in the tests". CLAUDE.md asks for both | grep | wrong text (sources) | after reading NIST: comment + About line | About reference |
+| 10 | atom_view.cpp:357, 395-402 | Speed risk: with phase colours (Wheel, complex, superposition) and Classic dots, every one of 24 colour bins re-scans all dots each frame (24×, 3D: 3 bands × 24 = 72×; up to 48,000 dots) | read | speed risk | bucket dots once per frame by colour | no |
+| 11 | atom_sim.cpp:274-291, 307-325; atom_view.cpp:304 | Speed risk: per dot per frame, a cloud jump calls `jumpFractions` twice (complex exp, sin, cos) and a superposition does exp+norm+hash; the jump also copies all dots every frame (`allPts.assign`); `info1` sums 48,000 `hypot` per frame (atom_sim.cpp:765) | read | speed risk | compute θ-terms once per frame; keep the dot sum running | no |
+| 12 | outline.cpp:77-140, atom_view.cpp:346 | Speed risk: first use of each outline runs 64³ = 262,144 density evaluations, a sort and contours on the drawing thread; each cut move redoes 40,000 in `outlineSlice`; `normFactor` first use is 12,000 `pow` steps per orbital. Per-frame vectors in the nucleus view (`list`, `softOps`, `make_shared`, lines 294-308, 501-587) | read | speed risk | warm up at orbital change; reuse buffers | no |
+| 13 | atom_panel.cpp:326, 354 vs atom_core.cpp:429-430, atom_view.cpp:834 | "Visible" is 380-750 nm in the spectrum card, 380-780 nm in colours and photon tags: a line at 760 nm is "invisible" in one place and red in another | read | wrong text | one constant | no |
+| 14 | atom_sim.cpp:678-686 | Orbit view, speed 30, n=1: leapfrog has 50 steps per orbit, radius wobbles to +0.78 % (readout energy and orbit wobble with it); n=4 is exact | probe, 20 s at Z=1 and 118 | bug (small) | sub-steps when h is large | yes (Orbit runs) |
+| 15 | atom_sim.cpp:766 | "avg r: sampled …" shows after only 300 dots; the dots are one Metropolis chain, so they are correlated: at 12,000 dots 2p reads 0.964 and 3d 0.961 of theory (1s 1.018) | probe | wrong text (small) | show "sampled" only with 12,000 dots, say "±few %" | yes |
+| 16 | tests/test_atom.cpp:159-167 | Weak test: spectral lines and `rydM` are compared with the web's own output only; no hand or NIST value for Hα, Lyman-α, He⁺ | read | weak test | add Rydberg formula by hand now, NIST values later | no |
+| 17 | tests/test_atom.cpp:606-623, 140-157 | Weak test: the 90 % outline mass is asserted only for complex 2p (the 30 real ones read 0.900-0.903 in the probe, not asserted); no 1s norm (= π) check; no radial node count (n−l−1); no check of the sampled <r> = a0(3n²−l(l+1))/2Z (only the jump test uses it); view code (finding 1) is untestable | read + probe | weak test | add these four | no |
+| 18 | tests/test_atom.cpp:665, 962 | Reference values are "CODATA 2018 (written from knowledge)": not read from a source | read | weak test | re-read at physics.nist.gov, name the year | no |
 
-## 3. Row 20 (Simple against Horizons): it already existed
-`jpl_tests` measure Simple against `jpl_table.inc` (301 dates, 8 planets, km and arcsec), guard them, and check that `kSimpleErrKm` are the measured maxima (stages 3-4). **Added only what was missing:** the app's own path (`SolarSystem::loadAt` in Simple) gives the same positions as the measured `planetStateAt` (largest difference 0.000000 km over 301 × 8), so the quoted errors are what a user sees. `jpl_tests` 54 → 55.
+## Known item: the Bohr radius
+The lab uses the web's rounded **0.529 Å** (5.29e-11 m), **−0.0335 %** from the CODATA 2018 value in the repo (CODATA 2022 not checked). The Learn guides use 5.29177e-11 m on their own, so guides and picture differ by that much. Changing `kA0Ang` alone also changes the speed a0/τ, so a0, Hartree, τ and fm must come from one source. Would move (WfW): every web-compared run (orbit x, y, vx, vy, dot coordinates, period and speed readouts); not the orbitals, spectra, outlines, Learn texts, beats; `testOrbitGlide` (4e-4 limit) still passes.
 
-## 4-5. Rows 21 and 22: new checks (section 16 of `orbit_tests`; queries in `tools/make_events_ref.py`, values in `tests/reference/events_table.inc`, Horizons, retrieved 2026-10-03)
-All limits are regression guards about 1 % above the error measured here (Linux GCC), not physical bounds.
-- Real, Mars seen from Earth, 27 Aug 2003 10:00: Horizons vector, measured **1,219 km** (distance 55.758 million km); guard 1,232. Replaces "±0.3 million km".
-- Real, Jupiter-Saturn angle, 21 Dec 2020 12:00 (0.10578°): measured **0.00244″**; guard 0.005″ (a floor for compiler rounding). Replaces "0.1° ± 0.05°" (it gave 0.126°).
-- Simple, Earth after one orbital period (P = 2π√(a³/GM) from the orbit's energy, Kepler's third law): **1,423 km** from its start (leapfrog, sub-steps ≤ 5.6 h); guard 1,438. Replaces "after one Julian year within 15,000 km" (a year is not the period); the energy check beside it stays.
-- 2026 equinoxes (Horizons JD 2461120.1150, 2461306.5036): "next season starts in N days" from 5 start dates in Simple and in Real: worst **0.192 h**, limit 0.2 h.
+## Checked and fine
+Analytic 1s norm π; radial and complex-state maths (tests are independent: scipy, L_z, orthonormality); 90 % outline masses 0.900-0.903 and 1s radius 2.67 a0; phase wheel (standard CIELAB/sRGB, tested against scikit-image); no NaN or inf in readouts, hint or spectra for Z=1…118 (4f cloud); mix 0 and 100 %, speed 1 and 30, Z change during a jump (jump cancelled cleanly), Pause (beat clock lives in `step`); jump selection rules; Dirac 1s formula and the u+d quark mass sum are internally consistent (values not checked against a source). Hα (lab, vacuum, reduced mass) 656.4696 nm agrees with my hand value from R∞ and mₚ/mₑ; **NIST ASD not checked**.
 
-## 6. Row 23: moved into `orbit/` (no ImGui) and tested
-`orbit/date_text.h`: `parseDateTime`, the date limits, `clampJumpDate`, `jumpMessage`, `tspeedText`. `orbit/real_errors.h`: `realNoteText`, `simpleNoteText`. `orbit/card_text.cpp`: `selectionStillValid` (the hidden-selection rule), `dateLine`. `orbit/sky.cpp`: `voyagerCaption`. `ui/journey_dates.cpp`, `ui/orbit_panel.cpp`, `orbit_view.cpp` now call them (same texts). Section 16 has 49 new checks in all (rows 21-23; section 17, 17 checks, is row 18): dates (30 Feb, 24:00, seconds, leap day refused or kept), the clamp notes at 1799 and 2101, the 2050 note only in Simple, Time speed texts by hand (58 days at 0; 3,597 s = 60 minutes at the Journey's), the date line three ways, the selection rule (Dwarfs/Comets/Moons/Belts/Far off, wrong numbers, Voyagers before 1990), the Voyager caption in 1941, 1980 and today, both notes' numbers, and a **length guard of 460 characters** for the Real note (444 showed as 10 lines; the screen itself cannot be tested).
-**Not moved:** the Journey stops' captions and zooms (they need the canvas), the Go-to tiles, the scale bar and "zoomed far out" text (inside `draw`), the two tooltips (static text).
+## Tests run (once, Linux GCC Release, PL_BUILD_APP=OFF, scratch build outside the repo)
+7 of 7 pass: orbit 1,540; atom 17,936; app 1,385. Test time: atom 21 s of 52 s in all (no frame timing claimed).
 
-## Tests changed on purpose, with why
-- `test_orbit.cpp`: section 9 (Mars-Earth 0.3 Mkm, Jupiter-Saturn ±0.05°) and the "Earth back after a year" check removed, replaced by the stricter section 16 checks above; the imperial-cards loop now covers 5 more lines (belt and Sun cards, 1,523 checks).
-- `test_app.cpp`: the saved About reference: the same 4 text changes as `app_text.inc` (c and the light year, the Sun's turning period, comet sizes, the "no named source" line); the edit count stays 14.
-- `test_jpl.cpp`: one check added. No limit loosened; no other test changed.
-
-## Tests: full suite once, Linux GCC Release, no warnings: 7 of 7 pass
-orbit 1,540; atom 17,936; app 1,385; nbody 37; jpl 55; moon 24; moon_real 59. Looked at: the NEOWISE card once (1280×800, Xvfb; `PL_SELECT` cannot pick the Sun).
-
-## Not tested
-Windows, speed, the Real note's line count (a character guard instead), imperial text of the new lines on screen, the Sun and belt cards on screen (their lines are tested as text).
+## Not checked
+NIST/CODATA 2022/ASD values (blocked); `atom_data.inc` (names, half-lives, melting points, binding table); the Learn texts beyond constants and the timeline's dates; timeline claims on Og and Stodolna (no source); anything on screen, Windows, GPU speed; `ATOM_PLAN.md`.
