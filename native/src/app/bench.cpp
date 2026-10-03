@@ -45,6 +45,8 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
     t += std::string("GPU timer (GL_TIME_ELAPSED): ") + (e.gpuTimer ? "available" : "not available") + "\n";
     if (e.gpuTimer) t += std::string("GPU timer check: ") + (e.gpuReliable ? "reliable, " : "NOT RELIABLE, ") + (e.gpuCheck.empty() ? "no check was made" : e.gpuCheck) + "\n";
     t += "GPU time covers the whole drawing of a frame (clear, picture with its soft layer and instanced draws, panels and text), up to just before the buffer swap.\n";
+    t += "Input during the test: blocked\n";
+    if (!e.atomSettings.empty()) t += "Atom Lab settings used: " + e.atomSettings + "\n";
     if (e.cancelled) t += "THE TEST WAS CANCELLED: only the finished scenes are listed.\n";
     t += "\n";
     for (const BenchScene& s : scenes) {

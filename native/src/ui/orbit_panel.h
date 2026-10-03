@@ -67,7 +67,7 @@ struct AppState {
     int drawCalls = 0, drawInstances = 0;  // what the renderer drew last frame (the Atom Lab's Performance card)
 };
 
-// Puts everything back where it is today and resets the view and time speed (the web's "☉ Reset to today").
+// Puts everything back where it is today and resets the view (the web's "☉ Reset to today"). The Time speed is NOT changed.
 void resetToToday(AppState& app);
 
 // "1 s = 29.1 days": what a Time speed slider value means (as in the web version).

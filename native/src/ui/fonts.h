@@ -29,8 +29,8 @@ void useFontFamily(const std::string& key);             // switch the whole app'
 // so a label never shows an empty box. Text that can be drawn is unchanged.
 // Puts line breaks into `text` (at spaces) so no line is wider than `width` points: ImGui buttons and check boxes do not wrap by themselves.
 std::string wrapLabel(const std::string& text, float width);
-// A button as wide as the window, its label wrapped onto more lines when it does not fit (small windows, big text).
-bool wideButton(const char* label);
+// A button as wide as the window (its ID is `id`, or the label when there is none), its label wrapped onto more lines when it does not fit (small windows, big text).
+bool wideButton(const char* label, const char* id = nullptr);   // id: a name for the button when the same label is used twice on one screen
 // A check box whose label wraps when it does not fit.
 bool wrappedCheckbox(const char* label, bool* v);
 std::string displayable(const std::string& text, ImFont* font = nullptr);

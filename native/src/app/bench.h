@@ -35,6 +35,10 @@ struct BenchScene {
     std::string gpuProblem;      // "" if the GPU numbers look right; else why they are not reliable
 };
 
+// While the benchmark runs nothing may change the labs or the app except its Cancel button and Esc, so a run cannot be faked:
+// the picture's wheel, drag, clicks and the keyboard shortcuts (Space, F11) ask this first; the panels are blocked by a modal box (ui/benchmark.cpp).
+inline bool labInputAllowed(bool benchRunning) { return !benchRunning; }
+
 struct BenchEnv {
     std::string version, when;                   // the native version; the local date and time
     std::string gpu, glVersion, vendor;          // GL_RENDERER, GL_VERSION, GL_VENDOR
@@ -47,6 +51,7 @@ struct BenchEnv {
     std::string gpuCheck;                        // the self-check in words (how well it agreed, or why it did not)
     double warmupS = kBenchWarmupS, measureS = kBenchMeasureS;
     bool cancelled = false;                      // stopped before the end: only the scenes done are listed
+    std::string atomSettings;                    // the Atom Lab settings each Atom Lab scene really ran with (so a wrong run shows)
 };
 
 // The plain text of a result (starts with the version, the date and the computer's graphics), for the clipboard and the file.

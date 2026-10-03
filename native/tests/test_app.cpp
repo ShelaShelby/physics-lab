@@ -788,6 +788,54 @@ static void testLiveAndGpu() {
     checkTrue("stress atom scene: oganesson-294, identical twice", A1.p.Z == 118 && A1.p.N == 176 && A1.p.zoom == A2.p.zoom && A1.p.qstyle == "Accurate");
 }
 
+// ---- 0.9.3: the Atom Lab benchmark scenes start from the lab's defaults, whatever the user had set; the input lock; the result lines ----
+static bool sameParams(const atom::AtomParams& a, const atom::AtomParams& b) {
+    return a.scale == b.scale && a.zoom == b.zoom && a.qstyle == b.qstyle && a.detail == b.detail && a.style == b.style && a.Z == b.Z && a.N == b.N
+        && a.view == b.view && a.ostyle == b.ostyle && a.orb == b.orb && a.pAx == b.pAx && a.dAx == b.dAx && a.fAx == b.fAx && a.cutAxis == b.cutAxis
+        && a.cut == b.cut && a.n == b.n && a.speed == b.speed;
+}
+static void oddAtomLab(atom::AtomLab& L) {                    // deliberately odd values in every setting and in the state the drawing depends on
+    L.setParam("Z", 8.0); L.setParam("view", std::string("Slice")); L.setParam("ostyle", std::string("Bohr 1913")); L.setParam("scale", std::string("Fixed"));
+    L.setParam("qstyle", std::string("Classic")); L.setParam("detail", std::string("Valence")); L.setParam("style", std::string("Hard balls"));
+    L.setParam("orb", std::string("3d")); L.setParam("pAx", std::string("x")); L.setParam("dAx", std::string("xy")); L.setParam("fAx", std::string("xyz"));
+    L.setParam("cutAxis", std::string("Horizontal")); L.setParam("cut", 0.6); L.setParam("n", 3.0); L.setParam("speed", 20.0); L.setParam("zoom", 5.0);
+    L.moreStored = true; L.paused = true; L.hold = true; L.s.focus = 3; L.s.layer = "Quarks"; L.s.spin = true;
+    L.chain.push_back(atom::ChainStep{"x", "", 0, std::nullopt});
+}
+static void testBenchAtomScenes() {
+    for (int which = 0; which < 4; which++) {
+        const std::string w = "atom scene " + std::to_string(which + 1) + ": ";
+        atom::AtomLab odd, clean;
+        oddAtomLab(odd);
+        atom::benchSetup(odd, which, 800, 600);
+        atom::benchSetup(clean, which, 800, 600);            // a lab with the defaults (the reference)
+        checkTrue(w + "same settings as from a default lab", sameParams(odd.p, clean.p));
+        // what the scene itself asks for, written out
+        const bool cloud = which == 1, big = which == 3;
+        checkTrue(w + "Orbit style is Modern (the Bohr picture draws one small ball, no nucleons)", odd.p.ostyle == "Modern");
+        checkTrue(w + "default scale, orientations and cut", odd.p.scale == "Auto" && odd.p.pAx == "z" && odd.p.dAx == "z2" && odd.p.fAx == "z3" && odd.p.cutAxis == "Vertical" && odd.p.cut == 0 && odd.p.n == 1 && odd.p.speed == 5);
+        checkTrue(w + "the nucleus asked for", odd.p.Z == (big ? 118 : 92) && odd.p.N == (big ? 176 : 146));
+        checkTrue(w + "view", odd.p.view == (cloud ? "Cloud 3D" : "Orbit") && odd.p.orb == (cloud ? "4f" : "1s"));
+        if (!cloud) {
+            checkTrue(w + "quark style, detail and nucleons", odd.p.qstyle == (which == 0 ? "Cinematic" : "Accurate") && odd.p.detail == "+ Sea" && odd.p.style == "Fuzzy");
+            checkTrue(w + "the nucleons are there to draw (the whole nucleus)", int(odd.s.nuc.size()) == odd.p.Z + odd.p.N);
+        }
+        checkTrue(w + "state the drawing reads is fresh", !odd.moreStored && !odd.paused && !odd.hold && odd.chain.empty() && odd.s.layer == "Atom" && !odd.s.spin);
+        checkTrue(w + "focus: only the one-nucleon scene follows a nucleon", odd.s.focus == (which == 2 ? 0 : -1));
+        const std::string txt = atom::benchSettingsText(odd);
+        checkTrue(w + "settings text names view, Orbit style and quark style", txt.find("Orbit style Modern") != std::string::npos && txt.find(cloud ? "view Cloud 3D" : "view Orbit") != std::string::npos && txt.find("quark style " + odd.p.qstyle) != std::string::npos);
+    }
+}
+static void testBenchInputLock() {
+    checkTrue("input is allowed when no benchmark runs", labInputAllowed(false));
+    checkTrue("input to the labs and app is blocked while the benchmark runs", !labInputAllowed(true));
+    BenchEnv env; env.version = "0.9.3"; env.atomSettings = "scene 2: view Orbit, Orbit style Modern, quark style Cinematic";
+    const std::string t = benchResultText(env, {});
+    checkTrue("result says input was blocked", t.find("Input during the test: blocked\n") != std::string::npos);
+    checkTrue("result lists the Atom Lab settings used", t.find("Atom Lab settings used: scene 2: view Orbit, Orbit style Modern, quark style Cinematic\n") != std::string::npos);
+    checkTrue("no Atom Lab line when no Atom Lab scene ran", benchResultText(BenchEnv(), {}).find("Atom Lab settings used") == std::string::npos);
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -800,6 +848,8 @@ int main() {
     testHistoryNotes();
     testWindow();
     testBench();
+    testBenchAtomScenes();
+    testBenchInputLock();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);

@@ -66,6 +66,7 @@ void atomScene(AppState& app, int which) {
     commonSetup(app);
     app.lab = 1;
     atom::benchSetup(app.atom, which, app.canvasW, app.canvasH);
+    app.tempK = 293.15;                                  // the Temperature card's little box is drawn every frame: the same temperature for every run
 }
 void atomNucleus(AppState& app) { atomScene(app, 0); }
 void atomCloud(AppState& app) { atomScene(app, 1); }
@@ -161,10 +162,12 @@ struct BenchState {
     std::unique_ptr<atom::AtomView> atomView;
     orbit::ViewSettings set;
     Journey journey;
+    double tempK = 293.15;
     // ---- results ----
     app::BenchEnv env;
     std::vector<app::BenchScene> results;
     std::string text, note;
+    std::vector<std::string> atomUsed;        // per scene: the Atom Lab settings it really ran with ("" for an Orbit Lab scene)
     bool noteFailed = false;
     GpuTimer gpu;
     std::vector<GpuSample> gpuReady;
@@ -196,7 +199,7 @@ const char* whyNot(const AppState& app) {
 
 void restore(AppState& app, BenchState& b) {
     app.sys = *b.sys; app.view = *b.view; app.atom = *b.atom; app.atomView = *b.atomView;
-    app.set = b.set; app.journey = b.journey;
+    app.set = b.set; app.journey = b.journey; app.tempK = b.tempK;
     app.lab = b.lab; app.paused = b.paused; app.vsync = b.vsync;
     app.learn = b.learn; app.atomLearn = b.atomLearn;
     app.showSettings = b.showSettings; app.showAbout = b.showAbout; app.showHistory = b.showHistory; app.showLabLog = b.showLabLog;
@@ -240,7 +243,8 @@ void begin(AppState& app) {
     b.view = std::make_unique<orbit::OrbitView>(app.view);
     b.atom = std::make_unique<atom::AtomLab>(app.atom);
     b.atomView = std::make_unique<atom::AtomView>(app.atomView);
-    b.set = app.set; b.journey = app.journey;
+    b.set = app.set; b.journey = app.journey; b.tempK = app.tempK;
+    b.atomUsed.assign(activeScenes(b), std::string());
     b.results.clear(); b.text.clear(); b.note.clear(); b.cancelled = false; b.gpuChecked = false; b.gpuCheck = app::GpuVerdict(); b.gpuReady.clear();
     b.gpu.make();
     b.run = std::make_unique<app::BenchRun>(activeScenes(b), b.warm, b.measure);
@@ -274,6 +278,9 @@ void finish(AppState& app, BenchState& b, bool cancelled) {
         for (int i = 0; i < n; i++) { app::BenchScene r = b.run->result(i); r.name = scenes()[i].info.name; r.what = scenes()[i].info.what; b.results.push_back(r); }
     }
     b.env.cancelled = cancelled;
+    b.env.atomSettings.clear();
+    for (int i = 0; i < int(b.atomUsed.size()) && i < int(b.results.size()); i++)
+        if (!b.atomUsed[i].empty()) b.env.atomSettings += (b.env.atomSettings.empty() ? "" : "; ") + std::string("scene ") + std::to_string(i + 1) + ": " + b.atomUsed[i];
     b.env.gpuTimer = b.gpu.ok && std::any_of(b.results.begin(), b.results.end(), [](const app::BenchScene& s) { return s.gpuSamples > 0; });
     b.env.gpuReliable = b.env.gpuTimer && b.gpuChecked && b.gpuCheck.reliable;
     b.env.gpuCheck = b.gpuChecked ? b.gpuCheck.why : std::string();
@@ -318,7 +325,11 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, i
         std::printf("GPU timer check: %s: %s\n", b.gpuCheck.reliable ? "reliable" : "NOT reliable", b.gpuCheck.why.c_str());
     }
     const int i = b.run->sceneToSetUp();
-    if (i >= 0) { scenes()[i].setup(app); b.run->setUpDone(); }
+    if (i >= 0) {
+        scenes()[i].setup(app);
+        if (app.lab == 1 && i < int(b.atomUsed.size())) b.atomUsed[i] = atom::benchSettingsText(app.atom);
+        b.run->setUpDone();
+    }
     app.vsync = false;
 }
 
@@ -372,11 +383,38 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
 void benchmarkWindow(AppState& app) {
     if (!app.bench) return;
     BenchState& b = *app.bench;
-    if (b.stage == BenchState::Stage::Closed) return;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const float fs = ImGui::GetFontSize();
     const ImGuiWindowFlags fl = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize;
     const bool esc = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+    // The running box is a modal pop-up: while it is open ImGui ignores every other window (panels, header, tabs, settings). The picture is not ImGui,
+    // so main.cpp also drops its wheel / drag / click / key handling (app::labInputAllowed). The dim behind a modal is made clear there, so the picture stays as it is.
+    // The pop-up is closed here also when the run ended some other way (cancelled from the frame code, finished).
+    static const char* const kRunBox = "##benchrun";
+    const bool running = b.stage == BenchState::Stage::Running;
+    bool cancel = running && esc;
+    if (running || ImGui::IsPopupOpen(kRunBox)) {
+        if (running && !ImGui::IsPopupOpen(kRunBox)) ImGui::OpenPopup(kRunBox);
+        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 12 * fs / 16, vp->WorkPos.y + 12 * fs / 16 + std::max(0.0f, headerHeight())), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.85f);
+        if (ImGui::BeginPopupModal(kRunBox, nullptr, fl | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav)) {
+            if (running) {
+                const app::BenchRun& r = *b.run;
+                const int shown = std::min(r.scene() + 1, r.sceneCount());
+                ImGui::Text("Scene %d of %d: %s", shown, r.sceneCount(), scenes()[std::min(r.scene(), r.sceneCount() - 1)].info.name);
+                ImGui::Text("%s  %.1f s", r.measuring() ? "Counting" : "Warming up", r.sceneElapsedS());
+                const double fps = app.stats.avgFrame() > 0 ? 1000.0 / app.stats.avgFrame() : 0;
+                ImGui::Text("Live: %.0f fps", fps);
+                ImGui::ProgressBar(float(r.doneS() / r.totalS()), ImVec2(24 * fs, 0));
+                ImGui::TextDisabled("Everything else is locked until the test ends.");
+                if (ImGui::Button("Cancel")) cancel = true;
+            }
+            if (cancel || !running) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+    }
+    if (cancel) { finish(app, b, true); return; }
+    if (b.stage == BenchState::Stage::Closed) return;
     if (b.stage == BenchState::Stage::Ask) {
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0));
@@ -401,20 +439,6 @@ void benchmarkWindow(AppState& app) {
         }
         ImGui::End();
         if (!open) b.stage = BenchState::Stage::Closed;
-    } else if (b.stage == BenchState::Stage::Running) {
-        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 12 * fs / 16, vp->WorkPos.y + 12 * fs / 16 + std::max(0.0f, headerHeight())), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.85f);
-        if (ImGui::Begin("##benchrun", nullptr, fl | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav)) {
-            const app::BenchRun& r = *b.run;
-            const int shown = std::min(r.scene() + 1, r.sceneCount());
-            ImGui::Text("Scene %d of %d: %s", shown, r.sceneCount(), scenes()[std::min(r.scene(), r.sceneCount() - 1)].info.name);
-            ImGui::Text("%s  %.1f s", r.measuring() ? "Counting" : "Warming up", r.sceneElapsedS());
-            const double fps = app.stats.avgFrame() > 0 ? 1000.0 / app.stats.avgFrame() : 0;
-            ImGui::Text("Live: %.0f fps", fps);
-            ImGui::ProgressBar(float(r.doneS() / r.totalS()), ImVec2(24 * fs, 0));
-            if (ImGui::Button("Cancel") || esc) { ImGui::End(); finish(app, b, true); return; }
-        }
-        ImGui::End();
     } else if (b.stage == BenchState::Stage::Done) {
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(std::min(46 * fs, vp->WorkSize.x * 0.97f), std::min(34 * fs, vp->WorkSize.y * 0.92f)), ImGuiCond_Appearing);

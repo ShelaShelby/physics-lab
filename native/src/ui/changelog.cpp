@@ -17,6 +17,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9.3", "Four fixes: benchmark scenes, guide buttons, benchmark input lock, Time speed on Today",
+     "1) The Atom Lab benchmark scenes no longer pick up your own Atom Lab settings: they start from the lab's defaults, so \"Bohr 1913\" can no "
+     "longer hide the nucleons (earlier results for the nucleus, one-nucleon and biggest-nucleus scenes taken with Bohr 1913 on are not valid). "
+     "The result now says which settings each Atom Lab scene used. "
+     "2) The two \"What am I even looking at?\" buttons in the Atom Lab panel no longer clash, so the red \"conflicting ID\" message is gone. "
+     "3) While the benchmark runs, nothing but Cancel and Esc works: not the panels, the buttons at the top, the keys, nor the picture. "
+     "The result says so. The window title also follows the lab that is on screen. "
+     "4) \"Reset to today\" and the other Today buttons keep your Time speed; only Defaults puts it back."},
     {"0.9.2", "Alpha label, drop-down text fits",
      "The Orbit Lab's drop-downs (Sizes, Trails, Stars in the background, Constellations) show only the short name in the closed box, so "
      "it is never cut off at big Text sizes; the explanation is under each choice in the open list. "

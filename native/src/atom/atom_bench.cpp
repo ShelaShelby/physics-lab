@@ -7,6 +7,9 @@ namespace atom {
 namespace {
 void fresh(AtomLab& L, int Z, int N, double w, double h) {
     seedRandom(20260101);                                // the same random numbers every run
+    L.p = AtomParams{};                                  // the Atom Lab's own defaults (what "Defaults" gives): no setting of the user's can leak in (Orbit style Bohr 1913 hid the nucleons)
+    L.moreStored.reset();                                // the ⓘ More / Less choice changes the readout in the picture
+    L.chain.clear(); L.paused = false; L.hold = false;
     L.viewW = w; L.viewH = h;
     L.setParam("Z", double(Z)); L.setParam("N", double(N));
     L.restart();
@@ -14,7 +17,7 @@ void fresh(AtomLab& L, int Z, int N, double w, double h) {
     L.s.spin = false;
 }
 void nucleus(AtomLab& L, const char* qstyle) {
-    L.setParam("view", std::string("Orbit")); L.setParam("qstyle", std::string(qstyle)); L.setParam("detail", std::string("+ Sea")); L.setParam("style", std::string("Fuzzy"));
+    L.setParam("view", std::string("Orbit")); L.setParam("ostyle", std::string("Modern")); L.setParam("qstyle", std::string(qstyle)); L.setParam("detail", std::string("+ Sea")); L.setParam("style", std::string("Fuzzy"));
     L.ensureNucleus();
     L.setParam("zoom", L.zoomForNucleus());
 }
@@ -42,6 +45,10 @@ void benchSetup(AtomLab& L, int which, double w, double h) {
         L.setParam("zoom", L.zoomForNucleon());
         still(L);
     }
+}
+
+std::string benchSettingsText(const AtomLab& L) {
+    return "view " + L.p.view + ", Orbit style " + L.p.ostyle + ", quark style " + L.p.qstyle + ", detail " + L.p.detail + ", " + L.p.style + " nucleons";
 }
 
 }  // namespace atom

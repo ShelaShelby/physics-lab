@@ -36,10 +36,10 @@ void setZoom(AppState& app, double zoom) {
     app.set.zoom = zoom;
 }
 
+// Today: the Time speed is the user's own and is not touched (Defaults puts it back itself).
 void resetToToday(AppState& app) {
     app.sys.loadAt(nowUnixMs());
     app.sys.jumped = false;
-    app.set.tspeed = kTspeedDefault;
     app.set.zoom = kZoomDefault;
     app.set.moons = app.set.dwarfs = app.set.comets = app.set.belts = true;
     app.view.sel = Selection{};

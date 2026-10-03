@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "app/app_data.h"
+#include "app/bench.h"
 #include "app/frame_time.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
@@ -152,6 +154,7 @@ int main(int, char**) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;                           // nothing saved next to the .exe
+    io.ConfigDebugHighlightIdConflicts = false;         // never show ImGui's red "conflicting ID" box to a user (the conflicts themselves are fixed)
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
     style.ScaleAllSizes(scale);
@@ -259,10 +262,12 @@ int main(int, char**) {
             case SDL_EVENT_QUIT: running = false; break;
             case SDL_EVENT_WINDOW_CLOSE_REQUESTED: if (e.window.windowID == SDL_GetWindowID(window)) running = false; break;
             case SDL_EVENT_KEY_DOWN:
+                if (!app::labInputAllowed(app.benchRunning)) break;      // the benchmark is running: only Cancel and Esc do anything
                 if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) app.paused = !app.paused;
                 break;
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
+                if (!app::labInputAllowed(app.benchRunning)) break;
                 if (app.lab == 1) {                     // Atom Lab: zoom −= deltaY × 0.004, 0.4 per wheel notch
                     if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH && e.wheel.mouse_y < headerH + pictureWinH) app.atom.setParam("zoom", app.atom.p.zoom + e.wheel.y * 0.4);
                     break;
@@ -273,6 +278,7 @@ int main(int, char**) {
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                if (!app::labInputAllowed(app.benchRunning)) break;
                 if (app.lab == 1) {
                     if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && e.button.y < headerH + pictureWinH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
                     break;
@@ -281,7 +287,7 @@ int main(int, char**) {
                 if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
                 break;
             case SDL_EVENT_MOUSE_MOTION:
-                if (mouseDown) {
+                if (mouseDown && app::labInputAllowed(app.benchRunning)) {
                     if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) dragging = true;
                     // 3D: dragging turns the view, unless "Drag moves the view" is on, or with the right button or Shift held
                     const bool rotate = app.set.view3D && !app.view.panMode && !rightDrag && !(SDL_GetModState() & SDL_KMOD_SHIFT);
@@ -291,7 +297,7 @@ int main(int, char**) {
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                if (mouseDown && !dragging && e.button.button == SDL_BUTTON_LEFT) {
+                if (mouseDown && !dragging && app::labInputAllowed(app.benchRunning) && e.button.button == SDL_BUTTON_LEFT) {
                     if (app.lab == 1) app.atom.click(e.button.x / scale, (e.button.y - headerH) / scale);
                     else app.view.click(e.button.x / scale, (e.button.y - headerH) / scale);
                 }
@@ -348,6 +354,11 @@ int main(int, char**) {
 
         // ---- build the frame ----
         ui::updateLook(app.prefs, systemLight(), ui::systemReducedMotion());   // theme, text size, font, motion
+        ImGui::GetStyle().Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0, 0, 0, app.benchRunning ? 0.0f : 0.45f);   // the benchmark's input lock is a modal that must not dim the picture
+        if (static int shownLab = -1; shownLab != app.lab) {   // the window title follows the lab on screen
+            shownLab = app.lab;
+            SDL_SetWindowTitle(window, (std::string("Physics Lab ") + ui::appVersion() + " — " + app::kLabInfo[app.lab].name).c_str());
+        }
         app.atom.reducedMotion = ui::look().reduced;
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL3_NewFrame();

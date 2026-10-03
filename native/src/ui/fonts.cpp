@@ -147,10 +147,10 @@ std::string wrapLabel(const std::string& text, float width) {
     return out + line;
 }
 
-bool wideButton(const char* label) {
+bool wideButton(const char* label, const char* id) {
     const ImGuiStyle& st = ImGui::GetStyle();
     const std::string shown = wrapLabel(label, ImGui::GetContentRegionAvail().x - 2 * st.FramePadding.x - 2);
-    return ImGui::Button((shown + "###" + label).c_str(), ImVec2(-1, 0));
+    return ImGui::Button((shown + "###" + (id ? id : label)).c_str(), ImVec2(-1, 0));
 }
 
 bool wrappedCheckbox(const char* label, bool* v) {

@@ -53,6 +53,7 @@ void putBackAtomDefaults(AppState& app) {
 void putBackDefaults(AppState& app) {
     journeyStop(app);
     app.set = orbit::ViewSettings{};
+    app.set.tspeed = units::kTspeedDefault;               // Defaults puts the Time speed back (resetToToday keeps it)
     app.view = orbit::OrbitView{};
     app.dateNote.clear();
     app.learnJump.clear();

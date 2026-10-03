@@ -1,6 +1,8 @@
 // The Atom Lab scenes of the benchmark (the same ones every run: fixed random numbers, fixed camera, no animation to wait for).
 #pragma once
 
+#include <string>
+
 #include "atom/atom_sim.h"
 
 namespace atom {
@@ -10,6 +12,9 @@ namespace atom {
 // 2: uranium-238, Accurate quarks, + Sea detail, zoomed all the way into the first nucleon
 // 3: stress: oganesson-294 (118 protons, 176 neutrons), Accurate quarks, + Sea detail, zoomed 0.6 (about 4 times) closer than the whole nucleus, so every nucleon is large
 // width, height: the picture's size in points.
+// Every scene starts from the Atom Lab's default settings (AtomParams{}), then applies its own.
 void benchSetup(AtomLab& L, int which, double width, double height);
+// "view Orbit, Orbit style Modern, quark style Cinematic, ..." as the lab is now: put in the result so a wrong run is visible.
+std::string benchSettingsText(const AtomLab& L);
 
 }  // namespace atom
