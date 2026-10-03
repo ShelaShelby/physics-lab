@@ -51,6 +51,8 @@ native/build/Release/PhysicsLab.exe
 
 Or open the `native` folder in Visual Studio (File → Open → Folder) and press F5.
 
+The physics tests include `jpl_tests`, which compares the Real planets with JPL Horizons vector tables kept in `native/data/jpl/` (see the README.txt there; `native/tools/make_jpl_data.py` checks them and rewrites the generated `.inc` files). The app itself does not use them yet.
+
 ## Using it
 
 Pick the lab with the two buttons at the top of the panel: **Orbit Lab** or **Atom Lab**.

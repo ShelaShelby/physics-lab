@@ -87,7 +87,9 @@ NBodyState nbodyStartState(double jd = kNBodyRefJD);
 // The state at any time, by stepping from the reference epoch forward or backward, with stored checkpoints so a jump does not start from the beginning.
 class NBodyClock {
 public:
-    explicit NBodyClock(double h = kNBodyStep, bool gr = false);   // gr: the planets feel the Sun's general-relativity potential (see above)
+    // gr: the planets feel the Sun's general-relativity potential (see above). start: the state at the reference epoch the clock is built from; nullptr (the
+    // default, and all the app does) = nbodyStartState(), the app's orbital elements. Used by the tests to start from the JPL state (0.10.3 stage 1; the app does not).
+    explicit NBodyClock(double h = kNBodyStep, bool gr = false, const NBodyState* start = nullptr);
     bool gr() const { return gr_; }
     // Positions and velocities at `tau` seconds after the reference epoch (negative: before it), cubic-Hermite interpolated between the two nearest grid steps.
     void stateAt(double tau, Vec3* x, Vec3* v);

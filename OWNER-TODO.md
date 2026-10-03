@@ -31,7 +31,7 @@
 - [x] Links opening the browser.
 
 ## Decisions and other tasks
-- [ ] Download a data file from JPL Horizons for 0.10.3 (the planning chat will give the steps when it is time).
+- [x] Download a data file from JPL Horizons for 0.10.3 (done 2026-10-03: nine files, now in `native/data/jpl/`; used by the new `jpl_tests`).
 - [ ] Decide the 1.0 style direction: clean and scientific, neon and cinematic, or both. The planning chat recommended both: clean light themes, cinematic dark themes.
 - [ ] Decide whether to add more electrons (see DECISIONS.md).
 - [ ] The free "Full reset" on the usage page expires on 22 Oct: keep it for when the weekly limit runs out.

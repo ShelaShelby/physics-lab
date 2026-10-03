@@ -83,6 +83,11 @@ if(PL_BUILD_TESTS)
   target_link_libraries(nbody_tests PRIVATE orbit_core)
   target_compile_options(nbody_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME nbody_physics COMMAND nbody_tests)
+  add_executable(jpl_tests tests/test_jpl.cpp)
+  target_include_directories(jpl_tests PRIVATE tests)
+  target_link_libraries(jpl_tests PRIVATE orbit_core)
+  target_compile_options(jpl_tests PRIVATE ${PL_WARNINGS})
+  add_test(NAME jpl_validation COMMAND jpl_tests)
 endif()
 
 # ---- the app ----

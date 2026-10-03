@@ -174,7 +174,7 @@ NBodyState nbodyStartState(double jd) {
     return s;
 }
 
-NBodyClock::NBodyClock(double h, bool gr) : h_(h), gr_(gr), start_(nbodyStartState()) {}
+NBodyClock::NBodyClock(double h, bool gr, const NBodyState* start) : h_(h), gr_(gr), start_(start ? *start : nbodyStartState()) {}
 
 const NBodyState& NBodyClock::checkpoint(long j) {
     if (j == 0) return start_;
