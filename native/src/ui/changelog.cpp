@@ -17,6 +17,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.9.8", "A 90% outline for the electron cloud",
+     "A new setting in the Atom Lab's Cloud, Cloud 3D and Slice views, \"90% outline\" (Off by default), draws a thin line round the smallest region where the electron is found "
+     "90% of the time. It is not a sphere: for p, d and f orbitals it follows the real shape (dumbbells, rings, clovers), and an orbital with nodes can have several surfaces. "
+     "In Slice it is the line where the cut plane crosses that surface, in Cloud it is the region's shadow seen from the side, and in Cloud 3D it is a faint wireframe that turns "
+     "with the cloud. It uses the same model as the cloud: one electron, no relativity, hydrogen-like orbitals; atoms with more electrons have different shapes. "
+     "The benchmark always has it off."},
     {"0.9.7", "Reset to today keeps your view choices",
      "\"Reset to today\" (and the Today buttons in the Journey card and the Learn window) now sets only the date and time back to today, and clears the selection and Follow. "
      "It no longer changes your zoom or the Moons, Dwarf planets, Comets and Belts switches (it already kept your Time speed). Defaults still puts everything back. "

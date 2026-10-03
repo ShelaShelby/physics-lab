@@ -560,6 +560,9 @@ void atomPanel(AppState& app, float width) {
                                                    {"High", "High · 24,000 dots. More dots show the same probability more smoothly. They do not change the physics."},
                                                    {"Ultra", "Ultra · 48,000 dots. More dots show the same probability more smoothly. They do not change the physics."}}, p.cdens);
     }
+    if (p.view != "Orbit")
+        selectRow(app, "outline", "90% outline", {{"Off", "Off · Shows where the electron is found 90% of the time (one-electron model)."},
+                                                   {"On", "On · Thin line round the smallest region where the electron is found 90% of the time. One electron, hydrogen-like model; atoms with more electrons differ."}}, p.outline);
     if (p.view == "Slice") {
         selectRow(app, "cutAxis", "Cut direction", {{"Vertical", "Vertical (contains the z axis)"}, {"Horizontal", "Horizontal (across the z axis)"}}, p.cutAxis);
         sliderRow(app, "cut", "Cut position (0 = through the nucleus)", fmt::jsString(p.cut), p.cut, -1, 1, 0.01, false);

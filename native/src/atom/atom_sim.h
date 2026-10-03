@@ -35,6 +35,7 @@ struct AtomParams {
     int n = 1;                           // energy level (Orbit view)
     int speed = 5;                       // playback speed (Orbit view)
     std::string cstyle = "Classic";      // how the cloud's dots are drawn: Classic (the web's small hard dots) / Glow (soft dots that add up)
+    std::string outline = "Off";         // 90 % outline on the cloud views: Off / On (atom/outline.h)
     std::string cdens = "Normal";        // how many dots the cloud keeps: Normal 12,000 (the web's) / High 24,000 / Ultra 48,000
     // The struct's own values are the web's (the tests that compare the lab with the web's code step by step use them). What the app
     // starts with, and what "Defaults" gives, is this: the web's settings plus the glowing, denser cloud.

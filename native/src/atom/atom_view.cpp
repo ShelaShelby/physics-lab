@@ -1,5 +1,6 @@
 #include "atom_view.h"
 #include "cloud_light.h"
+#include "outline.h"
 #include "quark_light.h"
 
 #include <algorithm>
@@ -294,6 +295,10 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         std::vector<GlowDot> G;
         G.reserve(glow ? std::size_t(cnt) : 0);
         const Color cP = css.accent, cN = kPhaseNeg;
+        const bool outlineOn = p.outline == "On";
+        const int fo = lab.fullOrb();
+        const Color olCol = withA(css.fg, 0.6);                            // the 90 % outline: thin, the theme's text colour (light on dark pages, dark on light ones)
+        const double olUnit = kA0 / p.Z * pxm;                             // points per Bohr radius at Z = 1 in the outline's own units
         if (sl) {                                                          // slice: only dots inside a thin slab around the cut plane, seen face-on
             const double size = kExt[orbitals()[orbIndex(p.orb)].n] / p.Z * kA0, off = lab.cutOffsetM(), th = 0.07 * size;
             for (long i = 0; i < cnt; i++) {
@@ -307,6 +312,11 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             if (glow) drawGlow(R, G, cap, css.light, cP, cN, 3.0, w, h, cloudExpo_);
             else R.blobs(B.data(), int(B.size()));
             B.clear();
+            if (outlineOn) {                                               // the contour |psi|^2 = c in the cut plane (cached until the orbital or the cut changes)
+                const double off0 = p.cut * 0.5 * kExt[orbitals()[fo].n];
+                if (olOrb_ != fo || olHz_ != hz || olOff_ != off0) { olSlice_ = outlineSlice(fo, hz, off0); olOrb_ = fo; olHz_ = hz; olOff_ = off0; }
+                for (const OutSeg2& g : olSlice_) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
+            }
             const double gx = w - 44, gy = h - 44;                         // axes of the cut plane
             R.line(gx, gy, gx + 26, gy, 1.5, css.muted);
             R.line(gx, gy, gx, gy - 26, 1.5, css.muted);
@@ -326,6 +336,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             if (glow) drawGlow(R, G, cap, css.light, cP, cN, 1.0, w, h, cloudExpo_);
             else R.blobs(B.data(), int(B.size()));
             B.clear();
+            if (outlineOn)                                                 // the shadow of the 90 % region seen from the side
+                for (const OutSeg2& g : outlineOf(fo).side) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
         } else {                                                           // rotate by yaw (about z), then pitch, then project
             const double ext = kExt[orbitals()[orbIndex(p.orb)].n] / p.Z * kA0;
             static std::vector<float> PX, PY, PD;
@@ -362,6 +374,19 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 }
             R.blobs(B.data(), int(B.size()));
             B.clear();
+            }
+            if (outlineOn) {                                               // a faint wireframe of the 90 % surface: its contour lines in planes across the region, turned with the cloud
+                const double um = kA0 / p.Z;
+                const auto pr = [&](double x, double y, double z, double& X, double& Y, double& t) {
+                    x *= um; y *= um; z *= um;
+                    const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, dep = y1 * cb - z * sb, up = y1 * sb + z * cb, f = 1 / (1 + dep / (4 * ext));
+                    X = cx + x1 * pxm * f; Y = cy - up * pxm * f; t = std::max(-1.0, std::min(1.0, dep / ext));
+                };
+                for (const OutSeg3& g : outlineOf(fo).wire) {
+                    double X0, Y0, t0, X1, Y1, t1;
+                    pr(g.x0, g.y0, g.z0, X0, Y0, t0); pr(g.x1, g.y1, g.z1, X1, Y1, t1);
+                    R.line(X0, Y0, X1, Y1, 0.9, withA(css.fg, 0.42 - 0.22 * 0.5 * (t0 + t1 + 2) / 2));        // nearer lines are a little stronger
+                }
             }
             const double gx = w - 44, gy = h - 44;                         // axis gizmo (bottom right)
             const double axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};

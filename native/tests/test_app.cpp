@@ -23,6 +23,8 @@
 #include "orbit/today.h"
 #include "atom/atom_bench.h"
 #include "atom/cloud_light.h"
+#include "atom/outline.h"
+#include <chrono>
 #include "atom/quark_light.h"
 #include "orbit/solar_system.h"
 
@@ -1050,6 +1052,130 @@ static void testResetToToday() {
     checkTrue("the planets are where a fresh load at today's date puts them", same);
 }
 
+// ---- 0.9.8: the 90 % outline. Independent references: the closed-form 1s distribution, and a separate fine integration of the exact |psi|^2. ----
+struct FineRegion { double frac, rmax, total; };
+// The probability inside {|psi|^2 >= c} divided by the probability in all space, by midpoint integration in spherical coordinates (r, cos(theta), phi) for the
+// hydrogen-like orbital with nuclear charge Z. A different integration from the one the app uses (a Cartesian grid), on a fine grid.
+static void gaussLegendre(int n, std::vector<double>& x, std::vector<double>& w) {          // nodes and weights on (-1, 1), by Newton iteration on P_n
+    x.assign(n, 0); w.assign(n, 0);
+    for (int i = 0; i < n; i++) {
+        double z = std::cos(atom::kPi * (i + 0.75) / (n + 0.5)), pp = 1;
+        for (int it = 0; it < 100; it++) {
+            double p1 = 1, p2 = 0;
+            for (int j = 1; j <= n; j++) { const double p3 = p2; p2 = p1; p1 = ((2.0 * j - 1) * z * p2 - (j - 1.0) * p3) / j; }
+            pp = n * (z * p1 - p2) / (z * z - 1);
+            const double dz = p1 / pp; z -= dz;
+            if (std::fabs(dz) < 1e-15) break;
+        }
+        x[i] = z; w[i] = 2 / ((1 - z * z) * pp * pp);
+    }
+}
+static FineRegion fineRegion(int orb, int Z, double c, double dr = 0.1, int nu = 40, int nphi = 36) {
+    const atom::Orbital& o = atom::orbitals()[orb];
+    const double top = 2.0 * atom::kExt[o.n] / Z;
+    const int nr = int(std::ceil(top / dr));
+    const double h = top / nr;
+    std::vector<double> gx, gw;
+    gaussLegendre(nu, gx, gw);                                         // Gauss-Legendre in cos(theta): exact for the polynomial angular parts
+    double all = 0, in = 0, rmax = 0;
+    for (int ir = 0; ir < nr; ir++) {
+        const double r = (ir + 0.5) * h;
+        for (int iu = 0; iu < nu; iu++) {
+            const double u = gx[iu], s = std::sqrt(1 - u * u);
+            for (int ip = 0; ip < nphi; ip++) {
+                const double ph = 2 * atom::kPi * (ip + 0.5) / nphi;
+                const double p = atom::psi(orb, Z, r * s * std::cos(ph), r * s * std::sin(ph), r * u), w = p * p * r * r * gw[iu];
+                all += w;
+                if (p * p >= c) { in += w; rmax = std::max(rmax, r); }
+            }
+        }
+    }
+    return {in / all, rmax, all * h * (2 * atom::kPi / nphi)};     // total = the integral of |psi|^2 over all space
+}
+static void testOutline() {
+    using atom::kA0;
+    // --- 1s against the closed form: the enclosed probability is 1 - e^(-2r) (1 + 2r + 2r^2) (r in a0/Z); solve for 0.9 ---
+    {
+        double lo = 0, hi = 20;
+        for (int i = 0; i < 200; i++) { const double m = 0.5 * (lo + hi); (1 - std::exp(-2 * m) * (1 + 2 * m + 2 * m * m) < 0.9 ? lo : hi) = m; }
+        const double r90 = 0.5 * (lo + hi);
+        const int orb = atom::orbIndex("1s");
+        const atom::Outline& O = atom::outlineOf(orb);
+        const double p0 = atom::psi(orb, 1, 0, 0, 0);
+        const double rc = -0.5 * std::log(O.c / (p0 * p0));                      // |psi|^2 = |psi(0)|^2 e^(-2r): the radius where it falls to the level c
+        double rs = 0; int ns = 0;
+        for (const atom::OutSeg2& g : atom::outlineSlice(orb, false, 0.0)) { rs += std::hypot(g.x0, g.y0); ns++; }
+        std::printf("  1s: exact 90%% radius %.4f a0 (closed form, root of 1-e^-2r(1+2r+2r^2)=0.9); outline level gives %.4f a0; the slice contour averages %.4f a0 over %d segments; grid says it holds %.4f\n", r90, rc, rs / ns, ns, O.mass);
+        checkTrue("1s: the outline radius is the exact 90 % radius (within 0.03 a0, the grid's tolerance)", std::fabs(rc - r90) < 0.03 && ns > 20 && std::fabs(rs / ns - r90) < 0.03);
+        checkTrue("1s: the grid's own mass inside is 0.90 +- 0.01", std::fabs(O.mass - 0.9) < 0.01);
+    }
+    // --- every orbital and orientation: the region holds 0.90 of the probability, by a separate fine integration ---
+    double worst = 0; int count = 0;
+    double slowest = 0;
+    for (int orb = 0; orb < int(atom::orbitals().size()); orb++) {
+        const auto t0 = std::chrono::steady_clock::now();
+        const atom::Outline& O = atom::outlineOf(orb);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        slowest = std::max(slowest, ms);
+        const FineRegion F = fineRegion(orb, 1, O.c);
+        const double nrm = atom::orbitalNorm(orb);
+        worst = std::max(worst, std::fabs(F.frac - 0.9)); count++;
+        if (std::fabs(nrm / F.total - 1) > 0.002) std::printf("  note: %s norm ratio app/fine = %.5f, region fraction %.4f\n", atom::orbitals()[orb].key.c_str(), nrm / F.total, F.frac);
+        checkTrue("outline " + atom::orbitals()[orb].key + ": probability inside |psi|^2 >= c is 0.90 +- 0.01 (fine integration)", std::fabs(F.frac - 0.9) < 0.01);
+        checkTrue("outline " + atom::orbitals()[orb].key + ": the region stays inside the grid and has lines", O.rmax < O.half - 1 && !O.wire.empty() && !O.side.empty());
+        checkTrue("outline " + atom::orbitals()[orb].key + ": the app's normalising integral of |psi|^2 agrees with the fine one within 0.5 %", std::fabs(nrm / F.total - 1) < 0.005);
+    }
+    {   // the cut-plane contour of the biggest orbital (what a Slice view recomputes when the cut slider moves)
+        const auto t0 = std::chrono::steady_clock::now();
+        const auto segs = atom::outlineSlice(atom::orbIndex("4f|xyz"), false, 3.0);
+        std::printf("  4f|xyz cut-plane contour (200 x 200 points): %zu segments in %.1f ms\n", segs.size(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+    }
+    std::printf("  %d orbitals: the probability inside the outline is 0.90 within %.4f at worst; the slowest outline took %.0f ms to compute (software, this machine)\n", count, worst, slowest);
+    // --- the sampled dots (Ultra, fixed seeds): the fraction inside the outline is 0.90 within 4 standard errors (batch means) ---
+    for (const char* shell : {"1s", "2s", "2p", "3d", "4f"}) {
+        atom::AtomLab L;
+        fillCloud(L, shell, "Ultra", 9001);
+        const int orb = L.fullOrb();
+        const atom::Outline& O = atom::outlineOf(orb);
+        double mean, se;
+        batchMean(L, [&](long i) { const double p = atom::psi(orb, 1, L.s.pts[3 * i] / kA0, L.s.pts[3 * i + 1] / kA0, L.s.pts[3 * i + 2] / kA0); return p * p >= O.c ? 1.0 : 0.0; }, mean, se);
+        std::printf("  %s: %.4f of the 48,000 dots lie inside the outline (standard error %.4f; off by %.2f standard errors)\n", atom::orbitals()[orb].key.c_str(), mean, se, std::fabs(mean - 0.9) / se);
+        checkTrue(std::string(shell) + ": the fraction of dots inside the outline is 0.90 within 4 standard errors", std::fabs(mean - 0.9) < 4 * se);
+    }
+    // --- the setting: default, good and bad values, the settings file, Defaults, the benchmark ---
+    {
+        atom::AtomParams web, app = atom::AtomParams::appDefaults();
+        checkTrue("90% outline: Off by default (the struct, and what the app starts with and Defaults give)", web.outline == "Off" && app.outline == "Off");
+        checkTrue("90% outline: Off and On are accepted", atom::AtomLab::validChoice("outline", "Off") && atom::AtomLab::validChoice("outline", "On"));
+        checkTrue("90% outline: bad values are refused (the loader keeps the default)", !atom::AtomLab::validChoice("outline", "on") && !atom::AtomLab::validChoice("outline", "90") && !atom::AtomLab::validChoice("outline", ""));
+        Prefs p; p.atom = {{"outline", "On"}, {"view", "Slice"}};
+        const Prefs q = loadPrefs(savePrefs(p));
+        checkTrue("90% outline: goes through the settings file unchanged", q.atom == p.atom && q.atom.at("outline") == "On");
+        atom::AtomLab L; L.setParam("outline", std::string("On"));
+        checkTrue("90% outline: setParam turns it on", L.p.outline == "On");
+        for (int which = 0; which < 5; which++) {
+            atom::AtomLab B; B.setParam("outline", std::string("On"));
+            atom::benchSetup(B, which, 800, 600);
+            checkTrue("benchmark scene " + std::to_string(which + 1) + ": the outline is Off", B.p.outline == "Off");
+        }
+    }
+    // --- Z scaling: psi at Z = 2 is psi at Z = 1 with all lengths halved, so the outline is exactly half the size ---
+    for (const char* key : {"1s", "2s", "2p|z", "3d|z2", "4f|xyz"}) {
+        const int orb = atom::orbIndex(key);
+        const atom::Outline& O = atom::outlineOf(orb);
+        bool same = true;
+        for (const atom::OutSeg2& g : atom::outlineSlice(orb, false, 0.0, 60)) {          // points of the Z = 1 contour, and the same points halved for Z = 2
+            const double a = atom::psi(orb, 1, g.x0, 0, g.y0), b = atom::psi(orb, 2, g.x0 / 2, 0, g.y0 / 2);
+            if (std::fabs(a * a - b * b) > 1e-9 * std::max(1e-30, a * a)) same = false;
+        }
+        const FineRegion F2 = fineRegion(orb, 2, O.c);
+        const double tol = 2 * O.half / atom::kOutlineGrid + 0.2;
+        std::printf("  %s: Z=1 reaches %.2f a0, Z=2 reaches %.2f a0 (half is %.2f); probability inside at Z=2: %.4f\n", key, O.rmax, F2.rmax, O.rmax / 2, F2.frac);
+        checkTrue(std::string(key) + ": psi(Z=2) at the halved points equals psi(Z=1) (the contour scales exactly)", same);
+        checkTrue(std::string(key) + ": at Z = 2 the same level holds 0.90 and the reach is half (within the grid tolerance)", std::fabs(F2.frac - 0.9) < 0.01 && std::fabs(2 * F2.rmax - O.rmax) < tol);
+    }
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -1068,6 +1194,7 @@ int main() {
     testFarMasses();
     testQuarkLight();
     testResetToToday();
+    testOutline();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);

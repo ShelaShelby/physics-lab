@@ -8,6 +8,7 @@ namespace {
 void fresh(AtomLab& L, int Z, int N, double w, double h) {
     seedRandom(20260101);                                // the same random numbers every run
     L.p = AtomParams::appDefaults();                                // the Atom Lab's own defaults (what "Defaults" gives): no setting of the user's can leak in (Orbit style Bohr 1913 hid the nucleons)
+    L.p.outline = "Off";                                 // the 90 % outline is never drawn in the benchmark, so the old numbers stay comparable
     L.moreStored.reset();                                // the ⓘ More / Less choice changes the readout in the picture
     L.chain.clear(); L.paused = false; L.hold = false;
     L.viewW = w; L.viewH = h;

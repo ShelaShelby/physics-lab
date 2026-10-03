@@ -28,7 +28,7 @@ bool AtomLab::validChoice(const std::string& key, const std::string& v) {
         {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice"}}, {"ostyle", {"Modern", "Bohr 1913"}},
         {"orb", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"pAx", {"x", "y", "z"}}, {"dAx", {"z2", "xz", "yz", "xy", "x2y2"}},
         {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2"}}, {"cutAxis", {"Vertical", "Horizontal"}},
-        {"cstyle", {"Classic", "Glow"}}, {"cdens", {"Normal", "High", "Ultra"}}};
+        {"cstyle", {"Classic", "Glow"}}, {"outline", {"Off", "On"}}, {"cdens", {"Normal", "High", "Ultra"}}};
     const auto it = opts.find(key);
     return it != opts.end() && std::find(it->second.begin(), it->second.end(), v) != it->second.end();
 }
@@ -90,6 +90,7 @@ void AtomLab::setParam(const std::string& key, const std::string& v) {
     else if (key == "cutAxis") p.cutAxis = v;
     else if (key == "cstyle") p.cstyle = v;
     else if (key == "cdens") p.cdens = v;
+    else if (key == "outline") p.outline = v;
     else return;
     onParam(key);
 }
@@ -519,6 +520,10 @@ std::vector<std::string> AtomLab::info() {
     }
     if (p.view == "Slice") lines.push_back("cut plane: " + std::string(p.cutAxis == "Horizontal" ? "z" : "y") + " = " + fmt::fixed(cutOffsetM() * 1e10, 2) + " Å");
     if (p.view != "Orbit") lines.push_back("two colours = the + and − halves of the wave ψ (zero where they meet)");
+    if (p.view != "Orbit" && p.outline == "On") {
+        lines.push_back("thin line: the 90% outline (the electron is found inside it 90% of the time)");
+        more.push_back(std::string(p.view == "Slice" ? "90% outline: the line where the cut plane crosses the 90% surface. " : p.view == "Cloud" ? "90% outline: the shadow of the 90% region seen from the side. " : "90% outline: faint lines across the 90% surface, turning with the cloud. ") + "One electron, non-relativistic, hydrogen-like orbital with nuclear charge " + std::to_string(p.Z) + ", the same model as the cloud. It is the boundary of the smallest region that holds 90% of the probability, which follows the orbital's real shape; atoms with more electrons have different shapes.");
+    }
     if (s.layer == "Nucleus" && p.Z + p.N >= 12) {
         const double b = nucBeta(p.Z, p.N);
         lines.push_back("shape: " + std::string(nucShapeWord(b)) + (nucMeasured(p.Z, p.N) ? "" : p.Z >= 100 ? " (a guess)" : " (estimated)"));
