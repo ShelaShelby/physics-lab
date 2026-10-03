@@ -157,7 +157,26 @@ Vec3 nbodyCentreOfMass(const NBodyState& s) {
     return c * (1.0 / m);
 }
 
-NBodyState nbodyStartState(double jd) {
+// JPL Horizons (DE441, downloaded 2026-10-03; native/data/jpl) at 2026-01-01 12:00 TDB, barycentric (JPL's Solar System Barycenter), ecliptic and mean equinox of J2000:
+// { {x, y, z} (m), {vx, vy, vz} (m/s) } for the Sun, Mercury, Venus, Earth-Moon barycentre, Mars ... Neptune (system barycentres). Made by tools/make_jpl_data.py.
+static const double kJplEpoch[kNBodies][2][3] =
+#include "jpl_epoch.inc"
+;
+
+NBodyState nbodyStartState() {
+    NBodyState s;
+    for (int i = 0; i < kNBodies; i++) {
+        s.x[i] = Vec3{kJplEpoch[i][0][0], kJplEpoch[i][0][1], kJplEpoch[i][0][2]};
+        s.v[i] = Vec3{kJplEpoch[i][1][0], kJplEpoch[i][1][1], kJplEpoch[i][1][2]};
+    }
+    double total = 0; Vec3 c, w;                                          // the GM-weighted mean position and velocity (the lab's own centre of mass)
+    for (int i = 0; i < kNBodies; i++) { total += kRealGM[i]; c = c + s.x[i] * kRealGM[i]; w = w + s.v[i] * kRealGM[i]; }
+    c = c * (1.0 / total); w = w * (1.0 / total);
+    for (int i = 0; i < kNBodies; i++) { s.x[i] = s.x[i] - c; s.v[i] = s.v[i] - w; }
+    return s;
+}
+
+NBodyState nbodyElementsStartState(double jd) {
     NBodyState s;
     Vec3 r[kNBodies], v[kNBodies];                                      // heliocentric
     double total = 0;

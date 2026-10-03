@@ -88,7 +88,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
     if (real_) { applyReal(0); sunTrailPoint(); }
 }
 
-// the reference epoch of the N-body clock (Julian day kNBodyRefJD, 2026-01-01 12:00 UT) as Unix milliseconds
+// the reference epoch of the N-body clock (Julian day kNBodyRefJD, 2026-01-01 12:00 TDB, the time scale of the JPL data) as Unix milliseconds. The lab treats its calendar dates as TDB, with no conversion from UTC.
 static constexpr double kRefUnixMs = (kNBodyRefJD - 2440587.5) * 86400000.0;
 
 void SolarSystem::applyReal(double extra) {

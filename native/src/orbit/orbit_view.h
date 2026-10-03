@@ -36,7 +36,7 @@ struct ViewSettings {
     ConsMode cons = ConsMode::Off;
     bool realPlanets = false;   // Planet physics: Simple (false) / Real (true), see orbit/nbody.h
     bool exaggerateWobble = true;   // Real only: draw the Sun's path round the barycentre kSunWobbleScale times too big (on by default: the real path is under 2.3 Sun radii)
-    bool relativity = true;     // Real only: "General relativity (1PN)" for the planets (on by default; no effect in Simple)
+    bool relativity = false;    // Real only: "General relativity (1PN)" for the planets (off by default since 0.10.3: it moves the planets away from JPL; no effect in Simple)
     bool far = true;            // Far-away things (nearest stars, Voyagers, galactic centre)
     bool paused = false;        // time is stopped (a fast spin is only held still while time runs)
     bool lightTheme = false;    // the theme is a light one (the picture follows the theme when Stars are Off)

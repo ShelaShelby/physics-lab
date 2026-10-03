@@ -17,6 +17,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.3", "Real planets start from JPL's data (Orbit Lab)",
+     "With Planet physics set to Real, the planets now start from NASA/JPL Horizons' positions and velocities (the DE441 ephemeris) for 1 January 2026 12:00 TDB, instead of the lab's own simplified orbital "
+     "elements. Measured against Horizons' tables for 1 January of every year from 1800 to 2100, the worst error of any planet's position is now under 30,000 km (Mercury) with relativity off, and under 8,000 km "
+     "for the others; before, the worst errors were millions of km for the inner planets and Jupiter, and over a hundred million km for Saturn, Uranus and Neptune. The lab's calendar dates are treated as TDB (the time scale "
+     "of the JPL data) with no conversion from UTC; the note under Planet physics says so, and gives the worst errors. The General relativity (1PN) tick box is now off by default: measured against JPL, the Sun-potential "
+     "term gets Mercury's extra turn right (about 43 arcseconds per century) but the motion along the orbit slightly wrong, so it moves every planet's position away from JPL (Mercury, worst case 1800 to 2100: "
+     "70,045 km with it, 29,231 km without). The box is still there, and a setting you saved earlier is kept (press Defaults once to put it off). Real is still an option, and Simple is still the default, "
+     "until it has been tried on a PC. Still left out: moons, dwarf planets (Pluto is not in) and asteroids pulling on the planets. Simple is unchanged."},
     {"0.10.2", "Phase colours, quantum beats and smooth photon jumps (Atom Lab)",
      "The Atom Lab can now show the phase of the electron's wave. New orientations m = +1, −1 (and ±2, ±3 for d and f) are complex waves, and a new setting, \"Phase colours: Sign / Wheel\", "
      "colours each dot by the phase of the wave with a colour ring (Sign is the old two-colour look and is still the default). New: \"Superposition\", two orbitals at once, such as 1s + 2p. "

@@ -3,9 +3,9 @@
 //
 // What is in the model: Newtonian point-mass gravity between the Sun and the eight planets (each planet stands for its whole system, planet plus
 // moons, so its GM is the system's), and, as an option (0.10.1), a first-order general-relativity correction (below). What is NOT: higher orders of general
-// relativity, the Sun's shape and spin, the pull of moons (apart from being inside the system's GM), asteroids, dwarf planets or comets on the planets. The starting state is NOT from JPL's ephemeris (JPL Horizons could not be reached from the session
-// that wrote this): it is the app's own simplified orbital elements (Standish's JPL "approximate positions", 1800-2050) at the reference epoch, turned into barycentric
-// positions and velocities, so the planets drift from their true positions over decades and more.
+// relativity, the Sun's shape and spin, the pull of moons (apart from being inside the system's GM), asteroids, dwarf planets or comets on the planets. The starting state (0.10.3) is JPL Horizons' (DE441) position and velocity of the Sun and each planet system (Earth: the Earth-Moon barycentre) at
+// 2026-01-01 12:00 TDB, moved to the lab's own centre of mass (below). Dates are used as TDB without conversion. Over 1800-2100 the planets then stay within a few
+// thousand km of Horizons (Mercury 29,230 km at worst without relativity; tests/test_jpl.cpp measures it).
 //
 // The integrator: a Wisdom-Holman map, J. Wisdom & M. Holman, "Symplectic maps for the N-body problem", The Astronomical Journal 102 (1991) 1528-1538, in the
 // "democratic heliocentric" variables of M. J. Duncan, H. F. Levison & M. H. Lee, "A Multiple Time Step Symplectic Algorithm for Integrating Close
@@ -49,8 +49,8 @@ inline bool planetPhysicsFromText(const std::string& s, bool& real) {
 constexpr int kNBodies = 9;                   // the Sun, then Mercury ... Neptune
 
 // GM (m^3/s^2): the Sun, then the system of each planet (Earth: Earth + Moon). Source: JPL "Astrodynamic Parameters"
-// (https://ssd.jpl.nasa.gov/astro_par.html), the DE440 values (Park et al. 2021, The Astronomical Journal). Read from an excerpt of that page: the page itself
-// was blocked from the session that wrote this. In nbody.cpp, with the source next to each number.
+// (https://ssd.jpl.nasa.gov/astro_par.html), the DE440 values (Park et al. 2021, The Astronomical Journal). First read from an excerpt of that page; on 2026-10-03 the
+// owner read the values from the page itself and they matched the code. In nbody.cpp, with the source next to each number.
 extern const double kRealGM[kNBodies];
 
 struct NBodyState {
@@ -77,18 +77,24 @@ Vec3 nbodyAngularMomentum(const NBodyState& s);  // sum GM_i x_i cross v_i
 Vec3 nbodyMomentum(const NBodyState& s);         // sum GM_i v_i
 Vec3 nbodyCentreOfMass(const NBodyState& s);     // sum GM_i x_i / sum GM_i
 
-// The starting state on Julian day `jd` (default: the reference epoch below): the app's orbital elements for the eight planets, put into barycentric form with the real GMs.
-// Each planet's velocity from the elements is scaled by sqrt((GM_sun + GM_i) / kGMSun) so its orbit keeps the shape the elements give under the real GM.
-// The reference epoch is 2026-01-01 12:00 UT (Julian day 2461042.0), near "today": the elements are only mean elements, so the N-body planets drift away from
-// them the further the date is from the epoch (Saturn: about 0.1 degree per year); near the epoch they are where the elements put them.
+// The reference epoch: 2026-01-01 12:00 TDB (Barycentric Dynamical Time), Julian day 2461042.0 (the time scale of JPL Horizons' rows). The lab's calendar dates are
+// used as TDB without conversion; UTC and TDB differ by a small amount (not looked up).
 constexpr double kNBodyRefJD = 2461042.0;
-NBodyState nbodyStartState(double jd = kNBodyRefJD);
+// The default starting state (the clock's, and the app's): the JPL Horizons (DE441) state of the Sun and the eight planet systems at the reference epoch (jpl_epoch.inc,
+// made by tools/make_jpl_data.py from data/jpl), moved to the lab's own 9-body centre of mass: the GM-weighted mean position and velocity (the lab's GMs) are subtracted,
+// so the centre of mass is at rest at the origin as the integrator expects (the shift is 128.5 km and 0.039 mm/s; JPL's barycentre also holds Pluto, the asteroids and
+// so on, which the lab has not). Heliocentric positions and velocities are exactly JPL's.
+NBodyState nbodyStartState();
+// LEGACY, for tests only (the app does not use it since 0.10.3): the app's own orbital elements on Julian day `jd`, put into barycentric form with the real GMs. Each planet's
+// velocity from the elements is scaled by sqrt((GM_sun + GM_i) / kGMSun). Mean elements: the planets drift away from them (Saturn: about 0.1 degree per year), which is why
+// the app now starts from JPL; kept to show the before-and-after errors in tests/test_jpl.cpp and that the integrator itself did not change.
+NBodyState nbodyElementsStartState(double jd = kNBodyRefJD);
 
 // The state at any time, by stepping from the reference epoch forward or backward, with stored checkpoints so a jump does not start from the beginning.
 class NBodyClock {
 public:
     // gr: the planets feel the Sun's general-relativity potential (see above). start: the state at the reference epoch the clock is built from; nullptr (the
-    // default, and all the app does) = nbodyStartState(), the app's orbital elements. Used by the tests to start from the JPL state (0.10.3 stage 1; the app does not).
+    // default, and all the app does) = nbodyStartState(), the JPL state. The tests pass the legacy elements state to compare.
     explicit NBodyClock(double h = kNBodyStep, bool gr = false, const NBodyState* start = nullptr);
     bool gr() const { return gr_; }
     // Positions and velocities at `tau` seconds after the reference epoch (negative: before it), cubic-Hermite interpolated between the two nearest grid steps.

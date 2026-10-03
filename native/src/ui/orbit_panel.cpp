@@ -16,6 +16,7 @@
 #include "shot.h"
 #include "benchmark.h"
 #include "orbit/format.h"
+#include "orbit/real_errors.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
 #include "orbit/today.h"
@@ -25,6 +26,21 @@ namespace ui {
 
 using namespace orbit;
 using namespace units;
+
+
+// "29,231" for the worst-error lists in the Real note (orbit/real_errors.h)
+static std::string withCommas(long v) {
+    std::string d = std::to_string(v), out;
+    for (std::size_t i = 0; i < d.size(); i++) { if (i && (d.size() - i) % 3 == 0) out += ','; out += d[i]; }
+    return out;
+}
+// "Mercury 29,231 km, Venus 4,762, ..." (the worst error of each planet against JPL Horizons, 1800-2100, from the measured table)
+static std::string worstErrorList(bool relativityOn) {
+    const long* km = relativityOn ? orbit::kRealErrKmRelOn : orbit::kRealErrKmRelOff;
+    std::string t;
+    for (int i = 0; i < orbit::kRealErrCount; i++) t += (i ? ", " : "") + std::string(orbit::kRealErrName[i]) + " " + withCommas(km[i]) + (i == orbit::kRealErrCount - 1 ? " km" : "");
+    return t;
+}
 
 static int64_t nowUnixMs() {
     using namespace std::chrono;
@@ -199,10 +215,13 @@ void orbitPanel(AppState& app, float width) {
             if (ImGui::IsItemHovered()) {
                 ImGui::BeginTooltip();
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
-                ImGui::TextUnformatted("Adds Einstein's correction to the Sun's pull on each planet, so Mercury's orbit turns a little more each time round: about 43 arcseconds per century, as measured.\n\n"
-                                       "It is a first-order (1PN) approximation, made with one simple extra potential of the Sun (Nobili & Roxburgh, 1986). It gets the turning of the orbit right, "
-                                       "but a planet's speed along its orbit is off by a tiny amount, of the order of one part in ten million for Mercury. It leaves out the planets' relativistic pull on each other, the Sun's spin and shape, and all higher orders.\n\n"
-                                       "Off: plain Newtonian gravity, no extra turn.");
+                const std::string tip = "Adds Einstein's correction to the Sun's pull on each planet, so Mercury's orbit turns a little more each time round: about 43 arcseconds per century, as measured.\n\n"
+                                        "It is a first-order (1PN) approximation, made with one simple extra potential of the Sun (Nobili & Roxburgh, 1986). It gets the turning of the orbit right, "
+                                        "but the motion along the orbit is slightly wrong, so, measured against JPL Horizons, it moves every planet's position away from JPL: Mercury's worst error in 1800 to 2100 is "
+                                        + withCommas(orbit::kRealErrKmRelOn[0]) + " km with it and " + withCommas(orbit::kRealErrKmRelOff[0]) + " km without. "
+                                        "It leaves out the planets' relativistic pull on each other, the Sun's spin and shape, and all higher orders.\n\n"
+                                        "Off (the default): plain Newtonian gravity, no extra turn.";
+                ImGui::TextUnformatted(tip.c_str());
                 ImGui::PopTextWrapPos();
                 ImGui::EndTooltip();
             }
@@ -219,15 +238,22 @@ void orbitPanel(AppState& app, float width) {
             }
         }
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        const std::string realNote =
+            "Real: the Sun and the eight planets pull on each other (Newtonian; each planet stands for its whole system). "
+            "Start: JPL Horizons (DE441) state of 1 January 2026 12:00 TDB; dates are treated as TDB (no UTC conversion; the small difference was not looked up). "
+            "Left out: moons, dwarf planets (Pluto is not in) and asteroids pulling on the planets (they move as in Simple). "
+            "Worst error against Horizons, 1800 to 2100, relativity " + std::string(app.set.relativity ? "on" : "off") + ": " + worstErrorList(app.set.relativity) + ".";
         ImGui::TextWrapped("%s", app.set.realPlanets
-            ? "Real: the Sun and the eight planets pull on each other (Newtonian gravity; each planet stands for its whole system with its moons). No effects of moons, dwarf planets or asteroids on the planets. "
-              "The start values are simplified orbital elements for 1 January 2026 (not JPL's ephemeris), so far from that date the planets drift away from their true positions (Mercury is off by about 12 degrees in 1800). Moons, dwarf planets, comets and belts move as in Simple. "
-              "The picture is drawn round the balance point (barycentre) of the Sun and the planets, and the Sun circles it, never farther than about two Sun radii: the Sun's own path is drawn as a trail."
+            ? realNote.c_str()
             : "Simple: each planet moves on its own round the Sun, and the planets do not pull on each other (as in the web version).");
-        if (app.set.realPlanets)
-            ImGui::TextWrapped("%s", app.set.relativity
-                ? "General relativity is a first-order (1PN) approximation with the Sun's field only: Mercury's orbit turns about 43 arcseconds per century more. Left out: relativity between the planets, the Sun's spin and shape, and higher orders."
-                : "No relativity: plain Newtonian gravity, so Mercury's extra turn of about 43 arcseconds per century is missing.");
+        if (app.set.realPlanets) {
+            const std::string grNote = app.set.relativity
+                ? "General relativity is a first-order (1PN) approximation with the Sun's field only: Mercury's orbit turns about 43 arcseconds per century more, but, measured against JPL Horizons, every planet's position gets worse (Mercury, worst case 1800 to 2100: "
+                  + withCommas(orbit::kRealErrKmRelOn[0]) + " km with it, " + withCommas(orbit::kRealErrKmRelOff[0]) + " km without). The turn is right, the motion along the orbit slightly wrong. Left out: relativity between the planets, the Sun's spin and shape, and higher orders."
+                : "No relativity (the default): plain Newtonian gravity. Mercury's extra turn of about 43 arcseconds per century is missing, but the planets stay closer to JPL Horizons (Mercury's worst error 1800 to 2100: "
+                  + withCommas(orbit::kRealErrKmRelOff[0]) + " km, against " + withCommas(orbit::kRealErrKmRelOn[0]) + " km with the relativity tick on).";
+            ImGui::TextWrapped("%s", grNote.c_str());
+        }
         ImGui::PopStyleColor();
     }
 

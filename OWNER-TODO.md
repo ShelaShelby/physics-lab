@@ -14,6 +14,15 @@
 - [ ] The Milky Way band at far zoom (about 9,200 and 13,000 AU across), 3D view turned to several angles: one stripe running right across, fading only at the edges.
 - [ ] The two secret themes, once unlocked, show their names in the Theme picker (not "???") and the cards still look right.
 
+## Try on the PC (0.10.3: Real planets start from JPL)
+- [ ] Planet physics: **Real**. Jump the date to **1800** and to **2100**: the planets should be where Simple has them to the eye (the Real note gives the real errors) and nothing should jump, freeze or look broken.
+- [ ] The **fastest Time speed** in Real: smooth, no stalls when the date moves far; **trails at fast speeds** look sensible.
+- [ ] The **Journey** in Real mode (it should work as in Simple).
+- [ ] The **planet cards** in Real mode: numbers sensible.
+- [ ] **Extra large text** and a **narrow window**: the longer Real note under "Planet physics" still reads and scrolls well.
+- [ ] The relativity tick box is now **off** by default. If your saved settings still have it on, press **Defaults** once (Defaults also puts everything else back).
+- [ ] Then **decide whether Real becomes the default** (it stays an option until you do).
+
 ## Try on the PC (0.10.2: phase colours, quantum beats, smooth jumps)
 - [ ] **Phase colours:** Atom Lab, Electron card: "Phase colours: Sign / Wheel". Sign must look as before. Wheel on a dark AND a light theme, in Cloud, Cloud 3D and Slice, Classic and Glow; the colour ring (0, π/2, π, 3π/2) top right. Orientation of 2p, 3d, 4f has "m = +1", "m = −1" … (4f up to ±3): the colours go round the z axis m times, opposite ways for + and −. Defaults puts everything back.
 - [ ] **Superposition:** 1s + 2p (pz): the cloud's centre sloshes up and down once per 4 s at Playback speed 5; the line under the picture gives the real beat period. 1s + 2s: the cloud breathes. 2s + 2p: nothing moves, and the text says why. **1s + 4f:** try it too (the dipole is zero, so the cloud only changes shape, and the text should say so). Mix slider (0 and 100 % = one still orbital), Playback speed (faster/slower beats), **Space pauses it**.

@@ -1,5 +1,6 @@
-// 0.10.3 stage 1: the Real planets (orbit/nbody.*) checked against the JPL Horizons vector tables in native/data/jpl (the independent reference).
-// NOTHING THE APP DOES IS CHANGED in this stage: the app still starts from its own orbital elements; the JPL state is used here, in the tests, only.
+// 0.10.3: the Real planets (orbit/nbody.*) checked against the JPL Horizons vector tables in native/data/jpl (the independent reference).
+// Stage 1 measured it with the JPL state passed to the clock by the test; since stage 2 the JPL state IS the clock's (and the app's) default start, so the
+// "JPL" runs below use the default clock. The old orbital-elements start is the legacy function nbodyElementsStartState, kept for the before-and-after column.
 // The tables say {source: DE441}: Horizons' default ephemeris (spans -13200 to +17191; JPL says it is a little less accurate than DE440 for the present
 // century, mainly for the Moon). The lab's GM values are DE440's. So this is a comparison with Horizons' DE441 output, NOT "against DE440".
 #include <algorithm>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "orbit/nbody.h"
+#include "orbit/real_errors.h"
 #include "orbit/solar_system.h"
 #include "orbit/units.h"
 
@@ -72,11 +74,8 @@ static void testData() {
 // ---- the JPL epoch state moved to the lab's own 9-body centre of mass (test path only) ----
 static NBodyState g_jplStart;
 static void makeJplStart() {
-    NBodyState s;
-    for (int i = 0; i < kNBodies; i++) {
-        s.x[i] = Vec3{kJplEpoch[i][0][0], kJplEpoch[i][0][1], kJplEpoch[i][0][2]};
-        s.v[i] = Vec3{kJplEpoch[i][1][0], kJplEpoch[i][1][1], kJplEpoch[i][1][2]};
-    }
+    NBodyState s;                                                             // from the 2026 row of the TABLE (not from jpl_epoch.inc, which the app uses)
+    for (int i = 0; i < kNBodies; i++) { s.x[i] = tv(i, kEpochRow, 1); s.v[i] = tv(i, kEpochRow, 4); }
     const Vec3 c = nbodyCentreOfMass(s);                                      // sum GM_i x_i / sum GM_i with the lab's GMs
     double total = 0; for (int i = 0; i < kNBodies; i++) total += kRealGM[i];
     const Vec3 w = nbodyMomentum(s) * (1.0 / total);                          // sum GM_i v_i / sum GM_i
@@ -86,9 +85,24 @@ static void makeJplStart() {
     const Vec3 c2 = nbodyCentreOfMass(s), p2 = nbodyMomentum(s);
     check("shift: afterwards the lab's centre of mass is at the origin (< 1 m) and its momentum zero (< 1e-6 m/s per unit GM)", length(c2) < 1.0 && length(p2) / total < 1e-6);
     // the heliocentric differences, which is what is compared below, do not change
-    double dh = 0; for (int i = 1; i < kNBodies; i++) dh = std::max(dh, length((s.x[i] - s.x[0]) - Vec3{kJplEpoch[i][0][0] - kJplEpoch[0][0][0], kJplEpoch[i][0][1] - kJplEpoch[0][0][1], kJplEpoch[i][0][2] - kJplEpoch[0][0][2]}));
+    double dh = 0; for (int i = 1; i < kNBodies; i++) dh = std::max(dh, length((s.x[i] - s.x[0]) - (tv(i, kEpochRow, 1) - tv(0, kEpochRow, 1))));
     check("shift: heliocentric positions are unchanged by the shift (< 1e-3 m, rounding only)", dh < 1e-3);
     g_jplStart = s;
+
+    // (a) 0.10.3 stage 2: the app's default start (what NBodyClock() and the app use) is this state: JPL's epoch row minus the shift
+    const NBodyState d = nbodyStartState();
+    double dpos = 0, dvel = 0, dhel = 0, dhelv = 0;
+    for (int i = 0; i < kNBodies; i++) { dpos = std::max(dpos, length(d.x[i] - s.x[i])); dvel = std::max(dvel, length(d.v[i] - s.v[i])); }
+    for (int i = 1; i < kNBodies; i++) {
+        dhel = std::max(dhel, length((d.x[i] - d.x[0]) - (tv(i, kEpochRow, 1) - tv(0, kEpochRow, 1))));
+        dhelv = std::max(dhelv, length((d.v[i] - d.v[0]) - (tv(i, kEpochRow, 4) - tv(0, kEpochRow, 4))));
+    }
+    std::printf("default start: differs from the JPL row minus the shift by %.1e m and %.1e m/s; heliocentric positions differ from the row by %.1e m, velocities by %.1e m/s\n", dpos, dvel, dhel, dhelv);
+    check("default start: heliocentric positions equal the JPL 2026 row to 1e-3 m", dhel < 1e-3);
+    check("default start: heliocentric velocities equal the JPL 2026 row to 1e-9 m/s", dhelv < 1e-9);
+    check("default start: equals the JPL row minus the shift (positions 1e-3 m, velocities 1e-9 m/s)", dpos < 1e-3 && dvel < 1e-9);
+    const Vec3 cm = nbodyCentreOfMass(d), pm = nbodyMomentum(d);
+    check("default start: the centre of mass is at the origin (< 1 m) and the momentum is zero (< 1e-6 m/s per unit GM)", length(cm) < 1.0 && length(pm) / total < 1e-6);
 }
 
 // ---- (b) nothing changed: the 0.10.2 values (saved from the code before this stage; GCC x86-64), exact binary numbers ----
@@ -96,7 +110,10 @@ static void makeJplStart() {
 #include "test_jpl_saved.inc"
 
 static void testNothingChanged() {
-    NBodyClock clock;                                                         // Real, GR off, the app's elements start: the app's default
+    // The integrator and the clock are unchanged: Real from the LEGACY elements start (the 0.10.2 start) still gives the 0.10.2 numbers. (The app's default Real start
+    // is now the JPL state, which changes Real on purpose; that is checked against the JPL table below.)
+    const NBodyState elemStart = nbodyElementsStartState();
+    NBodyClock clock(kNBodyStep, false, &elemStart);
     double worstReal = 0, worstSimple = 0;
     for (int d = 0; d < 5; d++) {
         Vec3 x[kNBodies], v[kNBodies];
@@ -112,18 +129,22 @@ static void testNothingChanged() {
     }
     std::printf("nothing changed: Real (5 dates) differs from the 0.10.2 values by at most %.1e, Simple (5 dates) by at most %.1e (relative)\n", worstReal, worstSimple);
     // 1e-9: the same compiled code gives 0; another compiler (the Windows build) may round differently, which cannot grow to 1e-9 in 74 years of 1-day steps.
-    check("nothing changed: Real planets at 5 dates equal the 0.10.2 values within 1e-9 relative", worstReal < 1e-9);
+    check("nothing changed: Real from the legacy elements start, 5 dates, equals the 0.10.2 values within 1e-9 relative (the integrator did not change)", worstReal < 1e-9);
     check("nothing changed: Simple planets at 5 dates equal the 0.10.2 values within 1e-9 relative", worstSimple < 1e-9);
-    NBodyClock viaNull(kNBodyStep, false, nullptr);
+    NBodyClock viaNull(kNBodyStep, false, nullptr), plain;
+    const NBodyState def = nbodyStartState();
+    NBodyClock viaDef(kNBodyStep, false, &def);
     Vec3 x[kNBodies], v[kNBodies], y[kNBodies], w[kNBodies];
-    clock.stateAt(3000 * 86400.0, x, v); viaNull.stateAt(3000 * 86400.0, y, w);
+    viaNull.stateAt(3000 * 86400.0, x, v); plain.stateAt(3000 * 86400.0, y, w);
     bool same = true; for (int i = 0; i < kNBodies; i++) same = same && x[i].x == y[i].x && x[i].y == y[i].y && x[i].z == y[i].z;
-    check("nothing changed: a clock given no start state is the default clock, bit for bit", same);
+    viaDef.stateAt(3000 * 86400.0, y, w);
+    for (int i = 0; i < kNBodies; i++) same = same && x[i].x == y[i].x && x[i].y == y[i].y && x[i].z == y[i].z;
+    check("default start: a clock given no start state is the clock started from nbodyStartState() (the JPL state), bit for bit", same);
 }
 
 // ---- (c) validation ----
 enum { kSimple, kElemGR, kJplGR, kJplNoGR, kModels };
-static const char* kModelNames[kModels] = {"Simple", "Real from the app's elements, GR on", "Real from the JPL state, GR on", "Real from the JPL state, GR off"};
+static const char* kModelNames[kModels] = {"Simple", "Real from the legacy elements start, GR on (0.10.2)", "Real, default JPL start, GR on", "Real, default JPL start, GR off"};
 static double g_km[kModels][8][kRows], g_as[kModels][8][kRows];             // planet 0 = Mercury ... 7 = Neptune
 static double g_sunDiff[kRows];                                             // |lab Sun - JPL Sun| (barycentric, km), the JPL-start GR-on run
 
@@ -219,7 +240,8 @@ static const double kGuardSunKm = 175;   // regression guard (measured 172.5 km)
 static double angleArcsec(const Vec3& a, const Vec3& b) { return std::atan2(length(cross(a, b)), dot(a, b)) * kArcsecPerRad; }
 
 static void testValidation() {
-    NBodyClock elem(kNBodyStep, true), jplGR(kNBodyStep, true, &g_jplStart), jplOff(kNBodyStep, false, &g_jplStart);
+    const NBodyState elemStart = nbodyElementsStartState();                   // LEGACY start, the "before"
+    NBodyClock elem(kNBodyStep, true, &elemStart), jplGR(kNBodyStep, true), jplOff(kNBodyStep, false);     // the last two: the app's own default clock
     NBodyClock* clocks[3] = {&elem, &jplGR, &jplOff};
     for (int r = 0; r < kRows; r++) {
         const double jd = kJplTable[0][r][0], tau = (jd - kNBodyRefJD) * 86400.0;     // a whole number of days from the epoch
@@ -251,6 +273,19 @@ static void testValidation() {
                   g_km[m][i][at] <= kGuardKm[m][i] && mxA <= kGuardArcsec[m][i]);
         }
     }
+    for (int m = kJplGR; m <= kJplNoGR; m++) {
+        std::printf("exact maxima, %s (km):", kModelNames[m]);
+        for (int i = 0; i < 8; i++) { double mx = 0; for (int r = 0; r < kRows; r++) mx = std::max(mx, g_km[m][i][r]); std::printf(" %.3f", mx); }
+        std::printf("\n");
+    }
+    // (b) the numbers quoted in the app's Real note (orbit/real_errors.h) are the measured maxima through the app's own default clock, rounded UP to a whole km
+    bool quoted = true;
+    for (int i = 0; i < 8; i++) {
+        double mOff = 0, mOn = 0;
+        for (int r = 0; r < kRows; r++) { mOff = std::max(mOff, g_km[kJplNoGR][i][r]); mOn = std::max(mOn, g_km[kJplGR][i][r]); }
+        quoted = quoted && double(kRealErrKmRelOff[i]) >= mOff && double(kRealErrKmRelOff[i]) - mOff < 1.0 && double(kRealErrKmRelOn[i]) >= mOn && double(kRealErrKmRelOn[i]) - mOn < 1.0;
+    }
+    check("the worst errors quoted in the app's Real note are the measured maxima (default clock, GR off and on) rounded up to a whole km", quoted);
     // Mercury: does the GR term move it towards JPL?
     std::printf("\nMercury, from the JPL state, error (km) with GR on / off:\n");
     for (int k = 0; k < 5; k++) std::printf("  %d: %.1f / %.1f\n", kShow[k], g_km[kJplGR][0][kShow[k] - kFirstYear], g_km[kJplNoGR][0][kShow[k] - kFirstYear]);

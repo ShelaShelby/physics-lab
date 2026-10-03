@@ -134,15 +134,19 @@ static void testClock() {
     clock.stateAt(0, x, v);
     double d0 = 0; for (int i = 0; i < kNBodies; i++) d0 = std::max(d0, length(x[i] - start.x[i]) + length(v[i] - start.v[i]));
     check("clock: at the reference epoch the state is the start state", d0 == 0);
-    // the start state against the app's own elements: heliocentric positions are the elements' positions, velocities scaled by sqrt((GM_sun + GM_i) / kGMSun)
+    // 0.10.3: the default start is the JPL state (tests/test_jpl.cpp checks it against the table). The LEGACY elements start (the 0.10.2 start, tests only) is still
+    // what it was: heliocentric positions are the elements' positions, velocities scaled by sqrt((GM_sun + GM_i) / kGMSun)
+    const NBodyState legacy = nbodyElementsStartState();
     double dpos = 0, dvel = 0;
     for (int i = 1; i < kNBodies; i++) {
         const State st = planetStateAt(std::size_t(i - 1), kNBodyRefJD);
-        dpos = std::max(dpos, length((start.x[i] - start.x[0]) - st.pos) / length(st.pos));
-        dvel = std::max(dvel, length((start.v[i] - start.v[0]) - st.vel * std::sqrt((kRealGM[0] + kRealGM[i]) / units::kGMSun)) / length(st.vel));
+        dpos = std::max(dpos, length((legacy.x[i] - legacy.x[0]) - st.pos) / length(st.pos));
+        dvel = std::max(dvel, length((legacy.v[i] - legacy.v[0]) - st.vel * std::sqrt((kRealGM[0] + kRealGM[i]) / units::kGMSun)) / length(st.vel));
     }
-    std::printf("start state vs the app's orbital elements at the reference epoch: heliocentric positions differ by %.1e, velocities (after the GM scaling) by %.1e (relative)\n", dpos, dvel);
-    check("clock: the start state is the elements' state (positions and scaled velocities), to rounding", dpos < 1e-12 && dvel < 1e-12);
+    std::printf("legacy elements start vs the app's orbital elements at the reference epoch: heliocentric positions differ by %.1e, velocities (after the GM scaling) by %.1e (relative)\n", dpos, dvel);
+    check("clock: the legacy elements start is the elements' state (positions and scaled velocities), to rounding", dpos < 1e-12 && dvel < 1e-12);
+    // the default start is not the elements' state: Mercury is thousands of km from where the mean elements put it (the JPL state, not the elements, is the app's start)
+    check("clock: the default start is the JPL state, not the elements' (Mercury's heliocentric position differs by more than 1,000 km)", length((start.x[1] - start.x[0]) - (legacy.x[1] - legacy.x[0])) > 1e6);
     // a jump 100 years on and 100 years back, against stepping directly
     const double h = kNBodyStep;
     NBodyState direct = start;
@@ -311,7 +315,7 @@ static const double kSaved010[kNBodies][3] = {
 };
 
 static void testGROffIsOld() {
-    NBodyState a = nbodyStartState(), b = nbodyStartState();
+    NBodyState a = nbodyElementsStartState(), b = nbodyElementsStartState();   // the saved 0.10.0 numbers are from the elements start (0.10.3: the app's default start is now JPL's)
     for (int i = 0; i < 3652; i++) { nbodyStep(a, kNBodyStep); nbodyStep(b, kNBodyStep, false); }
     bool same = true;
     for (int i = 0; i < kNBodies; i++) same = same && a.x[i].x == b.x[i].x && a.x[i].y == b.x[i].y && a.x[i].z == b.x[i].z && a.v[i].x == b.v[i].x;
@@ -322,7 +326,7 @@ static void testGROffIsOld() {
     // 1e-9: the same compiled code gives 0; another compiler or CPU may round differently, and 3,652 steps can grow that to about 1e-12 at most.
     check("GR off: the default (no argument) is the same as an explicit off, bit for bit", same);
     check("GR off: positions equal the ones saved from 0.10.0 (to 1e-9 of the distances, for other compilers' rounding)", worst < 1e-9);
-    NBodyState c = nbodyStartState(); for (int i = 0; i < 3652; i++) nbodyStep(c, kNBodyStep, true);
+    NBodyState c = nbodyElementsStartState(); for (int i = 0; i < 3652; i++) nbodyStep(c, kNBodyStep, true);
     check("GR on really changes the motion (Mercury's place after 10 years is not the 'off' place)", length(c.x[1] - a.x[1]) > 1e3);
 }
 

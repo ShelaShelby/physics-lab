@@ -1,13 +1,14 @@
 # Resume
 
 ## Current state
-- Version 0.10.2 alpha is the latest finished version.
-- The roadmap was updated after it. The next planned version is 0.10.3 (see ROADMAP.md).
+- Version 0.10.3 alpha is the latest finished version (Real planets start from JPL Horizons data; relativity tick off by default; Real is still an option, Simple the default, until the owner has tried it).
+- The roadmap was updated after it. The next planned version is 0.10.4 (see ROADMAP.md).
 - Test programs and their last known check counts:
   - orbit_tests: 1,377
   - atom_tests: 17,936
-  - app_tests: 1,383
-  - nbody_tests: 36
+  - app_tests: 1,385
+  - nbody_tests: 37
+  - jpl_tests: 52 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
 
 ## How work flows
 - The owner pastes a written task into a new Claude Code session (Sonnet 5.5, branch box `native`).
