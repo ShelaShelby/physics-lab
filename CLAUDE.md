@@ -12,3 +12,6 @@
 - Run only the tests that matter while working, and the full test suite once before each commit. Do not rebuild everything after every small edit.
 - Do not start helper agents (subagents) unless the task says so.
 - If the task turns out much bigger than described, stop and ask before continuing.
+
+- Accuracy bar: this app is meant to be accurate enough for university students and PhD-level learners. Every value, formula and calculation must be correct and traceable. Take values from named sources (NIST/CODATA, NASA/JPL, NUBASE and so on) and put the source in a code comment. Never invent or guess a number, a reference value or a test expectation: if a source cannot be reached, say so and leave it out. Tests should check against independent references (known values, conservation laws, published data), not only against our own earlier output.
+- Be honest about limits: if a model is simplified (one electron, non-relativistic, test particles, approximate elements), the app text must say so. Never present an approximation as exact. If you find an error or doubtful value in existing code or text, do not hide it or silently change it: report it in REPORT.md with the source for the correct value.
