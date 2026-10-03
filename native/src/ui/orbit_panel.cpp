@@ -18,6 +18,7 @@
 #include "benchmark.h"
 #include "orbit/format.h"
 #include "orbit/moon_elp.h"
+#include "orbit/date_text.h"
 #include "orbit/real_errors.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
@@ -36,14 +37,6 @@ static std::string withCommas(long v) {
     for (std::size_t i = 0; i < d.size(); i++) { if (i && (d.size() - i) % 3 == 0) out += ','; out += d[i]; }
     return out;
 }
-// "Mercury 29,231 km, Venus 4,762, ..." (the worst error of each planet against JPL Horizons, 1800-2100, from the measured table)
-static std::string worstErrorList(bool relativityOn) {
-    const long* km = relativityOn ? orbit::kRealErrKmRelOn : orbit::kRealErrKmRelOff;
-    std::string t;
-    for (int i = 0; i < orbit::kRealErrCount; i++) t += (i ? ", " : "") + std::string(orbit::kRealErrName[i]) + " " + withCommas(km[i]) + (i == orbit::kRealErrCount - 1 ? " km" : "");
-    return t;
-}
-
 static int64_t nowUnixMs() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
@@ -59,18 +52,8 @@ void setZoom(AppState& app, double zoom) {
 // (orbit/today.h; Defaults puts them back itself).
 void resetToToday(AppState& app) { orbit::backToToday(app.sys, app.set, app.view, nowUnixMs()); }
 
-// "1 s = 29.1 days": what the Time speed slider means (as in the web version)
-std::string tspeedText(double v) {
-    const double d = kSimTime / kDay * std::pow(10.0, v), sec = d * 86400;   // simulated days / seconds per real second
-    if (sec < 1.05) return "1 s = 1 second (real time)";
-    std::string t;
-    if (sec < 60) t = fmt::fixed(sec, sec < 10 ? 1 : 0) + " seconds";
-    else if (sec < 3600) t = fmt::fixed(sec / 60, sec < 600 ? 1 : 0) + " minutes";
-    else if (d < 1) t = fmt::fixed(d * 24, d * 24 < 10 ? 1 : 0) + " hours";
-    else if (d < 365) t = fmt::fixed(d, d < 10 ? 1 : 0) + " days";
-    else t = fmt::fixed(d / 365.25, d < 3652 ? 1 : 0) + " years";
-    return "1 s = " + t;
-}
+// "1 s = 29.1 days": what the Time speed slider means (orbit/date_text.h, tested)
+std::string tspeedText(double v) { return orbit::tspeedText(v); }
 
 static std::string zoomText(double v) {
     const double z = std::pow(10.0, v);
@@ -240,19 +223,8 @@ void orbitPanel(AppState& app, float width) {
             }
         }
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        char moonBuf[32];
-        std::snprintf(moonBuf, sizeof moonBuf, "%.1f km", orbit::kMoonElpWorstKm);
-        const std::string moonErr = moonBuf;
-        // 0.10.5 stage 2 (audit row 16): the whole Real note, one paragraph, no repeated relativity numbers (the checkbox tooltip says what relativity does; the Moon's card and About give the arcseconds and the light-time remark)
-        const std::string realNote =
-            "Real: Sun and eight planets pull on each other (Newtonian; each planet with its moons). "
-            "Start: JPL Horizons (DE441), 1 Jan 2026 12:00 TDB; dates used as TDB. "
-            "Moon: ELP2000-82B, 1800 to 1 Jan 2100 only; other moons as in Simple. "
-            "Not in: dwarf planets, asteroids. "
-            "Worst error vs Horizons, 1800-2100: Moon " + moonErr + "; planets, relativity " + std::string(app.set.relativity ? "on" : "off") + ": " + worstErrorList(app.set.relativity) + ".";
-        // 0.10.5 stage 3 (audit row 9): Simple says how far from JPL it is (numbers: orbit/real_errors.h, measured by tests/test_jpl.cpp)
-        const std::string simpleNote = "Simple: each planet moves alone on a fixed orbit round the Sun, and the planets do not pull on each other (as in the web version). Worst error vs JPL Horizons, 1800-2100 (JPL's table is made for 1800-2050), "
-                                       "in million km: " + orbit::simpleWorstErrorList() + ".";
+        // the two notes are built in orbit/real_errors.h (tested: the numbers and a length guard)
+        const std::string realNote = realNoteText(app.set.relativity), simpleNote = simpleNoteText();
         ImGui::TextWrapped("%s", app.set.realPlanets
             ? realNote.c_str()
             : simpleNote.c_str());

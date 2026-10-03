@@ -7,9 +7,11 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdio>
 #include <string>
 
 #include "format.h"
+#include "moon_elp.h"
 
 namespace orbit {
 
@@ -37,6 +39,30 @@ inline std::string simpleWorstErrorList() {
         t += (k ? ", " : "") + std::string(kRealErrName[order[k]]) + " " + (mkm >= 1 ? fmt::fixed(mkm, 1) : fmt::precision(mkm, 2));
     }
     return t;
+}
+
+
+// "Mercury 29,231 km, Venus 4,762, ..., Neptune 2,653 km": Real's worst errors from the table above (0.10.5 stage 5: moved here from ui/orbit_panel.cpp)
+inline std::string realWorstErrorList(bool relativityOn) {
+    const long* km = relativityOn ? kRealErrKmRelOn : kRealErrKmRelOff;
+    std::string t;
+    for (int i = 0; i < kRealErrCount; i++) t += (i ? ", " : "") + std::string(kRealErrName[i]) + " " + fmt::commas(double(km[i])) + (i == kRealErrCount - 1 ? " km" : "");
+    return t;
+}
+
+// The notes under "Planet physics" (0.10.5 stage 2/3: one paragraph each; the Real one showed as 10 lines at 1280 x 800, normal text size).
+inline std::string realNoteText(bool relativityOn) {
+    char moon[32];
+    std::snprintf(moon, sizeof moon, "%.1f km", kMoonElpWorstKm);
+    return std::string("Real: Sun and eight planets pull on each other (Newtonian; each planet with its moons). "
+                       "Start: JPL Horizons (DE441), 1 Jan 2026 12:00 TDB; dates used as TDB. "
+                       "Moon: ELP2000-82B, 1800 to 1 Jan 2100 only; other moons as in Simple. "
+                       "Not in: dwarf planets, asteroids. "
+                       "Worst error vs Horizons, 1800-2100: Moon ") + moon + "; planets, relativity " + (relativityOn ? "on" : "off") + ": " + realWorstErrorList(relativityOn) + ".";
+}
+inline std::string simpleNoteText() {
+    return "Simple: each planet moves alone on a fixed orbit round the Sun, and the planets do not pull on each other (as in the web version). Worst error vs JPL Horizons, 1800-2100 (JPL's table is made for 1800-2050), "
+           "in million km: " + simpleWorstErrorList() + ".";
 }
 
 }  // namespace orbit

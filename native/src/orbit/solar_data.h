@@ -75,6 +75,7 @@ struct CometData {
     double tail;                // tail length scale (drawing only), AU
     const char* title;
     const char* note;
+    bool nucleusRough = false;  // the nucleus size has no named source (JPL SBDB gives none): the card says so (0.10.5 stage 5)
 };
 
 extern const PlanetData kPlanets[];

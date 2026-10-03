@@ -132,7 +132,7 @@ const char* beltTitle(const std::string& key) {
     return "Kuiper belt";
 }
 
-std::vector<std::string> beltLines(const std::string& key) {
+static std::vector<std::string> beltLinesRaw(const std::string& key) {
     if (key == "main") return {"Between Mars and Jupiter, about 2.1 – 3.3 AU", "More than 700,000 rocks wider than 1 km", "Total mass: only about 3% of our Moon",
                                "Ceres alone holds 39% of it", "Gaps are where Jupiter's pull clears orbits", "Dots here: 1,800 stand in for the millions"};
     if (key == "oort") {
@@ -147,6 +147,13 @@ std::vector<std::string> beltLines(const std::string& key) {
                                  "Held in place by the Sun and Jupiter together", "Dots here: 300 stand in for the rest"};
     return {"From Neptune's orbit (30 AU) out to about 50 AU", "More than 100,000 icy worlds wider than 100 km", "Total mass: only about 0.02 Earths",
             "Home of Pluto, Haumea and Makemake", "Dots here: 900 stand in for the rest"};
+}
+
+// The facts of a belt, and (0.10.5 stage 5, audit row 18) a last line saying that its counts and masses are rough: they come from the web version and no named source was found.
+std::vector<std::string> beltLines(const std::string& key) {
+    std::vector<std::string> lines = beltLinesRaw(key);
+    lines.push_back("The counts and masses above are rough figures (no named source)");
+    return lines;
 }
 
 std::string oortCaption() {

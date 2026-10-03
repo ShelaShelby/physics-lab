@@ -41,6 +41,14 @@ struct CardOptions {
 
 const Body* findBody(const SolarSystem& sys, int id);
 
+// Which things the settings show (Solar System extras and Far-away things).
+struct SelectionSwitches { bool dwarfs = true, comets = true, moons = true, belts = true, far = true; };
+// Does the selected thing still exist and show? False when it is gone (a body removed), hidden by a switch (Dwarf planets, Comets, Moons, Belts, Far-away things), not there on this date (the
+// Voyagers before 1990), or a number that does not exist. Then the drawing drops the selection. (0.10.5 stage 5: moved here from orbit_view.cpp so it can be tested.)
+bool selectionStillValid(const SolarSystem& sys, const Selection& sel, const SelectionSwitches& sw);
+// The line at the top left of the picture: the date shown, and how long after the start date.
+std::string dateLine(const SolarSystem& sys);
+
 // Returns false when there is nothing to show (nothing selected, or it is gone).
 bool cardText(const SolarSystem& sys, const Selection& sel, const CardOptions& opt, Card& out);
 

@@ -17,6 +17,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.5", "Orbit Lab: more checks and clearer sources (stage 5)",
+     "Orbit Lab: tests now compare the lab with NASA/JPL Horizons for the famous dates (Mars closest, 2003; Jupiter and Saturn, 2020) and for the 2026 equinoxes (the Earth card's \"next season\" is within 12 minutes), and the texts of the jump notes, the Real and Simple notes, the date line and the hidden-selection rule are tested too. Sources: the speed of light is JPL's; the Sun's 25.38-day turning period is Horizons'; comets' nucleus sizes are the Small-Body Database's (Encke 4.9 → 4.8 km). Numbers that have no named source are now marked rough on the cards (the Sun's surface temperature and its 25- and 34-day turning, the belts' counts and masses, NEOWISE's size), and About lists them. Nothing else changed."},
     {"0.10.5", "The official astronomical unit (stage 4)",
      "The Orbit Lab now uses the official astronomical unit, 149,597,870,700 m (the IAU value, as on NASA/JPL's astrodynamic parameters page). Before, it used the web version's rounded 149.6 million km, which is 2,129 km too long at 1 AU (64,000 km at Neptune). Every distance in the lab, the same orbits in Simple, the comets, the belts and the Oort cloud, is now 0.0014 % shorter; the times and the orbits' shapes do not change. Against NASA/JPL Horizons no planet got worse by more than that change can explain (Uranus and Neptune about 30,000 and 39,000 km farther off in their worst year, the others within 1,300 km)."},
     {"0.10.5", "Orbit Lab data fixes (stage 3)",

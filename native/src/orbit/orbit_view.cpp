@@ -278,19 +278,6 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
 
 }  // namespace
 
-std::string dateLine(const SolarSystem& sys) {
-    const double yrs = sys.t / kYear;
-    std::string epoch = fmt::dateUTC(sys.epochMs);
-    if (sys.jumped) {                                     // a picked date also shows its time of day (Greenwich time)
-        const int64_t m = ((sys.epochMs / 60000) % 1440 + 1440) % 1440;
-        char hm[16];
-        std::snprintf(hm, sizeof hm, ", %02d:%02d UT", static_cast<int>(m / 60), static_cast<int>(m % 60));
-        epoch += hm;
-    }
-    return yrs * 365.25 < 1 ? (sys.jumped ? "Solar System on " : "Solar System today, ") + epoch
-                            : "Solar System on " + fmt::simDate(sys.epochMs, yrs) + "  ·  " + fmt::years(yrs) + " after " + epoch;
-}
-
 void OrbitView::click(double x, double y) {
     if (sel.kind != Selection::None && !cardHidden) { cardHidden = true; return; }   // the first click only closes the info box
     const Hit* best = nullptr;
@@ -329,18 +316,9 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     const bool TRUE_SCALE = set.trueScale;
     const Vec3 bc = sys.barycentre();                     // everything is drawn around the barycentre, so the Sun is the one that wobbles
 
-    // the selected thing may be gone (removed, or switched off)
+    // the selected thing may be gone (removed, or switched off): orbit/card_text.cpp, tested
     const auto visible = [&](const Body& b) { return (b.type != BodyKind::Dwarf || set.dwarfs) && (b.type != BodyKind::Comet || set.comets); };
-    {
-        bool ok = true;
-        if (sel.kind == Selection::Body || sel.kind == Selection::Moon) {
-            const Body* b = findBody(sys, sel.bodyId);
-            ok = b && visible(*b) && (sel.kind != Selection::Moon || (set.moons && sel.moon < static_cast<int>(b->moons.size())));
-        }
-        if (sel.kind == Selection::Far) { FarItem f; ok = set.far && farItem(sys, sel.moon, f); }
-        if (sel.kind == Selection::Belt) ok = set.belts && sel.moon >= 0 && sel.moon < static_cast<int>(sys.belts.size());
-        if (!ok) { sel = Selection{}; follow = false; }
-    }
+    if (!selectionStillValid(sys, sel, SelectionSwitches{set.dwarfs, set.comets, set.moons, set.belts, set.far})) { sel = Selection{}; follow = false; }
 
     // ---- the camera (the web's base()): turn by yaw about z, tilt by pitch towards the viewer, then a mild perspective ----
     const bool d3 = set.view3D;

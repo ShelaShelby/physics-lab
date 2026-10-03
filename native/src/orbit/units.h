@@ -17,18 +17,22 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kKm = 1000.0;                        // m
 // The astronomical unit: the IAU value, exactly 149,597,870,700 m. Owner decision of 3 Oct 2026 (DECISIONS.md): the lab follows the IAU, not the web version's 149.6e9 m (0.10.5 stage 4).
 // JPL's Astrodynamic Parameters page (https://ssd.jpl.nasa.gov/astro_par.html, read 2026-10-03) states: "astronomical unit au 149597870700 m IAU 2012 Resolution B1"
-// (the page's own wording; the owner's decision names Resolution B2, the IAU text itself was not reachable from the session that wrote this).
+// (the page's own wording). The owner's decision names IAU 2012 Resolution B2. 0.10.5 stage 5 tried to read the IAU's own text (iauarchive.eso.org/static/resolutions/IAU2012_English.pdf) and
+// the SYRTE page (syrte.obspm.fr/IAU_resolutions/IAUResol_2012_0.html): neither was reachable from the session (the proxy refused), so B2 is NOT confirmed from the IAU here and JPL's "B1" stays quoted.
 constexpr double kAU = 149597870700.0;                // m
 constexpr double kEarthRadius = 6371.0 * kKm;         // m, used to turn "× Earth" sizes into metres
 // The Sun's radius: IAU 2015 nominal solar radius, 695,700 km. JPL Horizons' Sun header (API, COMMAND='10', OBJ_DATA='YES', read 2026-10-03) says:
 //   "Vol. mean radius, km  = 695700"  and  "Solar radius (IAU2015)= 695700 km"      (0.10.5 stage 3; before it the lab used 696,000 km, 4.3e-4 more)
 constexpr double kSunRadius = 695700.0 * kKm;         // m
+// The speed of light: JPL's Astrodynamic Parameters page (https://ssd.jpl.nasa.gov/astro_par.html, read 2026-10-03) lists "speed of light in vacuum c 299792458 m/s 2018 CODATA recommended values".
 constexpr double kLightSpeed = 299792.458 * kKm;      // m/s
-constexpr double kLightYearAU = 63241.077;            // AU per light year
 
 // --- time ---------------------------------------------------------------------
 constexpr double kDay = 86400.0;                      // s
 constexpr double kYear = 365.25 * kDay;               // s, a Julian year (the web counts years as 365.25 days)
+// A light year: the distance light travels in one Julian year (365.25 days), here worked out from c and the au above, in AU: 63,241.077 AU. (0.10.5 stage 5: it was a typed 63241.077, the IAU
+// value written from knowledge; the IAU text itself could not be opened, so only the arithmetic is the lab's.)
+constexpr double kLightYearAU = kLightSpeed * kYear / kAU;
 
 // --- the web's sim units in SI --------------------------------------------------
 // 1 sim length = 1 AU / 100^(1/3); 1 sim time = 1 year / (2π).

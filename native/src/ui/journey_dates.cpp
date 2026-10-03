@@ -21,20 +21,6 @@ using namespace units;
 
 namespace {
 
-// Days since 1 Jan 1970 for a calendar date (proleptic Gregorian; H. Hinnant's algorithm)
-int64_t daysFromCivil(int64_t y, int m, int d) {
-    y -= m <= 2;
-    const int64_t era = (y >= 0 ? y : y - 399) / 400;
-    const int64_t yoe = y - era * 400;
-    const int64_t doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
-    const int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    return era * 146097 + doe - 719468;
-}
-int64_t utcMs(int y, int mo, int d, int h = 0, int mi = 0) { return (daysFromCivil(y, mo, d) * 1440 + h * 60 + mi) * 60000; }
-
-// NASA's orbital elements are made for 1800–2050; the lab goes to 2100, a little less exact
-const int64_t kDateMin = utcMs(1800, 1, 1), kDateMax = utcMs(2100, 12, 31, 23, 59), kTableEnd = utcMs(2050, 12, 31);
-
 struct Stop {
     double span;          // width of the picture in AU (0: use zoomFn)
     bool earth;           // stay on Earth
@@ -59,11 +45,7 @@ constexpr double kSpeed = 0.65;              // decades of zoom per second betwe
 std::string caption(const AppState& app, int k) {
     if (kStops[k].cap) return kStops[k].cap;
     if (k == 5) return oortCaption();
-    FarItem f;
-    if (farItem(app.sys, farIndexOf("v1"), f))
-        return "Voyager 1 is the most distant spacecraft: " + fmt::commas(f.au) + " AU out, " + fmt::fixed(f.au * 499.005 / 3600, 0) +
-               " light-hours. It left the Sun’s wind (the heliopause) at 121 AU in 2012.";
-    return voyagerFallbackCaption(fmt::yearUTC(app.sys.currentUnixMs()), probeLaunchYear("v1"), kProbesShownFromYear);
+    return voyagerCaption(app.sys);   // orbit/sky.cpp, tested (Voyager 1 where it is shown, the Kuiper belt text before 1990)
 }
 double holdTime(const std::string& cap) { return 2.2 + cap.size() / 18.0; }   // seconds at a stop: longer text, longer stay
 double stopZoom(const AppState& app, int k) {
@@ -140,28 +122,12 @@ void journeyTick(AppState& app, double dt) {
     }
 }
 
-bool parseDateTime(const char* date, const char* time, int64_t& ms) {
-    int y = 0, mo = 0, d = 0, h = 12, mi = 0;
-    char extra = 0;
-    if (std::sscanf(date, "%d-%d-%d%c", &y, &mo, &d, &extra) != 3) return false;
-    if (time && time[0] && std::sscanf(time, "%d:%d%c", &h, &mi, &extra) != 2) return false;
-    if (mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59) return false;
-    // reject dates such as 30 February: the day must come back the same
-    const int64_t days = daysFromCivil(y, mo, d);
-    if (daysFromCivil(y, mo, 1) + d - 1 != days || (mo < 12 ? daysFromCivil(y, mo + 1, 1) : daysFromCivil(y + 1, 1, 1)) <= days) return false;
-    ms = utcMs(y, mo, d, h, mi);
-    return true;
-}
+bool parseDateTime(const char* date, const char* time, int64_t& ms) { return orbit::parseDateTime(date, time, ms); }   // orbit/date_text.h, tested
 
 std::string jumpToDate(AppState& app, int64_t ms) {
     journeyStop(app);
-    std::string note;
-    if (ms < kDateMin || ms > kDateMax) {     // the web silently moved such a date; now it says so
-        const int64_t asked = ms;
-        ms = std::clamp(ms, kDateMin, kDateMax);
-        note = fmt::dateUTC(asked) + " is outside 1800–2100, the years this lab can show (NASA/JPL’s orbit numbers are made for 1800–2050). "
-               "Showing the nearest date it can: " + fmt::dateUTC(ms) + ". ";
-    }
+    std::string clampNote;
+    ms = clampJumpDate(ms, clampNote);        // a date outside 1800-2100 is moved, and says so (orbit/date_text.h, tested)
     // keep the selected planet or moon selected, by name
     std::string selName;
     int moonIdx = -1;
@@ -176,9 +142,7 @@ std::string jumpToDate(AppState& app, int64_t ms) {
         app.view.sel = s;
         if (s.kind == Selection::None) app.view.follow = false;
     }
-    if (note.empty()) note = "Showing " + fmt::dateUTC(ms) + ". ";
-    note += dateNotes(ms > kTableEnd, app.set.realPlanets, app.set.realPlanets && app.sys.realMoon());   // orbit/date_text.h (tested)
-    return note;
+    return jumpMessage(clampNote, ms, app.set.realPlanets, app.set.realPlanets && app.sys.realMoon());   // orbit/date_text.h, tested
 }
 
 void journeyDatesCard(AppState& app, bool wasActive) {

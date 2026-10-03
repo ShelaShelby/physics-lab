@@ -1,6 +1,7 @@
 #include "card_text.h"
 
 #include <cmath>
+#include <cstdio>
 
 #include "format.h"
 #include "sky.h"
@@ -41,7 +42,7 @@ static void cometCard(const SolarSystem& sys, const Body& b, Card& c) {
     const auto jdDate = [](double j) { return fmt::dateUTC(static_cast<int64_t>(std::llround((j - 2440587.5) * 86400000.0))); };
     const double a = cm.qAU / (1 - cm.e), Q = a * (1 + cm.e);   // AU
     c.title = cm.title;
-    c.lines = {"Nucleus: about " + fmt::kmPlain(cm.nucleusKm) + " across",
+    c.lines = {"Nucleus: about " + fmt::kmPlain(cm.nucleusKm) + " across" + (cm.nucleusRough ? " (rough: JPL gives no size)" : ""),
                "Distance from the Sun now: " + (r < 10 ? fmt::fixed(r, 2) : fmt::commas(r)) + " AU (" + fmt::millionKm(r * kAU / kKm / 1e6) + ")",
                "Speed now: " + fmt::kms(v),
                "Closest to the Sun: " + fmt::fixed(cm.qAU, 2) + " AU  ·  farthest: " + (Q < 10 ? fmt::fixed(Q, 1) : fmt::commas(Q)) + " AU",
@@ -140,10 +141,11 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         c.title = "Sun · G-type star";
         c.lines = {"Mass: 1 solar mass (M☉), " + fmt::fixed(sp.m * 1.989, 2) + "×10³⁰ kg",
                    "Radius: " + fmt::fixed(sp.R, 2) + " Suns (" + fmt::km(sp.R * kSunRadius / kKm) + ")",
-                   "Surface: about " + fmt::commas(t) + " K  ·  " + fmt::fixed(sp.L, sp.L < 10 ? 2 : 1) + " Suns bright",
+                   "Surface (rough): about " + fmt::commas(t) + " K  ·  " + fmt::fixed(sp.L, sp.L < 10 ? 2 : 1) + " Suns bright",
                    "Habitable zone (rough): " + fmt::fixed(sp.hzIn, 2) + " – " + fmt::fixed(sp.hzOut, 2) + " AU",
                    "Frost line (rough): " + fmt::fixed(sp.frost, 1) + " AU (rock inside, giants outside)"};
         for (auto& l : sunSpinLines(sys, opt.tspeed, opt.paused)) c.lines.push_back(l);
+        c.lines.push_back("The 25.38 days is JPL's standard rate; the 25 and 34 days are rough");   // Horizons' Sun header: "Adopted sid. rot. per.= 25.38 d"; the equator and pole figures have no named source
         c.lines.push_back("Wobbles a little, mostly pulled by Jupiter");
         c.lines.push_back("Lifetime (rough): about " + (sp.life < 1 ? fmt::fixed(sp.life, 1) : fmt::commas(sp.life)) + " billion years");
         c.lines.push_back("Rough main-sequence estimates");
@@ -184,6 +186,30 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
     }
     }
     return false;
+}
+
+bool selectionStillValid(const SolarSystem& sys, const Selection& sel, const SelectionSwitches& sw) {
+    const auto visible = [&](const Body& b) { return (b.type != BodyKind::Dwarf || sw.dwarfs) && (b.type != BodyKind::Comet || sw.comets); };
+    if (sel.kind == Selection::Body || sel.kind == Selection::Moon) {
+        const Body* b = findBody(sys, sel.bodyId);
+        return b && visible(*b) && (sel.kind != Selection::Moon || (sw.moons && sel.moon >= 0 && sel.moon < static_cast<int>(b->moons.size())));
+    }
+    if (sel.kind == Selection::Far) { FarItem f; return sw.far && farItem(sys, sel.moon, f); }
+    if (sel.kind == Selection::Belt) return sw.belts && sel.moon >= 0 && sel.moon < static_cast<int>(sys.belts.size());
+    return true;
+}
+
+std::string dateLine(const SolarSystem& sys) {
+    const double yrs = sys.t / kYear;
+    std::string epoch = fmt::dateUTC(sys.epochMs);
+    if (sys.jumped) {                                     // a picked date also shows its time of day (Greenwich time)
+        const int64_t m = ((sys.epochMs / 60000) % 1440 + 1440) % 1440;
+        char hm[16];
+        std::snprintf(hm, sizeof hm, ", %02d:%02d UT", static_cast<int>(m / 60), static_cast<int>(m % 60));
+        epoch += hm;
+    }
+    return yrs * 365.25 < 1 ? (sys.jumped ? "Solar System on " : "Solar System today, ") + epoch
+                            : "Solar System on " + fmt::simDate(sys.epochMs, yrs) + "  ·  " + fmt::years(yrs) + " after " + epoch;
 }
 
 // The card with every distance, speed and temperature in the chosen units: the numbers worked out

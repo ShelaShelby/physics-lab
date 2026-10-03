@@ -44,8 +44,7 @@ struct ViewSettings {
     float textScale = 1;        // Settings → Text size: the labels drawn in the picture
 };
 
-// The line at the top left of the picture: the date shown, and how long after the start date.
-std::string dateLine(const SolarSystem& sys);
+// (dateLine, the line at the top left of the picture, is in orbit/card_text.h since 0.10.5 stage 5)
 
 class OrbitView {
 public:

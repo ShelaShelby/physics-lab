@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "card_text.h"
+#include "date_text.h"
 #include "format.h"
 #include "solar_system.h"
 #include "units.h"
@@ -158,6 +159,14 @@ bool farItem(const SolarSystem& sys, int index, FarItem& f) {
     f.au = p.au + p.kms * kAuPerYearPerKms * yrs;           // a straight line outwards at its real speed (0.21095 AU per year for each km/s)
     f.pos = f.dir * (f.au * kAU);
     return true;
+}
+
+std::string voyagerCaption(const SolarSystem& sys) {
+    FarItem f;
+    if (farItem(sys, farIndexOf("v1"), f))
+        return "Voyager 1 is the most distant spacecraft: " + fmt::commas(f.au) + " AU out, " + fmt::fixed(f.au * 499.005 / 3600, 0) + " light-hours. It left the Sun’s wind (the heliopause) at " +
+               fmt::plainNumber(f.probe->cross) + " AU in " + std::to_string(f.probe->crossYear) + ".";
+    return voyagerFallbackCaption(fmt::yearUTC(sys.currentUnixMs()), probeLaunchYear("v1"), kProbesShownFromYear);
 }
 
 void farCard(const FarItem& f, Card& c) {

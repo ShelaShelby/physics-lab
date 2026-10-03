@@ -14,6 +14,8 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.1: general relativity (1PN) for the planets in Real mode (Mercury's extra turn), the Sun's wobble round the centre of mass drawn in Real mode, Milky Way band fix, secret theme names fix — done
 - 0.10.3: Real planets start from JPL (Horizons data, DE441); the relativity tick box is off by default; Real stays an option until the owner has tried it — done
 - 0.10.4: the real Moon (ELP2000-82B checked against Horizons; used in the Orbit Lab's Real mode: Moon position, phases on its card, Real note and About text) — done (stage 1: data and validation, stage 2: the Orbit Lab)
+- 0.10.5: Orbit Lab audit and fixes — done (stages 1-5: report, text fixes, data fixes, the IAU au, tests and sources)
+- 0.10.5 stage 5: Orbit tests and sources — done (audit rows 18, 20-23; the speed rows 24-27 wait for the owner's timing)
 - 0.10.5 stage 1: Orbit Lab audit report — done (report only, nothing in the app changed)
 - 0.10.5 stage 4: the IAU astronomical unit — done (audit row 2; the web's 149.6e9 m is no longer followed)
 - 0.10.5 stage 3: Orbit data fixes — done (audit rows 3, 4, 9, 12: planet gravity, Sun radius, comet records, Simple accuracy)
@@ -21,7 +23,6 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- 0.10.5 fix tasks still open from the Orbit Lab audit (independent tests; About sources; speed checks on the PC; stage numbers decided by the owner) — planned
 - Bug and speed audit before 1.0, the two passes still to do: Atom Lab, then app and settings (each: a report only, then small fix tasks for the real findings) — planned
 - 1.0 alpha stages — planned:
   - design plan (written in a fresh short chat)
@@ -34,7 +35,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 1.0 release — planned
 
 ## Later (not scheduled)
-- speed work, only if the owner's benchmark shows a problem — planned
+- speed work after the owner's timing (Orbit audit rows 24-27: Real at the top Time speed, the Milky Way mesh and stars redone every frame, label halos and the belts, a long replay after a very long run), only if the benchmark shows a problem — planned
 - better relativity for Real: the Sun-potential term gives the wrong motion along the orbit; replace it with a better 1PN method and re-check against JPL — planned
 - Estonian translation — planned
 - volume-fog electron cloud — planned

@@ -1,29 +1,46 @@
-# Native Physics Lab 0.10.5 (alpha) — stage 4 report: the IAU astronomical unit
+# Native Physics Lab 0.10.5 (alpha) — stage 5 report: Orbit tests and About sources (last stage of 0.10.5)
 
-Audit row 2, owner decision of 3 Oct 2026 (now in DECISIONS.md). `kAU` = **149,597,870,700 m** (was 149.6e9 m). Version stays 0.10.5; history, About, ROADMAP ("Orbit audit: the web's AU" removed from Later), RESUME updated. No card text template changed, so no screenshot.
+Audit rows 18, 20, 21, 22, 23 (`git show 5239fcd:native/REPORT.md`). Version stays 0.10.5; history, ROADMAP ("0.10.5 stage 5 — done", "0.10.5: Orbit Lab audit and fixes — done"; speed rows 24-27 stay in Later "after the owner's timing"), RESUME, About updated. OWNER-TODO unchanged.
 
-## Source
-JPL Astrodynamic Parameters page, https://ssd.jpl.nasa.gov/astro_par.html, read 2026-10-03: **"astronomical unit au 149597870700 m IAU 2012 Resolution B1"**. The page says B1; the owner's decision says B2. I quoted the page's wording in the `units.h` comment and in About, said the two differ, and said the IAU text itself was not read (not reachable from here).
+## 1. The AU resolution: not confirmed from the IAU
+`iauarchive.eso.org/static/resolutions/IAU2012_English.pdf` and the SYRTE page `syrte.obspm.fr/IAU_resolutions/IAUResol_2012_0.html` were both tried and **neither was reachable** (the proxy refused; so were the IAU 2015 PDF, arXiv, NIST, Wikipedia). So units.h and About keep **JPL's wording ("IAU 2012 Resolution B1")**, say the owner's decision calls it B2, and say the IAU text was not read. Only ssd.jpl.nasa.gov and ssd-api.jpl.nasa.gov answered.
 
-## Code changes
-- `units.h`: `kAU`, with the comment. Typed au values replaced by `kAU`: the comet card's "million km" (`card_text.cpp`), the Learn seasons text (`learn.cpp`). Left as they are, because they are rounded text and still right: "149.6 million km" in a Journey caption; `384,400 km / 149.6 million km` in a comment became 149.598.
-- **`kGMSun` (built from kAU, year not changed):** was 1.3272312e20 m³/s² (+8.05e-5 over JPL's GM of the Sun, 1.32712440041279419e20), is now **1.3271745e20 (+3.78e-5)**. The rest is the 365.25-day Julian year (the Gaussian year is 365.2568983 d). With the GM built this way every Simple period stays a^1.5 years, so **no time, eccentricity, inclination or period changed**; only lengths and speeds, by s = 149597870700 / 149.6e9 = 0.99998576671123.
+## 2. Row 18: every unsourced number, and what I did
+| number | action |
+|---|---|
+| c | JPL astro_par page: "speed of light in vacuum c 299792458 m/s 2018 CODATA recommended values" (read 2026-10-03). Comment in units.h, About; test `c == 299792458` |
+| kLightYearAU (63,241.077) | no source reachable, so **worked out** as c × 365.25 d / au = 63,241.07708 (`kLightYearAU = kLightSpeed * kYear / kAU`); About says so; test against 299,792,458 × 31,557,600 / 149,597,870,700 by hand |
+| Sun 25.38 days | Horizons' Sun header, "Adopted sid. rot. per.= 25.38 d": cited in About; test 360 / 14.1844 = 25.38 |
+| Sun equator 25 d, poles 34 d | no source: card line "the 25 and 34 days are rough" (the web-compared spin lines are untouched) |
+| 5,772 K | IAU text unreachable: Sun card "Surface (rough): about 5,770 K" |
+| habitable zone, frost line, lifetime | already "(rough)" (stage 2); no source opened (Kopparapu: arXiv blocked); listed in About |
+| 30 % reflected | the app's own assumption, already on the card (stage 2); listed in About |
+| belt counts and masses, Oort mass | no source: each belt card ends "The counts and masses above are rough figures (no named source)"; About |
+| NEOWISE 5 km | SBDB has no diameter: card "(rough: JPL gives no size)" (new `nucleusRough` flag); About |
+| other comet sizes | SBDB diameters (read 2026-10-03): Halley 11.0, Hale-Bopp 60, 67P 3.4, Swift-Tuttle 26 already equal; **Encke 4.9 → 4.8** (data fix, on purpose); source comment, test |
+| phase cut-offs | the app's own convention, on the card and in About since stage 2; named again in About's "no named source" line |
 
-## What was rescaled, kind by kind (script `tests/reference/rescale_au.py`, header says why)
-They were made by the frozen web page's JavaScript with the web's au, which cannot give numbers for another au. In Simple every length is a multiple of the au and GM, softening and crash radius scale with au³, so a run is the old one scaled with time unchanged. Checked by the tests passing at their **old, unchanged tolerances** (1e-12 positions, 1e-9 runs and orbit shapes, 1e-6 belts): worst difference from the references 5.2e-11 (was 2.6e-11).
-- `orbit_tests`, `reference_values.h`: positions and velocities of the 13 non-comet bodies in the initial set and the three runs (312 numbers), orbit sizes `a` (13), barycentre (3), belt-rock positions (108) × s. e, i, periods, times unchanged. The six comet rows (168 numbers) are not rescaled: `make_comet_refs.py` recomputes them from the JPL records with the new au.
-- `jpl_tests`, `test_jpl_saved.inc`: the 120 numbers of `kSavedSimple` × s (match to 5e-16).
-- **Not rescalable, so not touched, and the stage's brief called for rescaling them:** the nbody "saved 0.10.0" positions and the jpl "0.10.2 Real from the legacy elements start" values. They come from integrating the legacy elements start with the **real GMs, which do not scale**: the start's positions go × s but its velocities × s^(-1/2) (elements velocity ~ s, then × sqrt(GM_real / kGMSun) ~ s^(-3/2)), so the integrated orbit is not the old one scaled. Instead the new `tests/au_legacy.h` rebuilds the old start exactly (x / s, v × s^½) and the integrator must still give the saved numbers at the old 1e-9: nbody 3.9e-12, jpl 1.5e-10. The saved values are unchanged and just as strict.
+## 3. Row 20 (Simple against Horizons): it already existed
+`jpl_tests` measure Simple against `jpl_table.inc` (301 dates, 8 planets, km and arcsec), guard them, and check that `kSimpleErrKm` are the measured maxima (stages 3-4). **Added only what was missing:** the app's own path (`SolarSystem::loadAt` in Simple) gives the same positions as the measured `planetStateAt` (largest difference 0.000000 km over 301 × 8), so the quoted errors are what a user sees. `jpl_tests` 54 → 55.
 
-## Re-measured numbers (all "regression guards, about 1 % above", not physical bounds)
-- **Simple against Horizons, worst error 1800-2100 (km), before → after, and what the au change can explain** (1.42e-5 × a(1+e)): Mercury 7,641 → 7,618 (−23; ≤ +994); Venus 13,959 → 13,858 (−102; ≤ +1,551); Earth 16,314 → 16,112 (−202; ≤ +2,165); Mars 90,248 → 90,493 (+245; ≤ +3,547); Jupiter 1,840,647 → 1,839,933 (−714; ≤ +11,614); Saturn 7,999,511 → 8,000,757 (+1,245; ≤ +21,400); Uranus 2,912,393 → 2,942,873 (+30,480; ≤ +42,790); Neptune 2,302,277 → 2,341,475 (+39,198; ≤ +64,577). **Nothing is worse by more than the au change explains.** `kSimpleErrKm` updated; a new `jpl_tests` check does this comparison. The Simple note's text did not change (still Saturn 8.0, Uranus 2.9, Neptune 2.3, Jupiter 1.8, Mars 0.09 …).
-- `jpl_tests` guards: Simple (km and arcsec) and "Real from the legacy elements start" re-set from the new measurements. The legacy start is test-only; its errors fell a lot (Mercury 10.5 → 1.85 million km: its velocities used a GM that was 8e-5 off, now 3.8e-5), so those guards are tighter; Saturn's rose 1.4 % (109.4 → 110.9 million km), Simple Neptune's 1.7 %.
-- **Real from JPL (the app's default): unchanged**, same numbers to the digit (Mercury 29,230.1 / 70,044.3 km …), `real_errors.h` unchanged. Moon, ELP and Horizons-based tests unchanged.
-- Comet guards (12) re-set: NEOWISE at perihelion 628 → 1 km and 67P 2,578 → 0 km (it was mostly the au; floor of 100 km there), Halley 27.0 → 26.98 million km at 2026-01-01, others within 1 %.
+## 4-5. Rows 21 and 22: new checks (section 16 of `orbit_tests`; queries in `tools/make_events_ref.py`, values in `tests/reference/events_table.inc`, Horizons, retrieved 2026-10-03)
+All limits are regression guards about 1 % above the error measured here (Linux GCC), not physical bounds.
+- Real, Mars seen from Earth, 27 Aug 2003 10:00: Horizons vector, measured **1,219 km** (distance 55.758 million km); guard 1,232. Replaces "±0.3 million km".
+- Real, Jupiter-Saturn angle, 21 Dec 2020 12:00 (0.10578°): measured **0.00244″**; guard 0.005″ (a floor for compiler rounding). Replaces "0.1° ± 0.05°" (it gave 0.126°).
+- Simple, Earth after one orbital period (P = 2π√(a³/GM) from the orbit's energy, Kepler's third law): **1,423 km** from its start (leapfrog, sub-steps ≤ 5.6 h); guard 1,438. Replaces "after one Julian year within 15,000 km" (a year is not the period); the energy check beside it stays.
+- 2026 equinoxes (Horizons JD 2461120.1150, 2461306.5036): "next season starts in N days" from 5 start dates in Simple and in Real: worst **0.192 h**, limit 0.2 h.
+
+## 6. Row 23: moved into `orbit/` (no ImGui) and tested
+`orbit/date_text.h`: `parseDateTime`, the date limits, `clampJumpDate`, `jumpMessage`, `tspeedText`. `orbit/real_errors.h`: `realNoteText`, `simpleNoteText`. `orbit/card_text.cpp`: `selectionStillValid` (the hidden-selection rule), `dateLine`. `orbit/sky.cpp`: `voyagerCaption`. `ui/journey_dates.cpp`, `ui/orbit_panel.cpp`, `orbit_view.cpp` now call them (same texts). Section 16 has 49 new checks in all (rows 21-23; section 17, 17 checks, is row 18): dates (30 Feb, 24:00, seconds, leap day refused or kept), the clamp notes at 1799 and 2101, the 2050 note only in Simple, Time speed texts by hand (58 days at 0; 3,597 s = 60 minutes at the Journey's), the date line three ways, the selection rule (Dwarfs/Comets/Moons/Belts/Far off, wrong numbers, Voyagers before 1990), the Voyager caption in 1941, 1980 and today, both notes' numbers, and a **length guard of 460 characters** for the Real note (444 showed as 10 lines; the screen itself cannot be tested).
+**Not moved:** the Journey stops' captions and zooms (they need the canvas), the Go-to tiles, the scale bar and "zoomed far out" text (inside `draw`), the two tooltips (static text).
+
+## Tests changed on purpose, with why
+- `test_orbit.cpp`: section 9 (Mars-Earth 0.3 Mkm, Jupiter-Saturn ±0.05°) and the "Earth back after a year" check removed, replaced by the stricter section 16 checks above; the imperial-cards loop now covers 5 more lines (belt and Sun cards, 1,523 checks).
+- `test_app.cpp`: the saved About reference: the same 4 text changes as `app_text.inc` (c and the light year, the Sun's turning period, comet sizes, the "no named source" line); the edit count stays 14.
+- `test_jpl.cpp`: one check added. No limit loosened; no other test changed.
 
 ## Tests: full suite once, Linux GCC Release, no warnings: 7 of 7 pass
-orbit 1,469; atom 17,936; app 1,385; nbody 37; jpl 54 (one new); moon 24; moon_real 59. `app_tests` (every word-for-word text): the only change is the About reference, edited like `app_text.inc` (one new line for the au source). No limit loosened; no test failed for another reason than the au.
+orbit 1,540; atom 17,936; app 1,385; nbody 37; jpl 55; moon 24; moon_real 59. Looked at: the NEOWISE card once (1280×800, Xvfb; `PL_SELECT` cannot pick the Sun).
 
-## Not tested, not changed
-- Windows, speed, any screen. The Journey caption "149.6 million km" and the card distances in "million km" can differ in the last digit from before (1.4e-5): not looked at.
-- Year and Sun's GM (3.8e-5 above JPL) as asked; `kLightYearAU` (63,241.077 AU per light year) is now consistent with the IAU au, its source (IAU) was not read; the Real-mode tests do not use the au.
+## Not tested
+Windows, speed, the Real note's line count (a character guard instead), imperial text of the new lines on screen, the Sun and belt cards on screen (their lines are tested as text).

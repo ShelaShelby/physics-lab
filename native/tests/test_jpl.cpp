@@ -244,11 +244,16 @@ static void testValidation() {
     const NBodyState elemStart = nbodyElementsStartState();                   // LEGACY start, the "before"
     NBodyClock elem(kNBodyStep, true, &elemStart), jplGR(kNBodyStep, true), jplOff(kNBodyStep, false);     // the last two: the app's own default clock
     NBodyClock* clocks[3] = {&elem, &jplGR, &jplOff};
+    double worstApp = 0;                                                       // 0.10.5 stage 5: the app's own path (SolarSystem::loadAt in Simple) against planetStateAt, km
     for (int r = 0; r < kRows; r++) {
         const double jd = kJplTable[0][r][0], tau = (jd - kNBodyRefJD) * 86400.0;     // a whole number of days from the epoch
         for (int m = 0; m < kModels; m++) {
             Vec3 x[kNBodies], v[kNBodies], h[8];
-            if (m == kSimple) { for (int i = 0; i < 8; i++) h[i] = planetStateAt(std::size_t(i), jd).pos; }
+            if (m == kSimple) {
+                for (int i = 0; i < 8; i++) h[i] = planetStateAt(std::size_t(i), jd).pos;
+                SolarSystem app; app.loadAt(static_cast<int64_t>(std::llround((jd - 2440587.5) * 86400000.0)));       // what the app shows after "Jump to a date" in Simple
+                for (int i = 0; i < 8; i++) worstApp = std::max(worstApp, length(app.bodies[i].pos - h[i]) / 1e3);
+            }
             else { clocks[m - 1]->stateAt(tau, x, v); for (int i = 0; i < 8; i++) h[i] = x[i + 1] - x[0]; }
             for (int i = 0; i < 8; i++) {
                 const Vec3 ref = tv(i + 1, r, 1) - tv(0, r, 1);                       // JPL: planet minus Sun, so the barycentre shift cancels
@@ -297,6 +302,10 @@ static void testValidation() {
         quotedSimple = quotedSimple && ok;
     }
     check("the worst errors quoted in the app's Simple note are the measured maxima (planets from the elements, 301 dates 1800-2100) rounded up to a whole km", quotedSimple);
+    // (c2) 0.10.5 stage 5 (audit row 20): the measured Simple errors above are those of planetStateAt; the app (loadAt, Simple) must show the same positions, so the measured errors, the quoted
+    // maxima and the guards are the errors a user sees. (The comparison with JPL Horizons itself, 301 dates, every planet, km and arcsec, was already here: kGuardKm / kGuardArcsec for "Simple".)
+    std::printf("the app's Simple positions (loadAt) differ from planetStateAt by at most %.6f km over 301 dates and 8 planets\n", worstApp);
+    check("the app's Simple positions after a jump (SolarSystem::loadAt) are the positions measured against Horizons (within 1 km)", worstApp < 1.0);
     // (d) 0.10.5 stage 4, the independent check of the au change: Simple against Horizons must not be worse than before the change (the quoted maxima of 0.10.5 stage 3, measured with the web's
     // au of 149.6e9 m) by more than the change itself can explain: the au moved every length by 1 - 149597870700 / 149.6e9 = 1.4233e-5, so a position error can grow by at most that times the planet's
     // greatest distance from the Sun, a (1 + e) (JPL elements at J2000).

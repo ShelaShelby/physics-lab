@@ -24,6 +24,7 @@
 #include "orbit/solar_system.h"
 #include "orbit/units.h"
 #include "reference/reference_values.h"
+#include "reference/events_table.inc"   // 0.10.5 stage 5: Horizons vectors of the famous dates and the 2026 equinoxes (tools/make_events_ref.py)
 #include "reference/comet_table.inc"   // 0.10.5 stage 3: the comets' records and Horizons vectors (made by tools/make_comet_ref.py)
 
 using namespace orbit;
@@ -134,8 +135,8 @@ int main() {
         runSteps(s, tspeed, steps);
         s.step(realSeconds - steps * units::kPhysicsStep, tspeed);    // the last part of a step, to land exactly on one year
         const double moved = length(s.bodies[2].pos - p0);
-        // Earth's orbital period here is 1.000006 years (0.002 days more, about 6,000 km of travel); allow 1e-4 AU (15,000 km)
-        check(moved < 1e-4 * units::kAU, "Earth back at its start after one year (moved " + std::to_string(moved / units::kKm) + " km)");
+        // (0.10.5 stage 5: the old "Earth back at its start after one Julian year, within 1e-4 AU = 15,000 km" is replaced by the check against Kepler's third law in section 16; the energy check stays)
+        (void)moved;
         const double e1 = orbitOf(s.bodies[2]).energy;
         near(e1, e0, e0, 1e-6, "Earth orbital energy conserved over one year");
     }
@@ -191,20 +192,7 @@ int main() {
         }
     }
 
-    // 9) famous dates the web version quotes (Jump to a date): Mars 55.76 million km from Earth on
-    //    27 Aug 2003 (NASA), and Jupiter and Saturn 0.1° apart as seen from Earth on 21 Dec 2020
-    {
-        const auto find = [](const SolarSystem& s, const char* n) { for (const Body& b : s.bodies) if (b.name == n) return b.pos; return Vec3{}; };
-        SolarSystem s; s.loadAt(1061942400000LL + 10 * 3600000LL);   // 27 Aug 2003, 10:00 UT (closest at 09:51 UT)
-        const double mkm = length(find(s, "Mars") - find(s, "Earth")) / 1e9;
-        std::printf("  Mars–Earth on 27 Aug 2003: %.2f million km (NASA: 55.76)\n", mkm);
-        check(std::fabs(mkm - 55.76) < 0.3, "Mars–Earth distance on 27 Aug 2003");
-        s.loadAt(1608552000000LL);                                    // 21 Dec 2020, 12:00 UT
-        const Vec3 e = find(s, "Earth"), j = find(s, "Jupiter") - e, sa = find(s, "Saturn") - e;
-        const double sep = std::acos(dot(j, sa) / (length(j) * length(sa))) * 180 / units::kPi;
-        std::printf("  Jupiter–Saturn on 21 Dec 2020: %.3f° apart (real: 0.10°)\n", sep);
-        check(std::fabs(sep - 0.1) < 0.05, "Jupiter–Saturn great conjunction");
-    }
+    // 9) (0.10.5 stage 5) the two famous dates of the Jump tiles are now checked in section 16 against JPL Horizons vectors, in Real mode; the old checks here (Mars-Earth within 0.3 million km, Jupiter-Saturn 0.1 +- 0.05 degrees, Simple mode) could not see an error under about 100,000 km.
 
     // 10) number and date wording (as JavaScript would write them)
     check(fmt::plainNumber(-110) == "-110", "plainNumber(-110) = " + fmt::plainNumber(-110));
@@ -443,6 +431,155 @@ int main() {
             ci++;
         }
         check(ci == 6, "comets: all six records tested");
+    }
+
+    // 16) 0.10.5 stage 5: Orbit Lab tests against independent references (audit rows 20-23) and the message logic that moved out of the app target into orbit/.
+    {
+        const auto ms = [](double jd) { return static_cast<int64_t>(std::llround((jd - 2440587.5) * 86400000.0)); };
+        const auto has = [](const std::string& hay, const char* w) { return hay.find(w) != std::string::npos; };
+        const auto vecOf = [](const char* body, const EventVector*& out) { for (const EventVector& e : kEventVectors) if (std::string(e.body) == body) { out = &e; return true; } return false; };
+        const EventVector *mars = nullptr, *jup = nullptr, *sat = nullptr;
+        check(vecOf("Mars", mars) && vecOf("Jupiter", jup) && vecOf("Saturn", sat), "Horizons event vectors present");
+        // row 21: Real mode against Horizons (events_table.inc). These replace the old checks that allowed 0.3 million km (Mars-Earth 27 Aug 2003) and 0.05 degrees (Jupiter-Saturn 21 Dec 2020).
+        // The limits are regression guards, about 1 % above the error measured when they were set (Linux GCC), NOT physical bounds.
+        {
+            SolarSystem r; r.setRealPlanets(true); r.loadAt(ms(mars->jd));
+            const auto pos = [](const SolarSystem& sys, const char* n) { for (const Body& b : sys.bodies) if (b.name == n) return b.pos; return Vec3{}; };
+            const Vec3 d = pos(r, "Mars") - pos(r, "Earth");
+            const double errKm = length(d - Vec3{mars->x * 1000, mars->y * 1000, mars->z * 1000}) / 1000, distMkm = length(d) / 1e9;
+            std::printf("  Real, Mars from Earth, 27 Aug 2003 10:00: %.3f million km (Horizons %.3f), error %.0f km\n", distMkm, length(Vec3{mars->x, mars->y, mars->z}) / 1e6, errKm);
+            // measured 1,219 km (Mars-Earth distance 55.758 million km)
+            check(errKm <= 1232, "Real: Mars as seen from Earth on 27 Aug 2003 within the regression guard of Horizons' vector");
+            SolarSystem q; q.setRealPlanets(true); q.loadAt(ms(jup->jd));
+            const Vec3 j = pos(q, "Jupiter") - pos(q, "Earth"), sa = pos(q, "Saturn") - pos(q, "Earth");
+            const Vec3 hj{jup->x, jup->y, jup->z}, hs{sat->x, sat->y, sat->z};
+            const double deg = 180 / units::kPi, sep = std::acos(dot(j, sa) / (length(j) * length(sa))) * deg, hsep = std::acos(dot(hj, hs) / (length(hj) * length(hs))) * deg;
+            std::printf("  Real, Jupiter-Saturn, 21 Dec 2020 12:00: %.5f degrees (Horizons %.5f), error %.5f arcsec\n", sep, hsep, std::fabs(sep - hsep) * 3600);
+            // measured 0.00244 arcsec; the guard has a floor of 0.005 arcsec for compiler rounding
+            check(std::fabs(sep - hsep) * 3600 <= 0.005, "Real: the Jupiter-Saturn angle on 21 Dec 2020 within the regression guard of Horizons'");
+        }
+        // row 21, "Earth back after one year": the leapfrog round the Sun must bring Earth back after exactly one orbital period, P = 2 pi sqrt(a^3 / GM) with a from the orbit's energy
+        // (Kepler's third law, independent of the code). The old check allowed 15,000 km after a Julian year (which is not the period).
+        {
+            SolarSystem s; s.loadAt(ref::kEpochMs);
+            const Vec3 p0 = s.bodies[2].pos;
+            const OrbitShape o = orbitOf(s.bodies[2]);
+            const double P = 2 * units::kPi * std::sqrt(o.a * o.a * o.a / units::kGMSun);        // s
+            const double realSeconds = P / units::kSimTime;                                       // at Time speed 0: 1 real second = kSimTime
+            const int steps = static_cast<int>(realSeconds / units::kPhysicsStep);
+            for (int k = 0; k < steps; k++) s.step(units::kPhysicsStep, 0.0);
+            s.step(realSeconds - steps * units::kPhysicsStep, 0.0);
+            const double backKm = length(s.bodies[2].pos - p0) / 1000;
+            std::printf("  Simple: Earth after one orbital period (%.4f years) is %.2f km from its start\n", P / units::kYear, backKm);
+            // measured 1,423.18 km (leapfrog with sub-steps of at most 5.6 hours; the exact orbit would give 0)
+            check(backKm <= 1438, "Simple: Earth is back at its start after one orbital period, within the regression guard (Kepler's third law)");
+        }
+        // row 22: the 2026 equinoxes. "Next season starts in N days" must land on Horizons' equinox within 0.2 hours, in Simple and in Real, from five start dates.
+        {
+            const struct { double jd; int which; } starts[] = {{2461042.0, 0}, {2461087.0, 0}, {2461101.0, 0}, {2461254.0, 1}, {2461294.0, 1}};
+            double worst = 0;
+            for (int real = 0; real < 2; real++)
+                for (const auto& st : starts) {
+                    SolarSystem s; s.setRealPlanets(real == 1); s.loadAt(ms(st.jd));
+                    for (const Body& b : s.bodies) if (b.name == "Earth") {
+                        EarthSeason q;
+                        check(earthSeason(b, s, q), "equinox: season known");
+                        const double hours = (st.jd + q.until - kEquinoxJD[st.which]) * 24;
+                        worst = std::fmax(worst, std::fabs(hours));
+                        check(std::fabs(hours) <= 0.2, std::string(real ? "Real" : "Simple") + ": next season from JD " + std::to_string(st.jd) + " lands on the equinox within 0.2 h (" + std::to_string(hours) + " h)");
+                    }
+                }
+            std::printf("  equinoxes 2026: worst difference from Horizons %.3f hours (limit 0.2)\n", worst);
+        }
+        // row 23, moved into orbit/ (no ImGui) so they can be tested: dates, jump message, Time speed text, the date line, the hidden-selection rule, the Voyager caption
+        int64_t t = 0;
+        check(parseDateTime("2003-08-27", "12:00", t) && t == 1061985600000LL, "parseDateTime: 27 Aug 2003 12:00 UT = 1061985600000 ms (Mars-Earth test above: 1061942400000 is 00:00)");
+        check(parseDateTime("2003-08-27", "", t) && t == 1061985600000LL, "parseDateTime: no time means 12:00");
+        check(!parseDateTime("2003-02-30", "12:00", t) && !parseDateTime("2003-13-01", "12:00", t) && !parseDateTime("2003-08-27", "24:00", t) && !parseDateTime("2003-08-27", "12:00:30", t) && !parseDateTime("27 Aug 2003", "", t) && !parseDateTime("2003-08-27x", "", t), "parseDateTime: 30 February, month 13, 24:00, seconds and other shapes are refused");
+        check(parseDateTime("2024-02-29", "00:00", t) && !parseDateTime("2023-02-29", "00:00", t), "parseDateTime: 29 February only in leap years");
+        std::string clampNote;
+        check(clampJumpDate(1061985600000LL, clampNote) == 1061985600000LL && clampNote.empty(), "clampJumpDate: a date inside the range is kept, no note");
+        const int64_t before = clampJumpDate(-5364662400001LL, clampNote);
+        check(before == kDateMinMs && has(clampNote, "outside 1800–2100") && has(clampNote, "Showing the nearest date it can: 1 Jan 1800"), "clampJumpDate: 1799 is moved to 1 Jan 1800, with a note: " + clampNote);
+        clampNote.clear();
+        check(clampJumpDate(4133894400000LL + 86400000LL, clampNote) == kDateMaxMs && has(clampNote, "31 Dec 2100"), "clampJumpDate: 2101 is moved to the end of 2100");
+        check(jumpMessage("", 1061985600000LL, false, false).rfind("Showing 27 Aug 2003. ", 0) == 0, "jump message: starts with Showing <date>");
+        check(has(jumpMessage("", kTableEndMs + 86400000LL, false, false), "After 2050") && !has(jumpMessage("", kTableEndMs, false, false), "After 2050"), "jump message: the 2050 note starts the day after 31 Dec 2050");
+        check(tspeedText(0.0) == "1 s = 58 days" && tspeedText(units::kTspeedMin) == "1 s = 1 second (real time)" && tspeedText(units::kTspeedMax) == "1 s = 50 years" && tspeedText(-3.145) == "1 s = 60 minutes",
+              "Time speed text: 58.13 days at 0, real time at the slowest, 18,383 days = 50 years at the fastest, 3,597 s = 59.95 minutes at the Journey's: " + tspeedText(0.0) + " / " + tspeedText(units::kTspeedMin) + " / " + tspeedText(units::kTspeedMax) + " / " + tspeedText(-3.145));
+        {
+            SolarSystem d; d.loadAt(ref::kEpochMs);
+            check(dateLine(d) == "Solar System today, 1 Jan 2026", "date line: today: " + dateLine(d));
+            d.jumped = true; d.loadAt(ms(2459205.0));
+            check(dateLine(d) == "Solar System on 21 Dec 2020, 12:00 UT", "date line: after a jump it also shows the time of day: " + dateLine(d));
+            SolarSystem e; e.loadAt(ref::kEpochMs); e.t = units::kYear;
+            check(dateLine(e) == "Solar System on 1 Jan 2027  ·  1.00 years after 1 Jan 2026", "date line: one Julian year later: " + dateLine(e));
+        }
+        {
+            SolarSystem v; v.loadAt(ref::kEpochMs);
+            int ceres = 0, halley = 0, earth = 0; for (const Body& b : v.bodies) { if (b.name == "Ceres") ceres = b.id; if (b.name == "Halley") halley = b.id; if (b.name == "Earth") earth = b.id; }
+            SelectionSwitches all;
+            check(selectionStillValid(v, Selection{Selection::Body, ceres}, all) && selectionStillValid(v, Selection{Selection::Star}, all) && selectionStillValid(v, Selection{Selection::Bary}, all), "selection: a visible body, the Sun and the barycentre stay selected");
+            SelectionSwitches noDwarf = all; noDwarf.dwarfs = false;
+            check(!selectionStillValid(v, Selection{Selection::Body, ceres}, noDwarf) && selectionStillValid(v, Selection{Selection::Body, earth}, noDwarf), "selection: Dwarf planets off drops Ceres, not Earth");
+            SelectionSwitches noComet = all; noComet.comets = false;
+            check(!selectionStillValid(v, Selection{Selection::Body, halley}, noComet) && selectionStillValid(v, Selection{Selection::Body, halley}, all), "selection: Comets off drops Halley");
+            SelectionSwitches noMoon = all; noMoon.moons = false;
+            check(selectionStillValid(v, Selection{Selection::Moon, earth, 0}, all) && !selectionStillValid(v, Selection{Selection::Moon, earth, 0}, noMoon) && !selectionStillValid(v, Selection{Selection::Moon, earth, 1}, all) && !selectionStillValid(v, Selection{Selection::Moon, earth, -1}, all), "selection: Moons off, or a moon number the planet does not have, drops the moon (Earth has one)");
+            check(!selectionStillValid(v, Selection{Selection::Body, 9999}, all) && !selectionStillValid(v, Selection{Selection::Moon, 9999, 0}, all), "selection: a body that is gone is dropped");
+            SelectionSwitches noBelt = all; noBelt.belts = false;
+            check(selectionStillValid(v, Selection{Selection::Belt, 0, 3}, all) && !selectionStillValid(v, Selection{Selection::Belt, 0, 4}, all) && !selectionStillValid(v, Selection{Selection::Belt, 0, 3}, noBelt), "selection: a belt needs Belts on and a belt number below 4");
+            SelectionSwitches noFar = all; noFar.far = false;
+            const int v1 = farIndexOf("v1");
+            check(selectionStillValid(v, Selection{Selection::Far, 0, v1}, all) && !selectionStillValid(v, Selection{Selection::Far, 0, v1}, noFar) && !selectionStillValid(v, Selection{Selection::Far, 0, 9999}, all), "selection: a far-away thing needs Far-away on and a real number");
+            SolarSystem old; old.loadAt(-5364662400000LL);   // 1800: the Voyagers are not shown before 1990
+            check(!selectionStillValid(old, Selection{Selection::Far, 0, v1}, all), "selection: Voyager 1 is dropped on a date before 1990");
+        }
+        {
+            SolarSystem old; old.loadAt(ms(2444239.5));   // 1 Jan 1980
+            check(has(voyagerCaption(old), "launched in 1977") && has(voyagerCaption(old), "from 1990 on"), "Voyager caption in 1980: " + voyagerCaption(old));
+            SolarSystem old2; old2.loadAt(ms(2430000.5));  // 1941
+            check(has(voyagerCaption(old2), "not launched yet"), "Voyager caption in 1941: not launched yet");
+            SolarSystem now; now.loadAt(ref::kEpochMs);
+            check(has(voyagerCaption(now), "Voyager 1 is the most distant spacecraft") && has(voyagerCaption(now), "121 AU in 2012"), "Voyager caption today: " + voyagerCaption(now));
+        }
+        // the two Planet physics notes (the text moved to orbit/real_errors.h; its length is kept inside what showed as 10 lines on 2026-10-03, 1280 x 800, normal text size)
+        const std::string realOff = realNoteText(false), realOn = realNoteText(true), simple = simpleNoteText();
+        check(has(realOff, "relativity off: Mercury 29,231, Venus 4,762, Earth 3,960, Mars 7,293, Jupiter 728, Saturn 151, Uranus 620, Neptune 2,653 km.") && has(realOff, "Moon 5.2 km") && has(realOff, "1800 to 1 Jan 2100"), "Real note: the measured errors without relativity: " + realOff);
+        check(has(realOn, "relativity on: Mercury 70,045, Venus 45,430, Earth 22,081, Mars 22,341, Jupiter 2,823, Saturn 1,068, Uranus 876, Neptune 2,791 km."), "Real note: the measured errors with relativity: " + realOn);
+        std::printf("  Real note lengths: %zu / %zu characters (off / on), Simple note %zu\n", realOff.size(), realOn.size(), simple.size());
+        // 444 characters (relativity off) showed as 10 lines on 2026-10-03 (1280 x 800, normal text size, about 43 characters a line); 11 lines would be about 470. Guard: 460.
+        check(realOff.size() <= 460 && realOn.size() <= 460, "Real note: no longer than the text that showed as 10 lines, plus a little (guard in characters)");
+        check(has(simple, "fixed orbit") && has(simple, "Saturn 8.0") && has(simple, "1800-2050"), "Simple note: fixed orbits and the measured errors: " + simple);
+    }
+
+    // 17) 0.10.5 stage 5, row 18: numbers with a named source, and the ones marked as having none
+    {
+        const auto has = [](const std::string& hay, const char* w) { return hay.find(w) != std::string::npos; };
+        // c: JPL astro_par page, "speed of light in vacuum c 299792458 m/s 2018 CODATA recommended values" (read 2026-10-03)
+        check(units::kLightSpeed == 299792458.0, "c = 299,792,458 m/s (JPL astro_par page)");
+        // a light year = c x one Julian year (365.25 d = 31,557,600 s) = 9,460,730,472,580,800 m (by hand: 299,792,458 x 31,557,600), over the au of 149,597,870,700 m
+        near(units::kLightYearAU, 9460730472580800.0 / 149597870700.0, 63241, 1e-14, "a light year in AU = c x 31,557,600 s / au = 63,241.077");
+        // the Sun's turning: Horizons' Sun header, "Adopted sid. rot. per.= 25.38 d" (API, COMMAND='10', read 2026-10-03); the lab's rate is the IAU's 14.1844 degrees a day
+        near(360.0 / spinRateDegPerDay("Sun"), 25.38, 25.38, 2e-4, "Sun's standard turning period 25.38 days (Horizons' header)");
+        // comets' nucleus sizes: JPL SBDB "diameter" (read 2026-10-03): Halley 11.0, Hale-Bopp 60, Encke 4.8, 67P 3.4, Swift-Tuttle 26; none for NEOWISE
+        const struct { const char* name; double km; bool rough; } sizes[] = {{"Halley", 11.0, false}, {"Hale–Bopp", 60, false}, {"Encke", 4.8, false}, {"67P", 3.4, false}, {"Swift–Tuttle", 26, false}, {"NEOWISE", 5, true}};
+        SolarSystem s; s.loadAt(ref::kEpochMs);
+        for (const auto& z : sizes) {
+            const CometData* c = nullptr; for (std::size_t k = 0; k < kCometCount; k++) if (std::string(kComets[k].name) == z.name) c = &kComets[k];
+            check(c && c->nucleusKm == z.km && c->nucleusRough == z.rough, std::string("comet ") + z.name + ": nucleus " + std::to_string(z.km) + " km from SBDB" + (z.rough ? " (none: marked rough)" : ""));
+            for (const Body& b : s.bodies) if (b.name == z.name) {
+                Card cd; CardOptions o; cardText(s, Selection{Selection::Body, b.id}, o, cd);
+                const bool marked = cd.lines[0].find("(rough: JPL gives no size)") != std::string::npos;
+                check(marked == z.rough, std::string("comet card ") + z.name + ": the nucleus line " + (z.rough ? "says rough" : "does not say rough") + ": " + cd.lines[0]);
+            }
+        }
+        Card sc; CardOptions so; cardText(s, Selection{Selection::Star}, so, sc);
+        std::string sun; for (const auto& l : sc.lines) sun += l + "\n";
+        check(has(sun, "Surface (rough): about 5,770 K") && has(sun, "The 25.38 days is JPL's standard rate; the 25 and 34 days are rough"), "Sun card: surface temperature rough; 25.38 days is JPL's, 25 and 34 rough");
+        bool beltsOk = true;
+        for (const char* k : {"main", "trojan", "kuiper", "oort"}) beltsOk = beltsOk && beltLines(k).back() == "The counts and masses above are rough figures (no named source)";
+        check(beltsOk, "belt cards (asteroid, Trojans, Kuiper, Oort): the last line says the counts and masses are rough");
     }
 
     std::printf("%d checks, %d failed. Worst position difference vs the web version: %.3g of the distance from the Sun (belt rocks: %.3g).\n",

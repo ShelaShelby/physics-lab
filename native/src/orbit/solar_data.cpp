@@ -66,6 +66,8 @@ const MoonData kMoons[] = {
     {"Neptune", "Triton", 354760, 5.876854, 0.00002, 1353.4, 28.3, true, "Orbits backwards: probably a captured object"},
     {"Pluto", "Charon", 19596, 6.3872, 0.0002, 606, 122.5, false, "Half the size of Pluto: they orbit each other"},
 };
+// Nucleus sizes (km): JPL Small-Body Database "diameter" (SBDB API, phys-par=1, read 2026-10-03): Halley 11.0, Hale-Bopp 60 (+-20), Encke 4.8 (it was 4.9 before 0.10.5 stage 5), 67P 3.4 (+-0.1),
+// Swift-Tuttle 26. SBDB gives no diameter for NEOWISE: its 5 km is kept (it only sets the dot's size and a card line) and the card says "rough: JPL gives no size".
 const CometData kComets[] = {
     // Halley: JPL Small-Body Database, orbit_id 75 (solution date 2025-11-21 15:57:34), epoch JD 2439875.5 = 1968-01-20 00:00 TDB. q, e, i, Ω, ω, tp and period are all from that one record (read 2026-10-03).
     {"Halley", "#8ecbff", 0.5748638313743413, 0.9679359956953211, 162.1905300439129, 59.09894720612437, 112.2414314637764, 2446469.9736161465, 27728.04608790421, 11, 1,
@@ -78,9 +80,9 @@ const CometData kComets[] = {
     // NEOWISE: JPL Small-Body Database, orbit_id 31 (solution date 2024-07-30 14:57:24), epoch JD 2459036.5 = 2020-07-06 00:00 TDB. q, e, i, Ω, ω, tp and period are all from that one record (read 2026-10-03).
     {"NEOWISE", "#7fe0c8", 0.2946512493809196, 0.9991780262531292, 128.9375027594809, 61.01042818536988, 37.2786584481257, 2459034.1788980444, 2478985.217997125, 5, 1,
      "Comet NEOWISE (C/2020 F3)",
-     "Put on a show in the evening sky of July 2020. It will not be back for about 6,800 years"},
+     "Put on a show in the evening sky of July 2020. It will not be back for about 6,800 years", true},
     // Encke: JPL Small-Body Database, orbit_id K273/20 (solution date 2026-10-01 15:11:48), epoch JD 2460147.5 = 2023-07-22 00:00 TDB. q, e, i, Ω, ω, tp and period are all from that one record (read 2026-10-03).
-    {"Encke", "#ffd28a", 0.3395910296522707, 0.8469532425568865, 11.33709697552753, 334.0240655739339, 187.2820411908973, 2460240.026674769, 1207.248132847095, 4.9, 0.35,
+    {"Encke", "#ffd28a", 0.3395910296522707, 0.8469532425568865, 11.33709697552753, 334.0240655739339, 187.2820411908973, 2460240.026674769, 1207.248132847095, 4.8, 0.35,
      "Comet Encke (2P)",
      "The shortest trip of any fairly bright comet: 3.3 years. Its dust makes the Taurid meteor showers"},
     // 67P: JPL orbit solution K284/1 (the same solution as SBDB's current record, whose epoch is 2015-Oct-22), osculating at epoch JD 2459520.5 = 2021-11-02 00:00 TDB (the 2021 perihelion) from Horizons ELEMENTS (EC QR IN OM W Tp PR).

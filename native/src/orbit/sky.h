@@ -71,6 +71,8 @@ int farCount();                                     // stars and objects + probe
 bool farItem(const SolarSystem& sys, int index, FarItem& out);
 int farIndexOf(const std::string& key);             // -1 if unknown
 void farCard(const FarItem& f, Card& c);
+// The Journey's Voyager 1 caption for the date shown (0.10.5 stage 5: moved here from ui/journey_dates.cpp, tested).
+std::string voyagerCaption(const SolarSystem& sys);
 
 // 1 km/s is this many AU per year (31,557,600 km per Julian year / 149,597,870.7 km per AU = 0.210945, rounded as the web version did)
 constexpr double kAuPerYearPerKms = 0.21095;
