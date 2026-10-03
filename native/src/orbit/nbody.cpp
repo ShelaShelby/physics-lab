@@ -85,7 +85,7 @@ static void keplerDrift(Vec3& q, Vec3& v, double mu, double dt) {
 // One step (Wisdom & Holman 1991, Strang splitting, symmetric so time-reversible): half interaction kick, half Sun jump, full Kepler drift, half jump, half kick.
 // The Kepler part is solved exactly, so for planets far smaller than the Sun the error is of order (planet mass / Sun mass) * h^2, not h^4 times a big
 // constant: that is why a day-scale step is enough and the orbits do not creep (see REPORT.md for the measured numbers).
-void nbodyStepN(int n, const double* gm, Vec3* x, Vec3* v, double h) {
+void nbodyStepN(int n, const double* gm, Vec3* x, Vec3* v, double h, bool gr) {
     double mt = 0; Vec3 com, vcm;
     for (int i = 0; i < n; i++) { mt += gm[i]; com = com + x[i] * gm[i]; vcm = vcm + v[i] * gm[i]; }
     com = com * (1.0 / mt); vcm = vcm * (1.0 / mt);
@@ -101,6 +101,10 @@ void nbodyStepN(int n, const double* gm, Vec3* x, Vec3* v, double h) {
                 a[i] = a[i] + d * (gm[j] * inv3);
                 a[j] = a[j] - d * (gm[i] * inv3);
             }
+        if (gr) {                                                                // the Sun's 1PN potential (Nobili & Roxburgh 1986, see nbody.h): a = -6 GM^2 Q / (c^2 |Q|^4)
+            const double pre = 6.0 * gm[0] * gm[0] / (kLightSpeed * kLightSpeed);
+            for (int i = 1; i < n; i++) { const double r2 = dot(Q[i], Q[i]); a[i] = a[i] - Q[i] * (pre / (r2 * r2)); }
+        }
         for (int i = 1; i < n; i++) V[i] = V[i] + a[i] * dt;
     };
     const auto jump = [&](double dt) {                                           // every planet moves with the Sun's reflex velocity
@@ -121,7 +125,7 @@ void nbodyStepN(int n, const double* gm, Vec3* x, Vec3* v, double h) {
 }
 
 void nbodyAccel(const Vec3* x, Vec3* a) { nbodyAccelN(kNBodies, kRealGM, x, a); }
-void nbodyStep(NBodyState& s, double h) { nbodyStepN(kNBodies, kRealGM, s.x, s.v, h); }
+void nbodyStep(NBodyState& s, double h, bool gr) { nbodyStepN(kNBodies, kRealGM, s.x, s.v, h, gr); }
 
 double nbodyEnergy(const NBodyState& s) {
     double e = 0;
@@ -129,6 +133,12 @@ double nbodyEnergy(const NBodyState& s) {
         e += 0.5 * kRealGM[i] * dot(s.v[i], s.v[i]);
         for (int j = i + 1; j < kNBodies; j++) e -= kRealGM[i] * kRealGM[j] / length(s.x[j] - s.x[i]);
     }
+    return e;
+}
+double nbodyEnergyGR(const NBodyState& s) {
+    double e = nbodyEnergy(s);
+    const double pre = 3.0 * kRealGM[0] * kRealGM[0] / (kLightSpeed * kLightSpeed);       // potential energy per G: GM_i * (-3 GM_sun^2 / (c^2 r^2))
+    for (int i = 1; i < kNBodies; i++) { const Vec3 d = s.x[i] - s.x[0]; e -= kRealGM[i] * pre / dot(d, d); }
     return e;
 }
 Vec3 nbodyAngularMomentum(const NBodyState& s) {
@@ -164,7 +174,7 @@ NBodyState nbodyStartState(double jd) {
     return s;
 }
 
-NBodyClock::NBodyClock(double h) : h_(h), start_(nbodyStartState()) {}
+NBodyClock::NBodyClock(double h, bool gr) : h_(h), gr_(gr), start_(nbodyStartState()) {}
 
 const NBodyState& NBodyClock::checkpoint(long j) {
     if (j == 0) return start_;
@@ -176,7 +186,7 @@ const NBodyState& NBodyClock::checkpoint(long j) {
     NBodyState s = start_;
     for (long q = j - dir; q != 0; q -= dir) { auto f = cp_.find(q); if (f != cp_.end()) { from = q; s = f->second; break; } }
     for (long q = from + dir; ; q += dir) {
-        for (long n = 0; n < kEvery; n++) nbodyStep(s, dir * h_);
+        for (long n = 0; n < kEvery; n++) nbodyStep(s, dir * h_, gr_);
         steps_ += kEvery;
         if (std::labs(q) <= kKeep) cp_[q] = s;
         if (q == j) { if (std::labs(q) > kKeep) { last_ = s; return last_; } break; }
@@ -186,16 +196,16 @@ const NBodyState& NBodyClock::checkpoint(long j) {
 
 void NBodyClock::ensure(long k) {
     if (have_ && k == k_) return;
-    if (have_ && k == k_ + 1) { s0_ = s1_; k_ = k; s1_ = s0_; nbodyStep(s1_, h_); steps_++; return; }
+    if (have_ && k == k_ + 1) { s0_ = s1_; k_ = k; s1_ = s0_; nbodyStep(s1_, h_, gr_); steps_++; return; }
     if (have_ && k > k_ && k - k_ < kEvery) {                          // a short way on: just step
-        while (k_ < k) { s0_ = s1_; k_++; s1_ = s0_; nbodyStep(s1_, h_); steps_++; }
+        while (k_ < k) { s0_ = s1_; k_++; s1_ = s0_; nbodyStep(s1_, h_, gr_); steps_++; }
         return;
     }
     long j = k >= 0 ? k / kEvery : -((-k + kEvery - 1) / kEvery);       // floor(k / kEvery)
     NBodyState s = checkpoint(j);
     long at = j * kEvery;
-    for (; at < k; at++) { nbodyStep(s, h_); steps_++; }
-    s0_ = s; s1_ = s; nbodyStep(s1_, h_); steps_++;
+    for (; at < k; at++) { nbodyStep(s, h_, gr_); steps_++; }
+    s0_ = s; s1_ = s; nbodyStep(s1_, h_, gr_); steps_++;
     k_ = k; have_ = true;
 }
 

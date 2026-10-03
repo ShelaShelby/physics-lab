@@ -455,7 +455,9 @@ static const NativeEdit kEditsAbout[] = {
      "<div class=\"lrnP lrnMuted\">Distances of Polaris, Betelgeuse and Rigel are uncertain, so they are rounded.</div><div class=\"lrnP lrnMuted\">The star masses are published estimates, in solar masses, and some are uncertain; the Fomalhaut and Arcturus masses come from stellar models, not from measuring an orbit. The numbers were taken from the papers&rsquo; summaries and have not been checked against their tables. Stars whose mass could not be sourced show none.</div>"},
     // 0.10: the sources of "Planet physics: Real"
     {"About sources: the Real planet physics (GM values, the integrator, the Mercury check)", "(the moons: sizes and orbits)</li>", "(the moons: sizes and orbits)</li><li><a href=\"https://ssd.jpl.nasa.gov/astro_par.html\" target=\"_blank\" rel=\"noopener noreferrer\">NASA/JPL: astrodynamic parameters</a> (GM of the Sun and of each planet with its moons, DE440 values, for &ldquo;Planet physics: Real&rdquo;; read from an excerpt of the page)</li><li>Park et al., 2021, The Astronomical Journal: the DE440 and DE441 planetary and lunar ephemerides (the paper behind those DE440 values)</li><li><a href=\"https://doi.org/10.1086/115978\" target=\"_blank\" rel=\"noopener noreferrer\">Wisdom &amp; Holman, 1991: Symplectic maps for the N-body problem</a> (the method that moves the planets in &ldquo;Planet physics: Real&rdquo;)</li><li>Duncan, Levison &amp; Lee, 1998: A multiple time step symplectic algorithm for integrating close encounters (The Astronomical Journal; the variables that method is written in)</li><li>Bate, Mueller &amp; White, 1971: <i>Fundamentals of Astrodynamics</i> (moving a planet along its Kepler orbit with universal variables)</li><li>Clemence, 1947: The relativity effect in planetary motions (Reviews of Modern Physics; the 532 arcseconds per century of Mercury&rsquo;s perihelion advance from the other planets, used to check &ldquo;Planet physics: Real&rdquo;)</li>"},
-        {"About sources: the textbooks for the hydrogen-like orbitals", "(the 1913 paper behind the Bohr 1913 style)</li>", "(the 1913 paper behind the Bohr 1913 style)</li><li>Textbooks for the hydrogen-like orbitals (the average distance of the electron, the radial probability, the cloud tests): David J. Griffiths, <i>Introduction to Quantum Mechanics</i>; Hans A. Bethe and Edwin E. Salpeter, <i>Quantum Mechanics of One- and Two-Electron Atoms</i></li>"},
+        // 0.10.1: the sources of "General relativity (1PN)"
+    {"About sources: general relativity for the planets (REBOUNDx potential, Nobili & Roxburgh, the published Mercury value)", "used to check &ldquo;Planet physics: Real&rdquo;)</li>", "used to check &ldquo;Planet physics: Real&rdquo;)</li><li><a href=\"https://github.com/dtamayo/reboundx/blob/main/src/gr_potential.c\" target=\"_blank\" rel=\"noopener noreferrer\">REBOUNDx, the file gr_potential.c</a> (Tamayo, Rein, Shi &amp; Hernandez, 2020, Monthly Notices of the Royal Astronomical Society 491, 2885: the simple potential of the Sun behind &ldquo;General relativity (1PN)&rdquo; for the planets; the formula was read in that source file)</li><li>Nobili &amp; Roxburgh, 1986: Simulation of general relativistic corrections in long term numerical integrations of planetary orbits (IAU Symposium 114; the idea of that potential; the paper itself was not read)</li><li><a href=\"https://arxiv.org/abs/1403.7377\" target=\"_blank\" rel=\"noopener noreferrer\">Will, 2014: The confrontation between general relativity and experiment</a> (Living Reviews in Relativity 17; Mercury&rsquo;s relativistic perihelion advance of 42.98 arcseconds per century, used to check &ldquo;General relativity (1PN)&rdquo;; read from a search excerpt, not from the paper)</li>"},
+    {"About sources: the textbooks for the hydrogen-like orbitals", "(the 1913 paper behind the Bohr 1913 style)</li>", "(the 1913 paper behind the Bohr 1913 style)</li><li>Textbooks for the hydrogen-like orbitals (the average distance of the electron, the radial probability, the cloud tests): David J. Griffiths, <i>Introduction to Quantum Mechanics</i>; Hans A. Bethe and Edwin E. Salpeter, <i>Quantum Mechanics of One- and Two-Electron Atoms</i></li>"},
 };
 static const NativeEdit kEditSgrA = {"Sagittarius A* card: no Spacetime Lab", " (see the Spacetime Lab)", ""};
 static const NativeEdit kEditGuideSky = {"Orbit guide, stars and far-away things: no Spacetime Lab", " (the Spacetime Lab shows what a black hole like it does)", ""};
@@ -531,8 +533,8 @@ static void testNativeEdits() {
         checkTrue(n + "a button has an action and the other way round", (*kTimeline[i].button != 0) == (*kTimeline[i].lab != 0));
     }
     checkTrue("exactly one slingshot button in the web", slingshot == 1);
-    // every edit was used (nothing in the list is left over): units 1 + about 6 + sgra 1 + guide 8 + slingshot 1
-    checkTrue("every native edit was used", g_editUses == 1 + 6 + 1 + 8 + 1);
+    // every edit was used (nothing in the list is left over): units 1 + about 7 + sgra 1 + guide 8 + slingshot 1
+    checkTrue("every native edit was used", g_editUses == 1 + 7 + 1 + 8 + 1);
 }
 
 // ---- the frames-per-second counter text (the web: Math.round(frames * 1000 / ms) + ' fps') ----
@@ -1265,6 +1267,51 @@ static void testPlanetPhysics() {
     }
 }
 
+// ---- 0.10.1: "General relativity (1PN)" for the Real planets ----
+static void testRelativity() {
+    orbit::ViewSettings vs;
+    checkTrue("General relativity (1PN): on by default (it only acts in Real)", vs.relativity);
+    Prefs p; p.orbit = {{"physics", "Real"}, {"gr", "0"}};
+    const Prefs q = loadPrefs(savePrefs(p));
+    checkTrue("General relativity (1PN): goes through the settings file unchanged", q.orbit == p.orbit && q.orbit.at("gr") == "0");
+    // the system: a new SolarSystem has it off (so the 0.10 tests are unchanged); the app turns it on
+    const double refMs = (orbit::kNBodyRefJD - 2440587.5) * 86400000.0;
+    orbit::SolarSystem off, on;
+    checkTrue("a new solar system starts with relativity off", !off.relativity());
+    off.setRealPlanets(true); on.setRealPlanets(true); on.setRelativity(true);
+    off.loadAt(int64_t(std::llround(refMs))); on.loadAt(int64_t(std::llround(refMs)));
+    bool same = true;
+    for (std::size_t i = 0; i < 8; i++) same = same && off.bodies[i].pos.x == on.bodies[i].pos.x && off.bodies[i].vel.y == on.bodies[i].vel.y;
+    checkTrue("at the reference epoch GR on and off start from the same state (the clocks begin at the same start state)", same && on.relativity());
+    // stepping about 100 years: the planets follow the clock with the same GR setting; GR on puts Mercury somewhere else than GR off
+    for (int k = 0; k < 100; k++) { off.step(1.0 / 60, 1.3); on.step(1.0 / 60, 1.3); }
+    orbit::NBodyClock cOn(orbit::kNBodyStep, true), cOff(orbit::kNBodyStep, false);
+    orbit::Vec3 xa[orbit::kNBodies], va[orbit::kNBodies], xb[orbit::kNBodies], vb[orbit::kNBodies];
+    cOn.stateAt(on.t, xa, va); cOff.stateAt(off.t, xb, vb);
+    double wOn = 0, wOff = 0;
+    for (std::size_t i = 0; i < 8; i++) {
+        wOn = std::max(wOn, orbit::length(on.bodies[i].pos - (xa[i + 1] - xa[0])) / orbit::length(on.bodies[i].pos));
+        wOff = std::max(wOff, orbit::length(off.bodies[i].pos - (xb[i + 1] - xb[0])) / orbit::length(off.bodies[i].pos));
+    }
+    checkTrue("Real with GR on follows the GR clock, and with GR off the plain clock (both to 1e-12)", wOn < 1e-12 && wOff < 1e-12 && on.t > 1e8);
+    checkTrue("GR on moves Mercury away from the GR-off place", orbit::length(on.bodies[0].pos - off.bodies[0].pos) > 1e3 && off.t == on.t);
+    // switching GR while Real is on: the planets go to the other clock's place for the date shown; switching off again gives the old place exactly
+    const orbit::Vec3 mercuryOn = on.bodies[0].pos;
+    on.setRelativity(false);
+    same = true;
+    for (std::size_t i = 0; i < 8; i++) same = same && on.bodies[i].pos.x == xb[i + 1].x - xb[0].x;
+    checkTrue("switching GR off while Real is on moves the planets to the plain clock's state for the same date", same && !on.relativity() && on.bodies[0].pos.x != mercuryOn.x);
+    on.setRelativity(true);
+    checkTrue("switching GR back on gives exactly the GR state again", on.bodies[0].pos.x == mercuryOn.x && on.bodies[0].pos.y == mercuryOn.y);
+    // in Simple, GR does nothing
+    orbit::SolarSystem sa, sb;
+    sa.loadAt(1790000000000LL); sb.loadAt(1790000000000LL); sb.setRelativity(true);
+    for (int k = 0; k < 20; k++) { sa.step(0.25, -0.3); sb.step(0.25, -0.3); }
+    same = true;
+    for (std::size_t i = 0; i < sa.bodies.size(); i++) same = same && sa.bodies[i].pos.x == sb.bodies[i].pos.x && sa.bodies[i].vel.z == sb.bodies[i].vel.z;
+    checkTrue("in Simple the GR setting changes nothing", same && !sb.realPlanets());
+}
+
 int main() {
     testRoundTrip();
     testBadLines();
@@ -1286,6 +1333,7 @@ int main() {
     testOutline();
     testThemeGrid();
     testPlanetPhysics();
+    testRelativity();
     testLiveAndGpu();
     testNativeEdits();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);

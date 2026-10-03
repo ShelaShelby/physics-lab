@@ -32,6 +32,7 @@ struct ViewSettings {
     SkyMode sky = SkyMode::Soft;
     ConsMode cons = ConsMode::Off;
     bool realPlanets = false;   // Planet physics: Simple (false) / Real (true), see orbit/nbody.h
+    bool relativity = true;     // Real only: "General relativity (1PN)" for the planets (on by default; no effect in Simple)
     bool far = true;            // Far-away things (nearest stars, Voyagers, galactic centre)
     bool paused = false;        // time is stopped (a fast spin is only held still while time runs)
     bool lightTheme = false;    // the theme is a light one (the picture follows the theme when Stars are Off)

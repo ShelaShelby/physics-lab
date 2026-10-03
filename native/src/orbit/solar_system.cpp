@@ -112,6 +112,16 @@ void SolarSystem::setRealPlanets(bool on) {
     else loadAt(currentUnixMs());                        // back to Simple: everything reloaded from the elements at the date shown
 }
 
+void SolarSystem::setRelativity(bool on) {
+    if (on == gr_) return;
+    gr_ = on;
+    nb_ = NBodyClock(kNBodyStep, on);                    // a new clock: its stored states were made with the other setting
+    if (real_) {
+        applyReal(0);
+        for (Body& b : bodies) if (b.type == BodyKind::Planet) b.trail.clear();
+    }
+}
+
 void SolarSystem::step(double dt, double tspeed) {
     // Simulated time for this step, cut into equal sub-steps of at most kMaxSubStep
     // (about 5.6 simulated hours) so fast Time speeds stay accurate.

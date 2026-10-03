@@ -194,12 +194,29 @@ void orbitPanel(AppState& app, float width) {
             if (ImGui::Button(real ? "Real" : "Simple", ImVec2(w, 0)) && !on) app.set.realPlanets = real == 1;
             if (on) popOn();
         }
+        if (app.set.realPlanets) {                          // Real only: general relativity for the planets
+            wrappedCheckbox("General relativity (1PN)", &app.set.relativity);
+            if (ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
+                ImGui::TextUnformatted("Adds Einstein's correction to the Sun's pull on each planet, so Mercury's orbit turns a little more each time round: about 43 arcseconds per century, as measured.\n\n"
+                                       "It is a first-order (1PN) approximation, made with one simple extra potential of the Sun (Nobili & Roxburgh, 1986). It gets the turning of the orbit right, "
+                                       "but a planet's speed along its orbit is off by a tiny amount, of the order of one part in ten million for Mercury. It leaves out the planets' relativistic pull on each other, the Sun's spin and shape, and all higher orders.\n\n"
+                                       "Off: plain Newtonian gravity, no extra turn.");
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+        }
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::TextWrapped("%s", app.set.realPlanets
-            ? "Real: the Sun and the eight planets pull on each other (Newtonian gravity; each planet stands for its whole system with its moons). No relativity, and no effects of moons, dwarf planets or asteroids on the planets. "
+            ? "Real: the Sun and the eight planets pull on each other (Newtonian gravity; each planet stands for its whole system with its moons). No effects of moons, dwarf planets or asteroids on the planets. "
               "The start values are simplified orbital elements for 1 January 2026 (not JPL's ephemeris), so far from that date the planets drift away from their true positions (Mercury is off by about 12 degrees in 1800). Moons, dwarf planets, comets and belts move as in Simple. "
               "The picture stays centred on the Sun; the Sun's own small wobble round the balance point is not drawn."
             : "Simple: each planet moves on its own round the Sun, and the planets do not pull on each other (as in the web version).");
+        if (app.set.realPlanets)
+            ImGui::TextWrapped("%s", app.set.relativity
+                ? "General relativity is a first-order (1PN) approximation with the Sun's field only: Mercury's orbit turns about 43 arcseconds per century more. Left out: relativity between the planets, the Sun's spin and shape, and higher orders."
+                : "No relativity: plain Newtonian gravity, so Mercury's extra turn of about 43 arcseconds per century is missing.");
         ImGui::PopStyleColor();
     }
 

@@ -213,6 +213,187 @@ static void testMercuryPerihelion() {
     check("Mercury's perihelion advance from the planets is within 5 % of the published 532 arcseconds per century", std::fabs(arcsec / 532 - 1) < 0.05);
 }
 
+// ================= General relativity (1PN) for the planets, 0.10.1 =================
+// The option adds the Nobili & Roxburgh (1986) potential of the Sun, Phi(r) = -3 (GM_sun)^2 / (c^2 r^2), to the planets (the same method as REBOUNDx's
+// "gr_potential", Tamayo et al. 2020, MNRAS 491, 2885). Everything below is checked against things that do not come from the code: the standard 1PN formula,
+// a published number, the 0.10 results saved before the change, and conservation laws.
+static const double kC = units::kLightSpeed;                 // speed of light, m/s: CODATA exact value 299,792,458 (units.h)
+static const double kCenturyS = 36525.0 * 86400;             // Julian century, s
+static const double kArcsecPerRad = 180.0 / units::kPi * 3600;
+
+// The standard first-order (1PN) extra advance of the perihelion per orbit, in radians: delta_omega = 6 pi GM / (c^2 a (1 - e^2)) (the standard result; not read from a source in this session; the tests below check it against the published 42.98 arcseconds per century).
+static double grAdvancePerOrbit(double gm, double a, double e) { return 6 * units::kPi * gm / (kC * kC * a * (1 - e * e)); }
+
+static double lineSlope(const std::vector<double>& t, const std::vector<double>& y) {      // least-squares slope
+    double mt = 0, my = 0; const double m = double(t.size());
+    for (std::size_t i = 0; i < t.size(); i++) { mt += t[i]; my += y[i]; }
+    mt /= m; my /= m;
+    double sxy = 0, sxx = 0;
+    for (std::size_t i = 0; i < t.size(); i++) { sxy += (t[i] - mt) * (y[i] - my); sxx += (t[i] - mt) * (t[i] - mt); }
+    return sxy / sxx;
+}
+
+// A planet-sized test body (Mercury's GM) alone with the Sun on an orbit (a, e), started at perihelion, for `orbits` orbits with step hDays. Returns the
+// advance of the perihelion per orbit (rad) as the slope of the eccentricity-vector direction, sampled every step.
+static double measuredAdvancePerOrbit(bool gr, double a, double e, long orbits, double hDays) {
+    const double gm[2] = {kRealGM[0], kRealGM[1]};
+    const double mu = gm[0] + gm[1], T = 2 * units::kPi * std::sqrt(a * a * a / mu), h = hDays * 86400;
+    Vec3 rv; const Vec3 r0 = keplerRel(a, e, mu, 0, &rv);
+    Vec3 x[2], v[2];
+    x[0] = r0 * (-gm[1] / mu); x[1] = r0 * (gm[0] / mu);
+    v[0] = rv * (-gm[1] / mu); v[1] = rv * (gm[0] / mu);
+    const long nSteps = long(std::llround(orbits * T / h));
+    std::vector<double> ts, ws; ts.reserve(std::size_t(nSteps) + 1); ws.reserve(std::size_t(nSteps) + 1);
+    double prev = 0, unwrap = 0;
+    for (long i = 0; i <= nSteps; i++) {
+        const Vec3 r = x[1] - x[0], vv = v[1] - v[0], hv = cross(r, vv);
+        const Vec3 ev = cross(vv, hv) * (1.0 / mu) - r * (1.0 / length(r));                // points to the perihelion
+        const double w = std::atan2(ev.y, ev.x);
+        double d = w - prev; if (d < -units::kPi) d += 2 * units::kPi; else if (d > units::kPi) d -= 2 * units::kPi;
+        unwrap += d; prev = w;
+        ts.push_back(i * h); ws.push_back(unwrap);
+        if (i < nSteps) nbodyStepN(2, gm, x, v, h, gr);
+    }
+    return lineSlope(ts, ws) * T;
+}
+
+static void testGRFormula() {
+    struct Orbit { const char* name; double a, e; long orbits; } orbitsToTry[] = {
+        {"Mercury (a = 0.38709927 AU, e = 0.20563593: the app's elements)", 0.38709927 * units::kAU, 0.20563593, 500},
+        {"an eccentric orbit (a = 0.5 AU, e = 0.5)", 0.5 * units::kAU, 0.5, 400},
+    };
+    for (const Orbit& o : orbitsToTry) {
+        const double want = grAdvancePerOrbit(kRealGM[0], o.a, o.e);
+        double rel[2];
+        const double steps[2] = {0.25, 1.0};                            // 0.25 d: close to the exact flow; 1 d: the app's step
+        for (int k = 0; k < 2; k++) {
+            const double on = measuredAdvancePerOrbit(true, o.a, o.e, o.orbits, steps[k]), off = measuredAdvancePerOrbit(false, o.a, o.e, o.orbits, steps[k]);
+            rel[k] = (on - off) / want - 1;
+            std::printf("GR advance, %s, %ld orbits, step %.2f d: GR on - GR off = %.5e rad/orbit, formula 6 pi GM/(c^2 a (1-e^2)) = %.5e (relative difference %+.2e; GR off alone drifts %.1e rad/orbit)\n",
+                        o.name, o.orbits, steps[k], on - off, want, rel[k], off);
+        }
+        // Limit for the fine step: the fit sees the short-period wobble of the osculating perihelion (amplitude of order GM/(c^2 p) ~ 1e-7 rad) against a total
+        // advance of order 1e-4 rad, so about 1e-3; terms of the next order in GM/(c^2 p) are ~1e-7 and negligible.
+        check(std::string("GR: perihelion advance for ") + o.name + " matches 6 pi GM / (c^2 a (1-e^2)) to 1e-3 at a 0.25 d step", std::fabs(rel[0]) < 1e-3);
+        // The app's own 1-day step, same limit and same reason. (My first limit here was 2 %, a guess for a splitting error; the measured difference is ~1e-5, no
+        // different from the 0.25 d step, so I use the fit-noise limit.)
+        check(std::string("GR: the 1-day step (the app's) reproduces the formula for ") + o.name + " to 1e-3", std::fabs(rel[1]) < 1e-3);
+    }
+}
+
+// Published value: Will, C. M., "The Confrontation between General Relativity and Experiment", Living Reviews in Relativity 17 (2014) 4: Mercury's perihelion
+// shift is 42.98 arcseconds per century times (2 + 2 gamma - beta)/3, i.e. 42.98 for general relativity (gamma = beta = 1). Quoted from a search-engine excerpt of
+// that review (the paper itself, on arXiv, could not be opened from the session that wrote this).
+static void testGRPublished() {
+    const double a = 0.38709927 * units::kAU, e = 0.20563593;
+    const double mu = kRealGM[0] + kRealGM[1], T = 2 * units::kPi * std::sqrt(a * a * a / mu);
+    const double on = measuredAdvancePerOrbit(true, a, e, 500, 0.25), off = measuredAdvancePerOrbit(false, a, e, 500, 0.25);
+    const double perCentury = (on - off) * (kCenturyS / T) * kArcsecPerRad;
+    std::printf("GR advance of Mercury (Sun + Mercury, 500 orbits, step 0.25 d): %.3f arcseconds per century; published (Will 2014): 42.98\n", perCentury);
+    // Limit 1e-3 (0.043 arcsec): the published number is rounded to 0.01 (1.2e-4), and it uses Mercury's real orbit while the app uses its own AU (149.6e9 m, 1.0e-4
+    // below the IAU value; the advance goes as a^(-5/2): 2.5e-4) and J2000 mean elements; the fit adds up to 4e-4 (see above).
+    check("GR: Mercury's advance agrees with the published 42.98 arcseconds per century to 1e-3", std::fabs(perCentury / 42.98 - 1) < 1e-3);
+}
+
+// ---- with the option off, nothing changes from 0.10 ----
+// The Sun and planets' positions after 3,652 one-day steps from the start state, saved from version 0.10.0 (the code before this change; GCC, x86-64) as exact
+// binary floating-point numbers. A saved result of our own earlier code, so it only shows that nothing changed.
+static const double kSaved010[kNBodies][3] = {
+    {-0x1.638f6fb9a1d14p+28, -0x1.ee3a0b8fe0f08p+29, 0x1.7fb0240dcebcap+23},
+    {0x1.966afe98afa3cp+34, 0x1.10773d66b151p+35, 0x1.06ed1a08bbd4ep+29},
+    {0x1.8f072c99051b7p+36, 0x1.8ea0604a855f4p+33, -0x1.650e805ae7bbdp+32},
+    {-0x1.840f53424fe74p+34, 0x1.0bdd617c266bp+37, 0x1.1e8381ebb942p+19},
+    {0x1.cab293c3e134p+36, 0x1.566fed0116907p+37, 0x1.9af765981a926p+29},
+    {0x1.bf8a50fb2bbd8p+38, 0x1.09a679ee1da6cp+39, -0x1.8737ce4b5c018p+33},
+    {-0x1.b9bc6fbf15bbbp+39, 0x1.c9c8147d84afcp+39, 0x1.348b9c64fe403p+34},
+    {-0x1.1a544d638f698p+39, 0x1.3fc3ac025f8b1p+41, 0x1.0c8946c0a10c9p+34},
+    {0x1.ddddbd265929ep+41, 0x1.97fad46569454p+40, -0x1.e6c6434004e1fp+36},
+};
+
+static void testGROffIsOld() {
+    NBodyState a = nbodyStartState(), b = nbodyStartState();
+    for (int i = 0; i < 3652; i++) { nbodyStep(a, kNBodyStep); nbodyStep(b, kNBodyStep, false); }
+    bool same = true;
+    for (int i = 0; i < kNBodies; i++) same = same && a.x[i].x == b.x[i].x && a.x[i].y == b.x[i].y && a.x[i].z == b.x[i].z && a.v[i].x == b.v[i].x;
+    double worst = 0;
+    for (int i = 1; i < kNBodies; i++)
+        worst = std::max(worst, length(a.x[i] - Vec3{kSaved010[i][0], kSaved010[i][1], kSaved010[i][2]}) / length(a.x[i] - a.x[0]));
+    std::printf("GR off: after 3,652 steps the positions differ from the saved 0.10.0 ones by at most %.1e of the planets' distances (default argument equals an explicit 'off': %s)\n", worst, same ? "yes" : "NO");
+    // 1e-9: the same compiled code gives 0; another compiler or CPU may round differently, and 3,652 steps can grow that to about 1e-12 at most.
+    check("GR off: the default (no argument) is the same as an explicit off, bit for bit", same);
+    check("GR off: positions equal the ones saved from 0.10.0 (to 1e-9 of the distances, for other compilers' rounding)", worst < 1e-9);
+    NBodyState c = nbodyStartState(); for (int i = 0; i < 3652; i++) nbodyStep(c, kNBodyStep, true);
+    check("GR on really changes the motion (Mercury's place after 10 years is not the 'off' place)", length(c.x[1] - a.x[1]) > 1e3);
+}
+
+// ---- conserved quantities with GR on: energy including the GR potential energy, angular momentum, momentum, centre of mass ----
+static void testGRConservation() {
+    NBodyState s = nbodyStartState();
+    const double h = kNBodyStep, e0 = nbodyEnergyGR(s);
+    const Vec3 l0 = nbodyAngularMomentum(s), p0 = nbodyMomentum(s);
+    double scaleP = 0; for (int i = 0; i < kNBodies; i++) scaleP += kRealGM[i] * length(s.v[i]);
+    double maxE = 0, maxL = 0, maxP = 0, maxCom = 0;
+    const long n = long(1000 * kYearS / h);
+    for (long i = 1; i <= n; i++) {
+        nbodyStep(s, h, true);
+        if (i % 50 == 0) {
+            maxE = std::max(maxE, std::fabs(nbodyEnergyGR(s) / e0 - 1));
+            maxL = std::max(maxL, length(nbodyAngularMomentum(s) - l0) / length(l0));
+            maxP = std::max(maxP, length(nbodyMomentum(s)) / scaleP);
+            maxCom = std::max(maxCom, length(nbodyCentreOfMass(s)));
+        }
+    }
+    std::printf("GR on, eight planets, 1,000 years: max |dE/E| = %.3e (E includes the GR potential), max |dL|/|L| = %.3e, max |P| / sum(GM |v|) = %.3e (start %.1e), max |centre of mass| = %.3e m\n",
+                maxE, maxL, maxP, length(p0) / scaleP, maxCom);
+    // The limits are the ones used without GR (REPORT 0.10.0): the GR kick is a force from a potential that depends only on the distance to the Sun, so it is
+    // time-symmetric, central (no torque) and momentum-conserving, and the energy it adds to the error is far below the planets' own splitting error.
+    check("GR on: energy (with the GR potential) bounded below 1e-8 over 1,000 years", maxE < 1e-8);
+    check("GR on: angular momentum to rounding level (1e-12)", maxL < 1e-12);
+    check("GR on: momentum stays at rounding level (1e-13 of sum GM |v|)", maxP < 1e-13);
+    check("GR on: the centre of mass stays within 1 km of the origin over 1,000 years", maxCom < 1e3);
+}
+
+static void testGRReversal() {
+    NBodyState s = nbodyStartState();
+    const NBodyState start = s;
+    const double h = kNBodyStep;
+    const long n = long(100 * kYearS / h);
+    for (long i = 0; i < n; i++) nbodyStep(s, h, true);
+    for (long i = 0; i < n; i++) nbodyStep(s, -h, true);
+    const double back = maxRelDiff(s, start);
+    std::printf("GR on, time reversal: 100 years forward then back: the planets are back to within %.2e of their distances\n", back);
+    check("GR on: time reversal still works (back at the start to within 1e-9, as without GR)", back < 1e-9);
+}
+
+// Eight planets: Mercury's perihelion advance with GR on minus the same run with GR off, which removes the planets' pull (about 526 arcseconds per century here).
+static double mercuryRateArcsecPerCentury(bool gr, double years) {
+    NBodyState s = nbodyStartState();
+    const double h = kNBodyStep;
+    const long n = long(years * kYearS / h);
+    std::vector<double> ts, ws;
+    double unwrap = 0, prev = 0;
+    for (long i = 0; i <= n; i++) {
+        if (i % 40 == 0) {
+            const Vec3 r = s.x[1] - s.x[0], vv = s.v[1] - s.v[0];
+            const double mu = kRealGM[0] + kRealGM[1];
+            const Vec3 hv = cross(r, vv), ev = cross(vv, hv) * (1.0 / mu) - r * (1.0 / length(r));
+            const double w = std::atan2(ev.y, ev.x);
+            double d = w - prev; if (d < -units::kPi) d += 2 * units::kPi; else if (d > units::kPi) d -= 2 * units::kPi;
+            unwrap = ts.empty() ? w : unwrap + d; prev = w;
+            ts.push_back(i * h / kCenturyS); ws.push_back(unwrap);
+        }
+        if (i < n) nbodyStep(s, h, gr);
+    }
+    return lineSlope(ts, ws) * kArcsecPerRad;
+}
+
+static void testGRMercuryEightPlanets() {
+    const double on = mercuryRateArcsecPerCentury(true, 500), off = mercuryRateArcsecPerCentury(false, 500);
+    std::printf("Mercury in the eight-planet model, 500 years: perihelion advance %.2f arcseconds per century with GR, %.2f without; difference %.2f (published GR value 42.98, Will 2014)\n", on, off, on - off);
+    // Limit 2 %: the same fit in both runs (so the planets' wobble cancels); what is left is the fit's own noise and a tiny cross effect of GR and the planets.
+    check("GR: in the eight-planet model GR adds 42.98 arcseconds per century to Mercury's advance (to 2 %)", std::fabs((on - off) / 42.98 - 1) < 0.02);
+}
+
 int main() {
     testTwoBody();
     testEightPlanets();
@@ -220,6 +401,12 @@ int main() {
     testConvergence();
     testClock();
     testMercuryPerihelion();
+    testGRFormula();
+    testGRPublished();
+    testGROffIsOld();
+    testGRConservation();
+    testGRReversal();
+    testGRMercuryEightPlanets();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

@@ -78,6 +78,10 @@ public:
     // to the N-body state for the date shown; switching off reloads the system at the date shown from the orbital elements.
     void setRealPlanets(bool on);
     bool realPlanets() const { return real_; }
+    // In Real: the planets also feel the Sun's first-order (1PN) general-relativity potential (orbit/nbody.h). Changing it moves the planets to the other
+    // clock's state for the date shown and clears the planets' trails. No effect in Simple (the value is kept for when Real is switched on).
+    void setRelativity(bool on);
+    bool relativity() const { return gr_; }
 
     // The balance point of the Sun and every planet, m from the Sun's centre.
     Vec3 barycentre() const;
@@ -95,6 +99,7 @@ public:
 private:
     int nextId_ = 0;
     bool real_ = false;
+    bool gr_ = false;
     NBodyClock nb_;
     void applyReal(double extraSeconds);   // put the eight planets where the N-body clock has them `extraSeconds` after the shown date
     void realTrail(Body& b);
