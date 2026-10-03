@@ -157,6 +157,25 @@ static void testThemes() {
     checkTrue("synthwave unlocked", themeUsable(p, "synthwave") && !themeUsable(p, "monochrome"));
 }
 
+// ---- 0.10.1: the name a theme card shows ("???" only while a secret theme is still locked) ----
+static void testThemeShownName() {
+    const std::set<std::string> none, one = {"synthwave"}, both = {"synthwave", "monochrome"};
+    const ThemeDef &dark = kThemes[2], &synth = kThemes[9], &mono = kThemes[10];
+    checkStr("shown name: a normal theme shows its name (nothing unlocked)", themeShownName(dark, none), "Dark");
+    checkStr("shown name: a locked secret theme is ???", themeShownName(synth, none), "???");
+    checkStr("shown name: the other locked secret theme is ???", themeShownName(mono, none), "???");
+    checkStr("shown name: an unlocked secret theme shows its real name", themeShownName(synth, one), "Synthwave");
+    checkStr("shown name: the one still locked stays ??? when only the other is unlocked", themeShownName(mono, one), "???");
+    checkStr("shown name: both unlocked, Monochrome shows its name", themeShownName(mono, both), "Monochrome");
+    bool ok = true;
+    for (const ThemeDef& t : kThemes) {
+        ok = ok && (t.secret || themeShownName(t, none) == t.name);                 // every normal theme always shows its name
+        ok = ok && themeShownName(t, both) == t.name;                                // with both unlocked every theme shows its name
+        ok = ok && (!t.secret || themeShownName(t, none) == "???");                 // every secret theme is ??? while locked
+    }
+    checkTrue("shown name: the rule holds for every theme in the list", ok);
+}
+
 static void testProgress() {
     // the pop-up texts against the web's run, for every count (the web counts 5 achievements, the native app 4)
     // (the reference starts with the first `themes` secret themes and the first `achievements` achievements;
@@ -1364,6 +1383,7 @@ int main() {
     testRoundTrip();
     testBadLines();
     testThemes();
+    testThemeShownName();
     testProgress();
     testPages();
     testFactsAndTabs();

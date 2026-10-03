@@ -306,15 +306,15 @@ void themeButton(AppState& app) {
     const float tick = bold->CalcTextSizeA(fs, FLT_MAX, 0, "✓").x;
     const float fixed = 2 * pad + dot + 2 * pad + tick;                  // everything on a card except the name
     const float maxWidth = vp->WorkSize.x - 24 * s;                      // the popup must fit in the window
-    float nameW = 0;                                                     // the widest name (a secret theme shows "???")
-    for (const app::ThemeDef& t : app::kThemes) nameW = std::max(nameW, bold->CalcTextSizeA(fs, FLT_MAX, 0, displayable(t.secret ? "???" : t.name, bold).c_str()).x);
+    float nameW = 0;                                                     // the widest name (a secret theme shows "???" only while it is locked)
+    for (const app::ThemeDef& t : app::kThemes) nameW = std::max(nameW, bold->CalcTextSizeA(fs, FLT_MAX, 0, displayable(app::themeShownName(t, app.prefs.unlocked), bold).c_str()).x);
     float cardW = fixed + nameW + 2 * s;
     cardW = std::min(cardW, (maxWidth - (kColumns - 1) * gap - 2 * ImGui::GetStyle().WindowPadding.x) / kColumns);
     const float textW = std::max(20 * s, cardW - fixed);
     std::vector<std::string> shown;                                      // each card's name, wrapped to the card
     std::size_t lines = 1;
     for (const app::ThemeDef& t : app::kThemes) {
-        std::string n = wrapLabel(displayable(t.secret ? "???" : t.name, bold), textW);
+        std::string n = wrapLabel(displayable(app::themeShownName(t, app.prefs.unlocked), bold), textW);
         lines = std::max<std::size_t>(lines, 1 + std::count(n.begin(), n.end(), '\n'));
         shown.push_back(n);
     }
