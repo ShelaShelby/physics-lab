@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """0.10.5 stage 3: rewrites the six comet rows of reference/reference_values.h (initial positions, the three runs, the orbit shapes).
-Run it AFTER make_reference.js (which makes the file from the web code and knows only the old comet elements):
+Run it AFTER make_reference.js (which makes the file from the web code, with the web's au and the old comet elements), then rescale_au.py, then this:
     node tests/reference/make_reference.js > tests/reference/reference_values.h   (as before)
     python3 tests/reference/make_comet_refs.py tests/reference/reference_values.h
 The new rows come from an independent Python Kepler solver (same formulas as the lab: Newton's method on Kepler's equation, rotation by Omega, i, omega, speed sqrt(GM a)/r with the lab's
-GM = 4 pi^2 au^3 / year^2, au = 149.6e9 m, year = 365.25 d) applied to the elements in tests/reference/comet_table.inc, i.e. the JPL records, not to the lab's C++ code.
+GM = 4 pi^2 au^3 / year^2, au = 149,597,870,700 m, year = 365.25 d) applied to the elements in tests/reference/comet_table.inc, i.e. the JPL records, not to the lab's C++ code.
 """
 import math, re, sys
 
 path = sys.argv[1]
 src = open(path, encoding="utf-8").read()
 inc = open(path.replace("reference_values.h", "comet_table.inc"), encoding="utf-8").read()
-AU, YEAR = 149.6e9, 365.25 * 86400.0
+AU, YEAR = 149597870700.0, 365.25 * 86400.0   # 0.10.5 stage 4: the IAU au (units.h), before it 149.6e9 m
 GM = 4 * math.pi ** 2 * AU ** 3 / YEAR ** 2
 rec = {}
 for m in re.finditer(r'\{"([^"]+)", "[^"]*", "[^"]*", ([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,]+), ([^,\n]+),', inc):

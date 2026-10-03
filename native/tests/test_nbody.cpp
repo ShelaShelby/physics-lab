@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "au_legacy.h"
 #include "orbit/nbody.h"
 #include "orbit/solar_system.h"
 #include "orbit/units.h"
@@ -315,7 +316,7 @@ static const double kSaved010[kNBodies][3] = {
 };
 
 static void testGROffIsOld() {
-    NBodyState a = nbodyElementsStartState(), b = nbodyElementsStartState();   // the saved 0.10.0 numbers are from the elements start (0.10.3: the app's default start is now JPL's)
+    NBodyState a = legacyStartWithWebAu(), b = legacyStartWithWebAu();   // the saved 0.10.0 numbers are from the elements start with the web's au (0.10.3: the app's default start is now JPL's; 0.10.5 stage 4: the au is the IAU one, see au_legacy.h)
     for (int i = 0; i < 3652; i++) { nbodyStep(a, kNBodyStep); nbodyStep(b, kNBodyStep, false); }
     bool same = true;
     for (int i = 0; i < kNBodies; i++) same = same && a.x[i].x == b.x[i].x && a.x[i].y == b.x[i].y && a.x[i].z == b.x[i].z && a.v[i].x == b.v[i].x;

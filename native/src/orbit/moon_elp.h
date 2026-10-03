@@ -23,7 +23,7 @@ constexpr double kMoonElpWorstKm = 5.2116, kMoonElpWorstArcsec = 2.8789;
 // The Moon's phase (0.10.4 stage 2), from the Moon's and the Sun's directions seen from the Earth's centre (any common frame, the ecliptic here; only directions are used).
 //  elongationDeg: the angle at the Earth between the Sun and the Moon, 0 .. 180 degrees (the geocentric elongation).
 //  fraction: the lit part of the disc, (1 - cos(elongation)) / 2. This is the first-order value: the exact one uses the phase angle (the angle at the Moon between the Sun and the
-//    Earth), which differs from 180 degrees minus the elongation by up to about 0.15 degrees (the Moon's distance over the Sun's, 384,400 km / 149.6 million km = 0.0026 rad) because the Sun is not infinitely
+//    Earth), which differs from 180 degrees minus the elongation by up to about 0.15 degrees (the Moon's distance over the Sun's, 384,400 km / 149.598 million km = 0.0026 rad) because the Sun is not infinitely
 //    far; near the quarters that moves the lit fraction by up to about 0.0013 (0.13 percentage points).
 //  index/name: eight names, chosen so that a name never disagrees with the lit percent: by the lit fraction, with waxing or waning from the Moon's ecliptic-longitude difference from the Sun
 //    (Moon minus Sun, 0 to 180 degrees = east of the Sun = waxing). new moon: under 2 % lit; crescent: 2 to 40 %; quarter: 40 to 60 %; gibbous: 60 to 98 %; full moon: over 98 %.

@@ -211,7 +211,7 @@ void seasonsGuide(AppState& app) {
             if (!e || !earthSeason(*e, app.sys, q)) { richText("<p class=\"lrnP\">The real Solar System is needed for this (it is on when the lab opens).</p>"); continue; }
             const std::string when = fmt::dateUTC(app.sys.currentUnixMs()), dec = std::fabs(q.dlat) < 0.05 ? "the equator" : fmt::fixed(std::fabs(q.dlat), 1) + "° " + (q.dlat > 0 ? "north" : "south");
             richText("<p class=\"lrnP\"><b>" + when + " in the lab.</b> Northern " + kSeasonNorth[q.k] + ", southern " + kSeasonSouth[q.k] +
-                     ". The Sun is straight overhead at " + dec + ". Earth is " + fmt::fixed(q.distAU, 3) + " AU from the Sun (" + fmt::millionKm(q.distAU * 149.6) + ").</p>");
+                     ". The Sun is straight overhead at " + dec + ". Earth is " + fmt::fixed(q.distAU, 3) + " AU from the Sun (" + fmt::millionKm(q.distAU * units::kAU / units::kKm / 1e6) + ").</p>");
             if (ImGui::BeginTable("daylight", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH)) {
                 ImGui::TableSetupColumn("Place"); ImGui::TableSetupColumn("Daylight"); ImGui::TableSetupColumn("Noon Sun height");
                 ImGui::TableHeadersRow();

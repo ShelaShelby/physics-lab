@@ -22,8 +22,9 @@ constexpr long kRealErrKmRelOn[kRealErrCount] = {70045, 45430, 22081, 22341, 282
 // 0.10.5 stage 3: the same for "Planet physics: Simple" (planets from JPL's approximate Keplerian elements, 1800-2050 table, kept as fixed orbits when time runs), quoted in the Simple note.
 // Heliocentric position error against the same Horizons tables at the same 301 dates, measured by tests/test_jpl.cpp (the "Simple" block; the maximum over all 301 dates, so it includes
 // 2050-2100, which the table is not made for; Saturn's worst is in 2067), each rounded UP to a whole km; the test checks they are the measured maxima. Earth = the Earth-Moon barycentre.
-// (They include the lab's au of 149.6e9 m, 1.4e-5 too big: audit row 2; they will move a little when that is fixed, and the test will say so.)
-constexpr long kSimpleErrKm[kRealErrCount] = {7641, 13959, 16314, 90248, 1840647, 7999511, 2912393, 2302277};
+// 0.10.5 stage 4 (the IAU au, 149,597,870,700 m, instead of the web's 149.6e9 m): they were 7641, 13959, 16314, 90248, 1840647, 7999511, 2912393, 2302277 km before; tests/test_jpl.cpp checks that no
+// planet got worse by more than the au change can explain (1.42e-5 of its greatest distance from the Sun).
+constexpr long kSimpleErrKm[kRealErrCount] = {7618, 13858, 16112, 90493, 1839933, 8000757, 2942873, 2341475};
 
 // "Saturn 8.0, Uranus 2.9, Neptune 2.3, Jupiter 1.8, Mars 0.09, Earth 0.016, Venus 0.014, Mercury 0.0076": Simple's worst errors in million km, largest first
 inline std::string simpleWorstErrorList() {

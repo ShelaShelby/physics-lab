@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "au_legacy.h"
 #include "orbit/nbody.h"
 #include "orbit/real_errors.h"
 #include "orbit/solar_system.h"
@@ -112,7 +113,7 @@ static void makeJplStart() {
 static void testNothingChanged() {
     // The integrator and the clock are unchanged: Real from the LEGACY elements start (the 0.10.2 start) still gives the 0.10.2 numbers. (The app's default Real start
     // is now the JPL state, which changes Real on purpose; that is checked against the JPL table below.)
-    const NBodyState elemStart = nbodyElementsStartState();
+    const NBodyState elemStart = legacyStartWithWebAu();   // the 0.10.2 start with the web's au (0.10.5 stage 4: the lab's au is the IAU one; see au_legacy.h); kSavedSimple below was rescaled instead
     NBodyClock clock(kNBodyStep, false, &elemStart);
     double worstReal = 0, worstSimple = 0;
     for (int d = 0; d < 5; d++) {
@@ -153,24 +154,24 @@ static double g_sunDiff[kRows];                                             // |
 // (GCC, x86-64), rounded up to 3 digits. They only notice a change; they are NOT physical bounds, and the big ones (Real from the elements) are the known drift of the elements start.
 static const double kGuardKm[kModels][8] = {
     {   // Simple
-        7720,   // regression guard (measured 7640.6 km)
-        14100,   // regression guard (measured 13958.1 km)
-        16500,   // regression guard (measured 16313.5 km)
-        91200,   // regression guard (measured 90247.2 km)
-        1.86e+06,   // regression guard (measured 1840650.0 km)
-        8.08e+06,   // regression guard (measured 7999510.0 km)
-        2.95e+06,   // regression guard (measured 2912390.0 km)
-        2.33e+06,   // regression guard (measured 2302280.0 km)
+        7700,   // regression guard (measured 7617.7 km)
+        14000,   // regression guard (measured 13857.2 km)
+        16300,   // regression guard (measured 16111.6 km)
+        91400,   // regression guard (measured 90492.6 km)
+        1.86e+06,   // regression guard (measured 1.83993e+06 km)
+        8.09e+06,   // regression guard (measured 8.00076e+06 km)
+        2.98e+06,   // regression guard (measured 2.94287e+06 km)
+        2.37e+06,   // regression guard (measured 2.34148e+06 km)
     },
     {   // Real from elements, GR on
-        1.07e+07,   // regression guard (measured 10537900.0 km)
-        6.53e+06,   // regression guard (measured 6456600.0 km)
-        5.33e+06,   // regression guard (measured 5270330.0 km)
-        7.6e+06,   // regression guard (measured 7522470.0 km)
-        1.24e+07,   // regression guard (measured 12265300.0 km)
-        1.11e+08,   // regression guard (measured 109384000.0 km)
-        4.08e+08,   // regression guard (measured 403795000.0 km)
-        1.12e+08,   // regression guard (measured 110630000.0 km)
+        1.88e+06,   // regression guard (measured 1.85228e+06 km)
+        1.11e+06,   // regression guard (measured 1.09081e+06 km)
+        666000,   // regression guard (measured 658428 km)
+        3.68e+06,   // regression guard (measured 3.63653e+06 km)
+        1.05e+07,   // regression guard (measured 1.0383e+07 km)
+        1.13e+08,   // regression guard (measured 1.10925e+08 km)
+        4.09e+08,   // regression guard (measured 4.04883e+08 km)
+        1.13e+08,   // regression guard (measured 1.11452e+08 km)
     },
     {   // Real from JPL, GR on
         70800,   // regression guard (measured 70044.3 km)
@@ -198,21 +199,21 @@ static const double kGuardArcsec[kModels][8] = {
         34.4,   // regression guard (measured 34.008 arcsec)
         26.8,   // regression guard (measured 26.454 arcsec)
         22.9,   // regression guard (measured 22.582 arcsec)
-        86.3,   // regression guard (measured 85.421 arcsec)
+        86.3,   // regression guard (measured 85.42 arcsec)
         512,   // regression guard (measured 505.949 arcsec)
-        1200,   // regression guard (measured 1186.370 arcsec)
+        1200,   // regression guard (measured 1186.37 arcsec)
         203,   // regression guard (measured 200.206 arcsec)
         91.8,   // regression guard (measured 90.817 arcsec)
     },
     {   // Real from elements, GR on
-        47600,   // regression guard (measured 47053.000 arcsec)
-        12600,   // regression guard (measured 12388.800 arcsec)
-        7470,   // regression guard (measured 7391.140 arcsec)
-        7580,   // regression guard (measured 7498.130 arcsec)
-        3260,   // regression guard (measured 3223.750 arcsec)
-        16800,   // regression guard (measured 16581.300 arcsec)
-        30900,   // regression guard (measured 30516.100 arcsec)
-        5030,   // regression guard (measured 4974.160 arcsec)
+        8380,   // regression guard (measured 8290.31 arcsec)
+        2120,   // regression guard (measured 2092.85 arcsec)
+        933,   // regression guard (measured 923.336 arcsec)
+        3660,   // regression guard (measured 3623.18 arcsec)
+        2710,   // regression guard (measured 2682.82 arcsec)
+        17000,   // regression guard (measured 16815.4 arcsec)
+        31000,   // regression guard (measured 30598.6 arcsec)
+        5070,   // regression guard (measured 5011.68 arcsec)
     },
     {   // Real from JPL, GR on
         317,   // regression guard (measured 313.652 arcsec)
@@ -296,6 +297,22 @@ static void testValidation() {
         quotedSimple = quotedSimple && ok;
     }
     check("the worst errors quoted in the app's Simple note are the measured maxima (planets from the elements, 301 dates 1800-2100) rounded up to a whole km", quotedSimple);
+    // (d) 0.10.5 stage 4, the independent check of the au change: Simple against Horizons must not be worse than before the change (the quoted maxima of 0.10.5 stage 3, measured with the web's
+    // au of 149.6e9 m) by more than the change itself can explain: the au moved every length by 1 - 149597870700 / 149.6e9 = 1.4233e-5, so a position error can grow by at most that times the planet's
+    // greatest distance from the Sun, a (1 + e) (JPL elements at J2000).
+    {
+        const long before[8] = {7641, 13959, 16314, 90248, 1840647, 7999511, 2912393, 2302277};
+        bool within = true;
+        for (int i = 0; i < 8; i++) {
+            double mx = 0;
+            for (int r = 0; r < kRows; r++) mx = std::max(mx, g_km[kSimple][i][r]);
+            const double rmax = kPlanets[i].el[0] * (1 + kPlanets[i].el[2]) * units::kAU / 1000.0;     // km
+            const double allowed = (1 - units::kAU / 149.6e9) * rmax;
+            std::printf("  au change, Simple %s: before %ld km, now %.0f km (%+.0f), at most +%.0f explainable\n", kNames[i + 1], before[i], mx, mx - double(before[i]), allowed);
+            within = within && mx - double(before[i]) <= allowed;
+        }
+        check("the au change: no planet's worst Simple error grew by more than 1.42e-5 of its greatest distance from the Sun", within);
+    }
     // Mercury: does the GR term move it towards JPL?
     std::printf("\nMercury, from the JPL state, error (km) with GR on / off:\n");
     for (int k = 0; k < 5; k++) std::printf("  %d: %.1f / %.1f\n", kShow[k], g_km[kJplGR][0][kShow[k] - kFirstYear], g_km[kJplNoGR][0][kShow[k] - kFirstYear]);

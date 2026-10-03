@@ -15,3 +15,4 @@
 - No connectors, plugins or extra skills for now (they cost usage).
 - Coding sessions run on Sonnet 5.5; the strongest model is used only in a fresh short planning chat (for example the 1.0 design plan).
 - More electrons: the first level (shells filling with simplified screening, Slater's rules) needs the owner's decision before it is planned.
+- The lab uses the IAU astronomical unit, 149,597,870,700 m exactly (IAU 2012 Resolution B2; JPL's Astrodynamic Parameters page states this value and names the resolution B1). The web version's 149.6e9 m is no longer followed (3 Oct 2026).

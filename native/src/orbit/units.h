@@ -15,7 +15,10 @@ constexpr double kPi = 3.14159265358979323846;
 
 // --- length -------------------------------------------------------------------
 constexpr double kKm = 1000.0;                        // m
-constexpr double kAU = 149.6e9;                       // m. The web uses AU_KM = 149.6e6 km (IAU value: 149,597,870.7 km)
+// The astronomical unit: the IAU value, exactly 149,597,870,700 m. Owner decision of 3 Oct 2026 (DECISIONS.md): the lab follows the IAU, not the web version's 149.6e9 m (0.10.5 stage 4).
+// JPL's Astrodynamic Parameters page (https://ssd.jpl.nasa.gov/astro_par.html, read 2026-10-03) states: "astronomical unit au 149597870700 m IAU 2012 Resolution B1"
+// (the page's own wording; the owner's decision names Resolution B2, the IAU text itself was not reachable from the session that wrote this).
+constexpr double kAU = 149597870700.0;                // m
 constexpr double kEarthRadius = 6371.0 * kKm;         // m, used to turn "× Earth" sizes into metres
 // The Sun's radius: IAU 2015 nominal solar radius, 695,700 km. JPL Horizons' Sun header (API, COMMAND='10', OBJ_DATA='YES', read 2026-10-03) says:
 //   "Vol. mean radius, km  = 695700"  and  "Solar radius (IAU2015)= 695700 km"      (0.10.5 stage 3; before it the lab used 696,000 km, 4.3e-4 more)
@@ -35,8 +38,8 @@ constexpr double kSimTime = kYear / (2.0 * kPi);            // s   (about 58.13 
 // --- gravity of the Sun -----------------------------------------------------------
 // GM of the Sun as the web version uses it: GM = 100 sim units, which is the same
 // as Kepler's third law with 1 AU and 1 Julian year:  GM = 4π² · AU³ / year².
-// = 1.32724e20 m³/s². (The IAU value is 1.32712e20; the 0.009 % difference comes
-// from the web's rounded AU and 365.25-day year, and is kept so both versions agree.)
+// = 1.3271745e20 m³/s² with the IAU au (before 0.10.5 stage 4, with the web's 149.6e9 m, it was 1.3272312e20). JPL's GM of the Sun (DE440, astro_par page) is 1.32712440041279419e20:
+// this one is 3.8e-5 larger, which comes from the 365.25-day Julian year (the Gaussian year is 365.2568983 d). Kept on purpose for now: the year and this GM are not changed in this stage.
 constexpr double kGMSun = 4.0 * kPi * kPi * kAU * kAU * kAU / (kYear * kYear);   // m³/s²
 
 constexpr double kSunMassKg = 1.989e30;               // kg (shown on the Sun's card)

@@ -422,10 +422,11 @@ int main() {
         check(simpleWorstErrorList() == "Saturn 8.0, Uranus 2.9, Neptune 2.3, Jupiter 1.8, Mars 0.09, Earth 0.016, Venus 0.014, Mercury 0.0076", "Simple note: worst errors, million km: " + simpleWorstErrorList());
         // row 12: each comet's elements are exactly the record named in tests/reference/comet_table.inc, and its place is measured against Horizons at two dates
         // (the record's perihelion time and 2026-01-01 12:00 TDB). The guards are regression guards: about 1 % above the error measured when they were set, NOT physical bounds.
-        // Measured on Linux GCC when set (km, at tp / at 2026-01-01): Halley 5,174,603 / 27,045,044; Hale-Bopp 9,703,485 / 1,152,185; NEOWISE 628 / 1,214,195; Encke 8,904 / 281,619;
-        // 67P 2,578 / 1,703,135; Swift-Tuttle 1,229,198 / 8,928,328. They are large because each comet is ONE fixed two-body orbit from the record's epoch (Halley's is 1968), and they include
-        // the lab's au (149.6e9 m, 1.4e-5 too big, audit row 2). The old elements (stage 2) gave 4.6 / 48.8, 9.7 / 1.7, 0.05 / 2.8, 0.18 / 2.8, 14.4 / 61.8, 1.2 / 17.8 million km.
-        const double kGuardKm[6][2] = {{5226350, 27315495}, {9800520, 1163707}, {635, 1226337}, {8994, 284436}, {2604, 1720167}, {1241490, 9017612}};
+        // Measured on Linux GCC when set (0.10.5 stage 4, with the IAU au; km, at tp / at 2026-01-01): Halley 5,175,018 / 26,983,131; Hale-Bopp 9,704,149 / 1,161,789; NEOWISE 1 / 1,226,153;
+        // Encke 8,947 / 273,680; 67P 0 / 1,712,840; Swift-Tuttle 1,228,869 / 8,993,217. (Stage 3, with the web's au: NEOWISE 628 and 67P 2,578 at tp: that was mostly the au.) Where the error is
+        // about 0 the guard is a floor of 100 km, for rounding differences between compilers. They are large elsewhere because each comet is ONE fixed two-body orbit from the record's epoch
+        // (Halley's is 1968). The old elements (stage 2) gave 4.6 / 48.8, 9.7 / 1.7, 0.05 / 2.8, 0.18 / 2.8, 14.4 / 61.8, 1.2 / 17.8 million km.
+        const double kGuardKm[6][2] = {{5226769, 27252963}, {9801191, 1173407}, {100, 1238415}, {9037, 276417}, {100, 1729969}, {1241158, 9083150}};
         int ci = 0;
         for (const CometRecord& r : kCometRecords) {
             const CometData* c = nullptr;

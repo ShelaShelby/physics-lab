@@ -42,7 +42,7 @@ static void cometCard(const SolarSystem& sys, const Body& b, Card& c) {
     const double a = cm.qAU / (1 - cm.e), Q = a * (1 + cm.e);   // AU
     c.title = cm.title;
     c.lines = {"Nucleus: about " + fmt::kmPlain(cm.nucleusKm) + " across",
-               "Distance from the Sun now: " + (r < 10 ? fmt::fixed(r, 2) : fmt::commas(r)) + " AU (" + fmt::millionKm(r * 149.6) + ")",
+               "Distance from the Sun now: " + (r < 10 ? fmt::fixed(r, 2) : fmt::commas(r)) + " AU (" + fmt::millionKm(r * kAU / kKm / 1e6) + ")",
                "Speed now: " + fmt::kms(v),
                "Closest to the Sun: " + fmt::fixed(cm.qAU, 2) + " AU  ·  farthest: " + (Q < 10 ? fmt::fixed(Q, 1) : fmt::commas(Q)) + " AU",
                "One trip round the Sun: " + (yrs < 10 ? fmt::fixed(yrs, 1) : fmt::commas(yrs)) + " years"};
