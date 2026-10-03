@@ -211,7 +211,7 @@ void journeyDatesCard(AppState& app, bool wasActive) {
                               // QUANTITIES=23 (solar elongation), START_TIME 2012-06-06 00:30, STOP_TIME 02:30, STEP_SIZE 1 min: the minimum row is 2012-Jun-06 01:26, 0.154 degrees.
                               {"Venus crosses the Sun, 2012", "2012-06-06", "The last transit of Venus: 5–6 Jun 2012 (the jump lands at its middle, 01:26 UT on 6 Jun)", "01:26"},
                               {"Great conjunction, 2020", "2020-12-21", "Jupiter and Saturn looked almost touching: 21 Dec 2020"},
-                              {"Halley returns, 2061", "2061-07-28", "Halley’s Comet is due back on 28 Jul 2061 (a prediction)"}};
+                              {"Halley returns, 2061", "2061-07-28", "Halley’s Comet is due back on 28 Jul 2061 (JPL’s prediction; the lab’s simple orbit has it about 5 months later)"}};
     for (int i = 0; i < 7; i++) {                         // one tile per row, so the names fit
         if (wideButton(jumps[i].name)) {
             if (!jumps[i].date) { journeyStop(app); resetToToday(app); app.dateNote = "Back to today."; }

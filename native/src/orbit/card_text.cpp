@@ -139,7 +139,7 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         const double t = std::round(sp.T / 10) * 10;
         c.title = "Sun · G-type star";
         c.lines = {"Mass: 1 solar mass (M☉), " + fmt::fixed(sp.m * 1.989, 2) + "×10³⁰ kg",
-                   "Radius: " + fmt::fixed(sp.R, 2) + " Suns (" + fmt::km(sp.R * 696000) + ")",
+                   "Radius: " + fmt::fixed(sp.R, 2) + " Suns (" + fmt::km(sp.R * kSunRadius / kKm) + ")",
                    "Surface: about " + fmt::commas(t) + " K  ·  " + fmt::fixed(sp.L, sp.L < 10 ? 2 : 1) + " Suns bright",
                    "Habitable zone (rough): " + fmt::fixed(sp.hzIn, 2) + " – " + fmt::fixed(sp.hzOut, 2) + " AU",
                    "Frost line (rough): " + fmt::fixed(sp.frost, 1) + " AU (rock inside, giants outside)"};
@@ -165,7 +165,7 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
         const double vEsc = std::sqrt(2 * kGMSun / o.r);                     // escape speed from the Sun here, m/s
         c.title = b.name + " · " + b.kind;
         c.lines = {"Size: " + fmt::fixed(Rp, Rp < 1 ? 2 : 1) + " × Earth (radius " + fmt::km(Rp * 6371) + ")",
-                   "Mass: " + mass + "  ·  gravity " + fmt::fixed(g, g < 0.1 ? 3 : 1) + " g",
+                   "Mass: " + mass + "  ·  gravity " + fmt::fixed(g, g < 0.1 ? 3 : 1) + " g" + (b.gravityG >= 0 ? " at the equator" : ""),
                    "Distance: " + fmt::au(d) + " (" + fmt::millionKm(d * kAU / kKm / 1e6) + ")",
                    "Speed: " + fmt::kms(o.v / kKm) + " (escape here " + fmt::kmsNumber(vEsc / kKm) + ")",
                    "Orbit: " + shape,

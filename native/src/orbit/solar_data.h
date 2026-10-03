@@ -12,7 +12,9 @@ namespace orbit {
 // positions of the major planets, 1800 AD - 2050 AD". Each element has its value
 // at J2000 and its rate per Julian century:
 //   a (AU), e, I (deg), L mean longitude (deg), long. of perihelion ϖ (deg), long. of node Ω (deg).
-// Sizes, masses, gravity and mean temperatures: NASA planetary fact sheet.
+// Sizes, masses and mean temperatures: NASA planetary fact sheet. Gravity (0.10.5 stage 3): JPL "Planetary Physical Parameters" (https://ssd.jpl.nasa.gov/planets/phys_par.html, read 2026-10-03),
+// column "Equatorial Gravity", which the page defines as "the gravitational acceleration on the planet's surface at the equator" (m/s^2; Mercury 3.70, Venus 8.87, Earth 9.80, Mars 3.71,
+// Jupiter 24.79, Saturn 10.44, Uranus 8.87, Neptune 11.15). The page does not say which level the giant planets' value is for, so the card only says "at the equator".
 struct PlanetData {
     const char* name;
     const char* color;          // "#rrggbb", as drawn in the web version
@@ -20,7 +22,7 @@ struct PlanetData {
     double el[12];              // a0, a1, e0, e1, I0, I1, L0, L1, w0, w1, O0, O1
     double radiusKm;            // equatorial radius, km
     double massEarths;          // mass in Earth masses
-    double gravityG;            // surface gravity in g (Earth = 1)
+    double gravityMS2;          // surface gravity at the equator, m/s^2 (JPL Planetary Physical Parameters, "Equatorial Gravity")
     double tempC;               // mean temperature, °C
     const char* tempNote;       // where that temperature is measured
     const char* note;           // one fact for the info card
@@ -59,8 +61,8 @@ struct MoonData {
     const char* note;
 };
 
-// Famous comets: NASA/JPL Small-Body Database, each placed on its own orbit so
-// that its last/next closest approach matches the real date.
+// Famous comets: the elements of one JPL orbit record each (named in solar_data.cpp: JPL Small-Body Database orbit id and epoch), kept as a fixed two-body orbit.
+// Far from the record's epoch the lab's comet drifts from the real one (tests/test_orbit.cpp section 15 measures it against Horizons at two dates).
 struct CometData {
     const char* name;
     const char* color;

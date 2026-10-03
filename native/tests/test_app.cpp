@@ -487,6 +487,9 @@ static const NativeEdit kEditsAbout[] = {
     // 0.10.2 stage 3: the sources of the smooth photon jumps
     {"About sources: smooth photon jumps (Griffiths two-level picture, CODATA Bohr radius)", "(the values were written from knowledge, not looked up here)</li>", "(the values were written from knowledge, not looked up here)</li><li>David J. Griffiths, <i>Introduction to Quantum Mechanics</i>, the chapter on time-dependent perturbation theory (the two-level system): the textbook picture of a transition as a mixing of two states, which the Atom Lab&rsquo;s smooth photon jump follows. It is a picture, not a calculation of how a photon is absorbed (the book was not opened from the session that wrote this)</li><li>CODATA 2018 Bohr radius, 5.29177210903&times;10<sup>&minus;11</sup> m (NIST): used in the tests to show that the lab&rsquo;s 0.529 &Aring; (the web version&rsquo;s rounded value) is 0.03 % smaller (written from knowledge, not looked up here)</li>"},
     {"About sources: the textbooks for the hydrogen-like orbitals", "(the 1913 paper behind the Bohr 1913 style)</li>", "(the 1913 paper behind the Bohr 1913 style)</li><li>Textbooks for the hydrogen-like orbitals (the average distance of the electron, the radial probability, the cloud tests): David J. Griffiths, <i>Introduction to Quantum Mechanics</i>; Hans A. Bethe and Edwin E. Salpeter, <i>Quantum Mechanics of One- and Two-Electron Atoms</i></li>"},
+    // 0.10.5 stage 3: the sources of the planets' gravity (JPL physical parameters), the Sun's radius (Horizons header) and the comet records
+    {"About sources: planet gravity from JPL (the fact-sheet entry no longer claims gravity)", "(sizes, masses, gravity, temperatures)</li>", "(sizes, masses and temperatures; the planets&rsquo; gravity is from JPL, below)</li>"},
+    {"About sources: JPL physical parameters, the Sun's radius, the comet records", "(dwarf planets, asteroids, comets)</li>", "(dwarf planets, asteroids, comets)</li><li><a href=\"https://ssd.jpl.nasa.gov/planets/phys_par.html\" target=\"_blank\" rel=\"noopener noreferrer\">NASA/JPL: planetary physical parameters</a> (each planet&rsquo;s surface gravity at the equator, read from the page on 2026-10-03; the cards give it in g, with Earth&rsquo;s 9.80 m/s&sup2; on the same page as 1 g)</li><li>NASA/JPL Horizons, the Sun&rsquo;s header (Horizons API, COMMAND 10, read 2026-10-03): &ldquo;Solar radius (IAU2015) = 695700 km&rdquo;, the nominal solar radius the lab uses</li><li>NASA/JPL Small-Body Database records of the six famous comets (SBDB API, read 2026-10-03: orbit 75 Halley, 226 Hale&ndash;Bopp, 31 NEOWISE, K273/20 Encke, 32 Swift&ndash;Tuttle; 67P: orbit K284/1 as Horizons gives it at 2021-11-02), and Horizons position vectors of the comets at two dates each, used to check them. Each comet is one fixed two-body orbit, so it drifts from the real one away from the record&rsquo;s date</li>"},
 };
 static const NativeEdit kEditSgrA = {"Sagittarius A* card: no Spacetime Lab", " (see the Spacetime Lab)", ""};
 static const NativeEdit kEditGuideSky = {"Orbit guide, stars and far-away things: no Spacetime Lab", " (the Spacetime Lab shows what a black hole like it does)", ""};
@@ -562,8 +565,8 @@ static void testNativeEdits() {
         checkTrue(n + "a button has an action and the other way round", (*kTimeline[i].button != 0) == (*kTimeline[i].lab != 0));
     }
     checkTrue("exactly one slingshot button in the web", slingshot == 1);
-    // every edit was used (nothing in the list is left over): units 1 + about 12 + sgra 1 + guide 8 + slingshot 1
-    checkTrue("every native edit was used", g_editUses == 1 + 12 + 1 + 8 + 1);
+    // every edit was used (nothing in the list is left over): units 1 + about 14 + sgra 1 + guide 8 + slingshot 1
+    checkTrue("every native edit was used", g_editUses == 1 + 14 + 1 + 8 + 1);   // the About list has 14 edits since 0.10.5 stage 3 (two added for the gravity, Sun radius and comet sources)
 }
 
 // ---- the frames-per-second counter text (the web: Math.round(frames * 1000 / ms) + ' fps') ----

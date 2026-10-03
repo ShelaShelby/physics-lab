@@ -18,11 +18,13 @@
 #include "orbit/date_text.h"
 #include "orbit/format.h"
 #include "orbit/kepler.h"
+#include "orbit/real_errors.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
 #include "orbit/solar_system.h"
 #include "orbit/units.h"
 #include "reference/reference_values.h"
+#include "reference/comet_table.inc"   // 0.10.5 stage 3: the comets' records and Horizons vectors (made by tools/make_comet_ref.py)
 
 using namespace orbit;
 
@@ -394,6 +396,52 @@ int main() {
         check(has(sun, "Habitable zone (rough)") && has(sun, "Frost line (rough)") && has(sun, "Lifetime (rough)"), "Sun card: habitable zone, frost line and lifetime are marked rough");
         check(!has(cardOf(s, "Earth", 0), "× our Moon") && has(cardOf(s, "Earth", 0), "Radius: 1737.4 km"), "Moon card: no comparison with itself");
         check(has(cardOf(s, "Jupiter", 0), "× our Moon"), "Io card: still compared with our Moon");
+    }
+
+    // 15) 0.10.5 stage 3, Orbit Lab data fixes (audit rows 3, 4, 12). Source numbers typed from the pages named next to them.
+    {
+        // row 3: planet surface gravity, JPL "Planetary Physical Parameters" (https://ssd.jpl.nasa.gov/planets/phys_par.html, read 2026-10-03), column "Equatorial Gravity" (m s-2),
+        // defined on that page as "the gravitational acceleration on the planet's surface at the equator". Mercury .. Neptune:
+        const double kJplGravity[8] = {3.70, 8.87, 9.80, 3.71, 24.79, 10.44, 8.87, 11.15};
+        for (int i = 0; i < 8; i++) {
+            check(kPlanets[i].gravityMS2 == kJplGravity[i], std::string("gravity of ") + kPlanets[i].name + " is JPL's value");
+            SolarSystem g; g.loadAt(ref::kEpochMs);
+            near(g.bodies[i].gravityG, kJplGravity[i] / kJplGravity[2], 1.0, 1e-15, std::string("gravity in g of ") + kPlanets[i].name + " = its m/s2 over Earth's 9.80 on the same JPL page");
+        }
+        SolarSystem g; g.loadAt(ref::kEpochMs);
+        const auto massLine = [&](const char* n) { for (const Body& b : g.bodies) if (b.name == n) { Card c; CardOptions o; cardText(g, Selection{Selection::Body, b.id}, o, c); return c.lines[1]; } return std::string(); };
+        check(massLine("Jupiter").find("gravity 2.5 g at the equator") != std::string::npos, "Jupiter card: " + massLine("Jupiter"));
+        check(massLine("Earth").find("gravity 1.0 g at the equator") != std::string::npos && massLine("Mars").find("gravity 0.4 g at the equator") != std::string::npos, "Earth and Mars cards say the gravity is at the equator");
+        // row 4: the Sun's radius, JPL Horizons' Sun header (API, COMMAND='10', OBJ_DATA='YES', read 2026-10-03):
+        //   "Vol. mean radius, km  = 695700" and "Solar radius (IAU2015)= 695700 km"
+        near(units::kSunRadius, 695700.0 * 1000, 695700.0 * 1000, 0, "Sun radius = 695,700 km (IAU 2015 nominal)");
+        Card sc; CardOptions so; cardText(g, Selection{Selection::Star}, so, sc);
+        bool radius = false; for (const auto& l : sc.lines) if (l.find("Radius: 1.00 Suns (695,700 km)") != std::string::npos) radius = true;
+        check(radius, "Sun card: Radius: 1.00 Suns (695,700 km)");
+        // row 9: the Simple note's list of worst errors (kSimpleErrKm in orbit/real_errors.h; tests/test_jpl.cpp checks them against the measured maxima), in million km
+        check(simpleWorstErrorList() == "Saturn 8.0, Uranus 2.9, Neptune 2.3, Jupiter 1.8, Mars 0.09, Earth 0.016, Venus 0.014, Mercury 0.0076", "Simple note: worst errors, million km: " + simpleWorstErrorList());
+        // row 12: each comet's elements are exactly the record named in tests/reference/comet_table.inc, and its place is measured against Horizons at two dates
+        // (the record's perihelion time and 2026-01-01 12:00 TDB). The guards are regression guards: about 1 % above the error measured when they were set, NOT physical bounds.
+        // Measured on Linux GCC when set (km, at tp / at 2026-01-01): Halley 5,174,603 / 27,045,044; Hale-Bopp 9,703,485 / 1,152,185; NEOWISE 628 / 1,214,195; Encke 8,904 / 281,619;
+        // 67P 2,578 / 1,703,135; Swift-Tuttle 1,229,198 / 8,928,328. They are large because each comet is ONE fixed two-body orbit from the record's epoch (Halley's is 1968), and they include
+        // the lab's au (149.6e9 m, 1.4e-5 too big, audit row 2). The old elements (stage 2) gave 4.6 / 48.8, 9.7 / 1.7, 0.05 / 2.8, 0.18 / 2.8, 14.4 / 61.8, 1.2 / 17.8 million km.
+        const double kGuardKm[6][2] = {{5226350, 27315495}, {9800520, 1163707}, {635, 1226337}, {8994, 284436}, {2604, 1720167}, {1241490, 9017612}};
+        int ci = 0;
+        for (const CometRecord& r : kCometRecords) {
+            const CometData* c = nullptr;
+            for (std::size_t k = 0; k < kCometCount; k++) if (std::string(kComets[k].name) == r.name) c = &kComets[k];
+            if (!c) { check(false, std::string("comet in the lab: ") + r.name); ci++; continue; }
+            const std::string tag = std::string("comet ") + r.name + " (record " + r.record + ")";
+            check(c->qAU == r.q && c->e == r.e && c->inclDeg == r.i && c->nodeDeg == r.om && c->periDeg == r.w && c->perihelionJD == r.tp && c->periodDays == r.per, tag + ": the lab's elements are exactly the record's");
+            for (int k = 0; k < 2; k++) {
+                const State st = cometState(*c, r.jd[k]);
+                const double err = length(st.pos - Vec3{r.x[k] * 1000, r.y[k] * 1000, r.z[k] * 1000}) / 1000;   // km
+                std::printf("  %s vs Horizons at JD %.3f: %.0f km (%.4f au; guard %.0f)\n", tag.c_str(), r.jd[k], err, err / 149597870.7, kGuardKm[ci][k]);
+                check(err <= kGuardKm[ci][k], tag + ": position at JD " + std::to_string(r.jd[k]) + " within the regression guard");
+            }
+            ci++;
+        }
+        check(ci == 6, "comets: all six records tested");
     }
 
     std::printf("%d checks, %d failed. Worst position difference vs the web version: %.3g of the distance from the Sun (belt rocks: %.3g).\n",

@@ -52,7 +52,7 @@ void SolarSystem::loadAt(int64_t unixMs) {
         b.name = d.name; b.color = d.color; b.kind = d.kind; b.type = BodyKind::Planet;
         b.pos = st.pos; b.vel = st.vel;
         b.radius = d.radiusKm * kKm;
-        b.massEarths = d.massEarths; b.gravityG = d.gravityG;
+        b.massEarths = d.massEarths; b.gravityG = d.gravityMS2 / kPlanets[2].gravityMS2;   // in g: Earth's equatorial gravity (kPlanets[2], JPL 9.80 m/s^2) = 1
         b.hasTemp = true; b.tempC = d.tempC; b.tempNote = d.tempNote;
         b.note = d.note;
         b.giant = d.massEarths > 50;

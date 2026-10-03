@@ -17,7 +17,9 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kKm = 1000.0;                        // m
 constexpr double kAU = 149.6e9;                       // m. The web uses AU_KM = 149.6e6 km (IAU value: 149,597,870.7 km)
 constexpr double kEarthRadius = 6371.0 * kKm;         // m, used to turn "× Earth" sizes into metres
-constexpr double kSunRadius = 696000.0 * kKm;         // m
+// The Sun's radius: IAU 2015 nominal solar radius, 695,700 km. JPL Horizons' Sun header (API, COMMAND='10', OBJ_DATA='YES', read 2026-10-03) says:
+//   "Vol. mean radius, km  = 695700"  and  "Solar radius (IAU2015)= 695700 km"      (0.10.5 stage 3; before it the lab used 696,000 km, 4.3e-4 more)
+constexpr double kSunRadius = 695700.0 * kKm;         // m
 constexpr double kLightSpeed = 299792.458 * kKm;      // m/s
 constexpr double kLightYearAU = 63241.077;            // AU per light year
 

@@ -286,6 +286,16 @@ static void testValidation() {
         quoted = quoted && double(kRealErrKmRelOff[i]) >= mOff && double(kRealErrKmRelOff[i]) - mOff < 1.0 && double(kRealErrKmRelOn[i]) >= mOn && double(kRealErrKmRelOn[i]) - mOn < 1.0;
     }
     check("the worst errors quoted in the app's Real note are the measured maxima (default clock, GR off and on) rounded up to a whole km", quoted);
+    // (c) 0.10.5 stage 3: the same for Simple's worst errors, quoted in the app's Simple note (orbit/real_errors.h, kSimpleErrKm)
+    bool quotedSimple = true;
+    for (int i = 0; i < 8; i++) {
+        double mx = 0;
+        for (int r = 0; r < kRows; r++) mx = std::max(mx, g_km[kSimple][i][r]);
+        const bool ok = double(kSimpleErrKm[i]) >= mx && double(kSimpleErrKm[i]) - mx < 1.0;
+        if (!ok) std::printf("   Simple %s: quoted %ld km, measured maximum %.3f km\n", kNames[i + 1], kSimpleErrKm[i], mx);
+        quotedSimple = quotedSimple && ok;
+    }
+    check("the worst errors quoted in the app's Simple note are the measured maxima (planets from the elements, 301 dates 1800-2100) rounded up to a whole km", quotedSimple);
     // Mercury: does the GR term move it towards JPL?
     std::printf("\nMercury, from the JPL state, error (km) with GR on / off:\n");
     for (int k = 0; k < 5; k++) std::printf("  %d: %.1f / %.1f\n", kShow[k], g_km[kJplGR][0][kShow[k] - kFirstYear], g_km[kJplNoGR][0][kShow[k] - kFirstYear]);

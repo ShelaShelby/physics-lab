@@ -13,6 +13,8 @@
 - [ ] Select a comet and a dwarf planet (Ceres, Pluto): the card says its orbit is a simple one fixed at one date. Select Mars: no "In the habitable zone" line. Select the Sun: the habitable zone, frost line and lifetime say "(rough)".
 - [ ] Jump to a date in 1980 and select Voyager 1's tile / run the Journey: the caption says Voyager 1 launched in 1977 and is shown from 1990 on (not "not launched yet").
 - [ ] Press the "Venus crosses the Sun, 2012" tile: the date box shows 01:26 (the middle of the transit).
+- [ ] Select Jupiter (and Saturn): the Mass line says "gravity 2.5 g at the equator" (Saturn 1.1 g). Select Halley: the card shows its orbit numbers; it says the orbit is a simple one fixed at one date; next closest approach January 2062 (the note says JPL predicts 28 July 2061); the Sun card says 695,700 km.
+- [ ] Switch Planet physics to Simple: the note under it lists the worst errors against JPL (Saturn 8.0 million km first) and reads well.
 - [ ] Select the Oort cloud: the travel times (about 560 and 56,000 years) fit the distances above them; the Moon's own card no longer compares it with itself.
 
 ## Try on the PC (0.10.4)

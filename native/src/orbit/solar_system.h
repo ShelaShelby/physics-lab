@@ -37,7 +37,7 @@ struct Body {
     Vec3 pos, vel;             // m and m/s, Sun at the origin
     double radius = 0;         // m
     double massEarths = 0;     // Earth masses (0 for comets)
-    double gravityG = -1;      // surface gravity in g; < 0 when not given (then worked out from mass and radius)
+    double gravityG = -1;      // surface gravity at the equator in g (Earth's = 1, from JPL's m/s^2); < 0 when not given (then worked out from mass and radius)
     bool hasTemp = false;
     double tempC = 0;          // real mean temperature, °C (planets only)
     const char* tempNote = "";

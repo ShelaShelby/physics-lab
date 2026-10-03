@@ -86,7 +86,7 @@ void runStep(AppState& app, const TimelineStep& st) {
         app.view.ox = app.view.oy = 0;
     } else if (lab == "sun") {
         app.view.sel = {Selection::Star}; app.view.follow = true; app.view.cardHidden = false;
-        setZoom(app, app.set.trueScale ? zoomFor(app, 696000, 90) : 0.8);
+        setZoom(app, app.set.trueScale ? zoomFor(app, units::kSunRadius / units::kKm, 90) : 0.8);
     }
 }
 

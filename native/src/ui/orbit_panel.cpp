@@ -250,9 +250,12 @@ void orbitPanel(AppState& app, float width) {
             "Moon: ELP2000-82B, 1800 to 1 Jan 2100 only; other moons as in Simple. "
             "Not in: dwarf planets, asteroids. "
             "Worst error vs Horizons, 1800-2100: Moon " + moonErr + "; planets, relativity " + std::string(app.set.relativity ? "on" : "off") + ": " + worstErrorList(app.set.relativity) + ".";
+        // 0.10.5 stage 3 (audit row 9): Simple says how far from JPL it is (numbers: orbit/real_errors.h, measured by tests/test_jpl.cpp)
+        const std::string simpleNote = "Simple: each planet moves alone on a fixed orbit round the Sun, and the planets do not pull on each other (as in the web version). Worst error vs JPL Horizons, 1800-2100 (JPL's table is made for 1800-2050), "
+                                       "in million km: " + orbit::simpleWorstErrorList() + ".";
         ImGui::TextWrapped("%s", app.set.realPlanets
             ? realNote.c_str()
-            : "Simple: each planet moves on its own round the Sun, and the planets do not pull on each other (as in the web version).");
+            : simpleNote.c_str());
         ImGui::PopStyleColor();
     }
 
@@ -348,7 +351,7 @@ void orbitPanel(AppState& app, float width) {
     };
 
     ImGui::TextDisabled("Star and planets");
-    if (tile("Sun", "#f0b020", v.sel.kind == Selection::Star, tw)) fly({Selection::Star}, ts2 ? zoomFor(app, 696000, 90) : easyZoom("Sun"));
+    if (tile("Sun", "#f0b020", v.sel.kind == Selection::Star, tw)) fly({Selection::Star}, ts2 ? zoomFor(app, kSunRadius / kKm, 90) : easyZoom("Sun"));
     next();
     if (tile("Barycentre", "#9aa5b8", v.sel.kind == Selection::Bary, tw)) fly({Selection::Bary}, ts2 ? 2.3 : 2.0);
     next();
