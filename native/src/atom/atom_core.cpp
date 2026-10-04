@@ -19,6 +19,8 @@ namespace atom {
 static orbit::Mulberry32 g_rng(0x9e3779b9u);
 double random() { return g_rng.next(); }
 void seedRandom(uint32_t seed) { g_rng = orbit::Mulberry32(seed); }
+uint32_t randomState() { return g_rng.seed; }
+void skipRandom(uint64_t n) { g_rng.seed += uint32_t(n * 0x6D2B79F5ull); }   // Mulberry32::next() adds 0x6D2B79F5 to the seed (mod 2^32) before it mixes it, so n calls move it by n times that
 
 // ---------------------------------------------------------------- small JavaScript helpers
 // parseFloat: the number at the start of the text, NaN when there is none
@@ -390,6 +392,20 @@ void jumpFractions(std::complex<double> A, std::complex<double> B, double theta,
     const double rho = std::norm(std::cos(theta) * A + std::sin(theta) * B * std::exp(std::complex<double>(0, -phi))), lam = std::cos(theta) * std::cos(theta);
     const double aFirstA = a2 > 0 ? std::min(1.0, rho / a2) : 0, aFirstB = b2 > 0 ? std::max(0.0, (rho - a2 * aFirstA) / b2) : 0;     // the old dots fill first
     const double bFirstB = b2 > 0 ? std::min(1.0, rho / b2) : 0, bFirstA = a2 > 0 ? std::max(0.0, (rho - b2 * bFirstB) / a2) : 0;     // the new dots fill first
+    fA = std::max(0.0, std::min(1.0, lam * aFirstA + (1 - lam) * bFirstA));
+    fB = std::max(0.0, std::min(1.0, lam * aFirstB + (1 - lam) * bFirstB));
+}
+JumpTerms jumpTerms(double theta, double phi, double u) {
+    JumpTerms T;
+    T.cth = std::cos(theta); T.sth = std::sin(theta); T.lam = T.cth * T.cth;
+    T.em = std::exp(std::complex<double>(0, -phi)); T.ep = std::exp(std::complex<double>(0, phi * u));
+    return T;
+}
+void jumpFractions(std::complex<double> A, std::complex<double> B, const JumpTerms& T, double& fA, double& fB) {   // (the same lines as above, in the same order)
+    const double a2 = std::norm(A), b2 = std::norm(B);
+    const double rho = std::norm(T.cth * A + T.sth * B * T.em), lam = T.lam;
+    const double aFirstA = a2 > 0 ? std::min(1.0, rho / a2) : 0, aFirstB = b2 > 0 ? std::max(0.0, (rho - a2 * aFirstA) / b2) : 0;
+    const double bFirstB = b2 > 0 ? std::min(1.0, rho / b2) : 0, bFirstA = a2 > 0 ? std::max(0.0, (rho - b2 * bFirstB) / a2) : 0;
     fA = std::max(0.0, std::min(1.0, lam * aFirstA + (1 - lam) * bFirstA));
     fB = std::max(0.0, std::min(1.0, lam * aFirstB + (1 - lam) * bFirstB));
 }

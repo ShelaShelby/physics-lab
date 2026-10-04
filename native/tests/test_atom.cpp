@@ -1318,6 +1318,168 @@ static void testOneEnergy() {
 // Finding 14: the Orbit view's leapfrog. 60 s of steps at the speeds 1, 5, 10 and 30 and n = 1..4: the radius stays near the analytic Bohr radius n^2 a0 / Z (a0 from the NIST value typed above), the readout
 // energy near levelEV, and the electron turns at the rate the speed setting says: dt x speed / n^3 radians per step (a circular orbit's angular rate is Z^2 / n^3 per atomic unit of time, and a step is
 // dt x speed / Z^2 of them). Guards: measured worst error + 1 % (the numbers are printed), see the comment at the checks.
+// ---- 0.10.6 stage 8: the cloud jump gives exactly the dots it gave before the speed work ----
+// The numbers below were recorded from the code of stage 7 (before any change of stage 8), by this same function; asserting them proves that the faster path changes nothing.
+struct JumpPrint { std::uint64_t arrays = 0, groupsSign = 0, groupsWheel = 0, landed = 0, rng = 0; long jn = 0; };
+// kind "emit": jump straight away; "absorb": the photon flies in first. cdens: Normal / Ultra. reduced: Settings -> Motion (no glide: the jump is over at once).
+static JumpPrint jumpPrint(const char* orb, const char* cdens, const char* kind, const char* toKey, bool reduced, int seed) {
+    using namespace atom;
+    seedRandom(uint32_t(seed));
+    AtomLab lab; lab.nowMs = [] { return 0.0; };
+    lab.p = AtomParams(); lab.reducedMotion = reduced; lab.restart();
+    lab.setParam("Z", 6.0); lab.setParam("N", 6.0); lab.setParam("view", std::string("Cloud 3D")); lab.setParam("cdens", std::string(cdens)); lab.setParam("orb", std::string(orb));
+    for (int i = 0; i < 40000 && lab.s.k < lab.cloudCap(); i++) lab.step(1.0 / 240);
+    lab.startJump(kind, orbIndex(toKey));
+    JumpPrint r;
+    for (int guard = 0; guard < 600 && !(lab.s.trans && lab.s.jn > 0) && !reduced; guard++) lab.step(1.0 / 240);   // an absorbed photon: the jump begins when it arrives
+    if (!reduced) {
+        for (int i = 0; i < 40; i++) lab.step(1.0 / 240);                                                      // some frames into the jump
+        (void)lab.jumpShown(0, 0);                                                                              // (whatever is still being built is finished here)
+        r.jn = lab.s.jn;
+        r.arrays = fnv(lab.s.jp.data(), lab.s.jp.size() * sizeof(float));
+        r.arrays = fnv(lab.s.jA.data(), lab.s.jA.size() * sizeof(float), r.arrays);
+        r.arrays = fnv(lab.s.jB.data(), lab.s.jB.size() * sizeof(float), r.arrays);
+        r.arrays = fnv(&lab.s.w2, sizeof(lab.s.w2), r.arrays);
+        for (int ph = 0; ph < 2; ph++) {
+            lab.p.phase = ph ? "Wheel" : "Sign";
+            std::uint64_t h = 1469598103934665603ULL;
+            for (double t : {0.3, 0.7}) {
+                lab.s.trans->t = t;
+                std::vector<unsigned char> g(std::size_t(2 * lab.s.jn));
+                for (long i = 0; i < lab.s.jn; i++) { g[std::size_t(i)] = (unsigned char)lab.jumpGroup(0, i); g[std::size_t(lab.s.jn + i)] = (unsigned char)lab.jumpGroup(1, i); }
+                h = fnv(g.data(), g.size(), h);
+            }
+            (ph ? r.groupsWheel : r.groupsSign) = h;
+        }
+        lab.s.trans->t = 0.7;
+    }
+    for (int i = 0; i < 700 && (lab.s.trans || lab.s.photon || lab.s.photonAfter); i++) lab.step(1.0 / 240);      // the jump ends, the cloud goes on for a while
+    for (int i = 0; i < 50; i++) lab.step(1.0 / 240);
+    const std::size_t cap = std::size_t(std::min<long>(lab.cloudCap(), long(lab.s.sg.size())));
+    r.landed = fnv(lab.s.pts.data(), cap * 3 * sizeof(float));
+    r.landed = fnv(lab.s.sg.data(), cap * sizeof(lab.s.sg[0]), r.landed);
+    r.landed = fnv(lab.s.ph.data(), cap * sizeof(float), r.landed);
+    r.landed = fnv(&lab.s.w, sizeof(lab.s.w), r.landed);
+    r.landed = fnv(&lab.s.k, sizeof(lab.s.k), r.landed);
+    const double q[3] = {atom::random(), atom::random(), atom::random()};
+    r.rng = fnv(q, sizeof q);
+    return r;
+}
+
+struct JumpWant { const char *orb, *cdens, *kind, *to; bool reduced; int seed; long jn; std::uint64_t arrays, groupsSign, groupsWheel, landed, rng; };
+static void testJumpSameDots() {
+    const JumpWant want[] = {
+        {"4f", "Ultra", "emit", "3d|z2", false, 2026, 48000, 0x7095a67a985ca13bULL, 0xcdf9f00f863b3d11ULL, 0xd85284fd3fb07198ULL, 0x3b86b4308a7d2891ULL, 0x41c7ab3d72cb76cULL},
+        {"2p", "Normal", "absorb", "3d|z2", false, 77, 12000, 0x98b327572f41a123ULL, 0x59361e19cb0899fdULL, 0x7a4900c882e08859ULL, 0x7d0567fd952455aULL, 0x851e9a0155a55bd1ULL},
+        {"3d", "Normal", "emit", "2p|z", true, 5, 0, 0x0ULL, 0x0ULL, 0x0ULL, 0x1eda2849fc8988aULL, 0xd24f31271d67ed5fULL},
+        {"2s", "Normal", "emit", "1s", false, 9, 12000, 0x9855fa60bbf78085ULL, 0x6f04b230eeafaf75ULL, 0x78e6cdd3d9f4bafdULL, 0xe98ddaedbf4a2107ULL, 0x6b81ff3e35952cdeULL},
+    };
+    for (const JumpWant& w : want) {
+        const std::string name = std::string("jump (same as stage 7): ") + w.orb + " " + w.kind + " to " + w.to + ", " + w.cdens + (w.reduced ? ", reduced motion" : "") + ": ";
+        const JumpPrint r = jumpPrint(w.orb, w.cdens, w.kind, w.to, w.reduced, w.seed);
+        checkTrue(name + "dot count", r.jn == w.jn);
+        checkTrue(name + "the new dots, the amplitudes and the walker are the same, bit for bit", r.arrays == w.arrays);
+        checkTrue(name + "every dot's colour group at two moments of the jump, Sign: the same", r.groupsSign == w.groupsSign);
+        checkTrue(name + "every dot's colour group at two moments of the jump, Wheel: the same", r.groupsWheel == w.groupsWheel);
+        checkTrue(name + "the cloud after landing (dots, signs, phases, walker, count) is the same", r.landed == w.landed);
+        checkTrue(name + "the random numbers that follow are the same (the jump used exactly as many as before)", r.rng == w.rng);
+    }
+}
+
+// The new parts of the jump's speed work, each against the old way of getting the same numbers.
+static void testJumpBuild() {
+    using namespace atom;
+    // random numbers: skipping n is the same as drawing n
+    for (std::uint64_t n : {0ull, 1ull, 7ull, 5600ull, 343000ull}) {
+        seedRandom(4242);
+        const std::uint32_t s0 = randomState();
+        for (std::uint64_t i = 0; i < n; i++) (void)atom::random();
+        const std::uint32_t drawn = randomState();
+        seedRandom(4242); skipRandom(n);
+        checkTrue("random numbers: skipRandom(" + std::to_string(n) + ") ends on the state n draws end on", randomState() == drawn && (n == 0 || drawn != s0));
+        seedRandom(4242); for (std::uint64_t i = 0; i < n; i++) (void)atom::random();
+        const double a = atom::random();
+        seedRandom(4242); skipRandom(n);
+        checkTrue("random numbers: and the next number is the same", a == atom::random());
+    }
+    // the fractions with the terms worked out once are the same numbers, bit for bit
+    {
+        seedRandom(99);
+        long same = 0, total = 0;
+        for (int k = 0; k < 20000; k++) {
+            const std::complex<double> A(atom::random() - 0.5, atom::random() - 0.5), B(atom::random() - 0.5, atom::random() - 0.5);
+            const double u = atom::random(), th = kPi / 2 * u, phi = (atom::random() - 0.5) * 12;
+            double fA, fB, gA, gB;
+            jumpFractions(A, B, th, phi, fA, fB);
+            jumpFractions(A, B, jumpTerms(th, phi, u), gA, gB);
+            total++; if (fA == gA && fB == gB) same++;
+        }
+        checkTrue("jumpFractions with per-frame terms: 20,000 random cases, the same bits as the old call", same == total);
+    }
+    // every dot's group in one call is the same number as the call for each dot, in both colour modes and at several moments of the jump
+    for (const char* phase : {"Sign", "Wheel"}) {
+        AtomLab lab; lab.nowMs = [] { return 0.0; };
+        seedRandom(31);
+        lab.p = AtomParams(); lab.restart();
+        lab.setParam("Z", 6.0); lab.setParam("N", 6.0); lab.setParam("view", std::string("Cloud 3D")); lab.setParam("cdens", std::string("High")); lab.setParam("orb", std::string("3d")); lab.setParam("phase", std::string(phase));
+        for (int i = 0; i < 40000 && lab.s.k < lab.cloudCap(); i++) lab.step(1.0 / 240);
+        lab.startJump("emit", orbIndex("2p|z"));
+        lab.completeJump();
+        const long jn = lab.jumpDots();
+        long same = 0, shown = 0;
+        for (double t : {0.0, 0.05, 0.3, 0.6, 0.9, 1.19}) {
+            lab.s.trans->t = t;
+            std::vector<unsigned char> g(std::size_t(2 * jn), 7);
+            lab.jumpGroups(g.data());
+            for (long i = 0; i < jn; i++) { same += g[std::size_t(i)] == (unsigned char)lab.jumpGroup(0, i); same += g[std::size_t(jn + i)] == (unsigned char)lab.jumpGroup(1, i); shown += g[std::size_t(i)] != 255; }
+        }
+        checkTrue(std::string("jumpGroups = jumpGroup for every dot (") + phase + ", " + std::to_string(jn) + " dots x 2 populations x 6 moments)", same == 12 * jn && shown > 0);
+    }
+    // the build over a few frames: the start frame builds no dots, a few frames finish it, nothing is read half built, and the result is the one built all at once
+    for (const char* dens : {"Normal", "Ultra"}) {
+        AtomLab A, B;
+        for (AtomLab* L : {&A, &B}) {
+            seedRandom(8); L->nowMs = [] { return 0.0; };
+            L->p = AtomParams(); L->restart();
+            L->setParam("Z", 3.0); L->setParam("N", 4.0); L->setParam("view", std::string("Cloud 3D")); L->setParam("cdens", std::string(dens)); L->setParam("orb", std::string("4f"));
+            for (int i = 0; i < 40000 && L->s.k < L->cloudCap(); i++) L->step(1.0 / 240);
+            L->startJump("emit", L->targets(-1).front());
+        }
+        const std::string w = std::string("jump build, ") + dens + ": ";
+        checkTrue(w + "right after the start the jump is not built (the start frame does not carry it) and is not drawn yet", A.s.trans && !A.jumpReady() && !A.jumpDrawn() && A.jumpCloud() && A.s.jn == A.cloudCap());
+        int frames = 0;
+        while (!A.jumpReady() && frames < 100) { A.step(1.0 / 240); frames++; }
+        checkTrue(w + "built by the frames alone, in 4 or 5 of them (" + std::to_string(frames) + ")", A.jumpReady() && frames >= 3 && frames <= 5 && A.jumpDrawn());
+        B.completeJump();                                                          // the other lab: all at once, at once
+        for (int i = 0; i < frames; i++) B.step(1.0 / 240);                         // the same number of frames, so the clocks agree
+        checkTrue(w + "the dots, amplitudes and walker are the same built over frames or all at once, bit for bit",
+                  A.s.jp == B.s.jp && A.s.jA == B.s.jA && A.s.jB == B.s.jB && A.s.w2.x == B.s.w2.x && A.s.w2.y == B.s.w2.y && A.s.w2.z == B.s.w2.z && A.s.jb.rng == B.s.jb.rng);
+        checkTrue(w + "asking about a dot of a half-built jump gives the finished jump", [&] {
+            AtomLab C; seedRandom(8); C.nowMs = [] { return 0.0; }; C.p = AtomParams(); C.restart();
+            C.setParam("Z", 3.0); C.setParam("N", 4.0); C.setParam("view", std::string("Cloud 3D")); C.setParam("cdens", std::string(dens)); C.setParam("orb", std::string("4f"));
+            for (int i = 0; i < 40000 && C.s.k < C.cloudCap(); i++) C.step(1.0 / 240);
+            C.startJump("emit", C.targets(-1).front());
+            C.step(1.0 / 240);                                                        // one chunk built, the rest not
+            const bool part = !C.jumpReady();
+            (void)C.jumpShown(1, 5);
+            return part && C.jumpReady() && C.s.jp == A.s.jp && C.s.jB == A.s.jB;
+        }());
+    }
+    // a jump that is over before it is built (a very long frame) is built first, so the landing is the same cloud
+    {
+        AtomLab A, B;
+        for (AtomLab* L : {&A, &B}) {
+            seedRandom(12); L->nowMs = [] { return 0.0; }; L->p = AtomParams(); L->restart();
+            L->setParam("view", std::string("Cloud 3D")); L->setParam("orb", std::string("2p"));
+            for (int i = 0; i < 40000 && L->s.k < L->cloudCap(); i++) L->step(1.0 / 240);
+            L->startJump("emit", orbIndex("1s"));
+        }
+        seedRandom(555); A.step(5.0);                                                 // one frame of 5 s: the jump is over at once (the cloud goes on after the landing: the same numbers for both)
+        B.completeJump(); seedRandom(555); B.step(5.0);
+        checkTrue("jump build: a jump ended by one very long frame lands on the same cloud as one built first", !A.s.trans && !B.s.trans && A.s.pts == B.s.pts && A.s.sg == B.s.sg && A.s.k == B.s.k && A.s.jn == 0 && A.s.jb.done == 0);
+    }
+}
+
 static void testOrbitAccuracy(double radTol, double enTol, double rateTol) {
     double worstR = 0, worstE = 0, worstRate = 0; int runs = 0;
     for (int Z : {1, 3})
@@ -1684,6 +1846,8 @@ int main() {
     testOneEnergy();
     // guards = the worst error MEASURED after the fix (Linux GCC, 32 runs of 60 s) + 1 %: radius 2.16990e-4 -> 2.192e-4, energy 4.70644e-8 -> 4.754e-8, turning rate 1.45367e-4 -> 1.469e-4. The same runs
     // before the fix (0.10.6 stage 2 code, one leapfrog step per frame): radius 7.783e-3 (n = 1, speed 30), energy 5.964e-5, rate 5.165e-3, so this fails without the sub-steps.
+    testJumpSameDots();
+    testJumpBuild();
     testOrbitAccuracy(2.192e-4, 4.754e-8, 1.469e-4);
     testFixedExtent();
     // guards: outline margin 0.10 = about half the smallest MEASURED difference (0.1867, 4f m=+1 against its fallback 4fz3); norm 6.69e-4 = measured 6.62289e-4 (the midpoint quadrature's own error on the orthogonal

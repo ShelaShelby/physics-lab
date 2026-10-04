@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 
+#include "orbit/belts.h"
 #include "orbit/format.h"
 #include "phase_wheel.h"
 
@@ -60,7 +61,7 @@ void AtomLab::init() {
     if (superOn()) { s.sa.assign(std::size_t(cloudCap()) * 4, 0.f); sup_ = superState(); nA_ = normFactor(sup_.idA, p.Z); nB_ = normFactor(sup_.idB, p.Z); overlap_ = overlapAB(sup_.idA, sup_.idB) != 0.0; } else overlap_ = false; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
-    s.trans.reset(); s.photon.reset(); s.photonAfter.reset(); s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0; s.landT = 99; s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
+    s.trans.reset(); s.photon.reset(); s.photonAfter.reset(); s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0; s.jb = AtomState::JumpBuild(); s.landT = 99; s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
     s.last.clear(); s.msg.clear(); s.szCur.reset();
     for (int i = 0; i < 800; i++) mcmc(false);   // burn-in: let the walker forget where it started
 }
@@ -281,6 +282,7 @@ static double jumpUniform(int pop, long i) {                     // a fixed unif
 }
 bool AtomLab::jumpShown(int pop, long i) const {
     if (!s.trans || i < 0 || i >= s.jn) return false;
+    if (!jumpReady()) const_cast<AtomLab*>(this)->completeJump();     // (anything that asks about a dot gets the finished jump)
     const std::vector<float>& a = pop ? s.jB : s.jA;
     const std::complex<double> A(a[4 * i], a[4 * i + 1]), B(a[4 * i + 2], a[4 * i + 3]);
     double fA, fB;
@@ -288,6 +290,7 @@ bool AtomLab::jumpShown(int pop, long i) const {
     return jumpUniform(pop, i) < (pop ? fB : fA);
 }
 double AtomLab::jumpPhase(int pop, long i) const {
+    if (!jumpReady()) const_cast<AtomLab*>(this)->completeJump();
     const std::vector<float>& a = pop ? s.jB : s.jA;
     const std::complex<double> A(a[4 * i], a[4 * i + 1]), B(a[4 * i + 2], a[4 * i + 3]);
     const double th = kPi / 2 * jumpU(), phi = jumpPhi();
@@ -297,6 +300,28 @@ int AtomLab::jumpGroup(int pop, long i) const {
     if (!jumpShown(pop, i)) return 255;
     const double ph = jumpPhase(pop, i);
     return p.phase == "Wheel" ? phaseBin(ph) : (std::cos(ph) >= 0 ? 0 : 1);
+}
+// Every dot of the jump, in one go (the picture asks for this each frame): the same numbers as jumpGroup(pop, i) one by one, bit for bit (tested), but cos, sin and the complex exponentials
+// of the jump's progress, and the jump's energy step (levelEV, which looks up the nucleus's mass), are worked out once here and not once per dot (0.10.6 stage 8; the benchmark's scene 11 spent about 26 of 30 ms here).
+void AtomLab::jumpGroups(unsigned char* grp) const {
+    const long jn = s.jn;
+    if (!s.trans || jn <= 0) { for (long i = 0; i < 2 * jn; i++) grp[i] = 255; return; }
+    if (!jumpReady()) const_cast<AtomLab*>(this)->completeJump();
+    const double u = jumpU(), phi = jumpPhi(), th = kPi / 2 * u;
+    const JumpTerms T = jumpTerms(th, phi, u);
+    const bool wheel = p.phase == "Wheel";
+    for (int pop = 0; pop < 2; pop++) {
+        const float* a = (pop ? s.jB : s.jA).data();
+        unsigned char* g = grp + (pop ? jn : 0);
+        for (long i = 0; i < jn; i++) {
+            const std::complex<double> A(a[4 * i], a[4 * i + 1]), B(a[4 * i + 2], a[4 * i + 3]);
+            double fA, fB;
+            jumpFractions(A, B, T, fA, fB);
+            if (!(jumpUniform(pop, i) < (pop ? fB : fA))) { g[i] = 255; continue; }
+            const double ph = std::arg(T.ep * (T.cth * A + T.sth * B * T.em));
+            g[i] = (unsigned char)(wheel ? phaseBin(ph) : (std::cos(ph) >= 0 ? 0 : 1));
+        }
+    }
 }
 double AtomLab::outlineAlpha() const {                          // the outline belongs to one orbital: it fades out as the cloud leaves it, and back in after landing
     if (reducedMotion || webJumps) return 1;
@@ -404,6 +429,36 @@ void AtomLab::startJump(const std::string& kind, int to) {   // emit: the jump r
     if (kind == "emit") beginTransition(from, to);
 }
 
+// Build the jump's dots from b.done up to upTo. Each new dot is ONE step of the walk(), written out here with exactly its arithmetic and its 7 random numbers (from the chain's own copy of the
+// generator, see beginTransition), but the wave function at the walker's place is carried from step to step: psi(to) at the point the walker stands on is the same number the next step starts
+// with and the same number the new dot's amplitude needs (the function is pure, so the same arguments give the same bits), which is 2 evaluations per dot instead of 4.
+// (The jump is between real orbitals: targets() gives none for a complex state, so walk()'s complex branch is not needed.)
+void AtomLab::buildJump(long upTo) {
+    AtomState::JumpBuild& b = s.jb;
+    upTo = std::min(upTo, s.jn);
+    const int n = orbitals()[stateOrbital(b.to)].n;
+    const double sg = 0.4 * n * (n >= 4 ? 1.8 : 1) / p.Z;
+    orbit::Mulberry32 r(b.rng);
+    const auto gauss = [&r] { const double u = r.next(); return std::sqrt(-2 * std::log(1 - u)) * std::cos(2 * kPi * r.next()); };
+    const auto chainStep = [&] {                               // = walk(to, w, false), with b.fo = psi(to, w) carried
+        const double nx = b.w.x + sg * gauss(), ny = b.w.y + sg * gauss(), nz = b.w.z + sg * gauss();
+        const double pOld = b.fo * b.fo;
+        const double fn = psi(b.to, p.Z, nx, ny, nz);
+        if (r.next() * pOld < fn * fn || pOld == 0) { b.w.x = nx; b.w.y = ny; b.w.z = nz; b.fo = fn; }
+    };
+    if (!b.settled) { for (int i = 0; i < 800; i++) chainStep(); b.settled = true; }
+    for (; b.done < upTo; b.done++) {
+        const long i = b.done;
+        const double x = s.pts[3 * i] / kA0, y = s.pts[3 * i + 1] / kA0, z = s.pts[3 * i + 2] / kA0;      // the old dot
+        s.jA[4 * i] = float(b.nA * psi(b.from, p.Z, x, y, z)); s.jA[4 * i + 2] = float(b.nB * psi(b.to, p.Z, x, y, z));
+        chainStep();                                                                                       // the new dot
+        s.jp[3 * i] = float(b.w.x * kA0); s.jp[3 * i + 1] = float(b.w.y * kA0); s.jp[3 * i + 2] = float(b.w.z * kA0);
+        s.jB[4 * i] = float(b.nA * psi(b.from, p.Z, b.w.x, b.w.y, b.w.z)); s.jB[4 * i + 2] = float(b.nB * b.fo);
+    }
+    b.rng = r.seed;
+    if (b.done >= s.jn) s.w2 = b.w;                            // the chain's end is where the new cloud's walker goes on from
+}
+
 // A jump. Orbit view: the electron glides from one circle to the other (0.8 s). Cloud views: two fixed populations of dots (the cloud on screen, and a new one of the target orbital),
 // shown with the exact fractions of jumpFractions() while theta goes 0 -> pi/2 over 1.2 s (atom_core.h). Reduced motion: no glide, no cross-fade: the jump is over at once.
 void AtomLab::beginTransition(int from, int to) {
@@ -425,20 +480,18 @@ void AtomLab::beginTransition(int from, int to) {
         s.gAng = std::atan2(s.y, s.x);
     } else {
         const long jn = std::min<long>(s.k, std::min<long>(cloudCap(), long(s.sg.size())));
-        const double nA = normFactor(from, p.Z), nB = normFactor(to, p.Z);
         s.jn = jn; s.jp.assign(std::size_t(3 * jn), 0.f); s.jA.assign(std::size_t(4 * jn), 0.f); s.jB.assign(std::size_t(4 * jn), 0.f);
-        for (long i = 0; i < jn; i++) {                         // the old dots: the amplitudes of both orbitals at each
-            const double x = s.pts[3 * i] / kA0, y = s.pts[3 * i + 1] / kA0, z = s.pts[3 * i + 2] / kA0;
-            s.jA[4 * i] = float(nA * psi(from, p.Z, x, y, z)); s.jA[4 * i + 2] = float(nB * psi(to, p.Z, x, y, z));
-        }
-        const double k = double(orbitals()[to].n) / p.Z;        // the new dots: a Metropolis chain of the target orbital, one dot per step like the ring
+        // The dots are built by buildJump(), a part of them each frame (an old dot's amplitudes, and one step of the chain of new dots with its amplitudes, for the same index). Nothing is sampled during a
+        // jump (step() does not run the cloud), so the old dots stay as they are and the random numbers are used by this chain only: the generator is moved past all of them now, exactly as the
+        // old code used them, 800 steps and one per dot, 7 numbers each (3 pairs for the steps, 1 for the odds), so whatever uses random numbers after this gets the numbers it always got.
+        const double k = double(orbitals()[to].n) / p.Z;
         s.w2 = {0.7 * k, 0.4 * k, 1.1 * k};
-        for (int i = 0; i < 800; i++) walk(to, s.w2, false);
-        for (long i = 0; i < jn; i++) {
-            walk(to, s.w2, false);
-            s.jp[3 * i] = float(s.w2.x * kA0); s.jp[3 * i + 1] = float(s.w2.y * kA0); s.jp[3 * i + 2] = float(s.w2.z * kA0);
-            s.jB[4 * i] = float(nA * psi(from, p.Z, s.w2.x, s.w2.y, s.w2.z)); s.jB[4 * i + 2] = float(nB * psi(to, p.Z, s.w2.x, s.w2.y, s.w2.z));
-        }
+        AtomState::JumpBuild& b = s.jb;
+        b = AtomState::JumpBuild();
+        b.nA = normFactor(from, p.Z); b.nB = normFactor(to, p.Z); b.from = from; b.to = to;
+        b.rng = randomState(); b.w = s.w2; b.fo = psi(to, p.Z, b.w.x, b.w.y, b.w.z);
+        skipRandom(7ull * (800 + std::uint64_t(jn)));
+        buildJump(0);                                           // the 800 steps that settle the chain (about 0.2 ms)
     }
     s.trans = Transition{from, to, 0, dur};
     if (dur == 0) finishTransition(0);
@@ -452,6 +505,7 @@ void AtomLab::finishTransition(double overshoot) {
         s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a);
         s.jumping = true; setParam("n", to); s.jumping = false; s.flash = 0;                      // the landing flash
     } else {
+        completeJump();                                         // (a jump that is ended before it was built, by reduced motion or a long frame, is built now)
         const Orbital& o = orbitals()[s.trans->to];
         for (long i = 0; i < s.jn; i++) {                       // the new dots are the cloud now (the old ones were hidden at the end already)
             s.pts[3 * i] = s.jp[3 * i]; s.pts[3 * i + 1] = s.jp[3 * i + 1]; s.pts[3 * i + 2] = s.jp[3 * i + 2];
@@ -464,7 +518,7 @@ void AtomLab::finishTransition(double overshoot) {
         setParam("orb", o.shell);
         s.jumping = false;
         s.w = s.w2; s.boost = 0.6;
-        s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0;
+        s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0; s.jb = AtomState::JumpBuild();
         s.landT = 0;
     }
     s.trans.reset();
@@ -667,7 +721,8 @@ void AtomLab::step(double dt) {
     if (superOn()) s.beatT += dt * p.speed / 5.0;                // the beat clock: 4 s per beat at Playback speed 5, faster or slower with the speed (step() does not run while paused)
     if (p.view != "Orbit") {
         if (s.trans && !webJumps) {
-            // a cloud jump: the two populations of dots are fixed, nothing is sampled
+            // a cloud jump: the two populations of dots are fixed, nothing is sampled (the dots are being built: a quarter of them each frame, so the start of a jump is not one long frame)
+            if (!jumpReady()) buildJump(std::min(s.jn, s.jb.done + std::max<long>(2000, (s.jn + 3) / 4)));
         } else if (s.trans) {                                  // the web's morph: new dots come from the target orbital with growing odds
             const double u0 = s.trans->t / s.trans->dur, u = u0 * u0 * (3 - 2 * u0);
             for (int i = 0, n = 48 * cloudCap() / kCap; i < n; i++) {     // more dots to fill: more steps per frame (the dots themselves are sampled the same way)

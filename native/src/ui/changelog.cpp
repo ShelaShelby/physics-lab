@@ -17,6 +17,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.6", "Atom Lab: the cloud jump made cheaper (stage 8)",
+     "The benchmark on a real PC showed the Atom Lab's cloud jump (an electron jumping between orbitals in the cloud views) was the slowest thing in the app: about 33 frames a second for the 1.2 seconds it lasts, with a long hitch at its start. "
+     "The jump now does the work that is the same for every dot once per frame instead of once per dot, and builds its new dots over the first four frames instead of in one. The pictures and the random dots are exactly the same as before (tested bit for bit). "
+     "It was not timed in the cloud session: the speed has to be confirmed by running the benchmark again."},
     {"0.10.6", "Atom Lab: speed scenes added to the benchmark (stage 7)",
      "The benchmark has a new tick box, \"Include Atom Lab speed-risk scenes\": 11 scenes for the Atom Lab's heaviest paths (phase colours with Classic dots, a cloud jump, a superposition, the 90 % outline's first use and with the cut dragged, the nucleus view). "
      "They were not timed yet (the cloud session has no graphics card); the numbers will come from a real PC, and nothing was made faster in this stage."},

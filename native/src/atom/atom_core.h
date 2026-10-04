@@ -68,6 +68,8 @@ constexpr double kExt[5] = {0, 4.5, 12, 24, 40};  // view radius per n, Bohr rad
 // seed it and the web's Math.random the same way and compare the results number for number. ----
 double random();                              // [0, 1)
 void seedRandom(uint32_t seed);
+uint32_t randomState();                       // the generator's state now (Mulberry32: one 32-bit number)
+void skipRandom(uint64_t n);                  // as if random() had been called n times, at once (the state moves by the same step every call: exact, in constant time)
 
 // ---- element and nuclide data (generated from index.html) ----
 const char* name(int Z);                      // "Hydrogen"
@@ -160,6 +162,10 @@ std::complex<double> psiSuperT(const Superposition& s, int Z, int N, double tSec
 // The fractions blend "the old dots fill the density first" (weight cos^2 theta) with "the new dots fill it first" (weight sin^2 theta): at theta = 0 only the old dots are shown,
 // at pi/2 only the new ones, so the cloud on screen never reshuffles at the start or the end.
 void jumpFractions(std::complex<double> A, std::complex<double> B, double theta, double phi, double& fA, double& fB);
+// The same, with the terms that do not depend on the dot worked out once per frame (0.10.6 stage 8): the very same numbers, bit for bit (tested), without a cos, a sin and a complex exp per dot.
+struct JumpTerms { double cth, sth, lam; std::complex<double> em, ep; };   // cos theta, sin theta, cos^2 theta, exp(-i phi), exp(i phi u)
+JumpTerms jumpTerms(double theta, double phi, double u);
+void jumpFractions(std::complex<double> A, std::complex<double> B, const JumpTerms& T, double& fA, double& fB);
 bool dipoleAxes(const Superposition& s, double out[3]);   // can light couple A and B? out = size of the angular dipole integral along x, y, z (relative); false when none
 
 // ---- light: the reduced-mass Rydberg energy and the spectral lines ----

@@ -296,7 +296,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     if (cloud) {
         const long cap = std::min<long>(lab.cloudCap(), long(s.sg.size()));
         long cnt = std::min<long>(s.k, cap);
-        const bool jump = lab.jumpCloud();                                 // a photon jump: the old dots and the new ones are drawn together, each shown with its own odds
+        const bool jump = lab.jumpDrawn();                                 // a photon jump: the old dots and the new ones are drawn together, each shown with its own odds (while its dots are still being built, in the first few frames, the cloud is drawn as it was)
         static std::vector<float> allPts;
         const float* PTS = s.pts.data();
         if (jump) {
@@ -316,8 +316,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         static std::vector<unsigned char> grp;                             // each dot's colour group
         grp.resize(std::size_t(cnt));
         if (jump) {
-            const long jn = lab.jumpDots();
-            for (long i = 0; i < jn; i++) { grp[std::size_t(i)] = (unsigned char)lab.jumpGroup(0, i); grp[std::size_t(jn + i)] = (unsigned char)lab.jumpGroup(1, i); }
+            lab.jumpGroups(grp.data());                                    // all dots at once (the same numbers as jumpGroup(pop, i), with the per-frame terms worked out once)
         } else if (lab.superOn()) {                                        // a superposition: each dot is thinned and coloured from the CURRENT beat phase (255 = not shown now)
             const double th = lab.beatTheta();
             for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = (unsigned char)lab.superGroup(i, th);

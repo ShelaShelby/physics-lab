@@ -8,6 +8,11 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Run on the PC (0.10.6 stage 8: the cloud jump) — please do this first
+- [ ] Run the benchmark again with "Include Atom Lab speed-risk scenes" ticked (same window size as on 4 Oct) and paste the result. I need scenes **11** (jump held in flight) and **12** (jumps one after another): average and **worst** frame, to compare with before: scene 11 average 29.93 ms (33.4 fps), worst 33.28 ms; scene 12 average 8.06 ms, worst 36.35 ms, 1 % low 32.1 fps; scene 9 (no jump) 3.80 ms.
+- [ ] Look at it too: Atom Lab, Cloud 3D, 4f, density Ultra, press Emit: the jump should look as before (the dots swap over 1.2 s) and start without a hitch. If the first moment looks like a small pop, say so.
+- [ ] Not changed on purpose (later stages): phase colours (scenes 8 and 10), the outline (16, 17) and the superpositions (13 to 15).
+
 ## Run on the PC (0.10.6 stage 7: Atom Lab speed scenes) — the numbers are what the next stage is decided from
 - [ ] Performance card → Benchmark…, tick **both** "Include stress scenes" and "Include Atom Lab speed-risk scenes", click Start, leave the window alone (about 3 minutes). Use the same window size as in your earlier benchmark.
 - [ ] Paste the whole result text into your message to Claude. If you only look: note the **Worst** column of the scenes numbered 8 to 18 (and the Average). Compare: 8 and 10 (phase colours) with 9 (two colours, same dots); 11 and 12 (jumps) and 13 to 15 (superpositions) with 9; 16 and 17 (outline) with scene 3; 18 (Og-294 nucleus) with scene 2.

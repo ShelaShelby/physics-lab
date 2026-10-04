@@ -76,6 +76,10 @@ struct AtomState {
     std::vector<float> jp;               // cloud jump: the new dots (the target orbital's), m (x, y, z for each); the old dots stay in pts
     std::vector<float> jA, jB;           // cloud jump: normalised amplitudes (A re, A im, B re, B im) at each old dot and at each new dot
     long jn = 0;                         // dots in each population
+    // The jump's dots are built over a few frames (0.10.6 stage 8), not all in the frame the jump starts: the chain that makes the new dots, with the random numbers it would have used
+    // (the generator is moved past them at the start, so everything after the jump gets the numbers it always got), and the amplitudes at the old and the new dots.
+    struct JumpBuild { std::uint32_t rng = 0; Vec3d w; double fo = 0, nA = 0, nB = 0; long done = 0; int from = 0, to = 0; bool settled = false; };
+    JumpBuild jb;                        // done < jn: still being built
     double gAng = 0;                     // Orbit glide: the electron's angle
     double landT = 99;                   // seconds since the last landing (the 90 % outline fades back in)
     double beatT = 0;                    // Superposition: seconds of beat time on screen so far (runs at 1 s per second at Playback speed 5; Space pauses it)
@@ -193,6 +197,10 @@ public:
     double jumpU() const;                                 // 0 .. 1: smooth progress of the jump (theta = pi/2 u)
     double jumpPhi() const;                               // the slowed beat phase during the jump
     long jumpDots() const { return s.jn; }
+    bool jumpReady() const { return s.jb.done >= s.jn; }  // every dot of the jump is built (the picture shows the jump only then; until then it shows the cloud as it was: the jump has only just begun)
+    bool jumpDrawn() const { return jumpCloud() && jumpReady(); }
+    void completeJump() { if (!jumpReady()) buildJump(s.jn); }   // build what is left now (anything that reads the jump's arrays calls this first)
+    void jumpGroups(unsigned char* grp) const;            // jumpGroup(0, i) into grp[i] and jumpGroup(1, i) into grp[jumpDots() + i], all dots, the terms that do not depend on the dot worked out once
     bool jumpShown(int pop, long i) const;                // pop 0: the old dots, 1: the new ones
     double jumpPhase(int pop, long i) const;              // arg of the wave at the dot (gauge: ends on the new orbital's own phase)
     int jumpGroup(int pop, long i) const;                 // 255 = not shown, else the colour group (phase bin, or 0 / 1 for the sign)
@@ -235,6 +243,7 @@ private:
     Superposition sup_;                                   // set when the cloud is (re)started and when a share changes
     double nA_ = 1, nB_ = 1;                              // normalisation factors of the two states at the current Z
     bool overlap_ = false;                                // Superposition: the two states overlap (<A|B> != 0: the same n, l and a non-orthogonal angular part). They then share one energy, the state is static, and the walker samples its renormalised density directly (every dot is shown)
+    void buildJump(long upTo);                            // build the jump's dots up to upTo (old and new dots with the same index)
     void beginTransition(int from, int to);
     void finishTransition(double overshoot);
     void glideOrbit(double dt);
