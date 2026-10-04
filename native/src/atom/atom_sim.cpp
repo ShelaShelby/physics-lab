@@ -318,7 +318,7 @@ void AtomLab::jumpGroups(unsigned char* grp) const {
             double fA, fB;
             jumpFractions(A, B, T, fA, fB);
             if (!(jumpUniform(pop, i) < (pop ? fB : fA))) { g[i] = 255; continue; }
-            const double ph = std::arg(T.ep * (T.cth * A + T.sth * B * T.em));
+            const double ph = jumpPhaseOf(A, B, T);
             g[i] = (unsigned char)(wheel ? phaseBin(ph) : (std::cos(ph) >= 0 ? 0 : 1));
         }
     }

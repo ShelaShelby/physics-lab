@@ -1318,71 +1318,177 @@ static void testOneEnergy() {
 // Finding 14: the Orbit view's leapfrog. 60 s of steps at the speeds 1, 5, 10 and 30 and n = 1..4: the radius stays near the analytic Bohr radius n^2 a0 / Z (a0 from the NIST value typed above), the readout
 // energy near levelEV, and the electron turns at the rate the speed setting says: dt x speed / n^3 radians per step (a circular orbit's angular rate is Z^2 / n^3 per atomic unit of time, and a step is
 // dt x speed / Z^2 of them). Guards: measured worst error + 1 % (the numbers are printed), see the comment at the checks.
-// ---- 0.10.6 stage 8: the cloud jump gives exactly the dots it gave before the speed work ----
-// The numbers below were recorded from the code of stage 7 (before any change of stage 8), by this same function; asserting them proves that the faster path changes nothing.
-struct JumpPrint { std::uint64_t arrays = 0, groupsSign = 0, groupsWheel = 0, landed = 0, rng = 0; long jn = 0; };
-// kind "emit": jump straight away; "absorb": the photon flies in first. cdens: Normal / Ultra. reduced: Settings -> Motion (no glide: the jump is over at once).
-static JumpPrint jumpPrint(const char* orb, const char* cdens, const char* kind, const char* toKey, bool reduced, int seed) {
+// ---- 0.10.6 stage 8 / 9: the cloud jump gives the dots it gave before the speed work ----
+// Stage 8 compared 64-bit fingerprints of the raw bytes of the results, recorded on Linux. That is not portable: the walker is a chain of 48,800 steps made with log, cos and sqrt, which the C
+// libraries of GCC and MSVC may round differently in the last bit, so a double's bytes (the walker's end, `w2` / `w`) differ between the compilers although nothing is wrong (the Windows run of
+// stage 8 failed in exactly the 7 checks that hashed the walker's bytes; the checks of the float-derived colour groups, the random numbers and the dot count passed there). So now:
+//   1. the OLD way of making the jump's dots (the code of stage 7, written out below from it) is run in the same test, in the same binary, on the same seeded jump, and must agree with the new
+//      way bit for bit: both are computed by the same compiler and library, so exact equality is right here;
+//   2. numbers recorded on Linux are kept, compared with a stated tolerance (like the stage 2 dot tests), so a real change of the dots is caught across versions too.
+struct JumpCase { const char *orb, *cdens, *kind, *to; bool reduced; int seed; };
+static atom::AtomLab jumpLabFor(const JumpCase& c) {
     using namespace atom;
-    seedRandom(uint32_t(seed));
+    seedRandom(uint32_t(c.seed));
     AtomLab lab; lab.nowMs = [] { return 0.0; };
-    lab.p = AtomParams(); lab.reducedMotion = reduced; lab.restart();
-    lab.setParam("Z", 6.0); lab.setParam("N", 6.0); lab.setParam("view", std::string("Cloud 3D")); lab.setParam("cdens", std::string(cdens)); lab.setParam("orb", std::string(orb));
+    lab.p = AtomParams(); lab.reducedMotion = c.reduced; lab.restart();
+    lab.setParam("Z", 6.0); lab.setParam("N", 6.0); lab.setParam("view", std::string("Cloud 3D")); lab.setParam("cdens", std::string(c.cdens)); lab.setParam("orb", std::string(c.orb));
     for (int i = 0; i < 40000 && lab.s.k < lab.cloudCap(); i++) lab.step(1.0 / 240);
-    lab.startJump(kind, orbIndex(toKey));
-    JumpPrint r;
-    for (int guard = 0; guard < 600 && !(lab.s.trans && lab.s.jn > 0) && !reduced; guard++) lab.step(1.0 / 240);   // an absorbed photon: the jump begins when it arrives
-    if (!reduced) {
-        for (int i = 0; i < 40; i++) lab.step(1.0 / 240);                                                      // some frames into the jump
-        (void)lab.jumpShown(0, 0);                                                                              // (whatever is still being built is finished here)
-        r.jn = lab.s.jn;
-        r.arrays = fnv(lab.s.jp.data(), lab.s.jp.size() * sizeof(float));
-        r.arrays = fnv(lab.s.jA.data(), lab.s.jA.size() * sizeof(float), r.arrays);
-        r.arrays = fnv(lab.s.jB.data(), lab.s.jB.size() * sizeof(float), r.arrays);
-        r.arrays = fnv(&lab.s.w2, sizeof(lab.s.w2), r.arrays);
-        for (int ph = 0; ph < 2; ph++) {
-            lab.p.phase = ph ? "Wheel" : "Sign";
-            std::uint64_t h = 1469598103934665603ULL;
-            for (double t : {0.3, 0.7}) {
-                lab.s.trans->t = t;
-                std::vector<unsigned char> g(std::size_t(2 * lab.s.jn));
-                for (long i = 0; i < lab.s.jn; i++) { g[std::size_t(i)] = (unsigned char)lab.jumpGroup(0, i); g[std::size_t(lab.s.jn + i)] = (unsigned char)lab.jumpGroup(1, i); }
-                h = fnv(g.data(), g.size(), h);
-            }
-            (ph ? r.groupsWheel : r.groupsSign) = h;
+    return lab;
+}
+// The old build of the jump's dots: stage 7's beginTransition and walk() for a real orbital, written out (4 evaluations of psi per new dot, the global generator, all in one go).
+struct OldJump { std::vector<float> jp, jA, jB; atom::Vec3d w2; };
+static OldJump oldJumpBuild(const std::vector<float>& pts, long jn, int from, int to, int Z) {
+    using namespace atom;
+    OldJump o; o.jp.assign(std::size_t(3 * jn), 0.f); o.jA.assign(std::size_t(4 * jn), 0.f); o.jB.assign(std::size_t(4 * jn), 0.f);
+    const double nA = normFactor(from, Z), nB = normFactor(to, Z);
+    for (long i = 0; i < jn; i++) {
+        const double x = pts[3 * i] / kA0, y = pts[3 * i + 1] / kA0, z = pts[3 * i + 2] / kA0;
+        o.jA[4 * i] = float(nA * psi(from, Z, x, y, z)); o.jA[4 * i + 2] = float(nB * psi(to, Z, x, y, z));
+    }
+    const double k = double(orbitals()[to].n) / Z;
+    o.w2 = {0.7 * k, 0.4 * k, 1.1 * k};
+    const int n = orbitals()[stateOrbital(to)].n;
+    const double sg = 0.4 * n * (n >= 4 ? 1.8 : 1) / Z;
+    const auto walk = [&](Vec3d& w) {                                          // walk(to, w, false)
+        auto gauss = [] { const double u = atom::random(); return std::sqrt(-2 * std::log(1 - u)) * std::cos(2 * kPi * atom::random()); };
+        const double nx = w.x + sg * gauss(), ny = w.y + sg * gauss(), nz = w.z + sg * gauss();
+        const double fo = psi(to, Z, w.x, w.y, w.z), pOld = fo * fo;
+        const double fn = psi(to, Z, nx, ny, nz);
+        if (atom::random() * pOld < fn * fn || pOld == 0) { w.x = nx; w.y = ny; w.z = nz; }
+    };
+    for (int i = 0; i < 800; i++) walk(o.w2);
+    for (long i = 0; i < jn; i++) {
+        walk(o.w2);
+        o.jp[3 * i] = float(o.w2.x * kA0); o.jp[3 * i + 1] = float(o.w2.y * kA0); o.jp[3 * i + 2] = float(o.w2.z * kA0);
+        o.jB[4 * i] = float(nA * psi(from, Z, o.w2.x, o.w2.y, o.w2.z)); o.jB[4 * i + 2] = float(nB * psi(to, Z, o.w2.x, o.w2.y, o.w2.z));
+    }
+    return o;
+}
+// Start the jump in `lab` and give back what the old way makes from the same state: the random generator is put back to where the jump began and the old build runs on it. Afterwards the
+// generator stands where the old build left it (it must be where the new build left it: the same count of numbers), and `rngNew` is where the new build left it.
+struct JumpPair { OldJump old; std::uint32_t rngNew = 0, rngOld = 0; long jn = 0; int from = 0, to = 0; };
+static JumpPair startAndReference(atom::AtomLab& lab, const JumpCase& c) {
+    using namespace atom;
+    JumpPair r;
+    r.to = orbIndex(c.to); r.from = lab.curLevel();
+    r.jn = std::min<long>(lab.s.k, std::min<long>(lab.cloudCap(), long(lab.s.sg.size())));
+    std::vector<float> pts(lab.s.pts.begin(), lab.s.pts.begin() + 3 * r.jn);
+    std::uint32_t before = randomState();
+    const bool emit = std::string(c.kind) == "emit";
+    lab.startJump(c.kind, r.to);
+    if (!emit)                                                                // the photon flies in first (the cloud goes on sampling meanwhile); the jump begins when it arrives:
+        for (int guard = 0; guard < 600 && !lab.s.trans; guard++) {           // the old dots, the generator and the count are those of the moment before the arrival step
+            before = randomState(); pts.assign(lab.s.pts.begin(), lab.s.pts.begin() + 3 * std::min<long>(lab.cloudCap(), long(lab.s.sg.size())));
+            r.jn = std::min<long>(lab.s.k, std::min<long>(lab.cloudCap(), long(lab.s.sg.size())));
+            lab.step(1.0 / 240);
         }
-        lab.s.trans->t = 0.7;
+    r.rngNew = randomState();
+    seedRandom(before);
+    if (emit) (void)atom::random();                                           // startJump's own number (the photon's angle) comes first
+    r.old = oldJumpBuild(pts, r.jn, r.from, r.to, lab.p.Z);
+    r.rngOld = randomState();
+    seedRandom(r.rngNew);                                                     // leave the generator where the new build left it
+    return r;
+}
+// Everything the checks below look at, as plain numbers.
+struct JumpSummary { double jn = 0, w2[3] = {0, 0, 0}, sumJp = 0, sumJA = 0, sumJB = 0, shownSign03 = 0, shownSign07 = 0, wheelSum07 = 0, k = 0, w[3] = {0, 0, 0}, sumPts = 0, sumPh = 0, sumSg = 0, rng[3] = {0, 0, 0}; };
+static JumpSummary jumpSummary(const JumpCase& c) {
+    using namespace atom;
+    AtomLab lab = jumpLabFor(c);
+    lab.startJump(c.kind, orbIndex(c.to));
+    JumpSummary r;
+    for (int guard = 0; guard < 600 && !(lab.s.trans && lab.s.jn > 0) && !c.reduced; guard++) lab.step(1.0 / 240);   // an absorbed photon: the jump begins when it arrives
+    if (!c.reduced) {
+        for (int i = 0; i < 40; i++) lab.step(1.0 / 240);                                                      // some frames into the jump: built over the frames, as the app does
+        r.jn = double(lab.s.jn);
+        r.w2[0] = lab.s.w2.x; r.w2[1] = lab.s.w2.y; r.w2[2] = lab.s.w2.z;
+        for (float f : lab.s.jp) r.sumJp += std::fabs(double(f));
+        for (float f : lab.s.jA) r.sumJA += std::fabs(double(f));
+        for (float f : lab.s.jB) r.sumJB += std::fabs(double(f));
+        std::vector<unsigned char> g(std::size_t(2 * lab.s.jn));
+        lab.p.phase = "Sign";
+        for (double t : {0.3, 0.7}) { lab.s.trans->t = t; lab.jumpGroups(g.data()); double n = 0; for (unsigned char v : g) n += v != 255; (t < 0.5 ? r.shownSign03 : r.shownSign07) = n; }
+        lab.p.phase = "Wheel";
+        lab.s.trans->t = 0.7; lab.jumpGroups(g.data());
+        for (unsigned char v : g) if (v != 255) r.wheelSum07 += v;
     }
     for (int i = 0; i < 700 && (lab.s.trans || lab.s.photon || lab.s.photonAfter); i++) lab.step(1.0 / 240);      // the jump ends, the cloud goes on for a while
     for (int i = 0; i < 50; i++) lab.step(1.0 / 240);
     const std::size_t cap = std::size_t(std::min<long>(lab.cloudCap(), long(lab.s.sg.size())));
-    r.landed = fnv(lab.s.pts.data(), cap * 3 * sizeof(float));
-    r.landed = fnv(lab.s.sg.data(), cap * sizeof(lab.s.sg[0]), r.landed);
-    r.landed = fnv(lab.s.ph.data(), cap * sizeof(float), r.landed);
-    r.landed = fnv(&lab.s.w, sizeof(lab.s.w), r.landed);
-    r.landed = fnv(&lab.s.k, sizeof(lab.s.k), r.landed);
-    const double q[3] = {atom::random(), atom::random(), atom::random()};
-    r.rng = fnv(q, sizeof q);
+    r.k = double(lab.s.k); r.w[0] = lab.s.w.x; r.w[1] = lab.s.w.y; r.w[2] = lab.s.w.z;
+    for (std::size_t i = 0; i < 3 * cap; i++) r.sumPts += std::fabs(double(lab.s.pts[i]));
+    for (std::size_t i = 0; i < cap; i++) { r.sumPh += double(lab.s.ph[i]); r.sumSg += double(lab.s.sg[i]); }
+    for (double& q : r.rng) q = atom::random();
     return r;
 }
 
-struct JumpWant { const char *orb, *cdens, *kind, *to; bool reduced; int seed; long jn; std::uint64_t arrays, groupsSign, groupsWheel, landed, rng; };
 static void testJumpSameDots() {
-    const JumpWant want[] = {
-        {"4f", "Ultra", "emit", "3d|z2", false, 2026, 48000, 0x7095a67a985ca13bULL, 0xcdf9f00f863b3d11ULL, 0xd85284fd3fb07198ULL, 0x3b86b4308a7d2891ULL, 0x41c7ab3d72cb76cULL},
-        {"2p", "Normal", "absorb", "3d|z2", false, 77, 12000, 0x98b327572f41a123ULL, 0x59361e19cb0899fdULL, 0x7a4900c882e08859ULL, 0x7d0567fd952455aULL, 0x851e9a0155a55bd1ULL},
-        {"3d", "Normal", "emit", "2p|z", true, 5, 0, 0x0ULL, 0x0ULL, 0x0ULL, 0x1eda2849fc8988aULL, 0xd24f31271d67ed5fULL},
-        {"2s", "Normal", "emit", "1s", false, 9, 12000, 0x9855fa60bbf78085ULL, 0x6f04b230eeafaf75ULL, 0x78e6cdd3d9f4bafdULL, 0xe98ddaedbf4a2107ULL, 0x6b81ff3e35952cdeULL},
+    const JumpCase cases[] = {{"4f", "Ultra", "emit", "3d|z2", false, 2026}, {"2p", "Normal", "absorb", "3d|z2", false, 77}, {"3d", "Normal", "emit", "2p|z", true, 5}, {"2s", "Normal", "emit", "1s", false, 9}};
+    // Recorded on Linux (GCC, Release) from the code of stage 7 (the same numbers came out of stage 8's code: the stage 8 fingerprints matched). Tolerances, and why:
+    //  - sums of absolute values of float arrays (positions, amplitudes, picture dots, phases): relative 1e-6. A float holds 6e-8; a last-bit difference of the C library (1e-16 relative in a double,
+    //    perhaps 1e-14 after 48,800 chained steps) moves a stored float by one unit of its last place at most rarely, which is about 1e-7 of a sum of 10^4 values at the very most; 1e-6 is 10 times that.
+    //  - the walker (doubles after 48,800 steps): relative 1e-9 (the accumulated library difference is about 1e-14).
+    //  - how many dots are shown at a moment of the jump: within 0.05 % of all dots (+ 1): a dot at the very edge of its odds could flip with a last-bit difference; the sums of colour numbers likewise.
+    //  - the count of dots k, and the next random numbers: exactly (integers; the generator uses only integer maths and an exact division).
+    // (No Windows run of these numbers exists before the CI run of stage 9, see REPORT.md; they are what the Linux code gives.)
+    const JumpSummary want[] = {
+        {48000, {-0.61042645026652043, 0.18372748262565081, 1.6411758933862042}, 6.0625978228732691e-06, 6031.6557989177954, 11212.080984488653, 48189, 48033, 445747, 94272, {0.11361336951312254, -1.6703970121316665, -0.52004410793344713}, 6.2572345950363523e-06, 59297.56298661232, 10250, {0.21281560184434056, 0.25574702024459839, 0.53744121524505317}},
+        {12000, {0.87155394968079025, 1.4187888667326771, 0.02980526777541892}, 1.6482404722913135e-06, 7868.2822019484593, 3264.3803650895343, 11546, 11499, 149535, 14448, {-0.029836201632667078, -0.40120695930633449, -1.8850526524151678}, 1.6525631670415527e-06, 16562.476930618286, 1456, {0.152442317456007, 0.86131891421973705, 0.58514888910576701}},
+        {0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 23568, {-0.073387654444096589, 0.08689996727725588, -0.49041880346852601}, 8.0405526679301871e-07, 22999.600456953049, -2642, {0.88974490761756897, 0.38691916177049279, 0.74242525990121067}},
+        {12000, {-0.24404311097619288, -0.12356757358303777, 0.016061441752741386}, 2.321701230241769e-07, 7991.6644537394195, 38289.438420659302, 11642, 11877, 96672, 23568, {0.2475660059532431, 0.34024883493234381, 0.074693734791195537}, 2.5181023221036696e-07, 0, 12000, {0.9405794651247561, 0.65091568906791508, 0.5389178313780576}},
     };
-    for (const JumpWant& w : want) {
-        const std::string name = std::string("jump (same as stage 7): ") + w.orb + " " + w.kind + " to " + w.to + ", " + w.cdens + (w.reduced ? ", reduced motion" : "") + ": ";
-        const JumpPrint r = jumpPrint(w.orb, w.cdens, w.kind, w.to, w.reduced, w.seed);
-        checkTrue(name + "dot count", r.jn == w.jn);
-        checkTrue(name + "the new dots, the amplitudes and the walker are the same, bit for bit", r.arrays == w.arrays);
-        checkTrue(name + "every dot's colour group at two moments of the jump, Sign: the same", r.groupsSign == w.groupsSign);
-        checkTrue(name + "every dot's colour group at two moments of the jump, Wheel: the same", r.groupsWheel == w.groupsWheel);
-        checkTrue(name + "the cloud after landing (dots, signs, phases, walker, count) is the same", r.landed == w.landed);
-        checkTrue(name + "the random numbers that follow are the same (the jump used exactly as many as before)", r.rng == w.rng);
+    for (std::size_t ci = 0; ci < 4; ci++) {
+        const JumpCase& c = cases[ci];
+        const std::string name = std::string("jump: ") + c.orb + " " + c.kind + " to " + c.to + ", " + c.cdens + (c.reduced ? ", reduced motion" : "") + ": ";
+        // ---- 1. the old way against the new way, in this run: exactly equal ----
+        {
+            atom::AtomLab lab = jumpLabFor(c);
+            const JumpPair pr = startAndReference(lab, c);
+            checkTrue(name + "the new build and the old build use exactly the same count of random numbers (the generator ends on the same state)", pr.rngNew == pr.rngOld);
+            if (!c.reduced) {
+                lab.completeJump();
+                checkTrue(name + "new dots, old way = new way, bit for bit (same run, same compiler)", lab.s.jp == pr.old.jp && lab.s.jn == pr.jn);
+                checkTrue(name + "amplitudes at the old and at the new dots, old way = new way, bit for bit", lab.s.jA == pr.old.jA && lab.s.jB == pr.old.jB);
+                checkTrue(name + "the walker the new cloud goes on from, old way = new way, bit for bit", lab.s.w2.x == pr.old.w2.x && lab.s.w2.y == pr.old.w2.y && lab.s.w2.z == pr.old.w2.z);
+            } else {                                                              // no glide: the jump is over at once, the new dots are the cloud now
+                bool same = lab.s.k == pr.jn && pr.jn > 0 && lab.s.w.x == pr.old.w2.x && lab.s.w.y == pr.old.w2.y && lab.s.w.z == pr.old.w2.z;
+                for (long i = 0; same && i < 3 * pr.jn; i++) same = lab.s.pts[std::size_t(i)] == pr.old.jp[std::size_t(i)];
+                for (long i = 0; same && i < pr.jn; i++) same = lab.s.sg[std::size_t(i)] == (pr.old.jB[std::size_t(4 * i + 2)] >= 0 ? 1 : -1);
+                checkTrue(name + "the cloud after an instant jump = the old way's new dots, signs and walker, bit for bit", same);
+            }
+            // the whole run to the end, the jump built over the frames against built at once: the same cloud after landing, bit for bit
+            atom::AtomLab a = jumpLabFor(c), b = jumpLabFor(c);                   // (same seed: the same start; the generator is global, so each one is run on its own, from the same state)
+            const std::uint32_t s0 = atom::randomState();
+            auto landed = [&](atom::AtomLab& L, bool atOnce) {
+                atom::seedRandom(s0);
+                L.startJump(c.kind, atom::orbIndex(c.to));
+                for (int g = 0; g < 600 && !L.s.trans && !c.reduced; g++) L.step(1.0 / 240);
+                if (atOnce) L.completeJump();
+                for (int i = 0; i < 700 && (L.s.trans || L.s.photon || L.s.photonAfter); i++) L.step(1.0 / 240);
+                for (int i = 0; i < 50; i++) L.step(1.0 / 240);
+            };
+            landed(a, false); const std::uint32_t ra = atom::randomState();
+            landed(b, true); const std::uint32_t rb = atom::randomState();
+            checkTrue(name + "the cloud after landing is the same built over the frames or at once (dots, signs, phases, walker, count, generator), bit for bit",
+                      a.s.pts == b.s.pts && a.s.sg == b.s.sg && a.s.ph == b.s.ph && a.s.k == b.s.k && a.s.w.x == b.s.w.x && a.s.w.y == b.s.w.y && a.s.w.z == b.s.w.z && ra == rb);
+        }
+        // ---- 2. against the numbers recorded on Linux, with the tolerances above ----
+        const JumpSummary got = jumpSummary(c), &w = want[ci];
+        const double nDots = std::max(1.0, w.jn * 2), shownTol = 0.0005 * nDots + 1;
+        checkNum(name + "recorded: dot count", got.jn, w.jn, 0);
+        for (int a = 0; a < 3; a++) checkNum(name + "recorded: the walker at the end of the build, coordinate " + std::to_string(a), got.w2[a], w.w2[a], 1e-9, 1e-12);
+        checkNum(name + "recorded: sum of |new dot coordinates|", got.sumJp, w.sumJp, 1e-6);
+        checkNum(name + "recorded: sum of |amplitudes at the old dots|", got.sumJA, w.sumJA, 1e-6);
+        checkNum(name + "recorded: sum of |amplitudes at the new dots|", got.sumJB, w.sumJB, 1e-6);
+        checkNum(name + "recorded: dots shown at 0.3 of the jump (Sign)", got.shownSign03, w.shownSign03, 0, shownTol);
+        checkNum(name + "recorded: dots shown at 0.7 of the jump (Sign)", got.shownSign07, w.shownSign07, 0, shownTol);
+        checkNum(name + "recorded: sum of the phase colour numbers at 0.7 (Wheel)", got.wheelSum07, w.wheelSum07, 1e-3, 1);
+        checkNum(name + "recorded: dots in the cloud after landing", got.k, w.k, 0);
+        for (int a = 0; a < 3; a++) checkNum(name + "recorded: the walker after landing, coordinate " + std::to_string(a), got.w[a], w.w[a], 1e-9, 1e-12);
+        checkNum(name + "recorded: sum of |dot coordinates| after landing", got.sumPts, w.sumPts, 1e-6);
+        checkNum(name + "recorded: sum of the phases after landing", got.sumPh, w.sumPh, 1e-6);
+        checkNum(name + "recorded: sum of the signs after landing", got.sumSg, w.sumSg, 0, 0.0005 * (w.jn > 0 ? w.jn : 12000) + 1);
+        for (int a = 0; a < 3; a++) checkNum(name + "recorded: the next random number " + std::to_string(a), got.rng[a], w.rng[a], 0);
     }
 }
 
@@ -1415,6 +1521,14 @@ static void testJumpBuild() {
             total++; if (fA == gA && fB == gB) same++;
         }
         checkTrue("jumpFractions with per-frame terms: 20,000 random cases, the same bits as the old call", same == total);
+        long samePh = 0;                                                         // the phase of a dot: the old per-dot expression (AtomLab::jumpPhase) against jumpPhaseOf
+        for (int k = 0; k < 20000; k++) {
+            const std::complex<double> A(atom::random() - 0.5, atom::random() - 0.5), B(atom::random() - 0.5, atom::random() - 0.5);
+            const double u = atom::random(), th = kPi / 2 * u, phi = (atom::random() - 0.5) * 12;
+            const double old = std::arg(std::exp(std::complex<double>(0, phi * u)) * (std::cos(th) * A + std::sin(th) * B * std::exp(std::complex<double>(0, -phi))));
+            if (old == jumpPhaseOf(A, B, jumpTerms(th, phi, u))) samePh++;
+        }
+        checkTrue("jumpPhaseOf with per-frame terms: 20,000 random cases, the same bits as the old per-dot expression", samePh == 20000);
     }
     // every dot's group in one call is the same number as the call for each dot, in both colour modes and at several moments of the jump
     for (const char* phase : {"Sign", "Wheel"}) {

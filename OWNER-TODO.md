@@ -8,6 +8,9 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Nothing new for stage 9
+- The Windows build was red after stage 8 because of one test (not the app). Stage 9 fixes the test only; the stage 8 items below still apply.
+
 ## Run on the PC (0.10.6 stage 8: the cloud jump) — please do this first
 - [ ] Run the benchmark again with "Include Atom Lab speed-risk scenes" ticked (same window size as on 4 Oct) and paste the result. I need scenes **11** (jump held in flight) and **12** (jumps one after another): average and **worst** frame, to compare with before: scene 11 average 29.93 ms (33.4 fps), worst 33.28 ms; scene 12 average 8.06 ms, worst 36.35 ms, 1 % low 32.1 fps; scene 9 (no jump) 3.80 ms.
 - [ ] Look at it too: Atom Lab, Cloud 3D, 4f, density Ultra, press Emit: the jump should look as before (the dots swap over 1.2 s) and start without a hitch. If the first moment looks like a small pop, say so.

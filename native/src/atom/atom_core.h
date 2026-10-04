@@ -166,6 +166,8 @@ void jumpFractions(std::complex<double> A, std::complex<double> B, double theta,
 struct JumpTerms { double cth, sth, lam; std::complex<double> em, ep; };   // cos theta, sin theta, cos^2 theta, exp(-i phi), exp(i phi u)
 JumpTerms jumpTerms(double theta, double phi, double u);
 void jumpFractions(std::complex<double> A, std::complex<double> B, const JumpTerms& T, double& fA, double& fB);
+// The phase of a dot during a jump (the gauge ends on the new orbital's own phase): the same expression as AtomLab::jumpPhase, with the terms given.
+inline double jumpPhaseOf(std::complex<double> A, std::complex<double> B, const JumpTerms& T) { return std::arg(T.ep * (T.cth * A + T.sth * B * T.em)); }
 bool dipoleAxes(const Superposition& s, double out[3]);   // can light couple A and B? out = size of the angular dipole integral along x, y, z (relative); false when none
 
 // ---- light: the reduced-mass Rydberg energy and the spectral lines ----

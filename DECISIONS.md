@@ -15,6 +15,7 @@
 - No connectors, plugins or extra skills for now (they cost usage).
 - Coding sessions run on Sonnet 5.5; the strongest model is used only in a fresh short planning chat (for example the 1.0 design plan).
 - More electrons: the first level (shells filling with simplified screening, Slater's rules) needs the owner's decision before it is planned.
+- Tests never compare raw bytes of floating-point results recorded on another compiler or platform (cos, sin, exp, log and pow may differ in the last bit between GCC and MSVC). They compare two ways of computing in the same run (exact is right there), or recorded numbers with a stated tolerance, as the stage 2 dot tests do (4 Oct 2026).
 - The cloud jump's dots are built over 4 frames and the picture shows a jump only when they are built (the first frames show the cloud as it was, the jump is then under 1 % through); the random numbers the build needs are skipped exactly at the start, so nothing after a jump changes. A speed change must not move any saved number (4 Oct 2026).
 - The Atom Lab's speed risks (audit findings 10-12) are first made measurable, not fixed: the benchmark has 11 extra scenes behind a tick box, and the fixes are decided from the owner's numbers (worst frame per scene) from the PC (4 Oct 2026).
 - The nucleus's mass in the Atom Lab is Z m_p + N m_n − B/c² with B from the AME2020 binding table; nuclides beyond the table keep A u − Z m_e. The spectrum tests compare with the Rydberg formula by hand and with NIST ASD within (Zα)² (4 Oct 2026).

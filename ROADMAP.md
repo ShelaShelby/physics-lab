@@ -14,6 +14,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.1: general relativity (1PN) for the planets in Real mode (Mercury's extra turn), the Sun's wobble round the centre of mass drawn in Real mode, Milky Way band fix, secret theme names fix — done
 - 0.10.3: Real planets start from JPL (Horizons data, DE441); the relativity tick box is off by default; Real stays an option until the owner has tried it — done
 - 0.10.4: the real Moon (ELP2000-82B checked against Horizons; used in the Orbit Lab's Real mode: Moon position, phases on its card, Real note and About text) — done (stage 1: data and validation, stage 2: the Orbit Lab)
+- 0.10.6 stage 9: the stage 8 jump test made portable (old path against new path in the same run; recorded numbers with stated tolerances instead of byte fingerprints) — done; the Windows build was red after stage 8 and is fixed by this
 - 0.10.6 stage 8: the Atom Lab cloud jump made cheaper (per-dot work done once per frame; the start spread over 4 frames; output bit for bit unchanged) — done in code, speed to be confirmed on the owner's PC (audit finding 11)
 - 0.10.6 stage 7: the Atom Lab's speed-risk paths added to the benchmark as 11 scenes (a tick box), never timed in the cloud, to be timed on the owner's PC — done (audit findings 10, 11, 12 made measurable; nothing optimised)
 - 0.10.6 stage 6: nuclear mass from AME2020 (the spectrum lines of deuterium and tritium), independent spectrum checks (hand formula, NIST ASD), four basic orbital checks — done (audit findings 5, 16, 17)
