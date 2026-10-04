@@ -24,6 +24,7 @@
 #include "atom/atom_sim.h"
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
+#include "atom/radii.h"
 #include "atom/radial_graph.h"
 #include "orbit/format.h"
 
@@ -217,7 +218,7 @@ static void testLight() {
 static void testNuclei() {
     for (const NucleusRef& r : kNucleusRef) {
         seedRandom(r.seed);
-        const auto got = buildNucleus(r.Z, r.N);
+        const auto got = buildNucleusByRule(r.Z, r.N);   // 0.10.9 stage 1: buildNucleus now sizes a nucleus by its measured charge radius where there is one (9 of these 10 have one); the web's saved positions are the web's RULE layout, which buildNucleusByRule still is
         const std::string w = "nucleus " + at(r.Z, r.N);
         checkNum(w + " count", got.size(), r.n.size(), 0);
         for (std::size_t i = 0; i < got.size() && i < r.n.size(); i++) {
@@ -298,6 +299,41 @@ static std::string adaptSampled(std::string web, const AtomLab& lab) {
     return web;
 }
 
+// 0.10.9 stage 1: the nucleus is drawn at its MEASURED size, so two lines of the saved web runs move on purpose: "The nucleus is ~X× smaller than this orbit/orbital" and "chance the electron is inside the nucleus ...".
+// The web's saved text is kept for everything else, word for word. For an isotope with a measured charge radius these two numbers are rebuilt here from the CSV value (typed in kRunRad from data/radii/charge_radii.csv):
+//   R = sqrt(5/3) x rms charge radius (a uniform ball), in Bohr radii; ratio = (orbit or orbital size n^2 / Z in Bohr radii) / R; chance = 4/3 Z^3 R^3 / n^3 (the lab's own formula, 0.10.6: |psi(0)|^2 x the nucleus' volume).
+struct RunRad { int Z, N; double rms; };
+static const RunRad kRunRad[] = {{2, 1, 1.9661}, {2, 2, 1.6755}, {3, 4, 2.4440}, {26, 30, 3.7377}, {82, 126, 5.5012}, {83, 129, 5.5489}, {92, 141, 5.8203}, {96, 152, 5.8687}};
+static int g_runMoved = 0;
+static bool runRadiusA0(const AtomLab& lab, double& Ra0) {
+    if (!sizedByMeasurement(lab.p.Z, lab.p.N)) return false;
+    for (const RunRad& r : kRunRad) if (r.Z == lab.p.Z && r.N == lab.p.N) { Ra0 = 1.2909944487358056 * r.rms * 1e-15 / nist::a0; return true; }
+    checkTrue("a saved run uses a measured isotope that kRunRad does not list: " + at(lab.p.Z, lab.p.N), false);
+    return false;
+}
+static std::string adaptNucleusHint(std::string web, const AtomLab& lab) {
+    double R;
+    if (!runRadiusA0(lab, R)) return web;
+    const std::string a = "The nucleus is ~", b = "× smaller than this";
+    const std::size_t i = web.find(a), j = web.find(b);
+    if (i == std::string::npos || j == std::string::npos) return web;
+    const double size = lab.p.view == "Orbit" ? double(lab.p.n) * lab.p.n / lab.p.Z : std::pow(orbitals()[orbIndex(lab.p.orb)].n, 2) / double(lab.p.Z);
+    const std::string now = fmt::jsLocale(std::strtod(fmt::jsToPrecision(size / R, 2).c_str(), nullptr)), was = web.substr(i + a.size(), j - i - a.size());
+    if (now != was) { g_runMoved++; std::printf("saved web reference moved: %s hint \"~%s× smaller\" -> \"~%s×\"\n", at(lab.p.Z, lab.p.N).c_str(), was.c_str(), now.c_str()); }
+    return web.substr(0, i + a.size()) + now + web.substr(j);
+}
+static std::string adaptNucleusChance(std::string web, const AtomLab& lab) {
+    double R;
+    if (!runRadiusA0(lab, R)) return web;
+    const std::string a = "chance the electron is inside the nucleus at any instant: ≈ ";
+    if (web.compare(0, a.size(), a) != 0) return web;
+    const int n = orbitals()[orbIndex(lab.p.orb)].n;
+    const double P = 4.0 / 3 * std::pow(lab.p.Z, 3) * R * R * R / std::pow(n, 3);
+    const std::string now = sci(P) + " (1 in " + sci(1 / P) + ")", was = web.substr(a.size());
+    if (now != was) { g_runMoved++; std::printf("saved web reference moved: %s chance \"%s\" -> \"%s\"\n", at(lab.p.Z, lab.p.N).c_str(), was.c_str(), now.c_str()); }
+    return a + now;
+}
+
 static void testRuns() {
     const double sLen = nist::a0 / webval::a0, sSpeed = (nist::a0 / nist::tau) / (webval::a0 / webval::tau);   // CODATA 2022 over the web's value: 1.000334, 1.000383
     int run = 0;
@@ -328,7 +364,7 @@ static void testRuns() {
                 checkNum(w + " info lines", info.size(), c.info.size(), 0);
                 for (std::size_t i = 0; i < info.size() && i < c.info.size(); i++) {
                     std::string eWant, eGot;
-                    const std::string want = withNewEnergy(adaptSampled(c.info[i], lab), lab, c, &eWant);
+                    const std::string want = withNewEnergy(adaptNucleusChance(adaptSampled(c.info[i], lab), lab), lab, c, &eWant);
                     withNewEnergy(info[i], lab, c, &eGot);   // (only to cut the same parts out of the lab's line: its own energy parts are compared below)
                     checkLine(w + " info " + std::to_string(i), info[i], want);
                     if (!eWant.empty()) {
@@ -339,7 +375,7 @@ static void testRuns() {
                         checkStr(w + " info " + std::to_string(i) + " energy part (exact)", gotE + gotH, eWant);
                     }
                 }
-                checkStr(w + " hint", lab.hint(), c.hint);
+                checkStr(w + " hint", lab.hint(), adaptNucleusHint(c.hint, lab));
                 std::string chain;
                 for (const ChainStep& st : lab.chain)
                     chain += (chain.empty() ? "" : " > ") + (st.nuc.empty() ? st.how + "|" + jsNum(st.lived, 6) + "|" + (st.to ? *st.to : "null") : st.nuc);
@@ -2842,6 +2878,223 @@ static void testLifetimes() {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 0.10.9 stage 1: every nucleus at its measured size (measured rms charge radii, IAEA Nuclear Data Section, data/radii).
+// REFERENCES here are NOT the lab's own output: (1) numbers typed from data/radii/charge_radii.csv, the file the fetch wrote (fetched 2026-10-04; counted with a separate script, not with the lab); (2) hand
+// arithmetic with the stated relation (a uniform ball of radius R has rms radius sqrt(3/5) R, so R = sqrt(5/3) x rms: 2.1631 fm for helium-4 is 1.2910 x 1.6755); (3) the Woods-Saxon density's mean square
+// radius by the test's own Simpson integral (not the lab's routine) and the textbook closed form 3/5 R^2 + 7/5 pi^2 a^2; (4) the statistics of the nucleon positions the lab actually draws.
+struct RadRef { int Z, N; double rms, unc; };
+static const RadRef kRadRef[] = {                                                         // typed from the CSV: z, n, radius_val, radius_unc
+    {1, 0, 0.8783, 0.0086}, {1, 1, 2.1421, 0.0088}, {1, 2, 1.7591, 0.0363}, {2, 1, 1.9661, 0.0030}, {2, 2, 1.6755, 0.0028}, {2, 4, 2.0660, 0.0111}, {2, 6, 1.9239, 0.0306},
+    {3, 3, 2.5890, 0.0390}, {3, 4, 2.4440, 0.0420}, {3, 5, 2.3390, 0.0440}, {3, 6, 2.2450, 0.0460}, {3, 8, 2.4820, 0.0430}, {6, 6, 2.4702, 0.0022}, {8, 8, 2.6991, 0.0052},
+    {14, 14, 3.1224, 0.0024}, {20, 20, 3.4776, 0.0019}, {20, 28, 3.4771, 0.0020}, {26, 30, 3.7377, 0.0016}, {50, 82, 4.7093, 0.0076}, {82, 126, 5.5012, 0.0013}, {92, 146, 5.8571, 0.0033},
+    {95, 148, 5.9048, 0.0035}, {19, 28, 3.4534, 0.0138}, {4, 6, 2.3550, 0.0170}};
+// rows per element Z = 1 .. 96 that have a radius_val, counted from the CSV (z = 0, the neutron, left out): 90 elements, 908 isotopes
+static const int kRadPerElement[96] = {3, 4, 5, 4, 2, 3, 2, 3, 1, 11, 12, 3, 1, 3, 1, 3, 2, 14, 10, 11, 5, 7, 1, 4, 7, 4, 1, 5, 2, 5, 2, 5, 1, 6, 2, 24, 23, 24, 16, 14, 7, 15, 0, 7, 1, 6, 6, 18,
+                                       24, 25, 2, 13, 1, 24, 29, 28, 4, 7, 1, 16, 0, 17, 23, 11, 11, 18, 14, 12, 19, 24, 19, 12, 1, 5, 2, 7, 10, 20, 17, 26, 19, 32, 11, 15, 0, 15, 16, 19, 0, 5, 0, 5, 0, 6, 2, 5};
+// the mean square radius of the Woods-Saxon density 1 / (1 + exp((r - R) / a)): the test's own Simpson integral of r^4 f and r^2 f (20,000 intervals out to R + 40 a)
+static double wsMeanSquareOwn(double R, double a) {
+    const int n = 20000;
+    const double top = R + 40 * a, h = top / n;
+    double num = 0, den = 0;
+    for (int i = 0; i <= n; i++) {
+        const double r = i * h, f = 1 / (1 + std::exp((r - R) / a)), w = (i == 0 || i == n) ? 1 : (i % 2 ? 4 : 2);
+        num += w * r * r * r * r * f; den += w * r * r * f;
+    }
+    return num / den;
+}
+// what the lab really draws: the rms charge radius of one nucleus' protons, averaged over many builds. Positions are about the centre of mass (the nucleus is centred on it); a charge radius is the proton
+// positions' rms there plus the proton's own size (r_p^2 = 0.84^2 fm^2, the lab's nucleon radius). minSep = the smallest distance between two nucleons in any build, in fm.
+struct LayoutStat { double chargeRms, minSep; };
+static LayoutStat layoutStat(int Z, int N, int builds, bool byRule, uint32_t seed) {
+    double sum = 0, minSep = 1e9; long np = 0;
+    seedRandom(seed);
+    for (int b = 0; b < builds; b++) {
+        const std::vector<Nucleon> v = byRule ? buildNucleusByRule(Z, N) : buildNucleus(Z, N);
+        double cx = 0, cy = 0, cz = 0;
+        for (const Nucleon& q : v) { cx += q.x; cy += q.y; cz += q.z; }
+        cx /= v.size(); cy /= v.size(); cz /= v.size();
+        for (std::size_t i = 0; i < v.size(); i++) {
+            if (v[i].isP) { const double x = (v[i].x - cx) / kFmLab, y = (v[i].y - cy) / kFmLab, z = (v[i].z - cz) / kFmLab; sum += x * x + y * y + z * z; np++; }
+            for (std::size_t j = i + 1; j < v.size(); j++) {
+                const double dx = (v[i].x - v[j].x) / kFmLab, dy = (v[i].y - v[j].y) / kFmLab, dz = (v[i].z - v[j].z) / kFmLab;
+                minSep = std::min(minSep, std::sqrt(dx * dx + dy * dy + dz * dz));
+            }
+        }
+    }
+    return {std::sqrt(sum / np + kNucleonR * kNucleonR), minSep};
+}
+static std::string joinLines(const std::vector<std::string>& v) { std::string s; for (const std::string& l : v) s += l + "\n"; return s; }
+static bool has(const std::string& s, const std::string& w) { return s.find(w) != std::string::npos; }
+
+static void testNuclearSize(double guardLayout, double guardMinSepFloor) {
+    // ---- 1. the data parses; counts as fetched ----
+    int n = 0;
+    const RadiusRow* rows = radiusRows(n);
+    int withValue = 0, prelimOnly = 0, both = 0, perElement[119] = {0}, badOrder = 0, badSane = 0, badUnc = 0, zeroZ = 0, badA = 0;
+    double lo = 1e9, hi = -1e9, uhi = 0;
+    for (int i = 0; i < n; i++) {
+        const RadiusRow& r = rows[i];
+        if (r.Z < 1) zeroZ++;
+        if (r.N < 0) badA++;
+        if (i > 0 && !(rows[i - 1].Z < r.Z || (rows[i - 1].Z == r.Z && rows[i - 1].N < r.N))) badOrder++;
+        const bool v = !std::isnan(r.rms), p = !std::isnan(r.prelim);
+        if (v) { withValue++; perElement[r.Z]++; lo = std::min(lo, r.rms); hi = std::max(hi, r.rms); uhi = std::max(uhi, r.unc); if (!(r.rms > 0) || !(r.unc > 0)) badUnc++; }
+        else if (p) prelimOnly++;
+        if (v && p) both++;
+        if (!v && !p) badSane++;
+    }
+    checkTrue("radii: 956 rows (the CSV's 957 minus the neutron row z = 0): 908 with a value, 48 preliminary only, 99 with both", n == 956 && withValue == 908 && prelimOnly == 48 && both == 99);
+    checkTrue("radii: no row for z = 0 (the neutron's negative number is a mean square in fm^2, not a radius), none with N < 0, sorted and unique, every row has a value or a preliminary one", zeroZ == 0 && badA == 0 && badOrder == 0 && badSane == 0 && chargeRadius(0, 1) == nullptr);
+    int bad = 0;
+    for (int z = 1; z <= 96; z++) if (perElement[z] != kRadPerElement[z - 1]) bad++;
+    checkTrue("radii: the number of isotopes with a value per element Z = 1 .. 96 equals the count made from the CSV (90 elements)", bad == 0);
+    int elements = 0; for (int z = 1; z <= 118; z++) if (perElement[z]) elements++;
+    checkTrue("radii: 90 elements have a value; none above Z = 96", elements == 90 && perElement[97] + perElement[98] + perElement[110] + perElement[118] == 0);
+    // every value in a sane range: the CSV's smallest is 0.8783 (hydrogen), the largest 5.9048 (Am-243); guard = those + 1 % (labelled)
+    checkTrue("radii: every value in [0.8783 x 0.99, 5.9048 x 1.01] fm (the CSV's extremes -/+ 1 %: guard), every uncertainty > 0 and at most 0.3139 x 1.01 fm", lo >= 0.8783 * 0.99 && hi <= 5.9048 * 1.01 && badUnc == 0 && uhi <= 0.3139 * 1.01);
+    std::printf("radii: %d rows, %d with a value (%.4f .. %.4f fm, uncertainty up to %.4f), %d preliminary only\n", n, withValue, lo, hi, uhi, prelimOnly);
+    // ---- 2. spot values, typed from the CSV ----
+    for (const RadRef& r : kRadRef) {
+        const RadiusRow* row = chargeRadius(r.Z, r.N);
+        const std::string w = "radii " + at(r.Z, r.N);
+        checkTrue(w + " is in the table", row != nullptr);
+        if (!row) continue;
+        checkNum(w + " rms", row->rms, r.rms, 1e-12);
+        checkNum(w + " uncertainty", row->unc, r.unc, 1e-9);
+    }
+    const RadiusRow* k47 = chargeRadius(19, 28); const RadiusRow* be12 = chargeRadius(4, 8); const RadiusRow* li10 = chargeRadius(3, 7);
+    checkTrue("radii: K-47 has a value 3.4534 and a preliminary 3.4419 with uncertainty 0.0000 (as the CSV has it); Be-12 has ONLY a preliminary 2.5030 +- 0.0150; Li-10 has no row",
+              k47 && k47->prelim == 3.4419 && k47->prelimUnc == 0 && be12 && std::isnan(be12->rms) && be12->prelim == 2.5030 && be12->prelimUnc == 0.0150 && li10 == nullptr);
+    // ---- 3. the size drawn: R = sqrt(5/3) x the measured rms where there is a value (a uniform ball), the usual rule where there is none; the preliminary column and H-1 are not used ----
+    checkNum("a uniform ball has rms radius sqrt(3/5) R: sqrt(5/3) = 1.2909944487", kSharpOverRms, 1.2909944487358056, 1e-15);
+    checkNum("helium-4: drawn radius = 1.2910 x 1.6755 = 2.1631 fm (hand arithmetic)", nuclearRadius(2, 2), 2.1631, 3e-5);
+    checkNum("lead-208: drawn radius = 1.2910 x 5.5012 = 7.1020 fm (hand arithmetic)", nuclearRadius(82, 126), 7.1020, 3e-5);
+    checkNum("lead-208: the usual rule 1.2 x 208^(1/3) = 7.1100 fm, which is an rms charge radius of 5.5074 fm (hand arithmetic)", ruleRms(208), 5.5074, 2e-5);
+    for (const RadRef& r : kRadRef) {
+        if (r.Z + r.N == 1) continue;
+        checkNum("drawn radius of " + at(r.Z, r.N) + " = sqrt(5/3) x measured", nuclearRadius(r.Z, r.N), 1.2909944487358056 * r.rms, 1e-12);
+    }
+    checkNum("K-47: the value is used, not the preliminary one", nuclearRadius(19, 28), 1.2909944487358056 * 3.4534, 1e-12);
+    checkNum("Be-12 (only a preliminary value): the usual rule", nuclearRadius(4, 8), nuclearR(12), 1e-14);
+    checkNum("Li-10 (no row): the usual rule", nuclearRadius(3, 7), nuclearR(10), 1e-14);
+    checkNum("Og-294 (no row): the usual rule", nuclearRadius(118, 176), nuclearR(294), 1e-14);
+    checkNum("H-1: the proton keeps the lab's own proton radius (CODATA 2022 0.84075 fm, drawn 0.84), not the table's 0.8783", nuclearRadius(1, 0), kNucleonR, 0);
+    checkTrue("sizedByMeasurement: yes for He-4 and Pb-208, no for H-1, Be-12 (preliminary only), Li-10, Og-294", sizedByMeasurement(2, 2) && sizedByMeasurement(82, 126) && !sizedByMeasurement(1, 0) && !sizedByMeasurement(4, 8) && !sizedByMeasurement(3, 7) && !sizedByMeasurement(118, 176));
+    // the usual rule against the measurements (rule rms = sqrt(3/5) x 1.2 A^(1/3)); the percentages are hand arithmetic from the CSV values
+    auto dev = [](int Z, int N) { const double m = chargeRadius(Z, N)->rms, r = ruleRms(Z + N); return 100 * (m - r) / r; };
+    checkNum("deviation from the rule: H-2 +82.91 %", dev(1, 1), 82.91, 0, 0.01);
+    checkNum("deviation from the rule: Li-6 +53.28 %", dev(3, 3), 53.28, 0, 0.01);
+    checkNum("deviation from the rule: He-3 +46.66 %", dev(2, 1), 46.66, 0, 0.01);
+    checkNum("deviation from the rule: C-12 +16.08 %", dev(6, 6), 16.08, 0, 0.01);
+    checkNum("deviation from the rule: Fe-56 +5.10 %", dev(26, 30), 5.10, 0, 0.01);
+    checkNum("deviation from the rule: U-238 +1.68 %", dev(92, 146), 1.68, 0, 0.01);
+    checkNum("deviation from the rule: Pb-208 -0.11 %", dev(82, 126), -0.11, 0, 0.01);
+    checkNum("deviation from the rule: Sn-132 -0.50 %", dev(50, 82), -0.50, 0, 0.01);
+    double worstUp = -1e9, worstDown = 1e9; int upZ = 0, upN = 0, dnZ = 0, dnN = 0;
+    for (int i = 0; i < n; i++) {
+        if (std::isnan(rows[i].rms) || rows[i].Z + rows[i].N == 1) continue;
+        const double d = dev(rows[i].Z, rows[i].N);
+        if (d > worstUp) { worstUp = d; upZ = rows[i].Z; upN = rows[i].N; }
+        if (d < worstDown) { worstDown = d; dnZ = rows[i].Z; dnN = rows[i].N; }
+    }
+    checkTrue("the biggest deviations from the rule are H-2 (+82.9 %) and, below it, Sn-132 (-0.50 %): the measurement is never more than 0.5 % under the rule", upZ == 1 && upN == 1 && dnZ == 50 && dnN == 82 && worstDown > -0.51);
+    // known cases, from the data itself
+    checkTrue("He-4 (1.6755) is smaller than He-3 (1.9661), as measured; lithium falls from Li-6 to Li-9 (2.2450) and rises at Li-11 (2.4820)",
+              chargeRadius(2, 2)->rms < chargeRadius(2, 1)->rms && chargeRadius(3, 3)->rms > chargeRadius(3, 4)->rms && chargeRadius(3, 4)->rms > chargeRadius(3, 5)->rms &&
+              chargeRadius(3, 5)->rms > chargeRadius(3, 6)->rms && chargeRadius(3, 8)->rms > chargeRadius(3, 6)->rms);
+    checkTrue("Li-11 against Li-7: +0.0380 fm, with an uncertainty of sqrt(0.043^2 + 0.042^2) = 0.0601 fm: NOT distinguishable by charge radius (the app must not call it much larger)",
+              std::fabs((chargeRadius(3, 8)->rms - chargeRadius(3, 4)->rms) - 0.038) < 1e-9 && chargeRadius(3, 8)->rms - chargeRadius(3, 4)->rms < std::hypot(chargeRadius(3, 8)->unc, chargeRadius(3, 4)->unc));
+    checkTrue("a strongly deformed rare earth, Gd-158, is bigger than the rule by a few percent (+0.6 %: the charge radius carries no shape)", dev(64, 94) > 0 && dev(64, 94) < 5);
+    // the density the drawn size implies (a uniform ball of A nucleons): between the measured extremes -/+ 1 % (guard); the lowest is Ne-17
+    double rlo = 1e9, rhi = 0; int rloZ = 0;
+    for (int i = 0; i < n; i++) {
+        if (std::isnan(rows[i].rms) || rows[i].Z + rows[i].N < 12) continue;
+        const int A = rows[i].Z + rows[i].N; const double R = nuclearRadius(rows[i].Z, rows[i].N), rho = 3.0 * A / (4 * kPi * R * R * R);
+        if (rho < rlo) { rlo = rho; rloZ = rows[i].Z; }
+        rhi = std::max(rhi, rho);
+    }
+    std::printf("radii: nucleon density of the drawn uniform ball, A >= 12: %.5f (Z = %d) .. %.5f per fm^3\n", rlo, rloZ, rhi);
+    checkTrue("density of the drawn ball for A >= 12 is between 0.06705 x 0.99 and 0.14023 x 1.01 per fm^3 (the CSV's extremes -/+ 1 %: guard; the lowest is Ne-17)", rlo >= 0.06705 * 0.99 && rhi <= 0.14023 * 1.01 && rloZ == 10);
+    // ---- 4. how many isotopes the slider offers are measured ----
+    int offered = 0, measured = 0, fallback = 0, prelimOnlyOffered = 0;
+    for (int z = 1; z <= 118; z++) {
+        const auto rg = nRange(z);
+        for (int nn = rg.first; nn <= rg.second; nn++) {
+            offered++;
+            const RadiusRow* r = chargeRadius(z, nn);
+            if (sizedByMeasurement(z, nn)) measured++; else { fallback++; if (r && std::isnan(r->rms)) prelimOnlyOffered++; }
+        }
+    }
+    std::printf("radii: the slider offers %d isotopes: %d sized by a measurement, %d by the rule (%d of those have only a preliminary value)\n", offered, measured, fallback, prelimOnlyOffered);
+    checkTrue("the slider's isotopes: every measured isotope the table has (907 with A > 1) is offered or not, but measured + fallback = offered", measured + fallback == offered && measured > 0 && fallback > 0);
+    // ---- 5. the layout the lab draws ----
+    // the half-density radius that gives a measured charge radius: the lab's solver against the test's own integral. proton density rms^2 + r_p^2 = measured^2
+    for (const double rms : {2.7, 3.1224, 3.7377, 5.5012, 5.8571}) {
+        const double a = 0.54, R = wsHalfDensityRadiusForChargeRms(rms);
+        checkNum("Woods-Saxon radius for a charge rms of " + fmt::fixed(rms, 4) + " fm: the test's own Simpson integral gives back sqrt(rms^2 - r_p^2)", std::sqrt(wsMeanSquareOwn(R, a)), std::sqrt(rms * rms - kNucleonR * kNucleonR), 1e-5);
+        checkNum("... and the textbook closed form 3/5 R^2 + 7/5 pi^2 a^2 agrees (it drops exp(-R/a) terms)", 0.6 * R * R + 1.4 * kPi * kPi * a * a, rms * rms - kNucleonR * kNucleonR, 2e-3);
+    }
+    // the deuteron is two nucleons at +-d/2: the proton's own distance to the centre is d/2, so d/2 = sqrt(2.1421^2 - 0.84^2) = 1.9705 fm (hand arithmetic); by the rule it stays 1.6
+    for (const bool rule : {false, true}) {
+        seedRandom(5);
+        const auto v = rule ? buildNucleusByRule(1, 1) : buildNucleus(1, 1);
+        const double d = std::hypot(std::hypot(v[0].x - v[1].x, v[0].y - v[1].y), v[0].z - v[1].z) / kFmLab;
+        checkNum(rule ? "deuteron by the rule: half separation 1.6 fm" : "deuteron by its measured charge radius: half separation 1.9705 fm", d / 2, rule ? 1.6 : 1.9705, rule ? 1e-9 : 3e-5);
+    }
+    // unmeasured isotopes are built exactly as the rule builds them (same seed, same positions); measured ones are not
+    for (const auto& zn : {std::pair<int, int>{3, 7}, {4, 8}, {118, 176}, {1, 0}, {50, 40}}) {
+        seedRandom(9); const auto a = buildNucleus(zn.first, zn.second); seedRandom(9); const auto b = buildNucleusByRule(zn.first, zn.second);
+        bool same = a.size() == b.size();
+        for (std::size_t i = 0; same && i < a.size(); i++) same = a[i].x == b[i].x && a[i].y == b[i].y && a[i].z == b[i].z && a[i].isP == b[i].isP;
+        checkTrue("no measurement: buildNucleus = the rule's layout, position for position: " + at(zn.first, zn.second), same);
+    }
+    {
+        seedRandom(9); const auto a = buildNucleus(2, 1); seedRandom(9); const auto b = buildNucleusByRule(2, 1);
+        checkTrue("a measurement: He-3 is built differently from the rule", a.size() == b.size() && (a[0].x != b[0].x || a[0].y != b[0].y || a[0].z != b[0].z));
+    }
+    // the protons' rms charge radius of what is drawn against the measured value. buildNucleus scales every snapshot so that this is exact (see atom_core.cpp), so the guard is rounding-level, NOT a statistical one
+    // (the test averages over many builds anyway). The same check on the rule's layout must NOT hold: it is the check that tells the two apart. minSep: the closest two nucleons in any build.
+    struct Lay { int Z, N, builds; };
+    const Lay lays[] = {{2, 1, 400}, {2, 2, 400}, {3, 3, 300}, {4, 5, 300}, {6, 6, 200}, {8, 8, 150}, {20, 20, 60}, {26, 30, 40}, {82, 126, 20}};
+    double worst = 0, worstRule = 0, lowSep = 1e9; std::string wl;
+    for (const Lay& L : lays) {
+        const double m = chargeRadius(L.Z, L.N)->rms;
+        const LayoutStat st = layoutStat(L.Z, L.N, L.builds, false, 20260 + L.Z), sr = layoutStat(L.Z, L.N, L.builds, true, 20260 + L.Z);
+        const double d = std::fabs(st.chargeRms / m - 1), dr = std::fabs(sr.chargeRms / m - 1);
+        std::printf("layout %-8s beta2 %+.3f measured %.4f fm: drawn %.4f (%+.2e), by the rule %.4f (%+.2f %%), closest pair %.3f fm (rule %.3f)\n", at(L.Z, L.N).c_str(), nucBeta(L.Z, L.N), m, st.chargeRms, st.chargeRms / m - 1, sr.chargeRms, 100 * (sr.chargeRms / m - 1), st.minSep, sr.minSep);
+        if (d > worst) { worst = d; wl = at(L.Z, L.N); }
+        worstRule = std::max(worstRule, dr);
+        lowSep = std::min(lowSep, st.minSep);
+    }
+    std::printf("layout: worst difference of the drawn rms charge radius from the measured one: %.3e (%s); the rule's layout was off by up to %.4f; closest pair of any build %.4f fm\n", worst, wl.c_str(), worstRule, lowSep);
+    checkTrue("the drawn protons' rms charge radius equals the measured value for 9 nuclei, deformed or not (exact by construction: guard 1e-9)", worst <= guardLayout);
+    checkTrue("... and the rule's layout does NOT (off by more than 5 % for some of them): the check can tell the two apart", worstRule > 0.05);
+    checkTrue("no two nucleons closer than the guard (what the density rule guarantees: hard core 1.0 fm, relaxed to 0.55 fm only when crowded, then the snapshot is scaled by about 1: so never below 0.55 x the scale)", lowSep >= guardMinSepFloor);
+    // the lab itself: the size it frames, zooms to and uses in its texts
+    for (const auto& zn : {std::pair<int, int>{2, 2}, {82, 126}, {1, 0}, {4, 8}, {118, 176}}) {
+        AtomLab lab; lab.p.Z = zn.first; lab.p.N = zn.second;
+        checkNum("the lab's nucleus radius (Bohr radii x fm per Bohr radius) = nuclearRadius: " + at(zn.first, zn.second), lab.nucRA0() * kFmPerA0, nuclearRadius(zn.first, zn.second), 1e-12);
+    }
+    // ---- 6. the words ----
+    const std::string he4 = joinLines(nuclearSizeLines(2, 2)), li9 = joinLines(nuclearSizeLines(3, 6)), c12 = joinLines(nuclearSizeLines(6, 6)), be12t = joinLines(nuclearSizeLines(4, 8)), h1 = joinLines(nuclearSizeLines(1, 0)), og = joinLines(nuclearSizeLines(118, 176));
+    checkTrue("card, He-4: the measured 1.6755 +- 0.0028 fm, the drawn 2.1631 fm, the rule's 1.9049 fm and its rms 1.4755 fm, the difference +0.2000 fm (+13.6 %)",
+              has(he4, "1.6755") && has(he4, "0.0028") && has(he4, "2.1631") && has(he4, "1.9049") && has(he4, "1.4755") && has(he4, "+0.2000") && has(he4, "13.6 %"));
+    checkTrue("card, He-4: says helium-4 is smaller than helium-3 (1.9661 fm) and gives the binding per nucleon (AME2020) of both", has(he4, "smaller than helium-3") && has(he4, "1.9661") && has(he4, "MeV per nucleon"));
+    checkTrue("card, Li-9: lists the measured lithium radii falling to Li-9 and rising at Li-11, says Li-10 has none, and that Li-11 against Li-7 is inside the uncertainty",
+              has(li9, "2.5890") && has(li9, "2.2450") && has(li9, "2.4820") && has(li9, "Li-10") && has(li9, "no measured") && has(li9, "uncertainty") && !has(li9, "much larger"));
+    checkTrue("card, C-12: no He/Li series text", !has(c12, "lithium") && !has(c12, "smaller than helium-3"));
+    checkTrue("card, an isotope with no value: \"no measured radius for this isotope; size from the usual rule\" and the rule's radius, Og-294: 1.2 x 294^(1/3) = 7.9793 fm",
+              has(og, "no measured radius for this isotope; size from the usual rule") && has(og, "7.9793"));
+    checkTrue("card, Be-12 (only preliminary): says so, gives 2.5030 +- 0.0150 and that it is not used", has(be12t, "preliminary") && has(be12t, "2.5030") && has(be12t, "0.0150") && has(be12t, "not used") && has(be12t, "no measured radius for this isotope; size from the usual rule"));
+    checkTrue("card, H-1: one proton, 0.84 fm, says the table's 0.8783 +- 0.0086 is not the CODATA 2022 proton radius 0.84075 and is not used", has(h1, "0.84") && has(h1, "0.8783") && has(h1, "CODATA 2022") && has(h1, "not used"));
+    const std::string ex = chargeRadiusExplain();
+    checkTrue("explanation: what a charge radius is (the size of the protons' charge, rms), neutrons carry no charge, matter extends further, which is why a halo cannot be drawn from this table, a size not a shape, the uniform-ball assumption, static, no vibration or rotation",
+              has(ex, "charge radius") && has(ex, "rms") && has(ex, "protons") && has(ex, "Neutrons carry no electric charge") && has(ex, "matter") && has(ex, "halo") && has(ex, "cannot be drawn") && has(ex, "a size, not a shape") &&
+              has(ex, "uniform ball") && has(ex, "sqrt(5/3)") && has(ex, "vibrate and rotate"));
+    checkTrue("the credit names IAEA, Angeli and Marinova and the file's own limits", has(kRadiiCredit, "IAEA") && has(kRadiiCredit, "Angeli") && has(kRadiiCredit, "Marinova") && has(kRadiiCredit, "charge_radii.csv"));
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -2881,6 +3134,8 @@ int main() {
     testDirac();
     testDiracPrecision();
     testLifetimes();
+    // guards: layout 1e-9 (rounding level: the size is exact by construction); closest pair 0.673 fm = the smallest MEASURED (0.6801 fm, C-12, 9 nuclei) - 1 %, a floor
+    testNuclearSize(1e-9, 0.673);
     testElements();
     testNuclides();
     testFormats();

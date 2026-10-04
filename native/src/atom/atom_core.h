@@ -189,7 +189,8 @@ double nucBeta(int Z, int N);                 // quadrupole deformation β₂
 bool nucMeasured(int Z, int N);
 const char* nucShapeWord(double b);
 struct Nucleon { double x, y, z; bool isP; double ph; };   // centre (m), proton?, wobble phase
-std::vector<Nucleon> buildNucleus(int Z, int N);
+std::vector<Nucleon> buildNucleus(int Z, int N);        // sized by the measured charge radius where there is one (radii.h), else by the rule
+std::vector<Nucleon> buildNucleusByRule(int Z, int N);  // the rule only: the web version's layout (the saved web positions test this one)
 
 // ---- radioactive decay (NUBASE2020) ----
 struct DecayInfo { std::optional<double> T; bool unk = false; std::vector<std::pair<std::string, double>> br; };

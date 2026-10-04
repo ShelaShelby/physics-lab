@@ -23,6 +23,7 @@
 #include "atom/asd.h"
 #include "atom/dirac.h"
 #include "atom/lifetime.h"
+#include "atom/radii.h"
 #include "atom/radial_graph.h"
 #include "atom_learn.h"
 #include "orbit_panel.h"
@@ -523,6 +524,15 @@ void realSpectrumCard(int Z, int N, bool dirac) {
     mutedWrapped(kAsdCredit, 12.0f / 16);
 }
 
+// the nuclear size card (atom/radii.h): the measured charge radius of the nucleus on screen next to the usual rule's, what a charge radius is, and the limits. A table look-up and some text: nothing here runs per frame except the card's own drawing.
+void nuclearSizeCard(AppState& app) {
+    const AtomParams& p = app.atom.p;
+    mutedWrapped(std::string("The nucleus on screen: ") + name(p.Z) + "-" + std::to_string(p.Z + p.N) + ".", 12.0f / 16);
+    for (const std::string& l : nuclearSizeLines(p.Z, p.N)) mutedWrapped(l, 12.0f / 16);
+    mutedWrapped(chargeRadiusExplain(), 12.0f / 16);
+    mutedWrapped(kRadiiCredit, 12.0f / 16);
+}
+
 // the lifetimes card (atom/lifetime.h): how long the state on screen lives and how likely each jump is, from NIST ASD's transition probabilities, and a check of any jump between two shells (allowed, with its rate; or why not)
 void lifetimeCard(AppState& app) {
     const AtomParams& p = app.atom.p;
@@ -831,6 +841,10 @@ void atomPanel(AppState& app, float width) {
     // ---- The real spectrum ----
     ImGui::SeparatorText("Real spectrum (NIST)");
     realSpectrumCard(p.Z, p.N, p.dirac == "On");
+
+    // ---- Nuclear size ----
+    ImGui::SeparatorText("Nuclear size (measured)");
+    nuclearSizeCard(app);
 
     // ---- Lifetimes and jumps ----
     ImGui::SeparatorText("Lifetimes and jumps (NIST)");

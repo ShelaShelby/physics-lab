@@ -1,5 +1,6 @@
 #include "atom_core.h"
 #include "outline.h"
+#include "radii.h"
 
 #include <algorithm>
 #include <array>
@@ -560,7 +561,7 @@ const char* nucShapeWord(double b) {
 // Glauber Monte Carlo codes; a Gaussian for light nuclei), with a hard core so nucleons do not
 // overlap, a neutron skin and the measured quadrupole deformation. One possible snapshot: really,
 // every nucleon is a wave spread through the nucleus. Worked out in fm, stored in metres (kFmLab).
-std::vector<Nucleon> buildNucleus(int Z, int N) {
+static std::vector<Nucleon> buildNucleusImpl(int Z, int N, bool measured) {
     const int A = Z + N;
     std::vector<Nucleon> out;
     auto gs = [] { double u = 0; while (!u) u = random(); const double v = random(); return std::sqrt(-2 * std::log(u)) * std::cos(2 * kPi * v); };
@@ -575,14 +576,28 @@ std::vector<Nucleon> buildNucleus(int Z, int N) {
     }
     if (A == 2) {                                  // the deuteron is a loose pair
         const double a = random() * 6.28, c = std::cos(a), sn = std::sin(a);
-        out.push_back({1.6 * c, 1.6 * sn, 0, types[0] != 0, 0});
-        out.push_back({-1.6 * c, -1.6 * sn, 0, types[1] != 0, 1.7});
+        // half the distance of the pair: 1.6 fm by the rule; measured: the proton's own distance to the centre is d/2, so the charge radius is sqrt((d/2)^2 + r_p^2) and d/2 = sqrt(rms^2 - r_p^2)
+        const double h = measured ? std::sqrt(std::max(0.5, chargeRadius(Z, N)->rms * chargeRadius(Z, N)->rms - kNucleonR * kNucleonR)) : 1.6;
+        out.push_back({h * c, h * sn, 0, types[0] != 0, 0});
+        out.push_back({-h * c, -h * sn, 0, types[1] != 0, 1.7});
         return toMetres();
     }
-    const double beta = nucBeta(Z, N), cA = std::cbrt(static_cast<double>(A)), R0 = 1.12 * cA - 0.86 / cA, a = 0.54;
+    const double beta = nucBeta(Z, N), cA = std::cbrt(static_cast<double>(A)), a = 0.54;
     const double skin = std::max(-0.3, std::min(0.6, 1.7 * (N - Z) / A));   // neutron minus proton radius (measured 0.28 fm for lead-208)
     const bool gauss = A <= 16;
-    const double rms = A == 3 ? 1.76 : 1.68 + 0.085 * (A - 4), sg = std::sqrt(std::max(0.5, rms * rms - 0.84 * 0.84)) / std::sqrt(3.0);
+    // The size. By the rule: R0 = 1.12 A^(1/3) - 0.86 / A^(1/3), and for A <= 16 a Gaussian of rms 1.76 (A = 3) or 1.68 + 0.085 (A - 4) fm. Measured (0.10.9 stage 1, radii.h): the sampling starts from the measured
+    // size (protons' density rms^2 = measured rms^2 - r_p^2, r_p = 0.84 fm, the lab's nucleon radius; the neutrons keep their skin), and after the nucleons are placed and centred the whole snapshot is scaled about the
+    // centre of mass so that its PROTONS' rms charge radius is the measured one EXACTLY. The scale absorbs what the sampling adds on its own: the hard core between nucleons spreads them out, re-centring on the
+    // centroid pulls them in (by (A - 1) / A), and a deformed nucleus' rms grows with beta2^2. Each picture is one random snapshot (as before) with the measured size; the rule's own layout is not scaled.
+    double R0 = 1.12 * cA - 0.86 / cA;
+    double rms = A == 3 ? 1.76 : 1.68 + 0.085 * (A - 4), sg = std::sqrt(std::max(0.5, rms * rms - 0.84 * 0.84)) / std::sqrt(3.0);
+    double chargeTarget = 0;                                                  // measured: the protons' mean square radius about the centre of mass the picture must have, fm^2
+    if (measured) {
+        const double m = chargeRadius(Z, N)->rms;
+        chargeTarget = std::max(0.1, m * m - kNucleonR * kNucleonR);
+        if (gauss) sg = std::sqrt(std::max(0.5, chargeTarget)) / std::sqrt(3.0);
+        else R0 = wsHalfDensityRadiusForChargeRms(m) + 0.5 * skin;          // protons sit at R0 - skin / 2 = the solved radius
+    }
     double dmin = 1.0;
     for (int i = 0; i < A; i++) {
         const bool isP = types[i] != 0;
@@ -614,14 +629,22 @@ std::vector<Nucleon> buildNucleus(int Z, int N) {
     double mx = 0, my = 0, mz = 0;
     for (const Nucleon& q : out) { mx += q.x; my += q.y; mz += q.z; }
     mx /= A; my /= A; mz /= A;
+    double sc = 1;                                 // measured: the scale that gives the protons exactly the measured mean square radius about the centre of mass
+    if (measured) {
+        double sum = 0; int np = 0;
+        for (const Nucleon& q : out) if (q.isP) { sum += (q.x - mx) * (q.x - mx) + (q.y - my) * (q.y - my) + (q.z - mz) * (q.z - mz); np++; }
+        if (np > 0 && sum > 0) sc = std::sqrt(chargeTarget * np / sum);
+    }
     // tilt the symmetry axis so the shape shows from the side
     const double ty = 0.95, tz = random() * 6.28, c1 = std::cos(ty), s1 = std::sin(ty), c2 = std::cos(tz), s2 = std::sin(tz);
     for (Nucleon& q : out) {
-        const double x = q.x - mx, y = q.y - my, z = q.z - mz, x1 = x * c1 + z * s1, z1 = -x * s1 + z * c1;
+        const double x = (q.x - mx) * sc, y = (q.y - my) * sc, z = (q.z - mz) * sc, x1 = x * c1 + z * s1, z1 = -x * s1 + z * c1;
         q.x = x1 * c2 - y * s2; q.y = x1 * s2 + y * c2; q.z = z1;
     }
     return toMetres();
 }
+std::vector<Nucleon> buildNucleus(int Z, int N) { return buildNucleusImpl(Z, N, sizedByMeasurement(Z, N)); }
+std::vector<Nucleon> buildNucleusByRule(int Z, int N) { return buildNucleusImpl(Z, N, false); }
 
 // ---------------------------------------------------------------- radioactive decay
 static const std::vector<std::map<int, std::string>>& decTable() {

@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.10.8 alpha, stage 3 is finished: real lifetimes and selection rules from NIST ASD. `AsdLine` gained `aki` (ASD's A, NaN when none), `acc` (its accuracy code) and `type` (blank = E1) from columns already in the 2026-10-04 fetch (no refetch; `tools/make_asd_data.py build`). `src/atom/lifetime.*`: `lifeOf(Z, level)` (every allowed way to a lower n, sum A, complete?, lifetime 1/sum A only when complete, an upper limit when partial, metastable 2s = no number), `jumpsBetween` (allowed with A, accuracy, share; or the rules that forbid it named, and ASD's forbidden-type line), the words. `AtomParams::jfrom/jto` (UI only, not saved). New card "Lifetimes and jumps (NIST)" in `atom_panel.cpp` (not compiled or seen in the cloud: OWNER-TODO). Only new functions and data columns were added: with the Dirac setting off and on, the dumps of stage 2 and stage 3 are byte-identical. ASD data oddity found: Cs LV 1s-2s listed as allowed (data/asd README).\n- Stage 2 (earlier) fixed the red Windows build of stage 1: test references use double-double and never `long double`; the Dirac correction and readout formulas have no cancellation. Stage 1 added the Dirac setting.\n- Not done, still on the roadmap: the three deferred optimisation items (phase-colour scan, overlapping superposition, outline first use; numbers in ROADMAP). Not re-read from a source: the hydrogen-1 atom mass 1.00782503223 u (AME2020 has 1.007825031898 u, not yet put in the code) and the proton radius (0.84 fm). The owner picks what comes next.
+- Version 0.10.9 alpha, stage 1 is finished: every nucleus at its measured size. `atom/radii.h/.cpp` + `radii_data.inc` (from data/radii/charge_radii.csv, IAEA, fetched 2026-10-04 by tools/make_radii_data.py): `nuclearRadius(Z, N)` = sqrt(5/3) x the measured rms charge radius (908 isotopes), else the rule 1.2 A^(1/3); `buildNucleus` scales each snapshot so its protons have exactly the measured rms (`buildNucleusByRule` is the web's layout, kept for the saved web positions); the card "Nuclear size (measured)"; About entry. Shape (quadrupole moments) and halo (matter radii) are BLOCKED ON DATA the owner must download (ROADMAP, OWNER-TODO).
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 18,418
-  - app_tests: 1,518
+  - atom_tests: 18,578
+  - app_tests: 1,519
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
   - moon_tests: 24 (new in 0.10.4 stage 1: the ELP2000-82B Moon against the Horizons Moon table; takes about 12 s)

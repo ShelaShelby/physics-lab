@@ -3,6 +3,7 @@
 #include "outline.h"
 #include "phase_wheel.h"
 #include "quark_light.h"
+#include "radii.h"
 
 #include <algorithm>
 #include <array>
@@ -483,7 +484,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     if (!cloud && eBehind) drawE();
 
     // the nucleus at its real size: a speck at atom scale, then protons and neutrons, then (deep zoom) quarks
-    const double Rpx = nuclearR(p.Z + p.N) * fmPx, rn = kNucleonR * fmPx;
+    const double Rpx = nuclearRadius(p.Z, p.N) * fmPx, rn = kNucleonR * fmPx;
     const double qa = clamp01((rn - 40) / 120);                            // 0 = solid nucleon balls, 1 = full quark view
     s.layer = Rpx < 3 ? "Atom" : rn >= 110 ? "Quarks" : (p.Z + p.N > 1 ? Rpx < 0.45 * m : rn < 40) ? "Nucleus" : "Nucleon";
     if (bohr) {                                                            // Bohr 1913: the nucleus is one small positive ball, NOT to scale

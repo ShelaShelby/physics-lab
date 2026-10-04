@@ -1,4 +1,5 @@
 #include "atom_sim.h"
+#include "radii.h"
 
 #include <algorithm>
 #include <chrono>
@@ -193,7 +194,7 @@ double AtomLab::sizeM() const {
     return fitSize(p, p.view == "Orbit" ? double(p.n) * p.n / p.Z * kA0 : kExt[sizeN()] / p.Z * kA0);
 }
 double AtomLab::pxPerM(double m, std::optional<double> sz) const { return (p.view == "Orbit" ? 0.42 : 0.45) * m / (sz ? *sz : sizeM()); }
-double AtomLab::nucRA0() const { return nuclearR(p.Z + p.N) / kFmPerA0; }
+double AtomLab::nucRA0() const { return nuclearRadius(p.Z, p.N) / kFmPerA0; }   // measured charge radius (as a uniform ball) where there is one, else the rule: radii.h
 double AtomLab::zoomForNucleus() const {
     const double m = std::min(viewW, viewH);
     return clampZoom(std::log10(0.28 * m / (nucRA0() * kA0 * pxPerM(m))));
