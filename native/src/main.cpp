@@ -285,7 +285,10 @@ int main(int, char**) {
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
                 if (!app::labInputAllowed(app.benchRunning)) break;
                 if (app.lab == 1) {                     // Atom Lab: zoom −= deltaY × 0.004, 0.4 per wheel notch
-                    if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH && e.wheel.mouse_y < headerH + pictureWinH) app.atom.setParam("zoom", app.atom.p.zoom + e.wheel.y * 0.4);
+                    if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH && e.wheel.mouse_y < headerH + pictureWinH) {
+                        if (app.atom.chartOn()) app.atom.chartZoomAt(std::pow(1.15, e.wheel.y), e.wheel.mouse_x / scale, (e.wheel.mouse_y - headerH) / scale);   // the chart of nuclides: zoom about the pointer
+                        else app.atom.setParam("zoom", app.atom.p.zoom + e.wheel.y * 0.4);
+                    }
                     break;
                 }
                 if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) {

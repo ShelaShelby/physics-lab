@@ -72,6 +72,7 @@ void AtomLab::init() {
 
 // ---------------------------------------------------------------- settings
 void AtomLab::setParam(const std::string& key, double v) {
+    if (key == "tilt") { setChartTilt(v); return; }              // the chart's tilt is part of the view, not of the atom: no new state, no re-init
     double lo = 0, hi = 0;
     if (key == "zoom") { lo = 0; hi = 7; }
     else if (key == "Z") { lo = 1; hi = 118; }
@@ -797,6 +798,30 @@ void AtomLab::resetView() {
 }
 
 // the ⓘ button, or a click on a nucleon to dive into it
+const ChartScene& AtomLab::chartScene() const { chartScene_.build(viewW, viewH, s.chartView); return chartScene_; }
+void AtomLab::setChartTilt(double t) {
+    s.chartView.tilt = std::max(0.0, std::min(1.0, t));
+    chartScene_.build(viewW, viewH, s.chartView);
+    s.chartView = chartScene_.clamped(s.chartView);
+}
+void AtomLab::chartZoomAt(double factor, double px, double py) {
+    ChartViewState v = s.chartView;
+    const double z = std::max(1.0, std::min(kChartZoomMax, v.zoom * factor)), k = z / v.zoom;     // k: the factor actually applied (the limits cut it)
+    // scaling the whole picture about (px, py) by k: final' = q + k (final - q), which is the same view with zoom z and the pan below
+    v.panX = (1 - k) * (px - viewW / 2) + k * v.panX;
+    v.panY = (1 - k) * (py - viewH / 2) + k * v.panY;
+    v.zoom = z;
+    chartScene_.build(viewW, viewH, s.chartView);
+    s.chartView = chartScene_.clamped(v);
+}
+void AtomLab::chartPan(double dx, double dy) {
+    if (s.chartView.zoom <= 1) return;                          // the whole chart is fitted: nothing to move
+    ChartViewState v = s.chartView;
+    v.panX += dx; v.panY += dy;
+    chartScene_.build(viewW, viewH, s.chartView);
+    s.chartView = chartScene_.clamped(v);
+}
+
 void AtomLab::chooseNuclide(int Z, int N) {
     if (!chartHas(Z, N)) return;
     if (p.Z != Z) setParam("Z", double(Z));                     // (a new element: the neutrons first follow to its usual isotope)
@@ -812,7 +837,7 @@ bool AtomLab::chartStep(int dZ, int dN) {
 void AtomLab::click(double x, double y) {
     if (chartOn()) {                                           // the chart: a click on a tile chooses that nuclide
         int Z, N;
-        if (chartTileAt(chartLayout(viewW, viewH), x, y, Z, N)) chooseNuclide(Z, N);
+        if (s.chartView.flat() ? chartTileAt(chartLayout(viewW, viewH), x, y, Z, N) : chartScene().pick(x, y, Z, N)) chooseNuclide(Z, N);
         return;
     }
     if (s.infoBox && x >= s.infoBox->x && x <= s.infoBox->x + s.infoBox->w && y >= s.infoBox->y && y <= s.infoBox->y + s.infoBox->h) {
@@ -829,6 +854,7 @@ void AtomLab::click(double x, double y) {
 // Orbit: turn the atom. Cloud 3D: rotate. Slice: slide the cut. Cloud (side view): move.
 // Shift, right or middle drag, or the ✥ button, always moves the picture.
 void AtomLab::drag(double dx, double dy, bool forceMove) {
+    if (chartOn()) { chartPan(dx, dy); return; }               // the chart: a drag moves the picture (only while zoomed in)
     const std::string act = forceMove || s.dragMode == "move" || p.view == "Cloud" ? "move"
                           : p.view == "Orbit" ? "turn" : p.view == "Cloud 3D" ? "rotate" : p.view == "Slice" ? "cut" : "";
     const double m = std::min(viewW, viewH);
@@ -951,7 +977,7 @@ std::vector<std::string> AtomLab::info() {
 std::string AtomLab::hint() const {
     if (chartOn())
         return "The chart of nuclides: every known nuclide is one square, neutrons across and protons up. Hover a square for its details, click it to choose that nuclide (the other views then show it), "
-               "or use the arrow keys to move one proton or one neutron. The colour is how the nuclide decays; the lines are the magic numbers.";
+               "or use the arrow keys to move one proton or one neutron. The colour is how the nuclide decays; the lines are the magic numbers. The Tilt slider turns the flat chart into a landscape whose height is the half-life (a chosen log scale: see the legend); the wheel zooms, a drag pans.";
     const double x = p.Z * kAlpha;
     std::string note;
     if (p.Z >= kRelativityZ) note += " Heavy atoms: this lab uses non-relativistic physics, but a 1s electron here moves at " + fmt::fixed(100 * x, 0) +

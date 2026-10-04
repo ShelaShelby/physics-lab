@@ -17,6 +17,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.11", "Atom Lab: the chart of nuclides as a landscape (stage 3 of 4)",
+     "The Chart of nuclides view has a new Tilt slider. At 0 it is exactly the flat chart of the last version; as you move it up, the chart turns into a landscape seen from a fixed isometric angle, and every nuclide becomes a block whose height is its half-life. The stable nuclides stand in a ridge along the middle, and the short-lived ones fall away on both sides like a shore. "
+     "The height is a chosen scale, not a measurement: the logarithm of the half-life, from 10^-23 seconds (flat) to 10^32 seconds (the top), where each step up is ten times longer; the legend says so. Stable nuclides have no half-life, so they all stand at one fixed height above the top of the scale, meaning no decay seen, not a long number. "
+     "A nuclide with no measured half-life, or only an extrapolated one, has no height at all: it is drawn flat, hollow or pale. A pale block is only a limit or an approximate value. "
+     "The wheel zooms about the pointer, a drag moves the picture when zoomed in, and a reset button brings back the flat chart. Hover and click work on the block you see on top, including its sides. "
+     "A benchmark scene measures the landscape. The next stage is about what the height can mean."},
     {"0.11", "Atom Lab: the chart of nuclides (stage 2 of 4)",
      "A new view, \"Chart of nuclides\", is a map of every nuclide the lab knows: 3,557 squares, neutrons across and protons up. Each square is coloured by how that nuclide decays (stable, beta minus, beta plus or electron capture, alpha, fission, proton or neutron emission), and the legend says in words what each colour means. The stable nuclides run along the middle like a valley, with neutron-rich nuclei on one side and proton-rich ones on the other. "
      "The lines are the magic numbers 2, 8, 20, 28, 50, 82 and 126, where a shell of nucleons is full. The nuclide you have chosen is marked with a box and cross-hairs, so you do not lose your place. Hover a square for its half-life, how it decays and with what odds, its spin, and whether the lab has a measured charge radius and a measured quadrupole moment; where the lab has no value, it says so. "

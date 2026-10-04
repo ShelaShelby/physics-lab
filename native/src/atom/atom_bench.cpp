@@ -48,9 +48,11 @@ void still(AtomLab& L) { L.s.zoomTo.reset(); L.s.panTo.reset(); L.s.pan = Vec3d{
 }  // namespace
 
 void benchSetup(AtomLab& L, int which, double w, double h) {
-    if (which == kBenchChartScene) {                     // the chart of nuclides: the whole map, U-238 chosen (the marker is drawn), nothing to wait for
+    if (which == kBenchChartScene || which == kBenchLandscapeScene) {   // the chart of nuclides: the whole map (flat) or the landscape (full tilt), U-238 chosen (the marker is drawn), nothing to wait for
         fresh(L, 92, 146, w, h);
+        L.chartReset();
         L.setParam("view", std::string(kChartView));
+        if (which == kBenchLandscapeScene) L.setChartTilt(1);
         still(L);
         return;
     }
@@ -110,6 +112,9 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Chart of nuclides: the whole chart, 3,557 squares", "the Atom Lab's Chart of nuclides view (0.11 stage 2): every nuclide of the lab's table as one square (3,557), the 14 magic-number bands, the legend and the text box, the chosen nuclide (uranium-238) marked. "
                                                               "Nothing moves. Keep the pointer off the picture while it runs (a hovered square changes the text box). Compare it with scene 8 (the Orbit view's own cost) and look at the GPU time: "
                                                               "this scene is all rectangles in one batch, so the CPU time to build them is what it measures"},
+        {"Chart of nuclides, tilted landscape (full tilt), 3,557 blocks", "the Chart of nuclides view at full tilt (0.11 stage 3): every nuclide a block whose height is the log of its half-life (stable ones on a plateau), drawn far to near with its top and two faces, "
+                                                                          "the ground and the magic-number bands, the legend, uranium-238 chosen. Nothing moves. It is the same data as the flat chart scene just before it, so the DIFFERENCE between the two is the cost of the third dimension: "
+                                                                          "about three times the triangles, and the per-frame loop over the blocks. Look at the CPU frame time first (the GPU is expected near idle); keep the pointer off the picture"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchSceneCount - 1)) - kBenchFirstRisk];
 }
@@ -138,7 +143,7 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
 }
 
 std::string benchSettingsText(const AtomLab& L) {
-    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N);
+    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %, zoom " + std::to_string(int(std::lround(L.s.chartView.zoom * 100))) + " %, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N);
     std::string t = "view " + L.p.view + ", Orbit style " + L.p.ostyle + ", quark style " + L.p.qstyle + ", detail " + L.p.detail + ", " + L.p.style + " nucleons";
     if (L.p.view != "Orbit") {                           // the cloud views: what the cost depends on
         t += ", orbital " + L.p.orb + ", cloud style " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots, phase " + L.p.phase;

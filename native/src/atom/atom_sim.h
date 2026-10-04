@@ -16,6 +16,7 @@
 
 #include "atom_core.h"
 #include "chart.h"
+#include "chart_view.h"
 
 namespace atom {
 
@@ -105,6 +106,7 @@ struct AtomState {
     bool autoPhotons = false;
     double wait = 0.3, boost = 0;
     std::string last, msg;
+    ChartViewState chartView;            // the chart of nuclides: tilt, zoom, pan (kept across init(); not saved)
     std::string autoSaid;                // Auto photons: the reason already given for finding no jump (state + cause), so it is said once, not every time Auto looks
     std::optional<double> szCur;         // the size the picture is fitted to (glides), m
     // ---- kept across init() ----
@@ -136,6 +138,7 @@ public:
     bool paused = false;                 // the app's pause
     bool hold = false;                   // a control is being held: the decay clock waits
     std::optional<bool> moreStored;      // the remembered ⓘ choice (web: localStorage plAtomMore)
+    mutable ChartScene chartScene_;
     double viewW = 1000, viewH = 700;    // the picture's size in points (the web's canvas size)
     std::function<double()> nowMs;       // the wall clock in ms (web: performance.now / Date.now)
     bool reducedMotion = false;          // Settings → Motion: camera moves jump, Cloud 3D does not spin by itself (web: plRM())
@@ -181,7 +184,13 @@ public:
 
     bool chartOn() const { return p.view == kChartView; }  // the map of all nuclides is shown instead of one atom
     void chooseNuclide(int Z, int N);                     // the chart's click: exactly this Z and N (the other views then show it)
-    bool chartStep(int dZ, int dN);                       // an arrow key in the chart: one proton or one neutron, only onto an observed nuclide
+    bool chartStep(int dZ, int dN);
+    // the landscape (0.11 stage 3): tilt 0 = the flat chart, 1 = the full landscape; zoom about a picture point (factor > 1 = closer); pan in picture points (only while zoomed in). Each keeps the chart in the picture.
+    void setChartTilt(double t);
+    void chartZoomAt(double factor, double px, double py);
+    void chartPan(double dx, double dy);
+    void chartReset() { s.chartView = ChartViewState(); }
+    const ChartScene& chartScene() const;                 // the blocks for the picture's size and the view (rebuilt only when one of them changed)                       // an arrow key in the chart: one proton or one neutron, only onto an observed nuclide
     void click(double x, double y);                       // picture points
     void drag(double dx, double dy, bool forceMove);      // forceMove: Shift, right or middle button
 

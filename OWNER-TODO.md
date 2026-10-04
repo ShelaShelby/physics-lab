@@ -154,3 +154,11 @@
 - [ ] Open www-nds.iaea.org/amdc/ (a browser gets past the bot challenge) and send what it says about citing NUBASE2020; the app credits only the citation line the file itself gives.
 - [ ] Decide whether Auto photons waiting silently while the chart is shown is fine (the chart shows no electron) or should say so.
 - [ ] The lab's table marks 113 half-lives with "~" (approximate); I could not reproduce that mark from NUBASE2020 (most of those have plain values there). If you know where it came from, say so; the chart's hover repeats the lab's existing wording.
+
+## 0.11 stage 3 (the landscape): what only the owner can do
+- [ ] On the PC, in the Chart of nuclides view, move the Tilt slider from 0 to 100 %: at 0 it must look exactly like the flat chart of stage 2; at 100 % check the ridge of stable nuclides, the shore of hollow squares, the legend (it moves to the emptiest corner; does it cover a block or an axis number at your window sizes?), the pin on the chosen nuclide. My images are a software replay with other fonts.
+- [ ] Hover and click blocks that are partly hidden behind taller ones (a short block behind the stable ridge): the one you point at, the one drawn on top, must be the one that is chosen. Try the side faces of a tall block too.
+- [ ] Zoom with the wheel (about the pointer) and drag to pan; zoom out to 1 and check the chart is back and centred. Try Reset.
+- [ ] Judge the height scale: 12 tiles per scale height, the plateau of stable nuclides. If the relief is too flat or too tall for you, say so; it is one number (`kHeightCells`).
+- [ ] Run the new benchmark scene (number 20, "Chart of nuclides, tilted landscape") next to the flat chart scene (19), pointer off the picture, and send both results.
+- [ ] Decide whether the view from the neutron-rich side (the proton-rich side hides behind the ridge at full tilt; at tilt 50 % both show) is the right one, or whether the other side should face the viewer.

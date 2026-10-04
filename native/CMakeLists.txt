@@ -55,6 +55,7 @@ add_library(atom_core STATIC
   src/atom/quadrupole.cpp
   src/atom/nubase.cpp
   src/atom/chart.cpp
+  src/atom/chart_view.cpp
 )
 target_link_libraries(atom_core PUBLIC orbit_core)
 target_compile_options(atom_core PRIVATE ${PL_WARNINGS})

@@ -23,6 +23,7 @@
 #include "atom/lifetime.h"
 #include "atom/atom_sim.h"
 #include "atom/chart.h"
+#include "atom/chart_view.h"
 #include "atom/nubase.h"
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
@@ -1391,14 +1392,24 @@ static void testAutoSilence() {
 // ---- a recording stand-in for the renderer: drawChart only calls Renderer2D::rect and hexColor, so these two are all it needs (the real ones are in src/render, built only in the app)
 struct RecRect { double x, y, w, h; render::Color c; };
 static std::vector<RecRect> g_rec;
+struct RecTri { double p[6]; render::Color c; };
+struct RecLine { double x0, y0, x1, y1, w; render::Color c; };
+struct RecDisc { double x, y, r; render::Color c; };
+static std::vector<RecTri> g_tri;
+static std::vector<RecLine> g_lines;
+static std::vector<RecDisc> g_discs;
 namespace render {
 void Renderer2D::rect(double x, double y, double w, double h, Color c) { g_rec.push_back({x, y, w, h, c}); }
+void Renderer2D::triangle(double x0, double y0, Color c0, double x1, double y1, Color, double x2, double y2, Color) { g_tri.push_back({{x0, y0, x1, y1, x2, y2}, c0}); }
+void Renderer2D::line(double x0, double y0, double x1, double y1, double width, Color c) { g_lines.push_back({x0, y0, x1, y1, width, c}); }
+void Renderer2D::disc(double x, double y, double r, Color c) { g_discs.push_back({x, y, r, c}); }
 Color hexColor(const char* hex, float alpha) { auto v = [&](int i) { return float(std::strtol(std::string(hex + 1 + 2 * i, 2).c_str(), nullptr, 16)) / 255.f; }; return {v(0), v(1), v(2), alpha}; }
 }
 struct RecText : atom::ChartText {
     mutable std::vector<std::string> lines;
+    mutable std::vector<std::array<double, 2>> at;      // where each string was drawn (x, baseline y)
     double width(const std::string& t, double size, bool) const override { return double(t.size()) * size * 0.5; }
-    void draw(const std::string& t, double, double, double, render::Color, double, bool) const override { lines.push_back(t); }
+    void draw(const std::string& t, double x, double y, double, render::Color, double, bool) const override { lines.push_back(t); at.push_back({x, y}); }
 };
 
 static bool hoverHas(int Z, int N, const std::string& what) { for (const std::string& L : chartHover(Z, N)) if (L.find(what) != std::string::npos) return true; return false; }
@@ -1713,6 +1724,310 @@ static void testChart() {
         checkNum("chart legend: classes with tiles (all but Other)", listed, 8, 0);
         checkTrue("chart: the magic-number sentence names all seven numbers and says what a magic number is", [&] { const std::string w = chartMagicWords(); for (int m : kChartMagic) if (w.find(std::to_string(m)) == std::string::npos) return false; return w.find("filled shell") != std::string::npos; }());
         checkTrue("chart: the view's name is 'Chart of nuclides' and it is a valid view choice", std::string(kChartView) == "Chart of nuclides" && AtomLab::validChoice("view", kChartView));
+    }
+}
+
+// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 0.11 stage 3: the chart as a landscape. REFERENCES are not the lab's own output: (1) heights worked out by hand from the stated mapping, (log10(T) + 23) / 55, with the half-lives typed from the lab's
+// table and the NUBASE2020 file (Python was used as a calculator for the logarithms, not as a second copy of the code); (2) the isometric axes by hand (cos 45 = 0.70710678, cos 54.7356 = 0.57735027, sin 54.7356 =
+// 0.81649658: the three axes then look sqrt(2/3) = 0.81649658 times their length); (3) the picture is checked against a RAY CASTER written here, which knows nothing of the painter's order: for each pixel it
+// finds the first box a ray from the viewer enters, and the block the lab reports (the last one drawn that covers the pixel) must be that one. Guards are exact counts or stated tolerances (float storage: 1e-4 pt).
+struct RayHit { bool hit = false; int Z = 0, N = 0; double d = -1e300; int boxes = 0; };
+static RayHit rayCast(const ChartScene& S, double px, double py) {
+    const ChartProjection& P = S.proj(); const ChartLayout& L = S.layout();
+    double a0, b0, z0, a1, b1, z1; P.unmap(px, py, 0, a0, b0, z0); P.unmap(px, py, 1, a1, b1, z1);
+    const double p0[3] = {a0, b0, z0}, dv[3] = {a1 - a0, b1 - b0, z1 - z0};
+    RayHit best;
+    for (const ChartTile& t : chartTiles()) {
+        const double lo3[3] = {L.x(t.N), L.y(t.Z), -1e-6}, hi3[3] = {L.x(t.N) + L.cell, L.y(t.Z) + L.cell, S.heightPoints(chartHeightOf(t.Z, t.N).h) + 1e-6};
+        double lo = -1e300, hi = 1e300; bool miss = false;
+        for (int k = 0; k < 3 && !miss; k++) {
+            if (std::fabs(dv[k]) < 1e-12) { if (p0[k] < lo3[k] || p0[k] > hi3[k]) miss = true; continue; }
+            const double t1 = (lo3[k] - p0[k]) / dv[k], t2 = (hi3[k] - p0[k]) / dv[k];
+            lo = std::max(lo, std::min(t1, t2)); hi = std::min(hi, std::max(t1, t2));
+        }
+        if (miss || lo > hi) continue;
+        best.boxes++;
+        if (hi > best.d) { best.hit = true; best.d = hi; best.Z = t.Z; best.N = t.N; }       // the largest depth = the nearest to the viewer
+    }
+    return best;
+}
+static const ChartBlock* blockOf(const ChartScene& S, int Z, int N) { for (const ChartBlock& B : S.blocks()) if (B.Z == Z && B.N == N) return &B; return nullptr; }
+static void testChartLandscape() {
+    const double eps = 1e-12;
+    // ---- the height mapping: half-life in, height out, by hand
+    struct HL { double T, h; const char* what; };
+    static const HL hl[] = {{1e-23, 0, "10^-23 s: the bottom of the scale"}, {1e-30, 0, "far below: cut to 0"}, {1e32, 1, "10^32 s: the top"}, {1e40, 1, "far above: cut to 1"},
+                            {1, 0.41818181818181815, "1 s = 23/55"}, {1e-3, 0.36363636363636365, "1 ms = 20/55"}, {1e4, 0.4909090909090909, "10^4 s = 27/55"}, {86400, 0.5079366134996163, "a day"},
+                            {365.25 * 86400, 0.5545291630379132, "a year"}, {1.39e-22, 0.020782087277347212, "H-4: 1.39e-22 s"}, {1.41e17, 0.7299858020482797, "U-238: 1.41e17 s"},
+                            {3.89e8, 0.5743627200241037, "H-3: 3.89e8 s"}, {6.34e26, 0.905492531961486, "Bi-209: 6.34e26 s"}, {7.1e31, 0.9972956063403468, "Te-128: 7.1e31 s, the longest in the table"},
+                            {1e-10, 0.23636363636363636, "10^-10 s = 13/55"}, {1e12, 0.6363636363636364, "10^12 s = 35/55"}, {1e20, 0.7818181818181819, "10^20 s = 43/55"}};
+    int badH = 0; for (const HL& k : hl) if (std::fabs(chartHeightFromHalfLife(k.T) - k.h) > 1e-12) { badH++; std::printf("height of %s: got %.15g want %.15g\n", k.what, chartHeightFromHalfLife(k.T), k.h); }
+    checkNum("landscape height: half-lives (17, spanning the whole scale and beyond it) whose height differs from the hand-worked value by more than 1e-12", badH, 0, 0);
+    checkTrue("landscape height: zero, negative and not-a-number half-lives are height 0 (nothing is invented), and each factor of ten adds exactly 1/55", chartHeightFromHalfLife(0) == 0 && chartHeightFromHalfLife(-5) == 0 && chartHeightFromHalfLife(NAN) == 0 &&
+              std::fabs(chartHeightFromHalfLife(1e5) - chartHeightFromHalfLife(1e4) - 1.0 / 55) < eps && std::fabs(chartHeightFromHalfLife(1e-7) - chartHeightFromHalfLife(1e-8) - 1.0 / 55) < eps);
+    checkTrue("landscape height: the scale is 10^-23 s to 10^32 s and a scale height is 12 tiles (chosen by looking at the replay: 36 hid the proton-rich side behind the stable ridge); the stable plateau is 1.1 scale heights", kHeightLog10Lo == -23 && kHeightLog10Hi == 32 && kHeightCells == 12 && kStableHeight == 1.1);
+    // ---- what each group gets
+    struct HK { int Z, N; HeightKind k; double h; const char* what; };
+    static const HK hk[] = {
+        {2, 2, HeightKind::Stable, 1.1, "He-4: stable, the plateau"}, {26, 30, HeightKind::Stable, 1.1, "Fe-56: stable, the plateau"},
+        {82, 122, HeightKind::StableNoted, 1.1, "Pb-204: stable in the lab's table, NUBASE gives a limit >140 Py and 'A ?': the plateau and a mark"}, {36, 42, HeightKind::Approx, -1, "Kr-78: the lab has a number for it (NUBASE says stable): not on the plateau"},
+        {92, 146, HeightKind::Measured, 0.7299858020482797, "U-238"}, {1, 2, HeightKind::Measured, 0.5743627200241037, "H-3"}, {83, 126, HeightKind::Measured, 0.905492531961486, "Bi-209: 6.34e26 s, well below the plateau"},
+        {52, 76, HeightKind::Measured, 0.9972956063403468, "Te-128: the longest half-life in the table, just under the top"}, {1, 3, HeightKind::Measured, 0.020782087277347212, "H-4 (Z 1, N 3): 1.39e-22 s"}, {1, 4, HeightKind::Measured, 0.01699088093170121, "H-5 (Z 1, N 4): 8.6e-23 s, the shortest in the table"},
+        {5, 11, HeightKind::Limit, 0.048413778757846804, "B-16: only a limit, >4.6 zs"}, {18, 12, HeightKind::Limit, 0.21818181818181817, "Ar-30: only a limit, <10 ps"}, {97, 151, HeightKind::Limit, 0.571879026845901, "Bk-248: >9 y"},
+        {63, 99, HeightKind::Approx, 0.43636363636363634, "Eu-162: NUBASE ~10 s"}, {104, 152, HeightKind::Approx, 0.3785371624643976, "Rf-256: the lab's '~' 6.6e-3 s"},
+        {9, 22, HeightKind::Extrapolated, 0, "F-31: only an extrapolation from systematics: no height"}, {3, 9, HeightKind::Unknown, 0, "Li-12: no half-life at all: no height"}, {3, 0, HeightKind::Unknown, 0, "Li-3: p-unst: no height"}};
+    for (const HK& k : hk) {
+        const ChartHeight c = chartHeightOf(k.Z, k.N);
+        if (k.h < 0) checkTrue(std::string("landscape height: ") + k.what, c.kind != HeightKind::Stable && c.kind != HeightKind::StableNoted && c.h < 1 - 1e-9 && c.h > 0.9);
+        else checkTrue(std::string("landscape height: ") + k.what, c.kind == k.k && std::fabs(c.h - k.h) < 1e-9);
+    }
+    {
+        int unknownWithHeight = 0, stableOff = 0, over = 0, nonStableOnPlateau = 0, total = 0;
+        for (const ChartTile& t : chartTiles()) {
+            const ChartHeight c = chartHeightOf(t.Z, t.N); total++;
+            if ((c.kind == HeightKind::Unknown || c.kind == HeightKind::Extrapolated) && c.h != 0) unknownWithHeight++;
+            if ((c.kind == HeightKind::Stable || c.kind == HeightKind::StableNoted) != (t.cls == ChartClass::Stable) || ((c.kind == HeightKind::Stable || c.kind == HeightKind::StableNoted) && c.h != kStableHeight)) stableOff++;
+            if (c.kind != HeightKind::Stable && c.kind != HeightKind::StableNoted && (c.h > 1 || c.h < 0)) over++;
+            if (c.kind != HeightKind::Stable && c.kind != HeightKind::StableNoted && c.h >= kStableHeight) nonStableOnPlateau++;
+        }
+        checkNum("landscape height: tiles drawn with a height although their half-life is unknown or only extrapolated", unknownWithHeight, 0, 0);
+        checkNum("landscape height: tiles whose stability and plateau disagree (the stable ones, and only they, stand at 1.1)", stableOff, 0, 0);
+        checkNum("landscape height: not-stable tiles outside 0 .. 1 or on the plateau", over + nonStableOnPlateau, 0, 0);
+        checkNum("landscape height: every tile has a kind (3,557)", total, 3557, 0);
+        static const struct { HeightKind k; int n; } cnt[] = {{HeightKind::Measured, 2720}, {HeightKind::Stable, 182}, {HeightKind::StableNoted, 69}, {HeightKind::Approx, 119}, {HeightKind::Limit, 11}, {HeightKind::Extrapolated, 369}, {HeightKind::Unknown, 87}};
+        int wrong = 0, sum = 0; for (const auto& c : cnt) { if (chartHeightCount(c.k) != c.n) wrong++; sum += chartHeightCount(c.k); }
+        checkNum("landscape height: kinds whose count differs from the separate count (measured 2,720, stable 182, stable with a NUBASE note 69, approximate 119, limit 11, extrapolated 369, unknown 87)", wrong, 0, 0);
+        checkNum("landscape height: the kinds add up to every tile", sum, 3557, 0);
+        checkTrue("landscape height: the legend sentence says it is a chosen scale, the base, the two ends, the plateau, and that no height is invented", [&] { const std::string w = chartHeightWords(); for (const char* x : {"not a measurement", "ten times", "10^-23 s", "10^32 s", "fixed height above the top", "no height is invented"}) if (w.find(x) == std::string::npos) return false; return true; }());
+    }
+    // ---- tilt zero is the stage 2 chart
+    const double sizes2[][2] = {{900, 700}, {640, 480}, {1400, 900}, {1920, 1000}};
+    {
+        int off = 0, sides = 0, notId = 0; double worst = 0;
+        for (const auto& wh : sizes2) {
+            ChartScene S; S.build(wh[0], wh[1], ChartViewState());
+            const ChartLayout L = chartLayout(wh[0], wh[1]);
+            if (!S.proj().identity) notId++;
+            for (const ChartBlock& B : S.blocks()) {
+                const double x = L.x(B.N), y = L.y(B.Z), want[8] = {x, y, x + L.cell, y, x + L.cell, y + L.cell, x, y + L.cell};
+                for (int i = 0; i < 8; i++) { const double e = std::fabs(double(B.top[i]) - want[i]); worst = std::max(worst, e); if (e > 1e-4) off++; }
+                if (B.sides) sides++;
+            }
+        }
+        checkNum("landscape tilt 0: tile corners that are not at stage 2's place (x(N), y(Z), one square) within 1e-4 pt (float storage), 4 picture sizes x 3,557 tiles x 4 corners", off, 0, 0);
+        checkTrue("landscape tilt 0: the largest difference is below the float rounding of the coordinates, no tile has side faces, and the projection is the identity", worst < 1e-4 && sides == 0 && notId == 0);
+        // the same maths at tilt 0 with a zoom: the whole picture scaled about its centre
+        ChartScene Z2; Z2.build(900, 700, ChartViewState{0, 2, 0, 0});
+        const ChartLayout L = chartLayout(900, 700); int offZ = 0;
+        for (const ChartBlock& B : Z2.blocks()) { const double x = 450 + 2 * (L.x(B.N) - 450), y = 350 + 2 * (L.y(B.Z) - 350); if (std::fabs(B.top[0] - x) > 2e-3 || std::fabs(B.top[1] - y) > 2e-3) offZ++; }
+        checkNum("landscape tilt 0, zoom 2: tiles not at the flat position scaled by 2 about the picture's centre (2e-3 pt)", offZ, 0, 0);
+        // pick equals stage 2's grid lookup
+        ChartScene F; F.build(900, 700, ChartViewState()); int diff = 0, seen = 0;
+        for (double py = 3.3; py < 700; py += 5.3) for (double px = 2.7; px < 900; px += 5.3) {
+            int z1 = 0, n1 = 0, z2 = 0, n2 = 0; const bool a = chartTileAt(L, px, py, z1, n1), b = F.pick(px, py, z2, n2);
+            if (a != b || (a && (z1 != z2 || n1 != n2))) diff++; if (a) seen++;
+        }
+        checkTrue("landscape tilt 0: the scene's hit test and stage 2's grid lookup agree at every point of a 5.3-point grid (about 20,000 points, about 3,000 on tiles)", diff == 0 && seen > 2500);
+    }
+    // ---- the projection at full tilt, by hand
+    {
+        ChartScene S; S.build(900, 700, ChartViewState{1, 1, 0, 0});
+        const ChartProjection& P = S.proj(); const double K = P.K;
+        double ox, oy, od, ax, ay, ad, bx, by, bd, zx, zy, zd;
+        P.map(500, 300, 0, ox, oy, od); P.map(501, 300, 0, ax, ay, ad); P.map(500, 301, 0, bx, by, bd); P.map(500, 300, 1, zx, zy, zd);
+        checkTrue("landscape iso: one step along N goes right and down by (0.70710678, 0.40824829) x K", std::fabs((ax - ox) / K - 0.7071067811865476) < 1e-9 && std::fabs((ay - oy) / K - 0.40824829046386296) < 1e-9);
+        checkTrue("landscape iso: one step down the flat layout (towards smaller Z) goes left and down by (-0.70710678, 0.40824829) x K", std::fabs((bx - ox) / K + 0.7071067811865476) < 1e-9 && std::fabs((by - oy) / K - 0.40824829046386296) < 1e-9);
+        checkTrue("landscape iso: one step up in height goes straight up by 0.81649658 x K", std::fabs((zx - ox) / K) < 1e-9 && std::fabs((zy - oy) / K + 0.816496580927726) < 1e-9);
+        const double la = std::hypot(ax - ox, ay - oy) / K, lb = std::hypot(bx - ox, by - oy) / K, lz = std::hypot(zx - ox, zy - oy) / K;
+        checkTrue("landscape iso: the three axes look equally long, sqrt(2/3) = 0.81649658 of their length", std::fabs(la - 0.816496580927726) < 1e-9 && std::fabs(lb - 0.816496580927726) < 1e-9 && std::fabs(lz - 0.816496580927726) < 1e-9);
+        checkTrue("landscape iso: nearer to the viewer = larger N and smaller Z, and higher is nearer (depth grows with N, with the flat-layout y, and with the height)", ad > od && bd > od && zd > od);
+        // map and unmap are inverse, at several tilts and with zoom and pan
+        double worstR = 0;
+        for (const ChartViewState& st : {ChartViewState{0.37, 1, 0, 0}, ChartViewState{1, 3, 40, -25}, ChartViewState{0.8, 7, -300, 120}, ChartViewState{0, 2, 10, 10}}) {
+            ChartScene Q; Q.build(900, 700, st); const ChartProjection& PP = Q.proj();
+            for (double a : {100.0, 333.3, 640.0, 801.0}) for (double b : {50.0, 222.2, 480.0}) for (double z : {0.0, 17.5, 90.0}) {
+                double sx, sy, d, a2, b2, z2; PP.map(a, b, z, sx, sy, d); PP.unmap(sx, sy, d, a2, b2, z2);
+                worstR = std::max(worstR, std::max(std::fabs(a2 - a), std::max(std::fabs(b2 - b), std::fabs(z2 - z))));
+            }
+        }
+        checkTrue("landscape iso: unmap undoes map to 1e-9 pt at four views (tilts 0.37, 1, 0.8, 0; zooms up to 7; pans)", worstR < 1e-9);
+    }
+    // ---- the whole landscape is in the picture at zoom 1, at every tilt and size
+    {
+        int out = 0;
+        for (const auto& wh : sizes2) for (double tilt : {0.05, 0.25, 0.5, 0.75, 1.0}) {
+            ChartScene S; S.build(wh[0], wh[1], ChartViewState{tilt, 1, 0, 0});
+            for (const ChartBlock& B : S.blocks()) if (B.x0 < -1 || B.y0 < -1 || B.x1 > wh[0] + 1 || B.y1 > wh[1] + 1) out++;
+        }
+        checkNum("landscape fit: blocks (any face) outside the picture by more than 1 pt at tilts 0.05 .. 1 and 4 sizes", out, 0, 0);
+    }
+    // ---- the painter's order against the ray caster; the hit test (the topmost drawn block) against the ray caster
+    {
+        struct Case { double w, h, tilt, zoom, panX, panY; double step; };
+        const Case cases[] = {{900, 700, 0.35, 1, 0, 0, 13}, {900, 700, 1, 1, 0, 0, 11}, {640, 480, 1, 1, 0, 0, 9}, {900, 700, 0.7, 3, 80, -40, 13}, {900, 700, 1, 6, -150, 60, 17}};
+        for (const Case& c : cases) {
+            ChartScene S; S.build(c.w, c.h, ChartViewState{c.tilt, c.zoom, c.panX, c.panY});
+            int tested = 0, mismatch = 0, hits = 0, overlaps = 0, missPick = 0;
+            for (double py = 0.37; py < c.h; py += c.step) for (double px = 0.61; px < c.w; px += c.step) {
+                const RayHit r = rayCast(S, px, py); int Z = 0, N = 0; const bool p = S.pick(px, py, Z, N);
+                tested++;
+                if (r.hit) hits++;
+                if (r.boxes >= 2) overlaps++;
+                if (p != r.hit || (p && (Z != r.Z || N != r.N))) { mismatch++; if (mismatch <= 3) std::printf("  mismatch at %.2f %.2f: pick %d (%d,%d) ray %d (%d,%d) boxes %d\n", px, py, int(p), Z, N, int(r.hit), r.Z, r.N, r.boxes); }
+                if (!p && r.hit) missPick++;
+            }
+            const std::string tag = "landscape order and hit test, " + std::to_string(int(c.w)) + "x" + std::to_string(int(c.h)) + " tilt " + jsNum(c.tilt, 2) + " zoom " + jsNum(c.zoom, 2) + ": ";
+            checkNum(tag + "pixels (a grid) where the topmost drawn block is not the first box the ray caster's ray enters, or one finds a block and the other none", mismatch, 0, 0);
+            checkTrue(tag + "the grid had many pixels on blocks (" + std::to_string(hits) + ") and, for tilted views, many where a ray meets two or more boxes, so the order matters (" + std::to_string(overlaps) + ")", tested > 1000 && hits > 300 && (c.tilt < 0.3 || overlaps > 100));
+            (void)missPick;
+        }
+    }
+    {   // two explicit cases where a tall block overlaps a short one behind it, and one where a short block is in front of a tall one
+        ChartScene S; S.build(900, 700, ChartViewState{1, 1, 0, 0});
+        const ChartBlock* tall = blockOf(S, 82, 126);       // Pb-208 (stable, the plateau); behind it (smaller N, larger Z) stands Tl-207 (81, 126)? the neighbour at (83, 125) is checked below
+        const ChartBlock* shortBehind = blockOf(S, 83, 125);
+        checkTrue("landscape pick: Pb-208 (a stable block on the plateau) and the block behind it exist", tall && shortBehind && tall->h == kStableHeight && shortBehind->h < kStableHeight);
+        if (tall && shortBehind) {
+            // the middle of the tall block's front face (b side), which lies over the blocks behind it
+            const double fx = (tall->faceB[0] + tall->faceB[4]) / 2, fy = (tall->faceB[1] + tall->faceB[5]) / 2; int Z = 0, N = 0;
+            const bool got = S.pick(fx, fy, Z, N);
+            checkTrue("landscape pick: a point on the tall block's front face is reported as the tall block (82, 126)", got && Z == 82 && N == 126);
+            // a point that is on the short block behind's top face AND inside the tall block's silhouette: the tall one wins
+            int cover = 0, wrong = 0;
+            for (const ChartBlock& B : S.blocks()) {
+                if (&B == tall || B.N >= tall->N || B.Z <= tall->Z) continue;          // behind it: smaller N, larger Z
+                const double cx = (B.top[0] + B.top[4]) / 2, cy = (B.top[1] + B.top[5]) / 2;
+                const RayHit r = rayCast(S, cx, cy);
+                if (r.hit && r.Z == tall->Z && r.N == tall->N) { cover++; int z2 = 0, n2 = 0; if (!S.pick(cx, cy, z2, n2) || z2 != tall->Z || n2 != tall->N) wrong++; }
+            }
+            checkTrue("landscape pick: blocks behind Pb-208 whose top is hidden by it (" + std::to_string(cover) + " of them): at their top's centre the tall block is reported, every time", cover >= 3 && wrong == 0);
+            // and the reverse: a short block in front of a tall one: at its own top's centre the short block, not the tall one behind
+            const ChartBlock* front = blockOf(S, 81, 127);
+            if (front) { const double cx = (front->top[0] + front->top[4]) / 2, cy = (front->top[1] + front->top[5]) / 2; int z3 = 0, n3 = 0; const bool g = S.pick(cx, cy, z3, n3); const RayHit r = rayCast(S, cx, cy);
+                checkTrue("landscape pick: at the centre of the top of a block nearer than Pb-208 (81, 127) the lab and the ray caster agree on the topmost block", g && r.hit && z3 == r.Z && n3 == r.N); }
+        }
+        // edges of the picture: outside is no block; at the picture's own border the answer is the ray caster's
+        int Z = 0, N = 0; int bad = 0;
+        for (const auto& pt : {std::pair<double, double>{-1, 350}, {901, 350}, {450, -1}, {450, 701}, {-5, -5}, {2000, 2000}}) { ChartScene E; E.build(900, 700, ChartViewState{1, 1, 0, 0}); if (E.pick(pt.first, pt.second, Z, N) != rayCast(E, pt.first, pt.second).hit) bad++; }
+        for (const double zoom : {1.0, 4.0}) { ChartScene E; E.build(900, 700, ChartViewState{0.6, zoom, 0, 0});
+            for (const auto& pt : {std::pair<double, double>{0.01, 0.01}, {899.99, 0.01}, {0.01, 699.99}, {899.99, 699.99}, {0.01, 350}, {899.99, 350}, {450, 0.01}, {450, 699.99}}) { const RayHit r = rayCast(E, pt.first, pt.second); if (E.pick(pt.first, pt.second, Z, N) != r.hit || (r.hit && (Z != r.Z || N != r.N))) bad++; } }
+        checkNum("landscape pick: points outside the picture and on its edges (zoom 1 and 4) where the lab and the ray caster disagree", bad, 0, 0);
+    }
+    // ---- zoom and pan
+    {
+        AtomLab lab; lab.p = AtomParams(); lab.paused = false; lab.restart(); lab.setParam("view", std::string(kChartView)); lab.viewW = 900; lab.viewH = 700;
+        lab.setParam("tilt", 0.7);
+        checkTrue("landscape state: the tilt is set by setParam('tilt'), cut to 0 .. 1, and is kept when another nuclide is chosen", [&] { lab.setParam("tilt", 5); const bool a = lab.s.chartView.tilt == 1; lab.setParam("tilt", -2); const bool b = lab.s.chartView.tilt == 0; lab.setParam("tilt", 0.7);
+            lab.chooseNuclide(26, 30); return a && b && lab.s.chartView.tilt == 0.7 && lab.p.Z == 26 && lab.p.N == 30; }());
+        const ChartBlock* b0 = blockOf(lab.chartScene(), 92, 146); const float x0 = b0->top[0], y0 = b0->top[1];
+        lab.chartZoomAt(2, 300, 200); lab.chartZoomAt(0.5, 300, 200);
+        const ChartBlock* b1 = blockOf(lab.chartScene(), 92, 146);
+        checkTrue("landscape zoom: zooming in by 2 and out by 1/2 about the same point returns the picture (zoom 1, no pan, the same corner within 1e-3 pt)", lab.s.chartView.zoom == 1 && lab.s.chartView.panX == 0 && std::fabs(b1->top[0] - x0) < 1e-3 && std::fabs(b1->top[1] - y0) < 1e-3);
+        lab.chartZoomAt(2, 450, 350); const ChartViewState v2 = lab.s.chartView;
+        lab.chartZoomAt(3, 470, 330); lab.chartZoomAt(1.0 / 3, 470, 330);
+        checkTrue("landscape zoom: zoom 2, then x3 and back by 1/3 about another point, returns the same view (zoom and pan within 1e-9)", std::fabs(lab.s.chartView.zoom - v2.zoom) < 1e-9 && std::fabs(lab.s.chartView.panX - v2.panX) < 1e-9 && std::fabs(lab.s.chartView.panY - v2.panY) < 1e-9);
+        {   // the point under the pointer stays where it is (the picture is scaled about it)
+            lab.chartReset(); lab.setParam("tilt", 1);
+            const ChartBlock* a = blockOf(lab.chartScene(), 50, 70); const float ax = a->top[0], ay = a->top[1];
+            lab.chartZoomAt(2.5, 380, 260);
+            const ChartBlock* b = blockOf(lab.chartScene(), 50, 70);
+            checkTrue("landscape zoom: a tile's corner goes to q + k (p - q) when zooming by k about q (within 1e-2 pt)", std::fabs(b->top[0] - (380 + 2.5 * (ax - 380))) < 1e-2 && std::fabs(b->top[1] - (260 + 2.5 * (ay - 260))) < 1e-2);
+        }
+        lab.chartZoomAt(1000, 450, 350); const double zmax = lab.s.chartView.zoom; lab.chartZoomAt(1e-6, 450, 350);
+        checkTrue("landscape zoom: the zoom is cut to 16 at most and 1 at least; at 1 the pan is 0", zmax == 16 && lab.s.chartView.zoom == 1 && lab.s.chartView.panX == 0 && lab.s.chartView.panY == 0);
+        // the chart cannot be lost: extreme pans at several zooms and tilts leave a strip of it in the picture
+        int lost = 0, tried = 0;
+        for (double tilt : {0.0, 0.5, 1.0}) for (double zoom : {2.0, 8.0, 16.0}) for (const auto& d : {std::pair<double, double>{1e5, 0}, {-1e5, 0}, {0, 1e5}, {0, -1e5}, {-1e5, -1e5}, {1e5, 1e5}}) {
+            lab.chartReset(); lab.setParam("tilt", tilt); lab.chartZoomAt(zoom, 450, 350); lab.chartPan(d.first, d.second); tried++;
+            double bx0, by0, bx1, by1; lab.chartScene().bbox(bx0, by0, bx1, by1);
+            const double bw = bx1 - bx0, bh = by1 - by0, needX = std::min(std::min(bw, 900.0), 120.0), needY = std::min(std::min(bh, 700.0), 90.0);
+            if (std::min(bx1, 900.0) - std::max(bx0, 0.0) < needX - 0.01 || std::min(by1, 700.0) - std::max(by0, 0.0) < needY - 0.01) lost++;   // (0.01 pt: the corners are floats)
+        }
+        checkNum("landscape pan: extreme pans (x, y, both, 54 cases: 3 tilts x 3 zooms x 6 directions) after which less than a 120 x 90 pt strip of the chart is in the picture", lost, 0, 0);
+        checkTrue("landscape pan: " + std::to_string(tried) + " cases were run", tried == 54);
+        lab.chartReset(); lab.drag(50, 50, false);
+        checkTrue("landscape pan: a drag at zoom 1 moves nothing (the whole chart is fitted); at zoom 3 it moves the picture", [&] { const bool still = lab.s.chartView.flat(); lab.chartZoomAt(3, 450, 350); const double px0 = lab.s.chartView.panX; lab.drag(20, -10, false); return still && std::fabs(lab.s.chartView.panX - px0 - 20) < 1e-9; }());
+        // clicking a tilted, zoomed landscape chooses the block under the pointer: its top, and its side faces
+        int bad = 0, n = 0;
+        for (const auto& st : {ChartViewState{1, 1, 0, 0}, ChartViewState{0.5, 1, 0, 0}, ChartViewState{1, 3, 120, 30}}) {
+            lab.chartReset(); lab.s.chartView = st; lab.chooseNuclide(1, 0);
+            const ChartScene& S = lab.chartScene();
+            for (const std::pair<int, int>& zn : {std::pair<int, int>{92, 146}, {82, 126}, {26, 30}, {50, 70}, {8, 8}, {20, 28}}) {
+                const ChartBlock* B = blockOf(S, zn.first, zn.second); if (!B) continue;
+                const double tx = (B->top[0] + B->top[4]) / 2, ty = (B->top[1] + B->top[5]) / 2;
+                const RayHit r = rayCast(S, tx, ty);
+                if (tx < 1 || tx > 899 || ty < 1 || ty > 699) continue;
+                lab.chooseNuclide(1, 0); lab.click(tx, ty); n++;
+                if (!(lab.p.Z == r.Z && lab.p.N == r.N)) bad++;
+                if (B->sides) { const double sx = (B->faceB[0] + B->faceB[4]) / 2, sy = (B->faceB[1] + B->faceB[5]) / 2; const RayHit r2 = rayCast(S, sx, sy); lab.chooseNuclide(1, 0); lab.click(sx, sy); n++; if (!(lab.p.Z == r2.Z && lab.p.N == r2.N)) bad++; }
+            }
+        }
+        checkNum("landscape click: clicks on a block's top or front face (tilted, and zoomed) that did not choose the block the ray caster says is on top", bad, 0, 0);
+        checkTrue("landscape click: at least 20 clicks were made", n >= 20);
+    }
+    // ---- the drawing, through the recording stand-in
+    {
+        const render::Color fg{0.1f, 0.2f, 0.3f, 1}, muted{0.4f, 0.5f, 0.6f, 1}, accent{0.9f, 0.1f, 0.7f, 1}, card{0.95f, 0.95f, 0.9f, 1}, line{0.5f, 0.5f, 0.5f, 1};
+        const ChartColours C{fg, muted, accent, card, line};
+        render::Renderer2D R; RecText T;
+        const auto same = [](render::Color a, render::Color b) { return std::fabs(a.r - b.r) < 1e-6 && std::fabs(a.g - b.g) < 1e-6 && std::fabs(a.b - b.b) < 1e-6 && std::fabs(a.a - b.a) < 1e-6; };
+        ChartScene S; S.build(900, 700, ChartViewState{1, 1, 0, 0});
+        g_rec.clear(); g_tri.clear(); g_lines.clear(); g_discs.clear(); T.lines.clear();
+        drawChartScene(R, T, C, S, 900, 700, 92, 146, 0, 0);
+        // the order the tops are drawn in is the painter's order (far to near)
+        std::map<std::array<float, 6>, int> firstTri;
+        for (std::size_t i = 0; i < g_tri.size(); i++) { std::array<float, 6> k; for (int j = 0; j < 6; j++) k[std::size_t(j)] = float(g_tri[i].p[j]); if (!firstTri.count(k)) firstTri[k] = int(i); }
+        int prev = -1, outOfOrder = 0, missing = 0, solid = 0;
+        for (const ChartBlock& B : S.blocks()) {
+            if (B.kind == HeightKind::Unknown) continue;                       // hollow: outline only, no triangle
+            const std::array<float, 6> k = {B.top[0], B.top[1], B.top[2], B.top[3], B.top[4], B.top[5]};
+            const auto it = firstTri.find(k); solid++;
+            if (it == firstTri.end()) { missing++; continue; }
+            if (it->second <= prev) outOfOrder++;
+            prev = it->second;
+        }
+        checkTrue("landscape drawing: every block that has a filled top has its top drawn (" + std::to_string(solid) + " blocks), and the tops are drawn in the painter's order, far to near: not one is out of order", missing == 0 && outOfOrder == 0 && solid == 3557 - 87);
+        int cardTri = 0; for (const RecTri& t : g_tri) if (same(t.c, card)) cardTri++;
+        checkNum("landscape drawing: the small mark on the 69 stable nuclides that NUBASE has a note for (2 triangles each, in the card colour)", cardTri, 138, 0);
+        int hollow = 0; for (const ChartBlock& B : S.blocks()) if (B.kind == HeightKind::Unknown) hollow++;
+        checkNum("landscape drawing: hollow blocks (no half-life at all) are in the scene and have no filled top", hollow, 87, 0);
+        // heights: the top is above the foot by K H sin(pitch) (hand: sin = 0.81649658 at full tilt)
+        const ChartBlock* u = blockOf(S, 92, 146); const ChartBlock* fe = blockOf(S, 26, 30); const ChartBlock* te = blockOf(S, 52, 76); const ChartBlock* li = blockOf(S, 3, 9);
+        const auto lift = [&](const ChartBlock* B) { return (B->faceB[1] - B->top[7]); };   // the foot of the corner (a0, b1) minus the top of the same corner
+        const double Kf = S.proj().K, c = S.layout().cell;
+        checkTrue("landscape drawing: U-238's top stands K x h x 12 tiles x 0.81649658 above its foot (hand arithmetic, 1e-2 pt); a stable block stands higher than the longest-lived one (Te-128); a hollow one has no height",
+                  std::fabs(lift(u) - Kf * 0.7299858020482797 * kHeightCells * c * 0.816496580927726) < 1e-2 && lift(fe) > lift(te) && lift(te) > lift(u) && !li->sides);
+        // the marker: the ring and the pin are drawn last, in the accent colour
+        int accentLines = 0; for (const RecLine& l : g_lines) if (same(l.c, accent)) accentLines++;
+        checkTrue("landscape drawing: the chosen nuclide has a ring (4 lines) and a pin (1 line and a dot) in the accent colour, plus its footprint on the ground (4 lines)", accentLines == 4 + 1 + 4 && g_discs.size() == 1 && same(g_discs[0].c, accent));
+        std::string all; for (const std::string& l : T.lines) all += l + "\n";
+        checkTrue("landscape drawing: the legend has the height sentence and the status line says the wheel zooms and a drag pans; the flat chart's legend has no height line", all.find("Height: ") != std::string::npos && all.find("wheel zooms, drag pans") != std::string::npos);
+        g_rec.clear(); T.lines.clear(); drawChart(R, T, C, 900, 700, 92, 146, 0, 0); std::string flat; for (const std::string& l : T.lines) flat += l + "\n";
+        checkTrue("landscape drawing: the flat chart (stage 2's drawing, used at tilt 0, zoom 1, no pan) mentions no height and no zoom", flat.find("Height:") == std::string::npos && flat.find("wheel zooms") == std::string::npos);
+        // the legend covers no block (conservative: bounding boxes) where it fits, at several tilts and sizes
+        int covered = 0, boxes = 0;
+        for (const auto& wh : {std::pair<double, double>{900, 700}, {1280, 720}, {1400, 900}, {1920, 1000}}) for (double tilt : {0.3, 0.7, 1.0}) {
+            ChartScene Q; Q.build(wh.first, wh.second, ChartViewState{tilt, 1, 0, 0});
+            g_rec.clear(); g_tri.clear(); g_lines.clear(); g_discs.clear(); T.lines.clear();
+            drawChartScene(R, T, C, Q, wh.first, wh.second, 26, 30, 0, 0);
+            for (const RecRect& r : g_rec) if (same(r.c, card.withAlpha(0.9f))) { boxes++; for (const ChartBlock& B : Q.blocks()) if (B.x0 < r.x + r.w && B.x1 > r.x && B.y0 < r.y + r.h && B.y1 > r.y) { covered++; std::printf("  legend %.0fx%.0f tilt %.1f covers block (%d,%d)\n", wh.first, wh.second, tilt, B.Z, B.N); break; } }
+        }
+        {   // no axis number under the legend (the text is an overlay, it would show through the box)
+            int under = 0, numbers = 0;
+            for (const auto& wh : {std::pair<double, double>{900, 700}, {640, 480}, {1280, 720}}) for (double tilt : {0.5, 1.0}) {
+                ChartScene Q; Q.build(wh.first, wh.second, ChartViewState{tilt, 1, 0, 0});
+                g_rec.clear(); T.lines.clear(); T.at.clear(); drawChartScene(R, T, C, Q, wh.first, wh.second, 26, 30, 0, 0);
+                double bx = 0, by = 0, bw = 0, bh = 0; for (const RecRect& r : g_rec) if (same(r.c, card.withAlpha(0.9f))) { bx = r.x; by = r.y; bw = r.w; bh = r.h; }
+                for (std::size_t i = 0; i < T.lines.size(); i++) {
+                    const std::string& t = T.lines[i]; if (t.empty() || t.find_first_not_of("0123456789") != std::string::npos) continue;
+                    numbers++; if (T.at[i][0] > bx && T.at[i][0] < bx + bw && T.at[i][1] > by && T.at[i][1] < by + bh) under++;
+                }
+            }
+            checkTrue("landscape drawing: axis numbers drawn (" + std::to_string(numbers) + ") and none of them inside the legend box (3 sizes x 2 tilts)", numbers > 30 && under == 0);
+        }
+        checkNum("landscape drawing: legend boxes drawn (4 sizes x 3 tilts)", boxes, 12, 0);
+        checkNum("landscape drawing: legend boxes whose area meets a block's bounding box, 4 window sizes x 3 tilts", covered, 0, 0);
     }
 }
 
@@ -3899,6 +4214,7 @@ int main() {
     testOutlineFade();
     testAutoSilence();
     testChart();
+    testChartLandscape();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

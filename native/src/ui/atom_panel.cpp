@@ -754,6 +754,11 @@ void atomPanel(AppState& app, float width) {
     // ---- Electron ----
     ImGui::SeparatorText("Electron");
     selectRow(app, "view", "View", {{"Orbit", "Orbit (electron on a circle)"}, {"Cloud", "Cloud (quantum, side view)"}, {"Cloud 3D", "Cloud 3D (quantum, rotatable)"}, {"Slice", "Slice (cross-section of the cloud)"}, {kChartView, "Chart of nuclides (every nuclide on one map)"}}, p.view);
+    if (L.chartOn()) {                                 // the landscape (0.11 stage 3): tilt from the flat chart to the full landscape; the wheel zooms, a drag moves the picture
+        sliderRow(app, "tilt", "Tilt (flat chart to landscape)", std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %", L.s.chartView.tilt, 0, 1, 0.01, false);
+        if (ImGui::Button("Reset tilt, zoom and position")) L.chartReset();
+        mutedWrapped("Landscape: a block's height is the log of the nuclide's half-life, a scale chosen for this picture (the legend gives it), and all stable nuclides stand at one fixed height above it. The wheel zooms about the pointer and a drag moves the picture when zoomed in. Hover and click work on the block you see on top.", 12.0f / 16);
+    }
     mutedWrapped("The energy E in the line over the picture is the one-electron, non-relativistic level, −Rydberg energy × Z²/n², with the nucleus's real mass (hydrogen: −13.60 eV). In the Orbit view it is worked out from the electron's position and speed and scaled to that level. "
                  "Fine structure, the Lamb shift and spin are not modelled, so real energies differ a little (more for heavy atoms).", 12.0f / 16);
     if (p.view == "Orbit") selectRow(app, "ostyle", "Orbit style", {{"Modern", "Modern (real nucleus, quarks when you zoom in)"}, {"Bohr 1913", "Bohr 1913 (simple balls, as Bohr drew it)"}}, p.ostyle);
