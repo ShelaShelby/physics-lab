@@ -35,4 +35,4 @@ A short by 1 % → 12 failed; τ = 1/(2ΣA) → 10; ways include the same n → 
 `atom_panel.cpp` (`lifetimeCard`, its call) is not built here: the card compiled against stand-ins (`-Wall -Wextra`, clean). **Never compiled with ImGui, never seen:** layout, theme, text sizes, the two ten-button rows, long lines at large text, glyphs (→ − ⁻¹ ×10ⁿ µ). OWNER-TODO has the checks. The two "Check a jump" choices are not saved (UI only).
 
 ## Windows CI result
-Pending at the time of writing; recorded below after the run.
+Run 37202445920 on commit 046c077 (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build (the whole app, so `atom_panel.cpp` with the new card **compiled on MSVC**, which the cloud could not do) and "Physics unit tests" (all seven programs) passed, so the new lifetime tests hold under MSVC. I could not read the printed counts from the log (`gh` gave no test lines), so "18,418 on Windows" is not claimed; the step's success is. Compiling is not seeing: the card has never been looked at on a screen (OWNER-TODO).
