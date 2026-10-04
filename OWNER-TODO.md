@@ -8,6 +8,10 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Try on the PC (0.10.6 stage 6: nuclear mass)
+- [ ] Atom Lab, hydrogen with 1 neutron (deuterium): the light spectrum card shows Hα at 656.29 nm as before (the real change is 1.3 pm, far below what the card shows). Nothing else should look different.
+- [ ] Optional: the hydrogen-1 atom mass in the Learn texts is still 1.00782503223 u (AME2020's file says 1.007825031898 u); say if you want it updated.
+
 ## Try on the PC (0.10.6 stage 5: Atom Lab words)
 - [ ] Atom Lab, Cloud view, hydrogen: the line over the picture shows "avg r: sampled …" for the first seconds, then the number with "(an estimate, usually within 10 %)"; the new "model: one electron, non-relativistic …" line under ⓘ More reads well and wraps at Extra large text.
 - [ ] Spectrum card: "Visible light, 380 to 780 nm (to scale)"; Learn, Timeline: the Pauli step's button says "Open a neon nucleus with one electron" and opens one electron around neon; the 2013 step reads well and its button opens a hydrogen cloud.

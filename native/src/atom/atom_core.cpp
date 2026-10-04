@@ -458,10 +458,21 @@ bool dipoleOK(int a, int b) {
 }
 
 // ---------------------------------------------------------------- light
-// The electron and the nucleus both circle their common centre: the Rydberg energy with the
-// reduced mass. M = the nucleus's mass in electron masses (its binding energy changes this by under 10⁻⁶).
+// The electron and the nucleus both circle their common centre: the Rydberg energy with the reduced mass, M / (M + 1) times the infinite-mass value, M = the nucleus's mass in electron masses.
+// M = Z m_p + N m_n - B / c² (0.10.6 stage 6; it was A u - Z m_e, which ignores that a nucleus weighs less than its parts by B/c² AND that A u is not the mass of A nucleons: for H-2 it was 0.70 % low, for
+// H-3 0.53 %, He-4 0.065 %, Fe-56 0.12 % high; the old comment "its binding energy changes this by under 10⁻⁶" was wrong: the effect on the Rydberg energy is 1.9e-6 for H-2, i.e. 1.3 pm on D-alpha).
+//  m_p and m_n: the CODATA 2022 masses in atom_core.h. B: the lab's binding table (massBinding), the total nuclear binding energy from the measured ATOMIC masses, in whole keV per nucleon (AME2020: all 3,557
+//  nuclides of the lab's table agree with the AME2020 atomic masses, https://www-nds.iaea.org/amdc/ame2020/mass.mas20.txt, read 2026-10-04: M within 5.4e-7 of AME's in the worst case, 2.6e-7 typically; 1,008 of
+//  them are AME's own extrapolated values, marked # there, which are as sourced as the rest). B comes from atomic masses, so it includes the electrons' binding energies, which are not taken out here:
+//  that and the rounding to 1 keV per nucleon are the 5e-7 (and the Rydberg energy moves by that over M, below 1e-9). A nuclide the table does not hold (the neutron slider reaches 3 beyond the known
+//  ones) keeps the old form A u - Z m_e, because no mass is known for it: the error of that form is the 1e-3-ish above for light nuclei, 1e-6 or less for the Rydberg energy.
+double nuclearMassMe(int Z, int N) {
+    const Binding b = massBinding(Z, N);
+    if (!b.real) return (Z + N) * kMeU - Z;
+    return Z * kMpOverMe + N * (kMnU / kMeInU) - b.B * 1e6 / kMecEV;       // B in MeV -> eV; m_n in electron masses from the neutron mass in u and the electron mass in u
+}
 double rydM(int Z, int N) {
-    const double M = Z == 1 && N == 0 ? kMpOverMe : (Z + N) * kMeU - Z;
+    const double M = nuclearMassMe(Z, N);
     return kRydInf * M / (M + 1);
 }
 const char* const kSeries[6] = {"", "Lyman", "Balmer", "Paschen", "Brackett", "Pfund"};

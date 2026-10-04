@@ -14,6 +14,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.1: general relativity (1PN) for the planets in Real mode (Mercury's extra turn), the Sun's wobble round the centre of mass drawn in Real mode, Milky Way band fix, secret theme names fix — done
 - 0.10.3: Real planets start from JPL (Horizons data, DE441); the relativity tick box is off by default; Real stays an option until the owner has tried it — done
 - 0.10.4: the real Moon (ELP2000-82B checked against Horizons; used in the Orbit Lab's Real mode: Moon position, phases on its card, Real note and About text) — done (stage 1: data and validation, stage 2: the Orbit Lab)
+- 0.10.6 stage 6: nuclear mass from AME2020 (the spectrum lines of deuterium and tritium), independent spectrum checks (hand formula, NIST ASD), four basic orbital checks — done (audit findings 5, 16, 17)
 - 0.10.6 stage 5: wrong and misleading Atom Lab text (one relativity line, two Learn steps, one visible range, the sampled average radius) — done (audit findings 6, 7, 13, 15)
 - 0.10.6 stage 4: the 90 % outline of complex states drawn for the right state, superposition normalised for overlapping pairs — done (audit findings 1, 2)
 - 0.10.6 stage 3: one energy for one atom (reduced-mass level in the Cloud and Orbit readouts), Orbit view sub-steps (no wobble at speed 30), Scale Fixed holds the n = 4 clouds — done (audit findings 3, 14, 8)
@@ -28,7 +29,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- 0.10.6 fix tasks from the Atom Lab audit (18 findings in the stage 1 report, in git history `git show 90049fe:native/REPORT.md`; findings 4, 9 and 18 are done in stage 2, 3, 8 and 14 in stage 3, 1 and 2 in stage 4, 6, 7, 13 and 15 in stage 5; still planned: the deuterium and tritium mass, heavy-atom text, timeline texts, speed checks on the PC, stronger tests; stage numbers decided after the owner reads the report) — planned
+- 0.10.6 fix tasks from the Atom Lab audit (18 findings in the stage 1 report, in git history `git show 90049fe:native/REPORT.md`; findings 4, 9 and 18 are done in stage 2, 3, 8 and 14 in stage 3, 1 and 2 in stage 4, 6, 7, 13 and 15 in stage 5, 5, 16 and 17 in stage 6; still planned: heavy-atom text, timeline texts, speed checks on the PC, stronger tests; stage numbers decided after the owner reads the report) — planned
 - Bug and speed audit before 1.0, the last pass still to do: app and settings (a report only, then small fix tasks for the real findings) — planned
 - 1.0 alpha stages — planned:
   - design plan (written in a fresh short chat)

@@ -89,7 +89,15 @@ constexpr double hcEVnm = h * c / e * 1e9;      // eV nm, from the three exact v
 namespace webval { constexpr double a0 = 0.529e-10, tau = 24.19e-18, ryd = 13.605693123, hcEVnm = 1239.841984, meu = 1822.888486, mpOverMe = 1836.15267; }
 // the web's reduced-mass Rydberg energy and the same formula with the CODATA 2022 values: the saved web numbers are rescaled by their ratio
 static double rydMBy(double ry, double meu, double mpme, int Z, int N) { const double M = Z == 1 && N == 0 ? mpme : (Z + N) * meu - Z; return ry * M / (M + 1); }
-static double rydMRatio(int Z, int N) { return rydMBy(nist::rydEV, 1 / nist::meInU, nist::mpOverMe, Z, N) / rydMBy(webval::ryd, webval::meu, webval::mpOverMe, Z, N); }
+// 0.10.6 stage 6 (finding 5): the lab's nuclear mass is now Z m_p + N m_n - B/c^2 (B from the lab's binding table, which is AME2020) instead of A u - Z m_e. Written here again from the NIST masses typed above; a
+// nuclide the table does not hold keeps the old form. The saved web numbers (made with the web's A u - Z m_e) are rescaled by the ratio of this to the web's formula.
+static double nuclearMassNew(int Z, int N) {
+    const Binding b = massBinding(Z, N);
+    if (!b.real) return (Z + N) / nist::meInU - Z;
+    return Z * nist::mpOverMe + N * (nist::mnU / nist::meInU) - b.B * 1e6 / nist::mecEV;
+}
+static double rydMNew(int Z, int N) { const double M = nuclearMassNew(Z, N); return nist::rydEV * M / (M + 1); }
+static double rydMRatio(int Z, int N) { return rydMNew(Z, N) / rydMBy(webval::ryd, webval::meu, webval::mpOverMe, Z, N); }
 
 static void testElements() {
     for (const ElementRef& e : kElementRef) {
@@ -231,7 +239,7 @@ static bool lineSegment(const std::string& line, const std::string& key, std::si
 }
 static std::string energyText(const AtomLab& lab, const Check& c) {          // the new "E ..." part of the line, as the lab writes it
     const int Z = lab.p.Z, N = lab.p.N;
-    const double rm = rydMBy(nist::rydEV, 1 / nist::meInU, nist::mpOverMe, Z, N);
+    const double rm = rydMNew(Z, N);
     if (lab.p.view != "Orbit") { const int n = orbitals()[orbIndex(lab.p.orb)].n; return "E −" + fmtEV(rm * Z * Z / (double(n) * n)); }
     const double auSpeed = webval::a0 / webval::tau, r = std::hypot(c.x, c.y) / webval::a0, v2 = (c.vx * c.vx + c.vy * c.vy) / (auSpeed * auSpeed);
     const double E = (0.5 * v2 - Z / r) * nist::hartreeEV * (rm / nist::rydEV);
@@ -244,7 +252,7 @@ static std::string withNewEnergy(std::string line, const AtomLab& lab, const Che
     const std::size_t k = line.find(key);
     if (k != std::string::npos && line.find("real 1s energy −") != std::string::npos) {
         const std::size_t e = line.find(tail, k);
-        const double rm = rydMBy(nist::rydEV, 1 / nist::meInU, nist::mpOverMe, lab.p.Z, lab.p.N);
+        const double rm = rydMNew(lab.p.Z, lab.p.N);
         line.replace(k + key.size(), e - k - key.size(), fmtEV(rm * lab.p.Z * lab.p.Z));
         if (energyOnly) *energyOnly += "|" + line.substr(k, e - k);
     }
@@ -1581,6 +1589,96 @@ static void testSampledRadius(double guard) {
     checkTrue("sampled <r>: the stated 'usually within 10 %' holds for at least 95 % of the runs", within10 >= 0.95 * n);
 }
 
+// ================= 0.10.6 stage 6: the nuclear mass from a source, an independent spectrum check, four basic checks =================
+// Finding 5: the nuclear mass. Reference: AME2020 atomic masses, https://www-nds.iaea.org/amdc/ame2020/mass.mas20.txt (read 2026-10-04; "ATOMIC MASS" column, micro-u, typed in below), with the NIST m_e in u
+// (nist::meInU): M_nucleus = atomic mass / m_e - Z, in electron masses (the electrons' binding energy, which this neglects, is far below the lab's own rounding of the table to 1 keV per nucleon).
+struct AmeRef { int Z, N; const char* name; double microU; };
+static const AmeRef kAme[] = {{1, 0, "H-1", 1007825.031898}, {1, 1, "H-2", 2014101.777844}, {1, 2, "H-3", 3016049.28132}, {2, 2, "He-4", 4002603.25413}, {6, 6, "C-12", 12000000.0}, {26, 30, "Fe-56", 55934935.537}, {92, 146, "U-238", 238050786.936}};
+static double ameNuclearMe(const AmeRef& a) { return a.microU * 1e-6 / nist::meInU - a.Z; }
+static void testNuclearMass(double guard) {
+    double worst = 0, worstOld = 0; std::string line;
+    for (const AmeRef& a : kAme) {
+        const double ref = ameNuclearMe(a), lab = nuclearMassMe(a.Z, a.N), old = (a.Z + a.N) / nist::meInU - a.Z - (a.Z == 1 && a.N == 0 ? (a.Z + a.N) / nist::meInU - a.Z - nist::mpOverMe : 0);
+        worst = std::max(worst, std::fabs(lab / ref - 1)); worstOld = std::max(worstOld, std::fabs(old / ref - 1));
+        line += std::string(" ") + a.name + " " + fmt::fixed(100 * (lab / ref - 1), 6) + " % (old form " + fmt::fixed(100 * (old / ref - 1), 4) + " %);";
+    }
+    std::printf("nuclear mass against AME2020 (relative difference):%s worst new %.3e, worst old form %.3e\n", line.c_str(), worst, worstOld);
+    checkTrue("nuclear mass: the lab's M (electron masses) equals AME2020's atomic mass / m_e - Z for H-1, H-2, H-3, He-4, C-12, Fe-56, U-238 (guard = measured + 1 %)", worst <= guard);
+    checkTrue("nuclear mass: the old form A u - Z m_e was off by more than 1e-3 for H-2 and H-3 (so this test would catch it)", std::fabs(((1 + 1) / nist::meInU - 1) / ameNuclearMe(kAme[1]) - 1) > 1e-3);
+    // the deuterium D-alpha line by hand from the AME mass (Rydberg formula with the NIST values) against the lab's
+    const double M = ameNuclearMe(kAme[1]), hand = nist::hcEVnm / (nist::rydEV * M / (M + 1) * (1.0 / 4 - 1.0 / 9));
+    double lab = 0; for (const SpecLine& l : specLines(1, 1)) if (l.lo == 2 && l.hi == 3) lab = l.lam;
+    std::printf("D-alpha: by hand from the AME2020 deuteron mass %.6f nm, lab %.6f nm (relative %.2e)\n", hand, lab, lab / hand - 1);
+    checkNum("D-alpha: the lab's wavelength equals the hand value from the AME2020 deuteron mass (1e-9)", lab, hand, 1e-9);
+    // the lines that moved: deuterium's D-alpha is shorter than before by about 1.3 pm (the old A u - Z m_e mass was 0.7 % low)
+    const double oldM = 2 / nist::meInU - 1, oldLam = nist::hcEVnm / (nist::rydEV * oldM / (oldM + 1) * (1.0 / 4 - 1.0 / 9));
+    checkTrue("D-alpha: it moved by about -1.3 pm against the old mass form (between -1.0 and -1.6 pm)", (lab - oldLam) * 1e3 < -1.0 && (lab - oldLam) * 1e3 > -1.6);
+}
+
+// Finding 16: the spectrum against two things the lab did not make. (a) The Rydberg formula written out here from the NIST values, with the nucleus's mass from AME2020 (He-4: the alpha particle).
+// (b) NIST ASD, https://physics.nist.gov/cgi-bin/ASD/lines1.pl (read 2026-10-04): query spectra = "H I" and "He II", low_w = 90 / 20, upp_w = 2000 nm, unit = 1 (nm), format = 3 (tab-delimited),
+// show_av = 3 (VACUUM wavelengths), show_obs_wl = 1, show_calc_wl = 1, allowed_out = 1, forbid_out = 1. The column ritz_wl_vac(nm) of the fine-structure COMPONENTS (J_i and J_k given) of each line is typed
+// in below as [lowest, highest]. The lab is vacuum, one electron, non-relativistic, level-averaged (no fine structure, Lamb shift or spin), so its single wavelength can differ from the ASD's components by the
+// size of what it leaves out: relativistic corrections are of the order (Z alpha)^2 of the level energies (5.3e-5 for hydrogen, 2.1e-4 for He+). The check is therefore that the lab's value lies inside the
+// components' range widened by (Z alpha)^2 of the wavelength on each side. Measured: the lab lies outside the bare range by 8.9e-6 (H Lyman-alpha), 1.0e-6 (H-beta), 3.8e-5 (He+ Lyman-alpha); inside for H-alpha and He II 468.7 nm (the allowed distance is 5.3e-5 and 2.1e-4).
+static double handLine(double M, int Z, int lo, int hi) { return nist::hcEVnm / (nist::rydEV * M / (M + 1) * Z * Z * (1.0 / (lo * lo) - 1.0 / (hi * hi))); }
+static void testSpectrumIndependent() {
+    struct Asd { int Z, N, lo, hi; const char* name; double minNm, maxNm; };
+    const Asd as[] = {{1, 0, 1, 2, "H Lyman-alpha", 121.566823731, 121.5673644608}, {1, 0, 2, 3, "H-alpha", 656.4522556, 656.4722349}, {1, 0, 2, 4, "H-beta", 486.26365622, 486.273282785},
+                      {2, 2, 1, 2, "He II 30.4 nm", 30.3780409484, 30.3785814724}, {2, 2, 3, 4, "He II 468.7 nm", 468.66881681, 468.722934627}};
+    const double M[2] = {nist::mpOverMe, ameNuclearMe(kAme[3])};                 // the proton; the alpha particle from AME2020 (He-4 atomic mass - 2 m_e)
+    bool handOk = true, asdOk = true; double worstHand = 0;
+    for (const Asd& a : as) {
+        double lab = 0; for (const SpecLine& l : specLines(a.Z, a.N)) if (l.lo == a.lo && l.hi == a.hi) lab = l.lam;
+        const double hand = handLine(M[a.Z == 1 ? 0 : 1], a.Z, a.lo, a.hi), tol = std::pow(a.Z * nist::alpha, 2) * lab;
+        const double outside = lab < a.minNm ? a.minNm - lab : lab > a.maxNm ? lab - a.maxNm : 0;
+        worstHand = std::max(worstHand, std::fabs(lab / hand - 1));
+        handOk = handOk && std::fabs(lab / hand - 1) < 1e-9; asdOk = asdOk && outside <= tol;
+        std::printf("  %-14s lab %.6f nm, hand %.6f nm, ASD components %.6f..%.6f nm: lab outside by %.1e of the wavelength (allowed %.1e)\n", a.name, lab, hand, a.minNm, a.maxNm, outside / lab, tol / lab);
+    }
+    checkTrue("spectrum: H Lyman-alpha, H-alpha, H-beta and two He II lines equal the Rydberg formula written out from the NIST values (1e-9; worst " + fmt::fixed(worstHand, 12) + ")", handOk);
+    checkTrue("spectrum: the same five lines lie inside NIST ASD's fine-structure components widened by (Z alpha)^2 (the size of what the lab does not model)", asdOk);
+}
+
+// Finding 17: four basic checks.
+static void testBasicOrbitChecks() {
+    // (a) the 90 % outline holds 90 % of the probability for all 30 real orbitals: 0.9 <= mass (by construction) and <= the measured worst 0.903 (probe) + 1 %
+    double lo = 1, hi = 0; for (int i = 0; i < int(orbitals().size()); i++) { const double m = outlineOf(i).mass; lo = std::min(lo, m); hi = std::max(hi, m); }
+    std::printf("90 %% outline mass over the 30 real orbitals: %.5f to %.5f\n", lo, hi);
+    checkTrue("outline: all 30 real orbitals hold 90 % of the probability (0.9 up to the measured worst + 1 %: 0.912)", lo >= 0.9 && hi <= 0.912);
+    // (b) the 1s norm: the integral of |e^-r|^2 over space is pi (a0^3)
+    const double n1 = orbitalNorm(orbIndex("1s"));
+    std::printf("1s normalisation integral %.9f, pi %.9f (relative %.2e)\n", n1, kPi, n1 / kPi - 1);
+    checkNum("orbital: the 1s normalisation integral is pi (guard = measured 5.83e-10 + 1 %)", n1, kPi, 5.9e-10);
+    // (c) radial nodes: the radial part R(q) has n - l - 1 sign changes for q > 0 (counted on a fine grid) for every orbital
+    bool nodesOk = true; int checked = 0;
+    for (const Orbital& o : orbitals()) {
+        int changes = 0; double prev = radial(o, 1e-6);
+        for (double q = 0.001; q < 80; q += 0.001) { const double v = radial(o, q); if ((v > 0) != (prev > 0) && v != 0) changes++; prev = v; }
+        nodesOk = nodesOk && changes == o.n - o.l - 1; checked++;
+    }
+    checkTrue("orbital: every one of the 30 real orbitals has n - l - 1 radial nodes", nodesOk && checked == 30);
+}
+// (d) the sampled <r> against a0 (3n^2 - l(l+1)) / (2Z) for Z other than 1 (stage 5 tests Z = 1): the same dots, 3 and 26 times closer to the nucleus.
+static void testSampledRadiusZ(double guard) {
+    struct C { const char* orb; const char* key; const char* ori; } cs[] = {{"1s", "", ""}, {"2p", "pAx", "z"}, {"3d", "dAx", "z2"}, {"3s", "", ""}, {"4f", "fAx", "xyz"}, {"4s", "", ""}};
+    double worst = 0; long n = 0;
+    for (int Z : {3, 26})
+        for (const C& c : cs)
+            for (int seed = 1; seed <= 4; seed++) {
+                seedRandom(7000 + seed);
+                AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+                lab.setParam("Z", double(Z)); lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string(c.orb)); if (*c.key) lab.setParam(c.key, std::string(c.ori));
+                for (int i = 0; i < 800; i++) lab.step(1.0 / 240);
+                const Orbital& o = orbitals()[orbIndex(c.orb)];
+                const long cnt = std::min<long>(lab.s.k, lab.cloudCap()); double sum = 0;
+                for (long i = 0; i < cnt; i++) sum += std::hypot(double(lab.s.pts[3 * i]), double(lab.s.pts[3 * i + 1]), double(lab.s.pts[3 * i + 2]));
+                worst = std::max(worst, std::fabs(sum / cnt / ((3.0 * o.n * o.n - o.l * (o.l + 1)) / (2.0 * Z) * nist::a0) - 1)); n++;
+            }
+    std::printf("sampled <r> for Z = 3 and 26 (%ld labs): worst difference from a0 (3n^2 - l(l+1)) / 2Z %.5f\n", n, worst);
+    checkTrue("sampled <r>: for Z = 3 and 26 the dots' mean radius is within the guard of a0 (3n^2 - l(l+1)) / 2Z (guard = measured worst + 1 %)", worst <= guard);
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -1601,6 +1699,12 @@ int main() {
     // guard 0.1788 = the worst MEASURED difference of the sampled <r> from the exact value at the full ring, 0.17702 (96 seeded labs: 12 orbitals x 8 seeds), + 1 %; 95 of 96 were within 10 %, mean 0.0311.
     // BEFORE the fix (same test): the sampled value was shown from 300 dots on (1,600 dots here: a number instead of the placeholder), with no note.
     testSampledRadius(0.1788);
+    // guards = the worst MEASURED difference + 1 %. Mass against AME2020: 3.899e-7 (Fe-56; the lab's table is rounded to 1 keV per nucleon and includes the electrons' binding) -> 3.94e-7; BEFORE the fix 7.003e-3 (H-2, the old
+    // form A u - Z m_e), so this fails without the new mass. 1s norm integral: pi to 5.83e-10 -> 5.9e-10. Sampled <r> at Z = 3 and 26 (48 labs): worst 0.07226 -> 0.0730.
+    testNuclearMass(3.94e-7);
+    testSpectrumIndependent();
+    testBasicOrbitChecks();
+    testSampledRadiusZ(0.0730);
     testElements();
     testNuclides();
     testFormats();

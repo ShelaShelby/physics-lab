@@ -163,6 +163,7 @@ void jumpFractions(std::complex<double> A, std::complex<double> B, double theta,
 bool dipoleAxes(const Superposition& s, double out[3]);   // can light couple A and B? out = size of the angular dipole integral along x, y, z (relative); false when none
 
 // ---- light: the reduced-mass Rydberg energy and the spectral lines ----
+double nuclearMassMe(int Z, int N);              // the nucleus's mass in electron masses: Z m_p + N m_n - B/c² (B from the binding table, AME2020) where the table has it, else A u - Z m_e
 double rydM(int Z, int N);                    // eV
 struct SpecLine { int lo; int hi; double lam; };   // hi = 0 for a series limit; lam in nm
 std::vector<SpecLine> specLines(int Z, int N);

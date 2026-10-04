@@ -17,6 +17,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.6", "Atom Lab: the nucleus's real mass, and spectrum checked against NIST (stage 6)",
+     "The nucleus's mass in the Atom Lab now comes from the measured binding energies (AME2020), not from the mass number times a mass unit, so the light of deuterium and tritium is worked out with the right mass (deuterium's red line moves by 1.3 trillionths of a metre; nothing else visible changes). "
+     "The tests now check the spectrum against the Rydberg formula worked out by hand and against the NIST Atomic Spectra Database, and check more basic facts about the orbitals."},
     {"0.10.6", "Atom Lab: clearer, more honest words (stage 5)",
      "The Atom Lab now says \"non-relativistic\" for every atom and warns the same way, from the same atom (cobalt, Z = 27) on, in the readout, the hint and the spectrum note. Visible light is 380 to 780 nm everywhere. "
      "The average radius from the dots appears only once the cloud is full, and says it is an estimate. Two Learn steps no longer claim more than the lab can show (the neon button, and the 2013 electron-wave picture)."},
