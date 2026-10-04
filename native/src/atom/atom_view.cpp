@@ -324,7 +324,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         } else
         for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = wheel ? (unsigned char)phaseBin(s.ph[std::size_t(i)]) : (unsigned char)(s.sg[i] > 0 ? 0 : 1);
         const bool outlineOn = p.outline == "On" && !lab.superOn() && lab.outlineAlpha() > 0.01;         // (the 90 % outline is of one orbital: not drawn for a superposition)
-        const int fo = lab.fullOrb();
+        const int fo = lab.outlineStateId();                                // the state on screen (a complex state's own id), not the real fallback fullOrb()
         const double olA = lab.outlineAlpha();                             // the outline fades out as a jump leaves its orbital and back in after landing
         const Color olCol = withA(css.fg, 0.6 * olA);                            // the 90 % outline: thin, the theme's text colour (light on dark pages, dark on light ones)
         const double olUnit = kA0 / p.Z * pxm;                             // points per Bohr radius at Z = 1 in the outline's own units
@@ -342,7 +342,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             else R.blobs(B.data(), int(B.size()));
             B.clear();
             if (outlineOn) {                                               // the contour |psi|^2 = c in the cut plane (cached until the orbital or the cut changes)
-                const double off0 = p.cut * 0.5 * kExt[orbitals()[fo].n];
+                const double off0 = p.cut * 0.5 * kExt[orbitals()[stateOrbital(fo)].n];
                 if (olOrb_ != fo || olHz_ != hz || olOff_ != off0) { olSlice_ = outlineSlice(fo, hz, off0); olOrb_ = fo; olHz_ = hz; olOff_ = off0; }
                 for (const OutSeg2& g : olSlice_) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
             }

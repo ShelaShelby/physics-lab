@@ -142,7 +142,9 @@ double levelEV(int Z, int N, int n);                   // E_n = -rydM(Z, N) Z^2 
 double beatEV(int Z, int N, const Superposition& s);   // E_B - E_A, eV (signed)
 double beatPeriodS(int Z, int N, const Superposition& s);   // h / |E_B - E_A|, s (infinity when the energies are equal)
 double normFactor(int id, int Z);                      // 1 / sqrt(integral of |psi|^2), so that normFactor * psi is normalised (x, y, z in Bohr radii)
-std::complex<double> psiSuper(const Superposition& s, int Z, double theta, double x, double y, double z);   // a A + b B e^(-i theta), A and B normalised, relative to A
+std::complex<double> overlapAB(int idA, int idB);      // <A|B> of the two NORMALISED states: 1 for the same state, exactly 0 when they are orthogonal (different n or l, or the angular parts are), else the angular overlap
+double superNorm2(const Superposition& s, double theta);   // integral of |a A + b B e^(-i theta)|^2 over all space = a^2 + b^2 + 2 a b Re(<A|B> e^(-i theta)); exactly a^2 + b^2 (= 1) for orthogonal states
+std::complex<double> psiSuper(const Superposition& s, int Z, double theta, double x, double y, double z);   // (a A + b B e^(-i theta)) / sqrt(superNorm2), A and B normalised, relative to A: normalised for ANY pair
 std::complex<double> psiSuperT(const Superposition& s, int Z, int N, double tSeconds, double x, double y, double z);   // the same at real time t: theta = (EB - EA) t / hbar
 // ---- smooth photon jumps (0.10.2, stage 3) ----
 // A cloud jump shows psi = cos(theta) A + sin(theta) B e^(-i phi) (theta from 0 to pi/2). The picture is built from TWO fixed populations of dots: the cloud that was on screen (dots

@@ -183,6 +183,7 @@ public:
     int fullOrb() const;                                  // the orbital shown (shell + orientation); for a complex state: the real orbital the Orientation falls back to
     int complexM() const;                                 // m of the complex state chosen in Orientation (+-1 .. +-l), 0 when a real orientation is chosen
     int stateId() const;                                  // what the cloud shows: a complex state's id (atom_core.h), or fullOrb()
+    int outlineStateId() const;                           // the state the 90 % outline is drawn for: the one on screen (a complex state's own id), NOT the real orbital the Orientation falls back to
     bool usesWheel() const { return p.phase == "Wheel" || complexM() != 0 || superOn(); }   // complex states and superpositions always use the phase wheel
     int stateIdOf(const std::string& shell, const std::string& pAx, const std::string& dAx, const std::string& fAx) const;   // the id of a shell + orientation (real or complex)
     // ---- smooth photon jumps ----
@@ -233,6 +234,7 @@ private:
     void mcmc(bool record) { if (superOn()) walkSuper(s.w, record); else walk(stateId(), s.w, record); }
     Superposition sup_;                                   // set when the cloud is (re)started and when a share changes
     double nA_ = 1, nB_ = 1;                              // normalisation factors of the two states at the current Z
+    bool overlap_ = false;                                // Superposition: the two states overlap (<A|B> != 0: the same n, l and a non-orthogonal angular part). They then share one energy, the state is static, and the walker samples its renormalised density directly (every dot is shown)
     void beginTransition(int from, int to);
     void finishTransition(double overshoot);
     void glideOrbit(double dt);

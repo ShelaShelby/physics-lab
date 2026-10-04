@@ -325,11 +325,62 @@ double normFactor(int id, int Z) {
     if (it == cache.end()) it = cache.emplace(id, 1 / std::sqrt(orbitalNorm(id))).first;
     return it->second * std::pow(double(Z), 1.5);
 }
+// <A|B> for two normalised states. Every state is (radial part of its shell) x (angular part), so <A|B> is zero for different n or l (the radial parts, or the spherical harmonics, are orthogonal:
+// textbook, Griffiths ch. 4 / Bethe & Salpeter, the sources already in About) and, within one shell (same n and l), the overlap of the normalised angular parts over the sphere. That integral is done
+// with 16 Gauss-Legendre points in cos(theta) and 32 in phi (exact for the polynomials of degree <= 6 in x, y, z met here). Values below 1e-9 are rounding of an exact 0 and are returned as exactly 0, so
+// orthogonal pairs take exactly the same numbers as before this function existed.
+std::complex<double> overlapAB(int idA, int idB) {
+    if (idA == idB) return 1.0;
+    const Orbital &oa = orbitals()[stateOrbital(idA)], &ob = orbitals()[stateOrbital(idB)];
+    if (oa.n != ob.n || oa.l != ob.l) return 0.0;
+    static std::map<std::pair<int, int>, std::complex<double>> cache;
+    const auto it = cache.find({idA, idB});
+    if (it != cache.end()) return it->second;
+    static std::vector<double> zs, ws;
+    if (zs.empty()) {                                                      // Gauss-Legendre nodes by Newton's method on P_16
+        const int nu = 16;
+        for (int i = 0; i < nu; i++) {
+            double x = std::cos(kPi * (i + 0.75) / (nu + 0.5)), dp = 1;
+            for (int k = 0; k < 100; k++) {
+                double p0 = 1, p1 = x;
+                for (int j = 2; j <= nu; j++) { const double p2 = ((2 * j - 1) * x * p1 - (j - 1) * p0) / j; p0 = p1; p1 = p2; }
+                dp = nu * (x * p1 - p0) / (x * x - 1);
+                const double dx = p1 / dp; x -= dx; if (std::fabs(dx) < 1e-15) break;
+            }
+            zs.push_back(x); ws.push_back(2 / ((1 - x * x) * dp * dp));
+        }
+    }
+    const auto ang = [](int id, double x, double y, double z) {
+        const Orbital& o = orbitals()[stateOrbital(id)];
+        return isComplexState(id) ? angularComplex(o.l, stateM(id), x, y, z) : std::complex<double>(angular(o.ang, x, y, z), 0);
+    };
+    std::complex<double> ab = 0; double aa = 0, bb = 0;
+    const int nphi = 32;
+    for (std::size_t i = 0; i < zs.size(); i++) {
+        const double z = zs[i], r = std::sqrt(std::max(0.0, 1 - z * z));
+        for (int k = 0; k < nphi; k++) {
+            const double f = 2 * kPi * (k + 0.5) / nphi, x = r * std::cos(f), y = r * std::sin(f);
+            const std::complex<double> A = ang(idA, x, y, z), B = ang(idB, x, y, z);
+            ab += std::conj(A) * B * ws[i]; aa += std::norm(A) * ws[i]; bb += std::norm(B) * ws[i];
+        }
+    }
+    std::complex<double> v = ab / std::sqrt(aa * bb);
+    if (std::abs(v) < 1e-9) v = 0.0;
+    cache[{idA, idB}] = v;
+    return v;
+}
+double superNorm2(const Superposition& s, double theta) {
+    const std::complex<double> S = overlapAB(s.idA, s.idB);
+    if (S == 0.0) return s.a * s.a + s.b * s.b;
+    return s.a * s.a + s.b * s.b + 2 * s.a * s.b * (S * std::exp(std::complex<double>(0, -theta))).real();
+}
 static std::complex<double> amp(int id, int Z, double x, double y, double z) {
     return normFactor(id, Z) * (isComplexState(id) ? psiComplex(id, Z, x, y, z) : std::complex<double>(psi(id, Z, x, y, z), 0));
 }
 std::complex<double> psiSuper(const Superposition& s, int Z, double theta, double x, double y, double z) {
-    return s.a * amp(s.idA, Z, x, y, z) + s.b * amp(s.idB, Z, x, y, z) * std::exp(std::complex<double>(0, -theta));
+    const std::complex<double> v = s.a * amp(s.idA, Z, x, y, z) + s.b * amp(s.idB, Z, x, y, z) * std::exp(std::complex<double>(0, -theta));
+    if (overlapAB(s.idA, s.idB) == 0.0) return v;                          // orthogonal states (the usual case): a^2 + b^2 = 1 already, the numbers are exactly the old ones
+    return v / std::sqrt(std::max(1e-300, superNorm2(s, theta)));          // overlapping states (same state twice, a real orbital with an m state of its shell): renormalised
 }
 std::complex<double> psiSuperT(const Superposition& s, int Z, int N, double tSeconds, double x, double y, double z) {
     return psiSuper(s, Z, beatEV(Z, N, s) * tSeconds / (kPlanckEVs / (2 * kPi)), x, y, z);

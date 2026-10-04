@@ -605,7 +605,8 @@ void atomPanel(AppState& app, float width) {
                          "Real beats are far too fast to see (hydrogen 1s + 2p: about 4×10⁻¹⁶ s), so the picture is slowed down; the line under the picture gives the real period and the slow-down. "
                          "1s + 2p: the cloud's centre sloshes back and forth (an oscillating dipole). 1s + 2s: the cloud breathes. 2s + 2p: the same n has the same energy here, so there are no beats (fine structure and the Lamb shift are not modelled). "
                          "Colours are the phase of the wave relative to the first orbital: a wave's overall phase means nothing, so the colours turn only once per beat. "
-                         "Playback speed sets the beat speed (4 s per beat at 5); Space pauses. One electron, non-relativistic. No photon jumps and no 90% outline while a superposition is shown.", 12.0f / 16);
+                         "Playback speed sets the beat speed (4 s per beat at 5); Space pauses. One electron, non-relativistic. No photon jumps and no 90% outline while a superposition is shown. "
+                         "If the two states overlap (the same state twice, or a real orientation with an m state of the same shell, such as 2px and 2p m = +1), the mixture is renormalised: the percentages are then only the amplitudes of the mix, not exact shares, and the cloud is one fixed shape.", 12.0f / 16);
         }
     }
     if (p.view == "Slice") {

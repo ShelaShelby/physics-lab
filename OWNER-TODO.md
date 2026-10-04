@@ -8,6 +8,10 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Try on the PC (0.10.6 stage 4: outline of complex states, superposition norm)
+- [ ] 90% outline On, Cloud 3D, 2p with Orientation "m = +1": the thin outline is a doughnut round the z axis (not a dumbbell). Try 3d "m = +2" and 4f "m = +3" in Cloud, Cloud 3D and Slice too.
+- [ ] Superposition: 2p (px) + second orbital 2p "m = +1": the cloud is one steady shape, all dots there, the line over the picture says "amplitudes … the states overlap by 71 %, so the mixture is renormalised"; moving Mix redraws the cloud. 1s + 2p (pz) must look and behave exactly as before. The longer Superposition note reads well at Extra large text.
+
 ## Try on the PC (0.10.6 stage 3: energy, Orbit accuracy, Fixed scale)
 - [ ] Atom Lab, hydrogen: the line over the picture says E −13.60 eV in the Orbit view and in every Cloud view (it said −13.61); the new grey note under the View buttons (non-relativistic, one electron) reads well and fits at Extra large text.
 - [ ] Orbit view, n = 1, Playback speed 30: the electron goes round smoothly on a steady circle (no breathing); speed 5 looks exactly as before. Is it still smooth (no stutter) at speed 30 on your PC?

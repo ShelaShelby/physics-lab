@@ -57,7 +57,7 @@ void AtomLab::init() {
     s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a); s.trail.clear();
     s.pts.assign(std::size_t(cloudCap()) * 3, 0.f); s.sg.assign(cloudCap(), 0); s.ph.assign(cloudCap(), 0.f); s.k = 0;
     s.sa.clear(); s.beatT = 0;
-    if (superOn()) { s.sa.assign(std::size_t(cloudCap()) * 4, 0.f); sup_ = superState(); nA_ = normFactor(sup_.idA, p.Z); nB_ = normFactor(sup_.idB, p.Z); } s.w = {0.7 * k, 0.4 * k, 1.1 * k};
+    if (superOn()) { s.sa.assign(std::size_t(cloudCap()) * 4, 0.f); sup_ = superState(); nA_ = normFactor(sup_.idA, p.Z); nB_ = normFactor(sup_.idB, p.Z); overlap_ = overlapAB(sup_.idA, sup_.idB) != 0.0; } else overlap_ = false; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
     s.trans.reset(); s.photon.reset(); s.photonAfter.reset(); s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0; s.landT = 99; s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
@@ -123,10 +123,13 @@ void AtomLab::onParam(const std::string& key) {
         if (p.zoom > 0) { s.selfSet = true; setParam("zoom", std::max(0.0, p.zoom + d)); s.selfSet = false; }
         if (s.zoomTo) s.zoomTo = clampZoom(*s.zoomTo + d);
     }
-    if (key == "mix") { sup_.a = std::sqrt(1 - p.mix / 100); sup_.b = std::sqrt(p.mix / 100); return; }   // the shares change the time dependence only, never the dots
+    if (key == "mix") {                                       // orthogonal pair: the shares change the time dependence only, never the dots. An overlapping pair has no time dependence (one energy): the
+        sup_.a = std::sqrt(1 - p.mix / 100); sup_.b = std::sqrt(p.mix / 100);   // mix changes the density itself, so the cloud is refilled below, like a new orbital
+        if (!(superOn() && overlap_)) return;
+    }
     if ((key == "orb2" || key == "pAx2" || key == "dAx2" || key == "fAx2") && p.super != "On") return;    // (nothing shown depends on them while the superposition is off)
     static const char* const reinit[] = {"Z", "n", "view", "orb", "pAx", "dAx", "fAx", "cdens", "super", "orb2", "pAx2", "dAx2", "fAx2"};   // a new density refills the cloud
-    if (std::find(std::begin(reinit), std::end(reinit), key) != std::end(reinit)) {
+    if (key == "mix" || std::find(std::begin(reinit), std::end(reinit), key) != std::end(reinit)) {
         const AtomState keep = s;
         init();
         s.yaw = keep.yaw; s.pitch = keep.pitch; s.oyaw = keep.oyaw; s.opitch = keep.opitch; s.spin = keep.spin;
@@ -173,6 +176,7 @@ int AtomLab::sizeN() const {
     const int nA = orbitals()[orbIndex(p.orb)].n;
     return superOn() ? std::max(nA, orbitals()[orbIndex(p.orb2)].n) : nA;
 }
+int AtomLab::outlineStateId() const { return stateId(); }   // the outline belongs to the state ON SCREEN: for m = +-1.. its own complex id (fullOrb() would give the real orbital the Orientation falls back to: a dumbbell round a doughnut)
 int AtomLab::stateId() const { const int m = complexM(); return m ? complexState(orbIndex(p.orb), m) : fullOrb(); }
 std::string AtomLab::stateText() const { return atom::stateText(stateId()); }
 
@@ -244,7 +248,9 @@ void AtomLab::walkSuper(Vec3d& w, bool record) {
     const double nx = w.x + sg * gauss(), ny = w.y + sg * gauss(), nz = w.z + sg * gauss();
     std::complex<double> A0, B0, A1, B1;
     amps(w.x, w.y, w.z, A0, B0); amps(nx, ny, nz, A1, B1);
-    const double pOld = std::norm(A0) + std::norm(B0), pNew = std::norm(A1) + std::norm(B1);
+    // orthogonal pair: the time-independent mixture (|A|^2 + |B|^2) / 2, thinned below. Overlapping pair (one energy, static): the renormalised density |a A + b B|^2 itself (the constant norm does not matter
+    // to the Metropolis odds), and every dot is shown.
+    const double pOld = overlap_ ? std::norm(sup_.a * A0 + sup_.b * B0) : std::norm(A0) + std::norm(B0), pNew = overlap_ ? std::norm(sup_.a * A1 + sup_.b * B1) : std::norm(A1) + std::norm(B1);
     if (random() * pOld < pNew || pOld == 0) { w.x = nx; w.y = ny; w.z = nz; }
     if (record) {
         const long i = s.k % std::min<long>(cloudCap(), long(s.sg.size()));
@@ -314,6 +320,7 @@ double AtomLab::superPhase(long i, double theta) const {
 bool AtomLab::superShown(long i, double theta) const {
     if (std::size_t(4 * i + 3) >= s.sa.size()) return false;
     const std::complex<double> A(s.sa[4 * i], s.sa[4 * i + 1]), B(s.sa[4 * i + 2], s.sa[4 * i + 3]);
+    if (overlap_) return std::norm(sup_.a * A + sup_.b * B) > 0;               // sampled from the renormalised density itself: nothing is thinned
     const double q = 0.5 * (std::norm(A) + std::norm(B));
     if (q <= 0) return false;
     const double w = std::norm(sup_.a * A + sup_.b * B * std::exp(std::complex<double>(0, -theta))) / q;
@@ -329,7 +336,8 @@ std::string AtomLab::beatKindText() const {
     const Superposition u = superState();
     const Orbital &oa = orbitals()[stateOrbital(u.idA)], &ob = orbitals()[stateOrbital(u.idB)];
     if (oa.n == ob.n) return "Same n: " + std::string(oa.n == 1 ? "" : "the same energy in this model, so NO beats (the density does not change). ") +
-                             "Fine structure and the Lamb shift, which make 2s and 2p differ a little in real hydrogen, are not modelled.";
+                             "Fine structure and the Lamb shift, which make 2s and 2p differ a little in real hydrogen, are not modelled." +
+                             (overlap_ ? std::string(" These two states overlap, so the mixture is renormalised (it is one fixed state).") : std::string());
     double d[3];
     if ((oa.l + ob.l) % 2 == 1) {
         if (dipoleAxes(u, d)) {
@@ -770,8 +778,11 @@ std::string AtomLab::info1() {
     if (superOn()) {
         const Superposition u = superState();
         const double eA = levelEV(p.Z, p.N, orbitals()[stateOrbital(u.idA)].n), eB = levelEV(p.Z, p.N, orbitals()[stateOrbital(u.idB)].n);
-        return head + "  ·  superposition " + atom::stateText(u.idA) + " + " + atom::stateText(u.idB) + " (" + std::to_string(int(std::lround(100 - p.mix))) + " % / " + std::to_string(int(std::lround(p.mix))) +
-               " %)  ·  E −" + fmtEV(-eA) + " and −" + fmtEV(-eB) + "  ·  " + beatSlowText();
+        const std::string shares = std::to_string(int(std::lround(100 - p.mix))) + " % / " + std::to_string(int(std::lround(p.mix))) + " %";
+        // orthogonal states: the shares a^2 and b^2 are exactly the probabilities. Overlapping states: they are only the amplitudes of the mixture, which is renormalised, so the line says that instead
+        const std::string split = overlap_ ? "(amplitudes " + shares + "; the states overlap by " + std::to_string(int(std::lround(100 * std::abs(overlapAB(u.idA, u.idB))))) + " %, so the mixture is renormalised)" : "(" + shares + ")";
+        return head + "  ·  superposition " + atom::stateText(u.idA) + " + " + atom::stateText(u.idB) + " " + split +
+               "  ·  E −" + fmtEV(-eA) + " and −" + fmtEV(-eB) + "  ·  " + beatSlowText();
     }
     if (p.view != "Orbit") {
         const Orbital& o = orbitals()[orbIndex(p.orb)];

@@ -17,6 +17,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.6", "Atom Lab: the right outline, a correct superposition (stage 4)",
+     "The thin 90% outline of a complex state (m = +1, +2 ...) now has that state's own shape, a doughnut for 2p with m = +1 (it used to show the dumbbell of the real orbital). A superposition of two states that overlap, such as the same state twice, "
+     "is now properly normalised, so its cloud is the right density and all its dots are shown; the line over the picture says when the mixture is renormalised. Other superpositions are unchanged."},
     {"0.10.6", "Atom Lab: one energy, a steadier orbit, Fixed scale (stage 3)",
      "Hydrogen's energy now reads -13.60 eV in every view (it said -13.61 in two of them): the readout uses the same level as the spectrum, with the nucleus's real mass. In the Orbit view the electron no longer breathes at the fastest playback speed "
      "(the orbit is calculated in smaller steps; the speed itself is the same). With Scale set to Fixed the biggest clouds (n = 4) now fit in the picture. A new note says the energy is the one-electron, non-relativistic level."},

@@ -1326,6 +1326,123 @@ static void testFixedExtent() {
     checkTrue("Scale Fixed, Orbit view: the view radius holds the n = 4 circle (16 a0)", o.sizeM() >= 16 * kA0 * (1 - 1e-12));
 }
 
+// ================= 0.10.6 stage 4: the outline of a complex state, and the norm of a superposition =================
+// Finding 1 (audit): the view drew the 90 % outline of the real orbital the Orientation falls back to (fullOrb), not of the state on screen. The view now asks AtomLab::outlineStateId().
+// The drawing itself cannot be tested here; this checks one level down what the view would ask for, and that the answer has a different shape from the fallback's.
+static void testOutlineIsTheState(double margin) {
+    int n = 0; double minDiff = 1e9; std::string which; bool allRight = true, axisOk = true;
+    for (int id : complexIds()) {
+        const Orbital& o = orbitals()[stateOrbital(id)];
+        AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+        lab.setParam("view", std::string("Cloud")); lab.setParam("orb", o.shell);
+        lab.setParam(o.l == 1 ? "pAx" : o.l == 2 ? "dAx" : "fAx", oriKey(stateM(id)));
+        const int fb = lab.fullOrb();                                       // what the view used to ask for: the real fallback
+        allRight = allRight && lab.outlineStateId() == id && lab.stateId() == id && fb != id && !isComplexState(fb) && orbitals()[fb].n == o.n && orbitals()[fb].l == o.l;
+        const Outline &c = outlineOf(lab.outlineStateId()), &f = outlineOf(fb);
+        auto ext = [](const Outline& O, double& ax, double& az) { ax = az = 0; for (const OutSeg2& g : O.side) { ax = std::max({ax, double(std::fabs(g.x0)), double(std::fabs(g.x1))}); az = std::max({az, double(std::fabs(g.y0)), double(std::fabs(g.y1))}); } };
+        double ax1, az1, ax2, az2; ext(c, ax1, az1); ext(f, ax2, az2);
+        // the shape differs: the largest relative difference of the 90 % radius, the side view's width and its height
+        const double d = std::max({std::fabs(c.rmax / f.rmax - 1), std::fabs(ax1 / ax2 - 1), std::fabs(az1 / az2 - 1)});
+        if (d < minDiff) { minDiff = d; which = stateText(id); }
+        axisOk = axisOk && density(id, 1, 0, 0, 3) < 1e-12 * density(fb, 1, 0, 0, 3);   // every m != 0 state is zero on the z axis; the m = 0 fallback is not
+        n++;
+    }
+    std::printf("outline of complex states: %d states; the 90 %% shape differs from the real fallback's by at least %.4f (%s); margin %.3f\n", n, minDiff, which.c_str(), margin);
+    checkTrue("outline: for every complex state the view asks for that state's outline, not the real fallback's (20 states)", n == 20 && allRight);
+    checkTrue("outline: every complex state is zero on the z axis, its fallback is not", axisOk);
+    checkTrue("outline: the complex state's 90 % shape (radius, side width or height) differs from the fallback's by more than the margin", minDiff > margin);
+}
+
+// Finding 2 (audit): the integral of the drawn density |psi|^2 over all space is 1 for ANY pair, also when the states overlap (same state twice, a real orbital with an m state of its shell).
+// For a = cos, b = sin: integral |a A + b B e^(-i theta)|^2 = a^2 + b^2 + 2 a b Re(<A|B> e^(-i theta)), which is 1 only if <A|B> = 0, so psiSuper divides by that.
+static void testSuperNorm(double tol) {
+    struct P { const char* sa; const char* oa; const char* sb; const char* ob; bool overlap; };
+    const P ps[] = {{"2p", "z", "2p", "z", true}, {"1s", "", "1s", "", true}, {"2p", "x", "2p", "m+1", true}, {"2p", "y", "2p", "m-1", true}, {"3d", "xz", "3d", "m+1", true}, {"3d", "x2y2", "3d", "m+2", true},
+        {"4f", "xz2", "4f", "m+1", true}, {"3d", "m+2", "3d", "m+2", true},
+        {"2p", "m+1", "2p", "m-1", false}, {"2p", "x", "2p", "y", false}, {"1s", "", "2p", "z", false}, {"1s", "", "2s", "", false}, {"2s", "", "2p", "z", false}, {"2p", "m+1", "3d", "m+2", false},
+        {"3d", "z2", "3d", "xy", false}, {"3d", "xz", "3d", "m+2", false}, {"4p", "z", "4f", "z3", false}, {"2p", "x", "3p", "x", false}};
+    const Quad q = makeQuad(450, 16, 50);
+    double worst = 0, worstOverlap = 0, worstOrtho = 0; std::string wp;
+    for (const P& pr : ps)
+        for (double mix : {0.0, 0.5, 1.0})
+            for (double th : {0.0, 2.5}) {
+                const Superposition su = mkSup(pr.sa, pr.oa, pr.sb, pr.ob, mix);
+                double sum = 0;
+                for (std::size_t i = 0; i < q.r.size(); i++)
+                    for (std::size_t j = 0; j < q.u.size(); j++) {
+                        const double st = std::sqrt(1 - q.u[j] * q.u[j]);
+                        for (int k = 0; k < q.nphi; k++) {
+                            const double f = 2 * kPi * (k + 0.5) / q.nphi;
+                            sum += std::norm(psiSuper(su, 1, th, q.r[i] * st * std::cos(f), q.r[i] * st * std::sin(f), q.r[i] * q.u[j])) * (2 * kPi / q.nphi) * q.wu[j] * q.r[i] * q.r[i] * q.wr[i];
+                        }
+                    }
+                const double err = std::fabs(sum - 1);
+                if (err > worst) { worst = err; wp = std::string(pr.sa) + pr.oa + " + " + pr.sb + pr.ob + " mix " + std::to_string(int(mix * 100)); }
+                (pr.overlap ? worstOverlap : worstOrtho) = std::max(pr.overlap ? worstOverlap : worstOrtho, err);
+            }
+    std::printf("superposition norm: integral of |psi|^2 over %zu pairs x mix 0, 50, 100 %% x 2 phases: largest |norm - 1| = %.5e (overlapping pairs %.5e, orthogonal %.5e; worst: %s)\n", sizeof ps / sizeof ps[0], worst, worstOverlap, worstOrtho, wp.c_str());
+    checkTrue("superposition: the drawn density integrates to 1 for every pair, overlapping or not, at mix 0, 50 and 100 % (guard = measured + 1 %)", worst <= tol);
+    // the overlap itself, from the maths: the same state 1; 2px with 2p m=+1 is -1/sqrt 2 (m=+1 = -(px + i py)/sqrt 2); orthogonal pairs exactly 0
+    checkNum("overlap: <2pz|2pz> = 1", std::abs(overlapAB(orbIndex("2p|z"), orbIndex("2p|z"))), 1, 1e-12);
+    checkNum("overlap: |<2px|2p m=+1>| = 1/sqrt 2", std::abs(overlapAB(orbIndex("2p|x"), complexState(orbIndex("2p"), 1))), 1 / std::sqrt(2.0), 1e-9);
+    checkNum("overlap: |<2px|2p m=-1>| = 1/sqrt 2", std::abs(overlapAB(orbIndex("2p|x"), complexState(orbIndex("2p"), -1))), 1 / std::sqrt(2.0), 1e-9);
+    checkTrue("overlap: exactly 0 for orthogonal pairs (m=+1 and m=-1, px and py, 1s and 2p, 2s and 2p, different n)", overlapAB(complexState(orbIndex("2p"), 1), complexState(orbIndex("2p"), -1)) == 0.0 && overlapAB(orbIndex("2p|x"), orbIndex("2p|y")) == 0.0
+              && overlapAB(orbIndex("1s"), orbIndex("2p|z")) == 0.0 && overlapAB(orbIndex("2s"), orbIndex("2p|z")) == 0.0 && overlapAB(orbIndex("2p|x"), orbIndex("3p|x")) == 0.0);
+}
+
+// The dots of an overlapping pair follow the renormalised density and ALL of them are shown (no thinning): for 2px + 2p(m=+1) at mix 0, 50 and 100 % the mean x^2, y^2, z^2 of the dots equal the
+// integrals of x^2 |psi|^2 etc. of the lab's own psiSuper (quadrature), within the Metropolis chain's sampling error (the 8 labs are independent, every dot of a lab is used).
+static void testOverlapDots(double tol) {
+    const Quad q = makeQuad(450, 16, 50);
+    double worst = 0; bool allShown = true; std::string line;
+    for (double mix : {0.0, 0.5, 1.0}) {
+        const Superposition su = mkSup("2p", "x", "2p", "m+1", mix);
+        double ex[3] = {0, 0, 0}, nrm = 0;
+        for (std::size_t i = 0; i < q.r.size(); i++)
+            for (std::size_t j = 0; j < q.u.size(); j++) {
+                const double st = std::sqrt(1 - q.u[j] * q.u[j]);
+                for (int k = 0; k < q.nphi; k++) {
+                    const double f = 2 * kPi * (k + 0.5) / q.nphi, x = q.r[i] * st * std::cos(f), y = q.r[i] * st * std::sin(f), z = q.r[i] * q.u[j];
+                    const double w = std::norm(psiSuper(su, 1, 0, x, y, z)) * (2 * kPi / q.nphi) * q.wu[j] * q.r[i] * q.r[i] * q.wr[i];
+                    ex[0] += w * x * x; ex[1] += w * y * y; ex[2] += w * z * z; nrm += w;
+                }
+            }
+        double got[3] = {0, 0, 0}; long cnt = 0;
+        for (int lab_ = 0; lab_ < 8; lab_++) {
+            seedRandom(9000 + lab_ + int(mix * 10));
+            AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+            lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string("2p")); lab.setParam("pAx", std::string("x"));
+            lab.setParam("super", std::string("On")); lab.setParam("orb2", std::string("2p")); lab.setParam("pAx2", std::string("m+1")); lab.setParam("mix", mix * 100);
+            for (int i = 0; i < 800; i++) lab.step(1.0 / 240);
+            const long c = std::min<long>(lab.s.k, long(lab.s.sg.size()));
+            for (long i = 0; i < c; i++) {
+                allShown = allShown && lab.superGroup(i, lab.beatTheta()) != 255;
+                for (int a = 0; a < 3; a++) { const double v = lab.s.pts[3 * i + a] / kA0; got[a] += v * v; }
+            }
+            cnt += c;
+        }
+        for (int a = 0; a < 3; a++) { got[a] /= cnt; worst = std::max(worst, std::fabs(got[a] / (ex[a] / nrm) - 1)); }
+        line += " mix " + std::to_string(int(mix * 100)) + ": <x2,y2,z2> dots " + fmt::fixed(got[0], 2) + "," + fmt::fixed(got[1], 2) + "," + fmt::fixed(got[2], 2) + " vs integral " + fmt::fixed(ex[0] / nrm, 2) + "," + fmt::fixed(ex[1] / nrm, 2) + "," + fmt::fixed(ex[2] / nrm, 2) + ";";
+    }
+    std::printf("overlapping pair 2px + 2p(m=+1), dots against the integral of psiSuper:%s largest relative difference %.5f\n", line.c_str(), worst);
+    checkTrue("overlapping pair: every dot is shown (no thinning)", allShown);
+    checkTrue("overlapping pair: the dots' mean x^2, y^2, z^2 equal those of the renormalised density at mix 0, 50 and 100 % (guard = measured + 1 %)", worst <= tol);
+}
+
+// The readout must not claim a split that is not drawn: orthogonal pairs keep "(50 % / 50 %)"; an overlapping pair says the mixture is renormalised.
+static void testSuperReadout() {
+    auto mk = [](const char* a, const char* ao, const char* b, const char* bo) {
+        AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+        lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string(a)); if (*ao) lab.setParam(orbitals()[orbIndex(a)].l == 1 ? "pAx" : "dAx", std::string(ao));
+        lab.setParam("super", std::string("On")); lab.setParam("orb2", std::string(b)); if (*bo) lab.setParam(orbitals()[orbIndex(b)].l == 1 ? "pAx2" : "dAx2", std::string(bo));
+        return lab.info1();
+    };
+    const std::string ortho = mk("1s", "", "2p", "z"), overlap = mk("2p", "x", "2p", "m+1"), same = mk("2p", "z", "2p", "z");
+    checkTrue("readout: an orthogonal pair keeps its exact split (50 % / 50 %)", ortho.find("(50 % / 50 %)") != std::string::npos && ortho.find("overlap") == std::string::npos);
+    checkTrue("readout: an overlapping pair does not claim (50 % / 50 %) and says the states overlap and the mixture is renormalised", overlap.find("(50 % / 50 %)") == std::string::npos && overlap.find("overlap") != std::string::npos && overlap.find("renormalised") != std::string::npos);
+    checkTrue("readout: the same state twice says so (overlap 100 %)", same.find("(50 % / 50 %)") == std::string::npos && same.find("overlap") != std::string::npos && same.find("100 %") != std::string::npos);
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -1333,6 +1450,13 @@ int main() {
     // before the fix (0.10.6 stage 2 code, one leapfrog step per frame): radius 7.783e-3 (n = 1, speed 30), energy 5.964e-5, rate 5.165e-3, so this fails without the sub-steps.
     testOrbitAccuracy(2.192e-4, 4.754e-8, 1.469e-4);
     testFixedExtent();
+    // guards: outline margin 0.10 = about half the smallest MEASURED difference (0.1867, 4f m=+1 against its fallback 4fz3); norm 6.69e-4 = measured 6.62289e-4 (the midpoint quadrature's own error on the orthogonal
+    // pair 4pz + 4fz3; the overlapping pairs reach 1.19e-4) + 1 %; dots 0.0591 = measured 0.05844 (Metropolis sampling error of the 8 seeded labs) + 1 %.
+    // BEFORE the fix (same tests): outline asked for the fallback in 20 of 20 states (difference 0), norm error 1.00009 (the same state twice at mix 50: the integral is 2), dots 0.944 off (and the dots thinned instead of all shown).
+    testOutlineIsTheState(0.10);
+    testSuperNorm(6.69e-4);
+    testOverlapDots(0.0591);
+    testSuperReadout();
     testElements();
     testNuclides();
     testFormats();
