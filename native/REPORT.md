@@ -28,4 +28,4 @@ Two separate blocks, each with its own title, strip and note, never one list: **
 - Not measured: start-up and Windows build time with the extra 0.65 MB of tables. The comparison for Z > 100 relies on ASD's calculated values only.
 
 ## Windows CI result
-Pending at the time of writing (filled in after the push).
+Run 37194494399 on commit 8724a02 (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build (the whole app, so `atom_panel.cpp` with the new card and the 0.65 MB of NIST tables **compiled on MSVC**; the build step took 3 min 11 s, not compared with before) and "Physics unit tests" (all seven programs) passed, so the tolerance-based ASD tests hold under MSVC. I did not read the printed counts from the log, so "18,326 on Windows" is not claimed. Compiling is not seeing: the card has never been looked at on a screen (OWNER-TODO).
