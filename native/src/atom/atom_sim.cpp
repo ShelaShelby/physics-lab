@@ -631,15 +631,13 @@ void AtomLab::decTick(double dt) {
         s.decNext.clear(); chainVer++;
         s.decKey = key; s.decAge = 0; s.decHeld = false;
         s.dec = decInfo(p.Z, p.N);
-        s.decAt = !s.dec || !s.dec->T ? INFINITY : -*s.dec->T / kLn2 * std::log(1 - random());
+        s.decAt = !s.dec || !s.dec->T ? INFINITY : decDrawLifetime(*s.dec->T, random());   // (decay_chain.h: the same two draws as the chain walk on the chart)
     }
     if (paused || hold || chartOn() || s.decHeld || std::isinf(s.decAt)) return;   // (the chart: the chosen nucleus must stay where the user put it, so its decay clock waits)
     s.decAge += dt;
     if (s.decAge < s.decAt) return;
     // which way it decays, with the measured odds
-    double r = random();
-    std::string m = s.dec->br.back().first;
-    for (const auto& [mm, v] : s.dec->br) { if (r < v) { m = mm; break; } r -= v; }
+    const std::string m = s.dec->br[decDrawBranch(*s.dec, random())].first;   // (the listed odds, normalised to add up to 1: decay_chain.h)
     const auto mv = decMove(m);
     const std::string from = nucName(p.Z, p.N);
     const double lived = s.decAt, now = nowMs();
@@ -702,6 +700,13 @@ std::string AtomLab::decLine() const {                        // the readout lin
 // ---------------------------------------------------------------- every frame / every step
 void AtomLab::tick(double dt) {                               // runs every frame, even when paused: smooth dive and pan
     decTick(dt);                                               // radioactive decay: only while not paused
+    if (chartOn()) {                                           // the decay chain walk (0.12 stage 1): it follows the chosen nuclide; the screen time between steps is counted only while the app runs
+        if (s.walk.startZ != p.Z || s.walk.startN != p.N) walkStart(s.walk, p.Z, p.N);
+        if (!paused) {
+            walkTime(s.walk, dt);
+            if (s.walkAuto && !s.walk.done && s.walk.sinceStep >= kWalkPaceS) walkOnce();
+        }
+    }
     const bool rmv = reducedMotion;                            // reduced motion: camera moves jump to the end instead of gliding
     if (s.zoomTo) {
         const double d = rmv ? 0 : *s.zoomTo - p.zoom;
@@ -803,6 +808,15 @@ void AtomLab::resetView() {
 }
 
 // the ⓘ button, or a click on a nucleon to dive into it
+const ChainGraph& AtomLab::decayGraph() const {
+    if (chainZ_ != p.Z || chainN_ != p.N) { chainGraph_ = decayChain(p.Z, p.N); chainZ_ = p.Z; chainN_ = p.N; }
+    return chainGraph_;
+}
+void AtomLab::walkRestart() { walkStart(s.walk, p.Z, p.N); }
+void AtomLab::walkOnce() {
+    if (s.walk.startZ != p.Z || s.walk.startN != p.N) walkStart(s.walk, p.Z, p.N);
+    walkStep(s.walk, [] { return random(); });
+}
 const ChartScene& AtomLab::chartScene() const { chartScene_.build(viewW, viewH, s.chartView); return chartScene_; }
 void AtomLab::setChartTilt(double t) {
     s.chartView.tilt = std::max(0.0, std::min(1.0, t));

@@ -44,6 +44,9 @@ enum class HeightKind : unsigned char { Measured, Stable, StableNoted, Approx, L
 struct ChartHeight { double h; HeightKind kind; };       // h in scale heights (0 .. kStableHeight)
 ChartHeight chartHeightOf(int Z, int N, ChartHeightMode m = ChartHeightMode::HalfLife);   // for a tile of the chart (each mode's table is built once)
 int chartHeightCount(HeightKind k, ChartHeightMode m = ChartHeightMode::HalfLife);        // tiles of that kind
+// The half-life in seconds that the half-life height of this tile is drawn from (0.12 stage 1: the decay chain times a step with it): the measured value for Measured, the approximate one for Approx (the
+// lab's "~" value, or NUBASE2020's text where the lab's table has none), and NaN for every other kind (stable, a limit only, extrapolated, unknown): no number is made up for them.
+double chartHalfLifeOf(int Z, int N);
 double chartHeightTiles(ChartHeightMode m);              // tiles per scale height: kHeightCells or kBindingCells
 const char* chartHeightWords(ChartHeightMode m = ChartHeightMode::HalfLife);   // the sentence(s) for the legend: starts "Height: ..." and says which height is in use
 const char* chartHeightShort(ChartHeightMode m = ChartHeightMode::HalfLife);
@@ -98,6 +101,7 @@ public:
     double heightPoints(double hScale) const { return hScale * chartHeightTiles(st_.height) * L_.cell; }   // in flat-layout points (the projection scales it)
     // the tile whose block is drawn on top at this point (the last one drawn that covers it), or false: the rule for hover and click
     bool pick(double px, double py, int& Z, int& N) const;
+    const ChartBlock* block(int Z, int N) const;                            // the block of this nuclide (nullptr when there is none): a lookup, not a search (the decay chain's trail asks for a few dozen)
     // room: how tall a box can be, from the top margin or up from the bottom margin, across x0..x1 before it would cover a block (a conservative measure from the blocks' bounding boxes)
     double freeHeight(bool fromTop, double x0, double x1) const;
     // the screen bounding box of everything (blocks) and the pan that keeps enough of it in the picture
@@ -112,6 +116,7 @@ private:
     ChartLayout L_;
     ChartProjection proj_;
     std::vector<ChartBlock> blocks_;
+    std::vector<int> blockOf_;                           // per tile (chartTiles() order): the index of its block in blocks_
     std::vector<float> colTop_, colBottom_;              // per picture column: the lowest top edge and the highest bottom edge of any block there
     double bx0_ = 0, by0_ = 0, bx1_ = 0, by1_ = 0;
 };

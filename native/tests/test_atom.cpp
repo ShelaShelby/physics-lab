@@ -4342,6 +4342,8 @@ static void testQuadrupole(double guardMinSepDeformed) {
     checkTrue("the credit names the IAEA file, its INDC report and the NSR keys, and says the page with the citation terms could not be read", has(kQuadCredit, "elec_mom_recomm.csv") && has(kQuadCredit, "indc-nds-0833") && has(kQuadCredit, "NSR") && has(kQuadCredit, "could not be read"));
 }
 
+#include "test_chain.inc"   // 0.12 stage 1: decay chains on the chart
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -4416,6 +4418,9 @@ int main() {
     testChart();
     testChartLandscape();
     testChartBinding();
+    testDecayChain();
+    testDecayChainDraw();
+    testDecayChainLab();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

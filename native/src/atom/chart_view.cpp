@@ -74,6 +74,14 @@ ChartHeight chartHeightOf(int Z, int N, ChartHeightMode m) {
     if (it == t.end() || it->Z != Z || it->N != N) return {0, HeightKind::Unknown};
     return heights(m)[std::size_t(it - t.begin())];
 }
+double chartHalfLifeOf(int Z, int N) {
+    const ChartHeight h = chartHeightOf(Z, N);
+    if (h.kind != HeightKind::Measured && h.kind != HeightKind::Approx) return NAN;
+    const std::string* c = nucCode(Z, N);
+    if (c && *c == "?") { const NubaseRow* nb = nubase(Z, N); return nb ? secondsOf(nb->lim) : double(NAN); }   // an approximate value that only NUBASE2020 has (">", "<" and "#" are other kinds)
+    const auto d = decInfo(Z, N);
+    return d && d->T ? *d->T : double(NAN);
+}
 int chartHeightCount(HeightKind k, ChartHeightMode m) {
     static const std::vector<int> n[2] = {[] { std::vector<int> a(7, 0); for (const ChartHeight& h : heights(ChartHeightMode::HalfLife)) a[int(h.kind)]++; return a; }(),
                                           [] { std::vector<int> a(7, 0); for (const ChartHeight& h : heights(ChartHeightMode::Binding)) a[int(h.kind)]++; return a; }()};
@@ -198,6 +206,8 @@ void ChartScene::build(double w, double h, const ChartViewState& in) {
         for (int i = 0; i < 4; i++) { corner(raw, fb[i][0], fb[i][1], fb[i][2], B.faceB + 2 * i); corner(raw, fa[i][0], fa[i][1], fa[i][2], B.faceA + 2 * i); }
         B.sides = !P.flat && H * P.sinP > 0.05;
     }
+    blockOf_.assign(tiles.size(), -1);
+    for (std::size_t k = 0; k < order.size(); k++) blockOf_[std::size_t(order[k])] = int(k);
     // The fit uses the box the landscape can fill, not the heights of the blocks: the whole grid up to the tallest height either height mode can reach (the larger of the two), so switching what the height
     // means (stage 4) does not rescale or move the picture, only the blocks' heights change.
     {
@@ -242,6 +252,13 @@ void ChartScene::build(double w, double h, const ChartViewState& in) {
         const int c0 = std::max(0, int(std::floor(B.x0))), c1 = std::min(cols - 1, int(std::floor(B.x1)));
         for (int c = c0; c <= c1; c++) { colTop_[std::size_t(c)] = std::min(colTop_[std::size_t(c)], B.y0); colBottom_[std::size_t(c)] = std::max(colBottom_[std::size_t(c)], B.y1); }
     }
+}
+
+const ChartBlock* ChartScene::block(int Z, int N) const {
+    const std::vector<ChartTile>& t = chartTiles();
+    const auto it = std::lower_bound(t.begin(), t.end(), std::make_pair(Z, N), [](const ChartTile& a, const std::pair<int, int>& k) { return a.Z != k.first ? a.Z < k.first : a.N < k.second; });
+    if (it == t.end() || it->Z != Z || it->N != N || blockOf_.empty()) return nullptr;
+    return &blocks_[std::size_t(blockOf_[std::size_t(it - t.begin())])];
 }
 
 bool ChartScene::pick(double px, double py, int& Z, int& N) const {

@@ -48,12 +48,19 @@ void still(AtomLab& L) { L.s.zoomTo.reset(); L.s.panTo.reset(); L.s.pan = Vec3d{
 }  // namespace
 
 void benchSetup(AtomLab& L, int which, double w, double h) {
-    if (which == kBenchChartScene || which == kBenchLandscapeScene || which == kBenchBindingScene) {   // the chart of nuclides: the whole map (flat) or the landscape (full tilt), U-238 chosen (the marker is drawn), nothing to wait for
+    if (which == kBenchChartScene || which == kBenchLandscapeScene || which == kBenchBindingScene || which == kBenchChainScene) {   // the chart of nuclides: the whole map (flat) or the landscape (full tilt), U-238 chosen (the marker is drawn), nothing to wait for
         fresh(L, 92, 146, w, h);
         L.chartReset();
         L.setParam("view", std::string(kChartView));
         L.s.chartView.height = which == kBenchBindingScene ? ChartHeightMode::Binding : ChartHeightMode::HalfLife;   // (the scene says what the height means: no choice of the user's leaks in)
         if (which != kBenchChartScene) L.setChartTilt(1);
+        L.s.showChain = which == kBenchChainScene;       // the three older chart scenes draw no chain, so they cost what they cost in 0.11; scene 19 draws it
+        if (which == kBenchChainScene) {                 // the chain of uranium-238, walked five steps with a fixed seed (the same trail and the same walker every run); the walk does not move by itself
+            seedRandom(20241004);
+            L.walkRestart();
+            for (int i = 0; i < 5; i++) L.walkOnce();
+            L.s.walkAuto = false;
+        }
         still(L);
         return;
     }
@@ -119,6 +126,9 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Chart of nuclides, tilted landscape, BINDING-ENERGY height (full tilt), 3,557 blocks", "the same view as the scene before it (the tilted landscape, half-life height) with the height meaning the binding energy per nucleon (0.11 stage 4): the same 3,557 blocks drawn the same way, "
                                                                           "but 2,549 solid blocks (the measured values) and 1,008 flat pale squares (estimates only), and the peak note. The three chart scenes are flat, tilted with half-life height and tilted with binding height, "
                                                                           "so the DIFFERENCE between the last two is only the other height table (built once) and the notes: it should be about nothing. Look at the CPU frame time; keep the pointer off the picture"},
+        {"Chart of nuclides, tilted landscape with the DECAY CHAIN of uranium-238 drawn and walked, 3,557 blocks", "the same view as the tilted landscape with half-life height (0.12 stage 1) with the decay chain of the chosen nuclide, uranium-238, drawn over it: 43 trail segments between 28 nuclides (the likeliest way thick, the others thinner or faint) with their mode labels, "
+                                                                          "and the walker after five steps of a walk with a fixed random seed (its path, the squares it has been through and its disc). The chain is built once; the walk is not advancing during the scene. Scenes 16 to 18 draw no chain. "
+                                                                          "Compare this scene with the tilted-landscape scene before it: the DIFFERENCE is the cost of the trail, the labels and the walker. Keep the pointer off the picture while it runs."},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchSceneCount - 1)) - kBenchFirstRisk];
 }
@@ -147,7 +157,7 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
 }
 
 std::string benchSettingsText(const AtomLab& L) {
-    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %, height " + (L.s.chartView.height == ChartHeightMode::Binding ? "binding energy per nucleon" : "half-life") + ", zoom " + std::to_string(int(std::lround(L.s.chartView.zoom * 100))) + " %, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N);
+    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %, height " + (L.s.chartView.height == ChartHeightMode::Binding ? "binding energy per nucleon" : "half-life") + ", zoom " + std::to_string(int(std::lround(L.s.chartView.zoom * 100))) + " %, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N) + ", decay chain " + (L.s.showChain ? "drawn, walked " + std::to_string(L.s.walk.steps.size()) + " steps" : std::string("not drawn"));
     std::string t = "view " + L.p.view + ", Orbit style " + L.p.ostyle + ", quark style " + L.p.qstyle + ", detail " + L.p.detail + ", " + L.p.style + " nucleons";
     if (L.p.view != "Orbit") {                           // the cloud views: what the cost depends on
         t += ", orbital " + L.p.orb + ", cloud style " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots, phase " + L.p.phase;

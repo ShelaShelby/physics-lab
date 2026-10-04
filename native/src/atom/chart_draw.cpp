@@ -184,9 +184,106 @@ void drawNotes(render::Renderer2D& R, const ChartText& T, const ChartColours& C,
     }
 }
 
+
+// ---------------------------------------------------------------- the decay chain (0.12 stage 1)
+// How a way is drawn (the rule, also in the panel's words): the LIKELIEST way at each nuclide is solid and thick; the other ways whose measured share is at least 0.1 % are thinner; the rarer ones
+// (fission, double beta, cluster decays: below 0.1 %) are very faint hairlines; where NUBASE2020 marks the odds as not measured no way is likeliest and each is drawn thin, its label ending in " ?".
+// The colour is the kind of the mode (alpha yellow, beta minus blue, beta plus red, ...), the same as the tiles. Every line runs from the middle of one square to the middle of the next (a block's top
+// face in the landscape), with a small arrowhead short of the end. The walker is a disc in the accent colour; the squares it has been through are small discs, and the path it took is drawn over the trail.
+// Cost: a few dozen to about 120 segments (plus labels), computed from a graph built once per chosen nuclide: no per-frame search (the landscape finds a block by a lookup).
+using CentreFn = std::function<bool(int, int, double&, double&)>;
+void drawChainOverlay(render::Renderer2D& R, const ChartText& T, const ChartColours& C, const ChainOverlay& ov, double cell, const Color* col, const CentreFn& centre) {
+    if (!ov.graph || ov.graph->nodes.empty()) return;
+    const ChainGraph& g = *ov.graph;
+    const ChainNode& start = g.nodes[0];
+    if (start.stop == ChainStop::Stable) return;                         // a stable nuclide has no chain
+    struct Seg { double x0, y0, x1, y1; const ChainEdge* e; const ChainNode* from; };
+    std::vector<Seg> segs;
+    for (const ChainNode& a : g.nodes) {
+        double x0, y0;
+        if (!centre(a.Z, a.N, x0, y0)) continue;
+        for (const ChainEdge& e : a.edges) {
+            if (e.end != ChainEnd::Node) continue;
+            const ChainNode& b = g.nodes[std::size_t(e.to)];
+            double x1, y1;
+            if (centre(b.Z, b.N, x1, y1)) segs.push_back({x0, y0, x1, y1, &e, &a});
+        }
+    }
+    const auto style = [](const ChainEdge& e, double& wd, float& al) {      // thick and solid / thinner / faint hairline / thin (odds not measured)
+        if (e.likeliest) { wd = 4.2; al = 1.0f; }
+        else if (!e.measured) { wd = 1.8; al = 0.95f; }
+        else if (e.p >= 1e-3) { wd = 1.8; al = 0.9f; }
+        else { wd = 1.0; al = 0.45f; }
+    };
+    std::stable_sort(segs.begin(), segs.end(), [](const Seg& a, const Seg& b) { return a.e->likeliest < b.e->likeliest; });   // the likeliest on top
+    const double head = std::max(5.0, std::min(9.0, 0.9 * cell));
+    for (const Seg& sg : segs) {
+        double wd; float al; style(*sg.e, wd, al);
+        const Color c = col[int(chartClassOfMode(sg.e->mode))];
+        if (sg.e->likeliest || !sg.e->measured || sg.e->p >= 1e-3) R.line(sg.x0, sg.y0, sg.x1, sg.y1, wd + 3, C.card.withAlpha(0.85f));   // a pale outline so the line shows over any tile colour, a blue beta-minus line over blue tiles too (not for the faint hairlines: it would show as a pale band)
+        R.line(sg.x0, sg.y0, sg.x1, sg.y1, wd, c.withAlpha(al));
+        const double len = std::hypot(sg.x1 - sg.x0, sg.y1 - sg.y0);
+        if (len > 2.2 * head) {                                            // an arrowhead short of the destination, so the walker's disc does not hide it
+            const double ux = (sg.x1 - sg.x0) / len, uy = (sg.y1 - sg.y0) / len, tx = sg.x1 - ux * 0.55 * cell, ty = sg.y1 - uy * 0.55 * cell;
+            for (const double side : {-1.0, 1.0}) { const double ca = std::cos(0.45), sa = side * std::sin(0.45); R.line(tx, ty, tx - head * (ux * ca - uy * sa), ty - head * (uy * ca + ux * sa), wd, c.withAlpha(al)); }
+        }
+    }
+    // a split (fission) that is likeliest or at least 0.1 %: three short rays from the square, since it has no single daughter
+    for (const ChainNode& a : g.nodes) {
+        double x, y;
+        if (!centre(a.Z, a.N, x, y)) continue;
+        for (const ChainEdge& e : a.edges) if (e.end == ChainEnd::Fission && (e.likeliest || e.p >= 1e-3)) {
+            const Color c = col[int(chartClassOfMode(e.mode))];
+            for (int k = 0; k < 3; k++) { const double an = -1.57 + k * 2.09, r0 = std::min(0.6 * cell, 16.0), r1 = r0 + 9; R.line(x + r0 * std::cos(an), y + r0 * std::sin(an), x + r1 * std::cos(an), y + r1 * std::sin(an), 2, c); }
+        }
+    }
+    // mode labels at the middle of the likeliest steps (and of the other measured ways of at least 1 %), where they do not run into a label already placed
+    {
+        struct Rc { double x0, y0, x1, y1; };
+        std::vector<Rc> placed;
+        for (const Seg& sg : segs) {
+            if (!(sg.e->likeliest || !sg.e->measured || sg.e->p >= 0.01)) continue;
+            const double len = std::hypot(sg.x1 - sg.x0, sg.y1 - sg.y0);
+            if (len < 6) continue;
+            const std::string t = chainModeShort(sg.e->mode) + (sg.e->measured ? "" : " ?");                 // a way whose odds are not measured says so on its label
+            const double tw = T.width(t, 10, true), mx = (sg.x0 + sg.x1) / 2, my = (sg.y0 + sg.y1) / 2, nx = -(sg.y1 - sg.y0) / len, ny = (sg.x1 - sg.x0) / len;
+            for (const double side : {1.0, -1.0}) {
+                const double cx = mx + side * nx * (5 + tw / 2), cy = my + side * ny * 8 + 3;
+                const Rc r{cx - tw / 2 - 2, cy - 10, cx + tw / 2 + 2, cy + 3};
+                bool clash = false;
+                for (const Rc& q : placed) if (r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0) clash = true;
+                if (clash) continue;
+                placed.push_back(r);
+                R.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0, C.card.withAlpha(0.8f));
+                T.draw(t, cx, cy, 10, C.fg, 0.5, true);
+                break;
+            }
+        }
+    }
+    // the walk: the squares it has been through, the path it took over the trail, the walker
+    if (ov.walk) {
+        const ChainWalk& w = *ov.walk;
+        double x0, y0, x1, y1;
+        for (const WalkStep& st : w.steps) {
+            if (st.end != ChainEnd::Node || !centre(st.fromZ, st.fromN, x0, y0) || !centre(st.toZ, st.toN, x1, y1)) continue;
+            R.line(x0, y0, x1, y1, 6.4, C.card.withAlpha(0.9f)); R.line(x0, y0, x1, y1, 4.0, C.accent);
+        }
+        const double rd = std::max(2.5, std::min(7.0, 0.45 * cell));            // (the discs grow with the squares only up to a size that never hides the trail)
+        for (const WalkStep& st : w.steps) if (centre(st.fromZ, st.fromN, x0, y0)) R.disc(x0, y0, rd, C.accent.withAlpha(0.9f));
+        if (centre(w.Z, w.N, x0, y0)) { const double r = std::max(4.0, std::min(12.0, 0.9 * cell)); R.disc(x0, y0, r + 2.2, C.card); R.disc(x0, y0, r, C.accent); }
+    }
+    // a cross on every nuclide where the chain stops without a time (a half-life that is only a limit, only an extrapolation or not given), over the walker's disc too, with a pale outline
+    for (const ChainNode& a : g.nodes) {
+        double x, y;
+        if (a.stop != ChainStop::NoHalfLife || !centre(a.Z, a.N, x, y)) continue;
+        const double d = std::max(3.0, std::min(8.0, 0.7 * cell));
+        for (const double wd : {5.0, 2.2}) { const Color k = wd > 3 ? C.card : C.fg; R.line(x - d, y - d, x + d, y + d, wd, k); R.line(x - d, y + d, x + d, y - d, wd, k); }
+    }
+}
+
 }  // namespace
 
-void drawChart(render::Renderer2D& R, const ChartText& T, const ChartColours& C, double w, double h, int selZ, int selN, int hovZ, int hovN) {
+void drawChart(render::Renderer2D& R, const ChartText& T, const ChartColours& C, double w, double h, int selZ, int selN, int hovZ, int hovN, const ChainOverlay* chain) {
     const ChartLayout L = chartLayout(w, h);
     const double gridL = L.x(0), gridR = L.x(L.nMax) + L.cell, gridT = L.y(L.zMax), gridB = L.y(1) + L.cell;
     Color col[kChartClasses];
@@ -222,6 +319,8 @@ void drawChart(render::Renderer2D& R, const ChartText& T, const ChartColours& C,
         box(R, cx - half - 1.5, cy - half - 1.5, 2 * half + 3, 2 * half + 3, 1, C.card);
     }
     if (hovZ >= 1 && (hovZ != selZ || hovN != selN)) box(R, L.x(hovN) - 1, L.y(hovZ) - 1, L.cell + 2, L.cell + 2, 1.5, C.fg);
+
+    if (chain) drawChainOverlay(R, T, C, *chain, L.cell, col, [&](int z, int n, double& x, double& y) { x = L.x(n) + L.cell / 2; y = L.y(z) + L.cell / 2; return true; });
 
     const std::function<double(bool, double, double)> roomFlat = [&](bool fromTop, double x0, double x1) { return chartFreeHeight(L, h, fromTop, x0, x1); };
     const LegendBox lgFlat = drawStatusAndLegend(R, T, C, w, h, L, roomFlat, col, selZ, selN, false, ChartHeightMode::HalfLife, true);
@@ -264,7 +363,7 @@ void groundOutline(render::Renderer2D& R, const ChartProjection& P, double a0, d
 
 }  // namespace
 
-void drawChartScene(render::Renderer2D& R, const ChartText& T, const ChartColours& C, const ChartScene& S, double w, double h, int selZ, int selN, int hovZ, int hovN) {
+void drawChartScene(render::Renderer2D& R, const ChartText& T, const ChartColours& C, const ChartScene& S, double w, double h, int selZ, int selN, int hovZ, int hovN, const ChainOverlay* chain) {
     const ChartLayout& L = S.layout();
     const ChartProjection& P = S.proj();
     const double gridL = L.x(0), gridR = L.x(L.nMax) + L.cell, gridT = L.y(L.zMax), gridB = L.y(1) + L.cell;
@@ -346,6 +445,7 @@ void drawChartScene(render::Renderer2D& R, const ChartText& T, const ChartColour
         R.line(cx, cy, cx, cy - 26, 2.5, C.card); R.line(cx, cy, cx, cy - 26, 1.5, C.accent);
         R.disc(cx, cy - 27, 3.5, C.accent);
     }
+    if (chain) drawChainOverlay(R, T, C, *chain, L.cell * P.K, col, [&](int z, int n, double& x, double& y) { const ChartBlock* B = S.block(z, n); if (!B) return false; x = (B->top[0] + B->top[4]) / 2; y = (B->top[1] + B->top[5]) / 2; return true; });
     Notes notes;
     notes.centre = [&](int z, int n, double& x, double& y) { const ChartBlock* B = find(z, n); if (!B) return false; x = (B->top[0] + B->top[4]) / 2; y = (B->top[1] + B->top[5]) / 2; return true; };
     notes.covers = [&](double x0, double y0, double x1, double y1) { for (const ChartBlock& B : S.blocks()) if (B.x0 < x1 && B.x1 > x0 && B.y0 < y1 && B.y1 > y0) return true; return false; };

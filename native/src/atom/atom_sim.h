@@ -17,6 +17,7 @@
 #include "atom_core.h"
 #include "chart.h"
 #include "chart_view.h"
+#include "decay_chain.h"
 
 namespace atom {
 
@@ -126,6 +127,9 @@ struct AtomState {
     std::optional<DecayFx> decFx;
     int decays = 0;                        // decays seen so far (the web grants the Half-Life achievement at each one)
     std::vector<LogLine> decLog;
+    // the decay chain on the chart (0.12 stage 1): the walk down the chosen nuclide's chain (restarts when another nuclide is chosen), whether the trail is shown, and the auto-walk
+    ChainWalk walk;
+    bool showChain = true, walkAuto = false;
 };
 
 class AtomLab {
@@ -139,6 +143,8 @@ public:
     bool hold = false;                   // a control is being held: the decay clock waits
     std::optional<bool> moreStored;      // the remembered ⓘ choice (web: localStorage plAtomMore)
     mutable ChartScene chartScene_;
+    mutable ChainGraph chainGraph_;      // the chain of the chosen nuclide, computed once per chosen nuclide (decayGraph())
+    mutable int chainZ_ = 0, chainN_ = -1;
     double viewW = 1000, viewH = 700;    // the picture's size in points (the web's canvas size)
     std::function<double()> nowMs;       // the wall clock in ms (web: performance.now / Date.now)
     bool reducedMotion = false;          // Settings → Motion: camera moves jump, Cloud 3D does not spin by itself (web: plRM())
@@ -190,6 +196,11 @@ public:
     void chartZoomAt(double factor, double px, double py);
     void chartPan(double dx, double dy);
     void chartReset() { const ChartHeightMode m = s.chartView.height; s.chartView = ChartViewState(); s.chartView.height = m; }   // (the choice of what the height means is kept)
+    // the decay chain of the chosen nuclide (0.12 stage 1): the graph is built once per chosen nuclide; the walk draws the lifetime and the branch with the same two functions as the decay clock (decDrawLifetime,
+    // decDrawBranch) and the lab's random numbers. The walker is NOT the chosen nuclide: choosing stays where the user put it.
+    const ChainGraph& decayGraph() const;
+    void walkOnce();                                      // one decay of the walker (if it is not over)
+    void walkRestart();                                   // the walker back on the chosen nuclide
     const ChartScene& chartScene() const;                 // the blocks for the picture's size and the view (rebuilt only when one of them changed)                       // an arrow key in the chart: one proton or one neutron, only onto an observed nuclide
     void click(double x, double y);                       // picture points
     void drag(double dx, double dy, bool forceMove);      // forceMove: Shift, right or middle button

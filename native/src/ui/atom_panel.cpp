@@ -662,6 +662,43 @@ void labPicker(AppState& app) {
 }
 
 // ---------------------------------------------------------------- the panel
+// The decay chain of the chosen nuclide on the chart (0.12 stage 1): what is drawn, the walk (one step, auto-walk, restart), each step in words with its random lifetime and how much faster than real time it was
+// shown, and the standing note that this is not real time. All the words come from decay_chain.cpp (tested); this only lays them out.
+static void chainSection(AtomLab& L) {
+    ImGui::SeparatorText("Decay chain of the chosen nuclide");
+    ImGui::Checkbox("Show the chain on the chart", &L.s.showChain);
+    const ChainGraph& g = L.decayGraph();
+    for (const std::string& line : chainSummary(g)) mutedWrapped(line, 12.0f / 16);
+    if (g.nodes[0].stop != ChainStop::Continues) return;
+    mutedWrapped("On the chart: every way it can decay is a line from square to square, in the colour of the mode. The likeliest way is thick and solid, other measured ways are thinner, ways below 0.1 % are faint hairlines, "
+                 "a label ending in ? marks a way whose odds are not measured, and a cross marks a nuclide whose half-life is unknown (the chain stops there). The accent-coloured disc is the walker; the chosen nuclide stays where you put it.", 12.0f / 16);
+    const ChainWalk& w = L.s.walk;
+    if (w.done) ImGui::BeginDisabled();
+    if (ImGui::Button("Walk one step")) L.walkOnce();
+    ImGui::SameLine();
+    if (ImGui::Button(displayable(L.s.walkAuto ? "Pause auto-walk" : "Auto-walk (a step every " + jsNum(kWalkPaceS, 2) + " s)").c_str())) L.s.walkAuto = !L.s.walkAuto;
+    if (w.done) ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Restart walk")) L.walkRestart();
+    if (!w.steps.empty()) {
+        ImGui::BeginChild("##walk", ImVec2(-1, std::min(300 * S(), float(w.steps.size()) * 4.5f * ImGui::GetTextLineHeightWithSpacing() + 8)), ImGuiChildFlags_None);
+        for (std::size_t i = 0; i < w.steps.size(); i++) {
+            ImGui::PushFont(fonts().bold, 0.0f); ImGui::TextUnformatted(("Step " + std::to_string(i + 1)).c_str()); ImGui::PopFont();
+            ImGui::PushTextWrapPos(0);
+            ImGui::TextUnformatted(displayable(chainStepWords(w.steps[i])).c_str());
+            ImGui::PopTextWrapPos();
+            mutedWrapped(chainStepTime(w.steps[i]), 12.0f / 16);
+        }
+        static std::size_t shown = 0;                                          // scroll to the newest step only when one has been added, so the user can scroll up
+        if (w.steps.size() != shown) { shown = w.steps.size(); ImGui::SetScrollHereY(1.0f); }
+        ImGui::EndChild();
+        mutedWrapped("Drawn lifetimes added up: " + fmtLife(w.drawnS) + ". Screen time since the walk began: " + jsNum(w.screenS, 3) + " s. These are not the same thing: the screen is not real time.", 12.0f / 16);
+    }
+    if (w.done) mutedWrapped(chainWalkEndWords(w), 13.0f / 16);
+    else mutedWrapped("The walker is at " + chainNuclide(w.Z, w.N) + ".", 13.0f / 16);
+    mutedWrapped(chainTimeNote(), 12.0f / 16);
+}
+
 void atomPanel(AppState& app, float width) {
     AtomLab& L = app.atom;
     const AtomParams& p = L.p;
@@ -760,6 +797,7 @@ void atomPanel(AppState& app, float width) {
                   L.s.chartView.height == ChartHeightMode::Binding ? std::string("Binding energy per nucleon") : std::string("Half-life"));
         if (ImGui::Button("Reset tilt, zoom and position")) L.chartReset();
         mutedWrapped("Landscape: a block's height is either the log of the nuclide's half-life (all stable nuclides at one fixed height above the scale) or its binding energy per nucleon (a linear scale, the peak near iron and nickel); both scales are chosen for this picture and the legend gives them. A flat pale square has no height: its value is only an extrapolation. The wheel zooms about the pointer and a drag moves the picture when zoomed in. Hover and click work on the block you see on top. The names of the valley of stability (measured) and the island of stability (a prediction, not drawn) are in the legend.", 12.0f / 16);
+        chainSection(L);
     }
     mutedWrapped("The energy E in the line over the picture is the one-electron, non-relativistic level, −Rydberg energy × Z²/n², with the nucleus's real mass (hydrogen: −13.60 eV). In the Orbit view it is worked out from the electron's position and speed and scaled to that level. "
                  "Fine structure, the Lamb shift and spin are not modelled, so real energies differ a little (more for heavy atoms).", 12.0f / 16);

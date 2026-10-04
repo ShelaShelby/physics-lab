@@ -290,8 +290,9 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const bool flat = s.chartView.flat();                              // exactly stage 2's picture: its own drawing and grid lookup; otherwise the landscape's blocks (topmost drawn block under the pointer)
         if (!ImGui::GetIO().WantCaptureMouse && mx >= 0 && my >= 0 && mx < w && my < h) { if (flat) chartTileAt(chartLayout(w, h), mx, my, hz, hn); else lab.chartScene().pick(mx, my, hz, hn); }
         const ChartColours chartColours{css.fg, css.muted, css.accent, css.card, css.line};
-        if (flat) drawChart(R, adapter, chartColours, w, h, p.Z, p.N, hz, hn);
-        else drawChartScene(R, adapter, chartColours, lab.chartScene(), w, h, p.Z, p.N, hz, hn);
+        const ChainOverlay chainOv{s.showChain ? &lab.decayGraph() : nullptr, &s.walk};   // the decay chain of the chosen nuclide (0.12 stage 1): the graph is built once per chosen nuclide
+        if (flat) drawChart(R, adapter, chartColours, w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr);
+        else drawChartScene(R, adapter, chartColours, lab.chartScene(), w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr);
         if (hz) {                                                          // the details of the square under the pointer: a tooltip (it follows the pointer, stays on screen and never hides a square)
             ImGui::BeginTooltip();
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
