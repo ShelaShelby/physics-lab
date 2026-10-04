@@ -17,6 +17,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.6", "Atom Lab: exact constants (stage 2)",
+     "The Atom Lab now uses the official CODATA 2022 values (read from NIST) for the Bohr radius, the Hartree energy, the atomic unit of time, the Rydberg energy, the masses and more, instead of the web version's rounded ones. "
+     "The Bohr radius is 0.03 % larger than before, so the electron's circle is a hair bigger; everything else looks the same. The About page lists the constants and where they come from."},
     {"0.10.6", "Atom Lab checked for errors", "Atom Lab checked for errors, fixes to follow; nothing changed yet."},
     {"0.10.5", "Orbit Lab: more checks and clearer sources (stage 5)",
      "Orbit Lab: tests now compare the lab with NASA/JPL Horizons for the famous dates (Mars closest, 2003; Jupiter and Saturn, 2020) and for the 2026 equinoxes (the Earth card's \"next season\" is within 12 minutes), and the texts of the jump notes, the Real and Simple notes, the date line and the hidden-selection rule are tested too. Sources: the speed of light is JPL's; the Sun's 25.38-day turning period is Horizons'; comets' nucleus sizes are the Small-Body Database's (Encke 4.9 → 4.8 km). Numbers that have no named source are now marked rough on the cards (the Sun's surface temperature and its 25- and 34-day turning, the belts' counts and masses, NEOWISE's size), and About lists them. Nothing else changed."},

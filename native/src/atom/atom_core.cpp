@@ -410,7 +410,7 @@ bool dipoleOK(int a, int b) {
 // The electron and the nucleus both circle their common centre: the Rydberg energy with the
 // reduced mass. M = the nucleus's mass in electron masses (its binding energy changes this by under 10⁻⁶).
 double rydM(int Z, int N) {
-    const double M = Z == 1 && N == 0 ? 1836.15267 : (Z + N) * kMeU - Z;
+    const double M = Z == 1 && N == 0 ? kMpOverMe : (Z + N) * kMeU - Z;
     return kRydInf * M / (M + 1);
 }
 const char* const kSeries[6] = {"", "Lyman", "Balmer", "Paschen", "Brackett", "Pfund"};

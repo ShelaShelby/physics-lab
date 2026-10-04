@@ -814,7 +814,7 @@ std::vector<std::string> AtomLab::info() {
     more.push_back(tempLine(p.Z));
     more.push_back("layer: " + s.layer + "  ·  this nucleus in real life: " + isoInfo(p.Z, p.N));
     if (p.Z >= 27) {   // relativity: the 1s electron of a heavy nucleus moves at a large fraction of light speed
-        const double x = p.Z / 137.036, model = 0.5 * kHartreeEV * p.Z * p.Z, real = 510998.95 * (1 - std::sqrt(1 - x * x));   // Dirac 1s: mc²(√(1−(Zα)²) − 1)
+        const double x = p.Z * kAlpha, model = 0.5 * kHartreeEV * p.Z * p.Z, real = kMecEV * (1 - std::sqrt(1 - x * x));   // Dirac 1s: mc²(√(1−(Zα)²) − 1)
         more.push_back("1s electron speed: " + fmt::fixed(100 * x, 0) + "% of light speed  ·  real 1s energy −" + fmtEV(real) + " vs −" + fmtEV(model) + " in this lab");
     }
     if (p.style != "Hard balls" && s.layer != "Atom") more.push_back("nucleon edge: charge density ∝ e^(−r / 0.24 fm), so there is no sharp surface (rms radius 0.84 fm)");
@@ -830,7 +830,7 @@ std::vector<std::string> AtomLab::info() {
 }
 
 std::string AtomLab::hint() const {
-    const double x = p.Z / 137.036;
+    const double x = p.Z * kAlpha;
     std::string note;
     if (p.Z >= 27) note += " Heavy atoms: this lab uses non-relativistic physics, but a 1s electron here moves at " + fmt::fixed(100 * x, 0) +
                            "% of light speed, so the true energy differs. The readout gives the Dirac-equation value for a point nucleus.";

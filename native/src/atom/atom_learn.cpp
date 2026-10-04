@@ -27,8 +27,11 @@ string barRow(const string& rn, double widthPct, const string& col) {
 }
 // the nuclear radius (m) and the lowest orbit (m) the guides use
 double guideR(int A) { return A == 1 ? 0.84e-15 : 1.2e-15 * std::pow(A, 1.0 / 3); }
-const double kM_U = 1.66053907e-27, kM_P = 1.67262192e-27, kM_N = 1.67492750e-27, kM_E = 9.1093837e-31;   // kg
-const double kU_P = 1.007276467, kU_N = 1.008664916, kU_E = 5.48579909e-4, kU_H = 1.00782503223, kU_MEV = 931.49410242;   // u; 1 u = 931.494 MeV/c²
+// the masses: CODATA 2022 (NIST), the values and pages are in atom_core.h (kUKg, kMpKg, kMnKg, kMeKg in kg; kMpU, kMnU, kMeInU in u; kUMeV = 1 u in MeV/c²)
+const double kM_U = kUKg, kM_P = kMpKg, kM_N = kMnKg, kM_E = kMeKg;   // kg
+const double kU_P = kMpU, kU_N = kMnU, kU_E = kMeInU, kU_MEV = kUMeV;   // u; 1 u = 931.494 MeV/c²
+// the mass of the hydrogen-1 ATOM in u: 1.00782503223 is the value this lab already had (AME2020, the mass evaluation behind the binding table); it is NOT a CODATA constant and its source page was not re-read in 0.10.6 stage 2
+const double kU_H = 1.00782503223;
 
 }  // namespace
 
@@ -45,7 +48,7 @@ const std::vector<TimelineStep>& timelineSteps() {
 std::vector<LearnSection> lookSections(const AtomParams& p, const std::string& live) {
     const int Z = p.Z, N = p.N, A = Z + N;
     const string NM = name(Z), nm = lower(NM), nuc = nm + "-" + str(A), ion = ionLabel(Z), view = p.view;
-    const double R = A == 1 ? 0.84e-15 : 1.2e-15 * std::pow(A, 1.0 / 3), r1 = 5.29177e-11 / Z;
+    const double R = A == 1 ? 0.84e-15 : 1.2e-15 * std::pow(A, 1.0 / 3), r1 = kA0 / Z;
     std::vector<LearnSection> D;
     D.push_back({"big", "🔎 The big picture",
         "\n<p class=\"lrnP\">Everything around you is made of <b>atoms</b>. This lab shows you one, enlarged hundreds of millions of times so you can see how it is built.</p>"
@@ -130,7 +133,7 @@ std::string scaleHtml(const AtomParams& p, const std::string& tab, int obj) {
         return out;
     }
     const int Z = p.Z, A = p.Z + p.N;
-    const double R = guideR(A), r1 = 5.29177e-11 / Z;
+    const double R = guideR(A), r1 = kA0 / Z;
     const string nm = string(name(Z)) + "-" + str(A);
     out += "<p class=\"lrnP\">Atoms are almost entirely empty space. Here is <b>" + nm + "</b>, the one you have open in the lab. Pick an object and imagine the nucleus were that size.</p>";
     out += "[[chips]]";
@@ -274,7 +277,7 @@ std::string tempStateHtml(int Z, double K) {
 
 std::string tempSpeedHtml(int Z, double K) {
     if (K < 0.05) return "At this temperature the atoms have almost no motion.";
-    const double mA = (Z + defaultN(Z)) * 1.66054e-27, vv = std::sqrt(3 * 1.380649e-23 * K / mA);   // typical speed: ½mv² = (3/2)kT
+    const double mA = (Z + defaultN(Z)) * kUKg, vv = std::sqrt(3 * kBoltzmann * K / mA);   // typical speed: ½mv² = (3/2)kT
     const string sp = vv >= 1000 ? fmt::fixed(vv / 1000, 2) + " km/s" : vv >= 10 ? fmt::jsString(jsRound(vv)) + " m/s" : fmt::fixed(vv, 1) + " m/s";
     const double mph = vv * 2.23694;
     return "Typical atom speed here: ≈ <b>" + (fmt::imperial() ? (mph >= 10 ? fmt::jsLocale(jsRound(mph)) : fmt::fixed(mph, 1)) + " mph" : sp) + "</b>" +

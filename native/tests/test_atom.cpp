@@ -61,6 +61,36 @@ static void checkNum(const std::string& what, double got, double want, double re
 static void checkTrue(const std::string& what, bool ok) { checkStr(what, ok ? "true" : "false", "true"); }
 static std::string at(int Z, int N) { return std::to_string(Z) + "," + std::to_string(N); }
 
+// ---- 0.10.6 stage 2: the CODATA 2022 values, typed in here AGAIN from the NIST pages (https://physics.nist.gov/cgi-bin/cuu/Value?<key>, each page says "Source: 2022 CODATA recommended
+// values", all read on 2026-10-04), so the tests do not take them from atom_core.h. The key of each page is in the comment.
+namespace nist {
+constexpr double a0 = 5.29177210544e-11;        // m, bohrrada0
+constexpr double hartreeEV = 27.211386245981;   // eV, hrev
+constexpr double tau = 2.4188843265864e-17;     // s, aut (atomic unit of time)
+constexpr double alpha = 7.2973525643e-3;       // alph
+constexpr double rydEV = 13.605693122990;       // eV, rydhcev
+constexpr double mecEV = 510998.95069;          // eV, mec2mev (0.510 998 950 69 MeV)
+constexpr double meInU = 5.485799090441e-4;     // meu
+constexpr double mpOverMe = 1836.152673426;     // mpsme
+constexpr double ukg = 1.66053906892e-27;       // kg, ukg
+constexpr double uMeV = 931.49410372;           // MeV, muc2mev
+constexpr double meKg = 9.1093837139e-31;       // me
+constexpr double mpKg = 1.67262192595e-27;      // mp
+constexpr double mnKg = 1.67492750056e-27;      // mn
+constexpr double mpU = 1.0072764665789;         // mpu
+constexpr double mnU = 1.00866491606;           // mnu
+constexpr double kB = 1.380649e-23;             // J/K, k (exact)
+constexpr double h = 6.62607015e-34;            // J s, h (exact)
+constexpr double c = 299792458.0;               // m/s, c (exact)
+constexpr double e = 1.602176634e-19;           // C, e (exact)
+constexpr double hcEVnm = h * c / e * 1e9;      // eV nm, from the three exact values (NIST has no page for it)
+}
+// the web's rounded values the saved web results were made with (index.html, never changed)
+namespace webval { constexpr double a0 = 0.529e-10, tau = 24.19e-18, ryd = 13.605693123, hcEVnm = 1239.841984, meu = 1822.888486, mpOverMe = 1836.15267; }
+// the web's reduced-mass Rydberg energy and the same formula with the CODATA 2022 values: the saved web numbers are rescaled by their ratio
+static double rydMBy(double ry, double meu, double mpme, int Z, int N) { const double M = Z == 1 && N == 0 ? mpme : (Z + N) * meu - Z; return ry * M / (M + 1); }
+static double rydMRatio(int Z, int N) { return rydMBy(nist::rydEV, 1 / nist::meInU, nist::mpOverMe, Z, N) / rydMBy(webval::ryd, webval::meu, webval::mpOverMe, Z, N); }
+
 static void testElements() {
     for (const ElementRef& e : kElementRef) {
         const std::string w = "Z=" + std::to_string(e.Z);
@@ -157,11 +187,14 @@ static void testOrbitals() {
 }
 
 static void testLight() {
+    // 0.10.6 stage 2: the saved web values were made with the web's rounded Rydberg energy, h·c, u/m_e and m_p/m_e. The lab now uses the CODATA 2022 ones, so each web value is multiplied by the
+    // ratio the changed constants give (rydMRatio above; for a wavelength h·c ratio / rydM ratio). The limits stay 1e-14 and 1e-13: the change is about 1e-9, so this is not a loosening.
     for (const SpecRef& r : kSpecRef) {
-        checkNum("rydM " + at(r.Z, r.N), rydM(r.Z, r.N), r.ryd, 1e-14);
+        const double q = rydMRatio(r.Z, r.N), qLam = (nist::hcEVnm / webval::hcEVnm) / q;
+        checkNum("rydM " + at(r.Z, r.N), rydM(r.Z, r.N), r.ryd * q, 1e-14);
         const auto lines = specLines(r.Z, r.N);
         checkNum("line count", lines.size(), 105, 0);
-        for (std::size_t i = 0; i < lines.size() && i < 105; i++) checkNum("line " + at(r.Z, r.N) + " #" + std::to_string(i), lines[i].lam, r.lam[i], 1e-13);
+        for (std::size_t i = 0; i < lines.size() && i < 105; i++) checkNum("line " + at(r.Z, r.N) + " #" + std::to_string(i), lines[i].lam, r.lam[i] * qLam, 1e-13);
     }
     for (const ColRef& c : kColRef) checkStr("lamColor " + fmt::jsString(c.lam), lamColorCss(c.lam), c.css);
 }
@@ -185,6 +218,7 @@ static void testNuclei() {
 
 // The whole lab, run by the same script as the web, with the same random numbers.
 static void testRuns() {
+    const double sLen = nist::a0 / webval::a0, sSpeed = (nist::a0 / nist::tau) / (webval::a0 / webval::tau);   // CODATA 2022 over the web's value: 1.000334, 1.000383
     int run = 0;
     for (const RunRef& r : kRunRef) {
         run++;
@@ -218,12 +252,14 @@ static void testRuns() {
                 std::string log;
                 for (const LogLine& L : lab.s.decLog) log += (log.empty() ? "" : "\n") + L.txt;
                 checkStr(w + " decay log", log, c.log);
-                checkNum(w + " x", lab.s.x, c.x, 1e-9, 1e-22);
-                checkNum(w + " y", lab.s.y, c.y, 1e-9, 1e-22);
-                checkNum(w + " vx", lab.s.vx, c.vx, 1e-9, 1e-6);
-                checkNum(w + " vy", lab.s.vy, c.vy, 1e-9, 1e-6);
+                // 0.10.6 stage 2: the web's Bohr radius (0.529 Å) and atomic unit of time (24.19 as) became the CODATA 2022 ones. The motion in atomic units is the same (the step is
+                // dt x speed / Z^2 atomic units, the dots are sampled in Bohr radii), so every length is the web's x (a0 ratio) and every speed the web's x (a0 / tau ratio), exactly.
+                checkNum(w + " x", lab.s.x, c.x * sLen, 1e-9, 1e-22);
+                checkNum(w + " y", lab.s.y, c.y * sLen, 1e-9, 1e-22);
+                checkNum(w + " vx", lab.s.vx, c.vx * sSpeed, 1e-9, 1e-6);
+                checkNum(w + " vy", lab.s.vy, c.vy * sSpeed, 1e-9, 1e-6);
                 checkNum(w + " dots", lab.s.k, c.k, 0);
-                for (int i = 0; i < 6; i++) checkNum(w + " dot coordinate " + std::to_string(i), lab.s.pts[i], c.pts[i], 1e-6, 1e-17);
+                for (int i = 0; i < 6; i++) checkNum(w + " dot coordinate " + std::to_string(i), lab.s.pts[i], c.pts[i] * sLen, 1e-6, 1e-17);
             }
         }
     }
@@ -240,6 +276,28 @@ static std::string fold(const std::string& s) {
     return o;
 }
 
+// 0.10.6 stage 2: the Learn masses are now the CODATA 2022 values instead of the web's rounded ones. The text is still word for word, except the 16-digit CSS width of a bar ("width:99.94556794247602%"),
+// which moves by about 1e-10 relative with the new masses and is never shown as a number. Every other character must be the same, and each width must agree within 1e-8 relative (100 x the move).
+static void checkTextWidths(const std::string& what, const std::string& got, const std::string& want) {
+    std::string a = got, b = want;
+    double worst = 0; int nw = 0; bool ok = true;
+    std::size_t i = 0, j = 0;
+    std::string ga, gb;
+    for (;;) {
+        const std::size_t p = a.find("width:", i), q = b.find("width:", j);
+        if ((p == std::string::npos) != (q == std::string::npos)) { ok = false; break; }
+        if (p == std::string::npos) { ga += a.substr(i); gb += b.substr(j); break; }
+        ga += a.substr(i, p + 6 - i); gb += b.substr(j, q + 6 - j);
+        char *ea = nullptr, *eb = nullptr;
+        const double x = std::strtod(a.c_str() + p + 6, &ea), y = std::strtod(b.c_str() + q + 6, &eb);
+        worst = std::max(worst, std::fabs(x - y) / std::max(std::fabs(y), 1e-300)); nw++;
+        i = std::size_t(ea - a.c_str()); j = std::size_t(eb - b.c_str());
+    }
+    g_checks++;
+    if (ok && ga == gb && worst < 1e-8) return;
+    if (++g_failed <= 40) std::printf("FAIL %s (text differs outside the bar widths, or a width moved by %.2e)\n", what.c_str(), worst);
+}
+
 // The Learn guides, word for word against the web's own guide functions
 static void testLearn() {
     for (const LearnRef& r : kLearnRef) {
@@ -254,7 +312,7 @@ static void testLearn() {
         checkStr(w + " scale: powers of ten", fold(scaleHtml(p, "ten", 0)), r.scale[0]);
         for (int o = 0; o < 5; o++) checkStr(w + " scale: " + kScaleObjects[o], fold(scaleHtml(p, "scale", o)), r.scale[o + 1]);
         const char* tabs[5] = {"parts", "miss", "count", "proton", "ladder"};
-        for (int t = 0; t < 5; t++) checkStr(w + " weight: " + tabs[t], fold(massHtml(p, tabs[t])), r.mass[t]);
+        for (int t = 0; t < 5; t++) checkTextWidths(w + " weight: " + tabs[t], fold(massHtml(p, tabs[t])), r.mass[t]);
     }
     fmt::setImperial(false);
     // the panel's texts, against what the web's own buildUI wrote
@@ -507,15 +565,24 @@ static void testDensityFromReal() {
 
 // (f) the real orbitals' dots are unchanged bit for bit, with Phase colours = Sign: the positions and signs of 4,800 dots (300 steps, seed 12345) hashed (FNV-1a 64) were
 // recorded from the code BEFORE this change (version 0.10.1). (The 17,818 existing checks also compare whole runs with the web version's.)
+// 0.10.6 stage 2: the dots are stored in METRES, and the Bohr radius changed (0.529 Å -> CODATA 2022), so every stored float changed and the six hashes below were recorded again from the new code.
+// What did NOT change is checked directly: three dots of each run (the 1st, 1,001st and 4,800th) in Bohr radii as the 0.10.5 code made them (pts / its 0.529e-10 m, printed with 9 digits) are compared
+// with the new dots in Bohr radii (pts / kA0) to 1e-6 (a float has 6e-8). The two builds also agreed on all 288,000 stored values to 1.2e-7 (largest relative difference, measured once).
+static const double kOldDots[6][3][3] = {{{-8.49509131, 4.58798511, -0.172708282}, {-6.44851532, -6.55992851, -6.97008981}, {1.90480114, -0.842173815, -1.21785222}},
+      {{-4.65779379, 4.7618688, -4.54753542}, {-2.61313786, -5.34231817, -9.28414245}, {-5.28331002, -0.380771737, -4.61095193}},
+      {{3.57307231, 6.31028783, 6.82481534}, {-6.70778965, -6.43479966, -15.6323054}, {4.5692939, -3.5280141, -7.98969271}},
+      {{2.59999174, 0.154706657, 0.266091743}, {-5.94455697, -1.49512373, -5.18749452}, {2.37630384, -0.308817178, -0.0588654883}},
+      {{-5.36542875, -8.61586375, -11.5972785}, {-11.7242227, -12.4388013, -24.8153651}, {-12.508972, -14.3252507, -13.5947617}},
+      {{5.01336003, 2.34338462, 11.8061452}, {-5.89072322, 2.22509471, -10.7500954}, {10.365039, -4.37580081, 8.63580788}}};
 static uint64_t fnv(const void* d, std::size_t n, uint64_t h = 1469598103934665603ULL) { const unsigned char* p = static_cast<const unsigned char*>(d); for (std::size_t i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ULL; } return h; }
 static void testRealDotsUnchanged() {
     struct C { const char* orb; const char* key; const char* ori; int Z; uint64_t hash; } cs[] = {
-{"2p", "pAx", "x", 1, 0x65b1818ec4437ad5ULL},   // 4800 dots
-    {"2p", "pAx", "z", 1, 0x30e2ae786ad49d82ULL},   // 4800 dots
-    {"3d", "dAx", "xz", 1, 0xea06110ad093f911ULL},   // 4800 dots
-    {"3d", "dAx", "x2y2", 2, 0x5a74c1621ce3d8f2ULL},   // 4800 dots
-    {"4f", "fAx", "xyz", 1, 0x50e7318a4f559379ULL},   // 4800 dots
-    {"3s", "", "", 1, 0xe6b701112cfefccdULL},   // 4800 dots
+{"2p", "pAx", "x", 1, 0xc93e0afcd9cce69aULL},   // 4800 dots
+    {"2p", "pAx", "z", 1, 0x0023e5319ddd8eefULL},   // 4800 dots
+    {"3d", "dAx", "xz", 1, 0xf8b6a385a90a4162ULL},   // 4800 dots
+    {"3d", "dAx", "x2y2", 2, 0xb633d809a5b2079fULL},   // 4800 dots
+    {"4f", "fAx", "xyz", 1, 0xe0f89b80a9f6b154ULL},   // 4800 dots
+    {"3s", "", "", 1, 0x514506a3ffd7ba46ULL},   // 4800 dots
     };
     for (const C& c : cs) {
         seedRandom(12345);
@@ -527,6 +594,11 @@ static void testRealDotsUnchanged() {
         uint64_t h = fnv(lab.s.pts.data(), lab.s.pts.size() * sizeof(float));
         h = fnv(lab.s.sg.data(), lab.s.sg.size(), h);
         checkTrue(std::string("real orbital dots unchanged (positions and signs) from 0.10.1: ") + c.orb + " " + c.ori + " Z=" + std::to_string(c.Z), h == c.hash);
+        {
+            const int ci = int(&c - cs); const long idx[3] = {0, 1000, 4799}; double worst = 0;
+            for (int d = 0; d < 3; d++) for (int a = 0; a < 3; a++) worst = std::max(worst, std::fabs(lab.s.pts[3 * idx[d] + a] / kA0 / kOldDots[ci][d][a] - 1));
+            checkTrue(std::string("real orbital dots in Bohr radii equal the 0.10.5 ones (1e-6): ") + c.orb + " " + c.ori, worst < 1e-6);
+        }
         // the new phase of each dot of a real orbital is 0 where the sign is + and pi where it is -
         bool ok = lab.s.ph.size() == lab.s.sg.size();
         for (std::size_t i = 0; ok && i < std::size_t(lab.s.k) && i < lab.s.sg.size(); i++) ok = lab.s.ph[i] == (lab.s.sg[i] > 0 ? 0.f : float(kPi));
@@ -661,8 +733,8 @@ static void testBeatPeriodAndAmplitude() {
     // amplitude with other mixes: 2 a b M for a^2 = 0.8 / 0.2
     const double z2 = expectZ(q, mkSup("1s", "", "2p", "z", 0.2), 1, 0);
     checkTrue("beats: the amplitude follows 2ab: mix 20 % gives 2 sqrt(0.2 x 0.8) M (1e-4)", std::fabs(z2 / (2 * std::sqrt(0.2 * 0.8) * mClosed) - 1) < 1e-4);
-    // the period: found from the zero of <z>(t) in real seconds (a quarter period), against h / (E2 - E1) written here from CODATA 2018 values
-    const double hJs = 6.62607015e-34, eV = 1.602176634e-19, RyInf = 13.605693122994, mpMe = 1836.15267343;
+    // the period: found from the zero of <z>(t) in real seconds (a quarter period), against h / (E2 - E1) written here from the CODATA 2022 values of the nist:: block above (NIST pages h, e, rydhcev, mpsme, read 2026-10-04)
+    const double hJs = nist::h, eV = nist::e, RyInf = nist::rydEV, mpMe = nist::mpOverMe;
     const double RyRed = RyInf * mpMe / (mpMe + 1);                       // reduced-mass Rydberg energy for hydrogen (proton), eV
     const double Tref = hJs / ((RyRed * eV) * (1.0 - 0.25));              // E2 - E1 = Ry (1 - 1/4)
     double lo = 0, hi = 0.5 * Tref;                                        // <z> goes from + to - between t = 0 and T/2: bisection for the first zero
@@ -673,8 +745,8 @@ static void testBeatPeriodAndAmplitude() {
     }
     const double Tmeas = 4 * 0.5 * (lo + hi);
     std::printf("beats 1s + 2p, hydrogen: period from the zero of <z>(t) %.9e s, h/(E2-E1) from CODATA %.9e s (relative difference %.1e); beatPeriodS %.9e\n", Tmeas, Tref, std::fabs(Tmeas / Tref - 1), beatPeriodS(1, 0, su));
-    // limit 1e-6 as asked: the lab's own constants are the web's hc and the Rydberg energy to 10 digits, plus the proton mass to 1e-9.
-    checkTrue("beats: the period of <z>(t) is h / (E2 - E1) (CODATA h, Rydberg energy, proton mass; 1e-6)", std::fabs(Tmeas / Tref - 1) < 1e-6 && std::fabs(beatPeriodS(1, 0, su) / Tref - 1) < 1e-6);
+    // limit 1e-6 as asked (the lab's constants are the CODATA 2022 ones since 0.10.6 stage 2, so the real difference is far smaller).
+    checkTrue("beats: the period of <z>(t) is h / (E2 - E1) (CODATA 2022 h, Rydberg energy, proton mass; 1e-6)", std::fabs(Tmeas / Tref - 1) < 1e-6 && std::fabs(beatPeriodS(1, 0, su) / Tref - 1) < 1e-6);
     checkTrue("beats: about 4e-16 s for hydrogen 1s + 2p (the owner's h / 10.204 eV)", Tmeas > 4.0e-16 && Tmeas < 4.1e-16);
     // Z = 2: a quarter of the period, up to the reduced-mass difference between hydrogen and helium
     const double T2 = beatPeriodS(2, 2, su);
@@ -959,7 +1031,7 @@ static void testJumpDots() {
 
 // the Orbit view: the electron glides between the circles
 static void testOrbitGlide() {
-    const double a0CODATA = 5.29177210903e-11;                            // m, CODATA 2018 (written from knowledge)
+    const double a0CODATA = nist::a0;                                     // m, CODATA 2022, NIST page bohrrada0 (read 2026-10-04)
     for (int Z : {1, 2}) {
         for (int dir : {1, -1}) {
             AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.paused = false; lab.restart();
@@ -989,8 +1061,8 @@ static void testOrbitGlide() {
             // limit 5e-4: in the step of landing the Orbit view's own leapfrog takes one step on the new circle, and a leapfrog circle wobbles by about (angle per step)^2 / 8 (1.3e-4 at n = 1,
             // speed 5): measured 1.3e-4. The landing circle itself is exact: the reduced-motion test below (no leapfrog after the leap) holds it to 1e-9.
             checkTrue("Orbit: the glide ends on the circle n^2 a0 / Z (the lab's a0, 5e-4: one leapfrog step of wobble)", std::fabs(rEnd / want - 1) < 5e-4 && lab.p.n == n2 && !lab.s.trans);
-            // the lab's Bohr radius is the web's rounded 0.529 Angstrom, 0.034 % below CODATA's 0.529177: stated in REPORT.md as an existing doubtful value
-            checkTrue("Orbit: the circle n^2 a0 / Z of the lab is within 4e-4 of the one with the CODATA Bohr radius (the lab's 0.529 Angstrom is rounded)", std::fabs(want / (double(n2) * n2 / Z * a0CODATA) - 1) < 4e-4);
+            // 0.10.6 stage 2: the lab's Bohr radius is the CODATA 2022 one now (it was the web's rounded 0.529 Angstrom, 0.034 % low), so this check, which allowed 4e-4, now holds to 1e-12
+            checkTrue("Orbit: the circle n^2 a0 / Z of the lab is the one with the CODATA 2022 Bohr radius (1e-12)", std::fabs(want / (double(n2) * n2 / Z * a0CODATA) - 1) < 1e-12);
             checkTrue("Orbit: the glide is monotone (never turns back) and never overshoots either circle", worstBack < 1e-18 && worstOver < 1e-9);
             checkTrue("Orbit: the glide takes about 0.8 s", glideSteps >= 190 && glideSteps <= 194);
         }
@@ -1102,7 +1174,34 @@ static void testOutlineFade() {
     checkTrue("outline: starts at full strength, fades out, is hidden in the middle of the jump, fades back in after landing and is full again", a0 == 1 && a1 < 1 && a1 > 0 && a2 == 0 && a3 <= 0.05 && a4 > 0 && a4 < 1 && a5 == 1);
 }
 
+// ================= The constants (0.10.6 stage 2): CODATA 2022 from the NIST pages =================
+static void testConstants() {
+    struct K { const char* what; double lab, want; };
+    const K ks[] = {{"Bohr radius", kA0, nist::a0}, {"Hartree energy eV", kHartreeEV, nist::hartreeEV}, {"atomic unit of time", kAuTime, nist::tau}, {"fine-structure constant", kAlpha, nist::alpha},
+        {"Rydberg energy eV", kRydInf, nist::rydEV}, {"electron mass energy eV", kMecEV, nist::mecEV}, {"electron mass in u", kMeInU, nist::meInU}, {"proton-electron mass ratio", kMpOverMe, nist::mpOverMe},
+        {"u in kg", kUKg, nist::ukg}, {"u in MeV", kUMeV, nist::uMeV}, {"electron mass kg", kMeKg, nist::meKg}, {"proton mass kg", kMpKg, nist::mpKg}, {"neutron mass kg", kMnKg, nist::mnKg},
+        {"proton mass u", kMpU, nist::mpU}, {"neutron mass u", kMnU, nist::mnU}, {"Boltzmann", kBoltzmann, nist::kB}, {"Planck constant", kPlanckJs, nist::h}, {"speed of light", kC, nist::c},
+        {"elementary charge", kEV, nist::e}, {"h c in eV nm", kHcEVnm, nist::hcEVnm}, {"u in electron masses", kMeU, 1 / nist::meInU}};
+    for (const K& k : ks) checkNum(std::string("constant: ") + k.what + " is the NIST CODATA 2022 value", k.lab, k.want, 1e-14);
+    checkNum("constant: h in eV s (NIST page hev: 4.135 667 696...e-15, ten digits)", kPlanckEVs, 4.135667696e-15, 1e-9);
+    // derived ones: one source
+    checkNum("constant: Bohr radius in Angstrom is a0 x 1e10", kA0Ang, nist::a0 * 1e10, 1e-15);
+    checkNum("constant: metres per fm is exactly 1e-15", kFmLab, 1e-15, 0);
+    checkNum("constant: fm per Bohr radius is a0 / 1e-15 (52 917.721 054 4)", kFmPerA0, 52917.7210544, 1e-12);
+    checkNum("constant: the atomic unit of time in as is tau x 1e18", kAuTimeAs, 24.188843265864, 1e-13);
+    // relations between the constants (independent of how each was typed): alpha c = a0 / tau; Hartree = 2 Rydberg = alpha^2 m_e c^2; a0 = hbar / (m_e c alpha); u / m_e = (u c^2) / (m_e c^2); m_p / m_e
+    const double alphaC = kAlpha * kC;
+    std::printf("constants: a0/tau = %.9e m/s, alpha c = %.9e m/s (relative difference %.1e)\n", kAuSpeed, alphaC, std::fabs(kAuSpeed / alphaC - 1));
+    checkTrue("constant: the atomic unit of speed a0 / tau equals alpha x c (1e-10; measured about 6e-12)", std::fabs(kAuSpeed / alphaC - 1) < 1e-10);
+    checkTrue("constant: Hartree energy = 2 x Rydberg energy (1e-11)", std::fabs(kHartreeEV / (2 * kRydInf) - 1) < 1e-11);
+    checkTrue("constant: Hartree energy = alpha^2 m_e c^2 (1e-9, alpha's uncertainty is 1.6e-10)", std::fabs(kHartreeEV / (kAlpha * kAlpha * kMecEV) - 1) < 1e-9);
+    checkTrue("constant: Bohr radius = hbar / (m_e c alpha) (1e-9)", std::fabs(kA0 / (kPlanckJs / (2 * kPi) / (kMeKg * kC * kAlpha)) - 1) < 1e-9);
+    checkTrue("constant: u / m_e = u c^2 / m_e c^2 (1e-9)", std::fabs(kMeU / (kUMeV * 1e6 / kMecEV) - 1) < 1e-9);
+    checkTrue("constant: m_p / m_e from the kg values and from the u values (1e-9)", std::fabs(kMpKg / kMeKg / kMpOverMe - 1) < 1e-9 && std::fabs(kMpU / kMeInU / kMpOverMe - 1) < 1e-9);
+}
+
 int main() {
+    testConstants();
     testElements();
     testNuclides();
     testFormats();

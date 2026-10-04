@@ -8,6 +8,11 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Try on the PC (0.10.6 stage 2: Atom Lab constants)
+- [ ] Atom Lab, Orbit view, hydrogen: the picture looks the same (the circle is 0.03 % larger); the readout says r 0.53 Å, E −13.61 eV, period 152 as. Try Cloud and Slice too: nothing should look different.
+- [ ] About, "Where the facts come from", Atoms and particles: the new CODATA 2022 line reads well (it is long) and the two old CODATA 2018 lines now say the values were read from NIST.
+- [ ] Decide: keep the proton radius at the web's rounded 0.84 fm, or use CODATA 2022's 0.84075 fm (it changes the nucleon size by 0.09 %).
+
 ## Try on the PC (0.10.5)
 - [ ] Planet physics Real: the note under it reads well and is 11 lines or fewer at normal text size, and also at Extra large text.
 - [ ] Select a comet and a dwarf planet (Ceres, Pluto): the card says its orbit is a simple one fixed at one date. Select Mars: no "In the habitable zone" line. Select the Sun: the habitable zone, frost line and lifetime say "(rough)".

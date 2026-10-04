@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.10.6 alpha, stage 1: the Atom Lab audit, a report only (native/REPORT.md, 18 findings); nothing in the app changed. NIST was unreachable in that session (403), so no CODATA 2022 or NIST ASD value was compared. The Orbit Lab audit (0.10.5) is finished.
-- Next: the owner reads the Atom Lab audit and picks the fix tasks (on the roadmap as planned). After them: the audit of the app and settings. The Orbit speed rows still wait for the owner's timing.
+- Version 0.10.6 alpha, stage 2 is finished: the Atom Lab's constants are CODATA 2022, read from the NIST pages on 2026-10-04 (atom_core.h, one comment per constant; Bohr radius 5.29177210544e-11 m instead of the web's 0.529 Å, Hartree, atomic time, alpha, Rydberg energy, masses, h, c, e). The web-compared tests were rescaled by the constant ratios, not loosened (REPORT.md). Stage 1 (the audit, 18 findings) is in git history: `git show 90049fe:native/REPORT.md`.
+- Not done, still on the roadmap: audit findings 1-3, 5-8, 10-17 (outline of complex states, Superposition of equal states, one energy for hydrogen, ...). Not re-read from a source: the hydrogen-1 atomic mass 1.00782503223 u (AME2020, atom_learn.cpp) and the proton radius (kept at the web's rounded 0.84 fm; CODATA 2022: 0.84075 fm). The owner picks the next fix tasks.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 17,936
+  - atom_tests: 17,974
   - app_tests: 1,385
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)

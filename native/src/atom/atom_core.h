@@ -1,12 +1,10 @@
 // Atom Lab physics core: one electron around any nucleus from hydrogen to oganesson.
 // Ported from the web version's Atom Lab (index.html). No drawing here.
 //
-// Units: everything stored is SI (metres, seconds, m/s, joules). The web works in atomic units
-// (length = Bohr radius, energy = Hartree, time = 24.19 as) with rounded constants for what it
-// shows; the same rounded constants are used here to convert, so every number on screen matches.
-// Two things stay dimensionless on purpose, as in the web: the Metropolis walker that samples the
-// cloud (in Bohr radii, so it draws exactly the same dots from the same random numbers) and the
-// nucleon placement (in fm while it is built). Both are turned into metres when stored.
+// Units: everything stored is SI (metres, seconds, m/s, joules). The web worked in atomic units (length = Bohr radius, energy = Hartree, time = atomic unit of time) with ROUNDED
+// constants (0.529 Å, 27.211 eV, 24.19 as). Since 0.10.6 stage 2 the lab uses the CODATA 2022 values below, so the picture, the readouts and the Learn guides share one set.
+// Two things stay dimensionless on purpose, as in the web: the Metropolis walker that samples the cloud (in Bohr radii, so it draws exactly the same dots from the same random
+// numbers) and the nucleon placement (in fm while it is built). Both are turned into metres when stored.
 #pragma once
 
 #include <cmath>
@@ -20,27 +18,40 @@
 
 namespace atom {
 
-// ---- constants (the web's own values) ----
+// ---- constants: CODATA 2022 (NIST), each read from its page https://physics.nist.gov/cgi-bin/cuu/Value?<key> in the session of 2026-10-04; every page says
+// "Source: 2022 CODATA recommended values". Derived constants are worked out from these, never typed in again. ----
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kLn2 = 0.69314718055994530942;
-constexpr double kA0Ang = 0.529;              // Bohr radius, Å (web: A0)
-constexpr double kHartreeEV = 27.211;         // Hartree energy, eV (web: HARTREE)
-constexpr double kAuTimeAs = 24.19;           // atomic unit of time, attoseconds (web: AU_T)
-constexpr double kA0 = kA0Ang * 1e-10;        // Bohr radius, m
-constexpr double kAuTime = kAuTimeAs * 1e-18; // atomic unit of time, s
-constexpr double kAuSpeed = kA0 / kAuTime;    // atomic unit of speed, m/s
-constexpr double kEV = 1.602176634e-19;       // one electronvolt, J
-constexpr double kHartree = kHartreeEV * kEV; // Hartree energy, J
-constexpr double kFm = 1e-15;                 // one femtometre, m
-constexpr double kFmPerA0 = 52917.7;          // femtometres per Bohr radius (web: FM_AU)
-constexpr double kNucleonR = 0.84;            // proton charge radius, fm (web: NUCLEON_R)
-// The web measures the nucleus in fm and converts with FM_AU = 52,917.7 fm per Bohr radius, while
-// its Bohr radius on screen is 0.529 Å (52,900 fm). To keep every picture and ratio as on the web,
-// nuclear lengths go fm -> Bohr radii -> metres with the web's own two numbers (0.03 % from 1e-15).
-constexpr double kFmLab = kA0 / kFmPerA0;     // metres per fm, as the lab uses it
-constexpr double kRydInf = 13.605693123;      // Rydberg energy for an infinitely heavy nucleus, eV
-constexpr double kHcEVnm = 1239.841984;       // h·c, eV·nm
-constexpr double kMeU = 1822.888486;          // one atomic mass unit in electron masses
+constexpr double kC = 299792458.0;                    // speed of light, m/s, exact. page Value?c
+constexpr double kEV = 1.602176634e-19;               // elementary charge = one electronvolt in J, exact. page Value?e (1.602 176 634e-19 C)
+constexpr double kPlanckJs = 6.62607015e-34;          // Planck constant, J s, exact. page Value?h
+constexpr double kPlanckEVs = kPlanckJs / kEV;        // h in eV·s = 4.135 667 696...e-15 (page Value?hev says the same)
+constexpr double kHcEVnm = kPlanckJs * kC / kEV * 1e9;   // h·c in eV·nm = 1239.841 984 33, exact; worked out from h, c and e (NIST has no page for it)
+constexpr double kA0 = 5.29177210544e-11;             // Bohr radius, m: 5.291 772 105 44(82)e-11 m. page Value?bohrrada0
+constexpr double kA0Ang = kA0 * 1e10;                 // Bohr radius, Å (0.529 177 210 544)
+constexpr double kHartreeEV = 27.211386245981;        // Hartree energy, eV: 27.211 386 245 981(30). page Value?hrev
+constexpr double kAuTime = 2.4188843265864e-17;       // atomic unit of time, s: 2.418 884 326 5864(26)e-17 s. page Value?aut
+constexpr double kAuTimeAs = kAuTime * 1e18;          // atomic unit of time, attoseconds (24.188 843 265 864)
+constexpr double kAuSpeed = kA0 / kAuTime;            // atomic unit of speed, m/s (= alpha·c to 6e-12, checked in the tests)
+constexpr double kAlpha = 7.2973525643e-3;            // fine-structure constant: 7.297 352 5643(11)e-3. page Value?alph
+constexpr double kHartree = kHartreeEV * kEV;         // Hartree energy, J
+constexpr double kRydInf = 13.605693122990;           // Rydberg energy h·c·R_inf for an infinitely heavy nucleus, eV: 13.605 693 122 990(15). page Value?rydhcev
+constexpr double kMecEV = 510998.95069;               // electron mass energy m_e c², eV: 0.510 998 950 69(16) MeV. page Value?mec2mev
+constexpr double kMeInU = 5.485799090441e-4;          // electron mass in u: 5.485 799 090 441(97)e-4. page Value?meu
+constexpr double kMeU = 1.0 / kMeInU;                 // one atomic mass unit in electron masses (1822.888 486 28)
+constexpr double kMpOverMe = 1836.152673426;          // proton-electron mass ratio: 1836.152 673 426(32). page Value?mpsme
+constexpr double kUKg = 1.66053906892e-27;            // unified atomic mass unit, kg: 1.660 539 068 92(52)e-27. page Value?ukg
+constexpr double kUMeV = 931.49410372;                // u c² in MeV: 931.494 103 72(29). page Value?muc2mev
+constexpr double kMeKg = 9.1093837139e-31;            // electron mass, kg: 9.109 383 7139(28)e-31. page Value?me
+constexpr double kMpKg = 1.67262192595e-27;           // proton mass, kg: 1.672 621 925 95(52)e-27. page Value?mp
+constexpr double kMnKg = 1.67492750056e-27;           // neutron mass, kg: 1.674 927 500 56(85)e-27. page Value?mn
+constexpr double kMpU = 1.0072764665789;              // proton mass in u: 1.007 276 466 5789(83). page Value?mpu
+constexpr double kMnU = 1.00866491606;                // neutron mass in u: 1.008 664 916 06(40). page Value?mnu
+constexpr double kBoltzmann = 1.380649e-23;           // J/K, exact. page Value?k
+constexpr double kFm = 1e-15;                         // one femtometre, m (exact)
+constexpr double kFmLab = kFm;                        // metres per fm: now just the exact value (the web needed its own conversion, 0.03 % off)
+constexpr double kFmPerA0 = kA0 / kFm;                // femtometres per Bohr radius (52 917.721 054 4)
+constexpr double kNucleonR = 0.84;                    // proton charge radius, fm, ROUNDED: CODATA 2022 gives 0.84075(64) fm (page Value?rp, read 2026-10-04); the web's 0.84 is kept
 constexpr double kYearS = 365.25 * 86400;     // one year, s (web: YEAR_S)
 constexpr double kTRoom = 293.15, kTMax = 6000;   // room temperature and the top of the temperature slider, K
 constexpr int kCap = 12000;                   // cloud dots kept (web: CAP)
@@ -126,7 +137,6 @@ std::string stateText(int id);                         // "2pz" or "2p (m = +1)"
 // The states are NORMALISED here (normFactor), so a^2 and b^2 are the shares. The density changes with the beat phase theta = (EB - EA) t / hbar. A wave's overall phase has no
 // physical meaning, so psiSuper() is given relative to state A (multiplied by e^(+i EA t/hbar)): the colours then turn only at the beat frequency, not at the huge energy frequency.
 // Both ids may be real orbitals or complex states. In this model all l of one n share one energy: 2s + 2p do not beat (no fine structure, no Lamb shift).
-constexpr double kPlanckEVs = kHcEVnm * 1e-9 / 299792458.0;   // h in eV·s, from the lab's own h·c and the exact speed of light
 struct Superposition { int idA = 0, idB = 0; double a = 1, b = 0; };
 double levelEV(int Z, int N, int n);                   // E_n = -rydM(Z, N) Z^2 / n^2, eV
 double beatEV(int Z, int N, const Superposition& s);   // E_B - E_A, eV (signed)
