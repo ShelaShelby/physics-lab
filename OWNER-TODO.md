@@ -8,6 +8,9 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## 0.10.8 stage 2 (the Dirac arithmetic): nothing new to look at
+- [x] Nothing the app shows changed (every text is identical, checked for all 118 elements), so the stage 1 screen checks below are still the only ones. The Windows build is what stage 2 fixed: its result is in REPORT.md.
+
 ## Look at on the PC (0.10.8 stage 1: the Relativity / Dirac setting) — the drawing could not be compiled or seen in the cloud
 - [ ] Atom Lab, under "Light spectrum": the new setting "Relativity (Dirac levels)" (Off / On, off by default). Switch it on for hydrogen, iron (Z = 26) and a heavy element (Z = 92): the strip should show split lines (more lines, farther apart as Z grows), the note under the picture, the list of Dirac levels, and under "Real spectrum (NIST)" a row of text per series with the lab's lines against NIST's components and the miss with and without Dirac. Look at every theme and at every text size: nothing may overlap or run past the panel edge, and every glyph (−, →, ▼) must draw.
 - [ ] Read the words as a reader would: does the one-line explanation say what changes (levels and lines in the spectrum cards) and what does not (pictures, readouts, photon jumps, Lamb shift, nuclear size)? Does the long note under the setting, when on, make clear the pictures did NOT become relativistic?

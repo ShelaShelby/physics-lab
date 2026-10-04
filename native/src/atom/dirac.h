@@ -21,10 +21,13 @@ namespace atom {
 //   E = m c^2 [ (1 + (Z alpha)^2 / (n - delta)^2)^(-1/2) - 1 ],   delta = (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2).
 // The Sommerfeld fine-structure formula, the exact solution of the Dirac equation for a Coulomb potential (standard textbook material: Bethe & Salpeter, Quantum Mechanics of One- and Two-Electron Atoms;
 // Griffiths ch. 6 gives its expansion). Written from knowledge, NOT looked up in the session that wrote it (only physics.nist.gov was reachable): the tests check it against hand arithmetic, its expansion and the
-// measured NIST lines. Constants: alpha and m c^2 from CODATA 2022 (atom_core.h). Written with expm1 / log1p and delta = (Z alpha)^2 / ((j + 1/2) + sqrt(...)), the same function, so the small relativistic
-// correction keeps its digits. Valid for Z alpha < j + 1/2, i.e. every Z up to 118 (Z alpha = 0.86).
+// measured NIST lines. Constants: alpha and m c^2 from CODATA 2022 (atom_core.h). Written with no subtraction of nearly equal numbers (0.10.8 stage 2): delta = (Z alpha)^2 / ((j + 1/2) + sqrt(...)) and
+// E = -m c^2 t / (s (1 + s)), t = (Z alpha)^2 / (n - delta)^2, s = sqrt(1 + t), so only +, *, / and sqrt are used and the result is good to a few units of the last digit (the naive form loses up to 10 digits).
+// Valid for Z alpha < j + 1/2, i.e. every Z up to 118 (Z alpha = 0.86).
 double diracInfiniteEV(int Z, int n, int twoJ);
-// The relativistic correction alone: the Dirac energy minus the non-relativistic one with the SAME constants, -(1/2) m c^2 (Z alpha)^2 / n^2. It is of the order (Z alpha)^2 of the level, negative (the level lies deeper).
+// The defect delta = (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2) used inside it (it depends on Z and j only): (Z alpha)^2 / ((j + 1/2) + sqrt(...)), so it keeps its digits where the naive difference loses them.
+double diracDelta(int Z, int twoJ);
+// The relativistic correction alone: the Dirac energy minus the non-relativistic one with the SAME constants, -(1/2) m c^2 (Z alpha)^2 / n^2. It is of the order (Z alpha)^2 of the level, negative (the level lies deeper). Worked out directly (see dirac.cpp), NOT as the difference of the two energies, which would lose about 5 digits for hydrogen.
 double diracCorrectionEV(int Z, int n, int twoJ);
 // The level the lab shows with the setting on: the lab's own non-relativistic level, with the nucleus's real mass (levelEV, the reduced-mass Rydberg energy), plus the correction above. In words: the main
 // energy has the reduced mass, as it always had; the relativistic correction is worked out for an infinitely heavy nucleus. Putting the reduced mass into the whole Dirac formula instead would scale the correction

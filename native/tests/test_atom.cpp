@@ -1787,7 +1787,7 @@ static void testRelativityText() {
         const std::size_t k = all.find(kNucPrefix);
         caveat = caveat && k != std::string::npos && all.find(kNucSuffix, k) != std::string::npos;
         // the model line: the Dirac 1s level is deeper than the non-relativistic one by this much (independent: NIST alpha typed in the nist:: block)
-        const double x = Z * nist::alpha, pct = 100 * ((1 - std::sqrt(1 - x * x)) / (0.5 * x * x) - 1);
+        const double x = Z * nist::alpha, sq = std::sqrt(1 - x * x), pct = 100 * x * x / ((1 + sq) * (1 + sq));   // = 100 ((1 - sq) / ((Z alpha)^2 / 2) - 1) without the subtractions (0.10.8 stage 2)
         model = model && all.find(kModelPrefix + " (no relativity, fine structure, Lamb shift or spin). For a point nucleus the Dirac equation puts the 1s level " + jsNum(pct, 2) + " % deeper than this lab's.") != std::string::npos;
     }
     checkTrue("relativity: the readout, the hint and the spectrum note warn at exactly the same Z (none below 27, all three from 27) for Z = 1, 19, 20, 26, 27, 92, 118", agree == 7);
@@ -1795,7 +1795,7 @@ static void testRelativityText() {
     checkTrue("relativity: the model line gives the Dirac-minus-lab 1s difference at every Z, from the lab's own formula", model);
     checkTrue("relativity: the chance-inside-the-nucleus line says it is a non-relativistic estimate that this lab does not correct", caveat);
     // the line: the correction to the 1s energy is 0.917 % at Z = 26 and 0.990 % at Z = 27 (about 1 %); (Z alpha)^2 = 0.0388 and v/c = 0.197 at 27
-    auto corr = [](int Z) { const double x = Z * nist::alpha; return 100 * ((1 - std::sqrt(1 - x * x)) / (0.5 * x * x) - 1); };
+    auto corr = [](int Z) { const double x = Z * nist::alpha, sq = std::sqrt(1 - x * x); return 100 * x * x / ((1 + sq) * (1 + sq)); };   // cancellation-free (0.10.8 stage 2)
     threshold = std::fabs(corr(26) - 0.917) < 0.001 && std::fabs(corr(27) - 0.990) < 0.001 && corr(19) < 0.5 && kRelativityZ == 27 && std::fabs(27 * nist::alpha - 0.197) < 0.001;
     checkTrue("relativity: the threshold Z = 27 is where the 1s energy is 0.99 % off (0.917 % at 26), Z alpha = 0.197, (Z alpha)^2 = 0.039", threshold);
 }
@@ -2146,9 +2146,11 @@ static void testRadialReadout() {
 // from asd_data.inc), so the test checks that parsing, building and compiling kept what the fetch produced.
 // The Dirac level formula (point nucleus, reduced mass): E(n, j) = mu c^2 [ (1 + (Z alpha)^2 / (n - d)^2)^(-1/2) - 1 ], d = (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2). It is the standard textbook formula (Bethe &
 // Salpeter; Griffiths ch. 6 gives its expansion), written from knowledge, not looked up here; the comparison with ASD below is its check.
+// 0.10.8 stage 2: written WITHOUT subtracting nearly equal numbers (it was the plain textbook form, 1e-10 off at the worst; harmless for the guards below, but a reference should be accurate):
+// d = (Z alpha)^2 / ((j + 1/2) + sqrt(...)) and (1 + t)^(-1/2) - 1 = -t / (s (1 + s)), s = sqrt(1 + t).
 static double diracE(double mu, int Z, int n, double j) {      // eV, binding energy negative; mu in eV (m c^2 times the reduced-mass factor)
-    const double za = Z * nist::alpha, d = (j + 0.5) - std::sqrt((j + 0.5) * (j + 0.5) - za * za);
-    return mu * (1 / std::sqrt(1 + za * za / ((n - d) * (n - d))) - 1);
+    const double za = Z * nist::alpha, d = za * za / ((j + 0.5) + std::sqrt((j + 0.5) * (j + 0.5) - za * za)), t = za * za / ((n - d) * (n - d)), sq = std::sqrt(1 + t);
+    return -mu * t / (sq * (1 + sq));
 }
 static const AsdLine* asdFind(const AsdSpectrum& sp, const char* transitionStart) {
     for (int i = 0; i < sp.count; i++) if (std::string(sp.lines[i].transition).rfind(transitionStart, 0) == 0) return &sp.lines[i];
@@ -2267,24 +2269,67 @@ static void testAsdData() {
 // ================= 0.10.8 stage 1: relativity as an option (Dirac levels) =================
 // References that do NOT come from the lab's own functions:
 //  (1) the CODATA 2022 constants typed in namespace nist above (alpha, m_e c^2, the Rydberg energy, h c);
-//  (2) the textbook arrangement of the Sommerfeld / Dirac formula, E = m c^2 [ (1 + (Z alpha / (n - (j + 1/2) + sqrt((j + 1/2)^2 - (Z alpha)^2)))^2)^(-1/2) - 1 ], worked out here in long double (the lab uses
-//      a different arrangement, with expm1 / log1p, so that the small relativistic correction keeps its digits). Same formula, so (1) and (2) check the arithmetic, not the physics;
+//  (2) the textbook arrangement of the Sommerfeld / Dirac formula, E = m c^2 [ (1 + (Z alpha / (n - (j + 1/2) + sqrt((j + 1/2)^2 - (Z alpha)^2)))^2)^(-1/2) - 1 ], worked out here in DOUBLE-DOUBLE arithmetic (about 32
+//      digits, built below from error-free transformations and std::fma): the plain subtractions of the textbook form are then harmless (they cost at most 11 digits of 32). The lab uses cancellation-free
+//      rearrangements instead (dirac.cpp). Same formula, so (1) and (2) check the arithmetic, not the physics. 0.10.8 stage 2: this block was first written with long double, which is 80 bits on Linux and only 64 on MSVC,
+//      so on Windows the reference was the inaccurate side and six checks failed. **DO NOT USE long double (or any extended precision) IN A TEST REFERENCE: it is not portable.** The 80-digit values typed below
+//      (Python decimal) pin the double-double code itself;
 //  (3) its expansion to the order (Z alpha)^4 (Bethe & Salpeter; Griffiths ch. 6): E = -(m c^2 (Z alpha)^2 / 2 n^2) [1 + ((Z alpha)^2 / n^2)(n / (j + 1/2) - 3/4)]: a different formula, whose miss must scale as (Z alpha)^6;
 //  (4) NIST ASD (data/asd, 0.10.7 stage 2): MEASURED wavelengths, matched to the lab's lines by the n and j of both levels, read from ASD's own transition text.
 // Both formulas are the standard textbook ones, written from knowledge, not looked up in this session (only physics.nist.gov was reachable); (4) is what checks them against nature.
-static long double refDiracF(long double za, int n, int twoJ) {     // f - 1, (m c^2 units), binding negative
-    const long double jh = (twoJ + 1) / 2.0L, k = n - jh + std::sqrt(jh * jh - za * za);
-    return 1.0L / std::sqrt(1.0L + za * za / (k * k)) - 1.0L;
+// ---- double-double arithmetic (a value is hi + lo, |lo| <= half an ulp of hi): the portable high-precision reference. Only +, -, *, / and sqrt of doubles and std::fma, which are exactly rounded on every IEEE
+// platform; no extended precision. (Knuth's two-sum; the product's error from fma; Newton steps for / and sqrt.)
+struct DD { double hi, lo; };
+static DD ddNorm(double a, double b) { const double s = a + b; return {s, b - (s - a)}; }                       // |a| >= |b|
+static DD ddTwoSum(double a, double b) { const double s = a + b, v = s - a; return {s, (a - (s - v)) + (b - v)}; }
+static DD ddTwoProd(double a, double b) { const double p = a * b; return {p, std::fma(a, b, -p)}; }
+static DD ddAdd(DD a, DD b) { DD s = ddTwoSum(a.hi, b.hi); const DD t = ddTwoSum(a.lo, b.lo); s.lo += t.hi; s = ddNorm(s.hi, s.lo); s.lo += t.lo; return ddNorm(s.hi, s.lo); }
+static DD ddNeg(DD a) { return {-a.hi, -a.lo}; }
+static DD ddSub(DD a, DD b) { return ddAdd(a, ddNeg(b)); }
+static DD ddMul(DD a, DD b) { DD p = ddTwoProd(a.hi, b.hi); p.lo += a.hi * b.lo + a.lo * b.hi; return ddNorm(p.hi, p.lo); }
+static DD ddDiv(DD a, DD b) {
+    const double q1 = a.hi / b.hi; DD r = ddSub(a, ddMul(b, DD{q1, 0}));
+    const double q2 = r.hi / b.hi; r = ddSub(r, ddMul(b, DD{q2, 0}));
+    const double q3 = r.hi / b.hi;
+    return ddAdd(ddNorm(q1, q2), DD{q3, 0});
 }
-static double refDiracInfEV(int Z, int n, int twoJ) { return double(nist::mecEV * refDiracF(Z * (long double)nist::alpha, n, twoJ)); }
+static DD ddSqrt(DD a) { const double s = std::sqrt(a.hi); const DD r = ddSub(a, ddTwoProd(s, s)); return ddAdd(DD{s, 0}, DD{r.hi / (2 * s), 0}); }
+static double ddRel(DD got, DD want) { return std::fabs((got.hi - want.hi) + (got.lo - want.lo)) / std::fabs(want.hi); }
+// the textbook formula with plain subtractions, in double-double, from the same double x = Z * alpha the lab forms:
+//   delta = (j + 1/2) - sqrt((j + 1/2)^2 - x^2), k = n - delta, E = m c^2 ((1 + x^2 / k^2)^(-1/2) - 1), correction c = E + m c^2 x^2 / (2 n^2)
+struct DiracDD { DD E, c, delta; };
+static DiracDD ddDirac(int Z, int n, int twoJ) {
+    const double x = Z * nist::alpha, jh = (twoJ + 1) / 2.0;
+    const DD x2 = ddTwoProd(x, x), delta = ddSub(DD{jh, 0}, ddSqrt(ddSub(DD{jh * jh, 0}, x2))), k = ddSub(DD{double(n), 0}, delta);
+    const DD f = ddDiv(DD{1, 0}, ddSqrt(ddAdd(DD{1, 0}, ddDiv(x2, ddMul(k, k)))));
+    const DD E = ddMul(DD{nist::mecEV, 0}, ddSub(f, DD{1, 0}));
+    const DD c = ddAdd(E, ddDiv(ddMul(DD{nist::mecEV, 0}, x2), DD{2.0 * n * n, 0}));
+    return {E, c, delta};
+}
+static double refDiracInfEV(int Z, int n, int twoJ) { return ddDirac(Z, n, twoJ).E.hi; }
+static double refCorrEV(int Z, int n, int twoJ) { return ddDirac(Z, n, twoJ).c.hi; }
+// typed 80-digit values (Python decimal, 80 digits, from the same double Z alpha and m c^2), as {hi, lo}: Z, n, 2j, E (eV), the correction c (eV), delta
+struct DiracTyped { int Z, n, twoJ; DD E, c, delta; };
+static const DiracTyped kDiracTyped[] = {
+    {1, 1, 1, {-13.605874258016533, -5.969003669744587e-16}, {-0.00018113521962715416, -3.783553996857771e-21}, {2.6626031696629847e-05, 2.678459506123533e-22}},
+    {1, 2, 1, {-3.4014798855307187, 4.520228029309583e-17}, {-5.660483149211426e-05, 1.871567248221069e-21}, {2.6626031696629847e-05, 2.678459506123533e-22}},
+    {1, 2, 3, {-3.401434601424379, -1.6954613731282566e-17}, {-1.1320725152316283e-05, 2.5521239038358817e-22}, {1.3312882920136858e-05, 8.51972088924689e-24}},
+    {1, 3, 5, {-1.5117459164951206, 6.853153541232245e-17}, {-2.2361843531711144e-06, -1.0230414748475084e-22}, {8.875238869593463e-06, -1.719576036269966e-22}},
+    {1, 6, 11, {-0.3779360598389038, 2.2515491269053562e-17}, {-1.3976121196891403e-07, 5.097490222003399e-24}, {4.437614511676528e-06, 2.0789311433837705e-22}},
+    {92, 1, 1, {-132279.93376052065, -6.296308638660601e-12}, {-17121.34716916764, -1.763957495721877e-12}, {0.2588653725842363, 9.632853740197007e-18}},
+    {92, 2, 1, {-34215.48418576323, 1.7159236195463466e-12}, {-5425.837537924971, 1.20527299962243e-13}, {0.2588653725842363, 9.632853740197007e-18}},
+    {92, 2, 3, {-29649.837103282563, -1.3856411128590466e-12}, {-860.1904554443101, -2.5179651681133387e-14}, {0.11604656746651436, -4.190429857505444e-18}},
+    {92, 3, 5, {-12959.73819605728, -4.92793156578785e-14}, {-164.33968590694485, -4.320951067065598e-16}, {0.07608472490143743, -4.275308759882891e-18}},
+    {92, 6, 11, {-3208.9251872264167, 1.1499724852477167e-14}, {-10.075559688832845, 6.188910780668959e-16}, {0.03767825960769684, 2.7536361417673256e-18}}
+};
 static double refSeriesEV(int Z, int n, int twoJ) {                 // the (Z alpha)^4 expansion
     const double x = Z * nist::alpha, jh = (twoJ + 1) / 2.0;
     return -(nist::mecEV * x * x / (2.0 * n * n)) * (1 + x * x / (double(n) * n) * (n / jh - 0.75));
 }
 // the lab's hybrid level written again by hand: reduced-mass main term (the lab's nuclear mass, typed again above) + the infinite-mass relativistic correction
 static double refHybridEV(int Z, int N, int n, int twoJ) {
-    const double M = nuclearMassNew(Z, N), ry = nist::rydEV * M / (M + 1), x = Z * nist::alpha;
-    return -ry * Z * Z / (double(n) * n) + (refDiracInfEV(Z, n, twoJ) + 0.5 * nist::mecEV * x * x / (double(n) * n));
+    const double M = nuclearMassNew(Z, N), ry = nist::rydEV * M / (M + 1);
+    return -ry * Z * Z / (double(n) * n) + refCorrEV(Z, n, twoJ);
 }
 // the lines of ASD for ion Z that are electric-dipole (n changes, l changes by 1), as {nLo, nHi, 2jLo, 2jHi} -> Ritz wavelengths
 struct AsdKey { int a, b, c, d; bool operator<(const AsdKey& o) const { return std::array<int, 4>{a, b, c, d} < std::array<int, 4>{o.a, o.b, o.c, o.d}; } };
@@ -2322,16 +2367,18 @@ static void testDirac() {
     //  scaling of Dirac - non-relativistic with (Z alpha)^2: 0.50676 -> 0.5118 (the next-order coefficient is 1/2); log-log slope off 2 by at most 1.5412e-2 -> 1.557e-2; miss of the (Z alpha)^4 expansion 0.00782 -> 0.00790;
     //  ASD, worst relative miss of any n <= 6 component, with Dirac / without, and the improvement factor: H I 3.3169e-6 -> 3.351e-6 / 2.6431e-5 -> 2.670e-5, x7.969 -> 7.88; He II 1.0931e-5 -> 1.104e-5 / 1.0573e-4 -> 1.068e-4,
     //  x9.672 -> 9.57; Fe XXVI 5.7231e-4 -> 5.781e-4 / 1.8239e-2 -> 1.843e-2, x31.87 -> 31.5; what is left, Lyman-alpha of 110 ions, 220 components: (ASD - Dirac) / (non-relativistic - Dirac) at most 0.27164 -> 0.2744.
+    constexpr double GUARD_ROUND_E = 2e-15, GUARD_ROUND_HYB = 1e-15;   // rounding level against the double-double reference: measured worst 6.66e-16 (3 units of the last digit) and 0
     constexpr double GUARD_RATIO = 0.5118, GUARD_SLOPE = 1.557e-2, GUARD_SERIES = 0.00790, GUARD_LEFT = 0.2744;
     constexpr double GUARD_H_ON = 3.351e-6, GUARD_H_OFF = 2.670e-5, GUARD_H_RATIO = 7.88, GUARD_HE_ON = 1.104e-5, GUARD_HE_OFF = 1.068e-4, GUARD_HE_RATIO = 9.57, GUARD_FE_ON = 5.781e-4, GUARD_FE_OFF = 1.843e-2, GUARD_FE_RATIO = 31.5;
     const double a = nist::alpha, mc = nist::mecEV;
     // ---- (1) the level against hand-made values ----
-    {   // hydrogen 1s, infinite mass: j = 1/2, k = sqrt(1 - alpha^2), so E = m c^2 (sqrt(1 - alpha^2) - 1) in closed form
-        const double want = double(nist::mecEV * (std::sqrt(1.0L - (long double)a * a) - 1.0L));
-        checkNum("Dirac H 1s, infinite mass, = m c^2 (sqrt(1 - alpha^2) - 1) worked out here from CODATA", diracInfiniteEV(1, 1, 1), want, 1e-12);
+    {   // hydrogen 1s, infinite mass: j = 1/2, k = sqrt(1 - alpha^2), so E = m c^2 (sqrt(1 - alpha^2) - 1) = - m c^2 alpha^2 / (1 + sqrt(1 - alpha^2)) in closed form (the second form has no subtraction;
+        // the first, in plain double, is off by 2.5e-12: it subtracts 1 from 0.99997338)
+        const double want = -nist::mecEV * a * a / (1 + std::sqrt(1 - a * a));
+        checkNum("Dirac H 1s, infinite mass, = - m c^2 alpha^2 / (1 + sqrt(1 - alpha^2)) worked out here from CODATA (the cancellation-free form of m c^2 (sqrt(1 - alpha^2) - 1))", diracInfiniteEV(1, 1, 1), want, 1e-15);
         std::printf("Dirac H 1s infinite mass: %.12f eV (the non-relativistic %.12f eV)\n", diracInfiniteEV(1, 1, 1), -0.5 * mc * a * a);
-        const double wantFe = double(nist::mecEV * (std::sqrt(1.0L - (long double)26 * a * 26 * a) - 1.0L));
-        checkNum("Dirac Fe XXVI 1s, infinite mass, = m c^2 (sqrt(1 - (26 alpha)^2) - 1) worked out here", diracInfiniteEV(26, 1, 1), wantFe, 1e-12);
+        const double x26 = 26 * a, wantFe = -nist::mecEV * x26 * x26 / (1 + std::sqrt(1 - x26 * x26));
+        checkNum("Dirac Fe XXVI 1s, infinite mass, = - m c^2 (26 alpha)^2 / (1 + sqrt(1 - (26 alpha)^2)) worked out here", diracInfiniteEV(26, 1, 1), wantFe, 1e-15);
         std::printf("Dirac Fe 1s infinite mass: %.6f eV (non-relativistic %.6f eV)\n", diracInfiniteEV(26, 1, 1), -0.5 * mc * 26 * a * 26 * a);
     }
     double worstFormula = 0; bool allFinite = true;
@@ -2341,18 +2388,18 @@ static void testDirac() {
                 const double got = diracInfiniteEV(Z, n, j2), want = refDiracInfEV(Z, n, j2);
                 worstFormula = std::max(worstFormula, std::fabs(got - want) / std::fabs(want)); allFinite = allFinite && std::isfinite(got) && got < 0;
             }
-    std::printf("Dirac level, infinite mass, vs the textbook arrangement in long double (Z up to 118, n <= 6, every j): worst relative difference %.3e\n", worstFormula);
+    std::printf("Dirac level, infinite mass, vs the textbook arrangement in double-double (Z up to 118, n <= 6, every j): worst relative difference %.3e\n", worstFormula);
     checkTrue("Dirac level: every level is finite and bound for Z = 1 .. 118 (Z alpha < 1)", allFinite);
-    checkTrue("Dirac level agrees with the textbook arrangement of the formula to 1e-12 for Z = 1, 2, 6, 26, 54, 92, 118, n <= 6, every j (rounding level, as the closed-form guards of the radial graph)", worstFormula < 1e-12);
+    checkTrue("Dirac level agrees with the textbook arrangement of the formula (double-double) to 2e-15 for Z = 1, 2, 6, 26, 54, 92, 118, n <= 6, every j (rounding level: 2.3 units of the last digit; the measured worst is printed above)", worstFormula < GUARD_ROUND_E);
     // ---- the lab's level: reduced-mass main term + the infinite-mass relativistic correction ----
     double worstHyb = 0;
     for (int Z : {1, 2, 26}) for (int n = 1; n <= 4; n++) for (int j2 = 1; j2 <= 2 * n - 1; j2 += 2) worstHyb = std::max(worstHyb, std::fabs(diracEV(Z, defaultN(Z), n, j2) - refHybridEV(Z, defaultN(Z), n, j2)) / std::fabs(refHybridEV(Z, defaultN(Z), n, j2)));
-    checkTrue("Dirac level of the lab = the hand-made hybrid (reduced-mass term from the NIST masses + the infinite-mass Dirac correction) to 1e-12 (H, He+, Fe, n <= 4)", worstHyb < 1e-12);
+    checkTrue("Dirac level of the lab = the hand-made hybrid (reduced-mass term from the NIST masses + the infinite-mass Dirac correction) to the rounding level (H, He+, Fe, n <= 4)", worstHyb < GUARD_ROUND_HYB);
     std::printf("Dirac level of the lab vs the hand-made hybrid: worst relative difference %.3e\n", worstHyb);
     // ---- the reduced mass: what the hybrid does and how far it is from the plain m -> mu substitution (itself only a leading-order recoil term, not an exact one) ----
     {
         const int Z = 1, N = 0; const double M = nuclearMassNew(Z, N), mu = M / (M + 1);
-        const double corr = (refDiracInfEV(1, 2, 3) + 0.5 * mc * a * a / 4) - (refDiracInfEV(1, 1, 1) + 0.5 * mc * a * a);   // the infinite-mass relativistic correction to the Lyman-alpha (2p3/2) photon energy
+        const double corr = refCorrEV(1, 2, 3) - refCorrEV(1, 1, 1);   // the infinite-mass relativistic correction to the Lyman-alpha (2p3/2) photon energy
         const double hyb = diracEV(Z, N, 2, 3) - diracEV(Z, N, 1, 1);                                                      // the lab's photon energy
         const double sub = mu * (nist::rydEV * 0.75 + corr);                                                               // m -> mu in the whole formula: the correction is scaled by mu too
         const double E = nist::hcEVnm / refLam(Z, N, 1, 1, 2, 3, true);
@@ -2384,7 +2431,7 @@ static void testDirac() {
         double worstRatio = 0, worstSlope = 0, worstSeries = 0, worstMass = 0, prevR = 0, prevZ = 0;
         std::printf("Dirac vs non-relativistic 1s, infinite mass, (E_Dirac - E_NR) / E_NR over (Z alpha)^2 / 4 (1 at the lowest order):");
         for (int Z : {1, 2, 3, 4, 6, 8, 10, 14, 20}) {
-            const double x2 = Z * a * Z * a, nr = -0.5 * mc * x2, r = (diracInfiniteEV(Z, 1, 1) - nr) / nr;
+            const double x2 = Z * a * Z * a, nr = -0.5 * mc * x2, r = refCorrEV(Z, 1, 1) / nr;   // (E_Dirac - E_NR) / E_NR from the double-double reference: the plain difference of the two energies would lose 5 digits
             worstRatio = std::max(worstRatio, std::fabs(r / (x2 / 4) - 1) / x2);       // the miss of the leading order, in units of (Z alpha)^2: about constant (3/8 in the expansion's next term)
             if (prevR != 0) worstSlope = std::max(worstSlope, std::fabs(std::log(r / prevR) / std::log(double(Z) / prevZ) - 2));
             prevR = r; prevZ = Z;
@@ -2475,7 +2522,7 @@ static void testDirac() {
             same = same && !cmp.empty();
         }
         std::printf("compareIonDirac vs the hand-made comparison: worst difference of a relative miss %.3e (the misses themselves are 1e-6 to 1e-2)\n", maxD);
-        checkTrue("compareIonDirac gives the component counts and, to 1e-11 (rounding of double against long double; the misses are 1e-6 and up), the worst miss of the hand-made comparison (H I, He II, Fe XXVI, every transition n <= 6)", same && maxD < 1e-11);
+        checkTrue("compareIonDirac gives the component counts and, to 1e-14 (rounding; measured 3.2e-16 since 0.10.8 stage 2, it was 1.1e-13 while the reference was long double; the misses themselves are 1e-6 and up), the worst miss of the hand-made comparison (H I, He II, Fe XXVI, every transition n <= 6)", same && maxD < 1e-14);
         const auto L = diracLines(1, 0);
         bool shape = !L.empty(), limits = true;
         for (const DiracLine& l : L) { shape = shape && l.lam > 0 && l.lo >= 1 && l.lo <= 5 && (l.hi == 0 ? l.jHi2 == 0 : l.hi > l.lo && l.hi <= l.lo + 20); if (l.hi == 0) limits = limits && l.lo >= 1; }
@@ -2527,6 +2574,85 @@ static void testDirac() {
     }
 }
 
+// ================= 0.10.8 stage 2: the precision of the Dirac formula =================
+// Stage 1's Windows build failed because its reference was computed with long double, which is 80 bits on Linux and 64 on MSVC: the plain subtraction sqrt(1 - alpha^2) - 1 (the result is 2.7e-5, so 11 of the 16
+// digits of the sqrt are thrown away) was then 2.5e-12 off, and the LAB's value, which had no such subtraction, looked wrong. Here the references are well conditioned and portable: double-double arithmetic (the
+// classes above) of the textbook formula, pinned by 80-digit values typed from Python's decimal module. Written from the same double Z alpha the lab forms, so what is measured is the arithmetic of the lab's
+// rearrangements, not the rounding of the input. The "old" forms below are written out here exactly as they were (the naive textbook form; stage 1's expm1/log1p energy and its E + m c^2 (Z alpha)^2 / 2 n^2 correction).
+// The lab's rewritten quantities (rounding level, units of the last digit 2.2e-16; measured worst: delta 1.77e-16, energy 4.56e-16, correction 1.29e-15, readout 2.98e-16): about 2-4 times the measured.
+// The old forms' errors (plain IEEE arithmetic, so the same on every platform; the guard is measured - 1 %, rounded down): Z = 1: delta 6.01e-11, energy 1.45e-10, stage 1 correction 2.07e-10;
+// Z = 92: stage 1 correction 3.65e-14, naive energy 1.46e-14.
+constexpr double GUARD_NOW_D = 5e-16, GUARD_NOW_E = 1e-15, GUARD_NOW_C = 5e-15, GUARD_NOW_R = 1e-15;
+constexpr double GUARD_NAIVE_D = 5.95e-11, GUARD_NAIVE_E = 1.43e-10, GUARD_NAIVE_C = 2.04e-10, GUARD_NAIVE_C92 = 3.61e-14, GUARD_NAIVE_E92 = 1.44e-14;
+static void testDiracPrecision() {
+    // guards: rounding-level ones are in units of the last digit (2.2e-16), not measured + 1 %, because the last bit may differ between compilers; the deterministic ones (the naive forms' errors, plain IEEE operations) are
+    // measured - 1 % (they must stay at least that bad, or the test no longer shows the cancellation): see the numbers printed below and the report.
+    {   // the double-double arithmetic itself
+        const DD r2 = ddSqrt(DD{2, 0}), e1 = ddSub(ddMul(r2, r2), DD{2, 0}), e2 = ddSub(ddMul(ddDiv(DD{1, 0}, DD{3, 0}), DD{3, 0}), DD{1, 0});
+        std::printf("double-double: sqrt(2)^2 - 2 = %.1e, (1/3) 3 - 1 = %.1e\n", e1.hi, e2.hi);
+        checkTrue("double-double: sqrt(2)^2 = 2 and (1/3) 3 = 1 to 1e-30 (about 32 digits), so it can serve as the reference", std::fabs(e1.hi) < 1e-30 && std::fabs(e2.hi) < 1e-30);
+    }
+    double worstDD = 0, tE = 0, tC = 0, tD = 0;
+    for (const DiracTyped& r : kDiracTyped) {
+        const DiracDD d = ddDirac(r.Z, r.n, r.twoJ);
+        worstDD = std::max({worstDD, ddRel(d.E, r.E), ddRel(d.c, r.c), ddRel(d.delta, r.delta)});
+        tE = std::max(tE, ddRel(DD{diracInfiniteEV(r.Z, r.n, r.twoJ), 0}, r.E)); tC = std::max(tC, ddRel(DD{diracCorrectionEV(r.Z, r.n, r.twoJ), 0}, r.c)); tD = std::max(tD, ddRel(DD{diracDelta(r.Z, r.twoJ), 0}, r.delta));
+    }
+    std::printf("typed 80-digit values (Z = 1 and 92, 5 levels each): double-double worst %.2e; the lab: energy %.2e, correction %.2e, delta %.2e (relative)\n", worstDD, tE, tC, tD);
+    // The textbook form has the plain subtractions, so even 32 digits leave less at Z = 1, n = 6: measured worst 3.64e-20 (the correction, whose size is 4e-7 of the energy it is the difference of), + 1 %. Still 4 orders
+    // of magnitude finer than a double (the lab is at 1e-15), so it is a valid reference; the energy itself is good to 1.3e-26.
+    checkTrue("double-double reference = the 80-digit values typed from Python decimal, to 3.7e-20 relative (measured 3.64e-20 + 1 %; E, the correction and delta, Z = 1 and 92, five levels each)", worstDD < 3.7e-20);
+    checkTrue("the lab's energy, correction and delta agree with the typed 80-digit values to 5e-15 (a few units of the last digit; Z = 1 and 92, five levels each)", tE < 5e-15 && tC < 5e-15 && tD < 5e-15);
+    // ---- digits gained, against the double-double reference: Z = 1 and 92, n = 1 .. 6, every j ----
+    struct Worst { double naive = 0, old = 0, now = 0; };
+    Worst wE[2], wD[2], wC[2];
+    const int zs[2] = {1, 92};
+    for (int zi = 0; zi < 2; zi++) {
+        const int Z = zs[zi];
+        for (int n = 1; n <= 6; n++)
+            for (int j2 = 1; j2 <= 2 * n - 1; j2 += 2) {
+                const double x = Z * nist::alpha, x2 = x * x, jh = (j2 + 1) / 2.0, m = nist::mecEV;
+                const DiracDD ref = ddDirac(Z, n, j2);
+                const double dNaive = jh - std::sqrt(jh * jh - x2), dStable = x2 / (jh + std::sqrt(jh * jh - x2));
+                const double eNaive = m * (1 / std::sqrt(1 + x2 / ((n - dNaive) * (n - dNaive))) - 1);                 // the textbook form with the plain subtractions
+                const double eOld = m * std::expm1(-0.5 * std::log1p(x2 / ((n - dStable) * (n - dStable))));            // stage 1's energy (already without the subtractions)
+                const double cOld = eOld + 0.5 * m * x2 / (double(n) * n), cNaive = eNaive + 0.5 * m * x2 / (double(n) * n);   // stage 1's correction: the difference of two energies
+                auto up = [](Worst& w, double naive, double old, double now, DD ref) { w.naive = std::max(w.naive, ddRel(DD{naive, 0}, ref)); w.old = std::max(w.old, ddRel(DD{old, 0}, ref)); w.now = std::max(w.now, ddRel(DD{now, 0}, ref)); };
+                up(wD[zi], dNaive, dNaive, diracDelta(Z, j2), ref.delta);
+                up(wE[zi], eNaive, eOld, diracInfiniteEV(Z, n, j2), ref.E);
+                up(wC[zi], cNaive, cOld, diracCorrectionEV(Z, n, j2), ref.c);
+            }
+    }
+    auto digits = [](double was, double now) { return std::log10(was / std::max(now, 1e-18)); };
+    std::printf("digits against the double-double reference (worst relative error over n = 1..6 and every j; digits gained = log10(old / now)):\n");
+    for (int zi = 0; zi < 2; zi++) {
+        std::printf("  Z = %2d  delta: naive %.2e -> now %.2e (%.1f digits)   energy: naive %.2e, stage 1 %.2e -> now %.2e (%.1f digits over naive)   correction: naive-based %.2e, stage 1 %.2e -> now %.2e (%.1f digits over stage 1)\n",
+                    zs[zi], wD[zi].naive, wD[zi].now, digits(wD[zi].naive, wD[zi].now), wE[zi].naive, wE[zi].old, wE[zi].now, digits(wE[zi].naive, wE[zi].now), wC[zi].naive, wC[zi].old, wC[zi].now, digits(wC[zi].old, wC[zi].now));
+    }
+    checkTrue("precision: the lab's delta, energy and correction are within GUARD_NOW_D / GUARD_NOW_E / GUARD_NOW_C of the double-double reference for Z = 1 and 92, n = 1..6, every j (rounding level, units of the last digit)",
+              wD[0].now < GUARD_NOW_D && wD[1].now < GUARD_NOW_D && wE[0].now < GUARD_NOW_E && wE[1].now < GUARD_NOW_E && wC[0].now < GUARD_NOW_C && wC[1].now < GUARD_NOW_C);
+    checkTrue("precision: the naive forms really are bad at Z = 1 (so this test shows the cancellation): delta off by at least GUARD_NAIVE_D, the energy by at least GUARD_NAIVE_E, stage 1's correction by at least GUARD_NAIVE_C (measured - 1 %)",
+              wD[0].naive >= GUARD_NAIVE_D && wE[0].naive >= GUARD_NAIVE_E && wC[0].old >= GUARD_NAIVE_C);
+    checkTrue("precision: at Z = 92 the stage 1 correction was off by at least GUARD_NAIVE_C92 and the naive energy by at least GUARD_NAIVE_E92 (measured - 1 %); the new ones are not", wC[1].old >= GUARD_NAIVE_C92 && wE[1].naive >= GUARD_NAIVE_E92);
+    checkTrue("precision: the rewrites gain digits at Z = 1: at least 4 for the correction over stage 1, at least 5 for the energy over the naive form", digits(wC[0].old, wC[0].now) >= 4 && digits(wE[0].naive, wE[0].now) >= 5);
+    // ---- the readout's two heavy-atom formulas, 1 - sqrt(1 - (Z alpha)^2): the percentage and the 1s energy ----
+    {
+        double worstOld = 0, worstNew = 0, worstOldE = 0, worstNewE = 0; bool same = true;
+        for (int Z = 1; Z <= 118; Z++) {
+            const double zx = Z * nist::alpha, zx2 = zx * zx, sq = std::sqrt(1 - zx2);
+            const double oldPct = 100 * ((1 - sq) / (0.5 * zx2) - 1), newPct = 100 * zx2 / ((1 + sq) * (1 + sq)), oldE = nist::mecEV * (1 - sq), newE = nist::mecEV * zx2 / (1 + sq);
+            const DD y = ddTwoProd(zx, zx), s = ddSqrt(ddSub(DD{1, 0}, y)), num = ddSub(DD{1, 0}, s);
+            const DD refPct = ddMul(DD{100, 0}, ddSub(ddDiv(num, ddMul(DD{0.5, 0}, y)), DD{1, 0})), refE = ddMul(DD{nist::mecEV, 0}, num);
+            worstOld = std::max(worstOld, ddRel(DD{oldPct, 0}, refPct)); worstNew = std::max(worstNew, ddRel(DD{newPct, 0}, refPct));
+            worstOldE = std::max(worstOldE, ddRel(DD{oldE, 0}, refE)); worstNewE = std::max(worstNewE, ddRel(DD{newE, 0}, refE));
+            same = same && jsNum(oldPct, 2) == jsNum(newPct, 2) && fmtEV(oldE) == fmtEV(newE);      // what the readout SHOWS (2 decimals; the 1s energy in eV text)
+        }
+        std::printf("readout, Z = 1..118: the percentage off by %.2e (old) -> %.2e (now), the 1s energy off by %.2e (old) -> %.2e (now); the shown text identical for all 118: %s\n", worstOld, worstNew, worstOldE, worstNewE, same ? "yes" : "NO");
+        checkTrue("readout: the cancellation-free percentage and 1s energy are within GUARD_NOW_R of the double-double reference for Z = 1 .. 118 (rounding level)", worstNew < GUARD_NOW_R && worstNewE < GUARD_NOW_R);
+        checkTrue("readout: the text the readout shows (the percentage to 2 decimals, the 1s energy) is the same with the old and the new arithmetic for all 118 elements: nothing the app shows changed", same);
+    }
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -2564,6 +2690,7 @@ int main() {
     testRadialReadout();
     testAsdData();
     testDirac();
+    testDiracPrecision();
     testElements();
     testNuclides();
     testFormats();

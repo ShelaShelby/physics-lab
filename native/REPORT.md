@@ -1,48 +1,41 @@
-# Native Physics Lab 0.10.8 (alpha) — stage 1 report: relativity as a real option (Dirac levels)
+# Native Physics Lab 0.10.8 (alpha) — stage 2 report: the Dirac formula's precision (fix of the red stage 1 build)
 
-New setting "Relativity (Dirac levels)" in the Atom Lab, under "Light spectrum", **off by default**. `index.html` untouched (sha256 e5501387ae64…). The three deferred optimisation items stayed deferred. No helper agents.
+`index.html` untouched (sha256 e5501387ae64…). No helper agents. Only the Atom Lab's Dirac code and its tests changed; no text the app shows changed.
 
-## What it does
-- On: the **Light spectrum** and **Real spectrum (NIST)** cards use Dirac levels (one electron, point nucleus). A level depends on n and j, so 2p splits into 2p 1/2 and 2p 3/2 and every line splits (more as Z grows). The strip, the visible-line marks and the real-spectrum card draw ONE list of lines (`specLinesFor`), so the card compares exactly what is drawn. The card compares each NIST component with the lab line of the same n and j (not the nearest line) and shows the miss with and without Dirac. A short list gives the split levels (n = 1–3, gap in µeV/GHz).
-- **Does not change, and the app says so (one-line explanation, long note when on, spectrum note):** clouds, orbitals, outlines and radial graph (non-relativistic wave functions); the energy readout, the photon of a jump (and its ▼ mark) and the quantum beats (the lab's orbitals have no spin, so no j to give them). No Lamb shift, other QED or nuclear size.
-- **Selection rules:** the spectrum enforces l changes by 1 and j by 0 or 1 (`diracAllowed`). **Not changed: `targets()`** (which orbitals a jump may reach): it enforces l ± 1 and the orientation rule, which is already the l part of the Dirac rule; the j part needs a j the orbital picture does not have, so a 2p → 1s jump cannot say which component it is. Left as is, said in the app and OWNER-TODO (a question for the owner).
+## What I established about the cancellation (checked, not assumed)
+- Python `decimal`, 60 digits, with the same double inputs as the lab: exact mc²(√(1−α²)−1) = −13.605874258016532628…; the same in plain double = −13.605874257982812, **relative error 2.48e-12**; written without the subtraction, −mc²α²/(1+√(1−α²)) = −13.605874258016533 (error 1.5e-18, i.e. correct to the last bit). √(1−α²) = 0.99997337…, so 1 − it = 2.66e-5 and the subtraction throws away 11 of 16 digits (ulp(1) / 2.66e-5 = 8.3e-12).
+- **So the lab's value (−13.605874258016534) was the accurate one and the test's hand-made reference was the inaccurate one.** Stage 1's test used `long double` (80 bits on Linux, 64 on MSVC).
+- Reproduced before fixing: a copy of the stage 1 test with every `long double` and `…L` literal made `double` failed **exactly the six checks of the Windows run, with the CI's numbers** (got −13.605874258016534 / want −13.605874257982812; got 121.56642146623935 / want …640098). No tolerance was loosened anywhere.
 
-## The formula and its source
-E(n,j) = mc²[(1 + (Zα)²/(n − δ)²)^(−1/2) − 1], δ = (j+½) − √((j+½)² − (Zα)²): the Sommerfeld fine-structure formula, the exact Dirac level for a point nucleus (comment in `dirac.h`; About entry added: Bethe & Salpeter, already listed, and Griffiths for the expansion). **Written from knowledge, not looked up** (only physics.nist.gov was reachable). The code uses expm1/log1p and δ = (Zα)²/(…) so the small correction keeps its digits. Checks are below; the book was not re-read (OWNER-TODO).
+## The fix
+1. **Test references** (`test_atom.cpp`): double-double arithmetic (two-sum, error-free product via `std::fma`, Newton division and sqrt; ~32 digits) of the plain textbook formula, so its subtractions are harmless. The double-double code itself is pinned by 80-digit values typed from Python `decimal` (10 levels, Z = 1 and 92; E, correction, δ). Measured accuracy: 3.6e-20 at worst (the correction at Z = 1, n = 6, where it is 4e-7 of the energy it is the difference of; the energy is good to 1.3e-26) — four orders finer than the lab's 1e-15, so it is a valid reference. A test comment says: never use `long double` or any extended precision in a reference. Also rewritten well-conditioned: stage 0.10.7's `diracE` helper and `testRelativityText`'s percentage (guards untouched). `grep` finds `long double` only in comments.
+2. **The lab's own code** (`dirac.cpp`, `atom_sim.cpp`): stage 1's energy (expm1/log1p) and δ (as a quotient) were **already** cancellation-free, so the user's two named places needed no rescue in substance; the energy now uses −t/(s(1+s)) (only +, ×, ÷, sqrt, which are correctly rounded on every platform). Real cancellation found and fixed: **(a)** the relativistic correction c = E_Dirac − E_NR (a difference of two energies, 13.6 eV vs 1.8e-4 eV for H) — now worked out directly: c/mc² = (s−1)²(s+2)/(2s) − (Zα)²δ(2n−δ)/(2n²k²), s−1 = t/(s+1), no subtraction of near-equals; **(b)** the readout's percentage `100((1−√)/(½x²) −1)` → 100x²/(1+√)² and 1s energy `mc²(1−√)` → mc²x²/(1+√); **(c)** the level-gap rows now use differences of corrections, not of two levels. Looked at and left: spectrum lines R(1/lo²−1/hi²)+Δc (benign: exact rational, Δc now accurate), the misses (calculated − measured: that difference is the physics), nuclear mass (no near-equal terms). Not examined: `sqrt(1−e²)` in the Orbit Lab (eccentricity; not this code).
 
-## Reduced mass (not quietly reused)
-Done: the lab's own reduced-mass level (`levelEV`) **plus the relativistic correction of an infinitely heavy nucleus**. Not done: m → μ in the whole Dirac formula (that scales the correction by μ/m too, which is only a leading-order recoil term), and the full recoil terms beyond the reduced mass (no source could be read; their size is not known to me). For hydrogen Lyα (2p 3/2): the two treatments differ by 9.2e-8 eV = **9.1e-9 of the photon energy** (10.1989 eV), which is 5.4e-4 of the Dirac correction itself (1.70e-4 eV). The app says: reduced mass in the main energy, infinitely heavy nucleus in the correction, further recoil not included.
-
-## Against NIST ASD (worst of all n ≤ 6 components, matched by n and j; relative to the wavelength)
-| | components | without Dirac | with Dirac | closer by |
+## Digits gained (worst relative error over n = 1…6, every j, against the double-double reference; measured in the test)
+| | Z = 1 old → now | digits | Z = 92 old → now | digits |
 |---|---|---|---|---|
-| H I | 140 | 2.643e-5 | 3.317e-6 | 7.97× |
-| He II | 140 | 1.057e-4 | 1.093e-5 | 9.67× |
-| Fe XXVI | 91 | 1.824e-2 | 5.723e-4 | 31.9× |
+| δ (naive → quotient) | 6.0e-11 → 7.0e-17 | 5.9 | 9.6e-15 → 1.8e-16 | 1.7 |
+| energy (naive → now; stage 1 was 2.5e-16) | 1.45e-10 → 4.6e-16 | 5.5 | 1.46e-14 → 4.2e-16 | 1.5 |
+| correction (stage 1 → now) | 2.07e-10 → 1.3e-15 | 5.2 | 3.7e-14 → 1.0e-15 | 1.5 |
+Readout, Z = 1…118: percentage 1.9e-7 → 3.0e-16 (relative to a value of 0.0027 % for H), 1s energy 2.5e-12 → 2.8e-16.
 
-Fe XXVI Lyα: lab off 0.179738854 nm; Dirac 0.177701150 (2p 3/2), 0.178241973 (2p 1/2); NIST Ritz 0.177801471, 0.178344041.
-- **Rule against NIST data:** for H I and He II the set of (n, j, n′, j′) lines the rule gives for n ≤ 6 equals ASD's electric-dipole set exactly (90 of 90); for all 110 ions every ASD E1 component is allowed by the rule. Lines of equal energy are one line (Hα: 5 lines, ASD has 7 components).
-- NIST's own 2p 3/2 − 2p 1/2 gap for hydrogen (from its two Lyα Ritz wavelengths) is 10.96905 GHz; Dirac gives 10.94965 GHz (m c² α⁴/32 = 10.9493 GHz): NIST is 0.1772 % larger. That part is not in Dirac theory; its cause was not checked against a source.
+## Did any app-visible value change? (a correction of arithmetic, not of physics)
+Stage 1 and stage 2 dumped side by side (118 elements × 2 isotopes: lines, notes, level rows, the Dirac note, the NIST comparison rows, and info()/hint() for 5 elements × 4 views, Dirac on: 197,843 lines): **every displayed text is identical, 0 differences.** Underlying numbers moved only at rounding level: Dirac wavelengths ≤ 2.1e-15 relative, levels ≤ 7.9e-16, the tiny misses (~1e-6 of the wavelength) ≤ 4.7e-10 of themselves, hydrogen's 2p 3/2 − 2p 1/2 gap (a difference of two levels) 9.8e-12 (exact 4.5284106339798e-5 eV; the card now shows it from corrections, to 1e-16).
 
-## The leftover (shown, not hidden)
-Lyα of all 110 ions (220 components): non-relativistic lab > NIST > Dirac in wavelength every time; NIST sits 0.022 to 0.272 of the way from Dirac to the old line. Size of the Dirac line's miss: 3.3e-6 (H), 1.1e-5 (He II), 5.7e-4 (Fe XXVI) of the wavelength. This is the Lamb shift (which lifts 1s), other QED and the nuclear size; **I did not separate them or look up their sizes**. The Real spectrum note says so on screen.
+## Stage 1 conclusions re-derived (the guards of stage 1 are unchanged and all still pass)
+Re-run, not assumed: improvement against ASD H I 2.643e-5 → 3.317e-6 (7.97×), He II 1.057e-4 → 1.093e-5 (9.67×), Fe XXVI 1.824e-2 → 5.72e-4 (31.9×); Lamb-side share (ASD − Dirac)/(NR − Dirac) 0.02203 … 0.27164 over 220 components, order NR > ASD > Dirac in all; selection rule vs ASD 90 of 90 for H I and He II; NIST gap 0.1772 % above Dirac; reduced-mass difference 9.24e-8 eV (9.1e-9 of Lyα). All equal stage 1's at the printed digits; **none moved** (the 2.5e-12 error was far below every tolerance, as expected).
 
-## Nothing changes with the setting off (proved)
-The previous commit was built in a separate tree. One program using only the old API dumped specLines, visibleLines, compareIon, levels, spectrum notes (118 elements × 2 isotopes), info() and hint() and the first 3,000 cloud numbers (5 elements × 4 views): **2,442 lines, 1.6 MB, identical byte for byte** old vs new. In the tests: the lists and notes compared in the same run (no stored hashes), and a lab told "Off" by hand equals one never told. The settings file has no "dirac" line when off. The existing counts and every existing test and saved reference are unchanged; none was loosened.
+## Nothing changes with the setting OFF (proved again)
+Stage 1 vs stage 2 built separately, one program with the old API (specLines, visibleLines, compareIon, levels, notes, info(), hint(), first 3,000 cloud numbers): **2,422 lines, 1.6 MB, identical byte for byte.** (The readout's percentage/energy are Off-visible: their doubles moved by ≤ 1e-12 but the text shown is the same for all 118.)
 
-## Tests (first written from independent references, then the code; Linux GCC Release)
-atom 18,373 (was 18,326: +47); app 1,517 (+2; About edit list 17 → 18); orbit 1,540; nbody 37; jpl 55; moon 24; moon_real 59. All seven pass.
-- Hand values from CODATA 2022 (H 1s = mc²(√(1−α²)−1), Fe 1s likewise, both at 1e-12); textbook arrangement in long double for Z up to 118, n ≤ 6, every j: worst 7.9e-14. The expansion to (Zα)⁴ misses by 0.0078 (Zα)⁴. 2p 3/2 − 2p 1/2 for H = m c² α⁴/32 within α² (measured 0.62 α²). The Dirac − non-relativistic difference scales as (Zα)² for Z = 1–20 (next term 1/2 (Zα)²); the reduced mass is a separate 5.4e-4 factor, checked apart.
-- Guards are measured + 1 % (improvement factors: − 1 %), written next to each test. Two guards (1e-12, 1e-11) are rounding-level, ≥ 10× the measured 7.9e-14 / 1.1e-13, as in the radial-graph tests.
-- **Mutations (each reverted, file compared byte for byte):** j off by one step → 11 failed; sign of the correction flipped → 7; j rule loosened to Δj ≤ 2 → 1; δ added instead of subtracted → 13; upper level's j taken from the lower → 2.
+## Tests (Linux GCC Release)
+atom **18,382** (stage 1: 18,373; +9: double-double, typed 80-digit values, the digit table, the readout); app 1,517; orbit 1,540; nbody 37; jpl 55; moon 24; moon_real 59. All seven pass. Also passed: the atom tests built with `-O0 -ffp-contract=off`, with `-O2 -mfma -ffp-contract=fast` (fused multiply-add, as other compilers do) and with `-O3` — numbers identical. Guards: rounding-level ones in units of the last digit (2–4× measured), the old forms' errors measured − 1 % (deterministic IEEE), stated beside each. Tightened (never loosened): lab vs reference 1e-12 → 2e-15, compareIonDirac 1e-11 → 1e-14.
 
-## Found, not changed
-- `compareIon` (0.10.7, Off) counts forbidden M1/E2 ASD lines as components for H I (e.g. 1s–2s at 121.5673 nm); left, since Off must stay identical. The Dirac comparison uses E1 lines only.
-- `tools/native_edits.js` lists 3 About edits but `test_app.cpp` and `app_text.inc` have 18: running `make_app_text.js` would drop the others. My About entry went into `app_text.inc` and the test list, as in earlier stages.
+## Perturbations (each reverted; `dirac.cpp` compared byte for byte)
+Correction's second term added instead of subtracted → 13 failed; (1+s) replaced by 2s in the energy → 8; sqrt added inside δ → 13; **t perturbed by 1e-12 relative → 4**; j off by one step → 15.
 
-## Not compiled, not seen, not tested
-- `atom_panel.cpp` and `settings.cpp` are not built here. Compiled against stand-ins (`-Wall -Wextra`, clean): `spectrumPicture`, `realStrip`, `realTicks`, `realSpectrumCard` and the new settings block. **Not compiled:** the `settings.cpp` lines (three short edits, read by eye). **Never seen:** layout, theme colours, text sizes, the long notes at large text, glyphs (−, →, ▼). OWNER-TODO has the checks.
-- Not measured: speed (the Dirac list is rebuilt each frame while on, ~325 level energies; cheap, not timed). Not tested: Windows behaviour beyond CI.
+## Not tested
+MSVC itself (the Windows run is the test; its `long double` was simulated as `double`). `atom_panel.cpp`/`settings.cpp` untouched this stage.
 
 ## Windows CI result
 Pending at the time of writing; recorded below after the run.

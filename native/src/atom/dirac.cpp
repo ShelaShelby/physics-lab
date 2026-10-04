@@ -7,15 +7,33 @@
 namespace atom {
 
 // ---- the level (see the header for the formula, its source and its limits) ----
-double diracInfiniteEV(int Z, int n, int twoJ) {
+// Every quantity here is written WITHOUT subtracting two nearly equal numbers (0.10.8 stage 2): the naive forms lose digits in proportion to how small (Z alpha)^2 is (1 minus sqrt(1 - alpha^2) is 2.7e-5,
+// so subtracting 1 from sqrt(1 - alpha^2) throws away 11 of 16 digits; for n = 6 and Z = 1 the energy of the naive form is off by 1e-10). Measured by the tests against a double-double reference.
+namespace {
+double deltaOf(double x2, double jh) { return x2 / (jh + std::sqrt(jh * jh - x2)); }   // (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2) = (Z alpha)^2 / ((j + 1/2) + sqrt(...)): the difference of two nearly equal numbers, as a quotient
+struct Core { double x2, delta, k, t, s; };         // (Z alpha)^2, delta, k = n - delta, t = (Z alpha)^2 / k^2, s = sqrt(1 + t) = 1 / f
+Core core(int Z, int n, int twoJ) {
+    Core c;
     const double x = Z * kAlpha, jh = (twoJ + 1) * 0.5;
-    const double delta = x * x / (jh + std::sqrt(jh * jh - x * x));      // (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2), written so that it does not cancel for small Z alpha
-    const double k = n - delta;
-    return kMecEV * std::expm1(-0.5 * std::log1p(x * x / (k * k)));    // m c^2 [ (1 + (Z alpha)^2 / k^2)^(-1/2) - 1 ]
+    c.x2 = x * x;
+    c.delta = deltaOf(c.x2, jh);
+    c.k = n - c.delta;
+    c.t = c.x2 / (c.k * c.k);
+    c.s = std::sqrt(1 + c.t);
+    return c;
+}
+}  // namespace
+double diracDelta(int Z, int twoJ) { const double x = Z * kAlpha; return deltaOf(x * x, (twoJ + 1) * 0.5); }
+double diracInfiniteEV(int Z, int n, int twoJ) {
+    const Core c = core(Z, n, twoJ);
+    return -kMecEV * c.t / (c.s * (1 + c.s));               // m c^2 (1/s - 1) = -m c^2 t / (s (1 + s)): no subtraction of 1
 }
 double diracCorrectionEV(int Z, int n, int twoJ) {
-    const double x = Z * kAlpha;
-    return diracInfiniteEV(Z, n, twoJ) + 0.5 * kMecEV * x * x / (double(n) * n);
+    // E_Dirac - E_NR = m c^2 [ (1/s - 1 + t/2) + ((Z alpha)^2 / 2 n^2 - t/2) ]. The first bracket is (s - 1)^2 (s + 2) / (2 s) (from t = s^2 - 1), with s - 1 = t / (s + 1); the second is
+    // -((Z alpha)^2 / 2) delta (2n - delta) / (n^2 k^2) (from n^2 - k^2 = delta (2n - delta)). Both are products and quotients; each is of the order (Z alpha)^4, and they only partly cancel (a factor 4 at most).
+    const Core c = core(Z, n, twoJ);
+    const double sm1 = c.t / (c.s + 1), a = sm1 * sm1 * (c.s + 2) / (2 * c.s), b = 0.5 * c.x2 * c.delta * (2.0 * n - c.delta) / (double(n) * n * c.k * c.k);
+    return kMecEV * (a - b);
 }
 double diracEV(int Z, int N, int n, int twoJ) { return levelEV(Z, N, n) + diracCorrectionEV(Z, n, twoJ); }
 
@@ -89,7 +107,7 @@ std::vector<std::string> diracLevelRows(int Z, int N) {
     for (int n = 1; n <= 3; n++) {
         for (int j2 = 1; j2 < 2 * n; j2 += 2)
             rows.push_back("n = " + std::to_string(n) + ": " + shells(n, j2) + " (j = " + jText(j2) + "): −" + jsNum(-diracEV(Z, N, n, j2), 8) + " eV");
-        if (n >= 2) rows.push_back("n = " + std::to_string(n) + " gap (j = " + jText(2 * n - 1) + " above j = 1/2): " + gapText(diracEV(Z, N, n, 2 * n - 1) - diracEV(Z, N, n, 1)));
+        if (n >= 2) rows.push_back("n = " + std::to_string(n) + " gap (j = " + jText(2 * n - 1) + " above j = 1/2): " + gapText(diracCorrectionEV(Z, n, 2 * n - 1) - diracCorrectionEV(Z, n, 1)));
     }
     return rows;
 }
@@ -102,9 +120,8 @@ std::string diracExplain() {
 }
 std::string diracOffNote() { return "the lab uses the non-relativistic levels, one for each n, as it always did."; }
 std::string diracOnNote(int Z) {
-    const int N = defaultN(Z);
     return "On: the levels and lines come from the Dirac equation for one electron round a point nucleus. A level now depends on j as well as n, so lines split, and the split grows with Z (for " + std::string(name(Z)) + ": 2p j = 3/2 above 2p j = 1/2 by " +
-           gapText(diracEV(Z, N, 2, 3) - diracEV(Z, N, 2, 1)) + "). The clouds, orbitals, outlines and radial graph are still the non-relativistic wave functions: only the energies and lines are Dirac. "
+           gapText(diracCorrectionEV(Z, 2, 3) - diracCorrectionEV(Z, 2, 1)) + "). The clouds, orbitals, outlines and radial graph are still the non-relativistic wave functions: only the energies and lines are Dirac. "
            "The main energy keeps the reduced mass; the relativistic correction is worked out for an infinitely heavy nucleus, and further recoil effects are not included. "
            "In Dirac theory 2s and 2p (j = 1/2) have exactly the same energy; in reality the Lamb shift (a QED effect) separates them. QED and the size of the nucleus also move every line a little, so NIST's measured lines still differ slightly from these: "
            "for Lyman-alpha, NIST's wavelength lies between the Dirac line and the non-relativistic one, for every ion NIST has. Photon jumps, their ▼ marks and the energy readouts keep the non-relativistic values (the lab's orbitals have no spin or j).";

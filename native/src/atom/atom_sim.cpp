@@ -901,12 +901,12 @@ std::vector<std::string> AtomLab::info() {
     more.push_back(tempLine(p.Z));
     more.push_back("layer: " + s.layer + "  ·  this nucleus in real life: " + isoInfo(p.Z, p.N));
     {   // the model, said at EVERY Z: non-relativistic. The Dirac comparison is the lab's own formula (see kRelativityZ in atom_core.h)
-        const double zx = p.Z * kAlpha, pct = 100 * ((1 - std::sqrt(1 - zx * zx)) / (0.5 * zx * zx) - 1);
+        const double zx = p.Z * kAlpha, zx2 = zx * zx, sq = std::sqrt(1 - zx2), pct = 100 * zx2 / ((1 + sq) * (1 + sq));   // 100 ((1 - sq) / ((Z alpha)^2 / 2) - 1) = 100 (Z alpha)^2 / (1 + sq)^2, written without the subtractions (0.10.8 stage 2)
         more.push_back("model: one electron, non-relativistic (no relativity, fine structure, Lamb shift or spin). For a point nucleus the Dirac equation puts the 1s level " + jsNum(pct, 2) + " % deeper than this lab's.");
     }
     if (p.dirac == "On") more.push_back("relativity setting: ON. The spectrum cards show Dirac energies and lines; this readout's energy, the photons of your jumps and the clouds are still non-relativistic.");
     if (p.Z >= kRelativityZ) {   // relativity: the 1s electron of a heavy nucleus moves at a large fraction of light speed
-        const double x = p.Z * kAlpha, model = -levelEV(p.Z, p.N, 1), real = kMecEV * (1 - std::sqrt(1 - x * x));   // Dirac 1s: mc²(√(1−(Zα)²) − 1)
+        const double x = p.Z * kAlpha, model = -levelEV(p.Z, p.N, 1), real = kMecEV * x * x / (1 + std::sqrt(1 - x * x));   // Dirac 1s: mc²(1 − √(1−(Zα)²)) = mc² (Zα)² / (1 + √(1−(Zα)²)), without the subtraction (0.10.8 stage 2)
         more.push_back("1s electron speed: " + fmt::fixed(100 * x, 0) + "% of light speed  ·  real 1s energy −" + fmtEV(real) + " vs −" + fmtEV(model) + " in this lab");
     }
     if (p.style != "Hard balls" && s.layer != "Atom") more.push_back("nucleon edge: charge density ∝ e^(−r / 0.24 fm), so there is no sharp surface (rms radius 0.84 fm)");

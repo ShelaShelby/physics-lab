@@ -17,6 +17,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.8", "Atom Lab: the Dirac formula's arithmetic made exact, and a Windows test fixed (stage 2)",
+     "The Windows build of the previous stage failed in its new tests. The cause was in the tests, not in the physics: a reference value was computed in a way that throws away about 11 of 16 digits (it subtracts 1 from 0.99997), and only passed on Linux because the Linux compiler's extra-long numbers hid it; the lab's own value was the accurate one. "
+     "The tests now use a reference that is exact on every computer. The lab's own arithmetic was also looked at for the same weakness: the small relativistic correction to each level was a difference of two nearly equal energies and lost up to 5 digits for hydrogen; it is now worked out directly, as are the percentage and the 1s energy in the heavy-atom readout. "
+     "Nothing you can see changes: every line, level, note and number shown is the same text as before (checked for all 118 elements), and with the setting off nothing at all changed."},
     {"0.10.8", "Atom Lab: relativity as a real option, the Dirac levels (stage 1)",
      "New setting under Light spectrum, \"Relativity (Dirac levels)\", off by default. Switched on, the two spectrum cards use the energy levels of the Dirac equation (one electron, point nucleus) instead of the non-relativistic formula: a level then depends on j, the total angular momentum, as well as n, so 2p splits into 2p 1/2 and 2p 3/2 and every line splits, more and more as Z grows. "
      "The strip shows the split lines, a short list gives the split levels, and the Real spectrum card now compares the lines the lab draws, component by component, with NIST's measured lines: the lab lands 8 times closer for hydrogen, 10 times for He\u207a and 32 times for Fe\u00b2\u2075\u207a. "
