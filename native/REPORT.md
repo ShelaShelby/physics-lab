@@ -38,4 +38,4 @@ Correction's second term added instead of subtracted → 13 failed; (1+s) replac
 MSVC itself (the Windows run is the test; its `long double` was simulated as `double`). `atom_panel.cpp`/`settings.cpp` untouched this stage.
 
 ## Windows CI result
-Pending at the time of writing; recorded below after the run.
+Run 37200345857 on commit 3b8e9b6 (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build and "Physics unit tests" (all seven programs, so the six Dirac checks that failed in run 37198855230 now pass under MSVC, where `long double` is 64 bits) all passed. I could not read the printed counts (`gh run view --log` gave no test lines here), so "18,382 on Windows" is not claimed; the step's success is. Stage 1's run (failure) is the one this fixes.
