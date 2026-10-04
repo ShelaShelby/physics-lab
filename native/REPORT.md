@@ -32,4 +32,4 @@ About "Where the facts come from" already lists Griffiths and Bethe & Salpeter f
 - No speed or Windows behaviour claimed. The comparison of the graph with the picture's outline is by numbers only.
 
 ## Windows CI result
-Pending at the time of writing (filled in after the push).
+Run 37192475980 on commit ec4f629 (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build (the whole app, so `atom_panel.cpp` with the new card **compiled on MSVC**) and "Physics unit tests" (all seven programs) passed. I did not read the printed counts from the log, so "18,299 on Windows" is not claimed. Compiling is not seeing: the card has still never been looked at on a screen (OWNER-TODO).
