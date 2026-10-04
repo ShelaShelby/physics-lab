@@ -25,4 +25,4 @@ Each was reverted (`git diff` empty for the perturbed lines) and the suite re-ru
 orbit 1,540; **atom 18,278** (was 18,203: +75 from more checks per jump and the phase test); app 1,515; nbody 37; jpl 55; moon 24; moon_real 59.
 
 ## Windows CI result
-@@CI@@
+Run 37190302360 on commit 201e834 (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build and the step "Physics unit tests" (all seven programs through ctest) all passed, so the numbers with tolerances and the old-against-new comparison hold under MSVC as well. I did not read the atom test's printed count from that log (only the step's result), so "18,278 on Windows" is not claimed. The stage 8 run (37189309944) was the failing one.
