@@ -42,6 +42,7 @@ struct AtomParams {
     double mix = 50;                     // the share of the second orbital, 0 to 100 %
     std::string phase = "Sign";          // Phase colours on the cloud views: Sign (two colours, the sign of the wave: today's look) / Wheel (the phase arg(psi), a colour ring)
     std::string cdens = "Normal";        // how many dots the cloud keeps: Normal 12,000 (the web's) / High 24,000 / Ultra 48,000
+    std::string dirac = "Off";           // Relativity (0.10.8): Off (the non-relativistic levels, as always) / On (Dirac levels and split lines in the two spectrum cards only, atom/dirac.h). Off in the app too.
     // The struct's own values are the web's (the tests that compare the lab with the web's code step by step use them). What the app
     // starts with, and what "Defaults" gives, is this: the web's settings plus the glowing, denser cloud.
     static AtomParams appDefaults() { AtomParams p; p.cstyle = "Glow"; p.cdens = "High"; return p; }

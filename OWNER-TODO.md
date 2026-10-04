@@ -8,6 +8,13 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Look at on the PC (0.10.8 stage 1: the Relativity / Dirac setting) — the drawing could not be compiled or seen in the cloud
+- [ ] Atom Lab, under "Light spectrum": the new setting "Relativity (Dirac levels)" (Off / On, off by default). Switch it on for hydrogen, iron (Z = 26) and a heavy element (Z = 92): the strip should show split lines (more lines, farther apart as Z grows), the note under the picture, the list of Dirac levels, and under "Real spectrum (NIST)" a row of text per series with the lab's lines against NIST's components and the miss with and without Dirac. Look at every theme and at every text size: nothing may overlap or run past the panel edge, and every glyph (−, →, ▼) must draw.
+- [ ] Read the words as a reader would: does the one-line explanation say what changes (levels and lines in the spectrum cards) and what does not (pictures, readouts, photon jumps, Lamb shift, nuclear size)? Does the long note under the setting, when on, make clear the pictures did NOT become relativistic?
+- [ ] Switch it off again: the cards must look exactly as before. Quit and restart with it on: it should come back on; with it off the settings file should have no "dirac" line.
+- [ ] Decide (a question, not a defect): the photon of a jump, the energy readout and the quantum beats still use the non-relativistic levels, because the lab's orbitals have no spin and so no j. Should a later stage give them Dirac values (for example by picking j by statistical weight)? It is not on the roadmap.
+- [ ] Not looked up in the cloud session: the Dirac formula is textbook material written from knowledge (physics.nist.gov was the only reachable site). The tests check it against hand arithmetic, its expansion and NIST's measured lines, but the book (Bethe & Salpeter) was not re-read; please check the formula in the About page against it if you can.
+
 ## Look at on the PC (0.10.7 stage 2: the real spectrum) — the drawing could not be compiled or seen in the cloud
 - [ ] Atom Lab, under "Light spectrum": the new card "Real spectrum (NIST)". Look at it in every theme and at every text size, for hydrogen (Z = 1), helium, iron (Z = 26), a heavy element (Z = 92) and one NIST does not have (Z = 118; Fm I, Z = 100, for the neutral atom): the two rows of each strip, the tick colours, the line-by-line text under (a), and the long notes at the bottom must be readable and not run past the panel's edge.
 - [ ] Check that (a) and (b) read as two different things (the titles and notes), and that the words are right to you.

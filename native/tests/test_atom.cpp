@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstring>
+#include <map>
+#include <set>
 #include <complex>
 #include <string>
 #include <vector>
@@ -16,6 +19,7 @@
 #include "atom/atom_core.h"
 #include "atom/atom_learn.h"
 #include "atom/asd.h"
+#include "atom/dirac.h"
 #include "atom/atom_sim.h"
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
@@ -2260,6 +2264,269 @@ static void testAsdData() {
     }
 }
 
+// ================= 0.10.8 stage 1: relativity as an option (Dirac levels) =================
+// References that do NOT come from the lab's own functions:
+//  (1) the CODATA 2022 constants typed in namespace nist above (alpha, m_e c^2, the Rydberg energy, h c);
+//  (2) the textbook arrangement of the Sommerfeld / Dirac formula, E = m c^2 [ (1 + (Z alpha / (n - (j + 1/2) + sqrt((j + 1/2)^2 - (Z alpha)^2)))^2)^(-1/2) - 1 ], worked out here in long double (the lab uses
+//      a different arrangement, with expm1 / log1p, so that the small relativistic correction keeps its digits). Same formula, so (1) and (2) check the arithmetic, not the physics;
+//  (3) its expansion to the order (Z alpha)^4 (Bethe & Salpeter; Griffiths ch. 6): E = -(m c^2 (Z alpha)^2 / 2 n^2) [1 + ((Z alpha)^2 / n^2)(n / (j + 1/2) - 3/4)]: a different formula, whose miss must scale as (Z alpha)^6;
+//  (4) NIST ASD (data/asd, 0.10.7 stage 2): MEASURED wavelengths, matched to the lab's lines by the n and j of both levels, read from ASD's own transition text.
+// Both formulas are the standard textbook ones, written from knowledge, not looked up in this session (only physics.nist.gov was reachable); (4) is what checks them against nature.
+static long double refDiracF(long double za, int n, int twoJ) {     // f - 1, (m c^2 units), binding negative
+    const long double jh = (twoJ + 1) / 2.0L, k = n - jh + std::sqrt(jh * jh - za * za);
+    return 1.0L / std::sqrt(1.0L + za * za / (k * k)) - 1.0L;
+}
+static double refDiracInfEV(int Z, int n, int twoJ) { return double(nist::mecEV * refDiracF(Z * (long double)nist::alpha, n, twoJ)); }
+static double refSeriesEV(int Z, int n, int twoJ) {                 // the (Z alpha)^4 expansion
+    const double x = Z * nist::alpha, jh = (twoJ + 1) / 2.0;
+    return -(nist::mecEV * x * x / (2.0 * n * n)) * (1 + x * x / (double(n) * n) * (n / jh - 0.75));
+}
+// the lab's hybrid level written again by hand: reduced-mass main term (the lab's nuclear mass, typed again above) + the infinite-mass relativistic correction
+static double refHybridEV(int Z, int N, int n, int twoJ) {
+    const double M = nuclearMassNew(Z, N), ry = nist::rydEV * M / (M + 1), x = Z * nist::alpha;
+    return -ry * Z * Z / (double(n) * n) + (refDiracInfEV(Z, n, twoJ) + 0.5 * nist::mecEV * x * x / (double(n) * n));
+}
+// the lines of ASD for ion Z that are electric-dipole (n changes, l changes by 1), as {nLo, nHi, 2jLo, 2jHi} -> Ritz wavelengths
+struct AsdKey { int a, b, c, d; bool operator<(const AsdKey& o) const { return std::array<int, 4>{a, b, c, d} < std::array<int, 4>{o.a, o.b, o.c, o.d}; } };
+static std::map<AsdKey, std::vector<double>> asdE1(int Z) {
+    std::map<AsdKey, std::vector<double>> out;
+    const AsdSpectrum& sp = asdIon(Z);
+    for (int i = 0; i < sp.count; i++) {
+        AsdTransition t;
+        if (!asdParseTransition(sp.lines[i].transition, t) || t.nLo >= t.nHi || std::abs(t.lLo - t.lHi) != 1 || !sp.lines[i].resolved) continue;
+        out[{t.nLo, t.nHi, t.jLo2, t.jHi2}].push_back(std::isnan(sp.lines[i].ritz) ? sp.lines[i].nm : sp.lines[i].ritz);   // ASD's Ritz wavelength, else its observed one (as compareIon)
+    }
+    return out;
+}
+// the hand-made wavelength of one line, nm: with the Dirac levels (hybrid) or without
+static double refLam(int Z, int N, int lo, int jl, int hi, int jh, bool dirac) {
+    return nist::hcEVnm / ((dirac ? refHybridEV(Z, N, hi, jh) - refHybridEV(Z, N, lo, jl) : -(nist::rydEV * nuclearMassNew(Z, N) / (nuclearMassNew(Z, N) + 1)) * Z * Z * (1.0 / (double(hi) * hi) - 1.0 / (double(lo) * lo))));
+}
+// the worst relative miss of the lab's lines against ASD's E1 components, matched by (n, j) of both levels; positive = the lab's line is longer
+struct Miss { double worst = 0; int comps = 0, unmatched = 0; };
+static Miss worstMiss(int Z, int N, bool dirac) {
+    Miss m;
+    for (const auto& kv : asdE1(Z))
+        for (double w : kv.second) {
+            const AsdKey& k = kv.first;
+            if (k.b > 6) continue;
+            const double lam = refLam(Z, N, k.a, k.c, k.b, k.d, dirac), r = (lam - w) / w;
+            if (std::fabs(r) > std::fabs(m.worst)) m.worst = r;
+            m.comps++;
+        }
+    return m;
+}
+
+static void testDirac() {
+    // Guards = the worst MEASURED value + 1 % (Linux GCC Release; improvement factors: measured - 1 %), from the first run of these tests:
+    //  scaling of Dirac - non-relativistic with (Z alpha)^2: 0.50676 -> 0.5118 (the next-order coefficient is 1/2); log-log slope off 2 by at most 1.5412e-2 -> 1.557e-2; miss of the (Z alpha)^4 expansion 0.00782 -> 0.00790;
+    //  ASD, worst relative miss of any n <= 6 component, with Dirac / without, and the improvement factor: H I 3.3169e-6 -> 3.351e-6 / 2.6431e-5 -> 2.670e-5, x7.969 -> 7.88; He II 1.0931e-5 -> 1.104e-5 / 1.0573e-4 -> 1.068e-4,
+    //  x9.672 -> 9.57; Fe XXVI 5.7231e-4 -> 5.781e-4 / 1.8239e-2 -> 1.843e-2, x31.87 -> 31.5; what is left, Lyman-alpha of 110 ions, 220 components: (ASD - Dirac) / (non-relativistic - Dirac) at most 0.27164 -> 0.2744.
+    constexpr double GUARD_RATIO = 0.5118, GUARD_SLOPE = 1.557e-2, GUARD_SERIES = 0.00790, GUARD_LEFT = 0.2744;
+    constexpr double GUARD_H_ON = 3.351e-6, GUARD_H_OFF = 2.670e-5, GUARD_H_RATIO = 7.88, GUARD_HE_ON = 1.104e-5, GUARD_HE_OFF = 1.068e-4, GUARD_HE_RATIO = 9.57, GUARD_FE_ON = 5.781e-4, GUARD_FE_OFF = 1.843e-2, GUARD_FE_RATIO = 31.5;
+    const double a = nist::alpha, mc = nist::mecEV;
+    // ---- (1) the level against hand-made values ----
+    {   // hydrogen 1s, infinite mass: j = 1/2, k = sqrt(1 - alpha^2), so E = m c^2 (sqrt(1 - alpha^2) - 1) in closed form
+        const double want = double(nist::mecEV * (std::sqrt(1.0L - (long double)a * a) - 1.0L));
+        checkNum("Dirac H 1s, infinite mass, = m c^2 (sqrt(1 - alpha^2) - 1) worked out here from CODATA", diracInfiniteEV(1, 1, 1), want, 1e-12);
+        std::printf("Dirac H 1s infinite mass: %.12f eV (the non-relativistic %.12f eV)\n", diracInfiniteEV(1, 1, 1), -0.5 * mc * a * a);
+        const double wantFe = double(nist::mecEV * (std::sqrt(1.0L - (long double)26 * a * 26 * a) - 1.0L));
+        checkNum("Dirac Fe XXVI 1s, infinite mass, = m c^2 (sqrt(1 - (26 alpha)^2) - 1) worked out here", diracInfiniteEV(26, 1, 1), wantFe, 1e-12);
+        std::printf("Dirac Fe 1s infinite mass: %.6f eV (non-relativistic %.6f eV)\n", diracInfiniteEV(26, 1, 1), -0.5 * mc * 26 * a * 26 * a);
+    }
+    double worstFormula = 0; bool allFinite = true;
+    for (int Z : {1, 2, 6, 26, 54, 92, 118})
+        for (int n = 1; n <= 6; n++)
+            for (int j2 = 1; j2 <= 2 * n - 1; j2 += 2) {
+                const double got = diracInfiniteEV(Z, n, j2), want = refDiracInfEV(Z, n, j2);
+                worstFormula = std::max(worstFormula, std::fabs(got - want) / std::fabs(want)); allFinite = allFinite && std::isfinite(got) && got < 0;
+            }
+    std::printf("Dirac level, infinite mass, vs the textbook arrangement in long double (Z up to 118, n <= 6, every j): worst relative difference %.3e\n", worstFormula);
+    checkTrue("Dirac level: every level is finite and bound for Z = 1 .. 118 (Z alpha < 1)", allFinite);
+    checkTrue("Dirac level agrees with the textbook arrangement of the formula to 1e-12 for Z = 1, 2, 6, 26, 54, 92, 118, n <= 6, every j (rounding level, as the closed-form guards of the radial graph)", worstFormula < 1e-12);
+    // ---- the lab's level: reduced-mass main term + the infinite-mass relativistic correction ----
+    double worstHyb = 0;
+    for (int Z : {1, 2, 26}) for (int n = 1; n <= 4; n++) for (int j2 = 1; j2 <= 2 * n - 1; j2 += 2) worstHyb = std::max(worstHyb, std::fabs(diracEV(Z, defaultN(Z), n, j2) - refHybridEV(Z, defaultN(Z), n, j2)) / std::fabs(refHybridEV(Z, defaultN(Z), n, j2)));
+    checkTrue("Dirac level of the lab = the hand-made hybrid (reduced-mass term from the NIST masses + the infinite-mass Dirac correction) to 1e-12 (H, He+, Fe, n <= 4)", worstHyb < 1e-12);
+    std::printf("Dirac level of the lab vs the hand-made hybrid: worst relative difference %.3e\n", worstHyb);
+    // ---- the reduced mass: what the hybrid does and how far it is from the plain m -> mu substitution (itself only a leading-order recoil term, not an exact one) ----
+    {
+        const int Z = 1, N = 0; const double M = nuclearMassNew(Z, N), mu = M / (M + 1);
+        const double corr = (refDiracInfEV(1, 2, 3) + 0.5 * mc * a * a / 4) - (refDiracInfEV(1, 1, 1) + 0.5 * mc * a * a);   // the infinite-mass relativistic correction to the Lyman-alpha (2p3/2) photon energy
+        const double hyb = diracEV(Z, N, 2, 3) - diracEV(Z, N, 1, 1);                                                      // the lab's photon energy
+        const double sub = mu * (nist::rydEV * 0.75 + corr);                                                               // m -> mu in the whole formula: the correction is scaled by mu too
+        const double E = nist::hcEVnm / refLam(Z, N, 1, 1, 2, 3, true);
+        std::printf("Reduced mass, H Lyman-alpha 2p3/2: photon %.9f eV; hybrid minus (m -> mu everywhere) %.3e eV = %.3e of the photon energy; the whole relativistic correction is %.3e eV = %.3e of it\n", E, hyb - sub, (hyb - sub) / E, corr, corr / E);
+        checkNum("Reduced mass, H Lyman-alpha 2p3/2: the hybrid differs from the m -> mu photon energy by exactly the correction times (1 - mu), as derived", hyb - sub, corr * (1 - mu), 1e-6);
+        checkTrue("Reduced mass, H Lyman-alpha 2p3/2: that difference is below 1e-7 of the photon energy (measured, stated in the report), far below the Dirac correction itself", std::fabs(hyb - sub) / E < 1e-7 && std::fabs(hyb - sub) < 1e-2 * std::fabs(corr));
+    }
+    // ---- the splitting 2p3/2 - 2p1/2 of hydrogen against m c^2 alpha^4 / 32, from the constants ----
+    {
+        const double lead = mc * std::pow(a, 4) / 32, got = diracEV(1, 0, 2, 3) - diracEV(1, 0, 2, 1), gotInf = diracInfiniteEV(1, 2, 3) - diracInfiniteEV(1, 2, 1);
+        std::printf("H n = 2 fine structure: Dirac %.9e eV (%.6f GHz), m c^2 alpha^4 / 32 = %.9e eV, ratio - 1 = %.3e (alpha^2 = %.3e)\n", got, got / nist::h * nist::e * 1e-9, lead, got / lead - 1, a * a);
+        checkNum("H 2p3/2 - 2p1/2 Dirac splitting = m c^2 alpha^4 / 32 within alpha^2 (the next order)", got, lead, a * a);
+        checkNum("H 2p3/2 - 2p1/2 splitting: the lab's level (reduced-mass main term) gives the same as the infinite-mass Dirac levels, because only the main term has the reduced mass", got, gotInf, 1e-9);
+        checkTrue("H 2p3/2 is less bound than 2p1/2 (the splitting is positive, j = 3/2 above j = 1/2)", got > 0);
+        checkNum("Dirac theory: 2s1/2 and 2p1/2 have exactly the same energy (no Lamb shift): the level depends on n and j only", diracEV(1, 0, 2, 1), diracEV(1, 0, 2, 1), 0);
+        {   // NIST's own 2p3/2 - 2p1/2 gap for hydrogen, from ASD's two Lyman-alpha Ritz wavelengths (ASD's Ritz wavelengths are made from its measured energy levels): h c (1 / lambda(2p3/2) - 1 / lambda(2p1/2))
+            const auto m = asdE1(1); const double l3 = m.at({1, 2, 1, 3}).front(), l1 = m.at({1, 2, 1, 1}).front();
+            const double nist2 = nist::hcEVnm * (1 / l3 - 1 / l1), over = nist2 / got - 1;
+            std::printf("H n = 2 gap from ASD's Lyman-alpha Ritz wavelengths: %.9e eV (%.6f GHz); Dirac %.9e eV; NIST / Dirac - 1 = %.4e\n", nist2, nist2 / nist::h * nist::e * 1e-9, got, over);
+            checkTrue("H 2p3/2 - 2p1/2: NIST's measured gap is LARGER than the Dirac one, by 0.1772 % (measured; the guard is + 1 % of that): the part of the gap Dirac theory does not have (QED), small and one-sided", over > 0 && over < 1.789e-3);
+        }
+        checkNum("The splitting from the expansion to (Z alpha)^4: m c^2 alpha^4 / 32 is the leading difference of the series formula", refSeriesEV(1, 2, 3) - refSeriesEV(1, 2, 1), lead, 1e-9);
+    }
+    // ---- reduces to the non-relativistic level as Z alpha -> 0, at the order (Z alpha)^2 ----
+    // Infinite nuclear mass first (pure Dirac against pure Bohr): the relative difference of the 1s level is (Z alpha)^2 / 4 at the lowest order (n = 1, j = 1/2 in the expansion (3)), and its next term is
+    // of the order (Z alpha)^4, so the ratio to (Z alpha)^2 / 4 minus 1, divided by (Z alpha)^2, stays a constant. The lab's level carries the reduced mass on top, which is NOT a (Z alpha)^2 effect (5.4e-4
+    // for hydrogen), so it is checked separately: the lab's relative difference is the infinite-mass one divided by mu / m.
+    {
+        double worstRatio = 0, worstSlope = 0, worstSeries = 0, worstMass = 0, prevR = 0, prevZ = 0;
+        std::printf("Dirac vs non-relativistic 1s, infinite mass, (E_Dirac - E_NR) / E_NR over (Z alpha)^2 / 4 (1 at the lowest order):");
+        for (int Z : {1, 2, 3, 4, 6, 8, 10, 14, 20}) {
+            const double x2 = Z * a * Z * a, nr = -0.5 * mc * x2, r = (diracInfiniteEV(Z, 1, 1) - nr) / nr;
+            worstRatio = std::max(worstRatio, std::fabs(r / (x2 / 4) - 1) / x2);       // the miss of the leading order, in units of (Z alpha)^2: about constant (3/8 in the expansion's next term)
+            if (prevR != 0) worstSlope = std::max(worstSlope, std::fabs(std::log(r / prevR) / std::log(double(Z) / prevZ) - 2));
+            prevR = r; prevZ = Z;
+            std::printf(" Z=%d:%.5f", Z, r / (x2 / 4));
+            const double M = nuclearMassMe(Z, defaultN(Z)), lab = (diracEV(Z, defaultN(Z), 1, 1) - levelEV(Z, defaultN(Z), 1)) / levelEV(Z, defaultN(Z), 1);
+            worstMass = std::max(worstMass, std::fabs(lab / r * (M / (M + 1)) - 1));
+        }
+        std::printf("\n");
+        for (int Z : {1, 2, 4, 8, 16}) {      // against the expansion: the miss is of the order (Z alpha)^4 of the energy
+            const double x2 = Z * a * Z * a, miss = std::fabs(diracInfiniteEV(Z, 2, 3) - refSeriesEV(Z, 2, 3)) / std::fabs(refSeriesEV(Z, 2, 3));
+            worstSeries = std::max(worstSeries, miss / (x2 * x2));
+        }
+        std::printf("Dirac vs non-relativistic: worst (ratio to (Z alpha)^2 / 4 minus 1) over (Z alpha)^2: %.5f; worst deviation of the log-log slope from 2: %.4e; lab's relative difference vs the infinite-mass one times m / mu: %.2e; miss of the (Z alpha)^4 expansion in units of (Z alpha)^4: %.5f\n", worstRatio, worstSlope, worstMass, worstSeries);
+        checkTrue("Dirac - non-relativistic (1s, infinite mass) scales like (Z alpha)^2 for Z = 1 .. 20: (ratio to (Z alpha)^2 / 4 minus 1) / (Z alpha)^2 stays below its measured value + 1 %", worstRatio < GUARD_RATIO && worstRatio > 0.3);
+        checkTrue("Dirac - non-relativistic: the log-log slope of the relative difference between neighbouring Z (1 .. 20) is 2 to within its measured deviation + 1 %", worstSlope < GUARD_SLOPE);
+        checkTrue("The lab's relative difference (reduced-mass level) is the infinite-mass one times M / (M + 1) inverse, to 1e-8 for Z = 1 .. 20: the reduced mass is a separate, mass-ratio-sized factor", worstMass < 1e-8);
+        checkTrue("Dirac 2p3/2 against the (Z alpha)^4 expansion: the miss is a constant (below its measured value + 1 %) times (Z alpha)^4 of the energy for Z = 1 .. 16, a different formula agreeing to the order it is exact", worstSeries < GUARD_SERIES);
+    }
+    // ---- which jumps are allowed ----
+    {
+        checkTrue("selection rule: 2p1/2 -> 1s1/2, 2p3/2 -> 1s1/2, 2s1/2 -> 2p3/2 type jumps follow l changes by 1 and j by 0 or 1", diracAllowed(0, 1, 1, 1) && diracAllowed(0, 1, 1, 3) && diracAllowed(1, 3, 2, 3) && diracAllowed(1, 3, 2, 5) && diracAllowed(1, 1, 2, 3));
+        checkTrue("selection rule: d5/2 -> p1/2 (j changes by 2), s -> d (l changes by 2), p -> p (l unchanged) and an impossible j are not allowed", !diracAllowed(1, 1, 2, 5) && !diracAllowed(0, 1, 2, 3) && !diracAllowed(1, 1, 1, 3) && !diracAllowed(0, 3, 1, 3) && !diracAllowed(1, 5, 2, 5));
+        auto count = [](int lo, int hi) { int n = 0; for (const DiracLine& l : diracLines(1, 0)) if (l.lo == lo && l.hi == hi) n++; return n; };
+        checkTrue("lines counted by hand: Lyman-alpha 2 (np1/2, np3/2 -> 1s1/2), Lyman-beta 2, Balmer-alpha 5 (of the 7 textbook components two pairs coincide in Dirac theory), Balmer-beta 5", count(1, 2) == 2 && count(1, 3) == 2 && count(2, 3) == 5 && count(2, 4) == 5);
+        // 3s1/2 -> 2p1/2 and 3p1/2 -> 2s1/2 have the same energies in Dirac theory: one line, not two
+        int h1 = 0; for (const DiracLine& l : diracLines(1, 0)) if (l.lo == 2 && l.hi == 3 && l.jLo2 == 1 && l.jHi2 == 1) h1++;
+        checkTrue("Dirac theory: 3s1/2 -> 2p1/2 and 3p1/2 -> 2s1/2 have equal energies, so they are ONE line", h1 == 1);
+        // against NIST: for H I and He II the set of lines (n, j, n', j') of ASD's E1 components is exactly the set the rule gives
+        for (int Z : {1, 2}) {
+            std::set<std::array<int, 4>> mine, asd;
+            for (const DiracLine& l : diracLines(Z, defaultN(Z))) if (l.hi >= 1 && l.hi <= 6) mine.insert({l.lo, l.hi, l.jLo2, l.jHi2});
+            for (const auto& kv : asdE1(Z)) if (kv.first.b <= 6) asd.insert({kv.first.a, kv.first.b, kv.first.c, kv.first.d});
+            std::printf("selection rule vs ASD, Z = %d: the rule gives %zu lines (n <= 6), ASD has %zu E1 (n, j, n', j') sets\n", Z, mine.size(), asd.size());
+            checkTrue(std::string("selection rule vs NIST ASD, Z = ") + std::to_string(Z) + ": the lines the rule gives for n <= 6 are exactly the (n, j, n', j') sets of ASD's electric-dipole components", mine == asd);
+        }
+        // every ion ASD has: no ASD component lies outside the rule (ASD may lack some Ritz lines, the rule never lacks one ASD has)
+        int zsChecked = 0; bool subset = true;
+        for (int Z = 1; Z <= 118; Z++) {
+            if (asdIon(Z).status != AsdStatus::Lines) continue;
+            std::set<std::array<int, 4>> mine;
+            for (const DiracLine& l : diracLines(Z, defaultN(Z))) if (l.hi >= 1 && l.hi <= 6) mine.insert({l.lo, l.hi, l.jLo2, l.jHi2});
+            for (const auto& kv : asdE1(Z)) if (kv.first.b <= 6 && !mine.count({kv.first.a, kv.first.b, kv.first.c, kv.first.d})) subset = false;
+            zsChecked++;
+        }
+        checkTrue("selection rule vs NIST ASD: for every ion ASD has, every electric-dipole component (n <= 6) is a line the rule allows (110 ions)", subset && zsChecked == 110);
+    }
+    // ---- against NIST: the lab's lines with Dirac closer to the measured ones than without ----
+    {
+        struct Case { int Z; const char* name; double guardOn, guardOff; double ratioMin; };
+        const Case cases[3] = {{1, "H I", GUARD_H_ON, GUARD_H_OFF, GUARD_H_RATIO}, {2, "He II", GUARD_HE_ON, GUARD_HE_OFF, GUARD_HE_RATIO}, {26, "Fe XXVI", GUARD_FE_ON, GUARD_FE_OFF, GUARD_FE_RATIO}};
+        for (const Case& c : cases) {
+            const Miss off = worstMiss(c.Z, defaultN(c.Z), false), on = worstMiss(c.Z, defaultN(c.Z), true);
+            std::printf("vs ASD, %s, %d components (n <= 6): worst relative miss without Dirac %.4e, with Dirac %.4e (improvement x%.2f; the lab's line is %s)\n", c.name, on.comps, off.worst, on.worst, std::fabs(off.worst / on.worst), on.worst > 0 ? "longer" : "shorter");
+            checkTrue(std::string("Dirac vs ASD, ") + c.name + ": with Dirac the lab's lines land closer to every measured component set than without (worst miss smaller)", std::fabs(on.worst) < std::fabs(off.worst) && on.comps > 20);
+            checkTrue(std::string("Dirac vs ASD, ") + c.name + ": the worst miss with Dirac is below its measured value + 1 % and the improvement factor above its measured value - 1 %", std::fabs(on.worst) < c.guardOn && std::fabs(off.worst) < c.guardOff && std::fabs(off.worst / on.worst) > c.ratioMin);
+        }
+    }
+    // ---- what is left is the Lamb shift (and QED, nuclear size): ASD lies between Dirac and the non-relativistic lab, for Lyman-alpha of every ion ----
+    {
+        double lo = 1e9, hi = -1e9; bool order = true; int nZ = 0;
+        for (int Z = 1; Z <= 118; Z++) {
+            const auto m = asdE1(Z); if (m.empty()) continue;
+            for (int j2 : {1, 3}) {
+                const auto it = m.find({1, 2, 1, j2}); if (it == m.end()) continue;
+                for (double w : it->second) {
+                    const int N = defaultN(Z); const double nr = refLam(Z, N, 1, 1, 2, j2, false), d = refLam(Z, N, 1, 1, 2, j2, true), share = (w - d) / (nr - d);
+                    lo = std::min(lo, share); hi = std::max(hi, share); order = order && nr > w && w > d; nZ++;
+                }
+            }
+        }
+        std::printf("Lamb-shift side, Lyman-alpha, both components of %d (ion, component) pairs: (ASD - Dirac) / (non-relativistic - Dirac) from %.5f to %.5f\n", nZ, lo, hi);
+        checkTrue("What is left, Lyman-alpha (1s-2p1/2 and 1s-2p3/2) of every ion ASD has: non-relativistic lab > ASD > Dirac in wavelength, i.e. ASD lies between, as the Lamb shift (it lifts 1s) and the nuclear size would put it", order && nZ >= 200);
+        checkTrue("What is left is small: ASD is at most 0.2744 of the way from Dirac to the non-relativistic line (measured max 0.27164, + 1 %), and always beyond Dirac", hi < GUARD_LEFT && lo > 0);
+    }
+    // ---- the lab's functions: the comparison, the lines, the rows, the words ----
+    {
+        bool same = true; double maxD = 0;
+        for (int Z : {1, 2, 26}) {
+            const auto cmp = compareIonDirac(Z, defaultN(Z));
+            for (const FineCompare& c : cmp) {
+                double worst = 0; int comps = 0;
+                for (const auto& kv : asdE1(Z)) {
+                    if (kv.first.a != c.lo || kv.first.b != c.hi) continue;
+                    for (double w : kv.second) { const double r = (refLam(Z, defaultN(Z), c.lo, kv.first.c, c.hi, kv.first.d, true) - w) / w; if (std::fabs(r) > std::fabs(worst)) worst = r; comps++; }
+                }
+                maxD = std::max(maxD, std::fabs(c.worstDiracRel - worst)); same = same && c.asdComponents == comps && c.asdUnmatched == 0 && c.lo < c.hi && c.hi <= 6 && c.labLines >= 1;
+            }
+            same = same && !cmp.empty();
+        }
+        std::printf("compareIonDirac vs the hand-made comparison: worst difference of a relative miss %.3e (the misses themselves are 1e-6 to 1e-2)\n", maxD);
+        checkTrue("compareIonDirac gives the component counts and, to 1e-11 (rounding of double against long double; the misses are 1e-6 and up), the worst miss of the hand-made comparison (H I, He II, Fe XXVI, every transition n <= 6)", same && maxD < 1e-11);
+        const auto L = diracLines(1, 0);
+        bool shape = !L.empty(), limits = true;
+        for (const DiracLine& l : L) { shape = shape && l.lam > 0 && l.lo >= 1 && l.lo <= 5 && (l.hi == 0 ? l.jHi2 == 0 : l.hi > l.lo && l.hi <= l.lo + 20); if (l.hi == 0) limits = limits && l.lo >= 1; }
+        int lim2 = 0; for (const DiracLine& l : L) if (l.hi == 0 && l.lo == 2) lim2++;
+        checkTrue("diracLines: every line has a positive wavelength and sensible levels; the n = 2 series limit is split in two (j = 1/2 and 3/2)", shape && lim2 == 2);
+        // the wavelength of Lyman-alpha 2p3/2 in the lab with Dirac equals the hand-made one
+        double got = 0; for (const DiracLine& l : L) if (l.lo == 1 && l.hi == 2 && l.jHi2 == 3) got = l.lam;
+        checkNum("diracLines: H Lyman-alpha 2p3/2 wavelength = the hand-made one", got, refLam(1, 0, 1, 1, 2, 3, true), 1e-12);
+        // visible lines and the lines of the spectrum come from ONE list
+        const auto V = visibleLinesFor(1, 0, true); bool visOk = !V.empty();
+        for (const SpecLine& l : V) visOk = visOk && isVisibleNm(l.lam) && l.hi != 0;
+        checkTrue("visibleLinesFor(Dirac) lists the Dirac lines inside visible light (Balmer and above), none a series limit", visOk);
+    }
+    {   // OFF must be the old lab, number for number: the same list, bit for bit, every element
+        bool listSame = true, visSame = true, noteSame = true;
+        for (int Z = 1; Z <= 118; Z++) {
+            const int N = defaultN(Z);
+            const auto A = specLines(Z, N), B = specLinesFor(Z, N, false), V1 = visibleLines(Z, N), V2 = visibleLinesFor(Z, N, false);
+            listSame = listSame && A.size() == B.size() && std::memcmp(A.data(), B.data(), A.size() * sizeof(SpecLine)) == 0;
+            visSame = visSame && V1.size() == V2.size() && (V1.empty() || std::memcmp(V1.data(), V2.data(), V1.size() * sizeof(SpecLine)) == 0);
+            noteSame = noteSame && spectrumNote(Z, N) == spectrumNote(Z, N, false);
+        }
+        checkTrue("setting OFF: specLinesFor, visibleLinesFor and the spectrum note are the old ones, bit for bit, for all 118 elements (compared in this run, no stored hashes)", listSame && visSame && noteSame);
+        checkTrue("setting OFF is the default, in the web-like struct and in the app's defaults, and only Off and On are valid choices", AtomParams().dirac == "Off" && AtomParams::appDefaults().dirac == "Off" && AtomLab::validChoice("dirac", "Off") && AtomLab::validChoice("dirac", "On") && !AtomLab::validChoice("dirac", "on") && !AtomLab::validChoice("dirac", ""));
+        // a lab with the setting set to Off by hand reads out and runs exactly as one never told: same readout lines, same dots
+        AtomLab x, y; x.nowMs = [] { return 0.0; }; y.nowMs = [] { return 0.0; };
+        x.p = AtomParams(); y.p = AtomParams(); x.restart(); y.restart();
+        seedRandom(77); x.setParam("view", std::string("Cloud")); x.setParam("Z", 26.0);
+        seedRandom(77); y.setParam("view", std::string("Cloud")); y.setParam("dirac", std::string("Off")); y.setParam("Z", 26.0);
+        const auto rx = x.info(), ry = y.info();
+        checkTrue("setting OFF set by hand: the readout lines and the cloud dots are identical to a lab that never saw the setting", rx == ry && x.s.k == y.s.k && x.s.pts == y.s.pts);
+        y.setParam("dirac", std::string("On"));
+        checkTrue("setting ON changes nothing about the cloud or the readout's energy line: the pictures stay non-relativistic (the readout gains a note only)", x.s.pts == y.s.pts && y.info().size() >= rx.size());
+    }
+    {   // the words
+        auto has = [](const std::string& s, const char* w) { return s.find(w) != std::string::npos; };
+        const std::string lab = kDiracLabel, ex = diracExplain(), on = diracOnNote(26), off = diracOffNote(), sn = spectrumNote(26, defaultN(26), true), an = asdIonNoteDirac(26), same = spectrumNote(26, defaultN(26));
+        checkTrue("Dirac words: the label is short and honest (Dirac levels), and the one-line explanation says what changes (levels and lines in the spectrum cards) and what does not (pictures, readouts, Lamb shift, nuclear size)",
+                  has(lab, "Dirac") && lab.size() < 40 && has(ex, "levels") && has(ex, "lines") && has(ex, "spectrum") && has(ex, "pictures") && has(ex, "non-relativistic") && has(ex, "Lamb shift") && has(ex, "size of the nucleus") && ex.size() < 400);
+        checkTrue("Dirac words (on): says the energies and lines are Dirac while the shapes are still non-relativistic, one electron, point nucleus; levels depend on j; 2s and 2p (j = 1/2) equal; the Lamb shift, QED and nuclear size are not in it and why NIST still differs",
+                  has(on, "Dirac equation") && has(on, "one electron") && has(on, "point nucleus") && has(on, "clouds") && has(on, "non-relativistic") && has(on, "j") && has(on, "2s") && has(on, "2p") && has(on, "exactly the same energy") && has(on, "Lamb shift") && has(on, "QED") && has(on, "size of the nucleus") && has(on, "NIST") && has(on, "reduced mass"));
+        checkTrue("Dirac words (on): the reduced-mass treatment is said plainly: the main energy has the reduced mass, the relativistic correction is for an infinitely heavy nucleus, recoil beyond that is not included", has(on, "infinitely heavy") && has(on, "recoil"));
+        checkTrue("Dirac words: with the setting off the note says only that the setting is off and non-relativistic is what is shown", has(off, "non-relativistic") && !has(off, "Lamb shift is"));
+        checkTrue("Dirac words: the spectrum note (on) says fine structure IS included and the Lamb shift, QED and nuclear size are NOT, and that the marks of your jumps and photon readouts keep the non-relativistic value; the old note (off) is unchanged and says fine structure is not included",
+                  has(sn, "Dirac") && has(sn, "Lamb shift") && has(sn, "size of the nucleus") && has(sn, "non-relativistic") && !has(sn, "Not included: fine structure") && has(same, "Not included: fine structure"));
+        checkTrue("Dirac words: the real-spectrum note (on) says the top row is the lab's Dirac lines, what is left is the Lamb shift, QED and nuclear size, and that this checks the lab", has(an, "Dirac") && has(an, "Lamb shift") && has(an, "size of the nucleus") && has(an, "checks the lab"));
+        const auto rows = diracLevelRows(1, 0); std::string all; for (const std::string& r : rows) all += r + "\n";
+        checkTrue("Dirac level rows (hydrogen): n = 1, 2 and 3 are listed, 2s and 2p share j = 1/2, and the 2p 3/2 - 2p 1/2 gap is given in eV-type units", rows.size() >= 6 && has(all, "n = 1") && has(all, "n = 2") && has(all, "n = 3") && has(all, "2s, 2p") && has(all, "gap") && has(all, "GHz"));
+    }
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -2296,6 +2563,7 @@ int main() {
     testRadialDots(0.1070);
     testRadialReadout();
     testAsdData();
+    testDirac();
     testElements();
     testNuclides();
     testFormats();

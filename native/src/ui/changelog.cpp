@@ -17,6 +17,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.8", "Atom Lab: relativity as a real option, the Dirac levels (stage 1)",
+     "New setting under Light spectrum, \"Relativity (Dirac levels)\", off by default. Switched on, the two spectrum cards use the energy levels of the Dirac equation (one electron, point nucleus) instead of the non-relativistic formula: a level then depends on j, the total angular momentum, as well as n, so 2p splits into 2p 1/2 and 2p 3/2 and every line splits, more and more as Z grows. "
+     "The strip shows the split lines, a short list gives the split levels, and the Real spectrum card now compares the lines the lab draws, component by component, with NIST's measured lines: the lab lands 8 times closer for hydrogen, 10 times for He\u207a and 32 times for Fe\u00b2\u2075\u207a. "
+     "What it does not do, and the app says so: the pictures (clouds, orbitals, outlines, radial graph) are still non-relativistic, and so are the readouts, the photon of a jump and the quantum beats; there is no Lamb shift, no other QED effect and no size of the nucleus, so NIST's lines still differ a little (in Dirac theory 2s and 2p 1/2 have exactly the same energy). "
+     "With the setting off, nothing changes (compared byte for byte with the previous version). The numbers are tested against hand arithmetic and NIST's data; the drawing could not be run in the cloud session and has to be looked at on a real screen."},
     {"0.10.7", "Atom Lab: the real spectrum from NIST next to the lab's (stage 2)",
      "A new card, \"Real spectrum (NIST)\", puts the measured spectrum from the NIST Atomic Spectra Database next to the lines the lab predicts, as two separate comparisons. "
      "(a) The ion the lab actually models (one electron round a nucleus of charge Z: H I, He II, ... Fe XXVI): the lab's lines should land almost on the measured ones, and what is left is mostly fine structure and relativity, which the lab leaves out. This checks the lab. "

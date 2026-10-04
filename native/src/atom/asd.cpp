@@ -1,11 +1,13 @@
 #include "asd.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
 
 #include "atom_core.h"
+#include "dirac.h"
 
 namespace atom {
 
@@ -62,6 +64,63 @@ std::vector<IonCompare> compareIon(int Z, int N) {
     return out;
 }
 
+bool asdParseTransition(const char* text, AsdTransition& out) {
+    const std::string s(text ? text : "");
+    const std::size_t d = s.find(" - ");
+    if (d == std::string::npos) return false;
+    auto side = [](const std::string& t, int& n, int& l, int& j2) {              // "2p 2P* 3/2": configuration, term, J
+        const std::size_t a = t.find(' '), b = a == std::string::npos ? a : t.find(' ', a + 1);
+        if (a == std::string::npos || b == std::string::npos) return false;
+        const std::string conf = t.substr(0, a), J = t.substr(b + 1);
+        std::size_t i = 0;
+        while (i < conf.size() && std::isdigit(static_cast<unsigned char>(conf[i]))) i++;
+        if (i == 0 || i + 1 != conf.size()) return false;                         // a leading n and ONE letter (a configuration such as 2p; not "2p2" or "6")
+        const std::size_t p = std::string("spdfghiklm").find(conf[i]);
+        const std::size_t sl = J.find("/2");
+        if (p == std::string::npos || sl == std::string::npos || sl + 2 != J.size() || sl == 0) return false;
+        for (std::size_t k = 0; k < sl; k++) if (!std::isdigit(static_cast<unsigned char>(J[k]))) return false;
+        n = std::atoi(conf.c_str()); l = int(p); j2 = std::atoi(J.c_str());
+        return true;
+    };
+    return side(s.substr(0, d), out.nLo, out.lLo, out.jLo2) && side(s.substr(d + 3), out.nHi, out.lHi, out.jHi2);
+}
+
+std::vector<FineCompare> compareIonDirac(int Z, int N) {
+    std::vector<FineCompare> out;
+    const AsdSpectrum& sp = asdIon(Z);
+    const std::vector<DiracLine> lines = diracLines(Z, N);
+    const std::vector<SpecLine> plain = specLines(Z, N);
+    for (int lo = 1; lo <= 5; lo++)
+        for (int hi = lo + 1; hi <= 6; hi++) {
+            FineCompare c{lo, hi, 0, 0, 0, 1e300, 0, 1e300, 0, 0, 0};
+            for (const DiracLine& l : lines) if (l.lo == lo && l.hi == hi) { c.labLines++; c.labMinNm = std::min(c.labMinNm, l.lam); c.labMaxNm = std::max(c.labMaxNm, l.lam); }
+            double plainNm = 0;
+            for (const SpecLine& l : plain) if (l.lo == lo && l.hi == hi) plainNm = l.lam;
+            for (int i = 0; i < sp.count; i++) {
+                const AsdLine& a = sp.lines[i];
+                AsdTransition t;
+                if (!a.resolved || !asdParseTransition(a.transition, t) || t.nLo != lo || t.nHi != hi || std::abs(t.lLo - t.lHi) != 1) continue;
+                const double w = std::isnan(a.ritz) ? a.nm : a.ritz;
+                const DiracLine* m = nullptr;
+                for (const DiracLine& l : lines) if (l.lo == lo && l.hi == hi && l.jLo2 == t.jLo2 && l.jHi2 == t.jHi2) m = &l;
+                if (!m) { c.asdUnmatched++; continue; }
+                c.asdComponents++; c.asdMinNm = std::min(c.asdMinNm, w); c.asdMaxNm = std::max(c.asdMaxNm, w);
+                const double rd = (m->lam - w) / w, rp = (plainNm - w) / w;
+                if (std::fabs(rd) > std::fabs(c.worstDiracRel)) c.worstDiracRel = rd;
+                if (std::fabs(rp) > std::fabs(c.worstPlainRel)) c.worstPlainRel = rp;
+            }
+            if (c.asdComponents + c.asdUnmatched > 0 && c.labLines > 0) out.push_back(c);
+        }
+    return out;
+}
+
+std::string asdFineRow(const FineCompare& c) {
+    auto pct = [](double r) { return jsNum(std::fabs(r) * 100, 2) + " % " + (r > 0 ? "longer" : "shorter"); };
+    return "n = " + std::to_string(c.hi) + " → " + std::to_string(c.lo) + ": the lab has " + std::to_string(c.labLines) + " Dirac line" + (c.labLines > 1 ? "s" : "") + " (" + jsNum(c.labMinNm, 7) + (c.labLines > 1 ? " to " + jsNum(c.labMaxNm, 7) : "") +
+           " nm), NIST has " + std::to_string(c.asdComponents) + " component" + (c.asdComponents > 1 ? "s" : "") + " (" + jsNum(c.asdMinNm, 7) + (c.asdMinNm != c.asdMaxNm ? " to " + jsNum(c.asdMaxNm, 7) : "") +
+           " nm). Worst miss with Dirac: " + pct(c.worstDiracRel) + "; without it: " + pct(c.worstPlainRel) + ".";
+}
+
 const char* const kAsdMeasuredNote =
     "NIST lines are wavelengths measured in a laboratory (observed) or worked out from measured energy levels (Ritz), each with its own uncertainty; all are vacuum wavelengths. "
     "Where NIST gives an intensity it is only a qualitative relative value: it has meaning within one spectrum, not between spectra, and it depends on the light source; a line NIST gives no intensity for is drawn short and equal, with no brightness meant. "
@@ -74,6 +133,10 @@ std::string asdIonTitle(int Z) { return "(a) The ion the lab models: " + ionLabe
 std::string asdIonNote(int Z) {
     return "One electron round a nucleus of charge " + std::to_string(Z) + ": the lab's own model. Top row: the lab's lines; bottom row: NIST's lines for this ion. They should nearly coincide. What is left is mostly fine structure "
            "and relativity, which the lab leaves out (one electron, non-relativistic, point nucleus), and it grows as Z gets bigger. This comparison checks the lab.";
+}
+std::string asdIonNoteDirac(int Z) {
+    return "One electron round a nucleus of charge " + std::to_string(Z) + ": the lab's own model, here with the Dirac levels. Top row: the lab's lines, split by j; bottom row: NIST's lines for this ion. They should nearly coincide, much better than without "
+           "the Dirac levels. What is left is the Lamb shift and the other QED effects and the size of the nucleus, which the lab leaves out (one electron, point nucleus), and it grows as Z gets bigger. This comparison checks the lab.";
 }
 std::string asdAtomTitle(int Z) { return "(b) The neutral atom of the element: " + std::string(asdAtom(Z).name); }
 std::string asdAtomNote(int Z) {

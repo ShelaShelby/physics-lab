@@ -21,6 +21,7 @@
 #include "orbit/format.h"
 #include "atom/atom_learn.h"
 #include "atom/asd.h"
+#include "atom/dirac.h"
 #include "atom/radial_graph.h"
 #include "atom_learn.h"
 #include "orbit_panel.h"
@@ -302,7 +303,7 @@ void factsCard(int Z, double tempK) {
 }
 
 // the light-spectrum picture (web: drawSpectrum): every line on a log scale, then visible light to scale
-void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen) {
+void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen, bool dirac) {
     const Theme th = panelTheme();
     const float s = S(), W = ImGui::GetContentRegionAvail().x / s, H = 158;
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -316,9 +317,9 @@ void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen) {
         dl->AddText(F, fs, ImVec2(o.x + float(x) * s - ts.x * float(align), o.y + float(y) * s - F->GetFontBaked(fs)->Ascent), U32(c), t.c_str());
     };
     auto width = [&](const std::string& t) { return F->CalcTextSizeA(fs, FLT_MAX, 0, t.c_str()).x / s; };
-    const auto L = specLines(Z, N);
+    const auto L = specLinesFor(Z, N, dirac);                              // the lines of the non-relativistic levels, or the Dirac ones when that setting is on (dirac.h): ONE list for the strip, the series names and the visible lines
     double lim1 = 0, top5 = 0;
-    for (const SpecLine& l : L) { if (l.lo == 1 && l.hi == 0) lim1 = l.lam; if (l.lo == 5 && l.hi == 6) top5 = l.lam; }
+    for (const SpecLine& l : L) { if (l.lo == 1 && l.hi == 0) lim1 = l.lam; if (l.lo == 5 && l.hi == 6) top5 = std::max(top5, l.lam); }   // (with the Dirac levels a group has several lines: its longest sets the edge)
     const double a = std::log(lim1 * 0.85), b = std::log(top5 * 1.15);
     auto X = [&](double lam) { return 8 + (std::log(lam) - a) / (b - a) * (W - 16); };
     auto lamCol = [](double lam, float al) { const Rgb c = lamColor(lam); return IM_COL32(c.r, c.g, c.b, int(al * 255)); };
@@ -340,7 +341,7 @@ void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen) {
     double ends[2] = {-1e9, -1e9};                                         // series names: two rows, so neighbours do not collide
     for (int lo = 1; lo <= 5; lo++) {
         double fl = 0, el = 0;
-        for (const SpecLine& l : L) { if (l.lo == lo && l.hi == lo + 1) fl = l.lam; if (l.lo == lo && l.hi == 0) el = l.lam; }
+        for (const SpecLine& l : L) { if (l.lo == lo && l.hi == lo + 1) fl = std::max(fl, l.lam); if (l.lo == lo && l.hi == 0) el = l.lam; }
         const std::string t = Z == 1 ? kSeries[lo] : "→ n=" + std::to_string(lo);
         const double tw = width(t), xm = std::max(tw / 2 + 4, std::min(W - tw / 2 - 4, (X(fl) + X(el)) / 2));
         const int row = xm - tw / 2 > ends[0] + 6 ? 0 : 1;
@@ -355,7 +356,7 @@ void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen) {
     auto VX = [&](double lam) { return 8 + (lam - kVisibleLoNm) / (kVisibleHiNm - kVisibleLoNm) * (W - 16); };
     text("Visible light, " + fmt::fixed(kVisibleLoNm, 0) + " to " + fmt::fixed(kVisibleHiNm, 0) + " nm (to scale):", 8, y2 - 6, 0, th.muted);
     for (int x = 8; x < W - 8; x++) dl->AddRectFilled(P(x, y2), P(x + 1, y2 + 30), lamCol(kVisibleLoNm + (x - 8) / (W - 16) * (kVisibleHiNm - kVisibleLoNm), 0.28f));
-    const std::vector<SpecLine> vl = visibleLines(Z, N);
+    const std::vector<SpecLine> vl = visibleLinesFor(Z, N, dirac);
     for (const SpecLine& l : vl) { const double x = VX(l.lam); dl->AddRectFilled(P(x - 1.5, y2), P(x + 1.5, y2 + 30), lamCol(l.lam, 1)); }
     std::vector<SpecLine> sorted = vl;
     std::stable_sort(sorted.begin(), sorted.end(), [](const SpecLine& u, const SpecLine& v) { return v.lam < u.lam; });
@@ -441,7 +442,7 @@ void radialCard(const AtomLab& L) {
 // intensity within this spectrum (a rough relative value), one without any intensity is short and equal, so no brightness is implied.
 struct RealTick { double nm; float h; bool observed; };
 constexpr float kRealH = 112;
-void realStrip(const std::vector<double>& lab, const std::vector<RealTick>& real, const char* realName) {
+void realStrip(const std::vector<double>& lab, const std::vector<RealTick>& real, const char* realName, const char* labTitle) {
     const Theme th = panelTheme();
     const float s = S(), W = ImGui::GetContentRegionAvail().x / s;
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -459,7 +460,7 @@ void realStrip(const std::vector<double>& lab, const std::vector<RealTick>& real
     for (const RealTick& t : real) { lo = std::min(lo, t.nm); hi = std::max(hi, t.nm); }
     const double a = std::log(lo * 0.85), b = std::log(hi * 1.15);
     auto X = [&](double nm) { return 8 + (std::log(nm) - a) / (b - a) * (W - 16); };
-    text("The lab's lines (one electron)", 8, 11, 0, th.muted);
+    text(labTitle, 8, 11, 0, th.muted);
     for (double v : lab) dl->AddLine(P(X(v), 16), P(X(v), 40), U32(th.accent), 1.5f * s);
     text(std::string("NIST: ") + realName, 8, 58, 0, th.muted);
     for (const RealTick& t : real) {
@@ -486,31 +487,34 @@ std::vector<RealTick> realTicks(const AsdSpectrum& sp) {
 }
 
 // the card: (a) the ion the lab models, then (b) the neutral atom, kept apart; what is missing is said
-void realSpectrumCard(int Z, int N) {
-    static int cz = -1, cn = -1;
+void realSpectrumCard(int Z, int N, bool dirac) {
+    static int cz = -1, cn = -1; static bool cd = false;
     static std::vector<double> lab;
     static std::vector<RealTick> ion, atomT;
     static std::vector<IonCompare> cmp;
-    if (Z != cz || N != cn) {                                          // the data is static: looked up when the element or isotope changes, not every frame
+    static std::vector<FineCompare> cmpD;
+    if (Z != cz || N != cn || dirac != cd) {                                          // the data is static: looked up when the element or isotope changes, not every frame
         lab.clear();
-        for (const SpecLine& l : specLines(Z, N)) if (l.hi > 0 && l.hi <= 6) lab.push_back(l.lam);
-        ion = realTicks(asdIon(Z)); atomT = realTicks(asdAtom(Z)); cmp = compareIon(Z, N);
-        cz = Z; cn = N;
+        for (const SpecLine& l : specLinesFor(Z, N, dirac)) if (l.hi > 0 && l.hi <= 6) lab.push_back(l.lam);   // the lines the strip above draws: with the Dirac levels on, the Dirac lines
+        ion = realTicks(asdIon(Z)); atomT = realTicks(asdAtom(Z)); cmp = compareIon(Z, N); cmpD = dirac ? compareIonDirac(Z, N) : std::vector<FineCompare>();
+        cz = Z; cn = N; cd = dirac;
     }
     auto plain = [](const std::string& t) { ImGui::PushTextWrapPos(0); ImGui::TextUnformatted(displayable(t).c_str()); ImGui::PopTextWrapPos(); };
     plain(asdIonTitle(Z));
     if (asdIon(Z).status == AsdStatus::Lines) {
-        realStrip(lab, ion, asdIon(Z).name);
-        for (const IonCompare& c : cmp) {                              // the first line of each series: the lab's number against NIST's components
+        const char* const labTitle = dirac ? "The lab's lines (one electron, Dirac levels)" : "The lab's lines (one electron)";
+        realStrip(lab, ion, asdIon(Z).name, labTitle);
+        if (dirac) for (const FineCompare& c : cmpD) { if (c.hi == c.lo + 1) mutedWrapped(asdFineRow(c), 12.0f / 16); }   // the first line of each series, split: the lab's Dirac lines against NIST's components, with the miss with and without Dirac
+        else for (const IonCompare& c : cmp) {                              // the first line of each series: the lab's number against NIST's components
             if (c.hi != c.lo + 1) continue;
             std::string verdict = c.offsetNm == 0 ? "the lab's line is inside NIST's components" : std::string("the lab's line is ") + jsNum(std::fabs(c.offsetNm) / c.labNm * 100, 2) + " % " + (c.offsetNm > 0 ? "longer" : "shorter") + " than all of them";
             mutedWrapped("n = " + std::to_string(c.hi) + " → " + std::to_string(c.lo) + ": lab " + jsNum(c.labNm, 7) + " nm; NIST " + jsNum(c.minNm, 7) + (c.components > 1 ? " to " + jsNum(c.maxNm, 7) : "") + " nm; " + verdict, 12.0f / 16);
         }
     } else mutedWrapped(asdMissingText(asdIon(Z)), 12.0f / 16);
-    mutedWrapped(asdIonNote(Z), 12.0f / 16);
+    mutedWrapped(dirac ? asdIonNoteDirac(Z) : asdIonNote(Z), 12.0f / 16);
     ImGui::Dummy(ImVec2(0, 4 * S()));
     plain(asdAtomTitle(Z));
-    if (asdAtom(Z).status == AsdStatus::Lines) realStrip(lab, atomT, asdAtom(Z).name);
+    if (asdAtom(Z).status == AsdStatus::Lines) realStrip(lab, atomT, asdAtom(Z).name, dirac ? "The lab's lines (one electron, Dirac levels)" : "The lab's lines (one electron)");
     else mutedWrapped(asdMissingText(asdAtom(Z)), 12.0f / 16);
     mutedWrapped(asdAtomNote(Z), 12.0f / 16);
     mutedWrapped(kAsdMeasuredNote, 12.0f / 16);
@@ -790,14 +794,21 @@ void atomPanel(AppState& app, float width) {
 
     // ---- Light spectrum ----
     ImGui::SeparatorText("Light spectrum");
-    spectrumPicture(p.Z, p.N, L.s.lines);
+    selectRow(app, "dirac", kDiracLabel, {{"Off", "Off · " + diracOffNote()}, {"On", "On · the Dirac levels: a level depends on j as well as n, so lines split."}}, p.dirac);
+    mutedWrapped(diracExplain(), 12.0f / 16);
+    if (p.dirac == "On") mutedWrapped(diracOnNote(p.Z), 12.0f / 16);
+    spectrumPicture(p.Z, p.N, L.s.lines, p.dirac == "On");
     ImGui::PushTextWrapPos(0);
-    richText(spectrumNote(p.Z, p.N), true, 12.0f / 16, 0);
+    richText(spectrumNote(p.Z, p.N, p.dirac == "On"), true, 12.0f / 16, 0);
     ImGui::PopTextWrapPos();
+    if (p.dirac == "On") {   // the split levels, in words (binding energies, eV; j = total angular momentum)
+        mutedWrapped("The Dirac levels of this atom (binding energy; the same energy for every subshell named on one row):", 12.0f / 16);
+        for (const std::string& r : diracLevelRows(p.Z, p.N)) mutedWrapped(r, 12.0f / 16);
+    }
 
     // ---- The real spectrum ----
     ImGui::SeparatorText("Real spectrum (NIST)");
-    realSpectrumCard(p.Z, p.N);
+    realSpectrumCard(p.Z, p.N, p.dirac == "On");
 
     // ---- Temperature ----
     ImGui::SeparatorText("Temperature");

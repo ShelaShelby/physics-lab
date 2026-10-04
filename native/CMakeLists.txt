@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.10.7 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.10.8 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -49,6 +49,7 @@ add_library(atom_core STATIC
   src/atom/outline.cpp
   src/atom/radial_graph.cpp
   src/atom/asd.cpp
+  src/atom/dirac.cpp
 )
 target_link_libraries(atom_core PUBLIC orbit_core)
 target_compile_options(atom_core PRIVATE ${PL_WARNINGS})

@@ -9,6 +9,7 @@
 // Wavelengths are VACUUM wavelengths in nm (as the lab's). A line's wavelength is ASD's observed one when it gives it, else its Ritz one (calculated from measured energy levels).
 #pragma once
 
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -50,6 +51,27 @@ struct IonCompare {
     double offsetNm;           // 0 when the lab's value lies between the components; else lab - nearest end (positive: the lab's line is longer than every component)
 };
 std::vector<IonCompare> compareIon(int Z, int N);
+
+// ---- with the Dirac levels on (0.10.8 stage 1, dirac.h): the lab's lines split by j, so they are compared with ASD's fine-structure components one by one ----
+// A line of ASD's transition text, "1s 2S 1/2 - 2p 2P* 3/2", read as numbers: n, l and 2j of the lower and the upper level. False when ASD gives no classification, an unresolved group ("1s 2S 1/2 - 6")
+// or a J that is not a half-integer.
+struct AsdTransition { int nLo, lLo, jLo2, nHi, lHi, jHi2; };
+bool asdParseTransition(const char* text, AsdTransition& out);
+// One transition n = hi -> lo between levels n <= 6: the lab's Dirac lines against the ASD electric-dipole components (l changes by 1) that have the same n and j on both sides. Every ASD component is
+// compared with the lab's line of the SAME j pair (a component is matched by its quantum numbers, not by being the nearest line).
+struct FineCompare {
+    int lo, hi;
+    int labLines;               // the lab's Dirac lines of this transition (lines of equal energy count once)
+    int asdComponents;          // ASD components matched to a lab line
+    int asdUnmatched;           // ASD components with no lab line of the same j pair (0 for every ion of the data: the rule leaves out no line ASD has)
+    double labMinNm, labMaxNm;  // the lab's Dirac lines, shortest and longest
+    double asdMinNm, asdMaxNm;  // the matched ASD components (Ritz wavelength where there is one, else the observed one), shortest and longest
+    double worstDiracRel;       // the largest |lab - ASD| / ASD over the matched components, with its sign (positive: the lab's line is longer)
+    double worstPlainRel;       // the same for the lab WITHOUT the Dirac levels (its one line per transition) against the same components
+};
+std::vector<FineCompare> compareIonDirac(int Z, int N);
+std::string asdFineRow(const FineCompare& c);          // one row of text for the card
+std::string asdIonNoteDirac(int Z);                    // the note of block (a) when the Dirac levels are on
 
 // the words of the card (used by the panel and checked by the tests)
 std::string asdIonTitle(int Z);            // "(a) The ion the lab models: He⁺ (NIST: He II)"

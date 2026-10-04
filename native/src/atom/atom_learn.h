@@ -40,7 +40,8 @@ std::string isotopeLine(int Z, int N);                // "☢ Iron-60: half-life
 std::string elemCardHtml(int Z);                      // the element card (web: elemCardHTML)
 extern const char* const kTableNote;                  // "Click an element for its most common isotope ..."
 std::string factsHtml(int Z);                         // the facts with the temperature bar (web: factsHTML)
-std::string spectrumNote(int Z, int N);               // the note under the light spectrum
+std::string spectrumNote(int Z, int N);               // the note under the light spectrum (the non-relativistic levels)
+std::string spectrumNote(int Z, int N, bool dirac);   // the same with the Dirac levels on (dirac.h): the old note, bit for bit, when dirac is false
 std::string tempStateHtml(int Z, double K);           // "<b>293 K</b> · 20 °C · 68 °F  →  Iron is <b>🧊 solid</b>"
 std::string tempSpeedHtml(int Z, double K);           // "Typical atom speed here: ..." (follows metric/imperial)
 extern const char* const kTempNote;

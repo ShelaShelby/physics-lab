@@ -257,16 +257,24 @@ std::string factsHtml(int Z) {
     return factsLinesHtml(Z) + bar + (notes.empty() ? "" : "<div class=\"tnote\">" + notes + "</div>") + "<div class=\"tnote\">" + kFactsFootnote + "</div>";
 }
 
-std::string spectrumNote(int Z, int N) {
+std::string spectrumNote(int Z, int N, bool dirac) {
     double ha = 0;
-    for (const SpecLine& l : specLines(Z, N)) if (l.lo == 2 && l.hi == 3) ha = l.lam;
+    for (const SpecLine& l : specLines(Z, N)) if (l.lo == 2 && l.hi == 3) ha = l.lam;   // (the non-relativistic H-alpha; with the Dirac levels on the sentence says "near", because the line is then five lines a few thousandths of a nm apart)
     const string ion = Z == 1 ? string() : string(symbol(Z)) + (Z - 1 > 1 ? supDigits(Z - 1) : "") + "⁺";
-    string t = Z == 1 ? "<b>This is hydrogen’s real spectrum:</b> the light it gives off when its electron drops from a higher level to a lower one. The visible lines are the Balmer series (drops to level 2): Hα at " + fmt::fixed(ha, 2) + " nm is the red glow of hydrogen in nebulae."
+    string t = Z == 1 ? "<b>This is hydrogen’s real spectrum:</b> the light it gives off when its electron drops from a higher level to a lower one. The visible lines are the Balmer series (drops to level 2): Hα " + string(dirac ? "near" : "at") + " " + fmt::fixed(ha, 2) + " nm is the red glow of hydrogen in nebulae."
                       : "<b>The spectrum of " + string(name(Z)) + " with only one electron left (" + ion + ")</b>, the atom on screen. It is real: ions like this glow in very hot plasmas and stars. A normal " + lower(name(Z)) + " atom, with all " + str(Z) + " electrons, has a very different spectrum, which this lab does not model.";
+    if (dirac) {   // 0.10.8 stage 1: the Dirac levels are on (dirac.h): fine structure IS drawn; the Lamb shift, the other QED effects and the nucleus's size are not
+        t += " Each group is a series of drops to one level; its dashed line is the series limit. Vacuum wavelengths, with the nucleus’s real mass. Line heights are not brightness. "
+             "Relativity is ON: the levels and lines are from the Dirac equation (one electron, point nucleus), so each line splits by j, and the split grows with Z. Not included: the Lamb shift, the other QED effects and the size of the nucleus, "
+             "so NIST’s real lines still differ slightly. ▼ = lines your photon jumps made; they keep the non-relativistic wavelength.";
+        return t;
+    }
     t += " Each group is a series of drops to one level; its dashed line is the series limit. ▼ = lines your photon jumps made. Vacuum wavelengths, with the nucleus’s real mass. Line heights are not brightness. Not included: fine structure (relativity splits each line slightly: about 0.005 % for hydrogen, much more for heavy ions)";
     t += Z >= kRelativityZ ? " (for " + string(name(Z)) + " the true lines are shifted and split noticeably, so these are approximate)." : string(".");
     return t;
 }
+
+std::string spectrumNote(int Z, int N) { return spectrumNote(Z, N, false); }
 
 std::string tempStateHtml(int Z, double K) {
     const auto st = tempState(Z, K);
