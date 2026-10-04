@@ -8,6 +8,12 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Look at on the PC (0.10.8 stage 3: lifetimes and jumps) — the drawing could not be compiled or seen in the cloud
+- [ ] Atom Lab, under "Real spectrum (NIST)": the new card "Lifetimes and jumps (NIST)". Look at it in every theme and at every text size, for hydrogen (Z = 1), iron (Z = 26), a mid element (Z = 12 or 13, where ASD lacks many rates) and Z = 118 (no ASD data): the explanation, the state lines, the two "Check a jump" rows of buttons (ten shells each) and the result lines must be readable and not run past the panel edge; the glyphs (→, −, ⁻¹, ×10ⁿ, µ) must draw.
+- [ ] Try: 2p → 1s (allowed, A about 6.3×10⁸ s⁻¹, share 100 %), 3p → 2s and 3p → 1s (two ways, two shares), 2s → 1s (not allowed: the parity and l rules named, and ASD's M1 rate shown as a different process), 3d → 1s (not allowed), 3s → 2p; and the state 2s on screen (metastable note, no lifetime number). Read the words: do they say plainly what a lifetime and a branching share are?
+- [ ] Question (not a defect): the card lists the lifetime of every j of the shell on screen because the lab's orbitals have no j. Fine, or should it show one number per shell?
+- [ ] ASD's own typing looks wrong for Cs LV 1s-2s (blank Type = allowed, with A = 7.591e11 /s, though l does not change); the lab ignores it and says so. If you can, report it to NIST.
+
 ## 0.10.8 stage 2 (the Dirac arithmetic): nothing new to look at
 - [x] Nothing the app shows changed (every text is identical, checked for all 118 elements), so the stage 1 screen checks below are still the only ones. The Windows build is what stage 2 fixed: its result is in REPORT.md.
 

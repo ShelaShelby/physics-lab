@@ -50,6 +50,7 @@ add_library(atom_core STATIC
   src/atom/radial_graph.cpp
   src/atom/asd.cpp
   src/atom/dirac.cpp
+  src/atom/lifetime.cpp
 )
 target_link_libraries(atom_core PUBLIC orbit_core)
 target_compile_options(atom_core PRIVATE ${PL_WARNINGS})

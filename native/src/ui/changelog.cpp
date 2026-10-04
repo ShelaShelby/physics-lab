@@ -17,6 +17,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.8", "Atom Lab: real lifetimes and selection rules, from NIST (stage 3)",
+     "A new card, \"Lifetimes and jumps (NIST)\", says how long the state on screen lives and how likely each jump is. The numbers are NIST's: the rate A of each jump (the chance per second that the state makes it by itself) with the accuracy rating NIST gives it. "
+     "The lifetime is 1 divided by the sum of the rates of every allowed way down, and the share of a jump is its rate over that sum. \"Check a jump\" asks about any two shells: if the jump is allowed you see its rate, rating and share; if not, the card names the rule that forbids it (parity, l or j) and, where NIST lists it as a forbidden jump, shows NIST's rate under that name. "
+     "Where NIST has no rate the card says so and shows no number; the lab never makes one up. The 2s state of hydrogen has no allowed way down: the card gives no lifetime for it and says that a real 2s state still decays by emitting two photons, which NIST does not list and the lab does not model. "
+     "The numbers and the rules are tested against NIST's own data (every allowed line in it is allowed in the lab, none of the forbidden ones is, rates scale as Z\u2074 across 109 ions); the drawing could not be run in the cloud session and has to be looked at on a real screen."},
     {"0.10.8", "Atom Lab: the Dirac formula's arithmetic made exact, and a Windows test fixed (stage 2)",
      "The Windows build of the previous stage failed in its new tests. The cause was in the tests, not in the physics: a reference value was computed in a way that throws away about 11 of 16 digits (it subtracts 1 from 0.99997), and only passed on Linux because the Linux compiler's extra-long numbers hid it; the lab's own value was the accurate one. "
      "The tests now use a reference that is exact on every computer. The lab's own arithmetic was also looked at for the same weakness: the small relativistic correction to each level was a difference of two nearly equal energies and lost up to 5 digits for hydrogen; it is now worked out directly, as are the percentage and the 1s energy in the heavy-atom readout. "

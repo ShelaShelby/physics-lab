@@ -20,6 +20,7 @@
 #include "atom/atom_learn.h"
 #include "atom/asd.h"
 #include "atom/dirac.h"
+#include "atom/lifetime.h"
 #include "atom/atom_sim.h"
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
@@ -2653,6 +2654,194 @@ static void testDiracPrecision() {
     }
 }
 
+// ================= 0.10.8 stage 3: real lifetimes and selection rules (from NIST ASD) =================
+// References that do not come from the lab's lifetime code: (1) numbers typed from data/asd/asd_lines.tsv (the file the fetch wrote, NOT the compiled table) so the whole pipeline is checked: the A values, their accuracy
+// codes and transition types; (2) 1 / (sum of A) worked out here from those typed numbers; (3) ASD's own words for the selection rule (ASD's lines help, read 2026-10-04: an allowed E1 line joins levels of opposite
+// parity whose J differs by at most 1, J = 0 <-> 0 excluded; its Type column is blank for E1 and M1, E2, M1+E2, UT for forbidden ones); (4) the ASD data itself, scanned here by a separate loop (grouping by the upper level).
+// No long double and no hashes of doubles (0.10.6 stage 9, 0.10.8 stage 2).
+struct AsdE1 { Level lo, hi; double A; std::string acc, type; };
+static std::vector<AsdE1> asdAllLines(int Z) {             // every resolved ASD line of the ion whose two levels read as (n, l, j), lower n < upper n
+    std::vector<AsdE1> out; const AsdSpectrum& sp = asdIon(Z);
+    for (int i = 0; i < sp.count; i++) {
+        AsdTransition t;
+        if (!asdParseTransition(sp.lines[i].transition, t) || t.nLo >= t.nHi) continue;
+        out.push_back({{t.nLo, t.lLo, t.jLo2}, {t.nHi, t.lHi, t.jHi2}, sp.lines[i].aki, sp.lines[i].acc, sp.lines[i].type});
+    }
+    return out;
+}
+// ASD's rule in ASD's words (opposite parity, J changes by at most 1, not 0 <-> 0 (never needed: j is at least 1/2)), for two real levels
+static bool asdRuleAllows(Level lo, Level hi) { return (lo.l + hi.l) % 2 == 1 && std::abs(lo.j2 - hi.j2) <= 2; }
+static std::vector<Level> allLevelsUpTo(int nMax) { std::vector<Level> v; for (int n = 1; n <= nMax; n++) for (int l = 0; l < n; l++) for (int j2 = 2 * l - 1; j2 <= 2 * l + 1; j2 += 2) if (j2 >= 1) v.push_back({n, l, j2}); return v; }
+
+// Guards = the worst MEASURED value + 1 % (Linux GCC Release), for A(Z) / (Z^4 A(H)) from ASD's own numbers, the three transitions 2p3/2 -> 1s, 2p1/2 -> 1s, 3d5/2 -> 2p3/2:
+//  worst |r - 1| for Z <= 10: 6.489e-4, 1.229e-3, 8.749e-4 -> 6.554e-4, 1.242e-3, 8.837e-4 (the reduced mass and the like);
+//  worst |r - 1| / (Z alpha)^2 for Z >= 10 (ions up to Z = 110): 0.3614, 0.2308, 0.1452 -> 0.3651, 0.2331, 0.1467 (the relativistic correction, of the order (Z alpha)^2; r falls to 0.77 at Z = 110 for 2p3/2).
+static constexpr double GUARD_Z4_LOW[3] = {6.554e-4, 1.242e-3, 8.837e-4}, GUARD_Z4_REL[3] = {0.3651, 0.2331, 0.1467};
+static void testLifetimes() {
+    // ---- 1. what the file says (typed from asd_lines.tsv: the Aki, Acc and Type columns) ----
+    {
+        int ionN = 0, withA = 0, accAA = 0, accAAA = 0, accNone = 0, accNoneWithA = 0, t1 = 0, tM1 = 0, tE2 = 0, tUT = 0, tMix = 0;
+        for (int Z = 1; Z <= 118; Z++) { const AsdSpectrum& sp = asdIon(Z); for (int i = 0; i < sp.count; i++) { const AsdLine& l = sp.lines[i]; ionN++; withA += !std::isnan(l.aki); const std::string a = l.acc, t = l.type;
+            accAA += a == "AA"; accAAA += a == "AAA"; accNone += a.empty(); accNoneWithA += a.empty() && !std::isnan(l.aki); t1 += t.empty(); tM1 += t == "M1"; tE2 += t == "E2"; tUT += t == "UT"; tMix += t == "M1+E2"; } }
+        std::printf("ASD ion lines: %d, with A %d; accuracy AA %d, AAA %d, none %d (of which with an A value: %d); types E1 %d, M1 %d, E2 %d, UT %d, M1+E2 %d\n", ionN, withA, accAA, accAAA, accNone, accNoneWithA, t1, tM1, tE2, tUT, tMix);
+        checkTrue("ASD data (counted in asd_lines.tsv): 5,029 ion lines, 4,925 with an A value; accuracy AA 4,762, AAA 159, none 108 (4 of them have an A value: ASD gave a rate and no rating); types E1 5,011, M1 11, E2 5, UT 1, M1+E2 1",
+                  ionN == 5029 && withA == 4925 && accAA == 4762 && accAAA == 159 && accNone == 108 && accNoneWithA == 4 && t1 == 5011 && tM1 == 11 && tE2 == 5 && tUT == 1 && tMix == 1);
+        const std::vector<AsdE1> hl = asdAllLines(1), hel = asdAllLines(2);
+        auto find = [](const std::vector<AsdE1>& v, Level lo, Level hi) -> const AsdE1* { for (const AsdE1& e : v) if (e.lo.n == lo.n && e.lo.l == lo.l && e.lo.j2 == lo.j2 && e.hi.n == hi.n && e.hi.l == hi.l && e.hi.j2 == hi.j2) return &e; return nullptr; };
+        const AsdE1 *a3 = find(hl, {1, 0, 1}, {2, 1, 3}), *a1 = find(hl, {1, 0, 1}, {2, 1, 1}), *m1 = find(hl, {1, 0, 1}, {2, 0, 1}), *e2 = find(hl, {1, 0, 1}, {3, 2, 5}), *he = find(hel, {1, 0, 1}, {2, 1, 3});
+        checkTrue("ASD data, read from asd_lines.tsv: H I Lyman-alpha 1s - 2p3/2 A = 6.2647e8 /s (AAA), 1s - 2p1/2 6.2648e8 /s (AAA); He II 1s - 2p3/2 1.0029e10 /s (AA)",
+                  a3 && a1 && he && a3->A == 6.2647e8 && a3->acc == "AAA" && a1->A == 6.2648e8 && a1->acc == "AAA" && he->A == 1.0029e10 && he->acc == "AA" && a3->type.empty());
+        checkTrue("ASD data, read from asd_lines.tsv: H I 1s - 2s is listed as M1 with A = 2.495e-6 /s (AAA); 1s - 3d5/2 as E2 with A = 5.937e2 /s (AAA)", m1 && e2 && m1->type == "M1" && m1->A == 2.495e-6 && m1->acc == "AAA" && e2->type == "E2" && e2->A == 5.937e2 && e2->acc == "AAA");
+    }
+    // ---- 2. the lifetime of a state: 1 / (sum of A of every allowed way down) ----
+    {
+        // numbers typed from asd_lines.tsv (H I): A in /s, all AAA
+        const double p3 = 6.2647e8, p1 = 6.2648e8, p3_1s = 1.6725e8, p3_2s = 2.2448e7, p1_1s = 1.6725e8, p1_2s = 2.2449e7, d3_p1 = 5.3877e7, d3_p3 = 1.0775e7, d5_p3 = 6.4651e7, s3_p1 = 2.1046e6, s3_p3 = 4.2097e6;
+        const Life l2p3 = lifeOf(1, {2, 1, 3}), l2p1 = lifeOf(1, {2, 1, 1}), l3p3 = lifeOf(1, {3, 1, 3}), l3p1 = lifeOf(1, {3, 1, 1}), l3d3 = lifeOf(1, {3, 2, 3}), l3d5 = lifeOf(1, {3, 2, 5}), l3s = lifeOf(1, {3, 0, 1});
+        std::printf("H I lifetimes from ASD's A: 2p3/2 %.5e s (A %.4e), 2p1/2 %.5e s, 3p3/2 %.5e s, 3p1/2 %.5e s, 3d3/2 %.5e s, 3d5/2 %.5e s, 3s %.5e s\n", l2p3.tauS, p3, l2p1.tauS, l3p3.tauS, l3p1.tauS, l3d3.tauS, l3d5.tauS, l3s.tauS);
+        checkNum("H 2p3/2 lifetime = 1 / A(Lyman-alpha) with A read from the data file (6.2647e8 /s)", l2p3.tauS, 1 / p3, 1e-12);
+        checkNum("H 2p1/2 lifetime = 1 / 6.2648e8 /s", l2p1.tauS, 1 / p1, 1e-12);
+        checkTrue("H 2p: one way down (to 1s 1/2), ASD's rate complete, accuracy AAA, the lifetime is 1.596 ns", l2p3.ways.size() == 1 && l2p3.complete && l2p3.ways[0].acc == "AAA" && std::fabs(l2p3.tauS - 1.5963e-9) < 1e-12);
+        checkNum("H 3p3/2 lifetime = 1 / (A to 1s + A to 2s) from the data file", l3p3.tauS, 1 / (p3_1s + p3_2s), 1e-12);
+        checkNum("H 3p1/2 lifetime = 1 / (A to 1s + A to 2s) from the data file", l3p1.tauS, 1 / (p1_1s + p1_2s), 1e-12);
+        checkNum("H 3d3/2 lifetime = 1 / (A to 2p1/2 + A to 2p3/2) from the data file", l3d3.tauS, 1 / (d3_p1 + d3_p3), 1e-12);
+        checkNum("H 3d5/2 lifetime = 1 / A(to 2p3/2) from the data file (one way down)", l3d5.tauS, 1 / d5_p3, 1e-12);
+        checkNum("H 3s lifetime = 1 / (A to 2p1/2 + A to 2p3/2) from the data file", l3s.tauS, 1 / (s3_p1 + s3_p3), 1e-12);
+        checkTrue("H 3d3/2 has two ways (2p 1/2 and 2p 3/2); the branching ratios are A / sum and sum to 1", l3d3.ways.size() == 2 && std::fabs(l3d3.ways[0].A / l3d3.sumA - d3_p1 / (d3_p1 + d3_p3)) < 1e-12 && std::fabs(l3d3.ways[0].A / l3d3.sumA + l3d3.ways[1].A / l3d3.sumA - 1) < 1e-15);
+        // a state the lab offers but ASD cannot complete, or has no data for: said, never filled in
+        const Life none = lifeOf(118, {2, 1, 3});
+        checkTrue("an element ASD has no hydrogen-like ion for (Og, Z = 118): status 'no data', no lifetime number", none.status == LifeStatus::NoData && std::isnan(none.tauS));
+    }
+    // ---- 3. metastable 2s: no electric-dipole way down; no number is invented ----
+    {
+        const Life s2 = lifeOf(1, {2, 0, 1});
+        checkTrue("H 2s1/2 has NO allowed way down to a lower n (l would not change, parity would not change): it is metastable, and the lab gives no lifetime number", s2.ways.empty() && s2.metastable && std::isnan(s2.tauS) && std::isnan(s2.tauMaxS));
+        const std::string t = metastableText(1);
+        auto has = [](const std::string& x, const char* w) { return x.find(w) != std::string::npos; };
+        checkTrue("metastable text: says no electric-dipole jump is allowed, that a real 2s state still decays (two photons at once), that ASD does not list that process and the lab does not model it, and gives no lifetime", has(t, "electric-dipole") && has(t, "two photons") && has(t, "does not") && has(t, "ASD") && !has(t, " ns") && !has(t, " ms"));
+        const std::vector<Jump> j = jumpsBetween(1, 2, 0, 1, 0);      // 2s -> 1s
+        bool m1 = false; for (const Jump& x : j) m1 = m1 || (x.asdType == "M1" && x.haveA && x.A == 2.495e-6 && x.acc == "AAA" && !x.allowed);
+        checkTrue("2s -> 1s in H: not allowed; ASD lists it only as magnetic dipole (M1) with A = 2.495e-6 /s (AAA), and the lab shows that rate with its type, not as an allowed jump", j.size() == 1 && m1);
+        // no state with no allowed way ever gets a lifetime number
+        bool never = true; int metas = 0;
+        for (int Z = 1; Z <= 110; Z++) for (const Level& L : allLevelsUpTo(6)) { const Life x = lifeOf(Z, L); if (x.ways.empty()) { metas++; never = never && (x.metastable || x.ground) && std::isnan(x.tauS) && std::isnan(x.tauMaxS); } }
+        checkTrue("every state with no allowed way down to a lower n (the ground state 1s, and the metastable 2s) has no lifetime number, for all 110 ions", never && metas > 0);
+        std::printf("states with no allowed way down to a lower n, over 110 ions and n <= 6: %d (1s and 2s of each ion)\n", metas);
+    }
+    // ---- 4. the selection rules against ASD (extends 0.10.8 stage 1's 90-of-90 for H I and He II to every ion and to the forbidden lines) ----
+    {
+        int e1 = 0, forb = 0, e1Bad = 0, forbBad = 0, reasonBad = 0, typeBad = 0, typeOddZ = 0;
+        std::set<std::string> forbTypes;
+        for (int Z = 1; Z <= 118; Z++) {
+            if (asdIon(Z).status != AsdStatus::Lines) continue;
+            for (const AsdE1& e : asdAllLines(Z)) {
+                const bool lab = diracAllowed(e.lo.l, e.lo.j2, e.hi.l, e.hi.j2);
+                const bool oddCs = Z == 55 && e.lo.n == 1 && e.hi.n == 2 && e.hi.l == 0;   // ASD's one anomaly, see below
+                if (e.type.empty()) { e1++; e1Bad += !lab && !oddCs; typeOddZ += !lab && oddCs; }
+                else { forb++; forbBad += lab; forbTypes.insert(e.type); }
+                const std::vector<Jump> js = jumpsBetween(Z, e.hi.n, e.hi.l, e.lo.n, e.lo.l);
+                bool found = false; for (const Jump& x : js) if (x.upper.j2 == e.hi.j2 && x.lower.j2 == e.lo.j2) { found = true; typeBad += (x.allowed != e.type.empty()) && !oddCs; reasonBad += !x.allowed && x.why.empty(); }
+                typeBad += !found;
+            }
+        }
+        std::printf("selection rules vs ASD, all ions with data: %d lines ASD calls allowed (E1), the lab calls %d of them not allowed (and %d more: the Cs LV 1s-2s line, see below); %d lines ASD lists as forbidden (", e1, e1Bad, typeOddZ, forb);
+        for (const std::string& t : forbTypes) std::printf("%s ", t.c_str());
+        std::printf("), the lab calls %d of them allowed\n", forbBad);
+        // ONE exception, found by this test and reported (REPORT.md): ASD lists the line 1s 2S 1/2 - 2s 2S 1/2 of Cs LV (Z = 55) with a BLANK Type (= allowed E1) and A = 7.591e11 /s, but l does not change (nor the parity), so it
+        // cannot be electric dipole; the same line is typed M1 for Z = 56 (9.155e11) and UT for Z = 38 (4.068e10). The lab follows the rule and refuses it, says so on screen and does not use ASD's value; the test names it.
+        checkTrue("selection rules vs ASD: EVERY ASD line of every ion that is allowed E1 (Type blank, both levels read as n, l, j) is a jump the lab calls allowed, with ONE exception, ASD's own Cs LV 1s-2s line (4,770 lines checked)", e1 > 4000 && e1Bad == 0 && typeOddZ == 1);
+        checkTrue("selection rules vs ASD: the lab calls allowed NOTHING that ASD lists only as forbidden (M1, E2, M1+E2, UT): all 16 forbidden lines that read as levels (E2, M1, UT) are refused", forb == 16 && forbBad == 0);
+        {   const std::vector<Jump> cs = jumpsBetween(55, 2, 0, 1, 0); const std::string line = cs.empty() ? "" : jumpLine(cs.front());
+            checkTrue("the Cs LV 1s-2s anomaly is said on screen: not allowed, ASD marks it allowed, the lab follows the rule and does not use ASD's value as a lifetime", cs.size() == 1 && !cs[0].allowed && cs[0].asdListed && cs[0].asdType.empty() && line.find("disagrees with the rule") != std::string::npos && line.find("does not use that value") != std::string::npos && lifeOf(55, {2, 0, 1}).metastable); }
+        checkTrue("jumpsBetween agrees with ASD's Type for every line (allowed exactly when the Type is blank), and every refused jump carries at least one reason", typeBad == 0 && reasonBad == 0);
+        // ASD's own wording of the rule (opposite parity, J changes by at most 1) against the lab's rule (l changes by 1, j by at most 1) for EVERY pair of levels n <= 6: the same
+        int pairs = 0, differ = 0;
+        for (const Level& lo : allLevelsUpTo(6)) for (const Level& hi : allLevelsUpTo(6)) { if (hi.n <= lo.n) continue; pairs++; differ += asdRuleAllows(lo, hi) != diracAllowed(lo.l, lo.j2, hi.l, hi.j2); }
+        std::printf("rule in ASD's words (parity + J) against the lab's rule (l + j), all %d pairs of levels n <= 6 with n' > n: %d differ\n", pairs, differ);
+        checkTrue("ASD's wording of the rule (levels of opposite parity, J changes by at most 1) and the lab's (l changes by 1, j by at most 1) allow exactly the same jumps between levels n <= 6 (505 pairs; for one electron they are the same rule)", pairs == 505 && differ == 0);
+        // the reasons name the rule that fails
+        auto why = [](int Z, int nu, int lu, int ju, int nl, int ll, int jl) { std::string out; for (const Jump& x : jumpsBetween(Z, nu, lu, nl, ll)) if (x.upper.j2 == ju && x.lower.j2 == jl) for (const std::string& w : x.why) out += w + " | "; return out; };
+        auto has = [](const std::string& x, const char* w) { return x.find(w) != std::string::npos; };
+        const std::string ss = why(1, 2, 0, 1, 1, 0, 1), dp = why(1, 3, 2, 5, 2, 1, 1), sd = why(1, 3, 2, 3, 1, 0, 1);
+        checkTrue("reasons: 2s -> 1s (l and parity unchanged) names the parity rule and the l rule and not the j rule", has(ss, "parity") && has(ss, "l") && !has(ss, "j changes"));
+        checkTrue("reasons: 3d5/2 -> 2p1/2 (parity changes, l changes by 1, but j changes by 2) names ONLY the j rule", has(dp, "j") && !has(dp, "parity") && !has(dp, "l must"));
+        checkTrue("reasons: 3d3/2 -> 1s (l changes by 2, parity unchanged) names the parity rule and the l rule", has(sd, "parity") && has(sd, "l"));
+    }
+    // ---- 5. branching ratios: which states have a complete set from ASD ----
+    {
+        int statesAll = 0, completeAll = 0, mismatch = 0, sumBad = 0, tauBad = 0, hComplete = 0, heComplete = 0, feComplete = 0, hStates = 0;
+        double worstSum = 0, worstTau = 0;
+        for (int Z = 1; Z <= 110; Z++) {
+            if (asdIon(Z).status != AsdStatus::Lines) continue;
+            const std::vector<AsdE1> lines = asdAllLines(Z);
+            for (const Level& up : allLevelsUpTo(6)) {
+                if (up.n < 2) continue;
+                // the test's own scan: every level below (lower n, opposite parity, J within 1) must have an E1 line with an A value
+                int need = 0, have = 0; double sum = 0;
+                for (const Level& lo : allLevelsUpTo(up.n - 1)) {
+                    if (!asdRuleAllows(lo, up)) continue;
+                    need++;
+                    for (const AsdE1& e : lines) if (e.type.empty() && e.lo.n == lo.n && e.lo.l == lo.l && e.lo.j2 == lo.j2 && e.hi.n == up.n && e.hi.l == up.l && e.hi.j2 == up.j2 && !std::isnan(e.A)) { have++; sum += e.A; break; }
+                }
+                const bool complete = need > 0 && have == need;
+                const Life L = lifeOf(Z, up);
+                statesAll++; completeAll += complete;
+                if (Z == 1) { hStates++; hComplete += complete; } if (Z == 2) heComplete += complete; if (Z == 26) feComplete += complete;
+                mismatch += (L.complete != complete) || (int(L.ways.size()) != need) || (L.withA != have);
+                if (complete) {
+                    double shares = 0; for (const Way& w : L.ways) shares += w.A / L.sumA;
+                    worstSum = std::max(worstSum, std::fabs(shares - 1)); sumBad += std::fabs(shares - 1) > 1e-15;
+                    worstTau = std::max(worstTau, std::fabs(L.tauS * sum - 1)); tauBad += std::fabs(L.tauS * sum - 1) > 1e-12;
+                }
+            }
+        }
+        std::printf("branching ratios: %d states (n = 2..6, every l and j) of 110 ions; ASD has the complete set of A for %d of them (H I %d of %d, He II %d, Fe XXVI %d); the shares sum to 1 within %.1e; tau * (sum A) = 1 within %.1e\n", statesAll, completeAll, hComplete, hStates, heComplete, feComplete, worstSum, worstTau);
+        checkTrue("lifeOf agrees with the test's own scan of the ASD lines for every state n = 2..6 of every ion (number of ways, ways with an A value, complete or not)", mismatch == 0);
+        // WHICH states have a complete set (measured): a state (n, l, j) of an ion has one when ASD gives an A for every allowed jump to a lower n. Of the 3,850 states n = 2..6 of the 110 ions, 1,531 do. Hydrogen: 34 of the 35
+        // (all but 2s, which has no allowed way down at all); He II 34; Fe XXVI 26. ASD has A for every way down of every state with n <= 3 in most ions and is patchy above (n = 6: A for a fifth of the ways).
+        checkTrue("the branching ratios of every state with a complete ASD set add up to 1 (to 1e-15) and tau = 1 / sum A (to 1e-12), for all 1,531 of them (the set is defined above: ASD has an A for every allowed jump to a lower n)", sumBad == 0 && tauBad == 0 && completeAll == 1531);
+        checkTrue("hydrogen: ASD has a complete set for 34 of the 35 states n = 2..6 (every l and j); the 35th is 2s, which has no allowed way down", hStates == 35 && hComplete == 34 && !lifeOf(1, {2, 0, 1}).complete && lifeOf(1, {2, 0, 1}).ways.empty());
+    }
+    // ---- 6. A scales as Z^4 for hydrogen-like ions: from ASD's own numbers ----
+    {
+        struct T { Level lo, hi; const char* name; } trs[3] = {{{1, 0, 1}, {2, 1, 3}, "2p3/2 -> 1s"}, {{1, 0, 1}, {2, 1, 1}, "2p1/2 -> 1s"}, {{2, 1, 3}, {3, 2, 5}, "3d5/2 -> 2p3/2"}};
+        double lowDev[3] = {0, 0, 0}, relMax[3] = {0, 0, 0}; int cnt[3] = {0, 0, 0};
+        for (int k = 0; k < 3; k++) {
+            double A1 = 0; for (const AsdE1& e : asdAllLines(1)) if (e.type.empty() && e.lo.n == trs[k].lo.n && e.lo.l == trs[k].lo.l && e.lo.j2 == trs[k].lo.j2 && e.hi.n == trs[k].hi.n && e.hi.l == trs[k].hi.l && e.hi.j2 == trs[k].hi.j2) A1 = e.A;
+            for (int Z = 2; Z <= 110; Z++) for (const AsdE1& e : asdAllLines(Z)) {
+                if (!e.type.empty() || std::isnan(e.A) || e.lo.n != trs[k].lo.n || e.lo.l != trs[k].lo.l || e.lo.j2 != trs[k].lo.j2 || e.hi.n != trs[k].hi.n || e.hi.l != trs[k].hi.l || e.hi.j2 != trs[k].hi.j2) continue;
+                const double r = e.A / (std::pow(double(Z), 4) * A1), x2 = std::pow(Z * nist::alpha, 2);
+                cnt[k]++;
+                if (Z <= 10) lowDev[k] = std::max(lowDev[k], std::fabs(r - 1));
+                if (Z >= 10) relMax[k] = std::max(relMax[k], std::fabs(r - 1) / x2);
+            }
+            std::printf("A scaling, %s: A(Z) / (Z^4 A(H)) over %d ions: worst |r - 1| for Z <= 10 is %.3e; worst |r - 1| / (Z alpha)^2 for Z >= 10 is %.4f\n", trs[k].name, cnt[k], lowDev[k], relMax[k]);
+        }
+        checkTrue("A of the same transition scales as Z^4 across the ASD ions (Z = 2..110, 3 transitions: 109, 109 and 104 ions): for Z <= 10 within GUARD_Z4_LOW of Z^4 times hydrogen's A (measured worst + 1 %)", cnt[0] >= 100 && cnt[1] >= 100 && cnt[2] >= 100 && lowDev[0] < GUARD_Z4_LOW[0] && lowDev[1] < GUARD_Z4_LOW[1] && lowDev[2] < GUARD_Z4_LOW[2]);
+        checkTrue("and for Z >= 10 the departure from Z^4 is a relativistic correction of the order (Z alpha)^2: |r - 1| / (Z alpha)^2 stays below GUARD_Z4_REL (measured worst + 1 %) for all three transitions", relMax[0] < GUARD_Z4_REL[0] && relMax[1] < GUARD_Z4_REL[1] && relMax[2] < GUARD_Z4_REL[2]);
+    }
+    // ---- 7. the words ----
+    {
+        auto has = [](const std::string& x, const char* w) { return x.find(w) != std::string::npos; };
+        checkTrue("lifetime units are chosen automatically: 1.5963e-9 s = 1.596 ns, 2.2e-12 s in ps, 3.3e-7 s in ns, 4.5e-5 s in microseconds, 2.0e-2 s in ms, 12 s in s",
+                  lifeText(1.5963e-9) == "1.596 ns" && has(lifeText(2.2e-12), " ps") && has(lifeText(3.3e-7), " ns") && has(lifeText(4.5e-5), " µs") && has(lifeText(2.0e-2), " ms") && lifeText(12) == "12 s");
+        const std::string e = lifeExplain();
+        checkTrue("the app explains what a lifetime is in plain words: the average time before the state jumps down by itself, the inverse of the sum of the rates, A is the rate (chance per second) of one jump, the branching ratio is the share of all jumps",
+                  has(e, "average time") && has(e, "by itself") && has(e, "sum") && has(e, "per second") && has(e, "share") && has(e, "NIST"));
+        checkTrue("accuracy codes carry ASD's meaning (read from its help page 2026-10-04): AAA = 0.3 %, AA = 1 %, B+ = 7 %, E = more than 50 %, a prime = a split multiplet, none = no rating given",
+                  has(accMeaning("AAA"), "0.3 %") && has(accMeaning("AA"), "1 %") && has(accMeaning("B+"), "7 %") && has(accMeaning("E"), "50 %") && has(accMeaning("A'"), "multiplet") && has(accMeaning(""), "no rating"));
+        const Life x = lifeOf(1, {2, 1, 3}); const std::string line = lifeLine(1, x);
+        checkTrue("the state line gives the level, the lifetime in ns, ASD's accuracy and says it is from ASD (2p3/2 of hydrogen: 1.596 ns, AAA)", has(line, "2p 3/2") && has(line, "1.596 ns") && has(line, "AAA") && has(line, "NIST"));
+        const std::vector<Jump> ok = jumpsBetween(1, 2, 1, 1, 0); const std::string jl = jumpLine(ok.front());
+        checkTrue("the jump line gives A, ASD's accuracy and the branching share (2p3/2 -> 1s: 100 %)", ok.size() == 2 && has(jl, "6.265×10⁸") && has(jl, "AAA") && has(jl, "100 %"));
+        // a transition ASD gives no A for, where the lab offers it: said on screen
+        int noA = 0; std::string sample;
+        for (int Z = 1; Z <= 110; Z++) for (const Level& up : allLevelsUpTo(6)) for (const Jump& j : jumpsBetween(Z, up.n, up.l, 1, 0)) if (j.allowed && !j.haveA && j.ionData) { if (!noA) sample = jumpLine(j); noA++; }
+        std::printf("allowed jumps to 1s for which ASD has no A (all ions, n <= 6): %d; the lab says: %s\n", noA, sample.c_str());
+        checkTrue("an allowed jump ASD has no A for says so on screen and shows no number", noA == 0 || (has(sample, "no transition probability") && !has(sample, "s⁻¹")));
+    }
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -2691,6 +2880,7 @@ int main() {
     testAsdData();
     testDirac();
     testDiracPrecision();
+    testLifetimes();
     testElements();
     testNuclides();
     testFormats();

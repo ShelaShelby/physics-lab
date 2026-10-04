@@ -37,7 +37,8 @@ bool AtomLab::validChoice(const std::string& key, const std::string& v) {
         {"pAx2", {"x", "y", "z", "m+1", "m-1"}}, {"dAx2", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
         {"fAx2", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2", "m+1", "m-1", "m+2", "m-2", "m+3", "m-3"}},
         {"orb2", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"super", {"Off", "On"}}, {"cutAxis", {"Vertical", "Horizontal"}},
-        {"cstyle", {"Classic", "Glow"}}, {"outline", {"Off", "On"}}, {"phase", {"Sign", "Wheel"}}, {"cdens", {"Normal", "High", "Ultra"}}, {"dirac", {"Off", "On"}}};
+        {"cstyle", {"Classic", "Glow"}}, {"outline", {"Off", "On"}}, {"phase", {"Sign", "Wheel"}}, {"cdens", {"Normal", "High", "Ultra"}}, {"dirac", {"Off", "On"}},
+        {"jfrom", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"jto", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}};
     const auto it = opts.find(key);
     return it != opts.end() && std::find(it->second.begin(), it->second.end(), v) != it->second.end();
 }
@@ -105,6 +106,8 @@ void AtomLab::setParam(const std::string& key, const std::string& v) {
     else if (key == "cdens") p.cdens = v;
     else if (key == "outline") p.outline = v;
     else if (key == "dirac") p.dirac = v;
+    else if (key == "jfrom") p.jfrom = v;
+    else if (key == "jto") p.jto = v;
     else if (key == "phase") p.phase = v;
     else if (key == "super") p.super = v;
     else if (key == "orb2") p.orb2 = v;

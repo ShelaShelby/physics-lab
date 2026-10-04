@@ -22,6 +22,7 @@
 #include "atom/atom_learn.h"
 #include "atom/asd.h"
 #include "atom/dirac.h"
+#include "atom/lifetime.h"
 #include "atom/radial_graph.h"
 #include "atom_learn.h"
 #include "orbit_panel.h"
@@ -522,6 +523,27 @@ void realSpectrumCard(int Z, int N, bool dirac) {
     mutedWrapped(kAsdCredit, 12.0f / 16);
 }
 
+// the lifetimes card (atom/lifetime.h): how long the state on screen lives and how likely each jump is, from NIST ASD's transition probabilities, and a check of any jump between two shells (allowed, with its rate; or why not)
+void lifetimeCard(AppState& app) {
+    const AtomParams& p = app.atom.p;
+    mutedWrapped(lifeExplain(), 12.0f / 16);
+    std::vector<Level> levels;                                         // the state on screen: every j of its shell (the lab's orbitals have no j); the Orbit view has only n, so every l and j of it
+    std::string what;
+    if (p.view == "Orbit") { for (int l = 0; l < p.n; l++) for (int j2 = std::max(1, 2 * l - 1); j2 <= 2 * l + 1; j2 += 2) levels.push_back({p.n, l, j2}); what = "n = " + std::to_string(p.n) + " (the Orbit view has no l: every l and j of this n)"; }
+    else { const Orbital& o = orbitals()[orbIndex(p.orb)]; for (int j2 = std::max(1, 2 * o.l - 1); j2 <= 2 * o.l + 1; j2 += 2) levels.push_back({o.n, o.l, j2}); what = shellName(o.n, o.l) + " (the lab's orbital has no j: both j of this shell)"; }
+    mutedWrapped("The state on screen: " + what + ", for " + ionLabel(p.Z) + ".", 12.0f / 16);
+    bool meta = false;
+    for (const Level& lv : levels) { const Life life = lifeOf(p.Z, lv); mutedWrapped(lifeLine(p.Z, life), 12.0f / 16); meta = meta || life.metastable; }
+    if (meta) mutedWrapped(metastableText(p.Z), 12.0f / 16);
+    selectRow(app, "jfrom", "Check a jump: from (the upper shell)", SHELLS, p.jfrom);
+    selectRow(app, "jto", "to (the lower shell)", SHELLS, p.jto);
+    const Orbital& a = orbitals()[orbIndex(p.jfrom)]; const Orbital& b = orbitals()[orbIndex(p.jto)];
+    const std::vector<Jump> js = jumpsBetween(p.Z, a.n, a.l, b.n, b.l);
+    if (js.empty()) mutedWrapped(a.n == b.n ? std::string(kLifeNoEqualN) : std::string("Choose two different shells."), 12.0f / 16);
+    for (const Jump& j : js) mutedWrapped(jumpLine(j), 12.0f / 16);
+    mutedWrapped(std::string(kLifeNoEqualN) + " " + kAsdCredit, 12.0f / 16);
+}
+
 // the little particle box of the Temperature card (web: tempPicture): solid = locked and jiggling, liquid = flowing, gas = flying
 struct TempBox {
     struct P { double sx, sy, x, y, vx, vy, a, b, w1, w2; };
@@ -809,6 +831,10 @@ void atomPanel(AppState& app, float width) {
     // ---- The real spectrum ----
     ImGui::SeparatorText("Real spectrum (NIST)");
     realSpectrumCard(p.Z, p.N, p.dirac == "On");
+
+    // ---- Lifetimes and jumps ----
+    ImGui::SeparatorText("Lifetimes and jumps (NIST)");
+    lifetimeCard(app);
 
     // ---- Temperature ----
     ImGui::SeparatorText("Temperature");

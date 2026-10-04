@@ -1,41 +1,38 @@
-# Native Physics Lab 0.10.8 (alpha) — stage 2 report: the Dirac formula's precision (fix of the red stage 1 build)
+# Native Physics Lab 0.10.8 (alpha) — stage 3 report: real lifetimes and selection rules, from NIST ASD
 
-`index.html` untouched (sha256 e5501387ae64…). No helper agents. Only the Atom Lab's Dirac code and its tests changed; no text the app shows changed.
+New card **"Lifetimes and jumps (NIST)"** in the Atom Lab, under "Real spectrum (NIST)". `index.html` untouched (sha256 e5501387ae64…). No helper agents. The three deferred optimisation items stayed deferred.
 
-## What I established about the cancellation (checked, not assumed)
-- Python `decimal`, 60 digits, with the same double inputs as the lab: exact mc²(√(1−α²)−1) = −13.605874258016532628…; the same in plain double = −13.605874257982812, **relative error 2.48e-12**; written without the subtraction, −mc²α²/(1+√(1−α²)) = −13.605874258016533 (error 1.5e-18, i.e. correct to the last bit). √(1−α²) = 0.99997337…, so 1 − it = 2.66e-5 and the subtraction throws away 11 of 16 digits (ulp(1) / 2.66e-5 = 8.3e-12).
-- **So the lab's value (−13.605874258016534) was the accurate one and the test's hand-made reference was the inaccurate one.** Stage 1's test used `long double` (80 bits on Linux, 64 on MSVC).
-- Reproduced before fixing: a copy of the stage 1 test with every `long double` and `…L` literal made `double` failed **exactly the six checks of the Windows run, with the CI's numbers** (got −13.605874258016534 / want −13.605874257982812; got 121.56642146623935 / want …640098). No tolerance was loosened anywhere.
+## Was Aki already in the data? Yes — no refetch
+`data/asd/asd_lines.tsv` (retrieved 2026-10-04, query in its README: lines1.pl, vacuum, allowed_out=1, forbid_out=1 …) already had the columns **Aki(s^-1), Acc and Type**; the compiled table had dropped them. So no new request was made. `tools/make_asd_data.py build` now writes three more columns (`aki`, `acc`, `type`) into `asd_data.inc`; `AsdLine` gained the fields. Of 5,029 ion lines 4,925 have an A; accuracy AA 4,762, AAA 159, none 108 (4 of these have an A and no rating: the app says "no rating given"); types E1 5,011, M1 11, E2 5, UT 1, M1+E2 1 (counted by the test). ASD's help page (`lineshelp.html`, read 2026-10-04) gave the accuracy table (AAA ≤ 0.3 % … E > 50 %, a prime = a split multiplet), the Type meaning (blank = E1) and ASD's own rule (opposite parity, J changes by at most 1); all quoted in the data README and About (the ASD entry was extended, not duplicated).
 
-## The fix
-1. **Test references** (`test_atom.cpp`): double-double arithmetic (two-sum, error-free product via `std::fma`, Newton division and sqrt; ~32 digits) of the plain textbook formula, so its subtractions are harmless. The double-double code itself is pinned by 80-digit values typed from Python `decimal` (10 levels, Z = 1 and 92; E, correction, δ). Measured accuracy: 3.6e-20 at worst (the correction at Z = 1, n = 6, where it is 4e-7 of the energy it is the difference of; the energy is good to 1.3e-26) — four orders finer than the lab's 1e-15, so it is a valid reference. A test comment says: never use `long double` or any extended precision in a reference. Also rewritten well-conditioned: stage 0.10.7's `diracE` helper and `testRelativityText`'s percentage (guards untouched). `grep` finds `long double` only in comments.
-2. **The lab's own code** (`dirac.cpp`, `atom_sim.cpp`): stage 1's energy (expm1/log1p) and δ (as a quotient) were **already** cancellation-free, so the user's two named places needed no rescue in substance; the energy now uses −t/(s(1+s)) (only +, ×, ÷, sqrt, which are correctly rounded on every platform). Real cancellation found and fixed: **(a)** the relativistic correction c = E_Dirac − E_NR (a difference of two energies, 13.6 eV vs 1.8e-4 eV for H) — now worked out directly: c/mc² = (s−1)²(s+2)/(2s) − (Zα)²δ(2n−δ)/(2n²k²), s−1 = t/(s+1), no subtraction of near-equals; **(b)** the readout's percentage `100((1−√)/(½x²) −1)` → 100x²/(1+√)² and 1s energy `mc²(1−√)` → mc²x²/(1+√); **(c)** the level-gap rows now use differences of corrections, not of two levels. Looked at and left: spectrum lines R(1/lo²−1/hi²)+Δc (benign: exact rational, Δc now accurate), the misses (calculated − measured: that difference is the physics), nuclear mass (no near-equal terms). Not examined: `sqrt(1−e²)` in the Orbit Lab (eccentricity; not this code).
+## What the card does
+- **Lifetime** of the state on screen (every j of its shell, since the lab's orbitals have no j): τ = 1 / ΣA over every allowed jump to a lower n, shown only when ASD has an A for **every** such way ("complete"); unit chosen automatically (as … s). Partial set: only "at most …" (upper limit). The explanation is in plain words on the card.
+- **Check a jump** (two rows of shell buttons): allowed → A, ASD's accuracy meaning, branching share = A/ΣA; not allowed → every rule that fails, in words (parity, l, j) and, where ASD lists it as forbidden (M1, E2 …), ASD's rate under that type, labelled a different process, not a lifetime.
+- No A from ASD → "allowed (electric dipole), but NIST ASD has no transition probability for this jump, so no rate or share is given." No ASD ion (Z = 111–118) → "NIST ASD has no data for …". Nothing is calculated; no hydrogenic rate was implemented.
+- Jumps between levels of one n are not in the data (centimetre waves) and are not counted; the card says so.
 
-## Digits gained (worst relative error over n = 1…6, every j, against the double-double reference; measured in the test)
-| | Z = 1 old → now | digits | Z = 92 old → now | digits |
-|---|---|---|---|---|
-| δ (naive → quotient) | 6.0e-11 → 7.0e-17 | 5.9 | 9.6e-15 → 1.8e-16 | 1.7 |
-| energy (naive → now; stage 1 was 2.5e-16) | 1.45e-10 → 4.6e-16 | 5.5 | 1.46e-14 → 4.2e-16 | 1.5 |
-| correction (stage 1 → now) | 2.07e-10 → 1.3e-15 | 5.2 | 3.7e-14 → 1.0e-15 | 1.5 |
-Readout, Z = 1…118: percentage 1.9e-7 → 3.0e-16 (relative to a value of 0.0027 % for H), 1s energy 2.5e-12 → 2.8e-16.
+## Numbers (ASD, as read; accuracy in brackets)
+H 2p 3/2: A = 6.2647×10⁸ s⁻¹ (AAA) → **1.596 ns**; 2p 1/2: 6.2648×10⁸ (AAA). 3p 3/2: two ways, 88.2 % to 1s and 11.8 % to 2s (AAA) → 5.272 ns. 3d 3/2: 83.3 % to 2p 1/2, 16.7 % to 2p 3/2 → 15.47 ns. 3s: 33.3 % / 66.7 % → 158.4 ns. He II 2p 3/2: 1.0029×10¹⁰ (AA) → 99.71 ps. Fe XXVI 2p 3/2: 2.8370×10¹⁴ (AA) → 3.525 fs.
+**Coverage (ways down with no ASD A, 110 ions):** upper n = 2: 0 of 220; n = 3: 51 of 990; n = 4: 1,583 of 2,420; n = 5: 2,960 of 4,510; n = 6: 6,036 of 7,260. So the card often says "no value" for n = 4 states (lab orbitals reach n = 4), and for 920 allowed jumps to 1s within n ≤ 6.
 
-## Did any app-visible value change? (a correction of arithmetic, not of physics)
-Stage 1 and stage 2 dumped side by side (118 elements × 2 isotopes: lines, notes, level rows, the Dirac note, the NIST comparison rows, and info()/hint() for 5 elements × 4 views, Dirac on: 197,843 lines): **every displayed text is identical, 0 differences.** Underlying numbers moved only at rounding level: Dirac wavelengths ≤ 2.1e-15 relative, levels ≤ 7.9e-16, the tiny misses (~1e-6 of the wavelength) ≤ 4.7e-10 of themselves, hydrogen's 2p 3/2 − 2p 1/2 gap (a difference of two levels) 9.8e-12 (exact 4.5284106339798e-5 eV; the card now shows it from corrections, to 1e-16).
+## Metastable 2s
+2s 1/2 has **no allowed way down** (l and parity unchanged), so no lifetime number appears, for any of the 110 ions (tested: 220 states, the 1s and 2s of each, none has a number). The card says a real 2s state still decays by emitting two photons, which ASD does not list and the lab does not model (textbook physics, no number given). I did **not** use the 0.12 s of the job text: it is not in ASD and was not checked. ASD does list the one-photon M1 jump 2s → 1s for hydrogen (A = 2.495×10⁻⁶ s⁻¹, AAA); the jump check shows it as "forbidden type M1, a different process, not counted".
 
-## Stage 1 conclusions re-derived (the guards of stage 1 are unchanged and all still pass)
-Re-run, not assumed: improvement against ASD H I 2.643e-5 → 3.317e-6 (7.97×), He II 1.057e-4 → 1.093e-5 (9.67×), Fe XXVI 1.824e-2 → 5.72e-4 (31.9×); Lamb-side share (ASD − Dirac)/(NR − Dirac) 0.02203 … 0.27164 over 220 components, order NR > ASD > Dirac in all; selection rule vs ASD 90 of 90 for H I and He II; NIST gap 0.1772 % above Dirac; reduced-mass difference 9.24e-8 eV (9.1e-9 of Lyα). All equal stage 1's at the printed digits; **none moved** (the 2.5e-12 error was far below every tolerance, as expected).
+## Tests (written first; Linux GCC Release) — atom 18,418 (was 18,382: +36), app 1,518 (+1)
+- Typed from the TSV: A of Lyα 2p 3/2 and 1/2 (6.2647×10⁸ / 6.2648×10⁸, AAA), He II, the M1/E2 lines, 3p/3d/3s rates; the lab's τ equals 1/ΣA worked out from them to 1e-12 (H 2p: 1.5962 ns).
+- **Selection rules vs ASD, all 110 ions** (extends stage 1's 90 of 90): of 4,771 ASD lines with blank Type, the lab allows all but **one**; of the 16 forbidden lines (E2, M1, UT) it allows none; ASD's wording (parity + J) and the lab's rule (l + j) agree on all 505 pairs of levels n ≤ 6; `jumpsBetween` agrees with ASD's Type for every line; reasons name the right rule (2s→1s: parity and l, not j; 3d 5/2→2p 1/2: only j).
+- **The one exception, found by the test:** ASD lists **1s–2s of Cs LV (Z = 55) with a blank Type (= allowed) and A = 7.591×10¹¹ s⁻¹**, yet l does not change; the same line is M1 for Z = 56 and UT for Z = 38. The lab follows the rule, says so on screen and does not use the value; the test names it; data README and OWNER-TODO record it. ASD's data file was not changed.
+- **Branching ratios:** of 3,850 states (n = 2…6, every l, j, 110 ions) ASD has the complete set for **1,531**: hydrogen 34 of 35 (all but 2s, which has no way down), He II 34, Fe XXVI 26. For all 1,531 the shares sum to 1 (worst 2.2e-16) and τΣA = 1 (1.1e-16); the lab's complete/ways/withA agree with the test's separate scan for every state.
+- **A ∝ Z⁴ from ASD's own numbers** (2p 3/2→1s, 2p 1/2→1s, 3d 5/2→2p 3/2; 109, 109, 104 ions): for Z ≤ 10, A/(Z⁴A(H)) is within 6.5×10⁻⁴, 1.2×10⁻³, 8.7×10⁻⁴ of 1; for Z ≥ 10, |r−1|/(Zα)² ≤ 0.361, 0.231, 0.145 (r falls to 0.77 at Z = 110 for 2p 3/2: a relativistic correction). Guards = measured + 1 %, labelled in the test.
+- Words: units (ps/ns/µs/ms/s), the explanation, the accuracy-table text, the state and jump lines, the no-A and Cs LV messages. App test: the extended About entry, the settings keys. No `long double`, no hashes.
+- Also passed: the atom tests built with `-O2 -mfma -ffp-contract=fast` (fused multiply-add), 18,418 checks.
+- **Nothing existing changed:** stage 2 and stage 3 built apart and compared with the Dirac setting off (2,422 lines, 1.6 MB) and on (197,842 lines): **identical byte for byte**.
 
-## Nothing changes with the setting OFF (proved again)
-Stage 1 vs stage 2 built separately, one program with the old API (specLines, visibleLines, compareIon, levels, notes, info(), hint(), first 3,000 cloud numbers): **2,422 lines, 1.6 MB, identical byte for byte.** (The readout's percentage/energy are Off-visible: their doubles moved by ≤ 1e-12 but the text shown is the same for all 118.)
+## Perturbations (each reverted, file compared byte for byte)
+A short by 1 % → 12 failed; τ = 1/(2ΣA) → 10; ways include the same n → 15; rule loosened (l unchanged allowed) → 4; ASD line looked up with levels swapped → 12; accuracy limit AAA 0.3→0.5 % → 1; share with the wrong denominator → 1.
 
-## Tests (Linux GCC Release)
-atom **18,382** (stage 1: 18,373; +9: double-double, typed 80-digit values, the digit table, the readout); app 1,517; orbit 1,540; nbody 37; jpl 55; moon 24; moon_real 59. All seven pass. Also passed: the atom tests built with `-O0 -ffp-contract=off`, with `-O2 -mfma -ffp-contract=fast` (fused multiply-add, as other compilers do) and with `-O3` — numbers identical. Guards: rounding-level ones in units of the last digit (2–4× measured), the old forms' errors measured − 1 % (deterministic IEEE), stated beside each. Tightened (never loosened): lab vs reference 1e-12 → 2e-15, compareIonDirac 1e-11 → 1e-14.
-
-## Perturbations (each reverted; `dirac.cpp` compared byte for byte)
-Correction's second term added instead of subtracted → 13 failed; (1+s) replaced by 2s in the energy → 8; sqrt added inside δ → 13; **t perturbed by 1e-12 relative → 4**; j off by one step → 15.
-
-## Not tested
-MSVC itself (the Windows run is the test; its `long double` was simulated as `double`). `atom_panel.cpp`/`settings.cpp` untouched this stage.
+## Not compiled, not seen
+`atom_panel.cpp` (`lifetimeCard`, its call) is not built here: the card compiled against stand-ins (`-Wall -Wextra`, clean). **Never compiled with ImGui, never seen:** layout, theme, text sizes, the two ten-button rows, long lines at large text, glyphs (→ − ⁻¹ ×10ⁿ µ). OWNER-TODO has the checks. The two "Check a jump" choices are not saved (UI only).
 
 ## Windows CI result
-Run 37200345857 on commit 3b8e9b6 (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build and "Physics unit tests" (all seven programs, so the six Dirac checks that failed in run 37198855230 now pass under MSVC, where `long double` is 64 bits) all passed. I could not read the printed counts (`gh run view --log` gave no test lines here), so "18,382 on Windows" is not claimed; the step's success is. Stage 1's run (failure) is the one this fixes.
+Pending at the time of writing; recorded below after the run.

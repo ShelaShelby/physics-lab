@@ -36,6 +36,23 @@ What the columns mean (ASD's help, https://physics.nist.gov/PhysRefData/ASD/Html
     ASD gives no number for short and equal, so no brightness is implied. 17 ion lines have only ASD's flags (e.g. "bl*", a blend) in the cell.
     ASD writes some numbers in brackets, e.g. "(51000)"; the text is kept as written. What the brackets mean was not looked up.
 
+0.10.8 stage 3: the transition probabilities (NO new request, no refetch)
+  The columns Aki(s^-1) (ASD's transition probability, the Einstein A coefficient: the spontaneous-emission rate of the upper level to the lower one),
+  Acc (ASD's accuracy code for it) and Type (ASD's transition type) were already in asd_lines.tsv from the 2026-10-04 retrieval above; stage 3 only
+  carries them into the compiled table (tools/make_asd_data.py build, three new columns of kAsdLines: aki, acc, type) and uses them for the lifetimes and
+  jump rates of the "Lifetimes and jumps (NIST)" card. Of the 5,029 ion lines 4,925 have an A value; 104 have none (10 of them hydrogen's forbidden lines).
+  ASD's own explanations, read from its lines help page https://physics.nist.gov/PhysRefData/ASD/Html/lineshelp.html on 2026-10-04:
+  - Accuracy: "An estimated accuracy is listed for each transition strength, indicated by a code letter": AAA <= 0.3 %, AA <= 1 %, A+ <= 2 %, A <= 3 %,
+    B+ <= 7 %, B <= 10 %, C+ <= 18 %, C <= 25 %, D+ <= 40 %, D <= 50 %, E > 50 %. "If the accuracy is followed by a prime, then a multiplet in the original
+    compilation has been separated into its component lines and the transition probability was derived from the compiled value assuming pure LS coupling.
+    This may decrease the listed accuracy." 103 lines have an A value and no accuracy code in this file (4 of them ion lines); the app says "no rating given".
+  - Type: blank for allowed (electric dipole, E1) transitions; M1 magnetic dipole, E2 electric quadrupole, M2, E3, M3, M1+E2 mixed, HF hyperfine-induced, UT
+    "forbidden transition of an unspecified type". In this file: ion lines E1 5,011, M1 11, E2 5, UT 1, M1+E2 1.
+  - ASD's rule for an allowed line: the levels must be of opposite parities and the total angular momentum J must change by no more than +-1 (J = 0 <-> 0 excluded).
+  A doubtful ASD entry found by the tests: the line 1s 2S 1/2 - 2s 2S 1/2 of Cs LV (Z = 55) has a BLANK Type (= allowed E1) and A = 7.591e11 /s, but l does not change
+  there, so it cannot be electric dipole; the same line is typed M1 for Z = 56 (9.155e11 /s) and UT for Z = 38 (4.068e10 /s). The lab follows the selection rule and
+  does not use that value. Nothing was changed in the data file.
+
 Citation, in the form ASD's version history page asks for (read 2026-10-04):
   Kramida, A., Ralchenko, Yu., Reader, J. and NIST ASD Team (2024). NIST Atomic Spectra Database (version 5.12), [Online].
   Available: https://physics.nist.gov/asd [access date 2026-10-04]. National Institute of Standards and Technology, Gaithersburg, MD.

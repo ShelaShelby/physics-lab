@@ -24,6 +24,10 @@ struct AsdLine {
     int ni, nk;                // principal quantum numbers of the lower and the upper level (0 when the configuration has no leading number)
     int resolved;              // 1: ASD gives J of both levels (a fine-structure component); 0: an unresolved line of the whole n -> n' group
     const char* transition;    // "1s 2S 1/2 - 2p 2P* 3/2": configuration, term and J of the lower level, then of the upper one; just "-" when ASD gives no classification for the line
+    // 0.10.8 stage 3 (no refetch: already in data/asd/asd_lines.tsv):
+    double aki;                // ASD's transition probability A of the upper level to the lower one, 1/s (NaN: ASD gives none for this line)
+    const char* acc;           // ASD's accuracy code for it as written: "AAA" (<= 0.3 %), "AA" (<= 1 %), "A+", "A", "B+", ..., "E" (> 50 %); a prime ' means a multiplet was split with pure LS coupling; "" when ASD gives none
+    const char* type;          // ASD's transition type: "" = allowed electric dipole (E1); "M1", "E2", "M1+E2", "UT" = forbidden (UT: unspecified)
 };
 struct AsdSet {
     const char* spectrum;      // ASD's name: "He II", "Fe I"
