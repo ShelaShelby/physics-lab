@@ -34,7 +34,7 @@ New `testAutoSilence`: 4 states (2p m = +1, 3d m = −2, 4f m = +3, superpositio
 Message suppressed: 14 failures. Wrong cause (superposition reported as complex): 2. Message at every look: 12. Message on a normal Auto: 15. All caught.
 
 ## Not compiled, not seen
-`changelog.cpp` (the history entry) is built only in the full app, which the cloud cannot build: not compiled here (plain string literals). The message's layout on screen, and Auto on a real PC, never seen. No Windows behaviour or speed tested here.
+`changelog.cpp` (the history entry) is built only in the full app, which the cloud cannot build: not compiled here (it did compile on Windows CI, below). The message's layout on screen, and Auto on a real PC, never seen. No Windows behaviour or speed tested here.
 
 ## Windows CI result
-(filled in after the run — see below)
+Run 37215890663 on commit 71503e6 (Native Windows build, windows-latest): **success**. The whole app, including `changelog.cpp` and the changed `atom_sim.cpp`, compiled on MSVC, and the "Physics unit tests" step (all seven programs) passed. I did not read the printed counts from the log, so "18,889 on Windows" is not claimed; the step's success is. The message on screen has still never been seen (OWNER-TODO).
