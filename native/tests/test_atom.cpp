@@ -1294,6 +1294,92 @@ static void testJumpHandover() {
     checkTrue("reduced motion (Orbit): the electron leaps at once to the new circle, the flash and the photon appear", !ro.s.trans && ro.p.n == 1 && std::fabs(std::hypot(ro.s.x, ro.s.y) / kA0 - 1) < 1e-9 && ro.s.photon.has_value() && ro.s.flash.has_value());
 }
 
+// 0.11 stage 1: Auto photons must say why when they cannot jump (they used to stay silent). A fake clock that runs with the steps, so a message that
+// is issued again would get a later msgUntil.
+static constexpr int AUTO_JUMPS_CLOUD = 15, AUTO_JUMPS_ORBIT = 18;   // photons in 60 s (seed 97531, 1/240 s steps), measured on the code before the fix
+static double g_autoClock = 0;
+static void autoSteps(AtomLab& lab, int n) { for (int i = 0; i < n; i++) { g_autoClock += 1000.0 / 240; lab.step(1.0 / 240); } }
+static void autoSetup(AtomLab& lab) { lab.nowMs = [] { return g_autoClock; }; lab.s.msg.clear(); lab.s.msgUntil = 0; }
+static std::string manualText(const char* orb, const char* axKey, const char* ax, bool super, int dir) {   // what the manual button says in the same state
+    AtomLab m; jumpSetup(m, orb, ""); if (*axKey) m.setParam(axKey, std::string(ax));
+    if (super) { m.setParam("orb2", std::string("2s")); m.setParam("mix", 30.0); m.setParam("super", std::string("On")); }
+    g_autoClock = 0; autoSetup(m); if (dir < 0) m.emit(); else m.absorb();
+    return m.s.msg;
+}
+static void testAutoSilence() {
+    // the three situations in which targets() is empty because of the state itself
+    struct Case { const char* name; const char* orb; const char* axKey; const char* ax; bool super; const char* cause; };
+    const Case cases[] = {{"complex state 2p m=+1", "2p", "pAx", "m+1", false, "is a complex state"}, {"complex state 3d m=-2", "3d", "dAx", "m-2", false, "is a complex state"},
+                          {"complex state 4f m=+3", "4f", "fAx", "m+3", false, "is a complex state"}, {"superposition", "2p", "", "", true, "A superposition has no single level"}};
+    for (const Case& c : cases) {
+        seedRandom(424242);
+        AtomLab lab; jumpSetup(lab, c.orb, ""); if (*c.axKey) lab.setParam(c.axKey, std::string(c.ax));
+        if (c.super) { lab.setParam("orb2", std::string("2s")); lab.setParam("mix", 30.0); lab.setParam("super", std::string("On")); }
+        g_autoClock = 0; autoSetup(lab); lab.toggleAuto();
+        bool anyJump = false;
+        autoSteps(lab, 240 * 4);                                   // four seconds: the wait is at most 1.8 s, so Auto has looked at least twice
+        anyJump = lab.s.trans || lab.s.photon || lab.s.photonAfter;
+        const std::string want = manualText(c.orb, c.axKey, c.ax, c.super, -1);
+        const std::string tag = std::string("Auto, ") + c.name + ": ";
+        checkTrue(tag + "no jump and no photon (the electron really cannot jump from here in the lab)", !anyJump);
+        checkTrue(tag + "a message says why, with the manual button's own words", !lab.s.msg.empty() && lab.s.msg == want && lab.s.msg.find(c.cause) != std::string::npos);
+        checkTrue(tag + "the message is shown by info() (for as long as it lasts)", [&] { for (const std::string& L : lab.info()) if (L == lab.s.msg) return true; return false; }());
+        const double until = lab.s.msgUntil;
+        autoSteps(lab, 240 * 40);                                  // 40 more seconds: the message has long expired and must not come back
+        checkNum(tag + "40 s later the message was not issued again (msgUntil unchanged)", lab.s.msgUntil, until, 0);
+        checkTrue(tag + "still no jump after 44 s", !lab.s.trans && !lab.s.photon && !lab.s.photonAfter && lab.s.lines.empty());
+        checkTrue(tag + "and the message has expired from info()", [&] { for (const std::string& L : lab.info()) if (L == lab.s.msg) return false; return true; }());
+        // the situation changes (Auto switched off and on again): it says it once more
+        lab.toggleAuto(); autoSteps(lab, 10); lab.toggleAuto(); autoSteps(lab, 240 * 3);
+        checkTrue(tag + "Auto switched off and on again: the message comes again (once)", lab.s.msgUntil > until);
+        const double until2 = lab.s.msgUntil; autoSteps(lab, 240 * 30);
+        checkNum(tag + "and again only once", lab.s.msgUntil, until2, 0);
+    }
+    // a different cause is a different message: complex m=+1 -> complex m=-1 (other state), complex -> superposition, superposition -> a real orientation (Auto then works)
+    {
+        seedRandom(7);
+        AtomLab lab; jumpSetup(lab, "2p", ""); lab.setParam("pAx", std::string("m+1")); g_autoClock = 0; autoSetup(lab); lab.toggleAuto(); autoSteps(lab, 240 * 4);
+        const std::string first = lab.s.msg; const double u1 = lab.s.msgUntil;
+        lab.setParam("pAx", std::string("m-1")); autoSteps(lab, 240 * 4);
+        checkTrue("Auto: m=+1 changed to m=-1 is a new situation: new message naming m = −1", lab.s.msgUntil > u1 && lab.s.msg != first && lab.s.msg.find("m = −1") != std::string::npos);
+        lab.setParam("mix", 30.0); lab.setParam("orb2", std::string("2s")); lab.setParam("super", std::string("On")); autoSteps(lab, 240 * 4);
+        checkTrue("Auto: complex state changed to a superposition: the superposition message", lab.s.msg.find("A superposition has no single level") != std::string::npos);
+        lab.setParam("super", std::string("Off")); lab.setParam("pAx", std::string("z")); autoSteps(lab, 240 * 20);
+        checkTrue("Auto: back to a real orientation, the jumps resume by themselves", !lab.s.lines.empty());
+    }
+    // Auto still works for real orientations: no message, and the same number of jumps as before this change (measured on the code before the fix; the wait is 0.5-1.8 s, so at most 120 attempts in 60 s)
+    for (const char* view : {"Cloud", "Orbit"}) {
+        seedRandom(97531);
+        AtomLab lab; jumpSetup(lab, "3p", "z"); lab.setParam("view", std::string(view)); if (std::string(view) == "Orbit") lab.setParam("n", 3.0);
+        g_autoClock = 0; autoSetup(lab); lab.toggleAuto();
+        int started = 0; bool said = false;
+        for (int i = 0; i < 14400; i++) {
+            const bool idle = !lab.s.trans && !lab.s.photon && !lab.s.photonAfter; const std::string before = lab.s.last;
+            autoSteps(lab, 1);
+            if (before != lab.s.last) started++;
+            (void)idle; if (!lab.s.msg.empty()) said = true;
+        }
+        const int want = std::string(view) == "Cloud" ? AUTO_JUMPS_CLOUD : AUTO_JUMPS_ORBIT;
+        checkTrue(std::string("Auto, real orientation, ") + view + ", 60 s: no message at all", !said);
+        checkTrue(std::string("Auto, real orientation, ") + view + ", 60 s: jumps happen, at most 120 (the shortest wait is 0.5 s plus the flight)", started > 0 && started <= 120);
+        checkNum(std::string("Auto, real orientation, ") + view + ", 60 s: the same number of photons as before the change", started, want, 0);
+    }
+    // every real orbital and every Orbit level: never a state with no jump in either direction (so Auto's reason is never "can't emit" alone); and every
+    // state whose Absorb finds nothing is on the top shell (n = 4), where the manual words "highest level in this sim" are true
+    { AtomLab e; jumpSetup(e, "1s", ""); int both = 0, upEmptyBelowTop = 0, checked = 0;
+      for (int k = 0; k < int(orbitals().size()); k++) {
+          e.p.view = "Cloud"; e.p.orb = orbitals()[k].shell; const int l = orbitals()[k].l; (l == 1 ? e.p.pAx : l == 2 ? e.p.dAx : e.p.fAx) = orbitals()[k].ori;
+          if (e.complexM() != 0) continue;
+          checked++;
+          if (e.targets(-1).empty() && e.targets(1).empty()) both++;
+          if (e.targets(1).empty() && orbitals()[k].n < 4) upEmptyBelowTop++;
+      }
+      e.p.view = "Orbit"; for (int n = 1; n <= 4; n++) { e.p.n = n; checked++; if (e.targets(-1).empty() && e.targets(1).empty()) both++; if (e.targets(1).empty() && n < 4) upEmptyBelowTop++; }
+      checkTrue("real states examined: all 4 Orbit levels and every real orbital", checked > 4 + 20);
+      checkNum("real states with no jump in either direction", both, 0, 0);
+      checkNum("real states below the top shell with nothing to absorb", upEmptyBelowTop, 0, 0); }
+}
+
 static void testOutlineFade() {
     AtomLab lab; jumpSetup(lab, "1s", ""); runSteps(lab, 100);
     checkTrue("outline: fully there when no jump runs", lab.outlineAlpha() == 1);
@@ -3475,6 +3561,7 @@ int main() {
     testOrbitGlide();
     testJumpHandover();
     testOutlineFade();
+    testAutoSilence();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

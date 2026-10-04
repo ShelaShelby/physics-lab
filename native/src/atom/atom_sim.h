@@ -104,6 +104,7 @@ struct AtomState {
     bool autoPhotons = false;
     double wait = 0.3, boost = 0;
     std::string last, msg;
+    std::string autoSaid;                // Auto photons: the reason already given for finding no jump (state + cause), so it is said once, not every time Auto looks
     std::optional<double> szCur;         // the size the picture is fitted to (glides), m
     // ---- kept across init() ----
     double msgUntil = 0;                 // wall clock, ms
@@ -166,7 +167,7 @@ public:
     void resetView();
     void emit() { manualJump(-1); }
     void absorb() { manualJump(1); }
-    void toggleAuto() { s.autoPhotons = !s.autoPhotons; s.wait = 0.3; }
+    void toggleAuto() { s.autoPhotons = !s.autoPhotons; s.wait = 0.3; s.autoSaid.clear(); }
     void toggleSpin() { s.spin = !s.spin; }
     bool showBuildAnother() const { return s.decHeld; }
     bool showReshuffle() const { return p.Z + p.N > 3; }
@@ -253,6 +254,8 @@ private:
     void finishTransition(double overshoot);
     void glideOrbit(double dt);
     void manualJump(int dir);
+    struct NoJump { std::string text; double ms; };
+    NoJump whyNoJump(int dir) const;                      // why targets(dir) is empty, in the words the Emit/Absorb buttons use (and Auto, when it finds no jump at all)
     void advance(double dt);
     void decTick(double dt);
 };

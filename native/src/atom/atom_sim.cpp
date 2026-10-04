@@ -65,7 +65,7 @@ void AtomLab::init() {
     if (superOn()) { s.sa.assign(std::size_t(cloudCap()) * 4, 0.f); sup_ = superState(); nA_ = normFactor(sup_.idA, p.Z); nB_ = normFactor(sup_.idB, p.Z); overlap_ = overlapAB(sup_.idA, sup_.idB) != 0.0; } else overlap_ = false; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
-    s.trans.reset(); s.photon.reset(); s.photonAfter.reset(); s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0; s.jb = AtomState::JumpBuild(); s.landT = 99; s.lines.clear(); s.autoPhotons = false; s.wait = 0.3; s.boost = 0;
+    s.trans.reset(); s.photon.reset(); s.photonAfter.reset(); s.jp.clear(); s.jA.clear(); s.jB.clear(); s.jn = 0; s.jb = AtomState::JumpBuild(); s.landT = 99; s.lines.clear(); s.autoPhotons = false; s.autoSaid.clear(); s.wait = 0.3; s.boost = 0;
     s.last.clear(); s.msg.clear(); s.szCur.reset();
     for (int i = 0; i < 800; i++) mcmc(false);   // burn-in: let the walker forget where it started
 }
@@ -545,25 +545,23 @@ void AtomLab::glideOrbit(double dt) {
     if (s.trail.size() > 500) s.trail.pop_front();
 }
 
-void AtomLab::manualJump(int dir) {
-    if (s.trans || s.photon) return;
-    const std::vector<int> list = targets(dir);
+AtomLab::NoJump AtomLab::whyNoJump(int dir) const {          // (only asked when targets(dir) is empty)
     const int cur = curLevel();
-    if (list.empty() && superOn()) {
-        s.msg = "A superposition has no single level to jump from. Switch Superposition off to emit or absorb a photon.";
-        s.msgUntil = nowMs() + 5500;
-        return;
-    }
-    if (list.empty() && p.view != "Orbit" && complexM() != 0) {
-        s.msg = stateText() + " is a complex state. Photon jumps from it are not in the lab: which levels light can reach depends on the light's polarisation, which the lab does not model. Pick a real orientation (px, pz, ...) to emit or absorb.";
-        s.msgUntil = nowMs() + 6500;
-        return;
-    }
+    if (superOn()) return {"A superposition has no single level to jump from. Switch Superposition off to emit or absorb a photon.", 5500};
+    if (p.view != "Orbit" && complexM() != 0)
+        return {stateText() + " is a complex state. Photon jumps from it are not in the lab: which levels light can reach depends on the light's polarisation, which the lab does not model. Pick a real orientation (px, pz, ...) to emit or absorb.", 6500};
+    return {dir < 0 ? (lvlN(cur) == 1 ? lvl(cur) + " is the lowest level: nothing to emit. Try Absorb."
+                                      : lvl(cur) + " can't emit a photon (selection rule: l must change by 1), so it stays excited.")
+                    : lvl(cur) + " is the highest level in this sim: nothing more to absorb.", 4500};
+}
+
+void AtomLab::manualJump(int dir) {
+    if (s.trans || s.photon) return;                            // (a jump is already under way: the button does nothing, as in the web)
+    const std::vector<int> list = targets(dir);
     if (list.empty()) {
-        s.msg = dir < 0 ? (lvlN(cur) == 1 ? lvl(cur) + " is the lowest level: nothing to emit. Try Absorb."
-                                           : lvl(cur) + " can't emit a photon (selection rule: l must change by 1), so it stays excited.")
-                        : lvl(cur) + " is the highest level in this sim: nothing more to absorb.";
-        s.msgUntil = nowMs() + 4500;
+        const NoJump w = whyNoJump(dir);
+        s.msg = w.text;
+        s.msgUntil = nowMs() + w.ms;
         return;
     }
     startJump(dir < 0 ? "emit" : "absorb", pick(list));
@@ -606,7 +604,12 @@ void AtomLab::advance(double dt) {
         const std::vector<int> down = targets(-1), up = targets(1);
         const bool goUp = down.empty() || (!up.empty() && random() < 0.25);
         const std::vector<int>& list = goUp ? up : down;
-        if (!list.empty()) startJump(goUp ? "absorb" : "emit", pick(list));
+        if (!list.empty()) { startJump(goUp ? "absorb" : "emit", pick(list)); s.autoSaid.clear(); }
+        else {                                                  // nothing to do in either direction: say why, once per cause (not at every look), with the buttons' words
+            const NoJump w = whyNoJump(-1);                     // (for a superposition or a complex state the reason is the same both ways; for the rest, see the report)
+            const std::string key = w.text;
+            if (s.autoSaid != key) { s.autoSaid = key; s.msg = w.text; s.msgUntil = nowMs() + w.ms; }
+        }
         s.wait = 0.5 + random() * 1.3;
     }
 }

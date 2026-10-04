@@ -17,6 +17,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.11", "Atom Lab: Auto photons now say why they cannot jump (stage 1 of 4)",
+     "With Auto photons on, a complex orientation (m = ±1, ±2, ±3) or a superposition used to leave the atom doing nothing, with no word about it. Now the lab says why, in the same words the Emit and Absorb buttons use, once for each reason (not again at every look), and again if you change the state or switch Auto off and on. Auto stays on and starts jumping by itself as soon as you pick a real orientation (px, pz, ...). "
+     "Nothing else changed: real orientations jump exactly as before (the same photons in the same test run). "
+     "Still true: the lab does not do photon jumps from a complex state or a superposition. Light can in fact take such a state to another level (the rule l changes by 1 still holds; the light's polarisation decides which m it ends in); the lab refuses because it does not model the polarisation, and whether to allow it is left to the owner's decision. The next stages of 0.11 are the chart of nuclides."},
     {"0.10.9", "Atom Lab: the nucleus's shape from measured quadrupole moments (stage 2)",
      "The shape of a nucleus now comes from a measured quadrupole moment wherever one can be used: the IAEA's recommended values (fetched 2026-10-04, 598 ground-state rows). A positive moment means stretched (like a rugby ball), a negative one flattened (like a pancake), and the card and the readout line say which the nucleus on screen is. "
      "Where there is no usable moment the lab keeps what it had, and now says which: a B(E2) value (11 isotopes) or an estimate; of the neutron slider's 4,252 isotopes, 498 now take their shape from a measured moment, 11 from B(E2) and 3,743 from the estimate. "

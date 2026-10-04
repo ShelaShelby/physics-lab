@@ -1,10 +1,10 @@
 # Resume
 
 ## Current state
-- Version 0.10.9 alpha, stage 2 is finished: the nucleus's shape from measured quadrupole moments. `atom/quadrupole.h/.cpp` + `quadrupole_data.inc` (from data/quadrupole/elec_mom_recomm.csv, IAEA, fetched 2026-10-04 by tools/make_quadrupole_data.py; the file's second column is the MASS NUMBER): `nucShape(Z, N)` = a measured ground-state moment converted with the strong-coupling relation K = I (|beta2| <= 0.6, signed, firm spin >= 1: 498 of the slider's isotopes), else the B(E2) value (11), else the estimate (3,743); `buildNucleus` draws a volume-keeping body whose protons have exactly the measured rms (stage 1) and quadrupole; card "Nuclear size and shape (measured)" and the readout line name the source. Stage 1 (sizes from the IAEA charge radii) stands. Halo nuclei stay BLOCKED ON DATA the owner downloads (ROADMAP, OWNER-TODO).
+- Version 0.11 alpha, stage 1 of 4 is finished: Auto photons now say why they find no jump (`AtomLab::whyNoJump`, shared by `manualJump` and the auto block in `advance`; the reason is said once per cause via `s.autoSaid`, reset by `init()` and `toggleAuto()`; no random number is used differently). Complex states and superpositions still refuse jumps, on purpose: the options (and the physics) are in native/REPORT.md and wait for the owner. The CMake/app version number is still 0.10.9 (changelog entry is labelled 0.11); stages 2-4 (the chart of nuclides) are not started. Everything of 0.10.9 (measured nuclear size and shape) stands unchanged.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 18,845
+  - atom_tests: 18,889
   - app_tests: 1,520
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
