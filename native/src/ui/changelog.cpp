@@ -17,6 +17,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.11", "Atom Lab: the chart of nuclides (stage 2 of 4)",
+     "A new view, \"Chart of nuclides\", is a map of every nuclide the lab knows: 3,557 squares, neutrons across and protons up. Each square is coloured by how that nuclide decays (stable, beta minus, beta plus or electron capture, alpha, fission, proton or neutron emission), and the legend says in words what each colour means. The stable nuclides run along the middle like a valley, with neutron-rich nuclei on one side and proton-rich ones on the other. "
+     "The lines are the magic numbers 2, 8, 20, 28, 50, 82 and 126, where a shell of nucleons is full. The nuclide you have chosen is marked with a box and cross-hairs, so you do not lose your place. Hover a square for its half-life, how it decays and with what odds, its spin, and whether the lab has a measured charge radius and a measured quadrupole moment; where the lab has no value, it says so. "
+     "Click a square to choose that nuclide: the other views then show it. The arrow keys move one proton or one neutron, which is the natural way to walk a decay chain. While the chart is shown the chosen nucleus does not decay on its own, so it stays where you put it. "
+     "The spins and the kind of each half-life (a measurement, a limit, only an extrapolation, or none) come from NUBASE2020, which is now listed under Where the facts come from. The colours are a convention of this lab, not a measurement; where a decay has several branches, the colour is the kind with the largest total odds. The chart shows what has been observed: it says nothing about the island of stability or about heights, which come in the next stages. "
+     "The app's version is now 0.11."},
     {"0.11", "Atom Lab: Auto photons now say why they cannot jump (stage 1 of 4)",
      "With Auto photons on, a complex orientation (m = ±1, ±2, ±3) or a superposition used to leave the atom doing nothing, with no word about it. Now the lab says why, in the same words the Emit and Absorb buttons use, once for each reason (not again at every look), and again if you change the state or switch Auto off and on. Auto stays on and starts jumping by itself as soon as you pick a real orientation (px, pz, ...). "
      "Nothing else changed: real orientations jump exactly as before (the same photons in the same test run). "

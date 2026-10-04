@@ -33,7 +33,7 @@ AtomLab::AtomLab() {
 bool AtomLab::validChoice(const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> opts = {
         {"scale", {"Auto", "Fixed"}}, {"qstyle", {"Cinematic", "Accurate", "Classic"}}, {"detail", {"Valence", "+ Gluons", "+ Sea"}},
-        {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice"}}, {"ostyle", {"Modern", "Bohr 1913"}},
+        {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice", kChartView}}, {"ostyle", {"Modern", "Bohr 1913"}},
         {"orb", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"pAx", {"x", "y", "z", "m+1", "m-1"}}, {"dAx", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
         {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2", "m+1", "m-1", "m+2", "m-2", "m+3", "m-3"}},
         {"pAx2", {"x", "y", "z", "m+1", "m-1"}}, {"dAx2", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
@@ -556,7 +556,8 @@ AtomLab::NoJump AtomLab::whyNoJump(int dir) const {          // (only asked when
 }
 
 void AtomLab::manualJump(int dir) {
-    if (s.trans || s.photon) return;                            // (a jump is already under way: the button does nothing, as in the web)
+    if (s.trans || s.photon) return;
+    if (chartOn()) { s.msg = "The chart of nuclides shows nuclei, not the electron. Switch to Orbit, Cloud or Slice to emit or absorb a photon."; s.msgUntil = nowMs() + 4500; return; }                            // (a jump is already under way: the button does nothing, as in the web)
     const std::vector<int> list = targets(dir);
     if (list.empty()) {
         const NoJump w = whyNoJump(dir);
@@ -600,7 +601,7 @@ void AtomLab::advance(double dt) {
     }
     if (s.flash) { *s.flash += dt; if (*s.flash > 0.7) s.flash.reset(); }
     if (s.boost > 0) s.boost -= dt;
-    if (s.autoPhotons && !s.trans && !s.photon && (s.wait -= dt) <= 0) {
+    if (s.autoPhotons && !chartOn() && !s.trans && !s.photon && (s.wait -= dt) <= 0) {
         const std::vector<int> down = targets(-1), up = targets(1);
         const bool goUp = down.empty() || (!up.empty() && random() < 0.25);
         const std::vector<int>& list = goUp ? up : down;
@@ -626,7 +627,7 @@ void AtomLab::decTick(double dt) {
         s.dec = decInfo(p.Z, p.N);
         s.decAt = !s.dec || !s.dec->T ? INFINITY : -*s.dec->T / kLn2 * std::log(1 - random());
     }
-    if (paused || hold || s.decHeld || std::isinf(s.decAt)) return;
+    if (paused || hold || chartOn() || s.decHeld || std::isinf(s.decAt)) return;   // (the chart: the chosen nucleus must stay where the user put it, so its decay clock waits)
     s.decAge += dt;
     if (s.decAge < s.decAt) return;
     // which way it decays, with the measured odds
@@ -728,6 +729,7 @@ void AtomLab::tick(double dt) {                               // runs every fram
 
 void AtomLab::step(double dt) {
     advance(dt);
+    if (chartOn()) return;                                      // the chart shows no electron: nothing to move
     if (superOn()) s.beatT += dt * p.speed / 5.0;                // the beat clock: 4 s per beat at Playback speed 5, faster or slower with the speed (step() does not run while paused)
     if (p.view != "Orbit") {
         if (s.trans && !webJumps) {
@@ -795,7 +797,24 @@ void AtomLab::resetView() {
 }
 
 // the ⓘ button, or a click on a nucleon to dive into it
+void AtomLab::chooseNuclide(int Z, int N) {
+    if (!chartHas(Z, N)) return;
+    if (p.Z != Z) setParam("Z", double(Z));                     // (a new element: the neutrons first follow to its usual isotope)
+    if (p.N != N) setParam("N", double(N));
+}
+bool AtomLab::chartStep(int dZ, int dN) {
+    int Z = p.Z, N = p.N;
+    if (!chartMove(Z, N, dZ, dN)) return false;
+    chooseNuclide(Z, N);
+    return true;
+}
+
 void AtomLab::click(double x, double y) {
+    if (chartOn()) {                                           // the chart: a click on a tile chooses that nuclide
+        int Z, N;
+        if (chartTileAt(chartLayout(viewW, viewH), x, y, Z, N)) chooseNuclide(Z, N);
+        return;
+    }
     if (s.infoBox && x >= s.infoBox->x && x <= s.infoBox->x + s.infoBox->w && y >= s.infoBox->y && y <= s.infoBox->y + s.infoBox->h) {
         s.more = !moreShown();
         moreStored = s.more;
@@ -930,6 +949,9 @@ std::vector<std::string> AtomLab::info() {
 }
 
 std::string AtomLab::hint() const {
+    if (chartOn())
+        return "The chart of nuclides: every known nuclide is one square, neutrons across and protons up. Hover a square for its details, click it to choose that nuclide (the other views then show it), "
+               "or use the arrow keys to move one proton or one neutron. The colour is how the nuclide decays; the lines are the magic numbers.";
     const double x = p.Z * kAlpha;
     std::string note;
     if (p.Z >= kRelativityZ) note += " Heavy atoms: this lab uses non-relativistic physics, but a 1s electron here moves at " + fmt::fixed(100 * x, 0) +

@@ -277,6 +277,10 @@ int main(int, char**) {
                 if (!app::labInputAllowed(app.benchRunning)) break;      // the benchmark is running: only Cancel and Esc do anything
                 if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) app.paused = !app.paused;
+                if (app.lab == 1 && app.atom.chartOn() && !io.WantCaptureKeyboard) {   // the chart of nuclides: arrow keys walk one proton or one neutron (up = more protons, right = more neutrons)
+                    const int dZ = e.key.key == SDLK_UP ? 1 : e.key.key == SDLK_DOWN ? -1 : 0, dN = e.key.key == SDLK_RIGHT ? 1 : e.key.key == SDLK_LEFT ? -1 : 0;
+                    if (dZ || dN) app.atom.chartStep(dZ, dN);
+                }
                 break;
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
                 if (!app::labInputAllowed(app.benchRunning)) break;

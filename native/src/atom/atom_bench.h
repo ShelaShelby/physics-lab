@@ -16,7 +16,8 @@ namespace atom {
 //   10 phase colours with Classic dots: 5 Cloud 3D Wheel, 6 Cloud 3D Sign (the baseline), 7 Cloud 2D Wheel (all 48,000 dots)
 //   11 a cloud jump: 8 held half way, 9 one after another; a superposition: 10 orthogonal, 11 overlapping, 12 orthogonal with two energies (all 48,000 dots)
 //   12 an outline: 13 first use (cache emptied again and again), 14 the cut dragged (Slice view), 15 the nucleus view (oganesson-294, whole nucleus)
-constexpr int kBenchFirstRisk = 5, kBenchSceneCount = 16;
+//   16 the chart of nuclides (0.11 stage 2): the whole chart, every nuclide's square drawn, nothing hovered (keep the pointer off the picture)
+constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchSceneCount = 17;
 struct BenchInfo { std::string name, what; };       // name: without a number (the benchmark adds it); what: the settings in words
 const BenchInfo& benchSceneInfo(int which);          // which = kBenchFirstRisk .. kBenchSceneCount - 1
 // Some scenes need something done every frame (a jump held half way, the cut moving, the outline's cache emptied): the benchmark calls this at the start of every frame

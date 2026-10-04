@@ -146,3 +146,11 @@
 ## 0.11 stage 1 (Auto photons say why): what only the owner can do
 - [ ] Decide what the lab should do with photon jumps from a complex state (m = ±1, ±2, ±3): the options and a recommendation are in native/REPORT.md ("The complex-state question"). Until you decide, the lab refuses (now with a message from Auto too).
 - [ ] On the PC: switch Auto photons on, choose a complex orientation (for example 2p m = +1) and check the message appears once, reads well and is not cut off; then pick px and check Auto starts by itself. The message's layout has never been seen on a screen.
+
+## 0.11 stage 2 (the chart of nuclides): what only the owner can do
+- [ ] Open the new view (View: Chart of nuclides) on the PC and look: the whole chart at your usual window size and at a small one, the legend (does it cover any tile, is the text readable and not cut off), the magic lines, the box and cross-hairs round the chosen nuclide, the axis numbers. I replayed the drawing into a picture with my own fonts, never the app's real ones.
+- [ ] Hover a few squares (a stable one, an alpha emitter, a fissioning one such as fermium-258, one with a tentative spin, one far from stability): the tooltip must wrap and stay on screen. Click a square, switch to Cloud or Orbit and check it shows that nuclide. Use the arrow keys to walk along a row and a column (hold one down).
+- [ ] Run the benchmark scene "Chart of nuclides: the whole chart, 3,557 squares" with the pointer off the picture and send the result (frame time, GPU time).
+- [ ] Open www-nds.iaea.org/amdc/ (a browser gets past the bot challenge) and send what it says about citing NUBASE2020; the app credits only the citation line the file itself gives.
+- [ ] Decide whether Auto photons waiting silently while the chart is shown is fine (the chart shows no electron) or should say so.
+- [ ] The lab's table marks 113 half-lives with "~" (approximate); I could not reproduce that mark from NUBASE2020 (most of those have plain values there). If you know where it came from, say so; the chart's hover repeats the lab's existing wording.

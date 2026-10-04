@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.11 alpha, stage 1 of 4 is finished: Auto photons now say why they find no jump (`AtomLab::whyNoJump`, shared by `manualJump` and the auto block in `advance`; the reason is said once per cause via `s.autoSaid`, reset by `init()` and `toggleAuto()`; no random number is used differently). Complex states and superpositions still refuse jumps, on purpose: the options (and the physics) are in native/REPORT.md and wait for the owner. The CMake/app version number is still 0.10.9 (changelog entry is labelled 0.11); stages 2-4 (the chart of nuclides) are not started. Everything of 0.10.9 (measured nuclear size and shape) stands unchanged.
+- Version 0.11 alpha, stage 2 of 4 is finished: the chart of nuclides (flat). Logic in `atom/chart.h/.cpp` (tiles, the colour rule, layout, hit test, arrow step, hover words, free-room measure; all tested), drawing in `atom/chart_draw.cpp` (rect calls only, tested through a recording stand-in for the renderer), data in `atom/nubase.h/.cpp` + `nubase_data.inc` (from data/nubase/nubase_4.mas20.txt by tools/make_nubase_data.py: spin, kind of half-life, '?' entries of stable nuclides). View name `kChartView` = "Chart of nuclides"; `AtomLab::chartOn()`, `chooseNuclide`, `chartStep`; in the chart view `step` returns early, `decTick` waits, auto photons wait, Emit/Absorb say so. The hover is an ImGui tooltip in `atom_view.cpp`, arrow keys in `main.cpp`. Benchmark scene 16. App version 0.11. Stages 3 (2.5D landscape) and 4 (heights, island of stability) are not started. Stage 1 (Auto photons say why) and all of 0.10.9 stand unchanged.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 18,889
-  - app_tests: 1,520
+  - atom_tests: 18,987
+  - app_tests: 1,526
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
   - moon_tests: 24 (new in 0.10.4 stage 1: the ELP2000-82B Moon against the Horizons Moon table; takes about 12 s)

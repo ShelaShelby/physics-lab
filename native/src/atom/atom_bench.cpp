@@ -48,6 +48,12 @@ void still(AtomLab& L) { L.s.zoomTo.reset(); L.s.panTo.reset(); L.s.pan = Vec3d{
 }  // namespace
 
 void benchSetup(AtomLab& L, int which, double w, double h) {
+    if (which == kBenchChartScene) {                     // the chart of nuclides: the whole map, U-238 chosen (the marker is drawn), nothing to wait for
+        fresh(L, 92, 146, w, h);
+        L.setParam("view", std::string(kChartView));
+        still(L);
+        return;
+    }
     if (which >= kBenchFirstRisk) {                      // the speed-risk scenes: U-238 like scene 3 (the nucleus scene: oganesson-294), every setting named, nothing animated by itself
         const bool og = which == 15;
         fresh(L, og ? 118 : 92, og ? 176 : 146, w, h);
@@ -101,6 +107,9 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Risk 12: first use of an outline (cache emptied every 120 frames), Cloud 3D, 4f, 12,000 dots", "uranium-238, Cloud 3D, 4f, Classic, Normal (scene 3 of the benchmark). The outline is switched on at the first counted frame and the outline cache is emptied every 120 frames after that, so the 64 x 64 x 64 density pass runs again each time: look at the worst frame"},
         {"Risk 12: outline with the cut dragged, Slice view, 4f, 12,000 dots", "uranium-238, Slice view, 4f, Classic, Normal, 90 % outline On: the cut moves 0.01 every frame between -0.90 and +0.90 (as a drag does), so the outline's slice (40,000 density values) is redone every frame"},
         {"Risk 12: nucleus view, oganesson-294 (294 nucleons), whole nucleus, Cinematic quarks, + Sea detail", "oganesson-294 (118 protons, 176 neutrons), the whole nucleus in view, Cinematic quarks, + Sea detail, Fuzzy nucleons (scene 2 of the benchmark with the biggest nucleus)"},
+        {"Chart of nuclides: the whole chart, 3,557 squares", "the Atom Lab's Chart of nuclides view (0.11 stage 2): every nuclide of the lab's table as one square (3,557), the 14 magic-number bands, the legend and the text box, the chosen nuclide (uranium-238) marked. "
+                                                              "Nothing moves. Keep the pointer off the picture while it runs (a hovered square changes the text box). Compare it with scene 8 (the Orbit view's own cost) and look at the GPU time: "
+                                                              "this scene is all rectangles in one batch, so the CPU time to build them is what it measures"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchSceneCount - 1)) - kBenchFirstRisk];
 }
@@ -129,6 +138,7 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
 }
 
 std::string benchSettingsText(const AtomLab& L) {
+    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N);
     std::string t = "view " + L.p.view + ", Orbit style " + L.p.ostyle + ", quark style " + L.p.qstyle + ", detail " + L.p.detail + ", " + L.p.style + " nucleons";
     if (L.p.view != "Orbit") {                           // the cloud views: what the cost depends on
         t += ", orbital " + L.p.orb + ", cloud style " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots, phase " + L.p.phase;

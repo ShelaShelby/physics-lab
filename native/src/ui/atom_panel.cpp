@@ -739,6 +739,7 @@ void atomPanel(AppState& app, float width) {
 
     // ---- View & zoom ----
     ImGui::SeparatorText("View & zoom");
+    if (!L.chartOn()) {                                // (the chart has no scale, zoom or spin: nothing here would do anything)
     if (L.showSpin() && ImGui::Button(displayable("⟳ Spin on/off").c_str())) L.toggleSpin();
     selectRow(app, "scale", "Scale", {{"Auto", "Auto-fit (orbit fills the canvas)"}, {"Fixed", "Fixed (same scale for every atom)"}}, p.scale);
     sliderRow(app, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(std::round(std::pow(10, p.zoom))), p.zoom, 0, 7, 0.01, false);
@@ -748,13 +749,15 @@ void atomPanel(AppState& app, float width) {
     }
     if (p.zoom >= 3) selectRow(app, "style", "Nucleon edge", {{"Fuzzy", "Fuzzy (real charge density)"}, {"Hard balls", "Hard balls (simple)"}}, p.style);
 
+    }
+
     // ---- Electron ----
     ImGui::SeparatorText("Electron");
-    selectRow(app, "view", "View", {{"Orbit", "Orbit (electron on a circle)"}, {"Cloud", "Cloud (quantum, side view)"}, {"Cloud 3D", "Cloud 3D (quantum, rotatable)"}, {"Slice", "Slice (cross-section of the cloud)"}}, p.view);
+    selectRow(app, "view", "View", {{"Orbit", "Orbit (electron on a circle)"}, {"Cloud", "Cloud (quantum, side view)"}, {"Cloud 3D", "Cloud 3D (quantum, rotatable)"}, {"Slice", "Slice (cross-section of the cloud)"}, {kChartView, "Chart of nuclides (every nuclide on one map)"}}, p.view);
     mutedWrapped("The energy E in the line over the picture is the one-electron, non-relativistic level, −Rydberg energy × Z²/n², with the nucleus's real mass (hydrogen: −13.60 eV). In the Orbit view it is worked out from the electron's position and speed and scaled to that level. "
                  "Fine structure, the Lamb shift and spin are not modelled, so real energies differ a little (more for heavy atoms).", 12.0f / 16);
     if (p.view == "Orbit") selectRow(app, "ostyle", "Orbit style", {{"Modern", "Modern (real nucleus, quarks when you zoom in)"}, {"Bohr 1913", "Bohr 1913 (simple balls, as Bohr drew it)"}}, p.ostyle);
-    if (p.view != "Orbit") {
+    if (p.view != "Orbit" && !L.chartOn()) {
         selectRow(app, "orb", p.super == "On" ? "First orbital" : "Orbital", SHELLS, p.orb);
         const int l = orbitals()[orbIndex(p.orb)].l;
         if (l == 1) selectRow(app, "pAx", "Orientation", P_AX, p.pAx);
@@ -810,12 +813,13 @@ void atomPanel(AppState& app, float width) {
         sliderRow(app, "speed", "Playback speed", std::to_string(p.speed), p.speed, 1, 30, 1, false);
     }
 
-    if (p.view != "Orbit") {
+    if (p.view != "Orbit" && !L.chartOn()) {
         ImGui::SeparatorText("Where the electron is found");
         radialCard(L);
     }
 
     // ---- Photons ----
+    if (!L.chartOn()) {                                // (the chart shows nuclei, not the electron: no photons there)
     ImGui::SeparatorText("Photons");
     if (ImGui::Button("↓ Emit photon")) L.emit();
     ImGui::SameLine();
@@ -828,6 +832,7 @@ void atomPanel(AppState& app, float width) {
           "sloshing at the slowed-down beat frequency on the way. It is not a calculation of how a photon is absorbed or emitted. A real jump is very different from the screen: the screen is slowed down, and the real time is not shown. "
           "The 90% outline fades out as the cloud leaves its orbital and back in after landing. A photon you emit appears when the jump ends; an absorbed photon arrives first, and then the jump starts. "
           "With Reduced motion on (Settings, Motion) the jump is over at once.", 12.0f / 16);
+    }
 
     // ---- Light spectrum ----
     ImGui::SeparatorText("Light spectrum");

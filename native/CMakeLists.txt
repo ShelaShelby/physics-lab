@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.10.9 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.11 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -53,6 +53,8 @@ add_library(atom_core STATIC
   src/atom/lifetime.cpp
   src/atom/radii.cpp
   src/atom/quadrupole.cpp
+  src/atom/nubase.cpp
+  src/atom/chart.cpp
 )
 target_link_libraries(atom_core PUBLIC orbit_core)
 target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
@@ -156,6 +158,7 @@ if(PL_BUILD_APP)
     src/render/earth_texture.cpp
     src/orbit/orbit_view.cpp
     src/atom/atom_view.cpp
+    src/atom/chart_draw.cpp
     src/ui/orbit_panel.cpp
     src/ui/app_pages.cpp
     src/ui/app_tabs.cpp

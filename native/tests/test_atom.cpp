@@ -22,12 +22,15 @@
 #include "atom/dirac.h"
 #include "atom/lifetime.h"
 #include "atom/atom_sim.h"
+#include "atom/chart.h"
+#include "atom/nubase.h"
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
 #include "atom/radii.h"
 #include "atom/quadrupole.h"
 #include "atom/radial_graph.h"
 #include "orbit/format.h"
+#include "atom/chart_draw.cpp"   // 0.11 stage 2: the chart drawing is tested through a recording stand-in for the renderer below (it only calls rect and hexColor)
 
 #include "reference/atom_reference.inc"
 #include "reference/atom_learn_reference.inc"
@@ -1378,6 +1381,339 @@ static void testAutoSilence() {
       checkTrue("real states examined: all 4 Orbit levels and every real orbital", checked > 4 + 20);
       checkNum("real states with no jump in either direction", both, 0, 0);
       checkNum("real states below the top shell with nothing to absorb", upEmptyBelowTop, 0, 0); }
+}
+
+// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 0.11 stage 2: the chart of nuclides. REFERENCES are not the lab's own output: (1) counts and rows typed from data/nubase/nubase_4.mas20.txt (NUBASE2020, fetched 2026-10-04) by a separate
+// script that reads only that file: 3,558 ground-state lines = the free neutron + 3,557 nuclides, the count per element, spin and half-life text of 15 chosen nuclides; (2) the colour classes counted
+// by a separate Python implementation of the stated rule on the lab's decay table, and, as a cross-check done once and written in REPORT.md, against NUBASE's own decay column (3,054 of 3,083 agree);
+// (3) hand arithmetic for the layout; (4) the 4 spin kinds. Guards are exact counts, not tolerances.
+// ---- a recording stand-in for the renderer: drawChart only calls Renderer2D::rect and hexColor, so these two are all it needs (the real ones are in src/render, built only in the app)
+struct RecRect { double x, y, w, h; render::Color c; };
+static std::vector<RecRect> g_rec;
+namespace render {
+void Renderer2D::rect(double x, double y, double w, double h, Color c) { g_rec.push_back({x, y, w, h, c}); }
+Color hexColor(const char* hex, float alpha) { auto v = [&](int i) { return float(std::strtol(std::string(hex + 1 + 2 * i, 2).c_str(), nullptr, 16)) / 255.f; }; return {v(0), v(1), v(2), alpha}; }
+}
+struct RecText : atom::ChartText {
+    mutable std::vector<std::string> lines;
+    double width(const std::string& t, double size, bool) const override { return double(t.size()) * size * 0.5; }
+    void draw(const std::string& t, double, double, double, render::Color, double, bool) const override { lines.push_back(t); }
+};
+
+static bool hoverHas(int Z, int N, const std::string& what) { for (const std::string& L : chartHover(Z, N)) if (L.find(what) != std::string::npos) return true; return false; }
+static void testChart() {
+    const std::vector<ChartTile>& tiles = chartTiles();
+    // ---- the tile set equals the data set: no nuclide drawn that the data does not have, none missing
+    checkNum("chart: NUBASE2020's file has 3,558 ground-state lines = 3,557 nuclides + the free neutron (counted from the file); the chart has one tile per nuclide", double(tiles.size()), 3557, 0);
+    checkNum("chart: NUBASE table rows (the same set, made by the tool from the file)", nubaseCount(), 3557, 0);
+    static const int perZ[118] = {7,8,11,12,16,16,16,18,19,20,23,23,23,24,24,24,25,26,29,29,29,29,29,30,31,32,32,35,33,33,33,33,33,33,34,35,34,35,35,37,38,39,40,41,41,42,42,42,42,42,41,42,42,43,42,42,42,41,41,40,40,41,41,40,40,39,39,39,39,38,39,38,40,41,41,43,43,44,43,47,43,43,41,42,39,39,37,35,33,32,31,29,27,27,27,22,22,20,20,20,19,17,16,16,16,16,19,18,18,18,15,13,13,8,6,5,4,3};
+    int wrongZ = 0, noRow = 0, unsorted = 0, noCode = 0, dup = 0;
+    std::array<int, 119> have{};
+    for (std::size_t i = 0; i < tiles.size(); i++) {
+        have[tiles[i].Z]++;
+        if (!nubase(tiles[i].Z, tiles[i].N)) noRow++;
+        if (!nucCode(tiles[i].Z, tiles[i].N)) noCode++;
+        if (i && !(tiles[i - 1].Z < tiles[i].Z || (tiles[i - 1].Z == tiles[i].Z && tiles[i - 1].N < tiles[i].N))) unsorted++;
+        if (i && tiles[i - 1].Z == tiles[i].Z && tiles[i - 1].N == tiles[i].N) dup++;
+    }
+    for (int z = 1; z <= 118; z++) if (have[z] != perZ[z - 1]) wrongZ++;
+    checkNum("chart: elements whose tile count differs from NUBASE2020's count of that element's ground states (118 typed counts)", wrongZ, 0, 0);
+    checkNum("chart: tiles with no row in the NUBASE table", noRow, 0, 0);
+    checkNum("chart: tiles the lab's own table does not hold", noCode, 0, 0);
+    checkNum("chart: tiles out of order or twice", unsorted + dup, 0, 0);
+    int missing = 0;
+    for (int Z = 1; Z <= 118; Z++) for (int N = 0; N <= 180; N++) if ((nubase(Z, N) != nullptr) != chartHas(Z, N)) missing++;
+    checkNum("chart: cells where chartHas and the NUBASE table disagree (Z 1-118, N 0-180)", missing, 0, 0);
+    checkNum("chart: largest N and Z (NUBASE: 177 and 118)", chartMaxN() * 1000 + chartMaxZ(), 177118, 0);
+    checkTrue("chart: He-2 (the diproton), Z=118 N=100 and Z=1 N=7 are not nuclides", !chartHas(2, 0) && !chartHas(118, 100) && !chartHas(1, 7) && !chartHas(0, 1) && !chartHas(119, 150));
+    // ---- the colour rule
+    static const struct { ChartClass c; int n; } kCount[] = {{ChartClass::Stable, 251}, {ChartClass::BetaMinus, 1401}, {ChartClass::BetaPlus, 1112}, {ChartClass::Alpha, 479}, {ChartClass::Fission, 59},
+                                                             {ChartClass::Proton, 104}, {ChartClass::Neutron, 30}, {ChartClass::Other, 0}, {ChartClass::Mixed, 121}};
+    int wrongCount = 0, sum = 0;
+    for (const auto& k : kCount) { if (chartClassCount(k.c) != k.n) wrongCount++; sum += chartClassCount(k.c); }
+    checkNum("chart: classes whose tile count differs from the separate Python implementation of the rule (251, 1,401, 1,112, 479, 59, 104, 30, 0, 121)", wrongCount, 0, 0);
+    checkNum("chart: every tile has a class", sum, 3557, 0);
+    struct Pick { int Z, N; ChartClass c; const char* why; };
+    static const Pick picks[] = {
+        {2, 2, ChartClass::Stable, "He-4: NUBASE \"stbl\""}, {26, 30, ChartClass::Stable, "Fe-56: stbl"}, {1, 2, ChartClass::BetaMinus, "H-3: B-=100"}, {6, 5, ChartClass::BetaPlus, "C-11: B+=100"},
+        {92, 146, ChartClass::Alpha, "U-238: A=100 (SF=5.44e-5, 2B-=2.2e-10)"}, {100, 158, ChartClass::Fission, "Fm-258: SF~100"}, {104, 152, ChartClass::Fission, "Rf-256: SF=99.69, A=0.31"},
+        {7, 10, ChartClass::BetaMinus, "N-17: B-=100, B-n=95.1, B-A=0.0025: the delayed branches add to beta minus"},
+        {52, 56, ChartClass::BetaPlus, "Te-108: B+=51 (4), A=49 (4), B+p=2.4: the lab's table splits B+ into 0.4853 + 0.024 + 0.00065 > A 0.49"},
+        {94, 135, ChartClass::BetaPlus, "Pu-229: the lab table lists B+=0.4673 before A=0.4673 (NUBASE writes A~50, B+~50): a tie goes to the kind listed first in the lab table"},
+        {96, 154, ChartClass::Fission, "Cm-250: SF 0.74 B- 0.13 A 0.13"}, {3, 0, ChartClass::Proton, "Li-3: p, odds not measured, one mode"}, {1, 3, ChartClass::Neutron, "H-4: n=100"},
+        {20, 28, ChartClass::BetaMinus, "Ca-48: B- and 2B- listed, odds not measured: both beta minus"}, {7, 18, ChartClass::Mixed, "N-25: B-, n, 2n, odds not measured: three kinds"},
+        {36, 42, ChartClass::BetaPlus, "Kr-78: the lab's table has 2B+ (NUBASE says stbl): the lab's table decides"}};
+    for (const Pick& k : picks) checkTrue(std::string("chart colour: ") + k.why, chartClassOf(k.Z, k.N) == k.c);
+    checkTrue("chart: the kind of a mode text", chartClassOfMode("A") == ChartClass::Alpha && chartClassOfMode("SF") == ChartClass::Fission && chartClassOfMode("B-") == ChartClass::BetaMinus &&
+        chartClassOfMode("2B-") == ChartClass::BetaMinus && chartClassOfMode("B-n") == ChartClass::BetaMinus && chartClassOfMode("B-SF") == ChartClass::BetaMinus && chartClassOfMode("B+") == ChartClass::BetaPlus &&
+        chartClassOfMode("B+p") == ChartClass::BetaPlus && chartClassOfMode("2B+") == ChartClass::BetaPlus && chartClassOfMode("p") == ChartClass::Proton && chartClassOfMode("2p") == ChartClass::Proton &&
+        chartClassOfMode("n") == ChartClass::Neutron && chartClassOfMode("3n") == ChartClass::Neutron && chartClassOfMode("14C") == ChartClass::Other && chartClassOfMode("24Ne") == ChartClass::Other);
+    std::set<std::string> hexes; bool words = true;
+    for (int c = 0; c < kChartClasses; c++) { hexes.insert(chartClassInfo(ChartClass(c)).hex); if (!*chartClassInfo(ChartClass(c)).name || !*chartClassInfo(ChartClass(c)).words) words = false; }
+    checkNum("chart: the nine classes have nine different colours (stable is the page's text colour, written as an empty hex)", double(hexes.size()), 9, 0);
+    checkTrue("chart: every class has a name and a sentence for the legend; stable's colour is the page's text colour", words && std::string(chartClassInfo(ChartClass::Stable).hex).empty());
+    // ---- the layout, the magic lines, which tile is under a point
+    const double sizes[][2] = {{900, 700}, {640, 480}, {1400, 900}, {400, 300}};
+    int outside = 0, roundTrip = 0, overlap = 0, shape = 0;
+    for (const auto& wh : sizes) {
+        const ChartLayout L = chartLayout(wh[0], wh[1]);
+        for (const ChartTile& t : tiles) {
+            const double x = L.x(t.N), y = L.y(t.Z);
+            if (x < 0 || y < 0 || x + L.cell > wh[0] + 1e-9 || y + L.cell > wh[1] + 1e-9) outside++;
+            int Z = 0, N = 0;
+            if (!chartTileAt(L, x + L.cell / 2, y + L.cell / 2, Z, N) || Z != t.Z || N != t.N) roundTrip++;
+            if (!chartTileAt(L, x + 0.01 * L.cell, y + 0.01 * L.cell, Z, N) || Z != t.Z || N != t.N || !chartTileAt(L, x + 0.99 * L.cell, y + 0.99 * L.cell, Z, N) || Z != t.Z || N != t.N) roundTrip++;
+        }
+        for (int Z = 1; Z < 118; Z++) if (std::fabs(L.y(Z) - L.y(Z + 1) - L.cell) > 1e-9) overlap++;
+        for (int N = 0; N < 177; N++) if (std::fabs(L.x(N + 1) - L.x(N) - L.cell) > 1e-9) overlap++;
+        if (L.y(118) < 0 || L.x(0) < 0) shape++;
+        int Z = 0, N = 0;
+        checkTrue("chart: a point outside the picture, left of the chart or on a square with no nuclide is no tile (" + std::to_string(int(wh[0])) + " x " + std::to_string(int(wh[1])) + ")",
+                  !chartTileAt(L, -5, 100, Z, N) && !chartTileAt(L, 5, 5, Z, N) && !chartTileAt(L, wh[0] + 50, wh[1] / 2, Z, N) && !chartTileAt(L, L.x(0) + L.cell / 2, L.y(2) + L.cell / 2, Z, N) &&
+                  !chartTileAt(L, L.x(120) + L.cell / 2, L.y(10) + L.cell / 2, Z, N) && !chartTileAt(L, L.x(0) - 1, L.y(1) + L.cell / 2, Z, N));
+        for (int m : kChartMagic) {                                // the magic lines are drawn along the edges of column N = m and row Z = m: a tile is between the two edges exactly when its own N (or Z) is m
+            for (const ChartTile& t : tiles) {
+                const double cx = L.x(t.N) + L.cell / 2, cy = L.y(t.Z) + L.cell / 2;
+                if ((cx > L.x(m) && cx < L.x(m) + L.cell) != (t.N == m)) shape++;
+                if ((cy > L.y(m) && cy < L.y(m) + L.cell) != (t.Z == m)) shape++;
+            }
+        }
+    }
+    checkNum("chart: tiles not wholly inside the picture, at 4 picture sizes", outside, 0, 0);
+    checkNum("chart: tiles whose centre or whose corners (1 % and 99 % into the square) are not found by chartTileAt, at 4 sizes", roundTrip, 0, 0);
+    checkNum("chart: rows or columns not exactly one square apart (tiles neither overlap nor leave gaps), 4 sizes", overlap, 0, 0);
+    checkNum("chart: magic-number rows and columns that are not where their number says (the tile in column N = m has N = m; the tile in row Z = m has Z = m), 4 sizes", shape, 0, 0);
+    {   // the room the chart leaves in the two corners: a box of that height covers no tile, and one a square taller does (found by trying every tile)
+        int loose = 0, tight = 0;
+        for (const auto& wh : sizes) for (bool top : {true, false}) for (double wf : {0.2, 0.35, 0.5}) {
+            const ChartLayout L = chartLayout(wh[0], wh[1]);
+            const double x0 = top ? L.left + 8 : wh[0] - L.right - wf * wh[0], x1 = x0 + wf * wh[0];
+            const double fh = chartFreeHeight(L, wh[1], top, x0, x1), y0 = top ? L.top : wh[1] - L.bottom - fh, y1 = top ? L.top + fh : wh[1] - L.bottom;
+            const double e = L.cell * 1.0001, ya = top ? y0 : y0 - e, yb = top ? y1 + e : y1;      // a box one square taller
+            bool hitSmall = false, hitBig = false;
+            for (const ChartTile& t : tiles) {
+                const double tx = L.x(t.N), ty = L.y(t.Z);
+                const bool xin = tx < x1 && tx + L.cell > x0;
+                if (xin && ty < y1 - 1e-6 && ty + L.cell > y0 + 1e-6) hitSmall = true;
+                if (xin && ty < yb && ty + L.cell > ya) hitBig = true;
+            }
+            if (hitSmall) loose++;
+            if (!hitBig && fh < wh[1] - L.top - L.bottom - 1e-6) tight++;
+        }
+        checkNum("chart room: corner boxes of the free height that cover a tile (4 sizes x 2 corners x 3 widths)", loose, 0, 0);
+        checkNum("chart room: corner boxes one square taller than the free height that still cover no tile (the height is not too small)", tight, 0, 0);
+    }
+    checkTrue("chart: the magic numbers are 2, 8, 20, 28, 50, 82, 126", kChartMagic[0] == 2 && kChartMagic[1] == 8 && kChartMagic[2] == 20 && kChartMagic[3] == 28 && kChartMagic[4] == 50 && kChartMagic[5] == 82 && kChartMagic[6] == 126);
+    checkTrue("chart: protons up (Z 118 above Z 1) and neutrons across (N 177 right of N 0)", chartLayout(900, 700).y(118) < chartLayout(900, 700).y(1) && chartLayout(900, 700).x(177) > chartLayout(900, 700).x(0));
+    {   // a tile on a known cell: U-238 (Z 92, N 146) is up and to the right of Fe-56 (26, 30), and the point at the middle of its square is U-238 and not the transposed (146, 92)
+        const ChartLayout L = chartLayout(900, 700); int Z = 0, N = 0;
+        checkTrue("chart: the middle of U-238's square is Z 92, N 146 (not swapped)", chartTileAt(L, L.x(146) + L.cell / 2, L.y(92) + L.cell / 2, Z, N) && Z == 92 && N == 146 && !chartHas(146, 92));
+    }
+    // ---- clicking sets exactly that Z and N; the other views then show it
+    {
+        AtomLab lab; lab.p = AtomParams(); lab.paused = false; lab.restart(); lab.setParam("view", std::string(kChartView)); lab.viewW = 900; lab.viewH = 700;
+        const ChartLayout L = chartLayout(900, 700);
+        int bad = 0;
+        const int cl[][2] = {{92, 146}, {26, 30}, {1, 0}, {2, 2}, {118, 176}, {50, 70}, {82, 126}, {8, 8}, {67, 98}, {20, 28}};
+        for (const auto& zn : cl) {
+            lab.click(L.x(zn[1]) + L.cell / 2, L.y(zn[0]) + L.cell / 2);
+            if (lab.p.Z != zn[0] || lab.p.N != zn[1] || lab.p.view != kChartView) bad++;
+        }
+        checkNum("chart click: nuclides clicked (10, from the edges and the middle) that did not set exactly that Z and N, or left the chart view", bad, 0, 0);
+        lab.click(L.x(100) + L.cell / 2, L.y(10) + L.cell / 2); lab.click(5, 5); lab.click(-3, 400); lab.click(2000, 2000);
+        checkTrue("chart click: an empty square, a corner and points outside change nothing (still Ca-48, the last one clicked)", lab.p.Z == 20 && lab.p.N == 28);
+        lab.click(L.x(146) + L.cell / 2, L.y(92) + L.cell / 2);
+        lab.setParam("view", std::string("Cloud"));
+        checkTrue("chart click: the other views show the chosen nuclide (Cloud view: Z 92, N 146)", lab.p.Z == 92 && lab.p.N == 146 && lab.p.view == "Cloud" && !lab.chartOn());
+        checkTrue("chart: a click in another view is not a chart click (no change of Z and N)", [&] { lab.click(L.x(30) + L.cell / 2, L.y(26) + L.cell / 2); return lab.p.Z == 92 && lab.p.N == 146; }());
+    }
+    // ---- the arrow keys: one proton or one neutron, and stop at the edges
+    {
+        AtomLab lab; lab.p = AtomParams(); lab.paused = false; lab.restart(); lab.setParam("view", std::string(kChartView));
+        lab.chooseNuclide(26, 30);
+        checkTrue("chart keys: from Fe-56 up is Z+1, down Z-1, right N+1, left N-1", lab.chartStep(1, 0) && lab.p.Z == 27 && lab.p.N == 30 && lab.chartStep(-1, 0) && lab.chartStep(-1, 0) && lab.p.Z == 25 && lab.p.N == 30 &&
+                  lab.chartStep(0, 1) && lab.p.Z == 25 && lab.p.N == 31 && lab.chartStep(0, -1) && lab.chartStep(0, -1) && lab.p.Z == 25 && lab.p.N == 29);
+        lab.chooseNuclide(1, 0);
+        checkTrue("chart keys: at hydrogen-1 left, down and up (helium-2 does not exist) do nothing; right goes to hydrogen-2", !lab.chartStep(0, -1) && !lab.chartStep(-1, 0) && !lab.chartStep(1, 0) && lab.p.Z == 1 && lab.p.N == 0 &&
+                  lab.chartStep(0, 1) && lab.p.Z == 1 && lab.p.N == 1);
+        // walking to each edge: every step is exactly one, and the walk stops where the next square holds no nuclide
+        int steps = 0; bool exact = true;
+        lab.chooseNuclide(26, 30);
+        for (int i = 0; i < 400; i++) { const int z = lab.p.Z; if (!lab.chartStep(1, 0)) break; steps++; if (lab.p.Z != z + 1 || lab.p.N != 30) exact = false; }
+        int top = 0; for (const ChartTile& t : tiles) if (t.N == 30) top = std::max<int>(top, t.Z);
+        checkTrue("chart keys: up from Fe-56 along N = 30 stops at the highest Z that has N = 30 (found by scanning the tiles), one proton at a time", exact && lab.p.Z == top && lab.p.N == 30 && steps == top - 26 && !chartHas(top + 1, 30));
+        lab.chooseNuclide(26, 30); int right = 0;
+        for (int i = 0; i < 400; i++) { if (!lab.chartStep(0, 1)) break; right++; }
+        int rmax = 0; for (const ChartTile& t : tiles) if (t.Z == 26) rmax = std::max<int>(rmax, t.N);
+        checkTrue("chart keys: right from Fe-56 stops at the largest N of iron", lab.p.N == rmax && right == rmax - 30 && lab.p.Z == 26);
+        lab.chooseNuclide(118, 176);
+        checkTrue("chart keys: at the top row nothing goes up, at Z = 118 N = 177 nothing goes right", !lab.chartStep(1, 0) && lab.chartStep(0, 1) && lab.p.N == 177 && !lab.chartStep(0, 1) && !lab.chartStep(1, 0));
+        int fmin = 999; for (const ChartTile& t : tiles) if (t.Z == 26) fmin = std::min<int>(fmin, t.N);
+        int z = 26, n = fmin;
+        checkTrue("chart keys: left of the lightest iron nuclide is no nuclide: chartMove refuses and leaves Z and N alone; a step of (0, 0) goes nowhere new but is a nuclide", !chartMove(z, n, 0, -1) && z == 26 && n == fmin && chartMove(z, n, 0, 1) && n == fmin + 1);
+    }
+    // ---- in the chart view the electron and the decay clock wait; photons say so
+    {
+        AtomLab lab; lab.p = AtomParams(); lab.paused = false; lab.restart(); lab.nowMs = [] { return 0.0; };
+        lab.setParam("Z", 3.0); lab.setParam("N", 5.0);                          // lithium-8, half-life 0.84 s: in any other view it decays within a minute
+        lab.setParam("view", std::string(kChartView));
+        seedRandom(2024);
+        for (int i = 0; i < 3000; i++) { lab.tick(1.0 / 60); lab.step(1.0 / 60); }
+        checkTrue("chart: Li-8 (half-life under a second) is still the chosen nucleus after 50 s in the chart view (its decay clock waits)", lab.p.Z == 3 && lab.p.N == 5);
+        lab.emit();
+        checkTrue("chart: Emit says why it does nothing", lab.s.msg.find("chart of nuclides shows nuclei") != std::string::npos && !lab.s.trans && !lab.s.photon);
+        AtomLab lab2; lab2.p = AtomParams(); lab2.paused = false; lab2.restart(); lab2.nowMs = [] { return 0.0; };
+        lab2.setParam("Z", 3.0); lab2.setParam("N", 5.0); lab2.setParam("view", std::string("Cloud"));
+        seedRandom(2024);
+        for (int i = 0; i < 3000; i++) { lab2.tick(1.0 / 60); lab2.step(1.0 / 60); }
+        checkTrue("chart: (the control) in the Cloud view the same Li-8 does decay in 50 s, so the chart view's wait is real", !(lab2.p.Z == 3 && lab2.p.N == 5));
+    }
+    // ---- the hover words: each line is a field of the data
+    checkTrue("hover He-4: stable, spin 0+ as evaluated, the measured radius 1.6755 fm", hoverHas(2, 2, "Helium-4") && hoverHas(2, 2, "Stable: no decay has been seen") && hoverHas(2, 2, "Spin and parity: 0+ (as evaluated") && hoverHas(2, 2, "rms 1.6755 fm") &&
+              !hoverHas(2, 2, "Decays by"));
+    checkTrue("hover U-238 (an alpha emitter): half-life 4.47 billion years, alpha 100 % with the fission and double-beta odds, spin 0+, no stable line", hoverHas(92, 146, "Uranium-238") && hoverHas(92, 146, "4.47 billion years") &&
+              hoverHas(92, 146, "alpha (α) 100 %") && hoverHas(92, 146, "spontaneous fission") && hoverHas(92, 146, "double beta minus") && hoverHas(92, 146, "Spin and parity: 0+") && !hoverHas(92, 146, "Stable:"));
+    checkTrue("hover H-3 (a beta emitter): half-life 12.3 years, beta minus, spin 1/2+ directly measured", hoverHas(1, 2, "half-life 12.3 years") && hoverHas(1, 2, "Decays by: beta minus (β⁻).") && hoverHas(1, 2, "Spin and parity: 1/2+ (directly measured)"));
+    checkTrue("hover C-11 (beta plus / electron capture): 3/2− directly measured, its half-life is minutes", hoverHas(6, 5, "beta plus or electron capture (β⁺/EC)") && hoverHas(6, 5, "3/2− (directly measured)") && hoverHas(6, 5, "20.3 minutes"));
+    checkTrue("hover Fm-258 (fission): half-life 370 microseconds as 3.7e-4 s, spontaneous fission, spin 0+", hoverHas(100, 158, "spontaneous fission") && hoverHas(100, 158, "Spin and parity: 0+") && hoverHas(100, 158, "Fermium-258"));
+    checkTrue("hover Li-12 (missing data): no half-life given by NUBASE2020, the neutron emission with 'odds are not measured', tentative spin (1−,2−), no measured radius, no moment", hoverHas(3, 9, "Half-life: not given by NUBASE2020") &&
+              hoverHas(3, 9, "neutron emission") && hoverHas(3, 9, "the odds are not measured") && hoverHas(3, 9, "(1−,2−) (tentative)") && hoverHas(3, 9, "Charge radius: no measured value") && hoverHas(3, 9, "Quadrupole moment: no usable"));
+    checkTrue("hover B-16 (only a limit): NUBASE gives >4.6 zs, spin 0− estimated from systematics, neutron emission", hoverHas(5, 11, "only a limit is known, >4.6 zs") && hoverHas(5, 11, "0− (estimated from systematics, not measured)") && hoverHas(5, 11, "neutron emission"));
+    checkTrue("hover F-31 (Z 9, N 22): NUBASE has only an extrapolation from systematics, spin 5/2+ estimated; the lab shows no number", hoverHas(9, 22, "Half-life: not measured (NUBASE2020 has only an extrapolation from systematics") && hoverHas(9, 22, "5/2+ (estimated from systematics") &&
+              !hoverHas(9, 22, "2 ms") && !hoverHas(9, 22, "half-life 2"));
+    checkTrue("hover Pb-204 (stable, NUBASE lower limit and an entry with a question mark): the limit >140 Py and 'A ?' are shown as NUBASE writes them", hoverHas(82, 122, "Stable: no decay has been seen") && hoverHas(82, 122, "lower limit for the half-life, >140 Py") &&
+              hoverHas(82, 122, "\"A ?\""));
+    checkTrue("hover Kr-78: NUBASE lists it stable with >110 Ey, the lab's table has a measured half-life: both are said", hoverHas(36, 42, "NUBASE2020 lists it as stable, with a lower limit >110 Ey"));
+    checkTrue("hover Ca-48: a half-life far longer than the universe's age and 'odds are not measured' for B- and 2B-", hoverHas(20, 28, "Practically stable (half-life 5.6×10¹⁹ years") && hoverHas(20, 28, "the odds are not measured") && hoverHas(20, 28, "double beta minus"));
+    checkTrue("hover Ho-165 (measured size and moment): rms 5.2022 fm (CSV) and Q = +3.58(2) b (IAEA table)", hoverHas(67, 98, "rms 5.2022 fm") && hoverHas(67, 98, "Q = +3.58(2) b"));
+    checkTrue("hover Og-294 (the heaviest): alpha, spin 0+, no measured radius", hoverHas(118, 176, "Oganesson-294") && hoverHas(118, 176, "alpha (α)") && hoverHas(118, 176, "Charge radius: no measured value"));
+    checkTrue("hover of a cell with no nuclide says so and shows no half-life", hoverHas(2, 0, "Not in the table") && !hoverHas(2, 0, "Half-life") && hoverHas(200, 5, "Not in the table") == true);
+    checkTrue("hover Li-3 (p-unst): says only that it is unstable to emitting a particle, no number", hoverHas(3, 0, "unstable to emitting a particle") && hoverHas(3, 0, "3/2− (estimated from systematics"));
+    {
+        int noSpinLine = 0, noHalfLine = 0, noDecay = 0, empty = 0;
+        for (const ChartTile& t : tiles) {
+            const std::vector<std::string> h = chartHover(t.Z, t.N);
+            if (h.empty() || h[0].empty()) empty++;
+            bool spin = false, half = false, dec = false;
+            for (const std::string& L : h) { if (L.rfind("Spin and parity:", 0) == 0) spin = true; if (L.rfind("Half-life:", 0) == 0 || L.find("half-life") != std::string::npos || L.rfind("Stable", 0) == 0 || L.find("Unbound") == 0 || L.find("unbound") != std::string::npos) half = true; if (L.rfind("Decays by:", 0) == 0 || L.rfind("Decay:", 0) == 0) dec = true; }
+            if (!spin) noSpinLine++;
+            if (!half) noHalfLine++;
+            if (t.cls != ChartClass::Stable && !dec) noDecay++;
+        }
+        checkNum("hover: tiles whose hover has no spin line (every tile says its spin or that there is none)", noSpinLine, 0, 0);
+        checkNum("hover: tiles whose hover has no stable / half-life line", noHalfLine, 0, 0);
+        checkNum("hover: unstable tiles whose hover has no decay line", noDecay, 0, 0);
+        checkNum("hover: tiles with an empty hover", empty, 0, 0);
+    }
+
+    // ---- the drawing, through the recording stand-in: where every tile, the magic lines and the marker go, and what the legend and the hover box say
+    {
+        const double W = 900, H = 700;
+        const ChartLayout L = chartLayout(W, H);
+        const render::Color fg{0.1f, 0.2f, 0.3f, 1}, muted{0.4f, 0.5f, 0.6f, 1}, accent{0.9f, 0.1f, 0.7f, 1}, card{0.95f, 0.95f, 0.9f, 1}, line{0.5f, 0.5f, 0.5f, 1};
+        const atom::ChartColours C{fg, muted, accent, card, line};
+        render::Renderer2D R; RecText T;
+        g_rec.clear();
+        drawChart(R, T, C, W, H, 92, 146, 0, 0);
+        const std::size_t all = g_rec.size();
+        const double gap = L.cell >= 3 ? 0.6 : 0, side = L.cell - gap;
+        auto same = [](render::Color a, render::Color b) { return std::fabs(a.r - b.r) < 1e-6 && std::fabs(a.g - b.g) < 1e-6 && std::fabs(a.b - b.b) < 1e-6 && std::fabs(a.a - b.a) < 1e-6; };
+        int found = 0, wrongColour = 0, tileRects = 0;
+        for (const RecRect& r : g_rec) if (std::fabs(r.w - side) < 1e-9 && std::fabs(r.h - side) < 1e-9) tileRects++;
+        for (const ChartTile& t : tiles) {
+            const render::Color want = *chartClassInfo(t.cls).hex ? render::hexColor(chartClassInfo(t.cls).hex) : fg;
+            bool hit = false;
+            for (const RecRect& r : g_rec) if (std::fabs(r.x - (L.x(t.N) + gap / 2)) < 1e-9 && std::fabs(r.y - (L.y(t.Z) + gap / 2)) < 1e-9 && std::fabs(r.w - side) < 1e-9) { hit = true; if (!same(r.c, want)) wrongColour++; break; }
+            if (hit) found++;
+            if (&t - &tiles[0] > 3556) break;
+        }
+        checkNum("chart drawing: squares drawn at a tile's size (one per nuclide: 3,557)", tileRects, 3557, 0);
+        checkNum("chart drawing: tiles found at their own place (x(N), y(Z)) among the drawn rectangles", found, 3557, 0);
+        checkNum("chart drawing: tiles drawn in a colour other than their class's colour (stable in the page's text colour)", wrongColour, 0, 0);
+        checkTrue("chart drawing: the whole chart is a few dozen rectangles over the 3,557 tiles, each of them one rect call (the renderer puts all rects of a frame into one batch)", all > 3557 && all < 3557 + 120);
+        int magicLines = 0, bad = 0;
+        for (const RecRect& r : g_rec) if (same(r.c, muted.withAlpha(0.7f))) {
+            magicLines++;
+            bool ok = false;
+            for (int m : kChartMagic) {
+                if (std::fabs(r.w - 1) < 1e-9 && (std::fabs(r.x + 0.5 - L.x(m)) < 1e-9 || std::fabs(r.x + 0.5 - (L.x(m) + L.cell)) < 1e-9)) ok = true;     // a vertical edge of column N = m
+                if (std::fabs(r.h - 1) < 1e-9 && (std::fabs(r.y + 0.5 - L.y(m)) < 1e-9 || std::fabs(r.y + 0.5 - (L.y(m) + L.cell)) < 1e-9)) ok = true;     // a horizontal edge of row Z = m
+            }
+            if (!ok) bad++;
+        }
+        checkNum("chart drawing: magic-number edge lines drawn (7 columns + 6 rows, 2 edges each: Z = 126 is beyond the last element, 118, so it has no row)", magicLines, 26, 0);
+        checkNum("chart drawing: magic-number edge lines that are not on the edge of column N = m or row Z = m", bad, 0, 0);
+        int missingEdge = 0;
+        for (int m : kChartMagic) {                                // each magic column has its left edge and its right edge drawn, once each; each magic row (Z <= 118) its top and bottom edge
+            int l = 0, r2 = 0, t2 = 0, b2 = 0;
+            for (const RecRect& r : g_rec) if (same(r.c, muted.withAlpha(0.7f))) {
+                if (std::fabs(r.w - 1) < 1e-9 && std::fabs(r.x + 0.5 - L.x(m)) < 1e-9) l++;
+                if (std::fabs(r.w - 1) < 1e-9 && std::fabs(r.x + 0.5 - (L.x(m) + L.cell)) < 1e-9) r2++;
+                if (std::fabs(r.h - 1) < 1e-9 && std::fabs(r.y + 0.5 - L.y(m)) < 1e-9) t2++;
+                if (std::fabs(r.h - 1) < 1e-9 && std::fabs(r.y + 0.5 - (L.y(m) + L.cell)) < 1e-9) b2++;
+            }
+            if (l != 1 || r2 != 1) missingEdge++;
+            if (m <= 118 && (t2 != 1 || b2 != 1)) missingEdge++;
+        }
+        checkNum("chart drawing: magic numbers whose column lacks its left or right edge line, or whose row lacks its top or bottom edge line", missingEdge, 0, 0);
+        double mx = -1, my = -1; int markRects = 0;
+        for (const RecRect& r : g_rec) if (same(r.c, accent)) { markRects++; mx = r.x + r.w / 2; my = r.y + r.h / 2; }
+        checkTrue("chart drawing: the chosen nuclide (U-238) is marked: the accent-colour box round the middle of its square, so a point inside is the chosen tile",
+                  markRects == 4 && std::fabs(mx - (L.x(146) + L.cell / 2)) < 2 * L.cell + 6 && std::fabs(my - (L.y(92) + L.cell / 2)) < 2 * L.cell + 6);
+        g_rec.clear(); drawChart(R, T, C, W, H, 26, 30, 0, 0);
+        double mx2 = -1; for (const RecRect& r : g_rec) if (same(r.c, accent)) mx2 = r.x + r.w / 2;
+        checkTrue("chart drawing: the marker follows the chosen nuclide (Fe-56 is left of U-238)", mx2 > 0 && mx2 < mx - 10 * L.cell);
+        g_rec.clear(); drawChart(R, T, C, W, H, 26, 30, 92, 146);
+        int hovBox = 0; for (const RecRect& r : g_rec) if (same(r.c, fg) && std::fabs(r.w - (L.cell + 2)) < 1e-9) hovBox++;
+        checkTrue("chart drawing: a hovered tile (not the chosen one) gets an outline in the text colour", hovBox >= 2);
+        g_rec.clear(); T.lines.clear(); drawChart(R, T, C, W, H, 92, 146, 0, 0);
+        std::string all2; for (const std::string& l : T.lines) all2 += l + "\n";
+        bool legend = true; for (int c = 0; c < kChartClasses; c++) if (chartClassCount(ChartClass(c)) > 0 && all2.find(std::string(chartClassInfo(ChartClass(c)).words).substr(0, 20)) == std::string::npos) legend = false;
+        checkTrue("chart drawing: the legend says every colour that has tiles in words (each class's sentence starts the legend line)", legend);
+        checkTrue("chart drawing: the magic-number sentence and the axis titles are drawn", all2.find("Magic numbers: 2, 8, 20, 28, 50, 82") != std::string::npos && all2.find("neutrons N") != std::string::npos && all2.find("protons Z") != std::string::npos);
+        checkTrue("chart drawing: the status line names the chosen nuclide (U-238) and says what the mouse and keys do", all2.find("Chosen: Uranium-238 (²³⁸U)") != std::string::npos && all2.find("click to choose it") != std::string::npos && all2.find("arrow keys") != std::string::npos);
+        T.lines.clear(); drawChart(R, T, C, W, H, 26, 30, 2, 2);
+        all2.clear(); for (const std::string& l : T.lines) all2 += l + "\n";
+        checkTrue("chart drawing: hovering He-4 changes nothing in the status line (the details are a tooltip made from chartHover, tested above); the chosen one is still Fe-56", all2.find("Chosen: Iron-56") != std::string::npos);
+        // the legend is placed where the chart leaves room: its box covers no tile when there is room for it, in the sizes a window really has
+        {
+            int covered = 0, boxes = 0; bool fullWords = false;
+            const double sz[][2] = {{900, 700}, {1280, 720}, {1400, 900}, {1920, 1000}, {1000, 800}};
+            for (const auto& wh : sz) {
+                const ChartLayout LL = chartLayout(wh[0], wh[1]);
+                g_rec.clear(); T.lines.clear(); drawChart(R, T, C, wh[0], wh[1], 92, 146, 0, 0);
+                for (const RecRect& r : g_rec) if (same(r.c, card.withAlpha(0.9f))) {
+                    boxes++;
+                    for (const ChartTile& t : tiles) { const double tx = LL.x(t.N), ty = LL.y(t.Z); if (tx < r.x + r.w && tx + LL.cell > r.x && ty < r.y + r.h && ty + LL.cell > r.y) { covered++; break; } }
+                }
+                std::string a3; for (const std::string& l : T.lines) a3 += l + "\n";
+                if (wh[0] >= 1280 && a3.find("Common in heavy nuclei") != std::string::npos) fullWords = true;
+            }
+            checkNum("chart drawing: legend boxes drawn, one per picture size (5 sizes)", boxes, 5, 0);
+            checkNum("chart drawing: legend boxes that cover a tile, in 5 window sizes from 900 x 700 to 1920 x 1000", covered, 0, 0);
+            checkTrue("chart drawing: in a big picture the legend has the full wording for every colour", fullWords);
+        }
+        int inside = 0; g_rec.clear(); drawChart(R, T, C, 400, 300, 26, 30, 0, 0);
+        for (const RecRect& r : g_rec) if (r.x >= -1 && r.y >= -1 && r.x + r.w <= 401 && r.y + r.h <= 301) inside++;
+        checkTrue("chart drawing: in a small picture (400 x 300) every rectangle still lies inside it", inside == int(g_rec.size()));
+    }
+    // ---- NUBASE spin text: the four kinds
+    {
+        const NubaseRow* a = nubase(1, 2); const NubaseRow* b = nubase(3, 9); const NubaseRow* c = nubase(5, 11); const NubaseRow* d = nubase(2, 2); const NubaseRow* e = nubase(5, 3);
+        checkTrue("nubase spin: H-3 '1/2+*' measured, Li-12 '(1-,2-)' tentative, B-16 '0-#' systematics, He-4 '0+' evaluated, B-8 is listed", a && b && c && d && e && nubaseSpin(*a).how == 1 && nubaseSpin(*a).text == "1/2+" && nubaseSpin(*b).how == 3 && nubaseSpin(*b).text == "(1−,2−)" &&
+                  nubaseSpin(*c).how == 2 && nubaseSpin(*c).text == "0−" && nubaseSpin(*d).how == 4 && nubaseSpin(*d).text == "0+");
+        int blank = 0, kinds[128] = {0}; for (const ChartTile& t : tiles) { const NubaseRow* r = nubase(t.Z, t.N); if (!*r->jpi) blank++; kinds[int(r->kind)]++; }
+        checkTrue("nubase: 185 ground states have no spin, and the half-life kinds are 253 stable, 2,831 value, 369 systematics, 84 none, 11 limit, 6 approximate, 3 p-unst (counted from the file)", blank == 185 && kinds[int('S')] == 253 && kinds[int('M')] == 2831 &&
+                  kinds[int('E')] == 369 && kinds[int('-')] == 84 && kinds[int('B')] == 11 && kinds[int('A')] == 6 && kinds[int('P')] == 3);
+    }
+    // ---- the legend is complete and the words say what each colour means
+    {
+        int listed = 0; for (int c = 0; c < kChartClasses; c++) if (chartClassCount(ChartClass(c)) > 0) listed++;
+        checkNum("chart legend: classes with tiles (all but Other)", listed, 8, 0);
+        checkTrue("chart: the magic-number sentence names all seven numbers and says what a magic number is", [&] { const std::string w = chartMagicWords(); for (int m : kChartMagic) if (w.find(std::to_string(m)) == std::string::npos) return false; return w.find("filled shell") != std::string::npos; }());
+        checkTrue("chart: the view's name is 'Chart of nuclides' and it is a valid view choice", std::string(kChartView) == "Chart of nuclides" && AtomLab::validChoice("view", kChartView));
+    }
 }
 
 static void testOutlineFade() {
@@ -3562,6 +3898,7 @@ int main() {
     testJumpHandover();
     testOutlineFade();
     testAutoSilence();
+    testChart();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

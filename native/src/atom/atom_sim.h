@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "atom_core.h"
+#include "chart.h"
 
 namespace atom {
 
@@ -26,7 +27,7 @@ struct AtomParams {
     std::string detail = "+ Gluons";     // Valence / + Gluons / + Sea
     std::string style = "Fuzzy";         // Fuzzy / Hard balls
     int Z = 1, N = 0;                    // protons, neutrons
-    std::string view = "Orbit";          // Orbit / Cloud / Cloud 3D / Slice
+    std::string view = "Orbit";          // Orbit / Cloud / Cloud 3D / Slice / Chart of nuclides (kChartView, 0.11 stage 2)
     std::string ostyle = "Modern";       // Modern / Bohr 1913
     std::string orb = "1s";              // the orbital's shell: 1s ... 4f
     std::string pAx = "z", dAx = "z2", fAx = "z3";   // orientation of p, d and f orbitals
@@ -178,6 +179,9 @@ public:
     bool showSpin() const { return p.view == "Cloud 3D"; }
     std::string autoText() const { return s.autoPhotons ? "⏸ Auto photons: on" : "▶ Auto photons"; }
 
+    bool chartOn() const { return p.view == kChartView; }  // the map of all nuclides is shown instead of one atom
+    void chooseNuclide(int Z, int N);                     // the chart's click: exactly this Z and N (the other views then show it)
+    bool chartStep(int dZ, int dN);                       // an arrow key in the chart: one proton or one neutron, only onto an observed nuclide
     void click(double x, double y);                       // picture points
     void drag(double dx, double dy, bool forceMove);      // forceMove: Shift, right or middle button
 

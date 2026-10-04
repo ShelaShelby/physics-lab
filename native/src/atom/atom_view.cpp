@@ -1,4 +1,5 @@
 #include "atom_view.h"
+#include "chart_draw.h"
 #include "cloud_light.h"
 #include "outline.h"
 #include "phase_wheel.h"
@@ -275,6 +276,30 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     const Text T{dl, ox, oy, uiScale};
     lab.viewW = w; lab.viewH = h;
     R.rect(0, 0, w, h, css.card);                                          // the canvas background (the web: var(--card))
+
+    if (lab.chartOn()) {                                                   // the chart of nuclides (0.11 stage 2): a map of all nuclides, not one atom
+        struct ChartTextAdapter : ChartText {
+            const Text& t;
+            explicit ChartTextAdapter(const Text& tt) : t(tt) {}
+            double width(const std::string& str, double size, bool bold) const override { return t.width(str, size, bold); }
+            void draw(const std::string& str, double x, double y, double size, Color c, double align, bool bold) const override { t.draw(str, x, y, size, c, align, nullptr, bold, false); }
+        } adapter(T);
+        int hz = 0, hn = 0;                                                // the tile under the pointer, if the pointer is over the picture and no pop-up has it
+        const ImVec2 mp = ImGui::GetMousePos();
+        const double mx = (mp.x - ox) / uiScale, my = (mp.y - oy) / uiScale;
+        if (!ImGui::GetIO().WantCaptureMouse && mx >= 0 && my >= 0 && mx < w && my < h) chartTileAt(chartLayout(w, h), mx, my, hz, hn);
+        drawChart(R, adapter, ChartColours{css.fg, css.muted, css.accent, css.card, css.line}, w, h, p.Z, p.N, hz, hn);
+        if (hz) {                                                          // the details of the square under the pointer: a tooltip (it follows the pointer, stays on screen and never hides a square)
+            ImGui::BeginTooltip();
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
+            const std::vector<std::string> info = chartHover(hz, hn);
+            for (const std::string& line : info) ImGui::TextUnformatted(ui::displayable(line, ImGui::GetFont()).c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        }
+        s.hits.clear(); s.layer = "Atom";
+        return;
+    }
 
     const bool cloud = p.view != "Orbit", d3 = p.view == "Cloud 3D", sl = p.view == "Slice", hz = sl && p.cutAxis == "Horizontal";
     const double cx0 = w / 2, cy0 = h / 2, m = std::min(w, h);
