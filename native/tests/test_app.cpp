@@ -876,6 +876,93 @@ static void testBenchAtomScenes() {
         checkTrue(w + "settings text names view, Orbit style and quark style", txt.find("Orbit style Modern") != std::string::npos && txt.find(cloud ? "view Cloud 3D" : "view Orbit") != std::string::npos && txt.find("quark style " + odd.p.qstyle) != std::string::npos);
     }
 }
+// ---- 0.10.6 stage 7: the Atom Lab speed-risk scenes (audit findings 10, 11, 12): each sets up, steps headlessly, and ends in the state it declared ----
+static void testBenchRiskScenes() {
+    using atom::kBenchFirstRisk; using atom::kBenchSceneCount;
+    checkTrue("risk scenes: they come after the 5 old Atom Lab scenes, 11 of them", kBenchFirstRisk == 5 && kBenchSceneCount == 16);
+    struct Want { const char* view; const char* orb; const char* cstyle; const char* cdens; const char* phase; bool super; const char* outline; };
+    const Want want[] = {
+        {"Cloud 3D", "4f", "Classic", "Ultra", "Wheel", false, "Off"},   // 5  finding 10, 3D, phase colours
+        {"Cloud 3D", "4f", "Classic", "Ultra", "Sign", false, "Off"},    // 6  the same with two colours (what the old look costs)
+        {"Cloud", "4f", "Classic", "Ultra", "Wheel", false, "Off"},      // 7  finding 10, 2D
+        {"Cloud 3D", "4f", "Classic", "Ultra", "Sign", false, "Off"},    // 8  finding 11, a jump held half way
+        {"Cloud 3D", "4f", "Classic", "Ultra", "Sign", false, "Off"},    // 9  finding 11, jumps one after another
+        {"Cloud 3D", "2p", "Classic", "Ultra", "Sign", true, "Off"},     // 10 finding 11, orthogonal pair, one energy
+        {"Cloud 3D", "2p", "Classic", "Ultra", "Sign", true, "Off"},     // 11 finding 11, overlapping pair
+        {"Cloud 3D", "2p", "Classic", "Ultra", "Sign", true, "Off"},     // 12 finding 11, orthogonal pair, two energies (it beats)
+        {"Cloud 3D", "4f", "Classic", "Normal", "Sign", false, "On"},    // 13 finding 12, first use of an outline
+        {"Slice", "4f", "Classic", "Normal", "Sign", false, "On"},       // 14 finding 12, the cut dragged
+        {"Orbit", "1s", "Glow", "High", "Sign", false, "Off"},           // 15 (the lab's own defaults for the cloud: it is not drawn) finding 12, the nucleus view
+    };
+    std::vector<std::string> names;
+    for (int which = kBenchFirstRisk; which < kBenchSceneCount; which++) {
+        const std::string w = "risk scene " + std::to_string(which - kBenchFirstRisk + 8) + ": ";
+        const Want& e = want[which - kBenchFirstRisk];
+        atom::AtomLab L, again;
+        oddAtomLab(L);                                          // a lab the user has changed everywhere: the scene must not care
+        atom::benchSetup(L, which, 800, 600);
+        atom::benchSetup(again, which, 800, 600);
+        checkTrue(w + "same settings from an odd lab and from a default one", sameParams(L.p, again.p));
+        const bool nucleus = which == 15;
+        checkTrue(w + "the nucleus asked for", L.p.Z == (nucleus ? 118 : 92) && L.p.N == (nucleus ? 176 : 146));
+        checkTrue(w + "state the drawing reads is fresh", !L.moreStored && !L.paused && !L.hold && L.chain.empty() && L.s.layer == "Atom" && !L.s.spin);
+        checkTrue(w + "speed is the default 5", L.p.speed == 5);
+        // step it the way the benchmark does: 200 warm-up frames, then 400 counted ones, one frame of the lab (1/240 s) each
+        int jumpStarts = 0; bool wasJumping = false; double lastT = 0;         // a start: a jump appears, or its clock goes back to the start (one began the frame the last one ended)
+        const int frames = which == 9 ? 1500 : 600;       // the jumps one after another: 1500 frames = 6.25 s of the lab's time
+        for (int f = 0; f < frames; f++) {
+            atom::benchFrame(L, which, f, f < 200 ? -1 : f - 200);
+            if (L.s.trans && (!wasJumping || L.s.trans->t < lastT)) jumpStarts++;
+            wasJumping = bool(L.s.trans); lastT = L.s.trans ? L.s.trans->t : 0;
+            L.step(1.0 / 240);
+        }
+        checkTrue(w + "view, orbital, cloud style, phase, outline as declared", L.p.view == e.view && (L.p.orb == e.orb || (which == 9 && L.p.orb == "3d")) && L.p.cstyle == e.cstyle && L.p.phase == e.phase && L.p.outline == e.outline);
+        checkTrue(w + "dot count as declared", L.p.cdens == e.cdens && L.cloudCap() == (std::string(e.cdens) == "Ultra" ? 48000 : std::string(e.cdens) == "High" ? 24000 : 12000) && (nucleus || L.s.k >= L.cloudCap()));
+        checkTrue(w + "superposition as declared", L.superOn() == e.super && L.p.super == (e.super ? "On" : "Off"));
+        names.push_back(atom::benchSceneInfo(which).name);
+        const std::string& nm = names.back();
+        checkTrue(w + "the name says the setting the cost depends on",
+                  (nm.find("Wheel") != std::string::npos) == (L.p.phase == "Wheel") && (which == 13 || which == 14 || nucleus || nm.find("48,000") != std::string::npos)
+                  && (L.p.view != "Cloud" || nm.find("2D") != std::string::npos) && (L.p.view != "Cloud 3D" || nm.find("3D") != std::string::npos));
+        const std::string txt = atom::benchSettingsText(L);
+        checkTrue(w + "the settings text names orbital, dots, cloud style and phase", nucleus || (txt.find("orbital " + L.p.orb) != std::string::npos && txt.find(std::to_string(L.cloudCap()) ) != std::string::npos && txt.find("cloud style Classic") != std::string::npos && txt.find("phase " + L.p.phase) != std::string::npos));
+        if (which == 8) {
+            checkTrue(w + "a jump is in flight, held half way (not over, not at the start)", L.s.trans && L.s.trans->t > 0.3 && L.s.trans->t < 0.7 && jumpStarts == 1 && L.s.jn == L.cloudCap());
+        }
+        if (which == 9) checkTrue(w + "jumps start again and again (at least 3 in 1500 frames: emit, absorb, emit)", jumpStarts >= 3);
+        if (which >= 10 && which <= 12) {
+            const atom::Superposition sp = L.superState();
+            const double ov = std::abs(atom::overlapAB(sp.idA, sp.idB));
+            checkTrue(w + (which == 11 ? "the pair overlaps (the stage 4 sampling path)" : "the pair is orthogonal (the old thinning path)"), which == 11 ? ov != 0.0 : ov == 0.0);
+            const double eA = atom::levelEV(L.p.Z, L.p.N, atom::orbitals()[L.fullOrb(L.p.orb)].n), eB = atom::levelEV(L.p.Z, L.p.N, atom::orbitals()[L.fullOrb(L.p.orb2)].n);
+            checkTrue(w + (which == 12 ? "the two energies differ (a beat)" : "one energy (no beat)"), which == 12 ? eA != eB : eA == eB);
+            checkTrue(w + "mix 50 %", L.p.mix == 50);
+        }
+        if (which == 13) checkTrue(w + "the outline is on, and its cache was emptied at counted frame 360 (nothing here draws, so it is still empty)", L.p.outline == "On" && atom::outlineCacheSize() == 0);
+        if (which == 14) checkTrue(w + "the cut has moved from the middle, inside -1 .. 1", L.p.cut != 0 && std::fabs(L.p.cut) <= 1);
+        if (nucleus) checkTrue(w + "every nucleon is there to draw, the whole nucleus in view", int(L.s.nuc.size()) == 294 && L.s.focus == -1 && L.p.qstyle == "Cinematic" && L.p.detail == "+ Sea");
+        // repeatable: the same scene stepped the same way ends in the same state
+        atom::AtomLab B1, B2;
+        for (atom::AtomLab* Q : {&B1, &B2}) {
+            atom::benchSetup(*Q, which, 800, 600);
+            for (int f = 0; f < 120; f++) { atom::benchFrame(*Q, which, f, f < 40 ? -1 : f - 40); Q->step(1.0 / 240); }
+        }
+        checkTrue(w + "repeatable: the same dots and the same cut", B1.s.pts.size() == B2.s.pts.size() && std::equal(B1.s.pts.begin(), B1.s.pts.begin() + std::min<std::size_t>(3000, B1.s.pts.size()), B2.s.pts.begin()) && B1.p.cut == B2.p.cut && B1.s.k == B2.s.k);
+    }
+    checkTrue("risk scenes: every name is different and not empty", [&] { for (std::size_t i = 0; i < names.size(); i++) { if (names[i].empty()) return false; for (std::size_t j = i + 1; j < names.size(); j++) if (names[i] == names[j]) return false; } return true; }());
+    checkTrue("risk scenes: the old scene numbers 0 to 4 still ask for what they did (the benchmark stays comparable)", [] {
+        atom::AtomLab L; atom::benchSetup(L, 1, 800, 600);
+        return L.p.cstyle == "Classic" && L.p.cdens == "Normal" && L.p.view == "Cloud 3D" && L.p.orb == "4f" && L.p.phase == "Sign" && L.p.super == "Off" && L.p.outline == "Off";
+    }());
+    // the outline cache can be emptied (the first-use scene needs a cold start) and fills again
+    atom::clearOutlineCache();
+    checkTrue("the outline cache is empty after clearOutlineCache", atom::outlineCacheSize() == 0);
+    const int orbA = atom::orbIndex("2p|z");
+    (void)atom::outlineOf(orbA);
+    checkTrue("one outline cached after one use", atom::outlineCacheSize() == 1);
+    atom::clearOutlineCache();
+    checkTrue("and empty again", atom::outlineCacheSize() == 0 && atom::outlineOf(orbA).mass > 0.89);
+}
 static void testBenchInputLock() {
     checkTrue("input is allowed when no benchmark runs", labInputAllowed(false));
     checkTrue("input to the labs and app is blocked while the benchmark runs", !labInputAllowed(true));
@@ -1489,6 +1576,7 @@ int main() {
     testWindow();
     testBench();
     testBenchAtomScenes();
+    testBenchRiskScenes();
     testBenchInputLock();
     testCloud();
     testFarMasses();

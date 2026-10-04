@@ -28,8 +28,10 @@ namespace ui {
 
 namespace {
 
-struct SceneDef { BenchSceneInfo info; std::function<void(AppState&)> setup; };
+// frame (optional): called at the start of every frame after the set-up, with the frame number from the set-up and the number of the counted frame (-1 while warming up)
+struct SceneDef { BenchSceneInfo info; std::function<void(AppState&)> setup; std::function<void(AppState&, int, int)> frame; };
 constexpr int kNormalScenes = 4;
+constexpr int kStressScenes = 3;         // scenes 5 to 7; the speed-risk scenes (8 and up, Atom Lab, 0.10.6 stage 7) come after them
 constexpr int kStressBeltScale = 8;      // scenes 1 to 4 never change, so results stay comparable between versions; the stress scenes come after them
 
 // ---- the scenes (chosen by measuring which settings cost the most, see REPORT.md) ----
@@ -77,8 +79,11 @@ void atomCloudGlow(AppState& app) { atomScene(app, 4); }
 
 const char* const STRESS_ATOM_WHAT = "oganesson-294 (118 protons, 176 neutrons, the biggest nucleus the app has), Accurate quarks, + Sea detail, Fuzzy nucleons, zoomed in 0.6 (about 4 times) closer than the whole nucleus, so that every nucleon is drawn large";
 
+// the speed-risk scenes: the Atom Lab's heaviest paths (audit findings 10, 11, 12), numbered from 8; the names and settings are in atom/atom_bench.cpp
+void atomRisk(AppState& app, int which) { atomScene(app, which); }
 const std::vector<SceneDef>& scenes() {
-    static const std::vector<SceneDef> v = {
+    static const std::vector<SceneDef> v = [] {
+    std::vector<SceneDef> v = {
         {{"1. Orbit Lab, heaviest view", "3D view, belts and Oort cloud on, all Solar System extras on, full night sky with constellation lines and names, "
                                           "far-away things on, full orbit trails, true scale, fastest time speed (1 s = about 50 years), zoom x1, fixed camera"}, orbitHeaviest},
         {{"2. Atom Lab, uranium-238 nucleus", "uranium-238 (92 protons, 146 neutrons), zoomed to the whole nucleus, Cinematic quarks, + Sea detail, Fuzzy nucleons"}, atomNucleus},
@@ -89,6 +94,19 @@ const std::vector<SceneDef>& scenes() {
                                                      "(48,000 instead of 6,000; the same kinds of orbits, a fixed random seed). The rocks do not pull on each other, so the physics is unchanged"}, orbitStress},
         {{"7. Stress: Atom Lab, Cloud 3D, Glow, 48,000 dots", "scene 3 (uranium-238, Cloud 3D, the 4f orbital, fixed camera) with cloud style Glow (soft dots that add up) and density Ultra (48,000 dots)"}, atomCloudGlow},
     };
+    static std::vector<std::string> names;               // the names with their numbers, kept alive for the const char* of the list
+    names.clear();
+    const int first = int(v.size()) + 1;                  // the number of the first speed-risk scene (8)
+    for (int w = atom::kBenchFirstRisk; w < atom::kBenchSceneCount; w++) names.push_back(std::to_string(first + w - atom::kBenchFirstRisk) + ". " + atom::benchSceneInfo(w).name);
+    static std::vector<std::string> whats;
+    whats.clear();
+    for (int w = atom::kBenchFirstRisk; w < atom::kBenchSceneCount; w++) whats.push_back(atom::benchSceneInfo(w).what);
+    for (int w = atom::kBenchFirstRisk; w < atom::kBenchSceneCount; w++) {
+        const int k = w - atom::kBenchFirstRisk;
+        v.push_back({{names[k].c_str(), whats[k].c_str()}, [w](AppState& a) { atomRisk(a, w); }, [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); }});
+    }
+    return v;
+    }();
     return v;
 }
 
@@ -177,13 +195,24 @@ struct BenchState {
     app::GpuVerdict gpuCheck;
     bool gpuChecked = false;
     bool includeStress = false;               // the checkbox: run the stress scenes after the four normal ones
+    bool includeRisk = false;                 // the checkbox: run the Atom Lab speed-risk scenes (after the stress ones)
+    std::vector<int> list;                    // the scenes of this run (indexes into scenes()), fixed when it starts
+    int sceneFrame = 0, measFrame = -1;       // frames since the scene was set up; counted frames so far (-1: still warming up)
     double warm = app::kBenchWarmupS, measure = app::kBenchMeasureS;
     bool cancelled = false;
 };
 
 namespace {
 
-int activeScenes(const BenchState& b) { return b.includeStress ? int(scenes().size()) : kNormalScenes; }
+// which scenes run: the 4 normal ones, then the 3 stress ones if asked, then the speed-risk ones if asked (indexes into scenes())
+std::vector<int> sceneList(const BenchState& b) {
+    std::vector<int> v;
+    for (int i = 0; i < kNormalScenes; i++) v.push_back(i);
+    if (b.includeStress) for (int i = kNormalScenes; i < kNormalScenes + kStressScenes; i++) v.push_back(i);
+    if (b.includeRisk) for (int i = kNormalScenes + kStressScenes; i < int(scenes().size()); i++) v.push_back(i);
+    return v;
+}
+int activeScenes(const BenchState& b) { return int(sceneList(b).size()); }
 
 BenchState& st(AppState& app) {
     if (!app.bench) app.bench = std::make_shared<BenchState>();
@@ -247,7 +276,8 @@ void begin(AppState& app) {
     b.atom = std::make_unique<atom::AtomLab>(app.atom);
     b.atomView = std::make_unique<atom::AtomView>(app.atomView);
     b.set = app.set; b.journey = app.journey; b.tempK = app.tempK;
-    b.atomUsed.assign(activeScenes(b), std::string());
+    b.list = sceneList(b);
+    b.atomUsed.assign(b.list.size(), std::string());
     b.results.clear(); b.text.clear(); b.note.clear(); b.cancelled = false; b.gpuChecked = false; b.gpuCheck = app::GpuVerdict(); b.gpuReady.clear();
     b.gpu.make();
     b.run = std::make_unique<app::BenchRun>(activeScenes(b), b.warm, b.measure);
@@ -278,12 +308,12 @@ void finish(AppState& app, BenchState& b, bool cancelled) {
     if (b.run) {
         const int n = cancelled ? b.run->doneScenes() : b.run->sceneCount();
         b.results.clear();
-        for (int i = 0; i < n; i++) { app::BenchScene r = b.run->result(i); r.name = scenes()[i].info.name; r.what = scenes()[i].info.what; b.results.push_back(r); }
+        for (int i = 0; i < n; i++) { app::BenchScene r = b.run->result(i); r.name = scenes()[b.list[i]].info.name; r.what = scenes()[b.list[i]].info.what; b.results.push_back(r); }
     }
     b.env.cancelled = cancelled;
     b.env.atomSettings.clear();
     for (int i = 0; i < int(b.atomUsed.size()) && i < int(b.results.size()); i++)
-        if (!b.atomUsed[i].empty()) b.env.atomSettings += (b.env.atomSettings.empty() ? "" : "; ") + std::string("scene ") + std::to_string(i + 1) + ": " + b.atomUsed[i];
+        if (!b.atomUsed[i].empty()) b.env.atomSettings += (b.env.atomSettings.empty() ? "" : "; ") + std::string("scene ") + std::to_string(b.list[i] + 1) + ": " + b.atomUsed[i];
     b.env.gpuTimer = b.gpu.ok && std::any_of(b.results.begin(), b.results.end(), [](const app::BenchScene& s) { return s.gpuSamples > 0; });
     b.env.gpuReliable = b.env.gpuTimer && b.gpuChecked && b.gpuCheck.reliable;
     b.env.gpuCheck = b.gpuChecked ? b.gpuCheck.why : std::string();
@@ -329,9 +359,16 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, i
     }
     const int i = b.run->sceneToSetUp();
     if (i >= 0) {
-        scenes()[i].setup(app);
+        scenes()[b.list[i]].setup(app);
         if (app.lab == 1 && i < int(b.atomUsed.size())) b.atomUsed[i] = atom::benchSettingsText(app.atom);
         b.run->setUpDone();
+        b.sceneFrame = 0; b.measFrame = -1;
+    }
+    if (b.run->sceneToSetUp() < 0 && b.run->scene() < int(b.list.size())) {      // a scene that needs something done every frame (a jump held, the cut moving)
+        b.measFrame = b.run->measuring() ? b.measFrame + 1 : -1;
+        const SceneDef& sd = scenes()[b.list[b.run->scene()]];
+        if (sd.frame) sd.frame(app, b.sceneFrame, b.measFrame);
+        b.sceneFrame++;
     }
     app.vsync = false;
 }
@@ -404,7 +441,7 @@ void benchmarkWindow(AppState& app) {
             if (running) {
                 const app::BenchRun& r = *b.run;
                 const int shown = std::min(r.scene() + 1, r.sceneCount());
-                ImGui::Text("Scene %d of %d: %s", shown, r.sceneCount(), scenes()[std::min(r.scene(), r.sceneCount() - 1)].info.name);
+                ImGui::Text("Scene %d of %d: %s", shown, r.sceneCount(), scenes()[b.list[std::min(r.scene(), r.sceneCount() - 1)]].info.name);
                 ImGui::Text("%s  %.1f s", r.measuring() ? "Counting" : "Warming up", r.sceneElapsedS());
                 const double fps = app.stats.avgFrame() > 0 ? 1000.0 / app.stats.avgFrame() : 0;
                 ImGui::Text("Live: %.0f fps", fps);
@@ -423,14 +460,18 @@ void benchmarkWindow(AppState& app) {
         ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0));
         bool open = true;
         if (ImGui::Begin("Benchmark###bench", &open, fl)) {
-            const int count = activeScenes(b);
+            const std::vector<int> list = sceneList(b);
+            const int count = int(list.size());
             const int secs = int(count * (app::kBenchWarmupS + app::kBenchMeasureS));
             ImGui::TextWrapped("This runs %d scenes one after the other, about %d seconds in all. Each one has %d seconds of warm-up that is not counted, then %d seconds that are counted.",
                                count, secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
             ImGui::Spacing();
-            for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[i].info.name);
+            for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[list[i]].info.name);
             ImGui::Checkbox("Include stress scenes (3 extra, much heavier)", &b.includeStress);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
+            ImGui::Checkbox("Include Atom Lab speed-risk scenes (11 extra)", &b.includeRisk);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("The Atom Lab's heaviest paths, each with its settings in its name: phase colours with Classic dots, a cloud jump, a superposition, the 90 %% outline (first use, and with the cut dragged) and the nucleus view. "
+                                                          "Look at the Worst column: these are about stutter, which the average hides.");
             ImGui::Spacing();
             ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "
                                "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "

@@ -12,6 +12,7 @@
 // orbital at Z = 1 (lengths in Bohr radii) and only scaled by 1/Z for the atom on screen. It is worked out on first use and kept.
 #pragma once
 
+#include <cstddef>
 #include <vector>
 
 namespace atom {
@@ -35,6 +36,10 @@ struct Outline {
 
 double orbitalNorm(int orb);               // integral of |psi|^2 over all space at Z = 1, a0^3 (radial integral × angular average)
 const Outline& outlineOf(int orb);         // cached
+// For the benchmark's "first use of an outline" scene (and its test): empty the cache so the next outlineOf runs the whole 64^3 pass again; how many are cached.
+// Only call between frames (nothing may hold an outlineOf reference).
+void clearOutlineCache();
+std::size_t outlineCacheSize();
 // the contour |psi|^2 = c in a plane: vertical (y = offset, axes x and z) or horizontal (z = offset, axes x and y); offset in a0 at Z = 1.
 std::vector<OutSeg2> outlineSlice(int orb, bool horizontal, double offset, int n = 200);
 

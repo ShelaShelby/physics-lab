@@ -8,6 +8,12 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Run on the PC (0.10.6 stage 7: Atom Lab speed scenes) — the numbers are what the next stage is decided from
+- [ ] Performance card → Benchmark…, tick **both** "Include stress scenes" and "Include Atom Lab speed-risk scenes", click Start, leave the window alone (about 3 minutes). Use the same window size as in your earlier benchmark.
+- [ ] Paste the whole result text into your message to Claude. If you only look: note the **Worst** column of the scenes numbered 8 to 18 (and the Average). Compare: 8 and 10 (phase colours) with 9 (two colours, same dots); 11 and 12 (jumps) and 13 to 15 (superpositions) with 9; 16 and 17 (outline) with scene 3; 18 (Og-294 nucleus) with scene 2.
+- [ ] What a bad number looks like: a worst frame above about 16 ms (a visible hitch at 60 Hz) in any of 8 to 18, or an average far above scene 9. Scenes 12 (jumps one after another) and 16 (first use of an outline) should have a worst frame well above their average: that is the stutter, and it is what is being measured.
+- [ ] Nothing else changes in the app. If the benchmark window looks wrong (the new tick box, long scene names wrapping, the result table), say so: that code could not be compiled in the cloud session.
+
 ## Try on the PC (0.10.6 stage 6: nuclear mass)
 - [ ] Atom Lab, hydrogen with 1 neutron (deuterium): the light spectrum card shows Hα at 656.29 nm as before (the real change is 1.3 pm, far below what the card shows). Nothing else should look different.
 - [ ] Optional: the hydrogen-1 atom mass in the Learn texts is still 1.00782503223 u (AME2020's file says 1.007825031898 u); say if you want it updated.

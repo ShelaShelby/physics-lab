@@ -1,43 +1,41 @@
-# Native Physics Lab 0.10.6 (alpha) — stage 6 report: nuclear mass from a source, and stronger tests
+# Native Physics Lab 0.10.6 (alpha) — stage 7 report: the Atom Lab's speed risks made measurable
 
-Fixes findings 5, 16 and 17 of the stage 1 audit (`git show 90049fe:native/REPORT.md`). Only the Atom Lab; `index.html` untouched (sha256 e5501387ae64…). Tests were written first: the new mass test and the D-alpha test failed on the old code (numbers below). Retrieval date of every source: 2026-10-04.
+Audit findings 10, 11, 12 (`git show 90049fe:native/REPORT.md`). Only the Atom Lab; `index.html` untouched (sha256 e5501387ae64…). **Nothing was optimised and nothing was timed**: this session has no GPU and no Windows. The scenes were added and run headlessly for correctness only. **Every speed number must come from the owner's PC** (OWNER-TODO.md).
 
-## Sources: all answered
-- `physics.nist.gov` (CODATA pages): **answered**. `https://physics.nist.gov/cgi-bin/ASD/lines1.pl` (ASD lines form): **answered**; it needs `allowed_out=1&forbid_out=1` and gives the tab-delimited list with `format=3`, vacuum wavelengths with `show_av=3` (full query in the test comment).
-- `https://www-nds.iaea.org/amdc/` and `…/ame2020/mass.mas20.txt` (AME2020, 3,558 nuclides): **answered**. Nothing was refused. No number below was typed from memory: the AME masses and ASD wavelengths are copied from those files.
+## How it is built (the existing benchmark, no second timer)
+- Same system as before: `BenchRun` (2 s warm-up, 8 s counted), the result table with Average, fps, 1 % low, **Worst**, CPU, GPU. The table and the text file already give the worst frame for every scene, so the new scenes report it too.
+- New tick box in the benchmark's start window: "Include Atom Lab speed-risk scenes (11 extra)", after the stress scenes. The 7 old scenes keep their numbers and settings (a test checks scene 3 is unchanged). New scenes are numbered 8 to 18.
+- New in `atom_bench.cpp/.h`: scenes `5…15` of `benchSetup` (the Atom Lab side), `benchSceneInfo` (names and settings in words), `benchFrame` (a small per-frame step: jump held, cut moving, outline cache emptied). New in `outline.cpp/.h`: `clearOutlineCache()`, `outlineCacheSize()` (a cold start for "first use"; called only between frames).
+- Wiring in `ui/benchmark.cpp`: an optional per-frame function per scene, a scene list per run, the tick box. Each scene starts from the lab's defaults, fixed seed 20260101, fixed Z/N, orbital, view, speed 5, camera still. The settings text in the result now also names orbital, cloud style, dots, phase, superposition, outline for cloud views.
 
-## Finding 5: the nuclear mass (atom_core.cpp `nuclearMassMe`, used by `rydM`)
-- **Binding table:** `kBeaLines` (generated from the web page; "binding energy per nucleon in keV, from measured atomic masses, mendeleev/AME") holds the **per-nucleon** energy in whole keV; `massBinding` multiplies by A to give the **total** B (MeV). I checked it against AME2020: **all 3,557 nuclides of the table are in AME** (1,008 of them AME's own extrapolated values, marked #).
-- **New form:** M = Z·m_p + N·m_n − B/c² (CODATA 2022 masses from stage 2). Against AME2020's atomic mass / m_e − Z the new M is within **5.4e-7** in the worst case over all 3,557 (median 2.6e-7; the rounding to 1 keV per nucleon and the electrons' binding energy, which the table includes, are the cause). The old A·u − Z·m_e was off by up to **1.0e-2** (median 4–5e-4).
-- **Which nuclides:** table nuclides **3,557** use the new form; the neutron slider reaches **4,252** nuclides, so **695** beyond the table keep the old form (no mass is known for them; nothing invented). The false "binding energy under 10⁻⁶" comment is replaced by this explanation.
-- **Masses before → after (electron masses, relative change)** and effect on the Rydberg energy / wavelength of the 2→3 line:
+## The 11 scenes (all uranium-238, Z = 92, unless noted; "48,000" = density Ultra)
+| # | Name (settings are in it) | Exercises | What a bad number looks like |
+|---|---|---|---|
+| 8 | Risk 10: phase colours (Wheel), Classic dots, Cloud 3D, 48,000 | finding 10: 24 colour bins × 3 depth bands, each rescans all dots | average far above 9 |
+| 9 | Risk 10 baseline: two colours (Sign), same | the same without the 24 bins | the baseline for 8, 10–15 |
+| 10 | Risk 10: Wheel, Classic, Cloud 2D side view, 48,000 | finding 10 in 2D (24 scans) | far above 9 |
+| 11 | Risk 11: cloud jump in flight (held half way) | finding 11: per-dot `jumpFractions`, copy of all dots | average far above 9 |
+| 12 | Risk 11: jumps one after another (emit, absorb back) | the start of a jump builds 48,000 new dots in one frame | **worst** far above the average |
+| 13 | Risk 11: superposition, orthogonal 2p z + 2p x (one energy) | finding 11: per-dot thinning, hash | above 9 |
+| 14 | Risk 11: superposition, overlapping 2p x + 2p m+1 | the stage 4 sampling path | compare with 13 |
+| 15 | Risk 11: superposition, orthogonal 2p z + 3d z² (two energies, beats) | thinning with a changing beat phase | compare with 13 |
+| 16 | Risk 12: first use of an outline (cache emptied every 120 frames), Cloud 3D, 4f, 12,000 dots | finding 12: the 64³ density pass | **worst** far above the average (the stutter) |
+| 17 | Risk 12: outline with the cut dragged, Slice, 4f, 12,000 dots | `outlineSlice`, 40,000 values, every frame (cut moves 0.01 per frame, as a drag does) | average far above scene 3 |
+| 18 | Risk 12: nucleus view, oganesson-294 (294 nucleons), whole nucleus | per-frame vectors in the nucleus view | far above scene 2 |
+Jump scene 11: the jump is started and its clock held at 0.6 s of 1.2 s, so every frame draws a jump in flight, whatever the fps. Scene 12: emit 4f→lower, drop the emitted photon, absorb back to 4f; in the headless run the starts came at lab frames 0, 674, 963 (a start about every 2.8 to 4 s of lab time). Scene 16 clears the cache at counted frame 0 and every 120 counted frames after (about 17 first uses in 8 s at 255 fps); the setup also clears it, so the first run and later runs start cold alike.
+The normFactor first use (a cached 12,000-step integral per orbital) cannot be reset without changing the core; it hits the first jump or superposition of a process, in the warm-up.
 
-| nuclide | M old → new | M change | rydM change | 2→3 line |
-|---|---|---|---|---|
-| H-1 | 1836.153 (special case) → same | 0 | 0 | 0 |
-| H-2 | 3644.777 → 3670.484 | +7.05e-3 | +1.92e-6 | 656.292291 → 656.291030 nm (**−1.26 pm**) |
-| H-3 | 5467.665 → 5496.923 | +5.35e-3 | +9.7e-7 | −0.64 pm |
-| He-4 | 7289.554 → 7294.299 | +6.5e-4 | +8.9e-8 | −0.015 pm |
-| Fe-56 | 102055.755 → 101937.190 | −1.16e-3 | −1.1e-8 | +1e-5 pm |
-| U-238 | 433755.460 → 433848.100 | +2.1e-4 | +4.9e-10 | below 1e-7 pm |
-| Og-294 | 535811.215 → 536201.482 | +7.3e-4 | +1.4e-9 | below 1e-7 pm |
-Over the slider: 2 nuclides move the Rydberg energy by more than 1e-6 (H-2, H-3), 45 by more than 1e-7, 295 by more than 1e-8. **Nothing else visible changes** (the H-2 spectrum note still reads 656.29 nm).
-- **Test** (`testNuclearMass`, from AME2020 atomic masses typed in with the file URL; NIST m_e): lab M vs AME M − Z for H-1, H-2, H-3, He-4, C-12, Fe-56, U-238: worst **3.899e-7** (Fe-56), guard **3.94e-7** (+1 %); before the fix 7.003e-3 (H-2: −0.700 %; H-3 −0.532 %, Fe-56 +0.116 %). D-alpha by hand from the AME deuteron mass 656.291030 nm vs lab: before 656.292291 (+1.9e-6), after **−8.4e-11**; tolerance 1e-9.
-- **Saved references moved (rescaled, none loosened):** `kSpecRef` for the web nuclides H-2, He-4, Fe-56, Og-294 (H-1 unchanged): 4 `rydM` values and 420 lines, each web number × (new ratio of Rydberg energies, written in the test from the NIST masses and the table's B) at the old 1e-14 / 1e-13 limits. Readouts, hints, hashes, dots, Learn texts did not move.
-
-## Finding 16: the spectrum against things the lab did not make (`testSpectrumIndependent`)
-- **By hand:** H Lyman-alpha, H-alpha, H-beta and He II 30.4 and 468.7 nm from the Rydberg formula written in the test from the NIST values (He-4 mass from AME2020): lab agrees to 1e-9 (worst 1e-10).
-- **NIST ASD:** vacuum Ritz wavelengths of the fine-structure components (J_i, J_k given) of H I and He II. The lab is vacuum, one electron, non-relativistic and level-averaged, so it is compared with the **range** of the components widened by (Zα)² of the wavelength (5.3e-5 for H, 2.1e-4 for He⁺: the size of fine structure, which the lab leaves out). Measured: inside for H-alpha (656.4696 in 656.4523–656.4722 nm) and He II 468.7 nm; just outside by 8.9e-6 (Lyman-alpha 121.568446 vs 121.566824–121.567364 nm), 1.0e-6 (H-beta) and 3.8e-5 (He II 30.38 nm).
-- **About:** one new entry for AME2020 and one for the ASD (both "used … in the tests"); `test_app` About edits 15 → 16, same words as `app_text.inc`.
-
-## Finding 17: four basic checks (`testBasicOrbitChecks`, `testSampledRadiusZ`)
-- 90 % outline mass of all 30 real orbitals: **0.90000–0.90254** (asserted: ≥ 0.9 and ≤ 0.912 = measured + 1 %).
-- 1s normalisation integral = π: measured relative **5.83e-10**; guard 5.9e-10.
-- Radial nodes: every one of the 30 orbitals has n − l − 1 sign changes of R(q) (counted on a 0.001 grid up to q = 80).
-- Sampled <r>: stage 5 already tests Z = 1 (12 orbitals × 8 seeds, band 10 %); this adds Z = 3 and 26 (6 orbitals × 4 seeds each): worst **0.07226**, guard 0.0730, and the "usually within 10 %" band holds.
+## Optimisation candidates (seen, NOT implemented; lines as of this commit)
+- `atom_view.cpp:355` (2D) and `:395` (3D): for each of the 24 colour groups every dot is scanned again; one pass bucketing dots by group would do it once (finding 10).
+- `atom_view.cpp:304`: `allPts.assign` + `insert` copies up to 96,000 floats every jump frame; `atom_sim.cpp:287` (`jumpFractions` per dot per frame, complex exp, sin, cos) could be computed once per frame (finding 11).
+- `atom_sim.cpp:791`: `info1` sums 48,000 `hypot` every frame; a running sum would do.
+- `outline.cpp:77–140` (`outlineOf`) runs on the drawing thread; `atom_view.cpp:346` recomputes `outlineSlice` (`outline.cpp:141`) on every cut change; could be done at orbital change or coarser while dragging.
+- `atom_view.cpp:501, 560–566`: per-frame `list`, `softOps`, `make_shared` in the nucleus view; buffers could be reused.
 
 ## Tests (Linux GCC Release, Ninja, `PL_BUILD_APP=OFF`): all seven pass
-orbit 1,540; **atom 18,157** (was 18,147: +10); app 1,385; nbody 37; jpl 55; moon 24; moon_real 59.
+orbit 1,540; atom 18,157; **app 1,515** (was 1,385: +130 in `testBenchRiskScenes`); nbody 37; jpl 55; moon 24; moon_real 59.
+`testBenchRiskScenes`, for each of the 11 scenes: set up from an odd lab and from a default lab gives the same settings; stepped 600 frames (1500 for the jump loop, 200 warm-up + counted) it ends as declared (Z, N, view, orbital, cloud style, phase, dot count, superposition on/off, outline); name says phase colours / 2D or 3D / 48,000; settings text names them; scene 11 is held between 0.3 and 0.7 s with one start; scene 12 starts at least 3 jumps; the pairs are orthogonal / overlapping (`overlapAB`) and one-energy / two-energy as named; scene 16 emptied the cache; scene 17's cut moved and stays in −1…1; scene 18 has 294 nucleons; each scene is repeatable (same dots, cut, count); old scene 3 is unchanged; the outline cache can be emptied and refilled. Tests were written first (they did not compile before the code). No existing test was changed or loosened.
 
-## Not done / not tested
-Screen, speed, Windows. The 695 slider nuclides beyond the table keep the old mass. The binding table is rounded to 1 keV per nucleon (could be re-made from AME's unrounded values; the effect is below 1e-9 on the lines). Still untouched from the audit: findings 9–12 (unsourced constants already done in stage 2; speed risks wait for timing) and the deuterium/tritium story is closed.
+## Not compiled / not tested here
+- **`ui/benchmark.cpp`** (the tick box, scene list, per-frame call, numbering) is in the app target, which needs SDL3 and ImGui and does not build here. I checked its new scene-list and numbering code by compiling it in a small harness with stub types (names 8 to 18, scene 8 sets up U-238 Cloud 3D), but the file itself was never compiled: a typo there would only show on the PC. Confidence: medium for the wiring, high for the scenes (compiled and tested).
+- `atom_view.cpp`, `atom_panel.cpp` were not touched. No timing, no screen, no GPU, no Windows; the scenes were never drawn. Whether the per-frame hook runs at the right moment relative to the sim step in the real loop is unverified.

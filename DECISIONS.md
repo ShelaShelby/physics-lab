@@ -15,6 +15,7 @@
 - No connectors, plugins or extra skills for now (they cost usage).
 - Coding sessions run on Sonnet 5.5; the strongest model is used only in a fresh short planning chat (for example the 1.0 design plan).
 - More electrons: the first level (shells filling with simplified screening, Slater's rules) needs the owner's decision before it is planned.
+- The Atom Lab's speed risks (audit findings 10-12) are first made measurable, not fixed: the benchmark has 11 extra scenes behind a tick box, and the fixes are decided from the owner's numbers (worst frame per scene) from the PC (4 Oct 2026).
 - The nucleus's mass in the Atom Lab is Z m_p + N m_n − B/c² with B from the AME2020 binding table; nuclides beyond the table keep A u − Z m_e. The spectrum tests compare with the Rydberg formula by hand and with NIST ASD within (Zα)² (4 Oct 2026).
 - The Atom Lab says "non-relativistic" at every Z and warns that its error is large from Z = 27 (where the Dirac 1s energy is about 1 % off), in the readout, the hint and the spectrum note alike. Visible light is 380-780 nm everywhere (a convention the app picked). The sampled average radius is shown only with the full 12,000 dots and is called an estimate "usually within 10 %" (4 Oct 2026).
 - A superposition of two overlapping states (the same state twice, a real orientation with an m state of its shell) is renormalised, not refused; its Mix percentages are then amplitudes, not exact shares, and the readout says so. Orthogonal pairs keep exact shares (4 Oct 2026).

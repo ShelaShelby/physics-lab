@@ -74,6 +74,9 @@ double orbitalNorm(int orb) {
     return s * 4 * kPi * angularMeanSq(orb);
 }
 
+void clearOutlineCache() { cache().clear(); }
+std::size_t outlineCacheSize() { return cache().size(); }
+
 const Outline& outlineOf(int orb) {
     auto& m = cache();
     auto it = m.find(orb);
