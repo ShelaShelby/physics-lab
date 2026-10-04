@@ -25,6 +25,7 @@
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
 #include "atom/radii.h"
+#include "atom/quadrupole.h"
 #include "atom/radial_graph.h"
 #include "orbit/format.h"
 
@@ -3042,12 +3043,24 @@ static void testNuclearSize(double guardLayout, double guardMinSepFloor) {
         const double d = std::hypot(std::hypot(v[0].x - v[1].x, v[0].y - v[1].y), v[0].z - v[1].z) / kFmLab;
         checkNum(rule ? "deuteron by the rule: half separation 1.6 fm" : "deuteron by its measured charge radius: half separation 1.9705 fm", d / 2, rule ? 1.6 : 1.9705, rule ? 1e-9 : 3e-5);
     }
-    // unmeasured isotopes are built exactly as the rule builds them (same seed, same positions); measured ones are not
-    for (const auto& zn : {std::pair<int, int>{3, 7}, {4, 8}, {118, 176}, {1, 0}, {50, 40}}) {
+    // unmeasured, ROUND isotopes are built exactly as the rule builds them (same seed, same positions); measured ones are not. (0.10.9 stage 2: this list had Og-294, whose estimated beta2 is 0.206, and passed with seed 9 by
+    // luck; a deformed nucleus is now drawn with the volume-keeping surface of quadrupole.h, so its layout differs on purpose: Og-294 moved to the check below, which needs it to differ for every one of 4 seeds.)
+    for (const auto& zn : {std::pair<int, int>{3, 7}, {4, 8}, {1, 0}, {50, 40}}) {
+        checkTrue("no measured radius and no deformation (beta2 = 0): " + at(zn.first, zn.second), nucBeta(zn.first, zn.second) == 0 && !sizedByMeasurement(zn.first, zn.second));
         seedRandom(9); const auto a = buildNucleus(zn.first, zn.second); seedRandom(9); const auto b = buildNucleusByRule(zn.first, zn.second);
         bool same = a.size() == b.size();
         for (std::size_t i = 0; same && i < a.size(); i++) same = a[i].x == b[i].x && a[i].y == b[i].y && a[i].z == b[i].z && a[i].isP == b[i].isP;
         checkTrue("no measurement: buildNucleus = the rule's layout, position for position: " + at(zn.first, zn.second), same);
+    }
+    {
+        int differs = 0;
+        for (uint32_t sd = 1; sd <= 4; sd++) {
+            seedRandom(sd); const auto a = buildNucleus(118, 176); seedRandom(sd); const auto b = buildNucleusByRule(118, 176);
+            bool same = a.size() == b.size();
+            for (std::size_t i = 0; same && i < a.size(); i++) same = a[i].x == b[i].x;
+            differs += !same;
+        }
+        checkTrue("no measured radius but a deformed nucleus (Og-294, estimated beta2 = 0.206): the layout differs from the web's rule layout for all 4 seeds (the volume is kept now)", nucBeta(118, 176) > 0.2 && differs == 4);
     }
     {
         seedRandom(9); const auto a = buildNucleus(2, 1); seedRandom(9); const auto b = buildNucleusByRule(2, 1);
@@ -3095,6 +3108,303 @@ static void testNuclearSize(double guardLayout, double guardMinSepFloor) {
     checkTrue("the credit names IAEA, Angeli and Marinova and the file's own limits", has(kRadiiCredit, "IAEA") && has(kRadiiCredit, "Angeli") && has(kRadiiCredit, "Marinova") && has(kRadiiCredit, "charge_radii.csv"));
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 0.10.9 stage 2: the nucleus's shape from measured electric quadrupole moments (IAEA recommended values, data/quadrupole).
+// REFERENCES are NOT the lab's own output: (1) numbers typed from data/quadrupole/elec_mom_recomm.csv (fetched 2026-10-04; counted with a separate script) and data/radii/charge_radii.csv; (2) hand arithmetic of the
+// textbook relation between the spectroscopic and the intrinsic moment for strong coupling K = I, Q = Q0 I (2I - 1) / ((I + 1) (2I + 3)), so Q0 = Q x 10, 5, 7/2, 14/5, 15/7, 11/6 for I = 1, 3/2, 2, 5/2, 7/2, 9/2, and
+// the first-order Q0 = 3 Z R^2 beta / sqrt(5 pi); (3) a SEPARATE Python implementation (plain Simpson integration over the angle, not the lab's closed forms) for the exact shape parameters typed below;
+// (4) the test's own integrals of the drawn surface.
+struct QuadRef { int Z, A, spin2; char kind; double Qb, uncB; const char* method; const char* nsr; int stable; };
+static const QuadRef kQuadRef[] = {                                                      // typed from the CSV: z, column 2 (A), spin, value, uncertainty, method, nsr, half-life
+    {1, 2, 2, 'S', +0.0028578, 3e-7, "MB,R", "1958Qu02", 1}, {3, 6, 2, 'S', -0.000806, 6e-6, "MB", "2005Bo45", 1}, {3, 7, 3, 'S', -0.0400, 3e-4, "MB", "2008Py02", 1},
+    {5, 11, 3, 'S', +0.04059, 1e-4, "AB", "", 1}, {11, 23, 3, 'S', +0.104, 1e-3, "O", "", 1}, {13, 27, 5, 'S', +0.1466, 1e-3, "AB", "", 1}, {19, 39, 3, 'S', +0.603, 6e-3, "AB", "", 1},
+    {19, 40, 8, 'S', -0.750, 8e-3, "AB", "", 0}, {27, 59, 7, 'S', +0.42, 3e-2, "AB", "", 1}, {55, 124, 2, 'S', -0.69, 4e-2, "ABLS", "", 0}, {55, 126, 2, 'S', -0.64, 3e-2, "ABLS", "", 0},
+    {62, 147, 7, 'S', -0.26, 3e-2, "Mu-X", "", 0}, {63, 153, 5, 'S', +2.41, 2e-2, "Mu-X", "", 1}, {67, 165, 7, 'S', +3.58, 2e-2, "Pi-X", "", 1}, {68, 167, 7, 'S', +3.57, 3e-2, "Mu-X", "", 1},
+    {71, 175, 7, 'S', +3.49, 2e-2, "Mu-X", "", 1}, {83, 209, 9, 'S', -0.516, 1.5e-2, "AB", "", 0}, {92, 235, 7, 'S', +4.936, 6e-3, "Mu-X", "", 0}, {5, 12, 2, 'U', 0.0132, 3e-4, "b-NMR", "", 0},
+    {3, 11, 3, 'T', -0.0333, 5e-4, "b-NMR", "2008Ne11", 0}, {19, 41, 3, 'S', +0.734, 7e-3, "AB", "2018Py01", 1}};
+// ground-state rows kept per element Z = 1 .. 102 (the file's 599 minus the K-41 duplicate), counted from the CSV
+static const int kQuadPerElement[102] = {1, 0, 5, 1, 8, 1, 4, 3, 4, 2, 9, 4, 7, 1, 1, 2, 3, 5, 4, 7, 6, 3, 2, 1, 13, 0, 5, 1, 21, 6, 17, 2, 4, 2, 6, 8, 20, 9, 7, 5, 7, 2, 1, 3, 0, 1, 4, 8, 20, 8, 5, 3, 6, 10,
+                                         24, 8, 5, 0, 3, 7, 4, 7, 19, 2, 11, 9, 12, 9, 12, 10, 15, 4, 5, 0, 7, 4, 13, 4, 12, 5, 3, 7, 15, 8, 18, 7, 20, 6, 3, 1, 2, 2, 1, 1, 3, 0, 0, 0, 1, 0, 0, 1};
+// the measured rms charge radius (radii CSV), Q0 / (Z <r^2>) with <r^2> = rms^2 - 0.84^2 (the protons' point mean square radius), the exact beta2 of the uniformly charged body that has that moment (separate Python
+// implementation) and the first-order beta2 = sqrt(5 pi) Q0 / (3 Z R^2), R^2 = (5/3) <r^2> (hand formula)
+struct ShapeRef { int Z, A; double rms, ratio, beta, first; };
+static const ShapeRef kShapeRef[] = {{67, 165, 5.2022, 0.434410959, +0.32474953, +0.3443426}, {68, 167, 5.2560, 0.417905897, +0.31242822, +0.3312596}, {71, 175, 5.3700, 0.374429877, +0.28018744, +0.2967976},
+                                      {63, 153, 5.1115, 0.421335135, +0.31498403, +0.3339778}, {92, 235, 5.8337, 0.344978011, +0.25848001, +0.2734522}, {27, 59, 3.7875, 0.244387227, +0.18464940, +0.1937173},
+                                      {83, 209, 5.5211, -0.038276560, -0.03069289, -0.0303405}, {62, 147, 4.9892, -0.037153656, -0.02978184, -0.0294504}, {55, 126, 4.7872, -0.523884804, -0.57887637, -0.4152654},
+                                      {13, 27, 3.0610, 0.364438408, +0.27281351, +0.2888777}, {11, 23, 2.9936, 0.572583488, +0.43068437, +0.4538672}, {64, 155, 5.1319, 0.387107540, +0.28956095, +0.3068468}};
+// a symmetric 3 x 3 matrix's eigenvalue of the largest size, by Jacobi rotations
+static double bigEigen(double a[3][3]) {
+    for (int sweep = 0; sweep < 50; sweep++) {
+        double off = 0;
+        for (int p = 0; p < 3; p++) for (int q = p + 1; q < 3; q++) off += a[p][q] * a[p][q];
+        if (off < 1e-24) break;
+        for (int p = 0; p < 3; p++) for (int q = p + 1; q < 3; q++) {
+            if (std::fabs(a[p][q]) < 1e-300) continue;
+            const double th = (a[q][q] - a[p][p]) / (2 * a[p][q]), t = (th >= 0 ? 1 : -1) / (std::fabs(th) + std::sqrt(th * th + 1)), c = 1 / std::sqrt(t * t + 1), s = t * c;
+            for (int k = 0; k < 3; k++) { const double akp = a[k][p], akq = a[k][q]; a[k][p] = c * akp - s * akq; a[k][q] = s * akp + c * akq; }
+            for (int k = 0; k < 3; k++) { const double apk = a[p][k], aqk = a[q][k]; a[p][k] = c * apk - s * aqk; a[q][k] = s * apk + c * aqk; }
+        }
+    }
+    double e = a[0][0];
+    for (int k = 1; k < 3; k++) if (std::fabs(a[k][k]) > std::fabs(e)) e = a[k][k];
+    return e;
+}
+// what the lab draws: the protons' traceless quadrupole tensor sum(3 x_i x_j - r^2 delta_ij) / sum(r^2) of one build (rotation does not change its eigenvalues, so the random tilt does not matter). For an axial body
+// its eigenvalues are (ratio, -ratio/2, -ratio/2) with ratio = Q0 / (Z <r^2>): the one of the largest size is positive for a prolate nucleus and negative for an oblate one. Mean and spread over the builds.
+struct CloudQ { double mean, sd; };
+static CloudQ cloudQuadrupole(int Z, int N, int builds, uint32_t seed) {
+    seedRandom(seed);
+    double s1 = 0, s2 = 0;
+    for (int b = 0; b < builds; b++) {
+        const std::vector<Nucleon> v = buildNucleus(Z, N);
+        double cx = 0, cy = 0, cz = 0;
+        for (const Nucleon& q : v) { cx += q.x; cy += q.y; cz += q.z; }
+        cx /= v.size(); cy /= v.size(); cz /= v.size();
+        double T[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}, r2s = 0;
+        for (const Nucleon& q : v) {
+            if (!q.isP) continue;
+            const double x[3] = {(q.x - cx) / kFmLab, (q.y - cy) / kFmLab, (q.z - cz) / kFmLab}, r2 = x[0] * x[0] + x[1] * x[1] + x[2] * x[2];
+            r2s += r2;
+            for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) T[i][j] += 3 * x[i] * x[j] - (i == j ? r2 : 0);
+        }
+        for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) T[i][j] /= r2s;
+        const double e = bigEigen(T);
+        s1 += e; s2 += e * e;
+    }
+    const double m = s1 / builds;
+    return {m, std::sqrt(std::max(0.0, s2 / builds - m * m))};
+}
+// the volume, the mean square radius and <3z^2 - r^2> / <r^2> of the uniform body whose surface is r(u) = R_V f(u) (u = cos theta, f = shapeRadiusFactor), by the test's own Simpson integrals over u:
+// V = (2 pi / 3) integral r^3 du;  <r^2> = (3/5) integral r^5 du / integral r^3 du;  <3z^2 - r^2> / <r^2> = integral r^5 (3u^2 - 1) du / integral r^5 du
+struct BodyOwn { double volume, ms, ratio; };
+static BodyOwn bodyOwn(double beta, double RV) {
+    const int n = 20000;
+    const double h = 2.0 / n;
+    double v3 = 0, v5 = 0, q5 = 0;
+    for (int i = 0; i <= n; i++) {
+        const double u = -1 + i * h, w = (i == 0 || i == n) ? 1 : (i % 2 ? 4 : 2), r = RV * shapeRadiusFactor(beta, u), r3 = r * r * r, r5 = r3 * r * r;
+        v3 += w * r3; v5 += w * r5; q5 += w * r5 * (3 * u * u - 1);
+    }
+    return {2 * kPi / 3 * v3 * h / 3, 0.6 * v5 / v3, q5 / v5};
+}
+
+static void testQuadrupole(double guardMinSepDeformed) {
+    // ---- 1. the data parses; counts as fetched ----
+    int n = 0, fileRows = 0, isoRows = 0;
+    const QuadRow* rows = quadRows(n);
+    quadFileCounts(fileRows, isoRows);
+    int kinds[256] = {0}, perEl[120] = {0}, badOrder = 0, asA = 0, asN = 0, stable = 0, stableS = 0, stableN = 0, spinLow = 0, evenEven = 0, firmBad = 0;
+    for (int i = 0; i < n; i++) {
+        const QuadRow& r = rows[i];
+        kinds[(unsigned char)r.kind]++; perEl[r.Z]++;
+        if (i > 0 && !(rows[i - 1].Z < r.Z || (rows[i - 1].Z == r.Z && rows[i - 1].A < r.A))) badOrder++;
+        if (nucCode(r.Z, r.A - r.Z)) asA++;
+        if (nucCode(r.Z, r.A)) asN++;
+        if (r.stable) { stable++; const std::string* c = nucCode(r.Z, r.A - r.Z); if (c && *c == "S") stableS++; const std::string* d = nucCode(r.Z, r.A); if (d && *d == "S") stableN++; }
+        if (r.kind == 'S' && r.spin2 >= 0 && r.spin2 < 2) spinLow++;
+        if (r.Z % 2 == 0 && (r.A - r.Z) % 2 == 0) evenEven++;
+        if (r.spinFirm && r.spin2 < 0) firmBad++;
+    }
+    checkTrue("quadrupole: the file has 1,155 rows: 599 ground states (598 here: the duplicate K-41 row is left out) and 556 isomer rows (not in the table)", fileRows == 1155 && isoRows == 556 && n == 598 && fileRows - isoRows == 599);
+    checkTrue("quadrupole: 598 ground-state rows: 546 signed, 41 unsigned (no sign in the file), 4 tentative sign, 7 not a single clean number (counted from the CSV)", kinds['S'] == 546 && kinds['U'] == 41 && kinds['T'] == 4 && kinds['X'] == 7);
+    checkTrue("quadrupole: sorted and unique by (Z, A); ground rows per element Z = 1 .. 102 as counted from the CSV", badOrder == 0 && std::equal(kQuadPerElement, kQuadPerElement + 102, perEl + 1));
+    checkTrue("quadrupole: no even-even ground row and none of spin 0 or 1/2 (quantum mechanics: such a nucleus has no spectroscopic quadrupole moment)", evenEven == 0 && spinLow == 0 && firmBad == 0);
+    // what the second column is: the MASS NUMBER A. Read as A, all 598 rows are nuclides of the lab's NUBASE-derived table; read as a neutron count only 53 are, and the 77 'stable' rows are the stable isotopes (76: Eu-151
+    // is in the table with 1.45e26 s) only as A
+    checkTrue("quadrupole: the file's second column is the mass number: (Z, A - Z) is a known nuclide for 598 of 598 rows, (Z, column) for only 53; of 77 'stable' rows 76 are stable isotopes read as A and 0 read as N",
+              asA == 598 && asN == 53 && stable == 77 && stableS == 76 && stableN == 0);
+    std::printf("quadrupole: %d ground rows (signed %d, unsigned %d, tentative %d, not clean %d), %d isomer rows; column read as A: %d of %d are nuclides, as N: %d; stable rows %d: %d on stable isotopes as A, %d as N\n",
+                n, kinds['S'], kinds['U'], kinds['T'], kinds['X'], isoRows, asA, n, asN, stable, stableS, stableN);
+    // ---- 2. spot values typed from the CSV (units: barns) ----
+    for (const QuadRef& r : kQuadRef) {
+        const QuadRow* q = quadRow(r.Z, r.A - r.Z);
+        const std::string w = "quadrupole " + std::string(symbol(r.Z)) + "-" + std::to_string(r.A);
+        checkTrue(w + " is in the table", q != nullptr);
+        if (!q) continue;
+        checkTrue(w + ": spin, kind, stable, method as in the CSV", q->spin2 == r.spin2 && q->kind == r.kind && q->stable == r.stable && std::string(q->method) == r.method && (!*r.nsr || std::string(q->nsr) == r.nsr));
+        checkNum(w + " Q (barns)", q->Qb, r.Qb, 1e-12);
+        checkNum(w + " uncertainty (barns)", q->uncB, r.uncB, 1e-9);
+    }
+    checkTrue("quadrupole: the value text and spin text are the file's own (Ho-165 \"+3.58(2)\" \"7/2-\"; Cu-78 spin \"(6-)\" is not firm; B-12 \"0.0132(3)\" has no sign; At-218's row is not clean)",
+              std::string(quadRow(67, 98)->raw) == "+3.58(2)" && std::string(quadRow(67, 98)->spin) == "7/2-" && quadRow(29, 49)->spinFirm == 0 && std::string(quadRow(5, 7)->raw) == "0.0132(3)" && quadRow(85, 133)->kind == 'X');
+    checkNum("1 barn = 100 fm^2 exactly (10^-28 m^2 over 10^-30 m^2)", kBarnFm2, 100, 0);
+    // ---- 3. spectroscopic -> intrinsic, K = I (hand arithmetic) ----
+    checkNum("K = I: spin 1: Q0 = 10 Q", intrinsicQ0(1.0, 2), 10, 1e-14);
+    checkNum("K = I: spin 3/2: Q0 = 5 Q", intrinsicQ0(1.0, 3), 5, 1e-14);
+    checkNum("K = I: spin 2: Q0 = 7/2 Q", intrinsicQ0(1.0, 4), 3.5, 1e-14);
+    checkNum("K = I: spin 5/2: Q0 = 14/5 Q", intrinsicQ0(1.0, 5), 2.8, 1e-14);
+    checkNum("K = I: spin 7/2: Q0 = 15/7 Q", intrinsicQ0(1.0, 7), 15.0 / 7, 1e-14);
+    checkNum("K = I: spin 9/2: Q0 = 11/6 Q", intrinsicQ0(1.0, 9), 11.0 / 6, 1e-14);
+    checkTrue("K = I: spin 0 and spin 1/2 have no conversion (the spectroscopic moment is exactly zero whatever the shape): not a number", std::isnan(intrinsicQ0(1.0, 0)) && std::isnan(intrinsicQ0(1.0, 1)));
+    checkNum("Ho-165 (spin 7/2, Q = +3.58 b): Q0 = 3.58 x 15/7 = +7.6714 b", intrinsicQ0(3.58, 7), 7.671428571428571, 1e-14);
+    checkNum("deuteron (spin 1, Q = +0.0028578 b): Q0 = +0.028578 b", intrinsicQ0(0.0028578, 2), 0.028578, 1e-14);
+    checkNum("Bi-209 (spin 9/2, Q = -0.516 b): Q0 = -0.516 x 11/6 = -0.9460 b", intrinsicQ0(-0.516, 9), -0.946, 1e-14);
+    // ---- 4. the shape parameter: the point-proton mean square radius, the exact beta2 for the drawn body, the first-order formula as a hand check ----
+    for (const ShapeRef& r : kShapeRef) {
+        const int N = r.A - r.Z;
+        const std::string w = std::string(symbol(r.Z)) + "-" + std::to_string(r.A);
+        const double ms = r.rms * r.rms - 0.84 * 0.84;
+        checkNum(w + ": the point-proton mean square radius = measured rms^2 - 0.84^2", pointProtonMs(r.Z, N), ms, 1e-12);
+        const QuadRow* q = quadRow(r.Z, N);
+        const double Q0fm2 = intrinsicQ0(q->Qb, q->spin2) * kBarnFm2;
+        checkNum(w + ": ratio Q0 / (Z <r^2>) (separate Python)", Q0fm2 / (r.Z * ms), r.ratio, 1e-7);
+        const Shape s = nucShape(r.Z, N);
+        checkTrue(w + ": the shape comes from the measured moment", s.src == ShapeSource::MeasuredMoment && s.moment == MomentUse::Used);
+        checkNum(w + ": beta2 equals the separate Python solution (exact for the drawn body)", s.beta, r.beta, 0, 3e-6);
+        checkTrue(w + ": the sign of beta2 is the sign of the measured moment (positive: prolate, negative: oblate)", (s.beta > 0) == (q->Qb > 0));
+        const double first = std::sqrt(5 * kPi) * Q0fm2 / (3 * r.Z * (5.0 / 3) * ms);
+        checkNum(w + ": the first-order hand formula sqrt(5 pi) Q0 / (3 Z R^2) with R^2 = (5/3) <r^2>", first, r.first, 1e-6);
+        if (std::fabs(r.beta) > 0.2 && std::fabs(r.beta) < 0.45) checkTrue(w + ": the exact value is 4 to 9 % below the first-order one for 0.2 < |beta2| < 0.45 (the second-order term)", std::fabs(s.beta) < std::fabs(first) * 0.96 && std::fabs(s.beta) > std::fabs(first) * 0.90);
+    }
+    // known cases: strongly deformed rare earths and actinides are clearly prolate; the most oblate case the rule accepts is clearly oblate (Cs-126: a moment from a few nucleons; no benchmark was read, this is the data's own)
+    int prolate = 0;
+    for (const auto& za : {std::pair<int, int>{67, 165}, {68, 167}, {71, 175}, {63, 153}, {64, 155}, {70, 173}, {92, 235}}) {
+        const Shape s = nucShape(za.first, za.second - za.first);
+        if (s.src == ShapeSource::MeasuredMoment && s.beta > 0.25 && s.beta < 0.40) prolate++;
+    }
+    checkTrue("known cases: Ho-165, Er-167, Lu-175, Eu-153, Gd-155, Yb-173, U-235 are all prolate with 0.25 < beta2 < 0.40", prolate == 7);
+    checkTrue("the most oblate case the rule accepts, Cs-126, is clearly oblate (beta2 = -0.579); near a closed shell Bi-209 and Sm-147 are almost round (-0.031, -0.030)",
+              nucShape(55, 71).beta < -0.5 && std::fabs(nucShape(83, 126).beta) < 0.04 && nucShape(83, 126).beta < 0 && std::fabs(nucShape(62, 85).beta) < 0.04 && nucShape(62, 85).beta < 0);
+    // ---- 5. the drawn body: volume, mean square radius and quadrupole by the test's own integrals ----
+    double worstVol = 0, worstMs = 0, minRV = 1e9;
+    for (const double beta : {-0.6, -0.45, -0.3, -0.03, 0.0, 0.03, 0.2, 0.3247, 0.45, 0.6}) {
+        const double Rpt = 6.0, RV = volumeEquivalentRadius(Rpt, beta);
+        const BodyOwn b = bodyOwn(beta, RV);
+        worstVol = std::max(worstVol, std::fabs(b.volume / (4 * kPi / 3 * RV * RV * RV) - 1));
+        worstMs = std::max(worstMs, std::fabs(b.ms / (0.6 * Rpt * Rpt) - 1));
+        minRV = std::min(minRV, RV / Rpt);
+        checkNum("the drawn body keeps its volume when deformed: beta2 = " + fmt::fixed(beta, 4) + ": V = 4 pi/3 R_V^3 (own Simpson)", b.volume, 4 * kPi / 3 * RV * RV * RV, 1e-9);
+        checkNum("... and its mean square radius is the measured point-proton one: beta2 = " + fmt::fixed(beta, 4), b.ms, 0.6 * Rpt * Rpt, 1e-9);
+        if (beta != 0) checkNum("... and <3z^2 - r^2> / <r^2> is the lab's shapeMomentRatio: beta2 = " + fmt::fixed(beta, 4), b.ratio, shapeMomentRatio(beta), 1e-9);
+        else checkNum("a sphere has no quadrupole moment", b.ratio, 0, 0, 1e-12);
+    }
+    std::printf("drawn body (own integrals): worst volume error %.2e, worst mean-square-radius error %.2e; smallest R_V / R_pt = %.4f (beta2 = +-0.6)\n", worstVol, worstMs, minRV);
+    checkNum("the first-order relation is the small-beta limit: <3z^2 - r^2> / <r^2> = 4 c beta (c = sqrt(5/(16 pi))) for beta = 0.001", shapeMomentRatio(0.001), 4 * 0.31539156525252005 * 0.001, 1e-3);
+    checkNum("Q0 of the measured moments is reproduced by the drawn body: Ho-165, Q0 = Z <r^2> x (own integral of the drawn surface)", 67 * (5.2022 * 5.2022 - 0.84 * 0.84) * bodyOwn(nucShape(67, 98).beta, volumeEquivalentRadius(std::sqrt(5.0 / 3 * (5.2022 * 5.2022 - 0.84 * 0.84)), nucShape(67, 98).beta)).ratio,
+             intrinsicQ0(3.58, 7) * kBarnFm2, 1e-6);
+    // ---- 6. which source the nucleus uses, and why not the measured moment ----
+    struct Why { int Z, A; ShapeSource src; MomentUse use; const char* what; };
+    const Why whys[] = {
+        {67, 165, ShapeSource::MeasuredMoment, MomentUse::Used, "Ho-165: a measured, signed moment, firm spin"},
+        {64, 158, ShapeSource::BE2, MomentUse::NoRow, "Gd-158: even-even, no moment possible; the lab's B(E2) table has it"},
+        {82, 208, ShapeSource::Estimate, MomentUse::NoRow, "Pb-208: even-even and doubly magic: no moment, an estimate (round)"},
+        {50, 120, ShapeSource::Estimate, MomentUse::NoRow, "Sn-120: even-even: no moment, an estimate"},
+        {3, 7, ShapeSource::Estimate, MomentUse::TooLarge, "Li-7: a real moment, but K = I would need |beta2| = 1.0 > 0.6: not used"},
+        {19, 41, ShapeSource::Estimate, MomentUse::TooLarge, "K-41: |beta2| about 1.4: not used"},
+        {5, 12, ShapeSource::Estimate, MomentUse::SignNotGiven, "B-12: |Q| = 0.0132 b but the file gives no sign"},
+        {3, 11, ShapeSource::Estimate, MomentUse::SignNotGiven, "Li-11: sign only tentative (-)"},
+        {29, 78, ShapeSource::Estimate, MomentUse::SpinNotFirm, "Cu-78: spin only tentative (6-)"},
+        {85, 218, ShapeSource::Estimate, MomentUse::RowNotUsable, "At-218: the row is not a clean number"},
+        {91, 231, ShapeSource::Estimate, MomentUse::RowNotUsable, "Pa-231: [-1.72(5)] 'not measured'"}};
+    for (const Why& w : whys) {
+        const Shape s = nucShape(w.Z, w.A - w.Z);
+        checkTrue(std::string("source and reason: ") + w.what, s.src == w.src && s.moment == w.use);
+    }
+    checkTrue("a nucleus without a measured moment keeps what the lab had: the same beta2 as nucBeta (Gd-158: B(E2); Pb-208: round; Sn-120: the estimate)", nucShape(64, 94).beta == nucBeta(64, 94) && nucShape(82, 126).beta == nucBeta(82, 126) && nucShape(50, 70).beta == nucBeta(50, 70));
+    int used = 0, tooLarge = 0, noSign = 0, spinNo = 0, notClean = 0, qualifying = 0;
+    for (int i = 0; i < n; i++) {
+        const Shape s = nucShape(rows[i].Z, rows[i].A - rows[i].Z);
+        used += s.moment == MomentUse::Used; tooLarge += s.moment == MomentUse::TooLarge; noSign += s.moment == MomentUse::SignNotGiven; spinNo += s.moment == MomentUse::SpinNotFirm; notClean += s.moment == MomentUse::RowNotUsable;
+    }
+    qualifying = used + tooLarge;
+    checkTrue("of the 598 ground rows 512 qualify (signed, firm spin >= 1): 498 give a shape, 14 need |beta2| > 0.6; 45 have no firm sign, 34 no firm spin, 7 are not clean numbers (counted by the separate Python)", qualifying == 512 && used == 498 && tooLarge == 14 && noSign == 45 && spinNo == 34 && notClean == 7);
+    int offered = 0, srcQ = 0, srcB = 0, srcE = 0, estEvenEven = 0;
+    for (int z = 1; z <= 118; z++) {
+        const auto rg = nRange(z);
+        for (int nn = rg.first; nn <= rg.second; nn++) {
+            offered++;
+            const Shape s = nucShape(z, nn);
+            srcQ += s.src == ShapeSource::MeasuredMoment; srcB += s.src == ShapeSource::BE2; srcE += s.src == ShapeSource::Estimate;
+            if (s.src == ShapeSource::Estimate && z % 2 == 0 && nn % 2 == 0) estEvenEven++;
+        }
+    }
+    std::printf("shape sources of the slider's %d isotopes: measured moment %d, B(E2) %d, estimate %d (of which even-even, spin 0: %d)\n", offered, srcQ, srcB, srcE, estEvenEven);
+    checkTrue("the slider's 4,252 isotopes: 498 shapes from a measured moment, 11 from B(E2), 3,743 estimates (1,057 of them even-even); counted separately in Python", offered == 4252 && srcQ == 498 && srcB == 11 && srcE == 3743 && estEvenEven == 1057);
+    // ---- 7. the cloud the lab draws ----
+    // (a) EXACT: buildNucleusAxial is buildNucleus without its last step, the random tilt, so the symmetry axis is z. The protons' <x^2> = <y^2> and <z^2> about the centre of mass are scaled to those of the model, so
+    // (2 <z^2> - <x^2> - <y^2>) / (<x^2> + <y^2> + <z^2>) must be Q0 / (Z <r^2>) of the DATA (typed ratios, separate Python), the trace the point-proton <r^2>, and <x^2> = <y^2>: by construction, so the guard is rounding-level.
+    struct Cloud { int Z, A; double ratio; };
+    const Cloud clouds[] = {{67, 165, 0.434410959236}, {68, 167, 0.417905896953}, {63, 153, 0.421335134532}, {92, 235, 0.344978011370}, {27, 59, 0.244387227285}, {13, 27, 0.364438407721}, {55, 126, -0.523884804060}, {64, 155, 0.387107539569},
+                           {3, 6, -0.044797779987}, {3, 8, 0.768748492144}, {7, 12, 0.373674093554}, {7, 14, 0.500103853759}};   // the last four (A <= 16) go through the Gaussian branch of the layout
+    double worstRatio = 0, worstTrace = 0, worstXY = 0, minSepAxial = 1e9;
+    for (const Cloud& c : clouds) {
+        const int N = c.A - c.Z;
+        double ratioSum = 0, minSep = 1e9; const int builds = 40;
+        seedRandom(4242 + c.Z);
+        for (int b = 0; b < builds; b++) {
+            const std::vector<Nucleon> v = buildNucleusAxial(c.Z, N);
+            double cx = 0, cy = 0, cz = 0;
+            for (const Nucleon& q : v) { cx += q.x; cy += q.y; cz += q.z; }
+            cx /= v.size(); cy /= v.size(); cz /= v.size();
+            double sxx = 0, syy = 0, szz = 0; int np = 0;
+            for (const Nucleon& q : v) if (q.isP) { sxx += (q.x - cx) * (q.x - cx) / (kFmLab * kFmLab); syy += (q.y - cy) * (q.y - cy) / (kFmLab * kFmLab); szz += (q.z - cz) * (q.z - cz) / (kFmLab * kFmLab); np++; }
+            sxx /= np; syy /= np; szz /= np;
+            const double tr = sxx + syy + szz, ratio = (2 * szz - sxx - syy) / tr;
+            worstRatio = std::max(worstRatio, std::fabs(ratio - c.ratio)); worstTrace = std::max(worstTrace, std::fabs(tr / pointProtonMs(c.Z, N) - 1)); worstXY = std::max(worstXY, std::fabs(sxx - syy) / tr);
+            ratioSum += ratio;
+            for (std::size_t i = 0; i < v.size(); i++) for (std::size_t j = i + 1; j < v.size(); j++) {
+                const double dx = (v[i].x - v[j].x) / kFmLab, dy = (v[i].y - v[j].y) / kFmLab, dz = (v[i].z - v[j].z) / kFmLab;
+                minSep = std::min(minSep, std::sqrt(dx * dx + dy * dy + dz * dz));
+            }
+        }
+        minSepAxial = std::min(minSepAxial, minSep);
+        std::printf("cloud %s-%d (untilted, %d builds): <3z^2 - r^2>/<r^2> of the drawn protons %+.9f, from the data %+.9f; closest pair %.3f fm\n", symbol(c.Z), c.A, builds, ratioSum / builds, c.ratio, minSep);
+    }
+    std::printf("cloud: worst |drawn - data| ratio %.2e, trace %.2e, |<x^2> - <y^2>| %.2e; closest pair %.4f fm\n", worstRatio, worstTrace, worstXY, minSepAxial);
+    checkTrue("the drawn cloud has EXACTLY the measured moment: protons' <3z^2 - r^2> / <r^2> = Q0 / (Z <r^2>) of the data for 12 nuclei (4 through the Gaussian branch, A <= 16) (guard 1e-9: exact by construction)", worstRatio <= 1e-9);
+    checkTrue("... with the point-proton <r^2> as its trace (the stage 1 radius: 1e-9) and <x^2> = <y^2> (an axial body: 1e-9)", worstTrace <= 1e-9 && worstXY <= 1e-9);
+    checkTrue("... and no two nucleons closer than the guard 0.606 fm (the hard core 1.0 fm, relaxed to 0.55 fm only when crowded, then scaled by the deformation; the smallest measured is printed)", minSepAxial >= guardMinSepDeformed);
+    // (b) the tilted cloud the screen shows: only the SIGN is a safe statistic for a random snapshot (the largest eigenvalue of a noisy tensor of a few protons is biased), so the sign only
+    for (std::size_t ci = 0; ci < 8; ci++) {   // the 8 with Z >= 13 and |ratio| >= 0.24; the light ones have a few protons, a noise of about 0.5 and (Li-6) a ratio of -0.045
+        const Cloud& c = clouds[ci];
+        const CloudQ q = cloudQuadrupole(c.Z, c.A - c.Z, 120, 777 + c.Z);
+        std::printf("cloud %s-%d (tilted, as drawn): largest eigenvalue %+.4f (sd of one build %.3f), model %+.4f\n", symbol(c.Z), c.A, q.mean, q.sd, c.ratio);
+        checkTrue(std::string("the drawn cloud's sign: ") + symbol(c.Z) + "-" + std::to_string(c.A) + (c.ratio > 0 ? " is prolate (positive)" : " is oblate (negative)"), (q.mean > 0) == (c.ratio > 0));
+    }
+    // the stage 1 radius still holds with the deformation: the protons' rms charge radius of the drawn nucleus is the measured one (9 nuclei, several deformed, in testNuclearSize); here the strongly deformed ones
+    for (const auto& za : {std::pair<int, int>{67, 165}, {63, 153}, {92, 235}}) {
+        const double m = chargeRadius(za.first, za.second - za.first)->rms;
+        const LayoutStat st = layoutStat(za.first, za.second - za.first, 30, false, 31337 + za.first);
+        checkNum(std::string("stage 1 radius kept after deformation: ") + symbol(za.first) + "-" + std::to_string(za.second) + ": the drawn rms charge radius = the measured one", st.chargeRms, m, 1e-9);
+    }
+    // the lab's readout line "shape: ..." at the Nucleus layer names the source, one of three labels
+    auto shapeLine = [](int Z, int N) {
+        AtomLab lab; lab.p.Z = Z; lab.p.N = N; lab.s.layer = "Nucleus";
+        for (const std::string& l : lab.info()) if (l.compare(0, 7, "shape: ") == 0) return l;
+        return std::string("(no shape line)");
+    };
+    checkStr("readout, Ho-165: a measured moment", shapeLine(67, 98), "shape: stretched like a rugby ball (from a measured quadrupole moment)");
+    checkStr("readout, Cs-126: a measured moment, oblate", shapeLine(55, 71), "shape: flattened like a pancake (from a measured quadrupole moment)");
+    checkStr("readout, Gd-158: B(E2)", shapeLine(64, 94), "shape: stretched like a rugby ball (from B(E2))");
+    checkStr("readout, Pb-208: doubly magic, an estimate (was labelled as measured before 0.10.9 stage 2)", shapeLine(82, 126), "shape: nearly round (an estimate)");
+    checkStr("readout, Sn-120: an estimate", shapeLine(50, 70), "shape: nearly round (an estimate)");
+    checkStr("readout, Og-294: an estimate, a guess", shapeLine(118, 176), "shape: stretched like a rugby ball (an estimate: a guess)");
+    // ---- 8. the words ----
+    const std::string ho = joinLines(nuclearShapeLines(67, 98)), cs = joinLines(nuclearShapeLines(55, 71)), li7 = joinLines(nuclearShapeLines(3, 4)), b12 = joinLines(nuclearShapeLines(5, 7)), pb = joinLines(nuclearShapeLines(82, 126)),
+                    gd = joinLines(nuclearShapeLines(64, 94)), sn = joinLines(nuclearShapeLines(50, 70)), h1 = joinLines(nuclearShapeLines(1, 0)), bi = joinLines(nuclearShapeLines(83, 126)), cu = joinLines(nuclearShapeLines(29, 49)),
+                    li10 = joinLines(nuclearShapeLines(3, 7));
+    checkTrue("card, Ho-165: names the source 'measured quadrupole moment', the moment +3.5800 b +- 0.0200 b with spin 7/2, the conversion Q0 = +7.6714 b and that it is a model assumption (K = I), prolate and beta2 = +0.3247",
+              has(ho, "measured quadrupole moment") && has(ho, "+3.5800 b") && has(ho, "0.0200 b") && has(ho, "7/2") && has(ho, "+7.6714 b") && has(ho, "Model assumption, not a measurement") && has(ho, "K = I") &&
+              has(ho, "prolate (stretched like a rugby ball)") && has(ho, "+0.3247"));
+    checkTrue("card, Cs-126: oblate (flattened like a pancake), a negative moment, beta2 = -0.5789", has(cs, "oblate (flattened like a pancake)") && has(cs, "-0.6400 b") && has(cs, "-0.5789"));
+    checkTrue("card, Li-7: the moment is real (-0.0400 b) but the rule would need |beta2| = 1.0, above the limit 0.6: not used; the source is an estimate", has(li7, "-0.0400 b") && has(li7, "above the limit") && has(li7, "Not used") && has(li7, "estimate"));
+    checkTrue("card, B-12: the table has |Q| = 0.0132 b but no sign: prolate or oblate cannot be told, not used", has(b12, "0.0132 b") && has(b12, "no sign") && has(b12, "not used"));
+    checkTrue("card, Li-11: the sign is only tentative: not used", has(joinLines(nuclearShapeLines(3, 8)), "tentative") && has(joinLines(nuclearShapeLines(3, 8)), "not used"));
+    checkTrue("card, Cu-78: the spin is only tentative (6-): not used", has(cu, "tentative") && has(cu, "(6-)") && has(cu, "not used"));
+    checkTrue("card, Pb-208 and Sn-120 (even-even: spin 0): a spin-0 nucleus has NO spectroscopic quadrupole moment whatever its shape, so this table cannot say whether it is round; 'round' is not implied",
+              has(pb, "spin 0") && has(pb, "whatever its shape") && has(pb, "cannot say") && has(sn, "spin 0") && has(sn, "whatever its shape") && has(sn, "cannot say") && has(sn, "estimate"));
+    checkTrue("card, Pb-208: doubly magic is round by the shell model's expectation, labelled an estimate, not a measurement", has(pb, "estimate") && has(pb, "doubly magic") && has(pb, "not a measurement"));
+    checkTrue("card, Gd-158: the source is B(E2)", has(gd, "B(E2)") && has(gd, "spin 0"));
+    checkTrue("card, an odd nucleus with no row (Li-10): no row in the table; if the spin is 0 or 1/2 the moment is exactly zero whatever the shape; the lab has no spin table", has(li10, "no row") && has(li10, "spin is 0 or 1/2") && has(li10, "whatever the shape") && has(li10, "no spin table"));
+    checkTrue("card, H-1: one proton: spin 1/2, no quadrupole moment possible", has(h1, "spin 1/2") && has(h1, "whatever") && has(h1, "round"));
+    checkTrue("card, Bi-209: a measured moment of -0.5160 b is used and the nucleus is nearly round (oblate, beta2 = -0.0307)", has(bi, "-0.5160 b") && has(bi, "-0.0307") && has(bi, "oblate"));
+    const std::string ex = shapeExplain();
+    checkTrue("explanation: spectroscopic vs intrinsic, zero for spin 0 and 1/2, the strong-coupling K = I model assumption (poor for light nuclei and near closed shells), the 0.6 limit, a uniform charged body with a volume that is kept, "
+              "a diffuse cloud edge, a static picture", has(ex, "spectroscopic") && has(ex, "intrinsic") && has(ex, "spin 0 and 1/2") && has(ex, "strong coupling") && has(ex, "K = I") && has(ex, "model assumption") &&
+              has(ex, "near closed shells") && has(ex, "0.6") && has(ex, "uniform") && has(ex, "volume") && has(ex, "diffuse") && has(ex, "vibrate and rotate"));
+    checkTrue("the credit names the IAEA file, its INDC report and the NSR keys, and says the page with the citation terms could not be read", has(kQuadCredit, "elec_mom_recomm.csv") && has(kQuadCredit, "indc-nds-0833") && has(kQuadCredit, "NSR") && has(kQuadCredit, "could not be read"));
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -3136,6 +3446,8 @@ int main() {
     testLifetimes();
     // guards: layout 1e-9 (rounding level: the size is exact by construction); closest pair 0.673 fm = the smallest MEASURED (0.6801 fm, C-12, 9 nuclei) - 1 %, a floor
     testNuclearSize(1e-9, 0.673);
+    // guard: closest two nucleons in the 12 deformed clouds = the smallest MEASURED (0.6125 fm, Li-8) - 1 %, a floor
+    testQuadrupole(0.606);
     testElements();
     testNuclides();
     testFormats();

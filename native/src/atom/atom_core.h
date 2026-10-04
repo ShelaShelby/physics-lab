@@ -187,9 +187,11 @@ double nuclearR(int A);                       // nuclear radius, fm
 // ---- the nucleus ----
 double nucBeta(int Z, int N);                 // quadrupole deformation β₂
 bool nucMeasured(int Z, int N);
+bool nucBE2Known(int Z, int N);              // the B(E2) table has it (0.10.9 stage 2: nucMeasured is also true for doubly magic nuclei, which are drawn round by expectation)
 const char* nucShapeWord(double b);
 struct Nucleon { double x, y, z; bool isP; double ph; };   // centre (m), proton?, wobble phase
 std::vector<Nucleon> buildNucleus(int Z, int N);        // sized by the measured charge radius where there is one (radii.h), else by the rule
+std::vector<Nucleon> buildNucleusAxial(int Z, int N);   // buildNucleus without the final random tilt: the symmetry axis along z (for tests of the shape)
 std::vector<Nucleon> buildNucleusByRule(int Z, int N);  // the rule only: the web version's layout (the saved web positions test this one)
 
 // ---- radioactive decay (NUBASE2020) ----

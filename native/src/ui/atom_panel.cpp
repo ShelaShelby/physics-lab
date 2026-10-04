@@ -24,6 +24,7 @@
 #include "atom/dirac.h"
 #include "atom/lifetime.h"
 #include "atom/radii.h"
+#include "atom/quadrupole.h"
 #include "atom/radial_graph.h"
 #include "atom_learn.h"
 #include "orbit_panel.h"
@@ -524,13 +525,17 @@ void realSpectrumCard(int Z, int N, bool dirac) {
     mutedWrapped(kAsdCredit, 12.0f / 16);
 }
 
-// the nuclear size card (atom/radii.h): the measured charge radius of the nucleus on screen next to the usual rule's, what a charge radius is, and the limits. A table look-up and some text: nothing here runs per frame except the card's own drawing.
+// the nuclear size and shape card (atom/radii.h, atom/quadrupole.h): the measured charge radius of the nucleus on screen next to the usual rule's, what a charge radius is, then where its SHAPE comes from (a measured quadrupole moment,
+// B(E2) or an estimate), its sign and what spin 0 and 1/2 mean, and the limits. Table look-ups and text: nothing here runs per frame except the card's own drawing.
 void nuclearSizeCard(AppState& app) {
     const AtomParams& p = app.atom.p;
     mutedWrapped(std::string("The nucleus on screen: ") + name(p.Z) + "-" + std::to_string(p.Z + p.N) + ".", 12.0f / 16);
     for (const std::string& l : nuclearSizeLines(p.Z, p.N)) mutedWrapped(l, 12.0f / 16);
     mutedWrapped(chargeRadiusExplain(), 12.0f / 16);
     mutedWrapped(kRadiiCredit, 12.0f / 16);
+    for (const std::string& l : nuclearShapeLines(p.Z, p.N)) mutedWrapped(l, 12.0f / 16);
+    mutedWrapped(shapeExplain(), 12.0f / 16);
+    mutedWrapped(kQuadCredit, 12.0f / 16);
 }
 
 // the lifetimes card (atom/lifetime.h): how long the state on screen lives and how likely each jump is, from NIST ASD's transition probabilities, and a check of any jump between two shells (allowed, with its rate; or why not)
@@ -843,7 +848,7 @@ void atomPanel(AppState& app, float width) {
     realSpectrumCard(p.Z, p.N, p.dirac == "On");
 
     // ---- Nuclear size ----
-    ImGui::SeparatorText("Nuclear size (measured)");
+    ImGui::SeparatorText("Nuclear size and shape (measured)");
     nuclearSizeCard(app);
 
     // ---- Lifetimes and jumps ----

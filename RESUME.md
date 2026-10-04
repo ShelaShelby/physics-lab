@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.10.9 alpha, stage 1 is finished: every nucleus at its measured size. `atom/radii.h/.cpp` + `radii_data.inc` (from data/radii/charge_radii.csv, IAEA, fetched 2026-10-04 by tools/make_radii_data.py): `nuclearRadius(Z, N)` = sqrt(5/3) x the measured rms charge radius (908 isotopes), else the rule 1.2 A^(1/3); `buildNucleus` scales each snapshot so its protons have exactly the measured rms (`buildNucleusByRule` is the web's layout, kept for the saved web positions); the card "Nuclear size (measured)"; About entry. Shape (quadrupole moments) and halo (matter radii) are BLOCKED ON DATA the owner must download (ROADMAP, OWNER-TODO).
+- Version 0.10.9 alpha, stage 2 is finished: the nucleus's shape from measured quadrupole moments. `atom/quadrupole.h/.cpp` + `quadrupole_data.inc` (from data/quadrupole/elec_mom_recomm.csv, IAEA, fetched 2026-10-04 by tools/make_quadrupole_data.py; the file's second column is the MASS NUMBER): `nucShape(Z, N)` = a measured ground-state moment converted with the strong-coupling relation K = I (|beta2| <= 0.6, signed, firm spin >= 1: 498 of the slider's isotopes), else the B(E2) value (11), else the estimate (3,743); `buildNucleus` draws a volume-keeping body whose protons have exactly the measured rms (stage 1) and quadrupole; card "Nuclear size and shape (measured)" and the readout line name the source. Stage 1 (sizes from the IAEA charge radii) stands. Halo nuclei stay BLOCKED ON DATA the owner downloads (ROADMAP, OWNER-TODO).
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 18,578
-  - app_tests: 1,519
+  - atom_tests: 18,845
+  - app_tests: 1,520
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
   - moon_tests: 24 (new in 0.10.4 stage 1: the ELP2000-82B Moon against the Horizons Moon table; takes about 12 s)

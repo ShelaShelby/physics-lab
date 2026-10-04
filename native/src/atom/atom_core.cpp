@@ -1,6 +1,7 @@
 #include "atom_core.h"
 #include "outline.h"
 #include "radii.h"
+#include "quadrupole.h"
 
 #include <algorithm>
 #include <array>
@@ -548,6 +549,7 @@ double nucBeta(int Z, int N) {
     const double P = static_cast<double>(dZ) * dN / (dZ + dN);   // Casten's P-factor: valence protons × neutrons / their sum
     return A <= 40 ? 0.6 * (1 - std::exp(-P / 1.5)) : 0.35 * (1 - std::exp(-P / 3));
 }
+bool nucBE2Known(int Z, int N) { return betaKnown(Z, Z + N) != nullptr; }   // the lab's own table of measured B(E2; 0+ -> 2+) values has this isotope
 bool nucMeasured(int Z, int N) {
     if (betaKnown(Z, Z + N)) return true;
     return std::find(std::begin(kMagicZ), std::end(kMagicZ), Z) != std::end(kMagicZ) &&
@@ -561,7 +563,7 @@ const char* nucShapeWord(double b) {
 // Glauber Monte Carlo codes; a Gaussian for light nuclei), with a hard core so nucleons do not
 // overlap, a neutron skin and the measured quadrupole deformation. One possible snapshot: really,
 // every nucleon is a wave spread through the nucleus. Worked out in fm, stored in metres (kFmLab).
-static std::vector<Nucleon> buildNucleusImpl(int Z, int N, bool measured) {
+static std::vector<Nucleon> buildNucleusImpl(int Z, int N, bool measured, bool newShape, bool tilt = true) {
     const int A = Z + N;
     std::vector<Nucleon> out;
     auto gs = [] { double u = 0; while (!u) u = random(); const double v = random(); return std::sqrt(-2 * std::log(u)) * std::cos(2 * kPi * v); };
@@ -582,7 +584,10 @@ static std::vector<Nucleon> buildNucleusImpl(int Z, int N, bool measured) {
         out.push_back({-h * c, -h * sn, 0, types[1] != 0, 1.7});
         return toMetres();
     }
-    const double beta = nucBeta(Z, N), cA = std::cbrt(static_cast<double>(A)), a = 0.54;
+    // The shape (0.10.9 stage 2). newShape: the shape of nucShape (a measured quadrupole moment where it can be used, else the lab's B(E2) value or estimate), drawn as the surface r = R f(cos theta) of quadrupole.h
+    // whose VOLUME is kept for every beta2; the rule's layout (newShape false) is the web's: beta2 from nucBeta, the radius stretched by (1 + beta2 Y20) and a Gaussian's z by (1 + beta2), volume not kept.
+    const Shape shp = newShape ? nucShape(Z, N) : Shape{};
+    const double beta = newShape ? shp.beta : nucBeta(Z, N), cA = std::cbrt(static_cast<double>(A)), a = 0.54;
     const double skin = std::max(-0.3, std::min(0.6, 1.7 * (N - Z) / A));   // neutron minus proton radius (measured 0.28 fm for lead-208)
     const bool gauss = A <= 16;
     // The size. By the rule: R0 = 1.12 A^(1/3) - 0.86 / A^(1/3), and for A <= 16 a Gaussian of rms 1.76 (A = 3) or 1.68 + 0.085 (A - 4) fm. Measured (0.10.9 stage 1, radii.h): the sampling starts from the measured
@@ -591,7 +596,10 @@ static std::vector<Nucleon> buildNucleusImpl(int Z, int N, bool measured) {
     // centroid pulls them in (by (A - 1) / A), and a deformed nucleus' rms grows with beta2^2. Each picture is one random snapshot (as before) with the measured size; the rule's own layout is not scaled.
     double R0 = 1.12 * cA - 0.86 / cA;
     double rms = A == 3 ? 1.76 : 1.68 + 0.085 * (A - 4), sg = std::sqrt(std::max(0.5, rms * rms - 0.84 * 0.84)) / std::sqrt(3.0);
-    double chargeTarget = 0;                                                  // measured: the protons' mean square radius about the centre of mass the picture must have, fm^2
+    // The snapshot is also made EXACT in its protons' quadrupole when the size is exact and the shape is not round (below): the protons' <x^2> = <y^2> and <z^2> are scaled to the values of the uniformly charged body of
+    // quadrupole.h (<3 z^2 - r^2> / <r^2> = shapeMomentRatio(beta2)); the trace, so the rms radius, is unchanged. The size is exact for a measured radius, and for a shape from a measured moment (then at the rule's rms).
+    const bool exact = measured || (newShape && shp.src == ShapeSource::MeasuredMoment);
+    double chargeTarget = exact ? pointProtonMs(Z, N) : 0;                   // the protons' mean square radius about the centre of mass the picture must have, fm^2 (the measured rms^2 - r_p^2, or the rule ball's)
     if (measured) {
         const double m = chargeRadius(Z, N)->rms;
         chargeTarget = std::max(0.1, m * m - kNucleonR * kNucleonR);
@@ -608,10 +616,11 @@ static std::vector<Nucleon> buildNucleusImpl(int Z, int N, bool measured) {
             double x, y, z;
             if (gauss) {
                 x = sg * gs(); y = sg * gs(); z = sg * gs();
-                if (beta) z *= 1 + beta;
+                if (beta && !newShape) z *= 1 + beta;
+                else if (beta) { const double r = std::sqrt(x * x + y * y + z * z), f = r > 0 ? shapeRadiusFactor(beta, z / r) : 1; x *= f; y *= f; z *= f; }   // the same volume-keeping surface as the heavy nuclei
             } else {
                 const double Rmax = R0 + 9 * a + 1, u = random() * 2 - 1, f = random() * 6.2832, sn = std::sqrt(1 - u * u);
-                const double Rth = Ri * (1 + beta * 0.3154 * (3 * u * u - 1));
+                const double Rth = newShape ? Ri * shapeRadiusFactor(beta, u) : Ri * (1 + beta * 0.3154 * (3 * u * u - 1));
                 const double r = Rmax * std::cbrt(random());
                 if (random() > 1 / (1 + std::exp((r - Rth) / a))) continue;   // Woods–Saxon: keep it with the density's odds
                 x = r * sn * std::cos(f); y = r * sn * std::sin(f); z = r * u;
@@ -629,22 +638,29 @@ static std::vector<Nucleon> buildNucleusImpl(int Z, int N, bool measured) {
     double mx = 0, my = 0, mz = 0;
     for (const Nucleon& q : out) { mx += q.x; my += q.y; mz += q.z; }
     mx /= A; my /= A; mz /= A;
-    double sc = 1;                                 // measured: the scale that gives the protons exactly the measured mean square radius about the centre of mass
-    if (measured) {
-        double sum = 0; int np = 0;
-        for (const Nucleon& q : out) if (q.isP) { sum += (q.x - mx) * (q.x - mx) + (q.y - my) * (q.y - my) + (q.z - mz) * (q.z - mz); np++; }
-        if (np > 0 && sum > 0) sc = std::sqrt(chargeTarget * np / sum);
+    double fx = 1, fy = 1, fz = 1;                 // exact: the scales that give the protons exactly the wanted mean square radius about the centre of mass (and, for a deformed nucleus, the wanted quadrupole)
+    if (exact) {
+        double sxx = 0, syy = 0, szz = 0; int np = 0;
+        for (const Nucleon& q : out) if (q.isP) { sxx += (q.x - mx) * (q.x - mx); syy += (q.y - my) * (q.y - my); szz += (q.z - mz) * (q.z - mz); np++; }
+        if (np > 0 && sxx + syy + szz > 0) {
+            fx = fy = fz = std::sqrt(chargeTarget * np / (sxx + syy + szz));
+            if (newShape && beta != 0 && np >= 2 && sxx > 0 && syy > 0 && szz > 0) {
+                const double ratio = shapeMomentRatio(beta), tx = chargeTarget * (1 - ratio / 2) / 3, tz2 = chargeTarget * (1 + ratio) / 3;   // <x^2> = <y^2>, <z^2> of the body; 2 tx + tz2 = chargeTarget
+                fx = std::sqrt(tx * np / sxx); fy = std::sqrt(tx * np / syy); fz = std::sqrt(tz2 * np / szz);
+            }
+        }
     }
     // tilt the symmetry axis so the shape shows from the side
-    const double ty = 0.95, tz = random() * 6.28, c1 = std::cos(ty), s1 = std::sin(ty), c2 = std::cos(tz), s2 = std::sin(tz);
+    const double ty = tilt ? 0.95 : 0, tz = tilt ? random() * 6.28 : 0, c1 = std::cos(ty), s1 = std::sin(ty), c2 = std::cos(tz), s2 = std::sin(tz);
     for (Nucleon& q : out) {
-        const double x = (q.x - mx) * sc, y = (q.y - my) * sc, z = (q.z - mz) * sc, x1 = x * c1 + z * s1, z1 = -x * s1 + z * c1;
+        const double x = (q.x - mx) * fx, y = (q.y - my) * fy, z = (q.z - mz) * fz, x1 = x * c1 + z * s1, z1 = -x * s1 + z * c1;
         q.x = x1 * c2 - y * s2; q.y = x1 * s2 + y * c2; q.z = z1;
     }
     return toMetres();
 }
-std::vector<Nucleon> buildNucleus(int Z, int N) { return buildNucleusImpl(Z, N, sizedByMeasurement(Z, N)); }
-std::vector<Nucleon> buildNucleusByRule(int Z, int N) { return buildNucleusImpl(Z, N, false); }
+std::vector<Nucleon> buildNucleus(int Z, int N) { return buildNucleusImpl(Z, N, sizedByMeasurement(Z, N), true); }
+std::vector<Nucleon> buildNucleusByRule(int Z, int N) { return buildNucleusImpl(Z, N, false, false); }
+std::vector<Nucleon> buildNucleusAxial(int Z, int N) { return buildNucleusImpl(Z, N, sizedByMeasurement(Z, N), true, false); }
 
 // ---------------------------------------------------------------- radioactive decay
 static const std::vector<std::map<int, std::string>>& decTable() {

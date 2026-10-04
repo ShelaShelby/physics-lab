@@ -1,5 +1,6 @@
 #include "atom_sim.h"
 #include "radii.h"
+#include "quadrupole.h"
 
 #include <algorithm>
 #include <chrono>
@@ -899,8 +900,8 @@ std::vector<std::string> AtomLab::info() {
         more.push_back(std::string(p.view == "Slice" ? "90% outline: the line where the cut plane crosses the 90% surface. " : p.view == "Cloud" ? "90% outline: the shadow of the 90% region seen from the side. " : "90% outline: faint lines across the 90% surface, turning with the cloud. ") + "One electron, non-relativistic, hydrogen-like orbital with nuclear charge " + std::to_string(p.Z) + ", the same model as the cloud. It is the boundary of the smallest region that holds 90% of the probability, which follows the orbital's real shape; atoms with more electrons have different shapes.");
     }
     if (s.layer == "Nucleus" && p.Z + p.N >= 12) {
-        const double b = nucBeta(p.Z, p.N);
-        lines.push_back("shape: " + std::string(nucShapeWord(b)) + (nucMeasured(p.Z, p.N) ? "" : p.Z >= 100 ? " (a guess)" : " (estimated)"));
+        const Shape sh = nucShape(p.Z, p.N);   // 0.10.9 stage 2: a measured quadrupole moment where it can be used, else B(E2), else an estimate: the line names which (one of three labels, never one vague word)
+        lines.push_back("shape: " + std::string(nucShapeWord(sh.beta)) + (sh.src == ShapeSource::MeasuredMoment ? " (from a measured quadrupole moment)" : sh.src == ShapeSource::BE2 ? " (from B(E2))" : p.Z >= 100 ? " (an estimate: a guess)" : " (an estimate)"));
     }
     more.push_back(tempLine(p.Z));
     more.push_back("layer: " + s.layer + "  ·  this nucleus in real life: " + isoInfo(p.Z, p.N));

@@ -52,6 +52,7 @@ add_library(atom_core STATIC
   src/atom/dirac.cpp
   src/atom/lifetime.cpp
   src/atom/radii.cpp
+  src/atom/quadrupole.cpp
 )
 target_link_libraries(atom_core PUBLIC orbit_core)
 target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
