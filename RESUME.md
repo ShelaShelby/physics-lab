@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.12 alpha, stage 1 of 2 is done: decay chains on the chart of nuclides. New: `atom/decay_chain.h/.cpp` (graph of every way down a nuclide's chain, the random walk with `decDrawLifetime`/`decDrawBranch` shared with `decTick`, all the words), `chartHalfLifeOf`, `ChartScene::block`, `ChainOverlay` in `chart_draw`, state `s.walk`/`s.showChain`/`s.walkAuto`, `AtomLab::decayGraph/walkOnce/walkRestart`, panel section, benchmark scene 22 (index 19; scenes 19-21 draw no chain), tests in `tests/test_chain.inc`. Rules: no time for limit/extrapolated/unknown half-lives; unmeasured odds only as a marked equal stand-in; odds normalised; never real time. Stage 2 (data clean-up) is next; its findings are in REPORT.md. Version 0.11 (flat chart, landscape, binding height, valley/island) stands.
+- Version 0.12 alpha is finished (stage 2 of 2, the accuracy clean-up, on top of stage 1's decay chains). New in stage 2: `tests/test_clean.inc`, `tools/fix_halflives_0_12.py` (rewrites half-life codes in `atom_data.inc` from the NUBASE file), `chainHalfLifeWords`, `decUnquantified`, `nucUsesUnsourcedMagic`, `nubase_data.inc` now carries the half-life text of plain values and the '?' decay entries for every nuclide. Rules now: a half-life is shown or timed only if NUBASE2020 has a measured or approximate value; Kr-78/Xe-124 are stable; Z = 114 and N = 184 are kept as labelled unsourced magic numbers; the odds are said to be incomplete where NUBASE lists modes with no intensity. Stage 1 (decay chains) and all of 0.11 stand. Next: nothing planned beyond the ROADMAP.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 19,232
-  - app_tests: 1,544
+  - atom_tests: 20,474
+  - app_tests: 1,545
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
   - moon_tests: 24 (new in 0.10.4 stage 1: the ELP2000-82B Moon against the Horizons Moon table; takes about 12 s)

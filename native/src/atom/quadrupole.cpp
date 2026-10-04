@@ -97,6 +97,7 @@ std::vector<std::string> nuclearShapeLines(int Z, int N) {
             if (nucMeasured(Z, N) && !nucBE2Known(Z, N)) v.push_back("Shape source: estimate. This is a doubly magic nucleus, drawn round: that is the shell model's expectation, not a measurement.");
             else if (A < 12) v.push_back("Shape source: estimate. Nuclei lighter than A = 12 are drawn round: the lab makes no estimate for them and this is not a measurement.");
             else v.push_back("Shape source: estimate, from the number of valence protons and neutrons (Casten's P-factor): a rule of thumb, not a measurement.");
+            if (nucUsesUnsourcedMagic(Z, N)) v.push_back("This estimate counts Z = 114 or N = 184 as a magic number. Those two numbers are the web version's, with no source (they are predictions for superheavy nuclei, never observed), and they set this shape.");
             break;
     }
     if (r && r->kind != 'X') {

@@ -249,6 +249,49 @@ std::string chainWalkEndWords(const ChainWalk& w) {
     if (!w.steps.empty() && w.steps.back().end == ChainEnd::NotInTable) return "The daughter of " + chainNuclide(w.steps.back().fromZ, w.steps.back().fromN) + " is not a nuclide the table lists, so the walk ends here.";
     return (w.steps.empty() ? std::string() : "After " + std::to_string(w.steps.size()) + (w.steps.size() == 1 ? " decay: " : " decays: ")) + stopText(w.Z, w.N, w.stop, w.why);
 }
+std::string chainHalfLifeWords(int Z, int N) {
+    const std::string* c = nucCode(Z, N);
+    if (!c) return "no such nuclide in the table";
+    if (*c == "S") return "stable";
+    const ChainTiming t = chainTiming(Z, N);
+    if (t.kind == ChainTime::Measured) return "half-life " + fmtLife(t.halfLife);
+    if (t.kind == ChainTime::Approximate) return "half-life about " + fmtLife(t.halfLife) + " (NUBASE2020 gives it only as approximate)";
+    const NubaseRow* nb = nubase(Z, N);
+    if (t.why == HeightKind::Limit) return std::string("no half-life measured: only a limit is known") + (nb && *nb->lim ? std::string(" (") + nb->lim + ")" : std::string());
+    if (t.why == HeightKind::Extrapolated) return "no half-life measured: NUBASE2020 has only an extrapolation from systematics, which the lab does not show";
+    if (nb && nb->kind == 'P') return "no half-life given: NUBASE2020 says only that it is unstable to emitting a particle";
+    return "no half-life given by NUBASE2020";
+}
+
+std::vector<std::string> decUnquantified(int Z, int N) {
+    std::vector<std::string> out;
+    const NubaseRow* nb = nubase(Z, N);
+    const std::string* c = nucCode(Z, N);
+    const auto d = decInfo(Z, N);
+    if (!nb || !c || *c == "S" || !d || d->unk || !*nb->modes) return out;
+    std::string rest = nb->modes;
+    for (std::size_t i = 0; i <= rest.size();) {                           // the entries are joined with "; "
+        const std::size_t j = std::min(rest.find(';', i), rest.size());
+        std::string e = rest.substr(i, j - i);
+        i = j + 1;
+        e.erase(0, e.find_first_not_of(' '));
+        std::string m = e.substr(0, e.find_first_of(" ="));
+        if (m.empty()) continue;
+        if (m == "EC" || m == "e+") m = "B+";                              // the lab writes electron capture and positron emission as B+
+        bool inOdds = false;
+        for (const auto& b : d->br) if (b.first == m) inOdds = true;
+        if (!inOdds && std::find(out.begin(), out.end(), m) == out.end()) out.push_back(m);
+    }
+    return out;
+}
+std::string decUnquantifiedWords(int Z, int N) {
+    const std::vector<std::string> m = decUnquantified(Z, N);
+    if (m.empty()) return "";
+    std::string l;
+    for (std::size_t i = 0; i < m.size(); i++) l += (i ? (i + 1 == m.size() ? " and " : ", ") : "") + decWord(m[i]);
+    return "NUBASE2020 also lists " + l + " for it, with no intensity (marked with a question mark): the odds above leave " + (m.size() == 1 ? "it" : "them") + " out, so they are not complete.";
+}
+
 const char* chainTimeNote() {
     return "Time: this is not real time. Each step's lifetime is a random draw from the real exponential law for that nuclide's half-life (not a fixed schedule: walk again and the times and the branches differ), "
            "but the screen shows the steps one after another about 1.6 seconds apart (or when you press the button), so a step that really takes billions of years is shown billions of years faster than it happened. "
@@ -294,6 +337,11 @@ std::vector<std::string> chainSummary(const ChainGraph& g) {
     if (onlyRare) out.push_back(std::to_string(onlyRare) + (onlyRare == 1 ? " nuclide is" : " nuclides are") + " reached only by such rare ways (a chance of at most " + pctOf(maxOnlyRare) + " % each); they are drawn, faintly, and a walk almost never goes there.");
     if (unmeasured) out.push_back(std::to_string(unmeasured) + (unmeasured == 1 ? " nuclide in this chain lists" : " nuclides in this chain list") + " several ways whose odds are not measured (marked ?): no way is called likeliest, and a walk uses an equal chance for each as a stand-in, marked at the step (not data).");
     if (stops) out.push_back(std::to_string(stops) + (stops == 1 ? " nuclide in this chain has" : " nuclides in this chain have") + " a half-life that is only a limit, only an extrapolation or not given (marked with a cross): the chain stops there without a time.");
+    {
+        int incomplete = 0;
+        for (const ChainNode& x : g.nodes) if (x.reach >= 1e-3 && !decUnquantified(x.Z, x.N).empty()) incomplete++;
+        if (incomplete) out.push_back(std::to_string(incomplete) + (incomplete == 1 ? " nuclide in this chain has" : " nuclides in this chain have") + " decay modes that NUBASE2020 lists with no intensity (hover a square to see them); the odds here leave them out, so they are not complete.");
+    }
     // where it ends
     const std::vector<ChainEndProb> ends = chainEnds(g);
     std::string e;

@@ -136,11 +136,93 @@ static void testElements() {
     }
 }
 
-static void testNuclides() {
-    for (const NuclideRef& n : kNuclideRef) {
-        checkStr("isoLine " + at(n.Z, n.N), isoLine(n.Z, n.N), n.line);
-        checkStr("isoInfo " + at(n.Z, n.N), isoInfo(n.Z, n.N), n.info);
+// ---- 0.12 stage 2: the web version's words that move on purpose, and why (see REPORT.md) ----
+// The data corrections move numbers: (5) the 113 superheavy "~" half-lives (NUBASE2020 gives a plain measured value, the lab's table had rounded it and called it approximate), (6) 16 superheavy half-lives that
+// differed from NUBASE2020 by up to a factor 2.8 (an older evaluation), (3) Kr-78 and Xe-124, which the lab gave half-lives and NUBASE2020 and the mendeleev package call stable. The new number is worked out here from
+// NUBASE2020's own text (its half-life column, in nubase_data.inc), not from the lab's table.
+static const int kStale[][2] = {{103, 163}, {104, 163}, {105, 163}, {106, 163}, {107, 163}, {108, 161}, {109, 169}, {110, 171}, {111, 171}, {112, 173}, {113, 173}, {114, 175}, {115, 175}, {116, 177}, {117, 177}, {118, 176}};
+static double nubaseSeconds(int Z, int N) {
+    static const struct { const char* u; double s; } kUnit[] = {{"ys", 1e-24}, {"zs", 1e-21}, {"as", 1e-18}, {"ps", 1e-12}, {"ns", 1e-9}, {"us", 1e-6}, {"ms", 1e-3}, {"s", 1}, {"m", 60}, {"h", 3600}, {"d", 86400}, {"y", 365.25 * 86400}, {"ky", 3.15576e10}, {"My", 3.15576e13}, {"Gy", 3.15576e16}, {"Ty", 3.15576e19}, {"Py", 3.15576e22}, {"Ey", 3.15576e25}, {"Zy", 3.15576e28}, {"Yy", 3.15576e31}};
+    const NubaseRow* nb = nubase(Z, N);
+    const std::string t = nb ? nb->lim : "";
+    const std::size_t sp = t.find(' ');
+    if (!nb || nb->kind != 'M' || sp == std::string::npos) return -1.0;
+    for (const auto& u : kUnit) if (t.substr(sp + 1) == u.u) return std::atof(t.c_str()) * u.s;
+    return -1.0;
+}
+static bool isKrXe(int Z, int N) { return (Z == 36 && N == 42) || (Z == 54 && N == 70); }
+static bool isStale(int Z, int N, const std::string& webText) {
+    bool st = webText.find("superheavy values are approximate") != std::string::npos;
+    for (const auto& k : kStale) if (k[0] == Z && k[1] == N) st = true;
+    return st;
+}
+// The web's one-line text for a nuclide ("Name: half-life 2 ms · decays by ...") as the native app now says it.
+static std::string expectedIsoLine(const std::string& wLine, int Z, int N) {
+    const std::size_t colon = wLine.find(": "), by = wLine.find(" · decays by ");
+    const std::string unq = decUnquantified(Z, N).empty() ? "" : " · odds not complete (modes with no intensity left out)";
+    if (!nucCode(Z, N)) return wLine.substr(0, colon) + ": not in the table: NUBASE2020 lists no such nuclide";
+    if (isKrXe(Z, N)) return wLine.substr(0, colon) + ": stable";
+    if (by == std::string::npos) return wLine;
+    if (isStale(Z, N, "") || wLine.find("half-life") == colon + 2) {
+        const double sec = nubaseSeconds(Z, N);
+        if (isStale(Z, N, "") && sec > 0) return wLine.substr(0, colon) + ": half-life " + fmtLife(sec) + wLine.substr(by) + unq;
     }
+    return wLine.substr(0, colon) + ": " + chainHalfLifeWords(Z, N) + wLine.substr(by) + unq;
+}
+// "…<prefix>OLD<suffix>…" -> the native isoInfo in place of OLD, but only where the web's OLD is one of the claims that were corrected on purpose
+static std::string adaptRealLife(std::string web, int Z, int N, const std::string& prefix, const std::string& suffix) {
+    const std::size_t a = web.find(prefix);
+    if (a == std::string::npos) return web;
+    const std::size_t b = suffix.empty() ? web.size() : web.find(suffix, a + prefix.size());
+    if (b == std::string::npos) return web;
+    const std::string old = web.substr(a + prefix.size(), b - a - prefix.size());
+    if (old.rfind("never observed:", 0) == 0 || old.rfind("seen only fleetingly", 0) == 0 || isKrXe(Z, N) || isStale(Z, N, old)) return web.substr(0, a + prefix.size()) + isoInfo(Z, N) + web.substr(b);
+    return web;
+}
+
+static void testNuclides() {
+    // 0.12 stage 2: TEN KINDS of the web version's words are changed ON PURPOSE (REPORT.md lists them): (1) "never observed: it either falls apart instantly or nobody has made it yet" for a square with no nuclide;
+    // (2) "seen only fleetingly in labs: no half-life measured ..." for the 473 nuclides with no half-life number (it was a claim the data does not make); (3) in the one-line text, "half-life <number>" for a nuclide
+    // whose half-life is only an extrapolation, only a limit or only approximate (a number that is not a measurement), and "no half-life measured" for the ones with none; (4) a suffix for the nuclides whose odds leave out modes
+    // NUBASE2020 lists with no intensity. Everything else, and everything after " · decays by ", must still equal the web's text word for word. The new words are checked against the data in testCleanup().
+    int movedInfo = 0, movedLine = 0, sameInfo = 0, sameLine = 0, movedData = 0;
+    for (const NuclideRef& n : kNuclideRef) {
+        const std::string wInfo = n.info, wLine = n.line;
+        const bool kx = isKrXe(n.Z, n.N), stale = isStale(n.Z, n.N, wInfo);
+        if (kx || stale) {
+            movedData++;
+            const std::size_t c0 = std::string(wLine).find(": "), by0 = wLine.find(" · decays by ");
+            if (kx) {
+                checkStr("isoInfo (data corrected on purpose, 0.12 stage 2) " + at(n.Z, n.N), isoInfo(n.Z, n.N), "stable");
+                checkStr("isoLine (data corrected on purpose, 0.12 stage 2) " + at(n.Z, n.N), isoLine(n.Z, n.N), wLine.substr(0, c0) + ": stable");
+            } else {
+                const double sec = nubaseSeconds(n.Z, n.N);
+                checkTrue("data corrected on purpose: NUBASE2020 has a plain half-life text for " + at(n.Z, n.N), sec > 0);
+                checkStr("isoInfo (data corrected on purpose, 0.12 stage 2) " + at(n.Z, n.N), isoInfo(n.Z, n.N), "radioactive (half-life " + fmtHalf(sec) + ")");
+                checkStr("isoLine (data corrected on purpose, 0.12 stage 2) " + at(n.Z, n.N), isoLine(n.Z, n.N), wLine.substr(0, c0) + ": half-life " + fmtLife(sec) + wLine.substr(by0) + (decUnquantified(n.Z, n.N).empty() ? "" : " · odds not complete (modes with no intensity left out)"));
+            }
+            continue;
+        }
+        if (wInfo.rfind("never observed:", 0) == 0 || wInfo.rfind("seen only fleetingly", 0) == 0) {
+            movedInfo++;
+            checkStr("isoInfo (moved on purpose, 0.12 stage 2) " + at(n.Z, n.N), isoInfo(n.Z, n.N), nucCode(n.Z, n.N) ? chainHalfLifeWords(n.Z, n.N) : std::string("not in the table: NUBASE2020 lists no such nuclide"));
+        } else { sameInfo++; checkStr("isoInfo " + at(n.Z, n.N), isoInfo(n.Z, n.N), wInfo); }
+        const std::size_t colon = wLine.find(": "), by = wLine.find(" · decays by ");
+        const std::string unq = decUnquantified(n.Z, n.N).empty() ? "" : " · odds not complete (modes with no intensity left out)";
+        if (!nucCode(n.Z, n.N) || by == std::string::npos) {                           // no nuclide there, or a stable one: only the name's line can change
+            if (!nucCode(n.Z, n.N)) { movedLine++; checkStr("isoLine (moved on purpose, 0.12 stage 2) " + at(n.Z, n.N), isoLine(n.Z, n.N), wLine.substr(0, colon) + ": not in the table: NUBASE2020 lists no such nuclide"); }
+            else { sameLine++; checkStr("isoLine " + at(n.Z, n.N), isoLine(n.Z, n.N), wLine); }
+            continue;
+        }
+        const std::string webHalf = wLine.substr(colon + 2, by - colon - 2), tail = wLine.substr(by);
+        if (webHalf == chainHalfLifeWords(n.Z, n.N) && unq.empty()) { sameLine++; checkStr("isoLine " + at(n.Z, n.N), isoLine(n.Z, n.N), wLine); continue; }
+        movedLine++;
+        const NubaseRow* nb = nubase(n.Z, n.N);
+        const bool allowed = webHalf != chainHalfLifeWords(n.Z, n.N) ? (nb && std::string("EBA-P").find(nb->kind) != std::string::npos) : true;   // a changed half-life part only for the kinds with no measured value
+        checkTrue("isoLine (moved on purpose) " + at(n.Z, n.N) + ": the half-life part changes only for a nuclide whose half-life is not a plain measured value", allowed);
+        checkStr("isoLine (moved on purpose, 0.12 stage 2) " + at(n.Z, n.N), isoLine(n.Z, n.N), wLine.substr(0, colon) + ": " + chainHalfLifeWords(n.Z, n.N) + tail + unq);
+    }
+    std::printf("saved web reference moved on purpose (0.12 stage 2): isoInfo %d moved by the wording, %d unchanged; isoLine %d moved, %d unchanged; %d nuclides' half-life data corrected\n", movedInfo, sameInfo, movedLine, sameLine, movedData);
     for (const ModeRef& m : kModeRef) {
         const auto mv = decMove(m.m);
         checkTrue(std::string("decMove ") + m.m, bool(mv) == m.moves && (!mv || (mv->first == m.dZ && mv->second == m.dN)));
@@ -370,7 +452,7 @@ static void testRuns() {
                 checkNum(w + " info lines", info.size(), c.info.size(), 0);
                 for (std::size_t i = 0; i < info.size() && i < c.info.size(); i++) {
                     std::string eWant, eGot;
-                    const std::string want = withNewEnergy(adaptNucleusChance(adaptSampled(c.info[i], lab), lab), lab, c, &eWant);
+                    const std::string want = withNewEnergy(adaptNucleusChance(adaptSampled(adaptRealLife(c.info[i], lab.p.Z, lab.p.N, "this nucleus in real life: ", ""), lab), lab), lab, c, &eWant);
                     withNewEnergy(info[i], lab, c, &eGot);   // (only to cut the same parts out of the lab's line: its own energy parts are compared below)
                     checkLine(w + " info " + std::to_string(i), info[i], want);
                     if (!eWant.empty()) {
@@ -445,7 +527,7 @@ static void testLearn() {
         const auto secs = lookSections(p, r.live);
         checkNum(w + " look sections", secs.size(), r.look.size(), 0);
         for (std::size_t i = 0; i < secs.size() && i < r.look.size(); i++)
-            checkStr(w + " look " + secs[i].key, secs[i].key + "|" + secs[i].title + "|" + fold(secs[i].html), r.look[i]);
+            checkStr(w + " look " + secs[i].key, secs[i].key + "|" + secs[i].title + "|" + fold(secs[i].html), adaptRealLife(r.look[i], r.Z, r.N, "Real life: this nucleus is <b>", "</b>"));
         checkStr(w + " scale: powers of ten", fold(scaleHtml(p, "ten", 0)), r.scale[0]);
         for (int o = 0; o < 5; o++) checkStr(w + " scale: " + kScaleObjects[o], fold(scaleHtml(p, "scale", o)), r.scale[o + 1]);
         const char* tabs[5] = {"parts", "miss", "count", "proton", "ladder"};
@@ -456,7 +538,7 @@ static void testLearn() {
     for (const PanelRef& r : kPanelRef) {
         fmt::setImperial(r.imperial);
         const std::string w = "panel " + std::string(name(r.Z)) + "-" + std::to_string(r.Z + r.N) + (r.imperial ? " (imperial)" : "");
-        checkStr(w + " isotope line", isotopeLine(r.Z, r.N), r.iso);
+        { const std::string wi = r.iso, mark = wi.substr(0, wi.find(' ') + 1); checkStr(w + " isotope line", isotopeLine(r.Z, r.N), (decInfo(r.Z, r.N) ? "☢ " : "● ") + expectedIsoLine(wi.substr(mark.size()), r.Z, r.N)); }
         checkStr(w + " element card", elemCardHtml(r.Z) + "<div>" + kTableNote + "</div>", r.card);
         checkStr(w + " facts", factsHtml(r.Z), r.facts);
         // 0.10.6 stage 5: the web warned "the true lines are shifted and split noticeably" from Z = 20; the lab now warns from Z = 27 on, like the readout and the hint (finding 6): for 20 <= Z < 27 the web's warning is dropped
@@ -1440,11 +1522,11 @@ static void testChart() {
     checkNum("chart: largest N and Z (NUBASE: 177 and 118)", chartMaxN() * 1000 + chartMaxZ(), 177118, 0);
     checkTrue("chart: He-2 (the diproton), Z=118 N=100 and Z=1 N=7 are not nuclides", !chartHas(2, 0) && !chartHas(118, 100) && !chartHas(1, 7) && !chartHas(0, 1) && !chartHas(119, 150));
     // ---- the colour rule
-    static const struct { ChartClass c; int n; } kCount[] = {{ChartClass::Stable, 251}, {ChartClass::BetaMinus, 1401}, {ChartClass::BetaPlus, 1112}, {ChartClass::Alpha, 479}, {ChartClass::Fission, 59},
+    static const struct { ChartClass c; int n; } kCount[] = {{ChartClass::Stable, 253}, {ChartClass::BetaMinus, 1401}, {ChartClass::BetaPlus, 1110}, {ChartClass::Alpha, 479}, {ChartClass::Fission, 59},
                                                              {ChartClass::Proton, 104}, {ChartClass::Neutron, 30}, {ChartClass::Other, 0}, {ChartClass::Mixed, 121}};
     int wrongCount = 0, sum = 0;
     for (const auto& k : kCount) { if (chartClassCount(k.c) != k.n) wrongCount++; sum += chartClassCount(k.c); }
-    checkNum("chart: classes whose tile count differs from the separate Python implementation of the rule (251, 1,401, 1,112, 479, 59, 104, 30, 0, 121)", wrongCount, 0, 0);
+    checkNum("chart: classes whose tile count differs from the separate Python implementation of the rule (253, 1,401, 1,110, 479, 59, 104, 30, 0, 121; 0.12 stage 2 moved Kr-78 and Xe-124, whose lab entry was double beta plus, to stable: stable 251 -> 253, beta plus 1,112 -> 1,110, the rest as counted before)", wrongCount, 0, 0);
     checkNum("chart: every tile has a class", sum, 3557, 0);
     struct Pick { int Z, N; ChartClass c; const char* why; };
     static const Pick picks[] = {
@@ -1455,7 +1537,7 @@ static void testChart() {
         {94, 135, ChartClass::BetaPlus, "Pu-229: the lab table lists B+=0.4673 before A=0.4673 (NUBASE writes A~50, B+~50): a tie goes to the kind listed first in the lab table"},
         {96, 154, ChartClass::Fission, "Cm-250: SF 0.74 B- 0.13 A 0.13"}, {3, 0, ChartClass::Proton, "Li-3: p, odds not measured, one mode"}, {1, 3, ChartClass::Neutron, "H-4: n=100"},
         {20, 28, ChartClass::BetaMinus, "Ca-48: B- and 2B- listed, odds not measured: both beta minus"}, {7, 18, ChartClass::Mixed, "N-25: B-, n, 2n, odds not measured: three kinds"},
-        {36, 42, ChartClass::BetaPlus, "Kr-78: the lab's table has 2B+ (NUBASE says stbl): the lab's table decides"}};
+        {36, 42, ChartClass::Stable, "Kr-78: NUBASE says stbl and, since 0.12 stage 2, so does the lab's table (it had a half-life number NUBASE and the mendeleev package do not have)"}};
     for (const Pick& k : picks) checkTrue(std::string("chart colour: ") + k.why, chartClassOf(k.Z, k.N) == k.c);
     checkTrue("chart: the kind of a mode text", chartClassOfMode("A") == ChartClass::Alpha && chartClassOfMode("SF") == ChartClass::Fission && chartClassOfMode("B-") == ChartClass::BetaMinus &&
         chartClassOfMode("2B-") == ChartClass::BetaMinus && chartClassOfMode("B-n") == ChartClass::BetaMinus && chartClassOfMode("B-SF") == ChartClass::BetaMinus && chartClassOfMode("B+") == ChartClass::BetaPlus &&
@@ -1596,7 +1678,7 @@ static void testChart() {
               !hoverHas(9, 22, "2 ms") && !hoverHas(9, 22, "half-life 2"));
     checkTrue("hover Pb-204 (stable, NUBASE lower limit and an entry with a question mark): the limit >140 Py and 'A ?' are shown as NUBASE writes them", hoverHas(82, 122, "Stable: no decay has been seen") && hoverHas(82, 122, "lower limit for the half-life, >140 Py") &&
               hoverHas(82, 122, "\"A ?\""));
-    checkTrue("hover Kr-78: NUBASE lists it stable with >110 Ey, the lab's table has a measured half-life: both are said", hoverHas(36, 42, "NUBASE2020 lists it as stable, with a lower limit >110 Ey"));
+    checkTrue("hover Kr-78 (0.12 stage 2): stable, with NUBASE2020's lower limit >110 Ey and its \"2B+ ?\" entry as written, and no half-life number (the old text said the lab's table had a measured half-life instead)", hoverHas(36, 42, "Stable: no decay has been seen") && hoverHas(36, 42, "a lower limit for the half-life, >110 Ey") && hoverHas(36, 42, "\"2B+ ?\"") && !hoverHas(36, 42, "measured half-life instead") && !hoverHas(36, 42, "Decays by") && !hoverHas(54, 70, "measured half-life instead") && hoverHas(54, 70, "a lower limit for the half-life, >200 Ty"));
     checkTrue("hover Ca-48: a half-life far longer than the universe's age and 'odds are not measured' for B- and 2B-", hoverHas(20, 28, "Practically stable (half-life 5.6×10¹⁹ years") && hoverHas(20, 28, "the odds are not measured") && hoverHas(20, 28, "double beta minus"));
     checkTrue("hover Ho-165 (measured size and moment): rms 5.2022 fm (CSV) and Q = +3.58(2) b (IAEA table)", hoverHas(67, 98, "rms 5.2022 fm") && hoverHas(67, 98, "Q = +3.58(2) b"));
     checkTrue("hover Og-294 (the heaviest): alpha, spin 0+, no measured radius", hoverHas(118, 176, "Oganesson-294") && hoverHas(118, 176, "alpha (α)") && hoverHas(118, 176, "Charge radius: no measured value"));
@@ -1772,11 +1854,11 @@ static void testChartLandscape() {
     struct HK { int Z, N; HeightKind k; double h; const char* what; };
     static const HK hk[] = {
         {2, 2, HeightKind::Stable, 1.1, "He-4: stable, the plateau"}, {26, 30, HeightKind::Stable, 1.1, "Fe-56: stable, the plateau"},
-        {82, 122, HeightKind::StableNoted, 1.1, "Pb-204: stable in the lab's table, NUBASE gives a limit >140 Py and 'A ?': the plateau and a mark"}, {36, 42, HeightKind::Approx, -1, "Kr-78: the lab has a number for it (NUBASE says stable): not on the plateau"},
+        {82, 122, HeightKind::StableNoted, 1.1, "Pb-204: stable in the lab's table, NUBASE gives a limit >140 Py and 'A ?': the plateau and a mark"}, {36, 42, HeightKind::StableNoted, 1.1, "Kr-78: stable in NUBASE2020 (limit >110 Ey and '2B+ ?') and, since 0.12 stage 2, in the lab: the plateau and a mark"},
         {92, 146, HeightKind::Measured, 0.7299858020482797, "U-238"}, {1, 2, HeightKind::Measured, 0.5743627200241037, "H-3"}, {83, 126, HeightKind::Measured, 0.905492531961486, "Bi-209: 6.34e26 s, well below the plateau"},
         {52, 76, HeightKind::Measured, 0.9972956063403468, "Te-128: the longest half-life in the table, just under the top"}, {1, 3, HeightKind::Measured, 0.020782087277347212, "H-4 (Z 1, N 3): 1.39e-22 s"}, {1, 4, HeightKind::Measured, 0.01699088093170121, "H-5 (Z 1, N 4): 8.6e-23 s, the shortest in the table"},
         {5, 11, HeightKind::Limit, 0.048413778757846804, "B-16: only a limit, >4.6 zs"}, {18, 12, HeightKind::Limit, 0.21818181818181817, "Ar-30: only a limit, <10 ps"}, {97, 151, HeightKind::Limit, 0.571879026845901, "Bk-248: >9 y"},
-        {63, 99, HeightKind::Approx, 0.43636363636363634, "Eu-162: NUBASE ~10 s"}, {104, 152, HeightKind::Approx, 0.3785371624643976, "Rf-256: the lab's '~' 6.6e-3 s"},
+        {63, 99, HeightKind::Approx, 0.43636363636363634, "Eu-162: NUBASE ~10 s"}, {104, 152, HeightKind::Measured, 0.3785371624643976, "Rf-256: NUBASE2020 6.60 ms (the lab had called it approximate; the value is the same)"},
         {9, 22, HeightKind::Extrapolated, 0, "F-31: only an extrapolation from systematics: no height"}, {3, 9, HeightKind::Unknown, 0, "Li-12: no half-life at all: no height"}, {3, 0, HeightKind::Unknown, 0, "Li-3: p-unst: no height"}};
     for (const HK& k : hk) {
         const ChartHeight c = chartHeightOf(k.Z, k.N);
@@ -1796,9 +1878,9 @@ static void testChartLandscape() {
         checkNum("landscape height: tiles whose stability and plateau disagree (the stable ones, and only they, stand at 1.1)", stableOff, 0, 0);
         checkNum("landscape height: not-stable tiles outside 0 .. 1 or on the plateau", over + nonStableOnPlateau, 0, 0);
         checkNum("landscape height: every tile has a kind (3,557)", total, 3557, 0);
-        static const struct { HeightKind k; int n; } cnt[] = {{HeightKind::Measured, 2720}, {HeightKind::Stable, 182}, {HeightKind::StableNoted, 69}, {HeightKind::Approx, 119}, {HeightKind::Limit, 11}, {HeightKind::Extrapolated, 369}, {HeightKind::Unknown, 87}};
+        static const struct { HeightKind k; int n; } cnt[] = {{HeightKind::Measured, 2831}, {HeightKind::Stable, 182}, {HeightKind::StableNoted, 71}, {HeightKind::Approx, 6}, {HeightKind::Limit, 11}, {HeightKind::Extrapolated, 369}, {HeightKind::Unknown, 87}};
         int wrong = 0, sum = 0; for (const auto& c : cnt) { if (chartHeightCount(c.k) != c.n) wrong++; sum += chartHeightCount(c.k); }
-        checkNum("landscape height: kinds whose count differs from the separate count (measured 2,720, stable 182, stable with a NUBASE note 69, approximate 119, limit 11, extrapolated 369, unknown 87)", wrong, 0, 0);
+        checkNum("landscape height: kinds whose count differs from the separate count (0.12 stage 2, from the NUBASE2020 file: measured 2,831 = its plain half-lives, stable 182, stable with a NUBASE note 71, approximate 6 = its '~' values, limit 11, extrapolated 369, unknown 87; before: 2,720, 182, 69, 119, 11, 369, 87)", wrong, 0, 0);
         checkNum("landscape height: the kinds add up to every tile", sum, 3557, 0);
         checkTrue("landscape height: the legend sentence says it is a chosen scale, the base, the two ends, the plateau, and that no height is invented", [&] { const std::string w = chartHeightWords(); for (const char* x : {"not a measurement", "ten times", "10^-23 s", "10^32 s", "fixed height above the top", "no height is invented"}) if (w.find(x) == std::string::npos) return false; return true; }());
     }
@@ -1991,7 +2073,7 @@ static void testChartLandscape() {
         }
         checkTrue("landscape drawing: every block that has a filled top has its top drawn (" + std::to_string(solid) + " blocks), and the tops are drawn in the painter's order, far to near: not one is out of order", missing == 0 && outOfOrder == 0 && solid == 3557 - 87);
         int cardTri = 0; for (const RecTri& t : g_tri) if (same(t.c, card)) cardTri++;
-        checkNum("landscape drawing: the small mark on the 69 stable nuclides that NUBASE has a note for (2 triangles each, in the card colour)", cardTri, 138, 0);
+        checkNum("landscape drawing: the small mark on the 71 stable nuclides that NUBASE has a note for (2 triangles each, in the card colour; 69 before 0.12 stage 2 made Kr-78 and Xe-124 stable)", cardTri, 142, 0);
         int hollow = 0; for (const ChartBlock& B : S.blocks()) if (B.kind == HeightKind::Unknown) hollow++;
         checkNum("landscape drawing: hollow blocks (no half-life at all) are in the scene and have no filled top", hollow, 87, 0);
         // heights: the top is above the foot by K H sin(pitch) (hand: sin = 0.81649658 at full tilt)
@@ -2089,8 +2171,8 @@ static void testChartBinding() {
     {
         int estWithHeight = 0, measuredNoHeight = 0, over = 0; for (const ChartTile& t : chartTiles()) { const ChartHeight c = chartHeightOf(t.Z, t.N, ChartHeightMode::Binding); const bool est = ame(t.Z, t.N)->est; if (est && (c.h != 0 || c.kind != HeightKind::Extrapolated)) estWithHeight++; if (!est && c.kind != HeightKind::Measured) measuredNoHeight++; if (c.h < 0 || c.h > 1) over++; }
         checkNum("binding height: estimated nuclides drawn with a height (they get none), measured ones without a block, or heights outside 0..1", estWithHeight + measuredNoHeight + over, 0, 0);
-        checkTrue("binding height: kinds are 2,549 measured, 1,008 extrapolated (flat pale), 0 unknown; the half-life mode's counts are untouched (2,720 measured)", chartHeightCount(HeightKind::Measured, ChartHeightMode::Binding) == 2549 && chartHeightCount(HeightKind::Extrapolated, ChartHeightMode::Binding) == 1008 &&
-                  chartHeightCount(HeightKind::Unknown, ChartHeightMode::Binding) == 0 && chartHeightCount(HeightKind::Measured) == 2720 && chartHeightCount(HeightKind::Stable) == 182);
+        checkTrue("binding height: kinds are 2,549 measured, 1,008 extrapolated (flat pale), 0 unknown; the half-life mode's counts are the 0.12 stage 2 ones (2,831 measured)", chartHeightCount(HeightKind::Measured, ChartHeightMode::Binding) == 2549 && chartHeightCount(HeightKind::Extrapolated, ChartHeightMode::Binding) == 1008 &&
+                  chartHeightCount(HeightKind::Unknown, ChartHeightMode::Binding) == 0 && chartHeightCount(HeightKind::Measured) == 2831 && chartHeightCount(HeightKind::Stable) == 182);
     }
     // ---- the words say which height is in use and what it means; every number in them is the table's
     {
@@ -4343,6 +4425,7 @@ static void testQuadrupole(double guardMinSepDeformed) {
 }
 
 #include "test_chain.inc"   // 0.12 stage 1: decay chains on the chart
+#include "test_clean.inc"   // 0.12 stage 2: the accuracy clean-up
 
 int main() {
     testConstants();
@@ -4421,6 +4504,7 @@ int main() {
     testDecayChain();
     testDecayChainDraw();
     testDecayChainLab();
+    testCleanup();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

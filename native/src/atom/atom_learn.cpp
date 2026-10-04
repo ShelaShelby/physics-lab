@@ -303,6 +303,7 @@ std::vector<std::pair<std::string, std::string>> decayHistory(const std::vector<
     std::vector<std::pair<string, string>> out;
     if (ch.size() < 2) {
         out.push_back({"decNone", ch.empty() ? string("No decays yet.")
+                                  : decInfo(Z, N) && chainTiming(Z, N).kind == ChainTime::None ? ch[0].nuc + ": it is unstable, but " + chainHalfLifeWords(Z, N) + ", so the lab does not time it and it will not decay here by itself."
                                   : decInfo(Z, N) ? ch[0].nuc + ": no decays yet. When it decays, each step of the chain is listed here with how long it lived."
                                                   : ch[0].nuc + " does not decay (as far as anyone has measured). Build an unstable nucleus to start a decay history."});
         return out;

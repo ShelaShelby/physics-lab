@@ -7,6 +7,7 @@
 #include <string>
 
 #include "atom_core.h"
+#include "decay_chain.h"
 #include "nubase.h"
 #include "quadrupole.h"
 #include "radii.h"
@@ -181,8 +182,7 @@ std::vector<std::string> chartHover(int Z, int N) {
         std::string t = isoInfo(Z, N);
         t[0] = char(std::toupper(static_cast<unsigned char>(t[0])));
         out.push_back(t + ".");
-        if (nb && nb->kind == 'S')
-            out.push_back(std::string("NUBASE2020 lists it as stable, with a lower limit ") + (*nb->lim ? nb->lim : "(none given)") + " on the half-life; the lab's table has a measured half-life instead.");
+        // (0.12 stage 2: the lab's table no longer disagrees with NUBASE2020 about which nuclides are stable, so there is no "the table has a number instead" line; a test checks every tile)
     }
     // how it decays
     if (*c != "S") {
@@ -195,6 +195,8 @@ std::vector<std::string> chartHover(int Z, int N) {
                 t += (i ? "; " : "") + decWord(m) + (!d->unk && !std::isnan(v) && (v < 0.9995 || d->br.size() > 1) ? " " + pct(v) + " %" : "");
             }
             out.push_back(t + (d->unk ? " (the odds are not measured)." : "."));
+            const std::string unq = decUnquantifiedWords(Z, N);
+            if (!unq.empty()) out.push_back(unq);
         }
     }
     // the spin

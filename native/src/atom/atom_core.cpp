@@ -1,4 +1,5 @@
 #include "atom_core.h"
+#include "decay_chain.h"
 #include "outline.h"
 #include "radii.h"
 #include "quadrupole.h"
@@ -549,6 +550,14 @@ double nucBeta(int Z, int N) {
     const double P = static_cast<double>(dZ) * dN / (dZ + dN);   // Casten's P-factor: valence protons × neutrons / their sum
     return A <= 40 ? 0.6 * (1 - std::exp(-P / 1.5)) : 0.35 * (1 - std::exp(-P / 3));
 }
+bool nucUsesUnsourcedMagic(int Z, int N) {
+    if (Z + N < 12 || betaKnown(Z, Z + N)) return false;                  // the same cases nucBeta decides by measurement or leaves round
+    int dZ = 1 << 30, dN = 1 << 30, dZs = 1 << 30, dNs = 1 << 30;         // nearest magic number with and without the unsourced ones (the last entry of each list)
+    const int nZ = int(std::size(kMagicZ)), nN = int(std::size(kMagicN));
+    for (int i = 0; i < nZ; i++) { dZ = std::min(dZ, std::abs(Z - kMagicZ[i])); if (i + 1 < nZ) dZs = std::min(dZs, std::abs(Z - kMagicZ[i])); }
+    for (int i = 0; i < nN; i++) { dN = std::min(dN, std::abs(N - kMagicN[i])); if (i + 1 < nN) dNs = std::min(dNs, std::abs(N - kMagicN[i])); }
+    return dZ != dZs || dN != dNs;
+}
 bool nucBE2Known(int Z, int N) { return betaKnown(Z, Z + N) != nullptr; }   // the lab's own table of measured B(E2; 0+ -> 2+) values has this isotope
 bool nucMeasured(int Z, int N) {
     if (betaKnown(Z, Z + N)) return true;
@@ -820,22 +829,20 @@ std::string isoLine(int Z, int N) {
         if (i) modes += ", ";
         modes += decWord(m) + (v < 0.9995 ? " " + pct(v) + " %" : "");
     }
-    return nm + ": " + (d->T ? "half-life " + fmtLife(*d->T) : std::string("no half-life measured")) + " · decays by " + modes + (d->br.size() > 2 ? " …" : "");
+    return nm + ": " + chainHalfLifeWords(Z, N) + " · decays by " + modes + (d->br.size() > 2 ? " …" : "") + (decUnquantified(Z, N).empty() ? "" : " · odds not complete (modes with no intensity left out)");
 }
 static const char* kUnbound = "unbound: falls apart almost instantly (~10⁻²² s)";
 // what this nucleus is like in real life
 std::string isoInfo(int Z, int N) {
     const std::string* c = nucCode(Z, N);
     if (Z == 4 && N == 4) return "unbound: splits into two helium-4 nuclei in ~10⁻¹⁶ s";
-    if (!c) return "never observed: it either falls apart instantly or nobody has made it yet";
+    if (!c) return "not in the table: NUBASE2020 lists no such nuclide";
     if (*c == "S") return "stable";
     if (*c == "U") return kUnbound;
-    if (*c == "?") return "seen only fleetingly in labs: no half-life measured (extremely short-lived or unbound)";
-    const bool approx = (*c)[0] == '~';
-    const double t = parseFloat(approx ? c->substr(1) : *c);
+    if (*c == "?") return chainHalfLifeWords(Z, N);   // 0.12 stage 2: what NUBASE2020 actually says (an extrapolation, a limit, an approximate value, nothing, p-unst); the old text called all 473 "seen only fleetingly"
+    const double t = parseFloat((*c)[0] == '~' ? c->substr(1) : *c);
     if (t >= 1e15 * kYearS) return "practically stable (half-life " + fmtHalf(t) + ", far longer than the age of the universe)";
-    return approx ? "radioactive (half-life about " + fmtHalf(t, 2) + "; superheavy values are approximate, and some of these nuclides are claimed but not confirmed)"
-                  : "radioactive (half-life " + fmtHalf(t) + ")";
+    return "radioactive (half-life " + fmtHalf(t) + ")";
 }
 
 // ---------------------------------------------------------------- mass

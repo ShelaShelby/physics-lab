@@ -103,6 +103,13 @@ std::string chainStepTime(const WalkStep& s);                              // th
 std::string chainStopWords(const ChainNode& n);                            // why a chain stops at this node
 std::string chainWalkEndWords(const ChainWalk& w);                         // why the walk is over
 std::vector<std::string> chainSummary(const ChainGraph& g);                // the chain in words: the likeliest path, the branches, the ends and their chances
+// What the lab can honestly say about a nuclide's half-life (0.12 stage 2; the panel line, the chart's hover and the decay clock all use it): "half-life 2.5 hours", "half-life about 10 s (NUBASE2020 gives it
+// only as approximate)", or, where there is no number to use, the reason: only a limit, only an extrapolation from systematics, none given, "p-unst". Never a number for those.
+std::string chainHalfLifeWords(int Z, int N);
+// The decay modes NUBASE2020 lists for this nuclide WITHOUT an intensity (entries marked "?": "B-n ?", "B+2p=?") that the lab's odds do not contain, as the lab's mode codes ("B-n"). Empty when the lab's odds are
+// themselves marked not measured (they are flagged as such already), for a stable nuclide, or when every such mode is in the odds. The odds of the others add up to 1 without them: they are not complete.
+std::vector<std::string> decUnquantified(int Z, int N);
+std::string decUnquantifiedWords(int Z, int N);                            // the sentence for the hover; empty when there is nothing to say
 const char* chainTimeNote();                                               // the standing note about time: never real time, each step a random draw
 
 }  // namespace atom

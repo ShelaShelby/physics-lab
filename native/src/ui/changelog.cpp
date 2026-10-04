@@ -17,6 +17,15 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.12", "Atom Lab: the accuracy clean-up (stage 2 of 2)",
+     "This stage fixes data and wording that earlier versions found doubtful and only reported. Nothing about how the atom or the chart works has changed; some numbers have, and each is listed here. "
+     "Nuclides with no half-life number were all described as \"seen only fleetingly\". The data does not say that. They are now described by what NUBASE2020 says: 369 only have an extrapolation from systematics, 84 have none, 11 only a limit, 6 an approximate value, 3 are only known to be unstable to emitting a particle. "
+     "The one-line text and the decay readout no longer show an extrapolation or a limit as if it were a half-life (fluorine-31 used to say \"half-life 2 ms\", boron-16 \"half-life 4.6e-21 s\" for a limit), and the decay clock no longer makes such a nucleus decay on a timer: it stays as you chose it, and the readout says why. "
+     "Krypton-78 and xenon-124 had half-lives that are in neither NUBASE2020 nor the mendeleev package, which both call them stable; the numbers had no source, so they are now shown as NUBASE2020 shows them (observationally stable, with its limits). "
+     "113 superheavy half-lives had been rounded and marked \"approximate\" although NUBASE2020 gives plain measured values: they are now NUBASE2020's own. 16 more superheavy values came from an older evaluation and were up to 2.8 times off (seaborgium-269: 14 minutes before, 5 minutes now). "
+     "For 644 nuclides NUBASE2020 lists a decay mode with no intensity (marked with a question mark); the odds leave it out, and the hover, the line in the panel and the chain now say so. "
+     "The nucleus's shape estimate counts Z = 114 and N = 184 as magic numbers; they come from the web version with no source, so they stay but are now labelled in the nucleus card (286 nuclides depend on them). "
+     "This finishes version 0.12."},
     {"0.12", "Atom Lab: decay chains walk the chart (stage 1 of 2)",
      "On the Chart of nuclides, the chosen nuclide now shows where it goes next. Every way it can decay is drawn as a line from square to square, in the colour of the mode: an alpha jumps two squares down and two left, a beta minus moves one square up and one left, a beta plus the other way. "
      "The likeliest way is thick and solid, the other ways whose odds are measured are thinner, ways below 0.1 % are faint hairlines, and a way whose odds are not measured is marked with a question mark. Uranium-238 reaches lead-206 in 14 steps along its likeliest path; bismuth-212 splits in two paths (beta minus 64 %, alpha 36 %) that meet again at lead-208. "

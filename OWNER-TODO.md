@@ -153,7 +153,7 @@
 - [ ] Run the benchmark scene "Chart of nuclides: the whole chart, 3,557 squares" with the pointer off the picture and send the result (frame time, GPU time).
 - [ ] Open www-nds.iaea.org/amdc/ (a browser gets past the bot challenge) and send what it says about citing NUBASE2020; the app credits only the citation line the file itself gives.
 - [ ] Decide whether Auto photons waiting silently while the chart is shown is fine (the chart shows no electron) or should say so.
-- [ ] The lab's table marks 113 half-lives with "~" (approximate); I could not reproduce that mark from NUBASE2020 (most of those have plain values there). If you know where it came from, say so; the chart's hover repeats the lab's existing wording.
+- [x] (Resolved in 0.12 stage 2) The lab's 113 "~" half-lives: NUBASE2020 gives each as a plain measured value; the lab's older table had rounded them and flagged them approximate. They now carry NUBASE2020's values.
 
 ## 0.11 stage 3 (the landscape): what only the owner can do
 - [ ] On the PC, in the Chart of nuclides view, move the Tilt slider from 0 to 100 %: at 0 it must look exactly like the flat chart of stage 2; at 100 % check the ridge of stable nuclides, the shore of hollow squares, the legend (it moves to the emptiest corner; does it cover a block or an axis number at your window sizes?), the pin on the chosen nuclide. My images are a software replay with other fonts.
@@ -169,7 +169,7 @@
 - [ ] Look at the notes box (valley and island words) at your window sizes: it sits in a free corner, or is left out in a very small window. Does anything cover a block, a tick number or the legend? My images are a software replay with other fonts; at 640 x 480 the legend still covers part of the island.
 - [ ] Judge the binding scale: 28 tiles per scale height, linear from zero. It shows the peak and the fall clearly but most nuclides stand at 75-98 % of the top (heavy ones 80-90 %); a different baseline would exaggerate the fall, so I left it at zero.
 - [ ] Run benchmark scene 21 ("... BINDING-ENERGY height ...") with scenes 19 and 20, pointer off the picture, and send the three results. It should cost about the same as scene 20.
-- [ ] The lab's older web data holds the numbers N = 184 and Z = 114 (kMagicN / kMagicZ in atom_data.inc, with no source). They are not used for the island. If you know where they came from, say so.
+- [ ] The lab's older web data holds the numbers N = 184 and Z = 114 (kMagicN / kMagicZ in atom_data.inc, with no source). They are not used for the island. If you know where they came from, say so. (0.12 stage 2: they set the shape estimate of 286 nuclides; the nucleus card now says they have no source.)
 
 ## 0.12 stage 1 (decay chains): what only the owner can do
 - [ ] Open the Chart of nuclides view with uranium-238 chosen (the default benchmark nuclide) and look at the trail at your usual window size, flat and tilted: the likeliest path should be a clear thick line from the ringed square to lead-206, the faint hairlines the rare ways. Are the mode labels (α, β⁻) readable, or too many? Zoom in with the wheel and look again. My images are a software replay with other fonts.
@@ -179,3 +179,10 @@
 - [ ] Lead-206 and lead-208, the ends of two classic series, are 'observationally stable' in NUBASE2020 (a half-life limit and an 'A ?' entry). The app says so in those words. Tell me if you want 'stable' alone there.
 - [ ] Run benchmark scene 22 ("... with the DECAY CHAIN of uranium-238 drawn and walked ...") next to scenes 19 to 21, pointer off the picture, and send the results. Scenes 19 to 21 no longer draw a chain, so they are comparable with the 0.11 results.
 - [ ] The reference series (uranium-238, uranium-235, thorium-232, neptunium-237) were typed from textbook tables, because no online source could be reached. If you have a source you trust (a PDF or text), send it and I will check the lists against it.
+
+## 0.12 stage 2 (the accuracy clean-up): what only the owner can do
+- [ ] **Krypton-78 and xenon-124.** The half-lives the lab used to show (9.2e21 years and 1.8e22 years) are in neither NUBASE2020 nor the mendeleev package, which both call the nuclides stable, so I removed them. If you have a source for them (a decay measurement, as a PDF or text), send it and I will restore them with the source named.
+- [ ] **Magic numbers 114 and 184.** They are kept and labelled in the nucleus card's Shape source line (286 nuclides' estimated shapes depend on them). Decide: keep labelled, remove (their shape estimates would change), or send a source.
+- [ ] On the PC look at: the Atom panel's isotope line and decay readout for fluorine-31 (an extrapolated half-life: no number, "the lab does not time it"), boron-16 (only a limit), europium-162 ("about 10 s"), beryllium-11 ("odds not complete"); the hover of beryllium-11 and of titanium-39 in the Chart of nuclides; the nucleus card's Shape source line of oganesson-294 (it mentions Z = 114 or N = 184).
+- [ ] Decide whether a nucleus the lab does not time (369 extrapolated, 11 limit-only, 87 with none) should be allowed to decay by itself with a clearly labelled invented time. I chose no.
+- [ ] NUBASE2020's file does not define the question mark after a decay mode. If the AMDC pages (not reachable from the cloud session) say what it means, send the text; the app only says the mode is listed "with no intensity (marked with a question mark)".

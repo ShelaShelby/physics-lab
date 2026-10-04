@@ -631,7 +631,11 @@ void AtomLab::decTick(double dt) {
         s.decNext.clear(); chainVer++;
         s.decKey = key; s.decAge = 0; s.decHeld = false;
         s.dec = decInfo(p.Z, p.N);
-        s.decAt = !s.dec || !s.dec->T ? INFINITY : decDrawLifetime(*s.dec->T, random());   // (decay_chain.h: the same two draws as the chain walk on the chart)
+        s.decZ = p.Z; s.decN = p.N;
+        // A nucleus is timed only if its half-life is a measured or an approximate value (0.12 stage 2, the same rule as the chain walk): the lab's decay table also holds numbers for the 369 nuclides whose half-life
+    // NUBASE2020 only extrapolates from systematics and for 11 that have only a limit; the clock used to time those as if they were measured, and no longer does.
+    const ChainTiming tm = s.dec ? chainTiming(s.decZ, s.decN) : ChainTiming{ChainTime::None, 0, HeightKind::Unknown};
+    s.decAt = tm.kind == ChainTime::None ? INFINITY : decDrawLifetime(tm.halfLife, random());   // (decay_chain.h: the same two draws as the chain walk on the chart)
     }
     if (paused || hold || chartOn() || s.decHeld || std::isinf(s.decAt)) return;   // (the chart: the chosen nucleus must stay where the user put it, so its decay clock waits)
     s.decAge += dt;
@@ -690,10 +694,12 @@ std::string AtomLab::decLine() const {                        // the readout lin
     std::string top;
     for (std::size_t i = 0; i < d.br.size() && i < 3; i++) top += (i ? ", " : "") + decWord(d.br[i].first) + " " + pctText(d.br[i].second);
     const std::string unk = d.unk ? " (odds not measured, shown as equal)" : "";
-    if (!d.T) return "☢ unstable: decays by " + top + unk + "  ·  no half-life measured, so the lab cannot time it";
-    const double q = 1 - std::exp(-kLn2 * 60 / *d.T);       // chance of decaying within a minute
+    const ChainTiming tm = chainTiming(s.decZ, s.decN);
+    const std::string more = decUnquantified(s.decZ, s.decN).empty() ? "" : "  ·  odds not complete (NUBASE2020 lists modes with no intensity)";
+    if (tm.kind == ChainTime::None) return "☢ unstable: decays by " + top + unk + more + "  ·  " + chainHalfLifeWords(s.decZ, s.decN) + ", so the lab does not time it and it will not decay here by itself";
+    const double q = 1 - std::exp(-kLn2 * 60 / tm.halfLife);       // chance of decaying within a minute
     const std::string qs = q > 0.9999 ? "certain" : q >= 1e-4 ? jsNum(q * 100, 2) + " %" : q > 0 ? sci(q * 100) + " %" : "0 %";
-    return "☢ unstable: half-life " + fmtLife(*d.T) + "  ·  decays by " + top + unk + "  ·  chance it decays in the next minute: " + qs +
+    return "☢ unstable: " + chainHalfLifeWords(s.decZ, s.decN) + "  ·  decays by " + top + unk + more + "  ·  chance it decays in the next minute: " + qs +
            (s.decHeld ? "  ·  this one is gone: tap ☢ Build another" : paused ? "  ·  paused: its clock is stopped" : "");
 }
 

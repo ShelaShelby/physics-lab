@@ -124,6 +124,7 @@ struct AtomState {
     double decAge = 0, decAt = INFINITY;
     bool decHeld = false;
     std::optional<DecayInfo> dec;
+    int decZ = 0, decN = -1;               // the nucleus `dec` and `decAt` belong to (p may already be the daughter for one frame after a decay)
     std::optional<DecayFx> decFx;
     int decays = 0;                        // decays seen so far (the web grants the Half-Life achievement at each one)
     std::vector<LogLine> decLog;

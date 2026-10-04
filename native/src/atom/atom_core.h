@@ -187,6 +187,7 @@ double nuclearR(int A);                       // nuclear radius, fm
 // ---- the nucleus ----
 double nucBeta(int Z, int N);                 // quadrupole deformation β₂
 bool nucMeasured(int Z, int N);
+bool nucUsesUnsourcedMagic(int Z, int N);   // 0.12 stage 2: the shape ESTIMATE of this nucleus has Z = 114 or N = 184 (the web version's unsourced magic numbers) as the nearest magic number, so they set it (286 nuclides)
 bool nucBE2Known(int Z, int N);              // the B(E2) table has it (0.10.9 stage 2: nucMeasured is also true for doubly magic nuclei, which are drawn round by expectation)
 const char* nucShapeWord(double b);
 struct Nucleon { double x, y, z; bool isP; double ph; };   // centre (m), proton?, wobble phase

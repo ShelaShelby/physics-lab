@@ -80,8 +80,8 @@ static void testDecayChain() {
         checkNum("timing: ... extrapolated only (369)", ext, 369, 0);
         checkNum("timing: ... no half-life at all (87)", unk, 87, 0);
         checkNum("timing: the sum is 467 and no other reason exists, and each reason is the stage 3 height kind of that tile", none * 1000 + wrongKind, 467000, 0);
-        checkNum("timing: not-stable nuclides with a measured half-life (stage 3: 2,720) and an approximate one (119)", meas * 1000 + appr, 2720 * 1000 + 119, 0);
-        checkNum("timing: stable tiles in the lab's table (stage 3: 182 + 69 = 251)", stable, 251, 0);
+        checkNum("timing: not-stable nuclides with a measured half-life (0.12 stage 2: 2,831 = NUBASE2020's plain values; 2,720 before) and an approximate one (6 = NUBASE2020's '~'; 119 before)", meas * 1000 + appr, 2831 * 1000 + 6, 0);
+        checkNum("timing: stable tiles in the lab's table (182 + 71 = 253; 251 before 0.12 stage 2 made Kr-78 and Xe-124 stable)", stable, 253, 0);
         checkNum("timing: nuclides NUBASE2020 calls stable and lists with a half-life limit or a '?' decay entry (the brief's 71)", obs, 71, 0);
     }
     // ---- the four classic series, from the data: members, steps, end point (typed from the textbooks)
