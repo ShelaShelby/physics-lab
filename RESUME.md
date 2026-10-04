@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.10.7 alpha, stage 1 is finished: the Atom Lab's radial probability graph. `src/atom/radial_graph.*` (no drawing): `radialDensity` / `radialGraph` give P(r) = r²R² (area 1, normalised by the closed form; the lab's `radial()` lacks the q^l factor, handled there), the peak (exact roots of dP/dr), `meanRadius` (shared with the readout), the 90 % reach (outline rmax / Z), the axis step and the card's words. `AtomLab::radialMode()` says shown / hidden / superposition / jumping. The card is drawn in `atom_panel.cpp` (`radialPicture`, `radialCard`) like the spectrum picture, computed only when the orbital or Z changes; it was NOT compiled in the cloud (only a stand-in syntax check) and never seen: the owner must look (OWNER-TODO). Superposition: the card gives an explanation and no graph (DECISIONS). Tests: `testRadialGraph`, `testRadialDots`, `testRadialReadout` in test_atom.cpp. The 0.10.6 audit is closed; three optimisation items are deferred by the owner (ROADMAP).
+- Version 0.10.7 alpha, stage 2 is finished: the real NIST ASD spectrum beside the lab's. `tools/make_asd_data.py fetch` (network: physics.nist.gov) wrote `native/data/asd/asd_lines.tsv` + `manifest.tsv` + README.txt (query, date 2026-10-04, selection, citation) and `build` makes `src/atom/asd_data.inc`; `src/atom/asd.*` gives `asdIon(Z)` (hydrogen-like ion: validates the lab), `asdAtom(Z)` (neutral atom: shows its limit), `compareIon`, and the card's words; the card is drawn in `atom_panel.cpp` (`realStrip`, `realSpectrumCard`) like the spectrum picture, NOT compiled in the cloud (stand-in syntax check only) and never seen: the owner must look (OWNER-TODO). Tests: `testAsdData` in test_atom.cpp (data counts, H I / He II within (Zα)², Fe XXVI Lyα against the Dirac formula) and one new About entry in test_app.cpp. NIST's general licence statement could not be read (www.nist.gov unreachable): OWNER-TODO. Stage 1 (before it): the radial probability graph (`radial_graph.*`, card "Where the electron is found"). The 0.10.6 audit is closed; three optimisation items are deferred by the owner (ROADMAP).
 - Not done, still on the roadmap: the three deferred optimisation items (phase-colour scan, overlapping superposition, outline first use; numbers in ROADMAP). Not re-read from a source: the hydrogen-1 atom mass 1.00782503223 u (AME2020 has 1.007825031898 u, not yet put in the code) and the proton radius (0.84 fm). The owner picks what comes next.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 18,299
+  - atom_tests: 18,326
   - app_tests: 1,515
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)

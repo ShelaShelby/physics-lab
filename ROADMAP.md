@@ -3,6 +3,7 @@
 Plain list of what is done and what is planned. No dates. Nothing is promised that is not on this list.
 
 ## Done
+- 0.10.7 stage 2: the real NIST ASD spectrum next to the lab's (card "Real spectrum (NIST)": (a) the hydrogen-like ion the lab models, which validates it, and (b) the neutral atom, which shows its limit; data fetched 2026-10-04 into data/asd) — done in code and tests; the drawing is not seen yet (see OWNER-TODO)
 - 0.10.7 stage 1: the Atom Lab's radial probability graph (card "Where the electron is found": P(r) with the peak, the average distance and the 90 % outline's reach; hidden with an explanation during a superposition) — done in code and tests; the drawing is not seen yet (see OWNER-TODO)
 - 0.9.3: bug fixes — done
 - 0.9.4: glowing, denser electron cloud — done

@@ -15,6 +15,7 @@
 
 #include "atom/atom_core.h"
 #include "atom/atom_learn.h"
+#include "atom/asd.h"
 #include "atom/atom_sim.h"
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
@@ -2136,6 +2137,129 @@ static void testRadialReadout() {
     checkTrue("radial graph: the readout's 'theory' avg r is the graph's <r>, for 10 shells x Z 1, 2, 26 (" + std::to_string(k) + " cases)", same);
 }
 
+// ================= 0.10.7 stage 2: the real spectrum (NIST ASD) next to the lab's =================
+// The data was fetched on 2026-10-04 by tools/make_asd_data.py (the query is in data/asd/README.txt). The numbers typed below are read from data/asd/manifest.tsv and asd_lines.tsv (the files the fetch wrote, NOT
+// from asd_data.inc), so the test checks that parsing, building and compiling kept what the fetch produced.
+// The Dirac level formula (point nucleus, reduced mass): E(n, j) = mu c^2 [ (1 + (Z alpha)^2 / (n - d)^2)^(-1/2) - 1 ], d = (j + 1/2) - sqrt((j + 1/2)^2 - (Z alpha)^2). It is the standard textbook formula (Bethe &
+// Salpeter; Griffiths ch. 6 gives its expansion), written from knowledge, not looked up here; the comparison with ASD below is its check.
+static double diracE(double mu, int Z, int n, double j) {      // eV, binding energy negative; mu in eV (m c^2 times the reduced-mass factor)
+    const double za = Z * nist::alpha, d = (j + 0.5) - std::sqrt((j + 0.5) * (j + 0.5) - za * za);
+    return mu * (1 / std::sqrt(1 + za * za / ((n - d) * (n - d))) - 1);
+}
+static const AsdLine* asdFind(const AsdSpectrum& sp, const char* transitionStart) {
+    for (int i = 0; i < sp.count; i++) if (std::string(sp.lines[i].transition).rfind(transitionStart, 0) == 0) return &sp.lines[i];
+    return nullptr;
+}
+
+static void testAsdData() {
+    // ---- the data parses and is what the fetch produced ----
+    int total = 0, ionTotal = 0, atomTotal = 0, ionOk = 0, ionNone = 0, atomOk = 0, atomNone = 0, atomEmpty = 0;
+    int flagsOnly = 0, ionObs = 0, ionRitzOnly = 0, atomObs = 0, ionResolved = 0, atomResolved = 0, ionIntens = 0, atomIntens = 0;
+    bool positive = true, rangeOk = true, sorted = true, namesOk = true, unResolvedOk = true, uncOk = true, intensOk = true;
+    double ionMin = 1e30, ionMax = 0, atomMin = 1e30, atomMax = 0;
+    for (int Z = 1; Z <= 118; Z++)
+        for (int kind = 0; kind < 2; kind++) {
+            const AsdSpectrum& sp = kind == 0 ? asdIon(Z) : asdAtom(Z);
+            (kind == 0 ? ionTotal : atomTotal) += sp.count; total += sp.count;
+            if (kind == 0) { ionOk += sp.status == AsdStatus::Lines; ionNone += sp.status == AsdStatus::NoSpectrum; }
+            else { atomOk += sp.status == AsdStatus::Lines; atomNone += sp.status == AsdStatus::NoSpectrum; atomEmpty += sp.status == AsdStatus::NoLines; }
+            namesOk = namesOk && std::string(sp.name).rfind(std::string(symbol(Z)) + " ", 0) == 0 && (sp.status == AsdStatus::Lines) == (sp.count > 0);
+            for (int i = 0; i < sp.count; i++) {
+                const AsdLine& l = sp.lines[i];
+                positive = positive && l.nm > 0 && l.ritz != 0;
+                if (kind == 0) { rangeOk = rangeOk && l.nm >= kAsdIonLowNm && l.nm <= kAsdIonHighNm; ionMin = std::min(ionMin, l.nm); ionMax = std::max(ionMax, l.nm); ionObs += l.observed; ionRitzOnly += !l.observed; ionResolved += l.resolved; ionIntens += !std::isnan(asdIntensity(l)); }
+                else { rangeOk = rangeOk && l.nm >= kAsdAtomLowNm && l.nm <= kAsdAtomHighNm && l.observed; atomMin = std::min(atomMin, l.nm); atomMax = std::max(atomMax, l.nm); atomObs += l.observed; atomResolved += l.resolved; atomIntens += !std::isnan(asdIntensity(l)); }
+                if (i > 0) sorted = sorted && (kind == 1 ? sp.lines[i - 1].nm <= l.nm : true);
+                unResolvedOk = unResolvedOk && (l.resolved == 0 || l.resolved == 1) && l.ni >= 0 && l.nk >= 0 && (std::string(l.transition).find(" - ") != std::string::npos || std::string(l.transition) == "-");
+                uncOk = uncOk && (std::isnan(l.unc) || l.unc >= 0);
+                if (!std::string(l.intens).empty() && std::isnan(asdIntensity(l))) flagsOnly++;
+                intensOk = intensOk && (std::string(l.intens).empty() ? std::isnan(asdIntensity(l)) : true) && (std::isnan(asdIntensity(l)) || asdIntensity(l) > 0) && (kind == 0 || !std::isnan(asdIntensity(l)));
+            }
+        }
+    std::printf("ASD data: %d lines kept (ion %d, atom %d); ions with lines %d, not in ASD %d; atoms with lines %d, not in ASD %d, none in range %d; wavelengths ion %.7g..%.7g nm, atom %.7g..%.7g nm\n",
+                total, ionTotal, atomTotal, ionOk, ionNone, atomOk, atomNone, atomEmpty, ionMin, ionMax, atomMin, atomMax);
+    checkTrue("ASD data: the totals are what the fetch produced (7,915 lines: 5,029 of the ions and 2,886 of the atoms; asdTotalLines agrees)", total == 7915 && ionTotal == 5029 && atomTotal == 2886 && asdTotalLines() == 7915);
+    checkTrue("ASD data: 110 ions and 98 atoms have lines; 8 ions (Z 111-118) and 19 atoms (Z 100-118 except Fr) are not in ASD; Fr I has no line in the range", ionOk == 110 && ionNone == 8 && atomOk == 98 && atomNone == 19 && atomEmpty == 1);
+    checkTrue("ASD data: counts per spectrum as fetched: H I ion 169 of 441, He II 140, Fe XXVI 95, U XCII 13, Fm C 13, H I atom 30 of 262, Fe I atom 30 of 9,548, Ne I atom 30 of 1,264",
+              asdIon(1).count == 169 && asdIon(1).returned == 441 && asdIon(2).count == 140 && asdIon(26).count == 95 && asdIon(92).count == 13 && asdIon(100).count == 13 &&
+              asdAtom(1).count == 30 && asdAtom(1).returned == 262 && asdAtom(26).count == 30 && asdAtom(26).returned == 9548 && asdAtom(10).count == 30 && asdAtom(10).returned == 1264);
+    checkTrue("ASD data: every wavelength is positive, in the range asked (ion 1e-4 to 1e4 nm, atom 100 to 2500 nm), the names start with the element's symbol, status matches the line count", positive && rangeOk && namesOk);
+    checkNum("ASD data: shortest and longest ion line are the fetched ones (0.0075649 and 9569.4 nm)", ionMin, 0.0075649, 1e-12); checkNum("ASD data: longest ion line", ionMax, 9569.4, 1e-12);
+    checkNum("ASD data: shortest atom line (102.5728 nm)", atomMin, 102.5728, 1e-12); checkNum("ASD data: longest atom line (2486.733 nm)", atomMax, 2486.733, 1e-12);
+    checkTrue("ASD data: observed and Ritz flags survive: ion lines 210 observed and 4,819 Ritz only; every atom line (2,886) is observed", ionObs == 210 && ionRitzOnly == 4819 && atomObs == 2886);
+    checkTrue("ASD data: resolved components (both J given): ion 5,014 of 5,029, atom 2,164 of 2,886; numeric intensities: ion 107, atom all 2,886; 17 ion lines have only ASD flags in the intensity cell (no number: drawn without brightness)", ionResolved == 5014 && atomResolved == 2164 && ionIntens == 107 && atomIntens == 2886 && flagsOnly == 17);
+    checkTrue("ASD data: atom lines are sorted by wavelength, uncertainties are NaN or not negative, a transition reads 'lower - upper' (or just '-' when ASD classifies none), an empty intensity is NaN, a given number is positive", sorted && unResolvedOk && uncOk && intensOk);
+    // spot values typed from asd_lines.tsv
+    const AsdLine *h1 = asdFind(asdIon(1), "1s 2S 1/2 - 2p 2P* 3/2"), *h2 = asdFind(asdIon(1), "1s 2S 1/2 - 2p 2P* 1/2"), *he = asdFind(asdIon(2), "1s 2S 1/2 - 2p 2P* 3/2"), *fe = asdFind(asdIon(26), "1s 2S 1/2 - 2p 2P* 3/2");
+    checkTrue("ASD data: H I Lyman-alpha is there with ASD's observed 121.56699 nm +- 0.00020 and Ritz 121.5668237310 / 121.5673644608 nm", h1 && h2 && h1->observed == 1 && std::fabs(h1->nm - 121.56699) < 1e-9 && std::fabs(h1->unc - 0.00020) < 1e-12 && std::fabs(h1->ritz - 121.5668237310) < 1e-9 && std::fabs(h2->ritz - 121.5673644608) < 1e-9);
+    checkTrue("ASD data: He II 1s-2p Ritz 30.3780409484 nm (also the stage 6 value), and it is a Ritz-only line; Fe XXVI 1s-2p3/2 0.177801471 nm Ritz-only with 1e-8 nm uncertainty",
+              he && !he->observed && std::fabs(he->nm - 30.3780409484) < 1e-9 && fe && !fe->observed && std::fabs(fe->nm - 0.177801471) < 1e-12 && std::fabs(fe->unc - 1e-8) < 1e-12);
+    checkTrue("ASD data: a Ritz-only ion line carries no intensity text (nothing invented), and the 1s - 6 H I line carries ASD's 19000", std::string(he->intens).empty() && std::isnan(asdIntensity(*he)));
+    bool h6 = false; for (int i = 0; i < asdIon(1).count; i++) { const AsdLine& l = asdIon(1).lines[i]; if (std::string(l.transition) == "1s 2S 1/2 - 6" && asdIntensity(l) == 19000 && !l.resolved) h6 = true; }
+    checkTrue("ASD data: the unresolved H I line '1s 2S 1/2 - 6' keeps ASD's intensity 19000 and is marked not resolved", h6);
+
+    // ---- (a) the lab against the measured ion: fine structure and relativity are what is left ----
+    // Tolerance: the lab is level-averaged and non-relativistic, so its line can differ from the components by the relativistic corrections, of the order (Z alpha)^2 of the level energies (5.3e-5 for hydrogen, 2.1e-4 for
+    // He+): the lab's value must lie in the components' range widened by (Z alpha)^2 of the wavelength (the same justification as stage 6, now for every transition between n <= 6, not five lines).
+    double worstH = 0, worstHe = 0; bool allIn = true; int cmpN = 0;
+    for (int Z : {1, 2}) {
+        const auto cmp = compareIon(Z, defaultN(Z));
+        cmpN += int(cmp.size());
+        for (const IonCompare& c : cmp) {
+            const double rel = std::fabs(c.offsetNm) / c.labNm, tol = std::pow(Z * nist::alpha, 2);
+            (Z == 1 ? worstH : worstHe) = std::max(Z == 1 ? worstH : worstHe, rel / tol);
+            allIn = allIn && rel <= tol && c.components >= 1 && c.minNm <= c.maxNm && c.lo < c.hi && c.hi <= 6;
+        }
+    }
+    std::printf("ASD ion vs lab: H I and He II, %d transitions between n <= 6; the lab lies outside the components by at most %.3f (H I) and %.3f (He II) of the allowed (Z alpha)^2 of the wavelength\n", cmpN, worstH, worstHe);
+    checkTrue("ASD ion vs lab: for all 15 transitions among n <= 6 of H I and of He II (30 compared) the lab's wavelength lies inside ASD's components widened by (Z alpha)^2 of the wavelength", cmpN == 30 && allIn);
+    // the heavy ions: the lab's line is LONGER than the measured one, by about the Dirac correction
+    {
+        const int Z = 26; const auto cmp = compareIon(Z, defaultN(Z));
+        const double M = nuclearMassMe(Z, defaultN(Z)), mu = nist::mecEV * M / (M + 1);
+        const AsdLine *a3 = asdFind(asdIon(Z), "1s 2S 1/2 - 2p 2P* 3/2"), *a1 = asdFind(asdIon(Z), "1s 2S 1/2 - 2p 2P* 1/2");
+        double lab = 0; for (const IonCompare& c : cmp) if (c.lo == 1 && c.hi == 2) lab = c.labNm;
+        const double d3 = nist::hcEVnm / (diracE(mu, Z, 2, 1.5) - diracE(mu, Z, 1, 0.5)), d1 = nist::hcEVnm / (diracE(mu, Z, 2, 0.5) - diracE(mu, Z, 1, 0.5));
+        const double asd3 = a3->ritz, asd1 = a1->ritz;
+        std::printf("Fe XXVI Lyman-alpha: lab %.9f nm; Dirac 2p3/2 %.9f, 2p1/2 %.9f; ASD Ritz 2p3/2 %.9f, 2p1/2 %.9f nm. lab - ASD: %.4e (2p3/2), %.4e (2p1/2) of the wavelength; lab - Dirac: %.4e, %.4e; ASD - Dirac: %.3e, %.3e\n",
+                    lab, d3, d1, asd3, asd1, (lab - asd3) / lab, (lab - asd1) / lab, (lab - d3) / lab, (lab - d1) / lab, (asd3 - d3) / lab, (asd1 - d1) / lab);
+        checkTrue("ASD ion vs lab, Fe XXVI Lyman-alpha: the lab's non-relativistic line is longer than both measured components (the relativistic correction shortens it)", lab > asd3 && lab > asd1);
+        double offL = 0, mxL = 0, mnL = 0; for (const IonCompare& c : cmp) if (c.lo == 1 && c.hi == 2) { offL = c.offsetNm; mxL = c.maxNm; mnL = c.minNm; }
+        checkTrue("ASD ion vs lab, Fe XXVI Lyman-alpha: compareIon reports the lab as LONGER (positive offset = lab minus the longest component) and the components are the two ASD Ritz values",
+                  offL > 0 && std::fabs(offL - (lab - mxL)) < 1e-12 && std::fabs(mxL - asd1) < 1e-12 && std::fabs(mnL - asd3) < 1e-12);
+        const double rel3 = (lab - asd3) / (lab - d3), rel1 = (lab - asd1) / (lab - d1);
+        // ASD lies between the lab and Dirac: the Dirac formula has no QED (Lamb shift) and no finite nuclear size, which lift the 1s level and so move the line back towards the lab's. Measured share of the lab's
+        // error that Dirac accounts for: 0.9508 (2p3/2) and 0.9318 (2p1/2); the guard is the larger remainder 0.0682 + 1 %.
+        checkTrue("ASD ion vs lab, Fe XXVI Lyman-alpha: (lab - ASD) / (lab - Dirac) is within 0.0689 of 1 for both components (measured remainder 0.0682, + 1 %); the rest is what neither the lab nor Dirac has (QED, nuclear size)", std::fabs(rel3 - 1) <= 0.0689 && std::fabs(rel1 - 1) <= 0.0689 && rel3 < 1 && rel1 < 1);
+        // every ion ASD has (Z = 1 .. 100 with the 1s-2p3/2 line): the lab's line is longer than ASD's, ASD's is longer than Dirac's, and Dirac accounts for 80 % to 100 % of the gap
+        double lo = 1e9, hi = -1e9; bool order = true; int nZ = 0;
+        for (int z = 1; z <= 118; z++) {
+            const AsdLine* l3 = asdFind(asdIon(z), "1s 2S 1/2 - 2p 2P* 3/2"); if (!l3 || std::isnan(l3->ritz)) continue;
+            double lb = 0; for (const IonCompare& c : compareIon(z, defaultN(z))) if (c.lo == 1 && c.hi == 2) lb = c.labNm;
+            const double M2 = nuclearMassMe(z, defaultN(z)), mu2 = nist::mecEV * M2 / (M2 + 1), dz = nist::hcEVnm / (diracE(mu2, z, 2, 1.5) - diracE(mu2, z, 1, 0.5));
+            const double r = (lb - l3->ritz) / (lb - dz); lo = std::min(lo, r); hi = std::max(hi, r); order = order && lb > l3->ritz && l3->ritz > dz; nZ++;
+        }
+        std::printf("Lyman-alpha 1s-2p3/2, %d ions: (lab - ASD) / (lab - Dirac) from %.4f to %.4f\n", nZ, lo, hi);
+        // ---- the words: (a) validates, (b) teaches the limit, and the missing data are said ----
+        auto has = [](const std::string& s, const char* w) { return s.find(w) != std::string::npos; };
+        const std::string ta = asdIonTitle(26), na = asdIonNote(26), tb = asdAtomTitle(26), nb = asdAtomNote(26), nb1 = asdAtomNote(1), mOg = asdMissingText(asdIon(118)), mFr = asdMissingText(asdAtom(87)), mOk = asdMissingText(asdIon(26));
+        checkTrue("ASD words: (a) names the ion the lab models (Fe XXVI), says one electron, non-relativistic, point nucleus, fine structure and relativity are left out, and that it checks the lab",
+                  has(ta, "(a)") && has(ta, "ion the lab models") && has(ta, "Fe XXVI") && has(na, "One electron") && has(na, "non-relativistic") && has(na, "point nucleus") && has(na, "fine structure") && has(na, "relativity") && has(na, "checks the lab"));
+        checkTrue("ASD words: (b) names the neutral atom (Fe I), says it has 26 electrons while the lab has ONE, that the lines are not expected to match and that it shows the limit of the lab",
+                  has(tb, "(b)") && has(tb, "neutral atom") && has(tb, "Fe I") && has(nb, "26 electrons") && has(nb, "ONE electron") && has(nb, "not expected to match") && has(nb, "limit of the lab"));
+        checkTrue("ASD words: for hydrogen (b) says the neutral atom is the same system as (a)", has(nb1, "same system as (a)"));
+        checkTrue("ASD words: no data is said on screen: Og CXVIII 'has no data for Og CXVIII', Fr I 'but no line in the range', a spectrum with lines gives no message",
+                  has(mOg, "has no data for Og CXVIII") && has(mFr, "Fr I") && has(mFr, "no line in the range") && mOk.empty());
+        const std::string mn = kAsdMeasuredNote, cr = kAsdCredit;
+        checkTrue("ASD words: the note says measured or Ritz with uncertainties, vacuum wavelengths, qualitative relative intensities that mean something only within one spectrum and depend on the source, no brightness meant where there is none, and that only a selection is stored",
+                  has(mn, "measured") && has(mn, "Ritz") && has(mn, "uncertainty") && has(mn, "vacuum") && has(mn, "qualitative") && has(mn, "within one spectrum") && has(mn, "light source") && has(mn, "no brightness") && has(mn, "selection"));
+        checkTrue("ASD words: the credit follows NIST's request (authors, title, version 5.12, 2024, https://physics.nist.gov/asd, DOI 10.18434/T4W30F) and gives the fetch date",
+                  has(cr, "Kramida, A., Ralchenko, Yu., Reader, J. and NIST ASD Team (2024)") && has(cr, "version 5.12") && has(cr, "https://physics.nist.gov/asd") && has(cr, "10.18434/T4W30F") && has(cr, "2026-10-04"));
+        checkTrue("ASD words: the selections are stated (ion: n <= 6; atom: the 30 strongest observed lines with an intensity in 100-2500 nm)", has(kAsdSelectIon, "n <= 6") && has(kAsdSelectAtom, "30 strongest") && has(kAsdSelectAtom, "100-2500 nm"));
+        checkTrue("ASD ion vs lab: for every ion ASD has (Lyman-alpha 1s-2p3/2) the order is lab > ASD > Dirac in wavelength, and Dirac accounts for between 0.793 and 1 of the lab's error (measured 0.8017 for H to 0.9780; lowest - 1 %)", nZ == 110 && order && lo >= 0.793 && hi < 1);
+    }
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -2171,6 +2295,7 @@ int main() {
     testRadialGraph(1e-12, 2.23e-8, 3.85e-7, 9.30e-9, 4.62e-10, 1e-12, 0.0603);
     testRadialDots(0.1070);
     testRadialReadout();
+    testAsdData();
     testElements();
     testNuclides();
     testFormats();

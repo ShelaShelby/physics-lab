@@ -17,6 +17,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.7", "Atom Lab: the real spectrum from NIST next to the lab's (stage 2)",
+     "A new card, \"Real spectrum (NIST)\", puts the measured spectrum from the NIST Atomic Spectra Database next to the lines the lab predicts, as two separate comparisons. "
+     "(a) The ion the lab actually models (one electron round a nucleus of charge Z: H I, He II, ... Fe XXVI): the lab's lines should land almost on the measured ones, and what is left is mostly fine structure and relativity, which the lab leaves out. This checks the lab. "
+     "(b) The neutral atom of the element (Fe I, Ne I, ...), which is what \"the spectrum of iron\" means: it has Z electrons and the lab has one, so the lines are not expected to match. This shows the lab's limit. "
+     "Where NIST has no data the card says so. The lines were fetched on 4 October 2026 and are stored in the app (a selection, stated in About); intensities are NIST's rough relative values and are drawn only within one spectrum. "
+     "The numbers are tested; the drawing could not be run in the cloud session and has to be looked at on a real screen."},
     {"0.10.7", "Atom Lab: how far from the nucleus the electron is found (stage 1)",
      "The Atom Lab's cloud views have a new card, \"Where the electron is found\": a graph of how likely the electron is to be at each distance from the nucleus, for the orbital on screen. "
      "It marks the most likely distance, the average distance (the same number as the readout's \"theory\") and how far the 90 % outline reaches, with the distance in Bohr radii and in Å, scaled for the orbital and the nucleus. "

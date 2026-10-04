@@ -8,6 +8,12 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Look at on the PC (0.10.7 stage 2: the real spectrum) — the drawing could not be compiled or seen in the cloud
+- [ ] Atom Lab, under "Light spectrum": the new card "Real spectrum (NIST)". Look at it in every theme and at every text size, for hydrogen (Z = 1), helium, iron (Z = 26), a heavy element (Z = 92) and one NIST does not have (Z = 118; Fm I, Z = 100, for the neutral atom): the two rows of each strip, the tick colours, the line-by-line text under (a), and the long notes at the bottom must be readable and not run past the panel's edge.
+- [ ] Check that (a) and (b) read as two different things (the titles and notes), and that the words are right to you.
+- [ ] Check NIST's terms of use: the session could not read NIST's general statement on copyright and licensing of its data (www.nist.gov is not reachable from it); only the citation request on ASD's own pages was read, and the app and data README follow it. Please read NIST's statement before the app is shared widely.
+- [ ] The app grew by about 0.65 MB of C++ tables (the NIST lines): check the Windows build still compiles and the .exe starts at its usual speed (not measured).
+
 ## Look at on the PC (0.10.7 stage 1: the radial probability graph) — the drawing could not be compiled or seen in the cloud
 - [ ] Atom Lab, a cloud view: the new card "Where the electron is found" (above Photons). Look at it in every theme and at every text size (Settings), for 1s, 2s, 2p, 3d, 4f, and Z = 1 and a large Z: curve, the three marks and their lines, the tick numbers, and the three legend lines must be readable and not overlap or run past the panel's edge.
 - [ ] Check it against the cloud: the dots should be thick where the curve is high; the peak line near the densest ring of dots; the readout's "theory" average distance equals the dashed "average distance" line's value.

@@ -48,6 +48,7 @@ add_library(atom_core STATIC
   src/atom/atom_bench.cpp
   src/atom/outline.cpp
   src/atom/radial_graph.cpp
+  src/atom/asd.cpp
 )
 target_link_libraries(atom_core PUBLIC orbit_core)
 target_compile_options(atom_core PRIVATE ${PL_WARNINGS})

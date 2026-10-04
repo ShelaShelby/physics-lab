@@ -20,6 +20,7 @@
 #include "look.h"
 #include "orbit/format.h"
 #include "atom/atom_learn.h"
+#include "atom/asd.h"
 #include "atom/radial_graph.h"
 #include "atom_learn.h"
 #include "orbit_panel.h"
@@ -435,6 +436,88 @@ void radialCard(const AtomLab& L) {
     mutedWrapped(kRadialNote, 12.0f / 16);
 }
 
+// the real spectrum (atom/asd.h): the lab's lines and NIST's measured lines for ONE comparison, on one log wavelength axis, drawn like the spectrum picture (same helpers, theme colours, text scaling).
+// Top row: the lab's lines (accent). Bottom row: NIST's lines (text colour): a measured (observed) line is solid, a Ritz-only one is fainter; a line with an ASD intensity is as tall as the logarithm of that
+// intensity within this spectrum (a rough relative value), one without any intensity is short and equal, so no brightness is implied.
+struct RealTick { double nm; float h; bool observed; };
+constexpr float kRealH = 112;
+void realStrip(const std::vector<double>& lab, const std::vector<RealTick>& real, const char* realName) {
+    const Theme th = panelTheme();
+    const float s = S(), W = ImGui::GetContentRegionAvail().x / s;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 o = ImGui::GetCursorScreenPos();
+    auto P = [&](double x, double y) { return ImVec2(o.x + float(x) * s, o.y + float(y) * s); };
+    ImFont* F = fonts().regular;
+    const float fs = 11 * s;
+    auto text = [&](const std::string& t0, double x, double y, double align, const render::Color& c) {   // y = baseline
+        const std::string t = displayable(t0);
+        const ImVec2 ts = F->CalcTextSizeA(fs, FLT_MAX, 0, t.c_str());
+        dl->AddText(F, fs, ImVec2(o.x + float(x) * s - ts.x * float(align), o.y + float(y) * s - F->GetFontBaked(fs)->Ascent), U32(c), t.c_str());
+    };
+    double lo = 1e300, hi = 0;
+    for (double v : lab) { lo = std::min(lo, v); hi = std::max(hi, v); }
+    for (const RealTick& t : real) { lo = std::min(lo, t.nm); hi = std::max(hi, t.nm); }
+    const double a = std::log(lo * 0.85), b = std::log(hi * 1.15);
+    auto X = [&](double nm) { return 8 + (std::log(nm) - a) / (b - a) * (W - 16); };
+    text("The lab's lines (one electron)", 8, 11, 0, th.muted);
+    for (double v : lab) dl->AddLine(P(X(v), 16), P(X(v), 40), U32(th.accent), 1.5f * s);
+    text(std::string("NIST: ") + realName, 8, 58, 0, th.muted);
+    for (const RealTick& t : real) {
+        const double h = 24 * t.h;
+        dl->AddLine(P(X(t.nm), 87), P(X(t.nm), 87 - h), U32(th.fg, t.observed ? 0.9f : 0.5f), 1.0f * s);
+    }
+    auto rg = [](double v) { return v < 1 ? jsNum(v * 1000, 3) + " pm" : v < 1000 ? jsNum(v, 3) + " nm" : jsNum(v / 1000, 3) + " µm"; };
+    text(rg(std::exp(a)), 8, 104, 0, th.muted);
+    text(rg(std::exp(b)), W - 8, 104, 1, th.muted);
+    ImGui::Dummy(ImVec2(W * s, kRealH * s));
+}
+
+std::vector<RealTick> realTicks(const AsdSpectrum& sp) {
+    std::vector<RealTick> out;
+    double lo = 1e300, hi = 0;
+    for (int i = 0; i < sp.count; i++) { const double v = asdIntensity(sp.lines[i]); if (!std::isnan(v) && v > 0) { lo = std::min(lo, v); hi = std::max(hi, v); } }
+    for (int i = 0; i < sp.count; i++) {
+        const AsdLine& l = sp.lines[i];
+        const double v = asdIntensity(l);
+        const float h = std::isnan(v) || v <= 0 ? 0.35f : hi > lo ? float(0.45 + 0.55 * (std::log(v) - std::log(lo)) / (std::log(hi) - std::log(lo))) : 0.8f;   // 0.35: no intensity given
+        out.push_back({l.nm, h, l.observed != 0});
+    }
+    return out;
+}
+
+// the card: (a) the ion the lab models, then (b) the neutral atom, kept apart; what is missing is said
+void realSpectrumCard(int Z, int N) {
+    static int cz = -1, cn = -1;
+    static std::vector<double> lab;
+    static std::vector<RealTick> ion, atomT;
+    static std::vector<IonCompare> cmp;
+    if (Z != cz || N != cn) {                                          // the data is static: looked up when the element or isotope changes, not every frame
+        lab.clear();
+        for (const SpecLine& l : specLines(Z, N)) if (l.hi > 0 && l.hi <= 6) lab.push_back(l.lam);
+        ion = realTicks(asdIon(Z)); atomT = realTicks(asdAtom(Z)); cmp = compareIon(Z, N);
+        cz = Z; cn = N;
+    }
+    auto plain = [](const std::string& t) { ImGui::PushTextWrapPos(0); ImGui::TextUnformatted(displayable(t).c_str()); ImGui::PopTextWrapPos(); };
+    plain(asdIonTitle(Z));
+    if (asdIon(Z).status == AsdStatus::Lines) {
+        realStrip(lab, ion, asdIon(Z).name);
+        for (const IonCompare& c : cmp) {                              // the first line of each series: the lab's number against NIST's components
+            if (c.hi != c.lo + 1) continue;
+            std::string verdict = c.offsetNm == 0 ? "the lab's line is inside NIST's components" : std::string("the lab's line is ") + jsNum(std::fabs(c.offsetNm) / c.labNm * 100, 2) + " % " + (c.offsetNm > 0 ? "longer" : "shorter") + " than all of them";
+            mutedWrapped("n = " + std::to_string(c.hi) + " → " + std::to_string(c.lo) + ": lab " + jsNum(c.labNm, 7) + " nm; NIST " + jsNum(c.minNm, 7) + (c.components > 1 ? " to " + jsNum(c.maxNm, 7) : "") + " nm; " + verdict, 12.0f / 16);
+        }
+    } else mutedWrapped(asdMissingText(asdIon(Z)), 12.0f / 16);
+    mutedWrapped(asdIonNote(Z), 12.0f / 16);
+    ImGui::Dummy(ImVec2(0, 4 * S()));
+    plain(asdAtomTitle(Z));
+    if (asdAtom(Z).status == AsdStatus::Lines) realStrip(lab, atomT, asdAtom(Z).name);
+    else mutedWrapped(asdMissingText(asdAtom(Z)), 12.0f / 16);
+    mutedWrapped(asdAtomNote(Z), 12.0f / 16);
+    mutedWrapped(kAsdMeasuredNote, 12.0f / 16);
+    mutedWrapped(std::string("Selection. (a): ") + kAsdSelectIon + ". (b): " + kAsdSelectAtom + ".", 12.0f / 16);
+    mutedWrapped(kAsdCredit, 12.0f / 16);
+}
+
 // the little particle box of the Temperature card (web: tempPicture): solid = locked and jiggling, liquid = flowing, gas = flying
 struct TempBox {
     struct P { double sx, sy, x, y, vx, vy, a, b, w1, w2; };
@@ -711,6 +794,10 @@ void atomPanel(AppState& app, float width) {
     ImGui::PushTextWrapPos(0);
     richText(spectrumNote(p.Z, p.N), true, 12.0f / 16, 0);
     ImGui::PopTextWrapPos();
+
+    // ---- The real spectrum ----
+    ImGui::SeparatorText("Real spectrum (NIST)");
+    realSpectrumCard(p.Z, p.N);
 
     // ---- Temperature ----
     ImGui::SeparatorText("Temperature");
