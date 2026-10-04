@@ -20,6 +20,7 @@
 #include "look.h"
 #include "orbit/format.h"
 #include "atom/atom_learn.h"
+#include "atom/radial_graph.h"
 #include "atom_learn.h"
 #include "orbit_panel.h"
 #include "rich_text.h"
@@ -366,6 +367,74 @@ void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen) {
     ImGui::Dummy(ImVec2(W * s, H * s));
 }
 
+// the radial probability graph (atom/radial_graph.h): P(r) against the distance from the nucleus for the orbital on screen, with three marks: the most likely distance, the average distance and how far the
+// 90 % outline reaches. Drawn like the spectrum picture (same helpers, theme colours and text scaling). The curve is worked out when the orbital or Z changes, never per frame.
+constexpr float kRadialH = 172;   // the picture's height in points: the same whether it shows the graph or the "changing orbital" message, so the panel below does not jump during a photon jump
+void radialPicture(const RadialGraph& g, bool active) {
+    const Theme th = panelTheme();
+    const float s = S(), W = ImGui::GetContentRegionAvail().x / s;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 o = ImGui::GetCursorScreenPos();
+    auto P = [&](double x, double y) { return ImVec2(o.x + float(x) * s, o.y + float(y) * s); };
+    ImFont* F = fonts().regular;
+    const float fs = 11 * s;
+    auto text = [&](const std::string& t0, double x, double y, double align, const render::Color& c) {   // y = baseline
+        const std::string t = displayable(t0);
+        const ImVec2 ts = F->CalcTextSizeA(fs, FLT_MAX, 0, t.c_str());
+        dl->AddText(F, fs, ImVec2(o.x + float(x) * s - ts.x * float(align), o.y + float(y) * s - F->GetFontBaked(fs)->Ascent), U32(c), t.c_str());
+    };
+    const double x0 = 10, x1 = W - 10, yTop = 10, yAxis = 104;
+    if (!active) {
+        text("The cloud is changing orbital: the graph comes back when it lands.", W / 2, yAxis / 2, 0.5, th.muted);
+        ImGui::Dummy(ImVec2(W * s, kRadialH * s));
+        return;
+    }
+    double pMax = 0; for (double v : g.P) pMax = std::max(pMax, v);
+    auto X = [&](double r) { return x0 + r / g.rEnd * (x1 - x0); };
+    auto Y = [&](double v) { return yAxis - v / (pMax * 1.08) * (yAxis - yTop); };
+    for (std::size_t i = 0; i + 1 < g.r.size(); i++)                      // the area under the curve, a thin strip per step, then the line on top
+        dl->AddQuadFilled(P(X(g.r[i]), yAxis), P(X(g.r[i]), Y(g.P[i])), P(X(g.r[i + 1]), Y(g.P[i + 1])), P(X(g.r[i + 1]), yAxis), U32(th.accent, 0.18f));
+    for (std::size_t i = 0; i + 1 < g.r.size(); i++) dl->AddLine(P(X(g.r[i]), Y(g.P[i])), P(X(g.r[i + 1]), Y(g.P[i + 1])), U32(th.accent), 1.5f * s);
+    dl->AddLine(P(x0, yAxis), P(x1, yAxis), U32(th.fg, 0.6f), 1);
+    const double step = radialTickStep(g.rEnd);                           // ticks in Bohr radii, a round step
+    for (int k = 0; k * step <= g.rEnd * (1 + 1e-9); k++) {
+        const double x = X(k * step);
+        dl->AddLine(P(x, yAxis), P(x, yAxis + 4), U32(th.fg, 0.6f), 1);
+        text(jsNum(k * step, 3), x, yAxis + 15, k == 0 ? 0 : 0.5, th.muted);
+    }
+    text("a₀", x1, yAxis + 15, 1, th.muted);
+    struct Mark { double r; const char* what; ImU32 col; bool dashed; };
+    const Mark marks[3] = {{g.peak, "most likely distance", U32(th.accent), false}, {g.mean, "average distance", U32(th.fg), true}, {g.reach90, "90 % outline reaches", IM_COL32(0xe8, 0xa3, 0x5a, 255), true}};
+    double ly = yAxis + 32;
+    for (const Mark& m : marks) {
+        if (m.r <= g.rEnd) {                                              // the mark on the graph (the 90 % reach can lie outside a very small picture only if the edge cuts it: then it is in the legend alone)
+            const double x = X(m.r);
+            if (m.dashed) { for (double y = yTop; y < yAxis; y += 5) dl->AddLine(P(x, y), P(x, std::min(yAxis, y + 3)), m.col, 1.5f * s); }
+            else dl->AddLine(P(x, yTop), P(x, yAxis), m.col, 1.5f * s);
+        }
+        dl->AddLine(P(x0, ly - 4), P(x0 + 18, ly - 4), m.col, 1.5f * s);   // the legend row: the line's look and the value in a₀ and Å
+        text(radialMarkText(m.what, m.r), x0 + 24, ly, 0, th.fg);
+        ly += 15;
+    }
+    ImGui::Dummy(ImVec2(W * s, kRadialH * s));
+}
+
+// the card: the graph for the orbital on screen, or why there is none
+void radialCard(const AtomLab& L) {
+    const RadialMode mode = L.radialMode();
+    if (mode == RadialMode::Superposition) {
+        mutedWrapped("No radial graph while a superposition is shown: it is drawn for one orbital, and the mixed cloud has its own distribution of distances (for some pairs it changes with the beat, and an overlapping pair is renormalised). "
+                     "Switch Superposition off to see it.", 12.0f / 16);
+        return;
+    }
+    static int id = -1, Z = -1;
+    static RadialGraph g;
+    if (mode == RadialMode::Shown && (L.stateId() != id || L.p.Z != Z)) { g = radialGraph(L.stateId(), L.p.Z); id = L.stateId(); Z = L.p.Z; }   // only when the orbital or Z changes
+    radialPicture(g, mode == RadialMode::Shown);
+    mutedWrapped(kRadialAxisNote, 12.0f / 16);
+    mutedWrapped(kRadialNote, 12.0f / 16);
+}
+
 // the little particle box of the Temperature card (web: tempPicture): solid = locked and jiggling, liquid = flowing, gas = flying
 struct TempBox {
     struct P { double sx, sy, x, y, vx, vy, a, b, w1, w2; };
@@ -615,6 +684,11 @@ void atomPanel(AppState& app, float width) {
     if (p.view == "Orbit") {
         sliderRow(app, "n", "Energy level (n)", std::to_string(p.n), p.n, 1, 4, 1, false);
         sliderRow(app, "speed", "Playback speed", std::to_string(p.speed), p.speed, 1, 30, 1, false);
+    }
+
+    if (p.view != "Orbit") {
+        ImGui::SeparatorText("Where the electron is found");
+        radialCard(L);
     }
 
     // ---- Photons ----

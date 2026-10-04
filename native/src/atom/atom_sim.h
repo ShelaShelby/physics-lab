@@ -50,6 +50,8 @@ struct AtomParams {
 struct Vec3d { double x = 0, y = 0, z = 0; };
 struct Photon { std::string kind; int from, to; double E, lam; std::string name, col; double ang, t, dur; };
 struct Transition { int from, to; double t, dur; };
+// What the radial probability graph (radial_graph.h) does: not shown (Orbit view), drawn, replaced by a note while a superposition is shown, or while a photon jump changes the cloud.
+enum class RadialMode { Hidden, Shown, Superposition, Jumping };
 struct SeenLine { double lam; std::string col; };
 struct FlyingShot { Shot q; double a; };
 struct DecayFx { double t0; std::vector<FlyingShot> shots; };   // t0: wall clock, ms
@@ -187,6 +189,7 @@ public:
     int fullOrb() const;                                  // the orbital shown (shell + orientation); for a complex state: the real orbital the Orientation falls back to
     int complexM() const;                                 // m of the complex state chosen in Orientation (+-1 .. +-l), 0 when a real orientation is chosen
     int stateId() const;                                  // what the cloud shows: a complex state's id (atom_core.h), or fullOrb()
+    RadialMode radialMode() const { return p.view == "Orbit" ? RadialMode::Hidden : superOn() ? RadialMode::Superposition : jumpCloud() ? RadialMode::Jumping : RadialMode::Shown; }
     int outlineStateId() const;                           // the state the 90 % outline is drawn for: the one on screen (a complex state's own id), NOT the real orbital the Orientation falls back to
     bool usesWheel() const { return p.phase == "Wheel" || complexM() != 0 || superOn(); }   // complex states and superpositions always use the phase wheel
     int stateIdOf(const std::string& shell, const std::string& pAx, const std::string& dAx, const std::string& fAx) const;   // the id of a shell + orientation (real or complex)

@@ -10,6 +10,7 @@
 #include "orbit/belts.h"
 #include "orbit/format.h"
 #include "phase_wheel.h"
+#include "radial_graph.h"
 
 namespace atom {
 
@@ -847,7 +848,7 @@ std::string AtomLab::info1() {
         // The dots are ONE correlated Metropolis chain, so their mean radius is a rough estimate: measured over 96 runs at the full ring of kCap = 12,000 dots (12 orbitals, 8 seeds), 99 % were within 10 %
         // of the exact value below, the worst 17.7 % (0.10.6 stage 5). It is shown only with the full ring (it was 300 dots before), and says so.
         const std::string got = cnt >= kCap ? fmtLen(sum / cnt * 1e10) + " (an estimate, usually within 10 %)" : "…";
-        const std::string th = fmtLen((3.0 * o.n * o.n - o.l * (o.l + 1)) / 2 / p.Z * kA0Ang);   // exact <r> for hydrogen-like atoms
+        const std::string th = fmtLen(meanRadius(o.n, o.l, p.Z) * kA0Ang);   // exact <r> for hydrogen-like atoms: the same function the radial graph uses
         const double E = levelEV(p.Z, p.N, o.n);   // the same reduced-mass level as the spectrum and Superposition (finding 3 of the 0.10.6 audit)
         return head + "  ·  " + stateText() + " orbital  ·  E −" + fmtEV(-E) + "  ·  avg r: sampled " + got + ", theory " + th;
     }

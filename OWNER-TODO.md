@@ -8,6 +8,13 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Look at on the PC (0.10.7 stage 1: the radial probability graph) — the drawing could not be compiled or seen in the cloud
+- [ ] Atom Lab, a cloud view: the new card "Where the electron is found" (above Photons). Look at it in every theme and at every text size (Settings), for 1s, 2s, 2p, 3d, 4f, and Z = 1 and a large Z: curve, the three marks and their lines, the tick numbers, and the three legend lines must be readable and not overlap or run past the panel's edge.
+- [ ] Check it against the cloud: the dots should be thick where the curve is high; the peak line near the densest ring of dots; the readout's "theory" average distance equals the dashed "average distance" line's value.
+- [ ] Change the orbital with the 90 % outline Off and watch for a one-off hitch (the graph asks for the outline's numbers once per new orbital; it was not timed).
+- [ ] Turn Superposition on (the card should give a one-line explanation, no graph) and press Emit (the card keeps its height and shows "changing orbital" until the landing).
+- [ ] Run the speed-risk benchmark scenes again only if you want the deferred items' numbers refreshed; nothing was optimised.
+
 ## Nothing new for stage 9
 - The Windows build was red after stage 8 because of one test (not the app). Stage 9 fixes the test only; the stage 8 items below still apply.
 

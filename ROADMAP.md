@@ -3,6 +3,7 @@
 Plain list of what is done and what is planned. No dates. Nothing is promised that is not on this list.
 
 ## Done
+- 0.10.7 stage 1: the Atom Lab's radial probability graph (card "Where the electron is found": P(r) with the peak, the average distance and the 90 % outline's reach; hidden with an explanation during a superposition) — done in code and tests; the drawing is not seen yet (see OWNER-TODO)
 - 0.9.3: bug fixes — done
 - 0.9.4: glowing, denser electron cloud — done
 - 0.9.5: Orbit Lab: smooth Milky Way band and star mass labels — done
@@ -32,7 +33,10 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- 0.10.6 fix tasks from the Atom Lab audit (18 findings in the stage 1 report, in git history `git show 90049fe:native/REPORT.md`; findings 4, 9 and 18 are done in stage 2, 3, 8 and 14 in stage 3, 1 and 2 in stage 4, 6, 7, 13 and 15 in stage 5, 5, 16 and 17 in stage 6, the speed scenes for 10-12 in stage 7, the jump fix (11) in stage 8; still planned: the speed fixes for 10 (phase colours), 12 (outline) and the superposition paths, decided from the owner's numbers from the PC; stage numbers decided after the owner reads the report) — planned
+- 0.10.6 Atom Lab audit: closed. Fixed: findings 1-9, 11, 13-18 (stages 2-9; finding 11, the cloud jump, in stage 8). Three measured optimisation items are DEFERRED by the owner (not dropped; do not work on them until the owner says):
+  - phase-colour scan (audit finding 10, benchmark scene 8): 7.21 ms against a 4.03 ms baseline
+  - overlapping superposition (scene 14): 9.31 ms, 107 fps
+  - outline first use (audit finding 12, scene 16): worst frame 19.93 ms, 1 % low 60.4 fps. Note: since 0.10.7 stage 1 the radial graph asks for the state's outline when the orbital changes, so this one-time cost can now also fall on a change of orbital with the outline off (not measured) — deferred
 - Bug and speed audit before 1.0, the last pass still to do: app and settings (a report only, then small fix tasks for the real findings) — planned
 - 1.0 alpha stages — planned:
   - design plan (written in a fresh short chat)

@@ -18,6 +18,7 @@
 #include "atom/atom_sim.h"
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
+#include "atom/radial_graph.h"
 #include "orbit/format.h"
 
 #include "reference/atom_reference.inc"
@@ -1955,6 +1956,186 @@ static void testSampledRadiusZ(double guard) {
     checkTrue("sampled <r>: for Z = 3 and 26 the dots' mean radius is within the guard of a0 (3n^2 - l(l+1)) / 2Z (guard = measured worst + 1 %)", worst <= guard);
 }
 
+// ================= 0.10.7 stage 1: the radial probability graph =================
+// References, none of them from the lab's own radial(): (1) the textbook closed forms of the first hydrogen radial functions R10 .. R32 (Griffiths, Introduction to Quantum Mechanics, ch. 4, the table
+// of the first few R_nl; a0 = 1), typed here and CHECKED below to be normalised and orthogonal, so a wrong coefficient shows; (2) composite Simpson quadrature; (3) the exact peaks: 1s at a0/Z and every
+// l = n - 1 orbital at n^2 a0/Z (P is then r^(2n) e^(-2r/n a0 / Z), its maximum is at n^2 a0 / Z); (4) <r> = a0 (3n^2 - l(l+1)) / 2Z; (5) the closed-form share of the 1s probability inside q = Z r:
+// 1 - e^(-2q)(1 + 2q + 2q^2) (by parts, d/dq of it is 4 q^2 e^(-2q)); (6) the dots themselves.
+namespace rg {
+static const char* kShells[10] = {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"};
+static double Rref(int idx, double q) {      // idx: 0 1s, 1 2s, 2 2p, 3 3s, 4 3p, 5 3d  (a0 = 1)
+    switch (idx) {
+        case 0: return 2 * std::exp(-q);
+        case 1: return (1 / std::sqrt(2.0)) * (1 - q / 2) * std::exp(-q / 2);
+        case 2: return (1 / std::sqrt(24.0)) * q * std::exp(-q / 2);
+        case 3: return (2 / std::sqrt(27.0)) * (1 - 2 * q / 3 + 2 * q * q / 27) * std::exp(-q / 3);
+        case 4: return (8 / (27 * std::sqrt(6.0))) * (1 - q / 6) * q * std::exp(-q / 3);
+        default: return (4 / (81 * std::sqrt(30.0))) * q * q * std::exp(-q / 3);
+    }
+}
+template <class F> static double simpson(F f, double a, double b, int n) {   // n even
+    const double h = (b - a) / n; double s = f(a) + f(b);
+    for (int i = 1; i < n; i++) s += f(a + i * h) * (i % 2 ? 4 : 2);
+    return s * h / 3;
+}
+static double meanFormula(const Orbital& o, int Z) { return (3.0 * o.n * o.n - o.l * (o.l + 1)) / (2.0 * Z); }
+}  // namespace rg
+
+static void testRadialGraph(double tolRef, double tolArea, double tolCurve, double tolCover, double tolMean, double tolPeak, double tolR90s) {
+    // ---- the closed forms are themselves right: normalised, and R10, R20, R30 mutually orthogonal (same l) ----
+    double worstN = 0, worstO = 0;
+    for (int i = 0; i < 6; i++) worstN = std::max(worstN, std::fabs(rg::simpson([&](double q) { return q * q * rg::Rref(i, q) * rg::Rref(i, q); }, 0, 400, 40000) - 1));
+    for (int a : {0, 1, 3}) for (int b : {0, 1, 3}) if (a < b) worstO = std::max(worstO, std::fabs(rg::simpson([&](double q) { return q * q * rg::Rref(a, q) * rg::Rref(b, q); }, 0, 400, 40000)));
+    std::printf("radial graph: the typed textbook R10..R32: worst |norm - 1| %.4e, worst |overlap| %.4e\n", worstN, worstO);
+    checkTrue("radial graph: the typed textbook radial functions are normalised and orthogonal (so the reference is right)", worstN <= 2.70e-9 && worstO <= 9.53e-10);   // guards = measured (2.6662e-9, 9.4268e-10: Simpson, h = 0.01) + 1 %
+
+    // ---- the lab's P(r) against those closed forms (n <= 3), for Z = 1, 2, 26 ----
+    double worstRef = 0;
+    for (int i = 0; i < 6; i++)
+        for (int Z : {1, 2, 26})
+            for (int k = 1; k <= 60; k++) {
+                const double r = k * 0.25 / Z, q = Z * r, want = Z * q * q * rg::Rref(i, q) * rg::Rref(i, q);   // P(r) dr = q^2 R(q)^2 dq, r = q / Z
+                const double got = radialDensity(orbIndex(rg::kShells[i]), Z, r);
+                if (want > 1e-12) worstRef = std::max(worstRef, std::fabs(got / want - 1));
+            }
+    std::printf("radial graph: P(r) against the textbook closed forms, 6 shells x Z 1, 2, 26: worst relative difference %.3e\n", worstRef);
+    checkTrue("radial graph: P(r) = r^2 R^2 equals the textbook closed forms for 1s 2s 2p 3s 3p 3d at Z = 1, 2, 26 (guard from the measured value)", worstRef <= tolRef);
+
+    // ---- area 1, <r>, peaks, number of maxima, for all ten shells at Z = 1, 2, 26 ----
+    double worstArea = 0, worstMean = 0, worstPeak = 0, worstPeakIdx = 0; bool countsOk = true, gridCountOk = true, highest = true, minimaOk = true, markOk = true, diffOk = true;
+    double worstCurve = 0, worstCover = 0;
+    for (int s = 0; s < 10; s++)
+        for (int Z : {1, 2, 26}) {
+            const int st = orbIndex(rg::kShells[s]); const Orbital& o = orbitals()[st];
+            const RadialGraph g = radialGraph(st, Z);
+            const auto Pf = [&](double r) { return radialDensity(st, Z, r); };
+            const double L = 60.0 * o.n * o.n / Z;
+            worstArea = std::max(worstArea, std::fabs(rg::simpson(Pf, 0, L, 20000) - 1));
+            worstMean = std::max(worstMean, std::fabs(rg::simpson([&](double r) { return r * Pf(r); }, 0, L, 20000) / rg::meanFormula(o, Z) - 1));
+            diffOk = diffOk && g.mean == meanRadius(o.n, o.l, Z) && std::fabs(meanRadius(o.n, o.l, Z) / rg::meanFormula(o, Z) - 1) < 1e-14;
+            // the stored curve: its own trapezoid area against Simpson of the exact function over the same range, and the share it covers
+            double tr = 0; for (std::size_t i = 0; i + 1 < g.r.size(); i++) tr += 0.5 * (g.P[i] + g.P[i + 1]) * (g.r[i + 1] - g.r[i]);
+            const double ex = rg::simpson(Pf, 0, g.rEnd, 20000);
+            worstCurve = std::max(worstCurve, std::fabs(tr - ex)); worstCover = std::max(worstCover, std::fabs(ex - kRadialCover));
+            // peaks
+            if (o.n == 1) worstPeak = std::max(worstPeak, std::fabs(g.peak * Z - 1));
+            if (o.l == o.n - 1) worstPeak = std::max(worstPeak, std::fabs(g.peak * Z / (double(o.n) * o.n) - 1));
+            std::size_t am = 0; for (std::size_t i = 0; i < g.P.size(); i++) if (g.P[i] > g.P[am]) am = i;
+            worstPeakIdx = std::max(worstPeakIdx, std::fabs(g.r[am] - g.peak) / (g.r[1] - g.r[0]));
+            highest = highest && Pf(g.peak) >= g.P[am] * (1 - 1e-12) && g.P.size() == std::size_t(kRadialPoints + 1) && g.r.front() == 0;
+            // maxima: n - l (exact roots), and n - l on the stored curve; the n - l - 1 nodes between them are zeros of P
+            countsOk = countsOk && int(g.maxima.size()) == o.n - o.l;
+            int gm = 0, gmin = 0;
+            for (std::size_t i = 1; i + 1 < g.P.size(); i++) { if (g.P[i] > g.P[i - 1] && g.P[i] >= g.P[i + 1]) gm++; if (g.P[i] < g.P[i - 1] && g.P[i] <= g.P[i + 1]) { gmin++; minimaOk = minimaOk && g.P[i] < 0.02 * g.P[am]; } }
+            gridCountOk = gridCountOk && gm == o.n - o.l && gmin == o.n - o.l - 1;
+            // the 90 % mark is the state's own outline reach; at Z it is the Z = 1 one over Z
+            for (int a = 0; a < int(orbitals().size()); a++) {
+                if (orbitals()[a].shell != o.shell) continue;
+                const RadialGraph ga = radialGraph(a, Z);
+                markOk = markOk && std::fabs(ga.reach90 * Z / outlineOf(a).rmax - 1) < 1e-12 && ga.P == g.P && ga.maxima == g.maxima && ga.reach90 > 0;
+            }
+        }
+    std::printf("radial graph, 10 shells x Z 1, 2, 26: worst |area - 1| %.4e; worst |<r>(quadrature) / formula - 1| %.4e; worst peak error vs exact %.3e (relative); highest point of the curve within %.2f grid steps of the peak;\n"
+                "   stored curve (trapezoid, %d points) against Simpson of the exact P over the same range: worst difference %.4e; the share inside the right edge differs from %.3f by at most %.4e\n",
+                worstArea, worstMean, worstPeak, worstPeakIdx, kRadialPoints + 1, worstCurve, kRadialCover, worstCover);
+    checkTrue("radial graph: the area under P(r) is 1 for all ten shells at Z = 1, 2, 26 (Simpson, 20,000 intervals; guard = measured + 1 %)", worstArea <= tolArea);
+    checkTrue("radial graph: the stored curve's area equals the exact P's over the same range (trapezoid, 401 points; guard = measured + 1 %)", worstCurve <= tolCurve);
+    checkTrue("radial graph: the picture's right edge holds 99.9 % of the probability (guard = measured + 1 %)", worstCover <= tolCover);
+    checkTrue("radial graph: <r> from the quadrature of r P(r) equals a0 (3n^2 - l(l+1)) / 2Z for all ten shells at Z = 1, 2, 26 (guard = measured + 1 %)", worstMean <= tolMean);
+    checkTrue("radial graph: the graph's <r> is meanRadius() (the readout's number) and equals the formula to 1e-14", diffOk);
+    checkTrue("radial graph: the most likely distance is exactly a0/Z for 1s and n^2 a0/Z for every l = n - 1 orbital (relative guard: the bisection's, above rounding)", worstPeak <= tolPeak);
+    checkTrue("radial graph: the peak is the highest point of the 401-point curve (to a step) and the curve starts at r = 0", highest && worstPeakIdx <= 1.0);
+    checkTrue("radial graph: P has n - l maxima (exact roots), the stored curve shows n - l maxima and n - l - 1 nodes where P falls to about 0", countsOk && gridCountOk && minimaOk);
+    checkTrue("radial graph: the 90 % mark is the outline's own rmax / Z for every orientation, and the curve does not depend on the orientation", markOk);
+
+    // ---- the 90 % mark against an independent number: 1s is a ball, its outline radius is the radius holding 90 %: bisection of the closed-form share ----
+    double lo = 0, hi = 20; for (int i = 0; i < 100; i++) { const double q = 0.5 * (lo + hi); (1 - std::exp(-2 * q) * (1 + 2 * q + 2 * q * q) < 0.9 ? lo : hi) = q; }
+    const double q90 = 0.5 * (lo + hi), got1 = radialGraph(orbIndex("1s"), 1).reach90, h = 2 * 1.15 * 4.5 / kOutlineGrid;
+    std::printf("radial graph: 1s radius holding 90 %% (closed form) %.6f a0; the outline's reach %.6f a0 (grid step %.4f a0): difference %.5f a0 (%.5f of a step)\n", q90, got1, h, q90 - got1, (q90 - got1) / h);
+    checkTrue("radial graph: for 1s the 90 % mark agrees with the closed-form 90 % radius to a small part of a grid step of the outline (guard = measured 0.05966 of a step + 1 %)", std::fabs(got1 - q90) <= tolR90s * h);
+    checkNum("radial graph: the 90 % mark scales as 1/Z (1s, Z = 26)", radialGraph(orbIndex("1s"), 26).reach90 * 26, got1, 1e-12);
+
+    // ---- complex states: the same curve as the shell ----
+    bool sameM = true;
+    for (const char* sh : {"2p", "3p", "3d", "4d", "4f"}) {
+        const int base = orbIndex(sh), l = orbitals()[base].l;
+        const RadialGraph g0 = radialGraph(base, 2);
+        for (int m = -l; m <= l; m++) { if (!m) continue; const RadialGraph gm = radialGraph(complexState(base, m), 2); sameM = sameM && gm.P == g0.P && gm.peak == g0.peak && gm.mean == g0.mean && gm.reach90 > 0 && std::fabs(gm.reach90 * 2 / outlineOf(complexState(base, m)).rmax - 1) < 1e-12; }
+    }
+    checkTrue("radial graph: every m = +-1 .. +-l state of a shell gives the same curve, peak and <r>, and each one's 90 % mark is its own outline's rmax / Z (the radial part does not depend on m)", sameM);
+
+    // ---- the tick step is a round number and gives a few ticks ----
+    bool ticksOk = true;
+    for (int s = 0; s < 10; s++) for (int Z : {1, 2, 26}) {
+        const RadialGraph g = radialGraph(orbIndex(rg::kShells[s]), Z);
+        const double st = radialTickStep(g.rEnd), e = std::pow(10.0, std::floor(std::log10(st))), m = st / e, nt = std::floor(g.rEnd / st + 1e-9);
+        ticksOk = ticksOk && (std::fabs(m - 1) < 1e-9 || std::fabs(m - 2) < 1e-9 || std::fabs(m - 5) < 1e-9) && nt >= 3 && nt <= 8;
+    }
+    checkTrue("radial graph: the axis step is 1, 2 or 5 times a power of ten and gives 3 to 8 ticks", ticksOk);
+
+    // ---- the words ----
+    const std::string note = kRadialNote, axis = kRadialAxisNote, mk = radialMarkText("average distance", 1.5);
+    checkTrue("radial graph: the note says what P(r) dr is, that the area is 1, that every orientation has the same curve, and the model's limits (one electron, non-relativistic, point nucleus)",
+              note.find("between r and r + dr") != std::string::npos && note.find("area") != std::string::npos && note.find("orientation") != std::string::npos &&
+              note.find("one electron") != std::string::npos && note.find("non-relativistic") != std::string::npos && note.find("point nucleus") != std::string::npos);
+    checkTrue("radial graph: the axis note names both units, Bohr radii and Å, and says where the right edge is (99.9 %)", axis.find("a₀") != std::string::npos && axis.find("Å") != std::string::npos && axis.find("99.9 %") != std::string::npos);
+    checkStr("radial graph: a mark's text gives the value in a0 and in Å (CODATA a0 = 0.529177 Å)", mk, "average distance 1.5 a₀ = " + fmtLen(1.5 * kA0Ang));
+
+    // ---- when it is shown ----
+    {
+        AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+        lab.setParam("view", std::string("Cloud"));
+        const bool cloud = lab.radialMode() == RadialMode::Shown;
+        lab.setParam("view", std::string("Orbit")); const bool orbit = lab.radialMode() == RadialMode::Hidden;
+        lab.setParam("view", std::string("Slice")); const bool slice = lab.radialMode() == RadialMode::Shown;
+        lab.setParam("view", std::string("Cloud 3D")); const bool c3 = lab.radialMode() == RadialMode::Shown;
+        lab.setParam("view", std::string("Cloud")); lab.setParam("super", std::string("On")); const bool sup = lab.radialMode() == RadialMode::Superposition;
+        lab.setParam("super", std::string("Off")); lab.setParam("orb", std::string("2p")); lab.emit(); for (int i = 0; i < 4 && lab.radialMode() != RadialMode::Jumping; i++) lab.step(1.0 / 60);
+        const bool jump = lab.radialMode() == RadialMode::Jumping;
+        checkTrue("radial graph: shown in Cloud, Cloud 3D and Slice; hidden in Orbit; replaced by a note in a superposition and during a photon jump", cloud && orbit && slice && c3 && sup && jump);
+    }
+}
+
+// The dots: the distance distribution of the dots (12,000 of them) against the graph's own cumulative curve, as the Kolmogorov distance (largest gap between the two cumulative curves).
+static void testRadialDots(double guard) {
+    struct C { const char* orb; const char* key; const char* ori; int Z; } cs[] = {{"1s", "", "", 1}, {"2s", "", "", 1}, {"2p", "pAx", "z", 1}, {"2p", "pAx", "m+1", 1}, {"3s", "", "", 1}, {"3p", "pAx", "z", 1},
+        {"3d", "dAx", "z2", 1}, {"3d", "dAx", "m+2", 1}, {"4s", "", "", 1}, {"4d", "dAx", "x2y2", 1}, {"4f", "fAx", "z3", 1}, {"4f", "fAx", "m+3", 1}, {"1s", "", "", 3}, {"3d", "dAx", "z2", 3}, {"4f", "fAx", "m+3", 26}};
+    double worst = 0, sum = 0; long n = 0;
+    for (const C& c : cs)
+        for (int seed = 1; seed <= 4; seed++) {
+            seedRandom(8000 + seed);
+            AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+            lab.setParam("Z", double(c.Z)); lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string(c.orb)); if (*c.key) lab.setParam(c.key, std::string(c.ori));
+            for (int i = 0; i < 800; i++) lab.step(1.0 / 240);
+            const long cnt = std::min<long>(lab.s.k, lab.cloudCap());
+            std::vector<double> rr(cnt); for (long i = 0; i < cnt; i++) rr[i] = std::hypot(double(lab.s.pts[3 * i]), double(lab.s.pts[3 * i + 1]), double(lab.s.pts[3 * i + 2])) / nist::a0;
+            std::sort(rr.begin(), rr.end());
+            const RadialGraph g = radialGraph(lab.stateId(), c.Z);
+            double cdf = 0, d = 0; std::size_t j = 0;
+            for (std::size_t i = 1; i < g.r.size(); i++) {
+                cdf += 0.5 * (g.P[i - 1] + g.P[i]) * (g.r[i] - g.r[i - 1]);
+                while (j < rr.size() && rr[j] <= g.r[i]) j++;
+                d = std::max(d, std::fabs(double(j) / double(cnt) - cdf));
+            }
+            worst = std::max(worst, d); sum += d; n++;
+        }
+    std::printf("radial graph against the dots (%ld labs, 12,000 dots each): Kolmogorov distance mean %.4f, worst %.6f\n", n, sum / n, worst);
+    checkTrue("radial graph: the distance distribution of the dots matches the graph's cumulative curve (Kolmogorov distance; guard = measured worst + 1 %)", worst <= guard);
+}
+
+// The readout's "theory" is the graph's <r>: the same number, to the digit shown, for every shell and several Z.
+static void testRadialReadout() {
+    bool same = true; int k = 0;
+    for (const char* sh : rg::kShells)
+        for (int Z : {1, 2, 26}) {
+            AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+            lab.setParam("Z", double(Z)); lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string(sh));
+            const RadialGraph g = radialGraph(lab.stateId(), Z);
+            same = same && lab.info1().find("theory " + fmtLen(g.mean * kA0Ang)) != std::string::npos; k++;
+        }
+    checkTrue("radial graph: the readout's 'theory' avg r is the graph's <r>, for 10 shells x Z 1, 2, 26 (" + std::to_string(k) + " cases)", same);
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -1983,6 +2164,13 @@ int main() {
     testSpectrumIndependent();
     testBasicOrbitChecks();
     testSampledRadiusZ(0.0730);
+    // guards = the worst MEASURED value + 1 % (Linux GCC Release): area error 2.2069e-8 -> 2.23e-8 (Simpson, 20,000 intervals); stored curve against Simpson 3.8113e-7 -> 3.85e-7; right edge 9.1995e-9 -> 9.30e-9;
+    // <r> by quadrature 4.5654e-10 -> 4.62e-10; 1s outline reach 0.05966 of a grid step from the closed-form 90 % radius -> 0.0603; dots: Kolmogorov distance of 60 seeded labs, worst 0.105906 -> 0.1070.
+    // Two guards are NOT measured + 1 %: the closed-form comparison (measured 1.976e-14) and the peaks (measured 0, the bisection lands on the exact value) are rounding-level, where a 1 % guard would depend on the
+    // compiler's last bit, so they use 1e-12 (50 times the first, far below any real error).
+    testRadialGraph(1e-12, 2.23e-8, 3.85e-7, 9.30e-9, 4.62e-10, 1e-12, 0.0603);
+    testRadialDots(0.1070);
+    testRadialReadout();
     testElements();
     testNuclides();
     testFormats();
