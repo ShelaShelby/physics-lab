@@ -323,12 +323,12 @@ void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen) {
     text("All lines (log scale): shorter wavelength, more energy ←", 8, 11, 0, th.muted);
     for (int x = 8; x < W - 8; x++) {
         const double lam = std::exp(a + (x - 8) / (W - 16) * (b - a));
-        const bool vis = lam >= 380 && lam <= 750;
+        const bool vis = isVisibleNm(lam);
         dl->AddRectFilled(P(x, 18), P(x + 1, 48), vis ? lamCol(lam, 0.9f) : U32(th.muted, 0.12f));
     }
     for (const SpecLine& l : L) {
         const double x = X(l.lam);
-        const bool vis = l.lam >= 380 && l.lam <= 750;
+        const bool vis = isVisibleNm(l.lam);
         if (l.hi == 0) {   // the series limit: dashed
             for (double y = 16; y < 50; y += 4) dl->AddLine(P(x, y), P(x, std::min(50.0, y + 2)), U32(th.fg), 1);
             continue;
@@ -350,11 +350,10 @@ void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen) {
     text(rg(std::exp(a)), 8, 88, 0, th.muted);
     text(rg(std::exp(b)), W - 8, 88, 1, th.muted);
     const double y2 = 110;
-    auto VX = [&](double lam) { return 8 + (lam - 380) / (750 - 380) * (W - 16); };
-    text("Visible light, 380 to 750 nm (to scale):", 8, y2 - 6, 0, th.muted);
-    for (int x = 8; x < W - 8; x++) dl->AddRectFilled(P(x, y2), P(x + 1, y2 + 30), lamCol(380 + (x - 8) / (W - 16) * 370, 0.28f));
-    std::vector<SpecLine> vl;
-    for (const SpecLine& l : L) if (l.hi != 0 && l.lam >= 380 && l.lam <= 750) vl.push_back(l);
+    auto VX = [&](double lam) { return 8 + (lam - kVisibleLoNm) / (kVisibleHiNm - kVisibleLoNm) * (W - 16); };
+    text("Visible light, " + fmt::fixed(kVisibleLoNm, 0) + " to " + fmt::fixed(kVisibleHiNm, 0) + " nm (to scale):", 8, y2 - 6, 0, th.muted);
+    for (int x = 8; x < W - 8; x++) dl->AddRectFilled(P(x, y2), P(x + 1, y2 + 30), lamCol(kVisibleLoNm + (x - 8) / (W - 16) * (kVisibleHiNm - kVisibleLoNm), 0.28f));
+    const std::vector<SpecLine> vl = visibleLines(Z, N);
     for (const SpecLine& l : vl) { const double x = VX(l.lam); dl->AddRectFilled(P(x - 1.5, y2), P(x + 1.5, y2 + 30), lamCol(l.lam, 1)); }
     std::vector<SpecLine> sorted = vl;
     std::stable_sort(sorted.begin(), sorted.end(), [](const SpecLine& u, const SpecLine& v) { return v.lam < u.lam; });

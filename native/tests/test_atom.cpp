@@ -251,6 +251,38 @@ static std::string withNewEnergy(std::string line, const AtomLab& lab, const Che
     return line;
 }
 
+// 0.10.6 stage 5: three parts of the readout changed on purpose (words, not physics), so the saved web lines are adapted, each by ONE exact rule, and everything else stays word for word:
+//  1. a new line "model: one electron, non-relativistic ..." (all Z): taken out of the lab's lines before comparing (its content is tested in testRelativityText);
+//  2. the "chance the electron is inside the nucleus" line gets a fixed suffix: cut off (exactly this text) before comparing;
+//  3. "avg r: sampled X, theory T": X is shown only with the full ring of 12,000 dots (kCap) and then with kSampledNote after it; before that the web's number is replaced by the placeholder "…".
+static const std::string kModelPrefix = "model: one electron, non-relativistic";
+static const std::string kNucPrefix = "chance the electron is inside the nucleus";
+static const std::string kNucSuffix = "  ·  non-relativistic estimate: for heavy atoms relativity makes the real value larger, and this lab does not work it out";
+static const std::string kSampledNote = " (an estimate, usually within 10 %)";
+static std::vector<std::string> stripNewParts(const std::vector<std::string>& in, bool& ok) {
+    std::vector<std::string> out;
+    ok = true;
+    for (const std::string& l : in) {
+        if (l.compare(0, kModelPrefix.size(), kModelPrefix) == 0) continue;
+        if (l.compare(0, kNucPrefix.size(), kNucPrefix) == 0) {
+            if (l.size() < kNucSuffix.size() || l.compare(l.size() - kNucSuffix.size(), kNucSuffix.size(), kNucSuffix) != 0) { ok = false; out.push_back(l); }
+            else out.push_back(l.substr(0, l.size() - kNucSuffix.size()));
+            continue;
+        }
+        out.push_back(l);
+    }
+    return out;
+}
+static std::string adaptSampled(std::string web, const AtomLab& lab) {
+    const std::string key = "avg r: sampled ", th = ", theory";
+    const std::size_t a = web.find(key);
+    if (a == std::string::npos) return web;
+    const std::size_t b = web.find(th, a);
+    const std::string x = web.substr(a + key.size(), b - a - key.size());
+    web.replace(a + key.size(), x.size(), lab.s.k >= kCap ? x + kSampledNote : std::string("…"));
+    return web;
+}
+
 static void testRuns() {
     const double sLen = nist::a0 / webval::a0, sSpeed = (nist::a0 / nist::tau) / (webval::a0 / webval::tau);   // CODATA 2022 over the web's value: 1.000334, 1.000383
     int run = 0;
@@ -275,11 +307,13 @@ static void testRuns() {
                 if (ci >= r.checks.size()) break;
                 const Check& c = r.checks[ci++];
                 const std::string w = "run " + std::to_string(run) + " check " + std::to_string(ci);
-                const auto info = lab.info();
+                bool partsOk = true;
+                const auto info = stripNewParts(lab.info(), partsOk);
+                checkTrue(w + " the nucleus line ends with the stage 5 caveat", partsOk);
                 checkNum(w + " info lines", info.size(), c.info.size(), 0);
                 for (std::size_t i = 0; i < info.size() && i < c.info.size(); i++) {
                     std::string eWant, eGot;
-                    const std::string want = withNewEnergy(c.info[i], lab, c, &eWant);
+                    const std::string want = withNewEnergy(adaptSampled(c.info[i], lab), lab, c, &eWant);
                     withNewEnergy(info[i], lab, c, &eGot);   // (only to cut the same parts out of the lab's line: its own energy parts are compared below)
                     checkLine(w + " info " + std::to_string(i), info[i], want);
                     if (!eWant.empty()) {
@@ -368,7 +402,10 @@ static void testLearn() {
         checkStr(w + " isotope line", isotopeLine(r.Z, r.N), r.iso);
         checkStr(w + " element card", elemCardHtml(r.Z) + "<div>" + kTableNote + "</div>", r.card);
         checkStr(w + " facts", factsHtml(r.Z), r.facts);
-        checkStr(w + " spectrum note", spectrumNote(r.Z, r.N), r.spectrum);
+        // 0.10.6 stage 5: the web warned "the true lines are shifted and split noticeably" from Z = 20; the lab now warns from Z = 27 on, like the readout and the hint (finding 6): for 20 <= Z < 27 the web's warning is dropped
+        std::string spectrumWant = r.spectrum;
+        if (r.Z >= 20 && r.Z < 27) { const std::size_t a = spectrumWant.find(" (for "), b = spectrumWant.find("so these are approximate).", a); if (a != std::string::npos && b != std::string::npos) spectrumWant.replace(a, b + 26 - a, "."); }
+        checkStr(w + " spectrum note", spectrumNote(r.Z, r.N), spectrumWant);
         checkStr(w + " temperature", tempStateHtml(r.Z, r.tempK), r.tState);
         checkStr(w + " atom speed", tempSpeedHtml(r.Z, r.tempK), r.tSpeed);
         std::vector<ChainStep> chain;
@@ -1443,6 +1480,107 @@ static void testSuperReadout() {
     checkTrue("readout: the same state twice says so (overlap 100 %)", same.find("(50 % / 50 %)") == std::string::npos && same.find("overlap") != std::string::npos && same.find("100 %") != std::string::npos);
 }
 
+// ================= 0.10.6 stage 5: wrong and misleading text =================
+// Finding 6: ONE relativity line (Z = 27) in the readout, the hint and the spectrum note; "non-relativistic" in the readout at every Z; the nucleus line carries its caveat.
+static void testRelativityText() {
+    int agree = 0; bool nonrel = true, caveat = true, model = true, threshold = true;
+    for (int Z : {1, 19, 20, 26, 27, 92, 118}) {
+        AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+        lab.setParam("Z", double(Z)); lab.setParam("view", std::string("Cloud")); lab.setParam("zoom", 2.0);
+        std::string all; for (const std::string& l : lab.info()) all += l + "\n";
+        const bool warnRead = all.find("1s electron speed:") != std::string::npos, warnHint = lab.hint().find("Heavy atoms: this lab uses non-relativistic physics") != std::string::npos,
+                   warnSpec = spectrumNote(Z, lab.p.N).find("so these are approximate") != std::string::npos, want = Z >= 27;
+        if (warnRead == warnHint && warnHint == warnSpec && warnSpec == want) agree++;
+        else std::printf("  relativity warning at Z = %d: readout %d, hint %d, spectrum note %d (want %d)\n", Z, warnRead, warnHint, warnSpec, want);
+        nonrel = nonrel && all.find("non-relativistic") != std::string::npos;
+        // the nucleus line (s orbital, zoomed in) has its caveat
+        const std::size_t k = all.find(kNucPrefix);
+        caveat = caveat && k != std::string::npos && all.find(kNucSuffix, k) != std::string::npos;
+        // the model line: the Dirac 1s level is deeper than the non-relativistic one by this much (independent: NIST alpha typed in the nist:: block)
+        const double x = Z * nist::alpha, pct = 100 * ((1 - std::sqrt(1 - x * x)) / (0.5 * x * x) - 1);
+        model = model && all.find(kModelPrefix + " (no relativity, fine structure, Lamb shift or spin). For a point nucleus the Dirac equation puts the 1s level " + jsNum(pct, 2) + " % deeper than this lab's.") != std::string::npos;
+    }
+    checkTrue("relativity: the readout, the hint and the spectrum note warn at exactly the same Z (none below 27, all three from 27) for Z = 1, 19, 20, 26, 27, 92, 118", agree == 7);
+    checkTrue("relativity: the word non-relativistic is in the readout at every Z (1, 19, 20, 26, 27, 92, 118)", nonrel);
+    checkTrue("relativity: the model line gives the Dirac-minus-lab 1s difference at every Z, from the lab's own formula", model);
+    checkTrue("relativity: the chance-inside-the-nucleus line says it is a non-relativistic estimate that this lab does not correct", caveat);
+    // the line: the correction to the 1s energy is 0.917 % at Z = 26 and 0.990 % at Z = 27 (about 1 %); (Z alpha)^2 = 0.0388 and v/c = 0.197 at 27
+    auto corr = [](int Z) { const double x = Z * nist::alpha; return 100 * ((1 - std::sqrt(1 - x * x)) / (0.5 * x * x) - 1); };
+    threshold = std::fabs(corr(26) - 0.917) < 0.001 && std::fabs(corr(27) - 0.990) < 0.001 && corr(19) < 0.5 && kRelativityZ == 27 && std::fabs(27 * nist::alpha - 0.197) < 0.001;
+    checkTrue("relativity: the threshold Z = 27 is where the 1s energy is 0.99 % off (0.917 % at 26), Z alpha = 0.197, (Z alpha)^2 = 0.039", threshold);
+}
+
+// Finding 7: the two Learn steps. The text lives in the generator's edit list (tools/native_edits.js, applied by tools/make_atom_learn.js); this checks what the app finally says.
+static void testTimelineText() {
+    const TimelineStep *pauli = nullptr, *stod = nullptr;
+    for (const TimelineStep& st : timelineSteps()) { if (std::string(st.y) == "1925" && std::string(st.t) == "Why electrons form shells") pauli = &st; if (std::string(st.y) == "2013") stod = &st; }
+    checkTrue("timeline: the Pauli and the 2013 steps are there", pauli && stod);
+    if (!pauli || !stod) return;
+    std::string zs, ns; for (const auto& kv : pauli->set) { if (kv.first == "Z") zs = kv.second; if (kv.first == "N") ns = kv.second; }
+    checkTrue("timeline: the Pauli button says it opens a neon nucleus with ONE electron (not 'See neon')", std::string(pauli->lab) == "Open a neon nucleus with one electron" && zs == "10" && ns == "10");
+    checkTrue("timeline: the Pauli text says the lab draws one electron, so it cannot show a full shell (Ne⁹⁺)", std::string(pauli->d).find("The lab draws only one electron, so it cannot show a full shell like this: the button opens a neon nucleus with a single electron (Ne⁹⁺).") != std::string::npos);
+    const std::string d = stod->d;
+    checkTrue("timeline: the 2013 step no longer calls it a direct picture of the quantum cloud, or the same kind of shape", d.find("direct picture") == std::string::npos && d.find("same kind of shape") == std::string::npos && std::string(stod->t).find("Photographing") == std::string::npos);
+    checkTrue("timeline: the 2013 step says a pattern recorded on a detector, not a picture of a cloud like those in the lab, which are worked out from theory",
+              d.find("It is a pattern recorded on a detector, evidence for the electron’s wave, not a picture of a cloud like the ones in this lab: those are worked out from the theory.") != std::string::npos && std::string(stod->t) == "An electron wave, seen on a detector");
+    checkTrue("timeline: the 2013 button says the cloud it opens is worked out from theory", std::string(stod->lab) == "Open a hydrogen cloud (worked out from theory)");
+}
+
+// Finding 13: one visible range (380-780 nm, both ends included) for the spectrum card, the colour code and the photon tag.
+static void testVisibleRange() {
+    bool ok = true;
+    for (double nm : {379.0, 380.0, 381.0, 749.0, 750.0, 751.0, 779.0, 780.0, 781.0}) {
+        const bool vis = nm >= 380 && nm <= 780;                                  // the range, written here again
+        const std::string css = lamColorCss(nm), tag = bandTag(nm);
+        const bool card = isVisibleNm(nm), colour = css.compare(0, 4, "rgb(") == 0, noTag = tag.empty();
+        const Rgb c = lamColor(nm); const bool standIn = (c.r == 0xb0 && c.g == 0x6c && c.b == 0xff) || (c.r == 0xd2 && c.g == 0x4a && c.b == 0x3c);
+        const bool here = card == vis && colour == vis && noTag == vis && standIn == !vis && (vis || tag == (nm < 380 ? " (UV)" : " (IR)"));
+        if (!here) std::printf("  visible range at %.0f nm: card %d, colour %d, tag '%s', stand-in %d (want visible %d)\n", nm, card, colour, tag.c_str(), standIn, vis);
+        ok = ok && here;
+    }
+    checkTrue("visible range: the spectrum card, the line colour and the (UV)/(IR) tag agree at 379, 380, 381, 749, 750, 751, 779, 780, 781 nm", ok);
+    // the card's visible strip: the lines it marks are exactly the lines with a real colour and no tag, for every element
+    bool same = true; long nVis = 0;
+    for (int Z = 1; Z <= 118; Z++) {
+        const auto strip = visibleLines(Z, defaultN(Z));
+        long inColour = 0;
+        for (const SpecLine& l : specLines(Z, defaultN(Z))) if (l.hi != 0 && lamColorCss(l.lam).compare(0, 4, "rgb(") == 0 && std::string(bandTag(l.lam)).empty()) inColour++;
+        same = same && long(strip.size()) == inColour; nVis += inColour;
+        for (const SpecLine& l : strip) same = same && l.lam >= 380 && l.lam <= 780;
+    }
+    checkTrue("visible range: for all 118 elements the lines the card marks as visible are exactly those the colour code draws in real colour", same && nVis > 0);
+}
+
+// Finding 15: "avg r: sampled" only with the full ring of kCap dots, with its honest note; and the sampled average against the exact <r> = a0 (3 n^2 - l (l + 1)) / (2 Z).
+static void testSampledRadius(double guard) {
+    struct C { const char* orb; const char* key; const char* ori; } cs[] = {{"1s", "", ""}, {"2s", "", ""}, {"2p", "pAx", "z"}, {"2p", "pAx", "m+1"}, {"3s", "", ""}, {"3p", "pAx", "z"}, {"3d", "dAx", "z2"}, {"3d", "dAx", "m+2"},
+                                                                  {"4s", "", ""}, {"4d", "dAx", "x2y2"}, {"4f", "fAx", "z3"}, {"4f", "fAx", "m+3"}};
+    double worst = 0, sumd = 0; long n = 0, within10 = 0; bool placeholderOk = true, numberOk = true, noteOk = true;
+    for (const C& c : cs)
+        for (int seed = 1; seed <= 8; seed++) {
+            seedRandom(5000 + seed);
+            AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+            lab.setParam("view", std::string("Cloud")); lab.setParam("orb", std::string(c.orb)); if (*c.key) lab.setParam(c.key, std::string(c.ori));
+            const Orbital& o = orbitals()[orbIndex(c.orb)];
+            const double theory = (3.0 * o.n * o.n - o.l * (o.l + 1)) / 2 * nist::a0;               // <r> for Z = 1, with the NIST Bohr radius typed above
+            for (int i = 0; i < 100; i++) lab.step(1.0 / 240);                                       // 1,600 dots: more than the old 300, fewer than kCap
+            placeholderOk = placeholderOk && lab.s.k > 300 && lab.s.k < kCap && lab.info1().find("sampled …, theory") != std::string::npos;
+            for (int i = 0; i < 700; i++) lab.step(1.0 / 240);                                       // more than kCap dots: the ring is full
+            const long cnt = std::min<long>(lab.s.k, lab.cloudCap());
+            double sum = 0; for (long i = 0; i < cnt; i++) sum += std::hypot(double(lab.s.pts[3 * i]), double(lab.s.pts[3 * i + 1]), double(lab.s.pts[3 * i + 2]));
+            const double d = std::fabs(sum / cnt / theory - 1);
+            worst = std::max(worst, d); sumd += d; n++; if (d < 0.10) within10++;
+            const std::string line = lab.info1();
+            numberOk = numberOk && line.find("sampled …") == std::string::npos && line.find("avg r: sampled ") != std::string::npos;
+            noteOk = noteOk && line.find(kSampledNote + ", theory") != std::string::npos;
+        }
+    std::printf("sampled <r> at the full ring (12,000 dots), %ld labs (12 orbitals x 8 seeds): mean |difference| %.4f, worst %.5f, within 10 %%: %ld of %ld\n", n, sumd / n, worst, within10, n);
+    checkTrue("sampled <r>: below the full ring of kCap dots the readout shows the placeholder, not a number", placeholderOk);
+    checkTrue("sampled <r>: with the full ring the readout shows the number, with the note 'an estimate, usually within 10 %'", numberOk && noteOk);
+    checkTrue("sampled <r>: at kCap dots the sampled average is within the guard of the exact a0 (3n^2 - l(l+1))/2Z (guard = measured worst + 1 %)", worst <= guard);
+    checkTrue("sampled <r>: the stated 'usually within 10 %' holds for at least 95 % of the runs", within10 >= 0.95 * n);
+}
+
 int main() {
     testConstants();
     testOneEnergy();
@@ -1457,6 +1595,12 @@ int main() {
     testSuperNorm(6.69e-4);
     testOverlapDots(0.0591);
     testSuperReadout();
+    testRelativityText();
+    testTimelineText();
+    testVisibleRange();
+    // guard 0.1788 = the worst MEASURED difference of the sampled <r> from the exact value at the full ring, 0.17702 (96 seeded labs: 12 orbitals x 8 seeds), + 1 %; 95 of 96 were within 10 %, mean 0.0311.
+    // BEFORE the fix (same test): the sampled value was shown from 300 dots on (1,600 dots here: a number instead of the placeholder), with no note.
+    testSampledRadius(0.1788);
     testElements();
     testNuclides();
     testFormats();

@@ -477,8 +477,8 @@ std::vector<SpecLine> specLines(int Z, int N) {
 }
 // wavelength (nm) -> colour; UV and IR get stand-in colours
 Rgb lamColor(double l) {
-    if (l < 380) return {0xb0, 0x6c, 0xff};
-    if (l > 780) return {0xd2, 0x4a, 0x3c};
+    if (l < kVisibleLoNm) return {0xb0, 0x6c, 0xff};
+    if (l > kVisibleHiNm) return {0xd2, 0x4a, 0x3c};
     double r = 0, g = 0, b = 0;
     if (l < 440) { r = (440 - l) / 60; b = 1; }
     else if (l < 490) { g = (l - 440) / 50; b = 1; }
@@ -486,16 +486,18 @@ Rgb lamColor(double l) {
     else if (l < 580) { r = (l - 510) / 70; g = 1; }
     else if (l < 645) { r = 1; g = (645 - l) / 65; }
     else r = 1;
-    const double f = l < 420 ? 0.3 + 0.7 * (l - 380) / 40 : l > 700 ? 0.3 + 0.7 * (780 - l) / 80 : 1;
+    const double f = l < 420 ? 0.3 + 0.7 * (l - kVisibleLoNm) / 40 : l > 700 ? 0.3 + 0.7 * (kVisibleHiNm - l) / 80 : 1;   // the dim ends: 40 nm above the low edge, 80 nm below the high one
     auto c = [&](double v) { return static_cast<int>(jsRound(255 * std::pow(v * f, 0.8))); };
     return {c(r), c(g), c(b)};
 }
 std::string lamColorCss(double l) {
-    if (l < 380) return "#b06cff";
-    if (l > 780) return "#d24a3c";
+    if (l < kVisibleLoNm) return "#b06cff";
+    if (l > kVisibleHiNm) return "#d24a3c";
     const Rgb c = lamColor(l);
     return "rgb(" + std::to_string(c.r) + "," + std::to_string(c.g) + "," + std::to_string(c.b) + ")";
 }
+const char* bandTag(double nm) { return nm < 10 ? " (X-ray)" : nm < kVisibleLoNm ? " (UV)" : nm > kVisibleHiNm ? " (IR)" : ""; }
+std::vector<SpecLine> visibleLines(int Z, int N) { std::vector<SpecLine> v; for (const SpecLine& l : specLines(Z, N)) if (l.hi != 0 && isVisibleNm(l.lam)) v.push_back(l); return v; }
 double nuclearR(int A) { return A == 1 ? kNucleonR : 1.2 * std::cbrt(static_cast<double>(A)); }   // r = 1.2 A^(1/3) fm
 
 // ---------------------------------------------------------------- the nucleus

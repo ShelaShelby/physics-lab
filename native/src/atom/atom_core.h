@@ -52,6 +52,13 @@ constexpr double kFm = 1e-15;                         // one femtometre, m (exac
 constexpr double kFmLab = kFm;                        // metres per fm: now just the exact value (the web needed its own conversion, 0.03 % off)
 constexpr double kFmPerA0 = kA0 / kFm;                // femtometres per Bohr radius (52 917.721 054 4)
 constexpr double kNucleonR = 0.84;                    // proton charge radius, fm, ROUNDED: CODATA 2022 gives 0.84075(64) fm (page Value?rp, read 2026-10-04); the web's 0.84 is kept
+// The relativity line (0.10.6 stage 5). The lab is non-relativistic at every Z. From kRelativityZ on the text WARNS that the error is large (readout, hint and spectrum note all use this one number).
+// Why 27: for a point nucleus the Dirac 1s energy mc²(1 − √(1 − (Zα)²)) is above the non-relativistic ½mc²(Zα)² by 0.917 % at Z = 26 and 0.990 % at Z = 27 (about 1 %); there (Zα)² = 0.0388
+// (3.9 %) and the 1s electron moves at Zα = 20 % of the speed of light. Z = 20 is 0.54 % (Zα)² = 0.021. The percentages are the lab's own Dirac formula (the readout compares with it); no source was read.
+constexpr int kRelativityZ = 27;
+// Visible light: ONE range for the whole Atom Lab (the spectrum card, the line colours, the (UV) and (IR) tags, the strip under the picture). 380-780 nm is a CONVENTION this app uses: it is the range of the
+// web version's colour code (lamColor); no source for the range was read (it was 380-750 nm in the spectrum card before 0.10.6 stage 5). Inside it a line is drawn in its real colour, outside in a stand-in.
+constexpr double kVisibleLoNm = 380, kVisibleHiNm = 780;
 constexpr double kYearS = 365.25 * 86400;     // one year, s (web: YEAR_S)
 constexpr double kTRoom = 293.15, kTMax = 6000;   // room temperature and the top of the temperature slider, K
 constexpr int kCap = 12000;                   // cloud dots kept (web: CAP)
@@ -163,6 +170,9 @@ extern const char* const kSeries[6];          // "", "Lyman", "Balmer", ...
 struct Rgb { int r, g, b; };
 Rgb lamColor(double nm);
 std::string lamColorCss(double nm);           // "rgb(r,g,b)" or the web's hex stand-ins
+inline bool isVisibleNm(double nm) { return nm >= kVisibleLoNm && nm <= kVisibleHiNm; }   // inside the visible range (both ends included)
+const char* bandTag(double nm);               // " (X-ray)" below 10 nm, " (UV)" below the visible range, " (IR)" above it, "" inside it
+std::vector<SpecLine> visibleLines(int Z, int N);   // the lines (not the series limits) that fall in visible light: what the spectrum card marks in its visible strip
 double nuclearR(int A);                       // nuclear radius, fm
 
 // ---- the nucleus ----

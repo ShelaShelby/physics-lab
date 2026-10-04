@@ -264,7 +264,7 @@ std::string spectrumNote(int Z, int N) {
     string t = Z == 1 ? "<b>This is hydrogen’s real spectrum:</b> the light it gives off when its electron drops from a higher level to a lower one. The visible lines are the Balmer series (drops to level 2): Hα at " + fmt::fixed(ha, 2) + " nm is the red glow of hydrogen in nebulae."
                       : "<b>The spectrum of " + string(name(Z)) + " with only one electron left (" + ion + ")</b>, the atom on screen. It is real: ions like this glow in very hot plasmas and stars. A normal " + lower(name(Z)) + " atom, with all " + str(Z) + " electrons, has a very different spectrum, which this lab does not model.";
     t += " Each group is a series of drops to one level; its dashed line is the series limit. ▼ = lines your photon jumps made. Vacuum wavelengths, with the nucleus’s real mass. Line heights are not brightness. Not included: fine structure (relativity splits each line slightly: about 0.005 % for hydrogen, much more for heavy ions)";
-    t += Z >= 20 ? " (for " + string(name(Z)) + " the true lines are shifted and split noticeably, so these are approximate)." : string(".");
+    t += Z >= kRelativityZ ? " (for " + string(name(Z)) + " the true lines are shifted and split noticeably, so these are approximate)." : string(".");
     return t;
 }
 

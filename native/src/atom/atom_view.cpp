@@ -831,7 +831,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 pen.to(bx + dx * k + nx * off, by + dy * k + ny * off);
             }
         }
-        const std::string tag = ph.lam < 10 ? " (X-ray)" : ph.lam < 380 ? " (UV)" : ph.lam > 780 ? " (IR)" : "";
+        const std::string tag = bandTag(ph.lam);
         const std::string ptxt = (ph.name.empty() ? "" : ph.name + "  ·  ") + fmtLam(ph.lam) + tag + "  ·  " + fmtEV(ph.E);
         const double hw = T.width(ptxt, 12) / 2 + 8;                       // keep the whole label on the picture
         T.draw(ptxt, std::max(hw, std::min(w - hw, bx + nx * 24)), std::max(96.0, std::min(h - 40, by + ny * 24)), 12, css.fg, 0.5);
@@ -843,7 +843,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         T.draw(wide ? "spectral lines, 0.005–3000 nm (log)" : "spectral lines, 1–3000 nm (log)", sx, sy - 8, 11, css.muted);
         for (int i = 0; i < int(sw); i++) {
             const double lam = std::exp(L0 + i / sw * LS);
-            const bool vis = lam >= 380 && lam <= 780;
+            const bool vis = isVisibleNm(lam);
             R.rect(sx + i, sy, 1, 10, vis ? cssColor(lamColorCss(lam)).withAlpha(0.85f) : withA(css.muted, 0.15));
         }
         for (const SeenLine& L : s.lines) R.rect(sx + clamp01((std::log(L.lam) - L0) / LS) * sw - 1, sy - 3, 2, 16, cssColor(L.col));

@@ -17,6 +17,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.6", "Atom Lab: clearer, more honest words (stage 5)",
+     "The Atom Lab now says \"non-relativistic\" for every atom and warns the same way, from the same atom (cobalt, Z = 27) on, in the readout, the hint and the spectrum note. Visible light is 380 to 780 nm everywhere. "
+     "The average radius from the dots appears only once the cloud is full, and says it is an estimate. Two Learn steps no longer claim more than the lab can show (the neon button, and the 2013 electron-wave picture)."},
     {"0.10.6", "Atom Lab: the right outline, a correct superposition (stage 4)",
      "The thin 90% outline of a complex state (m = +1, +2 ...) now has that state's own shape, a doughnut for 2p with m = +1 (it used to show the dumbbell of the real orbital). A superposition of two states that overlap, such as the same state twice, "
      "is now properly normalised, so its cloud is the right density and all its dots are shown; the line over the picture says when the mixture is renormalised. Other superpositions are unchanged."},

@@ -8,6 +8,11 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Try on the PC (0.10.6 stage 5: Atom Lab words)
+- [ ] Atom Lab, Cloud view, hydrogen: the line over the picture shows "avg r: sampled …" for the first seconds, then the number with "(an estimate, usually within 10 %)"; the new "model: one electron, non-relativistic …" line under ⓘ More reads well and wraps at Extra large text.
+- [ ] Spectrum card: "Visible light, 380 to 780 nm (to scale)"; Learn, Timeline: the Pauli step's button says "Open a neon nucleus with one electron" and opens one electron around neon; the 2013 step reads well and its button opens a hydrogen cloud.
+- [ ] Decide: should the timeline's 2013 step get a real source (the paper could not be reached from the cloud session; you could look it up and tell what it measured)?
+
 ## Try on the PC (0.10.6 stage 4: outline of complex states, superposition norm)
 - [ ] 90% outline On, Cloud 3D, 2p with Orientation "m = +1": the thin outline is a doughnut round the z axis (not a dumbbell). Try 3d "m = +2" and 4f "m = +3" in Cloud, Cloud 3D and Slice too.
 - [ ] Superposition: 2p (px) + second orbital 2p "m = +1": the cloud is one steady shape, all dots there, the line over the picture says "amplitudes … the states overlap by 71 %, so the mixture is renormalised"; moving Mix redraws the cloud. 1s + 2p (pz) must look and behave exactly as before. The longer Superposition note reads well at Extra large text.

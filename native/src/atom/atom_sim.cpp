@@ -789,7 +789,9 @@ std::string AtomLab::info1() {
         const long cnt = std::min<long>(s.k, cloudCap());
         double sum = 0;
         for (long i = 0; i < cnt; i++) sum += std::hypot(double(s.pts[3 * i]), double(s.pts[3 * i + 1]), double(s.pts[3 * i + 2]));
-        const std::string got = cnt > 300 ? fmtLen(sum / cnt * 1e10) : "…";
+        // The dots are ONE correlated Metropolis chain, so their mean radius is a rough estimate: measured over 96 runs at the full ring of kCap = 12,000 dots (12 orbitals, 8 seeds), 99 % were within 10 %
+        // of the exact value below, the worst 17.7 % (0.10.6 stage 5). It is shown only with the full ring (it was 300 dots before), and says so.
+        const std::string got = cnt >= kCap ? fmtLen(sum / cnt * 1e10) + " (an estimate, usually within 10 %)" : "…";
         const std::string th = fmtLen((3.0 * o.n * o.n - o.l * (o.l + 1)) / 2 / p.Z * kA0Ang);   // exact <r> for hydrogen-like atoms
         const double E = levelEV(p.Z, p.N, o.n);   // the same reduced-mass level as the spectrum and Superposition (finding 3 of the 0.10.6 audit)
         return head + "  ·  " + stateText() + " orbital  ·  E −" + fmtEV(-E) + "  ·  avg r: sampled " + got + ", theory " + th;
@@ -823,7 +825,9 @@ std::vector<std::string> AtomLab::info() {
         if (o.l > 0) more.push_back("electron density at the nucleus: 0 (this orbital has a node there)");
         else {
             const double P = 4.0 / 3 * std::pow(p.Z, 3) * std::pow(nucRA0(), 3) / std::pow(o.n, 3);   // ≈ |ψ(0)|² × the nucleus's volume
-            more.push_back("chance the electron is inside the nucleus at any instant: ≈ " + sci(P) + " (1 in " + sci(1 / P) + ")");
+            // P is |psi(0)|² of the NON-relativistic wave times the nucleus's volume. For heavy atoms relativity makes the density at the nucleus of an s electron larger (the Dirac wave is larger there);
+            // this lab does not compute that and gives no correction factor.
+            more.push_back("chance the electron is inside the nucleus at any instant: ≈ " + sci(P) + " (1 in " + sci(1 / P) + ")  ·  non-relativistic estimate: for heavy atoms relativity makes the real value larger, and this lab does not work it out");
         }
     }
     if (p.view == "Slice") lines.push_back("cut plane: " + std::string(p.cutAxis == "Horizontal" ? "z" : "y") + " = " + fmt::fixed(cutOffsetM() * 1e10, 2) + " Å");
@@ -839,7 +843,11 @@ std::vector<std::string> AtomLab::info() {
     }
     more.push_back(tempLine(p.Z));
     more.push_back("layer: " + s.layer + "  ·  this nucleus in real life: " + isoInfo(p.Z, p.N));
-    if (p.Z >= 27) {   // relativity: the 1s electron of a heavy nucleus moves at a large fraction of light speed
+    {   // the model, said at EVERY Z: non-relativistic. The Dirac comparison is the lab's own formula (see kRelativityZ in atom_core.h)
+        const double zx = p.Z * kAlpha, pct = 100 * ((1 - std::sqrt(1 - zx * zx)) / (0.5 * zx * zx) - 1);
+        more.push_back("model: one electron, non-relativistic (no relativity, fine structure, Lamb shift or spin). For a point nucleus the Dirac equation puts the 1s level " + jsNum(pct, 2) + " % deeper than this lab's.");
+    }
+    if (p.Z >= kRelativityZ) {   // relativity: the 1s electron of a heavy nucleus moves at a large fraction of light speed
         const double x = p.Z * kAlpha, model = -levelEV(p.Z, p.N, 1), real = kMecEV * (1 - std::sqrt(1 - x * x));   // Dirac 1s: mc²(√(1−(Zα)²) − 1)
         more.push_back("1s electron speed: " + fmt::fixed(100 * x, 0) + "% of light speed  ·  real 1s energy −" + fmtEV(real) + " vs −" + fmtEV(model) + " in this lab");
     }
@@ -858,7 +866,7 @@ std::vector<std::string> AtomLab::info() {
 std::string AtomLab::hint() const {
     const double x = p.Z * kAlpha;
     std::string note;
-    if (p.Z >= 27) note += " Heavy atoms: this lab uses non-relativistic physics, but a 1s electron here moves at " + fmt::fixed(100 * x, 0) +
+    if (p.Z >= kRelativityZ) note += " Heavy atoms: this lab uses non-relativistic physics, but a 1s electron here moves at " + fmt::fixed(100 * x, 0) +
                            "% of light speed, so the true energy differs. The readout gives the Dirac-equation value for a point nucleus.";
     if (p.zoom >= 4 && p.qstyle != "Classic")
         note += " Quark colours (red, green, blue) are a charge of the strong force, not the up/down flavour: gluons carry colour between quarks, so each keeps changing colour while the three always add up to colourless. The glowing haze is the gluon field, an artistic version of what lattice-QCD calculations show; the quarks themselves are points.";

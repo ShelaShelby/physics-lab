@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.10.6 alpha, stage 4 is finished: the 90 % outline is drawn for the state on screen (`AtomLab::outlineStateId()`, a complex state's own id), and a superposition is normalised for any pair: `overlapAB`/`superNorm2` in atom_core, `psiSuper` divides by the norm only for overlapping pairs (same n and l, non-orthogonal angular parts), which are static, sampled directly with every dot shown; the readout says "amplitudes … renormalised" for them. Orthogonal pairs, saved references and hashes are bit for bit unchanged. Stages 3 (one energy, Orbit sub-steps, Fixed scale), 2 (CODATA 2022 constants) and 1 (audit, `git show 90049fe:native/REPORT.md`) are in git history.
-- Not done, still on the roadmap: audit findings 5-7, 9-13, 15-17 (next: 6 heavy-atom text, 7 timeline texts). Not re-read from a source: the hydrogen-1 atom mass 1.00782503223 u and the proton radius (kept at the web's rounded 0.84 fm). The owner picks the next fix tasks.
+- Version 0.10.6 alpha, stage 5 is finished (words only): one relativity line `kRelativityZ = 27` (readout, hint and spectrum note; a "model: … non-relativistic" line at every Z; a caveat on the nucleus-probability line), the Pauli and 2013 Learn steps reworded through the generator's edit list (`tools/native_edits.js` + `make_atom_learn.js`; regenerate with `node native/tools/make_atom_learn.js`), one visible range 380–780 nm (`kVisibleLoNm/HiNm`, `isVisibleNm`, `bandTag`, `visibleLines`), and "avg r: sampled" only at 12,000 dots with the note "usually within 10 %". Stages 4 (outline, superposition norm), 3, 2 (CODATA 2022) and 1 (audit, `git show 90049fe:native/REPORT.md`) are in git history.
+- Not done, still on the roadmap: audit findings 5 (deuterium/tritium mass), 9-12, 16, 17. The 2013 experiment's real content was NOT sourced (all hosts refused): the step claims only what the web text said. Not re-read from a source: the hydrogen-1 atom mass 1.00782503223 u and the proton radius (0.84 fm). The owner picks the next fix tasks.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 18,098
+  - atom_tests: 18,147
   - app_tests: 1,385
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
