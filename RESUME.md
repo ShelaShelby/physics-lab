@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.11 alpha, stage 3 of 4 is finished: the chart of nuclides as a landscape. New `atom/chart_view.h/.cpp` (pure logic: `chartHeightOf` = the stated log10 mapping, `ChartProjection`, `ChartScene` = blocks in a fixed painter's order, `pick` = the topmost drawn block, `clamped` = zoom and pan limits); `chart_draw.cpp` has `drawChartScene` (the landscape) beside stage 2's `drawChart`, which is still used when the view is exactly flat (tilt 0, zoom 1, no pan). State: `AtomState::chartView` (tilt, zoom, pan; not saved, default flat); `AtomLab::setChartTilt/chartZoomAt/chartPan/chartReset/chartScene`; `setParam("tilt")`; the panel slider, the wheel in `main.cpp`. Height scale 10^-23 s .. 10^32 s, 12 tiles per scale height, stable plateau 1.1; benchmark scene 17 (the number the owner sees: 20). Stage 4 (what the height can mean, the island of stability) is not started. Stages 1-2 and all of 0.10.9 stand unchanged.
+- Version 0.11 alpha is finished (stage 4 of 4): the chart of nuclides is flat, a landscape with two choices of height, with the valley (measured) named and the island of stability stated as a prediction and not drawn. New: `atom/ame.h/.cpp` + `ame_data.inc` (AME2020 binding energy per nucleon with the '#' estimate flag; tools/make_ame_data.py; data/ame), `chart_view.h` (`ChartHeightMode`, `chartHeightFromBinding`, `kBindingTopKeV` 9000 and `kBindingCells` 28, the words), `chart.h` (`chartValleyAnchor` = the median stable tile, `chartHeaviestZ`, the valley / island / heaviest words), `chart_draw.cpp` (`drawNotes` labels placed where they cover nothing, `drawNotesBox`). State: `ChartViewState::height`, `setParam("cheight")` (not saved); the fit no longer depends on the height mode. Benchmark scene 18 (the owner sees 21). The island: NO source could be read (every host answered 403), so no region and no predicted number are drawn or quoted; the lab's own unsourced constants kMagicN 184 / kMagicZ 114 in atom_data.inc are NOT used for it. Stages 1-3 and all of 0.10.9 stand, except what REPORT.md lists as moved on purpose.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 19,061
-  - app_tests: 1,532
+  - atom_tests: 19,106
+  - app_tests: 1,538
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)
   - moon_tests: 24 (new in 0.10.4 stage 1: the ELP2000-82B Moon against the Horizons Moon table; takes about 12 s)

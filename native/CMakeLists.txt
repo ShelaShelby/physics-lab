@@ -54,6 +54,7 @@ add_library(atom_core STATIC
   src/atom/radii.cpp
   src/atom/quadrupole.cpp
   src/atom/nubase.cpp
+  src/atom/ame.cpp
   src/atom/chart.cpp
   src/atom/chart_view.cpp
 )

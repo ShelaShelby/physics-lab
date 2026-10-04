@@ -3,9 +3,12 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <string>
 
+#include "ame.h"
 #include "atom_core.h"
 #include "nubase.h"
 
@@ -51,28 +54,72 @@ ChartHeight computeHeight(int Z, int N) {
     return {chartHeightFromHalfLife(*d->T), (*c)[0] == '~' ? HeightKind::Approx : HeightKind::Measured};
 }
 
-const std::vector<ChartHeight>& heights() {            // aligned with chartTiles()
-    static const std::vector<ChartHeight> v = [] { std::vector<ChartHeight> r; for (const ChartTile& t : chartTiles()) r.push_back(computeHeight(t.Z, t.N)); return r; }();
-    return v;
+ChartHeight computeBindingHeight(int Z, int N) {
+    const AmeRow* r = ame(Z, N);
+    if (!r) return {0, HeightKind::Unknown};
+    if (r->est) return {0, HeightKind::Extrapolated};                       // AME2020 only estimates it: no height
+    return {chartHeightFromBinding(r->bindPerA), HeightKind::Measured};
+}
+
+const std::vector<ChartHeight>& heights(ChartHeightMode m = ChartHeightMode::HalfLife) {   // aligned with chartTiles(), one table per mode, each built once
+    static const std::vector<ChartHeight> half = [] { std::vector<ChartHeight> r; for (const ChartTile& t : chartTiles()) r.push_back(computeHeight(t.Z, t.N)); return r; }();
+    static const std::vector<ChartHeight> bind = [] { std::vector<ChartHeight> r; for (const ChartTile& t : chartTiles()) r.push_back(computeBindingHeight(t.Z, t.N)); return r; }();
+    return m == ChartHeightMode::Binding ? bind : half;
 }
 }  // namespace
 
-ChartHeight chartHeightOf(int Z, int N) {
+ChartHeight chartHeightOf(int Z, int N, ChartHeightMode m) {
     const std::vector<ChartTile>& t = chartTiles();
     const auto it = std::lower_bound(t.begin(), t.end(), std::make_pair(Z, N), [](const ChartTile& a, const std::pair<int, int>& k) { return a.Z != k.first ? a.Z < k.first : a.N < k.second; });
     if (it == t.end() || it->Z != Z || it->N != N) return {0, HeightKind::Unknown};
-    return heights()[std::size_t(it - t.begin())];
+    return heights(m)[std::size_t(it - t.begin())];
 }
-int chartHeightCount(HeightKind k) {
-    static const std::vector<int> n = [] { std::vector<int> a(7, 0); for (const ChartHeight& h : heights()) a[int(h.kind)]++; return a; }();
-    return n[int(k)];
+int chartHeightCount(HeightKind k, ChartHeightMode m) {
+    static const std::vector<int> n[2] = {[] { std::vector<int> a(7, 0); for (const ChartHeight& h : heights(ChartHeightMode::HalfLife)) a[int(h.kind)]++; return a; }(),
+                                          [] { std::vector<int> a(7, 0); for (const ChartHeight& h : heights(ChartHeightMode::Binding)) a[int(h.kind)]++; return a; }()};
+    return n[int(m)][int(k)];
 }
-const char* chartHeightWords() {
+double chartHeightFromBinding(double keV) {
+    if (!(keV > 0)) return 0;
+    return std::min(1.0, keV / kBindingTopKeV);
+}
+double chartHeightTiles(ChartHeightMode m) { return m == ChartHeightMode::Binding ? kBindingCells : kHeightCells; }
+namespace {
+std::string withCommas(double v, int decimals) {
+    char buf[64]; std::snprintf(buf, sizeof buf, "%.*f", decimals, v);
+    std::string s = buf, frac;
+    const std::size_t dot = s.find('.'); if (dot != std::string::npos) { frac = s.substr(dot); s = s.substr(0, dot); }
+    for (int i = int(s.size()) - 3; i > 0; i -= 3) s.insert(std::size_t(i), ",");
+    return s + frac;
+}
+// The words for the binding height. Every number in them is read from the table (the peak, the next two, the counts, the heaviest measured Z); only the top of the scale is a chosen number.
+std::string bindingWords(bool brief) {
+    const std::vector<const AmeRow*> top = ameHighestN(3);
+    const auto nm = [](const AmeRow* r) { std::string n = name(r->Z); n[0] = char(std::tolower(static_cast<unsigned char>(n[0]))); return n + "-" + std::to_string(r->Z + r->N); };
+    std::string peak = nm(top[0]);
+    if (brief) return "Height: binding energy per nucleon, 0 to " + withCommas(kBindingTopKeV, 0) + " keV; highest in the data " + peak + "; pale flat = estimate only.";
+    return "Height: the binding energy per nucleon (AME2020), a linear scale from 0 (flat) to " + withCommas(kBindingTopKeV, 0) + " keV (the top). The highest value in the data is " + peak + ", " + withCommas(top[0]->bindPerA, 2) +
+           " keV, then " + nm(top[1]) + " and " + nm(top[2]) + ". Fusing nuclei that lie below the peak releases energy; splitting nuclei above it does. A flat pale square has only an estimated value (" +
+           std::to_string(ameCount() - ameMeasuredCount()) + " nuclides): AME2020 has no measured mass above Z = " + std::to_string(ameHeaviestMeasuredZ()) + ".";
+}
+}  // namespace
+
+std::string chartBindingPeakLabel() {
+    const AmeRow& r = ameHighest();
+    std::string n = name(r.Z); n[0] = char(std::tolower(static_cast<unsigned char>(n[0])));
+    return "peak of the data: " + n + "-" + std::to_string(r.Z + r.N) + ", " + withCommas(r.bindPerA, 2) + " keV per nucleon";
+}
+
+const char* chartHeightWords(ChartHeightMode m) {
+    if (m == ChartHeightMode::Binding) { static const std::string w = bindingWords(false); return w.c_str(); }
     return "Height: the log of the half-life, a scale chosen for this picture, not a measurement. Each step up is ten times longer, from 10^-23 s (flat) to 10^32 s (the top). "
            "Stable nuclides have no half-life: all stand at one fixed height above the top, so they read as no decay seen, not as a long number. A pale block is only a limit or an approximate value. "
            "A pale flat square has only an extrapolated half-life and a hollow one has none: no height is invented for them.";
 }
-const char* chartHeightShort() { return "Height: log10 of the half-life, 10^-23 s to 10^32 s; stable = one fixed height above; pale = limit or approximate; flat pale or hollow = unknown."; }
+const char* chartHeightShort(ChartHeightMode m) {
+    if (m == ChartHeightMode::Binding) { static const std::string w = bindingWords(true); return w.c_str(); }
+    return "Height: log10 of the half-life, 10^-23 s to 10^32 s; stable = one fixed height above; pale = limit or approximate; flat pale or hollow = unknown.";
+}
 
 // ---------------------------------------------------------------- the projection
 void ChartProjection::map(double a, double b, double z, double& sx, double& sy, double& depth) const {
@@ -141,7 +188,7 @@ void ChartScene::build(double w, double h, const ChartViewState& in) {
     const auto corner = [&](const ChartProjection& pr, double a, double b, double z, float* out) { double sx, sy, d; pr.map(a, b, z, sx, sy, d); out[0] = float(sx); out[1] = float(sy); };
     for (std::size_t k = 0; k < order.size(); k++) {
         const ChartTile& t = tiles[std::size_t(order[k])];
-        const ChartHeight ch = heights()[std::size_t(order[k])];
+        const ChartHeight ch = heights(st.height)[std::size_t(order[k])];
         ChartBlock& B = blocks_[k];
         B.Z = t.Z; B.N = t.N; B.cls = t.cls; B.kind = ch.kind; B.h = ch.h;
         const double a0 = L_.x(t.N), a1 = a0 + L_.cell, b0 = L_.y(t.Z), b1 = b0 + L_.cell, H = heightPoints(ch.h);
@@ -150,9 +197,17 @@ void ChartScene::build(double w, double h, const ChartViewState& in) {
         const double fb[4][3] = {{a0, b1, 0}, {a1, b1, 0}, {a1, b1, H}, {a0, b1, H}}, fa[4][3] = {{a1, b0, 0}, {a1, b1, 0}, {a1, b1, H}, {a1, b0, H}};
         for (int i = 0; i < 4; i++) { corner(raw, fb[i][0], fb[i][1], fb[i][2], B.faceB + 2 * i); corner(raw, fa[i][0], fa[i][1], fa[i][2], B.faceA + 2 * i); }
         B.sides = !P.flat && H * P.sinP > 0.05;
-        const int nq = B.sides ? 3 : 1;
-        const float* qs[3] = {B.top, B.faceB, B.faceA};
-        for (int q = 0; q < nq; q++) for (int i = 0; i < 4; i++) { minx = std::min<double>(minx, qs[q][2 * i]); maxx = std::max<double>(maxx, qs[q][2 * i]); miny = std::min<double>(miny, qs[q][2 * i + 1]); maxy = std::max<double>(maxy, qs[q][2 * i + 1]); }
+    }
+    // The fit uses the box the landscape can fill, not the heights of the blocks: the whole grid up to the tallest height either height mode can reach (the larger of the two), so switching what the height
+    // means (stage 4) does not rescale or move the picture, only the blocks' heights change.
+    {
+        const double hMax = std::max(kStableHeight * chartHeightTiles(ChartHeightMode::HalfLife), 1.0 * chartHeightTiles(ChartHeightMode::Binding)) * L_.cell;
+        const double ga = L_.x(0), gb = L_.y(L_.zMax), ga1 = L_.x(L_.nMax) + L_.cell, gb1 = L_.y(1) + L_.cell;
+        const double cs[4][2] = {{ga, gb}, {ga1, gb}, {ga1, gb1}, {ga, gb1}};
+        for (int c = 0; c < 4; c++) for (double z : {0.0, hMax}) {
+            float q[2]; corner(raw, cs[c][0], cs[c][1], z, q);
+            minx = std::min<double>(minx, q[0]); maxx = std::max<double>(maxx, q[0]); miny = std::min<double>(miny, q[1]); maxy = std::max<double>(maxy, q[1]);
+        }
     }
     // fit: the whole landscape inside the room the layout leaves (the flat chart already fits, so s = 1 at tilt 0), centred more and more as the tilt grows
     const double aw = std::max(10.0, w - L_.left - L_.right), ah = std::max(10.0, h - L_.top - L_.bottom);

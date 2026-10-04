@@ -17,6 +17,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.11", "Atom Lab: what the height means, and the valley and the island of stability (stage 4 of 4)",
+     "The Chart of nuclides has a new choice, Height means. Besides the half-life it can now be the binding energy per nucleon, the quantity behind the whole chart: it rises steeply from hydrogen, reaches its highest value in the data at nickel-62 (8,794.56 keV per nucleon, with iron-58 and iron-56 next; the app reads this from the table, it is not typed in), and falls slowly towards uranium. That is why fusing light nuclei releases energy and splitting heavy ones does. The scale is linear from 0 to 9,000 keV per nucleon, and the legend says which height is in use. "
+     "The numbers are from the 2020 atomic mass evaluation (AME2020). It marks 1,008 of the 3,557 nuclides as estimates, not measurements, including every nuclide above Z = 110, so those are drawn flat and pale and never as a height. "
+     "Switching the height changes nothing else: the colours, the magic-number bands, the hover text and the chosen nuclide stay exactly as they were. "
+     "The chart now names the valley of stability, the band of stable nuclides that the data already shows, and says it is measured. It also marks the heaviest known nuclides (Z = 118) and says that nothing has been observed beyond them. "
+     "The island of stability is a prediction: theory expects a region of superheavy nuclides beyond the heaviest known that might live much longer than their neighbours. The app says so plainly and draws nothing there, because no source for where it lies could be reached from the project's tools; it says only that where it lies is disputed. "
+     "This finishes the chart of nuclides (version 0.11)."},
     {"0.11", "Atom Lab: the chart of nuclides as a landscape (stage 3 of 4)",
      "The Chart of nuclides view has a new Tilt slider. At 0 it is exactly the flat chart of the last version; as you move it up, the chart turns into a landscape seen from a fixed isometric angle, and every nuclide becomes a block whose height is its half-life. The stable nuclides stand in a ridge along the middle, and the short-lived ones fall away on both sides like a shore. "
      "The height is a chosen scale, not a measurement: the logarithm of the half-life, from 10^-23 seconds (flat) to 10^32 seconds (the top), where each step up is ten times longer; the legend says so. Stable nuclides have no half-life, so they all stand at one fixed height above the top of the scale, meaning no decay seen, not a long number. "

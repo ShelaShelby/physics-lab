@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
+#include <string>
 
 #include "atom_core.h"
 #include "nubase.h"
@@ -78,6 +80,32 @@ const char* chartMagicWords() {
 }
 
 const char* chartMagicShort() { return "Lines: the magic numbers 2, 8, 20, 28, 50, 82, 126, where a nuclear shell is full (held unusually tightly)."; }
+
+ChartTile chartValleyAnchor() {
+    static const ChartTile t = [] {
+        std::vector<ChartTile> s;
+        for (const ChartTile& x : chartTiles()) if (x.cls == ChartClass::Stable) s.push_back(x);      // already in order of Z, then N
+        return s[s.size() / 2];
+    }();
+    return t;
+}
+int chartHeaviestZ() { static const int z = [] { int m = 0; for (const ChartTile& t : chartTiles()) m = std::max<int>(m, t.Z); return m; }(); return z; }
+std::vector<ChartTile> chartHeaviestTiles() { std::vector<ChartTile> v; for (const ChartTile& t : chartTiles()) if (t.Z == chartHeaviestZ()) v.push_back(t); return v; }
+const char* chartValleyWords() {
+    return "Valley of stability: the narrow band of stable and very long-lived nuclides (the black tiles, the ridge in the landscape) that runs through the whole chart. It is measured, not predicted: "
+           "nuclides on either side decay back towards it.";
+}
+const char* chartValleyShort() { return "Valley of stability: the band of stable nuclides (measured)."; }
+const char* chartIslandWords() {
+    static const std::string w = "Island of stability: a PREDICTION, not something seen. Theory expects a region of superheavy nuclides beyond the heaviest known (Z = " + std::to_string(chartHeaviestZ()) +
+        ") that might live far longer than their neighbours. None of them has been observed, and where it lies is disputed. This lab has no sourced prediction to draw, so nothing is drawn there.";
+    return w.c_str();
+}
+const char* chartIslandShort() {
+    static const std::string w = "Island of stability: a prediction, not seen, beyond Z = " + std::to_string(chartHeaviestZ()) + "; not drawn (no sourced prediction).";
+    return w.c_str();
+}
+std::string chartHeaviestLabel() { return "heaviest known: Z = " + std::to_string(chartHeaviestZ()) + " (" + [] { std::string n = name(chartHeaviestZ()); n[0] = char(std::tolower(static_cast<unsigned char>(n[0]))); return n; }() + "); nothing observed beyond"; }
 
 ChartLayout chartLayout(double w, double h) {
     ChartLayout L;

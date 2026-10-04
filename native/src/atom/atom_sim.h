@@ -189,7 +189,7 @@ public:
     void setChartTilt(double t);
     void chartZoomAt(double factor, double px, double py);
     void chartPan(double dx, double dy);
-    void chartReset() { s.chartView = ChartViewState(); }
+    void chartReset() { const ChartHeightMode m = s.chartView.height; s.chartView = ChartViewState(); s.chartView.height = m; }   // (the choice of what the height means is kept)
     const ChartScene& chartScene() const;                 // the blocks for the picture's size and the view (rebuilt only when one of them changed)                       // an arrow key in the chart: one proton or one neutron, only onto an observed nuclide
     void click(double x, double y);                       // picture points
     void drag(double dx, double dy, bool forceMove);      // forceMove: Shift, right or middle button

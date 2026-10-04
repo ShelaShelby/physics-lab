@@ -24,6 +24,7 @@
 #include "atom/atom_sim.h"
 #include "atom/chart.h"
 #include "atom/chart_view.h"
+#include "atom/ame.h"
 #include "atom/nubase.h"
 #include "atom/outline.h"
 #include "atom/phase_wheel.h"
@@ -1739,7 +1740,7 @@ static RayHit rayCast(const ChartScene& S, double px, double py) {
     const double p0[3] = {a0, b0, z0}, dv[3] = {a1 - a0, b1 - b0, z1 - z0};
     RayHit best;
     for (const ChartTile& t : chartTiles()) {
-        const double lo3[3] = {L.x(t.N), L.y(t.Z), -1e-6}, hi3[3] = {L.x(t.N) + L.cell, L.y(t.Z) + L.cell, S.heightPoints(chartHeightOf(t.Z, t.N).h) + 1e-6};
+        const double lo3[3] = {L.x(t.N), L.y(t.Z), -1e-6}, hi3[3] = {L.x(t.N) + L.cell, L.y(t.Z) + L.cell, S.heightPoints(chartHeightOf(t.Z, t.N, S.mode()).h) + 1e-6};
         double lo = -1e300, hi = 1e300; bool miss = false;
         for (int k = 0; k < 3 && !miss; k++) {
             if (std::fabs(dv[k]) < 1e-12) { if (p0[k] < lo3[k] || p0[k] > hi3[k]) miss = true; continue; }
@@ -1826,7 +1827,8 @@ static void testChartLandscape() {
         ChartScene F; F.build(900, 700, ChartViewState()); int diff = 0, seen = 0;
         for (double py = 3.3; py < 700; py += 5.3) for (double px = 2.7; px < 900; px += 5.3) {
             int z1 = 0, n1 = 0, z2 = 0, n2 = 0; const bool a = chartTileAt(L, px, py, z1, n1), b = F.pick(px, py, z2, n2);
-            if (a != b || (a && (z1 != z2 || n1 != n2))) diff++; if (a) seen++;
+            if (a != b || (a && (z1 != z2 || n1 != n2))) diff++;
+            if (a) seen++;
         }
         checkTrue("landscape tilt 0: the scene's hit test and stage 2's grid lookup agree at every point of a 5.3-point grid (about 20,000 points, about 3,000 on tiles)", diff == 0 && seen > 2500);
     }
@@ -2028,6 +2030,204 @@ static void testChartLandscape() {
         }
         checkNum("landscape drawing: legend boxes drawn (4 sizes x 3 tilts)", boxes, 12, 0);
         checkNum("landscape drawing: legend boxes whose area meets a block's bounding box, 4 window sizes x 3 tilts", covered, 0, 0);
+    }
+}
+
+// -------------------------------------------------------------------------------------------------------------------------------------------------------------
+// 0.11 stage 4: a second height (binding energy per nucleon, AME2020), the valley and the island. REFERENCES are not the lab's own output: (1) rows typed from data/ame/mass.mas20.txt (AME2020, fetched
+// 2026-10-04) read by hand with grep/awk: 12 nuclides' binding energy per nucleon and uncertainty, the count of rows (3,557) and of "#" estimates (1,008), the heaviest measured Z (110), the three highest
+// measured values; (2) the lab's OWN binding table (kBeaLines, through massBinding) compared with the file for all 3,557 nuclides; (3) the height mapping by hand: keV / 9,000; (4) the median stable tile
+// worked out separately (251 stable tiles in order of Z then N, element 125: Z 47, N 62); (5) the same ray caster as stage 3. Guards are exact counts or stated tolerances.
+static std::string joinLines(const RecText& T) { std::string a; for (const std::string& l : T.lines) a += l + "\n"; return a; }
+static bool hasDigitsOtherThan(const std::string& text, const std::string& allowed) {          // every run of digits in the text must be the allowed one
+    for (std::size_t i = 0; i < text.size();) { if (std::isdigit(static_cast<unsigned char>(text[i]))) { std::size_t j = i; while (j < text.size() && std::isdigit(static_cast<unsigned char>(text[j]))) j++; if (text.substr(i, j - i) != allowed) return true; i = j; } else i++; }
+    return false;
+}
+static void testChartBinding() {
+    // ---- the AME2020 table
+    checkNum("binding: AME2020 rows with Z >= 1 in the file (counted from the file) = the table = the chart's tiles", ameCount() * 1.0, 3557, 0);
+    checkNum("binding: values the file marks '#' (estimated, non-experimental), counted from the file: 1,008; the rest, 2,549, come from measured masses", ameCount() - ameMeasuredCount(), 1008, 0);
+    checkNum("binding: measured values in the table", ameMeasuredCount(), 2549, 0);
+    struct AR { int Z, N; double b, u; int est; };
+    static const AR ar[] = {{1, 0, 0.0, 0.0, 0}, {1, 1, 1112.2831, 0.0002, 0}, {2, 2, 7073.9156, 0.0002, 0}, {6, 6, 7680.1446, 0.0002, 0}, {8, 8, 7976.2072, 0.0002, 0}, {24, 30, 8777.9672, 0.0025, 0}, {26, 30, 8790.3563, 0.0048, 0},
+                            {26, 32, 8792.2534, 0.0055, 0}, {28, 34, 8794.5555, 0.0069, 0}, {28, 36, 8777.4637, 0.0072, 0}, {92, 146, 7570.1262, 0.0063, 0}, {110, 160, 7253.7634, 0.1455, 0},
+                            {118, 176, 7079.0, 2.0, 1}, {3, 0, -2267.0, 667.0, 1}, {5, 1, -467.0, 334.0, 1}};
+    int badRow = 0; for (const AR& r : ar) { const AmeRow* a = ame(r.Z, r.N); if (!a || std::fabs(a->bindPerA - r.b) > 1e-9 || std::fabs(a->unc - r.u) > 1e-9 || a->est != r.est) badRow++; }
+    checkNum("binding: typed AME2020 rows (15 nuclides: H-1 ... U-238, Ds-270, Og-294, Li-3, B-6) whose value, uncertainty or estimate mark differs from the table", badRow, 0, 0);
+    int est1 = 0, noRow = 0; for (int z = 111; z <= 118; z++) for (const ChartTile& t : chartTiles()) if (t.Z == z) { const AmeRow* a = ame(t.Z, t.N); if (!a) noRow++; else if (!a->est) est1++; }
+    checkTrue("binding: the heaviest Z with a measured value is 110 (the file), and every nuclide of Z 111-118 in the chart has only an estimate", ameHeaviestMeasuredZ() == 110 && est1 == 0 && noRow == 0 && !ame(110, 160)->est && ame(110, 160) && ame(111, 160) == nullptr);
+    {   // the peak, READ from the table: the three highest measured values (typed from the file: Ni-62 8794.5555, Fe-58 8792.2534, Fe-56 8790.3563)
+        const std::vector<const AmeRow*> top = ameHighestN(3);
+        checkTrue("binding: the highest measured value in the table is Z 28, N 34 (nickel-62), 8794.5555 keV, then Z 26, N 32 (iron-58) and Z 26, N 30 (iron-56)", top.size() == 3 && top[0]->Z == 28 && top[0]->N == 34 && top[1]->Z == 26 && top[1]->N == 32 && top[2]->Z == 26 &&
+                  top[2]->N == 30 && std::fabs(top[0]->bindPerA - 8794.5555) < 1e-9 && std::fabs(top[1]->bindPerA - 8792.2534) < 1e-9 && std::fabs(top[2]->bindPerA - 8790.3563) < 1e-9 && &ameHighest() == top[0]);
+        double best = -1; int bz = 0, bn = 0; for (const ChartTile& t : chartTiles()) { const ChartHeight h = chartHeightOf(t.Z, t.N, ChartHeightMode::Binding); if (h.kind == HeightKind::Measured && h.h > best) { best = h.h; bz = t.Z; bn = t.N; } }
+        checkTrue("binding: the tallest measured block of the binding landscape is the same nuclide (found by scanning the heights, not the table's helper)", bz == 28 && bn == 34 && std::fabs(best - 8794.5555 / 9000) < 1e-12);
+    }
+    {   // the lab's own table agrees with the file: whole keV per nucleon, so within 0.5 keV for every measured value; one estimate (Z 19, N 36) differs by a whole keV
+        int over = 0, overMeasured = 0; double worstMeasured = 0, worstAll = 0;
+        for (const ChartTile& t : chartTiles()) {
+            const double lab = massBinding(t.Z, t.N).B * 1000.0 / (t.Z + t.N), d = std::fabs(lab - ame(t.Z, t.N)->bindPerA);
+            worstAll = std::max(worstAll, d); if (!ame(t.Z, t.N)->est) worstMeasured = std::max(worstMeasured, d);
+            if (d > 0.5 + 1e-6) { over++; if (!ame(t.Z, t.N)->est) overMeasured++; }
+        }
+        checkTrue("binding: the lab's own binding table (massBinding) agrees with AME2020 for all 2,549 measured values to 0.5 keV per nucleon (worst measured 0.4998: rounding to whole keV) and differs by 1 keV in exactly one estimate",
+                  overMeasured == 0 && worstMeasured < 0.5 && over == 1 && std::fabs(worstAll - 1.0) < 1e-6 && std::fabs(massBinding(19, 36).B * 1000.0 / 55 - 7793) < 1e-6);
+    }
+    // ---- the mapping, by hand: keV / 9,000, linear, cut to 0 .. 1
+    struct BH { double kev, h; };
+    static const BH bh[] = {{0, 0}, {4500, 0.5}, {9000, 1}, {10000, 1}, {-100, 0}, {-2267, 0}, {8794.5555, 0.9771728333333333}, {7570.1262, 0.8411251333333333}, {7073.9156, 0.7859906222222222}, {1112.2831, 0.12358701111111111}, {900, 0.1}};
+    int badB = 0; for (const BH& k : bh) if (std::fabs(chartHeightFromBinding(k.kev) - k.h) > 1e-12) badB++;
+    checkNum("binding height: values of keV per nucleon (11, from below 0 to above the top) whose height differs from keV / 9,000 cut to 0..1 by more than 1e-12", badB, 0, 0);
+    checkTrue("binding height: the scale is linear (equal steps of 900 keV add 0.1), per NUCLEON (U-238, 7,570 keV, is below Ni-62, 8,795 keV, though it has 3.8 times as many nucleons), 0 to 9,000 keV, 28 tiles per scale height",
+              std::fabs(chartHeightFromBinding(1800) - chartHeightFromBinding(900) - 0.1) < 1e-12 && std::fabs(chartHeightFromBinding(7200) - chartHeightFromBinding(6300) - 0.1) < 1e-12 && kBindingTopKeV == 9000 && kBindingCells == 28 &&
+                  chartHeightOf(92, 146, ChartHeightMode::Binding).h < chartHeightOf(28, 34, ChartHeightMode::Binding).h);
+    struct TH { int Z, N; HeightKind k; double h; const char* what; };
+    static const TH th[] = {{2, 2, HeightKind::Measured, 0.7859906222222222, "He-4"}, {28, 34, HeightKind::Measured, 0.9771728333333333, "Ni-62, the peak"}, {92, 146, HeightKind::Measured, 0.8411251333333333, "U-238"}, {1, 0, HeightKind::Measured, 0, "H-1: measured, exactly 0 (nothing bound)"},
+                            {1, 1, HeightKind::Measured, 0.12358701111111111, "H-2"}, {118, 176, HeightKind::Extrapolated, 0, "Og-294: AME2020 only estimates it: no height"}, {3, 0, HeightKind::Extrapolated, 0, "Li-3: estimate, negative: no height"},
+                            {110, 160, HeightKind::Measured, 0.8059737111111111, "Ds-270: the heaviest nuclide with a measured value"}, {111, 161, HeightKind::Extrapolated, 0, "Rg-272: heavier than any measured mass: no height"}, {2, 0, HeightKind::Unknown, 0, "He-2: not a nuclide, no row: no height"}};
+    for (const TH& k : th) { const ChartHeight c = chartHeightOf(k.Z, k.N, ChartHeightMode::Binding); checkTrue(std::string("binding height: ") + k.what, c.kind == k.k && std::fabs(c.h - k.h) < 1e-12); }
+    {
+        int estWithHeight = 0, measuredNoHeight = 0, over = 0; for (const ChartTile& t : chartTiles()) { const ChartHeight c = chartHeightOf(t.Z, t.N, ChartHeightMode::Binding); const bool est = ame(t.Z, t.N)->est; if (est && (c.h != 0 || c.kind != HeightKind::Extrapolated)) estWithHeight++; if (!est && c.kind != HeightKind::Measured) measuredNoHeight++; if (c.h < 0 || c.h > 1) over++; }
+        checkNum("binding height: estimated nuclides drawn with a height (they get none), measured ones without a block, or heights outside 0..1", estWithHeight + measuredNoHeight + over, 0, 0);
+        checkTrue("binding height: kinds are 2,549 measured, 1,008 extrapolated (flat pale), 0 unknown; the half-life mode's counts are untouched (2,720 measured)", chartHeightCount(HeightKind::Measured, ChartHeightMode::Binding) == 2549 && chartHeightCount(HeightKind::Extrapolated, ChartHeightMode::Binding) == 1008 &&
+                  chartHeightCount(HeightKind::Unknown, ChartHeightMode::Binding) == 0 && chartHeightCount(HeightKind::Measured) == 2720 && chartHeightCount(HeightKind::Stable) == 182);
+    }
+    // ---- the words say which height is in use and what it means; every number in them is the table's
+    {
+        const std::string bw = chartHeightWords(ChartHeightMode::Binding), bs = chartHeightShort(ChartHeightMode::Binding), hw = chartHeightWords(ChartHeightMode::HalfLife), pk = chartBindingPeakLabel();
+        bool ok = true; for (const char* x : {"Height: the binding energy per nucleon (AME2020)", "linear", "9,000 keV", "nickel-62", "8,794.56 keV", "iron-58", "iron-56", "Fusing nuclei that lie below the peak releases energy", "1008", "Z = 110"}) if (bw.find(x) == std::string::npos) { ok = false; std::printf("  missing: %s\n", x); }
+        checkTrue("binding words: the legend sentence says it is the binding energy per nucleon from AME2020 on a linear 0 to 9,000 keV scale, names the peak and the next two as READ from the table, the fusion/fission sentence, and that there is no measured mass above Z = 110",
+                  ok || bw.find("1,008") != std::string::npos);
+        checkTrue("binding words: the short form names the height and the peak; the half-life words still start 'Height: the log of the half-life' (stage 3's wording is unchanged); the peak note is 'peak of the data: nickel-62, 8,794.56 keV per nucleon'",
+                  bs.find("Height: binding energy per nucleon") == 0 && bs.find("nickel-62") != std::string::npos && hw.find("Height: the log of the half-life") == 0 && pk == "peak of the data: nickel-62, 8,794.56 keV per nucleon");
+    }
+    // ---- the valley and the island
+    {
+        const ChartTile a = chartValleyAnchor();
+        checkTrue("valley: the label is attached to the median stable tile (element 125 of the 251 stable tiles in order of Z then N: Z 47, N 62, silver-109), a stable tile", a.Z == 47 && a.N == 62 && a.cls == ChartClass::Stable);
+        const std::vector<ChartTile> hv = chartHeaviestTiles(); int maxZ = 0; for (const ChartTile& t : chartTiles()) maxZ = std::max<int>(maxZ, t.Z);
+        checkTrue("island/end: the measured chart ends at Z 118 (largest Z among the tiles), whose tiles are N 175, 176, 177 (NUBASE2020), and no tile lies beyond; the label is read from the data", chartHeaviestZ() == 118 && maxZ == 118 && hv.size() == 3 && hv[0].N == 175 && hv[1].N == 176 && hv[2].N == 177 &&
+                  chartHeaviestLabel() == "heaviest known: Z = 118 (oganesson); nothing observed beyond");
+        const std::string vw = chartValleyWords(), vs = chartValleyShort(), iw = chartIslandWords(), is = chartIslandShort();
+        checkTrue("valley words: it is the band of stable and very long-lived nuclides (the black tiles, the ridge), measured, not predicted, and nuclides on either side decay back towards it", vw.find("narrow band of stable and very long-lived nuclides") != std::string::npos && vw.find("the black tiles") != std::string::npos &&
+                  vw.find("the ridge in the landscape") != std::string::npos && vw.find("measured, not predicted") != std::string::npos && vw.find("decay back towards it") != std::string::npos && vs.find("(measured)") != std::string::npos);
+        checkTrue("island words: a PREDICTION, not something seen; theory expects a region beyond the heaviest known; none observed; where it lies is disputed; no sourced prediction to draw, so nothing is drawn", iw.find("a PREDICTION, not something seen") != std::string::npos &&
+                  iw.find("beyond the heaviest known (Z = 118)") != std::string::npos && iw.find("None of them has been observed") != std::string::npos && iw.find("where it lies is disputed") != std::string::npos && iw.find("no sourced prediction to draw") != std::string::npos &&
+                  iw.find("nothing is drawn there") != std::string::npos && is.find("a prediction, not seen") != std::string::npos && is.find("not drawn") != std::string::npos);
+        checkTrue("island words quote NO number of their own: the only digits in the island words (long and short) and in the heaviest label are 118, read from the data (no predicted magic number, no predicted Z or N)", !hasDigitsOtherThan(iw, "118") && !hasDigitsOtherThan(is, "118") && !hasDigitsOtherThan(chartHeaviestLabel(), "118") && iw.find("118") != std::string::npos);
+    }
+    // ---- switching the height changes nothing else
+    {
+        AtomLab lab; lab.p = AtomParams(); lab.paused = false; lab.restart(); lab.setParam("view", std::string(kChartView)); lab.viewW = 900; lab.viewH = 700;
+        lab.chooseNuclide(92, 146); lab.setParam("tilt", 0.8); lab.chartZoomAt(1.5, 300, 300);
+        const ChartViewState before = lab.s.chartView; std::vector<std::string> hoverBefore; for (const ChartTile& t : chartTiles()) hoverBefore.push_back(chartHover(t.Z, t.N)[0] + chartHover(t.Z, t.N).back());
+        lab.setParam("cheight", std::string("Nonsense"));
+        const bool ignored = lab.s.chartView.height == ChartHeightMode::HalfLife;
+        lab.setParam("cheight", std::string("Binding energy per nucleon"));
+        std::vector<std::string> hoverAfter; for (const ChartTile& t : chartTiles()) hoverAfter.push_back(chartHover(t.Z, t.N)[0] + chartHover(t.Z, t.N).back());
+        checkTrue("switch: an unknown choice is ignored; 'Binding energy per nucleon' sets the mode; the selection (92, 146), the tilt, zoom and pan, and every nuclide's hover words are identical, and the mode is kept by a reset", ignored && lab.s.chartView.height == ChartHeightMode::Binding && lab.p.Z == 92 && lab.p.N == 146 &&
+                  lab.s.chartView.tilt == before.tilt && lab.s.chartView.zoom == before.zoom && lab.s.chartView.panX == before.panX && lab.s.chartView.panY == before.panY && hoverBefore == hoverAfter && [&] { lab.chartReset(); return lab.s.chartView.height == ChartHeightMode::Binding && lab.s.chartView.flat(); }());
+        lab.setParam("cheight", std::string("Half-life")); checkTrue("switch: back to 'Half-life'", lab.s.chartView.height == ChartHeightMode::HalfLife);
+        // the whole hover text, all lines, for 3,557 nuclides, is built from the data and does not mention the height at all
+        int mentions = 0; for (const ChartTile& t : chartTiles()) for (const std::string& l : chartHover(t.Z, t.N)) if (l.find("binding") != std::string::npos || l.find("Height") != std::string::npos) mentions++;
+        checkNum("switch: hover lines (all 3,557 nuclides) that mention binding energy or a height (the hover is about the nuclide, not the picture)", mentions, 0, 0);
+    }
+    {   // drawn: the ground, the bands, the footprint, the pin's place, the blocks' x, the colours and the status line are identical in the two modes
+        const render::Color fg{0.1f, 0.2f, 0.3f, 1}, muted{0.4f, 0.5f, 0.6f, 1}, accent{0.9f, 0.1f, 0.7f, 1}, card{0.95f, 0.95f, 0.9f, 1}, line{0.5f, 0.5f, 0.5f, 1};
+        const ChartColours C{fg, muted, accent, card, line};
+        render::Renderer2D R;
+        const auto same = [](render::Color a, render::Color b) { return std::fabs(a.r - b.r) < 1e-6 && std::fabs(a.g - b.g) < 1e-6 && std::fabs(a.b - b.b) < 1e-6 && std::fabs(a.a - b.a) < 1e-6; };
+        struct Out { std::vector<RecTri> tri; std::vector<RecLine> lines; std::vector<RecDisc> discs; std::vector<RecRect> rects; std::vector<std::string> text; ChartScene S; };
+        const auto draw = [&](ChartHeightMode m, double W, double H, double tilt, int selZ, int selN, RecText& T) {
+            Out o; ChartViewState st{tilt, 1, 0, 0}; st.height = m; o.S.build(W, H, st);
+            g_rec.clear(); g_tri.clear(); g_lines.clear(); g_discs.clear(); T.lines.clear(); T.at.clear();
+            drawChartScene(R, T, C, o.S, W, H, selZ, selN, 0, 0);
+            o.tri = g_tri; o.lines = g_lines; o.discs = g_discs; o.rects = g_rec; o.text = T.lines; return o;
+        };
+        RecText T1, T2;
+        const Out h = draw(ChartHeightMode::HalfLife, 900, 700, 1, 92, 146, T1), b = draw(ChartHeightMode::Binding, 900, 700, 1, 92, 146, T2);
+        // ground triangles (the plate and the bands), by colour, in order
+        const auto groundTri = [&](const Out& o) { std::vector<RecTri> v; for (const RecTri& t : o.tri) if (same(t.c, line.withAlpha(0.12f)) || same(t.c, line.withAlpha(0.26f))) v.push_back(t); return v; };
+        const auto groundLines = [&](const Out& o) { std::vector<RecLine> v; for (const RecLine& l : o.lines) if (same(l.c, muted.withAlpha(0.7f)) || same(l.c, muted.withAlpha(0.8f))) v.push_back(l); return v; };
+        const std::vector<RecTri> gh = groundTri(h), gb = groundTri(b); const std::vector<RecLine> lh = groundLines(h), lb = groundLines(b);
+        bool gEq = gh.size() == gb.size() && lh.size() == lb.size() && !gh.empty() && !lh.empty();
+        for (std::size_t i = 0; gEq && i < gh.size(); i++) for (int j = 0; j < 6; j++) if (gh[i].p[j] != gb[i].p[j]) gEq = false;
+        for (std::size_t i = 0; gEq && i < lh.size(); i++) if (lh[i].x0 != lb[i].x0 || lh[i].y0 != lb[i].y0 || lh[i].x1 != lb[i].x1 || lh[i].y1 != lb[i].y1) gEq = false;
+        checkTrue("switch, drawn: the ground plate, the 13 magic bands' triangles (" + std::to_string(gh.size()) + ") and their edge lines (" + std::to_string(lh.size()) + ") are at exactly the same places in the two height modes (the picture is not refitted)", gEq);
+        bool xEq = h.S.blocks().size() == b.S.blocks().size(); int clsDiff = 0, xDiff = 0;
+        for (std::size_t k = 0; xEq && k < h.S.blocks().size(); k++) { const ChartBlock &p = h.S.blocks()[k], &q = b.S.blocks()[k]; if (p.Z != q.Z || p.N != q.N || p.cls != q.cls) clsDiff++; for (int i = 0; i < 8; i += 2) if (p.top[i] != q.top[i]) xDiff++; }
+        checkTrue("switch, drawn: every block is the same nuclide with the same decay class in the same order, and its top is at the same x (only the heights change)", xEq && clsDiff == 0 && xDiff == 0);
+        // the top colours of blocks that are filled in both modes are the same
+        const auto topColours = [&](const Out& o) { std::map<std::pair<float, float>, render::Color> m; for (const RecTri& t : o.tri) m.insert({{float(t.p[0]), float(t.p[1])}, t.c}); return m; };
+        const auto mh = topColours(h), mb = topColours(b); int compared = 0, colourDiff = 0, classWrong = 0;
+        for (std::size_t k = 0; k < h.S.blocks().size(); k++) {
+            const ChartBlock &p = h.S.blocks()[k], &q = b.S.blocks()[k];
+            const auto ih = mh.find({p.top[0], p.top[1]}), ib = mb.find({q.top[0], q.top[1]});
+            if (ih == mh.end() || ib == mb.end()) continue;
+            const render::Color want = *chartClassInfo(p.cls).hex ? render::hexColor(chartClassInfo(p.cls).hex) : fg;
+            if (p.kind == HeightKind::Measured || p.kind == HeightKind::Stable || p.kind == HeightKind::StableNoted) { if (!same(ih->second, want)) classWrong++; }
+            if (q.kind == HeightKind::Measured) { if (!same(ib->second, want)) classWrong++; }
+            if ((p.kind == HeightKind::Measured && q.kind == HeightKind::Measured)) { compared++; if (!same(ih->second, ib->second)) colourDiff++; }
+        }
+        checkTrue("switch, drawn: the top colour of a block that is solid in both modes is the same (" + std::to_string(compared) + " compared), and in each mode a solid top has its decay class's colour (0 wrong)", compared > 2000 && colourDiff == 0 && classWrong == 0);
+        std::string th = joinLines(T1), tb = joinLines(T2);
+        const auto statusOf = [](const std::string& t) { const std::size_t a = t.find("Chosen: "); return t.substr(a, t.find('\n', a) - a); };
+        checkTrue("switch, drawn: the status line (the selection) is the same in both modes; the legend names the height in use: 'Height: the log of the half-life' for the half-life, 'Height: ...binding energy per nucleon' for binding; neither names the other", statusOf(th) == statusOf(tb) &&
+                  th.find("Height: ") != std::string::npos && th.find("half-life") != std::string::npos && th.find("binding energy per nucleon") == std::string::npos && tb.find("binding energy per nucleon") != std::string::npos && tb.find("Height: ") != std::string::npos && tb.find("log10 of the half-life") == std::string::npos && tb.find("log of the half-life") == std::string::npos);
+        // the selection's pin: same x, and the same footprint lines
+        int accentH = 0, accentB = 0; for (const RecLine& l : h.lines) if (same(l.c, accent)) accentH++; for (const RecLine& l : b.lines) if (same(l.c, accent)) accentB++;
+        checkTrue("switch, drawn: the chosen nuclide's pin is at the same x in both modes; the binding mode adds exactly one ring (4 lines) in the accent colour, round the peak (the half-life mode has none)", h.discs.size() >= 1 && b.discs.size() >= 1 && h.discs.back().x == b.discs.back().x && accentB == accentH + 4);
+        const std::string pkText = chartBindingPeakLabel();
+        checkTrue("peak note: drawn in the binding mode (at 1280 x 720 there is a free place), never in the half-life mode", [&] { RecText Ta, Tb; const Out bb = draw(ChartHeightMode::Binding, 1280, 720, 1, 92, 146, Ta); const Out hh = draw(ChartHeightMode::HalfLife, 1280, 720, 1, 92, 146, Tb); (void)bb; (void)hh; return joinLines(Ta).find(pkText) != std::string::npos && joinLines(Tb).find("peak of the data") == std::string::npos; }());
+        // no predicted thing is drawn: the blocks are exactly the 3,557 nuclides; the number of filled top faces equals the filled blocks; nothing is drawn in a tile's colour beyond them
+        int filled = 0; for (const ChartBlock& B : b.S.blocks()) if (B.kind != HeightKind::Unknown) filled++;
+        std::set<std::pair<float, float>> topsDrawn; for (const RecTri& t : b.tri) topsDrawn.insert({float(t.p[0]), float(t.p[1])});
+        int tileColoured = 0; for (const RecTri& t : b.tri) { for (int c = 0; c < kChartClasses; c++) { const render::Color cc = *chartClassInfo(ChartClass(c)).hex ? render::hexColor(chartClassInfo(ChartClass(c)).hex) : fg; if (same(t.c, cc) || same(t.c, cc.withAlpha(0.5f)) || same(t.c, cc.withAlpha(0.28f))) { tileColoured++; break; } } }
+        int tilesNotBlocks = 0; { std::set<std::pair<int, int>> have; for (const ChartBlock& B : b.S.blocks()) have.insert({B.Z, B.N}); for (const ChartTile& t : chartTiles()) if (!have.count({t.Z, t.N})) tilesNotBlocks++; }
+        checkTrue("island not drawn as measured: the scene has exactly the 3,557 nuclides' blocks (none beyond Z 118), and every triangle in a tile's colour is the top face of one of them (exactly 2 triangles each: 7,114; the shaded side faces are other colours)", b.S.blocks().size() == 3557 && tilesNotBlocks == 0 && filled == 3557 &&
+                  tileColoured == 2 * 3557);
+    }
+    // ---- the labels and the notes keep clear of tiles, blocks and each other
+    {
+        const render::Color fg{0.1f, 0.2f, 0.3f, 1}, muted{0.4f, 0.5f, 0.6f, 1}, accent{0.9f, 0.1f, 0.7f, 1}, card{0.95f, 0.95f, 0.9f, 1}, line{0.5f, 0.5f, 0.5f, 1};
+        const ChartColours C{fg, muted, accent, card, line};
+        render::Renderer2D R; RecText T;
+        const auto same = [](render::Color a, render::Color b) { return std::fabs(a.r - b.r) < 1e-6 && std::fabs(a.g - b.g) < 1e-6 && std::fabs(a.b - b.b) < 1e-6 && std::fabs(a.a - b.a) < 1e-6; };
+        int labels = 0, covers = 0, hitsBox = 0, boxes = 0, boxCovers = 0, noBox = 0;
+        struct Cs { double w, h, tilt; ChartHeightMode m; };
+        const Cs cases[] = {{900, 700, 0, ChartHeightMode::HalfLife}, {1280, 720, 0, ChartHeightMode::HalfLife}, {1400, 900, 0, ChartHeightMode::HalfLife}, {1920, 1000, 0, ChartHeightMode::HalfLife}, {1280, 720, 1, ChartHeightMode::HalfLife}, {1280, 720, 1, ChartHeightMode::Binding},
+                            {1400, 900, 0.5, ChartHeightMode::HalfLife}, {1400, 900, 0.5, ChartHeightMode::Binding}, {1920, 1000, 1, ChartHeightMode::Binding}, {900, 700, 0.6, ChartHeightMode::Binding}};
+        for (const Cs& c : cases) {
+            ChartViewState st{c.tilt, 1, 0, 0}; st.height = c.m; ChartScene S; S.build(c.w, c.h, st); const ChartLayout L = chartLayout(c.w, c.h);
+            g_rec.clear(); g_tri.clear(); g_lines.clear(); g_discs.clear(); T.lines.clear(); T.at.clear();
+            if (st.flat()) drawChart(R, T, C, c.w, c.h, 26, 30, 0, 0); else drawChartScene(R, T, C, S, c.w, c.h, 26, 30, 0, 0);
+            std::vector<RecRect> bx; for (const RecRect& r : g_rec) if (same(r.c, card.withAlpha(0.9f)) || same(r.c, card.withAlpha(0.88f))) bx.push_back(r);
+            const auto coversTile = [&](double x0, double y0, double x1, double y1) {
+                if (st.flat()) { for (const ChartTile& t : chartTiles()) { const double tx = L.x(t.N), ty = L.y(t.Z); if (tx < x1 && tx + L.cell > x0 && ty < y1 && ty + L.cell > y0) return true; } return false; }
+                for (const ChartBlock& B : S.blocks()) { if (B.x0 < x1 && B.x1 > x0 && B.y0 < y1 && B.y1 > y0) return true; }
+                return false; };
+            for (const RecRect& r : bx) { boxes++; if (coversTile(r.x, r.y, r.x + r.w, r.y + r.h)) boxCovers++; }
+            bool noteBoxDrawn = false; for (const RecRect& r : bx) if (same(r.c, card.withAlpha(0.88f))) noteBoxDrawn = true; if (!noteBoxDrawn) noBox++;
+            for (std::size_t i = 0; i < T.lines.size(); i++) {
+                const std::string& t = T.lines[i]; if (t != "valley of stability (measured)" && t != chartHeaviestLabel() && t != chartBindingPeakLabel()) continue;
+                const double tw = t.size() * 11 * 0.5, x = T.at[i][0], y = T.at[i][1];
+                labels++; if (coversTile(x - tw / 2 - 3, y - 11, x + tw / 2 + 3, y + 4)) covers++;
+                for (const RecRect& r : bx) if (x - tw / 2 - 3 < r.x + r.w && x + tw / 2 + 3 > r.x && y - 11 < r.y + r.h && y + 4 > r.y) hitsBox++;
+            }
+        }
+        checkTrue("labels: the valley, heaviest-known and peak labels drawn (" + std::to_string(labels) + " in 10 views: flat and tilted, both height modes, 900x700 to 1920x1000: the valley label and the heaviest-known label in each of the 10, the peak note in the 4 binding views) cover no tile or block and sit on neither the legend nor the notes box", labels == 24 && covers == 0 && hitsBox == 0);
+        checkTrue("notes boxes: the legend and the notes box (" + std::to_string(boxes) + ") cover no tile or block in those views, and the notes box is drawn in every one of them (" + std::to_string(noBox) + " without)", boxes >= 18 && boxCovers == 0 && noBox == 0);
+    }
+    // ---- painter's order and hit test with the binding heights, against the ray caster
+    for (const double tilt : {1.0, 0.6}) {
+        ChartViewState st{tilt, 1, 0, 0}; st.height = ChartHeightMode::Binding; ChartScene S; S.build(900, 700, st);
+        int tested = 0, mismatch = 0, overlaps = 0, hits = 0;
+        for (double py = 0.43; py < 700; py += 13) for (double px = 0.57; px < 900; px += 13) {
+            const RayHit r = rayCast(S, px, py); int Z = 0, N = 0; const bool p = S.pick(px, py, Z, N); tested++; if (r.hit) hits++; if (r.boxes >= 2) overlaps++;
+            if (p != r.hit || (p && (Z != r.Z || N != r.N))) mismatch++;
+        }
+        checkNum("binding landscape, tilt " + jsNum(tilt, 2) + ": pixels (a 13-pt grid) where the topmost drawn block is not the first box the ray caster's ray enters", mismatch, 0, 0);
+        checkTrue("binding landscape, tilt " + jsNum(tilt, 2) + ": the grid had many pixels on blocks (" + std::to_string(hits) + ") and where a ray meets 2+ boxes (" + std::to_string(overlaps) + ")", tested > 2000 && hits > 300 && overlaps > 100);
     }
 }
 
@@ -4215,6 +4415,7 @@ int main() {
     testAutoSilence();
     testChart();
     testChartLandscape();
+    testChartBinding();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

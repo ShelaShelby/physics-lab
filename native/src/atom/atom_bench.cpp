@@ -48,11 +48,12 @@ void still(AtomLab& L) { L.s.zoomTo.reset(); L.s.panTo.reset(); L.s.pan = Vec3d{
 }  // namespace
 
 void benchSetup(AtomLab& L, int which, double w, double h) {
-    if (which == kBenchChartScene || which == kBenchLandscapeScene) {   // the chart of nuclides: the whole map (flat) or the landscape (full tilt), U-238 chosen (the marker is drawn), nothing to wait for
+    if (which == kBenchChartScene || which == kBenchLandscapeScene || which == kBenchBindingScene) {   // the chart of nuclides: the whole map (flat) or the landscape (full tilt), U-238 chosen (the marker is drawn), nothing to wait for
         fresh(L, 92, 146, w, h);
         L.chartReset();
         L.setParam("view", std::string(kChartView));
-        if (which == kBenchLandscapeScene) L.setChartTilt(1);
+        L.s.chartView.height = which == kBenchBindingScene ? ChartHeightMode::Binding : ChartHeightMode::HalfLife;   // (the scene says what the height means: no choice of the user's leaks in)
+        if (which != kBenchChartScene) L.setChartTilt(1);
         still(L);
         return;
     }
@@ -115,6 +116,9 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Chart of nuclides, tilted landscape (full tilt), 3,557 blocks", "the Chart of nuclides view at full tilt (0.11 stage 3): every nuclide a block whose height is the log of its half-life (stable ones on a plateau), drawn far to near with its top and two faces, "
                                                                           "the ground and the magic-number bands, the legend, uranium-238 chosen. Nothing moves. It is the same data as the flat chart scene just before it, so the DIFFERENCE between the two is the cost of the third dimension: "
                                                                           "about three times the triangles, and the per-frame loop over the blocks. Look at the CPU frame time first (the GPU is expected near idle); keep the pointer off the picture"},
+        {"Chart of nuclides, tilted landscape, BINDING-ENERGY height (full tilt), 3,557 blocks", "the same view as the scene before it (the tilted landscape, half-life height) with the height meaning the binding energy per nucleon (0.11 stage 4): the same 3,557 blocks drawn the same way, "
+                                                                          "but 2,549 solid blocks (the measured values) and 1,008 flat pale squares (estimates only), and the peak note. The three chart scenes are flat, tilted with half-life height and tilted with binding height, "
+                                                                          "so the DIFFERENCE between the last two is only the other height table (built once) and the notes: it should be about nothing. Look at the CPU frame time; keep the pointer off the picture"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchSceneCount - 1)) - kBenchFirstRisk];
 }
@@ -143,7 +147,7 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
 }
 
 std::string benchSettingsText(const AtomLab& L) {
-    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %, zoom " + std::to_string(int(std::lround(L.s.chartView.zoom * 100))) + " %, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N);
+    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %, height " + (L.s.chartView.height == ChartHeightMode::Binding ? "binding energy per nucleon" : "half-life") + ", zoom " + std::to_string(int(std::lround(L.s.chartView.zoom * 100))) + " %, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N);
     std::string t = "view " + L.p.view + ", Orbit style " + L.p.ostyle + ", quark style " + L.p.qstyle + ", detail " + L.p.detail + ", " + L.p.style + " nucleons";
     if (L.p.view != "Orbit") {                           // the cloud views: what the cost depends on
         t += ", orbital " + L.p.orb + ", cloud style " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots, phase " + L.p.phase;

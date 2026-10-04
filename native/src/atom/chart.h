@@ -50,6 +50,22 @@ bool chartTileAt(const ChartLayout& L, double px, double py, int& Z, int& N);   
 double chartFreeHeight(const ChartLayout& L, double h, bool fromTop, double x0, double x1);
 bool chartMove(int& Z, int& N, int dZ, int dN);          // one step; true and moved only when the square there holds a nuclide; false and unchanged otherwise (the edge of what has been observed)
 
+// ---- the valley and the island (0.11 stage 4): two different things, never blurred ----
+// THE VALLEY OF STABILITY is MEASURED: it is the band of stable and very long-lived nuclides that the chart already draws (the tiles the lab's table calls stable, the ridge of the landscape). The chart
+// names it where it stands: the label is attached to the MEDIAN stable tile (the stable tiles in order of Z, then N; the middle one of the 251), a tile found in the data, not a typed place.
+// THE ISLAND OF STABILITY is a PREDICTION. A source for where theory puts it could NOT be reached from these sessions (every host tried answered "CONNECT tunnel failed, response 403", the
+// proxy's policy denial: Wikipedia, arXiv, INSPIRE, Crossref, the journals and the laboratories' sites: REPORT.md lists them), so NOTHING SPECIFIC IS DRAWN OR QUOTED about it: no region, no magic
+// numbers. The chart says only what the owner's brief says and the data can back: theory expects such a region beyond the heaviest known nuclides, the lab has no sourced prediction to draw, where
+// it lies is disputed, and the measured chart simply ends at the heaviest known nuclides (the largest Z among the tiles, read from the table).
+ChartTile chartValleyAnchor();                 // the median stable tile
+int chartHeaviestZ();                          // the largest Z among the tiles: where the measured chart ends
+std::vector<ChartTile> chartHeaviestTiles();   // the tiles with that Z
+const char* chartValleyWords();                // legend: what the valley is (full)
+const char* chartValleyShort();
+const char* chartIslandWords();                // legend: what the island is: a prediction, not seen, not drawn (full)
+const char* chartIslandShort();
+std::string chartHeaviestLabel();              // "heaviest known: Z = 118 (oganesson); nothing observed beyond"
+
 // The words of the hover box (one string per line): name, whether it is stable or its half-life, how it decays and the odds, the spin, and whether the lab has a measured charge radius
 // and a measured quadrupole moment. Where there is no value the line says so.
 std::vector<std::string> chartHover(int Z, int N);

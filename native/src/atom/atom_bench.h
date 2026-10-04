@@ -18,7 +18,8 @@ namespace atom {
 //   12 an outline: 13 first use (cache emptied again and again), 14 the cut dragged (Slice view), 15 the nucleus view (oganesson-294, whole nucleus)
 //   16 the chart of nuclides (0.11 stage 2): the whole chart, every nuclide's square drawn, nothing hovered (keep the pointer off the picture)
 //   17 the same chart as a landscape (0.11 stage 3): full tilt, 3,557 blocks with their sides, the painter's order, the ground and the legend
-constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchLandscapeScene = 17, kBenchSceneCount = 18;
+//   18 the landscape with the BINDING-ENERGY height (0.11 stage 4), full tilt: the same blocks and drawing as 17, with the other height table (and the peak note)
+constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchLandscapeScene = 17, kBenchBindingScene = 18, kBenchSceneCount = 19;
 struct BenchInfo { std::string name, what; };       // name: without a number (the benchmark adds it); what: the settings in words
 const BenchInfo& benchSceneInfo(int which);          // which = kBenchFirstRisk .. kBenchSceneCount - 1
 // Some scenes need something done every frame (a jump held half way, the cut moving, the outline's cache emptied): the benchmark calls this at the start of every frame

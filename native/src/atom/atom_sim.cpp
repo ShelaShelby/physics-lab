@@ -33,7 +33,7 @@ AtomLab::AtomLab() {
 bool AtomLab::validChoice(const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> opts = {
         {"scale", {"Auto", "Fixed"}}, {"qstyle", {"Cinematic", "Accurate", "Classic"}}, {"detail", {"Valence", "+ Gluons", "+ Sea"}},
-        {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice", kChartView}}, {"ostyle", {"Modern", "Bohr 1913"}},
+        {"style", {"Fuzzy", "Hard balls"}}, {"view", {"Orbit", "Cloud", "Cloud 3D", "Slice", kChartView}}, {"cheight", {"Half-life", "Binding energy per nucleon"}}, {"ostyle", {"Modern", "Bohr 1913"}},
         {"orb", {"1s", "2s", "2p", "3s", "3p", "3d", "4s", "4p", "4d", "4f"}}, {"pAx", {"x", "y", "z", "m+1", "m-1"}}, {"dAx", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
         {"fAx", {"z3", "xz2", "yz2", "xyz", "zx2y2", "xx23y2", "y3x2y2", "m+1", "m-1", "m+2", "m-2", "m+3", "m-3"}},
         {"pAx2", {"x", "y", "z", "m+1", "m-1"}}, {"dAx2", {"z2", "xz", "yz", "xy", "x2y2", "m+1", "m-1", "m+2", "m-2"}},
@@ -94,6 +94,11 @@ void AtomLab::setParam(const std::string& key, double v) {
 }
 
 void AtomLab::setParam(const std::string& key, const std::string& v) {
+    if (key == "cheight") {                                      // what the chart's height means: part of the view, not of the atom (not saved, no re-init); nothing else about the picture changes
+        if (!validChoice(key, v)) return;
+        s.chartView.height = v == "Binding energy per nucleon" ? ChartHeightMode::Binding : ChartHeightMode::HalfLife;
+        return;
+    }
     if (key == "scale") p.scale = v;
     else if (key == "qstyle") p.qstyle = v;
     else if (key == "detail") p.detail = v;
@@ -977,7 +982,7 @@ std::vector<std::string> AtomLab::info() {
 std::string AtomLab::hint() const {
     if (chartOn())
         return "The chart of nuclides: every known nuclide is one square, neutrons across and protons up. Hover a square for its details, click it to choose that nuclide (the other views then show it), "
-               "or use the arrow keys to move one proton or one neutron. The colour is how the nuclide decays; the lines are the magic numbers. The Tilt slider turns the flat chart into a landscape whose height is the half-life (a chosen log scale: see the legend); the wheel zooms, a drag pans.";
+               "or use the arrow keys to move one proton or one neutron. The colour is how the nuclide decays; the lines are the magic numbers. The Tilt slider turns the flat chart into a landscape whose height is either the half-life or the binding energy per nucleon (chosen scales: see the legend); the wheel zooms, a drag pans.";
     const double x = p.Z * kAlpha;
     std::string note;
     if (p.Z >= kRelativityZ) note += " Heavy atoms: this lab uses non-relativistic physics, but a 1s electron here moves at " + fmt::fixed(100 * x, 0) +
