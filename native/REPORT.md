@@ -39,4 +39,4 @@ The shape is solved once per isotope change (60 bisections of a closed form, abo
 `atom_panel.cpp` (the card's extra lines) is not built here: compiled against stand-ins (`-Wall -Wextra`, clean). Never seen: the card's layout and wrapping, the glyphs (β₂ Q₀ ₂₀ × ± ²), the nuclei on screen, overlap. No Windows behaviour or speed tested here.
 
 ## Windows CI result
-(pending: filled in after the push)
+Run 37209912058 on commit 9269257 (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build (the whole app: `atom_panel.cpp` with the extended card and `atom_sim.cpp` with the new readout line **compiled on MSVC**, which the cloud could not do) and "Physics unit tests" (all seven programs) passed, so the quadrupole, layout and text tests hold under MSVC. I did not read the printed counts from the log, so "18,845 on Windows" is not claimed; the step's success is. Compiling is not seeing: the card and the nuclei at their new shapes have never been looked at on a screen (OWNER-TODO).
