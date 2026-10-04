@@ -27,4 +27,4 @@ Per frame about 3,557 blocks × up to 3 quads (6 triangles) ≈ 21,000 triangles
 `atom_view.cpp`, `atom_panel.cpp`, `main.cpp`, `benchmark.cpp`, `changelog.cpp` do not build here; syntax-checked against the real ImGui v1.92.9b and SDL 3.4.16 headers (clean), not linked or run. Never seen: the real app, the slider, the wheel and drag handlers, the tooltip on a block.
 
 ## Windows CI result
-(to be filled in after the run)
+Run 37221706041 on commit 13de622 (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build (the whole app: `atom_view.cpp`, `atom_panel.cpp`, `main.cpp`, `benchmark.cpp`, `changelog.cpp`, `chart_draw.cpp`, `chart_view.cpp` **compiled on MSVC**) and "Physics unit tests" (all seven programs, including the ray-caster, hit-test and landscape drawing tests) passed. I did not read the printed counts from the log, so "19,061 on Windows" is not claimed; the step's success is. Compiling is not seeing: the landscape has never been looked at in the real app (OWNER-TODO).
