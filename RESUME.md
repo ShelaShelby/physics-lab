@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.10.6 alpha, stage 2 is finished: the Atom Lab's constants are CODATA 2022, read from the NIST pages on 2026-10-04 (atom_core.h, one comment per constant; Bohr radius 5.29177210544e-11 m instead of the web's 0.529 Å, Hartree, atomic time, alpha, Rydberg energy, masses, h, c, e). The web-compared tests were rescaled by the constant ratios, not loosened (REPORT.md). Stage 1 (the audit, 18 findings) is in git history: `git show 90049fe:native/REPORT.md`.
-- Not done, still on the roadmap: audit findings 1-3, 5-8, 10-17 (outline of complex states, Superposition of equal states, one energy for hydrogen, ...). Not re-read from a source: the hydrogen-1 atomic mass 1.00782503223 u (AME2020, atom_learn.cpp) and the proton radius (kept at the web's rounded 0.84 fm; CODATA 2022: 0.84075 fm). The owner picks the next fix tasks.
+- Version 0.10.6 alpha, stage 3 is finished: one energy for one atom (the Cloud and Orbit readouts use the reduced-mass level `levelEV`; hydrogen reads −13.60 eV everywhere; the Orbit view's energy is scaled by rydM/kRydInf), the Orbit view splits its leapfrog step so no sub-step turns more than 2π/300 rad (radius error 2.2e-4 at every speed, was 7.8e-3 at speed 30, n = 1), and Scale Fixed uses kExt[4] = 40 a0 for clouds. The `webJumps` test flag also keeps the web's single leapfrog step. Stage 2 (CODATA 2022 constants) and stage 1 (audit, `git show 90049fe:native/REPORT.md`) are in git history.
+- Not done, still on the roadmap: audit findings 1, 2, 5-7, 9-13, 15-17 (next: the 90 % outline of complex states, Superposition of equal states). Not re-read from a source: the hydrogen-1 atom mass 1.00782503223 u and the proton radius (kept at the web's rounded 0.84 fm). The owner picks the next fix tasks.
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 17,974
+  - atom_tests: 18,085
   - app_tests: 1,385
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)

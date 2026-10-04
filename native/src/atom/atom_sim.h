@@ -186,7 +186,7 @@ public:
     bool usesWheel() const { return p.phase == "Wheel" || complexM() != 0 || superOn(); }   // complex states and superpositions always use the phase wheel
     int stateIdOf(const std::string& shell, const std::string& pAx, const std::string& dAx, const std::string& fAx) const;   // the id of a shell + orientation (real or complex)
     // ---- smooth photon jumps ----
-    bool webJumps = false;                                // the tests that compare with the web: its instant leap and dot-by-dot morph. The app never sets it.
+    bool webJumps = false;                                // the tests that compare with the web: its instant leap, its dot-by-dot morph and its single leapfrog step per frame (no sub-steps). The app never sets it.
     void startJump(const std::string& kind, int to);      // emit: the jump runs first, the photon appears when it ends; absorb: the photon flies in, the jump starts when it arrives
     bool jumpCloud() const { return s.trans && p.view != "Orbit" && !webJumps; }   // a cloud jump is on screen
     double jumpU() const;                                 // 0 .. 1: smooth progress of the jump (theta = pi/2 u)
@@ -211,6 +211,7 @@ public:
     int superGroup(long dot, double theta) const;         // 255 = not shown, else the phase colour bin
     std::string stateText() const;                        // "2pz" or "2p (m = +1)"
     int fullOrb(const std::string& shell) const;
+    double orbitEnergyEV() const;                         // Orbit view: the electron's energy from its position and speed, eV (scaled to the reduced-mass level, see atom_sim.cpp)
     double sizeM() const;                                 // the size the picture is fitted to, m
     double pxPerM(double m, std::optional<double> sz = std::nullopt) const;   // auto-fit points per metre
     double nucRA0() const;                                // nuclear radius in Bohr radii (the web's nucR)

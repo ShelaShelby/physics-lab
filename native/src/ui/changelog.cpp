@@ -17,6 +17,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.10.6", "Atom Lab: one energy, a steadier orbit, Fixed scale (stage 3)",
+     "Hydrogen's energy now reads -13.60 eV in every view (it said -13.61 in two of them): the readout uses the same level as the spectrum, with the nucleus's real mass. In the Orbit view the electron no longer breathes at the fastest playback speed "
+     "(the orbit is calculated in smaller steps; the speed itself is the same). With Scale set to Fixed the biggest clouds (n = 4) now fit in the picture. A new note says the energy is the one-electron, non-relativistic level."},
     {"0.10.6", "Atom Lab: exact constants (stage 2)",
      "The Atom Lab now uses the official CODATA 2022 values (read from NIST) for the Bohr radius, the Hartree energy, the atomic unit of time, the Rydberg energy, the masses and more, instead of the web version's rounded ones. "
      "The Bohr radius is 0.03 % larger than before, so the electron's circle is a hair bigger; everything else looks the same. The About page lists the constants and where they come from."},

@@ -14,6 +14,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.1: general relativity (1PN) for the planets in Real mode (Mercury's extra turn), the Sun's wobble round the centre of mass drawn in Real mode, Milky Way band fix, secret theme names fix — done
 - 0.10.3: Real planets start from JPL (Horizons data, DE441); the relativity tick box is off by default; Real stays an option until the owner has tried it — done
 - 0.10.4: the real Moon (ELP2000-82B checked against Horizons; used in the Orbit Lab's Real mode: Moon position, phases on its card, Real note and About text) — done (stage 1: data and validation, stage 2: the Orbit Lab)
+- 0.10.6 stage 3: one energy for one atom (reduced-mass level in the Cloud and Orbit readouts), Orbit view sub-steps (no wobble at speed 30), Scale Fixed holds the n = 4 clouds — done (audit findings 3, 14, 8)
 - 0.10.6 stage 2: Atom Lab constants from CODATA 2022 (NIST pages read 2026-10-04) — done (audit findings 4, 9, 18 and the Bohr radius item; the web's rounded 0.529 Å, 27.211 eV and 24.19 as are no longer followed)
 - 0.10.6 stage 1: Atom Lab audit report — done (report only, nothing in the app changed)
 - 0.10.5: Orbit Lab audit and fixes — done (stages 1-5: report, text fixes, data fixes, the IAU au, tests and sources)
@@ -25,7 +26,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- 0.10.6 fix tasks from the Atom Lab audit (18 findings in the stage 1 report, in git history `git show 90049fe:native/REPORT.md`; findings 4, 9 and 18 are done in stage 2; still planned: the outline of complex states, Superposition of equal states, one energy for hydrogen, the deuterium and tritium mass, heavy-atom text, timeline texts, speed checks on the PC, stronger tests; stage numbers decided after the owner reads the report) — planned
+- 0.10.6 fix tasks from the Atom Lab audit (18 findings in the stage 1 report, in git history `git show 90049fe:native/REPORT.md`; findings 4, 9 and 18 are done in stage 2, 3, 8 and 14 in stage 3; still planned: the outline of complex states, Superposition of equal states, the deuterium and tritium mass, heavy-atom text, timeline texts, speed checks on the PC, stronger tests; stage numbers decided after the owner reads the report) — planned
 - Bug and speed audit before 1.0, the last pass still to do: app and settings (a report only, then small fix tasks for the real findings) — planned
 - 1.0 alpha stages — planned:
   - design plan (written in a fresh short chat)

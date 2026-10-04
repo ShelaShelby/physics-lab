@@ -15,6 +15,7 @@ namespace atom {
 static double jsRound(double x) { const double r = std::floor(x + 0.5); return r == 0 && x < 0 ? -0.0 : r; }
 static double clampZoom(double z) { return std::max(0.0, std::min(7.0, z)); }
 static const char* const kLetter = "spdf";
+static constexpr double kMaxStepAngle = 2 * kPi / 300;   // the largest angle one leapfrog step of the Orbit view may turn, rad (see AtomLab::step)
 static const char* const kGreek[4] = {"α", "β", "γ", "δ"};
 
 AtomLab::AtomLab() {
@@ -175,8 +176,9 @@ int AtomLab::sizeN() const {
 int AtomLab::stateId() const { const int m = complexM(); return m ? complexState(orbIndex(p.orb), m) : fullOrb(); }
 std::string AtomLab::stateText() const { return atom::stateText(stateId()); }
 
-// the size the picture is fitted to: Fixed uses one reference size (hydrogen n = 4 / 3s) for every atom and level
-static double fitSize(const AtomParams& p, double szM) { return p.scale == "Fixed" ? (p.view == "Orbit" ? 16 : 24) * kA0 : szM; }
+// the size the picture is fitted to: Fixed uses one reference size for every atom and level, that of hydrogen n = 4: the circle n² = 16 a0 in the Orbit view, and the view radius of the
+// n = 4 clouds, kExt[4] = 40 a0, in the cloud views. (It was 24 a0 = kExt[3], the n = 3 size, which cut off 4s, 4p, 4d and 4f: their 90 % outline reaches 30-36 a0; 0.10.6 stage 3, audit finding 8.)
+static double fitSize(const AtomParams& p, double szM) { return p.scale == "Fixed" ? (p.view == "Orbit" ? 16 : kExt[4]) * kA0 : szM; }
 double AtomLab::sizeM() const {
     return fitSize(p, p.view == "Orbit" ? double(p.n) * p.n / p.Z * kA0 : kExt[sizeN()] / p.Z * kA0);
 }
@@ -678,12 +680,22 @@ void AtomLab::step(double dt) {
     const double h = dt * p.speed / (double(p.Z) * p.Z) * kAuTime;
     const double kC = p.Z * kA0 * kA0 * kA0 / (kAuTime * kAuTime);   // Z·e²/(4πε₀·mₑ) in these units: a = −kC·r/|r|³
     auto acc = [&](double x, double y, double& ax, double& ay) { const double r3 = std::pow(std::hypot(x, y), 3); ax = -kC * x / r3; ay = -kC * y / r3; };
-    double ax, ay;
-    acc(s.x, s.y, ax, ay);
-    s.vx += ax * h / 2; s.vy += ay * h / 2;
-    s.x += s.vx * h; s.y += s.vy * h;
-    acc(s.x, s.y, ax, ay);
-    s.vx += ax * h / 2; s.vy += ay * h / 2;
+    // Sub-steps (0.10.6 stage 3, audit finding 14). A circular orbit n turns dt·speed/n³ radians per step (any Z). A leapfrog step of angle φ makes the radius wobble by about φ²/2 (measured:
+    // n = 1 at speed 5, φ = 0.0208 rad, 302 steps per orbit: +2.2e-4; at speed 10: +8.7e-4; at speed 30, 50 steps per orbit: +7.8e-3). So one step is split into equal sub-steps so that none turns more than
+    // kMaxStepAngle = 2π/300 rad (300 steps per orbit), the accuracy the default speed 5 has always had: the radius then stays within about 2.2e-4 and the energy within about 1e-4 at every speed. At speed 5 and
+    // below nothing is split (n = 1 at speed 5 is 0.02083 rad, just under the limit), so the default motion is bit for bit the old one; only n = 1 above speed 5 is split (6 sub-steps at 30). The same
+    // time passes and the electron turns at the same rate: nothing in the look or the speed changes, and the trail still gets one point per frame.
+    const double stepAngle = dt * p.speed / (double(p.n) * p.n * p.n);
+    const int sub = webJumps ? 1 : std::max(1, int(std::ceil(stepAngle / kMaxStepAngle)));   // (webJumps, tests only: the web's own single leapfrog step, which the web-compared runs follow)
+    const double hs = h / sub;
+    for (int k = 0; k < sub; k++) {
+        double ax, ay;
+        acc(s.x, s.y, ax, ay);
+        s.vx += ax * hs / 2; s.vy += ay * hs / 2;
+        s.x += s.vx * hs; s.y += s.vy * hs;
+        acc(s.x, s.y, ax, ay);
+        s.vx += ax * hs / 2; s.vy += ay * hs / 2;
+    }
     s.t += h;
     s.trail.push_back({s.x, s.y});
     if (s.trail.size() > 500) s.trail.pop_front();
@@ -745,9 +757,12 @@ void AtomLab::drag(double dx, double dy, bool forceMove) {
 
 // ---------------------------------------------------------------- the readout
 // the electron's energy in eV from its position and speed (kinetic + Coulomb, in atomic units)
-static double orbitEnergyEV(const AtomState& s, int Z) {
+// The orbit is integrated in atomic units for an infinitely heavy nucleus (½v² − Z/r in Hartree), whose circular orbit n has −Z²/(2n²) Hartree = −kRydInf Z²/n². The lab's one energy
+// for an atom is levelEV (the reduced-mass level −rydM(Z, N) Z²/n², also used by Superposition and the spectrum), so the number is multiplied by rydM / kRydInf: for a circle it is then
+// levelEV (to the integrator's error). Without it hydrogen read −13.61 eV here and −13.60 eV in the spectrum. (Non-relativistic, one electron, no fine structure: same model as levelEV.)
+double AtomLab::orbitEnergyEV() const {
     const double r = std::hypot(s.x, s.y) / kA0, v2 = (s.vx * s.vx + s.vy * s.vy) / (kAuSpeed * kAuSpeed);
-    return (0.5 * v2 - Z / r) * kHartreeEV;
+    return (0.5 * v2 - p.Z / r) * kHartreeEV * (rydM(p.Z, p.N) / kRydInf);
 }
 
 std::string AtomLab::info1() {
@@ -765,10 +780,10 @@ std::string AtomLab::info1() {
         for (long i = 0; i < cnt; i++) sum += std::hypot(double(s.pts[3 * i]), double(s.pts[3 * i + 1]), double(s.pts[3 * i + 2]));
         const std::string got = cnt > 300 ? fmtLen(sum / cnt * 1e10) : "…";
         const std::string th = fmtLen((3.0 * o.n * o.n - o.l * (o.l + 1)) / 2 / p.Z * kA0Ang);   // exact <r> for hydrogen-like atoms
-        const double E = -0.5 * kHartreeEV * p.Z * p.Z / (o.n * o.n);
+        const double E = levelEV(p.Z, p.N, o.n);   // the same reduced-mass level as the spectrum and Superposition (finding 3 of the 0.10.6 audit)
         return head + "  ·  " + stateText() + " orbital  ·  E −" + fmtEV(-E) + "  ·  avg r: sampled " + got + ", theory " + th;
     }
-    const double r = std::hypot(s.x / kA0, s.y / kA0) * kA0Ang, E = orbitEnergyEV(s, p.Z);
+    const double r = std::hypot(s.x / kA0, s.y / kA0) * kA0Ang, E = orbitEnergyEV();
     const double T = 2 * kPi * std::pow(p.n, 3) / (double(p.Z) * p.Z) * kAuTimeAs;   // the orbit's period, as
     return head + "  ·  n=" + std::to_string(p.n) + "  ·  r " + fmtLen(r) + "  ·  E " + (E < 0 ? "−" : "") + fmtEV(std::fabs(E)) + "  ·  period " + fmtT(T);
 }
@@ -776,7 +791,7 @@ std::string AtomLab::info1() {
 std::vector<std::string> AtomLab::info() {
     const bool msgOn = !s.msg.empty() && nowMs() < s.msgUntil;
     if (p.view == "Orbit" && p.ostyle == "Bohr 1913") {        // Bohr 1913: only what Bohr knew
-        const double r = std::hypot(s.x / kA0, s.y / kA0) * kA0Ang, E = orbitEnergyEV(s, p.Z);
+        const double r = std::hypot(s.x / kA0, s.y / kA0) * kA0Ang, E = orbitEnergyEV();
         std::vector<std::string> ls = {"Bohr model, 1913  ·  " + std::string(name(p.Z)) + "  ·  nucleus +" + std::to_string(p.Z) + "  ·  n=" + std::to_string(p.n) +
                                        "  ·  r " + fmtLen(r) + "  ·  E " + (E < 0 ? "−" : "") + fmtEV(std::fabs(E))};
         if (!s.last.empty()) ls.push_back(s.last);
@@ -814,7 +829,7 @@ std::vector<std::string> AtomLab::info() {
     more.push_back(tempLine(p.Z));
     more.push_back("layer: " + s.layer + "  ·  this nucleus in real life: " + isoInfo(p.Z, p.N));
     if (p.Z >= 27) {   // relativity: the 1s electron of a heavy nucleus moves at a large fraction of light speed
-        const double x = p.Z * kAlpha, model = 0.5 * kHartreeEV * p.Z * p.Z, real = kMecEV * (1 - std::sqrt(1 - x * x));   // Dirac 1s: mc²(√(1−(Zα)²) − 1)
+        const double x = p.Z * kAlpha, model = -levelEV(p.Z, p.N, 1), real = kMecEV * (1 - std::sqrt(1 - x * x));   // Dirac 1s: mc²(√(1−(Zα)²) − 1)
         more.push_back("1s electron speed: " + fmt::fixed(100 * x, 0) + "% of light speed  ·  real 1s energy −" + fmtEV(real) + " vs −" + fmtEV(model) + " in this lab");
     }
     if (p.style != "Hard balls" && s.layer != "Atom") more.push_back("nucleon edge: charge density ∝ e^(−r / 0.24 fm), so there is no sharp surface (rms radius 0.84 fm)");

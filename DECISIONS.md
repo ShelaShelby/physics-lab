@@ -15,5 +15,6 @@
 - No connectors, plugins or extra skills for now (they cost usage).
 - Coding sessions run on Sonnet 5.5; the strongest model is used only in a fresh short planning chat (for example the 1.0 design plan).
 - More electrons: the first level (shells filling with simplified screening, Slater's rules) needs the owner's decision before it is planned.
+- The Atom Lab shows ONE energy per atom: the reduced-mass level −Rydberg(Z, N)·Z²/n², in every view; the Orbit view's own ½v² − Z/r is scaled to it. The Orbit view's leapfrog is split so that no step turns more than 2π/300 rad (the accuracy the default speed has). Scale Fixed is the n = 4 size (4 Oct 2026).
 - The Atom Lab uses the CODATA 2022 constants, read from the NIST pages (Bohr radius 5.29177210544e-11 m, Hartree 27.211386245981 eV, atomic unit of time 2.4188843265864e-17 s, and the rest listed in atom_core.h). The web version's rounded 0.529 Å, 27.211 eV and 24.19 as are no longer followed; the saved web results in the tests are rescaled by the constant ratios (4 Oct 2026).
 - The lab uses the IAU astronomical unit, 149,597,870,700 m exactly (IAU 2012 Resolution B2; JPL's Astrodynamic Parameters page states this value and names the resolution B1). The web version's 149.6e9 m is no longer followed (3 Oct 2026).

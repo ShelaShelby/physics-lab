@@ -217,6 +217,40 @@ static void testNuclei() {
 }
 
 // The whole lab, run by the same script as the web, with the same random numbers.
+// 0.10.6 stage 3 (finding 3): the readout energy is now the reduced-mass level, so the energy text of the saved web lines is rebuilt, EXACTLY, from what the web's own state says:
+//  Cloud view: E = -rydM(Z, N) Z^2 / n^2, worked out here from the NIST values (rydMBy and nist:: above), not from atom_core.h.
+//  Orbit view: the web's E = (1/2 v^2 - Z / r) x 27.211 eV from the web's saved x, y, vx, vy (its a0 and tau), converted to the new Hartree energy and multiplied by the reduced-mass ratio rydM / Ry_inf.
+//  Heavy-atom line "real 1s energy -A vs -B in this lab": B = rydM Z^2 (A, the Dirac value, is unchanged).
+// Everything else in the line stays as the web wrote it; the energy part is then compared exactly (checkStr), outside the last-digit tolerance of checkLine.
+static bool lineSegment(const std::string& line, const std::string& key, std::size_t& a, std::size_t& b) {
+    a = line.find(key);
+    if (a == std::string::npos) return false;
+    b = line.find("  ·  ", a + key.size());
+    if (b == std::string::npos) b = line.size();
+    return true;
+}
+static std::string energyText(const AtomLab& lab, const Check& c) {          // the new "E ..." part of the line, as the lab writes it
+    const int Z = lab.p.Z, N = lab.p.N;
+    const double rm = rydMBy(nist::rydEV, 1 / nist::meInU, nist::mpOverMe, Z, N);
+    if (lab.p.view != "Orbit") { const int n = orbitals()[orbIndex(lab.p.orb)].n; return "E −" + fmtEV(rm * Z * Z / (double(n) * n)); }
+    const double auSpeed = webval::a0 / webval::tau, r = std::hypot(c.x, c.y) / webval::a0, v2 = (c.vx * c.vx + c.vy * c.vy) / (auSpeed * auSpeed);
+    const double E = (0.5 * v2 - Z / r) * nist::hartreeEV * (rm / nist::rydEV);
+    return std::string("E ") + (E < 0 ? "−" : "") + fmtEV(std::fabs(E));
+}
+static std::string withNewEnergy(std::string line, const AtomLab& lab, const Check& c, std::string* energyOnly) {
+    std::size_t a, b;
+    if (lineSegment(line, "  ·  E ", a, b)) { a += std::string("  ·  ").size(); const std::string e = energyText(lab, c); line.replace(a, b - a, e); if (energyOnly) *energyOnly = e; }
+    const std::string key = " vs −", tail = " in this lab";
+    const std::size_t k = line.find(key);
+    if (k != std::string::npos && line.find("real 1s energy −") != std::string::npos) {
+        const std::size_t e = line.find(tail, k);
+        const double rm = rydMBy(nist::rydEV, 1 / nist::meInU, nist::mpOverMe, lab.p.Z, lab.p.N);
+        line.replace(k + key.size(), e - k - key.size(), fmtEV(rm * lab.p.Z * lab.p.Z));
+        if (energyOnly) *energyOnly += "|" + line.substr(k, e - k);
+    }
+    return line;
+}
+
 static void testRuns() {
     const double sLen = nist::a0 / webval::a0, sSpeed = (nist::a0 / nist::tau) / (webval::a0 / webval::tau);   // CODATA 2022 over the web's value: 1.000334, 1.000383
     int run = 0;
@@ -243,7 +277,19 @@ static void testRuns() {
                 const std::string w = "run " + std::to_string(run) + " check " + std::to_string(ci);
                 const auto info = lab.info();
                 checkNum(w + " info lines", info.size(), c.info.size(), 0);
-                for (std::size_t i = 0; i < info.size() && i < c.info.size(); i++) checkLine(w + " info " + std::to_string(i), info[i], c.info[i]);
+                for (std::size_t i = 0; i < info.size() && i < c.info.size(); i++) {
+                    std::string eWant, eGot;
+                    const std::string want = withNewEnergy(c.info[i], lab, c, &eWant);
+                    withNewEnergy(info[i], lab, c, &eGot);   // (only to cut the same parts out of the lab's line: its own energy parts are compared below)
+                    checkLine(w + " info " + std::to_string(i), info[i], want);
+                    if (!eWant.empty()) {
+                        std::string gotE, gotH; std::size_t a, b;
+                        if (lineSegment(info[i], "  ·  E ", a, b)) { const std::size_t sk = std::string("  ·  ").size(); gotE = info[i].substr(a + sk, b - a - sk); }
+                        const std::size_t k = info[i].find(" vs −", 0), e = info[i].find(" in this lab");
+                        if (k != std::string::npos && e != std::string::npos && info[i].find("real 1s energy −") != std::string::npos) gotH = "|" + info[i].substr(k, e - k);
+                        checkStr(w + " info " + std::to_string(i) + " energy part (exact)", gotE + gotH, eWant);
+                    }
+                }
                 checkStr(w + " hint", lab.hint(), c.hint);
                 std::string chain;
                 for (const ChainStep& st : lab.chain)
@@ -1200,8 +1246,93 @@ static void testConstants() {
     checkTrue("constant: m_p / m_e from the kg values and from the u values (1e-9)", std::fabs(kMpKg / kMeKg / kMpOverMe - 1) < 1e-9 && std::fabs(kMpU / kMeInU / kMpOverMe - 1) < 1e-9);
 }
 
+// ================= 0.10.6 stage 3: one energy for one atom, the Orbit view's accuracy, the Fixed scale =================
+// Finding 3 (audit): the readout energy is the lab's reduced-mass level levelEV (hydrogen -13.598 eV -> "13.60 eV"), in the Cloud view AND in the Orbit view (from the orbit itself).
+static void testOneEnergy() {
+    // independent: hydrogen's level is the Rydberg energy for an infinite mass divided by (1 + m_e/m_p), from the NIST values typed in the nist:: block (not from atom_core.h)
+    const double hyd = nist::rydEV / (1 + 1 / nist::mpOverMe);
+    checkNum("energy: levelEV of hydrogen 1s is -Ry_inf / (1 + m_e/m_p) = -13.598287 eV (NIST values, 1e-12)", -levelEV(1, 0, 1), hyd, 1e-12);
+    checkNum("energy: the same atom in the spectrum: the Lyman limit is h c / 13.598287 eV (1e-12)", [] { for (const SpecLine& l : specLines(1, 0)) if (l.lo == 1 && l.hi == 0) return l.lam; return 0.0; }(), nist::hcEVnm / hyd, 1e-12);
+    for (int Z : {1, 2, 26, 92, 118}) {
+        const int N = defaultN(Z);
+        for (const char* view : {"Orbit", "Cloud"}) {
+            AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+            lab.setParam("Z", double(Z)); lab.setParam("N", double(N)); lab.setParam("view", std::string(view));
+            for (int n = 1; n <= 4; n++) {
+                std::string line;
+                if (std::string(view) == "Orbit") { lab.setParam("n", double(n)); line = lab.info1(); checkNum("energy: Orbit view E = levelEV Z=" + std::to_string(Z) + " n=" + std::to_string(n), lab.orbitEnergyEV(), levelEV(Z, N, n), 1e-9); }
+                else { lab.setParam("orb", std::string(std::to_string(n) + "s")); line = lab.info1(); }
+                checkTrue("energy: the readout shows fmtEV(levelEV) (" + std::string(view) + ", Z=" + std::to_string(Z) + ", n=" + std::to_string(n) + ")", line.find("E −" + fmtEV(-levelEV(Z, N, n))) != std::string::npos);
+            }
+        }
+    }
+    AtomLab h; h.nowMs = [] { return 0.0; }; h.p = AtomParams(); h.restart();
+    checkTrue("energy: hydrogen reads -13.60 eV in the Orbit view and in the Cloud view (was -13.61)", h.info1().find("E −13.60 eV") != std::string::npos && (h.setParam("view", std::string("Cloud")), h.info1()).find("E −13.60 eV") != std::string::npos);
+}
+
+// Finding 14: the Orbit view's leapfrog. 60 s of steps at the speeds 1, 5, 10 and 30 and n = 1..4: the radius stays near the analytic Bohr radius n^2 a0 / Z (a0 from the NIST value typed above), the readout
+// energy near levelEV, and the electron turns at the rate the speed setting says: dt x speed / n^3 radians per step (a circular orbit's angular rate is Z^2 / n^3 per atomic unit of time, and a step is
+// dt x speed / Z^2 of them). Guards: measured worst error + 1 % (the numbers are printed), see the comment at the checks.
+static void testOrbitAccuracy(double radTol, double enTol, double rateTol) {
+    double worstR = 0, worstE = 0, worstRate = 0; int runs = 0;
+    for (int Z : {1, 3})
+        for (int speed : {1, 5, 10, 30})
+            for (int n = 1; n <= 4; n++) {
+                AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+                lab.setParam("Z", double(Z)); lab.setParam("n", double(n)); lab.setParam("speed", double(speed));
+                const double rB = double(n) * n / Z * nist::a0, E0 = levelEV(Z, lab.p.N, n);
+                double ang = std::atan2(lab.s.y, lab.s.x), turned = 0, wr = 0, we = 0;
+                const int steps = 240 * 60;
+                for (int i = 0; i < steps; i++) {
+                    lab.step(1.0 / 240);
+                    wr = std::max(wr, std::fabs(std::hypot(lab.s.x, lab.s.y) / rB - 1));
+                    we = std::max(we, std::fabs(lab.orbitEnergyEV() / E0 - 1));
+                    const double a = std::atan2(lab.s.y, lab.s.x); double d = a - ang; while (d < -kPi) d += 2 * kPi; while (d > kPi) d -= 2 * kPi;
+                    turned += d; ang = a;
+                }
+                const double want = steps * (1.0 / 240) * speed / (double(n) * n * n);          // radians
+                worstR = std::max(worstR, wr); worstE = std::max(worstE, we); worstRate = std::max(worstRate, std::fabs(turned / want - 1)); runs++;
+                if (wr > radTol || we > enTol) std::printf("  Orbit accuracy Z=%d speed %d n=%d: radius error %.2e, energy error %.2e\n", Z, speed, n, wr, we);
+            }
+    std::printf("Orbit accuracy over %d runs of 60 s: worst radius error %.5e, energy error %.5e, turning-rate error %.5e\n", runs, worstR, worstE, worstRate);
+    checkTrue("Orbit: the radius stays within the guard of the analytic Bohr radius n^2 a0 / Z at speeds 1 to 30, n = 1..4", worstR <= radTol);
+    checkTrue("Orbit: the readout energy stays within the guard of levelEV at speeds 1 to 30, n = 1..4", worstE <= enTol);
+    checkTrue("Orbit: the electron turns dt x speed / n^3 radians per step (the visible speed), within the guard", worstRate <= rateTol);
+}
+
+// Finding 8: Scale Fixed has to hold every cloud. The view radius (sizeM, the half-size the picture is fitted to) must reach at least the 90 % outline radius of the orbital,
+// from the lab's own outline code (outlineOf: rmax in Bohr radii at Z = 1). The same for Auto (kExt per n) and for the complex states; Fixed in the Orbit view holds the n = 4 circle.
+static void testFixedExtent() {
+    double worstFixed = 1e9, worstAuto = 1e9; std::string wf, wa;
+    std::vector<int> ids;
+    for (int i = 0; i < int(orbitals().size()); i++) ids.push_back(i);
+    for (int id : complexIds()) ids.push_back(id);
+    for (const char* scale : {"Fixed", "Auto"})
+        for (int Z : {1, 3}) {
+            AtomLab lab; lab.nowMs = [] { return 0.0; }; lab.p = AtomParams(); lab.restart();
+            lab.setParam("view", std::string("Cloud")); lab.setParam("Z", double(Z)); lab.setParam("scale", std::string(scale));
+            for (int id : ids) {
+                const Orbital& o = orbitals()[stateOrbital(id)];
+                lab.setParam("orb", o.shell);
+                const double reach = outlineOf(id).rmax / Z * kA0, ratio = lab.sizeM() / reach;   // metres at this Z
+                if (std::string(scale) == "Fixed" && ratio < worstFixed) { worstFixed = ratio; wf = stateText(id); }
+                if (std::string(scale) == "Auto" && ratio < worstAuto) { worstAuto = ratio; wa = stateText(id); }
+            }
+        }
+    std::printf("view radius / 90 %% outline radius, smallest over 30 real + 20 complex orbitals: Fixed %.3f (%s), Auto %.3f (%s)\n", worstFixed, wf.c_str(), worstAuto, wa.c_str());
+    checkTrue("Scale Fixed: the view radius holds the 90 % outline of every orbital (n = 1..4, s p d f, real and complex)", worstFixed >= 1);
+    checkTrue("Scale Auto: the view radius (kExt per n) holds the 90 % outline of every orbital", worstAuto >= 1);
+    AtomLab o; o.nowMs = [] { return 0.0; }; o.p = AtomParams(); o.restart(); o.setParam("scale", std::string("Fixed")); o.setParam("view", std::string("Orbit"));
+    checkTrue("Scale Fixed, Orbit view: the view radius holds the n = 4 circle (16 a0)", o.sizeM() >= 16 * kA0 * (1 - 1e-12));
+}
+
 int main() {
     testConstants();
+    testOneEnergy();
+    // guards = the worst error MEASURED after the fix (Linux GCC, 32 runs of 60 s) + 1 %: radius 2.16990e-4 -> 2.192e-4, energy 4.70644e-8 -> 4.754e-8, turning rate 1.45367e-4 -> 1.469e-4. The same runs
+    // before the fix (0.10.6 stage 2 code, one leapfrog step per frame): radius 7.783e-3 (n = 1, speed 30), energy 5.964e-5, rate 5.165e-3, so this fails without the sub-steps.
+    testOrbitAccuracy(2.192e-4, 4.754e-8, 1.469e-4);
+    testFixedExtent();
     testElements();
     testNuclides();
     testFormats();

@@ -8,6 +8,11 @@
 - [x] The theme picker at Extra large text.
 - [x] Planet physics Real: jump to 1800 and 2100, play at the fastest speed.
 
+## Try on the PC (0.10.6 stage 3: energy, Orbit accuracy, Fixed scale)
+- [ ] Atom Lab, hydrogen: the line over the picture says E −13.60 eV in the Orbit view and in every Cloud view (it said −13.61); the new grey note under the View buttons (non-relativistic, one electron) reads well and fits at Extra large text.
+- [ ] Orbit view, n = 1, Playback speed 30: the electron goes round smoothly on a steady circle (no breathing); speed 5 looks exactly as before. Is it still smooth (no stutter) at speed 30 on your PC?
+- [ ] Scale: Fixed, Cloud views: the 4s, 4p, 4d, 4f clouds now fit in the picture. The cloud views are drawn 1.67 times smaller in Fixed than before (the n = 4 size): is that fine?
+
 ## Try on the PC (0.10.6 stage 2: Atom Lab constants)
 - [ ] Atom Lab, Orbit view, hydrogen: the picture looks the same (the circle is 0.03 % larger); the readout says r 0.53 Å, E −13.61 eV, period 152 as. Try Cloud and Slice too: nothing should look different.
 - [ ] About, "Where the facts come from", Atoms and particles: the new CODATA 2022 line reads well (it is long) and the two old CODATA 2018 lines now say the values were read from NIST.

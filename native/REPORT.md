@@ -1,46 +1,28 @@
-# Native Physics Lab 0.10.6 (alpha) — stage 2 report: Atom Lab constants from CODATA 2022
+# Native Physics Lab 0.10.6 (alpha) — stage 3 report: one energy for one atom, Orbit accuracy, Fixed scale
 
-Fixes stage 1 findings 4, 9 and 18 and the "Known item" (the Bohr radius). Stage 1's report is in git history (`git show 90049fe:native/REPORT.md`). Only the Atom Lab changed; no Orbit Lab code; `index.html` untouched (sha256 e5501387ae64…).
+Fixes findings 3, 14 and 8 of the stage 1 audit (`git show 90049fe:native/REPORT.md`). Only the Atom Lab (the Orbit *view* included); no Orbit Lab code; `index.html` untouched (sha256 e5501387ae64…). Tests were written first for 14 and 8 and failed before the fix (below).
 
-## NIST pages: reached, read in this session (2026-10-04)
-Plain curl worked, **all pages answered 200**, and each says "Source: **2022 CODATA recommended values**" (`https://physics.nist.gov/cgi-bin/cuu/Value?<key>`): bohrrada0, hrev, aut, alph, rydhcev, mec2mev, meu, mpsme, ukg, muc2mev, me, mp, mn, mpu, mnu, k, h, c, e, hev, rp. So step 1b (second-hand values) was **not used**; every value in the code was read here. Not usable: `mu` is the *molar* mass constant (not the atomic mass constant), `hcevnm` and `hcev` do not exist: h·c is **derived** from the exact h, c and e (1239.841 984 332).
-Not from NIST, not re-read, left as they were: the hydrogen-1 **atom** mass 1.00782503223 u (AME2020, `atom_learn.cpp`, comment says so) and the proton radius **0.84 fm** (web's rounded value kept; CODATA 2022 `rp` = 0.84075(64) fm, in the comment).
+## Finding 3: one energy (atom_sim.cpp)
+- Cloud view readout: `E = levelEV(Z, N, n)` (was ½·Hartree·Z²/n², infinite mass). The heavy-atom line ("real 1s energy −A vs −B in this lab", Z ≥ 27) now also uses it for B.
+- Orbit view (and Bohr 1913 line): new public `AtomLab::orbitEnergyEV()` = (½v² − Z/r)·Hartree × **rydM(Z,N)/kRydInf**. Reason (in the code comment): the orbit is integrated in atomic units for an infinite mass; a circle has −kRydInf Z²/n²; the reduced-mass level is rydM Z²/n². Both views, Superposition and the spectrum now give the same number. Hydrogen: **−13.60 eV** everywhere (was −13.61 in Cloud/Orbit, −13.60 in spectrum/Superposition).
+- Call sites checked (grep `kHartreeEV`, `orbitEnergyEV`, `levelEV`): the two readouts, the heavy-atom line, nothing else reads the old formula; Learn texts do not print a level energy.
+- Honest limits: a new muted note in the Electron card (`atom_panel.cpp`) says E is the one-electron, non-relativistic level with the nucleus's real mass, scaled in the Orbit view, and that fine structure, Lamb shift and spin are not modelled. The existing Z ≥ 27 text already says "non-relativistic".
+- **Word-for-word tests moved on purpose.** Of the 150 saved web readout lines, **10** changed, each by 0.01 eV: Hydrogen 7× (−13.61 → −13.60), Lithium Li²⁺ 2× (−13.61 → −13.60), Helium He⁺ 1× (−54.42 → −54.41). All others print the same text (heavier ions: the reduced-mass change is below the digits shown). `atom_reference.inc` is generated from the frozen web page and is not edited: `testRuns` rebuilds the expected energy part **exactly** (Cloud: −rydM Z²/n² from the NIST values typed in the test; Orbit: the web's own saved x, y, vx, vy → its E → new Hartree × rydM/Ry_inf; heavy line: rydM Z²) and compares it with `checkStr` (42 exact checks), outside the old last-digit tie rule (which had started to swallow these 10 lines; it is back to the 6 a0 lines of stage 2). No limit loosened.
+- New (63 checks): hydrogen level = Ry_inf/(1+m_e/m_p) from NIST values (1e-12); the Lyman limit uses the same energy; for Z = 1, 2, 26, 92, 118 and n = 1..4 the readout text is `fmtEV(levelEV)` in both views, and the Orbit-view energy equals levelEV to 1e-9.
 
-## Every constant: old → new (relative change)
-| constant | old (web / typed) | new (CODATA 2022) | change |
-|---|---|---|---|
-| Bohr radius a0 | 0.529e-10 m | 5.29177210544e-11 m | **+3.35e-4** |
-| Hartree energy | 27.211 eV | 27.211386245981 eV | +1.4e-5 |
-| atomic unit of time | 24.19 as | 24.188843265864 as | −4.8e-5 |
-| atomic unit of speed a0/τ | 2.186854e6 m/s | 2.187691262e6 m/s (= αc to 5.6e-12) | **+3.83e-4** |
-| fm per a0 / metres per fm | 52917.7 / 9.99666e-16 | 52917.7210544 (derived) / 1e-15 exact | +4.0e-7 / **+3.35e-4** |
-| α | 1/137.036 | 7.2973525643e-3 | +6.0e-9 |
-| Rydberg energy | 13.605693123 eV | 13.605693122990 eV | −7.4e-13 |
-| h·c | 1239.841984 eV nm | 1239.841984332 (derived) | +2.7e-10 |
-| u / m_e; m_p / m_e | 1822.888486; 1836.15267 | 1822.888486278 (1/meu); 1836.152673426 | +1.5e-10; +1.9e-9 |
-| m_e c² | 510998.95 eV | 510998.95069 eV | +1.4e-9 |
-| u, m_p, m_n, m_e (kg) | 1.66053907, 1.67262192, 1.67492750e-27, 9.1093837e-31 | …892, …92595, …50056e-27, 9.1093837139e-31 | −6.5e-10, +3.6e-9, +3.3e-10, +1.5e-9 |
-| u (MeV); m_p, m_n, m_e (u) | 931.49410242; 1.007276467, 1.008664916, 5.48579909e-4 | 931.49410372; 1.0072764665789, 1.00866491606, 5.485799090441e-4 | +1.4e-9; −4.2e-10, +6e-11, +8e-11 |
-| u in the temperature text; Learn a0 | 1.66054e-27; 5.29177e-11 | the new u; kA0 | −5.6e-7; +4.0e-7 |
-| k_B, h, c, e | exact SI | same (now named, with their NIST pages) | 0 |
-All are in `atom_core.h`, one block, each with the page key, the year and the date; derived ones (kAuSpeed, kAuTimeAs, kA0Ang, kFmPerA0, kFmLab, kPlanckEVs, kHcEVnm, kMeU, kHartree) are worked out, not typed again. The old comment block about the web's two-number fm conversion is gone. Moved into the block: 510998.95 and 137.036 (`atom_sim.cpp`), the masses and 931.49 (`atom_learn.cpp`), k_B and u (temperature text), the 5.29177e-11 of the guides, 1836.15267 (`atom_core.cpp`).
+## Finding 14: Orbit view wobble (atom_sim.cpp `step`)
+Measured **before** (60 s, Z = 1 and 3, speeds 1/5/10/30, n = 1..4): worst radius error **7.783e-3** (n = 1, speed 30: 50 steps per orbit), energy 5.964e-5, turning-rate error 5.165e-3. Speed 10: 8.7e-4; speed 5: 2.2e-4; n = 2 at 30: 1.2e-4; n ≥ 3 below 1e-5. The wobble is ≈ φ²/2 for a step angle φ = dt·speed/n³.
+**Fix:** each frame step is split into equal leapfrog sub-steps so that none turns more than **kMaxStepAngle = 2π/300 rad**. **Why 300:** it is exactly the accuracy the default speed 5 at n = 1 always had (0.02083 rad, 302 steps per orbit, radius error 2.2e-4), so (a) the target is "every speed as good as the default", (b) at speed ≤ 5 nothing is split and the default motion is bit for bit the old one, (c) only n = 1 above speed 5 splits (6 sub-steps at 30). A stricter floor (e.g. 1e-4) would have changed the default and every web-compared run. Time per frame, turning rate and the trail (one point per frame) are unchanged. `webJumps` (tests only) keeps the web's single step so the web-compared runs still match the web exactly (they did not, for n = 1 above speed 5, with sub-steps: 12 checks).
+**After** (same 32 runs): radius **2.16990e-4**, energy **4.70644e-8**, turning rate **1.45367e-4**. Guards = measured + 1 %: **2.192e-4, 4.754e-8, 1.469e-4** (labelled so in `test_atom.cpp`). The test is from physics: radius against n²a0/Z with a0 from the NIST value, energy against levelEV, turning rate against dt·speed/n³. The remaining 1.45e-4 rate error is the leapfrog's own frequency error at the floor angle (the visible speed is 0.015 % slow, 0.5 % before).
 
-## What moved in the tests (all rescaled by the constant ratio, none loosened)
-Before: 782 of 17,936 atom checks failed. All of them were one of:
-- **Orbit-run numbers** (x, y, vx, vy, first dots; 212 checks): web value × a0 ratio (1.000335) for lengths, × (a0/τ) ratio (1.000383) for speeds, same 1e-9 / 1e-6 limits. They match exactly: the motion in atomic units is unchanged.
-- **Spectra** (5 `rydM`, 525 lines): web value × the ratio the new Rydberg energy, h·c, u/m_e and m_p/m_e give (≤ 2.7e-10; Hα moves 1.8e-7 nm), same 1e-14 / 1e-13 limits. The NIST values are typed again in the test (`nist::` block), not taken from the code.
-- **6 dot hashes** (positions are stored in metres): re-recorded. Checked first, with the 0.10.5 code built in a scratch folder: all 288,000 stored values agree in Bohr radii to **1.2e-7** (float rounding); 3 old dots per run are now also in the test, compared to 1e-6.
-- **Learn "weight" texts** (34): only the 16-digit CSS bar width (`width:99.94556794247602%`) moved, by ~1e-10. Now compared as: all other characters identical, each width within 1e-8 relative (`checkTextWidths`).
-- **6 readout lines** (the existing last-digit "tie" rule took them): e.g. 3dxy "theory 5.55 Å" → 5.56 (10.5 a0 = 5.5545 → 5.5564 Å); sampled 3.68 → 3.69; U⁹¹⁺ "r 0.57 pm" → 0.58. All up by the +0.033 % in a0: real changes, not noise.
-Did **not** move: orbitals (psi), Laguerre, dipole table, outlines, beats, complex states, phase wheel, nuclei (compared in fm), hints, the other readouts and Learn texts, About-independent texts.
-**Tightened:** `testOrbitGlide` compared the lab's circle with CODATA's to 4e-4; now 1e-12. Comments "CODATA 2018 (written from knowledge)" replaced by the real source (NIST pages, 2022).
-**New** (32 checks, `testConstants`): all 21 constants against the NIST values typed in the test (1e-14); relations independent of how each was typed: a0/τ = αc (1e-10, measured 5.6e-12), Hartree = 2 Rydberg (1e-11), Hartree = α²m_ec², a0 = ħ/(m_e c α), u/m_e = uc²/m_ec², m_p/m_e from kg and from u (all 1e-9).
+## Finding 8: Scale Fixed (atom_sim.cpp `fitSize`)
+Cloud views used 24 a0 (= kExt[3], the n = 3 size; the comment said "n = 4 / 3s") and cut off the n = 4 orbitals (view radius / 90 % outline radius was **0.664**, worst 4p). Now `kExt[4]` = 40 a0, the comment is fixed; the Orbit view's 16 a0 (the n = 4 circle) was right. New test over all 30 real and 20 complex orbitals at Z = 1 and 3, using the lab's own `outlineOf(...).rmax`: Fixed now **1.106** at worst (4p), Auto 1.106 (kExt per n holds every outline); Orbit Fixed holds the n = 4 circle. Visible change on purpose: in Fixed, cloud views are drawn 40/24 = 1.67× smaller. No web-compared dot, hash or reference moved.
 
-## About page (`app_text.inc` and its edit list in `test_app.cpp`, same words)
-The two "CODATA 2018 … written from knowledge" lines now say CODATA 2022, read from NIST on 2026-10-04; the "0.529 Å is 0.03 % smaller" line is replaced by one entry naming the NIST pages and every constant, saying what changed and what was not from NIST (H-1 atom mass, proton radius). Edit count in `test_app` unchanged (14).
+## Not moved
+Orbitals, dots (all six hashes and the 18 old dots), outlines, spectra, beats, Learn texts, the other readouts, the 6 stage 2 a0 last-digit lines, the default Orbit motion (speed ≤ 5), Superposition, About page. **No new source:** the formulas are the reduced-mass Rydberg level already listed under the textbooks and CODATA entries; the sub-step floor is measured (tests), not taken from a source; so About is unchanged.
 
-## Tests: all seven pass (Linux GCC Release, Ninja scratch build in /tmp/claude-0/build, `PL_BUILD_APP=OFF`)
-orbit 1,540; **atom 17,974** (was 17,936); app 1,385; nbody 37; jpl 55; moon 24; moon_real 59.
+## Tests (Linux GCC Release, Ninja, `PL_BUILD_APP=OFF`): all seven pass
+orbit 1,540; **atom 18,085** (was 17,974: +63 energy, +42 exact energy parts, +3 accuracy, +3 Fixed); app 1,385; nbody 37; jpl 55; moon 24; moon_real 59.
 
-## Not done / not tested
-Windows, speed, anything on screen (the Bohr circle is 0.03 % bigger: not looked at; OWNER-TODO has a check). Other stage 1 findings (1-3, 5-8, 10-17) are untouched: finding 3 (hydrogen shows −13.61 eV from ½·Hartree·Z², not the reduced-mass level) and 5 (A·u − Z mass) still stand. Hydrogen-1 atom mass and proton radius not re-read from a source. `ATOM_PLAN.md` still describes the web's rounded constants (history, not edited).
+## Not tested / left undone
+Windows, speed (6 sub-steps at n = 1, speed 30 are a few multiplications per frame; not timed), anything on screen. `atom_panel.cpp` is not built in this session (the app target needs SDL3): the new note is one `mutedWrapped` call like its neighbours, not compiled here. Findings 1, 2, 5-7, 9-13, 15-17 of the audit are untouched (finding 1, the outline of complex states, is next in importance).
