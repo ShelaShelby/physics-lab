@@ -41,4 +41,4 @@ Per frame: one binary search in 956 rows (≈ 15 ns) for the size. Per isotope c
 `atom_panel.cpp` (the new `nuclearSizeCard`) and `atom_view.cpp` (one changed line, one include) are not built here: the card function compiled against stand-ins (`-Wall -Wextra`, clean). Never seen: the card's layout and wrapping, the glyphs (± × √ ²), the nucleus at its new sizes, overlap on screen. No Windows behaviour or speed tested here.
 
 ## Windows CI result
-(pending: filled in after the push)
+Run 37206334083 on commit bc374ae (Native Windows build, windows-latest, Visual Studio 64-bit): **success**. Configure, Build (the whole app: `atom_panel.cpp` with the new card and `atom_view.cpp` with the changed line **compiled on MSVC**, which the cloud could not do) and "Physics unit tests" (all seven programs) passed, so the new radii, layout and text tests hold under MSVC. I did not read the printed counts from the log, so "18,578 on Windows" is not claimed; the step's success is. Compiling is not seeing: the card and the nucleus at its new sizes have never been looked at on a screen (OWNER-TODO).
