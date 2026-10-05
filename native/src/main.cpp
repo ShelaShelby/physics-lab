@@ -366,8 +366,11 @@ int main(int, char**) {
         app.sys.setRealPlanets(app.set.realPlanets);        // Planet physics: Simple / Real (does nothing when it has not changed)
         // ---- time and physics (fixed steps, as in the web version) ----
         const Uint64 now = SDL_GetPerformanceCounter();   // the frame starts here
-        const double frameDt = static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
+        static const double fixedDt = SDL_getenv("PL_FIXED_DT") ? std::atof(SDL_getenv("PL_FIXED_DT")) : 0.0;   // for automatic checks: every frame lasts exactly this many seconds, so two runs draw the same pictures
+        const double frameDt = fixedDt > 0 ? fixedDt : static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
         last = now;
+        static double fixedClockMs = 0;                  // with PL_FIXED_DT the Atom Lab's own clock (glides, messages, decay) follows the frames too
+        if (fixedDt > 0) { fixedClockMs += fixedDt * 1000; app.atom.nowMs = [] { return fixedClockMs; }; }
         const double dt = app::stepSeconds(frameDt, units::kMaxFrameDt);   // a slow frame counts as at most 0.05 s, a stall (window held by the system) as nothing: no jump, no catching up
         maxPhysicsDt = std::max(maxPhysicsDt, dt);
         if (app.pane) {                                 // the Learn or Achievements tab is open: the lab waits (the web draws nothing then)

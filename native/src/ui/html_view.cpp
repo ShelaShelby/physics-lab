@@ -259,7 +259,7 @@ void block(const Node& n, const Ctx& cx, float left, float right, float sizePt, 
         }
         const float bottom = ImGui::GetCursorScreenPos().y + pad * 0.6f;
         dl->ChannelsSetCurrent(0);
-        dl->AddRectFilled(o, ImVec2(right, bottom), IM_COL32(120, 140, 200, 31), 12 * s);
+        dl->AddRectFilled(o, ImVec2(right, bottom), col(look().c.soft, 31/255.f), 12 * s);
         dl->ChannelsMerge();
         ImGui::SetCursorScreenPos(ImVec2(left, bottom + 10 * s));
         ImGui::Dummy(ImVec2(right - left, 0));
@@ -303,7 +303,7 @@ void block(const Node& n, const Ctx& cx, float left, float right, float sizePt, 
         return;
     }
     auto bar = [&](const Node& track, float x0, float x1, float y, float h) {   // a rounded track with a coloured bar in it
-        dl->AddRectFilled(ImVec2(x0, y), ImVec2(x1, y + h), IM_COL32(120, 140, 200, 38), h / 2);
+        dl->AddRectFilled(ImVec2(x0, y), ImVec2(x1, y + h), col(look().c.soft, 38/255.f), h / 2);
         for (const auto& b : track.kids) {
             if (!b->has("lrnBar")) continue;
             const float w = float(std::atof(b->style.count("width") ? b->style.at("width").c_str() : "0")) / 100;
@@ -332,7 +332,7 @@ void block(const Node& n, const Ctx& cx, float left, float right, float sizePt, 
     }
     if (n.tag == "div" && n.has("lrnStack")) {                 // the stacked bar of protons, neutrons and electrons
         const float h = 16 * s, y = ImGui::GetCursorScreenPos().y + 6 * s;
-        dl->AddRectFilled(ImVec2(left, y), ImVec2(right, y + h), IM_COL32(128, 128, 128, 51), h / 2);
+        dl->AddRectFilled(ImVec2(left, y), ImVec2(right, y + h), col(look().c.neutral, 51/255.f), h / 2);
         float x = left;
         for (const auto& k : n.kids) {
             const float w = float(std::atof(k->style.count("width") ? k->style.at("width").c_str() : "0")) / 100 * (right - left);

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "app_data.h"
+#include "theme_style.h"
 
 namespace app {
 
@@ -22,7 +23,7 @@ std::string clean(const std::string& v) {           // one line: no line breaks 
 
 }  // namespace
 
-bool validTheme(const std::string& id) { for (const ThemeDef& t : kThemes) if (id == t.id) return true; return false; }
+bool validTheme(const std::string& id) { return findTheme(id) != nullptr; }
 bool validTextSize(const std::string& k) { for (const SizeOpt& s : kTextSizes) if (k == s.key) return true; return false; }
 bool validFont(const std::string& k) { for (const FontOpt& f : kFonts) if (k == f.key) return true; return false; }
 bool validMotion(const std::string& k) { return k == "auto" || k == "on" || k == "off"; }
@@ -137,15 +138,24 @@ Rgb hexRgb(const std::string& h) {
 
 ThemeColors themeColors(const std::string& id0, bool systemLight) {
     const std::string id = id0 == "auto" || !validTheme(id0) ? (systemLight ? "light" : "dark") : id0;
-    for (const ThemeDef& t : kThemes)
-        if (id == t.id)
-            return {hexRgb(t.bg), hexRgb(t.fg), hexRgb(t.muted), hexRgb(t.card), hexRgb(t.line), hexRgb(t.accent), hexRgb(t.onacc), t.light, id};
+    if (const ThemeDef* t = findTheme(id)) {
+        ThemeColors c{hexRgb(t->bg), hexRgb(t->fg), hexRgb(t->muted), hexRgb(t->card), hexRgb(t->line), hexRgb(t->accent), hexRgb(t->onacc), t->light, id, {}, {}, {}, {}, {}, {}, {}};
+        c.style = themeStyle(id);
+        const ThemeStyle& s = c.style;
+        // what used to be written into the drawing code: the same numbers as before unless the theme says otherwise
+        c.accentFill = s.accentFill.set ? s.accentFill.c : c.accent;
+        c.danger = s.danger.set ? s.danger.c : Rgb{0.90f, 0.35f, 0.30f};                  // error messages (Save image, the benchmark)
+        c.dangerFill = s.dangerFill.set ? s.dangerFill.c : hexRgb("#d0453b");               // the red button of the reset pop-up
+        c.onDanger = s.onDanger.set ? s.onDanger.c : Rgb{1, 1, 1};
+        c.soft = s.soft.set ? s.soft.c : Rgb{120 / 255.f, 140 / 255.f, 200 / 255.f};        // the faint blue tint behind illustrations, bars and the Learn cards
+        c.neutral = s.neutral.set ? s.neutral.c : Rgb{128 / 255.f, 128 / 255.f, 128 / 255.f};   // the grey of tracks, frames and boxes
+        return c;
+    }
     return themeColors("dark", false);
 }
 
 bool themeUsable(const Prefs& p, const std::string& id) {
-    for (const ThemeDef& t : kThemes)
-        if (id == t.id) return !t.secret || p.unlocked.count(id);
+    if (const ThemeDef* t = findTheme(id)) return !t->secret || p.unlocked.count(id);
     return false;
 }
 

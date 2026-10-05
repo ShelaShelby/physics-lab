@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "app/theme_types.h"
+
 namespace app {
 
 // Where the window was: its size and (if known) its place, in the window system's own units, and whether it was maximised.
@@ -56,9 +58,16 @@ bool validMotion(const std::string& k);
 double textSizeFactor(const std::string& k);      // 0.9, 1, 1.15, 1.3
 
 // ---- themes ----
-struct Rgb { float r, g, b; };
 Rgb hexRgb(const std::string& hex);               // "#1e1e21" or "#fff"
-struct ThemeColors { Rgb bg, fg, muted, card, line, accent, onacc; bool light; std::string id; };
+// The colours of a theme and (0.14) its style. The six extra colours are what used to be written into drawing code:
+//   accentFill  the accent when it is a FILL behind onacc text (chosen buttons, the selected tab); the accent itself is for text and marks
+//   danger      an error message's colour;  dangerFill / onDanger  the red button and its text
+//   soft        the faint tint behind illustrations and bars;  neutral  the grey of tracks and frames
+struct ThemeColors {
+    Rgb bg, fg, muted, card, line, accent, onacc; bool light; std::string id;
+    Rgb accentFill{0, 0, 0}, danger{0, 0, 0}, dangerFill{0, 0, 0}, onDanger{0, 0, 0}, soft{0, 0, 0}, neutral{0, 0, 0};
+    ThemeStyle style;
+};
 // The colours of a theme. Auto follows Windows' light or dark setting (the web's device setting).
 ThemeColors themeColors(const std::string& id, bool systemLight);
 // a secret theme can only be used once it is unlocked (as the web's pick())

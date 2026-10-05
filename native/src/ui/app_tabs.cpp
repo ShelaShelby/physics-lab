@@ -17,6 +17,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "look.h"
+#include "style_draw.h"
 #include "orbit/sky.h"
 
 namespace ui {
@@ -123,10 +124,9 @@ bool drawCard(const Card& c, ImVec2 p, float w, float h, bool clickable, int id)
         ImGui::PopID();
         if (hover) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
-    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), col(look().c.card, a), corner(12 * s));
-    dl->AddRect(p, ImVec2(p.x + w, p.y + h), col(hover ? look().c.accent : look().c.line, a), corner(12 * s));
+    cardRect(dl, p, ImVec2(p.x + w, p.y + h), corner(12 * s), hover ? look().c.accent : look().c.line, a);
     const ImVec2 ib(p.x + 14 * s, p.y + (h - 48 * s) / 2);
-    dl->AddRectFilled(ib, ImVec2(ib.x + 48 * s, ib.y + 48 * s), col(c.locked ? look().c.line : look().c.accent, a), corner(12 * s));
+    faceRect(dl, ib, ImVec2(ib.x + 48 * s, ib.y + 48 * s), c.locked ? look().c.line : look().c.accentFill, a, app::WidgetState::Normal, corner(12 * s));
     const std::string icon = displayable(c.icon);
     if (!icon.empty()) {
         const float fs = 26 * s;
@@ -292,8 +292,7 @@ void factsLine(AppState& app) {
     if (hover != g_held) { g_held = hover; if (g_held) g_next = DBL_MAX; else if (g_fadeAt < 0) sched(app); }
     if (clicked) { if (gift) openSecret(app, 1); else if (g_fadeAt < 0) showNext(app); }
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p, ImVec2(p.x + W, p.y + h), col(look().c.card), corner(12 * s));
-    dl->AddRect(p, ImVec2(p.x + W, p.y + h), col(g_held ? look().c.accent : look().c.line), corner(12 * s));
+    cardRect(dl, p, ImVec2(p.x + W, p.y + h), corner(12 * s), g_held ? look().c.accent : look().c.line);
     if (!icon.empty()) dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(p.x + padX, p.y + (h - 18 * s) / 2), col(look().c.fg), icon.c_str());
     // the text fades out and in over 0.25 s (Reduced motion: no fading)
     float alpha = 1;
@@ -323,7 +322,7 @@ void tabsBar(AppState& app) {
     const float h = ImGui::GetFontSize() + 14 * s;
     float total = 0;
     for (const char* l : labels) total += ImGui::CalcTextSize(displayable(l).c_str()).x + 28 * s;
-    dl->AddRectFilled(p0, ImVec2(p0.x + total, p0.y + h), col(look().c.card), corner(10 * s));
+    cardRect(dl, p0, ImVec2(p0.x + total, p0.y + h), corner(10 * s), look().c.line, 1, false);
     for (int i = 0; i < 3; i++) {
         const std::string l = displayable(labels[i]);
         const float w = ImGui::CalcTextSize(l.c_str()).x + 28 * s;
@@ -333,8 +332,8 @@ void tabsBar(AppState& app) {
         const bool hover = ImGui::IsItemHovered();
         ImGui::PopID();
         const bool on = app.pane == i;
-        if (on) dl->AddRectFilled(ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), col(look().c.accent), corner(10 * s),
-                                  i == 0 ? ImDrawFlags_RoundCornersLeft : i == 2 ? ImDrawFlags_RoundCornersRight : ImDrawFlags_RoundCornersNone);
+        if (on) faceRect(dl, ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), look().c.accentFill, 1, app::WidgetState::Normal, corner(10 * s),
+                         i == 0 ? ImDrawFlags_RoundCornersLeft : i == 2 ? ImDrawFlags_RoundCornersRight : ImDrawFlags_RoundCornersNone);
         else if (hover) dl->AddRectFilled(ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), col(look().c.line, 0.6f));
         dl->AddText(ImVec2(x + 14 * s, p0.y + 7 * s), col(on ? look().c.onacc : look().c.fg), l.c_str());
         x += w;
@@ -357,6 +356,7 @@ void paneWindow(AppState& app, float top) {
     ImGui::Begin("##pane", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                  ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_AlwaysVerticalScrollbar);
     ImGui::PopStyleVar(2);
+    panelDecor(app::PanelKind::Docked);
     if (look().synthGlow) drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8 * s, 8 * s));
     if (app.pane == 1) learnPane(app);
@@ -413,6 +413,7 @@ void appTabsFrame(AppState& app) {
     ImGui::Begin("##achToast", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings |
                  ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    panelDecor(app::PanelKind::Floating);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const float tx = p.x + 42 * s + 10 * s, tw = p.x + w - 24 * s - tx;
@@ -437,7 +438,7 @@ void appTabsFrame(AppState& app) {
     ImGui::PopTextWrapPos();
     const float bottom = ImGui::GetCursorScreenPos().y;
     const float iy = std::max(p.y, (p.y + bottom - 42 * s) / 2 - 2 * s);
-    dl->AddRectFilled(ImVec2(p.x, iy), ImVec2(p.x + 42 * s, iy + 42 * s), col(look().c.accent, a), corner(10 * s));
+    faceRect(dl, ImVec2(p.x, iy), ImVec2(p.x + 42 * s, iy + 42 * s), look().c.accentFill, a, app::WidgetState::Normal, corner(10 * s));
     const std::string icon = displayable(A.ic);
     if (!icon.empty()) {
         const ImVec2 sz = ImGui::GetFont()->CalcTextSizeA(22 * s, FLT_MAX, 0, icon.c_str());

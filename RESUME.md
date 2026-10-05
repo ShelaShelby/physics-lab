@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.13 alpha, "GPU update", is COMPLETE (stage 4 of 4 done: the Orbit Lab's rocks on the GPU, the chart of nuclides kept in a GPU buffer, the Cloud 2D view's cost fixed). 0.14 is not decided. What 0.13 is: OpenGL 4.3 with a 3.3 fallback (the CPU paths stay as the reference); phase colours (stage 1), superposition and jump colour groups (stage 2), the 90 % outline and exact normalisation (stage 3), rocks and chart (stage 4) on the GPU; five switches in the Performance card (GPU colours, superposition and jumps, outline, rocks, chart cache), none saved. New in stage 4: `src/render/rock_compute.*` + `kRocksCS`, `src/orbit/belt_layer.*`, `solveKepler`/`beltScreen` in `src/orbit/belts.*`, `src/render/mesh.h` + `kChartVS` + `Renderer2D::meshCreate/drawMesh`, `src/atom/chart_mesh.*`, `ChartCache` in `chart_draw`, `tests/test_rocks.inc` + `rock_reference.h`, `tests/test_chart_cache.inc`, `tests/test_stage4_cloud.inc`, `tests/gl_rocks.inc`, `tests/gl_chart.inc`, `tests/timing_stage4.cpp` (`-DPL_TIMING=ON`). Speed is NOT measured: the owner runs the benchmark (OWNER-TODO).
+- Version 0.14 alpha, "Themes", stage 1 of 5 is done (richer theme styles + the Frutiger Aero theme). Stages 2-5 (Y2K futurism, glass / chrome planets and nucleons, glossy chart and Cloud dots, animated backgrounds and a full contrast check) are in ROADMAP. What stage 1 is: a theme can have a gradient page, glass panels, gloss, rounding, a shadow and a system font, all as data (`src/app/theme_types.h`, `theme_style.*`, drawn by `src/ui/style_draw.*`); the 11 web themes draw the same pixels as in 0.13 (`tools/theme_pictures.sh`, `tests/check_theme_pictures.sh`, reference hashes in `tests/reference/theme_pictures_*.sha256`; the real app builds and runs headless on Linux with SDL's offscreen driver and llvmpipe, see REPORT.md); `PL_FIXED_DT` (main.cpp) makes two runs draw the same pixels. Science colours and the lab pictures are NOT themed yet. 0.13 (GPU update) is complete before it.
 - Test programs and their last known check counts:
   - orbit_tests: 1,612 (72 added in 0.13 stage 4)
   - atom_tests: 21,066 (84 added in 0.13 stage 4)
-  - app_tests: 1,616 (16 added in 0.13 stage 4)
+  - app_tests: 2,014 (398 added in 0.14 stage 1: the WCAG formula, theme data, gloss, Aero contrast, font fallback)
   - glsl_shaders (glslang, needs `glslang-tools`; skipped if absent; 15 shaders, 4 compute) and gl_phase_colours (only with -DPL_GL_TESTS=ON: 503 checks on llvmpipe)
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)

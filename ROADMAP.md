@@ -71,8 +71,16 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - stage 1: phase colours on the GPU — done (OpenGL 3.3)
 - stage 2: switch to OpenGL 4.3; superposition and cloud jumps on the GPU (compute shaders) — done (the dot positions, projection, draw order and upload of the cloud are still on the CPU; the jump's own dot building stays there because its random chain cannot run in parallel)
 - stage 3: the outline's density grid on the GPU (compute), and exact orbital normalisation — done
-- stage 4: Orbit Lab rocks on the GPU; chart and landscape geometry cached on the GPU; the Cloud 2D cost — done. **0.13 is complete.** 0.14 is not decided.
+- stage 4: Orbit Lab rocks on the GPU; chart and landscape geometry cached on the GPU; the Cloud 2D cost — done. **0.13 is complete.**
 - OpenGL 4.3 from stage 2 means PCs older than about 2013 (Intel HD 4600 / Haswell, GeForce 600, Radeon HD 7000 or newer are the oldest that support it) will not run the app; the owner has accepted this (see DECISIONS.md)
+
+## 0.14 "Themes" plan (the owner's, 5 Oct 2026): the owner's two favourite looks, Frutiger Aero and Y2K futurism; science must stay readable in every theme
+- stage 1: richer theme styles (gradient page, glass panels, gloss, rounding, shadow, system font; all data) + Frutiger Aero panels and widgets — done (the pictures of the labs are NOT changed)
+- stage 2: Y2K futurism panels and widgets — planned
+- stage 3: glass (Aero) / chrome (Y2K) planets and nucleons: theme-aware shading — planned
+- stage 4: glossy chart tiles and landscape; theme-aware Cloud dots — planned
+- stage 5: animated backgrounds (with an off switch) and a full contrast check — planned
+- Science colours (phase wheel, decay modes, element and planet colours) stay fixed in every theme on purpose.
 
 ## Later (not scheduled)
 - Orbit Lab frame cost that is NOT the rocks (measured in 0.13 stage 4: about 3.4 of the 4.1 ms of scene 1 on the cloud session's CPU): the night sky, the Milky Way band, the constellation lines and the trails push about 86,000 vertices every frame (`Renderer2D::push`), the same way the chart did; a retained GPU mesh for the sky (it only changes with the camera) would be the same kind of job as the chart's — planned, not measured on the owner's PC

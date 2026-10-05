@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "fonts.h"
+#include "style_draw.h"
 
 namespace ui {
 
@@ -30,12 +31,12 @@ bool systemReducedMotion() {
 ImVec4 vec(const app::Rgb& c, float a) { return ImVec4(c.r, c.g, c.b, a); }
 ImU32 col(const app::Rgb& c, float a) { return ImGui::ColorConvertFloat4ToU32(vec(c, a)); }
 app::Rgb mix(const app::Rgb& a, const app::Rgb& b, float f) { return {a.r + (b.r - a.r) * f, a.g + (b.g - a.g) * f, a.b + (b.b - a.b) * f}; }
-float corner(float r) { return g_look.square ? 0 : r; }
+float corner(float r) { return app::scaledRadius(g_look.c.style, r); }
 
 void pushOn() {
-    ImGui::PushStyleColor(ImGuiCol_Button, vec(g_look.c.accent));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, vec(g_look.c.accent));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, vec(g_look.c.accent));
+    ImGui::PushStyleColor(ImGuiCol_Button, vec(g_look.c.accentFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, vec(g_look.c.accentFill));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, vec(g_look.c.accentFill));
     ImGui::PushStyleColor(ImGuiCol_Text, vec(g_look.c.onacc));
 }
 void popOn() { ImGui::PopStyleColor(4); }
@@ -55,6 +56,7 @@ bool beginGift(const char* id) {
     const bool open = ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
+    if (open) panelDecor(app::PanelKind::Floating);
     return open;
 }
 
@@ -176,13 +178,13 @@ std::string giftPage(const std::string& html) {
                 const bool primary = bs[i].cls == "primary", danger = bs[i].cls == "setDanger";
                 if (primary) pushOn();
                 if (danger) {                               // .setDanger: red with white text
-                    const ImVec4 red = vec(app::hexRgb("#d0453b"));
+                    const ImVec4 red = vec(g_look.c.dangerFill);
                     ImGui::PushStyleColor(ImGuiCol_Button, red);
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, red);
                     ImGui::PushStyleColor(ImGuiCol_ButtonActive, red);
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+                    ImGui::PushStyleColor(ImGuiCol_Text, vec(g_look.c.onDanger));
                 }
-                if (ImGui::Button(bs[i].label.c_str())) clicked = bs[i].id;
+                if (ui::Button(bs[i].label.c_str())) clicked = bs[i].id;
                 if (primary || danger) ImGui::PopStyleColor(4);
             }
         }
@@ -192,7 +194,7 @@ std::string giftPage(const std::string& html) {
 
 void drawSynthGlow(ImDrawList* dl, ImVec2 a, ImVec2 b) {
     // radial-gradient(130% 55% at 50% 0%, #3b1466 0%, var(--bg) 62%): soft rings from the top middle
-    const app::Rgb glow = app::hexRgb("#3b1466");
+    const app::Rgb glow = g_look.c.style.glowTop.c;
     const float w = b.x - a.x, h = b.y - a.y, rx = 1.3f * w * 0.62f, ry = 0.55f * h * 0.62f;
     for (int i = 24; i >= 1; i--) {
         const float t = i / 24.f;
@@ -211,11 +213,12 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     L.c = app::themeColors(app::themeUsable(p, p.theme) ? p.theme : "auto", systemLight);
     L.textScale = float(app::textSizeFactor(p.textSize));
     L.reduced = p.motion == "on" || (p.motion == "auto" && systemReduced);
-    L.square = L.c.id == "monochrome";
-    L.grayscale = L.c.id == "monochrome";
-    L.synthGlow = L.c.id == "synthwave";
-    // the font: the one picked in Settings; with Theme default, Paper's book font and Monochrome's monospace (the web's --ffd)
-    L.fontKey = p.font != "auto" ? p.font : L.c.id == "paper" ? "serif" : L.c.id == "monochrome" ? "mono" : "auto";
+    const app::ThemeStyle& ts = L.c.style;                     // 0.14: what used to be tested as `id == "monochrome"` and so on is data of the theme
+    L.square = ts.square;
+    L.grayscale = ts.grayscale;
+    L.synthGlow = ts.glowTop.set;
+    // the font: the one picked in Settings; with Theme default, the theme's own (Paper's book font, Monochrome's monospace, Aero's Segoe UI when the PC has it)
+    L.fontKey = app::fontKeyFor(ts, p.font, fontFamilyAvailable(app::fontFamilyKeyOf(ts)));
     g_look = L;
     useFontFamily(L.fontKey);
     const std::string key = L.c.id + "|" + std::to_string(L.textScale);
@@ -223,25 +226,25 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     g_applied = key;
     ImGuiStyle& st = ImGui::GetStyle();
     st.FontScaleMain = L.textScale;
-    const float r = L.square ? 0 : 6;
+    const float r = L.square ? 0 : 6 * ts.roundScale;
     st.FrameRounding = r * 0.7f; st.GrabRounding = r * 0.5f; st.PopupRounding = r; st.ChildRounding = r; st.TabRounding = r * 0.7f;
     st.ScrollbarRounding = r; st.WindowRounding = 0;
-    st.FrameBorderSize = 1;
+    st.FrameBorderSize = ts.panel.borderWidth;
     st.GrabMinSize = 16.0f * st.FontScaleDpi * L.textScale;   // a thumb that is easy to see and grab
     const app::ThemeColors& c = L.c;
     ImVec4* k = st.Colors;
     k[ImGuiCol_Text] = vec(c.fg);
     k[ImGuiCol_TextDisabled] = vec(c.muted);
-    k[ImGuiCol_WindowBg] = vec(c.bg);
+    k[ImGuiCol_WindowBg] = vec(c.bg, glassy() ? 0.f : 1.f);   // a glass theme paints every window itself (ui/style_draw.cpp panelDecor)
     k[ImGuiCol_ChildBg] = vec(c.bg, 0);
-    k[ImGuiCol_PopupBg] = vec(c.card);
-    k[ImGuiCol_Border] = vec(mix(c.line, c.fg, 0.25f));
+    k[ImGuiCol_PopupBg] = vec(c.card, ts.panel.floatAlpha);
+    k[ImGuiCol_Border] = vec(mix(c.line, c.fg, ts.panel.borderFgMix));
     k[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
     k[ImGuiCol_FrameBg] = vec(mix(c.card, c.fg, 0.16f));
     k[ImGuiCol_FrameBgHovered] = vec(mix(c.card, c.accent, 0.18f));
     k[ImGuiCol_FrameBgActive] = vec(mix(c.card, c.accent, 0.3f));
     k[ImGuiCol_TitleBg] = vec(c.card);
-    k[ImGuiCol_TitleBgActive] = vec(mix(c.card, c.accent, 0.15f));
+    k[ImGuiCol_TitleBgActive] = vec(mix(c.card, c.accentFill, 0.15f));
     k[ImGuiCol_TitleBgCollapsed] = vec(c.card);
     k[ImGuiCol_MenuBarBg] = vec(c.card);
     k[ImGuiCol_ScrollbarBg] = vec(c.bg);
@@ -252,11 +255,11 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     k[ImGuiCol_SliderGrab] = vec(mix(c.accent, c.fg, 0.1f));
     k[ImGuiCol_SliderGrabActive] = vec(mix(c.accent, c.fg, 0.2f));
     k[ImGuiCol_Button] = vec(c.card);
-    k[ImGuiCol_ButtonHovered] = vec(mix(c.card, c.accent, 0.22f));
-    k[ImGuiCol_ButtonActive] = vec(mix(c.card, c.accent, 0.45f));
-    k[ImGuiCol_Header] = vec(mix(c.card, c.accent, 0.15f));
-    k[ImGuiCol_HeaderHovered] = vec(mix(c.card, c.accent, 0.25f));
-    k[ImGuiCol_HeaderActive] = vec(mix(c.card, c.accent, 0.4f));
+    k[ImGuiCol_ButtonHovered] = vec(mix(c.card, c.accent, ts.widget.hoverTint));
+    k[ImGuiCol_ButtonActive] = vec(mix(c.card, c.accent, ts.widget.pressTint));
+    k[ImGuiCol_Header] = vec(mix(c.card, c.accentFill, 0.15f));
+    k[ImGuiCol_HeaderHovered] = vec(mix(c.card, c.accentFill, 0.25f));
+    k[ImGuiCol_HeaderActive] = vec(mix(c.card, c.accentFill, 0.4f));
     k[ImGuiCol_Separator] = vec(c.line);
     k[ImGuiCol_SeparatorHovered] = vec(c.accent);
     k[ImGuiCol_SeparatorActive] = vec(c.accent);
@@ -265,7 +268,7 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     k[ImGuiCol_ResizeGripActive] = vec(c.accent);
     k[ImGuiCol_Tab] = vec(c.card);
     k[ImGuiCol_TabHovered] = vec(mix(c.card, c.accent, 0.25f));
-    k[ImGuiCol_TabSelected] = vec(c.accent);
+    k[ImGuiCol_TabSelected] = vec(c.accentFill);
     k[ImGuiCol_PlotLines] = vec(c.accent);
     k[ImGuiCol_PlotLinesHovered] = vec(c.fg);
     k[ImGuiCol_PlotHistogram] = vec(c.accent);

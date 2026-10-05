@@ -1,4 +1,5 @@
 #include "ui/benchmark.h"
+#include "ui/style_draw.h"
 
 #include <SDL3/SDL.h>
 
@@ -543,7 +544,7 @@ void benchmarkWindow(AppState& app) {
             }
             ImGui::PopStyleColor();
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Text, b.noteFailed ? ImVec4(0.9f, 0.35f, 0.3f, 1) : vec(look().c.muted));
+            ImGui::PushStyleColor(ImGuiCol_Text, b.noteFailed ? vec(look().c.danger) : vec(look().c.muted));
             ImGui::TextWrapped("%s", b.note.c_str());
             ImGui::PopStyleColor();
             ImGui::Spacing();

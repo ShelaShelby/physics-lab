@@ -18,6 +18,7 @@
 #include "imgui.h"
 #include "app_pages.h"
 #include "look.h"
+#include "style_draw.h"
 #include "orbit/format.h"
 #include "atom/atom_learn.h"
 #include "atom/asd.h"
@@ -99,7 +100,7 @@ void selectRow(AppState& app, const char* key, const char* label, const std::vec
         float w = options.size() == 2 ? (avail - gap) / 2 : ImGui::CalcTextSize(t.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x + 8 * S();
         if (i > 0) { if (x + gap + w <= avail) { ImGui::SameLine(0, gap); x += gap; } else x = 0; }
         if (on) pushOn();
-        if (ImGui::Button(t.c_str(), ImVec2(w, 0)) && !on) app.atom.setParam(key, options[i].first);
+        if (ui::Button(t.c_str(), ImVec2(w, 0)) && !on) app.atom.setParam(key, options[i].first);
         if (on) popOn();
         x += w;
     }
@@ -133,21 +134,21 @@ void sliderRow(AppState& app, const char* key, const std::string& label, const s
     ImGui::PopFont();
     const float bw = ImGui::GetFrameHeight();
     if (plusMinus) {
-        if (ImGui::Button("−", ImVec2(bw, 0))) app.atom.setParam(key, v - step);
+        if (ui::Button("−", ImVec2(bw, 0))) app.atom.setParam(key, v - step);
         if (ImGui::IsItemHovered() && what) ImGui::SetTooltip("one fewer %s", what);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - bw - ImGui::GetStyle().ItemSpacing.x);
     } else ImGui::SetNextItemWidth(-1);
     if (step >= 1) {
         int iv = int(std::lround(v));
-        if (ImGui::SliderInt("##s", &iv, int(lo), int(hi), "")) app.atom.setParam(key, iv);
+        if (ui::SliderInt("##s", &iv, int(lo), int(hi), "")) app.atom.setParam(key, iv);
     } else {
         float fv = float(v);
-        if (ImGui::SliderFloat("##s", &fv, float(lo), float(hi), "")) app.atom.setParam(key, std::round(double(fv) / step) * step);
+        if (ui::SliderFloat("##s", &fv, float(lo), float(hi), "")) app.atom.setParam(key, std::round(double(fv) / step) * step);
     }
     if (plusMinus) {
         ImGui::SameLine();
-        if (ImGui::Button("+", ImVec2(bw, 0))) app.atom.setParam(key, v + step);
+        if (ui::Button("+", ImVec2(bw, 0))) app.atom.setParam(key, v + step);
         if (ImGui::IsItemHovered() && what) ImGui::SetTooltip("one more %s", what);
     }
     ImGui::PopID();
@@ -279,7 +280,7 @@ void factsCard(int Z, double tempK) {
     auto frac = [](double k) { return std::sqrt(std::min(k, kTMax) / kTMax); };
     const ImVec2 a = ImGui::GetCursorScreenPos();
     const float bh = 10 * s, by = a.y + 8 * s;
-    dl->AddRectFilled(ImVec2(a.x, by), ImVec2(a.x + width, by + bh), IM_COL32(128, 128, 128, 51), 5 * s);
+    dl->AddRectFilled(ImVec2(a.x, by), ImVec2(a.x + width, by + bh), col(look().c.neutral, 51/255.f), 5 * s);
     const double sEnd = frac(f == 's' ? b : std::isnan(m) ? 0 : m);
     double lEnd = sEnd;
     if (!(f == 's' || std::isnan(m))) lEnd = sEnd + (frac(std::isnan(b) ? kTMax : b) - frac(m));
@@ -628,8 +629,8 @@ struct TempBox {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const float width = ImGui::GetContentRegionAvail().x, k = width / float(W);
         const ImVec2 o = ImGui::GetCursorScreenPos();
-        dl->AddRectFilled(o, ImVec2(o.x + width, o.y + float(H) * k), IM_COL32(128, 128, 128, 26), 6 * S());
-        dl->AddRect(ImVec2(o.x + 0.5f * k, o.y + 0.5f * k), ImVec2(o.x + width - 0.5f * k, o.y + float(H - 0.5) * k), IM_COL32(128, 128, 128, 128), 6 * S());
+        dl->AddRectFilled(o, ImVec2(o.x + width, o.y + float(H) * k), col(look().c.neutral, 26/255.f), 6 * S());
+        dl->AddRect(ImVec2(o.x + 0.5f * k, o.y + 0.5f * k), ImVec2(o.x + width - 0.5f * k, o.y + float(H - 0.5) * k), col(look().c.neutral, 128/255.f), 6 * S());
         for (const P& q : P_) {
             const ImVec2 c(o.x + float(q.x) * k, o.y + float(q.y) * k);
             dl->AddCircleFilled(c, float(R) * k, hsl(hue, 70, st && *st == "gas" ? 62 : 55, 1));
@@ -658,7 +659,7 @@ void labPicker(AppState& app) {
         if (i) ImGui::SameLine();
         const bool on = app.lab == i;
         if (on) pushOn();
-        if (ImGui::Button(names[i], ImVec2(w, 0))) openLab(app, i);
+        if (ui::Button(names[i], ImVec2(w, 0))) openLab(app, i);
         if (on) popOn();
     }
 }
@@ -668,7 +669,7 @@ void labPicker(AppState& app) {
 // shown, and the standing note that this is not real time. All the words come from decay_chain.cpp (tested); this only lays them out.
 static void chainSection(AtomLab& L) {
     ImGui::SeparatorText("Decay chain of the chosen nuclide");
-    ImGui::Checkbox("Show the chain on the chart", &L.s.showChain);
+    ui::Checkbox("Show the chain on the chart", &L.s.showChain);
     const ChainGraph& g = L.decayGraph();
     for (const std::string& line : chainSummary(g)) mutedWrapped(line, 12.0f / 16);
     if (g.nodes[0].stop != ChainStop::Continues) return;
@@ -676,12 +677,12 @@ static void chainSection(AtomLab& L) {
                  "a label ending in ? marks a way whose odds are not measured, and a cross marks a nuclide whose half-life is unknown (the chain stops there). The accent-coloured disc is the walker; the chosen nuclide stays where you put it.", 12.0f / 16);
     const ChainWalk& w = L.s.walk;
     if (w.done) ImGui::BeginDisabled();
-    if (ImGui::Button("Walk one step")) L.walkOnce();
+    if (ui::Button("Walk one step")) L.walkOnce();
     ImGui::SameLine();
-    if (ImGui::Button(displayable(L.s.walkAuto ? "Pause auto-walk" : "Auto-walk (a step every " + jsNum(kWalkPaceS, 2) + " s)").c_str())) L.s.walkAuto = !L.s.walkAuto;
+    if (ui::Button(displayable(L.s.walkAuto ? "Pause auto-walk" : "Auto-walk (a step every " + jsNum(kWalkPaceS, 2) + " s)").c_str())) L.s.walkAuto = !L.s.walkAuto;
     if (w.done) ImGui::EndDisabled();
     ImGui::SameLine();
-    if (ImGui::Button("Restart walk")) L.walkRestart();
+    if (ui::Button("Restart walk")) L.walkRestart();
     if (!w.steps.empty()) {
         ImGui::BeginChild("##walk", ImVec2(-1, std::min(300 * S(), float(w.steps.size()) * 4.5f * ImGui::GetTextLineHeightWithSpacing() + 8)), ImGuiChildFlags_None);
         for (std::size_t i = 0; i < w.steps.size(); i++) {
@@ -708,6 +709,7 @@ void atomPanel(AppState& app, float width) {
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
     ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
     ImGui::Begin("Atom controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    panelDecor(app::PanelKind::Docked);
     if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
         const ImGuiViewport* vp = ImGui::GetMainViewport();
         drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
@@ -716,7 +718,7 @@ void atomPanel(AppState& app, float width) {
     labPicker(app);
     defaultsButton(app);
     ImGui::SameLine();
-    if (ImGui::Button("Reset")) L.restart();                  // the web's Reset: a fresh atom, the same settings
+    if (ui::Button("Reset")) L.restart();                  // the web's Reset: a fresh atom, the same settings
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Restart this lab's simulation");
     shotButton(app, true);                                    // the web's 📷 Save image
     shotNote(app);
@@ -729,7 +731,7 @@ void atomPanel(AppState& app, float width) {
     {
         const int z = periodicTable(p.Z, 26 * S(), false);
         if (z) pickElement(app, z);
-        if (ImGui::Button(displayable("⤢ Bigger table").c_str())) app.bigTable = true;
+        if (ui::Button(displayable("⤢ Bigger table").c_str())) app.bigTable = true;
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Open the periodic table large, with bigger buttons");
         mutedWrapped(isotopeLine(p.Z, p.N), 12.0f / 16);
         ImGui::Dummy(ImVec2(0, 4 * S()));
@@ -737,9 +739,9 @@ void atomPanel(AppState& app, float width) {
         mutedWrapped(kTableNote, 12.0f / 16);
         ImGui::Dummy(ImVec2(0, 4 * S()));
         factsCard(p.Z, app.tempK);
-        if (L.showBuildAnother() && ImGui::Button(displayable("☢ Build another").c_str())) L.buildAnother();
+        if (L.showBuildAnother() && ui::Button(displayable("☢ Build another").c_str())) L.buildAnother();
         if (L.showBuildAnother() && L.showReshuffle()) ImGui::SameLine();
-        if (L.showReshuffle() && ImGui::Button(displayable("🎲 Reshuffle nucleons").c_str())) L.reshuffle();
+        if (L.showReshuffle() && ui::Button(displayable("🎲 Reshuffle nucleons").c_str())) L.reshuffle();
         sliderRow(app, "Z", "Protons (Z)", std::to_string(p.Z) + " · " + name(p.Z), p.Z, 1, 118, 1, true, "proton");
         const auto nr = nRange(p.Z);
         sliderRow(app, "N", "Neutrons", std::to_string(p.N), p.N, nr.first, nr.second, 1, true, "neutron");
@@ -779,7 +781,7 @@ void atomPanel(AppState& app, float width) {
     // ---- View & zoom ----
     ImGui::SeparatorText("View & zoom");
     if (!L.chartOn()) {                                // (the chart has no scale, zoom or spin: nothing here would do anything)
-    if (L.showSpin() && ImGui::Button(displayable("⟳ Spin on/off").c_str())) L.toggleSpin();
+    if (L.showSpin() && ui::Button(displayable("⟳ Spin on/off").c_str())) L.toggleSpin();
     selectRow(app, "scale", "Scale", {{"Auto", "Auto-fit (orbit fills the canvas)"}, {"Fixed", "Fixed (same scale for every atom)"}}, p.scale);
     sliderRow(app, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(std::round(std::pow(10, p.zoom))), p.zoom, 0, 7, 0.01, false);
     if (p.zoom >= 4) {
@@ -797,7 +799,7 @@ void atomPanel(AppState& app, float width) {
         sliderRow(app, "tilt", "Tilt (flat chart to landscape)", std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %", L.s.chartView.tilt, 0, 1, 0.01, false);
         selectRow(app, "cheight", "Height means", {{"Half-life", "Half-life (log scale, 10^-23 s to 10^32 s)"}, {"Binding energy per nucleon", "Binding energy per nucleon (linear, 0 to 9,000 keV)"}},
                   L.s.chartView.height == ChartHeightMode::Binding ? std::string("Binding energy per nucleon") : std::string("Half-life"));
-        if (ImGui::Button("Reset tilt, zoom and position")) L.chartReset();
+        if (ui::Button("Reset tilt, zoom and position")) L.chartReset();
         mutedWrapped("Landscape: a block's height is either the log of the nuclide's half-life (all stable nuclides at one fixed height above the scale) or its binding energy per nucleon (a linear scale, the peak near iron and nickel); both scales are chosen for this picture and the legend gives them. A flat pale square has no height: its value is only an extrapolation. The wheel zooms about the pointer and a drag moves the picture when zoomed in. Hover and click work on the block you see on top. The names of the valley of stability (measured) and the island of stability (a prediction, not drawn) are in the legend.", 12.0f / 16);
         chainSection(L);
     }
@@ -868,10 +870,10 @@ void atomPanel(AppState& app, float width) {
     // ---- Photons ----
     if (!L.chartOn()) {                                // (the chart shows nuclei, not the electron: no photons there)
     ImGui::SeparatorText("Photons");
-    if (ImGui::Button("↓ Emit photon")) L.emit();
+    if (ui::Button("↓ Emit photon")) L.emit();
     ImGui::SameLine();
-    if (ImGui::Button("↑ Absorb photon")) L.absorb();
-    if (ImGui::Button(displayable(L.autoText()).c_str())) L.toggleAuto();
+    if (ui::Button("↑ Absorb photon")) L.absorb();
+    if (ui::Button(displayable(L.autoText()).c_str())) L.toggleAuto();
     mutedWrapped(p.view == "Orbit"
         ? "How a jump is drawn: the electron glides from one circle to the other over about 0.8 s, only to help the eye. Bohr's model has no path between circles: the electron is on one circle, and then on the other. "
           "A photon you emit appears when the glide ends; an absorbed photon arrives first, and then the glide starts. With Reduced motion on (Settings, Motion) the electron leaps at once."
@@ -915,12 +917,12 @@ void atomPanel(AppState& app, float width) {
         ImGui::TextUnformatted("Temperature");
         int tv = int(std::lround(T2v(app.tempK)));
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::SliderInt("##temp", &tv, 0, 1000, "")) app.tempK = v2T(tv);
+        if (ui::SliderInt("##temp", &tv, 0, 1000, "")) app.tempK = v2T(tv);
         const int Zs = p.Z;
         richText(tempStateHtml(Zs, app.tempK), true, 13.0f / 16, 0.2f);
         richText(tempSpeedHtml(Zs, app.tempK), true, 12.0f / 16, 0.2f);
         g_tempBox.draw(Zs, app.tempK, std::min(0.05, double(ImGui::GetIO().DeltaTime)));
-        auto jump = [&](const char* txt, double T) { if (ImGui::Button(displayable(txt).c_str())) { if (!std::isnan(T)) app.tempK = std::max(0.0, std::min(kTMax, T)); } };
+        auto jump = [&](const char* txt, double T) { if (ui::Button(displayable(txt).c_str())) { if (!std::isnan(T)) app.tempK = std::max(0.0, std::min(kTMax, T)); } };
         const Temp& td = tempData(Zs);
         jump("❄ Cold", 3); ImGui::SameLine();
         jump("🏠 Room", kTRoom); ImGui::SameLine();
@@ -948,7 +950,11 @@ void atomPanel(AppState& app, float width) {
     if (app.bigTable) {
         ImGui::SetNextWindowSize(ImVec2(std::min(760 * S(), vp->WorkSize.x * 0.95f), std::min(560 * S(), vp->WorkSize.y * 0.95f)), ImGuiCond_Appearing);
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x / 2, vp->WorkPos.y + vp->WorkSize.y / 2), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        if (ImGui::Begin("Periodic table", &app.bigTable, ImGuiWindowFlags_NoCollapse)) {
+        pushFloatStyle();
+        const bool tableShown = ImGui::Begin("Periodic table", &app.bigTable, ImGuiWindowFlags_NoCollapse);
+        popFloatStyle();
+        if (tableShown) {
+            panelDecor(app::PanelKind::Floating);
             mutedWrapped("Tap an element to load its most common (or longest-lived) isotope. Dashed edges are elements with no stable isotope.", 13.0f / 16);
             // the category legend
             float x = 0;
@@ -990,6 +996,7 @@ float atomBottomBar(AppState& app, float x, float y, float width, bool draw) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
     ImGui::Begin("Atom view bar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
+    panelDecor(app::PanelKind::Docked);
     float used = 0;
     auto button = [&](const std::string& t, bool show) {
         if (!show) return false;
@@ -997,7 +1004,7 @@ float atomBottomBar(AppState& app, float x, float y, float width, bool draw) {
         const float w = ImGui::CalcTextSize(d.c_str()).x + 2 * ImGui::GetStyle().FramePadding.x;
         if (used > 0) { if (used + 6 * S() + w < width - 2 * pad) ImGui::SameLine(0, 6 * S()); else used = 0; }
         used += (used > 0 ? 6 * S() : 0) + w;
-        return ImGui::Button(d.c_str());
+        return ui::Button(d.c_str());
     };
     if (button("⌕ Atom", true)) L.zoomAtom();
     if (button("⌕ Nucleus", true)) L.zoomNucleus();

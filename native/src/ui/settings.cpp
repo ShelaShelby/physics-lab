@@ -20,6 +20,7 @@
 #include "imgui.h"
 #include "app_pages.h"
 #include "look.h"
+#include "style_draw.h"
 #include "orbit/format.h"
 #include "orbit/units.h"
 #include "rich_text.h"
@@ -142,7 +143,7 @@ bool optionTile(const char* id, const std::string& name, bool on, ImFont* font, 
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const float h = sub.empty() && font ? 62 * ImGui::GetFontSize() / 16 : 46 * ImGui::GetFontSize() / 16;
     if (on) pushOn();
-    const bool clicked = ImGui::Button("##opt", ImVec2(width, h));
+    const bool clicked = ui::Button("##opt", ImVec2(width, h));
     if (on) popOn();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 fg = on ? col(look().c.onacc) : col(look().c.fg), mu = on ? col(look().c.onacc) : col(look().c.muted);
@@ -227,7 +228,11 @@ void settingsWindow(AppState& app) {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowSize(ImVec2(std::min(30 * ImGui::GetFontSize(), vp->WorkSize.x * 0.95f), std::min(40 * ImGui::GetFontSize(), vp->WorkSize.y * 0.92f)), ImGuiCond_Appearing);   // never bigger than the window (small window, big text)
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    if (ImGui::Begin((std::string(app::kSettingsTitle) + "###settings").c_str(), &app.showSettings, ImGuiWindowFlags_NoCollapse)) {
+    pushFloatStyle();
+    const bool settingsShown = ImGui::Begin((std::string(app::kSettingsTitle) + "###settings").c_str(), &app.showSettings, ImGuiWindowFlags_NoCollapse);
+    popFloatStyle();
+    if (settingsShown) {
+            panelDecor(app::PanelKind::Floating);
         const float avail = ImGui::GetContentRegionAvail().x, gap = ImGui::GetStyle().ItemSpacing.x;
         auto tiles = [&](int n) { return (avail - gap * (n - 1)) / n; };
         // 🔠 Text size
@@ -245,7 +250,7 @@ void settingsWindow(AppState& app) {
         for (int i = 0; i < 5; i++) {
             if (i) ImGui::SameLine();
             const app::FontOpt& o = app::kFonts[i];
-            const std::string fam = std::string(o.key) == "auto" ? (look().c.id == "paper" ? "serif" : look().c.id == "monochrome" ? "mono" : "auto") : o.key;
+            const std::string fam = app::fontKeyFor(look().c.style, o.key, fontFamilyAvailable(app::fontFamilyKeyOf(look().c.style)));   // the sample in the family Auto would use under this theme
             if (optionTile(o.key, o.name, P.font == o.key, fontFamily(fam).regular, 17 * ImGui::GetFontSize() / 16, tiles(5))) P.font = o.key;
         }
         // 📏 Units
@@ -301,6 +306,7 @@ void themeButton(AppState& app) {
     static int frames = 0;
     if (testOpen && ++frames == 12) ImGui::OpenPopup("##themes");
     if (!ImGui::BeginPopup("##themes")) return;
+    panelDecor(app::PanelKind::Floating);
     constexpr int kColumns = 3;
     constexpr float PI = 3.14159265f;
     const float s = ImGui::GetFontSize() / 16, fs = ImGui::GetFontSize(), pad = 8 * s, gap = 6 * s, dot = 24 * s;
@@ -310,24 +316,25 @@ void themeButton(AppState& app) {
     const float fixed = 2 * pad + dot + 2 * pad + tick;                  // everything on a card except the name
     const float maxWidth = vp->WorkSize.x - 24 * s;                      // the popup must fit in the window
     float nameW = 0;                                                     // the widest name (a secret theme shows "???" only while it is locked)
-    for (const app::ThemeDef& t : app::kThemes) nameW = std::max(nameW, bold->CalcTextSizeA(fs, FLT_MAX, 0, displayable(app::themeShownName(t, app.prefs.unlocked), bold).c_str()).x);
+    const std::vector<const app::ThemeDef*>& themes = app::allThemes();   // the web's themes and the native ones (Frutiger Aero), in the picker's order
+    for (const app::ThemeDef* t : themes) nameW = std::max(nameW, bold->CalcTextSizeA(fs, FLT_MAX, 0, displayable(app::themeShownName(*t, app.prefs.unlocked), bold).c_str()).x);
     float cardW = fixed + nameW + 2 * s;
     cardW = std::min(cardW, (maxWidth - (kColumns - 1) * gap - 2 * ImGui::GetStyle().WindowPadding.x) / kColumns);
     const float textW = std::max(20 * s, cardW - fixed);
     std::vector<std::string> shown;                                      // each card's name, wrapped to the card
     std::size_t lines = 1;
-    for (const app::ThemeDef& t : app::kThemes) {
-        std::string n = wrapLabel(displayable(app::themeShownName(t, app.prefs.unlocked), bold), textW);
+    for (const app::ThemeDef* t : themes) {
+        std::string n = wrapLabel(displayable(app::themeShownName(*t, app.prefs.unlocked), bold), textW);
         lines = std::max<std::size_t>(lines, 1 + std::count(n.begin(), n.end(), '\n'));
         shown.push_back(n);
     }
     const float cardH = std::max(dot, lines * fs * 1.2f) + 2 * pad;
-    const int count = int(sizeof(app::kThemes) / sizeof(app::kThemes[0])), rows = app::gridRows(count, kColumns);
+    const int count = int(themes.size()), rows = app::gridRows(count, kColumns);
     const ImVec2 o = ImGui::GetCursorPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     int lockedIdx = 0;
     for (int i = 0; i < count; i++) {
-        const app::ThemeDef& t = app::kThemes[i];
+        const app::ThemeDef& t = *themes[i];
         const app::GridCell cell = app::gridCell(i, kColumns);
         const bool locked = t.secret && !app.prefs.unlocked.count(t.id), on = app.prefs.theme == t.id;
         ImGui::SetCursorPos(ImVec2(o.x + cell.col * (cardW + gap), o.y + cell.row * (cardH + gap)));
@@ -349,8 +356,8 @@ void themeButton(AppState& app) {
             dl->AddCircleFilled(c, dot / 2, col(app::hexRgb(t.swatchBg)));
             dl->AddCircleFilled(ImVec2(c.x + dot * 0.18f, c.y + dot * 0.18f), dot * 0.2f, col(app::hexRgb(t.swatchAccent)));
         } else {
-            dl->PathArcTo(c, dot / 2, PI * 0.5f, PI * 1.5f, 24); dl->PathFillConvex(col(app::hexRgb("#f7f7f5")));      // left half light
-            dl->PathArcTo(c, dot / 2, -PI * 0.5f, PI * 0.5f, 24); dl->PathFillConvex(col(app::hexRgb("#151517")));     // right half dark
+            dl->PathArcTo(c, dot / 2, PI * 0.5f, PI * 1.5f, 24); dl->PathFillConvex(col(app::themeColors("light", true).bg));      // left half light (the Light theme's page)
+            dl->PathArcTo(c, dot / 2, -PI * 0.5f, PI * 0.5f, 24); dl->PathFillConvex(col(app::themeColors("dark", false).bg));     // right half dark (the Dark theme's page)
         }
         dl->AddCircle(c, dot / 2, col(look().c.line), 0, 1.0f);
         const float ty = p.y + cardH / 2 - (std::count(shown[i].begin(), shown[i].end(), '\n') + 1) * fs * 1.2f / 2;
@@ -365,7 +372,7 @@ void themeButton(AppState& app) {
 
 void defaultsButton(AppState& app) {
     if (app.lab == 1) {
-        if (ImGui::Button("Defaults")) ImGui::OpenPopup("Put Atom Lab back?");
+        if (ui::Button("Defaults")) ImGui::OpenPopup("Put Atom Lab back?");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Put this lab's settings back to how they started");
         ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
         if (ImGui::BeginPopupModal("Put Atom Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
@@ -373,24 +380,24 @@ void defaultsButton(AppState& app) {
                                "zoom, scale, quark style and the other choices, and starts a fresh atom (the decay history starts "
                                "again). Your units and More / Less info choices stay.");
             ImGui::Spacing();
-            if (ImGui::Button("Yes, put them back")) { putBackAtomDefaults(app); ImGui::CloseCurrentPopup(); }
+            if (ui::Button("Yes, put them back")) { putBackAtomDefaults(app); ImGui::CloseCurrentPopup(); }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+            if (ui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
             ImGui::SetItemDefaultFocus();
             ImGui::EndPopup();
         }
         return;
     }
-    if (ImGui::Button("Defaults")) ImGui::OpenPopup("Put Orbit Lab back?");
+    if (ui::Button("Defaults")) ImGui::OpenPopup("Put Orbit Lab back?");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Put this lab's settings back to how they started");
     ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
     if (ImGui::BeginPopupModal("Put Orbit Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::TextWrapped("This puts every Orbit Lab setting back to how it started: 2D view, zoom, Time speed, sizes, trails, "
                            "sky and extras, and the Solar System back to today. What you selected is let go. Your units choice stays.");
         ImGui::Spacing();
-        if (ImGui::Button("Yes, put them back")) { putBackDefaults(app); ImGui::CloseCurrentPopup(); }
+        if (ui::Button("Yes, put them back")) { putBackDefaults(app); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+        if (ui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
         ImGui::SetItemDefaultFocus();
         ImGui::EndPopup();
     }

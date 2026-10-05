@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.13 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.14 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -68,6 +68,7 @@ target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
 # App-wide settings, themes and achievements (the saved settings file; no graphics)
 add_library(app_core STATIC
   src/app/prefs.cpp
+  src/app/theme_style.cpp
   src/app/shot.cpp
   src/app/fps.cpp
   src/app/bench.cpp
@@ -206,6 +207,7 @@ if(PL_BUILD_APP)
     src/ui/journey_dates.cpp
     src/ui/learn.cpp
     src/ui/look.cpp
+    src/ui/style_draw.cpp
     src/ui/rich_text.cpp
     src/ui/svg_icon.cpp
     src/ui/settings.cpp
@@ -222,4 +224,12 @@ if(PL_BUILD_APP)
     target_sources(PhysicsLab PRIVATE assets/physics_lab.rc)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
+  # 0.14 stage 1: pictures of the real app's main screens for every theme, drawn headless (SDL's offscreen driver, Mesa llvmpipe), compared with the pictures of the
+  # 0.13 code. Linux only (the cloud session); the GitHub Windows build does not run it. Needs -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON.
+  option(PL_PICTURE_TESTS "Register the theme picture test (needs a headless Mesa and the app built on Linux)" OFF)
+  if(PL_PICTURE_TESTS AND UNIX)
+    enable_testing()
+    add_test(NAME theme_pictures COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_theme_pictures.sh $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/theme_pictures
+             ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+  endif()
 endif()

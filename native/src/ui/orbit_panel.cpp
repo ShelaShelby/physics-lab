@@ -14,6 +14,7 @@
 #include "imgui.h"
 #include "app_pages.h"
 #include "look.h"
+#include "style_draw.h"
 #include "shot.h"
 #include "benchmark.h"
 #include "app/bench.h"
@@ -85,7 +86,7 @@ static bool tile(const char* label, const char* hex, bool selected, float width)
     ImGui::PushID(label);
     const ImVec2 size(width, ImGui::GetFrameHeight());
     if (selected) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 0.17f, 0.84f, 0.45f));
-    const bool clicked = ImGui::Button("##tile", size);
+    const bool clicked = ui::Button("##tile", size);
     if (selected) ImGui::PopStyleColor();
     const ImVec2 a = ImGui::GetItemRectMin();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -188,6 +189,7 @@ void orbitPanel(AppState& app, float width) {
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
     ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
     ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    panelDecor(app::PanelKind::Docked);
     if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
     if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
         const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -218,7 +220,7 @@ void orbitPanel(AppState& app, float width) {
     ImGui::Text("Time speed: %s", tspeedText(app.set.tspeed).c_str());   // the value on its own line: the slider's thumb would cover it
     float ts = static_cast<float>(app.set.tspeed);
     ImGui::SetNextItemWidth(-1);
-    if (ImGui::SliderFloat("##tspeed", &ts, static_cast<float>(kTspeedMin), static_cast<float>(kTspeedMax), ""))
+    if (ui::SliderFloat("##tspeed", &ts, static_cast<float>(kTspeedMin), static_cast<float>(kTspeedMax), ""))
         app.set.tspeed = ts;
     ImGui::TextDisabled("Space: play / pause");
 
@@ -230,7 +232,7 @@ void orbitPanel(AppState& app, float width) {
             if (real) ImGui::SameLine(0, gap);
             const bool on = app.set.realPlanets == (real == 1);
             if (on) pushOn();
-            if (ImGui::Button(real ? "Real" : "Simple", ImVec2(w, 0)) && !on) app.set.realPlanets = real == 1;
+            if (ui::Button(real ? "Real" : "Simple", ImVec2(w, 0)) && !on) app.set.realPlanets = real == 1;
             if (on) popOn();
         }
         if (app.set.realPlanets) {                          // Real only: general relativity for the planets
@@ -284,7 +286,7 @@ void orbitPanel(AppState& app, float width) {
     ImGui::Text("Zoom: %s", zoomText(app.set.zoom).c_str());
     float z = static_cast<float>(app.set.zoom);
     ImGui::SetNextItemWidth(-1);
-    if (ImGui::SliderFloat("##zoom", &z, static_cast<float>(kZoomMin), static_cast<float>(kZoomMax), "")) setZoom(app, z);
+    if (ui::SliderFloat("##zoom", &z, static_cast<float>(kZoomMin), static_cast<float>(kZoomMax), "")) setZoom(app, z);
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)); ImGui::TextWrapped("Mouse wheel zooms, drag moves the view"); ImGui::PopStyleColor();
     ImGui::TextUnformatted("Sizes");
     int sizes = app.set.trueScale ? 0 : 1;
@@ -332,10 +334,10 @@ void orbitPanel(AppState& app, float width) {
 
     // ---- Solar System extras ----
     ImGui::SeparatorText("Solar System extras");
-    ImGui::Checkbox("Moons", &app.set.moons);
-    ImGui::Checkbox("Dwarf planets", &app.set.dwarfs);
-    ImGui::Checkbox("Famous comets", &app.set.comets);
-    ImGui::Checkbox("Belts and Oort cloud", &app.set.belts);
+    ui::Checkbox("Moons", &app.set.moons);
+    ui::Checkbox("Dwarf planets", &app.set.dwarfs);
+    ui::Checkbox("Famous comets", &app.set.comets);
+    ui::Checkbox("Belts and Oort cloud", &app.set.belts);
 
     performanceCard(app);
 

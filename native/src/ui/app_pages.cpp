@@ -12,6 +12,7 @@
 #include "html_view.h"
 #include "imgui.h"
 #include "look.h"
+#include "style_draw.h"
 #include "atom_panel.h"
 #include "rich_text.h"
 #include "settings.h"
@@ -38,7 +39,10 @@ bool beginPage(const char* title, const char* id, bool* open) {
     ImGui::SetNextWindowSize(ImVec2(std::min(vp->WorkSize.x * 0.6f, 46 * ImGui::GetFontSize()), vp->WorkSize.y * 0.85f), ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     const std::string t = displayable(title) + "###" + id;
+    pushFloatStyle();
     const bool shown = ImGui::Begin(t.c_str(), open, ImGuiWindowFlags_NoCollapse);
+    popFloatStyle();
+    if (shown) panelDecor(app::PanelKind::Floating);
     if (shown && ImGui::IsKeyPressed(ImGuiKey_Escape) && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) *open = false;
     return shown;
 }
@@ -46,6 +50,7 @@ bool beginPage(const char* title, const char* id, bool* open) {
 // 🌐 the language menu: English, and Estonian greyed out as "Coming soon"
 void languageMenu(AppState& app) {
     if (!ImGui::BeginPopup("##lang")) return;
+    panelDecor(app::PanelKind::Floating);
     const float s = S() * look().textScale, w = 230 * s - 12 * s, h = 36 * s;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     for (const app::LangOpt& L : app::kLangs) {
@@ -81,10 +86,10 @@ bool pillButton(const std::string& label, const char* tip) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, corner(99));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10 * s, 3 * s));
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Button, glossy() ? vec(look().c.card) : ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Border, vec(look().c.line));
     ImGui::PushFont(fonts().bold, ImGui::GetStyle().FontSizeBase * 13 / 16);
-    const bool clicked = ImGui::Button(displayable(label, fonts().bold).c_str());
+    const bool clicked = ui::Button(displayable(label, fonts().bold).c_str());
     ImGui::PopFont();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
@@ -102,6 +107,7 @@ void header(AppState& app) {
     ImGui::Begin("##header", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize |
                  ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing);
     ImGui::PopStyleVar(2);
+    panelDecor(app::PanelKind::Docked);
     if (look().synthGlow) drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
     const app::LabInfo& L = app::kLabInfo[app.lab];
     const std::string ver = app.lab == 1 ? std::string(app::kAtomHistoryName) + " " + L.update : std::string("Update ") + L.update, hist = historyLabel();   // the Atom Lab's button says whose history it is
@@ -178,7 +184,7 @@ void historyWindow(AppState& app) {
             const float w = ImGui::GetContentRegionAvail().x, box = 60 * s * ts, x1 = p.x + box + 12 * s * ts;
             dl->AddLine(p, ImVec2(p.x + w, p.y), col(look().c.line));
             const float top = p.y + 12 * s * ts;
-            dl->AddRectFilled(ImVec2(p.x, top), ImVec2(p.x + box, top + box), IM_COL32(120, 140, 200, 31), corner(12 * s * ts));
+            dl->AddRectFilled(ImVec2(p.x, top), ImVec2(p.x + box, top + box), col(look().c.soft, 31/255.f), corner(12 * s * ts));
             const std::string icon = displayable(ic);
             if (!icon.empty()) {
                 const float fs = 28 * s * ts;
@@ -207,7 +213,7 @@ void historyWindow(AppState& app) {
                 if (to >= 0) {                                   // only the labs the native app has
                     ImGui::SetCursorPosX(x1 - ImGui::GetWindowPos().x + ImGui::GetScrollX());
                     ImGui::PushID(i);
-                    if (ImGui::Button(displayable(button).c_str())) { openLab(app, to); app.showHistory = false; }
+                    if (ui::Button(displayable(button).c_str())) { openLab(app, to); app.showHistory = false; }
                     ImGui::PopID();
                 }
             }

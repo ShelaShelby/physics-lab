@@ -1,4 +1,5 @@
 #include "fonts.h"
+#include "style_draw.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -7,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "app/theme_style.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 
@@ -78,6 +80,33 @@ const char* loadFonts(float size) {
         }
         return nullptr;
     };
+    // 0.14: a theme's own system font by file name (Frutiger Aero: Segoe UI). Looked for in the system's font folder (Windows) and in PL_FONT_DIR (for automatic
+    // checks). Not found: no family is made, and the theme uses Auto (see useFontFamily). The font files are Microsoft's: used from the PC, never shipped.
+    std::vector<std::string> sysDirs;
+#ifdef _WIN32
+    sysDirs.push_back(dir);
+#endif
+    if (const char* e = std::getenv("PL_FONT_DIR")) sysDirs.push_back(std::string(e) + "/");
+    const auto exists = [](const std::string& p) { return fileExists(p); };
+    std::map<std::string, std::vector<std::vector<std::string>>> themeFamilies;
+    for (const app::ThemeDef* t : app::allThemes()) {
+        const std::string themeId = t->id;
+        const app::ThemeStyle& ts = app::themeStyle(themeId);
+        const std::string regular = app::resolveFontFile(ts.fontRegular, sysDirs, exists);
+        if (regular.empty()) continue;
+        const std::string bold = app::resolveFontFile(ts.fontBold, sysDirs, exists), italic = app::resolveFontFile(ts.fontItalic, sysDirs, exists);
+        themeFamilies[app::fontFamilyKeyOf(ts)] = {{regular}, {bold.empty() ? regular : bold}, {italic.empty() ? regular : italic}};
+    }
+    for (const auto& kv : themeFamilies) {
+        Fonts fam;
+        fam.regular = addFace(kv.second[0]);
+        if (!fam.regular) continue;
+        fam.bold = addFace(kv.second[1]);
+        fam.italic = addFace(kv.second[2]);
+        if (!fam.bold) fam.bold = fam.regular;
+        if (!fam.italic) fam.italic = fam.regular;
+        g_families[kv.first] = fam;
+    }
     for (const auto& [key, faces] : families) {
         Fonts fam;
         fam.regular = addFace(faces[0]);
@@ -150,13 +179,13 @@ std::string wrapLabel(const std::string& text, float width) {
 bool wideButton(const char* label, const char* id) {
     const ImGuiStyle& st = ImGui::GetStyle();
     const std::string shown = wrapLabel(label, ImGui::GetContentRegionAvail().x - 2 * st.FramePadding.x - 2);
-    return ImGui::Button((shown + "###" + (id ? id : label)).c_str(), ImVec2(-1, 0));
+    return ui::Button((shown + "###" + (id ? id : label)).c_str(), ImVec2(-1, 0));
 }
 
 bool wrappedCheckbox(const char* label, bool* v) {
     const ImGuiStyle& st = ImGui::GetStyle();
     const std::string shown = wrapLabel(label, ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - st.ItemInnerSpacing.x - 2);
-    return ImGui::Checkbox((shown + "###" + label).c_str(), v);
+    return ui::Checkbox((shown + "###" + label).c_str(), v);
 }
 
 }  // namespace ui

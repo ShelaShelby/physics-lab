@@ -10,6 +10,7 @@
 #include "fonts.h"
 #include "imgui.h"
 #include "look.h"
+#include "style_draw.h"
 #include "orbit/card_text.h"
 #include "orbit/format.h"
 #include "orbit/sky.h"
@@ -196,7 +197,7 @@ void seasonsGuide(AppState& app) {
             for (const SeasonMoment& m : kSeasonMoments) {
                 if (n++ % 2) ImGui::SameLine();
                 const std::string label = std::string(m.name) + "\n" + m.date;
-                if (ImGui::Button(label.c_str(), ImVec2((ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / (n % 2 ? 2 : 1), 0))) {
+                if (ui::Button(label.c_str(), ImVec2((ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / (n % 2 ? 2 : 1), 0))) {
                     int64_t ms;
                     char d[16], t[8];
                     std::snprintf(d, sizeof d, "%04d-%02d-%02d", m.y, m.mo, m.d);
@@ -255,7 +256,7 @@ void timeline(AppState& app) {
         ImGui::Separator();
         const float s = ImGui::GetFontSize() / 16.0f;      // the step picture on the left, as in the Atom Lab's timeline (the web's .lrnIc, 60 px wide)
         const ImVec2 o = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), IM_COL32(120, 140, 200, 31), 12 * s);
+        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), col(look().c.soft, 31/255.f), 12 * s);
         svgIcon(st.svg, ImVec2(o.x + 2 * s, o.y + 6 * s), s);
         ImGui::SetCursorScreenPos(ImVec2(o.x + 72 * s, o.y + 4 * s));
         ImGui::BeginGroup();
@@ -267,7 +268,7 @@ void timeline(AppState& app) {
         richText(std::string("<p class=\"lrnP\">") + st.text + "</p>");
         if (st.button[0]) {
             ImGui::PushID(i);
-            if (ImGui::Button((std::string("▶ ") + st.button).c_str())) {
+            if (ui::Button((std::string("▶ ") + st.button).c_str())) {
                 runStep(app, st);
                 app.learn = 0;                             // close the guide, so you see the lab
             }

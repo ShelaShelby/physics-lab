@@ -14,6 +14,7 @@
 #include "html_view.h"
 #include "imgui.h"
 #include "look.h"
+#include "style_draw.h"
 #include "orbit_panel.h"
 #include "rich_text.h"
 #include "svg_icon.h"
@@ -37,7 +38,7 @@ int chipRow(const std::vector<std::string>& labels, int on) {
         if (i > 0 && ImGui::GetItemRectMax().x + 6 * S() + w < right) ImGui::SameLine(0, 6 * S());
         if (i == on) pushOn();
         ImGui::PushID(i);
-        if (ImGui::Button(t.c_str())) clicked = i;
+        if (ui::Button(t.c_str())) clicked = i;
         ImGui::PopID();
         if (i == on) popOn();
     }
@@ -48,7 +49,7 @@ int chipRow(const std::vector<std::string>& labels, int on) {
 void elemBar(AppState& app) {
     AtomLab& L = app.atom;
     auto goZ = [&](int z) { z = std::max(1, std::min(118, z)); L.setParam("Z", z); L.setParam("N", defaultN(z)); };
-    if (ImGui::Button("◀")) goZ(L.p.Z - 1);
+    if (ui::Button("◀")) goZ(L.p.Z - 1);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("previous element");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x - 8 * S());
@@ -58,22 +59,22 @@ void elemBar(AppState& app) {
         ImGui::EndCombo();
     }
     ImGui::SameLine();
-    if (ImGui::Button("▶")) goZ(L.p.Z + 1);
+    if (ui::Button("▶")) goZ(L.p.Z + 1);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("next element");
     ImGui::TextDisabled("Neutrons");
     ImGui::SameLine();
     const auto r = nRange(L.p.Z);
-    if (ImGui::Button("−")) L.setParam("N", std::max(r.first, std::min(r.second, L.p.N - 1)));
+    if (ui::Button("−")) L.setParam("N", std::max(r.first, std::min(r.second, L.p.N - 1)));
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("one fewer neutron");
     ImGui::SameLine();
     ImGui::PushFont(fonts().bold, 0.0f);
     ImGui::Text("%s-%d", name(L.p.Z), L.p.Z + L.p.N);
     ImGui::PopFont();
     ImGui::SameLine();
-    if (ImGui::Button("+")) L.setParam("N", std::max(r.first, std::min(r.second, L.p.N + 1)));
+    if (ui::Button("+")) L.setParam("N", std::max(r.first, std::min(r.second, L.p.N + 1)));
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("one more neutron");
     ImGui::SameLine();
-    if (ImGui::Button("usual")) L.setParam("N", defaultN(L.p.Z));
+    if (ui::Button("usual")) L.setParam("N", defaultN(L.p.Z));
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("the usual isotope");
     ImGui::Separator();
 }
@@ -144,7 +145,7 @@ void timelineGuide(AppState& app) {
         const float s = S();
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 o = ImGui::GetCursorScreenPos();
-        dl->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), IM_COL32(120, 140, 200, 31), 12 * s);
+        dl->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), col(look().c.soft, 31/255.f), 12 * s);
         svgIcon(st.svg, ImVec2(o.x + 2 * s, o.y + 6 * s), s);
         ImGui::SetCursorScreenPos(ImVec2(o.x + 72 * s, o.y + 4 * s));
         ImGui::BeginGroup();
@@ -160,7 +161,7 @@ void timelineGuide(AppState& app) {
         richText(std::string("<p class=\"lrnP\">") + st.d + "</p>", false, 0.9f, 0.3f);
         if (*st.lab) {
             ImGui::PushID(i);
-            if (ImGui::Button((std::string("▶ ") + st.lab).c_str())) {   // close the guide and set the lab to show it
+            if (ui::Button((std::string("▶ ") + st.lab).c_str())) {   // close the guide and set the lab to show it
                 for (const auto& [k, v] : st.set) {
                     char* end = nullptr;
                     const double d = std::strtod(v.c_str(), &end);

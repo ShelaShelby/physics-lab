@@ -1,4 +1,5 @@
 #include "ui/shot.h"
+#include "ui/style_draw.h"
 
 #include <SDL3/SDL.h>
 
@@ -34,7 +35,7 @@ void shotNote(AppState& app) {
     ShotUi& s = app.shot;
     if (s.note.empty() || ImGui::GetTime() >= s.noteUntil) return;
     const Look& L = look();
-    ImGui::PushStyleColor(ImGuiCol_Text, s.failed ? ImVec4(0.90f, 0.35f, 0.30f, 1) : vec(L.c.muted));
+    ImGui::PushStyleColor(ImGuiCol_Text, s.failed ? vec(L.c.danger) : vec(L.c.muted));
     ImGui::TextWrapped("%s", s.note.c_str());
     ImGui::PopStyleColor();
 }
