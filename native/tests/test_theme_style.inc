@@ -319,6 +319,7 @@ static void testFloatingReadability() {
 }
 
 #include "test_theme_stage2.inc"   // 0.14 stage 2
+#include "test_theme_stage3.inc"   // 0.14 stage 3: the Theme effects switch
 
 static void testThemeStyle() {
     testWcagFormula();
@@ -331,4 +332,5 @@ static void testThemeStyle() {
     testRoundScale();
     testFloatingReadability();
     testStage2();
+    testStage3();
 }

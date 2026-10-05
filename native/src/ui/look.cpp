@@ -7,6 +7,7 @@
 #endif
 
 #include <cmath>
+#include <cstdlib>
 #include <regex>
 #include <vector>
 
@@ -211,6 +212,9 @@ void drawSynthGlow(ImDrawList* dl, ImVec2 a, ImVec2 b) {
 void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     Look L;
     L.c = app::themeColors(app::themeUsable(p, p.theme) ? p.theme : "auto", systemLight);
+    static const bool envEffectsOff = std::getenv("PL_EFFECTS") && std::string(std::getenv("PL_EFFECTS")) == "off";   // for the automatic picture checks
+    L.effects = p.effects != "off" && !envEffectsOff;
+    if (!L.effects) L.c.style = app::withoutEffects(L.c.style);    // 0.14 stage 3: Settings → Theme effects Off: colours, gloss and fonts stay, the decoration goes
     L.textScale = float(app::textSizeFactor(p.textSize));
     L.reduced = p.motion == "on" || (p.motion == "auto" && systemReduced);
     const app::ThemeStyle& ts = L.c.style;                     // 0.14: what used to be tested as `id == "monochrome"` and so on is data of the theme

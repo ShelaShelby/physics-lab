@@ -74,15 +74,24 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - stage 4: Orbit Lab rocks on the GPU; chart and landscape geometry cached on the GPU; the Cloud 2D cost — done. **0.13 is complete.**
 - OpenGL 4.3 from stage 2 means PCs older than about 2013 (Intel HD 4600 / Haswell, GeForce 600, Radeon HD 7000 or newer are the oldest that support it) will not run the app; the owner has accepted this (see DECISIONS.md)
 
-## 0.14 "Themes" plan (the owner's, 5 Oct 2026): the owner's two favourite looks, Frutiger Aero and Y2K futurism; science must stay readable in every theme
+## 0.14 "Themes" — COMPLETE in 3 stages (the owner's plan of 5 Oct 2026 had 5; the owner ended it here): the owner's two favourite looks, Frutiger Aero and Y2K futurism; science stays readable in every theme
 - stage 1: richer theme styles (gradient page, glass panels, gloss, rounding, shadow, system font; all data) + Frutiger Aero panels and widgets — done (the pictures of the labs are NOT changed)
 - stage 2: Frutiger Aero's real look (saturated aqua and leaf green, jelly buttons, glossy title bars, rim and glow, clouds and bubbles, glossy combo boxes and tooltips), Light's accent text readable (4.57:1), and the two Y2K futurism themes (Y2K Ice light, Y2K Night dark: grain, halftone, grid, HUD rules, corner brackets, chrome buttons, the Michroma title font) — done (the lab pictures are NOT changed)
-- stage 3: glass (Aero) / chrome (Y2K) planets and nucleons: theme-aware shading — planned
-- stage 4: glossy chart tiles and landscape; theme-aware Cloud dots — planned
-- stage 5: animated backgrounds (with an off switch) and a full contrast check — planned
+- stage 3 (final): Settings → Theme effects On / Off (saved; Off = no page textures, clouds, bubbles, grain, halftone, grid, streak, glints, brush lines, reflection, corner brackets or HUD decoration; colours, gloss gradients and fonts stay; the benchmark report prints it), and this wrap-up — done
+- DROPPED by the owner (not deferred to 0.15): glass (Aero) / chrome (Y2K) planets and nucleons (theme-aware shading), glossy chart tiles and landscape, theme-aware Cloud dots, animated backgrounds. The lab pictures keep their own colours in every theme.
 - Science colours (phase wheel, decay modes, element and planet colours) stay fixed in every theme on purpose.
 
+## 0.15 "Full UI rework" — the owner's problems (planned; the app must look CLEAN)
+Goal: the app looks clean, like a modern app or site. Today it looks like MyAnimeList (dense 2005-era web: tiny text, boxes, everything visible at once). The target is a modern app like AniList: the same amount of content, but big visuals, generous space, few clear text sizes, details revealed on click or hover.
+The owner's problems:
+1. Text is far too small on the owner's screen. Check Windows DPI scaling and scaling with the window size (does the text follow either?).
+2. Too much text: the side panels are walls of paragraphs. A short summary first; details and sources behind "More" / an info button.
+3. Too much scrolling, and controls scattered between the header, the side column and under the picture.
+Also seen: boxes inside boxes and outlines on everything; no breathing room; no clear size hierarchy; legend and note boxes covering the picture; too many small elements at once; mixed icon and button styles; no common alignment grid.
+Plan: 0.15 starts with a DESIGN SYSTEM (a spacing scale, 3-4 text sizes, one button style plus one primary, one icon set, a layout grid) and MOCKUPS for the owner to pick from, before any screen is rebuilt. The four themes work and the Theme effects switch carry over. Not started; no stages planned yet.
+
 ## Later (not scheduled)
+- an in-app mascot (an original character, no brand art) that reacts to what the user does and replaces the "Did you know?" bar — after 0.15
 - Orbit Lab frame cost that is NOT the rocks (measured in 0.13 stage 4: about 3.4 of the 4.1 ms of scene 1 on the cloud session's CPU): the night sky, the Milky Way band, the constellation lines and the trails push about 86,000 vertices every frame (`Renderer2D::push`), the same way the chart did; a retained GPU mesh for the sky (it only changes with the camera) would be the same kind of job as the chart's — planned, not measured on the owner's PC
 - speed work after the owner's timing (Orbit audit rows 24-27: Real at the top Time speed, the Milky Way mesh and stars redone every frame, label halos and the belts, a long replay after a very long run), only if the benchmark shows a problem — planned
 - better relativity for Real: the Sun-potential term gives the wrong motion along the orbit; replace it with a better 1PN method and re-check against JPL — planned

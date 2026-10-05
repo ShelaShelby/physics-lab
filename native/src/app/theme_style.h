@@ -68,6 +68,10 @@ bool hasStage2Decor(const ThemeStyle& s);                           // any stage
 // The bundled font for titles: the theme's, if it is built into the app (`available`); else "" (the titles use the normal font).
 std::string titleFontKeyFor(const ThemeStyle& s, bool available);
 
+// 0.14 stage 3, Settings → Theme effects Off: the style without its decoration: no page textures (clouds, bubbles, grain, halftone, grid, streak), no glints, brush lines,
+// reflection, corner brackets, HUD rules or spec label. Colours, the gloss gradients, rim, glow, shine, title bars and fonts stay exactly.
+ThemeStyle withoutEffects(const ThemeStyle& s);
+
 // ---- the list of themes in the app: the web's 11 plus the native ones, in the order of the picker ----
 // Order: the web's themes that are not secret, then the native themes (Frutiger Aero), then the secret ones (so the "???" cards stay at the end).
 const std::vector<const ThemeDef*>& allThemes();

@@ -26,6 +26,7 @@ std::string clean(const std::string& v) {           // one line: no line breaks 
 bool validTheme(const std::string& id) { return findTheme(id) != nullptr; }
 bool validTextSize(const std::string& k) { for (const SizeOpt& s : kTextSizes) if (k == s.key) return true; return false; }
 bool validFont(const std::string& k) { for (const FontOpt& f : kFonts) if (k == f.key) return true; return false; }
+bool validEffects(const std::string& k) { return k == "on" || k == "off"; }
 bool validMotion(const std::string& k) { return k == "auto" || k == "on" || k == "off"; }
 double textSizeFactor(const std::string& k) { for (const SizeOpt& s : kTextSizes) if (k == s.key) return s.factor; return 1; }
 
@@ -36,7 +37,7 @@ std::string savePrefs(const Prefs& p) {
     std::ostringstream o;
     o << "# Physics Lab (native) settings. Written by the app; safe to delete.\n";
     o << "theme=" << clean(p.theme) << "\n" << "textSize=" << clean(p.textSize) << "\n" << "font=" << clean(p.font) << "\n"
-      << "motion=" << clean(p.motion) << "\n" << "units=" << clean(p.units) << "\n" << "lang=" << clean(p.lang) << "\n";
+      << "motion=" << clean(p.motion) << "\n" << "effects=" << clean(p.effects) << "\n" << "units=" << clean(p.units) << "\n" << "lang=" << clean(p.lang) << "\n";
     std::string un;
     for (const std::string& u : p.unlocked) un += (un.empty() ? "" : ",") + clean(u);
     o << "unlock=" << un << "\n";
@@ -64,6 +65,7 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "textSize") { if (validTextSize(v)) p.textSize = v; }
         else if (k == "font") { if (validFont(v)) p.font = v; }
         else if (k == "motion") { if (validMotion(v)) p.motion = v; }
+        else if (k == "effects") { if (validEffects(v)) p.effects = v; }
         else if (k == "units") { if (v == "metric" || v == "imperial") p.units = v; }
         else if (k == "lang") { if (v == "en") p.lang = v; }                     // as the web: only English can be picked yet
         else if (k == "unlock") {

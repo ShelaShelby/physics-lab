@@ -289,7 +289,7 @@ void begin(AppState& app) {
         e.fullscreen = (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0;
         if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w))) e.refreshHz = m->refresh_rate;
     }
-    e.textSize = app.prefs.textSize; e.theme = app.prefs.theme;
+    e.textSize = app.prefs.textSize; e.theme = app.prefs.theme; e.effects = look().effects ? "on" : "off";
     b.warm = envNum("PL_BENCH_WARMUP", app::kBenchWarmupS);          // for automatic checks: shorter times
     b.measure = envNum("PL_BENCH_MEASURE", app::kBenchMeasureS);
     e.warmupS = b.warm; e.measureS = b.measure;

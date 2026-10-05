@@ -44,6 +44,7 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
     t += "Picture area: " + std::to_string(e.pictureW) + " x " + std::to_string(e.pictureH) + " pixels\n";
     t += "Display refresh rate: " + (e.refreshHz > 0 ? f("%.0f", e.refreshHz) + " Hz" : std::string("not available")) + "\n";
     t += "Text size: " + e.textSize + ", theme: " + e.theme + "\n";
+    t += std::string("Theme effects: ") + (e.effects == "off" ? "off" : "on") + "\n";
     t += "VSync: off during the test. Each scene: " + f("%.0f", e.warmupS) + " s warm-up (not counted), then " + f("%.0f", e.measureS) + " s counted.\n";
     t += std::string("GPU timer (GL_TIME_ELAPSED): ") + (e.gpuTimer ? "available" : "not available") + "\n";
     if (e.gpuTimer) t += std::string("GPU timer check: ") + (e.gpuReliable ? "reliable, " : "NOT RELIABLE, ") + (e.gpuCheck.empty() ? "no check was made" : e.gpuCheck) + "\n";

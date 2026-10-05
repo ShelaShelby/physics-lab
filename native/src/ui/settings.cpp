@@ -269,6 +269,15 @@ void settingsWindow(AppState& app) {
             if (optionTile(motions[i], app::kMotionOpts[i].name, P.motion == motions[i], nullptr, 0, tiles(3), app::kMotionOpts[i].sub)) setMotion(app, motions[i]);
         }
         richText(std::string("<p class=\"lrnP lrnMuted\">") + app::kMotionNote + "</p>");
+        // ✨ Theme effects (0.14 stage 3, native only)
+        richHeading(displayable("✨ Theme effects"));
+        const char* effectKeys[2] = {"on", "off"};
+        const char* effectNames[2] = {"On", "Off"}, *effectSubs[2] = {"Textures, glints, brackets", "Colours and gloss only"};
+        for (int i = 0; i < 2; i++) {
+            if (i) ImGui::SameLine();
+            if (optionTile((std::string("effects-") + effectKeys[i]).c_str(), effectNames[i], P.effects == effectKeys[i], nullptr, 0, tiles(2), effectSubs[i])) P.effects = effectKeys[i];
+        }
+        richText("<p class=\"lrnP lrnMuted\">On: the Frutiger Aero and Y2K themes draw their extra decoration: soft clouds and bubbles; film grain, halftone dots, grid lines, light streaks, glints on buttons, reflections, corner brackets and HUD marks. Off: none of that, only the colours, the gloss and the fonts. Text is just as easy to read either way. The other themes have no such decoration, so nothing changes for them.</p>");
         // 🔒 Progress
         richHeading(displayable(app::kSetH[4]));
         if (optionTile("reset", app::kResetRow.name, false, nullptr, 0, avail, app::kResetRow.sub)) {

@@ -737,6 +737,7 @@ static void testBench() {
     std::size_t at = 0;
     bool inOrder = true;
     for (const char* w : want) { const std::size_t p = t.find(w, at); if (p == std::string::npos) { inOrder = false; checkTrue(std::string("result text has: ") + w, false); break; } at = p; }
+    checkTrue("result text: Theme effects line, on by default and off when switched off (0.14 stage 3)", t.find("Text size: xl, theme: paper\nTheme effects: on\n") != std::string::npos && [&] { BenchEnv o = env; o.effects = "off"; return benchResultText(o, {s1}).find("Theme effects: off\n") != std::string::npos; }());
     checkTrue("the result text starts with the version, date and graphics, in order", inOrder && t.rfind("Physics Lab (native) benchmark\n", 0) == 0);
     checkTrue("result text: scene 1 numbers", t.find("  Average: 10.00 ms per frame = 100.0 fps\n  1 % low: 100.0 fps") != std::string::npos && t.find("  Worst frame: 10.00 ms\n  CPU work per frame: 3.50 ms\n  GPU time per frame: 6.25 ms") != std::string::npos);
     checkTrue("result text: the GPU span line", t.find("  GPU span per frame: 7.50 ms") != std::string::npos);

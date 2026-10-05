@@ -1,5 +1,11 @@
 # Owner to-do (things only the owner can do)
 
+## 0.14 stage 3 (final: Theme effects switch): look at all three new looks in the real app on the PC
+- [ ] Look at Frutiger Aero, Y2K Ice and Y2K Night one more time on your screen (the stage 2 items below are still open): glossy and "wet" enough? the Y2K themes cold and techno enough? Say what you want changed; 0.14 is finished, so changes would be small fixes in 0.15 or later.
+- [ ] Settings → Theme effects: switch Off in each of them. The textures, clouds, bubbles, glints, reflections and corner brackets should go; colours, gloss and fonts stay. Switch On again. Tell me if anything stays that should go, or goes that should stay.
+- [ ] Speed: if an old PC feels slower in Aero or the Y2K themes, try Theme effects Off and tell me the difference. Speed was never measured here.
+- [ ] 0.15 is the UI rework (ROADMAP): when you are ready, say so and the first task is the design system and mockups. Useful to bring: your screen size, Windows' display scaling (Settings → System → Display → Scale) and a screenshot of the worst screen.
+
 ## 0.14 stage 2 (Aero's real look, Light's accent, Y2K Ice and Y2K Night): look at them in the real app on the PC — no Windows, no GPU, no Segoe UI in the cloud session
 - [ ] Open 🎨 Theme → Frutiger Aero. Is it now glossy, saturated and "wet" (aqua and lime jelly buttons, blue title bars, clouds and bubbles), or still pale? Check the Learn guide, Settings, the changelog and a combo box (Orbit Lab → View). Say what is off.
 - [ ] Open 🎨 Theme → Y2K Ice and Y2K Night. Do they read as the cold blue-white / night-city print look with chrome buttons, grid, halftone, HUD rules and corner brackets, or just "grey with blue"? Is the title font (Michroma) too wide anywhere? Night's buttons are dark gunmetal on purpose (see DECISIONS); say if you want bright silver there.

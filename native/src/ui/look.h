@@ -12,6 +12,7 @@ namespace ui {
 struct Look {
     app::ThemeColors c;          // the theme's colours (Auto resolved to Light or Dark)
     float textScale = 1;         // Settings → Text size
+    bool effects = true;         // Settings → Theme effects (0.14 stage 3): off = the style has no textures, glints, reflection, brackets or HUD (app::withoutEffects)
     bool reduced = false;        // Settings → Motion (Auto: Windows' "Animation effects" off)
     bool square = false;         // Monochrome: no rounded corners
     bool grayscale = false;      // Monochrome: the pictures in shades of grey

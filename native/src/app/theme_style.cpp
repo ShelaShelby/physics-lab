@@ -83,6 +83,15 @@ std::vector<Rgb> pageFxExtremes(const PageFx& fx, const Rgb& page) {
     const Rgb toned = mixRgb(page, fx.tone, pageFxTotal(fx));
     return {page, toned, mixRgb(page, fx.streakColour, fx.streak), mixRgb(toned, fx.streakColour, fx.streak)};
 }
+ThemeStyle withoutEffects(const ThemeStyle& s) {
+    ThemeStyle o = s;
+    PageFx& f = o.page.fx;
+    f.clouds = f.bubbles = f.grain = f.halftone = f.grid = f.streak = 0;
+    o.widget.glint = 0; o.widget.brush = 0;
+    o.panel.reflectAlpha = 0; o.panel.reflectHeight = 0;
+    o.panel.bracketAlpha = 0; o.panel.bracketSize = 0; o.panel.hudAlpha = 0; o.panel.spec.clear();
+    return o;
+}
 bool hasStage2Decor(const ThemeStyle& s) {
     const PanelStyle& p = s.panel;
     const WidgetStyle& w = s.widget;

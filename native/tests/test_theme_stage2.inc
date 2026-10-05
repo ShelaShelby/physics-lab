@@ -126,10 +126,11 @@ static FaceCheck checkFaces(const ThemeColors& c) {
 }
 
 // the same checks for both new looks: Aero (light, saturated) and Y2K (Ice light, Night dark)
-static void checkLook(const std::string& id) {
-    const ThemeColors c = themeColors(id, id != "y2knight");
+static void checkLook(const std::string& id, bool effectsOff = false) {
+    ThemeColors c = themeColors(id, id != "y2knight");
+    if (effectsOff) c.style = withoutEffects(c.style);                   // 0.14 stage 3: the same rules with the Theme effects switch Off
     const ThemeStyle& s = c.style;
-    const std::string w = id + ": ";
+    const std::string w = id + (effectsOff ? " (effects off): " : ": ");
     // text over the real page, at every height, with the textures at their strongest, under the glass and over the plain glass
     double wText = 1e9, wMuted = 1e9, wAccent = 1e9, wDanger = 1e9, wBare = 1e9, wHud = 1e9, wBorder = 1e9;
     for (int i = 0; i <= 100; i++) {

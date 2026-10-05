@@ -7,23 +7,28 @@
 # Reference files (made by tools/theme_pictures.sh):
 #   theme_pictures_0.13.sha256   the SHA-256 of the pixels of every picture the 0.13 code drew (Mesa 25.2.8 llvmpipe, LLVM 20.1.2). The five screens (Orbit Lab, Atom Lab
 #                                nucleus, Cloud 3D, chart, Settings) must still match it for the 10 variants that were not changed: auto, black, midnight, solar, paper,
-#                                sage, contrast, dark, synthwave, monochrome = 50 pictures, 0 differing pixels.
-#   theme_pictures_0.14s2_changed.sha256   what stage 2 changed ON PURPOSE, made by the stage 2 code after looking at the pictures (a regression guard, not an independent
+#                                sage, contrast, dark, synthwave, monochrome (stage 3: four screens each = 40 pictures), 0 differing pixels.
+#   theme_pictures_0.14_changed.sha256   what stage 2 changed ON PURPOSE, made by the stage 2 code after looking at the pictures (a regression guard, not an independent
 #                                reference): the five screens of Light and of Auto in light mode (Light's accent text was 4.24:1 on its page, now 4.57:1: a darker blue, the same
 #                                hue), and the theme picker in all 12 variants (it got two new cards, Y2K Ice and Y2K Night).
+#   0.14 stage 3 (the Theme effects switch): the Settings screen of all 12 variants joined that file (a new section; the picture differs from stage 2 only in the scroll bar
+#                                strip, x 727..736 of 1000: checked once against the stage 2 program, see REPORT.md), so the five screens that must equal 0.13 are now four
+#                                (Orbit Lab, nucleus, Cloud 3D, chart) = 40 pictures; and the picker is compared too.
+#   theme_pictures_0.14s2_native.sha256   Frutiger Aero, Y2K Ice and Y2K Night with effects On (the default): the pictures of the STAGE 2 program (made by it), five screens minus
+#                                Settings: stage 3 must draw them exactly (0 differing pixels).
 # A different Mesa may round differently: then regenerate both files from the OLD code first (see REPORT.md of 0.14 stage 1), never edit a hash by hand.
 set -e
 BIN="$1"; WORK="$2"; REF="$3"; TOOLS="$4"
 rm -rf "$WORK"; mkdir -p "$WORK"
 sh "$TOOLS/theme_pictures.sh" "$BIN" "$WORK" > "$WORK/run.txt"
 fail=0
-for ref in theme_pictures_0.13.sha256 theme_pictures_0.14s2_changed.sha256; do
+for ref in theme_pictures_0.13.sha256 theme_pictures_0.14_changed.sha256; do
     while read -r hash name; do
         [ -z "$name" ] && continue
         case "$ref:$name" in
-            theme_pictures_0.13.sha256:themes_*|theme_pictures_0.13.sha256:*_light) continue ;;   # the picker and Light have their own file
-            theme_pictures_0.14s2_changed.sha256:themes_*|theme_pictures_0.14s2_changed.sha256:*_light) ;;
-            theme_pictures_0.14s2_changed.sha256:*) continue ;;
+            theme_pictures_0.13.sha256:themes_*|theme_pictures_0.13.sha256:settings_*|theme_pictures_0.13.sha256:*_light) continue ;;   # the picker, Settings and Light have their own file
+            theme_pictures_0.14_changed.sha256:themes_*|theme_pictures_0.14_changed.sha256:settings_*|theme_pictures_0.14_changed.sha256:*_light) ;;
+            theme_pictures_0.14_changed.sha256:*) continue ;;
         esac
         got=$(grep "  $name\$" "$WORK/pictures.sha256" | cut -d' ' -f1)
         if [ "$got" != "$hash" ]; then echo "DIFFERENT PICTURE: $name"; fail=$((fail + 1)); fi
@@ -38,6 +43,12 @@ for th in aero y2kice y2knight; do
     grep -q "Font: " "$WORK/$th/log.txt" || { echo "$th: no font line in the log"; fail=$((fail + 1)); }
     if [ "$(grep -c "_$th\$" "$WORK/$th/pictures.sha256")" != 6 ] || [ "$(grep '^' "$WORK/$th/pictures.sha256" | cut -d' ' -f1 | sort -u | wc -l)" != 6 ]; then
         echo "$th: the six pictures are missing or not all different"; fail=$((fail + 1)); fi
+    # effects On (the default) draws exactly what stage 2 drew (Settings excluded: it got a section)
+    while read -r hash name; do
+        case "$name" in *_$th) ;; *) continue ;; esac
+        got=$(grep "  $name\$" "$WORK/$th/pictures.sha256" | cut -d' ' -f1)
+        if [ "$got" != "$hash" ]; then echo "DIFFERENT FROM STAGE 2: $name"; fail=$((fail + 1)); fi
+    done < "$REF/theme_pictures_0.14s2_native.sha256"
     # and the pictures are not the dark theme's (the theme really did something)
     if grep -q "$(grep ' orbit_dark$' "$WORK/pictures.sha256" | cut -d' ' -f1)" "$WORK/$th/pictures.sha256"; then echo "$th looks like Dark"; fail=$((fail + 1)); fi
 done

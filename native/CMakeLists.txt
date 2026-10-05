@@ -243,6 +243,8 @@ if(PL_BUILD_APP)
       add_test(NAME window_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_window_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/window_pictures)
       # 0.14 stage 2: the Y2K decoration stays at the windows' edges, the title font only on titles, the page textures stay within their model, the glow
       add_test(NAME y2k_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_y2k_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/y2k_pictures)
+      # 0.14 stage 3: Settings -> Theme effects Off removes all decoration and nothing else
+      add_test(NAME effects_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_effects_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/effects_pictures)
     endif()
   endif()
 endif()

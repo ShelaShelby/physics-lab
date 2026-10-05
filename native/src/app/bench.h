@@ -71,6 +71,7 @@ struct BenchEnv {
     int pictureW = 0, pictureH = 0;              // the picture area, in pixels
     double refreshHz = 0;                        // the display's refresh rate (0: unknown)
     std::string textSize, theme;
+    std::string effects = "on";                  // Settings → Theme effects (0.14 stage 3): "on" or "off"
     bool fullscreen = false, gpuTimer = false;   // gpuTimer: the driver gave GPU times
     bool gpuReliable = false;                    // ... and the self-check with a known load agreed with a clock
     std::string gpuCheck;                        // the self-check in words (how well it agreed, or why it did not)
