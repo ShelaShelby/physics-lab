@@ -344,13 +344,9 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const int ng = dc.n;
         static std::vector<unsigned char> grp;                             // each dot's colour group
         grp.resize(std::size_t(cnt));
-        if (jump) {
-            lab.jumpGroups(grp.data());                                    // all dots at once (the same numbers as jumpGroup(pop, i), with the per-frame terms worked out once)
-        } else if (lab.superOn()) {                                        // a superposition: each dot is thinned and coloured from the CURRENT beat phase (255 = not shown now)
-            const double th = lab.beatTheta();
-            for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = (unsigned char)lab.superGroup(i, th);
-        } else
-        plainGroups(wheel, s.ph.data(), s.sg.data(), cnt, grp.data());
+        // each dot's colour group: a jump in flight, a superposition (thinned and coloured from the CURRENT beat phase) or a plain cloud. 0.13 stage 2: on a PC with OpenGL 4.3 (and the
+        // "GPU superposition and jumps" switch on) the first two come from a compute shader, else from the CPU functions, which are the reference (255 = not shown now)
+        fillGroups(lab, R.compute(), cnt, grp.data());
         const bool outlineOn = p.outline == "On" && !lab.superOn() && lab.outlineAlpha() > 0.01;         // (the 90 % outline is of one orbital: not drawn for a superposition)
         const int fo = lab.outlineStateId();                                // the state on screen (a complex state's own id), not the real fallback fullOrb()
         const double olA = lab.outlineAlpha();                             // the outline fades out as a jump leaves its orbital and back in after landing

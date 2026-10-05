@@ -32,6 +32,7 @@
 #include "atom/quadrupole.h"
 #include "atom/radial_graph.h"
 #include "orbit/format.h"
+#include "atom/atom_bench.h"
 #include "atom/cloud_dots.h"
 #include "atom/cloud_light.h"
 #include "render/shaders.h"
@@ -4430,6 +4431,7 @@ static void testQuadrupole(double guardMinSepDeformed) {
 #include "test_chain.inc"   // 0.12 stage 1: decay chains on the chart
 #include "test_clean.inc"   // 0.12 stage 2: the accuracy clean-up
 #include "test_gpu_colours.inc"   // 0.13 stage 1: phase colours on the GPU
+#include "test_gpu_compute.inc"   // 0.13 stage 2: the superposition and the jump on the GPU (the physics check; the GPU comparison is tests/gl_compare.cpp)
 
 int main() {
     testConstants();
@@ -4510,6 +4512,8 @@ int main() {
     testDecayChainLab();
     testCleanup();
     testGpuColours();
+    testGpuComputePhysics();
+    testGpuComputeLogic();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

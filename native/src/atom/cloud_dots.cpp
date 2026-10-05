@@ -53,6 +53,23 @@ void plainGroups(bool wheel, const float* ph, const signed char* sg, long cnt, u
     for (long i = 0; i < cnt; i++) grp[i] = wheel ? (unsigned char)phaseBin(ph[i]) : (unsigned char)(sg[i] > 0 ? 0 : 1);
 }
 
+GroupsBy fillGroups(AtomLab& L, render::IGroupCompute* gc, long cnt, unsigned char* grp) {
+    const bool gpu = L.gpuCompute && gc && gc->ok();
+    if (L.jumpDrawn()) {
+        if (gpu && L.jumpGroupsGpu(*gc, grp)) return GroupsBy::Gpu;
+        L.jumpGroups(grp);
+        return GroupsBy::Cpu;
+    }
+    if (L.superOn()) {
+        const double th = L.beatTheta();
+        if (gpu && L.superGroupsGpu(*gc, cnt, th, grp)) return GroupsBy::Gpu;
+        for (long i = 0; i < cnt; i++) grp[i] = (unsigned char)L.superGroup(i, th);
+        return GroupsBy::Cpu;
+    }
+    plainGroups(L.usesWheel(), L.s.ph.data(), L.s.sg.data(), cnt, grp);
+    return GroupsBy::Cpu;
+}
+
 // ---- the picture of the cloud ----
 void projectCloud(const float* pts, long cnt, const CloudCamera& cam, double w, double h, std::vector<float>& PX, std::vector<float>& PY, std::vector<float>& PD) {
     PX.resize(std::size_t(cnt)); PY.resize(std::size_t(cnt)); PD.resize(std::size_t(cnt));

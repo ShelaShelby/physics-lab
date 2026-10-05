@@ -13,7 +13,9 @@
 
 #include <vector>
 
+#include "atom_sim.h"
 #include "phase_wheel.h"
+#include "render/group_compute.h"
 #include "render/renderer2d.h"
 
 namespace atom {
@@ -38,6 +40,12 @@ render::Renderer2D::Blob softDot(const DotColours& dc, double x, double y, doubl
 
 // The colour group of every plain dot (no jump, no superposition): Wheel: the bin of its phase; Sign: 0 where the wave is + and 1 where it is −.
 void plainGroups(bool wheel, const float* ph, const signed char* sg, long cnt, unsigned char* grp);
+
+// Every dot's colour group for this frame (cnt dots: a jump in flight: both populations, 2 jn; a superposition; or a plain cloud). The jump and the superposition come from the GPU (0.13
+// stage 2, render/group_compute.h) when the lab's gpuCompute switch is on and `gc` is a working OpenGL 4.3 compute object; otherwise, and always when gc is null (an OpenGL 3.3 PC),
+// from the CPU functions AtomLab::jumpGroups / superGroup, which are the reference. Returns which one did the work (so a test and the Performance card can say).
+enum class GroupsBy { Cpu, Gpu };
+GroupsBy fillGroups(AtomLab& L, render::IGroupCompute* gc, long cnt, unsigned char* grp);
 
 // ---- Classic Cloud 3D: three depth bands, far = faint and small, near = bright and larger ----
 constexpr int kDepthBands = 3;

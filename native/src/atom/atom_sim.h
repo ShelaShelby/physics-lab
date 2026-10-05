@@ -18,6 +18,7 @@
 #include "chart.h"
 #include "chart_view.h"
 #include "decay_chain.h"
+#include "render/group_compute.h"
 
 namespace atom {
 
@@ -82,6 +83,10 @@ struct AtomState {
     std::optional<Photon> photonAfter;
     std::vector<float> jp;               // cloud jump: the new dots (the target orbital's), m (x, y, z for each); the old dots stay in pts
     std::vector<float> jA, jB;           // cloud jump: normalised amplitudes (A re, A im, B re, B im) at each old dot and at each new dot
+    // 0.13 stage 2: what a GPU copy of those arrays needs to know to stay up to date (render/group_compute.h). The epoch is a new number whenever the array is made again; the dirty range
+    // [lo, hi) is the dots of `sa` written since a GPU copy last took them (lo >= hi: none). The CPU path ignores all of this.
+    std::uint64_t saEpoch = 0, jumpEpoch = 0;
+    long saDirtyLo = 0, saDirtyHi = 0;
     long jn = 0;                         // dots in each population
     // The jump's dots are built over a few frames (0.10.6 stage 8), not all in the frame the jump starts: the chain that makes the new dots, with the random numbers it would have used
     // (the generator is moved past them at the start, so everything after the jump gets the numbers it always got), and the amplitudes at the old and the new dots.
@@ -141,6 +146,7 @@ public:
     std::vector<ChainStep> chain;        // the decay history (web: DEC_CHAIN)
     int chainVer = 0;
     bool paused = false;                 // the app's pause
+    bool gpuCompute = true;              // 0.13 stage 2: the superposition's and the jump's colour groups come from a compute shader (OpenGL 4.3), if the PC has it; false: the CPU loops (the reference). Not saved. A second switch, so stage 1 and stage 2 can be compared apart
     bool gpuColours = true;              // 0.13 stage 1: the cloud's dots carry a colour INDEX and the shader picks the colour (true), or the CPU colours every dot as in 0.12 (false: for comparing). Not saved; the Performance card has the switch
     bool hold = false;                   // a control is being held: the decay clock waits
     std::optional<bool> moreStored;      // the remembered ⓘ choice (web: localStorage plAtomMore)
@@ -232,6 +238,11 @@ public:
     bool jumpReady() const { return s.jb.done >= s.jn; }  // every dot of the jump is built (the picture shows the jump only then; until then it shows the cloud as it was: the jump has only just begun)
     bool jumpDrawn() const { return jumpCloud() && jumpReady(); }
     void completeJump() { if (!jumpReady()) buildJump(s.jn); }   // build what is left now (anything that reads the jump's arrays calls this first)
+    // 0.13 stage 2: the same two results from the GPU. They return false when the compute path cannot run (the caller then uses the CPU functions). The CPU functions stay the reference.
+    render::SuperGroupParams superGpuParams(double theta) const;      // a, b, exp(-i theta), overlap: what the kernel needs each frame
+    render::JumpGroupParams jumpGpuParams() const;                    // the terms of this frame's jump
+    bool superGroupsGpu(render::IGroupCompute& gc, long cnt, double theta, unsigned char* out);   // out[i] = superGroup(i, theta) for i < cnt
+    bool jumpGroupsGpu(render::IGroupCompute& gc, unsigned char* out);                            // out = jumpGroups()'s 2 jn entries
     void jumpGroups(unsigned char* grp) const;            // jumpGroup(0, i) into grp[i] and jumpGroup(1, i) into grp[jumpDots() + i], all dots, the terms that do not depend on the dot worked out once
     bool jumpShown(int pop, long i) const;                // pop 0: the old dots, 1: the new ones
     double jumpPhase(int pop, long i) const;              // arg of the wave at the dot (gauge: ends on the new orbital's own phase)

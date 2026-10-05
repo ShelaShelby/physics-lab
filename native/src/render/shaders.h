@@ -239,4 +239,98 @@ void main() {
 }
 )";
 
+// ---- 0.13 stage 2: OpenGL 4.3 compute (GLSL 430 core) ----
+// The colour group of every dot of a superposition or of a cloud jump, worked out on the GPU from the amplitudes stored with each dot when it was made. One kernel, two modes (uMode).
+// Each function is a direct port of its C++ twin, named in its comment; the C++ functions stay the reference (tests/gl_compare.cpp counts every dot that differs, and each must be within
+// float rounding of a threshold). The result is 8 bits per dot (255 = not shown, else the phase bin 0..23, or 0 / 1 for Sign), four dots to a 32-bit word, read back by the CPU.
+static const char* const kGroupsCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer AmpsA { vec4 ampA[]; };     // superposition: (A.re, A.im, B.re, B.im) of each dot (AtomState::sa); jump: the old dots (jA)
+layout(std430, binding = 1) readonly buffer AmpsB { vec4 ampB[]; };     // jump: the new dots (jB)
+layout(std430, binding = 2) writeonly buffer Groups { uint groups[]; };
+uniform int uMode;      // 0: a superposition, 1: a cloud jump
+uniform int uCount;     // dots to do (a jump: both populations, 2 jn)
+uniform int uJn;        // a jump: dots in each population
+uniform vec4 uP0;       // superposition: a, b, exp(-i theta) re, im.  jump: cos theta, sin theta, cos^2 theta, 0
+uniform vec4 uP1;       // jump: exp(-i phi) re, im, exp(i phi u) re, im
+uniform int uFlags;     // bit 0: the two states overlap (a superposition that does not beat); bit 1: Wheel colours (else Sign)
+
+vec2 cmul(vec2 p, vec2 q) { return vec2(p.x * q.x - p.y * q.y, p.x * q.y + p.y * q.x); }
+
+// port of atom::phaseBin() in src/atom/phase_wheel.h (kPhaseBins = 24, bin 0 centred on phase 0): t = fmod(arg / 2 pi + 0.5 / 24, 1), negative t + 1, min(23, int(t * 24))
+int phaseBin(float arg) {
+    float t = arg / 6.28318530717958647692 + 0.5 / 24.0;
+    t = t - trunc(t);
+    if (t < 0.0) t += 1.0;
+    return min(23, int(t * 24.0));
+}
+
+// 64-bit arithmetic on (low, high) pairs of 32-bit words, for the lab's splitmix64
+uvec2 mul64(uvec2 a, uvec2 b) { uint hi, lo; umulExtended(a.x, b.x, hi, lo); return uvec2(lo, hi + a.x * b.y + a.y * b.x); }
+uvec2 add64(uvec2 a, uvec2 b) { uint c; uint lo = uaddCarry(a.x, b.x, c); return uvec2(lo, a.y + b.y + c); }
+uvec2 xorShift(uvec2 z, int n) {        // z ^ (z >> n), 0 < n < 64
+    uvec2 s = n >= 32 ? uvec2(z.y >> (n - 32), 0u) : uvec2((z.x >> n) | (z.y << (32 - n)), z.y >> n);
+    return z ^ s;
+}
+// port of the fixed random number of a dot: splitmix64 of seed * 0x9E3779B97F4A7C15 + 0x632BE59BD9B4E019 (atom_sim.cpp: superShown and jumpUniform, which finish
+// double(z >> 11) / 2^53). Here the top 24 bits of z (z >> 40), plus half a step, over 2^24: within 3e-8 of the 53-bit number.
+float uniform01(uvec2 seed) {
+    uvec2 z = add64(mul64(seed, uvec2(0x7F4A7C15u, 0x9E3779B9u)), uvec2(0xD9B4E019u, 0x632BE59Bu));
+    z = mul64(xorShift(z, 30), uvec2(0x1CE4E5B9u, 0xBF58476Du));
+    z = mul64(xorShift(z, 27), uvec2(0x133111EBu, 0x94D049BBu));
+    z = xorShift(z, 31);
+    return (float(z.y >> 8) + 0.5) / 16777216.0;
+}
+
+// port of AtomLab::superGroup(i, theta) = superShown + phaseBin(superPhase) in src/atom/atom_sim.cpp
+uint superGroup(uint i) {
+    vec2 A = ampA[i].xy, B = ampA[i].zw;
+    vec2 c = uP0.x * A + uP0.y * cmul(B, uP0.zw);                        // a A + b B e^(-i theta)
+    if ((uFlags & 1) != 0) {                                             // overlapping states: static, every dot with a nonzero wave is shown
+        vec2 s = uP0.x * A + uP0.y * B;
+        if (!(dot(s, s) > 0.0)) return 255u;
+    } else {                                                             // orthogonal: shown with the odds |c|^2 / q, q = (|A|^2 + |B|^2) / 2, against the dot's fixed random number (exact thinning)
+        float q = 0.5 * (dot(A, A) + dot(B, B));
+        if (!(q > 0.0)) return 255u;
+        float w = dot(c, c) / q;
+        if (!(uniform01(uvec2(i, 0u)) < w * 0.5)) return 255u;
+    }
+    float ph = (c.x == 0.0 && c.y == 0.0) ? 0.0 : atan(c.y, c.x);
+    return uint(phaseBin(ph));
+}
+
+// port of AtomLab::jumpGroups(): jumpFractions(A, B, T) in src/atom/atom_core.cpp, the dot's fixed random number (jumpUniform: seed = i + (pop << 40)), jumpPhaseOf(A, B, T)
+uint jumpGroup(uint k) {
+    uint pop = k >= uint(uJn) ? 1u : 0u;
+    uint i = k - pop * uint(uJn);
+    vec2 A = (pop == 1u ? ampB[i] : ampA[i]).xy, B = (pop == 1u ? ampB[i] : ampA[i]).zw;
+    float cth = uP0.x, sth = uP0.y, lam = uP0.z;
+    vec2 em = uP1.xy, ep = uP1.zw;
+    float a2 = dot(A, A), b2 = dot(B, B);
+    vec2 cc = cth * A + sth * cmul(B, em);
+    float rho = dot(cc, cc);
+    float aFirstA = a2 > 0.0 ? min(1.0, rho / a2) : 0.0;                              // the old dots fill first
+    float aFirstB = b2 > 0.0 ? max(0.0, (rho - a2 * aFirstA) / b2) : 0.0;
+    float bFirstB = b2 > 0.0 ? min(1.0, rho / b2) : 0.0;                              // the new dots fill first
+    float bFirstA = a2 > 0.0 ? max(0.0, (rho - b2 * bFirstB) / a2) : 0.0;
+    float f = pop == 1u ? clamp(lam * aFirstB + (1.0 - lam) * bFirstB, 0.0, 1.0) : clamp(lam * aFirstA + (1.0 - lam) * bFirstA, 0.0, 1.0);
+    if (!(uniform01(uvec2(i, pop << 8)) < f)) return 255u;
+    vec2 z = cmul(ep, cc);
+    if ((uFlags & 2) != 0) return uint(phaseBin((z.x == 0.0 && z.y == 0.0) ? 0.0 : atan(z.y, z.x)));
+    return z.x >= 0.0 ? 0u : 1u;                                                      // Sign: cos(arg) >= 0 is Re >= 0
+}
+
+void main() {
+    uint t = gl_GlobalInvocationID.x;
+    if (t >= (uint(uCount) + 3u) / 4u) return;
+    uint word = 0u;
+    for (uint j = 0u; j < 4u; j++) {
+        uint g = 4u * t + j, v = 255u;
+        if (g < uint(uCount)) v = uMode == 0 ? superGroup(g) : jumpGroup(g);
+        word |= v << (8u * j);
+    }
+    groups[t] = word;
+}
+)";
+
 }  // namespace render

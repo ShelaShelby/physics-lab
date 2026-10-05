@@ -41,6 +41,8 @@ struct AppState {
     std::shared_ptr<BenchState> bench;     // the benchmark: its window, its run and the settings it will give back
     bool benchRunning = false;             // a benchmark is running: nothing is written to the settings file
     double canvasW = 800, canvasH = 600;   // picture size in points (for the Go to zoom levels)
+    int glMajor = 3, glMinor = 3;          // the OpenGL version the window got (0.13 stage 2)
+    bool computeOk = false;                // the renderer has the OpenGL 4.3 compute path (the Atom Lab's GPU superposition and jumps); false: the CPU does that work
     bool vsync = true;                     // wait for the screen's refresh (off: draw as fast as possible, to measure headroom)
     FrameStats stats;
     app::LiveStats live;                   // frames drawn while the window system had the window in its move / resize loop

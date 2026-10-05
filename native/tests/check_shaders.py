@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Compiles every GLSL shader of the renderer (src/render/shaders.h) as GLSL 330 core with glslang, alone and linked in the pairs the renderer links.
+"""Compiles every GLSL shader of the renderer (src/render/shaders.h) with glslang: the vertex and fragment shaders as GLSL 330 core, alone and linked in the pairs the renderer links,
+and (0.13 stage 2) the compute shaders (names ending in CS) as GLSL 430 core.
 
 A shader that does not compile, or a pair whose outputs and inputs do not match, fails the test. glslang is the Khronos reference compiler: it needs no graphics card.
 (It checks the language; what a GPU's own driver does with the shader is only tested on a real PC.)
@@ -26,14 +27,15 @@ def main():
     shaders = dict((m.group(1), m.group(2)) for m in re.finditer(r'static const char\* const (k\w+) = R"\((.*?)\)";', src, re.S))
     names = sorted(shaders)
     failed = 0
-    if len(shaders) < 10:
-        print("FAIL: found only %d shaders in %s (expected at least 10)" % (len(shaders), sys.argv[1])); return 1
+    if len(shaders) < 11 or not any(n.endswith("CS") for n in shaders):
+        print("FAIL: found only %d shaders in %s (expected at least 11, one of them a compute shader)" % (len(shaders), sys.argv[1])); return 1
     with tempfile.TemporaryDirectory() as d:
         paths = {}
         for n in names:
-            kind = "vert" if n.endswith("VS") or n == "kVertexShader" else "frag"
-            if not shaders[n].startswith("#version 330 core\n"):
-                print("FAIL %s: does not start with '#version 330 core'" % n); failed += 1
+            kind = "comp" if n.endswith("CS") else "vert" if n.endswith("VS") or n == "kVertexShader" else "frag"
+            want = "#version 430 core\n" if kind == "comp" else "#version 330 core\n"
+            if not shaders[n].startswith(want):
+                print("FAIL %s: does not start with '%s'" % (n, want.strip())); failed += 1
             p = os.path.join(d, n + "." + kind)
             open(p, "w", encoding="utf-8").write(shaders[n])
             paths[n] = p
@@ -41,7 +43,7 @@ def main():
             if r.returncode != 0:
                 print("FAIL %s:\n%s%s" % (n, r.stdout, r.stderr)); failed += 1
             else:
-                print("ok   %s (GLSL 330 core)" % n)
+                print("ok   %s (GLSL %s core)" % (n, "430" if kind == "comp" else "330"))
         for v, f in PAIRS:
             r = subprocess.run([tool, "-l", paths[v], paths[f]], capture_output=True, text=True)
             if r.returncode != 0:

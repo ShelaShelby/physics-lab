@@ -118,9 +118,15 @@ if(PL_BUILD_TESTS)
     add_test(NAME glsl_shaders COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shaders.py ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h)
     set_tests_properties(glsl_shaders PROPERTIES SKIP_RETURN_CODE 77)
   endif()
+  # 0.13 stage 2: where the CPU time of a frame goes (a measuring tool, not a test): cmake -DPL_TIMING=ON, then run stage2_timing
+  option(PL_TIMING "Build stage2_timing, the per-frame CPU time breakdown of the jump and superposition scenes" OFF)
+  if(PL_TIMING)
+    add_executable(stage2_timing tests/timing_stage2.cpp)
+    target_link_libraries(stage2_timing PRIVATE atom_core)
+  endif()
   if(PL_GL_TESTS)
     find_library(PL_EGL_LIBRARY EGL REQUIRED)
-    add_executable(gl_compare_tests tests/gl_compare.cpp src/render/renderer2d.cpp src/render/earth_texture.cpp)
+    add_executable(gl_compare_tests tests/gl_compare.cpp src/render/renderer2d.cpp src/render/earth_texture.cpp src/render/group_compute.cpp)
     target_include_directories(gl_compare_tests PRIVATE src/render)
     target_link_libraries(gl_compare_tests PRIVATE atom_core ${PL_EGL_LIBRARY})
     target_compile_options(gl_compare_tests PRIVATE ${PL_WARNINGS})
@@ -176,6 +182,7 @@ if(PL_BUILD_APP)
     src/render/gl_loader.cpp
     src/render/renderer2d.cpp
     src/render/earth_texture.cpp
+    src/render/group_compute.cpp
     src/orbit/orbit_view.cpp
     src/atom/atom_view.cpp
     src/atom/chart_draw.cpp

@@ -16,6 +16,7 @@
 #include "look.h"
 #include "shot.h"
 #include "benchmark.h"
+#include "app/bench.h"
 #include "orbit/format.h"
 #include "orbit/moon_elp.h"
 #include "orbit/date_text.h"
@@ -123,6 +124,16 @@ void performanceCard(AppState& app) {
     ImGui::SeparatorText("Performance");
     wrappedCheckbox("VSync (wait for the screen)", &app.vsync);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
+    if (app.lab == 1) {                                   // 0.13 stage 2: which way the superposition and the jumps are worked out: the line says what this PC has, the switch compares the two ways
+        ImGui::TextWrapped("%s", app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute).c_str());
+        ImGui::BeginDisabled(!app.computeOk);
+        wrappedCheckbox("GPU superposition and jumps (OpenGL 4.3)", &app.atom.gpuCompute);
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("On (the default, needs OpenGL 4.3): for a superposition or a photon jump, a compute shader on the graphics card works out which dots are shown and their colours;\n"
+                                                      "Off, or on a PC without OpenGL 4.3: the processor does it dot by dot, as versions up to 0.13 stage 1 did.\n"
+                                                      "The picture is the same either way (tested, except a rare dot within rounding of a threshold); only the speed differs, and it is expected, not yet measured, to be better On.\n"
+                                                      "Used for comparing on your PC with the benchmark's scenes 11, 13, 14, 15 and 25 to 28. Not saved: it is On again at the next start.");
+    }
     if (app.lab == 1) {                                   // the Atom Lab's cloud dots: who picks the phase colours (0.13 stage 1). A debug switch for comparing on a real PC; not saved
         wrappedCheckbox("GPU colours (Atom Lab cloud dots)", &app.atom.gpuColours);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("On (the default): each dot of the electron cloud carries its colour number and the graphics card picks the colour.\n"

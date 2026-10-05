@@ -44,10 +44,10 @@ namespace {
 
 #include "ui/icon_data.inc"      // kIconRgba: the window icon (64 x 64)
 
-SDL_Window* createWindow(float scale, bool multisample, const app::WindowState& ws) {
+SDL_Window* createWindow(float scale, bool multisample, const app::WindowState& ws, bool gl43) {   // gl43: ask for an OpenGL 4.3 core context (0.13 stage 2: compute shaders), else 3.3
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, gl43 ? 4 : 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, multisample ? 1 : 0);   // smooth edges on lines and dots
@@ -124,12 +124,18 @@ int main(int, char**) {
     }
     app::WindowState start;                             // size 0: the default
     if (app.prefs.window) start = app::fitWindow(*app.prefs.window, screens);
-    SDL_Window* window = createWindow(scale, true, start);
-    SDL_GLContext gl = window ? SDL_GL_CreateContext(window) : nullptr;
-    if (!gl) {                                          // no multisampling available: try again without
-        if (window) SDL_DestroyWindow(window);
-        window = createWindow(scale, false, start);
-        gl = window ? SDL_GL_CreateContext(window) : nullptr;
+    // 0.13 stage 2: first ask for OpenGL 4.3 (the Atom Lab's superposition and jumps then run on the GPU), with smooth edges, then without them; if the PC cannot give 4.3, the same two tries
+    // for 3.3 as before (and the CPU does that work).
+    SDL_Window* window = nullptr;
+    SDL_GLContext gl = nullptr;
+    for (const bool want43 : {true, false}) {
+        for (const bool multisample : {true, false}) {
+            window = createWindow(scale, multisample, start, want43);
+            gl = window ? SDL_GL_CreateContext(window) : nullptr;
+            if (gl) break;
+            if (window) { SDL_DestroyWindow(window); window = nullptr; }
+        }
+        if (gl) break;
     }
     if (SDL_getenv("PL_FAKE_GLFAIL")) { if (gl) SDL_GL_DestroyContext(gl); gl = nullptr; if (window) SDL_DestroyWindow(window); window = nullptr; }   // for automatic checks: pretend OpenGL is missing
     if (!window || !gl) { fail("Could not open an OpenGL 3.3 window", "Physics Lab draws with OpenGL 3.3 (3D graphics), and your computer did not give it a window to draw in. This usually means the graphics driver is too old, or missing.", kDriverAdvice); return 1; }
@@ -150,6 +156,13 @@ int main(int, char**) {
     std::printf("OpenGL: %s | %s\n", plgl::glGetString(GL_VERSION), plgl::glGetString(GL_RENDERER));
     render::Renderer2D renderer;
     if (!renderer.init()) { fail("Could not set up the OpenGL shaders", "Your graphics driver started, but would not accept the drawing programs Physics Lab sends it.", kDriverAdvice); return 1; }
+    if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // for the owner and automatic checks: run the CPU path even on a PC that has OpenGL 4.3
+    {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
+        GLint maj = 0, min = 0;
+        plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
+        app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr;
+        std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
+    }
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();

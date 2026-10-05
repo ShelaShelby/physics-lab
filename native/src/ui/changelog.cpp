@@ -17,6 +17,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.13", "GPU update: superposition and photon jumps on the graphics card (stage 2 of 4)",
+     "In a superposition (and while a photon jump is in flight) the processor used to work out, for every one of the 48,000 dots and every frame, whether the dot is shown, and its colour. This was the slowest part of the app (the overlapping superposition was the slowest scene of 0.12). "
+     "Now, on a PC with OpenGL 4.3, a compute shader on the graphics card does that from the amplitudes stored with each dot, and the processor only sends the beat phase and the weights. A PC with only OpenGL 3.3 keeps the old way and nothing else changes: the app asks for 4.3 first and falls back to 3.3. "
+     "The Performance card says which way your PC runs (\"OpenGL 4.3: GPU superposition on\" or \"OpenGL 3.3: CPU path\"), has a switch to compare the two, and the benchmark report prints it; scenes 25 to 28 run the jump and the three superpositions again with the old way. "
+     "The physics is the same: the formulas are ported line by line and tested against the processor's for every dot. The graphics card works in 32-bit numbers, so a dot within rounding of a threshold (a few in a million) can come out differently; each such dot is tested to be that close. "
+     "The tests also check the superposition against the textbook hydrogen formulas written out separately, and found that the lab's orbital normalisation is off by 3e-6 to 1.6e-5 in amplitude (not changed, reported). "
+     "Not changed: the building of the dots of a jump (the random sampling is a chain that cannot run in parallel). "
+     "The speed-up is EXPECTED, not measured: it could not be tried on a real graphics card or on Windows here. Scene 14 should drop from about 10 ms towards the 4 ms of one plain orbital."},
     {"0.13", "GPU update: phase colours on the graphics card (stage 1 of 4)",
      "The electron cloud's dots used to be coloured by the processor: for the 24 Wheel colours it went over all 48,000 dots once for each colour, in each of three depth bands. Now each dot carries only the number of its colour and the graphics card picks the colour. "
      "The picture is meant to be exactly the same (the same colours, the same depth bands, the same drawing order); the tests compare the old way and the new way dot by dot and, with a software OpenGL, pixel by pixel, and found no difference. "

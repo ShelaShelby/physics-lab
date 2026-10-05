@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "gl_loader.h"
+#include "group_compute.h"
 
 namespace render {
 
@@ -25,6 +26,9 @@ class Renderer2D {
 public:
     bool init();
     void shutdown();
+    // The OpenGL 4.3 compute path (0.13 stage 2), or nullptr when this context has no OpenGL 4.3 (then the CPU does that work, as before). Valid after init().
+    IGroupCompute* compute() const { return compute_; }
+    void disableCompute();                // forget the compute object: the CPU paths are used (PL_NO_COMPUTE; tests)
 
     // Start a frame for a picture `width` × `height` points.
     void begin(double width, double height);
@@ -94,6 +98,7 @@ private:
     GLuint plProgram_ = 0, earthTex_ = 0;
     GLint plSize_ = -1, plK_ = -1, plEarth_ = -1, plPa_ = -1, plLod_ = -1, plTex_ = -1;
 
+    IGroupCompute* compute_ = nullptr;        // owned; see compute()
     std::vector<Blob> blobs_;                 // all blobs of this frame
     GLuint blProgram_ = 0, blVao_ = 0, blInstVbo_ = 0;
     GLint blSize_ = -1, blFuzz_ = -1, blPalWheel_ = -1, blPalLight_ = -1, blPalPlus_ = -1, blPalMinus_ = -1;

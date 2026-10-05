@@ -39,9 +39,18 @@ struct BenchScene {
 // the picture's wheel, drag, clicks and the keyboard shortcuts (Space, F11) ask this first; the panels are blocked by a modal box (ui/benchmark.cpp).
 inline bool labInputAllowed(bool benchRunning) { return !benchRunning; }
 
+// The sentence the Performance card and the benchmark report use for the Atom Lab's superposition and jumps (0.13 stage 2). computeOk: the renderer has the OpenGL 4.3 compute path;
+// switchOn: the "GPU superposition and jumps" switch (AtomLab::gpuCompute).
+inline std::string computePathText(int major, int minor, bool computeOk, bool switchOn) {
+    const std::string v = "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
+    if (!computeOk) return v + ": CPU path";
+    return v + (switchOn ? ": GPU superposition on" : ": GPU superposition off (switched off, CPU path)");
+}
+
 struct BenchEnv {
     std::string version, when;                   // the native version; the local date and time
     std::string gpu, glVersion, vendor;          // GL_RENDERER, GL_VERSION, GL_VENDOR
+    std::string computePath;                     // computePathText(): "OpenGL 4.3: GPU superposition on" or "OpenGL 3.3: CPU path" (0.13 stage 2)
     int windowW = 0, windowH = 0;                // the window, in pixels
     int pictureW = 0, pictureH = 0;              // the picture area, in pixels
     double refreshHz = 0;                        // the display's refresh rate (0: unknown)

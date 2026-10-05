@@ -16,6 +16,8 @@
 
 namespace atom {
 
+static std::uint64_t nextEpoch();   // a new number each call (for the GPU copies of the amplitude arrays, see AtomState::saEpoch)
+
 static double jsRound(double x) { const double r = std::floor(x + 0.5); return r == 0 && x < 0 ? -0.0 : r; }
 static double clampZoom(double z) { return std::max(0.0, std::min(7.0, z)); }
 static const char* const kLetter = "spdf";
@@ -61,7 +63,7 @@ void AtomLab::init() {
     s.t = 0; s.Zprev = p.Z; s.more = moreStored; s.pan = {}; s.panTo.reset(); s.dragMode = "rotate";
     s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a); s.trail.clear();
     s.pts.assign(std::size_t(cloudCap()) * 3, 0.f); s.sg.assign(cloudCap(), 0); s.ph.assign(cloudCap(), 0.f); s.k = 0;
-    s.sa.clear(); s.beatT = 0;
+    s.sa.clear(); s.beatT = 0; s.saEpoch = nextEpoch(); s.saDirtyLo = 0; s.saDirtyHi = 0;
     if (superOn()) { s.sa.assign(std::size_t(cloudCap()) * 4, 0.f); sup_ = superState(); nA_ = normFactor(sup_.idA, p.Z); nB_ = normFactor(sup_.idB, p.Z); overlap_ = overlapAB(sup_.idA, sup_.idB) != 0.0; } else overlap_ = false; s.w = {0.7 * k, 0.4 * k, 1.1 * k};
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
     s.fc = {}; s.focus = -1; s.zoomTo.reset(); s.layer = "Atom"; s.hits.clear();
@@ -271,6 +273,7 @@ void AtomLab::walkSuper(Vec3d& w, bool record) {
         std::complex<double> A, B;
         amps(w.x, w.y, w.z, A, B);
         if (std::size_t(4 * i + 3) < s.sa.size()) { s.sa[4 * i] = float(A.real()); s.sa[4 * i + 1] = float(A.imag()); s.sa[4 * i + 2] = float(B.real()); s.sa[4 * i + 3] = float(B.imag()); }
+        if (s.saDirtyHi <= s.saDirtyLo) { s.saDirtyLo = i; s.saDirtyHi = i + 1; } else { s.saDirtyLo = std::min(s.saDirtyLo, i); s.saDirtyHi = std::max(s.saDirtyHi, i + 1); }   // (for a GPU copy)
         s.sg[i] = 1; s.ph[i] = 0.f;
         s.pts[3 * i] = float(w.x * kA0); s.pts[3 * i + 1] = float(w.y * kA0); s.pts[3 * i + 2] = float(w.z * kA0);
         s.k++;
@@ -313,6 +316,36 @@ int AtomLab::jumpGroup(int pop, long i) const {
     if (!jumpShown(pop, i)) return 255;
     const double ph = jumpPhase(pop, i);
     return p.phase == "Wheel" ? phaseBin(ph) : (std::cos(ph) >= 0 ? 0 : 1);
+}
+// ---- 0.13 stage 2: the same colour groups from the GPU (render/group_compute.h; the kernel is a port of superGroup and jumpGroups, shaders.h kGroupsCS) ----
+static std::uint64_t nextEpoch() { static std::uint64_t n = 0; return ++n; }
+render::SuperGroupParams AtomLab::superGpuParams(double theta) const {
+    render::SuperGroupParams q;
+    q.a = float(sup_.a); q.b = float(sup_.b);
+    q.emRe = float(std::cos(theta)); q.emIm = float(-std::sin(theta));             // exp(-i theta)
+    q.overlap = overlap_ ? 1 : 0;
+    return q;
+}
+render::JumpGroupParams AtomLab::jumpGpuParams() const {
+    const double u = jumpU(), phi = jumpPhi(), th = kPi / 2 * u;
+    const JumpTerms T = jumpTerms(th, phi, u);
+    render::JumpGroupParams q;
+    q.cth = float(T.cth); q.sth = float(T.sth); q.lam = float(T.lam);
+    q.emRe = float(T.em.real()); q.emIm = float(T.em.imag()); q.epRe = float(T.ep.real()); q.epIm = float(T.ep.imag());
+    q.wheel = p.phase == "Wheel" ? 1 : 0;
+    return q;
+}
+bool AtomLab::superGroupsGpu(render::IGroupCompute& gc, long cnt, double theta, unsigned char* out) {
+    if (!gc.ok() || !superOn() || cnt <= 0 || std::size_t(4 * cnt) > s.sa.size()) return false;
+    const long lo = s.saDirtyLo, hi = s.saDirtyHi;
+    s.saDirtyLo = s.saDirtyHi = 0;                                                  // taken: the GPU copy is current after this call
+    return gc.superGroups(s.sa.data(), cnt, s.saEpoch, lo, hi, superGpuParams(theta), out);
+}
+bool AtomLab::jumpGroupsGpu(render::IGroupCompute& gc, unsigned char* out) {
+    const long jn = s.jn;
+    if (!gc.ok() || !s.trans || jn <= 0) return false;
+    if (!jumpReady()) completeJump();
+    return gc.jumpGroups(s.jA.data(), s.jB.data(), jn, s.jumpEpoch, jumpGpuParams(), out);
 }
 // Every dot of the jump, in one go (the picture asks for this each frame): the same numbers as jumpGroup(pop, i) one by one, bit for bit (tested), but cos, sin and the complex exponentials
 // of the jump's progress, and the jump's energy step (levelEV, which looks up the nucleus's mass), are worked out once here and not once per dot (0.10.6 stage 8; the benchmark's scene 11 spent about 26 of 30 ms here).
@@ -493,6 +526,7 @@ void AtomLab::beginTransition(int from, int to) {
         s.gAng = std::atan2(s.y, s.x);
     } else {
         const long jn = std::min<long>(s.k, std::min<long>(cloudCap(), long(s.sg.size())));
+        s.jumpEpoch = nextEpoch();
         s.jn = jn; s.jp.assign(std::size_t(3 * jn), 0.f); s.jA.assign(std::size_t(4 * jn), 0.f); s.jB.assign(std::size_t(4 * jn), 0.f);
         // The dots are built by buildJump(), a part of them each frame (an old dot's amplitudes, and one step of the chain of new dots with its amplitudes, for the same index). Nothing is sampled during a
         // jump (step() does not run the cloud), so the old dots stay as they are and the random numbers are used by this chain only: the generator is moved past all of them now, exactly as the

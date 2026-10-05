@@ -67,6 +67,15 @@ typedef std::ptrdiff_t GLintptr;
 #define GL_RENDERER 0x1F01
 #define GL_FRAMEBUFFER 0x8D40
 #define GL_COLOR_ATTACHMENT0 0x8CE0
+// OpenGL 4.3 (0.13 stage 2): compute shaders and shader storage buffers
+#define GL_MAJOR_VERSION 0x821B
+#define GL_MINOR_VERSION 0x821C
+#define GL_COMPUTE_SHADER 0x91B9
+#define GL_SHADER_STORAGE_BUFFER 0x90D2
+#define GL_SHADER_STORAGE_BARRIER_BIT 0x00002000
+#define GL_BUFFER_UPDATE_BARRIER_BIT 0x00000200
+#define GL_DYNAMIC_DRAW 0x88E8
+#define GL_DYNAMIC_READ 0x88E9
 
 #define PL_GL_FUNCTIONS(X)                                                                         \
     X(void, glClear, (GLbitfield mask))                                                            \
@@ -130,15 +139,26 @@ typedef std::ptrdiff_t GLintptr;
     X(void, glGetQueryObjectui64v, (GLuint id, GLenum pname, unsigned long long* params))          \
     X(void, glQueryCounter, (GLuint id, GLenum target))                                            \
     X(void, glFinish, ())                                                                          \
-    X(void, glReadPixels, (GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum t, void* data))
+    X(void, glReadPixels, (GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum t, void* data))        \
+    X(void, glGetIntegerv, (GLenum pname, GLint* data))
+
+// The OpenGL 4.3 functions the compute path needs. They are loaded SEPARATELY (loadGL43), and only on a 4.3 context: on a 3.3 one the app runs without them (the CPU paths).
+#define PL_GL43_FUNCTIONS(X)                                                                       \
+    X(void, glDispatchCompute, (GLuint x, GLuint y, GLuint z))                                     \
+    X(void, glMemoryBarrier, (GLbitfield barriers))                                                \
+    X(void, glBindBufferBase, (GLenum target, GLuint index, GLuint buffer))                        \
+    X(void, glGetBufferSubData, (GLenum target, GLintptr offset, GLsizeiptr size, void* data))
 
 // The function pointers live in their own namespace, so they never clash with the
 // system's OpenGL library (which exports functions with the same names).
 namespace plgl {
 #define PL_GL_DECLARE(ret, name, args) typedef ret(PL_GLAPI* PFN_##name) args; extern PFN_##name name;
 PL_GL_FUNCTIONS(PL_GL_DECLARE)
+PL_GL43_FUNCTIONS(PL_GL_DECLARE)
 #undef PL_GL_DECLARE
 
 // Loads every function above. Returns false (and the name in `missing`) if one is not there.
 bool loadGL(const char** missing);
+// Loads the OpenGL 4.3 functions above. Returns false (and the name in `missing`) if one is not there; the 3.3 functions are not touched.
+bool loadGL43(const char** missing);
 }  // namespace plgl

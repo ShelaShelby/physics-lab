@@ -36,6 +36,7 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
     t += "Date: " + e.when + "\n";
     t += "GPU: " + (e.gpu.empty() ? "unknown" : e.gpu) + "\n";
     t += "OpenGL: " + (e.glVersion.empty() ? "unknown" : e.glVersion) + "\n";
+    t += "Atom Lab superposition and jumps: " + (e.computePath.empty() ? "unknown" : e.computePath) + "\n";
     t += "Driver / vendor: " + (e.vendor.empty() ? "not available" : e.vendor) + "\n";
     t += "Window: " + std::to_string(e.windowW) + " x " + std::to_string(e.windowH) + " pixels" + (e.fullscreen ? ", full screen" : ", not full screen") + "\n";
     t += "Picture area: " + std::to_string(e.pictureW) + " x " + std::to_string(e.pictureH) + " pixels\n";

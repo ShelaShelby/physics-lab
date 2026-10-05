@@ -24,13 +24,23 @@
 #include "atom/atom_bench.h"
 #include "atom/cloud_dots.h"
 #include "atom/cloud_light.h"
+#include "render/group_compute.h"
 #include "render/renderer2d.h"
 
 // ---- the GL functions, from EGL (the app gets them from SDL: render/gl_loader.cpp) ----
 namespace plgl {
 #define PL_GL_DEFINE(ret, name, args) PFN_##name name = nullptr;
 PL_GL_FUNCTIONS(PL_GL_DEFINE)
+PL_GL43_FUNCTIONS(PL_GL_DEFINE)
 #undef PL_GL_DEFINE
+bool loadGL43(const char** missing) {
+#define PL_GL_LOAD(ret, name, args)                                                  \
+    name = reinterpret_cast<PFN_##name>(eglGetProcAddress(#name));                    \
+    if (!name) { if (missing) *missing = #name; return false; }
+    PL_GL43_FUNCTIONS(PL_GL_LOAD)
+#undef PL_GL_LOAD
+    return true;
+}
 bool loadGL(const char** missing) {
 #define PL_GL_LOAD(ret, name, args)                                                  \
     name = reinterpret_cast<PFN_##name>(eglGetProcAddress(#name));                    \
@@ -239,6 +249,295 @@ static void glowDots(render::Renderer2D& R, const std::string& dir) {           
     }
 }
 
+
+// ================= 0.13 stage 2: the superposition and the jump on the GPU (compute shaders, OpenGL 4.3) =================
+// The CPU functions (AtomLab::superGroup, AtomLab::jumpGroups) are the reference. Every dot's shown / hidden decision and its colour group come from the GPU in 32-bit floats; they may
+// differ from the 64-bit CPU numbers ONLY for a dot that is within float rounding of a threshold (its thinning odds against its fixed random number, or a colour-bin edge). Each differing
+// dot is checked against a bound worked out here from the dot's own numbers; any other difference is a failure.
+static const double kEps = 5.9604645e-8;      // kEps = 2^-24, the rounding of one 32-bit float operation (relative)
+static double splitUniform(std::uint64_t z) {                             // the lab's splitmix64 finish as a double in [0, 1) (atom_sim.cpp: jumpUniform and superShown)
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL; z ^= z >> 31;
+    return double(z >> 11) * (1.0 / 9007199254740992.0);
+}
+static double binEdgeDistance(double arg) {                               // radians from a phase to the nearest edge between two of the 24 bins (the edges are at (k + 1/2) 2 pi / 24)
+    const double w = 2 * kPi / kPhaseBins;
+    double t = std::fmod(arg - 0.5 * w, w); if (t < 0) t += w;
+    return std::min(t, w - t);
+}
+struct GroupDiff { long dots = 0, shownDiff = 0, binDiff = 0, bad = 0; double worstRatio = 0; };
+static void addDiff(GroupDiff& d, const GroupDiff& o) { d.dots += o.dots; d.shownDiff += o.shownDiff; d.binDiff += o.binDiff; d.bad += o.bad; d.worstRatio = std::max(d.worstRatio, o.worstRatio); }
+
+// one superposition frame: the GPU groups against lab.superGroup, every difference accounted for
+static GroupDiff compareSuper(AtomLab& L, render::IGroupCompute& gc, double theta, const std::string& what) {
+    GroupDiff d;
+    const long cnt = std::min<long>(L.s.k, L.cloudCap());
+    std::vector<unsigned char> gpu(static_cast<std::size_t>(cnt));
+    const bool ok = L.superGroupsGpu(gc, cnt, theta, gpu.data());
+    check(what + ": the GPU kernel ran", ok);
+    if (!ok) return d;
+    const Superposition su = L.superState();
+    const double a = su.a, b = su.b;
+    const bool overlap = overlapAB(su.idA, su.idB) != 0.0;
+    d.dots = cnt;
+    for (long i = 0; i < cnt; i++) {
+        const int cpu = L.superGroup(i, theta), g = gpu[std::size_t(i)];
+        if (cpu == g) continue;
+        const std::complex<double> A(L.s.sa[std::size_t(4 * i)], L.s.sa[std::size_t(4 * i + 1)]), B(L.s.sa[std::size_t(4 * i + 2)], L.s.sa[std::size_t(4 * i + 3)]);
+        const std::complex<double> c = a * A + b * B * std::exp(std::complex<double>(0, -theta));
+        const double S = a * std::abs(A) + b * std::abs(B), cm = std::max(std::abs(c), 1e-300);
+        if ((cpu == 255) != (g == 255)) {                                  // shown on one side only: the dot's odds are within rounding of its random number
+            d.shownDiff++;
+            double w, u;
+            if (overlap) { w = std::norm(a * A + b * B); u = 0; }
+            else { const double q = 0.5 * (std::norm(A) + std::norm(B)); w = std::norm(c) / q; u = splitUniform(std::uint64_t(i) * 0x9E3779B97F4A7C15ULL + 0x632BE59BD9B4E019ULL); }
+            const double thr = overlap ? 0.0 : w / 2, tol = overlap ? 1e-30 : thr * 1.5e-6 * (S / cm + 1) + 3.1e-8;
+            const double ratio = std::fabs(u - thr) / tol;
+            d.worstRatio = std::max(d.worstRatio, ratio);
+            if (!(ratio <= 1)) { d.bad++; if (d.bad < 4) std::printf("  dot %ld: CPU %d GPU %d, u %.9g, w/2 %.9g, tolerance %.3g\n", i, cpu, g, u, thr, tol); }
+        } else {                                                           // shown in both, in different colour bins: the phase is within rounding of a bin edge
+            d.binDiff++;
+            const double ph = std::arg(c), tol = 4 * 3 * kEps * S / cm + 2e-6, ratio = binEdgeDistance(ph) / tol;
+            d.worstRatio = std::max(d.worstRatio, ratio);
+            if (!(ratio <= 1)) { d.bad++; if (d.bad < 4) std::printf("  dot %ld: CPU bin %d GPU bin %d, phase %.9g, distance to a bin edge %.3g, tolerance %.3g\n", i, cpu, g, ph, binEdgeDistance(ph), tol); }
+        }
+    }
+    return d;
+}
+
+// one jump frame: the same for the two populations of dots of a cloud jump
+static GroupDiff compareJump(AtomLab& L, render::IGroupCompute& gc, const std::string& what) {
+    GroupDiff d;
+    const long jn = L.jumpDots();
+    std::vector<unsigned char> gpu(static_cast<std::size_t>(2 * jn)), cpu(static_cast<std::size_t>(2 * jn));
+    L.jumpGroups(cpu.data());
+    const bool ok = L.jumpGroupsGpu(gc, gpu.data());
+    check(what + ": the GPU kernel ran", ok);
+    if (!ok) return d;
+    d.dots = 2 * jn;
+    const double u = L.jumpU(), phi = L.jumpPhi();
+    const JumpTerms T = jumpTerms(kPi / 2 * u, phi, u);
+    const bool wheel = L.p.phase == "Wheel";
+    for (long k = 0; k < 2 * jn; k++) {
+        const int cg = cpu[std::size_t(k)], gg = gpu[std::size_t(k)];
+        if (cg == gg) continue;
+        const int pop = k >= jn ? 1 : 0; const long i = k - pop * jn;
+        const std::vector<float>& arr = pop ? L.s.jB : L.s.jA;
+        const std::complex<double> A(arr[std::size_t(4 * i)], arr[std::size_t(4 * i + 1)]), B(arr[std::size_t(4 * i + 2)], arr[std::size_t(4 * i + 3)]);
+        if ((cg == 255) != (gg == 255)) {
+            d.shownDiff++;
+            double fA, fB; jumpFractions(A, B, T, fA, fB);
+            const double f = pop ? fB : fA, uu = splitUniform((std::uint64_t(i) + (std::uint64_t(pop) << 40)) * 0x9E3779B97F4A7C15ULL + 0x632BE59BD9B4E019ULL);
+            const double tol = 2e-5;       // the fractions are ratios of float sums: their error is a few 1e-7 (measured, printed below); 2e-5 also covers dots near a node of the wave
+            const double ratio = std::fabs(uu - f) / tol;
+            d.worstRatio = std::max(d.worstRatio, ratio);
+            if (!(ratio <= 1)) { d.bad++; if (d.bad < 4) std::printf("  jump dot pop %d i %ld: CPU %d GPU %d, u %.9g, fraction %.9g\n", pop, i, cg, gg, uu, f); }
+        } else {
+            d.binDiff++;
+            const std::complex<double> z = T.ep * (T.cth * A + T.sth * B * T.em);
+            const double S = std::abs(T.cth * A) + std::abs(T.sth * B), cm = std::max(std::abs(z), 1e-300);
+            const double ph = std::arg(z), tol = 4 * 3 * kEps * S / cm + 2e-6;
+            const double dist = wheel ? binEdgeDistance(ph) : std::fabs(std::fabs(ph) - kPi / 2);      // Sign: the two colours meet where Re = 0, at phase +- pi/2
+            const double ratio = dist / tol;
+            d.worstRatio = std::max(d.worstRatio, ratio);
+            if (!(ratio <= 1)) { d.bad++; if (d.bad < 4) std::printf("  jump dot pop %d i %ld: CPU bin %d GPU bin %d, phase %.9g, distance %.3g\n", pop, i, cg, gg, ph, dist); }
+        }
+    }
+    return d;
+}
+
+// a Classic Cloud 3D picture from given colour groups (the pipeline of atom_view.cpp: projection, depth bands, draw order, one palette draw)
+static Picture groupPicture(render::Renderer2D& R, AtomLab& L, const std::vector<unsigned char>& grp, bool jump, bool light = false) {
+    const double w = 1040, h = 713;
+    std::vector<float> all;
+    const float* PTS = L.s.pts.data();
+    long cnt = long(grp.size());
+    if (jump) { const long jn = L.jumpDots(); all.assign(L.s.pts.begin(), L.s.pts.begin() + 3 * jn); all.insert(all.end(), L.s.jp.begin(), L.s.jp.begin() + 3 * jn); PTS = all.data(); }
+    const double pxm = L.pxPerM(std::min(w, h), L.s.szCur) * std::pow(10, L.p.zoom), ext = kExt[L.sizeN()] / L.p.Z * kA0;
+    std::vector<float> PX, PY, PD;
+    projectCloud(PTS, cnt, CloudCamera{w / 2, h / 2, pxm, std::cos(L.s.yaw), std::sin(L.s.yaw), std::cos(L.s.pitch), std::sin(L.s.pitch), ext}, w, h, PX, PY, PD);
+    const DotColours dc = makeDotColours(true, L.usesWheel(), light, kPlus, kMinus);
+    std::vector<Blob> B;
+    buildClassic3D(PX.data(), PY.data(), PD.data(), grp.data(), cnt, dc, cloudDotWeight(L.cloudCap()), B);
+    return draw1(R, 1040, 713, light ? Color{1, 1, 1, 1} : render::hexColor("#1e1e21"), [&] { R.blobsPalette(B.data(), int(B.size()), false, dc.palette()); });
+}
+
+static Picture g_cpuSuper14;                                               // scene 14 at beat 0 drawn from CPU groups on the 4.3 context, for the fallback test
+
+static void gpuSuperScenes(render::Renderer2D& R, const std::string& dir) {
+    render::IGroupCompute* gc = R.compute();
+    check("OpenGL 4.3 context: the renderer made a compute object", gc != nullptr && gc->ok());
+    if (!gc) return;
+    struct Sc { int which; const char* name; };
+    const Sc list[] = {{10, "scene 13 2p z + 2p x"}, {11, "scene 14 2p x + 2p m+1 (overlap)"}, {12, "scene 15 2p z + 3d z2 (beats)"}};
+    for (const Sc& sc : list) {
+        AtomLab L;
+        benchSetup(L, sc.which, 1040, 713);
+        check(std::string(sc.name) + ": the scene's superposition is on and has the 48,000 dots", L.superOn() && L.s.k >= 48000);
+        GroupDiff total;
+        for (const double beat : {0.0, 1.0, 2.0, 0.37, 3.1}) {              // t = 0, a quarter beat, half a beat (one beat is 4 s of the lab's beat clock), and two other times
+            L.s.beatT = beat;
+            const double theta = L.beatTheta();
+            addDiff(total, compareSuper(L, *gc, theta, std::string(sc.name) + " at beat clock " + std::to_string(beat).substr(0, 4)));
+        }
+        std::printf("%-34s %ld dot-frames: %ld shown/hidden differences, %ld colour-bin differences (each within %.3g of its tolerance, worst)\n", sc.name, total.dots, total.shownDiff, total.binDiff, total.worstRatio);
+        check(std::string(sc.name) + ": every dot's GPU decision equals the CPU one, except dots within float rounding of a threshold (none outside the tolerance)", total.bad == 0);
+        check(std::string(sc.name) + ": differing dots are rare (under 0.05 % of the dot-frames)", double(total.shownDiff + total.binDiff) < 5e-4 * double(total.dots));
+        // pictures: CPU groups against GPU groups, at beat 0, a quarter beat and half a beat
+        for (const double beat : {0.0, 1.0, 2.0}) {
+            L.s.beatT = beat;
+            const double theta = L.beatTheta();
+            const long cnt = std::min<long>(L.s.k, L.cloudCap());
+            std::vector<unsigned char> cpu(static_cast<std::size_t>(cnt)), gpu(static_cast<std::size_t>(cnt));
+            for (long i = 0; i < cnt; i++) cpu[std::size_t(i)] = (unsigned char)L.superGroup(i, theta);
+            L.superGroupsGpu(*gc, cnt, theta, gpu.data());
+            const Picture a = groupPicture(R, L, cpu, false), b = groupPicture(R, L, gpu, false);
+            report(dir, std::string(sc.name) + " beat " + (beat == 0 ? "0" : beat == 1 ? "quarter" : "half"), a, b, 40);
+            if (sc.which == 11 && beat == 0) g_cpuSuper14 = a;
+        }
+    }
+}
+
+
+// Directed edge cases: dots PUT on a colour-bin edge and on a thinning threshold (the real scenes have almost none), so that the CPU and the GPU really do disagree for some, and every
+// disagreement is within the stated tolerance. This also tests the incremental upload: the dots are changed in place and only their range is marked dirty, as walkSuper does.
+static void gpuEdgeCases(render::Renderer2D& R) {
+    render::IGroupCompute* gc = R.compute();
+    if (!gc) return;
+    {   // 1. colour-bin edges: B = 0, so the phase is arg(A); A at the phase of a bin edge plus a small step
+        AtomLab L; benchSetup(L, 12, 1040, 713);                               // 2p z + 3d z2, it beats
+        const double theta0 = L.beatTheta();
+        std::vector<unsigned char> warm(static_cast<std::size_t>(std::min<long>(L.s.k, L.cloudCap())));
+        L.superGroupsGpu(*gc, long(warm.size()), theta0, warm.data());                     // a first full upload, as a frame does
+        const double steps[] = {-2e-6, -5e-7, -1e-7, -3e-8, 0.0, 3e-8, 1e-7, 5e-7, 2e-6};
+        long n = 0;
+        const double w = 2 * 3.14159265358979323846 / kPhaseBins;
+        for (long i = 0; i < 4000 && n < 4000; i++) {
+            const double u = splitUniform(std::uint64_t(i) * 0x9E3779B97F4A7C15ULL + 0x632BE59BD9B4E019ULL);
+            if (u > 0.4) continue;                                             // B = 0: the dot is shown when u < a^2 * 2 / 2 = 0.5, so u < 0.4 is shown with room to spare
+            const int k = int(n % kPhaseBins); const double phi = (k + 0.5) * w + steps[(n / kPhaseBins) % 9];
+            L.s.sa[std::size_t(4 * i)] = float(std::cos(phi)); L.s.sa[std::size_t(4 * i + 1)] = float(std::sin(phi)); L.s.sa[std::size_t(4 * i + 2)] = 0.f; L.s.sa[std::size_t(4 * i + 3)] = 0.f;
+            n++;
+        }
+        L.s.saDirtyLo = 0; L.s.saDirtyHi = 4000;                               // only these dots changed: the GPU must take just them
+        const GroupDiff d = compareSuper(L, *gc, theta0, "edge dots on bin edges");
+        std::printf("dots put on bin edges: %ld; differing: %ld shown/hidden, %ld colour bin (worst %.3g of its tolerance)\n", n, d.shownDiff, d.binDiff, d.worstRatio);
+        check("edge dots: some dots on a bin edge really come out in a different bin on the GPU (the test is not vacuous)", d.binDiff > 0);
+        check("edge dots: every one of them is within the tolerance of a bin edge", d.bad == 0);
+        check("edge dots: the incremental upload took the changed dots (all other dots equal)", d.shownDiff + d.binDiff < n / 2);
+    }
+    {   // 2. thinning thresholds: A = 1, B = beta (real), theta = 0 (2p z + 2p x: one energy), so |c|^2 / q is a known function of beta; beta is chosen so that w / 2 = u + step for the dot's own u
+        AtomLab L; benchSetup(L, 10, 1040, 713);
+        const Superposition su = L.superState();
+        const double a = su.a, b = su.b;
+        const double steps[] = {-3e-6, -1e-6, -3e-7, -1e-7, 0.0, 1e-7, 3e-7, 1e-6, 3e-6};
+        long n = 0;
+        for (long i = 0; i < 20000 && n < 2000; i++) {
+            const double u = splitUniform(std::uint64_t(i) * 0x9E3779B97F4A7C15ULL + 0x632BE59BD9B4E019ULL), target = u + steps[n % 9];
+            if (target < 0.52 || target > 0.97) continue;                      // w / 2 = (a + b beta)^2 / (1 + beta^2) is between 1/2 (beta = 0 gives a^2 = 1/2... up to 1) for beta in (0, 1)
+            double lo = 0, hi = 1;
+            for (int it = 0; it < 80; it++) { const double m = 0.5 * (lo + hi), f = (a + b * m) * (a + b * m) / (1 + m * m); if (f < target) lo = m; else hi = m; }
+            const double beta = 0.5 * (lo + hi);
+            L.s.sa[std::size_t(4 * i)] = 1.f; L.s.sa[std::size_t(4 * i + 1)] = 0.f; L.s.sa[std::size_t(4 * i + 2)] = float(beta); L.s.sa[std::size_t(4 * i + 3)] = 0.f;
+            n++;
+        }
+        L.s.saDirtyLo = 0; L.s.saDirtyHi = 20000;
+        const GroupDiff d = compareSuper(L, *gc, L.beatTheta(), "edge dots on thinning thresholds");
+        std::printf("dots put on a thinning threshold: %ld; differing: %ld shown/hidden, %ld colour bin (worst %.3g of its tolerance)\n", n, d.shownDiff, d.binDiff, d.worstRatio);
+        check("edge dots: some dots on a thinning threshold really come out differently on the GPU (the test is not vacuous)", d.shownDiff > 0);
+        check("edge dots: every one of them is within the tolerance of its threshold", d.bad == 0);
+    }
+    {   // 2b. the real thing: frames in which the lab keeps sampling new dots (walkSuper writes 64 amplitudes a frame and marks them), the GPU copy following by dirty ranges only
+        AtomLab L; benchSetup(L, 12, 1040, 713);
+        GroupDiff total;
+        for (int frame = 0; frame < 40; frame++) {
+            L.tick(1.0 / 240); L.step(1.0 / 240);
+            addDiff(total, compareSuper(L, *gc, L.beatTheta(), "frame " + std::to_string(frame) + " of a running superposition"));
+        }
+        std::printf("40 running frames of scene 15: %ld dot-frames, %ld differences (worst %.3g of its tolerance)\n", total.dots, total.shownDiff + total.binDiff, total.worstRatio);
+        check("running frames: the GPU copy kept up by dirty ranges (every frame equal to the CPU, except edge dots)", total.bad == 0 && total.shownDiff + total.binDiff < 5e-4 * double(total.dots));
+    }
+    {   // 3. a new epoch (the lab restarted) is a full upload: after a restart the GPU must not keep the old dots
+        AtomLab L; benchSetup(L, 11, 1040, 713);
+        std::vector<unsigned char> g(static_cast<std::size_t>(std::min<long>(L.s.k, L.cloudCap())));
+        L.superGroupsGpu(*gc, long(g.size()), 0, g.data());
+        const std::uint64_t e0 = L.s.saEpoch;
+        L.restart();
+        check("restart: the amplitude array gets a new epoch", L.s.saEpoch != e0);
+        for (int i = 0; i < 40000 && L.s.k < L.cloudCap(); i++) L.step(1.0 / 240);
+        const GroupDiff d = compareSuper(L, *gc, 0, "after a restart");
+        check("restart: the GPU copy follows the new dots", d.bad == 0 && d.shownDiff + d.binDiff < 50);
+    }
+}
+
+static void gpuJumpScenes(render::Renderer2D& R, const std::string& dir) {
+    render::IGroupCompute* gc = R.compute();
+    if (!gc) return;
+    for (const int which : {8, 9}) {
+        for (const char* phase : {"Sign", "Wheel"}) {
+            AtomLab L;
+            benchSetup(L, which, 1040, 713);
+            L.p.phase = phase;
+            const std::string name = std::string("scene ") + (which == 8 ? "11 jump held" : "12 jumps") + ", phase " + phase;
+            for (int f = 0; f < 700 && !(L.s.trans && L.jumpDrawn()); f++) { benchFrame(L, which, f, f - 200); L.tick(1.0 / 240); L.step(1.0 / 240); }
+            check(name + ": a jump is in flight and built", L.s.trans && L.jumpDrawn());
+            if (!(L.s.trans && L.jumpDrawn())) continue;
+            GroupDiff total;
+            for (const double t : {0.0, 0.3, 0.6, 0.9, 1.15}) {              // the jump's clock: the start, and four times along it (it lasts 1.2 s)
+                L.s.trans->t = t;
+                addDiff(total, compareJump(L, *gc, name + " at jump time " + std::to_string(t).substr(0, 4)));
+            }
+            std::printf("%-34s %ld dot-frames: %ld shown/hidden differences, %ld colour differences (worst %.3g of its tolerance)\n", name.c_str(), total.dots, total.shownDiff, total.binDiff, total.worstRatio);
+            check(name + ": every dot's GPU decision equals the CPU one, except dots within float rounding of a threshold", total.bad == 0);
+            check(name + ": differing dots are rare (under 0.05 % of the dot-frames)", double(total.shownDiff + total.binDiff) < 5e-4 * double(total.dots));
+            if (which == 8) {                                                // a picture of the jump in flight (the middle of it), CPU groups against GPU groups
+                L.s.trans->t = 0.6;
+                std::vector<unsigned char> cpu(static_cast<std::size_t>(2 * L.jumpDots())), gpu(cpu.size());
+                L.jumpGroups(cpu.data()); L.jumpGroupsGpu(*gc, gpu.data());
+                report(dir, std::string("jump in flight, phase ") + phase, groupPicture(R, L, cpu, true), groupPicture(R, L, gpu, true), 40);
+            }
+        }
+    }
+}
+
+// the PC without OpenGL 4.3: a context that says 3.3 (Mesa's version override); the renderer must start, have no compute object, and the CPU path must be what draws, with the same picture
+static void fallback33(EGLDisplay dpy, EGLConfig cfg, EGLSurface surf, const std::string& dir) {
+    setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1); setenv("MESA_GLSL_VERSION_OVERRIDE", "330", 1);
+    const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE};
+    EGLContext ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctxAttr);
+    if (ctx == EGL_NO_CONTEXT || !eglMakeCurrent(dpy, surf, surf, ctx)) { check("a 3.3 context can be made", false); return; }
+    g_fbo = g_tex = 0; g_fw = g_fh = 0;                                     // the picture's framebuffer belonged to the other context
+    const char* missing = nullptr;
+    check("3.3 context: the 3.3 functions load", plgl::loadGL(&missing));
+    GLint maj = 0, min = 0;
+    plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
+    std::printf("fallback context: OpenGL %d.%d (%s)\n", maj, min, plgl::glGetString(GL_VERSION));
+    check("3.3 context: it really reports 3.3 (not 4.3 or more)", maj == 3 && min == 3);
+    render::Renderer2D R33;
+    check("3.3 context: the renderer starts (nothing crashes, no shader error)", R33.init());
+    check("3.3 context: there is no compute object, so the CPU path is used", R33.compute() == nullptr);
+    AtomLab L;
+    benchSetup(L, 11, 1040, 713);
+    L.s.beatT = 0;
+    const long cnt = std::min<long>(L.s.k, L.cloudCap());
+    std::vector<unsigned char> viaFill(static_cast<std::size_t>(cnt)), cpu(static_cast<std::size_t>(cnt));
+    const GroupsBy used = fillGroups(L, R33.compute(), cnt, viaFill.data());
+    const double theta = L.beatTheta();
+    for (long i = 0; i < cnt; i++) cpu[std::size_t(i)] = (unsigned char)L.superGroup(i, theta);
+    check("3.3 context: fillGroups used the CPU path", used == GroupsBy::Cpu);
+    check("3.3 context: its groups are exactly the CPU reference's", viaFill == cpu);
+    const Picture p33 = groupPicture(R33, L, viaFill, false);
+    if (g_cpuSuper14.px.empty()) check("scene 14 picture from the 4.3 context was kept", false);
+    else report(dir, "3.3 fallback scene 14 beat 0 against the 4.3 context's CPU-groups picture", g_cpuSuper14, p33, 0);
+    // the switch: on a 4.3 context with gpuCompute off the CPU is used too (tested with a stand-in object that must not be called)
+    struct Never : render::IGroupCompute { bool ok() const override { return true; } bool superGroups(const float*, long, std::uint64_t, long, long, const render::SuperGroupParams&, unsigned char*) override { called = true; return false; }
+                                           bool jumpGroups(const float*, const float*, long, std::uint64_t, const render::JumpGroupParams&, unsigned char*) override { called = true; return false; } bool called = false; } never;
+    L.gpuCompute = false;
+    check("GPU superposition switch Off: the CPU path is used and the compute object is not called", fillGroups(L, &never, cnt, viaFill.data()) == GroupsBy::Cpu && !never.called && viaFill == cpu);
+    L.gpuCompute = true;
+    check("a compute object that fails (returns false) falls back to the CPU result", fillGroups(L, &never, cnt, viaFill.data()) == GroupsBy::Cpu && never.called && viaFill == cpu);
+    R33.shutdown();
+}
+
 int main(int argc, char** argv) {
     const std::string dir = argc > 1 ? argv[1] : "";
     setenv("EGL_PLATFORM", "surfaceless", 0);
@@ -252,9 +551,9 @@ int main(int argc, char** argv) {
     if (!eglChooseConfig(dpy, cfgAttr, &cfg, 1, &n) || n < 1) { std::printf("no EGL config\n"); return 2; }
     const EGLint pbAttr[] = {EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE};
     EGLSurface surf = eglCreatePbufferSurface(dpy, cfg, pbAttr);
-    const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE};
+    const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 4, EGL_CONTEXT_MINOR_VERSION, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE};   // 0.13 stage 2: ask for 4.3
     EGLContext ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctxAttr);
-    if (ctx == EGL_NO_CONTEXT || !eglMakeCurrent(dpy, surf, surf, ctx)) { std::printf("no OpenGL 3.3 core context\n"); return 2; }
+    if (ctx == EGL_NO_CONTEXT || !eglMakeCurrent(dpy, surf, surf, ctx)) { std::printf("no OpenGL 4.3 core context\n"); return 2; }
     const char* missing = nullptr;
     if (!plgl::loadGL(&missing)) { std::printf("missing GL function %s\n", missing); return 2; }
     std::printf("OpenGL: %s | %s | %s\n", plgl::glGetString(GL_VENDOR), plgl::glGetString(GL_RENDERER), plgl::glGetString(GL_VERSION));
@@ -263,6 +562,11 @@ int main(int argc, char** argv) {
     swatches(R, dir);
     scenes(R, dir);
     glowDots(R, dir);
+    gpuSuperScenes(R, dir);
+    gpuJumpScenes(R, dir);
+    gpuEdgeCases(R);
+    R.shutdown();
+    fallback33(dpy, cfg, surf, dir);
     std::printf("%d GL checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

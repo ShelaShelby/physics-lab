@@ -6,6 +6,7 @@
 #include <cstdlib>
 
 #include "earth_texture.h"
+#include "group_compute.h"
 #include "shaders.h"
 
 using namespace plgl;
@@ -170,10 +171,15 @@ bool Renderer2D::init() {
     glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(8 * sizeof(float)));
     for (GLuint i = 0; i < 4; i++) glEnableVertexAttribArray(i);
     glBindVertexArray(0);
+    // OpenGL 4.3 (0.13 stage 2): the compute path for superpositions and jumps, if this context has it. A 3.3 context (or any failure) leaves compute_ empty: the CPU paths are used, nothing else changes.
+    compute_ = makeGroupCompute();
     return true;
 }
 
+void Renderer2D::disableCompute() { delete compute_; compute_ = nullptr; }
+
 void Renderer2D::shutdown() {
+    delete compute_; compute_ = nullptr;
     if (earthTex_) glDeleteTextures(1, &earthTex_);
     if (plProgram_) glDeleteProgram(plProgram_);
     earthTex_ = plProgram_ = 0;
