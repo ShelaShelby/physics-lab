@@ -1,5 +1,13 @@
 # Owner to-do (things only the owner can do)
 
+## 0.15 stage 2 (inventory, final spec, small fixes): please check
+- [ ] **Read `native/docs/ui-0.15/INVENTORY.md`** (every control and where it goes in your design). Tell me anything missing, in the wrong place, more than 2 clicks away, or a "most used" list that is wrong. Three questions are at its end (Play button in the Atom toolbar, an orbital chip, the data sheet).
+- [ ] Read `DESIGN.md` section 3 and decide the glass: nearly solid panels (93-97 % opaque, always readable) or more see-through (about 70 %, muted text needs solid backing). Also section 8 (Body 15 px or 16).
+- [ ] **Benchmark effects On vs Off** on your PC (Y2K Night, focused, main monitor, like last time): the page effects are now drawn once. Expected: the extra 0.7 ms per frame with effects On is gone (below 0.05 ms). Tell me the two numbers. (Here, on a software renderer, 300 frames took 13.2 s with the cache and 22.6 s without: that says nothing about your GPU.) Look at Frutiger Aero, Y2K Ice and Y2K Night once: they should look the same as before (a few levels of rounding differ); switch the Theme effects Off and On and resize the window to see the effects redrawn.
+- [ ] **Focus / power:** with the benchmark's window on the second monitor, click the other monitor so the app loses focus and watch the frame rate: did the big drop go away? Run the benchmark and click away during it: the report must say "WARNING: … lost focus or was minimised". The report now has a "Windows power throttling" line: tell me what it says.
+- [ ] **DPI:** drag the window between two monitors with different Windows scale (and change Windows' scale while the app runs): the text and the panel should follow without a restart. Try making the window small: it should stop at a smallest size (880 x 560 at 100 %).
+- [ ] The About page: the quotes and dashes (the "planets' gravity" lines) should show as real characters now, not "&rsquo;".
+
 ## 0.15 stage 1 (audit, design system, mockups): pick a layout
 - [ ] Look at the mockups in `native/docs/ui-0.15/mockups/` (24 PNGs; start with `A_orbit_dark_1280x800.png`, `B_orbit_dark_1280x800.png`, `C_orbit_dark_1280x800.png` and the `chart` ones) and read the paragraph for each in `mockups/README.md`. **Pick A, B or C** (or a mix, e.g. "A with C's card on click") and say what to change (colours, icons, sizes, what feels wrong).
 - [ ] Tell me your screen numbers so the text-size rule fits you: Windows Settings → System → Display: **Scale (%)** and **Resolution**; the screen size in inches; whether the app window is usually maximised. And say which text is "impossibly small" (the Atom Lab side panel, which is 12 px, is my main suspect).

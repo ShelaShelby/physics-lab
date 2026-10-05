@@ -54,6 +54,9 @@ static void checkStr(const std::string& what, const std::string& got, const std:
 }
 static void checkTrue(const std::string& what, bool ok) { checkStr(what, ok ? "true" : "false", "true"); }
 
+#include "test_entities.inc"   // 0.15 stage 2, C1: HTML entities
+#include "test_stage2.inc"     // 0.15 stage 2, C3 and C4: power request, the benchmark's focus flag, display scale
+
 static void testRoundTrip() {
     Prefs p;
     p.theme = "monochrome"; p.textSize = "xl"; p.font = "round"; p.motion = "on"; p.units = "imperial";
@@ -1877,6 +1880,11 @@ int main() {
     testLiveAndGpu();
     testNativeEdits();
     testThemeStyle();
+    testEntities();
+    testPowerRequest();
+    testBenchFocusFlag();
+    testDisplayScale();
+    testPageCacheLogic();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

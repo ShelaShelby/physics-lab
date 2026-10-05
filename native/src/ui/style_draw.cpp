@@ -11,7 +11,10 @@
 #include <string>
 #include <vector>
 
+#include "app/page_cache.h"
 #include "fonts.h"
+#include "imgui_impl_opengl3.h"
+#include "render/gl_loader.h"
 #include "imgui_internal.h"
 #include "look.h"
 
@@ -91,7 +94,8 @@ void radialPage(ImDrawList* dl, ImVec2 a, ImVec2 b) {
 
 // ---- 0.14 stage 2: switches for the automatic picture checks (tests/check_y2k_pictures.py): PL_FX=off paints no page textures, PL_DECOR=off no brackets, HUD rules or label ----
 bool envOff(const char* name) { const char* e = std::getenv(name); return e && !std::strcmp(e, "off"); }
-float pts() { return ImGui::GetFontSize() / 16; }                                    // points to pixels, as the other helpers
+float g_ptsOverride = 0;                                                             // set while the page cache texture is drawn (it is drawn with the text size of the frame that asked)
+float pts() { return g_ptsOverride > 0 ? g_ptsOverride : ImGui::GetFontSize() / 16; }                                    // points to pixels, as the other helpers
 uint32_t hash2(int x, int y, uint32_t seed) {                                         // a fixed pseudo-random number for a place: the grain does not shimmer
     uint32_t h = uint32_t(x) * 374761393u + uint32_t(y) * 668265263u + seed * 2246822519u;
     h = (h ^ (h >> 13)) * 1274126177u;
@@ -352,6 +356,91 @@ void pageGradient(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding, ImDrawFlag
     }
 }
 
+// ---- 0.15 stage 2, C2: the page effects cache ----
+// The page (gradient + textures) of the whole window is drawn ONCE into a texture, with the very same calls as before into a private draw list that Dear ImGui's own OpenGL
+// backend renders; every frame a docked panel then draws its piece of that texture (one quad) instead of thousands of vertices. Rebuilt only when the key changes
+// (app/page_cache.h): the window size, the theme, Theme effects, the text size. PL_PAGE_CACHE=off draws the old way (for tests/check_page_cache.py, which compares the two).
+namespace {
+struct PageTexture { unsigned fbo = 0, tex = 0; int w = 0, h = 0; };
+PageTexture g_pageTex;
+app::PageCacheTracker g_pageCacheTracker;
+
+bool buildPageTexture(const ImGuiViewport* vp, int W, int H) {
+    using namespace plgl;
+    if (!g_pageTex.fbo) glGenFramebuffers(1, &g_pageTex.fbo);
+    if (!g_pageTex.tex) glGenTextures(1, &g_pageTex.tex);
+    GLint prevFbo = 0, prevTex = 0, prevVp[4] = {0, 0, 0, 0};
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
+    glGetIntegerv(GL_VIEWPORT, prevVp);
+    if (g_pageTex.w != W || g_pageTex.h != H) {                                                  // a new size: a new storage
+        glBindTexture(GL_TEXTURE_2D, g_pageTex.tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);                       // 1 texel = 1 pixel: a panel's piece is copied, not filtered
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        g_pageTex.w = W; g_pageTex.h = H;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, g_pageTex.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_pageTex.tex, 0);
+    const bool ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (ok) {
+        glViewport(0, 0, W, H);
+        glClearColor(0, 0, 0, 0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGuiIO& io = ImGui::GetIO();
+        ImDrawList dl(ImGui::GetDrawListSharedData());
+        dl._ResetForNewFrame();
+        dl.PushTexture(io.Fonts->TexRef);
+        dl.PushClipRectFullScreen();
+        const ImVec2 a = vp->Pos, b(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y);
+        const float before = g_ptsOverride;
+        g_ptsOverride = ImGui::GetFontSize() / 16;
+        pageGradient(&dl, a, b, 0, 0);
+        drawPageFx(&dl, a, b);
+        g_ptsOverride = before;
+        ImDrawData dd;
+        dd.Valid = true;
+        dd.CmdListsCount = 1;
+        dd.TotalVtxCount = dl.VtxBuffer.Size;
+        dd.TotalIdxCount = dl.IdxBuffer.Size;
+        dd.CmdLists.push_back(&dl);
+        dd.DisplayPos = vp->Pos;
+        dd.DisplaySize = vp->Size;
+        dd.FramebufferScale = io.DisplayFramebufferScale;
+        dd.OwnerViewport = const_cast<ImGuiViewport*>(vp);
+        ImGui_ImplOpenGL3_RenderDrawData(&dd);
+        dd.CmdLists.clear();                                                                      // (dl is on this stack, not Dear ImGui's)
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+    glViewport(prevVp[0], prevVp[1], prevVp[2], prevVp[3]);
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTex));
+    return ok;
+}
+}  // namespace
+
+bool pageCacheDraw(ImDrawList* dl, ImVec2 a, ImVec2 b) {
+    static const bool off = envOff("PL_PAGE_CACHE");
+    static const bool log = std::getenv("PL_LOG_WINDOWS") != nullptr;
+    if (off || !app::pageNeedsCache(style().page)) return false;
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.Fonts->TexRef.GetTexID() == 0) return false;                                           // the very first frame: the font texture is not uploaded yet, draw the old way
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const int W = int(vp->Size.x * io.DisplayFramebufferScale.x + 0.5f), H = int(vp->Size.y * io.DisplayFramebufferScale.y + 0.5f);
+    if (W < 1 || H < 1) return false;
+    app::PageCacheKey key;
+    key.theme = look().c.id; key.effects = look().effects; key.w = W; key.h = H; key.fontPx100 = int(ImGui::GetFontSize() * 100 + 0.5f);
+    if (g_pageCacheTracker.update(key)) {
+        if (!buildPageTexture(vp, W, H)) { g_pageCacheTracker.invalidate(); return false; }
+        if (log) std::fprintf(stderr, "PLPAGECACHE rebuild %d %s %dx%d\n", g_pageCacheTracker.rebuilds(), key.theme.c_str(), W, H);
+    }
+    const float u0 = (a.x - vp->Pos.x) / vp->Size.x, u1 = (b.x - vp->Pos.x) / vp->Size.x;
+    const float v0 = 1.f - (a.y - vp->Pos.y) / vp->Size.y, v1 = 1.f - (b.y - vp->Pos.y) / vp->Size.y;    // a texture drawn into a framebuffer has its top at v = 1
+    dl->AddImage(ImTextureRef(static_cast<ImTextureID>(g_pageTex.tex)), a, b, ImVec2(u0, v0), ImVec2(u1, v1));
+    return true;
+}
+
 // ---- panels ----
 void panelDecor(PanelKind kind) {
     static const bool logWindows = std::getenv("PL_LOG_WINDOWS") != nullptr;   // for automatic checks: where every painted window is (tests/check_window_pictures.py)
@@ -373,8 +462,11 @@ void panelDecor(PanelKind kind) {
     // shadow shows through the glass; a floating window paints its own, so it covers what is behind it
     // the title bar first (it reorders the window's index list, which is only safe while that is one draw command)
     if (kind == PanelKind::Floating) titleDecor(w);
-    pageGradient(kind == PanelKind::Docked ? ImGui::GetBackgroundDrawList() : dl, a, b, r, flags);
-    if (kind == PanelKind::Docked) drawPageFx(ImGui::GetBackgroundDrawList(), a, b);          // textures on the page, under the glass
+    if (kind == PanelKind::Docked && pageCacheDraw(ImGui::GetBackgroundDrawList(), a, b)) {}   // 0.15 stage 2: the page and its textures from the cache (one quad)
+    else {
+        pageGradient(kind == PanelKind::Docked ? ImGui::GetBackgroundDrawList() : dl, a, b, r, flags);
+        if (kind == PanelKind::Docked) drawPageFx(ImGui::GetBackgroundDrawList(), a, b);          // textures on the page, under the glass
+    }
     dl->PushClipRect(a, b, false);
     const float alpha = kind == PanelKind::Docked ? p.fillAlpha : p.floatAlpha;
     if (alpha < 1) dl->AddRectFilled(a, b, tint(p.fill, alpha), r, flags);

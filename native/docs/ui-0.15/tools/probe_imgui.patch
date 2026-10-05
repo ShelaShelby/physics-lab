@@ -51,7 +51,7 @@
      {
          KeepAliveID(id);
 --- a/imgui_draw.cpp	2026-10-05 17:44:52.685002147 +0000
-+++ b/imgui_draw.cpp	2026-10-05 17:47:27.084690236 +0000
++++ b/imgui_draw.cpp	2026-10-05 19:56:27.943654802 +0000
 @@ -34,6 +34,7 @@
  #endif
  
@@ -71,11 +71,12 @@
      if (points_count < 2 || (col & IM_COL32_A_MASK) == 0)
          return;
  
-@@ -1726,6 +1731,17 @@
+@@ -1726,6 +1731,18 @@
  
  void ImDrawList::AddText(ImFont* font, float font_size, const ImVec2& pos, ImU32 col, const char* text_begin, const char* text_end, float wrap_width, const ImVec4* cpu_fine_clip_rect)
  {
-+    if (g_plProbe.on && (col & IM_COL32_A_MASK) && text_begin && font && GImGui) {
++    if (g_plProbe.on && (col & IM_COL32_A_MASK) && text_begin && GImGui) {
++        if (!font) font = GImGui->Font;                                    // AddText(pos, ...) passes no font: the current one (stage 1 skipped these by mistake)
 +        const float fs = font_size > 0 ? font_size : GImGui->FontSize;
 +        if (!text_end) text_end = text_begin + strlen(text_begin);
 +        if (text_end > text_begin) {

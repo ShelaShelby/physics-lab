@@ -1,43 +1,32 @@
-# Native Physics Lab 0.15 "Full UI rework" — stage 1: audit, design system, mockups (no screen rebuilt)
+# Native Physics Lab 0.15 "Full UI rework" — stage 2 of ~7: control inventory, final spec, small fixes
 
-**Docs, tools and mockup pictures only.** Not one line of app code, test, asset, data or workflow changed (`git diff origin/native` outside `native/docs`, REPORT, README, RESUME, ROADMAP, OWNER-TODO: empty). `index.html` untouched (sha256 e5501387ae64…). No helper agents. Everything is in `native/docs/ui-0.15/`: `AUDIT.md` (Part A and B in full), `DESIGN.md` + `design_tokens.json` (Part C), `mockups/` (Part D), `tools/` (throwaway probe and scripts, `README.md`).
-**NOT tested: a real PC, Windows' own DPI scaling, Segoe UI, any speed.** Numbers are from the real app (Release) on Linux, SDL offscreen + Mesa llvmpipe, 1280 × 800, scale 1.0, Dark, Text size Normal, DejaVu Sans (wider than Segoe UI); other themes were not audited.
+`index.html` untouched (sha256 e5501387ae64…). No helper agents. One commit, one push to `native`, no PR. Physics untouched (no formula, constant or number changed).
+**NOT tested: a real PC, real GPU, real Segoe UI, Windows power behaviour, Windows DPI events, speed.** Pictures are Mesa llvmpipe, headless (the real app, SDL offscreen).
+**Tests were written first** for every fix in Part C (compile-red, then green: `tests/test_entities.inc`, `tests/test_stage2.inc`, `tests/check_page_cache.py`).
 
-## Part A — text size (numbers; rule only proposed)
-- **DPI:** SDL 3.4.16 itself declares per-monitor-v2 awareness on Windows (the .exe has no manifest). The app reads `SDL_GetDisplayContentScale` of the PRIMARY monitor ONCE at start and uses it for fonts, spacing, panel width (360 × scale) and window size. It never reads it again (no scale-changed handler: moving the window to another monitor keeps the old size) and sets no minimum window size.
-- **Text does not follow the window** (same sizes at 1000 × 640, 1280 × 800, 1920 × 1200); it follows Text size (× 0.9 / 1 / 1.15 / 1.3) but the panel stays 360 px at all four. The header grows in small windows (163 px at 1280 wide, 211 px at 1000: 33 % of a 640 px window).
-- **"Normal" text:** Orbit Lab panel **16 px** (94 % of its characters); Atom Lab panel **12 px** (82 %), table symbols 9.5 px in 16 × 26 px cells, labels 11 px. Windows' own type ramp: body 14 / caption 12 epx (1 epx = 1 px at 100 %). I could only read this as a web-search summary (learn.microsoft.com was blocked), not the page. At 150 %: 21 / 18 px.
-- **Unknown:** the owner's real scale and resolution (OWNER-TODO). Proposed rule (AUDIT.md): unit u × Windows scale × Text size, body 16 u, nothing under 13 u, text never shrinks with the window, panel width in text widths, re-read the scale, Settings shows the numbers.
+## Part A — `docs/ui-0.15/INVENTORY.md`
+Every control, readout, text block and window (Orbit Lab, Atom Lab, header, Settings, Theme, Learn, Achievements, About, history, changelogs, guides, Benchmark, facts, toasts) with its new home in the owner's design, reach (clicks) and default. Nothing is more than 2 clicks away; the 10 most-used controls per lab are named (no usage data exists: chosen from what the labs are for, **the owner should correct them**). Count, default-visible controls old → new: Orbit 29 seen (96 in all) → **27**; Atom Lab 139–141 seen (202–233) → **26**; long pages 0 controls. Honest: on the Orbit Lab the number barely moves; the gain is no scrolling (1,919 px) and 6 text sizes → 4. Three open points are listed at its end (Play button in the Atom toolbar, an orbital chip, the data sheet "All values").
+**Audit corrections (mine):** the stage 1 probe skipped text in ImGui's default font. Re-run: controls, boxes, text-size lists, scrolls and paragraph counts are number-for-number unchanged; character totals +4–8 %, shares: Atom panel 12 px text is 76–79 % (was 81–83), Orbit 16 px 92.5 % (was 93.5). Stage 1 also said "236 entities, About and History": the About page alone has **254**.
 
-## Part B — audit table (full definitions and all text sizes: AUDIT.md)
-| Screen | Controls seen / all | Outside main area | Boxes seen / all | Text sizes | Scroll px | Paragraphs >3 lines (first screen / all) |
-|---|---|---|---|---|---|---|
-| Orbit Lab | 29 / 96 | 10 | 28 / 100 | 5 | 1,919 | 1 / 2 |
-| Orbit Lab, Earth selected | 29 / 99 | 10 | 28 / 103 | 5 | 1,997 | 1 / 2 |
-| Atom Lab: orbit view | 140 / 202 | 14 | 27 / 117 | 11 | 4,857 | 0 / 19 |
-| Atom Lab: nucleus | 141 / 211 | 15 | 28 / 127 | 11 | 5,055 | 1 / 20 |
-| Atom Lab: Cloud 3D | 141 / 233 | 15 | 28 / 152 | 11 | 5,936 | 0 / 23 |
-| Atom Lab: Slice | 140 / 229 | 14 | 27 / 146 | 11 | 5,836 | 1 / 23 |
-| Atom Lab: chart | 139 / 209 | 13 | 27 / 128 | 11 | 5,717 | 1 / 25 |
-| Atom Lab: landscape | 139 / 209 | 13 | 27 / 128 | 11 | 5,717 | 1 / 25 |
-| Learn tab | 17 / 17 | 10 | 15 / 15 | 6 | 0 (window) | 2 / 2 |
-| Achievements tab | 10 / 10 | 10 | 12 / 12 | 6 | 0 (window) | 0 / 0 |
-| Settings | 48 / 120 | 28 | 42 / 122 | 10 | 446 (window) | 1 / 2 |
-| Theme picker | 40 / 110 | 26 | 42 / 114 | 3 | 0 (window) | 1 / 2 |
-| About | 33 / 103 | 26 | 26 / 116 | 6 | 9,212 (window) | 1 / 2 |
-| History (app changelog) | 33 / 109 | 26 | 26 / 142 | 7 | 17,530 (window) | 3 / 81 |
-| Lab changelog | 35 / 103 | 28 | 28 / 106 | 5 | 3,654 (window) | 6 / 26 |
-| Guide (Orbit Lab) | 51 / 129 | 27 | 42 / 122 | 8 | 2,847 (window) | 1 / 2 |
-| Guide (Atom Lab) | 163 / 235 | 136 | 39 / 135 | 12 | 2,080 (window) | 0 / 19 |
-**The 5 worst problems:** (1) the Atom Lab side column is 5,000+ px of scrolling (9–10 windows tall): ~200 controls, 118 of them periodic-table cells, 19–25 long paragraphs; (2) the Atom Lab's main text is 12 px, it uses 11 text sizes, and neither window size nor panel width follows the text; (3) controls are scattered: header, tabs, "Did you know?" bar, side panel, the bar under the Atom picture; (4) a box around everything: 27–28 outlined boxes at once, 100–150 in a full column; About and History hold 78,000–87,000 characters; (5) the picture gets what is left (48–57 % of the window, 43 % at 1000 × 640) and the legend / readout text is drawn over it.
+## Part B — `docs/ui-0.15/DESIGN.md` (stage 1's version kept as `DESIGN_stage1_rejected.md`, mockups marked rejected)
+Sizes (Caption 13 / **Body 15** / Title 17 / Key number 28 units, floors 12 / **14** / 15 / 22 px: Body is 14 px even at Text size Small), controls 28–32 (button 30, top bar 44), spacing 4/8/12/16/24, radius 10/6, widths in em so panels grow with text, smallest window 880 × 560 units; chip, dropdown, toolbar, readout, search, subject card + data sheet, Legend, reading view, facts, collapsing; the centre-shift rule for the selected body; all 14 themes mapped (Aero = light glass, Y2K = chrome / ice, plain themes tokens only); **BUILD PLAN stages 3–7** (also in ROADMAP).
+**Finding to decide (OWNER-TODO):** `tools/glass_alpha.py` computes the least opacity so text, muted and accent text pass WCAG 4.5:1 over the worst picture (white behind dark glass, black behind light): plain themes need **93–97 %** opaque panels (High contrast 0.70, Aero 0.75, Y2K Ice 0.80, Night 0.78). The spec default is that (nearly solid); about 0.70 with solid backing for muted text is the alternative.
 
-## Parts C and D
-- **DESIGN.md:** spacing 4/8/12/16/24/32 u; text Caption 13 / **Body 16** / Title 20 / Display 28 u (minimums per Windows scale in the file); one button shape, Primary / Secondary / Quiet; icons **Lucide** (ISC, licence in `mockups/assets/`); 3 surface levels, no outlines (edges of text-less controls computed to 3:1); grid; summary ≤ 140 characters + More / ⓘ; groups Choose / View / Info; tips: the bar is replaced by an icon + one card + an optional toast; all 14 themes map onto the 7 flat colours they already have (WCAG table computed by `tools/theme_contrast.py`: muted text ≥ 4.99:1 everywhere; the theme line colour is only 1.3–1.8:1 in most themes, so control edges are computed).
-- **Mockups** (`native/docs/ui-0.15/mockups/`, 24 PNGs, largest 187 KB, 2.9 MB in all): `A_*` rail + panel with tabs, `B_*` top bar + bottom drawer, `C_*` picture first with a subject card and popovers; each as `<layout>_<orbit|chart>_<dark|aero>_<1280x800|1000x640>.png`, e.g. `A_orbit_dark_1280x800.png`. Lab pictures in them are the app's real pictures; words and numbers are the app's own. Per-layout paragraph, honest comparison and a suggestion (A as base + C's card on click, NOT a decision) are in `mockups/README.md`. Limits: one tab and 14–26 sample controls per picture, other screens and the element picker not drawn, Aero glass approximated, Inter font (free) not Segoe UI.
+## Part C — the four fixes
+1. **HTML entities.** `app/html_entities.*` decodes the HTML Standard's 2,125 named references that end in ";" (generated by `tools/make_entities.py` from entities.json, read from the w3c/html mirror: the standard's host was blocked; sha256 in the .inc) and numeric ones; unknown / no ";" / out of range stay text; one pass. Used in `rich_text.cpp` and `html_view.cpp`. Tests: all 27 names of `kAboutHtml` (typed expected UTF-8) + 254 occurrences, malformed cases, no double decoding. Checked in the real app: "planets’ gravity", "Hale–Bopp", "m/s²" show as characters. Only the About page has entities (History has none); the About page lists the source.
+2. **Effects cache.** Aero, Y2K Ice and Y2K Night draw the page (gradient + textures) once into a texture (FBO, Dear ImGui's own GL backend), then one quad per docked panel; rebuilt only when window size, theme, Theme effects or text size change (`app/page_cache.*`, `style_draw.cpp pageCacheDraw`). `PL_PAGE_CACHE=off` is the old drawing. **Pictures change on purpose, by rounding:** `check_page_cache.py` (new ctest `page_cache_pictures`): 3 themes × 3 screens, 1 rebuild in 40 frames; worst measured 12.18 % of pixels differ, 0.770 % by more than 1 level, max 19 levels (the old way is drawn into the multisampled window, the texture is not); guards = those +1 % (labelled regression guards). Effects Off, Dark and Light: 0 differing pixels, never built. The 15 stage 2 hash guards in `check_theme_pictures.sh` are now compared with `PL_PAGE_CACHE=off` (the old drawing: still exactly equal); no saved hash changed, no test loosened. Speed: here, software GL, 300 frames 13.2 s cached vs 22.6 s old: **not the owner's number** (OWNER-TODO: On vs Off on the Ryzen).
+3. **Power throttling + focus.** `app/power.*`: the request (control bits set, state 0 = off, never on), `ui/power.cpp` calls `SetProcessInformation(ProcessPowerThrottling)` on Windows (constants from memory of winnt.h, docs not reachable; compiled by the Windows build only). `BenchRun::noteWindow` flags a scene whose window lost focus or was minimised (warm-up included): a WARNING line per scene and a summary in the report, plus a "Windows power throttling" line. Stand-in tests; Windows behaviour untested.
+4. **DPI.** `app/display_scale.*`: `main.cpp` reads the scale of the window's own monitor after the window exists and again on SDL's display-changed / display-scale events (style rebuilt from a saved copy, theme re-applied, panel width and text follow), and sets a minimum window of 880 × 560 units × scale (not with `PL_WINDOW`). Stand-in tracker tests.
+Also: in-app history entry "0.15 stage 2" (`changelog.cpp`), About source line.
 
-## Found, not fixed (for later stages)
-- **About and History show raw HTML entities** (`&rsquo;`, `&ndash;`, `&ldquo;` …; 236 in `app_text.inc`): `html_view.cpp` has no entity decoding. Seen in the About render.
-- The scale is read once from the primary monitor; no minimum window size (Part A). Monochrome's line colour is 2.10:1 on its page (needs the computed edge in 0.15).
+## Perturbed, caught, reverted (each test fails on the broken code)
+Entities decoder returning text unchanged (entity tests); throttling state ON (2 tests); focus flag never set (4); scale tracker ignoring changes (4); minimum window 800 × 500 (4); cache key ignoring height (4) and rebuilding every frame (4 unit, and the picture test: "built 78 times in 40 frames"); a plain theme claiming the cache (4); cache texture flipped (picture test: 40 % of pixels differ, max 103); rebuild every frame in the app (picture test). All reverted; clean build passes.
 
-## Tests
-Linux GCC Release, Ninja, `-DPL_BUILD_APP=ON -DPL_GL_TESTS=ON -DPL_PICTURE_TESTS=ON`, run on the unchanged code before and after the docs were added: **ctest 14 / 14 pass** (orbit, atom, app, nbody, jpl, moon, moon_real, glsl_shaders, windows_decorated, gl_phase_colours, theme_pictures, window_pictures, y2k_pictures, effects_pictures; the picture tests keep 0 differing pixels). Test counts are those of 0.14. The audit probe and mockup code live only in a scratch copy / in `docs`; none is reachable from the app.
+## Tests (Linux GCC Release, Ninja, `-DPL_BUILD_APP=ON -DPL_GL_TESTS=ON -DPL_PICTURE_TESTS=ON`)
+**ctest 15 / 15 pass** (orbit, atom, app, nbody, jpl, moon, moon_real, glsl_shaders, windows_decorated, gl_phase_colours, theme_pictures, window_pictures, y2k_pictures, effects_pictures, new page_cache_pictures), run on the final code. Existing picture tests: 0 differing pixels (the stage 2 hash guards are compared with the old drawing, see C2).
+app_tests **3,456** (3,036 + 420 new). Other counts as in 0.14 (orbit 1,612, atom 21,066, nbody 37, jpl 55, moon 24, moon_real 59, GL 503).
+
+## Limits and found
+Not done by design: no screen is rebuilt (stage 3 onwards). Monochrome's line colour is 2.10:1 (needs the computed edge). Stage 1's "About and History" and "236" are corrected above. The About page's list of sources gained one line. GitHub connector / Actions result: in the closing message.
+
+> I DONT WANNA WORK ANYMORE SCREW THIS!

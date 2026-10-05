@@ -54,6 +54,11 @@ typedef unsigned long long GLuint64;
 #define GL_RGBA 0x1908
 #define GL_PACK_ALIGNMENT 0x0D05
 #define GL_RGBA8 0x8058
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+#define GL_FRAMEBUFFER_BINDING 0x8CA6
+#define GL_TEXTURE_BINDING_2D 0x8069
+#define GL_VIEWPORT 0x0BA2
+#define GL_NEAREST 0x2600
 #define GL_TEXTURE_2D 0x0DE1
 #define GL_TEXTURE0 0x84C0
 #define GL_TEXTURE_MIN_FILTER 0x2801
@@ -136,6 +141,7 @@ typedef unsigned long long GLuint64;
     X(void, glDeleteFramebuffers, (GLsizei n, const GLuint* f))                                    \
     X(void, glBindFramebuffer, (GLenum t, GLuint f))                                               \
     X(void, glFramebufferTexture2D, (GLenum t, GLenum att, GLenum tt, GLuint tex, GLint lvl))      \
+    X(GLenum, glCheckFramebufferStatus, (GLenum t))                                                \
     X(void, glBlendFunc, (GLenum s, GLenum d))                                                     \
     X(void, glUniform1fv, (GLint loc, GLsizei n, const GLfloat* v))                                \
     X(void, glPixelStorei, (GLenum p, GLint v))                                                    \

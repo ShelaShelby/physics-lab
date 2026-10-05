@@ -33,6 +33,7 @@ struct BenchScene {
     double gpuSpanAvgMs = -1;    // first to last GPU command of the frame (timestamps), waiting included; < 0: no result
     int gpuSamples = 0;          // frames that gave a GPU result
     std::string gpuProblem;      // "" if the GPU numbers look right; else why they are not reliable
+    bool windowInactive = false; // 0.15 stage 2: the window lost focus or was minimised at some time during this scene (warm-up or measuring): Windows can slow a background app
 };
 
 // While the benchmark runs nothing may change the labs or the app except its Cancel button and Esc, so a run cannot be faked:
@@ -78,6 +79,7 @@ struct BenchEnv {
     double warmupS = kBenchWarmupS, measureS = kBenchMeasureS;
     bool cancelled = false;                      // stopped before the end: only the scenes done are listed
     std::string atomSettings;                    // the Atom Lab settings each Atom Lab scene really ran with (so a wrong run shows)
+    std::string power;                           // 0.15 stage 2: app::powerNote() (Windows power throttling asked off or not)
 };
 
 // The plain text of a result (starts with the version, the date and the computer's graphics), for the clipboard and the file.
@@ -93,6 +95,8 @@ public:
     void setUpDone() { setup_ = -1; }
     // One finished frame: its time (ms) and the CPU work (ms).
     void frame(double frameMs, double cpuMs);
+    // 0.15 stage 2: call once per frame BEFORE frame() with the window's state; a scene during which the window was not focused or was minimised is flagged (BenchScene::windowInactive).
+    void noteWindow(bool focused, bool minimised);
     // A GPU result that came in (a frame or two late): the busy time and the span (ms). Counted only while a scene is being measured.
     void gpuSample(double busyMs, double spanMs);
     bool finished() const { return finished_; }
@@ -112,6 +116,7 @@ private:
     std::vector<std::vector<double>> frameMs_;
     std::vector<double> cpuSum_, gpuSum_, spanSum_;
     std::vector<int> cpuN_, gpuN_;
+    std::vector<char> inactive_;
 };
 
 }  // namespace app

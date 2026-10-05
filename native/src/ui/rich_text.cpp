@@ -3,6 +3,7 @@
 #include <cfloat>
 #include <vector>
 
+#include "app/html_entities.h"
 #include "fonts.h"
 #include "imgui.h"
 
@@ -22,7 +23,7 @@ std::vector<Block> parse(const std::string& h) {
     std::string text;
     const auto flushText = [&]() {
         if (text.empty()) return;
-        cur.runs.push_back({text, bold, italic, small});
+        cur.runs.push_back({app::decodeHtmlEntities(text), bold, italic, small});   // 0.15 stage 2: "&rsquo;" is a character, not typed text
         text.clear();
     };
     const auto endBlock = [&]() {

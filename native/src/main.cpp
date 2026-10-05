@@ -38,6 +38,8 @@
 #include "ui/app_tabs.h"
 #include "atom/outline.h"
 #include "ui/atom_learn.h"
+#include "ui/power.h"
+#include "app/display_scale.h"
 #include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
 
@@ -109,8 +111,13 @@ const char* const kDriverAdvice =
 int main(int, char**) {
     if (!SDL_Init(SDL_INIT_VIDEO)) { fail("Could not start the window system", "Physics Lab could not start its window system, so it has nothing to draw on.", "Restart the computer and try again. If it still fails, tell Alex what Windows version you have."); return 1; }
 
-    float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());   // 1.5 on a Windows screen at 150 %
-    if (scale <= 0) scale = 1;
+    // 0.15 stage 2 (C3): ask Windows not to power-throttle the app (the owner saw the frame rate fall a lot when the window merely lost focus on his second monitor)
+    const std::string powerNote = ui::requestNoPowerThrottling();
+    std::printf("%s\n", powerNote.c_str());
+    // the first reading is the primary monitor's scale (the window does not exist yet); it is read again from the window's own monitor right after the window is made,
+    // and whenever SDL says the scale changed (0.15 stage 2, C4)
+    app::DisplayScale displayScale(SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay()));   // 1.5 on a Windows screen at 150 %
+    float scale = displayScale.scale();
     // the saved settings come first: they say where the window was
     ui::AppState app;
     ui::resetToToday(app);
@@ -174,6 +181,7 @@ int main(int, char**) {
     io.ConfigDebugHighlightIdConflicts = false;         // never show ImGui's red "conflicting ID" box to a user (the conflicts themselves are fixed)
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
+    const ImGuiStyle unscaledStyle = style;             // kept so a changed display scale can be applied from scratch (ScaleAllSizes only multiplies)
     style.ScaleAllSizes(scale);
     style.FontScaleDpi = scale;
     style.WindowRounding = 0;
@@ -191,7 +199,28 @@ int main(int, char**) {
     if (ui::look().reduced) app.paused = true;          // reduced motion: the lab starts still, with a ▶ Play button
     app.visited[app.lab] = true;
 
-    const float panelWidth = 360 * scale;              // window coordinates
+    float panelWidth = app::panelWidthFor(scale);      // window coordinates (follows the scale, see applyScale)
+    // 0.15 stage 2, C4: read the scale of the monitor the window is on; when it differs from the one in use, redo the sizes (spacing, text) and the smallest window
+    const auto applyScale = [&](float s) {
+        scale = s;
+        ImGuiStyle& st = ImGui::GetStyle();
+        st = unscaledStyle;
+        st.ScaleAllSizes(scale);
+        st.FontScaleDpi = scale;
+        st.WindowRounding = 0;                          // (the theme's colours and roundings are put back by ui::updateLook, whose key includes the scale)
+        ui::invalidateLook();
+        panelWidth = app::panelWidthFor(scale);
+        int mw = 0, mh = 0;
+        displayScale.minimumWindow(mw, mh);
+        if (!SDL_getenv("PL_WINDOW")) SDL_SetWindowMinimumSize(window, mw, mh);   // (automatic picture checks choose their own window size)
+    };
+    const auto rereadScale = [&] {
+        const float s = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window));
+        if (s > 0 && displayScale.update(s)) applyScale(displayScale.scale());
+    };
+    applyScale(scale);                                  // the smallest window, and the window's own monitor's scale (it may not be the primary one)
+    rereadScale();
+    app.powerNote = powerNote;
     double acc = 0;                                     // real time not yet simulated, s
     Uint64 last = SDL_GetPerformanceCounter();
     bool vsyncOn = true;
@@ -290,6 +319,9 @@ int main(int, char**) {
             switch (e.type) {
             case SDL_EVENT_QUIT: running = false; break;
             case SDL_EVENT_WINDOW_CLOSE_REQUESTED: if (e.window.windowID == SDL_GetWindowID(window)) running = false; break;
+            case SDL_EVENT_WINDOW_DISPLAY_CHANGED:           // the window moved to another monitor, or the monitor's scale changed (Windows' scale setting)
+            case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+            case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED: rereadScale(); break;
             case SDL_EVENT_KEY_DOWN:
                 if (!app::labInputAllowed(app.benchRunning)) break;      // the benchmark is running: only Cancel and Esc do anything
                 if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off

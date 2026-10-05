@@ -47,5 +47,7 @@ void logTitleRect(const char* what, ImVec2 a, ImVec2 b);   // PL_LOG_WINDOWS onl
 // ---- the page behind everything ----
 // Paints the page gradient into a..b (the window rectangle) as it is at that place on the main window. Used by panelDecor; exposed for the test pictures.
 void pageGradient(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding, ImDrawFlags flags);
+// 0.15 stage 2: draws the piece a..b of the cached page (gradient + textures of the whole window, made once). False: not used (plain theme, effects off, first frame, PL_PAGE_CACHE=off).
+bool pageCacheDraw(ImDrawList* dl, ImVec2 a, ImVec2 b);
 
 }  // namespace ui

@@ -13,6 +13,7 @@
 
 #include <SDL3/SDL_misc.h>
 
+#include "app/html_entities.h"
 #include "fonts.h"
 #include "look.h"
 #include "imgui.h"
@@ -47,7 +48,7 @@ std::unique_ptr<Node> parse(const std::string& h) {
     auto flush = [&] {
         if (text.empty()) return;
         auto t = std::make_unique<Node>();
-        t->text = text;
+        t->text = app::decodeHtmlEntities(text);   // 0.15 stage 2: "&rsquo;" is a character, not typed text
         stack.back()->kids.push_back(std::move(t));
         text.clear();
     };

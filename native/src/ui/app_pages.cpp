@@ -170,6 +170,7 @@ void aboutWindow(AppState& app) {
     if (beginPage(app::kAboutTitle, "about", &app.showAbout)) {
         htmlView(app::kAboutHtml);
         htmlView(std::string("<p class=\"lrnP lrnMuted\">Native app: Physics Lab (native) ") + appVersionLabel() + ".</p>");
+        htmlView("<p class=\"lrnP lrnMuted\">Text codes such as &amp;rsquo; are turned into their characters with the list of named character references of the HTML Standard (WHATWG, entities.json); this page is the only text that uses them.</p>");
     }
     ImGui::End();
 }

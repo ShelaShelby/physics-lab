@@ -15,6 +15,8 @@
 #                                strip, x 727..736 of 1000: checked once against the stage 2 program, see REPORT.md), so the five screens that must equal 0.13 are now four
 #                                (Orbit Lab, nucleus, Cloud 3D, chart) = 40 pictures; and the picker is compared too.
 #   theme_pictures_0.14s2_native.sha256   Frutiger Aero, Y2K Ice and Y2K Night with effects On (the default): the pictures of the STAGE 2 program (made by it), five screens minus
+#                                (0.15 stage 2: compared with PL_PAGE_CACHE=off, the old drawing; the page cache of 0.15 changes these pictures by rounding and edge pixels on purpose,
+#                                tests/check_page_cache.py holds it to its stated tolerance)
 #                                Settings: stage 3 must draw them exactly (0 differing pixels).
 # A different Mesa may round differently: then regenerate both files from the OLD code first (see REPORT.md of 0.14 stage 1), never edit a hash by hand.
 set -e
@@ -36,7 +38,7 @@ for ref in theme_pictures_0.13.sha256 theme_pictures_0.14_changed.sha256; do
 done
 # the three native themes (Frutiger Aero, Y2K Ice, Y2K Night): draw, do not crash, use the default font here (no Segoe UI), six different pictures, and are not Dark
 for th in aero y2kice y2knight; do
-    sh "$TOOLS/theme_pictures.sh" "$BIN" "$WORK/$th" "$th" > /dev/null
+    PL_PAGE_CACHE=off sh "$TOOLS/theme_pictures.sh" "$BIN" "$WORK/$th" "$th" > /dev/null   # 0.15 stage 2: the OLD drawing (no page cache): these hashes are the stage 2 program's exactly; the cached drawing is checked against it by tests/check_page_cache.py
     n=$(ls "$WORK"/$th/*_$th.bmp | wc -l)
     [ "$n" = 6 ] || { echo "$th: expected 6 pictures, got $n"; fail=$((fail + 1)); }
     if grep -q "Font: .*segoeui" "$WORK/$th/log.txt"; then echo "$th used a font file that should not exist here"; fail=$((fail + 1)); fi

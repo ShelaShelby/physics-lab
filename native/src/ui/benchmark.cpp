@@ -290,6 +290,7 @@ void begin(AppState& app) {
         if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w))) e.refreshHz = m->refresh_rate;
     }
     e.textSize = app.prefs.textSize; e.theme = app.prefs.theme; e.effects = look().effects ? "on" : "off";
+    e.power = app.powerNote;                                          // 0.15 stage 2: whether Windows was asked not to power-throttle the app
     b.warm = envNum("PL_BENCH_WARMUP", app::kBenchWarmupS);          // for automatic checks: shorter times
     b.measure = envNum("PL_BENCH_MEASURE", app::kBenchMeasureS);
     e.warmupS = b.warm; e.measureS = b.measure;
@@ -441,6 +442,10 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
         },
         b.gpuReady);
     for (const GpuSample& r : b.gpuReady) b.run->gpuSample(r.busyMs, r.spanMs);
+    if (SDL_Window* w = SDL_GL_GetCurrentWindow()) {   // 0.15 stage 2: a scene during which the window lost focus or was minimised is flagged in the report
+        const SDL_WindowFlags fl = SDL_GetWindowFlags(w);
+        b.run->noteWindow((fl & SDL_WINDOW_INPUT_FOCUS) != 0, (fl & SDL_WINDOW_MINIMIZED) != 0);
+    }
     b.run->frame(frameMs, cpuMs);
     if (b.run->finished()) finish(app, b, false);
 }

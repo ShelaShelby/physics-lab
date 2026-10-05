@@ -1,30 +1,142 @@
 {
-  "_about": "0.15 stage 1: the design system as DATA. Not read by the app yet. u = 1 px at Windows scale 100 % and Text size Normal; every size below is multiplied by (Windows scale x Text size factor 0.9 / 1 / 1.15 / 1.3).",
-  "spacing_u": [4, 8, 12, 16, 24, 32],
-  "page_margin_u": 24,
-  "type": {
-    "caption": {"size_u": 13, "line_u": 18, "weight": 400, "role": "units, hints, tooltips, labels on the picture; the smallest text anywhere"},
-    "body":    {"size_u": 16, "line_u": 24, "weight": 400, "role": "every control label, readout line and paragraph"},
-    "title":   {"size_u": 20, "line_u": 26, "weight": 600, "role": "section and card titles"},
-    "display": {"size_u": 28, "line_u": 34, "weight": 600, "role": "the one name of the screen (element, planet, nuclide)"},
-    "min_px": {"rule": "no interface text below 13 px at Normal; at Small (x0.9) the floor stays 12 px", "windows_scale_100": {"caption": 13, "body": 16, "title": 20, "display": 28}, "windows_scale_125": {"caption": 16.25, "body": 20, "title": 25, "display": 35}, "windows_scale_150": {"caption": 19.5, "body": 24, "title": 30, "display": 42}}
+ "_about": "0.15 stage 2: the chosen design as DATA (DESIGN.md). Not read by the app yet. u = 1 px at Windows scale 100 % and Text size Normal; size = max(floor, round(size_u * Windows scale * Text size factor)); widths in em of Body.",
+ "text_size_factor": {
+  "small": 0.9,
+  "normal": 1,
+  "large": 1.15,
+  "xl": 1.3
+ },
+ "type": {
+  "caption": {
+   "u": 13,
+   "floor_px": 12
   },
-  "radius_u": {"control": 8, "panel": 12, "pill": 999},
-  "control_height_u": 36,
-  "icon": {"set": "Lucide", "version": "1.52.0", "licence": "ISC", "grid": 24, "draw_size_u": 20, "stroke_u": 1.75},
-  "buttons": {
-    "primary":   {"fill": "accent-fill", "text": "on-accent", "border": "none", "limit": "one per group, at most one in view"},
-    "secondary": {"fill": "surface-3", "text": "text", "border": "none"},
-    "quiet":     {"fill": "none", "text": "accent", "hover_fill": "accent at 10 %", "border": "none"},
-    "icon":      {"size_u": [36, 36], "style": "quiet"},
-    "states":    {"hover": "tint 8 %", "pressed": "tint 16 %", "focus": "2 px accent ring, 2 px outside", "disabled": "text at 40 %"}
+  "body": {
+   "u": 15,
+   "floor_px": 14
   },
-  "surfaces": {
-    "page": "bg", "panel": "card", "inset": "mix(card, text, 6 %)", "face": "mix(card, text, 12 %)",
-    "rules": ["at most 2 surface levels inside one panel (panel, inset)", "no outline around groups; groups are separated by 24 u of space", "a 1 px divider (line colour) only between rows of one list", "text-less controls (tick box, switch, slider track, text field) keep an edge computed to 3:1 against what is behind them", "one shadow only, under floating things (popover, drawer, dialog)"]
+  "title": {
+   "u": 17,
+   "weight": 600,
+   "floor_px": 15
   },
-  "grid": {"base_u": 4, "rail_u": 64, "panel_width_em": 24, "panel_min_u": 320, "top_bar_u": 56, "columns_in_panel": 12, "gutter_u": 8},
-  "long_text": {"summary_max_chars": 140, "summary_max_lines": 2, "paragraph_default_max_lines": 3, "reading_page_width_em": 66, "reading_line_height": 1.6},
-  "groups": ["Choose", "View", "Info"],
-  "themes": {"tokens_from_flat_colours": {"bg": "bg", "surface": "card", "text": "fg", "text-muted": "muted", "hairline": "line", "accent": "accent", "accent-fill": "accentFill", "on-accent": "onacc", "danger": "danger"}, "style_data_kept": ["gradient", "glass", "gloss", "rim", "glow", "title bar", "fonts", "decoration (Theme effects switch)"]}
+  "key_number": {
+   "u": 28,
+   "weight": 600,
+   "floor_px": 22
+  }
+ },
+ "spacing_u": [
+  4,
+  8,
+  12,
+  16,
+  24
+ ],
+ "radius_u": {
+  "panel": 10,
+  "control": 6
+ },
+ "controls_u": {
+  "button_h": 30,
+  "icon_button": [
+   30,
+   30
+  ],
+  "toolbar_button": [
+   32,
+   32
+  ],
+  "caret": [
+   16,
+   32
+  ],
+  "checkbox": 16,
+  "segmented_h": 28,
+  "slider_track": 4,
+  "slider_thumb": 14,
+  "stepper_button": [
+   28,
+   28
+  ],
+  "row_h": 28,
+  "chip_h": 38,
+  "top_bar_h": 44,
+  "toolbar_h": 40
+ },
+ "widths_em": {
+  "dropdown": 24,
+  "subject_card": 20,
+  "data_sheet": 36,
+  "toolbar_panel_max": 22,
+  "search": 36,
+  "reading_column": 38
+ },
+ "min_window_u": [
+  880,
+  560
+ ],
+ "icon": {
+  "set": "Lucide",
+  "version": "1.52.0",
+  "licence": "ISC",
+  "size_u": 20,
+  "stroke_u": 1.75
+ },
+ "glass": {
+  "edge": "text at 20 %",
+  "top_light": "text at 6 % fading over 40 u",
+  "shadow": "floating panels only",
+  "blur": "none (a later option, measured first)",
+  "opacity_by_theme": {
+   "light": 0.97,
+   "dark": 0.96,
+   "black": 0.93,
+   "midnight": 0.95,
+   "solar": 0.97,
+   "paper": 0.97,
+   "sage": 0.95,
+   "contrast": 0.7,
+   "synthwave": 0.94,
+   "monochrome": 0.87,
+   "aero": 0.75,
+   "y2kice": 0.8,
+   "y2knight": 0.78
+  },
+  "rule": "WCAG 2.x 4.5:1 for text, muted and accent over pure white (dark panels) or pure black (light panels) behind; tools/glass_alpha.py"
+ },
+ "reading_view": {
+  "dim": 0.6,
+  "line_height": 1.6,
+  "h1": 28,
+  "h2": 20,
+  "h3": 17
+ },
+ "timing_s": {
+  "centre_shift": 0.3,
+  "toast": 4
+ },
+ "toolbar": {
+  "orbit": [
+   "play",
+   "speed",
+   "show",
+   "pick",
+   "scale",
+   "2d3d",
+   "save"
+  ],
+  "atom": [
+   "play",
+   "atom",
+   "nucleus",
+   "cloud",
+   "chart",
+   "view_options",
+   "marks",
+   "photon",
+   "reset",
+   "save"
+  ]
+ }
 }

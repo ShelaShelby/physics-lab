@@ -69,6 +69,10 @@ target_compile_options(atom_core PRIVATE ${PL_WARNINGS})
 add_library(app_core STATIC
   src/app/prefs.cpp
   src/app/theme_style.cpp
+  src/app/html_entities.cpp
+  src/app/display_scale.cpp
+  src/app/power.cpp
+  src/app/page_cache.cpp
   src/app/shot.cpp
   src/app/fps.cpp
   src/app/bench.cpp
@@ -219,7 +223,8 @@ if(PL_BUILD_APP)
     src/ui/settings.cpp
     src/ui/shot.cpp
     src/ui/fps_counter.cpp
-    src/ui/benchmark.cpp)
+    src/ui/benchmark.cpp
+    src/ui/power.cpp)
   target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core app_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)
@@ -243,6 +248,8 @@ if(PL_BUILD_APP)
       add_test(NAME window_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_window_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/window_pictures)
       # 0.14 stage 2: the Y2K decoration stays at the windows' edges, the title font only on titles, the page textures stay within their model, the glow
       add_test(NAME y2k_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_y2k_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/y2k_pictures)
+      # 0.15 stage 2: the page effects cache draws the same pictures as the old way (within the stated guards), builds its texture once, and is unused where there are no textures
+      add_test(NAME page_cache_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_page_cache.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/page_cache_pictures)
       # 0.14 stage 3: Settings -> Theme effects Off removes all decoration and nothing else
       add_test(NAME effects_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_effects_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/effects_pictures)
     endif()

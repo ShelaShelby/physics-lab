@@ -1,4 +1,4 @@
-# 0.15 mockups — pick A, B or C (nothing here is in the app)
+# 0.15 stage 1 mockups A / B / C — REJECTED by the owner (5 Oct 2026: "looks like a mobile app"); kept for the record. The chosen design is in `../DESIGN.md`.
 
 24 pictures, named `<layout>_<lab>_<theme>_<window>.png`: layout **A / B / C**, lab **orbit / chart** (the Orbit Lab; the Atom Lab's chart of nuclides), theme **dark / aero** (Dark; Frutiger Aero), window **1280x800** or **1000x640**.
 Each is under 190 KB (all 24: 2.9 MB). They are drawn with HTML and CSS in Chromium (`src/`, throwaway code); **the lab pictures inside them are real pictures from the real app**, drawn at the exact size each layout gives the picture (Save image, headless). The words and numbers are the app's own (Earth's card, the chart's legend counts, the buttons, "Half-life 4.47 billion years …"); nothing new is claimed. Colours are the app's own flat colours (Aero's lime and aqua as in 0.14). Free font **Inter** (OFL) and **Lucide** icons (ISC); licences in `assets/`. Rules: `../DESIGN.md`.

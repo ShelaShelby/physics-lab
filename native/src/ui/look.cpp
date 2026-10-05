@@ -209,6 +209,8 @@ void drawSynthGlow(ImDrawList* dl, ImVec2 a, ImVec2 b) {
     }
 }
 
+void invalidateLook() { g_applied.clear(); }   // 0.15 stage 2: the Dear ImGui style was rebuilt (a new display scale): the next updateLook puts the theme back
+
 void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     Look L;
     L.c = app::themeColors(app::themeUsable(p, p.theme) ? p.theme : "auto", systemLight);
@@ -225,7 +227,7 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     L.fontKey = app::fontKeyFor(ts, p.font, fontFamilyAvailable(app::fontFamilyKeyOf(ts)));
     g_look = L;
     useFontFamily(L.fontKey);
-    const std::string key = L.c.id + "|" + std::to_string(L.textScale);
+    const std::string key = L.c.id + "|" + std::to_string(L.textScale) + "|" + std::to_string(ImGui::GetStyle().FontScaleDpi);   // 0.15 stage 2: the display scale can change while the app runs
     if (key == g_applied) return;
     g_applied = key;
     ImGuiStyle& st = ImGui::GetStyle();

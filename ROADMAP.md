@@ -89,7 +89,13 @@ The owner's problems:
 3. Too much scrolling, and controls scattered between the header, the side column and under the picture.
 Also seen: boxes inside boxes and outlines on everything; no breathing room; no clear size hierarchy; legend and note boxes covering the picture; too many small elements at once; mixed icon and button styles; no common alignment grid.
 - stage 1 (audit, design system, mockups) — DONE, docs only, no screen rebuilt: `native/docs/ui-0.15/` (AUDIT.md with the text-size measurements, DESIGN.md + design_tokens.json, 24 mockups A / B / C in Dark and Frutiger Aero at 1280x800 and 1000x640). The four themes and the Theme effects switch carry over.
-- Next stages are NOT planned yet: they depend on the owner's pick of mockup A, B or C and what to change (OWNER-TODO). Likely first: the text-size rule (Windows scale re-read, minimum window, Settings display line), the About / History HTML-entity bug, then the chosen layout screen by screen.
+- stage 2 (control inventory, final spec, small fixes) — DONE: `native/docs/ui-0.15/INVENTORY.md` (every control and its new home), `DESIGN.md` (the owner's chosen full-screen 3D-viewer design; stage 1's layouts A / B / C rejected), and four fixes (About's HTML entities decoded; the page effects cache; Windows power throttling asked off and a focus flag in the benchmark report; the display scale re-read per monitor and a smallest window size).
+- BUILD PLAN (each stage shippable, the app fully usable after each; details in DESIGN.md section 7):
+  - stage 3 — shell: text-size rule and Settings display line, glass tokens (with the contrast tests), the top bar replacing the header block, tabs and the "Did you know?" bar (lightbulb facts card), the floating-panel and reading-view frameworks, the search skeleton; the old side column stays as a floating glass panel until the labs move
+  - stage 4 — Orbit Lab: chip + Time panel (dial), toolbar and its panels, pick-a-body list, subject card and data sheet, readout; the Orbit column goes
+  - stage 5 — Atom Lab: element chip + periodic table dropdown, toolbar (views, view options, marks, photon / jump), subject card and data sheet (spectrum, lifetimes, nucleus, temperature, decay), legend; the Atom column and bar go
+  - stage 6 — Learn, Settings (sections), About, history, changelogs, guides, Benchmark in the reading view; the Achievements panel
+  - stage 7 — all 13 themes through the glass tokens (Aero, Y2K), full search, keyboard, final speed check and clean-up
 
 ## Later (not scheduled)
 - an in-app mascot (an original character, no brand art) that reacts to what the user does and replaces the "Did you know?" bar — after 0.15

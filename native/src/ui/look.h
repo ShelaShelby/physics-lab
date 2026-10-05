@@ -23,6 +23,7 @@ const Look& look();
 
 // Works out the look and applies it to Dear ImGui (colours, corners, font, text size). Call before NewFrame.
 void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced);
+void invalidateLook();     // forget what was applied to Dear ImGui, so the next updateLook applies it all again
 bool systemReducedMotion();          // Windows' "Show animations in Windows" is off
 
 ImU32 col(const app::Rgb& c, float a = 1);

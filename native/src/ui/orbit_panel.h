@@ -46,6 +46,7 @@ struct AppState {
     bool computeOk = false;                // the renderer has the OpenGL 4.3 compute path (the Atom Lab's GPU superposition and jumps); false: the CPU does that work
     bool vsync = true;                     // wait for the screen's refresh (off: draw as fast as possible, to measure headroom)
     FrameStats stats;
+    std::string powerNote;                 // 0.15 stage 2: app::powerNote() (Windows power throttling asked off), printed in the benchmark report
     app::LiveStats live;                   // frames drawn while the window system had the window in its move / resize loop
     bool liveFrame = false;                // the frame being built now is one of those
     Journey journey;
