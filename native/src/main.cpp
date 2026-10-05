@@ -218,6 +218,7 @@ int main(int, char**) {
     if (const char* g = SDL_getenv("PL_GR")) app.set.relativity = std::atoi(g) != 0;   // for automatic checks: General relativity (1PN) on (1) / off (0)
     if (const char* d = SDL_getenv("PL_DATE")) { int64_t ms; if (ui::parseDateTime(d, "12:00", ms)) std::printf("%s\n", ui::jumpToDate(app, ms).c_str()); else std::printf("not a date\n"); }
     if (SDL_getenv("PL_JOURNEY")) ui::journeyStart(app);
+    if (const char* pn = SDL_getenv("PL_PANE")) app.pane = std::atoi(pn);     // for automatic checks: open the Learn (1) or Achievements (2) tab
     if (const char* l = SDL_getenv("PL_LEARN")) app.learn = std::atoi(l);     // open a Learn guide (1, 2 or 3)
     if (const char* o = SDL_getenv("PL_OPEN")) { const std::string w = o; app.showSettings = w == "settings"; app.showAbout = w == "about"; app.showHistory = w == "history"; app.showLabLog = w == "log"; }   // for automatic checks: open a window
     if (SDL_getenv("PL_CONS")) app.set.cons = orbit::ConsMode::LinesAndNames;

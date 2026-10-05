@@ -708,7 +708,9 @@ void atomPanel(AppState& app, float width) {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
     ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
+    pushDockedBg();
     ImGui::Begin("Atom controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    popDockedBg();
     panelDecor(app::PanelKind::Docked);
     if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
         const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -994,8 +996,10 @@ float atomBottomBar(AppState& app, float x, float y, float width, bool draw) {
     ImGui::SetNextWindowPos(ImVec2(x, y));
     ImGui::SetNextWindowSize(ImVec2(width, barH));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
+    pushDockedBg();
     ImGui::Begin("Atom view bar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
+    popDockedBg();
     panelDecor(app::PanelKind::Docked);
     float used = 0;
     auto button = [&](const std::string& t, bool show) {

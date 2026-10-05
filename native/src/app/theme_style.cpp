@@ -35,6 +35,16 @@ Rgb panelSurface(const ThemeColors& c, PanelKind kind, const Rgb& under) {
     return over(p.fill, a, under);
 }
 
+Rgb floatingSurface(const ThemeColors& c, const Rgb& /*backdrop*/, float t, bool popup) {
+    const PanelStyle& p = c.style.panel;
+    if (isPlainPanelStyle(p, c.style.page)) return popup ? c.card : c.bg;
+    const Rgb page = pageColourAt(c.style.page, c.bg, popup ? 0.5f : t);        // the window paints the page itself first, so what is behind it never counts
+    return over(p.fill, p.floatAlpha, page);
+}
+Rgb dockedSurface(const ThemeColors& c, float t) { return panelSurface(c, PanelKind::Docked, pageColourAt(c.style.page, c.bg, t)); }
+float floatingOpacity(const ThemeStyle& s) { return s.page.kind != 0 || s.panel.floatAlpha >= 1 ? 1.f : s.panel.floatAlpha; }   // a page is painted opaque under the glass
+float popupOpacity(const ThemeStyle&) { return 1.f; }
+
 static bool plainWidget(const WidgetStyle& w) { return w.hi == 0 && w.split == 0 && w.loAmount == 0 && w.shineLineAlpha == 0 && w.pressDark == 0; }
 bool isPlainWidgetStyle(const WidgetStyle& w) { return plainWidget(w); }
 bool isPlainPanelStyle(const PanelStyle& p, const PageStyle& page) {

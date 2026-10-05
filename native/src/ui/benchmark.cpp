@@ -463,6 +463,7 @@ void benchmarkWindow(AppState& app) {
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 12 * fs / 16, vp->WorkPos.y + 12 * fs / 16 + std::max(0.0f, headerHeight())), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(0.85f);
         if (ImGui::BeginPopupModal(kRunBox, nullptr, fl | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav)) {
+            panelDecor(app::PanelKind::Floating);
             if (running) {
                 const app::BenchRun& r = *b.run;
                 const int shown = std::min(r.scene() + 1, r.sceneCount());
@@ -484,7 +485,11 @@ void benchmarkWindow(AppState& app) {
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0));
         bool open = true;
-        if (ImGui::Begin("Benchmark###bench", &open, fl)) {
+        pushFloatStyle();
+        const bool benchShown = ImGui::Begin("Benchmark###bench", &open, fl);
+        popFloatStyle();
+        if (benchShown) {
+            panelDecor(app::PanelKind::Floating);
             const std::vector<int> list = sceneList(b);
             const int count = int(list.size());
             const int secs = int(count * (app::kBenchWarmupS + app::kBenchMeasureS));
@@ -516,7 +521,11 @@ void benchmarkWindow(AppState& app) {
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(std::min(46 * fs, vp->WorkSize.x * 0.97f), std::min(34 * fs, vp->WorkSize.y * 0.92f)), ImGuiCond_Appearing);
         bool open = true;
-        if (ImGui::Begin("Benchmark result###bench", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        pushFloatStyle();
+        const bool resultShown = ImGui::Begin("Benchmark result###bench", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+        popFloatStyle();
+        if (resultShown) {
+            panelDecor(app::PanelKind::Floating);
             ImGui::TextWrapped("%s, %s, OpenGL %s", b.env.gpu.c_str(), b.env.vendor.c_str(), b.env.glVersion.c_str());
             ImGui::TextWrapped("Atom Lab superposition and jumps: %s", b.env.computePath.c_str());
             ImGui::TextWrapped("Atom Lab 90 %% outline: %s", b.env.outlinePath.c_str());

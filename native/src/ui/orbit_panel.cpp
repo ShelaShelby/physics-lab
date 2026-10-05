@@ -188,7 +188,9 @@ void orbitPanel(AppState& app, float width) {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
     ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
+    pushDockedBg();
     ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    popDockedBg();
     panelDecor(app::PanelKind::Docked);
     if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
     if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel

@@ -31,6 +31,13 @@ enum class PanelKind { Docked, Floating };
 // The colour a panel really shows, where `under` is what is behind it (for a docked panel the page at that height). A plain theme: Docked is its
 // bg colour, Floating its card colour, whatever is behind (they are solid). A glass panel: its glass colour at its alpha over `under`.
 Rgb panelSurface(const ThemeColors& c, PanelKind kind, const Rgb& under);
+// 0.14 stage 1.1: what a window or pop-up that holds text really shows, whatever is behind it (`backdrop` is ignored on purpose: nothing may show through).
+// A plain theme: a floating window is its bg colour, a pop-up its card colour. A glass theme: the window paints the page (opaque) and the glass over it, so the
+// stack is solid; a pop-up list is one solid colour (the glass over the page's middle colour). `t` is the place on the page, 0 top .. 1 bottom.
+Rgb floatingSurface(const ThemeColors& c, const Rgb& backdrop, float t, bool popup);
+Rgb dockedSurface(const ThemeColors& c, float t);                  // a docked panel: its glass over the page at height t
+float floatingOpacity(const ThemeStyle& s);                         // how solid a floating window is as drawn (1 = hides everything behind it)
+float popupOpacity(const ThemeStyle& s);                            // the same for a pop-up list
 // true when the style does nothing new: flat page, solid panels without shine or shadow, flat widgets, scale 1
 bool isPlainStyle(const ThemeStyle& s);
 bool isPlainWidgetStyle(const WidgetStyle& w);                     // no gloss, no tints other than the old 0.22 / 0.45

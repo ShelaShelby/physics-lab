@@ -274,6 +274,48 @@ static void testRoundScale() {
     checkTrue("Aero is rounder", scaledRadius(themeColors("aero", true).style, 12.f) > 12.f);
 }
 
+
+// ---- 0.14 stage 1.1: a floating window or pop-up that holds text hides what is behind it, whatever that is ----
+// The owner saw the Learn cards through the guide window in Aero. The stage 1 rule only looked at glass over the page gradient; this one lets ANYTHING be behind.
+static void testFloatingReadability() {
+    for (const ThemeDef* t : allThemes()) {
+        const std::string id = t->id;
+        if (id == "auto") continue;
+        const ThemeColors c = themeColors(id, false);
+        const std::string w = id + ": ";
+        const Rgb backs[] = {rgb8(0, 0, 0), rgb8(255, 255, 255), c.bg, c.fg, c.card, c.line, c.accent, c.onacc, c.muted, c.accentFill, c.danger, c.dangerFill};
+        checkTrue(w + "the stack of a floating window is at least 94 % solid", floatingOpacity(c.style) >= 0.94f);
+        checkTrue(w + "a pop-up list is fully solid", popupOpacity(c.style) == 1.f);
+        double worst = 1e9, worstPop = 1e9, leak = 0;
+        for (int i = 0; i <= 20; i++) {
+            const float pos = i / 20.f;
+            const Rgb ref = floatingSurface(c, backs[0], pos, false), refPop = floatingSurface(c, backs[0], pos, true);
+            for (const Rgb& b : backs) {
+                const Rgb sw = floatingSurface(c, b, pos, false), sp = floatingSurface(c, b, pos, true);
+                leak = std::max({leak, std::fabs(double(sw.r - ref.r)), std::fabs(double(sw.g - ref.g)), std::fabs(double(sw.b - ref.b)),
+                                 std::fabs(double(sp.r - refPop.r)), std::fabs(double(sp.g - refPop.g)), std::fabs(double(sp.b - refPop.b))});
+                for (const Rgb& txt : {c.fg}) { worst = std::min(worst, contrastRatio(txt, sw)); worstPop = std::min(worstPop, contrastRatio(txt, sp)); }
+                if (id == "aero") for (const Rgb& txt : {c.muted, c.accent, c.danger}) { worst = std::min(worst, contrastRatio(txt, sw)); worstPop = std::min(worstPop, contrastRatio(txt, sp)); }
+            }
+        }
+        checkTrue(w + "nothing behind a window or pop-up shows through it (leak " + std::to_string(leak) + ")", leak < 1e-6);
+        checkTrue(w + "text on a floating window over any backdrop " + std::to_string(worst) + " >= 4.5", worst >= 4.5);
+        checkTrue(w + "text on a pop-up over any backdrop " + std::to_string(worstPop) + " >= 4.5", worstPop >= 4.5);
+        // the glass layer alone (if a window were ever drawn without the page under it) must still read over every backdrop: the real alpha
+        if (c.style.panel.floatAlpha < 1) {
+            double alone = 1e9;
+            for (const Rgb& b : backs) alone = std::min({alone, contrastRatio(c.fg, over(c.style.panel.fill, c.style.panel.floatAlpha, b)), contrastRatio(c.muted, over(c.style.panel.fill, c.style.panel.floatAlpha, b))});
+            checkTrue(w + "the glass alone, over any backdrop: " + std::to_string(alone) + " >= 4.5", alone >= 4.5);
+            checkTrue(w + "the glass alone is at least 94 % solid", c.style.panel.floatAlpha >= 0.94f);
+        }
+        // a docked panel is laid over the page and nothing else: dockedSurface is exactly panelSurface over the page colour at that height
+        for (int i = 0; i <= 10; i++) {
+            const Rgb a = dockedSurface(c, i / 10.f), b = panelSurface(c, PanelKind::Docked, pageColourAt(c.style.page, c.bg, i / 10.f));
+            checkTrue(w + "docked surface at " + std::to_string(i) + "/10 is the glass over the page", nearTo(a.r, b.r, 1e-6) && nearTo(a.g, b.g, 1e-6) && nearTo(a.b, b.b, 1e-6));
+        }
+    }
+}
+
 static void testThemeStyle() {
     testWcagFormula();
     testGradients();
@@ -283,4 +325,5 @@ static void testThemeStyle() {
     testAeroContrast();
     testThemeFonts();
     testRoundScale();
+    testFloatingReadability();
 }

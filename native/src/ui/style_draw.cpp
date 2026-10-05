@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "imgui_internal.h"
@@ -139,11 +141,16 @@ void pageGradient(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding, ImDrawFlag
 
 // ---- panels ----
 void panelDecor(PanelKind kind) {
+    static const bool logWindows = std::getenv("PL_LOG_WINDOWS") != nullptr;   // for automatic checks: where every painted window is (tests/check_window_pictures.py)
+    if (logWindows) {
+        const ImGuiWindow* lw = ImGui::GetCurrentWindow();
+        std::fprintf(stderr, "PLWIN %s %d %d %d %d %s\n", lw->Name, int(lw->Pos.x), int(lw->Pos.y), int(lw->Size.x), int(lw->Size.y), kind == PanelKind::Docked ? "docked" : "floating");
+    }
     if (!glassy()) return;
     const app::PanelStyle& p = style().panel;
     ImGuiWindow* w = ImGui::GetCurrentWindow();
     const float bs = w->WindowBorderSize;
-    const ImVec2 a(w->Pos.x + bs, w->Pos.y + (w->TitleBarHeight > 0 ? w->TitleBarHeight : bs)), b(w->Pos.x + w->Size.x - bs, w->Pos.y + w->Size.y - bs);
+    const ImVec2 a(w->Pos.x + bs, w->Pos.y + (w->TitleBarHeight > 0 ? w->TitleBarHeight : bs)), b(w->Pos.x + w->Size.x - bs - (w->ScrollbarY ? w->ScrollbarSizes.x : 0.f), w->Pos.y + w->Size.y - bs - (w->ScrollbarX ? w->ScrollbarSizes.y : 0.f));   // not over the scroll bars (ImGui painted them already)
     if (b.x <= a.x || b.y <= a.y) return;
     const float r = std::max(0.f, w->WindowRounding - bs);
     const ImDrawFlags flags = w->TitleBarHeight > 0 ? ImDrawFlags_RoundCornersBottom : ImDrawFlags_RoundCornersAll;
@@ -165,6 +172,8 @@ void panelDecor(PanelKind kind) {
     if (kind == PanelKind::Floating) shadowBehind(w->Pos, ImVec2(w->Pos.x + w->Size.x, w->Pos.y + w->Size.y), w->WindowRounding);
 }
 
+void pushDockedBg() { if (glassy()) ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); }
+void popDockedBg() { if (glassy()) ImGui::PopStyleColor(); }
 void pushFloatStyle() { ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, app::scaledRadius(style(), style().panel.floatRounding) * ImGui::GetFontSize() / 16); }
 void popFloatStyle() { ImGui::PopStyleVar(); }
 

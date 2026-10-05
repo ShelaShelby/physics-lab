@@ -235,9 +235,9 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     ImVec4* k = st.Colors;
     k[ImGuiCol_Text] = vec(c.fg);
     k[ImGuiCol_TextDisabled] = vec(c.muted);
-    k[ImGuiCol_WindowBg] = vec(c.bg, glassy() ? 0.f : 1.f);   // a glass theme paints every window itself (ui/style_draw.cpp panelDecor)
+    k[ImGuiCol_WindowBg] = vec(c.bg);                         // every window is solid; only a docked panel of a glass theme is made see-through (pushDockedBg)
     k[ImGuiCol_ChildBg] = vec(c.bg, 0);
-    k[ImGuiCol_PopupBg] = vec(c.card, ts.panel.floatAlpha);
+    k[ImGuiCol_PopupBg] = vec(app::floatingSurface(c, c.bg, 0.5f, true));   // a pop-up list is one solid colour (a glass theme: the glass over the page's middle)
     k[ImGuiCol_Border] = vec(mix(c.line, c.fg, ts.panel.borderFgMix));
     k[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
     k[ImGuiCol_FrameBg] = vec(mix(c.card, c.fg, 0.16f));

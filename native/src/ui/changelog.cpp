@@ -6,6 +6,7 @@
 #include "app/app_data.h"
 #include "fonts.h"
 #include "look.h"
+#include "style_draw.h"
 
 #include "imgui.h"
 
@@ -17,6 +18,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.14", "Themes, stage 1.1: a fix, Frutiger Aero's floating windows are solid now",
+     "The owner found on the real app that in Frutiger Aero the guides (\"What am I even looking at?\"), the changelog and some other windows were see-through: the Learn cards and the Solar System readout showed through their text. Cause: stage 1 made window backgrounds see-through for glass themes but did not paint every window. Now every window and pop-up that holds text is solid (the glass look is the sky gradient, a bright line along the top, the rim and a soft shadow), only the docked panels stay see-through, and the scroll bars show again. The older themes are unchanged (the 72 test pictures are identical). New tests: every window opened by the app must be painted by the theme; the inside of a window must be the same picture over two different backdrops (Aero, Dark, Light); every theme's text passes 4.5:1 over any backdrop colour. Found, not changed: the Light theme's accent text on its page colour is 4.24:1, a little under 4.5. NOT TESTED: a real PC and a real GPU."},
     {"0.14", "Themes, stage 1 of 5: richer theme styles and the Frutiger Aero theme",
      "A theme is no longer only seven flat colours. It can now also have a page that fades from one colour to another, glass panels (see-through, with a bright line along the top and a soft shadow under floating windows), glossy buttons, tabs, check boxes and sliders (a bright top half, a tinted lower half, a pressed look), its own corner roundness and its own font. All of this is data in the theme, not code for one theme, and every theme that existed before draws exactly the same pixels as in 0.13 (checked by pictures of six screens in all 12 versions, dark and light). "
      "New theme: Frutiger Aero (light): a sky-blue page, frosted glass, glossy aqua and fresh-green buttons, rounder corners. It uses Segoe UI when Windows has it; the font is Microsoft's and is not shipped. Every text and background pair in it passes the W3C's WCAG 2.x contrast rule (4.5:1 for text, 3:1 for large text and interface parts), glass over the lightest and darkest part of the page included; the tests check the formula against values worked by hand. "
@@ -388,7 +391,11 @@ void labLogWindow(bool* open, int lab) {
     ImGui::SetNextWindowSize(ImVec2(std::min(vp->WorkSize.x - 32, 620 * s), vp->WorkSize.y * 0.8f), ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     const std::string title = (lab == 1 ? std::string(app::kAtomHistoryName) + " " + L.update : std::string(L.name) + app::kLogTitleTail) + "###labLog";
-    if (ImGui::Begin(title.c_str(), open, ImGuiWindowFlags_NoCollapse)) {
+    pushFloatStyle();
+    const bool logShown = ImGui::Begin(title.c_str(), open, ImGuiWindowFlags_NoCollapse);
+    popFloatStyle();
+    if (logShown) {
+        panelDecor(app::PanelKind::Floating);
         const Entry* rows = lab == 1 ? kWebAtom : kWeb;
         const int n = lab == 1 ? int(sizeof kWebAtom / sizeof kWebAtom[0]) : int(sizeof kWeb / sizeof kWeb[0]);
         const ImU32 accent = col(look().c.accent), line = col(look().c.line);

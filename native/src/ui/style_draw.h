@@ -17,6 +17,9 @@ bool glassy();                        // the panels have a gradient page, glass,
 // A docked window is a panel of the main window; a floating one is a pop-up or a window that can sit over anything. Plain themes: does nothing.
 void panelDecor(app::PanelKind kind);
 // Floating windows (Settings, About, the periodic table) have rounded corners in some themes: push before ImGui::Begin, pop after it.
+// Docked panels are see-through on purpose (the page gradient is painted under them): push before their ImGui::Begin, pop right after it. Every other window is solid.
+void pushDockedBg();
+void popDockedBg();
 void pushFloatStyle();
 void popFloatStyle();
 // A card drawn by hand (the facts line, an achievement): the card colour with its border, or glass with a shine. Plain themes: card colour + border, as before.

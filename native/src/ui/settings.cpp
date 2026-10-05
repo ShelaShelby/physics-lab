@@ -376,6 +376,7 @@ void defaultsButton(AppState& app) {
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Put this lab's settings back to how they started");
         ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
         if (ImGui::BeginPopupModal("Put Atom Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+            panelDecor(app::PanelKind::Floating);
             ImGui::TextWrapped("This puts every Atom Lab setting back to how it started: hydrogen-1, the Orbit view, level n = 1, "
                                "zoom, scale, quark style and the other choices, and starts a fresh atom (the decay history starts "
                                "again). Your units and More / Less info choices stay.");
@@ -392,6 +393,7 @@ void defaultsButton(AppState& app) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Put this lab's settings back to how they started");
     ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
     if (ImGui::BeginPopupModal("Put Orbit Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+        panelDecor(app::PanelKind::Floating);
         ImGui::TextWrapped("This puts every Orbit Lab setting back to how it started: 2D view, zoom, Time speed, sizes, trails, "
                            "sky and extras, and the Solar System back to today. What you selected is let go. Your units choice stays.");
         ImGui::Spacing();

@@ -1,41 +1,33 @@
-# Native Physics Lab 0.14 (alpha) — stage 1 of 5: richer theme styles + Frutiger Aero
+# Native Physics Lab 0.14 (alpha) — stage 1.1: Frutiger Aero floating windows were unreadable (fix before stage 2)
 
 `index.html` untouched (sha256 e5501387ae64…). No helper agents. One commit, one push; the Actions result is in the closing message.
-**NOT TESTED: the look on a real PC (Windows, real GPU, real Segoe UI) and speed.** The owner judges the look (OWNER-TODO).
+**NOT TESTED: a real PC, real GPU, real Segoe UI, speed.** Pictures are Mesa llvmpipe, headless (the real app on Linux, SDL offscreen).
 
-## Tests written FIRST (`tests/test_theme_style.inc`, compile-red before `theme_style.*` existed)
-WCAG 2.x formula against values worked by hand (black/white 21:1, #777/white 4.478:1, #767676 4.54, red 4.00, blue 8.59, mid grey L 0.2159, the 0.04045 linear part); gradients by hand; theme data (all 12 themes have every field in range; the 11 old themes are "plain" = old 7-colour look, old numbers 0.90/0.35/0.30, #d0453b, 120/140/200, 128 kept); gloss colours (top lighter, pressed turns over, plain = flat); panel colours; font fallback; corner scale. app_tests 1,616 → **2,014**.
-**Aero contrast (computed from the theme's real data):** text, muted, accent and error text on docked glass and floating windows over the page at 101 heights, plus floating over pure white and black; button text and muted text in all 3 states; green and red button text; highlighted rows and title bars; borders 3:1, check mark, slider grab. Worst body pair ≥ 4.5.
-**Perturbed, caught, reverted (12):** panel alpha default 0.9 (21 fails); floating alpha 0.97 (20); gloss top/bottom swapped (5); Aero muted too light (5); Aero accent too light (5); border mix default 0.3 (10); corner scale 1.1 (21); hover tint 0.2 (11); contrast exponent 2.2 (4); contrast +0.1 instead of +0.05 (17); font fallback returns a path that is not there (2); Paper loses its serif (2). Picture test: a corner radius changed in `look.cpp` → every picture differed; reverted.
+## What the owner saw, and the cause (reproduced first, in Aero)
+1. Guide ("What am I even looking at?") and changelog windows see-through; the Learn cards and the picture showed through the text.
+2. The "Solar System … Nothing is selected yet" card inside the guide, the tip bar text colliding near the window title.
+**One cause, not three.** Stage 1 set every window background to transparent in glass themes and painted the glass only in windows that called `panelDecor`. Eight windows never did: the Orbit and Atom guides (`learn.cpp`, `atom_learn.cpp`), the changelog, the two benchmark windows, the benchmark run box and the two "put back" pop-ups. Transparent and unpainted = everything behind showed. The "Solar System" card is the guide's OWN card (it shows the selected body), not a layer bug: nothing in the app draws on Dear ImGui's foreground layer (searched; the picture's text is on the background layer, under all windows), and a window covers it once it is solid. The tip bar line is under the window for the same reason. The stage 1 contrast test modelled glass over the page gradient only; it could not see an unpainted window.
 
-## Pictures: old themes unchanged
-Real app built on Linux (`-DPL_BUILD_APP=ON`, SDL offscreen, Mesa 25.2.8 llvmpipe). `tools/theme_pictures.sh`: 6 screens (Orbit Lab, Atom Lab nucleus, Cloud 3D, chart, Settings, theme picker) × 12 variants (auto dark / auto light + 10 themes) = 72. Baseline: the 0.13 code with only the version number set to 0.14 and the `PL_FIXED_DT` test switch (else the header text differs everywhere). **60 of 60 pictures identical (0 pixels)**. The 12 theme-picker pictures differ on purpose: the 12th card (Frutiger Aero) fills the last row (differences only in y 147–190). Reference hashes in `tests/reference/theme_pictures_*.sha256`; ctest `theme_pictures` (`-DPL_PICTURE_TESTS=ON`, Linux only, not run by the Windows workflow). Needed `PL_FIXED_DT`, `PL_DYK_FIRST`, `PL_DATE` to make two runs equal.
+## Fix (decision and reason in DECISIONS)
+Frosted, not clear: every window is solid by default again (`WindowBg` opaque); only the docked panels (header, side panels, tab page) are see-through (`pushDockedBg`, behind them there is only the page). A floating window paints the page gradient (opaque) and the glass (alpha 0.94) over it; a pop-up list is one solid colour. The glass look is the gradient, shine, rim and shadow. **No blur:** needs a frame copy and a second pass on a renderer that draws in layers, not testable on a real GPU here. All eight windows now call `panelDecor` and get the rounded floating style. Also fixed on the way: the painted glass covered the scroll bars (they vanished in the guide); it now stops before them.
 
-## Audit: colours and styles written into drawing code
-| where | what | kind → action |
-|---|---|---|
-| look.cpp gift page | red button #d0453b, white text | UI → `dangerFill`, `onDanger` |
-| shot.cpp, benchmark.cpp | error text (0.90, 0.35, 0.30) | UI → `danger` |
-| atom_learn, app_pages, learn, html_view (5) | faint blue tint (120,140,200,31/38) | UI → `soft` |
-| atom_panel (3), html_view | grey (128,128,128,x) tracks/frames | UI → `neutral` |
-| pushOn, selected tab, toast/achievement icon, Header*, TitleBg, TabSelected | accent as a FILL behind text | UI → `accentFill` (text/marks keep `accent`) |
-| settings.cpp Auto swatch | #f7f7f5 / #151517 | UI → taken from the Light / Dark themes |
-| look.cpp, settings.cpp, app_pages.cpp | `id == "monochrome"/"synthwave"/"paper"` (corners, grey pictures, glow, fonts) | per-theme code → data (`square`, `grayscale`, `glowTop`, `titleGlow`, `font`) |
-| ~40 `corner(r)`, rounding 6, border 1, mix 0.25, tints 0.22/0.45, PopupBg alpha | style values | → `roundScale`, `borderWidth`, `borderFgMix`, `hoverTint`, `pressTint`, `floatAlpha` |
-| orbit_view, atom_view, cloud_dots, chart_*, atom_panel (spectrum, s/l/p bars, marks), learn.cpp illustration | star, planet, phase wheel, decay-mode, element, spectrum colours | **science, fixed on purpose** |
-| orbit_view kBg/kCard/kLine (sky on), overlay cards (alpha 0.84/0.72, radii), fps card, orbit_panel pink | picture-area UI | left for stages 3–4 / matches picture highlight |
-| look.cpp giftPreview | Synthwave / Monochrome preview illustrations | fixed (they draw those themes) |
-About 60 sites, far fewer than feared; no stop needed.
+## Tests written FIRST (red before the fix, green after)
+- `test_theme_style.inc` (+178 checks, app_tests 2,014 → **2,192**): for all 12 themes, a floating window and a pop-up show the same surface over 12 different backdrops (black, white, the theme's own colours): leak 0; stack ≥ 94 % solid, pop-up solid; text 4.5:1 over every backdrop (Aero: also muted, accent, error); the glass alone over any backdrop still reads (real alpha); docked surface = glass over the page.
+- `tests/check_windows_decorated.py` (ctest `windows_decorated`, needs no graphics): every `Begin` / `BeginPopup` / `BeginPopupModal` in `src` must call `panelDecor`; every docked one must `pushDockedBg`. Red: **13 problems** before, 0 after (20 windows).
+- `tests/check_window_pictures.py` (ctest `window_pictures`, `-DPL_PICTURE_TESTS=ON`): Aero, Dark, Light; the guide and the changelog over the Orbit picture against over the Learn cards; Settings over the Earth card against no card (layering); the side panel after 40 against 70 frames. Inside of the window, inset 14 px. Tolerance stated: ≤ 0.03 % of pixels, none over 40/255. Measured 8 to 15 pixels, worst 29: one letter's anti-aliased edge. (My first layering test used the guide and failed on purpose-free grounds: the guide shows the selected body in its own card. Changed to Settings, said here.)
+- Old themes: `theme_pictures` (72 pictures vs the 0.13 code, 60 identical + picker vs its 0.14 file) passes, **0 differing pixels; the fix changes no old picture**, so there is nothing to list.
 
-## What was built
-`theme_types.h`, `theme_style.*` (pure, tested), `style_draw.*`: one helper per kind (page, panel, card, face; own Button / Checkbox / Slider that copy Dear ImGui 1.92.9b's steps and hand over to plain ImGui when the theme is plain). Docked panels paint the page gradient on the background layer (windows see-through), floating windows paint their own and a soft shadow. Radial pages are implemented but used by no theme and not drawn in any test picture (pure gradient maths is tested). `fonts.cpp`: theme fonts by file name (`PL_FONT_DIR` for checks). Aero is a native theme in `theme_style.cpp` (the web list `kThemes` is untouched, its 11-theme tests unchanged).
-**Font fallback, real app:** no Segoe UI here → default font (DejaVu), no crash; with a stand-in file named `segoeui.ttf` in a temp folder the theme font loads. Real Segoe UI: unseen.
+## Perturbed, caught, reverted
+Stage 1 bug recreated (transparent background, window not painted): Aero guide **136,223** of 295,152 pixels differ, changelog 199,669, layering 41,954; Dark and Light unchanged. Overlay card drawn on the foreground layer: layering fails in all 3 themes (≈52,300 pixels). Aero floating alpha 0.5: 10 fails. Glass lets the backdrop through: leak 0.06 caught. Pop-up not solid: 11 fails. One `panelDecor` removed from `changelog.cpp`: the scan names it. (One of my perturbations did not compile, so it tested nothing; redone and caught.)
 
-## Looked at (llvmpipe pictures, Aero and two old themes)
-Aero **reads as Aero in the header and on buttons** (sky gradient, bright top half and aqua lower half, green chosen tabs, rounded floating windows, soft shadow) but **only partly**: lower on the page the gradient fades to near-white so the side panel looks pale blue rather than glass; the shadow is invisible over the dark space picture; combo boxes stay flat grey; the lab pictures (space, cloud) are untouched by design. Fixed after the first look: panels were white (page gradient made deeper, glass 0.58 → 0.55), shadow hidden under docked panels, square floating windows. Old themes compared above.
+## Looked at (Aero, before and after)
+Guide over Learn, guide over the Orbit picture, changelog over Learn, Settings: before, titles, card icons and picture labels ran through the paragraphs; after, the text reads cleanly on a plain near-white window with scroll bar, the Solar System card sits inside the guide's own text, the tip bar is hidden under the window. Honest limit: the windows are now plain light panels; the Aero feel there is the gradient edge, rounded corners, shadow and the green / aqua buttons, not a see-through glass.
 
-## Changed on purpose / found
-About edits 29 → **30** (`g_editUses`), About now lists the WCAG formula; `app_text.inc` edited by hand as in earlier stages. **The W3C WCAG page could not be opened (network blocked): the formula is from knowledge and hand arithmetic; About and OWNER-TODO say so.** No existing test loosened; no physics changed (orbit 1,612, atom 21,066, nbody 37, jpl 55, moon 24, moon_real 59, GL 503, glslang pass; fresh configure ok).
+## Found, not changed (report rule)
+Light theme: accent text #2f6fed on its page colour #f7f7f5 is **4.24:1** (4.55 on its card): just under 4.5 for body-size accent text ("Did you know?" label). All other old themes pass 4.5 for text, muted and accent on bg and card (computed by hand). No existing test loosened or changed; no physics touched; `PL_PANE` and `PL_LOG_WINDOWS` are test switches.
+
+## Tests run
+orbit 1,612, atom 21,066, app **2,192**, nbody 37, jpl 55, moon 24, moon_real 59, GL 503, glslang pass, `windows_decorated`, `window_pictures`, `theme_pictures`: all pass.
 
 ## Not tested / limits
-Windows/MSVC build (GitHub Actions only); real GPU; speed; Segoe UI itself; contrast of progress bars, chart/picture overlay cards and science colours on Aero (not in this stage); combo boxes, tooltips and some pop-ups are only plain-ImGui glass (no shine/shadow).
+Windows/MSVC build (Actions only); benchmark windows and the two "put back" pop-ups in Aero have no picture, only the source scan; combo lists are solid but flat; pop-up shadows and shine only on windows that call `panelDecor`.

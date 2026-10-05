@@ -297,7 +297,11 @@ void learnWindow(AppState& app) {
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.4f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     bool open = true;
     const std::string title = std::string(kTitles[app.learn]) + "###learn";   // one window; the title changes with the guide
-    if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse)) {
+    pushFloatStyle();
+    const bool guideShown = ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse);
+    popFloatStyle();
+    if (guideShown) {
+        panelDecor(app::PanelKind::Floating);
         if (app.learnJump == "top") { ImGui::SetScrollY(0); app.learnJump.clear(); }
         if (const char* sc = std::getenv("PL_LEARN_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
         ImGui::PushTextWrapPos(0);

@@ -353,9 +353,11 @@ void paneWindow(AppState& app, float top) {
     ImGui::SetNextWindowSize(ImVec2(vp->Size.x, vp->Size.y - top));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16 * s, 12 * s));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    pushDockedBg();
     ImGui::Begin("##pane", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                  ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_AlwaysVerticalScrollbar);
     ImGui::PopStyleVar(2);
+    popDockedBg();
     panelDecor(app::PanelKind::Docked);
     if (look().synthGlow) drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8 * s, 8 * s));

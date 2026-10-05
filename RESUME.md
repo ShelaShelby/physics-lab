@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.14 alpha, "Themes", stage 1 of 5 is done (richer theme styles + the Frutiger Aero theme). Stages 2-5 (Y2K futurism, glass / chrome planets and nucleons, glossy chart and Cloud dots, animated backgrounds and a full contrast check) are in ROADMAP. What stage 1 is: a theme can have a gradient page, glass panels, gloss, rounding, a shadow and a system font, all as data (`src/app/theme_types.h`, `theme_style.*`, drawn by `src/ui/style_draw.*`); the 11 web themes draw the same pixels as in 0.13 (`tools/theme_pictures.sh`, `tests/check_theme_pictures.sh`, reference hashes in `tests/reference/theme_pictures_*.sha256`; the real app builds and runs headless on Linux with SDL's offscreen driver and llvmpipe, see REPORT.md); `PL_FIXED_DT` (main.cpp) makes two runs draw the same pixels. Science colours and the lab pictures are NOT themed yet. 0.13 (GPU update) is complete before it.
+- Version 0.14 alpha, "Themes", stage 1 of 5 is done (and stage 1.1, a fix: Aero's floating windows are solid; see DECISIONS) (richer theme styles + the Frutiger Aero theme). Stages 2-5 (Y2K futurism, glass / chrome planets and nucleons, glossy chart and Cloud dots, animated backgrounds and a full contrast check) are in ROADMAP. What stage 1 is: a theme can have a gradient page, glass panels, gloss, rounding, a shadow and a system font, all as data (`src/app/theme_types.h`, `theme_style.*`, drawn by `src/ui/style_draw.*`); the 11 web themes draw the same pixels as in 0.13 (`tools/theme_pictures.sh`, `tests/check_theme_pictures.sh`, reference hashes in `tests/reference/theme_pictures_*.sha256`; the real app builds and runs headless on Linux with SDL's offscreen driver and llvmpipe, see REPORT.md); `PL_FIXED_DT` (main.cpp) makes two runs draw the same pixels. Science colours and the lab pictures are NOT themed yet. 0.13 (GPU update) is complete before it.
 - Test programs and their last known check counts:
   - orbit_tests: 1,612 (72 added in 0.13 stage 4)
   - atom_tests: 21,066 (84 added in 0.13 stage 4)
-  - app_tests: 2,014 (398 added in 0.14 stage 1: the WCAG formula, theme data, gloss, Aero contrast, font fallback)
+  - app_tests: 2,192 (576 added in 0.14 stages 1 and 1.1: the WCAG formula, theme data, gloss, Aero contrast, font fallback, floating windows hide what is behind them). Also `tests/check_windows_decorated.py` (ctest windows_decorated) and, with -DPL_PICTURE_TESTS=ON, `check_window_pictures.py` (window_pictures)
   - glsl_shaders (glslang, needs `glslang-tools`; skipped if absent; 15 shaders, 4 compute) and gl_phase_colours (only with -DPL_GL_TESTS=ON: 503 checks on llvmpipe)
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)

@@ -1,5 +1,9 @@
 # Owner to-do (things only the owner can do)
 
+## 0.14 stage 1.1 (Aero floating windows were see-through): look again on the PC
+- [ ] Frutiger Aero: open Orbit Lab → Learn → "What am I even looking at?", the changelog (v0.14 alpha · history), Settings, 🎨 Theme and the Atom Lab guides and periodic table. Text must read cleanly with nothing showing through, and the window must sit on top of the Solar System card and the tip bar. Say what still feels off (the windows are now solid white-blue; the glass look is the gradient, shine and shadow).
+- [ ] Not checked here: the benchmark windows and the two "put back" pop-ups in Aero were painted by the same call but only found by a source scan, not by a picture.
+
 ## 0.14 stage 1 (richer theme styles, Frutiger Aero): look at it on the PC — the cloud session has no Windows and no Segoe UI
 - [ ] Open the real app, 🎨 Theme → Frutiger Aero. Does it read as Aero (glossy, glassy, bright) or just "light blue"? Say what feels off: the sky gradient, the glass, the button gloss, the green, the rounding, the shadow. The look was only seen as llvmpipe pictures here.
 - [ ] Check the font on Windows: with Segoe UI present Aero should use it (the default font on Windows already is Segoe UI unless you picked another in Settings). Tell me if the text looks wrong.

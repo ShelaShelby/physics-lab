@@ -104,9 +104,11 @@ void header(AppState& app) {
     ImGui::SetNextWindowSizeConstraints(ImVec2(vp->Size.x, 0), ImVec2(vp->Size.x, FLT_MAX));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, 8 * s));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    pushDockedBg();
     ImGui::Begin("##header", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize |
                  ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing);
     ImGui::PopStyleVar(2);
+    popDockedBg();
     panelDecor(app::PanelKind::Docked);
     if (look().synthGlow) drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
     const app::LabInfo& L = app::kLabInfo[app.lab];
