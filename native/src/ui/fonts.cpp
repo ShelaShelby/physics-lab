@@ -118,6 +118,11 @@ const char* loadFonts(float size) {
         g_families[key] = fam;
         if (key == "auto") used = faces[0][0];
     }
+    {   // 0.14 stage 2: the display face of the Y2K themes' titles (Michroma, SIL OFL, built into the .exe): one face. If it is missing, no family is made and titles use the bold face.
+        Fonts fam;
+        fam.regular = addFace({"@Michroma-Regular"});
+        if (fam.regular) { fam.bold = fam.italic = fam.regular; g_families["michroma"] = fam; }
+    }
     if (!g_families.count("auto")) {
         ImFont* f = io.Fonts->AddFontDefault();
         g_families["auto"] = {f, f, f};
@@ -135,6 +140,14 @@ void useFontFamily(const std::string& key) {
     g_family = k;
     g_fonts = g_families[k];
     ImGui::GetIO().FontDefault = g_fonts.regular;
+}
+
+// PL_TITLEFONT=off (for the automatic picture checks): the titles use the bold face, to see what the title font changes
+static bool titleFontSwitchedOff() { static const bool off = std::getenv("PL_TITLEFONT") && std::strcmp(std::getenv("PL_TITLEFONT"), "off") == 0; return off; }
+float titleFontScale() { return titleFontSwitchedOff() || app::titleFontKeyFor(style(), fontFamilyAvailable(style().titleFont)).empty() ? 1.f : 0.85f; }
+ImFont* titleFont() {
+    const std::string key = titleFontSwitchedOff() ? std::string() : app::titleFontKeyFor(style(), fontFamilyAvailable(style().titleFont));
+    return key.empty() ? g_fonts.bold : fontFamily(key).regular;
 }
 
 const Fonts& fontFamily(const std::string& key) { return g_families.count(key) ? g_families[key] : g_families["auto"]; }

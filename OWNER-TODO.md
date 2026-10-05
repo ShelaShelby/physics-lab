@@ -1,5 +1,12 @@
 # Owner to-do (things only the owner can do)
 
+## 0.14 stage 2 (Aero's real look, Light's accent, Y2K Ice and Y2K Night): look at them in the real app on the PC — no Windows, no GPU, no Segoe UI in the cloud session
+- [ ] Open 🎨 Theme → Frutiger Aero. Is it now glossy, saturated and "wet" (aqua and lime jelly buttons, blue title bars, clouds and bubbles), or still pale? Check the Learn guide, Settings, the changelog and a combo box (Orbit Lab → View). Say what is off.
+- [ ] Open 🎨 Theme → Y2K Ice and Y2K Night. Do they read as the cold blue-white / night-city print look with chrome buttons, grid, halftone, HUD rules and corner brackets, or just "grey with blue"? Is the title font (Michroma) too wide anywhere? Night's buttons are dark gunmetal on purpose (see DECISIONS); say if you want bright silver there.
+- [ ] Light: its blue text (the accent) is a little darker now. Look at "Did you know?" and the chosen tab. Say if it feels too dark.
+- [ ] Speed was NOT measured: the page textures (grain, halftone, grid, clouds) are drawn as many small shapes every frame. If an old PC feels slower in the Y2K themes, tell me; stage 5 has an off switch for background effects.
+- [ ] Not seen here: the benchmark windows and the two "put back" pop-ups in the new themes (only checked by a source scan), and a tooltip in every screen.
+
 ## 0.14 stage 1.1 (Aero floating windows were see-through): look again on the PC
 - [ ] Frutiger Aero: open Orbit Lab → Learn → "What am I even looking at?", the changelog (v0.14 alpha · history), Settings, 🎨 Theme and the Atom Lab guides and periodic table. Text must read cleanly with nothing showing through, and the window must sit on top of the Solar System card and the tip bar. Say what still feels off (the windows are now solid white-blue; the glass look is the gradient, shine and shadow).
 - [ ] Not checked here: the benchmark windows and the two "put back" pop-ups in Aero were painted by the same call but only found by a source scan, not by a picture.

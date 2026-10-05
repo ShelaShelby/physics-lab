@@ -4,6 +4,7 @@
 //   * the W3C's own worked values (#767676 on white is the lightest grey that reaches 4.5:1; pure red on white is 4:1);
 //   * linear interpolation worked by hand for the gradients.
 #include "app/theme_style.h"
+#include <set>
 
 static bool nearTo(double a, double b, double tol) { return std::fabs(a - b) <= tol; }
 static Rgb rgb8(int r, int g, int b) { return {r / 255.f, g / 255.f, b / 255.f}; }
@@ -66,10 +67,10 @@ static void testGradients() {
 // ---- the theme data: every theme has every field; the old themes keep their exact look ----
 static void testThemeStyleData() {
     const std::vector<const ThemeDef*> all = allThemes();
-    checkTrue("12 themes in the app: the web's 11 and Frutiger Aero", all.size() == 12);
+    checkTrue("14 themes in the app: the web's 11, Frutiger Aero (0.14 stage 1) and Y2K Ice and Y2K Night (0.14 stage 2: 12 before, changed on purpose)", all.size() == 14);
     // the web's order is kept; Aero comes before the two secret themes, so the "???" cards stay at the end
-    const char* order[] = {"auto", "light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "aero", "synthwave", "monochrome"};
-    for (std::size_t i = 0; i < all.size() && i < 12; i++) checkStr("picker order " + std::to_string(i), all[i]->id, order[i]);
+    const char* order[] = {"auto", "light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "aero", "y2kice", "y2knight", "synthwave", "monochrome"};
+    for (std::size_t i = 0; i < all.size() && i < 14; i++) checkStr("picker order " + std::to_string(i), all[i]->id, order[i]);
     checkTrue("the web's own list is untouched (still 11)", count(kThemes) == 11);
     std::set<std::string> ids;
     for (const ThemeDef* t : all) ids.insert(t->id);
@@ -174,7 +175,8 @@ static void testAeroContrast() {
         darkest = std::min(darkest, float(relativeLuminance(g)));
         lightest = std::max(lightest, float(relativeLuminance(g)));
     }
-    checkTrue("sky blue at the top is darker than the white at the bottom", darkest < 0.55f && lightest > 0.75f);
+    // 0.14 stage 2, on purpose: stage 1 asked for a page that ends almost white (lightest > 0.75, a pale design); the owner found that too pale, the page is now saturated aqua to leaf green
+    checkTrue("the sky blue at the top is darker than the bottom of the page, which is still light (stage 2: > 0.3)", darkest < 0.55f && lightest > 0.3f);
 
     struct Pair { const char* what; Rgb text; double need; };
     const Pair texts[] = {{"text", c.fg, 4.5}, {"muted text", c.muted, 4.5}, {"accent text", c.accent, 4.5}, {"error text", c.danger, 4.5}};
@@ -316,6 +318,8 @@ static void testFloatingReadability() {
     }
 }
 
+#include "test_theme_stage2.inc"   // 0.14 stage 2
+
 static void testThemeStyle() {
     testWcagFormula();
     testGradients();
@@ -326,4 +330,5 @@ static void testThemeStyle() {
     testThemeFonts();
     testRoundScale();
     testFloatingReadability();
+    testStage2();
 }

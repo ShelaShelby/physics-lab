@@ -93,7 +93,7 @@ bool pillButton(const std::string& label, const char* tip) {
     ImGui::PopFont();
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
-    if (tip && *tip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+    if (tip && *tip && ImGui::IsItemHovered()) ui::SetTooltip("%s", tip);
     return clicked;
 }
 
@@ -122,11 +122,12 @@ void header(AppState& app) {
     ImGui::PopFont();
     const float W = vp->Size.x - 2 * pad, x0 = ImGui::GetCursorPosX(), y0 = ImGui::GetCursorPosY();
     // h1: Physics Lab (Synthwave gives it a pink glow)
-    ImGui::PushFont(fonts().bold, ImGui::GetStyle().FontSizeBase * 20 / 16);
+    ImGui::PushFont(titleFont(), ImGui::GetStyle().FontSizeBase * 20 / 16 * titleFontScale());   // the theme's display font for the app name (Y2K), else the bold face
     const ImVec2 tp = ImGui::GetCursorScreenPos();
     if (look().c.id == "synthwave")
         for (int k = 1; k <= 3; k++) ImGui::GetWindowDrawList()->AddText(ImVec2(tp.x, tp.y), col(app::hexRgb("#ff4fd8"), 0.12f * k), app::kHdrTitle);
     ImGui::TextUnformatted(app::kHdrTitle);
+    logTitleRect("appname", ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     const float titleW = ImGui::GetItemRectSize().x, titleH = ImGui::GetItemRectSize().y;
     ImGui::PopFont();
     // #sub: the lab's subtitle, between the title and the buttons

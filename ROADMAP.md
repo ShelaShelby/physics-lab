@@ -76,7 +76,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 
 ## 0.14 "Themes" plan (the owner's, 5 Oct 2026): the owner's two favourite looks, Frutiger Aero and Y2K futurism; science must stay readable in every theme
 - stage 1: richer theme styles (gradient page, glass panels, gloss, rounding, shadow, system font; all data) + Frutiger Aero panels and widgets — done (the pictures of the labs are NOT changed)
-- stage 2: Y2K futurism panels and widgets — planned
+- stage 2: Frutiger Aero's real look (saturated aqua and leaf green, jelly buttons, glossy title bars, rim and glow, clouds and bubbles, glossy combo boxes and tooltips), Light's accent text readable (4.57:1), and the two Y2K futurism themes (Y2K Ice light, Y2K Night dark: grain, halftone, grid, HUD rules, corner brackets, chrome buttons, the Michroma title font) — done (the lab pictures are NOT changed)
 - stage 3: glass (Aero) / chrome (Y2K) planets and nucleons: theme-aware shading — planned
 - stage 4: glossy chart tiles and landscape; theme-aware Cloud dots — planned
 - stage 5: animated backgrounds (with an off switch) and a full contrast check — planned

@@ -139,9 +139,10 @@ Rgb hexRgb(const std::string& h) {
 ThemeColors themeColors(const std::string& id0, bool systemLight) {
     const std::string id = id0 == "auto" || !validTheme(id0) ? (systemLight ? "light" : "dark") : id0;
     if (const ThemeDef* t = findTheme(id)) {
-        ThemeColors c{hexRgb(t->bg), hexRgb(t->fg), hexRgb(t->muted), hexRgb(t->card), hexRgb(t->line), hexRgb(t->accent), hexRgb(t->onacc), t->light, id, {}, {}, {}, {}, {}, {}, {}};
+        ThemeColors c{hexRgb(t->bg), hexRgb(t->fg), hexRgb(t->muted), hexRgb(t->card), hexRgb(t->line), hexRgb(t->accent), hexRgb(t->onacc), t->light, id, {}, {}, {}, {}, {}, {}, {}, {}};
         c.style = themeStyle(id);
         const ThemeStyle& s = c.style;
+        if (s.accent.set) c.accent = s.accent.c;                                            // 0.14 stage 2: Light's readable accent (the web's is 4.24:1 on its page)
         // what used to be written into the drawing code: the same numbers as before unless the theme says otherwise
         c.accentFill = s.accentFill.set ? s.accentFill.c : c.accent;
         c.danger = s.danger.set ? s.danger.c : Rgb{0.90f, 0.35f, 0.30f};                  // error messages (Save image, the benchmark)
@@ -149,6 +150,7 @@ ThemeColors themeColors(const std::string& id0, bool systemLight) {
         c.onDanger = s.onDanger.set ? s.onDanger.c : Rgb{1, 1, 1};
         c.soft = s.soft.set ? s.soft.c : Rgb{120 / 255.f, 140 / 255.f, 200 / 255.f};        // the faint blue tint behind illustrations, bars and the Learn cards
         c.neutral = s.neutral.set ? s.neutral.c : Rgb{128 / 255.f, 128 / 255.f, 128 / 255.f};   // the grey of tracks, frames and boxes
+        c.button = s.button.set ? s.button.c : c.card;                                      // the face of a button (0.14 stage 2: Aero's aqua jelly, Y2K's silver)
         return c;
     }
     return themeColors("dark", false);

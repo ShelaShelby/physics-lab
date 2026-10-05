@@ -358,7 +358,7 @@ void benchmarkButton(AppState& app) {
     if (why) ImGui::BeginDisabled();
     if (ImGui::Button("Benchmark...")) { st(app).stage = BenchState::Stage::Ask; }
     if (why) ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", why ? why : "Runs fixed scenes and gives numbers to compare between runs and PCs");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("%s", why ? why : "Runs fixed scenes and gives numbers to compare between runs and PCs");
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::TextWrapped("A test of about %d seconds: it measures how fast the app draws, to compare between PCs or versions.", int(scenes().size() * (app::kBenchWarmupS + app::kBenchMeasureS)));
     ImGui::PopStyleColor();
@@ -498,13 +498,13 @@ void benchmarkWindow(AppState& app) {
             ImGui::Spacing();
             for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[list[i]].info.name);
             ImGui::Checkbox("Include stress scenes (3 extra, much heavier)", &b.includeStress);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
+            if (ImGui::IsItemHovered()) ui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
             {   // the number is counted, not typed: it was "11" in 0.10.6 and the list has grown since
                 char riskLabel[96];
                 std::snprintf(riskLabel, sizeof riskLabel, "Include speed-risk scenes (%d extra)", atom::kBenchAtomScenes - atom::kBenchFirstRisk + 2);   // (+ the two Orbit Lab twins of scenes 1 and 6, 0.13 stage 4; the chart twins are in kBenchAtomScenes)
                 ImGui::Checkbox(riskLabel, &b.includeRisk);
             }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("The Atom Lab's heaviest paths, each with its settings in its name: phase colours with Classic dots, a cloud jump, a superposition, the 90 %% outline (first use, and with the cut dragged) and the nucleus view. "
+            if (ImGui::IsItemHovered()) ui::SetTooltip("The Atom Lab's heaviest paths, each with its settings in its name: phase colours with Classic dots, a cloud jump, a superposition, the 90 %% outline (first use, and with the cut dragged) and the nucleus view. "
                                                           "Look at the Worst column: these are about stutter, which the average hides.");
             ImGui::Spacing();
             ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "

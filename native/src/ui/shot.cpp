@@ -28,7 +28,7 @@ void shotButton(AppState& app, bool sameLine) {
         if (ImGui::GetItemRectMax().x + st.ItemSpacing.x + w <= right) ImGui::SameLine();
     }
     if (ImGui::Button((label + "###shot").c_str())) s.requested = true;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", app::kShotTitle);
+    if (ImGui::IsItemHovered()) ui::SetTooltip("%s", app::kShotTitle);
 }
 
 void shotNote(AppState& app) {

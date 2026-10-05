@@ -403,6 +403,11 @@ int main(int, char**) {
         app.atom.reducedMotion = ui::look().reduced;
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
+        {   // for automatic checks: PL_MOUSE=x,y puts the pointer there every frame (a hovered button, a tooltip); a mouse that is really used is not affected
+            static const char* mouse = SDL_getenv("PL_MOUSE");
+            float mx = 0, my = 0;
+            if (mouse && std::sscanf(mouse, "%f,%f", &mx, &my) == 2) ImGui::GetIO().AddMousePosEvent(mx, my);
+        }
         ImGui::NewFrame();
         ui::header(app);                                // across the top: title, subtitle and the app's buttons
         headerH = ui::headerHeight();

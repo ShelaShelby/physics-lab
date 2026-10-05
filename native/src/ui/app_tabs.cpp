@@ -288,7 +288,7 @@ void factsLine(AppState& app) {
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const bool clicked = ImGui::InvisibleButton("##dyk", ImVec2(W, h));
     const bool hover = ImGui::IsItemHovered();
-    if (hover) { ImGui::SetMouseCursor(ImGuiMouseCursor_Hand); ImGui::SetTooltip("%s", app::kDykTip); }
+    if (hover) { ImGui::SetMouseCursor(ImGuiMouseCursor_Hand); ui::SetTooltip("%s", app::kDykTip); }
     if (hover != g_held) { g_held = hover; if (g_held) g_next = DBL_MAX; else if (g_fadeAt < 0) sched(app); }
     if (clicked) { if (gift) openSecret(app, 1); else if (g_fadeAt < 0) showNext(app); }
     ImDrawList* dl = ImGui::GetWindowDrawList();

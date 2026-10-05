@@ -103,7 +103,7 @@ struct ComboItem { const char* name; const char* note; };
 bool shortCombo(const char* id, int* cur, std::initializer_list<ComboItem> items) {
     bool changed = false;
     ImGui::SetNextItemWidth(-1);
-    if (ImGui::BeginCombo(id, items.begin()[*cur].name)) {
+    if (ui::BeginCombo(id, items.begin()[*cur].name)) {
         int i = 0;
         for (const ComboItem& it : items) {
             if (ImGui::Selectable(it.name, *cur == i)) { *cur = i; changed = true; }
@@ -124,13 +124,13 @@ bool shortCombo(const char* id, int* cur, std::initializer_list<ComboItem> items
 void performanceCard(AppState& app) {
     ImGui::SeparatorText("Performance");
     wrappedCheckbox("VSync (wait for the screen)", &app.vsync);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
     if (app.lab == 0) {                                   // 0.13 stage 4: who places the belts' rocks: the line says what this PC has, the switch compares the two ways
         ImGui::TextWrapped("%s", app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks).c_str());
         ImGui::BeginDisabled(!app.rocksOk);
         wrappedCheckbox("GPU rocks (OpenGL 4.3)", &app.set.gpuRocks);
         ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("On (the default, needs OpenGL 4.3): the places of the belts' rocks (Kepler's equation for every rock, and where it lands on the picture) are worked out by a compute shader on the graphics card; "
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): the places of the belts' rocks (Kepler's equation for every rock, and where it lands on the picture) are worked out by a compute shader on the graphics card; "
                                                       "the processor only sends the time and the camera.\n"
                                                       "Off, or on a PC without OpenGL 4.3: the processor does it rock by rock, as versions up to 0.13 stage 3 did.\n"
                                                       "The picture is the same either way (tested to a few thousandths of a point); only the speed differs, and it is expected, not yet measured, to be better On.\n"
@@ -141,7 +141,7 @@ void performanceCard(AppState& app) {
         ImGui::BeginDisabled(!app.computeOk);
         wrappedCheckbox("GPU superposition and jumps (OpenGL 4.3)", &app.atom.gpuCompute);
         ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("On (the default, needs OpenGL 4.3): for a superposition or a photon jump, a compute shader on the graphics card works out which dots are shown and their colours;\n"
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): for a superposition or a photon jump, a compute shader on the graphics card works out which dots are shown and their colours;\n"
                                                       "Off, or on a PC without OpenGL 4.3: the processor does it dot by dot, as versions up to 0.13 stage 1 did.\n"
                                                       "The picture is the same either way (tested, except a rare dot within rounding of a threshold); only the speed differs, and it is expected, not yet measured, to be better On.\n"
                                                       "Used for comparing on your PC with the benchmark's scenes 11, 13, 14, 15 and 25 to 28. Not saved: it is On again at the next start.");
@@ -149,7 +149,7 @@ void performanceCard(AppState& app) {
         ImGui::BeginDisabled(!app.computeOk);
         wrappedCheckbox("GPU outline (OpenGL 4.3)", &app.atom.gpuOutline);
         ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("On (the default, needs OpenGL 4.3): the 90 %% outline's density grid and its 90 %% level (and, in the Slice view, the cut's contour) are made by compute shaders\n"
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): the 90 %% outline's density grid and its 90 %% level (and, in the Slice view, the cut's contour) are made by compute shaders\n"
                                                       "on the graphics card, without the picture waiting for them: the outline appears a frame or two after it is switched on, instead of a half-frame hitch.\n"
                                                       "Off, or on a PC without OpenGL 4.3: the processor makes it (about 30 ms the first time for each orbital).\n"
                                                       "The outline is the same either way (tested, except a line a hair's breadth off where a cell is within rounding of the level); only the speed differs, and it is expected, not yet measured, to be better On.\n"
@@ -157,7 +157,7 @@ void performanceCard(AppState& app) {
     }
     if (app.lab == 1) {                                   // the Atom Lab's cloud dots: who picks the phase colours (0.13 stage 1). A debug switch for comparing on a real PC; not saved
         wrappedCheckbox("GPU colours (Atom Lab cloud dots)", &app.atom.gpuColours);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On (the default): each dot of the electron cloud carries its colour number and the graphics card picks the colour.\n"
+        if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default): each dot of the electron cloud carries its colour number and the graphics card picks the colour.\n"
                                                       "Off: the processor colours every dot, going over all dots once per colour, as versions up to 0.12 did.\n"
                                                       "The picture is the same either way (tested); only the speed differs, and it is expected, not yet measured, to be better On.\n"
                                                       "Used for comparing on your PC with the benchmark's scenes 8 and 23, 10 and 24. Not saved: it is On again at the next start.");
@@ -168,7 +168,7 @@ void performanceCard(AppState& app) {
         ImGui::Text("Frame: %.2f ms   average %.2f ms", st.last(), avg);
         ImGui::Text("= %.0f fps on average   worst %.2f ms", avg > 0 ? 1000.0f / avg : 0.0f, st.worst());
         ImGui::Text("Work per frame (CPU): %.2f ms", st.avgWork());
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Time to run the physics and build the frame, before waiting for the screen.\nThe graphics card may still be drawing after this.");
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Time to run the physics and build the frame, before waiting for the screen.\nThe graphics card may still be drawing after this.");
         float hist[FrameStats::kHistory];
         st.ordered(hist);
         ImGui::PlotLines("##frametimes", hist, FrameStats::kHistory, 0, "frame time, last 240 frames", 0.0f, std::max(2 * avg, 1.0f), ImVec2(-1, 50));
@@ -177,7 +177,7 @@ void performanceCard(AppState& app) {
         const app::LiveStats& lv = app.live;
         if (lv.frames == 0) ImGui::TextDisabled("Window drag / resize: no frames drawn during one yet");
         else ImGui::TextDisabled("Window drag / resize: %ld frames drawn during %d drags, longest gap %.0f ms", lv.frames, lv.drags, lv.worstGapMs);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("While you hold or drag the window's title bar or edge, Windows pauses the app's own loop.\n"
+        if (ImGui::IsItemHovered()) ui::SetTooltip("While you hold or drag the window's title bar or edge, Windows pauses the app's own loop.\n"
                                                       "Frames drawn in that time are counted here (the longest time between two of them, and the longest pause before the first: %.0f ms).\n"
                                                       "If the picture or the fps counter still freezes while you drag, and this stays at 0, tell Alex.", lv.leadInMs);
     }
@@ -240,7 +240,7 @@ void orbitPanel(AppState& app, float width) {
         if (app.set.realPlanets) {                          // Real only: general relativity for the planets
             wrappedCheckbox("General relativity (1PN)", &app.set.relativity);
             if (ImGui::IsItemHovered()) {
-                ImGui::BeginTooltip();
+                ui::BeginTooltip();
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
                 const std::string tip = "Adds Einstein's correction to the Sun's pull on each planet, so Mercury's orbit turns a little more each time round: about 43 arcseconds per century, as measured.\n\n"
                                         "It is a first-order (1PN) approximation, made with one simple extra potential of the Sun (Nobili & Roxburgh, 1986). It gets the turning of the orbit right, "
@@ -254,7 +254,7 @@ void orbitPanel(AppState& app, float width) {
             }
             wrappedCheckbox("Exaggerate the Sun's wobble (×50)", &app.set.exaggerateWobble);
             if (ImGui::IsItemHovered()) {
-                ImGui::BeginTooltip();
+                ui::BeginTooltip();
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
                 ImGui::TextUnformatted("The Sun is not fixed: it circles the balance point of the Solar System (the barycentre, the marked point), mostly because of Jupiter's pull. "
                                        "The real circle is smaller than about two Sun radii, far too small to see here.\n\n"
@@ -278,7 +278,7 @@ void orbitPanel(AppState& app, float width) {
     {
         int v3 = app.set.view3D ? 1 : 0;
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##view", &v3, "2D (top-down)\0" "3D (rotatable)\0")) app.set.view3D = v3 == 1;
+        if (ui::Combo("##view", &v3, "2D (top-down)\0" "3D (rotatable)\0")) app.set.view3D = v3 == 1;
     }
     if (app.set.view3D) {
         if (wideButton(app.view.panMode ? "✥ Drag moves the view" : "⟲ Drag rotates the view")) app.view.panMode = !app.view.panMode;   // full width: it does not fit half a row at big text sizes
@@ -398,7 +398,7 @@ void orbitPanel(AppState& app, float width) {
                 if (b.type == BodyKind::Dwarf) app.set.dwarfs = true;
                 fly(s, ts2 ? zoomFor(app, b.moons[j].data->aKm, 0.34 * std::min(app.canvasW, app.canvasH)) : easyZoom(b.name));   // true scale: fit the moon's orbit
             }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s · moon of %s", b.moons[j].data->name, b.name.c_str());
+            if (ImGui::IsItemHovered()) ui::SetTooltip("%s · moon of %s", b.moons[j].data->name, b.name.c_str());
             next();
         }
     newRow();

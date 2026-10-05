@@ -50,32 +50,32 @@ void elemBar(AppState& app) {
     AtomLab& L = app.atom;
     auto goZ = [&](int z) { z = std::max(1, std::min(118, z)); L.setParam("Z", z); L.setParam("N", defaultN(z)); };
     if (ui::Button("◀")) goZ(L.p.Z - 1);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("previous element");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("previous element");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x - 8 * S());
     auto label = [](int z) { return std::to_string(z) + " · " + name(z) + " (" + symbol(z) + ")"; };
-    if (ImGui::BeginCombo("##elem", label(L.p.Z).c_str())) {
+    if (ui::BeginCombo("##elem", label(L.p.Z).c_str())) {
         for (int z = 1; z <= 118; z++) if (ImGui::Selectable(label(z).c_str(), z == L.p.Z)) goZ(z);
         ImGui::EndCombo();
     }
     ImGui::SameLine();
     if (ui::Button("▶")) goZ(L.p.Z + 1);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("next element");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("next element");
     ImGui::TextDisabled("Neutrons");
     ImGui::SameLine();
     const auto r = nRange(L.p.Z);
     if (ui::Button("−")) L.setParam("N", std::max(r.first, std::min(r.second, L.p.N - 1)));
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("one fewer neutron");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("one fewer neutron");
     ImGui::SameLine();
     ImGui::PushFont(fonts().bold, 0.0f);
     ImGui::Text("%s-%d", name(L.p.Z), L.p.Z + L.p.N);
     ImGui::PopFont();
     ImGui::SameLine();
     if (ui::Button("+")) L.setParam("N", std::max(r.first, std::min(r.second, L.p.N + 1)));
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("one more neutron");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("one more neutron");
     ImGui::SameLine();
     if (ui::Button("usual")) L.setParam("N", defaultN(L.p.Z));
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("the usual isotope");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("the usual isotope");
     ImGui::Separator();
 }
 
@@ -107,7 +107,7 @@ void lookGuide(AppState& app) {
         ImGui::SameLine();
         ImGui::PushID(int(i));
         if (ImGui::SmallButton("↑")) app.atomLearnJump = "bar";
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Back to the list of headings");
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the list of headings");
         ImGui::PopID();
         htmlView(secs[i].html);
     }
@@ -182,7 +182,7 @@ void timelineGuide(AppState& app) {
 
 void atomHelpButton(AppState& app) {
     if (wideButton(displayable("❓ What am I even looking at?").c_str(), "atomHelp")) { app.atomLearn = 1; app.atomLearnJump = "top"; }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("A plain-words guide to the atom on screen");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("A plain-words guide to the atom on screen");
 }
 
 void atomLearnButtons(AppState& app) {

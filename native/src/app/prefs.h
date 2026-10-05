@@ -65,7 +65,7 @@ Rgb hexRgb(const std::string& hex);               // "#1e1e21" or "#fff"
 //   soft        the faint tint behind illustrations and bars;  neutral  the grey of tracks and frames
 struct ThemeColors {
     Rgb bg, fg, muted, card, line, accent, onacc; bool light; std::string id;
-    Rgb accentFill{0, 0, 0}, danger{0, 0, 0}, dangerFill{0, 0, 0}, onDanger{0, 0, 0}, soft{0, 0, 0}, neutral{0, 0, 0};
+    Rgb accentFill{0, 0, 0}, danger{0, 0, 0}, dangerFill{0, 0, 0}, onDanger{0, 0, 0}, soft{0, 0, 0}, neutral{0, 0, 0}, button{0, 0, 0};   // button: the face of a button (0.14 stage 2; the card colour unless the theme says otherwise)
     ThemeStyle style;
 };
 // The colours of a theme. Auto follows Windows' light or dark setting (the web's device setting).

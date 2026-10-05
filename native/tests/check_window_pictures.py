@@ -63,7 +63,7 @@ def main():
         ok = n > 0 and bad <= 0.0003 * n and worst <= 40
         print(f"{'ok  ' if ok else 'FAIL'} {label}: {bad} of {n} pixels differ (worst {worst}/255)")
         if not ok: problems += 1
-    for theme in ("aero", "dark", "light"):
+    for theme in ("aero", "y2kice", "y2knight", "dark", "light"):
         guide_a, ra = run(binary, work, f"guide_pic_{theme}", theme, {"PL_LEARN": "1"})
         guide_b, rb = run(binary, work, f"guide_learn_{theme}", theme, {"PL_LEARN": "1", "PL_PANE": "1"})
         win = [k for k, v in ra.items() if v[4] == "floating"]

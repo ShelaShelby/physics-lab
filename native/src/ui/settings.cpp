@@ -344,7 +344,7 @@ void themeButton(AppState& app) {
         if (ImGui::Selectable("##t", on, 0, ImVec2(cardW, cardH)) && !locked) { app.prefs.theme = t.id; ImGui::CloseCurrentPopup(); }
         if (locked) ImGui::EndDisabled();
         const std::string sub = locked ? app::kThemeLocked[lockedIdx] : t.sub;
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", displayable(sub).c_str());
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("%s", displayable(sub).c_str());
         ImGui::PopID();
         // the colour dot: the theme's background with its accent; Auto is half light, half dark
         const ImVec2 c(p.x + pad + dot / 2, p.y + cardH / 2);
@@ -373,7 +373,7 @@ void themeButton(AppState& app) {
 void defaultsButton(AppState& app) {
     if (app.lab == 1) {
         if (ui::Button("Defaults")) ImGui::OpenPopup("Put Atom Lab back?");
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Put this lab's settings back to how they started");
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Put this lab's settings back to how they started");
         ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
         if (ImGui::BeginPopupModal("Put Atom Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
             panelDecor(app::PanelKind::Floating);
@@ -390,7 +390,7 @@ void defaultsButton(AppState& app) {
         return;
     }
     if (ui::Button("Defaults")) ImGui::OpenPopup("Put Orbit Lab back?");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Put this lab's settings back to how they started");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("Put this lab's settings back to how they started");
     ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
     if (ImGui::BeginPopupModal("Put Orbit Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
         panelDecor(app::PanelKind::Floating);

@@ -135,7 +135,7 @@ void sliderRow(AppState& app, const char* key, const std::string& label, const s
     const float bw = ImGui::GetFrameHeight();
     if (plusMinus) {
         if (ui::Button("−", ImVec2(bw, 0))) app.atom.setParam(key, v - step);
-        if (ImGui::IsItemHovered() && what) ImGui::SetTooltip("one fewer %s", what);
+        if (ImGui::IsItemHovered() && what) ui::SetTooltip("one fewer %s", what);
         ImGui::SameLine();
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - bw - ImGui::GetStyle().ItemSpacing.x);
     } else ImGui::SetNextItemWidth(-1);
@@ -149,7 +149,7 @@ void sliderRow(AppState& app, const char* key, const std::string& label, const s
     if (plusMinus) {
         ImGui::SameLine();
         if (ui::Button("+", ImVec2(bw, 0))) app.atom.setParam(key, v + step);
-        if (ImGui::IsItemHovered() && what) ImGui::SetTooltip("one more %s", what);
+        if (ImGui::IsItemHovered() && what) ui::SetTooltip("one more %s", what);
     }
     ImGui::PopID();
 }
@@ -181,7 +181,7 @@ int periodicTable(int sel, float cellH, bool big) {
         ImGui::PushID(Z);
         if (ImGui::InvisibleButton("el", ImVec2(cw, ch))) clicked = Z;
         const bool hov = ImGui::IsItemHovered();
-        if (hov) ImGui::SetTooltip("%s", displayable(cellTip(Z)).c_str());
+        if (hov) ui::SetTooltip("%s", displayable(cellTip(Z)).c_str());
         ImGui::PopID();
         const int hue = categoryHue(Z);
         const bool on = Z == sel, rad = !hasStable(Z);
@@ -721,7 +721,7 @@ void atomPanel(AppState& app, float width) {
     defaultsButton(app);
     ImGui::SameLine();
     if (ui::Button("Reset")) L.restart();                  // the web's Reset: a fresh atom, the same settings
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Restart this lab's simulation");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("Restart this lab's simulation");
     shotButton(app, true);                                    // the web's 📷 Save image
     shotNote(app);
     if (wideButton(app.paused ? "▶ Play" : "❚❚ Pause")) app.paused = !app.paused;
@@ -734,7 +734,7 @@ void atomPanel(AppState& app, float width) {
         const int z = periodicTable(p.Z, 26 * S(), false);
         if (z) pickElement(app, z);
         if (ui::Button(displayable("⤢ Bigger table").c_str())) app.bigTable = true;
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Open the periodic table large, with bigger buttons");
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Open the periodic table large, with bigger buttons");
         mutedWrapped(isotopeLine(p.Z, p.N), 12.0f / 16);
         ImGui::Dummy(ImVec2(0, 4 * S()));
         elementCard(p.Z);
@@ -753,7 +753,7 @@ void atomPanel(AppState& app, float width) {
         for (int i = 0; i < int(fam.size()); i++) if (fam[i].Z == p.Z && fam[i].N == p.N) cur = i;
         auto famName = [&](int i) { return std::string(name(fam[i].Z)) + "-" + std::to_string(fam[i].Z + fam[i].N) + " · " + fam[i].why; };
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##famous", cur < 0 ? "Pick one…" : famName(cur).c_str())) {
+        if (ui::BeginCombo("##famous", cur < 0 ? "Pick one…" : famName(cur).c_str())) {
             for (int i = 0; i < int(fam.size()); i++)
                 if (ImGui::Selectable(famName(i).c_str(), i == cur)) { L.setParam("Z", fam[i].Z); L.setParam("N", fam[i].N); }
             ImGui::EndCombo();
@@ -942,7 +942,7 @@ void atomPanel(AppState& app, float width) {
     // ---- Performance ----
     performanceCard(app);
     ImGui::TextDisabled("Picture: %d draw calls, %d instanced shapes", app.drawCalls, app.drawInstances);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Cloud dots, glows and gluon-field particles are drawn as instanced shapes,\na few draw calls for thousands of them.");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("Cloud dots, glows and gluon-field particles are drawn as instanced shapes,\na few draw calls for thousands of them.");
 
     // a slider or button held down: the decay clock waits (the web's PL_HOLD)
     L.hold = ImGui::IsAnyItemActive() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);

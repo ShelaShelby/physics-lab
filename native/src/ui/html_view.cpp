@@ -1,4 +1,5 @@
 #include "html_view.h"
+#include "style_draw.h"
 
 #include <algorithm>
 #include <cctype>
@@ -166,7 +167,7 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
                 dl->AddLine(ImVec2(at.x, at.y + sz + 1), ImVec2(at.x + wt, at.y + sz + 1), lc);
                 if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, ImVec2(at.x + w, at.y + sz + 2))) {
                     ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                    ImGui::SetTooltip("%s", r.href.c_str());
+                    ui::SetTooltip("%s", r.href.c_str());
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) SDL_OpenURL(r.href.c_str());
                 }
             } else dl->AddText(font, sz, at, r.bold && !forceBold ? boldCol : col, word.c_str());

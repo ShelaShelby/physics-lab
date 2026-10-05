@@ -23,6 +23,8 @@ const char* loadFonts(float sizePixels);
 const Fonts& fonts();                                   // the family in use
 const Fonts& fontFamily(const std::string& key);        // any family (the Settings samples)
 bool fontFamilyAvailable(const std::string& key);
+float titleFontScale();                                 // 1, or less for a wide display font so a title still fits
+ImFont* titleFont();                                    // 0.14 stage 2: the font of window titles and the app name: the theme's display font if it has one and it is built in, else the bold face
 void useFontFamily(const std::string& key);             // switch the whole app's text (call before NewFrame)
 
 // The text without characters the font cannot draw (such as an emoji the system font lacks),

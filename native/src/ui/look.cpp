@@ -246,6 +246,8 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     k[ImGuiCol_TitleBg] = vec(c.card);
     k[ImGuiCol_TitleBgActive] = vec(mix(c.card, c.accentFill, 0.15f));
     k[ImGuiCol_TitleBgCollapsed] = vec(c.card);
+    if (ts.panel.title.set)                                   // 0.14 stage 2: one flat colour that ui/style_draw.cpp finds and paints over with the bar's gradient (all three states)
+        k[ImGuiCol_TitleBg] = k[ImGuiCol_TitleBgActive] = k[ImGuiCol_TitleBgCollapsed] = vec(ts.panel.title.top);
     k[ImGuiCol_MenuBarBg] = vec(c.card);
     k[ImGuiCol_ScrollbarBg] = vec(c.bg);
     k[ImGuiCol_ScrollbarGrab] = vec(c.line);
@@ -254,9 +256,9 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     k[ImGuiCol_CheckMark] = vec(c.accent);
     k[ImGuiCol_SliderGrab] = vec(mix(c.accent, c.fg, 0.1f));
     k[ImGuiCol_SliderGrabActive] = vec(mix(c.accent, c.fg, 0.2f));
-    k[ImGuiCol_Button] = vec(c.card);
-    k[ImGuiCol_ButtonHovered] = vec(mix(c.card, c.accent, ts.widget.hoverTint));
-    k[ImGuiCol_ButtonActive] = vec(mix(c.card, c.accent, ts.widget.pressTint));
+    k[ImGuiCol_Button] = vec(c.button);                       // the card colour unless the theme has its own face colour (Aero's aqua, Y2K's silver)
+    k[ImGuiCol_ButtonHovered] = vec(mix(c.button, c.accent, ts.widget.hoverTint));
+    k[ImGuiCol_ButtonActive] = vec(mix(c.button, c.accent, ts.widget.pressTint));
     k[ImGuiCol_Header] = vec(mix(c.card, c.accentFill, 0.15f));
     k[ImGuiCol_HeaderHovered] = vec(mix(c.card, c.accentFill, 0.25f));
     k[ImGuiCol_HeaderActive] = vec(mix(c.card, c.accentFill, 0.4f));

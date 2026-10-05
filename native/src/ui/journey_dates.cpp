@@ -1,4 +1,5 @@
 #include "fonts.h"
+#include "style_draw.h"
 #include "journey_dates.h"
 
 #include <algorithm>
@@ -151,7 +152,7 @@ void journeyDatesCard(AppState& app, bool wasActive) {
         if (app.journey.active) journeyStop(app);
         else if (!wasActive) journeyStart(app);   // this click already stopped a running Journey
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("An automatic trip that zooms out, step by step, from Earth to the centre of our galaxy.\nTouch anything to stop it; your view and settings come back.");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("An automatic trip that zooms out, step by step, from Earth to the centre of our galaxy.\nTouch anything to stop it; your view and settings come back.");
     ImGui::TextUnformatted("Jump to a date (Greenwich time)");
     const float w = ImGui::GetContentRegionAvail().x;
     ImGui::SetNextItemWidth(w * 0.42f);
@@ -186,7 +187,7 @@ void journeyDatesCard(AppState& app, bool wasActive) {
                 if (parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = jumpToDate(app, ms);
             }
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", jumps[i].tip);
+        if (ImGui::IsItemHovered()) ui::SetTooltip("%s", jumps[i].tip);
     }
     ImGui::TextWrapped("%s", app.dateNote.empty() ? datePickHint() : app.dateNote.c_str());
 }

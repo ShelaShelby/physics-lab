@@ -57,6 +57,17 @@ std::string fontFamilyKeyOf(const ThemeStyle& s);                  // the family
 // default family (Paper: serif, Monochrome: mono); else "auto". A family that does not exist falls back to "auto" in ui/fonts.cpp as well.
 std::string fontKeyFor(const ThemeStyle& s, const std::string& userFont, bool themeFontFound);
 
+// ---- 0.14 stage 2: Aero's real look and the Y2K themes ----
+// The colour of a title bar at y (0 top .. 1 bottom): the gradient from top to bottom, with the white shine band over its upper part (what ui/style_draw.cpp paints).
+Rgb titleBarAt(const TitleStyle& t, float y);
+float pageFxTotal(const PageFx& fx);                                // clouds + bubbles + grain + halftone + grid, capped at 1: the most the page moves towards `tone`
+// The extremes the page's textures can make of a page colour: the page itself, moved fully towards `tone`, towards the streak colour, and both. A text colour that
+// reads on all four reads on the page whatever the textures do (they are drawn under the glass and never over text).
+std::vector<Rgb> pageFxExtremes(const PageFx& fx, const Rgb& page);
+bool hasStage2Decor(const ThemeStyle& s);                           // any stage 2 field set: textures, title bar, rim, glow, reflection, brackets, HUD, spec label, rim / glint / brush / glow of widgets, a button colour, a title font
+// The bundled font for titles: the theme's, if it is built into the app (`available`); else "" (the titles use the normal font).
+std::string titleFontKeyFor(const ThemeStyle& s, bool available);
+
 // ---- the list of themes in the app: the web's 11 plus the native ones, in the order of the picker ----
 // Order: the web's themes that are not secret, then the native themes (Frutiger Aero), then the secret ones (so the "???" cards stay at the end).
 const std::vector<const ThemeDef*>& allThemes();

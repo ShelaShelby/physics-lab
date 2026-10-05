@@ -141,7 +141,7 @@ void lookGuide(AppState& app) {
         ImGui::SameLine();
         ImGui::PushID(i);
         if (ImGui::SmallButton("↑")) app.learnJump = "bar";
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Back to the list of headings");
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the list of headings");
         ImGui::PopID();
         std::string h = secs[i].html;
         h = fillIn(h, "{WHEN}", dateLine(app.sys));

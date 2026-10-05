@@ -18,6 +18,7 @@
 #include "imgui.h"
 #include "orbit/format.h"
 #include "ui/fonts.h"
+#include "ui/style_draw.h"
 
 namespace atom {
 
@@ -297,7 +298,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         if (flat) drawChart(R, adapter, chartColours, w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr, cache);
         else drawChartScene(R, adapter, chartColours, lab.chartScene(), w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr, cache);
         if (hz) {                                                          // the details of the square under the pointer: a tooltip (it follows the pointer, stays on screen and never hides a square)
-            ImGui::BeginTooltip();
+            ui::BeginTooltip();
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
             const std::vector<std::string> info = chartHover(hz, hn);
             for (const std::string& line : info) ImGui::TextUnformatted(ui::displayable(line, ImGui::GetFont()).c_str());
