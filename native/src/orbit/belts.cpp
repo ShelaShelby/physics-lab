@@ -1,5 +1,6 @@
 #include "belts.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "format.h"
@@ -33,6 +34,7 @@ struct RockElements {
 }  // namespace
 
 std::vector<BeltGroup> makeBelts(int64_t ms, int scale) {
+    static std::uint64_t nextSerial = 1;
     scale = scale < 1 ? 1 : scale;
     Mulberry32 R(20260929);
     const auto rnd = [&]() { return R.next(); };
@@ -45,7 +47,7 @@ std::vector<BeltGroup> makeBelts(int64_t ms, int scale) {
 
     const auto build = [&](const char* key, const char* color, int count, auto gen) {
         BeltGroup g;
-        g.key = key; g.color = color; g.n = count;
+        g.key = key; g.color = color; g.n = count; g.serial = nextSerial++;
         for (auto* v : {&g.aN, &g.a, &g.e, &g.M0, &g.libA, &g.libPh, &g.Px, &g.Py, &g.Pz, &g.Qx, &g.Qy, &g.Qz}) v->resize(count);
         for (int k = 0; k < count; k++) {
             const RockElements d = gen(k);                                   // same order of random draws as the web
@@ -97,7 +99,7 @@ std::vector<BeltGroup> makeBelts(int64_t ms, int scale) {
     });
     {   // Oort cloud: a flattened inner (Hills) cloud, 2,000–20,000 AU, and a round outer cloud, 20,000–200,000 AU
         BeltGroup g;
-        g.key = "oort"; g.color = "#8c98bb"; g.n = 3000 * scale; g.isStatic = true; g.alpha = 0.55f;
+        g.key = "oort"; g.color = "#8c98bb"; g.n = 3000 * scale; g.isStatic = true; g.alpha = 0.55f; g.serial = nextSerial++;
         g.x.resize(g.n); g.y.resize(g.n); g.z.resize(g.n);
         for (int k = 0; k < g.n; k++) {
             const bool inner = k < 800 * scale;
@@ -112,17 +114,44 @@ std::vector<BeltGroup> makeBelts(int64_t ms, int scale) {
     return groups;
 }
 
+double solveKepler(double e, double M) {
+    const double twoPi = 2 * kPi;
+    M -= twoPi * std::floor(M / twoPi + 0.5);                                // -pi .. pi
+    double E = e > 0.8 ? (M < 0 ? -kPi : kPi) : M + e * std::sin(M);
+    for (int k = 1; k <= 60; k++) {                                          // Newton's method on f(E) = E - e sin E - M
+        const double dE = (M - (E - e * std::sin(E))) / (1 - e * std::cos(E));
+        E += dE;
+        if (k >= 3 && std::fabs(dE) < 1e-9) break;
+    }
+    if (std::fabs(E - e * std::sin(E) - M) > 1e-9) {                         // safety net: bisection (f rises with E, so halving cannot miss the one root)
+        double lo = -kPi, hi = kPi;
+        for (int k = 0; k < 80; k++) { E = (lo + hi) / 2; if (E - e * std::sin(E) - M > 0) hi = E; else lo = E; }
+    }
+    return E;
+}
+
+double beltMeanMotion(const BeltGroup& g, int k) {
+    const double aN = g.aN[k] * kAU;
+    return std::sqrt(kGMSun / (aN * aN * aN));
+}
+
 Vec3 beltPoint(const BeltGroup& g, int k, double t) {
     if (g.isStatic) return {g.x[k], g.y[k], g.z[k]};
     // mean anomaly M = M0 + n·t, with n = √(GM/aN³); Trojans also sway with a 150-year period
-    const double aN = g.aN[k] * kAU;
-    double M = g.M0[k] + std::sqrt(kGMSun / (aN * aN * aN)) * t;
+    double M = g.M0[k] + beltMeanMotion(g, k) * t;
     if (g.libA[k] != 0) M += g.libA[k] * std::sin(t / kYear / 150 * 6.2832 + g.libPh[k]);
     const double e = g.e[k];
-    double E = M + e * std::sin(M);                                          // Kepler's equation, 3 Newton steps
-    for (int i = 0; i < 3; i++) E += (M - (E - e * std::sin(E))) / (1 - e * std::cos(E));
+    const double E = solveKepler(e, M);                                      // Kepler's equation (see belts.h)
     const double a = g.a[k] * kAU, xp = a * (std::cos(E) - e), yp = a * std::sqrt(1 - e * e) * std::sin(E);
     return {xp * g.Px[k] + yp * g.Qx[k], xp * g.Py[k] + yp * g.Qy[k], xp * g.Pz[k] + yp * g.Qz[k]};
+}
+
+void beltScreen(const BeltCamera& c, const Vec3& p, double& X, double& Y) {
+    const double x = p.x - c.bx, y = p.y - c.by, z = p.z - c.bz;
+    const double x1 = x * c.ca - y * c.sa, y1 = x * c.sa + y * c.ca, y2 = y1 * c.cb - z * c.sb, dep = y1 * c.sb + z * c.cb;
+    const double f = c.d3 ? c.D / std::max(c.D - (dep - c.cd), 0.05 * c.D) : 1;
+    X = c.W / 2 + x1 * c.px * f + c.ox;
+    Y = c.H / 2 - y2 * c.px * f + c.oy;
 }
 
 const char* beltTitle(const std::string& key) {

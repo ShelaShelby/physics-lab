@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <functional>
 #include <memory>
 
@@ -65,6 +66,10 @@ void orbitStress(AppState& app) {
     app.sys.belts = orbit::makeBelts(app.sys.epochMs, kStressBeltScale);
 }
 
+// 0.13 stage 4: the same two scenes with the rocks' places worked out by the CPU (GPU rocks Off): scenes 31 and 32, at the very end, to compare with scenes 1 and 6
+void orbitHeaviestCpuRocks(AppState& app) { orbitHeaviest(app); app.set.gpuRocks = false; }
+void orbitStressCpuRocks(AppState& app) { orbitStress(app); app.set.gpuRocks = false; }
+
 void atomScene(AppState& app, int which) {
     commonSetup(app);
     app.lab = 1;
@@ -85,13 +90,15 @@ const std::vector<SceneDef>& scenes() {
     static const std::vector<SceneDef> v = [] {
     std::vector<SceneDef> v = {
         {{"1. Orbit Lab, heaviest view", "3D view, belts and Oort cloud on, all Solar System extras on, full night sky with constellation lines and names, "
-                                          "far-away things on, full orbit trails, true scale, fastest time speed (1 s = about 50 years), zoom x1, fixed camera"}, orbitHeaviest},
+                                          "far-away things on, full orbit trails, true scale, fastest time speed (1 s = about 50 years), zoom x1, fixed camera. "
+                                          "From 0.13 stage 4 the rocks' places are worked out on the graphics card when the PC has OpenGL 4.3 (scene 31 is this scene with the processor doing it)"}, orbitHeaviest},
         {{"2. Atom Lab, uranium-238 nucleus", "uranium-238 (92 protons, 146 neutrons), zoomed to the whole nucleus, Cinematic quarks, + Sea detail, Fuzzy nucleons"}, atomNucleus},
         {{"3. Atom Lab, Cloud 3D", "uranium-238, Cloud 3D view, the 4f orbital (the biggest cloud), cloud style Classic, density Normal (all 12,000 dots), fixed camera"}, atomCloud},
         {{"4. Atom Lab, one nucleon", "uranium-238, Accurate quarks, + Sea detail, zoomed all the way into one nucleon (the first one)"}, atomNucleon},
         {{"5. Stress: Atom Lab, the biggest nucleus", STRESS_ATOM_WHAT}, atomStress},
         {{"6. Stress: Orbit Lab, 8 times the rocks", "scene 1 (3D, everything on, true scale, zoom x1, fastest time) with 8 times as many rocks in the asteroid belt, the Trojans, the Kuiper belt and the Oort cloud "
-                                                     "(48,000 instead of 6,000; the same kinds of orbits, a fixed random seed). The rocks do not pull on each other, so the physics is unchanged"}, orbitStress},
+                                                     "(48,000 instead of 6,000; the same kinds of orbits, a fixed random seed). The rocks do not pull on each other, so the physics is unchanged. "
+                                                     "From 0.13 stage 4 their places are worked out on the graphics card when the PC has OpenGL 4.3 (scene 32 is this scene with the processor doing it)"}, orbitStress},
         {{"7. Stress: Atom Lab, Cloud 3D, Glow, 48,000 dots", "scene 3 (uranium-238, Cloud 3D, the 4f orbital, fixed camera) with cloud style Glow (soft dots that add up) and density Ultra (48,000 dots)"}, atomCloudGlow},
     };
     static std::vector<std::string> names;               // the names with their numbers, kept alive for the const char* of the list
@@ -104,6 +111,20 @@ const std::vector<SceneDef>& scenes() {
     for (int w = atom::kBenchFirstRisk; w < atom::kBenchSceneCount; w++) {
         const int k = w - atom::kBenchFirstRisk;
         v.push_back({{names[k].c_str(), whats[k].c_str()}, [w](AppState& a) { atomRisk(a, w); }, [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); }});
+    }
+    {   // 0.13 stage 4: the Orbit Lab twins of scenes 1 and 6 with GPU rocks Off, numbered after the last Atom Lab scene (31 and 32), so no old number moved
+        static const std::string n1 = std::to_string(int(v.size()) + 1) + ". Orbit Lab, heaviest view, GPU rocks OFF (the CPU path, to compare with scene 1)";
+        static const std::string w1 = "scene 1 (3D view, belts and Oort cloud, everything on, true scale, fastest time, zoom x1) with the GPU rocks switch Off: the processor places the 6,000 rocks, as before 0.13 stage 4. Scene 1 is the same with it On";
+        v.push_back({{n1.c_str(), w1.c_str()}, orbitHeaviestCpuRocks});
+        static const std::string n2 = std::to_string(int(v.size()) + 1) + ". Stress: Orbit Lab, 8 times the rocks, GPU rocks OFF (the CPU path, to compare with scene 6)";
+        static const std::string w2 = "scene 6 (the same view with 48,000 rocks) with the GPU rocks switch Off: the processor places all 48,000 rocks. Scene 6 is the same with it On";
+        v.push_back({{n2.c_str(), w2.c_str()}, orbitStressCpuRocks});
+    }
+    for (int w = atom::kBenchChartCpuFirst; w < atom::kBenchAtomScenes; w++) {   // 0.13 stage 4 part B: scenes 19 and 20 with the GPU chart cache Off, after the Orbit Lab twins (33 and 34)
+        static std::deque<std::string> cn, cw;
+        cn.push_back(std::to_string(int(v.size()) + 1) + ". " + atom::benchSceneInfo(w).name);
+        cw.push_back(atom::benchSceneInfo(w).what);
+        v.push_back({{cn.back().c_str(), cw.back().c_str()}, [w](AppState& a) { atomRisk(a, w); }, [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); }});
     }
     return v;
     }();
@@ -256,6 +277,7 @@ void begin(AppState& app) {
     const char* s = reinterpret_cast<const char*>(plgl::glGetString(GL_RENDERER)); e.gpu = s ? s : "";
     s = reinterpret_cast<const char*>(plgl::glGetString(GL_VERSION)); e.glVersion = s ? s : "";
     s = reinterpret_cast<const char*>(plgl::glGetString(GL_VENDOR)); e.vendor = s ? s : "";
+    e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks);   // (scenes 1 and 6 are the ones it changes: the benchmark's own settings below start from the defaults, so it is On)
     e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline);   // (scenes 16 and 17 are the ones it changes)
     e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute);   // which way the Atom Lab's superposition and jumps run (scenes 11 to 15 are the ones it changes)
     const ImGuiIO& io = ImGui::GetIO();
@@ -473,7 +495,7 @@ void benchmarkWindow(AppState& app) {
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
             {   // the number is counted, not typed: it was "11" in 0.10.6 and the list has grown since
                 char riskLabel[96];
-                std::snprintf(riskLabel, sizeof riskLabel, "Include Atom Lab speed-risk scenes (%d extra)", atom::kBenchSceneCount - atom::kBenchFirstRisk);
+                std::snprintf(riskLabel, sizeof riskLabel, "Include speed-risk scenes (%d extra)", atom::kBenchAtomScenes - atom::kBenchFirstRisk + 2);   // (+ the two Orbit Lab twins of scenes 1 and 6, 0.13 stage 4; the chart twins are in kBenchAtomScenes)
                 ImGui::Checkbox(riskLabel, &b.includeRisk);
             }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("The Atom Lab's heaviest paths, each with its settings in its name: phase colours with Classic dots, a cloud jump, a superposition, the 90 %% outline (first use, and with the cut dragged) and the nucleus view. "
@@ -497,6 +519,7 @@ void benchmarkWindow(AppState& app) {
             ImGui::TextWrapped("%s, %s, OpenGL %s", b.env.gpu.c_str(), b.env.vendor.c_str(), b.env.glVersion.c_str());
             ImGui::TextWrapped("Atom Lab superposition and jumps: %s", b.env.computePath.c_str());
             ImGui::TextWrapped("Atom Lab 90 %% outline: %s", b.env.outlinePath.c_str());
+            ImGui::TextWrapped("Orbit Lab rocks: %s", b.env.rocksPath.c_str());
             ImGui::TextWrapped("Window %d x %d, picture %d x %d pixels%s", b.env.windowW, b.env.windowH, b.env.pictureW, b.env.pictureH, b.env.fullscreen ? ", full screen" : "");
             ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, vec(look().c.line));      // the header row in the theme's colours (the default is dark on every theme)
             const bool table = ImGui::BeginTable("##benchtable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp);

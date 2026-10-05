@@ -16,6 +16,7 @@ int baseScene(int which) {
     if (which == kBenchJumpCpuScene) return 8;
     if (which >= kBenchSuperCpuFirst && which < kBenchOutlineCpuFirst) return 10 + (which - kBenchSuperCpuFirst);
     if (which >= kBenchOutlineCpuFirst && which < kBenchSceneCount) return 13 + (which - kBenchOutlineCpuFirst);
+    if (which >= kBenchChartCpuFirst && which < kBenchAtomScenes) return 16 + (which - kBenchChartCpuFirst);   // 28, 29: scenes 19 and 20 (which 16, 17)
     return which;
 }
 void fresh(AtomLab& L, int Z, int N, double w, double h) {
@@ -27,6 +28,7 @@ void fresh(AtomLab& L, int Z, int N, double w, double h) {
     L.chain.clear(); L.paused = false; L.hold = false;
     L.gpuColours = true;                                 // the default (0.13 stage 1); the scenes that compare with the CPU way switch it off themselves
     L.gpuOutline = true;                                 // the default (0.13 stage 3: the outline's grid and the Slice's contour values from compute shaders, where the PC has OpenGL 4.3)
+    L.gpuChart = true;                                   // the default (0.13 stage 4 part B: the chart's tiles and blocks in a GPU buffer)
     L.gpuCompute = true;                                 // the default (0.13 stage 2: the superposition and jump colour groups from a compute shader, where the PC has OpenGL 4.3)
     L.viewW = w; L.viewH = h;
     L.setParam("Z", double(Z)); L.setParam("N", double(N));
@@ -60,14 +62,16 @@ void still(AtomLab& L) { L.s.zoomTo.reset(); L.s.panTo.reset(); L.s.pan = Vec3d{
 }  // namespace
 
 void benchSetup(AtomLab& L, int which, double w, double h) {
-    if (which == kBenchChartScene || which == kBenchLandscapeScene || which == kBenchBindingScene || which == kBenchChainScene) {   // the chart of nuclides: the whole map (flat) or the landscape (full tilt), U-238 chosen (the marker is drawn), nothing to wait for
+    const int base0 = baseScene(which);
+    if (base0 == kBenchChartScene || base0 == kBenchLandscapeScene || base0 == kBenchBindingScene || base0 == kBenchChainScene) {   // the chart of nuclides: the whole map (flat) or the landscape (full tilt), U-238 chosen (the marker is drawn), nothing to wait for
         fresh(L, 92, 146, w, h);
         L.chartReset();
+        L.gpuChart = which < kBenchChartCpuFirst;        // scenes 33 and 34 (which 28, 29) are scenes 19 and 20 with the chart drawn the old way
         L.setParam("view", std::string(kChartView));
         L.s.chartView.height = which == kBenchBindingScene ? ChartHeightMode::Binding : ChartHeightMode::HalfLife;   // (the scene says what the height means: no choice of the user's leaks in)
-        if (which != kBenchChartScene) L.setChartTilt(1);
-        L.s.showChain = which == kBenchChainScene;       // the three older chart scenes draw no chain, so they cost what they cost in 0.11; the benchmark's scene 22 (which 19) draws it
-        if (which == kBenchChainScene) {                 // the chain of uranium-238, walked five steps with a fixed seed (the same trail and the same walker every run); the walk does not move by itself
+        if (base0 != kBenchChartScene) L.setChartTilt(1);
+        L.s.showChain = base0 == kBenchChainScene;       // the three older chart scenes draw no chain, so they cost what they cost in 0.11; the benchmark's scene 22 (which 19) draws it
+        if (base0 == kBenchChainScene) {                 // the chain of uranium-238, walked five steps with a fixed seed (the same trail and the same walker every run); the walk does not move by itself
             seedRandom(20241004);
             L.walkRestart();
             for (int i = 0; i < 5; i++) L.walkOnce();
@@ -79,7 +83,7 @@ void benchSetup(AtomLab& L, int which, double w, double h) {
     if (which >= kBenchFirstRisk) {                      // the speed-risk scenes: U-238 like the benchmark's scene 3 (scene 18, which 15: oganesson-294), every setting named, nothing animated by itself
         const bool cpuColours = which == kBenchWheelCpuScene || which == kBenchWheel2DCpuScene;   // scenes 23 and 24 are scene 8 and scene 10 again with the 0.12 way of colouring
         const bool cpuCompute = which >= kBenchJumpCpuScene && which < kBenchOutlineCpuFirst;
-        const bool cpuOutline = which >= kBenchOutlineCpuFirst;               // scenes 29 and 30 are scenes 16 and 17 again with the CPU making the outline (0.13 stage 3)                  // scenes 25 to 28 are scenes 11, 13, 14, 15 again with the CPU working out the colour groups (0.13 stage 2)
+        const bool cpuOutline = which >= kBenchOutlineCpuFirst && which < kBenchChartCpuFirst;               // scenes 29 and 30 are scenes 16 and 17 again with the CPU making the outline (0.13 stage 3)                  // scenes 25 to 28 are scenes 11, 13, 14, 15 again with the CPU working out the colour groups (0.13 stage 2)
         const int sc = baseScene(which);
         const bool og = sc == 15;
         fresh(L, og ? 118 : 92, og ? 176 : 146, w, h);
@@ -157,8 +161,10 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Superposition 2p z + 3d z2 (beats), Cloud 3D, 48,000 dots, GPU superposition OFF (the CPU path, to compare with scene 15)", "exactly scene 15 with GPU superposition Off: the processor works out every dot's phase, odds and colour every frame. The DIFFERENCE between this scene and scene 15 is what the compute shader is worth on this PC. Not measured in the cloud session"},
         {"First use of an outline (cache emptied every 120 frames), Cloud 3D, 4f, 12,000 dots, GPU outline OFF (the CPU path, to compare with scene 16)", "exactly scene 16 with GPU outline Off: the processor makes the outline's 64 x 64 x 64 density grid and its 90 % level on the frame that first needs them (about 30 ms on the machine where this was measured: 13 ms for the density, 17 ms to sort the cells), as before 0.13 stage 3. The DIFFERENCE in the worst frame between this scene and scene 16 is what the compute shaders are worth on this PC; on a PC without OpenGL 4.3 the two scenes run the same way. Not measured in the cloud session"},
         {"Outline with the cut dragged, Slice view, 4f, 12,000 dots, GPU outline OFF (the CPU path, to compare with scene 17)", "exactly scene 17 with GPU outline Off: the processor makes the cut's 40,000 density values every frame. The DIFFERENCE between this scene and scene 17 is what the compute shader is worth on this PC. Not measured in the cloud session"},
+        {"The chart of nuclides, flat, GPU chart cache OFF (the 0.13 stage 3 way, to compare with scene 19)", "exactly scene 19 (the whole chart, flat, uranium-238 chosen, nothing hovered) with the GPU chart cache Off: the 3,557 squares are turned into vertices and sent to the graphics card again every frame, as up to 0.13 stage 3. Scene 19 is the same with the squares kept in a GPU buffer. The DIFFERENCE between the two is what the cache is worth on this PC. Not measured in the cloud session. Keep the pointer off the picture while it runs"},
+        {"The chart as a landscape, full tilt, GPU chart cache OFF (the 0.13 stage 3 way, to compare with scene 20)", "exactly scene 20 (the landscape at full tilt, uranium-238 chosen) with the GPU chart cache Off: the 3,557 blocks and their sides are turned into vertices and sent again every frame, as up to 0.13 stage 3. Scene 20 is the same with the blocks kept in a GPU buffer. The DIFFERENCE between the two is what the cache is worth on this PC. Not measured in the cloud session. Keep the pointer off the picture while it runs"},
     };
-    return v[std::max(kBenchFirstRisk, std::min(which, kBenchSceneCount - 1)) - kBenchFirstRisk];
+    return v[std::max(kBenchFirstRisk, std::min(which, kBenchAtomScenes - 1)) - kBenchFirstRisk];
 }
 
 void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
@@ -186,7 +192,7 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
 }
 
 std::string benchSettingsText(const AtomLab& L) {
-    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %, height " + (L.s.chartView.height == ChartHeightMode::Binding ? "binding energy per nucleon" : "half-life") + ", zoom " + std::to_string(int(std::lround(L.s.chartView.zoom * 100))) + " %, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N) + ", decay chain " + (L.s.showChain ? "drawn, walked " + std::to_string(L.s.walk.steps.size()) + " steps" : std::string("not drawn"));
+    if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %, GPU chart cache " + (L.gpuChart ? "On" : "Off") + ", height " + (L.s.chartView.height == ChartHeightMode::Binding ? "binding energy per nucleon" : "half-life") + ", zoom " + std::to_string(int(std::lround(L.s.chartView.zoom * 100))) + " %, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N) + ", decay chain " + (L.s.showChain ? "drawn, walked " + std::to_string(L.s.walk.steps.size()) + " steps" : std::string("not drawn"));
     std::string t = "view " + L.p.view + ", Orbit style " + L.p.ostyle + ", quark style " + L.p.qstyle + ", detail " + L.p.detail + ", " + L.p.style + " nucleons";
     if (L.p.view != "Orbit") {                           // the cloud views: what the cost depends on
         t += ", orbital " + L.p.orb + ", cloud style " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots, phase " + L.p.phase + ", GPU colours " + (L.gpuColours ? "On" : "Off") + ", GPU superposition " + (L.gpuCompute ? "On" : "Off") + ", GPU outline " + (L.gpuOutline ? "On" : "Off");

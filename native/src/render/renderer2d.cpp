@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstddef>
 #include <cstdlib>
 
 #include "earth_texture.h"
 #include "group_compute.h"
 #include "outline_compute.h"
+#include "rock_compute.h"
 #include "shaders.h"
 
 using namespace plgl;
@@ -161,6 +163,21 @@ bool Renderer2D::init() {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
+    {   // the retained-mesh program (the chart of nuclides): its own vertex shader, the shapes' fragment shader
+        const GLuint v = compile(GL_VERTEX_SHADER, kChartVS), f = compile(GL_FRAGMENT_SHADER, kFragmentShader);
+        meshProgram_ = glCreateProgram();
+        glAttachShader(meshProgram_, v);
+        glAttachShader(meshProgram_, f);
+        glLinkProgram(meshProgram_);
+        glDeleteShader(v);
+        glDeleteShader(f);
+        glGetProgramiv(meshProgram_, GL_LINK_STATUS, &ok);
+        if (!ok) { std::fprintf(stderr, "mesh shader link error\n"); return false; }
+        mSize_ = glGetUniformLocation(meshProgram_, "uSize");
+        mRot_ = glGetUniformLocation(meshProgram_, "uRot");
+        mCen_ = glGetUniformLocation(meshProgram_, "uCen");
+        mFit_ = glGetUniformLocation(meshProgram_, "uFit");
+    }
     glGenVertexArrays(1, &vao_);
     glGenBuffers(1, &vbo_);
     glBindVertexArray(vao_);
@@ -175,14 +192,20 @@ bool Renderer2D::init() {
     // OpenGL 4.3 (0.13 stage 2): the compute path for superpositions and jumps, if this context has it. A 3.3 context (or any failure) leaves compute_ empty: the CPU paths are used, nothing else changes.
     compute_ = makeGroupCompute();
     outline_ = makeOutlineCompute();
+    rocks_ = makeRockCompute();
     return true;
 }
 
-void Renderer2D::disableCompute() { delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; }
+void Renderer2D::disableCompute() { delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr; }
 
 void Renderer2D::shutdown() {
+    for (int i = 0; i < int(meshes_.size()); i++) meshDelete(i);
+    meshes_.clear();
+    if (meshProgram_) glDeleteProgram(meshProgram_);
+    meshProgram_ = 0;
     delete compute_; compute_ = nullptr;
     delete outline_; outline_ = nullptr;
+    delete rocks_; rocks_ = nullptr;
     if (earthTex_) glDeleteTextures(1, &earthTex_);
     if (plProgram_) glDeleteProgram(plProgram_);
     earthTex_ = plProgram_ = 0;
@@ -249,6 +272,57 @@ void Renderer2D::squares(const float* xy, int count, double size, Color c) {
     inst_.insert(inst_.end(), xy, xy + 2 * count);
 }
 
+int Renderer2D::meshCreate(const std::vector<MeshVertex>& v) {
+    int id = -1;
+    for (int i = 0; i < int(meshes_.size()); i++) if (!meshes_[std::size_t(i)].used) { id = i; break; }
+    if (id < 0) { id = int(meshes_.size()); meshes_.emplace_back(); }
+    Mesh& m = meshes_[std::size_t(id)];
+    m.used = true; m.count = static_cast<int>(v.size());
+    glGenVertexArrays(1, &m.vao);
+    glGenBuffers(1, &m.vbo);
+    glBindVertexArray(m.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m.vbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(v.size() * sizeof(MeshVertex)), v.data(), GL_STATIC_DRAW);
+    const GLsizei stride = sizeof(MeshVertex);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offsetof(MeshVertex, p0)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offsetof(MeshVertex, p1)));
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offsetof(MeshVertex, rgba)));
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(offsetof(MeshVertex, corner)));
+    for (GLuint i = 0; i < 4; i++) glEnableVertexAttribArray(i);
+    glBindVertexArray(0);
+    meshUploads_ += static_cast<long>(v.size());
+    return id;
+}
+
+void Renderer2D::meshDelete(int id) {
+    if (id < 0 || id >= int(meshes_.size()) || !meshes_[std::size_t(id)].used) return;
+    Mesh& m = meshes_[std::size_t(id)];
+    if (m.vbo) glDeleteBuffers(1, &m.vbo);
+    if (m.vao) glDeleteVertexArrays(1, &m.vao);
+    m = Mesh();
+}
+
+int Renderer2D::meshesAlive() const { int n = 0; for (const Mesh& m : meshes_) n += m.used; return n; }
+
+void Renderer2D::drawMesh(int id, int first, int count, const MeshProjection& P) {
+    if (id < 0 || id >= int(meshes_.size()) || !meshes_[std::size_t(id)].used || count <= 0) return;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::Mesh; sg.slot = id; sg.first = first; sg.count = count; sg.mp = P;
+    segments_.push_back(sg);
+}
+
+bool Renderer2D::rocksGpu(const RockSet& set, const RockFrame& f, double size, Color c) {
+    if (!rocks_ || !rocks_->ok() || set.count <= 0) return false;
+    const int slot = rocks_->slotFor(set);
+    if (slot < 0) return false;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::RocksGpu; sg.first = 0; sg.count = set.count; sg.size = static_cast<float>(size); sg.c = c; sg.slot = slot; sg.rf = f;
+    segments_.push_back(sg);
+    return true;
+}
+
 void Renderer2D::blobs(const Blob* b, int count, bool additive) { blobsPalette(b, count, additive, PhasePalette()); }
 
 void Renderer2D::blobsPalette(const Blob* b, int count, bool additive, const PhasePalette& pal) {
@@ -258,6 +332,17 @@ void Renderer2D::blobsPalette(const Blob* b, int count, bool additive, const Pha
     sg.kind = Kind::Blobs; sg.first = static_cast<int>(blobs_.size()); sg.count = count; sg.additive = additive; sg.pal = pal;
     segments_.push_back(sg);
     blobs_.insert(blobs_.end(), b, b + count);
+}
+
+void Renderer2D::blobsPaletteTake(std::vector<Blob>& b, bool additive, const PhasePalette& pal) {
+    if (b.empty()) return;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::Blobs; sg.first = static_cast<int>(blobs_.size()); sg.count = static_cast<int>(b.size()); sg.additive = additive; sg.pal = pal;
+    segments_.push_back(sg);
+    if (blobs_.empty()) blobs_.swap(b);
+    else blobs_.insert(blobs_.end(), b.begin(), b.end());
+    b.clear();
 }
 
 void Renderer2D::beginSoftLayer(float scale) {
@@ -296,7 +381,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
     lastCalls_ = 0; lastInstances_ = 0;
     for (const Segment& sg : segments_) {
         if (sg.kind != Kind::LayerBegin) lastCalls_++;
-        if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs) lastInstances_ += sg.count;
+        if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu) lastInstances_ += sg.count;
     }
     if (segments_.empty()) return;
     // Monochrome: draw into an offscreen picture first, then copy it over in grey (at the bottom of end())
@@ -395,6 +480,31 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
             glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(base + 16 * sizeof(float)));
             glDrawArraysInstanced(GL_TRIANGLES, 0, 6, sg.count);
             if (sg.additive) normalBlend();
+            continue;
+        }
+        if (sg.kind == Kind::Mesh) {
+            const Mesh& m = meshes_[std::size_t(sg.slot)];
+            if (!m.used) continue;
+            const MeshProjection& P = sg.mp;
+            glUseProgram(meshProgram_);
+            glUniform2f(mSize_, static_cast<float>(width_), static_cast<float>(height_));
+            glUniform4f(mRot_, static_cast<float>(P.cosY), static_cast<float>(P.sinY), static_cast<float>(P.cosP), static_cast<float>(P.sinP));
+            glUniform4f(mCen_, static_cast<float>(P.cx), static_cast<float>(P.cy), static_cast<float>(P.K), static_cast<float>(P.fx));
+            glUniform4f(mFit_, static_cast<float>(P.fy), P.identity ? 1.f : 0.f, P.flat ? 1.f : 0.f, 0.f);
+            glBindVertexArray(m.vao);
+            glDrawArrays(GL_TRIANGLES, sg.first, sg.count);
+            continue;
+        }
+        if (sg.kind == Kind::RocksGpu) {
+            if (!rocks_ || !rocks_->dispatch(sg.slot, sg.rf)) continue;     // the positions of every rock of this belt, on the GPU
+            glUseProgram(sqProgram_);
+            glUniform2f(sqSize_, static_cast<float>(width_), static_cast<float>(height_));
+            glUniform1f(sqSide_, sg.size);
+            glUniform4f(sqColor_, sg.c.r, sg.c.g, sg.c.b, sg.c.a);
+            glBindVertexArray(sqVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, rocks_->positionsBuffer(sg.slot));
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), reinterpret_cast<void*>(0));
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, sg.count);
             continue;
         }
         if (sg.kind == Kind::Planet) {

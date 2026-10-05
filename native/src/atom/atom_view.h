@@ -9,6 +9,7 @@
 
 #include "app/prefs.h"
 #include "atom_sim.h"
+#include "chart_draw.h"
 #include "outline.h"
 #include "render/renderer2d.h"
 
@@ -34,7 +35,9 @@ private:
     std::vector<int> qset_;                // nucleons that show their quarks (web: s.qset), in the order they were added
     std::vector<float> qf_;                // how far each nucleon's quarks have faded in (web: s.qf)
     double qNow_ = 0;
+    ChartCache chartCache_;                // the chart's tiles / blocks and ground on the GPU (0.13 stage 4 part B); only used while lab.gpuChart is on
     SliceContour olSlice_;                 // the 90 % outline in the Slice view: kept until the orbital, the plane or the cut changes; with the GPU (0.13 stage 3) made by a compute job and a frame behind the cut (outline.h)
+    std::vector<render::Renderer2D::Blob> blobs_;   // the blobs of one frame, kept so their buffer is not allocated again every frame (0.13 stage 4 part C)
     double cloudExpo_ = 0;                 // the cloud's exposure (Glow), smoothed over frames; 0 = not set yet
 };
 

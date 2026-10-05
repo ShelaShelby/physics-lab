@@ -54,10 +54,18 @@ inline std::string outlinePathText(int major, int minor, bool computeOk, bool sw
     return v + (switchOn ? ": GPU outline on" : ": GPU outline off (switched off, CPU path)");
 }
 
+// The same for the Orbit Lab's rocks (0.13 stage 4). rocksOk: the renderer has the rock compute object (OpenGL 4.3 and a shader with double precision that compiled).
+inline std::string rocksPathText(int major, int minor, bool rocksOk, bool switchOn) {
+    const std::string v = "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
+    if (!rocksOk) return v + ": CPU path";
+    return v + (switchOn ? ": GPU rocks on" : ": GPU rocks off (switched off, CPU path)");
+}
+
 struct BenchEnv {
     std::string version, when;                   // the native version; the local date and time
     std::string gpu, glVersion, vendor;          // GL_RENDERER, GL_VERSION, GL_VENDOR
     std::string outlinePath;                     // outlinePathText() (0.13 stage 3)
+    std::string rocksPath;                       // rocksPathText() (0.13 stage 4)
     std::string computePath;                     // computePathText(): "OpenGL 4.3: GPU superposition on" or "OpenGL 3.3: CPU path" (0.13 stage 2)
     int windowW = 0, windowH = 0;                // the window, in pixels
     int pictureW = 0, pictureH = 0;              // the picture area, in pixels

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "app/prefs.h"
+#include "belt_layer.h"
 #include "card_text.h"
 #include "render/renderer2d.h"
 #include "solar_system.h"
@@ -32,6 +33,7 @@ struct ViewSettings {
     bool dwarfs = true;
     bool comets = true;
     bool belts = true;          // Belts and Oort cloud
+    bool gpuRocks = true;       // 0.13 stage 4: the rocks' places are worked out on the GPU (OpenGL 4.3); off, or on a 3.3 PC: the CPU does it, as before (not saved)
     SkyMode sky = SkyMode::Soft;
     ConsMode cons = ConsMode::Off;
     bool realPlanets = false;   // Planet physics: Simple (false) / Real (true), see orbit/nbody.h
@@ -77,12 +79,7 @@ private:
     struct Hit { Selection sel; double x, y, r; };
     std::vector<Hit> hits_;
     std::map<std::pair<int, int>, double> exag_; // moon (body id, index) -> how many times too wide its orbit is drawn
-    // belt rocks: positions only change with the simulated time, so they are worked out
-    // once per time step (not again while paused, or when only the view moves)
-    std::vector<std::vector<Vec3>> beltPos_;
-    double beltT_ = -1;
-    int64_t beltEpoch_ = 0;
-    std::vector<float> beltScreen_;              // on-screen rock centres for one belt (reused every frame)
+    BeltLayer beltLayer_;                        // the belts' rocks: the CPU path (positions kept until the time moves) or the GPU path (orbit/belt_layer.h)
 };
 
 }  // namespace orbit

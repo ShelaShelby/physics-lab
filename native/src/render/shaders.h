@@ -446,4 +446,120 @@ void main() {
 }
 )";
 
+// ---- the chart of nuclides' retained mesh (0.13 stage 4 part B) ----
+// Draws a mesh made once (render/mesh.h) in the chart's world coordinates: the same projection as atom::ChartProjection::map (chart_view.cpp), from uniforms. Triangle vertices are projected;
+// a line vertex is two end points, projected, pushed half a point out along the line's screen normal (as Renderer2D::line does: nx = -dy / len * w / 2, with w = 1). The side faces of a block
+// are dropped when the chart is flat or the block is too low to show them (ChartScene::build: sides = !flat && H sin(pitch) > 0.05). The fragment shader is kFragmentShader's flat colour (mode 0).
+static const char* const kChartVS = R"(#version 330 core
+layout(location = 0) in vec3 aP0;
+layout(location = 1) in vec3 aP1;
+layout(location = 2) in vec4 aColor;
+layout(location = 3) in vec2 aMisc;          // corner, height
+uniform vec2 uSize;
+uniform vec4 uRot;                           // cos(yaw), sin(yaw), cos(pitch), sin(pitch)
+uniform vec4 uCen;                           // cx, cy, K, fx   (the grid's centre, the scale, the fitted centre x)
+uniform vec4 uFit;                           // fy, identity, flat, 0
+out vec2 vUV;
+out vec4 vColor;
+out vec4 vParam;
+// twin: atom::ChartProjection::map (chart_view.cpp)
+vec2 projectPt(vec3 w) {
+    if (uFit.y > 0.5) return w.xy;
+    vec2 r;
+    if (uFit.z > 0.5) r = w.xy;
+    else {
+        float u = w.x - uCen.x, v = w.y - uCen.y;
+        float x = u * uRot.x - v * uRot.y, y = u * uRot.y + v * uRot.x;
+        r = vec2(uCen.x + x, uCen.y + (y * uRot.z - w.z * uRot.w));
+    }
+    return vec2(uCen.w + uCen.z * (r.x - uCen.x), uFit.x + uCen.z * (r.y - uCen.y));
+}
+void main() {
+    vUV = vec2(0.0); vColor = aColor; vParam = vec4(0.0);
+    bool cull = aMisc.y >= 0.0 && (uFit.z > 0.5 || aMisc.y * uRot.w <= 0.05);
+    vec2 s;
+    if (aMisc.x < 0.0) s = projectPt(aP0);
+    else {
+        vec2 s0 = projectPt(aP0), s1 = projectPt(aP1);
+        vec2 d = s1 - s0;
+        float len = length(d);
+        float side = aMisc.x >= 1.5 ? -1.0 : 1.0;
+        vec2 n = len > 1e-9 ? vec2(-d.y, d.x) / len * 0.5 : vec2(0.0);
+        s = (mod(aMisc.x, 2.0) > 0.5 ? s1 : s0) + side * n;
+        if (len < 1e-9) cull = true;
+    }
+    gl_Position = cull ? vec4(2.0, 2.0, 0.0, 1.0) : vec4(s.x / uSize.x * 2.0 - 1.0, 1.0 - s.y / uSize.y * 2.0, 0.0, 1.0);
+}
+)";
+
+// ---- the Orbit Lab's belt rocks (0.13 stage 4 part A) ----
+// One thread a rock: its place on its Kepler ellipse and on the picture. Each part is a direct port of its C++ twin (orbit/belts.cpp, orbit/belts.h), named in its comment; the C++ functions stay
+// the reference (tests/gl_compare.cpp compares every rock of scenes 1 and 6 with them). Times and angles that grow without limit are DOUBLE (GLSL 4.00 double precision): M = M0 + n t is formed and
+// brought into -pi..pi in double, and only that small angle goes into float. The Kepler equation and the position are float (a rock's place is then good to about 1e-7 of its distance).
+static const char* const kRocksCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Elements { float el[]; };          // 12 floats a rock: M0, a (AU), e, libA, libPh, P (3), Q (3), 0; a still rock: x, y, z (m) in the P slots
+layout(std430, binding = 1) readonly buffer MeanMotion { double nn[]; };       // rad/s, one a rock (orbit::beltMeanMotion, made on the CPU in double)
+layout(std430, binding = 2) writeonly buffer Positions { float pos[]; };       // x, y on the picture, points, two floats a rock
+uniform int uCount;
+uniform int uStatic;                                                           // 1: the Oort cloud, positions that never move
+uniform int uD3;                                                               // 1: the 3D view (mild perspective)
+uniform vec2 uT;                                                               // the simulated time t = double(uT.x) + double(uT.y) seconds (hi + lo: exact)
+uniform float uLibPhase;                                                       // t / year / 150 * 6.2832, brought into 0..2 pi on the CPU in double
+uniform vec4 uBc;                                                              // the barycentre, m
+uniform vec4 uCam;                                                             // ca, sa, cb, sb
+uniform vec4 uView;                                                            // px (points per metre), W, H, D (m)
+uniform vec4 uOff;                                                             // cd (m), ox, oy (points)
+const float PI = 3.14159265358979;
+const float AU = 1.495978707e11;                                               // units::kAU, the IAU astronomical unit, m
+
+// twin: orbit::solveKepler (belts.cpp). M is already in -pi..pi. At least 3 steps, stopped when a step moves E by less than 5e-7 (one float step: E is below 3.2, its spacing 2.4e-7),
+// at most 20 (a float cannot go below its own rounding for e near 1, so the limit keeps the loop finite). The C++ twin's bisection safety net is not ported: from +-pi, Newton's method
+// does not run away for any e < 1 (it is the start the C++ uses for e > 0.8).
+float solveKepler(float e, float M) {
+    float E = e > 0.8 ? (M < 0.0 ? -PI : PI) : M + e * sin(M);
+    for (int k = 1; k <= 20; k++) {
+        float dE = (M - (E - e * sin(E))) / (1.0 - e * cos(E));
+        E += dE;
+        if (k >= 3 && abs(dE) < 5e-7) break;
+    }
+    return E;
+}
+
+// twin: orbit::beltPoint (belts.cpp): a point on the ellipse, in the ecliptic (m, Sun at the origin)
+vec3 rockPoint(uint i) {
+    uint b = i * 12u;
+    if (uStatic != 0) return vec3(el[b + 5u], el[b + 6u], el[b + 7u]);
+    double t = double(uT.x) + double(uT.y);
+    double M = double(el[b]) + nn[i] * t;                                      // M = M0 + n t (double: t reaches 1e11 s and more)
+    float libA = el[b + 3u];
+    if (libA != 0.0) M += double(libA * sin(uLibPhase + el[b + 4u]));         // the Trojans' sway, 150-year period (the phase was reduced in double)
+    const double TWO_PI = 6.283185307179586LF;
+    M -= TWO_PI * floor(M / TWO_PI + 0.5LF);                                   // -pi .. pi, in double
+    float e = el[b + 2u];
+    float E = solveKepler(e, float(M));
+    float a = el[b + 1u] * AU;
+    float xp = a * (cos(E) - e), yp = a * sqrt(1.0 - e * e) * sin(E);
+    vec3 P = vec3(el[b + 5u], el[b + 6u], el[b + 7u]), Q = vec3(el[b + 8u], el[b + 9u], el[b + 10u]);
+    return xp * P + yp * Q;
+}
+
+// twin: orbit::beltScreen (belts.cpp), the camera of OrbitView::draw (base and proj)
+vec2 screenOf(vec3 p) {
+    p -= uBc.xyz;
+    float ca = uCam.x, sa = uCam.y, cb = uCam.z, sb = uCam.w;
+    float x1 = p.x * ca - p.y * sa, y1 = p.x * sa + p.y * ca, y2 = y1 * cb - p.z * sb, dep = y1 * sb + p.z * cb;
+    float D = uView.w;
+    float f = uD3 != 0 ? D / max(D - (dep - uOff.x), 0.05 * D) : 1.0;
+    return vec2(uView.y * 0.5 + x1 * uView.x * f + uOff.y, uView.z * 0.5 - y2 * uView.x * f + uOff.z);
+}
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(uCount)) return;
+    vec2 s = screenOf(rockPoint(i));
+    pos[2u * i] = s.x; pos[2u * i + 1u] = s.y;
+}
+)";
+
 }  // namespace render

@@ -24,12 +24,15 @@
 #include <vector>
 
 #include "atom/atom_bench.h"
+#include "atom/chart_draw.h"
 #include "atom/cloud_dots.h"
 #include "atom/cloud_light.h"
 #include "atom/outline.h"
 #include "render/group_compute.h"
 #include "render/outline_compute.h"
 #include "render/renderer2d.h"
+#include "orbit/belt_layer.h"
+#include "orbit/solar_system.h"
 
 // ---- the GL functions, from EGL (the app gets them from SDL: render/gl_loader.cpp) ----
 namespace plgl {
@@ -231,6 +234,61 @@ static void scenes(render::Renderer2D& R, const std::string& dir) {
             long lit = 0; for (std::size_t i = 0; i < a.px.size(); i += 4) lit += a.px[i] != a.px[0] || a.px[i + 1] != a.px[1] || a.px[i + 2] != a.px[2];
             check(std::string(sc.name) + (light ? " light page" : " dark page") + ": the picture shows the cloud (more than 5,000 pixels differ from the page)", lit > 5000);
         }
+}
+
+// 0.13 stage 4 part C: the renderer takes a finished list of blobs without copying it; the pictures of scenes 8 and 10 made the new way (sideBlobs, a kept vector, blobsPaletteTake) equal the old way's
+static bool sameBlobs(const std::vector<Blob>& a, const std::vector<Blob>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t i = 0; i < a.size(); i++)
+        if (std::memcmp(&a[i], &b[i], sizeof(Blob)) != 0) return false;       // (no padding in a Blob: 4 + 4 + 4 floats and 3 Colors)
+    return true;
+}
+static void cloudBuffers(render::Renderer2D& R, const std::string& dir) {
+    const DotColours dc = makeDotColours(true, true, false, kPlus, kMinus);
+    std::vector<Blob> list;
+    for (int i = 0; i < 1000; i++) list.push_back(squareDot(dc, i * 0.5, i * 0.25, 1, i % dc.n, 0.3));
+    const std::vector<Blob> keep = list;
+    render::Renderer2D A, B2;                                              // (nothing is drawn with these two: only what they hold is compared)
+    A.begin(1040, 713); B2.begin(1040, 713);
+    A.blobsPalette(list.data(), int(list.size()), false, dc.palette());
+    const Blob* before = list.data();
+    B2.blobsPaletteTake(list, false, dc.palette());
+    check("blobsPaletteTake: the renderer holds the same blobs and draw calls as with blobsPalette", sameBlobs(A.pendingBlobs(), B2.pendingBlobs()) && A.pendingSegments() == B2.pendingSegments());
+    check("blobsPaletteTake: the first list is taken over without a copy (the renderer's buffer is the caller's old one) and the caller's vector is left empty", B2.pendingBlobs().data() == before && list.empty());
+    std::vector<Blob> second(keep.begin(), keep.begin() + 300);
+    A.blobsPalette(second.data(), int(second.size()), true, dc.palette());
+    B2.blobsPaletteTake(second, true, dc.palette());
+    check("blobsPaletteTake: a second list in the same frame is appended in order, as with the copy", A.pendingBlobs().size() == 1300 && sameBlobs(A.pendingBlobs(), B2.pendingBlobs()) && second.empty() && A.pendingSegments() == B2.pendingSegments());
+    B2.begin(1040, 713);
+    check("after begin() the renderer holds nothing", B2.pendingBlobs().empty());
+    list.clear();
+    B2.blobsPaletteTake(list, false, dc.palette());
+    check("blobsPaletteTake of an empty list adds nothing", B2.pendingBlobs().empty() && B2.pendingSegments() == 0);
+
+    // the pictures: scene 10 (side view) and scene 8 (Cloud 3D), the old copy way against the new way, the new way on a kept vector over three frames
+    for (const int which : {7, 5}) {
+        static SceneCloud S;
+        setupScene(S, which);
+        for (bool gpuColours : {true, false}) {
+            const DotColours c = makeDotColours(gpuColours, true, false, kPlus, kMinus);
+            const Picture oldWay = draw1(R, 1040, 713, render::hexColor("#1e1e21"), [&] { if (which == 5) drawScene3D(R, S, c); else drawScene2D(R, S, c); });
+            std::vector<Blob> kept, held;
+            std::vector<SideDot> side;
+            Picture last{};
+            long newAllocs = 0;
+            for (int frame = 0; frame < 3; frame++) {
+                const Blob* p0 = kept.data();
+                last = draw1(R, 1040, 713, render::hexColor("#1e1e21"), [&] {
+                    if (which == 5) buildClassic3D(S.PX.data(), S.PY.data(), S.PD.data(), S.grp.data(), S.cnt, c, cloudDotWeight(S.L.cloudCap()), kept);
+                    else { sideDots(S.L.s.pts.data(), S.cnt, S.grp.data(), c.n, S.cam.cx, S.cam.cy, S.cam.pxm, S.w, S.h, c.gpu, side); sideBlobs(side, c, 0.3 * cloudDotWeight(S.L.cloudCap()), kept); }
+                    R.blobsPaletteTake(kept, false, c.palette());
+                });
+                (void)p0; newAllocs += frame > 0 && kept.capacity() < 40000;
+            }
+            report(dir, std::string(which == 5 ? "scene 8" : "scene 10") + (gpuColours ? " GPU colours On" : " GPU colours Off") + ", blobs taken by the renderer (frame 3)", oldWay, last, 0);
+            check(std::string(which == 5 ? "scene 8" : "scene 10") + ": the vector the caller keeps stays big after the swaps (no regrowing from empty)", newAllocs == 0);
+        }
+    }
 }
 
 static void glowDots(render::Renderer2D& R, const std::string& dir) {                                         // soft dots (Glow style): additive on a dark page, alpha-blended on a light one
@@ -740,6 +798,13 @@ static void gpuJumpScenes(render::Renderer2D& R, const std::string& dir) {
 }
 
 // the PC without OpenGL 4.3: a context that says 3.3 (Mesa's version override); the renderer must start, have no compute object, and the CPU path must be what draws, with the same picture
+namespace rk {
+using namespace orbit;
+#include "rock_reference.h"
+}
+#include "gl_rocks.inc"   // 0.13 stage 4 part A: the Orbit Lab's rocks on the GPU
+#include "gl_chart.inc"   // 0.13 stage 4 part B: the chart of nuclides from the retained mesh
+
 static void fallback33(EGLDisplay dpy, EGLConfig cfg, EGLSurface surf, const std::string& dir) {
     setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1); setenv("MESA_GLSL_VERSION_OVERRIDE", "330", 1);
     const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE};
@@ -768,6 +833,8 @@ static void fallback33(EGLDisplay dpy, EGLConfig cfg, EGLSurface surf, const std
     const Picture p33 = groupPicture(R33, L, viaFill, false);
     if (g_cpuSuper14.px.empty()) check("scene 14 picture from the 4.3 context was kept", false);
     else report(dir, "3.3 fallback scene 14 beat 0 against the 4.3 context's CPU-groups picture", g_cpuSuper14, p33, 0);
+    gpuRocksFallback33(R33, dir);
+    chartFallback33(R33, dir);
     // the switch: on a 4.3 context with gpuCompute off the CPU is used too (tested with a stand-in object that must not be called)
     struct Never : render::IGroupCompute { bool ok() const override { return true; } bool superGroups(const float*, long, std::uint64_t, long, long, const render::SuperGroupParams&, unsigned char*) override { called = true; return false; }
                                            bool jumpGroups(const float*, const float*, long, std::uint64_t, const render::JumpGroupParams&, unsigned char*) override { called = true; return false; } bool called = false; } never;
@@ -819,6 +886,7 @@ int main(int argc, char** argv) {
     swatches(R, dir);
     scenes(R, dir);
     glowDots(R, dir);
+    cloudBuffers(R, dir);
     gpuSuperScenes(R, dir);
     gpuJumpScenes(R, dir);
     gpuEdgeCases(R);
@@ -826,6 +894,10 @@ int main(int argc, char** argv) {
     gpuOutlinePipeline(R);
     gpuOutlineSlice(R);
     gpuOutlinePictures(R, dir);
+    gpuRocks(R, dir);
+    gpuRocksPictures(R, dir);
+    chartPictures(R, dir);
+    chartShaderRules(R);
     R.shutdown();
     fallback33(dpy, cfg, surf, dir);
     std::printf("%d GL checks, %d failed\n", g_checks, g_failed);

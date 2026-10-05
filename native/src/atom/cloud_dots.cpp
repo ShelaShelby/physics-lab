@@ -144,4 +144,10 @@ void sideDots(const float* pts, long cnt, const unsigned char* grp, int nGroups,
     for (const int i : order) out.push_back(dots[std::size_t(i)]);
 }
 
+void sideBlobs(const std::vector<SideDot>& side, const DotColours& dc, double weight, std::vector<Blob>& out) {
+    out.clear();
+    out.reserve(side.size());
+    for (const SideDot& d : side) out.push_back(squareDot(dc, d.x, d.y, 1, d.g, weight));
+}
+
 }  // namespace atom

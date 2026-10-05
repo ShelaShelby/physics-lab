@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <regex>
+#include <set>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -70,7 +71,11 @@ static void runSteps(SolarSystem& sys, double tspeed, int steps) {
     for (int k = 0; k < steps; k++) sys.step(units::kPhysicsStep, tspeed);
 }
 
+#include "rock_reference.h"
+#include "test_rocks.inc"   // 0.13 stage 4 part A: the belt rocks against Kepler's equation as the textbook has it
+
 int main() {
+    testRockKepler();
     // 1) Kepler's equation
     for (const auto& k : ref::kKepler) {
         const double E = keplerE(k.e, k.Mdeg);

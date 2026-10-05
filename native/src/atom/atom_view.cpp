@@ -262,7 +262,7 @@ void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bo
     B.clear();
     B.reserve(D.size());
     for (const GlowDot& d : D) B.push_back(softDot(dc, d.x, d.y, d.r, d.g, cloudDotLight(cap, expo, base, d.wt)));   // (GPU colours: the dot carries its group, the shader picks the colour)
-    R.blobsPalette(B.data(), int(B.size()), !light, dc.palette());
+    R.blobsPaletteTake(B, !light, dc.palette());
     B.clear();
 }
 
@@ -292,8 +292,10 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         if (!ImGui::GetIO().WantCaptureMouse && mx >= 0 && my >= 0 && mx < w && my < h) { if (flat) chartTileAt(chartLayout(w, h), mx, my, hz, hn); else lab.chartScene().pick(mx, my, hz, hn); }
         const ChartColours chartColours{css.fg, css.muted, css.accent, css.card, css.line};
         const ChainOverlay chainOv{s.showChain ? &lab.decayGraph() : nullptr, &s.walk};   // the decay chain of the chosen nuclide (0.12 stage 1): the graph is built once per chosen nuclide
-        if (flat) drawChart(R, adapter, chartColours, w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr);
-        else drawChartScene(R, adapter, chartColours, lab.chartScene(), w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr);
+        if (!lab.gpuChart) chartCache_.release(R);                         // (switched off: the GPU's copy is let go)
+        ChartCache* cache = lab.gpuChart ? &chartCache_ : nullptr;         // 0.13 stage 4 part B: the tiles / blocks and the ground come from a GPU buffer made once; nullptr: made every frame as before
+        if (flat) drawChart(R, adapter, chartColours, w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr, cache);
+        else drawChartScene(R, adapter, chartColours, lab.chartScene(), w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr, cache);
         if (hz) {                                                          // the details of the square under the pointer: a tooltip (it follows the pointer, stays on screen and never hides a square)
             ImGui::BeginTooltip();
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
@@ -322,7 +324,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     double fpx, fpy, fpd;
     proj(s.fc.x, s.fc.y, s.fc.z, fpx, fpy, fpd);                           // the camera follows the focused nucleon
     const double cx = cx0 - fpx * pxm + s.pan.x * pxm, cy = cy0 + fpy * pxm + s.pan.y * pxm;
-    std::vector<Blob> B;
+    std::vector<Blob>& B = blobs_;                                         // kept from frame to frame (0.13 stage 4 part C): the 48,000 blobs of a big cloud are not allocated again every frame
+    B.clear();
 
     if (cloud) {
         const long cap = std::min<long>(lab.cloudCap(), long(s.sg.size()));
@@ -363,7 +366,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 else B.push_back(squareDot(dc, X - 1 + 1.25, Y - 1 + 1.25, 1.25, grp[std::size_t(i)], 0.6 * (1 - 0.6 * dist / th) * cloudDotWeight(cap)));
             }
             if (glow) drawGlow(R, G, cap, css.light, dc, !wheel, 3.0, w, h, cloudExpo_);
-            else R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
+            else R.blobsPaletteTake(B, false, dc.palette());
             B.clear();
             if (outlineOn) {                                               // the contour |psi|^2 = c in the cut plane (cached until the orbital or the cut changes)
                 const Outline* O = outlineReady(fo, lab.gpuOutline);       // 0.13 stage 3: nullptr while the GPU is still making the outline (the first time): nothing is drawn yet, and the frame does not wait
@@ -384,13 +387,13 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             // the v0.12 scan (a pass over all dots for each colour) with GPU colours Off, a counting sort with them On: the same list.
             static std::vector<SideDot> side;
             sideDots(PTS, cnt, grp.data(), ng, cx, cy, pxm, w, h, lab.gpuColours, side);
-            const double sideLight = 0.3 * cloudDotWeight(cap);
-            for (const SideDot& d : side) {
-                if (glow) G.push_back({d.x, d.y, 4.4f, 1.f, d.g});
-                else B.push_back(squareDot(dc, d.x, d.y, 1, d.g, sideLight));
+            if (glow) {
+                for (const SideDot& d : side) G.push_back({d.x, d.y, 4.4f, 1.f, d.g});
+                drawGlow(R, G, cap, css.light, dc, !wheel, 1.0, w, h, cloudExpo_);
+            } else {
+                sideBlobs(side, dc, 0.3 * cloudDotWeight(cap), B);               // one reserve, no regrowing (0.13 stage 4 part C)
+                R.blobsPaletteTake(B, false, dc.palette());
             }
-            if (glow) drawGlow(R, G, cap, css.light, dc, !wheel, 1.0, w, h, cloudExpo_);
-            else R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
             B.clear();
             if (outlineOn)                                                 // the shadow of the 90 % region seen from the side
                 if (const Outline* O = outlineReady(fo, lab.gpuOutline))
@@ -413,7 +416,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             // three depth bands (far = faint and small, near = bright and larger: kDepthBand), drawn far to near, inside a band group by group, inside a group in dot order.
             // GPU colours Off: the v0.12 scan, a pass over all dots for each band and colour (72 for the Wheel); On: a counting sort, and the dots carry only their colour group.
             buildClassic3D(PX.data(), PY.data(), PD.data(), grp.data(), cnt, dc, cloudDotWeight(cap), B);
-            R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
+            R.blobsPaletteTake(B, false, dc.palette());
             B.clear();
             }
             const Outline* wireO = outlineOn ? outlineReady(fo, lab.gpuOutline) : nullptr;   // (nullptr while the GPU makes it the first time)

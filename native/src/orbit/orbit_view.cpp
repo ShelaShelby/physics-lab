@@ -437,26 +437,10 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
     }
 
-    if (set.belts && !sys.belts.empty()) {   // belts: thousands of rocks on Kepler orbits, one instanced draw call per belt
-        if (beltT_ != sys.t || beltEpoch_ != sys.epochMs || beltPos_.size() != sys.belts.size()) {
-            beltPos_.resize(sys.belts.size());
-            for (std::size_t gi = 0; gi < sys.belts.size(); gi++) {
-                const BeltGroup& g = sys.belts[gi];
-                beltPos_[gi].resize(g.n);
-                for (int k = 0; k < g.n; k++) beltPos_[gi][k] = beltPoint(g, k, sys.t);
-            }
-            beltT_ = sys.t; beltEpoch_ = sys.epochMs;
-        }
-        for (std::size_t gi = 0; gi < sys.belts.size(); gi++) {
-            const BeltGroup& g = sys.belts[gi];
-            const bool on = sel.kind == Selection::Belt && sel.moon == static_cast<int>(gi);   // the selected belt: bigger dots, in the look-here colour
-            beltScreen_.clear();
-            for (const Vec3& p : beltPos_[gi]) {
-                const Q q = proj(p.x, p.y, p.z);
-                if (q.first > -2 && q.first < W + 2 && q.second > -2 && q.second < H + 2) { beltScreen_.push_back(static_cast<float>(q.first)); beltScreen_.push_back(static_cast<float>(q.second)); }
-            }
-            R.squares(beltScreen_.data(), static_cast<int>(beltScreen_.size() / 2), on ? 2.6 : 1.4, on ? kHL : hexColor(g.color, g.alpha));
-        }
+    if (set.belts && !sys.belts.empty()) {   // belts: thousands of rocks on Kepler orbits, one instanced draw call per belt (the places: the CPU, or from 0.13 stage 4 the GPU, orbit/belt_layer.h)
+        BeltCamera cam;
+        cam.bx = bc.x; cam.by = bc.y; cam.bz = bc.z; cam.ca = ca; cam.sa = sa; cam.cb = cb; cam.sb = sb; cam.px = px; cam.W = W; cam.H = H; cam.D = D; cam.cd = cd; cam.ox = ox; cam.oy = oy; cam.d3 = d3;
+        beltLayer_.draw(R, sys, cam, sel.kind == Selection::Belt ? sel.moon : -1, kHL, set.gpuRocks);
     }
 
     std::vector<const Body*> vis;

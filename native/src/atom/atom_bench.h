@@ -22,12 +22,13 @@ namespace atom {
 //   19 the landscape of 17 with the DECAY CHAIN of uranium-238 drawn and walked five steps (0.12 stage 1): the trail, its labels and the walker on top; scenes 16 to 18 (the benchmark's 19 to 21) draw no chain, so they stay comparable with 0.11
 //   20 scene 8 again with GPU colours Off (0.13 stage 1): the 0.12 way, the CPU colours every dot (scene 8 is the same with GPU colours On); 21 scene 10 again with GPU colours Off
 //   22 to 25 scenes 11, 13, 14 and 15 again with GPU superposition Off (0.13 stage 2): the CPU works out the colour groups, as before stage 2 (scenes 11, 13, 14, 15 are the same with it On)
+//   28, 29 scenes 19 and 20 (which 16, 17) again with the GPU chart cache Off (0.13 stage 4 part B): in the benchmark they come LAST (33 and 34), after the Orbit Lab twins 31 and 32, so kBenchSceneCount (28) ends the run of scenes whose shown number is which + 3
 //   26, 27 scenes 16 and 17 again with GPU outline Off (0.13 stage 3): the CPU makes the outline's grid and the Slice's contour values (scenes 16 and 17 are the same with it On)
 // NUMBERS: `which` here is not the number the benchmark shows: the benchmark's scene number is which + 3 for which >= 5 (which 5 = "scene 8", which 19 = "scene 22", which 20 = "scene 23"),
 // and which 0 to 4 are scenes 2, 3, 4, 5 and 7 (see ui/benchmark.cpp). Texts shown to the owner use the benchmark's numbers.
-constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchLandscapeScene = 17, kBenchBindingScene = 18, kBenchChainScene = 19, kBenchWheelCpuScene = 20, kBenchWheel2DCpuScene = 21, kBenchJumpCpuScene = 22, kBenchSuperCpuFirst = 23, kBenchOutlineCpuFirst = 26, kBenchSceneCount = 28;   // 22: scene 11 with the CPU path; 23, 24, 25: scenes 13, 14, 15; 26, 27: scenes 16 and 17 with the CPU outline
+constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchLandscapeScene = 17, kBenchBindingScene = 18, kBenchChainScene = 19, kBenchWheelCpuScene = 20, kBenchWheel2DCpuScene = 21, kBenchJumpCpuScene = 22, kBenchSuperCpuFirst = 23, kBenchOutlineCpuFirst = 26, kBenchSceneCount = 28, kBenchChartCpuFirst = 28, kBenchAtomScenes = 30;   // 22: scene 11 with the CPU path; 23, 24, 25: scenes 13, 14, 15; 26, 27: scenes 16 and 17 with the CPU outline
 struct BenchInfo { std::string name, what; };       // name: without a number (the benchmark adds it); what: the settings in words
-const BenchInfo& benchSceneInfo(int which);          // which = kBenchFirstRisk .. kBenchSceneCount - 1
+const BenchInfo& benchSceneInfo(int which);          // which = kBenchFirstRisk .. kBenchAtomScenes - 1
 // Some scenes need something done every frame (a jump held half way, the cut moving, the outline's cache emptied): the benchmark calls this at the start of every frame
 // after the scene is set up (and before the picture is drawn). sceneFrame: 0, 1, 2 ... from the set-up, the warm-up included; measureFrame: -1 while warming up, then 0, 1, 2 ... the counted frames.
 // It does nothing for the scenes that need nothing (0 to 4, 5 to 7, 10 to 12, 15), so it can be called for any scene.

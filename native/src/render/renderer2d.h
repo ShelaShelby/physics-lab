@@ -11,7 +11,9 @@
 
 #include "gl_loader.h"
 #include "group_compute.h"
+#include "mesh.h"
 #include "outline_compute.h"
+#include "rock_compute.h"
 
 namespace render {
 
@@ -30,6 +32,8 @@ public:
     // The OpenGL 4.3 compute path (0.13 stage 2), or nullptr when this context has no OpenGL 4.3 (then the CPU does that work, as before). Valid after init().
     IGroupCompute* compute() const { return compute_; }
     IOutlineCompute* outlineCompute() const { return outline_; }   // the same for the 90 % outline (0.13 stage 3)
+    IRockCompute* rockCompute() const { return rocks_; }           // the same for the Orbit Lab's belt rocks (0.13 stage 4)
+    void useRockCompute(IRockCompute* r) { delete rocks_; rocks_ = r; }   // tests: put a stand-in (or nullptr) in place of the OpenGL object; the renderer owns it
     void disableCompute();                // forget the compute object: the CPU paths are used (PL_NO_COMPUTE; tests)
 
     // Start a frame for a picture `width` × `height` points.
@@ -52,6 +56,9 @@ public:
     // Many small squares of one colour, drawn with ONE instanced draw call (used for the belts'
     // thousands of rocks). xy holds the squares' centres, 2 floats each, in picture points.
     void squares(const float* xy, int count, double size, Color c);
+    // The same squares, but their places are worked out on the GPU (0.13 stage 4 part A, render/rock_compute.h): sends the rocks if this set is not on the GPU yet, and in end() runs the compute
+    // shader for the camera `f` and draws from the buffer it wrote (no CPU wait, no per-rock CPU work). Returns false, adding nothing, when there is no OpenGL 4.3 (the caller then uses squares()).
+    bool rocksGpu(const RockSet& set, const RockFrame& f, double size, Color c);
 
     // Many round or square "blobs" with their own colours, drawn with ONE instanced draw call (the
     // Atom Lab's cloud dots, glowing nucleons, gluon-field particles, quarks). Each blob is a disc of
@@ -70,6 +77,18 @@ public:
     // of that bin (a port of atom::phaseRgb in atom/phase_wheel.h; `light` = the light-page colours); otherwise the group 0 is sign[0] and any other group sign[1].
     struct PhasePalette { bool wheel = false, light = false; Color sign[2]; };
     void blobsPalette(const Blob* b, int count, bool additive, const PhasePalette& pal);
+    // The same, but TAKES the caller's list (0.13 stage 4 part C): when no blobs are waiting yet this frame the two vectors are swapped, so the 48,000 blobs (3.8 MB) are not copied; the caller gets the
+    // renderer's old, emptied buffer back (with its capacity) and keeps it for the next frame. Otherwise they are appended. `b` is empty afterwards. The picture is the same as blobsPalette's.
+    void blobsPaletteTake(std::vector<Blob>& b, bool additive, const PhasePalette& pal);
+    const std::vector<Blob>& pendingBlobs() const { return blobs_; }          // what end() would draw as blobs (for tests)
+    std::size_t pendingSegments() const { return segments_.size(); }          // the draw calls so far (the open run of triangles is not counted until it is closed)
+    // A retained mesh (0.13 stage 4 part B, render/mesh.h): uploaded once with meshCreate (needs the OpenGL context), drawn from the GPU buffer in every frame that asks for it with drawMesh, in the order
+    // of the other shapes of the frame. The projection P goes in as uniforms, so changing it costs nothing but the uniforms. meshDelete frees the buffer. Ids are small integers (>= 0).
+    int meshCreate(const std::vector<MeshVertex>& v);
+    void meshDelete(int id);
+    void drawMesh(int id, int firstVertex, int vertexCount, const MeshProjection& P);
+    int meshesAlive() const;                                                  // for tests
+    long meshUploads() const { return meshUploads_; }                         // vertices sent to the GPU by meshCreate so far (for tests: nothing is sent while a mesh is just drawn)
     // Everything drawn between beginSoftLayer() and endSoftLayer() goes into an offscreen picture at
     // `scale` of the resolution, which is then stretched over the picture in one go (the web's soft layer:
     // blurry things cost a fraction of the pixels, and out-of-focus things look soft).
@@ -82,6 +101,7 @@ public:
     // What the last end() drew: draw calls, and shapes drawn by the instanced calls (squares and blobs)
     int lastDrawCalls() const { return lastCalls_; }
     int lastInstances() const { return lastInstances_; }
+    std::size_t pendingVertexBytes() const { return verts_.size() * sizeof(Vertex); }   // what end() would upload for the shapes added so far (a measuring aid for tests and tools)
 
     // A turning planet. K turns screen directions into the planet's own frame (rows: its 0° meridian,
     // 90° east, north pole; columns: screen right, up, towards you). earth: the Earth map, else a plain
@@ -89,8 +109,8 @@ public:
     void planet(double x, double y, double r, Color base, double lightX, double lightY, const float K[9], bool earth);
 
 private:
-    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd };
-    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; bool earth; float r; bool additive; PhasePalette pal; };   // draw calls, in the order they were added
+    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh };
+    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; bool earth; float r; bool additive; PhasePalette pal; int slot; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
     std::vector<float> inst_;                 // square centres for all square draws of this frame
@@ -102,6 +122,12 @@ private:
 
     IGroupCompute* compute_ = nullptr;        // owned; see compute()
     IOutlineCompute* outline_ = nullptr;      // owned; see outlineCompute()
+    IRockCompute* rocks_ = nullptr;           // owned; see rockCompute()
+    struct Mesh { GLuint vbo = 0, vao = 0; int count = 0; bool used = false; };
+    std::vector<Mesh> meshes_;
+    GLuint meshProgram_ = 0;
+    GLint mSize_ = -1, mRot_ = -1, mCen_ = -1, mFit_ = -1;
+    long meshUploads_ = 0;
     std::vector<Blob> blobs_;                 // all blobs of this frame
     GLuint blProgram_ = 0, blVao_ = 0, blInstVbo_ = 0;
     GLint blSize_ = -1, blFuzz_ = -1, blPalWheel_ = -1, blPalLight_ = -1, blPalPlus_ = -1, blPalMinus_ = -1;

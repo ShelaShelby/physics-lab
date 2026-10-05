@@ -148,6 +148,7 @@ public:
     bool paused = false;                 // the app's pause
     bool gpuCompute = true;              // 0.13 stage 2: the superposition's and the jump's colour groups come from a compute shader (OpenGL 4.3), if the PC has it; false: the CPU loops (the reference). Not saved. A second switch, so stage 1 and stage 2 can be compared apart
     bool gpuOutline = true;              // 0.13 stage 3: the 90 % outline's density grid and level (and the Slice's contour values) come from compute shaders (OpenGL 4.3), if the PC has it, without waiting; false: the CPU does it, as before. Not saved. A third switch, so each stage can be compared apart
+    bool gpuChart = true;                // 0.13 stage 4 part B: the chart of nuclides' tiles / blocks and ground are kept in a GPU buffer and drawn from it (OpenGL 3.3 is enough); false: made and sent again every frame, as up to 0.13 stage 3 (the reference). Not saved
     bool gpuColours = true;              // 0.13 stage 1: the cloud's dots carry a colour INDEX and the shader picks the colour (true), or the CPU colours every dot as in 0.12 (false: for comparing). Not saved; the Performance card has the switch
     bool hold = false;                   // a control is being held: the decay clock waits
     std::optional<bool> moreStored;      // the remembered ⓘ choice (web: localStorage plAtomMore)

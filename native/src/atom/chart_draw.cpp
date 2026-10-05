@@ -283,12 +283,33 @@ void drawChainOverlay(render::Renderer2D& R, const ChartText& T, const ChartColo
 
 }  // namespace
 
-void drawChart(render::Renderer2D& R, const ChartText& T, const ChartColours& C, double w, double h, int selZ, int selN, int hovZ, int hovN, const ChainOverlay* chain) {
-    const ChartLayout L = chartLayout(w, h);
+namespace {
+Color classColour(const ChartColours& C, int c) { const char* hex = chartClassInfo(ChartClass(c)).hex; return *hex ? render::hexColor(hex) : C.fg; }
+bool sameColours(const ChartColours& a, const ChartColours& b) {
+    const auto same = [](const Color& x, const Color& y) { return x.r == y.r && x.g == y.g && x.b == y.b && x.a == y.a; };
+    return same(a.fg, b.fg) && same(a.muted, b.muted) && same(a.accent, b.accent) && same(a.card, b.card) && same(a.line, b.line);
+}
+// a slot of the cache is up to date for this picture, theme and height meaning, or it is made again (its old buffer freed first)
+template <class Build>
+void ensureSlot(render::Renderer2D& R, ChartCache::Slot& s, double w, double h, const ChartColours& C, int mode, Build build) {
+    if (s.id >= 0 && s.w == w && s.h == h && s.mode == mode && sameColours(s.colours, C)) return;
+    if (s.id >= 0) R.meshDelete(s.id);
+    s.mesh = build();
+    s.id = R.meshCreate(s.mesh.v);
+    s.w = w; s.h = h; s.mode = mode; s.colours = C;
+    s.builds++;
+}
+}  // namespace
+
+void ChartCache::release(render::Renderer2D& R) {
+    for (Slot* s : {&flat, &land}) { if (s->id >= 0) R.meshDelete(s->id); *s = Slot(); }
+}
+
+// The static part of the flat chart, made every frame (the reference of the retained mesh, and the path with no cache)
+void drawChartStaticFlat(render::Renderer2D& R, const ChartColours& C, const ChartLayout& L) {
     const double gridL = L.x(0), gridR = L.x(L.nMax) + L.cell, gridT = L.y(L.zMax), gridB = L.y(1) + L.cell;
     Color col[kChartClasses];
-    for (int c = 0; c < kChartClasses; c++) { const char* hex = chartClassInfo(ChartClass(c)).hex; col[c] = *hex ? render::hexColor(hex) : C.fg; }
-
+    for (int c = 0; c < kChartClasses; c++) col[c] = classColour(C, c);
     // the magic-number rows and columns: a faint band under the tiles, so it shows in the empty squares too, and thin edges over them
     for (int m : kChartMagic) {
         R.rect(L.x(m), gridT, L.cell, gridB - gridT, C.line.withAlpha(0.22f));
@@ -302,6 +323,18 @@ void drawChart(render::Renderer2D& R, const ChartText& T, const ChartColours& C,
         R.rect(L.x(m) - lw / 2, gridT, lw, gridB - gridT, C.muted.withAlpha(0.7f)); R.rect(L.x(m) + L.cell - lw / 2, gridT, lw, gridB - gridT, C.muted.withAlpha(0.7f));
         if (m <= L.zMax) { R.rect(gridL, L.y(m) - lw / 2, gridR - gridL, lw, C.muted.withAlpha(0.7f)); R.rect(gridL, L.y(m) + L.cell - lw / 2, gridR - gridL, lw, C.muted.withAlpha(0.7f)); }
     }
+}
+
+void drawChart(render::Renderer2D& R, const ChartText& T, const ChartColours& C, double w, double h, int selZ, int selN, int hovZ, int hovN, const ChainOverlay* chain, ChartCache* cache) {
+    const ChartLayout L = chartLayout(w, h);
+    const double gridL = L.x(0), gridR = L.x(L.nMax) + L.cell, gridT = L.y(L.zMax), gridB = L.y(1) + L.cell;
+    Color col[kChartClasses];
+    for (int c = 0; c < kChartClasses; c++) col[c] = classColour(C, c);
+
+    if (cache) {                                                       // the tiles and the magic-number rows and columns from the GPU buffer (one draw call, no vertices made or sent)
+        ensureSlot(R, cache->flat, w, h, C, 0, [&] { return chartFlatMesh(L, C); });
+        R.drawMesh(cache->flat.id, cache->flat.mesh.partB, cache->flat.mesh.partBCount, render::MeshProjection());   // (the default projection is the identity: the picture's own points)
+    } else drawChartStaticFlat(R, C, L);
 
     // axis numbers and titles (every 10; every 20 when the squares are very small)
     const int step = L.cell >= 3 ? 10 : 20;
@@ -363,14 +396,9 @@ void groundOutline(render::Renderer2D& R, const ChartProjection& P, double a0, d
 
 }  // namespace
 
-void drawChartScene(render::Renderer2D& R, const ChartText& T, const ChartColours& C, const ChartScene& S, double w, double h, int selZ, int selN, int hovZ, int hovN, const ChainOverlay* chain) {
-    const ChartLayout& L = S.layout();
-    const ChartProjection& P = S.proj();
+// the ground of the landscape: a faint plate under the whole chart and the magic-number rows and columns on it (they run under the blocks)
+void drawChartStaticGround(render::Renderer2D& R, const ChartColours& C, const ChartLayout& L, const ChartProjection& P) {
     const double gridL = L.x(0), gridR = L.x(L.nMax) + L.cell, gridT = L.y(L.zMax), gridB = L.y(1) + L.cell;
-    Color col[kChartClasses];
-    for (int c = 0; c < kChartClasses; c++) { const char* hex = chartClassInfo(ChartClass(c)).hex; col[c] = *hex ? render::hexColor(hex) : C.fg; }
-
-    // the ground: a faint plate under the whole chart, the magic-number rows and columns on it (they run under the blocks), and the chosen nuclide's footprint
     groundQuad(R, P, gridL, gridT, gridR, gridB, C.line.withAlpha(0.12f));
     for (int m : kChartMagic) {
         groundQuad(R, P, L.x(m), gridT, L.x(m) + L.cell, gridB, C.line.withAlpha(0.26f));
@@ -381,9 +409,12 @@ void drawChartScene(render::Renderer2D& R, const ChartText& T, const ChartColour
         }
     }
     groundOutline(R, P, gridL, gridT, gridR, gridB, 1, C.muted.withAlpha(0.8f));
-    if (selZ >= 1 && selZ <= L.zMax && selN >= 0 && selN <= L.nMax) groundOutline(R, P, L.x(selN), L.y(selZ), L.x(selN) + L.cell, L.y(selZ) + L.cell, 2, C.accent);
+}
 
-    // the blocks, far to near (the order is fixed: see chartPaintOrder), each a top and the two faces that face the viewer
+// the blocks, far to near (the order is fixed: see chartPaintOrder), each a top and the two faces that face the viewer
+void drawChartStaticBlocks(render::Renderer2D& R, const ChartColours& C, const ChartScene& S) {
+    Color col[kChartClasses];
+    for (int c = 0; c < kChartClasses; c++) col[c] = classColour(C, c);
     for (const ChartBlock& B : S.blocks()) {
         const Color c = col[int(B.cls)];
         switch (B.kind) {
@@ -410,6 +441,23 @@ void drawChartScene(render::Renderer2D& R, const ChartText& T, const ChartColour
             break;
         }
     }
+}
+
+void drawChartScene(render::Renderer2D& R, const ChartText& T, const ChartColours& C, const ChartScene& S, double w, double h, int selZ, int selN, int hovZ, int hovN, const ChainOverlay* chain, ChartCache* cache) {
+    const ChartLayout& L = S.layout();
+    const ChartProjection& P = S.proj();
+    const double gridL = L.x(0), gridR = L.x(L.nMax) + L.cell, gridT = L.y(L.zMax), gridB = L.y(1) + L.cell;
+    Color col[kChartClasses];
+    for (int c = 0; c < kChartClasses; c++) col[c] = classColour(C, c);
+    const render::MeshProjection mp = chartMeshProjection(P);
+    if (cache) ensureSlot(R, cache->land, w, h, C, int(S.mode()), [&] { return chartLandscapeMesh(L, C, S.mode()); });
+
+    // the ground, from the GPU buffer or made now
+    if (cache) R.drawMesh(cache->land.id, cache->land.mesh.partA, cache->land.mesh.partACount, mp); else drawChartStaticGround(R, C, L, P);
+    // the chosen nuclide's footprint (it follows the choice, so it is never in the mesh)
+    if (selZ >= 1 && selZ <= L.zMax && selN >= 0 && selN <= L.nMax) groundOutline(R, P, L.x(selN), L.y(selZ), L.x(selN) + L.cell, L.y(selZ) + L.cell, 2, C.accent);
+    // the blocks, far to near
+    if (cache) R.drawMesh(cache->land.id, cache->land.mesh.partB, cache->land.mesh.partBCount, mp); else drawChartStaticBlocks(R, C, S);
 
     // where the legend will go (a dry run), so no axis number is drawn under it
     const std::function<double(bool, double, double)> roomFn = [&](bool fromTop, double x0, double x1) { return S.freeHeight(fromTop, x0, x1); };

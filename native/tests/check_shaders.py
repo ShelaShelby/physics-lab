@@ -12,7 +12,7 @@ import os, re, shutil, subprocess, sys, tempfile
 
 # the pairs renderer2d.cpp links, in init()
 PAIRS = [("kVertexShader", "kFragmentShader"), ("kSquareVS", "kSquareFS"), ("kBlobVS", "kBlobFS"), ("kCompositeVS", "kCompositeFS"),
-         ("kCompositeVS", "kGrayFS"), ("kVertexShader", "kPlanetFS")]
+         ("kCompositeVS", "kGrayFS"), ("kVertexShader", "kPlanetFS"), ("kChartVS", "kFragmentShader")]
 
 def main():
     if len(sys.argv) != 2:
@@ -27,8 +27,8 @@ def main():
     shaders = dict((m.group(1), m.group(2)) for m in re.finditer(r'static const char\* const (k\w+) = R"\((.*?)\)";', src, re.S))
     names = sorted(shaders)
     failed = 0
-    if len(shaders) < 13 or sum(n.endswith("CS") for n in shaders) < 3:
-        print("FAIL: found only %d shaders in %s (expected at least 13, three of them compute shaders)" % (len(shaders), sys.argv[1])); return 1
+    if len(shaders) < 15 or sum(n.endswith("CS") for n in shaders) < 4:
+        print("FAIL: found only %d shaders in %s (expected at least 15, four of them compute shaders)" % (len(shaders), sys.argv[1])); return 1
     with tempfile.TemporaryDirectory() as d:
         paths = {}
         for n in names:

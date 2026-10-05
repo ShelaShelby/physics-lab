@@ -77,5 +77,9 @@ void buildClassic3D(const float* PX, const float* PY, const float* PD, const uns
 struct SideDot { float x, y; unsigned char g; };
 // Every dot on the picture (x, z) in the order: group by group, inside a group in dot order (the same two ways as above, chosen by `counting`).
 void sideDots(const float* pts, long cnt, const unsigned char* grp, int nGroups, double cx, double cy, double pxm, double w, double h, bool counting, std::vector<SideDot>& out);
+// One square blob (squareDot, half-size 1, light `weight`) for each side dot, in the same order, into `out` (cleared first). 0.13 stage 4 part C: the vector is meant to be KEPT from frame to frame
+// (AtomView::blobs_): reserve() is a no-op once it is big enough, so a frame allocates nothing. Up to 0.13 stage 3 the side view started from an empty vector every frame and grew it by doubling
+// (about 17 reallocations of up to 3.8 MB for the 48,000 dots of Ultra), which was most of why scene 10 cost more than scene 8 (REPORT.md).
+void sideBlobs(const std::vector<SideDot>& side, const DotColours& dc, double weight, std::vector<render::Renderer2D::Blob>& out);
 
 }  // namespace atom

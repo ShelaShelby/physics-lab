@@ -1485,10 +1485,18 @@ struct RecDisc { double x, y, r; render::Color c; };
 static std::vector<RecTri> g_tri;
 static std::vector<RecLine> g_lines;
 static std::vector<RecDisc> g_discs;
+static std::vector<std::pair<char, int>> g_events;     // every rect ('r'), triangle ('t') and line ('l') call in the order made, with its index in the vector above (0.13 stage 4 part B: the retained mesh is compared with this)
+// 0.13 stage 4 part B: the stand-in also records the retained-mesh calls (what the real renderer would upload and draw), so the cache's rebuild triggers can be tested without a graphics card
+struct RecMesh { int id, first, count; render::MeshProjection p; };
+static std::vector<RecMesh> g_meshDraws;
+static int g_meshCreates = 0, g_meshDeletes = 0, g_meshNext = 0;
 namespace render {
-void Renderer2D::rect(double x, double y, double w, double h, Color c) { g_rec.push_back({x, y, w, h, c}); }
-void Renderer2D::triangle(double x0, double y0, Color c0, double x1, double y1, Color, double x2, double y2, Color) { g_tri.push_back({{x0, y0, x1, y1, x2, y2}, c0}); }
-void Renderer2D::line(double x0, double y0, double x1, double y1, double width, Color c) { g_lines.push_back({x0, y0, x1, y1, width, c}); }
+int Renderer2D::meshCreate(const std::vector<MeshVertex>&) { g_meshCreates++; return g_meshNext++; }
+void Renderer2D::meshDelete(int) { g_meshDeletes++; }
+void Renderer2D::drawMesh(int id, int first, int count, const MeshProjection& P) { g_meshDraws.push_back({id, first, count, P}); }
+void Renderer2D::rect(double x, double y, double w, double h, Color c) { g_events.push_back({'r', int(g_rec.size())}); g_rec.push_back({x, y, w, h, c}); }
+void Renderer2D::triangle(double x0, double y0, Color c0, double x1, double y1, Color, double x2, double y2, Color) { g_events.push_back({'t', int(g_tri.size())}); g_tri.push_back({{x0, y0, x1, y1, x2, y2}, c0}); }
+void Renderer2D::line(double x0, double y0, double x1, double y1, double width, Color c) { g_events.push_back({'l', int(g_lines.size())}); g_lines.push_back({x0, y0, x1, y1, width, c}); }
 void Renderer2D::disc(double x, double y, double r, Color c) { g_discs.push_back({x, y, r, c}); }
 Color hexColor(const char* hex, float alpha) { auto v = [&](int i) { return float(std::strtol(std::string(hex + 1 + 2 * i, 2).c_str(), nullptr, 16)) / 255.f; }; return {v(0), v(1), v(2), alpha}; }
 }
@@ -4446,6 +4454,8 @@ static void testQuadrupole(double guardMinSepDeformed) {
 #include "test_gpu_colours.inc"   // 0.13 stage 1: phase colours on the GPU
 #include "test_gpu_compute.inc"   // 0.13 stage 2: the superposition and the jump on the GPU (the physics check; the GPU comparison is tests/gl_compare.cpp)
 #include "test_outline_norm.inc"   // 0.13 stage 3: the exact normalisation (part B) and the 90 % outline
+#include "test_stage4_cloud.inc"   // 0.13 stage 4 part C: the Cloud 2D view's buffers
+#include "test_chart_cache.inc"   // 0.13 stage 4 part B: the chart of nuclides kept on the GPU
 
 int main() {
     testConstants();
@@ -4531,6 +4541,8 @@ int main() {
     testExactNormalisation();
     testOutlineLevelIndependent();
     testOutlineGpuLogic();
+    testCloudBuffers();
+    testChartCache();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

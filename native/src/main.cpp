@@ -161,9 +161,10 @@ int main(int, char**) {
     {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
         GLint maj = 0, min = 0;
         plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
-        app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr;
+        app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr;
         atom::setOutlineCompute(renderer.outlineCompute());           // the 90 % outline's compute object (null on a 3.3 PC or with PL_NO_COMPUTE: the CPU makes it)
         std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
+        std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(maj, min, app.rocksOk, true).c_str());
     }
 
     IMGUI_CHECKVERSION();
