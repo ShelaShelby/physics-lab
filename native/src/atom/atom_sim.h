@@ -141,6 +141,7 @@ public:
     std::vector<ChainStep> chain;        // the decay history (web: DEC_CHAIN)
     int chainVer = 0;
     bool paused = false;                 // the app's pause
+    bool gpuColours = true;              // 0.13 stage 1: the cloud's dots carry a colour INDEX and the shader picks the colour (true), or the CPU colours every dot as in 0.12 (false: for comparing). Not saved; the Performance card has the switch
     bool hold = false;                   // a control is being held: the decay clock waits
     std::optional<bool> moreStored;      // the remembered ⓘ choice (web: localStorage plAtomMore)
     mutable ChartScene chartScene_;

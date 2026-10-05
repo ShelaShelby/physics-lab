@@ -21,6 +21,32 @@ permissions:
   contents: write
 
 jobs:
+  # 0.13 stage 1: the checks that need Linux tools. Every shader compiled by glslang (the Khronos reference compiler), and the old-way against new-way pictures of the cloud
+  # dots drawn by the real renderer on Mesa's software OpenGL (llvmpipe, through EGL). No Windows build, no release: it only says pass or fail.
+  linux-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            native
+            .github
+
+      - name: Install glslang and software OpenGL
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build glslang-tools libegl-dev libgl1-mesa-dri libegl-mesa0
+
+      - name: Configure (CMake, Ninja, no app, with the GL picture test)
+        run: cmake -S native -B build -G Ninja -DPL_BUILD_APP=OFF -DPL_GL_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build the picture test
+        run: cmake --build build --target gl_compare_tests
+
+      - name: Shader and picture checks
+        env:
+          PL_REQUIRE_GLSLANG: "1"
+        run: ctest --test-dir build -R "glsl_shaders|gl_phase_colours" --output-on-failure
+
   build:
     runs-on: windows-latest
     timeout-minutes: 30

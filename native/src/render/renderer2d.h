@@ -18,6 +18,7 @@ struct Color {
     Color withAlpha(float alpha) const { return {r, g, b, alpha}; }
 };
 Color hexColor(const char* hex, float alpha = 1);   // "#rrggbb"
+constexpr float kBlobPalSquare = 5, kBlobPalSoft = 6;   // Blob::kind of a square / soft dot with a colour picked by the shader (see Renderer2D::blobsPalette)
 Color rgba(int r, int g, int b, float a = 1);
 
 class Renderer2D {
@@ -53,11 +54,16 @@ public:
     // additive: colours add up (the canvas "lighter" mode).
     struct Blob {
         float x, y, r;
-        float kind;          // 0 gradient disc, 1 fuzzy nucleon profile (colour c0), 2 square of side 2r (c0), 3 flat disc (c0), 4 soft Gaussian dot (c0; fades to 0 at r)
+        float kind;          // 0 gradient disc, 1 fuzzy nucleon profile (colour c0), 2 square of side 2r (c0), 3 flat disc (c0), 4 soft Gaussian dot (c0; fades to 0 at r),
+                             // 5 and 6: a square (like 2) or a soft dot (like 4) whose colour the SHADER picks from the group index in fx and the palette of blobsPalette(); only c0.a is used
         float fx, fy, f0, s1;
         Color c0, c1, c2;
     };
     void blobs(const Blob* b, int count, bool additive = false);
+    // Blobs of kind 5 and 6 (the cloud dots, 0.13 stage 1): the colour is picked in the vertex shader from the group number in fx. Wheel: group 0..23 is the colour of the phase at the middle
+    // of that bin (a port of atom::phaseRgb in atom/phase_wheel.h; `light` = the light-page colours); otherwise the group 0 is sign[0] and any other group sign[1].
+    struct PhasePalette { bool wheel = false, light = false; Color sign[2]; };
+    void blobsPalette(const Blob* b, int count, bool additive, const PhasePalette& pal);
     // Everything drawn between beginSoftLayer() and endSoftLayer() goes into an offscreen picture at
     // `scale` of the resolution, which is then stretched over the picture in one go (the web's soft layer:
     // blurry things cost a fraction of the pixels, and out-of-focus things look soft).
@@ -78,7 +84,7 @@ public:
 
 private:
     enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd };
-    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; bool earth; float r; bool additive; };   // draw calls, in the order they were added
+    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; bool earth; float r; bool additive; PhasePalette pal; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
     std::vector<float> inst_;                 // square centres for all square draws of this frame
@@ -90,7 +96,7 @@ private:
 
     std::vector<Blob> blobs_;                 // all blobs of this frame
     GLuint blProgram_ = 0, blVao_ = 0, blInstVbo_ = 0;
-    GLint blSize_ = -1, blFuzz_ = -1;
+    GLint blSize_ = -1, blFuzz_ = -1, blPalWheel_ = -1, blPalLight_ = -1, blPalPlus_ = -1, blPalMinus_ = -1;
     GLuint layerFbo_ = 0, layerTex_ = 0, cmpProgram_ = 0, cmpVao_ = 0;
     GLint cmpTex_ = -1;
     int layerW_ = 0, layerH_ = 0;

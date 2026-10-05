@@ -17,6 +17,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.13", "GPU update: phase colours on the graphics card (stage 1 of 4)",
+     "The electron cloud's dots used to be coloured by the processor: for the 24 Wheel colours it went over all 48,000 dots once for each colour, in each of three depth bands. Now each dot carries only the number of its colour and the graphics card picks the colour. "
+     "The picture is meant to be exactly the same (the same colours, the same depth bands, the same drawing order); the tests compare the old way and the new way dot by dot and, with a software OpenGL, pixel by pixel, and found no difference. "
+     "This applies to every cloud view (Cloud, Cloud 3D, Slice), Classic and Glow dots, Sign and Wheel, every orbital and density. "
+     "The speed-up is EXPECTED, not measured: it could not be tried on a real graphics card or on Windows here. The benchmark's scene 8 should drop towards scene 9, and scene 10 likewise; scenes 23 and 24 run them again with the old way for comparison. "
+     "A switch in the Performance card, GPU colours (Atom Lab cloud dots), goes back to the old way (it is On again at every start). "
+     "Two texts in the benchmark's scene list pointed at the wrong scene (scene 19 said to compare with scene 8, it is scene 2; scene 22 said scenes 16 to 18, it is 19 to 21) and the tick box said 11 extra scenes (it is 15 now): fixed. "
+     "The next stages plan OpenGL 4.3, which needs a graphics chip of about 2013 or newer (Intel HD 4600, GeForce 600, Radeon HD 7000); older PCs will not run those versions. The app's version is now 0.13."},
     {"0.12", "Atom Lab: the accuracy clean-up (stage 2 of 2)",
      "This stage fixes data and wording that earlier versions found doubtful and only reported. Nothing about how the atom or the chart works has changed; some numbers have, and each is listed here. "
      "Nuclides with no half-life number were all described as \"seen only fleetingly\". The data does not say that. They are now described by what NUBASE2020 says: 369 only have an extrapolation from systematics, 84 have none, 11 only a limit, 6 an approximate value, 3 are only known to be unstable to emitting a particle. "

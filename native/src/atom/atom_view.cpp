@@ -1,5 +1,6 @@
 #include "atom_view.h"
 #include "chart_draw.h"
+#include "cloud_dots.h"
 #include "cloud_light.h"
 #include "outline.h"
 #include "phase_wheel.h"
@@ -233,7 +234,7 @@ struct GlowDot { float x, y, r, wt; unsigned char g; };   // g: the dot's colour
 // Draws the dots as soft round dots. Dark pages: the light adds up (additive), so dense places glow and thin ones fade. Light pages: ordinary
 // alpha blending with darker, more saturated colours (opacity builds up as 1 - exp(-light)). `base` is the brightest a single dot may be.
 // The exposure is chosen from the brightest 8 × 8 pixel place so it stays just under white; it is one number for all dots.
-void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bool light, std::vector<Color> pal, bool darken, double base, double w, double h, double& expo) {
+void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bool light, DotColours dc, bool darken, double base, double w, double h, double& expo) {
     if (D.empty()) return;
     constexpr int kCell = 8;
     const int gw = int(w / kCell) + 2, gh = int(h / kCell) + 2;
@@ -254,14 +255,14 @@ void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bo
     const double e = cloudExposure(summed, light ? 2.4 : 1.0, base);
     expo = expo <= 0 || e < expo ? e : std::exp(0.85 * std::log(expo) + 0.15 * std::log(e));   // never brighter than the picture can show; slowly brighter again
     if (light && darken) {                                                 // the Sign colours on a light page: darker, more saturated (the wheel has its own light-page colours)
-        const Color cP = pal[0], cN = pal[1];
-        pal[0] = Color{cP.r * 0.85f, cP.g * 0.85f, cP.b * 0.85f, 1}; pal[1] = Color{cN.r * 0.85f, cN.g * 0.62f, cN.b * 0.45f, 1};
+        const Color cP = dc.c[0], cN = dc.c[1];
+        dc.c[0] = Color{cP.r * 0.85f, cP.g * 0.85f, cP.b * 0.85f, 1}; dc.c[1] = Color{cN.r * 0.85f, cN.g * 0.62f, cN.b * 0.45f, 1};
     }
     static std::vector<Blob> B;
     B.clear();
     B.reserve(D.size());
-    for (const GlowDot& d : D) B.push_back(soft(d.x, d.y, d.r, withA(pal[d.g], cloudDotLight(cap, expo, base, d.wt))));
-    R.blobs(B.data(), int(B.size()), !light);
+    for (const GlowDot& d : D) B.push_back(softDot(dc, d.x, d.y, d.r, d.g, cloudDotLight(cap, expo, base, d.wt)));   // (GPU colours: the dot carries its group, the shader picks the colour)
+    R.blobsPalette(B.data(), int(B.size()), !light, dc.palette());
     B.clear();
 }
 
@@ -339,10 +340,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         G.reserve(glow ? std::size_t(cnt) : 0);
         const Color cP = css.accent, cN = kPhaseNeg;
         const bool wheel = lab.usesWheel();                                // Phase colours: Wheel (or a complex state) colours each dot by its phase, Sign by the sign of the wave
-        std::vector<Color> pal;
-        if (wheel) for (int g = 0; g < kPhaseBins; g++) { const PhaseRgb c = phaseRgb(phaseOfBin(g), css.light); pal.push_back(Color{c.r, c.g, c.b, 1}); }
-        else pal = {cP, cN};
-        const int ng = int(pal.size());
+        const DotColours dc = makeDotColours(lab.gpuColours, wheel, css.light, cP, cN);   // GPU colours On (the default): a dot carries its colour group; Off: the 0.12 way, every dot carries its colour
+        const int ng = dc.n;
         static std::vector<unsigned char> grp;                             // each dot's colour group
         grp.resize(std::size_t(cnt));
         if (jump) {
@@ -351,7 +350,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             const double th = lab.beatTheta();
             for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = (unsigned char)lab.superGroup(i, th);
         } else
-        for (long i = 0; i < cnt; i++) grp[std::size_t(i)] = wheel ? (unsigned char)phaseBin(s.ph[std::size_t(i)]) : (unsigned char)(s.sg[i] > 0 ? 0 : 1);
+        plainGroups(wheel, s.ph.data(), s.sg.data(), cnt, grp.data());
         const bool outlineOn = p.outline == "On" && !lab.superOn() && lab.outlineAlpha() > 0.01;         // (the 90 % outline is of one orbital: not drawn for a superposition)
         const int fo = lab.outlineStateId();                                // the state on screen (a complex state's own id), not the real fallback fullOrb()
         const double olA = lab.outlineAlpha();                             // the outline fades out as a jump leaves its orbital and back in after landing
@@ -365,10 +364,10 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 const double X = cx + PTS[3 * i] * pxm, Y = cy - (hz ? PTS[3 * i + 1] : PTS[3 * i + 2]) * pxm;
                 if (X < -2 || X > w || Y < -2 || Y > h) continue;
                 if (glow) G.push_back({float(X), float(Y), 4.2f, float(1 - 0.6 * dist / th), grp[std::size_t(i)]});     // dots nearer the cut plane are brighter, as before
-                else B.push_back(square(X - 1 + 1.25, Y - 1 + 1.25, 1.25, withA(pal[grp[std::size_t(i)]], 0.6 * (1 - 0.6 * dist / th) * cloudDotWeight(cap))));
+                else B.push_back(squareDot(dc, X - 1 + 1.25, Y - 1 + 1.25, 1.25, grp[std::size_t(i)], 0.6 * (1 - 0.6 * dist / th) * cloudDotWeight(cap)));
             }
-            if (glow) drawGlow(R, G, cap, css.light, pal, !wheel, 3.0, w, h, cloudExpo_);
-            else R.blobs(B.data(), int(B.size()));
+            if (glow) drawGlow(R, G, cap, css.light, dc, !wheel, 3.0, w, h, cloudExpo_);
+            else R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
             B.clear();
             if (outlineOn) {                                               // the contour |psi|^2 = c in the cut plane (cached until the orbital or the cut changes)
                 const double off0 = p.cut * 0.5 * kExt[orbitals()[stateOrbital(fo)].n];
@@ -381,32 +380,24 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             T.draw("x", gx + 34, gy + 4, 12, css.muted, 0.5);
             T.draw(hz ? "y" : "z", gx, gy - 32, 12, css.muted, 0.5);
         } else if (!d3) {                                                  // side view: drop y, plot (x, z)
-            for (int g = 0; g < ng; g++) {                                 // Sign: blue where the wave ψ is +, orange where it is −; Wheel: one colour per phase step
-                const Color c = withA(pal[g], 0.3 * cloudDotWeight(cap));
-                for (long i = 0; i < cnt; i++) {
-                    if (grp[std::size_t(i)] != g) continue;
-                    const double X = cx + PTS[3 * i] * pxm - 1, Y = cy - PTS[3 * i + 2] * pxm - 1;
-                    if (!(X > -2 && X < w && Y > -2 && Y < h)) continue;
-                    if (glow) G.push_back({float(X + 1), float(Y + 1), 4.4f, 1.f, (unsigned char)g});
-                    else B.push_back(square(X + 1, Y + 1, 1, c));
-                }
+            // Sign: blue where the wave ψ is +, orange where it is −; Wheel: one colour per phase step. The dots are drawn group by group, each group in dot order:
+            // the v0.12 scan (a pass over all dots for each colour) with GPU colours Off, a counting sort with them On: the same list.
+            static std::vector<SideDot> side;
+            sideDots(PTS, cnt, grp.data(), ng, cx, cy, pxm, w, h, lab.gpuColours, side);
+            const double sideLight = 0.3 * cloudDotWeight(cap);
+            for (const SideDot& d : side) {
+                if (glow) G.push_back({d.x, d.y, 4.4f, 1.f, d.g});
+                else B.push_back(squareDot(dc, d.x, d.y, 1, d.g, sideLight));
             }
-            if (glow) drawGlow(R, G, cap, css.light, pal, !wheel, 1.0, w, h, cloudExpo_);
-            else R.blobs(B.data(), int(B.size()));
+            if (glow) drawGlow(R, G, cap, css.light, dc, !wheel, 1.0, w, h, cloudExpo_);
+            else R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
             B.clear();
             if (outlineOn)                                                 // the shadow of the 90 % region seen from the side
                 for (const OutSeg2& g : outlineOf(fo).side) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
         } else {                                                           // rotate by yaw (about z), then pitch, then project
             const double ext = kExt[lab.sizeN()] / p.Z * kA0;
             static std::vector<float> PX, PY, PD;
-            PX.resize(cnt); PY.resize(cnt); PD.resize(cnt);
-            for (long i = 0; i < cnt; i++) {
-                const double x = PTS[3 * i], y = PTS[3 * i + 1], z = PTS[3 * i + 2];
-                const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, dep = y1 * cb - z * sb, up = y1 * sb + z * cb;   // dep > 0: farther away
-                const double f = 1 / (1 + dep / (4 * ext));                 // mild perspective
-                PX[i] = float(cx + x1 * pxm * f); PY[i] = float(cy - up * pxm * f); PD[i] = float(dep / ext);
-                if (PX[i] < 0 || PX[i] > w || PY[i] < 0 || PY[i] > h) PD[i] = NAN;   // off screen
-            }
+            projectCloud(PTS, cnt, CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, w, h, PX, PY, PD);   // PD: the depth over the cloud's radius; NaN = off the picture
             if (glow) {
                 // one pass: size and brightness change smoothly with depth (far = smaller, fainter; near = bigger, brighter), no bands
                 for (long i = 0; i < cnt; i++) {
@@ -416,21 +407,12 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     const float near = 0.5f - 0.5f * t;                        // 1 near … 0 far
                     G.push_back({PX[i], PY[i], 4.6f * (0.8f + 0.4f * near), 0.3f + 0.9f * near, grp[std::size_t(i)]});
                 }
-                drawGlow(R, G, cap, css.light, pal, !wheel, 1.0, w, h, cloudExpo_);
+                drawGlow(R, G, cap, css.light, dc, !wheel, 1.0, w, h, cloudExpo_);
             } else {
-            // three depth bands: far = faint and small, near = bright and larger
-            const double bands[3][2] = {{0.15, 1.6}, {0.3, 2}, {0.55, 2.4}};
-            for (int bnd = 0; bnd < 3; bnd++)
-                for (int g = 0; g < ng; g++) {
-                    const Color c = withA(pal[g], bands[bnd][0] * cloudDotWeight(cap));
-                    const double sz = bands[bnd][1];
-                    for (long i = 0; i < cnt; i++) {
-                        const float v = PD[i];
-                        const bool in = bnd == 0 ? v > 0.35f : bnd == 1 ? (v <= 0.35f && v >= -0.35f) : v < -0.35f;
-                        if (grp[std::size_t(i)] == g && in) B.push_back(square(PX[i], PY[i], sz / 2, c));
-                    }
-                }
-            R.blobs(B.data(), int(B.size()));
+            // three depth bands (far = faint and small, near = bright and larger: kDepthBand), drawn far to near, inside a band group by group, inside a group in dot order.
+            // GPU colours Off: the v0.12 scan, a pass over all dots for each band and colour (72 for the Wheel); On: a counting sort, and the dots carry only their colour group.
+            buildClassic3D(PX.data(), PY.data(), PD.data(), grp.data(), cnt, dc, cloudDotWeight(cap), B);
+            R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
             B.clear();
             }
             if (outlineOn) {                                               // a faint wireframe of the 90 % surface: its contour lines in planes across the region, turned with the cloud

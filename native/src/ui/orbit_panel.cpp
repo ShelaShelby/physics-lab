@@ -123,6 +123,13 @@ void performanceCard(AppState& app) {
     ImGui::SeparatorText("Performance");
     wrappedCheckbox("VSync (wait for the screen)", &app.vsync);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
+    if (app.lab == 1) {                                   // the Atom Lab's cloud dots: who picks the phase colours (0.13 stage 1). A debug switch for comparing on a real PC; not saved
+        wrappedCheckbox("GPU colours (Atom Lab cloud dots)", &app.atom.gpuColours);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("On (the default): each dot of the electron cloud carries its colour number and the graphics card picks the colour.\n"
+                                                      "Off: the processor colours every dot, going over all dots once per colour, as versions up to 0.12 did.\n"
+                                                      "The picture is the same either way (tested); only the speed differs, and it is expected, not yet measured, to be better On.\n"
+                                                      "Used for comparing on your PC with the benchmark's scenes 8 and 23, 10 and 24. Not saved: it is On again at the next start.");
+    }
     {
         const FrameStats& st = app.stats;
         const float avg = st.avgFrame();

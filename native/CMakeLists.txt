@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.12 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.13 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -14,6 +14,7 @@ endif()
 
 option(PL_BUILD_APP "Build the Physics Lab app (needs SDL3 and Dear ImGui)" ON)
 option(PL_BUILD_TESTS "Build the physics unit tests" ON)
+option(PL_GL_TESTS "Also build gl_compare_tests: draws pictures with the real renderer on Mesa's software OpenGL (llvmpipe, through EGL) and compares them (Linux, needs libEGL)" OFF)
 
 if(MSVC)
   add_compile_options(/utf-8 /W3)           # the source has UTF-8 text (°, ☉, ×, ...)
@@ -46,6 +47,7 @@ add_library(atom_core STATIC
   src/atom/atom_sim.cpp
   src/atom/atom_learn.cpp
   src/atom/atom_bench.cpp
+  src/atom/cloud_dots.cpp
   src/atom/outline.cpp
   src/atom/radial_graph.cpp
   src/atom/asd.cpp
@@ -110,6 +112,21 @@ if(PL_BUILD_TESTS)
   target_link_libraries(moon_real_tests PRIVATE orbit_core)
   target_compile_options(moon_real_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME moon_real_validation COMMAND moon_real_tests)
+  # every shader compiled as GLSL 330 core by glslang (skipped, not failed, if glslang is not installed; PL_REQUIRE_GLSLANG=1 makes that a failure)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(Python3_FOUND)
+    add_test(NAME glsl_shaders COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shaders.py ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h)
+    set_tests_properties(glsl_shaders PROPERTIES SKIP_RETURN_CODE 77)
+  endif()
+  if(PL_GL_TESTS)
+    find_library(PL_EGL_LIBRARY EGL REQUIRED)
+    add_executable(gl_compare_tests tests/gl_compare.cpp src/render/renderer2d.cpp src/render/earth_texture.cpp)
+    target_include_directories(gl_compare_tests PRIVATE src/render)
+    target_link_libraries(gl_compare_tests PRIVATE atom_core ${PL_EGL_LIBRARY})
+    target_compile_options(gl_compare_tests PRIVATE ${PL_WARNINGS})
+    add_test(NAME gl_phase_colours COMMAND gl_compare_tests ${CMAKE_BINARY_DIR}/gl_pictures)
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/gl_pictures)
+  endif()
 endif()
 
 # ---- the app ----

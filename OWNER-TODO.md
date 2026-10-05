@@ -1,5 +1,10 @@
 # Owner to-do (things only the owner can do)
 
+## 0.13 stage 1 (phase colours on the GPU): run on the PC — nothing here could be run in the cloud (no real GPU, no Windows)
+- [ ] Run the benchmark with "Atom Lab speed-risk scenes" ticked (15 + 2 more scenes now). Compare scene 8 (GPU colours On) with scene 23 (Off, the 0.12 way), and scene 10 with scene 24; also scene 8 against scene 9. Expected, NOT measured: scene 8 drops towards scene 9 (about 4 ms from 8.08 ms on your RX 9060 XT) and scene 10 from 4.24 ms. If it does not, send the result text: that would be a finding.
+- [ ] Look at the real app: Atom Lab, 4f orbital with a complex orientation (m = +3), Phase colours Wheel and Sign, Cloud and Cloud 3D, Classic and Glow, on a dark and a light theme. Switch "GPU colours (Atom Lab cloud dots)" in the Performance card Off and On: the picture should look the same (pixel for pixel with the software OpenGL here; your driver may differ in a rare pixel by one level).
+- [ ] If you can: try it on an old PC (the i7-4770K) and tell which Intel/NVIDIA graphics it has; stages 2 to 4 need OpenGL 4.3.
+
 ## Try on the PC
 - [x] Benchmark input lock: wheel, drag, click, Space and F11 do nothing while it runs; only Cancel and Esc work.
 - [x] Milky Way band and star mass labels.

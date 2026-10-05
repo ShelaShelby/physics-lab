@@ -19,8 +19,11 @@ namespace atom {
 //   16 the chart of nuclides (0.11 stage 2): the whole chart, every nuclide's square drawn, nothing hovered (keep the pointer off the picture)
 //   17 the same chart as a landscape (0.11 stage 3): full tilt, 3,557 blocks with their sides, the painter's order, the ground and the legend
 //   18 the landscape with the BINDING-ENERGY height (0.11 stage 4), full tilt: the same blocks and drawing as 17, with the other height table (and the peak note)
-//   19 the landscape of 17 with the DECAY CHAIN of uranium-238 drawn and walked five steps (0.12 stage 1): the trail, its labels and the walker on top; scenes 16 to 18 draw no chain, so they stay comparable with 0.11
-constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchLandscapeScene = 17, kBenchBindingScene = 18, kBenchChainScene = 19, kBenchSceneCount = 20;
+//   19 the landscape of 17 with the DECAY CHAIN of uranium-238 drawn and walked five steps (0.12 stage 1): the trail, its labels and the walker on top; scenes 16 to 18 (the benchmark's 19 to 21) draw no chain, so they stay comparable with 0.11
+//   20 scene 8 again with GPU colours Off (0.13 stage 1): the 0.12 way, the CPU colours every dot (scene 8 is the same with GPU colours On); 21 scene 10 again with GPU colours Off
+// NUMBERS: `which` here is not the number the benchmark shows: the benchmark's scene number is which + 3 for which >= 5 (which 5 = "scene 8", which 19 = "scene 22", which 20 = "scene 23"),
+// and which 0 to 4 are scenes 2, 3, 4, 5 and 7 (see ui/benchmark.cpp). Texts shown to the owner use the benchmark's numbers.
+constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchLandscapeScene = 17, kBenchBindingScene = 18, kBenchChainScene = 19, kBenchWheelCpuScene = 20, kBenchWheel2DCpuScene = 21, kBenchSceneCount = 22;
 struct BenchInfo { std::string name, what; };       // name: without a number (the benchmark adds it); what: the settings in words
 const BenchInfo& benchSceneInfo(int which);          // which = kBenchFirstRisk .. kBenchSceneCount - 1
 // Some scenes need something done every frame (a jump held half way, the cut moving, the outline's cache emptied): the benchmark calls this at the start of every frame

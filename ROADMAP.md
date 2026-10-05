@@ -3,6 +3,7 @@
 Plain list of what is done and what is planned. No dates. Nothing is promised that is not on this list.
 
 ## Done
+- 0.13 stage 1 (of 4), "GPU update": phase colours on the GPU: every cloud dot carries its colour number and the vertex shader picks the colour (a GLSL port of `atom::phaseRgb`); the old per-colour CPU scan is kept behind the Performance card's "GPU colours" switch (default On) and as benchmark scenes 23 and 24; tests: dot by dot against the old scan, glslang for every shader, old way against new way pixel by pixel on llvmpipe; the speed-up is EXPECTED, not measured; benchmark text fixes (scene 19 compares with scene 2, scene 22 says scenes 19 to 21, "15 extra") — done in code and tests (speed, the real GPU and Windows to be confirmed by the owner)
 - 0.12 stage 2 (of 2), which finishes 0.12: the accuracy clean-up: what NUBASE2020 says about nuclides with no half-life number, no extrapolated or limit value shown or timed as a half-life, Kr-78 and Xe-124 stable as in NUBASE2020, 113 "~" and 16 stale superheavy half-lives replaced by NUBASE2020's values, modes listed without an intensity said to leave the odds incomplete, the unsourced magic numbers 114 and 184 labelled — done in code and tests (the Windows build and look to be confirmed by the owner)
 - 0.12 stage 1 (of 2): decay chains on the chart of nuclides: the chosen nuclide's chain drawn as a trail from square to square (every way, the likeliest solid), a walk down it step by step with the lab's real random draws, the time stated as never real time, no time made up for half-lives that are only a limit or an extrapolation or not given, the four classic series tested, a chain benchmark scene, the app version is now 0.12 — done in code and tests (the Windows build and look to be confirmed by the owner)
 - 0.11 stage 4 (of 4), which finishes 0.11: the chart's second height, the binding energy per nucleon (AME2020 fetched 2026-10-04 into data/ame; the peak read from the table; 1,008 estimates drawn flat), the valley of stability named as measured, the heaviest known nuclides marked, the island of stability stated as a prediction and NOT drawn (no source could be reached), a binding-landscape benchmark scene — done
@@ -51,8 +52,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
   - a table of measured matter radii of the light halo isotopes (He-6, He-8, Li-11, Be-11, B-17, C-19 ...), for example Tanihata, Savajols and Kanungo, Progress in Particle and Nuclear Physics 68 (2013) 215, or Ozawa, Suzuki and Tanihata, Nuclear Physics A693 (2001) 32: a named, citable table the owner can open, saved as text, CSV or PDF. Both names came from a search result and were not checked
   - then: halo isotopes drawn at the measured matter radius with the halo neutrons outside the core, tests first
 - Magnetic dipole moments are REACHABLE (checked on 2026-10-04 by a plain GET, not stored): `https://www-nds.iaea.org/nuclearmoments/magn_mom_recomm.csv`, 295,121 bytes, 2,365 lines, the same columns as the quadrupole file with `magnetic dipole [nm]`. For a later hyperfine-structure stage (the hyperfine splitting of the hydrogen-like levels needs a nuclear magnetic moment and spin); not scheduled, not started
-- 0.10.6 Atom Lab audit: closed. Fixed: findings 1-9, 11, 13-18 (stages 2-9; finding 11, the cloud jump, in stage 8). Three measured optimisation items are DEFERRED by the owner (not dropped; do not work on them until the owner says):
-  - phase-colour scan (audit finding 10, benchmark scene 8): 7.21 ms against a 4.03 ms baseline
+- 0.10.6 Atom Lab audit: closed. Fixed: findings 1-9, 11, 13-18 (stages 2-9; finding 11, the cloud jump, in stage 8). Two measured optimisation items are DEFERRED by the owner (not dropped; do not work on them until the owner says); the third, the phase-colour scan (audit finding 10, benchmark scene 8), is done in 0.13 stage 1:
   - overlapping superposition (scene 14): 9.31 ms, 107 fps
   - outline first use (audit finding 12, scene 16): worst frame 19.93 ms, 1 % low 60.4 fps. Note: since 0.10.7 stage 1 the radial graph asks for the state's outline when the orbital changes, so this one-time cost can now also fall on a change of orbital with the outline off (not measured) — deferred
 - Bug and speed audit before 1.0, the last pass still to do: app and settings (a report only, then small fix tasks for the real findings) — planned
@@ -65,6 +65,13 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
   - new themes "Frutiger Aero" and "Y2K futurism"
 - 1.0 beta — planned
 - 1.0 release — planned
+
+## 0.13 "GPU update" plan (the owner's, 5 Oct 2026): move repeated per-item work from the CPU to the GPU across the whole app, so it runs well on old PCs (target: a 2013 Core i7-4770K, about 2-3 times slower per core than the owner's Ryzen 5 7500X3D)
+- stage 1: phase colours on the GPU — done (OpenGL 3.3)
+- stage 2: switch to OpenGL 4.3; superposition and cloud jumps on the GPU (compute shaders) — planned
+- stage 3: the outline's density grid on the GPU (compute) — planned
+- stage 4: Orbit Lab rocks on the GPU; chart and landscape geometry cached on the GPU — planned
+- OpenGL 4.3 from stage 2 means PCs older than about 2013 (Intel HD 4600 / Haswell, GeForce 600, Radeon HD 7000 or newer are the oldest that support it) will not run the app; the owner has accepted this (see DECISIONS.md)
 
 ## Later (not scheduled)
 - speed work after the owner's timing (Orbit audit rows 24-27: Real at the top Time speed, the Milky Way mesh and stars redone every frame, label halos and the belts, a long replay after a very long run), only if the benchmark shows a problem — planned

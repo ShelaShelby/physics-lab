@@ -469,7 +469,11 @@ void benchmarkWindow(AppState& app) {
             for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[list[i]].info.name);
             ImGui::Checkbox("Include stress scenes (3 extra, much heavier)", &b.includeStress);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
-            ImGui::Checkbox("Include Atom Lab speed-risk scenes (11 extra)", &b.includeRisk);
+            {   // the number is counted, not typed: it was "11" in 0.10.6 and the list has grown since
+                char riskLabel[96];
+                std::snprintf(riskLabel, sizeof riskLabel, "Include Atom Lab speed-risk scenes (%d extra)", atom::kBenchSceneCount - atom::kBenchFirstRisk);
+                ImGui::Checkbox(riskLabel, &b.includeRisk);
+            }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("The Atom Lab's heaviest paths, each with its settings in its name: phase colours with Classic dots, a cloud jump, a superposition, the 90 %% outline (first use, and with the cut dragged) and the nucleus view. "
                                                           "Look at the Worst column: these are about stutter, which the average hides.");
             ImGui::Spacing();
