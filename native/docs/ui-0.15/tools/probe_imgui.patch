@@ -1,0 +1,111 @@
+--- a/imgui.cpp	2026-10-05 17:44:52.677002147 +0000
++++ b/imgui.cpp	2026-10-05 17:54:33.284145104 +0000
+@@ -1250,6 +1250,11 @@
+ #endif
+ 
+ #include "imgui.h"
++#include "imgui_probe.h"
++#include <stdarg.h>
++PlProbe g_plProbe;
++void PlProbe::add(const char* fmt, ...) { if (!on) return; char b[600]; va_list a; va_start(a, fmt); vsnprintf(b, sizeof b, fmt, a); va_end(a); cur.push_back(b); }
++static struct PlProbeExit { ~PlProbeExit() { g_plProbe.dump(); } } g_plProbeExit;
+ #ifndef IMGUI_DISABLE
+ #include "imgui_internal.h"
+ 
+@@ -5588,6 +5593,7 @@
+ 
+ void ImGui::NewFrame()
+ {
++    g_plProbe.frame();
+     IM_ASSERT(GImGui != NULL && "No current context. Did you call ImGui::CreateContext() and ImGui::SetCurrentContext() ?");
+     ImGuiContext& g = *GImGui;
+ 
+@@ -7534,6 +7540,7 @@
+ 
+     // Find or create
+     ImGuiWindow* window = FindWindowByName(name);
++    if (window && g_plProbe.on && std::getenv("PL_PROBE_SCROLL") && strcmp(name, "##header") != 0 && strcmp(name, "Debug##Default") != 0) { window->ScrollTarget.y = (float)atof(std::getenv("PL_PROBE_SCROLL")); window->ScrollTargetCenterRatio.y = 0.0f; window->ScrollTargetEdgeSnapDist.y = 0.0f; }   // probe only: walk a window down
+     const bool window_just_created = (window == NULL);
+     if (window_just_created)
+         window = CreateNewWindow(name, flags);
+@@ -8341,6 +8348,7 @@
+         IM_ASSERT_USER_ERROR(g.CurrentWindowStack.Size > 1, "Calling End() too many times!");
+         return;
+     }
++    if (g_plProbe.on && g.CurrentWindowStack.Size > 1) g_plProbe.add("W\t%s\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%.1f\t%d", window->Name, window->Pos.x, window->Pos.y, window->Size.x, window->Size.y, window->Scroll.y, window->ScrollMax.y, window->ContentSize.y, (int)window->Flags);
+     ImGuiWindowStackData& window_stack_data = g.CurrentWindowStack.back();
+ 
+     // Error checking: verify that user doesn't directly call End() on a child window.
+@@ -11466,6 +11474,13 @@
+     g.LastItemData.StatusFlags = ImGuiItemStatusFlags_None;
+     // Note: we don't copy 'g.NextItemData.SelectionUserData' to an hypothetical g.LastItemData.SelectionUserData: since the former is not cleared.
+ 
++    if (id != 0 && g_plProbe.on && window)
++    {
++        const ImGuiID sy = ImGui::GetWindowScrollbarID(window, ImGuiAxis_Y), sx = ImGui::GetWindowScrollbarID(window, ImGuiAxis_X);
++        const bool tiny = (bb.Max.x - bb.Min.x) < 3 || (bb.Max.y - bb.Min.y) < 3;
++        if (id != sy && id != sx && !tiny)
++            g_plProbe.add("I\t%s\t%.1f\t%.1f\t%.1f\t%.1f\t%d\t%u", window->Name, bb.Min.x, bb.Min.y, bb.Max.x, bb.Max.y, window->ClipRect.Overlaps(bb) ? 1 : 0, (unsigned)id);
++    }
+     if (id != 0)
+     {
+         KeepAliveID(id);
+--- a/imgui_draw.cpp	2026-10-05 17:44:52.685002147 +0000
++++ b/imgui_draw.cpp	2026-10-05 17:47:27.084690236 +0000
+@@ -34,6 +34,7 @@
+ #endif
+ 
+ #include "imgui.h"
++#include "imgui_probe.h"
+ #ifndef IMGUI_DISABLE
+ #include "imgui_internal.h"
+ #ifdef IMGUI_ENABLE_FREETYPE
+@@ -815,6 +816,10 @@
+ // We avoid using the ImVec2 math operators here to reduce cost to a minimum for debug/non-inlined builds.
+ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32 col, float thickness, ImDrawFlags flags)
+ {
++    if (g_plProbe.on && (flags & ImDrawFlags_Closed) && points_count >= 4 && (col & IM_COL32_A_MASK) && GImGui) {
++        ImVec2 a = points[0], b = points[0]; for (int i = 1; i < points_count; i++) { a = ImMin(a, points[i]); b = ImMax(b, points[i]); }
++        g_plProbe.add("R\t%s\t%.1f\t%.1f\t%.1f\t%.1f\t%.2f\t%d\t%d", GImGui->CurrentWindow ? GImGui->CurrentWindow->Name : "-", a.x, a.y, b.x, b.y, thickness, (int)(col >> 24), points_count);
++    }
+     if (points_count < 2 || (col & IM_COL32_A_MASK) == 0)
+         return;
+ 
+@@ -1726,6 +1731,17 @@
+ 
+ void ImDrawList::AddText(ImFont* font, float font_size, const ImVec2& pos, ImU32 col, const char* text_begin, const char* text_end, float wrap_width, const ImVec4* cpu_fine_clip_rect)
+ {
++    if (g_plProbe.on && (col & IM_COL32_A_MASK) && text_begin && font && GImGui) {
++        const float fs = font_size > 0 ? font_size : GImGui->FontSize;
++        if (!text_end) text_end = text_begin + strlen(text_begin);
++        if (text_end > text_begin) {
++            const float lh = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, "Ag").y;
++            const ImVec2 sz = font->CalcTextSizeA(fs, FLT_MAX, wrap_width, text_begin, text_end);
++            const int lines = lh > 0 ? (int)(sz.y / lh + 0.5f) : 1;
++            char t[48]; int n = 0; for (const char* c = text_begin; c < text_end && n < 44; c++) t[n++] = (*c == '\n' || *c == '\t') ? ' ' : *c; t[n] = 0;
++            g_plProbe.add("T\t%s\t%.2f\t%.1f\t%d\t%d\t%.1f\t%.1f\t%.1f\t%.1f\t%s", GImGui->CurrentWindow ? GImGui->CurrentWindow->Name : "-", fs, wrap_width, lines, (int)(text_end - text_begin), pos.x, pos.y, sz.x, sz.y, t);
++        }
++    }
+     if ((col & IM_COL32_A_MASK) == 0)
+         return;
+ 
+--- /dev/null	2026-10-05 12:56:05.850397296 +0000
++++ b/imgui_probe.h	2026-10-05 17:47:16.088998867 +0000
+@@ -0,0 +1,17 @@
++// UI audit probe (0.15 stage 1). THROWAWAY: copied over a scratch copy of Dear ImGui, never part of the app.
++// With PL_PROBE=<file> it records, for the last frame, every text run, interactive item, closed outline and window.
++#pragma once
++#include <cstdio>
++#include <cstdlib>
++#include <string>
++#include <vector>
++#include <cfloat>
++struct PlProbe {
++    std::vector<std::string> cur, last;
++    bool on = false, init = false;
++    void setup() { if (!init) { init = true; on = std::getenv("PL_PROBE") != nullptr; } }
++    void frame() { setup(); if (!on) return; if (!cur.empty()) last = cur; cur.clear(); }
++    void add(const char* fmt, ...) __attribute__((format(printf, 2, 3)));
++    void dump() { if (!on) return; std::FILE* f = std::fopen(std::getenv("PL_PROBE"), "w"); if (!f) return; const auto& v = cur.empty() ? last : cur; for (const auto& s : v) std::fprintf(f, "%s\n", s.c_str()); std::fclose(f); }
++};
++extern PlProbe g_plProbe;

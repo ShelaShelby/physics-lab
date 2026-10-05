@@ -1,0 +1,23 @@
+--- a/src/atom/chart_draw.cpp	2026-10-05 17:43:31.669004000 +0000
++++ b/src/atom/chart_draw.cpp	2026-10-05 18:09:39.522288847 +0000
+@@ -1,3 +1,4 @@
++#include <cstdlib>
+ #include "chart_draw.h"
+ #include "ame.h"
+ #include "chart_view.h"
+@@ -37,6 +38,7 @@
+ // dry = true: only work out where the legend goes (the box is returned), draw nothing
+ LegendBox drawStatusAndLegend(render::Renderer2D& R, const ChartText& T, const ChartColours& C, double w, double h, const ChartLayout& L, const std::function<double(bool, double, double)>& room, const Color* col,
+                               int selZ, int selN, bool landscape, ChartHeightMode mode, bool dry = false) {
++    if (!dry && std::getenv("PL_MOCK_CLEAN")) return LegendBox{};   // MOCKUP PROBE ONLY (scratch copy): no status line and no legend, the mockups draw those themselves
+     // the status line in the top margin: which nuclide is chosen (so it is never lost) and what the mouse and keys do. The details of a hovered square are a tooltip (atom_view.cpp).
+     if (!dry) {
+         const std::vector<std::string> info = chartHover(selZ, selN);
+@@ -100,6 +102,7 @@
+ // The notes box: what the valley is (measured) and what the island is (a prediction, not drawn). It is a separate box from the legend, in the corner with the most room that the legend does not
+ // take; full wording if it fits, else the short lines, else (a tiny picture) nothing: the labels on the chart say the same in short.
+ LegendBox drawNotesBox(render::Renderer2D& R, const ChartText& T, const ChartColours& C, double w, double h, const ChartLayout& L, const LegendBox& lg, const std::function<double(bool, double, double)>& room, bool dry) {
++    if (!dry && std::getenv("PL_MOCK_CLEAN")) return LegendBox{};   // MOCKUP PROBE ONLY
+     const double nw = std::min(w < 700 ? 250.0 : 380.0, 0.45 * w), ls = 10, llh = 12;
+     const double xL = L.left + 8, xR = w - L.right - nw;
+     struct Cand { bool top, right; double x, free; };

@@ -88,7 +88,8 @@ The owner's problems:
 2. Too much text: the side panels are walls of paragraphs. A short summary first; details and sources behind "More" / an info button.
 3. Too much scrolling, and controls scattered between the header, the side column and under the picture.
 Also seen: boxes inside boxes and outlines on everything; no breathing room; no clear size hierarchy; legend and note boxes covering the picture; too many small elements at once; mixed icon and button styles; no common alignment grid.
-Plan: 0.15 starts with a DESIGN SYSTEM (a spacing scale, 3-4 text sizes, one button style plus one primary, one icon set, a layout grid) and MOCKUPS for the owner to pick from, before any screen is rebuilt. The four themes work and the Theme effects switch carry over. Not started; no stages planned yet.
+- stage 1 (audit, design system, mockups) — DONE, docs only, no screen rebuilt: `native/docs/ui-0.15/` (AUDIT.md with the text-size measurements, DESIGN.md + design_tokens.json, 24 mockups A / B / C in Dark and Frutiger Aero at 1280x800 and 1000x640). The four themes and the Theme effects switch carry over.
+- Next stages are NOT planned yet: they depend on the owner's pick of mockup A, B or C and what to change (OWNER-TODO). Likely first: the text-size rule (Windows scale re-read, minimum window, Settings display line), the About / History HTML-entity bug, then the chosen layout screen by screen.
 
 ## Later (not scheduled)
 - an in-app mascot (an original character, no brand art) that reacts to what the user does and replaces the "Did you know?" bar — after 0.15

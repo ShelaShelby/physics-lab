@@ -1,5 +1,10 @@
 # Owner to-do (things only the owner can do)
 
+## 0.15 stage 1 (audit, design system, mockups): pick a layout
+- [ ] Look at the mockups in `native/docs/ui-0.15/mockups/` (24 PNGs; start with `A_orbit_dark_1280x800.png`, `B_orbit_dark_1280x800.png`, `C_orbit_dark_1280x800.png` and the `chart` ones) and read the paragraph for each in `mockups/README.md`. **Pick A, B or C** (or a mix, e.g. "A with C's card on click") and say what to change (colours, icons, sizes, what feels wrong).
+- [ ] Tell me your screen numbers so the text-size rule fits you: Windows Settings → System → Display: **Scale (%)** and **Resolution**; the screen size in inches; whether the app window is usually maximised. And say which text is "impossibly small" (the Atom Lab side panel, which is 12 px, is my main suspect).
+- [ ] Read `native/docs/ui-0.15/AUDIT.md` (Part B table and "the 5 worst problems") and say if anything important is missing or wrong.
+
 ## 0.14 stage 3 (final: Theme effects switch): look at all three new looks in the real app on the PC
 - [ ] Look at Frutiger Aero, Y2K Ice and Y2K Night one more time on your screen (the stage 2 items below are still open): glossy and "wet" enough? the Y2K themes cold and techno enough? Say what you want changed; 0.14 is finished, so changes would be small fixes in 0.15 or later.
 - [ ] Settings → Theme effects: switch Off in each of them. The textures, clouds, bubbles, glints, reflections and corner brackets should go; colours, gloss and fonts stay. Switch On again. Tell me if anything stays that should go, or goes that should stay.

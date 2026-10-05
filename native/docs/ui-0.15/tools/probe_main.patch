@@ -1,0 +1,10 @@
+--- a/src/main.cpp	2026-10-05 17:43:31.673004000 +0000
++++ b/src/main.cpp	2026-10-05 17:51:30.259259040 +0000
+@@ -239,6 +239,7 @@
+         }
+     }
+     if (const char* f = SDL_getenv("PL_ATOM_FOCUS")) app.atom.s.focus = std::atoi(f);
++    if (const char* t = SDL_getenv("PL_ATOM_TILT")) app.atom.s.chartView.tilt = std::atof(t);   // PROBE ONLY (scratch copy): the landscape
+     const char* atomDo = SDL_getenv("PL_ATOM_DO");
+     const int atomDoFrame = SDL_getenv("PL_ATOM_DO_FRAME") ? std::atoi(SDL_getenv("PL_ATOM_DO_FRAME")) : 0;   // PL_ATOM_DO_FRAME=n: press it at frame n (after the cloud has filled), not at the start
+     const auto doAtom = [&] { if (!atomDo) return; const std::string a = atomDo; if (a == "emit") app.atom.emit(); else if (a == "absorb") app.atom.absorb(); else if (a == "auto") app.atom.toggleAuto();

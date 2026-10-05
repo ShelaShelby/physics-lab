@@ -1,24 +1,43 @@
-# Native Physics Lab 0.14 (alpha) — stage 3 (FINAL): Theme effects switch and wrap-up
+# Native Physics Lab 0.15 "Full UI rework" — stage 1: audit, design system, mockups (no screen rebuilt)
 
-`index.html` untouched (sha256 e5501387ae64…). No helper agents. One commit, one push to `native`, no PR. 0.14 ends here by the owner's decision.
-**NOT TESTED: a real PC, real GPU, real Segoe UI, speed.** Pictures are Mesa llvmpipe, headless (the real app on Linux, SDL offscreen).
-**Tests were written first** (`tests/test_theme_stage3.inc`: compile-red, then green; `tests/check_effects_pictures.py`).
+**Docs, tools and mockup pictures only.** Not one line of app code, test, asset, data or workflow changed (`git diff origin/native` outside `native/docs`, REPORT, README, RESUME, ROADMAP, OWNER-TODO: empty). `index.html` untouched (sha256 e5501387ae64…). No helper agents. Everything is in `native/docs/ui-0.15/`: `AUDIT.md` (Part A and B in full), `DESIGN.md` + `design_tokens.json` (Part C), `mockups/` (Part D), `tools/` (throwaway probe and scripts, `README.md`).
+**NOT tested: a real PC, Windows' own DPI scaling, Segoe UI, any speed.** Numbers are from the real app (Release) on Linux, SDL offscreen + Mesa llvmpipe, 1280 × 800, scale 1.0, Dark, Text size Normal, DejaVu Sans (wider than Segoe UI); other themes were not audited.
 
-## What changed
-- **Settings → Theme effects: On / Off** (saved as `effects=on|off`, default On; tiles after Motion, with a note). Off strips, in one function on the style data (`app::withoutEffects`, applied in `ui/look.cpp`): page textures (clouds, bubbles, grain, halftone, grid, streak), glints, brush lines, the reflection, corner brackets, HUD rules, the spec label. Colours, gloss gradients, rim, glow, shine, shadow, title bars and fonts stay. Test switch `PL_EFFECTS=off`. The benchmark report prints `Theme effects: on/off`.
-- **Docs:** ROADMAP (0.14 complete in 3 stages; glass/chrome planets and nucleons, glossy chart tiles, theme-aware Cloud dots and animated backgrounds listed as DROPPED by the owner; the 0.15 "Full UI rework" entry with the owner's problems, the MyAnimeList → AniList target and the design-system-and-mockups start; "Later": the mascot), RESUME (0.14 complete), README, DECISIONS, OWNER-TODO, one summary entry at the top of the changelog (v0.14 history).
+## Part A — text size (numbers; rule only proposed)
+- **DPI:** SDL 3.4.16 itself declares per-monitor-v2 awareness on Windows (the .exe has no manifest). The app reads `SDL_GetDisplayContentScale` of the PRIMARY monitor ONCE at start and uses it for fonts, spacing, panel width (360 × scale) and window size. It never reads it again (no scale-changed handler: moving the window to another monitor keeps the old size) and sets no minimum window size.
+- **Text does not follow the window** (same sizes at 1000 × 640, 1280 × 800, 1920 × 1200); it follows Text size (× 0.9 / 1 / 1.15 / 1.3) but the panel stays 360 px at all four. The header grows in small windows (163 px at 1280 wide, 211 px at 1000: 33 % of a 640 px window).
+- **"Normal" text:** Orbit Lab panel **16 px** (94 % of its characters); Atom Lab panel **12 px** (82 %), table symbols 9.5 px in 16 × 26 px cells, labels 11 px. Windows' own type ramp: body 14 / caption 12 epx (1 epx = 1 px at 100 %). I could only read this as a web-search summary (learn.microsoft.com was blocked), not the page. At 150 %: 21 / 18 px.
+- **Unknown:** the owner's real scale and resolution (OWNER-TODO). Proposed rule (AUDIT.md): unit u × Windows scale × Text size, body 16 u, nothing under 13 u, text never shrinks with the window, panel width in text widths, re-read the scale, Settings shows the numbers.
+
+## Part B — audit table (full definitions and all text sizes: AUDIT.md)
+| Screen | Controls seen / all | Outside main area | Boxes seen / all | Text sizes | Scroll px | Paragraphs >3 lines (first screen / all) |
+|---|---|---|---|---|---|---|
+| Orbit Lab | 29 / 96 | 10 | 28 / 100 | 5 | 1,919 | 1 / 2 |
+| Orbit Lab, Earth selected | 29 / 99 | 10 | 28 / 103 | 5 | 1,997 | 1 / 2 |
+| Atom Lab: orbit view | 140 / 202 | 14 | 27 / 117 | 11 | 4,857 | 0 / 19 |
+| Atom Lab: nucleus | 141 / 211 | 15 | 28 / 127 | 11 | 5,055 | 1 / 20 |
+| Atom Lab: Cloud 3D | 141 / 233 | 15 | 28 / 152 | 11 | 5,936 | 0 / 23 |
+| Atom Lab: Slice | 140 / 229 | 14 | 27 / 146 | 11 | 5,836 | 1 / 23 |
+| Atom Lab: chart | 139 / 209 | 13 | 27 / 128 | 11 | 5,717 | 1 / 25 |
+| Atom Lab: landscape | 139 / 209 | 13 | 27 / 128 | 11 | 5,717 | 1 / 25 |
+| Learn tab | 17 / 17 | 10 | 15 / 15 | 6 | 0 (window) | 2 / 2 |
+| Achievements tab | 10 / 10 | 10 | 12 / 12 | 6 | 0 (window) | 0 / 0 |
+| Settings | 48 / 120 | 28 | 42 / 122 | 10 | 446 (window) | 1 / 2 |
+| Theme picker | 40 / 110 | 26 | 42 / 114 | 3 | 0 (window) | 1 / 2 |
+| About | 33 / 103 | 26 | 26 / 116 | 6 | 9,212 (window) | 1 / 2 |
+| History (app changelog) | 33 / 109 | 26 | 26 / 142 | 7 | 17,530 (window) | 3 / 81 |
+| Lab changelog | 35 / 103 | 28 | 28 / 106 | 5 | 3,654 (window) | 6 / 26 |
+| Guide (Orbit Lab) | 51 / 129 | 27 | 42 / 122 | 8 | 2,847 (window) | 1 / 2 |
+| Guide (Atom Lab) | 163 / 235 | 136 | 39 / 135 | 12 | 2,080 (window) | 0 / 19 |
+**The 5 worst problems:** (1) the Atom Lab side column is 5,000+ px of scrolling (9–10 windows tall): ~200 controls, 118 of them periodic-table cells, 19–25 long paragraphs; (2) the Atom Lab's main text is 12 px, it uses 11 text sizes, and neither window size nor panel width follows the text; (3) controls are scattered: header, tabs, "Did you know?" bar, side panel, the bar under the Atom picture; (4) a box around everything: 27–28 outlined boxes at once, 100–150 in a full column; About and History hold 78,000–87,000 characters; (5) the picture gets what is left (48–57 % of the window, 43 % at 1000 × 640) and the legend / readout text is drawn over it.
+
+## Parts C and D
+- **DESIGN.md:** spacing 4/8/12/16/24/32 u; text Caption 13 / **Body 16** / Title 20 / Display 28 u (minimums per Windows scale in the file); one button shape, Primary / Secondary / Quiet; icons **Lucide** (ISC, licence in `mockups/assets/`); 3 surface levels, no outlines (edges of text-less controls computed to 3:1); grid; summary ≤ 140 characters + More / ⓘ; groups Choose / View / Info; tips: the bar is replaced by an icon + one card + an optional toast; all 14 themes map onto the 7 flat colours they already have (WCAG table computed by `tools/theme_contrast.py`: muted text ≥ 4.99:1 everywhere; the theme line colour is only 1.3–1.8:1 in most themes, so control edges are computed).
+- **Mockups** (`native/docs/ui-0.15/mockups/`, 24 PNGs, largest 187 KB, 2.9 MB in all): `A_*` rail + panel with tabs, `B_*` top bar + bottom drawer, `C_*` picture first with a subject card and popovers; each as `<layout>_<orbit|chart>_<dark|aero>_<1280x800|1000x640>.png`, e.g. `A_orbit_dark_1280x800.png`. Lab pictures in them are the app's real pictures; words and numbers are the app's own. Per-layout paragraph, honest comparison and a suggestion (A as base + C's card on click, NOT a decision) are in `mockups/README.md`. Limits: one tab and 14–26 sample controls per picture, other screens and the element picker not drawn, Aero glass approximated, Inter font (free) not Segoe UI.
+
+## Found, not fixed (for later stages)
+- **About and History show raw HTML entities** (`&rsquo;`, `&ndash;`, `&ldquo;` …; 236 in `app_text.inc`): `html_view.cpp` has no entity decoding. Seen in the About render.
+- The scale is read once from the primary monitor; no minimum window size (Part A). Monochrome's line colour is 2.10:1 on its page (needs the computed edge in 0.15).
 
 ## Tests
-- app_tests **3,036** (was 2,855): the setting (default On, saved, loaded, old file, bad value, benchmark line); for all 13 themes Off has none of the decoration and leaves the page gradient, gloss, rim, glow, title bar, fonts, button colour exactly; Aero, Ice and Night: with Off the page is the plain gradient at every height, and the whole stage 2 contrast set (page, panels, buttons, title bars, borders) passes again with Off.
-- `effects_pictures` (new): Off = the header margin is the plain gradient (second difference 1 of 255; with On it is 22 and 29 for Ice and Night, so the test can tell); Aero's clouds and bubbles change 57,774 header pixels; the corner bracket arm is a line with On (217 / 175 levels) and the gradient with Off; the inside of a floating window is the same On and Off (0 to 6 of 282,568 pixels, worst 1/255); hover glint and brush lines gone; the saved setting draws the same picture as the switch; Dark and Light: 0 differing pixels On vs Off.
-- **Effects On = stage 2, exactly:** against the stage 2 program, Aero / Ice / Night orbit, nucleus, Cloud 3D, chart, picker and guide: 0 differing pixels (checked pair by pair; 15 hashes of the stage 2 program are now a guard in `theme_pictures_0.14s2_native.sha256`).
-- **72-picture test:** the 40 pictures (Orbit, nucleus, Cloud 3D, chart) of the 10 unchanged themes: 0 differing pixels vs 0.13. Listed as changed (all in `theme_pictures_0.14_changed.sha256`, made by this code, a regression guard not an independent reference): Light and Auto-in-light (stage 2: the darker accent); the picker (stage 2: two cards); **new in stage 3: the Settings screen of all 12 variants**, because it has a new section and the scroll bar thumb is shorter. Checked against the stage 2 program for Dark, Aero, Ice-night: differs only in x 727–736, y 344–432 (the scroll bar), 857–859 pixels. So "0 differing pixels" holds for everything but these named files.
-- Other tests unchanged and passing (ctest below): orbit 1,612, atom 21,066, nbody 37, jpl 55, moon 24, moon_real 59, GL 503, glslang, windows_decorated, window_pictures, y2k_pictures.
-
-## Perturbed, caught, reverted
-1. Brackets, HUD and spec label not stripped: unit test fails (3 checks); my first picture check did NOT catch it (a bracket line is uniform along its row), so I changed it to compare the arm row with the rows below, and it then fails for Ice and Night on the perturbed program (217 vs 217, 175 vs 175).
-2. Grid not stripped: 4 unit fails and the picture test fails (margin 22 and 29 > 2; hover glint check). All reverted; the clean build passes.
-
-## Limits
-Speed of the effects was never measured (OWNER-TODO asks the owner to compare On and Off on a slow PC). The GitHub connector was down for a while in this session; the Actions result is in the closing message if it could be read. No physics touched; no existing test loosened (one test file got a parameter, `checkLook(id, effectsOff)`, to run the same rules with Off).
-- **Final diff against `origin/native`: 26 files, +302 / −43** (no build output, no pictures, no generated data).
+Linux GCC Release, Ninja, `-DPL_BUILD_APP=ON -DPL_GL_TESTS=ON -DPL_PICTURE_TESTS=ON`, run on the unchanged code before and after the docs were added: **ctest 14 / 14 pass** (orbit, atom, app, nbody, jpl, moon, moon_real, glsl_shaders, windows_decorated, gl_phase_colours, theme_pictures, window_pictures, y2k_pictures, effects_pictures; the picture tests keep 0 differing pixels). Test counts are those of 0.14. The audit probe and mockup code live only in a scratch copy / in `docs`; none is reachable from the app.
