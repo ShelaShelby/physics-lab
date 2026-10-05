@@ -22,11 +22,16 @@ struct RadialGraph {
     std::vector<double> maxima;            // every local maximum of P, a0, nearest the nucleus first (there are n - l)
     double mean = 0;                       // the average distance <r> = a0 (3 n^2 - l (l + 1)) / (2 Z), the number the readout shows as "theory"
     double reach90 = 0;                    // how far the 90 % outline of this state reaches from the nucleus, a0 (outline.h rmax / Z)
+    bool reach90Pending = false;           // 0.13 stage 3: the outline is still being made on the GPU, so reach90 is not known yet (0): the panel shows no 90 % mark and calls completeReach90 each frame
 };
 
 double meanRadius(int n, int l, int Z);                       // <r>, a0: the one formula used by the graph and by the readout
 double radialDensity(int state, int Z, double r);             // P(r), 1 / a0; `state` is a real orbital's index or a complex state's id (only its n and l matter)
-RadialGraph radialGraph(int state, int Z);                    // `state` as above (the 90 % reach is that state's own outline)
+RadialGraph radialGraph(int state, int Z);                    // `state` as above (the 90 % reach is that state's own outline; if it is not made yet this waits for the CPU to make it: about 30 ms the first time)
+// 0.13 stage 3: the same without that wait when the GPU can make the outline: `useGpu` (the lab's "GPU outline" switch) hands the outline to the compute object and leaves reach90Pending set until it is ready.
+// With no compute object it is the same as radialGraph(state, Z).
+RadialGraph radialGraphNoWait(int state, int Z, bool useGpu);
+bool completeReach90(RadialGraph& g, int state, int Z, bool useGpu);   // fills reach90 once the outline is ready; true when it is (or was never pending)
 
 // the words around the graph (used by the panel and checked by the tests)
 double radialTickStep(double rEnd);                           // a round axis step (1, 2 or 5 times a power of ten, a0) that gives 3 to 8 ticks up to rEnd

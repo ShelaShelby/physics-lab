@@ -256,6 +256,7 @@ void begin(AppState& app) {
     const char* s = reinterpret_cast<const char*>(plgl::glGetString(GL_RENDERER)); e.gpu = s ? s : "";
     s = reinterpret_cast<const char*>(plgl::glGetString(GL_VERSION)); e.glVersion = s ? s : "";
     s = reinterpret_cast<const char*>(plgl::glGetString(GL_VENDOR)); e.vendor = s ? s : "";
+    e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline);   // (scenes 16 and 17 are the ones it changes)
     e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute);   // which way the Atom Lab's superposition and jumps run (scenes 11 to 15 are the ones it changes)
     const ImGuiIO& io = ImGui::GetIO();
     const float sc = ImGui::GetStyle().FontScaleDpi;
@@ -495,6 +496,7 @@ void benchmarkWindow(AppState& app) {
         if (ImGui::Begin("Benchmark result###bench", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
             ImGui::TextWrapped("%s, %s, OpenGL %s", b.env.gpu.c_str(), b.env.vendor.c_str(), b.env.glVersion.c_str());
             ImGui::TextWrapped("Atom Lab superposition and jumps: %s", b.env.computePath.c_str());
+            ImGui::TextWrapped("Atom Lab 90 %% outline: %s", b.env.outlinePath.c_str());
             ImGui::TextWrapped("Window %d x %d, picture %d x %d pixels%s", b.env.windowW, b.env.windowH, b.env.pictureW, b.env.pictureH, b.env.fullscreen ? ", full screen" : "");
             ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, vec(look().c.line));      // the header row in the theme's colours (the default is dark on every theme)
             const bool table = ImGui::BeginTable("##benchtable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp);

@@ -36,6 +36,7 @@
 #include "orbit/sky.h"
 #include "ui/app_pages.h"
 #include "ui/app_tabs.h"
+#include "atom/outline.h"
 #include "ui/atom_learn.h"
 #include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
@@ -161,6 +162,7 @@ int main(int, char**) {
         GLint maj = 0, min = 0;
         plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
         app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr;
+        atom::setOutlineCompute(renderer.outlineCompute());           // the 90 % outline's compute object (null on a 3.3 PC or with PL_NO_COMPUTE: the CPU makes it)
         std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
     }
 
@@ -484,6 +486,7 @@ int main(int, char**) {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
+    atom::setOutlineCompute(nullptr);
     renderer.shutdown();
     SDL_GL_DestroyContext(gl);
     SDL_DestroyWindow(window);

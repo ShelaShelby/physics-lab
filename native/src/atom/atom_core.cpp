@@ -288,6 +288,10 @@ static const ComplexPair kPairs[] = {
     {2, 1, 5, 6, 1}, {2, 2, 8, 7, 2},      // xz, yz;  x2-y2, xy
     {3, 1, 10, 11, 1}, {3, 2, 13, 12, 2}, {3, 3, 14, 15, 1},   // xz2, yz2;  z(x2-y2), xyz;  x(x2-3y2), y(3x2-y2)
 };
+bool complexPairOf(int l, int absM, int& re, int& im, double& c) {
+    for (const ComplexPair& p : kPairs) if (p.l == l && p.m == absM) { re = p.re; im = p.im; c = p.c; return true; }
+    return false;
+}
 std::complex<double> angularComplex(int l, int m, double x, double y, double z) {
     const int am = m < 0 ? -m : m;
     for (const ComplexPair& p : kPairs) {

@@ -18,13 +18,17 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <thread>
+#include <chrono>
 #include <string>
 #include <vector>
 
 #include "atom/atom_bench.h"
 #include "atom/cloud_dots.h"
 #include "atom/cloud_light.h"
+#include "atom/outline.h"
 #include "render/group_compute.h"
+#include "render/outline_compute.h"
 #include "render/renderer2d.h"
 
 // ---- the GL functions, from EGL (the app gets them from SDL: render/gl_loader.cpp) ----
@@ -469,6 +473,242 @@ static void gpuEdgeCases(render::Renderer2D& R) {
     }
 }
 
+// ================= 0.13 stage 3: the 90 % outline on the GPU (compute shaders, OpenGL 4.3) =================
+// The CPU functions (outlineGridCpu, outlineLevelCpu, outlinePlaneCpu, outlineFromGrid) are the reference. The GPU's density grid may differ from the CPU's only within float rounding; the 90 % level it
+// finds must be the right level FOR ITS OWN GRID (the enclosed probability of the cells at or above it is 0.9 to the float sum's accuracy, and the next higher cell value encloses less), and must agree
+// with the CPU's level to 1e-4 relative; the Slice's plane likewise. Jobs are polled the way the app does it (never blocking); here the test just keeps asking, with a short sleep.
+static bool waitGrid(render::IOutlineCompute& oc, int job, std::vector<float>& g, float& lv) {
+    for (int i = 0; i < 5000; i++) { const render::JobState st = oc.pollGrid(job, g, lv); if (st == render::JobState::Done) return true; if (st == render::JobState::Failed) return false; std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+    return false;
+}
+static bool waitPlane(render::IOutlineCompute& oc, int job, std::vector<float>& v) {
+    for (int i = 0; i < 5000; i++) { const render::JobState st = oc.pollPlane(job, v); if (st == render::JobState::Done) return true; if (st == render::JobState::Failed) return false; std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+    return false;
+}
+// largest relative difference between two density grids, where the CPU cell is at least 1e-3 of the grid's maximum; and (for the rest) the largest absolute difference as a share of the maximum.
+// The bounds: 32-bit floats carry 6e-8; the radial Laguerre polynomial and the angular polynomials are sums with signs, so near a node the result is smaller than its terms and the relative error
+// is amplified by terms / result: measured up to 4.3e-5 relative (3d z2 plane), so the bound is 2e-4 for cells above 0.1 % of the maximum, and 2e-6 of the maximum for all the others.
+struct ValDiff { double rel = 0, small = 0, gmax = 0; long over = 0; };
+static ValDiff compareValues(const std::vector<float>& gpu, const std::vector<float>& cpu) {
+    ValDiff d;
+    for (float v : cpu) d.gmax = std::max(d.gmax, double(v));
+    for (std::size_t i = 0; i < cpu.size(); i++) {
+        const double c = cpu[i], g = gpu[i], diff = std::fabs(g - c);
+        if (c >= 1e-3 * d.gmax) { d.rel = std::max(d.rel, diff / c); if (diff > 2e-4 * c) d.over++; }
+        else { d.small = std::max(d.small, diff / d.gmax); if (diff > 2e-6 * d.gmax) d.over++; }
+    }
+    return d;
+}
+
+
+// A Classic Cloud 3D picture with the outline's wireframe (slice == nullptr), or a Slice picture with the cut's contour: the drawing of atom_view.cpp, line for line
+static Picture outlinePicture(render::Renderer2D& R, AtomLab& L, const Outline& O, const std::vector<OutSeg2>* slice, bool light) {
+    const double w = 1040, h = 713;
+    const long cnt = std::min<long>(L.s.k, L.cloudCap());
+    std::vector<unsigned char> grp(static_cast<std::size_t>(cnt));
+    plainGroups(L.usesWheel(), L.s.ph.data(), L.s.sg.data(), cnt, grp.data());
+    const double pxm = L.pxPerM(std::min(w, h), L.s.szCur) * std::pow(10, L.p.zoom), ext = kExt[L.sizeN()] / L.p.Z * kA0, cx = w / 2, cy = h / 2;
+    const double ca = std::cos(L.s.yaw), sa = std::sin(L.s.yaw), cb = std::cos(L.s.pitch), sb = std::sin(L.s.pitch);
+    const Color fg = light ? render::hexColor("#1c1c1a") : render::hexColor("#eeeeee"), accent = light ? render::hexColor("#2f6fed") : kPlus;
+    const DotColours dc = makeDotColours(true, L.usesWheel(), light, accent, kMinus);
+    const double olUnit = kA0 / L.p.Z * pxm;
+    return draw1(R, 1040, 713, light ? Color{1, 1, 1, 1} : render::hexColor("#1e1e21"), [&] {
+        std::vector<Blob> B;
+        if (!slice) {
+            std::vector<float> PX, PY, PD;
+            projectCloud(L.s.pts.data(), cnt, CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, w, h, PX, PY, PD);
+            buildClassic3D(PX.data(), PY.data(), PD.data(), grp.data(), cnt, dc, cloudDotWeight(L.cloudCap()), B);
+            R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
+            const double um = kA0 / L.p.Z;
+            const auto pr = [&](double x, double y, double z, double& X, double& Y, double& t) {
+                x *= um; y *= um; z *= um;
+                const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, dep = y1 * cb - z * sb, up = y1 * sb + z * cb, f = 1 / (1 + dep / (4 * ext));
+                X = cx + x1 * pxm * f; Y = cy - up * pxm * f; t = std::max(-1.0, std::min(1.0, dep / ext));
+            };
+            for (const OutSeg3& g : O.wire) {
+                double X0, Y0, t0, X1, Y1, t1;
+                pr(g.x0, g.y0, g.z0, X0, Y0, t0); pr(g.x1, g.y1, g.z1, X1, Y1, t1);
+                Color c = fg; c.a = float(std::max(0.0, std::min(1.0, 0.42 - 0.22 * 0.5 * (t0 + t1 + 2) / 2)));
+                R.line(X0, Y0, X1, Y1, 0.9, c);
+            }
+        } else {
+            const double size = kExt[L.sizeN()] / L.p.Z * kA0, off = L.cutOffsetM(), th = 0.07 * size;
+            for (long i = 0; i < cnt; i++) {
+                const double dist = std::fabs(L.s.pts[std::size_t(3 * i + 1)] - off);
+                if (dist > th || grp[std::size_t(i)] == kHiddenGroup) continue;
+                const double X = cx + L.s.pts[std::size_t(3 * i)] * pxm, Y = cy - L.s.pts[std::size_t(3 * i + 2)] * pxm;
+                if (X < -2 || X > w || Y < -2 || Y > h) continue;
+                B.push_back(squareDot(dc, X - 1 + 1.25, Y - 1 + 1.25, 1.25, grp[std::size_t(i)], 0.6 * (1 - 0.6 * dist / th) * cloudDotWeight(L.cloudCap())));
+            }
+            R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
+            Color c = fg; c.a = 0.6f;
+            for (const OutSeg2& g : *slice) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, c);
+        }
+    });
+}
+
+static AtomLab* outlineLab(AtomLab& L, const char* shell, const char* axKey, const char* ax, const char* view) {
+    seedRandom(20260101);
+    L.p = AtomParams::appDefaults(); L.p.super = "Off"; L.p.outline = "On"; L.viewW = 1040; L.viewH = 713;
+    L.setParam("Z", 92.0); L.setParam("N", 146.0); L.restart(); L.s.nucSeed = 1; L.s.spin = false;
+    L.p.cstyle = "Classic"; L.p.cdens = "Normal";
+    L.setParam("view", std::string(view)); L.setParam("orb", std::string(shell)); L.setParam(axKey, std::string(ax)); L.setParam("zoom", 0.0); L.resetView();
+    L.p.outline = "On";
+    for (int i = 0; i < 40000 && L.s.k < L.cloudCap(); i++) L.step(1.0 / 240);
+    return &L;
+}
+
+static Picture g_cpuOutline2p;                                              // 2p z, Cloud 3D, the CPU outline, on the 4.3 context: for the fallback test
+
+static void gpuOutlinePictures(render::Renderer2D& R, const std::string& dir) {
+    render::IOutlineCompute* oc = R.outlineCompute();
+    if (!oc) return;
+    struct Sc { const char* shell; const char* axKey; const char* ax; const char* name; };
+    const Sc list[] = {{"4f", "fAx", "z3", "4f z3"}, {"2p", "pAx", "z", "2p z"}, {"3d", "dAx", "z2", "3d z2"}};
+    for (const Sc& sc : list)
+        for (const char* view : {"Cloud 3D", "Slice"}) {
+            AtomLab L;
+            outlineLab(L, sc.shell, sc.axKey, sc.ax, view);
+            const int fo = L.outlineStateId();
+            const bool slice = std::string(view) == "Slice";
+            clearOutlineCache(); setOutlineCompute(nullptr);
+            const Outline cpuO = outlineOf(fo);
+            const double off0 = L.p.cut * 0.5 * kExt[orbitals()[stateOrbital(fo)].n];
+            const std::vector<OutSeg2> cpuSlice = slice ? outlineSlice(fo, false, off0) : std::vector<OutSeg2>();
+            clearOutlineCache(); setOutlineCompute(oc);
+            const Outline* g = nullptr;
+            outlineReady(fo, true);
+            for (int i = 0; i < 5000 && !g; i++) { g = outlineReady(fo, true); if (!g) std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+            check(std::string(sc.name) + " " + view + ": the GPU outline arrives", g != nullptr);
+            if (!g) continue;
+            std::vector<OutSeg2> gpuSlice;
+            if (slice) {
+                const int job = oc->beginPlane(outlineDensityOf(fo), 200, float(g->half), false, float(off0));
+                std::vector<float> v; const bool ok = job > 0 && waitPlane(*oc, job, v);
+                check(std::string(sc.name) + " Slice: the GPU plane arrives", ok);
+                if (ok) gpuSlice = outlineSliceFromValues(*g, v);
+            }
+            for (const bool light : {false, true}) {
+                const Picture a = outlinePicture(R, L, cpuO, slice ? &cpuSlice : nullptr, light), b = outlinePicture(R, L, *g, slice ? &gpuSlice : nullptr, light);
+                const Diff d = compare(a, b);
+                std::printf("outline %-8s %-8s %s: largest difference %d of 255, %ld of %ld pixels differ (%.4f %%)\n", sc.name, view, light ? "light" : "dark", d.maxLevel, d.differing, d.total, 100.0 * double(d.differing) / double(d.total));
+                check(std::string("outline picture ") + sc.name + " " + view + (light ? " light" : " dark") + ": the CPU and GPU outlines draw the same picture (under 0.05 % of the pixels differ: lines move only where a cell is within rounding of the level)", double(d.differing) < 5e-4 * double(d.total));
+                save(dir, std::string("outline ") + sc.name + " " + view + (light ? " light" : " dark"), a, b);
+                if (!light && !slice && std::string(sc.name) == "2p z") g_cpuOutline2p = a;
+            }
+            clearOutlineCache(); setOutlineCompute(nullptr);
+        }
+}
+
+static void gpuOutlineGrids(render::Renderer2D& R) {
+    render::IOutlineCompute* oc = R.outlineCompute();
+    check("OpenGL 4.3 context: the renderer made an outline compute object", oc != nullptr && oc->ok());
+    if (!oc) return;
+    const int orbs[] = {orbIndex("4f|z3"), orbIndex("2p|z"), orbIndex("3d|z2"), complexState(orbIndex("4f"), 3), orbIndex("3s"), orbIndex("1s"), orbIndex("2p|x")};
+    for (const int orb : orbs) {
+        const std::string tag = "outline " + stateText(orb) + ": ";
+        const Orbital& o = orbitals()[stateOrbital(orb)];
+        const double half = 1.15 * kExt[o.n], h = 2 * half / kOutlineGrid, dV = h * h * h, norm = orbitalNorm(orb), scale = dV / norm;
+        const std::vector<float> cpuGrid = outlineGridCpu(orb);
+        const float cpuLevel = outlineLevelCpu(cpuGrid, dV, norm);
+        const int job = oc->beginGrid(outlineDensityOf(orb), kOutlineGrid, float(half), float(scale), float(kOutlineProb));
+        check(tag + "the grid job starts", job > 0);
+        std::vector<float> g; float lv = 0;
+        const bool done = job > 0 && waitGrid(*oc, job, g, lv);
+        check(tag + "the grid job finishes", done && g.size() == cpuGrid.size());
+        if (!done || g.size() != cpuGrid.size()) continue;
+        const ValDiff d = compareValues(g, cpuGrid);
+        // the level, on the GPU's own grid: the cells at or above it hold 0.9 (to the float sum), the next higher cell value holds less
+        double above = 0; float next = 3.4e38f;
+        for (float v : g) { if (v >= lv) above += double(v) * scale; if (v > lv && v < next) next = v; }
+        double aboveNext = 0; for (float v : g) if (v >= next) aboveNext += double(v) * scale;
+        const double ratio = double(lv) / double(cpuLevel);
+        std::printf("%-12s grid: worst relative difference %.2e (cells over the bound: %ld), level GPU/CPU %.8f, enclosed probability at the GPU level %.7f, at the next cell value %.7f\n", stateText(orb).c_str(), d.rel, d.over, ratio, above, aboveNext);
+        check(tag + "the GPU density grid equals the CPU's within float rounding (2e-4 relative where the cell is above 0.1 % of the maximum, 2e-6 of the maximum elsewhere: near a node the polynomial cancels)", d.over == 0);
+        check(tag + "the GPU's 90 % level encloses 0.9 on its own grid (>= 0.9 - 1e-6) and the next higher cell value encloses less (< 0.9 + 1e-6)", above >= 0.9 - 1e-6 && aboveNext < 0.9 + 1e-6);
+        check(tag + "the GPU's 90 % level agrees with the CPU's to 1e-4 relative", std::fabs(ratio - 1) < 1e-4);
+    }
+}
+
+static void gpuOutlinePipeline(render::Renderer2D& R) {
+    render::IOutlineCompute* oc = R.outlineCompute();
+    if (!oc) return;
+    setOutlineCompute(oc);
+    for (const int orb : {orbIndex("4f|z3"), orbIndex("2p|z"), orbIndex("3d|z2"), complexState(orbIndex("4f"), 3)}) {
+        const std::string tag = "outline pipeline " + stateText(orb) + ": ";
+        clearOutlineCache();
+        const Outline cpu = outlineOf(orb);
+        clearOutlineCache();
+        const Outline* first = outlineReady(orb, true);
+        check(tag + "the first request returns nothing (the GPU job runs, nothing waits)", first == nullptr);
+        const Outline* got = nullptr;
+        for (int i = 0; i < 5000 && !got; i++) { got = outlineReady(orb, true); if (!got) std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
+        check(tag + "the outline arrives", got != nullptr);
+        if (!got) continue;
+        const double dc = std::fabs(got->c / cpu.c - 1);
+        std::printf("%-12s outline: level GPU/CPU %.8f, mass %.5f (CPU %.5f), reach %.4f (CPU %.4f), side %zu (CPU %zu), wire %zu (CPU %zu)\n", stateText(orb).c_str(), got->c / cpu.c, got->mass, cpu.mass, got->rmax, cpu.rmax, got->side.size(), cpu.side.size(), got->wire.size(), cpu.wire.size());
+        check(tag + "level within 1e-4 of the CPU's, the same grid geometry, the enclosed probability 0.9 to the width of the cells at the level (0.01, as the CPU's own)", dc < 1e-4 && got->half == cpu.half && got->norm == cpu.norm && std::fabs(got->mass - 0.9) < 0.01 && std::fabs(got->mass - cpu.mass) < 5e-3);
+        check(tag + "the reach and the line counts agree with the CPU's (the lines differ only where a cell is within rounding of the level)", std::fabs(got->rmax - cpu.rmax) <= 2 * cpu.half / kOutlineGrid &&
+              std::abs(long(got->side.size()) - long(cpu.side.size())) <= 4 + long(cpu.side.size()) / 50 && std::abs(long(got->wire.size()) - long(cpu.wire.size())) <= 8 + long(cpu.wire.size()) / 50);
+    }
+    clearOutlineCache();
+    setOutlineCompute(nullptr);
+}
+
+static void gpuOutlineSlice(render::Renderer2D& R) {
+    render::IOutlineCompute* oc = R.outlineCompute();
+    if (!oc) return;
+    for (const int orb : {orbIndex("4f|z3"), orbIndex("2p|z"), orbIndex("3d|z2"), complexState(orbIndex("4f"), 3)}) {
+        clearOutlineCache();
+        const Outline& O = outlineOf(orb);
+        const Orbital& o = orbitals()[stateOrbital(orb)];
+        const std::string tag = "Slice " + stateText(orb) + ": ";
+        ValDiff total; long segDiff = 0, planes = 0; bool allOk = true;
+        for (const bool hz : {false, true})
+            for (const double off : {-1.4, 0.0, 0.37, 1.9}) {
+                const std::vector<float> cpu = outlinePlaneCpu(orb, O.half, hz, off, 200);
+                const int job = oc->beginPlane(outlineDensityOf(orb), 200, float(O.half), hz, float(off));
+                std::vector<float> gv;
+                const bool ok = job > 0 && waitPlane(*oc, job, gv) && gv.size() == cpu.size();
+                allOk = allOk && ok;
+                if (!ok) continue;
+                const ValDiff d = compareValues(gv, cpu);
+                total.rel = std::max(total.rel, d.rel); total.small = std::max(total.small, d.small); total.over += d.over;
+                const std::vector<OutSeg2> a = outlineSlice(orb, hz, off), b = outlineSliceFromValues(O, gv);
+                segDiff = std::max<long>(segDiff, std::abs(long(a.size()) - long(b.size()))); planes++;
+            }
+        (void)o;
+        std::printf("%-12s Slice: %ld planes, worst relative difference %.2e, cells over the tolerance %ld, largest difference in the number of contour segments %ld\n", stateText(orb).c_str(), planes, total.rel, total.over, segDiff);
+        check(tag + "all eight plane jobs ran", allOk && planes == 8);
+        check(tag + "the GPU plane equals the CPU's within float rounding (2e-4 relative above 0.1 % of the maximum, 2e-6 of the maximum elsewhere)", total.over == 0);
+        check(tag + "the contour from the GPU's plane has the CPU's number of segments, to 2 (a cell within rounding of the level)", segDiff <= 2);
+    }
+    // the Slice contour object as the app drives it: one update a frame, the cut moving, the real GPU; each time it has caught up it equals the CPU's contour for that cut (within the 2 segments of a cell at rounding)
+    {
+        const int orb = orbIndex("4f|z3");
+        clearOutlineCache(); setOutlineCompute(nullptr);
+        const Outline O = outlineOf(orb);
+        clearOutlineCache(); setOutlineCompute(oc);
+        SliceContour sc;
+        long worst = 0; bool caughtUp = true; int framesBehind = 0, maxBehind = 0;
+        for (const double off : {0.0, 0.37, -0.8, 1.9}) {
+            framesBehind = 0;
+            for (int f = 0; f < 5000; f++) {
+                sc.update(O, orb, false, off, true);
+                if (sc.shows(orb, false) && !sc.jobInFlight() && std::abs(long(sc.segments().size()) - long(outlineSlice(orb, false, off).size())) <= 2) break;
+                framesBehind++; std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                if (f == 4999) caughtUp = false;
+            }
+            maxBehind = std::max(maxBehind, framesBehind);
+            worst = std::max<long>(worst, std::abs(long(sc.segments().size()) - long(outlineSlice(orb, false, off).size())));
+        }
+        std::printf("SliceContour on the GPU, four cuts: largest difference in segments %ld, updates needed to catch up at most %d (each one a frame of the app, with the app's frame time in between)\n", worst, maxBehind);
+        check("Slice contour on the GPU: it catches up with every cut and equals the CPU's contour (to 2 segments)", caughtUp && worst <= 2);
+        setOutlineCompute(nullptr); clearOutlineCache();
+    }
+    clearOutlineCache();
+}
+
 static void gpuJumpScenes(render::Renderer2D& R, const std::string& dir) {
     render::IGroupCompute* gc = R.compute();
     if (!gc) return;
@@ -535,6 +775,23 @@ static void fallback33(EGLDisplay dpy, EGLConfig cfg, EGLSurface surf, const std
     check("GPU superposition switch Off: the CPU path is used and the compute object is not called", fillGroups(L, &never, cnt, viaFill.data()) == GroupsBy::Cpu && !never.called && viaFill == cpu);
     L.gpuCompute = true;
     check("a compute object that fails (returns false) falls back to the CPU result", fillGroups(L, &never, cnt, viaFill.data()) == GroupsBy::Cpu && never.called && viaFill == cpu);
+    // 0.13 stage 3: the outline on the 3.3 context: no compute object, the CPU path at once (a picture with an outline on the first frame), the same outline and the same picture
+    check("3.3 context: there is no outline compute object either", R33.outlineCompute() == nullptr);
+    setOutlineCompute(R33.outlineCompute());
+    {
+        AtomLab Lo;
+        outlineLab(Lo, "2p", "pAx", "z", "Cloud 3D");
+        const int fo = Lo.outlineStateId();
+        clearOutlineCache();
+        const Outline* o = outlineReady(fo, true);
+        check("3.3 context: outlineReady returns the CPU outline at once (never blank)", o != nullptr);
+        clearOutlineCache();
+        const Outline ref = outlineOf(fo);
+        check("3.3 context: it is the CPU's outline", o != nullptr && o->c == ref.c && o->mass == ref.mass && o->rmax == ref.rmax && o->wire.size() == ref.wire.size());
+        if (o && !g_cpuOutline2p.px.empty()) report(dir, "3.3 fallback outline 2p z Cloud 3D against the 4.3 context's CPU-outline picture", g_cpuOutline2p, outlinePicture(R33, Lo, *o, nullptr, false), 0);
+        clearOutlineCache();
+    }
+    setOutlineCompute(nullptr);
     R33.shutdown();
 }
 
@@ -565,6 +822,10 @@ int main(int argc, char** argv) {
     gpuSuperScenes(R, dir);
     gpuJumpScenes(R, dir);
     gpuEdgeCases(R);
+    gpuOutlineGrids(R);
+    gpuOutlinePipeline(R);
+    gpuOutlineSlice(R);
+    gpuOutlinePictures(R, dir);
     R.shutdown();
     fallback33(dpy, cfg, surf, dir);
     std::printf("%d GL checks, %d failed\n", g_checks, g_failed);

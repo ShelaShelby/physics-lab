@@ -1,11 +1,11 @@
 # Resume
 
 ## Current state
-- Version 0.13 alpha, stage 2 of 4 ("GPU update", OpenGL 4.3 and the superposition and jump colour groups on the GPU) is done; stages 3 and 4 are on the ROADMAP. Stage 1 (phase colours on the GPU) is done. New in stage 2: `src/render/group_compute.*` (the OpenGL 4.3 compute class and the `IGroupCompute` interface), `kGroupsCS` in `src/render/shaders.h`, `render/gl_loader.h` has the 4.3 functions (`loadGL43`), `Renderer2D::compute()`, `AtomLab::gpuCompute`, `AtomLab::superGroupsGpu / jumpGroupsGpu`, `fillGroups` in `src/atom/cloud_dots.*`, benchmark scenes 25 to 28, `main.cpp` asks for 4.3 then 3.3, `tests/test_gpu_compute.inc`, `tests/gl_compare.cpp` (now also the 4.3 comparison and the 3.3 fallback), `tests/timing_stage2.cpp` (`-DPL_TIMING=ON`). Speed is NOT measured yet: the owner runs the benchmark (OWNER-TODO). One thing found and left alone: the orbital normalisation is off by 3e-6 to 1.6e-5 (DECISIONS.md)
+- Version 0.13 alpha, stage 3 of 4 ("GPU update", the 90 % outline on the GPU and exact orbital normalisation) is done; stage 4 (Orbit Lab rocks on the GPU, chart and landscape geometry cached on the GPU) is on the ROADMAP. Stages 1 and 2 are done. New in stage 3: `src/render/outline_compute.*` (OpenGL 4.3 jobs with fences, the `IOutlineCompute` interface), `kOutlineDensityCS` and `kOutlineLevelCS` in `shaders.h`, `outlineReady`, `SliceContour`, the public CPU pieces (`outlineGridCpu` ...) in `src/atom/outline.*`, `radialGraphNoWait`, `AtomLab::gpuOutline`, benchmark scenes 29 and 30, the exact `orbitalNorm`, `tests/test_outline_norm.inc`, `tests/timing_stage3.cpp` (`-DPL_TIMING=ON`). Speed is NOT measured yet: the owner runs the benchmark (OWNER-TODO). The Slice contour trails the cut by a frame on the GPU path (DECISIONS.md)
 - Test programs and their last known check counts:
   - orbit_tests: 1,540
-  - atom_tests: 20,924 (66 added in 0.13 stage 2)
-  - app_tests: 1,583 (25 added in 0.13 stage 2)
+  - atom_tests: 20,982 (58 added in 0.13 stage 3)
+  - app_tests: 1,600 (17 added in 0.13 stage 3)
   - glsl_shaders (glslang, needs `glslang-tools`; skipped if absent) and gl_phase_colours (only with -DPL_GL_TESTS=ON)
   - nbody_tests: 37
   - jpl_tests: 55 (new in 0.10.3: the Real planets against the Horizons tables in native/data/jpl)

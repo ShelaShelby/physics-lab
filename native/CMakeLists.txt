@@ -123,10 +123,12 @@ if(PL_BUILD_TESTS)
   if(PL_TIMING)
     add_executable(stage2_timing tests/timing_stage2.cpp)
     target_link_libraries(stage2_timing PRIVATE atom_core)
+    add_executable(stage3_timing tests/timing_stage3.cpp)
+    target_link_libraries(stage3_timing PRIVATE atom_core)
   endif()
   if(PL_GL_TESTS)
     find_library(PL_EGL_LIBRARY EGL REQUIRED)
-    add_executable(gl_compare_tests tests/gl_compare.cpp src/render/renderer2d.cpp src/render/earth_texture.cpp src/render/group_compute.cpp)
+    add_executable(gl_compare_tests tests/gl_compare.cpp src/render/renderer2d.cpp src/render/earth_texture.cpp src/render/group_compute.cpp src/render/outline_compute.cpp)
     target_include_directories(gl_compare_tests PRIVATE src/render)
     target_link_libraries(gl_compare_tests PRIVATE atom_core ${PL_EGL_LIBRARY})
     target_compile_options(gl_compare_tests PRIVATE ${PL_WARNINGS})
@@ -183,6 +185,7 @@ if(PL_BUILD_APP)
     src/render/renderer2d.cpp
     src/render/earth_texture.cpp
     src/render/group_compute.cpp
+    src/render/outline_compute.cpp
     src/orbit/orbit_view.cpp
     src/atom/atom_view.cpp
     src/atom/chart_draw.cpp

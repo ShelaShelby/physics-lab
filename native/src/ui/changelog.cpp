@@ -17,6 +17,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.13", "GPU update: the 90 % outline on the graphics card, and exact orbital normalisation (stage 3 of 4)",
+     "The first time a 90 % outline is needed for an orbital, the processor used to make a 64 x 64 x 64 grid of densities and sort it to find the 90 % level: about 30 ms in a measurement here (13 ms for the densities, 17 ms for the sort), the only real hitch left in the app. "
+     "Now, on a PC with OpenGL 4.3, compute shaders on the graphics card make the grid and find the level (by a search over the values, no sort), and the picture does not wait for them: the outline appears a frame or two after it is switched on. In the Slice view the cut's contour values are made the same way, so the contour is a frame behind the cut while you drag it. "
+     "The 90 % mark of the radial graph no longer makes the panel wait either. A PC with only OpenGL 3.3 keeps the old way. The Performance card has a switch (GPU outline) and says which way your PC runs; the benchmark report prints it; scenes 29 and 30 run scenes 16 and 17 again with the old way. "
+     "The outline is the same as before: the graphics card's level agrees with the processor's to 1e-4 and the cells to float rounding, and the tests compare them cell by cell. "
+     "The speed-up is EXPECTED, not measured: it could not be tried on a real graphics card or on Windows here. "
+     "A physics fix on purpose: the orbitals' normalisation was a numerical sum that left the wave function too big by 3e-6 (2p) up to 4.4e-5 (4f z^3) in amplitude; it is now exact (closed form), checked for every orbital the app offers to 1e-10. The only numbers that move are the recorded jump amplitude sums in the tests; nothing you see changes."},
     {"0.13", "GPU update: superposition and photon jumps on the graphics card (stage 2 of 4)",
      "In a superposition (and while a photon jump is in flight) the processor used to work out, for every one of the 48,000 dots and every frame, whether the dot is shown, and its colour. This was the slowest part of the app (the overlapping superposition was the slowest scene of 0.12). "
      "Now, on a PC with OpenGL 4.3, a compute shader on the graphics card does that from the amplitudes stored with each dot, and the processor only sends the beat phase and the weights. A PC with only OpenGL 3.3 keeps the old way and nothing else changes: the app asks for 4.3 first and falls back to 3.3. "

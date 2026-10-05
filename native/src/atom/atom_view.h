@@ -34,7 +34,7 @@ private:
     std::vector<int> qset_;                // nucleons that show their quarks (web: s.qset), in the order they were added
     std::vector<float> qf_;                // how far each nucleon's quarks have faded in (web: s.qf)
     double qNow_ = 0;
-    int olOrb_ = -1; bool olHz_ = false; double olOff_ = 0; std::vector<OutSeg2> olSlice_;   // the 90 % outline in the Slice view: kept until the orbital or the cut changes
+    SliceContour olSlice_;                 // the 90 % outline in the Slice view: kept until the orbital, the plane or the cut changes; with the GPU (0.13 stage 3) made by a compute job and a frame behind the cut (outline.h)
     double cloudExpo_ = 0;                 // the cloud's exposure (Glow), smoothed over frames; 0 = not set yet
 };
 

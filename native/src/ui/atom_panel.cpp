@@ -412,6 +412,7 @@ void radialPicture(const RadialGraph& g, bool active) {
     const Mark marks[3] = {{g.peak, "most likely distance", U32(th.accent), false}, {g.mean, "average distance", U32(th.fg), true}, {g.reach90, "90 % outline reaches", IM_COL32(0xe8, 0xa3, 0x5a, 255), true}};
     double ly = yAxis + 32;
     for (const Mark& m : marks) {
+        if (&m == &marks[2] && g.reach90Pending) continue;                // the 90 % mark waits for the outline (0.13 stage 3): no mark and no legend row until it is known
         if (m.r <= g.rEnd) {                                              // the mark on the graph (the 90 % reach can lie outside a very small picture only if the edge cuts it: then it is in the legend alone)
             const double x = X(m.r);
             if (m.dashed) { for (double y = yTop; y < yAxis; y += 5) dl->AddLine(P(x, y), P(x, std::min(yAxis, y + 3)), m.col, 1.5f * s); }
@@ -434,7 +435,8 @@ void radialCard(const AtomLab& L) {
     }
     static int id = -1, Z = -1;
     static RadialGraph g;
-    if (mode == RadialMode::Shown && (L.stateId() != id || L.p.Z != Z)) { g = radialGraph(L.stateId(), L.p.Z); id = L.stateId(); Z = L.p.Z; }   // only when the orbital or Z changes
+    if (mode == RadialMode::Shown && (L.stateId() != id || L.p.Z != Z)) { g = radialGraphNoWait(L.stateId(), L.p.Z, L.gpuOutline); id = L.stateId(); Z = L.p.Z; }   // only when the orbital or Z changes (0.13 stage 3: the 90 % mark may come a frame later, when the GPU has made the outline: no wait)
+    if (mode == RadialMode::Shown && g.reach90Pending) completeReach90(g, id, Z, L.gpuOutline);
     radialPicture(g, mode == RadialMode::Shown);
     mutedWrapped(kRadialAxisNote, 12.0f / 16);
     mutedWrapped(kRadialNote, 12.0f / 16);

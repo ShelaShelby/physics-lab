@@ -14,7 +14,8 @@ int baseScene(int which) {
     if (which == kBenchWheelCpuScene) return 5;
     if (which == kBenchWheel2DCpuScene) return 7;
     if (which == kBenchJumpCpuScene) return 8;
-    if (which >= kBenchSuperCpuFirst && which < kBenchSceneCount) return 10 + (which - kBenchSuperCpuFirst);
+    if (which >= kBenchSuperCpuFirst && which < kBenchOutlineCpuFirst) return 10 + (which - kBenchSuperCpuFirst);
+    if (which >= kBenchOutlineCpuFirst && which < kBenchSceneCount) return 13 + (which - kBenchOutlineCpuFirst);
     return which;
 }
 void fresh(AtomLab& L, int Z, int N, double w, double h) {
@@ -25,6 +26,7 @@ void fresh(AtomLab& L, int Z, int N, double w, double h) {
     L.moreStored.reset();                                // the ⓘ More / Less choice changes the readout in the picture
     L.chain.clear(); L.paused = false; L.hold = false;
     L.gpuColours = true;                                 // the default (0.13 stage 1); the scenes that compare with the CPU way switch it off themselves
+    L.gpuOutline = true;                                 // the default (0.13 stage 3: the outline's grid and the Slice's contour values from compute shaders, where the PC has OpenGL 4.3)
     L.gpuCompute = true;                                 // the default (0.13 stage 2: the superposition and jump colour groups from a compute shader, where the PC has OpenGL 4.3)
     L.viewW = w; L.viewH = h;
     L.setParam("Z", double(Z)); L.setParam("N", double(N));
@@ -76,12 +78,14 @@ void benchSetup(AtomLab& L, int which, double w, double h) {
     }
     if (which >= kBenchFirstRisk) {                      // the speed-risk scenes: U-238 like the benchmark's scene 3 (scene 18, which 15: oganesson-294), every setting named, nothing animated by itself
         const bool cpuColours = which == kBenchWheelCpuScene || which == kBenchWheel2DCpuScene;   // scenes 23 and 24 are scene 8 and scene 10 again with the 0.12 way of colouring
-        const bool cpuCompute = which >= kBenchJumpCpuScene;                  // scenes 25 to 28 are scenes 11, 13, 14, 15 again with the CPU working out the colour groups (0.13 stage 2)
+        const bool cpuCompute = which >= kBenchJumpCpuScene && which < kBenchOutlineCpuFirst;
+        const bool cpuOutline = which >= kBenchOutlineCpuFirst;               // scenes 29 and 30 are scenes 16 and 17 again with the CPU making the outline (0.13 stage 3)                  // scenes 25 to 28 are scenes 11, 13, 14, 15 again with the CPU working out the colour groups (0.13 stage 2)
         const int sc = baseScene(which);
         const bool og = sc == 15;
         fresh(L, og ? 118 : 92, og ? 176 : 146, w, h);
         L.gpuColours = !cpuColours;
         L.gpuCompute = !cpuCompute;
+        L.gpuOutline = !cpuOutline;
         if (sc <= 7) { L.setParam("phase", std::string(sc == 6 ? "Sign" : "Wheel")); cloud3D(L, "Classic", "Ultra", sc == 7 ? "Cloud" : "Cloud 3D"); }
         else if (sc <= 9) cloud3D(L, "Classic", "Ultra");                        // the jump itself starts in benchFrame
         else if (sc == 10) superScene(L, "2p", "z", "2p", "x");
@@ -129,8 +133,8 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Risk 11: superposition, orthogonal pair 2p z + 2p x (one energy), Cloud 3D, 48,000 dots", "uranium-238, Cloud 3D, Classic, Ultra, Superposition On, 2p (z) with 2p (x), 50 % each: the two real p orbitals are orthogonal, so the dots are thinned every frame. From 0.13 stage 2, on a PC with OpenGL 4.3, the colour group of every dot (shown or not, and its colour) is worked out by a compute shader instead of a loop on the processor (the report says 'OpenGL 4.3: GPU superposition on', or 'CPU path' on a PC without it); scene 26 is this scene with the old CPU way. The speed-up is EXPECTED, not measured, until the owner runs it on a real PC."},
         {"Risk 11: superposition, overlapping pair 2p x + 2p m+1 (one energy), Cloud 3D, 48,000 dots", "the same with 2p (x) and the complex 2p (m = +1): these overlap, so the dots are sampled from the combined density (stage 4 of 0.10.6) and nothing is thinned. From 0.13 stage 2, on a PC with OpenGL 4.3, the colour group of every dot (shown or not, and its colour) is worked out by a compute shader instead of a loop on the processor (the report says 'OpenGL 4.3: GPU superposition on', or 'CPU path' on a PC without it); scene 27 is this scene with the old CPU way. The speed-up is EXPECTED, not measured, until the owner runs it on a real PC."},
         {"Risk 11: superposition, orthogonal pair 2p z + 3d z2 (two energies, it beats), Cloud 3D, 48,000 dots", "2p (z) with 3d (z2), 50 % each: orthogonal, and the energies differ, so the density beats and every dot's colour and thinning change with the beat phase. From 0.13 stage 2, on a PC with OpenGL 4.3, the colour group of every dot (shown or not, and its colour) is worked out by a compute shader instead of a loop on the processor (the report says 'OpenGL 4.3: GPU superposition on', or 'CPU path' on a PC without it); scene 28 is this scene with the old CPU way. The speed-up is EXPECTED, not measured, until the owner runs it on a real PC."},
-        {"Risk 12: first use of an outline (cache emptied every 120 frames), Cloud 3D, 4f, 12,000 dots", "uranium-238, Cloud 3D, 4f, Classic, Normal (scene 3 of the benchmark). The outline is switched on at the first counted frame and the outline cache is emptied every 120 frames after that, so the 64 x 64 x 64 density pass runs again each time: look at the worst frame"},
-        {"Risk 12: outline with the cut dragged, Slice view, 4f, 12,000 dots", "uranium-238, Slice view, 4f, Classic, Normal, 90 % outline On: the cut moves 0.01 every frame between -0.90 and +0.90 (as a drag does), so the outline's slice (40,000 density values) is redone every frame"},
+        {"Risk 12: first use of an outline (cache emptied every 120 frames), Cloud 3D, 4f, 12,000 dots", "uranium-238, Cloud 3D, 4f, Classic, Normal (scene 3 of the benchmark). The outline is switched on at the first counted frame and the outline cache is emptied every 120 frames after that, so the 64 x 64 x 64 density pass runs again each time: look at the worst frame. From 0.13 stage 3, on a PC with OpenGL 4.3, the 64 x 64 x 64 density pass and the 90 % level are made by compute shaders on the graphics card and the picture does not wait for them: the outline appears a frame or two later, so the worst frame should lose its hitch (about 20 ms on the Ryzen of the first measurement); the report says 'OpenGL 4.3: GPU outline on', or 'CPU path' on a PC without it. Scene 29 is this scene with the old CPU way. The improvement is EXPECTED, not measured, until the owner runs it on a real PC"},
+        {"Risk 12: outline with the cut dragged, Slice view, 4f, 12,000 dots", "uranium-238, Slice view, 4f, Classic, Normal, 90 % outline On: the cut moves 0.01 every frame between -0.90 and +0.90 (as a drag does), so the outline's slice (40,000 density values) is redone every frame. From 0.13 stage 3, on a PC with OpenGL 4.3, the cut's 40,000 density values are made by a compute shader without the picture waiting (the contour is a frame behind the cut while it moves); scene 30 is this scene with the old CPU way. EXPECTED faster (about 1.7 of its 2 ms was the density values on this machine's CPU), not measured, until the owner runs it on a real PC"},
         {"Risk 12: nucleus view, oganesson-294 (294 nucleons), whole nucleus, Cinematic quarks, + Sea detail", "oganesson-294 (118 protons, 176 neutrons), the whole nucleus in view, Cinematic quarks, + Sea detail, Fuzzy nucleons (scene 2 of the benchmark with the biggest nucleus)"},
         {"Chart of nuclides: the whole chart, 3,557 squares", "the Atom Lab's Chart of nuclides view (0.11 stage 2): every nuclide of the lab's table as one square (3,557), the 14 magic-number bands, the legend and the text box, the chosen nuclide (uranium-238) marked. "
                                                               "Nothing moves. Keep the pointer off the picture while it runs (a hovered square changes the text box). Compare it with scene 2 (the Atom Lab's own Orbit view of uranium-238, drawn by the same frame code) and look at the GPU time: "
@@ -151,6 +155,8 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Superposition 2p z + 2p x (orthogonal), Cloud 3D, 48,000 dots, GPU superposition OFF (the CPU path, to compare with scene 13)", "exactly scene 13 with GPU superposition Off: the processor thins and colours every dot every frame. The DIFFERENCE between this scene and scene 13 is what the compute shader is worth on this PC. Not measured in the cloud session"},
         {"Superposition 2p x + 2p m+1 (overlapping), Cloud 3D, 48,000 dots, GPU superposition OFF (the CPU path, to compare with scene 14)", "exactly scene 14 (the slowest scene of 0.12) with GPU superposition Off. The DIFFERENCE between this scene and scene 14 is what the compute shader is worth on this PC. Not measured in the cloud session"},
         {"Superposition 2p z + 3d z2 (beats), Cloud 3D, 48,000 dots, GPU superposition OFF (the CPU path, to compare with scene 15)", "exactly scene 15 with GPU superposition Off: the processor works out every dot's phase, odds and colour every frame. The DIFFERENCE between this scene and scene 15 is what the compute shader is worth on this PC. Not measured in the cloud session"},
+        {"First use of an outline (cache emptied every 120 frames), Cloud 3D, 4f, 12,000 dots, GPU outline OFF (the CPU path, to compare with scene 16)", "exactly scene 16 with GPU outline Off: the processor makes the outline's 64 x 64 x 64 density grid and its 90 % level on the frame that first needs them (about 30 ms on the machine where this was measured: 13 ms for the density, 17 ms to sort the cells), as before 0.13 stage 3. The DIFFERENCE in the worst frame between this scene and scene 16 is what the compute shaders are worth on this PC; on a PC without OpenGL 4.3 the two scenes run the same way. Not measured in the cloud session"},
+        {"Outline with the cut dragged, Slice view, 4f, 12,000 dots, GPU outline OFF (the CPU path, to compare with scene 17)", "exactly scene 17 with GPU outline Off: the processor makes the cut's 40,000 density values every frame. The DIFFERENCE between this scene and scene 17 is what the compute shader is worth on this PC. Not measured in the cloud session"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchSceneCount - 1)) - kBenchFirstRisk];
 }
@@ -183,7 +189,7 @@ std::string benchSettingsText(const AtomLab& L) {
     if (L.chartOn()) return "view " + L.p.view + ", " + std::to_string(chartTiles().size()) + " squares, tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %, height " + (L.s.chartView.height == ChartHeightMode::Binding ? "binding energy per nucleon" : "half-life") + ", zoom " + std::to_string(int(std::lround(L.s.chartView.zoom * 100))) + " %, chosen Z " + std::to_string(L.p.Z) + " N " + std::to_string(L.p.N) + ", decay chain " + (L.s.showChain ? "drawn, walked " + std::to_string(L.s.walk.steps.size()) + " steps" : std::string("not drawn"));
     std::string t = "view " + L.p.view + ", Orbit style " + L.p.ostyle + ", quark style " + L.p.qstyle + ", detail " + L.p.detail + ", " + L.p.style + " nucleons";
     if (L.p.view != "Orbit") {                           // the cloud views: what the cost depends on
-        t += ", orbital " + L.p.orb + ", cloud style " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots, phase " + L.p.phase + ", GPU colours " + (L.gpuColours ? "On" : "Off") + ", GPU superposition " + (L.gpuCompute ? "On" : "Off");
+        t += ", orbital " + L.p.orb + ", cloud style " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots, phase " + L.p.phase + ", GPU colours " + (L.gpuColours ? "On" : "Off") + ", GPU superposition " + (L.gpuCompute ? "On" : "Off") + ", GPU outline " + (L.gpuOutline ? "On" : "Off");
         if (L.p.super == "On") t += ", superposition " + L.p.orb + " + " + L.p.orb2 + " (" + std::to_string(int(L.p.mix)) + " %)";
         if (L.p.outline == "On") t += ", 90 % outline On";
     }

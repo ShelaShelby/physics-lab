@@ -5,9 +5,10 @@
 //   psi(2p, x)         = the same with x/r
 //   psi(2p, m = +1)    = -Z^(3/2) / (8 sqrt(pi)) * rho exp(-rho/2) * (x + i y)/r              (Condon-Shortley sign)
 //   psi(3d, z^2)       = Z^(3/2) / (81 sqrt(6 pi)) * rho^2 exp(-rho/3) * (3 z^2/r^2 - 1)
-// (Griffiths, Introduction to Quantum Mechanics, ch. 4; Bethe and Salpeter). FOUND: the lab's states are normalised by a numerical sum (outline.cpp, orbitalNorm: a midpoint rule with 400 points in
-// cos(theta)), which leaves the lab's amplitude too big by 3.1e-6 for 2p and 1.6e-5 for 3d z2 (the textbook value is exactly 1; 1s is exact). It is not changed in this stage (the physics must not
-// change); the tolerances below are those measured sizes, rounded up, and say so (density 1e-4, phase 2e-5 rad, norm 5e-5). Constants (CODATA 2022, typed): a0 = 5.29177210544e-11 m, Hartree energy 27.211386245981 eV,
+// (Griffiths, Introduction to Quantum Mechanics, ch. 4; Bethe and Salpeter). History: stage 2 FOUND that the lab's states were normalised by a numerical sum (outline.cpp, orbitalNorm) that left the
+// amplitude too big by 3.1e-6 (2p) and 1.6e-5 (3d z2), and widened the tolerances below to 1e-4 (density), 2e-5 rad (phase) and 5e-5 (norm). Stage 3 (part B) made the normalisation exact, and the
+// tolerances are TIGHTENED (not loosened) to 1e-10 (density), 1e-10 rad (phase) and 1e-8 (norm, the quadrature's own accuracy).
+// Constants (CODATA 2022, typed): a0 = 5.29177210544e-11 m, Hartree energy 27.211386245981 eV,
 // m_p/m_e = 1836.152673426, h = 6.62607015e-34 J s and e = 1.602176634e-19 C (both exact). The beat period of two levels is h / (E_B - E_A), E_n = -Ry (M/(M+1)) Z^2 / n^2.
 
 static std::complex<double> tbPsi(int which, int Z, double x, double y, double z) {   // which: 0 = 2pz, 1 = 2px, 2 = 2p m=+1, 3 = 3d z2; x, y, z in Bohr radii
@@ -64,7 +65,7 @@ static void testGpuComputePhysics() {
                         }
                     }
                 const std::string tag = std::string("physics: ") + pr.name + ", Z = " + std::to_string(Z) + ", " + std::to_string(int(mix)) + " % B";
-                checkTrue(tag + ": density and phase at 20 points equal the textbook formulas (density 1e-4 relative, phase 2e-5 rad: the lab\'s normalisation sum, see the top of this file; measured " + std::to_string(worstDens) + ", " + std::to_string(worstPhase) + ")", worstDens < 1e-4 && worstPhase < 2e-5);
+                checkTrue(tag + ": density and phase at 20 points equal the textbook formulas (density 1e-10 relative, phase 1e-10 rad: tightened in stage 3 when the normalisation became exact; measured " + std::to_string(worstDens) + ", " + std::to_string(worstPhase) + ")", worstDens < 1e-10 && worstPhase < 1e-10);
             }
         }
     }
@@ -108,7 +109,7 @@ static void testGpuComputePhysics() {
                     }
                 }
             }
-            checkNum(std::string("physics: normalisation of ") + pr.name + " at beat phase " + std::to_string(theta).substr(0, 4) + " (quadrature; 5e-5 because of the lab\'s normalisation sum, measured 1.4e-5)", sum, 1.0, 5e-5);
+            checkNum(std::string("physics: normalisation of ") + pr.name + " at beat phase " + std::to_string(theta).substr(0, 4) + " (quadrature, 1e-8: tightened in stage 3 from 5e-5)", sum, 1.0, 1e-8);
         }
     }
 }

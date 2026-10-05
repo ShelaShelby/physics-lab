@@ -366,9 +366,13 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             else R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
             B.clear();
             if (outlineOn) {                                               // the contour |psi|^2 = c in the cut plane (cached until the orbital or the cut changes)
-                const double off0 = p.cut * 0.5 * kExt[orbitals()[stateOrbital(fo)].n];
-                if (olOrb_ != fo || olHz_ != hz || olOff_ != off0) { olSlice_ = outlineSlice(fo, hz, off0); olOrb_ = fo; olHz_ = hz; olOff_ = off0; }
-                for (const OutSeg2& g : olSlice_) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
+                const Outline* O = outlineReady(fo, lab.gpuOutline);       // 0.13 stage 3: nullptr while the GPU is still making the outline (the first time): nothing is drawn yet, and the frame does not wait
+                if (O) {
+                    const double off0 = p.cut * 0.5 * kExt[orbitals()[stateOrbital(fo)].n];
+                    olSlice_.update(*O, fo, hz, off0, lab.gpuOutline);
+                    if (olSlice_.shows(fo, hz))                            // (the contour of another orbital or plane is never drawn; the cut may be a frame behind while the GPU works)
+                        for (const OutSeg2& g : olSlice_.segments()) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
+                }
             }
             const double gx = w - 44, gy = h - 44;                         // axes of the cut plane
             R.line(gx, gy, gx + 26, gy, 1.5, css.muted);
@@ -389,7 +393,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             else R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
             B.clear();
             if (outlineOn)                                                 // the shadow of the 90 % region seen from the side
-                for (const OutSeg2& g : outlineOf(fo).side) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
+                if (const Outline* O = outlineReady(fo, lab.gpuOutline))
+                for (const OutSeg2& g : O->side) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
         } else {                                                           // rotate by yaw (about z), then pitch, then project
             const double ext = kExt[lab.sizeN()] / p.Z * kA0;
             static std::vector<float> PX, PY, PD;
@@ -411,14 +416,15 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             R.blobsPalette(B.data(), int(B.size()), false, dc.palette());
             B.clear();
             }
-            if (outlineOn) {                                               // a faint wireframe of the 90 % surface: its contour lines in planes across the region, turned with the cloud
+            const Outline* wireO = outlineOn ? outlineReady(fo, lab.gpuOutline) : nullptr;   // (nullptr while the GPU makes it the first time)
+            if (wireO) {                                                   // a faint wireframe of the 90 % surface: its contour lines in planes across the region, turned with the cloud
                 const double um = kA0 / p.Z;
                 const auto pr = [&](double x, double y, double z, double& X, double& Y, double& t) {
                     x *= um; y *= um; z *= um;
                     const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, dep = y1 * cb - z * sb, up = y1 * sb + z * cb, f = 1 / (1 + dep / (4 * ext));
                     X = cx + x1 * pxm * f; Y = cy - up * pxm * f; t = std::max(-1.0, std::min(1.0, dep / ext));
                 };
-                for (const OutSeg3& g : outlineOf(fo).wire) {
+                for (const OutSeg3& g : wireO->wire) {
                     double X0, Y0, t0, X1, Y1, t1;
                     pr(g.x0, g.y0, g.z0, X0, Y0, t0); pr(g.x1, g.y1, g.z1, X1, Y1, t1);
                     R.line(X0, Y0, X1, Y1, 0.9, withA(css.fg, olA * (0.42 - 0.22 * 0.5 * (t0 + t1 + 2) / 2)));        // nearer lines are a little stronger

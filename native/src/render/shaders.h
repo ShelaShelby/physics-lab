@@ -333,4 +333,117 @@ void main() {
 }
 )";
 
+// ---- 0.13 stage 3: the 90 % outline on the GPU (compute, GLSL 430) ----
+// kOutlineDensityCS: |psi|^2 of one state at Z = 1 on a 3D grid (mode 0, the 64^3 outline pass) or on a plane (mode 1, the Slice's contour), a direct port of atom::density and its parts
+// (src/atom/atom_core.cpp: radial, angular), in 32-bit floats. The state arrives as a description (render/outline_compute.h, OutlineDensity), made by outlineDensityOf in src/atom/outline.cpp.
+static const char* const kOutlineDensityCS = R"(#version 430 core
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+layout(std430, binding = 0) writeonly buffer Values { float values[]; };
+uniform int uMode;          // 0: the grid (uN^3 cells, index (k uN + j) uN + i for x = i, y = j, z = k), 1: a plane (uN x uN cells, index b uN + a)
+uniform int uN;
+uniform float uHalf;        // the grid covers [-uHalf, uHalf]; the cell centres are at -uHalf + (i + 1/2) h, h = 2 uHalf / uN
+uniform int uHorizontal;    // plane: 1: z = uOffset (a = x, b = y), 0: y = uOffset (a = x, b = z)
+uniform float uOffset;
+uniform vec4 uLag;          // Laguerre polynomial coefficients lag[0] .. lag[3]
+uniform float uNq;          // the principal quantum number n
+uniform int uAngRe, uAngIm; // the real angular polynomials of the state (a complex state: Re and Im; a real one: uAngIm unused)
+uniform vec2 uCw;           // (c of the Im part, weight): |A|^2 = weight (Re^2 + c^2 Im^2); real orbital: (0, 1), complex state: (c, 1/2)
+
+// port of atom::angular(a, x, y, z) in src/atom/atom_core.cpp (the real cubic harmonics; they hold the r^l factor)
+float angularPoly(int a, vec3 p) {
+    float x = p.x, y = p.y, z = p.z, r2 = x * x + y * y + z * z;
+    switch (a) {
+        case 0: return 1.0;
+        case 1: return x;
+        case 2: return y;
+        case 3: return z;
+        case 4: return 3.0 * z * z - r2;
+        case 5: return x * z;
+        case 6: return y * z;
+        case 7: return x * y;
+        case 8: return x * x - y * y;
+        case 9: return z * (5.0 * z * z - 3.0 * r2);
+        case 10: return x * (5.0 * z * z - r2);
+        case 11: return y * (5.0 * z * z - r2);
+        case 12: return x * y * z;
+        case 13: return z * (x * x - y * y);
+        case 14: return x * (x * x - 3.0 * y * y);
+        default: return y * (3.0 * x * x - y * y);
+    }
+}
+
+// port of atom::density(orb, 1, x, y, z) = |psi|^2 at Z = 1: atom::radial (Horner on the Laguerre coefficients, times e^(-r/n); the sign is squared away) times the angular part.
+// A real orbital: (R A)^2. A complex state (Re + i c Im) / sqrt(2): R^2 (Re^2 + c^2 Im^2) / 2, which is |atom::psiComplex|^2.
+float density(vec3 p) {
+    float r = length(p);
+    float q = 2.0 * r / uNq;
+    float L = ((uLag.w * q + uLag.z) * q + uLag.y) * q + uLag.x;
+    float R = L * exp(-r / uNq);
+    float A = angularPoly(uAngRe, p), B = uCw.x != 0.0 ? angularPoly(uAngIm, p) : 0.0;
+    return R * R * uCw.y * (A * A + uCw.x * uCw.x * B * B);
+}
+
+void main() {
+    ivec3 g = ivec3(gl_GlobalInvocationID);
+    float h = 2.0 * uHalf / float(uN);
+    if (uMode == 0) {
+        if (g.x >= uN || g.y >= uN || g.z >= uN) return;
+        vec3 p = vec3(-uHalf + (float(g.x) + 0.5) * h, -uHalf + (float(g.y) + 0.5) * h, -uHalf + (float(g.z) + 0.5) * h);
+        values[(g.z * uN + g.y) * uN + g.x] = density(p);
+    } else {
+        if (g.x >= uN || g.y >= uN || g.z != 0) return;
+        float u = -uHalf + (float(g.x) + 0.5) * h, v = -uHalf + (float(g.y) + 0.5) * h;
+        values[g.y * uN + g.x] = density(uHorizontal != 0 ? vec3(u, v, uOffset) : vec3(u, uOffset, v));
+    }
+}
+)";
+
+// kOutlineLevelCS: the 90 % level, with no sort. ONE work group of 1024 threads bisects over the bit patterns of the (non-negative) float cell values: for each candidate level t it adds up value * scale over
+// the cells with value >= t (every thread a stride of the grid, then a tree sum in shared memory), and keeps the largest t whose sum is still >= target. 31 halvings of the 31-bit range find it exactly:
+// it is the value of a cell, the same cell the CPU's sort-and-add (atom::outlineLevelCpu) stops at (up to the float sum). 31 passes over 262,144 cells in one work group: a few tenths of a millisecond,
+// against the 17 ms of the CPU's sort. Result: [0] the level (float bits), [1] the probability enclosed at that level (float bits).
+static const char* const kOutlineLevelCS = R"(#version 430 core
+layout(local_size_x = 1024) in;
+layout(std430, binding = 0) readonly buffer Grid { float grid[]; };
+layout(std430, binding = 1) writeonly buffer Level { uint result[2]; };
+uniform int uCount;         // cells in the grid
+uniform float uScale;       // dV / norm: a cell's share of the probability is value * uScale
+uniform float uTarget;      // 0.9
+shared float part[1024];
+shared uint sLo, sHi;
+
+// the probability enclosed by the cells whose value, as float bits, is >= key (all threads get the same answer)
+float massAbove(uint key) {
+    uint tid = gl_LocalInvocationIndex;
+    float s = 0.0;
+    for (uint i = tid; i < uint(uCount); i += 1024u) { float v = grid[i]; if (floatBitsToUint(v) >= key) s += v * uScale; }
+    part[tid] = s;
+    memoryBarrierShared(); barrier();
+    for (uint stride = 512u; stride > 0u; stride >>= 1) {
+        if (tid < stride) part[tid] += part[tid + stride];
+        memoryBarrierShared(); barrier();
+    }
+    float total = part[0];
+    memoryBarrierShared(); barrier();
+    return total;
+}
+
+void main() {
+    uint tid = gl_LocalInvocationIndex;
+    if (tid == 0u) { sLo = 0u; sHi = 0x7F800000u; }                         // lo: encloses >= target (everything), hi: +infinity, encloses nothing
+    memoryBarrierShared(); barrier();
+    for (int it = 0; it < 32; it++) {
+        uint lo = sLo, hi = sHi;
+        if (hi - lo <= 1u) break;
+        uint mid = lo + (hi - lo) / 2u;
+        float m = massAbove(mid);
+        if (tid == 0u) { if (m >= uTarget) sLo = mid; else sHi = mid; }
+        memoryBarrierShared(); barrier();
+    }
+    uint key = sLo;
+    float enclosed = massAbove(key);
+    if (tid == 0u) { result[0] = key; result[1] = floatBitsToUint(enclosed); }
+}
+)";
+
 }  // namespace render

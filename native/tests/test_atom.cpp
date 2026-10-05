@@ -2498,9 +2498,13 @@ static void testJumpSameDots() {
     //  - how many dots are shown at a moment of the jump: within 0.05 % of all dots (+ 1): a dot at the very edge of its odds could flip with a last-bit difference; the sums of colour numbers likewise.
     //  - the count of dots k, and the next random numbers: exactly (integers; the generator uses only integer maths and an exact division).
     // (No Windows run of these numbers exists before the CI run of stage 9, see REPORT.md; they are what the Linux code gives.)
+    // 0.13 stage 3: the amplitude sums of the first two cases moved when the orbital normalisation became exact (the old numbers were 6031.6557989177954 and 11212.080984488653 (4f to 3d z2), 7868.2822019484593
+    // and 3264.3803650895343 (2p to 3d z2)). Nothing else moved: positions, odds, colours, counts and the random numbers are the same. The move is checked against what the fix predicts: every amplitude is scaled
+    // by sqrt(old norm / exact norm) of its orbital (old norms, from the old numerical sum: 4f z3 148225969.16689572, 3d z2 123668.07167856106, 2p z 100.53033659634187; exact: 47185920 pi, 39366 pi, 32 pi), so a
+    // sum of both amplitudes of a dot is scaled by a factor between the two orbitals' factors; see testJumpSameDots below.
     const JumpSummary want[] = {
-        {48000, {-0.61042645026652043, 0.18372748262565081, 1.6411758933862042}, 6.0625978228732691e-06, 6031.6557989177954, 11212.080984488653, 48189, 48033, 445747, 94272, {0.11361336951312254, -1.6703970121316665, -0.52004410793344713}, 6.2572345950363523e-06, 59297.56298661232, 10250, {0.21281560184434056, 0.25574702024459839, 0.53744121524505317}},
-        {12000, {0.87155394968079025, 1.4187888667326771, 0.02980526777541892}, 1.6482404722913135e-06, 7868.2822019484593, 3264.3803650895343, 11546, 11499, 149535, 14448, {-0.029836201632667078, -0.40120695930633449, -1.8850526524151678}, 1.6525631670415527e-06, 16562.476930618286, 1456, {0.152442317456007, 0.86131891421973705, 0.58514888910576701}},
+        {48000, {-0.61042645026652043, 0.18372748262565081, 1.6411758933862042}, 6.0625978228732691e-06, 6031.4603008456952, 11211.814493594451, 48189, 48033, 445747, 94272, {0.11361336951312254, -1.6703970121316665, -0.52004410793344713}, 6.2572345950363523e-06, 59297.56298661232, 10250, {0.21281560184434056, 0.25574702024459839, 0.53744121524505317}},
+        {12000, {0.87155394968079025, 1.4187888667326771, 0.02980526777541892}, 1.6482404722913135e-06, 7868.2322264678405, 3264.3454413429163, 11546, 11499, 149535, 14448, {-0.029836201632667078, -0.40120695930633449, -1.8850526524151678}, 1.6525631670415527e-06, 16562.476930618286, 1456, {0.152442317456007, 0.86131891421973705, 0.58514888910576701}},
         {0, {0, 0, 0}, 0, 0, 0, 0, 0, 0, 23568, {-0.073387654444096589, 0.08689996727725588, -0.49041880346852601}, 8.0405526679301871e-07, 22999.600456953049, -2642, {0.88974490761756897, 0.38691916177049279, 0.74242525990121067}},
         {12000, {-0.24404311097619288, -0.12356757358303777, 0.016061441752741386}, 2.321701230241769e-07, 7991.6644537394195, 38289.438420659302, 11642, 11877, 96672, 23568, {0.2475660059532431, 0.34024883493234381, 0.074693734791195537}, 2.5181023221036696e-07, 0, 12000, {0.9405794651247561, 0.65091568906791508, 0.5389178313780576}},
     };
@@ -2546,6 +2550,15 @@ static void testJumpSameDots() {
         for (int a = 0; a < 3; a++) checkNum(name + "recorded: the walker at the end of the build, coordinate " + std::to_string(a), got.w2[a], w.w2[a], 1e-9, 1e-12);
         checkNum(name + "recorded: sum of |new dot coordinates|", got.sumJp, w.sumJp, 1e-6);
         checkNum(name + "recorded: sum of |amplitudes at the old dots|", got.sumJA, w.sumJA, 1e-6);
+        if (ci < 2) {                                                  // the cases that involve a 3d z2 jump: the move against the old numbers must lie inside the predicted range
+            const double pi = 3.14159265358979323846;
+            const double f4f = std::sqrt(148225969.16689572 / (47185920 * pi)), f3d = std::sqrt(123668.07167856106 / (39366 * pi)), f2p = std::sqrt(100.53033659634187 / (32 * pi));
+            const double oldJA = ci == 0 ? 6031.6557989177954 : 7868.2822019484593, oldJB = ci == 0 ? 11212.080984488653 : 3264.3803650895343;
+            const double lo = ci == 0 ? f4f : f3d, hi = ci == 0 ? f3d : f2p;     // case 0: 4f z3 and 3d z2 (4f is the smaller factor); case 1: 3d z2 and 2p (3d is the smaller)
+            const double rA = got.sumJA / oldJA, rB = got.sumJB / oldJB;
+            checkTrue(name + "the amplitude sums moved by the factor the exact normalisation predicts (between " + std::to_string(std::min(lo, hi)).substr(0, 9) + " and " + std::to_string(std::max(lo, hi)).substr(0, 9) + "; got " + std::to_string(rA).substr(0, 9) + ", " + std::to_string(rB).substr(0, 9) + ")",
+                      rA >= std::min(lo, hi) - 1e-7 && rA <= std::max(lo, hi) + 1e-7 && rB >= std::min(lo, hi) - 1e-7 && rB <= std::max(lo, hi) + 1e-7);
+        }
         checkNum(name + "recorded: sum of |amplitudes at the new dots|", got.sumJB, w.sumJB, 1e-6);
         checkNum(name + "recorded: dots shown at 0.3 of the jump (Sign)", got.shownSign03, w.shownSign03, 0, shownTol);
         checkNum(name + "recorded: dots shown at 0.7 of the jump (Sign)", got.shownSign07, w.shownSign07, 0, shownTol);
@@ -4432,6 +4445,7 @@ static void testQuadrupole(double guardMinSepDeformed) {
 #include "test_clean.inc"   // 0.12 stage 2: the accuracy clean-up
 #include "test_gpu_colours.inc"   // 0.13 stage 1: phase colours on the GPU
 #include "test_gpu_compute.inc"   // 0.13 stage 2: the superposition and the jump on the GPU (the physics check; the GPU comparison is tests/gl_compare.cpp)
+#include "test_outline_norm.inc"   // 0.13 stage 3: the exact normalisation (part B) and the 90 % outline
 
 int main() {
     testConstants();
@@ -4514,6 +4528,9 @@ int main() {
     testGpuColours();
     testGpuComputePhysics();
     testGpuComputeLogic();
+    testExactNormalisation();
+    testOutlineLevelIndependent();
+    testOutlineGpuLogic();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }

@@ -47,9 +47,17 @@ inline std::string computePathText(int major, int minor, bool computeOk, bool sw
     return v + (switchOn ? ": GPU superposition on" : ": GPU superposition off (switched off, CPU path)");
 }
 
+// The same for the 90 % outline (0.13 stage 3).
+inline std::string outlinePathText(int major, int minor, bool computeOk, bool switchOn) {
+    const std::string v = "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
+    if (!computeOk) return v + ": CPU path";
+    return v + (switchOn ? ": GPU outline on" : ": GPU outline off (switched off, CPU path)");
+}
+
 struct BenchEnv {
     std::string version, when;                   // the native version; the local date and time
     std::string gpu, glVersion, vendor;          // GL_RENDERER, GL_VERSION, GL_VENDOR
+    std::string outlinePath;                     // outlinePathText() (0.13 stage 3)
     std::string computePath;                     // computePathText(): "OpenGL 4.3: GPU superposition on" or "OpenGL 3.3: CPU path" (0.13 stage 2)
     int windowW = 0, windowH = 0;                // the window, in pixels
     int pictureW = 0, pictureH = 0;              // the picture area, in pixels

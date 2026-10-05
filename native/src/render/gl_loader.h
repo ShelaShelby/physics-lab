@@ -21,6 +21,8 @@ typedef unsigned int GLbitfield;
 typedef char GLchar;
 typedef std::ptrdiff_t GLsizeiptr;
 typedef std::ptrdiff_t GLintptr;
+typedef struct __GLsync* GLsync;                  // a fence (OpenGL 3.2; used by the 4.3 compute jobs to ask "is it done?" without waiting)
+typedef unsigned long long GLuint64;
 
 #define GL_FALSE 0
 #define GL_TRUE 1
@@ -76,6 +78,12 @@ typedef std::ptrdiff_t GLintptr;
 #define GL_BUFFER_UPDATE_BARRIER_BIT 0x00000200
 #define GL_DYNAMIC_DRAW 0x88E8
 #define GL_DYNAMIC_READ 0x88E9
+#define GL_SYNC_GPU_COMMANDS_COMPLETE 0x9117
+#define GL_SYNC_FLUSH_COMMANDS_BIT 0x00000001
+#define GL_ALREADY_SIGNALED 0x911A
+#define GL_TIMEOUT_EXPIRED 0x911B
+#define GL_CONDITION_SATISFIED 0x911C
+#define GL_WAIT_FAILED 0x911D
 
 #define PL_GL_FUNCTIONS(X)                                                                         \
     X(void, glClear, (GLbitfield mask))                                                            \
@@ -147,7 +155,10 @@ typedef std::ptrdiff_t GLintptr;
     X(void, glDispatchCompute, (GLuint x, GLuint y, GLuint z))                                     \
     X(void, glMemoryBarrier, (GLbitfield barriers))                                                \
     X(void, glBindBufferBase, (GLenum target, GLuint index, GLuint buffer))                        \
-    X(void, glGetBufferSubData, (GLenum target, GLintptr offset, GLsizeiptr size, void* data))
+    X(void, glGetBufferSubData, (GLenum target, GLintptr offset, GLsizeiptr size, void* data))              \
+    X(GLsync, glFenceSync, (GLenum condition, GLbitfield flags))                                   \
+    X(GLenum, glClientWaitSync, (GLsync sync, GLbitfield flags, GLuint64 timeout))                 \
+    X(void, glDeleteSync, (GLsync sync))
 
 // The function pointers live in their own namespace, so they never clash with the
 // system's OpenGL library (which exports functions with the same names).

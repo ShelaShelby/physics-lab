@@ -45,7 +45,8 @@ double radialDensity(int state, int Z, double r) {
     return r <= 0 ? 0.0 : Z * pq(o, Z * r, 1 / normI(o));
 }
 
-RadialGraph radialGraph(int state, int Z) {
+// everything but the 90 % mark (which needs the outline, which takes a 64^3 pass the first time)
+static RadialGraph radialGraphCore(int state, int Z) {
     const Orbital& o = orbitals()[stateOrbital(state)];
     RadialGraph g;
     g.n = o.n; g.l = o.l; g.Z = Z;
@@ -76,8 +77,28 @@ RadialGraph radialGraph(int state, int Z) {
     g.peak = g.maxima.empty() ? 0 : g.maxima[0];
     for (double m : g.maxima) if (radialDensity(state, Z, m) > radialDensity(state, Z, g.peak)) g.peak = m;
     g.mean = meanRadius(o.n, o.l, Z);
+    return g;
+}
+
+RadialGraph radialGraph(int state, int Z) {
+    RadialGraph g = radialGraphCore(state, Z);
     g.reach90 = outlineOf(state).rmax / Z;                               // the outline is worked out once at Z = 1; psi(Z) is it scaled by 1/Z (outline.h)
     return g;
+}
+
+RadialGraph radialGraphNoWait(int state, int Z, bool useGpu) {           // 0.13 stage 3: the 90 % mark may come a frame or two later, when the GPU has made the outline (it never waits)
+    RadialGraph g = radialGraphCore(state, Z);
+    if (const Outline* o = outlineReady(state, useGpu)) g.reach90 = o->rmax / Z;
+    else g.reach90Pending = true;
+    return g;
+}
+
+bool completeReach90(RadialGraph& g, int state, int Z, bool useGpu) {
+    if (!g.reach90Pending) return true;
+    const Outline* o = outlineReady(state, useGpu);
+    if (!o) return false;
+    g.reach90 = o->rmax / Z; g.reach90Pending = false;
+    return true;
 }
 
 double radialTickStep(double rEnd) {

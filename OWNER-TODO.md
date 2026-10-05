@@ -1,10 +1,16 @@
 # Owner to-do (things only the owner can do)
 
+## 0.13 stage 3 (the outline on the GPU, exact normalisation): run on the PC — nothing here could be run in the cloud (no real GPU, no Windows)
+- [ ] Run the benchmark with the speed-risk scenes. Compare scene 16 (first use of an outline) with 29 (CPU path): the WORST FRAME and the 1 % low are what matter (0.12 gave 19.90 ms worst, 58.8 fps 1 % low on your RX 9060 XT). Expected, NOT measured: no hitch on 16. Compare 17 with 30 (the cut dragged; 2.02 ms before): expected faster. The Performance card line should say "OpenGL 4.3: GPU outline on" (or a higher number).
+- [ ] Look at the real app: Atom Lab, Cloud 3D and Slice with the 90 % outline On for the 4f, 2p z and 3d z2 orbitals and a complex one (m = +1), on a dark and a light theme: the outline should appear within a frame or two of switching it on (or of changing the orbital) and look the same as before. Switch "GPU outline" Off and On to compare. Watch the Slice while dragging the cut: on the GPU path the contour trails the dots by about a frame; tell me if that is visible or annoying.
+- [ ] Open the radial probability graph (Atom Lab) and change orbital with the outline Off: the 90 % mark may appear a frame late; nothing should stall.
+- [ ] Nothing you see should change from the exact normalisation (amplitudes move by 3e-6 to 4.4e-5): the dots, colours and outlines look the same.
+
 ## 0.13 stage 2 (superposition and jumps on the GPU): run on the PC — nothing here could be run in the cloud (no real GPU, no Windows)
 - [ ] Start the app and open the Performance card in the Atom Lab: it should say "OpenGL 4.3: GPU superposition on" (or a higher version number such as 4.6). If it says "OpenGL 3.3: CPU path", send the GPU name and driver (the benchmark report has them): that PC cannot run stages 3 and 4 on the GPU either.
 - [ ] Run the benchmark with the speed-risk scenes. Compare scene 11 with 25, 13 with 26, 14 with 27 and 15 with 28 (CPU path), and 14 against scene 9 (one plain orbital, about 4 ms). Expected, NOT measured: 13, 14 and 15 drop towards scene 9 (from 8.15, 10.33 and 9.55 ms on your RX 9060 XT) and 11 towards about 5 ms. One thing to watch: the CPU waits for the GPU each frame to read the colour groups back; if the numbers are not better, send the result text.
 - [ ] Look at the real app: Atom Lab, Cloud 3D, Superposition On with 2p z + 2p x, 2p x + 2p m+1 and 2p z + 3d z2 (watch it beat), and a photon jump (Emit): switch "GPU superposition and jumps" Off and On, and on a dark and a light theme. The picture should look the same; a rare single dot may differ.
-- [ ] Decision for you: the lab's orbital normalisation is off by 3e-6 (2p) to 1.6e-5 (3d z2) in amplitude (DECISIONS.md). Fix it in a later stage (it changes the stored amplitudes by that much), or leave it?
+- [x] The orbital normalisation (off by 3e-6 to 1.6e-5 in amplitude) was fixed in 0.13 stage 3, as you decided.
 
 ## 0.13 stage 1 (phase colours on the GPU): run on the PC — nothing here could be run in the cloud (no real GPU, no Windows)
 - [ ] Run the benchmark with "Atom Lab speed-risk scenes" ticked (15 + 2 more scenes now). Compare scene 8 (GPU colours On) with scene 23 (Off, the 0.12 way), and scene 10 with scene 24; also scene 8 against scene 9. Expected, NOT measured: scene 8 drops towards scene 9 (about 4 ms from 8.08 ms on your RX 9060 XT) and scene 10 from 4.24 ms. If it does not, send the result text: that would be a finding.

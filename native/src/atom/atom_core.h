@@ -137,6 +137,8 @@ int stateM(int id);                                    // m of a complex state, 
 bool oriIsComplex(const std::string& ori, int& m);     // "m+2" -> true, m = 2 (the Orientation setting's value)
 std::string oriKey(int m);                             // 2 -> "m+2", -1 -> "m-1"
 std::complex<double> angularComplex(int l, int m, double x, double y, double z);   // the angular part (with r^l), l = 1..3, m = +-1..+-l
+// The real angular polynomials a complex state is made of: (angular(re) + i sign c angular(im)) / sqrt(2), with the Condon-Shortley sign (-1)^m for m > 0 (atom_core.cpp, kPairs). Returns false for l = 0 or |m| > l.
+bool complexPairOf(int l, int absM, int& re, int& im, double& c);
 std::complex<double> psiComplex(int id, int Z, double x, double y, double z);      // psi of a complex state; x, y, z in Bohr radii
 double density(int id, int Z, double x, double y, double z);                       // |psi|^2 of a real orbital or a complex state
 std::string stateText(int id);                         // "2pz" or "2p (m = +1)"
