@@ -35,6 +35,16 @@ ChipText chipText(const AppState& app);
 
 // The Time speed slider's words and range come from orbit/units.h (kTspeedMin, kTspeedMax) and tspeedText(); nothing else to do here.
 
+// ---- the long tooltips of the two Real-physics tick boxes (the old panel and the new Show panel show the same words) ----
+std::string relativityTip();
+std::string wobbleTip();
+
+// ---- the subject card's action links (the old side column's "Slow time to watch moons" / "Slow time to watch it turn") ----
+bool slowMoonsAvailable(const AppState& app);              // Moons is on and the selected planet (or the planet of the selected moon) has moons shown
+void slowMoons(AppState& app);                             // Time speed so that one lap of the moon (the fastest one of the planet) takes about 4 seconds, and follow
+bool slowSpinAvailable(const AppState& app);               // a planet with real spin data is selected
+void slowSpin(AppState& app);                              // Time speed so that one turn takes about 24 seconds, follow, and (True scale) zoom in close enough to see it
+
 // One line of the lab's state, for the automatic checks (PL_SHELL_STATE): the date, time speed, pause, view, switches, selection, zoom. Plain text.
 std::string orbitStateLine(const AppState& app);
 

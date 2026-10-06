@@ -54,6 +54,8 @@ ImU32 cEdge() { return g_f.outline ? colOf(g_f.c->fg) : colOf(g_f.c->fg, app::sh
 ImU32 cHair() { return colOf(g_f.c->line); }
 ImU32 cPanel() { return colOf(g_f.c->card, g_f.panelAlpha); }
 ImU32 cBackdrop(float a) { return colOf(g_f.c->bg, a); }
+ImU32 cFactText() { return colOf(app::shell::factTextColour(*g_f.c)); }
+ImU32 cShadow(float a) { return colOf(app::shell::textShadow(*g_f.c), a); }
 
 // ---- text ----
 ImFont* font(bool bold) { return bold ? fonts().bold : fonts().regular; }
@@ -103,6 +105,20 @@ void outlined(ImDrawList* dl, Type t, ImVec2 pos, ImU32 col, ImU32 outline, cons
         dl->AddText(f, px(t), ImVec2(pos.x + o * std::cos(a), pos.y + o * std::sin(a)), outline, d.c_str());
     }
     dl->AddText(f, px(t), pos, col, d.c_str());
+    auditText(typeName(t), px(t), s);
+}
+void shadowed(ImDrawList* dl, Type t, ImVec2 pos, ImU32 col, float fade, const std::string& s) {
+    ImFont* f = font(false);
+    const std::string d = displayable(s, f);
+    const float o = std::max(1.0f, static_cast<float>(std::round(g_f.dpi)));                      // 1 u
+    for (int ring = 2; ring >= 1; ring--)
+        for (int k = 0; k < 8; k++) {
+            const float a = k * 0.785398f;
+            dl->AddText(f, px(t), ImVec2(pos.x + ring * o * std::cos(a), pos.y + ring * o * std::sin(a)), cShadow((ring == 1 ? app::shell::kShadowAlpha : 0.35f) * fade), d.c_str());
+        }
+    ImVec4 c = ImGui::ColorConvertU32ToFloat4(col);
+    c.w *= fade;
+    dl->AddText(f, px(t), pos, ImGui::ColorConvertFloat4ToU32(c), d.c_str());
     auditText(typeName(t), px(t), s);
 }
 float headingPx(const char* level) { return static_cast<float>(level[1] == '1' ? g_f.m.h1 : level[1] == '2' ? g_f.m.h2 : g_f.m.h3); }
@@ -173,6 +189,7 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
         break;
     case Icon::Cube: dl->AddRect(P(-0.6f, -0.45f), P(0.45f, 0.6f), col, 0, 0, th); dl->AddRect(P(-0.3f, -0.75f), P(0.75f, 0.3f), col, 0, 0, th); break;
     case Icon::Dots: for (float x : {-0.6f, 0.0f, 0.6f}) dl->AddCircleFilled(P(x, 0), 0.14f * s, col); break;
+    case Icon::Info: dl->AddCircle(c, 0.8f * s, col, 28, th); dl->AddLine(P(0, -0.05f), P(0, 0.45f), col, th); dl->AddCircleFilled(P(0, -0.38f), 0.11f * s, col, 10); break;
     case Icon::Check: { const ImVec2 pts[3] = {P(-0.55f, 0.0f), P(-0.15f, 0.45f), P(0.6f, -0.45f)}; dl->AddPolyline(pts, 3, col, 0, th * 1.15f); break; }
     }
 }
@@ -181,7 +198,7 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
 bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scroll) {
     const Frame& f = g_f;
     const float pad = shape == Shape::Panel ? static_cast<float>(f.m.s16) : 0.0f;
-    const float rounding = shape == Shape::Bar || shape == Shape::Overlay ? 0.0f : shape == Shape::Pill ? static_cast<float>(r.h / 2) : ui::corner(static_cast<float>(f.m.radiusPanel));
+    const float rounding = shape == Shape::Bar || shape == Shape::Overlay || shape == Shape::Clear ? 0.0f : shape == Shape::Pill ? static_cast<float>(r.h / 2) : ui::corner(static_cast<float>(f.m.radiusPanel));
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(r.x), static_cast<float>(r.y)), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(r.w), static_cast<float>(r.h)), ImGuiCond_Always);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
@@ -198,8 +215,8 @@ bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scrol
     p.dl = ImGui::GetWindowDrawList();
     const ImVec2 a = ImGui::GetWindowPos(), b(a.x + ImGui::GetWindowWidth(), a.y + ImGui::GetWindowHeight());
     if (docked) panelDecor(app::PanelKind::Docked);
-    else if (!f.plain && shape != Shape::Overlay) panelDecor(app::PanelKind::Floating);   // Aero and Y2K: their own glass, rim, glow and textures (stage 7 refines them)
-    if (shape == Shape::Overlay) {
+    else if (!f.plain && shape != Shape::Overlay && shape != Shape::Clear) panelDecor(app::PanelKind::Floating);   // Aero and Y2K: their own glass, rim, glow and textures (stage 7 refines them)
+    if (shape == Shape::Overlay || shape == Shape::Clear) {
     } else if (f.plain) {
         if (shape != Shape::Bar) {                                              // one soft shadow below and round (black at low opacity, three layers), outside the window's own edge
             const float s = static_cast<float>(f.m.s4), big = 16 * s;
@@ -254,7 +271,8 @@ Hit hit(const char* id, ImVec2 pos, ImVec2 size) {
 float rc() { return ui::corner(static_cast<float>(g_f.m.radiusCtl)); }
 }  // namespace
 
-bool hoveredRect(ImVec2 pos, ImVec2 size) { return ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + size.x, pos.y + size.y)); }
+// (AllowWhenBlockedByActiveItem: while a button inside the rectangle is held, the rectangle is still hovered, so the button is still there when it is let go)
+bool hoveredRect(ImVec2 pos, ImVec2 size) { return ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + size.x, pos.y + size.y)); }
 
 bool button(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, Face face, bool selected) {
     const Hit h = hit(id, pos, size);
@@ -374,6 +392,19 @@ void pTitle(Panel& p, const std::string& s) { text(p.dl, Type::Title, true, here
 void pHeading(Panel& p, const std::string& s) { text(p.dl, Type::Caption, false, here(p), cMuted(), s); p.y += lineH(Type::Caption) + g_f.m.s4; }
 void pCaption(Panel& p, const std::string& s, bool muted) { p.y += paragraph(p.dl, Type::Caption, false, here(p), p.w, muted ? cMuted() : cText(), s) + g_f.m.s4; }
 void pBody(Panel& p, const std::string& s, bool muted) { p.y += paragraph(p.dl, Type::Body, false, here(p), p.w, muted ? cMuted() : cText(), s) + g_f.m.s4; }
+void pStat(Panel& p, const std::string& label, const std::string& value) {
+    const float lw = width(Type::Body, false, label), vw = width(Type::Body, false, value), gap = static_cast<float>(g_f.m.s12);
+    if (lw + vw + gap <= p.w) {
+        const ImVec2 o = here(p);
+        text(p.dl, Type::Body, false, o, cMuted(), label);
+        text(p.dl, Type::Body, false, ImVec2(o.x + p.w - vw, o.y), cText(), value);
+        p.y += lineH(Type::Body) + g_f.m.s4;
+    } else {
+        text(p.dl, Type::Body, false, here(p), cMuted(), label);
+        p.y += lineH(Type::Body);
+        p.y += paragraph(p.dl, Type::Body, false, here(p), p.w, cText(), value) + g_f.m.s4;
+    }
+}
 bool pCheck(Panel& p, const char* id, const std::string& label, bool* v) { const bool r = checkbox(id, here(p), p.w, label, v); p.y += g_f.m.row; return r; }
 bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels, int* cur) { const bool r = segmented(id, here(p), p.w, labels, cur); p.y += g_f.m.row + g_f.m.s4; return r; }
 bool pSlider(Panel& p, const char* id, float* v, float lo, float hi) { const bool r = slider(id, here(p), p.w, v, lo, hi); p.y += g_f.m.row; return r; }

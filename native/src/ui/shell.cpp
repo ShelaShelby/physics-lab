@@ -51,24 +51,35 @@ struct State {
     char query[96] = "";
     int searchSel = 0;
     bool searchFocus = false;
+    bool openThemes = false;                              // search asked for the Theme list
+    int openedFrame = -1;                                 // the frame a panel was opened in (its own opening click is not an outside click)
     std::map<PanelId, double> anchorX;                    // the centre x of the button a panel opens from (window pixels)
     bool contentsDummy = false;
+    // the fact line (stage 4)
+    FactClock fact;                                       // seconds this fact has been on screen (stands still while hovered)
+    bool factHover = false;
+    std::vector<std::string> recent;                      // the search's recent choices, newest first
+    bool recentLoaded = false;
+    double anchorFactX = 0;
 } S;
 
 const char* panelName(PanelId id) {
     switch (id) {
     case PanelId::Menu: return "menu"; case PanelId::LabMenu: return "labmenu"; case PanelId::Chip: return "chip"; case PanelId::Speed: return "speed";
     case PanelId::Show: return "show"; case PanelId::Pick: return "pick"; case PanelId::Scale: return "scale"; case PanelId::View: return "view";
-    case PanelId::More: return "more"; case PanelId::Facts: return "facts"; case PanelId::None: return "none";
+    case PanelId::More: return "more"; case PanelId::Facts: return "facts"; case PanelId::Data: return "data"; case PanelId::None: return "none";
     }
     return "none";
 }
-bool fromTop(PanelId id) { return id == PanelId::Menu || id == PanelId::LabMenu || id == PanelId::Chip || id == PanelId::Facts; }
+bool fromTop(PanelId id) { return id == PanelId::Menu || id == PanelId::LabMenu || id == PanelId::Chip; }
 double widthEmOf(PanelId id) {
     if (const double w = orbitPanelWidthEm(id)) return w;
-    switch (id) { case PanelId::Menu: return 18; case PanelId::LabMenu: return 14; case PanelId::Facts: return 22; case PanelId::More: return 18; default: return 20; }
+    switch (id) { case PanelId::Menu: return 18; case PanelId::LabMenu: return 14; case PanelId::Facts: return 24; case PanelId::More: return 18; case PanelId::Data: return 36; default: return 20; }
 }
-void toggle(PanelId id) { S.ui.open = S.ui.open == id ? PanelId::None : id; S.ui.search = false; }
+void toggle(PanelId id) { S.ui.open = S.ui.open == id ? PanelId::None : id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount(); }
+}  // namespace
+namespace shellimpl { void shellOpenPanel(PanelId id) { S.ui.open = id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount(); } }
+namespace {
 bool mouseIn(const Rect& r) { const ImVec2 mp = ImGui::GetIO().MousePos; return r.contains({mp.x, mp.y}); }
 constexpr float kOldPanelUnits = 360.0f;      // the old side column's width, in units (app/display_scale.h: kPanelWidthU)
 const char* const kTextSizes[4] = {"small", "normal", "large", "xl"};
@@ -77,6 +88,7 @@ const char* const kTextSizes[4] = {"small", "normal", "large", "xl"};
 void menuPanel(AppState& app, sh::Panel& p, bool& close) {
     const Metrics& m = sh::F().m;
     sh::pTitle(p, "Menu");
+    if (sh::pRow(p, "menu.save", "Save picture")) { app.shot.requested = true; close = true; }
     if (sh::pRow(p, "menu.history", "What's new (history)")) { app.showHistory = true; close = true; }
     if (sh::pRow(p, "menu.about", "About Physics Lab")) { app.showAbout = true; close = true; }
     if (sh::pRow(p, "menu.changelog", app.lab == 1 ? "Atom Lab changelog" : "Orbit Lab changelog")) { app.showLabLog = true; close = true; }
@@ -100,17 +112,39 @@ void labMenuPanel(AppState& app, sh::Panel& p, bool& close) {
         if (sh::pRow(p, i ? "lab.atom" : "lab.orbit", app::kLabInfo[i].name, app.lab == i)) { openLab(app, i); close = true; }
 }
 
-void factsPanel(AppState& app, sh::Panel& p) {
+void factsPanel(AppState& app, sh::Panel& p, bool& close) {
     const Metrics& m = sh::F().m;
     sh::pTitle(p, "Did you know?");
     sh::pBody(p, factText(app));
-    if (factIsGift(app) && sh::pButton(p, "facts.gift", "Open the surprise", Face::Primary)) factOpenGift(app);
+    if (factIsGift(app)) { if (sh::pButton(p, "facts.gift", "Open the surprise", Face::Primary)) { factOpenGift(app); close = true; } }
+    else sh::pCaption(p, "No named source is recorded for this fact yet: it came with the web version of the app.");
     const float bw = (p.w - m.s8) / 2;
     const ImVec2 o = sh::here(p);
-    if (sh::button("facts.prev", o, ImVec2(bw, static_cast<float>(m.control)), "‹ Previous")) factStep(app, -1);
-    if (sh::button("facts.next", ImVec2(o.x + bw + m.s8, o.y), ImVec2(bw, static_cast<float>(m.control)), "Next ›")) factStep(app, 1);
+    if (sh::button("facts.prev", o, ImVec2(bw, static_cast<float>(m.control)), "‹ Previous")) { factStep(app, -1); S.fact.t = 0; }
+    if (sh::button("facts.next", ImVec2(o.x + bw + m.s8, o.y), ImVec2(bw, static_cast<float>(m.control)), "Next ›")) { factStep(app, 1); S.fact.t = 0; }
     p.y += m.control + m.s4;
     sh::pCaption(p, std::to_string(factPosition(app) + 1) + " of " + std::to_string(factCount()));
+}
+
+// The subject card's "All values": every line of the old card, word for word (its source lines too), in a large panel.
+void dataPanel(AppState& app, sh::Panel& p, bool& close) {
+    const Metrics& m = sh::F().m;
+    orbit::SubjectCard sc;
+    if (!subjectCardOf(app, sc)) { close = true; return; }
+    const ImVec2 o = sh::here(p);
+    const float hb = static_cast<float>(m.iconBtn);
+    if (sh::iconButton("data.close", ImVec2(o.x + p.w - hb, o.y), ImVec2(hb, hb), Icon::Close, "Close (Esc)")) close = true;
+    sh::text(p.dl, Type::Title, true, o, sh::cText(), sc.name);
+    p.y += std::max(sh::lineH(Type::Title), hb) + m.s4;
+    sh::pCaption(p, sc.kind);
+    sh::pGap(p, m.s8);
+    for (const std::string& l : sc.all) sh::pBody(p, l);
+    if (shellLogOn()) {                                           // for the automatic checks: the lines the sheet shows, once per change
+        static std::string last;
+        std::string sig = sc.name;
+        for (const std::string& l : sc.all) sig += "\t" + l;
+        if (sig != last) { last = sig; std::printf("PLSHEET %s\n", sig.c_str()); std::fflush(stdout); }
+    }
 }
 
 void morePanel(sh::Panel& p, std::vector<ToolItem>& hidden, bool& close) {
@@ -130,35 +164,42 @@ void morePanel(sh::Panel& p, std::vector<ToolItem>& hidden, bool& close) {
     }
 }
 
-// ---- search (Ctrl+K) ----
+// ---- search (Ctrl+K): bodies, dates, every Orbit Lab setting, the menu's actions, the guides and the facts ----
 struct SearchEntry { SearchItem item; std::function<void()> act; };
 std::vector<SearchEntry> searchEntries(AppState& app) {
     std::vector<SearchEntry> v;
-    auto add = [&](const char* group, const std::string& label, std::function<void()> f) { v.push_back({{label, group, label}, std::move(f)}); };
+    const SearchAdd add = [&v](const char* group, const std::string& label, const std::string& id, std::function<void()> f) { v.push_back({{label, group, id}, std::move(f)}); };
     if (app.lab == 0) {
-        for (const PickGroup& g : pickGroups(app))
-            for (const PickItem& it : g.items) { PickItem copy = it; add("Bodies", it.name, [&app, copy] { pickItem(app, copy); }); }
-        add("Views", "2D view", [&app] { app.set.view3D = false; });
-        add("Views", "3D view", [&app] { app.set.view3D = true; });
-        add("Views", "Reset view", [&app] { resetViewAction(app); });
-        add("Views", "Today", [&app] { resetToToday(app); app.dateNote.clear(); });
-        add("Settings", "Time speed", [] { S.ui.open = PanelId::Speed; });
-        add("Settings", "Date and time", [] { S.ui.open = PanelId::Chip; });
-        add("Settings", "Zoom, sizes and trails", [] { S.ui.open = PanelId::Scale; });
-        add("Guides", "What am I even looking at?", [&app] { app.learn = 1; app.learnJump = "top"; });
-        add("Guides", "Why do we have seasons?", [&app] { app.learn = 2; app.learnJump = "top"; });
-        add("Guides", "Timeline: how we understood the Solar System", [&app] { app.learn = 3; app.learnJump = "top"; });
+        orbitSearch(app, add);
+        add("Guides", "What am I even looking at?", "guide:look", [&app] { app.learn = 1; app.learnJump = "top"; });
+        add("Guides", "Why do we have seasons?", "guide:seasons", [&app] { app.learn = 2; app.learnJump = "top"; });
+        add("Guides", "Timeline: how we understood the Solar System", "guide:timeline", [&app] { app.learn = 3; app.learnJump = "top"; });
     }
-    add("Settings", "Settings", [&app] { app.showSettings = true; });
-    add("Settings", "Text size", [] { S.ui.open = PanelId::Menu; });
-    add("Guides", "About Physics Lab", [&app] { app.showAbout = true; });
-    add("Guides", "History", [&app] { app.showHistory = true; });
-    add("Views", "Old panel (all the controls)", [&app] { app.showOldPanel = true; });
+    add("Menu", "Save picture", "menu:save", [&app] { app.shot.requested = true; });
+    add("Menu", "Settings", "menu:settings", [&app] { app.showSettings = true; });
+    add("Menu", "About Physics Lab", "menu:about", [&app] { app.showAbout = true; });
+    add("Menu", "What's new (history)", "menu:history", [&app] { app.showHistory = true; });
+    add("Menu", app.lab == 1 ? "Atom Lab changelog" : "Orbit Lab changelog", "menu:changelog", [&app] { app.showLabLog = true; });
+    add("Menu", "Put this lab's settings back…", "menu:defaults", [] { S.askDefaults = true; });
+    add("Menu", "Text size", "menu:textsize", [] { shellOpenPanel(PanelId::Menu); });
+    add("Menu", "Theme", "menu:theme", [] { S.openThemes = true; });
+    add("Menu", "Learn", "menu:learn", [&app] { app.pane = 1; });
+    add("Menu", "Achievements", "menu:ach", [&app] { app.pane = 2; });
+    add("Menu", app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", "menu:swap", [&app] { openLab(app, 1 - app.lab); });
+    add("Menu", app.prefs.facts == "on" ? "Facts: turn off" : "Facts: turn on", "menu:facts", [&app] { app.prefs.facts = app.prefs.facts == "on" ? "off" : "on"; });
+    add("Menu", "Legend", "menu:legend", [&app] { app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", !panelCollapsed(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", true)); });
+    if (app.lab == 1) add("Menu", "Old panel (the Atom Lab's controls)", "menu:old", [&app] { app.showOldPanel = true; });
+    for (int i = 0; i < factCount(); i++) {
+        const std::string t = factTextAt(i);
+        if (t.empty()) continue;
+        add("Facts", t, "fact:" + std::to_string(i), [&app, i] { factShow(app, i); S.fact.t = 0; shellOpenPanel(PanelId::Facts); });
+    }
     return v;
 }
 
-Rect searchPanel(AppState& app, const Frame& fr, const Metrics& m) {
-    const Rect r = placePanel(Anchor::Centre, m.em(36), sh::lastHeight("##search", static_cast<float>(m.em(14))), fr, m, fr.window.w / 2);
+Rect searchPanel(AppState& app, const Frame& fr, const Metrics& m, const std::vector<Rect>& cards) {
+    Rect r = placePanel(Anchor::Centre, m.em(36), sh::lastHeight("##search", static_cast<float>(m.em(14))), fr, m, fr.window.w / 2);
+    for (const Rect& c : cards) r = sideStep(r, c, fr.window, m.s12, m.s12);
     sh::Panel p;
     if (!sh::beginPanel("##search", r, p, sh::Shape::Panel, true)) return r;
     std::vector<SearchEntry> entries = searchEntries(app);
@@ -174,31 +215,43 @@ Rect searchPanel(AppState& app, const Frame& fr, const Metrics& m) {
     ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImGui::ColorConvertU32ToFloat4(sh::cMuted()));
     ImGui::SetNextItemWidth(p.w);
     if (S.searchFocus) { ImGui::SetKeyboardFocusHere(); S.searchFocus = false; }
-    const bool enterPressed = ImGui::InputTextWithHint("##searchfield", "Search bodies, views, settings, guides", S.query, sizeof S.query, ImGuiInputTextFlags_EnterReturnsTrue);
+    const bool enterPressed = ImGui::InputTextWithHint("##searchfield", "Search bodies, dates, settings, menu, guides, facts", S.query, sizeof S.query, ImGuiInputTextFlags_EnterReturnsTrue);
     noteItem("search.field");
     auditText("body", ImGui::GetFontSize(), S.query[0] ? S.query : "Search");
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(2);
     ImGui::PopFont();
     p.y += m.control + m.s8;
-    const std::vector<int> hits = searchResults(S.query, items, 8);
+    const std::vector<int> hits = searchResults(S.query, items, 8, S.recent);
     if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) S.searchSel++;
     if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true)) S.searchSel--;
     S.searchSel = hits.empty() ? 0 : std::min<int>(std::max(S.searchSel, 0), static_cast<int>(hits.size()) - 1);
     int chosen = -1;
+    if (!hits.empty()) auditNote("searchhit " + items[hits[0]].label);
+    auditNote("searchcount " + std::to_string(hits.size()));
     for (std::size_t i = 0; i < hits.size(); i++) {
         const SearchItem& it = items[hits[i]];
         const ImVec2 o = sh::here(p);
         const std::string id = "search.hit" + std::to_string(i);
-        if (sh::row(id.c_str(), o, p.w, it.label, static_cast<int>(i) == S.searchSel)) chosen = hits[i];
         const float gw = sh::width(Type::Caption, false, it.group);
+        std::string label = it.label;                                              // a long label (a fact) is cut with "…" so it leaves room for its group
+        const float room = p.w - gw - 4.0f * m.s8 - m.s12;
+        while (sh::width(Type::Body, false, label) > room && label.size() > 4) { label.pop_back(); while (!label.empty() && (static_cast<unsigned char>(label.back()) & 0xC0) == 0x80) label.pop_back(); label.pop_back(); }
+        if (label != it.label) label += "…";
+        if (sh::row(id.c_str(), o, p.w, label, static_cast<int>(i) == S.searchSel)) chosen = hits[i];
         sh::text(p.dl, Type::Caption, false, ImVec2(o.x + p.w - gw - m.s8, o.y + (m.row - sh::px(Type::Caption)) / 2), sh::cMuted(), it.group);
         p.y += m.row;
     }
     if (enterPressed && !hits.empty()) chosen = hits[S.searchSel];
+    if (!S.query[0] && hits.empty()) sh::pCaption(p, "Type to search: a planet or moon, a date, a setting, Save picture, a guide, a fact. Your recent choices are listed first.");
     if (S.query[0] && hits.empty()) sh::pCaption(p, "Nothing found. Try a planet, a setting or a guide.");
     sh::endPanel(p);
-    if (chosen >= 0) { entries[chosen].act(); S.ui.search = false; S.query[0] = 0; }
+    if (chosen >= 0) {
+        S.recent = pushRecent(S.recent, items[chosen].id);
+        app.prefs.recent = packRecent(S.recent);
+        S.ui.search = false; S.query[0] = 0;
+        entries[chosen].act();
+    }
     return r;
 }
 
@@ -223,6 +276,55 @@ double crumbWidth(const std::vector<Crumb>& v, const Metrics& m) {
         if (i + 1 < v.size()) w += m.s16;
     }
     return w;
+}
+
+// ---- the fact line (stage 4): one short line at the bottom left of the picture ----
+double factInterval() {
+    static const double v = [] { const char* e = std::getenv("PL_FACT_INTERVAL"); return e ? std::max(0.5, std::atof(e)) : kFactInterval; }();     // (for the automatic checks)
+    return v;
+}
+
+// Draws it and returns its rectangle (empty: not shown this frame). It is left out while it would sit on a card, a panel or the selected body; a click opens the whole fact, the arrows
+// (on hover) step. The text keeps its size; only its opacity changes.
+Rect factLine(AppState& app, const Frame& fr, const Metrics& m, const std::vector<Rect>& occ, double dpi, double dt) {
+    std::string txt = factText(app);
+    const double textW = sh::width(Type::Caption, false, txt);
+    const Rect r = factLineRect(fr, m, textW);
+    bool blocked = false;
+    for (const Rect& o : occ) if (r.intersects(o)) blocked = true;
+    if (!blocked && app.lab == 0) {
+        double bx = 0, by = 0, br = 0;
+        if (app.view.selectedScreen(bx, by, br) && hiddenBy({bx * dpi, by * dpi}, std::max(br * dpi, static_cast<double>(m.s8)), {r}, m.s12)) blocked = true;
+    }
+    if (blocked) { S.factHover = false; return Rect{0, 0, 0, 0}; }
+    sh::Panel p;
+    if (!sh::beginPanel("##shellFact", r, p, sh::Shape::Clear, false)) return Rect{0, 0, 0, 0};
+    const float arrowsW = static_cast<float>(2 * m.row + m.s4), textAreaW = static_cast<float>(r.w) - arrowsW, h = static_cast<float>(r.h);
+    const bool hover = sh::hoveredRect(p.origin, ImVec2(static_cast<float>(r.w), h));
+    S.factHover = hover;
+    if (factTick(S.fact, dt, hover, look().reduced, factInterval(), kFactFade)) factStep(app, 1);
+    const float alpha = look().reduced ? 1.0f : static_cast<float>(factAlpha(S.fact.t, factInterval(), kFactFade));
+    txt = factText(app);
+    const float room = textAreaW - 2.0f * m.s4;
+    std::string shown = txt;
+    while (sh::width(Type::Caption, false, shown) > room && shown.size() > 4) { shown.pop_back(); while (!shown.empty() && (static_cast<unsigned char>(shown.back()) & 0xC0) == 0x80) shown.pop_back(); }
+    if (shown != txt) { while (!shown.empty() && shown.back() == ' ') shown.pop_back(); shown += "…"; }
+    ImGui::SetCursorScreenPos(p.origin);
+    if (ImGui::InvisibleButton("fact.line", ImVec2(textAreaW, h))) { S.anchorX[PanelId::Facts] = r.x + textAreaW / 2; toggle(PanelId::Facts); }
+    noteItem("fact.line");
+    if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    sh::shadowed(p.dl, Type::Caption, ImVec2(p.origin.x + m.s4, p.origin.y + (h - sh::px(Type::Caption)) / 2), sh::cFactText(), alpha, shown);
+    if (hover) {
+        const float bw = static_cast<float>(m.row), by = (h - bw) / 2;
+        if (sh::button("fact.prev", ImVec2(p.origin.x + textAreaW, p.origin.y + by), ImVec2(bw, bw), "‹", Face::Quiet)) { factStep(app, -1); S.fact.t = 0; }
+        if (sh::button("fact.next", ImVec2(p.origin.x + textAreaW + bw + m.s4, p.origin.y + by), ImVec2(bw, bw), "›", Face::Quiet)) { factStep(app, 1); S.fact.t = 0; }
+    }
+    ImGui::End();
+    auditNote("factline " + shown);
+    char b[64];
+    std::snprintf(b, sizeof b, "factalpha %.3f t=%.2f", alpha, S.fact.t);
+    auditNote(b);
+    return r;
 }
 
 std::vector<std::string> readoutLines(const AppState& app, double fps) {
@@ -254,6 +356,7 @@ bool shellSpace(AppState& app, bool textInput) {
 void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     sh::beginFrame();
     auditFrame();
+    if (!S.recentLoaded) { S.recent = unpackRecent(app.prefs.recent); S.recentLoaded = true; }
     setReadingMode(true);
     const sh::Frame& SF = sh::F();
     const Metrics& m = SF.m;
@@ -281,10 +384,12 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     for (const ToolItem& t : tools)
         iw.push_back(t.kind == ToolItem::Sep ? m.s12 : t.kind == ToolItem::Menu ? m.toolBtn + m.caretW : t.kind == ToolItem::Segment ? 2 * segW + gap + m.caretW : m.toolBtn);
     const int count = static_cast<int>(tools.size());
+    const bool hasToolbar = count > 0;                    // the Atom Lab has none until stage 5
     const int shown = toolbarVisible(iw, gap, m.toolBtn, W, m);
     double tw = 2.0 * m.s8;
     for (int i = 0; i < shown; i++) tw += iw[i] + (i ? gap : 0);
     if (shown < count) tw += (shown ? gap : 0) + m.toolBtn;
+    if (!hasToolbar) tw = m.toolBtn;
     const std::vector<std::string> ro = readoutLines(app, fps);
     double rw = 0;
     for (const std::string& l : ro) rw = std::max(rw, static_cast<double>(sh::width(Type::Caption, false, l)));
@@ -295,17 +400,24 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     // the top bar's pieces
     const ChipInfo chip = chipInfo(app);
     const double todayW = sh::width(Type::Body, false, "Today") + 2.0 * m.s12;
-    const double chipW = 2.0 * m.s16 + std::max(sh::width(Type::Title, true, chip.title), sh::width(Type::Caption, false, chip.sub)) + (chip.today ? m.s8 + todayW : 0);
-    const double oldW = sh::width(Type::Body, false, "Old panel") + 2.0 * m.s12;
-    const int nIcons = 7;
+    const double stopW = sh::width(Type::Body, false, "■ Stop") + 2.0 * m.s12;
+    // The chip keeps one width while time runs (its words change every frame: "3.2 years after ..."), so the play and Today buttons inside it do not slide under the pointer: it is as wide
+    // as the longest words it normally holds, and only grows past that.
+    const double refTitle = sh::width(Type::Title, true, "30 Sep 2026, 12:00 UT"), refSub = sh::width(Type::Caption, false, "1 s = 29.1 days  ·  12.5 years after 30 Sep 2026");
+    const double chipW = 2.0 * m.s16 + std::max({static_cast<double>(sh::width(Type::Title, true, chip.title)), static_cast<double>(sh::width(Type::Caption, false, chip.sub)), app.lab == 0 ? static_cast<double>(refTitle) : 0.0, app.lab == 0 ? static_cast<double>(refSub) : 0.0}) + (chip.today ? m.s8 + todayW : chip.stop ? m.s8 + stopW : 0) + (chip.play ? m.s4 + m.control : 0);
+    const bool hasOld = app.lab == 1;                     // the Orbit Lab needs no Old panel any more; the Atom Lab keeps it until stage 5
+    const double oldW = hasOld ? sh::width(Type::Body, false, "Old panel") + 2.0 * m.s12 : 0;
+    const int nIcons = 6;
     TopBarWidths tbw;
     tbw.menu = m.iconBtn;
     tbw.crumbFull = crumbWidth(crumbs(app, 0), m); tbw.crumbShort = crumbWidth(crumbs(app, 1), m); tbw.crumbIcon = m.toolBtn + m.caretW;
     tbw.chip = chipW;
-    tbw.right = nIcons * m.iconBtn + (nIcons - 1) * gap + m.s8 + oldW;
+    tbw.right = nIcons * m.iconBtn + (nIcons - 1) * gap + (hasOld ? m.s8 + oldW : 0);
     const TopBarPlan plan = planTopBar(W, m, tbw);
 
-    std::vector<Rect> occ{fr.topBar, fr.toolbar};
+    std::vector<Rect> occ{fr.topBar};
+    std::vector<Rect> cards;                              // the floating cards (the Legend, the subject card): a panel that opens over one steps aside
+    if (hasToolbar) occ.push_back(fr.toolbar);
     std::string log;
 
     // ---- the floating cards: the subject card (top right) and the legend (top left); each collapses to its title ----
@@ -339,29 +451,66 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             sh::endPanel(p);
         }
         occ.push_back(r);
+        cards.push_back(r);
         auditRect(std::string("card.") + name + (collapsed ? ".collapsed" : ""), static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.w), static_cast<float>(r.h));
         auditNote(std::string("cardtitle ") + name + " " + title + (collapsed ? " collapsed" : " open"));
         return r;
     };
     const bool pane = app.pane != 0;                      // the Learn or Achievements page covers the lab: only the top bar stays
     if (app.lab == 0 && !pane) {
-        std::vector<std::pair<std::string, std::string>> rows;
-        legendRows(app, rows);
-        card("legend", "Legend", Anchor::TopLeft, 16, true, [&](sh::Panel& p) {
-            for (std::size_t i = 0; i < rows.size(); i++) sh::pRow(p, ("legend." + std::to_string(i)).c_str(), rows[i].second, false, rows[i].first.c_str());
+        card("legend", "Legend", Anchor::TopLeft, 22, true, [&](sh::Panel& p) {
+            const std::vector<LegendEntry> legend = legendEntries(app);              // (worked out only while the legend is open)
+            for (const LegendEntry& e : legend) {
+                const ImVec2 o = sh::here(p);
+                const float rowH = static_cast<float>(m.row), sw = static_cast<float>(m.s24 + m.s16);          // the swatch's width
+                const float cy = o.y + rowH / 2;
+                const auto col = [](const std::string& hex, float a = 1) { return ui::col(app::hexRgb(hex.c_str()), a); };
+                const float r = static_cast<float>(m.s4) + 1;
+                float x = o.x + m.s4;
+                switch (e.marker) {
+                case LegendEntry::Disc: p.dl->AddCircleFilled(ImVec2(o.x + sw / 2, cy), r * 1.3f, col(e.hex[0]), 16); break;
+                case LegendEntry::Ring: p.dl->AddCircle(ImVec2(o.x + sw / 2, cy), r * 1.5f, col(e.hex[0]), 16, 2.0f); break;
+                case LegendEntry::Line: p.dl->AddLine(ImVec2(o.x + m.s4, cy), ImVec2(o.x + sw - m.s4, cy), col(e.hex[0], 0.85f), 2.0f); break;
+                case LegendEntry::Band: p.dl->AddRectFilled(ImVec2(o.x + m.s4, cy - r * 1.4f), ImVec2(o.x + sw - m.s4, cy + r * 1.4f), col(e.hex[0], 0.55f)); break;
+                case LegendEntry::Cross:
+                    p.dl->AddCircle(ImVec2(o.x + sw / 2, cy), r * 1.4f, col(e.hex[0]), 16, 1.5f);
+                    p.dl->AddLine(ImVec2(o.x + sw / 2 - r * 2, cy), ImVec2(o.x + sw / 2 + r * 2, cy), col(e.hex[0]), 1.5f);
+                    p.dl->AddLine(ImVec2(o.x + sw / 2, cy - r * 2), ImVec2(o.x + sw / 2, cy + r * 2), col(e.hex[0]), 1.5f);
+                    break;
+                case LegendEntry::Dots: {
+                    const int n = static_cast<int>(std::min<std::size_t>(e.hex.size(), 5));
+                    const float step = n > 1 ? (sw - 2 * r - m.s4) / (n - 1) : 0;
+                    for (int k = 0; k < n; k++) p.dl->AddCircleFilled(ImVec2(x + r + k * step, cy), r, col(e.hex[k]), 12);
+                    break;
+                }
+                }
+                const float tx = o.x + sw + m.s8, avail = p.w - sw - m.s8;
+                const float ph = sh::paragraph(p.dl, Type::Body, false, ImVec2(tx, o.y + (rowH - sh::px(Type::Body)) / 2), avail, sh::cText(), e.text);
+                p.y += std::max(rowH, ph + m.s4);
+            }
         });
-        std::string title;
-        std::vector<std::string> lines;
-        if (subjectLines(app, title, lines))
-            card("card", title.c_str(), Anchor::TopRight, 20, false, [&](sh::Panel& p) {
-                const std::string kind = subjectKind(app);
-                if (!kind.empty()) sh::pCaption(p, kind);
-                for (const std::string& l : lines) sh::pBody(p, l);
+        orbit::SubjectCard sc;
+        if (subjectCardOf(app, sc))
+            card("card", sc.name.c_str(), Anchor::TopRight, 20, false, [&](sh::Panel& p) {
+                if (!sc.kind.empty()) sh::pCaption(p, sc.kind);
+                {   // the ONE big number (Key size; a very wide one drops to Title so it never leaves the card)
+                    const bool big = sh::width(Type::Key, true, sc.keyValue) <= p.w;
+                    const Type kt = big ? Type::Key : Type::Title;
+                    sh::text(p.dl, kt, true, sh::here(p), sh::cText(), sc.keyValue);
+                    p.y += sh::lineH(kt);
+                    sh::pCaption(p, sc.keyCaption);
+                }
+                sh::pGap(p, m.s4);
+                for (const orbit::SubjectValue& v : sc.values) { if (v.label.empty()) sh::pBody(p, v.value, true); else sh::pStat(p, v.label, v.value); }
+                CardAction act;
+                if (cardAction(app, act) && sh::pButton(p, act.id, act.text, Face::Quiet)) act.act();
+                if (sh::pButton(p, "card.all", "All values", Face::Secondary, S.ui.open == PanelId::Data)) toggle(PanelId::Data);
             });
+        else if (S.ui.open == PanelId::Data) S.ui.open = PanelId::None;       // nothing selected: no data sheet
     }
 
     // ---- the toolbar ----
-    if (!pane) {
+    if (!pane && hasToolbar) {
         sh::Panel tb;
         if (sh::beginPanel("##shellTool", fr.toolbar, tb, sh::Shape::Pill, false)) {
             float x = tb.origin.x + m.s8;
@@ -403,7 +552,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         if (sh::beginPanel("##shellRO", fr.readout, ropanel, sh::Shape::Overlay, false)) {
             for (std::size_t i = 0; i < ro.size(); i++) {
                 const float tw2 = sh::width(Type::Caption, false, ro[i]);
-                sh::outlined(ropanel.dl, Type::Caption, ImVec2(ropanel.origin.x + static_cast<float>(fr.readout.w) - tw2 - m.s4, ropanel.origin.y + i * sh::lineH(Type::Caption)), sh::cText(), sh::cBackdrop(0.9f), ro[i]);
+                sh::outlined(ropanel.dl, Type::Caption, ImVec2(ropanel.origin.x + static_cast<float>(fr.readout.w) - tw2 - m.s4, ropanel.origin.y + i * sh::lineH(Type::Caption)), sh::cText(), sh::cShadow(kShadowAlpha), ro[i]);
             }
             ImGui::End();
         }
@@ -456,28 +605,40 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 bar.dl->PushClipRect(a, b, true);
                 const bool open = S.ui.open == PanelId::Chip;
                 ImGui::SetCursorScreenPos(a);
-                if (chip.opens) ImGui::SetNextItemAllowOverlap();                    // the Today button sits on the chip and takes its own clicks
+                if (chip.opens) ImGui::SetNextItemAllowOverlap();                    // the Today, Stop and play buttons sit on the chip and take their own clicks
                 const bool hit = chip.opens && ImGui::InvisibleButton("top.chip", ImVec2(static_cast<float>(c.w), static_cast<float>(c.h)));
                 if (chip.opens) noteItem("top.chip");
                 const bool hov = chip.opens && ImGui::IsItemHovered();
                 bar.dl->AddRectFilled(a, b, open ? sh::cFacePress() : hov ? sh::cFaceHover() : sh::cFace(), static_cast<float>(c.h) / 2);
                 if (sh::F().outline) bar.dl->AddRect(a, b, sh::cEdge(), static_cast<float>(c.h) / 2, 0, 1.0f);
                 const float ty = a.y + (static_cast<float>(c.h) - sh::px(Type::Title) - sh::px(Type::Caption)) / 2;
-                sh::text(bar.dl, Type::Title, true, ImVec2(a.x + m.s16, ty), sh::cText(), chip.title);
-                sh::text(bar.dl, Type::Caption, false, ImVec2(a.x + m.s16, ty + sh::px(Type::Title)), sh::cMuted(), chip.sub);
+                const float tx = a.x + m.s16 + (chip.play ? static_cast<float>(m.control + m.s4) : 0.0f);
+                sh::text(bar.dl, Type::Title, true, ImVec2(tx, ty), sh::cText(), chip.title);
+                sh::text(bar.dl, Type::Caption, false, ImVec2(tx, ty + sh::px(Type::Title)), sh::cMuted(), chip.sub);
                 bar.dl->PopClipRect();
                 S.anchorX[PanelId::Chip] = c.x + c.w / 2;
                 if (hit) toggle(PanelId::Chip);
                 if (chip.today) {
                     const ImVec2 tpos(static_cast<float>(c.right()) - m.s8 - static_cast<float>(todayW), static_cast<float>(c.y) + (static_cast<float>(c.h) - m.control) / 2);
-                    if (sh::button("top.today", tpos, ImVec2(static_cast<float>(todayW), static_cast<float>(m.control)), "Today", Face::Quiet)) { resetToToday(app); app.dateNote.clear(); }
+                    if (sh::button("top.today", tpos, ImVec2(static_cast<float>(todayW), static_cast<float>(m.control)), "Today", Face::Quiet)) todayAction(app);
+                }
+                if (chip.stop) {
+                    const ImVec2 spos(static_cast<float>(c.right()) - m.s8 - static_cast<float>(stopW), static_cast<float>(c.y) + (static_cast<float>(c.h) - m.control) / 2);
+                    if (sh::button("top.stop", spos, ImVec2(static_cast<float>(stopW), static_cast<float>(m.control)), "■ Stop", Face::Quiet)) journeyStop(app);
+                }
+                if (chip.play) {   // play / pause: the owner's note of 6 Oct 2026 (it was on the toolbar, which felt like a phone's media bar); Space does the same
+                    const ImVec2 ppos(a.x + m.s4 + m.s4, static_cast<float>(c.y) + (static_cast<float>(c.h) - m.control) / 2);
+                    if (sh::iconButton("top.play", ppos, ImVec2(static_cast<float>(m.control), static_cast<float>(m.control)), chip.paused ? Icon::Play : Icon::Pause, chip.paused ? "Play (Space)" : "Pause (Space)")) app.paused = !app.paused;
                 }
                 auditRect("chip", a.x, a.y, static_cast<float>(c.w), static_cast<float>(c.h));
             }
             // the right side: search, the other lab, Learn, Achievements, 💡, Theme, Settings, and the temporary Old panel
-            float rx = static_cast<float>(W) - m.s12 - static_cast<float>(oldW);
-            if (sh::button("top.old", ImVec2(rx, (m.topBar - m.control) / 2.0f), ImVec2(static_cast<float>(oldW), static_cast<float>(m.control)), "Old panel", Face::Secondary, app.showOldPanel)) app.showOldPanel = !app.showOldPanel;
-            rx -= m.s8;
+            float rx = static_cast<float>(W) - m.s12;
+            if (hasOld) {
+                rx -= static_cast<float>(oldW);
+                if (sh::button("top.old", ImVec2(rx, (m.topBar - m.control) / 2.0f), ImVec2(static_cast<float>(oldW), static_cast<float>(m.control)), "Old panel", Face::Secondary, app.showOldPanel)) app.showOldPanel = !app.showOldPanel;
+                rx -= m.s8;
+            }
             const auto icon = [&](const char* id, Icon ic, const char* tip, bool on) {
                 rx -= ib;
                 const bool c = sh::iconButton(id, ImVec2(rx, y0), ImVec2(ib, ib), ic, tip, on);
@@ -486,11 +647,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             };
             if (icon("top.settings", Icon::Gear, "Settings", app.showSettings)) app.showSettings = true;
             const float themeX = rx - ib;
-            if (icon("top.theme", Icon::Palette, "Theme", false)) ImGui::OpenPopup("##themes");
+            if (icon("top.theme", Icon::Palette, "Theme", false) || S.openThemes) { ImGui::OpenPopup("##themes"); S.openThemes = false; }
             themePicker(app);
             (void)themeX;
-            S.anchorX[PanelId::Facts] = rx - ib / 2.0;
-            if (icon("top.facts", Icon::Bulb, "Did you know?", S.ui.open == PanelId::Facts)) toggle(PanelId::Facts);
             if (icon("top.ach", Icon::Trophy, "Achievements", app.pane == 2)) app.pane = app.pane == 2 ? 0 : 2;
             if (icon("top.learn", Icon::Book, "Learn", app.pane == 1)) app.pane = app.pane == 1 ? 0 : 1;
             if (icon("top.swap", Icon::Swap, app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", false)) openLab(app, 1 - app.lab);
@@ -504,6 +663,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     }
 
     // ---- the open dropdown or toolbar panel (one at a time) ----
+    { static PanelId prevOpen = PanelId::None; if (prevOpen == PanelId::Pick && S.ui.open != PanelId::Pick) pickFilterClear(); prevOpen = S.ui.open; }
     Rect openRect{0, 0, 0, 0};
     if (S.ui.open != PanelId::None) {
         const PanelId id = S.ui.open;
@@ -512,29 +672,32 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         else {
             const std::string wid = std::string("##panel_") + panelName(id);
             const double ax = S.anchorX.count(id) ? S.anchorX[id] : W / 2;
-            openRect = placePanel(fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
+            openRect = placePanel(id == PanelId::Data ? Anchor::Centre : fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
+            for (const Rect& c : cards) openRect = sideStep(openRect, c, fr.window, m.s12, m.s12);
             sh::Panel p;
             if (sh::beginPanel(wid.c_str(), openRect, p, sh::Shape::Panel, true)) {
                 bool close = false;
                 if (!buildOrbitPanel(id, app, p, close)) {
                     if (id == PanelId::Menu) menuPanel(app, p, close);
                     else if (id == PanelId::LabMenu) labMenuPanel(app, p, close);
-                    else if (id == PanelId::Facts) factsPanel(app, p);
+                    else if (id == PanelId::Facts) factsPanel(app, p, close);
+                    else if (id == PanelId::Data) dataPanel(app, p, close);
                     else if (id == PanelId::More) { std::vector<ToolItem> hidden(tools.begin() + shown, tools.end()); morePanel(p, hidden, close); }
                 }
-                sh::endPanel(p);
+                const float need = sh::endPanel(p);
+                { char nb[96]; std::snprintf(nb, sizeof nb, "panelneed %s need=%.0f have=%.0f", panelName(id), need, static_cast<float>(openRect.h)); auditNote(nb); }
                 if (close && S.ui.open == id) S.ui.open = PanelId::None;
             }
             occ.push_back(openRect);
             auditRect(std::string("panel.") + panelName(id), static_cast<float>(openRect.x), static_cast<float>(openRect.y), static_cast<float>(openRect.w), static_cast<float>(openRect.h));
             auditNote(std::string("panelopen ") + panelName(id));
             // a click anywhere else closes it (a click on the bars is their own business)
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !mouseIn(openRect) && !mouseIn(fr.topBar) && !mouseIn(fr.toolbar)) S.ui.open = PanelId::None;
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && S.openedFrame != ImGui::GetFrameCount() && !mouseIn(openRect) && !mouseIn(fr.topBar) && !mouseIn(fr.toolbar)) S.ui.open = PanelId::None;
         }
     }
     // ---- search ----
     if (S.ui.search) {
-        const Rect r = searchPanel(app, fr, m);
+        const Rect r = searchPanel(app, fr, m, cards);
         occ.push_back(r);
         auditRect("panel.search", static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.w), static_cast<float>(r.h));
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !mouseIn(r) && !mouseIn(fr.topBar)) S.ui.search = false;
@@ -546,6 +709,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         if (sh::beginPanel("##toast", r, p, sh::Shape::Panel, false)) { sh::pBody(p, app.shot.note, app.shot.failed ? false : true); sh::endPanel(p); }
     }
     // ---- the temporary Old panel: today's side column, floating, until stages 4 and 5 move its controls ----
+    if (app.lab == 0) app.showOldPanel = false;                        // the Orbit Lab has no Old panel any more
     if (app.showOldPanel) {
         const float pw = std::min(kOldPanelUnits * dpi, static_cast<float>(W - 2.0 * m.s12)), top = static_cast<float>(fr.topBar.bottom() + m.s12);
         const float ph = static_cast<float>(H) - top - static_cast<float>(m.s12);
@@ -555,6 +719,11 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (w->WasActive) { const Rect r{w->Pos.x, w->Pos.y, w->Size.x, w->Size.y}; occ.push_back(r); auditRect("panel.old", static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.w), static_cast<float>(r.h)); }
     }
     if (app.lab == 1) atomBigTable(app);
+    // ---- the fact line (Settings → Facts) ----
+    if (app.lab == 0 && !pane && app.prefs.facts == "on" && !app.journey.active && S.ui.open != PanelId::Facts) {   // (the Atom Lab: from stage 5, when its bottom left is arranged; today its own scale bar and "Less info" sit there)
+        const Rect fl = factLine(app, fr, m, occ, dpi, dt);
+        if (fl.w > 0) { occ.push_back(fl); auditRect("factline", static_cast<float>(fl.x), static_cast<float>(fl.y), static_cast<float>(fl.w), static_cast<float>(fl.h)); }
+    }
 
     // ---- the centre shift: the selected body is kept out from under the cards and panels (DESIGN.md section 6) ----
     static const bool shiftOff = std::getenv("PL_SHIFT") && std::string(std::getenv("PL_SHIFT")) == "off";   // for the automatic checks: the shift switched off

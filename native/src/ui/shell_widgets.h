@@ -36,7 +36,9 @@ ImU32 cFacePress();
 ImU32 cEdge();                   // the 1 px edge of panels and (outline mode) controls
 ImU32 cHair();                   // a divider between list rows
 ImU32 cPanel();                  // the glass fill (the card colour at the glass opacity)
-ImU32 cBackdrop(float a);        // the page colour, for the outline round the readout's text
+ImU32 cBackdrop(float a);        // the page colour (the reading view's dim)
+ImU32 cFactText();               // the fact line's colour (app::shell::factTextColour: the muted colour when it reads over black and white behind its shadow, else the main text colour)
+ImU32 cShadow(float a);          // the theme's text-shadow colour (app::shell::textShadow: black round light text, white round dark text) at opacity a
 
 // ---- text ----
 ImFont* font(bool bold);
@@ -47,15 +49,17 @@ void text(ImDrawList* dl, Type t, bool bold, ImVec2 pos, ImU32 col, const std::s
 std::vector<std::string> wrapText(Type t, bool bold, const std::string& s, float maxW);
 float paragraph(ImDrawList* dl, Type t, bool bold, ImVec2 pos, float maxW, ImU32 col, const std::string& s);   // wrapped; returns its height
 void outlined(ImDrawList* dl, Type t, ImVec2 pos, ImU32 col, ImU32 outline, const std::string& s);          // the readout: a 1 u outline so it reads over anything
+// The fact line: the text with a soft shadow round it (a 1 u ring at app::shell::kShadowAlpha, a 2 u ring fainter), everything times `fade` (0..1). Never changes the text's size.
+void shadowed(ImDrawList* dl, Type t, ImVec2 pos, ImU32 col, float fade, const std::string& s);
 void headingText(ImDrawList* dl, const char* level, ImVec2 pos, ImU32 col, const std::string& s);          // reading view headings: "h1", "h2", "h3"
 float headingPx(const char* level);
 
 // ---- icons (drawn by lines and shapes; no icon font) ----
-enum class Icon { Menu, Search, Play, Pause, Clock, Eye, Target, Ruler, Camera, Swap, Book, Trophy, Bulb, Palette, Gear, Caret, CaretUp, Close, Calendar, Cube, Dots, Check };
+enum class Icon { Menu, Search, Play, Pause, Clock, Eye, Target, Ruler, Camera, Swap, Book, Trophy, Bulb, Palette, Gear, Caret, CaretUp, Close, Calendar, Cube, Dots, Check, Info };
 void drawIcon(ImDrawList* dl, Icon icon, ImVec2 centre, float size, ImU32 col);
 
 // ---- panels ----
-enum class Shape { Panel, Bar, Pill, Overlay };      // Overlay: no glass, no input (the readout)
+enum class Shape { Panel, Bar, Pill, Overlay, Clear };      // Overlay: no glass, no input (the readout). Clear: no glass but it takes input (the fact line)
 struct Panel {
     ImDrawList* dl = nullptr;
     ImVec2 origin;               // where the content starts (inside the padding), screen pixels
@@ -87,6 +91,8 @@ void pGap(Panel& p, int px);
 void pTitle(Panel& p, const std::string& s);                                   // a panel's title: Title size, bold
 void pHeading(Panel& p, const std::string& s);                                 // a section heading: Caption, muted
 void pCaption(Panel& p, const std::string& s, bool muted = true);              // a wrapped note: Caption
+// A stat line: the label muted on the left, the value on the right (a value that does not fit goes under its label, wrapped)
+void pStat(Panel& p, const std::string& label, const std::string& value);
 void pBody(Panel& p, const std::string& s, bool muted = false);                // a wrapped paragraph or a value line: Body
 bool pCheck(Panel& p, const char* id, const std::string& label, bool* v);
 bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels, int* cur);

@@ -35,12 +35,6 @@ using namespace orbit;
 using namespace units;
 
 
-// "29,231" for the worst-error lists in the Real note (orbit/real_errors.h)
-static std::string withCommas(long v) {
-    std::string d = std::to_string(v), out;
-    for (std::size_t i = 0; i < d.size(); i++) { if (i && (d.size() - i) % 3 == 0) out += ','; out += d[i]; }
-    return out;
-}
 static int64_t nowUnixMs() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
@@ -73,14 +67,6 @@ std::string zoomLabel(double v) { return zoomText(v); }
 double zoomFor(const AppState& app, double km, double wantPx) {
     const double m = std::min(app.canvasW, app.canvasH) / 34;
     return std::clamp(std::log10(wantPx / (km * kKm / kSimLength) / m), -5.0, 5.5);
-}
-
-// The planet whose moons can be watched: the selected planet, or the planet of the selected moon
-static const Body* moonTarget(const AppState& app) {
-    const Selection& s = app.view.sel;
-    if (s.kind != Selection::Body && s.kind != Selection::Moon) return nullptr;
-    const Body* b = findBody(app.sys, s.bodyId);
-    return b && !b->moons.empty() ? b : nullptr;
 }
 
 static ImVec4 tileColor(const char* hex) {
@@ -241,12 +227,7 @@ static void orbitPanelContents(AppState& app) {
             if (ImGui::IsItemHovered()) {
                 ui::BeginTooltip();
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
-                const std::string tip = "Adds Einstein's correction to the Sun's pull on each planet, so Mercury's orbit turns a little more each time round: about 43 arcseconds per century, as measured.\n\n"
-                                        "It is a first-order (1PN) approximation, made with one simple extra potential of the Sun (Nobili & Roxburgh, 1986). It gets the turning of the orbit right, "
-                                        "but the motion along the orbit is slightly wrong, so, measured against JPL Horizons, it moves every planet's position away from JPL: Mercury's worst error in 1800 to 2100 is "
-                                        + withCommas(orbit::kRealErrKmRelOn[0]) + " km with it and " + withCommas(orbit::kRealErrKmRelOff[0]) + " km without. "
-                                        "It leaves out the planets' relativistic pull on each other, the Sun's spin and shape, and all higher orders.\n\n"
-                                        "Off (the default): plain Newtonian gravity, no extra turn.";
+                const std::string tip = relativityTip();
                 ImGui::TextUnformatted(tip.c_str());
                 ImGui::PopTextWrapPos();
                 ImGui::EndTooltip();
@@ -255,10 +236,7 @@ static void orbitPanelContents(AppState& app) {
             if (ImGui::IsItemHovered()) {
                 ui::BeginTooltip();
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
-                ImGui::TextUnformatted("The Sun is not fixed: it circles the balance point of the Solar System (the barycentre, the marked point), mostly because of Jupiter's pull. "
-                                       "The real circle is smaller than about two Sun radii, far too small to see here.\n\n"
-                                       "Ticked: the Sun's path is drawn 50 times too big, round the marked point, so you can see it. This is exaggerated, not to scale (the Sun itself and the planets are drawn at their true places).\n\n"
-                                       "Unticked: the path is drawn at its true size.");
+                ImGui::TextUnformatted(wobbleTip().c_str());
                 ImGui::PopTextWrapPos();
                 ImGui::EndTooltip();
             }
@@ -298,25 +276,8 @@ static void orbitPanelContents(AppState& app) {
     if (app.view.sel.kind != Selection::None && app.view.sel.kind != Selection::Belt) {
         if (wideButton(app.view.follow ? "◉ Following" : "○ Follow")) app.view.follow = !app.view.follow;
     }
-    if (app.set.moons && moonTarget(app)) {
-        if (wideButton("Slow time to watch moons")) {
-            const Body* b = moonTarget(app);
-            double P = 1e300;                             // the selected moon's period, or the fastest moon's
-            if (app.view.sel.kind == Selection::Moon) P = b->moons[app.view.sel.moon].data->periodDays;
-            else for (const Moon& m : b->moons) P = std::min(P, m.data->periodDays);
-            app.set.tspeed = std::clamp(std::log10(P / 4 / (kSimTime / kDay)), kTspeedMin, kTspeedMax);   // one lap in 4 seconds
-            app.view.follow = true;
-        }
-    }
-    {   // a selected planet with real spin data: slow time so one turn takes about 24 seconds
-        const Body* b = app.view.sel.kind == Selection::Body ? findBody(app.sys, app.view.sel.bodyId) : nullptr;
-        if (b && hasSpin(b->name) && wideButton("Slow time to watch it turn")) {
-            const double daysPerTurn = 360 / std::fabs(spinRateDegPerDay(b->name));
-            app.set.tspeed = std::clamp(std::log10(daysPerTurn / 24 / (kSimTime / kDay)), kTspeedMin, kTspeedMax);   // 1 s = 1/24 of a turn
-            app.view.follow = true;
-            if (app.set.trueScale) setZoom(app, zoomFor(app, b->radius / kKm, 80));   // close enough to see it turn
-        }
-    }
+    if (slowMoonsAvailable(app) && wideButton("Slow time to watch moons")) slowMoons(app);
+    if (slowSpinAvailable(app) && wideButton("Slow time to watch it turn")) slowSpin(app);
     if (wideButton("↺ Reset view")) resetViewAction(app);
 
     // ---- Sky ----

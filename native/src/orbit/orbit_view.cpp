@@ -5,11 +5,13 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 #include "format.h"
 #include "imgui.h"
 #include "kepler.h"
 #include "far_masses.h"
+#include "marker_colors.h"
 #include "sky.h"
 #include "spin.h"
 #include "units.h"
@@ -37,7 +39,7 @@ void setPictureColours(bool sky, const app::ThemeColors& t) {
 bool g_skyHalo = true;
 double g_minTextU = 0, g_minTextPx = 0;   // 0.15 stage 3: the new UI's smallest picture text (0: none)
 double g_textScale = 1;   // Settings → Text size   // the thin dark edge round labels is only needed on top of the stars
-const Color kHL = hexColor("#ff2bd6");   // the "look here" pink: nothing else in the picture is this colour
+const Color kHL = hexColor(marks::kHighlight);   // the "look here" pink: nothing else in the picture is this colour
 
 // The Sun's colour from its surface temperature (5,772 K), as in the web's starColor()
 Color starColor(double T) {
@@ -309,6 +311,8 @@ void OrbitView::zoomChanged(double oldZoom, double newZoom) {   // zoom about th
 
 void OrbitView::resetView() { ox = oy = 0; follow = false; yaw = 0.6; pitch = 1.0; cdep = 0; }
 
+void sunColourBytes(int rgb[3]) { const Color c = starColor(5772); rgb[0] = static_cast<int>(std::lround(c.r * 255)); rgb[1] = static_cast<int>(std::lround(c.g * 255)); rgb[2] = static_cast<int>(std::lround(c.b * 255)); }
+
 bool OrbitView::selectedScreen(double& x, double& y, double& r) const {
     if (sel.kind == Selection::None) return false;
     for (const Hit& h : hits_) if (h.sel == sel) { x = h.x; y = h.y; r = h.r; return true; }
@@ -402,7 +406,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     };
 
     {   // habitable zone: a faint green band
-        const Color band = {70 / 255.f, 180 / 255.f, 100 / 255.f, 0.13f};
+        const Color band = {marks::kHabitable[0] / 255.f, marks::kHabitable[1] / 255.f, marks::kHabitable[2] / 255.f, 0.13f};
         if (bigR(W, H, hzOut * kAU * px)) {               // zoomed far in: draw just the strip of it that crosses the picture
             // the point of the ecliptic under the middle of the picture, and the band's direction there
             const double wx = -ox / px, wy = (oy / px) / std::max(std::fabs(cb), 0.05);
@@ -639,7 +643,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             if (L * px > 4) {
                 const Vec3 dirs[2] = {u, u - b.vel * (0.7 / vm)};
                 const double lens[2] = {1, 0.8}, wds[2] = {0.05, 0.09};
-                const Color cols[2] = {rgba(140, 205, 255), rgba(255, 232, 180)};
+                const Color cols[2] = {rgba(marks::kIonTail[0], marks::kIonTail[1], marks::kIonTail[2]), rgba(marks::kDustTail[0], marks::kDustTail[1], marks::kDustTail[2])};
                 for (int k = 0; k < 2; k++) {
                     const Vec3 d = dirs[k] * (1 / std::max(length(dirs[k]), 1e-12));
                     const Q e = proj(b.pos.x + d.x * L * lens[k], b.pos.y + d.y * L * lens[k], b.pos.z + d.z * L * lens[k]);
@@ -758,7 +762,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             if (!fast) {
                 const double dx = star.first - mp.first, dy = star.second - mp.second, dlen = std::max(std::hypot(dx, dy), 1e-9);
                 R.disc(mp.first, mp.second, mr + 0.8, kCard);
-                R.sphere(mp.first, mp.second, mr, hexColor("#a4a4a4"), dx / dlen, dy / dlen);
+                R.sphere(mp.first, mp.second, mr, hexColor(marks::kMoon), dx / dlen, dy / dlen);
                 if (mtiny) R.ring(mp.first, mp.second, 3.5, 1.4, hexColor("#9b9b9b", 0.9f));
                 if (on) hiRing(mp.first, mp.second, md + 5);
             }
@@ -773,7 +777,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     if (set.far) {
         const auto fmtLyS = [](double v) { return fmtLy(v); };
         const auto inView = [&](const Q& q) { return q.dep - cd < 0.9 * D && q.first > -30 && q.first < W + 30 && q.second > -30 && q.second < H + 30; };
-        const Color gold = hexColor("#ffd27a");
+        const Color gold = hexColor(marks::kProbeRing);
         for (int i = 0; i < farCount(); i++) {
             FarItem f;
             if (!farItem(sys, i, f)) continue;
@@ -796,7 +800,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             if (!inView(q)) continue;
             if (probe) { R.disc(q.first, q.second, 2.6, Color{1, 1, 1, 1}); R.ring(q.first, q.second, 6, 1, gold); }
             else if (f.kind == "bh") { R.disc(q.first, q.second, 5.3, Color{1, 1, 1, 1}); R.disc(q.first, q.second, 4.5, Color{0, 0, 0, 1}); }
-            else if (f.kind == "object") { R.ring(q.first, q.second, 6, 1, hexColor("#8fd0ff")); R.disc(q.first, q.second, 1.6, hexColor("#8fd0ff")); }
+            else if (f.kind == "object") { R.ring(q.first, q.second, 6, 1, hexColor(marks::kObject)); R.disc(q.first, q.second, 1.6, hexColor(marks::kObject)); }
             else { const auto c = bvRGB(spBV(f.far->sp)); R.disc(q.first, q.second, 2.8, rgba(c[0], c[1], c[2])); R.ring(q.first, q.second, 6, 1, Color{1, 1, 1, 0.45f}); }
             if (on) hiRing(q.first, q.second, 11);
             if (f.kind == "bh") {
@@ -865,7 +869,18 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     CardOptions copt;
     copt.paused = set.paused; copt.tspeed = set.tspeed; copt.trueScale = TRUE_SCALE; copt.moonsOn = set.moons; copt.beltsOn = set.belts;
     if (sel.kind == Selection::Moon) { auto it = exag_.find({sel.bodyId, sel.moon}); copt.moonExaggeration = it == exag_.end() ? 1 : it->second; }
-    if (!set.shell && sel.kind != Selection::None && !cardHidden && !journey && cardText(sys, sel, copt, card)) {
+    if (set.shell) {                                      // the new UI's subject card is made from this same text (orbit/subject_card.h): worked out once per frame, here
+        cardOk = sel.kind != Selection::None && !journey && cardText(sys, sel, copt, card);
+        if (cardOk) { lastCard = std::move(card); cardSel = sel; }
+    } else
+    if (sel.kind != Selection::None && !cardHidden && !journey && cardText(sys, sel, copt, card)) {
+        static const bool logCard = std::getenv("PL_LOG_CARD") != nullptr;      // for the automatic checks: print the card the old layout draws, once per change
+        if (logCard) {
+            static std::string lastLogged;
+            std::string sig = card.title;
+            for (const auto& l : card.lines) sig += "\t" + l;
+            if (sig != lastLogged) { lastLogged = sig; std::printf("PLCARD %s\n", sig.c_str()); std::fflush(stdout); }
+        }
         const double k = std::max(0.74, std::min(1.0, W / 620)), LH = 13.5 * k, F = 10.5 * k, FT = 11 * k;
         double cw = T.width(card.title, FT);
         for (const auto& l : card.lines) cw = std::max(cw, T.width(l, F));
@@ -929,7 +944,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     {   // axis gizmo: which way x, y and z point on screen
         const double gx = W - 40, gy = gizY;
         const auto axis = [&](double X, double Y, double Z, double& sx, double& sy) { const double x1 = X * ca - Y * sa, y1 = X * sa + Y * ca; sx = 24 * x1; sy = 24 * (y1 * cb - Z * sb); };
-        struct Ax { const char* n; double X, Y; Color c; } ax[] = {{"x", 0, 0, hexColor("#e5484d")}, {"y", 0, 0, hexColor("#30a46c")}, {"z", 0, 0, hexColor("#3e63dd")}};
+        struct Ax { const char* n; double X, Y; Color c; } ax[] = {{"x", 0, 0, hexColor(marks::kAxisX)}, {"y", 0, 0, hexColor(marks::kAxisY)}, {"z", 0, 0, hexColor(marks::kAxisZ)}};
         axis(1, 0, 0, ax[0].X, ax[0].Y); axis(0, 1, 0, ax[1].X, ax[1].Y); axis(0, 0, 1, ax[2].X, ax[2].Y);
         for (const auto& a : ax) {
             if (std::hypot(a.X, a.Y) < 5) {               // pointing at you: a dot

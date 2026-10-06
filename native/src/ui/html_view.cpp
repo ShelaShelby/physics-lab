@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cfloat>
+#include <cstdio>
+#include <set>
 #include <cmath>
 #include <cstdlib>
 #include <map>
@@ -132,6 +134,8 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
     float x = x0;
     int chars = 0;                                       // characters on the line being laid out (the reading view reports the longest line)
     bool lineEmpty = true, any = false;
+    std::string prevHref;                                // 0.15 stage 4: a link's underline is one line, not one piece per word: the gap between two words of the same link on one line is filled
+    float prevLinkEnd = 0, prevLinkY = -1;
     for (const Run& r : runs) {
         if (r.br) { x = x0; y += lineH; lineEmpty = true; chars = 0; continue; }
         if (r.dot) {
@@ -173,7 +177,17 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
             } else if (!r.href.empty()) {                    // a link (.srcBox a): accent colour, underlined; a click opens it in the browser
                 const ImU32 lc = ui::col(look().c.accent);
                 dl->AddText(font, sz, at, lc, word.c_str());
-                dl->AddLine(ImVec2(at.x, at.y + sz + 1), ImVec2(at.x + wt, at.y + sz + 1), lc);
+                const float ly = at.y + sz + 1;
+                const float prevX0 = prevLinkEnd;
+                const bool sameLink = rb > 0 && r.href == prevHref && prevLinkY == ly && at.x > prevLinkEnd;   // (the new UI's reading view only: the old layout draws exactly what it did)
+                dl->AddLine(ImVec2(sameLink ? prevLinkEnd : at.x, ly), ImVec2(at.x + wt, ly), lc);
+                prevHref = r.href; prevLinkEnd = at.x + wt; prevLinkY = ly;
+                if (rb > 0 && shellLogOn()) {                 // for the automatic checks: each piece of underline once (the test joins them and looks for gaps inside one link)
+                    static std::set<std::string> seen;
+                    char buf[512];
+                    std::snprintf(buf, sizeof buf, "PLLINK id=%s y=%.1f x0=%.1f x1=%.1f", r.href.c_str(), ly, sameLink ? prevX0 : at.x, at.x + wt);
+                    if (seen.insert(buf).second) { std::printf("%s\n", buf); std::fflush(stdout); }
+                }
                 if (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, ImVec2(at.x + w, at.y + sz + 2))) {
                     ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
                     ui::SetTooltip("%s", r.href.c_str());

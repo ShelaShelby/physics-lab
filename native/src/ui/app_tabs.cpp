@@ -250,6 +250,11 @@ std::string factText(AppState& app) { return textOf(app, g_order[factPosition(ap
 bool factIsGift(AppState& app) { factPosition(app); return isGift(); }
 void factStep(AppState& app, int dir) { factPosition(app); g_pos = (g_pos + dir + int(g_order.size())) % int(g_order.size()); g_next = DBL_MAX; g_fadeAt = -1; }
 void factOpenGift(AppState& app) { openSecret(app, 1); }
+std::string factTextAt(int index) { if (index < 0 || index >= factCount() || std::string(app::kDyk[index]) == "@gift") return ""; return app::kDyk[index]; }
+void factShow(AppState& app, int index) {
+    factPosition(app);
+    for (int i = 0; i < int(g_order.size()); i++) if (g_order[i] == index) { g_pos = i; g_next = DBL_MAX; g_fadeAt = -1; return; }
+}
 
 void factsLine(AppState& app) {
     if (g_pos < 0) { showNext(app); setHtmlAction([](const std::string& a) { if (a == "monoKey") secretMono(); }); }

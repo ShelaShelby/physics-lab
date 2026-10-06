@@ -31,6 +31,7 @@ add_library(orbit_core STATIC
   src/orbit/solar_system.cpp
   src/orbit/format.cpp
   src/orbit/card_text.cpp
+  src/orbit/subject_card.cpp
   src/orbit/belts.cpp
   src/orbit/sky.cpp
   src/orbit/spin.cpp
@@ -264,6 +265,12 @@ if(PL_BUILD_APP)
       add_test(NAME shell_ui COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_ui)
       add_test(NAME shell_state COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_state.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_state)
       add_test(NAME shell_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_pictures ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference)
+      # 0.15 stage 4: the whole Orbit Lab in the new UI: every INVENTORY.md item reachable by real clicks (incl. the 47 Go to names), the subject card's data sheet equal to the old card's lines
+      # (8 things), the Time panel fits, the fact line (visible, changes after 20 s, stands still while hovered, readable, never overlaps), search (20 things, arrows, recent), links
+      foreach(part coverage card time chip facts facts_long readable search links)
+        add_test(NAME orbit_ui_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_orbit_ui.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/orbit_ui_${part} ${part})
+        set_tests_properties(orbit_ui_${part} PROPERTIES TIMEOUT 3600)
+      endforeach()
     endif()
   endif()
 endif()

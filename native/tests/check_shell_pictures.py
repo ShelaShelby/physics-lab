@@ -5,9 +5,11 @@
 #           with the panel closed gives "behind", the picture with it open must equal  card * a + behind * (1 - a)  within 2 levels (8-bit rounding), in the strip at the
 #           bottom right of the Time speed panel (no text, no shine). The card colours and the opacities are written HERE from the DESIGN.md table (computed by
 #           docs/ui-0.15/tools/glass_alpha.py, a separate program): so this fails if the drawing ever uses another colour or opacity.
-#   guard   the pictures of the new shell, Orbit Lab, Dark / Frutiger Aero / Y2K Night, 1280 x 800 and 1000 x 640, closed, with the Time panel open, with the Show panel open and
-#           with About in the reading view: their SHA-256 must equal tests/reference/shell_pictures_0.15s3.sha256. THESE ARE REGRESSION GUARDS, NOT AN INDEPENDENT REFERENCE:
-#           they were made by the stage 3 code on Mesa 25.2.8 llvmpipe (LLVM 20.1.2) AFTER the pictures had been looked at once. A different Mesa may round differently.
+#   guard   the pictures of the new shell, Orbit Lab, Dark / Frutiger Aero / Y2K Night / Light, 1280 x 800 and 1000 x 640, Earth selected: closed (the card, the legend, the fact line), with the
+#           Time panel open, with the Show panel open, with the card's All values (the data sheet), with search open and with About in the reading view: their SHA-256 must equal
+#           tests/reference/shell_pictures_0.15s4.sha256. THESE ARE REGRESSION GUARDS, NOT AN INDEPENDENT REFERENCE: they were made by the stage 4 code on Mesa 25.2.8 llvmpipe
+#           (LLVM 20.1.2) AFTER the pictures had been looked at once (the stage 3 file, shell_pictures_0.15s3.sha256, is gone: every one of those pictures changed on purpose, with the
+#           new chip, toolbar, card and fact line). A different Mesa may round differently.
 import hashlib, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, Bmp
@@ -20,15 +22,16 @@ def rgb(h):
     h = h.lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
-SCREENS = {"closed": {}, "time": {"PL_SCRIPT": "10:click=top.chip"}, "show": {"PL_SCRIPT": "10:click=tool.show"}, "about": {"PL_OPEN": "about"}}
+SCREENS = {"closed": {"PL_SELECT": "Earth"}, "time": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=top.chip"}, "show": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=tool.show"},
+           "sheet": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=card.all"}, "search": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:key=ctrl+k;16:text=moo"}, "about": {"PL_OPEN": "about"}}
 SIZES = ("1280x800", "1000x640")
-THEMES = ("dark", "aero", "y2knight")
+THEMES = ("dark", "aero", "y2knight", "light")
 
 def main():
     args = [a for a in sys.argv[1:] if a != "--write"]
     write = "--write" in sys.argv
     binary, work = args[0], args[1]
-    ref = os.path.join(args[2] if len(args) > 2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference"), "shell_pictures_0.15s3.sha256")
+    ref = os.path.join(args[2] if len(args) > 2 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference"), "shell_pictures_0.15s4.sha256")
     os.makedirs(work, exist_ok=True)
     fails = checks = 0
     def check(ok, what):

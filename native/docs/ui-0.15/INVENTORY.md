@@ -18,18 +18,18 @@ Made by reading the source (`orbit_panel.cpp`, `atom_panel.cpp`, `journey_dates.
 |---|---|---|---|
 | Orbit Lab / Atom Lab buttons (top of column) | TB breadcrumb *Orbit Lab ▾* dropdown; TB "other lab" icon | 0 / 1 | Y |
 | Defaults (puts the lab's settings back; asks first) | MENU › Put this lab's settings back | 2 | ✓ |
-| 📷 Save image (+ its note) | TOOL save picture (note shows as a toast) | 0 | Y |
+| 📷 Save image (+ its note) | **MENU › Save picture** (stage 4: owner's note of 6 Oct 2026, a camera button on the toolbar felt like a phone's media bar); also SEARCH; the note shows as a toast above the toolbar | 1 | ✓ |
 | ☉ Reset to today | CHIP ↺ "Today" button inside the chip (and in the Time panel) | 0 | Y |
-| Journey: Earth to the galactic centre / ■ Stop the journey | CHIP Time panel › Jump to › Journey; while it runs, a ■ Stop chip replaces the speed line | 2 | ✓ |
-| Date box (YYYY-MM-DD), time box (HH:MM), Jump | CHIP Time panel: date field, time-of-day dial with hour and minute fields, Jump (Live / Set manually) | 1 | ✓ |
-| "Today" button (journey card) | CHIP Time panel › Live | 1 | ✓ |
-| 6 history buttons (Halley 1986, Neptune found 1846, Mars closest 2003, Venus crosses the Sun 2012, Great conjunction 2020, Halley returns 2061) | CHIP Time panel › Jump to (list); also SEARCH | 2 | ✓ |
-| Paragraph "Pick any date from 1800 to 2100 …" (6 lines) | CHIP Time panel: one short caption + More | 1 | ✓ |
+| Journey: Earth to the galactic centre / ■ Stop the journey | CHIP Time panel › Jump to › Journey; while it runs, a ■ Stop button replaces Today in the chip and the chip says "Journey in progress" (stage 4) | 2 | ✓ |
+| Date box (YYYY-MM-DD), time box (HH:MM), Jump | CHIP Time panel: **Live / Set manually** switch; Set manually shows the date field with Go, the 24-hour dial and hour / minute steppers (stage 4) | 1 | ✓ |
+| "Today" button (journey card) | CHIP Today button; Time panel › Live (which also runs the lab) | 0 / 1 | Y |
+| 6 history buttons (Halley 1986, Neptune found 1846, Mars closest 2003, Venus crosses the Sun 2012, Great conjunction 2020, Halley returns 2061) | CHIP Time panel › Jump to: the first 4, then "More dates" (stage 4: 3 clicks for the last two); also SEARCH | 2 / 3 | ✓ |
+| Paragraph "Pick any date from 1800 to 2100 …" (6 lines) | CHIP Time panel: behind the (i) button (stage 4) | 2 | ✓ |
 | Learn: ❓ What am I even looking at? · 🌍 Why do we have seasons? · 🕰 Timeline of the Solar System | TB Learn icon (the Learn page, READ) and CARD "Learn about this" link | 1–2 | ✓ |
-| ▶ Play / ❚❚ Pause | TOOL play (Space stays) | 0 | Y |
+| ▶ Play / ❚❚ Pause | **CHIP: a small play / pause icon at the chip's left** (stage 4, same owner's note; Space stays; also SEARCH) | 0 | Y |
 | Time speed readout ("1 s = 29 days") and slider | CHIP second line shows it always; TOOL speed ▾ slider (one click on the speed button opens it) | 0 / 1 | Y |
-| "Slow time to watch moons", "Slow time to watch it turn" | CARD action link (only when a body with moons / spin is selected) | 1 | — |
-| Performance card: VSync tick box; GPU rocks tick box; "Frame … ms", "= fps", "Work per frame (CPU)", the frame-time plot; "Window drag / resize" line | SET › Performance (all of it, same wording); the fps number stays in RO | 2 | ✓ |
+| "Slow time to watch moons", "Slow time to watch it turn" | CARD action link (only when a body with moons / spin is selected; built in stage 4) | 1 | — |
+| Performance card: VSync tick box; GPU rocks tick box; "Frame … ms", "= fps", "Work per frame (CPU)", the frame-time plot; "Window drag / resize" line | SET › Performance (all of it, the same code and wording; in Settings from stage 4 when the New UI is on); the fps number stays in RO | 2 | ✓ |
 | Benchmark… button (and the Benchmark window, its start / cancel / result / Copy result) | SET › Performance › Benchmark… (window unchanged) | 2 | ✓ |
 | Planet physics: Simple / Real; General relativity (1PN) tick box; Exaggerate the Sun's wobble (×50); the Real / relativity notes (long) | TOOL show ▾ › Planet physics (segmented Simple · Real; the two tick boxes appear under Real; notes: one line + More) | 1 | ✓ |
 | View: 2D (top-down) / 3D (rotatable) combo | TOOL 2D/3D button | 0 | Y |
@@ -39,8 +39,8 @@ Made by reading the source (`orbit_panel.cpp`, `atom_panel.cpp`, `journey_dates.
 | Trails: Short tail / Full orbit trails | TOOL scale ▾ | 1 | ✓ |
 | Sky: Soft / Full / Off; Constellations Off / Lines / Lines and names; Far-away things (zoom out to find them) tick box | TOOL show ▾ › Sky | 1 | ✓ |
 | Solar System extras: Moons · Dwarf planets · Famous comets · Belts and Oort cloud | TOOL show ▾ (check boxes) | 1 | ✓ |
-| Go to: tiles — Star and planets: Sun, Barycentre, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune; Dwarf planets: Ceres, Pluto, Haumea, Makemake, Eris; Famous comets: Halley, Hale–Bopp, NEOWISE, Encke, 67P, Swift–Tuttle; Moons: Moon, Phobos, Deimos, Io, Europa, Ganymede, Callisto, Enceladus, Rhea, Titan, Titania, Oberon, Triton, Charon; Belts and the far edge: Asteroid belt, Jupiter's Trojans, Kuiper belt, Oort cloud; Far away: Voyager 1, Voyager 2, Alpha Centauri, Sirius, Vega, Pleiades, Orion Nebula, Galactic centre (45 tiles) | TOOL pick a body ▾ (grouped list with a filter box; a click flies there; the chosen one is ticked and a click on it lets go); SEARCH; a click on the thing in the picture | 1 | ✓ |
-| Hints "Click a tile to fly there …" and "Real orbits from NASA/JPL data. Moons show when you zoom in …" | pick-a-body panel caption (first), About (second, with More) | 1 | ✓ |
+| Go to: tiles — Star and planets: Sun, Barycentre, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune; Dwarf planets: Ceres, Pluto, Haumea, Makemake, Eris; Famous comets: Halley, Hale–Bopp, NEOWISE, Encke, 67P, Swift–Tuttle; Moons: Moon, Phobos, Deimos, Io, Europa, Ganymede, Callisto, Enceladus, Rhea, Titan, Titania, Oberon, Triton, Charon; Belts and the far edge: Asteroid belt, Jupiter’s Trojans, Kuiper belt, Oort cloud; Far away: Voyager 1, Voyager 2, Alpha Centauri, Sirius, Vega, Pleiades, Orion Nebula, Galactic centre (47 tiles: stage 2 said 45, a miscount found by the stage 4 test) | TOOL pick a body ▾ (grouped list with a filter box; a click flies there; the chosen one is ticked and a click on it lets go); SEARCH; a click on the thing in the picture | 1 | ✓ |
+| Hints "Click a tile to fly there …" and "Real orbits from NASA/JPL data. Moons show when you zoom in …" | pick-a-body panel: the first on top, the second at the foot (stage 4: the NASA/JPL source stays in view) | 1 | ✓ |
 | Date label in the picture ("Solar System on 5 Oct 2026, 12:00 UT") | CHIP (the same words; the label leaves the picture) | 0 | Y |
 | Scale bar and "light takes 2 hours" | RO (scale, light time) | 0 | Y |
 | fps counter | RO | 0 | Y |
@@ -99,7 +99,7 @@ Made by reading the source (`orbit_panel.cpp`, `atom_panel.cpp`, `journey_dates.
 | "v0.14 alpha · history" (the app's history page) | MENU › What's new (READ) | 2 | ✓ |
 | "Update 7.7.2" / "Web Atom Lab history 7.7.3" (the lab's changelog window) | MENU › Orbit Lab / Atom Lab changelog (READ) | 2 | ✓ |
 | Tabs Simulations · Learn · Achievements | the picture (Simulations); TB Learn icon; TB Achievements icon | 0 / 1 | Y |
-| "Did you know?" bar (27 facts, ›, the 💡 secret-theme unlock) | TB 💡 button → a small facts card (fact, previous / next, "n of 27"); the unlock stays inside it; later the mascot uses the same slot | 1 | ✓ |
+| "Did you know?" bar (27 facts, ›, the 💡 secret-theme unlock) | **the FACT LINE** (stage 4, owner's note: facts should be seen without asking): one short muted line at the bottom left of the picture, fading to the next fact every ~20 s, still while the pointer is on it; a click opens the whole fact in a small panel (the secret-theme unlock stays inside it); ‹ › on hover; Settings › Facts On / Off; also SEARCH. No 💡 button. | 0 | Y |
 | Achievement toast (bottom), the secret pop-up ("##secret") | toast stays (bottom centre, above the toolbar); pop-up unchanged | — | — |
 | Fullscreen F11, Space, arrow keys, Esc closing windows | unchanged; listed in MENU › Keys (a short help card, new) | — | — |
 | Windows: Settings, About, History, lab changelog, Learn guides (3 Orbit, 4 Atom), Benchmark (ask, run, result), "Put … back?" dialogs, the reset-progress dialogs | Settings and the dialogs stay small windows; About, History, changelogs and guides become READ | — | — |
@@ -130,7 +130,7 @@ Made by reading the source (`orbit_panel.cpp`, `atom_panel.cpp`, `journey_dates.
 
 ## 6. The 10 most-used controls per lab (one click away, reach 0 or 1)
 No usage data exists (the app does not record clicks). The choice is from what each lab is for, what the guides send a first-time user to, and the web version's layout; **the owner should correct it**.
-- **Orbit Lab:** (1) Play / Pause — TOOL, reach 0; (2) Time speed — chip line + TOOL speed ▾; (3) Date and time — CHIP; (4) Today — the ↺ inside the chip, reach 0; (5) Pick a body — click in the picture (0) or TOOL pick ▾ (1); (6) Moons / Dwarfs / Comets / Belts — TOOL show ▾; (7) Zoom — wheel, RO, TOOL scale ▾; (8) 2D / 3D — TOOL, reach 0; (9) Planet physics Simple / Real — TOOL show ▾; (10) Save picture — TOOL, reach 0. Why: they are what every Orbit session starts with (watch, set a date, look at one body, change what is drawn); Journey, history jumps, sky and trails are one click deeper inside the same panels.
+- **Orbit Lab:** (1) Play / Pause — **the chip's play icon**, reach 0 (stage 4; was TOOL); (2) Time speed — chip line + TOOL speed ▾; (3) Date and time — CHIP; (4) Today — the Today button inside the chip, reach 0; (5) Pick a body — click in the picture (0) or TOOL pick ▾ (1); (6) Moons / Dwarfs / Comets / Belts — TOOL show ▾; (7) Zoom — wheel, RO, TOOL scale ▾; (8) 2D / 3D — TOOL, reach 0; (9) Planet physics Simple / Real — TOOL show ▾; (10) Save picture — **MENU, reach 1** (stage 4; was TOOL). Why: they are what every Orbit session starts with (watch, set a date, look at one body, change what is drawn); Journey, history jumps, sky and trails are one click deeper inside the same panels.
 - **Atom Lab:** (1) Element — CHIP periodic table; (2) Neutrons / isotope — CHIP; (3) View buttons Atom · Nucleus · Cloud · Chart — TOOL, reach 0 (counted as one: they are the lab's main switch); (4) Orbital — TOOL view options ▾ top row; (5) Cloud style and density, outline, phase colours — TOOL marks ▾ / view options ▾; (6) Emit / Absorb photon — TOOL photon ▾; (7) Play / Pause — TOOL; (8) Reset view — TOOL; (9) Zoom — wheel, RO; (10) Save picture — TOOL. Why: the first thing anyone does is pick an element and a view; orbitals and photons are what the guides teach next.
 - Not one click away but two (acceptable, each used less often): Journey, history jumps, Sky, Trails, Superposition, Check a jump, spectrum cards, temperature, Settings content, Defaults, Benchmark.
 
@@ -148,9 +148,13 @@ No usage data exists (the app does not record clicks). The choice is from what e
 Honest reading: on the Orbit Lab the default count barely changes (29 → 27); the gain is that nothing needs scrolling (the column of 96 controls and 1,919 px is gone: every control is ≤ 2 clicks), that the 6 text sizes and 28 outlined boxes go, and that the Atom Lab falls from 139 to 26.
 
 ## 8. Rules check
-- **Nothing without a home:** every row above has one; the 45 body tiles, the 118 element cells, the 22 + 22 timeline steps and the 7 guides keep their content (moved, not shortened).
+- **Nothing without a home:** every row above has one; the 47 body tiles, the 118 element cells, the 22 + 22 timeline steps and the 7 guides keep their content (moved, not shortened).
 - **Nothing important more than 2 clicks away:** the deepest are DATA tabs and SET sections at reach 2.
 - **Three things that need the owner's eye:** (a) the Atom toolbar gets a Play button the brief did not list; (b) "Orbital" has no chip of its own (it is the first row of view options ▾); an orbital chip beside the element chip is possible if the owner wants it one click closer; (c) the data sheet (DATA) is my addition so the 7 Atom info cards have a home that is not the side column.
 
 ## Audit corrections (stage 1 numbers)
 The stage 1 probe skipped text drawn in ImGui's default font (a bug: `AddText` without a font). Re-run in stage 2 (same screens, 1280 × 800, Dark): see `AUDIT.md` "Corrections in stage 2" for what changed. Stage 1 also said "236 entities … About and History": the right figure is **254, in the About page only** (the pattern missed names with digits and capitals; the History page has none).
+
+
+## Stage 4 (6 Oct 2026): what changed in the Orbit Lab's homes
+Play / pause moved into the chip, Save picture into the menu (the toolbar now holds only view and lab controls: speed, show, pick, scale, 2D / 3D); the 💡 button became the fact line; the Time panel got Live / Set manually, 4 + More jumps and the (i); Show gained Sky (stars, constellations) and Far-away things; the Pick list got a filter and the NASA/JPL words; the subject card has one big number, 4 to 6 values, an action link and All values (the data sheet: every line of the old card, word for word); the Legend lists what the picture really draws; Performance and Benchmark are in Settings. **After this stage the Orbit Lab has no Old panel in the new UI**; the old side column is drawn only with New UI Off. The Atom Lab's rows above are unchanged (stage 5); its toolbar is empty until then (its play button is in its chip, Save picture in the menu).

@@ -7,6 +7,7 @@
 #include "imgui.h"
 #include "orbit/card_text.h"
 #include "orbit/date_text.h"
+#include "orbit/marker_colors.h"
 #include "orbit/real_errors.h"
 #include "orbit/units.h"
 #include "ui/fonts.h"
@@ -23,17 +24,12 @@ using namespace sh;
 using app::shell::PanelId;
 using app::shell::Metrics;
 
-// ---- the toolbar ----
+// ---- the toolbar: view and lab controls only (stage 4: play / pause moved into the chip, Save picture into the menu) ----
 std::vector<ToolItem> orbitTools(AppState& app) {
     std::vector<ToolItem> v;
-    ToolItem play;
-    play.kind = ToolItem::Button; play.id = "tool.play"; play.tip = app.paused ? "Play (Space)" : "Pause (Space)"; play.icon = app.paused ? Icon::Play : Icon::Pause;
-    play.act = [&app] { app.paused = !app.paused; };
-    v.push_back(play);
-    v.push_back(separator());
     auto menu = [&](const char* id, const char* tip, Icon icon, PanelId panel) { ToolItem t; t.kind = ToolItem::Menu; t.id = id; t.tip = tip; t.icon = icon; t.panel = panel; v.push_back(t); };
     menu("tool.speed", "Time speed", Icon::Clock, PanelId::Speed);
-    menu("tool.show", "Show: moons, dwarf planets, comets, belts, planet physics", Icon::Eye, PanelId::Show);
+    menu("tool.show", "Show: moons, dwarf planets, comets, belts, sky, planet physics", Icon::Eye, PanelId::Show);
     menu("tool.pick", "Pick a body", Icon::Target, PanelId::Pick);
     menu("tool.scale", "Zoom, sizes and trails", Icon::Ruler, PanelId::Scale);
     v.push_back(separator());
@@ -41,29 +37,15 @@ std::vector<ToolItem> orbitTools(AppState& app) {
     seg.kind = ToolItem::Segment; seg.id = "tool.view"; seg.tip = "2D or 3D view; the arrow: view options"; seg.panel = PanelId::View; seg.labels = {"2D", "3D"}; seg.sel = app.set.view3D ? 1 : 0;
     seg.pick = [&app](int i) { app.set.view3D = i == 1; };
     v.push_back(seg);
-    v.push_back(separator());
-    ToolItem save;
-    save.kind = ToolItem::Button; save.id = "tool.save"; save.tip = "Save picture"; save.icon = Icon::Camera; save.act = [&app] { app.shot.requested = true; };
-    v.push_back(save);
     return v;
 }
 
-std::vector<ToolItem> atomTools(AppState& app) {                // the Atom Lab's toolbar so far: its view and orbital buttons move here in stage 5 (until then: the Old panel and the bar under the picture)
-    std::vector<ToolItem> v;
-    ToolItem play;
-    play.kind = ToolItem::Button; play.id = "tool.play"; play.tip = app.paused ? "Play (Space)" : "Pause (Space)"; play.icon = app.paused ? Icon::Play : Icon::Pause;
-    play.act = [&app] { app.paused = !app.paused; };
-    v.push_back(play);
-    v.push_back(separator());
-    ToolItem save;
-    save.kind = ToolItem::Button; save.id = "tool.save"; save.tip = "Save picture"; save.icon = Icon::Camera; save.act = [&app] { app.shot.requested = true; };
-    v.push_back(save);
-    return v;
-}
+std::vector<ToolItem> atomTools(AppState&) { return {}; }          // the Atom Lab's toolbar is filled in stage 5 (play is in its chip, Save picture in the menu)
 
 // ---- the chip, the card, the legend ----
 ChipInfo chipInfo(AppState& app) {
     ChipInfo c;
+    c.play = true; c.paused = app.paused;
     if (app.lab == 1) {                                         // the Atom Lab: the element (the periodic table dropdown comes in stage 5; until then the Old panel has it)
         const atom::AtomParams& a = app.atom.p;
         c.title = std::string(atom::name(a.Z)) + "-" + std::to_string(a.Z + a.N);
@@ -72,8 +54,10 @@ ChipInfo chipInfo(AppState& app) {
     }
     const ChipText t = chipText(app);
     c.title = t.date;
+    c.opens = true;
+    if (app.journey.active) { c.sub = "Journey in progress"; c.stop = true; return c; }
     c.sub = t.extra.empty() ? t.speed : t.speed + "  ·  " + t.extra;
-    c.today = true; c.opens = true;
+    c.today = true;
     return c;
 }
 
@@ -81,45 +65,63 @@ std::string subjectName(const AppState& app) {
     if (app.lab == 1) return atom::name(app.atom.p.Z);
     const orbit::Selection& sel = app.view.sel;
     if (sel.kind == orbit::Selection::None) return "";
+    static orbit::Selection cachedSel;                       // the name of a selection never changes: looked up once, not 47 strings built every frame
+    static std::string cachedName;
+    if (cachedSel == sel && !cachedName.empty()) return cachedName;
     for (const PickGroup& g : pickGroups(app))
-        for (const PickItem& it : g.items) if (it.sel == sel) return it.name;
+        for (const PickItem& it : g.items) if (it.sel == sel) { cachedSel = sel; cachedName = it.name; return cachedName; }
     return "";
 }
 
-std::string subjectKind(const AppState& app) {
+bool subjectCardOf(const AppState& app, orbit::SubjectCard& out) {
     const orbit::Selection& sel = app.view.sel;
-    {   // the card's own title is "Earth · rocky planet (home)": the part after the dot is the kind
-        orbit::CardOptions o;
-        o.paused = app.paused; o.tspeed = app.set.tspeed; o.trueScale = app.set.trueScale; o.moonsOn = app.set.moons; o.beltsOn = app.set.belts; o.farOn = app.set.far;
-        orbit::Card card;
-        if (sel.kind != orbit::Selection::None && orbit::cardText(app.sys, sel, o, card)) { const std::size_t d = card.title.find(" · "); if (d != std::string::npos) return card.title.substr(d + std::string(" · ").size()); }
-    }
-    if (sel.kind == orbit::Selection::Body) { if (const orbit::Body* b = orbit::findBody(app.sys, sel.bodyId)) return b->kind; }
-    if (sel.kind == orbit::Selection::Moon) { if (const orbit::Body* b = orbit::findBody(app.sys, sel.bodyId)) return "moon of " + b->name; }
-    if (sel.kind == orbit::Selection::Star) return "star";
-    if (sel.kind == orbit::Selection::Bary) return "balance point of the Solar System";
-    return "";
-}
-
-bool subjectLines(const AppState& app, std::string& title, std::vector<std::string>& lines) {
-    if (app.view.sel.kind == orbit::Selection::None) return false;
-    orbit::CardOptions o;
-    o.paused = app.paused; o.tspeed = app.set.tspeed; o.trueScale = app.set.trueScale; o.moonsOn = app.set.moons; o.beltsOn = app.set.belts; o.farOn = app.set.far;
-    orbit::Card card;
-    if (!orbit::cardText(app.sys, app.view.sel, o, card)) return false;
-    title = card.title;
-    { const std::size_t d = title.find(" · "); if (d != std::string::npos) title = title.substr(0, d); }   // the name; the kind after the dot is the card's one-line kind
-    lines = card.lines;
+    if (sel.kind == orbit::Selection::None || !app.view.cardOk || !(app.view.cardSel == sel)) return false;
+    const std::string beltKey = sel.kind == orbit::Selection::Belt && sel.moon >= 0 && sel.moon < static_cast<int>(app.sys.belts.size()) ? app.sys.belts[sel.moon].key : "";
+    out = orbit::subjectCard(sel, beltKey, app.view.lastCard);
     return true;
 }
 
-void legendRows(const AppState& app, std::vector<std::pair<std::string, std::string>>& rows) {
+bool cardAction(AppState& app, CardAction& out) {
+    if (slowMoonsAvailable(app)) { out.id = "card.slowmoons"; out.text = "Slow time to watch moons"; out.act = [&app] { slowMoons(app); }; return true; }
+    if (slowSpinAvailable(app)) { out.id = "card.slowspin"; out.text = "Slow time to watch it turn"; out.act = [&app] { slowSpin(app); }; return true; }
+    return false;
+}
+
+std::vector<LegendEntry> legendEntries(const AppState& app) {
+    std::vector<LegendEntry> v;
+    const auto hex = [](const int c[3]) { char b[8]; std::snprintf(b, sizeof b, "#%02x%02x%02x", c[0], c[1], c[2]); return std::string(b); };
+    std::vector<std::string> planets, dwarfs;
     for (const PickGroup& g : pickGroups(app)) {
-        const bool shown = std::string(g.title) == "Dwarf planets" ? app.set.dwarfs : std::string(g.title) == "Famous comets" ? app.set.comets : std::string(g.title) == "Moons" ? app.set.moons
-                         : std::string(g.title).rfind("Belts", 0) == 0 ? app.set.belts : std::string(g.title) == "Far away" ? app.set.far : true;
-        if (!shown || g.items.empty()) continue;
-        rows.push_back({g.items.front().color, std::string(g.title) + "  " + std::to_string(g.items.size())});
+        const std::string t = g.title;
+        for (const PickItem& it : g.items) {
+            if (t == "Star and planets" && it.name != "Sun" && it.name != "Barycentre") planets.push_back(it.color);
+            if (t == "Dwarf planets") dwarfs.push_back(it.color);
+        }
     }
+    int sun[3];
+    orbit::sunColourBytes(sun);
+    v.push_back({LegendEntry::Disc, {hex(sun)}, "The Sun"});
+    v.push_back({LegendEntry::Dots, planets, "Planets: each has its own colour"});
+    if (!planets.empty()) v.push_back({LegendEntry::Line, {planets[2 % planets.size()]}, "A planet's orbit and tail, in its colour"});
+    if (app.set.dwarfs) v.push_back({LegendEntry::Dots, dwarfs, "Dwarf planets: their own colours"});
+    if (app.set.moons) v.push_back({LegendEntry::Disc, {orbit::marks::kMoon}, "A moon"});
+    if (app.set.comets) v.push_back({LegendEntry::Dots, {"#ffffff", hex(orbit::marks::kIonTail), hex(orbit::marks::kDustTail)}, "A comet: a bright head, a blue gas tail, a yellow dust tail"});
+    if (app.set.belts) {
+        std::vector<std::string> cols;
+        for (const orbit::BeltGroup& b : app.sys.belts) cols.push_back(b.color);
+        v.push_back({LegendEntry::Dots, cols, "A belt: each dot is a rock (a few thousand stand in for millions)"});
+    }
+    v.push_back({LegendEntry::Cross, {"#ffffff"}, "The barycentre: the balance point of the Solar System"});
+    v.push_back({LegendEntry::Band, {hex(orbit::marks::kHabitable)}, "Habitable zone (rough)"});
+    v.push_back({LegendEntry::Line, {"#9aa6bd"}, "Distance rings, labelled in AU"});
+    if (app.set.far) {
+        v.push_back({LegendEntry::Dots, {"#ffffff"}, "A far-away star (its own colour)"});
+        v.push_back({LegendEntry::Ring, {orbit::marks::kProbeRing}, "A spacecraft: Voyager 1 and 2"});
+        v.push_back({LegendEntry::Ring, {orbit::marks::kObject}, "A far-away object that is not a star"});
+    }
+    v.push_back({LegendEntry::Ring, {orbit::marks::kHighlight}, "The thing you picked"});
+    v.push_back({LegendEntry::Dots, {orbit::marks::kAxisX, orbit::marks::kAxisY, orbit::marks::kAxisZ}, "The little axes: x red, y green, z blue"});
+    return v;
 }
 
 // ---- the Time panel ----
@@ -149,92 +151,114 @@ void setTime(AppState& app, int hh, int mm) {
     std::snprintf(app.timeText, sizeof app.timeText, "%02d:%02d", hh, mm);
 }
 
+bool g_manual = false;          // the Time panel shows the date, the dial and Go ("Set manually"); also shown whenever a date was jumped to
+bool g_moreJumps = false;       // all six history jumps, not the first four
+bool g_dateInfo = false;        // the help words behind (i)
+char g_pickFilter[48] = "";    // the Pick a body list's filter text (cleared when the panel closes)
+constexpr int kJumpsShown = 4;  // the Time panel lists this many history jumps before "More"
+
 }  // namespace
+
+void pickFilterClear() { g_pickFilter[0] = 0; }
+
+void todayAction(AppState& app) { resetToToday(app); app.dateNote.clear(); g_manual = false; }
 
 void timePanel(AppState& app, Panel& p) {
     const Frame& f = F();
     const Metrics& m = f.m;
-    pTitle(p, "Date and time");
+    {   // the title, with the (i) button at the right end of the same row
+        const ImVec2 o = here(p);
+        const float hb = static_cast<float>(m.iconBtn);
+        if (iconButton("time.info", ImVec2(o.x + p.w - hb, o.y), ImVec2(hb, hb), Icon::Info, "About dates: any date from 1800 to 2100, Greenwich time", g_dateInfo)) g_dateInfo = !g_dateInfo;
+        text(p.dl, Type::Title, true, o, cText(), "Date and time");
+        p.y += std::max(lineH(Type::Title), hb) + m.s4;
+    }
     pBody(p, orbit::dateLine(app.sys));
-    if (pButton(p, "time.today", "Today", Face::Primary)) { resetToToday(app); app.dateNote.clear(); }
-    pGap(p, m.s8);
-    pHeading(p, "Set the date and time (Greenwich time)");
-    ImVec2 o = here(p);
-    inputField("##shelldate", app.dateText, sizeof app.dateText, "YYYY-MM-DD", p.w);
-    p.y += m.control + m.s8;
-    // the time of day: a 24-hour dial (one hand for the hour, a thinner one for the minutes) and two fields; the fields are the exact input
-    int hh = 12, mm = 0;
-    if (std::sscanf(app.timeText, "%d:%d", &hh, &mm) != 2) { hh = 12; mm = 0; }
-    hh = std::min(23, std::max(0, hh)); mm = std::min(59, std::max(0, mm));
-    const float D = static_cast<float>(app::shell::unitPx(120, f.dpi, f.tf)), R = D / 2;
-    o = here(p);
-    const ImVec2 c(o.x + R, o.y + R);
-    ImGui::SetCursorScreenPos(o);
-    ImGui::InvisibleButton("time.dial", ImVec2(D, D));
-    noteItem("time.dial");
-    if (ImGui::IsItemActive()) {
-        const ImVec2 mp = ImGui::GetIO().MousePos;
-        float a = std::atan2(mp.x - c.x, -(mp.y - c.y));
-        if (a < 0) a += 6.2831853f;
-        setTime(app, static_cast<int>(std::lround(a / 6.2831853f * 24)) % 24, mm);
-        std::sscanf(app.timeText, "%d:%d", &hh, &mm);
+    const bool manual = app.sys.jumped || g_manual;
+    int mode = manual ? 1 : 0;
+    if (pSegmented(p, "time.mode", {"Live", "Set manually"}, &mode)) {
+        if (mode == 0) { todayAction(app); app.paused = false; }      // Live: from the real date and time now, running at the chosen speed
+        else g_manual = true;
     }
-    ImDrawList* dl = p.dl;
-    dl->AddCircleFilled(c, R, cFace(), 48);
-    dl->AddCircle(c, R, cEdge(), 48, 1.0f);
-    for (int k = 0; k < 24; k++) {
-        const float a = k / 24.0f * 6.2831853f, sa = std::sin(a), ca = -std::cos(a), len = k % 3 == 0 ? 0.14f : 0.07f;
-        dl->AddLine(ImVec2(c.x + sa * R * (0.96f - len), c.y + ca * R * (0.96f - len)), ImVec2(c.x + sa * R * 0.96f, c.y + ca * R * 0.96f), cMuted(), 1.0f);
+    if (g_dateInfo) pCaption(p, orbit::datePickHint());
+    if (!manual) pCaption(p, "Live: the lab starts from the real date and time now and runs at the speed below.");
+    else {
+        // the date and the time of day: the fields are the exact input; the 24-hour dial is a second way to set the hour
+        const float goW = static_cast<float>(m.em(4));
+        ImVec2 o = here(p);
+        inputField("##shelldate", app.dateText, sizeof app.dateText, "YYYY-MM-DD", p.w - goW - m.s8);
+        if (button("time.go", ImVec2(o.x + p.w - goW, o.y), ImVec2(goW, static_cast<float>(m.control)), "Go", Face::Primary)) jumpFromBoxes(app);
+        p.y += m.control + m.s8;
+        int hh = 12, mm = 0;
+        if (std::sscanf(app.timeText, "%d:%d", &hh, &mm) != 2) { hh = 12; mm = 0; }
+        hh = std::min(23, std::max(0, hh)); mm = std::min(59, std::max(0, mm));
+        const float D = static_cast<float>(app::shell::unitPx(112, f.dpi, f.tf)), R = D / 2;
+        o = here(p);
+        const ImVec2 c(o.x + R, o.y + R);
+        ImGui::SetCursorScreenPos(o);
+        ImGui::InvisibleButton("time.dial", ImVec2(D, D));
+        noteItem("time.dial");
+        if (ImGui::IsItemActive()) {
+            const ImVec2 mp = ImGui::GetIO().MousePos;
+            float a = std::atan2(mp.x - c.x, -(mp.y - c.y));
+            if (a < 0) a += 6.2831853f;
+            setTime(app, static_cast<int>(std::lround(a / 6.2831853f * 24)) % 24, mm);
+            std::sscanf(app.timeText, "%d:%d", &hh, &mm);
+        }
+        ImDrawList* dl = p.dl;
+        dl->AddCircleFilled(c, R, cFace(), 48);
+        dl->AddCircle(c, R, cEdge(), 48, 1.0f);
+        for (int k = 0; k < 24; k++) {
+            const float a = k / 24.0f * 6.2831853f, sa = std::sin(a), ca = -std::cos(a), len = k % 3 == 0 ? 0.14f : 0.07f;
+            dl->AddLine(ImVec2(c.x + sa * R * (0.96f - len), c.y + ca * R * (0.96f - len)), ImVec2(c.x + sa * R * 0.96f, c.y + ca * R * 0.96f), cMuted(), 1.0f);
+        }
+        for (int k = 0; k < 4; k++) {                                              // 0, 6, 12, 18 inside the ticks
+            const std::string lab = std::to_string(k * 6);
+            const float a = k / 4.0f * 6.2831853f, tw = width(Type::Caption, false, lab);
+            text(dl, Type::Caption, false, ImVec2(c.x + std::sin(a) * R * 0.62f - tw / 2, c.y - std::cos(a) * R * 0.62f - px(Type::Caption) / 2), cMuted(), lab);
+        }
+        const float ha = (hh + mm / 60.0f) / 24.0f * 6.2831853f, ma = mm / 60.0f * 6.2831853f;
+        dl->AddLine(c, ImVec2(c.x + std::sin(ma) * R * 0.78f, c.y - std::cos(ma) * R * 0.78f), cMuted(), 1.5f);
+        dl->AddLine(c, ImVec2(c.x + std::sin(ha) * R * 0.52f, c.y - std::cos(ha) * R * 0.52f), cAccent(), 3.0f);
+        dl->AddCircleFilled(c, 3.0f, cAccent());
+        const float x2 = o.x + D + m.s12, w2 = p.w - D - m.s12, bw = static_cast<float>(m.control);
+        auto stepper = [&](const char* tag, const char* name, int value, float y) {
+            text(dl, Type::Caption, false, ImVec2(x2, y), cMuted(), name);
+            const float by = y + lineH(Type::Caption);
+            const std::string idm = std::string("time.") + tag + "-", idp = std::string("time.") + tag + "+";
+            int d = 0;
+            if (button(idm.c_str(), ImVec2(x2, by), ImVec2(bw, bw), "−")) d = -1;
+            char b[8];
+            std::snprintf(b, sizeof b, "%02d", value);
+            text(dl, Type::Body, true, ImVec2(x2 + bw + (w2 - 2 * bw - width(Type::Body, true, b)) / 2, by + (bw - px(Type::Body)) / 2), cText(), b);
+            if (button(idp.c_str(), ImVec2(x2 + w2 - bw, by), ImVec2(bw, bw), "+")) d = 1;
+            return d;
+        };
+        const int dh = stepper("hour", "Hour (Greenwich)", hh, o.y);
+        const int dm = stepper("minute", "Minute", mm, o.y + lineH(Type::Caption) + bw + m.s8);
+        if (dh) setTime(app, hh + dh, mm);
+        if (dm) setTime(app, hh, mm + dm);
+        p.y += std::max(D, 2.0f * (lineH(Type::Caption) + bw) + m.s8) + m.s4;
     }
-    for (int k = 0; k < 4; k++) {                                              // 0, 6, 12, 18 inside the ticks
-        const std::string lab = std::to_string(k * 6);
-        const float a = k / 4.0f * 6.2831853f, tw = width(Type::Caption, false, lab);
-        text(dl, Type::Caption, false, ImVec2(c.x + std::sin(a) * R * 0.62f - tw / 2, c.y - std::cos(a) * R * 0.62f - px(Type::Caption) / 2), cMuted(), lab);
-    }
-    const float ha = (hh + mm / 60.0f) / 24.0f * 6.2831853f, ma = mm / 60.0f * 6.2831853f;
-    dl->AddLine(c, ImVec2(c.x + std::sin(ma) * R * 0.78f, c.y - std::cos(ma) * R * 0.78f), cMuted(), 1.5f);
-    dl->AddLine(c, ImVec2(c.x + std::sin(ha) * R * 0.52f, c.y - std::cos(ha) * R * 0.52f), cAccent(), 3.0f);
-    dl->AddCircleFilled(c, 3.0f, cAccent());
-    // the two fields: − value +
-    const float x2 = o.x + D + m.s12, w2 = p.w - D - m.s12, bw = static_cast<float>(m.control);
-    auto stepper = [&](const char* tag, const char* name, int value, int lo, int hi, float y) {
-        text(dl, Type::Caption, false, ImVec2(x2, y), cMuted(), name);
-        const float by = y + lineH(Type::Caption);
-        const std::string idm = std::string("time.") + tag + "-", idp = std::string("time.") + tag + "+";
-        int d = 0;
-        if (button(idm.c_str(), ImVec2(x2, by), ImVec2(bw, bw), "−")) d = -1;
-        char b[8];
-        std::snprintf(b, sizeof b, "%02d", value);
-        text(dl, Type::Body, true, ImVec2(x2 + bw + (w2 - 2 * bw - width(Type::Body, true, b)) / 2, by + (bw - px(Type::Body)) / 2), cText(), b);
-        if (button(idp.c_str(), ImVec2(x2 + w2 - bw, by), ImVec2(bw, bw), "+")) d = 1;
-        (void)lo; (void)hi;
-        return d;
-    };
-    const int dh = stepper("hour", "Hour", hh, 0, 23, o.y);
-    const int dm = stepper("minute", "Minute", mm, 0, 59, o.y + lineH(Type::Caption) + bw + m.s12);
-    if (dh) setTime(app, hh + dh, mm);
-    if (dm) setTime(app, hh, mm + dm);
-    p.y += D + m.s8;
-    if (pButton(p, "time.go", "Go to this date", Face::Primary)) jumpFromBoxes(app);
-    pGap(p, m.s8);
-    pHeading(p, "Time speed");
-    pBody(p, tspeedText(app.set.tspeed));
+    if (!app.dateNote.empty()) pCaption(p, app.dateNote);
+    pStat(p, "Time speed", tspeedText(app.set.tspeed));
     float ts = static_cast<float>(app.set.tspeed);
     if (pSlider(p, "time.speed", &ts, static_cast<float>(units::kTspeedMin), static_cast<float>(units::kTspeedMax))) app.set.tspeed = ts;
-    pGap(p, m.s8);
+    pGap(p, m.s4);
     pHeading(p, "Jump to");
     if (pButton(p, "time.journey", app.journey.active ? "■ Stop the journey" : "Journey: Earth to the galactic centre")) {
         if (app.journey.active) journeyStop(app); else journeyStart(app);
     }
+    if (ImGui::IsItemHovered()) ui::SetTooltip("An automatic trip that zooms out, step by step, from Earth to the centre of our galaxy.\nTouch anything to stop it; your view and settings come back.");
     int n = 0;
     const DateJump* jumps = dateJumps(n);
-    for (int i = 1; i < n; i++) {
+    const int last = g_moreJumps ? n : std::min(n, 1 + kJumpsShown);
+    for (int i = 1; i < last; i++) {
         const std::string id = std::string("jump.") + jumps[i].date;
         if (pRow(p, id.c_str(), jumps[i].name)) doDateJump(app, i);
         if (ImGui::IsItemHovered()) ui::SetTooltip("%s", jumps[i].tip);
     }
-    pGap(p, m.s4);
-    pCaption(p, app.dateNote.empty() ? orbit::datePickHint() : app.dateNote);
+    if (n > 1 + kJumpsShown && pRow(p, "time.more", g_moreJumps ? "Fewer" : "More dates")) g_moreJumps = !g_moreJumps;
 }
 
 // ---- the toolbar's panels ----
@@ -242,7 +266,7 @@ double orbitPanelWidthEm(PanelId id) {
     switch (id) {
     case PanelId::Chip: return 24;
     case PanelId::Speed: return 20;
-    case PanelId::Show: return 22;
+    case PanelId::Show: return 25;
     case PanelId::Pick: return 22;
     case PanelId::Scale: return 22;
     case PanelId::View: return 20;
@@ -270,30 +294,58 @@ bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
         pCheck(p, "show.dwarfs", "Dwarf planets", &set.dwarfs);
         pCheck(p, "show.comets", "Famous comets", &set.comets);
         pCheck(p, "show.belts", "Belts and Oort cloud", &set.belts);
+        pCheck(p, "show.far", "Far-away things (zoom out to find them)", &set.far);
         pGap(p, m.s8);
+        pHeading(p, "Sky: stars in the background");
+        int sky = static_cast<int>(set.sky);
+        if (pSegmented(p, "show.sky", {"Soft", "Full", "Off"}, &sky)) set.sky = static_cast<orbit::SkyMode>(sky);
+        pCaption(p, sky == 0 ? "dim close up, brighter as you zoom out" : sky == 1 ? "always bright" : "plain background");
+        if (set.sky != orbit::SkyMode::Off) {
+            pHeading(p, "Constellations");
+            int c = static_cast<int>(set.cons);
+            if (pSegmented(p, "show.cons", {"Off", "Lines", "Lines and names"}, &c)) set.cons = static_cast<orbit::ConsMode>(c);
+        }
+        pGap(p, m.s4);
         pHeading(p, "Planet physics");
         int real = set.realPlanets ? 1 : 0;
         if (pSegmented(p, "show.physics", {"Simple", "Real"}, &real)) set.realPlanets = real == 1;
         if (set.realPlanets) {
             pCheck(p, "show.gr", "General relativity (1PN)", &set.relativity);
+            if (ImGui::IsItemHovered()) { ui::BeginTooltip(); ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26); ImGui::TextUnformatted(relativityTip().c_str()); ImGui::PopTextWrapPos(); ImGui::EndTooltip(); }
             pCheck(p, "show.wobble", "Exaggerate the Sun's wobble (×50)", &set.exaggerateWobble);
+            if (ImGui::IsItemHovered()) { ui::BeginTooltip(); ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26); ImGui::TextUnformatted(wobbleTip().c_str()); ImGui::PopTextWrapPos(); ImGui::EndTooltip(); }
         }
         if (pRow(p, "show.notes", notes ? "Notes about this choice  (hide)" : "Notes about this choice  (show)")) notes = !notes;
         if (notes) pCaption(p, set.realPlanets ? orbit::realNoteText(set.relativity) : orbit::simpleNoteText());
         return true;
     }
     case PanelId::Pick: {
+        char* filter = g_pickFilter;
         pTitle(p, "Pick a body");
         pCaption(p, "Click one to fly there. It stays in the middle of the picture. Your time speed is not changed.");
+        {
+            const ImVec2 o = here(p);
+            ImGui::SetCursorScreenPos(o);
+            inputField("##pickfilter", filter, sizeof g_pickFilter, "Filter the list", p.w);
+            p.y += m.control + m.s4;
+        }
+        auto lower = [](std::string x) { for (char& ch : x) if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a'); return x; };
+        const std::string q = lower(filter);
         for (const PickGroup& g : pickGroups(app)) {
+            bool any = false;
+            for (const PickItem& it : g.items) if (q.empty() || lower(it.name).find(q) != std::string::npos) any = true;
+            if (!any) continue;
             pGap(p, m.s4);
             pHeading(p, g.title);
             for (const PickItem& it : g.items) {
+                if (!q.empty() && lower(it.name).find(q) == std::string::npos) continue;
                 const std::string rid = "pick." + it.name;
-                if (pRow(p, rid.c_str(), it.name, app.view.sel == it.sel, it.color)) { pickItem(app, it); closeAfter = true; }
+                if (pRow(p, rid.c_str(), it.name, app.view.sel == it.sel, it.color)) { pickItem(app, it); closeAfter = true; filter[0] = 0; }
                 if (!it.tip.empty() && ImGui::IsItemHovered()) ui::SetTooltip("%s", it.tip.c_str());
             }
         }
+        pGap(p, m.s8);
+        pCaption(p, "Real orbits from NASA/JPL data. Moons show when you zoom in or click their planet (until you zoom in a lot, their orbits are drawn wider than real so they can be seen).");
         return true;
     }
     case PanelId::Scale: {
@@ -310,6 +362,7 @@ bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
         pHeading(p, "Trails");
         int trails = set.fullTrails ? 1 : 0;
         if (pSegmented(p, "scale.trails", {"Short tail", "Full orbit trails"}, &trails)) set.fullTrails = trails == 1;
+        pCaption(p, trails == 0 ? "a little tail behind each object" : "every object's whole path");
         return true;
     }
     case PanelId::View: {
@@ -330,6 +383,56 @@ bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
     }
     default: return false;
     }
+}
+
+// ---- search: everything the Orbit Lab can do ----
+void orbitSearch(AppState& app, const SearchAdd& add) {
+    for (const PickGroup& g : pickGroups(app))
+        for (const PickItem& it : g.items) { PickItem copy = it; add("Bodies", it.name, "body:" + it.name, [&app, copy] { pickItem(app, copy); }); }
+    int n = 0;
+    const DateJump* jumps = dateJumps(n);
+    for (int i = 1; i < n; i++) add("Dates", jumps[i].name, std::string("date:") + jumps[i].date, [&app, i] { doDateJump(app, i); });
+    add("Dates", "Today: back to the real date", "date:today", [&app] { todayAction(app); });
+    add("Dates", "Live: run from now", "date:live", [&app] { todayAction(app); app.paused = false; });
+    add("Dates", "Set the date and time by hand", "date:manual", [] { g_manual = true; shellOpenPanel(PanelId::Chip); });
+    add("Dates", "Journey: Earth to the galactic centre", "date:journey", [&app] { if (!app.journey.active) journeyStart(app); });
+    if (app.journey.active) add("Dates", "Stop the journey", "date:stopjourney", [&app] { journeyStop(app); });
+    orbit::ViewSettings& s = app.set;
+    const auto toggle = [&](const char* group, const char* name, const char* id, bool* v) {
+        add(group, std::string(name) + (*v ? ": turn off" : ": turn on"), id, [v] { *v = !*v; });
+    };
+    add("Time", app.paused ? "Play" : "Pause", "set:play", [&app] { app.paused = !app.paused; });
+    add("Time", "Time speed", "set:speed", [] { shellOpenPanel(PanelId::Speed); });
+    add("Time", "Date and time", "set:time", [] { shellOpenPanel(PanelId::Chip); });
+    toggle("Show", "Moons", "set:moons", &s.moons);
+    toggle("Show", "Dwarf planets", "set:dwarfs", &s.dwarfs);
+    toggle("Show", "Famous comets", "set:comets", &s.comets);
+    toggle("Show", "Belts and Oort cloud", "set:belts", &s.belts);
+    toggle("Show", "Far-away things", "set:far", &s.far);
+    add("Show", "Stars: Soft", "set:sky.soft", [&s] { s.sky = orbit::SkyMode::Soft; });
+    add("Show", "Stars: Full", "set:sky.full", [&s] { s.sky = orbit::SkyMode::Full; });
+    add("Show", "Stars: Off", "set:sky.off", [&s] { s.sky = orbit::SkyMode::Off; });
+    add("Show", "Constellations: Off", "set:cons.off", [&s] { s.cons = orbit::ConsMode::Off; });
+    add("Show", "Constellations: Lines", "set:cons.lines", [&s] { s.sky = s.sky == orbit::SkyMode::Off ? orbit::SkyMode::Soft : s.sky; s.cons = orbit::ConsMode::Lines; });
+    add("Show", "Constellations: Lines and names", "set:cons.names", [&s] { s.sky = s.sky == orbit::SkyMode::Off ? orbit::SkyMode::Soft : s.sky; s.cons = orbit::ConsMode::LinesAndNames; });
+    add("Physics", "Planet physics: Simple", "set:simple", [&s] { s.realPlanets = false; });
+    add("Physics", "Planet physics: Real", "set:real", [&s] { s.realPlanets = true; });
+    toggle("Physics", "General relativity (1PN)", "set:gr", &s.relativity);
+    toggle("Physics", "Exaggerate the Sun's wobble (×50)", "set:wobble", &s.exaggerateWobble);
+    add("Scale", "Zoom", "set:zoom", [] { shellOpenPanel(PanelId::Scale); });
+    add("Scale", "Sizes: True scale", "set:true", [&s] { s.trueScale = true; });
+    add("Scale", "Sizes: Easy to see", "set:easy", [&s] { s.trueScale = false; });
+    add("Scale", "Trails: Short tail", "set:trail.short", [&s] { s.fullTrails = false; });
+    add("Scale", "Trails: Full orbit trails", "set:trail.full", [&s] { s.fullTrails = true; });
+    add("View", "2D view", "set:2d", [&s] { s.view3D = false; });
+    add("View", "3D view", "set:3d", [&s] { s.view3D = true; });
+    add("View", "Spin the 3D view", "set:spin", [&app] { app.view.spin = !app.view.spin; app.set.view3D = true; });
+    add("View", "Drag moves the view", "set:pan", [&app] { app.view.panMode = !app.view.panMode; });
+    add("View", "Follow the selected body", "set:follow", [&app] { if (app.view.sel.kind != orbit::Selection::None) app.view.follow = !app.view.follow; });
+    add("View", "Reset view", "set:resetview", [&app] { resetViewAction(app); });
+    add("View", "Pick a body: the list", "set:picklist", [] { shellOpenPanel(PanelId::Pick); });
+    if (slowMoonsAvailable(app)) add("View", "Slow time to watch moons", "set:slowmoons", [&app] { slowMoons(app); });
+    if (slowSpinAvailable(app)) add("View", "Slow time to watch it turn", "set:slowspin", [&app] { slowSpin(app); });
 }
 
 }  // namespace ui::shellimpl

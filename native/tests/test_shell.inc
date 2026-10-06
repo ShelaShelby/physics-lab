@@ -5,6 +5,9 @@
 // overlaps). No long double, no hard-coded hashes.
 #include "app/shell.h"
 #include "app/theme_style.h"
+#include "orbit/subject_card.h"
+#include "orbit/sky.h"
+#include <set>
 
 namespace {
 using namespace app::shell;
@@ -355,6 +358,277 @@ void testShellPrefs() {
     checkStr("prefs: and loads back as Off", app::loadPrefs(text).newUi, "off");
 }
 
+
+// ================= 0.15 stage 4 (tests written BEFORE the code, compile-red first) =================
+// References: the owner's notes of 6 Oct 2026 (play in the chip, Save picture in the menu, a fact line that fades every ~20 s and stops while hovered), the subject card of
+// DESIGN.md section 5 (one big key number, 4 to 6 key values, "All values" = every line of the old card), WCAG 2.x for the text colours, and the hand-written card texts below
+// (the wording of orbit/card_text.cpp copied by hand into the cases, so the test does not run the code it tests for the synthetic cases).
+
+orbit::Card mk(const std::string& title, std::vector<std::string> lines) { orbit::Card c; c.title = title; c.lines = std::move(lines); return c; }
+
+bool hasLine(const orbit::SubjectCard& s, const std::string& l) { for (const std::string& x : s.all) if (x == l) return true; return false; }
+std::string joined(const orbit::SubjectCard& s) { std::string r; for (const orbit::SubjectValue& v : s.values) r += (v.label.empty() ? "" : v.label + "=") + v.value + "|"; return r; }
+std::string labelsOf(const orbit::SubjectCard& s) { std::string r; for (const orbit::SubjectValue& v : s.values) r += v.label + "|"; return r; }
+
+void testSubjectCardSynthetic() {
+    using orbit::Selection;
+    {   // a planet
+        const orbit::Card c = mk("Earth · rocky planet (home)", {"Size: 1.0 × Earth (radius 6,378 km)", "Mass: 1.0 Earths  ·  gravity 1.0 g at the equator", "Distance: 1.00 AU (150 million km)",
+                                 "Speed: 29.8 km/s (escape here 42.1)", "Orbit: near-circle", "One lap: 1.00 years", "Temperature: 15 °C (real, mean surface)", "Turns once in 23 h 56 min", "1 moon shown"});
+        const orbit::SubjectCard s = orbit::subjectCard(Selection{Selection::Body, 3}, "", c);
+        checkStr("card: planet name", s.name, "Earth");
+        checkStr("card: planet kind", s.kind, "rocky planet (home)");
+        checkStr("card: planet key number is the distance", s.keyValue, "1.00 AU");
+        checkStr("card: planet key caption", s.keyCaption, "from the Sun");
+        checkStr("card: planet key values, in this order", labelsOf(s), "Size|Mass|Speed|Orbit|One lap|Temperature|");
+        checkStr("card: a key value is the rest of its line, word for word", s.values[1].value, "1.0 Earths  ·  gravity 1.0 g at the equator");
+        checkTrue("card: all values = every line of the old card, in order", s.all == c.lines);
+    }
+    {   // a moon
+        const orbit::Card c = mk("Moon · moon of Earth", {"Radius: 1737.4 km", "Distance from Earth: 384,400 km", "Orbit: 27.3 days", "Speed: 1.02 km/s", "Always shows the same face to Earth"});
+        const orbit::SubjectCard s = orbit::subjectCard(Selection{Selection::Moon, 3, 0}, "", c);
+        checkStr("card: moon name", s.name, "Moon");
+        checkStr("card: moon kind", s.kind, "moon of Earth");
+        checkStr("card: moon key number", s.keyValue, "384,400 km");
+        checkStr("card: moon key caption", s.keyCaption, "from Earth");
+        checkStr("card: moon values", joined(s), "Radius=1737.4 km|Orbit=27.3 days|Speed=1.02 km/s|Always shows the same face to Earth|");
+    }
+    {   // the Sun
+        const orbit::Card c = mk("Sun · G-type star", {"Mass: 1 solar mass (M☉), 1.99×10³⁰ kg", "Radius: 1.00 Suns (695,700 km)", "Surface (rough): about 5,770 K  ·  1.00 Suns bright", "Habitable zone (rough): 0.95 – 1.67 AU",
+                                 "Frost line (rough): 2.7 AU (rock inside, giants outside)", "Turns once in 25.4 days (standard rate)", "Lifetime (rough): about 10 billion years", "Rough main-sequence estimates"});
+        const orbit::SubjectCard s = orbit::subjectCard(Selection{Selection::Star}, "", c);
+        checkStr("card: Sun kind", s.kind, "G-type star");
+        checkStr("card: Sun key number is the radius in km (the figure inside the brackets)", s.keyValue, "695,700 km");
+        checkStr("card: Sun key caption", s.keyCaption, "radius");
+        checkStr("card: Sun values", labelsOf(s), "Mass|Surface (rough)|Habitable zone (rough)|Frost line (rough)|Lifetime (rough)|");
+    }
+    {   // a comet
+        const orbit::Card c = mk("Halley’s Comet", {"Nucleus: about 11 km across", "Distance from the Sun now: 35 AU (5,272 million km)", "Speed now: 0.9 km/s", "Closest to the Sun: 0.57 AU  ·  farthest: 35 AU",
+                                 "One trip round the Sun: 76 years", "Last closest approach: 8 Feb 1986", "Next: 8 Jan 2062", "Far from the Sun: frozen and dark, no tail"});
+        const orbit::SubjectCard s = orbit::subjectCard(Selection{Selection::Body, 20}, "", c);
+        checkStr("card: comet name", s.name, "Halley’s Comet");
+        checkStr("card: comet kind", s.kind, "comet");
+        checkStr("card: comet key number", s.keyValue, "35 AU");
+        checkStr("card: comet key caption", s.keyCaption, "from the Sun now");
+        checkStr("card: comet values", labelsOf(s), "Nucleus|Speed now|Closest to the Sun|One trip round the Sun|Last closest approach|Next|");
+    }
+    {   // the barycentre
+        const orbit::Card c = mk("Barycentre of the Solar System", {"The point the Sun and all planets balance around", "They orbit this point, not the Sun’s centre", "Now 1.4 Sun radii from the Sun’s centre",
+                                 "Ranges from inside the Sun to about 2 Sun radii out", "Mostly Jupiter’s pull, a bit Saturn’s", "The Sun is drawn at its true size here"});
+        const orbit::SubjectCard s = orbit::subjectCard(Selection{Selection::Bary}, "", c);
+        checkStr("card: barycentre name", s.name, "Barycentre of the Solar System");
+        checkStr("card: barycentre key number", s.keyValue, "1.4 Sun radii");
+        checkTrue("card: barycentre has 4 plain values and the key line is not repeated", s.values.size() == 4 && !s.values[0].value.empty() && joined(s).find("Now 1.4") == std::string::npos);
+    }
+    {   // belts: the key number is a figure that stands in the first line
+        const orbit::Card main = mk("Asteroid belt", {"Between Mars and Jupiter, about 2.1 – 3.3 AU", "More than 700,000 rocks wider than 1 km", "Total mass: only about 3% of our Moon", "Ceres alone holds 39% of it"});
+        const orbit::SubjectCard a = orbit::subjectCard(Selection{Selection::Belt, 0, 0}, "main", main);
+        checkStr("card: asteroid belt key number", a.keyValue, "2.1 – 3.3 AU");
+        checkStr("card: asteroid belt key caption", a.keyCaption, "from the Sun");
+        const orbit::Card tro = mk("Jupiter's Trojans", {"They share Jupiter's orbit: 60° ahead and behind", "About a million rocks wider than 1 km", "Held in place by the Sun and Jupiter together"});
+        const orbit::SubjectCard t = orbit::subjectCard(Selection{Selection::Belt, 0, 2}, "trojan", tro);
+        checkStr("card: Trojans key number", t.keyValue, "60°");
+        checkStr("card: Trojans key caption", t.keyCaption, "ahead and behind Jupiter");
+        const orbit::Card oort = mk("Oort cloud (never seen directly)", {"Inner part 2,000 – 20,000 AU, outer part to about 200,000 AU", "Inferred from comets: the home of long-period comets"});
+        const orbit::SubjectCard o = orbit::subjectCard(Selection{Selection::Belt, 0, 3}, "oort", oort);
+        checkStr("card: Oort cloud key number is the outer edge", o.keyValue, "200,000 AU");
+        const orbit::Card kui = mk("Kuiper belt", {"From Neptune's orbit (30 AU) out to about 50 AU", "More than 100,000 icy worlds wider than 100 km"});
+        const orbit::SubjectCard k = orbit::subjectCard(Selection{Selection::Belt, 0, 1}, "kuiper", kui);
+        checkStr("card: Kuiper belt key number is the outer edge", k.keyValue, "50 AU");
+    }
+    {   // far-away things
+        const orbit::Card c = mk("Alpha Centauri", {"G2V star, in Centaurus", "Distance: 4.34 light years (275,000 AU)", "The light we see left it 4.34 years ago", "Voyager 1 would take about 77,000 years",
+                                 "The nearest star system: two Sun-like stars", "circling each other."});
+        const orbit::SubjectCard s = orbit::subjectCard(Selection{Selection::Far, 0, 0}, "", c);
+        checkStr("card: far star kind is its first line", s.kind, "G2V star, in Centaurus");
+        checkStr("card: far star key number", s.keyValue, "4.34 light years");
+        checkStr("card: far star key caption", s.keyCaption, "from the Sun");
+        checkTrue("card: far star values do not repeat the kind or the key line", s.values.size() == 4 && joined(s).find("G2V") == std::string::npos && joined(s).find("Distance") == std::string::npos);
+        const orbit::Card v = mk("Voyager 1 · spacecraft", {"Distance from the Sun: 168.4 AU", "Speed: 16.9 km/s away from the Sun", "A radio signal takes about 23.3 hours from the Sun", "Launched in 1977; it left the Sun’s wind"});
+        const orbit::SubjectCard p = orbit::subjectCard(Selection{Selection::Far, 0, 40}, "", v);
+        checkStr("card: probe kind", p.kind, "spacecraft");
+        checkStr("card: probe key number", p.keyValue, "168.4 AU");
+    }
+}
+
+void testSubjectCardReal() {
+    // every card of the real system (every body, moon, belt and far-away thing, at the reference date): the structure rules hold
+    orbit::SolarSystem sys;
+    sys.loadAt(1759665600000LL);                                    // 5 Oct 2026 12:00 UT
+    orbit::CardOptions opt;
+    std::vector<std::pair<orbit::Selection, std::string>> all = {{orbit::Selection{orbit::Selection::Star}, ""}, {orbit::Selection{orbit::Selection::Bary}, ""}};
+    for (const orbit::Body& b : sys.bodies) {
+        all.push_back({orbit::Selection{orbit::Selection::Body, b.id}, ""});
+        for (std::size_t j = 0; j < b.moons.size(); j++) all.push_back({orbit::Selection{orbit::Selection::Moon, b.id, static_cast<int>(j)}, ""});
+    }
+    for (std::size_t g = 0; g < sys.belts.size(); g++) all.push_back({orbit::Selection{orbit::Selection::Belt, 0, static_cast<int>(g)}, sys.belts[g].key});
+    for (int f = 0; f < orbit::farCount(); f++) all.push_back({orbit::Selection{orbit::Selection::Far, 0, f}, ""});
+    int n = 0;
+    for (const auto& [sel, key] : all) {
+        orbit::Card c;
+        if (!orbit::cardText(sys, sel, opt, c)) continue;
+        n++;
+        const orbit::SubjectCard s = orbit::subjectCard(sel, key, c);
+        const std::string t = " for " + c.title;
+        checkTrue("card: the name is not empty" + t, !s.name.empty());
+        checkTrue("card: the kind is not empty" + t, !s.kind.empty());
+        checkTrue("card: there is a key number and a caption" + t, !s.keyValue.empty() && !s.keyCaption.empty());
+        bool keyInLine = false;
+        for (const std::string& l : c.lines) if (l.find(s.keyValue) != std::string::npos) keyInLine = true;
+        checkTrue("card: the key number is a piece of one of the old card's lines, word for word" + t + " [" + s.keyValue + "]", keyInLine);
+        checkTrue("card: all values are exactly the old card's lines" + t, s.all == c.lines);
+        const bool kindIsLine = sel.kind == orbit::Selection::Far && c.title.find(" · ") == std::string::npos;     // a far-away star's kind is its first line
+        const std::size_t avail = c.lines.size() - 1 - (kindIsLine ? 1 : 0);                                       // the lines left after the key line (and the kind)
+        checkTrue("card: 4 to 6 key values (fewer only when the card has no more lines)" + t + " (" + std::to_string(s.values.size()) + ")", s.values.size() >= std::min<std::size_t>(4, avail) && s.values.size() <= 6);
+        for (const orbit::SubjectValue& v : s.values) {
+            const std::string line = v.label.empty() ? v.value : v.label + ": " + v.value;
+            checkTrue("card: a key value is one of the old card's lines, word for word" + t + " [" + line + "]", hasLine(s, line));
+        }
+        std::set<std::string> seen;
+        for (const orbit::SubjectValue& v : s.values) checkTrue("card: no line is shown twice" + t, seen.insert(v.label + "=" + v.value).second);
+    }
+    checkTrue("card: all the cards of the real system were checked (at least 55)", n >= 55);
+}
+
+void testShellRecentSearch() {
+    const std::vector<SearchItem> items = {{"Earth", "Bodies", "body:Earth"}, {"Mars", "Bodies", "body:Mars"}, {"Moons", "Settings", "set:moons"}, {"Moon", "Bodies", "body:Moon"},
+                                           {"Save picture", "Menu", "menu:save"}, {"Sirius", "Bodies", "body:Sirius"}, {"Settings", "Menu", "menu:settings"}};
+    auto labels = [&](const std::string& q, const std::vector<std::string>& recent, int n = 8) { std::string s; for (int i : searchResults(q, items, n, recent)) s += items[i].label + "|"; return s; };
+    checkStr("recent: an empty query lists the recent ones first-used first", labels("", {"body:Moon", "menu:save", "body:Earth"}), "Moon|Save picture|Earth|");
+    checkStr("recent: an empty query with no recents lists nothing", labels("", {}), "");
+    checkStr("recent: a recent id that is no longer in the list is skipped", labels("", {"gone", "body:Mars"}), "Mars|");
+    checkStr("recent: with a query, the order inside a tier puts the recent ones first", labels("s", {"menu:settings", "body:Sirius"}), "Settings|Sirius|Save picture|Mars|Moons|");
+    checkStr("recent: a recent item still has to match the query", labels("mo", {"body:Earth"}), "Moons|Moon|");
+    checkStr("recent: without recents the order is the list's (as before)", labels("s", {}), "Save picture|Sirius|Settings|Mars|Moons|");
+    checkTrue("recent: at most the asked number", searchResults("", items, 2, {"body:Moon", "menu:save", "body:Earth"}).size() == 2);
+    std::vector<std::string> r;
+    r = pushRecent(r, "a"); r = pushRecent(r, "b"); r = pushRecent(r, "a");
+    checkStr("recent: choosing again moves it to the front, no copies", packRecent(r), "a;b");
+    for (int i = 0; i < 12; i++) r = pushRecent(r, "x" + std::to_string(i));
+    checkTrue("recent: only the last 8 are kept", r.size() == 8 && r[0] == "x11" && r[7] == "x4");
+    checkTrue("recent: pack and unpack are inverses", unpackRecent(packRecent(r)) == r);
+    checkTrue("recent: unpacking garbage gives nothing odd", unpackRecent("").empty() && unpackRecent(";;").empty());
+}
+
+void testShellFacts() {
+    // the fade: 0 -> 1 in `fade` seconds, holds, 1 -> 0 in the last `fade` seconds
+    const double I = 20, F = 0.5;
+    checkTrue("facts: starts invisible", factAlpha(0, I, F) == 0);
+    checkTrue("facts: half visible after half the fade", std::fabs(factAlpha(0.25, I, F) - 0.5) < 1e-9);
+    checkTrue("facts: fully visible in the middle", factAlpha(1.0, I, F) == 1 && factAlpha(10, I, F) == 1 && factAlpha(I - 0.001, I, F) == 1);
+    checkTrue("facts: fading out after the interval", std::fabs(factAlpha(I + 0.25, I, F) - 0.5) < 1e-9);
+    checkTrue("facts: gone at the end", factAlpha(I + F, I, F) == 0 && factAlpha(I + 2 * F, I, F) == 0);
+    for (double t = 0; t < I + 2; t += 0.037) checkTrue("facts: alpha stays between 0 and 1", factAlpha(t, I, F) >= 0 && factAlpha(t, I, F) <= 1);
+    // the clock, at a fixed time step of 16 ms (as the app's PL_FIXED_DT run does)
+    {
+        FactClock c;
+        int frames = 0, changes = 0;
+        for (; frames < 1500 && changes == 0; frames++) if (factTick(c, 0.016, false, false, I, F)) changes++;
+        checkTrue("facts: the next fact comes after about 20.5 s (the interval plus the fade out): frames " + std::to_string(frames), changes == 1 && frames * 0.016 >= I && frames * 0.016 <= I + F + 0.05);
+        checkTrue("facts: the clock starts again for the new fact", c.t == 0);
+    }
+    {   // hovering pauses it completely, and the text stays fully visible
+        FactClock c;
+        for (int i = 0; i < 600; i++) factTick(c, 0.016, false, false, I, F);          // 9.6 s
+        const double before = c.t;
+        bool changed = false;
+        for (int i = 0; i < 5000; i++) if (factTick(c, 0.016, true, false, I, F)) changed = true;     // 80 s over it
+        checkTrue("facts: no change while hovered, however long", !changed && c.t == before);
+        FactClock late; late.t = I + 0.3;                                                // already fading out
+        factTick(late, 0.016, true, false, I, F);
+        checkTrue("facts: hovering during the fade-out brings the text back", factAlpha(late.t, I, F) == 1 && late.t <= I);
+        FactClock early; early.t = 0.2;                                                  // still fading in
+        factTick(early, 0.016, true, false, I, F);
+        checkTrue("facts: hovering during the fade-in shows the text in full at once", factAlpha(early.t, I, F) == 1);
+    }
+    {   // reduced motion: no automatic change at all (as the old line; the arrows still work)
+        FactClock c;
+        bool changed = false;
+        for (int i = 0; i < 3000; i++) if (factTick(c, 0.016, false, true, I, F)) changed = true;
+        checkTrue("facts: with Reduced motion nothing changes by itself", !changed);
+    }
+    // where the line sits
+    for (double dpi : kDpis)
+        for (double tf : kTfs)
+            for (double wu : {880.0, 1000.0, 1280.0, 1920.0})
+                for (double hu : {560.0, 640.0, 800.0, 1080.0}) {
+                    const Metrics m = metrics(dpi, tf);
+                    const double W = std::lround(wu * dpi), H = std::lround(hu * dpi);
+                    const std::string t = tag(dpi, tf) + " window " + num(W) + "x" + num(H);
+                    double tw = 0;
+                    const Frame f = makeFrame(W, H, m, 6 * (m.toolBtn + m.s4) + 4 * m.s8 + 2 * (2 * (m.body * 2.2 + 2 * m.s12) + m.caretW), 11 * m.caption, 3 * m.caption * 1.4);
+                    (void)tw;
+                    const Rect r = factLineRect(f, m, 60 * m.caption);
+                    checkTrue("fact line: inside the window" + t, within(r, f.window));
+                    checkTrue("fact line: not over the toolbar" + t, !r.intersects(f.toolbar));
+                    checkTrue("fact line: not over the readout" + t, !r.intersects(f.readout));
+                    checkTrue("fact line: not over the top bar" + t, !r.intersects(f.topBar));
+                    checkTrue("fact line: at the bottom left (its left edge is in the left third)" + t, r.x < W / 3);
+                    checkTrue("fact line: tall enough for its text" + t, r.h >= m.caption);
+                    checkTrue("fact line: wide enough to read when the window is not tiny" + t, wu < 1000 || r.w >= m.em(14));
+                    checkTrue("fact line: in the lower part of the window" + t, r.y > H * 0.6);
+                }
+}
+
+void testShellTextShadow() {
+    // text drawn straight on the picture (the readout, the fact line): its colour against the shadow round it must pass 4.5:1, so it is readable over black AND white (the shadow
+    // covers the glyph's neighbourhood at kShadowAlpha; behind that, black or white shows through only 1 - alpha)
+    std::vector<app::ThemeColors> all;
+    for (const app::ThemeDef* t : app::allThemes()) all.push_back(app::themeColors(t->id, false));
+    all.push_back(app::themeColors("auto", true));
+    for (const app::ThemeColors& c : all) {
+        const Rgb sh = textShadow(c);
+        checkTrue("shadow: the text-shadow colour is black or white in " + c.id, (sh.r == 0 && sh.g == 0 && sh.b == 0) || (sh.r == 1 && sh.g == 1 && sh.b == 1));
+        checkTrue("shadow: main text against its shadow is 4.5:1 in " + c.id, app::contrastRatio(c.fg, sh) >= 4.5);
+        const Rgb tx = factTextColour(c);
+        checkTrue("shadow: the fact line's colour is 4.5:1 against the shadow in " + c.id, app::contrastRatio(tx, sh) >= 4.5);
+        for (int white = 0; white < 2; white++) {
+            const Rgb behind = white ? Rgb{1, 1, 1} : Rgb{0, 0, 0};
+            const Rgb local = app::over(sh, kShadowAlpha, behind);
+            checkTrue("shadow: fact text 4.5:1 over " + std::string(white ? "white" : "black") + " behind its shadow in " + c.id, app::contrastRatio(tx, local) >= 4.5);
+        }
+        checkTrue("shadow: factContrast reports at least 4.5 in " + c.id + " (" + num(factContrast(c)) + ")", factContrast(c) >= 4.5);
+    }
+    // the test can fail: a muted grey without any shadow does not pass over both
+    const app::ThemeColors d = app::themeColors("dark", false);
+    checkTrue("shadow: without a shadow, light text on a white picture fails (so the check above can fail)", app::contrastRatio(d.fg, Rgb{1, 1, 1}) < 4.5);
+}
+
+void testShellPrefs4() {
+    app::Prefs p;
+    checkStr("prefs: Facts are On by default", p.facts, "on");
+    p.facts = "off"; p.recent = "body:Earth;menu:save";
+    const app::Prefs q = app::loadPrefs(app::savePrefs(p));
+    checkStr("prefs: Facts Off saves and loads", q.facts, "off");
+    checkStr("prefs: recent searches save and load", q.recent, "body:Earth;menu:save");
+    checkStr("prefs: a bad Facts value falls back to On", app::loadPrefs("facts=maybe\n").facts, "on");
+    const std::string text = app::savePrefs(app::Prefs{});
+    checkTrue("prefs: with the defaults the saved file has no facts or recent line (a file from stage 3 is unchanged)", text.find("facts") == std::string::npos && text.find("recent") == std::string::npos);
+}
+
+void testShellSideStep() {
+    const Rect win{0, 0, 1000, 640}, card{676, 56, 300, 330};
+    Rect r{414, 52, 360, 500};                                                         // a Time panel under a chip that sits right of the middle
+    Rect o = sideStep(r, card, win, 12, 12);
+    checkTrue("side step: a panel over the card moves left of it", o.right() <= card.x - 12 + 1e-9 && o.x >= 12 && o.y == r.y && o.w == r.w && o.h == r.h);
+    checkTrue("side step: and no longer touches it", !o.intersects(card));
+    Rect far{20, 52, 300, 300};
+    o = sideStep(far, card, win, 12, 12);
+    checkTrue("side step: a panel that does not touch the card stays where it is", o.x == far.x && o.y == far.y);
+    const Rect wide{0, 0, 1000, 640}, card2{20, 56, 300, 330};                           // a card on the left: there is no room left of it, so the panel goes to its right
+    o = sideStep(Rect{100, 52, 360, 500}, card2, wide, 12, 12);
+    checkTrue("side step: with no room on the left it goes to the right of the card", o.x == card2.right() + 12 && o.right() <= wide.right() - 12);
+    o = sideStep(Rect{100, 52, 600, 500}, Rect{300, 56, 300, 330}, wide, 12, 12);        // room on neither side: stays
+    checkTrue("side step: with room on neither side it stays", o.x == 100);
+    Lcg rng;
+    for (int i = 0; i < 4000; i++) {
+        const Rect b{rng.in(0, 800), rng.in(0, 300), rng.in(50, 300), rng.in(50, 300)}, p{rng.in(0, 700), rng.in(0, 300), rng.in(100, 400), rng.in(100, 400)};
+        const Rect q = sideStep(p, b, wide, 12, 12);
+        checkTrue("side step: only x changes, and the size never", q.y == p.y && q.w == p.w && q.h == p.h);
+        if (q.x != p.x) checkTrue("side step: when it moves it no longer touches the blocker and lies inside the window", !q.intersects(b) && q.x >= 12 - 1e-9 && q.right() <= wide.right() - 12 + 1e-9);
+    }
+}
+
 void testShell() {
     testShellTypeScale();
     testShellFrame();
@@ -368,5 +642,12 @@ void testShell() {
     testShellSearch();
     testShellPanelStates();
     testShellPrefs();
+    testSubjectCardSynthetic();
+    testSubjectCardReal();
+    testShellRecentSearch();
+    testShellFacts();
+    testShellTextShadow();
+    testShellPrefs4();
+    testShellSideStep();
 }
 }  // namespace

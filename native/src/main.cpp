@@ -183,6 +183,7 @@ int main(int, char**) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;                           // nothing saved next to the .exe
+    if (SDL_getenv("PL_FIXED_DT")) io.ConfigInputTextCursorBlink = false;       // for automatic checks: a text field's cursor does not blink (its phase follows the real clock), so two runs draw the same picture
     io.ConfigDebugHighlightIdConflicts = false;         // never show ImGui's red "conflicting ID" box to a user (the conflicts themselves are fixed)
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
@@ -198,6 +199,7 @@ int main(int, char**) {
     if (const char* t = SDL_getenv("PL_THEME")) { app.prefs.unlocked.insert(t); app.prefs.theme = t; }   // for automatic checks
     if (const char* t = SDL_getenv("PL_TEXTSIZE")) app.prefs.textSize = t;
     if (const char* t = SDL_getenv("PL_FONT")) app.prefs.font = t;
+    if (const char* t = SDL_getenv("PL_FACTS")) app.prefs.facts = t;                  // for automatic checks: the fact line "on" / "off"
     if (const char* t = SDL_getenv("PL_MOTION")) app.prefs.motion = t;
     auto systemLight = [] { return SDL_GetSystemTheme() == SDL_SYSTEM_THEME_LIGHT || SDL_getenv("PL_LIGHT"); };   // Windows' light/dark setting (the web's "Auto")
     ui::updateLook(app.prefs, systemLight(), ui::systemReducedMotion());

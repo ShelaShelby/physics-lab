@@ -59,6 +59,9 @@ TopBarPlan planTopBar(double winW, const Metrics& m, const TopBarWidths& w);
 enum class Anchor { TopLeft, TopRight, UnderChip, AboveToolbar, Centre };
 // Where a panel of (w x h) sits. It never leaves the window: it is made smaller (scrolls inside) when it must be. anchorX: the centre x of the caret or chip it belongs to.
 Rect placePanel(Anchor a, double w, double h, const Frame& f, const Metrics& m, double anchorX);
+// A panel that opens over a card: if r overlaps `blocker` it moves sideways to sit beside it (left of it when there is room inside `window` with `margin` to spare, else right of it, else it
+// stays). Only x changes. (Stage 4: the Time panel and the data sheet at 1000 px wide would otherwise cover half the subject card.)
+Rect sideStep(Rect r, const Rect& blocker, const Rect& window, double gap, double margin);
 double collapsedWidth(double titleW, const Metrics& m);                    // a collapsed panel: its title, the small caret and the padding
 
 // ---- the centre shift (DESIGN.md section 6) ----
@@ -81,7 +84,7 @@ Rgb onAccent(const ThemeColors& c);
 constexpr float kEdgeAlpha = 0.20f, kShineAlpha = 0.06f;                    // the 1 px edge and the top-lit shine are the text colour at these opacities
 
 // ---- keys ----
-enum class PanelId { None, Menu, LabMenu, Chip, Speed, Show, Pick, Scale, View, More, Facts };
+enum class PanelId { None, Menu, LabMenu, Chip, Speed, Show, Pick, Scale, View, More, Facts, Data };   // Facts: the full fact; Data: the subject card's "All values" (stage 4)
 struct UiState { PanelId open = PanelId::None; bool search = false; bool reading = false; bool oldPanel = false; };
 enum class Key { Escape, CtrlK, Space, Other };
 struct KeyOutcome { bool consumed = false; bool togglePlay = false; };
@@ -95,8 +98,29 @@ ReadingGeom readingGeometry(double winW, double winH, const Metrics& m);
 
 // ---- search (Ctrl+K) ----
 struct SearchItem { std::string label, group, id; };
-// Up to maxResults indexes: labels that start with the query first, then labels with a word that starts with it, then labels that contain it; ties keep the list's order.
-std::vector<int> searchResults(const std::string& query, const std::vector<SearchItem>& items, int maxResults = 8);
+// Up to maxResults indexes: labels that start with the query first, then labels with a word that starts with it, then labels that contain it; ties go to the recent choices
+// (newest first: `recent` holds item ids), then keep the list's order. An empty query lists the recent choices (stage 4: "recent searches first").
+std::vector<int> searchResults(const std::string& query, const std::vector<SearchItem>& items, int maxResults = 8, const std::vector<std::string>& recent = {});
+std::vector<std::string> pushRecent(const std::vector<std::string>& recent, const std::string& id, std::size_t keep = 8);   // id to the front, no copies, at most `keep`
+std::string packRecent(const std::vector<std::string>& recent);                                                           // "a;b;c" (the settings file's recent= line)
+std::vector<std::string> unpackRecent(const std::string& packed);
+
+// ---- the fact line (stage 4): one short line at the bottom left of the picture, fading to the next fact every ~20 s, still while the pointer is over it ----
+constexpr double kFactInterval = 20.0, kFactFade = 0.5;                   // seconds on screen, and the length of each fade (in and out)
+double factAlpha(double t, double interval, double fade);                 // how visible the text is t seconds after it appeared: 0 -> 1 over `fade`, held, 1 -> 0 over the last `fade`
+struct FactClock { double t = 0; };
+// One frame of the clock. True: the fade-out has ended, show the next fact (the clock restarts). Hovered: the clock stands still and the text comes back to full. Reduced motion: no
+// automatic change at all (the arrows still step; as the old line did).
+bool factTick(FactClock& c, double dt, bool hovered, bool reduced, double interval, double fade);
+// Where the line sits: bottom left, level with the toolbar and to its left; if there is no room there (a narrow window) one row above the toolbar, left of the readout. textW: the width
+// the fact would like (the arrows ‹ › are included in the rectangle). Never over the toolbar, the readout or the top bar, never outside the window.
+Rect factLineRect(const Frame& f, const Metrics& m, double textW);
+// Text drawn straight on the picture (the readout, the fact line) has a shadow round the letters: black round light text, white round dark text. Its opacity is kShadowAlpha at the
+// letters; the text colour against it passes WCAG 4.5:1, so the text reads over black and over white behind (tested in all 14 themes).
+constexpr float kShadowAlpha = 0.9f;
+Rgb textShadow(const ThemeColors& c);
+Rgb factTextColour(const ThemeColors& c);                                 // the muted colour if it passes 4.5:1 over both extremes behind its shadow, else the main text colour
+double factContrast(const ThemeColors& c);                                // the least contrast of that colour over white and black behind the shadow
 
 // ---- remembered panel states ----
 // "card=c,legend=o": the collapsed (c) or open (o) state of each floating panel, kept in the settings file.

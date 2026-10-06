@@ -10,7 +10,7 @@
 #   keys      Esc closes an open panel, then search; Ctrl+K opens search; Space plays / pauses (and is typing inside search)
 #   shift     with a card or panel over the middle, the selected body is moved outside every open panel; with the shift switched off (PL_SHIFT=off) it is not (so the test can fail)
 #   reading   About opens in the reading view: a column of at most 34 em, headings, a contents list, body lines of at most 75 characters (DejaVu Sans here, wider than Segoe UI)
-#   old       the Old panel button opens today's side column as a floating window
+#   old       the Old panel button opens today's side column as a floating window (the Atom Lab only, from stage 4)
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap
@@ -21,8 +21,8 @@ SCALE = {"caption": (13, 12), "body": (15, 14), "title": (17, 15), "key": (28, 2
 PAGE_FLOORS = {"pbody": 14, "pcaption": 12, "plabel": 12}
 TF = {"small": 0.9, "normal": 1.0, "large": 1.15, "xl": 1.3}
 EXERCISE = ("10:click=top.chip;14:key=escape;16:click=tool.speed;20:key=escape;22:click=tool.show;26:key=escape;28:click=tool.pick;32:key=escape;34:click=tool.scale;38:key=escape;"
-            "40:click=tool.view.caret;44:key=escape;46:click=top.menu;50:key=escape;52:click=top.facts;56:key=escape;58:key=ctrl+k;62:text=ear;66:key=escape;68:click=top.lab;72:key=escape;"
-            "74:click=card.legend;80:click=top.old")
+            "40:click=tool.view.caret;44:key=escape;46:click=top.menu;50:key=escape;52:click=fact.line;56:key=escape;58:key=ctrl+k;62:text=ear;66:key=escape;68:click=top.lab;72:key=escape;"
+            "74:click=card.legend;80:click=card.all;86:key=escape;88:click=top.chip;94:click=time.info;98:click=time.mode@0.9")
 fails = 0
 checks = 0
 
@@ -41,7 +41,7 @@ def part_sizes(binary, work, only_first_scale):
     for dpi in ((1.0,) if only_first_scale else (1.0, 1.25, 1.5, 2.0)):
         size = f"{int(round(1000 * dpi))}x{int(round(640 * dpi))}"
         for tfn, tf in TF.items():
-            r = run_app(binary, work, f"sizes_{dpi}_{tfn}", {"PL_NEWUI": "on", "PL_SCALE": str(dpi), "PL_TEXTSIZE": tfn, "PL_SELECT": "Earth", "PL_SCRIPT": EXERCISE}, frames=90, size=size)
+            r = run_app(binary, work, f"sizes_{dpi}_{tfn}", {"PL_NEWUI": "on", "PL_SCALE": str(dpi), "PL_TEXTSIZE": tfn, "PL_SELECT": "Earth", "PL_SCRIPT": EXERCISE}, frames=112, size=size)
             tag = f" (scale {dpi}, text {tfn})"
             check(r.window is not None, "the app printed its PLSHELL report" + tag)
             if r.window is None:
@@ -83,7 +83,7 @@ def part_small(binary, work):
     # the smallest window: 880 x 560 units, at 100 % and at 150 %
     for dpi, size in ((1.0, "880x560"), (1.5, "1320x840")):
         for tfn in ("small", "xl"):
-            r = run_app(binary, work, f"small_{dpi}_{tfn}", {"PL_NEWUI": "on", "PL_SCALE": str(dpi), "PL_TEXTSIZE": tfn, "PL_SELECT": "Earth", "PL_SCRIPT": EXERCISE}, frames=90, size=size)
+            r = run_app(binary, work, f"small_{dpi}_{tfn}", {"PL_NEWUI": "on", "PL_SCALE": str(dpi), "PL_TEXTSIZE": tfn, "PL_SELECT": "Earth", "PL_SCRIPT": EXERCISE}, frames=112, size=size)
             tag = f" (smallest window, scale {dpi}, text {tfn})"
             w, h = r.window[0], r.window[1]
             for name, rect in r.rects.items():
@@ -158,8 +158,11 @@ def part_reading(binary, work):
     check("reading.column" in r.rects and r.note("toc") and "reading.toc" in r.rects, "a wide window shows the reading view with its contents rail")
 
 def part_old(binary, work):
-    r = run_app(binary, work, "old", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.old"}, frames=40)
-    check("panel.old" in r.rects, "the Old panel button opens today's side panel as a floating window")
+    # stage 4: the Orbit Lab has no Old panel any more; the Atom Lab keeps it until stage 5
+    r = run_app(binary, work, "old", {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_SCRIPT": "10:click=top.old"}, frames=40)
+    check("panel.old" in r.rects, "in the Atom Lab the Old panel button opens today's side panel as a floating window")
+    r = run_app(binary, work, "old_orbit", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.old"}, frames=40)
+    check("panel.old" not in r.rects and len(r.scripted_missing()) == 1, "the Orbit Lab has no Old panel button")
     r = run_app(binary, work, "off", {"PL_NEWUI": "off"}, frames=30)
     check(r.window is None or not r.texts, "with New UI off the new UI draws nothing")
 

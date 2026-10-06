@@ -5,7 +5,9 @@
 #include <cstdio>
 
 #include "orbit/format.h"
+#include "orbit/real_errors.h"
 #include "orbit/sky.h"
+#include "orbit/spin.h"
 #include "orbit/units.h"
 
 namespace ui {
@@ -119,16 +121,75 @@ ChipText chipText(const AppState& app) {
     return c;
 }
 
+// "29,231" for the worst-error lists in the Real note (orbit/real_errors.h)
+static std::string withCommas(long v) {
+    std::string d = std::to_string(v), out;
+    for (std::size_t i = 0; i < d.size(); i++) { if (i && (d.size() - i) % 3 == 0) out += ','; out += d[i]; }
+    return out;
+}
+
+std::string relativityTip() {
+return "Adds Einstein's correction to the Sun's pull on each planet, so Mercury's orbit turns a little more each time round: about 43 arcseconds per century, as measured.\n\n"
+        "It is a first-order (1PN) approximation, made with one simple extra potential of the Sun (Nobili & Roxburgh, 1986). It gets the turning of the orbit right, "
+        "but the motion along the orbit is slightly wrong, so, measured against JPL Horizons, it moves every planet's position away from JPL: Mercury's worst error in 1800 to 2100 is "
+        + withCommas(orbit::kRealErrKmRelOn[0]) + " km with it and " + withCommas(orbit::kRealErrKmRelOff[0]) + " km without. "
+        "It leaves out the planets' relativistic pull on each other, the Sun's spin and shape, and all higher orders.\n\n"
+        "Off (the default): plain Newtonian gravity, no extra turn.";
+}
+
+std::string wobbleTip() {
+    return std::string("The Sun is not fixed: it circles the balance point of the Solar System (the barycentre, the marked point), mostly because of Jupiter's pull. "
+                                       "The real circle is smaller than about two Sun radii, far too small to see here.\n\n"
+                                       "Ticked: the Sun's path is drawn 50 times too big, round the marked point, so you can see it. This is exaggerated, not to scale (the Sun itself and the planets are drawn at their true places).\n\n"
+                                       "Unticked: the path is drawn at its true size.");
+}
+
+// The planet whose moons can be watched: the selected planet, or the planet of the selected moon
+static const Body* moonTarget(const AppState& app) {
+    const Selection& s = app.view.sel;
+    if (s.kind != Selection::Body && s.kind != Selection::Moon) return nullptr;
+    const Body* b = findBody(app.sys, s.bodyId);
+    return b && !b->moons.empty() ? b : nullptr;
+}
+
+bool slowMoonsAvailable(const AppState& app) { return app.set.moons && moonTarget(app); }
+
+void slowMoons(AppState& app) {
+    const Body* b = moonTarget(app);
+    if (!b) return;
+    double P = 1e300;                                 // the selected moon's period, or the fastest moon's
+    if (app.view.sel.kind == Selection::Moon) P = b->moons[app.view.sel.moon].data->periodDays;
+    else for (const Moon& m : b->moons) P = std::min(P, m.data->periodDays);
+    app.set.tspeed = std::clamp(std::log10(P / 4 / (kSimTime / kDay)), kTspeedMin, kTspeedMax);   // one lap in 4 seconds
+    app.view.follow = true;
+}
+
+static const Body* spinTarget(const AppState& app) {   // a selected planet with real spin data
+    const Body* b = app.view.sel.kind == Selection::Body ? findBody(app.sys, app.view.sel.bodyId) : nullptr;
+    return b && hasSpin(b->name) ? b : nullptr;
+}
+
+bool slowSpinAvailable(const AppState& app) { return spinTarget(app) != nullptr; }
+
+void slowSpin(AppState& app) {
+    const Body* b = spinTarget(app);
+    if (!b) return;
+    const double daysPerTurn = 360 / std::fabs(spinRateDegPerDay(b->name));
+    app.set.tspeed = std::clamp(std::log10(daysPerTurn / 24 / (kSimTime / kDay)), kTspeedMin, kTspeedMax);   // 1 s = 1/24 of a turn
+    app.view.follow = true;
+    if (app.set.trueScale) setZoom(app, zoomFor(app, b->radius / kKm, 80));   // close enough to see it turn
+}
+
 std::string orbitStateLine(const AppState& app) {
     const ViewSettings& s = app.set;
     const Selection& sel = app.view.sel;
     char b[640];
     std::snprintf(b, sizeof b,
-                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d",
+                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d",
                   static_cast<long long>(app.sys.epochMs), app.sys.t, app.sys.jumped ? 1 : 0, app.paused ? 1 : 0, s.tspeed,
                   s.view3D ? 1 : 0, s.trueScale ? 1 : 0, s.fullTrails ? 1 : 0, s.moons ? 1 : 0, s.dwarfs ? 1 : 0, s.comets ? 1 : 0, s.belts ? 1 : 0, s.far ? 1 : 0,
                   static_cast<int>(s.sky), static_cast<int>(s.cons), s.realPlanets ? 1 : 0, s.relativity ? 1 : 0, s.exaggerateWobble ? 1 : 0, s.zoom,
-                  static_cast<int>(sel.kind), sel.bodyId, sel.moon, app.view.follow ? 1 : 0, app.view.panMode ? 1 : 0, app.view.spin ? 1 : 0);
+                  static_cast<int>(sel.kind), sel.bodyId, sel.moon, app.view.follow ? 1 : 0, app.view.panMode ? 1 : 0, app.view.spin ? 1 : 0, app.journey.active ? 1 : 0);
     return b;
 }
 

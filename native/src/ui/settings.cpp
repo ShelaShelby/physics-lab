@@ -1,4 +1,6 @@
 #include "settings.h"
+#include "ui/shell.h"
+#include "ui/shell_test.h"
 
 #include <SDL3/SDL.h>
 
@@ -144,6 +146,7 @@ bool optionTile(const char* id, const std::string& name, bool on, ImFont* font, 
     const float h = sub.empty() && font ? 62 * ImGui::GetFontSize() / 16 : 46 * ImGui::GetFontSize() / 16;
     if (on) pushOn();
     const bool clicked = ui::Button("##opt", ImVec2(width, h));
+    noteItem(id);                                           // (the automatic checks click a tile by its name)
     if (on) popOn();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImU32 fg = on ? col(look().c.onacc) : col(look().c.fg), mu = on ? col(look().c.onacc) : col(look().c.muted);
@@ -302,6 +305,18 @@ void settingsWindow(AppState& app) {
                 if (optionTile((std::string("newui-") + uiKeys[i]).c_str(), uiNames[i], P.newUi == uiKeys[i], nullptr, 0, tiles(2), uiSubs[i])) P.newUi = uiKeys[i];
             }
             richText("<p class=\"lrnP lrnMuted\">A preview of the redesign (version 0.15): the picture fills the window, with a slim bar on top, a toolbar at the bottom and small floating panels. Only the Orbit Lab's date, speed, show, pick, scale, 2D / 3D and save controls are moved so far; everything else is in the Old panel button at the top right. Off is exactly the layout you know.</p>");
+        if (newUiOn(app)) {   // 0.15 stage 4: what the new UI needs a home for. Facts: the fact line; Performance: what the old side column held (VSync, GPU rocks, frame times, Benchmark)
+            richHeading(displayable("💡 Facts"));
+            const char* fKeys[2] = {"on", "off"};
+            const char* fNames[2] = {"On", "Off"}, *fSubs[2] = {"A fact at the bottom left of the picture", "No fact line"};
+            for (int i = 0; i < 2; i++) {
+                if (i) ImGui::SameLine();
+                if (optionTile((std::string("facts-") + fKeys[i]).c_str(), fNames[i], P.facts == fKeys[i], nullptr, 0, tiles(2), fSubs[i])) P.facts = fKeys[i];
+            }
+            richText("<p class=\"lrnP lrnMuted\">One short line of \"Did you know?\" at the bottom left of the picture, changing about every 20 seconds. It stops while the pointer is over it; a click opens the whole fact.</p>");
+            performanceCard(app);
+            auditNote("settingsnew facts-and-performance");
+        }
         }
         // the reset pop-ups (first the warning, then a clear "it worked")
         if (beginGift("##reset")) {

@@ -13,6 +13,8 @@ std::string factText(AppState& app);
 bool factIsGift(AppState& app);
 void factStep(AppState& app, int dir);
 void factOpenGift(AppState& app);
+std::string factTextAt(int index);                   // 0.15 stage 4: the words of fact number `index` (in the data's own order; "" for the gift), for search
+void factShow(AppState& app, int index);             // make that one the fact on show
 void tabsBar(AppState& app);                         // 🔬 Simulations · 📚 Learn · 🏆 Achievements (in the header)
 void paneWindow(AppState& app, float top);           // the Learn or Achievements page, below `top`, while one is chosen
 void appTabsFrame(AppState& app);                    // every frame: achievement triggers and pop-ups, the secret pop-ups

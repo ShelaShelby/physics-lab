@@ -41,6 +41,8 @@ std::string savePrefs(const Prefs& p) {
       << "motion=" << clean(p.motion) << "\n" << "effects=" << clean(p.effects) << "\n" << "units=" << clean(p.units) << "\n" << "lang=" << clean(p.lang) << "\n";
     if (p.newUi != "off") o << "newui=" << clean(p.newUi) << "\n";                      // 0.15 stage 3: only written when it is on, so a file from before it is unchanged
     if (!p.shellPanels.empty()) o << "shellpanels=" << clean(p.shellPanels) << "\n";
+    if (p.facts != "on") o << "facts=" << clean(p.facts) << "\n";                       // 0.15 stage 4: only written when it is off, so a file from stage 3 is unchanged
+    if (!p.recent.empty()) o << "recent=" << clean(p.recent) << "\n";
     std::string un;
     for (const std::string& u : p.unlocked) un += (un.empty() ? "" : ",") + clean(u);
     o << "unlock=" << un << "\n";
@@ -71,6 +73,8 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "effects") { if (validEffects(v)) p.effects = v; }
         else if (k == "newui") { if (validNewUi(v)) p.newUi = v; }
         else if (k == "shellpanels") p.shellPanels = v;
+        else if (k == "facts") { if (v == "on" || v == "off") p.facts = v; }
+        else if (k == "recent") p.recent = v;
         else if (k == "units") { if (v == "metric" || v == "imperial") p.units = v; }
         else if (k == "lang") { if (v == "en") p.lang = v; }                     // as the web: only English can be picked yet
         else if (k == "unlock") {

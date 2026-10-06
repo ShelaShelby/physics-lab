@@ -1,6 +1,7 @@
 #include "app/shell.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "app/display_scale.h"
@@ -130,6 +131,14 @@ Rect placePanel(Anchor a, double w, double h, const Frame& f, const Metrics& m, 
     return clampInto(r, f.window);
 }
 
+Rect sideStep(Rect r, const Rect& blocker, const Rect& window, double gap, double margin) {
+    if (!r.intersects(blocker)) return r;
+    const double left = blocker.x - gap - r.w, right = blocker.right() + gap;
+    if (left >= window.x + margin) r.x = left;
+    else if (right + r.w <= window.right() - margin) r.x = right;
+    return r;
+}
+
 double collapsedWidth(double titleW, const Metrics& m) { return titleW + m.caretW + 2.0 * m.s12; }
 
 // ---- the centre shift ----
@@ -256,10 +265,18 @@ std::string trim(const std::string& s) {
 }
 }  // namespace
 
-std::vector<int> searchResults(const std::string& query, const std::vector<SearchItem>& items, int maxResults) {
+std::vector<int> searchResults(const std::string& query, const std::vector<SearchItem>& items, int maxResults, const std::vector<std::string>& recent) {
     const std::string q = lower(trim(query));
-    std::vector<std::pair<int, int>> hit;                                    // (score, index)
-    if (q.empty()) return {};
+    const auto rank = [&](int i) { for (std::size_t r = 0; r < recent.size(); r++) if (recent[r] == items[i].id) return static_cast<int>(r); return 1 << 20; };
+    std::vector<std::array<int, 3>> hit;                                     // (score, recent rank, index)
+    if (q.empty()) {
+        std::vector<int> out;
+        for (const std::string& id : recent) {
+            if (static_cast<int>(out.size()) >= maxResults) break;
+            for (std::size_t i = 0; i < items.size(); i++) if (items[i].id == id) { out.push_back(static_cast<int>(i)); break; }
+        }
+        return out;
+    }
     for (std::size_t i = 0; i < items.size(); i++) {
         const std::string l = lower(items[i].label);
         int score = -1;
@@ -269,12 +286,79 @@ std::vector<int> searchResults(const std::string& query, const std::vector<Searc
                 if (p > 0 && (l[p - 1] == ' ' || l[p - 1] == '/' || l[p - 1] == '(' || l[p - 1] == '-')) { score = 1; break; }
             if (score < 0 && l.find(q) != std::string::npos) score = 2;
         }
-        if (score >= 0) hit.push_back({score, static_cast<int>(i)});
+        if (score >= 0) hit.push_back({score, rank(static_cast<int>(i)), static_cast<int>(i)});
     }
-    std::stable_sort(hit.begin(), hit.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::sort(hit.begin(), hit.end());                                       // score, then recent rank, then the list's order
     std::vector<int> out;
-    for (const auto& h : hit) { if (static_cast<int>(out.size()) >= maxResults) break; out.push_back(h.second); }
+    for (const auto& h : hit) { if (static_cast<int>(out.size()) >= maxResults) break; out.push_back(h[2]); }
     return out;
+}
+
+std::vector<std::string> pushRecent(const std::vector<std::string>& recent, const std::string& id, std::size_t keep) {
+    std::vector<std::string> out{id};
+    for (const std::string& r : recent) if (r != id && out.size() < keep) out.push_back(r);
+    return out;
+}
+std::string packRecent(const std::vector<std::string>& recent) {
+    std::string s;
+    for (const std::string& r : recent) s += (s.empty() ? "" : ";") + r;
+    return s;
+}
+std::vector<std::string> unpackRecent(const std::string& packed) {
+    std::vector<std::string> out;
+    std::size_t a = 0;
+    while (a <= packed.size()) {
+        std::size_t b = packed.find(';', a);
+        if (b == std::string::npos) b = packed.size();
+        if (b > a) out.push_back(packed.substr(a, b - a));
+        a = b + 1;
+    }
+    return out;
+}
+
+// ---- the fact line ----
+double factAlpha(double t, double interval, double fade) {
+    if (t <= 0) return 0;
+    if (t < fade) return t / fade;
+    if (t <= interval) return 1;
+    if (t < interval + fade) return 1 - (t - interval) / fade;
+    return 0;
+}
+
+bool factTick(FactClock& c, double dt, bool hovered, bool reduced, double interval, double fade) {
+    if (reduced) return false;
+    if (hovered) { if (c.t > interval) c.t = interval; else if (c.t < fade) c.t = fade; return false; }          // under the pointer the text is fully there, fading in or out or not
+    c.t += dt;
+    if (c.t >= interval + fade) { c.t = 0; return true; }
+    return false;
+}
+
+Rect factLineRect(const Frame& f, const Metrics& m, double textW) {
+    const double h = m.control, arrows = 2.0 * m.row + m.s4, maxW = m.em(44), x0 = f.window.x + m.s12, wanted = std::min(textW + arrows, maxW);
+    Rect r{x0, f.toolbar.y + (f.toolbar.h - h) / 2, 0, h};
+    const double beside = f.toolbar.x - m.s16 - x0;
+    if (beside >= m.em(14)) r.w = std::min(wanted, beside);
+    else {                                                                   // no room beside the toolbar: one row above it, left of the readout
+        r.y = f.toolbar.y - m.s8 - h;
+        const bool nearReadout = f.readout.y < r.y + h && f.readout.bottom() > r.y;
+        const double limit = nearReadout ? f.readout.x - m.s16 : f.window.right() - m.s12;
+        r.w = std::max(1.0, std::min(wanted, limit - x0));
+    }
+    return clampInto(r, f.window);
+}
+
+Rgb textShadow(const ThemeColors& c) {
+    const Rgb black{0, 0, 0}, white{1, 1, 1};
+    return contrastRatio(c.fg, black) >= contrastRatio(c.fg, white) ? black : white;
+}
+double factContrast(const ThemeColors& c) {
+    const Rgb sh = textShadow(c), tx = factTextColour(c);
+    return std::min(contrastRatio(tx, over(sh, kShadowAlpha, Rgb{0, 0, 0})), contrastRatio(tx, over(sh, kShadowAlpha, Rgb{1, 1, 1})));
+}
+Rgb factTextColour(const ThemeColors& c) {
+    const Rgb sh = textShadow(c);
+    const double m = std::min(contrastRatio(c.muted, over(sh, kShadowAlpha, Rgb{0, 0, 0})), contrastRatio(c.muted, over(sh, kShadowAlpha, Rgb{1, 1, 1})));
+    return m >= 4.5 ? c.muted : c.fg;
 }
 
 // ---- remembered panel states ----

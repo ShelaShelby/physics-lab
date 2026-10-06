@@ -112,6 +112,26 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
                 } else std::printf("PLSCRIPT frame %d: no control called \"%s\"\n", frame, name.c_str());
             }
             if (found) { pushMouse(window, x, y, 0); pending[frame + 1].push_back({x, y, 1}); pending[frame + 2].push_back({x, y, 2}); }
+        } else if (verb == "move") {                       // the pointer goes to a named control's middle (or to x,y) and stays there: hover
+            float x = 0, y = 0;
+            bool found = false;
+            const auto it = g_items.find(arg);
+            if (it != g_items.end()) { x = it->second.x + it->second.w / 2; y = it->second.y + it->second.h / 2; found = true; }
+            else found = std::sscanf(arg.c_str(), "%f,%f", &x, &y) == 2;
+            if (found) pushMouse(window, x, y, 0); else std::printf("PLSCRIPT frame %d: no control called \"%s\"\n", frame, arg.c_str());
+        } else if (verb == "wheel") {                      // the mouse wheel turns by n notches (negative: down) at the pointer
+            SDL_Event e;
+            SDL_zero(e);
+            e.type = SDL_EVENT_MOUSE_WHEEL; e.wheel.windowID = SDL_GetWindowID(window); e.wheel.y = static_cast<float>(std::atof(arg.c_str())); e.wheel.mouse_x = ImGui::GetIO().MousePos.x; e.wheel.mouse_y = ImGui::GetIO().MousePos.y;
+            SDL_PushEvent(&e);
+        } else if (verb == "drag") {                       // press at x0,y0, move to x1,y1 over a few frames, release (the picture's drag)
+            float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+            if (std::sscanf(arg.c_str(), "%f,%f,%f,%f", &x0, &y0, &x1, &y1) == 4) {
+                pushMouse(window, x0, y0, 0);
+                pending[frame + 1].push_back({x0, y0, 1});
+                for (int k = 1; k <= 4; k++) pending[frame + 1 + k].push_back({x0 + (x1 - x0) * k / 4, y0 + (y1 - y0) * k / 4, 0});
+                pending[frame + 6].push_back({x1, y1, 2});
+            }
         } else if (verb == "key") {
             std::string k = arg;
             SDL_Keymod mod = SDL_KMOD_NONE;
@@ -120,6 +140,8 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             if (k == "escape") { key = SDLK_ESCAPE; sc = SDL_SCANCODE_ESCAPE; }
             else if (k == "space") { key = SDLK_SPACE; sc = SDL_SCANCODE_SPACE; }
             else if (k == "enter") { key = SDLK_RETURN; sc = SDL_SCANCODE_RETURN; }
+            else if (k == "down") { key = SDLK_DOWN; sc = SDL_SCANCODE_DOWN; }
+            else if (k == "up") { key = SDLK_UP; sc = SDL_SCANCODE_UP; }
             else if (k.size() == 1) { key = static_cast<SDL_Keycode>(k[0]); sc = static_cast<SDL_Scancode>(SDL_SCANCODE_A + (k[0] - 'a')); }
             if (mod) pushKey(window, SDLK_LCTRL, SDL_SCANCODE_LCTRL, true, mod);
             pushKey(window, key, sc, true, mod);
@@ -154,7 +176,11 @@ void auditPictureText(float px) { if (shellLogOn()) auditText("plabel", px, "a l
 void auditFrame() { if (!shellLogOn()) return; g_rects.clear(); g_notes.clear(); }
 void auditNote(const std::string& line) {
     if (!shellLogOn()) return;
-    g_notes[line.substr(0, line.find(' '))+(line.rfind("cardtitle",0)==0||line.rfind("panelopen",0)==0 ? line.substr(line.find(' ')) : std::string())] = line;
+    const std::size_t sp = line.find(' ');
+    std::string key = line.substr(0, sp);
+    if (line.rfind("cardtitle", 0) == 0 || line.rfind("panelopen", 0) == 0) key += line.substr(sp);
+    else if (line.rfind("panelneed", 0) == 0 && sp != std::string::npos) key += line.substr(sp, line.find(' ', sp + 1) - sp);      // one line per panel
+    g_notes[key] = line;
 }
 
 void shellReport(int winW, int winH, float dpi, float textScale) {

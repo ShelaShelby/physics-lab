@@ -54,6 +54,9 @@ struct ViewSettings {
 
 // (dateLine, the line at the top left of the picture, is in orbit/card_text.h since 0.10.5 stage 5)
 
+// The Sun's colour in the picture (from its 5,772 K surface), in bytes: the new UI's Legend shows the same colour.
+void sunColourBytes(int rgb[3]);
+
 class OrbitView {
 public:
     // Draw one frame. The picture is width × height points, placed at (originX, originY)
@@ -81,6 +84,9 @@ public:
     double captionAlpha = 0;
     bool panMode = false;                        // 3D: dragging moves the view instead of turning it
     double cx = 0, cy = 0;                       // 0.15 stage 3: where a followed thing sits, from the middle of the picture, points (the centre shift keeps it out from under a card)
+    Card lastCard;                               // 0.15 stage 4, the new UI: the selected thing's card text as of the last frame (cardOk: there is one); the subject card and the data sheet use it
+    bool cardOk = false;
+    Selection cardSel;                           // the selection lastCard is for (the shell uses the card only when it is the current one)
     std::string scaleText, lightText;            // 0.15 stage 3: the scale bar's words ("1 AU" / "light takes 8.3 minutes"), kept for the readout
     // The selected thing's place on the picture (points) and its radius, as last drawn. False: nothing is selected, or it has no round mark.
     bool selectedScreen(double& x, double& y, double& r) const;

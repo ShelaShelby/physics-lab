@@ -39,6 +39,8 @@ struct Prefs {
     std::string motion = "auto";         // auto / on (reduced) / off (full)
     std::string newUi = "off";           // 0.15 stage 3: Settings → New UI (preview), on / off (off: the app is exactly the 0.14 layout)
     std::string shellPanels;             // 0.15 stage 3: the new UI's floating panels, collapsed or open ("card=c,legend=o")
+    std::string facts = "on";            // 0.15 stage 4: Settings → Facts, on / off: the fact line at the bottom left of the picture (new UI)
+    std::string recent;                  // 0.15 stage 4: the search's recent choices, newest first, ids joined by ";"
     std::string effects = "on";          // 0.14 stage 3: Theme effects, on / off (off: no page textures, glints, reflection, brackets or HUD decoration; colours, gloss and fonts stay)
     std::string units = "metric";        // metric / imperial
     std::string lang = "en";
