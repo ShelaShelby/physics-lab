@@ -50,6 +50,8 @@ struct ViewSettings {
     double minTextPx = 0;       // and never under this many pixels (the Caption floor, 12)
     double reserveBottom = 0;   // points kept clear at the bottom of the picture (the toolbar): the far-out note and the scale text sit above it
     double reserveRight = 0;    // points kept clear at the bottom right (the readout): the axes gizmo sits above it
+    double insetTop = 0;        // 0.15 stage 5c: points covered at the top (the top bar): ring labels are not drawn there
+    double insetRight = 0;      // points covered at the right (the Controls panel): the axes gizmo, the notes and the ring labels stay left of it
 };
 
 // (dateLine, the line at the top left of the picture, is in orbit/card_text.h since 0.10.5 stage 5)

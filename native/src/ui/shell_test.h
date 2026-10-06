@@ -16,6 +16,13 @@ struct AppState;
 
 void noteItem(const char* label);                       // call right after a widget: remembers its rectangle under its label (for PL_SCRIPT click=)
 void noteRect(const char* name, float x, float y, float w, float h);   // the same for a rectangle drawn by hand (window pixels)
+// The Controls panel scrolls. It tells the checks where its window is (noteScrollArea); a scripted click on a control of it that is scrolled out of view first asks the panel to scroll it in
+// (takeReveal / itemRect), and the click follows 1 frame later. Nothing here does anything without PL_SCRIPT.
+void noteScrollArea(float x, float y, float w, float h);
+void collectPanelItems(bool on);                        // between on and off, the controls noted belong to the Controls panel (only those are scrolled in)
+bool takeReveal(std::string& name);                     // a scripted click wants this control shown: true once
+bool itemRect(const std::string& name, float out[4]);
+void shiftItem(const std::string& name, float dy);     // the panel scrolled by -dy: the control's remembered place moves with it, so the click that follows next frame lands on it   // where a noted control was last frame
 void runScript(AppState& app, int frame, SDL_Window* window);          // called once per frame by main, before the events are read
 
 bool shellLogOn();                                      // PL_LOG_SHELL is set

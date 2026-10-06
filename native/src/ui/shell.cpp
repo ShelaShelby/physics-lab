@@ -61,6 +61,8 @@ struct State {
     std::vector<std::string> recent;                      // the search's recent choices, newest first
     bool recentLoaded = false;
     double anchorFactX = 0;
+    AppState* app = nullptr;                              // (stage 5c: the Controls panel's state lives in the settings, reached from the toolbar's callbacks)
+    std::string revealSection;                            // search or a toolbar panel's old name asked for this section: unfold it and scroll to it
 } S;
 
 const char* panelName(PanelId id) {
@@ -79,7 +81,24 @@ double widthEmOf(PanelId id) {
 }
 void toggle(PanelId id) { S.ui.open = S.ui.open == id ? PanelId::None : id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount(); }
 }  // namespace
-namespace shellimpl { void shellOpenPanel(PanelId id) { S.ui.open = id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount(); } }
+std::string controlsKey(const AppState& app, const char* what) { return std::string(app.lab == 0 ? "orbit." : "atom.") + what; }
+namespace shellimpl {
+bool controlsOpen() { return S.app && !panelCollapsed(S.app->prefs.shellPanels, controlsKey(*S.app, "controls"), false); }      // open by default; kept in the settings like the cards' state
+void controlsToggle() { if (S.app) S.app->prefs.shellPanels = withPanelState(S.app->prefs.shellPanels, controlsKey(*S.app, "controls"), controlsOpen()); }
+const char* controlsSectionOf(PanelId id) {
+    switch (id) { case PanelId::Speed: return "speed"; case PanelId::Show: return "show"; case PanelId::Pick: return "pick"; case PanelId::Scale: return "scale"; case PanelId::View: case PanelId::Nucleus: case PanelId::Cloud: return "view"; default: return ""; }
+}
+void shellOpenPanel(PanelId id) {
+    if (const std::string key = controlsSectionOf(id); !key.empty() && S.app) {     // the old toolbar panels are sections of the Controls panel now
+        S.app->prefs.shellPanels = withPanelState(S.app->prefs.shellPanels, controlsKey(*S.app, "controls"), false);
+        S.app->prefs.shellPanels = withPanelState(S.app->prefs.shellPanels, controlsKey(*S.app, (std::string("ctl.") + key).c_str()), false);
+        S.revealSection = key;
+        S.ui.open = PanelId::None; S.ui.search = false;
+        return;
+    }
+    S.ui.open = id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount();
+}
+}
 namespace {
 bool mouseIn(const Rect& r) { const ImVec2 mp = ImGui::GetIO().MousePos; return r.contains({mp.x, mp.y}); }
 constexpr float kOldPanelUnits = 360.0f;      // the old side column's width, in units (app/display_scale.h: kPanelWidthU)
@@ -155,7 +174,7 @@ void morePanel(sh::Panel& p, std::vector<ToolItem>& hidden, bool& close) {
         if (t.kind == ToolItem::Segment) {
             for (int i = 0; i < static_cast<int>(t.labels.size()); i++)
                 if (sh::pRow(p, (std::string(t.id) + "." + t.labels[i]).c_str(), t.labels[i] + " view", t.sel == i)) { t.pick(i); close = true; }
-            if (sh::pRow(p, (std::string(t.id) + ".opts").c_str(), "View options…")) { S.ui.open = t.panel; close = false; }
+            if (t.panel != PanelId::None && sh::pRow(p, (std::string(t.id) + ".opts").c_str(), "View options…")) { S.ui.open = t.panel; close = false; }
             continue;
         }
         if (t.kind == ToolItem::Split && sh::pRow(p, (std::string(t.id) + ".options").c_str(), t.tip + " (more choices)")) { S.ui.open = t.panel; close = false; continue; }
@@ -358,6 +377,7 @@ bool shellSpace(AppState& app, bool textInput) {
 void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     sh::beginFrame();
     auditFrame();
+    S.app = &app;
     if (!S.recentLoaded) { S.recent = unpackRecent(app.prefs.recent); S.recentLoaded = true; }
     setReadingMode(true);
     const sh::Frame& SF = sh::F();
@@ -384,19 +404,22 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     const double segW = std::max(sh::width(Type::Body, false, "2D"), sh::width(Type::Body, false, "3D")) + 2.0 * m.s12;
     std::vector<double> iw;
     for (const ToolItem& t : tools)
-        iw.push_back(t.kind == ToolItem::Sep ? m.s12 : t.kind == ToolItem::Menu || t.kind == ToolItem::Split ? m.toolBtn + m.caretW : t.kind == ToolItem::Segment ? 2 * segW + gap + m.caretW : m.toolBtn);
+        iw.push_back(t.kind == ToolItem::Sep ? m.s12 : t.kind == ToolItem::Menu || t.kind == ToolItem::Split ? m.toolBtn + m.caretW : t.kind == ToolItem::Segment ? 2 * segW + gap + (t.panel != PanelId::None ? m.caretW : 0) : m.toolBtn);
     const int count = static_cast<int>(tools.size());
     const bool hasToolbar = count > 0;
-    const int shown = toolbarVisible(iw, gap, m.toolBtn, W, m);
+    const bool paneOpen = app.pane != 0;                  // the Learn or Achievements page covers the lab: only the top bar stays
+    const double dockW = controlsOpen() && !paneOpen ? dockWidth(m, W) : 0;
+    const double freeW0 = dockW > 0 ? W - m.s12 - dockW : W;     // the width left of the Controls panel: the toolbar is centred in it
+    const int shown = toolbarVisible(iw, gap, m.toolBtn, freeW0, m);
     double tw = 2.0 * m.s8;
     for (int i = 0; i < shown; i++) tw += iw[i] + (i ? gap : 0);
     if (shown < count) tw += (shown ? gap : 0) + m.toolBtn;
     if (!hasToolbar) tw = m.toolBtn;
     const std::vector<std::string> ro = readoutLines(app, fps);
     double rw = 0;
-    for (const std::string& l : ro) rw = std::max(rw, static_cast<double>(sh::width(Type::Caption, false, l)));
-    const double rh = ro.size() * sh::lineH(Type::Caption);
-    const Frame fr = makeFrame(W, H, m, tw, rw + 2.0 * m.s4, rh);
+    for (const std::string& l : ro) rw = std::max(rw, static_cast<double>(sh::width(Type::Body, false, l)));
+    const double rh = ro.empty() ? 0.0 : ro.size() * sh::lineH(Type::Body) + 2.0 * m.s4;       // (stage 5c: Body size on a pill, padded 8 u and 4 u)
+    const Frame fr = makeFrame(W, H, m, tw, rw + 2.0 * m.s8, rh, dockW);
     S.topBarH = static_cast<float>(m.topBar);
 
     // the top bar's pieces
@@ -418,6 +441,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     const TopBarPlan plan = planTopBar(W, m, tbw);
 
     std::vector<Rect> occ{fr.topBar};
+    if (fr.dock.w > 0) occ.push_back(fr.dock);            // the Controls panel is an occluder like the others: the centre shift, the fact line and the dropdowns keep clear of it
     std::vector<Rect> cards;                              // the floating cards (the Legend, the subject card): a panel that opens over one steps aside
     if (hasToolbar) occ.push_back(fr.toolbar);
     std::string log;
@@ -458,7 +482,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         auditNote(std::string("cardtitle ") + name + " " + title + (collapsed ? " collapsed" : " open"));
         return r;
     };
-    const bool pane = app.pane != 0;                      // the Learn or Achievements page covers the lab: only the top bar stays
+    const bool pane = paneOpen;
     if (app.lab == 0 && !pane) {
         card("legend", "Legend", Anchor::TopLeft, 22, true, [&](sh::Panel& p) {
             const std::vector<LegendEntry> legend = legendEntries(app);              // (worked out only while the legend is open)
@@ -538,9 +562,11 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                     if (sh::segmented(t.id, ImVec2(x, sy), static_cast<float>(2 * segW), t.labels, &sel)) t.pick(sel);
                     noteRect((std::string(t.id) + ".2d").c_str(), x, sy, static_cast<float>(segW), static_cast<float>(m.row));
                     noteRect((std::string(t.id) + ".3d").c_str(), x + static_cast<float>(segW), sy, static_cast<float>(segW), static_cast<float>(m.row));
-                    const float cx = x + static_cast<float>(2 * segW + gap);
-                    S.anchorX[t.panel] = cx + m.caretW / 2.0;
-                    if (sh::iconButton((std::string(t.id) + ".caret").c_str(), ImVec2(cx, y), ImVec2(static_cast<float>(m.caretW), static_cast<float>(m.toolBtn)), Icon::Caret, "View options", S.ui.open == t.panel)) toggle(t.panel);
+                    if (t.panel != PanelId::None) {
+                        const float cx = x + static_cast<float>(2 * segW + gap);
+                        S.anchorX[t.panel] = cx + m.caretW / 2.0;
+                        if (sh::iconButton((std::string(t.id) + ".caret").c_str(), ImVec2(cx, y), ImVec2(static_cast<float>(m.caretW), static_cast<float>(m.toolBtn)), Icon::Caret, "View options", S.ui.open == t.panel)) toggle(t.panel);
+                    }
                 }
                 x += w + static_cast<float>(gap);
             }
@@ -553,18 +579,72 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         auditRect("toolbar", static_cast<float>(fr.toolbar.x), static_cast<float>(fr.toolbar.y), static_cast<float>(fr.toolbar.w), static_cast<float>(fr.toolbar.h));
     }
 
-    // ---- the readout, bottom right: no box, an outline on the text so it reads over anything (its own window, so a saved picture does not carry it) ----
-    if (!pane) {
+    // ---- the readout, bottom right: Body size on a soft dark pill (stage 5c; before it was Caption with an outline and was hard to read over lines and stars). Its own window, so a saved picture does not carry it ----
+    if (!pane && !ro.empty()) {
         sh::Panel ropanel;
         if (sh::beginPanel("##shellRO", fr.readout, ropanel, sh::Shape::Overlay, false)) {
+            const ImVec2 a(static_cast<float>(fr.readout.x), static_cast<float>(fr.readout.y)), b(static_cast<float>(fr.readout.right()), static_cast<float>(fr.readout.bottom()));
+            ropanel.dl->AddRectFilled(a, b, ui::col(app::Rgb{0, 0, 0}, kReadoutAlpha), static_cast<float>(ro.size() > 1 ? m.radiusPanel : fr.readout.h / 2));
+            const ImU32 tc = ui::col(readoutText(*sh::F().c), 1.0f);
             for (std::size_t i = 0; i < ro.size(); i++) {
-                const float tw2 = sh::width(Type::Caption, false, ro[i]);
-                sh::outlined(ropanel.dl, Type::Caption, ImVec2(ropanel.origin.x + static_cast<float>(fr.readout.w) - tw2 - m.s4, ropanel.origin.y + i * sh::lineH(Type::Caption)), sh::cText(), sh::cShadow(kShadowAlpha), ro[i]);
+                const float tw2 = sh::width(Type::Body, false, ro[i]);
+                sh::text(ropanel.dl, Type::Body, false, ImVec2(b.x - m.s8 - tw2, a.y + m.s4 + i * sh::lineH(Type::Body)), tc, ro[i]);
             }
+            auditText("readout", sh::px(Type::Body), ro[0]);
             ImGui::End();
         }
         auditRect("readout", static_cast<float>(fr.readout.x), static_cast<float>(fr.readout.y), static_cast<float>(fr.readout.w), static_cast<float>(fr.readout.h));
     }
+
+    // ---- the Controls panel (stage 5c, owner's decision of 6 Oct 2026): every simulation option in ONE docked panel on the right, in sections that fold. It floats over the full-window picture, under the
+    // top bar, full height, about 22 em wide, and scrolls inside. The bottom toolbar and the readout sit left of it. The chip's dropdowns and the app's settings are not in it. ----
+    if (fr.dock.w > 0) {
+        sh::Panel cp;
+        const std::string openKey = controlsKey(app, "controls");
+        if (sh::beginPanel("##shellControls", fr.dock, cp, sh::Shape::Panel, true)) {
+            const float hb = static_cast<float>(m.iconBtn);
+            {   // the title and its close button
+                const ImVec2 o = sh::here(cp);
+                if (sh::iconButton("ctl.close", ImVec2(o.x + cp.w - hb, o.y), ImVec2(hb, hb), Icon::Close, "Close the Controls panel (the Controls button on the toolbar opens it again)")) app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, openKey, true);
+                sh::text(cp.dl, Type::Title, true, o, sh::cText(), "Controls");
+                cp.y += std::max(sh::lineH(Type::Title), hb) + m.s4;
+            }
+            const SectionFn section = [&](const char* key, const char* title, bool defOpen) {
+                const std::string name = controlsKey(app, (std::string("ctl.") + key).c_str());
+                const bool was = panelCollapsed(app.prefs.shellPanels, name, !defOpen);
+                bool collapsed = was;
+                const bool revealed = S.revealSection == key;
+                if (revealed) collapsed = false;
+                const ImVec2 o = sh::here(cp);
+                if (cp.y > m.s16 + hb) sh::pRule(cp);
+                if (sh::row((std::string("ctl.sec.") + key).c_str(), sh::here(cp), cp.w, title, false)) collapsed = !collapsed;
+                const ImVec2 h = sh::here(cp);
+                sh::drawIcon(cp.dl, collapsed ? Icon::Caret : Icon::CaretUp, ImVec2(h.x + cp.w - m.s12 - m.caretW / 2.0f, h.y + m.row / 2.0f), m.caretW * 0.75f, sh::cMuted());
+                (void)o;
+                if (revealed) { ImGui::SetScrollY(ImGui::GetScrollY() + h.y - static_cast<float>(fr.dock.y) - m.s12); S.revealSection.clear(); }
+                cp.y += m.row + m.s4;
+                if (collapsed != was) app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, name, collapsed);
+                return !collapsed;
+            };
+            collectPanelItems(true);
+            if (app.lab == 0) orbitControls(app, cp, section); else atomControls(app, cp, section);
+            collectPanelItems(false);
+            std::string want;
+            if (takeReveal(want)) {
+                float r[4];
+                if (itemRect(want, r)) {
+                    const float cur = ImGui::GetScrollY(), to = std::min(ImGui::GetScrollMaxY(), std::max(0.0f, cur + r[1] - static_cast<float>(fr.dock.y) - static_cast<float>(fr.dock.h) * 0.3f));
+                    ImGui::SetScrollY(to);
+                    shiftItem(want, -(to - cur));
+                }
+            }
+            const float need = sh::endPanel(cp);
+            { char nb[96]; std::snprintf(nb, sizeof nb, "panelneed controls need=%.0f have=%.0f", need, static_cast<float>(fr.dock.h)); auditNote(nb); }
+        }
+        noteScrollArea(static_cast<float>(fr.dock.x), static_cast<float>(fr.dock.y), static_cast<float>(fr.dock.w), static_cast<float>(fr.dock.h));
+        auditRect("panel.controls", static_cast<float>(fr.dock.x), static_cast<float>(fr.dock.y), static_cast<float>(fr.dock.w), static_cast<float>(fr.dock.h));
+        auditNote("panelopen controls");
+    } else noteScrollArea(0, 0, 0, 0);
 
     // ---- the top bar ----
     {
@@ -718,9 +798,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     // ---- the temporary Old panel: today's side column, floating, until stages 4 and 5 move its controls ----
     if (app.lab == 0) app.showOldPanel = false;                        // the Orbit Lab has no Old panel any more
     if (app.showOldPanel) {
-        const float pw = std::min(kOldPanelUnits * dpi, static_cast<float>(W - 2.0 * m.s12)), top = static_cast<float>(fr.topBar.bottom() + m.s12);
+        const float pw = std::min(kOldPanelUnits * dpi, static_cast<float>(fr.freeW - 2.0 * m.s12)), top = static_cast<float>(fr.topBar.bottom() + m.s12);
         const float ph = static_cast<float>(H) - top - static_cast<float>(m.s12);
-        const float px0 = static_cast<float>(W) - m.s12 - pw;
+        const float px0 = static_cast<float>(fr.dock.w > 0 ? fr.dock.x : W) - m.s12 - pw;     // (stage 5c: left of the Controls panel when it is open)
         if (app.lab == 0) orbitPanelFloating(app, &app.showOldPanel, px0, top, pw, ph); else atomPanelFloating(app, &app.showOldPanel, px0, top, pw, ph);
         if (ImGuiWindow* w = ImGui::FindWindowByName("Old panel###oldpanel"))
             if (w->WasActive) { const Rect r{w->Pos.x, w->Pos.y, w->Size.x, w->Size.y}; occ.push_back(r); auditRect("panel.old", static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.w), static_cast<float>(r.h)); }
@@ -761,6 +841,8 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     app.set.shell = true;
     app.set.minTextU = typeDef(Type::Caption).u; app.set.minTextPx = typeDef(Type::Caption).floorPx;
     app.set.reserveBottom = (H - fr.toolbar.y) / dpi + 8;
+    app.set.insetTop = fr.topBar.h / dpi + 4;                         // (stage 5c: the picture draws no ring label under the top bar or the Controls panel)
+    app.set.insetRight = (W - fr.freeW) / dpi;
     app.set.reserveRight = (H - fr.readout.y) / dpi + 8;
     for (const Rect& r : occ) { char b[96]; std::snprintf(b, sizeof b, "occ%zu", static_cast<std::size_t>(&r - &occ[0])); auditRect(b, static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.w), static_cast<float>(r.h)); }
     auditNote("metrics body=" + std::to_string(m.body) + " caption=" + std::to_string(m.caption) + " title=" + std::to_string(m.title) + " key=" + std::to_string(m.key) + " control=" + std::to_string(m.control) + " topbar=" + std::to_string(m.topBar));

@@ -25,14 +25,9 @@ std::vector<ToolItem> atomTools(AppState& app) {
         it.act = [&L, t] { atom::pressTool(L, t); };
         v.push_back(it);
     };
-    const auto split = [&](const char* id, const char* tip, Icon icon, Tool t, PanelId panel) {   // the button acts; its caret opens the small panel
-        ToolItem it; it.kind = ToolItem::Split; it.id = id; it.tip = tip; it.icon = icon; it.on = atom::toolOn(L, t); it.panel = panel;
-        it.act = [&L, t] { atom::pressTool(L, t); };
-        v.push_back(it);
-    };
     button("tool.atom", "Atom: the electron and the whole atom (Orbit view)", Icon::Atom, Tool::Atom);
-    split("tool.nucleus", "Nucleus: zoom to the nucleus; the arrow: Nucleus or Nucleon", Icon::Nucleus, Tool::Nucleus, PanelId::Nucleus);
-    split("tool.cloud", "Cloud: the electron as a probability cloud; the arrow: Cloud, Cloud 3D or Slice", Icon::Cloud, Tool::Cloud, PanelId::Cloud);
+    button("tool.nucleus", "Nucleus: zoom to the nucleus (Nucleon, one proton or neutron: Controls › View)", Icon::Nucleus, Tool::Nucleus);
+    button("tool.cloud", "Cloud: the electron as a probability cloud (Cloud 3D and Slice: Controls › View)", Icon::Cloud, Tool::Cloud);
     button("tool.chart", "Chart of nuclides: every nuclide on one map", Icon::Chart, Tool::Chart);
     v.push_back(separator());
     button("tool.reset", L.chartOn() ? "Reset view: tilt, zoom and position of the chart" : "Reset view: turn the picture back", Icon::Reset, Tool::ResetView);
@@ -41,14 +36,16 @@ std::vector<ToolItem> atomTools(AppState& app) {
         const bool move = L.s.dragMode == "move";
         button("tool.drag", move ? "Drag moves the picture (click: drag rotates)" : L.p.view == "Slice" ? "Drag slides the cut (click: drag moves the picture)" : "Drag rotates (click: drag moves the picture)", Icon::Move, Tool::DragMode);
     }
+    ToolItem ctl; ctl.kind = ToolItem::Button; ctl.id = "tool.controls"; ctl.tip = "Controls: the view choices (more of the Atom Lab's options move here in the next stages)"; ctl.icon = Icon::Sliders; ctl.on = controlsOpen();
+    ctl.act = [] { controlsToggle(); };
+    v.push_back(separator());
+    v.push_back(ctl);
     return v;
 }
 
 double atomPanelWidthEm(PanelId id) {
     switch (id) {
     case PanelId::Chip: return 38;    // the element dropdown: 18 columns of cells of at least 28 u (18 x 28 + 17 x 2 + 2 x 16 padding = 570 u = 38 em of Body)
-    case PanelId::Nucleus: return 18;
-    case PanelId::Cloud: return 18;
     default: return 0;
     }
 }
@@ -69,7 +66,7 @@ static bool stepperRow(Panel& p, const char* id, int v, int lo, int hi, int* out
     return changed;
 }
 
-bool buildAtomPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
+bool buildAtomPanel(PanelId id, AppState& app, Panel& p, bool& /*closeAfter*/) {
     atom::AtomLab& L = app.atom;
     const Metrics& m = F().m;
     switch (id) {
@@ -117,24 +114,28 @@ bool buildAtomPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
         }
         return true;
     }
-    case PanelId::Nucleus: {
-        pTitle(p, "Nucleus");
-        if (pRow(p, "nucleus.nucleus", "Nucleus", atom::toolOn(L, Tool::Nucleus) && !atom::toolOn(L, Tool::Nucleon))) { atom::pressTool(L, Tool::Nucleus); closeAfter = true; }
-        if (pRow(p, "nucleus.nucleon", "Nucleon (one proton or neutron)", atom::toolOn(L, Tool::Nucleon))) { atom::pressTool(L, Tool::Nucleon); closeAfter = true; }
+    default: return false;
+    }
+}
+
+
+// ---- the Controls panel (stage 5c): what the Nucleus ▾ and Cloud ▾ panels held, in a "View" section. The other Atom controls are still in the Old panel (they move in 5d and 5e). ----
+void atomControls(AppState& app, Panel& p, const SectionFn& section) {
+    atom::AtomLab& L = app.atom;
+    const Metrics& m = F().m;
+    if (section("view", "View", true)) {
+        pHeading(p, "Nucleus");
+        if (pRow(p, "nucleus.nucleus", "Nucleus", atom::toolOn(L, Tool::Nucleus) && !atom::toolOn(L, Tool::Nucleon))) { atom::pressTool(L, Tool::Nucleus); }
+        if (pRow(p, "nucleus.nucleon", "Nucleon (one proton or neutron)", atom::toolOn(L, Tool::Nucleon))) { atom::pressTool(L, Tool::Nucleon); }
         pCaption(p, "Zoom in to a nucleon and click one to dive inside it.");
         if (atom::toolShown(L, Tool::BuildAnother) && pButton(p, "nucleus.build", "Build another")) atom::pressTool(L, Tool::BuildAnother);
         if (atom::toolShown(L, Tool::Reshuffle) && pButton(p, "nucleus.reshuffle", "Reshuffle nucleons")) atom::pressTool(L, Tool::Reshuffle);
-        return true;
-    }
-    case PanelId::Cloud: {
-        pTitle(p, "Cloud");
-        if (pRow(p, "cloud.cloud", "Cloud (side view)", L.p.view == "Cloud")) { atom::pressTool(L, Tool::Cloud); closeAfter = true; }
-        if (pRow(p, "cloud.cloud3d", "Cloud 3D (turn it with the mouse)", L.p.view == "Cloud 3D")) { atom::pressTool(L, Tool::Cloud3D); closeAfter = true; }
-        if (pRow(p, "cloud.slice", "Slice (cross-section of the cloud)", L.p.view == "Slice")) { atom::pressTool(L, Tool::Slice); closeAfter = true; }
+        pGap(p, m.s8);
+        pHeading(p, "Cloud");
+        if (pRow(p, "cloud.cloud", "Cloud (side view)", L.p.view == "Cloud")) { atom::pressTool(L, Tool::Cloud); }
+        if (pRow(p, "cloud.cloud3d", "Cloud 3D (turn it with the mouse)", L.p.view == "Cloud 3D")) { atom::pressTool(L, Tool::Cloud3D); }
+        if (pRow(p, "cloud.slice", "Slice (cross-section of the cloud)", L.p.view == "Slice")) { atom::pressTool(L, Tool::Slice); }
         pCaption(p, "Each dot is one possible place to find the electron (one electron, non-relativistic model).");
-        return true;
-    }
-    default: return false;
     }
 }
 

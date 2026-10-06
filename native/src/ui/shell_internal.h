@@ -33,6 +33,15 @@ std::vector<ToolItem> orbitTools(AppState& app);
 std::vector<ToolItem> atomTools(AppState& app);
 
 // What the Orbit Lab's panels hold (layout is by ui/shell.cpp). closeAfter is set by a panel that wants to close once something was chosen. False / 0: not an Orbit panel.
+// The Controls panel (stage 5c): one docked panel on the right with every simulation option, in sections that fold. `section` draws a section's header and says whether its body is shown;
+// the lab's function draws the bodies it is told to show. The state of the panel itself (open, sections) lives in ui/shell.cpp.
+using SectionFn = std::function<bool(const char* key, const char* title, bool defOpen)>;
+void orbitControls(AppState& app, sh::Panel& p, const SectionFn& section);
+void atomControls(AppState& app, sh::Panel& p, const SectionFn& section);
+bool controlsOpen();
+void controlsToggle();
+const char* controlsSectionOf(PanelId id);       // the section an old toolbar panel's contents moved to ("" if it did not move)
+
 double orbitPanelWidthEm(PanelId id);
 bool buildOrbitPanel(PanelId id, AppState& app, sh::Panel& p, bool& closeAfter);
 // The same for the Atom Lab's two toolbar panels (ui/shell_atom.cpp)

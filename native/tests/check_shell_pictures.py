@@ -22,7 +22,7 @@ def rgb(h):
     h = h.lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
-SCREENS = {"closed": {"PL_SELECT": "Earth"}, "time": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=top.chip"}, "show": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=tool.show"},
+SCREENS = {"closed": {"PL_SELECT": "Earth"}, "time": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=top.chip"}, "nocontrols": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=ctl.close"},
            "sheet": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=card.all"}, "search": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:key=ctrl+k;16:text=moo"}, "about": {"PL_OPEN": "about"}}
 SIZES = ("1280x800", "1000x640")
 THEMES = ("dark", "aero", "y2knight", "light")
@@ -41,14 +41,14 @@ def main():
             fails += 1
             print("FAIL", what)
     prefetch([((binary, work, f"glass_{t}_closed", {"PL_NEWUI": "on"}), dict(frames=40, size="1000x640", theme=t)) for t in GLASS] +
-             [((binary, work, f"glass_{t}_open", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=tool.speed"}), dict(frames=40, size="1000x640", theme=t)) for t in GLASS] +
+             [((binary, work, f"glass_{t}_open", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.chip"}), dict(frames=40, size="1000x640", theme=t)) for t in GLASS] +
              [((binary, work, f"shell_{scr}_{t}_{sz}", dict({"PL_NEWUI": "on"}, **extra)), dict(frames=40, size=sz, theme=t)) for t in THEMES for sz in SIZES for scr, extra in SCREENS.items()])
     # ---- glass ----
     for theme, (card, a) in GLASS.items():
         base = run_app(binary, work, f"glass_{theme}_closed", {"PL_NEWUI": "on"}, frames=40, size="1000x640", theme=theme)
-        open_ = run_app(binary, work, f"glass_{theme}_open", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=tool.speed"}, frames=40, size="1000x640", theme=theme)
-        r = open_.rects.get("panel.speed")
-        check(r is not None, f"{theme}: the Time speed panel is open")
+        open_ = run_app(binary, work, f"glass_{theme}_open", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.chip"}, frames=40, size="1000x640", theme=theme)
+        r = open_.rects.get("panel.chip")
+        check(r is not None, f"{theme}: the Time panel is open")
         if r is None:
             continue
         b0, b1 = Bmp(base.bmp), Bmp(open_.bmp)

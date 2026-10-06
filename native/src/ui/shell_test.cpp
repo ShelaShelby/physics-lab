@@ -19,6 +19,10 @@ namespace ui {
 namespace {
 
 struct Rect4 { float x = 0, y = 0, w = 0, h = 0; };
+bool g_collect = false;
+std::set<std::string> g_panelItems;                       // the names of the Controls panel's controls
+Rect4 g_scroll;                                          // the Controls panel's window (0 when it is not shown)
+std::string g_reveal;
 std::map<std::string, Rect4> g_items;                   // name -> where it was last frame (window pixels)
 std::set<std::string> g_texts;                          // "kind px text" lines, each once
 std::map<std::string, Rect4> g_rects;
@@ -86,6 +90,17 @@ void noteItem(const char* label) {
     if (!scriptText() && !shellLogOn()) return;
     const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
     g_items[keyOf(label)] = {a.x, a.y, b.x - a.x, b.y - a.y};
+    if (g_collect) g_panelItems.insert(keyOf(label));
+}
+void collectPanelItems(bool on) { g_collect = on; }
+void noteScrollArea(float x, float y, float w, float h) { g_scroll = {x, y, w, h}; }
+bool takeReveal(std::string& name) { if (g_reveal.empty()) return false; name = g_reveal; g_reveal.clear(); return true; }
+void shiftItem(const std::string& name, float dy) { const auto it = g_items.find(name); if (it != g_items.end()) it->second.y += dy; }
+bool itemRect(const std::string& name, float out[4]) {
+    const auto it = g_items.find(name);
+    if (it == g_items.end()) return false;
+    out[0] = it->second.x; out[1] = it->second.y; out[2] = it->second.w; out[3] = it->second.h;
+    return true;
 }
 void noteRect(const char* name, float x, float y, float w, float h) {
     if (!scriptText() && !shellLogOn()) return;
@@ -98,7 +113,10 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
     struct Step { float x, y; int what; };
     static std::map<int, std::vector<Step>> pending;
     if (auto it = pending.find(frame); it != pending.end()) { for (const Step& st : it->second) pushMouse(window, st.x, st.y, st.what); pending.erase(it); }
-    for (const Cmd& c : cmds) {
+    static std::vector<Cmd> later;                          // clicks held back until the Controls panel has scrolled the control into view
+    std::vector<Cmd> all = cmds;
+    all.insert(all.end(), later.begin(), later.end());
+    for (const Cmd& c : all) {
         if (c.frame != frame) continue;
         const std::string& w = c.what;
         const std::size_t eq = w.find('=');
@@ -113,6 +131,15 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
                 const std::size_t at = name.rfind('@');
                 if (at != std::string::npos) { frac = std::atof(name.substr(at + 1).c_str()); name = name.substr(0, at); }
                 const auto it = g_items.find(name);
+                if (it != g_items.end() && verb == "click" && g_scroll.w > 0 && g_panelItems.count(name)) {       // in the Controls panel but scrolled out of view: scroll it in, click later
+                    const Rect4& r0 = it->second;
+                    const float cy = r0.y + r0.h / 2;
+                    if (cy < g_scroll.y || cy > g_scroll.y + g_scroll.h) {
+                        g_reveal = name;
+                        later.push_back({frame + 1, "click=" + arg});
+                        continue;
+                    }
+                }
                 if (it != g_items.end()) {
                     const Rect4& r = it->second;
                     y = r.y + r.h / 2;

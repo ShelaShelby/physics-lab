@@ -51,14 +51,18 @@ Rect clampInto(Rect r, const Rect& b) {
 }
 
 // ---- the fixed pieces ----
-Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH) {
+double dockWidth(const Metrics& m, double winW) { return std::max<double>(m.em(12), std::min<double>(m.em(22), winW * 0.45)); }
+
+Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW) {
     Frame f;
     f.window = {0, 0, winW, winH};
     f.topBar = {0, 0, winW, static_cast<double>(m.topBar)};
-    const double tw = std::min(toolbarW, winW - 2.0 * m.s12);
-    f.toolbar = {(winW - tw) / 2, winH - m.s12 - m.toolbarH, tw, static_cast<double>(m.toolbarH)};
-    const double rw = std::min(readoutW, winW - 2.0 * m.s12);
-    f.readout = {winW - m.s12 - rw, winH - m.s12 - readoutH, rw, readoutH};
+    if (dockW > 0) f.dock = {winW - m.s12 - dockW, m.topBar + static_cast<double>(m.s8), dockW, winH - m.topBar - m.s8 - m.s12};
+    f.freeW = dockW > 0 ? f.dock.x : winW;
+    const double tw = std::min(toolbarW, f.freeW - 2.0 * m.s12);
+    f.toolbar = {(f.freeW - tw) / 2, winH - m.s12 - m.toolbarH, tw, static_cast<double>(m.toolbarH)};
+    const double rw = std::min(readoutW, f.freeW - 2.0 * m.s12);
+    f.readout = {f.freeW - m.s12 - rw, winH - m.s12 - readoutH, rw, readoutH};
     if (f.readout.inflated(m.s8).intersects(f.toolbar)) f.readout.y = f.toolbar.y - m.s8 - readoutH;   // no room beside the toolbar: just above it
     return f;
 }
@@ -98,7 +102,7 @@ TopBarPlan planTopBar(double winW, const Metrics& m, const TopBarWidths& w) {
 
 // ---- floating panels ----
 Rect placePanel(Anchor a, double w, double h, const Frame& f, const Metrics& m, double anchorX) {
-    const double W = f.window.w, top = f.topBar.bottom();
+    const double W = f.freeW > 0 ? f.freeW : f.window.w, top = f.topBar.bottom();     // (stage 5c: left of the Controls panel when it is open)
     w = std::max(1.0, std::min(w, W - 2.0 * m.s12));
     Rect r{0, 0, w, h};
     switch (a) {
@@ -128,7 +132,7 @@ Rect placePanel(Anchor a, double w, double h, const Frame& f, const Metrics& m, 
         break;
     }
     r.h = std::max(1.0, r.h);
-    return clampInto(r, f.window);
+    return clampInto(r, Rect{f.window.x, f.window.y, W, f.window.h});
 }
 
 Rect sideStep(Rect r, const Rect& blocker, const Rect& window, double gap, double margin) {
@@ -341,10 +345,20 @@ Rect factLineRect(const Frame& f, const Metrics& m, double textW) {
     else {                                                                   // no room beside the toolbar: one row above it, left of the readout
         r.y = f.toolbar.y - m.s8 - h;
         const bool nearReadout = f.readout.y < r.y + h && f.readout.bottom() > r.y;
-        const double limit = nearReadout ? f.readout.x - m.s16 : f.window.right() - m.s12;
+        const double limit = nearReadout ? f.readout.x - m.s16 : (f.freeW > 0 ? f.freeW : f.window.right()) - m.s12;
         r.w = std::max(1.0, std::min(wanted, limit - x0));
     }
-    return clampInto(r, f.window);
+    return clampInto(r, Rect{f.window.x, f.window.y, f.freeW > 0 ? f.freeW : f.window.w, f.window.h});
+}
+
+double readoutContrast(const Rgb& t) {
+    const Rgb black{0, 0, 0}, white{1, 1, 1};
+    return std::min(contrastRatio(t, over(black, kReadoutAlpha, black)), contrastRatio(t, over(black, kReadoutAlpha, white)));
+}
+Rgb readoutText(const ThemeColors& c) {
+    if (readoutContrast(c.muted) >= 4.5) return c.muted;
+    if (readoutContrast(c.fg) >= 4.5) return c.fg;
+    return Rgb{1, 1, 1};
 }
 
 Rgb textShadow(const ThemeColors& c) {

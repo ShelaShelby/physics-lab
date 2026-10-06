@@ -19,6 +19,7 @@
 #include "orbit/date_text.h"
 #include "orbit/format.h"
 #include "orbit/kepler.h"
+#include "orbit/label_clip.h"
 #include "orbit/real_errors.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
@@ -74,7 +75,42 @@ static void runSteps(SolarSystem& sys, double tspeed, int steps) {
 #include "rock_reference.h"
 #include "test_rocks.inc"   // 0.13 stage 4 part A: the belt rocks against Kepler's equation as the textbook has it
 
+// 0.15 stage 5c, bug fix A: which labels the picture may draw under the bars. WRITTEN BEFORE the code. References: plain geometry (a rectangle is clear when it lies wholly inside the free area)
+// and the owner's screenshot: at a far zoom-out the ring label "6,500,000,000 AU · 103,000 light years" sat on the breadcrumb in the top bar.
+static void testLabelClear() {
+    using namespace orbit;
+    const double W = 1280, H = 800;
+    const LabelInsets in{48, 60, 340};                                       // a top bar of 44 + 4, the toolbar band, the Controls panel
+    const LabelBox b = labelBox(500, 300, 100, 10, 0.5);                      // a centred 100-wide, 10-high label
+    near(b.x0, 450, 1, 1e-12, "label box: centred on x"); near(b.x1, 550, 1, 1e-12, "label box: 100 wide");
+    check(b.y0 < 300 && b.y1 > 300 && b.y1 - b.y0 > 10 && b.y1 - b.y0 < 15, "label box: reaches above and a little below the baseline, about one size high");
+    check(labelBox(500, 300, 100, 10, 0).x0 == 500, "label box: align 0 starts at x");
+    check(labelClear(labelBox(500, 300, 100, 10, 0.5), W, H, in), "a label in the middle is drawn");
+    check(!labelClear(labelBox(500, 50, 100, 10, 0.5), W, H, in), "a label whose top reaches into the top bar band is skipped");
+    check(!labelClear(labelBox(500, 20, 100, 10, 0.5), W, H, in), "a label inside the top bar is skipped");
+    check(labelClear(labelBox(500, 48 + 0.95 * 10 + 0.01, 100, 10, 0.5), W, H, in), "a label just under the band is drawn");
+    check(!labelClear(labelBox(500, 745, 100, 10, 0.5), W, H, in), "a label reaching into the toolbar band is skipped");
+    check(!labelClear(labelBox(W - 340 - 30, 300, 100, 10, 0.5), W, H, in), "a label reaching under the Controls panel is skipped");
+    check(labelClear(labelBox(W - 340 - 60, 300, 100, 10, 0.5), W, H, in), "a label just left of the Controls panel is drawn");
+    check(labelClear(labelBox(W - 20, 300, 100, 10, 0.5), W, H, LabelInsets{}), "no insets (the old layout): a label at the window's edge is drawn as before");
+    check(labelClear(labelBox(500, 5, 100, 10, 0.5), W, H, LabelInsets{0, 0, 0}) && labelClear(labelBox(500, H, 100, 10, 0.5), W, H, LabelInsets{0, 0, 0}), "no insets: nothing is skipped, even half off the window");
+    // the far zoom-out case: rings of 55 px steps out to the corner, labelled at the angle -0.8 rad about the Sun at the window's middle, the widest label ("6,500,000,000 AU · 103,000 light years", about 215 px at size 10)
+    int drawn = 0, skipped = 0;
+    for (double centreY : {400.0, 60.0, 30.0}) {                              // the Sun in the middle, near the top bar, and under it
+        for (int k = 1; k * 55.0 <= std::hypot(W, H); k++) {
+            const double R = k * 55.0, x = W / 2 + R * std::cos(-0.8), y = centreY + R * std::sin(-0.8) + 3;
+            const LabelBox lb = labelBox(x, y, 215, 10, 0.5);
+            if (labelClear(lb, W, H, in)) {
+                drawn++;
+                check(lb.y0 >= in.top && lb.y1 <= H - in.bottom && lb.x1 <= W - in.right, "far zoom-out: a ring label that is drawn is inside the free area");
+            } else skipped++;
+        }
+    }
+    check(drawn > 0 && skipped > 0, "far zoom-out: some ring labels are drawn and some are skipped (the ones in the bands)");
+}
+
 int main() {
+    testLabelClear();
     testRockKepler();
     // 1) Kepler's equation
     for (const auto& k : ref::kKepler) {

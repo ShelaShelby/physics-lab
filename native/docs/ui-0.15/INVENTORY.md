@@ -13,6 +13,8 @@ Made by reading the source (`orbit_panel.cpp`, `atom_panel.cpp`, `journey_dates.
 - **Reach** = clicks to make the control usable: 0 = already on screen, 1 = one click opens it (a chip, a caret panel, a window), 2 = two clicks. **Nothing is more than 2.** "One click away" means reach ≤ 1. Panels open on click and close on a click outside, Esc, or when another opens.
 - **Default**: Y = visible without any click; ✓ = after one click; — = only when relevant (a selection, a view, a state).
 
+**Stage 5c (6 Oct 2026, owner's decision, DECISIONS.md): a new home, CTRL = a section of the Controls panel** (one docked panel on the right, both labs, open by default, a Controls button on the toolbar opens / closes it; reach 0 while it is open, 1 when closed; the Pick a body section starts folded: reach 1). Wherever the tables below say **TOOL speed ▾ / show ▾ / pick a body ▾ / scale ▾ / the 2D/3D caret (View options)** read **CTRL Time speed / Show / Pick a body / Zoom, sizes and trails / View options**; the toolbar keeps 2D / 3D and gains a one-click **Reset view**. In the Atom Lab **TOOL Nucleus ▾ (Nucleon level, Build another, Reshuffle) and Cloud ▾ (Cloud, Cloud 3D, Slice)** read **CTRL View**; the Nucleus and Cloud buttons stay one click. Reach never gets worse (a reach-1 caret panel is reach 0 or 1 now).
+
 ## 1. Orbit Lab (today: the side column "Controls", the picture and its overlays)
 | Today (where) | New home | Reach | Default |
 |---|---|---|---|

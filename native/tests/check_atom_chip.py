@@ -115,10 +115,10 @@ def main():
         check(words in [t for _, _, t in re_.texts], f"E: Z={z} N={n} says '{words}'")
 
     # ---- F: Build another and Reshuffle live in the Nucleus panel, in the nucleus view only; no longer in the Old panel ----
-    rf = go("chip_f", "70:click=tool.nucleus.caret;76:click=nucleus.reshuffle;82:state", {"PL_ATOM_SET": "Z=6;N=6", "PL_ATOM_DO": "nucleus"}, frames=96)
+    rf = go("chip_f", "76:click=nucleus.reshuffle;82:state", {"PL_ATOM_SET": "Z=6;N=6", "PL_ATOM_DO": "nucleus"}, frames=96)
     sf = states(rf)
     check(not rf.scripted_missing() and len(sf) == 1 and sf[0]["seed"] == "1", f"F: Reshuffle in the Nucleus panel reshuffles once {sf[0]['seed'] if sf else None} {rf.scripted_missing()}")
-    rg = go("chip_g", "20:click=tool.nucleus.caret;26:click=nucleus.reshuffle", {"PL_ATOM_SET": "Z=6;N=6"}, frames=40)
+    rg = go("chip_g", "26:click=nucleus.reshuffle", {"PL_ATOM_SET": "Z=6;N=6"}, frames=40)
     check(any("nucleus.reshuffle" in l for l in rg.scripted_missing()), "F: in the atom view the Reshuffle button is not offered")
     rh = go("chip_h", "10:click=top.old;20:click=Reshuffle nucleons", {"PL_ATOM_SET": "Z=6;N=6", "PL_ATOM_DO": "nucleus"}, frames=40)
     check(any("Reshuffle nucleons" in l for l in rh.scripted_missing()), "F: the Old panel no longer has Reshuffle (New UI On)")

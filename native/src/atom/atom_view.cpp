@@ -909,7 +909,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         T.draw(label + "  =  " + metres(bar * 1e-10), 12, h - 24, 12, css.muted);
     }
     {   // the readout at the top left, on a soft plate (the web engine's info lines)
-        const double maxW = w - 24 - 56;
+        const double maxW = w - 24 - 56 - lab.insetRight;
         std::vector<std::string> rows;
         for (const std::string& t : lab.info()) {                          // wrap at " · " first
             std::string cur;

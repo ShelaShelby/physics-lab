@@ -113,33 +113,33 @@ def part_coverage(binary, work):
     r = R.go(["click=top.chip", "click=time.journey", "click=top.stop"]); s = state(r)
     check(not missing(r) and s["journey"] == "0", "a running Journey is stopped by the Stop button in the chip: " + str(missing(r)))
     # --- speed ---
-    r = R.go(["click=tool.speed", "click=speed.slider@0.3"]); s = state(r)
+    r = R.go(["click=speed.slider@0.3"]); s = state(r)
     check(not missing(r) and abs(float(s["tspeed"]) - float(base["tspeed"])) > 0.05, f"Time speed slider: {base['tspeed']} -> {s['tspeed']}")
     # --- the Show panel ---
     for name, field in (("moons", "moons"), ("dwarfs", "dwarfs"), ("comets", "comets"), ("belts", "belts"), ("far", "far")):
-        r = R.go(["click=tool.show", f"click=show.{name}"]); s = state(r)
+        r = R.go([f"click=show.{name}"]); s = state(r)
         check(not missing(r) and s[field] != base[field], f"Show: {name} flips {base[field]} -> {s[field]} {missing(r)}")
     for pos, want in ((0.5, "1"), (0.95, "2")):
-        r = R.go(["click=tool.show", f"click=show.sky@{pos}"]); s = state(r)
+        r = R.go([f"click=show.sky@{pos}"]); s = state(r)
         check(not missing(r) and s["sky"] == want, f"Sky segment at {pos}: sky={s['sky']} (want {want})")
-    for pos, want in ((0.5, "1"), (0.95, "2")):
-        r = R.go(["click=tool.show", f"click=show.cons@{pos}"]); s = state(r)
+    for pos, want in ((0.35, "1"), (0.95, "2")):      # (0.35: the middle of "Lines"; in the 22 em Controls panel the three segments are as wide as their words need, so "Lines" is not the middle third any more)
+        r = R.go([f"click=show.cons@{pos}"]); s = state(r)
         check(not missing(r) and s["cons"] == want, f"Constellations segment at {pos}: cons={s['cons']} (want {want})")
-    r = R.go(["click=tool.show", "click=show.physics@0.8", "click=show.gr", "click=show.wobble"]); s = state(r)
+    r = R.go(["click=show.physics@0.8", "click=show.gr", "click=show.wobble"]); s = state(r)
     check(not missing(r) and s["real"] == "1" and s["gr"] == "1" and s["wobble"] != base["wobble"], f"Planet physics Real + GR + wobble: {s['real']} {s['gr']} {s['wobble']} {missing(r)}")
     # --- scale ---
-    r = R.go(["click=tool.scale", "click=scale.zoom@0.2"]); s = state(r)
+    r = R.go(["click=scale.zoom@0.2"]); s = state(r)
     check(not missing(r) and s["zoom"] != base["zoom"], f"Zoom slider: {base['zoom']} -> {s['zoom']}")
-    r = R.go(["click=tool.scale", "click=scale.sizes@0.8", "click=scale.trails@0.8"]); s = state(r)
+    r = R.go(["click=scale.sizes@0.8", "click=scale.trails@0.8"]); s = state(r)
     check(not missing(r) and s["trueScale"] == "0" and s["fullTrails"] == "1", f"Sizes Easy to see + Trails Full: {s['trueScale']} {s['fullTrails']} {missing(r)}")
     # --- 2D / 3D and the view options ---
     r = R.go(["click=tool.view.3d"]); s = state(r)
     check(not missing(r) and s["3D"] == "1", "3D button")
-    r = R.go(["click=tool.view.3d", "click=tool.view.caret", "click=view.pan", "click=view.spin"]); s = state(r)
+    r = R.go(["click=tool.view.3d", "click=view.pan", "click=view.spin"]); s = state(r)
     check(not missing(r) and s["pan"] == "1" and s["spin"] == "1", f"View options: Drag moves the view + Spin: {s['pan']} {s['spin']} {missing(r)}")
-    r = R.go(["click=tool.view.caret", "click=view.follow"], {"PL_SELECT": "Earth"}); s = state(r)
+    r = R.go(["click=view.follow"], {"PL_SELECT": "Earth"}); s = state(r)
     check(not missing(r) and s["follow"] == "0", f"View options: Follow (Earth starts followed): {s['follow']} {missing(r)}")
-    r = R.go(["click=tool.scale", "click=scale.zoom@0.2", "key=escape", "click=tool.view.caret", "click=view.reset"]); s = state(r)
+    r = R.go(["click=scale.zoom@0.2", "click=view.reset"]); s = state(r)
     check(not missing(r) and float(s["zoom"]) == 0.0, f"Reset view puts the zoom back to 0: {s['zoom']} {missing(r)}")
     # --- the card's action links (the old column's "Slow time ..." buttons) ---
     r = R.go(["click=card.slowmoons"], {"PL_SELECT": "Earth"}); s = state(r)
@@ -189,8 +189,8 @@ def part_coverage(binary, work):
     check(len(names) == 47, f"INVENTORY.md lists 47 Go to names ({len(names)})")
     cmds = []
     for n in names:      # (the filter box brings the name to the top of the list, so the click lands on a row that is in view; it also tests the filter)
-        cmds += ["click=tool.pick", "click=##pickfilter", f"text={n}", f"click=pick.{n}", "state"]
-    script_parts = []
+        cmds += ["click=##pickfilter", f"text={n}", f"click=pick.{n}", "state"]
+    script_parts = ["4:click=ctl.sec.pick"]       # (the Pick a body section starts folded; it stays open between the clicks)
     f = 10
     for c in cmds:
         script_parts.append(f"{f}:{c}")
@@ -203,7 +203,7 @@ def part_coverage(binary, work):
         sels.append(m.groups() if m else None)
     check(len(sels) == 47 and all(x and x[0] != "0" for x in sels), f"each of the 47 clicks selected something ({len(sels)} states)")
     check(len(set(sels)) == 47, f"and 47 different things ({len(set(sels))})")
-    check(any("Real orbits from NASA/JPL data" in t for _, _, t in run_app(binary, work, "orb_pick_hint", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=tool.pick"}, frames=30).texts), "the pick list keeps the NASA/JPL words")
+    check(any("Real orbits from NASA/JPL data" in t for _, _, t in run_app(binary, work, "orb_pick_hint", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=ctl.sec.pick"}, frames=30).texts), "the pick list keeps the NASA/JPL words")
 
 # ------------------------------------------------------------------ the card
 CARD_THINGS = [("Sun", "Sun"), ("Earth", "Earth"), ("Jupiter", "Jupiter"), ("Pluto", "Pluto"), ("Moon", "Moon"), ("Halley", "Halley"), ("Asteroid belt", "Asteroid belt"), ("Alpha Centauri", "Alpha Centauri")]
@@ -213,7 +213,7 @@ def part_card(binary, work):
         # the OLD layout: click the Go to tile; the picture prints the card it draws (PL_LOG_CARD)
         old = run_app(binary, work, f"card_old_{tile.replace(' ', '_')}", {"PL_NEWUI": "off", "PL_LOG_CARD": "1", "PL_SCRIPT": f"10:click={tile}"}, frames=40, size="1000x2800")
         old_cards = [ln[7:].split("\t") for ln in old.out.splitlines() if ln.startswith("PLCARD ")]
-        new = run_app(binary, work, f"card_new_{tile.replace(' ', '_')}", {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=tool.pick;16:click=##pickfilter;22:text={pick};28:click=pick.{pick};40:click=card.all"}, frames=60)
+        new = run_app(binary, work, f"card_new_{tile.replace(' ', '_')}", {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=ctl.sec.pick;16:click=##pickfilter;22:text={pick};28:click=pick.{pick};40:click=card.all"}, frames=60)
         sheets = [ln[8:].split("\t") for ln in new.out.splitlines() if ln.startswith("PLSHEET ")]
         check(not missing(old) and not missing(new), f"{tile}: the clicks found their controls {missing(old)[:1]} {missing(new)[:1]}")
         check(len(old_cards) >= 1 and len(sheets) >= 1, f"{tile}: both layouts printed a card ({len(old_cards)} old, {len(sheets)} new)")
@@ -298,11 +298,11 @@ def part_facts(binary, work):
 
 def part_facts_long(binary, work):
     FULL = {"PL_NEWUI": "on", "PL_MOTION": "off"}
-    ENVS = (("closed", {}), ("select", {"PL_SELECT": "Earth"}), ("show", {"PL_SCRIPT": "20:click=tool.show"}), ("time", {"PL_SCRIPT": "20:click=top.chip"}), ("card", {"PL_SELECT": "Earth", "PL_SCRIPT": "20:click=card.all"}))
+    ENVS = (("closed", {}), ("select", {"PL_SELECT": "Earth"}), ("nocontrols", {"PL_SCRIPT": "20:click=ctl.close"}), ("time", {"PL_SCRIPT": "20:click=top.chip"}), ("card", {"PL_SELECT": "Earth", "PL_SCRIPT": "20:click=card.all"}))
     BODIES = ("Mercury", "Earth", "Mars", "Jupiter", "Saturn", "Neptune", "Pluto", "Ceres", "Halley", "Moon", "Sun", "Eris")
     prefetch([((binary, work, "fact_real_a", FULL), dict(frames=90, size="880x560")), ((binary, work, "fact_real_b", FULL), dict(frames=1330, size="880x560")), ((binary, work, "fact_real_c", FULL), dict(frames=1200, size="880x560"))] +
              [((binary, work, f"fact_ov_{n}_{sz}", dict({"PL_NEWUI": "on"}, **e)), dict(frames=60, size=sz)) for sz in ("1280x800", "1000x640", "880x560") for n, e in ENVS] +
-             [((binary, work, f"fact_body_{b}", {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=tool.pick;16:click=##pickfilter;22:text={b};28:click=pick.{b}"}), dict(frames=150, size="1000x640")) for b in BODIES])
+             [((binary, work, f"fact_body_{b}", {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=ctl.sec.pick;16:click=##pickfilter;22:text={b};28:click=pick.{b}"}), dict(frames=150, size="1000x640")) for b in BODIES])
     # the real interval: about 20 s = 1282 frames of 16 ms
     ra = run_app(binary, work, "fact_real_a", FULL, frames=90, size="880x560")
     rb = run_app(binary, work, "fact_real_b", FULL, frames=1330, size="880x560")
@@ -312,7 +312,7 @@ def part_facts_long(binary, work):
     ra = run_app(binary, work, "fact_step_a", {"PL_NEWUI": "on"}, frames=70)
     # no overlap, any size, with panels open
     for size in ("1280x800", "1000x640", "880x560"):
-        for name, env in (("closed", {}), ("select", {"PL_SELECT": "Earth"}), ("show", {"PL_SCRIPT": "20:click=tool.show"}), ("time", {"PL_SCRIPT": "20:click=top.chip"}), ("card", {"PL_SELECT": "Earth", "PL_SCRIPT": "20:click=card.all"})):
+        for name, env in (("closed", {}), ("select", {"PL_SELECT": "Earth"}), ("nocontrols", {"PL_SCRIPT": "20:click=ctl.close"}), ("time", {"PL_SCRIPT": "20:click=top.chip"}), ("card", {"PL_SELECT": "Earth", "PL_SCRIPT": "20:click=card.all"})):
             r = run_app(binary, work, f"fact_ov_{name}_{size}", dict({"PL_NEWUI": "on"}, **env), frames=60, size=size)
             fl = r.rects.get("factline")
             if fl is None:
@@ -321,12 +321,12 @@ def part_facts_long(binary, work):
             w, h = r.window[0], r.window[1]
             check(inside(fl, w, h), f"{name} {size}: the fact line is inside the window {fl}")
             for other, rc in r.rects.items():
-                if other == "factline" or other.startswith("occ"):
+                if other == "factline" or other.startswith("occ") or other.startswith("ringlabel.") or other.startswith("ringskip."):   # (the picture's own ring labels, logged since stage 5c, are not panels)
                     continue
                 check(not overlap(fl, rc), f"{name} {size}: the fact line does not overlap {other} {fl} {rc}")
     # never over the selected body: for 12 bodies at their own places
     for pick in ("Mercury", "Earth", "Mars", "Jupiter", "Saturn", "Neptune", "Pluto", "Ceres", "Halley", "Moon", "Sun", "Eris"):
-        r = run_app(binary, work, f"fact_body_{pick}", {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=tool.pick;16:click=##pickfilter;22:text={pick};28:click=pick.{pick}"}, frames=150, size="1000x640")
+        r = run_app(binary, work, f"fact_body_{pick}", {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=ctl.sec.pick;16:click=##pickfilter;22:text={pick};28:click=pick.{pick}"}, frames=150, size="1000x640")
         fl = r.rects.get("factline")
         b = [n for n in r.note("body")]
         if fl and b:

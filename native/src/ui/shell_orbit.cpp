@@ -28,16 +28,17 @@ using app::shell::Metrics;
 // ---- the toolbar: view and lab controls only (stage 4: play / pause moved into the chip, Save picture into the menu) ----
 std::vector<ToolItem> orbitTools(AppState& app) {
     std::vector<ToolItem> v;
-    auto menu = [&](const char* id, const char* tip, Icon icon, PanelId panel) { ToolItem t; t.kind = ToolItem::Menu; t.id = id; t.tip = tip; t.icon = icon; t.panel = panel; v.push_back(t); };
-    menu("tool.speed", "Time speed", Icon::Clock, PanelId::Speed);
-    menu("tool.show", "Show: moons, dwarf planets, comets, belts, sky, planet physics", Icon::Eye, PanelId::Show);
-    menu("tool.pick", "Pick a body", Icon::Target, PanelId::Pick);
-    menu("tool.scale", "Zoom, sizes and trails", Icon::Ruler, PanelId::Scale);
-    v.push_back(separator());
     ToolItem seg;
-    seg.kind = ToolItem::Segment; seg.id = "tool.view"; seg.tip = "2D or 3D view; the arrow: view options"; seg.panel = PanelId::View; seg.labels = {"2D", "3D"}; seg.sel = app.set.view3D ? 1 : 0;
+    seg.kind = ToolItem::Segment; seg.id = "tool.view"; seg.tip = "2D or 3D view"; seg.labels = {"2D", "3D"}; seg.sel = app.set.view3D ? 1 : 0;      // (no caret: the view options are in the Controls panel)
     seg.pick = [&app](int i) { app.set.view3D = i == 1; };
     v.push_back(seg);
+    ToolItem reset; reset.kind = ToolItem::Button; reset.id = "tool.reset"; reset.tip = "Reset view: turn the picture back and put it in the middle"; reset.icon = Icon::Reset;
+    reset.act = [&app] { resetViewAction(app); };
+    v.push_back(reset);
+    v.push_back(separator());
+    ToolItem ctl; ctl.kind = ToolItem::Button; ctl.id = "tool.controls"; ctl.tip = "Controls: time speed, what to show, pick a body, zoom and sizes, view options"; ctl.icon = Icon::Sliders; ctl.on = controlsOpen();
+    ctl.act = [] { controlsToggle(); };
+    v.push_back(ctl);
     return v;
 }
 
@@ -265,31 +266,31 @@ void timePanel(AppState& app, Panel& p) {
 double orbitPanelWidthEm(PanelId id) {
     switch (id) {
     case PanelId::Chip: return 24;
-    case PanelId::Speed: return 20;
-    case PanelId::Show: return 25;
-    case PanelId::Pick: return 22;
-    case PanelId::Scale: return 22;
-    case PanelId::View: return 20;
     default: return 0;
     }
 }
 
-bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
-    const Metrics& m = F().m;
-    orbit::ViewSettings& set = app.set;
+bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& /*closeAfter*/) {
     switch (id) {
     case PanelId::Chip: if (app.lab != 0) return false; timePanel(app, p); return true;
-    case PanelId::Speed: {
-        pTitle(p, "Time speed");
+    default: return false;
+    }
+}
+
+// ---- the Controls panel (stage 5c): what the Show, Pick, Scale, view and Time speed panels held, same controls, same words, same tooltips, in folding sections ----
+void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
+    const Metrics& m = F().m;
+    orbit::ViewSettings& set = app.set;
+    bool closeAfter = false;                                   // (the Pick list used it to close its dropdown; the docked panel stays open)
+    (void)closeAfter;
+    if (section("speed", "Time speed", true)) {
         pBody(p, tspeedText(set.tspeed));
         float ts = static_cast<float>(set.tspeed);
         if (pSlider(p, "speed.slider", &ts, static_cast<float>(units::kTspeedMin), static_cast<float>(units::kTspeedMax))) set.tspeed = ts;
         pCaption(p, "Space: play / pause");
-        return true;
     }
-    case PanelId::Show: {
+    if (section("show", "Show", true)) {
         static bool notes = false;
-        pTitle(p, "Show");
         pCheck(p, "show.moons", "Moons", &set.moons);
         pCheck(p, "show.dwarfs", "Dwarf planets", &set.dwarfs);
         pCheck(p, "show.comets", "Famous comets", &set.comets);
@@ -317,11 +318,9 @@ bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
         }
         if (pRow(p, "show.notes", notes ? "Notes about this choice  (hide)" : "Notes about this choice  (show)")) notes = !notes;
         if (notes) pCaption(p, set.realPlanets ? orbit::realNoteText(set.relativity) : orbit::simpleNoteText());
-        return true;
     }
-    case PanelId::Pick: {
+    if (section("pick", "Pick a body", false)) {
         char* filter = g_pickFilter;
-        pTitle(p, "Pick a body");
         pCaption(p, "Click one to fly there. It stays in the middle of the picture. Your time speed is not changed.");
         {
             const ImVec2 o = here(p);
@@ -340,16 +339,14 @@ bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
             for (const PickItem& it : g.items) {
                 if (!q.empty() && lower(it.name).find(q) == std::string::npos) continue;
                 const std::string rid = "pick." + it.name;
-                if (pRow(p, rid.c_str(), it.name, app.view.sel == it.sel, it.color)) { pickItem(app, it); closeAfter = true; filter[0] = 0; }
+                if (pRow(p, rid.c_str(), it.name, app.view.sel == it.sel, it.color)) { pickItem(app, it); filter[0] = 0; }
                 if (!it.tip.empty() && ImGui::IsItemHovered()) ui::SetTooltip("%s", it.tip.c_str());
             }
         }
         pGap(p, m.s8);
         pCaption(p, "Real orbits from NASA/JPL data. Moons show when you zoom in or click their planet (until you zoom in a lot, their orbits are drawn wider than real so they can be seen).");
-        return true;
     }
-    case PanelId::Scale: {
-        pTitle(p, "Zoom, sizes and trails");
+    if (section("scale", "Zoom, sizes and trails", true)) {
         pBody(p, "Zoom: " + zoomLabel(set.zoom));
         float z = static_cast<float>(set.zoom);
         if (pSlider(p, "scale.zoom", &z, static_cast<float>(units::kZoomMin), static_cast<float>(units::kZoomMax))) setZoom(app, z);
@@ -363,10 +360,8 @@ bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
         int trails = set.fullTrails ? 1 : 0;
         if (pSegmented(p, "scale.trails", {"Short tail", "Full orbit trails"}, &trails)) set.fullTrails = trails == 1;
         pCaption(p, trails == 0 ? "a little tail behind each object" : "every object's whole path");
-        return true;
     }
-    case PanelId::View: {
-        pTitle(p, "View options");
+    if (section("view", "View options", true)) {
         if (set.view3D) {
             bool pan = app.view.panMode;
             if (pCheck(p, "view.pan", "Drag moves the view", &pan)) app.view.panMode = pan;
@@ -379,9 +374,6 @@ bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
             if (pCheck(p, "view.follow", "Follow the selected body", &fol)) app.view.follow = fol;
         }
         if (pButton(p, "view.reset", "↺ Reset view")) resetViewAction(app);
-        return true;
-    }
-    default: return false;
     }
 }
 

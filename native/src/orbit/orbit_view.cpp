@@ -1,4 +1,5 @@
 #include "orbit_view.h"
+#include "orbit/label_clip.h"
 
 #include <algorithm>
 #include <array>
@@ -16,7 +17,7 @@
 #include "spin.h"
 #include "units.h"
 
-namespace ui { void auditPictureText(float px); }   // ui/shell_test.cpp: the new UI's PL_LOG_SHELL list of picture label sizes
+namespace ui { void auditPictureText(float px); void auditRect(const std::string& name, float x, float y, float w, float h); }   // ui/shell_test.cpp: the new UI's PL_LOG_SHELL list of picture label sizes and rectangles
 
 namespace orbit {
 
@@ -450,6 +451,12 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             const double v = std::round(au * 10) / 10;
             std::string label = (v == std::floor(v) ? fmt::commas(v) : fmt::fixed(v, 1)) + " AU";
             if (au >= 30000) label += " · " + fmtLy(au / kLightYearAU) + " light years";
+            if (set.shell) {                                                      // (stage 5c: no label under the bars or the Controls panel; the rings themselves are still drawn)
+                const LabelBox lb = labelBox(q.first, q.second + 3, T.width(label, 10), 10, 0.5);
+                const bool clear = labelClear(lb, W, H, {set.insetTop, set.reserveBottom, set.insetRight});
+                ui::auditRect(std::string(clear ? "ringlabel." : "ringskip.") + std::to_string(k), static_cast<float>(originX + lb.x0 * uiScale), static_cast<float>(originY + lb.y0 * uiScale), static_cast<float>((lb.x1 - lb.x0) * uiScale), static_cast<float>((lb.y1 - lb.y0) * uiScale));
+                if (!clear) continue;
+            }
             T.text(label, q.first, q.second + 3, 10, kMuted.withAlpha(0.75f));
         }
     }
@@ -913,7 +920,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             const std::string sp2 = spanLy >= 1 ? fmtLy(spanLy) + " light years" : fmt::commas(std::stod(fmt::precision(spanAU, 2))) + " AU (" + fmt::fixed(spanLy, 2) + " light years)";
             const std::string msg = "Zoomed far out: this picture is about " + sp2 + " across, so the whole Solar System is now just the ringed dot (the Sun).";
             // wrap to the picture width
-            const std::size_t maxChars = static_cast<std::size_t>(std::max(24.0, std::floor((W - 28) / 5.6)));
+            const std::size_t maxChars = static_cast<std::size_t>(std::max(24.0, std::floor((W - set.insetRight - 28) / 5.6)));
             std::vector<std::string> lines; std::string cur, word;
             for (char ch : msg + " ") {
                 if (ch != ' ') { word += ch; continue; }
@@ -942,7 +949,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     {   // axis gizmo: which way x, y and z point on screen
-        const double gx = W - 40, gy = gizY;
+        const double gx = W - 40 - set.insetRight, gy = gizY;
         const auto axis = [&](double X, double Y, double Z, double& sx, double& sy) { const double x1 = X * ca - Y * sa, y1 = X * sa + Y * ca; sx = 24 * x1; sy = 24 * (y1 * cb - Z * sb); };
         struct Ax { const char* n; double X, Y; Color c; } ax[] = {{"x", 0, 0, hexColor(marks::kAxisX)}, {"y", 0, 0, hexColor(marks::kAxisY)}, {"z", 0, 0, hexColor(marks::kAxisZ)}};
         axis(1, 0, 0, ax[0].X, ax[0].Y); axis(0, 1, 0, ax[1].X, ax[1].Y); axis(0, 0, 1, ax[2].X, ax[2].Y);

@@ -216,6 +216,13 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
         dl->AddLine(P(-0.85f, 0), P(0.85f, 0), col, th); dl->AddLine(P(0, -0.85f), P(0, 0.85f), col, th);
         for (int k = 0; k < 4; k++) { const float a = k * 1.5708f, ca = std::cos(a), sa = std::sin(a); dl->AddLine(P(0.85f * ca, 0.85f * sa), P(0.55f * ca - 0.25f * sa, 0.55f * sa + 0.25f * ca), col, th); dl->AddLine(P(0.85f * ca, 0.85f * sa), P(0.55f * ca + 0.25f * sa, 0.55f * sa - 0.25f * ca), col, th); }
         break;
+    case Icon::Sliders:   // three sliders: the Controls panel
+        for (int k = 0; k < 3; k++) {
+            const float y = -0.6f + k * 0.6f, kx = k == 1 ? 0.35f : k == 0 ? -0.35f : 0.1f;
+            dl->AddLine(P(-0.9f, y), P(0.9f, y), col, th * 0.9f);
+            dl->AddCircleFilled(P(kx, y), 0.2f * s, col, 12);
+        }
+        break;
     case Icon::CaretLeft: dl->AddTriangleFilled(P(0.22f, -0.45f), P(0.22f, 0.45f), P(-0.28f, 0.0f), col); break;
     case Icon::CaretRight: dl->AddTriangleFilled(P(-0.22f, -0.45f), P(-0.22f, 0.45f), P(0.28f, 0.0f), col); break;
     case Icon::Check: { const ImVec2 pts[3] = {P(-0.55f, 0.0f), P(-0.15f, 0.45f), P(0.6f, -0.45f)}; dl->AddPolyline(pts, 3, col, 0, th * 1.15f); break; }
@@ -347,21 +354,28 @@ bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::strin
     const Hit h = hit(id, pos, ImVec2(w, rowH));
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const int n = static_cast<int>(labels.size());
-    const float sw = w / n;
+    // equal parts; when a label does not fit its part (stage 5c: "Lines and names" in the 22 em Controls panel) the parts are as wide as their labels need, scaled to fill the row
+    std::vector<float> edge(n + 1, 0.0f), need(n, 0.0f);
+    float sum = 0;
+    bool fits = true;
+    for (int i = 0; i < n; i++) { need[i] = width(Type::Body, false, labels[i]) + 2.0f * g_f.m.s8; sum += need[i]; if (need[i] > w / n) fits = false; }
+    for (int i = 0; i < n; i++) edge[i + 1] = edge[i] + (fits ? w / n : w * need[i] / sum);
     dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + rowH), cFace(), rc());
     if (g_f.outline) dl->AddRect(pos, ImVec2(pos.x + w, pos.y + rowH), cEdge(), rc(), 0, 1.0f);
     bool changed = false;
     if (h.clicked) {
-        const int i = std::min(n - 1, std::max(0, static_cast<int>((ImGui::GetIO().MousePos.x - pos.x) / sw)));
+        const float mx = ImGui::GetIO().MousePos.x - pos.x;
+        int i = n - 1;
+        for (int k = 0; k < n; k++) if (mx < edge[k + 1]) { i = k; break; }
         if (i != *cur) { *cur = i; changed = true; }
     }
     for (int i = 0; i < n; i++) {
-        const ImVec2 a(pos.x + i * sw, pos.y), b(pos.x + (i + 1) * sw, pos.y + rowH);
+        const ImVec2 a(pos.x + edge[i], pos.y), b(pos.x + edge[i + 1], pos.y + rowH);
         const bool on = i == *cur;
         if (on) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFill(), std::max(0.0f, rc() - 1));
         else if (h.hovered && ImGui::GetIO().MousePos.x >= a.x && ImGui::GetIO().MousePos.x < b.x) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFaceHover(), std::max(0.0f, rc() - 1));
         const float tw = width(Type::Body, false, labels[i]);
-        text(dl, Type::Body, false, ImVec2(a.x + (sw - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? cOnFill() : cText(), labels[i]);
+        text(dl, Type::Body, false, ImVec2(a.x + (b.x - a.x - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? cOnFill() : cText(), labels[i]);
     }
     return changed;
 }

@@ -457,12 +457,12 @@ int main(int, char**) {
             atomBarH = 0;
         } else {
             ui::setReadingMode(false);                  // About, History and the guides open in their floating windows
-            app.set.shell = false; app.set.minTextU = app.set.minTextPx = app.set.reserveBottom = app.set.reserveRight = 0; app.view.cx = app.view.cy = 0;
+            app.set.shell = false; app.set.minTextU = app.set.minTextPx = app.set.reserveBottom = app.set.reserveRight = app.set.insetTop = app.set.insetRight = 0; app.view.cx = app.view.cy = 0;
             ui::header(app);                            // across the top: title, subtitle and the app's buttons
             headerH = ui::headerHeight();
         }
         pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 && !shellOn ? atomBarH : 0));
-        app.atom.insetTop = shellOn ? ui::shellTopBarH() / scale + 4 : 0; app.atom.insetBottom = shellOn ? app.set.reserveBottom : 0;   // (points; after shellFrame, so the first frame already has the bars' size)
+        app.atom.insetTop = shellOn ? ui::shellTopBarH() / scale + 4 : 0; app.atom.insetBottom = shellOn ? app.set.reserveBottom : 0; app.atom.insetRight = shellOn ? app.set.insetRight : 0;   // (points; after shellFrame, so the first frame already has the bars' size)
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
         app.canvasH = pictureWinH / scale;
         app.set.lightTheme = ui::look().c.light;

@@ -16,17 +16,17 @@ from shell_lib import run_app
 OLD = ("10:click=▶ Play;14:click=❚❚ Pause;18:click=☉ Reset to today;22:click=Halley at its closest, 1986;26:click=##tspeed@0.3;30:click=Moons;34:click=Famous comets;38:click=Belts and Oort cloud;"
        "42:click=Real;46:click=General relativity (1PN);50:click=##sizes;54:click=Easy to see;58:click=##trails;62:click=Full orbit trails;66:click=##view;70:click=3D (rotatable);"
        "74:click=Earth;78:click=shot;100:state")
-NEW = ("10:click=top.play;14:click=top.play;18:click=top.today;22:click=top.chip;26:click=jump.1986-02-09;30:key=escape;34:click=tool.speed;38:click=speed.slider@0.3;42:key=escape;"
-       "46:click=tool.show;50:click=show.moons;52:click=show.comets;54:click=show.belts;56:click=show.physics@0.8;60:click=show.gr;64:key=escape;68:click=tool.scale;72:click=scale.sizes@0.8;"
-       "74:click=scale.trails@0.8;78:key=escape;82:click=tool.view.3d;86:click=tool.pick;90:click=pick.Earth;94:click=top.menu;98:click=menu.save;110:state")
+NEW = ("10:click=top.play;14:click=top.play;18:click=top.today;22:click=top.chip;26:click=jump.1986-02-09;30:key=escape;34:key=escape;38:click=speed.slider@0.3;42:key=escape;"
+       "46:key=escape;50:click=show.moons;56:click=show.comets;62:click=show.belts;68:click=show.physics@0.8;74:click=show.gr;80:key=escape;84:key=escape;88:click=scale.sizes@0.8;"
+       "94:click=scale.trails@0.8;100:key=escape;104:click=tool.view.3d;108:click=ctl.sec.pick;114:click=pick.Earth;120:click=top.menu;124:click=menu.save;136:state")
 # 0.15 stage 4, the controls that moved in this stage (more runs, from Earth selected and followed): Drag moves the view, Spin, Sky, Constellations, Dwarf planets, Far-away things, Real + the
 # wobble tick box, Follow, the card's "Slow time to watch moons", Reset view (run 2); Mercury's "Slow time to watch it turn" (run 3); the Journey, started at the same frame 20 frames
 # before the state is read (run 4)
 OLD2 = ("10:click=##view;14:click=3D (rotatable);18:click=⟲ Drag rotates the view;22:click=⟳ Spin: off;26:click=##sky;30:click=Full;34:click=##cons;38:click=Lines;42:click=Dwarf planets;"
         "46:click=Far-away things (zoom out to find them);50:click=Real;54:click=Exaggerate the Sun's wobble (×50);58:click=◉ Following;62:click=Slow time to watch moons;66:click=↺ Reset view;80:state")
-NEW2 = ("10:click=tool.view.3d;14:click=tool.view.caret;18:click=view.pan;22:click=view.spin;26:key=escape;30:click=tool.show;34:click=show.sky@0.5;38:click=show.cons@0.5;42:click=show.dwarfs;"
-        "46:click=show.far;50:click=show.physics@0.8;54:click=show.wobble;58:key=escape;62:click=tool.view.caret;66:click=view.follow;70:key=escape;74:click=card.slowmoons;78:click=tool.view.caret;"
-        "82:click=view.reset;86:key=escape;100:state")
+NEW2 = ("10:click=tool.view.3d;16:click=view.pan;22:click=view.spin;26:key=escape;30:key=escape;36:click=show.sky@0.5;42:click=show.cons@0.35;48:click=show.dwarfs;"
+        "54:click=show.far;60:click=show.physics@0.8;66:click=show.wobble;70:key=escape;76:click=view.follow;80:key=escape;86:click=card.slowmoons;90:key=escape;"
+        "96:click=view.reset;100:key=escape;120:state")
 OLD3 = "10:click=Slow time to watch it turn;30:state"
 NEW3 = "10:click=card.slowspin;30:state"
 OLD4 = "10:click=Journey: Earth to the galactic centre;30:state"
@@ -58,7 +58,7 @@ def main():
         os.makedirs(shots[name], exist_ok=True)
         for f in glob.glob(os.path.join(shots[name], "*")):
             os.remove(f)
-        runs[name] = run_app(binary, work, "state_" + name, {"PL_NEWUI": newui, "PL_SCRIPT": script, "PL_SHOT_DIR": shots[name]}, frames=112, size="1000x2800")
+        runs[name] = run_app(binary, work, "state_" + name, {"PL_NEWUI": newui, "PL_SCRIPT": script, "PL_SHOT_DIR": shots[name]}, frames=112 if newui == "off" else 150, size="1000x2800")   # (the Controls panel scrolls a control in before a click: a longer script)
         check(not runs[name].scripted_missing(), f"{name}: every scripted click found its control: {runs[name].scripted_missing()}")
         check(len(runs[name].states) == 1, f"{name}: one state line was printed")
         check(len(glob.glob(os.path.join(shots[name], "*.png"))) == 1, f"{name}: Save picture made one PNG ({glob.glob(os.path.join(shots[name], '*'))})")
@@ -84,7 +84,7 @@ def main():
     for what, old_script, new_script, env, skip in EXTRA:
         runs2 = {}
         for name, newui, script in (("old", "off", old_script), ("new", "on", new_script)):
-            runs2[name] = run_app(binary, work, "state2_" + name, dict(env, PL_NEWUI=newui, PL_SCRIPT=script), frames=120, size="1000x2800")
+            runs2[name] = run_app(binary, work, "state2_" + name, dict(env, PL_NEWUI=newui, PL_SCRIPT=script), frames=120 if newui == "off" else 135, size="1000x2800")
             check(not runs2[name].scripted_missing(), f"{what}, {name}: every scripted click found its control: {runs2[name].scripted_missing()}")
             check(len(runs2[name].states) == 1, f"{what}, {name}: one state line was printed")
         if all(runs2[n].states for n in runs2):

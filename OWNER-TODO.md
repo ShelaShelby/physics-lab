@@ -277,3 +277,12 @@
 - [ ] Zoom to the nucleus (the Nucleus button), open its small arrow: Reshuffle nucleons is there (Build another appears after a decay). Is "only in the nucleus view" what you wanted, or should they show in the atom view too?
 - [ ] The Old panel button is still there, with the hint line and More / Less info at its top (5d).
 - [ ] Not tested here: Windows, Segoe UI widths, Windows scale 125 / 150 %, speed on your PC and graphics card.
+
+## 0.15 stage 5c (the Controls panel, New UI On, both labs): what only the owner can do
+- [ ] On your PC at Windows scale 125 % and 150 %: is the Controls panel (22 em of Body) a good width, do the long rows ("Far-away things (zoom out to find them)", "Lines and names") fit, does the Show section still read well? Try an ultrawide window: does a panel that is only 330 px wide look lost at the right edge of a very wide picture (a wider or resizable panel can be planned)?
+- [ ] Open and close the panel with the Controls button and its ✕; does the picture feel cramped with it open at 1280 x 720? The toolbar and the readout move left of it: is that fine? (Closed it stays closed next time you start the app.)
+- [ ] Far zoom-out in the Orbit Lab (zoom slider to the far left): distance-ring labels are skipped where they would sit under the top bar, the toolbar or the panel. Is that enough, or should they slide to a free place instead?
+- [ ] The readout (bottom right) is now text-size on a dark pill. In the light themes and Aero its text is white (the muted colour cannot reach 4.5:1 on a pill that is only 0.6 opaque over a white picture). Do you like it, or do you want a darker pill (0.7) so the softer grey text works?
+- [ ] Atom Lab: the Controls panel only holds the View section for now; the Old panel opens left of it (the two together are wide). The rest moves in 5d and 5e.
+- [ ] Not tested here: Windows, Segoe UI widths, Windows scale 125 / 150 %, a real GPU, speed.
+

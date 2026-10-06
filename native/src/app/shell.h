@@ -46,8 +46,11 @@ bool within(const Rect& r, const Rect& bounds, double eps = 0.5);          // r 
 Rect clampInto(Rect r, const Rect& bounds);                                // the same size (smaller if it must be) moved to lie inside bounds
 
 // ---- the fixed pieces ----
-struct Frame { Rect window, topBar, toolbar, readout; };
-Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH);
+// 0.15 stage 5c: `dock` is the Controls panel on the right (width 0: closed). freeW = the width of the window left of it: the toolbar is centred there, the readout and every panel that
+// anchors to the right edge sit left of it, so nothing of the bars is ever under the dock.
+struct Frame { Rect window, topBar, toolbar, readout, dock; double freeW = 0; };
+Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW = 0);
+double dockWidth(const Metrics& m, double winW);                          // the Controls panel: 22 em of Body, at most 45 % of the window, never under 12 em
 // How many toolbar items fit (the rest go behind a "..." button, never a second row). widths: each item's width incl. separators; the "..." button is `moreW` wide.
 int toolbarVisible(const std::vector<double>& widths, double gap, double moreW, double winW, const Metrics& m);
 
@@ -83,6 +86,13 @@ Rgb glassOver(const ThemeColors& c, const Rgb& behind);                    // wh
 Rgb onAccent(const ThemeColors& c);
 constexpr float kEdgeAlpha = 0.20f, kShineAlpha = 0.06f;                    // the 1 px edge and the top-lit shine are the text colour at these opacities
 
+// ---- the readout's backing (stage 5c) ----
+// The readout (Zoom, Scale, light travel time, fps) is Body size on a rounded dark pill: black at kReadoutAlpha. Its text is the theme's muted colour when that reads 4.5:1 on the pill
+// over the WORST picture behind it (black behind, and white behind, where the pill is only a mid grey #666666), else the theme's text colour, else white. (Measured: no theme's muted
+// colour passes over white at 0.6, so in practice it is the text colour or white; tests/test_shell.inc.)
+constexpr float kReadoutAlpha = 0.6f;
+Rgb readoutText(const ThemeColors& c);
+double readoutContrast(const Rgb& text);                                  // the least contrast of `text` on the pill over black and over white behind
 // ---- keys ----
 enum class PanelId { None, Menu, LabMenu, Chip, Speed, Show, Pick, Scale, View, More, Facts, Data, Nucleus, Cloud };   // Facts: the full fact; Data: the subject card's "All values" (stage 4); Nucleus, Cloud: the Atom Lab toolbar's carets (stage 5a)
 struct UiState { PanelId open = PanelId::None; bool search = false; bool reading = false; bool oldPanel = false; };

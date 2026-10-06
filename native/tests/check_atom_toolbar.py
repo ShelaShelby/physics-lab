@@ -37,10 +37,10 @@ def states(r):
 # steps: (frame, what). A level change needs the zoom to settle (80 frames); a view change a few.
 OLD_A = ("10:click=Cloud;16:state;20:click=Cloud 3D;32:state;36:click=Slice;48:state;52:click=Chart of nuclides;58:state;62:click=Orbit;68:state;"
          "72:click=⌕ Nucleus;162:state;166:click=⌕ Nucleon;262:state;266:click=⌕ Atom;366:state")
-NEW_A = ("10:click=tool.cloud;16:state;20:click=tool.cloud.caret;26:click=cloud.cloud3d;32:state;36:click=tool.cloud.caret;42:click=cloud.slice;48:state;52:click=tool.chart;58:state;62:click=tool.atom;68:state;"
-         "72:click=tool.nucleus;162:state;166:click=tool.nucleus.caret;172:click=nucleus.nucleon;262:state;266:click=tool.atom;366:state")
+NEW_A = ("10:click=tool.cloud;16:state;26:click=cloud.cloud3d;32:state;42:click=cloud.slice;48:state;52:click=tool.chart;58:state;62:click=tool.atom;68:state;"
+         "72:click=tool.nucleus;162:state;172:click=nucleus.nucleon;262:state;266:click=tool.atom;366:state")
 OLD_B = "6:click=Cloud 3D;18:drag=300,300,420,360;28:state;32:click=↺ Reset view;42:state;46:click=✥ Drag: rotate;52:state;56:click=✥ Drag: move;62:state"
-NEW_B = "6:click=tool.cloud.caret;12:click=cloud.cloud3d;18:drag=300,300,420,360;28:state;32:click=tool.reset;42:state;46:click=tool.drag;52:state;56:click=tool.drag;62:state"
+NEW_B = "12:click=cloud.cloud3d;18:drag=300,300,420,360;28:state;32:click=tool.reset;42:state;46:click=tool.drag;52:state;56:click=tool.drag;62:state"
 OLD_C = "6:move=300,300;8:wheel=3;20:state;24:click=Reset tilt, zoom and position;34:state"
 NEW_C = "6:move=500,400;8:wheel=3;20:state;24:click=tool.reset;34:state"
 NEW_D = "10:click=top.play;18:state;22:key=space;30:state;34:click=top.play;42:state"
@@ -116,7 +116,8 @@ def main():
     if tb:
         check(tb[3] <= 44, f"layout: the toolbar is one row ({tb[3]})")
         check(not overlap(tb, rl.rects["topbar"]), "layout: the toolbar does not touch the top bar")
-        check(abs(tb[0] + tb[2] / 2 - 640) <= 2, f"layout: the toolbar is centred ({tb[0] + tb[2] / 2})")
+        free = rl.rects["panel.controls"][0] if "panel.controls" in rl.rects else 1280      # (stage 5c: centred in the part of the window left of the Controls panel)
+        check(abs(tb[0] + tb[2] / 2 - free / 2) <= 2, f"layout: the toolbar is centred in the part left of the Controls panel ({tb[0] + tb[2] / 2} of {free})")
     check(not any(k.startswith("panel.old") for k in rl.rects), "layout: the Old panel starts closed")
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0

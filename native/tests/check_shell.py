@@ -16,12 +16,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap, prefetch
 
 # From docs/ui-0.15/DESIGN.md section 1 (the owner's chosen design): kind -> (size in units, floor in px)
-SCALE = {"caption": (13, 12), "body": (15, 14), "title": (17, 15), "key": (28, 22), "h1": (28, 22), "h2": (20, 16), "h3": (17, 15)}
+SCALE = {"caption": (13, 12), "body": (15, 14), "readout": (15, 14),   # (stage 5c: the readout is Body size)
+          "title": (17, 15), "key": (28, 22), "h1": (28, 22), "h2": (20, 16), "h3": (17, 15)}
 # Text the old pages draw inside the reading view (About, guides ...) has many sizes of its own (17 pt card titles, 13 pt notes ...): only the floors are claimed for it, not an exact size
 PAGE_FLOORS = {"pbody": 14, "pcaption": 12, "plabel": 12}
 TF = {"small": 0.9, "normal": 1.0, "large": 1.15, "xl": 1.3}
-EXERCISE = ("10:click=top.chip;14:key=escape;16:click=tool.speed;20:key=escape;22:click=tool.show;26:key=escape;28:click=tool.pick;32:key=escape;34:click=tool.scale;38:key=escape;"
-            "40:click=tool.view.caret;44:key=escape;46:click=top.menu;50:key=escape;52:click=fact.line;56:key=escape;58:key=ctrl+k;62:text=ear;66:key=escape;68:click=top.lab;72:key=escape;"
+EXERCISE = ("10:click=top.chip;14:key=escape;16:click=ctl.sec.pick;24:click=show.physics@0.8;32:click=ctl.sec.show;38:click=ctl.sec.show;"
+            "44:key=escape;46:click=top.menu;50:key=escape;52:click=fact.line;56:key=escape;58:key=ctrl+k;62:text=ear;66:key=escape;68:click=top.lab;72:key=escape;"
             "74:click=card.legend;80:click=card.all;86:key=escape;88:click=top.chip;94:click=time.info;98:click=time.mode@0.9")
 fails = 0
 checks = 0
@@ -62,7 +63,7 @@ def part_sizes(binary, work, only_first_scale):
             check(all(px >= max(12.0, 13 * dpi * tf - 0.01) for px in labels), "the picture's own labels are never under the Caption size (13 u, floor 12 px)" + tag + " " + str(sorted(set(labels))[:3]))
             w, h = r.window[0], r.window[1]
             for name, rect in r.rects.items():
-                if name.startswith("occ"):
+                if name.startswith("occ") or name.startswith("ringlabel.") or name.startswith("ringskip."):   # (the picture's own ring labels are not panels)
                     continue
                 check(inside(rect, w, h), f"{name} stays inside the window {rect}" + tag)
             if "toolbar" in r.rects and "readout" in r.rects:
@@ -94,7 +95,7 @@ def part_small(binary, work):
             tag = f" (smallest window, scale {dpi}, text {tfn})"
             w, h = r.window[0], r.window[1]
             for name, rect in r.rects.items():
-                if not name.startswith("occ"):
+                if not (name.startswith("occ") or name.startswith("ringlabel.") or name.startswith("ringskip.")):
                     check(inside(rect, w, h), f"{name} stays inside the smallest window {rect}" + tag)
             check(not overlap(r.rects["toolbar"], r.rects["readout"]), "toolbar and readout do not overlap" + tag)
 
@@ -109,18 +110,18 @@ def part_collapse(binary, work):
         check(cr[3] <= 40 and cr[2] <= 200, f"a collapsed card is small ({cr})")
 
 def part_keys(binary, work):
-    def panels(r): return [n for n in r.notes if n.startswith("panelopen")]
-    r = run_app(binary, work, "k_open", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=tool.show"}, frames=30)
-    check(panels(r) == ["panelopen show"], "a click on Show opens its panel: " + str(panels(r)))
-    r = run_app(binary, work, "k_esc", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=tool.show;20:key=escape"}, frames=30)
+    def panels(r): return [n for n in r.notes if n.startswith("panelopen") and n != "panelopen controls"]   # (the docked Controls panel is not a dropdown)
+    r = run_app(binary, work, "k_open", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.menu"}, frames=30)
+    check(panels(r) == ["panelopen menu"], "a click on the menu button opens its panel: " + str(panels(r)))
+    r = run_app(binary, work, "k_esc", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.menu;20:key=escape"}, frames=30)
     check(panels(r) == [], "Esc closes the open panel: " + str(panels(r)))
-    r = run_app(binary, work, "k_one", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=tool.show;20:click=tool.speed"}, frames=34)
-    check(panels(r) == ["panelopen speed"], "one dropdown at a time: " + str(panels(r)))
+    r = run_app(binary, work, "k_one", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.menu;20:click=top.chip"}, frames=34)
+    check(panels(r) == ["panelopen chip"], "one dropdown at a time: " + str(panels(r)))
     r = run_app(binary, work, "k_ctrlk", {"PL_NEWUI": "on", "PL_SCRIPT": "10:key=ctrl+k"}, frames=30)
     check("panel.search" in r.rects, "Ctrl+K opens search")
     r = run_app(binary, work, "k_ctrlk_esc", {"PL_NEWUI": "on", "PL_SCRIPT": "10:key=ctrl+k;20:key=escape"}, frames=30)
     check("panel.search" not in r.rects, "Esc closes search")
-    r = run_app(binary, work, "k_ctrlk_over_panel", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=tool.show;20:key=ctrl+k"}, frames=34)
+    r = run_app(binary, work, "k_ctrlk_over_panel", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.menu;20:key=ctrl+k"}, frames=34)
     check("panel.search" in r.rects and panels(r) == [], "Ctrl+K closes an open dropdown and opens search")
     r = run_app(binary, work, "k_space_none", {"PL_NEWUI": "on", "PL_SCRIPT": "30:state"}, frames=34)
     r2 = run_app(binary, work, "k_space", {"PL_NEWUI": "on", "PL_SCRIPT": "10:key=space;30:state"}, frames=34)

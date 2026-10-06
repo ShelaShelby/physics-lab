@@ -629,7 +629,77 @@ void testShellSideStep() {
     }
 }
 
+// 0.15 stage 5c: the Controls panel (the dock on the right) and the readout's backing pill. WRITTEN BEFORE the code. References: DESIGN.md (the owner's decision of 6 Oct 2026: one docked
+// panel on the right, about 22 em wide, below the top bar; the bottom toolbar and the readout stay left of it), the WCAG 2.x contrast formula written out again here (not the app's),
+// and plain geometry.
+double wcagLum(const Rgb& c) {
+    const auto lin = [](double v) { return v <= 0.03928 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+}
+double wcag(const Rgb& a, const Rgb& b) { const double x = wcagLum(a), y = wcagLum(b); return (std::max(x, y) + 0.05) / (std::min(x, y) + 0.05); }
+
+void testShellDock() {
+    checkTrue("dock: 22 em of Body at a normal window", dockWidth(metrics(1.0, 1.0), 1280) == metrics(1.0, 1.0).em(22) && metrics(1.0, 1.0).em(22) == 330);
+    checkTrue("dock: never wider than 45 % of the window", dockWidth(metrics(1.0, 1.0), 600) <= 0.45 * 600 + 1 || dockWidth(metrics(1.0, 1.0), 600) == metrics(1.0, 1.0).em(12));
+    for (double dpi : kDpis)
+        for (double tf : kTfs)
+            for (double wu : {880.0, 1000.0, 1280.0, 1920.0, 2560.0})
+                for (double hu : {560.0, 640.0, 800.0, 1080.0}) {
+                    const Metrics m = metrics(dpi, tf);
+                    const double W = std::lround(wu * dpi), H = std::lround(hu * dpi), dw = dockWidth(m, W);
+                    const std::string t = tag(dpi, tf) + " window " + num(W) + "x" + num(H);
+                    const double tbw = 7 * (m.toolBtn + m.s4) + 6 * m.s8, rw = 14 * m.caption;
+                    const Frame f = makeFrame(W, H, m, tbw, rw, 3 * m.caption * 1.4, dw);
+                    checkTrue("dock: inside the window" + t, within(f.dock, f.window));
+                    checkTrue("dock: below the top bar, not on it" + t, !f.dock.intersects(f.topBar) && f.dock.y >= f.topBar.bottom());
+                    checkTrue("dock: full height, down to 12 u of the bottom edge, 12 u of the right edge" + t, std::fabs(f.window.bottom() - f.dock.bottom() - m.s12) < 1 && std::fabs(f.window.right() - f.dock.right() - m.s12) < 1);
+                    checkTrue("dock: the toolbar does not touch it and is inside the window" + t, !f.toolbar.intersects(f.dock) && within(f.toolbar, f.window));
+                    checkTrue("dock: the readout does not touch it and is inside the window" + t, !f.readout.intersects(f.dock) && within(f.readout, f.window));
+                    checkTrue("dock: the toolbar is centred in the free part" + t, std::fabs((f.toolbar.x + f.toolbar.w / 2) - f.freeW / 2) < 1.0);
+                    checkTrue("dock: the readout and the toolbar do not overlap" + t, !f.toolbar.intersects(f.readout));
+                    for (Anchor a : {Anchor::TopLeft, Anchor::TopRight, Anchor::UnderChip, Anchor::AboveToolbar, Anchor::Centre})
+                        for (double ww : std::vector<double>{double(m.em(20.0)), double(m.em(36.0)), W * 2.0}) {
+                            const Rect r = placePanel(a, ww, m.em(12.0), f, m, W * 0.9);
+                            checkTrue("dock: a panel (anchor " + std::to_string(int(a)) + ", width " + num(ww) + ") stays clear of it" + t, !r.intersects(f.dock));
+                        }
+                    checkTrue("dock: the fact line stays clear of it" + t, !factLineRect(f, m, 60 * m.caption).intersects(f.dock));
+                    const Frame g = makeFrame(W, H, m, tbw, rw, 3 * m.caption * 1.4, 0);
+                    checkTrue("dock: closed, the dock is empty and the toolbar is centred in the window as before" + t, g.dock.w == 0 && g.freeW == W && std::fabs((g.toolbar.x + g.toolbar.w / 2) - W / 2) < 1.0);
+                }
+    // closed: the same numbers as the frame without the new argument
+    const Metrics m = metrics(1.0, 1.0);
+    const Frame a = makeFrame(1280, 800, m, 300, 100, 40), b = makeFrame(1280, 800, m, 300, 100, 40, 0);
+    checkTrue("dock: no dock argument = closed", a.toolbar.x == b.toolbar.x && a.readout.x == b.readout.x && a.readout.y == b.readout.y);
+    // a fly-to target that lies under the dock counts as hidden (it is an occluder like the other panels) and goes to the free part
+    const Frame f = makeFrame(1280, 800, m, 300, 100, 40, dockWidth(m, 1280));
+    Pt target;
+    checkTrue("dock: a body under the dock is hidden by it", hiddenBy({f.dock.x + 40, 400}, 10, {f.dock}, m.s24));
+    checkTrue("dock: the centre shift moves it out", centreShiftTarget({f.dock.x + 40, 400}, 10, f.window, {f.topBar, f.toolbar, f.dock}, m.s24, target) && target.x < f.dock.x - m.s24);
+}
+
+void testShellReadout() {
+    int muted = 0, fg = 0;
+    std::vector<app::ThemeColors> all;
+    for (const app::ThemeDef* t : app::allThemes()) all.push_back(app::themeColors(t->id, false));
+    all.push_back(app::themeColors("auto", true));
+    for (const app::ThemeColors& c : all) {
+        const Rgb tx = readoutText(c);
+        // the pill is black at 0.6; behind it the picture is black (space) or white (the worst): the text must pass 4.5:1 on both, written out here with our own WCAG formula
+        const Rgb onBlack{0, 0, 0}, onWhite{0.4, 0.4, 0.4};
+        const double lo = std::min(wcag(tx, onBlack), wcag(tx, onWhite));
+        checkTrue("readout: the text passes 4.5:1 on its pill over black and over white in " + c.id + " (" + num(lo) + ")", lo >= 4.5);
+        checkTrue("readout: readoutContrast agrees with the formula written out here in " + c.id, std::fabs(readoutContrast(tx) - lo) < 0.02);
+        if (tx.r == c.muted.r && tx.g == c.muted.g && tx.b == c.muted.b) muted++; else fg++;
+    }
+    // a finding, reported: on a pill that is only 0.6 opaque, over a WHITE picture it is a mid grey (#666666), and no theme's muted colour reaches 4.5:1 on that (best 4.39, Y2K Night), so the
+    // readout uses the theme's text colour where that passes and white where it does not (the light themes, Aero, Y2K Ice, Monochrome)
+    checkTrue("readout: no theme's muted colour passes on the 0.6 pill over white (the finding above); the text colour or white is used", muted == 0 && fg > 0);
+    checkTrue("readout: the pill is about 0.6 opaque", kReadoutAlpha > 0.55f && kReadoutAlpha < 0.65f);
+}
+
 void testShell() {
+    testShellDock();
+    testShellReadout();
     testShellTypeScale();
     testShellFrame();
     testShellToolbarOverflow();
