@@ -204,6 +204,12 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             else if (k == "enter") { key = SDLK_RETURN; sc = SDL_SCANCODE_RETURN; }
             else if (k == "down") { key = SDLK_DOWN; sc = SDL_SCANCODE_DOWN; }
             else if (k == "up") { key = SDLK_UP; sc = SDL_SCANCODE_UP; }
+            else if (k == "pagedown") { key = SDLK_PAGEDOWN; sc = SDL_SCANCODE_PAGEDOWN; }
+            else if (k == "pageup") { key = SDLK_PAGEUP; sc = SDL_SCANCODE_PAGEUP; }
+            else if (k == "home") { key = SDLK_HOME; sc = SDL_SCANCODE_HOME; }
+            else if (k == "end") { key = SDLK_END; sc = SDL_SCANCODE_END; }
+            else if (k == "left") { key = SDLK_LEFT; sc = SDL_SCANCODE_LEFT; }
+            else if (k == "right") { key = SDLK_RIGHT; sc = SDL_SCANCODE_RIGHT; }
             else if (k.size() == 1) { key = static_cast<SDL_Keycode>(k[0]); sc = static_cast<SDL_Scancode>(SDL_SCANCODE_A + (k[0] - 'a')); }
             if (mod) pushKey(window, SDLK_LCTRL, SDL_SCANCODE_LCTRL, true, mod);
             pushKey(window, key, sc, true, mod);
@@ -218,6 +224,7 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             SDL_PushEvent(&e);
         } else if (verb == "astate") {
             std::printf("PLASTATE %s\n", atomSettingsLine(app).c_str());
+            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3]); }   // (stage 5g: where the picture put its info text and phase ring, in points)
         } else if (verb == "state") {
             std::printf("PLSTATE %s\n", (app.lab == 1 ? atomStateLine(app) : orbitStateLine(app)).c_str());
         }

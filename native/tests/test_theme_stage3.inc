@@ -45,11 +45,11 @@ static void testEffectsOff() {
         checkTrue(w + "switching effects off twice changes nothing more", pageFxTotal(withoutEffects(off).page.fx) == 0 && withoutEffects(off).panel.title.set == off.panel.title.set);
         if (!hasStage2Decor(full) || id == "light") checkTrue(w + "a plain theme is the same style either way", isPlainStyle(off) == isPlainStyle(full));
     }
-    checkTrue("Aero, Ice and Night DO lose decoration (the switch does something)", pageFxTotal(themeColors("aero", true).style.page.fx) > 0 && pageFxTotal(withoutEffects(themeColors("aero", true).style).page.fx) == 0 &&
-              themeColors("y2knight", false).style.page.fx.streak > 0 && withoutEffects(themeColors("y2knight", false).style).page.fx.streak == 0 && themeColors("y2kice", true).style.panel.bracketAlpha > 0 &&
-              withoutEffects(themeColors("y2kice", true).style).panel.bracketAlpha == 0);
+    checkTrue("Aero and Night DO lose decoration (the switch does something)", pageFxTotal(themeColors("aero", true).style.page.fx) > 0 && pageFxTotal(withoutEffects(themeColors("aero", true).style).page.fx) == 0 &&
+              themeColors("y2knight", false).style.page.fx.streak > 0 && withoutEffects(themeColors("y2knight", false).style).page.fx.streak == 0 && themeColors("y2knight", false).style.panel.bracketAlpha > 0 &&
+              withoutEffects(themeColors("y2knight", false).style).panel.bracketAlpha == 0);
     // what the page is with the textures gone: the plain gradient; the four extremes of stage 2 are then the page itself
-    for (const char* id : {"aero", "y2kice", "y2knight"}) {
+    for (const char* id : {"aero", "y2knight"}) {
         const ThemeStyle off = withoutEffects(themeColors(id, false).style);
         bool plain = true;
         for (int i = 0; i <= 20; i++) for (const Rgb& e : pageFxExtremes(off.page.fx, pageColourAt(off.page, rgb8(0, 0, 0), i / 20.f))) plain = plain && sameRgb(e, pageColourAt(off.page, rgb8(0, 0, 0), i / 20.f));

@@ -92,8 +92,9 @@ def main():
         if not ok:
             fails += 1
             print("FAIL", what)
-    NEW = {"PL_NEWUI": "on", "PL_ATOM": "1"}
-    OLD = {"PL_NEWUI": "off", "PL_ATOM": "1"}
+    # (stage 5g: the Orbit view is named in both runs: the New UI now starts in Cloud 3D, the old app in Orbit, and these tests start from the same view)
+    NEW = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_ATOM_SET": "view=Orbit"}
+    OLD = {"PL_NEWUI": "off", "PL_ATOM": "1", "PL_ATOM_SET": "view=Orbit"}
 
     if part in ("sections", "all"):
         calls = []
@@ -250,7 +251,7 @@ def main():
         SEL = [("view.atom", "atom", "old.view=Orbit"), ("nucleus.nucleus", "nucleus", "tool.nucleus"), ("nucleus.nucleon", "nucleon", "nucleus.nucleon"),
                ("cloud.cloud", "cloud", "old.view=Cloud"), ("cloud.cloud3d", "cloud3d", "old.view=Cloud 3D"), ("cloud.slice", "slice", "old.view=Slice"), ("view.chart", "chart", "old.view=Chart of nuclides")]
         W = 100                          # frames to let the zoom animation finish
-        C = {"PL_ATOM_SET": "Z=6;N=6"}   # carbon: its nucleus has several nucleons, so "Nucleus" is a different layer from "Nucleon" (hydrogen's nucleus is one proton)
+        C = {"PL_ATOM_SET": "Z=6;N=6;view=Orbit"}   # carbon: its nucleus has several nucleons, so "Nucleus" is a different layer from "Nucleon" (hydrogen's nucleus is one proton)
         def sel_script(click, pre=None):
             steps = (["click=" + pre, ("wait", 12)] if pre else []) + ["click=" + click, ("wait", W), "astate"]
             return script(steps)

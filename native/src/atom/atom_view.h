@@ -31,6 +31,8 @@ struct MarksDrawn {
     std::size_t outlineSegs = 0;           // how many line pieces were drawn
     int phaseGroups = 0;                   // the cloud's colour groups (Sign: the two signs; Wheel: the phase steps); 0 = no cloud drawn
     bool wheel = false;
+    double info[4] = {0, 0, 0, 0};          // the info text's plate at the top left (x, y, w, h in points); w = 0: none
+    double ring[4] = {0, 0, 0, 0};          // the phase ring with its labels (x, y, w, h in points) when drawn; w = 0: not drawn
     int chainNodes = -1, chainEdges = -1;  // the decay chain drawn on the chart (-1: none)
 };
 const MarksDrawn& marksDrawn();

@@ -68,14 +68,20 @@ Rect handleRect(const Rect& dock, double winW, const Metrics& m, double e) {
     return {std::min(winW, slidRect(dock, winW, e).x) - w, dock.y + dock.h / 2 - h / 2, w, h};
 }
 
-Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW) {
+Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW, double anchorW) {
     Frame f;
     f.window = {0, 0, winW, winH};
     f.topBar = {0, 0, winW, static_cast<double>(m.topBar)};
     if (dockW > 0) f.dock = dockRect(winW, winH, m, dockW);
     f.freeW = dockW > 0 ? f.dock.x : winW;
     const double tw = std::min(toolbarW, f.freeW - 2.0 * m.s12);
-    f.toolbar = {(f.freeW - tw) / 2, winH - m.s12 - m.toolbarH, tw, static_cast<double>(m.toolbarH)};
+    double tx = (f.freeW - tw) / 2;
+    if (anchorW > 0) {
+        tx = winW / 2 - anchorW / 2;                                              // the fixed left edge (stage 5g)
+        if (dockW > 0) tx = std::min(tx, f.dock.x - m.s12 - anchorW);             // only the open Controls panel moves it, to its left
+        tx = std::max(tx, static_cast<double>(m.s12));
+    }
+    f.toolbar = {tx, winH - m.s12 - m.toolbarH, tw, static_cast<double>(m.toolbarH)};
     const double rw = std::min(readoutW, f.freeW - 2.0 * m.s12);
     f.readout = {f.freeW - m.s12 - rw, winH - m.s12 - readoutH, rw, readoutH};
     if (f.readout.inflated(m.s8).intersects(f.toolbar)) f.readout.y = f.toolbar.y - m.s8 - readoutH;   // no room beside the toolbar: just above it

@@ -51,7 +51,7 @@ def main():
     os.makedirs(work, exist_ok=True)
     fail = 0
     worst = {"any": 0.0, "over1": 0.0, "max": 0}
-    for theme in ("aero", "y2kice", "y2knight"):
+    for theme in ("aero", "y2knight"):
         for scr, extra in SCREENS.items():
             on, n_on = run(binary, work, f"{theme}_{scr}_on", theme, extra)
             off, n_off = run(binary, work, f"{theme}_{scr}_off", theme, dict(extra, PL_PAGE_CACHE="off"))

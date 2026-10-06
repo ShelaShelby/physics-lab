@@ -65,7 +65,7 @@ static void testStage2Fields() {
         checkTrue(id + ": the button face is the card colour", c.button.r == c.card.r && c.button.g == c.card.g && c.button.b == c.card.b);
         checkTrue(id + ": no title font", titleFontKeyFor(c.style, true).empty());
     }
-    for (const char* id : {"aero", "y2kice", "y2knight"}) checkTrue(std::string(id) + " has stage 2 decoration", hasStage2Decor(themeColors(id, false).style));
+    for (const char* id : {"aero", "y2knight"}) checkTrue(std::string(id) + " has stage 2 decoration", hasStage2Decor(themeColors(id, false).style));
     for (const ThemeDef* t : allThemes()) {
         const std::string id = t->id;
         if (id == "auto") continue;
@@ -125,7 +125,7 @@ static FaceCheck checkFaces(const ThemeColors& c) {
     return r;
 }
 
-// the same checks for both new looks: Aero (light, saturated) and Y2K (Ice light, Night dark)
+// the same checks for both new looks: Aero (light, saturated) and Y2K (Night, dark; the light Y2K Ice was removed in stage 5g)
 static void checkLook(const std::string& id, bool effectsOff = false) {
     ThemeColors c = themeColors(id, id != "y2knight");
     if (effectsOff) c.style = withoutEffects(c.style);                   // 0.14 stage 3: the same rules with the Theme effects switch Off
@@ -231,9 +231,9 @@ static void testAeroLook() {
     }());
 }
 
-// ---- Y2K Ice and Y2K Night ----
+// ---- Y2K Night (Y2K Ice was removed in 0.15 stage 5g) ----
 static void testY2kLook() {
-    for (const char* id : {"y2kice", "y2knight"}) {
+    for (const char* id : {"y2knight"}) {
         const bool night = std::string(id) == "y2knight";
         const ThemeColors c = themeColors(id, !night);
         const ThemeStyle& s = c.style;
@@ -283,8 +283,7 @@ static void testY2kLook() {
         // old-theme look of the sheen: the widget gloss still exists
         checkTrue(w + "chrome: a strong cold highlight and a split", wd.split > 0.3f && wd.split < 0.7f);
     }
-    checkTrue("Ice has no violet streak (only Night has the swoosh)", themeColors("y2kice", true).style.page.fx.streak == 0 && themeColors("y2knight", false).style.page.fx.streak > 0);
-    checkTrue("Ice silver: a light, bluish grey button (value >= 0.7, saturation <= 0.15)", valOf(themeColors("y2kice", true).button) >= 0.7 && satOf(themeColors("y2kice", true).button) <= 0.15);
+    checkTrue("Night has the violet streak (the light Ice, which had none, was removed)", themeColors("y2knight", false).style.page.fx.streak > 0);
     checkTrue("Night chrome: a dark gunmetal button (value <= 0.45)", valOf(themeColors("y2knight", false).button) <= 0.45);
     checkTrue("the other themes have no title font", titleFontKeyFor(themeColors("aero", true).style, true).empty());
 }

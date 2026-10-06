@@ -326,6 +326,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         }
         auto lower = [](std::string x) { for (char& ch : x) if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a'); return x; };
         const std::string q = lower(filter);
+        bool firstRow = true;
         for (const PickGroup& g : pickGroups(app)) {
             bool any = false;
             for (const PickItem& it : g.items) if (q.empty() || lower(it.name).find(q) != std::string::npos) any = true;
@@ -335,6 +336,8 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
             for (const PickItem& it : g.items) {
                 if (!q.empty() && lower(it.name).find(q) == std::string::npos) continue;
                 const std::string rid = "pick." + it.name;
+                if (firstRow && shellLogOn()) { const ImVec2 o = here(p); auditNote("pickfirst " + std::to_string(o.x) + " " + std::to_string(o.y) + " " + std::to_string(p.w) + " " + std::to_string(m.row)); }   // (for the automatic checks: the first row shown)
+                firstRow = false;
                 if (pRow(p, rid.c_str(), it.name, app.view.sel == it.sel, it.color)) { pickItem(app, it); filter[0] = 0; }
                 if (!it.tip.empty() && ImGui::IsItemHovered()) ui::SetTooltip("%s", it.tip.c_str());
             }

@@ -1,5 +1,12 @@
 # Owner to-do (things only the owner can do)
 
+## 0.15 stage 5g: please try on the real PC (New UI On, and once with it Off)
+- [ ] **Scroll with the real mouse wheel** in Learn (a guide and the timeline), About and What's new. The scripted wheel scrolled all of them here (3 sizes, New UI On and Off), so I could not reproduce "cannot scroll at all". If it still fails on your PC, tell me which window, the New UI setting, the theme and the pointer place. Also try Page Down / Page Up / arrows / Home / End, and dragging the scroll bar.
+- [ ] **Contents** button in Learn and About (narrow window): open it and choose three sections in a row.
+- [ ] **Toolbar position**: it should stay in the same place in the Orbit Lab and in every Atom view; Cloud 3D and Slice have buttons now.
+- [ ] **Cloud 3D as the first Atom view**: your saved settings keep the last view you used. To see the new default, use Defaults in the Atom Lab (or delete the settings file).
+- [ ] The Controls handle (flat pill), the phase ring beside the card, and the theme picker without Ice, in the themes you use.
+
 ## 0.15 stage 3 (the new shell): please look at it on the real PC
 - [ ] Settings (last section) → **New UI (preview): On**. Look at the **Orbit Lab**: the picture fills the window; a slim top bar; the date chip in the middle; the toolbar at the bottom (play, speed, show, pick a body, zoom/sizes, 2D/3D, save); the small readout at the bottom right. Click the chip (date, dial, jump list), each toolbar button, the Legend, and pick a body (a card appears at the top right). Is it clean, desktop-sized and readable, picture first?
 - [ ] **Text size** on BOTH monitors (and with Windows scale 100 / 125 / 150 %): is Body text (15 units, never under 14 px) big enough? Try Settings → Text size Small ... Extra large, or the menu's A− / A+. The old layout's text is untouched.

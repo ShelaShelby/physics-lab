@@ -19,6 +19,8 @@
 #                                (0.15 stage 2: compared with PL_PAGE_CACHE=off, the old drawing; the page cache of 0.15 changes these pictures by rounding and edge pixels on purpose,
 #                                tests/check_page_cache.py holds it to its stated tolerance)
 #                                Settings: stage 3 must draw them exactly (0 differing pixels).
+# 0.15 stage 5g (on purpose): the theme picker lost its Y2K Ice card, so the picker picture (themes_<variant>) of every variant has a new hash in theme_pictures_0.14_changed.sha256 and theme_pictures_0.14s2_native.sha256,
+# made by the stage 5g code after looking at the picture (a regression guard, not an independent reference); the Y2K Ice pictures were deleted from the file.
 # A different Mesa may round differently: then regenerate both files from the OLD code first (see REPORT.md of 0.14 stage 1), never edit a hash by hand.
 set -e
 BIN="$1"; WORK="$2"; REF="$3"; TOOLS="$4"
@@ -44,12 +46,12 @@ while read -r hash name; do
     got=$(grep "  $name\$" "$WORK/pictures.sha256" | cut -d' ' -f1)
     if [ "$got" != "$hash" ]; then echo "DIFFERENT PICTURE: $name (0.15 stage 3 Settings)"; fail=$((fail + 1)); fi
 done < "$REF/theme_pictures_0.15s3_settings.sha256"
-# the three native themes (Frutiger Aero, Y2K Ice, Y2K Night): draw, do not crash, use the default font here (no Segoe UI), six different pictures, and are not Dark
-for th in aero y2kice y2knight; do   # (0.15 stage 4.1: the three are drawn at the same time, then checked one after the other)
+# the two native themes (Frutiger Aero, Y2K Night; Y2K Ice was removed in 0.15 stage 5g): draw, do not crash, use the default font here (no Segoe UI), six different pictures, and are not Dark
+for th in aero y2knight; do   # (0.15 stage 4.1: the two are drawn at the same time, then checked one after the other)
     PL_PAGE_CACHE=off sh "$TOOLS/theme_pictures.sh" "$BIN" "$WORK/$th" "$th" > /dev/null &
 done
 wait
-for th in aero y2kice y2knight; do   # 0.15 stage 2: the OLD drawing (no page cache): these hashes are the stage 2 program's exactly; the cached drawing is checked against it by tests/check_page_cache.py
+for th in aero y2knight; do   # 0.15 stage 2: the OLD drawing (no page cache): these hashes are the stage 2 program's exactly; the cached drawing is checked against it by tests/check_page_cache.py
     n=$(ls "$WORK"/$th/*_$th.bmp | wc -l)
     [ "$n" = 6 ] || { echo "$th: expected 6 pictures, got $n"; fail=$((fail + 1)); }
     if grep -q "Font: .*segoeui" "$WORK/$th/log.txt"; then echo "$th used a font file that should not exist here"; fail=$((fail + 1)); fi

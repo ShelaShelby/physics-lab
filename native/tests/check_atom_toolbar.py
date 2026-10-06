@@ -117,7 +117,8 @@ def main():
         check(tb[3] <= 44, f"layout: the toolbar is one row ({tb[3]})")
         check(not overlap(tb, rl.rects["topbar"]), "layout: the toolbar does not touch the top bar")
         free = rl.rects["panel.controls"][0] if "panel.controls" in rl.rects else 1280      # (stage 5c: centred in the part of the window left of the Controls panel)
-        check(abs(tb[0] + tb[2] / 2 - free / 2) <= 2, f"layout: the toolbar is centred in the part left of the Controls panel ({tb[0] + tb[2] / 2} of {free})")
+        # (changed on purpose in stage 5g, owner's rule: the toolbar's left edge is fixed, so it no longer centres itself in the free part; it only has to stay left of the Controls panel. The place is tested in check_5g.py)
+        check(tb[0] + tb[2] <= free + 0.6, f"layout: the toolbar is left of the Controls panel ({tb[0] + tb[2]} of {free})")
     check(not any(k.startswith("panel.old") for k in rl.rects), "layout: the Old panel starts closed")
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0

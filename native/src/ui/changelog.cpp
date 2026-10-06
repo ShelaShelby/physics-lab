@@ -19,6 +19,17 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5g part 2: panel sections scroll into view, Atom text and data sheet",
+     "With New UI (preview) On: a Controls panel section you open now scrolls up so you can see what is in it (Pick a body used to open below the edge, out of sight). "
+     "The Atom Lab's info text at the top left now stops before the subject card and the phase ring, and goes under the ring in a narrow window. "
+     "The Atom data sheet has a solid background in the plain themes, and nothing in it is cut off with an ellipsis; the one \"…\" you may see in the isotope line (for example Uranium-238) is part of that line's own words: it means the nuclide has more decay modes than the two listed. "
+     "Not tested: a real PC or a real mouse."},
+    {"0.15", "Full UI rework, stage 5g part 1: scrolling, Contents, a fixed toolbar, Cloud 3D, a flat handle",
+     "Fixed: the Contents list in a Learn or About page worked once and then did nothing (the page had come in front of the list); it now works every time. The Page Up, Page Down, Home, End and arrow keys now scroll a Learn, About or history page, and in the new UI the wheel also scrolls it when the pointer is over the dimmed picture beside the page. "
+     "I could not reproduce \"the wheel does nothing\" with a scripted wheel (it scrolled in every window, at three sizes, with the new UI On and Off), so a real mouse on a real PC still has to confirm it. "
+     "With New UI (preview) On: the toolbar's left edge now stays in one place in every view and in both labs, every button keeps its slot and the optional ones (Drag, Centre) join at the right end; the Atom toolbar has Cloud 3D and Slice buttons beside Cloud; "
+     "the first time the Atom Lab opens (no saved view) it shows Cloud 3D, which can be turned (the old layout still starts in Orbit); the colour ring of the phase Wheel no longer sits under the subject card; the Controls panel's handle is a flat, slim pill with one chevron in every theme. "
+     "The light Y2K Ice theme was removed (a saved setting that names it now gives Dark); Y2K Night stays. Not tested: a real PC or a real mouse."},
     {"0.15", "Full UI rework, stage 5f part 2: the Atom Lab's subject card, data sheet and legend",
      "With New UI (preview) On, the Atom Lab now has a card at the top right for the chosen isotope: its name, kind, the proton number, neutrons, nucleons, the isotope line, a More info / Less info button and All values. All values opens a data sheet with three tabs: Values (where you meet it, melting and boiling point, density), Decay (the decay history) and This view (the hint line of the picture). They are the very words the old panel showed, moved, not rewritten; the hint line and the More / Less info button are no longer at the top of the Old panel. "
      "On the Chart of nuclides the colour legend and the notes about the valley and the island now live in the Legend chip at the top left (closed at first); the picture no longer draws its own copy, which the Controls panel used to cover. "

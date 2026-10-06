@@ -84,7 +84,8 @@ def part_orbit(binary, work):
     t = r.note("cardtitle orbit.card")
     check(not r.scripted_missing() and t and "Mars" in t[0], f"orbit: picking Mars in the list changes the card to Mars: {t} {r.scripted_missing()[:2]}")
 
-ELEMS = (("hydrogen", "Z=1;N=0"), ("iron", "Z=26;N=30"), ("uranium238", "Z=92;N=146"), ("oganesson", "Z=118;N=176"))
+# (stage 5g: the Orbit view is named in both runs: the New UI now starts in Cloud 3D and the old app in Orbit, and the hint line differs by view; the comparison needs the same view)
+ELEMS = (("hydrogen", "Z=1;N=0;view=Orbit"), ("iron", "Z=26;N=30;view=Orbit"), ("uranium238", "Z=92;N=146;view=Orbit"), ("oganesson", "Z=118;N=176;view=Orbit"))
 
 def part_atom(binary, work):
     NEW, OLD = {"PL_NEWUI": "on", "PL_ATOM": "1"}, {"PL_NEWUI": "off", "PL_ATOM": "1", "PL_LOG_CARD": "1"}

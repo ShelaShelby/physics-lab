@@ -79,8 +79,10 @@ def main():
     check("panel.controls" not in rc.rects and not rc.scripted_missing(), "the panel's own ✕ closes it")
     ro_open = run_app(binary, work, "c_geo_1280x800", dict(NEW, PL_SELECT="Earth"), frames=80)
     tb_o, tb_c = ro_open.rects["toolbar"], rc.rects["toolbar"]
-    check(tb_c[0] + tb_c[2] / 2 > tb_o[0] + tb_o[2] / 2 + 100, f"with the panel closed the toolbar is centred in the whole window (centre {tb_c[0] + tb_c[2] / 2:.0f} vs {tb_o[0] + tb_o[2] / 2:.0f} with it open)")
-    check(tb_o[0] + tb_o[2] / 2 < ro_open.rects["panel.controls"][0] / 2 + 2 and abs(tb_o[0] + tb_o[2] / 2 - ro_open.rects["panel.controls"][0] / 2) < 2, "with it open the toolbar is centred left of the panel")
+    # (changed on purpose in stage 5g, owner's rule: the toolbar's left edge is fixed, it is no longer centred in the free part. Closed or open, it starts at the same x unless the open panel would
+    # cover it; it is never under the panel. The exact place is tested in check_5g.py and by the unit test "anchor:".)
+    check(abs(tb_c[0] - tb_o[0]) < 1 or tb_o[0] < tb_c[0], f"the toolbar starts at the same x with the panel closed ({tb_c[0]:.0f}) and open ({tb_o[0]:.0f}), or further left")
+    check(tb_o[0] + tb_o[2] <= ro_open.rects["panel.controls"][0] + 0.6, "with it open the toolbar is left of the panel")
     # the closed state is kept like the cards' state (the settings file): a second run in the same home keeps it
     # (not tested here: every start uses a fresh home)
 
@@ -185,7 +187,7 @@ def main():
         check(pc is not None and heads and abs(heads[0][0] - (pc[0] + 16)) < 0.6, f"{lab}: the headers start on the content's left edge (16 u in) {heads[:1]} {pc}")
         small = [(px, t) for k, px, t in r.texts if k == "ctl" and px < 14 - 0.01]
         check(any(k == "ctl" for k, _, _ in r.texts) and not small, f"{lab}: all panel text is at least 14 px: {small[:3]}")
-    THEMES = ("light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "synthwave", "monochrome", "blackhole", "decay", "galactic", "aero", "y2kice", "y2knight")
+    THEMES = ("light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "synthwave", "monochrome", "blackhole", "decay", "galactic", "aero", "y2knight")
     HOVER = "10:move=card.legend;16:move=tool.reset;22:move=show.moons;28:move=ctl.sec.view;34:move=view.reset"
     prefetch([((binary, work, f"c_halo_{t}", dict(NEW, PL_SCRIPT=HOVER)), dict(frames=44, size="1280x1080", theme=t)) for t in THEMES])
     for t in THEMES:

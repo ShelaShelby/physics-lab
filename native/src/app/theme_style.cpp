@@ -125,9 +125,7 @@ static const ThemeDef kNativeThemes[] = {
     // 0.14 stage 2: Aero's aqua and leaf green are saturated now (the swatches are the two accents); the colours here are the flat fallbacks and the text colours.
     {"aero", "Frutiger Aero", "Glossy glass, aqua and leaf green", "#19b5d6", "#6cc419", false,
      "#8fd3ee", "#031f2e", "#0a3348", "#ffffff", "#4c9fbd", "#05501f", "#04260d", true},
-    // 0.14 stage 2: Y2K futurism, the owner's version: the cyber / techno print look. Nearly monochrome icy blue, cold white, black and brushed silver.
-    {"y2kice", "Y2K Ice", "Cold white, icy blue and brushed silver", "#bfe3ff", "#3a8dde", false,
-     "#e4f1ff", "#06142e", "#1b3358", "#f4f9ff", "#6a8cba", "#16479a", "#06142e", true},
+    // 0.14 stage 2: Y2K futurism, the owner's version: the cyber / techno print look. (0.15 stage 5g: the light "Y2K Ice" was removed at the owner's request; only Y2K Night is left.)
     {"y2knight", "Y2K Night", "Night city, a violet light streak and film grain", "#0e1a3c", "#7b5cff", false,
      "#060a16", "#eaf4ff", "#d5e2f7", "#0c1428", "#5878b8", "#a6cdff", "#031026", false},
 };
@@ -194,12 +192,12 @@ static ThemeStyle makeStyle(const std::string& id) {
         s.dangerFill = {true, rgb8(0xf8, 0xc0, 0xba)}; s.onDanger = {true, rgb8(0x2b, 0x05, 0x02)};
         // Segoe UI is Microsoft's: it is used from the PC when it is there (Windows), never shipped with the app.
         s.fontRegular = "segoeui.ttf"; s.fontBold = "segoeuib.ttf"; s.fontItalic = "segoeuii.ttf";
-    } else if (id == "y2kice" || id == "y2knight") {
+    } else if (id == "y2knight") {
         // Y2K futurism, the owner's version (0.14 stage 2): the cyber / techno PRINT look (not rainbow bubbles). Nearly monochrome icy blue, cold white, black and
         // brushed silver; violet only as a small streak. Fine film grain, halftone dots and thin grid lines on the page (very subtle, under the glass, never behind
         // text), thin HUD rules, corner brackets and a tiny spec label as decoration, chrome buttons with a cold highlight line, silver or dark title bars in a wide
         // free font (Michroma, SIL OFL). Style only: no logos, characters, photos or artwork. Contrast is tested over the textures at their strongest.
-        const bool night = id == "y2knight";
+        const bool night = true;                 // (Y2K Night is the only one left)
         s.page.kind = 1; s.page.stops = 3;
         s.panel.floatAlpha = 0.96f; s.panel.floatRounding = 4; s.roundScale = 0.5f;
         s.panel.borderFgMix = 0.4f; s.panel.borderWidth = 1;
@@ -212,37 +210,21 @@ static ThemeStyle makeStyle(const std::string& id) {
         s.widget.split = 0.5f; s.widget.shineLineAlpha = night ? 0.6f : 0.9f;
         s.titleFont = "michroma";
         s.danger = {true, rgb8(0x8e, 0x18, 0x12)};
-        if (!night) {
-            s.page.stop[0] = {rgb8(0xf4, 0xfa, 0xff), 0.00f}; s.page.stop[1] = {rgb8(0xb9, 0xda, 0xfa), 0.50f}; s.page.stop[2] = {rgb8(0x7d, 0xb4, 0xec), 1.00f};   // cold white to icy blue
-            s.page.fx.tone = rgb8(0x3a, 0x8d, 0xde); s.page.fx.grain = 0.08f; s.page.fx.halftone = 0.12f; s.page.fx.grid = 0.10f; s.page.fx.gridStep = 44; s.page.fx.halftoneStep = 6;
-            s.panel.fill = rgb8(0xea, 0xf4, 0xff); s.panel.fillAlpha = 0.40f;
-            s.panel.shineAlpha = 0.35f; s.panel.shineHeight = 0.10f; s.panel.shineLineAlpha = 0.8f;
-            s.panel.shadowAlpha = 0.22f; s.panel.shadow = rgb8(0x1e, 0x4a, 0x85);
-            s.panel.hud = rgb8(0x1b, 0x33, 0x58);
-            s.panel.title.top = rgb8(0xee, 0xf3, 0xf9); s.panel.title.bottom = rgb8(0xb7, 0xc4, 0xd6); s.panel.title.text = rgb8(0x06, 0x14, 0x2e);   // brushed silver
-            s.panel.title.shine = 0.35f; s.panel.title.glow = rgb8(0x3a, 0x8d, 0xde);
-            s.widget.hi = 0.8f; s.widget.loAmount = 0.7f; s.widget.lo = {0.7f, 0.78f, 0.9f}; s.widget.pressDark = 0.05f; s.widget.hoverTint = 0.06f; s.widget.pressTint = 0.10f;
-            s.widget.rimDark = 0.3f; s.widget.hoverGlow = 0.4f; s.widget.glint = 0.22f; s.widget.brush = 0.08f; s.widget.glow = rgb8(0x5a, 0xa8, 0xff); s.widget.glowAlpha = 0.6f;
-            s.button = {true, rgb8(0xc3, 0xcf, 0xdc)};                      // silver
-            s.accentFill = {true, rgb8(0x7a, 0xb6, 0xf2)};
-            s.dangerFill = {true, rgb8(0xf3, 0xc2, 0xbd)}; s.onDanger = {true, rgb8(0x2b, 0x05, 0x02)};
-        } else {
-            s.page.stop[0] = {rgb8(0x04, 0x06, 0x0c), 0.00f}; s.page.stop[1] = {rgb8(0x08, 0x0e, 0x20), 0.50f}; s.page.stop[2] = {rgb8(0x16, 0x28, 0x6a), 1.00f};   // night
-            s.page.fx.tone = rgb8(0x7a, 0xae, 0xff); s.page.fx.grain = 0.08f; s.page.fx.halftone = 0.10f; s.page.fx.grid = 0.10f; s.page.fx.gridStep = 44; s.page.fx.halftoneStep = 6;
-            s.page.fx.streak = 0.45f; s.page.fx.streakColour = rgb8(0x7b, 0x5c, 0xff);   // the violet / blue light-streak swoosh
-            s.panel.fill = rgb8(0x0a, 0x12, 0x26); s.panel.fillAlpha = 0.40f;
-            s.panel.shineAlpha = 0.12f; s.panel.shineHeight = 0.08f; s.panel.shineLineAlpha = 0.5f;
-            s.panel.shadowAlpha = 0.5f; s.panel.shadow = rgb8(0, 0, 0);
-            s.panel.hud = rgb8(0x9d, 0xb4, 0xd8);
-            s.panel.title.top = rgb8(0x2a, 0x35, 0x50); s.panel.title.bottom = rgb8(0x0f, 0x17, 0x30); s.panel.title.text = rgb8(0xea, 0xf4, 0xff);
-            s.panel.title.shine = 0.10f; s.panel.title.glow = rgb8(0x6f, 0xb4, 0xff);
-            s.widget.hi = 0.06f; s.widget.loAmount = 0.5f; s.widget.lo = {0.6f, 0.65f, 0.8f}; s.widget.pressDark = 0.10f; s.widget.hoverTint = 0.04f; s.widget.pressTint = 0.06f;
-            s.widget.rimLight = 0.45f; s.widget.hoverGlow = 0.35f; s.widget.glint = 0.12f; s.widget.brush = 0.06f; s.widget.glow = rgb8(0x5a, 0x9b, 0xff); s.widget.glowAlpha = 0.55f;
-            s.button = {true, rgb8(0x1c, 0x26, 0x3f)};                      // dark gunmetal chrome
-            s.accentFill = {true, rgb8(0x6f, 0xb4, 0xff)};
-            s.dangerFill = {true, rgb8(0x9c, 0x1f, 0x18)}; s.onDanger = {true, rgb8(0xff, 0xff, 0xff)};
-            s.danger = {true, rgb8(0xff, 0x9a, 0x90)};
-        }
+        s.page.stop[0] = {rgb8(0x04, 0x06, 0x0c), 0.00f}; s.page.stop[1] = {rgb8(0x08, 0x0e, 0x20), 0.50f}; s.page.stop[2] = {rgb8(0x16, 0x28, 0x6a), 1.00f};   // night
+        s.page.fx.tone = rgb8(0x7a, 0xae, 0xff); s.page.fx.grain = 0.08f; s.page.fx.halftone = 0.10f; s.page.fx.grid = 0.10f; s.page.fx.gridStep = 44; s.page.fx.halftoneStep = 6;
+        s.page.fx.streak = 0.45f; s.page.fx.streakColour = rgb8(0x7b, 0x5c, 0xff);   // the violet / blue light-streak swoosh
+        s.panel.fill = rgb8(0x0a, 0x12, 0x26); s.panel.fillAlpha = 0.40f;
+        s.panel.shineAlpha = 0.12f; s.panel.shineHeight = 0.08f; s.panel.shineLineAlpha = 0.5f;
+        s.panel.shadowAlpha = 0.5f; s.panel.shadow = rgb8(0, 0, 0);
+        s.panel.hud = rgb8(0x9d, 0xb4, 0xd8);
+        s.panel.title.top = rgb8(0x2a, 0x35, 0x50); s.panel.title.bottom = rgb8(0x0f, 0x17, 0x30); s.panel.title.text = rgb8(0xea, 0xf4, 0xff);
+        s.panel.title.shine = 0.10f; s.panel.title.glow = rgb8(0x6f, 0xb4, 0xff);
+        s.widget.hi = 0.06f; s.widget.loAmount = 0.5f; s.widget.lo = {0.6f, 0.65f, 0.8f}; s.widget.pressDark = 0.10f; s.widget.hoverTint = 0.04f; s.widget.pressTint = 0.06f;
+        s.widget.rimLight = 0.45f; s.widget.hoverGlow = 0.35f; s.widget.glint = 0.12f; s.widget.brush = 0.06f; s.widget.glow = rgb8(0x5a, 0x9b, 0xff); s.widget.glowAlpha = 0.55f;
+        s.button = {true, rgb8(0x1c, 0x26, 0x3f)};                      // dark gunmetal chrome
+        s.accentFill = {true, rgb8(0x6f, 0xb4, 0xff)};
+        s.dangerFill = {true, rgb8(0x9c, 0x1f, 0x18)}; s.onDanger = {true, rgb8(0xff, 0xff, 0xff)};
+        s.danger = {true, rgb8(0xff, 0x9a, 0x90)};
     }
     return s;
 }

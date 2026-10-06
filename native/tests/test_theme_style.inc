@@ -67,10 +67,10 @@ static void testGradients() {
 // ---- the theme data: every theme has every field; the old themes keep their exact look ----
 static void testThemeStyleData() {
     const std::vector<const ThemeDef*> all = allThemes();
-    checkTrue("14 themes in the app: the web's 11, Frutiger Aero (0.14 stage 1) and Y2K Ice and Y2K Night (0.14 stage 2: 12 before, changed on purpose)", all.size() == 14);
+    checkTrue("13 themes in the app: the web's 11, Frutiger Aero (0.14 stage 1) and Y2K Night (0.14 stage 2 added Ice and Night; Ice was removed in 0.15 stage 5g: 14 before, changed on purpose)", all.size() == 13);
     // the web's order is kept; Aero comes before the two secret themes, so the "???" cards stay at the end
-    const char* order[] = {"auto", "light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "aero", "y2kice", "y2knight", "synthwave", "monochrome"};
-    for (std::size_t i = 0; i < all.size() && i < 14; i++) checkStr("picker order " + std::to_string(i), all[i]->id, order[i]);
+    const char* order[] = {"auto", "light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "aero", "y2knight", "synthwave", "monochrome"};
+    for (std::size_t i = 0; i < all.size() && i < 13; i++) checkStr("picker order " + std::to_string(i), all[i]->id, order[i]);
     checkTrue("the web's own list is untouched (still 11)", count(kThemes) == 11);
     std::set<std::string> ids;
     for (const ThemeDef* t : all) ids.insert(t->id);

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -27,10 +29,31 @@ struct Reading {
     std::vector<Head> heads, now;     // the headings of the last frame (what the contents list shows) and of this one
     float scrollTo = -1;
     bool contentsOpen = false;
+    bool tocFront = false;            // the Contents list was just opened: it comes in front of the page
+    int lastFrame = -10;              // the frame this page was last drawn in (a page that was not drawn the frame before has just opened)
+    float wheel = 0;                  // the wheel turned over the dimmed picture beside the column: the page scrolls by it
     std::string title;
     float bodyFont = 0;
     int longest = 0, longestCaption = 0;   // the most characters on one line of the Body text, and of the Caption text, this frame
 } g;
+
+// 0.15 stage 5g: the keys PageUp / PageDown / Home / End / Up / Down scroll the page that has the focus (the windows have no keyboard navigation of their own), and a wheel turned
+// over the dimmed picture beside the reading column scrolls the page too (the old floating windows scroll by the wheel through Dear ImGui itself)
+void pageKeys(float wheel) {
+    const ImGuiIO& io = ImGui::GetIO();
+    const float y = ImGui::GetScrollY(), h = ImGui::GetWindowHeight();
+    float to = y;
+    if (wheel != 0) to -= wheel * std::trunc(std::min(2.5f * ImGui::GetFontSize(), h * 0.67f));
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !io.WantTextInput) {
+        if (ImGui::IsKeyPressed(ImGuiKey_PageDown)) to += h * 0.9f;
+        if (ImGui::IsKeyPressed(ImGuiKey_PageUp)) to -= h * 0.9f;
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) to += ImGui::GetFontSize() * 2.5f;
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) to -= ImGui::GetFontSize() * 2.5f;
+        if (ImGui::IsKeyPressed(ImGuiKey_Home, false)) to = 0;
+        if (ImGui::IsKeyPressed(ImGuiKey_End, false)) to = ImGui::GetScrollMaxY();
+    }
+    if (to != y) ImGui::SetScrollY(std::max(0.0f, std::min(to, ImGui::GetScrollMaxY())));
+}
 
 }  // namespace
 
@@ -55,7 +78,7 @@ bool pageBegin(const std::string& title, bool* open) {
         pushFloatStyle();
         const bool shown = ImGui::Begin(title.c_str(), open, ImGuiWindowFlags_NoCollapse);
         popFloatStyle();
-        if (shown) panelDecor(app::PanelKind::Floating);
+        if (shown) { panelDecor(app::PanelKind::Floating); pageKeys(0); auditNote("pagescroll y=" + std::to_string(int(ImGui::GetScrollY())) + " max=" + std::to_string(int(ImGui::GetScrollMaxY()))); }   // for automatic checks (the wheel moves the page)
         return shown;
     }
     // ---- the reading view ----
@@ -76,6 +99,7 @@ bool pageBegin(const std::string& title, bool* open) {
     ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(0, static_cast<float>(f.m.topBar)), ImVec2(static_cast<float>(W), static_cast<float>(H)), IM_COL32(0, 0, 0, 153));   // the picture dims to 60 % black (in this window, so a saved picture is not dimmed)
     ImGui::SetCursorScreenPos(ImVec2(0, static_cast<float>(f.m.topBar)));
     if (ImGui::InvisibleButton("##readClose", ImVec2(static_cast<float>(W), static_cast<float>(H - f.m.topBar)))) *open = false;
+    g.wheel = ImGui::IsItemHovered() ? ImGui::GetIO().MouseWheel : 0;
     ImGui::End();
 
     sh::Panel p;
@@ -84,6 +108,8 @@ bool pageBegin(const std::string& title, bool* open) {
     g.now.clear();
     g.longest = g.longestCaption = 0;
     g.title = title.substr(0, title.find("###"));
+    if (g.lastFrame != ImGui::GetFrameCount() - 1) ImGui::SetNextWindowFocus();   // a page that has just opened has the focus, so its keys work at once (stage 5g)
+    g.lastFrame = ImGui::GetFrameCount();
     const bool shown = sh::beginPanel("##reading", col, p, sh::Shape::Panel, true);
     g.began = shown;
     if (!shown) return false;
@@ -104,7 +130,7 @@ bool pageBegin(const std::string& title, bool* open) {
     if (!geom.rail && !g.heads.empty()) {
         const float cw = sh::width(sh::Type::Body, false, "Contents") + 2.0f * f.m.s12 + f.m.caretW;
         const float cy = headerBottom + f.m.s4;
-        if (sh::button("##readContents", ImVec2(o.x + pad, cy), ImVec2(cw, static_cast<float>(f.m.control)), "")) g.contentsOpen = !g.contentsOpen;
+        if (sh::button("##readContents", ImVec2(o.x + pad, cy), ImVec2(cw, static_cast<float>(f.m.control)), "")) { g.contentsOpen = !g.contentsOpen; g.tocFront = g.contentsOpen; }
         sh::text(dl, sh::Type::Body, false, ImVec2(o.x + pad + f.m.s12, cy + (f.m.control - sh::px(sh::Type::Body)) / 2), sh::cText(), "Contents");
         sh::drawIcon(dl, g.contentsOpen ? sh::Icon::CaretUp : sh::Icon::Caret, ImVec2(o.x + pad + cw - f.m.s8 - f.m.caretW / 2.0f, cy + f.m.control / 2.0f), static_cast<float>(f.m.caretW) * 0.75f, sh::cMuted());
         headerBottom = cy + f.m.control;
@@ -116,6 +142,7 @@ bool pageBegin(const std::string& title, bool* open) {
         app::shell::Rect r = geom.rail ? geom.toc : app::shell::Rect{o.x + pad, o.y + pad + btn + f.m.s4 + f.m.control + f.m.s4, static_cast<double>(std::min<double>(f.m.em(24), col.w - 2.0 * pad)), static_cast<double>(std::min<double>(H * 0.6, 40.0 * f.m.row))};
         if (!geom.rail) r = app::shell::clampInto(r, app::shell::Rect{0, 0, W, H});
         sh::Panel tp;
+        if (g.tocFront) { ImGui::SetNextWindowFocus(); g.tocFront = false; }   // (stage 5g: the click on the Contents button had brought the page in front of the list, so its second opening could not be clicked)
         if (sh::beginPanel("##readtoc", r, tp, sh::Shape::Panel, true)) {
             auditRect(geom.rail ? "reading.toc" : "reading.contents", static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.w), static_cast<float>(r.h));
             sh::text(tp.dl, sh::Type::Caption, false, tp.origin, sh::cMuted(), "Contents");
@@ -131,8 +158,10 @@ bool pageBegin(const std::string& title, bool* open) {
         }
     }
     if (g.scrollTo >= 0) { ImGui::SetScrollY(g.scrollTo); g.scrollTo = -1; }
+    else pageKeys(g.wheel);
     ImGui::PushFont(nullptr, g.bodyFont / (f.dpi * f.tf));                       // the pages' own sizes (S() = font / 16 of the web) now mean the Body size
     g.pushedFont = true;
+    auditNote("pagescroll y=" + std::to_string(int(ImGui::GetScrollY())) + " max=" + std::to_string(int(ImGui::GetScrollMaxY())));
     auditRect("reading.column", static_cast<float>(col.x), static_cast<float>(col.y), static_cast<float>(col.w), static_cast<float>(col.h));
     return true;
 }

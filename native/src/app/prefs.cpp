@@ -118,6 +118,7 @@ Prefs loadPrefs(const std::string& text) {
     // secret themes unlocked before achievements existed count too (the web's start-up check, line 5280)
     for (const std::string& id : p.unlocked) if (!p.achievements.count(id)) p.achievements[id] = 0;
     // a secret theme that is not unlocked cannot be in use (as the web's start-up check)
+    if (p.theme == "y2kice") p.theme = "dark";                        // 0.15 stage 5g: the Y2K Ice theme was removed; a settings file that names it gets Dark
     if (!themeUsable(p, p.theme)) p.theme = "auto";
     return p;
 }

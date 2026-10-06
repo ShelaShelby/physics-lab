@@ -169,6 +169,7 @@ void aboutWindow(AppState& app) {
         htmlView(app::kAboutHtml);
         htmlView(std::string("<p class=\"lrnP lrnMuted\">Native app: Physics Lab (native) ") + appVersionLabel() + ".</p>");
         htmlView("<p class=\"lrnP lrnMuted\">Text codes such as &amp;rsquo; are turned into their characters with the list of named character references of the HTML Standard (WHATWG, entities.json); this page is the only text that uses them.</p>");
+        htmlView("<p class=\"lrnP lrnMuted\">0.15 stage 5g: the Y2K Ice theme was removed at the owner's request (a saved setting that names it gives Dark); Y2K Night and Frutiger Aero stay. No new data.</p>");
         htmlView("<p class=\"lrnP lrnMuted\">The new UI (preview, 0.15 stage 3): panel opacity is found with the same W3C WCAG 2.x contrast formula (text, grey text and accent text each at least 4.5:1 over the worst picture that can be behind a panel, white behind a dark panel and black behind a light one); the icons are drawn by the app itself, no icon set; the type scale and sizes were chosen with the owner (docs/ui-0.15/DESIGN.md); no new data.</p>");
     }
     pageEnd();

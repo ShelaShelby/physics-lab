@@ -49,7 +49,9 @@ Rect clampInto(Rect r, const Rect& bounds);                                // th
 // 0.15 stage 5c: `dock` is the Controls panel on the right (width 0: closed). freeW = the width of the window left of it: the toolbar is centred there, the readout and every panel that
 // anchors to the right edge sit left of it, so nothing of the bars is ever under the dock.
 struct Frame { Rect window, topBar, toolbar, readout, dock; double freeW = 0; };
-Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW = 0);
+Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW = 0, double anchorW = 0);
+// 0.15 stage 5g: anchorW > 0 = the toolbar's LEFT edge is fixed: the window's centre minus half of anchorW (the widest toolbar, the Atom Lab's with every optional button), so the toolbar stays
+// where it is in every view and lab; it moves only to stay left of the open Controls panel (by the same widest width, so it still does not depend on the view). anchorW = 0: centred as before.
 double dockWidth(const Metrics& m, double winW);                          // the Controls panel: 22 em of Body, at most 45 % of the window, never under 12 em
 Rect dockRect(double winW, double winH, const Metrics& m, double dockW);   // where the open Controls panel sits (makeFrame's dock)
 // 0.15 stage 5c.1: the panel slides in and out from a handle on the picture's right edge (the owner's findings after trying 5c)

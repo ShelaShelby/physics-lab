@@ -19,7 +19,7 @@ using namespace sh;
 using atom::Tool;
 using app::shell::Metrics;
 
-std::vector<ToolItem> atomTools(AppState& app) {
+std::vector<ToolItem> atomTools(AppState& app, bool all) {
     atom::AtomLab& L = app.atom;
     std::vector<ToolItem> v;
     const auto button = [&](const char* id, const char* tip, Icon icon, Tool t) {
@@ -29,15 +29,20 @@ std::vector<ToolItem> atomTools(AppState& app) {
     };
     button("tool.atom", "Atom: the electron and the whole atom (Orbit view)", Icon::Atom, Tool::Atom);
     button("tool.nucleus", "Nucleus: zoom to the nucleus (Nucleon, one proton or neutron: Controls › View)", Icon::Nucleus, Tool::Nucleus);
-    button("tool.cloud", "Cloud: the electron as a probability cloud (Cloud 3D and Slice: Controls › View)", Icon::Cloud, Tool::Cloud);
+    button("tool.cloud", "Cloud: the electron as a probability cloud, seen from the side (it cannot be turned)", Icon::Cloud, Tool::Cloud);
+    button("tool.cloud3d", "Cloud 3D: the electron cloud in three dimensions; drag to turn it", Icon::Cloud3D, Tool::Cloud3D);
+    button("tool.slice", "Slice: a thin flat cut through the cloud, seen face-on", Icon::Slice, Tool::Slice);
     button("tool.chart", "Chart of nuclides: every nuclide on one map", Icon::Chart, Tool::Chart);
     v.push_back(separator());
     button("tool.reset", L.chartOn() ? "Reset view: tilt, zoom and position of the chart" : "Reset view: turn the picture back", Icon::Reset, Tool::ResetView);
-    if (atom::toolShown(L, Tool::Centre)) button("tool.centre", "Centre: move the picture back to the middle", Icon::Target, Tool::Centre);
-    if (atom::toolShown(L, Tool::DragMode)) {
+    // The optional buttons have slots of their own at the right end: Drag first, Centre after it. A slot whose button is not shown stays empty, so a button that appears never moves one
+    // that is already there (stage 5g).
+    const bool drag = all || atom::toolShown(L, Tool::DragMode), centre = all || atom::toolShown(L, Tool::Centre);
+    if (drag) {
         const bool move = L.s.dragMode == "move";
         button("tool.drag", move ? "Drag moves the picture (click: drag rotates)" : L.p.view == "Slice" ? "Drag slides the cut (click: drag moves the picture)" : "Drag rotates (click: drag moves the picture)", Icon::Move, Tool::DragMode);
-    }
+    } else if (centre) v.push_back(ToolItem{});                                       // the empty slot (no id: nothing is drawn)
+    if (centre) button("tool.centre", "Centre: move the picture back to the middle", Icon::Target, Tool::Centre);
     return v;                                             // (stage 5c.1: the Controls panel opens from its handle on the picture's right edge, not from the toolbar)
 }
 

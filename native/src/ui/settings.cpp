@@ -46,10 +46,13 @@ std::string settingsPath() {
 std::string g_written;            // what the file holds now
 double g_changedAt = -1;          // when the settings last changed (s), -1 = nothing waiting to be written
 
+const char* const kNewUiAtomView = "Cloud 3D";   // the New UI's first-ever Atom Lab view (owner's decision, 6 Oct 2026); a view saved by an earlier run is kept
+
 // Atom Lab back to how it starts: every setting at its default and a fresh atom (the web's load(lab, fresh));
 // the More / Less info choice and the Temperature slider are kept, as on the web
 void putBackAtomDefaults(AppState& app) {
     app.atom.p = atom::AtomParams::appDefaults();
+    if (newUiOn(app)) app.atom.p.view = kNewUiAtomView;    // (stage 5g: the New UI's starting view)
     app.atom.restart();
     app.atomLearn = 0;
 }
@@ -125,6 +128,7 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
                        : std::string(k) == "super" ? a.super : std::string(k) == "orb2" ? a.orb2 : std::string(k) == "pAx2" ? a.pAx2 : std::string(k) == "dAx2" ? a.dAx2 : std::string(k) == "fAx2" ? a.fAx2 : a.cutAxis;
         f = it->second;
     }
+    if (!p.atom.count("view") && newUiOn(app)) a.view = kNewUiAtomView;   // 0.15 stage 5g (owner's decision of 6 Oct 2026): the New UI's Atom Lab opens in Cloud 3D the first time (no saved view); the old app keeps Orbit
     if (readNum(p.atom, "zoom", 0, 7, d)) a.zoom = d;
     if (readNum(p.atom, "Z", 1, 118, d)) { a.Z = int(d); a.N = atom::defaultN(a.Z); }
     if (readNum(p.atom, "N", atom::nRange(a.Z).first, atom::nRange(a.Z).second, d)) a.N = int(d);

@@ -207,7 +207,7 @@ void atomDataPanel(AppState& app, sh::Panel& p, bool& close) {
 void morePanel(sh::Panel& p, std::vector<ToolItem>& hidden, bool& close) {
     sh::pTitle(p, "More");
     for (ToolItem& t : hidden) {
-        if (t.kind == ToolItem::Sep) continue;
+        if (t.kind == ToolItem::Sep || !t.id[0]) continue;      // (a blank slot has no id)
         if (t.kind == ToolItem::Segment) {
             for (int i = 0; i < static_cast<int>(t.labels.size()); i++)
                 if (sh::pRow(p, (std::string(t.id) + "." + t.labels[i]).c_str(), t.labels[i] + " view", t.sel == i)) { t.pick(i); close = true; }
@@ -477,7 +477,25 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     double rw = 0;
     for (const std::string& l : ro) rw = std::max(rw, static_cast<double>(sh::width(Type::Body, false, l)));
     const double rh = ro.empty() ? 0.0 : ro.size() * sh::lineH(Type::Body) + 2.0 * m.s4;       // (stage 5c: Body size on a pill, padded 8 u and 4 u)
-    const Frame fr = makeFrame(W, H, m, tw, rw + 2.0 * m.s8, rh, dockW);
+    // 0.15 stage 5g: the toolbar's left edge is fixed (window centre minus half of the widest toolbar: the Atom Lab's with every optional button, or the Orbit Lab's), so it does not move
+    // between views and labs; every button keeps its slot and the optional ones (Centre, Drag) join at the right end. Worked out again only when the sizes change.
+    static struct { double key[6] = {0, 0, 0, 0, 0, 0}; double w = 0; } widest;
+    const double wkey[6] = {m.toolBtn, m.caretW, m.s4, m.s8, segW, 0};
+    if (std::equal(std::begin(wkey), std::end(wkey), std::begin(widest.key)) == false || widest.w <= 0) {
+        std::copy(std::begin(wkey), std::end(wkey), std::begin(widest.key));
+        double best = 0;
+        for (int lab = 0; lab < 2; lab++) {
+            const std::vector<ToolItem> all = lab == 0 ? orbitTools(app) : atomTools(app, true);
+            double w = 2.0 * m.s8;
+            for (std::size_t i = 0; i < all.size(); i++) {
+                const ToolItem& t = all[i];
+                w += (i ? gap : 0) + (t.kind == ToolItem::Sep ? m.s12 : t.kind == ToolItem::Menu || t.kind == ToolItem::Split ? m.toolBtn + m.caretW : t.kind == ToolItem::Segment ? 2 * segW + gap + (t.panel != PanelId::None ? m.caretW : 0) : m.toolBtn);
+            }
+            best = std::max(best, w);
+        }
+        widest.w = best;
+    }
+    const Frame fr = makeFrame(W, H, m, tw, rw + 2.0 * m.s8, rh, dockW, hasToolbar ? widest.w : 0);
     S.topBarH = static_cast<float>(m.topBar);
 
     // the top bar's pieces
@@ -623,7 +641,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     }
     if (app.lab == 1 && !pane) {                          // 0.15 stage 5f: the Atom Lab's subject card (the chosen isotope): the same strings as the old panel's element card, isotope line and hint
         const AtomSubject sc = atomSubject(app);
-        card("card", displayable(sc.name).c_str(), Anchor::TopRight, 20, false, [&](sh::Panel& p) {
+        const Rect atomCardR = card("card", displayable(sc.name).c_str(), Anchor::TopRight, 20, false, [&](sh::Panel& p) {
             if (!sc.kind.empty()) sh::pCaption(p, displayable(sc.kind));
             {
                 const bool big = sh::width(Type::Key, true, sc.keyValue) <= p.w;
@@ -638,6 +656,19 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (sh::pButton(p, "card.more", app.atom.moreShown() ? "Less info" : "More info", Face::Quiet)) { app.atom.s.more = !app.atom.moreShown(); app.atom.moreStored = app.atom.s.more; }   // (the old bar's / picture's button)
             if (sh::pButton(p, "card.all", "All values", Face::Secondary, S.ui.open == PanelId::Data)) toggle(PanelId::Data);
         });
+        // 0.15 stage 5g: the picture's phase ring (the Wheel colours' legend) never sits under the card: below it when the card is a collapsed title, left of it when the card is open
+        // (below it when there is no room left of it). Its size: about 62 points each side of its centre, 62 above and 42 below (atom_view.cpp).
+        {
+            const double dp = dpi, half = 62, gapPt = 8, cardL = atomCardR.x / dp, cardR = atomCardR.right() / dp, cardT = atomCardR.y / dp, cardB = atomCardR.bottom() / dp;
+            const bool collapsedCard = panelCollapsed(app.prefs.shellPanels, "atom.card", false);
+            if (!collapsedCard && cardL - gapPt - 2 * half >= 12) { app.atom.ringX = cardL - gapPt - half; app.atom.ringY = cardT + half; }   
+            else { app.atom.ringX = cardR - half; app.atom.ringY = cardB + gapPt + half; }
+            const bool ringShown = !app.atom.chartOn() && app.atom.p.view != "Orbit" && app.atom.usesWheel();
+            const bool ringLeft = ringShown && app.atom.ringX < cardL;
+            const bool roomBeside = !ringLeft || app.atom.ringX - half >= 220;                           // 220 points: enough for the info text to wrap sensibly beside the ring
+            app.atom.infoRight = ringLeft && roomBeside ? app.atom.ringX - half : cardL;                // the info text at the top left stops before the card (and the ring)
+            app.atom.infoDown = ringLeft && !roomBeside ? app.atom.ringY + 42 + gapPt - 4 - (m.topBar / dp + 4) : 0;   // no room beside the ring: the text goes below it (the ring sits at the top, left of the card)
+        }
     }
 
     // ---- the toolbar ----
@@ -649,10 +680,11 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             for (int i = 0; i < shown; i++) {
                 ToolItem& t = tools[i];
                 const float w = static_cast<float>(iw[i]);
+                if (shellLogOn() && t.kind != ToolItem::Sep && t.id[0]) auditRect(std::string("toolbtn.") + t.id, x, y, w, static_cast<float>(m.toolBtn));   // (for the automatic checks: where each button is)
                 if (t.kind == ToolItem::Sep) {
                     tb.dl->AddLine(ImVec2(x + w / 2, y + m.s4), ImVec2(x + w / 2, y + m.toolBtn - m.s4), sh::cEdge(), 1.0f);
                 } else if (t.kind == ToolItem::Button) {
-                    if (sh::iconButton(t.id, ImVec2(x, y), ImVec2(static_cast<float>(m.toolBtn), static_cast<float>(m.toolBtn)), t.icon, t.tip.c_str(), t.on)) t.act();
+                    if (t.id[0] && sh::iconButton(t.id, ImVec2(x, y), ImVec2(static_cast<float>(m.toolBtn), static_cast<float>(m.toolBtn)), t.icon, t.tip.c_str(), t.on)) t.act();
                 } else if (t.kind == ToolItem::Split) {
                     if (sh::iconButton(t.id, ImVec2(x, y), ImVec2(static_cast<float>(m.toolBtn), static_cast<float>(m.toolBtn)), t.icon, t.tip.c_str(), t.on)) t.act();
                     const float cx = x + static_cast<float>(m.toolBtn);
@@ -732,6 +764,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 if (h.y >= pr.y && h.y + m.row <= pr.bottom()) auditRect(std::string("ctlhead.") + key, h.x, h.y, cp.w, static_cast<float>(m.row));   // (only the headers in view)
                 (void)o;
                 if (revealed) { ImGui::SetScrollY(ImGui::GetScrollY() + h.y - static_cast<float>(fr.dock.y) - m.s12); S.revealSection.clear(); }
+                else if (was && !collapsed) ImGui::SetScrollY(std::max(0.0f, ImGui::GetScrollY() + h.y - static_cast<float>(fr.dock.y) - m.s12));   // (stage 5g) a section the owner has just opened comes into view: its header at the top, so its rows are not below the fold
                 cp.y += m.row + m.s4;
                 if (collapsed != was) app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, name, collapsed);
                 return !collapsed;
@@ -765,10 +798,23 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     if (!paneOpen) {
         const Rect hr = handleRect(dockRect(W, H, m, dockWidth(m, W)), W, m, ease);
         sh::Panel hp;
-        if (sh::beginPanel("##shellHandle", hr, hp, sh::Shape::Pill, false)) {
+        if (sh::beginPanel("##shellHandle", hr, hp, sh::Shape::Clear, false)) {     // (stage 5g: flat and modern in every theme: a slim rounded pill with a thin edge and one chevron; no gradient, gloss, bevel, glow or shadow)
             ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
-            const ImVec2 o(static_cast<float>(hr.x), static_cast<float>(hr.y)), sz(static_cast<float>(hr.w), static_cast<float>(hr.h));
-            if (sh::iconButton("ctl.handle", o, sz, wantOpen ? Icon::CaretRight : Icon::CaretLeft, wantOpen ? "Close the Controls panel" : "Open the Controls panel")) controlsToggle();
+            const ImVec2 a(static_cast<float>(hr.x), static_cast<float>(hr.y)), b(static_cast<float>(hr.right()), static_cast<float>(hr.bottom()));
+            ImGui::SetCursorScreenPos(a);
+            const bool clicked = ImGui::InvisibleButton("ctl.handle", ImVec2(static_cast<float>(hr.w), static_cast<float>(hr.h)));
+            const bool hov = ImGui::IsItemHovered();
+            noteItem("ctl.handle");
+            if (hov) { ImGui::SetMouseCursor(ImGuiMouseCursor_Hand); ui::SetTooltip("%s", wantOpen ? "Close the Controls panel" : "Open the Controls panel"); }
+            const float rr = static_cast<float>(hr.w) / 2;
+            const app::Rgb card = sh::F().c->card, fg = sh::F().c->fg;
+            hp.dl->AddRectFilled(a, b, ui::col(hov ? app::mixRgb(card, fg, 0.10f) : card, 1.0f), rr);      // hover: a slightly different fill inside the pill (its own shape, never a halo: the 2 px rule)
+            hp.dl->AddRect(a, b, sh::cEdge(), rr, 0, 1.0f);
+            const float cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, k = static_cast<float>(hr.w) * 0.2f, dir = wantOpen ? 1.0f : -1.0f;   // the chevron points right (close) while the panel is open, left (open) while it is closed
+            const ImVec2 chev[3] = {ImVec2(cx - dir * k * 0.5f, cy - k), ImVec2(cx + dir * k * 0.5f, cy), ImVec2(cx - dir * k * 0.5f, cy + k)};
+            hp.dl->AddPolyline(chev, 3, hov ? sh::cText() : sh::cMuted(), 0, std::max(1.5f, static_cast<float>(m.s4) * 0.4f));
+            if (hov) auditHalo("hover.ctl.handle", a, b, a, b);
+            if (clicked) controlsToggle();
             ImGui::End();
         }
         auditRect("handle", static_cast<float>(hr.x), static_cast<float>(hr.y), static_cast<float>(hr.w), static_cast<float>(hr.h));
@@ -891,7 +937,8 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             openRect = placePanel(id == PanelId::Data ? Anchor::Centre : fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(id == PanelId::Chip && app.lab == 1 ? atomPanelWidthEm(id) : widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
             for (const Rect& c : cards) openRect = sideStep(openRect, c, fr.window, m.s12, m.s12);
             sh::Panel p;
-            if (sh::beginPanel(wid.c_str(), openRect, p, sh::Shape::Panel, true)) {
+            if (sh::beginPanel(wid.c_str(), openRect, p, sh::Shape::Panel, true, id == PanelId::Data)) {   // (stage 5g: the data sheet is solid in the plain themes: the picture's labels showed through it)
+                if (id == PanelId::Data) auditNote("datasheet solid");
                 bool close = false;
                 if (!buildOrbitPanel(id, app, p, close) && !buildAtomPanel(id, app, p, close)) {
                     if (id == PanelId::Menu) menuPanel(app, p, close);

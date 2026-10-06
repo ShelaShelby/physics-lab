@@ -72,7 +72,7 @@ def main():
     os.makedirs(work, exist_ok=True)
     screens = {"orbit": {}, "guide": {"PL_LEARN": "1"}, "settings": {"PL_OPEN": "settings"}}
     # the picture area is not a window: leave it out of "outside every window" by giving it nothing; only windows count
-    for theme in ("y2kice", "y2knight"):
+    for theme in ("y2knight",):
         for sname, extra in screens.items():
             on, wins, bars, texts = run(binary, work, f"{sname}_{theme}_on", theme, extra)
             off, _, _, _ = run(binary, work, f"{sname}_{theme}_decoff", theme, dict(extra, PL_DECOR="off"))
@@ -95,11 +95,11 @@ def main():
         on, wins, _, _ = run(binary, work, f"orbit_{theme}_fxon", theme, {})
         off, _, _, _ = run(binary, work, f"orbit_{theme}_fxoff", theme, {"PL_FX": "off"})
         d = diff_pixels(load(on), load(off))
-        bound = {"y2kice": 0.08 + 0.12 + 0.10, "y2knight": 1 - (1 - (0.08 + 0.10 + 0.10)) * (1 - 0.45)}[theme] * 255 + 2   # PageFx numbers of the theme (see test_theme_stage2.inc)
+        bound = {"y2knight": 1 - (1 - (0.08 + 0.10 + 0.10)) * (1 - 0.45)}[theme] * 255 + 2   # PageFx numbers of the theme (see test_theme_stage2.inc)
         worst = max((p[2] for p in d), default=0)
         report(len(d) > 1000 and worst <= bound, f"{theme}: page textures change {len(d)} pixels by at most {worst} (the model's bound is {bound:.0f}/255)")
     # glow over the dark picture
-    for theme, want in (("aero", True), ("y2kice", True), ("y2knight", True), ("dark", False)):
+    for theme, want in (("aero", True), ("y2knight", True), ("dark", False)):
         pic, wins, bars, _ = run(binary, work, f"guide_{theme}_glow", theme, {"PL_LEARN": "1"})
         fl = [v for v in wins.values() if v[4] == "floating"][-1]
         w, h, bp, rows = load(pic)
@@ -109,7 +109,7 @@ def main():
         near, far = col(fl[0] - 4), col(fl[0] - 40)
         report((near > far + 5) == want, f"{theme}: outer glow over the dark picture: {near:.1f} 4 pt outside the edge against {far:.1f} 40 pt outside ({'brighter' if want else 'not brighter'} expected)")
     # hover and tooltip
-    for theme in ("aero", "y2kice", "y2knight"):
+    for theme in ("aero", "y2knight"):
         a, _, _, _ = run(binary, work, f"orbit_{theme}_nomouse", theme, {})
         b, _, _, _ = run(binary, work, f"orbit_{theme}_hover", theme, {"PL_MOUSE": "766,256"})
         d = diff_pixels(load(a), load(b))

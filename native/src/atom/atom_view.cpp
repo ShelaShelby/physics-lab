@@ -458,7 +458,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             }
         }
         if (wheel) {                                                       // the legend: a ring of the phase colours, with 0, pi/2, pi, 3 pi/2 (the phase of the wave, not a place)
-            const double lx = w - 56 - lab.insetRight, ly = 86, ro = 20;   // top right (bottom left has the ⓘ button and the scale bar, bottom right the axes); new UI (0.15 stage 5e): left of the Controls panel
+            const double lx = lab.ringX >= 0 ? lab.ringX : w - 56 - lab.insetRight, ly = lab.ringY >= 0 ? lab.ringY : 86, ro = 20;   // top right (bottom left has the ⓘ button and the scale bar, bottom right the axes); new UI (0.15 stage 5e): left of the Controls panel
             for (int i = 0; i < 72; i++) {
                 const double a0 = 2 * kPi * i / 72, a1 = 2 * kPi * (i + 1.05) / 72;
                 const PhaseRgb c = phaseRgb(a0 + kPi / 72, css.light);
@@ -467,6 +467,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             const struct { const char* t; double a; } marks[] = {{"0", 0}, {"π/2", kPi / 2}, {"π", kPi}, {"3π/2", 1.5 * kPi}};
             for (const auto& mk : marks) T.draw(mk.t, lx + 34 * std::cos(mk.a), ly - 34 * std::sin(mk.a) + 4, 11, css.muted, 0.5);
             T.draw("phase of ψ", lx, ly - 54, 11, css.muted, 0.5);
+            g_marks.ring[0] = lx - 62; g_marks.ring[1] = ly - 62; g_marks.ring[2] = 124; g_marks.ring[3] = 104;   // (for the automatic checks: the ring with its labels, in points)
         }
     } else {                                                               // Orbit: the circle lies flat (x-y plane), projected so it can be turned
         auto op = [&](double x, double y, double& qx, double& qy) { const double x1 = x * ca - y * sa, y1 = x * sa + y * ca; qx = x1; qy = y1 * sb; };
@@ -923,7 +924,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         T.draw(label + "  =  " + metres(bar * 1e-10), 12, yb - 6, 12, css.muted);
     }
     {   // the readout at the top left, on a soft plate (the web engine's info lines)
-        const double maxW = w - 24 - 56 - lab.insetRight;
+        const double maxW = lab.infoRight >= 0 ? std::max(40.0, lab.infoRight - 34) : w - 24 - 56 - lab.insetRight;   // (new UI, stage 5g: the plate stops before the subject card and the phase ring)
         std::vector<std::string> rows;
         for (const std::string& t : lab.info()) {                          // wrap at " · " first
             std::string cur;
@@ -959,11 +960,12 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         for (const std::string& t : rows) { if (!t.empty()) any = true; mw = std::max(mw, T.width(t, 13)); }
         if (any) {
             const double bw = mw + 12 + 8, bh = 17.0 * rows.size() + 10;
-            dl->AddRectFilled(ImVec2(float(ox + 6 * uiScale), float(oy + (4 + lab.insetTop) * uiScale)), ImVec2(float(ox + (6 + bw) * uiScale), float(oy + (4 + lab.insetTop + bh) * uiScale)),
+            g_marks.info[0] = 6; g_marks.info[1] = 4 + lab.insetTop + lab.infoDown; g_marks.info[2] = bw; g_marks.info[3] = bh;   // (for the automatic checks: the info plate, in points)
+            dl->AddRectFilled(ImVec2(float(ox + 6 * uiScale), float(oy + (4 + lab.insetTop + lab.infoDown) * uiScale)), ImVec2(float(ox + (6 + bw) * uiScale), float(oy + (4 + lab.insetTop + lab.infoDown + bh) * uiScale)),
                               ImGui::ColorConvertFloat4ToU32(ImVec4(css.card.r, css.card.g, css.card.b, 0.72f)), float(8 * uiScale));
         }
         // on their see-through panel the rows need no halo (in light themes its 8 copies left faint grey marks between letters)
-        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 21 + lab.insetTop + 17.0 * i, 13, css.muted, 0, any ? nullptr : &css.card);
+        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 21 + lab.insetTop + lab.infoDown + 17.0 * i, 13, css.muted, 0, any ? nullptr : &css.card);
     }
 }
 

@@ -225,7 +225,7 @@ void testShellGlass() {
     // the opacities of docs/ui-0.15/DESIGN.md section 3, which tools/glass_alpha.py (Python, its own contrast function) computed
     struct Row { const char* id; double use; };
     const Row table[] = {{"light", 0.97}, {"dark", 0.96}, {"black", 0.93}, {"midnight", 0.95}, {"solar", 0.97}, {"paper", 0.97}, {"sage", 0.95}, {"contrast", 0.70},
-                         {"synthwave", 0.94}, {"monochrome", 0.87}, {"aero", 0.75}, {"y2kice", 0.80}, {"y2knight", 0.78}};
+                         {"synthwave", 0.94}, {"monochrome", 0.87}, {"aero", 0.75}, {"y2knight", 0.78}};
     for (const Row& r : table) {
         const app::ThemeColors c = app::themeColors(r.id, false);
         checkTrue(std::string("glass: opacity of ") + r.id + " equals the Python table (" + num(r.use) + ", got " + num(glassOpacity(c)) + ")", std::fabs(glassOpacity(c) - r.use) < 0.0051);
@@ -235,7 +235,7 @@ void testShellGlass() {
     for (const app::ThemeDef* t : app::allThemes()) if (std::string(t->id) != "auto") all.push_back(app::themeColors(t->id, false));
     all.push_back(app::themeColors("auto", false));
     all.push_back(app::themeColors("auto", true));
-    checkTrue("glass: all 14 themes were checked (13 and Auto, Dark and Light)", all.size() == 15 && app::allThemes().size() == 14);
+    checkTrue("glass: all 13 themes were checked (12 and Auto, Dark and Light; 14 before Y2K Ice was removed, stage 5g, on purpose)", all.size() == 14 && app::allThemes().size() == 13);
     for (const app::ThemeColors& c : all) {
         const double a = glassOpacity(c);
         checkTrue("glass: opacity of " + c.id + " is below 1 and at most 0.97", a > 0 && a <= 0.97 + 1e-9);
@@ -683,6 +683,16 @@ void testShellDock() {
     const Frame f = makeFrame(1280, 800, m, 300, 100, 40, dockWidth(m, 1280));
     Pt target;
     checkTrue("dock: a body under the dock is hidden by it", hiddenBy({f.dock.x + 40, 400}, 10, {f.dock}, m.s24));
+    // 0.15 stage 5g: the anchored toolbar: its left edge is the window centre minus half of the widest toolbar, whatever its own width; the open panel moves it left by the widest width
+    for (double W : {1280.0, 880.0, 1920.0}) {
+        const double H = W * 0.625, wide = 11 * (m.toolBtn + m.s4) + 2 * m.s8;
+        const Frame n1 = makeFrame(W, H, m, 2 * (m.toolBtn + m.s4) + 2 * m.s8, 100, 40, 0, wide), n2 = makeFrame(W, H, m, 9 * (m.toolBtn + m.s4) + 2 * m.s8, 100, 40, 0, wide);
+        checkTrue("anchor: the left edge does not depend on the toolbar's own width", std::fabs(n1.toolbar.x - n2.toolbar.x) < 1e-9 && std::fabs(n1.toolbar.x - (W / 2 - wide / 2)) < 1e-9);
+        const double dw = dockWidth(m, W);
+        const Frame d1 = makeFrame(W, H, m, 2 * (m.toolBtn + m.s4) + 2 * m.s8, 100, 40, dw, wide), d2 = makeFrame(W, H, m, 9 * (m.toolBtn + m.s4) + 2 * m.s8, 100, 40, dw, wide);
+        checkTrue("anchor: with the panel open the left edge still does not depend on the toolbar's width", std::fabs(d1.toolbar.x - d2.toolbar.x) < 1e-9);
+        checkTrue("anchor: with the panel open the toolbar is never under it, and moves only if it had to", d1.toolbar.x + wide <= d1.dock.x - m.s12 + 1e-9 && (d1.toolbar.x == n1.toolbar.x || std::fabs(d1.toolbar.x + wide - (d1.dock.x - m.s12)) < 1e-9 || d1.toolbar.x == m.s12));
+    }
     checkTrue("dock: the centre shift moves it out", centreShiftTarget({f.dock.x + 40, 400}, 10, f.window, {f.topBar, f.toolbar, f.dock}, m.s24, target) && target.x < f.dock.x - m.s24);
 }
 

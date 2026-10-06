@@ -30,7 +30,7 @@ struct ToolItem {
 
 inline ToolItem separator() { ToolItem t; t.kind = ToolItem::Sep; return t; }
 std::vector<ToolItem> orbitTools(AppState& app);
-std::vector<ToolItem> atomTools(AppState& app);
+std::vector<ToolItem> atomTools(AppState& app, bool all = false);   // all: every optional button too (the widest toolbar: the fixed left edge is worked out from it, stage 5g)
 
 // What the Orbit Lab's panels hold (layout is by ui/shell.cpp). closeAfter is set by a panel that wants to close once something was chosen. False / 0: not an Orbit panel.
 // The Controls panel (stage 5c): one docked panel on the right with every simulation option, in sections that fold. `section` draws a section's header and says whether its body is shown;

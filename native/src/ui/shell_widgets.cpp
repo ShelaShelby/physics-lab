@@ -206,6 +206,16 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
         for (const ImVec2& q : {ImVec2(0.0f, 0.0f), ImVec2(-0.22f, -0.15f), ImVec2(0.2f, 0.12f), ImVec2(0.05f, -0.32f), ImVec2(-0.15f, 0.28f), ImVec2(0.38f, -0.2f), ImVec2(-0.5f, 0.1f), ImVec2(0.55f, 0.4f), ImVec2(-0.45f, -0.5f), ImVec2(0.1f, 0.62f)})
             dl->AddCircleFilled(P(q.x, q.y), 0.11f * s, col, 8);
         break;
+    case Icon::Cloud3D: // a cube with dots inside: the cloud in three dimensions
+        dl->AddRect(P(-0.7f, -0.4f), P(0.35f, 0.65f), col, 0, 0, th * 0.8f); dl->AddRect(P(-0.35f, -0.75f), P(0.7f, 0.3f), col, 0, 0, th * 0.8f);
+        for (const ImVec2& q : {ImVec2(-0.05f, 0.0f), ImVec2(0.12f, -0.18f), ImVec2(-0.2f, 0.18f), ImVec2(0.25f, 0.1f), ImVec2(0.0f, 0.3f)}) dl->AddCircleFilled(P(q.x, q.y), 0.1f * s, col, 8);
+        break;
+    case Icon::Slice: { // a flat plane seen at an angle with dots on it: a thin cut through the cloud
+        const ImVec2 plane[4] = {P(-0.95f, 0.3f), P(-0.4f, -0.45f), P(0.95f, -0.45f), P(0.4f, 0.3f)};
+        dl->AddPolyline(plane, 4, col, ImDrawFlags_Closed, th * 0.9f);
+        for (const ImVec2& q : {ImVec2(-0.1f, -0.1f), ImVec2(0.2f, -0.2f), ImVec2(0.3f, 0.05f), ImVec2(-0.3f, 0.1f), ImVec2(0.05f, 0.12f)}) dl->AddCircleFilled(P(q.x, q.y), 0.1f * s, col, 8);
+        break;
+    }
     case Icon::Chart:   // the map of nuclides: a grid of squares, some filled
         for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) {
             const ImVec2 a = P(-0.8f + i * 0.58f, -0.8f + j * 0.58f), b = P(-0.8f + i * 0.58f + 0.46f, -0.8f + j * 0.58f + 0.46f);

@@ -106,18 +106,18 @@ static void testDisplayScale() {
 
 static void testPageCacheLogic() {
     using namespace app;
-    // which themes use the cache: exactly those whose page has textures (Aero's clouds and bubbles, Y2K Ice and Night), and only with Theme effects On
+    // which themes use the cache: exactly those whose page has textures (Aero's clouds and bubbles, Y2K Night), and only with Theme effects On
     int cached = 0;
     for (const ThemeDef* t : allThemes()) {
         const std::string id = t->id;
         if (id == "auto") continue;
         const ThemeStyle full = themeColors(id, false).style;
-        const bool want = id == "aero" || id == "y2kice" || id == "y2knight";
+        const bool want = id == "aero" || id == "y2knight";
         checkTrue("page cache is used for " + id + " exactly when it has page textures", pageNeedsCache(full.page) == want);
         checkTrue("page cache is never used with Theme effects Off: " + id, !pageNeedsCache(withoutEffects(full).page));
         if (pageNeedsCache(full.page)) cached++;
     }
-    checkTrue("three themes use the cache", cached == 3);
+    checkTrue("two themes use the cache (three before Y2K Ice was removed, stage 5g, on purpose)", cached == 2);
     // a page with textures but no gradient under it (kind 0) is not cached: the cached picture would carry transparent pixels
     PageStyle none; none.kind = 0; none.stops = 0; none.fx.grain = 0.05f;
     checkTrue("no gradient, no cache", !pageNeedsCache(none));

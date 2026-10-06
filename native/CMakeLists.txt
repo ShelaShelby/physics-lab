@@ -282,6 +282,10 @@ if(PL_BUILD_APP)
       foreach(part orbit atom)
         add_test(NAME cards_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_cards.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/cards_${part} ${part})
       endforeach()
+      # 0.15 stage 5g: the owner's bug list (scroll, Contents, toolbar place, Cloud 3D, top right, themes, handle, panel scroll)
+      foreach(part pages contents toolbar default ring panel atomtext)
+        add_test(NAME ui5g_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5g.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5g_${part} ${part})
+      endforeach()
       add_test(NAME shell_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_pictures ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference)
       # 0.15 stage 4: the whole Orbit Lab in the new UI: every INVENTORY.md item reachable by real clicks (incl. the 47 Go to names), the subject card's data sheet equal to the old card's lines
       # (8 things), the Time panel fits, the fact line (visible, changes after 20 s, stands still while hovered, readable, never overlaps), search (20 things, arrows, recent), links
@@ -301,7 +305,7 @@ foreach(t orbit_physics atom_physics app_settings nbody_physics jpl_validation m
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
-foreach(t gl_phase_colours theme_pictures window_pictures y2k_pictures page_cache_pictures effects_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom
+foreach(t gl_phase_colours theme_pictures window_pictures y2k_pictures page_cache_pictures effects_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext
           orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")

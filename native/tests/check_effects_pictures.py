@@ -67,7 +67,7 @@ def report(ok, text):
 def main():
     binary, work = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
     os.makedirs(work, exist_ok=True)
-    for theme in ("aero", "y2kice", "y2knight"):
+    for theme in ("aero", "y2knight"):
         on, wins, bars = run(binary, work, f"orbit_{theme}_on", theme, {})
         off, _, _ = run(binary, work, f"orbit_{theme}_off", theme, {"PL_EFFECTS": "off"})
         a, b = load(on), load(off)
