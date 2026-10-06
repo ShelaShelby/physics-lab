@@ -73,9 +73,10 @@ void pushKey(SDL_Window* w, SDL_Keycode key, SDL_Scancode sc, bool down, SDL_Key
 // The Atom Lab's state for the old-against-new comparison (check_atom_toolbar.py): what the toolbar's buttons change
 std::string atomStateLine(const AppState& app) {
     const atom::AtomLab& L = app.atom;
-    char b[512];
-    std::snprintf(b, sizeof b, "view=%s layer=%s zoom=%.6g zoomTo=%d focus=%d drag=%s paused=%d yaw=%.6g pitch=%.6g oyaw=%.6g opitch=%.6g ctilt=%.6g czoom=%.6g",
-                  L.p.view.c_str(), L.s.layer.c_str(), L.p.zoom, L.s.zoomTo ? 1 : 0, L.s.focus, L.s.dragMode.c_str(), app.paused ? 1 : 0, L.s.yaw, L.s.pitch, L.s.oyaw, L.s.opitch, L.s.chartView.tilt, L.s.chartView.zoom);
+    char b[640];
+    std::snprintf(b, sizeof b, "view=%s layer=%s zoom=%.6g zoomTo=%d focus=%d drag=%s paused=%d yaw=%.6g pitch=%.6g oyaw=%.6g opitch=%.6g ctilt=%.6g czoom=%.6g Z=%d N=%d usualN=%d seed=%d big=%d",
+                  L.p.view.c_str(), L.s.layer.c_str(), L.p.zoom, L.s.zoomTo ? 1 : 0, L.s.focus, L.s.dragMode.c_str(), app.paused ? 1 : 0, L.s.yaw, L.s.pitch, L.s.oyaw, L.s.opitch, L.s.chartView.tilt, L.s.chartView.zoom,
+                  L.p.Z, L.p.N, atom::defaultN(L.p.Z), L.s.nucSeed, app.bigTable ? 1 : 0);
     return b;
 }
 

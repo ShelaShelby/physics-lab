@@ -74,7 +74,7 @@ const char* panelName(PanelId id) {
 bool fromTop(PanelId id) { return id == PanelId::Menu || id == PanelId::LabMenu || id == PanelId::Chip; }
 double widthEmOf(PanelId id) {
     if (const double w = orbitPanelWidthEm(id)) return w;
-    if (const double w = atomPanelWidthEm(id)) return w;
+    if (id != PanelId::Chip) if (const double w = atomPanelWidthEm(id)) return w;
     switch (id) { case PanelId::Menu: return 18; case PanelId::LabMenu: return 14; case PanelId::Facts: return 24; case PanelId::More: return 18; case PanelId::Data: return 36; default: return 20; }
 }
 void toggle(PanelId id) { S.ui.open = S.ui.open == id ? PanelId::None : id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount(); }
@@ -674,12 +674,12 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     Rect openRect{0, 0, 0, 0};
     if (S.ui.open != PanelId::None) {
         const PanelId id = S.ui.open;
-        const bool orbitOnly = orbitPanelWidthEm(id) > 0, atomOnly = atomPanelWidthEm(id) > 0;
+        const bool orbitOnly = orbitPanelWidthEm(id) > 0 && id != PanelId::Chip, atomOnly = atomPanelWidthEm(id) > 0 && id != PanelId::Chip;   // (the chip belongs to both labs)
         if ((orbitOnly && app.lab != 0) || (atomOnly && app.lab != 1)) S.ui.open = PanelId::None;
         else {
             const std::string wid = std::string("##panel_") + panelName(id);
             const double ax = S.anchorX.count(id) ? S.anchorX[id] : W / 2;
-            openRect = placePanel(id == PanelId::Data ? Anchor::Centre : fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
+            openRect = placePanel(id == PanelId::Data ? Anchor::Centre : fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(id == PanelId::Chip && app.lab == 1 ? atomPanelWidthEm(id) : widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
             for (const Rect& c : cards) openRect = sideStep(openRect, c, fr.window, m.s12, m.s12);
             sh::Panel p;
             if (sh::beginPanel(wid.c_str(), openRect, p, sh::Shape::Panel, true)) {

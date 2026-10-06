@@ -270,3 +270,10 @@
 - [ ] The Atom picture now fills the window. Check on your real screen that the top text lines and the chart's notes box are clear of the top bar, and that nothing important hides behind the toolbar (the chart's "neutrons N →" label sits just under it).
 - [ ] The hint line and More / Less info are at the top of the Old panel for now (5b gives them a home). Tell me if you miss the bar's "hint" more than that.
 - [ ] Not tested here: Windows, Segoe UI widths, Windows scale 125 / 150 %, speed.
+
+## 0.15 stage 5b (the Atom Lab's element chip, New UI On): what only the owner can do
+- [ ] Settings → New UI (preview) → On, Atom Lab: click the chip at the top (it reads e.g. "U · Uranium-238"). Is the table big and clear enough (cells at least 28 u), are the dashed edges (no stable isotope) and the colours right, is the ringed element easy to see? Try the Protons and Neutrons arrows and sliders, "usual", the famous isotopes, Esc, a click outside.
+- [ ] The dropdown is tall (table, two sliders, the famous list, which scrolls inside). Would you rather have the famous isotopes in a second column, or fewer controls shown at once?
+- [ ] Zoom to the nucleus (the Nucleus button), open its small arrow: Reshuffle nucleons is there (Build another appears after a decay). Is "only in the nucleus view" what you wanted, or should they show in the atom view too?
+- [ ] The Old panel button is still there, with the hint line and More / Less info at its top (5d).
+- [ ] Not tested here: Windows, Segoe UI widths, Windows scale 125 / 150 %, speed on your PC and graphics card.

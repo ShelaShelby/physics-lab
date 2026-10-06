@@ -22,6 +22,8 @@ void pressTool(AtomLab& L, Tool t) {
     case Tool::ResetView: if (L.chartOn()) L.chartReset(); else if (L.showResetView()) L.resetView(); break;
     case Tool::Centre: L.centre(); break;
     case Tool::DragMode: L.toggleDrag(); break;
+    case Tool::BuildAnother: L.buildAnother(); break;
+    case Tool::Reshuffle: L.reshuffle(); break;
     }
 }
 
@@ -45,8 +47,28 @@ bool toolShown(const AtomLab& L, Tool t) {
     switch (t) {
     case Tool::Centre: return L.showCentre();
     case Tool::DragMode: return L.showDrag();
+    case Tool::BuildAnother: return toolOn(L, Tool::Nucleus) && L.showBuildAnother();   // only in the nucleus view, and when the old panel offered it
+    case Tool::Reshuffle: return toolOn(L, Tool::Nucleus) && L.showReshuffle();
     default: return true;
     }
+}
+
+static std::string plural(int n, const char* one, const char* many) { return std::to_string(n) + " " + (n == 1 ? one : many); }
+
+ChipText elementChipText(int Z, int N) {
+    ChipText t;
+    t.title = std::string(symbol(Z)) + " · " + name(Z) + "-" + std::to_string(Z + N);
+    t.sub = plural(Z, "proton", "protons") + " · " + plural(N, "neutron", "neutrons");
+    return t;
+}
+void pickElement(AtomLab& L, int Z) { L.setParam("Z", double(Z)); }   // (setParam("Z") sets the neutrons to the usual count itself)
+void stepProtons(AtomLab& L, int d) { L.setParam("Z", double(L.p.Z + d)); }
+void stepNeutrons(AtomLab& L, int d) { L.setParam("N", double(L.p.N + d)); }
+void usualNeutrons(AtomLab& L) { L.setParam("N", double(defaultN(L.p.Z))); }
+void pickFamous(AtomLab& L, int i) {
+    const auto& fam = famous();
+    if (i < 0 || i >= static_cast<int>(fam.size())) return;
+    L.setParam("Z", double(fam[i].Z)); L.setParam("N", double(fam[i].N));
 }
 
 }  // namespace atom

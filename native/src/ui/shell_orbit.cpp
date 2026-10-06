@@ -4,6 +4,7 @@
 #include <cstdio>
 
 #include "atom/atom_core.h"
+#include "atom/atom_tools.h"
 #include "imgui.h"
 #include "orbit/card_text.h"
 #include "orbit/date_text.h"
@@ -45,10 +46,10 @@ std::vector<ToolItem> orbitTools(AppState& app) {
 ChipInfo chipInfo(AppState& app) {
     ChipInfo c;
     c.play = true; c.paused = app.paused;
-    if (app.lab == 1) {                                         // the Atom Lab: the element (the periodic table dropdown comes in stage 5; until then the Old panel has it)
-        const atom::AtomParams& a = app.atom.p;
-        c.title = std::string(atom::name(a.Z)) + "-" + std::to_string(a.Z + a.N);
-        c.sub = std::to_string(a.Z) + " protons  ·  " + std::to_string(a.N) + " neutrons";
+    if (app.lab == 1) {                                         // the Atom Lab: "U · Uranium-238" and "92 protons · 146 neutrons"; a click opens the periodic table (stage 5b)
+        const atom::ChipText t = atom::elementChipText(app.atom.p.Z, app.atom.p.N);
+        c.title = t.title; c.sub = t.sub;
+        c.opens = true;
         return c;
     }
     const ChipText t = chipText(app);
@@ -277,7 +278,7 @@ bool buildOrbitPanel(PanelId id, AppState& app, Panel& p, bool& closeAfter) {
     const Metrics& m = F().m;
     orbit::ViewSettings& set = app.set;
     switch (id) {
-    case PanelId::Chip: timePanel(app, p); return true;
+    case PanelId::Chip: if (app.lab != 0) return false; timePanel(app, p); return true;
     case PanelId::Speed: {
         pTitle(p, "Time speed");
         pBody(p, tspeedText(set.tspeed));

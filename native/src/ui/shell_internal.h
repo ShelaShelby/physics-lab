@@ -36,7 +36,7 @@ std::vector<ToolItem> atomTools(AppState& app);
 double orbitPanelWidthEm(PanelId id);
 bool buildOrbitPanel(PanelId id, AppState& app, sh::Panel& p, bool& closeAfter);
 // The same for the Atom Lab's two toolbar panels (ui/shell_atom.cpp)
-double atomPanelWidthEm(PanelId id);
+double atomPanelWidthEm(PanelId id);   // (PanelId::Chip: the Atom Lab's element dropdown; the caller asks for it only in the Atom Lab)
 bool buildAtomPanel(PanelId id, AppState& app, sh::Panel& p, bool& closeAfter);
 
 // The chip, the crumbs and the cards (strings and what they do)

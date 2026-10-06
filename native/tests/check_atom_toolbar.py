@@ -22,7 +22,7 @@ def states(r):
     out = []
     for ln in r.states:
         # the view name has spaces ("Cloud 3D"): split on the known keys instead
-        keys = ["view", "layer", "zoom", "zoomTo", "focus", "drag", "paused", "yaw", "pitch", "oyaw", "opitch", "ctilt", "czoom"]
+        keys = ["view", "layer", "zoom", "zoomTo", "focus", "drag", "paused", "yaw", "pitch", "oyaw", "opitch", "ctilt", "czoom", "Z", "N", "usualN", "seed", "big"]
         d, pos = {}, []
         for k in keys:
             i = ln.find(k + "=")

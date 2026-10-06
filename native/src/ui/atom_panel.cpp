@@ -1,4 +1,5 @@
 #include "atom_panel.h"
+#include "ui/shell_test.h"
 
 #include <algorithm>
 #include <cctype>
@@ -158,51 +159,64 @@ void pickElement(AppState& app, int Z) { app.atom.setParam("Z", Z); app.atom.set
 
 std::string cellTip(int Z) { return std::to_string(Z) + " · " + name(Z) + " (" + categoryName(Z) + ")\n" + isoLine(Z, defaultN(Z)); }
 
-// The periodic table: 18 columns, 7 rows, a gap, and the lanthanide and actinide rows.
-// big: the large table (symbol and number); returns the element clicked, or 0.
-int periodicTable(int sel, float cellH, bool big) {
+}  // namespace
+
+ImVec2 PtGeom::cellPos(int row, int col) const {
+    const float y = row <= 7 ? o.y + (row - 1) * (ch + gap) : o.y + 7 * (ch + gap) + rowGap + gap + (row - 9) * (ch + gap);
+    return ImVec2(o.x + (col - 1) * (cw + gap), y);
+}
+
+// The cells and the * ** marks of the periodic table (shared by the old panel's table, the large table window and the new UI's element dropdown: same colours, same dashed edge for the
+// elements with no stable isotope). Returns the element clicked, or 0.
+int periodicTableCells(const PtGeom& g, int sel, ImU32 fg, ImU32 accent, ImU32 muted) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float gap = (big ? 2 : 2) * S(), avail = ImGui::GetContentRegionAvail().x;
-    const float cw = (avail - 17 * gap) / 18, ch = cellH, rowGap = (big ? 10 : 8) * S();
-    const ImVec2 o = ImGui::GetCursorScreenPos();
-    const Theme th = panelTheme();
-    // rows 1–7, then a thin gap row, then the lanthanides (row 9) and actinides (row 10)
-    auto cellPos = [&](int row, int col) {
-        const float y = row <= 7 ? o.y + (row - 1) * (ch + gap) : o.y + 7 * (ch + gap) + rowGap + gap + (row - 9) * (ch + gap);
-        return ImVec2(o.x + (col - 1) * (cw + gap), y);
-    };
     int clicked = 0;
     ImFont* reg = fonts().regular;
     ImFont* bold = fonts().bold;
     for (int Z = 1; Z <= 118; Z++) {
         const auto [r, c] = ptPos(Z);
-        const ImVec2 a = cellPos(r, c), b(a.x + cw, a.y + ch);
+        const ImVec2 a = g.cellPos(r, c), b(a.x + g.cw, a.y + g.ch);
         ImGui::SetCursorScreenPos(a);
         ImGui::PushID(Z);
-        if (ImGui::InvisibleButton("el", ImVec2(cw, ch))) clicked = Z;
+        if (ImGui::InvisibleButton("el", ImVec2(g.cw, g.ch))) clicked = Z;
         const bool hov = ImGui::IsItemHovered();
         if (hov) ui::SetTooltip("%s", displayable(cellTip(Z)).c_str());
         ImGui::PopID();
+        if (g.note) { char nm[24]; std::snprintf(nm, sizeof nm, "%s%d", g.note, Z); noteRect(nm, a.x, a.y, g.cw, g.ch); }
         const int hue = categoryHue(Z);
         const bool on = Z == sel, rad = !hasStable(Z);
-        dl->AddRectFilled(a, b, hsl(hue, 70, 55, on ? 0.6 : hov ? 0.35 : 0.22), (big ? 4 : 3) * S());
-        if (rad) dashedRect(dl, a, b, hsl(hue, 60, 45, 0.8), 1, 2.5f * S());
-        else dl->AddRect(a, b, hsl(hue, 60, 50, 0.5), (big ? 4 : 3) * S());
-        if (on) dl->AddRect(ImVec2(a.x + 1, a.y + 1), ImVec2(b.x - 1, b.y - 1), U32(th.accent), 2 * S(), 0, 2 * S());
-        ImFont* f = on || big ? bold : reg;
-        const float fs = (big ? 9.0f : 9.5f) * S() * (big && cw > 34 * S() ? 15.0f / 9.0f : 1.0f);
-        const ImVec2 ts = f->CalcTextSizeA(fs, FLT_MAX, 0, symbol(Z));
-        dl->AddText(f, fs, ImVec2(a.x + (cw - ts.x) / 2, a.y + (ch - ts.y) / 2), U32(th.fg), symbol(Z));
+        dl->AddRectFilled(a, b, hsl(hue, 70, 55, on ? 0.6 : hov ? 0.35 : 0.22), g.corner);
+        if (rad) dashedRect(dl, a, b, hsl(hue, 60, 45, 0.8), 1, 2.5f * g.s);
+        else dl->AddRect(a, b, hsl(hue, 60, 50, 0.5), g.corner);
+        if (on) dl->AddRect(ImVec2(a.x + 1, a.y + 1), ImVec2(b.x - 1, b.y - 1), accent, 2 * g.s, 0, 2 * g.s);
+        ImFont* f = on || g.boldAll ? bold : reg;
+        const ImVec2 ts = f->CalcTextSizeA(g.symPx, FLT_MAX, 0, symbol(Z));
+        dl->AddText(f, g.symPx, ImVec2(a.x + (g.cw - ts.x) / 2, a.y + (g.ch - ts.y) / 2), fg, symbol(Z));
     }
     const int marks[4][2] = {{6, 3}, {7, 3}, {9, 2}, {10, 2}};
     const char* mt[4] = {"*", "**", "*", "**"};
     for (int i = 0; i < 4; i++) {
-        const ImVec2 a = cellPos(marks[i][0], marks[i][1]);
-        const ImVec2 ts = reg->CalcTextSizeA(11 * S(), FLT_MAX, 0, mt[i]);
-        dl->AddText(reg, 11 * S(), ImVec2(a.x + (cw - ts.x) / 2, a.y + (ch - ts.y) / 2), U32(th.muted), mt[i]);
+        const ImVec2 a = g.cellPos(marks[i][0], marks[i][1]);
+        const ImVec2 ts = reg->CalcTextSizeA(g.markPx, FLT_MAX, 0, mt[i]);
+        dl->AddText(reg, g.markPx, ImVec2(a.x + (g.cw - ts.x) / 2, a.y + (g.ch - ts.y) / 2), muted, mt[i]);
     }
-    const ImVec2 end = cellPos(10, 1);
-    ImGui::SetCursorScreenPos(ImVec2(o.x, end.y + ch + 6 * S()));
+    return clicked;
+}
+
+namespace {
+
+int periodicTable(int sel, float cellH, bool big) {
+    const float gap = (big ? 2 : 2) * S(), avail = ImGui::GetContentRegionAvail().x;
+    const Theme th = panelTheme();
+    PtGeom g;
+    g.cw = (avail - 17 * gap) / 18; g.ch = cellH; g.gap = gap; g.rowGap = (big ? 10 : 8) * S();
+    g.o = ImGui::GetCursorScreenPos();
+    g.s = S(); g.corner = (big ? 4 : 3) * S(); g.boldAll = big;
+    g.symPx = (big ? 9.0f : 9.5f) * S() * (big && g.cw > 34 * S() ? 15.0f / 9.0f : 1.0f);
+    g.markPx = 11 * S();
+    const int clicked = periodicTableCells(g, sel, U32(th.fg), U32(th.accent), U32(th.muted));
+    const ImVec2 end = g.cellPos(10, 1);
+    ImGui::SetCursorScreenPos(ImVec2(g.o.x, end.y + cellH + 6 * S()));
     ImGui::Dummy(ImVec2(avail, 0));
     return clicked;
 }
@@ -729,9 +743,11 @@ static void atomPanelContents(AppState& app) {
         mutedWrapped(kTableNote, 12.0f / 16);
         ImGui::Dummy(ImVec2(0, 4 * S()));
         factsCard(p.Z, app.tempK);
+        if (!L.shellUi) {                                  // (the new UI: these two are in the toolbar's Nucleus panel, stage 5b)
         if (L.showBuildAnother() && ui::Button(displayable("☢ Build another").c_str())) L.buildAnother();
         if (L.showBuildAnother() && L.showReshuffle()) ImGui::SameLine();
         if (L.showReshuffle() && ui::Button(displayable("🎲 Reshuffle nucleons").c_str())) L.reshuffle();
+        }
         sliderRow(app, "Z", "Protons (Z)", std::to_string(p.Z) + " · " + name(p.Z), p.Z, 1, 118, 1, true, "proton");
         const auto nr = nRange(p.Z);
         sliderRow(app, "N", "Neutrons", std::to_string(p.N), p.N, nr.first, nr.second, 1, true, "neutron");

@@ -216,6 +216,8 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
         dl->AddLine(P(-0.85f, 0), P(0.85f, 0), col, th); dl->AddLine(P(0, -0.85f), P(0, 0.85f), col, th);
         for (int k = 0; k < 4; k++) { const float a = k * 1.5708f, ca = std::cos(a), sa = std::sin(a); dl->AddLine(P(0.85f * ca, 0.85f * sa), P(0.55f * ca - 0.25f * sa, 0.55f * sa + 0.25f * ca), col, th); dl->AddLine(P(0.85f * ca, 0.85f * sa), P(0.55f * ca + 0.25f * sa, 0.55f * sa - 0.25f * ca), col, th); }
         break;
+    case Icon::CaretLeft: dl->AddTriangleFilled(P(0.22f, -0.45f), P(0.22f, 0.45f), P(-0.28f, 0.0f), col); break;
+    case Icon::CaretRight: dl->AddTriangleFilled(P(-0.22f, -0.45f), P(-0.22f, 0.45f), P(0.28f, 0.0f), col); break;
     case Icon::Check: { const ImVec2 pts[3] = {P(-0.55f, 0.0f), P(-0.15f, 0.45f), P(0.6f, -0.45f)}; dl->AddPolyline(pts, 3, col, 0, th * 1.15f); break; }
     }
 }

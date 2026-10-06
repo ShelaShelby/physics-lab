@@ -55,7 +55,7 @@ void headingText(ImDrawList* dl, const char* level, ImVec2 pos, ImU32 col, const
 float headingPx(const char* level);
 
 // ---- icons (drawn by lines and shapes; no icon font) ----
-enum class Icon { Menu, Search, Play, Pause, Clock, Eye, Target, Ruler, Camera, Swap, Book, Trophy, Bulb, Palette, Gear, Caret, CaretUp, Close, Calendar, Cube, Dots, Check, Info, Atom, Nucleus, Cloud, Chart, Reset, Move };
+enum class Icon { Menu, Search, Play, Pause, Clock, Eye, Target, Ruler, Camera, Swap, Book, Trophy, Bulb, Palette, Gear, Caret, CaretUp, Close, Calendar, Cube, Dots, Check, Info, Atom, Nucleus, Cloud, Chart, Reset, Move, CaretLeft, CaretRight };
 void drawIcon(ImDrawList* dl, Icon icon, ImVec2 centre, float size, ImU32 col);
 
 // ---- panels ----
