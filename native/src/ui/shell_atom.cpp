@@ -36,11 +36,7 @@ std::vector<ToolItem> atomTools(AppState& app) {
         const bool move = L.s.dragMode == "move";
         button("tool.drag", move ? "Drag moves the picture (click: drag rotates)" : L.p.view == "Slice" ? "Drag slides the cut (click: drag moves the picture)" : "Drag rotates (click: drag moves the picture)", Icon::Move, Tool::DragMode);
     }
-    ToolItem ctl; ctl.kind = ToolItem::Button; ctl.id = "tool.controls"; ctl.tip = "Controls: the view choices (more of the Atom Lab's options move here in the next stages)"; ctl.icon = Icon::Sliders; ctl.on = controlsOpen();
-    ctl.act = [] { controlsToggle(); };
-    v.push_back(separator());
-    v.push_back(ctl);
-    return v;
+    return v;                                             // (stage 5c.1: the Controls panel opens from its handle on the picture's right edge, not from the toolbar)
 }
 
 double atomPanelWidthEm(PanelId id) {

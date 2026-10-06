@@ -64,15 +64,16 @@ def main():
         check(len(nm) == 1, f"{sz}: the panel reports its content height")
         check(any(k == "readout" and abs(px - 15) < 0.01 for k, px, _ in r.texts), f"{sz}: the readout text is Body size (15 px at 100 %): {[(k, px) for k, px, _ in r.texts if k == 'readout']}")
 
-    # ---- 2. the toolbar: one-click buttons only, a Controls button opens and closes the panel; no carets left ----
-    r = go("c_tb", "10:click=tool.show;12:click=tool.pick;14:click=tool.scale;16:click=tool.speed;18:click=tool.view.caret;20:click=tool.view.3d;26:click=tool.reset;34:click=tool.controls;50:click=tool.controls", frames=40)
+    # ---- 2. the toolbar: one-click buttons only, no carets left; (stage 5c.1) no Controls button either: the handle on the picture's right edge opens and closes the panel ----
+    r = go("c_tb", "10:click=tool.show;12:click=tool.pick;14:click=tool.scale;16:click=tool.speed;18:click=tool.view.caret;20:click=tool.view.3d;26:click=tool.reset;34:click=tool.controls", frames=40)
     miss = r.scripted_missing()
-    check(len(miss) == 5, f"the toolbar no longer has Show / Pick / Scale / Time speed / view carets ({len(miss)} missing): {miss}")
-    for nm in ("tool.view.3d", "tool.reset", "tool.controls"):
+    check(len(miss) == 6, f"the toolbar no longer has Show / Pick / Scale / Time speed / view carets, nor a Controls button ({len(miss)} missing): {miss}")
+    check("tool.controls" in " ".join(miss), "the Controls button is gone from the toolbar (stage 5c.1)")
+    for nm in ("tool.view.3d", "tool.reset"):
         check(nm not in " ".join(miss), f"{nm} is on the toolbar")
-    rc = go("c_tb_closed", "10:click=tool.controls", frames=40)
-    check("panel.controls" not in rc.rects, "the Controls button closes the panel")
-    rc = go("c_tb_reopen", "10:click=tool.controls;24:click=tool.controls", frames=40)
+    rc = go("c_tb_closed", "10:click=ctl.handle", frames=40)
+    check("panel.controls" not in rc.rects and not rc.scripted_missing(), "the handle closes the panel")
+    rc = go("c_tb_reopen", "10:click=ctl.handle;24:click=ctl.handle", frames=50)
     check("panel.controls" in rc.rects, "and a second click opens it again")
     rc = go("c_x", "10:click=ctl.close", frames=40)
     check("panel.controls" not in rc.rects and not rc.scripted_missing(), "the panel's own ✕ closes it")
@@ -146,7 +147,61 @@ def main():
     po, pc = r.rects.get("panel.old"), r.rects.get("panel.controls")
     check(po is not None and pc is not None and po[0] + po[2] <= pc[0] + 0.5, f"Atom: the Old panel sits left of the Controls panel {po} {pc}")
     r = go("c_atom_tb", "", frames=30, atom=True)
-    check("tool.controls" in " ".join(r.notes) or "toolbar" in r.rects, "Atom: the toolbar is drawn")
+    check("toolbar" in r.rects and "handle" in r.rects, "Atom: the toolbar and the handle are drawn")
+    # ---- 7. (stage 5c.1) the handle: a tab on the picture's right edge, centred on the panel's height, never under the panel, the top bar or the toolbar; after the slide the panel is exactly
+    # the docked rectangle. And every theme: a panel's glow / shadow and a widget's hover paint reach at most 2 px outside it (the owner saw the Legend's glow spill over its neighbours). ----
+    for sz in ("880x560", "1280x800", "1920x1080"):
+        for state, script, frames in (("open", "", 40), ("closed", "10:click=ctl.handle", 50), ("reopened", "10:click=ctl.handle;30:click=ctl.handle", 70)):
+            r = go(f"c_handle_{state}_{sz}", script, frames=frames, size=sz)
+            w, h = r.window[0], r.window[1]
+            hd, pc, dk, top, tb = r.rects.get("handle"), r.rects.get("panel.controls"), r.rects.get("dock.controls"), r.rects["topbar"], r.rects["toolbar"]
+            check(hd is not None and not r.scripted_missing(), f"{sz} {state}: the handle is there (and was clicked)")
+            if hd is None:
+                continue
+            check(inside(hd, w, h), f"{sz} {state}: the handle is inside the window {hd}")
+            check(not overlap(hd, top) and not overlap(hd, tb), f"{sz} {state}: the top bar and the toolbar do not cover it {hd} {top} {tb}")
+            check(hd[2] >= 24 - 0.01 and hd[3] >= 30, f"{sz} {state}: big enough to hit {hd}")
+            if state == "closed":
+                check(pc is None and r.note("handle closed"), f"{sz}: closed: no panel, the arrow says open")
+                check(abs(hd[0] + hd[2] - w) < 0.6, f"{sz}: closed: the handle sits on the window's right edge {hd}")
+            else:
+                check(pc is not None and dk is not None and r.note("handle open"), f"{sz} {state}: the panel is open, the arrow says close")
+                if pc is None or dk is None:
+                    continue
+                check(all(abs(a - b) < 0.05 for a, b in zip(pc, dk)), f"{sz} {state}: after the slide the panel is exactly the docked rectangle {pc} {dk}")
+                check(not overlap(hd, pc) and abs(hd[0] + hd[2] - pc[0]) < 0.6, f"{sz} {state}: the handle rides on the panel's left edge, not under it {hd} {pc}")
+                check(abs((hd[1] + hd[3] / 2) - (pc[1] + pc[3] / 2)) < 0.6, f"{sz} {state}: centred on the panel's height")
+    # with full motion (this harness runs with Motion reduced, where the panel jumps): after a real slide out and back in, the panel is exactly the docked rectangle again
+    r = go("c_handle_motion", "10:click=ctl.handle;40:click=ctl.handle", {"PL_MOTION": "off"}, frames=80)
+    pc, dk = r.rects.get("panel.controls"), r.rects.get("dock.controls")
+    check(pc is not None and dk is not None and all(abs(a - b) < 0.05 for a, b in zip(pc, dk)) and r.note("panelopen controls"), f"full motion: after the slide the panel is exactly docked {pc} {dk}")
+    # tidy-up (stage 5c.1): every section header has the same left edge and width (its arrow sits at the same place), and all text in the panel is at least 14 px, in both labs
+    for lab, atom in (("Orbit", False), ("Atom", True)):
+        r = go(f"c_tidy_{lab}", "", frames=30, size="1280x1080", atom=atom)
+        heads = [v for k, v in r.rects.items() if k.startswith("ctlhead.")]
+        check(len(heads) >= (3 if not atom else 1), f"{lab}: the section headers in view are logged ({len(heads)})")
+        check(heads and all(abs(v[0] - heads[0][0]) < 0.01 and abs(v[2] - heads[0][2]) < 0.01 for v in heads), f"{lab}: every header has one left edge and one width {heads}")
+        pc = r.rects.get("panel.controls")
+        check(pc is not None and heads and abs(heads[0][0] - (pc[0] + 16)) < 0.6, f"{lab}: the headers start on the content's left edge (16 u in) {heads[:1]} {pc}")
+        small = [(px, t) for k, px, t in r.texts if k == "ctl" and px < 14 - 0.01]
+        check(any(k == "ctl" for k, _, _ in r.texts) and not small, f"{lab}: all panel text is at least 14 px: {small[:3]}")
+    THEMES = ("light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "synthwave", "monochrome", "blackhole", "decay", "galactic", "aero", "y2kice", "y2knight")
+    HOVER = "10:move=card.legend;16:move=tool.reset;22:move=show.moons;28:move=ctl.sec.view;34:move=view.reset"
+    prefetch([((binary, work, f"c_halo_{t}", dict(NEW, PL_SCRIPT=HOVER)), dict(frames=44, size="1280x1080", theme=t)) for t in THEMES])
+    for t in THEMES:
+        r = run_app(binary, work, f"c_halo_{t}", dict(NEW, PL_SCRIPT=HOVER), frames=44, size="1280x1080", theme=t)
+        halos = {}
+        for n in r.note("halo "):
+            kv = dict(p.split("=", 1) for p in n.split()[1:])
+            halos[kv["name"]] = ([float(x) for x in kv["a"].split(",")], [float(x) for x in kv["o"].split(",")])
+        for want in ("panel##card_orbit.legend", "panel##shellControls", "panel##shellHandle", "hover.tool.reset", "hover.show.moons", "hover.view.reset"):
+            check(want in halos, f"{t}: {want} was drawn (and hovered) and logged its outline")
+        bad = [(k, a, o) for k, (a, o) in halos.items() if not (o[0] >= a[0] - 2.01 and o[1] >= a[1] - 2.01 and o[2] <= a[2] + 2.01 and o[3] <= a[3] + 2.01)]
+        check(not bad, f"{t}: every glow / shadow / hover outline is within 2 px of its widget or panel ({len(halos)} logged): {bad[:3]}")
+        if t == "aero":
+            for k in ("panel##card_orbit.legend", "hover.tool.reset", "hover.show.moons", "hover.view.reset"):
+                if k in halos:
+                    print(f"HALO aero {k}: widget {halos[k][0]} outline {halos[k][1]}")
     print(f"controls panel checks: {checks - fails} of {checks} passed")
     sys.exit(1 if fails else 0)
 

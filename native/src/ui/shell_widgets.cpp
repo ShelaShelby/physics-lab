@@ -59,14 +59,19 @@ ImU32 cShadow(float a) { return colOf(app::shell::textShadow(*g_f.c), a); }
 
 // ---- text ----
 ImFont* font(bool bold) { return bold ? fonts().bold : fonts().regular; }
-float px(Type t) { return static_cast<float>(app::shell::textPx(t, g_f.dpi, g_f.tf)); }
+// stage 5c.1 (the owner: panel text at least 14 px on every theme): while the Controls panel draws, Caption text (13 px) is drawn at Body size (15 px, never under 14); no new size
+static bool g_bodyFloor = false;
+void bodyFloor(bool on) { g_bodyFloor = on; }
+static Type floored(Type t) { return g_bodyFloor && t == Type::Caption ? Type::Body : t; }
+float px(Type t) { return static_cast<float>(app::shell::textPx(floored(t), g_f.dpi, g_f.tf)); }
 float width(Type t, bool bold, const std::string& s) { return font(bold)->CalcTextSizeA(px(t), FLT_MAX, 0, displayable(s, font(bold)).c_str()).x; }
 float lineH(Type t) { return std::round(px(t) * 1.35f); }
 void text(ImDrawList* dl, Type t, bool bold, ImVec2 pos, ImU32 col, const std::string& s) {
     ImFont* f = font(bold);
     const std::string d = displayable(s, f);
     dl->AddText(f, px(t), pos, col, d.c_str());
-    auditText(typeName(t), px(t), s);
+    auditText(typeName(floored(t)), px(t), s);
+    if (g_bodyFloor) auditText("ctl", px(t), s);
 }
 std::vector<std::string> wrapText(Type t, bool bold, const std::string& s, float maxW) {
     std::vector<std::string> lines;
@@ -230,7 +235,7 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
 }
 
 // ---- panels ----
-bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scroll) {
+bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scroll, bool solid) {
     const Frame& f = g_f;
     const float pad = shape == Shape::Panel ? static_cast<float>(f.m.s16) : 0.0f;
     const float rounding = shape == Shape::Bar || shape == Shape::Overlay || shape == Shape::Clear ? 0.0f : shape == Shape::Pill ? static_cast<float>(r.h / 2) : ui::corner(static_cast<float>(f.m.radiusPanel));
@@ -239,31 +244,34 @@ bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scrol
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, rounding);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1, 1));             // (stage 5c.1: Dear ImGui's 32 px minimum made the 24 u handle wider than its place)
     const bool docked = !f.plain && shape == Shape::Bar;                       // Aero / Y2K: the top bar is a docked panel, so the page behind it comes from the stage 2 page cache
     if (docked) pushDockedBg();
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));              // the glass is drawn by hand below
     const bool shown = ImGui::Begin(id, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
                                     (scroll && shape == Shape::Panel ? 0 : ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse) | (shape == Shape::Panel ? 0 : ImGuiWindowFlags_NoBringToFrontOnFocus) |
                                     (shape == Shape::Overlay ? ImGuiWindowFlags_NoInputs : 0));
-    ImGui::PopStyleColor(); ImGui::PopStyleVar(3); if (docked) popDockedBg();
+    ImGui::PopStyleColor(); ImGui::PopStyleVar(4); if (docked) popDockedBg();
     if (!shown) { ImGui::End(); return false; }
     p.dl = ImGui::GetWindowDrawList();
     const ImVec2 a = ImGui::GetWindowPos(), b(a.x + ImGui::GetWindowWidth(), a.y + ImGui::GetWindowHeight());
+    float reach = 0;                                                            // how far a shadow or glow reaches outside the panel (stage 5c.1: at most app::shell::kHaloMaxPx)
     if (docked) panelDecor(app::PanelKind::Docked);
-    else if (!f.plain && shape != Shape::Overlay && shape != Shape::Clear) panelDecor(app::PanelKind::Floating);   // Aero and Y2K: their own glass, rim, glow and textures (stage 7 refines them)
+    else if (!f.plain && shape != Shape::Overlay && shape != Shape::Clear) reach = panelDecor(app::PanelKind::Floating, true);   // Aero and Y2K: their own glass, rim and textures; the glow hugs the edge
     if (shape == Shape::Overlay || shape == Shape::Clear) {
     } else if (f.plain) {
-        if (shape != Shape::Bar) {                                              // one soft shadow below and round (black at low opacity, three layers), outside the window's own edge
-            const float s = static_cast<float>(f.m.s4), big = 16 * s;
+        if (shape != Shape::Bar) {                                              // a soft edge of at most kHaloMaxPx round the panel (black at low opacity, two layers), only outside its own edge (stage 5c.1:
+            const float big = static_cast<float>(app::shell::kHaloMaxPx);         // it was a 16 u drop shadow that spread over the neighbours)
             const ImVec2 outside[4][2] = {{ImVec2(a.x - big, a.y - big), ImVec2(b.x + big, a.y)}, {ImVec2(a.x - big, b.y), ImVec2(b.x + big, b.y + big)},
                                           {ImVec2(a.x - big, a.y), ImVec2(a.x, b.y)}, {ImVec2(b.x, a.y), ImVec2(b.x + big, b.y)}};
             for (const auto& o : outside) {                                     // only outside the panel: under the glass it would show through and make it darker than its opacity says
                 p.dl->PushClipRect(o[0], o[1], false);
-                for (int k = 3; k >= 1; k--) p.dl->AddRectFilled(ImVec2(a.x - k * s * 0.5f, a.y + s - k * s * 0.4f), ImVec2(b.x + k * s * 0.5f, b.y + s + k * s * 0.8f), IM_COL32(0, 0, 0, 14), rounding + k * s * 0.6f);
+                for (int k = 2; k >= 1; k--) p.dl->AddRectFilled(ImVec2(a.x - k * big * 0.5f, a.y - k * big * 0.5f), ImVec2(b.x + k * big * 0.5f, b.y + k * big * 0.5f), IM_COL32(0, 0, 0, 20), rounding + k * big * 0.5f);
                 p.dl->PopClipRect();
             }
+            reach = big;
         }
-        p.dl->AddRectFilled(a, b, cPanel(), rounding);
+        p.dl->AddRectFilled(a, b, solid ? colOf(f.c->card) : cPanel(), rounding);   // (stage 5c.1: the Controls panel is solid: the picture's labels showed through it)
         const float shine = static_cast<float>(f.m.s12 * 3 + f.m.s4);          // a faint top-lit gradient: the text colour at 6 % fading out over about 40 u
         const ImU32 top = ui::col(f.c->fg, app::shell::kShineAlpha), none = ui::col(f.c->fg, 0);
         p.dl->PushClipRect(a, ImVec2(b.x, std::min(b.y, a.y + shine)), true);
@@ -272,6 +280,7 @@ bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scrol
         if (shape == Shape::Bar) p.dl->AddLine(ImVec2(a.x, b.y - 0.5f), ImVec2(b.x, b.y - 0.5f), cEdge(), 1.0f);
         else p.dl->AddRect(a, b, cEdge(), rounding, 0, 1.0f);
     }
+    auditHalo(std::string("panel") + id, a, b, ImVec2(a.x - reach, a.y - reach), ImVec2(b.x + reach, b.y + reach));
     p.origin = ImGui::GetCursorScreenPos();
     p.w = ImGui::GetContentRegionAvail().x;
     p.y = 0;
@@ -307,6 +316,14 @@ float rc() { return ui::corner(static_cast<float>(g_f.m.radiusCtl)); }
 }  // namespace
 
 // (AllowWhenBlockedByActiveItem: while a button inside the rectangle is held, the rectangle is still hovered, so the button is still there when it is let go)
+// Every hover paint of the new UI goes through here (stage 5c.1): it is a fill of the widget's own rounded rectangle (or inside it), never a halo round it; the widget's rectangle and
+// what was painted are logged for the automatic checks (tests/check_controls.py: within app::shell::kHaloMaxPx).
+static void hoverFill(const char* id, ImDrawList* dl, ImVec2 w0, ImVec2 w1, ImVec2 a, ImVec2 b, ImU32 col, float r) {
+    dl->AddRectFilled(a, b, col, r);
+    const float edge = g_f.outline ? 0.5f : 0.0f;                               // Monochrome / High contrast: the 1 px outline is centred on the widget's edge
+    auditHalo(std::string("hover.") + id, w0, w1, ImVec2(std::min(a.x, w0.x - edge), std::min(a.y, w0.y - edge)), ImVec2(std::max(b.x, w1.x + edge), std::max(b.y, w1.y + edge)));
+}
+
 bool hoveredRect(ImVec2 pos, ImVec2 size) { return ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + size.x, pos.y + size.y)); }
 
 bool button(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, Face face, bool selected) {
@@ -316,7 +333,8 @@ bool button(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, F
     const bool filled = face == Face::Primary || selected;
     ImU32 bg = filled ? cFill() : face == Face::Quiet ? (h.hovered ? cFaceHover() : 0) : h.active ? cFacePress() : h.hovered ? cFaceHover() : cFace();
     if (filled && h.hovered) bg = ui::col(app::mixRgb(g_f.c->accentFill, g_f.c->fg, 0.12f));
-    if (bg) dl->AddRectFilled(pos, q, bg, rc());
+    if (bg && h.hovered) hoverFill(id, dl, pos, q, pos, q, bg, rc());
+    else if (bg) dl->AddRectFilled(pos, q, bg, rc());
     if (g_f.outline && face != Face::Quiet) dl->AddRect(pos, q, cEdge(), rc(), 0, 1.0f);
     const float tw = width(Type::Body, false, label);
     text(dl, Type::Body, false, ImVec2(pos.x + (size.x - tw) / 2, pos.y + (size.y - px(Type::Body)) / 2), filled ? cOnFill() : cText(), label);
@@ -328,7 +346,7 @@ bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 q(pos.x + size.x, pos.y + size.y);
     if (on) dl->AddRectFilled(pos, q, cFacePress(), rc());
-    else if (h.hovered) dl->AddRectFilled(pos, q, cFaceHover(), rc());
+    else if (h.hovered) hoverFill(id, dl, pos, q, pos, q, cFaceHover(), rc());
     if (g_f.outline) dl->AddRect(pos, q, cEdge(), rc(), 0, 1.0f);
     drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), cText());
     if (caretW > 0) drawIcon(dl, on ? Icon::CaretUp : Icon::Caret, ImVec2(pos.x + size.x - caretW / 2 - g_f.m.s4 * 0.5f, pos.y + size.y / 2), caretW * 0.75f, cMuted());
@@ -342,8 +360,8 @@ bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, boo
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 b0(pos.x, pos.y + (rowH - box) / 2), b1(b0.x + box, b0.y + box);
     const float r = ui::corner(3.0f * g_f.dpi);
-    if (*v) { dl->AddRectFilled(b0, b1, cFill(), r); drawIcon(dl, Icon::Check, ImVec2((b0.x + b1.x) / 2, (b0.y + b1.y) / 2), box * 0.85f, cOnFill()); }
-    else { dl->AddRectFilled(b0, b1, h.hovered ? cFaceHover() : cFace(), r); dl->AddRect(b0, b1, cMuted(), r, 0, 1.5f); }
+    if (*v) { if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), b0, b1, cFill(), r); else dl->AddRectFilled(b0, b1, cFill(), r); drawIcon(dl, Icon::Check, ImVec2((b0.x + b1.x) / 2, (b0.y + b1.y) / 2), box * 0.85f, cOnFill()); }
+    else { if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), b0, b1, cFaceHover(), r); else dl->AddRectFilled(b0, b1, cFace(), r); dl->AddRect(b0, b1, cMuted(), r, 0, 1.5f); }
     text(dl, Type::Body, false, ImVec2(b1.x + g_f.m.s8, pos.y + (rowH - px(Type::Body)) / 2), cText(), label);
     if (h.clicked) *v = !*v;
     return h.clicked;
@@ -373,7 +391,7 @@ bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::strin
         const ImVec2 a(pos.x + edge[i], pos.y), b(pos.x + edge[i + 1], pos.y + rowH);
         const bool on = i == *cur;
         if (on) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFill(), std::max(0.0f, rc() - 1));
-        else if (h.hovered && ImGui::GetIO().MousePos.x >= a.x && ImGui::GetIO().MousePos.x < b.x) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFaceHover(), std::max(0.0f, rc() - 1));
+        else if (h.hovered && ImGui::GetIO().MousePos.x >= a.x && ImGui::GetIO().MousePos.x < b.x) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFaceHover(), std::max(0.0f, rc() - 1));
         const float tw = width(Type::Body, false, labels[i]);
         text(dl, Type::Body, false, ImVec2(a.x + (b.x - a.x - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? cOnFill() : cText(), labels[i]);
     }
@@ -414,7 +432,7 @@ bool row(const char* id, ImVec2 pos, float w, const std::string& label, bool sel
     const float rowH = static_cast<float>(g_f.m.row);
     const Hit h = hit(id, pos, ImVec2(w, rowH));
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    if (h.hovered) dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + rowH), cFaceHover(), rc());
+    if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), pos, ImVec2(pos.x + w, pos.y + rowH), cFaceHover(), rc());
     else if (selected) dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + rowH), cFace(), rc());
     float x = pos.x + g_f.m.s8;
     if (dotHex) {
@@ -429,11 +447,11 @@ bool row(const char* id, ImVec2 pos, float w, const std::string& label, bool sel
 
 // ---- flowing content ----
 ImVec2 here(const Panel& p) { return ImVec2(p.origin.x, p.origin.y + p.y); }
-void pGap(Panel& p, int px) { p.y += static_cast<float>(px); }
-void pTitle(Panel& p, const std::string& s) { text(p.dl, Type::Title, true, here(p), cText(), s); p.y += lineH(Type::Title) + g_f.m.s4; }
-void pHeading(Panel& p, const std::string& s) { text(p.dl, Type::Caption, false, here(p), cMuted(), s); p.y += lineH(Type::Caption) + g_f.m.s4; }
-void pCaption(Panel& p, const std::string& s, bool muted) { p.y += paragraph(p.dl, Type::Caption, false, here(p), p.w, muted ? cMuted() : cText(), s) + g_f.m.s4; }
-void pBody(Panel& p, const std::string& s, bool muted) { p.y += paragraph(p.dl, Type::Body, false, here(p), p.w, muted ? cMuted() : cText(), s) + g_f.m.s4; }
+void pGap(Panel& p, int px) { p.y += static_cast<float>(px); p.gap += static_cast<float>(px); }
+void pTitle(Panel& p, const std::string& s) { text(p.dl, Type::Title, true, here(p), cText(), s); p.y += lineH(Type::Title) + g_f.m.s4; p.gap = g_f.m.s4; }
+void pHeading(Panel& p, const std::string& s) { text(p.dl, Type::Caption, false, here(p), cMuted(), s); p.y += lineH(Type::Caption) + g_f.m.s4; p.gap = g_f.m.s4; }
+void pCaption(Panel& p, const std::string& s, bool muted) { p.y += paragraph(p.dl, Type::Caption, false, here(p), p.w, muted ? cMuted() : cText(), s) + g_f.m.s4; p.gap = g_f.m.s4; }
+void pBody(Panel& p, const std::string& s, bool muted) { p.y += paragraph(p.dl, Type::Body, false, here(p), p.w, muted ? cMuted() : cText(), s) + g_f.m.s4; p.gap = g_f.m.s4; }
 void pStat(Panel& p, const std::string& label, const std::string& value) {
     const float lw = width(Type::Body, false, label), vw = width(Type::Body, false, value), gap = static_cast<float>(g_f.m.s12);
     if (lw + vw + gap <= p.w) {
@@ -446,12 +464,14 @@ void pStat(Panel& p, const std::string& label, const std::string& value) {
         p.y += lineH(Type::Body);
         p.y += paragraph(p.dl, Type::Body, false, here(p), p.w, cText(), value) + g_f.m.s4;
     }
+    p.gap = g_f.m.s4;
 }
-bool pCheck(Panel& p, const char* id, const std::string& label, bool* v) { const bool r = checkbox(id, here(p), p.w, label, v); p.y += g_f.m.row; return r; }
-bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels, int* cur) { const bool r = segmented(id, here(p), p.w, labels, cur); p.y += g_f.m.row + g_f.m.s4; return r; }
-bool pSlider(Panel& p, const char* id, float* v, float lo, float hi) { const bool r = slider(id, here(p), p.w, v, lo, hi); p.y += g_f.m.row; return r; }
-bool pButton(Panel& p, const char* id, const std::string& label, Face face, bool selected) { const bool r = button(id, here(p), ImVec2(p.w, static_cast<float>(g_f.m.control)), label, face, selected); p.y += g_f.m.control + g_f.m.s4; return r; }
-bool pRow(Panel& p, const char* id, const std::string& label, bool selected, const char* dotHex) { const bool r = row(id, here(p), p.w, label, selected, dotHex); p.y += g_f.m.row; return r; }
-void pRule(Panel& p) { const ImVec2 a = here(p); p.dl->AddLine(ImVec2(a.x, a.y + g_f.m.s4), ImVec2(a.x + p.w, a.y + g_f.m.s4), cHair()); p.y += 2 * g_f.m.s4 + 1; }
+bool pCheck(Panel& p, const char* id, const std::string& label, bool* v) { const bool r = checkbox(id, here(p), p.w, label, v); p.y += g_f.m.row; p.gap = 0; return r; }
+bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels, int* cur) { const bool r = segmented(id, here(p), p.w, labels, cur); p.y += g_f.m.row + g_f.m.s4; p.gap = g_f.m.s4; return r; }
+bool pSlider(Panel& p, const char* id, float* v, float lo, float hi) { const bool r = slider(id, here(p), p.w, v, lo, hi); p.y += g_f.m.row; p.gap = 0; return r; }
+bool pButton(Panel& p, const char* id, const std::string& label, Face face, bool selected) { const bool r = button(id, here(p), ImVec2(p.w, static_cast<float>(g_f.m.control)), label, face, selected); p.y += g_f.m.control + g_f.m.s4; p.gap = g_f.m.s4; return r; }
+bool pRow(Panel& p, const char* id, const std::string& label, bool selected, const char* dotHex) { const float in = g_bodyFloor ? static_cast<float>(g_f.m.s8) : 0.0f;   // (stage 5c.1: in the Controls panel its words sit on the content's left edge; the hover runs into the padding)
+    const bool r = row(id, ImVec2(here(p).x - in, here(p).y), p.w + 2 * in, label, selected, dotHex); p.y += g_f.m.row; p.gap = 0; return r; }
+void pRule(Panel& p) { const ImVec2 a = here(p); p.dl->AddLine(ImVec2(a.x, a.y + g_f.m.s4), ImVec2(a.x + p.w, a.y + g_f.m.s4), cHair()); p.y += 2 * g_f.m.s4 + 1; p.gap = 0; }
 
 }  // namespace ui::sh

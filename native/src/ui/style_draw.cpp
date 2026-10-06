@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "app/page_cache.h"
+#include "app/shell.h"
 #include "fonts.h"
 #include "imgui_impl_opengl3.h"
 #include "render/gl_loader.h"
@@ -272,18 +273,29 @@ void titleDecor(ImGuiWindow* w) {
     if (barEnd >= 0 && oneCmd && i1 > i0) std::rotate(dl->IdxBuffer.Data + barEnd, dl->IdxBuffer.Data + i0, dl->IdxBuffer.Data + i1);   // under the title text
 }
 
-// What is behind a floating window, on the background list (so under every window): its soft shadow, its outer glow, and the faint mirrored shine under it.
-void shadowBehind(ImVec2 a, ImVec2 b, float rounding) {
+// What is behind a floating window, on the background list (so under every window): its soft shadow, its outer glow, and the faint mirrored shine under it. Returns how far it reaches outside.
+// hug (the new UI, 0.15 stage 5c.1): the owner saw the glow of the small Legend pill spill over its neighbours ("something behind the Legend"); there the shadow and the glow are a soft edge
+// of at most app::shell::kHaloMaxPx round the same rounded rectangle, with no offset and no mirrored shine. The old app (hug false) is unchanged.
+float shadowBehind(ImVec2 a, ImVec2 b, float rounding, bool hug) {
     const app::PanelStyle& p = style().panel;
     const float s = ImGui::GetFontSize() / 16;                                    // the offsets and blur are in points at the normal text size
     ImDrawList* bg = ImGui::GetBackgroundDrawList();
-    if (p.shadowAlpha > 0 && p.shadowBlur > 0) softLayers(bg, a, b, rounding, p.shadow, p.shadowAlpha, p.shadowBlur * s, p.shadowDx * s, p.shadowDy * s);
-    if (p.glowAlpha > 0 && p.glowBlur > 0) softLayers(bg, a, b, rounding, p.glow, p.glowAlpha, p.glowBlur * s, 0, 0);
+    float reach = 0;
+    if (hug) {
+        const float edge = static_cast<float>(app::shell::kHaloMaxPx);
+        if (p.shadowAlpha > 0 && p.shadowBlur > 0) { softLayers(bg, a, b, rounding, p.shadow, p.shadowAlpha, edge, 0, 0); reach = edge; }
+        if (p.glowAlpha > 0 && p.glowBlur > 0) { softLayers(bg, a, b, rounding, p.glow, p.glowAlpha, edge, 0, 0); reach = edge; }
+        return reach;
+    }
+    if (p.shadowAlpha > 0 && p.shadowBlur > 0) { softLayers(bg, a, b, rounding, p.shadow, p.shadowAlpha, p.shadowBlur * s, p.shadowDx * s, p.shadowDy * s); reach = std::max(reach, (p.shadowBlur + std::max(std::fabs(p.shadowDx), std::fabs(p.shadowDy))) * s); }
+    if (p.glowAlpha > 0 && p.glowBlur > 0) { softLayers(bg, a, b, rounding, p.glow, p.glowAlpha, p.glowBlur * s, 0, 0); reach = std::max(reach, p.glowBlur * s); }
     if (p.reflectAlpha > 0 && p.reflectHeight > 0) {                             // the glossy floor: the window's own shine, mirrored below it and fading out
         const float h = (b.y - a.y) * p.reflectHeight, inset = std::min(rounding, (b.x - a.x) * 0.2f);
         const ImU32 c0 = tint(kWhite, p.reflectAlpha), c1 = tint(kWhite, 0);
         bg->AddRectFilledMultiColor(ImVec2(a.x + inset, b.y + 2 * s), ImVec2(b.x - inset, b.y + 2 * s + h), c0, c0, c1, c1);
+        reach = std::max(reach, 2 * s + h);
     }
+    return reach;
 }
 
 // a frame for a button-like widget at a..b whose base colour is `base` (from Dear ImGui's style), with the border
@@ -443,19 +455,19 @@ bool pageCacheDraw(ImDrawList* dl, ImVec2 a, ImVec2 b) {
 }
 
 // ---- panels ----
-void panelDecor(PanelKind kind) {
+float panelDecor(PanelKind kind, bool hug) {
     static const bool logWindows = std::getenv("PL_LOG_WINDOWS") != nullptr;   // for automatic checks: where every painted window is (tests/check_window_pictures.py)
     if (logWindows) {
         const ImGuiWindow* lw = ImGui::GetCurrentWindow();
         std::fprintf(stderr, "PLWIN %s %d %d %d %d %s\n", lw->Name, int(lw->Pos.x), int(lw->Pos.y), int(lw->Size.x), int(lw->Size.y), kind == PanelKind::Docked ? "docked" : "floating");
         if (lw->TitleBarHeight > 0) std::fprintf(stderr, "PLTITLEBAR %s %d %d %d %d %.3f\n", lw->Name, int(lw->Pos.x), int(lw->Pos.y), int(lw->Size.x), int(lw->TitleBarHeight), lw->TitleBarHeight);
     }
-    if (!glassy()) return;
+    if (!glassy()) return 0;
     const app::PanelStyle& p = style().panel;
     ImGuiWindow* w = ImGui::GetCurrentWindow();
     const float bs = w->WindowBorderSize;
     const ImVec2 a(w->Pos.x + bs, w->Pos.y + (w->TitleBarHeight > 0 ? w->TitleBarHeight : bs)), b(w->Pos.x + w->Size.x - bs - (w->ScrollbarY ? w->ScrollbarSizes.x : 0.f), w->Pos.y + w->Size.y - bs - (w->ScrollbarX ? w->ScrollbarSizes.y : 0.f));   // not over the scroll bars (ImGui painted them already)
-    if (b.x <= a.x || b.y <= a.y) return;
+    if (b.x <= a.x || b.y <= a.y) return 0;
     const float r = std::max(0.f, w->WindowRounding - bs);
     const ImDrawFlags flags = w->TitleBarHeight > 0 ? ImDrawFlags_RoundCornersBottom : ImDrawFlags_RoundCornersAll;
     ImDrawList* dl = w->DrawList;
@@ -484,7 +496,7 @@ void panelDecor(PanelKind kind) {
         dl->AddRect(ImVec2(w->Pos.x + in, w->Pos.y + in), ImVec2(w->Pos.x + w->Size.x - in, w->Pos.y + w->Size.y - in), tint(p.rim, p.rimAlpha), std::max(0.f, w->WindowRounding - in), 0, 1.f);
     }
     techDecor(w, dl, kind == PanelKind::Floating);
-    if (kind == PanelKind::Floating) shadowBehind(w->Pos, ImVec2(w->Pos.x + w->Size.x, w->Pos.y + w->Size.y), w->WindowRounding);
+    return kind == PanelKind::Floating ? shadowBehind(w->Pos, ImVec2(w->Pos.x + w->Size.x, w->Pos.y + w->Size.y), w->WindowRounding, hug) : 0.0f;
 }
 
 void logTitleRect(const char* what, ImVec2 a, ImVec2 b) {                          // for the automatic picture checks (PL_LOG_WINDOWS): where a title is drawn

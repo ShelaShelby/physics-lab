@@ -15,7 +15,7 @@ bool glassy();                        // the panels have a gradient page, glass,
 // ---- panels ----
 // Call right after ImGui::Begin(...) of a window, before its contents: paints the page gradient, the glass, the shine line and (floating windows) the shadow.
 // A docked window is a panel of the main window; a floating one is a pop-up or a window that can sit over anything. Plain themes: does nothing.
-void panelDecor(app::PanelKind kind);
+float panelDecor(app::PanelKind kind, bool hug = false);   // returns how far (px) its shadow / glow reaches outside the window; hug (the new UI only, 0.15 stage 5c.1): at most app::shell::kHaloMaxPx
 // Floating windows (Settings, About, the periodic table) have rounded corners in some themes: push before ImGui::Begin, pop after it.
 // Docked panels are see-through on purpose (the page gradient is painted under them): push before their ImGui::Begin, pop right after it. Every other window is solid.
 void pushDockedBg();

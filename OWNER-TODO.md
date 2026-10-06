@@ -285,4 +285,4 @@
 - [ ] The readout (bottom right) is now text-size on a dark pill. In the light themes and Aero its text is white (the muted colour cannot reach 4.5:1 on a pill that is only 0.6 opaque over a white picture). Do you like it, or do you want a darker pill (0.7) so the softer grey text works?
 - [ ] Atom Lab: the Controls panel only holds the View section for now; the Old panel opens left of it (the two together are wide). The rest moves in 5d and 5e.
 - [ ] Not tested here: Windows, Segoe UI widths, Windows scale 125 / 150 %, a real GPU, speed.
-
+- [ ] (0.15 stage 5c.1) On the PC, New UI On, in EVERY theme: the handle on the picture's right edge (opens / closes the panel, never hidden behind the toolbar, top bar or a card), the slide (smooth? 180 ms feels right?), and the hover outline / glow round the Legend, the toolbar buttons and the panel's check boxes and buttons (nothing spreading over neighbours). Also at 880 x 560, 1280 x 800, 1920 x 1080 and Windows scale 125 / 150 %.

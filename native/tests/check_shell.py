@@ -19,7 +19,7 @@ from shell_lib import run_app, inside, overlap, prefetch
 SCALE = {"caption": (13, 12), "body": (15, 14), "readout": (15, 14),   # (stage 5c: the readout is Body size)
           "title": (17, 15), "key": (28, 22), "h1": (28, 22), "h2": (20, 16), "h3": (17, 15)}
 # Text the old pages draw inside the reading view (About, guides ...) has many sizes of its own (17 pt card titles, 13 pt notes ...): only the floors are claimed for it, not an exact size
-PAGE_FLOORS = {"pbody": 14, "pcaption": 12, "plabel": 12}
+PAGE_FLOORS = {"pbody": 14, "pcaption": 12, "plabel": 12, "ctl": 14}   # ctl (stage 5c.1): text inside the Controls panel, logged again under this kind: 14 px at least (the owner); its exact size is checked under its own kind
 TF = {"small": 0.9, "normal": 1.0, "large": 1.15, "xl": 1.3}
 EXERCISE = ("10:click=top.chip;14:key=escape;16:click=ctl.sec.pick;24:click=show.physics@0.8;32:click=ctl.sec.show;38:click=ctl.sec.show;"
             "44:key=escape;46:click=top.menu;50:key=escape;52:click=fact.line;56:key=escape;58:key=ctrl+k;62:text=ear;66:key=escape;68:click=top.lab;72:key=escape;"

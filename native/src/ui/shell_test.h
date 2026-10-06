@@ -8,6 +8,8 @@
 
 #include <string>
 
+#include "imgui.h"
+
 struct SDL_Window;
 
 namespace ui {
@@ -27,7 +29,8 @@ void runScript(AppState& app, int frame, SDL_Window* window);          // called
 
 bool shellLogOn();                                      // PL_LOG_SHELL is set
 void auditText(const char* kind, float px, const std::string& text);   // a text the new UI drew: its kind (caption / body / title / key / h1 / h2 / h3) and its size in pixels
-void auditRect(const std::string& name, float x, float y, float w, float h);   // a rectangle of the new UI (last frame wins)
+void auditRect(const std::string& name, float x, float y, float w, float h);
+void auditHalo(const std::string& name, ImVec2 a, ImVec2 b, ImVec2 oa, ImVec2 ob);   // 0.15 stage 5c.1: a widget / panel (a..b) and how far its outline, glow or hover paint reaches (oa..ob); kept over frames   // a rectangle of the new UI (last frame wins)
 void auditPictureText(float px);                        // a label the Orbit Lab picture drew in the new UI (kind plabel; one line per size)
 void auditFrame();                                      // a new frame starts: forget last frame's rectangles (the texts are kept: every text size ever drawn)
 void auditNote(const std::string& line);                // a free line (replaces an earlier line with the same first word)

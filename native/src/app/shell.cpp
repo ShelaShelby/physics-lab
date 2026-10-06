@@ -53,11 +53,26 @@ Rect clampInto(Rect r, const Rect& b) {
 // ---- the fixed pieces ----
 double dockWidth(const Metrics& m, double winW) { return std::max<double>(m.em(12), std::min<double>(m.em(22), winW * 0.45)); }
 
+Rect dockRect(double winW, double winH, const Metrics& m, double dockW) { return {winW - m.s12 - dockW, m.topBar + static_cast<double>(m.s8), dockW, winH - m.topBar - m.s8 - m.s12}; }
+
+double slideStep(double s, double dt, bool open, bool reduced) {
+    if (reduced) return open ? 1.0 : 0.0;
+    if (!(dt > 0)) return s;
+    const double step = dt / kSlideSeconds;
+    return open ? std::min(1.0, s + step) : std::max(0.0, s - step);
+}
+double slideEase(double t) { t = std::min(1.0, std::max(0.0, t)); return t * t * (3 - 2 * t); }
+Rect slidRect(const Rect& dock, double winW, double e) { Rect r = dock; r.x = dock.x + (1 - e) * (winW - dock.x); return r; }
+Rect handleRect(const Rect& dock, double winW, const Metrics& m, double e) {
+    const double w = m.s24, h = 2.0 * m.s24 + m.s8;
+    return {std::min(winW, slidRect(dock, winW, e).x) - w, dock.y + dock.h / 2 - h / 2, w, h};
+}
+
 Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW) {
     Frame f;
     f.window = {0, 0, winW, winH};
     f.topBar = {0, 0, winW, static_cast<double>(m.topBar)};
-    if (dockW > 0) f.dock = {winW - m.s12 - dockW, m.topBar + static_cast<double>(m.s8), dockW, winH - m.topBar - m.s8 - m.s12};
+    if (dockW > 0) f.dock = dockRect(winW, winH, m, dockW);
     f.freeW = dockW > 0 ? f.dock.x : winW;
     const double tw = std::min(toolbarW, f.freeW - 2.0 * m.s12);
     f.toolbar = {(f.freeW - tw) / 2, winH - m.s12 - m.toolbarH, tw, static_cast<double>(m.toolbarH)};

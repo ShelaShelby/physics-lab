@@ -35,11 +35,7 @@ std::vector<ToolItem> orbitTools(AppState& app) {
     ToolItem reset; reset.kind = ToolItem::Button; reset.id = "tool.reset"; reset.tip = "Reset view: turn the picture back and put it in the middle"; reset.icon = Icon::Reset;
     reset.act = [&app] { resetViewAction(app); };
     v.push_back(reset);
-    v.push_back(separator());
-    ToolItem ctl; ctl.kind = ToolItem::Button; ctl.id = "tool.controls"; ctl.tip = "Controls: time speed, what to show, pick a body, zoom and sizes, view options"; ctl.icon = Icon::Sliders; ctl.on = controlsOpen();
-    ctl.act = [] { controlsToggle(); };
-    v.push_back(ctl);
-    return v;
+    return v;                                             // (stage 5c.1: the Controls panel opens from its handle on the picture's right edge, not from the toolbar)
 }
 
 
@@ -326,7 +322,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
             const ImVec2 o = here(p);
             ImGui::SetCursorScreenPos(o);
             inputField("##pickfilter", filter, sizeof g_pickFilter, "Filter the list", p.w);
-            p.y += m.control + m.s4;
+            p.y += m.control + m.s4; p.gap = m.s4;
         }
         auto lower = [](std::string x) { for (char& ch : x) if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a'); return x; };
         const std::string q = lower(filter);

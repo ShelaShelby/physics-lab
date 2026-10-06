@@ -677,6 +677,51 @@ void testShellDock() {
     checkTrue("dock: the centre shift moves it out", centreShiftTarget({f.dock.x + 40, 400}, 10, f.window, {f.topBar, f.toolbar, f.dock}, m.s24, target) && target.x < f.dock.x - m.s24);
 }
 
+// 0.15 stage 5c.1: the Controls panel opens from a handle on the picture's right edge and slides in and out. WRITTEN BEFORE the code. References: the owner's findings after trying 5c
+// (a small tab with an arrow, vertically centred on the panel's edge, never covered by the panel, the top bar or the toolbar; a 150-200 ms ease; no animation when motion is reduced;
+// a hover outline or glow at most 2 px outside the widget), and plain geometry.
+void testShellHandle() {
+    checkTrue("slide: 150 to 200 ms", kSlideSeconds >= 0.15 && kSlideSeconds <= 0.2);
+    checkTrue("halo: at most 2 px outside a widget or panel", kHaloMaxPx > 0 && kHaloMaxPx <= 2.0);
+    checkTrue("slide ease: starts at 0 and ends at 1", slideEase(0) == 0 && slideEase(1) == 1 && slideEase(-1) == 0 && slideEase(2) == 1);
+    for (int i = 0; i < 100; i++) checkTrue("slide ease: never goes back", slideEase((i + 1) / 100.0) >= slideEase(i / 100.0));
+    double s = 0;
+    int frames = 0;
+    for (; s < 1 && frames < 1000; frames++) s = slideStep(s, 1.0 / 60, true, false);
+    checkTrue("slide: at 60 frames a second it opens in 150-200 ms and lands exactly on 1 (" + std::to_string(frames) + " frames)", s == 1 && frames >= 9 && frames <= 12);
+    checkTrue("slide: open stays open", slideStep(1, 1.0 / 60, true, false) == 1);
+    for (frames = 0; s > 0 && frames < 1000; frames++) s = slideStep(s, 1.0 / 60, false, false);
+    checkTrue("slide: and closes in the same time, landing exactly on 0", s == 0 && frames >= 9 && frames <= 12);
+    checkTrue("slide: reduced motion jumps at once", slideStep(0, 1.0 / 60, true, true) == 1 && slideStep(1, 1.0 / 60, false, true) == 0 && slideStep(0.4, 1.0 / 60, true, true) == 1);
+    checkTrue("slide: a long frame (a hitch) does not overshoot", slideStep(0.5, 5.0, true, false) == 1 && slideStep(0.5, 5.0, false, false) == 0 && slideStep(0.5, -1, true, false) == 0.5);
+    for (double dpi : kDpis)
+        for (double tf : kTfs)
+            for (double wu : {880.0, 1280.0, 1920.0})
+                for (double hu : {560.0, 800.0, 1080.0}) {
+                    const Metrics m = metrics(dpi, tf);
+                    const double W = std::lround(wu * dpi), H = std::lround(hu * dpi), dw = dockWidth(m, W);
+                    const std::string t = tag(dpi, tf) + " window " + num(W) + "x" + num(H);
+                    const double tbw = 7 * (m.toolBtn + m.s4) + 6 * m.s8, rw = 14 * m.caption;
+                    const Frame fo = makeFrame(W, H, m, tbw, rw, 3 * m.caption * 1.4, dw), fc = makeFrame(W, H, m, tbw, rw, 3 * m.caption * 1.4, 0);
+                    const Rect dock = dockRect(W, H, m, dw);
+                    checkTrue("slide: the dock rectangle is the open frame's dock" + t, dock.x == fo.dock.x && dock.y == fo.dock.y && dock.w == fo.dock.w && dock.h == fo.dock.h);
+                    const Rect in = slidRect(dock, W, 1), out = slidRect(dock, W, 0);
+                    checkTrue("slide: after the slide the panel is exactly the docked rectangle" + t, in.x == dock.x && in.y == dock.y && in.w == dock.w && in.h == dock.h);
+                    checkTrue("slide: closed, the panel is wholly outside the window" + t, out.x >= W && out.y == dock.y && out.w == dock.w);
+                    for (int k = 0; k <= 20; k++) {
+                        const double e = k / 20.0;
+                        const Rect p = slidRect(dock, W, e), h = handleRect(dock, W, m, e);
+                        const std::string te = t + " at " + num(e);
+                        checkTrue("handle: inside the window" + te, within(h, fo.window));
+                        checkTrue("handle: never under the panel (it rides on its left edge)" + te, !h.intersects(p) && std::fabs(h.right() - std::min(W, p.x)) < 1e-9);
+                        checkTrue("handle: vertically centred on the panel's edge" + te, std::fabs((h.y + h.h / 2) - (dock.y + dock.h / 2)) < 1e-9);
+                        checkTrue("handle: clear of the top bar and the toolbar, open or closed" + te, !h.intersects(fo.topBar) && !h.intersects(fo.toolbar) && !h.intersects(fc.toolbar) && h.y >= fo.topBar.bottom());
+                        checkTrue("handle: big enough to hit (24 u wide, at least a control high)" + te, h.w >= m.s24 - 1e-9 && h.h >= m.control);
+                    }
+                    checkTrue("handle: closed, on the window's right edge" + t, std::fabs(handleRect(dock, W, m, 0).right() - W) < 1e-9);
+                }
+}
+
 void testShellReadout() {
     int muted = 0, fg = 0;
     std::vector<app::ThemeColors> all;
@@ -699,6 +744,7 @@ void testShellReadout() {
 
 void testShell() {
     testShellDock();
+    testShellHandle();
     testShellReadout();
     testShellTypeScale();
     testShellFrame();

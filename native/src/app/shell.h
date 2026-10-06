@@ -51,6 +51,14 @@ Rect clampInto(Rect r, const Rect& bounds);                                // th
 struct Frame { Rect window, topBar, toolbar, readout, dock; double freeW = 0; };
 Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW = 0);
 double dockWidth(const Metrics& m, double winW);                          // the Controls panel: 22 em of Body, at most 45 % of the window, never under 12 em
+Rect dockRect(double winW, double winH, const Metrics& m, double dockW);   // where the open Controls panel sits (makeFrame's dock)
+// 0.15 stage 5c.1: the panel slides in and out from a handle on the picture's right edge (the owner's findings after trying 5c)
+constexpr double kSlideSeconds = 0.18;                                    // the slide takes 180 ms (the owner asked for about 150-200 ms)
+constexpr double kHaloMaxPx = 2.0;                                        // a panel's or widget's glow / outline / shadow reaches at most 2 px outside it
+double slideStep(double s, double dt, bool open, bool reduced);           // the slide's linear progress 0 (closed) .. 1 (open) after dt seconds; reduced motion jumps
+double slideEase(double t);                                               // ease in and out (smoothstep), 0..1 -> 0..1
+Rect slidRect(const Rect& dock, double winW, double e);                   // the panel at eased progress e: e = 1 is exactly the dock, e = 0 is just outside the window's right edge
+Rect handleRect(const Rect& dock, double winW, const Metrics& m, double e);   // the handle: 24 u x 56 u, riding on the panel's left edge, centred on its height
 // How many toolbar items fit (the rest go behind a "..." button, never a second row). widths: each item's width incl. separators; the "..." button is `moreW` wide.
 int toolbarVisible(const std::vector<double>& widths, double gap, double moreW, double winW, const Metrics& m);
 

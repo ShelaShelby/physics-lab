@@ -44,6 +44,7 @@ using sh::Type;
 struct State {
     UiState ui;
     float topBarH = 0;
+    double slide = -1;                                    // the Controls panel's slide, 0 closed .. 1 open (stage 5c.1); -1 before the first frame (it starts where the settings say, no slide)
     bool askDefaults = false;
     bool frozen = false;                                  // the user dragged the picture: the centre shift holds still
     orbit::Selection lastSel;
@@ -408,7 +409,13 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     const int count = static_cast<int>(tools.size());
     const bool hasToolbar = count > 0;
     const bool paneOpen = app.pane != 0;                  // the Learn or Achievements page covers the lab: only the top bar stays
-    const double dockW = controlsOpen() && !paneOpen ? dockWidth(m, W) : 0;
+    // the Controls panel slides in and out over app::shell::kSlideSeconds (stage 5c.1; at once with Settings → Motion reduced). While it moves or is open, the layout is the open one (the toolbar and
+    // the readout stay left of it), so nothing slides under it; the only per-frame work is this step and the panel drawn at its place.
+    const bool wantOpen = controlsOpen();
+    if (S.slide < 0) S.slide = wantOpen ? 1 : 0;
+    else if (!paneOpen) S.slide = slideStep(S.slide, io.DeltaTime, wantOpen, look().reduced);
+    const double ease = slideEase(S.slide);
+    const double dockW = S.slide > 0 && !paneOpen ? dockWidth(m, W) : 0;
     const double freeW0 = dockW > 0 ? W - m.s12 - dockW : W;     // the width left of the Controls panel: the toolbar is centred in it
     const int shown = toolbarVisible(iw, gap, m.toolBtn, freeW0, m);
     double tw = 2.0 * m.s8;
@@ -601,11 +608,12 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     if (fr.dock.w > 0) {
         sh::Panel cp;
         const std::string openKey = controlsKey(app, "controls");
-        if (sh::beginPanel("##shellControls", fr.dock, cp, sh::Shape::Panel, true)) {
+        const Rect pr = slidRect(fr.dock, W, ease);         // where it is drawn: the dock itself once the slide is over
+        if (sh::beginPanel("##shellControls", pr, cp, sh::Shape::Panel, true, true)) {
             const float hb = static_cast<float>(m.iconBtn);
             {   // the title and its close button
                 const ImVec2 o = sh::here(cp);
-                if (sh::iconButton("ctl.close", ImVec2(o.x + cp.w - hb, o.y), ImVec2(hb, hb), Icon::Close, "Close the Controls panel (the Controls button on the toolbar opens it again)")) app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, openKey, true);
+                if (sh::iconButton("ctl.close", ImVec2(o.x + cp.w - hb, o.y), ImVec2(hb, hb), Icon::Close, "Close the Controls panel (the handle on the picture's right edge opens it again)")) app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, openKey, true);
                 sh::text(cp.dl, Type::Title, true, o, sh::cText(), "Controls");
                 cp.y += std::max(sh::lineH(Type::Title), hb) + m.s4;
             }
@@ -616,10 +624,12 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 const bool revealed = S.revealSection == key;
                 if (revealed) collapsed = false;
                 const ImVec2 o = sh::here(cp);
-                if (cp.y > m.s16 + hb) sh::pRule(cp);
-                if (sh::row((std::string("ctl.sec.") + key).c_str(), sh::here(cp), cp.w, title, false)) collapsed = !collapsed;
+                if (cp.y > m.s16 + hb) { cp.y += m.s4 - cp.gap; sh::pRule(cp); }      // (stage 5c.1: every section starts the same distance below the last item of the one before)
+                // (stage 5c.1) every header the same: its words on the content's left edge, its arrow (one size) ending on the content's right edge; the hover runs 8 u into the padding
                 const ImVec2 h = sh::here(cp);
-                sh::drawIcon(cp.dl, collapsed ? Icon::Caret : Icon::CaretUp, ImVec2(h.x + cp.w - m.s12 - m.caretW / 2.0f, h.y + m.row / 2.0f), m.caretW * 0.75f, sh::cMuted());
+                if (sh::row((std::string("ctl.sec.") + key).c_str(), ImVec2(h.x - m.s8, h.y), cp.w + 2.0f * m.s8, title, false)) collapsed = !collapsed;
+                sh::drawIcon(cp.dl, collapsed ? Icon::Caret : Icon::CaretUp, ImVec2(h.x + cp.w - m.caretW * 0.375f, h.y + m.row / 2.0f), m.caretW * 0.75f, sh::cMuted());
+                if (h.y >= pr.y && h.y + m.row <= pr.bottom()) auditRect(std::string("ctlhead.") + key, h.x, h.y, cp.w, static_cast<float>(m.row));   // (only the headers in view)
                 (void)o;
                 if (revealed) { ImGui::SetScrollY(ImGui::GetScrollY() + h.y - static_cast<float>(fr.dock.y) - m.s12); S.revealSection.clear(); }
                 cp.y += m.row + m.s4;
@@ -627,7 +637,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 return !collapsed;
             };
             collectPanelItems(true);
+            sh::bodyFloor(true);
             if (app.lab == 0) orbitControls(app, cp, section); else atomControls(app, cp, section);
+            sh::bodyFloor(false);
             collectPanelItems(false);
             std::string want;
             if (takeReveal(want)) {
@@ -641,10 +653,26 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             const float need = sh::endPanel(cp);
             { char nb[96]; std::snprintf(nb, sizeof nb, "panelneed controls need=%.0f have=%.0f", need, static_cast<float>(fr.dock.h)); auditNote(nb); }
         }
-        noteScrollArea(static_cast<float>(fr.dock.x), static_cast<float>(fr.dock.y), static_cast<float>(fr.dock.w), static_cast<float>(fr.dock.h));
-        auditRect("panel.controls", static_cast<float>(fr.dock.x), static_cast<float>(fr.dock.y), static_cast<float>(fr.dock.w), static_cast<float>(fr.dock.h));
-        auditNote("panelopen controls");
+        noteScrollArea(static_cast<float>(pr.x), static_cast<float>(pr.y), static_cast<float>(pr.w), static_cast<float>(pr.h));
+        auditRect("panel.controls", static_cast<float>(pr.x), static_cast<float>(pr.y), static_cast<float>(pr.w), static_cast<float>(pr.h));
+        auditRect("dock.controls", static_cast<float>(fr.dock.x), static_cast<float>(fr.dock.y), static_cast<float>(fr.dock.w), static_cast<float>(fr.dock.h));
+        if (S.slide >= 1) auditNote("panelopen controls");
     } else noteScrollArea(0, 0, 0, 0);
+
+    // ---- the handle (stage 5c.1, owner's findings after trying 5c): a small tab on the picture's right edge, riding on the panel's left edge and centred on its height; its arrow points left
+    // (open) while the panel is closed and right (close) while it is open. It is in front of every window, and by its place never under the panel, the top bar or the toolbar. ----
+    if (!paneOpen) {
+        const Rect hr = handleRect(dockRect(W, H, m, dockWidth(m, W)), W, m, ease);
+        sh::Panel hp;
+        if (sh::beginPanel("##shellHandle", hr, hp, sh::Shape::Pill, false)) {
+            ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+            const ImVec2 o(static_cast<float>(hr.x), static_cast<float>(hr.y)), sz(static_cast<float>(hr.w), static_cast<float>(hr.h));
+            if (sh::iconButton("ctl.handle", o, sz, wantOpen ? Icon::CaretRight : Icon::CaretLeft, wantOpen ? "Close the Controls panel" : "Open the Controls panel")) controlsToggle();
+            ImGui::End();
+        }
+        auditRect("handle", static_cast<float>(hr.x), static_cast<float>(hr.y), static_cast<float>(hr.w), static_cast<float>(hr.h));
+        auditNote(wantOpen ? "handle open" : "handle closed");
+    }
 
     // ---- the top bar ----
     {

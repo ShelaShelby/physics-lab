@@ -65,10 +65,12 @@ struct Panel {
     ImVec2 origin;               // where the content starts (inside the padding), screen pixels
     float w = 0;                 // the content's width
     float y = 0;                 // how far down the content has been laid out
+    float gap = 0;               // the empty space the last item left below itself (stage 5c.1: the Controls panel's sections then start the same distance below it)
     std::string id;
 };
 // Opens a window at r (window pixels). False: it is not shown. Always call endPanel when it returned true.
-bool beginPanel(const char* id, const app::shell::Rect& r, Panel& p, Shape shape = Shape::Panel, bool scroll = true);
+void bodyFloor(bool on);     // stage 5c.1: Caption text is drawn at Body size while on (the Controls panel)
+bool beginPanel(const char* id, const app::shell::Rect& r, Panel& p, Shape shape = Shape::Panel, bool scroll = true, bool solid = false);   // solid: no see-through (stage 5c.1, the Controls panel)
 // Ends it and returns the height the content needs (with the padding), to size the panel next frame.
 float endPanel(Panel& p);
 float lastHeight(const std::string& id, float dflt);     // the height a panel needed last time it was drawn

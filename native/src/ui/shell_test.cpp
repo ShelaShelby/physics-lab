@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -209,6 +210,11 @@ void auditRect(const std::string& name, float x, float y, float w, float h) {
     if (!shellLogOn()) return;
     g_rects[name] = {x, y, w, h};
 }
+namespace { std::map<std::string, std::array<float, 8>> g_halos; }
+void auditHalo(const std::string& name, ImVec2 a, ImVec2 b, ImVec2 oa, ImVec2 ob) {
+    if (!shellLogOn()) return;
+    g_halos[name] = {a.x, a.y, b.x, b.y, oa.x, oa.y, ob.x, ob.y};
+}
 void auditPictureText(float px) { if (shellLogOn()) auditText("plabel", px, "a label of the picture"); }   // (one line per size)
 void auditFrame() { if (!shellLogOn()) return; g_rects.clear(); g_notes.clear(); }
 void auditNote(const std::string& line) {
@@ -226,6 +232,7 @@ void shellReport(int winW, int winH, float dpi, float textScale) {
     for (const auto& [name, r] : g_rects) std::printf("PLSHELL rect name=%s x=%.1f y=%.1f w=%.1f h=%.1f\n", name.c_str(), r.x, r.y, r.w, r.h);
     for (const auto& [k, line] : g_notes) std::printf("PLSHELL %s\n", line.c_str());
     for (const std::string& t : g_texts) std::printf("PLSHELL text %s\n", t.c_str());
+    for (const auto& [name, v] : g_halos) std::printf("PLSHELL halo name=%s a=%.1f,%.1f,%.1f,%.1f o=%.1f,%.1f,%.1f,%.1f\n", name.c_str(), v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
 }
 
 }  // namespace ui
