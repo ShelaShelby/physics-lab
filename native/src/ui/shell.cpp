@@ -311,7 +311,12 @@ double factInterval() {
 Rect factLine(AppState& app, const Frame& fr, const Metrics& m, const std::vector<Rect>& occ, double dpi, double dt) {
     std::string txt = factText(app);
     const double textW = sh::width(Type::Caption, false, txt);
-    const Rect r = factLineRect(fr, m, textW);
+    // (stage 5d) a fact too long for one line wraps to two; the rectangle is as wide as for one line and only as tall as the lines need. "…" only when two lines are still too short.
+    const float arrowsW = static_cast<float>(2 * m.row + m.s4);
+    const float room = static_cast<float>(factLineRect(fr, m, textW).w) - arrowsW - 2.0f * m.s4;
+    std::vector<std::string> lines = sh::wrapText(Type::Caption, false, txt, room);
+    const int nLines = std::max(1, std::min(2, static_cast<int>(lines.size())));
+    const Rect r = factLineRect(fr, m, textW, nLines > 1 ? nLines * sh::lineH(Type::Caption) : 0.0);
     bool blocked = false;
     for (const Rect& o : occ) if (r.intersects(o)) blocked = true;
     if (!blocked && app.lab == 0) {
@@ -321,21 +326,30 @@ Rect factLine(AppState& app, const Frame& fr, const Metrics& m, const std::vecto
     if (blocked) { S.factHover = false; return Rect{0, 0, 0, 0}; }
     sh::Panel p;
     if (!sh::beginPanel("##shellFact", r, p, sh::Shape::Clear, false)) return Rect{0, 0, 0, 0};
-    const float arrowsW = static_cast<float>(2 * m.row + m.s4), textAreaW = static_cast<float>(r.w) - arrowsW, h = static_cast<float>(r.h);
+    const float textAreaW = static_cast<float>(r.w) - arrowsW, h = static_cast<float>(r.h);
     const bool hover = sh::hoveredRect(p.origin, ImVec2(static_cast<float>(r.w), h));
     S.factHover = hover;
     if (factTick(S.fact, dt, hover, look().reduced, factInterval(), kFactFade)) factStep(app, 1);
     const float alpha = look().reduced ? 1.0f : static_cast<float>(factAlpha(S.fact.t, factInterval(), kFactFade));
-    txt = factText(app);
-    const float room = textAreaW - 2.0f * m.s4;
-    std::string shown = txt;
-    while (sh::width(Type::Caption, false, shown) > room && shown.size() > 4) { shown.pop_back(); while (!shown.empty() && (static_cast<unsigned char>(shown.back()) & 0xC0) == 0x80) shown.pop_back(); }
-    if (shown != txt) { while (!shown.empty() && shown.back() == ' ') shown.pop_back(); shown += "…"; }
+    if (factText(app) != txt) { txt = factText(app); lines = sh::wrapText(Type::Caption, false, txt, room); }    // (it stepped this frame: the new one, in the same rectangle)
+    if (lines.empty()) lines.push_back("");
+    if (lines.size() > 2) {                                // more than two lines: the second ends with "…" (the click opens the whole fact)
+        std::string rest = lines[1];
+        for (std::size_t i = 2; i < lines.size(); i++) rest += " " + lines[i];
+        while (sh::width(Type::Caption, false, rest + "…") > room && rest.size() > 4) { rest.pop_back(); while (!rest.empty() && (static_cast<unsigned char>(rest.back()) & 0xC0) == 0x80) rest.pop_back(); }
+        while (!rest.empty() && rest.back() == ' ') rest.pop_back();
+        lines.resize(2); lines[1] = rest + "…";
+    }
+    std::string shown = lines[0];
+    for (std::size_t i = 1; i < lines.size(); i++) shown += " " + lines[i];      // (for the log: one line)
     ImGui::SetCursorScreenPos(p.origin);
     if (ImGui::InvisibleButton("fact.line", ImVec2(textAreaW, h))) { S.anchorX[PanelId::Facts] = r.x + textAreaW / 2; toggle(PanelId::Facts); }
     noteItem("fact.line");
     if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-    sh::shadowed(p.dl, Type::Caption, ImVec2(p.origin.x + m.s4, p.origin.y + (h - sh::px(Type::Caption)) / 2), sh::cFactText(), alpha, shown);
+    {   // one or two lines, centred on the rectangle's height together
+        const float lh = sh::lineH(Type::Caption), top = p.origin.y + (h - lh * static_cast<float>(lines.size())) / 2 + (lh - sh::px(Type::Caption)) / 2;
+        for (std::size_t i = 0; i < lines.size(); i++) sh::shadowed(p.dl, Type::Caption, ImVec2(p.origin.x + m.s4, top + lh * static_cast<float>(i)), sh::cFactText(), alpha, lines[i]);
+    }
     if (hover) {
         const float bw = static_cast<float>(m.row), by = (h - bw) / 2;
         if (sh::button("fact.prev", ImVec2(p.origin.x + textAreaW, p.origin.y + by), ImVec2(bw, bw), "‹", Face::Quiet)) { factStep(app, -1); S.fact.t = 0; }
@@ -343,6 +357,7 @@ Rect factLine(AppState& app, const Frame& fr, const Metrics& m, const std::vecto
     }
     ImGui::End();
     auditNote("factline " + shown);
+    auditNote("factlines " + std::to_string(lines.size()) + (lines.back().size() >= 3 && lines.back().compare(lines.back().size() - 3, 3, "…") == 0 ? " cut" : " whole"));
     char b[64];
     std::snprintf(b, sizeof b, "factalpha %.3f t=%.2f", alpha, S.fact.t);
     auditNote(b);
@@ -617,7 +632,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 sh::text(cp.dl, Type::Title, true, o, sh::cText(), "Controls");
                 cp.y += std::max(sh::lineH(Type::Title), hb) + m.s4;
             }
+            std::string shownSections = "ctlsections";          // (for the automatic checks: which sections were drawn, in order)
             const SectionFn section = [&](const char* key, const char* title, bool defOpen) {
+                shownSections += std::string(" ") + key;
                 const std::string name = controlsKey(app, (std::string("ctl.") + key).c_str());
                 const bool was = panelCollapsed(app.prefs.shellPanels, name, !defOpen);
                 bool collapsed = was;
@@ -641,6 +658,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (app.lab == 0) orbitControls(app, cp, section); else atomControls(app, cp, section);
             sh::bodyFloor(false);
             collectPanelItems(false);
+            auditNote(shownSections);
             std::string want;
             if (takeReveal(want)) {
                 float r[4];
@@ -835,10 +853,12 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     }
     if (app.lab == 1) atomBigTable(app);
     // ---- the fact line (Settings → Facts) ----
-    if (app.lab == 0 && !pane && app.prefs.facts == "on" && !app.journey.active && S.ui.open != PanelId::Facts) {   // (the Atom Lab: from stage 5, when its bottom left is arranged; today its own scale bar and "Less info" sit there)
+    double bottomLeftTop = fr.toolbar.y;                  // (stage 5d) the top of what the new UI puts at the picture's bottom left: the toolbar row and the fact line
+    if (!pane && app.prefs.facts == "on" && !app.journey.active && S.ui.open != PanelId::Facts) {   // (stage 5d: the Atom Lab too; its scale bar and decay lines now sit above the toolbar row and this line)
         const Rect fl = factLine(app, fr, m, occ, dpi, dt);
-        if (fl.w > 0) { occ.push_back(fl); auditRect("factline", static_cast<float>(fl.x), static_cast<float>(fl.y), static_cast<float>(fl.w), static_cast<float>(fl.h)); }
+        if (fl.w > 0) { occ.push_back(fl); auditRect("factline", static_cast<float>(fl.x), static_cast<float>(fl.y), static_cast<float>(fl.w), static_cast<float>(fl.h)); bottomLeftTop = std::min(bottomLeftTop, fl.y); }
     }
+    app.atom.insetBottomLeft = (fr.window.bottom() - bottomLeftTop) / dpi + 4;       // points (main.cpp sets it to 0 when the new UI is off)
 
     // ---- the centre shift: the selected body is kept out from under the cards and panels (DESIGN.md section 6) ----
     static const bool shiftOff = std::getenv("PL_SHIFT") && std::string(std::getenv("PL_SHIFT")) == "off";   // for the automatic checks: the shift switched off

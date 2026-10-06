@@ -158,6 +158,7 @@ public:
     double viewW = 1000, viewH = 700;    // the picture's size in points (the web's canvas size)
     std::function<double()> nowMs;       // the wall clock in ms (web: performance.now / Date.now)
     double insetTop = 0, insetBottom = 0; // new UI: how much of the picture the top bar and the toolbar cover, points (the readout lines and the chart keep clear of it)
+    double insetBottomLeft = 0;          // new UI (0.15 stage 5d): how high the toolbar row and the fact line reach at the bottom left, points (the scale bar and the decay lines sit above it); 0 in the old UI
     double insetRight = 0;                // 0.15 stage 5c: points the Controls panel covers at the right: the picture's text lines wrap before it
     bool shellUi = false;                // the new UI is on: the picture leaves out its own "More / Less info" button (the toggle is in the Old panel until stage 5b)
     bool reducedMotion = false;          // Settings → Motion: camera moves jump, Cloud 3D does not spin by itself (web: plRM())

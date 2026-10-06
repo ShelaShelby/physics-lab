@@ -567,6 +567,15 @@ void testShellFacts() {
                     checkTrue("fact line: tall enough for its text" + t, r.h >= m.caption);
                     checkTrue("fact line: wide enough to read when the window is not tiny" + t, wu < 1000 || r.w >= m.em(14));
                     checkTrue("fact line: in the lower part of the window" + t, r.y > H * 0.6);
+                    // 0.15 stage 5d: a long fact wraps to two lines; the taller rectangle keeps every rule above (two Caption lines with their leading: at most 2 x (caption + 4 u))
+                    const double twoH = 2.0 * (m.caption + m.s4);
+                    const Rect r2 = factLineRect(f, m, 60 * m.caption, twoH);
+                    checkTrue("fact line, two lines: tall enough" + t, r2.h >= twoH);
+                    checkTrue("fact line, two lines: inside the window" + t, within(r2, f.window));
+                    checkTrue("fact line, two lines: not over the toolbar" + t, !r2.intersects(f.toolbar));
+                    checkTrue("fact line, two lines: not over the readout" + t, !r2.intersects(f.readout));
+                    checkTrue("fact line, two lines: not over the top bar" + t, !r2.intersects(f.topBar));
+                    checkTrue("fact line, two lines: as wide as one line" + t, std::abs(r2.w - r.w) < 0.01);
                 }
 }
 
@@ -662,7 +671,7 @@ void testShellDock() {
                             const Rect r = placePanel(a, ww, m.em(12.0), f, m, W * 0.9);
                             checkTrue("dock: a panel (anchor " + std::to_string(int(a)) + ", width " + num(ww) + ") stays clear of it" + t, !r.intersects(f.dock));
                         }
-                    checkTrue("dock: the fact line stays clear of it" + t, !factLineRect(f, m, 60 * m.caption).intersects(f.dock));
+                    checkTrue("dock: the fact line stays clear of it" + t, !factLineRect(f, m, 60 * m.caption).intersects(f.dock)); checkTrue("dock: the two-line fact line stays clear of it" + t, !factLineRect(f, m, 60 * m.caption, 2.0 * (m.caption + m.s4)).intersects(f.dock));
                     const Frame g = makeFrame(W, H, m, tbw, rw, 3 * m.caption * 1.4, 0);
                     checkTrue("dock: closed, the dock is empty and the toolbar is centred in the window as before" + t, g.dock.w == 0 && g.freeW == W && std::fabs((g.toolbar.x + g.toolbar.w / 2) - W / 2) < 1.0);
                 }

@@ -3,11 +3,22 @@
 // spectrum and temperature cards).
 #pragma once
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "imgui.h"
 
 namespace ui {
 
 struct AppState;
+
+// 0.15 stage 5d: the old panel's choices for a setting (key, value, "words · note"; the words before " · " are on the button, the note is shown under the row) and its long notes
+// ("energy", "phase", "super", "chart", "chain"), shared with the new UI's Controls panel so both change the same setting with the same values and say the same words.
+using AtomChoices = std::vector<std::pair<std::string, std::string>>;
+const AtomChoices& atomChoices(const std::string& key);   // empty for an unknown key
+const char* atomNote(const std::string& which);
+std::pair<std::string, std::string> atomSplitLabel(const std::string& s);   // "1s · sphere" -> {"1s", "sphere"}; "Auto-fit (orbit fills the canvas)" -> {"Auto-fit", "orbit fills the canvas"}
 
 // The two buttons at the top of every panel: Orbit Lab / Atom Lab.
 void labPicker(AppState& app);

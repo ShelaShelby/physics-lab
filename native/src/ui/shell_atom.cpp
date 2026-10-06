@@ -6,6 +6,7 @@
 #include "atom/atom_core.h"
 #include "atom/atom_learn.h"
 #include "atom/atom_tools.h"
+#include "orbit/format.h"
 #include "ui/atom_panel.h"
 #include "ui/fonts.h"
 #include "ui/shell_internal.h"
@@ -115,7 +116,53 @@ bool buildAtomPanel(PanelId id, AppState& app, Panel& p, bool& /*closeAfter*/) {
 }
 
 
-// ---- the Controls panel (stage 5c): what the Nucleus ▾ and Cloud ▾ panels held, in a "View" section. The other Atom controls are still in the Old panel (they move in 5d and 5e). ----
+// ---- stage 5d: the old panel's setting rows, drawn with the new UI's controls. Same key, same values (atomChoices), same call (AtomLab::setParam) as the old row. ----
+// A setting with a few values: its name, the values' words on segmented buttons (packed into rows that fit the panel), the chosen value's note under them. Each part is also noted as
+// "atom.<key>=<value>" for the automatic checks.
+static void choiceRow(AppState& app, Panel& p, const char* key, const std::string& label, const ui::AtomChoices& opts, const std::string& cur, std::size_t maxPerRow = 5) {
+    const Metrics& m = F().m;
+    pHeading(p, label);
+    std::string note;
+    std::vector<std::string> words(opts.size());
+    for (std::size_t i = 0; i < opts.size(); i++) { const auto [t, sub] = ui::atomSplitLabel(opts[i].second); words[i] = displayable(t); if (opts[i].first == cur) note = sub; }
+    int rowNo = 0;
+    for (std::size_t i = 0; i < opts.size();) {
+        std::size_t j = i;
+        float need = 0;
+        while (j < opts.size() && j - i < maxPerRow) { const float w = width(Type::Body, false, words[j]) + 2.0f * m.s8; if (j > i && need + w > p.w) break; need += w; j++; }
+        std::vector<std::string> labels(words.begin() + static_cast<long>(i), words.begin() + static_cast<long>(j)), names;
+        int sel = -1;
+        for (std::size_t k = i; k < j; k++) { names.push_back(std::string("atom.") + key + "=" + opts[k].first); if (opts[k].first == cur) sel = static_cast<int>(k - i); }
+        int pick = sel;
+        const std::string id = std::string("atom.") + key + ".row" + std::to_string(rowNo++);
+        if (pSegmented(p, id.c_str(), labels, &pick, &names) && pick >= 0 && pick != sel) app.atom.setParam(key, opts[i + static_cast<std::size_t>(pick)].first);
+        i = j;
+    }
+    if (!note.empty()) pCaption(p, displayable(note));
+}
+// A number setting: its name with the value, then the slider ("atom.<key>"). Whole-number settings change only when the whole number does (the old SliderInt); the others are rounded to
+// their step on every change (the old SliderFloat).
+static void numberRow(AppState& app, Panel& p, const char* key, const std::string& label, const std::string& value, double v, double lo, double hi, double step) {
+    pStat(p, displayable(label), displayable(value));
+    float fv = static_cast<float>(v);
+    const std::string id = std::string("atom.") + key;
+    if (pSlider(p, id.c_str(), &fv, static_cast<float>(lo), static_cast<float>(hi))) {
+        if (step >= 1) { const double nv = static_cast<double>(std::lround(fv)); if (nv != v) app.atom.setParam(key, nv); }
+        else app.atom.setParam(key, std::round(static_cast<double>(fv) / step) * step);
+    }
+    pGap(p, F().m.s8);
+}
+static void orientationRow(AppState& app, Panel& p, const std::string& orb, const char* pKey, const char* dKey, const char* fKey, const std::string& label) {
+    const atom::AtomParams& P = app.atom.p;
+    const int l = atom::orbitals()[atom::orbIndex(orb)].l;
+    const std::string& cur = l == 1 ? (std::string(pKey) == "pAx" ? P.pAx : P.pAx2) : l == 2 ? (std::string(dKey) == "dAx" ? P.dAx : P.dAx2) : (std::string(fKey) == "fAx" ? P.fAx : P.fAx2);
+    if (l == 1) choiceRow(app, p, pKey, label, ui::atomChoices(pKey), cur, 3);
+    if (l == 2) choiceRow(app, p, dKey, label, ui::atomChoices(dKey), cur, 3);
+    if (l == 3) choiceRow(app, p, fKey, label, ui::atomChoices(fKey), cur, 3);
+}
+
+// ---- the Controls panel (stage 5c): what the Nucleus ▾ and Cloud ▾ panels held, in a "View" section. Stage 5d: the old panel's view options, in the sections Orbital, Cloud, Orbit,
+// Scale and motion, Nucleus and Chart, each shown when the old panel showed its rows (atom_panel.cpp, atomPanelContents). Marks and photons come in 5e. ----
 void atomControls(AppState& app, Panel& p, const SectionFn& section) {
     atom::AtomLab& L = app.atom;
     const Metrics& m = F().m;
@@ -132,6 +179,51 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
         if (pRow(p, "cloud.cloud3d", "Cloud 3D (turn it with the mouse)", L.p.view == "Cloud 3D")) { atom::pressTool(L, Tool::Cloud3D); }
         if (pRow(p, "cloud.slice", "Slice (cross-section of the cloud)", L.p.view == "Slice")) { atom::pressTool(L, Tool::Slice); }
         pCaption(p, "Each dot is one possible place to find the electron (one electron, non-relativistic model).");
+    }
+    const atom::AtomParams& P = L.p;
+    const bool orbit = P.view == "Orbit", chart = L.chartOn();
+    if (!chart && section("orbital", "Orbital", true)) {                 // old: Orbital and Orientation in the cloud views (not the chart); Energy level in the Orbit view
+        if (!orbit) {
+            choiceRow(app, p, "orb", P.super == "On" ? "First orbital" : "Orbital", ui::atomChoices("orb"), P.orb);
+            orientationRow(app, p, P.orb, "pAx", "dAx", "fAx", "Orientation");
+        } else numberRow(app, p, "n", "Energy level (n)", std::to_string(P.n), P.n, 1, 4, 1);
+        pCaption(p, displayable(ui::atomNote("energy")));
+    }
+    if (!orbit && section("cloud", "Cloud", true)) {                      // old: cloud style, density and superposition whenever the view is not Orbit; the cut in Slice
+        choiceRow(app, p, "cstyle", "Cloud style", ui::atomChoices("cstyle"), P.cstyle);
+        choiceRow(app, p, "cdens", "Cloud density", ui::atomChoices("cdens"), P.cdens);
+        choiceRow(app, p, "super", "Superposition", ui::atomChoices("super"), P.super);
+        if (P.super == "On") {
+            choiceRow(app, p, "orb2", "Second orbital", ui::atomChoices("orb2"), P.orb2);
+            orientationRow(app, p, P.orb2, "pAx2", "dAx2", "fAx2", "Second orientation");
+            numberRow(app, p, "mix", "Mix (share of the second orbital)", fmt::jsLocale(std::round(P.mix)) + " %", P.mix, 0, 100, 1);
+            numberRow(app, p, "speed", "Playback speed (beat speed)", std::to_string(P.speed), P.speed, 1, 30, 1);
+            pCaption(p, displayable(ui::atomNote("super")));
+        }
+        if (P.view == "Slice") {
+            choiceRow(app, p, "cutAxis", "Cut direction", ui::atomChoices("cutAxis"), P.cutAxis);
+            numberRow(app, p, "cut", "Cut position (0 = through the nucleus)", fmt::jsString(P.cut), P.cut, -1, 1, 0.01);
+        }
+    }
+    if (orbit && section("orbit", "Orbit", true)) choiceRow(app, p, "ostyle", "Orbit style", ui::atomChoices("ostyle"), P.ostyle);
+    if (!chart && section("scale", "Scale and motion", true)) {          // old: View & zoom (not on the chart) and the Orbit view's Playback speed
+        if (L.showSpin()) { bool spin = L.s.spin; if (pCheck(p, "atom.spin", "Spin (the cloud turns by itself)", &spin)) L.toggleSpin(); pGap(p, m.s4); }
+        choiceRow(app, p, "scale", "Scale", ui::atomChoices("scale"), P.scale);
+        numberRow(app, p, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(std::round(std::pow(10, P.zoom))), P.zoom, 0, 7, 0.01);
+        if (orbit) numberRow(app, p, "speed", "Playback speed", std::to_string(P.speed), P.speed, 1, 30, 1);
+    }
+    if (!chart && P.zoom >= 3 && section("nucleus", "Nucleus", true)) {  // old: quark style and nucleon detail from zoom 4, nucleon edge from zoom 3
+        if (P.zoom >= 4) {
+            choiceRow(app, p, "qstyle", "Quark style", ui::atomChoices("qstyle"), P.qstyle);
+            choiceRow(app, p, "detail", "Nucleon detail", ui::atomChoices("detail"), P.detail);
+        }
+        choiceRow(app, p, "style", "Nucleon edge", ui::atomChoices("style"), P.style);
+    }
+    if (chart && section("chart", "Chart", true)) {                       // old: the landscape's tilt and height, on the chart only
+        numberRow(app, p, "tilt", "Tilt (flat chart to landscape)", std::to_string(static_cast<int>(std::lround(L.s.chartView.tilt * 100))) + " %", L.s.chartView.tilt, 0, 1, 0.01);
+        choiceRow(app, p, "cheight", "Height means", ui::atomChoices("cheight"), L.s.chartView.height == atom::ChartHeightMode::Binding ? std::string("Binding energy per nucleon") : std::string("Half-life"));
+        if (pButton(p, "atom.chartreset", "Reset tilt, zoom and position")) L.chartReset();
+        pCaption(p, displayable(ui::atomNote("chart")));
     }
 }
 

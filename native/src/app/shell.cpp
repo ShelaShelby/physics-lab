@@ -352,8 +352,8 @@ bool factTick(FactClock& c, double dt, bool hovered, bool reduced, double interv
     return false;
 }
 
-Rect factLineRect(const Frame& f, const Metrics& m, double textW) {
-    const double h = m.control, arrows = 2.0 * m.row + m.s4, maxW = m.em(44), x0 = f.window.x + m.s12, wanted = std::min(textW + arrows, maxW);
+Rect factLineRect(const Frame& f, const Metrics& m, double textW, double textH) {
+    const double h = std::max<double>(m.control, textH > 0 ? textH + m.s4 : 0), arrows = 2.0 * m.row + m.s4, maxW = m.em(44), x0 = f.window.x + m.s12, wanted = std::min(textW + arrows, maxW);
     Rect r{x0, f.toolbar.y + (f.toolbar.h - h) / 2, 0, h};
     const double beside = f.toolbar.x - m.s16 - x0;
     if (beside >= m.em(14)) r.w = std::min(wanted, beside);

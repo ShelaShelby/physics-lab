@@ -200,6 +200,11 @@ int main(int, char**) {
     if (const char* t = SDL_getenv("PL_TEXTSIZE")) app.prefs.textSize = t;
     if (const char* t = SDL_getenv("PL_FONT")) app.prefs.font = t;
     if (const char* t = SDL_getenv("PL_FACTS")) app.prefs.facts = t;                  // for automatic checks: the fact line "on" / "off"
+    if (SDL_getenv("PL_FACT_LONGEST")) {                 // for automatic checks (0.15 stage 5d): show the longest fact first
+        int best = 0;
+        for (int i = 0; i < ui::factCount(); i++) if (ui::factTextAt(i).size() > ui::factTextAt(best).size()) best = i;
+        ui::factShow(app, best);
+    }
     if (const char* t = SDL_getenv("PL_MOTION")) app.prefs.motion = t;
     auto systemLight = [] { return SDL_GetSystemTheme() == SDL_SYSTEM_THEME_LIGHT || SDL_getenv("PL_LIGHT"); };   // Windows' light/dark setting (the web's "Auto")
     ui::updateLook(app.prefs, systemLight(), ui::systemReducedMotion());
@@ -462,7 +467,7 @@ int main(int, char**) {
             headerH = ui::headerHeight();
         }
         pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 && !shellOn ? atomBarH : 0));
-        app.atom.insetTop = shellOn ? ui::shellTopBarH() / scale + 4 : 0; app.atom.insetBottom = shellOn ? app.set.reserveBottom : 0; app.atom.insetRight = shellOn ? app.set.insetRight : 0;   // (points; after shellFrame, so the first frame already has the bars' size)
+        app.atom.insetTop = shellOn ? ui::shellTopBarH() / scale + 4 : 0; app.atom.insetBottom = shellOn ? app.set.reserveBottom : 0; app.atom.insetRight = shellOn ? app.set.insetRight : 0; if (!shellOn) app.atom.insetBottomLeft = 0;   // (points; after shellFrame, so the first frame already has the bars' size)
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
         app.canvasH = pictureWinH / scale;
         app.set.lightTheme = ui::look().c.light;

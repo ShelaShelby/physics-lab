@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <optional>
 #include <random>
 #include <string>
@@ -102,6 +103,7 @@ void selectRow(AppState& app, const char* key, const char* label, const std::vec
         if (i > 0) { if (x + gap + w <= avail) { ImGui::SameLine(0, gap); x += gap; } else x = 0; }
         if (on) pushOn();
         if (ui::Button(t.c_str(), ImVec2(w, 0)) && !on) app.atom.setParam(key, options[i].first);
+        noteItem(("old." + std::string(key) + "=" + options[i].first).c_str());     // (0.15 stage 5d: one name per button for the automatic checks; "On", "2p" ... repeat across rows)
         if (on) popOn();
         x += w;
     }
@@ -111,7 +113,7 @@ void selectRow(AppState& app, const char* key, const char* label, const std::vec
 }
 
 // the choices of the Orbital and Orientation rows (used for the first orbital and for the second one of a superposition)
-using Choices = std::vector<std::pair<std::string, std::string>>;
+using Choices = AtomChoices;
 static const Choices SHELLS = {{"1s", "1s · sphere"}, {"2s", "2s · sphere with a shell"}, {"2p", "2p · dumbbell"}, {"3s", "3s · sphere with two shells"}, {"3p", "3p · dumbbell with a shell"},
                                           {"3d", "3d · four lobes, or two and a ring"}, {"4s", "4s · sphere with three shells"}, {"4p", "4p · dumbbell with two shells"}, {"4d", "4d · d shape with a shell"}, {"4f", "4f · six or eight lobes"}};
 static const Choices P_AX = {{"x", "px · along x"}, {"y", "py · along y"}, {"z", "pz · along z (up)"},
@@ -124,6 +126,55 @@ static const Choices F_AX = {{"z3", "fz³ · two lobes and two rings"}, {"xz2", 
                                                           {"m+1", "m = +1 · complex state: the phase turns once round the z axis"}, {"m-1", "m = −1 · complex state: once round the z axis, the other way"},
                                                           {"m+2", "m = +2 · complex state: the phase turns twice round the z axis"}, {"m-2", "m = −2 · complex state: twice round the z axis, the other way"},
                                                           {"m+3", "m = +3 · complex state: the phase turns three times round the z axis"}, {"m-3", "m = −3 · complex state: three times round the z axis, the other way"}};
+
+}  // namespace
+
+// 0.15 stage 5d: the old panel's choices (key, value, "words · note") and its long notes in ONE place, so the new UI's Controls panel uses the very same keys, values and words
+const AtomChoices& atomChoices(const std::string& key) {
+    static const std::map<std::string, AtomChoices> m = {
+        {"scale", {{"Auto", "Auto-fit (orbit fills the canvas)"}, {"Fixed", "Fixed (same scale for every atom)"}}},
+        {"qstyle", {{"Cinematic", "Cinematic (glowing, colour charge)"}, {"Accurate", "Accurate (point quarks, colour charge)"}, {"Classic", "Classic (simple balls and tubes)"}}},
+        {"detail", {{"Valence", "Valence quarks only"}, {"+ Gluons", "+ Gluons (sparks)"}, {"+ Sea", "+ Sea (virtual pairs)"}}},
+        {"style", {{"Fuzzy", "Fuzzy (real charge density)"}, {"Hard balls", "Hard balls (simple)"}}},
+        {"cheight", {{"Half-life", "Half-life (log scale, 10^-23 s to 10^32 s)"}, {"Binding energy per nucleon", "Binding energy per nucleon (linear, 0 to 9,000 keV)"}}},
+        {"ostyle", {{"Modern", "Modern (real nucleus, quarks when you zoom in)"}, {"Bohr 1913", "Bohr 1913 (simple balls, as Bohr drew it)"}}},
+        {"cstyle", {{"Classic", "Classic · small hard dots, as in the web version"}, {"Glow", "Glow · soft dots that add up: dense places glow, thin places fade"}}},
+        {"cdens", {{"Normal", "Normal · 12,000 dots. More dots show the same probability more smoothly. They do not change the physics."},
+                                                   {"High", "High · 24,000 dots. More dots show the same probability more smoothly. They do not change the physics."},
+                                                   {"Ultra", "Ultra · 48,000 dots. More dots show the same probability more smoothly. They do not change the physics."}}},
+        {"outline", {{"Off", "Off · Shows where the electron is found 90% of the time (one-electron model)."},
+                                                   {"On", "On · Thin line round the smallest region where the electron is found 90% of the time. One electron, hydrogen-like model; atoms with more electrons differ."}}},
+        {"phase", {{"Sign", "Sign · two colours: blue where the wave ψ is +, orange where it is −"},
+                                                   {"Wheel", "Wheel · a colour for every phase of the wave, shown by the colour ring in the corner"}}},
+        {"super", {{"Off", "Off · one orbital"},
+                                                  {"On", "On · two orbitals at once: the cloud changes in time, at the beat frequency (quantum beats). Slowed down on screen."}}},
+        {"cutAxis", {{"Vertical", "Vertical (contains the z axis)"}, {"Horizontal", "Horizontal (across the z axis)"}}},
+        {"orb", SHELLS}, {"orb2", SHELLS}, {"jfrom", SHELLS}, {"jto", SHELLS},
+        {"pAx", P_AX}, {"dAx", D_AX}, {"fAx", F_AX}, {"pAx2", P_AX}, {"dAx2", D_AX}, {"fAx2", F_AX}};
+    static const AtomChoices none;
+    const auto it = m.find(key);
+    return it == m.end() ? none : it->second;
+}
+std::pair<std::string, std::string> atomSplitLabel(const std::string& s) { return splitLabel(s); }
+const char* atomNote(const std::string& which) {
+    if (which == "energy") return "The energy E in the line over the picture is the one-electron, non-relativistic level, −Rydberg energy × Z²/n², with the nucleus's real mass (hydrogen: −13.60 eV). In the Orbit view it is worked out from the electron's position and speed and scaled to that level. "
+                 "Fine structure, the Lamb shift and spin are not modelled, so real energies differ a little (more for heavy atoms).";
+    if (which == "phase") return "What the colours mean: a wave rises and falls, and its phase says where in that cycle it is. The colour of a dot shows the phase of the wave there. It is not a place and not how likely the electron is there (that is how many dots there are). "
+                     "The orientations m = +1, −1, … are complex waves whose phase turns round the z axis (angular momentum about z of m ħ); they are mixtures of the real orientations and always use the wheel. "
+                     "One electron, non-relativistic, no fine structure: all l of one n have the same energy here, and so do all m.";
+    if (which == "super") return "Two orbitals at once, ψ = a·ψ₁ + b·ψ₂ with their own energies. The density then changes in time at the beat frequency (E₂ − E₁)/h, like two notes beating. "
+                         "Real beats are far too fast to see (hydrogen 1s + 2p: about 4×10⁻¹⁶ s), so the picture is slowed down; the line under the picture gives the real period and the slow-down. "
+                         "1s + 2p: the cloud's centre sloshes back and forth (an oscillating dipole). 1s + 2s: the cloud breathes. 2s + 2p: the same n has the same energy here, so there are no beats (fine structure and the Lamb shift are not modelled). "
+                         "Colours are the phase of the wave relative to the first orbital: a wave's overall phase means nothing, so the colours turn only once per beat. "
+                         "Playback speed sets the beat speed (4 s per beat at 5); Space pauses. One electron, non-relativistic. No photon jumps and no 90% outline while a superposition is shown. "
+                         "If the two states overlap (the same state twice, or a real orientation with an m state of the same shell, such as 2px and 2p m = +1), the mixture is renormalised: the percentages are then only the amplitudes of the mix, not exact shares, and the cloud is one fixed shape.";
+    if (which == "chart") return "Landscape: a block's height is either the log of the nuclide's half-life (all stable nuclides at one fixed height above the scale) or its binding energy per nucleon (a linear scale, the peak near iron and nickel); both scales are chosen for this picture and the legend gives them. A flat pale square has no height: its value is only an extrapolation. The wheel zooms about the pointer and a drag moves the picture when zoomed in. Hover and click work on the block you see on top. The names of the valley of stability (measured) and the island of stability (a prediction, not drawn) are in the legend.";
+    if (which == "chain") return "On the chart: every way it can decay is a line from square to square, in the colour of the mode. The likeliest way is thick and solid, other measured ways are thinner, ways below 0.1 % are faint hairlines, "
+                 "a label ending in ? marks a way whose odds are not measured, and a cross marks a nuclide whose half-life is unknown (the chain stops there). The accent-coloured disc is the walker; the chosen nuclide stays where you put it.";
+    return "";
+}
+
+namespace {
 
 // A number setting: its label with the value in bold, then the slider (optionally with − and +).
 void sliderRow(AppState& app, const char* key, const std::string& label, const std::string& value, double v, double lo, double hi, double step, bool plusMinus, const char* what = nullptr) {
@@ -143,9 +194,11 @@ void sliderRow(AppState& app, const char* key, const std::string& label, const s
     if (step >= 1) {
         int iv = int(std::lround(v));
         if (ui::SliderInt("##s", &iv, int(lo), int(hi), "")) app.atom.setParam(key, iv);
+        noteItem(("old." + std::string(key)).c_str());
     } else {
         float fv = float(v);
         if (ui::SliderFloat("##s", &fv, float(lo), float(hi), "")) app.atom.setParam(key, std::round(double(fv) / step) * step);
+        noteItem(("old." + std::string(key)).c_str());
     }
     if (plusMinus) {
         ImGui::SameLine();
@@ -687,8 +740,7 @@ static void chainSection(AtomLab& L) {
     const ChainGraph& g = L.decayGraph();
     for (const std::string& line : chainSummary(g)) mutedWrapped(line, 12.0f / 16);
     if (g.nodes[0].stop != ChainStop::Continues) return;
-    mutedWrapped("On the chart: every way it can decay is a line from square to square, in the colour of the mode. The likeliest way is thick and solid, other measured ways are thinner, ways below 0.1 % are faint hairlines, "
-                 "a label ending in ? marks a way whose odds are not measured, and a cross marks a nuclide whose half-life is unknown (the chain stops there). The accent-coloured disc is the walker; the chosen nuclide stays where you put it.", 12.0f / 16);
+    mutedWrapped(atomNote("chain"), 12.0f / 16);
     const ChainWalk& w = L.s.walk;
     if (w.done) ImGui::BeginDisabled();
     if (ui::Button("Walk one step")) L.walkOnce();
@@ -788,13 +840,13 @@ static void atomPanelContents(AppState& app) {
     ImGui::SeparatorText("View & zoom");
     if (!L.chartOn()) {                                // (the chart has no scale, zoom or spin: nothing here would do anything)
     if (L.showSpin() && ui::Button(displayable("⟳ Spin on/off").c_str())) L.toggleSpin();
-    selectRow(app, "scale", "Scale", {{"Auto", "Auto-fit (orbit fills the canvas)"}, {"Fixed", "Fixed (same scale for every atom)"}}, p.scale);
+    selectRow(app, "scale", "Scale", atomChoices("scale"), p.scale);
     sliderRow(app, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(std::round(std::pow(10, p.zoom))), p.zoom, 0, 7, 0.01, false);
     if (p.zoom >= 4) {
-        selectRow(app, "qstyle", "Quark style", {{"Cinematic", "Cinematic (glowing, colour charge)"}, {"Accurate", "Accurate (point quarks, colour charge)"}, {"Classic", "Classic (simple balls and tubes)"}}, p.qstyle);
-        selectRow(app, "detail", "Nucleon detail", {{"Valence", "Valence quarks only"}, {"+ Gluons", "+ Gluons (sparks)"}, {"+ Sea", "+ Sea (virtual pairs)"}}, p.detail);
+        selectRow(app, "qstyle", "Quark style", atomChoices("qstyle"), p.qstyle);
+        selectRow(app, "detail", "Nucleon detail", atomChoices("detail"), p.detail);
     }
-    if (p.zoom >= 3) selectRow(app, "style", "Nucleon edge", {{"Fuzzy", "Fuzzy (real charge density)"}, {"Hard balls", "Hard balls (simple)"}}, p.style);
+    if (p.zoom >= 3) selectRow(app, "style", "Nucleon edge", atomChoices("style"), p.style);
 
     }
 
@@ -803,15 +855,14 @@ static void atomPanelContents(AppState& app) {
     selectRow(app, "view", "View", {{"Orbit", "Orbit (electron on a circle)"}, {"Cloud", "Cloud (quantum, side view)"}, {"Cloud 3D", "Cloud 3D (quantum, rotatable)"}, {"Slice", "Slice (cross-section of the cloud)"}, {kChartView, "Chart of nuclides (every nuclide on one map)"}}, p.view);
     if (L.chartOn()) {                                 // the landscape (0.11 stage 3): tilt from the flat chart to the full landscape; the wheel zooms, a drag moves the picture
         sliderRow(app, "tilt", "Tilt (flat chart to landscape)", std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %", L.s.chartView.tilt, 0, 1, 0.01, false);
-        selectRow(app, "cheight", "Height means", {{"Half-life", "Half-life (log scale, 10^-23 s to 10^32 s)"}, {"Binding energy per nucleon", "Binding energy per nucleon (linear, 0 to 9,000 keV)"}},
+        selectRow(app, "cheight", "Height means", atomChoices("cheight"),
                   L.s.chartView.height == ChartHeightMode::Binding ? std::string("Binding energy per nucleon") : std::string("Half-life"));
         if (ui::Button("Reset tilt, zoom and position")) L.chartReset();
-        mutedWrapped("Landscape: a block's height is either the log of the nuclide's half-life (all stable nuclides at one fixed height above the scale) or its binding energy per nucleon (a linear scale, the peak near iron and nickel); both scales are chosen for this picture and the legend gives them. A flat pale square has no height: its value is only an extrapolation. The wheel zooms about the pointer and a drag moves the picture when zoomed in. Hover and click work on the block you see on top. The names of the valley of stability (measured) and the island of stability (a prediction, not drawn) are in the legend.", 12.0f / 16);
+        mutedWrapped(atomNote("chart"), 12.0f / 16);
         chainSection(L);
     }
-    mutedWrapped("The energy E in the line over the picture is the one-electron, non-relativistic level, −Rydberg energy × Z²/n², with the nucleus's real mass (hydrogen: −13.60 eV). In the Orbit view it is worked out from the electron's position and speed and scaled to that level. "
-                 "Fine structure, the Lamb shift and spin are not modelled, so real energies differ a little (more for heavy atoms).", 12.0f / 16);
-    if (p.view == "Orbit") selectRow(app, "ostyle", "Orbit style", {{"Modern", "Modern (real nucleus, quarks when you zoom in)"}, {"Bohr 1913", "Bohr 1913 (simple balls, as Bohr drew it)"}}, p.ostyle);
+    mutedWrapped(atomNote("energy"), 12.0f / 16);
+    if (p.view == "Orbit") selectRow(app, "ostyle", "Orbit style", atomChoices("ostyle"), p.ostyle);
     if (p.view != "Orbit" && !L.chartOn()) {
         selectRow(app, "orb", p.super == "On" ? "First orbital" : "Orbital", SHELLS, p.orb);
         const int l = orbitals()[orbIndex(p.orb)].l;
@@ -820,20 +871,14 @@ static void atomPanelContents(AppState& app) {
         if (l == 3) selectRow(app, "fAx", "Orientation", F_AX, p.fAx);
     }
     if (p.view != "Orbit") {
-        selectRow(app, "cstyle", "Cloud style", {{"Classic", "Classic · small hard dots, as in the web version"}, {"Glow", "Glow · soft dots that add up: dense places glow, thin places fade"}}, p.cstyle);
-        selectRow(app, "cdens", "Cloud density", {{"Normal", "Normal · 12,000 dots. More dots show the same probability more smoothly. They do not change the physics."},
-                                                   {"High", "High · 24,000 dots. More dots show the same probability more smoothly. They do not change the physics."},
-                                                   {"Ultra", "Ultra · 48,000 dots. More dots show the same probability more smoothly. They do not change the physics."}}, p.cdens);
+        selectRow(app, "cstyle", "Cloud style", atomChoices("cstyle"), p.cstyle);
+        selectRow(app, "cdens", "Cloud density", atomChoices("cdens"), p.cdens);
     }
     if (p.view != "Orbit")
-        selectRow(app, "outline", "90% outline", {{"Off", "Off · Shows where the electron is found 90% of the time (one-electron model)."},
-                                                   {"On", "On · Thin line round the smallest region where the electron is found 90% of the time. One electron, hydrogen-like model; atoms with more electrons differ."}}, p.outline);
+        selectRow(app, "outline", "90% outline", atomChoices("outline"), p.outline);
     if (p.view != "Orbit") {
-        selectRow(app, "phase", "Phase colours", {{"Sign", "Sign · two colours: blue where the wave ψ is +, orange where it is −"},
-                                                   {"Wheel", "Wheel · a colour for every phase of the wave, shown by the colour ring in the corner"}}, p.phase);
-        mutedWrapped("What the colours mean: a wave rises and falls, and its phase says where in that cycle it is. The colour of a dot shows the phase of the wave there. It is not a place and not how likely the electron is there (that is how many dots there are). "
-                     "The orientations m = +1, −1, … are complex waves whose phase turns round the z axis (angular momentum about z of m ħ); they are mixtures of the real orientations and always use the wheel. "
-                     "One electron, non-relativistic, no fine structure: all l of one n have the same energy here, and so do all m.", 12.0f / 16);
+        selectRow(app, "phase", "Phase colours", atomChoices("phase"), p.phase);
+        mutedWrapped(atomNote("phase"), 12.0f / 16);
     }
     if (p.view == "Orbit") {                                           // a Bohr orbit has no superposition: the control is there but disabled
         ImGui::BeginDisabled();
@@ -841,8 +886,7 @@ static void atomPanelContents(AppState& app) {
         ImGui::EndDisabled();
         mutedWrapped("A Bohr orbit has no superposition; switch to a cloud view.", 12.0f / 16);
     } else {
-        selectRow(app, "super", "Superposition", {{"Off", "Off · one orbital"},
-                                                  {"On", "On · two orbitals at once: the cloud changes in time, at the beat frequency (quantum beats). Slowed down on screen."}}, p.super);
+        selectRow(app, "super", "Superposition", atomChoices("super"), p.super);
         if (p.super == "On") {
             selectRow(app, "orb2", "Second orbital", SHELLS, p.orb2);
             const int l2 = orbitals()[orbIndex(p.orb2)].l;
@@ -851,16 +895,11 @@ static void atomPanelContents(AppState& app) {
             if (l2 == 3) selectRow(app, "fAx2", "Second orientation", F_AX, p.fAx2);
             sliderRow(app, "mix", "Mix (share of the second orbital)", fmt::jsLocale(std::round(p.mix)) + " %", p.mix, 0, 100, 1, false);
             sliderRow(app, "speed", "Playback speed (beat speed)", std::to_string(p.speed), p.speed, 1, 30, 1, false);
-            mutedWrapped("Two orbitals at once, ψ = a·ψ₁ + b·ψ₂ with their own energies. The density then changes in time at the beat frequency (E₂ − E₁)/h, like two notes beating. "
-                         "Real beats are far too fast to see (hydrogen 1s + 2p: about 4×10⁻¹⁶ s), so the picture is slowed down; the line under the picture gives the real period and the slow-down. "
-                         "1s + 2p: the cloud's centre sloshes back and forth (an oscillating dipole). 1s + 2s: the cloud breathes. 2s + 2p: the same n has the same energy here, so there are no beats (fine structure and the Lamb shift are not modelled). "
-                         "Colours are the phase of the wave relative to the first orbital: a wave's overall phase means nothing, so the colours turn only once per beat. "
-                         "Playback speed sets the beat speed (4 s per beat at 5); Space pauses. One electron, non-relativistic. No photon jumps and no 90% outline while a superposition is shown. "
-                         "If the two states overlap (the same state twice, or a real orientation with an m state of the same shell, such as 2px and 2p m = +1), the mixture is renormalised: the percentages are then only the amplitudes of the mix, not exact shares, and the cloud is one fixed shape.", 12.0f / 16);
+            mutedWrapped(atomNote("super"), 12.0f / 16);
         }
     }
     if (p.view == "Slice") {
-        selectRow(app, "cutAxis", "Cut direction", {{"Vertical", "Vertical (contains the z axis)"}, {"Horizontal", "Horizontal (across the z axis)"}}, p.cutAxis);
+        selectRow(app, "cutAxis", "Cut direction", atomChoices("cutAxis"), p.cutAxis);
         sliderRow(app, "cut", "Cut position (0 = through the nucleus)", fmt::jsString(p.cut), p.cut, -1, 1, 0.01, false);
     }
     if (p.view == "Orbit") {

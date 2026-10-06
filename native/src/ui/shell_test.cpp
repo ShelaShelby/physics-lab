@@ -85,6 +85,22 @@ std::string atomStateLine(const AppState& app) {
     return b;
 }
 
+// 0.15 stage 5d: every Atom Lab setting the Controls panel can change (tab-separated key=value; the values have spaces), for the old-against-new comparison (check_atom_panel.py)
+std::string atomSettingsLine(const AppState& app) {
+    const atom::AtomLab& L = app.atom;
+    const atom::AtomParams& p = L.p;
+    std::string t;
+    const auto add = [&t](const char* k, const std::string& v) { t += std::string(k) + "=" + v + "\t"; };
+    const auto num = [](double v) { char b[32]; std::snprintf(b, sizeof b, "%.6g", v); return std::string(b); };
+    add("view", p.view); add("orb", p.orb); add("pAx", p.pAx); add("dAx", p.dAx); add("fAx", p.fAx); add("n", num(p.n)); add("speed", num(p.speed));
+    add("cstyle", p.cstyle); add("cdens", p.cdens); add("super", p.super); add("orb2", p.orb2); add("pAx2", p.pAx2); add("dAx2", p.dAx2); add("fAx2", p.fAx2); add("mix", num(p.mix));
+    add("cutAxis", p.cutAxis); add("cut", num(p.cut)); add("ostyle", p.ostyle); add("scale", p.scale); add("zoom", num(p.zoom)); add("spin", num(L.s.spin));
+    add("qstyle", p.qstyle); add("detail", p.detail); add("style", p.style); add("tilt", num(L.s.chartView.tilt)); add("cheight", L.s.chartView.height == atom::ChartHeightMode::Binding ? "Binding energy per nucleon" : "Half-life");
+    add("outline", p.outline); add("phase", p.phase); add("chain", num(L.s.showChain)); add("walkAuto", num(L.s.walkAuto)); add("walkSteps", num(static_cast<double>(L.s.walk.steps.size())));
+    add("jfrom", p.jfrom); add("jto", p.jto); add("auto", num(L.s.autoPhotons)); add("jumping", num(L.s.jumping)); add("Z", num(p.Z)); add("N", num(p.N));
+    return t;
+}
+
 }  // namespace
 
 void noteItem(const char* label) {
@@ -106,6 +122,7 @@ bool itemRect(const std::string& name, float out[4]) {
 void noteRect(const char* name, float x, float y, float w, float h) {
     if (!scriptText() && !shellLogOn()) return;
     g_items[name] = {x, y, w, h};
+    if (g_collect) g_panelItems.insert(name);             // (stage 5d: a part of a segmented button in the Controls panel is scrolled in like the other controls)
 }
 
 void runScript(AppState& app, int frame, SDL_Window* window) {
@@ -192,6 +209,8 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             static std::string keep; keep = arg;
             e.text.text = keep.c_str();
             SDL_PushEvent(&e);
+        } else if (verb == "astate") {
+            std::printf("PLASTATE %s\n", atomSettingsLine(app).c_str());
         } else if (verb == "state") {
             std::printf("PLSTATE %s\n", (app.lab == 1 ? atomStateLine(app) : orbitStateLine(app)).c_str());
         }
@@ -235,4 +254,5 @@ void shellReport(int winW, int winH, float dpi, float textScale) {
     for (const auto& [name, v] : g_halos) std::printf("PLSHELL halo name=%s a=%.1f,%.1f,%.1f,%.1f o=%.1f,%.1f,%.1f,%.1f\n", name.c_str(), v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
 }
 
-}  // namespace ui
+}  // namespace ui#include "atom/atom_view.h"
+

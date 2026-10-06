@@ -80,7 +80,7 @@ enum class Face { Secondary, Primary, Quiet };
 bool button(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, Face face = Face::Secondary, bool selected = false);
 bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* tip, bool on = false, float caretW = 0);   // caretW > 0: a small caret at the right end (the button opens a panel)
 bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, bool* v);
-bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur);
+bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names = nullptr);   // names: each part is also noted under its own name (stage 5d, for PL_SCRIPT)
 bool slider(const char* id, ImVec2 pos, float w, float* v, float lo, float hi);
 // A flat clickable row (a list entry): a dot colour (or none), a label, optionally selected. Returns true when clicked.
 bool row(const char* id, ImVec2 pos, float w, const std::string& label, bool selected, const char* dotHex = nullptr);
@@ -97,7 +97,7 @@ void pCaption(Panel& p, const std::string& s, bool muted = true);              /
 void pStat(Panel& p, const std::string& label, const std::string& value);
 void pBody(Panel& p, const std::string& s, bool muted = false);                // a wrapped paragraph or a value line: Body
 bool pCheck(Panel& p, const char* id, const std::string& label, bool* v);
-bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels, int* cur);
+bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names = nullptr);
 bool pSlider(Panel& p, const char* id, float* v, float lo, float hi);
 bool pButton(Panel& p, const char* id, const std::string& label, Face face = Face::Secondary, bool selected = false);   // as wide as the panel
 bool pRow(Panel& p, const char* id, const std::string& label, bool selected = false, const char* dotHex = nullptr);

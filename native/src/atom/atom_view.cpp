@@ -894,7 +894,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 for (const std::string& t : wrap(T, log[i]->txt, w - 24, 12)) lines.push_back({t, log[i]->t});
             const std::size_t first = lines.size() > 6 ? lines.size() - 6 : 0, n = lines.size() - first;
             for (std::size_t i = 0; i < n; i++) {
-                const double y = h - 84 - double(n - 1 - i) * 16;          // above the ⓘ button and the scale bar
+                const double y = h - 84 - lab.insetBottomLeft - double(n - 1 - i) * 16;   // above the ⓘ button and the scale bar (and, new UI, above the toolbar row and the fact line)
                 T.draw(lines[first + i].first, 12, y, 12, withA(css.fg, std::min(1.0, (14000 - (nowMs - lines[first + i].second)) / 2000)), 0, &css.card);
             }
         }
@@ -905,8 +905,9 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         for (int e = -8; e <= 1; e++) for (int mm : {1, 2, 5}) if (mm * std::pow(10.0, e) * pxA <= 0.3 * w) bar = mm * std::pow(10.0, e);
         auto nf = [](double v) { return jsNum(v, 2); };
         const std::string label = bar >= 0.1 ? nf(bar) + " Å" : bar * 100 >= 1 ? nf(bar * 100) + " pm" : nf(bar * 1e5) + " fm";
-        R.line(12, h - 18, 12 + bar * pxA, h - 18, 2, css.muted);
-        T.draw(label + "  =  " + metres(bar * 1e-10), 12, h - 24, 12, css.muted);
+        const double yb = h - 18 - lab.insetBottomLeft;                    // (new UI: above the toolbar row and the fact line)
+        R.line(12, yb, 12 + bar * pxA, yb, 2, css.muted);
+        T.draw(label + "  =  " + metres(bar * 1e-10), 12, yb - 6, 12, css.muted);
     }
     {   // the readout at the top left, on a soft plate (the web engine's info lines)
         const double maxW = w - 24 - 56 - lab.insetRight;

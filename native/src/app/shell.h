@@ -132,7 +132,7 @@ struct FactClock { double t = 0; };
 bool factTick(FactClock& c, double dt, bool hovered, bool reduced, double interval, double fade);
 // Where the line sits: bottom left, level with the toolbar and to its left; if there is no room there (a narrow window) one row above the toolbar, left of the readout. textW: the width
 // the fact would like (the arrows ‹ › are included in the rectangle). Never over the toolbar, the readout or the top bar, never outside the window.
-Rect factLineRect(const Frame& f, const Metrics& m, double textW);
+Rect factLineRect(const Frame& f, const Metrics& m, double textW, double textH = 0);   // textH: the text's height when it wraps (0.15 stage 5d: up to two lines); 0 = one line
 // Text drawn straight on the picture (the readout, the fact line) has a shadow round the letters: black round light text, white round dark text. Its opacity is kShadowAlpha at the
 // letters; the text colour against it passes WCAG 4.5:1, so the text reads over black and over white behind (tested in all 14 themes).
 constexpr float kShadowAlpha = 0.9f;

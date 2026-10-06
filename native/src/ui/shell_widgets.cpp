@@ -367,7 +367,7 @@ bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, boo
     return h.clicked;
 }
 
-bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur) {
+bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names) {
     const float rowH = static_cast<float>(g_f.m.row);
     const Hit h = hit(id, pos, ImVec2(w, rowH));
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -389,6 +389,7 @@ bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::strin
     }
     for (int i = 0; i < n; i++) {
         const ImVec2 a(pos.x + edge[i], pos.y), b(pos.x + edge[i + 1], pos.y + rowH);
+        if (names && i < static_cast<int>(names->size())) noteRect((*names)[i].c_str(), a.x, a.y, b.x - a.x, b.y - a.y);
         const bool on = i == *cur;
         if (on) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFill(), std::max(0.0f, rc() - 1));
         else if (h.hovered && ImGui::GetIO().MousePos.x >= a.x && ImGui::GetIO().MousePos.x < b.x) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFaceHover(), std::max(0.0f, rc() - 1));
@@ -467,7 +468,7 @@ void pStat(Panel& p, const std::string& label, const std::string& value) {
     p.gap = g_f.m.s4;
 }
 bool pCheck(Panel& p, const char* id, const std::string& label, bool* v) { const bool r = checkbox(id, here(p), p.w, label, v); p.y += g_f.m.row; p.gap = 0; return r; }
-bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels, int* cur) { const bool r = segmented(id, here(p), p.w, labels, cur); p.y += g_f.m.row + g_f.m.s4; p.gap = g_f.m.s4; return r; }
+bool pSegmented(Panel& p, const char* id, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names) { const bool r = segmented(id, here(p), p.w, labels, cur, names); p.y += g_f.m.row + g_f.m.s4; p.gap = g_f.m.s4; return r; }
 bool pSlider(Panel& p, const char* id, float* v, float lo, float hi) { const bool r = slider(id, here(p), p.w, v, lo, hi); p.y += g_f.m.row; p.gap = 0; return r; }
 bool pButton(Panel& p, const char* id, const std::string& label, Face face, bool selected) { const bool r = button(id, here(p), ImVec2(p.w, static_cast<float>(g_f.m.control)), label, face, selected); p.y += g_f.m.control + g_f.m.s4; p.gap = g_f.m.s4; return r; }
 bool pRow(Panel& p, const char* id, const std::string& label, bool selected, const char* dotHex) { const float in = g_bodyFloor ? static_cast<float>(g_f.m.s8) : 0.0f;   // (stage 5c.1: in the Controls panel its words sit on the content's left edge; the hover runs into the padding)
