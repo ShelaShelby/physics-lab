@@ -1,2 +1,0 @@
-- part 1 (labels, check.sh, env, ccache, CLAUDE.md rules): 6 min so far; quick green (65 s); first timed full run in progress
-- part 2 (parallel starts, prefetch pool, theme_pictures parallel): 38 min so far; shell_pictures, facts_long, shell_ui sizes green alone; final check.sh full running
