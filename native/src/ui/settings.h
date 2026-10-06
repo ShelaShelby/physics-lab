@@ -18,5 +18,7 @@ void settingsWindow(AppState& app);                       // the Settings window
 void defaultsButton(AppState& app);                       // the "Defaults" button and its "are you sure?" question (for the lab on screen)
 void setMotion(AppState& app, const std::string& k);       // auto / on (reduced) / off (full)
 void themeButton(AppState& app);                          // 🎨 Theme and its menu
+void themePicker(AppState& app);                          // the menu itself: open it with ImGui::OpenPopup("##themes") from the button just before this call (the new UI's palette icon)
+void defaultsPopups(AppState& app);                       // the "Put ... back?" questions: open with ImGui::OpenPopup("Put Orbit Lab back?") / ("Put Atom Lab back?") in the same window
 
 }  // namespace ui

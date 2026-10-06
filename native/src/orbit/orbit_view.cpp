@@ -14,6 +14,8 @@
 #include "spin.h"
 #include "units.h"
 
+namespace ui { void auditPictureText(float px); }   // ui/shell_test.cpp: the new UI's PL_LOG_SHELL list of picture label sizes
+
 namespace orbit {
 
 using namespace units;
@@ -33,6 +35,7 @@ void setPictureColours(bool sky, const app::ThemeColors& t) {
     else { kBg = fromRgb(t.bg); kFg = fromRgb(t.fg); kMuted = fromRgb(t.muted); kCard = fromRgb(t.card); kLine = fromRgb(t.line); }   // the theme's page colours
 }
 bool g_skyHalo = true;
+double g_minTextU = 0, g_minTextPx = 0;   // 0.15 stage 3: the new UI's smallest picture text (0: none)
 double g_textScale = 1;   // Settings → Text size   // the thin dark edge round labels is only needed on top of the stars
 const Color kHL = hexColor("#ff2bd6");   // the "look here" pink: nothing else in the picture is this colour
 
@@ -129,14 +132,16 @@ struct TextPainter {
     ImFont* font;
     double originX, originY, s;
 
+    static float pixels(double size, double s) { return static_cast<float>(std::max(std::max(size, g_minTextU) * g_textScale * s, g_minTextPx)); }   // the new UI's floor; 0 and 0 change nothing
     double width(const std::string& t, double size) const {
-        return font->CalcTextSizeA(static_cast<float>(size * g_textScale * s), FLT_MAX, 0, t.c_str()).x / s;
+        return font->CalcTextSizeA(pixels(size, s), FLT_MAX, 0, t.c_str()).x / s;
     }
     // align: 0 left, 0.5 centre
     // haloColor with alpha < 0: the dark edge for text on the night sky (left out when the stars are off)
     void text(const std::string& t, double x, double y, double size, Color c, double align = 0.5, bool halo = true, Color haloColor = {4 / 255.f, 6 / 255.f, 13 / 255.f, -0.85f}) {
         if (haloColor.a < 0) { if (!g_skyHalo) halo = false; haloColor.a = -haloColor.a; }
-        const float px = static_cast<float>(size * g_textScale * s);
+        const float px = pixels(size, s);
+        if (g_minTextPx > 0) ui::auditPictureText(px);      // the new UI: PL_LOG_SHELL lists the sizes of the picture's own labels (nothing otherwise)
         const float ascent = font->GetFontBaked(px)->Ascent;
         const double w = width(t, size);
         const float X = static_cast<float>(originX + (x - w * align) * s), Y = static_cast<float>(originY + y * s) - ascent;
@@ -304,6 +309,12 @@ void OrbitView::zoomChanged(double oldZoom, double newZoom) {   // zoom about th
 
 void OrbitView::resetView() { ox = oy = 0; follow = false; yaw = 0.6; pitch = 1.0; cdep = 0; }
 
+bool OrbitView::selectedScreen(double& x, double& y, double& r) const {
+    if (sel.kind == Selection::None) return false;
+    for (const Hit& h : hits_) if (h.sel == sel) { x = h.x; y = h.y; r = h.r; return true; }
+    return false;
+}
+
 void OrbitView::select(Selection s, bool f) {
     sel = s; follow = f; cardHidden = false;
     ox = oy = 0; cdep = 0;
@@ -341,8 +352,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     if (follow && sel.kind == Selection::Far) {           // keep a far-away thing in the middle
         FarItem f;
         if (farItem(sys, sel.moon, f)) {
-            if (f.kind != "probe") { cd = cdep = 0; const Q q = flat(f.pos.x, f.pos.y, f.pos.z); ox = W / 2 - q.first; oy = H / 2 - q.second; }
-            else { cd = cdep = base(f.pos.x, f.pos.y, f.pos.z).dep; const Q q = base(f.pos.x, f.pos.y, f.pos.z); ox = W / 2 - q.first; oy = H / 2 - q.second; }
+            if (f.kind != "probe") { cd = cdep = 0; const Q q = flat(f.pos.x, f.pos.y, f.pos.z); ox = W / 2 + cx - q.first; oy = H / 2 + cy - q.second; }
+            else { cd = cdep = base(f.pos.x, f.pos.y, f.pos.z).dep; const Q q = base(f.pos.x, f.pos.y, f.pos.z); ox = W / 2 + cx - q.first; oy = H / 2 + cy - q.second; }
         }
     } else if (follow && sel.kind != Selection::None) {   // keep the followed object in the middle
         Vec3 t;
@@ -350,12 +361,14 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         else if (sel.kind == Selection::Body || sel.kind == Selection::Moon) { const Body* b = findBody(sys, sel.bodyId); if (b) t = b->pos; }
         cd = cdep = base(t.x, t.y, t.z).dep;              // depth first, so the followed object sits in the middle with no perspective shift
         const Q q = base(t.x, t.y, t.z);
-        ox = W / 2 - q.first; oy = H / 2 - q.second;
+        ox = W / 2 + cx - q.first; oy = H / 2 + cy - q.second;
     }
     const auto proj = [&](double x, double y, double z) { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; };
 
     setPictureColours(set.sky != SkyMode::Off, set.theme);
     g_textScale = set.textScale;
+    g_minTextU = set.minTextU; g_minTextPx = set.minTextPx;
+    if (set.shell) cardHidden = true;                     // no in-picture card in the new UI: a click is a click
     g_skyHalo = set.sky != SkyMode::Off;
     R.rect(0, 0, W, H, kBg);
     hits_.clear();
@@ -847,12 +860,12 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     // ---- info card, bottom right (the first click closes it) ----
-    double gizY = H - 44, barY = H - 24;                  // the x y axes and the scale bar sit above the card when there is one
+    double gizY = H - 44 - set.reserveRight, barY = H - 24 - set.reserveBottom;   // (the new UI keeps the readout and the toolbar clear)                  // the x y axes and the scale bar sit above the card when there is one
     Card card;
     CardOptions copt;
     copt.paused = set.paused; copt.tspeed = set.tspeed; copt.trueScale = TRUE_SCALE; copt.moonsOn = set.moons; copt.beltsOn = set.belts;
     if (sel.kind == Selection::Moon) { auto it = exag_.find({sel.bodyId, sel.moon}); copt.moonExaggeration = it == exag_.end() ? 1 : it->second; }
-    if (sel.kind != Selection::None && !cardHidden && !journey && cardText(sys, sel, copt, card)) {
+    if (!set.shell && sel.kind != Selection::None && !cardHidden && !journey && cardText(sys, sel, copt, card)) {
         const double k = std::max(0.74, std::min(1.0, W / 620)), LH = 13.5 * k, F = 10.5 * k, FT = 11 * k;
         double cw = T.width(card.title, FT);
         for (const auto& l : card.lines) cw = std::max(cw, T.width(l, F));
@@ -899,15 +912,18 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
         if (massShown) T.text("Star masses are published estimates, in solar masses (M☉); some are uncertain.", 14, noteY - 2, 10, kMuted, 0, true, kCard);
         const double x0 = 14, y = barY;
-        for (int pass = 0; pass < 2; pass++) {
+        scaleText = main; lightText = "light takes " + lt;     // the new UI shows these in its readout
+        for (int pass = 0; pass < 2 && !set.shell; pass++) {
             const Color c = pass ? kFg : kCard;
             const double w = pass ? 1.6 : 5;
             R.line(x0, y - 4, x0, y + 4, w, c);
             R.line(x0, y, x0 + len, y, w, c);
             R.line(x0 + len, y - 4, x0 + len, y + 4, w, c);
         }
-        T.text(main, x0, y - 8, 11, kFg, 0, true, kCard);
-        T.text("light takes " + lt, x0, y + 15, 10, kMuted, 0, true, kCard);
+        if (!set.shell) {
+            T.text(main, x0, y - 8, 11, kFg, 0, true, kCard);
+            T.text("light takes " + lt, x0, y + 15, 10, kMuted, 0, true, kCard);
+        }
     }
 
     {   // axis gizmo: which way x, y and z point on screen
@@ -946,7 +962,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     {   // top left: the date, which moves on with the simulated time (the frames-per-second counter is drawn by main.cpp, for every lab)
-        T.text(dateLine(sys), 12, 20, 13, kFg, 0, true);
+        if (!set.shell) T.text(dateLine(sys), 12, 20, 13, kFg, 0, true);
     }
 }
 

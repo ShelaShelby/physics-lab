@@ -73,6 +73,7 @@ add_library(app_core STATIC
   src/app/display_scale.cpp
   src/app/power.cpp
   src/app/page_cache.cpp
+  src/app/shell.cpp
   src/app/shot.cpp
   src/app/fps.cpp
   src/app/bench.cpp
@@ -207,6 +208,12 @@ if(PL_BUILD_APP)
     src/atom/atom_view.cpp
     src/atom/chart_draw.cpp
     src/ui/orbit_panel.cpp
+    src/ui/orbit_actions.cpp
+    src/ui/shell.cpp
+    src/ui/shell_widgets.cpp
+    src/ui/shell_orbit.cpp
+    src/ui/shell_test.cpp
+    src/ui/reading.cpp
     src/ui/app_pages.cpp
     src/ui/app_tabs.cpp
     src/ui/atom_panel.cpp
@@ -252,6 +259,11 @@ if(PL_BUILD_APP)
       add_test(NAME page_cache_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_page_cache.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/page_cache_pictures)
       # 0.14 stage 3: Settings -> Theme effects Off removes all decoration and nothing else
       add_test(NAME effects_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_effects_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/effects_pictures)
+      # 0.15 stage 3: the new UI (Settings -> New UI (preview)): text sizes and floors at every Text size and Windows scale, nothing leaves the window, collapsing, Esc / Ctrl+K / Space,
+      # the centre shift, the reading view; the Orbit Lab top-10 controls give the same state as the old panel; pictures (glass opacity, regression guards)
+      add_test(NAME shell_ui COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_ui)
+      add_test(NAME shell_state COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_state.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_state)
+      add_test(NAME shell_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_pictures ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference)
     endif()
   endif()
 endif()

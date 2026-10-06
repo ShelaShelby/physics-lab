@@ -14,6 +14,7 @@
 #include "render/gl_loader.h"
 #include "ui/fonts.h"
 #include "ui/look.h"
+#include "ui/shell_test.h"
 
 namespace ui {
 
@@ -28,6 +29,7 @@ void shotButton(AppState& app, bool sameLine) {
         if (ImGui::GetItemRectMax().x + st.ItemSpacing.x + w <= right) ImGui::SameLine();
     }
     if (ImGui::Button((label + "###shot").c_str())) s.requested = true;
+    noteItem("###shot");
     if (ImGui::IsItemHovered()) ui::SetTooltip("%s", app::kShotTitle);
 }
 

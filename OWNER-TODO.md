@@ -1,5 +1,15 @@
 # Owner to-do (things only the owner can do)
 
+## 0.15 stage 3 (the new shell): please look at it on the real PC
+- [ ] Settings (last section) → **New UI (preview): On**. Look at the **Orbit Lab**: the picture fills the window; a slim top bar; the date chip in the middle; the toolbar at the bottom (play, speed, show, pick a body, zoom/sizes, 2D/3D, save); the small readout at the bottom right. Click the chip (date, dial, jump list), each toolbar button, the Legend, and pick a body (a card appears at the top right). Is it clean, desktop-sized and readable, picture first?
+- [ ] **Text size** on BOTH monitors (and with Windows scale 100 / 125 / 150 %): is Body text (15 units, never under 14 px) big enough? Try Settings → Text size Small ... Extra large, or the menu's A− / A+. The old layout's text is untouched.
+- [ ] Glass: panels are nearly solid (93-97 % opaque) as you decided. Does the glass look (edge, shine) still read as glass in Dark, Aero and Y2K Night? Say if you want them more see-through (the contrast rule then needs solid backing for grey text).
+- [ ] Keys: **Esc** closes the open panel, **Ctrl+K** opens search (try a planet's name), **Space** plays / pauses.
+- [ ] Open About, History, a changelog and a guide: they open in the reading view (centred column, contents list, ✕ and Esc). Is the line length comfortable (it is about 70 characters in Segoe UI; 34 em wide)?
+- [ ] Everything not moved yet is behind **Old panel** (top right): check that nothing is missing in either lab. The Atom Lab keeps its bar under the picture and its picture starts under the top bar until stage 5.
+- [ ] Not tested here: Windows, a real GPU, Segoe UI, speed. If the app feels slower with New UI On, tell me.
+- [ ] Decide for stage 4: the Atom toolbar's Play button, an orbital chip next to the element chip, the data sheet (DESIGN.md section 8 / INVENTORY.md end).
+
 ## 0.15 stage 2 (inventory, final spec, small fixes): please check
 - [ ] **Read `native/docs/ui-0.15/INVENTORY.md`** (every control and where it goes in your design). Tell me anything missing, in the wrong place, more than 2 clicks away, or a "most used" list that is wrong. Three questions are at its end (Play button in the Atom toolbar, an orbital chip, the data sheet).
 - [ ] Read `DESIGN.md` section 3 and decide the glass: nearly solid panels (93-97 % opaque, always readable) or more see-through (about 70 %, muted text needs solid backing). Also section 8 (Body 15 px or 16).

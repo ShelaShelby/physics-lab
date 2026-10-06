@@ -13,6 +13,7 @@
 #include "orbit/format.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
+#include "ui/orbit_actions.h"
 #include "ui/orbit_panel.h"
 
 namespace ui {
@@ -146,6 +147,39 @@ std::string jumpToDate(AppState& app, int64_t ms) {
     return jumpMessage(clampNote, ms, app.set.realPlanets, app.set.realPlanets && app.sys.realMoon());   // orbit/date_text.h, tested
 }
 
+void jumpFromBoxes(AppState& app) {
+    int64_t ms;
+    if (!app.dateText[0]) app.dateNote = "Pick a date first.";
+    else if (!parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = "That is not a date the lab can read: write it as YYYY-MM-DD (for example 2003-08-27), and the time as HH:MM.";
+    else app.dateNote = jumpToDate(app, ms);
+}
+
+// The jumps, shared by the old panel's buttons and the new UI's Time panel (ui/orbit_actions.h)
+const DateJump* dateJumps(int& count) {
+    static const DateJump jumps[] = {{"Today", nullptr, "Back to now", "12:00"},
+                              {"Halley at its closest, 1986", "1986-02-09", "Halley’s Comet at its closest to the Sun: 9 Feb 1986", "12:00"},
+                              {"Neptune found, 1846", "1846-09-23", "Johann Galle found Neptune on the night of 23 Sep 1846, where Le Verrier’s sums said it would be", "12:00"},
+                              {"Mars closest, 2003", "2003-08-27", "Mars at its closest to Earth in 2003: 55.76 million km on 27 Aug 2003", "12:00"},
+                              // Time of closest approach: Venus is nearest the Sun's centre, 0.154 degrees, at 01:26 UT on 6 June 2012. JPL Horizons API (read 2026-10-03), Venus (299) seen from Earth (500@399),
+                              // QUANTITIES=23 (solar elongation), START_TIME 2012-06-06 00:30, STOP_TIME 02:30, STEP_SIZE 1 min: the minimum row is 2012-Jun-06 01:26, 0.154 degrees.
+                              {"Venus crosses the Sun, 2012", "2012-06-06", "The last transit of Venus: 5–6 Jun 2012 (the jump lands at its middle, 01:26 UT on 6 Jun)", "01:26"},
+                              {"Great conjunction, 2020", "2020-12-21", "Jupiter and Saturn looked almost touching: 21 Dec 2020", "12:00"},
+                              {"Halley returns, 2061", "2061-07-28", "Halley’s Comet is due back on 28 Jul 2061 (JPL’s prediction; the lab’s simple orbit has it about 5 months later)", "12:00"}};
+    count = int(sizeof jumps / sizeof jumps[0]);
+    return jumps;
+}
+
+void doDateJump(AppState& app, int i) {
+    int n = 0;
+    const DateJump* jumps = dateJumps(n);
+    if (i < 0 || i >= n) return;
+    if (!jumps[i].date) { journeyStop(app); resetToToday(app); app.dateNote = "Back to today."; return; }
+    std::snprintf(app.dateText, sizeof app.dateText, "%s", jumps[i].date);
+    std::snprintf(app.timeText, sizeof app.timeText, "%s", jumps[i].time);
+    int64_t ms;
+    if (parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = jumpToDate(app, ms);
+}
+
 void journeyDatesCard(AppState& app, bool wasActive) {
     ImGui::SeparatorText("Journey and dates");
     if (wideButton(app.journey.active ? "■ Stop the journey" : "Journey: Earth to the galactic centre")) {
@@ -161,32 +195,11 @@ void journeyDatesCard(AppState& app, bool wasActive) {
     ImGui::SetNextItemWidth(w * 0.2f);
     ImGui::InputTextWithHint("##time", "HH:MM", app.timeText, sizeof app.timeText);
     ImGui::SameLine();
-    if (wideButton("Jump")) {
-        int64_t ms;
-        if (!app.dateText[0]) app.dateNote = "Pick a date first.";
-        else if (!parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = "That is not a date the lab can read: write it as YYYY-MM-DD (for example 2003-08-27), and the time as HH:MM.";
-        else app.dateNote = jumpToDate(app, ms);
-    }
-    struct J { const char* name; const char* date; const char* tip; const char* time = "12:00"; };
-    static const J jumps[] = {{"Today", nullptr, "Back to now"},
-                              {"Halley at its closest, 1986", "1986-02-09", "Halley’s Comet at its closest to the Sun: 9 Feb 1986"},
-                              {"Neptune found, 1846", "1846-09-23", "Johann Galle found Neptune on the night of 23 Sep 1846, where Le Verrier’s sums said it would be"},
-                              {"Mars closest, 2003", "2003-08-27", "Mars at its closest to Earth in 2003: 55.76 million km on 27 Aug 2003"},
-                              // Time of closest approach: Venus is nearest the Sun's centre, 0.154 degrees, at 01:26 UT on 6 June 2012. JPL Horizons API (read 2026-10-03), Venus (299) seen from Earth (500@399),
-                              // QUANTITIES=23 (solar elongation), START_TIME 2012-06-06 00:30, STOP_TIME 02:30, STEP_SIZE 1 min: the minimum row is 2012-Jun-06 01:26, 0.154 degrees.
-                              {"Venus crosses the Sun, 2012", "2012-06-06", "The last transit of Venus: 5–6 Jun 2012 (the jump lands at its middle, 01:26 UT on 6 Jun)", "01:26"},
-                              {"Great conjunction, 2020", "2020-12-21", "Jupiter and Saturn looked almost touching: 21 Dec 2020"},
-                              {"Halley returns, 2061", "2061-07-28", "Halley’s Comet is due back on 28 Jul 2061 (JPL’s prediction; the lab’s simple orbit has it about 5 months later)"}};
-    for (int i = 0; i < 7; i++) {                         // one tile per row, so the names fit
-        if (wideButton(jumps[i].name)) {
-            if (!jumps[i].date) { journeyStop(app); resetToToday(app); app.dateNote = "Back to today."; }
-            else {
-                std::snprintf(app.dateText, sizeof app.dateText, "%s", jumps[i].date);
-                std::snprintf(app.timeText, sizeof app.timeText, "%s", jumps[i].time);
-                int64_t ms;
-                if (parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = jumpToDate(app, ms);
-            }
-        }
+    if (wideButton("Jump")) jumpFromBoxes(app);
+    int nJumps = 0;
+    const DateJump* jumps = dateJumps(nJumps);
+    for (int i = 0; i < nJumps; i++) {                    // one tile per row, so the names fit
+        if (wideButton(jumps[i].name)) doDateJump(app, i);
         if (ImGui::IsItemHovered()) ui::SetTooltip("%s", jumps[i].tip);
     }
     ImGui::TextWrapped("%s", app.dateNote.empty() ? datePickHint() : app.dateNote.c_str());

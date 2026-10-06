@@ -86,3 +86,13 @@ Each stage ends with: ctest all green, the pictures listed, REPORT.md, an OWNER-
 
 ## 8. Not decided, for the owner
 (1) Glass opacity: nearly solid (the table) or see-through with solid backing for muted text; (2) an orbital chip next to the element chip; (3) the Play button in the Atom toolbar (INVENTORY.md); (4) Body 15 (this spec) or 16 (stage 1) as the default, given Windows' own body is 14 and the owner's complaint was size.
+
+## 9. Stage 3 as built (6 Oct 2026): what is exactly as above, what differs
+The shell is in the app behind Settings → New UI (preview) (Off by default). Owner decisions of 6 Oct: glass nearly solid (section 3's opacities), the INVENTORY section 6 "most-used" lists accepted. Differences from the text above, all listed in DECISIONS.md:
+- **Reading column 34 em** (section 5 says about 38 em): in DejaVu Sans 38 em gave Body lines of up to 80 characters; 34 em gives at most 75 here, and about 70 in Segoe UI, which is narrower. The contents rail appears only when the window is wider than 60 em plus the column, as written, so at 1280 px wide the "Contents" menu is used.
+- **Text on accent fills:** Dark and Black's own on-accent colour (white on #6c9cff) is 2.68:1, so the new UI uses the page colour there (`onAccent`); the old layout keeps it.
+- **Icons** are drawn by code (no Lucide yet); the Time panel has Today, a date field, a 24-hour dial with steppers, Go, the speed slider and the jump list, without the "Live / Set manually" switch; the subject card shows the card's own lines (no big key number or data sheet yet: stage 4); the Legend lists the pick groups with their counts.
+- **Glass:** a plain theme's panel is the card colour at the found opacity with a faint top-lit shine, a 1 px edge (the text colour at 20 %; a full-strength edge for Monochrome and High contrast) and one soft shadow; Aero and Y2K use their own panel decoration (the top bar is a docked panel, so the page behind it comes from the stage 2 page cache); stage 7 refines them.
+- **Sizes** are exactly `max(floor, round(u x Windows scale x Text size))` with the factor 1.3 held as a double (as a float 15 x 1.3 rounded to 19 instead of 20: found by the stage 3 test).
+- **Atom Lab:** its picture starts under the top bar and the bar under it stays until stage 5; its chip shows the element and is not yet a dropdown.
+

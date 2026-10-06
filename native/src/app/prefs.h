@@ -37,6 +37,8 @@ struct Prefs {
     std::string textSize = "normal";     // small / normal / large / xl
     std::string font = "auto";           // auto / serif / easy / round / mono
     std::string motion = "auto";         // auto / on (reduced) / off (full)
+    std::string newUi = "off";           // 0.15 stage 3: Settings → New UI (preview), on / off (off: the app is exactly the 0.14 layout)
+    std::string shellPanels;             // 0.15 stage 3: the new UI's floating panels, collapsed or open ("card=c,legend=o")
     std::string effects = "on";          // 0.14 stage 3: Theme effects, on / off (off: no page textures, glints, reflection, brackets or HUD decoration; colours, gloss and fonts stay)
     std::string units = "metric";        // metric / imperial
     std::string lang = "en";
@@ -56,6 +58,7 @@ bool validTheme(const std::string& id);
 bool validTextSize(const std::string& k);
 bool validFont(const std::string& k);
 bool validEffects(const std::string& k);
+bool validNewUi(const std::string& k);
 bool validMotion(const std::string& k);
 double textSizeFactor(const std::string& k);      // 0.9, 1, 1.15, 1.3
 

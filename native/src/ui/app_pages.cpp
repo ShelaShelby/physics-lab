@@ -16,6 +16,7 @@
 #include "atom_panel.h"
 #include "rich_text.h"
 #include "settings.h"
+#include "ui/reading.h"
 
 namespace ui {
 
@@ -39,10 +40,7 @@ bool beginPage(const char* title, const char* id, bool* open) {
     ImGui::SetNextWindowSize(ImVec2(std::min(vp->WorkSize.x * 0.6f, 46 * ImGui::GetFontSize()), vp->WorkSize.y * 0.85f), ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     const std::string t = displayable(title) + "###" + id;
-    pushFloatStyle();
-    const bool shown = ImGui::Begin(t.c_str(), open, ImGuiWindowFlags_NoCollapse);
-    popFloatStyle();
-    if (shown) panelDecor(app::PanelKind::Floating);
+    const bool shown = pageBegin(t, open);                     // the floating window as before, or (new UI) the reading view
     if (shown && ImGui::IsKeyPressed(ImGuiKey_Escape) && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) *open = false;
     return shown;
 }
@@ -171,8 +169,9 @@ void aboutWindow(AppState& app) {
         htmlView(app::kAboutHtml);
         htmlView(std::string("<p class=\"lrnP lrnMuted\">Native app: Physics Lab (native) ") + appVersionLabel() + ".</p>");
         htmlView("<p class=\"lrnP lrnMuted\">Text codes such as &amp;rsquo; are turned into their characters with the list of named character references of the HTML Standard (WHATWG, entities.json); this page is the only text that uses them.</p>");
+        htmlView("<p class=\"lrnP lrnMuted\">The new UI (preview, 0.15 stage 3): panel opacity is found with the same W3C WCAG 2.x contrast formula (text, grey text and accent text each at least 4.5:1 over the worst picture that can be behind a panel, white behind a dark panel and black behind a light one); the icons are drawn by the app itself, no icon set; the type scale and sizes were chosen with the owner (docs/ui-0.15/DESIGN.md); no new data.</p>");
     }
-    ImGui::End();
+    pageEnd();
 }
 
 // 🕰 history: the web's intro, then the native app's own updates (newest first), then the web's APP_LOG word for word
@@ -238,7 +237,7 @@ void historyWindow(AppState& app) {
         for (const app::LogEntry& e : app::kAppLog) { item(i, e.ic, std::string(app::kHistoryYear) + e.v, e.t, e.d, e.labButton, e.lab); i++; }
         htmlView(std::string("<p class=\"lrnP lrnMuted\">") + app::kHistoryNote + "</p>");
     }
-    ImGui::End();
+    pageEnd();
 }
 
 }  // namespace ui

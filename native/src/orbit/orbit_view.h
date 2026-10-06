@@ -44,6 +44,12 @@ struct ViewSettings {
     bool lightTheme = false;    // the theme is a light one (the picture follows the theme when Stars are Off)
     app::ThemeColors theme = app::themeColors("dark", false);   // the theme's colours (⚙ / 🎨)
     float textScale = 1;        // Settings → Text size: the labels drawn in the picture
+    // 0.15 stage 3, the new UI (all 0 / false = today's picture, pixel for pixel): the picture fills the window, and the parts that moved into the bars are not drawn here
+    bool shell = false;         // no date line, no info card, no scale bar (the chip, the subject card and the readout show them), and the first click is not eaten by a card
+    double minTextU = 0;        // the smallest text in the picture, in units before Text size (the Caption size, 13): smaller labels are drawn at this size
+    double minTextPx = 0;       // and never under this many pixels (the Caption floor, 12)
+    double reserveBottom = 0;   // points kept clear at the bottom of the picture (the toolbar): the far-out note and the scale text sit above it
+    double reserveRight = 0;    // points kept clear at the bottom right (the readout): the axes gizmo sits above it
 };
 
 // (dateLine, the line at the top left of the picture, is in orbit/card_text.h since 0.10.5 stage 5)
@@ -74,6 +80,10 @@ public:
     std::string caption;                         // the Journey's caption, and how visible it is (0–1)
     double captionAlpha = 0;
     bool panMode = false;                        // 3D: dragging moves the view instead of turning it
+    double cx = 0, cy = 0;                       // 0.15 stage 3: where a followed thing sits, from the middle of the picture, points (the centre shift keeps it out from under a card)
+    std::string scaleText, lightText;            // 0.15 stage 3: the scale bar's words ("1 AU" / "light takes 8.3 minutes"), kept for the readout
+    // The selected thing's place on the picture (points) and its radius, as last drawn. False: nothing is selected, or it has no round mark.
+    bool selectedScreen(double& x, double& y, double& r) const;
 
 private:
     struct Hit { Selection sel; double x, y, r; };

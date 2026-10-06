@@ -17,6 +17,7 @@
 #include "render/gl_loader.h"
 #include "imgui_internal.h"
 #include "look.h"
+#include "shell_test.h"
 
 #ifndef PL_VERSION
 #define PL_VERSION "0.14"
@@ -557,7 +558,7 @@ void faceRect(ImDrawList* dl, ImVec2 a, ImVec2 b, const Rgb& base, float alpha, 
 }
 
 // ---- widgets ----
-bool Button(const char* label, const ImVec2& size_arg) {
+static bool buttonImpl(const char* label, const ImVec2& size_arg) {
     if (!glossy()) return ImGui::Button(label, size_arg);
     ImGuiWindow* window = ImGui::GetCurrentWindow();                                // the same steps as ImGui::ButtonEx (imgui_widgets.cpp), with the frame drawn by us
     if (window->SkipItems) return false;
@@ -583,7 +584,9 @@ bool Button(const char* label, const ImVec2& size_arg) {
     return pressed;
 }
 
-bool Checkbox(const char* label, bool* v) {
+bool Button(const char* label, const ImVec2& size_arg) { const bool r = buttonImpl(label, size_arg); noteItem(label); return r; }   // (noteItem: the automatic checks find a control by its label; it does nothing otherwise)
+
+static bool checkboxImpl(const char* label, bool* v) {
     if (!glossy()) return ImGui::Checkbox(label, v);
     ImGuiWindow* window = ImGui::GetCurrentWindow();                                // the same steps as ImGui::Checkbox
     if (window->SkipItems) return false;
@@ -667,8 +670,12 @@ bool sliderScalar(const char* label, ImGuiDataType data_type, void* p_data, cons
 }
 }  // namespace
 
+bool Checkbox(const char* label, bool* v) { const bool r = checkboxImpl(label, v); noteItem(label); return r; }
+
 bool SliderFloat(const char* label, float* v, float lo, float hi, const char* format) {
-    return glossy() ? sliderScalar(label, ImGuiDataType_Float, v, &lo, &hi, format) : ImGui::SliderFloat(label, v, lo, hi, format);
+    const bool r = glossy() ? sliderScalar(label, ImGuiDataType_Float, v, &lo, &hi, format) : ImGui::SliderFloat(label, v, lo, hi, format);
+    noteItem(label);
+    return r;
 }
 bool SliderInt(const char* label, int* v, int lo, int hi, const char* format) {
     return glossy() ? sliderScalar(label, ImGuiDataType_S32, v, &lo, &hi, format) : ImGui::SliderInt(label, v, lo, hi, format);
@@ -688,7 +695,7 @@ void SetTooltip(const char* fmt, ...) {
 }
 
 bool BeginCombo(const char* label, const char* preview, ImGuiComboFlags flags) {
-    if (!glossy() && !glassy()) return ImGui::BeginCombo(label, preview, flags);
+    if (!glossy() && !glassy()) { const bool o = ImGui::BeginCombo(label, preview, flags); noteItem(label); return o; }
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (window->SkipItems) return false;
     const ImGuiStyle& st = ImGui::GetStyle();
@@ -709,6 +716,7 @@ bool BeginCombo(const char* label, const char* preview, ImGuiComboFlags flags) {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(6);
     } else open = ImGui::BeginCombo(label, preview, flags);
+    noteItem(label);
     // for the automatic picture checks: PL_OPEN_COMBO=<label> opens that combo box's list once, after a few frames
     static const char* wanted = std::getenv("PL_OPEN_COMBO");
     static int frames = 0, lastFrame = -1;
@@ -730,6 +738,7 @@ bool Combo(const char* label, int* current, const char* items_separated_by_zeros
             ImGui::PushID(i);
             const bool sel = i == *current;
             if (ImGui::Selectable(items[i], sel)) { *current = i; changed = true; }
+            noteItem(items[i]);
             if (sel) ImGui::SetItemDefaultFocus();
             ImGui::PopID();
         }

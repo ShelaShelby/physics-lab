@@ -1,4 +1,6 @@
 #include "orbit_panel.h"
+#include "orbit_actions.h"
+#include "shell_test.h"
 #include "atom_panel.h"
 
 #include <algorithm>
@@ -50,6 +52,8 @@ void setZoom(AppState& app, double zoom) {
     app.set.zoom = zoom;
 }
 
+void resetViewAction(AppState& app) { app.view.resetView(); setZoom(app, 0); app.view.ox = app.view.oy = 0; }
+
 // Today: only the date (and the selection, Follow and moved view) go back; the zoom, the four switches and the Time speed are the user's own
 // (orbit/today.h; Defaults puts them back itself).
 void resetToToday(AppState& app) { orbit::backToToday(app.sys, app.set, app.view, nowUnixMs()); }
@@ -57,10 +61,13 @@ void resetToToday(AppState& app) { orbit::backToToday(app.sys, app.set, app.view
 // "1 s = 29.1 days": what the Time speed slider means (orbit/date_text.h, tested)
 std::string tspeedText(double v) { return orbit::tspeedText(v); }
 
+std::string zoomLabel(double v);
 static std::string zoomText(double v) {
     const double z = std::pow(10.0, v);
     return "×" + (z < 0.01 ? fmt::precision(z, 1) : fmt::fixed(z, z < 1 ? 2 : z < 10 ? 1 : 0));
 }
+
+std::string zoomLabel(double v) { return zoomText(v); }
 
 // The zoom at which something `km` in radius is `wantPx` points on screen, at true scale (the web's zoomFor)
 double zoomFor(const AppState& app, double km, double wantPx) {
@@ -87,6 +94,7 @@ static bool tile(const char* label, const char* hex, bool selected, float width)
     const ImVec2 size(width, ImGui::GetFrameHeight());
     if (selected) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(1.0f, 0.17f, 0.84f, 0.45f));
     const bool clicked = ui::Button("##tile", size);
+    noteItem(label);
     if (selected) ImGui::PopStyleColor();
     const ImVec2 a = ImGui::GetItemRectMin();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -103,10 +111,13 @@ struct ComboItem { const char* name; const char* note; };
 bool shortCombo(const char* id, int* cur, std::initializer_list<ComboItem> items) {
     bool changed = false;
     ImGui::SetNextItemWidth(-1);
-    if (ui::BeginCombo(id, items.begin()[*cur].name)) {
+    const bool comboOpen = ui::BeginCombo(id, items.begin()[*cur].name);
+    noteItem(id);
+    if (comboOpen) {
         int i = 0;
         for (const ComboItem& it : items) {
             if (ImGui::Selectable(it.name, *cur == i)) { *cur = i; changed = true; }
+            noteItem(it.name);
             if (it.note[0]) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
                 ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
@@ -184,19 +195,7 @@ void performanceCard(AppState& app) {
     benchmarkButton(app);
 }
 
-void orbitPanel(AppState& app, float width) {
-    const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
-    ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
-    pushDockedBg();
-    ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
-    popDockedBg();
-    panelDecor(app::PanelKind::Docked);
-    if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
-    if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
-        const ImGuiViewport* vp = ImGui::GetMainViewport();
-        drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
-    }
+static void orbitPanelContents(AppState& app) {
     // touching the panel during a Journey stops it first (your settings come back), then the click does its job
     const bool journeyWasActive = app.journey.active;
     if (journeyWasActive && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) journeyStop(app);
@@ -318,7 +317,7 @@ void orbitPanel(AppState& app, float width) {
             if (app.set.trueScale) setZoom(app, zoomFor(app, b->radius / kKm, 80));   // close enough to see it turn
         }
     }
-    if (wideButton("↺ Reset view")) { app.view.resetView(); setZoom(app, 0); app.view.ox = app.view.oy = 0; }
+    if (wideButton("↺ Reset view")) resetViewAction(app);
 
     // ---- Sky ----
     ImGui::SeparatorText("Sky");
@@ -350,101 +349,47 @@ void orbitPanel(AppState& app, float width) {
     const auto next = [&]() { if (++col % 2) ImGui::SameLine(); };
     const auto newRow = [&]() { if (col % 2) ImGui::NewLine(); col = 0; };
     OrbitView& v = app.view;
-    const auto fly = [&](Selection s, double zoom) {      // select it, keep it in the middle, zoom to suit; the selected tile again lets go
-        if (v.sel == s) { v.sel = Selection{}; v.follow = false; return; }
-        v.select(s, true);
-        setZoom(app, zoom);
-        v.ox = v.oy = 0;
-    };
-    const bool ts2 = app.set.trueScale;
-    const auto easyZoom = [](const std::string& n) {      // zoom that suits each body in Easy to see (moons use their planet's)
-        static const struct { const char* n; double z; } Z[] = {{"Sun", 0.8}, {"Mercury", 0.8}, {"Venus", 0.8}, {"Earth", 0.8}, {"Mars", 0.6}, {"Jupiter", 1.3}, {"Saturn", 1.2},
-                                                                {"Uranus", 0.5}, {"Neptune", 0.3}, {"Ceres", 0.4}, {"Pluto", 0.3}, {"Haumea", 0.3}, {"Makemake", 0.3}, {"Eris", 0.3}};
-        for (const auto& e : Z) if (n == e.n) return e.z;
-        return 0.4;
-    };
 
-    ImGui::TextDisabled("Star and planets");
-    if (tile("Sun", "#f0b020", v.sel.kind == Selection::Star, tw)) fly({Selection::Star}, ts2 ? zoomFor(app, kSunRadius / kKm, 90) : easyZoom("Sun"));
-    next();
-    if (tile("Barycentre", "#9aa5b8", v.sel.kind == Selection::Bary, tw)) fly({Selection::Bary}, ts2 ? 2.3 : 2.0);
-    next();
-    const auto bodyTiles = [&](BodyKind kind) {
-        for (const Body& b : app.sys.bodies) {
-            if (b.type != kind) continue;
-            const Selection s{Selection::Body, b.id};
-            if (tile(b.name.c_str(), b.color, v.sel == s, tw)) {
-                if (kind == BodyKind::Dwarf) app.set.dwarfs = true;
-                if (kind == BodyKind::Comet) app.set.comets = true;
-                fly(s, kind == BodyKind::Comet ? 1.0 : !ts2 ? easyZoom(b.name) : zoomFor(app, b.radius / kKm, 55));   // true scale: the planet fills the picture
-            }
+    for (const PickGroup& grp : pickGroups(app)) {         // the same list the new toolbar's "pick a body" uses (ui/orbit_actions.h)
+        ImGui::TextDisabled("%s", grp.title);
+        for (const PickItem& it : grp.items) {
+            if (tile(it.name.c_str(), it.color, v.sel == it.sel, tw)) pickItem(app, it);
+            if (!it.tip.empty() && ImGui::IsItemHovered()) ui::SetTooltip("%s", it.tip.c_str());
             next();
         }
-    };
-    bodyTiles(BodyKind::Planet);
-    newRow();
-    ImGui::TextDisabled("Dwarf planets");
-    bodyTiles(BodyKind::Dwarf);
-    newRow();
-    ImGui::TextDisabled("Famous comets");
-    bodyTiles(BodyKind::Comet);
-    newRow();
-    ImGui::TextDisabled("Moons");
-    for (const Body& b : app.sys.bodies)
-        for (std::size_t j = 0; j < b.moons.size(); j++) {
-            const Selection s{Selection::Moon, b.id, static_cast<int>(j)};
-            if (tile(b.moons[j].data->name, b.color, v.sel == s, tw)) {
-                app.set.moons = true;
-                if (b.type == BodyKind::Dwarf) app.set.dwarfs = true;
-                fly(s, ts2 ? zoomFor(app, b.moons[j].data->aKm, 0.34 * std::min(app.canvasW, app.canvasH)) : easyZoom(b.name));   // true scale: fit the moon's orbit
-            }
-            if (ImGui::IsItemHovered()) ui::SetTooltip("%s · moon of %s", b.moons[j].data->name, b.name.c_str());
-            next();
-        }
-    newRow();
-    ImGui::TextDisabled("Belts and the far edge");
-    {   // belts: selected but not followed; each has a zoom that shows all of it
-        static const struct { const char* key; const char* name; const char* color; double zoom; } B[] = {
-            {"main", "Asteroid belt", "#8a7f72", -0.15}, {"trojan", "Jupiter’s Trojans", "#a08c6a", -0.55}, {"kuiper", "Kuiper belt", "#6f9fc0", -1.55}, {"oort", "Oort cloud", "#9aa5b8", -4.4}};
-        for (const auto& b : B)
-            for (std::size_t gi = 0; gi < app.sys.belts.size(); gi++) {
-                if (app.sys.belts[gi].key != b.key) continue;
-                const Selection s{Selection::Belt, 0, static_cast<int>(gi)};
-                if (tile(b.name, b.color, v.sel == s, tw)) {
-                    app.set.belts = true;
-                    if (v.sel == s) { v.sel = Selection{}; v.follow = false; }
-                    else { v.select(s, false); setZoom(app, b.zoom); v.ox = v.oy = 0; }
-                }
-                next();
-            }
+        newRow();
     }
-    newRow();
-    ImGui::TextDisabled("Far away");
-    {
-        static const struct { const char* key; const char* name; const char* color; } F[] = {
-            {"v1", "Voyager 1", "#ffd27a"}, {"v2", "Voyager 2", "#ffd27a"}, {"acen", "Alpha Centauri", "#ffe9b0"}, {"sirius", "Sirius", "#cfe0ff"},
-            {"vega", "Vega", "#cfe0ff"}, {"pleia", "Pleiades", "#8fd0ff"}, {"m42", "Orion Nebula", "#8fd0ff"}, {"sgra", "Galactic centre", "#cfd6e6"}};
-        for (const auto& f : F) {
-            const int idx = farIndexOf(f.key);
-            const Selection s{Selection::Far, 0, idx};
-            if (tile(f.name, f.color, v.sel == s, tw)) {
-                app.set.far = true;
-                FarItem it;
-                if (v.sel == s) { v.sel = Selection{}; v.follow = false; }
-                else if (farItem(app.sys, idx, it)) {   // far enough out that the Sun and the target are both in the picture
-                    v.select(s, true);
-                    setZoom(app, std::log10(13.6 / (it.au * kAU / kSimLength)));
-                    v.ox = v.oy = 0;
-                }
-            }
-            next();
-        }
-    }
-    newRow();
     ImGui::Spacing();
     ImGui::TextWrapped("Click a tile to fly there. It stays in the middle of the picture. Your time speed is not changed.");
     ImGui::Spacing();
     ImGui::TextDisabled("Real orbits from NASA/JPL data. Moons show when you zoom in or click their planet (until you zoom in a lot, their orbits are drawn wider than real so they can be seen).");
+}
+
+void orbitPanel(AppState& app, float width) {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
+    ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
+    pushDockedBg();
+    ImGui::Begin("Controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    popDockedBg();
+    panelDecor(app::PanelKind::Docked);
+    if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
+    if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
+    }
+    orbitPanelContents(app);
+    ImGui::End();
+}
+
+// The window around the same contents, floating (the new UI's temporary "Old panel": 0.15 stage 3, removed when stages 4 and 5 move the controls)
+void orbitPanelFloating(AppState& app, bool* open, float x, float y, float w, float h) {
+    ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_Appearing);
+    pushFloatStyle();
+    const bool shown = ImGui::Begin("Old panel###oldpanel", open, ImGuiWindowFlags_NoCollapse);
+    popFloatStyle();
+    if (shown) { panelDecor(app::PanelKind::Floating); orbitPanelContents(app); }
     ImGui::End();
 }
 

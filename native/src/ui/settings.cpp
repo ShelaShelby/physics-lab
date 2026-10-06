@@ -292,6 +292,17 @@ void settingsWindow(AppState& app) {
             g_unlockMsg = app::kUnlockMsg[std::min(t, 2)][std::min(a, 5)];
         }
         if (!g_unlockMsg.empty()) doneLine(g_unlockMsg);
+        // 🧪 New UI (preview) (0.15 stage 3): last, so the rest of this page is exactly as it was
+        richHeading(displayable("🧪 New UI (preview)"));
+        {
+            const char* uiKeys[2] = {"off", "on"};
+            const char* uiNames[2] = {"Off", "On"}, *uiSubs[2] = {"The layout you know", "The new layout, unfinished"};
+            for (int i = 0; i < 2; i++) {
+                if (i) ImGui::SameLine();
+                if (optionTile((std::string("newui-") + uiKeys[i]).c_str(), uiNames[i], P.newUi == uiKeys[i], nullptr, 0, tiles(2), uiSubs[i])) P.newUi = uiKeys[i];
+            }
+            richText("<p class=\"lrnP lrnMuted\">A preview of the redesign (version 0.15): the picture fills the window, with a slim bar on top, a toolbar at the bottom and small floating panels. Only the Orbit Lab's date, speed, show, pick, scale, 2D / 3D and save controls are moved so far; everything else is in the Old panel button at the top right. Off is exactly the layout you know.</p>");
+        }
         // the reset pop-ups (first the warning, then a clear "it worked")
         if (beginGift("##reset")) {
             const int t = std::min(g_resetThemes, 2), a = std::min(g_resetAch, 5);
@@ -311,6 +322,11 @@ void settingsWindow(AppState& app) {
 // them do not fit in the window, the cards get narrower and long names wrap onto a second line (a name is never cut off).
 void themeButton(AppState& app) {
     if (pillButton(app::kHdrTheme.label, app::kHdrTheme.tip)) ImGui::OpenPopup("##themes");
+    themePicker(app);
+}
+
+// The picker's list (0.15 stage 3: also drawn by the new UI's palette button, right after it)
+void themePicker(AppState& app) {
     static const bool testOpen = SDL_getenv("PL_OPEN") && std::string(SDL_getenv("PL_OPEN")) == "themes";   // for automatic checks: open the picker (after the other windows have appeared)
     static int frames = 0;
     if (testOpen && ++frames == 12) ImGui::OpenPopup("##themes");
@@ -379,10 +395,9 @@ void themeButton(AppState& app) {
     ImGui::EndPopup();
 }
 
-void defaultsButton(AppState& app) {
+// The two "Put ... back?" questions of Defaults (0.15 stage 3: split from the button so the new UI's menu can open them from its own window)
+void defaultsPopups(AppState& app) {
     if (app.lab == 1) {
-        if (ui::Button("Defaults")) ImGui::OpenPopup("Put Atom Lab back?");
-        if (ImGui::IsItemHovered()) ui::SetTooltip("Put this lab's settings back to how they started");
         ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
         if (ImGui::BeginPopupModal("Put Atom Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
             panelDecor(app::PanelKind::Floating);
@@ -398,8 +413,6 @@ void defaultsButton(AppState& app) {
         }
         return;
     }
-    if (ui::Button("Defaults")) ImGui::OpenPopup("Put Orbit Lab back?");
-    if (ImGui::IsItemHovered()) ui::SetTooltip("Put this lab's settings back to how they started");
     ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
     if (ImGui::BeginPopupModal("Put Orbit Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
         panelDecor(app::PanelKind::Floating);
@@ -412,6 +425,12 @@ void defaultsButton(AppState& app) {
         ImGui::SetItemDefaultFocus();
         ImGui::EndPopup();
     }
+}
+
+void defaultsButton(AppState& app) {
+    if (ui::Button("Defaults")) ImGui::OpenPopup(app.lab == 1 ? "Put Atom Lab back?" : "Put Orbit Lab back?");
+    if (ImGui::IsItemHovered()) ui::SetTooltip("Put this lab's settings back to how they started");
+    defaultsPopups(app);
 }
 
 }  // namespace ui

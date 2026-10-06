@@ -1,4 +1,5 @@
 #include "changelog.h"
+#include "ui/reading.h"
 
 #include <algorithm>
 #include <string>
@@ -18,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 3 of about 7: the new shell (a preview you can switch on)",
+     "Settings has a new last section, New UI (preview), Off by default. Off is exactly the layout you know. On, the lab picture fills the whole window and a new frame floats over it: a slim top bar (menu, breadcrumbs with a Labs drop-down, the date and speed in a centre chip with a Today button, search, and small icons for the other lab, Learn, Achievements, Did you know?, Theme and Settings), a toolbar at the bottom (play, speed, show, pick a body, zoom and sizes, 2D / 3D, save picture, each with a small panel above it), the zoom, scale and frame rate in a small readout at the bottom right, a Legend that starts collapsed, and a card for the selected body that collapses to its title. If a card or panel would cover the body you picked, the picture slides so the body stays in the clear. Keys: Esc closes the open panel, Ctrl+K opens search, Space plays and pauses.\n"
+     "About, History, the changelogs and the guides open in a reading view: a centred column about 70 characters wide over the dimmed picture, with a contents list. Text sizes follow one scale (13, 15, 17 and 28 units, never under 12, 14, 15 and 22 pixels, times Windows' scale and your Text size). Panels are nearly solid so their text passes the WCAG 4.5:1 rule over a white or a black picture behind them. Only the Orbit Lab's main controls are moved so far; everything else, in both labs, is behind the Old panel button at the top right until stages 4 and 5 move it.\n"
+     "Found on the way: in Dark and Black the text on a chosen button (white on #6c9cff) is only 2.7:1; the new UI uses the page colour there, the old layout is unchanged. Text size Extra large was 19 pixels instead of 20 in the first build of this stage; the test caught it. Not tested: a real PC, a real graphics card, Segoe UI, speed. Nothing about the physics changed."},
     {"0.15", "Full UI rework, stage 2 of about 7: the plan, and four small fixes",
      "0.15 is the rework of every screen. Stage 2 is mostly a plan: a list of every control in the app and where each one will live (INVENTORY.md in the project), and the final design, chosen by the owner: the lab picture fills the whole window, with a slim top bar, a centre chip, small floating panels, a toolbar at the bottom and a reading view for long text. The earlier layouts A, B and C were rejected. "
      "Four fixes came with it. (1) The About page showed raw codes like \"&rsquo;\" instead of the characters; they are now decoded (all 254 of them, and the whole HTML list is understood). (2) The page effects of Frutiger Aero, Y2K Ice and Y2K Night (clouds, bubbles, grain, grid, halftone, light streak) are drawn once into a picture and reused, instead of being rebuilt every frame; the pictures stay the same within a few levels of rounding, and the saving is expected to be about 0.7 ms per frame (measured by the owner's PC, not here). "
@@ -405,11 +410,8 @@ void labLogWindow(bool* open, int lab) {
     ImGui::SetNextWindowSize(ImVec2(std::min(vp->WorkSize.x - 32, 620 * s), vp->WorkSize.y * 0.8f), ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     const std::string title = (lab == 1 ? std::string(app::kAtomHistoryName) + " " + L.update : std::string(L.name) + app::kLogTitleTail) + "###labLog";
-    pushFloatStyle();
-    const bool logShown = ImGui::Begin(title.c_str(), open, ImGuiWindowFlags_NoCollapse);
-    popFloatStyle();
+    const bool logShown = pageBegin(title, open);                // the floating window as before, or (new UI) the reading view
     if (logShown) {
-        panelDecor(app::PanelKind::Floating);
         const Entry* rows = lab == 1 ? kWebAtom : kWeb;
         const int n = lab == 1 ? int(sizeof kWebAtom / sizeof kWebAtom[0]) : int(sizeof kWeb / sizeof kWeb[0]);
         const ImU32 accent = col(look().c.accent), line = col(look().c.line);
@@ -444,7 +446,7 @@ void labLogWindow(bool* open, int lab) {
             ImGui::PopStyleColor();
         }
     }
-    ImGui::End();
+    pageEnd();
 }
 
 }  // namespace ui

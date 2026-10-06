@@ -14,6 +14,7 @@
 #   0.14 stage 3 (the Theme effects switch): the Settings screen of all 12 variants joined that file (a new section; the picture differs from stage 2 only in the scroll bar
 #                                strip, x 727..736 of 1000: checked once against the stage 2 program, see REPORT.md), so the five screens that must equal 0.13 are now four
 #                                (Orbit Lab, nucleus, Cloud 3D, chart) = 40 pictures; and the picker is compared too.
+#   theme_pictures_0.15s3_settings.sha256   (0.15 stage 3) the Settings screen of the 12 variants after the New UI (preview) section was added at its end: only the scroll bar differs.
 #   theme_pictures_0.14s2_native.sha256   Frutiger Aero, Y2K Ice and Y2K Night with effects On (the default): the pictures of the STAGE 2 program (made by it), five screens minus
 #                                (0.15 stage 2: compared with PL_PAGE_CACHE=off, the old drawing; the page cache of 0.15 changes these pictures by rounding and edge pixels on purpose,
 #                                tests/check_page_cache.py holds it to its stated tolerance)
@@ -29,13 +30,20 @@ for ref in theme_pictures_0.13.sha256 theme_pictures_0.14_changed.sha256; do
         [ -z "$name" ] && continue
         case "$ref:$name" in
             theme_pictures_0.13.sha256:themes_*|theme_pictures_0.13.sha256:settings_*|theme_pictures_0.13.sha256:*_light) continue ;;   # the picker, Settings and Light have their own file
-            theme_pictures_0.14_changed.sha256:themes_*|theme_pictures_0.14_changed.sha256:settings_*|theme_pictures_0.14_changed.sha256:*_light) ;;
+            theme_pictures_0.14_changed.sha256:settings_*) continue ;;   # 0.15 stage 3: the Settings page got a last section (New UI (preview)): see theme_pictures_0.15s3_settings.sha256 below
+            theme_pictures_0.14_changed.sha256:themes_*|theme_pictures_0.14_changed.sha256:*_light) ;;
             theme_pictures_0.14_changed.sha256:*) continue ;;
         esac
         got=$(grep "  $name\$" "$WORK/pictures.sha256" | cut -d' ' -f1)
         if [ "$got" != "$hash" ]; then echo "DIFFERENT PICTURE: $name"; fail=$((fail + 1)); fi
     done < "$REF/$ref"
 done
+# 0.15 stage 3: the Settings screen of all 12 variants, with the New UI (preview) section added at its END. The page differs from stage 2 only in the scroll bar strip (x 727..736 of
+# 1000, 509 pixels, checked once against the stage 2 program in every variant: REPORT.md); these hashes are a regression guard made by the stage 3 code, not an independent reference.
+while read -r hash name; do
+    got=$(grep "  $name\$" "$WORK/pictures.sha256" | cut -d' ' -f1)
+    if [ "$got" != "$hash" ]; then echo "DIFFERENT PICTURE: $name (0.15 stage 3 Settings)"; fail=$((fail + 1)); fi
+done < "$REF/theme_pictures_0.15s3_settings.sha256"
 # the three native themes (Frutiger Aero, Y2K Ice, Y2K Night): draw, do not crash, use the default font here (no Segoe UI), six different pictures, and are not Dark
 for th in aero y2kice y2knight; do
     PL_PAGE_CACHE=off sh "$TOOLS/theme_pictures.sh" "$BIN" "$WORK/$th" "$th" > /dev/null   # 0.15 stage 2: the OLD drawing (no page cache): these hashes are the stage 2 program's exactly; the cached drawing is checked against it by tests/check_page_cache.py

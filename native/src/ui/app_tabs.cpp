@@ -243,6 +243,14 @@ void grantAchievement(AppState& app, const char* id) {
 void secretMono() { g_monoAsked = true; }
 
 // The 💡 line under the header: a fact, the counter (3/27) and ›; a tap shows the next one
+// ---- 0.15 stage 3: the new UI's 💡 card uses the same facts, in the same shuffled order ----
+int factCount() { return int(app::count(app::kDyk)); }
+int factPosition(AppState& app) { if (g_pos < 0) showNext(app); return g_pos; }
+std::string factText(AppState& app) { return textOf(app, g_order[factPosition(app)]); }
+bool factIsGift(AppState& app) { factPosition(app); return isGift(); }
+void factStep(AppState& app, int dir) { factPosition(app); g_pos = (g_pos + dir + int(g_order.size())) % int(g_order.size()); g_next = DBL_MAX; g_fadeAt = -1; }
+void factOpenGift(AppState& app) { openSecret(app, 1); }
+
 void factsLine(AppState& app) {
     if (g_pos < 0) { showNext(app); setHtmlAction([](const std::string& a) { if (a == "monoKey") secretMono(); }); }
     const double t = now();

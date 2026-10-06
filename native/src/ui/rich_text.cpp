@@ -1,4 +1,7 @@
 #include "rich_text.h"
+#include "ui/reading.h"
+#include "ui/shell_test.h"
+#include "ui/shell_widgets.h"
 
 #include <cfloat>
 #include <vector>
@@ -72,6 +75,11 @@ std::vector<Block> parse(const std::string& h) {
 
 void richHeading(const std::string& t) {
     const Fonts& F = fonts();
+    noteHeading(2, t);                                   // the reading view's contents (nothing outside it)
+    if (readingFloorBody() > 0) {                        // the reading view: H2 at its scale size (20 u, floor 16 px)
+        ImGui::PushFont(F.bold, sh::headingPx("h2") / (sh::F().dpi * sh::F().tf));
+        auditText("h2", ImGui::GetFontSize(), t);
+    } else
     ImGui::PushFont(F.bold, ImGui::GetFontSize() * 1.15f);
     ImGui::PushTextWrapPos(0);
     ImGui::TextUnformatted(displayable(t, F.bold).c_str());

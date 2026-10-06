@@ -17,6 +17,9 @@
 #include "fonts.h"
 #include "look.h"
 #include "imgui.h"
+#include "ui/reading.h"
+#include "ui/shell_test.h"
+#include "ui/shell_widgets.h"
 
 namespace ui {
 
@@ -106,6 +109,7 @@ ImU32 cssColor(const std::string& c, float alpha = 1) {
 }
 
 float S() { return ImGui::GetFontSize() / 16.0f; }
+const char* g_flowKind = nullptr;      // the reading view: the kind a heading reports to PL_LOG_SHELL ("h3"); null: body or caption by size
 
 // ---- inline text: runs laid out word by word ----
 struct Run { std::string text; bool bold, italic, small, sub, br; ImU32 dot; std::string href; };
@@ -123,11 +127,13 @@ void collect(const Node& n, bool bold, bool italic, bool small, bool sub, std::v
 float flow(const std::vector<Run>& runs, float x0, float y, float right, float sizePt, ImU32 col, ImU32 boldCol, bool forceBold = false, bool upper = false) {
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const Fonts& F = fonts();
-    const float size = sizePt * S(), lineH = size * 1.45f;
+    const float rb = readingFloorBody(), rc = readingFloorCaption();   // the reading view of the new UI: no page text under the Body (14 pt and up) or the Caption size
+    const float size = rb > 0 ? std::max(sizePt * S(), sizePt >= 14 ? rb : rc) : sizePt * S(), lineH = size * 1.45f;
     float x = x0;
+    int chars = 0;                                       // characters on the line being laid out (the reading view reports the longest line)
     bool lineEmpty = true, any = false;
     for (const Run& r : runs) {
-        if (r.br) { x = x0; y += lineH; lineEmpty = true; continue; }
+        if (r.br) { x = x0; y += lineH; lineEmpty = true; chars = 0; continue; }
         if (r.dot) {
             const float d = 9 * S();
             dl->AddCircleFilled(ImVec2(x + d / 2, y + size * 0.55f), d / 2, r.dot);
@@ -136,7 +142,8 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
             continue;
         }
         ImFont* font = r.bold || forceBold ? F.bold : r.italic ? F.italic : F.regular;
-        const float sz = r.small || r.sub ? size * 0.82f : size;
+        const float sz = rb > 0 ? std::max(r.small || r.sub ? size * 0.82f : size, r.small || r.sub ? rc : size) : r.small || r.sub ? size * 0.82f : size;
+        if (rb > 0 && !r.text.empty()) { std::size_t n = std::min<std::size_t>(24, r.text.size()); while (n > 0 && n < r.text.size() && (static_cast<unsigned char>(r.text[n]) & 0xC0) == 0x80) n--; auditText(g_flowKind ? g_flowKind : sz >= rb ? "pbody" : "pcaption", sz, r.text.substr(0, n)); }   // (cut at a whole character)
         std::string t = r.text;
         if (upper) for (char& c : t) c = char(std::toupper(static_cast<unsigned char>(c)));
         std::size_t p = 0;
@@ -149,7 +156,8 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
             std::string trimmed = word;
             while (!trimmed.empty() && trimmed.back() == ' ') trimmed.pop_back();
             const float wt = font->CalcTextSizeA(sz, FLT_MAX, 0, trimmed.c_str()).x, w = font->CalcTextSizeA(sz, FLT_MAX, 0, word.c_str()).x;
-            if (!lineEmpty && x + wt > right) { x = x0; y += lineH; lineEmpty = true; if (word == " ") continue; }
+            if (!lineEmpty && x + wt > right) { x = x0; y += lineH; lineEmpty = true; chars = 0; if (word == " ") continue; }
+            if (rb > 0) { for (char ch : trimmed) if ((static_cast<unsigned char>(ch) & 0xC0) != 0x80) chars++; chars += word.size() > trimmed.size() ? 1 : 0; readingLongestLine(chars - (word.size() > trimmed.size() ? 1 : 0), sizePt >= 14 && !r.small); }
             const ImVec2 at(x, y + (r.sub ? size * 0.35f : (size - sz) * 0.8f));
             if (r.href[0] == '#') {                          // an action word (.monoKey): its own colour, a dotted underline (solid on hover)
                 const ImU32 tc = r.bold && !forceBold ? boldCol : col;
@@ -214,6 +222,8 @@ void block(const Node& n, const Ctx& cx, float left, float right, float sizePt, 
     if (n.tag == "chips") { if (cx.chips) cx.chips(); ImGui::Dummy(ImVec2(0, 4 * s)); return; }
     if (n.tag == "p") {
         const bool m = n.has("lrnMuted");
+        if (!m && !n.kids.empty() && n.kids[0]->tag == "b" && !n.kids[0]->kids.empty() && !n.kids[0]->kids[0]->text.empty() && n.kids[0]->kids[0]->text.back() == ':')
+            noteHeading(2, n.kids[0]->kids[0]->text.substr(0, n.kids[0]->kids[0]->text.size() - 1));      // "The developer:" and the like lead a section
         blocks(n, cx, left, right, m ? 13 : sizePt, m || muted);
         ImGui::Dummy(ImVec2(0, 6 * s));
         return;
@@ -235,7 +245,11 @@ void block(const Node& n, const Ctx& cx, float left, float right, float sizePt, 
         ImGui::Dummy(ImVec2(0, 6 * s));
         std::vector<Run> runs;
         collect(n, true, false, false, false, runs);
-        const float y = flow(runs, left, ImGui::GetCursorScreenPos().y, right, 13, fg, fg, true);
+        const bool rv = readingFloorBody() > 0;
+        if (rv) noteHeading(3, displayable(n.text.empty() && !n.kids.empty() ? n.kids[0]->text : n.text));
+        g_flowKind = rv ? "h3" : nullptr;
+        const float y = flow(runs, left, ImGui::GetCursorScreenPos().y, right, rv ? sh::headingPx("h3") / S() : 13, fg, fg, true);   // (a heading of the reading view is H3 sized: 17 u, floor 15 px)
+        g_flowKind = nullptr;
         ImGui::SetCursorScreenPos(ImVec2(left, y));
         ImGui::Dummy(ImVec2(right - left, 0));
         return;

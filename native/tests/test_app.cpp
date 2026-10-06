@@ -56,6 +56,7 @@ static void checkTrue(const std::string& what, bool ok) { checkStr(what, ok ? "t
 
 #include "test_entities.inc"   // 0.15 stage 2, C1: HTML entities
 #include "test_stage2.inc"     // 0.15 stage 2, C3 and C4: power request, the benchmark's focus flag, display scale
+#include "test_shell.inc"      // 0.15 stage 3: the new UI's shell (type scale, layout, centre shift, glass, keys, reading column, search)
 
 static void testRoundTrip() {
     Prefs p;
@@ -1885,6 +1886,7 @@ int main() {
     testBenchFocusFlag();
     testDisplayScale();
     testPageCacheLogic();
+    testShell();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

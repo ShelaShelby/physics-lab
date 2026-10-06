@@ -702,21 +702,9 @@ static void chainSection(AtomLab& L) {
     mutedWrapped(chainTimeNote(), 12.0f / 16);
 }
 
-void atomPanel(AppState& app, float width) {
+static void atomPanelContents(AppState& app) {
     AtomLab& L = app.atom;
     const AtomParams& p = L.p;
-    const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
-    ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
-    pushDockedBg();
-    ImGui::Begin("Atom controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
-    popDockedBg();
-    panelDecor(app::PanelKind::Docked);
-    if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
-        const ImGuiViewport* vp = ImGui::GetMainViewport();
-        drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
-    }
-    if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
     labPicker(app);
     defaultsButton(app);
     ImGui::SameLine();
@@ -946,9 +934,11 @@ void atomPanel(AppState& app, float width) {
 
     // a slider or button held down: the decay clock waits (the web's PL_HOLD)
     L.hold = ImGui::IsAnyItemActive() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-    ImGui::End();
+}
 
-    // ---- the large periodic table ----
+void atomBigTable(AppState& app) {
+    const atom::AtomParams& p = app.atom.p;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
     if (app.bigTable) {
         ImGui::SetNextWindowSize(ImVec2(std::min(760 * S(), vp->WorkSize.x * 0.95f), std::min(560 * S(), vp->WorkSize.y * 0.95f)), ImGuiCond_Appearing);
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x / 2, vp->WorkPos.y + vp->WorkSize.y / 2), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -982,6 +972,24 @@ void atomPanel(AppState& app, float width) {
         }
         ImGui::End();
     }
+}
+
+void atomPanel(AppState& app, float width) {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - width, vp->WorkPos.y + headerHeight()));   // under the header
+    ImGui::SetNextWindowSize(ImVec2(width, vp->WorkSize.y - headerHeight()));
+    pushDockedBg();
+    ImGui::Begin("Atom controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
+    popDockedBg();
+    panelDecor(app::PanelKind::Docked);
+    if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
+    }
+    if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
+    atomPanelContents(app);
+    ImGui::End();
+    atomBigTable(app);
 }
 
 // ---------------------------------------------------------------- the bar under the picture
@@ -1025,6 +1033,17 @@ float atomBottomBar(AppState& app, float x, float y, float width, bool draw) {
     ImGui::PopFont();
     ImGui::End();
     return barH;
+}
+
+
+void atomPanelFloating(AppState& app, bool* open, float x, float y, float w, float h) {   // 0.15 stage 3: the same controls in the new UI's temporary "Old panel" window
+    ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(w, h), ImGuiCond_Appearing);
+    pushFloatStyle();
+    const bool shown = ImGui::Begin("Old panel###oldpanel", open, ImGuiWindowFlags_NoCollapse);
+    popFloatStyle();
+    if (shown) { panelDecor(app::PanelKind::Floating); atomPanelContents(app); }
+    ImGui::End();
 }
 
 }  // namespace ui

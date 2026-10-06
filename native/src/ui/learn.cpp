@@ -9,6 +9,7 @@
 
 #include "fonts.h"
 #include "imgui.h"
+#include "ui/reading.h"
 #include "look.h"
 #include "style_draw.h"
 #include "orbit/card_text.h"
@@ -297,11 +298,8 @@ void learnWindow(AppState& app) {
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.4f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     bool open = true;
     const std::string title = std::string(kTitles[app.learn]) + "###learn";   // one window; the title changes with the guide
-    pushFloatStyle();
-    const bool guideShown = ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse);
-    popFloatStyle();
+    const bool guideShown = pageBegin(title, &open);             // the floating window as before, or (new UI) the reading view
     if (guideShown) {
-        panelDecor(app::PanelKind::Floating);
         if (app.learnJump == "top") { ImGui::SetScrollY(0); app.learnJump.clear(); }
         if (const char* sc = std::getenv("PL_LEARN_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
         ImGui::PushTextWrapPos(0);
@@ -311,7 +309,7 @@ void learnWindow(AppState& app) {
         ImGui::PopTextWrapPos();
         if (ImGui::IsKeyPressed(ImGuiKey_Escape) && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) open = false;
     }
-    ImGui::End();
+    pageEnd();
     if (!open) app.learn = 0;
 }
 

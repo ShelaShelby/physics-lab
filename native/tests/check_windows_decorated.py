@@ -9,7 +9,9 @@
 #   ImGui::BeginTooltip / SetTooltip / BeginCombo / Combo are never called directly (outside ui/style_draw.cpp): ui::BeginTooltip / SetTooltip / BeginCombo / Combo give them the theme's face.
 # A new window that really needs no decoration goes in ALLOWED with the reason (none yet).
 import re, sys, pathlib
-ALLOWED = {}   # "file.cpp:Begin-argument-start": "reason"
+ALLOWED = {   # "file.cpp:Begin-argument-start": "reason"
+    "reading.cpp:\"##readBlock\"": "0.15 stage 3: an invisible, transparent window that only catches a click on the dimmed picture behind the reading view; it has nothing to decorate",
+}
 root = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parent.parent / "src"
 bad = []
 opens = re.compile(r'ImGui::(Begin|BeginPopup|BeginPopupModal)\(([^,)]*)')

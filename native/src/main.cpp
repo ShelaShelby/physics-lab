@@ -42,6 +42,9 @@
 #include "app/display_scale.h"
 #include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
+#include "ui/reading.h"
+#include "ui/shell.h"
+#include "ui/shell_test.h"
 
 namespace {
 
@@ -116,7 +119,9 @@ int main(int, char**) {
     std::printf("%s\n", powerNote.c_str());
     // the first reading is the primary monitor's scale (the window does not exist yet); it is read again from the window's own monitor right after the window is made,
     // and whenever SDL says the scale changed (0.15 stage 2, C4)
-    app::DisplayScale displayScale(SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay()));   // 1.5 on a Windows screen at 150 %
+    // PL_SCALE=1.25 stands in for a Windows scale of 125 % (automatic checks of the text sizes at 1.0, 1.25, 1.5 and 2.0; the cloud session has no Windows)
+    const float scaleOverride = SDL_getenv("PL_SCALE") ? static_cast<float>(std::atof(SDL_getenv("PL_SCALE"))) : 0.0f;
+    app::DisplayScale displayScale(scaleOverride > 0 ? scaleOverride : SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay()));   // 1.5 on a Windows screen at 150 %
     float scale = displayScale.scale();
     // the saved settings come first: they say where the window was
     ui::AppState app;
@@ -215,7 +220,7 @@ int main(int, char**) {
         if (!SDL_getenv("PL_WINDOW")) SDL_SetWindowMinimumSize(window, mw, mh);   // (automatic picture checks choose their own window size)
     };
     const auto rereadScale = [&] {
-        const float s = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window));
+        const float s = scaleOverride > 0 ? scaleOverride : SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window));
         if (s > 0 && displayScale.update(s)) applyScale(displayScale.scale());
     };
     applyScale(scale);                                  // the smallest window, and the window's own monitor's scale (it may not be the primary one)
@@ -290,12 +295,13 @@ int main(int, char**) {
         if (atomDoFrame > 0 && ++atomDoCount == atomDoFrame) doAtom();
         int winW = 0, winH = 0, fbW = 0, fbH = 0;
         float canvasWinW = 1, headerH = 0, pictureWinH = 1;
+        const bool shellOn = ui::newUiOn(app);          // 0.15 stage 3: Settings → New UI (preview): the picture fills the window, the bars float over it
         const auto measure = [&] {                      // the window as it is now (it can change while the window system has the loop)
             SDL_GetWindowSize(window, &winW, &winH);
             SDL_GetWindowSizeInPixels(window, &fbW, &fbH);
-            canvasWinW = std::max(1.0f, winW - panelWidth);   // the picture's width in window coordinates
+            canvasWinW = std::max(1.0f, shellOn ? float(winW) : winW - panelWidth);   // the picture's width in window coordinates
             // the header is across the top; the Atom Lab has a bar under its picture (view buttons and the hint); both are measured each frame
-            headerH = ui::headerHeight();
+            headerH = shellOn ? (app.lab == 1 ? ui::shellTopBarH() : 0.0f) : ui::headerHeight();   // (the Atom Lab's picture keeps its own text at the top: it starts under the bar until stage 5)
             pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 ? atomBarH : 0));
         };
         measure();
@@ -313,6 +319,7 @@ int main(int, char**) {
                 SDL_PushEvent(&ex);                     // the event watchers see it at once, like SDL's own timer in the window system's loop
             }
         }
+        if (!isLive) { static int scriptFrame = 0; ui::runScript(app, scriptFrame++, window); }   // PL_SCRIPT: automatic checks press things through the real input path
         SDL_Event e;
         while (!isLive && SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
@@ -325,7 +332,7 @@ int main(int, char**) {
             case SDL_EVENT_KEY_DOWN:
                 if (!app::labInputAllowed(app.benchRunning)) break;      // the benchmark is running: only Cancel and Esc do anything
                 if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off
-                if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) app.paused = !app.paused;
+                if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) { if (shellOn) ui::shellSpace(app, io.WantTextInput); else app.paused = !app.paused; }
                 if (app.lab == 1 && app.atom.chartOn() && !io.WantCaptureKeyboard) {   // the chart of nuclides: arrow keys walk one proton or one neutron (up = more protons, right = more neutrons)
                     const int dZ = e.key.key == SDLK_UP ? 1 : e.key.key == SDLK_DOWN ? -1 : 0, dN = e.key.key == SDLK_RIGHT ? 1 : e.key.key == SDLK_LEFT ? -1 : 0;
                     if (dZ || dN) app.atom.chartStep(dZ, dN);
@@ -356,7 +363,7 @@ int main(int, char**) {
                 break;
             case SDL_EVENT_MOUSE_MOTION:
                 if (mouseDown && app::labInputAllowed(app.benchRunning)) {
-                    if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) dragging = true;
+                    if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) { dragging = true; if (shellOn) ui::shellNoteDrag(); }
                     // 3D: dragging turns the view, unless "Drag moves the view" is on, or with the right button or Shift held
                     const bool rotate = app.set.view3D && !app.view.panMode && !rightDrag && !(SDL_GetModState() & SDL_KMOD_SHIFT);
                     if (dragging && app.lab == 1) app.atom.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));
@@ -441,15 +448,23 @@ int main(int, char**) {
             if (mouse && std::sscanf(mouse, "%f,%f", &mx, &my) == 2) ImGui::GetIO().AddMousePosEvent(mx, my);
         }
         ImGui::NewFrame();
-        ui::header(app);                                // across the top: title, subtitle and the app's buttons
-        headerH = ui::headerHeight();
+        if (shellOn) {                                  // the new UI: bars and panels over the full-window picture (the Atom Lab's bar under its picture stays, so the toolbar sits above it)
+            ui::shellFrame(app, winW, winH - int(app.lab == 1 ? atomBarH : 0), fps, frameDt);
+            headerH = app.lab == 1 ? ui::shellTopBarH() : 0.0f;
+        } else {
+            ui::setReadingMode(false);                  // About, History and the guides open in their floating windows
+            app.set.shell = false; app.set.minTextU = app.set.minTextPx = app.set.reserveBottom = app.set.reserveRight = 0; app.view.cx = app.view.cy = 0;
+            ui::header(app);                            // across the top: title, subtitle and the app's buttons
+            headerH = ui::headerHeight();
+        }
         pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 ? atomBarH : 0));
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
         app.canvasH = pictureWinH / scale;
         app.set.lightTheme = ui::look().c.light;
         app.set.theme = ui::look().c;
         app.set.textScale = ui::look().textScale;
-        if (app.pane) ui::paneWindow(app, headerH);
+        if (app.pane) ui::paneWindow(app, shellOn ? ui::shellTopBarH() : headerH);
+        else if (shellOn) {}                            // (the new UI's Old panel is a floating window made by shellFrame)
         else if (app.lab == 1) ui::atomPanel(app, panelWidth);
         else ui::orbitPanel(app, panelWidth);
         renderer.begin(app.canvasW, app.canvasH);
@@ -469,7 +484,7 @@ int main(int, char**) {
             text->PopClipRect();
         }
         // the frames-per-second counter, top right of the picture, for every lab (the web's #fps); not in a saved picture, not under a tab page
-        if (!app.pane && !app.shot.requested) ui::drawFpsCounter(text, canvasWinW, headerH, scale, fps);
+        if (!app.pane && !app.shot.requested && !shellOn) ui::drawFpsCounter(text, canvasWinW, headerH, scale, fps);   // (the new UI shows it in its readout)
         ui::labLogWindow(&app.showLabLog, app.lab);
         ui::aboutWindow(app);
         ui::historyWindow(app);
@@ -522,6 +537,11 @@ int main(int, char**) {
     SDL_AddEventWatch(onLiveExpose, &live);
     while (running) runFrame(false);
     SDL_RemoveEventWatch(onLiveExpose, &live);
+    {   // PL_LOG_SHELL: what the new UI drew (text sizes, rectangles), for the automatic checks
+        int w = 0, h = 0;
+        SDL_GetWindowSize(window, &w, &h);
+        ui::shellReport(w, h, scale, ui::look().textScale);
+    }
     if (SDL_getenv("PL_LIVE_REPORT"))
         std::printf("Live frames: %ld in %d drags, worst gap %.1f ms, lead-in %.1f ms, biggest physics step %.4f s\n", app.live.frames, app.live.drags, app.live.worstGapMs, app.live.leadInMs, maxPhysicsDt);
 

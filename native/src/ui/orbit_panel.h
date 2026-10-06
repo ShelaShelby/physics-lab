@@ -37,6 +37,7 @@ struct AppState {
     int pane = 0;                          // the tabs: 0 the labs (🔬 Simulations), 1 📚 Learn, 2 🏆 Achievements
     int learnBack = -1;                    // a guide opened from the Learn tab in another lab: the lab to go back to when it closes
     bool showSettings = false;
+    bool showOldPanel = false;             // 0.15 stage 3, the new UI: the "Old panel" window (today's side column, floating) is open
     ShotUi shot;
     std::shared_ptr<BenchState> bench;     // the benchmark: its window, its run and the settings it will give back
     bool benchRunning = false;             // a benchmark is running: nothing is written to the settings file
@@ -79,6 +80,12 @@ std::string tspeedText(double tspeed);
 // The zoom at which something km in radius is wantPx points on screen, at true scale (the web's zoomFor).
 double zoomFor(const AppState& app, double km, double wantPx);
 
+// "×0.06": what the Zoom slider says (0.15 stage 3: the new UI shows the same words).
+std::string zoomLabel(double v);
+
+// The "↺ Reset view" button: the view, the zoom and the offset back (0.15 stage 3: shared with the new UI).
+void resetViewAction(AppState& app);
+
 // Changes the zoom, keeping the middle of the picture in place.
 void setZoom(AppState& app, double zoom);
 
@@ -87,5 +94,7 @@ void performanceCard(AppState& app);
 
 // Draws the panel in a window `width` points wide on the right of the main window.
 void orbitPanel(AppState& app, float width);
+// 0.15 stage 3: the same controls in a floating window (the new UI's temporary "Old panel", closed with *open = false); window pixels.
+void orbitPanelFloating(AppState& app, bool* open, float x, float y, float w, float h);
 
 }  // namespace ui
