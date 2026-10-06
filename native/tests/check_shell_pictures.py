@@ -12,7 +12,7 @@
 #           new chip, toolbar, card and fact line). A different Mesa may round differently.
 import hashlib, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, Bmp
+from shell_lib import run_app, Bmp, prefetch
 
 # (card colour, opacity) of DESIGN.md section 3
 GLASS = {"light": ("#ffffff", 0.97), "dark": ("#1e1e21", 0.96), "black": ("#0b0b0c", 0.93), "midnight": ("#111c38", 0.95), "solar": ("#271d15", 0.97),
@@ -40,6 +40,9 @@ def main():
         if not ok:
             fails += 1
             print("FAIL", what)
+    prefetch([((binary, work, f"glass_{t}_closed", {"PL_NEWUI": "on"}), dict(frames=40, size="1000x640", theme=t)) for t in GLASS] +
+             [((binary, work, f"glass_{t}_open", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=tool.speed"}), dict(frames=40, size="1000x640", theme=t)) for t in GLASS] +
+             [((binary, work, f"shell_{scr}_{t}_{sz}", dict({"PL_NEWUI": "on"}, **extra)), dict(frames=40, size=sz, theme=t)) for t in THEMES for sz in SIZES for scr, extra in SCREENS.items()])
     # ---- glass ----
     for theme, (card, a) in GLASS.items():
         base = run_app(binary, work, f"glass_{theme}_closed", {"PL_NEWUI": "on"}, frames=40, size="1000x640", theme=theme)

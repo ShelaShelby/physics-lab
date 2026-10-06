@@ -13,7 +13,7 @@
 #   old       the Old panel button opens today's side column as a floating window (the Atom Lab only, from stage 4)
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, inside, overlap
+from shell_lib import run_app, inside, overlap, prefetch
 
 # From docs/ui-0.15/DESIGN.md section 1 (the owner's chosen design): kind -> (size in units, floor in px)
 SCALE = {"caption": (13, 12), "body": (15, 14), "title": (17, 15), "key": (28, 22), "h1": (28, 22), "h2": (20, 16), "h3": (17, 15)}
@@ -38,7 +38,10 @@ def expected(kind, dpi, tf):
     return max(floor, int(u * dpi * tf + 0.5))
 
 def part_sizes(binary, work, only_first_scale):
-    for dpi in ((1.0,) if only_first_scale else (1.0, 1.25, 1.5, 2.0)):
+    dpis = (1.0,) if only_first_scale else (1.0, 1.25, 1.5, 2.0)
+    prefetch([((binary, work, f"sizes_{d}_{n}", {"PL_NEWUI": "on", "PL_SCALE": str(d), "PL_TEXTSIZE": n, "PL_SELECT": "Earth", "PL_SCRIPT": EXERCISE}),
+               dict(frames=112, size=f"{int(round(1000 * d))}x{int(round(640 * d))}")) for d in dpis for n in TF])
+    for dpi in dpis:
         size = f"{int(round(1000 * dpi))}x{int(round(640 * dpi))}"
         for tfn, tf in TF.items():
             r = run_app(binary, work, f"sizes_{dpi}_{tfn}", {"PL_NEWUI": "on", "PL_SCALE": str(dpi), "PL_TEXTSIZE": tfn, "PL_SELECT": "Earth", "PL_SCRIPT": EXERCISE}, frames=112, size=size)
@@ -66,6 +69,8 @@ def part_sizes(binary, work, only_first_scale):
                 check(not overlap(r.rects["toolbar"], r.rects["readout"]), "toolbar and readout do not overlap" + tag)
 
 def part_reading_sizes(binary, work):
+    prefetch([((binary, work, f"read_{d}_{n}", {"PL_NEWUI": "on", "PL_SCALE": str(d), "PL_TEXTSIZE": n, "PL_OPEN": "about"}), dict(frames=30, size=f"{int(round(1000 * d))}x{int(round(700 * d))}"))
+              for d in (1.0, 1.25, 1.5, 2.0) for n in TF])
     # the reading view at every Text size and Windows scale: its headings are exact, its page text never under the floors
     for dpi in (1.0, 1.25, 1.5, 2.0):
         for tfn, tf in TF.items():
@@ -80,6 +85,8 @@ def part_reading_sizes(binary, work):
             check(col is not None and inside(col, r.window[0], r.window[1]), "the reading column stays inside the window" + tag)
 
 def part_small(binary, work):
+    prefetch([((binary, work, f"small_{d}_{n}", {"PL_NEWUI": "on", "PL_SCALE": str(d), "PL_TEXTSIZE": n, "PL_SELECT": "Earth", "PL_SCRIPT": EXERCISE}), dict(frames=112, size=sz))
+              for d, sz in ((1.0, "880x560"), (1.5, "1320x840")) for n in ("small", "xl")])
     # the smallest window: 880 x 560 units, at 100 % and at 150 %
     for dpi, size in ((1.0, "880x560"), (1.5, "1320x840")):
         for tfn in ("small", "xl"):

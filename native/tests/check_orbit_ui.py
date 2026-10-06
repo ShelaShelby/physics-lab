@@ -14,7 +14,7 @@
 #   links     in the reading view a link's underline is one line (no gap between two words of the same link)
 import datetime, glob, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, inside, overlap, Bmp
+from shell_lib import run_app, inside, overlap, Bmp, prefetch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 fails = checks = 0
@@ -298,6 +298,11 @@ def part_facts(binary, work):
 
 def part_facts_long(binary, work):
     FULL = {"PL_NEWUI": "on", "PL_MOTION": "off"}
+    ENVS = (("closed", {}), ("select", {"PL_SELECT": "Earth"}), ("show", {"PL_SCRIPT": "20:click=tool.show"}), ("time", {"PL_SCRIPT": "20:click=top.chip"}), ("card", {"PL_SELECT": "Earth", "PL_SCRIPT": "20:click=card.all"}))
+    BODIES = ("Mercury", "Earth", "Mars", "Jupiter", "Saturn", "Neptune", "Pluto", "Ceres", "Halley", "Moon", "Sun", "Eris")
+    prefetch([((binary, work, "fact_real_a", FULL), dict(frames=90, size="880x560")), ((binary, work, "fact_real_b", FULL), dict(frames=1330, size="880x560")), ((binary, work, "fact_real_c", FULL), dict(frames=1200, size="880x560"))] +
+             [((binary, work, f"fact_ov_{n}_{sz}", dict({"PL_NEWUI": "on"}, **e)), dict(frames=60, size=sz)) for sz in ("1280x800", "1000x640", "880x560") for n, e in ENVS] +
+             [((binary, work, f"fact_body_{b}", {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=tool.pick;16:click=##pickfilter;22:text={b};28:click=pick.{b}"}), dict(frames=150, size="1000x640")) for b in BODIES])
     # the real interval: about 20 s = 1282 frames of 16 ms
     ra = run_app(binary, work, "fact_real_a", FULL, frames=90, size="880x560")
     rb = run_app(binary, work, "fact_real_b", FULL, frames=1330, size="880x560")

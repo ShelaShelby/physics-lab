@@ -45,8 +45,11 @@ while read -r hash name; do
     if [ "$got" != "$hash" ]; then echo "DIFFERENT PICTURE: $name (0.15 stage 3 Settings)"; fail=$((fail + 1)); fi
 done < "$REF/theme_pictures_0.15s3_settings.sha256"
 # the three native themes (Frutiger Aero, Y2K Ice, Y2K Night): draw, do not crash, use the default font here (no Segoe UI), six different pictures, and are not Dark
-for th in aero y2kice y2knight; do
-    PL_PAGE_CACHE=off sh "$TOOLS/theme_pictures.sh" "$BIN" "$WORK/$th" "$th" > /dev/null   # 0.15 stage 2: the OLD drawing (no page cache): these hashes are the stage 2 program's exactly; the cached drawing is checked against it by tests/check_page_cache.py
+for th in aero y2kice y2knight; do   # (0.15 stage 4.1: the three are drawn at the same time, then checked one after the other)
+    PL_PAGE_CACHE=off sh "$TOOLS/theme_pictures.sh" "$BIN" "$WORK/$th" "$th" > /dev/null &
+done
+wait
+for th in aero y2kice y2knight; do   # 0.15 stage 2: the OLD drawing (no page cache): these hashes are the stage 2 program's exactly; the cached drawing is checked against it by tests/check_page_cache.py
     n=$(ls "$WORK"/$th/*_$th.bmp | wc -l)
     [ "$n" = 6 ] || { echo "$th: expected 6 pictures, got $n"; fail=$((fail + 1)); }
     if grep -q "Font: .*segoeui" "$WORK/$th/log.txt"; then echo "$th used a font file that should not exist here"; fail=$((fail + 1)); fi

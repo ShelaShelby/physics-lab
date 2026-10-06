@@ -20,3 +20,19 @@
 - Every source used for a value, formula or method must also be listed in the About page, 'Where the facts come from'.
 
 - While working, write one short plain-words sentence between steps saying what you are doing and why (the owner is not a programmer and follows along).
+
+## Workflow rules (0.15 stage 4.1; they apply to every stage)
+Why: stages used to take 20-30 minutes and had grown to hours: the cost was running the picture tests (each starts the real app under software OpenGL) many times. So:
+- Build (fresh session, about 6 minutes the first time; ccache is used when installed: `apt-get install -y ccache`):
+  `cmake -S native -B /home/user/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON && ninja -C /home/user/build`
+  Unit tests only (no SDL, about 1 minute): `cmake -S native -B /home/user/build -G Ninja -DPL_BUILD_APP=OFF && ninja -C /home/user/build`
+- Tests: `native/tools/check.sh quick` (unit tests, shaders, source scan: about 1 minute, no app start) and `native/tools/check.sh full` (everything, in parallel). One test: `ctest --test-dir /home/user/build -R '^name$' --output-on-failure` (names: `ctest -N`). Labels: quick, pictures.
+- While working: run only `check.sh quick` and the single test for what you changed.
+- Perturbation proofs ("break it on purpose"): use the fastest test that catches the break (a unit test, or ONE picture test), never the full suite.
+- Run `check.sh full` exactly ONCE, at the end, before pushing. Never re-run a passing suite; if one test fails, fix it and re-run that test only.
+- Picture renders for LOOKING: only the screens this stage changed; one look each.
+- Waiting for a long run: one long blocking wait (`timeout 119 sh -c 'until grep -q ... ; do sleep 10; done'` in a few calls at most), no polling loops of status.
+- Push as soon as the final run passes.
+- The owner's usage is limited: prefer smaller stages; stop and report if a stage grows.
+- Time budget: at each wip commit check the elapsed time; if the stage has passed 60 minutes, finish the current part, push what works, write in REPORT.md what is left, and stop. Each checkpoint adds one line to native/PROGRESS.md (part, minutes so far, tests green or not) so the owner can follow from his phone.
+- Test environment: picture tests run one llvmpipe thread per app start (LP_NUM_THREADS=1) and a shared Mesa shader cache (set by CMake / check.sh); they never need their own settings.

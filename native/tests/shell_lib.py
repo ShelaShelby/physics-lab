@@ -2,7 +2,7 @@
 # and read what it printed (PL_LOG_SHELL, PLSTATE) and the picture it saved (a BMP, bytes B G R A, rows bottom first).
 import os, re, struct, subprocess
 
-def run_app(binary, work, name, extra, frames=60, size="1280x800", theme="dark", timeout=900):
+def _run_app(binary, work, name, extra, frames=60, size="1280x800", theme="dark", timeout=900):
     binary, work = os.path.abspath(binary), os.path.abspath(work)
     home = os.path.join(work, "home_" + name)
     os.makedirs(home, exist_ok=True)
@@ -67,3 +67,30 @@ class Bmp:
         return (self.d[o + 2], self.d[o + 1], self.d[o])
     def pixels(self):
         return self.d[self.off:self.off + self.stride * self.h]
+
+
+# 0.15 stage 4.1: independent app starts at the same time. prefetch([(args, kwargs), ...]) starts them in a pool (PL_JOBS workers, default one per core; `check.sh full` sets PL_JOBS=1 because
+# ctest already runs one test per core); a later run_app(...) with the same arguments takes the finished result instead of starting the app again. Same start, same pixels, same checks:
+# only the order in time differs (every start has its own HOME and work files, named by `name`).
+import concurrent.futures, os as _os
+_cache = {}
+
+def _key(binary, work, name, extra, frames=60, size="1280x800", theme="dark", timeout=900):
+    return (_os.path.abspath(binary), _os.path.abspath(work), name, tuple(sorted(extra.items())), frames, size, theme)
+
+def run_app(binary, work, name, extra, frames=60, size="1280x800", theme="dark", timeout=900):
+    k = _key(binary, work, name, extra, frames, size, theme, timeout)
+    if k in _cache:
+        return _cache.pop(k).result()
+    return _run_app(binary, work, name, extra, frames, size, theme, timeout)
+
+def prefetch(calls):
+    jobs = int(_os.environ.get("PL_JOBS", _os.cpu_count() or 2))
+    if jobs <= 1:
+        return
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=jobs)
+    for args, kwargs in calls:
+        k = _key(*args, **kwargs)
+        if k not in _cache:
+            _cache[k] = pool.submit(_run_app, *args, **kwargs)
+    pool.shutdown(wait=False)

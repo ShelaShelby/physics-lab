@@ -5,6 +5,13 @@ project(PhysicsLabNative VERSION 0.14 LANGUAGES C CXX)
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
 # uses exactly the same code.
 
+# 0.15 stage 4.1: compile through ccache when it is installed (apt install ccache): a rebuild after reverting a change, or after a clean, hits the cache. No effect without it, and not for Visual Studio.
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM AND NOT MSVC AND NOT CMAKE_GENERATOR MATCHES "Visual Studio")
+  set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+  set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -274,3 +281,18 @@ if(PL_BUILD_APP)
     endif()
   endif()
 endif()
+
+# 0.15 stage 4.1: labels and a fast, identical environment for the tests. quick = the unit test programs, glsl and the source scan (about a minute, no app start);
+# pictures = everything that starts the real app under Mesa's software OpenGL. One llvmpipe thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
+# all of them) and a shared Mesa shader cache (a start no longer rebuilds its shaders): the pictures are the same (the picture guards prove it).
+foreach(t orbit_physics atom_physics app_settings nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
+  if(TEST ${t})
+    set_tests_properties(${t} PROPERTIES LABELS "quick")
+  endif()
+endforeach()
+foreach(t gl_phase_colours theme_pictures window_pictures y2k_pictures page_cache_pictures effects_pictures shell_ui shell_state shell_pictures
+          orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links)
+  if(TEST ${t})
+    set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")
+  endif()
+endforeach()
