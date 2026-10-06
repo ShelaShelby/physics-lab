@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -14,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "app/html_entities.h"
 #include "changelog.h"
 #include "shot.h"
 #include "fonts.h"
@@ -55,6 +57,19 @@ ImU32 hsl(double h, double s, double l, double a) {
     return ImGui::ColorConvertFloat4ToU32(ImVec4(float(r + m), float(g + m), float(b + m), float(a)));
 }
 Theme panelTheme() { return theme(look().c); }    // the panel follows the theme picked with 🎨
+
+// 0.15 stage 5f: for the automatic checks only: the old panel prints the strings of its cards once per change (PL_LOG_CARD), as the Orbit Lab's old card does.
+void logOldAtomCard(const std::string& tag, const std::vector<std::string>& lines) {
+    static const bool on = std::getenv("PL_LOG_CARD") != nullptr;
+    static std::map<std::string, std::string> last;
+    if (!on) return;
+    std::string sig;
+    for (const std::string& l : lines) sig += "\t" + l;
+    if (last[tag] == sig) return;
+    last[tag] = sig;
+    std::printf("PLATOMCARD %s%s\n", tag.c_str(), sig.c_str());
+    std::fflush(stdout);
+}
 
 void dashedRect(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 col, float th, float dash) {
     auto seg = [&](ImVec2 p, ImVec2 q) {
@@ -343,6 +358,12 @@ void elementCard(int Z) {
     dl->ChannelsMerge();
     ImGui::SetCursorScreenPos(ImVec2(o.x, bottom + 8 * s));
     ImGui::Dummy(ImVec2(width, 0));
+    {   // (for the automatic checks, PL_LOG_CARD)
+        std::vector<std::string> lines{name(Z)};
+        for (const std::string& c : elementChips(Z)) lines.push_back(c);
+        for (const std::string& l : atomPlainLines("<b>Where you meet it:</b> " + everyday(Z))) lines.push_back(l);
+        logOldAtomCard("element", lines);
+    }
 }
 
 // the facts (web: factsHTML): lines, the solid/liquid/gas bar with room temperature and the slider's temperature, notes
@@ -356,6 +377,14 @@ void factsCard(int Z, double tempK) {
     ImGui::Dummy(ImVec2(0, 6 * s));
     richText(factsLinesHtml(Z), true, 13.0f / 16, 0.15f);
     const Temp& t = tempData(Z);
+    {   // (for the automatic checks, PL_LOG_CARD)
+        std::vector<std::string> lines = atomPlainLines(factsLinesHtml(Z));
+        if (!(std::isnan(t.melt) && std::isnan(t.boil))) {
+            for (const std::string& l : atomPlainLines(factsNotesHtml(Z))) lines.push_back(l);
+            for (const std::string& l : atomPlainLines(kFactsFootnote)) lines.push_back(l);
+        }
+        logOldAtomCard("facts", lines);
+    }
     if (std::isnan(t.melt) && std::isnan(t.boil)) return;
     const char f = t.flag;
     const double m = t.melt, b = t.boil;
@@ -807,6 +836,7 @@ static void atomPanelContents(AppState& app) {
         if (ui::Button(displayable("⤢ Bigger table").c_str())) app.bigTable = true;
         if (ImGui::IsItemHovered()) ui::SetTooltip("Open the periodic table large, with bigger buttons");
         mutedWrapped(isotopeLine(p.Z, p.N), 12.0f / 16);
+        logOldAtomCard("isotope", {isotopeLine(p.Z, p.N)});
         ImGui::Dummy(ImVec2(0, 4 * S()));
         elementCard(p.Z);
         mutedWrapped(kTableNote, 12.0f / 16);
@@ -837,6 +867,7 @@ static void atomPanelContents(AppState& app) {
     ImGui::SeparatorText("Decay history");
     {
         const auto hist = decayHistory(L.chain, p.Z, p.N);
+        { std::vector<std::string> lines; for (const auto& h : hist) lines.push_back(h.second); logOldAtomCard("decay", lines); }   // (for the automatic checks, PL_LOG_CARD)
         if (hist.size() == 1) mutedWrapped(hist[0].second, 13.0f / 16);
         else {
             ImGui::BeginChild("##hist", ImVec2(-1, std::min(320 * S(), (hist.size() - 1) * ImGui::GetTextLineHeightWithSpacing() + 8)), ImGuiChildFlags_None);
@@ -1066,6 +1097,7 @@ float atomBottomBar(AppState& app, float x, float y, float width, bool draw) {
     AtomLab& L = app.atom;
     const float pad = 8 * S();
     const std::string hint = displayable(L.hint());
+    logOldAtomCard("hint", {L.hint()});
     const float wrapW = width - 2 * pad;
     const float hintH = ImGui::CalcTextSize(hint.c_str(), nullptr, false, wrapW).y * (13.0f / 16) * 1.12f;
     const float barH = pad + ImGui::GetFrameHeight() + 6 * S() + hintH + pad;
@@ -1113,14 +1145,63 @@ void atomPanelFloating(AppState& app, bool* open, float x, float y, float w, flo
     popFloatStyle();
     if (shown) {
         panelDecor(app::PanelKind::Floating);
-        {   // the old bar's hint line and the picture's More / Less info button: both left out of the new UI's picture until stage 5b gives them a home
-            AtomLab& L = app.atom;
-            if (ui::Button(L.moreShown() ? "Less info" : "More info")) { L.s.more = !L.moreShown(); L.moreStored = L.s.more; }
-            mutedWrapped(displayable(L.hint()), 13.0f / 16);
-        }
+        // (stage 5f: the hint line and the More / Less info button moved to the subject card and its data sheet)
         atomPanelContents(app);
     }
     ImGui::End();
+}
+
+
+// ---- stage 5f: the subject card and the data sheet of the Atom Lab ----
+std::vector<std::string> atomPlainLines(const std::string& html) {
+    std::vector<std::string> out;
+    std::string cur;
+    const auto flush = [&] {
+        std::string t, d = app::decodeHtmlEntities(cur);
+        bool sp = true;
+        for (char c : d) { const bool w = c == ' ' || c == '\n' || c == '\t' || c == '\r'; if (w) { if (!sp) t += ' '; sp = true; } else { t += c; sp = false; } }
+        while (!t.empty() && t.back() == ' ') t.pop_back();
+        if (!t.empty()) out.push_back(t);
+        cur.clear();
+    };
+    for (std::size_t i = 0; i < html.size();) {
+        if (html[i] == '<') {
+            const std::size_t e = html.find('>', i);
+            if (e == std::string::npos) break;
+            const std::string tag = html.substr(i + 1, e - i - 1);
+            if (tag == "/div" || tag == "/p" || tag == "br" || tag == "br/" || tag == "div" || tag == "p") flush();
+            i = e + 1;
+        } else cur += html[i++];
+    }
+    flush();
+    return out;
+}
+
+AtomSubject atomSubject(const AppState& app) {
+    const AtomLab& L = app.atom;
+    const int Z = L.p.Z, N = L.p.N;
+    AtomSubject a;
+    a.name = std::string(name(Z)) + "-" + std::to_string(Z + N);
+    const std::vector<std::string> chips = elementChips(Z);
+    a.kind = chips.empty() ? std::string() : chips[0];
+    a.keyValue = std::to_string(Z);
+    a.keyCaption = Z == 1 ? "proton" : "protons";
+    a.values.push_back({"Neutrons", std::to_string(N)});
+    a.values.push_back({"Nucleons", std::to_string(Z + N)});
+    for (std::size_t i = 1; i < chips.size(); i++) a.values.push_back({"", chips[i]});
+    a.isotope = isotopeLine(Z, N);
+    a.valuesTab.push_back(name(Z));
+    for (const std::string& c : chips) a.valuesTab.push_back(c);
+    for (const std::string& l : atomPlainLines("<b>Where you meet it:</b> " + everyday(Z))) a.valuesTab.push_back(l);
+    for (const std::string& l : atomPlainLines(factsLinesHtml(Z))) a.valuesTab.push_back(l);
+    const Temp& t = tempData(Z);
+    if (!(std::isnan(t.melt) && std::isnan(t.boil))) {
+        for (const std::string& l : atomPlainLines(factsNotesHtml(Z))) a.valuesTab.push_back(l);
+        for (const std::string& l : atomPlainLines(kFactsFootnote)) a.valuesTab.push_back(l);
+    }
+    for (const auto& h : decayHistory(L.chain, Z, N)) a.decayTab.push_back(h.second);
+    a.hint = L.hint();
+    return a;
 }
 
 }  // namespace ui

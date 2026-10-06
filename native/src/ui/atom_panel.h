@@ -22,6 +22,19 @@ const char* atomNote(const std::string& which);
 std::vector<std::string> atomJumpCheck(int Z, const std::string& from, const std::string& to);
 std::pair<std::string, std::string> atomSplitLabel(const std::string& s);   // "1s · sphere" -> {"1s", "sphere"}; "Auto-fit (orbit fills the canvas)" -> {"Auto-fit", "orbit fills the canvas"}
 
+// 0.15 stage 5f: the Atom Lab's subject card and data sheet, made from the strings the old panel's element card, facts card, isotope line, decay history and hint line draw (the old panel
+// logs the same strings with PL_LOG_CARD, so a test can compare them). Nothing here is a new fact or number.
+struct AtomSubject {
+    std::string name, kind, keyValue, keyCaption;                       // "Uranium-238", the element's category, Z, "protons"
+    std::vector<std::pair<std::string, std::string>> values;           // card rows: label, value (an empty label: a line of its own)
+    std::string isotope;                                                // the old isotope line ("☢ Uranium-238: half-life ...")
+    std::vector<std::string> valuesTab;                                 // name, category / period / state chips, "Where you meet it", the melting / boiling / density lines, their notes and footnote
+    std::vector<std::string> decayTab;                                  // the old Decay history lines
+    std::string hint;                                                   // the old bar's hint line (it depends on the view)
+};
+AtomSubject atomSubject(const AppState& app);
+std::vector<std::string> atomPlainLines(const std::string& html);      // "<div><b>A:</b> x</div>" -> {"A: x"}: tags removed, entities decoded, one line per <div> / <p>
+
 // The two buttons at the top of every panel: Orbit Lab / Atom Lab.
 void labPicker(AppState& app);
 void openLab(AppState& app, int lab);          // switch to a lab (0 Orbit Lab, 1 Atom Lab)

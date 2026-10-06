@@ -32,6 +32,11 @@ struct ChartCache {
     void release(render::Renderer2D& R);       // frees the GPU buffers (the next draw makes them again)
 };
 
+// 0.15 stage 5f: with the new UI the legend and the notes box are in the Legend chip (the picture's own copies were under the Controls panel); false = the picture leaves them out. Default true (the old UI,
+// the tests of the pictures). chartLegendDrawn(): what the last picture did (for the automatic checks: 1 drawn, 0 left out, -1 no chart drawn yet).
+void setChartLegendInPicture(bool on);
+int chartLegendDrawn();
+
 // w x h points. selZ/selN: the nuclide chosen in the lab (marked); hovZ/hovN: the one under the pointer (0, 0 = none).
 void drawChart(render::Renderer2D& R, const ChartText& T, const ChartColours& C, double w, double h, int selZ, int selN, int hovZ, int hovN, const ChainOverlay* chain = nullptr, ChartCache* cache = nullptr);
 // The per-frame builders of the static parts, as they were drawn every frame up to 0.13 stage 3: still what runs with no cache, and the reference the retained mesh is tested against.

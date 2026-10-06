@@ -1,4 +1,5 @@
 #include "ui/shell_test.h"
+#include "atom/chart_draw.h"
 
 #include <SDL3/SDL.h>
 
@@ -103,7 +104,7 @@ std::string atomSettingsLine(const AppState& app) {
     add("last", L.s.last); add("pending", L.s.photon ? L.s.photon->kind : L.s.photonAfter ? L.s.photonAfter->kind : std::string("none"));
     const atom::MarksDrawn& d = atom::marksDrawn();
     add("drawnOutline", d.outline); add("drawnOrb", num(d.outlineOrb)); add("drawnMass", num(d.outlineMass)); add("drawnReach", num(d.outlineReach)); add("drawnSegs", num(static_cast<double>(d.outlineSegs)));
-    add("drawnGroups", num(d.phaseGroups)); add("drawnWheel", num(d.wheel)); add("drawnChainNodes", num(d.chainNodes)); add("drawnChainEdges", num(d.chainEdges));
+    add("drawnLegend", num(atom::chartLegendDrawn())); add("drawnGroups", num(d.phaseGroups)); add("drawnWheel", num(d.wheel)); add("drawnChainNodes", num(d.chainNodes)); add("drawnChainEdges", num(d.chainEdges));
     return t;
 }
 

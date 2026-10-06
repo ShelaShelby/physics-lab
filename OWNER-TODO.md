@@ -293,3 +293,12 @@
 - [ ] Photons: Emit (from n = 2 or more), Absorb, Auto photons, and Check a jump (2p → 1s, 2s → 1s).
 - [ ] The fact line at the bottom left now wraps to two lines (and is shown in the Atom Lab, with the picture's scale bar above it). Readable on your screen? The Cloud options are also shown on the Chart, as in the old panel, where they do nothing: keep or hide?
 - [ ] Not tested here: Windows, a real GPU, speed, Segoe UI widths, Windows scale 125 / 150 %.
+
+## 0.15 stage 5f (Atom panel tidy, subject card, data sheet, legend; New UI On)
+- [ ] With a real mouse on the PC: the Atom View selector (Atom, Nucleus, Nucleon, Chart, Cloud, Cloud 3D, Slice) and the "Notes about this choice (show)" rows.
+- [ ] The subject card (top right), All values (tabs Values, Decay, This view; Esc and the cross close it), More / Less info, in both labs; the Legend chip on the Atom chart (it scrolls inside when tall).
+- [ ] Atom Lab: check on the PC that the Atom cloud dots draw (the short software frames here did not show them; not investigated).
+- [ ] Atom picture: its info text at the top left (More info) runs under the card on a narrow window: tell me if you want it moved.
+- [ ] Old app (New UI Off), not changed: the "Restart walk" row looks cut off in the old 360 u Atom column.
+- [ ] Not tested here: Windows, a real GPU, speed, Segoe UI, Windows scale 125 / 150 %.
+- [ ] Orbit Lab (found in 5f, older than this stage): click a body in the Pick list in a 1280 x 800 window: does it fly there and select it? The scripted tests `orbit_ui_card` and `orbit_ui_coverage` fail at that size (same failures at the stage 5e commit).

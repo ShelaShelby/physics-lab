@@ -302,6 +302,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         if (s.showChain) { g_marks.chainNodes = static_cast<int>(lab.decayGraph().nodes.size()); g_marks.chainEdges = lab.decayGraph().edgeCount(); }
         if (!lab.gpuChart) chartCache_.release(R);                         // (switched off: the GPU's copy is let go)
         ChartCache* cache = lab.gpuChart ? &chartCache_ : nullptr;         // 0.13 stage 4 part B: the tiles / blocks and the ground come from a GPU buffer made once; nullptr: made every frame as before
+        setChartLegendInPicture(!lab.shellUi);                           // (0.15 stage 5f: the new UI has the legend and the notes in its Legend chip)
         if (flat) drawChart(R, adapter, chartColours, w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr, cache);
         else drawChartScene(R, adapter, chartColours, lab.chartScene(), w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr, cache);
         if (hz) {                                                          // the details of the square under the pointer: a tooltip (it follows the pointer, stays on screen and never hides a square)

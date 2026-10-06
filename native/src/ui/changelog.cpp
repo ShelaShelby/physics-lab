@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5f part 2: the Atom Lab's subject card, data sheet and legend",
+     "With New UI (preview) On, the Atom Lab now has a card at the top right for the chosen isotope: its name, kind, the proton number, neutrons, nucleons, the isotope line, a More info / Less info button and All values. All values opens a data sheet with three tabs: Values (where you meet it, melting and boiling point, density), Decay (the decay history) and This view (the hint line of the picture). They are the very words the old panel showed, moved, not rewritten; the hint line and the More / Less info button are no longer at the top of the Old panel. "
+     "On the Chart of nuclides the colour legend and the notes about the valley and the island now live in the Legend chip at the top left (closed at first); the picture no longer draws its own copy, which the Controls panel used to cover. "
+     "The small text in the Orbit and Atom cards and in the data sheets is now at least 14 pixels (it was 13). Not tested: a real PC or a real mouse."},
     {"0.15", "Full UI rework, stage 5f part 1: a tidier Atom Controls panel",
      "With New UI (preview) On, the Atom Lab's View section is now one compact choice (Atom, Nucleus, Nucleon, Chart, Cloud, Cloud 3D, Slice) with the current view highlighted, doing what the old rows and the toolbar buttons do. "
      "The long notes (the energy level, the cloud, the phase colours, the chart, the decay chain, the photon jump) now sit behind a row \"Notes about this choice (show)\", closed at first, with the same words. "

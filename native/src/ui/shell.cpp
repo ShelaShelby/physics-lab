@@ -20,6 +20,8 @@
 #include "orbit/units.h"
 #include "ui/app_pages.h"
 #include "ui/app_tabs.h"
+#include "atom/chart.h"
+#include "atom/chart_view.h"
 #include "ui/atom_panel.h"
 #include "ui/fonts.h"
 #include "ui/look.h"
@@ -147,9 +149,11 @@ void factsPanel(AppState& app, sh::Panel& p, bool& close) {
     sh::pCaption(p, std::to_string(factPosition(app) + 1) + " of " + std::to_string(factCount()));
 }
 
+void atomDataPanel(AppState& app, sh::Panel& p, bool& close);
 // The subject card's "All values": every line of the old card, word for word (its source lines too), in a large panel.
 void dataPanel(AppState& app, sh::Panel& p, bool& close) {
     const Metrics& m = sh::F().m;
+    if (app.lab == 1) { atomDataPanel(app, p, close); return; }
     orbit::SubjectCard sc;
     if (!subjectCardOf(app, sc)) { close = true; return; }
     const ImVec2 o = sh::here(p);
@@ -164,6 +168,38 @@ void dataPanel(AppState& app, sh::Panel& p, bool& close) {
         static std::string last;
         std::string sig = sc.name;
         for (const std::string& l : sc.all) sig += "\t" + l;
+        if (sig != last) { last = sig; std::printf("PLSHEET %s\n", sig.c_str()); std::fflush(stdout); }
+    }
+}
+
+// The Atom Lab's data sheet (stage 5f): tabs Values, Decay and Hint, each the strings of the old panel's card / history / hint line, word for word.
+void atomDataPanel(AppState& app, sh::Panel& p, bool& close) {
+    const Metrics& m = sh::F().m;
+    static int tab = 0;
+    const AtomSubject sc = atomSubject(app);
+    const ImVec2 o = sh::here(p);
+    const float hb = static_cast<float>(m.iconBtn);
+    if (sh::iconButton("data.close", ImVec2(o.x + p.w - hb, o.y), ImVec2(hb, hb), Icon::Close, "Close (Esc)")) close = true;
+    sh::text(p.dl, Type::Title, true, o, sh::cText(), displayable(sc.name));
+    p.y += std::max(sh::lineH(Type::Title), hb) + m.s4;
+    sh::pCaption(p, displayable(sc.kind));
+    sh::pGap(p, m.s8);
+    const std::vector<std::string> labels{"Values", "Decay", "This view"}, names{"data.tab.values", "data.tab.decay", "data.tab.hint"};
+    int cur = tab;
+    if (sh::pSegmented(p, "data.tabs", labels, &cur, &names)) tab = cur;
+    sh::pGap(p, m.s4);
+    if (tab == 0) {
+        sh::pBody(p, displayable(sc.isotope));
+        for (std::size_t i = 0; i < sc.valuesTab.size(); i++) sh::pBody(p, displayable(sc.valuesTab[i]), i == 0);
+    } else if (tab == 1) {
+        for (const std::string& l : sc.decayTab) sh::pBody(p, displayable(l));
+    } else sh::pBody(p, displayable(sc.hint));
+    if (shellLogOn()) {                                           // for the automatic checks: every line of the three tabs (the old panel's strings are logged as PLATOMCARD), once per change
+        static std::string last;
+        std::string sig = sc.name + "\t" + sc.isotope;
+        for (const std::string& l : sc.valuesTab) sig += "\t" + l;
+        for (const std::string& l : sc.decayTab) sig += "\t" + l;
+        sig += "\t" + sc.hint;
         if (sig != last) { last = sig; std::printf("PLSHEET %s\n", sig.c_str()); std::fflush(stdout); }
     }
 }
@@ -495,7 +531,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (sh::iconButton((std::string("card.") + key + ".collapse").c_str(), ImVec2(p.origin.x + p.w - hb, p.origin.y - m.s4 * 0.0f), ImVec2(hb, hb), Icon::CaretUp, "Collapse to its title"))
                 app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, name, true);
             p.y += std::max(sh::lineH(Type::Title), hb) + m.s4;
+            sh::bodyFloor(true);                                    // (stage 5f: small text in the cards is drawn at Body size, never under 14 px, as in the Controls panel)
             body(p);
+            sh::bodyFloor(false);
             sh::endPanel(p);
         }
         occ.push_back(r);
@@ -555,6 +593,51 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 if (sh::pButton(p, "card.all", "All values", Face::Secondary, S.ui.open == PanelId::Data)) toggle(PanelId::Data);
             });
         else if (S.ui.open == PanelId::Data) S.ui.open = PanelId::None;       // nothing selected: no data sheet
+    }
+    if (app.lab == 1 && !pane && app.atom.chartOn()) {    // 0.15 stage 5f: the chart's legend and notes (the picture's own copies are left out in the new UI); nothing else in the Atom Lab has a legend to list
+        card("legend", "Legend", Anchor::TopLeft, 22, true, [&](sh::Panel& p) {
+            static bool notes = false;
+            sh::pCaption(p, "Colour: how it decays (an empty square: no such nuclide seen)");
+            int rows = 0;
+            std::string ends;
+            for (int c = 0; c < atom::kChartClasses; c++) {
+                if (atom::chartClassCount(atom::ChartClass(c)) == 0) continue;
+                const atom::ChartClassInfo& ci = atom::chartClassInfo(atom::ChartClass(c));
+                const ImVec2 o = sh::here(p);
+                const float rowH = static_cast<float>(m.row), sw = static_cast<float>(m.s24), sq = static_cast<float>(m.s12);
+                const ImU32 colr = *ci.hex ? ui::col(app::hexRgb(ci.hex), 1.0f) : sh::cText();      // ("" = the theme's text colour: the stable nuclides)
+                p.dl->AddRectFilled(ImVec2(o.x + m.s4, o.y + (rowH - sq) / 2), ImVec2(o.x + m.s4 + sq, o.y + (rowH - sq) / 2 + sq), colr);
+                const std::string words = displayable(std::string(ci.words) + "  (" + std::to_string(atom::chartClassCount(atom::ChartClass(c))) + ")");
+                const float ph = sh::paragraph(p.dl, Type::Body, false, ImVec2(o.x + sw + m.s8, o.y + (rowH - sh::px(Type::Body)) / 2), p.w - sw - m.s8, sh::cText(), words);
+                p.y += std::max(rowH, ph + m.s4);
+                rows++;
+                ends = "(" + std::to_string(atom::chartClassCount(atom::ChartClass(c))) + ")";
+            }
+            sh::pGap(p, m.s4);
+            sh::pCaption(p, displayable(atom::chartMagicWords()));
+            if (!app.atom.s.chartView.flat()) sh::pCaption(p, displayable(atom::chartHeightWords(app.atom.s.chartView.height)));
+            if (sh::pRow(p, "legend.notes", notes ? "Notes about the chart  (hide)" : "Notes about the chart  (show)")) notes = !notes;
+            if (notes) { sh::pCaption(p, displayable(atom::chartValleyWords())); sh::pCaption(p, displayable(atom::chartIslandWords())); }
+            if (shellLogOn()) auditNote("atomlegend rows=" + std::to_string(rows) + " ends=" + ends);
+        });
+    }
+    if (app.lab == 1 && !pane) {                          // 0.15 stage 5f: the Atom Lab's subject card (the chosen isotope): the same strings as the old panel's element card, isotope line and hint
+        const AtomSubject sc = atomSubject(app);
+        card("card", displayable(sc.name).c_str(), Anchor::TopRight, 20, false, [&](sh::Panel& p) {
+            if (!sc.kind.empty()) sh::pCaption(p, displayable(sc.kind));
+            {
+                const bool big = sh::width(Type::Key, true, sc.keyValue) <= p.w;
+                const Type kt = big ? Type::Key : Type::Title;
+                sh::text(p.dl, kt, true, sh::here(p), sh::cText(), sc.keyValue);
+                p.y += sh::lineH(kt);
+                sh::pCaption(p, sc.keyCaption);
+            }
+            sh::pGap(p, m.s4);
+            for (const auto& v : sc.values) { if (v.first.empty()) sh::pBody(p, displayable(v.second), true); else sh::pStat(p, v.first, v.second); }
+            sh::pCaption(p, displayable(sc.isotope));
+            if (sh::pButton(p, "card.more", app.atom.moreShown() ? "Less info" : "More info", Face::Quiet)) { app.atom.s.more = !app.atom.moreShown(); app.atom.moreStored = app.atom.s.more; }   // (the old bar's / picture's button)
+            if (sh::pButton(p, "card.all", "All values", Face::Secondary, S.ui.open == PanelId::Data)) toggle(PanelId::Data);
+        });
     }
 
     // ---- the toolbar ----
@@ -814,7 +897,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                     if (id == PanelId::Menu) menuPanel(app, p, close);
                     else if (id == PanelId::LabMenu) labMenuPanel(app, p, close);
                     else if (id == PanelId::Facts) factsPanel(app, p, close);
-                    else if (id == PanelId::Data) dataPanel(app, p, close);
+                    else if (id == PanelId::Data) { sh::bodyFloor(true); dataPanel(app, p, close); sh::bodyFloor(false); }
                     else if (id == PanelId::More) { std::vector<ToolItem> hidden(tools.begin() + shown, tools.end()); morePanel(p, hidden, close); }
                 }
                 const float need = sh::endPanel(p);

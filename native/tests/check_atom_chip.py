@@ -102,8 +102,8 @@ def main():
         check(int(s[7]["N"]) < int(s[6]["N"]) and int(s[7]["N"]) >= 0, f"C: the Neutrons slider at its left end gives fewer neutrons: {s[6]['N']} -> {s[7]['N']}")
     else:
         check(False, f"C: eight states ({len(s)})")
-    # ---- D: Esc, a click outside and a second click on the chip close it ----
-    for name, scr in (("esc", "10:click=top.chip;20:key=escape"), ("outside", "10:click=top.chip;20:clickxy=100,640"), ("again", "10:click=top.chip;20:click=top.chip")):
+    # ---- D: Esc, a click outside and a second click on the chip close it (stage 5f: the dropdown steps aside from the Atom card, so it now covers the left of the picture; the outside click is at 770,600, between it and the Controls panel) ----
+    for name, scr in (("esc", "10:click=top.chip;20:key=escape"), ("outside", "10:click=top.chip;20:clickxy=770,600"), ("again", "10:click=top.chip;20:click=top.chip")):
         rd = go("chip_d_" + name, scr, frames=34)
         check("panel.chip" not in rd.rects, f"D: {name} closes the dropdown")
     ro = go("chip_d_open", "10:click=top.chip", frames=34)

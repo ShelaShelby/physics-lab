@@ -10,6 +10,9 @@ namespace atom {
 
 namespace {
 
+bool g_legendInPicture = true;                       // (stage 5f) see chart_draw.h
+int g_legendDrawn = -1;
+
 using render::Color;
 
 std::vector<std::string> wrapText(const ChartText& T, const std::string& text, double maxW, double size, bool bold = false) {
@@ -44,6 +47,8 @@ LegendBox drawStatusAndLegend(render::Renderer2D& R, const ChartText& T, const C
         T.draw("Chosen: " + name + "   ·   hover a square for details, click to choose it, arrow keys walk one proton or neutron" + (landscape ? "   ·   wheel zooms, drag pans" : ""), 112, L.top - 6, 11, C.fg, 0, false);
     }
 
+    if (!g_legendInPicture) { if (!dry) g_legendDrawn = 0; return {}; }       // (stage 5f: the new UI lists the legend in its Legend chip)
+    if (!dry) g_legendDrawn = 1;
     // the legend, in the corner of the picture where the chart leaves more room (top left or bottom right): every colour in words with how many tiles have it, then the magic numbers (and in the
     // landscape the height). The full wording is used when it fits in that room; otherwise the colour names and one-line sentences; a tiny picture may still be covered a little.
     const double lw = std::min(w < 700 ? 250.0 : 400.0, 0.5 * w), ls = 10, llh = 12;
@@ -100,6 +105,7 @@ struct Notes {
 // The notes box: what the valley is (measured) and what the island is (a prediction, not drawn). It is a separate box from the legend, in the corner with the most room that the legend does not
 // take; full wording if it fits, else the short lines, else (a tiny picture) nothing: the labels on the chart say the same in short.
 LegendBox drawNotesBox(render::Renderer2D& R, const ChartText& T, const ChartColours& C, double w, double h, const ChartLayout& L, const LegendBox& lg, const std::function<double(bool, double, double)>& room, bool dry) {
+    if (!g_legendInPicture) return {};                                       // (stage 5f: the notes are in the Legend chip too)
     const double nw = std::min(w < 700 ? 250.0 : 380.0, 0.45 * w), ls = 10, llh = 12;
     const double xL = L.left + 8, xR = w - L.right - nw;
     struct Cand { bool top, right; double x, free; };
@@ -502,5 +508,8 @@ void drawChartScene(render::Renderer2D& R, const ChartText& T, const ChartColour
     drawStatusAndLegend(R, T, C, w, h, L, roomFn, col, selZ, selN, true, mode);
     drawNotesBox(R, T, C, w, h, L, lg, roomFn, false);
 }
+
+void setChartLegendInPicture(bool on) { g_legendInPicture = on; }
+int chartLegendDrawn() { return g_legendDrawn; }
 
 }  // namespace atom
