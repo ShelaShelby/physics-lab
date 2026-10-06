@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # 0.15 stage 5d: the Atom Lab's view options in the Controls panel (New UI On), and the fact line's two lines.
-#   check_atom_panel.py <PhysicsLab binary> <work folder> [part]      part: sections | facts | marks | photons | all (default)
+#   check_atom_panel.py <PhysicsLab binary> <work folder> [part]      part: sections | facts | marks | photons | tidy | all (default)
 # References (none is an earlier output of ours): the OLD side panel of the same build (New UI Off) is the reference for every control: both runs press the real control through the
 # real input path (PL_SCRIPT) and print every Atom setting (PLASTATE); the new control must give the old control's value. Which sections show in which view: the old panel's own rules
 # (atom_panel.cpp: Orbital choice and orientation in the cloud views but not the chart, n and Playback speed in the Orbit view, cloud style / density / superposition when the view is
@@ -132,7 +132,7 @@ def main():
         # (stage 5e added Marks: the old panel's outline and phase rows when the view is not Orbit, its chain block on the chart; and Photons: emit / absorb / auto off the chart,
         # Check a jump always, as the old Lifetimes card)
         ORDER = ["view", "orbital", "cloud", "orbit", "scale", "nucleus", "chart", "marks", "photons"]
-        WANT = {"orbit": {"view", "orbital", "orbit", "scale", "photons"}, "cloud": {"view", "orbital", "cloud", "scale", "marks", "photons"}, "chart": {"view", "cloud", "chart", "marks", "photons"},
+        WANT = {"orbit": {"view", "orbital", "orbit", "scale", "photons"}, "cloud": {"view", "orbital", "cloud", "scale", "marks", "photons"}, "chart": {"view", "chart", "marks", "photons"},   # (stage 5f: the Cloud section is left out on the chart: its rows do nothing there; the old panel still shows them)
                 "nucleus": {"view", "orbital", "orbit", "scale", "nucleus", "photons"}}
         SCR = {"orbit": "", "cloud": "10:click=tool.cloud", "chart": "10:click=tool.chart", "nucleus": "10:click=atom.zoom@0.62"}
         for name, want in WANT.items():
@@ -242,6 +242,88 @@ def main():
                 jn = rn.note("jumpcheck")
                 check(not rn.scripted_missing() and jn and jo and jn == jo, f"{sz} check a jump {name}: the same lines as the old card: new {jn[:1]} old {jo[:1]}")
                 check(jn and all(w in jn[0] for w in want), f"{sz} check a jump {name}: has the NIST values {want}: {jn[:1]}")
+
+    if part in ("tidy", "all"):
+        # ---- 8. (stage 5f part 1) the View selector, the folded notes, the chart without Cloud rows ----
+        # References: the OLD panel's View rows (old.view=...) for Cloud, Cloud 3D, Slice, Chart and Atom (= the old "Orbit"); the toolbar buttons (already compared with the old bar by atom_toolbar)
+        # for Nucleus and Nucleon. The highlighted part is read from the note "viewsel" of the last frame.
+        SEL = [("view.atom", "atom", "old.view=Orbit"), ("nucleus.nucleus", "nucleus", "tool.nucleus"), ("nucleus.nucleon", "nucleon", "nucleus.nucleon"),
+               ("cloud.cloud", "cloud", "old.view=Cloud"), ("cloud.cloud3d", "cloud3d", "old.view=Cloud 3D"), ("cloud.slice", "slice", "old.view=Slice"), ("view.chart", "chart", "old.view=Chart of nuclides")]
+        W = 100                          # frames to let the zoom animation finish
+        C = {"PL_ATOM_SET": "Z=6;N=6"}   # carbon: its nucleus has several nucleons, so "Nucleus" is a different layer from "Nucleon" (hydrogen's nucleus is one proton)
+        def sel_script(click, pre=None):
+            steps = (["click=" + pre, ("wait", 12)] if pre else []) + ["click=" + click, ("wait", W), "astate"]
+            return script(steps)
+        calls = []
+        for name, short, ref in SEL:
+            pre_new = "tool.nucleus" if short == "nucleon" else "tool.cloud" if short == "atom" else None
+            sn_, fn_ = sel_script(name, pre_new)
+            for sz in SIZES:
+                calls.append(((binary, work, f"sel_{short}_{sz}", dict(NEW, PL_SCRIPT=sn_, **C)), dict(frames=fn_, size=sz)))
+            if ref.startswith("old."):
+                pre_old = "old.view=Cloud" if short == "atom" else None
+                so_, fo_ = sel_script(ref, pre_old)
+                calls.append(((binary, work, f"sel_old_{short}", dict(OLD, PL_SCRIPT=so_, **C)), dict(frames=fo_, size=OLD_SIZE)))
+            else:
+                sr_, fr_ = sel_script(ref, pre_new)
+                calls.append(((binary, work, f"sel_ref_{short}", dict(NEW, PL_SCRIPT=sr_, **C)), dict(frames=fr_, size="1280x800")))
+        prefetch(calls)
+        for name, short, ref in SEL:
+            pre_new = "tool.nucleus" if short == "nucleon" else "tool.cloud" if short == "atom" else None
+            sn_, fn_ = sel_script(name, pre_new)
+            if ref.startswith("old."):
+                so_, fo_ = sel_script(ref, "old.view=Cloud" if short == "atom" else None)
+                rr = run_app(binary, work, f"sel_old_{short}", dict(OLD, PL_SCRIPT=so_, **C), frames=fo_, size=OLD_SIZE)
+            else:
+                sr_, fr_ = sel_script(ref, pre_new)
+                rr = run_app(binary, work, f"sel_ref_{short}", dict(NEW, PL_SCRIPT=sr_, **C), frames=fr_, size="1280x800")
+            st_ref = astates(rr)
+            for sz in SIZES:
+                rn = run_app(binary, work, f"sel_{short}_{sz}", dict(NEW, PL_SCRIPT=sn_, **C), frames=fn_, size=sz)
+                st = astates(rn)
+                check(not rn.scripted_missing() and len(st) == 1 and len(st_ref) == 1, f"{sz} selector {name}: found, clicked, read ({rn.scripted_missing()[:2]}, {len(st)}, {len(st_ref)})")
+                if len(st) == 1 and len(st_ref) == 1:
+                    check(st[0]["view"] == st_ref[0]["view"] and abs(float(st[0]["zoom"]) - float(st_ref[0]["zoom"])) <= 0.15,
+                          f"{sz} selector {name}: same view and zoom as {ref}: new {st[0]['view']} {st[0]['zoom']}, ref {st_ref[0]['view']} {st_ref[0]['zoom']}")
+                n = rn.note("viewsel")
+                check(n == ["viewsel " + short], f"{sz} selector {name}: the highlighted part is {short!r}: {n}")
+                small = [(px, t) for k, px, t in rn.texts if k == "ctl" and px < 14 - 0.01]
+                check(not small, f"{sz} selector {name}: all panel text is at least 14 px: {small[:3]}")
+        # the selector is one compact control: two rows of segmented buttons, inside the panel, one under the other
+        for sz in SIZES:
+            r = run_app(binary, work, f"seldraw_{sz}", dict(NEW), frames=30, size=sz)
+            pc, r1, r2 = r.rects.get("panel.controls"), r.rects.get("atom.viewsel1"), r.rects.get("atom.viewsel2")
+            check(pc and r1 and r2 and all(inside(q, r.window[0], r.window[1]) and q[0] >= pc[0] - 0.6 and q[0] + q[2] <= pc[0] + pc[2] + 0.6 for q in (r1, r2)), f"{sz}: the two rows of view buttons are inside the panel {r1} {r2} {pc}")
+            check(r1 and r2 and r2[1] >= r1[1] + r1[3] - 0.6 and abs(r1[2] - r2[2]) < 0.6, f"{sz}: the rows sit one under the other and are equally wide")
+        # notes: closed by default (Orbit, Cloud, Chart views), opened by their row, closed by it again; the same words
+        for view, pre, keys in (("orbit", "", ["view", "orbital", "jump"]), ("cloud", "10:click=tool.cloud", ["view", "orbital", "phase", "jump"]), ("chart", "10:click=tool.chart", ["view", "chart"])):
+            r = run_app(binary, work, f"notes0_{view}", dict(NEW, PL_SCRIPT=pre), frames=40)
+            n = r.note("atomnotes")
+            check(n and all(f"{k}=closed" in n[0] for k in keys) and "=open" not in n[0], f"{view}: every note fold is closed by default and the folds {keys} are there: {n}")
+            for k in keys:
+                steps = ([pre] if pre else []) + [f"24:click=atom.notes.{k}"]
+                r1 = run_app(binary, work, f"notes1_{view}_{k}", dict(NEW, PL_SCRIPT=";".join(steps)), frames=50)
+                n1 = r1.note("atomnotes")
+                check(not r1.scripted_missing() and n1 and f"{k}=open" in n1[0], f"{view}: the row 'Notes about this choice' of {k} opens it: {n1} {r1.scripted_missing()[:2]}")
+                texts = [t for kk, _, t in r1.texts if kk == "ctlnote"]
+                check(any(len(t) > 20 for t in texts), f"{view}: its note text is shown once open ({len(texts)} note texts)")
+            r2 = run_app(binary, work, f"notes2_{view}", dict(NEW, PL_SCRIPT=(pre + ";" if pre else "") + f"24:click=atom.notes.{keys[0]};40:click=atom.notes.{keys[0]}"), frames=60)
+            n2 = r2.note("atomnotes")
+            check(n2 and f"{keys[0]}=closed" in n2[0], f"{view}: clicking the row again closes it: {n2}")
+            r3 = run_app(binary, work, f"notes3_{view}", dict(NEW, PL_SCRIPT=pre), frames=40)
+            check(not [t for kk, _, t in r3.texts if kk == "ctlnote"], f"{view}: no note text is drawn while the folds are closed")
+        # the chart: no Cloud rows (they do nothing there); the other views keep them
+        for sz in SIZES:
+            r = run_app(binary, work, f"chartnocloud_{sz}", dict(NEW, PL_SCRIPT="10:click=tool.chart;20:click=atom.cstyle=Classic;24:click=atom.cdens=Ultra;28:click=atom.super=On"), frames=50, size=sz)
+            check(len(r.scripted_missing()) == 3, f"{sz} chart: Cloud style, density and superposition are not in the panel (all three clicks found nothing): {r.scripted_missing()}")
+            n = r.note("ctlsections")
+            check(n and "cloud" not in n[0].split()[1:], f"{sz} chart: no Cloud section {n}")
+        # panel text >= 14 px in Orbit and Chart views at three sizes (the Cloud view is in part 3 of the sections check)
+        for view, pre in (("orbit", ""), ("chart", "10:click=tool.chart")):
+            for sz in SIZES:
+                r = run_app(binary, work, f"txt_{view}_{sz}", dict(NEW, PL_SCRIPT=pre), frames=40, size=sz)
+                small = [(px, t) for k, px, t in r.texts if k in ("ctl", "ctlnote") and px < 14 - 0.01]
+                check(any(k == "ctl" for k, _, _ in r.texts) and not small, f"{sz} {view}: all panel text is at least 14 px: {small[:3]}")
 
     if part in ("facts", "all"):
         # ---- 4. the fact line: the longest fact, both labs, three sizes ----

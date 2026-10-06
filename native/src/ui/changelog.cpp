@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5f part 1: a tidier Atom Controls panel",
+     "With New UI (preview) On, the Atom Lab's View section is now one compact choice (Atom, Nucleus, Nucleon, Chart, Cloud, Cloud 3D, Slice) with the current view highlighted, doing what the old rows and the toolbar buttons do. "
+     "The long notes (the energy level, the cloud, the phase colours, the chart, the decay chain, the photon jump) now sit behind a row \"Notes about this choice (show)\", closed at first, with the same words. "
+     "On the Chart of nuclides the Cloud section is left out, because its settings do nothing there (the old panel still shows them). Nothing about the physics changed. Not tested: a real PC or a real mouse."},
     {"0.15", "Full UI rework, stages 5d and 5e: the Atom Lab's options, marks and photons in the Controls panel",
      "With New UI (preview) On, the Atom Lab's Controls panel now has, after View: Orbital (the orbital, its orientation, the energy level n), Cloud (style, density, superposition, the slice), Orbit (Modern or Bohr 1913), Scale and motion (spin, scale, zoom, playback speed), Nucleus (quark style, nucleon detail and edge), Chart (tilt, what the height means), Marks (the 90 % outline, the phase colours, the decay chain and its walk) and Photons (emit, absorb, auto photons, check a jump). "
      "Each section is shown only in the views where the old panel showed those controls; every control changes the same setting, with the same words and notes (one electron, non-relativistic: as before). "

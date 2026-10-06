@@ -2,6 +2,7 @@
 // Play / pause is in the element chip (stage 4; Space too), not on the toolbar. View options, marks, photons, the element chip's periodic table, the card and the legend come in 5b.
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 #include "atom/atom_core.h"
 #include "atom/atom_learn.h"
@@ -161,24 +162,50 @@ static void orientationRow(AppState& app, Panel& p, const std::string& orb, cons
     if (l == 3) choiceRow(app, p, fKey, label, ui::atomChoices(fKey), cur, 3);
 }
 
+// 0.15 stage 5f: a long note sits behind a row "Notes about this choice (show)" like the Orbit panel's; closed by default, kept while the app runs. Same words as before.
+static std::map<std::string, bool> g_noteOpen;
+static std::map<std::string, std::string> g_noteState;      // (for the automatic checks: key -> open / closed, printed as one note)
+static void notesFold(Panel& p, const char* key, const std::vector<std::string>& notes) {
+    bool& open = g_noteOpen[key];
+    if (pRow(p, (std::string("atom.notes.") + key).c_str(), open ? "Notes about this choice  (hide)" : "Notes about this choice  (show)")) open = !open;
+    if (shellLogOn()) g_noteState[key] = open ? "open" : "closed";
+    if (!open) return;
+    for (const std::string& n : notes) { pCaption(p, displayable(n)); if (shellLogOn()) auditText("ctlnote", px(Type::Caption), displayable(n)); }
+}
+
+// The View selector (stage 5f): the seven views in one compact control (two rows of segmented buttons, the current one highlighted). Each part does what the old row / toolbar button
+// does (atom::pressTool). The parts are noted by the ids the plain list used ("nucleus.nucleus", "cloud.slice" ...).
+static void viewSelector(Panel& p, atom::AtomLab& L) {
+    struct V { const char* label; const char* id; const char* shortName; Tool tool; };
+    static const V row1[] = {{"Atom", "view.atom", "atom", Tool::Atom}, {"Nucleus", "nucleus.nucleus", "nucleus", Tool::Nucleus}, {"Nucleon", "nucleus.nucleon", "nucleon", Tool::Nucleon}, {"Chart", "view.chart", "chart", Tool::Chart}};
+    static const V row2[] = {{"Cloud", "cloud.cloud", "cloud", Tool::Cloud}, {"Cloud 3D", "cloud.cloud3d", "cloud3d", Tool::Cloud3D}, {"Slice", "cloud.slice", "slice", Tool::Slice}};
+    const char* cur = L.chartOn() ? "chart" : L.p.view == "Slice" ? "slice" : L.p.view == "Cloud 3D" ? "cloud3d" : L.p.view == "Cloud" ? "cloud"
+                      : atom::toolOn(L, Tool::Nucleon) ? "nucleon" : atom::toolOn(L, Tool::Nucleus) ? "nucleus" : "atom";
+    const auto row = [&](const V* v, int n, const char* id) {
+        std::vector<std::string> labels, names;
+        int sel = -1;
+        for (int i = 0; i < n; i++) { labels.push_back(v[i].label); names.push_back(v[i].id); if (std::string(v[i].shortName) == cur) sel = i; }
+        int pick = sel;
+        if (shellLogOn()) { const ImVec2 o = here(p); auditRect(id, o.x, o.y, p.w, static_cast<float>(F().m.row)); }
+        if (pSegmented(p, id, labels, &pick, &names) && pick >= 0 && pick != sel) atom::pressTool(L, v[pick].tool);
+    };
+    row(row1, 4, "atom.viewsel1");
+    row(row2, 3, "atom.viewsel2");
+    if (shellLogOn()) auditNote(std::string("viewsel ") + cur);
+}
+
 // ---- the Controls panel (stage 5c): what the Nucleus ▾ and Cloud ▾ panels held, in a "View" section. Stage 5d: the old panel's view options, in the sections Orbital, Cloud, Orbit,
 // Scale and motion, Nucleus and Chart, each shown when the old panel showed its rows (atom_panel.cpp, atomPanelContents). Marks and photons come in 5e. ----
 void atomControls(AppState& app, Panel& p, const SectionFn& section) {
     atom::AtomLab& L = app.atom;
     const Metrics& m = F().m;
+    g_noteState.clear();
+    struct NoteLine { ~NoteLine() { if (shellLogOn()) { std::string t = "atomnotes"; for (const auto& [k, v] : g_noteState) t += " " + k + "=" + v; auditNote(t); } } } noteLine;   // (for the automatic checks: which folds are drawn, open or closed)
     if (section("view", "View", true)) {
-        pHeading(p, "Nucleus");
-        if (pRow(p, "nucleus.nucleus", "Nucleus", atom::toolOn(L, Tool::Nucleus) && !atom::toolOn(L, Tool::Nucleon))) { atom::pressTool(L, Tool::Nucleus); }
-        if (pRow(p, "nucleus.nucleon", "Nucleon (one proton or neutron)", atom::toolOn(L, Tool::Nucleon))) { atom::pressTool(L, Tool::Nucleon); }
-        pCaption(p, "Zoom in to a nucleon and click one to dive inside it.");
+        viewSelector(p, L);
         if (atom::toolShown(L, Tool::BuildAnother) && pButton(p, "nucleus.build", "Build another")) atom::pressTool(L, Tool::BuildAnother);
         if (atom::toolShown(L, Tool::Reshuffle) && pButton(p, "nucleus.reshuffle", "Reshuffle nucleons")) atom::pressTool(L, Tool::Reshuffle);
-        pGap(p, m.s8);
-        pHeading(p, "Cloud");
-        if (pRow(p, "cloud.cloud", "Cloud (side view)", L.p.view == "Cloud")) { atom::pressTool(L, Tool::Cloud); }
-        if (pRow(p, "cloud.cloud3d", "Cloud 3D (turn it with the mouse)", L.p.view == "Cloud 3D")) { atom::pressTool(L, Tool::Cloud3D); }
-        if (pRow(p, "cloud.slice", "Slice (cross-section of the cloud)", L.p.view == "Slice")) { atom::pressTool(L, Tool::Slice); }
-        pCaption(p, "Each dot is one possible place to find the electron (one electron, non-relativistic model).");
+        notesFold(p, "view", {"Zoom in to a nucleon and click one to dive inside it.", "Each dot is one possible place to find the electron (one electron, non-relativistic model)."});
     }
     const atom::AtomParams& P = L.p;
     const bool orbit = P.view == "Orbit", chart = L.chartOn();
@@ -187,9 +214,9 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
             choiceRow(app, p, "orb", P.super == "On" ? "First orbital" : "Orbital", ui::atomChoices("orb"), P.orb);
             orientationRow(app, p, P.orb, "pAx", "dAx", "fAx", "Orientation");
         } else numberRow(app, p, "n", "Energy level (n)", std::to_string(P.n), P.n, 1, 4, 1);
-        pCaption(p, displayable(ui::atomNote("energy")));
+        notesFold(p, "orbital", {ui::atomNote("energy")});
     }
-    if (!orbit && section("cloud", "Cloud", true)) {                      // old: cloud style, density and superposition whenever the view is not Orbit; the cut in Slice
+    if (!orbit && !chart && section("cloud", "Cloud", true)) {                      // old: cloud style, density and superposition whenever the view is not Orbit; the cut in Slice
         choiceRow(app, p, "cstyle", "Cloud style", ui::atomChoices("cstyle"), P.cstyle);
         choiceRow(app, p, "cdens", "Cloud density", ui::atomChoices("cdens"), P.cdens);
         choiceRow(app, p, "super", "Superposition", ui::atomChoices("super"), P.super);
@@ -198,7 +225,7 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
             orientationRow(app, p, P.orb2, "pAx2", "dAx2", "fAx2", "Second orientation");
             numberRow(app, p, "mix", "Mix (share of the second orbital)", fmt::jsLocale(std::round(P.mix)) + " %", P.mix, 0, 100, 1);
             numberRow(app, p, "speed", "Playback speed (beat speed)", std::to_string(P.speed), P.speed, 1, 30, 1);
-            pCaption(p, displayable(ui::atomNote("super")));
+            notesFold(p, "super", {ui::atomNote("super")});
         }
         if (P.view == "Slice") {
             choiceRow(app, p, "cutAxis", "Cut direction", ui::atomChoices("cutAxis"), P.cutAxis);
@@ -223,14 +250,14 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
         numberRow(app, p, "tilt", "Tilt (flat chart to landscape)", std::to_string(static_cast<int>(std::lround(L.s.chartView.tilt * 100))) + " %", L.s.chartView.tilt, 0, 1, 0.01);
         choiceRow(app, p, "cheight", "Height means", ui::atomChoices("cheight"), L.s.chartView.height == atom::ChartHeightMode::Binding ? std::string("Binding energy per nucleon") : std::string("Half-life"));
         if (pButton(p, "atom.chartreset", "Reset tilt, zoom and position")) L.chartReset();
-        pCaption(p, displayable(ui::atomNote("chart")));
+        notesFold(p, "chart", {ui::atomNote("chart")});
     }
     // ---- stage 5e: the marks (the 90 % outline and the phase colours when the view is not Orbit; the decay chain on the chart) and the photons, as in the old panel ----
     if ((!orbit || chart) && section("marks", "Marks", true)) {
         if (!orbit) {                                                      // old: 90% outline and Phase colours whenever the view is not Orbit
             choiceRow(app, p, "outline", "90% outline", ui::atomChoices("outline"), P.outline);
             choiceRow(app, p, "phase", "Phase colours", ui::atomChoices("phase"), P.phase);
-            pCaption(p, displayable(ui::atomNote("phase")));
+            notesFold(p, "phase", {ui::atomNote("phase")});
         }
         if (chart) {                                                       // old: the "Decay chain of the chosen nuclide" block, on the chart only
             pHeading(p, "Decay chain of the chosen nuclide");
@@ -239,7 +266,7 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
             const atom::ChainGraph& g = L.decayGraph();
             for (const std::string& line : atom::chainSummary(g)) pCaption(p, displayable(line));
             if (g.nodes[0].stop == atom::ChainStop::Continues) {
-                pCaption(p, displayable(ui::atomNote("chain")));
+                notesFold(p, "chain", {ui::atomNote("chain")});
                 const atom::ChainWalk& w = L.s.walk;
                 if (!w.done) {                                             // (the old buttons are greyed out when the walk is over; here they are left out)
                     if (pButton(p, "atom.walk", "Walk one step")) L.walkOnce();
@@ -264,7 +291,7 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
             if (button("atom.absorb", ImVec2(o.x + half + m.s8, o.y), ImVec2(half, static_cast<float>(m.control)), displayable("↑ Absorb photon"))) L.absorb();
             p.y += m.control + m.s4;
             if (pButton(p, "atom.auto", displayable(L.autoText()), Face::Secondary, L.s.autoPhotons)) L.toggleAuto();
-            pCaption(p, displayable(ui::atomNote(orbit ? "jumpOrbit" : "jumpCloud")));
+            notesFold(p, "jump", {ui::atomNote(orbit ? "jumpOrbit" : "jumpCloud")});
         }
         // Check a jump (old: the "Lifetimes and jumps (NIST)" card): the same rows, the same result lines (ui::atomJumpCheck, atom/lifetime.h, NIST ASD)
         choiceRow(app, p, "jfrom", "Check a jump: from (the upper shell)", ui::atomChoices("jfrom"), P.jfrom);
