@@ -156,6 +156,15 @@ const AtomChoices& atomChoices(const std::string& key) {
     return it == m.end() ? none : it->second;
 }
 std::pair<std::string, std::string> atomSplitLabel(const std::string& s) { return splitLabel(s); }
+std::vector<std::string> atomJumpCheck(int Z, const std::string& from, const std::string& to) {
+    std::vector<std::string> out;
+    const Orbital& a = orbitals()[orbIndex(from)]; const Orbital& b = orbitals()[orbIndex(to)];
+    const std::vector<Jump> js = jumpsBetween(Z, a.n, a.l, b.n, b.l);
+    if (js.empty()) out.push_back(a.n == b.n ? std::string(kLifeNoEqualN) : std::string("Choose two different shells."));
+    for (const Jump& j : js) out.push_back(jumpLine(j));
+    out.push_back(std::string(kLifeNoEqualN) + " " + kAsdCredit);
+    return out;
+}
 const char* atomNote(const std::string& which) {
     if (which == "energy") return "The energy E in the line over the picture is the one-electron, non-relativistic level, −Rydberg energy × Z²/n², with the nucleus's real mass (hydrogen: −13.60 eV). In the Orbit view it is worked out from the electron's position and speed and scaled to that level. "
                  "Fine structure, the Lamb shift and spin are not modelled, so real energies differ a little (more for heavy atoms).";
@@ -171,6 +180,12 @@ const char* atomNote(const std::string& which) {
     if (which == "chart") return "Landscape: a block's height is either the log of the nuclide's half-life (all stable nuclides at one fixed height above the scale) or its binding energy per nucleon (a linear scale, the peak near iron and nickel); both scales are chosen for this picture and the legend gives them. A flat pale square has no height: its value is only an extrapolation. The wheel zooms about the pointer and a drag moves the picture when zoomed in. Hover and click work on the block you see on top. The names of the valley of stability (measured) and the island of stability (a prediction, not drawn) are in the legend.";
     if (which == "chain") return "On the chart: every way it can decay is a line from square to square, in the colour of the mode. The likeliest way is thick and solid, other measured ways are thinner, ways below 0.1 % are faint hairlines, "
                  "a label ending in ? marks a way whose odds are not measured, and a cross marks a nuclide whose half-life is unknown (the chain stops there). The accent-coloured disc is the walker; the chosen nuclide stays where you put it.";
+    if (which == "jumpOrbit") return "How a jump is drawn: the electron glides from one circle to the other over about 0.8 s, only to help the eye. Bohr's model has no path between circles: the electron is on one circle, and then on the other. "
+          "A photon you emit appears when the glide ends; an absorbed photon arrives first, and then the glide starts. With Reduced motion on (Settings, Motion) the electron leaps at once.";
+    if (which == "jumpCloud") return "How a jump is drawn: the standard textbook picture of a transition, in which the electron's wave is a mixture of the old and the new state and slides from one shape to the other (1.2 s), "
+          "sloshing at the slowed-down beat frequency on the way. It is not a calculation of how a photon is absorbed or emitted. A real jump is very different from the screen: the screen is slowed down, and the real time is not shown. "
+          "The 90% outline fades out as the cloud leaves its orbital and back in after landing. A photon you emit appears when the jump ends; an absorbed photon arrives first, and then the jump starts. "
+          "With Reduced motion on (Settings, Motion) the jump is over at once.";
     return "";
 }
 
@@ -622,11 +637,9 @@ void lifetimeCard(AppState& app) {
     if (meta) mutedWrapped(metastableText(p.Z), 12.0f / 16);
     selectRow(app, "jfrom", "Check a jump: from (the upper shell)", SHELLS, p.jfrom);
     selectRow(app, "jto", "to (the lower shell)", SHELLS, p.jto);
-    const Orbital& a = orbitals()[orbIndex(p.jfrom)]; const Orbital& b = orbitals()[orbIndex(p.jto)];
-    const std::vector<Jump> js = jumpsBetween(p.Z, a.n, a.l, b.n, b.l);
-    if (js.empty()) mutedWrapped(a.n == b.n ? std::string(kLifeNoEqualN) : std::string("Choose two different shells."), 12.0f / 16);
-    for (const Jump& j : js) mutedWrapped(jumpLine(j), 12.0f / 16);
-    mutedWrapped(std::string(kLifeNoEqualN) + " " + kAsdCredit, 12.0f / 16);
+    const std::vector<std::string> jl = atomJumpCheck(p.Z, p.jfrom, p.jto);
+    for (const std::string& line : jl) mutedWrapped(line, 12.0f / 16);
+    if (shellLogOn()) { std::string all = "jumpcheck"; for (const std::string& line : jl) all += " | " + line; auditNote(all); }   // (0.15 stage 5e: for the automatic checks)
 }
 
 // the little particle box of the Temperature card (web: tempPicture): solid = locked and jiggling, liquid = flowing, gas = flying
@@ -737,6 +750,7 @@ void labPicker(AppState& app) {
 static void chainSection(AtomLab& L) {
     ImGui::SeparatorText("Decay chain of the chosen nuclide");
     ui::Checkbox("Show the chain on the chart", &L.s.showChain);
+    noteItem("old.chain");                                 // (0.15 stage 5e: names for the automatic checks)
     const ChainGraph& g = L.decayGraph();
     for (const std::string& line : chainSummary(g)) mutedWrapped(line, 12.0f / 16);
     if (g.nodes[0].stop != ChainStop::Continues) return;
@@ -744,11 +758,14 @@ static void chainSection(AtomLab& L) {
     const ChainWalk& w = L.s.walk;
     if (w.done) ImGui::BeginDisabled();
     if (ui::Button("Walk one step")) L.walkOnce();
+    noteItem("old.walk");
     ImGui::SameLine();
     if (ui::Button(displayable(L.s.walkAuto ? "Pause auto-walk" : "Auto-walk (a step every " + jsNum(kWalkPaceS, 2) + " s)").c_str())) L.s.walkAuto = !L.s.walkAuto;
+    noteItem("old.walkauto");
     if (w.done) ImGui::EndDisabled();
     ImGui::SameLine();
     if (ui::Button("Restart walk")) L.walkRestart();
+    noteItem("old.walkrestart");
     if (!w.steps.empty()) {
         ImGui::BeginChild("##walk", ImVec2(-1, std::min(300 * S(), float(w.steps.size()) * 4.5f * ImGui::GetTextLineHeightWithSpacing() + 8)), ImGuiChildFlags_None);
         for (std::size_t i = 0; i < w.steps.size(); i++) {
@@ -916,16 +933,13 @@ static void atomPanelContents(AppState& app) {
     if (!L.chartOn()) {                                // (the chart shows nuclei, not the electron: no photons there)
     ImGui::SeparatorText("Photons");
     if (ui::Button("↓ Emit photon")) L.emit();
+    noteItem("old.emit");                                  // (0.15 stage 5e: names for the automatic checks)
     ImGui::SameLine();
     if (ui::Button("↑ Absorb photon")) L.absorb();
+    noteItem("old.absorb");
     if (ui::Button(displayable(L.autoText()).c_str())) L.toggleAuto();
-    mutedWrapped(p.view == "Orbit"
-        ? "How a jump is drawn: the electron glides from one circle to the other over about 0.8 s, only to help the eye. Bohr's model has no path between circles: the electron is on one circle, and then on the other. "
-          "A photon you emit appears when the glide ends; an absorbed photon arrives first, and then the glide starts. With Reduced motion on (Settings, Motion) the electron leaps at once."
-        : "How a jump is drawn: the standard textbook picture of a transition, in which the electron's wave is a mixture of the old and the new state and slides from one shape to the other (1.2 s), "
-          "sloshing at the slowed-down beat frequency on the way. It is not a calculation of how a photon is absorbed or emitted. A real jump is very different from the screen: the screen is slowed down, and the real time is not shown. "
-          "The 90% outline fades out as the cloud leaves its orbital and back in after landing. A photon you emit appears when the jump ends; an absorbed photon arrives first, and then the jump starts. "
-          "With Reduced motion on (Settings, Motion) the jump is over at once.", 12.0f / 16);
+    noteItem("old.auto");
+    mutedWrapped(atomNote(p.view == "Orbit" ? "jumpOrbit" : "jumpCloud"), 12.0f / 16);
     }
 
     // ---- Light spectrum ----

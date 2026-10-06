@@ -270,7 +270,12 @@ void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bo
 }  // namespace
 
 // ---------------------------------------------------------------- the frame
+static MarksDrawn g_marks;
+const MarksDrawn& marksDrawn() { return g_marks; }
+static void noteOutline(const char* kind, const Outline& O, int fo, std::size_t segs) { g_marks.outline = kind; g_marks.outlineOrb = fo; g_marks.outlineMass = O.mass; g_marks.outlineReach = O.rmax; g_marks.outlineSegs = segs; }
+
 void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy, double uiScale, AtomLab& lab, double w, double h, const app::ThemeColors& colours, double textScale) {
+    g_marks = MarksDrawn{};
     const AtomParams& p = lab.p;
     AtomState& s = lab.s;
     const Theme css = theme(colours);
@@ -294,6 +299,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         if (!ImGui::GetIO().WantCaptureMouse && mx >= 0 && my >= 0 && mx < w && my < h) { if (flat) chartTileAt(chartLayout(w, h), mx, my, hz, hn); else lab.chartScene().pick(mx, my, hz, hn); }
         const ChartColours chartColours{css.fg, css.muted, css.accent, css.card, css.line};
         const ChainOverlay chainOv{s.showChain ? &lab.decayGraph() : nullptr, &s.walk};   // the decay chain of the chosen nuclide (0.12 stage 1): the graph is built once per chosen nuclide
+        if (s.showChain) { g_marks.chainNodes = static_cast<int>(lab.decayGraph().nodes.size()); g_marks.chainEdges = lab.decayGraph().edgeCount(); }
         if (!lab.gpuChart) chartCache_.release(R);                         // (switched off: the GPU's copy is let go)
         ChartCache* cache = lab.gpuChart ? &chartCache_ : nullptr;         // 0.13 stage 4 part B: the tiles / blocks and the ground come from a GPU buffer made once; nullptr: made every frame as before
         if (flat) drawChart(R, adapter, chartColours, w, h, p.Z, p.N, hz, hn, s.showChain ? &chainOv : nullptr, cache);
@@ -347,6 +353,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const bool wheel = lab.usesWheel();                                // Phase colours: Wheel (or a complex state) colours each dot by its phase, Sign by the sign of the wave
         const DotColours dc = makeDotColours(lab.gpuColours, wheel, css.light, cP, cN);   // GPU colours On (the default): a dot carries its colour group; Off: the 0.12 way, every dot carries its colour
         const int ng = dc.n;
+        g_marks.phaseGroups = ng; g_marks.wheel = wheel;
         static std::vector<unsigned char> grp;                             // each dot's colour group
         grp.resize(std::size_t(cnt));
         // each dot's colour group: a jump in flight, a superposition (thinned and coloured from the CURRENT beat phase) or a plain cloud. 0.13 stage 2: on a PC with OpenGL 4.3 (and the
@@ -375,8 +382,10 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 if (O) {
                     const double off0 = p.cut * 0.5 * kExt[orbitals()[stateOrbital(fo)].n];
                     olSlice_.update(*O, fo, hz, off0, lab.gpuOutline);
-                    if (olSlice_.shows(fo, hz))                            // (the contour of another orbital or plane is never drawn; the cut may be a frame behind while the GPU works)
+                    if (olSlice_.shows(fo, hz)) {                          // (the contour of another orbital or plane is never drawn; the cut may be a frame behind while the GPU works)
                         for (const OutSeg2& g : olSlice_.segments()) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
+                        noteOutline("slice", *O, fo, olSlice_.segments().size());
+                    }
                 }
             }
             const double gx = w - 44, gy = h - 44;                         // axes of the cut plane
@@ -398,8 +407,10 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             }
             B.clear();
             if (outlineOn)                                                 // the shadow of the 90 % region seen from the side
-                if (const Outline* O = outlineReady(fo, lab.gpuOutline))
-                for (const OutSeg2& g : O->side) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
+                if (const Outline* O = outlineReady(fo, lab.gpuOutline)) {
+                    for (const OutSeg2& g : O->side) R.line(cx + g.x0 * olUnit, cy - g.y0 * olUnit, cx + g.x1 * olUnit, cy - g.y1 * olUnit, 1.1, olCol);
+                    noteOutline("side", *O, fo, O->side.size());
+                }
         } else {                                                           // rotate by yaw (about z), then pitch, then project
             const double ext = kExt[lab.sizeN()] / p.Z * kA0;
             static std::vector<float> PX, PY, PD;
@@ -423,6 +434,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             }
             const Outline* wireO = outlineOn ? outlineReady(fo, lab.gpuOutline) : nullptr;   // (nullptr while the GPU makes it the first time)
             if (wireO) {                                                   // a faint wireframe of the 90 % surface: its contour lines in planes across the region, turned with the cloud
+                noteOutline("wire", *wireO, fo, wireO->wire.size());
                 const double um = kA0 / p.Z;
                 const auto pr = [&](double x, double y, double z, double& X, double& Y, double& t) {
                     x *= um; y *= um; z *= um;
@@ -445,7 +457,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             }
         }
         if (wheel) {                                                       // the legend: a ring of the phase colours, with 0, pi/2, pi, 3 pi/2 (the phase of the wave, not a place)
-            const double lx = w - 56, ly = 86, ro = 20;               // top right (bottom left has the ⓘ button and the scale bar, bottom right the axes)
+            const double lx = w - 56 - lab.insetRight, ly = 86, ro = 20;   // top right (bottom left has the ⓘ button and the scale bar, bottom right the axes); new UI (0.15 stage 5e): left of the Controls panel
             for (int i = 0; i < 72; i++) {
                 const double a0 = 2 * kPi * i / 72, a1 = 2 * kPi * (i + 1.05) / 72;
                 const PhaseRgb c = phaseRgb(a0 + kPi / 72, css.light);

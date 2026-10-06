@@ -22,6 +22,19 @@ struct Theme { render::Color fg, muted, accent, card, line, onacc; bool light; }
 Theme theme(bool light);
 Theme theme(const app::ThemeColors& c);          // the colours of the theme picked with 🎨
 
+// 0.15 stage 5e: what the last frame drew for the marks, in the picture's own units (Bohr radii, counts), not in pixels: the automatic checks compare the old and the new UI with it
+// (their pictures are different sizes). Filled by AtomView::draw; reading it costs nothing.
+struct MarksDrawn {
+    std::string outline = "none";          // which 90 % outline was drawn: none / side (Cloud) / slice / wire (Cloud 3D)
+    int outlineOrb = -1;                   // its state (outlineStateId)
+    double outlineMass = 0, outlineReach = 0;   // the probability inside it and how far it reaches, a0 (outline.h)
+    std::size_t outlineSegs = 0;           // how many line pieces were drawn
+    int phaseGroups = 0;                   // the cloud's colour groups (Sign: the two signs; Wheel: the phase steps); 0 = no cloud drawn
+    bool wheel = false;
+    int chainNodes = -1, chainEdges = -1;  // the decay chain drawn on the chart (-1: none)
+};
+const MarksDrawn& marksDrawn();
+
 class AtomView {
 public:
     // Draws one frame of a picture w × h points at (originX, originY) in the window; uiScale turns

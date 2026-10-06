@@ -225,6 +225,54 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
         if (pButton(p, "atom.chartreset", "Reset tilt, zoom and position")) L.chartReset();
         pCaption(p, displayable(ui::atomNote("chart")));
     }
+    // ---- stage 5e: the marks (the 90 % outline and the phase colours when the view is not Orbit; the decay chain on the chart) and the photons, as in the old panel ----
+    if ((!orbit || chart) && section("marks", "Marks", true)) {
+        if (!orbit) {                                                      // old: 90% outline and Phase colours whenever the view is not Orbit
+            choiceRow(app, p, "outline", "90% outline", ui::atomChoices("outline"), P.outline);
+            choiceRow(app, p, "phase", "Phase colours", ui::atomChoices("phase"), P.phase);
+            pCaption(p, displayable(ui::atomNote("phase")));
+        }
+        if (chart) {                                                       // old: the "Decay chain of the chosen nuclide" block, on the chart only
+            pHeading(p, "Decay chain of the chosen nuclide");
+            pCheck(p, "atom.chain", "Show the chain on the chart", &L.s.showChain);
+            pGap(p, m.s4);
+            const atom::ChainGraph& g = L.decayGraph();
+            for (const std::string& line : atom::chainSummary(g)) pCaption(p, displayable(line));
+            if (g.nodes[0].stop == atom::ChainStop::Continues) {
+                pCaption(p, displayable(ui::atomNote("chain")));
+                const atom::ChainWalk& w = L.s.walk;
+                if (!w.done) {                                             // (the old buttons are greyed out when the walk is over; here they are left out)
+                    if (pButton(p, "atom.walk", "Walk one step")) L.walkOnce();
+                    if (pButton(p, "atom.walkauto", displayable(L.s.walkAuto ? "Pause auto-walk" : "Auto-walk (a step every " + atom::jsNum(atom::kWalkPaceS, 2) + " s)"))) L.s.walkAuto = !L.s.walkAuto;
+                }
+                if (pButton(p, "atom.walkrestart", "Restart walk")) L.walkRestart();
+                for (std::size_t i = 0; i < w.steps.size(); i++) {
+                    pBody(p, "Step " + std::to_string(i + 1) + ": " + displayable(atom::chainStepWords(w.steps[i])));
+                    pCaption(p, displayable(atom::chainStepTime(w.steps[i])));
+                }
+                if (!w.steps.empty()) pCaption(p, displayable("Drawn lifetimes added up: " + atom::fmtLife(w.drawnS) + ". Screen time since the walk began: " + atom::jsNum(w.screenS, 3) + " s. These are not the same thing: the screen is not real time."));
+                pCaption(p, displayable(w.done ? atom::chainWalkEndWords(w) : "The walker is at " + atom::chainNuclide(w.Z, w.N) + "."));
+                pCaption(p, displayable(atom::chainTimeNote()));
+            }
+        }
+    }
+    if (section("photons", "Photons", true)) {
+        if (!chart) {                                                      // old: no photons on the chart (it shows nuclei, not the electron)
+            const float half = (p.w - static_cast<float>(m.s8)) / 2;
+            const ImVec2 o = here(p);
+            if (button("atom.emit", o, ImVec2(half, static_cast<float>(m.control)), displayable("↓ Emit photon"))) L.emit();
+            if (button("atom.absorb", ImVec2(o.x + half + m.s8, o.y), ImVec2(half, static_cast<float>(m.control)), displayable("↑ Absorb photon"))) L.absorb();
+            p.y += m.control + m.s4;
+            if (pButton(p, "atom.auto", displayable(L.autoText()), Face::Secondary, L.s.autoPhotons)) L.toggleAuto();
+            pCaption(p, displayable(ui::atomNote(orbit ? "jumpOrbit" : "jumpCloud")));
+        }
+        // Check a jump (old: the "Lifetimes and jumps (NIST)" card): the same rows, the same result lines (ui::atomJumpCheck, atom/lifetime.h, NIST ASD)
+        choiceRow(app, p, "jfrom", "Check a jump: from (the upper shell)", ui::atomChoices("jfrom"), P.jfrom);
+        choiceRow(app, p, "jto", "to (the lower shell)", ui::atomChoices("jto"), P.jto);
+        const std::vector<std::string> lines = ui::atomJumpCheck(P.Z, P.jfrom, P.jto);
+        for (const std::string& line : lines) pCaption(p, displayable(line));
+        if (shellLogOn()) { std::string all = "jumpcheck"; for (const std::string& line : lines) all += " | " + line; auditNote(all); }
+    }
 }
 
 }  // namespace ui::shellimpl

@@ -97,12 +97,17 @@ Also seen: boxes inside boxes and outlines on everything; no breathing room; no 
   - stage 5b — Atom Lab element chip + periodic table dropdown — DONE (behind New UI (preview)): "U · Uranium-238" chip, table, Protons / Neutrons steppers and sliders, usual, famous isotopes; Build another and Reshuffle moved into the Nucleus ▾ panel. Next: 5c (view options, marks, photon / jump panels), 5d (subject card, data sheet, legend, hint and More / Less info, the Atom fact line, then the Old panel goes).
   - stage 5c.1 — UI polish after the owner tried 5c — DONE (behind New UI (preview)): the toolbar's Controls button is gone; the panel opens and closes from a HANDLE on the picture's right edge (an arrow tab centred on the panel's edge) and slides in / out in 180 ms (at once with Motion reduced); panel / widget glow and shadow hug the edge (at most 2 px; the Aero Legend glow spilled over its neighbours); the panel is solid (picture labels showed through it), headers and rows share the content's edges, sections start the same distance apart, panel text is at least 14 px
   - stage 5c — the Controls panel — DONE (behind New UI (preview), both labs; the owner's decision of 6 Oct 2026): all simulation options in ONE docked panel on the right (22 em, sections that fold, scrolls inside; a Controls button on the toolbar); Orbit: Time speed, Show, Pick a body, Zoom / sizes / trails, View options; Atom: a View section (Nucleus level, Cloud / Cloud 3D / Slice, Build another, Reshuffle); the toolbar has no carets; + two fixes: ring labels never under the bars, the readout at Body size on a dark pill
-  - stage 5 — Atom Lab (5d, 5e, 5f are what is left; stage 5 is now 5a-5f): 5d Atom view options (into the Controls panel), 5e marks + photon / jump panels, 5f subject card + data sheet (spectrum, lifetimes, nucleus, temperature, decay), legend, hint line; the Atom column and bar go
+  - stage 5d — Atom view options in the Controls panel — DONE (behind New UI (preview)): sections Orbital, Cloud, Orbit, Scale and motion, Nucleus, Chart, shown by the old panel's rules, same setParam keys and values (one shared choice table); the fact line wraps to two lines and is shown in the Atom Lab too (scale bar above it); benchmark header "New UI: On/Off"
+  - stage 5e — Atom marks and photons in the Controls panel — DONE (behind New UI (preview)): a Marks section (90 % outline, phase colours, the decay chain on the chart with its walk) and a Photons section (emit, absorb, auto, check a jump), same state and words as the old panel; the old app had no toolbar button for them, so none was added
+  - stage 5 — Atom Lab (5f is what is left; stage 5 is now 5a-5f): 5f subject card + data sheet (spectrum, lifetimes, nucleus, temperature, decay), legend, hint line; the Atom column and bar go
   - stage 6 — Learn, Settings (sections), About, history, changelogs, guides, Benchmark in the reading view; the Achievements panel
   - stage 7 — all 13 themes through the glass tokens (Aero, Y2K), full search, keyboard, final speed check and clean-up
 
 ## 0.16 list (not scheduled, collected from 0.15 reports)
 - cache the periodic table dropdown in a texture: measured +47 ms per frame in software while open (stage 5b)
+- cache periodic-table dropdown texture
+- compile outline compute shader at startup (scene 16 worst frame 55 ms)
+- Orbit scene 1 about 9% slower in New UI: investigate
 
 ## Later (not scheduled)
 - an in-app mascot (an original character, no brand art) that reacts to what the user does and replaces the "Did you know?" bar — after 0.15

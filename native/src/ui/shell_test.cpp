@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "imgui.h"
+#include "atom/atom_view.h"
 #include "ui/orbit_actions.h"
 #include "ui/orbit_panel.h"
 
@@ -98,6 +99,11 @@ std::string atomSettingsLine(const AppState& app) {
     add("qstyle", p.qstyle); add("detail", p.detail); add("style", p.style); add("tilt", num(L.s.chartView.tilt)); add("cheight", L.s.chartView.height == atom::ChartHeightMode::Binding ? "Binding energy per nucleon" : "Half-life");
     add("outline", p.outline); add("phase", p.phase); add("chain", num(L.s.showChain)); add("walkAuto", num(L.s.walkAuto)); add("walkSteps", num(static_cast<double>(L.s.walk.steps.size())));
     add("jfrom", p.jfrom); add("jto", p.jto); add("auto", num(L.s.autoPhotons)); add("jumping", num(L.s.jumping)); add("Z", num(p.Z)); add("N", num(p.N));
+    // (stage 5e) what a photon click started (the words of the last photon: emitted / absorbed, and from which level) and what the picture drew for the marks (atom/atom_view.h)
+    add("last", L.s.last); add("pending", L.s.photon ? L.s.photon->kind : L.s.photonAfter ? L.s.photonAfter->kind : std::string("none"));
+    const atom::MarksDrawn& d = atom::marksDrawn();
+    add("drawnOutline", d.outline); add("drawnOrb", num(d.outlineOrb)); add("drawnMass", num(d.outlineMass)); add("drawnReach", num(d.outlineReach)); add("drawnSegs", num(static_cast<double>(d.outlineSegs)));
+    add("drawnGroups", num(d.phaseGroups)); add("drawnWheel", num(d.wheel)); add("drawnChainNodes", num(d.chainNodes)); add("drawnChainEdges", num(d.chainEdges));
     return t;
 }
 

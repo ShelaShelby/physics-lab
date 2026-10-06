@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # 0.15 stage 5d: the Atom Lab's view options in the Controls panel (New UI On), and the fact line's two lines.
-#   check_atom_panel.py <PhysicsLab binary> <work folder> [part]      part: sections | facts | all (default)
+#   check_atom_panel.py <PhysicsLab binary> <work folder> [part]      part: sections | facts | marks | photons | all (default)
 # References (none is an earlier output of ours): the OLD side panel of the same build (New UI Off) is the reference for every control: both runs press the real control through the
 # real input path (PL_SCRIPT) and print every Atom setting (PLASTATE); the new control must give the old control's value. Which sections show in which view: the old panel's own rules
 # (atom_panel.cpp: Orbital choice and orientation in the cloud views but not the chart, n and Playback speed in the Orbit view, cloud style / density / superposition when the view is
@@ -129,9 +129,11 @@ def main():
                     diff_o = {k for k in so[i + 1] if so[i + 1][k] != so[i][k]}
                     check(diff_n == diff_o, f"{sz} {view}: {nc} changed the same settings as the old control: new {sorted(diff_n)} old {sorted(diff_o)}")
         # ---- 2. which sections show in which view (the old panel's rules), in the brief's order; each folds ----
-        ORDER = ["view", "orbital", "cloud", "orbit", "scale", "nucleus", "chart"]
-        WANT = {"orbit": {"view", "orbital", "orbit", "scale"}, "cloud": {"view", "orbital", "cloud", "scale"}, "chart": {"view", "cloud", "chart"},
-                "nucleus": {"view", "orbital", "orbit", "scale", "nucleus"}}
+        # (stage 5e added Marks: the old panel's outline and phase rows when the view is not Orbit, its chain block on the chart; and Photons: emit / absorb / auto off the chart,
+        # Check a jump always, as the old Lifetimes card)
+        ORDER = ["view", "orbital", "cloud", "orbit", "scale", "nucleus", "chart", "marks", "photons"]
+        WANT = {"orbit": {"view", "orbital", "orbit", "scale", "photons"}, "cloud": {"view", "orbital", "cloud", "scale", "marks", "photons"}, "chart": {"view", "cloud", "chart", "marks", "photons"},
+                "nucleus": {"view", "orbital", "orbit", "scale", "nucleus", "photons"}}
         SCR = {"orbit": "", "cloud": "10:click=tool.cloud", "chart": "10:click=tool.chart", "nucleus": "10:click=atom.zoom@0.62"}
         for name, want in WANT.items():
             r = run_app(binary, work, f"sec_{name}", dict(NEW, PL_SCRIPT=SCR[name]), frames=40)
@@ -155,6 +157,91 @@ def main():
             check(pc is not None and inside(pc, r.window[0], r.window[1]), f"{sz}: the panel is inside the window {pc}")
             small = [(px, t) for k, px, t in r.texts if k == "ctl" and px < 14 - 0.01]
             check(any(k == "ctl" for k, _, _ in r.texts) and not small, f"{sz}: all panel text is at least 14 px: {small[:3]}")
+
+    if part in ("marks", "all"):
+        # ---- 5. (stage 5e) the marks: the same settings as the old rows, and the picture draws the same thing (in Bohr radii and counts, so the two picture sizes do not matter) ----
+        DRAWN = ("drawnOutline", "drawnOrb", "drawnMass", "drawnReach", "drawnSegs", "drawnGroups", "drawnWheel", "drawnChainNodes", "drawnChainEdges")
+        MARKS = [("atom.outline=On", "old.outline=On", "outline", "s"), ("atom.phase=Wheel", "old.phase=Wheel", "phase", "s")]
+        CHAIN = [("atom.walk", "old.walk", "walkSteps", "s"), ("atom.walkauto", "old.walkauto", "walkAuto", "s"), ("atom.walkauto", "old.walkauto", "walkAuto", "s"),
+                 ("atom.walkrestart", "old.walkrestart", "walkSteps", "s"), ("atom.chain", "old.chain", "chain", "s")]
+        U238 = {"PL_ATOM_SET": "Z=92;N=146;view=Chart of nuclides"}
+        runs = []
+        for view, items, extra in (("cloud", MARKS, {}), ("slice", MARKS, {}), ("chart", CHAIN, U238)):
+            steps_n, steps_o = [], []
+            for new, steps in ((True, steps_n), (False, steps_o)):
+                v = VIEWS[view][0 if new else 1] if view != "chart" else None
+                if v:
+                    steps += ["click=" + v, ("wait", 12)]
+                steps.append("astate")
+                for nc, oc, key, kind in items:
+                    steps += ["click=" + (nc if new else oc), ("wait", 30), "astate"]
+            runs.append((view, items, extra, script(steps_n), script(steps_o)))
+        prefetch([((binary, work, f"marks_new_{v}_{sz}", dict(NEW, PL_SCRIPT=sn[0], **ex)), dict(frames=sn[1], size=sz)) for v, it, ex, sn, so in runs for sz in SIZES] +
+                 [((binary, work, f"marks_old_{v}", dict(OLD, PL_SCRIPT=so[0], **ex)), dict(frames=so[1], size=OLD_SIZE)) for v, it, ex, sn, so in runs])
+        for view, items, extra, sn_, so_ in runs:
+            so = astates(run_app(binary, work, f"marks_old_{view}", dict(OLD, PL_SCRIPT=so_[0], **extra), frames=so_[1], size=OLD_SIZE))
+            for sz in SIZES:
+                rn = run_app(binary, work, f"marks_new_{view}_{sz}", dict(NEW, PL_SCRIPT=sn_[0], **extra), frames=sn_[1], size=sz)
+                sn = astates(rn)
+                check(not rn.scripted_missing() and len(sn) == len(items) + 1 and len(so) == len(items) + 1, f"{sz} marks {view}: all clicked, all states read: {rn.scripted_missing()[:3]} ({len(sn)}, {len(so)})")
+                if len(sn) != len(items) + 1 or len(so) != len(items) + 1:
+                    continue
+                for i, (nc, oc, key, kind) in enumerate(items):
+                    check(sn[i + 1][key] != sn[i][key], f"{sz} marks {view}: {nc} changed {key} ({sn[i][key]} -> {sn[i + 1][key]})")
+                    if nc == "atom.walkrestart":
+                        # (the old panel's Restart walk could not be clicked by the harness: at the centre and at the left edge of its rect the click changed nothing, see REPORT.md;
+                        # the reference here is what walkRestart does (atom_sim.cpp): the walk starts again from the chosen nuclide, 0 steps, as before the first step)
+                        check(sn[i + 1][key] == "0" == sn[0][key], f"{sz} marks {view}: Restart walk goes back to 0 steps ({sn[i + 1][key]})")
+                        continue
+                    check(sn[i + 1][key] == so[i + 1][key], f"{sz} marks {view}: {nc} gives {key}={sn[i + 1][key]!r}, the old {oc} gives {so[i + 1][key]!r}")
+                    if key != "walkSteps":            # (a walk step is a random draw: the drawn chain is the same, the walker may stand elsewhere)
+                        dn = {k: sn[i + 1][k] for k in DRAWN}; do = {k: so[i + 1][k] for k in DRAWN}
+                        check(dn == do, f"{sz} marks {view}: after {nc} the picture drew the same marks as the old one: new {dn} old {do}")
+                last = sn[-1]
+                if view in ("cloud", "slice"):
+                    # independent: the outline is the 90 % region (its definition; outline.h), and Wheel colours by phase
+                    check(last["drawnOutline"] == ("side" if view == "cloud" else "slice") and abs(float(last["drawnMass"]) - 0.9) < 0.02 and float(last["drawnSegs"]) > 0,
+                          f"{sz} marks {view}: the 90 % outline is drawn round about 90 % of the probability: {last['drawnOutline']} mass {last['drawnMass']} segs {last['drawnSegs']}")
+                    check(last["drawnWheel"] == "1" and sn[0]["drawnWheel"] == "0", f"{sz} marks {view}: the phase colours went from Sign to the Wheel")
+                else:
+                    # independent: the uranium series from U-238 to Pb-206 has 15 members on its main path (U-238, Th-234, Pa-234, U-234, Th-230, Ra-226, Rn-222, Po-218, Pb-214,
+                    # Bi-214, Po-214, Pb-210, Bi-210, Po-210, Pb-206; e.g. the NNDC chart / any nuclear physics text): the chain drawn has at least these; hiding it draws none
+                    check(int(sn[0]["drawnChainNodes"]) >= 15, f"{sz} chain: U-238's chain drawn with at least the 15 members of the uranium series ({sn[0]['drawnChainNodes']})")
+                    check(last["chain"] == "0" and last["drawnChainNodes"] == "-1", f"{sz} chain: hidden after the check box ({last['chain']}, {last['drawnChainNodes']})")
+
+    if part in ("photons", "all"):
+        # ---- 6. (stage 5e) photons: emit / absorb / auto do what the old buttons do (the hydrogen atom starts in n = 1: nothing below it to emit to) ----
+        P1 = (["astate", "click=atom.emit", ("wait", 4), "astate", "click=atom.absorb", ("wait", 4), "astate"], ["astate", "click=old.emit", ("wait", 4), "astate", "click=old.absorb", ("wait", 4), "astate"])
+        P2 = (["click=atom.n@1.0", ("wait", 8), "astate", "click=atom.emit", ("wait", 4), "astate"], ["click=old.n@1.0", ("wait", 8), "astate", "click=old.emit", ("wait", 4), "astate"])
+        P3 = (["astate", "click=atom.auto", ("wait", 4), "astate", "click=atom.auto", ("wait", 4), "astate"], ["astate", "click=old.auto", ("wait", 4), "astate", "click=old.auto", ("wait", 4), "astate"])
+        def kind(st):
+            l = st.get("last", "")
+            return l.split("  ·  ")[0], st.get("pending"), st.get("auto"), st.get("n")
+        for name, (sn_, so_) in (("p1", P1), ("p2", P2), ("p3", P3)):
+            a, fa = script(sn_); b, fb = script(so_)
+            so = astates(run_app(binary, work, f"ph_old_{name}", dict(OLD, PL_SCRIPT=b), frames=fb, size=OLD_SIZE))
+            for sz in SIZES:
+                rn = run_app(binary, work, f"ph_new_{name}_{sz}", dict(NEW, PL_SCRIPT=a), frames=fa, size=sz)
+                sn = astates(rn)
+                check(not rn.scripted_missing() and len(sn) == len(so) and len(sn) > 1, f"{sz} {name}: clicked and read ({rn.scripted_missing()[:2]}, {len(sn)} vs {len(so)})")
+                check([kind(x) for x in sn] == [kind(x) for x in so], f"{sz} {name}: the same photon state as the old buttons: new {[kind(x) for x in sn]} old {[kind(x) for x in so]}")
+                if name == "p1" and len(sn) == 3:
+                    check(kind(sn[1])[0] == "" and kind(sn[1])[1] == "none", f"{sz}: emit from n = 1 does nothing (no lower level) {kind(sn[1])}")
+                    check(kind(sn[2])[0] == "last photon: absorbed" and kind(sn[2])[1] == "absorb", f"{sz}: absorb starts an absorbed photon {kind(sn[2])}")
+                if name == "p2" and len(sn) == 2:
+                    check(sn[0]["n"] == "4" and kind(sn[1])[0] == "last photon: emitted", f"{sz}: from n = 4 emit starts an emitted photon {kind(sn[1])}")
+                if name == "p3" and len(sn) == 3:
+                    check([x["auto"] for x in sn] == ["0", "1", "0"], f"{sz}: Auto photons toggles on and off {[x['auto'] for x in sn]}")
+        # ---- 7. check a jump: two hydrogen cases of the existing atom_tests (NIST ASD values): 2p -> 1s A = 6.265e8 /s, AAA, 100 %; 2s -> 1s not allowed, only M1 with A = 2.495e-6 /s ----
+        for name, new_s, old_s, want in (("2p1s", "", "", ("6.265×10⁸", "AAA", "100 %")), ("2s1s", "10:click=atom.jfrom=2s", "8:move=820,1400;10:wheel=-60;24:click=old.jfrom=2s", ("M1", "2.495"))):
+            ro = run_app(binary, work, f"jc_old_{name}", dict(OLD, PL_SCRIPT=old_s), frames=40, size=OLD_SIZE)      # (the old card is below the window's bottom: the old column is scrolled first)
+            jo = ro.note("jumpcheck")
+            check(not ro.scripted_missing(), f"old check a jump {name}: clicked {ro.scripted_missing()[:2]}")
+            for sz in SIZES:
+                rn = run_app(binary, work, f"jc_new_{name}_{sz}", dict(NEW, PL_SCRIPT=new_s), frames=30, size=sz)
+                jn = rn.note("jumpcheck")
+                check(not rn.scripted_missing() and jn and jo and jn == jo, f"{sz} check a jump {name}: the same lines as the old card: new {jn[:1]} old {jo[:1]}")
+                check(jn and all(w in jn[0] for w in want), f"{sz} check a jump {name}: has the NIST values {want}: {jn[:1]}")
 
     if part in ("facts", "all"):
         # ---- 4. the fact line: the longest fact, both labs, three sizes ----

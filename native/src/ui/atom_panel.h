@@ -18,6 +18,8 @@ struct AppState;
 using AtomChoices = std::vector<std::pair<std::string, std::string>>;
 const AtomChoices& atomChoices(const std::string& key);   // empty for an unknown key
 const char* atomNote(const std::string& which);
+// "Check a jump" (0.10.8 stage 3): the result lines for the upper and lower shell ("2p", "1s"), for element Z: each allowed or refused jump (atom/lifetime.h, NIST ASD), then the standing note
+std::vector<std::string> atomJumpCheck(int Z, const std::string& from, const std::string& to);
 std::pair<std::string, std::string> atomSplitLabel(const std::string& s);   // "1s · sphere" -> {"1s", "sphere"}; "Auto-fit (orbit fills the canvas)" -> {"Auto-fit", "orbit fills the canvas"}
 
 // The two buttons at the top of every panel: Orbit Lab / Atom Lab.

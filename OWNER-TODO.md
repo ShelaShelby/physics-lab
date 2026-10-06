@@ -286,3 +286,10 @@
 - [ ] Atom Lab: the Controls panel only holds the View section for now; the Old panel opens left of it (the two together are wide). The rest moves in 5d and 5e.
 - [ ] Not tested here: Windows, Segoe UI widths, Windows scale 125 / 150 %, a real GPU, speed.
 - [ ] (0.15 stage 5c.1) On the PC, New UI On, in EVERY theme: the handle on the picture's right edge (opens / closes the panel, never hidden behind the toolbar, top bar or a card), the slide (smooth? 180 ms feels right?), and the hover outline / glow round the Legend, the toolbar buttons and the panel's check boxes and buttons (nothing spreading over neighbours). Also at 880 x 560, 1280 x 800, 1920 x 1080 and Windows scale 125 / 150 %.
+
+## 0.15 stages 5d + 5e (Atom view options, marks and photons in the Controls panel, New UI On)
+- [ ] With a real mouse on the PC (New UI On, Atom Lab): open the Controls panel in the Orbit, Cloud, Cloud 3D, Slice and Chart views and try every control of Orbital, Cloud, Orbit, Scale and motion, Nucleus, Chart, Marks and Photons; each should do what the same control in the Old panel does. Do the orbital and orientation buttons (rows of 5 and 3) read well?
+- [ ] Marks: 90 % outline On and Phase colours Wheel in the Cloud and Slice views; on the Chart (e.g. Uranium-238) Show the chain, Walk one step, Auto-walk, Restart walk.
+- [ ] Photons: Emit (from n = 2 or more), Absorb, Auto photons, and Check a jump (2p → 1s, 2s → 1s).
+- [ ] The fact line at the bottom left now wraps to two lines (and is shown in the Atom Lab, with the picture's scale bar above it). Readable on your screen? The Cloud options are also shown on the Chart, as in the old panel, where they do nothing: keep or hide?
+- [ ] Not tested here: Windows, a real GPU, speed, Segoe UI widths, Windows scale 125 / 150 %.
