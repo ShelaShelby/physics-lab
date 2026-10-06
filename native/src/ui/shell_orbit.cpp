@@ -40,7 +40,6 @@ std::vector<ToolItem> orbitTools(AppState& app) {
     return v;
 }
 
-std::vector<ToolItem> atomTools(AppState&) { return {}; }          // the Atom Lab's toolbar is filled in stage 5 (play is in its chip, Save picture in the menu)
 
 // ---- the chip, the card, the legend ----
 ChipInfo chipInfo(AppState& app) {

@@ -108,8 +108,12 @@ const char* chartIslandShort() {
 }
 std::string chartHeaviestLabel() { return "heaviest known: Z = " + std::to_string(chartHeaviestZ()) + " (" + [] { std::string n = name(chartHeaviestZ()); n[0] = char(std::tolower(static_cast<unsigned char>(n[0]))); return n; }() + "); nothing observed beyond"; }
 
+static double g_insetTop = 0, g_insetBottom = 0;
+void setChartInsets(double top, double bottom) { g_insetTop = top; g_insetBottom = bottom; }
+
 ChartLayout chartLayout(double w, double h) {
     ChartLayout L;
+    L.top += g_insetTop; L.bottom += g_insetBottom;
     L.nMax = chartMaxN(); L.zMax = chartMaxZ();
     const double availW = std::max(10.0, w - L.left - L.right), availH = std::max(10.0, h - L.top - L.bottom);
     L.cell = std::max(1.0, std::min(availW / (L.nMax + 1), availH / L.zMax));

@@ -14,9 +14,9 @@ namespace ui::shellimpl {
 
 using app::shell::PanelId;
 
-// One thing on the toolbar. A Button acts at once; a Menu opens its panel above it (icon and caret are one button); a Segment is a two-way switch (2D / 3D) with its own caret.
+// One thing on the toolbar. A Split acts at once AND has its own caret that opens a panel (the Atom Lab's Nucleus and Cloud). A Button acts at once; a Menu opens its panel above it (icon and caret are one button); a Segment is a two-way switch (2D / 3D) with its own caret.
 struct ToolItem {
-    enum Kind { Button, Sep, Menu, Segment } kind = Button;
+    enum Kind { Button, Sep, Menu, Segment, Split } kind = Button;
     const char* id = "";
     std::string tip;                         // the name shown in the tooltip, with its key
     sh::Icon icon = sh::Icon::Dots;
@@ -35,6 +35,9 @@ std::vector<ToolItem> atomTools(AppState& app);
 // What the Orbit Lab's panels hold (layout is by ui/shell.cpp). closeAfter is set by a panel that wants to close once something was chosen. False / 0: not an Orbit panel.
 double orbitPanelWidthEm(PanelId id);
 bool buildOrbitPanel(PanelId id, AppState& app, sh::Panel& p, bool& closeAfter);
+// The same for the Atom Lab's two toolbar panels (ui/shell_atom.cpp)
+double atomPanelWidthEm(PanelId id);
+bool buildAtomPanel(PanelId id, AppState& app, sh::Panel& p, bool& closeAfter);
 
 // The chip, the crumbs and the cards (strings and what they do)
 struct ChipInfo {

@@ -67,13 +67,14 @@ const char* panelName(PanelId id) {
     switch (id) {
     case PanelId::Menu: return "menu"; case PanelId::LabMenu: return "labmenu"; case PanelId::Chip: return "chip"; case PanelId::Speed: return "speed";
     case PanelId::Show: return "show"; case PanelId::Pick: return "pick"; case PanelId::Scale: return "scale"; case PanelId::View: return "view";
-    case PanelId::More: return "more"; case PanelId::Facts: return "facts"; case PanelId::Data: return "data"; case PanelId::None: return "none";
+    case PanelId::More: return "more"; case PanelId::Facts: return "facts"; case PanelId::Data: return "data"; case PanelId::Nucleus: return "nucleus"; case PanelId::Cloud: return "cloud"; case PanelId::None: return "none";
     }
     return "none";
 }
 bool fromTop(PanelId id) { return id == PanelId::Menu || id == PanelId::LabMenu || id == PanelId::Chip; }
 double widthEmOf(PanelId id) {
     if (const double w = orbitPanelWidthEm(id)) return w;
+    if (const double w = atomPanelWidthEm(id)) return w;
     switch (id) { case PanelId::Menu: return 18; case PanelId::LabMenu: return 14; case PanelId::Facts: return 24; case PanelId::More: return 18; case PanelId::Data: return 36; default: return 20; }
 }
 void toggle(PanelId id) { S.ui.open = S.ui.open == id ? PanelId::None : id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount(); }
@@ -157,6 +158,7 @@ void morePanel(sh::Panel& p, std::vector<ToolItem>& hidden, bool& close) {
             if (sh::pRow(p, (std::string(t.id) + ".opts").c_str(), "View options…")) { S.ui.open = t.panel; close = false; }
             continue;
         }
+        if (t.kind == ToolItem::Split && sh::pRow(p, (std::string(t.id) + ".options").c_str(), t.tip + " (more choices)")) { S.ui.open = t.panel; close = false; continue; }
         if (sh::pRow(p, (std::string(t.id) + ".more").c_str(), t.tip)) {
             if (t.kind == ToolItem::Menu) { S.ui.open = t.panel; close = false; }
             else { t.act(); close = true; }
@@ -382,9 +384,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     const double segW = std::max(sh::width(Type::Body, false, "2D"), sh::width(Type::Body, false, "3D")) + 2.0 * m.s12;
     std::vector<double> iw;
     for (const ToolItem& t : tools)
-        iw.push_back(t.kind == ToolItem::Sep ? m.s12 : t.kind == ToolItem::Menu ? m.toolBtn + m.caretW : t.kind == ToolItem::Segment ? 2 * segW + gap + m.caretW : m.toolBtn);
+        iw.push_back(t.kind == ToolItem::Sep ? m.s12 : t.kind == ToolItem::Menu || t.kind == ToolItem::Split ? m.toolBtn + m.caretW : t.kind == ToolItem::Segment ? 2 * segW + gap + m.caretW : m.toolBtn);
     const int count = static_cast<int>(tools.size());
-    const bool hasToolbar = count > 0;                    // the Atom Lab has none until stage 5
+    const bool hasToolbar = count > 0;
     const int shown = toolbarVisible(iw, gap, m.toolBtn, W, m);
     double tw = 2.0 * m.s8;
     for (int i = 0; i < shown; i++) tw += iw[i] + (i ? gap : 0);
@@ -522,6 +524,11 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                     tb.dl->AddLine(ImVec2(x + w / 2, y + m.s4), ImVec2(x + w / 2, y + m.toolBtn - m.s4), sh::cEdge(), 1.0f);
                 } else if (t.kind == ToolItem::Button) {
                     if (sh::iconButton(t.id, ImVec2(x, y), ImVec2(static_cast<float>(m.toolBtn), static_cast<float>(m.toolBtn)), t.icon, t.tip.c_str(), t.on)) t.act();
+                } else if (t.kind == ToolItem::Split) {
+                    if (sh::iconButton(t.id, ImVec2(x, y), ImVec2(static_cast<float>(m.toolBtn), static_cast<float>(m.toolBtn)), t.icon, t.tip.c_str(), t.on)) t.act();
+                    const float cx = x + static_cast<float>(m.toolBtn);
+                    S.anchorX[t.panel] = x + w / 2;
+                    if (sh::iconButton((std::string(t.id) + ".caret").c_str(), ImVec2(cx, y), ImVec2(static_cast<float>(m.caretW), static_cast<float>(m.toolBtn)), Icon::Caret, "More choices", S.ui.open == t.panel)) toggle(t.panel);
                 } else if (t.kind == ToolItem::Menu) {
                     S.anchorX[t.panel] = x + w / 2;
                     if (sh::iconButton(t.id, ImVec2(x, y), ImVec2(w, static_cast<float>(m.toolBtn)), t.icon, t.tip.c_str(), S.ui.open == t.panel, static_cast<float>(m.caretW))) toggle(t.panel);
@@ -667,8 +674,8 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     Rect openRect{0, 0, 0, 0};
     if (S.ui.open != PanelId::None) {
         const PanelId id = S.ui.open;
-        const bool orbitOnly = orbitPanelWidthEm(id) > 0;
-        if (orbitOnly && app.lab != 0) S.ui.open = PanelId::None;
+        const bool orbitOnly = orbitPanelWidthEm(id) > 0, atomOnly = atomPanelWidthEm(id) > 0;
+        if ((orbitOnly && app.lab != 0) || (atomOnly && app.lab != 1)) S.ui.open = PanelId::None;
         else {
             const std::string wid = std::string("##panel_") + panelName(id);
             const double ax = S.anchorX.count(id) ? S.anchorX[id] : W / 2;
@@ -677,7 +684,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             sh::Panel p;
             if (sh::beginPanel(wid.c_str(), openRect, p, sh::Shape::Panel, true)) {
                 bool close = false;
-                if (!buildOrbitPanel(id, app, p, close)) {
+                if (!buildOrbitPanel(id, app, p, close) && !buildAtomPanel(id, app, p, close)) {
                     if (id == PanelId::Menu) menuPanel(app, p, close);
                     else if (id == PanelId::LabMenu) labMenuPanel(app, p, close);
                     else if (id == PanelId::Facts) factsPanel(app, p, close);

@@ -277,6 +277,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     g_textScale = textScale;
     const Text T{dl, ox, oy, uiScale};
     lab.viewW = w; lab.viewH = h;
+    setChartInsets(lab.insetTop, lab.insetBottom);
     R.rect(0, 0, w, h, css.card);                                          // the canvas background (the web: var(--card))
 
     if (lab.chartOn()) {                                                   // the chart of nuclides (0.11 stage 2): a map of all nuclides, not one atom
@@ -818,7 +819,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const Color olHalo = withA(css.card, 0.9);
         T.draw(nuclideLabel(p.Z, p.N) + "  ·  " + std::to_string(p.Z) + "p, " + std::to_string(p.N) + "n", cx, cy + off + 8, 12, css.fg, 0.5, &olHalo);   // with a thin edge in the page colour, so it reads over the cloud dots
     }
-    {   // the ⓘ More / Less info button, bottom left above the scale bar
+    if (lab.shellUi) s.infoBox.reset();                                    // (the new UI: no button in the picture)
+    else {   // the ⓘ More / Less info button, bottom left above the scale bar
         const std::string t = lab.moreShown() ? "Less info" : "More info";
         const double ih = 28, ir = 8, bw = T.width(t, 13, true) + 2 * ir + 26, bx = 12, by = h - 40 - ih;
         s.infoBox = Box{bx, by, bw, ih};
@@ -943,11 +945,11 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         for (const std::string& t : rows) { if (!t.empty()) any = true; mw = std::max(mw, T.width(t, 13)); }
         if (any) {
             const double bw = mw + 12 + 8, bh = 17.0 * rows.size() + 10;
-            dl->AddRectFilled(ImVec2(float(ox + 6 * uiScale), float(oy + 4 * uiScale)), ImVec2(float(ox + (6 + bw) * uiScale), float(oy + (4 + bh) * uiScale)),
+            dl->AddRectFilled(ImVec2(float(ox + 6 * uiScale), float(oy + (4 + lab.insetTop) * uiScale)), ImVec2(float(ox + (6 + bw) * uiScale), float(oy + (4 + lab.insetTop + bh) * uiScale)),
                               ImGui::ColorConvertFloat4ToU32(ImVec4(css.card.r, css.card.g, css.card.b, 0.72f)), float(8 * uiScale));
         }
         // on their see-through panel the rows need no halo (in light themes its 8 copies left faint grey marks between letters)
-        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 21 + 17.0 * i, 13, css.muted, 0, any ? nullptr : &css.card);
+        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 21 + lab.insetTop + 17.0 * i, 13, css.muted, 0, any ? nullptr : &css.card);
     }
 }
 

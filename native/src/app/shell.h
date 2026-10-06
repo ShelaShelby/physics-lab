@@ -84,7 +84,7 @@ Rgb onAccent(const ThemeColors& c);
 constexpr float kEdgeAlpha = 0.20f, kShineAlpha = 0.06f;                    // the 1 px edge and the top-lit shine are the text colour at these opacities
 
 // ---- keys ----
-enum class PanelId { None, Menu, LabMenu, Chip, Speed, Show, Pick, Scale, View, More, Facts, Data };   // Facts: the full fact; Data: the subject card's "All values" (stage 4)
+enum class PanelId { None, Menu, LabMenu, Chip, Speed, Show, Pick, Scale, View, More, Facts, Data, Nucleus, Cloud };   // Facts: the full fact; Data: the subject card's "All values" (stage 4); Nucleus, Cloud: the Atom Lab toolbar's carets (stage 5a)
 struct UiState { PanelId open = PanelId::None; bool search = false; bool reading = false; bool oldPanel = false; };
 enum class Key { Escape, CtrlK, Space, Other };
 struct KeyOutcome { bool consumed = false; bool togglePlay = false; };

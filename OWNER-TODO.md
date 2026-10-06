@@ -264,3 +264,9 @@
 - [ ] **Sources for the facts.** None of the 27 "Did you know?" facts has a named source in the app (they came with the web version), and the full-fact panel says so. If you want, send sources (or tell me to look for them in a later stage); I did not invent any.
 - [ ] Search (Ctrl+K): is the order of results right? Are there things you would type that find nothing? (It lists your recent choices first when the box is empty.)
 - [ ] Not tested here: Windows scale 125 / 150 %, Segoe UI widths (the "Lines and names" segment, the card's rows), the speed on your PC, the real graphics card. The look was judged from software-OpenGL pictures only.
+
+## 0.15 stage 5a (the Atom Lab's toolbar, New UI On): what only the owner can do
+- [ ] Settings → New UI (preview) → On, go to the Atom Lab and use the bottom toolbar on your PC: Atom, Nucleus (and its ▾: Nucleus / Nucleon), Cloud (and its ▾: Cloud 3D, Slice), Chart, Reset view; Centre and Drag appear when the old bar showed them. Are the little pictures (atom, nucleus, cloud, chart, reset, move) clear without text? Is it right that Nucleus / Cloud act on the click and the ▾ opens the choice?
+- [ ] The Atom picture now fills the window. Check on your real screen that the top text lines and the chart's notes box are clear of the top bar, and that nothing important hides behind the toolbar (the chart's "neutrons N →" label sits just under it).
+- [ ] The hint line and More / Less info are at the top of the Old panel for now (5b gives them a home). Tell me if you miss the bar's "hint" more than that.
+- [ ] Not tested here: Windows, Segoe UI widths, Windows scale 125 / 150 %, speed.

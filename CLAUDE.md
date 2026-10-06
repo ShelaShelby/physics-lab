@@ -23,7 +23,7 @@
 
 ## Workflow rules (0.15 stage 4.1; they apply to every stage)
 Why: stages used to take 20-30 minutes and had grown to hours: the cost was running the picture tests (each starts the real app under software OpenGL) many times. So:
-- Build (fresh session, about 6 minutes the first time; ccache is used when installed: `apt-get install -y ccache`):
+- Build (fresh session; if CMake stops on "XCURSOR" install the X11 headers first: `apt-get install -y --no-install-recommends libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libgl1-mesa-dri libegl-mesa0 glslang-tools libdrm-dev libgbm-dev libasound2-dev libdecor-0-dev`; about 6 minutes the first time; ccache is used when installed: `apt-get install -y ccache`):
   `cmake -S native -B /home/user/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON && ninja -C /home/user/build`
   Unit tests only (no SDL, about 1 minute): `cmake -S native -B /home/user/build -G Ninja -DPL_BUILD_APP=OFF && ninja -C /home/user/build`
 - Tests: `native/tools/check.sh quick` (unit tests, shaders, source scan: about 1 minute, no app start) and `native/tools/check.sh full` (everything, in parallel). One test: `ctest --test-dir /home/user/build -R '^name$' --output-on-failure` (names: `ctest -N`). Labels: quick, pictures.

@@ -44,6 +44,8 @@ struct ChartLayout {
     double y(int Z) const { return y0 + (zMax - Z) * cell; }
 };
 ChartLayout chartLayout(double w, double h);             // fits the whole chart into a picture w x h points
+// 0.15 stage 5a (new UI): the picture fills the window, so the top bar and the toolbar float over it; the chart keeps this much room (points) at the top and the bottom. 0, 0 = as before.
+void setChartInsets(double top, double bottom);
 bool chartTileAt(const ChartLayout& L, double px, double py, int& Z, int& N);   // the nuclide under that point, false when none (outside, or a square with no nuclide)
 // How tall a box can be that starts at the top margin (fromTop) or ends at the bottom margin, across the picture columns x0..x1, before it would cover a tile: the distance from that edge to the
 // nearest tile in any of those columns (a column beyond the chart is empty all the way). Used to place the legend where the chart leaves room.

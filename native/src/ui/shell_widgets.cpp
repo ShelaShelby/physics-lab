@@ -190,6 +190,32 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
     case Icon::Cube: dl->AddRect(P(-0.6f, -0.45f), P(0.45f, 0.6f), col, 0, 0, th); dl->AddRect(P(-0.3f, -0.75f), P(0.75f, 0.3f), col, 0, 0, th); break;
     case Icon::Dots: for (float x : {-0.6f, 0.0f, 0.6f}) dl->AddCircleFilled(P(x, 0), 0.14f * s, col); break;
     case Icon::Info: dl->AddCircle(c, 0.8f * s, col, 28, th); dl->AddLine(P(0, -0.05f), P(0, 0.45f), col, th); dl->AddCircleFilled(P(0, -0.38f), 0.11f * s, col, 10); break;
+    case Icon::Atom:    // a nucleus and one electron on an orbit
+        dl->AddEllipse(c, ImVec2(0.95f * s, 0.4f * s), col, -0.5f, 28, th * 0.9f);
+        dl->AddCircleFilled(c, 0.2f * s, col, 12); dl->AddCircleFilled(P(0.67f, -0.55f), 0.13f * s, col, 10);
+        break;
+    case Icon::Nucleus: // a small cluster of nucleons
+        for (const ImVec2& q : {ImVec2(-0.28f, -0.25f), ImVec2(0.3f, -0.2f), ImVec2(0.0f, 0.34f), ImVec2(-0.34f, 0.3f), ImVec2(0.36f, 0.32f)}) dl->AddCircle(P(q.x, q.y), 0.3f * s, col, 14, th * 0.8f);
+        break;
+    case Icon::Cloud:   // scattered dots, denser in the middle
+        for (const ImVec2& q : {ImVec2(0.0f, 0.0f), ImVec2(-0.22f, -0.15f), ImVec2(0.2f, 0.12f), ImVec2(0.05f, -0.32f), ImVec2(-0.15f, 0.28f), ImVec2(0.38f, -0.2f), ImVec2(-0.5f, 0.1f), ImVec2(0.55f, 0.4f), ImVec2(-0.45f, -0.5f), ImVec2(0.1f, 0.62f)})
+            dl->AddCircleFilled(P(q.x, q.y), 0.11f * s, col, 8);
+        break;
+    case Icon::Chart:   // the map of nuclides: a grid of squares, some filled
+        for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) {
+            const ImVec2 a = P(-0.8f + i * 0.58f, -0.8f + j * 0.58f), b = P(-0.8f + i * 0.58f + 0.46f, -0.8f + j * 0.58f + 0.46f);
+            if (i + j == 2 || (i == 1 && j == 1)) dl->AddRectFilled(a, b, col); else dl->AddRect(a, b, col, 0, 0, th * 0.7f);
+        }
+        break;
+    case Icon::Reset: { // a circular arrow
+        dl->PathArcTo(c, 0.7f * s, -0.2f, 4.7f, 24); dl->PathStroke(col, 0, th);
+        dl->AddTriangleFilled(P(0.4f, -0.95f), P(0.95f, -0.45f), P(0.35f, -0.35f), col);
+        break;
+    }
+    case Icon::Move:    // four arrows
+        dl->AddLine(P(-0.85f, 0), P(0.85f, 0), col, th); dl->AddLine(P(0, -0.85f), P(0, 0.85f), col, th);
+        for (int k = 0; k < 4; k++) { const float a = k * 1.5708f, ca = std::cos(a), sa = std::sin(a); dl->AddLine(P(0.85f * ca, 0.85f * sa), P(0.55f * ca - 0.25f * sa, 0.55f * sa + 0.25f * ca), col, th); dl->AddLine(P(0.85f * ca, 0.85f * sa), P(0.55f * ca + 0.25f * sa, 0.55f * sa - 0.25f * ca), col, th); }
+        break;
     case Icon::Check: { const ImVec2 pts[3] = {P(-0.55f, 0.0f), P(-0.15f, 0.45f), P(0.6f, -0.45f)}; dl->AddPolyline(pts, 3, col, 0, th * 1.15f); break; }
     }
 }

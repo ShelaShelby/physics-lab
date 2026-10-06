@@ -303,8 +303,8 @@ int main(int, char**) {
             SDL_GetWindowSizeInPixels(window, &fbW, &fbH);
             canvasWinW = std::max(1.0f, shellOn ? float(winW) : winW - panelWidth);   // the picture's width in window coordinates
             // the header is across the top; the Atom Lab has a bar under its picture (view buttons and the hint); both are measured each frame
-            headerH = shellOn ? (app.lab == 1 ? ui::shellTopBarH() : 0.0f) : ui::headerHeight();   // (the Atom Lab's picture keeps its own text at the top: it starts under the bar until stage 5)
-            pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 ? atomBarH : 0));
+            headerH = shellOn ? 0.0f : ui::headerHeight();   // (the new UI: the picture fills the window in both labs)
+            pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 && !shellOn ? atomBarH : 0));
         };
         measure();
 
@@ -450,16 +450,19 @@ int main(int, char**) {
             if (mouse && std::sscanf(mouse, "%f,%f", &mx, &my) == 2) ImGui::GetIO().AddMousePosEvent(mx, my);
         }
         ImGui::NewFrame();
-        if (shellOn) {                                  // the new UI: bars and panels over the full-window picture (the Atom Lab's bar under its picture stays, so the toolbar sits above it)
-            ui::shellFrame(app, winW, winH - int(app.lab == 1 ? atomBarH : 0), fps, frameDt);
-            headerH = app.lab == 1 ? ui::shellTopBarH() : 0.0f;
+        app.atom.shellUi = shellOn;                     // the new UI: the picture's own "More / Less info" button is left out (stage 5a)
+        if (shellOn) {                                  // the new UI: bars and panels over the full-window picture, in both labs (stage 5a: the Atom Lab's bar under its picture is gone, its toolbar has its actions)
+            ui::shellFrame(app, winW, winH, fps, frameDt);
+            headerH = 0.0f;
+            atomBarH = 0;
         } else {
             ui::setReadingMode(false);                  // About, History and the guides open in their floating windows
             app.set.shell = false; app.set.minTextU = app.set.minTextPx = app.set.reserveBottom = app.set.reserveRight = 0; app.view.cx = app.view.cy = 0;
             ui::header(app);                            // across the top: title, subtitle and the app's buttons
             headerH = ui::headerHeight();
         }
-        pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 ? atomBarH : 0));
+        pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 && !shellOn ? atomBarH : 0));
+        app.atom.insetTop = shellOn ? ui::shellTopBarH() / scale + 4 : 0; app.atom.insetBottom = shellOn ? app.set.reserveBottom : 0;   // (points; after shellFrame, so the first frame already has the bars' size)
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
         app.canvasH = pictureWinH / scale;
         app.set.lightTheme = ui::look().c.light;
@@ -476,8 +479,8 @@ int main(int, char**) {
         else if (app.lab == 1) {
             app.atomView.draw(renderer, text, 0, headerH, scale, app.atom, app.canvasW, app.canvasH, ui::look().c, ui::look().textScale);
             text->PopClipRect();
-            atomBarH = ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, false);
-            ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, true);
+            if (shellOn) atomBarH = 0;                 // (the new UI: the toolbar has the bar's actions)
+            else { atomBarH = ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, false); ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, true); }
         } else {
             atomBarH = 0;
             app.set.paused = app.paused;

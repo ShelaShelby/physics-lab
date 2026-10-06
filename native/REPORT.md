@@ -1,48 +1,29 @@
-# Native Physics Lab 0.15 — stage 4.1: fast workflow (testing speed). No app, look, physics or test-check change.
+# Native Physics Lab 0.15 — stage 5a (of 7): the Atom Lab's toolbar and view buttons (New UI On)
 
-`index.html` untouched. No helper agents. One commit, one push to `native`, no PR. Changed: `CMakeLists.txt` (labels, test environment, ccache), `tools/check.sh`, `tools/theme_pictures.sh`, `tests/shell_lib.py` and the picture scripts (parallel starts), `CLAUDE.md` (workflow rules + build commands), RESUME. Time used: about 60 minutes (most of it the two timed full runs).
+`index.html` untouched. No helper agents. One commit, one push to `native`, no PR. New UI Off = the old app (hash guards unchanged). No physics value, formula or source changed, so the About page needs no new source.
 
-## Result in one paragraph (honest)
-`check.sh quick` is **65 s** (was: no such thing; the unit programs were mixed in with the picture tests). A single picture test run by hand is now **3-4x faster** (it uses every core: `orbit_ui_facts_long` 505 s -> 126 s alone, `shell_pictures` 233 s -> 201 s, a `check_shell.py` part of 8 starts 47 s). **The full run did NOT get faster: about 24-26 min before and after (1,461 s and, after the last edits, 1,541 s: 27 of 27 pass).** The reason is measured, not a guess: the cost is software rendering of the frames, about 90 ms of one CPU core per Orbit Lab frame at 1000x640 (45 frames = 3.8 s; an app start itself is 1.2 s), and the suite makes 529 app starts of 40-110 frames: about 5,800 CPU-seconds, so 4 cores cannot go below about 24 min. The old tests already kept all 4 cores busy (llvmpipe used 4 threads per start, now 1 thread per start and 4 starts at once: the same total). The 6-minute target is therefore not reachable without cutting work, and I did not cut any (see "Options").
+## What changed (New UI On, Atom Lab only)
+- **Toolbar**, bottom centre, same pill, 32 px buttons, 4 u gaps and carets as the Orbit one: **Atom · Nucleus ▾ · Cloud ▾ · Chart | Reset view**. Six new icons (atom, nucleus, cloud, chart, reset, move) drawn like the others.
+  - Atom = View Orbit + zoom out (old "View: Orbit" and the bar's ⌕ Atom). Nucleus = the bar's ⌕ Nucleus; its ▾ holds Nucleus / Nucleon (the bar's ⌕ Nucleon). Cloud = View Cloud; its ▾ holds Cloud / Cloud 3D / Slice. Chart = View Chart of nuclides. Reset view = the bar's ↺ Reset view; on the chart it is "Reset tilt, zoom and position".
+  - **Centre** and the **Drag rotate / move** button (also in the old bar) are kept: they appear only when the old bar showed them, so the toolbar changes width with the view. Nothing dropped.
+  - Nucleus / Nucleon from the chart also go to the Orbit view (the chart has no zoom; nothing would be seen). In the cloud views they only zoom, as the old bar did.
+- **Play / pause** stays in the element chip (stage 4 rule; Space works). This **replaces** DESIGN.md's "Play in the toolbar" idea for the Atom Lab (DECISIONS.md).
+- The **bar under the picture** and the picture's **"Less info"** button are gone in the New UI; the picture fills the window (header 0, no bar). Its own text lines and the chart keep clear of the top bar and the toolbar by an inset (new `AtomLab::insetTop/insetBottom`, `setChartInsets`; both 0 with New UI Off).
+- Because the hint line and More / Less info have no home until 5b, **both are at the top of the Old panel** (nothing unreachable). Build another and Reshuffle nucleons are also still only in the Old panel.
+- Code: `atom/atom_tools.*` (what each button does, no drawing), `ui/shell_atom.cpp` (toolbar items, two panels), small edits in `ui/shell.cpp` (split button kind, panel ids), `main.cpp`, `atom_view.cpp`, `chart.*`, `shell_test.cpp` (an Atom `state` line).
 
-## What was done
-- ctest labels `quick` (9 unit/shader/source-scan tests) and `pictures` (18 tests that start the app); `tools/check.sh quick|full` (full = `ctest -j<cores>`, `PL_JOBS=1` so ctest, not the scripts, spreads the work).
-- Picture tests get `LP_NUM_THREADS=1` and a shared `MESA_SHADER_CACHE_DIR` (an app start: 2.8 s -> 1.3 s with a warm cache). **Same pixels, proved:** `shell_pictures` (48 hash guards) and `theme_pictures` (the 0.13 / 0.14 / 0.15 hashes), `window`, `y2k`, `page_cache`, `effects` all pass under it.
-- `shell_lib.prefetch()`: independent starts run in a pool (`PL_JOBS` workers, one per core when a test is run alone); used by `check_shell.py` (sizes, reading, small), `check_shell_pictures.py` (68 starts), `check_orbit_ui.py` facts_long. `tools/theme_pictures.sh` draws its themes in parallel (own HOME and log each); the three native themes are drawn at once.
-- ccache is used by CMake when installed (`apt-get install -y ccache`): a rebuild after reverting a break-it-on-purpose edit hits the cache. (Not measured separately; the first build after enabling it was a full 386-step build.) A fresh container has nothing cached: FetchContent sources (SDL, ImGui) are fetched again (about 1 min of the configure); no way to keep them between sessions except in the repo, which I did not do (it would add large files).
-- CLAUDE.md: the exact one-line build commands (app, unit-only) and the WORKFLOW RULES the owner listed (quick while working, one test per perturbation, `full` once, no polling, time budget 60 min with PROGRESS.md lines).
-- Not done (not reachable here): reusing one app start for several pictures. A picture of another state needs another start, and a script step changes the screen it is then compared with, so pixels would differ.
+## Tests (written first; none loosened)
+- `atom_tests` (unit, in `check.sh quick`), new file `tests/test_atom_tools.inc`: for the five view words of INVENTORY ("Orbit / Cloud / Cloud 3D / Slice / Chart of nuclides") from every start view the button gives that word and the same state as the old View row; Nucleus / Nucleon / Atom against the old bar's functions called directly (and a zoom-in / ordering sanity check); Reset view in Cloud 3D (start angles 0.6 / 0.35), Orbit, Cloud (untouched), chart (= chartReset); Centre, Drag toggle and when each is shown; which button is lit. 21,148 atom checks, 0 failed.
+- `atom_toolbar` (new picture test, 44 checks, 130 s): the real app twice, old controls (New UI Off) against the toolbar (New UI On), same scripted clicks: view after each step, the levels Nucleus / Nucleon / Atom (carbon-12; hydrogen's nucleus is one nucleon, so its "Nucleus" level already reads as the nucleon level), Reset view, Drag toggle, the chart's Reset, chip play and Space, toolbar one row, inside the window, centred, not touching the top bar. Zoom numbers are not compared (the picture size differs).
+- **Break it on purpose:** the Slice button set to Cloud 3D: `atom_tests` failed 8 checks (Slice from each of 4 views, view and state); reverted, 0 failed.
+- Full suite (`check.sh full`, run once, with the new `atom_toolbar` in it): **27 of 27 passed**, 1,447 s.
 
-## Timing (seconds, `ctest -j4`; before = stage 4 runs, 4 llvmpipe threads per start; after = 1 thread, shared shader cache; app starts counted by a wrapper)
-| test | before | after | app starts |
-|---|---|---|---|
-| shell_ui | 940 | 1057 | 53 |
-| shell_pictures | nan | 579 | 68 |
-| theme_pictures | 552 | 526 | 90 |
-| orbit_ui_facts_long | 388 | 505 | 31 |
-| orbit_ui_coverage | 541 | 458 | 56 |
-| window_pictures | 368 | 424 | 40 |
-| y2k_pictures | 319 | 332 | 30 |
-| shell_state | 238 | 260 | 12 |
-| orbit_ui_readable | 256 | 243 | 36 |
-| effects_pictures | 240 | 216 | 25 |
-| orbit_ui_facts | 216 | 173 | 11 |
-| orbit_ui_search | 188 | 164 | 28 |
-| orbit_ui_card | 173 | 159 | 16 |
-| page_cache_pictures | 174 | 145 | 24 |
-| atom_physics | 108 | 64 | 0 |
-| orbit_ui_chip | 70 | 52 | 3 |
-| gl_phase_colours | 58 | 45 | 0 |
-| orbit_ui_time | 32 | 24 | 4 |
-| orbit_ui_links | 18 | 16 | 2 |
-| 9 quick tests | 108 (atom_physics) | 65 (all, parallel) | 0 |
-Total: **529 app starts**, full run 1,461 s / 1,541 s after (1,492 s before). Pass/fail is the same as the stage 4 run (27 of 27); the check counts are untouched (no check was edited).
+## Looked at (software OpenGL, 1280x800, once each)
+Atom, Nucleus, Cloud 3D, Chart in Dark; Cloud 3D in Aero. Found and fixed: the Atom picture's first two text lines and the chart's top-left notes were under the top bar (the inset above), and the chart's axis row sat under the toolbar. Left as it is: the chart's "neutrons N →" title is just below the toolbar's bottom edge (5b arranges the chart's legend and notes).
 
-## Options for the owner (each trades something, so not done without a decision)
-1. Run the logic-only tests (`orbit_ui_*`, `shell_ui`) in a smaller window: cost is about proportional to pixels, so about 35 % less for them; the checks stay, but some read layout at 1280x800.
-2. Fewer frames per start where a test only needs the state (the scripts wait 10-30 frames before and after the clicks): a few minutes saved, with a small risk of timing flakes.
-3. A split of `check.sh full` into "changed screens" and "everything" per stage (the rules in CLAUDE.md already say: while working, only the one test for what changed).
-4. A real GPU would make frames about 100x cheaper; the cloud session has none.
-
-## Not tested
-Windows, GitHub's build: see the closing message.
+## Not tested / limits
+- Windows, Segoe UI, Windows scale 125 / 150 %, a real GPU, speed: not tested (cloud session, software rendering). **No frame cost measured**; the stage adds no per-frame work except one tool list of 5-8 items and two number copies.
+- Not in this stage (5b): the element chip's periodic table, view options, marks, photon panels, subject card, legend, the Atom fact line. The Atom Lab keeps its Old panel button.
+- The toolbar's icons are small drawings without text; whether they are clear is for the owner (OWNER-TODO.md).
+- Found on the way: the picture's `layer` is chosen from the drawn size, so a one-nucleon nucleus (hydrogen) shows "Quarks / Nucleon" at the Nucleus zoom; existing behaviour, unchanged.
+- Environment: a fresh container needs X11 dev headers before CMake works (SDL stops on XCURSOR); the apt line is now in CLAUDE.md.

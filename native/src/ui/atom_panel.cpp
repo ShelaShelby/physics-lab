@@ -1042,7 +1042,15 @@ void atomPanelFloating(AppState& app, bool* open, float x, float y, float w, flo
     pushFloatStyle();
     const bool shown = ImGui::Begin("Old panel###oldpanel", open, ImGuiWindowFlags_NoCollapse);
     popFloatStyle();
-    if (shown) { panelDecor(app::PanelKind::Floating); atomPanelContents(app); }
+    if (shown) {
+        panelDecor(app::PanelKind::Floating);
+        {   // the old bar's hint line and the picture's More / Less info button: both left out of the new UI's picture until stage 5b gives them a home
+            AtomLab& L = app.atom;
+            if (ui::Button(L.moreShown() ? "Less info" : "More info")) { L.s.more = !L.moreShown(); L.moreStored = L.s.more; }
+            mutedWrapped(displayable(L.hint()), 13.0f / 16);
+        }
+        atomPanelContents(app);
+    }
     ImGui::End();
 }
 

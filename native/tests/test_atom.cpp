@@ -4456,6 +4456,7 @@ static void testQuadrupole(double guardMinSepDeformed) {
 #include "test_outline_norm.inc"   // 0.13 stage 3: the exact normalisation (part B) and the 90 % outline
 #include "test_stage4_cloud.inc"   // 0.13 stage 4 part C: the Cloud 2D view's buffers
 #include "test_chart_cache.inc"   // 0.13 stage 4 part B: the chart of nuclides kept on the GPU
+#include "test_atom_tools.inc"   // 0.15 stage 5a: the Atom Lab toolbar buttons -> lab state
 
 int main() {
     testConstants();
@@ -4543,6 +4544,7 @@ int main() {
     testOutlineGpuLogic();
     testCloudBuffers();
     testChartCache();
+    testAtomTools();
     std::printf("%d atom checks, %d failed (%d on an exact rounding tie, off by one in the last digit).\n", g_checks, g_failed, g_ties);
     return g_failed ? 1 : 0;
 }
