@@ -1,6 +1,7 @@
 # Owner to-do (things only the owner can do)
 
 ## 0.15 stage 5j: choose the modern look (on your phone or PC)
+- [ ] **The Windows exe with PL_LOOK=m1/m2/m3 is published** (release `latest` on GitHub, build of the newest `native` commit; first fixed in 5j.1, tested from commit b5473dd). Try it; steps are in REPORT.md (5j.1 and 5j). The pictures in `native/docs/look/` are full colour now.
 - [ ] Look at `native/docs/look/` on GitHub (m1_1.png ... m3_5.png and `look_compare.png`: TODAY | M1 | M2 | M3) and try `PL_LOOK=m1`, `m2`, `m3` on the PC (steps in REPORT.md): pick one or a mix (for example "M2's blue pill with M3's font"). The old looks A, B, C are gone.
 - [ ] On the PC: do Inter and IBM Plex Sans look clean at your Windows scale (100 / 125 / 150 %)? The emoji on buttons come from Segoe UI Emoji as before; tell me if any shows as a box.
 - [ ] Atom Lab, All values, a tall tab (Spectrum): the sheet should end above the bottom toolbar and scroll inside itself (stage 5i).
