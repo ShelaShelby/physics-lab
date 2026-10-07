@@ -66,6 +66,9 @@ jobs:
       - name: Physics unit tests
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Font coverage on Windows (printed lists, for the report)
+        run: ctest --test-dir build -C Release -R font_coverage -V
+
       - name: Collect files
         shell: pwsh
         run: |
