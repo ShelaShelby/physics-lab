@@ -1,0 +1,1 @@
+- 0.15 stage 5i part 1: data sheet ends above the toolbar (+ Orbit sheet kept off the Controls panel); ~28 min; ui5i_sheet + guards green, shell_pictures: 4 sheet hashes at 1000x640 rewritten on purpose

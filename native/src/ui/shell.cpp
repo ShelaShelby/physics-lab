@@ -962,6 +962,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             const double ax = S.anchorX.count(id) ? S.anchorX[id] : W / 2;
             openRect = placePanel(id == PanelId::Data ? Anchor::Centre : fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(id == PanelId::Chip && app.lab == 1 ? atomPanelWidthEm(id) : widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
             for (const Rect& c : cards) openRect = sideStep(openRect, c, fr.window, m.s12, m.s12);
+            if (id == PanelId::Data) openRect.x = std::max<double>(m.s12, std::min(openRect.x, (fr.freeW > 0 ? fr.freeW : fr.window.w) - m.s12 - openRect.w));   // stage 5i: the side step never pushes the sheet under the Controls panel
             sh::Panel p;
             if (sh::beginPanel(wid.c_str(), openRect, p, sh::Shape::Panel, true, id == PanelId::Data)) {   // (stage 5g: the data sheet is solid in the plain themes: the picture's labels showed through it)
                 if (id == PanelId::Data) auditNote("datasheet solid");

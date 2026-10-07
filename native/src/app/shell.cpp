@@ -148,8 +148,9 @@ Rect placePanel(Anchor a, double w, double h, const Frame& f, const Metrics& m, 
     }
     case Anchor::Centre:
         r.x = (W - w) / 2;
-        r.h = std::min(h, f.window.h - top - 2.0 * m.s24);
         r.y = top + m.s24;
+        // stage 5i: it ends above the bottom toolbar (it was drawn over it by about 27 px at 1280x800); a taller one scrolls inside itself
+        r.h = std::min(h, std::min(f.window.h - m.s24, f.toolbar.h > 0 ? f.toolbar.y - m.s8 : f.window.h) - r.y);
         break;
     }
     r.h = std::max(1.0, r.h);
