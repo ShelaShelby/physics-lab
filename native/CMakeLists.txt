@@ -197,6 +197,7 @@ if(PL_BUILD_APP)
   # 0.15 stage 5j: glyph coverage of the look fonts, read from the font files with stb_truetype (no window, no app start)
   add_executable(font_tests tests/test_fonts.cpp)
   target_include_directories(font_tests SYSTEM PRIVATE ${imgui_SOURCE_DIR})
+  target_include_directories(font_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
   target_compile_definitions(font_tests PRIVATE PL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets" PL_SRC_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
   add_test(NAME font_coverage COMMAND font_tests)
 

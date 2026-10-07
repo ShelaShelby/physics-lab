@@ -18,8 +18,8 @@ SCREENS = {
     4: (dict(ATOM, PL_SCRIPT="10:click=card.all;16:click=data.tab.spectrum"), 50),
 }
 
-def png(im, path, colours=96):
-    im.convert("RGB").quantize(colours, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(path, optimize=True)
+def png(im, path, colours=None):
+    im.convert("RGB").save(path, optimize=True)      # stage 5j.1: full colour (a palette washed out the small coloured dots); `colours` is kept only so old calls still work
 
 def main(binary, work, out):
     os.makedirs(out, exist_ok=True)

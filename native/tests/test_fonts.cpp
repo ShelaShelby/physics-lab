@@ -1,7 +1,7 @@
 // 0.15 stage 5j: glyph coverage of the fonts shipped for the looks M1..M3 (PL_LOOK). Written BEFORE the loader code.
 // Reference: the font files themselves: their 'cmap' tables read with stb_truetype (the same reader Dear ImGui builds its atlas with). No app, no window.
 //   1. Every non-ASCII character inside a string literal of src/ (the string tables and UI texts) is looked up in the new font (Inter, IBM Plex Sans) and in the fallback chain
-//      the loader merges behind it (Linux: DejaVu Sans, Noto Sans Symbols, FreeSerif, Liberation Sans: the list of ui/fonts.cpp; Windows has Segoe UI / Symbol / Emoji instead: NOT testable here).
+//      the loader merges behind it (the loader's own list, ui/font_chain.h: Linux DejaVu Sans, Noto Sans Symbols, FreeSerif; Windows Segoe UI, Segoe UI Symbol, Segoe UI Emoji).
 //   2. TEXT characters (below U+2100: Latin, Greek, punctuation, superscripts / subscripts) must be drawable by new font OR chain, else the test fails: that would be a box in the app.
 //   3. SYMBOL / emoji characters (U+2100 and up) found in neither are only LISTED (they are missing in today's app too; on Windows Segoe UI Symbol / Emoji draw most of them).
 #include <cstdio>
@@ -16,6 +16,7 @@
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "imstb_truetype.h"
+#include "ui/font_chain.h"
 
 static int failures = 0;
 static void checkTrue(const std::string& what, bool ok) {
@@ -82,14 +83,14 @@ int main() {
     std::printf("%zu different non-ASCII characters in the string literals of src/\n", used.size());
     checkTrue("the scan found the characters the New UI uses (superscripts, Greek, arrows)", used.count(0x2079) && used.count(0x207A) && used.count(0x207B) && used.count(0x03B1) && used.count(0x2192) && used.count(0x00D7) && used.count(0x00B0));
 
-    // the fallback chain the loader merges behind the look font (Linux list of ui/fonts.cpp, "auto" family); a file that is not on this machine is skipped and said
+    // the fallback chain the loader merges behind the look font: THE loader's own list (ui/font_chain.h), per platform (Windows: Segoe UI, Segoe UI Symbol, Segoe UI Emoji)
     std::vector<FontFile> chain;
-    for (const char* p : {"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf", "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
-                          "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"}) {
+    for (const std::string& p : ui::fallbackFontChain()) {
         FontFile f = load(p);
-        if (f.ok) chain.push_back(std::move(f)); else std::printf("note: fallback %s not on this machine\n", p);
+        if (f.ok) chain.push_back(std::move(f)); else std::printf("note: fallback %s not on this machine\n", p.c_str());
     }
-    checkTrue("at least DejaVu Sans is available as the fallback (so the test means something)", !chain.empty());
+    std::printf("%zu of the platform's fallback fonts found\n", chain.size());
+    checkTrue("at least one font of this platform's fallback chain is available (so the test means something)", !chain.empty());
     const auto inChain = [&](unsigned cp) { for (const FontFile& f : chain) if (f.has(cp)) return true; return false; };
 
     const std::map<std::string, std::vector<std::string>> looks = {
@@ -121,7 +122,7 @@ int main() {
             if (cp < 0x2100) checkTrue(name + ": text character " + b + "is drawable (new font or fallback)", false);
             else { missing += b; nMissing++; }
         }
-        std::printf("%s: %d characters only the new font adds; %d symbol / emoji characters in NEITHER the new font NOR the Linux fallbacks:\n  %s\n", name.c_str(), gained, nMissing, missing.c_str());
+        std::printf("%s: %d characters only the new font adds; %d symbol / emoji characters in NEITHER the new font NOR this platform's fallbacks:\n  %s\n", name.c_str(), gained, nMissing, missing.c_str());
     }
     std::printf("%s (%d failures)\n", failures ? "font coverage FAILED" : "font coverage passed", failures);
     return failures ? 1 : 0;

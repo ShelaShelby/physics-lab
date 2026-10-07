@@ -1,4 +1,5 @@
 #include "fonts.h"
+#include "font_chain.h"
 #include "style_draw.h"
 
 #include <cstdio>
@@ -41,16 +42,12 @@ const char* loadFonts(float size) {
     // Each family: regular, bold, italic. A face is a list of files tried in order (the first one found is used);
     // "@Name" is a font built into the .exe. Letters a face lacks come from the fallbacks (merged in after it).
 #ifdef _WIN32
-    std::string dir = "C:\\Windows\\Fonts\\";
-    if (const char* w = std::getenv("WINDIR")) dir = std::string(w) + "\\Fonts\\";
-    const std::vector<std::string> fallbacks = {dir + "segoeui.ttf", dir + "seguisym.ttf", dir + "seguiemj.ttf"};   // emoji as plain outlines
+    const std::string dir = windowsFontDir();
     const std::map<std::string, std::vector<std::vector<std::string>>> families = {
         {"auto", {{dir + "segoeui.ttf", dir + "arial.ttf"}, {dir + "segoeuib.ttf", dir + "arialbd.ttf"}, {dir + "segoeuii.ttf", dir + "ariali.ttf"}}},
         {"serif", {{dir + "georgia.ttf", dir + "times.ttf"}, {dir + "georgiab.ttf", dir + "timesbd.ttf"}, {dir + "georgiai.ttf", dir + "timesi.ttf"}}},
         {"mono", {{dir + "consola.ttf", dir + "cour.ttf"}, {dir + "consolab.ttf", dir + "courbd.ttf"}, {dir + "consolai.ttf", dir + "couri.ttf"}}},
 #else
-    const std::vector<std::string> fallbacks = {"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf",
-                                                "/usr/share/fonts/truetype/freefont/FreeSerif.ttf"};
     const std::string dv = "/usr/share/fonts/truetype/dejavu/", lb = "/usr/share/fonts/truetype/liberation/";
     const std::map<std::string, std::vector<std::vector<std::string>>> families = {
         {"auto", {{dv + "DejaVuSans.ttf", lb + "LiberationSans-Regular.ttf"}, {dv + "DejaVuSans-Bold.ttf", lb + "LiberationSans-Bold.ttf"}, {dv + "DejaVuSans-Oblique.ttf", lb + "LiberationSans-Italic.ttf"}}},
@@ -60,6 +57,7 @@ const char* loadFonts(float size) {
         {"easy", {{"@AtkinsonHyperlegible-Regular"}, {"@AtkinsonHyperlegible-Bold"}, {"@AtkinsonHyperlegible-Italic"}}},
         {"round", {{"@Nunito-Regular"}, {"@Nunito-Bold"}, {"@Nunito-Italic"}}},
     };
+    const std::vector<std::string> fallbacks = fallbackFontChain();     // (font_chain.h: the same list tests/test_fonts.cpp checks)
     auto addFace = [&](const std::vector<std::string>& files) -> ImFont* {
         ImFont* f = nullptr;
         for (const std::string& path : files) {
