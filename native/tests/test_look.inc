@@ -1,4 +1,4 @@
-// 0.15 stage 5i: the three look options (PL_LOOK=m1|m2|m3, Dark only). Included by test_app.cpp (uses its checkTrue). Written BEFORE src/app/look_options.*.
+// 0.15 stage 5i/5j: the look options M1..M3 (PL_LOOK=m1|m2|m3, Dark only). Included by test_app.cpp (uses its checkTrue). Written BEFORE src/app/look_options.*.
 // Reference: the W3C's WCAG 2.x contrast formula (https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio, #dfn-relative-luminance), WRITTEN OUT HERE (not the app's own function),
 // checked against the W3C's own worked values first. Needs: body and card text 4.5:1 (SC 1.4.3), icons and the borders of controls 3:1 (SC 1.4.11).
 #include "app/look_options.h"
@@ -49,8 +49,8 @@ static void testLookContrast() {
             {"muted text on card", mu, card, 4.5},  {"muted text on face", mu, face, 4.5},    {"muted text on hovered face", mu, hover, 4.5}, {"muted text on pressed face", mu, press, 4.5},
             {"accent text on card", ac, card, 4.5}, {"accent text on hovered face", ac, hover, 4.5},
             {"text on the accent fill", on, fill, 4.5},
-            {"icon (text colour) on card", fg, card, 3.0}, {"icon on face", fg, face, 3.0}, {"caret (muted) on card", mu, card, 3.0},
-            {"check box border (muted) on face", mu, face, 3.0}, {"slider track (accent) on card", ac, card, 3.0}, {"accent fill against card (selected tab)", fill, card, 1.0},
+            {"icon (muted, at rest) on card", mu, card, 3.0}, {"icon (muted) on face", mu, face, 3.0}, {"icon (text colour, hovered) on hovered face", fg, hover, 3.0}, {"icon (text colour) on card", fg, card, 3.0}, {"icon on face", fg, face, 3.0}, {"caret (muted) on card", mu, card, 3.0},
+            {"check box border (muted) on face", mu, face, 3.0}, {"slider track (accent) on card", ac, card, 3.0}, {"divider (line) on card: visible, a hairline", rg(t->line), card, 1.2}, {"accent fill against card (selected tab)", fill, card, 1.0},
         };
         for (const Pair& p : pairs) checkTrue(n + p.what + " >= " + std::to_string(p.need).substr(0, 3) + ":1 (is " + std::to_string(ratio(p.a, p.b)).substr(0, 4) + ")", ratio(p.a, p.b) >= p.need);
         // translucent panels: the card at panelAlpha over the WORST picture behind (pure black or pure white), text still 4.5:1
@@ -63,6 +63,20 @@ static void testLookContrast() {
         }
         // sizes: the spec's radii and the Body floor are not touched by a look
         checkTrue(n + "radii and padding are sane", t->radiusPanel >= 3 && t->radiusPanel <= 16 && t->radiusCtl >= 2 && t->radiusCtl <= t->radiusPanel && t->pad >= 12 && t->pad <= 24);
+        // the owner's brief for M1..M3: flat (no gradient / shine / halo / see-through), radii 10-12 / 8, thin icons, an own font; the selected pill is light grey with dark text (M1, M3) or blue with white text (M2)
+        checkTrue(n + "flat: solid, no shine, no halo", t->panelAlpha == 1.0f && t->shineAlpha == 0.0f && t->haloAlpha == 0);
+        checkTrue(n + "radii 10..12 (panels) and 8 (controls), thin icons (stroke 0.9..1.0 of 1.75 u = about 1.5 px)", t->radiusPanel >= 10 && t->radiusPanel <= 12 && t->radiusCtl == 8 && t->stroke >= 0.9f && t->stroke <= 1.0f);
+        checkTrue(n + "a look font is named", t->font && (std::string(t->font) == "m_inter" || std::string(t->font) == "m_plex"));
+        checkTrue(n + "the hairline border is about 8 % (6..10 %)", t->edgeAlpha >= 0.06f && t->edgeAlpha <= 0.10f);
+        checkTrue(n + "very dark flat background and card (luminance < 0.02), card a little lighter than the background", lum(rg(t->bg)) < 0.02 && lum(card) < 0.02 && lum(card) > lum(rg(t->bg)));
+        if (id == 2) checkTrue(n + "selected pill is blue (b > r, g) with white text", fill.b > fill.r && fill.b > fill.g && on.r == 1 && on.g == 1 && on.b == 1);
+        else checkTrue(n + "selected pill is light grey (luminance > 0.5) with dark text (< 0.02)", lum(fill) > 0.5 && lum(on) < 0.02 && std::fabs(fill.r - fill.b) < 0.05);
         checkTrue(n + "the border is a hairline (<= 0.2) and the halo stays within the 2 px rule (alpha <= 40)", t->edgeAlpha > 0 && t->edgeAlpha <= 0.2f && t->haloAlpha >= 0 && t->haloAlpha <= 40);
+    }
+    // M1 and M3 have the same surfaces and differ in the font; M1 and M2 share the font
+    const app::lookopt::Tokens *m1 = app::lookopt::tokens(1), *m2 = app::lookopt::tokens(2), *m3 = app::lookopt::tokens(3);
+    if (m1 && m2 && m3) {
+        checkTrue("M3 = M1's surfaces (bg, card, text, muted, fill) in another font", m1->bg.r == m3->bg.r && m1->card.g == m3->card.g && m1->muted.b == m3->muted.b && m1->accentFill.r == m3->accentFill.r && std::string(m1->font) != std::string(m3->font));
+        checkTrue("M1 and M2 both use Inter", std::string(m1->font) == "m_inter" && std::string(m2->font) == "m_inter");
     }
 }

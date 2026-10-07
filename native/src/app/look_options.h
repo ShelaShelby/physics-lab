@@ -19,9 +19,10 @@ struct Tokens {
     int radiusPanel, radiusCtl;          // corner radii, points at scale 1
     int pad;                             // a panel's padding, points at scale 1
     float stroke;                        // icon stroke, times today's 1.75 u
+    const char* font;                    // the font family key made by ui/fonts.cpp for this look ("m_inter", "m_plex"); text is drawn in it, today's font stays behind it as the fallback
 };
 
-constexpr int kCount = 0;                // number of looks (part 1: none yet)
+constexpr int kCount = 3;                // M1, M2, M3
 int fromEnv(const char* value);          // 1..kCount for PL_LOOK=m1..m3 (either case), else 0
 const Tokens* tokens(int id);           // nullptr for 0
 ThemeColors apply(const Tokens& t, ThemeColors dark);   // the Dark theme's colours with this look's tokens in place of the colours

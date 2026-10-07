@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "app/look_options.h"
 #include "app/theme_style.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -65,6 +66,7 @@ const char* loadFonts(float size) {
             if (path[0] == '@') {                                    // built in: the latin part, then latin-ext merged into it
                 const EmbeddedFont* a = embedded(path.substr(1) + "-latin");
                 const EmbeddedFont* b = embedded(path.substr(1) + "-latin-ext");
+                if (!a) { a = embedded(path.substr(1)); b = nullptr; }    // stage 5j: a whole font in one file (Inter, IBM Plex Sans)
                 if (!a) continue;
                 ImFontConfig cfg;
                 cfg.FontDataOwnedByAtlas = false;                    // the data lives in the .exe
@@ -123,6 +125,20 @@ const char* loadFonts(float size) {
         fam.regular = addFace({"@Michroma-Regular"});
         if (fam.regular) { fam.bold = fam.italic = fam.regular; g_families["michroma"] = fam; }
     }
+    {   // 0.15 stage 5j: the font of look M1..M3, loaded ONLY when PL_LOOK asks for it (today's fonts and atlas stay as they are otherwise). Regular + SemiBold (the "bold" face: titles); no italic file,
+        // so italic text is drawn upright. Today's font is merged behind it (addFace) so a letter the look font lacks is still drawn, never a box.
+        if (const app::lookopt::Tokens* lt = app::lookopt::tokens(app::lookopt::fromEnv(std::getenv("PL_LOOK")))) {
+            const bool inter = std::strcmp(lt->font, "m_inter") == 0;
+            Fonts fam;
+            fam.regular = addFace({inter ? "@Inter-Regular" : "@IBMPlexSans-Regular"});
+            if (fam.regular) {
+                fam.bold = addFace({inter ? "@Inter-SemiBold" : "@IBMPlexSans-SemiBold"});
+                if (!fam.bold) fam.bold = fam.regular;
+                fam.italic = fam.regular;
+                g_families[lt->font] = fam;
+            }
+        }
+    }
     if (!g_families.count("auto")) {
         ImFont* f = io.Fonts->AddFontDefault();
         g_families["auto"] = {f, f, f};
@@ -130,6 +146,14 @@ const char* loadFonts(float size) {
     g_fonts = g_families["auto"];
     io.FontDefault = g_fonts.regular;
     return used.c_str();
+}
+
+void logFontAtlas() {
+    if (!std::getenv("PL_LOG_ATLAS")) return;
+    ImFontAtlas* a = ImGui::GetIO().Fonts;
+    ImTextureData* t = a->TexData;
+    std::printf("PLATLAS tex=%dx%d used=%dx%d bytes=%d packedRects=%d packedPixels=%d bakedSizes=%d\n", t ? t->Width : 0, t ? t->Height : 0, t ? int(t->UsedRect.w) : 0, t ? int(t->UsedRect.h) : 0, t ? t->Width * t->Height * t->BytesPerPixel : 0,
+                a->Builder ? a->Builder->RectsPackedCount : -1, a->Builder ? a->Builder->RectsPackedSurface : -1, a->Builder ? a->Builder->BakedPool.Size : -1);
 }
 
 bool fontFamilyAvailable(const std::string& key) { return g_families.count(key) > 0; }

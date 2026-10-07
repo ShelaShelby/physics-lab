@@ -1,4 +1,5 @@
 #include "look.h"
+#include "app/look_options.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -225,6 +226,12 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     L.synthGlow = ts.glowTop.set;
     // the font: the one picked in Settings; with Theme default, the theme's own (Paper's book font, Monochrome's monospace, Aero's Segoe UI when the PC has it)
     L.fontKey = app::fontKeyFor(ts, p.font, fontFamilyAvailable(app::fontFamilyKeyOf(ts)));
+    {   // 0.15 stage 5j: PL_LOOK=m1|m2|m3 (New UI on, Dark, font Auto): the look's own font; if it did not load, nothing changes
+        static const app::lookopt::Tokens* lt = app::lookopt::tokens(app::lookopt::fromEnv(std::getenv("PL_LOOK")));
+        static const char* nuEnv = std::getenv("PL_NEWUI");                                      // (the same rule as newUiOn: PL_NEWUI overrides the setting)
+        const bool newUi = nuEnv ? std::string(nuEnv) == "on" : p.newUi == "on";
+        if (lt && newUi && L.c.id == "dark" && L.fontKey == "auto" && fontFamilyAvailable(lt->font)) L.fontKey = lt->font;
+    }
     g_look = L;
     useFontFamily(L.fontKey);
     const std::string key = L.c.id + "|" + std::to_string(L.textScale) + "|" + std::to_string(ImGui::GetStyle().FontScaleDpi);   // 0.15 stage 2: the display scale can change while the app runs

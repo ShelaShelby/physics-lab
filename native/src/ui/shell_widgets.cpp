@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <map>
 
@@ -107,7 +108,11 @@ std::vector<std::string> wrapText(Type t, bool bold, const std::string& s, float
             p = q + 1;
             if (w.empty() && q != para.size()) continue;
             const std::string tryLine = cur.empty() ? w : cur + " " + w;
-            if (!cur.empty() && width(t, bold, tryLine) > maxW) { lines.push_back(cur); cur = w; } else cur = tryLine;
+            if (!cur.empty() && width(t, bold, tryLine) > maxW) {
+                const std::size_t sp = cur.rfind(' ');
+                if (g_lo && w == "…" && sp != std::string::npos) { lines.push_back(cur.substr(0, sp)); cur = cur.substr(sp + 1) + " …"; }   // stage 5j looks: a lone "…" ("more decay modes") never stands on a line of its own: the word before it comes with it
+                else { lines.push_back(cur); cur = w; }
+            } else cur = tryLine;
         }
         lines.push_back(cur);
     }
@@ -375,7 +380,7 @@ bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* 
     if (on) dl->AddRectFilled(pos, q, cFacePress(), rc());
     else if (h.hovered) hoverFill(id, dl, pos, q, pos, q, cFaceHover(), rc());
     if (g_f.outline) dl->AddRect(pos, q, cEdge(), rc(), 0, 1.0f);
-    drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), cText());
+    drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), g_lo && !h.hovered && !on ? cMuted() : cText());   // (stage 5j looks: muted, bright on hover)
     if (caretW > 0) drawIcon(dl, on ? Icon::CaretUp : Icon::Caret, ImVec2(pos.x + size.x - caretW / 2 - g_f.m.s4 * 0.5f, pos.y + size.y / 2), caretW * 0.75f, cMuted());
     if (h.hovered && tip && *tip) ui::SetTooltip("%s", tip);
     return h.clicked;
@@ -386,7 +391,7 @@ bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, boo
     const Hit h = hit(id, pos, ImVec2(w, rowH));
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 b0(pos.x, pos.y + (rowH - box) / 2), b1(b0.x + box, b0.y + box);
-    const float r = ui::corner(3.0f * g_f.dpi);
+    const float r = ui::corner((g_lo ? 4.0f : 3.0f) * g_f.dpi);                  // (stage 5j looks: 4 px)
     if (*v) { if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), b0, b1, cFill(), r); else dl->AddRectFilled(b0, b1, cFill(), r); drawIcon(dl, Icon::Check, ImVec2((b0.x + b1.x) / 2, (b0.y + b1.y) / 2), box * 0.85f, cOnFill()); }
     else { if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), b0, b1, cFaceHover(), r); else dl->AddRectFilled(b0, b1, cFace(), r); dl->AddRect(b0, b1, cMuted(), r, 0, 1.5f); }
     text(dl, Type::Body, false, ImVec2(b1.x + g_f.m.s8, pos.y + (rowH - px(Type::Body)) / 2), cText(), label);
@@ -448,7 +453,7 @@ bool slider(const char* id, ImVec2 pos, float w, float* v, float lo, float hi) {
         if (nv != *v) { *v = nv; changed = true; }
     }
     const float t = hi > lo ? std::min(1.0f, std::max(0.0f, (*v - lo) / (hi - lo))) : 0;
-    const float cy = pos.y + rowH / 2, track = static_cast<float>(app::shell::unitPx(4, g_f.dpi, g_f.tf)), tx = x0 + t * (x1 - x0), rad = static_cast<float>(app::shell::unitPx(7, g_f.dpi, g_f.tf));
+    const float cy = pos.y + rowH / 2, track = static_cast<float>(app::shell::unitPx(g_lo ? 3 : 4, g_f.dpi, g_f.tf)), tx = x0 + t * (x1 - x0), rad = static_cast<float>(app::shell::unitPx(7, g_f.dpi, g_f.tf));
     dl->AddRectFilled(ImVec2(x0, cy - track / 2), ImVec2(x1, cy + track / 2), cHair(), track / 2);
     dl->AddRectFilled(ImVec2(x0, cy - track / 2), ImVec2(tx, cy + track / 2), cAccent(), track / 2);
     dl->AddCircleFilled(ImVec2(tx, cy), rad, h.active || h.hovered ? cAccent() : cFill());
@@ -460,7 +465,10 @@ bool row(const char* id, ImVec2 pos, float w, const std::string& label, bool sel
     const float rowH = static_cast<float>(g_f.m.row);
     const Hit h = hit(id, pos, ImVec2(w, rowH));
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), pos, ImVec2(pos.x + w, pos.y + rowH), cFaceHover(), rc());
+    // stage 5j looks: a selected row is ONE solid pill (fill colour, dark / white text, regular weight); a section header of the Controls panel is small muted text; hover = a soft pill
+    const bool sectionHead = g_lo && std::strncmp(id, "ctl.sec.", 8) == 0;
+    if (g_lo && selected) dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + rowH), cFill(), rc());
+    else if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), pos, ImVec2(pos.x + w, pos.y + rowH), cFaceHover(), rc());
     else if (selected) dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + rowH), cFace(), rc());
     float x = pos.x + g_f.m.s8;
     if (dotHex) {
@@ -469,7 +477,7 @@ bool row(const char* id, ImVec2 pos, float w, const std::string& label, bool sel
         dl->AddCircleFilled(ImVec2(x + d / 2, pos.y + rowH / 2), d / 2, ui::col(c), 16);
         x += d + g_f.m.s8;
     }
-    text(dl, Type::Body, selected, ImVec2(x, pos.y + (rowH - px(Type::Body)) / 2), selected ? cAccent() : cText(), label);
+    text(dl, Type::Body, selected && !g_lo, ImVec2(x, pos.y + (rowH - px(Type::Body)) / 2), g_lo ? (selected ? cOnFill() : sectionHead ? cMuted() : cText()) : selected ? cAccent() : cText(), label);
     return h.clicked;
 }
 

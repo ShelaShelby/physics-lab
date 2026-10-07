@@ -547,6 +547,7 @@ int main(int, char**) {
     SDL_AddEventWatch(onLiveExpose, &live);
     while (running) runFrame(false);
     SDL_RemoveEventWatch(onLiveExpose, &live);
+    ui::logFontAtlas();                              // PL_LOG_ATLAS=1 (stage 5j memory check): once, at the end
     {   // PL_LOG_SHELL: what the new UI drew (text sizes, rectangles), for the automatic checks
         int w = 0, h = 0;
         SDL_GetWindowSize(window, &w, &h);

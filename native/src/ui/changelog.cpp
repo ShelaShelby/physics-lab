@@ -19,6 +19,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5j: look options M1-M3 for testing",
+     "Three modern looks, M1, M2 and M3, were added for testing; they are not visible by default and nothing in the normal app changed. They keep the layout and change the details and the text: a clean modern font, flat dark cards with a thin edge, one solid selected pill, quiet muted section titles and thin icons. The old looks A, B and C were removed. "
+     "To try one on a PC: set PL_LOOK to m1, m2 or m3 before starting the app, and turn New UI on with the Dark theme. M1 and M2 use the Inter font and M3 uses IBM Plex Sans (both SIL Open Font License 1.1, built into the app, listed in About). Not tested: Windows, a real graphics card, speed. Nothing about the physics changed."},
     {"0.15", "Full UI rework, stage 5i: the data sheet stays above the toolbar",
      "With New UI (preview) On, the data sheet (All values) now ends above the bottom toolbar and scrolls inside itself when it is taller. Look options added for testing (not visible by default). No new facts or sources. Not tested: a real PC, a real mouse."},
     {"0.15", "Full UI rework, stage 5h: the Atom data sheet gets the last cards, and the atom is centred in the free space",

@@ -1,9 +1,9 @@
 # Owner to-do (things only the owner can do)
 
-## 0.15 stage 5i: choose the look (on your phone or PC)
-- [ ] Look at `native/docs/look/` on GitHub (a_1.png ... c_5.png and `look_compare.png`) and tell me: **A, B, C or a mix** (for example "B's surfaces with C's accent").
-- [ ] Optional, on the PC: start the app with `PL_LOOK=a` (steps in REPORT.md) and try it live; Settings -> New UI On, theme Dark.
-- [ ] Atom Lab, All values, a tall tab (Spectrum): the sheet should end above the bottom toolbar and scroll inside itself.
+## 0.15 stage 5j: choose the modern look (on your phone or PC)
+- [ ] Look at `native/docs/look/` on GitHub (m1_1.png ... m3_5.png and `look_compare.png`: TODAY | M1 | M2 | M3) and try `PL_LOOK=m1`, `m2`, `m3` on the PC (steps in REPORT.md): pick one or a mix (for example "M2's blue pill with M3's font"). The old looks A, B, C are gone.
+- [ ] On the PC: do Inter and IBM Plex Sans look clean at your Windows scale (100 / 125 / 150 %)? The emoji on buttons come from Segoe UI Emoji as before; tell me if any shows as a box.
+- [ ] Atom Lab, All values, a tall tab (Spectrum): the sheet should end above the bottom toolbar and scroll inside itself (stage 5i).
 - [ ] Keep: the Learn / About wheel bug was not reproduced in the cloud; test with a real mouse (see stage 5g below).
 
 ## 0.15 stage 5h: please try on the real PC (New UI On)

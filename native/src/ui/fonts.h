@@ -20,6 +20,7 @@ struct Fonts {
 // with Segoe UI and Segoe UI Symbol filling in letters a face lacks. Falls back to Dear ImGui's
 // built-in font (plain ASCII) if none is found. Returns the name of the main font file, or "built-in".
 const char* loadFonts(float sizePixels);
+void logFontAtlas();   // PL_LOG_ATLAS=1: at the end print the font atlas (texture size, packed glyph area, baked font sizes) once; for the memory check of stage 5j (no per-frame work)
 const Fonts& fonts();                                   // the family in use
 const Fonts& fontFamily(const std::string& key);        // any family (the Settings samples)
 bool fontFamilyAvailable(const std::string& key);

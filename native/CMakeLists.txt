@@ -194,9 +194,14 @@ if(PL_BUILD_APP)
   target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
   target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32)   # characters beyond U+FFFF (e.g. 🌍 in the Learn headings)
   target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
+  # 0.15 stage 5j: glyph coverage of the look fonts, read from the font files with stb_truetype (no window, no app start)
+  add_executable(font_tests tests/test_fonts.cpp)
+  target_include_directories(font_tests SYSTEM PRIVATE ${imgui_SOURCE_DIR})
+  target_compile_definitions(font_tests PRIVATE PL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets" PL_SRC_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src")
+  add_test(NAME font_coverage COMMAND font_tests)
 
   # the free fonts (assets/fonts, OFL) built into the .exe
-  file(GLOB PL_FONT_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/assets/fonts/*.ttf)
+  file(GLOB PL_FONT_FILES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/assets/fonts/*.ttf ${CMAKE_SOURCE_DIR}/assets/fonts/*.otf)
   add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/embedded_fonts.cpp
     COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR}/assets/fonts -DOUT=${CMAKE_BINARY_DIR}/embedded_fonts.cpp
@@ -293,6 +298,10 @@ if(PL_BUILD_APP)
       endforeach()
       # 0.15 stage 5i: the data sheet ends above the bottom toolbar (3 sizes, 8 tabs, Orbit sheet)
       add_test(NAME ui5i_sheet COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5i.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5i_sheet sheet)
+      # 0.15 stage 5j: the look options M1..M3: the app starts, draws the look, the 5g / 5h rect tests pass, and no text is cut in the panel / card / sheet (tests/check_5j.py)
+      foreach(m m1 m2 m3)
+        add_test(NAME ui5j_look_${m} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5j.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5j_look_${m} ${m})
+      endforeach()
       add_test(NAME shell_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_pictures ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference)
       # 0.15 stage 4: the whole Orbit Lab in the new UI: every INVENTORY.md item reachable by real clicks (incl. the 47 Go to names), the subject card's data sheet equal to the old card's lines
       # (8 things), the Time panel fits, the fact line (visible, changes after 20 s, stands still while hovered, readable, never overlaps), search (20 things, arrows, recent), links
@@ -307,12 +316,12 @@ endif()
 # 0.15 stage 4.1: labels and a fast, identical environment for the tests. quick = the unit test programs, glsl and the source scan (about a minute, no app start);
 # pictures = everything that starts the real app under Mesa's software OpenGL. One llvmpipe thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
 # all of them) and a shared Mesa shader cache (a start no longer rebuilds its shaders): the pictures are the same (the picture guards prove it).
-foreach(t orbit_physics atom_physics app_settings nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
+foreach(t orbit_physics atom_physics app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
-foreach(t gl_phase_colours theme_pictures window_pictures y2k_pictures page_cache_pictures effects_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet
+foreach(t gl_phase_colours theme_pictures window_pictures y2k_pictures page_cache_pictures effects_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui5j_look_m1 ui5j_look_m2 ui5j_look_m3
           orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")
