@@ -7,6 +7,7 @@ import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests"))
 from shell_lib import run_app, prefetch
 from PIL import Image
+LOOKS = ()
 
 ATOM = {"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;view=Cloud 3D;orb=2p"}
 SCREENS = {
@@ -21,10 +22,10 @@ def png(im, path, colours=96):
 
 def main(binary, work, out):
     os.makedirs(out, exist_ok=True)
-    calls = [((binary, work, f"lk_{o}_{n}", dict(env, PL_NEWUI="on", PL_LOOK=o)), {"frames": fr}) for o in "abc" for n, (env, fr) in SCREENS.items()]
+    calls = [((binary, work, f"lk_{o}_{n}", dict(env, PL_NEWUI="on", PL_LOOK=o)), {"frames": fr}) for o in LOOKS for n, (env, fr) in SCREENS.items()]
     prefetch(calls)
     ims = {}
-    for o in "abc":
+    for o in LOOKS:
         for n, (env, fr) in SCREENS.items():
             r = run_app(binary, work, f"lk_{o}_{n}", dict(env, PL_NEWUI="on", PL_LOOK=o), frames=fr)
             im = Image.open(r.bmp).convert("RGB")

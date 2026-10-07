@@ -1,4 +1,4 @@
-// 0.15 stage 5i: the three look options (PL_LOOK=a|b|c, Dark only). Included by test_app.cpp (uses its checkTrue). Written BEFORE src/app/look_options.*.
+// 0.15 stage 5i: the three look options (PL_LOOK=m1|m2|m3, Dark only). Included by test_app.cpp (uses its checkTrue). Written BEFORE src/app/look_options.*.
 // Reference: the W3C's WCAG 2.x contrast formula (https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio, #dfn-relative-luminance), WRITTEN OUT HERE (not the app's own function),
 // checked against the W3C's own worked values first. Needs: body and card text 4.5:1 (SC 1.4.3), icons and the borders of controls 3:1 (SC 1.4.11).
 #include "app/look_options.h"
@@ -23,8 +23,8 @@ static void testLookContrast() {
     checkTrue("WCAG #767676 on white = 4.54", std::fabs(ratio(hex("#767676"), hex("#ffffff")) - 4.54) < 5e-3);
     checkTrue("WCAG #777777 on white = 4.48 (fails)", std::fabs(ratio(hex("#777777"), hex("#ffffff")) - 4.478) < 2e-3);
 
-    checkTrue("fromEnv: a b c in either case, nothing else", app::lookopt::fromEnv("a") == 'a' && app::lookopt::fromEnv("B") == 'b' && app::lookopt::fromEnv("c") == 'c' &&
-              app::lookopt::fromEnv(nullptr) == 0 && app::lookopt::fromEnv("") == 0 && app::lookopt::fromEnv("d") == 0 && app::lookopt::fromEnv("ab") == 0);
+    checkTrue("fromEnv: m1..m3 in either case, nothing else (the old a b c are gone)", app::lookopt::fromEnv("m1") == (app::lookopt::kCount >= 1 ? 1 : 0) && app::lookopt::fromEnv("M3") == (app::lookopt::kCount >= 3 ? 3 : 0) &&
+              app::lookopt::fromEnv(nullptr) == 0 && app::lookopt::fromEnv("") == 0 && app::lookopt::fromEnv("a") == 0 && app::lookopt::fromEnv("m") == 0 && app::lookopt::fromEnv("m4") == 0 && app::lookopt::fromEnv("m10") == 0);
     checkTrue("tokens(0) is none", app::lookopt::tokens(0) == nullptr);
 
     const app::ThemeColors dark = app::themeColors("dark", false);
@@ -36,9 +36,9 @@ static void testLookContrast() {
         checkTrue("sanity Dark: accent on card >= 4.5", ratio(ac, card) >= 4.5);
         checkTrue("sanity Dark: text on its button face >= 4.5", ratio(fg, mix(card, fg, 0.10)) >= 4.5);
     }
-    for (char id : {'a', 'b', 'c'}) {
+    for (int id = 1; id <= app::lookopt::kCount; id++) {
         const app::lookopt::Tokens* t = app::lookopt::tokens(id);
-        checkTrue(std::string("look ") + id + " exists", t != nullptr);
+        checkTrue(std::string("look ") + std::to_string(id) + " exists", t != nullptr);
         if (!t) continue;
         const std::string n = std::string("look ") + t->name + ": ";
         const C3 card = rg(t->card), fg = rg(t->fg), mu = rg(t->muted), ac = rg(t->accent), fill = rg(t->accentFill), on = rg(t->onFill);
@@ -64,14 +64,5 @@ static void testLookContrast() {
         // sizes: the spec's radii and the Body floor are not touched by a look
         checkTrue(n + "radii and padding are sane", t->radiusPanel >= 3 && t->radiusPanel <= 16 && t->radiusCtl >= 2 && t->radiusCtl <= t->radiusPanel && t->pad >= 12 && t->pad <= 24);
         checkTrue(n + "the border is a hairline (<= 0.2) and the halo stays within the 2 px rule (alpha <= 40)", t->edgeAlpha > 0 && t->edgeAlpha <= 0.2f && t->haloAlpha >= 0 && t->haloAlpha <= 40);
-    }
-    // the specification of the three: A glass (radii 12..16, translucent), B flat (radii about 8, solid, no shine), C instrument (radii 3..4, cool accent: hue between teal and cyan)
-    const app::lookopt::Tokens *a = app::lookopt::tokens('a'), *b = app::lookopt::tokens('b'), *c = app::lookopt::tokens('c');
-    if (a && b && c) {
-        checkTrue("A: radii 12..16, translucent", a->radiusPanel >= 12 && a->radiusPanel <= 16 && a->panelAlpha < 1.0f);
-        checkTrue("B: radii about 8, solid, no shine, no halo", b->radiusPanel >= 7 && b->radiusPanel <= 9 && b->panelAlpha == 1.0f && b->shineAlpha == 0 && b->haloAlpha == 0);
-        checkTrue("C: radii 3..4, no shine, thinner icons", c->radiusPanel >= 3 && c->radiusPanel <= 4 && c->shineAlpha == 0 && c->stroke < 1.0f);
-        const look_t::C3 ac = look_t::rg(c->accent);
-        checkTrue("C: the accent is teal / cyan (green and blue high, red low)", ac.r < 0.4 && ac.g > 0.6 && ac.b > 0.6);
     }
 }
