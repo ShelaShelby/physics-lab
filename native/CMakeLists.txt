@@ -231,6 +231,7 @@ if(PL_BUILD_APP)
     src/ui/shell_atom.cpp
     src/ui/shell_test.cpp
     src/ui/reading.cpp
+    src/ui/input_log.cpp
     src/ui/app_pages.cpp
     src/ui/app_tabs.cpp
     src/ui/atom_panel.cpp
@@ -303,6 +304,11 @@ if(PL_BUILD_APP)
       foreach(m m1 m2 m3)
         add_test(NAME ui5j_look_${m} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5j.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5j_look_${m} ${m})
       endforeach()
+      # 0.15 stage 5k part 1: reading pages scroll by wheel / keys whichever window has the focus, the scrollbar, the Contents list, the hidden input log
+      foreach(part pages contents log windows toggle)
+        add_test(NAME ui5k_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5k.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5k_${part} ${part})
+        set_tests_properties(ui5k_${part} PROPERTIES TIMEOUT 3600)
+      endforeach()
       add_test(NAME shell_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_pictures ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference)
       # 0.15 stage 4: the whole Orbit Lab in the new UI: every INVENTORY.md item reachable by real clicks (incl. the 47 Go to names), the subject card's data sheet equal to the old card's lines
       # (8 things), the Time panel fits, the fact line (visible, changes after 20 s, stands still while hovered, readable, never overlaps), search (20 things, arrows, recent), links
@@ -322,7 +328,7 @@ foreach(t orbit_physics atom_physics app_settings font_coverage nbody_physics jp
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
-foreach(t gl_phase_colours theme_pictures window_pictures y2k_pictures page_cache_pictures effects_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui5j_look_m1 ui5j_look_m2 ui5j_look_m3
+foreach(t gl_phase_colours theme_pictures window_pictures y2k_pictures page_cache_pictures effects_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui5j_look_m1 ui5j_look_m2 ui5j_look_m3 ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle
           orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")

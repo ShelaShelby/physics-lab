@@ -1,4 +1,5 @@
 #include "ui/shell_test.h"
+#include "ui/reading.h"
 #include "atom/chart_draw.h"
 
 #include <SDL3/SDL.h>
@@ -197,7 +198,9 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
         } else if (verb == "key") {
             std::string k = arg;
             SDL_Keymod mod = SDL_KMOD_NONE;
+            bool shift = false;
             if (k.rfind("ctrl+", 0) == 0) { mod = SDL_KMOD_LCTRL; k = k.substr(5); }
+            if (k.rfind("shift+", 0) == 0) { shift = true; mod = static_cast<SDL_Keymod>(mod | SDL_KMOD_LSHIFT); k = k.substr(6); }
             SDL_Keycode key = SDLK_UNKNOWN; SDL_Scancode sc = SDL_SCANCODE_UNKNOWN;
             if (k == "escape") { key = SDLK_ESCAPE; sc = SDL_SCANCODE_ESCAPE; }
             else if (k == "space") { key = SDLK_SPACE; sc = SDL_SCANCODE_SPACE; }
@@ -208,13 +211,16 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             else if (k == "pageup") { key = SDLK_PAGEUP; sc = SDL_SCANCODE_PAGEUP; }
             else if (k == "home") { key = SDLK_HOME; sc = SDL_SCANCODE_HOME; }
             else if (k == "end") { key = SDLK_END; sc = SDL_SCANCODE_END; }
+            else if (k == "f12") { key = SDLK_F12; sc = SDL_SCANCODE_F12; }
             else if (k == "left") { key = SDLK_LEFT; sc = SDL_SCANCODE_LEFT; }
             else if (k == "right") { key = SDLK_RIGHT; sc = SDL_SCANCODE_RIGHT; }
             else if (k.size() == 1) { key = static_cast<SDL_Keycode>(k[0]); sc = static_cast<SDL_Scancode>(SDL_SCANCODE_A + (k[0] - 'a')); }
-            if (mod) pushKey(window, SDLK_LCTRL, SDL_SCANCODE_LCTRL, true, mod);
+            if (mod & SDL_KMOD_CTRL) pushKey(window, SDLK_LCTRL, SDL_SCANCODE_LCTRL, true, mod);
+            if (shift) pushKey(window, SDLK_LSHIFT, SDL_SCANCODE_LSHIFT, true, mod);
             pushKey(window, key, sc, true, mod);
             pushKey(window, key, sc, false, mod);
-            if (mod) pushKey(window, SDLK_LCTRL, SDL_SCANCODE_LCTRL, false, SDL_KMOD_NONE);
+            if (shift) pushKey(window, SDLK_LSHIFT, SDL_SCANCODE_LSHIFT, false, SDL_KMOD_NONE);
+            if (mod & SDL_KMOD_CTRL) pushKey(window, SDLK_LCTRL, SDL_SCANCODE_LCTRL, false, SDL_KMOD_NONE);
         } else if (verb == "text") {
             SDL_Event e;
             SDL_zero(e);
@@ -222,6 +228,10 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             static std::string keep; keep = arg;
             e.text.text = keep.c_str();
             SDL_PushEvent(&e);
+        } else if (verb == "pscroll") {                    // 5k: the open reading page's scroll offset and range, now
+            float y = -1, mx = -1;
+            readingScrollNow(&y, &mx);
+            std::printf("PLSCROLL %d %.1f %.1f |%s\n", frame, y, mx, readingAnchorsNow().c_str());
         } else if (verb == "astate") {
             std::printf("PLASTATE %s\n", atomSettingsLine(app).c_str());
             { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g centre=%g,%g label=%g,%g,%g,%g infopx=%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3], d.centre[0], d.centre[1], d.label[0], d.label[1], d.label[2], d.label[3], d.infoPx); }   // (stage 5g: where the picture put its info text and phase ring, in points)

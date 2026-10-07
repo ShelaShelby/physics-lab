@@ -14,6 +14,7 @@ void setReadingMode(bool on);                                // the new UI is on
 bool pageBegin(const std::string& title, bool* open);
 void pageEnd();                                              // ImGui::End() and, in the reading view, what goes with it
 void noteHeading(int level, const std::string& text);        // a heading the contents list shows (level 1..3); only counts inside the reading view
+bool readingModeOn();                                        // 5k: the New UI is on (floating windows are kept inside the app window then)
 bool readingShown();                                         // a page was shown in the reading view this frame
 void closePages(AppState& app);                              // closes every page (About, History, changelog, guides)
 bool pagesOpen(const AppState& app);                         // any of them is open
@@ -21,6 +22,10 @@ float readingBodyFont();                                     // the font size a 
 float readingFloorBody();                                    // the smallest sizes in px the pages may draw text at in the reading view (Body, Caption); 0 outside it
 float readingFloorCaption();
 void readingLongestLine(int chars, bool body);                // the pages report the characters on each line they lay out (the reading view keeps the longest of the Body text and of the Caption text, PL_LOG_SHELL)
+void readingFrameEnd();                                      // 5k: after all windows of a frame: the app scrolls the open page by the wheel and keys, and applies a Contents choice
+std::string readingAnchorsNow();                             // 5k: the scroll offset of each Contents entry now (the test script's pscroll)
+bool readingScrollNow(float* y, float* mx);                  // 5k: the open page's scroll offset and range (the test script's pscroll)
+std::string readingDiag();                                   // 5k: what the input log file says about the open page
 void readingNote(const std::string& line);                   // what the reading view measured (PL_LOG_SHELL)
 
 }  // namespace ui

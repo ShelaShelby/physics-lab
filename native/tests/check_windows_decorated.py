@@ -11,6 +11,7 @@
 import re, sys, pathlib
 ALLOWED = {   # "file.cpp:Begin-argument-start": "reason"
     "reading.cpp:\"##readBlock\"": "0.15 stage 3: an invisible, transparent window that only catches a click on the dimmed picture behind the reading view; it has nothing to decorate",
+    "reading.cpp:\"##readBar\"": "0.15 stage 5k: the reading page's slim scrollbar: a transparent window of 16 px that only holds the draggable thumb, which it draws itself; it has nothing to decorate",
 }
 root = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parent.parent / "src"
 bad = []

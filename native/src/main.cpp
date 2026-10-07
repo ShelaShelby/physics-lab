@@ -43,6 +43,8 @@
 #include "ui/atom_panel.h"
 #include "ui/orbit_panel.h"
 #include "ui/reading.h"
+#include "ui/input_log.h"
+#include "imgui_internal.h"
 #include "ui/shell.h"
 #include "ui/shell_test.h"
 
@@ -330,6 +332,14 @@ int main(int, char**) {
         SDL_Event e;
         while (!isLive && SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
+            if (e.type == SDL_EVENT_MOUSE_WHEEL) ui::inputNoteWheel(e.wheel.y, e.wheel.mouse_x, e.wheel.mouse_y);
+            if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) ui::inputNoteKey(static_cast<int>(e.key.key), e.type == SDL_EVENT_KEY_DOWN);
+            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F12 && !e.key.repeat && (e.key.mod & SDL_KMOD_CTRL) && (e.key.mod & SDL_KMOD_SHIFT)) {   // 5k: the hidden input log
+                const std::string path = ui::inputLogWrite(app);
+                app.shot.note = path.empty() ? "The input log could not be written." : "Input log written to " + path;
+                app.shot.failed = path.empty();
+                app.shot.noteUntil = ImGui::GetTime() + 30.0;
+            }
             switch (e.type) {
             case SDL_EVENT_QUIT: running = false; break;
             case SDL_EVENT_WINDOW_CLOSE_REQUESTED: if (e.window.windowID == SDL_GetWindowID(window)) running = false; break;
@@ -340,7 +350,7 @@ int main(int, char**) {
                 if (!app::labInputAllowed(app.benchRunning)) break;      // the benchmark is running: only Cancel and Esc do anything
                 if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) { if (shellOn) ui::shellSpace(app, io.WantTextInput); else app.paused = !app.paused; }
-                if (app.lab == 1 && app.atom.chartOn() && !io.WantCaptureKeyboard) {   // the chart of nuclides: arrow keys walk one proton or one neutron (up = more protons, right = more neutrons)
+                if (app.lab == 1 && app.atom.chartOn() && !io.WantCaptureKeyboard && !ui::readingShown()) {   // (5k: with a page open the arrow keys scroll the page)   // the chart of nuclides: arrow keys walk one proton or one neutron (up = more protons, right = more neutrons)
                     const int dZ = e.key.key == SDLK_UP ? 1 : e.key.key == SDLK_DOWN ? -1 : 0, dN = e.key.key == SDLK_RIGHT ? 1 : e.key.key == SDLK_LEFT ? -1 : 0;
                     if (dZ || dN) app.atom.chartStep(dZ, dN);
                 }
@@ -348,13 +358,13 @@ int main(int, char**) {
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
                 if (!app::labInputAllowed(app.benchRunning)) break;
                 if (app.lab == 1) {                     // Atom Lab: zoom −= deltaY × 0.004, 0.4 per wheel notch
-                    if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH && e.wheel.mouse_y < headerH + pictureWinH) {
+                    if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH && e.wheel.mouse_y < headerH + pictureWinH) {   // (5k: with a page open the wheel scrolls the page, never zooms the picture behind it)
                         if (app.atom.chartOn()) app.atom.chartZoomAt(std::pow(1.15, e.wheel.y), e.wheel.mouse_x / scale, (e.wheel.mouse_y - headerH) / scale);   // the chart of nuclides: zoom about the pointer
                         else app.atom.setParam("zoom", app.atom.p.zoom + e.wheel.y * 0.4);
                     }
                     break;
                 }
-                if (!io.WantCaptureMouse && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) {
+                if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) {
                     if (app.journey.active) ui::journeyStop(app);   // touching the picture stops a Journey (and brings your settings back)
                     else ui::setZoom(app, app.set.zoom + e.wheel.y * 0.07);
                 }
@@ -503,6 +513,12 @@ int main(int, char**) {
         ui::settingsWindow(app);
         ui::benchmarkWindow(app);                       // the benchmark: what it will do, the progress, the result
         ui::appTabsFrame(app);                          // achievements and their pop-ups, the secret pop-ups
+        if (ui::shellLogOn()) {                         // 5k: the windows from back to front (the test of the handle's place)
+            std::string order = "worder";
+            for (ImGuiWindow* w : ImGui::GetCurrentContext()->Windows) if (w->WasActive && !(w->Flags & ImGuiWindowFlags_ChildWindow)) order += std::string(" ") + w->Name;
+            ui::auditNote(order);
+        }
+        ui::readingFrameEnd();                          // 5k: the open page scrolls by the wheel and keys whichever window Dear ImGui calls hovered or focused
         ImGui::Render();
 
         // ---- draw: the picture first, then the panels and text on top ----
