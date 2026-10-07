@@ -211,6 +211,8 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             else if (k == "pageup") { key = SDLK_PAGEUP; sc = SDL_SCANCODE_PAGEUP; }
             else if (k == "home") { key = SDLK_HOME; sc = SDL_SCANCODE_HOME; }
             else if (k == "end") { key = SDLK_END; sc = SDL_SCANCODE_END; }
+            else if (k == "backspace") { key = SDLK_BACKSPACE; sc = SDL_SCANCODE_BACKSPACE; }
+            else if (k == "delete") { key = SDLK_DELETE; sc = SDL_SCANCODE_DELETE; }
             else if (k == "f12") { key = SDLK_F12; sc = SDL_SCANCODE_F12; }
             else if (k == "left") { key = SDLK_LEFT; sc = SDL_SCANCODE_LEFT; }
             else if (k == "right") { key = SDLK_RIGHT; sc = SDL_SCANCODE_RIGHT; }
@@ -234,7 +236,7 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             std::printf("PLSCROLL %d %.1f %.1f |%s\n", frame, y, mx, readingAnchorsNow().c_str());
         } else if (verb == "astate") {
             std::printf("PLASTATE %s\n", atomSettingsLine(app).c_str());
-            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g centre=%g,%g label=%g,%g,%g,%g infopx=%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3], d.centre[0], d.centre[1], d.label[0], d.label[1], d.label[2], d.label[3], d.infoPx); }   // (stage 5g: where the picture put its info text and phase ring, in points)
+            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g centre=%g,%g label=%g,%g,%g,%g infopx=%g free=%g,%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3], d.centre[0], d.centre[1], d.label[0], d.label[1], d.label[2], d.label[3], d.infoPx, app.atom.freeX, app.atom.freeW); }   // (stage 5g: where the picture put its info text and phase ring, in points)
         } else if (verb == "state") {
             std::printf("PLSTATE %s\n", (app.lab == 1 ? atomStateLine(app) : orbitStateLine(app)).c_str());
         }
@@ -264,7 +266,7 @@ void auditNote(const std::string& line) {
     if (!shellLogOn()) return;
     const std::size_t sp = line.find(' ');
     std::string key = line.substr(0, sp);
-    if (line.rfind("cardtitle", 0) == 0 || line.rfind("panelopen", 0) == 0) key += line.substr(sp);
+    if (line.rfind("cardtitle", 0) == 0 || line.rfind("panelopen", 0) == 0 || line.rfind("popupscroll", 0) == 0) key += line.substr(sp, line.find(' ', sp + 1) - sp);
     else if (line.rfind("panelneed", 0) == 0 && sp != std::string::npos) key += line.substr(sp, line.find(' ', sp + 1) - sp);      // one line per panel
     g_notes[key] = line;
 }

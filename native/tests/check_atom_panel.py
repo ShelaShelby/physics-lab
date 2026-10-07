@@ -248,7 +248,7 @@ def main():
         # ---- 8. (stage 5f part 1) the View selector, the folded notes, the chart without Cloud rows ----
         # References: the OLD panel's View rows (old.view=...) for Cloud, Cloud 3D, Slice, Chart and Atom (= the old "Orbit"); the toolbar buttons (already compared with the old bar by atom_toolbar)
         # for Nucleus and Nucleon. The highlighted part is read from the note "viewsel" of the last frame.
-        SEL = [("view.atom", "atom", "old.view=Orbit"), ("nucleus.nucleus", "nucleus", "tool.nucleus"), ("nucleus.nucleon", "nucleon", "nucleus.nucleon"),
+        SEL = [("view.atom", "atom", "old.view=Orbit"), ("nucleus.nucleus", "nucleus", "⌕ Nucleus"), ("nucleus.nucleon", "nucleon", "nucleus.nucleon"),
                ("cloud.cloud", "cloud", "old.view=Cloud"), ("cloud.cloud3d", "cloud3d", "old.view=Cloud 3D"), ("cloud.slice", "slice", "old.view=Slice"), ("view.chart", "chart", "old.view=Chart of nuclides")]
         W = 100                          # frames to let the zoom animation finish
         C = {"PL_ATOM_SET": "Z=6;N=6;view=Orbit"}   # carbon: its nucleus has several nucleons, so "Nucleus" is a different layer from "Nucleon" (hydrogen's nucleus is one proton)
@@ -257,11 +257,11 @@ def main():
             return script(steps)
         calls = []
         for name, short, ref in SEL:
-            pre_new = "tool.nucleus" if short == "nucleon" else "tool.cloud" if short == "atom" else None
+            pre_new = "nucleus.nucleus" if short == "nucleon" else "tool.cloud" if short == "atom" else None
             sn_, fn_ = sel_script(name, pre_new)
             for sz in SIZES:
                 calls.append(((binary, work, f"sel_{short}_{sz}", dict(NEW, PL_SCRIPT=sn_, **C)), dict(frames=fn_, size=sz)))
-            if ref.startswith("old."):
+            if ref.startswith(("old.", "⌕")):
                 pre_old = "old.view=Cloud" if short == "atom" else None
                 so_, fo_ = sel_script(ref, pre_old)
                 calls.append(((binary, work, f"sel_old_{short}", dict(OLD, PL_SCRIPT=so_, **C)), dict(frames=fo_, size=OLD_SIZE)))
@@ -270,9 +270,9 @@ def main():
                 calls.append(((binary, work, f"sel_ref_{short}", dict(NEW, PL_SCRIPT=sr_, **C)), dict(frames=fr_, size="1280x800")))
         prefetch(calls)
         for name, short, ref in SEL:
-            pre_new = "tool.nucleus" if short == "nucleon" else "tool.cloud" if short == "atom" else None
+            pre_new = "nucleus.nucleus" if short == "nucleon" else "tool.cloud" if short == "atom" else None
             sn_, fn_ = sel_script(name, pre_new)
-            if ref.startswith("old."):
+            if ref.startswith(("old.", "⌕")):
                 so_, fo_ = sel_script(ref, "old.view=Cloud" if short == "atom" else None)
                 rr = run_app(binary, work, f"sel_old_{short}", dict(OLD, PL_SCRIPT=so_, **C), frames=fo_, size=OLD_SIZE)
             else:

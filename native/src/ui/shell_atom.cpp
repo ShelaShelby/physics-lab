@@ -27,8 +27,8 @@ std::vector<ToolItem> atomTools(AppState& app, bool all) {
         it.act = [&L, t] { atom::pressTool(L, t); };
         v.push_back(it);
     };
-    button("tool.atom", "Atom: the electron and the whole atom (Orbit view)", Icon::Atom, Tool::Atom);
-    button("tool.nucleus", "Nucleus: zoom to the nucleus (Nucleon, one proton or neutron: Controls › View)", Icon::Nucleus, Tool::Nucleus);
+    button("tool.atom", "Atom: the electron and the whole atom (Orbit view). The nucleus zoom is in Controls › View", Icon::Atom, Tool::Atom);
+    v.back().on = L.p.view == "Orbit";                    // (5l: the Nucleus button left the toolbar (it is in Controls › View); Atom stays lit at every level of the Orbit view, as the view is still Orbit)
     button("tool.cloud", "Cloud: the electron as a probability cloud, seen from the side (it cannot be turned)", Icon::Cloud, Tool::Cloud);
     button("tool.cloud3d", "Cloud 3D: the electron cloud in three dimensions; drag to turn it", Icon::Cloud3D, Tool::Cloud3D);
     button("tool.slice", "Slice: a thin flat cut through the cloud, seen face-on", Icon::Slice, Tool::Slice);

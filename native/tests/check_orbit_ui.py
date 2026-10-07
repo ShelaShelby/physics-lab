@@ -10,7 +10,7 @@
 #   time      the Time panel fits above the toolbar at 1280x800 and 1000x640 (its content needs no more room than it has) in the Live view; the Set manually view at 1280x800
 #   facts     the fact line: visible by default, changes after the interval (a fixed 16 ms step, so the 20 s is counted in frames), stands still while hovered, a click opens the whole
 #             fact, Settings Facts Off hides it, never overlaps the toolbar / readout / top bar / cards / panels, never over the selected body
-#   search    20 named things are found, selected or opened with Enter; arrows move; recent choices come first
+#   search    20 named things are found, selected or opened with Enter; arrows move; recent choices only rank equal matches higher (5l: an empty box lists nothing)
 #   links     in the reading view a link's underline is one line (no gap between two words of the same link)
 import datetime, glob, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -426,9 +426,10 @@ def part_search(binary, work):
     # arrows: the second hit
     r = R.go(["key=ctrl+k", "text=moon", "key=down", "key=enter"]); s = state(r)
     check(s["moons"] == "0", f"arrow Down + Enter takes the second hit of 'moon' (Moons: turn off): moons={s['moons']}")
-    # recent choices come first
+    # 0.15 stage 5l (changed on purpose, owner's bug "the result stays after I delete the text"): the recent choices are NOT listed as results in an empty box any more (the thing just chosen came back
+    # and looked stuck); they only rank equal matches higher (the unit test "recent:" in test_shell.inc checks the ranking). So a new search after a choice starts empty:
     r = R.go(["key=ctrl+k", "text=pluto", "key=enter", "key=ctrl+k"])
-    check(r.note("searchhit") and r.note("searchhit")[0] == "searchhit Pluto", "the search box lists the recent choice first: " + str(r.note("searchhit")))
+    check(r.note("searchcount") == ["searchcount 0"] and not r.note("searchhit"), "a new search after a choice starts empty (no recent result): " + str(r.note("searchhit")))
     r = R.go(["key=ctrl+k", "text=s", "key=enter", "key=ctrl+k", "text=s"])
     hit = r.note("searchhit")
     check(hit and hit[0] != "", "a query still works after a recent choice: " + str(hit))

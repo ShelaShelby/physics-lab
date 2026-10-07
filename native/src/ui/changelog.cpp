@@ -19,6 +19,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5l: search finds every setting, Legend closes, toolbar centred",
+     "With New UI (preview) On, search now finds every row of Settings (Benchmark, Font, Units, Motion, Theme effects, Did you know facts and the rest) and opens Settings at that row. An empty search box lists nothing, and Ctrl+K no longer brings back the old words. The Legend folds when you click anywhere else or press Esc. The bottom toolbar is centred on the picture in each lab, lights only one of Cloud, Cloud 3D and Slice, and has no Nucleus button (Controls, View has it). Small dropdowns fit their content without a scrollbar, and the Labs dropdown is opaque and in front. Not tested: Windows, a real mouse, speed."},
     {"0.15", "Full UI rework, stage 5k: pages scroll, Settings toggles, new gear icon",
      "With New UI (preview) On, About, Learn and the other pages now really scroll: the text used to stay in place while the scroll position changed. The mouse wheel and PageUp, PageDown, Home, End and the arrow keys work whichever window has the focus, and a slim scrollbar shows on the page. The Contents list jumps to each section. The Settings button closes Settings on a second click and has a new gear icon. Floating windows stay inside the app window, and the Benchmark Start button is always in view. Ctrl+Shift+F12 writes a small text file about the mouse and keys for finding problems. Not tested: Windows, a real mouse, speed."},
     {"0.15", "Full UI rework, stage 5j: look options M1-M3 for testing",

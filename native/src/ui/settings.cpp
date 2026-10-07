@@ -222,6 +222,79 @@ void saveSettingsWhenChanged(AppState& app, double nowS) {
     }
 }
 
+// ---- 0.15 stage 5l: the list of the Settings window's rows (settings.h). The window draws each heading from it, so search (built from the same list) cannot miss one. ----
+const std::vector<SettingRow>& settingRows() {
+    static const std::vector<SettingRow> rows = {
+        {"text", app::kSetH[0], "Text size (Settings)", -1, false},
+        {"font", app::kSetH[1], "Font", -1, false},
+        {"units", app::kSetH[2], "Units (metric or imperial)", -1, false},
+        {"motion", app::kSetH[3], "Motion (reduced motion)", -1, false},
+        {"effects", "✨ Theme effects", "Theme effects", -1, false},
+        {"progress", app::kSetH[4], "Progress (start again)", -1, false},
+        {"developer", app::kSetH[5], "Developer (unlock everything)", -1, false},
+        {"newui", "🧪 New UI (preview)", "New UI (preview)", -1, false},
+        {"facts", "💡 Facts", "Did you know facts", -1, true},
+        {"perf", "Performance", "Performance", -1, true},
+        {"vsync", "VSync (wait for the screen)", "VSync (wait for the screen)", -1, true},
+        {"gpurocks", "GPU rocks (OpenGL 4.3)", "GPU rocks (OpenGL 4.3)", 0, true},
+        {"gpuspin", "GPU superposition and jumps (OpenGL 4.3)", "GPU superposition and jumps (OpenGL 4.3)", 1, true},
+        {"gpuoutline", "GPU outline (OpenGL 4.3)", "GPU outline (OpenGL 4.3)", 1, true},
+        {"gpucolours", "GPU colours (Atom Lab cloud dots)", "GPU colours (Atom Lab cloud dots)", 1, true},
+        {"frames", "Frame times", "Frame times (fps)", -1, true},
+        {"benchmark", "Benchmark", "Benchmark (speed test)", -1, true},
+    };
+    return rows;
+}
+const SettingRow& settingRow(const char* id) {
+    for (const SettingRow& r : settingRows()) if (std::string(r.id) == id) return r;
+    return settingRows().front();
+}
+bool settingRowShown(const SettingRow& r, const AppState& app) { return (r.lab < 0 || r.lab == app.lab) && (!r.newUiOnly || newUiOn(app)); }
+
+namespace {
+bool g_inSettings = false;                                  // the Settings window is being drawn
+std::string g_goto;                                         // search asked for this row
+int g_gotoFrames = 0;                                       // the page's lines are measured as they are drawn: the scroll is aimed at the row for a few frames
+double g_hlStart = -100;                                    // when the highlight began (ImGui time)
+struct Hl { float x0 = 0, y0 = 0, x1 = 0, y1 = 0, a = 0; } g_hl;   // the highlight to draw this frame (a == 0: none)
+std::vector<std::string> g_drawnRows;                       // the rows drawn this frame (for the test)
+constexpr double kHighlightSeconds = 1.6;
+}  // namespace
+
+void settingsGoto(AppState& app, const char* id) { app.showSettings = true; g_goto = id; g_gotoFrames = 8; g_hlStart = -100; }
+
+void settingMark(const char* id) {
+    if (!g_inSettings) return;
+    g_drawnRows.push_back(id);
+    const ImVec2 c = ImGui::GetCursorScreenPos();
+    const float h = ImGui::GetFrameHeight() + 4;
+    if (g_goto == id) {
+        if (g_gotoFrames > 0) {
+            ImGui::SetScrollHereY(0.12f);                   // the row's line near the top of the window
+            if (--g_gotoFrames == 7) g_hlStart = ImGui::GetTime();
+        }
+    }
+    const double age = ImGui::GetTime() - g_hlStart;
+    if (g_goto == id && age >= 0 && age < kHighlightSeconds) {
+        const float a = static_cast<float>(0.38 * (1.0 - age / kHighlightSeconds));
+        const ImVec2 wp = ImGui::GetWindowPos();
+        g_hl = {wp.x + 4, c.y - 2, wp.x + ImGui::GetWindowWidth() - 4, c.y - 2 + h, a};          // drawn over the row when the window ends (a button drawn after the mark would cover it)
+        if (shellLogOn()) auditNote("settinghl " + std::string(id) + " alpha=" + std::to_string(a));
+    }
+    if (shellLogOn()) {
+        auditRect(std::string("setting.") + id, c.x, c.y - 2, ImGui::GetWindowWidth() - 8, h);
+        if (g_goto == id && g_gotoFrames == 0 && g_hlStart > -50) {
+            g_gotoFrames = -1;
+            const ImVec2 wp = ImGui::GetWindowPos();
+            std::printf("PLSETROW %s y=%.1f h=%.1f winTop=%.1f winBottom=%.1f\n", id, c.y - 2, h, wp.y + ImGui::GetFrameHeight(), wp.y + ImGui::GetWindowHeight());
+        }
+    }
+}
+
+namespace {
+void settingHead(const char* id) { settingMark(id); richHeading(displayable(settingRow(id).heading)); }
+}  // namespace
+
 void setMotion(AppState& app, const std::string& k) {        // the web's setMotion: turning reduced motion on pauses the lab
     const bool was = look().reduced;
     app.prefs.motion = k;
@@ -240,11 +313,12 @@ void settingsWindow(AppState& app) {
     popFloatStyle();
     if (settingsShown) {
             panelDecor(app::PanelKind::Floating);
+        g_inSettings = true; g_drawnRows.clear(); g_hl.a = 0;
         auditRect("win.settings", ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowWidth(), ImGui::GetWindowHeight());
         const float avail = ImGui::GetContentRegionAvail().x, gap = ImGui::GetStyle().ItemSpacing.x;
         auto tiles = [&](int n) { return (avail - gap * (n - 1)) / n; };
         // 🔠 Text size
-        richHeading(displayable(app::kSetH[0]));
+        settingHead("text");
         for (int i = 0; i < 4; i++) {
             if (i) ImGui::SameLine();
             const app::SizeOpt& o = app::kTextSizes[i];
@@ -254,7 +328,7 @@ void settingsWindow(AppState& app) {
         richText(std::string("<p class=\"lrnP lrnMuted\">") + app::kSizeNote + "</p>");
         richText(std::string("<p class=\"lrnP\">") + app::kSizeSample + "</p>");
         // 🔤 Font
-        richHeading(displayable(app::kSetH[1]));
+        settingHead("font");
         for (int i = 0; i < 5; i++) {
             if (i) ImGui::SameLine();
             const app::FontOpt& o = app::kFonts[i];
@@ -262,7 +336,7 @@ void settingsWindow(AppState& app) {
             if (optionTile(o.key, o.name, P.font == o.key, fontFamily(fam).regular, 17 * ImGui::GetFontSize() / 16, tiles(5))) P.font = o.key;
         }
         // 📏 Units
-        richHeading(displayable(app::kSetH[2]));
+        settingHead("units");
         for (int i = 0; i < 2; i++) {
             if (i) ImGui::SameLine();
             const bool on = (i == 1) == fmt::imperial();
@@ -270,7 +344,7 @@ void settingsWindow(AppState& app) {
         }
         richText(std::string("<p class=\"lrnP lrnMuted\">") + app::kUnitsNote + "</p>");
         // 🌀 Motion
-        richHeading(displayable(app::kSetH[3]));
+        settingHead("motion");
         const char* motions[3] = {"auto", "on", "off"};
         for (int i = 0; i < 3; i++) {
             if (i) ImGui::SameLine();
@@ -278,7 +352,7 @@ void settingsWindow(AppState& app) {
         }
         richText(std::string("<p class=\"lrnP lrnMuted\">") + app::kMotionNote + "</p>");
         // ✨ Theme effects (0.14 stage 3, native only)
-        richHeading(displayable("✨ Theme effects"));
+        settingHead("effects");
         const char* effectKeys[2] = {"on", "off"};
         const char* effectNames[2] = {"On", "Off"}, *effectSubs[2] = {"Textures, glints, brackets", "Colours and gloss only"};
         for (int i = 0; i < 2; i++) {
@@ -287,21 +361,21 @@ void settingsWindow(AppState& app) {
         }
         richText("<p class=\"lrnP lrnMuted\">On: the Frutiger Aero and Y2K themes draw their extra decoration: soft clouds and bubbles; film grain, halftone dots, grid lines, light streaks, glints on buttons, reflections, corner brackets and HUD marks. Off: none of that, only the colours, the gloss and the fonts. Text is just as easy to read either way. The other themes have no such decoration, so nothing changes for them.</p>");
         // 🔒 Progress
-        richHeading(displayable(app::kSetH[4]));
+        settingHead("progress");
         if (optionTile("reset", app::kResetRow.name, false, nullptr, 0, avail, app::kResetRow.sub)) {
             g_resetThemes = app::unlockedThemeCount(P); g_resetAch = app::earnedAchievementCount(P); g_resetStage = 1;
             ImGui::OpenPopup("##reset");
         }
         if (g_resetDone) doneLine(app::kResetDoneLine);
         // 🛠 Developer
-        richHeading(displayable(app::kSetH[5]));
+        settingHead("developer");
         if (optionTile("unlock", app::kUnlockRow.name, false, nullptr, 0, avail, app::kUnlockRow.sub)) {
             const auto [t, a] = app::unlockEverything(P);
             g_unlockMsg = app::kUnlockMsg[std::min(t, 2)][std::min(a, 5)];
         }
         if (!g_unlockMsg.empty()) doneLine(g_unlockMsg);
         // 🧪 New UI (preview) (0.15 stage 3): last, so the rest of this page is exactly as it was
-        richHeading(displayable("🧪 New UI (preview)"));
+        settingHead("newui");
         {
             const char* uiKeys[2] = {"off", "on"};
             const char* uiNames[2] = {"Off", "On"}, *uiSubs[2] = {"The layout you know", "The new layout, unfinished"};
@@ -311,7 +385,7 @@ void settingsWindow(AppState& app) {
             }
             richText("<p class=\"lrnP lrnMuted\">A preview of the redesign (version 0.15): the picture fills the window, with a slim bar on top, a toolbar at the bottom and small floating panels. Only the Orbit Lab's date, speed, show, pick, scale, 2D / 3D and save controls are moved so far; everything else is in the Old panel button at the top right. Off is exactly the layout you know.</p>");
         if (newUiOn(app)) {   // 0.15 stage 4: what the new UI needs a home for. Facts: the fact line; Performance: what the old side column held (VSync, GPU rocks, frame times, Benchmark)
-            richHeading(displayable("💡 Facts"));
+            settingHead("facts");
             const char* fKeys[2] = {"on", "off"};
             const char* fNames[2] = {"On", "Off"}, *fSubs[2] = {"A fact at the bottom left of the picture", "No fact line"};
             for (int i = 0; i < 2; i++) {
@@ -323,6 +397,9 @@ void settingsWindow(AppState& app) {
             auditNote("settingsnew facts-and-performance");
         }
         }
+        g_inSettings = false;
+        if (g_hl.a > 0) { ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(g_hl.x0, g_hl.y0), ImVec2(g_hl.x1, g_hl.y1), col(look().c.accent, g_hl.a), 4); g_hl.a = 0; }
+        if (shellLogOn()) { std::string d; for (const std::string& r : g_drawnRows) d += (d.empty() ? "" : ",") + r; auditNote("settingrows " + d); }
         // the reset pop-ups (first the warning, then a clear "it worked")
         if (beginGift("##reset")) {
             const int t = std::min(g_resetThemes, 2), a = std::min(g_resetAch, 5);
@@ -412,6 +489,7 @@ void themePicker(AppState& app) {
     }
     ImGui::SetCursorPos(ImVec2(o.x, o.y + rows * (cardH + gap) - gap));    // the popup is exactly as tall and wide as the grid
     ImGui::Dummy(ImVec2(kColumns * cardW + (kColumns - 1) * gap, 0));
+    if (shellLogOn()) { const ImVec2 wp = ImGui::GetWindowPos(); auditRect("popup.themes", wp.x, wp.y, ImGui::GetWindowWidth(), ImGui::GetWindowHeight()); auditNote("popupscroll themes max=" + std::to_string(static_cast<int>(ImGui::GetScrollMaxY()))); }   // (5l: for the tests)
     ImGui::EndPopup();
 }
 

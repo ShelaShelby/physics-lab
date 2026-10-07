@@ -119,12 +119,15 @@ bool shortCombo(const char* id, int* cur, std::initializer_list<ComboItem> items
 
 // The Performance card (both labs): frame times and the VSync switch
 void performanceCard(AppState& app) {
+    settingMark("perf");
     ImGui::SeparatorText("Performance");
+    settingMark("vsync");
     wrappedCheckbox("VSync (wait for the screen)", &app.vsync);
     if (ImGui::IsItemHovered()) ui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom");
     if (app.lab == 0) {                                   // 0.13 stage 4: who places the belts' rocks: the line says what this PC has, the switch compares the two ways
         ImGui::TextWrapped("%s", app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks).c_str());
         ImGui::BeginDisabled(!app.rocksOk);
+        settingMark("gpurocks");
         wrappedCheckbox("GPU rocks (OpenGL 4.3)", &app.set.gpuRocks);
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): the places of the belts' rocks (Kepler's equation for every rock, and where it lands on the picture) are worked out by a compute shader on the graphics card; "
@@ -136,6 +139,7 @@ void performanceCard(AppState& app) {
     if (app.lab == 1) {                                   // 0.13 stage 2: which way the superposition and the jumps are worked out: the line says what this PC has, the switch compares the two ways
         ImGui::TextWrapped("%s", app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute).c_str());
         ImGui::BeginDisabled(!app.computeOk);
+        settingMark("gpuspin");
         wrappedCheckbox("GPU superposition and jumps (OpenGL 4.3)", &app.atom.gpuCompute);
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): for a superposition or a photon jump, a compute shader on the graphics card works out which dots are shown and their colours;\n"
@@ -144,6 +148,7 @@ void performanceCard(AppState& app) {
                                                       "Used for comparing on your PC with the benchmark's scenes 11, 13, 14, 15 and 25 to 28. Not saved: it is On again at the next start.");
         ImGui::TextWrapped("%s", app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline).c_str());
         ImGui::BeginDisabled(!app.computeOk);
+        settingMark("gpuoutline");
         wrappedCheckbox("GPU outline (OpenGL 4.3)", &app.atom.gpuOutline);
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): the 90 %% outline's density grid and its 90 %% level (and, in the Slice view, the cut's contour) are made by compute shaders\n"
@@ -153,6 +158,7 @@ void performanceCard(AppState& app) {
                                                       "Used for comparing on your PC with the benchmark's scenes 16, 17, 29 and 30. Not saved: it is On again at the next start.");
     }
     if (app.lab == 1) {                                   // the Atom Lab's cloud dots: who picks the phase colours (0.13 stage 1). A debug switch for comparing on a real PC; not saved
+        settingMark("gpucolours");
         wrappedCheckbox("GPU colours (Atom Lab cloud dots)", &app.atom.gpuColours);
         if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default): each dot of the electron cloud carries its colour number and the graphics card picks the colour.\n"
                                                       "Off: the processor colours every dot, going over all dots once per colour, as versions up to 0.12 did.\n"
@@ -160,6 +166,7 @@ void performanceCard(AppState& app) {
                                                       "Used for comparing on your PC with the benchmark's scenes 8 and 23, 10 and 24. Not saved: it is On again at the next start.");
     }
     {
+        settingMark("frames");
         const FrameStats& st = app.stats;
         const float avg = st.avgFrame();
         ImGui::Text("Frame: %.2f ms   average %.2f ms", st.last(), avg);
@@ -178,6 +185,7 @@ void performanceCard(AppState& app) {
                                                       "Frames drawn in that time are counted here (the longest time between two of them, and the longest pause before the first: %.0f ms).\n"
                                                       "If the picture or the fps counter still freezes while you drag, and this stays at 0, tell Alex.", lv.leadInMs);
     }
+    settingMark("benchmark");
     benchmarkButton(app);
 }
 

@@ -1,4 +1,5 @@
 #include "ui/shell_widgets.h"
+#include "imgui_internal.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -22,6 +23,7 @@ using app::shell::Rect;
 namespace {
 Frame g_f;
 std::map<std::string, float> g_heights;
+std::map<std::string, float> g_scrollMax;                 // (5l) how far a panel could scroll when it was last drawn (0: its content fits, no scrollbar)
 std::string g_glassId;
 double g_glassA = 0.95;
 // stage 5i: the look options (PL_LOOK=a|b|c, read once; Dark only; render and tests only). Null = today's tokens, and then nothing below changes.
@@ -315,7 +317,8 @@ bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scrol
         const float shine = static_cast<float>(f.m.s12 * 3 + f.m.s4);          // a faint top-lit gradient: the text colour at 6 % fading out over about 40 u
         const ImU32 top = ui::col(f.c->fg, g_lo ? g_lo->shineAlpha : app::shell::kShineAlpha), none = ui::col(f.c->fg, 0);
         p.dl->PushClipRect(a, ImVec2(b.x, std::min(b.y, a.y + shine)), true);
-        p.dl->AddRectFilledMultiColor(ImVec2(a.x + rounding * 0.5f, a.y), ImVec2(b.x - rounding * 0.5f, std::min(b.y, a.y + shine)), top, top, none, none);
+        const float inset = shape == Shape::Pill ? rounding : rounding * 0.5f;       // (5l: on a pill the gradient stays inside the straight part: its square corners showed as a faint rectangle beyond the rounded ends, behind the toolbar's buttons)
+        p.dl->AddRectFilledMultiColor(ImVec2(a.x + inset, a.y), ImVec2(b.x - inset, std::min(b.y, a.y + shine)), top, top, none, none);
         p.dl->PopClipRect();
         if (shape == Shape::Bar) p.dl->AddLine(ImVec2(a.x, b.y - 0.5f), ImVec2(b.x, b.y - 0.5f), cEdge(), 1.0f);
         else p.dl->AddRect(a, b, cEdge(), rounding, 0, 1.0f);
@@ -331,12 +334,16 @@ bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scrol
 float endPanel(Panel& p) {
     ImGui::SetCursorScreenPos(ImVec2(p.origin.x, p.origin.y + p.y));
     ImGui::Dummy(ImVec2(p.w, 1));
-    const float pad = ImGui::GetStyle().WindowPadding.x;
+    // 0.15 stage 5l: the padding the window was BEGUN with (beginPanel pushes its own and pops it at once, so the style's value read here was the default 8 px, not the panel's 16 px): every panel
+    // reported a height 16 px too small, so each one had a scroll range of 16 px (a scrollbar on a list that fitted) and the cards were clipped by that much.
+    const float pad = ImGui::GetCurrentWindow()->WindowPadding.x;
     const float h = p.y + 1 + 2 * pad;
+    g_scrollMax[p.id] = ImGui::GetScrollMaxY();
     ImGui::End();
     g_heights[p.id] = h;
     return h;
 }
+float lastScrollMax(const std::string& id) { const auto it = g_scrollMax.find(id); return it == g_scrollMax.end() ? 0.0f : it->second; }
 float lastHeight(const std::string& id, float dflt) { const auto it = g_heights.find(id); return it == g_heights.end() ? dflt : it->second; }
 
 // ---- controls ----

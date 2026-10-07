@@ -125,7 +125,8 @@ def part_fit(binary, work):
                     r1 = run_app(binary, work, f"ft_{t}_{sz}_{how}", {"PL_ATOM": "1", "PL_NEWUI": "on", "PL_ATOM_SET": "Z=92;N=146;view=Cloud 3D;orb=2p", "PL_SCRIPT": scr, "PL_LOG_SHELL": "1"}, frames=50, size=sz)
                     ys = [int(mm.group(1)) for n in r1.notes for mm in [re.match(r"sheetscroll y=(\d+)", n)] if mm]
                     check(bool(ys) and max(ys) > 0, f"{t} {sz}: {how} scrolled the sheet {ys[-3:]}")
-            cut = [tx for k, px, tx in r0.texts if "…" in tx and not tx.endswith(" …")]
+            fact = " ".join(r0.note("factline"))                  # 5l: the fact line ends its second line with "…" BY DESIGN when two lines are too short (a click opens the whole fact); with the toolbar centred under the picture it now sits above it in these views, so its words are logged here. Every other text must still be whole.
+            cut = [tx for k, px, tx in r0.texts if "…" in tx and not tx.endswith(" …") and tx.rstrip("…") not in fact]
             check(not cut, f"{t} {sz}: no text cut with an ellipsis {cut}")
     check(tall_seen.get("880x560", 0) >= 3, f"at 880x560 at least three tabs are taller than the sheet, so the scrolling was really exercised {tall_seen}")
 

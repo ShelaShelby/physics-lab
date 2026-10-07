@@ -263,7 +263,11 @@ bool pageBegin(const std::string& title, bool* open) {
     // the contents rail, or the menu under the button
     if (geom.rail || g.contentsOpen) {
         app::shell::Rect r = geom.rail ? geom.toc : app::shell::Rect{o.x + pad, o.y + pad + btn + f.m.s4 + f.m.control + f.m.s4, static_cast<double>(std::min<double>(f.m.em(24), col.w - 2.0 * pad)), static_cast<double>(std::min<double>(H * 0.6, 40.0 * f.m.row))};
-        if (!geom.rail) r = app::shell::clampInto(r, app::shell::Rect{0, 0, W, H});
+        if (!geom.rail) {                                                                // 5l: the dropdown is as tall as its list (the height it needed last frame), at most the room: no empty space, no scrollbar unless the list truly does not fit
+            const double need = sh::lastHeight("##readtoc", 0);
+            if (need > 0) r.h = std::min(r.h, need);
+            r = app::shell::clampInto(r, app::shell::Rect{0, 0, W, H});
+        }
         sh::Panel tp;
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) g.tocPress = -1;
         if (g.tocFront) { ImGui::SetNextWindowFocus(); g.tocFront = false; }   // (stage 5g: the click on the Contents button had brought the page in front of the list, so its second opening could not be clicked)
@@ -289,6 +293,7 @@ bool pageBegin(const std::string& title, bool* open) {
                 tp.y += f.m.row;
             }
             sh::endPanel(tp);
+            if (!geom.rail) auditNote("popupscroll contents max=" + std::to_string(int(sh::lastScrollMax("##readtoc"))) + " need=" + std::to_string(int(sh::lastHeight("##readtoc", 0))) + " have=" + std::to_string(int(r.h)));
         }
     }
     ImGui::PushClipRect(ImVec2(o.x, headerBottom + f.m.s4), ImVec2(o.x + static_cast<float>(col.w), o.y + static_cast<float>(col.h)), true);   // the content slides under the header (5k)

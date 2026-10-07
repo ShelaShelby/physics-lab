@@ -101,9 +101,12 @@ static void testAtomTools() {
         checkTrue("toolbar: at the nucleus level Nucleus is lit and Atom is not", atom::toolOn(L, atom::Tool::Nucleus) && !atom::toolOn(L, atom::Tool::Atom) && !atom::toolOn(L, atom::Tool::Nucleon));
         L.s.layer = "Nucleon";
         checkTrue("toolbar: at the nucleon level Nucleus and Nucleon are lit", atom::toolOn(L, atom::Tool::Nucleus) && atom::toolOn(L, atom::Tool::Nucleon));
+        // 0.15 stage 5l (changed on purpose, owner's bug: Cloud 3D lit "Cloud" as well): each cloud view lights ITS button only
         for (const char* v : {"Cloud", "Cloud 3D", "Slice"}) {
             AtomLab c = tlLab(v);
-            checkTrue(std::string("toolbar: in ") + v + " the Cloud button is lit and Atom, Chart are not", atom::toolOn(c, atom::Tool::Cloud) && !atom::toolOn(c, atom::Tool::Atom) && !atom::toolOn(c, atom::Tool::Chart));
+            const int lit = atom::toolOn(c, atom::Tool::Cloud) + atom::toolOn(c, atom::Tool::Cloud3D) + atom::toolOn(c, atom::Tool::Slice);
+            const bool mine = std::string(v) == "Cloud" ? atom::toolOn(c, atom::Tool::Cloud) : std::string(v) == "Cloud 3D" ? atom::toolOn(c, atom::Tool::Cloud3D) : atom::toolOn(c, atom::Tool::Slice);
+            checkTrue(std::string("toolbar: in ") + v + " exactly its own button is lit (and Atom, Chart are not)", lit == 1 && mine && !atom::toolOn(c, atom::Tool::Atom) && !atom::toolOn(c, atom::Tool::Chart));
         }
         AtomLab ch = tlLab("Chart of nuclides");
         checkTrue("toolbar: on the chart only Chart is lit", atom::toolOn(ch, atom::Tool::Chart) && !atom::toolOn(ch, atom::Tool::Atom) && !atom::toolOn(ch, atom::Tool::Cloud) && !atom::toolOn(ch, atom::Tool::Nucleus));

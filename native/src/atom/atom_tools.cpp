@@ -34,7 +34,7 @@ bool toolOn(const AtomLab& L, Tool t) {
     case Tool::Atom: return orbit && !deep;
     case Tool::Nucleus: return orbit && deep;
     case Tool::Nucleon: return orbit && (L.s.layer == "Nucleon" || L.s.layer == "Quarks");
-    case Tool::Cloud: return L.p.view == "Cloud" || L.p.view == "Cloud 3D" || L.p.view == "Slice";
+    case Tool::Cloud: return L.p.view == "Cloud";            // (5l: only the flat Cloud view; Cloud 3D and Slice have their own buttons, so one view lights one button)
     case Tool::Cloud3D: return L.p.view == "Cloud 3D";
     case Tool::Slice: return L.p.view == "Slice";
     case Tool::Chart: return L.chartOn();

@@ -54,6 +54,7 @@ struct State {
     char query[96] = "";
     int searchSel = 0;
     bool searchFocus = false;
+    int queryGen = 0;                                      // (5l) a new search gets a new text box id: Dear ImGui keeps the old words in its own copy of an id it has seen, and they came back in front of the new ones
     bool openThemes = false;                              // search asked for the Theme list
     int openedFrame = -1;                                 // the frame a panel was opened in (its own opening click is not an outside click)
     std::map<PanelId, double> anchorX;                    // the centre x of the button a panel opens from (window pixels)
@@ -273,6 +274,8 @@ std::vector<SearchEntry> searchEntries(AppState& app) {
     add("Menu", app.prefs.facts == "on" ? "Facts: turn off" : "Facts: turn on", "menu:facts", [&app] { app.prefs.facts = app.prefs.facts == "on" ? "off" : "on"; });
     add("Menu", "Legend", "menu:legend", [&app] { app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", !panelCollapsed(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", true)); });
     if (app.lab == 1) add("Menu", "Old panel (the Atom Lab's controls)", "menu:old", [&app] { app.showOldPanel = true; });
+    for (const SettingRow& r : settingRows())                                       // 0.15 stage 5l: EVERY row of the Settings window, from the window's own list (ui/settings.h), after the menu's own entries so that "text size" still lists the menu's quick text-size chooser first; each opens Settings at its row
+        if (settingRowShown(r, app)) { const std::string id = r.id; add("Settings", r.label, "setrow:" + id, [&app, id] { settingsGoto(app, id.c_str()); }); }
     for (int i = 0; i < factCount(); i++) {
         const std::string t = factTextAt(i);
         if (t.empty()) continue;
@@ -299,14 +302,24 @@ Rect searchPanel(AppState& app, const Frame& fr, const Metrics& m, const std::ve
     ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImGui::ColorConvertU32ToFloat4(sh::cMuted()));
     ImGui::SetNextItemWidth(p.w);
     if (S.searchFocus) { ImGui::SetKeyboardFocusHere(); S.searchFocus = false; }
-    const bool enterPressed = ImGui::InputTextWithHint("##searchfield", "Search bodies, dates, settings, menu, guides, facts", S.query, sizeof S.query, ImGuiInputTextFlags_EnterReturnsTrue);
+    const std::string fieldId = "##searchfield" + std::to_string(S.queryGen);
+    const bool enterPressed = ImGui::InputTextWithHint(fieldId.c_str(), "Search bodies, dates, settings, menu, guides, facts", S.query, sizeof S.query, ImGuiInputTextFlags_EnterReturnsTrue);
     noteItem("search.field");
     auditText("body", ImGui::GetFontSize(), S.query[0] ? S.query : "Search");
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(2);
     ImGui::PopFont();
     p.y += m.control + m.s8;
-    const std::vector<int> hits = searchResults(S.query, items, 8, S.recent);
+    // 0.15 stage 5l: the list follows the text. An empty (or blank) box shows NO results, only the hint below; the recent choices (before: listed as results when the box was empty, so the thing just
+    // chosen came back after the text was deleted, and looked stuck) now only rank equal matches higher.
+    const bool blank = std::all_of(S.query, S.query + std::strlen(S.query), [](char c) { return c == ' '; });
+    const std::vector<int> hits = blank ? std::vector<int>() : searchResults(S.query, items, 8, S.recent);
+    if (shellLogOn()) {
+        std::string sig = std::string("query=") + S.query + " hits=";
+        for (int h : hits) sig += items[h].label + "|";
+        static std::string last;
+        if (sig != last) { last = sig; std::printf("PLSEARCH %s\n", sig.c_str()); }
+    }
     if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) S.searchSel++;
     if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true)) S.searchSel--;
     S.searchSel = hits.empty() ? 0 : std::min<int>(std::max(S.searchSel, 0), static_cast<int>(hits.size()) - 1);
@@ -327,13 +340,13 @@ Rect searchPanel(AppState& app, const Frame& fr, const Metrics& m, const std::ve
         p.y += m.row;
     }
     if (enterPressed && !hits.empty()) chosen = hits[S.searchSel];
-    if (!S.query[0] && hits.empty()) sh::pCaption(p, "Type to search: a planet or moon, a date, a setting, Save picture, a guide, a fact. Your recent choices are listed first.");
-    if (S.query[0] && hits.empty()) sh::pCaption(p, "Nothing found. Try a planet, a setting or a guide.");
+    if (blank && hits.empty()) sh::pCaption(p, "Type to search: a planet or moon, a date, a setting, Save picture, a guide, a fact. Choices you made before rank higher.");
+    if (!blank && hits.empty()) sh::pCaption(p, "Nothing found. Try a planet, a setting or a guide.");
     sh::endPanel(p);
     if (chosen >= 0) {
         S.recent = pushRecent(S.recent, items[chosen].id);
         app.prefs.recent = packRecent(S.recent);
-        S.ui.search = false; S.query[0] = 0;
+        S.ui.search = false; S.query[0] = 0; S.queryGen++;
         entries[chosen].act();
     }
     return r;
@@ -467,13 +480,15 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     // ---- keys: Esc closes the topmost thing, Ctrl+K opens search (Space is routed by main.cpp through shellSpace) ----
     S.ui.reading = pagesOpen(app) || app.pane != 0;
     S.ui.oldPanel = app.showOldPanel;
+    bool escHandled = false;                              // (5l) Esc already closed something this frame: the Legend then stays
     if (!app.benchRunning) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && applyKey(S.ui, Key::Escape, io.WantTextInput, true).consumed) {
+            escHandled = true;
             app.showOldPanel = S.ui.oldPanel;
             if (!S.ui.reading) { closePages(app); app.pane = 0; }
             io.ClearInputKeys();
         }
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) { applyKey(S.ui, Key::CtrlK, io.WantTextInput, true); S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; }
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) { applyKey(S.ui, Key::CtrlK, io.WantTextInput, true); S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; S.queryGen++; }   // (5l: ClearActiveID: Ctrl+K with the box already open cleared our text but not the text box's own copy, so the old words came back in front of the new ones)
     }
 
     // ---- what the bars hold, and how big that makes them ----
@@ -503,25 +518,11 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     double rw = 0;
     for (const std::string& l : ro) rw = std::max(rw, static_cast<double>(sh::width(Type::Body, false, l)));
     const double rh = ro.empty() ? 0.0 : ro.size() * sh::lineH(Type::Body) + 2.0 * m.s4;       // (stage 5c: Body size on a pill, padded 8 u and 4 u)
-    // 0.15 stage 5g: the toolbar's left edge is fixed (window centre minus half of the widest toolbar: the Atom Lab's with every optional button, or the Orbit Lab's), so it does not move
-    // between views and labs; every button keeps its slot and the optional ones (Centre, Drag) join at the right end. Worked out again only when the sizes change.
-    static struct { double key[6] = {0, 0, 0, 0, 0, 0}; double w = 0; } widest;
-    const double wkey[6] = {m.toolBtn, m.caretW, m.s4, m.s8, segW, 0};
-    if (std::equal(std::begin(wkey), std::end(wkey), std::begin(widest.key)) == false || widest.w <= 0) {
-        std::copy(std::begin(wkey), std::end(wkey), std::begin(widest.key));
-        double best = 0;
-        for (int lab = 0; lab < 2; lab++) {
-            const std::vector<ToolItem> all = lab == 0 ? orbitTools(app) : atomTools(app, true);
-            double w = 2.0 * m.s8;
-            for (std::size_t i = 0; i < all.size(); i++) {
-                const ToolItem& t = all[i];
-                w += (i ? gap : 0) + (t.kind == ToolItem::Sep ? m.s12 : t.kind == ToolItem::Menu || t.kind == ToolItem::Split ? m.toolBtn + m.caretW : t.kind == ToolItem::Segment ? 2 * segW + gap + (t.panel != PanelId::None ? m.caretW : 0) : m.toolBtn);
-            }
-            best = std::max(best, w);
-        }
-        widest.w = best;
-    }
-    const Frame fr = makeFrame(W, H, m, tw, rw + 2.0 * m.s8, rh, dockW, hasToolbar ? widest.w : 0);
+    // 0.15 stage 5l: the toolbar is centred on the scene: the x the picture is drawn around. Orbit Lab: the Sun's x, the middle of the window (orbit_view.cpp draws at W / 2). Atom Lab: the middle of the
+    // free part of the picture (atom_view.cpp: freeX + freeW / 2), as worked out in the last frame (-1 on the first frame: the window's middle). With the Controls panel open the toolbar moves left only as
+    // far as it must to stay clear of it. (This replaces the stage 5g fixed left edge, which centred the widest toolbar, so the Orbit Lab's shorter one sat off to the left.)
+    const double sceneCx = app.lab == 1 && app.atom.freeW >= 0 ? (app.atom.freeX + app.atom.freeW / 2) * dpi : W / 2;
+    const Frame fr = makeFrame(W, H, m, tw, rw + 2.0 * m.s8, rh, dockW, 0, hasToolbar ? sceneCx : -1);
     S.topBarH = static_cast<float>(m.topBar);
 
     // the top bar's pieces
@@ -548,6 +549,8 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     if (hasToolbar) occ.push_back(fr.toolbar);
     std::string log;
 
+    Rect legendOpenR{0, 0, 0, 0};                         // (5l) where the Legend is when it is open (w == 0: not open)
+    std::string legendOpenName;
     // ---- the floating cards: the subject card (top right) and the legend (top left); each collapses to its title ----
     const auto card = [&](const char* key, const char* title, Anchor anchor, double emW, bool defCollapsed, const std::function<void(sh::Panel&)>& body) {
         const std::string name = std::string(app.lab == 0 ? "orbit." : "atom.") + key;
@@ -569,6 +572,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             ImGui::End();
         } else {
             r = placePanel(anchor, m.em(emW), sh::lastHeight(wid, static_cast<float>(m.em(8))), fr, m, 0);
+            if (std::strcmp(key, "legend") == 0) { legendOpenR = r; legendOpenName = name; }         // (5l) the open Legend: a click anywhere else, or Esc, folds it
             if (!sh::beginPanel(wid.c_str(), r, p, sh::Shape::Panel, true)) return r;
             sh::text(p.dl, Type::Title, true, sh::here(p), sh::cText(), title);
             const float hb = static_cast<float>(m.iconBtn);
@@ -665,6 +669,16 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (shellLogOn()) auditNote("atomlegend rows=" + std::to_string(rows) + " ends=" + ends);
         });
     }
+    // 0.15 stage 5l: the Legend folds back to its title on a click anywhere else (the picture, the bars, another window), and on Esc; a click inside it keeps it open. (Before: only its arrow closed it.)
+    // A click is judged by where the pointer is on the press, so it does not matter in which frame the pointer arrived.
+    if (legendOpenR.w > 0 && !app.benchRunning) {
+        // "on the Legend" = the window under the pointer IS the Legend's own (not just its rectangle: at a small size the subject card can lie over part of it, and a click on that card is outside)
+        const ImGuiWindow* hw = ImGui::GetCurrentContext()->HoveredWindow;
+        const bool onLegend = hw && hw->RootWindow && ("##card_" + legendOpenName) == hw->RootWindow->Name;
+        const bool outside = ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !onLegend;
+        const bool esc = ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !escHandled && !io.WantTextInput && !S.ui.search && S.ui.open == PanelId::None;
+        if (outside || esc) app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, legendOpenName, true);
+    }
     if (app.lab == 1 && !pane) {                          // 0.15 stage 5f: the Atom Lab's subject card (the chosen isotope): the same strings as the old panel's element card, isotope line and hint
         const AtomSubject sc = atomSubject(app);
         const Rect atomCardR = card("card", displayable(sc.name).c_str(), Anchor::TopRight, 20, false, [&](sh::Panel& p) {
@@ -737,6 +751,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 S.anchorX[PanelId::More] = x + m.toolBtn / 2.0;
                 if (sh::iconButton("tool.more", ImVec2(x, y), ImVec2(static_cast<float>(m.toolBtn), static_cast<float>(m.toolBtn)), Icon::Dots, "More", S.ui.open == PanelId::More)) toggle(PanelId::More);
             }
+            if (shellLogOn()) { std::string on; for (int i = 0; i < shown; i++) if (tools[i].kind == ToolItem::Button && tools[i].id[0] && tools[i].on) on += std::string(on.empty() ? "" : ",") + tools[i].id; auditNote("toolon " + on); }   // (5l: which buttons are lit, for the tests)
             sh::endPanel(tb);
         }
         auditRect("toolbar", static_cast<float>(fr.toolbar.x), static_cast<float>(fr.toolbar.y), static_cast<float>(fr.toolbar.w), static_cast<float>(fr.toolbar.h));
@@ -949,7 +964,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (icon("top.ach", Icon::Trophy, "Achievements", app.pane == 2)) app.pane = app.pane == 2 ? 0 : 2;
             if (icon("top.learn", Icon::Book, "Learn", app.pane == 1)) app.pane = app.pane == 1 ? 0 : 1;
             if (icon("top.swap", Icon::Swap, app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", false)) openLab(app, 1 - app.lab);
-            if (icon("top.search", Icon::Search, "Search (Ctrl+K)", S.ui.search)) { if (S.ui.search) S.ui.search = false; else { S.ui.search = true; S.ui.open = PanelId::None; S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; } }   // (5k: a second click closes it)
+            if (icon("top.search", Icon::Search, "Search (Ctrl+K)", S.ui.search)) { if (S.ui.search) S.ui.search = false; else { S.ui.search = true; S.ui.open = PanelId::None; S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; S.queryGen++; } }   // (5k: a second click closes it)
             if (S.askDefaults) { ImGui::OpenPopup(app.lab == 1 ? "Put Atom Lab back?" : "Put Orbit Lab back?"); S.askDefaults = false; }
             defaultsPopups(app);
             sh::endPanel(bar);
@@ -969,10 +984,15 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             const std::string wid = std::string("##panel_") + panelName(id);
             const double ax = S.anchorX.count(id) ? S.anchorX[id] : W / 2;
             openRect = placePanel(id == PanelId::Data ? Anchor::Centre : fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(id == PanelId::Chip && app.lab == 1 ? atomPanelWidthEm(id) : widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
-            for (const Rect& c : cards) openRect = sideStep(openRect, c, fr.window, m.s12, m.s12);
+            if (id != PanelId::LabMenu)                                           // (5l: the Labs dropdown stays under its button and is drawn over a card; the other panels step aside)
+                for (const Rect& c : cards) openRect = sideStep(openRect, c, fr.window, m.s12, m.s12);
             if (id == PanelId::Data) openRect.x = std::max<double>(m.s12, std::min(openRect.x, (fr.freeW > 0 ? fr.freeW : fr.window.w) - m.s12 - openRect.w));   // stage 5i: the side step never pushes the sheet under the Controls panel
             sh::Panel p;
-            if (sh::beginPanel(wid.c_str(), openRect, p, sh::Shape::Panel, true, id == PanelId::Data)) {   // (stage 5g: the data sheet is solid in the plain themes: the picture's labels showed through it)
+            // 5l: a scrollbar only when the content truly does not fit the room (it needed more than the room it was given last frame); the Labs dropdown is opaque and in front of everything
+            const float needLast = sh::lastHeight(wid, -1.0f);
+            const bool canScroll = needLast < 0 || needLast > static_cast<float>(openRect.h) + 1.0f;
+            if (sh::beginPanel(wid.c_str(), openRect, p, sh::Shape::Panel, canScroll, id == PanelId::Data || id == PanelId::LabMenu)) {   // (stage 5g: the data sheet is solid in the plain themes: the picture's labels showed through it)
+                if (id == PanelId::LabMenu) ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
                 if (id == PanelId::Data) auditNote("datasheet solid");
                 bool close = false;
                 if (!buildOrbitPanel(id, app, p, close) && !buildAtomPanel(id, app, p, close)) {
@@ -983,7 +1003,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                     else if (id == PanelId::More) { std::vector<ToolItem> hidden(tools.begin() + shown, tools.end()); morePanel(p, hidden, close); }
                 }
                 const float need = sh::endPanel(p);
-                { char nb[96]; std::snprintf(nb, sizeof nb, "panelneed %s need=%.0f have=%.0f", panelName(id), need, static_cast<float>(openRect.h)); auditNote(nb); }
+                { char nb[96]; std::snprintf(nb, sizeof nb, "panelneed %s need=%.0f have=%.0f scroll=%.0f", panelName(id), need, static_cast<float>(openRect.h), sh::lastScrollMax(wid)); auditNote(nb); }
                 if (close && S.ui.open == id) S.ui.open = PanelId::None;
             }
             occ.push_back(openRect);

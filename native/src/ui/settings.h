@@ -5,6 +5,7 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "app/prefs.h"
 
@@ -19,6 +20,14 @@ void defaultsButton(AppState& app);                       // the "Defaults" butt
 void setMotion(AppState& app, const std::string& k);       // auto / on (reduced) / off (full)
 void themeButton(AppState& app);                          // 🎨 Theme and its menu
 void themePicker(AppState& app);                          // the menu itself: open it with ImGui::OpenPopup("##themes") from the button just before this call (the new UI's palette icon)
+// 0.15 stage 5l: the Settings window's rows, in ONE list. The window takes each heading (and the Performance card each of its rows) from this list, and search builds its "Settings" results from the same
+// list, so a row cannot be missing from search. `heading` is what the window draws; `label` is what search shows and matches; lab: -1 both labs, 0 only the Orbit Lab, 1 only the Atom Lab.
+struct SettingRow { const char* id; const char* heading; const char* label; int lab; bool newUiOnly; };
+const std::vector<SettingRow>& settingRows();
+const SettingRow& settingRow(const char* id);                 // (an id that is not in the list is a programming error: the first row comes back)
+bool settingRowShown(const SettingRow& r, const AppState& app);   // is this row in the Settings window now (for this lab and this UI)?
+void settingsGoto(AppState& app, const char* id);              // open the Settings window at that row: scrolls to it and highlights it for a moment
+void settingMark(const char* id);                              // called by the window just before it draws a row (no-op outside the Settings window): remembers where it is, scrolls and highlights it
 void defaultsPopups(AppState& app);                       // the "Put ... back?" questions: open with ImGui::OpenPopup("Put Orbit Lab back?") / ("Put Atom Lab back?") in the same window
 
 }  // namespace ui

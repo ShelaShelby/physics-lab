@@ -73,6 +73,7 @@ void bodyFloor(bool on);     // stage 5c.1: Caption text is drawn at Body size w
 bool beginPanel(const char* id, const app::shell::Rect& r, Panel& p, Shape shape = Shape::Panel, bool scroll = true, bool solid = false);   // solid: no see-through (stage 5c.1, the Controls panel)
 // Ends it and returns the height the content needs (with the padding), to size the panel next frame.
 float endPanel(Panel& p);
+float lastScrollMax(const std::string& id);               // 5l: 0 when the panel's content fitted (nothing to scroll)
 float lastHeight(const std::string& id, float dflt);     // the height a panel needed last time it was drawn
 
 // ---- controls: each draws at `pos` and returns true when clicked / changed. id: the name a PL_SCRIPT click= uses ----

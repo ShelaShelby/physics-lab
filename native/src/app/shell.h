@@ -49,7 +49,9 @@ Rect clampInto(Rect r, const Rect& bounds);                                // th
 // 0.15 stage 5c: `dock` is the Controls panel on the right (width 0: closed). freeW = the width of the window left of it: the toolbar is centred there, the readout and every panel that
 // anchors to the right edge sit left of it, so nothing of the bars is ever under the dock.
 struct Frame { Rect window, topBar, toolbar, readout, dock; double freeW = 0; };
-Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW = 0, double anchorW = 0);
+Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW = 0, double anchorW = 0, double sceneCx = -1);
+// 0.15 stage 5l: sceneCx >= 0 = the x (window pixels) the scene is drawn around (the Sun's x in the Orbit Lab, the middle of the free part of the picture in the Atom Lab): the toolbar's own centre
+// is put there (it only moves left as far as it must to stay clear of the Controls panel and the window's edge). It replaces the stage 5g fixed left edge (anchorW).
 // 0.15 stage 5g: anchorW > 0 = the toolbar's LEFT edge is fixed: the window's centre minus half of anchorW (the widest toolbar, the Atom Lab's with every optional button), so the toolbar stays
 // where it is in every view and lab; it moves only to stay left of the open Controls panel (by the same widest width, so it still does not depend on the view). anchorW = 0: centred as before.
 double dockWidth(const Metrics& m, double winW);                          // the Controls panel: 22 em of Body, at most 45 % of the window, never under 12 em

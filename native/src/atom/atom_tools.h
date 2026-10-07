@@ -22,7 +22,7 @@ enum class Tool {
 };
 
 void pressTool(AtomLab& L, Tool t);
-bool toolOn(const AtomLab& L, Tool t);       // the button is lit: Atom / Nucleus by the level shown, Cloud by any of the three cloud views, Chart by the chart
+bool toolOn(const AtomLab& L, Tool t);       // the button is lit: Atom / Nucleus by the level shown, Cloud / Cloud 3D / Slice each by its own view only (5l), Chart by the chart
 bool toolShown(const AtomLab& L, Tool t);    // Centre and DragMode appear only when the old bar showed them; the others always
 
 // ---- 0.15 stage 5b: the element chip and the dropdown's controls (each = the old control's setParam calls) ----

@@ -68,7 +68,7 @@ Rect handleRect(const Rect& dock, double winW, const Metrics& m, double e) {
     return {std::min(winW, slidRect(dock, winW, e).x) - w, dock.y + dock.h / 2 - h / 2, w, h};
 }
 
-Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW, double anchorW) {
+Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, double readoutW, double readoutH, double dockW, double anchorW, double sceneCx) {
     Frame f;
     f.window = {0, 0, winW, winH};
     f.topBar = {0, 0, winW, static_cast<double>(m.topBar)};
@@ -81,6 +81,7 @@ Frame makeFrame(double winW, double winH, const Metrics& m, double toolbarW, dou
         if (dockW > 0) tx = std::min(tx, f.dock.x - m.s12 - anchorW);             // only the open Controls panel moves it, to its left
         tx = std::max(tx, static_cast<double>(m.s12));
     }
+    if (sceneCx >= 0) tx = std::max(static_cast<double>(m.s12), std::min(sceneCx - tw / 2, f.freeW - m.s12 - tw));
     f.toolbar = {tx, winH - m.s12 - m.toolbarH, tw, static_cast<double>(m.toolbarH)};
     const double rw = std::min(readoutW, f.freeW - 2.0 * m.s12);
     f.readout = {f.freeW - m.s12 - rw, winH - m.s12 - readoutH, rw, readoutH};

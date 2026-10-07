@@ -63,7 +63,7 @@ def part_contents(binary, work):
                 check(ys[0][0] > 0 and ys[1][0] > ys[0][0] and ys[2][0] > ys[1][0], f"{name} {sz}: three Contents choices in a row each moved the view to its section {ys}")
 
 def part_toolbar(binary, work):
-    # item 3: the toolbar's left edge is the same in the Orbit Lab and in every Atom view, at every size; no button moves when an optional one (Centre, Drag) appears
+    # item 3 (stage 5g): REPLACED in stage 5l by centring each lab's toolbar on its scene (see below); the optional buttons (Centre, Drag) still join at the right end
     # item 4a: Cloud 3D and Slice have their own buttons beside Cloud
     views = (("orbit", {}), ("a_orbit", {"PL_ATOM": "1", "PL_ATOM_SET": "view=Orbit"}), ("a_cloud", {"PL_ATOM": "1", "PL_ATOM_SET": "view=Cloud;orb=2p"}), ("a_cloud3d", {"PL_ATOM": "1", "PL_ATOM_SET": "view=Cloud 3D;orb=2p"}),
              ("a_slice", {"PL_ATOM": "1", "PL_ATOM_SET": "view=Slice;orb=2p"}), ("a_chart", {"PL_ATOM": "1", "PL_ATOM_SET": "view=Chart of nuclides"}),
@@ -86,10 +86,8 @@ def part_toolbar(binary, work):
             if n != "orbit":
                 for want in ("tool.cloud", "tool.cloud3d", "tool.slice"):
                     check(want in btn, f"{n} {sz}: the toolbar has {want}")
-        check(len(set(round(v, 1) for v in first.values())) == 1, f"{sz}: the first button is at the same x in every view and lab {first}")
-        for k, d in slots.items():
-            if len(d) > 1:
-                check(len(set(round(v, 1) for v in d.values())) == 1, f"{sz}: {k} is at the same x in every view {d}")
+        # 5l (changed on purpose, owner's request): the stage 5g rule "the first button / every button has the same x in every view and lab" is gone. Each lab's toolbar is now CENTRED on its scene (see
+        # DECISIONS.md, stage 5l; tests/check_5l.py part toolbar), so the Orbit Lab's shorter toolbar is no longer off to the left, and the Atom buttons shift when Drag or Centre appear.
         check("tool.drag" in slots and "tool.centre" in slots, f"{sz}: the optional buttons (Drag, Centre) appear in some view")
         if "tool.centre" in slots and "tool.drag" in slots:
             check(slots["tool.centre"]["a_zoom"] > slots["tool.drag"]["a_zoom"] > slots["tool.reset"]["a_zoom"], f"{sz}: the optional buttons are at the right end, after Reset")
