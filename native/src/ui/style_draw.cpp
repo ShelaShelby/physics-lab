@@ -18,6 +18,8 @@
 #include "render/gl_loader.h"
 #include "imgui_internal.h"
 #include "look.h"
+#include "reading.h"
+#include "shell.h"
 #include "shell_test.h"
 
 #ifndef PL_VERSION
@@ -508,7 +510,34 @@ void pushDockedBg() { if (glassy()) ImGui::PushStyleColor(ImGuiCol_WindowBg, ImV
 void popDockedBg() { if (glassy()) ImGui::PopStyleColor(); }
 // the title bar of a window with a styled bar has its own text colour; and the title (not the content) may be in the theme's display font
 static bool titleFontOn() { return !app::titleFontKeyFor(style(), fontFamilyAvailable(style().titleFont)).empty(); }
+// 0.15 stage 5k (New UI only; with it Off every floating window is exactly as before): a floating window is never taller than the room under the top bar, and on opening and after the app window
+// is resized it is moved inside it (title bar reachable, bottom edge 8 px above the window's bottom edge). A taller window scrolls inside.
+static const float kKeepMargin = 8.0f;
+static float keepTop() { return std::max(0.0f, shellTopBarH()); }
+static void keepInside() {
+    if (!readingModeOn()) return;
+    ImGuiWindow* w = ImGui::GetCurrentWindow();
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGuiStorage* st = ImGui::GetStateStorage();
+    const ImGuiID kW = ImGui::GetID("##keepW"), kH = ImGui::GetID("##keepH"), kLeft = ImGui::GetID("##keepLeft");
+    int left = st->GetInt(kLeft, 0);
+    if (w->Appearing || st->GetFloat(kW, -1) != vp->Size.x || st->GetFloat(kH, -1) != vp->Size.y) left = 5;     // a few frames: an auto-sized window settles over two or three
+    st->SetFloat(kW, vp->Size.x); st->SetFloat(kH, vp->Size.y);
+    if (left > 0) {
+        const float top = keepTop();
+        const float nx = std::max(vp->Pos.x, std::min(w->Pos.x, vp->Pos.x + vp->Size.x - w->Size.x));
+        const float ny = std::max(vp->Pos.y + top, std::min(w->Pos.y, vp->Pos.y + vp->Size.y - kKeepMargin - w->Size.y));
+        if (nx != w->Pos.x || ny != w->Pos.y) ImGui::SetWindowPos(w, ImVec2(nx, ny), ImGuiCond_Always);
+        left--;
+    }
+    st->SetInt(kLeft, left);
+}
+
 void pushFloatStyle() {
+    if (readingModeOn()) {
+        const ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(std::max(100.0f, vp->Size.x - 2 * kKeepMargin), std::max(100.0f, vp->Size.y - keepTop() - 2 * kKeepMargin)));
+    }
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, app::scaledRadius(style(), style().panel.floatRounding) * ImGui::GetFontSize() / 16);
     if (style().panel.title.set) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(style().panel.title.text.r, style().panel.title.text.g, style().panel.title.text.b, 1));
     if (titleFontOn()) {                                                                                  // a wide font: a little smaller so a title still fits ...
@@ -518,6 +547,7 @@ void pushFloatStyle() {
     }
 }
 void popFloatStyle() {
+    keepInside();                                   // (called right after Begin: the window is the current one)
     if (titleFontOn()) { ImGui::PopStyleVar(); ImGui::PopFont(); }
     if (style().panel.title.set) ImGui::PopStyleColor();
     ImGui::PopStyleVar();

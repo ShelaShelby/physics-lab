@@ -302,7 +302,7 @@ def part_toggle(binary, work):
     seq = "10:click=top.theme;24:click=top.theme;38:click=top.theme"
     for frames, want, what in ((20, True, "click 1 opens the Theme list"), (34, False, "click 2 closes it"), (48, True, "click 3 opens it again")):
         r = run_app(binary, work, f"kt_th_{frames}", {"PL_NEWUI": "on", "PL_SCRIPT": seq}, frames=frames, size=sz)
-        check((widx(worder(r), "##themes") >= 0) == want, f"{what} (frame {frames}, windows {worder(r)[-3:]})")
+        check((widx(worder(r), "##Popup_") >= 0) == want, f"{what} (frame {frames}, windows {worder(r)[-3:]})")
     for theme in ("dark", "y2knight"):
         r = run_app(binary, work, f"kt_icon_{theme}", {"PL_NEWUI": "on"}, frames=20, size=sz, theme=theme)
         ic = r.rects.get("topicon.settings")

@@ -825,7 +825,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         const Rect hr = handleRect(dockRect(W, H, m, dockWidth(m, W)), W, m, ease);
         sh::Panel hp;
         if (sh::beginPanel("##shellHandle", hr, hp, sh::Shape::Clear, false)) {     // (stage 5g: flat and modern in every theme: a slim rounded pill with a thin edge and one chevron; no gradient, gloss, bevel, glow or shadow)
-            ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+            // (5k: no BringWindowToDisplayFront any more: the handle was drawn THROUGH an open Settings / Benchmark window; it stays where it was made, below a window opened after it, and by its place it is never under a panel)
             const ImVec2 a(static_cast<float>(hr.x), static_cast<float>(hr.y)), b(static_cast<float>(hr.right()), static_cast<float>(hr.bottom()));
             ImGui::SetCursorScreenPos(a);
             const bool clicked = ImGui::InvisibleButton("ctl.handle", ImVec2(static_cast<float>(hr.w), static_cast<float>(hr.h)));
@@ -930,18 +930,26 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             const auto icon = [&](const char* id, Icon ic, const char* tip, bool on) {
                 rx -= ib;
                 const bool c = sh::iconButton(id, ImVec2(rx, y0), ImVec2(ib, ib), ic, tip, on);
+                auditRect(std::string("topicon.") + (id + 4), rx, y0, static_cast<float>(ib), static_cast<float>(ib));   // (5k: for the tests; id is "top.<name>")
                 rx -= static_cast<float>(gap);
                 return c;
             };
-            if (icon("top.settings", Icon::Gear, "Settings", app.showSettings)) app.showSettings = true;
+            if (icon("top.settings", Icon::Gear, "Settings", app.showSettings)) app.showSettings = !app.showSettings;   // (5k: a second click closes it)
             const float themeX = rx - ib;
-            if (icon("top.theme", Icon::Palette, "Theme", false) || S.openThemes) { ImGui::OpenPopup("##themes"); S.openThemes = false; }
+            // (5k: a second click on the button closes the list. While the list is open Dear ImGui does not hand the click to the button under it, so the press is found by its place)
+            static bool eatThemeClick = false;
+            const float themeBx = rx - ib;
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsMouseHoveringRect(ImVec2(themeBx, y0), ImVec2(themeBx + ib, y0 + ib), false) && ImGui::IsPopupOpen("##themes")) { ImGui::ClosePopupToLevel(0, true); eatThemeClick = true; }
+            bool themeClick = icon("top.theme", Icon::Palette, "Theme", false);
+            if (themeClick && eatThemeClick) themeClick = false;
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) eatThemeClick = false;
+            if (themeClick || S.openThemes) { ImGui::OpenPopup("##themes"); S.openThemes = false; }
             themePicker(app);
             (void)themeX;
             if (icon("top.ach", Icon::Trophy, "Achievements", app.pane == 2)) app.pane = app.pane == 2 ? 0 : 2;
             if (icon("top.learn", Icon::Book, "Learn", app.pane == 1)) app.pane = app.pane == 1 ? 0 : 1;
             if (icon("top.swap", Icon::Swap, app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", false)) openLab(app, 1 - app.lab);
-            if (icon("top.search", Icon::Search, "Search (Ctrl+K)", S.ui.search)) { S.ui.search = true; S.ui.open = PanelId::None; S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; }
+            if (icon("top.search", Icon::Search, "Search (Ctrl+K)", S.ui.search)) { if (S.ui.search) S.ui.search = false; else { S.ui.search = true; S.ui.open = PanelId::None; S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; } }   // (5k: a second click closes it)
             if (S.askDefaults) { ImGui::OpenPopup(app.lab == 1 ? "Put Atom Lab back?" : "Put Orbit Lab back?"); S.askDefaults = false; }
             defaultsPopups(app);
             sh::endPanel(bar);

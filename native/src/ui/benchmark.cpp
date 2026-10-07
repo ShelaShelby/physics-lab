@@ -1,4 +1,7 @@
 #include "ui/benchmark.h"
+#include "ui/reading.h"
+#include "ui/shell.h"
+#include "ui/shell_test.h"
 #include "ui/style_draw.h"
 
 #include <SDL3/SDL.h>
@@ -452,6 +455,7 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
 
 void benchmarkWindow(AppState& app) {
     if (!app.bench) return;
+    auditNote(std::string("benchstage ") + std::to_string(static_cast<int>(app.bench->stage)) + " running=" + std::to_string(app.benchRunning ? 1 : 0));
     BenchState& b = *app.bench;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const float fs = ImGui::GetFontSize();
@@ -501,7 +505,19 @@ void benchmarkWindow(AppState& app) {
             ImGui::TextWrapped("This runs %d scenes one after the other, about %d seconds in all. Each one has %d seconds of warm-up that is not counted, then %d seconds that are counted.",
                                count, secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
             ImGui::Spacing();
+            // 5k (New UI): the long scene list scrolls INSIDE the window; the check boxes and the Start / Cancel buttons under it are always in view (the window is never taller than the app window).
+            // The list's height is what is left after everything else, measured the frame before.
+            static float nonListH = 0;
+            const bool pinned = readingModeOn();
+            float listH = 0;
+            if (pinned) {
+                const float natural = count * ImGui::GetTextLineHeightWithSpacing() + 2;
+                const float room = std::max(60.0f, vp->Size.y - std::max(0.0f, shellTopBarH()) - 2 * 8.0f - nonListH);
+                listH = std::min(natural, room);
+                ImGui::BeginChild("##benchScenes", ImVec2(0, listH), ImGuiChildFlags_None);
+            }
             for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[list[i]].info.name);
+            if (pinned) ImGui::EndChild();
             ImGui::Checkbox("Include stress scenes (3 extra, much heavier)", &b.includeStress);
             if (ImGui::IsItemHovered()) ui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
             {   // the number is counted, not typed: it was "11" in 0.10.6 and the list has grown since
@@ -516,9 +532,14 @@ void benchmarkWindow(AppState& app) {
                                "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "
                                "Before the first scene the graphics card's timer is checked with a known load (about a second).");
             ImGui::Spacing();
-            if (ImGui::Button("Start") && !whyNot(app)) begin(app);
+            const bool startClicked = ImGui::Button("Start");
+            noteItem("bench.start");
+            auditRect("bench.start", ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectSize().x, ImGui::GetItemRectSize().y);
+            if (startClicked && !whyNot(app)) begin(app);
             ImGui::SameLine();
             if (ImGui::Button("Cancel") || esc) b.stage = BenchState::Stage::Closed;
+            if (pinned) nonListH = ImGui::GetCursorPosY() + ImGui::GetStyle().WindowPadding.y - listH;
+            auditRect("win.benchmark", ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowWidth(), ImGui::GetWindowHeight());
         }
         ImGui::End();
         if (!open) b.stage = BenchState::Stage::Closed;

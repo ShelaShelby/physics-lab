@@ -320,3 +320,4 @@
 - [ ] Old app (New UI Off), not changed: the "Restart walk" row looks cut off in the old 360 u Atom column.
 - [ ] Not tested here: Windows, a real GPU, speed, Segoe UI, Windows scale 125 / 150 %.
 - [ ] Orbit Lab (found in 5f, older than this stage): click a body in the Pick list in a 1280 x 800 window: does it fly there and select it? The scripted tests `orbit_ui_card` and `orbit_ui_coverage` fail at that size (same failures at the stage 5e commit).
+- [ ] On the PC (stage 5k): About scrolls with the wheel and PageDown, the scrollbar is visible, the Contents entries jump, the Settings button toggles, the gear icon is clear, the Benchmark window and its Start button are visible. If About still does not scroll, press Ctrl+Shift+F12 in About and send `physics-lab-input.txt`.

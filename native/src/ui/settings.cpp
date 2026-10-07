@@ -240,6 +240,7 @@ void settingsWindow(AppState& app) {
     popFloatStyle();
     if (settingsShown) {
             panelDecor(app::PanelKind::Floating);
+        auditRect("win.settings", ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowWidth(), ImGui::GetWindowHeight());
         const float avail = ImGui::GetContentRegionAvail().x, gap = ImGui::GetStyle().ItemSpacing.x;
         auto tiles = [&](int n) { return (avail - gap * (n - 1)) / n; };
         // 🔠 Text size

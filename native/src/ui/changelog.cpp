@@ -19,6 +19,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5k: pages scroll, Settings toggles, new gear icon",
+     "With New UI (preview) On, About, Learn and the other pages now really scroll: the text used to stay in place while the scroll position changed. The mouse wheel and PageUp, PageDown, Home, End and the arrow keys work whichever window has the focus, and a slim scrollbar shows on the page. The Contents list jumps to each section. The Settings button closes Settings on a second click and has a new gear icon. Floating windows stay inside the app window, and the Benchmark Start button is always in view. Ctrl+Shift+F12 writes a small text file about the mouse and keys for finding problems. Not tested: Windows, a real mouse, speed."},
     {"0.15", "Full UI rework, stage 5j: look options M1-M3 for testing",
      "Three modern looks, M1, M2 and M3, were added for testing; they are not visible by default and nothing in the normal app changed. They keep the layout and change the details and the text: a clean modern font, flat dark cards with a thin edge, one solid selected pill, quiet muted section titles and thin icons. The old looks A, B and C were removed. "
      "To try one on a PC: set PL_LOOK to m1, m2 or m3 before starting the app, and turn New UI on with the Dark theme. M1 and M2 use the Inter font and M3 uses IBM Plex Sans (both SIL Open Font License 1.1, built into the app, listed in About). Not tested: Windows, a real graphics card, speed. Nothing about the physics changed."},

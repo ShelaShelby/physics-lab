@@ -203,10 +203,18 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
         dl->AddCircle(c, 0.82f * s, col, 24, th);
         dl->AddCircleFilled(P(-0.3f, -0.2f), 0.12f * s, col); dl->AddCircleFilled(P(0.1f, -0.38f), 0.12f * s, col); dl->AddCircleFilled(P(0.38f, 0.0f), 0.12f * s, col);
         break;
-    case Icon::Gear:
-        dl->AddCircle(c, 0.42f * s, col, 16, th);
-        for (int k = 0; k < 8; k++) { const float a = k * 0.785398f, ca = std::cos(a), sa = std::sin(a); dl->AddLine(P(0.62f * ca, 0.62f * sa), P(0.92f * ca, 0.92f * sa), col, th * 1.2f); }
+    case Icon::Gear: {   // 5k: a cog: a ring (the hub hole) and a toothed rim of 8 teeth, drawn in the same thin stroke as the other icons (the old one, a circle with 8 rays, looked like a sun)
+        ImVec2 pts[32];
+        int n = 0;
+        for (int k = 0; k < 8; k++) {
+            const float a = k * 0.785398f;
+            const float da[4] = {-0.36f, -0.20f, 0.20f, 0.36f}, rr[4] = {0.62f, 0.92f, 0.92f, 0.62f};   // root, tip, tip, root
+            for (int j = 0; j < 4; j++) pts[n++] = P(rr[j] * std::cos(a + da[j]), rr[j] * std::sin(a + da[j]));
+        }
+        dl->AddPolyline(pts, n, col, ImDrawFlags_Closed, th);
+        dl->AddCircle(c, 0.27f * s, col, 16, th);
         break;
+    }
     case Icon::Caret: dl->AddTriangleFilled(P(-0.45f, -0.22f), P(0.45f, -0.22f), P(0.0f, 0.28f), col); break;
     case Icon::CaretUp: dl->AddTriangleFilled(P(-0.45f, 0.22f), P(0.45f, 0.22f), P(0.0f, -0.28f), col); break;
     case Icon::Close: dl->AddLine(P(-0.6f, -0.6f), P(0.6f, 0.6f), col, th); dl->AddLine(P(0.6f, -0.6f), P(-0.6f, 0.6f), col, th); break;
