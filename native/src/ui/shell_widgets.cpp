@@ -26,9 +26,7 @@ std::map<std::string, float> g_heights;
 std::map<std::string, float> g_scrollMax;                 // (5l) how far a panel could scroll when it was last drawn (0: its content fits, no scrollbar)
 std::string g_glassId;
 double g_glassA = 0.95;
-// stage 5i: the look options (PL_LOOK=a|b|c, read once; Dark only; render and tests only). Null = today's tokens, and then nothing below changes.
-const app::lookopt::Tokens* g_loTok = nullptr;
-bool g_loRead = false;
+// 0.15 stage 5m: the look M1 (app/look_options.h) is THE look of the New UI; for now it is applied to the Dark theme (stage 7 does the other themes through tokens).
 const app::lookopt::Tokens* g_lo = nullptr;       // this frame's look: set only while the theme is Dark
 app::ThemeColors g_loColors;
 bool g_loBuilt = false;
@@ -46,11 +44,10 @@ void beginFrame() {
     const app::ThemeColors& c = look().c;
     g_f.plain = app::isPlainStyle(c.style);
     g_f.outline = c.style.square || app::contrastRatio(c.line, c.bg) >= 7;          // Monochrome and High contrast
-    const std::string key = c.id + (look().effects ? "+" : "-");
+    const std::string key = c.id;
     if (key != g_glassId) { g_glassId = key; g_glassA = app::shell::glassOpacity(c); }
     g_f.panelAlpha = static_cast<float>(g_glassA);
-    if (!g_loRead) { g_loRead = true; g_loTok = app::lookopt::tokens(app::lookopt::fromEnv(std::getenv("PL_LOOK"))); }
-    g_lo = g_loTok && c.id == "dark" ? g_loTok : nullptr;
+    g_lo = c.id == "dark" ? &app::lookopt::m1() : nullptr;
     if (g_lo) {
         if (!g_loBuilt) { g_loColors = app::lookopt::apply(*g_lo, c); g_loBuilt = true; }
         g_f.c = &g_loColors;
@@ -60,6 +57,7 @@ void beginFrame() {
     }
 }
 const Frame& F() { return g_f; }
+bool lookM1() { return g_lo != nullptr; }
 
 ImU32 cText(float a) { return colOf(g_f.c->fg, a); }
 ImU32 cMuted(float a) { return colOf(g_f.c->muted, a); }

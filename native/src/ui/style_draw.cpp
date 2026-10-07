@@ -374,7 +374,7 @@ void pageGradient(ImDrawList* dl, ImVec2 a, ImVec2 b, float rounding, ImDrawFlag
 // ---- 0.15 stage 2, C2: the page effects cache ----
 // The page (gradient + textures) of the whole window is drawn ONCE into a texture, with the very same calls as before into a private draw list that Dear ImGui's own OpenGL
 // backend renders; every frame a docked panel then draws its piece of that texture (one quad) instead of thousands of vertices. Rebuilt only when the key changes
-// (app/page_cache.h): the window size, the theme, Theme effects, the text size. PL_PAGE_CACHE=off draws the old way (for tests/check_page_cache.py, which compares the two).
+// (app/page_cache.h): the window size, the theme, the text size. PL_PAGE_CACHE=off draws the old way (its picture guard, check_page_cache.py, is archived in native/archive/themes/tests: no theme has page textures now).
 namespace {
 struct PageTexture { unsigned fbo = 0, tex = 0; int w = 0, h = 0; };
 PageTexture g_pageTex;
@@ -445,7 +445,7 @@ bool pageCacheDraw(ImDrawList* dl, ImVec2 a, ImVec2 b) {
     const int W = int(vp->Size.x * io.DisplayFramebufferScale.x + 0.5f), H = int(vp->Size.y * io.DisplayFramebufferScale.y + 0.5f);
     if (W < 1 || H < 1) return false;
     app::PageCacheKey key;
-    key.theme = look().c.id; key.effects = look().effects; key.w = W; key.h = H; key.fontPx100 = int(ImGui::GetFontSize() * 100 + 0.5f);
+    key.theme = look().c.id; key.w = W; key.h = H; key.fontPx100 = int(ImGui::GetFontSize() * 100 + 0.5f);
     if (g_pageCacheTracker.update(key)) {
         if (!buildPageTexture(vp, W, H)) { g_pageCacheTracker.invalidate(); return false; }
         if (log) std::fprintf(stderr, "PLPAGECACHE rebuild %d %s %dx%d\n", g_pageCacheTracker.rebuilds(), key.theme.c_str(), W, H);

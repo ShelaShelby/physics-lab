@@ -271,12 +271,7 @@ if(PL_BUILD_APP)
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
       add_test(NAME window_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_window_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/window_pictures)
-      # 0.14 stage 2: the Y2K decoration stays at the windows' edges, the title font only on titles, the page textures stay within their model, the glow
-      add_test(NAME y2k_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_y2k_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/y2k_pictures)
-      # 0.15 stage 2: the page effects cache draws the same pictures as the old way (within the stated guards), builds its texture once, and is unused where there are no textures
-      add_test(NAME page_cache_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_page_cache.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/page_cache_pictures)
-      # 0.14 stage 3: Settings -> Theme effects Off removes all decoration and nothing else
-      add_test(NAME effects_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_effects_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/effects_pictures)
+      # 0.15 stage 5m: y2k_pictures, page_cache_pictures and effects_pictures were archived with the themes (native/archive/themes/tests)
       # 0.15 stage 3: the new UI (Settings -> New UI (preview)): text sizes and floors at every Text size and Windows scale, nothing leaves the window, collapsing, Esc / Ctrl+K / Space,
       # the centre shift, the reading view; the Orbit Lab top-10 controls give the same state as the old panel; pictures (glass opacity, regression guards)
       add_test(NAME shell_ui COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_ui)
@@ -300,10 +295,11 @@ if(PL_BUILD_APP)
       endforeach()
       # 0.15 stage 5i: the data sheet ends above the bottom toolbar (3 sizes, 8 tabs, Orbit sheet)
       add_test(NAME ui5i_sheet COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5i.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5i_sheet sheet)
-      # 0.15 stage 5j: the look options M1..M3: the app starts, draws the look, the 5g / 5h rect tests pass, and no text is cut in the panel / card / sheet (tests/check_5j.py)
-      foreach(m m1 m2 m3)
-        add_test(NAME ui5j_look_${m} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5j.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5j_look_${m} ${m})
-      endforeach()
+      # 0.15 stage 5j / 5m: the look M1 (the New UI's look, always on): the app starts, draws it, the 5g / 5h rect tests pass, and no text is cut in the panel / card / sheet (tests/check_5j.py)
+      add_test(NAME ui5j_look_m1 COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5j.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5j_look_m1 m1)
+      # 0.15 stage 5m: the three archived themes are gone (list, settings file, search, facts) and M1 is on without any environment variable (tests/check_5m.py)
+      add_test(NAME ui5m_themes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5m.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5m_themes themes)
+      set_tests_properties(ui5m_themes PROPERTIES TIMEOUT 3600)
       # 0.15 stage 5k part 1: reading pages scroll by wheel / keys whichever window has the focus, the scrollbar, the Contents list, the hidden input log
       foreach(part pages contents log windows toggle)
         add_test(NAME ui5k_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5k.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5k_${part} ${part})
@@ -333,7 +329,7 @@ foreach(t orbit_physics atom_physics app_settings font_coverage nbody_physics jp
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
-foreach(t gl_phase_colours theme_pictures window_pictures y2k_pictures page_cache_pictures effects_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui5j_look_m1 ui5j_look_m2 ui5j_look_m3 ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
+foreach(t gl_phase_colours theme_pictures window_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
           orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")

@@ -32,7 +32,7 @@ def diff_count(a, b, tol=24):
 # What each Settings row is called in search (the owner's words), per lab. The window's own list of drawn rows must be EXACTLY these (a row drawn but not listed here fails), and each one is typed
 # whole (the label) and by one word of it. These labels are written here by hand on purpose: they are the independent expectation, the app builds its list from its own table.
 ROWS_ALL = {"text": ("Text size (Settings)", "size"), "font": ("Font", "font"), "units": ("Units (metric or imperial)", "units"), "motion": ("Motion (reduced motion)", "motion"),
-            "effects": ("Theme effects", "effects"), "progress": ("Progress (start again)", "progress"), "developer": ("Developer (unlock everything)", "developer"),
+            "progress": ("Progress (start again)", "progress"), "developer": ("Developer (unlock everything)", "developer"),
             "newui": ("New UI (preview)", "preview"), "facts": ("Did you know facts", "did"), "perf": ("Performance", "performance"), "vsync": ("VSync (wait for the screen)", "vsync"),
             "frames": ("Frame times (fps)", "frame"), "benchmark": ("Benchmark (speed test)", "benchmark")}
 ROWS_LAB = {0: {"gpurocks": ("GPU rocks (OpenGL 4.3)", "rocks")},

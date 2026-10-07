@@ -225,7 +225,7 @@ void testShellGlass() {
     // the opacities of docs/ui-0.15/DESIGN.md section 3, which tools/glass_alpha.py (Python, its own contrast function) computed
     struct Row { const char* id; double use; };
     const Row table[] = {{"light", 0.97}, {"dark", 0.96}, {"black", 0.93}, {"midnight", 0.95}, {"solar", 0.97}, {"paper", 0.97}, {"sage", 0.95}, {"contrast", 0.70},
-                         {"synthwave", 0.94}, {"monochrome", 0.87}, {"aero", 0.75}, {"y2knight", 0.78}};
+                         {"monochrome", 0.87}};   // (0.15 stage 5m, on purpose: the rows of synthwave 0.94, aero 0.75 and y2knight 0.78 went with those themes)
     for (const Row& r : table) {
         const app::ThemeColors c = app::themeColors(r.id, false);
         checkTrue(std::string("glass: opacity of ") + r.id + " equals the Python table (" + num(r.use) + ", got " + num(glassOpacity(c)) + ")", std::fabs(glassOpacity(c) - r.use) < 0.0051);
@@ -235,7 +235,7 @@ void testShellGlass() {
     for (const app::ThemeDef* t : app::allThemes()) if (std::string(t->id) != "auto") all.push_back(app::themeColors(t->id, false));
     all.push_back(app::themeColors("auto", false));
     all.push_back(app::themeColors("auto", true));
-    checkTrue("glass: all 13 themes were checked (12 and Auto, Dark and Light; 14 before Y2K Ice was removed, stage 5g, on purpose)", all.size() == 14 && app::allThemes().size() == 13);
+    checkTrue("glass: all 10 themes were checked (9 and Auto, Dark and Light = 11; 14 and 13 before the three themes were archived, stage 5m, on purpose)", all.size() == 11 && app::allThemes().size() == 10);
     for (const app::ThemeColors& c : all) {
         const double a = glassOpacity(c);
         checkTrue("glass: opacity of " + c.id + " is below 1 and at most 0.97", a > 0 && a <= 0.97 + 1e-9);

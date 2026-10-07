@@ -98,8 +98,6 @@ struct ThemeStyle {
     float roundScale = 1;           // every corner radius in the app is multiplied by this (Monochrome: square instead)
     bool square = false;            // Monochrome: no rounded corners
     bool grayscale = false;         // Monochrome: the pictures in shades of grey
-    OptRgb glowTop;                 // Synthwave: the purple glow behind the top of the page (the colour at its middle)
-    OptRgb titleGlow;               // Synthwave: the neon glow round the title
     std::string font;               // the theme's own font family key when Settings → Font is Auto ("" = Auto): "serif", "mono" ...
     std::string fontRegular, fontBold, fontItalic;   // a system font by file name (looked for in the system's font folders; "" = none)
     OptRgb accentFill, danger, dangerFill, onDanger, soft, neutral;   // see ThemeColors: unset = the old value

@@ -194,40 +194,20 @@ std::string giftPage(const std::string& html) {
     return clicked;
 }
 
-void drawSynthGlow(ImDrawList* dl, ImVec2 a, ImVec2 b) {
-    // radial-gradient(130% 55% at 50% 0%, #3b1466 0%, var(--bg) 62%): soft rings from the top middle
-    const app::Rgb glow = g_look.c.style.glowTop.c;
-    const float w = b.x - a.x, h = b.y - a.y, rx = 1.3f * w * 0.62f, ry = 0.55f * h * 0.62f;
-    for (int i = 24; i >= 1; i--) {
-        const float t = i / 24.f;
-        const ImU32 c = col(glow, 0.09f * (1 - t) + 0.02f);
-        dl->PathClear();
-        for (int k = 0; k <= 32; k++) {
-            const float an = 3.14159265f * k / 32;
-            dl->PathLineTo(ImVec2(a.x + w / 2 + rx * t * std::cos(an), a.y + ry * t * std::sin(an)));
-        }
-        dl->PathFillConvex(c);
-    }
-}
-
 void invalidateLook() { g_applied.clear(); }   // 0.15 stage 2: the Dear ImGui style was rebuilt (a new display scale): the next updateLook puts the theme back
 
 void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     Look L;
     L.c = app::themeColors(app::themeUsable(p, p.theme) ? p.theme : "auto", systemLight);
-    static const bool envEffectsOff = std::getenv("PL_EFFECTS") && std::string(std::getenv("PL_EFFECTS")) == "off";   // for the automatic picture checks
-    L.effects = p.effects != "off" && !envEffectsOff;
-    if (!L.effects) L.c.style = app::withoutEffects(L.c.style);    // 0.14 stage 3: Settings → Theme effects Off: colours, gloss and fonts stay, the decoration goes
     L.textScale = float(app::textSizeFactor(p.textSize));
     L.reduced = p.motion == "on" || (p.motion == "auto" && systemReduced);
     const app::ThemeStyle& ts = L.c.style;                     // 0.14: what used to be tested as `id == "monochrome"` and so on is data of the theme
     L.square = ts.square;
     L.grayscale = ts.grayscale;
-    L.synthGlow = ts.glowTop.set;
     // the font: the one picked in Settings; with Theme default, the theme's own (Paper's book font, Monochrome's monospace, Aero's Segoe UI when the PC has it)
     L.fontKey = app::fontKeyFor(ts, p.font, fontFamilyAvailable(app::fontFamilyKeyOf(ts)));
-    {   // 0.15 stage 5j: PL_LOOK=m1|m2|m3 (New UI on, Dark, font Auto): the look's own font; if it did not load, nothing changes
-        static const app::lookopt::Tokens* lt = app::lookopt::tokens(app::lookopt::fromEnv(std::getenv("PL_LOOK")));
+    {   // 0.15 stage 5m: the New UI's look M1 (New UI on, Dark, font Auto): its own font (Inter); if it did not load, nothing changes
+        const app::lookopt::Tokens* lt = &app::lookopt::m1();
         static const char* nuEnv = std::getenv("PL_NEWUI");                                      // (the same rule as newUiOn: PL_NEWUI overrides the setting)
         const bool newUi = nuEnv ? std::string(nuEnv) == "on" : p.newUi == "on";
         if (lt && newUi && L.c.id == "dark" && L.fontKey == "auto" && fontFamilyAvailable(lt->font)) L.fontKey = lt->font;

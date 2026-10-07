@@ -1,4 +1,4 @@
-// 0.15 stage 5i/5j: the look options M1..M3 (PL_LOOK=m1|m2|m3, Dark only). Included by test_app.cpp (uses its checkTrue). Written BEFORE src/app/look_options.*.
+// 0.15 stage 5m: the look M1 of the New UI (Dark theme). Included by test_app.cpp (uses its checkTrue). (Stage 5i/5j tested M1..M3 and PL_LOOK; M2, M3 and fromEnv were removed on purpose, see REPORT.md.)
 // Reference: the W3C's WCAG 2.x contrast formula (https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio, #dfn-relative-luminance), WRITTEN OUT HERE (not the app's own function),
 // checked against the W3C's own worked values first. Needs: body and card text 4.5:1 (SC 1.4.3), icons and the borders of controls 3:1 (SC 1.4.11).
 #include "app/look_options.h"
@@ -23,10 +23,6 @@ static void testLookContrast() {
     checkTrue("WCAG #767676 on white = 4.54", std::fabs(ratio(hex("#767676"), hex("#ffffff")) - 4.54) < 5e-3);
     checkTrue("WCAG #777777 on white = 4.48 (fails)", std::fabs(ratio(hex("#777777"), hex("#ffffff")) - 4.478) < 2e-3);
 
-    checkTrue("fromEnv: m1..m3 in either case, nothing else (the old a b c are gone)", app::lookopt::fromEnv("m1") == (app::lookopt::kCount >= 1 ? 1 : 0) && app::lookopt::fromEnv("M3") == (app::lookopt::kCount >= 3 ? 3 : 0) &&
-              app::lookopt::fromEnv(nullptr) == 0 && app::lookopt::fromEnv("") == 0 && app::lookopt::fromEnv("a") == 0 && app::lookopt::fromEnv("m") == 0 && app::lookopt::fromEnv("m4") == 0 && app::lookopt::fromEnv("m10") == 0);
-    checkTrue("tokens(0) is none", app::lookopt::tokens(0) == nullptr);
-
     const app::ThemeColors dark = app::themeColors("dark", false);
     // today's Dark as a sanity row: the pairs that pass today must still read as passing in our formula (the ones that do not are reported in REPORT.md, not asserted)
     {
@@ -36,10 +32,8 @@ static void testLookContrast() {
         checkTrue("sanity Dark: accent on card >= 4.5", ratio(ac, card) >= 4.5);
         checkTrue("sanity Dark: text on its button face >= 4.5", ratio(fg, mix(card, fg, 0.10)) >= 4.5);
     }
-    for (int id = 1; id <= app::lookopt::kCount; id++) {
-        const app::lookopt::Tokens* t = app::lookopt::tokens(id);
-        checkTrue(std::string("look ") + std::to_string(id) + " exists", t != nullptr);
-        if (!t) continue;
+    {
+        const app::lookopt::Tokens* t = &app::lookopt::m1();
         const std::string n = std::string("look ") + t->name + ": ";
         const C3 card = rg(t->card), fg = rg(t->fg), mu = rg(t->muted), ac = rg(t->accent), fill = rg(t->accentFill), on = rg(t->onFill);
         const C3 face = mix(card, fg, t->faceMix), hover = mix(face, ac, t->hoverMix), press = mix(face, ac, t->pressMix);
@@ -63,20 +57,13 @@ static void testLookContrast() {
         }
         // sizes: the spec's radii and the Body floor are not touched by a look
         checkTrue(n + "radii and padding are sane", t->radiusPanel >= 3 && t->radiusPanel <= 16 && t->radiusCtl >= 2 && t->radiusCtl <= t->radiusPanel && t->pad >= 12 && t->pad <= 24);
-        // the owner's brief for M1..M3: flat (no gradient / shine / halo / see-through), radii 10-12 / 8, thin icons, an own font; the selected pill is light grey with dark text (M1, M3) or blue with white text (M2)
+        // the owner's brief for M1: flat (no gradient / shine / halo / see-through), radii 10-12 / 8, thin icons, an own font; the selected pill is light grey with dark text
         checkTrue(n + "flat: solid, no shine, no halo", t->panelAlpha == 1.0f && t->shineAlpha == 0.0f && t->haloAlpha == 0);
         checkTrue(n + "radii 10..12 (panels) and 8 (controls), thin icons (stroke 0.9..1.0 of 1.75 u = about 1.5 px)", t->radiusPanel >= 10 && t->radiusPanel <= 12 && t->radiusCtl == 8 && t->stroke >= 0.9f && t->stroke <= 1.0f);
-        checkTrue(n + "a look font is named", t->font && (std::string(t->font) == "m_inter" || std::string(t->font) == "m_plex"));
+        checkTrue(n + "a look font is named", t->font && std::string(t->font) == "m_inter");
         checkTrue(n + "the hairline border is about 8 % (6..10 %)", t->edgeAlpha >= 0.06f && t->edgeAlpha <= 0.10f);
         checkTrue(n + "very dark flat background and card (luminance < 0.02), card a little lighter than the background", lum(rg(t->bg)) < 0.02 && lum(card) < 0.02 && lum(card) > lum(rg(t->bg)));
-        if (id == 2) checkTrue(n + "selected pill is blue (b > r, g) with white text", fill.b > fill.r && fill.b > fill.g && on.r == 1 && on.g == 1 && on.b == 1);
-        else checkTrue(n + "selected pill is light grey (luminance > 0.5) with dark text (< 0.02)", lum(fill) > 0.5 && lum(on) < 0.02 && std::fabs(fill.r - fill.b) < 0.05);
+        checkTrue(n + "selected pill is light grey (luminance > 0.5) with dark text (< 0.02)", lum(fill) > 0.5 && lum(on) < 0.02 && std::fabs(fill.r - fill.b) < 0.05);
         checkTrue(n + "the border is a hairline (<= 0.2) and the halo stays within the 2 px rule (alpha <= 40)", t->edgeAlpha > 0 && t->edgeAlpha <= 0.2f && t->haloAlpha >= 0 && t->haloAlpha <= 40);
-    }
-    // M1 and M3 have the same surfaces and differ in the font; M1 and M2 share the font
-    const app::lookopt::Tokens *m1 = app::lookopt::tokens(1), *m2 = app::lookopt::tokens(2), *m3 = app::lookopt::tokens(3);
-    if (m1 && m2 && m3) {
-        checkTrue("M3 = M1's surfaces (bg, card, text, muted, fill) in another font", m1->bg.r == m3->bg.r && m1->card.g == m3->card.g && m1->muted.b == m3->muted.b && m1->accentFill.r == m3->accentFill.r && std::string(m1->font) != std::string(m3->font));
-        checkTrue("M1 and M2 both use Inter", std::string(m1->font) == "m_inter" && std::string(m2->font) == "m_inter");
     }
 }

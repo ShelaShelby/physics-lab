@@ -1,4 +1,4 @@
-// 0.14 stage 1: the maths and data behind the richer theme styles and Frutiger Aero. No graphics, so every function here is tested
+// 0.14 stage 1: the maths and data behind the richer theme styles (Frutiger Aero, the first user, was archived in 0.15 stage 5m; no shipped theme uses most of it now). No graphics, so every function here is tested
 // (tests/test_theme_style.inc). The drawing itself is in ui/style_draw.cpp and only ever calls these.
 #pragma once
 
@@ -68,12 +68,10 @@ bool hasStage2Decor(const ThemeStyle& s);                           // any stage
 // The bundled font for titles: the theme's, if it is built into the app (`available`); else "" (the titles use the normal font).
 std::string titleFontKeyFor(const ThemeStyle& s, bool available);
 
-// 0.14 stage 3, Settings → Theme effects Off: the style without its decoration: no page textures (clouds, bubbles, grain, halftone, grid, streak), no glints, brush lines,
-// reflection, corner brackets, HUD rules or spec label. Colours, the gloss gradients, rim, glow, shine, title bars and fonts stay exactly.
-ThemeStyle withoutEffects(const ThemeStyle& s);
-
-// ---- the list of themes in the app: the web's 11 plus the native ones, in the order of the picker ----
-// Order: the web's themes that are not secret, then the native themes (Frutiger Aero), then the secret ones (so the "???" cards stay at the end).
+// ---- the list of themes in the app, in the order of the picker ----
+// Order: the themes that are not secret, then the secret ones (so the "???" cards stay at the end). 0.15 stage 5m: the web's list (generated from index.html) still holds Synthwave,
+// and the app had Frutiger Aero and Y2K Night; those three were archived (native/archive/themes/), so allThemes() skips every id for which themeArchived is true.
+bool themeArchived(const std::string& id);                          // aero, y2knight, synthwave (and y2kice, removed in 0.15 stage 5g): a settings file that names one opens as Dark
 const std::vector<const ThemeDef*>& allThemes();
 const ThemeDef* findTheme(const std::string& id);
 const ThemeStyle& themeStyle(const std::string& id);               // the style of a theme (plain defaults for those that list none)

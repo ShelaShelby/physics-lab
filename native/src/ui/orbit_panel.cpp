@@ -343,10 +343,6 @@ void orbitPanel(AppState& app, float width) {
     popDockedBg();
     panelDecor(app::PanelKind::Docked);
     if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
-    if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
-        const ImGuiViewport* vp = ImGui::GetMainViewport();
-        drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
-    }
     orbitPanelContents(app);
     ImGui::End();
 }

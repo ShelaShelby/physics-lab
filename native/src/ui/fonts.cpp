@@ -118,23 +118,16 @@ const char* loadFonts(float size) {
         g_families[key] = fam;
         if (key == "auto") used = faces[0][0];
     }
-    {   // 0.14 stage 2: the display face of the Y2K themes' titles (Michroma, SIL OFL, built into the .exe): one face. If it is missing, no family is made and titles use the bold face.
+    {   // 0.15 stage 5m: the font of the look M1 (Inter), used only by the New UI on Dark with Font Auto (look.cpp). Regular + SemiBold (the "bold" face: titles); no italic file,
+        // so italic text is drawn upright. Today's font is merged behind it (addFace) so a letter Inter lacks is still drawn, never a box. (Loaded at start, not at the first use: adding a font
+        // while the app runs, e.g. when New UI is switched on in Settings, was not tested.)
         Fonts fam;
-        fam.regular = addFace({"@Michroma-Regular"});
-        if (fam.regular) { fam.bold = fam.italic = fam.regular; g_families["michroma"] = fam; }
-    }
-    {   // 0.15 stage 5j: the font of look M1..M3, loaded ONLY when PL_LOOK asks for it (today's fonts and atlas stay as they are otherwise). Regular + SemiBold (the "bold" face: titles); no italic file,
-        // so italic text is drawn upright. Today's font is merged behind it (addFace) so a letter the look font lacks is still drawn, never a box.
-        if (const app::lookopt::Tokens* lt = app::lookopt::tokens(app::lookopt::fromEnv(std::getenv("PL_LOOK")))) {
-            const bool inter = std::strcmp(lt->font, "m_inter") == 0;
-            Fonts fam;
-            fam.regular = addFace({inter ? "@Inter-Regular" : "@IBMPlexSans-Regular"});
-            if (fam.regular) {
-                fam.bold = addFace({inter ? "@Inter-SemiBold" : "@IBMPlexSans-SemiBold"});
-                if (!fam.bold) fam.bold = fam.regular;
-                fam.italic = fam.regular;
-                g_families[lt->font] = fam;
-            }
+        fam.regular = addFace({"@Inter-Regular"});
+        if (fam.regular) {
+            fam.bold = addFace({"@Inter-SemiBold"});
+            if (!fam.bold) fam.bold = fam.regular;
+            fam.italic = fam.regular;
+            g_families[app::lookopt::m1().font] = fam;
         }
     }
     if (!g_families.count("auto")) {

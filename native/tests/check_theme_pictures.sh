@@ -19,8 +19,12 @@
 #                                (0.15 stage 2: compared with PL_PAGE_CACHE=off, the old drawing; the page cache of 0.15 changes these pictures by rounding and edge pixels on purpose,
 #                                tests/check_page_cache.py holds it to its stated tolerance)
 #                                Settings: stage 3 must draw them exactly (0 differing pixels).
+# 0.15 stage 5m (on purpose): Frutiger Aero, Y2K Night and Synthwave left the app. The 11 variants are now auto, auto_light, light, dark, black, midnight, solar, paper, sage, contrast, monochrome. The picker (themes_<variant>)
+# lost three cards and the Settings screen (settings_<variant>) lost its Theme effects row, so those two pictures of every variant have new hashes (theme_pictures_0.14_changed.sha256 and theme_pictures_0.15s3_settings.sha256),
+# made by the stage 5m code after looking at one picker and one Settings picture (a regression guard, not an independent reference). The four main screens (orbit, nucleus, cloud3d, chart) of every variant still equal the 0.13 hashes.
 # 0.15 stage 5g (on purpose): the theme picker lost its Y2K Ice card, so the picker picture (themes_<variant>) of every variant has a new hash in theme_pictures_0.14_changed.sha256 and theme_pictures_0.14s2_native.sha256,
 # made by the stage 5g code after looking at the picture (a regression guard, not an independent reference); the Y2K Ice pictures were deleted from the file.
+# 0.15 stage 5m (on purpose, a second reason): the fact line now counts "n/26" (the Synthwave surprise left the facts), so EVERY old-UI picture has a new last digit and, because that changes which glyphs are packed into the font atlas, up to 28 text-edge pixels (at most 34 levels) moved; all hashes in the three files were rewritten by the stage 5m code, after the proof that nothing else moved (REPORT.md).
 # A different Mesa may round differently: then regenerate both files from the OLD code first (see REPORT.md of 0.14 stage 1), never edit a hash by hand.
 set -e
 BIN="$1"; WORK="$2"; REF="$3"; TOOLS="$4"
@@ -46,26 +50,7 @@ while read -r hash name; do
     got=$(grep "  $name\$" "$WORK/pictures.sha256" | cut -d' ' -f1)
     if [ "$got" != "$hash" ]; then echo "DIFFERENT PICTURE: $name (0.15 stage 3 Settings)"; fail=$((fail + 1)); fi
 done < "$REF/theme_pictures_0.15s3_settings.sha256"
-# the two native themes (Frutiger Aero, Y2K Night; Y2K Ice was removed in 0.15 stage 5g): draw, do not crash, use the default font here (no Segoe UI), six different pictures, and are not Dark
-for th in aero y2knight; do   # (0.15 stage 4.1: the two are drawn at the same time, then checked one after the other)
-    PL_PAGE_CACHE=off sh "$TOOLS/theme_pictures.sh" "$BIN" "$WORK/$th" "$th" > /dev/null &
-done
-wait
-for th in aero y2knight; do   # 0.15 stage 2: the OLD drawing (no page cache): these hashes are the stage 2 program's exactly; the cached drawing is checked against it by tests/check_page_cache.py
-    n=$(ls "$WORK"/$th/*_$th.bmp | wc -l)
-    [ "$n" = 6 ] || { echo "$th: expected 6 pictures, got $n"; fail=$((fail + 1)); }
-    if grep -q "Font: .*segoeui" "$WORK/$th/log.txt"; then echo "$th used a font file that should not exist here"; fail=$((fail + 1)); fi
-    grep -q "Font: " "$WORK/$th/log.txt" || { echo "$th: no font line in the log"; fail=$((fail + 1)); }
-    if [ "$(grep -c "_$th\$" "$WORK/$th/pictures.sha256")" != 6 ] || [ "$(grep '^' "$WORK/$th/pictures.sha256" | cut -d' ' -f1 | sort -u | wc -l)" != 6 ]; then
-        echo "$th: the six pictures are missing or not all different"; fail=$((fail + 1)); fi
-    # effects On (the default) draws exactly what stage 2 drew (Settings excluded: it got a section)
-    while read -r hash name; do
-        case "$name" in *_$th) ;; *) continue ;; esac
-        got=$(grep "  $name\$" "$WORK/$th/pictures.sha256" | cut -d' ' -f1)
-        if [ "$got" != "$hash" ]; then echo "DIFFERENT FROM STAGE 2: $name"; fail=$((fail + 1)); fi
-    done < "$REF/theme_pictures_0.14s2_native.sha256"
-    # and the pictures are not the dark theme's (the theme really did something)
-    if grep -q "$(grep ' orbit_dark$' "$WORK/pictures.sha256" | cut -d' ' -f1)" "$WORK/$th/pictures.sha256"; then echo "$th looks like Dark"; fail=$((fail + 1)); fi
-done
+# 0.15 stage 5m (on purpose): the checks of the two native themes (Frutiger Aero, Y2K Night: draw, six different pictures, stage 2 hashes) were deleted with those themes; theme_pictures_0.14s2_native.sha256 is in
+# native/archive/themes/tests. The pictures of Synthwave were taken out of theme_pictures_0.13.sha256 for the same reason.
 echo "$fail problems"
 [ "$fail" = 0 ]

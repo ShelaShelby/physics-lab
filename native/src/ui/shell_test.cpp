@@ -17,6 +17,10 @@
 #include "atom/atom_view.h"
 #include "ui/orbit_actions.h"
 #include "ui/orbit_panel.h"
+#include "ui/app_tabs.h"
+#include "ui/look.h"
+#include "ui/shell_widgets.h"
+#include "app/theme_style.h"
 
 namespace ui {
 
@@ -274,6 +278,11 @@ void auditNote(const std::string& line) {
 void shellReport(int winW, int winH, float dpi, float textScale) {
     if (!shellLogOn()) return;
     std::printf("PLSHELL window w=%d h=%d dpi=%.7f textScale=%.7f\n", winW, winH, dpi, textScale);
+    {   // 0.15 stage 5m: what the stage's test reads: the theme in use, whether the look M1 is drawn, its font, the picker's theme list, the number of facts
+        std::string ids;
+        for (const app::ThemeDef* t : app::allThemes()) ids += (ids.empty() ? "" : ",") + std::string(t->id);
+        std::printf("PLSHELL look theme=%s m1=%d font=%s themes=%s facts=%d\n", look().c.id.c_str(), sh::lookM1() ? 1 : 0, look().fontKey.c_str(), ids.c_str(), factCount());
+    }
     for (const auto& [name, r] : g_rects) std::printf("PLSHELL rect name=%s x=%.1f y=%.1f w=%.1f h=%.1f\n", name.c_str(), r.x, r.y, r.w, r.h);
     for (const auto& [k, line] : g_notes) std::printf("PLSHELL %s\n", line.c_str());
     for (const std::string& t : g_texts) std::printf("PLSHELL text %s\n", t.c_str());

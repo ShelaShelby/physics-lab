@@ -47,7 +47,7 @@ std::vector<int> g_order;                           // the facts in a shuffled o
 int g_pos = -1;
 double g_next = 0, g_setAt = 0, g_fadeAt = -1;      // the next change; when the current text appeared; when it began to fade out
 bool g_held = false;
-int g_modal = 0;                                    // a secret pop-up is open: 1 Synthwave, 2 Monochrome
+int g_modal = 0;                                    // a secret pop-up is open: 2 Monochrome (1 was Synthwave, archived in 0.15 stage 5m)
 bool g_first = true;                                // that pop-up is a first find
 bool g_monoAsked = false;                           // the guide's "monochrome" word was clicked
 bool g_openPending = false;
@@ -62,13 +62,9 @@ int utf16Length(const std::string& s) {             // the web's string length (
     return n;
 }
 
-bool isGift() { return g_pos >= 0 && std::string(app::kDyk[g_order[g_pos]]) == "@gift"; }
-
-std::string textOf(const AppState& app, int i) {
-    const std::string f = app::kDyk[i];
-    if (f != "@gift") return f;
-    return app.prefs.unlocked.count("synthwave") ? app::kDykGiftUnlocked : app::kDykGiftNew;
-}
+// 0.15 stage 5m: the web's list holds one "@gift" entry, the surprise that unlocked the Synthwave theme. That theme was archived, so the entry is left out of the facts (everywhere).
+bool isGiftEntry(int i) { return std::string(app::kDyk[i]) == "@gift"; }
+std::string textOf(const AppState&, int i) { return app::kDyk[i]; }
 
 void sched(const AppState& app) {                    // waits while you hover it or a pop-up is open; Reduced motion: only on tap
     g_next = g_held || g_modal || look().reduced ? DBL_MAX : now() + (6000 + 55.0 * utf16Length(textOf(app, g_order[g_pos]))) / 1000;
@@ -76,7 +72,7 @@ void sched(const AppState& app) {                    // waits while you hover it
 
 void showNext(const AppState& app) {
     if (g_order.empty()) {
-        for (int i = 0; i < int(app::count(app::kDyk)); i++) g_order.push_back(i);
+        for (int i = 0; i < int(app::count(app::kDyk)); i++) if (!isGiftEntry(i)) g_order.push_back(i);
         std::mt19937 rng{std::random_device{}()};
         for (int i = int(g_order.size()) - 1; i > 0; i--) std::swap(g_order[i], g_order[std::uniform_int_distribution<int>(0, i)(rng)]);
         if (const char* f = std::getenv("PL_DYK_FIRST")) {                   // for automatic checks: this fact first (26 is the 🎁)
@@ -91,7 +87,7 @@ void showNext(const AppState& app) {
 
 void openSecret(AppState& app, int which) {
     if (g_modal) return;
-    const char* id = which == 1 ? "synthwave" : "monochrome";
+    const char* id = "monochrome";                 // (which == 2; 1 was Synthwave)
     g_first = !app.prefs.unlocked.count(id);
     if (grantAchievement(app.prefs, id, nowMs())) queueToast(id);
     app.prefs.unlocked.insert(id);
@@ -244,13 +240,11 @@ void secretMono() { g_monoAsked = true; }
 
 // The 💡 line under the header: a fact, the counter (3/27) and ›; a tap shows the next one
 // ---- 0.15 stage 3: the new UI's 💡 card uses the same facts, in the same shuffled order ----
-int factCount() { return int(app::count(app::kDyk)); }
+int factCount() { int n = 0; for (int i = 0; i < int(app::count(app::kDyk)); i++) if (!isGiftEntry(i)) n++; return n; }
 int factPosition(AppState& app) { if (g_pos < 0) showNext(app); return g_pos; }
 std::string factText(AppState& app) { return textOf(app, g_order[factPosition(app)]); }
-bool factIsGift(AppState& app) { factPosition(app); return isGift(); }
 void factStep(AppState& app, int dir) { factPosition(app); g_pos = (g_pos + dir + int(g_order.size())) % int(g_order.size()); g_next = DBL_MAX; g_fadeAt = -1; }
-void factOpenGift(AppState& app) { openSecret(app, 1); }
-std::string factTextAt(int index) { if (index < 0 || index >= factCount() || std::string(app::kDyk[index]) == "@gift") return ""; return app::kDyk[index]; }
+std::string factTextAt(int index) { if (index < 0 || index >= factCount() || isGiftEntry(index)) return ""; return app::kDyk[index]; }
 void factShow(AppState& app, int index) {
     factPosition(app);
     for (int i = 0; i < int(g_order.size()); i++) if (g_order[i] == index) { g_pos = i; g_next = DBL_MAX; g_fadeAt = -1; return; }
@@ -267,7 +261,6 @@ void factsLine(AppState& app) {
     }
     if (t >= g_next) showNext(app);
     const float s = S() * T(), W = ImGui::GetContentRegionAvail().x, padX = 12 * s, padY = 8 * s;
-    const bool gift = isGift();
     const std::string fact = displayable(textOf(app, g_order[g_pos]));
     const std::string lead = std::string(app::kDykLead) + " ";
     const std::string count = std::to_string(g_pos + 1) + "/" + std::to_string(g_order.size());
@@ -276,7 +269,7 @@ void factsLine(AppState& app) {
     const float iconW = icon.empty() ? 0 : ImGui::GetFont()->CalcTextSizeA(18 * s, FLT_MAX, 0, icon.c_str()).x + 10 * s;
     const float countW = ImGui::GetFont()->CalcTextSizeA(13 * s, FLT_MAX, 0, "00/00").x + 6 * s + ImGui::GetFont()->CalcTextSizeA(18 * s, FLT_MAX, 0, "›").x + 10 * s;
     const float tx0 = padX + iconW, tw = W - tx0 - countW - padX;
-    // lay the words out: "Did you know?" in the accent colour, then the fact (the 🎁 line alone, accent and bold)
+    // lay the words out: "Did you know?" in the accent colour, then the fact
     struct Word { std::string w; bool lead; float x, y; };
     std::vector<Word> words;
     const float fs = 13.5f * s, lineH = fs * 1.4f;
@@ -295,15 +288,15 @@ void factsLine(AppState& app) {
             x += ww + sp;
         }
     };
-    if (!gift) add(lead, true, fonts().bold);
-    add(fact, false, gift ? fonts().bold : ImGui::GetFont());
+    add(lead, true, fonts().bold);
+    add(fact, false, ImGui::GetFont());
     const float textH = y + lineH, h = std::max(46 * s, textH + 2 * padY);
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const bool clicked = ImGui::InvisibleButton("##dyk", ImVec2(W, h));
     const bool hover = ImGui::IsItemHovered();
     if (hover) { ImGui::SetMouseCursor(ImGuiMouseCursor_Hand); ui::SetTooltip("%s", app::kDykTip); }
     if (hover != g_held) { g_held = hover; if (g_held) g_next = DBL_MAX; else if (g_fadeAt < 0) sched(app); }
-    if (clicked) { if (gift) openSecret(app, 1); else if (g_fadeAt < 0) showNext(app); }
+    if (clicked && g_fadeAt < 0) showNext(app);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     cardRect(dl, p, ImVec2(p.x + W, p.y + h), corner(12 * s), g_held ? look().c.accent : look().c.line);
     if (!icon.empty()) dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(p.x + padX, p.y + (h - 18 * s) / 2), col(look().c.fg), icon.c_str());
@@ -315,8 +308,8 @@ void factsLine(AppState& app) {
     }
     const float ty = p.y + (h - textH) / 2;
     for (const Word& w : words) {
-        ImFont* f = w.lead || gift ? fonts().bold : ImGui::GetFont();
-        dl->AddText(f, fs, ImVec2(p.x + tx0 + w.x, ty + w.y + (lineH - fs) / 2), col(w.lead || gift ? look().c.accent : look().c.fg, alpha), w.w.c_str());
+        ImFont* f = w.lead ? fonts().bold : ImGui::GetFont();
+        dl->AddText(f, fs, ImVec2(p.x + tx0 + w.x, ty + w.y + (lineH - fs) / 2), col(w.lead ? look().c.accent : look().c.fg, alpha), w.w.c_str());
     }
     const float cw = ImGui::GetFont()->CalcTextSizeA(13 * s, FLT_MAX, 0, count.c_str()).x, gw = ImGui::GetFont()->CalcTextSizeA(18 * s, FLT_MAX, 0, "›").x;
     const float rx = p.x + W - padX - gw;
@@ -372,7 +365,6 @@ void paneWindow(AppState& app, float top) {
     ImGui::PopStyleVar(2);
     popDockedBg();
     panelDecor(app::PanelKind::Docked);
-    if (look().synthGlow) drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8 * s, 8 * s));
     if (app.pane == 1) learnPane(app);
     else achievementsPane(app);
@@ -392,14 +384,13 @@ void appTabsFrame(AppState& app) {
     // a guide opened from the Learn tab in another lab: when it closes, that lab goes away again (the web's lrn.after)
     if (app.learnBack >= 0 && app.learn == 0 && app.atomLearn == 0) { app.lab = app.learnBack; app.learnBack = -1; }
 
-    // the secret pop-ups: 🎁 Synthwave (from the facts line) and Monochrome (the guide's word)
+    // the secret pop-up: Monochrome (the guide's word)
     if (g_monoAsked) { g_monoAsked = false; openSecret(app, 2); }
     if (g_openPending) { g_openPending = false; ImGui::OpenPopup("##secret"); }
     if (g_modal && beginGift("##secret")) {
-        const bool synth = g_modal == 1;
-        const std::string id = giftPage((synth ? app::kGiftSynth : app::kGiftMono)[g_first ? 0 : 1]);
-        bool close = id == (synth ? "giftX" : "monoX") || ImGui::IsKeyPressed(ImGuiKey_Escape);
-        if (id == (synth ? "giftUse" : "monoUse")) { app.prefs.theme = synth ? "synthwave" : "monochrome"; close = true; }
+        const std::string id = giftPage(app::kGiftMono[g_first ? 0 : 1]);
+        bool close = id == "monoX" || ImGui::IsKeyPressed(ImGuiKey_Escape);
+        if (id == "monoUse") { app.prefs.theme = "monochrome"; close = true; }
         if (close) { g_modal = 0; ImGui::CloseCurrentPopup(); if (g_pos >= 0 && g_fadeAt < 0) sched(app); }
         ImGui::EndPopup();
     } else if (g_modal && !ImGui::IsPopupOpen("##secret")) { g_modal = 0; if (g_pos >= 0) sched(app); }

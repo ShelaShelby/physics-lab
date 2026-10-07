@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # 0.15 stage 3: pictures of the new UI in the REAL app (Linux, headless on Mesa llvmpipe; not Windows, not a GPU):
 #   check_shell_pictures.py <PhysicsLab binary> <work folder> [<tests/reference folder>]      (add --write to make the guard file instead of checking it)
-#   glass   in the 10 plain themes, a floating panel's pixels are the theme's card colour at the glass opacity of DESIGN.md section 3 over what is behind it: the picture
+#   glass   in the 9 plain themes (10 before 0.15 stage 5m), a floating panel's pixels are the theme's card colour at the glass opacity of DESIGN.md section 3 over what is behind it: the picture
 #           with the panel closed gives "behind", the picture with it open must equal  card * a + behind * (1 - a)  within 2 levels (8-bit rounding), in the strip at the
 #           bottom right of the Time speed panel (no text, no shine). The card colours and the opacities are written HERE from the DESIGN.md table (computed by
 #           docs/ui-0.15/tools/glass_alpha.py, a separate program): so this fails if the drawing ever uses another colour or opacity.
-#   guard   the pictures of the new shell, Orbit Lab, Dark / Frutiger Aero / Y2K Night / Light, 1280 x 800 and 1000 x 640, Earth selected: closed (the card, the legend, the fact line), with the
+#   guard   the pictures of the new shell, Orbit Lab, Dark / Light, 1280 x 800 and 1000 x 640, Earth selected: closed (the card, the legend, the fact line), with the
 #           Time panel open, with the Show panel open, with the card's All values (the data sheet), with search open and with About in the reading view: their SHA-256 must equal
 #           tests/reference/shell_pictures_0.15s4.sha256. THESE ARE REGRESSION GUARDS, NOT AN INDEPENDENT REFERENCE: they were made by the stage 4 code on Mesa 25.2.8 llvmpipe
 #           (LLVM 20.1.2) AFTER the pictures had been looked at once (the stage 3 file, shell_pictures_0.15s3.sha256, is gone: every one of those pictures changed on purpose, with the
@@ -14,9 +14,9 @@ import hashlib, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, Bmp, prefetch
 
-# (card colour, opacity) of DESIGN.md section 3
-GLASS = {"light": ("#ffffff", 0.97), "dark": ("#1e1e21", 0.96), "black": ("#0b0b0c", 0.93), "midnight": ("#111c38", 0.95), "solar": ("#271d15", 0.97),
-         "paper": ("#fbf6ea", 0.97), "sage": ("#16211e", 0.95), "contrast": ("#000000", 0.70), "synthwave": ("#1b1035", 0.94), "monochrome": ("#ffffff", 0.87)}
+# (card colour, opacity) of DESIGN.md section 3. 0.15 stage 5m (on purpose): Dark is drawn with the look M1 now (always on in the New UI): its card #17171a, SOLID (opacity 1.0, app/look_options.cpp, the owner's choice) replaces DESIGN.md's #1e1e21 / 0.96
+GLASS = {"light": ("#ffffff", 0.97), "dark": ("#17171a", 1.0), "black": ("#0b0b0c", 0.93), "midnight": ("#111c38", 0.95), "solar": ("#271d15", 0.97),
+         "paper": ("#fbf6ea", 0.97), "sage": ("#16211e", 0.95), "contrast": ("#000000", 0.70), "monochrome": ("#ffffff", 0.87)}
 
 def rgb(h):
     h = h.lstrip("#")
@@ -25,7 +25,7 @@ def rgb(h):
 SCREENS = {"closed": {"PL_SELECT": "Earth"}, "time": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=top.chip"}, "nocontrols": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=ctl.close"},
            "sheet": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:click=card.all"}, "search": {"PL_SELECT": "Earth", "PL_SCRIPT": "10:key=ctrl+k;16:text=moo"}, "about": {"PL_OPEN": "about"}}
 SIZES = ("1280x800", "1000x640")
-THEMES = ("dark", "aero", "y2knight", "light")
+THEMES = ("dark", "light")   # 0.15 stage 5m: "aero" and "y2knight" were archived with the themes
 
 def main():
     args = [a for a in sys.argv[1:] if a != "--write"]

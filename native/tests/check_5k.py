@@ -49,7 +49,7 @@ def part_pages(binary, work):
     # ---- pass 1: no script: where the page, the Controls panel and the Legend are ----
     pre = []
     for sz in SIZES:
-        for theme in ("dark", "y2knight"):
+        for theme in ("dark", "light"):
             for name, env in PAGES:
                 if name in FULL or theme == "dark":
                     pre.append(((binary, work, f"k_pre_{name}_{sz}_{theme}", dict(env, PL_NEWUI="on")), {"frames": 20, "size": sz, "theme": theme}))
@@ -60,7 +60,7 @@ def part_pages(binary, work):
         info[(args[2], kw["size"], kw["theme"])] = run_app(*args, **kw)
     runs = []                                                    # (tag, name, env, sz, theme, what, want)
     for sz in SIZES:
-        for theme in ("dark", "y2knight"):
+        for theme in ("dark", "light"):
             for name, env in PAGES:
                 if not (name in FULL or theme == "dark"):
                     continue
@@ -162,7 +162,7 @@ def nm_sz(nm):
     return "1280x800"
 
 def nm_theme(nm):
-    return "y2knight" if "_y2knight" in nm else "dark"
+    return "light" if "_light" in nm else "dark"
 
 def part_contents(binary, work):
     # every entry of the Contents list jumps to its section (dropdown at 880x560, rail wider), each time after a separate hover frame; the same entry twice; after a wheel scroll
@@ -303,7 +303,7 @@ def part_toggle(binary, work):
     for frames, want, what in ((20, True, "click 1 opens the Theme list"), (34, False, "click 2 closes it"), (48, True, "click 3 opens it again")):
         r = run_app(binary, work, f"kt_th_{frames}", {"PL_NEWUI": "on", "PL_SCRIPT": seq}, frames=frames, size=sz)
         check((widx(worder(r), "##Popup_") >= 0) == want, f"{what} (frame {frames}, windows {worder(r)[-3:]})")
-    for theme in ("dark", "y2knight"):
+    for theme in ("dark", "light"):
         r = run_app(binary, work, f"kt_icon_{theme}", {"PL_NEWUI": "on"}, frames=20, size=sz, theme=theme)
         ic = r.rects.get("topicon.settings")
         check(ic is not None, f"{theme}: the Settings icon's place is logged")

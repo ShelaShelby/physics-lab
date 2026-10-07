@@ -292,7 +292,7 @@ void begin(AppState& app) {
         e.fullscreen = (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0;
         if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w))) e.refreshHz = m->refresh_rate;
     }
-    e.textSize = app.prefs.textSize; e.theme = app.prefs.theme; e.effects = look().effects ? "on" : "off"; e.newUi = app.prefs.newUi == "on" ? "on" : "off";
+    e.textSize = app.prefs.textSize; e.theme = app.prefs.theme; e.newUi = app.prefs.newUi == "on" ? "on" : "off";
     e.power = app.powerNote;                                          // 0.15 stage 2: whether Windows was asked not to power-throttle the app
     b.warm = envNum("PL_BENCH_WARMUP", app::kBenchWarmupS);          // for automatic checks: shorter times
     b.measure = envNum("PL_BENCH_MEASURE", app::kBenchMeasureS);

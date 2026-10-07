@@ -61,8 +61,8 @@ static void checkTrue(const std::string& what, bool ok) { checkStr(what, ok ? "t
 static void testRoundTrip() {
     Prefs p;
     p.theme = "monochrome"; p.textSize = "xl"; p.font = "round"; p.motion = "on"; p.units = "imperial";
-    p.unlocked = {"synthwave", "monochrome"};
-    p.achievements = {{"decay", 1790000000000LL}, {"monochrome", 0}, {"synthwave", 1789000000000LL}};
+    p.unlocked = {"monochrome"};
+    p.achievements = {{"decay", 1790000000000LL}, {"monochrome", 0}, {"galactic", 1789000000000LL}};
     p.atomMore = false;
     p.lab = "Atom Lab";
     p.orbit = {{"zoom", "-2.5"}, {"view3D", "1"}, {"sky", "off"}};
@@ -91,7 +91,7 @@ static void testRoundTrip() {
 
 static void testBadLines() {
     const Prefs p = loadPrefs("theme=nope\r\ntextSize=huge\nfont=comic\nmotion=fast\nunits=furlongs\nlang=et\n"
-                              "unlock=synthwave,rainbow\nach.blackhole=12\nach.unknown=5\nach.decay=soon\n"
+                              "unlock=monochrome,rainbow\nach.blackhole=12\nach.unknown=5\nach.decay=soon\n"
                               "atomMore=maybe\nlab=Black Hole Lab\nno equals sign\n# a comment\n");
     checkStr("bad theme", p.theme, "auto");
     checkStr("bad size", p.textSize, "normal");
@@ -99,14 +99,14 @@ static void testBadLines() {
     checkStr("bad motion", p.motion, "auto");
     checkStr("bad units", p.units, "metric");
     checkStr("language not ready", p.lang, "en");
-    checkTrue("only real secret themes", p.unlocked.size() == 1 && p.unlocked.count("synthwave"));
+    checkTrue("only real secret themes", p.unlocked.size() == 1 && p.unlocked.count("monochrome"));
     checkTrue("only known achievements with a time", p.achievements.size() == 2 && p.achievements.count("blackhole"));
-    checkTrue("an unlocked theme counts as its achievement", p.achievements.count("synthwave") && p.achievements.at("synthwave") == 0);
+    checkTrue("an unlocked theme counts as its achievement", p.achievements.count("monochrome") && p.achievements.at("monochrome") == 0);
     checkTrue("bad atomMore", !p.atomMore.has_value());
     checkStr("bad lab", p.lab, "Orbit Lab");
     // a secret theme that is not unlocked is not used
-    checkStr("locked secret theme", loadPrefs("theme=synthwave\n").theme, "auto");
-    checkStr("unlocked secret theme", loadPrefs("unlock=synthwave\ntheme=synthwave\n").theme, "synthwave");
+    checkStr("locked secret theme", loadPrefs("theme=monochrome\n").theme, "auto");
+    checkStr("unlocked secret theme", loadPrefs("unlock=monochrome\ntheme=monochrome\n").theme, "monochrome");
     // a value with a line break is written on one line
     Prefs n; n.orbit["x"] = "a\nb";
     checkStr("no line break inside a value", loadPrefs(savePrefs(n)).orbit["x"], "ab");
@@ -156,9 +156,9 @@ static void testThemes() {
     }
     // secret themes need unlocking
     Prefs p;
-    checkTrue("synthwave locked", !themeUsable(p, "synthwave") && themeUsable(p, "paper"));
-    p.unlocked.insert("synthwave");
-    checkTrue("synthwave unlocked", themeUsable(p, "synthwave") && !themeUsable(p, "monochrome"));
+    checkTrue("monochrome locked", !themeUsable(p, "monochrome") && themeUsable(p, "paper"));
+    p.unlocked.insert("monochrome");
+    checkTrue("monochrome unlocked", themeUsable(p, "monochrome") && !themeUsable(p, "synthwave"));
 }
 
 // ---- 0.10.1: the name a theme card shows ("???" only while a secret theme is still locked) ----
@@ -196,8 +196,10 @@ static void testProgress() {
         file += "\n";
         for (int i = 0; i < r.achievements; i++) file += std::string("ach.") + kAchievements[i].id + "=0\n";
         const Prefs p = loadPrefs(file);
-        checkTrue(w + "native theme count", unlockedThemeCount(p) == r.themes);
-        checkTrue(w + "native achievement count", earnedAchievementCount(p) == a - (r.achievements >= 3 ? 1 : 0));
+        // 0.15 stage 5m, on purpose: Synthwave (the first secret theme, the first achievement) was archived, so a file that names it counts nothing for it. Counted here by hand from the ids
+        // in kAchievements' order (synthwave, monochrome, blackhole, decay, galactic): monochrome is in the file when 2 themes are unlocked or 2 achievements are; blackhole is never counted (Black Hole Lab).
+        checkTrue(w + "native theme count (only Monochrome is left)", unlockedThemeCount(p) == (r.themes >= 2 ? 1 : 0));
+        checkTrue(w + "native achievement count (Synthwave's Neon Nights and Point of No Return are not counted)", earnedAchievementCount(p) == int(r.themes >= 2 || r.achievements >= 2) + int(r.achievements >= 4) + int(r.achievements >= 5));
     }
     // the counts the native pop-ups use, and what Reset / Unlock everything do
     Prefs p;
@@ -206,12 +208,12 @@ static void testProgress() {
     p.achievements = {{"monochrome", 0}, {"blackhole", 0}, {"decay", 5}};
     checkTrue("themes counted", unlockedThemeCount(p) == 1);
     checkTrue("Point of No Return not counted", earnedAchievementCount(p) == 2);
-    checkTrue("4 achievements in the native app", achievementCount() == 4);
+    checkTrue("3 achievements in the native app (4 before Neon Nights went with Synthwave, 0.15 stage 5m, on purpose)", achievementCount() == 3);
     resetProgress(p);
     checkTrue("reset locks all", unlockedThemeCount(p) == 0 && p.achievements.empty());
     checkStr("reset leaves the secret theme", p.theme, "auto");
     const auto [t, a] = unlockEverything(p);
-    checkTrue("unlock everything: 2 themes, 4 achievements", t == 2 && a == 4);
+    checkTrue("unlock everything: 1 theme, 3 achievements (2 and 4 before Synthwave was archived, on purpose)", t == 1 && a == 3);
     const auto [t2, a2] = unlockEverything(p);
     checkTrue("unlock again: nothing new", t2 == 0 && a2 == 0);
     checkTrue("text sizes", textSizeFactor("small") == 0.9 && textSizeFactor("xl") == 1.3 && textSizeFactor("bad") == 1);
@@ -522,10 +524,10 @@ static const NativeEdit kEditsAbout[] = {
     {"About sources: the 90 % outline on the graphics card and the exact normalisation (0.13 stage 3)", "3d z&sup2;) against the exact textbook value 1; made exact in 0.13 stage 3 (see below). The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li>", "3d z&sup2;) against the exact textbook value 1; made exact in 0.13 stage 3 (see below). The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li><li>The 90 % outline on the graphics card, and the exact normalisation of the orbitals (0.13 stage 3). Normalisation: the integral of the squared wave function is now worked out in closed form. The radial part is (n/2)<sup>2l+3</sup> &middot; 2n &middot; (n+l)!/(n&minus;l&minus;1)!, from the orthogonality and the three-term recurrence of the generalised Laguerre polynomials (NIST Digital Library of Mathematical Functions, chapter 18; Abramowitz and Stegun, chapter 22), and it is multiplied by the sphere integral of the square of each angular polynomial (the real cubic harmonics are combinations of the spherical harmonics, normalised as in Griffiths, <i>Introduction to Quantum Mechanics</i>, chapter 4). The formulas are the standard ones, written from knowledge; the chapter references were not opened in this session. They are checked by hand for 1s, 2p z, 3d z&sup2; and 4f z&sup3;, and by an independent quadrature for every orbital the app offers (real and complex, Z = 1, 2 and 5): each integrates to 1 within 1e-10 (before: off by up to 8.8e-5 in the density). Outline: the density on a 64&times;64&times;64 grid and its 90 % level (found by a search over the cell values instead of sorting them) are now worked out by compute shaders (OpenGL 4.3) without the picture waiting, so the outline appears a frame or two after it is switched on; the processor does it where there is no OpenGL 4.3. The region is defined as before (the densest cells holding 90 % of the probability, the standard textbook definition); the graphics-card level agrees with the processor&rsquo;s to 1e-4 and its cells to float rounding. The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li>"},
     // 0.13 stage 4: the Orbit Lab rocks and the chart on the graphics card
     {"About sources: the Orbit Lab rocks and the chart on the graphics card (0.13 stage 4)", "the graphics-card level agrees with the processor&rsquo;s to 1e-4 and its cells to float rounding. The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li>", "the graphics-card level agrees with the processor&rsquo;s to 1e-4 and its cells to float rounding. The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li><li>The Orbit Lab&rsquo;s rocks and the chart of nuclides on the graphics card (0.13 stage 4, the last of the four &ldquo;GPU update&rdquo; stages). No new data and no new physics. Rocks: where each belt rock is now worked out by a compute shader (OpenGL 4.3) from its Kepler ellipse, with the same formulas as before: Kepler&rsquo;s equation M = E &minus; e sin E, then x&prime; = a (cos E &minus; e) and y&prime; = a &radic;(1 &minus; e<sup>2</sup>) sin E, and the mean motion n = &radic;(GM/a<sup>3</sup>) from Kepler&rsquo;s third law; they are the formulas of the NASA/JPL page &ldquo;Keplerian Elements for Approximate Positions of the Major Planets&rdquo; (listed above, re-read on 5 October 2026 for the first two). The time and the mean anomaly are kept in double precision on the graphics card and brought into &minus;&pi;..&pi; there; only that small angle goes into 32-bit numbers, so a rock is where it was after 10,000 years at the fastest time speed too: the tests compare every rock of the benchmark&rsquo;s scenes 1 and 6 with the processor&rsquo;s and with Kepler&rsquo;s equation solved separately by bisection, at times up to ten million years; the places agree to 0.003 of a point on the picture. Found while checking: the belt code solved Kepler&rsquo;s equation with exactly three Newton steps, which is exact for every rock the app makes (the largest eccentricity is 0.498) but not for e of 0.8 and more (0.45 radian off at e = 0.99); it is now iterated until converged, so the app&rsquo;s rocks do not move. Chart of nuclides: the 3,557 squares or blocks and the ground are made once and kept in a graphics-card buffer, and the tilt, zoom and pan are applied there; they are rebuilt only when the picture size, the theme colours or the height meaning changes. The pictures and the hit test agree with the old way (tested triangle by triangle, and by pictures). The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li>"},
-    // 0.14 stage 1: the contrast rule and Frutiger Aero
-    {"About sources: the contrast rule and Frutiger Aero (0.14 stage 1)", "the hit test agree with the old way (tested triangle by triangle, and by pictures). The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li>", "the hit test agree with the old way (tested triangle by triangle, and by pictures). The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li><li>The colour themes&rsquo; contrast rule and the Frutiger Aero theme (0.14 stage 1). No new data and no physics. Contrast follows the W3C&rsquo;s Web Content Accessibility Guidelines 2.x (www.w3.org/TR/WCAG21, the definitions of &ldquo;relative luminance&rdquo; and &ldquo;contrast ratio&rdquo;, and success criteria 1.4.3 and 1.4.11): L = 0.2126 R + 0.7152 G + 0.0722 B, where each sRGB channel c (0 to 1) becomes c/12.92 if c &le; 0.04045, else ((c + 0.055)/1.055)<sup>2.4</sup>; the ratio is (L<sub>1</sub> + 0.05)/(L<sub>2</sub> + 0.05) with L<sub>1</sub> the lighter colour; it must be at least 4.5 for body text and 3 for large text and parts of the interface. Every text and background pair of Frutiger Aero was computed with it, including its glass over the lightest and the darkest point of the sky-blue page, and the tests check the formula against values worked by hand (black on white 21, #777777 on white 4.48). The W3C page could not be opened from the session that wrote this, so the formula is written from knowledge and checked only by that hand arithmetic; older WCAG text says 0.03928 instead of 0.04045, which changes no 8-bit colour. Only the panels, buttons and text were checked: the pictures of the labs keep their own colours. Frutiger Aero uses Segoe UI when Windows has it (a Microsoft font, used from the PC and never shipped with the app); without it the default font is used. The look has not been seen on a real PC.</li>"},
-    {"About sources: Frutiger Aero's real look, the Light accent fix, Y2K Ice and Night, and the Michroma font (0.14 stage 2)", "The look has not been seen on a real PC.</li>", "The look has not been seen on a real PC.</li><li>Frutiger Aero&rsquo;s real look, the Light accent fix and the Y2K Ice and Y2K Night themes (0.14 stage 2). No new data and no physics. The colours, textures and shapes are original style choices made for this app: no logos, icons, characters, photos or artwork of any company were used. The contrast rule is the same W3C WCAG 2.x formula as in the item above, now applied to every text and background pair over the page&rsquo;s clouds, bubbles, film grain, halftone dots, grid lines and light streak at their strongest, over every state of the jelly and chrome buttons (the bright top and the deep lower half) and over every title bar. Light&rsquo;s accent text (#2f6fed on its page #f7f7f5) was 4.24:1, under the 4.5 that body-size text needs; it is now #2d6ae3 (4.57:1), the same hue. The window titles and the app name in the two Y2K themes are set in Michroma (&copy; 2011 The Michroma Project Authors, <a href=\"https://github.com/googlefonts/Michroma-font\" target=\"_blank\" rel=\"noopener noreferrer\">github.com/googlefonts/Michroma-font</a>), a free wide font under the SIL Open Font License 1.1: the font file and its licence text are built into the app, unchanged. The look has not been seen on a real PC or a real graphics card.</li>"},
-    {"About sources: the fonts of the look options M1-M3 (0.15 stage 5j)", "<li>Richard Fitzpatrick, <i>Introductory Quantum Mechanics</i>", "<li><b>Fonts</b> for the test look options M1&ndash;M3 (0.15 stage 5j; used only when a look option is switched on): Inter (Ubuntu package fonts-inter 4.0+ds-1, &copy; 2016&ndash;2023 The Inter Project Authors, <a href=\"https://github.com/rsms/inter\" target=\"_blank\" rel=\"noopener noreferrer\">github.com/rsms/inter</a>, SIL Open Font License 1.1) and IBM Plex Sans (package fonts-ibm-plex 6.1.1-1, &copy; 2017&ndash;2018 IBM Corporation, <a href=\"https://github.com/IBM/plex\" target=\"_blank\" rel=\"noopener noreferrer\">github.com/IBM/plex</a>, SIL Open Font License 1.1, Reserved Font Name &ldquo;Plex&rdquo;). The Regular and SemiBold files are built into the app unchanged, and their licence texts travel with the download.</li><li>Richard Fitzpatrick, <i>Introductory Quantum Mechanics</i>"},
+    // 0.14 stage 1: the contrast rule
+    {"About sources: the contrast rule (0.14 stage 1)", "the hit test agree with the old way (tested triangle by triangle, and by pictures). The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li>", "the hit test agree with the old way (tested triangle by triangle, and by pictures). The speed-up is expected, not measured: it has not been run on a real graphics card or on Windows</li><li>The colour themes&rsquo; contrast rule (0.14 stage 1; the Frutiger Aero theme it was first written for was archived in 0.15 stage 5m). No new data and no physics. Contrast follows the W3C&rsquo;s Web Content Accessibility Guidelines 2.x (www.w3.org/TR/WCAG21, the definitions of &ldquo;relative luminance&rdquo; and &ldquo;contrast ratio&rdquo;, and success criteria 1.4.3 and 1.4.11): L = 0.2126 R + 0.7152 G + 0.0722 B, where each sRGB channel c (0 to 1) becomes c/12.92 if c &le; 0.04045, else ((c + 0.055)/1.055)<sup>2.4</sup>; the ratio is (L<sub>1</sub> + 0.05)/(L<sub>2</sub> + 0.05) with L<sub>1</sub> the lighter colour; it must be at least 4.5 for body text and 3 for large text and parts of the interface. Every text and background pair of the themes is computed with it, and the tests check the formula against values worked by hand (black on white 21, #777777 on white 4.48). The W3C page could not be opened from the session that wrote this, so the formula is written from knowledge and checked only by that hand arithmetic; older WCAG text says 0.03928 instead of 0.04045, which changes no 8-bit colour. Only the panels, buttons and text were checked: the pictures of the labs keep their own colours.</li>"},
+    {"About sources: the Light accent fix (0.14 stage 2)", "Only the panels, buttons and text were checked: the pictures of the labs keep their own colours.</li>", "Only the panels, buttons and text were checked: the pictures of the labs keep their own colours.</li><li>The Light accent fix (0.14 stage 2). No new data and no physics. Light&rsquo;s accent text (#2f6fed on its page #f7f7f5) was 4.24:1, under the 4.5 that body-size text needs; it is now #2d6ae3 (4.57:1), the same hue. The contrast rule is the same W3C WCAG 2.x formula as in the item above. The look has not been seen on a real PC.</li>"},
+    {"About sources: the font of the look M1 (0.15 stage 5j / 5m)", "<li>Richard Fitzpatrick, <i>Introductory Quantum Mechanics</i>", "<li><b>Font</b> of the New UI&rsquo;s look M1 (0.15 stages 5j and 5m): Inter (Ubuntu package fonts-inter 4.0+ds-1, &copy; 2016&ndash;2023 The Inter Project Authors, <a href=\"https://github.com/rsms/inter\" target=\"_blank\" rel=\"noopener noreferrer\">github.com/rsms/inter</a>, SIL Open Font License 1.1). The Regular and SemiBold files are built into the app unchanged, and their licence text travels with the download.</li><li>Richard Fitzpatrick, <i>Introductory Quantum Mechanics</i>"},
 };
 static const NativeEdit kEditSgrA = {"Sagittarius A* card: no Spacetime Lab", " (see the Spacetime Lab)", ""};
 static const NativeEdit kEditGuideSky = {"Orbit guide, stars and far-away things: no Spacetime Lab", " (the Spacetime Lab shows what a black hole like it does)", ""};
@@ -615,8 +617,8 @@ static void testNativeEdits() {
     checkTrue("About lists the 90 % outline on the graphics card and the exact normalisation (0.13 stage 3): the closed form and its sources, the checks, the 1e-10, expected and not measured", [&] { const std::string a = kAboutHtml; for (const char* w : {"The 90 % outline on the graphics card, and the exact normalisation of the orbitals (0.13 stage 3)", "(n+l)!/(n&minus;l&minus;1)!", "generalised Laguerre polynomials", "within 1e-10", "chapter references were not opened", "expected, not measured"}) if (a.find(w) == std::string::npos) return false; return true; }());
     checkTrue("About lists the decay chains: the four series typed from textbooks and NOT from a source that was read, the checks that need no table (the mass-number rule, the exponential law, binomial statistics), the normalised odds, the stand-in for odds not measured, no time for a limit or an extrapolation, and that the time shown is not real time (0.12 stage 1)", [&] { const std::string a = kAboutHtml; for (const char* w : {"Decay chains on the chart (0.12 stage 1)", "typed into the tests from standard textbook tables, <b>not</b> from a source read in the session", "A = A<sub>0</sub> mod 4", "the median lifetime is the half-life", "only as a marked stand-in, never as data", "is never given a time", "is not real time", "about 1.6 seconds apart"}) if (a.find(w) == std::string::npos) return false; return true; }());
     checkTrue("About lists AME2020 (file, size, date, citation as the file gives it), the # estimates drawn flat, the chosen linear scale, the peak read from the table, that no source for the island could be read, that nothing predicted is drawn or quoted, and that the wording follows the brief (0.11 stage 4)", [&] { const std::string a = kAboutHtml; for (const char* w : {"mass.mas20.txt", "476,239 bytes", "Chin. Phys. C45, 030002 (2021)", "1,008 of the 3,557 nuclides", "drawn flat and pale", "a chosen linear scale, 0 to 9,000 keV per nucleon", "nickel-62, 8,794.56 keV", "no source for it could be read", "draws no predicted region and quotes no predicted number", "that wording follows the project owner&rsquo;s brief"}) if (a.find(w) == std::string::npos) return false; return true; }());
-    checkTrue("About lists the WCAG 2.x contrast formula and thresholds, that the W3C page was not reachable, and Segoe UI as the PC's font that is never shipped (0.14 stage 1)", [&] { const std::string a = kAboutHtml; for (const char* w : {"www.w3.org/TR/WCAG21", "0.2126 R + 0.7152 G + 0.0722 B", "0.04045", "at least 4.5", "could not be opened", "Segoe UI", "never shipped"}) if (a.find(w) == std::string::npos) return false; return true; }());
-    checkTrue("About lists Michroma with its licence (SIL Open Font License), the Light accent fix and that no brand artwork was used (0.14 stage 2)", [&] { const std::string a = kAboutHtml; for (const char* w : {"Michroma", "SIL Open Font License 1.1", "github.com/googlefonts/Michroma-font", "#2d6ae3", "4.24:1", "no logos, icons, characters, photos or artwork"}) if (a.find(w) == std::string::npos) return false; return true; }());
+    checkTrue("About lists the WCAG 2.x contrast formula and thresholds, that the W3C page was not reachable (0.14 stage 1; its Segoe UI sentence went with Frutiger Aero, 0.15 stage 5m, on purpose)", [&] { const std::string a = kAboutHtml; for (const char* w : {"www.w3.org/TR/WCAG21", "0.2126 R + 0.7152 G + 0.0722 B", "0.04045", "at least 4.5", "could not be opened"}) if (a.find(w) == std::string::npos) return false; return true; }());
+    checkTrue("About lists the Light accent fix (0.14 stage 2; the Michroma font and the no-artwork sentence went with the Y2K and Aero themes, 0.15 stage 5m, on purpose)", [&] { const std::string a = kAboutHtml; for (const char* w : {"#2d6ae3", "4.24:1"}) if (a.find(w) == std::string::npos) return false; return true; }());
     checkTrue("every native edit was used", g_editUses == 1 + 32 + 1 + 8 + 1);   // the About list has 32 edits since 0.15 stage 5j (the fonts of the look options), 31 before that; 31 edits since 0.14 stage 2 (Aero's real look, Light's accent, Y2K and the Michroma font), 30 since 0.14 stage 1 (the contrast rule and Frutiger Aero), 29 since 0.13 stage 4 (the Orbit Lab rocks and the chart on the graphics card), 28 since 0.13 stage 3 (the outline on the graphics card, the exact normalisation), 27 since 0.13 stage 2 (superposition and jumps on the graphics card), 26 since 0.13 stage 1 (the phase colours on the graphics card), 25 since 0.12 stage 2 (the accuracy clean-up), 24 since 0.12 stage 1 (decay chains), 23 since 0.11 stage 4 (AME2020, the valley and the island), 22 since 0.11 stage 3 (the landscape heights are a chosen scale), 21 since 0.11 stage 2 (NUBASE2020 and the chart of nuclides), 20 since 0.10.9 stage 2 (the IAEA quadrupole moments), 19 since 0.10.9 stage 1 (the IAEA charge radii), 18 since 0.10.8 stage 1 (the Dirac levels), 17 since 0.10.7 stage 2 (the NIST ASD lines), 16 since 0.10.6 stage 6 (15 since stage 5: 14 since 0.10.5 stage 3: two added for the gravity, Sun radius and comet sources; one more for the visible range and the Dirac energy)
 }
 
@@ -742,8 +744,8 @@ static void testBench() {
     std::size_t at = 0;
     bool inOrder = true;
     for (const char* w : want) { const std::size_t p = t.find(w, at); if (p == std::string::npos) { inOrder = false; checkTrue(std::string("result text has: ") + w, false); break; } at = p; }
-    checkTrue("result text: Theme effects line, on by default and off when switched off (0.14 stage 3)", t.find("Text size: xl, theme: paper\nTheme effects: on\n") != std::string::npos && [&] { BenchEnv o = env; o.effects = "off"; return benchResultText(o, {s1}).find("Theme effects: off\n") != std::string::npos; }());
-    checkTrue("result text: New UI line, Off by default and On when Settings -> New UI is on (0.15 stage 5d)", t.find("Theme effects: on\nNew UI: Off\n") != std::string::npos && [&] { BenchEnv o = env; o.newUi = "on"; return benchResultText(o, {s1}).find("New UI: On\n") != std::string::npos; }());
+    checkTrue("result text: no Theme effects line any more (the setting was archived with the themes, 0.15 stage 5m; deleted on purpose)", t.find("Theme effects") == std::string::npos && t.find("Text size: xl, theme: paper\nNew UI: Off\n") != std::string::npos);
+    checkTrue("result text: New UI line, Off by default and On when Settings -> New UI is on (0.15 stage 5d)", t.find("New UI: Off\n") != std::string::npos && [&] { BenchEnv o = env; o.newUi = "on"; return benchResultText(o, {s1}).find("New UI: On\n") != std::string::npos; }());
     checkTrue("the result text starts with the version, date and graphics, in order", inOrder && t.rfind("Physics Lab (native) benchmark\n", 0) == 0);
     checkTrue("result text: scene 1 numbers", t.find("  Average: 10.00 ms per frame = 100.0 fps\n  1 % low: 100.0 fps") != std::string::npos && t.find("  Worst frame: 10.00 ms\n  CPU work per frame: 3.50 ms\n  GPU time per frame: 6.25 ms") != std::string::npos);
     checkTrue("result text: the GPU span line", t.find("  GPU span per frame: 7.50 ms") != std::string::npos);
@@ -1416,7 +1418,7 @@ static double relLuminance(double r, double g, double b) {          // WCAG 2.x 
 }
 static void testQuarkLight() {
     int lightThemes = 0;
-    for (const char* id : {"light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "synthwave", "monochrome"}) {
+    for (const char* id : {"light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "monochrome"}) {
         const ThemeColors t = themeColors(id, false);
         if (!t.light) continue;
         lightThemes++;
@@ -1603,7 +1605,8 @@ static void testThemeGrid() {
         checkTrue(w + "all cards fill the grid in order", ok);
     }
     checkTrue("no cards, no rows", app::gridRows(0, 3) == 0);
-    checkTrue("the app has 11 themes now (4 rows)", int(sizeof(kThemes) / sizeof(kThemes[0])) == 11 && app::gridRows(int(sizeof(kThemes) / sizeof(kThemes[0])), 3) == 4);
+    checkTrue("the app shows 10 themes now (4 rows; 11 before Synthwave was archived in 0.15 stage 5m, changed on purpose)", allThemes().size() == 10 && app::gridRows(int(allThemes().size()), 3) == 4);
+    checkTrue("the web's own list still has 11 (4 rows)", int(sizeof(kThemes) / sizeof(kThemes[0])) == 11 && app::gridRows(int(sizeof(kThemes) / sizeof(kThemes[0])), 3) == 4);
 }
 
 // ---- 0.10: "Planet physics: Simple / Real" ----

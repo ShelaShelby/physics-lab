@@ -83,15 +83,6 @@ std::vector<Rgb> pageFxExtremes(const PageFx& fx, const Rgb& page) {
     const Rgb toned = mixRgb(page, fx.tone, pageFxTotal(fx));
     return {page, toned, mixRgb(page, fx.streakColour, fx.streak), mixRgb(toned, fx.streakColour, fx.streak)};
 }
-ThemeStyle withoutEffects(const ThemeStyle& s) {
-    ThemeStyle o = s;
-    PageFx& f = o.page.fx;
-    f.clouds = f.bubbles = f.grain = f.halftone = f.grid = f.streak = 0;
-    o.widget.glint = 0; o.widget.brush = 0;
-    o.panel.reflectAlpha = 0; o.panel.reflectHeight = 0;
-    o.panel.bracketAlpha = 0; o.panel.bracketSize = 0; o.panel.hudAlpha = 0; o.panel.spec.clear();
-    return o;
-}
 bool hasStage2Decor(const ThemeStyle& s) {
     const PanelStyle& p = s.panel;
     const WidgetStyle& w = s.widget;
@@ -120,23 +111,15 @@ std::string fontKeyFor(const ThemeStyle& s, const std::string& userFont, bool th
 }
 
 // ---- the themes ----
-// The native themes (not in the web's list, which app_text.inc is generated from). Same fields as the web's ThemeDef.
-static const ThemeDef kNativeThemes[] = {
-    // 0.14 stage 2: Aero's aqua and leaf green are saturated now (the swatches are the two accents); the colours here are the flat fallbacks and the text colours.
-    {"aero", "Frutiger Aero", "Glossy glass, aqua and leaf green", "#19b5d6", "#6cc419", false,
-     "#8fd3ee", "#031f2e", "#0a3348", "#ffffff", "#4c9fbd", "#05501f", "#04260d", true},
-    // 0.14 stage 2: Y2K futurism, the owner's version: the cyber / techno print look. (0.15 stage 5g: the light "Y2K Ice" was removed at the owner's request; only Y2K Night is left.)
-    {"y2knight", "Y2K Night", "Night city, a violet light streak and film grain", "#0e1a3c", "#7b5cff", false,
-     "#060a16", "#eaf4ff", "#d5e2f7", "#0c1428", "#5878b8", "#a6cdff", "#031026", false},
-};
+// 0.15 stage 5m: the native themes (Frutiger Aero, Y2K Night) and the web's Synthwave were taken out of the app; their code is in native/archive/themes/. The web's list (kThemes, generated from index.html)
+// still holds Synthwave, so allThemes() skips the archived ids.
+bool themeArchived(const std::string& id) { return id == "aero" || id == "y2knight" || id == "synthwave" || id == "y2kice"; }   // y2kice: removed in 0.15 stage 5g
 
 const std::vector<const ThemeDef*>& allThemes() {
     static const std::vector<const ThemeDef*> list = [] {
         std::vector<const ThemeDef*> v;
-        for (const ThemeDef& t : kThemes) if (!t.secret) v.push_back(&t);
-        for (const ThemeDef& t : kNativeThemes) if (!t.secret) v.push_back(&t);
-        for (const ThemeDef& t : kThemes) if (t.secret) v.push_back(&t);
-        for (const ThemeDef& t : kNativeThemes) if (t.secret) v.push_back(&t);
+        for (const ThemeDef& t : kThemes) if (!t.secret && !themeArchived(t.id)) v.push_back(&t);
+        for (const ThemeDef& t : kThemes) if (t.secret && !themeArchived(t.id)) v.push_back(&t);
         return v;
     }();
     return list;
@@ -153,78 +136,10 @@ static ThemeStyle makeStyle(const std::string& id) {
     ThemeStyle s;
     if (id == "paper") s.font = "serif";                                    // the web's --ffd: Paper's book font
     else if (id == "monochrome") { s.square = true; s.grayscale = true; s.font = "mono"; }
-    else if (id == "synthwave") {
-        s.glowTop = {true, rgb8(0x3b, 0x14, 0x66)};                         // radial-gradient(130% 55% at 50% 0%, #3b1466 0%, var(--bg) 62%)
-        s.titleGlow = {true, rgb8(0xff, 0x4f, 0xd8)};
-    } else if (id == "light") {
+    else if (id == "light") {
         // 0.14 stage 2, on purpose (found in stage 1.1): the web's accent #2f6fed is 4.24:1 on Light's page #f7f7f5, under the 4.5:1 that body-size text needs.
         // Same hue (220 degrees) and saturation, a little darker: #2d6ae3 is 4.57:1 on the page and 4.9:1 on the card.
         s.accent = {true, rgb8(0x2d, 0x6a, 0xe3)};
-    } else if (id == "aero") {
-        // Frutiger Aero as the owner sees it (0.14 stage 2): the Vista / Windows 7 look: glossy aqua and leaf-green jelly, a saturated sky-to-leaf page with soft clouds
-        // and glass bubbles, blue glossy title bars, a bright rim and a soft glow so the windows read over the dark space picture. Style only, no artwork.
-        // Every text / background pair is checked with the W3C's WCAG 2.x formula (tests/test_theme_stage2.inc), over the page and its clouds at their strongest.
-        s.page.kind = 1; s.page.stops = 3;
-        s.page.stop[0] = {rgb8(0x2a, 0x9e, 0xe0), 0.00f};                   // sky blue
-        s.page.stop[1] = {rgb8(0x19, 0xb5, 0xd6), 0.50f};                   // aqua (the owner's #19b5d6)
-        s.page.stop[2] = {rgb8(0x8f, 0xd6, 0x3f), 1.00f};                   // leaf green: the page stays saturated all the way down
-        s.page.fx.tone = {1, 1, 1}; s.page.fx.clouds = 0.45f; s.page.fx.bubbles = 0.30f;   // soft clouds and glass bubbles: they only lighten the page
-        s.panel.fill = rgb8(0xf4, 0xfd, 0xff);
-        s.panel.fillAlpha = 0.36f; s.panel.floatAlpha = 0.94f;              // glass: the page shows through a docked panel; a floating window is nearly solid
-        s.panel.shineAlpha = 0.55f; s.panel.shineHeight = 0.16f; s.panel.shineLineAlpha = 0.9f;
-        s.panel.borderFgMix = 0.5f; s.panel.borderWidth = 1; s.panel.floatRounding = 12;   // the border is the line colour half way to the text colour: 3.75:1 on the glass
-        s.panel.shadowDx = 0; s.panel.shadowDy = 6; s.panel.shadowBlur = 18; s.panel.shadowAlpha = 0.28f; s.panel.shadow = rgb8(0x1d, 0x6f, 0x9c);   // a soft blue shadow
-        s.panel.rim = {1, 1, 1}; s.panel.rimAlpha = 0.85f;                  // a thin bright rim ...
-        s.panel.glow = rgb8(0xbf, 0xf3, 0xff); s.panel.glowAlpha = 0.5f; s.panel.glowBlur = 14;   // ... and an outer glow, so the edge reads over the dark picture
-        s.panel.reflectAlpha = 0.14f; s.panel.reflectHeight = 0.2f;        // a faint mirrored shine under windows and cards (the glossy floor)
-        s.panel.title.set = true;                                           // a Vista-style window title bar: deep blue, a shine band, an aqua line below
-        s.panel.title.top = rgb8(0x0a, 0x58, 0xa8); s.panel.title.bottom = rgb8(0x07, 0x40, 0x8a); s.panel.title.text = {1, 1, 1};
-        s.panel.title.shine = 0.18f; s.panel.title.shineHeight = 0.5f;
-        s.panel.title.glow = rgb8(0x19, 0xb5, 0xd6); s.panel.title.glowAlpha = 0.9f;
-        // jelly: a strong white highlight over the top 46 %, deep saturated colour below, a thin darker rim, a glow on hover
-        s.widget.hi = 0.62f; s.widget.split = 0.46f; s.widget.loAmount = 0.85f; s.widget.lo = {0.62f, 0.92f, 1.0f};
-        s.widget.shineLineAlpha = 0.85f; s.widget.pressDark = 0.04f; s.widget.hoverTint = 0.05f; s.widget.pressTint = 0.10f;
-        s.widget.rimDark = 0.45f; s.widget.hoverGlow = 0.55f;
-        s.roundScale = 1.5f;
-        s.button = {true, rgb8(0x25, 0xc4, 0xe6)};                          // aqua jelly
-        s.accentFill = {true, rgb8(0x6c, 0xc4, 0x19)};                      // lime jelly for a chosen button / tab (its text is the dark onacc)
-        s.danger = {true, rgb8(0x8e, 0x18, 0x12)};
-        s.dangerFill = {true, rgb8(0xf8, 0xc0, 0xba)}; s.onDanger = {true, rgb8(0x2b, 0x05, 0x02)};
-        // Segoe UI is Microsoft's: it is used from the PC when it is there (Windows), never shipped with the app.
-        s.fontRegular = "segoeui.ttf"; s.fontBold = "segoeuib.ttf"; s.fontItalic = "segoeuii.ttf";
-    } else if (id == "y2knight") {
-        // Y2K futurism, the owner's version (0.14 stage 2): the cyber / techno PRINT look (not rainbow bubbles). Nearly monochrome icy blue, cold white, black and
-        // brushed silver; violet only as a small streak. Fine film grain, halftone dots and thin grid lines on the page (very subtle, under the glass, never behind
-        // text), thin HUD rules, corner brackets and a tiny spec label as decoration, chrome buttons with a cold highlight line, silver or dark title bars in a wide
-        // free font (Michroma, SIL OFL). Style only: no logos, characters, photos or artwork. Contrast is tested over the textures at their strongest.
-        const bool night = true;                 // (Y2K Night is the only one left)
-        s.page.kind = 1; s.page.stops = 3;
-        s.panel.floatAlpha = 0.96f; s.panel.floatRounding = 4; s.roundScale = 0.5f;
-        s.panel.borderFgMix = 0.4f; s.panel.borderWidth = 1;
-        s.panel.shadowDy = 4; s.panel.shadowBlur = 14;
-        s.panel.rim = night ? rgb8(0xbc, 0xd8, 0xff) : rgb8(0xff, 0xff, 0xff); s.panel.rimAlpha = night ? 0.8f : 0.9f;
-        s.panel.glow = night ? rgb8(0x5a, 0x8c, 0xff) : rgb8(0x7a, 0xb6, 0xf2); s.panel.glowAlpha = night ? 0.45f : 0.35f; s.panel.glowBlur = night ? 12 : 10;
-        s.panel.reflectAlpha = night ? 0.06f : 0.08f; s.panel.reflectHeight = night ? 0.12f : 0.15f;
-        s.panel.bracketAlpha = 1.0f; s.panel.bracketSize = 12; s.panel.hudAlpha = 0.7f; s.panel.spec = "SYS";
-        s.panel.title.set = true; s.panel.title.glowAlpha = 0.9f; s.panel.title.shineHeight = 0.45f;
-        s.widget.split = 0.5f; s.widget.shineLineAlpha = night ? 0.6f : 0.9f;
-        s.titleFont = "michroma";
-        s.danger = {true, rgb8(0x8e, 0x18, 0x12)};
-        s.page.stop[0] = {rgb8(0x04, 0x06, 0x0c), 0.00f}; s.page.stop[1] = {rgb8(0x08, 0x0e, 0x20), 0.50f}; s.page.stop[2] = {rgb8(0x16, 0x28, 0x6a), 1.00f};   // night
-        s.page.fx.tone = rgb8(0x7a, 0xae, 0xff); s.page.fx.grain = 0.08f; s.page.fx.halftone = 0.10f; s.page.fx.grid = 0.10f; s.page.fx.gridStep = 44; s.page.fx.halftoneStep = 6;
-        s.page.fx.streak = 0.45f; s.page.fx.streakColour = rgb8(0x7b, 0x5c, 0xff);   // the violet / blue light-streak swoosh
-        s.panel.fill = rgb8(0x0a, 0x12, 0x26); s.panel.fillAlpha = 0.40f;
-        s.panel.shineAlpha = 0.12f; s.panel.shineHeight = 0.08f; s.panel.shineLineAlpha = 0.5f;
-        s.panel.shadowAlpha = 0.5f; s.panel.shadow = rgb8(0, 0, 0);
-        s.panel.hud = rgb8(0x9d, 0xb4, 0xd8);
-        s.panel.title.top = rgb8(0x2a, 0x35, 0x50); s.panel.title.bottom = rgb8(0x0f, 0x17, 0x30); s.panel.title.text = rgb8(0xea, 0xf4, 0xff);
-        s.panel.title.shine = 0.10f; s.panel.title.glow = rgb8(0x6f, 0xb4, 0xff);
-        s.widget.hi = 0.06f; s.widget.loAmount = 0.5f; s.widget.lo = {0.6f, 0.65f, 0.8f}; s.widget.pressDark = 0.10f; s.widget.hoverTint = 0.04f; s.widget.pressTint = 0.06f;
-        s.widget.rimLight = 0.45f; s.widget.hoverGlow = 0.35f; s.widget.glint = 0.12f; s.widget.brush = 0.06f; s.widget.glow = rgb8(0x5a, 0x9b, 0xff); s.widget.glowAlpha = 0.55f;
-        s.button = {true, rgb8(0x1c, 0x26, 0x3f)};                      // dark gunmetal chrome
-        s.accentFill = {true, rgb8(0x6f, 0xb4, 0xff)};
-        s.dangerFill = {true, rgb8(0x9c, 0x1f, 0x18)}; s.onDanger = {true, rgb8(0xff, 0xff, 0xff)};
-        s.danger = {true, rgb8(0xff, 0x9a, 0x90)};
     }
     return s;
 }

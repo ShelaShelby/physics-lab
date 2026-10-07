@@ -352,7 +352,7 @@ def part_readable(binary, work):
     # In the real picture the fact line is found by DIFFERENCE: the same picture with the line and with Settings > Facts Off; the pixels that differ are the letters and their shadow. The
     # lightest and the darkest of them must be 4.5:1 apart (WCAG 2.x, the formula written here in Python), in every theme, over the dark space picture AND over a BRIGHT one (the
     # Sun's glow). The shadow is what keeps the letters readable over white: without it the changed pixels would be the letters alone and this fails.
-    themes = ("dark", "light", "black", "paper", "monochrome", "aero", "y2knight", "contrast")
+    themes = ("dark", "light", "black", "paper", "monochrome", "contrast")
     for theme in themes:
         for name, env in (("space", {}), ("bright", {"PL_ZOOM": "2.2"})):
             on = run_app(binary, work, f"read_{theme}_{name}_on", dict({"PL_NEWUI": "on", "PL_FACTS": "on"}, **env), frames=50, size="1280x800", theme=theme)

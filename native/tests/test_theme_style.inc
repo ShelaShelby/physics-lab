@@ -1,4 +1,4 @@
-// 0.14 stage 1: the richer theme styles and Frutiger Aero. Included by test_app.cpp (uses its checkTrue / checkStr).
+// 0.14 stage 1: the richer theme styles (0.15 stage 5m: the Frutiger Aero tests were deleted or moved to a test fixture, see REPORT.md). Included by test_app.cpp (uses its checkTrue / checkStr).
 // Written BEFORE src/app/theme_style.* (compile-red first). References used, none of them our own earlier output:
 //   * the W3C's WCAG 2.x contrast formula (https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio and #dfn-relative-luminance), worked by hand below;
 //   * the W3C's own worked values (#767676 on white is the lightest grey that reaches 4.5:1; pure red on white is 4:1);
@@ -64,20 +64,38 @@ static void testGradients() {
     checkTrue("a flat page is the bg colour everywhere", nearTo(pageColourAt(flat, bg, 0.3f).g, bg.g, 1e-9) && nearTo(pageColourAt(flat, bg, 0.9f).b, bg.b, 1e-9));
 }
 
+// 0.15 stage 5m: a made-up glossy glass style (NOT a theme; Frutiger Aero, which these tests used, was archived). Numbers are the test's own: it checks the maths of the style engine, not a look.
+static ThemeColors fixtureGlass() {
+    ThemeColors c = themeColors("light", true);
+    ThemeStyle& s = c.style;
+    s.panel.fill = rgb8(0xf4, 0xfd, 0xff); s.panel.fillAlpha = 0.36f; s.panel.floatAlpha = 0.94f;
+    s.widget.hi = 0.62f; s.widget.split = 0.46f; s.widget.loAmount = 0.85f; s.widget.lo = {0.62f, 0.92f, 1.0f};
+    s.widget.hoverTint = 0.05f; s.widget.pressTint = 0.10f; s.widget.pressDark = 0.04f;
+    s.roundScale = 1.5f;
+    s.fontRegular = "segoeui.ttf"; s.fontBold = "segoeuib.ttf"; s.fontItalic = "segoeuii.ttf";
+    return c;
+}
+
 // ---- the theme data: every theme has every field; the old themes keep their exact look ----
 static void testThemeStyleData() {
     const std::vector<const ThemeDef*> all = allThemes();
-    checkTrue("13 themes in the app: the web's 11, Frutiger Aero (0.14 stage 1) and Y2K Night (0.14 stage 2 added Ice and Night; Ice was removed in 0.15 stage 5g: 14 before, changed on purpose)", all.size() == 13);
-    // the web's order is kept; Aero comes before the two secret themes, so the "???" cards stay at the end
-    const char* order[] = {"auto", "light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "aero", "y2knight", "synthwave", "monochrome"};
-    for (std::size_t i = 0; i < all.size() && i < 13; i++) checkStr("picker order " + std::to_string(i), all[i]->id, order[i]);
-    checkTrue("the web's own list is untouched (still 11)", count(kThemes) == 11);
+    checkTrue("10 themes in the app: the web's 11 without Synthwave (0.15 stage 5m archived Synthwave, Frutiger Aero and Y2K Night; 13 before, changed on purpose)", all.size() == 10);
+    // the web's order is kept; the secret Monochrome stays at the end, so the "???" card does too
+    const char* order[] = {"auto", "light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "monochrome"};
+    for (std::size_t i = 0; i < all.size() && i < 10; i++) checkStr("picker order " + std::to_string(i), all[i]->id, order[i]);
+    checkTrue("the web's own list is untouched (still 11: it still holds Synthwave, allThemes() skips it)", count(kThemes) == 11);
     std::set<std::string> ids;
     for (const ThemeDef* t : all) ids.insert(t->id);
     checkTrue("theme ids are unique", ids.size() == all.size());
-    checkTrue("aero is a valid theme and can be used without unlocking", validTheme("aero") && themeUsable(Prefs{}, "aero"));
-    checkStr("a saved aero theme is kept by the settings file", loadPrefs("theme=aero\n").theme, "aero");
-    checkTrue("aero is not secret", !std::string(themeShownName(*all[9], {})).empty() && all[9]->secret == false && themeShownName(*all[9], {}) == "Frutiger Aero");
+    for (const char* gone : {"aero", "y2knight", "synthwave", "y2kice"}) {
+        checkTrue(std::string(gone) + " is archived, not valid, not usable, not in the list", themeArchived(gone) && !validTheme(gone) && !themeUsable(Prefs{}, gone) && !ids.count(gone));
+        checkStr(std::string("a saved ") + gone + " opens as Dark (once, no error)", loadPrefs(std::string("theme=") + gone + "\n").theme, "dark");
+        Prefs q = loadPrefs(std::string("theme=") + gone + "\n");
+        checkStr(std::string("and Dark is what is written back, so ") + gone + " is gone after one run", loadPrefs(savePrefs(q)).theme, "dark");
+    }
+    checkStr("an unlocked secret theme that is archived does not unlock anything", loadPrefs("unlock=synthwave\ntheme=synthwave\n").theme, "dark");
+    checkTrue("and it unlocks nothing", loadPrefs("unlock=synthwave\n").unlocked.empty());
+    checkTrue("the non-archived themes are not archived", !themeArchived("dark") && !themeArchived("midnight") && !themeArchived("monochrome") && !themeArchived("auto"));
 
     for (const ThemeDef* t : all) {
         const std::string id = t->id;
@@ -112,10 +130,7 @@ static void testThemeStyleData() {
         checkTrue(w + "the neutral grey is 128", nearTo(c.neutral.r * 255, 128, 1e-3) && nearTo(c.neutral.g * 255, 128, 1e-3));
         checkTrue(w + "corners are scaled by 1 (square only for Monochrome)", c.style.roundScale == 1.f && c.style.square == (id == "monochrome"));
     }
-    // what used to be written as `id == "synthwave"` or `id == "monochrome"` is data now
-    checkTrue("only Synthwave has the purple glow, #3b1466 behind the page and #ff4fd8 in the title", themeColors("synthwave", false).style.glowTop.set && themeColors("synthwave", false).style.titleGlow.set &&
-              !themeColors("dark", false).style.glowTop.set && !themeColors("aero", false).style.glowTop.set && !themeColors("monochrome", false).style.glowTop.set);
-    checkTrue("Synthwave's glow colours", nearTo(themeColors("synthwave", false).style.glowTop.c.r * 255, 0x3b, 1e-3) && nearTo(themeColors("synthwave", false).style.titleGlow.c.g * 255, 0x4f, 1e-3));
+    // what used to be written as `id == "monochrome"` is data now (Synthwave's purple glow was archived with the theme)
     checkTrue("Monochrome: square corners and grey pictures", themeColors("monochrome", false).style.square && themeColors("monochrome", false).style.grayscale && !themeColors("paper", false).style.grayscale);
     checkStr("Paper's own font is the serif one", themeColors("paper", false).style.font, "serif");
     checkStr("Monochrome's own font is the monospace one", themeColors("monochrome", false).style.font, "mono");
@@ -125,14 +140,14 @@ static void testThemeStyleData() {
 // ---- gloss: the colours a widget gets ----
 static void testGloss() {
     const Rgb card = rgb8(255, 255, 255), accent = rgb8(0x0d, 0x6a, 0x24);
-    const ThemeColors aero = themeColors("aero", true), dark = themeColors("dark", false);
+    const ThemeColors aero = fixtureGlass(), dark = themeColors("dark", false);
     for (WidgetState st : {WidgetState::Normal, WidgetState::Hover, WidgetState::Pressed}) {
         const Gloss p = glossColours(dark.style.widget, card, st);
         checkTrue("a plain widget is its flat colour, all four", p.top0.r == card.r && p.top1.g == card.g && p.bot0.b == card.b && p.bot1.r == card.r);
     }
     const Gloss n = glossColours(aero.style.widget, card, WidgetState::Normal);
     checkTrue("normal: the top is lighter than the bottom", relativeLuminance(n.top0) > relativeLuminance(n.bot1) && relativeLuminance(n.top0) >= relativeLuminance(n.top1));
-    checkTrue("normal: the lower half is tinted (aqua: less red than blue)", n.bot1.r < n.bot1.b);
+    checkTrue("normal: the lower half is tinted (a bluish fixture: less red than blue)", n.bot1.r < n.bot1.b);
     const Gloss pr = glossColours(aero.style.widget, card, WidgetState::Pressed);
     checkTrue("pressed: the gloss turns over (the top is darker than the bottom)", relativeLuminance(pr.top0) < relativeLuminance(pr.bot1));
     checkTrue("pressed is darker than normal at the top", relativeLuminance(pr.top0) < relativeLuminance(n.top0));
@@ -143,13 +158,13 @@ static void testGloss() {
     checkTrue("a coloured button: the top is lighter than the bottom", relativeLuminance(a.top0) > relativeLuminance(a.bot1));
     checkTrue("the gloss only ever lightens the top (never darker than the base)", relativeLuminance(a.top0) >= relativeLuminance(accent));
     checkTrue("plain themes keep the hover and press tints that were fixed in the code (0.22, 0.45)", dark.style.widget.hoverTint == 0.22f && dark.style.widget.pressTint == 0.45f);
-    checkTrue("Aero's tints are softer (so the text stays readable on a pressed face)", aero.style.widget.hoverTint < 0.22f && aero.style.widget.pressTint < 0.45f);
+    checkTrue("the fixture's tints are softer (so the text stays readable on a pressed face)", aero.style.widget.hoverTint < 0.22f && aero.style.widget.pressTint < 0.45f);
     checkTrue("the split is in the middle of the button", aero.style.widget.split > 0.3f && aero.style.widget.split < 0.7f);
 }
 
 // ---- the panel colours ----
 static void testPanelColours() {
-    const ThemeColors aero = themeColors("aero", true), dark = themeColors("dark", false);
+    const ThemeColors aero = fixtureGlass(), dark = themeColors("dark", false);
     const Rgb under = rgb8(0, 0, 0);
     // a solid panel hides what is behind it; a glass panel shows it in proportion to 1 - alpha
     const Rgb solid = panelSurface(dark, PanelKind::Docked, under);
@@ -161,93 +176,10 @@ static void testPanelColours() {
     checkTrue("a floating window shows less of what is behind it", panelSurface(aero, PanelKind::Floating, under).g > glass.g);
 }
 
-// ---- Frutiger Aero: every text / background pair passes WCAG 2.x (4.5:1 body text, 3:1 large text and UI parts) ----
-static void testAeroContrast() {
-    const ThemeColors c = themeColors("aero", true);
-    const ThemeStyle& s = c.style;
-    const Rgb white = rgb8(255, 255, 255), black = rgb8(0, 0, 0);
-    checkTrue("Aero is a light theme", c.light);
-    checkTrue("the page is a vertical gradient", s.page.kind == 1 && s.page.stops >= 2);
-    // the page's lightest and darkest points; everything below is also checked at 101 points down the page
-    float darkest = 2, lightest = -1;
-    for (int i = 0; i <= 100; i++) {
-        const Rgb g = pageColourAt(s.page, c.bg, i / 100.f);
-        darkest = std::min(darkest, float(relativeLuminance(g)));
-        lightest = std::max(lightest, float(relativeLuminance(g)));
-    }
-    // 0.14 stage 2, on purpose: stage 1 asked for a page that ends almost white (lightest > 0.75, a pale design); the owner found that too pale, the page is now saturated aqua to leaf green
-    checkTrue("the sky blue at the top is darker than the bottom of the page, which is still light (stage 2: > 0.3)", darkest < 0.55f && lightest > 0.3f);
-
-    struct Pair { const char* what; Rgb text; double need; };
-    const Pair texts[] = {{"text", c.fg, 4.5}, {"muted text", c.muted, 4.5}, {"accent text", c.accent, 4.5}, {"error text", c.danger, 4.5}};
-    double worstBody = 1e9;
-    for (const Pair& p : texts) {
-        double worst = 1e9;
-        for (int i = 0; i <= 100; i++) {
-            const float t = i / 100.f;
-            const Rgb page = pageColourAt(s.page, c.bg, t);
-            const Rgb docked = panelSurface(c, PanelKind::Docked, page);                  // glass over the page at this height
-            const Rgb floating = panelSurface(c, PanelKind::Floating, page);
-            worst = std::min({worst, contrastRatio(p.text, docked), contrastRatio(p.text, floating)});
-            if (std::string(p.what) == "text") worst = std::min(worst, contrastRatio(p.text, page));   // plain text on the bare page (only the main text colour goes there)
-        }
-        // a floating window can also sit over a white or a black picture: the lightest and the darkest backdrop there is
-        worst = std::min({worst, contrastRatio(p.text, panelSurface(c, PanelKind::Floating, white)), contrastRatio(p.text, panelSurface(c, PanelKind::Floating, black))});
-        checkTrue(std::string("aero: ") + p.what + " on panels: " + std::to_string(worst) + " >= 4.5", worst >= p.need);
-        worstBody = std::min(worstBody, worst);
-    }
-    // the faces of the buttons, in every state, top to bottom (the highlight line at the top is white, which only helps dark text)
-    for (WidgetState st : {WidgetState::Normal, WidgetState::Hover, WidgetState::Pressed}) {
-        const Rgb base = st == WidgetState::Normal ? c.card : st == WidgetState::Hover ? mixRgb(c.card, c.accent, s.widget.hoverTint) : mixRgb(c.card, c.accent, s.widget.pressTint);   // the colours Dear ImGui is given (ui/look.cpp)
-        const Gloss g = glossColours(s.widget, base, st);
-        double worst = 1e9;
-        double worstMuted = 1e9;                                          // the small grey line under a name on a Settings tile (muted) sits on the same face
-        for (const Rgb& f : {g.top0, g.top1, g.bot0, g.bot1}) { worst = std::min(worst, contrastRatio(c.fg, f)); worstMuted = std::min(worstMuted, contrastRatio(c.muted, f)); }
-        checkTrue(std::string("aero: muted text on a button in state ") + std::to_string(int(st)) + ": " + std::to_string(worstMuted) + " >= 4.5", worstMuted >= 4.5);
-        checkTrue(std::string("aero: button text in state ") + std::to_string(int(st)) + ": " + std::to_string(worst) + " >= 4.5", worst >= 4.5);
-    }
-    {   // a chosen button / tab: the bright green with its dark text
-        double worst = 1e9;
-        for (WidgetState st : {WidgetState::Normal, WidgetState::Hover, WidgetState::Pressed}) {
-            const Gloss g = glossColours(s.widget, c.accentFill, st);
-            for (const Rgb& f : {g.top0, g.top1, g.bot0, g.bot1}) worst = std::min(worst, contrastRatio(c.onacc, f));
-        }
-        checkTrue("aero: text on the green chosen button " + std::to_string(worst) + " >= 4.5", worst >= 4.5);
-        double wd = 1e9;                       // the red (danger) button
-        for (WidgetState st : {WidgetState::Normal, WidgetState::Hover, WidgetState::Pressed}) {
-            const Gloss g = glossColours(s.widget, c.dangerFill, st);
-            for (const Rgb& f : {g.top0, g.top1, g.bot0, g.bot1}) wd = std::min(wd, contrastRatio(c.onDanger, f));
-        }
-        checkTrue("aero: text on the red button " + std::to_string(wd) + " >= 4.5", wd >= 4.5);
-    }
-    {   // the highlight of a chosen list row, a hovered row and the title bar of a window (ui/look.cpp: Header, HeaderHovered, HeaderActive, TitleBgActive)
-        double worst = 1e9;
-        for (float f : {0.15f, 0.25f, 0.4f}) worst = std::min(worst, contrastRatio(c.fg, mixRgb(c.card, c.accentFill, f)));
-        checkTrue("aero: text on a highlighted row or a title bar " + std::to_string(worst) + " >= 4.5", worst >= 4.5);
-        checkTrue("aero: text on the box of the Settings done-line (the line colour) >= 4.5", contrastRatio(c.fg, c.line) >= 4.5);
-    }
-    // UI parts (3:1): the border of a panel or button against what it sits on, the check mark and the slider grab against the box
-    {
-        const Rgb border = mixRgb(c.line, c.fg, s.panel.borderFgMix);                      // the colour ui/look.cpp gives Dear ImGui's Border
-        double worst = 1e9;
-        for (int i = 0; i <= 100; i++) {
-            const Rgb page = pageColourAt(s.page, c.bg, i / 100.f);
-            worst = std::min({worst, contrastRatio(border, panelSurface(c, PanelKind::Docked, page)), contrastRatio(border, panelSurface(c, PanelKind::Floating, page))});
-        }
-        checkTrue("aero: the border against panels " + std::to_string(worst) + " >= 3", worst >= 3.0);
-        const Rgb frame = mixRgb(c.card, c.fg, 0.16f);                                      // check box and slider track (ui/look.cpp FrameBg)
-        checkTrue("aero: the check mark against its box >= 3", contrastRatio(c.accent, frame) >= 3.0);
-        checkTrue("aero: the slider grab against its track >= 3", contrastRatio(mixRgb(c.accent, c.fg, 0.1f), frame) >= 3.0);
-        checkTrue("aero: the text in a box against the box >= 4.5", contrastRatio(c.fg, frame) >= 4.5);
-        checkTrue("aero: the accent as a drawn mark against the glass >= 3", contrastRatio(c.accent, panelSurface(c, PanelKind::Docked, pageColourAt(s.page, c.bg, 0))) >= 3.0);
-    }
-    checkTrue("aero: the worst body-text pair is at least 4.5", worstBody >= 4.5);
-}
-
 // ---- fonts: a system font by file name, with the fallback ----
 static void testThemeFonts() {
-    const ThemeColors aero = themeColors("aero", true);
-    checkStr("Aero asks for Segoe UI by file name", aero.style.fontRegular, "segoeui.ttf");
+    const ThemeColors aero = fixtureGlass();
+    checkStr("the fixture asks for Segoe UI by file name", aero.style.fontRegular, "segoeui.ttf");
     checkTrue("and its bold and italic faces", aero.style.fontBold == "segoeuib.ttf" && aero.style.fontItalic == "segoeuii.ttf");
     checkTrue("Segoe UI is not shipped (no font file is bundled for it)", aero.style.fontRegular.find('/') == std::string::npos && aero.style.fontRegular.find('\\') == std::string::npos);
     const std::vector<std::string> dirs = {"C:\\Windows\\Fonts\\", "/fonts/"};
@@ -273,7 +205,7 @@ static void testThemeFonts() {
 static void testRoundScale() {
     checkTrue("a plain theme keeps every radius", scaledRadius(themeColors("dark", false).style, 12.f) == 12.f && scaledRadius(themeColors("paper", false).style, 6.f) == 6.f);
     checkTrue("Monochrome has square corners", scaledRadius(themeColors("monochrome", false).style, 12.f) == 0.f);
-    checkTrue("Aero is rounder", scaledRadius(themeColors("aero", true).style, 12.f) > 12.f);
+    checkTrue("a style with roundScale 1.5 is rounder (the fixture)", scaledRadius(fixtureGlass().style, 12.f) > 12.f);
 }
 
 
@@ -297,8 +229,7 @@ static void testFloatingReadability() {
                 leak = std::max({leak, std::fabs(double(sw.r - ref.r)), std::fabs(double(sw.g - ref.g)), std::fabs(double(sw.b - ref.b)),
                                  std::fabs(double(sp.r - refPop.r)), std::fabs(double(sp.g - refPop.g)), std::fabs(double(sp.b - refPop.b))});
                 for (const Rgb& txt : {c.fg}) { worst = std::min(worst, contrastRatio(txt, sw)); worstPop = std::min(worstPop, contrastRatio(txt, sp)); }
-                if (id == "aero") for (const Rgb& txt : {c.muted, c.accent, c.danger}) { worst = std::min(worst, contrastRatio(txt, sw)); worstPop = std::min(worstPop, contrastRatio(txt, sp)); }
-            }
+                            }
         }
         checkTrue(w + "nothing behind a window or pop-up shows through it (leak " + std::to_string(leak) + ")", leak < 1e-6);
         checkTrue(w + "text on a floating window over any backdrop " + std::to_string(worst) + " >= 4.5", worst >= 4.5);
@@ -319,7 +250,6 @@ static void testFloatingReadability() {
 }
 
 #include "test_theme_stage2.inc"   // 0.14 stage 2
-#include "test_theme_stage3.inc"   // 0.14 stage 3: the Theme effects switch
 
 static void testThemeStyle() {
     testWcagFormula();
@@ -327,10 +257,8 @@ static void testThemeStyle() {
     testThemeStyleData();
     testGloss();
     testPanelColours();
-    testAeroContrast();
     testThemeFonts();
     testRoundScale();
     testFloatingReadability();
     testStage2();
-    testStage3();
 }

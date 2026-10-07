@@ -136,12 +136,11 @@ void labMenuPanel(AppState& app, sh::Panel& p, bool& close) {
         if (sh::pRow(p, i ? "lab.atom" : "lab.orbit", app::kLabInfo[i].name, app.lab == i)) { openLab(app, i); close = true; }
 }
 
-void factsPanel(AppState& app, sh::Panel& p, bool& close) {
+void factsPanel(AppState& app, sh::Panel& p, bool& /*close*/) {
     const Metrics& m = sh::F().m;
     sh::pTitle(p, "Did you know?");
     sh::pBody(p, factText(app));
-    if (factIsGift(app)) { if (sh::pButton(p, "facts.gift", "Open the surprise", Face::Primary)) { factOpenGift(app); close = true; } }
-    else sh::pCaption(p, "No named source is recorded for this fact yet: it came with the web version of the app.");
+    sh::pCaption(p, "No named source is recorded for this fact yet: it came with the web version of the app.");
     const float bw = (p.w - m.s8) / 2;
     const ImVec2 o = sh::here(p);
     if (sh::button("facts.prev", o, ImVec2(bw, static_cast<float>(m.control)), "‹ Previous")) { factStep(app, -1); S.fact.t = 0; }

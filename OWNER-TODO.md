@@ -1,8 +1,11 @@
 # Owner to-do (things only the owner can do)
 
+## 0.15 stage 5m (look)
+- [ ] On the PC (when the Windows exe of stage 5m is published): the three themes (Frutiger Aero, Y2K Night, Synthwave) are gone from the Theme list; an old saved choice of one of them opens as Dark; the look is M1 without any launcher (New UI On + Dark theme: Inter font, light-grey pill); Settings has no Theme effects row; the facts line counts "n/26". (Part 2 adds: handle, Legend and element chips, toolbar pill look right; the Legend is not covered by the subject card.)
+
 ## 0.15 stage 5j: choose the modern look (on your phone or PC)
-- [ ] **The Windows exe with PL_LOOK=m1/m2/m3 is published** (release `latest` on GitHub, build of the newest `native` commit; first fixed in 5j.1, tested from commit b5473dd). Try it; steps are in REPORT.md (5j.1 and 5j). The pictures in `native/docs/look/` are full colour now.
-- [ ] Look at `native/docs/look/` on GitHub (m1_1.png ... m3_5.png and `look_compare.png`: TODAY | M1 | M2 | M3) and try `PL_LOOK=m1`, `m2`, `m3` on the PC (steps in REPORT.md): pick one or a mix (for example "M2's blue pill with M3's font"). The old looks A, B, C are gone.
+- [x] (stage 5m: the choice is made, M1; M2, M3 and PL_LOOK are gone) **The Windows exe with PL_LOOK=m1/m2/m3 is published** (release `latest` on GitHub, build of the newest `native` commit; first fixed in 5j.1, tested from commit b5473dd). Try it; steps are in REPORT.md (5j.1 and 5j). The pictures in `native/docs/look/` are full colour now.
+- [x] (done: the owner chose M1 on 2026-10-07; only the m1 pictures are left) Look at `native/docs/look/` on GitHub (m1_1.png ... m3_5.png and `look_compare.png`: TODAY | M1 | M2 | M3) and try `PL_LOOK=m1`, `m2`, `m3` on the PC (steps in REPORT.md): pick one or a mix (for example "M2's blue pill with M3's font"). The old looks A, B, C are gone.
 - [ ] On the PC: do Inter and IBM Plex Sans look clean at your Windows scale (100 / 125 / 150 %)? The emoji on buttons come from Segoe UI Emoji as before; tell me if any shows as a box.
 - [ ] Atom Lab, All values, a tall tab (Spectrum): the sheet should end above the bottom toolbar and scroll inside itself (stage 5i).
 - [ ] Keep: the Learn / About wheel bug was not reproduced in the cloud; test with a real mouse (see stage 5g below).

@@ -26,19 +26,18 @@ std::string clean(const std::string& v) {           // one line: no line breaks 
 bool validTheme(const std::string& id) { return findTheme(id) != nullptr; }
 bool validTextSize(const std::string& k) { for (const SizeOpt& s : kTextSizes) if (k == s.key) return true; return false; }
 bool validFont(const std::string& k) { for (const FontOpt& f : kFonts) if (k == f.key) return true; return false; }
-bool validEffects(const std::string& k) { return k == "on" || k == "off"; }
 bool validNewUi(const std::string& k) { return k == "on" || k == "off"; }
 bool validMotion(const std::string& k) { return k == "auto" || k == "on" || k == "off"; }
 double textSizeFactor(const std::string& k) { for (const SizeOpt& s : kTextSizes) if (k == s.key) return s.factor; return 1; }
 
-bool achievementInApp(const std::string& id) { return id != "blackhole"; }   // Point of No Return belongs to the Black Hole Lab
+bool achievementInApp(const std::string& id) { return id != "blackhole" && id != "synthwave"; }   // Point of No Return belongs to the Black Hole Lab; Neon Nights (the Synthwave theme) was archived in 0.15 stage 5m
 int achievementCount() { int n = 0; for (const AchDef& a : kAchievements) if (achievementInApp(a.id)) n++; return n; }
 
 std::string savePrefs(const Prefs& p) {
     std::ostringstream o;
     o << "# Physics Lab (native) settings. Written by the app; safe to delete.\n";
     o << "theme=" << clean(p.theme) << "\n" << "textSize=" << clean(p.textSize) << "\n" << "font=" << clean(p.font) << "\n"
-      << "motion=" << clean(p.motion) << "\n" << "effects=" << clean(p.effects) << "\n" << "units=" << clean(p.units) << "\n" << "lang=" << clean(p.lang) << "\n";
+      << "motion=" << clean(p.motion) << "\n" << "units=" << clean(p.units) << "\n" << "lang=" << clean(p.lang) << "\n";
     if (p.newUi != "off") o << "newui=" << clean(p.newUi) << "\n";                      // 0.15 stage 3: only written when it is on, so a file from before it is unchanged
     if (!p.shellPanels.empty()) o << "shellpanels=" << clean(p.shellPanels) << "\n";
     if (p.facts != "on") o << "facts=" << clean(p.facts) << "\n";                       // 0.15 stage 4: only written when it is off, so a file from stage 3 is unchanged
@@ -66,11 +65,10 @@ Prefs loadPrefs(const std::string& text) {
         const std::size_t eq = line.find('=');
         if (eq == std::string::npos) continue;
         const std::string k = line.substr(0, eq), v = line.substr(eq + 1);
-        if (k == "theme") { if (validTheme(v)) p.theme = v; }
+        if (k == "theme") { if (themeArchived(v)) p.theme = "dark"; else if (validTheme(v)) p.theme = v; }   // 0.15 stage 5m: an archived theme opens as Dark, once, no message
         else if (k == "textSize") { if (validTextSize(v)) p.textSize = v; }
         else if (k == "font") { if (validFont(v)) p.font = v; }
         else if (k == "motion") { if (validMotion(v)) p.motion = v; }
-        else if (k == "effects") { if (validEffects(v)) p.effects = v; }
         else if (k == "newui") { if (validNewUi(v)) p.newUi = v; }
         else if (k == "shellpanels") p.shellPanels = v;
         else if (k == "facts") { if (v == "on" || v == "off") p.facts = v; }
@@ -83,7 +81,7 @@ Prefs loadPrefs(const std::string& text) {
                 std::size_t b = v.find(',', a);
                 if (b == std::string::npos) b = v.size();
                 const std::string id = v.substr(a, b - a);
-                if (id == "synthwave" || id == "monochrome") p.unlocked.insert(id);
+                if (id == "monochrome") p.unlocked.insert(id);                          // (synthwave: archived in 0.15 stage 5m, ignored)
                 a = b + 1;
             }
         } else if (k.rfind("ach.", 0) == 0) {
@@ -118,7 +116,6 @@ Prefs loadPrefs(const std::string& text) {
     // secret themes unlocked before achievements existed count too (the web's start-up check, line 5280)
     for (const std::string& id : p.unlocked) if (!p.achievements.count(id)) p.achievements[id] = 0;
     // a secret theme that is not unlocked cannot be in use (as the web's start-up check)
-    if (p.theme == "y2kice") p.theme = "dark";                        // 0.15 stage 5g: the Y2K Ice theme was removed; a settings file that names it gets Dark
     if (!themeUsable(p, p.theme)) p.theme = "auto";
     return p;
 }
@@ -173,7 +170,7 @@ bool themeUsable(const Prefs& p, const std::string& id) {
     return false;
 }
 
-int unlockedThemeCount(const app::Prefs& p) { return int(p.unlocked.count("synthwave") + p.unlocked.count("monochrome")); }
+int unlockedThemeCount(const app::Prefs& p) { return int(p.unlocked.count("monochrome")); }
 int earnedAchievementCount(const app::Prefs& p) {
     int n = 0;
     for (const auto& [id, t] : p.achievements) if (app::achievementInApp(id)) n++;
@@ -184,7 +181,7 @@ int earnedAchievementCount(const app::Prefs& p) {
 void resetProgress(app::Prefs& p) {
     p.unlocked.clear();
     p.achievements.clear();
-    if (p.theme == "synthwave" || p.theme == "monochrome") p.theme = "auto";
+    if (p.theme == "monochrome") p.theme = "auto";
 }
 
 // unlock every secret theme and achievement, silently; returns {themes, achievements} newly unlocked
@@ -192,7 +189,7 @@ std::pair<int, int> unlockEverything(app::Prefs& p) {
     int t = 0, a = 0;
     for (const app::AchDef& d : app::kAchievements)
         if (app::achievementInApp(d.id) && !p.achievements.count(d.id)) { p.achievements[d.id] = 0; a++; }
-    for (const char* id : {"synthwave", "monochrome"})
+    for (const char* id : {"monochrome"})
         if (!p.unlocked.count(id)) { p.unlocked.insert(id); t++; }
     return {t, a};
 }

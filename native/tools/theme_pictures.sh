@@ -11,7 +11,7 @@
 # Not a speed test, and not Windows.
 set -e
 BIN="$1"; OUT="$2"; shift 2
-THEMES="${*:-auto auto_light light dark black midnight solar paper sage contrast synthwave monochrome}"
+THEMES="${*:-auto auto_light light dark black midnight solar paper sage contrast monochrome}"
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd); BIN=$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")
 cd "$OUT"

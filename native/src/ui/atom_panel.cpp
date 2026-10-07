@@ -1106,10 +1106,6 @@ void atomPanel(AppState& app, float width) {
     ImGui::Begin("Atom controls", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar);
     popDockedBg();
     panelDecor(app::PanelKind::Docked);
-    if (look().synthGlow) {                                   // Synthwave: the page's purple glow, seen through this panel
-        const ImGuiViewport* vp = ImGui::GetMainViewport();
-        drawSynthGlow(ImGui::GetWindowDrawList(), vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y));
-    }
     if (const char* sc = std::getenv("PL_SCROLL")) ImGui::SetScrollY(float(std::atof(sc)));   // for automatic checks
     atomPanelContents(app);
     ImGui::End();

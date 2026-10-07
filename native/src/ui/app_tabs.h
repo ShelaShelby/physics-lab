@@ -7,12 +7,10 @@
 namespace ui {
 
 void factsLine(AppState& app);                       // the 💡 line (in the header)
-int factCount();                                     // 0.15 stage 3: the new UI's 💡 card: how many facts, which one is shown (0-based), its words, whether it is the 🎁 one,
-int factPosition(AppState& app);                     // a step to the next (+1) or the previous (-1), and the 🎁's click
+int factCount();                                     // 0.15 stage 3: the new UI's 💡 card: how many facts, which one is shown (0-based), its words, 
+int factPosition(AppState& app);                     // a step to the next (+1) or the previous (-1), 
 std::string factText(AppState& app);
-bool factIsGift(AppState& app);
 void factStep(AppState& app, int dir);
-void factOpenGift(AppState& app);
 std::string factTextAt(int index);                   // 0.15 stage 4: the words of fact number `index` (in the data's own order; "" for the gift), for search
 void factShow(AppState& app, int index);             // make that one the fact on show
 void tabsBar(AppState& app);                         // 🔬 Simulations · 📚 Learn · 🏆 Achievements (in the header)

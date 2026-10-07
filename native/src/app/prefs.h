@@ -41,10 +41,9 @@ struct Prefs {
     std::string shellPanels;             // 0.15 stage 3: the new UI's floating panels, collapsed or open ("card=c,legend=o")
     std::string facts = "on";            // 0.15 stage 4: Settings → Facts, on / off: the fact line at the bottom left of the picture (new UI)
     std::string recent;                  // 0.15 stage 4: the search's recent choices, newest first, ids joined by ";"
-    std::string effects = "on";          // 0.14 stage 3: Theme effects, on / off (off: no page textures, glints, reflection, brackets or HUD decoration; colours, gloss and fonts stay)
     std::string units = "metric";        // metric / imperial
     std::string lang = "en";
-    std::set<std::string> unlocked;      // secret themes: synthwave, monochrome
+    std::set<std::string> unlocked;      // secret themes: monochrome (synthwave was archived in 0.15 stage 5m)
     std::map<std::string, int64_t> achievements;   // id -> when it was earned (Unix ms; 0 = earlier, or unlocked for testing)
     std::optional<bool> atomMore;        // the Atom Lab's More / Less info choice
     std::optional<WindowState> window;   // the window as it was last time (none: the default size, centred)
@@ -59,7 +58,6 @@ Prefs loadPrefs(const std::string& text);         // unknown or broken lines are
 bool validTheme(const std::string& id);
 bool validTextSize(const std::string& k);
 bool validFont(const std::string& k);
-bool validEffects(const std::string& k);
 bool validNewUi(const std::string& k);
 bool validMotion(const std::string& k);
 double textSizeFactor(const std::string& k);      // 0.9, 1, 1.15, 1.3

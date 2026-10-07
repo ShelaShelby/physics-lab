@@ -229,7 +229,6 @@ const std::vector<SettingRow>& settingRows() {
         {"font", app::kSetH[1], "Font", -1, false},
         {"units", app::kSetH[2], "Units (metric or imperial)", -1, false},
         {"motion", app::kSetH[3], "Motion (reduced motion)", -1, false},
-        {"effects", "✨ Theme effects", "Theme effects", -1, false},
         {"progress", app::kSetH[4], "Progress (start again)", -1, false},
         {"developer", app::kSetH[5], "Developer (unlock everything)", -1, false},
         {"newui", "🧪 New UI (preview)", "New UI (preview)", -1, false},
@@ -351,15 +350,6 @@ void settingsWindow(AppState& app) {
             if (optionTile(motions[i], app::kMotionOpts[i].name, P.motion == motions[i], nullptr, 0, tiles(3), app::kMotionOpts[i].sub)) setMotion(app, motions[i]);
         }
         richText(std::string("<p class=\"lrnP lrnMuted\">") + app::kMotionNote + "</p>");
-        // ✨ Theme effects (0.14 stage 3, native only)
-        settingHead("effects");
-        const char* effectKeys[2] = {"on", "off"};
-        const char* effectNames[2] = {"On", "Off"}, *effectSubs[2] = {"Textures, glints, brackets", "Colours and gloss only"};
-        for (int i = 0; i < 2; i++) {
-            if (i) ImGui::SameLine();
-            if (optionTile((std::string("effects-") + effectKeys[i]).c_str(), effectNames[i], P.effects == effectKeys[i], nullptr, 0, tiles(2), effectSubs[i])) P.effects = effectKeys[i];
-        }
-        richText("<p class=\"lrnP lrnMuted\">On: the Frutiger Aero and Y2K themes draw their extra decoration: soft clouds and bubbles; film grain, halftone dots, grid lines, light streaks, glints on buttons, reflections, corner brackets and HUD marks. Off: none of that, only the colours, the gloss and the fonts. Text is just as easy to read either way. The other themes have no such decoration, so nothing changes for them.</p>");
         // 🔒 Progress
         settingHead("progress");
         if (optionTile("reset", app::kResetRow.name, false, nullptr, 0, avail, app::kResetRow.sub)) {
@@ -438,7 +428,7 @@ void themePicker(AppState& app) {
     const float fixed = 2 * pad + dot + 2 * pad + tick;                  // everything on a card except the name
     const float maxWidth = vp->WorkSize.x - 24 * s;                      // the popup must fit in the window
     float nameW = 0;                                                     // the widest name (a secret theme shows "???" only while it is locked)
-    const std::vector<const app::ThemeDef*>& themes = app::allThemes();   // the web's themes and the native ones (Frutiger Aero), in the picker's order
+    const std::vector<const app::ThemeDef*>& themes = app::allThemes();   // the web's themes in the picker's order (the archived ones are skipped)
     for (const app::ThemeDef* t : themes) nameW = std::max(nameW, bold->CalcTextSizeA(fs, FLT_MAX, 0, displayable(app::themeShownName(*t, app.prefs.unlocked), bold).c_str()).x);
     float cardW = fixed + nameW + 2 * s;
     cardW = std::min(cardW, (maxWidth - (kColumns - 1) * gap - 2 * ImGui::GetStyle().WindowPadding.x) / kColumns);
@@ -454,7 +444,6 @@ void themePicker(AppState& app) {
     const int count = int(themes.size()), rows = app::gridRows(count, kColumns);
     const ImVec2 o = ImGui::GetCursorPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    int lockedIdx = 0;
     for (int i = 0; i < count; i++) {
         const app::ThemeDef& t = *themes[i];
         const app::GridCell cell = app::gridCell(i, kColumns);
@@ -465,7 +454,7 @@ void themePicker(AppState& app) {
         if (locked) ImGui::BeginDisabled();
         if (ImGui::Selectable("##t", on, 0, ImVec2(cardW, cardH)) && !locked) { app.prefs.theme = t.id; ImGui::CloseCurrentPopup(); }
         if (locked) ImGui::EndDisabled();
-        const std::string sub = locked ? app::kThemeLocked[lockedIdx] : t.sub;
+        const std::string sub = locked ? app::kThemeLocked[1] : t.sub;
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("%s", displayable(sub).c_str());
         ImGui::PopID();
         // the colour dot: the theme's background with its accent; Auto is half light, half dark
@@ -485,7 +474,6 @@ void themePicker(AppState& app) {
         const float ty = p.y + cardH / 2 - (std::count(shown[i].begin(), shown[i].end(), '\n') + 1) * fs * 1.2f / 2;
         dl->AddText(bold, fs, ImVec2(p.x + pad + dot + pad, ty), col(look().c.fg, locked ? 0.6f : 1), shown[i].c_str());
         if (on) dl->AddText(bold, fs, ImVec2(p.x + cardW - pad - tick, p.y + cardH / 2 - fs / 2), col(look().c.accent), "✓");
-        if (t.secret) lockedIdx++;
     }
     ImGui::SetCursorPos(ImVec2(o.x, o.y + rows * (cardH + gap) - gap));    // the popup is exactly as tall and wide as the grid
     ImGui::Dummy(ImVec2(kColumns * cardW + (kColumns - 1) * gap, 0));

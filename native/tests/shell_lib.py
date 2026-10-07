@@ -13,8 +13,6 @@ def _run_app(binary, work, name, extra, frames=60, size="1280x800", theme="dark"
     env = {k: v for k, v in os.environ.items() if not k.startswith("PL_") and k != "XDG_DATA_HOME"}
     env.update(HOME=home, SDL_VIDEODRIVER="offscreen", PL_WINDOW=size, PL_MOTION="on", PL_FIXED_DT="0.016", PL_DYK_FIRST="3", PL_DATE="2026-10-05",
                PL_EXIT_AFTER_FRAMES=str(frames), PL_THEME=theme, PL_LOG_SHELL="1")
-    if os.environ.get("LOOK_TEST"):                         # stage 5i: a test sets LOOK_TEST=m1|m2|m3 to run under a look option (not a PL_ name, so it is not stripped above); a test's own PL_LOOK wins
-        env["PL_LOOK"] = os.environ["LOOK_TEST"]
     env.update(extra)
     bmp = os.path.join(work, name + ".bmp")
     env["PL_SCREENSHOT"] = bmp

@@ -24,6 +24,7 @@ struct Frame {
 };
 void beginFrame();               // once per frame, before any shell window: reads the look and the Windows scale
 const Frame& F();
+bool lookM1();                   // 0.15 stage 5m: the look M1 is drawn this frame (New UI shell, Dark theme); for the automatic checks
 
 ImU32 cText(float a = 1);
 ImU32 cMuted(float a = 1);

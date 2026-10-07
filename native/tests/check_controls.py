@@ -37,7 +37,7 @@ def main():
     UP = "30:drag=640,600,640,200"            # moves the picture up: the Sun goes to the window's top edge, so ring labels fall into the top bar
     prefetch([((binary, work, f"c_geo_{sz}", dict(NEW, PL_SELECT="Earth")), dict(frames=80, size=sz)) for sz in ("1280x800", "880x560")] +
              [((binary, work, f"c_ring_{sz}", dict(NEW, PL_SCRIPT=FAR + ";" + UP)), dict(frames=90, size=sz)) for sz in ("1280x800", "880x560", "1920x1080")] +
-             [((binary, work, f"c_ro_{t}", dict(NEW)), dict(frames=40, size="1280x800", theme=t)) for t in ("dark", "light", "aero", "black", "paper")])
+             [((binary, work, f"c_ro_{t}", dict(NEW)), dict(frames=40, size="1280x800", theme=t)) for t in ("dark", "light", "black", "paper")])
 
     # ---- 1. the panel's place (Orbit Lab), at two window sizes: inside the window, under the top bar, about 22 em wide, clear of the toolbar and the readout ----
     for sz in ("1280x800", "880x560"):
@@ -126,7 +126,7 @@ def main():
 
     # ---- 5. bug fix B: the readout is Body size on a dark pill; the measured contrast of its text on its pill, per theme ----
     SKY_OFF = "10:click=show.sky@0.95"              # a plain light background behind the pill in the light themes: the hard case
-    for theme, sky in [(t, k) for t in ("dark", "light", "aero", "black", "paper") for k in ("space", "plain")]:
+    for theme, sky in [(t, k) for t in ("dark", "light", "black", "paper") for k in ("space", "plain")]:
         r = run_app(binary, work, f"c_ro_{theme}" if sky == "space" else f"c_ro_{theme}_plain", dict(NEW) if sky == "space" else dict(NEW, PL_SCRIPT=SKY_OFF), frames=40, size="1280x800", theme=theme)
         ro = r.rects["readout"]
         b = Bmp(r.bmp)
@@ -187,7 +187,7 @@ def main():
         check(pc is not None and heads and abs(heads[0][0] - (pc[0] + 16)) < 0.6, f"{lab}: the headers start on the content's left edge (16 u in) {heads[:1]} {pc}")
         small = [(px, t) for k, px, t in r.texts if k == "ctl" and px < 14 - 0.01]
         check(any(k == "ctl" for k, _, _ in r.texts) and not small, f"{lab}: all panel text is at least 14 px: {small[:3]}")
-    THEMES = ("light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "synthwave", "monochrome", "blackhole", "decay", "galactic", "aero", "y2knight")
+    THEMES = ("light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "monochrome", "blackhole", "decay", "galactic")
     HOVER = "10:move=card.legend;16:move=tool.reset;22:move=show.moons;28:move=ctl.sec.view;34:move=view.reset"
     prefetch([((binary, work, f"c_halo_{t}", dict(NEW, PL_SCRIPT=HOVER)), dict(frames=44, size="1280x1080", theme=t)) for t in THEMES])
     for t in THEMES:
@@ -200,10 +200,6 @@ def main():
             check(want in halos, f"{t}: {want} was drawn (and hovered) and logged its outline")
         bad = [(k, a, o) for k, (a, o) in halos.items() if not (o[0] >= a[0] - 2.01 and o[1] >= a[1] - 2.01 and o[2] <= a[2] + 2.01 and o[3] <= a[3] + 2.01)]
         check(not bad, f"{t}: every glow / shadow / hover outline is within 2 px of its widget or panel ({len(halos)} logged): {bad[:3]}")
-        if t == "aero":
-            for k in ("panel##card_orbit.legend", "hover.tool.reset", "hover.show.moons", "hover.view.reset"):
-                if k in halos:
-                    print(f"HALO aero {k}: widget {halos[k][0]} outline {halos[k][1]}")
     print(f"controls panel checks: {checks - fails} of {checks} passed")
     sys.exit(1 if fails else 0)
 

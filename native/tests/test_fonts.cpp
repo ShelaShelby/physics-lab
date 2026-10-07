@@ -1,6 +1,6 @@
 // 0.15 stage 5j: glyph coverage of the fonts shipped for the looks M1..M3 (PL_LOOK). Written BEFORE the loader code.
 // Reference: the font files themselves: their 'cmap' tables read with stb_truetype (the same reader Dear ImGui builds its atlas with). No app, no window.
-//   1. Every non-ASCII character inside a string literal of src/ (the string tables and UI texts) is looked up in the new font (Inter, IBM Plex Sans) and in the fallback chain
+//   1. Every non-ASCII character inside a string literal of src/ (the string tables and UI texts) is looked up in the new font (Inter) and in the fallback chain
 //      the loader merges behind it (the loader's own list, ui/font_chain.h: Linux DejaVu Sans, Noto Sans Symbols, FreeSerif; Windows Segoe UI, Segoe UI Symbol, Segoe UI Emoji).
 //   2. TEXT characters (below U+2100: Latin, Greek, punctuation, superscripts / subscripts) must be drawable by new font OR chain, else the test fails: that would be a box in the app.
 //   3. SYMBOL / emoji characters (U+2100 and up) found in neither are only LISTED (they are missing in today's app too; on Windows Segoe UI Symbol / Emoji draw most of them).
@@ -94,8 +94,7 @@ int main() {
     const auto inChain = [&](unsigned cp) { for (const FontFile& f : chain) if (f.has(cp)) return true; return false; };
 
     const std::map<std::string, std::vector<std::string>> looks = {
-        {"Inter (M1, M2)", {"Inter-Regular.otf", "Inter-SemiBold.otf"}},
-        {"IBM Plex Sans (M3)", {"IBMPlexSans-Regular.ttf", "IBMPlexSans-SemiBold.ttf"}},
+        {"Inter (the look M1)", {"Inter-Regular.otf", "Inter-SemiBold.otf"}},
     };
     for (const auto& [name, files] : looks) {
         std::vector<FontFile> faces;

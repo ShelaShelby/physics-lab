@@ -12,11 +12,9 @@ namespace ui {
 struct Look {
     app::ThemeColors c;          // the theme's colours (Auto resolved to Light or Dark)
     float textScale = 1;         // Settings → Text size
-    bool effects = true;         // Settings → Theme effects (0.14 stage 3): off = the style has no textures, glints, reflection, brackets or HUD (app::withoutEffects)
     bool reduced = false;        // Settings → Motion (Auto: Windows' "Animation effects" off)
     bool square = false;         // Monochrome: no rounded corners
     bool grayscale = false;      // Monochrome: the pictures in shades of grey
-    bool synthGlow = false;      // Synthwave: a purple glow at the top of the window
     std::string fontKey = "auto";   // the font family in use (Paper's book font, Monochrome's monospace, or the chosen one)
 };
 const Look& look();
@@ -36,6 +34,5 @@ void popOn();
 // if (beginGift("##id")) { std::string clicked = giftPage(html); ...; ImGui::EndPopup(); }  giftPage returns the clicked button's id.
 bool beginGift(const char* id);
 std::string giftPage(const std::string& html);
-void drawSynthGlow(ImDrawList* dl, ImVec2 a, ImVec2 b);   // Synthwave's glow behind a window's top
 
 }  // namespace ui
