@@ -150,6 +150,14 @@ void factsPanel(AppState& app, sh::Panel& p, bool& close) {
 }
 
 void atomDataPanel(AppState& app, sh::Panel& p, bool& close);
+// 0.15 stage 5h: the data sheet scrolls inside itself when a tab is taller than its place: the wheel (Dear ImGui's own) and Page Up / Page Down (here); the offset is logged for the automatic checks
+void sheetScrollKeys() {
+    if (ImGui::GetIO().WantTextInput) return;
+    const float page = ImGui::GetWindowHeight() * 0.85f;
+    if (ImGui::IsKeyPressed(ImGuiKey_PageDown)) ImGui::SetScrollY(std::min(ImGui::GetScrollMaxY(), ImGui::GetScrollY() + page));
+    if (ImGui::IsKeyPressed(ImGuiKey_PageUp)) ImGui::SetScrollY(std::max(0.0f, ImGui::GetScrollY() - page));
+    if (shellLogOn()) { char b[64]; std::snprintf(b, sizeof b, "sheetscroll y=%d max=%d", static_cast<int>(ImGui::GetScrollY()), static_cast<int>(ImGui::GetScrollMaxY())); auditNote(b); }
+}
 // The subject card's "All values": every line of the old card, word for word (its source lines too), in a large panel.
 void dataPanel(AppState& app, sh::Panel& p, bool& close) {
     const Metrics& m = sh::F().m;
@@ -185,9 +193,27 @@ void atomDataPanel(AppState& app, sh::Panel& p, bool& close) {
     sh::pCaption(p, displayable(sc.kind));
     sh::pGap(p, m.s8);
     const std::vector<std::string> labels{"Values", "Decay", "This view"}, names{"data.tab.values", "data.tab.decay", "data.tab.hint"};
-    int cur = tab;
-    if (sh::pSegmented(p, "data.tabs", labels, &cur, &names)) tab = cur;
+    // stage 5h: a second row of tabs for the old panel's last cards (real spectrum, lifetimes, nuclear size, temperature, radial graph), each shown only when the old panel shows it for this subject and view
+    static std::string cardTab;                                   // "" = one of the first three tabs
+    const std::vector<AtomSheetCard> cards = atomSheetCards(app);
+    int ci = -1;
+    for (std::size_t i = 0; i < cards.size(); i++) if (cardTab == cards[i].id) ci = static_cast<int>(i);
+    if (ci < 0) cardTab.clear();
+    int cur = cardTab.empty() ? tab : -1;
+    if (sh::pSegmented(p, "data.tabs", labels, &cur, &names)) { tab = cur; cardTab.clear(); ci = -1; }
+    std::vector<std::string> clabels, cnames;
+    for (const AtomSheetCard& c : cards) { clabels.push_back(c.label); cnames.push_back(std::string("data.tab.") + c.id); }
+    int cc = ci;
+    if (sh::pSegmented(p, "data.cardtabs", clabels, &cc, &cnames) && cc >= 0) { cardTab = cards[cc].id; ci = cc; }
     sh::pGap(p, m.s4);
+    if (!cardTab.empty()) {                                       // the very same card function the old panel calls (atom_panel.cpp), drawn at the sheet's cursor
+        ImGui::SetCursorScreenPos(sh::here(p));
+        atomSheetCard(app, cardTab);
+        p.y = ImGui::GetCursorScreenPos().y - p.origin.y;
+        sheetScrollKeys();
+        return;
+    }
+    sheetScrollKeys();
     if (tab == 0) {
         sh::pBody(p, displayable(sc.isotope));
         for (std::size_t i = 0; i < sc.valuesTab.size(); i++) sh::pBody(p, displayable(sc.valuesTab[i]), i == 0);

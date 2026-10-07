@@ -19,6 +19,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5h: the Atom data sheet gets the last cards, and the atom is centred in the free space",
+     "New UI (preview) On: in the Atom Lab, All values now opens a data sheet with a second row of tabs: Spectrum (the real NIST spectrum), Lifetimes (lifetimes and jumps), Nuclear size, Temperature and, in the cloud views, Radial (the radial graph). Each tab is the Old panel's own card, drawn by the same code with the same words and the same numbers, and a tab only appears when the Old panel shows that card for the same atom and view. The sheet scrolls inside itself when a tab is taller than the window (mouse wheel, Page Up, Page Down). "
+     "The atom and its label now sit in the middle of the space the subject card, the Controls panel and the bars leave free, so the card no longer covers them; the atom's info text at the top left is 14 px (it was 13). The Old panel button stays. No new facts or sources. Not tested: a real PC, a real mouse or wheel."},
     {"0.15", "Full UI rework, stage 5g part 2: panel sections scroll into view, Atom text and data sheet",
      "With New UI (preview) On: a Controls panel section you open now scrolls up so you can see what is in it (Pick a body used to open below the edge, out of sight). "
      "The Atom Lab's info text at the top left now stops before the subject card and the phase ring, and goes under the ring in a narrow window. "

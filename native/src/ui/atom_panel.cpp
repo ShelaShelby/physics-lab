@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <optional>
 #include <random>
@@ -32,6 +33,7 @@
 #include "atom/quadrupole.h"
 #include "atom/radial_graph.h"
 #include "atom_learn.h"
+#include "shell_widgets.h"
 #include "orbit_panel.h"
 #include "rich_text.h"
 #include "settings.h"
@@ -71,6 +73,21 @@ void logOldAtomCard(const std::string& tag, const std::vector<std::string>& line
     std::fflush(stdout);
 }
 
+// 0.15 stage 5h: while a card runs (cardRun), every string it shows and the numbers of its graphs are collected and printed once per change (PL_LOG_CARD), by the old panel and by the new UI's
+// data sheet alike: they call the very same functions, so a test can compare what each one showed.
+std::vector<std::string>* g_capture = nullptr;
+void cap(const std::string& t) { if (g_capture) g_capture->push_back(t); }
+std::string num9(double v) { char b[40]; std::snprintf(b, sizeof b, "%.9g", v); return b; }
+void rich(const std::string& html, bool mutedBase, float size, float gap) { cap(html); richText(html, mutedBase, size, gap); }
+void cardRun(const char* tag, const std::function<void()>& body) {
+    static const bool on = std::getenv("PL_LOG_CARD") != nullptr;
+    std::vector<std::string> v;
+    if (on) g_capture = &v;
+    body();
+    g_capture = nullptr;
+    if (on) logOldAtomCard(std::string("card.") + tag, v);
+}
+
 void dashedRect(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 col, float th, float dash) {
     auto seg = [&](ImVec2 p, ImVec2 q) {
         const float len = std::hypot(q.x - p.x, q.y - p.y);
@@ -83,6 +100,7 @@ void dashedRect(ImDrawList* dl, ImVec2 a, ImVec2 b, ImU32 col, float th, float d
 }
 
 void mutedWrapped(const std::string& t, float size = 0.75f) {
+    cap(t);
     ImGui::PushFont(nullptr, B(16 * size));
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::PushTextWrapPos(0);
@@ -507,6 +525,7 @@ void radialPicture(const RadialGraph& g, bool active) {
         return;
     }
     double pMax = 0; for (double v : g.P) pMax = std::max(pMax, v);
+    if (g_capture) { double sp = 0, sr = 0; for (double v : g.P) sp += v; for (double v : g.r) sr += v; cap("graph radial n=" + std::to_string(g.P.size()) + " rEnd=" + num9(g.rEnd) + " sumP=" + num9(sp) + " sumR=" + num9(sr) + " peak=" + num9(g.peak) + " mean=" + num9(g.mean) + " reach90=" + num9(g.reach90)); }
     auto X = [&](double r) { return x0 + r / g.rEnd * (x1 - x0); };
     auto Y = [&](double v) { return yAxis - v / (pMax * 1.08) * (yAxis - yTop); };
     for (std::size_t i = 0; i + 1 < g.r.size(); i++)                      // the area under the curve, a thin strip per step, then the line on top
@@ -572,6 +591,7 @@ void realStrip(const std::vector<double>& lab, const std::vector<RealTick>& real
         const ImVec2 ts = F->CalcTextSizeA(fs, FLT_MAX, 0, t.c_str());
         dl->AddText(F, fs, ImVec2(o.x + float(x) * s - ts.x * float(align), o.y + float(y) * s - F->GetFontBaked(fs)->Ascent), U32(c), t.c_str());
     };
+    if (g_capture) { double sl = 0, sn = 0, sh = 0; int ob = 0; for (double v : lab) sl += v; for (const RealTick& t : real) { sn += t.nm; sh += t.h; ob += t.observed; } cap(std::string("graph strip ") + realName + " lab=" + std::to_string(lab.size()) + " sumLab=" + num9(sl) + " real=" + std::to_string(real.size()) + " sumNm=" + num9(sn) + " sumH=" + num9(sh) + " observed=" + std::to_string(ob)); }
     double lo = 1e300, hi = 0;
     for (double v : lab) { lo = std::min(lo, v); hi = std::max(hi, v); }
     for (const RealTick& t : real) { lo = std::min(lo, t.nm); hi = std::max(hi, t.nm); }
@@ -616,7 +636,7 @@ void realSpectrumCard(int Z, int N, bool dirac) {
         ion = realTicks(asdIon(Z)); atomT = realTicks(asdAtom(Z)); cmp = compareIon(Z, N); cmpD = dirac ? compareIonDirac(Z, N) : std::vector<FineCompare>();
         cz = Z; cn = N; cd = dirac;
     }
-    auto plain = [](const std::string& t) { ImGui::PushTextWrapPos(0); ImGui::TextUnformatted(displayable(t).c_str()); ImGui::PopTextWrapPos(); };
+    auto plain = [](const std::string& t) { cap(t); ImGui::PushTextWrapPos(0); ImGui::TextUnformatted(displayable(t).c_str()); ImGui::PopTextWrapPos(); };
     plain(asdIonTitle(Z));
     if (asdIon(Z).status == AsdStatus::Lines) {
         const char* const labTitle = dirac ? "The lab's lines (one electron, Dirac levels)" : "The lab's lines (one electron)";
@@ -750,6 +770,35 @@ struct TempBox {
     }
 };
 TempBox g_tempBox;
+
+// the Temperature card (web: the slider, state words, particle box, jump buttons, details): shared by the old panel and the new UI's data sheet
+void temperatureCard(AppState& app) {
+        auto v2T = [](double v) { return kTMax * (v / 1000) * (v / 1000); };
+        auto T2v = [](double T) { return 1000 * std::sqrt(T / kTMax); };
+        ImGui::TextUnformatted("Temperature");
+        int tv = int(std::lround(T2v(app.tempK)));
+        ImGui::SetNextItemWidth(-1);
+        if (ui::SliderInt("##temp", &tv, 0, 1000, "")) app.tempK = v2T(tv);
+        const int Zs = app.atom.p.Z;
+        rich(tempStateHtml(Zs, app.tempK), true, 13.0f / 16, 0.2f);
+        rich(tempSpeedHtml(Zs, app.tempK), true, 12.0f / 16, 0.2f);
+        g_tempBox.draw(Zs, app.tempK, std::min(0.05, double(ImGui::GetIO().DeltaTime)));
+        auto jump = [&](const char* txt, double T) { if (ui::Button(displayable(txt).c_str())) { if (!std::isnan(T)) app.tempK = std::max(0.0, std::min(kTMax, T)); } };
+        const Temp& td = tempData(Zs);
+        jump("❄ Cold", 3); ImGui::SameLine();
+        jump("🏠 Room", kTRoom); ImGui::SameLine();
+        jump("🔥 Just melted", td.flag == 's' ? td.boil - 1 : std::isnan(td.melt) ? td.boil - 0.5 : td.melt + 1);
+        jump("💨 Just boiled", std::isnan(td.boil) ? NAN : td.boil + 1);
+        ImGui::SetNextItemOpen(app.tempDetails);
+        app.tempDetails = ImGui::TreeNodeEx(displayable("🌡 What is temperature, really?").c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen);
+        if (app.tempDetails) {
+            ImGui::PushTextWrapPos(0);
+            rich(kTempDetailsHtml, true, 13.0f / 16, 0.4f);
+            ImGui::PopTextWrapPos();
+        }
+        mutedWrapped(kTempNote, 12.0f / 16);
+}
+
 
 }  // namespace
 
@@ -957,7 +1006,7 @@ static void atomPanelContents(AppState& app) {
 
     if (p.view != "Orbit" && !L.chartOn()) {
         ImGui::SeparatorText("Where the electron is found");
-        radialCard(L);
+        cardRun("radial", [&] { radialCard(L); });
     }
 
     // ---- Photons ----
@@ -989,44 +1038,19 @@ static void atomPanelContents(AppState& app) {
 
     // ---- The real spectrum ----
     ImGui::SeparatorText("Real spectrum (NIST)");
-    realSpectrumCard(p.Z, p.N, p.dirac == "On");
+    cardRun("spectrum", [&] { realSpectrumCard(p.Z, p.N, p.dirac == "On"); });
 
     // ---- Nuclear size ----
     ImGui::SeparatorText("Nuclear size and shape (measured)");
-    nuclearSizeCard(app);
+    cardRun("size", [&] { nuclearSizeCard(app); });
 
     // ---- Lifetimes and jumps ----
     ImGui::SeparatorText("Lifetimes and jumps (NIST)");
-    lifetimeCard(app);
+    cardRun("lifetimes", [&] { lifetimeCard(app); });
 
     // ---- Temperature ----
     ImGui::SeparatorText("Temperature");
-    {
-        auto v2T = [](double v) { return kTMax * (v / 1000) * (v / 1000); };
-        auto T2v = [](double T) { return 1000 * std::sqrt(T / kTMax); };
-        ImGui::TextUnformatted("Temperature");
-        int tv = int(std::lround(T2v(app.tempK)));
-        ImGui::SetNextItemWidth(-1);
-        if (ui::SliderInt("##temp", &tv, 0, 1000, "")) app.tempK = v2T(tv);
-        const int Zs = p.Z;
-        richText(tempStateHtml(Zs, app.tempK), true, 13.0f / 16, 0.2f);
-        richText(tempSpeedHtml(Zs, app.tempK), true, 12.0f / 16, 0.2f);
-        g_tempBox.draw(Zs, app.tempK, std::min(0.05, double(ImGui::GetIO().DeltaTime)));
-        auto jump = [&](const char* txt, double T) { if (ui::Button(displayable(txt).c_str())) { if (!std::isnan(T)) app.tempK = std::max(0.0, std::min(kTMax, T)); } };
-        const Temp& td = tempData(Zs);
-        jump("❄ Cold", 3); ImGui::SameLine();
-        jump("🏠 Room", kTRoom); ImGui::SameLine();
-        jump("🔥 Just melted", td.flag == 's' ? td.boil - 1 : std::isnan(td.melt) ? td.boil - 0.5 : td.melt + 1);
-        jump("💨 Just boiled", std::isnan(td.boil) ? NAN : td.boil + 1);
-        ImGui::SetNextItemOpen(app.tempDetails);
-        app.tempDetails = ImGui::TreeNodeEx(displayable("🌡 What is temperature, really?").c_str(), ImGuiTreeNodeFlags_NoTreePushOnOpen);
-        if (app.tempDetails) {
-            ImGui::PushTextWrapPos(0);
-            richText(kTempDetailsHtml, true, 13.0f / 16, 0.4f);
-            ImGui::PopTextWrapPos();
-        }
-        mutedWrapped(kTempNote, 12.0f / 16);
-    }
+    cardRun("temperature", [&] { temperatureCard(app); });
     // ---- Performance ----
     performanceCard(app);
     ImGui::TextDisabled("Picture: %d draw calls, %d instanced shapes", app.drawCalls, app.drawInstances);
@@ -1203,5 +1227,30 @@ AtomSubject atomSubject(const AppState& app) {
     a.hint = L.hint();
     return a;
 }
+
+// 0.15 stage 5h: the data sheet's tabs for the old panel's last cards. A card is listed exactly when the old panel draws it for this subject and view (atomPanelContents: the radial graph only
+// in a cloud view that is not the chart; the others always). The sheet calls the very same card functions, so the words, the graphs and their numbers are the old panel's own.
+std::vector<AtomSheetCard> atomSheetCards(const AppState& app) {
+    std::vector<AtomSheetCard> v{{"spectrum", "Spectrum"}, {"lifetimes", "Lifetimes"}, {"size", "Nuclear size"}, {"temperature", "Temperature"}};
+    if (app.atom.p.view != "Orbit" && !app.atom.chartOn()) v.push_back({"radial", "Radial"});
+    return v;
+}
+
+void atomSheetCard(AppState& app, const std::string& id) {
+    const AtomLab& L = app.atom;
+    const float body = sh::px(sh::Type::Body), have = 12.0f / 16 * ImGui::GetFontSize(), k = std::max(1.0f, body / have);   // the cards' small text (12 / 16 of the font) is drawn at Body size or larger, never smaller
+    ImGuiStyle& st = ImGui::GetStyle();
+    const float keep = st.FontSizeBase;
+    st.FontSizeBase = keep * k;
+    ImGui::PushFont(nullptr, keep * k);
+    if (id == "spectrum") cardRun("spectrum", [&] { realSpectrumCard(L.p.Z, L.p.N, L.p.dirac == "On"); });
+    else if (id == "lifetimes") cardRun("lifetimes", [&] { lifetimeCard(app); });
+    else if (id == "size") cardRun("size", [&] { nuclearSizeCard(app); });
+    else if (id == "temperature") cardRun("temperature", [&] { temperatureCard(app); });
+    else if (id == "radial") cardRun("radial", [&] { radialCard(L); });
+    ImGui::PopFont();
+    st.FontSizeBase = keep;
+}
+
 
 }  // namespace ui

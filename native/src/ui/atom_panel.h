@@ -33,6 +33,9 @@ struct AtomSubject {
     std::string hint;                                                   // the old bar's hint line (it depends on the view)
 };
 AtomSubject atomSubject(const AppState& app);
+struct AtomSheetCard { const char* id; const char* label; };   // 0.15 stage 5h: a data sheet tab that shows one of the old panel's cards (tab label)
+std::vector<AtomSheetCard> atomSheetCards(const AppState& app);   // the cards the old panel shows now for this subject and view
+void atomSheetCard(AppState& app, const std::string& id);         // draws one at the current ImGui cursor, by the very same function the old panel calls
 std::vector<std::string> atomPlainLines(const std::string& html);      // "<div><b>A:</b> x</div>" -> {"A: x"}: tags removed, entities decoded, one line per <div> / <p>
 
 // The two buttons at the top of every panel: Orbit Lab / Atom Lab.

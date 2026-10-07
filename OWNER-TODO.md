@@ -1,5 +1,9 @@
 # Owner to-do (things only the owner can do)
 
+## 0.15 stage 5h: please try on the real PC (New UI On)
+- [ ] Atom Lab, All values: click the five new tabs (Spectrum, Lifetimes, Nuclear size, Temperature, Radial) for a few atoms and views; scroll a tall one with the real mouse wheel and with Page Up / Page Down; is the text big enough, and are the graph labels (smaller than the other text) readable?
+- [ ] The atom and its label should sit clear of the subject card, also with the Controls panel closed; the info text at the top left should be a little bigger.
+
 ## 0.15 stage 5g: please try on the real PC (New UI On, and once with it Off)
 - [ ] **Scroll with the real mouse wheel** in Learn (a guide and the timeline), About and What's new. The scripted wheel scrolled all of them here (3 sizes, New UI On and Off), so I could not reproduce "cannot scroll at all". If it still fails on your PC, tell me which window, the New UI setting, the theme and the pointer place. Also try Page Down / Page Up / arrows / Home / End, and dragging the scroll bar.
 - [ ] **Contents** button in Learn and About (narrow window): open it and choose three sections in a row.
