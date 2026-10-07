@@ -1,28 +1,16 @@
-# Native Physics Lab 0.15 — stage 5g: the owner's bug list from his PC + the 5f leftovers
+# Native Physics Lab 0.15 — stage 5h part 1: Atom Lab centre and info text (New UI only)
 
-`index.html` untouched. No helper agents. New UI Off = the old app, except items 1, 2 (bugs, both layouts) and 6 (theme removed, both). No physics, formula or value changed. **No new number or fact.**
+`index.html` untouched. No helper agents. New UI Off = the old app (centre, text size unchanged). No physics, scale or value changed. **No new number or fact, no new source.**
 
-## Part 1 — what changed
-- **1 Scroll (reproduced? NO):** a scripted wheel (the same SDL event) scrolled Learn guides, the timeline, About and What's new in every case: 3 sizes x New UI On / Off, dark and Aero (`PLSHELL pagescroll y=` moves). So "cannot scroll at all with the mouse" is **not reproduced here**; I found no change since 0.14 in the wheel code (`git log`, main.cpp, reading.cpp, shell_widgets.cpp). It may only happen with a real mouse on the PC: OWNER-TODO asks which window / theme / pointer place. Added anyway: Page Up / Page Down / Home / End / arrows scroll a page (both layouts; the New UI page takes the focus when it opens), and in the New UI a wheel over the dimmed picture beside the page scrolls it (before, nothing was under the pointer there: a possible cause). The scroll bar is Dear ImGui's own: **not** checked by drag.
-- **2 Contents (reproduced, fixed):** at 880x560 the first choice worked, later ones did nothing: the click on the Contents button brought the page window in front of the list window, which then could not be clicked (3 choices in a row gave y 991, 991, 991). The list now comes to the front each time it opens (y 991, 2809, 5446).
-- **3 Toolbar:** left edge = window centre minus half of the widest toolbar (Atom with all buttons); fixed slots (Drag, then Centre; an empty slot if only Centre shows); moves only left of the open panel. Orbit and Atom start at the same x. The old test "centred in the free part" (atom_toolbar, controls_panel) was changed on purpose; unit test `anchor:` added.
-- **4 Cloud 3D:** toolbar buttons Cloud 3D and Slice (new icons) beside Cloud, same `pressTool` as the View selector. **New UI only: the first Atom view (no saved view) is Cloud 3D**; Defaults in the Atom Lab also give it; a saved view is kept (so the owner's own settings file keeps what he used last: OWNER-TODO). Old app: Orbit. Tests that start the Atom Lab and compare old with new now name `view=Orbit` in both runs (atom_panel, cards_atom, atom_chip): same view, nothing loosened.
-- **5 Ring:** the phase ring sits below a collapsed card, left of an open card (below it if no room); never under card, Legend, panel, top bar, toolbar, fact line (3 sizes x 3 views x card open / collapsed).
-- **6 Y2K Ice removed** (list: Y2K Ice, Y2K Night; only "Ice" removed). Tokens, 5 saved pictures, tests gone; a settings file naming it gives Dark (`prefs.cpp`); picker has no gap (looked at). About, history entry and README say so. Night's pictures are unchanged (guard hashes equal).
-- **7 Handle:** flat slim pill, thin edge, one chevron, no gloss, hover = a slightly different fill (2 px rule kept). Looked at in Dark and Aero. The "...ntrols panel" box in the Aero screenshot: I believe it is the handle's own tooltip ("Open / Close the Controls panel"), cut by the crop; I could not check the owner's screenshot.
+## Changed
+- **Centre:** the atom's drawing centre (and so its label "Uranium-238 · 92p, 146n") is now the middle of the largest part of the window that the top bar, toolbar, fact line, Controls panel and subject card leave free (`largestFreeRect`, the same helper the Orbit Lab uses). Before it was the window middle (640, 400 at 1280x800), under the card (x 614..914). Scale is still that of the whole picture; only where it is centred changed. `shell.cpp` hands the free rectangle to the picture, `atom_view.cpp` uses it.
+- **Info text:** measured 13 px at 100 % (13 points x text size 1). In the New UI it is now 14 px (the body size); line pitch follows (size + 4). Old app: still 13.
 
-## Part 2
-- **8** a section opened in the Controls panel scrolls its header to the top ("Pick a body": first row inside the panel at 3 sizes). **9** `orbit_ui_card` and `orbit_ui_coverage` pass again, nothing loosened. **10** Atom info text stops before card / panel / ring; in a narrow window it goes below the ring. **11** the data sheet is solid; the sheet text is whole and wraps. The only "…" is in the SOURCE string: `atom/atom_core.cpp:836` adds " …" when a nuclide has more than 2 decay modes (the old panel prints the same, so the old-panel comparison still holds); left as is. **12** PROGRESS.md deleted.
-
-## Tests (written / changed; see check_5g.py)
-`tests/check_5g.py` (ctest `ui5g_pages, contents, toolbar, default, ring, panel, atomtext`): wheel / PageDown scroll at 3 sizes On and Off; three Contents choices; toolbar x; Cloud 3D default and Off = Orbit; ring and info rects; first Pick row; sheet solid and no cut. Reproduced 2 before fixing (the unfixed binary: Contents; the Pick row was not run unfixed).
-- **Changed on purpose:** `check_theme_pictures.sh` hashes (picker lost a card: 12 + 2 lines rewritten, Ice lines deleted); `shell_pictures_0.15s4.sha256` (all 48: the handle, and the About note); unit tests for 13 themes / 2 cache themes; `atom_toolbar` and `controls_panel` toolbar-place checks; `view=Orbit` in the old-against-new Atom tests.
-
-## Break on purpose (each reverted, rebuilt)
-Default view back to Cloud: ui5g_default 1 failure. Toolbar anchored to the centre again: ui5g_toolbar 27. Ring left under the card (x on the card): ui5g_ring 9. Page keys / wheel-over-dim off: ui5g_pages 36. (The Contents fix was not broken again; it was seen failing before the fix.)
-
-## End run
-One `check.sh full` (39 tests, 21 min), then only the failed ones re-run alone after fixing: shell_ui (my `pick.first` rect was outside the window: now a note), cards_atom, atom_panel (both needed `view=Orbit`, see item 4), shell_pictures (references rewritten on purpose: 48 pictures, handle and About note). All passed on the final code: quick 9/9, orbit_ui_card, orbit_ui_coverage and every other test in the first full run. After that run only test files, shell_test logging and the Pick note changed. The two parts share ONE end run and are two commits made from one working tree.
+## Tested (Linux, software OpenGL)
+- New `tests/check_5h.py` (ctest `ui5h_centre`, `ui5h_infosize`): 3 sizes x 3 views (Cloud 3D, Orbit, Slice) x card open / collapsed x panel open / closed: centre and label not under card, panel, top bar, toolbar, fact line, handle; label inside the window. Font size 14+ (New UI) / 13 (Off).
+- Break on purpose (each reverted): old centring back: `ui5h_centre` 19 failures; info size back to 13: `ui5h_infosize` 3 failures.
+- End run: `check.sh quick` 9/9; ui5g_*, ui5h_*, orbit_ui_card, orbit_ui_coverage, theme / window / y2k / page_cache / effects pictures, atom_panel, atom_toolbar, atom_chip, cards_atom, controls_panel, shell_ui, shell_pictures: 23/23. No reference picture rewritten.
+- Looked once at Uranium-238, Cloud 3D, 1280x800, card open: atom and label in the free area left of the card.
 
 ## NOT tested
-Windows, a real mouse or wheel, a real GPU, speed, scale 125 / 150 % of this stage's items, the scroll bar by drag, the Aero screenshot box. No new per-frame work except the widest-toolbar width (cached by size) and a few numbers per frame for the ring.
+Windows, a real mouse, a real GPU, speed, scale 125 / 150 %. The centre is not re-centred when the user drags the picture (pan is unchanged). With a very large zoom the label can still move under a card (only the default zoom is tested).

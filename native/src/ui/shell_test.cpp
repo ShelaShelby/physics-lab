@@ -224,7 +224,7 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             SDL_PushEvent(&e);
         } else if (verb == "astate") {
             std::printf("PLASTATE %s\n", atomSettingsLine(app).c_str());
-            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3]); }   // (stage 5g: where the picture put its info text and phase ring, in points)
+            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g centre=%g,%g label=%g,%g,%g,%g infopx=%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3], d.centre[0], d.centre[1], d.label[0], d.label[1], d.label[2], d.label[3], d.infoPx); }   // (stage 5g: where the picture put its info text and phase ring, in points)
         } else if (verb == "state") {
             std::printf("PLSTATE %s\n", (app.lab == 1 ? atomStateLine(app) : orbitStateLine(app)).c_str());
         }

@@ -989,6 +989,11 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         if (fl.w > 0) { occ.push_back(fl); auditRect("factline", static_cast<float>(fl.x), static_cast<float>(fl.y), static_cast<float>(fl.w), static_cast<float>(fl.h)); bottomLeftTop = std::min(bottomLeftTop, fl.y); }
     }
     app.atom.insetBottomLeft = (fr.window.bottom() - bottomLeftTop) / dpi + 4;       // points (main.cpp sets it to 0 when the new UI is off)
+    if (app.lab == 1) {                                   // 0.15 stage 5h: the atom is centred in the part of the picture the bars, the Controls panel and the subject card leave free (the label under the nucleus too)
+        const Rect fr2 = largestFreeRect(fr.window, occ);
+        app.atom.freeX = fr2.x / dpi; app.atom.freeY = fr2.y / dpi; app.atom.freeW = fr2.w / dpi; app.atom.freeH = fr2.h / dpi;
+        app.atom.infoSize = 14;                           // the info text at the top left: the body size (14), not 13
+    }
 
     // ---- the centre shift: the selected body is kept out from under the cards and panels (DESIGN.md section 6) ----
     static const bool shiftOff = std::getenv("PL_SHIFT") && std::string(std::getenv("PL_SHIFT")) == "off";   // for the automatic checks: the shift switched off

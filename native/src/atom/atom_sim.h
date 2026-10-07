@@ -163,6 +163,8 @@ public:
     double infoDown = 0;                 // 0.15 stage 5g: the info text starts this far lower (points): below the phase ring when there is no room beside it
     double infoRight = -1;               // 0.15 stage 5g: the info text at the top left stops here (points; -1: the old width). The new UI sets it to the left edge of the subject card or the phase ring
     double ringX = -1, ringY = -1;       // 0.15 stage 5g: where the picture puts the phase ring's centre (points); -1: the old place (top right). The new UI puts it clear of the subject card
+    double freeX = -1, freeY = -1, freeW = -1, freeH = -1;   // 0.15 stage 5h: the part of the picture no card or bar covers (points); the atom is centred in it. freeW < 0: the whole picture (the old app)
+    double infoSize = 13;                // 0.15 stage 5h: the info text's size in points (the new UI: 14, the body size)
     bool shellUi = false;                // the new UI is on: the picture leaves out its own "More / Less info" button (the toggle is in the Old panel until stage 5b)
     bool reducedMotion = false;          // Settings → Motion: camera moves jump, Cloud 3D does not spin by itself (web: plRM())
     // the values a setting may take (for settings loaded from the file): a select's options, or a number's range

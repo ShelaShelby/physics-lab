@@ -318,7 +318,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     }
 
     const bool cloud = p.view != "Orbit", d3 = p.view == "Cloud 3D", sl = p.view == "Slice", hz = sl && p.cutAxis == "Horizontal";
-    const double cx0 = w / 2, cy0 = h / 2, m = std::min(w, h);
+    const double cx0 = lab.freeW >= 0 ? lab.freeX + lab.freeW / 2 : w / 2, cy0 = lab.freeW >= 0 ? lab.freeY + lab.freeH / 2 : h / 2, m = std::min(w, h);   // (new UI, stage 5h: the middle of the free part; the scale stays that of the whole picture)
+    g_marks.centre[0] = cx0; g_marks.centre[1] = cy0;
     const double pxm = lab.pxPerM(m, s.szCur) * std::pow(10, p.zoom);    // points per metre: auto-fit × zoom
     const double px = pxm * kA0;                                           // points per Bohr radius (the web's px)
     const bool isOrb = p.view == "Orbit", bohr = isOrb && p.ostyle == "Bohr 1913";
@@ -831,7 +832,9 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     if (!bohr && (s.layer == "Atom" || s.layer == "Nucleus")) {           // labels only while the whole nucleus is in view
         const double off = std::min(std::max(Rpx * 1.25, 3.0) + 12, h / 2 - 22);
         const Color olHalo = withA(css.card, 0.9);
-        T.draw(nuclideLabel(p.Z, p.N) + "  ·  " + std::to_string(p.Z) + "p, " + std::to_string(p.N) + "n", cx, cy + off + 8, 12, css.fg, 0.5, &olHalo);   // with a thin edge in the page colour, so it reads over the cloud dots
+        const std::string nl = nuclideLabel(p.Z, p.N) + "  ·  " + std::to_string(p.Z) + "p, " + std::to_string(p.N) + "n";
+        { const double lw = T.width(nl, 12) + 4; g_marks.label[0] = cx - lw / 2; g_marks.label[1] = cy + off - 6; g_marks.label[2] = lw; g_marks.label[3] = 18; }   // (stage 5h: for the automatic checks; points)
+        T.draw(nl, cx, cy + off + 8, 12, css.fg, 0.5, &olHalo);   // with a thin edge in the page colour, so it reads over the cloud dots
     }
     if (lab.shellUi) s.infoBox.reset();                                    // (the new UI: no button in the picture)
     else {   // the ⓘ More / Less info button, bottom left above the scale bar
@@ -924,6 +927,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         T.draw(label + "  =  " + metres(bar * 1e-10), 12, yb - 6, 12, css.muted);
     }
     {   // the readout at the top left, on a soft plate (the web engine's info lines)
+        const double isz = lab.infoSize;                                   // 13 points; the new UI 14 (stage 5h)
+        g_marks.infoPx = isz * g_textScale * uiScale;
         const double maxW = lab.infoRight >= 0 ? std::max(40.0, lab.infoRight - 34) : w - 24 - 56 - lab.insetRight;   // (new UI, stage 5g: the plate stops before the subject card and the phase ring)
         std::vector<std::string> rows;
         for (const std::string& t : lab.info()) {                          // wrap at " · " first
@@ -933,21 +938,21 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 const std::size_t b = t.find("  ·  ", a);
                 const std::string part = t.substr(a, b == std::string::npos ? std::string::npos : b - a);
                 const std::string nx = cur.empty() ? part : cur + "  ·  " + part;
-                if (!cur.empty() && T.width(nx, 13) > maxW) { rows.push_back(cur); cur = part; } else cur = nx;
+                if (!cur.empty() && T.width(nx, isz) > maxW) { rows.push_back(cur); cur = part; } else cur = nx;
                 if (b == std::string::npos) break;
                 a = b + 5;
             }
             rows.push_back(cur);
         }
         for (std::size_t i = 0; i < rows.size(); i++) {                    // a single long part still has to fit: break it at spaces
-            if (T.width(rows[i], 13) <= maxW) continue;
+            if (T.width(rows[i], isz) <= maxW) continue;
             std::string line, rest;
             std::size_t a = 0;
             for (;;) {
                 const std::size_t b = rows[i].find(' ', a);
                 const std::string wd = rows[i].substr(a, b == std::string::npos ? std::string::npos : b - a);
                 const std::string nx = line.empty() ? wd : line + " " + wd;
-                if (!line.empty() && T.width(nx, 13) > maxW) { rest = rows[i].substr(a); break; }
+                if (!line.empty() && T.width(nx, isz) > maxW) { rest = rows[i].substr(a); break; }
                 line = nx;
                 if (b == std::string::npos) break;
                 a = b + 1;
@@ -957,15 +962,15 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         }
         bool any = false;
         double mw = 0;
-        for (const std::string& t : rows) { if (!t.empty()) any = true; mw = std::max(mw, T.width(t, 13)); }
+        for (const std::string& t : rows) { if (!t.empty()) any = true; mw = std::max(mw, T.width(t, isz)); }
         if (any) {
-            const double bw = mw + 12 + 8, bh = 17.0 * rows.size() + 10;
+            const double bw = mw + 12 + 8, bh = (isz + 4) * rows.size() + 10;
             g_marks.info[0] = 6; g_marks.info[1] = 4 + lab.insetTop + lab.infoDown; g_marks.info[2] = bw; g_marks.info[3] = bh;   // (for the automatic checks: the info plate, in points)
             dl->AddRectFilled(ImVec2(float(ox + 6 * uiScale), float(oy + (4 + lab.insetTop + lab.infoDown) * uiScale)), ImVec2(float(ox + (6 + bw) * uiScale), float(oy + (4 + lab.insetTop + lab.infoDown + bh) * uiScale)),
                               ImGui::ColorConvertFloat4ToU32(ImVec4(css.card.r, css.card.g, css.card.b, 0.72f)), float(8 * uiScale));
         }
         // on their see-through panel the rows need no halo (in light themes its 8 copies left faint grey marks between letters)
-        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 21 + lab.insetTop + lab.infoDown + 17.0 * i, 13, css.muted, 0, any ? nullptr : &css.card);
+        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 8 + isz + lab.insetTop + lab.infoDown + (isz + 4) * i, isz, css.muted, 0, any ? nullptr : &css.card);
     }
 }
 
