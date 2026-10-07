@@ -1842,8 +1842,10 @@ static void testSunWobble() {
 }
 
 #include "test_theme_style.inc"   // 0.14 stage 1: richer theme styles and Frutiger Aero
+#include "test_look.inc"          // 0.15 stage 5i: the three look options (contrast by the WCAG formula, written out in the test)
 
 int main() {
+    testLookContrast();
     testRoundTrip();
     testBadLines();
     testThemes();

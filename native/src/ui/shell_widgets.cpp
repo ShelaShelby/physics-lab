@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstdlib>
 #include <map>
 
+#include "app/look_options.h"
 #include "app/theme_style.h"
 #include "fonts.h"
 #include "look.h"
@@ -21,10 +23,16 @@ Frame g_f;
 std::map<std::string, float> g_heights;
 std::string g_glassId;
 double g_glassA = 0.95;
+// stage 5i: the look options (PL_LOOK=a|b|c, read once; Dark only; render and tests only). Null = today's tokens, and then nothing below changes.
+const app::lookopt::Tokens* g_loTok = nullptr;
+bool g_loRead = false;
+const app::lookopt::Tokens* g_lo = nullptr;       // this frame's look: set only while the theme is Dark
+app::ThemeColors g_loColors;
+bool g_loBuilt = false;
 
 const char* typeName(Type t) { return t == Type::Caption ? "caption" : t == Type::Body ? "body" : t == Type::Title ? "title" : "key"; }
 ImU32 colOf(const Rgb& c, float a = 1) { return ui::col(c, a); }
-float thick() { return std::max(1.5f, static_cast<float>(1.75 * g_f.dpi * g_f.tf * 0.9)); }       // the icon stroke: 1.75 u
+float thick() { return std::max(g_lo ? 1.25f : 1.5f, static_cast<float>(1.75 * g_f.dpi * g_f.tf * 0.9 * (g_lo ? g_lo->stroke : 1.0f))); }       // the icon stroke: 1.75 u
 }  // namespace
 
 void beginFrame() {
@@ -38,6 +46,15 @@ void beginFrame() {
     const std::string key = c.id + (look().effects ? "+" : "-");
     if (key != g_glassId) { g_glassId = key; g_glassA = app::shell::glassOpacity(c); }
     g_f.panelAlpha = static_cast<float>(g_glassA);
+    if (!g_loRead) { g_loRead = true; g_loTok = app::lookopt::tokens(app::lookopt::fromEnv(std::getenv("PL_LOOK"))); }
+    g_lo = g_loTok && c.id == "dark" ? g_loTok : nullptr;
+    if (g_lo) {
+        if (!g_loBuilt) { g_loColors = app::lookopt::apply(*g_lo, c); g_loBuilt = true; }
+        g_f.c = &g_loColors;
+        g_f.panelAlpha = g_lo->panelAlpha;
+        g_f.m.radiusPanel = app::shell::unitPx(g_lo->radiusPanel, g_f.dpi, g_f.tf);
+        g_f.m.radiusCtl = app::shell::unitPx(g_lo->radiusCtl, g_f.dpi, g_f.tf);
+    }
 }
 const Frame& F() { return g_f; }
 
@@ -46,11 +63,11 @@ ImU32 cMuted(float a) { return colOf(g_f.c->muted, a); }
 ImU32 cAccent(float a) { return colOf(g_f.c->accent, a); }
 ImU32 cFill(float a) { return colOf(g_f.c->accentFill, a); }
 ImU32 cOnFill() { return colOf(app::shell::onAccent(*g_f.c)); }
-static Rgb faceRgb() { const app::ThemeColors& c = *g_f.c; return c.style.button.set ? c.button : app::mixRgb(c.card, c.fg, 0.10f); }
+static Rgb faceRgb() { const app::ThemeColors& c = *g_f.c; return c.style.button.set ? c.button : app::mixRgb(c.card, c.fg, g_lo ? g_lo->faceMix : 0.10f); }
 ImU32 cFace(float a) { return colOf(faceRgb(), a); }
-ImU32 cFaceHover() { return colOf(app::mixRgb(faceRgb(), g_f.c->accent, 0.18f)); }
-ImU32 cFacePress() { return colOf(app::mixRgb(faceRgb(), g_f.c->accent, 0.30f)); }
-ImU32 cEdge() { return g_f.outline ? colOf(g_f.c->fg) : colOf(g_f.c->fg, app::shell::kEdgeAlpha); }
+ImU32 cFaceHover() { return colOf(app::mixRgb(faceRgb(), g_f.c->accent, g_lo ? g_lo->hoverMix : 0.18f)); }
+ImU32 cFacePress() { return colOf(app::mixRgb(faceRgb(), g_f.c->accent, g_lo ? g_lo->pressMix : 0.30f)); }
+ImU32 cEdge() { return g_f.outline ? colOf(g_f.c->fg) : colOf(g_f.c->fg, g_lo ? g_lo->edgeAlpha : app::shell::kEdgeAlpha); }
 ImU32 cHair() { return colOf(g_f.c->line); }
 ImU32 cPanel() { return colOf(g_f.c->card, g_f.panelAlpha); }
 ImU32 cBackdrop(float a) { return colOf(g_f.c->bg, a); }
@@ -247,7 +264,7 @@ void drawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float size, ImU32 col) {
 // ---- panels ----
 bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scroll, bool solid) {
     const Frame& f = g_f;
-    const float pad = shape == Shape::Panel ? static_cast<float>(f.m.s16) : 0.0f;
+    const float pad = shape == Shape::Panel ? static_cast<float>(g_lo ? app::shell::unitPx(g_lo->pad, f.dpi, f.tf) : f.m.s16) : 0.0f;
     const float rounding = shape == Shape::Bar || shape == Shape::Overlay || shape == Shape::Clear ? 0.0f : shape == Shape::Pill ? static_cast<float>(r.h / 2) : ui::corner(static_cast<float>(f.m.radiusPanel));
     ImGui::SetNextWindowPos(ImVec2(static_cast<float>(r.x), static_cast<float>(r.y)), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(static_cast<float>(r.w), static_cast<float>(r.h)), ImGuiCond_Always);
@@ -270,20 +287,20 @@ bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scrol
     else if (!f.plain && shape != Shape::Overlay && shape != Shape::Clear) reach = panelDecor(app::PanelKind::Floating, true);   // Aero and Y2K: their own glass, rim and textures; the glow hugs the edge
     if (shape == Shape::Overlay || shape == Shape::Clear) {
     } else if (f.plain) {
-        if (shape != Shape::Bar) {                                              // a soft edge of at most kHaloMaxPx round the panel (black at low opacity, two layers), only outside its own edge (stage 5c.1:
+        if (shape != Shape::Bar && (!g_lo || g_lo->haloAlpha > 0)) {                                              // a soft edge of at most kHaloMaxPx round the panel (black at low opacity, two layers), only outside its own edge (stage 5c.1:
             const float big = static_cast<float>(app::shell::kHaloMaxPx);         // it was a 16 u drop shadow that spread over the neighbours)
             const ImVec2 outside[4][2] = {{ImVec2(a.x - big, a.y - big), ImVec2(b.x + big, a.y)}, {ImVec2(a.x - big, b.y), ImVec2(b.x + big, b.y + big)},
                                           {ImVec2(a.x - big, a.y), ImVec2(a.x, b.y)}, {ImVec2(b.x, a.y), ImVec2(b.x + big, b.y)}};
             for (const auto& o : outside) {                                     // only outside the panel: under the glass it would show through and make it darker than its opacity says
                 p.dl->PushClipRect(o[0], o[1], false);
-                for (int k = 2; k >= 1; k--) p.dl->AddRectFilled(ImVec2(a.x - k * big * 0.5f, a.y - k * big * 0.5f), ImVec2(b.x + k * big * 0.5f, b.y + k * big * 0.5f), IM_COL32(0, 0, 0, 20), rounding + k * big * 0.5f);
+                for (int k = 2; k >= 1; k--) p.dl->AddRectFilled(ImVec2(a.x - k * big * 0.5f, a.y - k * big * 0.5f), ImVec2(b.x + k * big * 0.5f, b.y + k * big * 0.5f), IM_COL32(0, 0, 0, g_lo ? g_lo->haloAlpha : 20), rounding + k * big * 0.5f);
                 p.dl->PopClipRect();
             }
             reach = big;
         }
         p.dl->AddRectFilled(a, b, solid ? colOf(f.c->card) : cPanel(), rounding);   // (stage 5c.1: the Controls panel is solid: the picture's labels showed through it)
         const float shine = static_cast<float>(f.m.s12 * 3 + f.m.s4);          // a faint top-lit gradient: the text colour at 6 % fading out over about 40 u
-        const ImU32 top = ui::col(f.c->fg, app::shell::kShineAlpha), none = ui::col(f.c->fg, 0);
+        const ImU32 top = ui::col(f.c->fg, g_lo ? g_lo->shineAlpha : app::shell::kShineAlpha), none = ui::col(f.c->fg, 0);
         p.dl->PushClipRect(a, ImVec2(b.x, std::min(b.y, a.y + shine)), true);
         p.dl->AddRectFilledMultiColor(ImVec2(a.x + rounding * 0.5f, a.y), ImVec2(b.x - rounding * 0.5f, std::min(b.y, a.y + shine)), top, top, none, none);
         p.dl->PopClipRect();
