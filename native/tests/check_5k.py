@@ -255,6 +255,7 @@ def write_png(path, w, h, rows):                                # rows: list of 
 def part_windows(binary, work):
     # Settings is open, then the Benchmark window: both stay inside the app window, the Start button is in view and starts the run; the Controls handle is below an open window (z order)
     asks = {}
+    under, free = [], None
     for sz in ("880x560", "1109x882", "1920x1080"):
         env = {"PL_NEWUI": "on", "PL_OPEN": "settings", "PL_BENCH": "ask", "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "0.3"}
         r = run_app(binary, work, f"kw_{sz}", env, frames=40, size=sz)
@@ -281,13 +282,20 @@ def part_windows(binary, work):
             check(widx(order, "##shellHandle") < widx(order, key), f"{sz}: the handle is drawn BELOW the open window {key} ({order})")
             if hdl and r.rects.get(nm):
                 print(f"  {sz}: handle {'overlaps' if overlap(hdl, r.rects[nm]) else 'does not overlap'} {nm}")
-        # the handle's centre belongs to the window: where it lies under the Benchmark window the pixel is not the handle's pill
-        if hdl and bw and overlap(hdl, bw):
+        # the handle's centre belongs to the window: where it lies under the Benchmark window the pixels are not the handle's pill.
+        # 0.16 stage 4: the Benchmark window's text can lie under the centre, so "flat" is no test any more; the 5x5 block there is compared with the handle's own
+        # block (pill and chevron) from a size where the handle lies free, and must differ from it (collected here, judged after the loop)
+        if hdl:
             bm = Bmp(r.bmp)
             hx, hy = mid(hdl)
             blk = [bm.px(int(hx) + dx, int(hy) + dy) for dx in range(-2, 3) for dy in range(-2, 3)]
-            rng = max(max(c[i] for c in blk) - min(c[i] for c in blk) for i in range(3))
-            check(rng <= 12, f"{sz}: the pixels at the handle's centre are the window's, not the handle's chevron (range {rng})")
+            if bw and overlap(hdl, bw): under.append((sz, (hx, hy), blk))
+            elif not overlap(hdl, bw or hdl) and free is None: free = blk
+    check(free is not None, "a size where the handle lies free of the Benchmark window gives the handle's own pixels")
+    for sz, c, blk in under:
+        if free:
+            same = sum(1 for p, q in zip(blk, free) if max(abs(p[i] - q[i]) for i in range(3)) <= 12)
+            check(same < 25, f"{sz}: the pixels at the handle's centre {c[0]:.0f},{c[1]:.0f} are the window's, not the handle's pill and chevron ({same} of 25 pixels equal the handle's)")
 
 def overlap(a, b):
     return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]

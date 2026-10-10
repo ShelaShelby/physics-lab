@@ -87,9 +87,11 @@ add_library(app_core STATIC
   src/app/shot.cpp
   src/app/fps.cpp
   src/app/bench.cpp
+  src/app/bench_scenes.cpp
   src/app/gpu_timer.cpp
 )
 target_include_directories(app_core PUBLIC src)
+target_link_libraries(app_core PUBLIC atom_core)   # 0.16 stage 4: bench_scenes.cpp reads the Atom Lab scene texts
 target_compile_options(app_core PRIVATE ${PL_WARNINGS})
 
 # ---- tests ----

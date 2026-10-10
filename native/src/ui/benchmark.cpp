@@ -9,11 +9,11 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
-#include <deque>
 #include <functional>
 #include <memory>
 
 #include "app/bench.h"
+#include "app/bench_scenes.h"
 #include "app/gpu_timer.h"
 #include "app/shot.h"
 #include "atom/atom_bench.h"
@@ -35,9 +35,7 @@ namespace {
 
 // frame (optional): called at the start of every frame after the set-up, with the frame number from the set-up and the number of the counted frame (-1 while warming up)
 struct SceneDef { BenchSceneInfo info; std::function<void(AppState&)> setup; std::function<void(AppState&, int, int)> frame; };
-constexpr int kNormalScenes = 4;
-constexpr int kStressScenes = 3;         // scenes 5 to 7; the speed-risk scenes (8 and up, Atom Lab, 0.10.6 stage 7) come after them
-constexpr int kStressBeltScale = 8;      // scenes 1 to 4 never change, so results stay comparable between versions; the stress scenes come after them
+constexpr int kStressBeltScale = 8;      // scene 2: 8 times the rocks of scene 1
 
 // ---- the scenes (chosen by measuring which settings cost the most, see REPORT.md) ----
 void commonSetup(AppState& app) {
@@ -64,13 +62,13 @@ void orbitHeaviest(AppState& app) {
     setZoom(app, 0.0);
 }
 
-// stress scene: the same view as scene 1, with 8 times as many rocks in the belts and the Oort cloud (the rocks do not touch each other: the physics is the same)
+// scene 2: the same view as scene 1, with 8 times as many rocks in the belts and the Oort cloud (the rocks do not touch each other: the physics is the same)
 void orbitStress(AppState& app) {
     orbitHeaviest(app);
     app.sys.belts = orbit::makeBelts(app.sys.epochMs, kStressBeltScale);
 }
 
-// 0.13 stage 4: the same two scenes with the rocks' places worked out by the CPU (GPU rocks Off): scenes 31 and 32, at the very end, to compare with scenes 1 and 6
+// 0.13 stage 4: the same two scenes with the rocks' places worked out by the CPU (GPU rocks Off): scenes 17 and 18, to compare with scenes 1 and 2
 void orbitHeaviestCpuRocks(AppState& app) { orbitHeaviest(app); app.set.gpuRocks = false; }
 void orbitStressCpuRocks(AppState& app) { orbitStress(app); app.set.gpuRocks = false; }
 
@@ -80,57 +78,31 @@ void atomScene(AppState& app, int which) {
     atom::benchSetup(app.atom, which, app.canvasW, app.canvasH);
     app.tempK = 293.15;                                  // the Temperature card's little box is drawn every frame: the same temperature for every run
 }
-void atomNucleus(AppState& app) { atomScene(app, 0); }
-void atomCloud(AppState& app) { atomScene(app, 1); }
 void atomNucleon(AppState& app) { atomScene(app, 2); }
-void atomStress(AppState& app) { atomScene(app, 3); }
-void atomCloudGlow(AppState& app) { atomScene(app, 4); }
 
-const char* const STRESS_ATOM_WHAT = "oganesson-294 (118 protons, 176 neutrons, the biggest nucleus the app has), Accurate quarks, + Sea detail, Fuzzy nucleons, zoomed in 0.6 (about 4 times) closer than the whole nucleus, so that every nucleon is drawn large";
-
-// the speed-risk scenes: the Atom Lab's heaviest paths (audit findings 10, 11, 12), numbered from 8; the names and settings are in atom/atom_bench.cpp
-void atomRisk(AppState& app, int which) { atomScene(app, which); }
+// 0.16 stage 4: scenes 1 to 11 are the default run; 12 to 18 (the old CPU paths) run only with "Compare old CPU paths". Names and texts: app/bench_scenes.cpp.
 const std::vector<SceneDef>& scenes() {
     static const std::vector<SceneDef> v = [] {
-    std::vector<SceneDef> v = {
-        {{"1. Orbit Lab, heaviest view", "3D view, belts and Oort cloud on, all Solar System extras on, full night sky with constellation lines and names, "
-                                          "far-away things on, full orbit trails, true scale, fastest time speed (1 s = about 50 years), zoom x1, fixed camera. "
-                                          "From 0.13 stage 4 the rocks' places are worked out on the graphics card when the PC has OpenGL 4.3 (scene 31 is this scene with the processor doing it)"}, orbitHeaviest},
-        {{"2. Atom Lab, uranium-238 nucleus", "uranium-238 (92 protons, 146 neutrons), zoomed to the whole nucleus, Cinematic quarks, + Sea detail, Fuzzy nucleons"}, atomNucleus},
-        {{"3. Atom Lab, Cloud 3D", "uranium-238, Cloud 3D view, the 4f orbital (the biggest cloud), cloud style Classic, density Normal (all 12,000 dots), fixed camera"}, atomCloud},
-        {{"4. Atom Lab, one nucleon", "uranium-238, Accurate quarks, + Sea detail, zoomed all the way into one nucleon (the first one)"}, atomNucleon},
-        {{"5. Stress: Atom Lab, the biggest nucleus", STRESS_ATOM_WHAT}, atomStress},
-        {{"6. Stress: Orbit Lab, 8 times the rocks", "scene 1 (3D, everything on, true scale, zoom x1, fastest time) with 8 times as many rocks in the asteroid belt, the Trojans, the Kuiper belt and the Oort cloud "
-                                                     "(48,000 instead of 6,000; the same kinds of orbits, a fixed random seed). The rocks do not pull on each other, so the physics is unchanged. "
-                                                     "From 0.13 stage 4 their places are worked out on the graphics card when the PC has OpenGL 4.3 (scene 32 is this scene with the processor doing it)"}, orbitStress},
-        {{"7. Stress: Atom Lab, Cloud 3D, Glow, 48,000 dots", "scene 3 (uranium-238, Cloud 3D, the 4f orbital, fixed camera) with cloud style Glow (soft dots that add up) and density Ultra (48,000 dots)"}, atomCloudGlow},
-    };
-    static std::vector<std::string> names;               // the names with their numbers, kept alive for the const char* of the list
-    names.clear();
-    const int first = int(v.size()) + 1;                  // the number of the first speed-risk scene (8)
-    for (int w = atom::kBenchFirstRisk; w < atom::kBenchSceneCount; w++) names.push_back(std::to_string(first + w - atom::kBenchFirstRisk) + ". " + atom::benchSceneInfo(w).name);
-    static std::vector<std::string> whats;
-    whats.clear();
-    for (int w = atom::kBenchFirstRisk; w < atom::kBenchSceneCount; w++) whats.push_back(atom::benchSceneInfo(w).what);
-    for (int w = atom::kBenchFirstRisk; w < atom::kBenchSceneCount; w++) {
-        const int k = w - atom::kBenchFirstRisk;
-        v.push_back({{names[k].c_str(), whats[k].c_str()}, [w](AppState& a) { atomRisk(a, w); }, [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); }});
-    }
-    {   // 0.13 stage 4: the Orbit Lab twins of scenes 1 and 6 with GPU rocks Off, numbered after the last Atom Lab scene (31 and 32), so no old number moved
-        static const std::string n1 = std::to_string(int(v.size()) + 1) + ". Orbit Lab, heaviest view, GPU rocks OFF (the CPU path, to compare with scene 1)";
-        static const std::string w1 = "scene 1 (3D view, belts and Oort cloud, everything on, true scale, fastest time, zoom x1) with the GPU rocks switch Off: the processor places the 6,000 rocks, as before 0.13 stage 4. Scene 1 is the same with it On";
-        v.push_back({{n1.c_str(), w1.c_str()}, orbitHeaviestCpuRocks});
-        static const std::string n2 = std::to_string(int(v.size()) + 1) + ". Stress: Orbit Lab, 8 times the rocks, GPU rocks OFF (the CPU path, to compare with scene 6)";
-        static const std::string w2 = "scene 6 (the same view with 48,000 rocks) with the GPU rocks switch Off: the processor places all 48,000 rocks. Scene 6 is the same with it On";
-        v.push_back({{n2.c_str(), w2.c_str()}, orbitStressCpuRocks});
-    }
-    for (int w = atom::kBenchChartCpuFirst; w < atom::kBenchAtomScenes; w++) {   // 0.13 stage 4 part B: scenes 19 and 20 with the GPU chart cache Off, after the Orbit Lab twins (33 and 34); 0.16 stage 3: the nucleus at full zoom (35), last
-        static std::deque<std::string> cn, cw;
-        cn.push_back(std::to_string(int(v.size()) + 1) + ". " + atom::benchSceneInfo(w).name);
-        cw.push_back(atom::benchSceneInfo(w).what);
-        v.push_back({{cn.back().c_str(), cw.back().c_str()}, [w](AppState& a) { atomRisk(a, w); }, [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); }});
-    }
-    return v;
+        std::vector<SceneDef> v;
+        static std::vector<std::string> keepName, keepWhat;      // the c_str() of these are kept by the list
+        keepName.reserve(app::kBenchAllScenes); keepWhat.reserve(app::kBenchAllScenes);
+        for (const app::BenchSceneText& t : app::benchSceneTexts()) {
+            keepName.push_back(t.name); keepWhat.push_back(t.what);
+            SceneDef d{{keepName.back().c_str(), keepWhat.back().c_str()}, nullptr, nullptr};
+            const int w = t.atomWhich;
+            switch (t.kind) {
+                case app::BenchKind::OrbitHeaviest: d.setup = orbitHeaviest; break;
+                case app::BenchKind::OrbitRocks8: d.setup = orbitStress; break;
+                case app::BenchKind::OrbitHeaviestCpuRocks: d.setup = orbitHeaviestCpuRocks; break;
+                case app::BenchKind::OrbitRocks8CpuRocks: d.setup = orbitStressCpuRocks; break;
+                case app::BenchKind::Atom:
+                    d.setup = [w](AppState& a) { atomScene(a, w); };
+                    d.frame = [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); };
+                    break;
+            }
+            v.push_back(d);
+        }
+        return v;
     }();
     return v;
 }
@@ -219,8 +191,7 @@ struct BenchState {
     std::vector<GpuSample> gpuReady;
     app::GpuVerdict gpuCheck;
     bool gpuChecked = false;
-    bool includeStress = false;               // the checkbox: run the stress scenes after the four normal ones
-    bool includeRisk = false;                 // the checkbox: run the Atom Lab speed-risk scenes (after the stress ones)
+    bool includeCompare = false;              // the checkbox "Compare old CPU paths": scenes 12 to 18 after the default 11
     std::vector<int> list;                    // the scenes of this run (indexes into scenes()), fixed when it starts
     int sceneFrame = 0, measFrame = -1;       // frames since the scene was set up; counted frames so far (-1: still warming up)
     double warm = app::kBenchWarmupS, measure = app::kBenchMeasureS;
@@ -229,12 +200,10 @@ struct BenchState {
 
 namespace {
 
-// which scenes run: the 4 normal ones, then the 3 stress ones if asked, then the speed-risk ones if asked (indexes into scenes())
+// which scenes run: the default 11, then the 7 old-CPU-path twins if asked (indexes into scenes())
 std::vector<int> sceneList(const BenchState& b) {
     std::vector<int> v;
-    for (int i = 0; i < kNormalScenes; i++) v.push_back(i);
-    if (b.includeStress) for (int i = kNormalScenes; i < kNormalScenes + kStressScenes; i++) v.push_back(i);
-    if (b.includeRisk) for (int i = kNormalScenes + kStressScenes; i < int(scenes().size()); i++) v.push_back(i);
+    for (int i = 0; i < (b.includeCompare ? app::kBenchAllScenes : app::kBenchDefaultScenes); i++) v.push_back(i);
     return v;
 }
 int activeScenes(const BenchState& b) { return int(sceneList(b).size()); }
@@ -281,9 +250,9 @@ void begin(AppState& app) {
     const char* s = reinterpret_cast<const char*>(plgl::glGetString(GL_RENDERER)); e.gpu = s ? s : "";
     s = reinterpret_cast<const char*>(plgl::glGetString(GL_VERSION)); e.glVersion = s ? s : "";
     s = reinterpret_cast<const char*>(plgl::glGetString(GL_VENDOR)); e.vendor = s ? s : "";
-    e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks);   // (scenes 1 and 6 are the ones it changes: the benchmark's own settings below start from the defaults, so it is On)
-    e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline);   // (scenes 16 and 17 are the ones it changes)
-    e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute);   // which way the Atom Lab's superposition and jumps run (scenes 11 to 15 are the ones it changes)
+    e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks);   // (scenes 1, 2, 17 and 18 are the ones it changes: the benchmark's own settings below start from the defaults, so it is On)
+    e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline);   // (scenes 9, 10, 15 and 16 are the ones it changes)
+    e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute);   // which way the Atom Lab's superposition and jumps run (scenes 7, 8, 13 and 14 are the ones it changes)
     const ImGuiIO& io = ImGui::GetIO();
     const float sc = ImGui::GetStyle().FontScaleDpi;
     e.windowW = int(io.DisplaySize.x * io.DisplayFramebufferScale.x + 0.5f); e.windowH = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);
@@ -364,7 +333,7 @@ void benchmarkButton(AppState& app) {
     if (why) ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("%s", why ? why : "Runs fixed scenes and gives numbers to compare between runs and PCs");
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("A test of about %d seconds: it measures how fast the app draws, to compare between PCs or versions.", int(scenes().size() * (app::kBenchWarmupS + app::kBenchMeasureS)));
+    ImGui::TextWrapped("A test of about %d seconds: it measures how fast the app draws, to compare between PCs or versions.", int(app::kBenchDefaultScenes * (app::kBenchWarmupS + app::kBenchMeasureS)));
     ImGui::PopStyleColor();
 }
 
@@ -372,8 +341,7 @@ void benchmarkTestHook(AppState& app) {
     static int frames = 0;
     const char* v = SDL_getenv("PL_BENCH");
     if (!v || ++frames != 5) return;
-    st(app).includeStress = SDL_getenv("PL_BENCH_STRESS") != nullptr;      // for automatic checks: the checkbox
-    st(app).includeRisk = SDL_getenv("PL_BENCH_RISK") != nullptr;          // for automatic checks: the second checkbox
+    st(app).includeCompare = SDL_getenv("PL_BENCH_RISK") != nullptr;       // for automatic checks: ticks "Compare old CPU paths" (the name is from 0.16 stage 2)
     if (std::string(v) == "start") begin(app); else st(app).stage = BenchState::Stage::Ask;
 }
 
@@ -514,15 +482,9 @@ void benchmarkWindow(AppState& app) {
             const float childH = bodyH > 0 ? std::min(bodyH, room) : room;
             ImGui::BeginChild("##benchBody", ImVec2(0, childH), ImGuiChildFlags_None);
             for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[list[i]].info.name);
-            ImGui::Checkbox("Include stress scenes (3 extra, much heavier)", &b.includeStress);
-            if (ImGui::IsItemHovered()) ui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
-            {   // the number is counted, not typed: it was "11" in 0.10.6 and the list has grown since
-                char riskLabel[96];
-                std::snprintf(riskLabel, sizeof riskLabel, "Include speed-risk scenes (%d extra)", atom::kBenchAtomScenes - atom::kBenchFirstRisk + 2);   // (+ the two Orbit Lab twins of scenes 1 and 6, 0.13 stage 4; the chart twins are in kBenchAtomScenes)
-                ImGui::Checkbox(riskLabel, &b.includeRisk);
-            }
-            if (ImGui::IsItemHovered()) ui::SetTooltip("The Atom Lab's heaviest paths, each with its settings in its name: phase colours with Classic dots, a cloud jump, a superposition, the 90 %% outline (first use, and with the cut dragged) and the nucleus view. "
-                                                          "Look at the Worst column: these are about stutter, which the average hides.");
+            ImGui::Checkbox("Compare old CPU paths", &b.includeCompare);
+            if (ImGui::IsItemHovered()) ui::SetTooltip("Adds %d scenes (%d to %d): scenes of the list above run again with the work done by the processor, the way older versions did it, "
+                                                          "so the difference to the graphics card's way can be read. Off by default; it makes the test longer.", app::kBenchAllScenes - app::kBenchDefaultScenes, app::kBenchDefaultScenes + 1, app::kBenchAllScenes);
             ImGui::Spacing();
             ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "
                                "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "

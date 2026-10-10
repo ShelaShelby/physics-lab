@@ -31,7 +31,7 @@ def part_scrollbar(binary, work):
 
 def part_bench(binary, work):
     for sz in ("880x560", "1280x700"):
-        r = run_app(binary, work, f"b_bn_{sz}", {"PL_NEWUI": "on", "PL_OPEN": "settings", "PL_BENCH": "ask", "PL_BENCH_STRESS": "1", "PL_BENCH_RISK": "1"}, frames=40, size=sz)
+        r = run_app(binary, work, f"b_bn_{sz}", {"PL_NEWUI": "on", "PL_OPEN": "settings", "PL_BENCH": "ask", "PL_BENCH_RISK": "1"}, frames=40, size=sz)
         h = r.window[1]
         bw, st = r.rects.get("win.benchmark"), r.rects.get("bench.start")
         check(bw is not None and st is not None, f"{sz}: window and Start are drawn")

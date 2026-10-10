@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.16", "Benchmark: 11 scenes instead of 34, about 2 minutes",
+     "The Benchmark now runs 11 scenes of 10 seconds each (about 2 minutes instead of about 6): the heaviest Orbit Lab view, 8 times the rocks, the oganesson-294 nucleus, the nucleus at full zoom with the camera moving, one nucleon, "
+     "phase colours with 48,000 dots, a cloud jump in flight, a superposition that beats, an outline's first use, the outline with the cut dragged, and the chart with the decay chain. "
+     "The scenes that only repeated another one were removed. The two old boxes (stress scenes, speed-risk scenes) are replaced by one: \"Compare old CPU paths\" adds 7 scenes (12 to 18) that run scenes of the list again with the processor doing the work, the way older versions did. "
+     "Every scene number in the texts and in the report is the new one."},
     {"0.16", "Atom Lab: less work at full zoom on the nucleus; benchmark counts slow frames",
      "At full zoom on a nucleus (x10,000,000) the Atom Lab no longer makes the parts of nearby nucleons that are wholly outside the picture: their gluon cloud, sea quarks, rings and lines. "
      "The picture is the same pixel for pixel. With \"+ Sea\" the antiquark rings alone were up to 311,076 corners a frame in Accurate, Classic and every light theme; now 36. "

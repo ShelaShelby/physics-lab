@@ -16,6 +16,7 @@
 #include "app/fps.h"
 #include "app/history.h"
 #include "app/bench.h"
+#include "app/bench_scenes.h"
 #include "app/grid.h"
 #include "app/frame_time.h"
 #include "app/gpu_timer.h"
@@ -1142,6 +1143,38 @@ static void testBenchGpuColours() {
     }
     checkTrue("scene numbers: every scene number in the risk scenes' texts (" + std::to_string(mentions) + " of them) is between 1 and 30", inRange && mentions >= 8);
 }
+// ---- 0.16 stage 4: the trimmed benchmark list (11 scenes, 7 old-CPU twins behind a box): every "scene N" in the texts exists, each twin names its original ----
+static void testBenchSceneNumbers() {
+    const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
+    checkTrue("benchmark list: 11 default scenes and 18 in all", app::kBenchDefaultScenes == 11 && app::kBenchAllScenes == 18 && int(v.size()) == 18);
+    bool numbered = true, plain = true, inRange = true; int mentions = 0;
+    for (std::size_t i = 0; i < v.size(); i++) {
+        numbered = numbered && v[i].name.rfind(std::to_string(i + 1) + ". ", 0) == 0;
+        plain = plain && v[i].name.find("Stress") == std::string::npos && v[i].name.find("Risk ") == std::string::npos;
+        const std::string t = v[i].name.substr(v[i].name.find(". ") + 2) + " " + v[i].what;       // (the scene's own number in front of the name is not a mention)
+        for (std::size_t p = 0; (p = t.find("cene", p)) != std::string::npos; p += 4) {
+            std::size_t j = p + 4; while (j < t.size() && (t[j] == 's' || t[j] == ' ')) j++;
+            while (j < t.size() && std::isdigit((unsigned char)t[j])) {
+                const int n = std::atoi(t.c_str() + j); mentions++; inRange = inRange && n >= 1 && n <= 18 && n != int(i + 1);
+                while (j < t.size() && std::isdigit((unsigned char)t[j])) j++;
+                if (t.compare(j, 5, " and ") == 0) j += 5; else if (t.compare(j, 4, " to ") == 0) j += 4; else break;
+            }
+        }
+    }
+    checkTrue("benchmark list: the names are numbered 1 to 18 in order, without 'Stress:' or 'Risk NN:'", numbered && plain);
+    checkTrue("benchmark list: every scene number in a name or text (" + std::to_string(mentions) + " of them) is a scene of the list, and none is the scene itself", inRange && mentions >= 20);
+    bool twins = true;
+    for (std::size_t i = 0; i < v.size(); i++) {
+        const int o = v[i].twinOf;
+        if ((i >= 11) != (o != 0)) { twins = false; continue; }
+        if (!o) continue;
+        const std::string want = "scene " + std::to_string(o);
+        twins = twins && o <= 11 && v[i].name.find("compare with " + want) != std::string::npos && v[i].what.find(want) != std::string::npos
+                && v[o - 1].what.find("cene " + std::to_string(i + 1)) != std::string::npos        // and the original points back at its twin
+                && (v[i].kind == app::BenchKind::Atom) == (v[o - 1].kind == app::BenchKind::Atom);
+    }
+    checkTrue("benchmark list: scenes 12 to 18 are the twins of 6, 7, 8, 9, 10, 1 and 2; each names its original, and the original names it", twins && v[11].twinOf == 6 && v[12].twinOf == 7 && v[13].twinOf == 8 && v[14].twinOf == 9 && v[15].twinOf == 10 && v[16].twinOf == 1 && v[17].twinOf == 2);
+}
 // ---- 0.13 stage 2: the CPU-comparison scenes for the superposition and the jump, and the sentence about which way it runs ----
 static void testBenchGpuCompute() {
     using atom::kBenchFirstRisk;
@@ -1882,6 +1915,7 @@ int main() {
     testBench();
     testBenchAtomScenes();
     testBenchRiskScenes();
+    testBenchSceneNumbers();
     testBenchGpuColours();
     testBenchGpuCompute();
     testBenchGpuOutline();
