@@ -19,6 +19,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 1a of the 0.16 clean-up: the Atom Lab's last old-panel features",
+     "With New UI On, the Atom Lab's Controls panel now has the Dirac levels switch (Relativity, with the same words as before) and a Restart atom button (a fresh atom, the same settings). The data sheet's Spectrum tab shows the lab's own light spectrum, with the Dirac level rows when Dirac is On, below the NIST spectrum. Settings, Performance shows the line \"Picture: N draw calls, M instanced shapes\" in the Atom Lab. Nothing was removed."},
     {"0.15", "Full UI rework, stage 5t: grey segments and check boxes",
      "In the Controls panel the chosen part of a segmented button and a ticked check box are now grey, like the sliders, in every theme. The label and the tick are white or black, whichever reads better. The bottom toolbar and the Settings tiles are unchanged."},
     {"0.15", "Full UI rework, stage 5r: the toolbar pills are flat",

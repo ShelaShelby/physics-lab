@@ -7,6 +7,7 @@
 #include "atom/atom_core.h"
 #include "atom/atom_learn.h"
 #include "atom/atom_tools.h"
+#include "atom/dirac.h"
 #include "orbit/format.h"
 #include "ui/atom_panel.h"
 #include "ui/fonts.h"
@@ -210,6 +211,7 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
         viewSelector(p, L);
         if (atom::toolShown(L, Tool::BuildAnother) && pButton(p, "nucleus.build", "Build another")) atom::pressTool(L, Tool::BuildAnother);
         if (atom::toolShown(L, Tool::Reshuffle) && pButton(p, "nucleus.reshuffle", "Reshuffle nucleons")) atom::pressTool(L, Tool::Reshuffle);
+        if (pButton(p, "atom.restart", "Restart atom")) L.restart();     // 0.16 stage 1a: the old panel's Reset (a fresh atom, the same settings)
         notesFold(p, "view", {"Zoom in to a nucleon and click one to dive inside it.", "Each dot is one possible place to find the electron (one electron, non-relativistic model)."});
     }
     const atom::AtomParams& P = L.p;
@@ -298,6 +300,8 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
             if (pButton(p, "atom.auto", displayable(L.autoText()), Face::Secondary, L.s.autoPhotons)) L.toggleAuto();
             notesFold(p, "jump", {ui::atomNote(orbit ? "jumpOrbit" : "jumpCloud")});
         }
+        // 0.16 stage 1a: the Dirac levels switch (old: the "Light spectrum" section); the lab's own spectrum picture is on the data sheet's Spectrum tab
+        choiceRow(app, p, "dirac", displayable(atom::kDiracLabel), ui::atomChoices("dirac"), P.dirac);
         // Check a jump (old: the "Lifetimes and jumps (NIST)" card): the same rows, the same result lines (ui::atomJumpCheck, atom/lifetime.h, NIST ASD)
         choiceRow(app, p, "jfrom", "Check a jump: from (the upper shell)", ui::atomChoices("jfrom"), P.jfrom);
         choiceRow(app, p, "jto", "to (the lower shell)", ui::atomChoices("jto"), P.jto);

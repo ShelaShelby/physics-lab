@@ -107,7 +107,7 @@ std::string atomSettingsLine(const AppState& app) {
     add("cstyle", p.cstyle); add("cdens", p.cdens); add("super", p.super); add("orb2", p.orb2); add("pAx2", p.pAx2); add("dAx2", p.dAx2); add("fAx2", p.fAx2); add("mix", num(p.mix));
     add("cutAxis", p.cutAxis); add("cut", num(p.cut)); add("ostyle", p.ostyle); add("scale", p.scale); add("zoom", num(p.zoom)); add("spin", num(L.s.spin));
     add("qstyle", p.qstyle); add("detail", p.detail); add("style", p.style); add("tilt", num(L.s.chartView.tilt)); add("cheight", L.s.chartView.height == atom::ChartHeightMode::Binding ? "Binding energy per nucleon" : "Half-life");
-    add("outline", p.outline); add("phase", p.phase); add("chain", num(L.s.showChain)); add("walkAuto", num(L.s.walkAuto)); add("walkSteps", num(static_cast<double>(L.s.walk.steps.size())));
+    add("outline", p.outline); add("dirac", p.dirac); add("phase", p.phase); add("chain", num(L.s.showChain)); add("walkAuto", num(L.s.walkAuto)); add("walkSteps", num(static_cast<double>(L.s.walk.steps.size())));
     add("jfrom", p.jfrom); add("jto", p.jto); add("auto", num(L.s.autoPhotons)); add("jumping", num(L.s.jumping)); add("Z", num(p.Z)); add("N", num(p.N));
     // (stage 5e) what a photon click started (the words of the last photon: emitted / absorbed, and from which level) and what the picture drew for the marks (atom/atom_view.h)
     add("last", L.s.last); add("pending", L.s.photon ? L.s.photon->kind : L.s.photonAfter ? L.s.photonAfter->kind : std::string("none"));

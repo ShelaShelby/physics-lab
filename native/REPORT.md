@@ -1,29 +1,21 @@
-# Native Physics Lab 0.16 stage 1: AUDIT ONLY - STOPPED, gaps found. Nothing removed, nothing pushed.
+# Native Physics Lab 0.16 stage 1a: the Atom Lab's old-panel gaps get a New UI home (nothing removed)
 
-Rule (CLAUDE.md / job): any old-UI control with no New UI home => change nothing, list the gaps.
-Flag: newUiOn() in ui/shell.cpp:464 (PL_NEWUI env or prefs.newUi). Old code behind it: orbitPanel/orbitPanelContents
-(ui/orbit_panel.cpp), atomPanel/atomPanelContents (ui/atom_panel.cpp), header/atomBottomBar, FPS counter (main.cpp ~486-507).
-The New UI itself still shows the Atom Lab's "Old panel" (top.old button, menu:old, shell.cpp:545/980/1083-1090).
+## What changed
+- Dirac levels switch: Controls panel, Photons section (shell_atom.cpp), same key "dirac", Off/On, same words. The choice table moved to atomChoices("dirac") (atom_panel.cpp); the old row uses it too.
+- The lab's own spectrum (explanation, picture, note, Dirac level rows only when On): one function labSpectrumCard() in atom_panel.cpp, called by the old panel and by the data sheet's Spectrum tab (below the NIST card, under a "Light spectrum" heading). No new text.
+- "Restart atom" in the Controls panel View section, next to Build another / Reshuffle: calls the same L.restart() as the old Reset. (It is in the Controls panel, not a menu: that is where those two live in the code.)
+- Draw-call line: now printed by performanceCard() when the Atom Lab is open (Settings and the old panel); the old panel's own copy was removed so it is not shown twice.
+- Test hooks: PLASTATE now also prints dirac; a "drawcalls shown" audit note.
 
-## Orbit Lab: no gap found
-Every control of orbitPanelContents has a New UI home (shell_orbit.cpp / shell.cpp / settings.cpp): play, time speed, presets,
-Journey and dates, Learn, Real/Simple + 1PN + wobble, 2D/3D, drag/spin, zoom, sizes, trails, follow, slow moons/spin, reset view,
-sky, constellations, far things, extras, go-to tiles, Save image, Defaults, lab switch, Performance (Settings).
+## The three extra old-panel items (home found, nothing added)
+- Decay history: the data sheet's Decay tab (shell.cpp:223, from atomSubject().decayTab).
+- Atom Learn buttons (4 guides): the Learn tab's Atom Lab cards (app_tabs.cpp:219-226, app_text.inc:227-230); menu "Learn" and the top-bar Learn icon open it.
+- "What am I even looking at?": the first Atom Lab card in the same Learn tab (guide 1).
 
-## Atom Lab: GAPS (found by grep of shell*.cpp / settings.cpp; not run in the app)
-1. Dirac levels switch ("Light spectrum" section, atom_panel.cpp:1027, param "dirac" Off/On). New UI: no control anywhere (settings.cpp
-   only saves / loads the value). Without it the Dirac level split cannot be turned on.
-2. The lab's own simulated light spectrum (atom_panel.cpp:1030-1037): spectrumPicture(), spectrumNote(), diracExplain/diracOnNote and
-   the Dirac level rows (diracLevelRows). The data sheet has only the NIST card (realSpectrumCard); this picture and text are not in it.
-3. "Reset" button (atom_panel.cpp:870, L.restart(): a fresh atom, same settings). New UI: only Defaults (which also resets the
-   settings); no restart-only action.
-4. Performance line "Picture: N draw calls, M instanced shapes" (atom_panel.cpp:1055). Not found in the New UI (performanceCard is in Settings).
-Not checked in detail (please confirm): Decay history list (atom_panel.cpp:916; the subject card may cover it), Atom Learn buttons
-and the "What am I even looking at?" help button (atom_learn.cpp:184/189; menu "Learn" exists), Where the electron is found (radial: in the data sheet, OK).
-
-## Proposed next step (needs the owner)
-Give gaps 1-4 a New UI home (Dirac switch + lab spectrum card in the data sheet or View panel, a Restart action, draw-call line in
-the readout / Settings Performance), or accept their loss. Then run this job again.
+## Tested (Linux, software OpenGL; not Windows, not a real GPU)
+- New test ui6a_atom_gaps (tests/check_6a.py): 3 themes, 1280x1800. FAILED on the old code (18 of 18 checks), passes now (24 checks).
+- check.sh quick exit 0. ctest: atom_toolbar, atom_chip, controls_panel, atom_panel, cards_atom, ui5h_cards, ui5i_sheet, app_settings, ui6a_atom_gaps (see final result below).
+- Looked at: Spectrum tab with Dirac On (picture, note, level rows fine), Controls panel (Restart atom, Dirac switch fine).
 
 ## Not tested
-Nothing was built or run. No tests, no screenshots, no Windows run. apt packages installed only.
+- Windows run, speed, real mouse. Not looked at: the Settings performance card (it is below the Settings window's scroll; only the audit note proves it is drawn). No full suite.

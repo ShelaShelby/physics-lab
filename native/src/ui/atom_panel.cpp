@@ -182,6 +182,7 @@ const AtomChoices& atomChoices(const std::string& key) {
         {"super", {{"Off", "Off · one orbital"},
                                                   {"On", "On · two orbitals at once: the cloud changes in time, at the beat frequency (quantum beats). Slowed down on screen."}}},
         {"cutAxis", {{"Vertical", "Vertical (contains the z axis)"}, {"Horizontal", "Horizontal (across the z axis)"}}},
+        {"dirac", {{"Off", "Off · " + diracOffNote()}, {"On", "On · the Dirac levels: a level depends on j as well as n, so lines split."}}},   // 0.16 stage 1a: one table for the old row and the Controls panel
         {"orb", SHELLS}, {"orb2", SHELLS}, {"jfrom", SHELLS}, {"jto", SHELLS},
         {"pAx", P_AX}, {"dAx", D_AX}, {"fAx", F_AX}, {"pAx2", P_AX}, {"dAx2", D_AX}, {"fAx2", F_AX}};
     static const AtomChoices none;
@@ -863,6 +864,22 @@ static void chainSection(AtomLab& L) {
     mutedWrapped(chainTimeNote(), 12.0f / 16);
 }
 
+// 0.16 stage 1a: the lab's own light spectrum (what the Dirac setting changes): the explanation, the picture, its note and, with Dirac On, the level rows. The old panel and the new UI's data sheet (Spectrum tab) call this one function.
+static void labSpectrumCard(AppState& app) {
+    const AtomLab& L = app.atom;
+    const AtomParams& p = L.p;
+    mutedWrapped(diracExplain(), 12.0f / 16);
+    if (p.dirac == "On") mutedWrapped(diracOnNote(p.Z), 12.0f / 16);
+    spectrumPicture(p.Z, p.N, L.s.lines, p.dirac == "On");
+    ImGui::PushTextWrapPos(0);
+    richText(spectrumNote(p.Z, p.N, p.dirac == "On"), true, 12.0f / 16, 0);
+    ImGui::PopTextWrapPos();
+    if (p.dirac == "On") {   // the split levels, in words (binding energies, eV; j = total angular momentum)
+        mutedWrapped("The Dirac levels of this atom (binding energy; the same energy for every subshell named on one row):", 12.0f / 16);
+        for (const std::string& r : diracLevelRows(p.Z, p.N)) mutedWrapped(r, 12.0f / 16);
+    }
+}
+
 static void atomPanelContents(AppState& app) {
     AtomLab& L = app.atom;
     const AtomParams& p = L.p;
@@ -1024,17 +1041,8 @@ static void atomPanelContents(AppState& app) {
 
     // ---- Light spectrum ----
     ImGui::SeparatorText("Light spectrum");
-    selectRow(app, "dirac", kDiracLabel, {{"Off", "Off · " + diracOffNote()}, {"On", "On · the Dirac levels: a level depends on j as well as n, so lines split."}}, p.dirac);
-    mutedWrapped(diracExplain(), 12.0f / 16);
-    if (p.dirac == "On") mutedWrapped(diracOnNote(p.Z), 12.0f / 16);
-    spectrumPicture(p.Z, p.N, L.s.lines, p.dirac == "On");
-    ImGui::PushTextWrapPos(0);
-    richText(spectrumNote(p.Z, p.N, p.dirac == "On"), true, 12.0f / 16, 0);
-    ImGui::PopTextWrapPos();
-    if (p.dirac == "On") {   // the split levels, in words (binding energies, eV; j = total angular momentum)
-        mutedWrapped("The Dirac levels of this atom (binding energy; the same energy for every subshell named on one row):", 12.0f / 16);
-        for (const std::string& r : diracLevelRows(p.Z, p.N)) mutedWrapped(r, 12.0f / 16);
-    }
+    selectRow(app, "dirac", kDiracLabel, atomChoices("dirac"), p.dirac);
+    cardRun("labspectrum", [&] { labSpectrumCard(app); });
 
     // ---- The real spectrum ----
     ImGui::SeparatorText("Real spectrum (NIST)");
@@ -1053,8 +1061,6 @@ static void atomPanelContents(AppState& app) {
     cardRun("temperature", [&] { temperatureCard(app); });
     // ---- Performance ----
     performanceCard(app);
-    ImGui::TextDisabled("Picture: %d draw calls, %d instanced shapes", app.drawCalls, app.drawInstances);
-    if (ImGui::IsItemHovered()) ui::SetTooltip("Cloud dots, glows and gluon-field particles are drawn as instanced shapes,\na few draw calls for thousands of them.");
 
     // a slider or button held down: the decay clock waits (the web's PL_HOLD)
     L.hold = ImGui::IsAnyItemActive() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
@@ -1239,7 +1245,11 @@ void atomSheetCard(AppState& app, const std::string& id) {
     const float keep = st.FontSizeBase;
     st.FontSizeBase = keep * k;
     ImGui::PushFont(nullptr, keep * k);
-    if (id == "spectrum") cardRun("spectrum", [&] { realSpectrumCard(L.p.Z, L.p.N, L.p.dirac == "On"); });
+    if (id == "spectrum") {
+        cardRun("spectrum", [&] { realSpectrumCard(L.p.Z, L.p.N, L.p.dirac == "On"); });
+        ImGui::SeparatorText("Light spectrum");   // 0.16 stage 1a: the lab's own spectrum, below the NIST card (the old panel's "Light spectrum" section)
+        cardRun("labspectrum", [&] { labSpectrumCard(app); });
+    }
     else if (id == "lifetimes") cardRun("lifetimes", [&] { lifetimeCard(app); });
     else if (id == "size") cardRun("size", [&] { nuclearSizeCard(app); });
     else if (id == "temperature") cardRun("temperature", [&] { temperatureCard(app); });

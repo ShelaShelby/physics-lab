@@ -185,6 +185,11 @@ void performanceCard(AppState& app) {
                                                       "Frames drawn in that time are counted here (the longest time between two of them, and the longest pause before the first: %.0f ms).\n"
                                                       "If the picture or the fps counter still freezes while you drag, and this stays at 0, tell Alex.", lv.leadInMs);
     }
+    if (app.lab == 1) {                                   // 0.16 stage 1a: the old Atom panel's line under its Performance card (with the tooltip)
+        ImGui::TextDisabled("Picture: %d draw calls, %d instanced shapes", app.drawCalls, app.drawInstances);
+        if (shellLogOn()) auditNote("drawcalls shown");   // (for the automatic checks)
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Cloud dots, glows and gluon-field particles are drawn as instanced shapes,\na few draw calls for thousands of them.");
+    }
     settingMark("benchmark");
     benchmarkButton(app);
 }
