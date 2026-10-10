@@ -7,7 +7,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const {makeEl} = require('./fake_dom.js');
 
 function loadAppWeb(opts = {}) {
-  const html = fs.readFileSync(path.join(__dirname, '../../../index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../../archive/web/index.html'), 'utf8');
   const lines = html.split('\n');
   const find = (re, from = 0) => { for (let i = from; i < lines.length; i++) if (re.test(lines[i])) return i; throw new Error('not found ' + re); };
   const cut = (a, b) => lines.slice(a, b).join('\n');
@@ -43,7 +43,7 @@ function loadAppWeb(opts = {}) {
   ctx.window = ctx;
   // PL_FONTS comes from the page's first script (line 206)
   ctx.PL_FONTS = vm.runInNewContext('(' + /window\.PL_FONTS=(\{.*?\});/.exec(html)[1] + ')');
-  const css = fs.readFileSync(path.join(__dirname, '../../../index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../../archive/web/index.html'), 'utf8');
   vm.createContext(ctx);
   vm.runInContext(lrnEl + '\n' + learn + '\n' + panes + '\n' + app + `
     globalThis.A = {APP_LOG, APP_PLAN, appTimeline, DYK, THEMES, PLAch, PLTheme, LEARN, paintAch, paintLearn, TEXT_SIZES};`, ctx);

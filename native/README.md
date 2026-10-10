@@ -206,10 +206,10 @@ Each lab keeps its state while the other one is on screen.
 | `src/ui/` | The ImGui panels of both labs, Learn guides (rich-text and HTML layout), Settings, themes and the look (`look.*`), the header, About and history (`app_pages.*`), the facts line, tabs and achievements (`app_tabs.*`), Journey and dates, changelogs, fonts |
 | `assets/fonts`, `cmake/embed_fonts.cmake` | The bundled free fonts, built into the .exe |
 | `tests/` | Unit tests that compare the physics with the web version |
-| `tools/make_sky_data.js` | Copies the sky, far-away and Earth-outline data out of `index.html` |
-| `tools/make_learn_data.js` | Copies the Learn text out of `index.html` by running the web's own guide code |
-| `tools/make_atom_data.js`, `tools/make_atom_learn.js` | Copy the Atom Lab data, timeline and history out of `index.html` |
-| `tools/make_app_text.js` | Copies the app-wide texts (Settings, themes, header, About, history, facts, tabs, achievements) out of `index.html` by running the web's own code |
+| `tools/make_sky_data.js` | Copies the sky, far-away and Earth-outline data out of `archive/web/index.html` |
+| `tools/make_learn_data.js` | Copies the Learn text out of `archive/web/index.html` by running the web's own guide code |
+| `tools/make_atom_data.js`, `tools/make_atom_learn.js` | Copy the Atom Lab data, timeline and history out of `archive/web/index.html` |
+| `tools/make_app_text.js` | Copies the app-wide texts (Settings, themes, header, About, history, facts, tabs, achievements) out of `archive/web/index.html` by running the web's own code |
 
 All physics is in SI units (metres, seconds, m/s). The web version uses "sim units"
 (GM of the Sun = 100, 1 year = 2π); `units.h` converts them exactly, so both versions
@@ -219,7 +219,7 @@ follow the same orbits.
 
 `tests/test_orbit.cpp` compares the C++ physics with numbers produced by the web
 version's **own** JavaScript: `tests/reference/make_reference.js` cuts the Orbit Lab
-functions out of `index.html`, runs them in Node and writes `reference_values.h`.
+functions out of `archive/web/index.html`, runs them in Node and writes `reference_values.h`.
 It checks the starting positions of all planets, dwarf planets and comets, their orbit
 shapes, the barycentre, the positions after fixed runs of the leapfrog integrator at
 three Time speeds, the belt rocks, and the spin / axis / season lines on the cards

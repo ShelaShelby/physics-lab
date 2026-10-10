@@ -9,7 +9,7 @@ const {makeEl} = require('./fake_dom.js');
 function mulberry32(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0)/4294967296; }; }
 
 function loadAtomWeb() {
-  const html = fs.readFileSync(path.join(__dirname, '../../../index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../../archive/web/index.html'), 'utf8');
   const lines = html.split('\n');
   const find = (re, from = 0) => { for (let i = from; i < lines.length; i++) if (re.test(lines[i])) return i; throw new Error('not found ' + re); };
   const a = find(/^\/\* --- Atom Lab: hydrogen-like atom in atomic units/);

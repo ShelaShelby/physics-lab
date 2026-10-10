@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const html = fs.readFileSync(path.join(__dirname, '../../../index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../../archive/web/index.html'), 'utf8');
 
 // --- small cutting helpers ---------------------------------------------------
 // From the first `open` bracket at or after `from`, return the text up to and

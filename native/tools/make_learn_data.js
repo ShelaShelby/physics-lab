@@ -10,7 +10,7 @@
 'use strict';
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const {apply, EDITS} = require('./native_edits.js');   // the few places where the native text differs from the web's
-const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../archive/web/index.html'), 'utf8');
 
 function matchBlock(text, from, open, close) {
   let i = text.indexOf(open, from), depth = 0, q = null;

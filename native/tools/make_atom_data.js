@@ -5,7 +5,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const {loadAtomWeb} = require('../tests/reference/atom_web.js');
-const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../archive/web/index.html'), 'utf8');
 const {W} = loadAtomWeb();
 const q = s => JSON.stringify(s);
 const num = x => x == null ? 'NAN' : String(x);

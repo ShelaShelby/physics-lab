@@ -1,7 +1,7 @@
 HISTORICAL plan (native 0.4/0.5). ROADMAP.md is the current plan.
 # App-wide features plan (native 0.5)
 
-Reference: `index.html` (web Physics Lab 8.6.2). Line numbers are from the current file, which is
+Reference: `archive/web/index.html` (web Physics Lab 8.6.2). Line numbers are from the current file, which is
 not edited. Text is copied out of it by tool scripts, never retyped. The Black Hole Lab, the
 Spacetime Lab and the Slingshot game are **not** ported.
 

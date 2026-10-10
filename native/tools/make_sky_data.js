@@ -7,7 +7,7 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const {apply} = require('./native_edits.js');   // the few places where the native text differs from the web's
-const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../archive/web/index.html'), 'utf8');
 const line = start => { const at = html.indexOf(start); if (at < 0) throw new Error('missing ' + start); return html.slice(at, html.indexOf('\n', at)); };
 const skyLine = line('const SKY = {');
 const SKY = eval('(' + skyLine.slice(skyLine.indexOf('{'), skyLine.lastIndexOf('}') + 1) + ')');
