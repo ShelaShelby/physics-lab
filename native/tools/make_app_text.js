@@ -1,3 +1,4 @@
+// NOTE: the committed output was hand-patched after generation (see REPORT 5t). Do not overwrite it by re-running.
 // Copies the web app's app-wide texts and data out of index.html into native/src/app/app_text.inc,
 // by running the web's own code (tests/reference/app_web.js) and reading what it builds:
 // Settings, themes, achievements, the history, About, the language list and the "Did you know?" facts.

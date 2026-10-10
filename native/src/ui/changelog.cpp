@@ -19,6 +19,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5t: grey segments and check boxes",
+     "In the Controls panel the chosen part of a segmented button and a ticked check box are now grey, like the sliders, in every theme. The label and the tick are white or black, whichever reads better. The bottom toolbar and the Settings tiles are unchanged."},
     {"0.15", "Full UI rework, stage 5r: the toolbar pills are flat",
      "The thin lighter rectangle behind the buttons of the bottom toolbar (and the 2D / 3D pill and the small chips) is gone: those pills now have one flat fill and no thin outline. Monochrome and High contrast keep their outline."},
     {"0.15", "Full UI rework, stage 5q: lit buttons in every theme, theme list, About scrollbar, End key, Element picker, grey sliders",

@@ -89,6 +89,18 @@ static Rgb greyOf(const Rgb& c) { const float a = (c.r + c.g + c.b) / 3.0f; retu
 static ImU32 cSliderFill() { return colOf(greyOf(app::mixRgb(g_f.c->muted, g_f.c->fg, 0.25f))); }
 static ImU32 cSliderKnob(bool lit) { return colOf(greyOf(lit ? g_f.c->fg : app::mixRgb(g_f.c->muted, g_f.c->fg, 0.6f))); }
 ImU32 cOnFill() { return colOf(app::shell::onAccent(*g_f.c)); }
+static Rgb faceRgb();
+// 5t: a selected segment and a checked box of the Controls panel are GREY like the sliders (no accent): the brightness of a theme token (muted towards the text colour), moved towards the text
+// colour until it stands out from the unselected face by at least 3:1; its label / check icon is white or black, whichever has the higher WCAG contrast
+static Rgb selGreyRgb() {
+    const Rgb face = faceRgb();
+    Rgb c = greyOf(app::mixRgb(g_f.c->muted, g_f.c->fg, 0.25f));
+    for (int i = 0; i < 20 && wcag(c, face) < 3.0f; i++) c = greyOf(app::mixRgb(c, g_f.c->fg, 0.12f));
+    return c;
+}
+static Rgb onGreyRgb(const Rgb& grey) { const Rgb w{1, 1, 1}, k{0, 0, 0}; return wcag(grey, w) >= wcag(grey, k) ? w : k; }
+static ImU32 cSelGrey() { return colOf(selGreyRgb()); }
+static ImU32 cOnGrey() { return colOf(onGreyRgb(selGreyRgb())); }
 static Rgb faceRgb() { const app::ThemeColors& c = *g_f.c; return c.style.button.set ? c.button : app::mixRgb(c.card, c.fg, g_lo ? g_lo->faceMix : 0.10f); }
 ImU32 cFace(float a) { return colOf(faceRgb(), a); }
 // 5m part 2: in M1 a hovered / pressed face is the face moved towards the TEXT colour (a light grey, never blue: the owner's "no blue"); the other themes keep their accent tint
@@ -440,7 +452,8 @@ bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, boo
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 b0(pos.x, pos.y + (rowH - box) / 2), b1(b0.x + box, b0.y + box);
     const float r = ui::corner((g_lo ? 4.0f : 3.0f) * g_f.dpi);                  // (stage 5j looks: 4 px)
-    if (*v) { if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), b0, b1, cFill(), r); else dl->AddRectFilled(b0, b1, cFill(), r); drawIcon(dl, Icon::Check, ImVec2((b0.x + b1.x) / 2, (b0.y + b1.y) / 2), box * 0.85f, cOnFill()); }
+    if (*v) { if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), b0, b1, cSelGrey(), r); else dl->AddRectFilled(b0, b1, cSelGrey(), r); drawIcon(dl, Icon::Check, ImVec2((b0.x + b1.x) / 2, (b0.y + b1.y) / 2), box * 0.85f, cOnGrey());
+        if (shellLogOn() && ImGui::IsRectVisible(b0, b1)) auditRect(std::string("check.") + id + ".box", b0.x, b0.y, box, box); }   // 5t: for the automatic checks (where a checked box is)
     else { if (h.hovered) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), b0, b1, cFaceHover(), r); else dl->AddRectFilled(b0, b1, cFace(), r); dl->AddRect(b0, b1, cMuted(), r, 0, 1.5f); }
     text(dl, Type::Body, false, ImVec2(b1.x + g_f.m.s8, pos.y + (rowH - px(Type::Body)) / 2), cText(), label);
     if (h.clicked) *v = !*v;
@@ -472,10 +485,11 @@ bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::strin
         const ImVec2 a(pos.x + edge[i], pos.y), b(pos.x + edge[i + 1], pos.y + rowH);
         if (names && i < static_cast<int>(names->size())) noteRect((*names)[i].c_str(), a.x, a.y, b.x - a.x, b.y - a.y);
         const bool on = i == *cur;
-        if (on) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), lit ? cLitFill() : cFill(), std::max(0.0f, rc() - 1));
+        if (on) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), lit ? cLitFill() : cSelGrey(), std::max(0.0f, rc() - 1));
+        if (shellLogOn() && !bar && ImGui::IsRectVisible(a, b)) auditRect(std::string("seg.") + id + (on ? ".sel" : ".off") + std::to_string(i), a.x + 2, a.y + 2, b.x - a.x - 4, rowH - 4);   // 5t: for the automatic checks
         else if (h.hovered && ImGui::GetIO().MousePos.x >= a.x && ImGui::GetIO().MousePos.x < b.x) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFaceHover(), std::max(0.0f, rc() - 1));
         const float tw = width(Type::Body, false, labels[i]);
-        text(dl, Type::Body, false, ImVec2(a.x + (b.x - a.x - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? (lit ? cLitIcon() : cOnFill()) : (lit ? cIdleIcon() : cText()), labels[i]);
+        text(dl, Type::Body, false, ImVec2(a.x + (b.x - a.x - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? (lit ? cLitIcon() : cOnGrey()) : (lit ? cIdleIcon() : cText()), labels[i]);
     }
     return changed;
 }

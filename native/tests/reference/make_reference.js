@@ -1,3 +1,4 @@
+// NOTE: the committed output was hand-patched after generation (see REPORT 5t). Do not overwrite it by re-running.
 // Makes the reference numbers the C++ unit tests compare against.
 //
 // It does NOT re-type the physics: it cuts the real Orbit Lab functions and data

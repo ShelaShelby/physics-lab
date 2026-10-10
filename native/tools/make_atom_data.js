@@ -1,3 +1,4 @@
+// NOTE: the committed output was hand-patched after generation (see REPORT 5t). Do not overwrite it by re-running.
 // Copies the Atom Lab data out of the web version (index.html) into native/src/atom/atom_data.inc.
 // The raw tables (nuclides, decays, binding energies) are copied line by line and parsed in C++
 // exactly as the web parses them; the other tables are taken from the web code after it has run.
