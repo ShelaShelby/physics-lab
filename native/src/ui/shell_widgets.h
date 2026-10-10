@@ -82,7 +82,7 @@ enum class Face { Secondary, Primary, Quiet };
 bool button(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, Face face = Face::Secondary, bool selected = false);
 bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* tip, bool on = false, float caretW = 0);   // caretW > 0: a small caret at the right end (the button opens a panel)
 bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, bool* v);
-bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names = nullptr);   // names: each part is also noted under its own name (stage 5d, for PL_SCRIPT)
+bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names = nullptr, bool bar = false);   // names: each part is also noted under its own name (stage 5d, for PL_SCRIPT)
 bool slider(const char* id, ImVec2 pos, float w, float* v, float lo, float hi);
 // A flat clickable row (a list entry): a dot colour (or none), a label, optionally selected. Returns true when clicked.
 bool row(const char* id, ImVec2 pos, float w, const std::string& label, bool selected, const char* dotHex = nullptr);

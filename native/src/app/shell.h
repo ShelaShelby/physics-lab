@@ -83,6 +83,9 @@ double collapsedWidth(double titleW, const Metrics& m);                    // a 
 // The picture is full-window; cards and panels cover parts of it. When the selected body's circle falls under one of them (plus margin), `target` is where its centre should go:
 // the middle of the largest free rectangle. False: nothing is in the way, nothing moves.
 Rect largestFreeRect(const Rect& window, const std::vector<Rect>& occluders);
+// 0.15 stage 5p: the free part of the Atom picture WITHOUT the things at its bottom left (the toolbar, the fact line, the readout: every obstacle that starts at or below bottomLeftTop) in the way by their
+// place: they are replaced by one band across the whole window from bottomLeftTop down. The toolbar is centred on this free part, so it must not depend on where the toolbar is (it flipped every frame).
+Rect atomFreeRect(const Rect& window, const std::vector<Rect>& occluders, double bottomLeftTop);
 bool hiddenBy(Pt centre, double radius, const std::vector<Rect>& occluders, double margin);
 bool centreShiftTarget(Pt centre, double radius, const Rect& window, const std::vector<Rect>& occluders, double margin, Pt& target);
 double easeToward(double current, double target, double dt, double seconds, bool reduced);   // eased over about `seconds`; reduced motion: at once

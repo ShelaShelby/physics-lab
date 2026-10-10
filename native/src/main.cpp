@@ -477,7 +477,7 @@ int main(int, char**) {
             headerH = ui::headerHeight();
         }
         pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 && !shellOn ? atomBarH : 0));
-        app.atom.insetTop = shellOn ? ui::shellTopBarH() / scale + 4 : 0; app.atom.insetBottom = shellOn ? app.set.reserveBottom : 0; app.atom.insetRight = shellOn ? app.set.insetRight : 0; if (!shellOn) { app.atom.insetBottomLeft = 0; app.atom.ringX = app.atom.ringY = app.atom.infoRight = -1; app.atom.infoDown = 0; app.atom.freeX = app.atom.freeY = app.atom.freeW = app.atom.freeH = -1; app.atom.infoSize = 13; }   // (points; after shellFrame, so the first frame already has the bars' size)
+        app.atom.insetTop = shellOn ? ui::shellTopBarH() / scale + 4 : 0; app.atom.insetBottom = shellOn ? app.set.reserveBottom : 0; app.atom.insetRight = shellOn ? app.set.insetRight : 0; if (!shellOn) { app.atom.insetBottomLeft = 0; app.atom.ringX = app.atom.ringY = app.atom.infoRight = -1; app.atom.infoDown = 0; app.atom.infoHidden = false; app.atom.freeX = app.atom.freeY = app.atom.freeW = app.atom.freeH = -1; app.atom.infoSize = 13; }   // (points; after shellFrame, so the first frame already has the bars' size)
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
         app.canvasH = pictureWinH / scale;
         app.set.lightTheme = ui::look().c.light;

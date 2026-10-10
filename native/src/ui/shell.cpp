@@ -77,6 +77,8 @@ const char* panelName(PanelId id) {
     }
     return "none";
 }
+// 0.15 stage 5p: the top of the toolbar row and the fact line as of the last frame (window pixels): a panel that hangs from the top bar stops above it, with the readout in its way too
+static double g_bottomTop = -1;
 bool fromTop(PanelId id) { return id == PanelId::Menu || id == PanelId::LabMenu || id == PanelId::Chip; }
 double widthEmOf(PanelId id) {
     if (const double w = orbitPanelWidthEm(id)) return w;
@@ -745,9 +747,10 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 } else {
                     const float sy = y + (m.toolBtn - m.row) / 2.0f;
                     int sel = t.sel;
-                    if (sh::segmented(t.id, ImVec2(x, sy), static_cast<float>(2 * segW), t.labels, &sel)) t.pick(sel);
+                    if (sh::segmented(t.id, ImVec2(x, sy), static_cast<float>(2 * segW), t.labels, &sel, nullptr, true)) t.pick(sel);
                     noteRect((std::string(t.id) + ".2d").c_str(), x, sy, static_cast<float>(segW), static_cast<float>(m.row));
                     noteRect((std::string(t.id) + ".3d").c_str(), x + static_cast<float>(segW), sy, static_cast<float>(segW), static_cast<float>(m.row));
+                    if (shellLogOn()) { auditRect(std::string("toolseg.") + t.id + ".2d", x, sy, static_cast<float>(segW), static_cast<float>(m.row)); auditRect(std::string("toolseg.") + t.id + ".3d", x + static_cast<float>(segW), sy, static_cast<float>(segW), static_cast<float>(m.row)); }   // (5p: for the automatic checks of the lit look)
                     if (t.panel != PanelId::None) {
                         const float cx = x + static_cast<float>(2 * segW + gap);
                         S.anchorX[t.panel] = cx + m.caretW / 2.0;
@@ -1014,6 +1017,12 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             openRect = placePanel(id == PanelId::Data ? Anchor::Centre : fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(id == PanelId::Chip && app.lab == 1 ? atomPanelWidthEm(id) : widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
             if (id != PanelId::LabMenu)                                           // (5l: the Labs dropdown stays under its button and is drawn over a card; the other panels step aside)
                 for (const Rect& c : cards) openRect = sideStep(openRect, c, fr.window, m.s12, m.s12);
+            if (fromTop(id) && id != PanelId::LabMenu) {                              // 5p: the Element picker (and the other panels from the top bar) never reach the fact line, the toolbar or the FPS pill
+                double limit = fr.toolbar.y;
+                if (g_bottomTop > 0) limit = std::min(limit, g_bottomTop);
+                if (fr.readout.w > 0 && fr.readout.x < openRect.right() && fr.readout.right() > openRect.x) limit = std::min(limit, fr.readout.y);
+                openRect.h = std::max<double>(m.em(6), std::min(openRect.h, limit - m.s12 - openRect.y));
+            }
             if (id == PanelId::Data) openRect.x = std::max<double>(m.s12, std::min(openRect.x, (fr.freeW > 0 ? fr.freeW : fr.window.w) - m.s12 - openRect.w));   // stage 5i: the side step never pushes the sheet under the Controls panel
             sh::Panel p;
             // 5l: a scrollbar only when the content truly does not fit the room (it needed more than the room it was given last frame); the Labs dropdown is opaque and in front of everything
@@ -1071,11 +1080,13 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         const Rect fl = factLine(app, fr, m, occ, dpi, dt);
         if (fl.w > 0) { occ.push_back(fl); auditRect("factline", static_cast<float>(fl.x), static_cast<float>(fl.y), static_cast<float>(fl.w), static_cast<float>(fl.h)); bottomLeftTop = std::min(bottomLeftTop, fl.y); }
     }
+    g_bottomTop = bottomLeftTop;
     app.atom.insetBottomLeft = (fr.window.bottom() - bottomLeftTop) / dpi + 4;       // points (main.cpp sets it to 0 when the new UI is off)
     if (app.lab == 1) {                                   // 0.15 stage 5h: the atom is centred in the part of the picture the bars, the Controls panel and the subject card leave free (the label under the nucleus too)
-        const Rect fr2 = largestFreeRect(fr.window, occ);
+        const Rect fr2 = atomFreeRect(fr.window, occ, bottomLeftTop);   // (5p: not through the toolbar's own place: the toolbar is centred on this, and it flipped every frame with the picker open)
         app.atom.freeX = fr2.x / dpi; app.atom.freeY = fr2.y / dpi; app.atom.freeW = fr2.w / dpi; app.atom.freeH = fr2.h / dpi;
         app.atom.infoSize = 14;                           // the info text at the top left: the body size (14), not 13
+        app.atom.infoHidden = S.ui.open == PanelId::Chip;  // (5p: the Element picker covers that corner)
     }
 
     // ---- the centre shift: the selected body is kept out from under the cards and panels (DESIGN.md section 6) ----

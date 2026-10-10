@@ -200,6 +200,13 @@ Rect largestFreeRect(const Rect& window, const std::vector<Rect>& occ) {
     return best;
 }
 
+Rect atomFreeRect(const Rect& window, const std::vector<Rect>& occ, double bottomLeftTop) {
+    std::vector<Rect> o2;
+    for (const Rect& o : occ) if (o.y < bottomLeftTop - 0.5) o2.push_back(o);
+    if (bottomLeftTop < window.bottom()) o2.push_back({window.x, bottomLeftTop, window.w, window.bottom() - bottomLeftTop});
+    return largestFreeRect(window, o2);
+}
+
 bool hiddenBy(Pt c, double radius, const std::vector<Rect>& occ, double margin) {
     for (const Rect& o0 : occ) {
         const Rect o = o0.inflated(margin);

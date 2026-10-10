@@ -63,6 +63,12 @@ ImU32 cText(float a) { return colOf(g_f.c->fg, a); }
 ImU32 cMuted(float a) { return colOf(g_f.c->muted, a); }
 ImU32 cAccent(float a) { return colOf(g_f.c->accent, a); }
 ImU32 cFill(float a) { return colOf(g_f.c->accentFill, a); }
+// 0.15 stage 5p (M1): a LIT toolbar / top-bar button is no longer the light pill: it is a subtle dark fill a little lighter than the bar (the card colour moved 14 % towards the text colour: 53 against the
+// bar's 23 of 255), the icon full white, no outline, no glow. The idle icon is the muted colour moved 15 % towards the card, so lit against idle is above 3:1 (white 1.00 against 0.24 relative luminance: 3.6;
+// the plain muted colour #9a9aa3 would give only 2.8). Not used for the Controls panel's segmented buttons and the Settings tiles: they keep the chosen light pill.
+static constexpr float kLitMix = 0.14f, kIdleMix = 0.15f;
+static ImU32 cLitFill() { return colOf(app::mixRgb(g_f.c->card, g_f.c->fg, kLitMix)); }
+static ImU32 cIdleIcon() { return colOf(app::mixRgb(g_f.c->muted, g_f.c->card, kIdleMix)); }
 ImU32 cOnFill() { return colOf(app::shell::onAccent(*g_f.c)); }
 static Rgb faceRgb() { const app::ThemeColors& c = *g_f.c; return c.style.button.set ? c.button : app::mixRgb(c.card, c.fg, g_lo ? g_lo->faceMix : 0.10f); }
 ImU32 cFace(float a) { return colOf(faceRgb(), a); }
@@ -392,12 +398,12 @@ bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* 
     const Hit h = hit(id, pos, size);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 q(pos.x + size.x, pos.y + size.y);
-    const bool pill = on && g_lo && caretW <= 0;                                // 5m part 2 (M1): a lit toolbar button is the same light-grey pill with a dark icon as a chosen segment
-    if (pill) dl->AddRectFilled(pos, q, cFill(), rc());
+    const bool pill = on && g_lo && caretW <= 0;                                // 5m part 2 (M1), changed in 5p: a lit toolbar / top-bar button is a dark fill with a white icon (see cLitFill)
+    if (pill) dl->AddRectFilled(pos, q, cLitFill(), rc());
     else if (on) dl->AddRectFilled(pos, q, cFacePress(), rc());
     else if (h.hovered) hoverFill(id, dl, pos, q, pos, q, cFaceHover(), rc());
     if (g_f.outline) dl->AddRect(pos, q, cEdge(), rc(), 0, 1.0f);
-    drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), pill ? cOnFill() : g_lo && !h.hovered && !on ? cMuted() : cText());   // (stage 5j looks: muted, bright on hover)
+    drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), pill ? IM_COL32(255, 255, 255, 255) : g_lo && !h.hovered && !on ? cIdleIcon() : cText());   // (stage 5j looks: muted, bright on hover)
     if (caretW > 0) drawIcon(dl, on ? Icon::CaretUp : Icon::Caret, ImVec2(pos.x + size.x - caretW / 2 - g_f.m.s4 * 0.5f, pos.y + size.y / 2), caretW * 0.75f, cMuted());
     if (h.hovered && tip && *tip) ui::SetTooltip("%s", tip);
     return h.clicked;
@@ -416,7 +422,8 @@ bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, boo
     return h.clicked;
 }
 
-bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names) {
+bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names, bool bar) {
+    const bool lit = bar && g_lo;                                             // 5p: the bottom toolbar's 2D / 3D segment is a toolbar button: it is lit like the others
     const float rowH = static_cast<float>(g_f.m.row);
     const Hit h = hit(id, pos, ImVec2(w, rowH));
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -440,10 +447,10 @@ bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::strin
         const ImVec2 a(pos.x + edge[i], pos.y), b(pos.x + edge[i + 1], pos.y + rowH);
         if (names && i < static_cast<int>(names->size())) noteRect((*names)[i].c_str(), a.x, a.y, b.x - a.x, b.y - a.y);
         const bool on = i == *cur;
-        if (on) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFill(), std::max(0.0f, rc() - 1));
+        if (on) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), lit ? cLitFill() : cFill(), std::max(0.0f, rc() - 1));
         else if (h.hovered && ImGui::GetIO().MousePos.x >= a.x && ImGui::GetIO().MousePos.x < b.x) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFaceHover(), std::max(0.0f, rc() - 1));
         const float tw = width(Type::Body, false, labels[i]);
-        text(dl, Type::Body, false, ImVec2(a.x + (b.x - a.x - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? cOnFill() : cText(), labels[i]);
+        text(dl, Type::Body, false, ImVec2(a.x + (b.x - a.x - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? (lit ? IM_COL32(255, 255, 255, 255) : cOnFill()) : (lit ? cIdleIcon() : cText()), labels[i]);
     }
     return changed;
 }

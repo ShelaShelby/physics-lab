@@ -158,6 +158,22 @@ def part_atomtext(binary, work):
             if rm and float(rm.group(3)) > 0:
                 ring = tuple(float(rm.group(i)) for i in range(1, 5))
                 check(not overlap(info, ring), f"{tag}: the info text does not run under the phase ring {info} {ring}")
+    # 0.15 stage 5p (#5): the same rule for the Element picker (top bar chip): the info text does not run under it, and the picker does not overlap the fact line, the toolbar or the FPS pill
+    for sz in SIZES:
+        for n, st in (("cloud3d", "Z=92;N=146;view=Cloud 3D;orb=2p;phase=Wheel"), ("orbit", "Z=92;N=146;view=Orbit")):
+            r = run_app(binary, work, f"infopick_{n}_{sz}", {"PL_ATOM": "1", "PL_NEWUI": "on", "PL_ATOM_SET": st, "PL_SCRIPT": "6:click=top.chip;40:astate"}, frames=44, size=sz)
+            tag = f"picker {n} {sz}"
+            pk = r.rects.get("panel.chip")
+            check(pk is not None, f"{tag}: the Element picker is open")
+            if pk is None:
+                continue
+            m = re.search(r"PLATOMBOX info=([-\d.e+]+),([-\d.e+]+),([-\d.e+]+),([-\d.e+]+)", r.out)
+            info = tuple(float(m.group(i)) for i in range(1, 5)) if m else (0, 0, 0, 0)
+            check(info[2] <= 0 or not overlap(info, pk), f"{tag}: the info text does not run under the picker {info} {pk}")
+            for other in ("factline", "toolbar", "readout"):
+                o = r.rects.get(other)
+                if o is not None:
+                    check(not overlap(pk, o), f"{tag}: the picker does not overlap {other} {pk} {o}")
     for el, nm in (("Z=92;N=146", "u238"), ("Z=26;N=30", "iron")):
         r = run_app(binary, work, f"sheet_{nm}", {"PL_ATOM": "1", "PL_NEWUI": "on", "PL_ATOM_SET": el, "PL_SCRIPT": "10:click=card.all", "PL_LOG_SHELL": "1"}, frames=40)
         check(any(n.startswith("datasheet solid") for n in r.notes), f"{nm}: the data sheet is drawn solid")

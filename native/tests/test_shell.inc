@@ -165,6 +165,53 @@ void testShellPanels() {
     checkTrue("collapsed panel: grows with the title", collapsedWidth(120, m) > collapsedWidth(80, m));
 }
 
+// 0.15 stage 5p (#4): the Atom picture is centred on the free part, and the toolbar is centred on the picture's centre of the LAST frame. With the Element picker open the free part used to be worked out
+// with the toolbar as an obstacle, so the toolbar sat in the strip beside the picker it had been put in, made that strip smaller, the other strip won, the toolbar moved there, and so on, every
+// frame (the owner's "everything shows twice": a photo catches both). The loop is simulated here with the real makeFrame / placePanel / factLineRect, at 100, 125 and 150 % scale.
+// Reference: a layout that is right is a fixed point: the next frame gives the same centre. (No picture is involved.)
+static std::vector<double> freeCentres(double dpi, double W, double H, bool dockOpen, bool newRule) {
+    const Metrics m = metrics(dpi, 1.0);
+    const double tw = 8 * (m.toolBtn + m.s4) + 2 * m.s8, rw = 4 * m.row, rh = m.row;
+    const double dockW = dockOpen ? dockWidth(m, W) : 0;
+    double sceneCx = -1;
+    std::vector<double> centres;
+    for (int it = 0; it < 12; it++) {
+        const Frame f = makeFrame(W, H, m, tw, rw, rh, dockW, 0, sceneCx);
+        const Rect card{f.freeW - m.s12 - m.em(21) - (dockOpen ? 0 : 0), f.topBar.bottom() + m.s12, m.em(21), m.em(24)};
+        Rect pick = placePanel(Anchor::UnderChip, m.em(38), m.em(60), f, m, W / 2);
+        pick = sideStep(pick, card, f.window, m.s12, m.s12);
+        const Rect fl = factLineRect(f, m, m.em(60), 0, false);
+        std::vector<Rect> occ{f.topBar, card, pick, f.toolbar, f.readout, fl};
+        if (dockOpen) occ.push_back(f.dock);
+        const double top = std::min(f.toolbar.y, fl.y);
+        const Rect fr = newRule ? atomFreeRect(f.window, occ, top) : largestFreeRect(f.window, occ);
+        centres.push_back(fr.x + fr.w / 2);
+        sceneCx = fr.x + fr.w / 2;
+    }
+    return centres;
+}
+
+void testShellAtomFreeLoop() {
+    int oldFlips = 0, cases = 0;
+    for (double dpi : {1.0, 1.25, 1.5})
+        for (double wu : {880.0, 1000.0, 1109.0, 1280.0, 1500.0, 1920.0})
+            for (double hu : {560.0, 640.0, 800.0, 882.0})
+                for (bool dock : {false, true}) {
+                    const double W = std::lround(wu * dpi), H = std::lround(hu * dpi);
+                    const std::vector<double> a = freeCentres(dpi, W, H, dock, true), o = freeCentres(dpi, W, H, dock, false);
+                    const std::string t = " (" + num(wu) + " x " + num(hu) + " at " + num(dpi * 100) + " %, Controls " + (dock ? "open" : "closed") + ")";
+                    cases++;
+                    bool still = true;
+                    for (std::size_t i = 6; i < a.size(); i++) if (std::fabs(a[i] - a[i - 1]) > 1e-6) still = false;
+                    checkTrue("atom free part: with the picker open the centre stops moving after a few frames" + t, still);
+                    bool oldStill = true;
+                    for (std::size_t i = 6; i < o.size(); i++) if (std::fabs(o[i] - o[i - 1]) > 1e-6) oldStill = false;
+                    if (!oldStill) oldFlips++;
+                }
+    printf("atom free part: the old rule flipped every frame in %d of %d simulated layouts, the new one in none\n", oldFlips, cases);
+    checkTrue("atom free part: the simulation reproduces the flip with the old rule in at least one layout (else it proves nothing)", oldFlips > 0);
+}
+
 void testShellCentreShift() {
     const Rect win{0, 0, 1000, 640};
     {   // largest free rectangle: one card in the top right corner, the free part is the left strip or the strip under the card; here the left one is larger
@@ -778,6 +825,7 @@ void testShell() {
     testShellTopBar();
     testShellPanels();
     testShellCentreShift();
+    testShellAtomFreeLoop();
     testShellGlass();
     testShellKeys();
     testShellReading();

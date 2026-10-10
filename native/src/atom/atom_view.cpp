@@ -926,7 +926,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         R.line(12, yb, 12 + bar * pxA, yb, 2, css.muted);
         T.draw(label + "  =  " + metres(bar * 1e-10), 12, yb - 6, 12, css.muted);
     }
-    {   // the readout at the top left, on a soft plate (the web engine's info lines)
+    g_marks.info[0] = g_marks.info[1] = g_marks.info[2] = g_marks.info[3] = 0;
+    if (!lab.infoHidden) {   // the readout at the top left, on a soft plate (the web engine's info lines)
         const double isz = lab.infoSize;                                   // 13 points; the new UI 14 (stage 5h)
         g_marks.infoPx = isz * g_textScale * uiScale;
         const double maxW = lab.infoRight >= 0 ? std::max(40.0, lab.infoRight - 34) : w - 24 - 56 - lab.insetRight;   // (new UI, stage 5g: the plate stops before the subject card and the phase ring)

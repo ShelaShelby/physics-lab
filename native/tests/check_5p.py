@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # 0.15 stage 5p: the owner's bug list. Checked in the REAL app (Linux, software OpenGL, scripted events; NOT a real mouse, NOT Windows, NOT a real GPU).
-#   check_5p.py <PhysicsLab binary> <work folder> <part>      parts: wheel, scroll, zoomout
+#   check_5p.py <PhysicsLab binary> <work folder> <part>      parts: wheel, scroll, zoomout, lit, picker
 # part wheel (#6): after a window is opened and closed again, the mouse wheel over the canvas must zoom exactly like it does with no window ever opened (the baseline).
 # The reference is a scripted run with no window at all, not an earlier output of ours.
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, prefetch
+from shell_lib import run_app, prefetch, Bmp, inside, overlap
 
 fails = checks = 0
 
@@ -147,8 +147,136 @@ def part_zoomout(binary, work):
             check(ring[2] == 0 or (ring[0] >= 0 and ring[1] >= 0 and ring[0] + ring[2] <= 1280 and ring[1] + ring[3] <= 800), f"{v}: the phase ring {ring} stays in the window at the limit")
     print(f"check_5p zoomout: {checks} checks, {fails} failed")
 
+# #1: the lit (chosen) button of the bottom toolbars and of the top bar is a subtle dark fill a little lighter than the bar, the icon full white, NO outline, NO glow. Measured on the PICTURE
+# (the real app's pixels), with the WCAG contrast formula written here: not read back from our own colour constants.
+def lin(c):
+    c /= 255.0
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+def lum(rgb):
+    r, g, b = (lin(v) for v in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+def contrast(a, b):
+    la, lb = lum(a), lum(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+def maxpix(bmp, r, inset=0):
+    best, bl = None, -1
+    for y in range(int(r[1]) + inset, int(r[1] + r[3]) - inset):
+        for x in range(int(r[0]) + inset, int(r[0] + r[2]) - inset):
+            p_ = bmp.px(x, y)
+            if lum(p_) > bl:
+                best, bl = p_, lum(p_)
+    return best
+
+OLD_PILL = (0xd9, 0xd9, 0xde)                       # the light pill this replaces (M1 accentFill, DESIGN / look_options)
+
+def judge(tag, bmp, lit, unlit, rowless=False):
+    """lit, unlit: button rects (x, y, w, h). The unlit one's fill sample is the bar."""
+    ly = int(lit[1] + lit[3] / 2)
+    fill = bmp.px(int(lit[0]) + 4, int(lit[1]) + 4)                       # near the top left corner: clear of the icon
+    bar = bmp.px(int(unlit[0]) + 4, int(unlit[1]) + 4)
+    check(lum(fill) < lum(OLD_PILL) * 0.35, f"{tag}: the lit fill {fill} is dark, not the old light pill {OLD_PILL}")
+    d = max(abs(a - b) for a, b in zip(fill, bar))
+    check(12 <= d <= 60, f"{tag}: the lit fill {fill} is a little lighter than the bar {bar} (largest channel difference {d}, wanted 12..60)")
+    check(all(a >= b - 1 for a, b in zip(fill, bar)), f"{tag}: the lit fill {fill} is lighter, not darker, than the bar {bar}")
+    mx_ = int(lit[0]) + 9                                                 # past the rounded corner, left of the icon
+    e1, e2 = bmp.px(mx_, int(lit[1]) + 2), bmp.px(mx_, int(lit[1]) + 4)
+    check(max(abs(a - b) for a, b in zip(e1, e2)) <= 2, f"{tag}: no outline: the pixels 2 and 4 px inside the top edge are the same fill {e1} {e2}")
+    out = [bmp.px(int(lit[0]) - k, ly) for k in (2, 3, 4)]
+    check(all(max(abs(a - b) for a, b in zip(o, bar)) <= 3 for o in out), f"{tag}: no glow: 2..4 px outside the button is the bar colour {bar}: {out}")
+    il, iu = maxpix(bmp, lit, 6), maxpix(bmp, unlit, 6)
+    check(lum(il) >= 0.85, f"{tag}: the lit icon is full white (brightest pixel {il})")
+    check(contrast(il, iu) >= 3.0, f"{tag}: lit icon {il} against unlit icon {iu}: contrast {contrast(il, iu):.2f} (at least 3)")
+
+def part_lit(binary, work):
+    runs = [((binary, work, "p_lit_atom", {"PL_NEWUI": "on", "PL_ATOM": "1"}), {"frames": 30}),
+            ((binary, work, "p_lit_orbit", {"PL_NEWUI": "on"}), {"frames": 30}),
+            ((binary, work, "p_lit_top", {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_OPEN": "settings"}), {"frames": 30})]
+    prefetch(runs)
+    # Atom toolbar: the lit button(s) from the app's own list, an unlit plain button beside it
+    r = run_app(*runs[0][0], **runs[0][1]); b = Bmp(r.bmp)
+    on = [x for x in (r.note("toolon")[0][len("toolon "):].split(",") if r.note("toolon") else []) if x]
+    btn = {k[len("toolbtn."):]: v for k, v in r.rects.items() if k.startswith("toolbtn.")}
+    check(len(on) >= 1, f"Atom toolbar has a lit button ({on})")
+    unlit = [k for k in btn if k not in on and not k.endswith(".caret") and k not in ("tool.more",)]
+    if on and unlit:
+        for o in on:
+            judge("Atom toolbar " + o, b, btn[o], btn[unlit[0]])
+    # Orbit toolbar: its lit button is the chosen part of the 2D / 3D segment
+    r = run_app(*runs[1][0], **runs[1][1]); b = Bmp(r.bmp)
+    a2, a3 = r.rects.get("toolseg.tool.view.2d"), r.rects.get("toolseg.tool.view.3d")
+    check(a2 is not None and a3 is not None, "Orbit toolbar has the 2D / 3D segment")
+    if a2 and a3:
+        s2, s3 = b.px(int(a2[0]) + 5, int(a2[1]) + 5), b.px(int(a3[0]) + 5, int(a3[1]) + 5)
+        lit, unl = (a2, a3) if lum(s2) > lum(s3) else (a3, a2)
+        lit_s, unl_s = (s2, s3) if lum(s2) > lum(s3) else (s3, s2)
+        check(lum(lit_s) < lum(OLD_PILL) * 0.35, f"Orbit toolbar: the lit part {lit_s} is dark, not the old light pill")
+        check(12 <= max(abs(x - y) for x, y in zip(lit_s, unl_s)) <= 60, f"Orbit toolbar: the lit part {lit_s} is a little lighter than the other part {unl_s}")
+        check(lum(maxpix(b, lit, 4)) >= 0.85, f"Orbit toolbar: the lit label is full white ({maxpix(b, lit, 4)})")
+        check(contrast(maxpix(b, lit, 4), maxpix(b, unl, 4)) >= 3.0, f"Orbit toolbar: lit label against unlit label: contrast {contrast(maxpix(b, lit, 4), maxpix(b, unl, 4)):.2f} (at least 3)")
+    # top bar with Settings open: the gear is lit
+    r = run_app(*runs[2][0], **runs[2][1]); b = Bmp(r.bmp)
+    gear, srch = r.rects.get("topicon.settings"), r.rects.get("topicon.search")
+    check(gear is not None and srch is not None, "top bar has the gear and the search icon")
+    if gear and srch:
+        judge("top bar gear (Settings open)", b, gear, srch)
+    print(f"check_5p lit: {checks} checks, {fails} failed")
+
+# #4 and #5: the Element picker (top bar chip) in the Atom Lab (and the Orbit Lab's chip panel).
+#  #5 the info text (top left) must not run under the picker, and the picker must not overlap the fact line, the toolbar or the FPS pill (it scrolls inside itself when it is too tall).
+#  #4 the layout must be the same on every frame: the owner saw the picture, toolbar, FPS pill and scale bar twice, i.e. their place flipped between two layouts from one frame to the next.
+#     Found: the picture's centre alternated every frame (largest free strip left / right of the picker). Checked here: the centre, toolbar, FPS pill and fact line are identical on 4 frames in a row.
+def part_picker(binary, work):
+    sizes = ("1280x800", "880x560", "1000x640", "1920x1080", "1109x882")
+    runs = []
+    for sz in sizes:
+        scr = "8:click=top.chip;" + ";".join(f"{f}:astate" for f in range(20, 32))
+        runs.append(((binary, work, f"p_pick_atom_{sz}", {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_SCRIPT": scr}), {"frames": 34, "size": sz}))
+        for k in (40, 41, 42, 43):
+            runs.append(((binary, work, f"p_pick_atom_{sz}_f{k}", {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_SCRIPT": "8:click=top.chip"}), {"frames": k, "size": sz}))
+    for sz in ("1280x800", "880x560"):
+        runs.append(((binary, work, f"p_pick_orbit_{sz}", {"PL_NEWUI": "on", "PL_SCRIPT": "8:click=top.chip"}), {"frames": 30, "size": sz}))
+    prefetch(runs)
+    for sz in sizes:
+        W, H = (int(v) for v in sz.split("x"))
+        r = run_app(*runs[[a[2] for a, k in runs].index(f"p_pick_atom_{sz}")][0], **dict(frames=34, size=sz))
+        pk = r.rects.get("panel.chip")
+        check(pk is not None, f"Atom {sz}: the Element picker opened")
+        if pk is None:
+            continue
+        check(inside(pk, W, H), f"Atom {sz}: the picker is inside the window {pk}")
+        for other in ("toolbar", "readout", "factline"):
+            o = r.rects.get(other)
+            check(o is None or not overlap(pk, o), f"Atom {sz}: the picker does not overlap the {other} {pk} {o}")
+        m = re.search(r"PLATOMBOX info=([-\d.e+]+),([-\d.e+]+),([-\d.e+]+),([-\d.e+]+)", r.out)
+        info = tuple(float(m.group(i)) for i in range(1, 5)) if m else (0, 0, 0, 0)
+        check(info[2] <= 0 or not overlap(info, pk), f"Atom {sz}: the info text does not run under the picker {info} {pk}")
+        need = [n for n in r.notes if n.startswith("panelneed chip")]
+        if need:
+            mm = re.search(r"need=(\d+) have=(\d+) scroll=(\d+)", need[-1])
+            nd, hv, sc = (int(v) for v in mm.groups())
+            check(nd <= hv + 1 or sc > 0, f"Atom {sz}: a picker taller than its room scrolls inside itself (needs {nd}, has {hv}, can scroll {sc})")
+        # the same layout on every frame
+        cs = [l.split("centre=")[1].split()[0] for l in r.out.splitlines() if l.startswith("PLATOMBOX")]
+        check(len(cs) == 12 and len(set(cs[3:])) == 1, f"Atom {sz}: the picture's centre is the same on every frame with the picker open {sorted(set(cs))}")
+        fr = [run_app(*runs[[a[2] for a, k in runs].index(f"p_pick_atom_{sz}_f{k}")][0], **dict(frames=k, size=sz)) for k in (40, 41, 42, 43)]
+        for name in ("toolbar", "readout", "factline", "panel.chip"):
+            vals = {tuple(round(x, 1) for x in f.rects[name]) for f in fr if name in f.rects}
+            check(len(vals) <= 1, f"Atom {sz}: the {name} is in the same place on 4 frames in a row {sorted(vals)}")
+    for sz in ("1280x800", "880x560"):
+        W, H = (int(v) for v in sz.split("x"))
+        r = run_app(*runs[[a[2] for a, k in runs].index(f"p_pick_orbit_{sz}")][0], **dict(frames=30, size=sz))
+        pk = r.rects.get("panel.chip")
+        check(pk is not None and inside(pk, W, H), f"Orbit {sz}: the chip panel is inside the window {pk}")
+        for other in ("toolbar", "readout", "factline"):
+            o = r.rects.get(other)
+            check(pk is None or o is None or not overlap(pk, o), f"Orbit {sz}: the chip panel does not overlap the {other} {pk} {o}")
+    print(f"check_5p picker: {checks} checks, {fails} failed")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"wheel": part_wheel, "scroll": part_scroll, "zoomout": part_zoomout}[part](binary, work)
+    {"wheel": part_wheel, "scroll": part_scroll, "zoomout": part_zoomout, "lit": part_lit, "picker": part_picker}[part](binary, work)
     sys.exit(1 if fails else 0)

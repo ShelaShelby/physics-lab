@@ -2,6 +2,14 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.15 stage 5p (six PC findings): what only you can do
+- [ ] Wheel after About: Atom Lab and Orbit Lab: open About, close it, turn the wheel over the picture: it must zoom. Same after History and the log. (Cloud test passed; your PC is the real test.)
+- [ ] About scroll: wheel, PageUp / PageDown / Home / End scroll it; the scrollbar is 12 px wide with a faint track and you can drag it. Pressing End once stops about 1 % above the bottom (the page grows while its bottom is first drawn); End again reaches it.
+- [ ] Zoom-out in the Atom Lab: Atom, Cloud, Cloud 3D, Slice and the Chart of nuclides: the picture can now get half its old smallest size. Is that far enough, and does it feel right?
+- [ ] Lit buttons (Dark theme, New UI): the bottom toolbars (Orbit's 2D / 3D, Atom's view buttons) and the gear with Settings open: dark fill, white icon, no outline or glow. Can you still see which one is on? Unlit icons are a little dimmer than before.
+- [ ] Element picker doubling (#4): NOT proven to be the same cause as on your PC. I reproduced a flip between two layouts every frame at 880 x 560 and fixed it, but I never saw the doubling you photographed. If it still shows: tell me (a) the display scale in Windows settings (100 / 125 / 150 %), (b) the window size, (c) whether it also happens with Settings or the theme chooser open, (d) whether it happens with New UI Off.
+- [ ] Element picker overlap (#5): the info text is hidden while it is open; the picker stops above the fact line, the toolbar and the FPS pill and scrolls inside itself. At 880 x 560 it still covers the subject card, and at 1280 x 800 it covers the left end of the scale bar. Tell me if either matters.
+
 ## 0.15 stage 5o (three layout fixes): what only you can do
 - [ ] Decide `ui5l_popups` (the one test still failing): the Labs dropdown's rounded corner is anti-aliased, so one corner pixel depends on the picture behind it; the test looks 3 px in, the corner reaches 2.93 px. Tell me: change the test to look 4 px in (my proof is in native/REPORT.md), or make the corner radius smaller.
 - [ ] On the PC, Orbit Lab in a small window (880 x 560, Controls open, Earth picked): the subject card now ends above the readout and scrolls (mouse wheel) to "All values". Is that what you want?
