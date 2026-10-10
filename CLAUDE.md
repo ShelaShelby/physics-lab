@@ -19,8 +19,6 @@
 - Tests first: for new physics or logic, write the tests from independent references first, then the code. If a test has to change, say why in REPORT.md.
 - Every source used for a value, formula or method must also be listed in the About page, 'Where the facts come from'.
 
-- While working, write one short plain-words sentence between steps saying what you are doing and why (the owner is not a programmer and follows along).
-
 ## Workflow rules (0.15 stage 4.1; they apply to every stage)
 Why: stages used to take 20-30 minutes and had grown to hours: the cost was running the picture tests (each starts the real app under software OpenGL) many times. So:
 - Build (fresh session; if CMake stops on "XCURSOR" install the X11 headers first: `apt-get install -y --no-install-recommends libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libgl1-mesa-dri libegl-mesa0 glslang-tools libdrm-dev libgbm-dev libasound2-dev libdecor-0-dev`; about 6 minutes the first time; ccache is used when installed: `apt-get install -y ccache`):
