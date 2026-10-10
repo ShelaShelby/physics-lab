@@ -153,7 +153,7 @@ bool optionTile(const char* id, const std::string& name, bool on, ImFont* font, 
     noteItem(id);                                           // (the automatic checks click a tile by its name)
     if (on) popOn();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImU32 fg = on ? col(look().c.onacc) : col(look().c.fg), mu = on ? col(look().c.onacc) : col(look().c.muted);
+    const ImU32 fg = on ? col(look().w.onacc) : col(look().w.fg), mu = on ? col(look().w.onacc) : col(look().w.muted);
     if (font) {
         const ImVec2 a = font->CalcTextSizeA(aaSize, FLT_MAX, 0, "Aa");
         dl->AddText(font, aaSize, ImVec2(p.x + (width - a.x) / 2, p.y + 6 * ImGui::GetFontSize() / 16), fg, "Aa");
@@ -183,8 +183,8 @@ void doneLine(const std::string& text) {
     const ImVec2 size = fonts().bold->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, w - 2 * padX, t.c_str());
     const ImVec2 p = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + size.y + 2 * padY), col(look().c.line), corner(10 * s));
-    dl->AddText(fonts().bold, ImGui::GetFontSize(), ImVec2(p.x + padX, p.y + padY), col(look().c.fg), t.c_str(), nullptr, w - 2 * padX);
+    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + size.y + 2 * padY), col(look().w.line), corner(10 * s));
+    dl->AddText(fonts().bold, ImGui::GetFontSize(), ImVec2(p.x + padX, p.y + padY), col(look().w.fg), t.c_str(), nullptr, w - 2 * padX);
     ImGui::Dummy(ImVec2(w, size.y + 2 * padY));
 }
 
@@ -331,7 +331,7 @@ void settingsWindow(AppState& app) {
         for (int i = 0; i < 5; i++) {
             if (i) ImGui::SameLine();
             const app::FontOpt& o = app::kFonts[i];
-            const std::string fam = app::fontKeyFor(look().c.style, o.key, fontFamilyAvailable(app::fontFamilyKeyOf(look().c.style)));   // the sample in the family Auto would use under this theme
+            const std::string fam = app::fontKeyFor(look().w.style, o.key, fontFamilyAvailable(app::fontFamilyKeyOf(look().w.style)));   // the sample in the family Auto would use under this theme
             if (optionTile(o.key, o.name, P.font == o.key, fontFamily(fam).regular, 17 * ImGui::GetFontSize() / 16, tiles(5))) P.font = o.key;
         }
         // 📏 Units
@@ -388,7 +388,7 @@ void settingsWindow(AppState& app) {
         }
         }
         g_inSettings = false;
-        if (g_hl.a > 0) { ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(g_hl.x0, g_hl.y0), ImVec2(g_hl.x1, g_hl.y1), col(look().c.accent, g_hl.a), 4); g_hl.a = 0; }
+        if (g_hl.a > 0) { ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(g_hl.x0, g_hl.y0), ImVec2(g_hl.x1, g_hl.y1), col(look().w.accent, g_hl.a), 4); g_hl.a = 0; }
         if (shellLogOn()) { std::string d; for (const std::string& r : g_drawnRows) d += (d.empty() ? "" : ",") + r; auditNote("settingrows " + d); }
         // the reset pop-ups (first the warning, then a clear "it worked")
         if (beginGift("##reset")) {
@@ -460,9 +460,9 @@ void themePicker(AppState& app) {
         // the colour dot: the theme's background with its accent; Auto is half light, half dark
         const ImVec2 c(p.x + pad + dot / 2, p.y + cardH / 2);
         if (locked) {
-            dl->AddCircleFilled(c, dot / 2, col(look().c.line));
+            dl->AddCircleFilled(c, dot / 2, col(look().w.line));
             const ImVec2 q = bold->CalcTextSizeA(fs, FLT_MAX, 0, "?");
-            dl->AddText(bold, fs, ImVec2(c.x - q.x / 2, c.y - q.y / 2), col(look().c.muted), "?");
+            dl->AddText(bold, fs, ImVec2(c.x - q.x / 2, c.y - q.y / 2), col(look().w.muted), "?");
         } else if (*t.swatchBg) {
             dl->AddCircleFilled(c, dot / 2, col(app::hexRgb(t.swatchBg)));
             dl->AddCircleFilled(ImVec2(c.x + dot * 0.18f, c.y + dot * 0.18f), dot * 0.2f, col(app::hexRgb(t.swatchAccent)));
@@ -470,10 +470,10 @@ void themePicker(AppState& app) {
             dl->PathArcTo(c, dot / 2, PI * 0.5f, PI * 1.5f, 24); dl->PathFillConvex(col(app::themeColors("light", true).bg));      // left half light (the Light theme's page)
             dl->PathArcTo(c, dot / 2, -PI * 0.5f, PI * 0.5f, 24); dl->PathFillConvex(col(app::themeColors("dark", false).bg));     // right half dark (the Dark theme's page)
         }
-        dl->AddCircle(c, dot / 2, col(look().c.line), 0, 1.0f);
+        dl->AddCircle(c, dot / 2, col(look().w.line), 0, 1.0f);
         const float ty = p.y + cardH / 2 - (std::count(shown[i].begin(), shown[i].end(), '\n') + 1) * fs * 1.2f / 2;
-        dl->AddText(bold, fs, ImVec2(p.x + pad + dot + pad, ty), col(look().c.fg, locked ? 0.6f : 1), shown[i].c_str());
-        if (on) dl->AddText(bold, fs, ImVec2(p.x + cardW - pad - tick, p.y + cardH / 2 - fs / 2), col(look().c.accent), "✓");
+        dl->AddText(bold, fs, ImVec2(p.x + pad + dot + pad, ty), col(look().w.fg, locked ? 0.6f : 1), shown[i].c_str());
+        if (on) dl->AddText(bold, fs, ImVec2(p.x + cardW - pad - tick, p.y + cardH / 2 - fs / 2), col(look().w.accent), "✓");
     }
     ImGui::SetCursorPos(ImVec2(o.x, o.y + rows * (cardH + gap) - gap));    // the popup is exactly as tall and wide as the grid
     ImGui::Dummy(ImVec2(kColumns * cardW + (kColumns - 1) * gap, 0));

@@ -1,4 +1,5 @@
 #include "style_draw.h"
+#include "app/look_options.h"
 
 #include <algorithm>
 #include <cmath>
@@ -538,7 +539,7 @@ void pushFloatStyle() {
         const ImGuiViewport* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(std::max(100.0f, vp->Size.x - 2 * kKeepMargin), std::max(100.0f, vp->Size.y - keepTop() - 2 * kKeepMargin)));
     }
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, app::scaledRadius(style(), style().panel.floatRounding) * ImGui::GetFontSize() / 16);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, look().m1 ? static_cast<float>(app::lookopt::m1().radiusPanel) * ImGui::GetFontSize() / 16 : app::scaledRadius(style(), style().panel.floatRounding) * ImGui::GetFontSize() / 16);   // 5n: M1 windows have the panels' radius
     if (style().panel.title.set) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(style().panel.title.text.r, style().panel.title.text.g, style().panel.title.text.b, 1));
     if (titleFontOn()) {                                                                                  // a wide font: a little smaller so a title still fits ...
         const float before = ImGui::GetFontSize();

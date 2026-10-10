@@ -11,6 +11,8 @@ namespace ui {
 
 struct Look {
     app::ThemeColors c;          // the theme's colours (Auto resolved to Light or Dark)
+    app::ThemeColors w;          // 0.15 stage 5n: the colours of the windows (Settings, About, Learn, Benchmark, history, pop-ups): the look M1's when M1 is on (New UI, Dark), else the same as c. The pictures keep c.
+    bool m1 = false;             // the look M1 is on for the windows
     float textScale = 1;         // Settings → Text size
     bool reduced = false;        // Settings → Motion (Auto: Windows' "Animation effects" off)
     bool square = false;         // Monochrome: no rounded corners

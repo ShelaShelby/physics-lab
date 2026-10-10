@@ -19,6 +19,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5m part 2 and 5n: bigger handle, grey instead of blue, M1 windows, chart tilt slider",
+     "With New UI (preview) On and the Dark theme: the handle on the picture's edge is bigger (32 x 72 points); hovered and pressed buttons are light grey, not blue; a lit toolbar button is the same light-grey pill as a chosen segment; the selected element in the periodic table has a light ring; the subject card steps aside while the Legend is open, so it never covers it; Settings, About, Learn, the history pages, the Benchmark windows and the pop-up lists use the same flat dark cards, rounded corners and grey selected pills. In the Atom Lab's Chart view a slider \"flat <-> 3D\" above the toolbar tilts the chart (the same tilt as the Controls panel). Not tested: Windows, a real mouse, a real GPU, how the slide feels."},
     {"0.15", "Full UI rework, stage 5m: three themes archived, the M1 look is the look",
      "Frutiger Aero, Y2K Night and Synthwave were taken out of the app (their code is kept in native/archive/themes). A saved choice of one of them now opens as Dark, with no message. The Settings row Theme effects went with them (only those themes used it), and so did the 🎁 surprise in the facts, which only unlocked Synthwave. With New UI (preview) On and the Dark theme, the look M1 (Inter font, flat dark cards, a light-grey selected pill) is now always on; looks M2 and M3 and the PL_LOOK switch were removed. With New UI Off nothing else changed. Not tested: Windows, a real mouse, a real graphics card, speed."},
     {"0.15", "Full UI rework, stage 5l: search finds every setting, Legend closes, toolbar centred",
@@ -468,7 +470,7 @@ void labLogWindow(bool* open, int lab) {
     if (logShown) {
         const Entry* rows = lab == 1 ? kWebAtom : kWeb;
         const int n = lab == 1 ? int(sizeof kWebAtom / sizeof kWebAtom[0]) : int(sizeof kWeb / sizeof kWeb[0]);
-        const ImU32 accent = col(look().c.accent), line = col(look().c.line);
+        const ImU32 accent = col(look().w.accent), line = col(look().w.line);
         for (int i = 0; i < n; i++) {
             // .logRow: the number in a 52-point column (accent, bold), then the title and the text (muted, smaller)
             const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -482,7 +484,7 @@ void labLogWindow(bool* open, int lab) {
             ImGui::PopFont();
             ImGui::SetCursorScreenPos(ImVec2(x1, ImGui::GetCursorScreenPos().y + 2 * s));
             ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 13 / 16);
-            ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.muted));
+            ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.muted));
             ImGui::TextUnformatted(displayable(rows[i].text).c_str());
             ImGui::PopStyleColor();
             ImGui::PopFont();
@@ -495,7 +497,7 @@ void labLogWindow(bool* open, int lab) {
         const char* note = lab == 1 ? kWebAtomNote : app::kOrbitLogNote;
         if (*note) {
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.muted));
+            ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.muted));
             ImGui::TextWrapped("%s", displayable(note).c_str());
             ImGui::PopStyleColor();
         }

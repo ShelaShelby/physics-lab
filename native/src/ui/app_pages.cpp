@@ -62,14 +62,14 @@ void languageMenu(AppState& app) {
         const float a = soon ? 0.6f : 1;                                   // :disabled{opacity:.6}
         float x = p.x + 10 * s;
         const std::string flag = displayable(L.flag);
-        if (!flag.empty()) { dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(x, p.y + (h - 18 * s) / 2), col(look().c.fg, a), flag.c_str()); x += 28 * s; }
-        dl->AddText(ImGui::GetFont(), 14 * s, ImVec2(x, p.y + (h - 14 * s) / 2), col(look().c.fg, a), L.name);
+        if (!flag.empty()) { dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(x, p.y + (h - 18 * s) / 2), col(look().w.fg, a), flag.c_str()); x += 28 * s; }
+        dl->AddText(ImGui::GetFont(), 14 * s, ImVec2(x, p.y + (h - 14 * s) / 2), col(look().w.fg, a), L.name);
         if (soon) {                                                        // .soon: a small rounded chip
             const float fs = 12 * s, tw = fonts().bold->CalcTextSizeA(fs, FLT_MAX, 0, L.soon).x;
             const ImVec2 b(p.x + w - 8 * s, p.y + h / 2 + fs / 2 + 3 * s), c(b.x - tw - 16 * s, p.y + h / 2 - fs / 2 - 3 * s);
-            dl->AddRect(c, b, col(look().c.line, a), corner(99));
-            dl->AddText(fonts().bold, fs, ImVec2(c.x + 8 * s, c.y + 3 * s), col(look().c.muted, a), L.soon);
-        } else if (on) dl->AddText(fonts().bold, 14 * s, ImVec2(p.x + w - 20 * s, p.y + (h - 14 * s) / 2), col(look().c.accent), "✓");
+            dl->AddRect(c, b, col(look().w.line, a), corner(99));
+            dl->AddText(fonts().bold, fs, ImVec2(c.x + 8 * s, c.y + 3 * s), col(look().w.muted, a), L.soon);
+        } else if (on) dl->AddText(fonts().bold, 14 * s, ImVec2(p.x + w - 20 * s, p.y + (h - 14 * s) / 2), col(look().w.accent), "✓");
     }
     ImGui::EndPopup();
 }
@@ -84,8 +84,8 @@ bool pillButton(const std::string& label, const char* tip) {
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, corner(99));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10 * s, 3 * s));
-    ImGui::PushStyleColor(ImGuiCol_Button, glossy() ? vec(look().c.card) : ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_Border, vec(look().c.line));
+    ImGui::PushStyleColor(ImGuiCol_Button, glossy() ? vec(look().w.card) : ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Border, vec(look().w.line));
     ImGui::PushFont(fonts().bold, ImGui::GetStyle().FontSizeBase * 13 / 16);
     const bool clicked = ui::Button(displayable(label, fonts().bold).c_str());
     ImGui::PopFont();
@@ -129,7 +129,7 @@ void header(AppState& app) {
     const float subX = x0 + titleW + 10 * s, subRight = oneLine ? x0 + W - bw - 10 * s : x0 + W;
     ImGui::SetCursorPos(ImVec2(subX, y0 + titleH - ImGui::GetFontSize() * 1.15f));
     ImGui::PushTextWrapPos(subRight);
-    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.muted));
+    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.muted));
     ImGui::TextUnformatted(displayable(L.subtitle).c_str());
     ImGui::PopStyleColor();
     ImGui::PopTextWrapPos();
@@ -182,19 +182,19 @@ void historyWindow(AppState& app) {
             ImDrawList* dl = ImGui::GetWindowDrawList();
             const ImVec2 p = ImGui::GetCursorScreenPos();
             const float w = ImGui::GetContentRegionAvail().x, box = 60 * s * ts, x1 = p.x + box + 12 * s * ts;
-            dl->AddLine(p, ImVec2(p.x + w, p.y), col(look().c.line));
+            dl->AddLine(p, ImVec2(p.x + w, p.y), col(look().w.line));
             const float top = p.y + 12 * s * ts;
-            dl->AddRectFilled(ImVec2(p.x, top), ImVec2(p.x + box, top + box), col(look().c.soft, 31/255.f), corner(12 * s * ts));
+            dl->AddRectFilled(ImVec2(p.x, top), ImVec2(p.x + box, top + box), col(look().w.soft, 31/255.f), corner(12 * s * ts));
             const std::string icon = displayable(ic);
             if (!icon.empty()) {
                 const float fs = 28 * s * ts;
                 const ImVec2 sz = ImGui::GetFont()->CalcTextSizeA(fs, FLT_MAX, 0, icon.c_str());
-                dl->AddText(ImGui::GetFont(), fs, ImVec2(p.x + (box - sz.x) / 2, top + (box - sz.y) / 2), col(look().c.fg), icon.c_str());
+                dl->AddText(ImGui::GetFont(), fs, ImVec2(p.x + (box - sz.x) / 2, top + (box - sz.y) / 2), col(look().w.fg), icon.c_str());
             }
             ImGui::SetCursorScreenPos(ImVec2(x1, top));
             ImGui::PushTextWrapPos(p.x + w - ImGui::GetWindowPos().x);   // window-relative
             ImGui::PushFont(fonts().bold, ImGui::GetStyle().FontSizeBase * 13 / 16);
-            ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.accent));
+            ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.accent));
             ImGui::TextUnformatted(displayable(year, fonts().bold).c_str());
             ImGui::PopStyleColor();
             ImGui::PopFont();

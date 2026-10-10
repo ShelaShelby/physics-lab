@@ -557,7 +557,7 @@ void benchmarkWindow(AppState& app) {
             ImGui::TextWrapped("Atom Lab 90 %% outline: %s", b.env.outlinePath.c_str());
             ImGui::TextWrapped("Orbit Lab rocks: %s", b.env.rocksPath.c_str());
             ImGui::TextWrapped("Window %d x %d, picture %d x %d pixels%s", b.env.windowW, b.env.windowH, b.env.pictureW, b.env.pictureH, b.env.fullscreen ? ", full screen" : "");
-            ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, vec(look().c.line));      // the header row in the theme's colours (the default is dark on every theme)
+            ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, vec(look().w.line));      // the header row in the theme's colours (the default is dark on every theme)
             const bool table = ImGui::BeginTable("##benchtable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp);
             if (table) {
                 const char* heads[] = {"Scene", "Average", "fps", "1 % low", "Worst", "CPU", "GPU"};
@@ -579,7 +579,7 @@ void benchmarkWindow(AppState& app) {
             }
             ImGui::PopStyleColor();
             ImGui::Spacing();
-            ImGui::PushStyleColor(ImGuiCol_Text, b.noteFailed ? vec(look().c.danger) : vec(look().c.muted));
+            ImGui::PushStyleColor(ImGuiCol_Text, b.noteFailed ? vec(look().w.danger) : vec(look().w.muted));
             ImGui::TextWrapped("%s", b.note.c_str());
             ImGui::PopStyleColor();
             ImGui::Spacing();

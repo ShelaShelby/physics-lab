@@ -560,6 +560,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         Rect r;
         if (collapsed) {
             r = placePanel(anchor, collapsedWidth(titleW, m), m.control, fr, m, 0);
+            if (std::strcmp(key, "card") == 0 && legendOpenR.w > 0 && r.intersects(legendOpenR)) return Rect{r.right(), r.y, 0, 0};   // 5m part 2: the subject card never covers an open Legend: it is left out while the Legend is open
             if (!sh::beginPanel(wid.c_str(), r, p, sh::Shape::Pill, false)) return r;
             const bool hover = sh::hoveredRect(ImVec2(static_cast<float>(r.x), static_cast<float>(r.y)), ImVec2(static_cast<float>(r.w), static_cast<float>(r.h)));
             (void)hover;
@@ -572,6 +573,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         } else {
             r = placePanel(anchor, m.em(emW), sh::lastHeight(wid, static_cast<float>(m.em(8))), fr, m, 0);
             if (std::strcmp(key, "legend") == 0) { legendOpenR = r; legendOpenName = name; }         // (5l) the open Legend: a click anywhere else, or Esc, folds it
+            if (std::strcmp(key, "card") == 0 && legendOpenR.w > 0 && r.intersects(legendOpenR)) return Rect{r.right(), r.y, 0, 0};   // 5m part 2: (the Legend and the cards are drawn Legend first) no room for both: the Legend is the one the owner just opened
             if (!sh::beginPanel(wid.c_str(), r, p, sh::Shape::Panel, true)) return r;
             sh::text(p.dl, Type::Title, true, sh::here(p), sh::cText(), title);
             const float hb = static_cast<float>(m.iconBtn);
@@ -754,6 +756,25 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             sh::endPanel(tb);
         }
         auditRect("toolbar", static_cast<float>(fr.toolbar.x), static_cast<float>(fr.toolbar.y), static_cast<float>(fr.toolbar.w), static_cast<float>(fr.toolbar.h));
+    }
+
+    // ---- 0.15 stage 5n: the chart's tilt slider "flat <-> 3D": a pill the width of the toolbar, directly above it (so its centre is the toolbar's centre), in the Chart view ONLY. It drives the same
+    // tilt as the Controls panel's "Tilt" slider (AtomLab::setParam("tilt"): 0 = the flat chart, 1 = the full landscape). ----
+    if (!pane && hasToolbar && app.lab == 1 && app.atom.chartOn()) {
+        const Rect tr{fr.toolbar.x, fr.toolbar.y - m.s8 - m.toolbarH, fr.toolbar.w, static_cast<double>(m.toolbarH)};
+        sh::Panel tp;
+        if (sh::beginPanel("##shellTilt", tr, tp, sh::Shape::Pill, false)) {
+            const float y0 = tp.origin.y + (m.toolbarH - m.row) / 2.0f, ty = y0 + (m.row - sh::px(Type::Body)) / 2.0f;
+            const float lw = sh::width(Type::Body, false, "flat"), rw = sh::width(Type::Body, false, "3D");
+            const float x0 = tp.origin.x + m.s16, sx = x0 + lw + m.s8, sw = static_cast<float>(tr.w) - 2.0f * m.s16 - lw - rw - 2.0f * m.s8;
+            sh::text(tp.dl, Type::Body, false, ImVec2(x0, ty), sh::cMuted(), "flat");
+            sh::text(tp.dl, Type::Body, false, ImVec2(sx + sw + m.s8, ty), sh::cMuted(), "3D");
+            float v = static_cast<float>(app.atom.s.chartView.tilt);
+            if (sw > 10 && sh::slider("tilt.slider", ImVec2(sx, y0), sw, &v, 0.0f, 1.0f)) app.atom.setParam("tilt", std::round(static_cast<double>(v) * 100.0) / 100.0);
+            sh::endPanel(tp);
+        }
+        occ.push_back(tr);
+        auditRect("tiltslider", static_cast<float>(tr.x), static_cast<float>(tr.y), static_cast<float>(tr.w), static_cast<float>(tr.h));
     }
 
     // ---- the readout, bottom right: Body size on a soft dark pill (stage 5c; before it was Caption with an outline and was hard to read over lines and stars). Its own window, so a saved picture does not carry it ----

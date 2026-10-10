@@ -310,6 +310,11 @@ if(PL_BUILD_APP)
         add_test(NAME ui5l_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5l.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5l_${part} ${part})
         set_tests_properties(ui5l_${part} PROPERTIES TIMEOUT 3600)
       endforeach()
+      # 0.15 stage 5m part 2 / 5n: handle size, the subject card never covers the Legend, the windows, popups and the chart tilt slider (tests/check_5m2.py)
+      foreach(part layout tilt windows popups)
+        add_test(NAME ui5m2_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_5m2.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui5m2_${part} ${part})
+        set_tests_properties(ui5m2_${part} PROPERTIES TIMEOUT 3600)
+      endforeach()
       add_test(NAME shell_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_pictures ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference)
       # 0.15 stage 4: the whole Orbit Lab in the new UI: every INVENTORY.md item reachable by real clicks (incl. the 47 Go to names), the subject card's data sheet equal to the old card's lines
       # (8 things), the Time panel fits, the fact line (visible, changes after 20 s, stands still while hovered, readable, never overlaps), search (20 things, arrows, recent), links

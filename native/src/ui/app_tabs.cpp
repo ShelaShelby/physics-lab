@@ -120,24 +120,24 @@ bool drawCard(const Card& c, ImVec2 p, float w, float h, bool clickable, int id)
         ImGui::PopID();
         if (hover) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
-    cardRect(dl, p, ImVec2(p.x + w, p.y + h), corner(12 * s), hover ? look().c.accent : look().c.line, a);
+    cardRect(dl, p, ImVec2(p.x + w, p.y + h), corner(12 * s), hover ? look().w.accent : look().w.line, a);
     const ImVec2 ib(p.x + 14 * s, p.y + (h - 48 * s) / 2);
-    faceRect(dl, ib, ImVec2(ib.x + 48 * s, ib.y + 48 * s), c.locked ? look().c.line : look().c.accentFill, a, app::WidgetState::Normal, corner(12 * s));
+    faceRect(dl, ib, ImVec2(ib.x + 48 * s, ib.y + 48 * s), c.locked ? look().w.line : look().w.accentFill, a, app::WidgetState::Normal, corner(12 * s));
     const std::string icon = displayable(c.icon);
     if (!icon.empty()) {
         const float fs = 26 * s;
         const ImVec2 sz = ImGui::GetFont()->CalcTextSizeA(fs, FLT_MAX, 0, icon.c_str());
-        dl->AddText(ImGui::GetFont(), fs, ImVec2(ib.x + (48 * s - sz.x) / 2, ib.y + (48 * s - sz.y) / 2), col(c.locked ? look().c.muted : look().c.onacc, a), icon.c_str());
+        dl->AddText(ImGui::GetFont(), fs, ImVec2(ib.x + (48 * s - sz.x) / 2, ib.y + (48 * s - sz.y) / 2), col(c.locked ? look().w.muted : look().w.onacc, a), icon.c_str());
     }
     const float tx = ib.x + 48 * s + 12 * s, tw = p.x + w - 14 * s - tx;
     const float th = cardHeight(c, w) - 24 * s;
     float y = p.y + (h - th) / 2;
     const std::string title = displayable(c.title, fonts().bold), text = displayable(c.text);
-    dl->AddText(fonts().bold, 15 * s, ImVec2(tx, y), col(look().c.fg, a), title.c_str(), nullptr, tw);
+    dl->AddText(fonts().bold, 15 * s, ImVec2(tx, y), col(look().w.fg, a), title.c_str(), nullptr, tw);
     y += fonts().bold->CalcTextSizeA(15 * s, FLT_MAX, tw, title.c_str()).y + 2 * s;
-    dl->AddText(ImGui::GetFont(), 13 * s, ImVec2(tx, y), col(look().c.muted, a), text.c_str(), nullptr, tw);
+    dl->AddText(ImGui::GetFont(), 13 * s, ImVec2(tx, y), col(look().w.muted, a), text.c_str(), nullptr, tw);
     y += ImGui::GetFont()->CalcTextSizeA(13 * s, FLT_MAX, tw, text.c_str()).y + 2 * s;
-    if (!c.small.empty()) dl->AddText(ImGui::GetFont(), 12 * s, ImVec2(tx, y), col(look().c.muted, a), displayable(c.small).c_str());
+    if (!c.small.empty()) dl->AddText(ImGui::GetFont(), 12 * s, ImVec2(tx, y), col(look().w.muted, a), displayable(c.small).c_str());
     return clicked;
 }
 
@@ -168,7 +168,7 @@ void heading(const char* text, float px) {
 
 void mutedLine(const char* text, float px) {
     ImGui::PushFont(nullptr, fontPx(px));
-    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.muted));
+    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.muted));
     ImGui::TextWrapped("%s", displayable(text).c_str());
     ImGui::PopStyleColor();
     ImGui::PopFont();
@@ -187,8 +187,8 @@ void achievementsPane(AppState& app) {
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const float W = ImGui::GetContentRegionAvail().x;
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p, ImVec2(p.x + W, p.y + 8 * s), col(look().c.line), corner(99));
-    if (got) dl->AddRectFilled(p, ImVec2(p.x + W * std::round(100.0f * got / total) / 100, p.y + 8 * s), col(look().c.accent), corner(99));
+    dl->AddRectFilled(p, ImVec2(p.x + W, p.y + 8 * s), col(look().w.line), corner(99));
+    if (got) dl->AddRectFilled(p, ImVec2(p.x + W * std::round(100.0f * got / total) / 100, p.y + 8 * s), col(look().w.accent), corner(99));
     ImGui::Dummy(ImVec2(W, 8 * s));
     ImGui::Dummy(ImVec2(0, 4 * s));
     std::vector<Card> cards;
@@ -298,8 +298,8 @@ void factsLine(AppState& app) {
     if (hover != g_held) { g_held = hover; if (g_held) g_next = DBL_MAX; else if (g_fadeAt < 0) sched(app); }
     if (clicked && g_fadeAt < 0) showNext(app);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    cardRect(dl, p, ImVec2(p.x + W, p.y + h), corner(12 * s), g_held ? look().c.accent : look().c.line);
-    if (!icon.empty()) dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(p.x + padX, p.y + (h - 18 * s) / 2), col(look().c.fg), icon.c_str());
+    cardRect(dl, p, ImVec2(p.x + W, p.y + h), corner(12 * s), g_held ? look().w.accent : look().w.line);
+    if (!icon.empty()) dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(p.x + padX, p.y + (h - 18 * s) / 2), col(look().w.fg), icon.c_str());
     // the text fades out and in over 0.25 s (Reduced motion: no fading)
     float alpha = 1;
     if (!look().reduced) {
@@ -309,12 +309,12 @@ void factsLine(AppState& app) {
     const float ty = p.y + (h - textH) / 2;
     for (const Word& w : words) {
         ImFont* f = w.lead ? fonts().bold : ImGui::GetFont();
-        dl->AddText(f, fs, ImVec2(p.x + tx0 + w.x, ty + w.y + (lineH - fs) / 2), col(w.lead ? look().c.accent : look().c.fg, alpha), w.w.c_str());
+        dl->AddText(f, fs, ImVec2(p.x + tx0 + w.x, ty + w.y + (lineH - fs) / 2), col(w.lead ? look().w.accent : look().w.fg, alpha), w.w.c_str());
     }
     const float cw = ImGui::GetFont()->CalcTextSizeA(13 * s, FLT_MAX, 0, count.c_str()).x, gw = ImGui::GetFont()->CalcTextSizeA(18 * s, FLT_MAX, 0, "›").x;
     const float rx = p.x + W - padX - gw;
-    dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(rx, p.y + (h - 18 * s * 1.15f) / 2), col(look().c.muted), "›");
-    dl->AddText(ImGui::GetFont(), 13 * s, ImVec2(rx - 6 * s - cw, p.y + (h - 13 * s) / 2), col(look().c.muted), count.c_str());
+    dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(rx, p.y + (h - 18 * s * 1.15f) / 2), col(look().w.muted), "›");
+    dl->AddText(ImGui::GetFont(), 13 * s, ImVec2(rx - 6 * s - cw, p.y + (h - 13 * s) / 2), col(look().w.muted), count.c_str());
 }
 
 // The tabs (the web's .seg): 🔬 Simulations, 📚 Learn, 🏆 Achievements
@@ -328,7 +328,7 @@ void tabsBar(AppState& app) {
     const float h = ImGui::GetFontSize() + 14 * s;
     float total = 0;
     for (const char* l : labels) total += ImGui::CalcTextSize(displayable(l).c_str()).x + 28 * s;
-    cardRect(dl, p0, ImVec2(p0.x + total, p0.y + h), corner(10 * s), look().c.line, 1, false);
+    cardRect(dl, p0, ImVec2(p0.x + total, p0.y + h), corner(10 * s), look().w.line, 1, false);
     for (int i = 0; i < 3; i++) {
         const std::string l = displayable(labels[i]);
         const float w = ImGui::CalcTextSize(l.c_str()).x + 28 * s;
@@ -338,14 +338,14 @@ void tabsBar(AppState& app) {
         const bool hover = ImGui::IsItemHovered();
         ImGui::PopID();
         const bool on = app.pane == i;
-        if (on) faceRect(dl, ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), look().c.accentFill, 1, app::WidgetState::Normal, corner(10 * s),
+        if (on) faceRect(dl, ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), look().w.accentFill, 1, app::WidgetState::Normal, corner(10 * s),
                          i == 0 ? ImDrawFlags_RoundCornersLeft : i == 2 ? ImDrawFlags_RoundCornersRight : ImDrawFlags_RoundCornersNone);
-        else if (hover) dl->AddRectFilled(ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), col(look().c.line, 0.6f));
-        dl->AddText(ImVec2(x + 14 * s, p0.y + 7 * s), col(on ? look().c.onacc : look().c.fg), l.c_str());
+        else if (hover) dl->AddRectFilled(ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), col(look().w.line, 0.6f));
+        dl->AddText(ImVec2(x + 14 * s, p0.y + 7 * s), col(on ? look().w.onacc : look().w.fg), l.c_str());
         x += w;
     }
     ImGui::PopFont();
-    dl->AddRect(p0, ImVec2(p0.x + total, p0.y + h), col(look().c.line), corner(10 * s));
+    dl->AddRect(p0, ImVec2(p0.x + total, p0.y + h), col(look().w.line), corner(10 * s));
     ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + h));
     ImGui::Dummy(ImVec2(total, 0));
 }
@@ -414,8 +414,8 @@ void appTabsFrame(AppState& app) {
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, a);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, corner(12 * s));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10 * s, 10 * s));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, vec(look().c.card));
-    ImGui::PushStyleColor(ImGuiCol_Border, vec(look().c.line));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, vec(look().w.card));
+    ImGui::PushStyleColor(ImGuiCol_Border, vec(look().w.line));
     ImGui::Begin("##achToast", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings |
                  ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
@@ -427,11 +427,11 @@ void appTabsFrame(AppState& app) {
     ImGui::SetCursorScreenPos(ImVec2(tx, p.y));
     ImGui::PushTextWrapPos(tx + tw - ImGui::GetWindowPos().x);
     ImGui::PushFont(nullptr, fontPx(11));
-    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.muted));
+    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.muted));
     ImGui::TextUnformatted(lead.c_str());
     ImGui::PopFont();
     ImGui::PushFont(fonts().bold, fontPx(14));
-    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.fg));
+    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.fg));
     ImGui::SetCursorPosX(tx - ImGui::GetWindowPos().x);
     ImGui::TextUnformatted(displayable(A.name, fonts().bold).c_str());
     ImGui::PopStyleColor();
@@ -444,11 +444,11 @@ void appTabsFrame(AppState& app) {
     ImGui::PopTextWrapPos();
     const float bottom = ImGui::GetCursorScreenPos().y;
     const float iy = std::max(p.y, (p.y + bottom - 42 * s) / 2 - 2 * s);
-    faceRect(dl, ImVec2(p.x, iy), ImVec2(p.x + 42 * s, iy + 42 * s), look().c.accentFill, a, app::WidgetState::Normal, corner(10 * s));
+    faceRect(dl, ImVec2(p.x, iy), ImVec2(p.x + 42 * s, iy + 42 * s), look().w.accentFill, a, app::WidgetState::Normal, corner(10 * s));
     const std::string icon = displayable(A.ic);
     if (!icon.empty()) {
         const ImVec2 sz = ImGui::GetFont()->CalcTextSizeA(22 * s, FLT_MAX, 0, icon.c_str());
-        dl->AddText(ImGui::GetFont(), 22 * s, ImVec2(p.x + (42 * s - sz.x) / 2, iy + (42 * s - sz.y) / 2), col(look().c.onacc, a), icon.c_str());
+        dl->AddText(ImGui::GetFont(), 22 * s, ImVec2(p.x + (42 * s - sz.x) / 2, iy + (42 * s - sz.y) / 2), col(look().w.onacc, a), icon.c_str());
     }
     if (bottom < iy + 42 * s) { ImGui::SetCursorScreenPos(ImVec2(p.x, iy + 42 * s)); ImGui::Dummy(ImVec2(0, 0)); }
     ImGui::End();

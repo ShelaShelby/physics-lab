@@ -1,5 +1,16 @@
 # Owner to-do (things only the owner can do)
 
+## 0.15 stage 5m part 2 + 5n (look, windows, tilt slider): what only you can do
+- [ ] On the PC (when the Windows exe is published): New UI On, Dark theme. Handle on the picture's right edge: bigger (32 x 72), slides smoothly (with Motion reduced it jumps). Is the size and the slide right?
+- [ ] Legend and the element chip / periodic table: grey hover, no blue; the chosen element has a light ring. The toolbar: a lit button is a light-grey pill. Is the toolbar pill flat enough?
+- [ ] Atom Lab, Chart view, a 880 x 560 window: open the Legend; the subject card goes away while it is open (it comes back when the Legend folds). Same in the Orbit Lab with a body picked. Is that what you want, or should the card shrink instead?
+- [ ] Settings, About, Learn, the history pages, Benchmark (also the Benchmark result window with Save, which could not be opened in the cloud) in the M1 look: rounded flat cards, grey selected tiles. Also the theme chooser and language pop-ups and the Facts panel (click the fact line). I read "Units popup" and "view-chooser popup" as the pop-up lists; tell me if you meant something else.
+- [ ] The chart tilt slider "flat <-> 3D" above the toolbar, Chart view only: drag it, compare with the Controls panel's Tilt row.
+- [ ] Still unconfirmed from earlier stages: Settings search; Legend closes on an outside click; Cloud / Cloud 3D show one highlight; the Labs dropdown; About Contents jumps.
+- [ ] New UI Off benchmark at the same window size (compare with New UI On); real-GPU numbers.
+- [ ] Delete "Look M*.bat" by hand if you still have them on your PC (none is in the repository).
+- [ ] Not tested here: Windows, Segoe UI widths, 125 / 150 % scale, a real mouse, a real GPU, speed, the feel of the slide.
+
 ## 0.15 stage 5m (look)
 - [ ] On the PC (when the Windows exe of stage 5m is published): the three themes (Frutiger Aero, Y2K Night, Synthwave) are gone from the Theme list; an old saved choice of one of them opens as Dark; the look is M1 without any launcher (New UI On + Dark theme: Inter font, light-grey pill); Settings has no Theme effects row; the facts line counts "n/26". (Part 2 adds: handle, Legend and element chips, toolbar pill look right; the Legend is not covered by the subject card.)
 

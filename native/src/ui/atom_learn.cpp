@@ -146,13 +146,13 @@ void timelineGuide(AppState& app) {
         const float s = S();
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 o = ImGui::GetCursorScreenPos();
-        dl->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), col(look().c.soft, 31/255.f), 12 * s);
+        dl->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), col(look().w.soft, 31/255.f), 12 * s);
         svgIcon(st.svg, ImVec2(o.x + 2 * s, o.y + 6 * s), s);
         ImGui::SetCursorScreenPos(ImVec2(o.x + 72 * s, o.y + 4 * s));
         ImGui::BeginGroup();
         ImGui::PushTextWrapPos(0);
         ImGui::PushFont(fonts().bold, 0.0f);
-        ImGui::PushStyleColor(ImGuiCol_Text, vec(look().c.accent));   // the year, in the accent colour (.lrnY)
+        ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.accent));   // the year, in the accent colour (.lrnY)
         ImGui::TextUnformatted(st.y);
         ImGui::PopStyleColor();
         ImGui::TextUnformatted(st.t);

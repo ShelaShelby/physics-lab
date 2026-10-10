@@ -257,7 +257,7 @@ void timeline(AppState& app) {
         ImGui::Separator();
         const float s = ImGui::GetFontSize() / 16.0f;      // the step picture on the left, as in the Atom Lab's timeline (the web's .lrnIc, 60 px wide)
         const ImVec2 o = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), col(look().c.soft, 31/255.f), 12 * s);
+        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(o.x, o.y + 4 * s), ImVec2(o.x + 60 * s, o.y + 64 * s), col(look().w.soft, 31/255.f), 12 * s);
         svgIcon(st.svg, ImVec2(o.x + 2 * s, o.y + 6 * s), s);
         ImGui::SetCursorScreenPos(ImVec2(o.x + 72 * s, o.y + 4 * s));
         ImGui::BeginGroup();
