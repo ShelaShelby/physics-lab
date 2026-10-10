@@ -510,6 +510,8 @@ int main(int, char**) {
         renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
         renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
+        static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
+        if (drawStat) std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices());
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         ui::benchmarkGpuEnd(app);
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included

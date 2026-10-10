@@ -705,6 +705,8 @@ static void testBench() {
     checkTrue("100 frames: the 1 % low is the single slowest frame", near(benchStats(hundred).low1Fps, 20));
     std::vector<double> sorted = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, rev(sorted.rbegin(), sorted.rend());
     checkTrue("order does not matter", near(benchStats(sorted).low1Fps, benchStats(rev).low1Fps) && near(benchStats(rev).low1Fps, 100));
+    // 0.16 stage 3: frames slower than 16.7 ms (below 60 fps), so a one-time hitch (1) can be told from a repeating one (many)
+    checkTrue("slow frames: only those over 16.7 ms count (16.7 itself does not)", benchStats({10, 16.7, 16.8, 55.3, 5}).slowFrames == 2 && benchStats({}).slowFrames == 0 && b.slowFrames == 2 && a.slowFrames == 0);
 
     // a run: 3 scenes, 2 s warm-up and 8 s counted, frames of 100 ms
     BenchRun run(3);
@@ -742,6 +744,7 @@ static void testBench() {
     BenchScene s1; s1.name = "1. First"; s1.what = "some settings"; s1.frames = benchStats({10, 10, 10, 10}); s1.cpuAvgMs = 3.5; s1.gpuAvgMs = 6.25; s1.gpuSpanAvgMs = 7.5; s1.gpuSamples = 4;
     BenchScene s2; s2.name = "2. Second"; s2.what = "other settings"; s2.frames = benchStats({20, 20}); s2.cpuAvgMs = 1; s2.gpuAvgMs = -1;
     const std::string t = benchResultText(env, {s1, s2});
+    checkTrue("result text: the frames slower than 16.7 ms, for every scene (0.16 stage 3)", t.find("  Worst frame: 20.00 ms\n  Frames slower than 16.7 ms: 2 of 2\n") != std::string::npos);
     const char* want[] = {"Physics Lab (native) benchmark", "Version: 0.9", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "OpenGL: 3.3.0 Test", "Driver / vendor: Test Vendor",
                           "Window: 1400 x 860 pixels, full screen", "Picture area: 1040 x 713 pixels", "Display refresh rate: 144 Hz", "Text size: xl, theme: paper",
                           "VSync: off during the test. Each scene: 2 s warm-up (not counted), then 8 s counted.", "GPU timer (GL_TIME_ELAPSED): available", "GPU timer check: reliable, self-check with a known load: timer 3.10 ms, clock 3.20 ms"};
@@ -750,7 +753,7 @@ static void testBench() {
     for (const char* w : want) { const std::size_t p = t.find(w, at); if (p == std::string::npos) { inOrder = false; checkTrue(std::string("result text has: ") + w, false); break; } at = p; }
     checkTrue("result text: no Theme effects line any more (the setting was archived with the themes, 0.15 stage 5m; deleted on purpose)", t.find("Theme effects") == std::string::npos && t.find("Text size: xl, theme: paper\n") != std::string::npos && t.find("New UI") == std::string::npos);
     checkTrue("the result text starts with the version, date and graphics, in order", inOrder && t.rfind("Physics Lab (native) benchmark\n", 0) == 0);
-    checkTrue("result text: scene 1 numbers", t.find("  Average: 10.00 ms per frame = 100.0 fps\n  1 % low: 100.0 fps") != std::string::npos && t.find("  Worst frame: 10.00 ms\n  CPU work per frame: 3.50 ms\n  GPU time per frame: 6.25 ms") != std::string::npos);
+    checkTrue("result text: scene 1 numbers", t.find("  Average: 10.00 ms per frame = 100.0 fps\n  1 % low: 100.0 fps") != std::string::npos && t.find("  Worst frame: 10.00 ms\n  Frames slower than 16.7 ms: 0 of 4\n  CPU work per frame: 3.50 ms\n  GPU time per frame: 6.25 ms") != std::string::npos);
     checkTrue("result text: the GPU span line", t.find("  GPU span per frame: 7.50 ms") != std::string::npos);
     checkTrue("result text: no GPU time says not available, it does not guess", t.find("2. Second\n") != std::string::npos && t.find("GPU time per frame: not available") != std::string::npos);
     checkTrue("result text: the average over the scenes", t.find("Average fps over the scenes: 75.0") != std::string::npos);
@@ -1179,7 +1182,19 @@ static void testBenchGpuChart() {
     // 0.13 stage 4 part B: the GPU chart cache switch and its two twin scenes (which 28, 29 = benchmark scenes 33, 34, after the Orbit Lab twins 31, 32)
     using atom::kBenchChartCpuFirst; using atom::kBenchAtomScenes;
     atom::AtomLab fresh; checkTrue("GPU chart cache: a new lab has the switch On (the default)", fresh.gpuChart);
-    checkTrue("chart twins: which 28 and 29 are the last two Atom Lab scenes, after the run of scenes numbered which + 3", kBenchChartCpuFirst == 28 && kBenchAtomScenes == 30 && atom::kBenchSceneCount == 28);
+    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 31 && atom::kBenchSceneCount == 28);
+    {   // 0.16 stage 3: the nucleus at full zoom with the camera turning (the owner's slow case), the last scene of the list
+        atom::AtomLab L; L.p.qstyle = "Classic"; L.gpuChart = false;
+        atom::benchSetup(L, atom::kBenchFullZoomScene, 1040, 713);
+        checkTrue("full-zoom scene: lawrencium-266, Orbit view, Cinematic, + Sea, Fuzzy, the largest zoom (7 = x10,000,000), no glide, the whole nucleus there",
+                  L.p.Z == 103 && L.p.N == 163 && L.p.view == "Orbit" && L.p.ostyle == "Modern" && L.p.qstyle == "Cinematic" && L.p.detail == "+ Sea" && L.p.style == "Fuzzy" && L.p.zoom == 7 && !L.s.zoomTo && int(L.s.nuc.size()) == 266 && L.gpuChart);
+        const double y0 = L.s.oyaw, p0 = L.s.opitch;
+        atom::benchFrame(L, atom::kBenchFullZoomScene, 0, -1); const double y1 = L.s.oyaw;
+        atom::benchFrame(L, atom::kBenchFullZoomScene, 1, 0);
+        checkTrue("full-zoom scene: the camera turns every frame, warm-up included, as a fast drag does (0.15 rad a frame = 15 points at 0.01 rad per point)", near(y1 - y0, 0.15) && near(L.s.oyaw - y1, 0.15) && L.s.opitch > 0 && L.s.opitch < 3.15 && near(L.s.opitch, p0, 0.2));
+        const atom::BenchInfo& in = atom::benchSceneInfo(atom::kBenchFullZoomScene);
+        checkTrue("full-zoom scene: the name and the settings in words", in.name.find("full zoom") != std::string::npos && in.what.find("lawrencium-266") != std::string::npos && in.what.find("x10,000,000") != std::string::npos && in.what.find("+ Sea") != std::string::npos);
+    }
     atom::AtomLab odd; odd.gpuChart = false; atom::benchSetup(odd, atom::kBenchChartScene, 800, 600);
     checkTrue("GPU chart cache: scene 19 switches it On even if the lab had it Off (no setting of the user's leaks into a scene)", odd.gpuChart);
     const int pairs[2][2] = {{28, 16}, {29, 17}};                    // scenes 33 and 34 are scenes 19 and 20 (which 16, 17)

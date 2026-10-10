@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.16", "Atom Lab: less work at full zoom on the nucleus; benchmark counts slow frames",
+     "At full zoom on a nucleus (x10,000,000) the Atom Lab no longer makes the parts of nearby nucleons that are wholly outside the picture: their gluon cloud, sea quarks, rings and lines. "
+     "The picture is the same pixel for pixel. With \"+ Sea\" the antiquark rings alone were up to 311,076 corners a frame in Accurate, Classic and every light theme; now 36. "
+     "The benchmark has a new last scene, \"Nucleus, full zoom, camera moving\" (lawrencium-266, Cinematic, + Sea, the camera turning), and every scene now says how many frames took longer than 16.7 ms, "
+     "so a one-time hitch can be told from a repeating one. The outline's graphics-card programs now run once at start, so a driver's first-use work does not fall on the first outline. "
+     "Not measured: speed (the cloud has no graphics card)."},
     {"0.16", "Four fixes: About scrollbar, Benchmark window, Contents rail, Atom Lab Nucleus",
      "The About page keeps its scrollbar after you close and reopen it (it was drawn behind the reopened page). The Benchmark window with both extra-scene boxes ticked never grows taller than the app window: its text scrolls and Start and Cancel stay in view. The Contents list beside a page is wider, so labels like \"Stars and far-away things\" are shown in full. In the Atom Lab, Controls now always has a Nucleus section with Quark style, Nucleon detail and Nucleon edge, at any zoom; they show in the picture when zoomed in close."},
     {"0.16", "The old interface is gone: the New UI is the only one",

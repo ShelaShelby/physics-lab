@@ -12,6 +12,7 @@ namespace app {
 
 constexpr double kBenchWarmupS = 2.0;      // not counted
 constexpr double kBenchMeasureS = 8.0;     // counted
+constexpr double kBenchSlowMs = 16.7;      // a frame slower than this is counted as slow (60 fps = 16.67 ms; the report says 16.7)
 
 // What the frame times of one scene come to.
 struct BenchStats {
@@ -21,6 +22,7 @@ struct BenchStats {
     double avgFps = 0;           // 1000 / avgMs
     double low1Fps = 0;          // the "1 % low": 1000 / (the average of the slowest 1 % of the frames, at least one frame)
     double worstMs = 0;          // the slowest frame
+    int slowFrames = 0;          // 0.16 stage 3: frames slower than kBenchSlowMs (below 60 fps): 1 = a one-time hitch, many = a repeating one
 };
 BenchStats benchStats(const std::vector<double>& frameMs);
 

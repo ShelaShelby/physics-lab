@@ -378,7 +378,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
     glBindFramebuffer(GL_FRAMEBUFFER, outFbo);
     glViewport(0, fbY, fbW, fbH);                         // the picture fills fbW × fbH pixels of the window, fbY above its bottom edge
     closeTriangles();
-    lastCalls_ = 0; lastInstances_ = 0;
+    lastCalls_ = 0; lastInstances_ = 0; lastVerts_ = static_cast<long>(verts_.size());
     for (const Segment& sg : segments_) {
         if (sg.kind != Kind::LayerBegin) lastCalls_++;
         if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu) lastInstances_ += sg.count;

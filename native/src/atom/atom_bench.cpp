@@ -16,7 +16,7 @@ int baseScene(int which) {
     if (which == kBenchJumpCpuScene) return 8;
     if (which >= kBenchSuperCpuFirst && which < kBenchOutlineCpuFirst) return 10 + (which - kBenchSuperCpuFirst);
     if (which >= kBenchOutlineCpuFirst && which < kBenchSceneCount) return 13 + (which - kBenchOutlineCpuFirst);
-    if (which >= kBenchChartCpuFirst && which < kBenchAtomScenes) return 16 + (which - kBenchChartCpuFirst);   // 28, 29: scenes 19 and 20 (which 16, 17)
+    if (which >= kBenchChartCpuFirst && which < kBenchFullZoomScene) return 16 + (which - kBenchChartCpuFirst);   // 28, 29: scenes 19 and 20 (which 16, 17)
     return which;
 }
 void fresh(AtomLab& L, int Z, int N, double w, double h) {
@@ -77,6 +77,13 @@ void benchSetup(AtomLab& L, int which, double w, double h) {
             for (int i = 0; i < 5; i++) L.walkOnce();
             L.s.walkAuto = false;
         }
+        still(L);
+        return;
+    }
+    if (which == kBenchFullZoomScene) {                  // 0.16 stage 3: the owner's slow case, the nucleus at the largest zoom with the camera turning (benchFrame turns it)
+        fresh(L, 103, 163, w, h);                        // lawrencium-266
+        nucleus(L, "Cinematic");
+        L.setParam("zoom", 7.0);                         // the largest zoom (x10,000,000; AtomLab::setParam clamps the zoom to kZoomMin..7)
         still(L);
         return;
     }
@@ -163,6 +170,9 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Outline with the cut dragged, Slice view, 4f, 12,000 dots, GPU outline OFF (the CPU path, to compare with scene 17)", "exactly scene 17 with GPU outline Off: the processor makes the cut's 40,000 density values every frame. The DIFFERENCE between this scene and scene 17 is what the compute shader is worth on this PC. Not measured in the cloud session"},
         {"The chart of nuclides, flat, GPU chart cache OFF (the 0.13 stage 3 way, to compare with scene 19)", "exactly scene 19 (the whole chart, flat, uranium-238 chosen, nothing hovered) with the GPU chart cache Off: the 3,557 squares are turned into vertices and sent to the graphics card again every frame, as up to 0.13 stage 3. Scene 19 is the same with the squares kept in a GPU buffer. The DIFFERENCE between the two is what the cache is worth on this PC. Not measured in the cloud session. Keep the pointer off the picture while it runs"},
         {"The chart as a landscape, full tilt, GPU chart cache OFF (the 0.13 stage 3 way, to compare with scene 20)", "exactly scene 20 (the landscape at full tilt, uranium-238 chosen) with the GPU chart cache Off: the 3,557 blocks and their sides are turned into vertices and sent again every frame, as up to 0.13 stage 3. Scene 20 is the same with the blocks kept in a GPU buffer. The DIFFERENCE between the two is what the cache is worth on this PC. Not measured in the cloud session. Keep the pointer off the picture while it runs"},
+        {"Nucleus, full zoom, camera moving: lawrencium-266, Cinematic quarks, + Sea", "lawrencium-266 (103 protons, 163 neutrons), Orbit view, Cinematic quarks, + Sea detail, Fuzzy nucleons, zoom at the maximum (x10,000,000: the picture is a small part of one nucleon), "
+         "the camera turning 0.15 rad every frame as a fast drag does (15 points of mouse movement a frame). The owner's slow case of 0.16, which scenes 4 and 5 missed because neither goes to the maximum zoom. "
+         "From 0.16 stage 3 the nucleons, blobs, rings and lines that lie wholly outside the picture are not made at all"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchAtomScenes - 1)) - kBenchFirstRisk];
 }
@@ -181,6 +191,8 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
             for (int k : up) if (orbitals()[k].shell == "4f") { to = k; break; }
             if (to >= 0) L.startJump("absorb", to);
         }
+    } else if (which == kBenchFullZoomScene) {
+        L.s.oyaw += 0.15;                                // turning as a fast drag does: 15 points of mouse movement a frame (the Orbit view turns 0.01 rad per point, AtomLab "turn")
     } else if (which == 13) {
         if (measureFrame < 0) return;
         if (measureFrame == 0) L.setParam("outline", std::string("On"));

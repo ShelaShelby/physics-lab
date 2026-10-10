@@ -101,6 +101,7 @@ public:
     // What the last end() drew: draw calls, and shapes drawn by the instanced calls (squares and blobs)
     int lastDrawCalls() const { return lastCalls_; }
     int lastInstances() const { return lastInstances_; }
+    long lastVertices() const { return lastVerts_; }                          // the triangle vertices end() uploaded (lines, rings, discs, text-free shapes)
     std::size_t pendingVertexBytes() const { return verts_.size() * sizeof(Vertex); }   // what end() would upload for the shapes added so far (a measuring aid for tests and tools)
 
     // A turning planet. K turns screen directions into the planet's own frame (rows: its 0° meridian,
@@ -136,6 +137,7 @@ private:
     int layerW_ = 0, layerH_ = 0;
     float layerScale_ = 0.5f;
     int lastCalls_ = 0, lastInstances_ = 0;
+    long lastVerts_ = 0;
     bool gray_ = false;
     Color grayBg_{0, 0, 0, 1};
     GLuint grayFbo_ = 0, grayTex_ = 0, grayProgram_ = 0;

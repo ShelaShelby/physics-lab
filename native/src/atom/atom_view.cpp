@@ -601,17 +601,24 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         };
         auto flushMain = [&] { if (!mainB.b.empty()) { R.blobs(mainB.b.data(), int(mainB.b.size()), mainB.add); mainB.b.clear(); } };
         struct Ctx { bool soft; };                                         // "a canvas": the main picture or the soft layer
+        // 0.16 stage 3: a shape that lies wholly outside the picture is not made at all. The graphics card would clip it away anyway, so the picture is the same,
+        // but at full zoom (x10,000,000) almost every blob, ring and line of the nucleons near the view is outside it. e: how far the shape reaches from (x, y),
+        // with 2 points to spare for the smooth edge (a blob's quad reaches r + 1).
+        const auto outside = [w, h](double x0, double y0, double x1, double y1, double e) { return std::max(x0, x1) + e < 0 || std::min(x0, x1) - e > w || std::max(y0, y1) + e < 0 || std::min(y0, y1) - e > h; };
         auto put = [&](const Ctx& c, const Blob& b, bool add = false) {
+            if (outside(b.x, b.y, b.x, b.y, double(b.r) + 2)) return;
             Batch& t = c.soft ? softB : mainB;
             if (t.add != add && !t.b.empty()) { if (c.soft) closeSoft(); else flushMain(); }
             t.add = add;
             t.b.push_back(b);
         };
         auto lineTo = [&](const Ctx& c, double x0, double y0, double x1, double y1, double wd, Color col) {
+            if (outside(x0, y0, x1, y1, std::max(wd, 1.0) / 2 + 2)) return;   // (Renderer2D::line: no caps, at least 1 point wide)
             if (c.soft) { closeSoft(); softOps.push_back([&R, x0, y0, x1, y1, wd, col] { R.line(x0, y0, x1, y1, wd, col); }); }
             else { flushMain(); R.line(x0, y0, x1, y1, wd, col); }
         };
         auto ringTo = [&](const Ctx& c, double x, double y, double r, double wd, Color col) {
+            if (outside(x, y, x, y, r + std::max(wd, 1.0) / 2 + 2)) return;    // a ring is up to 720 line pieces (Renderer2D::ring): the "+ Sea" antiquarks at full zoom made 311,076 vertices a frame
             if (c.soft) { closeSoft(); softOps.push_back([&R, x, y, r, wd, col] { R.ring(x, y, r, wd, col); }); }
             else { flushMain(); R.ring(x, y, r, wd, col); }
         };
@@ -645,7 +652,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                         put(c, flat(o.x + (X - o.x) * u + wob, o.y + (Y - o.y) * u - 0.6 * wob, std::max(1.0, 0.012 * rn), withA(css.fg, 0.8 * A * std::sin(kPi * u))));
                     }
                 }
-            if (p.detail == "+ Sea")                                       // virtual quark–antiquark pairs flashing in and out
+            if (p.detail == "+ Sea" && !outside(X, Y, X, Y, 0.75 * k + std::max(1.5, 0.028 * rn) + 2.6))   // virtual quark–antiquark pairs flashing in and out (all within 0.62 + 0.13 fm of the middle)
                 for (int j = 0; j < 12; j++) {
                     const double cc = t * 0.8 + j * 0.379, cyc = std::floor(cc), ph = cc - cyc, env = std::pow(std::sin(kPi * ph), 2), sd = j * 91.7 + cyc * 13.13;
                     const double rr = 0.62 * std::cbrt(rnd(sd)), th = std::acos(1 - 2 * rnd(sd + 1)), az = 2 * kPi * rnd(sd + 2);
@@ -672,6 +679,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const auto lightQuark = [&](const double in[3], double out[3]) { double t[3] = {in[0], in[1], in[2]}; if (css.light) lightQuarkColour(t, out); else for (int i = 0; i < 3; i++) out[i] = t[i]; };
         // Accurate / Cinematic quarks: colour charge, gluon exchange, a flickering gluon field (web: drawQuarksField).
         // phase 0 = 'all', 1 = 'soft' (blurry parts into sc), 2 = 'sharp' (crisp parts, faded by fog)
+        struct FP { double x, y, a, s; int g; };                           // a gluon-field particle
+        std::vector<FP> F;                                                 // (one list for the frame, refilled for each nucleon: no allocation per nucleon)
         auto field = [&](const Ctx& c, const Nucleon& q, double X, double Y, double A, int pb, int phase, const Ctx& sc, double fog) {
             const bool cine = p.qstyle == "Cinematic";
             const bool add = cine && !css.light;                           // Cinematic adds up light, which only shows on a dark page; on a light theme it is drawn with ordinary blending instead
@@ -683,31 +692,36 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     const int legN = int(std::lround(std::min(std::max(24.0, std::min(130.0, rn * 0.5)) * (cine ? 1.4 : 1), 0.85 * pb / 3)));
                     const int haloN = int(std::lround(std::min(46.0, 0.15 * pb)));
                     const double al0 = (cine ? 0.36 : 0.22) * A, sz0 = std::max(1.0, (cine ? 0.024 : 0.014) * rn);
-                    struct FP { double x, y, a, s; int g; };
-                    std::vector<FP> F;
-                    for (int leg = 0; leg < 3; leg++) {
-                        const QPt& o = Q.P[leg];
-                        const double dx = X - o.x, dy = Y - o.y, L = std::hypot(dx, dy) > 0 ? std::hypot(dx, dy) : 1, nx = -dy / L, ny = dx / L;
-                        for (int j = 0; j < legN; j++) {
-                            const double sd = leg * 977 + j * 13.7 + q.ph * 31, cc = t * 0.9 + rnd(sd) * 4, cyc = std::floor(cc), ph = cc - cyc, s2 = sd + cyc * 17.3;
-                            const double uu = rnd(s2), side = (rnd(s2 + 1) + rnd(s2 + 2) + rnd(s2 + 3) - 1.5) * (0.1 + 0.12 * std::sin(kPi * uu)) * rn;   // fatter in the middle of the tube
-                            F.push_back({o.x + dx * uu + nx * side, o.y + dy * uu + ny * side, std::pow(std::sin(kPi * ph), 2) * al0 * (0.5 + 0.5 * rnd(s2 + 4)), sz0 * (0.6 + rnd(s2 + 5)), uu > 0.7 ? 3 : leg});
+                    double reach = 0;                                      // how far from the middle a particle of the field can be drawn: a tube point is at most 0.33 rn beside its tube,
+                    for (const QPt& o : Q.P) reach = std::max(reach, std::hypot(o.x - X, o.y - Y));   // a halo point at most 0.3 rn sqrt(-2 ln 0.001) = 1.115 rn out; a blob is at most 1.8 sz0 x 1.7 big
+                    reach = std::max(reach + 0.33 * rn, 1.12 * rn) + 3.1 * sz0;
+                    if (!outside(X, Y, X, Y, reach + 2)) {                // only when some of it can reach the picture (0.16 stage 3: at full zoom, most nucleons near the view)
+                        F.clear();
+                        for (int leg = 0; leg < 3; leg++) {
+                            const QPt& o = Q.P[leg];
+                            const double dx = X - o.x, dy = Y - o.y, L = std::hypot(dx, dy) > 0 ? std::hypot(dx, dy) : 1, nx = -dy / L, ny = dx / L;
+                            for (int j = 0; j < legN; j++) {
+                                const double sd = leg * 977 + j * 13.7 + q.ph * 31, cc = t * 0.9 + rnd(sd) * 4, cyc = std::floor(cc), ph = cc - cyc, s2 = sd + cyc * 17.3;
+                                const double uu = rnd(s2), side = (rnd(s2 + 1) + rnd(s2 + 2) + rnd(s2 + 3) - 1.5) * (0.1 + 0.12 * std::sin(kPi * uu)) * rn;   // fatter in the middle of the tube
+                                F.push_back({o.x + dx * uu + nx * side, o.y + dy * uu + ny * side, std::pow(std::sin(kPi * ph), 2) * al0 * (0.5 + 0.5 * rnd(s2 + 4)), sz0 * (0.6 + rnd(s2 + 5)), uu > 0.7 ? 3 : leg});
+                            }
                         }
-                    }
-                    for (int j = 0; j < haloN; j++) {                      // a fainter cloud filling the whole nucleon
-                        const double sd = 5000 + j * 11.3 + q.ph * 17, cc = t * 0.7 + rnd(sd) * 4, cyc = std::floor(cc), ph = cc - cyc, s2 = sd + cyc * 29.1;
-                        const double rr = 0.3 * rn * std::sqrt(-2 * std::log(1 - 0.999 * rnd(s2))), an = 6.2832 * rnd(s2 + 1);
-                        F.push_back({X + rr * std::cos(an), Y + rr * std::sin(an), std::pow(std::sin(kPi * ph), 2) * al0 * 0.6, sz0 * (0.8 + rnd(s2 + 2)), 3});
-                    }
-                    const int idx[4] = {palIndex(Q.cols[0]), palIndex(Q.cols[1]), palIndex(Q.cols[2]), add ? 48 : css.light ? 49 : 50};
-                    for (int g = 0; g < 4; g++)
-                        for (const FP& f : F) {
-                            if (f.g != g) continue;
+                        for (int j = 0; j < haloN; j++) {                      // a fainter cloud filling the whole nucleon
+                            const double sd = 5000 + j * 11.3 + q.ph * 17, cc = t * 0.7 + rnd(sd) * 4, cyc = std::floor(cc), ph = cc - cyc, s2 = sd + cyc * 29.1;
+                            const double rr = 0.3 * rn * std::sqrt(-2 * std::log(1 - 0.999 * rnd(s2))), an = 6.2832 * rnd(s2 + 1);
+                            F.push_back({X + rr * std::cos(an), Y + rr * std::sin(an), std::pow(std::sin(kPi * ph), 2) * al0 * 0.6, sz0 * (0.8 + rnd(s2 + 2)), 3});
+                        }
+                        const int idx[4] = {palIndex(Q.cols[0]), palIndex(Q.cols[1]), palIndex(Q.cols[2]), add ? 48 : css.light ? 49 : 50};
+                        for (int g = 0; g < 4; g++) {
                             double pc[3];
                             lightQuark(pal().c[idx[g]], pc);
-                            const Color c0 = rgb3(pc, f.a), c1 = rgb3(pc, 0.5 * f.a), c2 = rgb3(pc, 0);
-                            put(sc, grad3(f.x, f.y, f.s * 1.7, c0, 0.4, c1, c2), add);
+                            for (const FP& f : F) {
+                                if (f.g != g) continue;
+                                const Color c0 = rgb3(pc, f.a), c1 = rgb3(pc, 0.5 * f.a), c2 = rgb3(pc, 0);
+                                put(sc, grad3(f.x, f.y, f.s * 1.7, c0, 0.4, c1, c2), add);
+                            }
                         }
+                    }
                 }
                 for (int i = 0; i < 3; i++) {                              // each quark's halo
                     const QPt& o = Q.P[i];
@@ -731,7 +745,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     put(c, flat(a.x + (b.x - a.x) * ff, a.y + (b.y - a.y) * ff, r, rgbaC(col, Af * (1 - mm / 6.0))), add);
                 }
             }
-            if (p.detail == "+ Sea")                                       // sea pairs: a colour and its anticolour
+            if (p.detail == "+ Sea" && !outside(X, Y, X, Y, 0.75 * k + std::max(1.5, (cine ? 0.026 : 0.02) * rn) + 3.2))   // sea pairs: a colour and its anticolour (all within 0.62 + 0.13 fm of the middle)
                 for (int j = 0; j < 12; j++) {
                     const double cc = t * 0.8 + j * 0.379, cyc = std::floor(cc), ph = cc - cyc, env = std::pow(std::sin(kPi * ph), 2), sd = j * 91.7 + cyc * 13.13;
                     const double rr = 0.62 * std::cbrt(rnd(sd)), th = std::acos(1 - 2 * rnd(sd + 1)), az = 2 * kPi * rnd(sd + 2);

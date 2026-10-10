@@ -33,6 +33,7 @@ private:
     void setDensity(const OutlineDensity& d, int mode, int n, float half, bool horizontal, float offset);
     int begin(const OutlineDensity& d, int mode, int n, float half, bool horizontal, float offset, float scale, float target);
     JobState poll(Job& j, bool wantGrid, GLenum& r);
+    void warmUp();
     bool ok_ = false;
     GLuint densityProg_ = 0, levelProg_ = 0;
     GLint uMode_ = -1, uN_ = -1, uHalf_ = -1, uHor_ = -1, uOff_ = -1, uLag_ = -1, uNq_ = -1, uAngRe_ = -1, uAngIm_ = -1, uCw_ = -1;
@@ -69,7 +70,24 @@ bool OutlineCompute::init() {
     uNq_ = glGetUniformLocation(densityProg_, "uNq"); uAngRe_ = glGetUniformLocation(densityProg_, "uAngRe"); uAngIm_ = glGetUniformLocation(densityProg_, "uAngIm"); uCw_ = glGetUniformLocation(densityProg_, "uCw");
     lCount_ = glGetUniformLocation(levelProg_, "uCount"); lScale_ = glGetUniformLocation(levelProg_, "uScale"); lTarget_ = glGetUniformLocation(levelProg_, "uTarget");
     ok_ = true;
+    warmUp();
     return true;
+}
+
+// 0.16 stage 3: one tiny job of each kind (a 4 x 4 x 4 grid with its level, a 4 x 4 plane) at start, waited for and read back, so that whatever the driver does on the FIRST
+// dispatch, fence and read-back of these programs (finishing the shader for the GPU, setting up the buffers) happens here and not on the frame that first draws an outline.
+// The programs are already compiled and linked in init(); whether a driver still does work on the first dispatch can only be seen on a real GPU (OWNER-TODO.md).
+void OutlineCompute::warmUp() {
+    const OutlineDensity d;                                                  // the 1s state (any state does)
+    for (int mode = 0; mode < 2; mode++) {
+        const int id = begin(d, mode, 4, 1.f, true, 0.f, 1.f, 0.9f);
+        Job* j = find(id);
+        if (!j) continue;
+        glClientWaitSync(j->sync, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ull);  // at start only: waits up to 1 s
+        std::vector<float> v;
+        float level = 0;
+        if ((mode == 0 ? pollGrid(id, v, level) : pollPlane(id, v)) == JobState::Pending) release(id);
+    }
 }
 
 void OutlineCompute::shutdown() {

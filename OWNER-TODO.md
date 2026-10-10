@@ -2,6 +2,10 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.16 stage 3: what only you can do (speed: the cloud has no GPU)
+- [ ] Atom Lab, Lawrencium-266, zoom slider at the maximum, Cinematic + "+ Sea" (and once with Classic + "+ Sea", once on a light theme): fps idle and while dragging fast. Was under 80 (drag) and 59 (Classic + Sea). Which theme were you on when it was slow?
+- [ ] Benchmark with the speed-risk box ticked. Send the report. I need for scene 35 (new, "Nucleus, full zoom, camera moving"): average fps, 1 % low, worst, "Frames slower than 16.7 ms".
+- [ ] Outline hitch, same report, scenes 16 (GPU) and 29 (CPU): worst frame AND "Frames slower than 16.7 ms". If scene 16 now has a worst frame near scene 29's or 0-1 slow frames, the first-use cost is gone (warm-up at start). If scene 16 has about one slow frame per 120 frames (the cache is emptied every 120 frames), the cost is per job, not first use: tell me, and the next step is the 90 % level shader (it runs in ONE work group).
 ## 0.15 stage 5q: what only you can do
 - [ ] Lit buttons in EVERY theme (Light, Paper, Sage, Solar, Midnight, Black, Contrast, Monochrome): toolbar and top-bar buttons that are on: quiet fill, strong icon, no outline or glow. Can you still see which one is on? In Contrast and Monochrome the lit button has no box edge: keep that?
 - [ ] Theme list under the top bar (no top-bar icon covered); About scrollbar stays 12 px when you point at it or drag it; End goes to the very bottom in one press.

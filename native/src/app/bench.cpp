@@ -17,6 +17,7 @@ BenchStats benchStats(const std::vector<double>& frameMs) {
     s.avgMs = sum / frameMs.size();
     s.avgFps = s.avgMs > 0 ? 1000 / s.avgMs : 0;
     s.worstMs = *std::max_element(frameMs.begin(), frameMs.end());
+    s.slowFrames = int(std::count_if(frameMs.begin(), frameMs.end(), [](double ms) { return ms > kBenchSlowMs; }));
     std::vector<double> sorted = frameMs;
     std::sort(sorted.begin(), sorted.end(), std::greater<double>());
     const std::size_t n = std::max<std::size_t>(1, std::size_t(std::ceil(frameMs.size() * 0.01)));
@@ -66,6 +67,7 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
         t += "  Average: " + f("%.2f", s.frames.avgMs) + " ms per frame = " + f("%.1f", s.frames.avgFps) + " fps\n";
         t += "  1 % low: " + f("%.1f", s.frames.low1Fps) + " fps (average of the slowest 1 % of the frames)\n";
         t += "  Worst frame: " + f("%.2f", s.frames.worstMs) + " ms\n";
+        t += "  Frames slower than 16.7 ms: " + std::to_string(s.frames.slowFrames) + " of " + std::to_string(s.frames.frames) + "\n";   // 0.16 stage 3: 1 = a one-time hitch, many = a repeating one
         t += "  CPU work per frame: " + f("%.2f", s.cpuAvgMs) + " ms\n";
         if (s.gpuSamples <= 0) t += "  GPU time per frame: not available\n";
         else if (e.gpuReliable && s.gpuProblem.empty()) {

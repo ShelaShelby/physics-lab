@@ -1,6 +1,7 @@
 # Resume
 
 ## Current state
+- 0.16 stage 3: nucleus view at full zoom makes nothing wholly off the picture (Accurate + Sea at x10,000,000: 311,076 -> 36 vertices, 843 -> 24 blobs, pixels identical; ui6c_fullzoom); benchmark scene 35 "Nucleus, full zoom, camera moving" and "Frames slower than 16.7 ms" per scene; outline compute warmed up at start. Speed NOT measured.
 - 0.16 stage 2: About scrollbar (z-order after reopen), Benchmark window height (body scrolls, Start fixed), Contents rail 20 em wide, Atom Lab Nucleus section always shown (ui6b_scrollbar/bench/rail/nucleus). Next: the dead-code hunt.
 - 0.16 stage 1b: the old interface is removed (side panels, header, Atom Lab Old panel button, Settings -> New UI, old fps counter, large table window); the New UI is always on; version 0.16. Tests converted / deleted: see native/REPORT.md. Next: the dead-code hunt.
 - 0.16 stage 1a: the Atom Lab's four old-panel gaps (Dirac switch, lab spectrum card on the data sheet, Restart atom, draw-call line) have a New UI home (ui6a_atom_gaps); nothing removed yet; stage 1 (removal) is next.

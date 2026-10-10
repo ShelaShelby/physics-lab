@@ -124,7 +124,7 @@ const std::vector<SceneDef>& scenes() {
         static const std::string w2 = "scene 6 (the same view with 48,000 rocks) with the GPU rocks switch Off: the processor places all 48,000 rocks. Scene 6 is the same with it On";
         v.push_back({{n2.c_str(), w2.c_str()}, orbitStressCpuRocks});
     }
-    for (int w = atom::kBenchChartCpuFirst; w < atom::kBenchAtomScenes; w++) {   // 0.13 stage 4 part B: scenes 19 and 20 with the GPU chart cache Off, after the Orbit Lab twins (33 and 34)
+    for (int w = atom::kBenchChartCpuFirst; w < atom::kBenchAtomScenes; w++) {   // 0.13 stage 4 part B: scenes 19 and 20 with the GPU chart cache Off, after the Orbit Lab twins (33 and 34); 0.16 stage 3: the nucleus at full zoom (35), last
         static std::deque<std::string> cn, cw;
         cn.push_back(std::to_string(int(v.size()) + 1) + ". " + atom::benchSceneInfo(w).name);
         cw.push_back(atom::benchSceneInfo(w).what);
@@ -554,9 +554,9 @@ void benchmarkWindow(AppState& app) {
             ImGui::TextWrapped("Orbit Lab rocks: %s", b.env.rocksPath.c_str());
             ImGui::TextWrapped("Window %d x %d, picture %d x %d pixels%s", b.env.windowW, b.env.windowH, b.env.pictureW, b.env.pictureH, b.env.fullscreen ? ", full screen" : "");
             ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, vec(look().w.line));      // the header row in the theme's colours (the default is dark on every theme)
-            const bool table = ImGui::BeginTable("##benchtable", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp);
+            const bool table = ImGui::BeginTable("##benchtable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp);
             if (table) {
-                const char* heads[] = {"Scene", "Average", "fps", "1 % low", "Worst", "CPU", "GPU"};
+                const char* heads[] = {"Scene", "Average", "fps", "1 % low", "Worst", "> 16.7 ms", "CPU", "GPU"};   // > 16.7 ms: how many frames were slower (0.16 stage 3)
                 for (const char* h : heads) ImGui::TableSetupColumn(h);
                 ImGui::TableHeadersRow();
                 for (const app::BenchScene& s : b.results) {
@@ -566,6 +566,7 @@ void benchmarkWindow(AppState& app) {
                     ImGui::TableNextColumn(); ImGui::Text("%.1f", s.frames.avgFps);
                     ImGui::TableNextColumn(); ImGui::Text("%.1f fps", s.frames.low1Fps);
                     ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.frames.worstMs);
+                    ImGui::TableNextColumn(); ImGui::Text("%d", s.frames.slowFrames);
                     ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.cpuAvgMs);
                     ImGui::TableNextColumn(); if (s.gpuSamples <= 0) ImGui::TextDisabled("not available");
                     else if (b.env.gpuReliable && s.gpuProblem.empty()) ImGui::Text("%.2f ms", s.gpuAvgMs);
