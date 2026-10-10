@@ -1,1 +1,0 @@
-0.15 stage 5m part 1: over the 35 min budget (package index hang, full build, hash rewrites); tests green (quick 10/10, ui5m_themes 39 checks, ui5j_look_m1, orbit_ui_card, shell_pictures, window_pictures, theme_pictures). Windows run NOT checked yet. Part 2 not started.

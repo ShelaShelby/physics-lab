@@ -62,7 +62,7 @@ constexpr double kHaloMaxPx = 2.0;                                        // a p
 double slideStep(double s, double dt, bool open, bool reduced);           // the slide's linear progress 0 (closed) .. 1 (open) after dt seconds; reduced motion jumps
 double slideEase(double t);                                               // ease in and out (smoothstep), 0..1 -> 0..1
 Rect slidRect(const Rect& dock, double winW, double e);                   // the panel at eased progress e: e = 1 is exactly the dock, e = 0 is just outside the window's right edge
-Rect handleRect(const Rect& dock, double winW, const Metrics& m, double e);   // the handle: 24 u x 56 u, riding on the panel's left edge, centred on its height
+Rect handleRect(const Rect& dock, double winW, const Metrics& m, double e);   // the handle: 32 u x 72 u (5m part 2), riding on the panel's left edge, centred on its height
 // How many toolbar items fit (the rest go behind a "..." button, never a second row). widths: each item's width incl. separators; the "..." button is `moreW` wide.
 int toolbarVisible(const std::vector<double>& widths, double gap, double moreW, double winW, const Metrics& m);
 

@@ -66,8 +66,10 @@ ImU32 cFill(float a) { return colOf(g_f.c->accentFill, a); }
 ImU32 cOnFill() { return colOf(app::shell::onAccent(*g_f.c)); }
 static Rgb faceRgb() { const app::ThemeColors& c = *g_f.c; return c.style.button.set ? c.button : app::mixRgb(c.card, c.fg, g_lo ? g_lo->faceMix : 0.10f); }
 ImU32 cFace(float a) { return colOf(faceRgb(), a); }
-ImU32 cFaceHover() { return colOf(app::mixRgb(faceRgb(), g_f.c->accent, g_lo ? g_lo->hoverMix : 0.18f)); }
-ImU32 cFacePress() { return colOf(app::mixRgb(faceRgb(), g_f.c->accent, g_lo ? g_lo->pressMix : 0.30f)); }
+// 5m part 2: in M1 a hovered / pressed face is the face moved towards the TEXT colour (a light grey, never blue: the owner's "no blue"); the other themes keep their accent tint
+static const app::Rgb& tintOf() { return g_lo ? g_f.c->fg : g_f.c->accent; }
+ImU32 cFaceHover() { return colOf(app::mixRgb(faceRgb(), tintOf(), g_lo ? g_lo->hoverMix : 0.18f)); }
+ImU32 cFacePress() { return colOf(app::mixRgb(faceRgb(), tintOf(), g_lo ? g_lo->pressMix : 0.30f)); }
 ImU32 cEdge() { return g_f.outline ? colOf(g_f.c->fg) : colOf(g_f.c->fg, g_lo ? g_lo->edgeAlpha : app::shell::kEdgeAlpha); }
 ImU32 cHair() { return colOf(g_f.c->line); }
 ImU32 cPanel() { return colOf(g_f.c->card, g_f.panelAlpha); }
@@ -390,10 +392,12 @@ bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* 
     const Hit h = hit(id, pos, size);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 q(pos.x + size.x, pos.y + size.y);
-    if (on) dl->AddRectFilled(pos, q, cFacePress(), rc());
+    const bool pill = on && g_lo && caretW <= 0;                                // 5m part 2 (M1): a lit toolbar button is the same light-grey pill with a dark icon as a chosen segment
+    if (pill) dl->AddRectFilled(pos, q, cFill(), rc());
+    else if (on) dl->AddRectFilled(pos, q, cFacePress(), rc());
     else if (h.hovered) hoverFill(id, dl, pos, q, pos, q, cFaceHover(), rc());
     if (g_f.outline) dl->AddRect(pos, q, cEdge(), rc(), 0, 1.0f);
-    drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), g_lo && !h.hovered && !on ? cMuted() : cText());   // (stage 5j looks: muted, bright on hover)
+    drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), pill ? cOnFill() : g_lo && !h.hovered && !on ? cMuted() : cText());   // (stage 5j looks: muted, bright on hover)
     if (caretW > 0) drawIcon(dl, on ? Icon::CaretUp : Icon::Caret, ImVec2(pos.x + size.x - caretW / 2 - g_f.m.s4 * 0.5f, pos.y + size.y / 2), caretW * 0.75f, cMuted());
     if (h.hovered && tip && *tip) ui::SetTooltip("%s", tip);
     return h.clicked;

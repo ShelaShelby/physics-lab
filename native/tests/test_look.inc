@@ -36,7 +36,7 @@ static void testLookContrast() {
         const app::lookopt::Tokens* t = &app::lookopt::m1();
         const std::string n = std::string("look ") + t->name + ": ";
         const C3 card = rg(t->card), fg = rg(t->fg), mu = rg(t->muted), ac = rg(t->accent), fill = rg(t->accentFill), on = rg(t->onFill);
-        const C3 face = mix(card, fg, t->faceMix), hover = mix(face, ac, t->hoverMix), press = mix(face, ac, t->pressMix);
+        const C3 face = mix(card, fg, t->faceMix), hover = mix(face, fg, t->hoverMix), press = mix(face, fg, t->pressMix);   // 5m part 2: hover / press move towards the text colour (grey), not the accent (blue)
         struct Pair { const char* what; C3 a, b; double need; };
         const Pair pairs[] = {
             {"text on card", fg, card, 4.5},        {"text on a button face", fg, face, 4.5}, {"text on a hovered face", fg, hover, 4.5}, {"text on a pressed face", fg, press, 4.5},

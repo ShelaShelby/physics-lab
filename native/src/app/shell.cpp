@@ -64,7 +64,7 @@ double slideStep(double s, double dt, bool open, bool reduced) {
 double slideEase(double t) { t = std::min(1.0, std::max(0.0, t)); return t * t * (3 - 2 * t); }
 Rect slidRect(const Rect& dock, double winW, double e) { Rect r = dock; r.x = dock.x + (1 - e) * (winW - dock.x); return r; }
 Rect handleRect(const Rect& dock, double winW, const Metrics& m, double e) {
-    const double w = m.s24, h = 2.0 * m.s24 + m.s8;
+    const double w = m.s24 + m.s8, h = 3.0 * m.s24;       // 5m part 2: 32 x 72 u (was 24 x 56)
     return {std::min(winW, slidRect(dock, winW, e).x) - w, dock.y + dock.h / 2 - h / 2, w, h};
 }
 
@@ -133,7 +133,7 @@ Rect placePanel(Anchor a, double w, double h, const Frame& f, const Metrics& m, 
         r.h = std::min(h, f.toolbar.y - m.s12 - r.y);
         break;
     case Anchor::TopRight:
-        r.x = std::max<double>(m.s12, W - m.s24 - w); r.y = top + m.s12;
+        r.x = std::max<double>(m.s12, W - (m.s24 + m.s8 + m.s4) - w); r.y = top + m.s12;     // 5m part 2: clear of the 32 u wide handle on the picture's right edge
         r.h = std::min(h, f.toolbar.y - m.s12 - r.y);
         break;
     case Anchor::UnderChip:

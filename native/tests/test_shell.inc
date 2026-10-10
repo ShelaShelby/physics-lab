@@ -151,7 +151,7 @@ void testShellPanels() {
                                 checkTrue("panel: has a positive size" + t, r.w > 0 && r.h > 0);
                                 checkTrue("panel: is never bigger than asked" + t, r.w <= ww + 1e-6 && r.h <= hh + 1e-6);
                                 if (a == Anchor::TopLeft) checkTrue("panel: top left sits at the left margin" + t, r.x <= m.s24 + 1e-6 || ww >= W - 2 * m.s12);
-                                if (a == Anchor::TopRight) checkTrue("panel: top right is flush to the right margin" + t, std::fabs(W - m.s24 - r.right()) < 1.0 || ww >= W - 2 * m.s12);
+                                if (a == Anchor::TopRight) checkTrue("panel: top right is flush to the right margin" + t, std::fabs(W - (m.s24 + m.s8 + m.s4) - r.right()) < 1.0 || ww >= W - 2 * m.s12);
                                 if (a == Anchor::UnderChip || a == Anchor::AboveToolbar) {
                                     const double fit = W - 2 * m.s12;
                                     if (ww <= fit) checkTrue("panel: a dropdown is centred on its anchor, or against the edge when it must be" + t,
@@ -734,8 +734,15 @@ void testShellHandle() {
                         checkTrue("handle: inside the window" + te, within(h, fo.window));
                         checkTrue("handle: never under the panel (it rides on its left edge)" + te, !h.intersects(p) && std::fabs(h.right() - std::min(W, p.x)) < 1e-9);
                         checkTrue("handle: vertically centred on the panel's edge" + te, std::fabs((h.y + h.h / 2) - (dock.y + dock.h / 2)) < 1e-9);
+                        if (e == 0 || e == 1) {   // 5m part 2: in the two settled states, a card at the top right (the subject card, 20 em wide, as tall as it can be) never lies on the handle (mid-slide the handle is moving)
+                            const Rect card = placePanel(Anchor::TopRight, m.em(20), 4000, e >= 1 ? fo : fc, m, 0);
+                            checkTrue("handle: the top-right card does not touch it" + te, !card.intersects(h));
+                        }
                         checkTrue("handle: clear of the top bar and the toolbar, open or closed" + te, !h.intersects(fo.topBar) && !h.intersects(fo.toolbar) && !h.intersects(fc.toolbar) && h.y >= fo.topBar.bottom());
                         checkTrue("handle: big enough to hit (24 u wide, at least a control high)" + te, h.w >= m.s24 - 1e-9 && h.h >= m.control);
+                    }
+                    if (dpi == 1.0 && tf == 1.0) {   // 5m part 2 (owner): the handle is at least 32 x 72 px at scale 100 % (a fixed number, not derived from the code's own units)
+                        checkTrue("handle: at least 32 x 72 px at scale 100 %" + t, handleRect(dock, W, m, 1).w >= 32 - 1e-9 && handleRect(dock, W, m, 1).h >= 72 - 1e-9);
                     }
                     checkTrue("handle: closed, on the window's right edge" + t, std::fabs(handleRect(dock, W, m, 0).right() - W) < 1e-9);
                 }

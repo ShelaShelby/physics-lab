@@ -34,5 +34,5 @@ Why: stages used to take 20-30 minutes and had grown to hours: the cost was runn
 - Waiting for a long run: one long blocking wait (`timeout 119 sh -c 'until grep -q ... ; do sleep 10; done'` in a few calls at most), no polling loops of status.
 - Push as soon as the final run passes.
 - The owner's usage is limited: prefer smaller stages; stop and report if a stage grows.
-- Time budget: at each wip commit check the elapsed time; if the stage has passed 60 minutes, finish the current part, push what works, write in REPORT.md what is left, and stop. Each checkpoint adds one line to native/PROGRESS.md (part, minutes so far, tests green or not) so the owner can follow from his phone.
+- Time budget: at each wip commit check the elapsed time; if the stage has passed 60 minutes, finish the current part, push what works, write in REPORT.md what is left, and stop.
 - Test environment: picture tests run one llvmpipe thread per app start (LP_NUM_THREADS=1) and a shared Mesa shader cache (set by CMake / check.sh); they never need their own settings.

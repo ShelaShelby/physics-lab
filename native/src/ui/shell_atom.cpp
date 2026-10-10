@@ -82,7 +82,7 @@ bool buildAtomPanel(PanelId id, AppState& app, Panel& p, bool& /*closeAfter*/) {
         g.o = here(p);
         g.gap = gap; g.cw = (p.w - 17 * gap) / 18; g.ch = std::round(g.cw * 0.92f); g.rowGap = static_cast<float>(m.s8);
         g.s = u; g.corner = 3 * u; g.symPx = px(Type::Body); g.markPx = px(Type::Caption); g.boldAll = false; g.note = "pt.";
-        const int z = periodicTableCells(g, L.p.Z, cText(), cAccent(), cMuted());
+        const int z = periodicTableCells(g, L.p.Z, cText(), lookM1() ? cText() : cAccent(), cMuted());
         if (z) atom::pickElement(L, z);
         if (shellLogOn()) for (int e = 1; e <= 118; e++) { const auto [r, c] = atom::ptPos(e); const ImVec2 a = g.cellPos(r, c); auditRect("pt." + std::to_string(e), a.x, a.y, g.cw, g.ch); }   // (for the automatic checks only)
         p.y += (g.cellPos(10, 1).y + g.ch) - g.o.y + static_cast<float>(m.s8);
