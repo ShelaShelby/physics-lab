@@ -373,6 +373,7 @@ void benchmarkTestHook(AppState& app) {
     const char* v = SDL_getenv("PL_BENCH");
     if (!v || ++frames != 5) return;
     st(app).includeStress = SDL_getenv("PL_BENCH_STRESS") != nullptr;      // for automatic checks: the checkbox
+    st(app).includeRisk = SDL_getenv("PL_BENCH_RISK") != nullptr;          // for automatic checks: the second checkbox
     if (std::string(v) == "start") begin(app); else st(app).stage = BenchState::Stage::Ask;
 }
 
@@ -491,8 +492,8 @@ void benchmarkWindow(AppState& app) {
     if (cancel) { finish(app, b, true); return; }
     if (b.stage == BenchState::Stage::Closed) return;
     if (b.stage == BenchState::Stage::Ask) {
-        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0));
+        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));   // (always: the height changes after the first frame, so the window stays centred and inside)
+        ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0), ImGuiCond_Always);
         bool open = true;
         pushFloatStyle();
         const bool benchShown = ImGui::Begin("Benchmark###bench", &open, fl);
@@ -505,19 +506,14 @@ void benchmarkWindow(AppState& app) {
             ImGui::TextWrapped("This runs %d scenes one after the other, about %d seconds in all. Each one has %d seconds of warm-up that is not counted, then %d seconds that are counted.",
                                count, secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
             ImGui::Spacing();
-            // 5k (New UI): the long scene list scrolls INSIDE the window; the check boxes and the Start / Cancel buttons under it are always in view (the window is never taller than the app window).
-            // The list's height is what is left after everything else, measured the frame before.
-            static float nonListH = 0;
-            const bool pinned = readingModeOn();
-            float listH = 0;
-            if (pinned) {
-                const float natural = count * ImGui::GetTextLineHeightWithSpacing() + 2;
-                const float room = std::max(60.0f, vp->Size.y - std::max(0.0f, shellTopBarH()) - 2 * 8.0f - nonListH);
-                listH = std::min(natural, room);
-                ImGui::BeginChild("##benchScenes", ImVec2(0, listH), ImGuiChildFlags_None);
-            }
+            // 0.16 stage 2: everything between here and the buttons scrolls INSIDE the window, so the window is never taller than 92 % of the work area and Start / Cancel are always in view.
+            // The body's natural height is measured the frame before (0 on the first frame: it is then cut to the room that is left).
+            static float bodyH = 0;
+            const float buttonsH = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y + ImGui::GetStyle().WindowPadding.y;
+            const float room = std::max(60.0f, std::min(vp->WorkSize.y * 0.92f, vp->Size.y - std::max(0.0f, shellTopBarH()) - 2 * 8.0f) - ImGui::GetCursorPosY() - buttonsH - ImGui::GetStyle().ItemSpacing.y);
+            const float childH = bodyH > 0 ? std::min(bodyH, room) : room;
+            ImGui::BeginChild("##benchBody", ImVec2(0, childH), ImGuiChildFlags_None);
             for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[list[i]].info.name);
-            if (pinned) ImGui::EndChild();
             ImGui::Checkbox("Include stress scenes (3 extra, much heavier)", &b.includeStress);
             if (ImGui::IsItemHovered()) ui::SetTooltip("%s\n\n%s\n\n%s", scenes()[kNormalScenes].info.what, scenes()[kNormalScenes + 1].info.what, scenes()[kNormalScenes + 2].info.what);
             {   // the number is counted, not typed: it was "11" in 0.10.6 and the list has grown since
@@ -531,14 +527,14 @@ void benchmarkWindow(AppState& app) {
             ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "
                                "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "
                                "Before the first scene the graphics card's timer is checked with a known load (about a second).");
-            ImGui::Spacing();
+            bodyH = ImGui::GetCursorPosY();
+            ImGui::EndChild();
             const bool startClicked = ImGui::Button("Start");
             noteItem("bench.start");
             auditRect("bench.start", ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectSize().x, ImGui::GetItemRectSize().y);
             if (startClicked && !whyNot(app)) begin(app);
             ImGui::SameLine();
             if (ImGui::Button("Cancel") || esc) b.stage = BenchState::Stage::Closed;
-            if (pinned) nonListH = ImGui::GetCursorPosY() + ImGui::GetStyle().WindowPadding.y - listH;
             auditRect("win.benchmark", ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowWidth(), ImGui::GetWindowHeight());
         }
         ImGui::End();

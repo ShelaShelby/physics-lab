@@ -132,7 +132,8 @@ def main():
         # (stage 5e added Marks: the old panel's outline and phase rows when the view is not Orbit, its chain block on the chart; and Photons: emit / absorb / auto off the chart,
         # Check a jump always, as the old Lifetimes card)
         ORDER = ["view", "orbital", "cloud", "orbit", "scale", "nucleus", "chart", "marks", "photons"]
-        WANT = {"orbit": {"view", "orbital", "orbit", "scale", "photons"}, "cloud": {"view", "orbital", "cloud", "scale", "marks", "photons"}, "chart": {"view", "chart", "marks", "photons"},   # (stage 5f: the Cloud section is left out on the chart: its rows do nothing there; the old panel still shows them)
+        # 0.16 stage 2: the Nucleus section is always shown off the chart, at any zoom (it used to need zoom 3)
+        WANT = {"orbit": {"view", "orbital", "orbit", "scale", "nucleus", "photons"}, "cloud": {"view", "orbital", "cloud", "scale", "nucleus", "marks", "photons"}, "chart": {"view", "chart", "marks", "photons"},   # (stage 5f: the Cloud section is left out on the chart: its rows do nothing there; the old panel still shows them)
                 "nucleus": {"view", "orbital", "orbit", "scale", "nucleus", "photons"}}
         SCR = {"orbit": "", "cloud": "10:click=tool.cloud", "chart": "10:click=tool.chart", "nucleus": "10:click=atom.zoom@0.62"}
         for name, want in WANT.items():

@@ -292,7 +292,7 @@ ReadingGeom readingGeometry(double winW, double winH, const Metrics& m) {
     const double y = m.topBar + m.s12;
     g.column = {(winW - colW) / 2, y, colW, std::max(1.0, winH - y - m.s12)};
     g.rail = winW > m.em(60) + colW;
-    if (g.rail) { const double tw = m.em(14); g.toc = {g.column.x - m.s24 - tw, y, tw, g.column.h}; }
+    if (g.rail) { const double tw = m.em(20); g.toc = {g.column.x - m.s24 - tw, y, tw, g.column.h}; }
     return g;
 }
 

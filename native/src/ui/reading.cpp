@@ -128,6 +128,7 @@ static void readingScrollbar() {
                                    ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar(3);
     if (open) {
+        ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());           // 0.16 stage 2: a page that is opened again takes the focus and goes in front of this bar's window, which hid the bar
         const float view = w->InnerRect.GetHeight(), thumbH = std::min(track, std::max(static_cast<float>(f.m.s4) * 6, track * view / (view + mx)));
         ImGui::SetCursorScreenPos(ImVec2(x0, ty0));
         ImGui::InvisibleButton("##readBarHit", ImVec2(hitW, track));

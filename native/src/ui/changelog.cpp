@@ -19,6 +19,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.16", "Four fixes: About scrollbar, Benchmark window, Contents rail, Atom Lab Nucleus",
+     "The About page keeps its scrollbar after you close and reopen it (it was drawn behind the reopened page). The Benchmark window with both extra-scene boxes ticked never grows taller than the app window: its text scrolls and Start and Cancel stay in view. The Contents list beside a page is wider, so labels like \"Stars and far-away things\" are shown in full. In the Atom Lab, Controls now always has a Nucleus section with Quark style, Nucleon detail and Nucleon edge, at any zoom; they show in the picture when zoomed in close."},
     {"0.16", "The old interface is gone: the New UI is the only one",
      "The old side panels, the old header and the Atom Lab's Old panel button were removed, and so was Settings -> New UI (preview): the new layout is always on. Nothing it showed was lost: every old control, card and note has a home in the new layout. A settings file that still holds the old New UI choice opens without a problem (the choice is ignored). The benchmark's result no longer has a New UI line. The old frames-per-second counter is gone; the fps is in the readout at the bottom right and in Settings -> Performance. No new facts or numbers; no physics changed. Not tested: Windows, a real mouse, a real GPU, speed."},
     {"0.15", "Full UI rework, stage 1a of the 0.16 clean-up: the Atom Lab's last old-panel features",

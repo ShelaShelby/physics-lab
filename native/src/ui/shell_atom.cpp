@@ -246,12 +246,11 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
         numberRow(app, p, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(atom::zoomFactorShown(P.zoom)), P.zoom, atom::kZoomMin, 7, 0.01);
         if (orbit) numberRow(app, p, "speed", "Playback speed", std::to_string(P.speed), P.speed, 1, 30, 1);
     }
-    if (!chart && P.zoom >= 3 && section("nucleus", "Nucleus", true)) {  // old: quark style and nucleon detail from zoom 4, nucleon edge from zoom 3
-        if (P.zoom >= 4) {
-            choiceRow(app, p, "qstyle", "Quark style", ui::atomChoices("qstyle"), P.qstyle);
-            choiceRow(app, p, "detail", "Nucleon detail", ui::atomChoices("detail"), P.detail);
-        }
+    if (!chart && section("nucleus", "Nucleus", true)) {                 // 0.16 stage 2: always here (it was hidden below zoom 3 / 4, too deep to find); the picture shows the nucleus when zoomed in close
+        choiceRow(app, p, "qstyle", "Quark style", ui::atomChoices("qstyle"), P.qstyle);
+        choiceRow(app, p, "detail", "Nucleon detail", ui::atomChoices("detail"), P.detail);
         choiceRow(app, p, "style", "Nucleon edge", ui::atomChoices("style"), P.style);
+        pCaption(p, "These show in the picture when zoomed in close.", true);
     }
     if (chart && section("chart", "Chart", true)) {                       // old: the landscape's tilt and height, on the chart only
         numberRow(app, p, "tilt", "Tilt (flat chart to landscape)", std::to_string(static_cast<int>(std::lround(L.s.chartView.tilt * 100))) + " %", L.s.chartView.tilt, 0, 1, 0.01);
