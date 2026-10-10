@@ -2031,7 +2031,7 @@ static void testChartLandscape() {
             checkTrue("landscape zoom: a tile's corner goes to q + k (p - q) when zooming by k about q (within 1e-2 pt)", std::fabs(b->top[0] - (380 + 2.5 * (ax - 380))) < 1e-2 && std::fabs(b->top[1] - (260 + 2.5 * (ay - 260))) < 1e-2);
         }
         lab.chartZoomAt(1000, 450, 350); const double zmax = lab.s.chartView.zoom; lab.chartZoomAt(1e-6, 450, 350);
-        checkTrue("landscape zoom: the zoom is cut to 16 at most and 1 at least; at 1 the pan is 0", zmax == 16 && lab.s.chartView.zoom == 1 && lab.s.chartView.panX == 0 && lab.s.chartView.panY == 0);
+        checkTrue("landscape zoom: the zoom is cut to 16 at most and 1/2 at least (5p: it was 1 at least, changed ON PURPOSE: twice as far out); zoomed out the pan is 0", zmax == 16 && lab.s.chartView.zoom == 0.5 && lab.s.chartView.panX == 0 && lab.s.chartView.panY == 0);
         // the chart cannot be lost: extreme pans at several zooms and tilts leave a strip of it in the picture
         int lost = 0, tried = 0;
         for (double tilt : {0.0, 0.5, 1.0}) for (double zoom : {2.0, 8.0, 16.0}) for (const auto& d : {std::pair<double, double>{1e5, 0}, {-1e5, 0}, {0, 1e5}, {0, -1e5}, {-1e5, -1e5}, {1e5, 1e5}}) {

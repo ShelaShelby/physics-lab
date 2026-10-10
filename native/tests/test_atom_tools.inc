@@ -45,6 +45,24 @@ static void testAtomTools() {
         atom::pressTool(a, atom::Tool::Atom);
         checkTrue("toolbar: Atom zooms all the way out and lets go of the nucleon", a.s.zoomTo && *a.s.zoomTo == 0 && a.s.focus == -1);
     }
+    {   // 0.15 stage 5p: the furthest zoom-out is twice as far out as before: the smallest picture scale was 1, now 1/2 (reference: -log10(2), 0.5; the top end stays 10^7 and 16)
+        AtomLab z = tlLab("Cloud 3D");
+        z.setParam("zoom", -9.0);
+        checkNum("zoom-out limit: the scale is exactly one half", std::pow(10.0, z.p.zoom), 0.5, 1e-12);
+        checkNum("zoom-out limit: log10 zoom is -log10(2)", z.p.zoom, -std::log10(2.0), 1e-12);
+        z.setParam("zoom", 99.0);
+        checkNum("zoom-in limit unchanged (10^7)", z.p.zoom, 7.0, 0);
+        z.setParam("zoom", 0.0);
+        checkNum("the old smallest size, zoom 0, is still allowed", z.p.zoom, 0.0, 0);
+        AtomLab c = tlLab("Chart of nuclides");
+        c.chartZoomAt(1e-6, 100, 100);
+        checkNum("chart zoom-out limit: half the fitted chart", c.s.chartView.zoom, 0.5, 0);
+        c.chartZoomAt(1e-6, 100, 100);
+        checkNum("chart zoom-out: stays there", c.s.chartView.zoom, 0.5, 0);
+        checkTrue("chart zoomed out has no pan", c.s.chartView.panX == 0 && c.s.chartView.panY == 0);
+        c.chartZoomAt(1e9, 100, 100);
+        checkNum("chart zoom-in limit unchanged (16)", c.s.chartView.zoom, 16.0, 0);
+    }
     {   // the chart has no zoom: from the chart the zoom buttons go to the Orbit view (else nothing would be seen); the cloud views keep their view
         AtomLab c = tlLab("Chart of nuclides");
         atom::pressTool(c, atom::Tool::Nucleus);

@@ -107,13 +107,13 @@ void readingFrameEnd() {
     g.prevValid = true;
 }
 
-// the slim scrollbar of a reading page (about 8 px, rounded, muted; wider and brighter under the pointer; draggable; none when the page fits)
+// the scrollbar of a reading page (5p: 12 px wide at 100 %, with a faint track so it can be seen; rounded, muted; wider and brighter under the pointer; draggable; none when the page fits)
 static void readingScrollbar() {
     ImGuiWindow* w = ImGui::FindWindowByName("##reading");
     const float mx = w ? w->ScrollMax.y : 0;
     if (!w || mx <= 0.5f) return;
     const sh::Frame& f = sh::F();
-    const float bw = 2.0f * static_cast<float>(f.m.s4), hitW = bw * 2.0f, margin = static_cast<float>(f.m.s4);
+    const float bw = 3.0f * static_cast<float>(f.m.s4), hitW = bw * 2.0f, margin = static_cast<float>(f.m.s4);
     const float x0 = w->Pos.x + w->Size.x - margin - hitW, ty0 = w->Pos.y + margin * 2, track = w->Size.y - margin * 4;
     ImGui::SetNextWindowPos(ImVec2(x0, ty0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(hitW, track), ImGuiCond_Always);
@@ -141,6 +141,8 @@ static void readingScrollbar() {
         ImU32 c = sh::cMuted();
         c = (c & ~(0xFFu << IM_COL32_A_SHIFT)) | (static_cast<ImU32>(hov || act ? 235 : 150) << IM_COL32_A_SHIFT);
         const ImVec2 a(x0 + hitW - tw, thumbY), b(x0 + hitW, thumbY + thumbH);
+        ImU32 tc = sh::cMuted();
+        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x0 + hitW - bw, ty0), ImVec2(x0 + hitW, ty0 + track), (tc & ~(0xFFu << IM_COL32_A_SHIFT)) | (static_cast<ImU32>(45) << IM_COL32_A_SHIFT), bw / 2);   // the track
         ImGui::GetWindowDrawList()->AddRectFilled(a, b, c, tw / 2);
         auditRect("reading.scrollbar", x0, ty0, hitW, track);
         auditRect("reading.scrollthumb", a.x, a.y, b.x - a.x, b.y - a.y);
@@ -154,8 +156,10 @@ std::string readingAnchorsNow() {   // 5k: where each Contents entry would put t
     return a;
 }
 
+static bool pageDrawnNow() { return g.shown && g.lastFrame == ImGui::GetFrameCount(); }   // (5p: see readingShown)
+
 bool readingScrollNow(float* y, float* mx) {   // 5k: for the test script (verb pscroll)
-    ImGuiWindow* w = g.mode && g.shown ? ImGui::FindWindowByName("##reading") : nullptr;
+    ImGuiWindow* w = g.mode && pageDrawnNow() ? ImGui::FindWindowByName("##reading") : nullptr;
     if (!w) return false;
     *y = w->Scroll.y; *mx = w->ScrollMax.y;
     return true;
@@ -177,7 +181,10 @@ std::string readingDiag() {
 
 void setReadingMode(bool on) { if (!on) { g.shown = false; g.contentsOpen = false; } g.mode = on; }
 bool readingModeOn() { return g.mode; }
-bool readingShown() { return g.shown; }
+// 5p, THE CAUSE of "after About the wheel no longer zooms" (owner's PC, both labs): g.shown was set when a page was drawn and cleared only by setReadingMode(false), which the New UI never calls,
+// so after the first page had been closed main.cpp kept seeing "a page is open" and dropped every wheel and arrow-key event meant for the picture. Now it only counts when the page was drawn
+// in the frame the app is in (events are read before the next frame starts, so that is the last frame drawn).
+bool readingShown() { return pageDrawnNow(); }
 float readingBodyFont() { return g.mode && g.shown ? g.bodyFont : 0; }
 float readingFloorBody() { return g.mode && g.shown ? static_cast<float>(sh::F().m.body) : 0; }
 float readingFloorCaption() { return g.mode && g.shown ? static_cast<float>(sh::F().m.caption) : 0; }

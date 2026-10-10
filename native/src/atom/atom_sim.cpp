@@ -19,7 +19,7 @@ namespace atom {
 static std::uint64_t nextEpoch();   // a new number each call (for the GPU copies of the amplitude arrays, see AtomState::saEpoch)
 
 static double jsRound(double x) { const double r = std::floor(x + 0.5); return r == 0 && x < 0 ? -0.0 : r; }
-static double clampZoom(double z) { return std::max(0.0, std::min(7.0, z)); }
+static double clampZoom(double z) { return std::max(kZoomMin, std::min(7.0, z)); }
 static const char* const kLetter = "spdf";
 static constexpr double kMaxStepAngle = 2 * kPi / 300;   // the largest angle one leapfrog step of the Orbit view may turn, rad (see AtomLab::step)
 static const char* const kGreek[4] = {"α", "β", "γ", "δ"};
@@ -76,7 +76,7 @@ void AtomLab::init() {
 void AtomLab::setParam(const std::string& key, double v) {
     if (key == "tilt") { setChartTilt(v); return; }              // the chart's tilt is part of the view, not of the atom: no new state, no re-init
     double lo = 0, hi = 0;
-    if (key == "zoom") { lo = 0; hi = 7; }
+    if (key == "zoom") { lo = kZoomMin; hi = 7; }
     else if (key == "Z") { lo = 1; hi = 118; }
     else if (key == "N") { const auto r = nRange(p.Z); lo = r.first; hi = r.second; }
     else if (key == "cut") { lo = -1; hi = 1; }
@@ -136,7 +136,7 @@ void AtomLab::onParam(const std::string& key) {
     if (key == "Z" && p.scale != "Fixed" && s.Zprev && s.Zprev != p.Z) {
         // auto-fit rescales with Z: counter it so what you are looking at stays the same size on screen
         const double d = std::log10(double(s.Zprev) / p.Z);
-        if (p.zoom > 0) { s.selfSet = true; setParam("zoom", std::max(0.0, p.zoom + d)); s.selfSet = false; }
+        if (p.zoom > 0) { s.selfSet = true; setParam("zoom", std::max(0.0, p.zoom + d)); s.selfSet = false; }   // (5p: only while zoomed in; at or below the old smallest size nothing is countered)
         if (s.zoomTo) s.zoomTo = clampZoom(*s.zoomTo + d);
     }
     if (key == "mix") {                                       // orthogonal pair: the shares change the time dependence only, never the dots. An overlapping pair has no time dependence (one energy): the
@@ -865,7 +865,7 @@ void AtomLab::setChartTilt(double t) {
 }
 void AtomLab::chartZoomAt(double factor, double px, double py) {
     ChartViewState v = s.chartView;
-    const double z = std::max(1.0, std::min(kChartZoomMax, v.zoom * factor)), k = z / v.zoom;     // k: the factor actually applied (the limits cut it)
+    const double z = std::max(kChartZoomMin, std::min(kChartZoomMax, v.zoom * factor)), k = z / v.zoom;     // k: the factor actually applied (the limits cut it)
     // scaling the whole picture about (px, py) by k: final' = q + k (final - q), which is the same view with zoom z and the pan below
     v.panX = (1 - k) * (px - viewW / 2) + k * v.panX;
     v.panY = (1 - k) * (py - viewH / 2) + k * v.panY;
@@ -874,7 +874,7 @@ void AtomLab::chartZoomAt(double factor, double px, double py) {
     s.chartView = chartScene_.clamped(v);
 }
 void AtomLab::chartPan(double dx, double dy) {
-    if (s.chartView.zoom <= 1) return;                          // the whole chart is fitted: nothing to move
+    if (s.chartView.zoom <= 1) return;                          // the whole chart is fitted (or smaller): nothing to move
     ChartViewState v = s.chartView;
     v.panX += dx; v.panY += dy;
     chartScene_.build(viewW, viewH, s.chartView);

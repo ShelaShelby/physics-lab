@@ -129,7 +129,7 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
         f = it->second;
     }
     if (!p.atom.count("view") && newUiOn(app)) a.view = kNewUiAtomView;   // 0.15 stage 5g (owner's decision of 6 Oct 2026): the New UI's Atom Lab opens in Cloud 3D the first time (no saved view); the old app keeps Orbit
-    if (readNum(p.atom, "zoom", 0, 7, d)) a.zoom = d;
+    if (readNum(p.atom, "zoom", atom::kZoomMin, 7, d)) a.zoom = d;
     if (readNum(p.atom, "Z", 1, 118, d)) { a.Z = int(d); a.N = atom::defaultN(a.Z); }
     if (readNum(p.atom, "N", atom::nRange(a.Z).first, atom::nRange(a.Z).second, d)) a.N = int(d);
     if (readNum(p.atom, "cut", -1, 1, d)) a.cut = d;

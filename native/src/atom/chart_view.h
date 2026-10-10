@@ -54,13 +54,14 @@ const char* chartHeightShort(ChartHeightMode m = ChartHeightMode::HalfLife);
 // ---- the view: tilt, zoom, pan ----
 struct ChartViewState {
     double tilt = 0;                                     // 0 = the flat chart of stage 2, 1 = the full landscape
-    double zoom = 1;                                     // 1 = the whole chart fitted into the picture
+    double zoom = 1;                                     // 1 = the whole chart fitted into the picture; 5p: down to kChartZoomMin (0.5, centred, no pan)
     double panX = 0, panY = 0;                           // points, only while zoom > 1
     ChartHeightMode height = ChartHeightMode::HalfLife;  // what the height means (nothing else about the picture depends on it)
     bool flat() const { return tilt == 0 && zoom == 1 && panX == 0 && panY == 0; }   // exactly stage 2's picture (the height mode does not show while flat)
     bool operator==(const ChartViewState& o) const { return tilt == o.tilt && zoom == o.zoom && panX == o.panX && panY == o.panY && height == o.height; }
 };
 inline constexpr double kChartZoomMax = 16;
+inline constexpr double kChartZoomMin = 0.5;   // 5p: twice as far out as before (it was 1 = the whole chart fitted); the chart then shows at half size
 // The fixed isometric angles: at tilt 1 the chart is turned about the vertical axis by 45 degrees and then tipped away from straight-down by 54.736 degrees (= arccos(1/sqrt(3)), so the camera looks
 // along a cube's diagonal, 35.264 degrees above the horizon): then the three axes (neutrons, protons, height) all look 0.8165 times their length, equally long. At tilt t both angles are t times
 // that. At tilt 0 nothing is turned and nothing is tipped, so the chart is exactly the flat one.

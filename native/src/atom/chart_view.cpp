@@ -284,8 +284,8 @@ double ChartScene::freeHeight(bool fromTop, double x0, double x1) const {
 ChartViewState ChartScene::clamped(const ChartViewState& in) {
     ChartViewState s = in;
     s.tilt = std::max(0.0, std::min(1.0, s.tilt));
-    s.zoom = std::max(1.0, std::min(kChartZoomMax, s.zoom));
-    if (s.zoom == 1) { s.panX = s.panY = 0; return s; }
+    s.zoom = std::max(kChartZoomMin, std::min(kChartZoomMax, s.zoom));
+    if (s.zoom <= 1) { s.panX = s.panY = 0; return s; }
     const double lim = 3 * std::max(w_, h_) * s.zoom;            // a pan beyond this is out of the picture anyway; cutting it first keeps the float corners exact enough below
     s.panX = std::max(-lim, std::min(lim, s.panX)); s.panY = std::max(-lim, std::min(lim, s.panY));
     build(w_, h_, s);

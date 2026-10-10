@@ -23,9 +23,13 @@
 namespace atom {
 
 // The settings (the web's params), with the web's default values.
+// 0.15 stage 5p: the smallest zoom (the furthest zoom-out) is twice as far out as before: before, the smallest picture scale was 1 (log10 = 0); now it is 1/2, log10(1/2) = -log10(2) = -0.30102999566398...
+inline constexpr double kZoomMin = -0.301029995663981195;
+inline double zoomFactorShown(double zoom) { const double f = std::pow(10.0, zoom); return f < 1 ? std::round(f * 100) / 100 : std::round(f); }   // the "×" number beside the zoom slider: whole numbers, but 0.5 below 1
+
 struct AtomParams {
     std::string scale = "Auto";          // Auto / Fixed
-    double zoom = 0;                     // log10 of the zoom, 0–7
+    double zoom = 0;                     // log10 of the zoom, kZoomMin–7 (5p: it was 0–7; the picture can now be shown at half its old smallest size)
     std::string qstyle = "Cinematic";    // Cinematic / Accurate / Classic
     std::string detail = "+ Gluons";     // Valence / + Gluons / + Sea
     std::string style = "Fuzzy";         // Fuzzy / Hard balls

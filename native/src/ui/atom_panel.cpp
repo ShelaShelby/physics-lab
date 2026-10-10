@@ -938,7 +938,7 @@ static void atomPanelContents(AppState& app) {
     if (!L.chartOn()) {                                // (the chart has no scale, zoom or spin: nothing here would do anything)
     if (L.showSpin() && ui::Button(displayable("⟳ Spin on/off").c_str())) L.toggleSpin();
     selectRow(app, "scale", "Scale", atomChoices("scale"), p.scale);
-    sliderRow(app, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(std::round(std::pow(10, p.zoom))), p.zoom, 0, 7, 0.01, false);
+    sliderRow(app, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(atom::zoomFactorShown(p.zoom)), p.zoom, atom::kZoomMin, 7, 0.01, false);
     if (p.zoom >= 4) {
         selectRow(app, "qstyle", "Quark style", atomChoices("qstyle"), p.qstyle);
         selectRow(app, "detail", "Nucleon detail", atomChoices("detail"), p.detail);

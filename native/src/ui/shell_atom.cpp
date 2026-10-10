@@ -241,7 +241,7 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
     if (!chart && section("scale", "Scale and motion", true)) {          // old: View & zoom (not on the chart) and the Orbit view's Playback speed
         if (L.showSpin()) { bool spin = L.s.spin; if (pCheck(p, "atom.spin", "Spin (the cloud turns by itself)", &spin)) L.toggleSpin(); pGap(p, m.s4); }
         choiceRow(app, p, "scale", "Scale", ui::atomChoices("scale"), P.scale);
-        numberRow(app, p, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(std::round(std::pow(10, P.zoom))), P.zoom, 0, 7, 0.01);
+        numberRow(app, p, "zoom", "Zoom (log scale)", "×" + fmt::jsLocale(atom::zoomFactorShown(P.zoom)), P.zoom, atom::kZoomMin, 7, 0.01);
         if (orbit) numberRow(app, p, "speed", "Playback speed", std::to_string(P.speed), P.speed, 1, 30, 1);
     }
     if (!chart && P.zoom >= 3 && section("nucleus", "Nucleus", true)) {  // old: quark style and nucleon detail from zoom 4, nucleon edge from zoom 3

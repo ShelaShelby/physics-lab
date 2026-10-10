@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5p: wheel after About, About scrollbar, zoom out further",
+     "Fixed: after you opened About (or History, or the log) and closed it again, the mouse wheel no longer zoomed the Orbit Lab or the Atom Lab until you restarted the app. The app kept thinking a page was still open. "
+     "The scrollbar of About, Learn and the other pages is now 12 px wide with a faint track, and still drags; the wheel, PageUp, PageDown, Home and End already scrolled them. In the Atom Lab you can now zoom out twice as far in every view (Atom, Nucleus, Nucleon, Cloud, Cloud 3D, Slice and the Chart of nuclides): the picture can be half its old smallest size. "
+     "Not tested: Windows, a real mouse, a real graphics card, speed."},
     {"0.15", "Full UI rework, stage 5o: three small layout fixes",
      "With New UI (preview) On and the Dark theme: in a small window (880 x 560) the Orbit Lab's subject card no longer runs into the readout at the bottom right; it stops above it and scrolls inside itself (use the mouse wheel to reach \"All values\"). In the Atom Lab a long Did-you-know fact that did not fit beside the toolbar (for example with the Controls panel open) is no longer cut with \"...\"; it moves to the row above the toolbar and the scale bar moves up with it. Three paragraphs of the About page are worded a little shorter so that no line of text is too long to read comfortably. Not tested: Windows, a real mouse, a real graphics card, speed, 125 and 150 % scaling."},
     {"0.15", "Full UI rework, stage 5m part 2 and 5n: bigger handle, grey instead of blue, M1 windows, chart tilt slider",
