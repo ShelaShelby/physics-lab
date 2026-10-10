@@ -1,6 +1,8 @@
+Current look: M1. Other looks were rejected or archived (native/archive/themes/).
+
 # 0.15 design — final spec (stage 2). Chosen by the owner on 5 Oct 2026; nothing here is applied to the app yet
 
-Stage 1's layouts A, B and C were **rejected** ("looks like a mobile app"): see `DESIGN_stage1_rejected.md` and `mockups/` (kept for the record). Every control has a home in `INVENTORY.md`. Numbers are in `design_tokens.json`.
+Stage 1's layouts A, B and C were **rejected** ("looks like a mobile app"): the layout pictures and the old spec were deleted in the 0.15 docs cleanup (they are in git history). Every control has a home in `INVENTORY.md`. Numbers are in `design_tokens.json`.
 
 ## 0. The design in one paragraph, and the owner's hard rules
 A **full-screen 3D-viewer ("digital twin") look**: the lab picture fills the whole window. Over it float: a slim **top bar** (menu, breadcrumbs, a centre **chip**, search, small icons), small **floating panels** that collapse to their title (**Legend** top left, collapsed; **subject card** top right), a compact **toolbar** bottom centre whose buttons have small ▾ carets that open a panel above them, and a tiny **readout** bottom right. Panels are dark translucent glass with a thin light edge and ~10 px corners; one accent colour. Checkboxes and segmented buttons, **no phone-style switches**. Long text lives in a **reading view** (centred column over a dimmed picture). No side column, no header block, no "Did you know?" bar.

@@ -1,3 +1,4 @@
+HISTORICAL plan (native 0.4/0.5). ROADMAP.md is the current plan.
 # Atom Lab port plan (native 0.4)
 
 Reference: `index.html`, web Atom Lab update 7.7.3. The Atom Lab is `SIMS['Atom Lab']`

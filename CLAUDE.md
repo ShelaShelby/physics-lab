@@ -34,5 +34,5 @@ Why: stages used to take 20-30 minutes and had grown to hours: the cost was runn
 - Waiting for a long run: one long blocking wait (`timeout 119 sh -c 'until grep -q ... ; do sleep 10; done'` in a few calls at most), no polling loops of status.
 - Push as soon as the final run passes.
 - The owner's usage is limited: prefer smaller stages; stop and report if a stage grows.
-- Time budget: at each wip commit check the elapsed time; if the stage has passed 60 minutes, finish the current part, push what works, write in REPORT.md what is left, and stop.
+- Time budget: About 70 minutes per job in two parts, one push per part. The times are a ceiling, not a target. Never skip tests, pixel checks or the Windows run to save time; if time runs out, push what is green and list what is left.
 - Test environment: picture tests run one llvmpipe thread per app start (LP_NUM_THREADS=1) and a shared Mesa shader cache (set by CMake / check.sh); they never need their own settings.
