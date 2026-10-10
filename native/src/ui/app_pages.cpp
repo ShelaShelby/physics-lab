@@ -22,7 +22,6 @@ namespace ui {
 
 namespace {
 
-float g_headerH = 0;               // the header's height last frame (window coordinates)
 
 float S() { return ImGui::GetFontSize() / 16 / look().textScale; }   // one web px (the web's sizes are then times the text size)
 
@@ -76,8 +75,6 @@ void languageMenu(AppState& app) {
 
 }  // namespace
 
-float headerHeight() { return g_headerH; }
-
 // a header button (.ver): a pill with a thin border, bold small text
 bool pillButton(const std::string& label, const char* tip) {
     const float s = S() * look().textScale;
@@ -95,69 +92,6 @@ bool pillButton(const std::string& label, const char* tip) {
     return clicked;
 }
 
-void header(AppState& app) {
-    const ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float s = S() * look().textScale, pad = 12 * s;
-    ImGui::SetNextWindowPos(vp->Pos);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(vp->Size.x, 0), ImVec2(vp->Size.x, FLT_MAX));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, 8 * s));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-    pushDockedBg();
-    ImGui::Begin("##header", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize |
-                 ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing);
-    ImGui::PopStyleVar(2);
-    popDockedBg();
-    panelDecor(app::PanelKind::Docked);
-    const app::LabInfo& L = app::kLabInfo[app.lab];
-    const std::string ver = app.lab == 1 ? std::string(app::kAtomHistoryName) + " " + L.update : std::string("Update ") + L.update, hist = historyLabel();   // the Atom Lab's button says whose history it is
-    // the buttons' widths, so they can sit on the right of the first line (they move under the title when there is no room)
-    ImGui::PushFont(fonts().bold, ImGui::GetStyle().FontSizeBase * 13 / 16);
-    float bw = 0;
-    for (const std::string& t : {std::string(app::kHdrTheme.label), std::string(app::kLangLabel), std::string(app::kHdrAbout.label),
-                                 std::string(app::kHdrSettings.label), hist, ver})
-        bw += ImGui::CalcTextSize(displayable(t, fonts().bold).c_str()).x + 20 * s + 2 + 8 * s;
-    ImGui::PopFont();
-    const float W = vp->Size.x - 2 * pad, x0 = ImGui::GetCursorPosX(), y0 = ImGui::GetCursorPosY();
-    // h1: Physics Lab
-    ImGui::PushFont(titleFont(), ImGui::GetStyle().FontSizeBase * 20 / 16 * titleFontScale());   // the theme's display font for the app name (Y2K), else the bold face
-    ImGui::TextUnformatted(app::kHdrTitle);
-    logTitleRect("appname", ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-    const float titleW = ImGui::GetItemRectSize().x, titleH = ImGui::GetItemRectSize().y;
-    ImGui::PopFont();
-    // #sub: the lab's subtitle, between the title and the buttons
-    const bool oneLine = W - titleW - bw > 260 * s;
-    const float subX = x0 + titleW + 10 * s, subRight = oneLine ? x0 + W - bw - 10 * s : x0 + W;
-    ImGui::SetCursorPos(ImVec2(subX, y0 + titleH - ImGui::GetFontSize() * 1.15f));
-    ImGui::PushTextWrapPos(subRight);
-    ImGui::PushStyleColor(ImGuiCol_Text, vec(look().w.muted));
-    ImGui::TextUnformatted(displayable(L.subtitle).c_str());
-    ImGui::PopStyleColor();
-    ImGui::PopTextWrapPos();
-    const float below = ImGui::GetCursorPosY();
-    // #hb: 🎨 Theme, 🌐 English, 👤 About, ⚙ Settings, 🕰 history, Update n
-    ImGui::SetCursorPos(oneLine ? ImVec2(x0 + W - bw + 8 * s, y0 + 2 * s) : ImVec2(x0, below + 4 * s));
-    themeButton(app);
-    ImGui::SameLine(0, 8 * s);
-    if (pillButton(app::kLangLabel, app::kHdrLang.tip)) ImGui::OpenPopup("##lang");
-    languageMenu(app);
-    ImGui::SameLine(0, 8 * s);
-    if (pillButton(app::kHdrAbout.label, app::kHdrAbout.tip)) app.showAbout = true;
-    ImGui::SameLine(0, 8 * s);
-    if (pillButton(app::kHdrSettings.label, app::kHdrSettings.tip)) app.showSettings = true;
-    ImGui::SameLine(0, 8 * s);
-    if (pillButton(hist, app::kHdrHistory.tip)) app.showHistory = true;
-    ImGui::SameLine(0, 8 * s);
-    if (pillButton(ver, app.lab == 1 ? app::kAtomHistoryTip : app::kHdrVer.tip)) app.showLabLog = true;
-    if (oneLine && ImGui::GetCursorPosY() < below) { ImGui::SetCursorPosY(below); ImGui::Dummy(ImVec2(0, 0)); }
-    // under it: the 💡 facts line, then the tabs
-    ImGui::Dummy(ImVec2(0, 2 * s));
-    factsLine(app);
-    ImGui::Dummy(ImVec2(0, 2 * s));
-    tabsBar(app);
-    g_headerH = ImGui::GetWindowHeight();
-    ImGui::End();
-}
-
 // 👤 About: the web's page word for word, with the labs of the native app, and the native version
 void aboutWindow(AppState& app) {
     if (!app.showAbout) return;
@@ -166,7 +100,7 @@ void aboutWindow(AppState& app) {
         htmlView(std::string("<p class=\"lrnP lrnMuted\">Native app: Physics Lab (native) ") + appVersionLabel() + ".</p>");
         htmlView("<p class=\"lrnP lrnMuted\">Text codes such as &amp;rsquo; are turned into their characters with the list of named character references of the HTML Standard (WHATWG, entities.json); this page is the only text that uses them.</p>");
         htmlView("<p class=\"lrnP lrnMuted\">0.15 stage 5g and 5m: the themes Y2K Ice, Y2K Night, Frutiger Aero and Synthwave were removed at the owner's request (a saved setting that names one gives Dark). No new data.</p>");
-        htmlView("<p class=\"lrnP lrnMuted\">The new UI (preview, 0.15 stage 3): panel opacity is found with the same W3C WCAG 2.x contrast formula (text, grey text and accent text each at least 4.5:1 over the worst picture that can be behind a panel, white behind a dark panel and black behind a light one); the icons are drawn by the app itself, no icon set; the type scale and sizes were chosen with the owner (docs/ui-0.15/DESIGN.md); no new data.</p>");
+        htmlView("<p class=\"lrnP lrnMuted\">The New UI (0.15 stage 3): panel opacity is found with the same W3C WCAG 2.x contrast formula (text, grey text and accent text each at least 4.5:1 over the worst picture that can be behind a panel, white behind a dark panel and black behind a light one); the icons are drawn by the app itself, no icon set; the type scale and sizes were chosen with the owner (docs/ui-0.15/DESIGN.md); no new data.</p>");
     }
     pageEnd();
 }

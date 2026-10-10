@@ -10,7 +10,7 @@
 #   keys      Esc closes an open panel, then search; Ctrl+K opens search; Space plays / pauses (and is typing inside search)
 #   shift     with a card or panel over the middle, the selected body is moved outside every open panel; with the shift switched off (PL_SHIFT=off) it is not (so the test can fail)
 #   reading   About opens in the reading view: a column of at most 34 em, headings, a contents list, body lines of at most 75 characters (DejaVu Sans here, wider than Segoe UI)
-#   old       the Old panel button opens today's side column as a floating window (the Atom Lab only, from stage 4)
+#   old       no Old panel button in either lab, and PL_NEWUI=off no longer switches the New UI off (0.16 stage 1b)
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap, prefetch
@@ -166,13 +166,13 @@ def part_reading(binary, work):
     check("reading.column" in r.rects and r.note("toc") and "reading.toc" in r.rects, "a wide window shows the reading view with its contents rail")
 
 def part_old(binary, work):
-    # stage 4: the Orbit Lab has no Old panel any more; the Atom Lab keeps it until stage 5
-    r = run_app(binary, work, "old", {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_SCRIPT": "10:click=top.old"}, frames=40)
-    check("panel.old" in r.rects, "in the Atom Lab the Old panel button opens today's side panel as a floating window")
-    r = run_app(binary, work, "old_orbit", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=top.old"}, frames=40)
+    # 0.16 stage 1b: the old interface is gone: neither lab has an Old panel button, and the app has no "off" layout
+    r = run_app(binary, work, "old", {"PL_ATOM": "1", "PL_SCRIPT": "10:click=top.old"}, frames=40)
+    check("panel.old" not in r.rects and len(r.scripted_missing()) == 1, "the Atom Lab has no Old panel button")
+    r = run_app(binary, work, "old_orbit", {"PL_SCRIPT": "10:click=top.old"}, frames=40)
     check("panel.old" not in r.rects and len(r.scripted_missing()) == 1, "the Orbit Lab has no Old panel button")
     r = run_app(binary, work, "off", {"PL_NEWUI": "off"}, frames=30)
-    check(r.window is None or not r.texts, "with New UI off the new UI draws nothing")
+    check(r.window is not None and r.texts, "the New UI is always on (PL_NEWUI=off is ignored)")
 
 def main():
     binary, work = sys.argv[1], sys.argv[2]

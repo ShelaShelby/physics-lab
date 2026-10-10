@@ -137,17 +137,14 @@ def main():
         check(best[0] >= 4.5, f"{theme} on {sky}: the readout text reads 4.5:1 on its pill, measured from the picture: {best[0]:.2f}")
         check(lum(pill) < 0.3, f"{theme} on {sky}: the pill is darker than the picture it sits on ({pill})")
 
-    # ---- 6. the Atom Lab: the View section, no carets, the Old panel left of the panel ----
-    r = go("c_atom", "10:click=tool.nucleus.caret;12:click=tool.cloud.caret;16:click=nucleus.nucleon;30:click=cloud.cloud3d;40:click=cloud.slice;50:click=tool.old", frames=60, atom=True)
+    # ---- 6. the Atom Lab: the View section, no carets, (0.16 stage 1b: the Old panel is gone) ----
+    r = go("c_atom", "10:click=tool.nucleus.caret;12:click=tool.cloud.caret;16:click=nucleus.nucleon;30:click=cloud.cloud3d;40:click=cloud.slice", frames=60, atom=True)
     miss = " ".join(r.scripted_missing())
     check("tool.nucleus.caret" in miss and "tool.cloud.caret" in miss, "Atom: the Nucleus and Cloud buttons have no caret any more")
     check("nucleus.nucleon" not in miss and "cloud.cloud3d" not in miss and "cloud.slice" not in miss, f"Atom: Nucleon, Cloud 3D and Slice are in the View section: {miss}")
     pc = r.rects.get("panel.controls")
     check(pc is not None and inside(pc, r.window[0], r.window[1]) and pc[1] >= r.rects["topbar"][3], f"Atom: the panel is inside the window, under the top bar {pc}")
     check(not overlap(pc, r.rects["toolbar"]) and not overlap(pc, r.rects["readout"]), "Atom: the toolbar and the readout are clear of it")
-    r = go("c_atom_old", "10:click=top.old", frames=40, atom=True)
-    po, pc = r.rects.get("panel.old"), r.rects.get("panel.controls")
-    check(po is not None and pc is not None and po[0] + po[2] <= pc[0] + 0.5, f"Atom: the Old panel sits left of the Controls panel {po} {pc}")
     r = go("c_atom_tb", "", frames=30, atom=True)
     check("toolbar" in r.rects and "handle" in r.rects, "Atom: the toolbar and the handle are drawn")
     # ---- 7. (stage 5c.1) the handle: a tab on the picture's right edge, centred on the panel's height, never under the panel, the top bar or the toolbar; after the slide the panel is exactly

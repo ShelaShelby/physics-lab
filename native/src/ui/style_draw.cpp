@@ -24,7 +24,7 @@
 #include "shell_test.h"
 
 #ifndef PL_VERSION
-#define PL_VERSION "0.14"
+#define PL_VERSION "0.16"
 #endif
 
 namespace ui {

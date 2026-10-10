@@ -8,7 +8,7 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap
 
-KEYS = ["view", "layer", "zoom", "zoomTo", "focus", "drag", "paused", "yaw", "pitch", "oyaw", "opitch", "ctilt", "czoom", "Z", "N", "usualN", "seed", "big"]
+KEYS = ["view", "layer", "zoom", "zoomTo", "focus", "drag", "paused", "yaw", "pitch", "oyaw", "opitch", "ctilt", "czoom", "Z", "N", "usualN", "seed"]
 
 def states(r):
     out = []
@@ -114,22 +114,12 @@ def main():
         re_ = go(f"chip_e_{z}_{n}", "", {"PL_ATOM_SET": f"Z={z};N={n}"}, frames=20)
         check(words in [t for _, _, t in re_.texts], f"E: Z={z} N={n} says '{words}'")
 
-    # ---- F: Build another and Reshuffle live in the Nucleus panel, in the nucleus view only; no longer in the Old panel ----
+    # ---- F: Build another and Reshuffle live in the Nucleus panel, in the nucleus view only ----
     rf = go("chip_f", "76:click=nucleus.reshuffle;82:state", {"PL_ATOM_SET": "Z=6;N=6;view=Orbit", "PL_ATOM_DO": "nucleus"}, frames=96)
     sf = states(rf)
     check(not rf.scripted_missing() and len(sf) == 1 and sf[0]["seed"] == "1", f"F: Reshuffle in the Nucleus panel reshuffles once {sf[0]['seed'] if sf else None} {rf.scripted_missing()}")
     rg = go("chip_g", "26:click=nucleus.reshuffle", {"PL_ATOM_SET": "Z=6;N=6;view=Orbit"}, frames=40)
     check(any("nucleus.reshuffle" in l for l in rg.scripted_missing()), "F: in the atom view the Reshuffle button is not offered")
-    rh = go("chip_h", "10:click=top.old;20:click=Reshuffle nucleons", {"PL_ATOM_SET": "Z=6;N=6;view=Orbit", "PL_ATOM_DO": "nucleus"}, frames=40)
-    check(any("Reshuffle nucleons" in l for l in rh.scripted_missing()), "F: the Old panel no longer has Reshuffle (New UI On)")
-    roff = run_app(binary, work, "chip_off", {"PL_ATOM": "1", "PL_NEWUI": "off", "PL_ATOM_SET": "Z=6;N=6;view=Orbit", "PL_ATOM_DO": "nucleus", "PL_SCRIPT": "40:click=Reshuffle nucleons;50:state"}, frames=60, size="1000x2800")
-    soff = states(roff)
-    check(not roff.scripted_missing() and soff and soff[0]["seed"] == "1", f"F: with New UI Off the old panel still has Reshuffle: {roff.scripted_missing()}")
-
-    # ---- G: Bigger table still works (the old panel's button and the large window) ----
-    rbg = go("chip_big", "10:click=top.old;20:click=⤢ Bigger table;30:state", {"PL_ATOM_SET": "Z=6;N=6"}, frames=40)
-    sbg = states(rbg)
-    check(not rbg.scripted_missing() and sbg and sbg[0]["big"] == "1", f"G: Bigger table opens the large table window {rbg.scripted_missing()}")
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0
 

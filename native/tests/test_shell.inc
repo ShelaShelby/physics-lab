@@ -392,17 +392,16 @@ void testShellPanelStates() {
 
 void testShellPrefs() {
     app::Prefs p;
-    checkStr("prefs: New UI is Off by default", p.newUi, "off");
-    p.newUi = "on"; p.shellPanels = "card=c,legend=o";
+    p.shellPanels = "card=c,legend=o";
     const app::Prefs q = app::loadPrefs(app::savePrefs(p));
-    checkStr("prefs: New UI saves and loads", q.newUi, "on");
     checkStr("prefs: panel states save and load", q.shellPanels, "card=c,legend=o");
-    const app::Prefs bad = app::loadPrefs("newui=maybe\nshellpanels=card=c\n");
-    checkStr("prefs: a bad New UI value falls back to Off", bad.newUi, "off");
-    checkTrue("prefs: valid values are on and off", app::validNewUi("on") && app::validNewUi("off") && !app::validNewUi("yes") && !app::validNewUi(""));
+    // 0.16 stage 1b: the New UI setting is gone; a file that still holds the old key loads (the key is ignored, the other lines are read) and is saved back without it
+    const app::Prefs old = app::loadPrefs("textSize=large\nnewui=on\nshellpanels=card=c\nnewui=maybe\n");
+    checkStr("prefs: an old newui key is ignored, the lines around it are still read (text size)", old.textSize, "large");
+    checkStr("prefs: an old newui key is ignored, the lines around it are still read (panels)", old.shellPanels, "card=c");
+    checkTrue("prefs: and it is not written back", app::savePrefs(old).find("newui") == std::string::npos);
     const std::string text = app::savePrefs(app::Prefs{});
-    checkTrue("prefs: with the defaults the saved file has no new lines at all (a file from before 0.15 stage 3 is unchanged)", text.find("newui") == std::string::npos && text.find("shellpanels") == std::string::npos);
-    checkStr("prefs: and loads back as Off", app::loadPrefs(text).newUi, "off");
+    checkTrue("prefs: with the defaults the saved file has no new lines at all", text.find("newui") == std::string::npos && text.find("shellpanels") == std::string::npos);
 }
 
 

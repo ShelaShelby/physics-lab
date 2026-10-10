@@ -94,3 +94,41 @@ def prefetch(calls):
         if k not in _cache:
             _cache[k] = pool.submit(_run_app, *args, **kwargs)
     pool.shutdown(wait=False)
+
+
+# 0.16 stage 1b: the OLD interface (the side panels, the header; New UI Off) was removed from the app, so the checks that used it as their reference now read what it printed,
+# saved from the last build that still had it (the commit before 0.16 stage 1b, "native 0.16 stage 1a"): tests/reference/old_ui_runs.json. A saved run keeps the lines the old
+# app printed that start with PL (PLSTATE, PLASTATE, PLATOMCARD, PLSCRIPT, the PLSHELL notes ...; not the PLSHELL rects and texts). Nothing in it is produced by the new code.
+# To capture again (needs a binary of that old commit): PL_CAPTURE_OLD=<old PhysicsLab binary> python3 check_xxx.py <new binary> <work>
+import json
+_OLD_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "reference", "old_ui_runs.json")
+_old_runs = None
+
+def old_run(test, name, extra, frames=60, size="1280x800", theme="dark", timeout=900):
+    global _old_runs
+    if _old_runs is None:
+        try:
+            _old_runs = json.load(open(_OLD_FILE))
+        except OSError:
+            _old_runs = {}
+    key = f"{test}/{name}"
+    cap = _os.environ.get("PL_CAPTURE_OLD")
+    if cap:
+        e = dict(extra); e["PL_NEWUI"] = "off"
+        work = _os.path.join(_os.environ.get("TMPDIR", "/tmp"), "old_ui_capture"); _os.makedirs(work, exist_ok=True)
+        r = _run_app(cap, work, "old_" + name, e, frames, size, theme, timeout)
+        text = "\n".join(ln for ln in r.out.splitlines() if ln.startswith("PL") and not ln.startswith(("PLSHELL rect ", "PLSHELL text ")))
+        import fcntl
+        with open(_OLD_FILE + ".lock", "w") as lk:             # (several tests may capture at the same time)
+            fcntl.flock(lk, fcntl.LOCK_EX)
+            try:
+                cur = json.load(open(_OLD_FILE))
+            except (OSError, ValueError):
+                cur = {}
+            cur[key] = text
+            json.dump(cur, open(_OLD_FILE, "w"), indent=0, sort_keys=True)
+        _old_runs[key] = text
+        return Result(text, "", "")
+    if key not in _old_runs:
+        raise KeyError("no saved run of the old interface: " + key)
+    return Result(_old_runs[key], "", "")

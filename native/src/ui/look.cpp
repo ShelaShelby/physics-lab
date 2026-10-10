@@ -206,12 +206,10 @@ void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced) {
     L.grayscale = ts.grayscale;
     // the font: the one picked in Settings; with Theme default, the theme's own (Paper's book font, Monochrome's monospace, Aero's Segoe UI when the PC has it)
     L.fontKey = app::fontKeyFor(ts, p.font, fontFamilyAvailable(app::fontFamilyKeyOf(ts)));
-    {   // 0.15 stage 5m: the New UI's look M1 (New UI on, Dark, font Auto): its own font (Inter); if it did not load, nothing changes
+    {   // 0.15 stage 5m: the New UI's look M1 (Dark, font Auto): its own font (Inter); if it did not load, nothing changes
         const app::lookopt::Tokens* lt = &app::lookopt::m1();
-        static const char* nuEnv = std::getenv("PL_NEWUI");                                      // (the same rule as newUiOn: PL_NEWUI overrides the setting)
-        const bool newUi = nuEnv ? std::string(nuEnv) == "on" : p.newUi == "on";
-        if (lt && newUi && L.c.id == "dark" && L.fontKey == "auto" && fontFamilyAvailable(lt->font)) L.fontKey = lt->font;
-        L.m1 = lt && newUi && L.c.id == "dark";                   // 0.15 stage 5n: the windows follow M1 too (colours: Look::w)
+        if (lt && L.c.id == "dark" && L.fontKey == "auto" && fontFamilyAvailable(lt->font)) L.fontKey = lt->font;
+        L.m1 = lt && L.c.id == "dark";                   // 0.15 stage 5n: the windows follow M1 too (colours: Look::w)
         L.w = L.m1 ? app::lookopt::apply(*lt, L.c) : L.c;
     }
     g_look = L;

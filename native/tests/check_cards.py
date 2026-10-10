@@ -11,7 +11,7 @@
 #   The Orbit sheet against the old card, word for word, is tested by orbit_ui_card (check_orbit_ui.py).
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, inside, overlap, prefetch
+from shell_lib import run_app, inside, overlap, prefetch, old_run
 
 SIZES = ("1280x800", "880x560", "1920x1080")
 fails = checks = 0
@@ -93,7 +93,6 @@ def part_atom(binary, work):
     calls = [((binary, work, f"cd_atom_{sz}", dict(NEW, **U)), dict(frames=60, size=sz)) for sz in SIZES]
     calls += [((binary, work, f"cd_atom_sheet_{sz}", dict(NEW, PL_SCRIPT="20:click=card.all", **U)), dict(frames=60, size=sz)) for sz in SIZES]
     for name, st in ELEMS:
-        calls.append(((binary, work, f"cd_atom_old_{name}", dict(OLD, PL_ATOM_SET=st)), dict(frames=40, size="1000x2800")))
         calls.append(((binary, work, f"cd_atom_new_{name}", dict(NEW, PL_ATOM_SET=st, PL_LOG_SHELL="1", PL_SCRIPT="20:click=card.all")), dict(frames=60, size="1280x800")))
     prefetch(calls)
     for sz in SIZES:
@@ -116,9 +115,9 @@ def part_atom(binary, work):
     r = run_app(binary, work, "cd_atom_pick", dict(NEW, PL_SCRIPT="10:click=top.chip;20:click=pt.26"), frames=60)
     t = r.note("cardtitle atom.card")
     check(not r.scripted_missing() and t and "Iron" in t[0], f"atom: choosing iron in the periodic table changes the card: {t} {r.scripted_missing()[:2]}")
-    # the sheet shows what the old panel showed (the old panel's strings, printed by the old UI itself)
+    # the sheet shows what the old panel showed (the old panel's strings, saved from the last build that had the old UI: tests/reference/old_ui_runs.json)
     for name, st in ELEMS:
-        ro = run_app(binary, work, f"cd_atom_old_{name}", dict(OLD, PL_ATOM_SET=st), frames=40, size="1000x2800")
+        ro = old_run("cards", f"cd_atom_old_{name}", dict(OLD, PL_ATOM_SET=st), frames=40, size="1000x2800")
         old = []
         for tag in ("hint", "isotope", "element", "facts", "decay"):
             m = lines(ro, f"PLATOMCARD {tag}")
@@ -151,8 +150,8 @@ def part_atom(binary, work):
                 if o is not None:
                     check(not overlap(lg, o), f"atom {sz} chart: the Legend does not overlap {other} {lg} {o}")
         check(drawn_legend(r) == "0", f"atom {sz} chart: the picture does not draw its own legend while the Legend chip has it: {drawn_legend(r)}")
-    ro = run_app(binary, work, "cd_atom_leg_old", dict({"PL_NEWUI": "off", "PL_ATOM": "1", "PL_SCRIPT": "30:astate"}, **CH), frames=50, size="1000x800")
-    check(drawn_legend(ro) == "1", f"atom old UI: the picture draws its legend as before: {drawn_legend(ro)}")
+    ro = old_run("cards", "cd_atom_leg_old", dict({"PL_NEWUI": "off", "PL_ATOM": "1", "PL_SCRIPT": "30:astate"}, **CH), frames=50, size="1000x800")
+    check(drawn_legend(ro) == "1", f"atom old UI (saved run): the picture drew its legend itself: {drawn_legend(ro)}")
     for sz in ("1280x800", "1920x1080"):
         r = run_app(binary, work, f"cd_atom_legopen_{sz}", dict(NEW, PL_SCRIPT="20:click=card.legend", **CH), frames=60, size=sz)
         lg = find(r, "card.atom.legend")

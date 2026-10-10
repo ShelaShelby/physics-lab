@@ -37,7 +37,6 @@ struct AppState {
     int pane = 0;                          // the tabs: 0 the labs (🔬 Simulations), 1 📚 Learn, 2 🏆 Achievements
     int learnBack = -1;                    // a guide opened from the Learn tab in another lab: the lab to go back to when it closes
     bool showSettings = false;
-    bool showOldPanel = false;             // 0.15 stage 3, the new UI: the "Old panel" window (today's side column, floating) is open
     ShotUi shot;
     std::shared_ptr<BenchState> bench;     // the benchmark: its window, its run and the settings it will give back
     bool benchRunning = false;             // a benchmark is running: nothing is written to the settings file
@@ -63,7 +62,6 @@ struct AppState {
     atom::AtomLab atom;
     atom::AtomView atomView;
     double tempK = 293.15;                 // the Temperature slider, K (kept while you switch elements, as in the web)
-    bool bigTable = false;                 // the large periodic table window is open
     bool tempDetails = false;              // "What is temperature, really?" is open
     int atomLearn = 0;                     // the open Atom Lab guide: 0 none, 1 look, 2 scale, 3 weight, 4 timeline
     std::string atomLearnJump;             // a section to scroll to ("top", "bar" or a section key)
@@ -91,10 +89,5 @@ void setZoom(AppState& app, double zoom);
 
 // The Performance card: frame times (last, average, worst, a graph) and the VSync switch.
 void performanceCard(AppState& app);
-
-// Draws the panel in a window `width` points wide on the right of the main window.
-void orbitPanel(AppState& app, float width);
-// 0.15 stage 3: the same controls in a floating window (the new UI's temporary "Old panel", closed with *open = false); window pixels.
-void orbitPanelFloating(AppState& app, bool* open, float x, float y, float w, float h);
 
 }  // namespace ui

@@ -6,7 +6,7 @@
 # infosize (Part 1, item 2): the Atom info text is drawn at 14 px or more in the New UI (measured from the size the picture asks the font for: PLATOMBOX infopx) and still 13 px with the New UI Off.
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, prefetch, inside, overlap
+from shell_lib import run_app, prefetch, inside, overlap, old_run
 
 SIZES = ("1280x800", "880x560", "1920x1080")
 fails = checks = 0
@@ -57,7 +57,7 @@ def part_centre(binary, work):
             check(False, f"{tag}: the nucleus label is drawn {label}")
 
 def part_infosize(binary, work):
-    for nu, want_min, want_max in (("on", 14, 40), ("off", 13, 13)):
+    for nu, want_min, want_max in (("on", 14, 40),):   # 0.16 stage 1b: the old layout (13 px) is gone
         for sz in SIZES:
             r = run_app(binary, work, f"isz_{nu}_{sz}", {"PL_ATOM": "1", "PL_NEWUI": nu, "PL_ATOM_SET": "Z=92;N=146;view=Orbit", "PL_SCRIPT": "20:astate"}, frames=30, size=sz)
             px = box(r.out, "infopx", 1)
@@ -73,12 +73,12 @@ def card_lines(out, tag):
 
 def part_cards(binary, work):
     # Part 2: the data sheet's tabs for the old panel's last cards show EXACTLY what the old panel shows (the strings and the numbers behind the two graphs), for 4 subjects in a cloud view
-    # (all five cards) and in the Orbit view (no radial graph: the old panel has none there). The OLD run is the old layout (New UI Off): its panel prints its cards' strings with PL_LOG_CARD.
+    # (all five cards) and in the Orbit view (no radial graph: the old panel has none there). The OLD run is the saved output of the old layout (the last build that had it, 0.16 stage 1a): its panel printed its cards' strings with PL_LOG_CARD.
     seq = "10:click=card.all;" + ";".join(f"{16 + 8 * i}:click=data.tab.{t}" for i, t in enumerate(TABS))
     for nm, zn in SUBJECTS:
         for vn, view in (("cloud3d", "view=Cloud 3D;orb=2p"), ("orbit", "view=Orbit")):
             st = zn + ";" + view
-            old = run_app(binary, work, f"cd_old_{nm}_{vn}", {"PL_ATOM": "1", "PL_NEWUI": "off", "PL_ATOM_SET": st, "PL_LOG_CARD": "1"}, frames=40)
+            old = old_run("5h", f"cd_old_{nm}_{vn}", {"PL_ATOM": "1", "PL_ATOM_SET": st, "PL_LOG_CARD": "1"}, frames=40)   # (saved from the last build with the old panel: tests/reference/old_ui_runs.json)
             new = run_app(binary, work, f"cd_new_{nm}_{vn}", {"PL_ATOM": "1", "PL_NEWUI": "on", "PL_ATOM_SET": st, "PL_LOG_CARD": "1", "PL_SCRIPT": seq, "PL_LOG_SHELL": "1"}, frames=70)
             for t in TABS:
                 tag = f"{nm} {vn} {t}"

@@ -23,11 +23,7 @@ def check(ok, what):
 def main(binary, work):
     check(look == "m1", "the look is m1 (the only one left)")
     on = run_app(binary, work, "lk_on", {"PL_NEWUI": "on", "PL_SELECT": "Earth"}, frames=40)
-    off = run_app(binary, work, "lk_off", {"PL_NEWUI": "off", "PL_SELECT": "Earth"}, frames=40)
     check("panel.controls" in on.rects and "toolbar" in on.rects, f"look {look}: the app starts and draws the panel and the toolbar")
-    a, b = open(on.bmp, "rb").read(), open(off.bmp, "rb").read()
-    diff = sum(1 for i in range(54, min(len(a), len(b)), 4) if a[i:i + 3] != b[i:i + 3])
-    check(len(a) == len(b) and diff > 0.01 * (len(a) // 4), f"look {look}: the New UI picture differs from the old UI's ({diff} pixels)")
     # PIXELS: inside the Controls panel, away from text, the colour is M1's card #17171a (23, 23, 26) (the panel is 0.95 opaque over the picture behind it, so allow the mix)
     pc = on.rects["panel.controls"]; bm = Bmp(on.bmp)
     inner = [bm.px(int(pc[0] + pc[2] - 6), int(pc[1] + pc[3] - 8 - k)) for k in range(0, 40, 4)]

@@ -1,6 +1,7 @@
 # Resume
 
 ## Current state
+- 0.16 stage 1b: the old interface is removed (side panels, header, Atom Lab Old panel button, Settings -> New UI, old fps counter, large table window); the New UI is always on; version 0.16. Tests converted / deleted: see native/REPORT.md. Next: the dead-code hunt.
 - 0.16 stage 1a: the Atom Lab's four old-panel gaps (Dirac switch, lab spectrum card on the data sheet, Restart atom, draw-call line) have a New UI home (ui6a_atom_gaps); nothing removed yet; stage 1 (removal) is next.
 - 0.15 stage 5t: Controls segments and check boxes are grey (ui5t_grey); generator drift documented in REPORT 5t; Kr-78 NOT changed (NUBASE2020 unreachable from the cloud).
 - 0.15 stage 5s: index.html moved to native/archive/web/index.html (sha256 unchanged); only 6 script paths changed, no app change.

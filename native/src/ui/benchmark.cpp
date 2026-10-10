@@ -292,7 +292,7 @@ void begin(AppState& app) {
         e.fullscreen = (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0;
         if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w))) e.refreshHz = m->refresh_rate;
     }
-    e.textSize = app.prefs.textSize; e.theme = app.prefs.theme; e.newUi = app.prefs.newUi == "on" ? "on" : "off";
+    e.textSize = app.prefs.textSize; e.theme = app.prefs.theme;
     e.power = app.powerNote;                                          // 0.15 stage 2: whether Windows was asked not to power-throttle the app
     b.warm = envNum("PL_BENCH_WARMUP", app::kBenchWarmupS);          // for automatic checks: shorter times
     b.measure = envNum("PL_BENCH_MEASURE", app::kBenchMeasureS);
@@ -469,7 +469,7 @@ void benchmarkWindow(AppState& app) {
     bool cancel = running && esc;
     if (running || ImGui::IsPopupOpen(kRunBox)) {
         if (running && !ImGui::IsPopupOpen(kRunBox)) ImGui::OpenPopup(kRunBox);
-        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 12 * fs / 16, vp->WorkPos.y + 12 * fs / 16 + std::max(0.0f, headerHeight())), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 12 * fs / 16, vp->WorkPos.y + 12 * fs / 16), ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(0.85f);
         if (ImGui::BeginPopupModal(kRunBox, nullptr, fl | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav)) {
             panelDecor(app::PanelKind::Floating);

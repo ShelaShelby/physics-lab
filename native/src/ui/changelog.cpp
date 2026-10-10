@@ -19,6 +19,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.16", "The old interface is gone: the New UI is the only one",
+     "The old side panels, the old header and the Atom Lab's Old panel button were removed, and so was Settings -> New UI (preview): the new layout is always on. Nothing it showed was lost: every old control, card and note has a home in the new layout. A settings file that still holds the old New UI choice opens without a problem (the choice is ignored). The benchmark's result no longer has a New UI line. The old frames-per-second counter is gone; the fps is in the readout at the bottom right and in Settings -> Performance. No new facts or numbers; no physics changed. Not tested: Windows, a real mouse, a real GPU, speed."},
     {"0.15", "Full UI rework, stage 1a of the 0.16 clean-up: the Atom Lab's last old-panel features",
      "With New UI On, the Atom Lab's Controls panel now has the Dirac levels switch (Relativity, with the same words as before) and a Restart atom button (a fresh atom, the same settings). The data sheet's Spectrum tab shows the lab's own light spectrum, with the Dirac level rows when Dirac is On, below the NIST spectrum. Settings, Performance shows the line \"Picture: N draw calls, M instanced shapes\" in the Atom Lab. Nothing was removed."},
     {"0.15", "Full UI rework, stage 5t: grey segments and check boxes",

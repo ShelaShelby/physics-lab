@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.14 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.16 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -247,7 +247,6 @@ if(PL_BUILD_APP)
     src/ui/svg_icon.cpp
     src/ui/settings.cpp
     src/ui/shot.cpp
-    src/ui/fps_counter.cpp
     src/ui/benchmark.cpp
     src/ui/power.cpp)
   target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core app_core imgui SDL3::SDL3-static)
@@ -260,17 +259,12 @@ if(PL_BUILD_APP)
     target_sources(PhysicsLab PRIVATE assets/physics_lab.rc)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
-  # 0.14 stage 1: pictures of the real app's main screens for every theme, drawn headless (SDL's offscreen driver, Mesa llvmpipe), compared with the pictures of the
-  # 0.13 code. Linux only (the cloud session); the GitHub Windows build does not run it. Needs -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON.
+  # 0.16 stage 1b: theme_pictures and window_pictures (pictures of the OLD interface) were deleted with it. The New UI's picture tests are below. Linux only (the cloud session); the GitHub Windows build does not run them. Needs -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON.
   option(PL_PICTURE_TESTS "Register the theme picture test (needs a headless Mesa and the app built on Linux)" OFF)
   if(PL_PICTURE_TESTS AND UNIX)
     enable_testing()
-    add_test(NAME theme_pictures COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_theme_pictures.sh $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/theme_pictures
-             ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference ${CMAKE_CURRENT_SOURCE_DIR}/tools)
-    # 0.14 stage 1.1: a window that holds text hides what is behind it (Aero's guide showed the Learn cards through its text); needs python3
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
-      add_test(NAME window_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_window_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/window_pictures)
       # 0.15 stage 5m: y2k_pictures, page_cache_pictures and effects_pictures were archived with the themes (native/archive/themes/tests)
       # 0.15 stage 3: the new UI (Settings -> New UI (preview)): text sizes and floors at every Text size and Windows scale, nothing leaves the window, collapsing, Esc / Ctrl+K / Space,
       # the centre shift, the reading view; the Orbit Lab top-10 controls give the same state as the old panel; pictures (glass opacity, regression guards)
@@ -359,7 +353,7 @@ foreach(t orbit_physics atom_physics app_settings font_coverage nbody_physics jp
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
-foreach(t gl_phase_colours theme_pictures window_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui6a_atom_gaps ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
+foreach(t gl_phase_colours shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui6a_atom_gaps ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
           orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")

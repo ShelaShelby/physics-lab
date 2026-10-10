@@ -33,7 +33,7 @@ def diff_count(a, b, tol=24):
 # whole (the label) and by one word of it. These labels are written here by hand on purpose: they are the independent expectation, the app builds its list from its own table.
 ROWS_ALL = {"text": ("Text size (Settings)", "size"), "font": ("Font", "font"), "units": ("Units (metric or imperial)", "units"), "motion": ("Motion (reduced motion)", "motion"),
             "progress": ("Progress (start again)", "progress"), "developer": ("Developer (unlock everything)", "developer"),
-            "newui": ("New UI (preview)", "preview"), "facts": ("Did you know facts", "did"), "perf": ("Performance", "performance"), "vsync": ("VSync (wait for the screen)", "vsync"),
+            "facts": ("Did you know facts", "did"), "perf": ("Performance", "performance"), "vsync": ("VSync (wait for the screen)", "vsync"),
             "frames": ("Frame times (fps)", "frame"), "benchmark": ("Benchmark (speed test)", "benchmark")}
 ROWS_LAB = {0: {"gpurocks": ("GPU rocks (OpenGL 4.3)", "rocks")},
             1: {"gpuspin": ("GPU superposition and jumps (OpenGL 4.3)", "superposition"), "gpuoutline": ("GPU outline (OpenGL 4.3)", "outline"), "gpucolours": ("GPU colours (Atom Lab cloud dots)", "colours")}}

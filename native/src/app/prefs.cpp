@@ -26,7 +26,6 @@ std::string clean(const std::string& v) {           // one line: no line breaks 
 bool validTheme(const std::string& id) { return findTheme(id) != nullptr; }
 bool validTextSize(const std::string& k) { for (const SizeOpt& s : kTextSizes) if (k == s.key) return true; return false; }
 bool validFont(const std::string& k) { for (const FontOpt& f : kFonts) if (k == f.key) return true; return false; }
-bool validNewUi(const std::string& k) { return k == "on" || k == "off"; }
 bool validMotion(const std::string& k) { return k == "auto" || k == "on" || k == "off"; }
 double textSizeFactor(const std::string& k) { for (const SizeOpt& s : kTextSizes) if (k == s.key) return s.factor; return 1; }
 
@@ -38,7 +37,6 @@ std::string savePrefs(const Prefs& p) {
     o << "# Physics Lab (native) settings. Written by the app; safe to delete.\n";
     o << "theme=" << clean(p.theme) << "\n" << "textSize=" << clean(p.textSize) << "\n" << "font=" << clean(p.font) << "\n"
       << "motion=" << clean(p.motion) << "\n" << "units=" << clean(p.units) << "\n" << "lang=" << clean(p.lang) << "\n";
-    if (p.newUi != "off") o << "newui=" << clean(p.newUi) << "\n";                      // 0.15 stage 3: only written when it is on, so a file from before it is unchanged
     if (!p.shellPanels.empty()) o << "shellpanels=" << clean(p.shellPanels) << "\n";
     if (p.facts != "on") o << "facts=" << clean(p.facts) << "\n";                       // 0.15 stage 4: only written when it is off, so a file from stage 3 is unchanged
     if (!p.recent.empty()) o << "recent=" << clean(p.recent) << "\n";
@@ -69,7 +67,6 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "textSize") { if (validTextSize(v)) p.textSize = v; }
         else if (k == "font") { if (validFont(v)) p.font = v; }
         else if (k == "motion") { if (validMotion(v)) p.motion = v; }
-        else if (k == "newui") { if (validNewUi(v)) p.newUi = v; }
         else if (k == "shellpanels") p.shellPanels = v;
         else if (k == "facts") { if (v == "on" || v == "off") p.facts = v; }
         else if (k == "recent") p.recent = v;

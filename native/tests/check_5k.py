@@ -230,7 +230,7 @@ def part_log(binary, work):
     lines = t.splitlines()
     check(len(lines) < 200, f"the file is under 200 lines ({len(lines)})")
     for key in ("time:", "app window: 1280 x 800", "theme: dark", "motion: on", "hovered window:", "focused window:", "WantCaptureMouse=", "WantCaptureKeyboard=", "reading page: shown", "scroll y=", "max=",
-                "flags=0x", "rect=", "dimmed layer: yes", "contents list:", "popups open:", "last wheel events", "wheel -2.00 at", "last key events", "PageDown down", "new UI: on"):
+                "flags=0x", "rect=", "dimmed layer: yes", "contents list:", "popups open:", "last wheel events", "wheel -2.00 at", "last key events", "PageDown down"):
         check(key in t, f"the file says \"{key}\"")
     check(any("Input log written to" in x[2] for x in r.texts), "the toast says where the log was written")
 

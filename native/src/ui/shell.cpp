@@ -107,7 +107,6 @@ void shellOpenPanel(PanelId id) {
 }
 namespace {
 bool mouseIn(const Rect& r) { const ImVec2 mp = ImGui::GetIO().MousePos; return r.contains({mp.x, mp.y}); }
-constexpr float kOldPanelUnits = 360.0f;      // the old side column's width, in units (app/display_scale.h: kPanelWidthU)
 const char* const kTextSizes[4] = {"small", "normal", "large", "xl"};
 
 // ---- the panels that every lab has ----
@@ -274,7 +273,6 @@ std::vector<SearchEntry> searchEntries(AppState& app) {
     add("Menu", app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", "menu:swap", [&app] { openLab(app, 1 - app.lab); });
     add("Menu", app.prefs.facts == "on" ? "Facts: turn off" : "Facts: turn on", "menu:facts", [&app] { app.prefs.facts = app.prefs.facts == "on" ? "off" : "on"; });
     add("Menu", "Legend", "menu:legend", [&app] { app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", !panelCollapsed(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", true)); });
-    if (app.lab == 1) add("Menu", "Old panel (the Atom Lab's controls)", "menu:old", [&app] { app.showOldPanel = true; });
     for (const SettingRow& r : settingRows())                                       // 0.15 stage 5l: EVERY row of the Settings window, from the window's own list (ui/settings.h), after the menu's own entries so that "text size" still lists the menu's quick text-size chooser first; each opens Settings at its row
         if (settingRowShown(r, app)) { const std::string id = r.id; add("Settings", r.label, "setrow:" + id, [&app, id] { settingsGoto(app, id.c_str()); }); }
     for (int i = 0; i < factCount(); i++) {
@@ -461,11 +459,6 @@ std::vector<std::string> readoutLines(const AppState& app, double fps) {
 
 }  // namespace
 
-bool newUiOn(const AppState& app) {
-    static const char* env = std::getenv("PL_NEWUI");
-    if (env) return std::string(env) == "on";
-    return app.prefs.newUi == "on";
-}
 float shellTopBarH() { return S.topBarH; }
 void shellNoteDrag() { S.frozen = true; }
 bool shellSpace(AppState& app, bool textInput) {
@@ -488,12 +481,10 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
 
     // ---- keys: Esc closes the topmost thing, Ctrl+K opens search (Space is routed by main.cpp through shellSpace) ----
     S.ui.reading = pagesOpen(app) || app.pane != 0;
-    S.ui.oldPanel = app.showOldPanel;
     bool escHandled = false;                              // (5l) Esc already closed something this frame: the Legend then stays
     if (!app.benchRunning) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && applyKey(S.ui, Key::Escape, io.WantTextInput, true).consumed) {
             escHandled = true;
-            app.showOldPanel = S.ui.oldPanel;
             if (!S.ui.reading) { closePages(app); app.pane = 0; }
             io.ClearInputKeys();
         }
@@ -542,14 +533,12 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     // as the longest words it normally holds, and only grows past that.
     const double refTitle = sh::width(Type::Title, true, "30 Sep 2026, 12:00 UT"), refSub = sh::width(Type::Caption, false, "1 s = 29.1 days  ·  12.5 years after 30 Sep 2026");
     const double chipW = 2.0 * m.s16 + std::max({static_cast<double>(sh::width(Type::Title, true, chip.title)), static_cast<double>(sh::width(Type::Caption, false, chip.sub)), app.lab == 0 ? static_cast<double>(refTitle) : 0.0, app.lab == 0 ? static_cast<double>(refSub) : 0.0}) + (chip.today ? m.s8 + todayW : chip.stop ? m.s8 + stopW : 0) + (chip.play ? m.s4 + m.control : 0);
-    const bool hasOld = app.lab == 1;                     // the Orbit Lab needs no Old panel any more; the Atom Lab keeps it until stage 5
-    const double oldW = hasOld ? sh::width(Type::Body, false, "Old panel") + 2.0 * m.s12 : 0;
     const int nIcons = 6;
     TopBarWidths tbw;
     tbw.menu = m.iconBtn;
     tbw.crumbFull = crumbWidth(crumbs(app, 0), m); tbw.crumbShort = crumbWidth(crumbs(app, 1), m); tbw.crumbIcon = m.toolBtn + m.caretW;
     tbw.chip = chipW;
-    tbw.right = nIcons * m.iconBtn + (nIcons - 1) * gap + (hasOld ? m.s8 + oldW : 0);
+    tbw.right = nIcons * m.iconBtn + (nIcons - 1) * gap;
     const TopBarPlan plan = planTopBar(W, m, tbw);
 
     std::vector<Rect> occ{fr.topBar};
@@ -973,13 +962,8 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 }
                 auditRect("chip", a.x, a.y, static_cast<float>(c.w), static_cast<float>(c.h));
             }
-            // the right side: search, the other lab, Learn, Achievements, 💡, Theme, Settings, and the temporary Old panel
+            // the right side: search, the other lab, Learn, Achievements, 💡, Theme, Settings
             float rx = static_cast<float>(W) - m.s12;
-            if (hasOld) {
-                rx -= static_cast<float>(oldW);
-                if (sh::button("top.old", ImVec2(rx, (m.topBar - m.control) / 2.0f), ImVec2(static_cast<float>(oldW), static_cast<float>(m.control)), "Old panel", Face::Secondary, app.showOldPanel)) app.showOldPanel = !app.showOldPanel;
-                rx -= m.s8;
-            }
             const auto icon = [&](const char* id, Icon ic, const char* tip, bool on) {
                 rx -= ib;
                 const bool c = sh::iconButton(id, ImVec2(rx, y0), ImVec2(ib, ib), ic, tip, on);
@@ -1080,17 +1064,6 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         sh::Panel p;
         if (sh::beginPanel("##toast", r, p, sh::Shape::Panel, false)) { sh::pBody(p, app.shot.note, app.shot.failed ? false : true); sh::endPanel(p); }
     }
-    // ---- the temporary Old panel: today's side column, floating, until stages 4 and 5 move its controls ----
-    if (app.lab == 0) app.showOldPanel = false;                        // the Orbit Lab has no Old panel any more
-    if (app.showOldPanel) {
-        const float pw = std::min(kOldPanelUnits * dpi, static_cast<float>(fr.freeW - 2.0 * m.s12)), top = static_cast<float>(fr.topBar.bottom() + m.s12);
-        const float ph = static_cast<float>(H) - top - static_cast<float>(m.s12);
-        const float px0 = static_cast<float>(fr.dock.w > 0 ? fr.dock.x : W) - m.s12 - pw;     // (stage 5c: left of the Controls panel when it is open)
-        if (app.lab == 0) orbitPanelFloating(app, &app.showOldPanel, px0, top, pw, ph); else atomPanelFloating(app, &app.showOldPanel, px0, top, pw, ph);
-        if (ImGuiWindow* w = ImGui::FindWindowByName("Old panel###oldpanel"))
-            if (w->WasActive) { const Rect r{w->Pos.x, w->Pos.y, w->Size.x, w->Size.y}; occ.push_back(r); auditRect("panel.old", static_cast<float>(r.x), static_cast<float>(r.y), static_cast<float>(r.w), static_cast<float>(r.h)); }
-    }
-    if (app.lab == 1) atomBigTable(app);
     // ---- the fact line (Settings → Facts) ----
     double bottomLeftTop = fr.toolbar.y;                  // (stage 5d) the top of what the new UI puts at the picture's bottom left: the toolbar row and the fact line
     if (!pane && app.prefs.facts == "on" && !app.journey.active && S.ui.open != PanelId::Facts) {   // (stage 5d: the Atom Lab too; its scale bar and decay lines now sit above the toolbar row and this line)

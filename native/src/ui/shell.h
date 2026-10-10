@@ -7,7 +7,6 @@
 
 namespace ui {
 
-bool newUiOn(const AppState& app);                       // Settings → New UI (preview) is On (PL_NEWUI=on / off overrides it, for the automatic checks)
 // Builds this frame's bars and panels (Dear ImGui windows) and sets how the lab picture is drawn (the full window, no overlays that moved into the bars, the centre shift).
 // Call after ImGui::NewFrame and before the picture is drawn. winW, winH: the window in pixels; fps and frameDt: for the readout and the easing.
 void shellFrame(AppState& app, int winW, int winH, double fps, double frameDt);

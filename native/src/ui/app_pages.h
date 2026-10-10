@@ -8,8 +8,6 @@
 
 namespace ui {
 
-void header(AppState& app);              // across the top of the window; call before the panels
-float headerHeight();                    // its height (window coordinates), from the last header() call
 bool pillButton(const std::string& label, const char* tip);   // a header button (.ver)
 void aboutWindow(AppState& app);
 void historyWindow(AppState& app);

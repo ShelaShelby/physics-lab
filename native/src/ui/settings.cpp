@@ -52,7 +52,7 @@ const char* const kNewUiAtomView = "Cloud 3D";   // the New UI's first-ever Atom
 // the More / Less info choice and the Temperature slider are kept, as on the web
 void putBackAtomDefaults(AppState& app) {
     app.atom.p = atom::AtomParams::appDefaults();
-    if (newUiOn(app)) app.atom.p.view = kNewUiAtomView;    // (stage 5g: the New UI's starting view)
+    app.atom.p.view = kNewUiAtomView;    // (stage 5g: the New UI's starting view)
     app.atom.restart();
     app.atomLearn = 0;
 }
@@ -128,7 +128,7 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
                        : std::string(k) == "super" ? a.super : std::string(k) == "orb2" ? a.orb2 : std::string(k) == "pAx2" ? a.pAx2 : std::string(k) == "dAx2" ? a.dAx2 : std::string(k) == "fAx2" ? a.fAx2 : a.cutAxis;
         f = it->second;
     }
-    if (!p.atom.count("view") && newUiOn(app)) a.view = kNewUiAtomView;   // 0.15 stage 5g (owner's decision of 6 Oct 2026): the New UI's Atom Lab opens in Cloud 3D the first time (no saved view); the old app keeps Orbit
+    if (!p.atom.count("view")) a.view = kNewUiAtomView;   // 0.15 stage 5g (owner's decision of 6 Oct 2026): the New UI's Atom Lab opens in Cloud 3D the first time (no saved view); the old app keeps Orbit
     if (readNum(p.atom, "zoom", atom::kZoomMin, 7, d)) a.zoom = d;
     if (readNum(p.atom, "Z", 1, 118, d)) { a.Z = int(d); a.N = atom::defaultN(a.Z); }
     if (readNum(p.atom, "N", atom::nRange(a.Z).first, atom::nRange(a.Z).second, d)) a.N = int(d);
@@ -225,22 +225,21 @@ void saveSettingsWhenChanged(AppState& app, double nowS) {
 // ---- 0.15 stage 5l: the list of the Settings window's rows (settings.h). The window draws each heading from it, so search (built from the same list) cannot miss one. ----
 const std::vector<SettingRow>& settingRows() {
     static const std::vector<SettingRow> rows = {
-        {"text", app::kSetH[0], "Text size (Settings)", -1, false},
-        {"font", app::kSetH[1], "Font", -1, false},
-        {"units", app::kSetH[2], "Units (metric or imperial)", -1, false},
-        {"motion", app::kSetH[3], "Motion (reduced motion)", -1, false},
-        {"progress", app::kSetH[4], "Progress (start again)", -1, false},
-        {"developer", app::kSetH[5], "Developer (unlock everything)", -1, false},
-        {"newui", "🧪 New UI (preview)", "New UI (preview)", -1, false},
-        {"facts", "💡 Facts", "Did you know facts", -1, true},
-        {"perf", "Performance", "Performance", -1, true},
-        {"vsync", "VSync (wait for the screen)", "VSync (wait for the screen)", -1, true},
-        {"gpurocks", "GPU rocks (OpenGL 4.3)", "GPU rocks (OpenGL 4.3)", 0, true},
-        {"gpuspin", "GPU superposition and jumps (OpenGL 4.3)", "GPU superposition and jumps (OpenGL 4.3)", 1, true},
-        {"gpuoutline", "GPU outline (OpenGL 4.3)", "GPU outline (OpenGL 4.3)", 1, true},
-        {"gpucolours", "GPU colours (Atom Lab cloud dots)", "GPU colours (Atom Lab cloud dots)", 1, true},
-        {"frames", "Frame times", "Frame times (fps)", -1, true},
-        {"benchmark", "Benchmark", "Benchmark (speed test)", -1, true},
+        {"text", app::kSetH[0], "Text size (Settings)", -1},
+        {"font", app::kSetH[1], "Font", -1},
+        {"units", app::kSetH[2], "Units (metric or imperial)", -1},
+        {"motion", app::kSetH[3], "Motion (reduced motion)", -1},
+        {"progress", app::kSetH[4], "Progress (start again)", -1},
+        {"developer", app::kSetH[5], "Developer (unlock everything)", -1},
+        {"facts", "💡 Facts", "Did you know facts", -1},
+        {"perf", "Performance", "Performance", -1},
+        {"vsync", "VSync (wait for the screen)", "VSync (wait for the screen)", -1},
+        {"gpurocks", "GPU rocks (OpenGL 4.3)", "GPU rocks (OpenGL 4.3)", 0},
+        {"gpuspin", "GPU superposition and jumps (OpenGL 4.3)", "GPU superposition and jumps (OpenGL 4.3)", 1},
+        {"gpuoutline", "GPU outline (OpenGL 4.3)", "GPU outline (OpenGL 4.3)", 1},
+        {"gpucolours", "GPU colours (Atom Lab cloud dots)", "GPU colours (Atom Lab cloud dots)", 1},
+        {"frames", "Frame times", "Frame times (fps)", -1},
+        {"benchmark", "Benchmark", "Benchmark (speed test)", -1},
     };
     return rows;
 }
@@ -248,7 +247,7 @@ const SettingRow& settingRow(const char* id) {
     for (const SettingRow& r : settingRows()) if (std::string(r.id) == id) return r;
     return settingRows().front();
 }
-bool settingRowShown(const SettingRow& r, const AppState& app) { return (r.lab < 0 || r.lab == app.lab) && (!r.newUiOnly || newUiOn(app)); }
+bool settingRowShown(const SettingRow& r, const AppState& app) { return (r.lab < 0 || r.lab == app.lab); }
 
 namespace {
 bool g_inSettings = false;                                  // the Settings window is being drawn
@@ -364,17 +363,7 @@ void settingsWindow(AppState& app) {
             g_unlockMsg = app::kUnlockMsg[std::min(t, 2)][std::min(a, 5)];
         }
         if (!g_unlockMsg.empty()) doneLine(g_unlockMsg);
-        // 🧪 New UI (preview) (0.15 stage 3): last, so the rest of this page is exactly as it was
-        settingHead("newui");
-        {
-            const char* uiKeys[2] = {"off", "on"};
-            const char* uiNames[2] = {"Off", "On"}, *uiSubs[2] = {"The layout you know", "The new layout, unfinished"};
-            for (int i = 0; i < 2; i++) {
-                if (i) ImGui::SameLine();
-                if (optionTile((std::string("newui-") + uiKeys[i]).c_str(), uiNames[i], P.newUi == uiKeys[i], nullptr, 0, tiles(2), uiSubs[i])) P.newUi = uiKeys[i];
-            }
-            richText("<p class=\"lrnP lrnMuted\">A preview of the redesign (version 0.15): the picture fills the window, with a slim bar on top, a toolbar at the bottom and small floating panels. Only the Orbit Lab's date, speed, show, pick, scale, 2D / 3D and save controls are moved so far; everything else is in the Old panel button at the top right. Off is exactly the layout you know.</p>");
-        if (newUiOn(app)) {   // 0.15 stage 4: what the new UI needs a home for. Facts: the fact line; Performance: what the old side column held (VSync, GPU rocks, frame times, Benchmark)
+        {   // 0.15 stage 4: what the new UI needs a home for. Facts: the fact line; Performance: what the old side column held (VSync, GPU rocks, frame times, Benchmark)
             settingHead("facts");
             const char* fKeys[2] = {"on", "off"};
             const char* fNames[2] = {"On", "Off"}, *fSubs[2] = {"A fact at the bottom left of the picture", "No fact line"};
@@ -385,7 +374,6 @@ void settingsWindow(AppState& app) {
             richText("<p class=\"lrnP lrnMuted\">One short line of \"Did you know?\" at the bottom left of the picture, changing about every 20 seconds. It stops while the pointer is over it; a click opens the whole fact.</p>");
             performanceCard(app);
             auditNote("settingsnew facts-and-performance");
-        }
         }
         g_inSettings = false;
         if (g_hl.a > 0) { ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(g_hl.x0, g_hl.y0), ImVec2(g_hl.x1, g_hl.y1), col(look().w.accent, g_hl.a), 4); g_hl.a = 0; }

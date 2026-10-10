@@ -37,7 +37,6 @@ struct Prefs {
     std::string textSize = "normal";     // small / normal / large / xl
     std::string font = "auto";           // auto / serif / easy / round / mono
     std::string motion = "auto";         // auto / on (reduced) / off (full)
-    std::string newUi = "off";           // 0.15 stage 3: Settings → New UI (preview), on / off (off: the app is exactly the 0.14 layout)
     std::string shellPanels;             // 0.15 stage 3: the new UI's floating panels, collapsed or open ("card=c,legend=o")
     std::string facts = "on";            // 0.15 stage 4: Settings → Facts, on / off: the fact line at the bottom left of the picture (new UI)
     std::string recent;                  // 0.15 stage 4: the search's recent choices, newest first, ids joined by ";"
@@ -58,7 +57,6 @@ Prefs loadPrefs(const std::string& text);         // unknown or broken lines are
 bool validTheme(const std::string& id);
 bool validTextSize(const std::string& k);
 bool validFont(const std::string& k);
-bool validNewUi(const std::string& k);
 bool validMotion(const std::string& k);
 double textSizeFactor(const std::string& k);      // 0.9, 1, 1.15, 1.3
 

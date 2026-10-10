@@ -42,7 +42,7 @@ std::string inputLogWrite(const AppState& app) {
     s += std::string("time: ") + tb + "\n";
     ImGuiContext& c = *GImGui;
     const ImGuiIO& io = ImGui::GetIO();
-    std::snprintf(b, sizeof b, "app window: %.0f x %.0f, theme: %s, motion: %s, new UI: %s\n", io.DisplaySize.x, io.DisplaySize.y, app.prefs.theme.c_str(), app.prefs.motion.c_str(), newUiOn(app) ? "on" : "off");
+    std::snprintf(b, sizeof b, "app window: %.0f x %.0f, theme: %s, motion: %s\n", io.DisplaySize.x, io.DisplaySize.y, app.prefs.theme.c_str(), app.prefs.motion.c_str());
     s += b;
     s += std::string("hovered window: ") + winName(c.HoveredWindow) + "\n";
     s += std::string("focused window: ") + winName(c.NavWindow) + "\n";

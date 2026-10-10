@@ -9,7 +9,7 @@
 # "…" only when two are too short, clear of the toolbar, readout, panel, handle and top bar, with the longest fact of the app's list (PL_FACT_LONGEST), in both labs.
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, inside, overlap, prefetch
+from shell_lib import run_app, inside, overlap, prefetch, old_run
 
 SIZES = ("1280x800", "880x560", "1920x1080")
 OLD_SIZE = "1000x2800"           # the old side column shows everything without scrolling at this height (as in check_atom_toolbar.py)
@@ -100,7 +100,6 @@ def main():
         calls = []
         for view, items in GROUPS:
             s_old, f_old = group_script(view, items, False)
-            calls.append(((binary, work, f"old_{view}", dict(OLD, PL_SCRIPT=s_old)), dict(frames=f_old, size=OLD_SIZE)))
             s_new, f_new = group_script(view, items, True)
             for sz in SIZES:
                 calls.append(((binary, work, f"new_{view}_{sz}", dict(NEW, PL_SCRIPT=s_new)), dict(frames=f_new, size=sz)))
@@ -108,7 +107,7 @@ def main():
         # ---- 1. every control changes the same setting as the old one, to the same value, at three window sizes ----
         for view, items in GROUPS:
             s_old, f_old = group_script(view, items, False)
-            ro = run_app(binary, work, f"old_{view}", dict(OLD, PL_SCRIPT=s_old), frames=f_old, size=OLD_SIZE)
+            ro = old_run("atom_panel", f"old_{view}", dict(OLD, PL_SCRIPT=s_old), frames=f_old, size=OLD_SIZE)
             so = astates(ro)
             check(not ro.scripted_missing() and len(so) == len(items) + 1, f"old {view}: every old control was found and clicked: {ro.scripted_missing()[:3]} ({len(so)} states)")
             s_new, f_new = group_script(view, items, True)
@@ -177,10 +176,9 @@ def main():
                 for nc, oc, key, kind in items:
                     steps += ["click=" + (nc if new else oc), ("wait", 30), "astate"]
             runs.append((view, items, extra, script(steps_n), script(steps_o)))
-        prefetch([((binary, work, f"marks_new_{v}_{sz}", dict(NEW, PL_SCRIPT=sn[0], **ex)), dict(frames=sn[1], size=sz)) for v, it, ex, sn, so in runs for sz in SIZES] +
-                 [((binary, work, f"marks_old_{v}", dict(OLD, PL_SCRIPT=so[0], **ex)), dict(frames=so[1], size=OLD_SIZE)) for v, it, ex, sn, so in runs])
+        prefetch([((binary, work, f"marks_new_{v}_{sz}", dict(NEW, PL_SCRIPT=sn[0], **ex)), dict(frames=sn[1], size=sz)) for v, it, ex, sn, so in runs for sz in SIZES])
         for view, items, extra, sn_, so_ in runs:
-            so = astates(run_app(binary, work, f"marks_old_{view}", dict(OLD, PL_SCRIPT=so_[0], **extra), frames=so_[1], size=OLD_SIZE))
+            so = astates(old_run("atom_panel", f"marks_old_{view}", dict(OLD, PL_SCRIPT=so_[0], **extra), frames=so_[1], size=OLD_SIZE))
             for sz in SIZES:
                 rn = run_app(binary, work, f"marks_new_{view}_{sz}", dict(NEW, PL_SCRIPT=sn_[0], **extra), frames=sn_[1], size=sz)
                 sn = astates(rn)
@@ -220,7 +218,7 @@ def main():
             return l.split("  ·  ")[0], st.get("pending"), st.get("auto"), st.get("n")
         for name, (sn_, so_) in (("p1", P1), ("p2", P2), ("p3", P3)):
             a, fa = script(sn_); b, fb = script(so_)
-            so = astates(run_app(binary, work, f"ph_old_{name}", dict(OLD, PL_SCRIPT=b), frames=fb, size=OLD_SIZE))
+            so = astates(old_run("atom_panel", f"ph_old_{name}", dict(OLD, PL_SCRIPT=b), frames=fb, size=OLD_SIZE))
             for sz in SIZES:
                 rn = run_app(binary, work, f"ph_new_{name}_{sz}", dict(NEW, PL_SCRIPT=a), frames=fa, size=sz)
                 sn = astates(rn)
@@ -235,7 +233,7 @@ def main():
                     check([x["auto"] for x in sn] == ["0", "1", "0"], f"{sz}: Auto photons toggles on and off {[x['auto'] for x in sn]}")
         # ---- 7. check a jump: two hydrogen cases of the existing atom_tests (NIST ASD values): 2p -> 1s A = 6.265e8 /s, AAA, 100 %; 2s -> 1s not allowed, only M1 with A = 2.495e-6 /s ----
         for name, new_s, old_s, want in (("2p1s", "", "", ("6.265×10⁸", "AAA", "100 %")), ("2s1s", "10:click=atom.jfrom=2s", "8:move=820,1400;10:wheel=-60;24:click=old.jfrom=2s", ("M1", "2.495"))):
-            ro = run_app(binary, work, f"jc_old_{name}", dict(OLD, PL_SCRIPT=old_s), frames=40, size=OLD_SIZE)      # (the old card is below the window's bottom: the old column is scrolled first)
+            ro = old_run("atom_panel", f"jc_old_{name}", dict(OLD, PL_SCRIPT=old_s), frames=40, size=OLD_SIZE)      # (the old card is below the window's bottom: the old column is scrolled first)
             jo = ro.note("jumpcheck")
             check(not ro.scripted_missing(), f"old check a jump {name}: clicked {ro.scripted_missing()[:2]}")
             for sz in SIZES:
@@ -264,7 +262,6 @@ def main():
             if ref.startswith(("old.", "⌕")):
                 pre_old = "old.view=Cloud" if short == "atom" else None
                 so_, fo_ = sel_script(ref, pre_old)
-                calls.append(((binary, work, f"sel_old_{short}", dict(OLD, PL_SCRIPT=so_, **C)), dict(frames=fo_, size=OLD_SIZE)))
             else:
                 sr_, fr_ = sel_script(ref, pre_new)
                 calls.append(((binary, work, f"sel_ref_{short}", dict(NEW, PL_SCRIPT=sr_, **C)), dict(frames=fr_, size="1280x800")))
@@ -274,7 +271,7 @@ def main():
             sn_, fn_ = sel_script(name, pre_new)
             if ref.startswith(("old.", "⌕")):
                 so_, fo_ = sel_script(ref, "old.view=Cloud" if short == "atom" else None)
-                rr = run_app(binary, work, f"sel_old_{short}", dict(OLD, PL_SCRIPT=so_, **C), frames=fo_, size=OLD_SIZE)
+                rr = old_run("atom_panel", f"sel_old_{short}", dict(OLD, PL_SCRIPT=so_, **C), frames=fo_, size=OLD_SIZE)
             else:
                 sr_, fr_ = sel_script(ref, pre_new)
                 rr = run_app(binary, work, f"sel_ref_{short}", dict(NEW, PL_SCRIPT=sr_, **C), frames=fr_, size="1280x800")

@@ -28,7 +28,7 @@ def scroll(r):
 def part_pages(binary, work):
     pages = (("learn1", {"PL_LEARN": "1"}), ("timeline", {"PL_LEARN": "3"}), ("about", {"PL_OPEN": "about"}), ("history", {"PL_OPEN": "history"}))
     runs = []                                                      # (tag, name, env, size, what)
-    for nu in ("off", "on"):
+    for nu in ("on",):   # 0.16 stage 1b: the old layout ("off") is gone
         for sz in SIZES:
             w, h = (int(v) for v in sz.split("x"))
             px, py = w // 2, h // 2
@@ -94,7 +94,7 @@ def part_toolbar(binary, work):
 
 def part_default(binary, work):
     # item 4b: New UI On, fresh settings: the Atom Lab opens in Cloud 3D; New UI Off: the old default (Orbit); a view named by the test (PL_ATOM_SET) still wins
-    for nu, want in (("on", "Cloud 3D"), ("off", "Orbit")):
+    for nu, want in (("on", "Cloud 3D"),):   # 0.16 stage 1b: the old default (Orbit, New UI Off) is gone
         r = run_app(binary, work, f"def_{nu}", {"PL_ATOM": "1", "PL_NEWUI": nu, "PL_SCRIPT": "10:astate"}, frames=20)
         v = [t.split("=", 1)[1] for ln in r.out.splitlines() if ln.startswith("PLASTATE ") for t in ln[9:].split("\t") if t.startswith("view=")]
         check(v == [want], f"New UI {nu}: a fresh Atom Lab opens in {want}: {v}")

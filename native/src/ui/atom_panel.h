@@ -42,11 +42,6 @@ std::vector<std::string> atomPlainLines(const std::string& html);      // "<div>
 void labPicker(AppState& app);
 void openLab(AppState& app, int lab);          // switch to a lab (0 Orbit Lab, 1 Atom Lab)
 
-// Draws the Atom Lab panel in a window `width` points wide on the right of the main window.
-void atomPanel(AppState& app, float width);
-void atomBigTable(AppState& app);       // the large periodic table window (when app.bigTable)
-// 0.15 stage 3: the same controls in a floating window (the new UI's temporary "Old panel"); window pixels.
-void atomPanelFloating(AppState& app, bool* open, float x, float y, float w, float h);
 
 // The periodic table's cells (0.15 stage 5b: shared by the old panel, the large table window and the new UI's element dropdown). Geometry in window pixels; s = pixels per unit.
 struct PtGeom {
@@ -58,9 +53,5 @@ struct PtGeom {
     ImVec2 cellPos(int row, int col) const;     // rows 1-7, then 9 and 10 for the lanthanides and actinides
 };
 int periodicTableCells(const PtGeom& g, int sel, ImU32 fg, ImU32 accent, ImU32 muted);   // the element clicked, or 0
-
-// The bar under the Atom Lab picture: the view and zoom buttons (the web's "near" bar) and the hint.
-// Returns its height in window coordinates; call with draw = false first to measure it.
-float atomBottomBar(AppState& app, float x, float y, float width, bool draw);
 
 }  // namespace ui

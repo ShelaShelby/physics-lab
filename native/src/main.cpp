@@ -31,7 +31,6 @@
 #include "ui/look.h"
 #include "ui/settings.h"
 #include "ui/shot.h"
-#include "ui/fps_counter.h"
 #include "ui/benchmark.h"
 #include "orbit/sky.h"
 #include "ui/app_pages.h"
@@ -213,7 +212,6 @@ int main(int, char**) {
     if (ui::look().reduced) app.paused = true;          // reduced motion: the lab starts still, with a ▶ Play button
     app.visited[app.lab] = true;
 
-    float panelWidth = app::panelWidthFor(scale);      // window coordinates (follows the scale, see applyScale)
     // 0.15 stage 2, C4: read the scale of the monitor the window is on; when it differs from the one in use, redo the sizes (spacing, text) and the smallest window
     const auto applyScale = [&](float s) {
         scale = s;
@@ -223,7 +221,6 @@ int main(int, char**) {
         st.FontScaleDpi = scale;
         st.WindowRounding = 0;                          // (the theme's colours and roundings are put back by ui::updateLook, whose key includes the scale)
         ui::invalidateLook();
-        panelWidth = app::panelWidthFor(scale);
         int mw = 0, mh = 0;
         displayScale.minimumWindow(mw, mh);
         if (!SDL_getenv("PL_WINDOW")) SDL_SetWindowMinimumSize(window, mw, mh);   // (automatic picture checks choose their own window size)
@@ -290,7 +287,6 @@ int main(int, char**) {
     if (const char* l = SDL_getenv("PL_ATOM_LEARN")) { app.atomLearn = std::atoi(l); if (const char* t = SDL_getenv("PL_ATOM_TAB")) { app.scaleTab = t; app.massTab = t; } }   // open an Atom Lab guide (1–4), on a tab
     int frame = 0;
     bool running = true;
-    float atomBarH = 0;                                 // the bar under the Atom Lab picture, window coordinates
 
     LiveWatch live;
     int normalFrames = 0;
@@ -304,14 +300,11 @@ int main(int, char**) {
         if (atomDoFrame > 0 && ++atomDoCount == atomDoFrame) doAtom();
         int winW = 0, winH = 0, fbW = 0, fbH = 0;
         float canvasWinW = 1, headerH = 0, pictureWinH = 1;
-        const bool shellOn = ui::newUiOn(app);          // 0.15 stage 3: Settings → New UI (preview): the picture fills the window, the bars float over it
         const auto measure = [&] {                      // the window as it is now (it can change while the window system has the loop)
             SDL_GetWindowSize(window, &winW, &winH);
             SDL_GetWindowSizeInPixels(window, &fbW, &fbH);
-            canvasWinW = std::max(1.0f, shellOn ? float(winW) : winW - panelWidth);   // the picture's width in window coordinates
-            // the header is across the top; the Atom Lab has a bar under its picture (view buttons and the hint); both are measured each frame
-            headerH = shellOn ? 0.0f : ui::headerHeight();   // (the new UI: the picture fills the window in both labs)
-            pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 && !shellOn ? atomBarH : 0));
+            canvasWinW = std::max(1.0f, float(winW));   // the picture's width in window coordinates
+            pictureWinH = std::max(1.0f, float(winH));   // the picture fills the window in both labs; the bars float over it
         };
         measure();
 
@@ -349,7 +342,7 @@ int main(int, char**) {
             case SDL_EVENT_KEY_DOWN:
                 if (!app::labInputAllowed(app.benchRunning)) break;      // the benchmark is running: only Cancel and Esc do anything
                 if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off
-                if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) { if (shellOn) ui::shellSpace(app, io.WantTextInput); else app.paused = !app.paused; }
+                if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) { ui::shellSpace(app, io.WantTextInput); }
                 if (app.lab == 1 && app.atom.chartOn() && !io.WantCaptureKeyboard && !ui::readingShown()) {   // (5k: with a page open the arrow keys scroll the page)   // the chart of nuclides: arrow keys walk one proton or one neutron (up = more protons, right = more neutrons)
                     const int dZ = e.key.key == SDLK_UP ? 1 : e.key.key == SDLK_DOWN ? -1 : 0, dN = e.key.key == SDLK_RIGHT ? 1 : e.key.key == SDLK_LEFT ? -1 : 0;
                     if (dZ || dN) app.atom.chartStep(dZ, dN);
@@ -380,7 +373,7 @@ int main(int, char**) {
                 break;
             case SDL_EVENT_MOUSE_MOTION:
                 if (mouseDown && app::labInputAllowed(app.benchRunning)) {
-                    if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) { dragging = true; if (shellOn) ui::shellNoteDrag(); }
+                    if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) { dragging = true; ui::shellNoteDrag(); }
                     // 3D: dragging turns the view, unless "Drag moves the view" is on, or with the right button or Shift held
                     const bool rotate = app.set.view3D && !app.view.panMode && !rightDrag && !(SDL_GetModState() & SDL_KMOD_SHIFT);
                     if (dragging && app.lab == 1) app.atom.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));
@@ -465,28 +458,17 @@ int main(int, char**) {
             if (mouse && std::sscanf(mouse, "%f,%f", &mx, &my) == 2) ImGui::GetIO().AddMousePosEvent(mx, my);
         }
         ImGui::NewFrame();
-        app.atom.shellUi = shellOn;                     // the new UI: the picture's own "More / Less info" button is left out (stage 5a)
-        if (shellOn) {                                  // the new UI: bars and panels over the full-window picture, in both labs (stage 5a: the Atom Lab's bar under its picture is gone, its toolbar has its actions)
-            ui::shellFrame(app, winW, winH, fps, frameDt);
-            headerH = 0.0f;
-            atomBarH = 0;
-        } else {
-            ui::setReadingMode(false);                  // About, History and the guides open in their floating windows
-            app.set.shell = false; app.set.minTextU = app.set.minTextPx = app.set.reserveBottom = app.set.reserveRight = app.set.insetTop = app.set.insetRight = 0; app.view.cx = app.view.cy = 0;
-            ui::header(app);                            // across the top: title, subtitle and the app's buttons
-            headerH = ui::headerHeight();
-        }
-        pictureWinH = std::max(1.0f, winH - headerH - (app.lab == 1 && !shellOn ? atomBarH : 0));
-        app.atom.insetTop = shellOn ? ui::shellTopBarH() / scale + 4 : 0; app.atom.insetBottom = shellOn ? app.set.reserveBottom : 0; app.atom.insetRight = shellOn ? app.set.insetRight : 0; if (!shellOn) { app.atom.insetBottomLeft = 0; app.atom.ringX = app.atom.ringY = app.atom.infoRight = -1; app.atom.infoDown = 0; app.atom.infoHidden = false; app.atom.freeX = app.atom.freeY = app.atom.freeW = app.atom.freeH = -1; app.atom.infoSize = 13; }   // (points; after shellFrame, so the first frame already has the bars' size)
+        app.atom.shellUi = true;                        // the picture's own "More / Less info" button is left out (the subject card has it)
+        ui::shellFrame(app, winW, winH, fps, frameDt);  // bars and panels over the full-window picture, in both labs
+        headerH = 0.0f;
+        pictureWinH = std::max(1.0f, float(winH));
+        app.atom.insetTop = ui::shellTopBarH() / scale + 4; app.atom.insetBottom = app.set.reserveBottom; app.atom.insetRight = app.set.insetRight;   // (points; after shellFrame, so the first frame already has the bars' size)
         app.canvasW = canvasWinW / scale;               // picture size in points (like CSS pixels)
         app.canvasH = pictureWinH / scale;
         app.set.lightTheme = ui::look().c.light;
         app.set.theme = ui::look().c;
         app.set.textScale = ui::look().textScale;
-        if (app.pane) ui::paneWindow(app, shellOn ? ui::shellTopBarH() : headerH);
-        else if (shellOn) {}                            // (the new UI's Old panel is a floating window made by shellFrame)
-        else if (app.lab == 1) ui::atomPanel(app, panelWidth);
-        else ui::orbitPanel(app, panelWidth);
+        if (app.pane) ui::paneWindow(app, ui::shellTopBarH());
         renderer.begin(app.canvasW, app.canvasH);
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, headerH), ImVec2(canvasWinW, headerH + pictureWinH));
@@ -494,17 +476,12 @@ int main(int, char**) {
         else if (app.lab == 1) {
             app.atomView.draw(renderer, text, 0, headerH, scale, app.atom, app.canvasW, app.canvasH, ui::look().c, ui::look().textScale);
             text->PopClipRect();
-            if (shellOn) atomBarH = 0;                 // (the new UI: the toolbar has the bar's actions)
-            else { atomBarH = ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, false); ui::atomBottomBar(app, 0, headerH + pictureWinH, canvasWinW, true); }
         } else {
-            atomBarH = 0;
             app.set.paused = app.paused;
             if (SDL_getenv("PL_SKYOFF") && frame == 0) app.set.sky = orbit::SkyMode::Off;
             app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH);
             text->PopClipRect();
         }
-        // the frames-per-second counter, top right of the picture, for every lab (the web's #fps); not in a saved picture, not under a tab page
-        if (!app.pane && !app.shot.requested && !shellOn) ui::drawFpsCounter(text, canvasWinW, headerH, scale, fps);   // (the new UI shows it in its readout)
         ui::labLogWindow(&app.showLabLog, app.lab);
         ui::aboutWindow(app);
         ui::historyWindow(app);

@@ -748,8 +748,7 @@ static void testBench() {
     std::size_t at = 0;
     bool inOrder = true;
     for (const char* w : want) { const std::size_t p = t.find(w, at); if (p == std::string::npos) { inOrder = false; checkTrue(std::string("result text has: ") + w, false); break; } at = p; }
-    checkTrue("result text: no Theme effects line any more (the setting was archived with the themes, 0.15 stage 5m; deleted on purpose)", t.find("Theme effects") == std::string::npos && t.find("Text size: xl, theme: paper\nNew UI: Off\n") != std::string::npos);
-    checkTrue("result text: New UI line, Off by default and On when Settings -> New UI is on (0.15 stage 5d)", t.find("New UI: Off\n") != std::string::npos && [&] { BenchEnv o = env; o.newUi = "on"; return benchResultText(o, {s1}).find("New UI: On\n") != std::string::npos; }());
+    checkTrue("result text: no Theme effects line any more (the setting was archived with the themes, 0.15 stage 5m; deleted on purpose)", t.find("Theme effects") == std::string::npos && t.find("Text size: xl, theme: paper\n") != std::string::npos && t.find("New UI") == std::string::npos);
     checkTrue("the result text starts with the version, date and graphics, in order", inOrder && t.rfind("Physics Lab (native) benchmark\n", 0) == 0);
     checkTrue("result text: scene 1 numbers", t.find("  Average: 10.00 ms per frame = 100.0 fps\n  1 % low: 100.0 fps") != std::string::npos && t.find("  Worst frame: 10.00 ms\n  CPU work per frame: 3.50 ms\n  GPU time per frame: 6.25 ms") != std::string::npos);
     checkTrue("result text: the GPU span line", t.find("  GPU span per frame: 7.50 ms") != std::string::npos);

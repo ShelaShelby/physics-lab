@@ -65,9 +65,9 @@ def part_themes(binary, work):
     check(n.get("theme") == "dark" and n.get("m1") == "1" and n.get("font") == "m_inter", f"New UI On + Dark: the look M1 is on (m1=1) and the font is Inter (m_inter) with no PL_LOOK: {n}")
     check(n.get("facts") == "26", f"the fact list has 26 facts (27 in the web: its 'surprise' fact only unlocked Synthwave): {n.get('facts')}")
     check(on.scripted_missing() == [], "no scripted event was missed")
-    off = run_app(binary, work, "m_off", {"PL_NEWUI": "off"})
+    off = run_app(binary, work, "m_off", {"PL_NEWUI": "off"})   # 0.16 stage 1b: the old env var is ignored: M1 is on all the same
     no = look_note(off)
-    check(no.get("m1") == "0" and no.get("font") != "m_inter", f"New UI Off: the look M1 and Inter are not used: {no}")
+    check(no.get("m1") == "1" and no.get("font") == "m_inter", f"PL_NEWUI=off is ignored: the look M1 and Inter are used: {no}")
     black = run_app(binary, work, "m_black", {"PL_NEWUI": "on"}, theme="black")
     nb = look_note(black)
     check(nb.get("theme") == "black" and nb.get("m1") == "0", f"the Black theme keeps its own colours for now (M1 is applied to Dark only; stage 7 does the other themes): {nb}")

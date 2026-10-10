@@ -14,7 +14,7 @@
 #   links     in the reading view a link's underline is one line (no gap between two words of the same link)
 import datetime, glob, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, inside, overlap, Bmp, prefetch
+from shell_lib import run_app, inside, overlap, Bmp, prefetch, old_run
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 fails = checks = 0
@@ -211,7 +211,7 @@ CARD_THINGS = [("Sun", "Sun"), ("Earth", "Earth"), ("Jupiter", "Jupiter"), ("Plu
 def part_card(binary, work):
     for tile, pick in CARD_THINGS:
         # the OLD layout: click the Go to tile; the picture prints the card it draws (PL_LOG_CARD)
-        old = run_app(binary, work, f"card_old_{tile.replace(' ', '_')}", {"PL_NEWUI": "off", "PL_LOG_CARD": "1", "PL_SCRIPT": f"10:click={tile}"}, frames=40, size="1000x2800")
+        old = old_run("orbit_ui", f"card_old_{tile.replace(' ', '_')}", {"PL_LOG_CARD": "1", "PL_SCRIPT": f"10:click={tile}"}, frames=40, size="1000x2800")   # (saved from the last build with the old layout: tests/reference/old_ui_runs.json)
         old_cards = [ln[7:].split("\t") for ln in old.out.splitlines() if ln.startswith("PLCARD ")]
         new = run_app(binary, work, f"card_new_{tile.replace(' ', '_')}", {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=ctl.sec.pick;16:click=##pickfilter;22:text={pick};28:click=pick.{pick};40:click=card.all"}, frames=60)
         sheets = [ln[8:].split("\t") for ln in new.out.splitlines() if ln.startswith("PLSHEET ")]
