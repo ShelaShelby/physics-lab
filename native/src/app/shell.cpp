@@ -123,6 +123,14 @@ TopBarPlan planTopBar(double winW, const Metrics& m, const TopBarWidths& w) {
 }
 
 // ---- floating panels ----
+// 0.15 stage 5o: how far down a corner card (top left or top right) may reach: above the toolbar and, when it lies over the readout pill's columns, above the readout too (at 880 x 560 with the Controls
+// panel open the tall Orbit subject card ran 33 px into the readout; the card now ends above it and scrolls inside itself, as it already did for the toolbar).
+double cornerBottom(const Frame& f, const Metrics& m, const Rect& r) {
+    double bottom = f.toolbar.y - m.s12;
+    if (f.readout.h > 0 && r.x < f.readout.right() && f.readout.x < r.right()) bottom = std::min(bottom, f.readout.y - m.s12);
+    return bottom;
+}
+
 Rect placePanel(Anchor a, double w, double h, const Frame& f, const Metrics& m, double anchorX) {
     const double W = f.freeW > 0 ? f.freeW : f.window.w, top = f.topBar.bottom();     // (stage 5c: left of the Controls panel when it is open)
     w = std::max(1.0, std::min(w, W - 2.0 * m.s12));
@@ -130,11 +138,11 @@ Rect placePanel(Anchor a, double w, double h, const Frame& f, const Metrics& m, 
     switch (a) {
     case Anchor::TopLeft:
         r.x = std::min<double>(m.s24, W - m.s12 - w); r.y = top + m.s12;
-        r.h = std::min(h, f.toolbar.y - m.s12 - r.y);
+        r.h = std::min(h, cornerBottom(f, m, r) - r.y);
         break;
     case Anchor::TopRight:
         r.x = std::max<double>(m.s12, W - (m.s24 + m.s8 + m.s4) - w); r.y = top + m.s12;     // 5m part 2: clear of the 32 u wide handle on the picture's right edge
-        r.h = std::min(h, f.toolbar.y - m.s12 - r.y);
+        r.h = std::min(h, cornerBottom(f, m, r) - r.y);
         break;
     case Anchor::UnderChip:
         r.x = std::min(std::max(anchorX - w / 2, static_cast<double>(m.s12)), W - m.s12 - w); r.y = top + m.s8;
@@ -360,11 +368,11 @@ bool factTick(FactClock& c, double dt, bool hovered, bool reduced, double interv
     return false;
 }
 
-Rect factLineRect(const Frame& f, const Metrics& m, double textW, double textH) {
+Rect factLineRect(const Frame& f, const Metrics& m, double textW, double textH, bool above) {
     const double h = std::max<double>(m.control, textH > 0 ? textH + m.s4 : 0), arrows = 2.0 * m.row + m.s4, maxW = m.em(44), x0 = f.window.x + m.s12, wanted = std::min(textW + arrows, maxW);
     Rect r{x0, f.toolbar.y + (f.toolbar.h - h) / 2, 0, h};
     const double beside = f.toolbar.x - m.s16 - x0;
-    if (beside >= m.em(14)) r.w = std::min(wanted, beside);
+    if (!above && beside >= m.em(14)) r.w = std::min(wanted, beside);       // (above: the caller found the room beside the toolbar too short for two whole lines)
     else {                                                                   // no room beside the toolbar: one row above it, left of the readout
         r.y = f.toolbar.y - m.s8 - h;
         const bool nearReadout = f.readout.y < r.y + h && f.readout.bottom() > r.y;

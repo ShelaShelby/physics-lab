@@ -387,10 +387,18 @@ Rect factLine(AppState& app, const Frame& fr, const Metrics& m, const std::vecto
     const double textW = sh::width(Type::Caption, false, txt);
     // (stage 5d) a fact too long for one line wraps to two; the rectangle is as wide as for one line and only as tall as the lines need. "…" only when two lines are still too short.
     const float arrowsW = static_cast<float>(2 * m.row + m.s4);
-    const float room = static_cast<float>(factLineRect(fr, m, textW).w) - arrowsW - 2.0f * m.s4;
+    float room = static_cast<float>(factLineRect(fr, m, textW).w) - arrowsW - 2.0f * m.s4;
     std::vector<std::string> lines = sh::wrapText(Type::Caption, false, txt, room);
+    // 0.15 stage 5o: beside the toolbar the room can be too short for the whole fact in two lines (the Atom Lab with the Controls panel open at 1280 x 800 cut "…the surface of the Sun" to "…hotter than the…"):
+    // then it takes the row above the toolbar, as it already does at small windows (the scale bar and decay lines rise with it: bottomLeftTop below).
+    bool above = false;
+    if (lines.size() > 2) {
+        const float room2 = static_cast<float>(factLineRect(fr, m, textW, 0.0, true).w) - arrowsW - 2.0f * m.s4;
+        const std::vector<std::string> lines2 = sh::wrapText(Type::Caption, false, txt, room2);
+        if (lines2.size() < lines.size()) { above = true; room = room2; lines = lines2; }
+    }
     const int nLines = std::max(1, std::min(2, static_cast<int>(lines.size())));
-    const Rect r = factLineRect(fr, m, textW, nLines > 1 ? nLines * sh::lineH(Type::Caption) : 0.0);
+    const Rect r = factLineRect(fr, m, textW, nLines > 1 ? nLines * sh::lineH(Type::Caption) : 0.0, above);
     bool blocked = false;
     for (const Rect& o : occ) if (r.intersects(o)) blocked = true;
     if (!blocked && app.lab == 0) {

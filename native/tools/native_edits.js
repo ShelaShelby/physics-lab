@@ -10,6 +10,10 @@ const EDITS = {
   // About
   about: [
     {replace: ['real orbits, atoms, black holes and a little space game.', 'real orbits and atoms.']},
+    // 0.15 stage 5o: three paragraphs reworded so no line of body text in the reading view is longer than 75 characters (the same meaning)
+    {replace: ['one idea and one update at a time. If you find a bug or have an idea, tell Alex.', 'one update at a time. Tell Alex about any bug you find or idea you have.']},
+    {replace: ['Alex decides what goes in and comes up with the ideas. It is built together with Claude, an AI assistant made by Anthropic, which helps write the code, check the facts and test everything.', 'Alex has the ideas and picks what goes in. Claude, an AI assistant made by Anthropic, helps write the code, check the facts and test everything.']},
+    {replace: ['planet positions come from NASA/JPL orbital data, and the isotope table is based on the NUBASE nuclear data (through the mendeleev package). Facts in the guides are checked against several sources, and where the sources disagree the text says so.', 'planet positions come from NASA/JPL data. The isotope table is based on NUBASE nuclear data (through the mendeleev package). Guide facts are checked against several sources, and where they disagree the text says so.']},
     // the sources of the Black Hole Lab and the Spacetime Lab, and the neutron star note under them
     {cut: ['<div class="srcH">🕳️ Black holes</div>', '<div class="srcH">🌌 Stars and far-away things</div>']},
     // ...but the Orbit Lab still says Sagittarius A* is 4.3 million Suns, so that one source stays, under the other Sagittarius A* source
