@@ -21,6 +21,8 @@ void noteRect(const char* name, float x, float y, float w, float h);   // the sa
 // The Controls panel scrolls. It tells the checks where its window is (noteScrollArea); a scripted click on a control of it that is scrolled out of view first asks the panel to scroll it in
 // (takeReveal / itemRect), and the click follows 1 frame later. Nothing here does anything without PL_SCRIPT.
 void noteScrollArea(float x, float y, float w, float h);
+void notePopupArea(float x, float y, float w, float h);   // 5q: the open dropdown panel's window; a scripted click on a control of it that is scrolled out of view scrolls it in first
+bool takeRevealPopup(std::string& name);
 void collectPanelItems(bool on);                        // between on and off, the controls noted belong to the Controls panel (only those are scrolled in)
 bool takeReveal(std::string& name);                     // a scripted click wants this control shown: true once
 bool itemRect(const std::string& name, float out[4]);

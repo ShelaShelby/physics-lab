@@ -84,6 +84,10 @@ static Rgb idleIconRgb() {
     return c;
 }
 static ImU32 cIdleIcon() { return colOf(idleIconRgb()); }
+// 5q: the Controls sliders are GREY in every theme (the owner: not blue): the grey is the brightness of a theme token (muted towards the text colour), its hue dropped
+static Rgb greyOf(const Rgb& c) { const float a = (c.r + c.g + c.b) / 3.0f; return {a, a, a}; }
+static ImU32 cSliderFill() { return colOf(greyOf(app::mixRgb(g_f.c->muted, g_f.c->fg, 0.25f))); }
+static ImU32 cSliderKnob(bool lit) { return colOf(greyOf(lit ? g_f.c->fg : app::mixRgb(g_f.c->muted, g_f.c->fg, 0.6f))); }
 ImU32 cOnFill() { return colOf(app::shell::onAccent(*g_f.c)); }
 static Rgb faceRgb() { const app::ThemeColors& c = *g_f.c; return c.style.button.set ? c.button : app::mixRgb(c.card, c.fg, g_lo ? g_lo->faceMix : 0.10f); }
 ImU32 cFace(float a) { return colOf(faceRgb(), a); }
@@ -496,8 +500,9 @@ bool slider(const char* id, ImVec2 pos, float w, float* v, float lo, float hi) {
     const float t = hi > lo ? std::min(1.0f, std::max(0.0f, (*v - lo) / (hi - lo))) : 0;
     const float cy = pos.y + rowH / 2, track = static_cast<float>(app::shell::unitPx(g_lo ? 3 : 4, g_f.dpi, g_f.tf)), tx = x0 + t * (x1 - x0), rad = static_cast<float>(app::shell::unitPx(7, g_f.dpi, g_f.tf));
     dl->AddRectFilled(ImVec2(x0, cy - track / 2), ImVec2(x1, cy + track / 2), cHair(), track / 2);
-    dl->AddRectFilled(ImVec2(x0, cy - track / 2), ImVec2(tx, cy + track / 2), cAccent(), track / 2);
-    dl->AddCircleFilled(ImVec2(tx, cy), rad, h.active || h.hovered ? cAccent() : cFill());
+    if (shellLogOn() && ImGui::IsRectVisible(ImVec2(x0, cy - rad), ImVec2(x1, cy + rad))) { auditRect(std::string("slider.") + id + ".fill", x0, cy - track / 2, tx - x0, track); auditRect(std::string("slider.") + id + ".knob", tx - rad, cy - rad, 2 * rad, 2 * rad); }   // 5q: for the automatic checks (where the grey fill and knob are)
+    dl->AddRectFilled(ImVec2(x0, cy - track / 2), ImVec2(tx, cy + track / 2), cSliderFill(), track / 2);
+    dl->AddCircleFilled(ImVec2(tx, cy), rad, cSliderKnob(h.active || h.hovered));
     dl->AddCircle(ImVec2(tx, cy), rad, cEdge(), 20, 1.0f);
     return changed;
 }

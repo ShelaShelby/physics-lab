@@ -558,6 +558,11 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     if (hasToolbar) occ.push_back(fr.toolbar);
     std::string log;
 
+    // 0.15 stage 5q: the Element picker of the Atom Lab HOVERS over the picture: it is not an occluder (nothing is re-centred for it) and the atom's free rectangle is kept as it was while it is open.
+    // The subject card is left out while the picker (as of the last frame) would cover it, as with the Legend. (The Orbit Lab's chip panel is unchanged.)
+    static Rect pickerPrev{0, 0, 0, 0};
+    static double freeSaved[4] = {0, 0, 0, 0}; static bool freeSavedOk = false;
+    Rect pickerNow{0, 0, 0, 0};
     Rect legendOpenR{0, 0, 0, 0};                         // (5l) where the Legend is when it is open (w == 0: not open)
     std::string legendOpenName;
     // ---- the floating cards: the subject card (top right) and the legend (top left); each collapses to its title ----
@@ -571,6 +576,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         if (collapsed) {
             r = placePanel(anchor, collapsedWidth(titleW, m), m.control, fr, m, 0);
             if (std::strcmp(key, "card") == 0 && legendOpenR.w > 0 && r.intersects(legendOpenR)) return Rect{r.right(), r.y, 0, 0};   // 5m part 2: the subject card never covers an open Legend: it is left out while the Legend is open
+            if (std::strcmp(key, "card") == 0 && app.lab == 1 && pickerPrev.w > 0 && r.intersects(pickerPrev)) return Rect{r.right(), r.y, 0, 0};   // 5q: ... and while the Element picker would cover it
             if (!sh::beginPanel(wid.c_str(), r, p, sh::Shape::Pill, false)) return r;
             const bool hover = sh::hoveredRect(ImVec2(static_cast<float>(r.x), static_cast<float>(r.y)), ImVec2(static_cast<float>(r.w), static_cast<float>(r.h)));
             (void)hover;
@@ -583,6 +589,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         } else {
             r = placePanel(anchor, m.em(emW), sh::lastHeight(wid, static_cast<float>(m.em(8))), fr, m, 0);
             if (std::strcmp(key, "legend") == 0) { legendOpenR = r; legendOpenName = name; }         // (5l) the open Legend: a click anywhere else, or Esc, folds it
+            if (std::strcmp(key, "card") == 0 && app.lab == 1 && pickerPrev.w > 0 && r.intersects(pickerPrev)) return Rect{r.right(), r.y, 0, 0};   // 5q: (see above)
             if (std::strcmp(key, "card") == 0 && legendOpenR.w > 0 && r.intersects(legendOpenR)) return Rect{r.right(), r.y, 0, 0};   // 5m part 2: (the Legend and the cards are drawn Legend first) no room for both: the Legend is the one the owner just opened
             if (!sh::beginPanel(wid.c_str(), r, p, sh::Shape::Panel, true)) return r;
             sh::text(p.dl, Type::Title, true, sh::here(p), sh::cText(), title);
@@ -1006,6 +1013,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
 
     // ---- the open dropdown or toolbar panel (one at a time) ----
     { static PanelId prevOpen = PanelId::None; if (prevOpen == PanelId::Pick && S.ui.open != PanelId::Pick) pickFilterClear(); prevOpen = S.ui.open; }
+    notePopupArea(0, 0, 0, 0);                                                    // (5q: set again below while a dropdown panel is open)
     Rect openRect{0, 0, 0, 0};
     if (S.ui.open != PanelId::None) {
         const PanelId id = S.ui.open;
@@ -1015,12 +1023,14 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             const std::string wid = std::string("##panel_") + panelName(id);
             const double ax = S.anchorX.count(id) ? S.anchorX[id] : W / 2;
             openRect = placePanel(id == PanelId::Data ? Anchor::Centre : fromTop(id) ? Anchor::UnderChip : Anchor::AboveToolbar, m.em(id == PanelId::Chip && app.lab == 1 ? atomPanelWidthEm(id) : widthEmOf(id)), sh::lastHeight(wid, static_cast<float>(m.em(10))), fr, m, ax);
+            const bool hoverPicker = id == PanelId::Chip && app.lab == 1;           // 5q: the Atom Lab's Element picker hovers: it may step sideways round a card (its own position only), and where it still covers the card the card is left out
             if (id != PanelId::LabMenu)                                           // (5l: the Labs dropdown stays under its button and is drawn over a card; the other panels step aside)
                 for (const Rect& c : cards) openRect = sideStep(openRect, c, fr.window, m.s12, m.s12);
             if (fromTop(id) && id != PanelId::LabMenu) {                              // 5p: the Element picker (and the other panels from the top bar) never reach the fact line, the toolbar or the FPS pill
                 double limit = fr.toolbar.y;
                 if (g_bottomTop > 0) limit = std::min(limit, g_bottomTop);
                 if (fr.readout.w > 0 && fr.readout.x < openRect.right() && fr.readout.right() > openRect.x) limit = std::min(limit, fr.readout.y);
+                if (hoverPicker && g_bottomTop > 0) limit = std::min(limit, g_bottomTop - 42.0 * dpi);   // 5q: and above the scale bar's label (it stands 22 pt above the fact line / toolbar row, its label 20 pt over it)
                 openRect.h = std::max<double>(m.em(6), std::min(openRect.h, limit - m.s12 - openRect.y));
             }
             if (id == PanelId::Data) openRect.x = std::max<double>(m.s12, std::min(openRect.x, (fr.freeW > 0 ? fr.freeW : fr.window.w) - m.s12 - openRect.w));   // stage 5i: the side step never pushes the sheet under the Controls panel
@@ -1039,11 +1049,18 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                     else if (id == PanelId::Data) { sh::bodyFloor(true); dataPanel(app, p, close); sh::bodyFloor(false); }
                     else if (id == PanelId::More) { std::vector<ToolItem> hidden(tools.begin() + shown, tools.end()); morePanel(p, hidden, close); }
                 }
+                { std::string want; float ir[4];                                              // 5q: a scripted click on a control scrolled out of this panel: scroll it in (the same as the Controls panel does)
+                  if (takeRevealPopup(want) && itemRect(want, ir)) {
+                      const float cur = ImGui::GetScrollY(), to = std::min(ImGui::GetScrollMaxY(), std::max(0.0f, cur + ir[1] - static_cast<float>(openRect.y) - static_cast<float>(openRect.h) * 0.3f));
+                      ImGui::SetScrollY(to);
+                      shiftItem(want, -(to - cur));
+                  } }
                 const float need = sh::endPanel(p);
                 { char nb[96]; std::snprintf(nb, sizeof nb, "panelneed %s need=%.0f have=%.0f scroll=%.0f", panelName(id), need, static_cast<float>(openRect.h), sh::lastScrollMax(wid)); auditNote(nb); }
                 if (close && S.ui.open == id) S.ui.open = PanelId::None;
             }
-            occ.push_back(openRect);
+            if (hoverPicker) pickerNow = openRect; else occ.push_back(openRect);   // 5q: a hovering picker is not an occluder
+            notePopupArea(static_cast<float>(openRect.x), static_cast<float>(openRect.y), static_cast<float>(openRect.w), static_cast<float>(openRect.h));
             auditRect(std::string("panel.") + panelName(id), static_cast<float>(openRect.x), static_cast<float>(openRect.y), static_cast<float>(openRect.w), static_cast<float>(openRect.h));
             auditNote(std::string("panelopen ") + panelName(id));
             // a click anywhere else closes it (a click on the bars is their own business)
@@ -1081,9 +1098,12 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         if (fl.w > 0) { occ.push_back(fl); auditRect("factline", static_cast<float>(fl.x), static_cast<float>(fl.y), static_cast<float>(fl.w), static_cast<float>(fl.h)); bottomLeftTop = std::min(bottomLeftTop, fl.y); }
     }
     g_bottomTop = bottomLeftTop;
+    pickerPrev = pickerNow;                                // 5q: (the card, next frame, is left out where this covers it)
     app.atom.insetBottomLeft = (fr.window.bottom() - bottomLeftTop) / dpi + 4;       // points (main.cpp sets it to 0 when the new UI is off)
     if (app.lab == 1) {                                   // 0.15 stage 5h: the atom is centred in the part of the picture the bars, the Controls panel and the subject card leave free (the label under the nucleus too)
-        const Rect fr2 = atomFreeRect(fr.window, occ, bottomLeftTop);   // (5p: not through the toolbar's own place: the toolbar is centred on this, and it flipped every frame with the picker open)
+        const bool pickerOpen = S.ui.open == PanelId::Chip && freeSavedOk;      // 5q: with the picker open the picture, toolbar, FPS pill and scale bar keep the place they had
+        const Rect fr2 = pickerOpen ? Rect{freeSaved[0], freeSaved[1], freeSaved[2], freeSaved[3]} : atomFreeRect(fr.window, occ, bottomLeftTop);
+        if (!pickerOpen) { freeSaved[0] = fr2.x; freeSaved[1] = fr2.y; freeSaved[2] = fr2.w; freeSaved[3] = fr2.h; freeSavedOk = true; }   // (5p: not through the toolbar's own place: the toolbar is centred on this, and it flipped every frame with the picker open)
         app.atom.freeX = fr2.x / dpi; app.atom.freeY = fr2.y / dpi; app.atom.freeW = fr2.w / dpi; app.atom.freeH = fr2.h / dpi;
         app.atom.infoSize = 14;                           // the info text at the top left: the body size (14), not 13
         app.atom.infoHidden = S.ui.open == PanelId::Chip;  // (5p: the Element picker covers that corner)

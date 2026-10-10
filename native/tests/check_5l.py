@@ -369,7 +369,7 @@ def part_popups(binary, work):
             wl = "##panel_labmenu"
             check(wl in order and order.index(wl) > max([order.index(w) for w in order if w.startswith("##card_") or w in ("##shellControls", "##shellHandle", "##shellTool")] or [-1]), f"{sz} lab {lab}: the Labs dropdown is in front of the cards, the Controls panel and the toolbar ({order[-4:]})")
             if pr:
-                x0, y0, x1, y1 = int(pr[0]) + 3, int(pr[1]) + 3, int(pr[0] + pr[2]) - 3, int(pr[1] + pr[3]) - 3
+                x0, y0, x1, y1 = int(pr[0]) + 4, int(pr[1]) + 4, int(pr[0] + pr[2]) - 4, int(pr[1] + pr[3]) - 4   # 5q: inset 4 (was 3: 3 px in reaches the anti-aliased edge of the radius-10 corner; the owner approved this one change)
                 d = diff_count(region(Bmp(a.bmp), x0, y0, x1, y1), region(Bmp(b.bmp), x0, y0, x1, y1), tol=6)
                 check(d == 0, f"{sz} lab {lab}: PIXELS: nothing shows through the Labs dropdown ({d} pixels depend on the picture behind it)")
 

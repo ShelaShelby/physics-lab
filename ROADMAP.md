@@ -110,7 +110,7 @@ Also seen: boxes inside boxes and outlines on everything; no breathing room; no 
   - stage 5p — DONE (cloud-tested; one job, two pushes; the owner's six PC findings): wheel dead after About / History / log in both labs (cause found and fixed), About scrollbar 12 px with a track, Atom zoom-out twice as far in every view, lit toolbar / top-bar button = dark fill + white icon (no outline, no glow), Element picker: no more layout flip between two places (cause found, reproduced at 880 x 560 and fixed), no overlap with the fact line / toolbar / FPS pill, info text hidden while it is open. NEXT: whatever the owner reports after testing 5p on the PC, then stage 6, stage 7, the 0.16 list.
   - stage 5o — DONE (cloud-tested; one job, two pushes): three of the four old test failures fixed in the app: `cards_orbit` (the Orbit subject card stops above the readout and scrolls), `ui5g_atomtext` (a fact too long for two lines beside the toolbar takes the row above it), `shell_ui` (three About paragraphs reworded; the app's own version label is now 0.15). `ui5l_popups` is NOT fixed on purpose: the test's 3 px inset reaches the Labs dropdown's rounded corner (proof in native/REPORT.md); the owner decides (test inset 4, or a smaller corner radius).
   - stage 5n — DONE (cloud-tested; see native/REPORT.md for what was not tested): Settings, About, Learn, history and Benchmark windows and the pop-up lists in the M1 look (one colour set for all Dear ImGui windows, `Look::w`); the chart tilt slider "flat <-> 3D" above the toolbar in the Atom Lab's Chart view only. Next: stage 6 and 7 (all themes through tokens, New UI as default, old panels removed).
-  - stage 5q — part 1 DONE (cloud-tested): lit buttons in ALL themes (cause: widget code used the new look only for Dark), theme list below the top bar, About scrollbar constant 12 px, End reaches the exact bottom. Part 2 (Element picker hovers, grey sliders, ui5l_popups inset 4, full suite) next.
+  - stage 5q — DONE (cloud-tested; one job, two pushes): lit buttons in ALL themes (cause: widget code used the new look only for Dark), theme list below the top bar, About scrollbar constant 12 px, End reaches the exact bottom; Atom Lab Element picker HOVERS (nothing moves; the subject card is left out while it would be covered; the picker stops above the scale bar), Controls sliders grey in every theme, `ui5l_popups` inset 3 -> 4 (owner approved).
   - NEXT JOB: what the owner reports from the PC test of 5p; then stage 6 (below), then stage 7, then the 0.16 list.
   - stage 6 — Learn, Settings (sections), About, history, changelogs, guides, Benchmark in the reading view; the Achievements panel
   - a "modern look" stage (planned, after the cards: the owner wants the whole New UI to look flatter and more modern; to be briefed)
@@ -119,7 +119,7 @@ Also seen: boxes inside boxes and outlines on everything; no breathing room; no 
 ## 0.16 list (not scheduled, collected from 0.15 reports)
 - cache the periodic table dropdown in a texture: measured +47 ms per frame in software while open (stage 5b)
 - cache periodic-table dropdown texture
-- compile outline compute shader at startup (scene 16 worst frame 55 ms)
+- compile outline compute shader at startup (scene 16 worst frame 55 ms); re-check the scene 16 worst frame on the PC afterwards
 - Orbit scene 1 about 9% slower in New UI: investigate
 
 ## Later (not scheduled)

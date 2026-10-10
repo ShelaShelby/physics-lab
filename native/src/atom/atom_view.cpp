@@ -925,6 +925,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const double yb = h - 18 - lab.insetBottomLeft;                    // (new UI: above the toolbar row and the fact line)
         R.line(12, yb, 12 + bar * pxA, yb, 2, css.muted);
         T.draw(label + "  =  " + metres(bar * 1e-10), 12, yb - 6, 12, css.muted);
+        { const double lw = std::max(T.width(label + "  =  " + metres(bar * 1e-10), 12), bar * pxA); g_marks.scale[0] = 12; g_marks.scale[1] = yb - 20; g_marks.scale[2] = lw; g_marks.scale[3] = 24; }   // (5q: for the automatic checks; points: the label above the bar and the bar)
     }
     g_marks.info[0] = g_marks.info[1] = g_marks.info[2] = g_marks.info[3] = 0;
     if (!lab.infoHidden) {   // the readout at the top left, on a soft plate (the web engine's info lines)

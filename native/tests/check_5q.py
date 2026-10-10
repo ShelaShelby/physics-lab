@@ -215,8 +215,116 @@ def part_endkey(binary, work):
         check(len(v) == 2 and all(a[1] == 0 for a in v), f"{sz}: Home reaches the exact top and stays there ({v})")
     print(f"check_5q endkey: {checks} checks, {fails} failed")
 
+# ---------------------------------------------------------------------------------------------- part 2
+# 5: the Element picker (top bar chip) in the Atom Lab HOVERS: opening it moves nothing (atom, toolbar, FPS pill, scale bar: pixel for pixel the same outside the picker)
+def box(r, key):
+    m = re.search(key + r"=([-\d.e+]+),([-\d.e+]+),([-\d.e+]+),([-\d.e+]+)", r.out.split("PLATOMBOX")[-1])
+    return tuple(float(m.group(i)) for i in range(1, 5)) if m else (0, 0, 0, 0)
+
+def grow(rc, k):
+    return (rc[0] - k, rc[1] - k, rc[2] + 2 * k, rc[3] + 2 * k)
+
+def part_picker(binary, work):
+    for sz in ("880x560", "1280x800", "2560x1369"):
+        W, H = (int(v) for v in sz.split("x"))
+        base = {"PL_NEWUI": "on", "PL_ATOM": "1"}
+        runs = [((binary, work, f"q_pk_closed_{sz}", dict(base, PL_SCRIPT="30:astate")), {"frames": 40, "size": sz}),
+                ((binary, work, f"q_pk_closed2_{sz}", dict(base, PL_SCRIPT="30:astate")), {"frames": 40, "size": sz}),
+                ((binary, work, f"q_pk_open_{sz}", dict(base, PL_SCRIPT="8:click=top.chip;30:astate")), {"frames": 40, "size": sz})]
+        prefetch(runs)
+        c, c2, o = (run_app(*a, **k) for a, k in runs)
+        dpi = c.window[2]
+        pk = o.rects.get("panel.chip")
+        check(pk is not None, f"{sz}: the picker opened")
+        if not pk:
+            continue
+        bc, b2, bo = Bmp(c.bmp), Bmp(c2.bmp), Bmp(o.bmp)
+        halo = 16 * dpi
+        skip = [grow(pk, halo)]
+        for name in ("chip",):
+            skip.append(grow(o.rects[name], 4)) if name in o.rects else None
+        info = tuple(v * dpi for v in box(c, "info"))
+        if info[2] > 0:
+            skip.append(grow(info, 4))
+        card = c.rects.get("card.atom.card")
+        if card and overlap(card, pk):                                   # the subject card is left out while the picker would cover it: its place may differ
+            skip.append(grow(card, 2))
+        def diff(a, b, skips):
+            n, first = 0, None
+            for y in range(H):
+                for x in range(W):
+                    if any(r[0] <= x < r[0] + r[2] and r[1] <= y < r[1] + r[3] for r in skips):
+                        continue
+                    if a.px(x, y) != b.px(x, y):
+                        n += 1
+                        first = first or (x, y)
+            return n, first
+        n0, f0 = diff(bc, b2, [])
+        check(n0 == 0, f"{sz}: the test itself is steady: two closed runs differ in {n0} pixels (first {f0})")
+        n, f = diff(bc, bo, skip)
+        check(n == 0, f"{sz}: PIXELS: closed against open, outside the picker, the chip and the info text: {n} pixels differ (first {f}); picker {pk}")
+        # nothing was moved (numbers): the atom's centre, the toolbar, the free rectangle
+        for key in ("centre", "free"):
+            m1 = re.search(key + r"=([-\d.e+]+),([-\d.e+]+)", c.out.split("PLATOMBOX")[-1]); m2 = re.search(key + r"=([-\d.e+]+),([-\d.e+]+)", o.out.split("PLATOMBOX")[-1])
+            check(m1 and m2 and m1.groups() == m2.groups(), f"{sz}: the atom's {key} is the same closed and open ({m1 and m1.groups()} {m2 and m2.groups()})")
+        check(c.rects.get("toolbar") == o.rects.get("toolbar"), f"{sz}: the toolbar is where it was ({c.rects.get('toolbar')} {o.rects.get('toolbar')})")
+        # the picker must not cover the scale bar's label or the subject card's text
+        sc = tuple(v * dpi for v in box(o, "scale"))
+        check(sc[2] > 0 and not overlap(pk, sc), f"{sz}: the picker {pk} does not cover the scale bar and its label {sc}")
+        oc = o.rects.get("card.atom.card")
+        check(oc is None or not overlap(pk, oc), f"{sz}: the picker does not cover the subject card {oc} {pk}")
+        inf = tuple(v * dpi for v in box(o, "info"))
+        check(inf[2] == 0, f"{sz}: the Atom info text is hidden while the picker is open {inf}")
+        for other in ("toolbar", "readout", "factline"):
+            r_ = o.rects.get(other)
+            check(r_ is None or not overlap(pk, r_), f"{sz}: the picker does not cover the {other} {pk} {r_}")
+        order = o.note("worder")[0].split()[1:] if o.note("worder") else []
+        later = [w for w in order if w.startswith("##card_") or w in ("##shellControls", "##shellHandle", "##shellTool")]
+        check("##panel_chip" in order and all(order.index("##panel_chip") > order.index(w) for w in later), f"{sz}: the picker is on top of the cards, the Controls panel and the toolbar ({order[-5:]})")
+    # it closes cleanly and the wheel works afterwards
+    sz = "1280x800"
+    zs = []
+    for tag, scr in (("base", "20:move=500,450;24:state;26:wheel=3;30:state"), ("pick", "8:click=top.chip;14:key=escape;20:move=500,450;24:state;26:wheel=3;30:state")):
+        r = run_app(binary, work, f"q_pk_wheel_{tag}", {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_SCRIPT": scr}, frames=34, size=sz)
+        d = [dict(p.split("=", 1) for p in st.replace("| ", "").split() if "=" in p) for st in r.states]
+        zs.append((float(d[0]["zoom"]), float(d[1]["zoom"])) if len(d) == 2 else None)
+        if tag == "pick":
+            check("panel.chip" not in r.rects, "the picker closed on Escape")
+    check(zs[0] and zs[1] and abs(zs[0][1] - zs[0][0]) > 1e-9 and zs[0] == zs[1], f"after the picker was opened and closed the wheel zooms like the baseline {zs}")
+    print(f"check_5q picker: {checks} checks, {fails} failed")
+
+# 6: the sliders of the Controls panel are grey in every theme (no accent colour): the filled part and the knob have almost no colour (largest channel spread <= 30 of 255)
+def part_sliders(binary, work):
+    runs = []
+    for t in THEMES:
+        th, env = theme_args(t)
+        for lab, e2 in (("atom", {"PL_ATOM": "1"}), ("orbit", {})):
+            runs.append(((binary, work, f"q_sl_{lab}_{t}", dict(env, **e2, PL_NEWUI="on", PL_SCRIPT="10:wheel=0")), {"frames": 24, "theme": th, "size": "1920x1080"}))
+    prefetch(runs)
+    for t in THEMES:
+        th, env = theme_args(t)
+        for lab, e2 in (("atom", {"PL_ATOM": "1"}), ("orbit", {})):
+            r = run_app(binary, work, f"q_sl_{lab}_{t}", dict(env, **e2, PL_NEWUI="on", PL_SCRIPT="10:wheel=0"), frames=24, theme=th, size="1920x1080")
+            b = Bmp(r.bmp)
+            fills = {k[:-5]: v for k, v in r.rects.items() if k.startswith("slider.") and k.endswith(".fill")}
+            tested = 0
+            for k, f in fills.items():
+                kn = r.rects.get(k + ".knob")
+                pc = r.rects.get("panel.controls")                          # a slider scrolled out of the panel is clipped away: its rectangle says nothing about pixels
+                if f[2] < 8 or not kn or not pc or not (pc[0] <= kn[0] and kn[0] + kn[2] <= pc[0] + pc[2] and pc[1] <= kn[1] and kn[1] + kn[3] <= pc[1] + pc[3]):
+                    continue
+                fp = b.px(int(f[0] + f[2] / 2), int(f[1] + f[3] / 2))
+                kp = b.px(int(kn[0] + kn[2] / 2), int(kn[1] + kn[3] / 2))
+                tested += 1
+                check(chroma(fp) <= 30, f"{lab} {t}: {k}: the filled part {fp} is grey (colour spread {chroma(fp)})")
+                check(chroma(kp) <= 30, f"{lab} {t}: {k}: the knob {kp} is grey (colour spread {chroma(kp)})")
+                trk = b.px(int(f[0] + f[2] + 3 + (kn[2] / 2)), int(f[1] + f[3] / 2))
+                check(contrast(fp, trk) >= 1.3 or dmax(fp, trk) >= 20, f"{lab} {t}: {k}: the filled part {fp} still shows against the empty track {trk}")
+            check(tested >= 1, f"{lab} {t}: at least one slider with a filled part was found ({len(fills)} sliders)")
+    print(f"check_5q sliders: {checks} checks, {fails} failed")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"lit": part_lit, "theme": part_theme, "scrollbar": part_scrollbar, "endkey": part_endkey}[part](binary, work)
+    {"lit": part_lit, "theme": part_theme, "scrollbar": part_scrollbar, "endkey": part_endkey, "picker": part_picker, "sliders": part_sliders}[part](binary, work)
     sys.exit(1 if fails else 0)

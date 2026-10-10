@@ -2,9 +2,13 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
-## 0.15 stage 5q part 1: what only you can do
+## 0.15 stage 5q: what only you can do
 - [ ] Lit buttons in EVERY theme (Light, Paper, Sage, Solar, Midnight, Black, Contrast, Monochrome): toolbar and top-bar buttons that are on: quiet fill, strong icon, no outline or glow. Can you still see which one is on? In Contrast and Monochrome the lit button has no box edge: keep that?
 - [ ] Theme list under the top bar (no top-bar icon covered); About scrollbar stays 12 px when you point at it or drag it; End goes to the very bottom in one press.
+- [ ] Atom Lab Element picker: open it: the atom, toolbar, FPS number and scale bar must not move. At a small window the subject card disappears while the picker would cover it (it comes back when you close the picker). Is that OK, or would you rather have the picker narrower / elsewhere?
+- [ ] Controls sliders are grey in every theme: can you still see where the value is?
+- [ ] Release label 0.14 -> 0.15 (CMake VERSION, window title, About, history chip) at stage 7.
+- [ ] Still open from before: scene 16 worst-frame check (on the 0.16 list); the benchmark with New UI Off.
 
 ## 0.15 stage 5p (six PC findings): what only you can do
 - [ ] Wheel after About: Atom Lab and Orbit Lab: open About, close it, turn the wheel over the picture: it must zoom. Same after History and the log. (Cloud test passed; your PC is the real test.)
@@ -15,7 +19,7 @@ Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked
 - [ ] Element picker overlap (#5): the info text is hidden while it is open; the picker stops above the fact line, the toolbar and the FPS pill and scrolls inside itself. At 880 x 560 it still covers the subject card, and at 1280 x 800 it covers the left end of the scale bar. Tell me if either matters.
 
 ## 0.15 stage 5o (three layout fixes): what only you can do
-- [ ] Decide `ui5l_popups` (the one test still failing): the Labs dropdown's rounded corner is anti-aliased, so one corner pixel depends on the picture behind it; the test looks 3 px in, the corner reaches 2.93 px. Tell me: change the test to look 4 px in (my proof is in native/REPORT.md), or make the corner radius smaller.
+- [x] `ui5l_popups`: decided and done in 5q (test inset 4).
 - [ ] On the PC, Orbit Lab in a small window (880 x 560, Controls open, Earth picked): the subject card now ends above the readout and scrolls (mouse wheel) to "All values". Is that what you want?
 - [ ] On the PC, Atom Lab (Controls open, 1280 x 800): a long fact is whole, on the row above the toolbar, and the scale bar sits above it.
 - [ ] On the PC: the Labs dropdown (top bar): the lower corners and edge look clean over the picture.

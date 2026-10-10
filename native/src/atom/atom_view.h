@@ -34,6 +34,7 @@ struct MarksDrawn {
     double info[4] = {0, 0, 0, 0};          // the info text's plate at the top left (x, y, w, h in points); w = 0: none
     double centre[2] = {-1, -1};            // 0.15 stage 5h: the picture's drawing centre (points)
     double label[4] = {0, 0, 0, 0};         // 0.15 stage 5h: the nucleus label's box (x, y, w, h in points); w = 0: none drawn
+    double scale[4] = {0, 0, 0, 0};         // 0.15 stage 5q: the scale bar with its label (x, y, w, h in points); for the automatic checks
     double infoPx = 0;                      // 0.15 stage 5h: the font size the info text asks for, in pixels (points x scale x text size)
     double ring[4] = {0, 0, 0, 0};          // the phase ring with its labels (x, y, w, h in points) when drawn; w = 0: not drawn
     int chainNodes = -1, chainEdges = -1;  // the decay chain drawn on the chart (-1: none)

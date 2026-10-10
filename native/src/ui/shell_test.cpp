@@ -3,9 +3,11 @@
 #include "atom/chart_draw.h"
 
 #include <SDL3/SDL.h>
+#include "imgui_internal.h"
 
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -30,7 +32,9 @@ struct Rect4 { float x = 0, y = 0, w = 0, h = 0; };
 bool g_collect = false;
 std::set<std::string> g_panelItems;                       // the names of the Controls panel's controls
 Rect4 g_scroll;                                          // the Controls panel's window (0 when it is not shown)
-std::string g_reveal;
+std::string g_reveal, g_revealPop;                  // (5q: g_revealPop: a control of the open dropdown panel scrolled out of view)
+std::set<std::string> g_popItems;                       // 5q: the controls drawn inside a dropdown panel window (##panel_...)
+Rect4 g_popArea;                                         // 5q: the open dropdown panel's window (0 when none)
 std::map<std::string, Rect4> g_items;                   // name -> where it was last frame (window pixels)
 std::set<std::string> g_texts;                          // "kind px text" lines, each once
 std::map<std::string, Rect4> g_rects;
@@ -119,10 +123,13 @@ void noteItem(const char* label) {
     if (!scriptText() && !shellLogOn()) return;
     const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
     g_items[keyOf(label)] = {a.x, a.y, b.x - a.x, b.y - a.y};
+    if (const ImGuiWindow* cw = ImGui::GetCurrentWindowRead()) { if (std::strncmp(cw->Name, "##panel_", 8) == 0) g_popItems.insert(keyOf(label)); else g_popItems.erase(keyOf(label)); }
     if (g_collect) g_panelItems.insert(keyOf(label));
 }
 void collectPanelItems(bool on) { g_collect = on; }
 void noteScrollArea(float x, float y, float w, float h) { g_scroll = {x, y, w, h}; }
+void notePopupArea(float x, float y, float w, float h) { g_popArea = {x, y, w, h}; }
+bool takeRevealPopup(std::string& name) { if (g_revealPop.empty()) return false; name = g_revealPop; g_revealPop.clear(); return true; }
 bool takeReveal(std::string& name) { if (g_reveal.empty()) return false; name = g_reveal; g_reveal.clear(); return true; }
 void shiftItem(const std::string& name, float dy) { const auto it = g_items.find(name); if (it != g_items.end()) it->second.y += dy; }
 bool itemRect(const std::string& name, float out[4]) {
@@ -166,6 +173,15 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
                     const float cy = r0.y + r0.h / 2;
                     if (cy < g_scroll.y || cy > g_scroll.y + g_scroll.h) {
                         g_reveal = name;
+                        later.push_back({frame + 1, "click=" + arg});
+                        continue;
+                    }
+                }
+                if (it != g_items.end() && verb == "click" && g_popArea.w > 0 && g_popItems.count(name) && !g_panelItems.count(name)) {       // 5q: in the open dropdown panel (the Element picker) but scrolled out of its view: scroll it in, click later
+                    const Rect4& r0 = it->second;
+                    const float cx0 = r0.x + r0.w / 2, cy = r0.y + r0.h / 2;
+                    if (cx0 >= g_popArea.x && cx0 <= g_popArea.x + g_popArea.w && (cy < g_popArea.y || cy > g_popArea.y + g_popArea.h)) {
+                        g_revealPop = name;
                         later.push_back({frame + 1, "click=" + arg});
                         continue;
                     }
@@ -240,7 +256,7 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             std::printf("PLSCROLL %d %.1f %.1f |%s\n", frame, y, mx, readingAnchorsNow().c_str());
         } else if (verb == "astate") {
             std::printf("PLASTATE %s\n", atomSettingsLine(app).c_str());
-            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g centre=%g,%g label=%g,%g,%g,%g infopx=%g free=%g,%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3], d.centre[0], d.centre[1], d.label[0], d.label[1], d.label[2], d.label[3], d.infoPx, app.atom.freeX, app.atom.freeW); }   // (stage 5g: where the picture put its info text and phase ring, in points)
+            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g centre=%g,%g label=%g,%g,%g,%g infopx=%g free=%g,%g scale=%g,%g,%g,%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3], d.centre[0], d.centre[1], d.label[0], d.label[1], d.label[2], d.label[3], d.infoPx, app.atom.freeX, app.atom.freeW, d.scale[0], d.scale[1], d.scale[2], d.scale[3]); }   // (stage 5g: where the picture put its info text and phase ring, in points)
         } else if (verb == "state") {
             std::printf("PLSTATE %s\n", (app.lab == 1 ? atomStateLine(app) : orbitStateLine(app)).c_str());
         }
