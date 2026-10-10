@@ -19,6 +19,8 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5r: the toolbar pills are flat",
+     "The thin lighter rectangle behind the buttons of the bottom toolbar (and the 2D / 3D pill and the small chips) is gone: those pills now have one flat fill and no thin outline. Monochrome and High contrast keep their outline."},
     {"0.15", "Full UI rework, stage 5q: lit buttons in every theme, theme list, About scrollbar, End key, Element picker, grey sliders",
      "The button that is switched on in the bottom toolbars and in the top bar looked light blue, pink, green or brown in every theme except Dark. Now it is the same quiet look everywhere: a fill a little different from the bar, a strong icon (white on dark themes, the text colour on light ones), no outline and no glow; icons that are off are dimmer so the difference also shows without colour. The hover colour of those buttons is grey in every theme, not tinted with the accent. In Contrast and Monochrome the switched-on button no longer has a box edge. "
      "The theme list under the palette button now opens below the top bar instead of covering its icons. The scrollbar of About, Learn and the other pages keeps its 12 px width when you point at it or drag it (it used to grow). Pressing End on a page now goes all the way to the bottom in one press (the page grows a little while its bottom is first drawn, so it stopped about 1 % short). "

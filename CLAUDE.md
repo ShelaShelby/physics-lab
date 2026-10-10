@@ -9,7 +9,9 @@
 - Cost rules (the owner is out of credit and runs on weekly plan limits): keep REPORT.md under 80 lines, covering only this version (what changed, what was tested, what was not tested); do not copy old text forward, old reports are in git history.
 - Read only CLAUDE.md, the latest REPORT.md and the files you will change. Do not explore the whole repo.
 - Take only the screenshots needed to check the change, and look at each once.
-- Run only the tests that matter while working, and the full test suite once before each commit. Do not rebuild everything after every small edit.
+- Run only the tests that matter while working, and the full suite only at the end of a stage, when the owner asks; a small fix runs check.sh quick plus the tests touching the change. Do not rebuild everything after every small edit.
+- Context diet: send build and test output to a file and read only its last 20 lines or the failing test names; read files with grep plus line ranges, never whole large files; at most 4 cropped screenshots, each looked at once; no narration between steps, no essay at the end.
+- Time: a small job targets 25 minutes with a hard stop at 40; if not green by then, push what is green and report what is left.
 - Do not start helper agents (subagents) unless the task says so.
 - If the task turns out much bigger than described, stop and ask before continuing.
 

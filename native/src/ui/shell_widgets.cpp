@@ -342,14 +342,18 @@ bool beginPanel(const char* id, const Rect& r, Panel& p, Shape shape, bool scrol
             reach = big;
         }
         p.dl->AddRectFilled(a, b, solid ? colOf(f.c->card) : cPanel(), rounding);   // (stage 5c.1: the Controls panel is solid: the picture's labels showed through it)
-        const float shine = static_cast<float>(f.m.s12 * 3 + f.m.s4);          // a faint top-lit gradient: the text colour at 6 % fading out over about 40 u
-        const ImU32 top = ui::col(f.c->fg, g_lo ? g_lo->shineAlpha : app::shell::kShineAlpha), none = ui::col(f.c->fg, 0);
-        p.dl->PushClipRect(a, ImVec2(b.x, std::min(b.y, a.y + shine)), true);
-        const float inset = shape == Shape::Pill ? rounding : rounding * 0.5f;       // (5l: on a pill the gradient stays inside the straight part: its square corners showed as a faint rectangle beyond the rounded ends, behind the toolbar's buttons)
-        p.dl->AddRectFilledMultiColor(ImVec2(a.x + inset, a.y), ImVec2(b.x - inset, std::min(b.y, a.y + shine)), top, top, none, none);
-        p.dl->PopClipRect();
+        if (shape == Shape::Pill && f.c->id == "sage")                          // 5r: Sage's glass is only 3 of 255 away from the page behind it; without an outline that is invisible, so a flat 1.5 % white layer (other themes differ by 7..8 and need none)
+            p.dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, 4), rounding);
+        if (shape != Shape::Pill) {                                             // 5r: a pill is a flat fill: the top-lit gradient showed as a lighter block with straight edges behind the buttons (easy to revert: delete this condition)
+            const float shine = static_cast<float>(f.m.s12 * 3 + f.m.s4);          // a faint top-lit gradient: the text colour at 6 % fading out over about 40 u
+            const ImU32 top = ui::col(f.c->fg, g_lo ? g_lo->shineAlpha : app::shell::kShineAlpha), none = ui::col(f.c->fg, 0);
+            p.dl->PushClipRect(a, ImVec2(b.x, std::min(b.y, a.y + shine)), true);
+            const float inset = shape == Shape::Pill ? rounding : rounding * 0.5f;       // (5l: on a pill the gradient stays inside the straight part: its square corners showed as a faint rectangle beyond the rounded ends, behind the toolbar's buttons)
+            p.dl->AddRectFilledMultiColor(ImVec2(a.x + inset, a.y), ImVec2(b.x - inset, std::min(b.y, a.y + shine)), top, top, none, none);
+            p.dl->PopClipRect();
+        }
         if (shape == Shape::Bar) p.dl->AddLine(ImVec2(a.x, b.y - 0.5f), ImVec2(b.x, b.y - 0.5f), cEdge(), 1.0f);
-        else p.dl->AddRect(a, b, cEdge(), rounding, 0, 1.0f);
+        else if (shape != Shape::Pill || f.outline) p.dl->AddRect(a, b, cEdge(), rounding, 0, 1.0f);   // 5r: no outline on a pill, except Monochrome / High contrast
     }
     auditHalo(std::string("panel") + id, a, b, ImVec2(a.x - reach, a.y - reach), ImVec2(b.x + reach, b.y + reach));
     p.origin = ImGui::GetCursorScreenPos();

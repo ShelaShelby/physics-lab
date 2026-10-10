@@ -1,30 +1,23 @@
-# Native Physics Lab 0.15 stage 5q (parts 1 and 2): the owner's PC findings
+# Native Physics Lab 0.15 stage 5r: flat pills
 
-Bug fixes only, no physics or value changed, `index.html` untouched (hash e5501387ae64 at start). New test: `tests/check_5q.py` (ui5q_lit, _theme, _scrollbar, _endkey, _picker, _sliders). The app's own label stays 0.14.
+Bug fix only, no physics or value changed. `index.html` untouched. App label stays 0.14.
 
 ## Changed
-- #1 Lit buttons, ALL themes. LOOK FIRST (11 themes rendered before any change): the coloured rectangle came from the WIDGET CODE, not the theme tokens. Stage 5p switched the new look on only when `g_lo` was set (Dark); every other theme drew a lit button with `cFacePress()` = the face colour 30 % towards the ACCENT (light blue in Light / Auto-light, pink in Paper, green in Sage, brown in Solar, blue in Midnight), Contrast and Monochrome also drew an outline round every button, and hover was accent-tinted too. Now `iconButton`, the 2D / 3D segment and the open chip use one rule from tokens: fill = card 14 % towards the text colour, icon = white on a dark theme / the theme's text colour on a light theme, no outline, no glow, idle icon = muted towards the card until it is 3.3:1 under the lit icon, hover / press = face towards the text colour (never the accent). Also the caret (panel) buttons (Cloud, Labs...) are lit the same way when their panel is open.
-- #2 Theme list: now hangs under the top bar, right edge under the palette button (`themePicker(app, &hang)`); the old-UI call is unchanged.
-- #3 About scrollbar: the thumb was 1.4 x wider (12 -> 16.8 px) on hover and drag; now 12 px in every state (only the colour changes).
-- #4 End: the page grows ~1 % while its bottom lines are first drawn, so one End stopped short. End now keeps aiming at the maximum for up to 24 frames (any other scroll, Home or a scrollbar grab lets go).
-- Looks on purpose: Contrast and Monochrome lit buttons lose their box edge (your rule "no outline in every theme"); the idle buttons keep theirs. Easy to revert, see DECISIONS.
-- #5 Element picker (Atom Lab) HOVERS: no longer an occluder, and the atom's free rectangle is kept as it was while it is open (`freeSaved`), so atom, toolbar, FPS pill and scale bar do not move. It may still step sideways round a card (its own position), is limited to end 42 pt above the fact line / toolbar row (scale bar label), and the subject card is LEFT OUT while the picker would still cover it (880 x 560: the 514 px picker and the 300 px card cannot both fit; 1280 x 800: the picker steps left, the card stays). Info text still hidden while open. Test helper: a scripted click on a control of an open dropdown panel that is scrolled out of view now scrolls it in first (the Controls panel already did): needed because the shorter picker pushes the famous-isotope list below its visible part; `atom_chip` itself is unchanged.
-- #6 Controls sliders: filled part and knob are grey in every theme (brightness of the muted / text tokens, hue dropped); hover only brightens the knob. Checkboxes and segmented buttons are still accent-coloured (not asked).
-- #7 `ui5l_popups`: inset 3 -> 4 px (owner approved); nothing else in that test changed.
-- Test log: the scale bar's rectangle (`PLATOMBOX ... scale=`) and slider fill / knob rectangles (only while visible) were added for the checks; no drawing changed by them.
-- `shell_pictures_0.15s4.sha256`: 22 of 24 hashes changed ON PURPOSE (grey sliders in the Controls panel of Dark and Light; the 2 Dark pictures without the Controls panel did not change). Looked at closed Dark, Time light and the Controls panel crops before writing.
+- `shell_widgets.cpp` beginPanel: the cause was the "top-lit gradient" (AddRectFilledMultiColor, a straight-edged lighter block over the straight part of a pill, measured luminance ~40 vs ~30 at the round ends) plus a 1 px outline on the edge pixel. Pills now get no gradient and no outline, except where `F().outline` is true (Monochrome, High contrast).
+- Sage: its glass is only 3 of 255 away from the page behind it, so with no outline it was nearly invisible; a flat 1.5 % white layer is added for Sage pills (test needs 4..40).
+- New test `tests/check_5r.py`, ctest `ui5r_pill` (dark, light, sage, monochrome, 1280x800, Atom Lab): toolbar and the 2D/3D (tilt) pill: flat interior (<= 2 of 255 over 16 points), no outline (kept in monochrome), fill differs from the page by 4..40. Before the fix it failed (13 failures); after, 0.
+- Docs: CLAUDE.md (new working rules), RESUME, DECISIONS, changelog.
 
-## Tested (cloud, Linux, Mesa llvmpipe, scripted events, pixels)
-- Before the fix on the same tests: lit 72 of 330 checks failed (every theme but Dark), theme list 21 of 30, scrollbar 10 of 20, End 12 of 28. After: 0 failed in all four.
-- ui5q_lit: 11 themes x (Atom toolbar button, top-bar gear, gear under the pointer, plain icon under the pointer, Orbit 2D/3D segment): fill differs 10..80 levels from the bar, not a coloured pill, edge pixels between fill and bar (no outline), 2..4 px outside = bar (no glow), icon on fill >= 4.5:1, lit against idle icon >= 3:1, idle icon on bar >= 3:1. WCAG formula written in the test.
-- Break on purpose (outline back on in Light, restored): 14 checks failed (Light, Auto-light, toolbar and gear, hover); my first ring probe missed the toolbar outline (it sits ON the edge pixel), so I fixed the probe and ran the break again.
-- Theme list at 880x560, 1280x800, 2560x1369: touches no top-bar icon, starts below the top bar, inside the window. Scrollbar: width idle, hover, drag (3 frames) all 12.00 px. End: one press, frames 20 / 30 / 45 after it, offset == max exactly at 3 sizes; Home exactly 0.
-- ui5q_picker at 880x560, 1280x800, 2560x1369: closed against open, outside the picker, chip and info text: 0 pixels differ; atom centre, free rect, toolbar identical; picker clear of scale bar, card (or card left out), toolbar, fact line; picker above cards, Controls, toolbar; Escape closes it; the wheel zooms like the baseline afterwards. Before the fix: 15 of 41 failed. Break on purpose (picker an occluder again, free rect not kept; then restored): 12 failed (12,901 differing pixels at 1280x800, 34,572 at 2560x1369, atom centre and toolbar moved at all three sizes). That proof was made before I put back the picker's sideways step; the test and the logic it checks did not change.
-- ui5q_sliders: 11 themes x Orbit and Atom (1920x1080): fill and knob colour spread <= 30 of 255, fill still shows against the empty track. Before: 64 of 121 failed. Looked at Light, Sage, Midnight, Contrast: grey.
-- ui5l_popups with inset 4: 28 checks, 0 failed. Break on purpose (the dropdown's rounded solid fill drawn with a 2.5 x larger radius, restored): 4 failed (show-through pixels at the corners), so inset 4 still catches a missing corner fill.
-- Looked at: all 11 themes before and after (lit toolbar + gear), the theme list at 1280x800, sliders in 4 themes, two shell pictures.
-- Full suite `ctest` once on the final code (4 cores, 28 min): 68 tests, 65 passed, 3 failed, each fixed and re-run alone: `shell_ui` (MY fault: the new slider rectangles were logged for sliders scrolled out of the panel; now only while visible; passed), `orbit_ui_coverage` (MY fault: the new popup scroll-in treated the top-bar Stop button as "scrolled out of the popup" and waited for ever; now only for controls drawn inside the popup; passed), `shell_pictures` (expected, see above; passed). An earlier full run was stopped after 2 failures of mine (`atom_chip`, `cards_atom`: the picker had stopped stepping aside, so the card disappeared and the famous list was below the fold); fixed as described, both pass. After the last code edit I re-ran `atom_chip`, `ui5q_picker`, `orbit_ui_coverage`, `shell_ui`, `shell_pictures` alone; the other 63 passed on the build before two logging / test-helper edits.
-- `ui5l_popups` passed in the full run (the earlier single failing pixel is gone with inset 4).
+## Shape::Pill panel calls (shell.cpp)
+- line ~580: collapsed card chips (the "Protactinium-231" chip is one of these; same beginPanel path, same cause as the toolbar, no different cause found)
+- line ~735: the bottom toolbar (`##shellTool`)
+- line ~784: the chart tilt pill (`##shellTilt`, "flat ... 3D")
+- Other panels (Controls panel, cards): shine gradient left as is, not looked at.
+
+## Tested (cloud, Linux, software OpenGL)
+- `check.sh quick` 10/10; ui5r_pill; ui5q, ui5l, atom_chip, shell_pictures passed (24 guard hashes re-written after looking at the Orbit 2D/3D pill in Dark; every picture with a pill changed on purpose).
+- Looked at crops (4x): toolbar in Sage and Light, tilt pill in Dark: flat, no rectangle, no outline.
 
 ## NOT tested
-Windows behaviour, real mouse, real GPU, speed, 125 / 150 % scale as a picture. The picker at 125 / 150 % scale as a picture (the 42 pt rule is in points x dpi, checked only at 100 %).
+- Windows, a real GPU, a real mouse, speed.
+- The chip picture itself was not rendered (only shares the code path); the full suite was not run (new rules).
