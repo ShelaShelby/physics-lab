@@ -63,17 +63,35 @@ ImU32 cText(float a) { return colOf(g_f.c->fg, a); }
 ImU32 cMuted(float a) { return colOf(g_f.c->muted, a); }
 ImU32 cAccent(float a) { return colOf(g_f.c->accent, a); }
 ImU32 cFill(float a) { return colOf(g_f.c->accentFill, a); }
-// 0.15 stage 5p (M1): a LIT toolbar / top-bar button is no longer the light pill: it is a subtle dark fill a little lighter than the bar (the card colour moved 14 % towards the text colour: 53 against the
-// bar's 23 of 255), the icon full white, no outline, no glow. The idle icon is the muted colour moved 15 % towards the card, so lit against idle is above 3:1 (white 1.00 against 0.24 relative luminance: 3.6;
-// the plain muted colour #9a9aa3 would give only 2.8). Not used for the Controls panel's segmented buttons and the Settings tiles: they keep the chosen light pill.
-static constexpr float kLitMix = 0.14f, kIdleMix = 0.15f;
+// 0.15 stage 5p (M1), widened to EVERY theme in 5q: a LIT toolbar / top-bar button (and the open chip) is a subtle fill a little away from the bar (the card colour moved 14 % towards the text
+// colour: in a dark theme a little lighter, in a light theme a little darker), the icon at full strength (white on a dark theme, the theme's text colour on a light one), no outline, no glow.
+// Nothing here is per theme: all of it comes from the theme tokens (card, text, muted). The idle icon is the muted colour moved towards the card until it is at least 3.3:1 under the lit icon
+// (WCAG relative luminance), so lit against idle is above 3:1 without colour; the plain muted colour of Dark (#9a9aa3) gives only 2.8. Not used for the Controls panel's segmented buttons and the
+// Settings tiles: they keep the chosen light pill. The hover and press of a toolbar / top-bar button are the face moved towards the TEXT colour in every theme (never the accent: the owner's "no blue").
+static constexpr float kLitMix = 0.14f, kIdleMix = 0.15f, kIdleVsLit = 3.3f;
+static float relLum(const Rgb& c) {
+    const auto lin = [](float v) { return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f); };
+    return 0.2126f * lin(c.r) + 0.7152f * lin(c.g) + 0.0722f * lin(c.b);
+}
+static float wcag(const Rgb& a, const Rgb& b) { const float la = relLum(a), lb = relLum(b); return (std::max(la, lb) + 0.05f) / (std::min(la, lb) + 0.05f); }
+static Rgb litIconRgb() { return relLum(g_f.c->card) < 0.18f ? Rgb{1, 1, 1} : g_f.c->fg; }          // a dark theme: white; a light theme: its own text colour
 static ImU32 cLitFill() { return colOf(app::mixRgb(g_f.c->card, g_f.c->fg, kLitMix)); }
-static ImU32 cIdleIcon() { return colOf(app::mixRgb(g_f.c->muted, g_f.c->card, kIdleMix)); }
+static ImU32 cLitIcon() { return colOf(litIconRgb()); }
+static Rgb idleIconRgb() {
+    const Rgb lit = litIconRgb();
+    Rgb c = app::mixRgb(g_f.c->muted, g_f.c->card, kIdleMix);
+    for (int i = 0; i < 12 && wcag(c, lit) < kIdleVsLit; i++) c = app::mixRgb(c, g_f.c->card, 0.08f);
+    return c;
+}
+static ImU32 cIdleIcon() { return colOf(idleIconRgb()); }
 ImU32 cOnFill() { return colOf(app::shell::onAccent(*g_f.c)); }
 static Rgb faceRgb() { const app::ThemeColors& c = *g_f.c; return c.style.button.set ? c.button : app::mixRgb(c.card, c.fg, g_lo ? g_lo->faceMix : 0.10f); }
 ImU32 cFace(float a) { return colOf(faceRgb(), a); }
 // 5m part 2: in M1 a hovered / pressed face is the face moved towards the TEXT colour (a light grey, never blue: the owner's "no blue"); the other themes keep their accent tint
 static const app::Rgb& tintOf() { return g_lo ? g_f.c->fg : g_f.c->accent; }
+ImU32 cIconHover() { return colOf(app::mixRgb(faceRgb(), g_f.c->fg, g_lo ? g_lo->hoverMix : 0.18f)); }       // 5q: toolbar / top-bar buttons: towards the text colour in every theme
+ImU32 cIconPress() { return colOf(app::mixRgb(faceRgb(), g_f.c->fg, g_lo ? g_lo->pressMix : 0.30f)); }
+ImU32 cLitFillPub() { return cLitFill(); }
 ImU32 cFaceHover() { return colOf(app::mixRgb(faceRgb(), tintOf(), g_lo ? g_lo->hoverMix : 0.18f)); }
 ImU32 cFacePress() { return colOf(app::mixRgb(faceRgb(), tintOf(), g_lo ? g_lo->pressMix : 0.30f)); }
 ImU32 cEdge() { return g_f.outline ? colOf(g_f.c->fg) : colOf(g_f.c->fg, g_lo ? g_lo->edgeAlpha : app::shell::kEdgeAlpha); }
@@ -398,12 +416,11 @@ bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* 
     const Hit h = hit(id, pos, size);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 q(pos.x + size.x, pos.y + size.y);
-    const bool pill = on && g_lo && caretW <= 0;                                // 5m part 2 (M1), changed in 5p: a lit toolbar / top-bar button is a dark fill with a white icon (see cLitFill)
+    const bool pill = on;                                                       // 5q: every theme: a lit button is a subtle fill with a full-strength icon (see cLitFill); a panel button's caret is drawn muted on it
     if (pill) dl->AddRectFilled(pos, q, cLitFill(), rc());
-    else if (on) dl->AddRectFilled(pos, q, cFacePress(), rc());
-    else if (h.hovered) hoverFill(id, dl, pos, q, pos, q, cFaceHover(), rc());
-    if (g_f.outline) dl->AddRect(pos, q, cEdge(), rc(), 0, 1.0f);
-    drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), pill ? IM_COL32(255, 255, 255, 255) : g_lo && !h.hovered && !on ? cIdleIcon() : cText());   // (stage 5j looks: muted, bright on hover)
+    else if (h.hovered) hoverFill(id, dl, pos, q, pos, q, cIconHover(), rc());
+    if (g_f.outline && !pill) dl->AddRect(pos, q, cEdge(), rc(), 0, 1.0f);      // (Monochrome / High contrast draw a box round every plain button; the lit one has none: its fill says it)
+    drawIcon(dl, icon, ImVec2(pos.x + (size.x - caretW) / 2, pos.y + size.y / 2), static_cast<float>(app::shell::unitPx(20, g_f.dpi, g_f.tf)), pill ? cLitIcon() : !h.hovered ? cIdleIcon() : cText());   // (stage 5j looks: muted, bright on hover; 5q: in every theme)
     if (caretW > 0) drawIcon(dl, on ? Icon::CaretUp : Icon::Caret, ImVec2(pos.x + size.x - caretW / 2 - g_f.m.s4 * 0.5f, pos.y + size.y / 2), caretW * 0.75f, cMuted());
     if (h.hovered && tip && *tip) ui::SetTooltip("%s", tip);
     return h.clicked;
@@ -423,7 +440,7 @@ bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, boo
 }
 
 bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names, bool bar) {
-    const bool lit = bar && g_lo;                                             // 5p: the bottom toolbar's 2D / 3D segment is a toolbar button: it is lit like the others
+    const bool lit = bar;                                                      // 5p (5q: every theme): the bottom toolbar's 2D / 3D segment is a toolbar button: it is lit like the others
     const float rowH = static_cast<float>(g_f.m.row);
     const Hit h = hit(id, pos, ImVec2(w, rowH));
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -450,7 +467,7 @@ bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::strin
         if (on) dl->AddRectFilled(ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), lit ? cLitFill() : cFill(), std::max(0.0f, rc() - 1));
         else if (h.hovered && ImGui::GetIO().MousePos.x >= a.x && ImGui::GetIO().MousePos.x < b.x) hoverFill(id, dl, pos, ImVec2(pos.x + w, pos.y + rowH), ImVec2(a.x + 2, a.y + 2), ImVec2(b.x - 2, b.y - 2), cFaceHover(), std::max(0.0f, rc() - 1));
         const float tw = width(Type::Body, false, labels[i]);
-        text(dl, Type::Body, false, ImVec2(a.x + (b.x - a.x - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? (lit ? IM_COL32(255, 255, 255, 255) : cOnFill()) : (lit ? cIdleIcon() : cText()), labels[i]);
+        text(dl, Type::Body, false, ImVec2(a.x + (b.x - a.x - tw) / 2, pos.y + (rowH - px(Type::Body)) / 2), on ? (lit ? cLitIcon() : cOnFill()) : (lit ? cIdleIcon() : cText()), labels[i]);
     }
     return changed;
 }

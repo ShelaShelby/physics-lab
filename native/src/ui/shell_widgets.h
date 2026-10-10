@@ -34,6 +34,9 @@ ImU32 cOnFill();                 // text on it (4.5:1 in every theme)
 ImU32 cFace(float a = 1);        // a control's face on a panel
 ImU32 cFaceHover();
 ImU32 cFacePress();
+ImU32 cIconHover();      // 5q: hover / press of a toolbar or top-bar button, and the lit fill (all themes: towards the text colour, never the accent)
+ImU32 cIconPress();
+ImU32 cLitFillPub();
 ImU32 cEdge();                   // the 1 px edge of panels and (outline mode) controls
 ImU32 cHair();                   // a divider between list rows
 ImU32 cPanel();                  // the glass fill (the card colour at the glass opacity)

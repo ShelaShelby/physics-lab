@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.15", "Full UI rework, stage 5q part 1: lit buttons in every theme, theme list, About scrollbar, End key",
+     "The button that is switched on in the bottom toolbars and in the top bar looked light blue, pink, green or brown in every theme except Dark. Now it is the same quiet look everywhere: a fill a little different from the bar, a strong icon (white on dark themes, the text colour on light ones), no outline and no glow; icons that are off are dimmer so the difference also shows without colour. The hover colour of those buttons is grey in every theme, not tinted with the accent. In Contrast and Monochrome the switched-on button no longer has a box edge. "
+     "The theme list under the palette button now opens below the top bar instead of covering its icons. The scrollbar of About, Learn and the other pages keeps its 12 px width when you point at it or drag it (it used to grow). Pressing End on a page now goes all the way to the bottom in one press (the page grows a little while its bottom is first drawn, so it stopped about 1 % short). "
+     "Not tested: Windows, a real mouse, a real graphics card, speed."},
     {"0.15", "Full UI rework, stage 5p: wheel after About, About scrollbar, zoom out further, lit buttons, Element picker",
      "Fixed: after you opened About (or History, or the log) and closed it again, the mouse wheel no longer zoomed the Orbit Lab or the Atom Lab until you restarted the app. The app kept thinking a page was still open. "
      "The scrollbar of About, Learn and the other pages is now 12 px wide with a faint track, and still drags; the wheel, PageUp, PageDown, Home and End already scrolled them. In the Atom Lab you can now zoom out twice as far in every view (Atom, Nucleus, Nucleon, Cloud, Cloud 3D, Slice and the Chart of nuclides): the picture can be half its old smallest size. "

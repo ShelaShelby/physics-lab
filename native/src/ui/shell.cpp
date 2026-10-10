@@ -943,8 +943,8 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 const bool hit = chip.opens && ImGui::InvisibleButton("top.chip", ImVec2(static_cast<float>(c.w), static_cast<float>(c.h)));
                 if (chip.opens) noteItem("top.chip");
                 const bool hov = chip.opens && ImGui::IsItemHovered();
-                bar.dl->AddRectFilled(a, b, open ? sh::cFacePress() : hov ? sh::cFaceHover() : sh::cFace(), static_cast<float>(c.h) / 2);
-                if (sh::F().outline) bar.dl->AddRect(a, b, sh::cEdge(), static_cast<float>(c.h) / 2, 0, 1.0f);
+                bar.dl->AddRectFilled(a, b, open ? sh::cLitFillPub() : hov ? sh::cIconHover() : sh::cFace(), static_cast<float>(c.h) / 2);
+                if (sh::F().outline && !open) bar.dl->AddRect(a, b, sh::cEdge(), static_cast<float>(c.h) / 2, 0, 1.0f);
                 const float ty = a.y + (static_cast<float>(c.h) - sh::px(Type::Title) - sh::px(Type::Caption)) / 2;
                 const float tx = a.x + m.s16 + (chip.play ? static_cast<float>(m.control + m.s4) : 0.0f);
                 sh::text(bar.dl, Type::Title, true, ImVec2(tx, ty), sh::cText(), chip.title);
@@ -990,7 +990,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (themeClick && eatThemeClick) themeClick = false;
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) eatThemeClick = false;
             if (themeClick || S.openThemes) { ImGui::OpenPopup("##themes"); S.openThemes = false; }
-            themePicker(app);
+            { const ImVec2 hang(themeBx + static_cast<float>(ib), static_cast<float>(m.topBar) + static_cast<float>(m.s4)); themePicker(app, &hang); }   // 5q: below the top bar
             (void)themeX;
             if (icon("top.ach", Icon::Trophy, "Achievements", app.pane == 2)) app.pane = app.pane == 2 ? 0 : 2;
             if (icon("top.learn", Icon::Book, "Learn", app.pane == 1)) app.pane = app.pane == 1 ? 0 : 1;

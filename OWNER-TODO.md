@@ -2,6 +2,10 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.15 stage 5q part 1: what only you can do
+- [ ] Lit buttons in EVERY theme (Light, Paper, Sage, Solar, Midnight, Black, Contrast, Monochrome): toolbar and top-bar buttons that are on: quiet fill, strong icon, no outline or glow. Can you still see which one is on? In Contrast and Monochrome the lit button has no box edge: keep that?
+- [ ] Theme list under the top bar (no top-bar icon covered); About scrollbar stays 12 px when you point at it or drag it; End goes to the very bottom in one press.
+
 ## 0.15 stage 5p (six PC findings): what only you can do
 - [ ] Wheel after About: Atom Lab and Orbit Lab: open About, close it, turn the wheel over the picture: it must zoom. Same after History and the log. (Cloud test passed; your PC is the real test.)
 - [ ] About scroll: wheel, PageUp / PageDown / Home / End scroll it; the scrollbar is 12 px wide with a faint track and you can drag it. Pressing End once stops about 1 % above the bottom (the page grows while its bottom is first drawn); End again reaches it.

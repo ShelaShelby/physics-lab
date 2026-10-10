@@ -38,6 +38,7 @@ struct Reading {
     int tocPress = -1;                // 5k: the Contents row a press began in (found by its place, not by Dear ImGui's hover)
     float prevY = 0; bool prevValid = false;   // 5k: the page's scroll at the end of the last frame (what the app-level fallback compares with)
     float grab = 0;                   // 5k: where in the scrollbar's thumb it was grabbed
+    int endAim = 0;                   // 5q: frames left in which the page keeps aiming at its bottom after End (the page grows a little while its bottom lines are first drawn and measured)
     std::string title;
     float bodyFont = 0;
     int longest = 0, longestCaption = 0;   // the most characters on one line of the Body text, and of the Caption text, this frame
@@ -97,8 +98,11 @@ void readingFrameEnd() {
             if (ImGui::IsKeyPressed(ImGuiKey_PageUp)) to -= h * 0.9f;
             if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) to += fs * 2.5f;
             if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) to -= fs * 2.5f;
-            if (ImGui::IsKeyPressed(ImGuiKey_Home, false)) to = 0;
-            if (ImGui::IsKeyPressed(ImGuiKey_End, false)) to = mx;
+            if (ImGui::IsKeyPressed(ImGuiKey_Home, false)) { to = 0; g.endAim = 0; }
+            if (ImGui::IsKeyPressed(ImGuiKey_End, false)) { to = mx; g.endAim = 24; }
+            else if (g.endAim > 0) {                                           // 5q: End reaches the TRUE bottom: it follows the maximum while that settles; any other scrolling lets go
+                if (userInput) g.endAim = 0; else { to = mx; g.endAim--; }
+            }
         }
     }
     to = std::max(0.0f, std::min(to, mx));
@@ -107,7 +111,7 @@ void readingFrameEnd() {
     g.prevValid = true;
 }
 
-// the scrollbar of a reading page (5p: 12 px wide at 100 %, with a faint track so it can be seen; rounded, muted; wider and brighter under the pointer; draggable; none when the page fits)
+// the scrollbar of a reading page (5p: 12 px wide at 100 %, with a faint track so it can be seen; rounded, muted; brighter under the pointer, never wider (5q); draggable; none when the page fits)
 static void readingScrollbar() {
     ImGuiWindow* w = ImGui::FindWindowByName("##reading");
     const float mx = w ? w->ScrollMax.y : 0;
@@ -130,6 +134,7 @@ static void readingScrollbar() {
         const bool hov = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem), act = ImGui::IsItemActive();
         float thumbY = ty0 + (track - thumbH) * (w->Scroll.y / mx);
         const float my = ImGui::GetIO().MousePos.y;
+        if (ImGui::IsItemActivated()) g.endAim = 0;
         if (ImGui::IsItemActivated()) g.grab = (my >= thumbY && my <= thumbY + thumbH) ? my - thumbY : thumbH / 2;
         if (act && track > thumbH) {
             const float to = std::max(0.0f, std::min(mx, (my - g.grab - ty0) / (track - thumbH) * mx));
@@ -137,7 +142,7 @@ static void readingScrollbar() {
             g.prevY = to;
             thumbY = ty0 + (track - thumbH) * (to / mx);
         }
-        const float tw = hov || act ? bw * 1.4f : bw;
+        const float tw = bw;                                                    // 5q: the width never changes (idle, hover, drag): only the colour does
         ImU32 c = sh::cMuted();
         c = (c & ~(0xFFu << IM_COL32_A_SHIFT)) | (static_cast<ImU32>(hov || act ? 235 : 150) << IM_COL32_A_SHIFT);
         const ImVec2 a(x0 + hitW - tw, thumbY), b(x0 + hitW, thumbY + thumbH);

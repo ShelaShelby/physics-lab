@@ -413,10 +413,11 @@ void themeButton(AppState& app) {
 }
 
 // The picker's list (0.15 stage 3: also drawn by the new UI's palette button, right after it)
-void themePicker(AppState& app) {
+void themePicker(AppState& app, const ImVec2* hang) {
     static const bool testOpen = SDL_getenv("PL_OPEN") && std::string(SDL_getenv("PL_OPEN")) == "themes";   // for automatic checks: open the picker (after the other windows have appeared)
     static int frames = 0;
     if (testOpen && ++frames == 12) ImGui::OpenPopup("##themes");
+    if (hang) ImGui::SetNextWindowPos(*hang, ImGuiCond_Always, ImVec2(1.0f, 0.0f));   // 5q: the new UI hangs the list under the top bar, its right edge under the palette button: it covers no top-bar icon
     if (!ImGui::BeginPopup("##themes")) return;
     panelDecor(app::PanelKind::Floating);
     constexpr int kColumns = 3;
