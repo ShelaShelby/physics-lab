@@ -2,6 +2,12 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.15 stage 5o (three layout fixes): what only you can do
+- [ ] Decide `ui5l_popups` (the one test still failing): the Labs dropdown's rounded corner is anti-aliased, so one corner pixel depends on the picture behind it; the test looks 3 px in, the corner reaches 2.93 px. Tell me: change the test to look 4 px in (my proof is in native/REPORT.md), or make the corner radius smaller.
+- [ ] On the PC, Orbit Lab in a small window (880 x 560, Controls open, Earth picked): the subject card now ends above the readout and scrolls (mouse wheel) to "All values". Is that what you want?
+- [ ] On the PC, Atom Lab (Controls open, 1280 x 800): a long fact is whole, on the row above the toolbar, and the scale bar sits above it.
+- [ ] On the PC: the Labs dropdown (top bar): the lower corners and edge look clean over the picture.
+
 ## 0.15 stage 5m part 2 + 5n (look, windows, tilt slider): what only you can do
 - [ ] On the PC (when the Windows exe is published): New UI On, Dark theme. Handle on the picture's right edge: bigger (32 x 72), slides smoothly (with Motion reduced it jumps). Is the size and the slide right?
 - [ ] Legend and the element chip / periodic table: grey hover, no blue; the chosen element has a light ring. The toolbar: a lit button is a light-grey pill. Is the toolbar pill flat enough?

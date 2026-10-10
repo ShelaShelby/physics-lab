@@ -93,9 +93,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $ver = (Select-String -Path native/CMakeLists.txt -Pattern 'project\(PhysicsLabNative VERSION ([0-9.]+)').Matches[0].Groups[1].Value
+          $appVer = (Select-String -Path native/CMakeLists.txt -Pattern 'project\(PhysicsLabNative VERSION ([0-9.]+)').Matches[0].Groups[1].Value
+          # The release title names the project's CURRENT version (RESUME.md, ROADMAP.md: 0.15). The app's own label (CMake VERSION, still 0.14) is left alone on purpose: it is drawn into the old
+          # UI's header and so into every saved picture hash; see native/REPORT.md (0.15 stage 5o). Change this line at each new version.
+          $ver = '0.15'
           $stage = (Select-String -Path native/src/ui/changelog.cpp -Pattern 'kStage = "([^"]*)"').Matches[0].Groups[1].Value
-          if (-not $ver) { throw "No version found in native/CMakeLists.txt" }
+          if (-not $appVer) { throw "No version found in native/CMakeLists.txt" }
           $label = if ($stage) { "$ver $stage" } else { $ver }
           Compress-Archive -Path out/* -DestinationPath PhysicsLab-windows-x64.zip -Force
           gh release delete latest --yes --cleanup-tag -R $env:GITHUB_REPOSITORY

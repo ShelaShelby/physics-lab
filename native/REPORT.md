@@ -1,4 +1,4 @@
-# Native Physics Lab 0.15 stage 5o, part 1: the four old test failures
+# Native Physics Lab 0.15 stage 5o: the four old test failures (parts 1 and 2)
 
 Fixes only, no new features, no physics or value changed, `index.html` untouched. All four failed on the commit before 5n too (5n report); each was run alone first and the output kept.
 
@@ -11,11 +11,14 @@ Fixes only, no new features, no physics or value changed, `index.html` untouched
 ## C `ui5l_popups` NOT fixed: the test is wrong, left failing
 Test: at 1280x800 Orbit Lab, nothing inside the Labs dropdown, inset 3 px from its rectangle, may depend on what is behind it. Truth: 1 pixel, (93,164), differs (RGB 19,20,25 vs 35,37,44), and it lies on the panel's rounded-corner edge, not on the fill (fill is (23,23,26) in both pictures). The panel radius is 10 u; its pixel centre is 9.48 px from the arc centre (edge ring 9..10), so it is the anti-aliased rim, which blends with the page by construction. A radius-10 corner leaves the 3 px inset square at R(1-1/sqrt2)=2.93 px, so the test's inset is under 1 px too small. With inset 4 or 5, 0 pixels differ (scratch script, repo test untouched). It only fails where the page behind happens to differ at that corner. I did not shrink the corner radius or change the test: owner decides (a test inset of 4 would fit).
 
+- Part 2: README line 4 now says 0.15 alpha (the project's version: RESUME, ROADMAP, changelog entries). The "latest" release title now says 0.15: the Windows workflow has `$ver = '0.15'` (was read from CMake). I did NOT change the app's own label (CMake `VERSION 0.14`, window title, About, "v0.14 alpha · history" chip): I tried, and it is drawn into the old UI's header, so every saved old-UI picture hash (`theme_pictures`, all pictures) changed. That needs its own decision; app and release now differ (0.14 vs 0.15) until then. A first full-suite run on that tree was stopped and thrown away; the one real run is below.
+- Docs: ROADMAP (5o done, next stage 6, 7, 0.16 list), RESUME, OWNER-TODO (4 items), changelog.cpp (one entry for A, B, C-free fixes).
+
 ## Tested (cloud, Linux, Mesa llvmpipe)
 - Before and after, each alone: cards_orbit failed -> passed; ui5g_atomtext failed -> passed; shell_ui failed -> passed (readmax 80 -> 75); ui5l_popups failed -> still fails (see C).
 - Break on purpose (fixes undone, one rebuild): cards_orbit failed again (card 56..445 vs readout 412); ui5g_atomtext failed again (3 checks, the cut "…hotter than the…"); shell_ui `reading` part failed again (readmax 80). Restored (diff identical), rebuilt.
 - Also run alone and passed: atom_panel, cards_atom, ui5h_cards, ui5h_fit; shell_pictures failed only on the 4 About pictures (updated after looking). `app_tests` 202,232 checks, 0 failed; `check.sh quick` once.
-- The full suite is NOT run in part 1 (it runs once in part 2).
+- Full suite once, on the final tree (`check.sh full`, 4 cores): 57 tests, 56 passed, 1 failed, 0 skipped. The one failure is `ui5l_popups` (C above). Nothing else failed.
 
 ## NOT tested
-Windows behaviour, real mouse, real GPU, speed, 125 / 150 % scale. The Windows run on GitHub and the "latest" release for this push: see the end of the part 2 report.
+Windows behaviour, real mouse, real GPU, speed, 125 / 150 % scale. The Windows run and release of the final push are in my last message.
