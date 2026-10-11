@@ -116,7 +116,7 @@ vec3 phaseRgb(float arg, bool lightPage) {
 void main() {
     float kind = aPosKind.w;
     vec4 c0 = aC0;
-    if (kind > 4.5) {                                         // kind 5 / 6: a square / a soft dot whose colour is picked here from its group; the rest of the shaders see kind 2 / 4
+    if (kind > 4.5 && kind < 6.5) {                           // kind 5 / 6: a square / a soft dot whose colour is picked here from its group; the rest of the shaders see kind 2 / 4
         int g = int(aFocal.x + 0.5);
         vec3 rgb = uPalWheel != 0 ? phaseRgb(2.0 * 3.14159265358979323846 * float(g) / 24.0, uPalLight != 0) : (g == 0 ? uPalPlus.rgb : uPalMinus.rgb);
         c0 = vec4(rgb, aC0.a);
@@ -142,6 +142,16 @@ out vec4 fragColor;
 void main() {
     int kind = int(vPosKind.w + 0.5);
     if (kind == 2) { fragColor = vC0; return; }
+    if (kind == 7) {                                         // a ring (0.16 stage 5): a hard-edged band, half width vFocal.z round the circle of radius vFocal.x (units of r), as Renderer2D::ring's line pieces
+        if (abs(length(vLocal) - vFocal.x) > vFocal.z) discard;
+        fragColor = vC0; return;
+    }
+    if (kind == 8) {                                         // a line (0.16 stage 5): from -vFocal.xy to +vFocal.xy, half width vFocal.z, hard-edged and without caps, as Renderer2D::line
+        vec2 a = vFocal.xy;
+        float L2 = max(dot(a, a), 1e-12);
+        if (abs(dot(vLocal, a)) > L2 || abs(vLocal.x * a.y - vLocal.y * a.x) > vFocal.z * sqrt(L2)) discard;
+        fragColor = vC0; return;
+    }
     float d = length(vLocal);
     float aa = max(fwidth(d), 1e-4);
     float edge = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, d);

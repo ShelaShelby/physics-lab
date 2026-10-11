@@ -8,6 +8,7 @@
 #include "radii.h"
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <functional>
 #include <memory>
@@ -67,6 +68,20 @@ Blob grad3(double x, double y, double r, Color c0, double s1, Color c1, Color c2
     return b;
 }
 Blob flat(double x, double y, double r, Color c) { Blob b{}; b.x = float(x); b.y = float(y); b.r = float(r); b.kind = 3; b.c0 = c; return b; }
+// 0.16 stage 5: a ring and a line as blobs (shader kinds 7 and 8), so they go into the same batch as the dots round them instead of breaking it.
+// The same shape as Renderer2D::ring / line: a hard-edged band (no smooth edge), at least 1 point wide (thinner: the alpha is lowered instead).
+Blob ringBlob(double x, double y, double r, double wd, Color c) {
+    if (wd < 1) { c.a *= float(wd); wd = 1; }
+    const double R = r + wd / 2 + 1;
+    Blob b{}; b.x = float(x); b.y = float(y); b.r = float(R); b.kind = 7; b.fx = float(r / R); b.f0 = float(wd / 2 / R); b.c0 = c; return b;
+}
+bool lineBlob(double x0, double y0, double x1, double y1, double wd, Color c, Blob& b) {   // false: too short to draw (as Renderer2D::line)
+    if (std::hypot(x1 - x0, y1 - y0) < 1e-9) return false;
+    if (wd < 1) { c.a *= float(wd); wd = 1; }
+    const double hx = (x1 - x0) / 2, hy = (y1 - y0) / 2, R = std::max(std::fabs(hx), std::fabs(hy)) + wd / 2;
+    b = Blob{}; b.x = float(x0 + hx); b.y = float(y0 + hy); b.r = float(R); b.kind = 8; b.fx = float(hx / R); b.fy = float(hy / R); b.f0 = float(wd / 2 / R); b.c0 = c;
+    return true;
+}
 Blob soft(double x, double y, double r, Color c) { Blob b{}; b.x = float(x); b.y = float(y); b.r = float(r); b.kind = 4; b.c0 = c; return b; }
 Blob square(double x, double y, double half, Color c) { Blob b{}; b.x = float(x); b.y = float(y); b.r = float(half); b.kind = 2; b.c0 = c; return b; }
 
@@ -142,6 +157,22 @@ std::vector<std::string> wrap(const Text& T, const std::string& text, double max
 
 // a deterministic "random" number from a seed (the web's rnd), for the flickering quark details
 double rnd(double a) { const double x = std::sin(a * 127.1 + 311.7) * 43758.5453; return x - std::floor(x); }
+// 0.16 stage 5: the random numbers of sea pair j in its cycle cyc depend on nothing else (not the nucleon, not the camera), so they are worked out once and kept.
+// The values are the very same doubles as before (the same calls in the same order); only the repeats are gone.
+struct SeaRnd { double cyc = -1e300, rr, sth, cth, saz, caz, sdth, cdth, sdaz, cdaz, c5; };
+const SeaRnd& seaRnd(int j, double cyc) {
+    static SeaRnd cache[12][64];
+    SeaRnd& e = cache[j][int(std::fmod(std::fabs(cyc), 64.0))];
+    if (e.cyc != cyc) {
+        const double sd = j * 91.7 + cyc * 13.13;
+        const double th = std::acos(1 - 2 * rnd(sd + 1)), az = 2 * kPi * rnd(sd + 2), dth = std::acos(1 - 2 * rnd(sd + 3)), daz = 2 * kPi * rnd(sd + 4);
+        e.cyc = cyc; e.rr = 0.62 * std::cbrt(rnd(sd));
+        e.sth = std::sin(th); e.cth = std::cos(th); e.saz = std::sin(az); e.caz = std::cos(az);
+        e.sdth = std::sin(dth); e.cdth = std::cos(dth); e.sdaz = std::sin(daz); e.cdaz = std::cos(daz);
+        e.c5 = rnd(sd + 5);
+    }
+    return e;
+}
 double smooth(double x) { return x * x * (3 - 2 * x); }
 const double (&kCCol)[3][3] = kColourCharge;    // colour charge: red, green, blue
 const int kSwaps[6][2] = {{0, 1}, {1, 2}, {0, 1}, {1, 2}, {0, 1}, {1, 2}};      // gluon exchanges: two quarks trade colours
@@ -272,6 +303,8 @@ void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bo
 // ---------------------------------------------------------------- the frame
 static MarksDrawn g_marks;
 const MarksDrawn& marksDrawn() { return g_marks; }
+static NucleusStats g_nst;
+const NucleusStats& nucleusStats() { return g_nst; }
 static void noteOutline(const char* kind, const Outline& O, int fo, std::size_t segs) { g_marks.outline = kind; g_marks.outlineOrb = fo; g_marks.outlineMass = O.mass; g_marks.outlineReach = O.rmax; g_marks.outlineSegs = segs; }
 
 void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy, double uiScale, AtomLab& lab, double w, double h, const app::ThemeColors& colours, double textScale) {
@@ -518,6 +551,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
 
     // the nucleus at its real size: a speck at atom scale, then protons and neutrons, then (deep zoom) quarks
     const double Rpx = nuclearRadius(p.Z, p.N) * fmPx, rn = kNucleonR * fmPx;
+    g_nst = NucleusStats();
+    const auto nucT0 = std::chrono::steady_clock::now();
     const double qa = clamp01((rn - 40) / 120);                            // 0 = solid nucleon balls, 1 = full quark view
     s.layer = Rpx < 3 ? "Atom" : rn >= 110 ? "Quarks" : (p.Z + p.N > 1 ? Rpx < 0.45 * m : rn < 40) ? "Nucleus" : "Nucleon";
     if (bohr) {                                                            // Bohr 1913: the nucleus is one small positive ball, NOT to scale
@@ -590,16 +625,16 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         // and is laid over the picture before the sharp things.
         // Draw calls keep their order. The soft layer collects the blurry things (drawn at half
         // resolution) and is laid over the picture in one go, before the sharp things.
-        std::vector<std::function<void()>> softOps;                        // what goes into the soft layer, in order
         struct Batch { std::vector<Blob> b; bool add = false; };
+        std::vector<Batch> softOps;                                        // what goes into the soft layer, in order (0.16 stage 5: blob runs only; rings and lines are blobs too)
         Batch softB, mainB;
         auto closeSoft = [&] {
             if (softB.b.empty()) return;
-            auto b = std::make_shared<Batch>(std::move(softB));
-            softOps.push_back([&R, b] { R.blobs(b->b.data(), int(b->b.size()), b->add); });
+            g_nst.blobs += long(softB.b.size()); g_nst.blobRuns++;
+            softOps.push_back(std::move(softB));
             softB = Batch();
         };
-        auto flushMain = [&] { if (!mainB.b.empty()) { R.blobs(mainB.b.data(), int(mainB.b.size()), mainB.add); mainB.b.clear(); } };
+        auto flushMain = [&] { if (!mainB.b.empty()) { g_nst.blobs += long(mainB.b.size()); g_nst.blobRuns++; R.blobs(mainB.b.data(), int(mainB.b.size()), mainB.add); mainB.b.clear(); } };
         struct Ctx { bool soft; };                                         // "a canvas": the main picture or the soft layer
         // 0.16 stage 3: a shape that lies wholly outside the picture is not made at all. The graphics card would clip it away anyway, so the picture is the same,
         // but at full zoom (x10,000,000) almost every blob, ring and line of the nucleons near the view is outside it. e: how far the shape reaches from (x, y),
@@ -614,13 +649,14 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         };
         auto lineTo = [&](const Ctx& c, double x0, double y0, double x1, double y1, double wd, Color col) {
             if (outside(x0, y0, x1, y1, std::max(wd, 1.0) / 2 + 2)) return;   // (Renderer2D::line: no caps, at least 1 point wide)
-            if (c.soft) { closeSoft(); softOps.push_back([&R, x0, y0, x1, y1, wd, col] { R.line(x0, y0, x1, y1, wd, col); }); }
-            else { flushMain(); R.line(x0, y0, x1, y1, wd, col); }
+            g_nst.lines++;
+            Blob b;
+            if (lineBlob(x0, y0, x1, y1, wd, col, b)) put(c, b);           // 0.16 stage 5: into the batch, no flush (put's own test cannot drop it: the blob reaches past the line)
         };
         auto ringTo = [&](const Ctx& c, double x, double y, double r, double wd, Color col) {
             if (outside(x, y, x, y, r + std::max(wd, 1.0) / 2 + 2)) return;    // a ring is up to 720 line pieces (Renderer2D::ring): the "+ Sea" antiquarks at full zoom made 311,076 vertices a frame
-            if (c.soft) { closeSoft(); softOps.push_back([&R, x, y, r, wd, col] { R.ring(x, y, r, wd, col); }); }
-            else { flushMain(); R.ring(x, y, r, wd, col); }
+            g_nst.ringCalls++;
+            put(c, ringBlob(x, y, r, wd, col));                             // 0.16 stage 5: one blob in the batch, not up to 720 line pieces and a flush
         };
         std::vector<std::pair<std::string, std::array<double, 4>>> letters;   // u/d letters: x, y, size, alpha (drawn as text on top)
         std::vector<Color> letterCols;
@@ -652,15 +688,16 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                         put(c, flat(o.x + (X - o.x) * u + wob, o.y + (Y - o.y) * u - 0.6 * wob, std::max(1.0, 0.012 * rn), withA(css.fg, 0.8 * A * std::sin(kPi * u))));
                     }
                 }
+            static const Color seaU = hexColor("#f0a500"), seaD = hexColor("#0e9488");
             if (p.detail == "+ Sea" && !outside(X, Y, X, Y, 0.75 * k + std::max(1.5, 0.028 * rn) + 2.6))   // virtual quark–antiquark pairs flashing in and out (all within 0.62 + 0.13 fm of the middle)
                 for (int j = 0; j < 12; j++) {
-                    const double cc = t * 0.8 + j * 0.379, cyc = std::floor(cc), ph = cc - cyc, env = std::pow(std::sin(kPi * ph), 2), sd = j * 91.7 + cyc * 13.13;
-                    const double rr = 0.62 * std::cbrt(rnd(sd)), th = std::acos(1 - 2 * rnd(sd + 1)), az = 2 * kPi * rnd(sd + 2);
+                    const double cc = t * 0.8 + j * 0.379, cyc = std::floor(cc), ph = cc - cyc, env = std::pow(std::sin(kPi * ph), 2);
+                    const SeaRnd& e = seaRnd(j, cyc);
                     double c0x, c0y, c0d, dvx, dvy, dvd;
-                    proj(rr * std::sin(th) * std::cos(az), rr * std::sin(th) * std::sin(az), rr * std::cos(th), c0x, c0y, c0d);
-                    const double dth = std::acos(1 - 2 * rnd(sd + 3)), daz = 2 * kPi * rnd(sd + 4), d = 0.05 + 0.08 * ph;
-                    proj(d * std::sin(dth) * std::cos(daz), d * std::sin(dth) * std::sin(daz), d * std::cos(dth), dvx, dvy, dvd);
-                    const Color col = withA(hexColor(rnd(sd + 5) < 0.6 ? "#f0a500" : "#0e9488"), 0.8 * env * A);
+                    proj(e.rr * e.sth * e.caz, e.rr * e.sth * e.saz, e.rr * e.cth, c0x, c0y, c0d);
+                    const double d = 0.05 + 0.08 * ph;
+                    proj(d * e.sdth * e.cdaz, d * e.sdth * e.sdaz, d * e.cdth, dvx, dvy, dvd);
+                    const Color col = withA(e.c5 < 0.6 ? seaU : seaD, 0.8 * env * A);
                     const double r = std::max(1.5, 0.028 * rn);
                     put(c, flat(X + (c0x + dvx) * k, Y - (c0y + dvy) * k, r, col));      // quark: filled
                     ringTo(c, X + (c0x - dvx) * k, Y - (c0y - dvy) * k, r, 1.2, col);   // antiquark: a ring
@@ -747,13 +784,13 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             }
             if (p.detail == "+ Sea" && !outside(X, Y, X, Y, 0.75 * k + std::max(1.5, (cine ? 0.026 : 0.02) * rn) + 3.2))   // sea pairs: a colour and its anticolour (all within 0.62 + 0.13 fm of the middle)
                 for (int j = 0; j < 12; j++) {
-                    const double cc = t * 0.8 + j * 0.379, cyc = std::floor(cc), ph = cc - cyc, env = std::pow(std::sin(kPi * ph), 2), sd = j * 91.7 + cyc * 13.13;
-                    const double rr = 0.62 * std::cbrt(rnd(sd)), th = std::acos(1 - 2 * rnd(sd + 1)), az = 2 * kPi * rnd(sd + 2);
+                    const double cc = t * 0.8 + j * 0.379, cyc = std::floor(cc), ph = cc - cyc, env = std::pow(std::sin(kPi * ph), 2);
+                    const SeaRnd& e = seaRnd(j, cyc);
                     double c0x, c0y, c0d, dvx, dvy, dvd;
-                    proj(rr * std::sin(th) * std::cos(az), rr * std::sin(th) * std::sin(az), rr * std::cos(th), c0x, c0y, c0d);
-                    const double dth = std::acos(1 - 2 * rnd(sd + 3)), daz = 2 * kPi * rnd(sd + 4), d = 0.05 + 0.08 * ph;
-                    proj(d * std::sin(dth) * std::cos(daz), d * std::sin(dth) * std::sin(daz), d * std::cos(dth), dvx, dvy, dvd);
-                    const double* col0 = kCCol[int(std::floor(rnd(sd + 5) * 3))];
+                    proj(e.rr * e.sth * e.caz, e.rr * e.sth * e.saz, e.rr * e.cth, c0x, c0y, c0d);
+                    const double d = 0.05 + 0.08 * ph;
+                    proj(d * e.sdth * e.cdaz, d * e.sdth * e.sdaz, d * e.cdth, dvx, dvy, dvd);
+                    const double* col0 = kCCol[int(std::floor(e.c5 * 3))];
                     const double anti0[3] = {255 - col0[0], 255 - col0[1], 255 - col0[2]};
                     double col[3], anti[3];
                     lightQuark(col0, col); lightQuark(anti0, anti);
@@ -820,7 +857,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             flushMain();
             closeSoft();
             R.beginSoftLayer(0.5f);
-            for (const auto& op : softOps) op();
+            for (const Batch& b : softOps) R.blobs(b.b.data(), int(b.b.size()), b.add);
             R.endSoftLayer();
             for (const Sharp& sh : sharp) {
                 const double fg = fogOf(sh.it->dep);
@@ -836,6 +873,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             T.draw(letters[i].first, L[0], L[1], L[2], withA(letterCols[i], L[3]), 0.5);
         }
     }
+    g_nst.cpuMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - nucT0).count();
     if (s.layer == "Quarks" && qa >= 0.5) {                               // mass budget: the quarks' own masses are only about 1% of a nucleon's
         const double bw = std::min(230.0, 0.5 * w), bx = w - 12 - bw, by = h - 62;
         T.draw("mass of a proton: about 1% quark masses, 99% strong-force energy", w - 12, by - 6, 11, css.muted, 1, &css.card);

@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.16", "Atom Lab: the nucleus with sea quarks draws in far fewer steps",
+     "With \"+ Sea\" each antiquark ring used to be drawn as 24 or more separate line pieces and broke the graphics card's batch; the Classic quark style's flux tubes did the same. "
+     "Both are now drawn in the same batch as the dots round them: darmstadtium-281 with \"+ Sea\" in Accurate, turning, went from 449 draw calls and 33,323 corners a frame to 5 and 30. "
+     "This was also why light themes were slower than dark ones with Cinematic quarks: on a light theme the rings took the slow way. The picture is the same (only the edge pixels of the rings differ slightly). "
+     "Not measured: speed on a real graphics card (the cloud has none)."},
     {"0.16", "Benchmark: 11 scenes instead of 34, about 2 minutes",
      "The Benchmark now runs 11 scenes of 10 seconds each (about 2 minutes instead of about 6): the heaviest Orbit Lab view, 8 times the rocks, the oganesson-294 nucleus, the nucleus at full zoom with the camera moving, one nucleon, "
      "phase colours with 48,000 dots, a cloud jump in flight, a superposition that beats, an outline's first use, the outline with the cut dragged, and the chart with the decay chain. "

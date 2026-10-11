@@ -36,6 +36,7 @@
 #include "ui/app_pages.h"
 #include "ui/app_tabs.h"
 #include "atom/outline.h"
+#include "atom/atom_view.h"
 #include "ui/atom_learn.h"
 #include "ui/power.h"
 #include "app/display_scale.h"
@@ -295,9 +296,11 @@ int main(int, char**) {
     const bool fakeResize = SDL_getenv("PL_FAKE_MODAL_RESIZE") != nullptr;
     // One frame. live: drawn from the event watch while the window system holds the loop (no events are read then).
     int atomDoCount = 0;
+    const double atomSpin = SDL_getenv("PL_ATOM_SPIN") ? std::atof(SDL_getenv("PL_ATOM_SPIN")) : 0;
     const auto runFrame = [&](bool isLive) {
         app.liveFrame = isLive;
         if (atomDoFrame > 0 && ++atomDoCount == atomDoFrame) doAtom();
+        if (atomSpin != 0) app.atom.s.oyaw += atomSpin;   // PL_ATOM_SPIN=0.15: the camera turns every frame as a fast drag does (0.16 stage 5, automatic checks)
         int winW = 0, winH = 0, fbW = 0, fbH = 0;
         float canvasWinW = 1, headerH = 0, pictureWinH = 1;
         const auto measure = [&] {                      // the window as it is now (it can change while the window system has the loop)
@@ -511,7 +514,9 @@ int main(int, char**) {
         renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
-        if (drawStat) std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices());
+        if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
+                        std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
+                                    ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         ui::benchmarkGpuEnd(app);
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included

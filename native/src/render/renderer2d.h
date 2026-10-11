@@ -69,6 +69,7 @@ public:
         float x, y, r;
         float kind;          // 0 gradient disc, 1 fuzzy nucleon profile (colour c0), 2 square of side 2r (c0), 3 flat disc (c0), 4 soft Gaussian dot (c0; fades to 0 at r),
                              // 5 and 6: a square (like 2) or a soft dot (like 4) whose colour the SHADER picks from the group index in fx and the palette of blobsPalette(); only c0.a is used
+                             // 7 a ring (c0): hard-edged band of half width f0 round the circle of radius fx (both in units of r); 8 a line (c0) from -(fx, fy) to +(fx, fy) (units of r), half width f0, no caps (0.16 stage 5)
         float fx, fy, f0, s1;
         Color c0, c1, c2;
     };

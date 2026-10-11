@@ -40,6 +40,9 @@ struct MarksDrawn {
     int chainNodes = -1, chainEdges = -1;  // the decay chain drawn on the chart (-1: none)
 };
 const MarksDrawn& marksDrawn();
+// 0.16 stage 5: what the nucleus part of the last frame cost, in counts and CPU time (for automatic checks and PL_DRAWSTAT; not GPU time)
+struct NucleusStats { long blobs = 0, lines = 0, ringCalls = 0, blobRuns = 0; double cpuMs = 0; };
+const NucleusStats& nucleusStats();
 
 class AtomView {
 public:
