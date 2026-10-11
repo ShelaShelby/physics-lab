@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.16", "Atom Lab: the Accurate quark style is closer to what is measured",
+     "Only the Accurate quark style changes its look; Classic and Cinematic look as before, except that Classic's sea now has more down than up pairs. "
+     "In Accurate each valence quark wanders on its own round the middle instead of riding a tumbling triangle; down quarks keep a little farther out than up quarks (a heuristic from Miller 2007), "
+     "and none goes past 0.6 fm. The gluon flux tubes are as wide as lattice QCD finds (radius 0.38 fm, Bissey et al. 2007, computed for heavy static quarks) and the gluon halo is wider "
+     "(rms 0.65 fm, a choice between published values that disagree). The Learn card on the proton's weight now gives the lattice-QCD split (Yang et al. 2018), the quark note says how much "
+     "bigger the dots are than a quark can be, and the Fuzzy edge text says the neutron uses the proton's profile only as a size. Sources: docs/QUARKS.md and About. Not measured: speed on a real graphics card."},
     {"0.16", "Atom Lab: the nucleus with sea quarks draws in far fewer steps",
      "With \"+ Sea\" each antiquark ring used to be drawn as 24 or more separate line pieces and broke the graphics card's batch; the Classic quark style's flux tubes did the same. "
      "Both are now drawn in the same batch as the dots round them: darmstadtium-281 with \"+ Sea\" in Accurate, turning, went from 449 draw calls and 33,323 corners a frame to 5 and 30. "

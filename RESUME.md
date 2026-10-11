@@ -1,6 +1,7 @@
 # Resume
 
 ## Current state
+- 0.16 stage 6: Accurate quarks more accurate (own wander per quark, d farther out than u, cut 0.6 fm, atom::accurateQuarks + testQuarkWander; tube 0.38 fm, halo rms 0.65 fm); Classic sea 60 % d; proton-mass card (Yang 2018), quark note, Fuzzy text; docs/QUARKS.md. Classic / Cinematic look unchanged.
 - 0.16 stage 5: nucleus view with + Sea / Classic tubes: antiquark rings and flux tubes are blobs in the batch (Ds-281 x2063 + Sea Accurate: 449 -> 5 draw calls, 33,323 -> 30 vertices); light-vs-Midnight gap was Cinematic's light-theme ring path; ui6c_ds281sea; GPU fps not tested.
 - Tools (no app change): native/tools/autoinstall (download watcher that installs each new PhysicsLab-windows-x64 zip into C:\PhysicsLab, CleanOld.ps1, Install/Uninstall); also attached to the "latest" release as PhysicsLab-AutoInstall.zip; logic tested on Linux pwsh only (native/tests/autoinstall_test.ps1), Windows behaviour untested.
 - 0.16 stage 4: the in-app Benchmark has 11 scenes (about 2 min); the 7 old-CPU twins (12 to 18) are behind the box "Compare old CPU paths"; stress and speed-risk boxes gone; texts in app/bench_scenes.cpp, tested by app_settings (scene numbers).

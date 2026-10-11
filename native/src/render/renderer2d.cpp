@@ -360,7 +360,7 @@ void Renderer2D::endSoftLayer() {
     segments_.push_back(sg);
 }
 
-// the fuzzy nucleon's profile: a proton's charge density falls off as exp(−r/r0), r0 = rms radius/√12;
+// the fuzzy nucleon's profile: a proton's charge density falls off as exp(−r/r0), r0 = rms radius/√12 (a neutron has no net charge: for it this is only a size profile);
 // seen from the side that is the column density x·K1(x), x = b/r0. Tabulated out to 1.9× the rms radius (the web's FUZZ).
 static const float* fuzzTable() {
     static float t[17];

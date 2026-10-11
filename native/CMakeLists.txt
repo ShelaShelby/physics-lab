@@ -53,6 +53,7 @@ target_compile_options(orbit_core PRIVATE ${PL_WARNINGS})
 add_library(atom_core STATIC
   src/atom/atom_core.cpp
   src/atom/atom_sim.cpp
+  src/atom/quark_wander.cpp
   src/atom/atom_learn.cpp
   src/atom/atom_tools.cpp
   src/atom/atom_bench.cpp

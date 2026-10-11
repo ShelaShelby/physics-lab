@@ -5,6 +5,7 @@
 #include "outline.h"
 #include "phase_wheel.h"
 #include "quark_light.h"
+#include "quark_wander.h"
 #include "radii.h"
 
 #include <algorithm>
@@ -228,25 +229,34 @@ struct Proj {
     }
 };
 
-// the slowly tumbling triangle of valence quarks and their colour charges (web: quarkPts)
+// the slowly tumbling triangle of valence quarks and their colour charges (web: quarkPts); accurate: 0.16 stage 6, each quark wanders on its own (atom::accurateQuarks)
 struct QPt { char f; double x, y, dep; };
 struct QuarkPts { double k, t; QPt P[3]; double cols[3][3]; double u; int kk; int sw[2]; };
-QuarkPts quarkPts(const Nucleon& q, double X, double Y, double rn, double now, const Proj& proj) {
+QuarkPts quarkPts(const Nucleon& q, double X, double Y, double rn, double now, const Proj& proj, bool accurate = false) {
     QuarkPts Q{};
     Q.k = rn / kNucleonR; Q.t = now + q.ph;
     const char flav[3] = {'u', q.isP ? 'u' : 'd', 'd'};
-    double rx[3], ry[3], rz[3];
-    for (int i = 0; i < 3; i++) {
-        const double t = Q.t, a = t * 0.6 + i * 2.094 + 0.5 * std::sin(t * 0.9 + i * 1.3), r = 0.30 + 0.12 * std::sin(t * 1.3 + i * 2.1);
-        rx[i] = r * std::cos(a); ry[i] = r * std::sin(a); rz[i] = 0.22 * std::sin(t * 0.7 + i * 4.1);
-    }
-    const double mx = (rx[0] + rx[1] + rx[2]) / 3, my = (ry[0] + ry[1] + ry[2]) / 3, mz = (rz[0] + rz[1] + rz[2]) / 3;
-    const double al = Q.t * 0.35, be = Q.t * 0.23, ca = std::cos(al), sa = std::sin(al), cb = std::cos(be), sb = std::sin(be);
-    for (int i = 0; i < 3; i++) {   // slow tumble so every view shows the triangle
-        const double x = rx[i] - mx, y = ry[i] - my, z = rz[i] - mz, y1 = y * ca - z * sa, z1 = y * sa + z * ca, x2 = x * cb - y1 * sb, y2 = x * sb + y1 * cb;
-        double vx, vy, vd;
-        proj(x2, y2, z1, vx, vy, vd);
-        Q.P[i] = {flav[i], X + vx * Q.k, Y - vy * Q.k, vd};
+    if (accurate) {
+        const QuarkWander W = accurateQuarks(q, now);
+        for (int i = 0; i < 3; i++) {
+            double vx, vy, vd;
+            proj(W.x[i][0], W.x[i][1], W.x[i][2], vx, vy, vd);
+            Q.P[i] = {W.f[i], X + vx * Q.k, Y - vy * Q.k, vd};
+        }
+    } else {
+        double rx[3], ry[3], rz[3];
+        for (int i = 0; i < 3; i++) {
+            const double t = Q.t, a = t * 0.6 + i * 2.094 + 0.5 * std::sin(t * 0.9 + i * 1.3), r = 0.30 + 0.12 * std::sin(t * 1.3 + i * 2.1);
+            rx[i] = r * std::cos(a); ry[i] = r * std::sin(a); rz[i] = 0.22 * std::sin(t * 0.7 + i * 4.1);
+        }
+        const double mx = (rx[0] + rx[1] + rx[2]) / 3, my = (ry[0] + ry[1] + ry[2]) / 3, mz = (rz[0] + rz[1] + rz[2]) / 3;
+        const double al = Q.t * 0.35, be = Q.t * 0.23, ca = std::cos(al), sa = std::sin(al), cb = std::cos(be), sb = std::sin(be);
+        for (int i = 0; i < 3; i++) {   // slow tumble so every view shows the triangle
+            const double x = rx[i] - mx, y = ry[i] - my, z = rz[i] - mz, y1 = y * ca - z * sa, z1 = y * sa + z * ca, x2 = x * cb - y1 * sb, y2 = x * sb + y1 * cb;
+            double vx, vy, vd;
+            proj(x2, y2, z1, vx, vy, vd);
+            Q.P[i] = {flav[i], X + vx * Q.k, Y - vy * Q.k, vd};
+        }
     }
     // colour charge: every 1.1 s two quarks swap colours (a gluon passes between them)
     const double tt = (now + q.ph * 0.37) / 1.1, e = std::floor(tt);
@@ -697,7 +707,9 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     proj(e.rr * e.sth * e.caz, e.rr * e.sth * e.saz, e.rr * e.cth, c0x, c0y, c0d);
                     const double d = 0.05 + 0.08 * ph;
                     proj(d * e.sdth * e.cdaz, d * e.sdth * e.sdaz, d * e.cdth, dvx, dvy, dvd);
-                    const Color col = withA(e.c5 < 0.6 ? seaU : seaD, 0.8 * env * A);
+                    // 0.16 stage 6: 40 % up, 60 % down pairs (the web had 60 % up). The real sea has more anti-d than anti-u: E866, hep-ex/0103030; SeaQuest, arXiv:2103.04024
+                    // (d-bar/u-bar levels near 1.6). The ratio 1.5 here is illustrative, a little below that plateau; it is not a measurement (strange pairs are not drawn).
+                    const Color col = withA(e.c5 < 0.4 ? seaU : seaD, 0.8 * env * A);
                     const double r = std::max(1.5, 0.028 * rn);
                     put(c, flat(X + (c0x + dvx) * k, Y - (c0y + dvy) * k, r, col));      // quark: filled
                     ringTo(c, X + (c0x - dvx) * k, Y - (c0y - dvy) * k, r, 1.2, col);   // antiquark: a ring
@@ -716,12 +728,13 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const auto lightQuark = [&](const double in[3], double out[3]) { double t[3] = {in[0], in[1], in[2]}; if (css.light) lightQuarkColour(t, out); else for (int i = 0; i < 3; i++) out[i] = t[i]; };
         // Accurate / Cinematic quarks: colour charge, gluon exchange, a flickering gluon field (web: drawQuarksField).
         // phase 0 = 'all', 1 = 'soft' (blurry parts into sc), 2 = 'sharp' (crisp parts, faded by fog)
+        constexpr double kTubeW = 1.33409;                                 // 1 / the mean of (1 - (g3/1.5)²)³ over the sum g3 of three uniforms minus 1.5 (numerical integral)
         struct FP { double x, y, a, s; int g; };                           // a gluon-field particle
         std::vector<FP> F;                                                 // (one list for the frame, refilled for each nucleon: no allocation per nucleon)
         auto field = [&](const Ctx& c, const Nucleon& q, double X, double Y, double A, int pb, int phase, const Ctx& sc, double fog) {
-            const bool cine = p.qstyle == "Cinematic";
+            const bool cine = p.qstyle == "Cinematic", acc = !cine;   // (field draws Accurate and Cinematic only)
             const bool add = cine && !css.light;                           // Cinematic adds up light, which only shows on a dark page; on a light theme it is drawn with ordinary blending instead
-            const QuarkPts Q = quarkPts(q, X, Y, rn, now, proj);
+            const QuarkPts Q = quarkPts(q, X, Y, rn, now, proj, acc);
             const double k = Q.k, t = Q.t;
             if (phase != 2) {
                 if (add) put(sc, grad3(X, Y, 1.05 * rn, rgba(8, 10, 24, float(0.9 * A)), 0.6, rgba(8, 10, 24, float(0.78 * A)), rgba(8, 10, 24, 0)));   // dark backdrop
@@ -729,9 +742,15 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     const int legN = int(std::lround(std::min(std::max(24.0, std::min(130.0, rn * 0.5)) * (cine ? 1.4 : 1), 0.85 * pb / 3)));
                     const int haloN = int(std::lround(std::min(46.0, 0.15 * pb)));
                     const double al0 = (cine ? 0.36 : 0.22) * A, sz0 = std::max(1.0, (cine ? 0.024 : 0.014) * rn);
-                    double reach = 0;                                      // how far from the middle a particle of the field can be drawn: a tube point is at most 0.33 rn beside its tube,
-                    for (const QPt& o : Q.P) reach = std::max(reach, std::hypot(o.x - X, o.y - Y));   // a halo point at most 0.3 rn sqrt(-2 ln 0.001) = 1.115 rn out; a blob is at most 1.8 sz0 x 1.7 big
-                    reach = std::max(reach + 0.33 * rn, 1.12 * rn) + 3.1 * sz0;
+                    // 0.16 stage 6, Accurate only (Cinematic keeps the web's sizes): the sizes from lattice QCD and experiment (docs/QUARKS.md).
+                    // Tube: radius 0.38 +/- 0.03 fm (Bissey et al., PRD 76, 114512 (2007), arXiv:hep-lat/0606016: a Y-shaped flux tube, no Delta shape; quenched lattice, heavy STATIC quarks,
+                    // not the light moving quarks drawn here), taken as the rms radius of the cross-section: 0.38 / sqrt 2 = 0.269 fm on the one sideways axis seen on screen.
+                    // Halo: 3D rms radius 0.65 fm, a choice inside the measured gluon radii, which are model dependent and disagree (mass radius 0.55 +/- 0.03 fm as quoted in arXiv:2404.11292;
+                    // Hall C, Nature 615, 813 (2023): about 0.75 fm, as reported by CERN Courier); per axis 0.65 / sqrt 3 = 0.375 fm (was 0.3 rn = 0.252 fm).
+                    const double sideK = acc ? 2 * 0.269 / kNucleonR : 1, haloS = acc ? 0.375 / kNucleonR : 0.3;   // sideK: (sum of 3 uniforms - 1.5) has sd 0.5; haloS in rn
+                    double reach = 0;                                      // how far from the middle a particle of the field can be drawn: a tube point is at most 0.33 rn beside its tube
+                    for (const QPt& o : Q.P) reach = std::max(reach, std::hypot(o.x - X, o.y - Y));   // (Accurate: 1.5 sideK rn = 0.96 rn), a halo point at most haloS rn sqrt(-2 ln 0.001) out (Accurate: ln 0.01)
+                    reach = std::max(reach + (acc ? 1.5 * sideK : 0.33) * rn, haloS * (acc ? 3.0349 : 3.7169) * rn) + 3.1 * sz0;   // (0.3 x 3.7169 = 1.115: the old 1.12 rn); a blob is at most 1.8 sz0 x 1.7 big
                     if (!outside(X, Y, X, Y, reach + 2)) {                // only when some of it can reach the picture (0.16 stage 3: at full zoom, most nucleons near the view)
                         F.clear();
                         for (int leg = 0; leg < 3; leg++) {
@@ -739,14 +758,20 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                             const double dx = X - o.x, dy = Y - o.y, L = std::hypot(dx, dy) > 0 ? std::hypot(dx, dy) : 1, nx = -dy / L, ny = dx / L;
                             for (int j = 0; j < legN; j++) {
                                 const double sd = leg * 977 + j * 13.7 + q.ph * 31, cc = t * 0.9 + rnd(sd) * 4, cyc = std::floor(cc), ph = cc - cyc, s2 = sd + cyc * 17.3;
-                                const double uu = rnd(s2), side = (rnd(s2 + 1) + rnd(s2 + 2) + rnd(s2 + 3) - 1.5) * (0.1 + 0.12 * std::sin(kPi * uu)) * rn;   // fatter in the middle of the tube
-                                F.push_back({o.x + dx * uu + nx * side, o.y + dy * uu + ny * side, std::pow(std::sin(kPi * ph), 2) * al0 * (0.5 + 0.5 * rnd(s2 + 4)), sz0 * (0.6 + rnd(s2 + 5)), uu > 0.7 ? 3 : leg});
+                                const double uu = rnd(s2), g3 = rnd(s2 + 1) + rnd(s2 + 2) + rnd(s2 + 3) - 1.5;
+                                const double side = acc ? g3 * sideK * rn : g3 * (0.1 + 0.12 * std::sin(kPi * uu)) * rn;   // web: fatter in the middle of the tube; Accurate: the measured width
+                                // Accurate: the particles spread over the tube's measured width, but their light is weighted toward the axis by (1 - (g3/1.5)²)³, close to a Gaussian of
+                                // sd 0.32 (g3 itself has sd 0.5), times kTubeW so the average weight is 1: the same total light. A drawing choice so the Y still reads.
+                                const double q2 = 1 - g3 * g3 * (1 / 2.25), wgt = acc ? kTubeW * q2 * q2 * q2 : 1;
+                                F.push_back({o.x + dx * uu + nx * side, o.y + dy * uu + ny * side, wgt * std::pow(std::sin(kPi * ph), 2) * al0 * (0.5 + 0.5 * rnd(s2 + 4)), sz0 * (0.6 + rnd(s2 + 5)), uu > 0.7 ? 3 : leg});
                             }
                         }
                         for (int j = 0; j < haloN; j++) {                      // a fainter cloud filling the whole nucleon
                             const double sd = 5000 + j * 11.3 + q.ph * 17, cc = t * 0.7 + rnd(sd) * 4, cyc = std::floor(cc), ph = cc - cyc, s2 = sd + cyc * 29.1;
-                            const double rr = 0.3 * rn * std::sqrt(-2 * std::log(1 - 0.999 * rnd(s2))), an = 6.2832 * rnd(s2 + 1);
-                            F.push_back({X + rr * std::cos(an), Y + rr * std::sin(an), std::pow(std::sin(kPi * ph), 2) * al0 * 0.6, sz0 * (0.8 + rnd(s2 + 2)), 3});
+                            const double e1 = 1 - (acc ? 0.99 : 0.999) * rnd(s2), rr = haloS * rn * std::sqrt(-2 * std::log(e1)), an = 6.2832 * rnd(s2 + 1);
+                            const double wgt = acc ? 2 * e1 : 1;   // Accurate: light weighted toward the centre by 2 exp(-r²/2 sd²) = 2 e1 (average 1.01: the same total light), so the middle of the Y reads;
+                                                                   // cut at 3.03 sd (0.99) instead of 3.72 sd, so the wider halo does not reach out further than needed
+                            F.push_back({X + rr * std::cos(an), Y + rr * std::sin(an), wgt * std::pow(std::sin(kPi * ph), 2) * al0 * 0.6, sz0 * (0.8 + rnd(s2 + 2)), 3});
                         }
                         const int idx[4] = {palIndex(Q.cols[0]), palIndex(Q.cols[1]), palIndex(Q.cols[2]), add ? 48 : css.light ? 49 : 50};
                         for (int g = 0; g < 4; g++) {

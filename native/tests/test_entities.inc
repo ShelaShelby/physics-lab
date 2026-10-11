@@ -50,7 +50,7 @@ static void testEntities() {
         const std::string d = app::decodeHtmlEntities(name);
         checkTrue("About entity " + name + " becomes a character", d != name && !d.empty() && d.find('&') == (name == "&amp;" ? 0u : std::string::npos));
     }
-    checkTrue("kAboutHtml has 254 entities (261 before 0.15 stage 5m, on purpose: the Frutiger Aero / Y2K / Michroma / IBM Plex entries went and the Fonts entry shrank; net -1 &rsquo;, -1 &ldquo;, -1 &rdquo;, -2 &ndash;, -2 &copy;, counted by a regex script that first gave 261 for the old text, the hand count; the 254 earlier in this test is 98+21+20+20+12+12+11+9+9+8+4+4+3+3+3+2+2+2+2+2+1+1+1+1+1+1+1 by name)", found == 254);
+    checkTrue("kAboutHtml has 261 entities (0.16 stage 6, on purpose: the quark sources add 4 &plusmn;, 1 &times;, 1 &minus;, 1 &rsquo;; 254 before; 261 before 0.15 stage 5m, on purpose: the Frutiger Aero / Y2K / Michroma / IBM Plex entries went and the Fonts entry shrank; net -1 &rsquo;, -1 &ldquo;, -1 &rdquo;, -2 &ndash;, -2 &copy;, counted by a regex script that first gave 261 for the old text, the hand count; the 254 earlier in this test is 98+21+20+20+12+12+11+9+9+8+4+4+3+3+3+2+2+2+2+2+1+1+1+1+1+1+1 by name)", found == 261);
     const std::string decoded = app::decodeHtmlEntities(page);
     checkTrue("decoded About has no &rsquo; left", decoded.find("&rsquo;") == std::string::npos && decoded.find("&ndash;") == std::string::npos && decoded.find("&ldquo;") == std::string::npos);
     checkTrue("decoded About keeps its tags", decoded.find("<div class=\"lrnCard\">") == 0);

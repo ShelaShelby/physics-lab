@@ -168,7 +168,7 @@ const AtomChoices& atomChoices(const std::string& key) {
         {"scale", {{"Auto", "Auto-fit (orbit fills the canvas)"}, {"Fixed", "Fixed (same scale for every atom)"}}},
         {"qstyle", {{"Cinematic", "Cinematic (glowing, colour charge)"}, {"Accurate", "Accurate (point quarks, colour charge)"}, {"Classic", "Classic (simple balls and tubes)"}}},
         {"detail", {{"Valence", "Valence quarks only"}, {"+ Gluons", "+ Gluons (sparks)"}, {"+ Sea", "+ Sea (virtual pairs)"}}},
-        {"style", {{"Fuzzy", "Fuzzy (real charge density)"}, {"Hard balls", "Hard balls (simple)"}}},
+        {"style", {{"Fuzzy", "Fuzzy (proton charge profile)"}, {"Hard balls", "Hard balls (simple)"}}},
         {"cheight", {{"Half-life", "Half-life (log scale, 10^-23 s to 10^32 s)"}, {"Binding energy per nucleon", "Binding energy per nucleon (linear, 0 to 9,000 keV)"}}},
         {"ostyle", {{"Modern", "Modern (real nucleus, quarks when you zoom in)"}, {"Bohr 1913", "Bohr 1913 (simple balls, as Bohr drew it)"}}},
         {"cstyle", {{"Classic", "Classic · small hard dots, as in the web version"}, {"Glow", "Glow · soft dots that add up: dense places glow, thin places fade"}}},

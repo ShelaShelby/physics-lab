@@ -2,6 +2,10 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.16 stage 6: what only you can do
+- [ ] Atom Lab, Accurate quarks, deep zoom (Ds-281 at x5182, then dive into one nucleon): does the new look read? Quarks wander on their own (no triangle), the gluon Y and halo are wider. Light theme and Midnight, with "+ Gluons" and "+ Sea".
+- [ ] Repeat the rotating fps test: Accurate, "+ Sea", camera turning (drag fast), light theme and Midnight. Send the fps numbers (the cloud has no GPU; only counts and CPU time were measured).
+
 ## 0.16 stage 3 and 4: what only you can do (speed: the cloud has no GPU)
 - [ ] Atom Lab, Lawrencium-266, zoom slider at the maximum, Cinematic + "+ Sea" (and once with Classic + "+ Sea", once on a light theme): fps idle and while dragging fast. Was under 80 (drag) and 59 (Classic + Sea). Which theme were you on when it was slow?
 - [ ] Run the benchmark once (default, 11 scenes, about 2 minutes), then once with "Compare old CPU paths" ticked (18 scenes); do not touch the PC while it runs; send the text. Scene 4 is the full-zoom nucleus, 9 the outline's first use (twin 15), 10 the dragged cut (twin 16): worst frame and "Frames slower than 16.7 ms".

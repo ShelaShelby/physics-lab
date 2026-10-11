@@ -1021,12 +1021,12 @@ std::vector<std::string> AtomLab::info() {
         const double x = p.Z * kAlpha, model = -levelEV(p.Z, p.N, 1), real = kMecEV * x * x / (1 + std::sqrt(1 - x * x));   // Dirac 1s: mc²(1 − √(1−(Zα)²)) = mc² (Zα)² / (1 + √(1−(Zα)²)), without the subtraction (0.10.8 stage 2)
         more.push_back("1s electron speed: " + fmt::fixed(100 * x, 0) + "% of light speed  ·  real 1s energy −" + fmtEV(real) + " vs −" + fmtEV(model) + " in this lab");
     }
-    if (p.style != "Hard balls" && s.layer != "Atom") more.push_back("nucleon edge: charge density ∝ e^(−r / 0.24 fm), so there is no sharp surface (rms radius 0.84 fm)");
+    if (p.style != "Hard balls" && s.layer != "Atom") more.push_back("nucleon edge: the proton's charge density ∝ e^(−r / 0.24 fm), so there is no sharp surface (rms radius 0.84 fm); a neutron has no net charge and uses it only as a size profile");
     if (s.layer == "Nucleon" || s.layer == "Quarks") {
         const int i = s.focus >= 0 ? s.focus : (p.Z + p.N == 1 ? 0 : -1);
         const Nucleon* q = i >= 0 && i < int(s.nuc.size()) ? &s.nuc[i] : nullptr;
         lines.push_back(q ? std::string(q->isP ? "proton: up + up + down  ·  charge +⅔ +⅔ −⅓ = +1" : "neutron: up + down + down  ·  charge +⅔ −⅓ −⅓ = 0") +
-                                "  ·  quarks are points (<0.001 fm), dots not to scale"
+                                "  ·  quarks are points (< 0.00001 fm), dots not to scale"
                           : std::string("click a nucleon to dive into it"));
     }
     if (moreShown()) lines.insert(lines.end(), more.begin(), more.end());
@@ -1042,7 +1042,10 @@ std::string AtomLab::hint() const {
     if (p.Z >= kRelativityZ) note += " Heavy atoms: this lab uses non-relativistic physics, but a 1s electron here moves at " + fmt::fixed(100 * x, 0) +
                            "% of light speed, so the true energy differs. The readout gives the Dirac-equation value for a point nucleus.";
     if (p.zoom >= 4 && p.qstyle != "Classic")
-        note += " Quark colours (red, green, blue) are a charge of the strong force, not the up/down flavour: gluons carry colour between quarks, so each keeps changing colour while the three always add up to colourless. The glowing haze is the gluon field, an artistic version of what lattice-QCD calculations show; the quarks themselves are points.";
+        note += " Quark colours (red, green, blue) are a charge of the strong force, not the up/down flavour: gluons carry colour between quarks, so each keeps changing colour while the three always add up to colourless. The glowing haze is the gluon field, an artistic version of what lattice-QCD calculations show; the quarks themselves are points. The dots are drawn about 3,000 times bigger than a quark can be (collider limits put any quark size below about 10⁻²⁰ m).";
+    // quark size: contact-interaction limits Lambda > about 24 TeV (CMS fit, PDG 2024 review "Searches for quark and lepton compositeness") -> size < 0.197 GeV fm / 24,000 GeV = 8e-6 fm = 8e-21 m;
+    // the dots are 0.03 x 0.84 fm = 0.025 fm in radius, about 3,000 times that. Sea: anti-d > anti-u (E866, hep-ex/0103030; SeaQuest, arXiv:2103.04024). See docs/QUARKS.md.
+    if (p.zoom >= 4 && p.qstyle == "Accurate") note += " The sea pairs here show colour only; the real sea has more anti-down than anti-up quarks.";
     if (p.scale == "Fixed") note += " Fixed scale: every atom and level is drawn at the same scale, so heavier nuclei pull the electron in close. Zoom in to follow it.";
     if (p.Z >= 104) note += " Superheavy elements are made a few atoms at a time; their half-lives are still being measured.";
     if (p.Z + p.N > 45 && p.zoom >= 4) note += " Quarks are drawn for the 45 nearest nucleons only (big nuclei have hundreds).";

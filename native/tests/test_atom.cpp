@@ -22,6 +22,7 @@
 #include "atom/dirac.h"
 #include "atom/lifetime.h"
 #include "atom/atom_sim.h"
+#include "atom/quark_wander.h"
 #include "atom/chart.h"
 #include "atom/chart_view.h"
 #include "atom/ame.h"
@@ -404,6 +405,13 @@ static bool runRadiusA0(const AtomLab& lab, double& Ra0) {
     return false;
 }
 static std::string adaptNucleusHint(std::string web, const AtomLab& lab) {
+    {   // 0.16 stage 6 (a native edit on purpose, not a web change): the quark note says how much bigger the dots are than a quark can be, and in Accurate that its sea shows colour only
+        const std::string pts = "the quarks themselves are points.";
+        const std::size_t k = web.find(pts);
+        if (k != std::string::npos)
+            web.insert(k + pts.size(), std::string(" The dots are drawn about 3,000 times bigger than a quark can be (collider limits put any quark size below about 10⁻²⁰ m).") +
+                                           (lab.p.qstyle == "Accurate" ? " The sea pairs here show colour only; the real sea has more anti-down than anti-up quarks." : ""));
+    }
     double R;
     if (!runRadiusA0(lab, R)) return web;
     const std::string a = "The nucleus is ~", b = "× smaller than this";
@@ -4459,7 +4467,42 @@ static void testQuadrupole(double guardMinSepDeformed) {
 #include "test_atom_tools.inc"   // 0.15 stage 5a: the Atom Lab toolbar buttons -> lab state
 #include "test_atom_chip.inc"   // 0.15 stage 5b: the element chip and its dropdown's controls
 
+// 0.16 stage 6: the Accurate style's valence quarks (atom::accurateQuarks). Targets are the owner's (docs/QUARKS.md): the mean distance from the centre kept from the old
+// motion (0.33 fm, a choice), mean d / mean u = 1.7^(1/3) from Miller, PRL 99, 112001 (a heuristic), nothing past 0.6 fm, the three centred on the nucleon, p = u u d and n = u d d,
+// and no jumps: the most a quark moves in 1/60 s stays under 0.04 fm (measured 0.026 fm, when a quark dives through the middle, where the profile leaves little room;
+// the old tumbling triangle's top speed was 0.0099 fm a frame). A teleport would be a step of the order of 0.3 fm. Measured over 2,000 nucleons x 300 times each, for protons and neutrons apart.
+static void testQuarkWander() {
+    for (int isP = 0; isP < 2; isP++) {
+        double su = 0, sd = 0, worst = 0, off = 0, step = 0; long nu = 0, nd = 0; bool flav = true;
+        for (int k = 0; k < 2000; k++) {
+            const atom::Nucleon q{0, 0, 0, isP == 1, std::fmod(k * 2.39996323, 6.283185307)};
+            for (int j = 0; j < 300; j++) {
+                const double t = 11.7 * j + 0.37 * k;
+                const atom::QuarkWander W = atom::accurateQuarks(q, t), W2 = atom::accurateQuarks(q, t + 1.0 / 60);
+                flav = flav && W.f[0] == 'u' && W.f[1] == (isP ? 'u' : 'd') && W.f[2] == 'd';
+                for (int a = 0; a < 3; a++) off = std::max(off, std::fabs(W.x[0][a] + W.x[1][a] + W.x[2][a]) / 3);
+                for (int i = 0; i < 3; i++) {
+                    const double r = std::sqrt(W.x[i][0] * W.x[i][0] + W.x[i][1] * W.x[i][1] + W.x[i][2] * W.x[i][2]);
+                    worst = std::max(worst, r);
+                    step = std::max(step, std::sqrt(std::pow(W2.x[i][0] - W.x[i][0], 2) + std::pow(W2.x[i][1] - W.x[i][1], 2) + std::pow(W2.x[i][2] - W.x[i][2], 2)));
+                    if (W.f[i] == 'u') { su += r; nu++; } else { sd += r; nd++; }
+                }
+            }
+        }
+        const std::string w = isP ? "Accurate quarks, proton: " : "Accurate quarks, neutron: ";
+        const double mean = (su + sd) / double(nu + nd), ratio = (sd / nd) / (su / nu);
+        std::printf("%smean %.4f fm, d/u %.4f, farthest %.4f fm, centre off %.2e fm, largest step in 1/60 s %.4f fm\n", w.c_str(), mean, ratio, worst, off, step);
+        checkTrue(w + "flavours u u d / u d d", flav);
+        checkNum(w + "mean distance from the centre", mean, atom::kQuarkMeanR, 0.05);
+        checkNum(w + "mean d distance / mean u distance", ratio, atom::quarkDUratio(), 0.05);
+        checkTrue(w + "nothing beyond 0.6 fm", worst <= atom::kQuarkCutR);
+        checkTrue(w + "the three are centred on the nucleon", off < 1e-12);
+        checkTrue(w + "no jumps (under 0.04 fm in 1/60 s)", step < 0.04);
+    }
+}
+
 int main() {
+    testQuarkWander();
     testConstants();
     testOneEnergy();
     // guards = the worst error MEASURED after the fix (Linux GCC, 32 runs of 60 s) + 1 %: radius 2.16990e-4 -> 2.192e-4, energy 4.70644e-8 -> 4.754e-8, turning rate 1.45367e-4 -> 1.469e-4. The same runs
