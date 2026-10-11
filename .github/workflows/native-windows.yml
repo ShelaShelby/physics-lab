@@ -100,6 +100,8 @@ jobs:
           if (-not $appVer) { throw "No version found in native/CMakeLists.txt" }
           $label = if ($stage) { "$ver $stage" } else { $ver }
           Compress-Archive -Path out/* -DestinationPath PhysicsLab-windows-x64.zip -Force
+          # small helper for Alex's PC (native/tools/autoinstall): kept out of the app zip
+          Compress-Archive -Path native/tools/autoinstall/* -DestinationPath PhysicsLab-AutoInstall.zip -Force
           gh release delete latest --yes --cleanup-tag -R $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { Write-Host "No earlier 'latest' release to replace." }
           $notes = @"
@@ -107,9 +109,11 @@ jobs:
 
           Download PhysicsLab-windows-x64.zip, unzip it and run PhysicsLab.exe.
 
+Optional: PhysicsLab-AutoInstall.zip is a small Windows PowerShell helper that installs each new download for you (see README.txt inside).
+
           If Windows warns you: the app is not code-signed yet, so Windows may show a reputation warning. This is not a sign that a virus was found. Before unzipping, right-click the zip, choose Properties, tick Unblock and press OK. Or, when "Windows protected your PC" (SmartScreen) appears, click More info, then Run anyway.
           "@
-          $ghArgs = @('release', 'create', 'latest', 'PhysicsLab-windows-x64.zip', '-R', $env:GITHUB_REPOSITORY, '--target', $env:GITHUB_SHA, '--title', "Physics Lab native $label (latest build)", '--notes', $notes)
+          $ghArgs = @('release', 'create', 'latest', 'PhysicsLab-windows-x64.zip', 'PhysicsLab-AutoInstall.zip', '-R', $env:GITHUB_REPOSITORY, '--target', $env:GITHUB_SHA, '--title', "Physics Lab native $label (latest build)", '--notes', $notes)
           if ($stage -eq 'alpha' -or $stage -eq 'beta') { $ghArgs += '--prerelease' }
           gh @ghArgs
           if ($LASTEXITCODE -ne 0) { exit 1 }

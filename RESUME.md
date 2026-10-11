@@ -1,6 +1,7 @@
 # Resume
 
 ## Current state
+- Tools (no app change): native/tools/autoinstall (download watcher that installs each new PhysicsLab-windows-x64 zip into C:\PhysicsLab, CleanOld.ps1, Install/Uninstall); also attached to the "latest" release as PhysicsLab-AutoInstall.zip; logic tested on Linux pwsh only (native/tests/autoinstall_test.ps1), Windows behaviour untested.
 - 0.16 stage 4: the in-app Benchmark has 11 scenes (about 2 min); the 7 old-CPU twins (12 to 18) are behind the box "Compare old CPU paths"; stress and speed-risk boxes gone; texts in app/bench_scenes.cpp, tested by app_settings (scene numbers).
 - 0.16 stage 3: nucleus view at full zoom makes nothing wholly off the picture (Accurate + Sea at x10,000,000: 311,076 -> 36 vertices, 843 -> 24 blobs, pixels identical; ui6c_fullzoom); benchmark scene 35 "Nucleus, full zoom, camera moving" and "Frames slower than 16.7 ms" per scene; outline compute warmed up at start. Speed NOT measured.
 - 0.16 stage 2: About scrollbar (z-order after reopen), Benchmark window height (body scrolls, Start fixed), Contents rail 20 em wide, Atom Lab Nucleus section always shown (ui6b_scrollbar/bench/rail/nucleus). Next: the dead-code hunt.
