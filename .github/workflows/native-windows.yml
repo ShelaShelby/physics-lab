@@ -109,7 +109,7 @@ jobs:
 
           Download PhysicsLab-windows-x64.zip, unzip it and run PhysicsLab.exe.
 
-Optional: PhysicsLab-AutoInstall.zip is a small Windows PowerShell helper that installs each new download for you (see README.txt inside).
+          Optional: PhysicsLab-AutoInstall.zip is a small Windows PowerShell helper that installs each new download for you (see README.txt inside).
 
           If Windows warns you: the app is not code-signed yet, so Windows may show a reputation warning. This is not a sign that a virus was found. Before unzipping, right-click the zip, choose Properties, tick Unblock and press OK. Or, when "Windows protected your PC" (SmartScreen) appears, click More info, then Run anyway.
           "@
