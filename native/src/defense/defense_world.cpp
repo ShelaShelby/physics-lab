@@ -1,4 +1,4 @@
-// Defense Lab (0.17 stage 1): the world. Every number in here is a GAME DESIGN CHOICE (see defense_world.h), not a measured value.
+// Defense Lab (0.17 stage 1, stage 2): the world. Every number in here is a GAME DESIGN CHOICE (see defense_world.h), not a measured value.
 #include "defense/defense_world.h"
 
 #include <algorithm>
@@ -96,10 +96,10 @@ double fbm(uint32_t seed, double x, double y, int octaves) {
 
 // ---------------------------------------------------------------- the map
 namespace {
-struct Patch { Item ore; double cx, cy, r, rich; };
+struct Patch { Item ore; double cx, cy, r; };
 // design: the start area's four patches, about 13 tiles from the core (always the same places, so a new player always finds them)
-const Patch kStart[4] = {{Item::IronOre, 10, -9, 4.5, 600}, {Item::CopperOre, -11, -8, 4.5, 600}, {Item::Coal, -9, 10, 4.5, 600}, {Item::Stone, 11, 9, 4.5, 600}};
-// The random patch of an ore cell, if it has one. Richer and bigger the farther from the start (design).
+const Patch kStart[4] = {{Item::IronOre, 10, -9, 4.5}, {Item::CopperOre, -11, -8, 4.5}, {Item::Coal, -9, 10, 4.5}, {Item::Stone, 11, 9, 4.5}};
+// The random patch of an ore cell, if it has one. Bigger the farther from the start (design; ore is infinite, so size is the only reward for going far).
 bool cellPatch(uint32_t seed, int ci, int cj, Patch& p) {
     const uint32_t h = hash3(seed ^ 0xA5A5A5A5u, ci, cj), h2 = hash3(seed ^ 0x5A5A5A5Au, ci, cj);
     if (u01(h) >= 0.55) return false;
@@ -108,8 +108,7 @@ bool cellPatch(uint32_t seed, int ci, int cj, Patch& p) {
     const double dist = std::sqrt(p.cx * p.cx + p.cy * p.cy);
     if (dist < kStartRadius + 24) return false;                  // the start area has its own four
     p.ore = static_cast<Item>(1 + (h >> 4) % 4u);
-    p.r = 3.5 + std::min(10.0, dist / 150.0) + u01(h2 ^ 0x1234567u) * 2.5;
-    p.rich = 350 + 1.2 * dist;
+    p.r = 3.5 + std::min(7.0, dist / 40.0) + u01(h2 ^ 0x1234567u) * 2.5;
     return true;
 }
 }  // namespace
@@ -117,22 +116,23 @@ bool cellPatch(uint32_t seed, int ci, int cj, Patch& p) {
 void World::generate(Chunk& c) {
     for (int j = 0; j < kChunk; j++)
         for (int i = 0; i < kChunk; i++) {
-            const int x = c.cx * kChunk + i, y = c.cy * kChunk + j;
-            double h = fbm(seed_, x / 110.0, y / 110.0, 5);
-            const double d = std::sqrt(double(x) * x + double(y) * y);
-            if (d <= kStartRadius) h = std::max(h, -0.05);       // the start area is always land
-            else if (d < kStartRadius + 16) h = std::max(h, -0.05 - (d - kStartRadius) / 16 * 0.6);
-            const Terrain t = h < -0.30 ? Terrain::Deep : h < -0.20 ? Terrain::Shallow : h < -0.13 ? Terrain::Sand : h < 0.30 ? Terrain::Grass : Terrain::Rock;
-            const int k = j * kChunk + i;
+            const int x = c.cx * kChunk + i, y = c.cy * kChunk + j, k = j * kChunk + i;
+            c.ore[k] = 0;
+            if (!inMap(x, y)) { c.terrain[k] = static_cast<uint8_t>(Terrain::Waste); continue; }   // the border band and beyond: nothing generated, nothing built
+            // one biome, red rock; the variants are only looks (design): big dust patches from smooth noise, then a few pits, cracks and stones from the tile's hash
+            Terrain t = Terrain::Rock;
+            const uint32_t h = hash3(seed_ ^ 0x7E44A1u, x, y);
+            if (fbm(seed_ + 31u, x / 36.0, y / 36.0, 3) > 0.22) t = Terrain::Dust;
+            else if (u01(h) < 0.035) t = Terrain::Pits;
+            else if (u01(h) < 0.075) t = Terrain::Cracks;
+            else if (u01(h) < 0.14) t = Terrain::Stones;
             c.terrain[k] = static_cast<uint8_t>(t);
-            c.ore[k] = 0; c.amount[k] = 0;
-            if (!buildable(t)) continue;
+            const double d = std::sqrt(double(x) * x + double(y) * y);
             const double wob = 0.85 + 0.3 * (valueNoise(seed_ + 99u, x / 3.0, y / 3.0) + 1) / 2;
             const auto tryPatch = [&](const Patch& p) {
-                const double dx = x + 0.5 - p.cx, dy = y + 0.5 - p.cy, r = std::sqrt(dx * dx + dy * dy), R = p.r * wob;
-                if (r > R) return false;
+                const double dx = x + 0.5 - p.cx, dy = y + 0.5 - p.cy;
+                if (std::sqrt(dx * dx + dy * dy) > p.r * wob) return false;
                 c.ore[k] = static_cast<uint8_t>(p.ore);
-                c.amount[k] = static_cast<uint32_t>(std::lround(p.rich * (1.25 - 0.75 * r / R)));
                 return true;
             };
             bool found = false;
@@ -140,10 +140,6 @@ void World::generate(Chunk& c) {
             const int ci = floorDiv(x, kOreCell), cj = floorDiv(y, kOreCell);
             for (int b = -1; b <= 1 && !found; b++)
                 for (int a = -1; a <= 1 && !found; a++) { Patch p; if (cellPatch(seed_, ci + a, cj + b, p)) found = tryPatch(p); }
-            if (found) {
-                const auto m = mined_.find(key(x, y));
-                if (m != mined_.end()) { c.amount[k] = m->second; if (m->second == 0) c.ore[k] = 0; }
-            }
         }
 }
 
@@ -168,10 +164,6 @@ Item World::oreAt(int x, int y) {
     const Chunk& c = chunkMut(floorDiv(x, kChunk), floorDiv(y, kChunk));
     return static_cast<Item>(c.ore[(y - c.cy * kChunk) * kChunk + (x - c.cx * kChunk)]);
 }
-uint32_t World::oreAmountAt(int x, int y) {
-    const Chunk& c = chunkMut(floorDiv(x, kChunk), floorDiv(y, kChunk));
-    return c.amount[(y - c.cy * kChunk) * kChunk + (x - c.cx * kChunk)];
-}
 
 // ---------------------------------------------------------------- building
 void World::newGame(uint32_t seed) {
@@ -179,6 +171,7 @@ void World::newGame(uint32_t seed) {
     seed_ = seed;
     Entity core;
     core.id = nextId_++; core.kind = Kind::Core; core.x = -1; core.y = -1;
+    core.store[static_cast<int>(Item::Coal)] = kStartCoal;        // stage 2: coal to feed the first generator by clicking it (no deadlock)
     ents_.push_back(core);
     for (int j = 0; j < 3; j++) for (int i = 0; i < 3; i++) occ_[key(-1 + i, -1 + j)] = core.id;
     index_[core.id] = 0;
@@ -193,7 +186,7 @@ bool World::canPlace(Kind k, int x, int y, std::string* why) {
     for (int j = 0; j < s; j++)
         for (int i = 0; i < s; i++) {
             if (occ_.count(key(x + i, y + j))) return no("Something is already there.");
-            if (!buildable(terrainAt(x + i, y + j))) return no("Nothing can be built on water.");
+            if (!inMap(x + i, y + j) || !buildable(terrainAt(x + i, y + j))) return no("Nothing can be built outside the map.");
             if (oreAt(x + i, y + j) != Item::None) ore = true;
         }
     if (k == Kind::Miner && !ore) return no("A miner must stand on ore.");
@@ -297,7 +290,7 @@ void World::relayout() {
         while (c >= 0 && ents_[std::size_t(c)].kind == Kind::Belt && !seen[std::size_t(c)]) { seen[std::size_t(c)] = 1; path.push_back(c); c = ents_[std::size_t(c)].target; }
         for (auto it = path.rbegin(); it != path.rend(); ++it) beltOrder_.push_back(*it);
     }
-    // power: poles wired within kPoleReach form a network; a building is on the network of the first pole whose 5 x 5 area it reaches
+    // power: poles wired within kPoleReach form a network; a building (and the core's emergency generator) is on the network of the first pole whose 5 x 5 area it reaches
     std::vector<int> poles;
     for (int i = 0; i < int(ents_.size()); i++) if (ents_[std::size_t(i)].kind == Kind::Pole) poles.push_back(i);
     std::vector<int> parent(poles.size());
@@ -315,7 +308,7 @@ void World::relayout() {
     nets_.assign(std::size_t(nn), PowerNet{});
     const int reach = static_cast<int>(std::floor(kPoleSupply));
     for (Entity& e : ents_) {
-        if (e.kind != Kind::Miner && e.kind != Kind::Generator) continue;
+        if (e.kind != Kind::Miner && e.kind != Kind::Generator && e.kind != Kind::Core) continue;
         const int s = footprint(e.kind);
         for (int pi : poles) {
             const Entity& p = ents_[std::size_t(pi)];
@@ -407,9 +400,11 @@ void World::spreadPollution() {
     for (const auto& kv : pol_) polScratch_.push_back(kv);
     for (const auto& [k, v] : polScratch_) {
         const int cx = static_cast<int>(k >> 32), cy = static_cast<int>(static_cast<int32_t>(static_cast<uint32_t>(k & 0xFFFFFFFF)));
-        pol_[k] -= v * (4 * kPollSpread + kPollAbsorb);
-        const double out = v * kPollSpread;
-        pol_[key(cx + 1, cy)] += out; pol_[key(cx - 1, cy)] += out; pol_[key(cx, cy + 1)] += out; pol_[key(cx, cy - 1)] += out;
+        const double out = v * kPollSpread;                             // only to neighbours inside the map (stage 2): nothing leaks off the map
+        const int nb[4][2] = {{cx + 1, cy}, {cx - 1, cy}, {cx, cy + 1}, {cx, cy - 1}};
+        int given = 0;
+        for (const auto& q : nb) if (chunkInMap(q[0], q[1])) { pol_[key(q[0], q[1])] += out; given++; }
+        pol_[k] -= v * kPollAbsorb + out * given;
     }
     for (auto it = pol_.begin(); it != pol_.end();) it = it->second < 1e-4 ? pol_.erase(it) : std::next(it);
 }
@@ -417,27 +412,31 @@ void World::spreadPollution() {
 void World::step() {
     if (dirty_) relayout();
     tick_++;
-    const int64_t minerJ = kMinerWatts / kTicksPerSecond, genJ = kGeneratorWatts / kTicksPerSecond;
+    const int64_t minerJ = kMinerWatts / kTicksPerSecond, genJ = kGeneratorWatts / kTicksPerSecond, coreJ = kCoreWatts / kTicksPerSecond;
     for (PowerNet& n : nets_) n = PowerNet{};
-    // 1. power: what the miners that can dig want, and what the generators with coal can give
+    // 1. power: what the miners that can dig want, and what the core's emergency generator (free, always on) and the generators with coal can give
     const auto minerCanDig = [&](const Entity& m) {
         if (m.outCount) return false;
-        for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) if (oreAmountAt(m.x + i, m.y + j) > 0 && oreAt(m.x + i, m.y + j) != Item::None) return true;
+        for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) if (oreAt(m.x + i, m.y + j) != Item::None) return true;
         return false;
     };
     int gensIn[64] = {};
+    int64_t freeJ = 0;                                              // the core's share on its network
     for (const Entity& e : ents_) {
         if (e.net < 0) continue;
+        if (e.kind == Kind::Core) { nets_[std::size_t(e.net)].supplyJ += coreJ; freeJ = coreJ; }
         if (e.kind == Kind::Miner && minerCanDig(e)) nets_[std::size_t(e.net)].demandJ += minerJ;
         if (e.kind == Kind::Generator && (e.burnJ > 0 || e.fuel > 0)) { nets_[std::size_t(e.net)].supplyJ += genJ; if (e.net < 64) gensIn[e.net]++; }
     }
     for (PowerNet& n : nets_) n.satPermille = n.demandJ == 0 ? 1000 : static_cast<int>(std::min<int64_t>(1000, n.supplyJ * 1000 / n.demandJ));
-    // 2. generators burn coal for what was used, shared evenly
+    // 2. generators burn coal for what was used beyond the core's free power, shared evenly
+    const int coreNet = ents_[0].net;
     for (Entity& e : ents_) {
         if (e.kind != Kind::Generator || e.net < 0 || !(e.burnJ > 0 || e.fuel > 0)) continue;
         const PowerNet& n = nets_[std::size_t(e.net)];
-        const int gens = e.net < 64 ? std::max(1, gensIn[e.net]) : static_cast<int>(std::max<int64_t>(1, n.supplyJ / genJ));
-        const int64_t share = n.demandJ * n.satPermille / 1000 / gens;
+        const int gens = e.net < 64 ? std::max(1, gensIn[e.net]) : static_cast<int>(std::max<int64_t>(1, (n.supplyJ - (e.net == coreNet ? freeJ : 0)) / genJ));
+        const int64_t used = n.demandJ * n.satPermille / 1000 - (e.net == coreNet ? freeJ : 0);
+        const int64_t share = std::max<int64_t>(0, used) / gens;
         while (e.burnJ < share && e.fuel > 0) { e.fuel--; e.burnJ += kCoalJoules; }
         e.burnJ -= std::min(share, e.burnJ);
         if (share > 0) addPollution(e.x, e.y, kPollGenerator / 3600.0 * double(share) / double(genJ));
@@ -450,17 +449,12 @@ void World::step() {
                 const int sat = nets_[std::size_t(e.net)].satPermille;
                 e.progress += sat;
                 if (sat > 0) addPollution(e.x, e.y, kPollMiner / 3600.0 * sat / 1000.0);
-                if (e.progress >= kMinerTicks * 1000) {
+                if (e.progress >= kMinerTicks * 1000) {                // ore is infinite: the first ore tile under the miner gives it, the tile never runs out
                     for (int j = 0; j < 2 && e.progress >= kMinerTicks * 1000; j++)
                         for (int i = 0; i < 2 && e.progress >= kMinerTicks * 1000; i++) {
-                            const int x = e.x + i, y = e.y + j;
-                            Chunk& c = chunkMut(floorDiv(x, kChunk), floorDiv(y, kChunk));
-                            const int k = (y - c.cy * kChunk) * kChunk + (x - c.cx * kChunk);
-                            if (!c.ore[k] || !c.amount[k]) continue;
-                            e.outItem = c.ore[k]; e.outCount = 1;
-                            c.amount[k]--;
-                            mined_[key(x, y)] = c.amount[k];
-                            if (c.amount[k] == 0) { c.ore[k] = 0; c.version++; }
+                            const Item o = oreAt(e.x + i, e.y + j);
+                            if (o == Item::None) continue;
+                            e.outItem = static_cast<uint8_t>(o); e.outCount = 1;
                             e.progress -= kMinerTicks * 1000;
                         }
                 }
@@ -498,6 +492,18 @@ void World::step() {
     if (tick_ % kTicksPerSecond == 0) spreadPollution();
 }
 
+int World::feedGenerator(int x, int y) {
+    const int i = entityAt(x, y);
+    if (i < 0) return 0;
+    Entity& g = ents_[std::size_t(i)];
+    uint64_t& coal = ents_[0].store[static_cast<int>(Item::Coal)];
+    if (g.kind != Kind::Generator || g.fuel >= kSlotMax || coal == 0) return 0;
+    const int n = static_cast<int>(std::min<uint64_t>(coal, static_cast<uint64_t>(kSlotMax - g.fuel)));
+    coal -= static_cast<uint64_t>(n);                               // moved, not made: core + generator hold the same coal as before
+    g.fuel = static_cast<uint16_t>(g.fuel + n);
+    return n;
+}
+
 int World::totalSatPermille() const {
     int64_t d = 0, got = 0;
     for (const PowerNet& n : nets_) { d += n.demandJ; got += n.demandJ * n.satPermille / 1000; }
@@ -522,7 +528,7 @@ uint64_t World::countAllItems() const { uint64_t n = 0; for (int i = 1; i < kIte
 namespace {
 uint64_t fnv(const char* s, std::size_t n) { uint64_t h = 1469598103934665603ull; for (std::size_t i = 0; i < n; i++) { h ^= static_cast<unsigned char>(s[i]); h *= 1099511628211ull; } return h; }
 const char* const kMagic = "PhysicsLabDefense";
-constexpr int kVersion = 1;
+constexpr int kVersion = 2;                                         // 2: stage 2 (fixed map, infinite ore: no "m" lines); 1: stage 1
 }  // namespace
 
 std::string World::serialize() const {
@@ -539,11 +545,18 @@ std::string World::serialize() const {
         for (int k = 0; k < e.n; k++) { std::snprintf(b, sizeof b, " %d %d", e.items[k].item, e.items[k].pos); s += b; }
         s += "\n";
     }
-    for (const auto& [k, v] : mined_) { std::snprintf(b, sizeof b, "m %d %d %u\n", static_cast<int>(k >> 32), static_cast<int>(static_cast<int32_t>(static_cast<uint32_t>(k & 0xFFFFFFFF))), v); s += b; }
     for (const auto& [k, v] : pol_) { std::snprintf(b, sizeof b, "p %d %d %.17g\n", static_cast<int>(k >> 32), static_cast<int>(static_cast<int32_t>(static_cast<uint32_t>(k & 0xFFFFFFFF))), v); s += b; }
     std::snprintf(b, sizeof b, "end %016llx\n", static_cast<unsigned long long>(fnv(s.data(), s.size())));
     s += b;
     return s;
+}
+
+int World::currentSaveVersion() { return kVersion; }
+int World::saveVersion(const std::string& text) {
+    const std::string head = std::string(kMagic) + " ";
+    if (text.compare(0, head.size(), head) != 0) return 0;
+    const long v = std::strtol(text.c_str() + head.size(), nullptr, 10);
+    return v > 0 && v < 1000000 ? static_cast<int>(v) : 0;
 }
 
 uint64_t World::stateHash() const { const std::string s = serialize(); return fnv(s.data(), s.size()); }
@@ -652,9 +665,6 @@ bool World::load(const std::string& text, std::string* error) {
             w.index_[e.id] = static_cast<int>(w.ents_.size());
             w.ents_.push_back(e);
             continue;
-        } else if (tag == "m") {
-            const int x = static_cast<int>(l.i(INT_MIN, INT_MAX)), y = static_cast<int>(l.i(INT_MIN, INT_MAX));
-            w.mined_[key(x, y)] = static_cast<uint32_t>(l.u(0xFFFFFFFFull));
         } else if (tag == "p") {
             const int x = static_cast<int>(l.i(INT_MIN, INT_MAX)), y = static_cast<int>(l.i(INT_MIN, INT_MAX));
             const double v = l.d();
@@ -727,7 +737,7 @@ void buildSampleBase(World& w) {
 }
 
 int buildBigBase(World& w) {
-    const int x0 = 2000, y0 = 2000;
+    const int x0 = kBigBaseX, y0 = kBigBaseY;
     int n = 0;
     for (int i = 0; i < 64; i++) {
         const int y = y0 + 2 * i;

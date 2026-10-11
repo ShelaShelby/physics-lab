@@ -1,6 +1,7 @@
 # Resume
 
 ## Current state
+- 0.17 stage 2: Defense Lab fixes: core emergency generator (180 kW) + 50 start coal + click-feed generators (no deadlock); fixed 512 x 512 map + 8-tile wasteland band (constants in defense_world.h), camera clamp; one red-rock biome, no water, infinite ore; new code-drawn look with LOD; core arrow + Home/H; drag-belts, right-drag remove, WASD, 1-8, Q, Esc; save v2 (v1 -> .old). defense_logic 91 checks. Next: stage 3.
 - 0.17 stage 1: new Defense Lab (lab 2), factory part only: seeded endless chunk map (own noise), miner / belt (auto corners) / furnace / chest / coal generator / pole / core, power networks, per-chunk pollution (overlay, no effect yet), versioned atomic save (60 s autosave, on close); src/defense, ui/shell_defense.cpp; tests defense_logic + defense_pictures. Next: stage 2 splitters and junctions.
 - 0.16 stage 6: Accurate quarks more accurate (own wander per quark, d farther out than u, cut 0.6 fm, atom::accurateQuarks + testQuarkWander; tube 0.38 fm, halo rms 0.65 fm); Classic sea 60 % d; proton-mass card (Yang 2018), quark note, Fuzzy text; docs/QUARKS.md. Classic / Cinematic look unchanged.
 - 0.16 stage 5: nucleus view with + Sea / Classic tubes: antiquark rings and flux tubes are blobs in the batch (Ds-281 x2063 + Sea Accurate: 449 -> 5 draw calls, 33,323 -> 30 vertices); light-vs-Midnight gap was Cinematic's light-theme ring path; ui6c_ds281sea; GPU fps not tested.

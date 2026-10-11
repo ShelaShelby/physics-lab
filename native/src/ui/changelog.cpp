@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.17", "Defense Lab, part 2: power from the core, a new look, a fixed map",
+     "Power no longer dead-ends: the core has a free emergency generator, enough for about 2 miners, that reaches the network through a pole next to it, and a new planet's core starts with 50 coal; "
+     "click a coal generator to fill it from the core (hold to keep filling). A new look drawn in code: one invented red rocky planet (Mars-like, not real Mars) with dust, pits, cracks and stones; "
+     "chunky outlined machines, each with its own colour: a yellow miner with a spinning drill, a round copper furnace that glows while it works, a red-orange generator that pulses while it burns, a chest with a lid and latch, "
+     "poles with glowing nodes, and the core as a landmark with a pulsing ring light; belts with moving chevrons. Far away, an arrow at the edge points to the core with the distance; H or Home jumps back. "
+     "The map is now fixed: 512 x 512 tiles with a dark border band; ore never runs out, and patches are bigger the farther out; no more water or sand. "
+     "Building: drag to lay a line of belts (corners made for you), right drag removes, a green or red ghost shows where a building can go, WASD or the arrow keys move the map, keys 1-8, Q picks, Esc puts down. "
+     "A planet saved by part 1 cannot be loaded (a copy is kept as .old): start a new planet. Not measured: speed on a real graphics card, and how the mouse and keys feel on Windows."},
     {"0.17", "New: the Defense Lab, part 1: the factory",
      "A third lab, next to the Orbit Lab and the Atom Lab: a factory game on an endless planet, seen from above, with soft shadows for depth. Each planet has a seed (shown, and you can type one); "
      "the same seed always makes the same map: deep and shallow water, sand, grass, rock, and patches of iron, copper, coal and stone, richer and bigger the farther you go. The start always has all four ores close by. "

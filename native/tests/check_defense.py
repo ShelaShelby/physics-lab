@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.17 stage 1: the Defense Lab in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU, NO timing: counts only).
+# 0.17 stage 1 (stage 2: save version 2, the core arrow): the Defense Lab in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU, NO timing: counts only).
 #   Renders the small sample base (seed 20261011, 2,400 steps = 40 s of play) in two themes and saves the pictures to look at (defense_dark.bmp, defense_light.bmp);
 #   checks the draw counts (terrain one mesh a chunk, belts and buildings batched), the build bar, the core where it should be;
 #   then: the game saves when the app closes and the next start continues from it; a damaged save file gives a message (no crash) and a new game can be started.
@@ -41,7 +41,15 @@ def main(binary, work):
         b = Bmp(r.bmp)
         px = b.px(652, 406)                                          # the core's lit centre (camera on tile 0, 24 points a tile)
         check(px[2] > 200 and px[1] > 180, f"{theme}: the core is drawn in the middle {px}")
-        check(os.path.exists(save) and open(save).read().startswith("PhysicsLabDefense 1"), f"{theme}: the planet was saved when the app closed")
+        check(os.path.exists(save) and open(save).read().startswith("PhysicsLabDefense 2"), f"{theme}: the planet was saved when the app closed")
+    # stage 2: looking far from the core (tile 120, 80): the arrow to the core is shown; on the core it is not
+    save = os.path.join(work, "save_arrow.txt")
+    if os.path.exists(save):
+        os.remove(save)
+    r = run_app(binary, work, "defense_arrow", dict(base, PL_DEFENSE_SAVE=save, PL_DEFENSE_CAM="120,80"), frames=12)
+    st = stats(r)
+    check(bool(st) and st[-1].get("arrow") == 1, "far from the core: the arrow to the core is shown")
+    check(any(s.get("arrow") == 0 for s in stats(run_app(binary, work, "defense_noarrow", dict(base, PL_DEFENSE_SAVE=save + "x"), frames=6))), "on the core: no arrow")
     # the next start continues from the save (nothing ran while it was closed)
     save = os.path.join(work, "save_dark.txt")
     tick0 = int(re.search(r"^tick (\d+)$", open(save).read(), re.M).group(1))
@@ -52,13 +60,13 @@ def main(binary, work):
     check(tick0 >= 2400 and tick0 <= tick1 <= tick0 + 30, f"the second start went on from the saved moment (tick {tick0} -> {tick1})")
     # a damaged save: a message, no crash, the damaged file kept
     bad = os.path.join(work, "save_bad.txt")
-    open(bad, "w").write("PhysicsLabDefense 1\nseed 5\ntick 1\ncamera 0 0 24\nnextid 2\ne 1 1 -1 -1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\nend 0000000000000000\n")
+    open(bad, "w").write("PhysicsLabDefense 2\nseed 5\ntick 1\ncamera 0 0 24\nnextid 2\ne 1 1 -1 -1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0\nend 0000000000000000\n")
     r = run_app(binary, work, "defense_bad", dict(base, PL_DEFENSE_SAVE=bad, PL_DEFENSE_SAMPLE=""), frames=10)
     check(r.bmp and os.path.exists(r.bmp), "a damaged save: the app ran and drew (no crash)")
     check(any(n.startswith("defense loaderror") for n in r.notes), "a damaged save: the message is shown")
     check(os.path.exists(bad + ".damaged"), "a damaged save: the file is kept as .damaged")
     r = run_app(binary, work, "defense_bad_new", dict(base, PL_DEFENSE_SAVE=bad, PL_DEFENSE_SAMPLE="", PL_SCRIPT="5:click=defense.newgame.error"), frames=12)
-    check(open(bad).read().startswith("PhysicsLabDefense 1") and "checksum" not in open(bad).read() and stats(r) and stats(r)[-1]["entities"] == 1,
+    check(open(bad).read().startswith("PhysicsLabDefense 2") and "checksum" not in open(bad).read() and stats(r) and stats(r)[-1]["entities"] == 1,
           "a damaged save: Start a new game gives a fresh planet with only the core")
 
 if __name__ == "__main__":

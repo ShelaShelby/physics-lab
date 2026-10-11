@@ -1,4 +1,4 @@
-// 0.17 stage 1: the Defense Lab's build bar (bottom centre, where the other labs have their toolbar) and its Controls panel (the planet's seed, new game, save,
+// 0.17 stage 1 (stage 2: Home, hotkeys, feeding generators): the Defense Lab's build bar (bottom centre, where the other labs have their toolbar) and its Controls panel (the planet's seed, new game, save,
 // power, the core's inventory, the pollution overlay, how to play, and the game numbers, which are design choices, not measured values).
 #include <algorithm>
 #include <cmath>
@@ -22,12 +22,12 @@ namespace {
 std::string shortName(defense::Kind k) { return k == defense::Kind::Generator ? "Generator" : k == defense::Kind::Pole ? "Pole" : defense::kindName(k); }
 const char* tipOf(defense::Kind k) {
     switch (k) {
-    case defense::Kind::Belt: return "Belt: carries items one way. Turn it with R; a belt fed from one side becomes a corner.";
-    case defense::Kind::Miner: return "Miner (2 x 2): stand it on ore. It digs the ore under it and puts it on the belt or building in front. Needs power.";
-    case defense::Kind::Furnace: return "Furnace (2 x 2): iron ore to iron plate, copper ore to copper plate, 2 stone to a brick. Burns coal. Takes from belts, puts out in front.";
-    case defense::Kind::Chest: return "Chest: stores items from belts and gives them to the belt in front.";
-    case defense::Kind::Generator: return "Coal generator (2 x 2): burns coal from belts and makes power for the poles around it.";
-    case defense::Kind::Pole: return "Power pole: links generators and buildings within its 5 x 5 area; poles up to 7.5 tiles apart are wired together.";
+    case defense::Kind::Belt: return "Belt (1): carries items one way. Hold the left button and drag to lay a line; corners are made for you. R turns it.";
+    case defense::Kind::Miner: return "Miner (2) (2 x 2): stand it on ore (ore never runs out). It digs the ore under it and puts it on the belt or building in front. Needs power.";
+    case defense::Kind::Furnace: return "Furnace (3) (2 x 2): iron ore to iron plate, copper ore to copper plate, 2 stone to a brick. Burns coal. Takes from belts, puts out in front.";
+    case defense::Kind::Chest: return "Chest (4): stores items from belts and gives them to the belt in front.";
+    case defense::Kind::Generator: return "Coal generator (5) (2 x 2): burns coal from belts and makes power for the poles around it. Click it to fill it with coal from the core.";
+    case defense::Kind::Pole: return "Power pole (6): links generators and buildings within its 5 x 5 area; poles up to 7.5 tiles apart are wired together.";
     default: return "";
     }
 }
@@ -47,12 +47,12 @@ Rect defenseBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
         const Rect r{(W - pw) / 2, H * 0.3, pw, sh::lastHeight("##defenseError", static_cast<float>(m.em(8)))};
         sh::Panel p;
         if (sh::beginPanel("##defenseError", r, p, sh::Shape::Panel, false)) {
-            sh::pTitle(p, "The saved planet could not be read");
+            sh::pTitle(p, L.oldSave ? "Saved with an older version" : "The saved planet could not be read");
             sh::pBody(p, L.loadError);
             if (sh::pButton(p, "defense.newgame.error", "Start a new game", sh::Face::Primary)) L.startNew(defense::seedFromText(L.seedText[0] ? L.seedText : std::to_string(static_cast<unsigned>(ImGui::GetTime() * 1e6)).c_str()));
             sh::endPanel(p);
         }
-        auditNote("defense loaderror");
+        auditNote(L.oldSave ? "defense loaderror old" : "defense loaderror");
         return r;
     }
     if (!L.loaded) return Rect{0, 0, 0, 0};
@@ -60,12 +60,13 @@ Rect defenseBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
     std::vector<double> bw;
     const auto widthOf = [&](const std::string& s) { return sh::width(Type::Body, false, s) + 2.0 * m.s12; };
     for (defense::Kind k : defense::kBuildBar) bw.push_back(widthOf(shortName(k)));
-    const double turnW = widthOf("Turn (R)"), saveW = widthOf("Save");
-    double total = 2.0 * m.s8 + turnW + saveW + 2.0 * m.s12;
+    const double turnW = widthOf("Turn (R)"), homeW = widthOf("Home (H)"), saveW = widthOf("Save");
+    double total = 2.0 * m.s8 + turnW + homeW + saveW + 3.0 * m.s12;
     for (double w : bw) total += w + m.s4;
     const double freeW = fr.freeW > 0 ? fr.freeW : W;
     const double x = std::max<double>(m.s12, std::min(freeW / 2 - total / 2, freeW - m.s12 - total));
     const Rect r{x, H - m.s12 - m.toolbarH, total, static_cast<double>(m.toolbarH)};
+    L.freeW = freeW; L.barH = m.s12 + m.toolbarH + m.s8;   // (the core arrow stays clear of the Controls panel and the bar)
     sh::Panel p;
     if (sh::beginPanel("##defenseBar", r, p, sh::Shape::Pill, false)) {
         float bx = p.origin.x + m.s8;
@@ -79,8 +80,11 @@ Rect defenseBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
         }
         bx += static_cast<float>(m.s12 - m.s4);
         if (sh::button("defense.turn", ImVec2(bx, by), ImVec2(static_cast<float>(turnW), static_cast<float>(m.control)), "Turn (R)", Face::Quiet)) L.rotate();
-        if (ImGui::IsItemHovered()) ui::SetTooltip("Turn the building being placed (R)");
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Turn the building being placed (R or 7)");
         bx += static_cast<float>(turnW + m.s12);
+        if (sh::button("defense.home", ImVec2(bx, by), ImVec2(static_cast<float>(homeW), static_cast<float>(m.control)), "Home (H)", Face::Quiet)) L.home();
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Move the view to the core (H or 8)");
+        bx += static_cast<float>(homeW + m.s12);
         if (sh::button("defense.save", ImVec2(bx, by), ImVec2(static_cast<float>(saveW), static_cast<float>(m.control)), "Save", Face::Secondary)) L.save();
         if (ImGui::IsItemHovered()) ui::SetTooltip("Save the planet now (it also saves itself every 60 s and when the app closes)");
         sh::endPanel(p);
@@ -131,7 +135,7 @@ void defenseControls(AppState& app, Panel& p, const SectionFn& section) {
         std::snprintf(b, sizeof b, "%.0f kW / %.0f kW", d * defense::kTicksPerSecond / 1000.0, sup * defense::kTicksPerSecond / 1000.0);
         pStat(p, "Needed / available", b);
         pStat(p, "Generators, poles, miners", std::to_string(gens) + ", " + std::to_string(poles) + ", " + std::to_string(miners));
-        pCaption(p, "With too little power, miners dig proportionally slower. A red dot on a miner: no power reaches it.");
+        pCaption(p, "The core has a free emergency generator (180 kW, about 2 miners) that reaches the network through a pole next to it. With too little power, miners dig proportionally slower. A red dot on a miner: no power reaches it.");
     }
     if (section("core", "Core inventory", true)) {
         bool any = false;
@@ -152,11 +156,16 @@ void defenseControls(AppState& app, Panel& p, const SectionFn& section) {
         pCaption(p, "Miners, furnaces and generators pollute their chunk (32 x 32 tiles); it spreads slowly to the next chunks. It has no effect yet.");
     }
     if (section("help", "How to play", false)) {
-        pCaption(p, "Drag to move the map (either button), the wheel zooms. Pick a building on the bar, left click to place it, R to turn it, right click to remove a building (what it held goes to the core). The core cannot be removed.", false);
-        pCaption(p, "Start: a miner on iron ore with a belt to a furnace; coal to the furnace; plates on a belt into the core. Miners need power: a coal generator fed with coal, and poles to the miners.", false);
+        pCaption(p, "Power: the core has a free emergency generator, enough for about 2 miners. Put a pole next to the core and poles to a miner on coal.", false);
+        pCaption(p, "Belt that coal to a coal generator near a pole: it then adds its own power. The core starts with 50 coal: click a generator to fill it.", false);
+        pCaption(p, "Then: iron ore by belt to a furnace (coal too), plates by belt into the core. No dead end: the core's power always starts a coal line.", false);
+        pCaption(p, "Map: WASD or the arrow keys, or drag with no building chosen (or the middle button); the wheel zooms; H or Home goes to the core (an arrow at the edge points to it).", false);
+        pCaption(p, "Build: keys 1-6 or the bar, left click to place (the building stays chosen), drag to lay a belt line, R turns, Q takes the building under the pointer, Esc or a right click on the ground puts it down. Right click or right drag removes (what it held goes to the core).", false);
     }
     if (section("numbers", "Game numbers (design, not physics)", false)) {
-        pCaption(p, "Every speed, cost, size, ore amount, power and pollution number in the Defense Lab is a game design choice, not a measured value. Only the element names and symbols (Fe, Cu, C) are real, from the Atom Lab's element table.", false);
+        pCaption(p, "Every speed, cost, size, map, ore patch, power and pollution number in the Defense Lab is a game design choice, not a measured value. The planet is invented (red rock, Mars-like, NOT real Mars). Only the element names and symbols (Fe, Cu, C) are real, from the Atom Lab's element table.", false);
+        pStat(p, "Map", "512 x 512 tiles, 8-tile border; ore never runs out");
+        pStat(p, "Core", "180 kW free power, starts with 50 coal");
         pStat(p, "Belt", "1.875 tiles/s, 7.5 items/s");
         pStat(p, "Miner", "1 ore / 2 s, 90 kW");
         pStat(p, "Furnace", "3.2 s an item, 1 coal / 32 s");

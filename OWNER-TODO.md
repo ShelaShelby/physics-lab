@@ -2,6 +2,11 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.17 stage 2 (Defense Lab fixes + new look): what only you can do
+- **Try on the PC:** drag-belts (hold left, drag: a line with automatic corners), the green/red ghost, right drag to remove, WASD and arrow keys, hotkeys 1-8, Q, Esc, H / Home, holding a click on a coal generator. Say what still feels clunky.
+- **Try on the PC:** the new look at several zooms (details and glow vanish below 14 points a tile); fps on the big base (`PL_DEFENSE_SAMPLE=big` on a new save); the core arrow at the screen edge with the Controls panel open and closed.
+- Your stage 1 planet cannot be loaded (map changed): the app says so and keeps it as defense_save.txt.old; start a new planet.
+
 ## 0.17 stage 1 (Defense Lab): what only you can do
 - [ ] On Windows with a real mouse: open the Defense Lab (Labs menu), drag to move, wheel to zoom, pick Belt, place a few with left click, turn with R, remove with right click. Does it feel right? Do belt corners form the way you expect?
 - [ ] Build a small chain (iron miner -> belt -> furnace with coal -> belt -> core, a generator with coal and poles to the miner); close the app and open it again: the base and the time must be where you left them.

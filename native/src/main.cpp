@@ -130,10 +130,11 @@ void defenseOpen(defense::DefenseLab& d) {
     const char* sample = SDL_getenv("PL_DEFENSE_SAMPLE");
     if (sample && !hadFile && d.loaded) {
         defense::buildSampleBase(d.world);
-        if (std::string(sample) == "big") { defense::buildBigBase(d.world); d.world.camX = 2025; d.world.camY = 2064; d.world.zoom = defense::kZoomMin; }
+        if (std::string(sample) == "big") { defense::buildBigBase(d.world); d.world.camX = defense::kBigBaseX + 25; d.world.camY = defense::kBigBaseY + 64; d.world.zoom = defense::kZoomMin; }
         if (const char* z = SDL_getenv("PL_DEFENSE_ZOOM")) d.world.zoom = std::atof(z);
         if (const char* t = SDL_getenv("PL_DEFENSE_TICKS")) for (int i = std::atoi(t); i > 0; i--) d.world.step();
     }
+    if (const char* c = SDL_getenv("PL_DEFENSE_CAM")) std::sscanf(c, "%lf,%lf", &d.world.camX, &d.world.camY);   // stage 2 checks: look somewhere else (the core arrow)
     if (const char* o = SDL_getenv("PL_DEFENSE_OVERLAY")) d.overlay = std::atoi(o) != 0;
     if (const char* t = SDL_getenv("PL_DEFENSE_TOOL")) { d.tool = static_cast<defense::Kind>(std::atoi(t)); }
 }
@@ -379,7 +380,14 @@ int main(int, char**) {
                 if (!app::labInputAllowed(app.benchRunning)) break;      // the benchmark is running: only Cancel and Esc do anything
                 if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) { ui::shellSpace(app, io.WantTextInput); }
-                if (app.lab == 2 && !io.WantCaptureKeyboard && !io.WantTextInput && e.key.key == SDLK_R && !e.key.repeat) app.defense.rotate();   // Defense Lab: R turns the building being placed
+                if (app.lab == 2 && !io.WantCaptureKeyboard && !io.WantTextInput && !e.key.repeat) {   // Defense Lab: R turns, Q picks what is under the pointer, H home, Esc puts the building down, 1-8 the build bar
+                    const SDL_Keycode k = e.key.key;
+                    if (k == SDLK_R) app.defense.rotate();
+                    else if (k == SDLK_Q) app.defense.pickUnder();
+                    else if (k == SDLK_H) app.defense.home();
+                    else if (k == SDLK_ESCAPE) app.defense.tool = defense::Kind::None;
+                    else if (k >= SDLK_1 && k <= SDLK_8) app.defense.hotkey(static_cast<int>(k - SDLK_1) + 1);
+                }
                 if (app.lab == 1 && app.atom.chartOn() && !io.WantCaptureKeyboard && !ui::readingShown()) {   // (5k: with a page open the arrow keys scroll the page)   // the chart of nuclides: arrow keys walk one proton or one neutron (up = more protons, right = more neutrons)
                     const int dZ = e.key.key == SDLK_UP ? 1 : e.key.key == SDLK_DOWN ? -1 : 0, dN = e.key.key == SDLK_RIGHT ? 1 : e.key.key == SDLK_LEFT ? -1 : 0;
                     if (dZ || dN) app.atom.chartStep(dZ, dN);
@@ -406,7 +414,10 @@ int main(int, char**) {
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (!app::labInputAllowed(app.benchRunning)) break;
                 if (app.lab >= 1) {                     // (the Defense Lab the same: a press on the picture starts a drag or a click)
-                    if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && e.button.y < headerH + pictureWinH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
+                    if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && e.button.y < headerH + pictureWinH) {
+                        mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y;
+                        if (app.lab == 2 && (e.button.button == SDL_BUTTON_LEFT || e.button.button == SDL_BUTTON_RIGHT)) app.defense.press(e.button.x / scale, e.button.y / scale, e.button.button == SDL_BUTTON_LEFT);   // 0.17 stage 2: build / remove / feed
+                    }
                     break;
                 }
                 if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && app.journey.active) { ui::journeyStop(app); break; }
@@ -417,16 +428,17 @@ int main(int, char**) {
                     if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) { dragging = true; ui::shellNoteDrag(); }
                     // 3D: dragging turns the view, unless "Drag moves the view" is on, or with the right button or Shift held
                     const bool rotate = app.set.view3D && !app.view.panMode && !rightDrag && !(SDL_GetModState() & SDL_KMOD_SHIFT);
-                    if (dragging && app.lab == 2) app.defense.pan((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale);   // Defense Lab: either button drags the map
+                    if (app.lab == 2 && (app.defense.dragBuild || app.defense.dragRemove)) app.defense.drag(e.motion.x / scale, e.motion.y / scale);   // stage 2: a line of belts / removing along the drag
+                    else if (app.lab == 2 && app.defense.feedHeld) {}
+                    else if (dragging && app.lab == 2) app.defense.pan((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale);   // Defense Lab: a drag without a building (or the middle button) moves the map
                     else if (dragging && app.lab == 1) app.atom.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));
                     else if (dragging) app.view.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rotate);
                     lastX = e.motion.x; lastY = e.motion.y;
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                if (mouseDown && !dragging && app::labInputAllowed(app.benchRunning) && app.lab == 2) {   // Defense Lab: left click places, right click removes
-                    if (e.button.button == SDL_BUTTON_LEFT) app.defense.clickPlace(e.button.x / scale, e.button.y / scale);
-                    else if (e.button.button == SDL_BUTTON_RIGHT) app.defense.clickRemove(e.button.x / scale, e.button.y / scale);
+                if (mouseDown && app::labInputAllowed(app.benchRunning) && app.lab == 2) {   // Defense Lab (stage 2): the press placed / removed / fed; the release ends a belt line or a removing drag
+                    if (e.button.button == SDL_BUTTON_LEFT || e.button.button == SDL_BUTTON_RIGHT) app.defense.release(e.button.x / scale, e.button.y / scale, e.button.button == SDL_BUTTON_LEFT, dragging);
                 } else if (mouseDown && !dragging && app::labInputAllowed(app.benchRunning) && e.button.button == SDL_BUTTON_LEFT) {
                     if (app.lab == 1) app.atom.click(e.button.x / scale, (e.button.y - headerH) / scale);
                     else app.view.click(e.button.x / scale, (e.button.y - headerH) / scale);
@@ -470,6 +482,12 @@ int main(int, char**) {
         maxPhysicsDt = std::max(maxPhysicsDt, dt);
         if (app.lab == 2 && !app.benchRunning) {        // Defense Lab: open the saved planet the first time; fixed 1/60 s steps (none while a page covers it, or paused); autosave
             defenseOpen(app.defense);
+            if (!app.pane && !io.WantCaptureKeyboard && !io.WantTextInput) {   // stage 2: WASD and the arrow keys move the map while held
+                const bool* ks = SDL_GetKeyboardState(nullptr);
+                const double kx = (ks[SDL_SCANCODE_D] || ks[SDL_SCANCODE_RIGHT] ? 1.0 : 0.0) - (ks[SDL_SCANCODE_A] || ks[SDL_SCANCODE_LEFT] ? 1.0 : 0.0);
+                const double ky = (ks[SDL_SCANCODE_S] || ks[SDL_SCANCODE_DOWN] ? 1.0 : 0.0) - (ks[SDL_SCANCODE_W] || ks[SDL_SCANCODE_UP] ? 1.0 : 0.0);
+                app.defense.keyPan(kx, ky, dt);
+            }
             app.defense.update(app.pane ? 0.0 : frameDt, app.paused || app.pane != 0);
         }
         if (app.pane) {                                 // the Learn or Achievements tab is open: the lab waits (the web draws nothing then)
@@ -567,8 +585,8 @@ int main(int, char**) {
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
         if (drawStat && app.lab == 2) { const defense::ViewStats& ds = app.defenseView.stats();
-                        std::printf("PLDEFSTAT calls=%d entities=%zu drawn=%d items=%d chunks=%d built=%d meshes=%d simus=%ld drawus=%ld steps=%d\n", renderer.lastDrawCalls(), app.defense.world.entities().size(), ds.entitiesDrawn,
-                                    ds.items, ds.chunks, ds.meshesBuilt, ds.meshesAlive, long(app.defense.simMs * 1000), long(ds.cpuMs * 1000), app.defense.stepsLastFrame); }
+                        std::printf("PLDEFSTAT calls=%d entities=%zu drawn=%d items=%d chunks=%d built=%d meshes=%d simus=%ld drawus=%ld steps=%d arrow=%d\n", renderer.lastDrawCalls(), app.defense.world.entities().size(), ds.entitiesDrawn,
+                                    ds.items, ds.chunks, ds.meshesBuilt, ds.meshesAlive, long(app.defense.simMs * 1000), long(ds.cpuMs * 1000), app.defense.stepsLastFrame, int(ds.arrow)); }
         if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
                         std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
                                     ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }
