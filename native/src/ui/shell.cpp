@@ -87,7 +87,7 @@ double widthEmOf(PanelId id) {
 }
 void toggle(PanelId id) { S.ui.open = S.ui.open == id ? PanelId::None : id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount(); }
 }  // namespace
-std::string controlsKey(const AppState& app, const char* what) { return std::string(app.lab == 0 ? "orbit." : "atom.") + what; }
+std::string controlsKey(const AppState& app, const char* what) { return std::string(app.lab == 0 ? "orbit." : app.lab == 2 ? "defense." : "atom.") + what; }
 namespace shellimpl {
 bool controlsOpen() { return S.app && !panelCollapsed(S.app->prefs.shellPanels, controlsKey(*S.app, "controls"), false); }      // open by default; kept in the settings like the cards' state
 void controlsToggle() { if (S.app) S.app->prefs.shellPanels = withPanelState(S.app->prefs.shellPanels, controlsKey(*S.app, "controls"), controlsOpen()); }
@@ -116,8 +116,8 @@ void menuPanel(AppState& app, sh::Panel& p, bool& close) {
     if (sh::pRow(p, "menu.save", "Save picture")) { app.shot.requested = true; close = true; }
     if (sh::pRow(p, "menu.history", "What's new (history)")) { app.showHistory = true; close = true; }
     if (sh::pRow(p, "menu.about", "About Physics Lab")) { app.showAbout = true; close = true; }
-    if (sh::pRow(p, "menu.changelog", app.lab == 1 ? "Atom Lab changelog" : "Orbit Lab changelog")) { app.showLabLog = true; close = true; }
-    if (sh::pRow(p, "menu.defaults", "Put this lab's settings back…")) { S.askDefaults = true; close = true; }
+    if (app.lab != 2 && sh::pRow(p, "menu.changelog", app.lab == 1 ? "Atom Lab changelog" : "Orbit Lab changelog")) { app.showLabLog = true; close = true; }   // (the Defense Lab is new: its history is in What's new)
+    if (app.lab != 2 && sh::pRow(p, "menu.defaults", "Put this lab's settings back…")) { S.askDefaults = true; close = true; }
     sh::pGap(p, m.s8);
     sh::pHeading(p, "Text size");
     int cur = 1;
@@ -133,8 +133,8 @@ void menuPanel(AppState& app, sh::Panel& p, bool& close) {
 
 void labMenuPanel(AppState& app, sh::Panel& p, bool& close) {
     sh::pTitle(p, "Labs");
-    for (int i = 0; i < 2; i++)
-        if (sh::pRow(p, i ? "lab.atom" : "lab.orbit", app::kLabInfo[i].name, app.lab == i)) { openLab(app, i); close = true; }
+    for (int i = 0; i < 3; i++)                                                      // 0.17: the Defense Lab is the third
+        if (sh::pRow(p, i == 2 ? "lab.defense" : i ? "lab.atom" : "lab.orbit", i == 2 ? defense::kLabName : app::kLabInfo[i].name, app.lab == i)) { openLab(app, i); close = true; }
 }
 
 void factsPanel(AppState& app, sh::Panel& p, bool& /*close*/) {
@@ -270,7 +270,7 @@ std::vector<SearchEntry> searchEntries(AppState& app) {
     add("Menu", "Theme", "menu:theme", [] { S.openThemes = true; });
     add("Menu", "Learn", "menu:learn", [&app] { app.pane = 1; });
     add("Menu", "Achievements", "menu:ach", [&app] { app.pane = 2; });
-    add("Menu", app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", "menu:swap", [&app] { openLab(app, 1 - app.lab); });
+    add("Menu", app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", "menu:swap", [&app] { openLab(app, app.lab == 0 ? 1 : 0); });
     add("Menu", app.prefs.facts == "on" ? "Facts: turn off" : "Facts: turn on", "menu:facts", [&app] { app.prefs.facts = app.prefs.facts == "on" ? "off" : "on"; });
     add("Menu", "Legend", "menu:legend", [&app] { app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", !panelCollapsed(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", true)); });
     for (const SettingRow& r : settingRows())                                       // 0.15 stage 5l: EVERY row of the Settings window, from the window's own list (ui/settings.h), after the menu's own entries so that "text size" still lists the menu's quick text-size chooser first; each opens Settings at its row
@@ -354,7 +354,7 @@ Rect searchPanel(AppState& app, const Frame& fr, const Metrics& m, const std::ve
 // ---- the top bar ----
 struct Crumb { std::string text; int kind; };                 // kind: 0 link, 1 the lab (a dropdown), 2 link to the lab's picture, 3 where you are now (not a button)
 std::vector<Crumb> crumbs(const AppState& app, int mode) {
-    const std::string lab = app::kLabInfo[app.lab].name, subj = subjectName(app);
+    const std::string lab = app.lab == 2 ? defense::kLabName : app::kLabInfo[app.lab].name, subj = subjectName(app);
     std::vector<Crumb> v;
     if (mode == 0) v.push_back({"Physics Lab", 0});
     if (mode <= 1) v.push_back({lab, 1});
@@ -492,7 +492,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     }
 
     // ---- what the bars hold, and how big that makes them ----
-    std::vector<ToolItem> tools = app.lab == 0 ? orbitTools(app) : atomTools(app);
+    std::vector<ToolItem> tools = app.lab == 0 ? orbitTools(app) : app.lab == 2 ? std::vector<ToolItem>{} : atomTools(app);   // (the Defense Lab has its build bar instead: shell_defense.cpp)
     const double gap = m.s4;
     const double segW = std::max(sh::width(Type::Body, false, "2D"), sh::width(Type::Body, false, "3D")) + 2.0 * m.s12;
     std::vector<double> iw;
@@ -784,6 +784,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         auditRect("tiltslider", static_cast<float>(tr.x), static_cast<float>(tr.y), static_cast<float>(tr.w), static_cast<float>(tr.h));
     }
 
+    // ---- 0.17: the Defense Lab's build bar, bottom centre (where the other labs have their toolbar) ----
+    if (!pane && app.lab == 2) { const Rect br = defenseBar(app, fr, m); if (br.w > 0) { occ.push_back(br); auditRect("defensebar", static_cast<float>(br.x), static_cast<float>(br.y), static_cast<float>(br.w), static_cast<float>(br.h)); } }
+
     // ---- the readout, bottom right: Body size on a soft dark pill (stage 5c; before it was Caption with an outline and was hard to read over lines and stars). Its own window, so a saved picture does not carry it ----
     if (!pane && !ro.empty()) {
         sh::Panel ropanel;
@@ -839,7 +842,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             };
             collectPanelItems(true);
             sh::bodyFloor(true);
-            if (app.lab == 0) orbitControls(app, cp, section); else atomControls(app, cp, section);
+            if (app.lab == 0) orbitControls(app, cp, section); else if (app.lab == 2) defenseControls(app, cp, section); else atomControls(app, cp, section);
             sh::bodyFloor(false);
             collectPanelItems(false);
             auditNote(shownSections);
@@ -985,8 +988,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             (void)themeX;
             if (icon("top.ach", Icon::Trophy, "Achievements", app.pane == 2)) app.pane = app.pane == 2 ? 0 : 2;
             if (icon("top.learn", Icon::Book, "Learn", app.pane == 1)) app.pane = app.pane == 1 ? 0 : 1;
-            if (icon("top.swap", Icon::Swap, app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", false)) openLab(app, 1 - app.lab);
+            if (icon("top.swap", Icon::Swap, app.lab == 0 ? "Go to the Atom Lab" : "Go to the Orbit Lab", false)) openLab(app, app.lab == 0 ? 1 : 0);
             if (icon("top.search", Icon::Search, "Search (Ctrl+K)", S.ui.search)) { if (S.ui.search) S.ui.search = false; else { S.ui.search = true; S.ui.open = PanelId::None; S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; S.queryGen++; } }   // (5k: a second click closes it)
+            if (S.askDefaults && app.lab == 2) S.askDefaults = false;               // (the Defense Lab has no settings to put back: its planet is the save file)
             if (S.askDefaults) { ImGui::OpenPopup(app.lab == 1 ? "Put Atom Lab back?" : "Put Orbit Lab back?"); S.askDefaults = false; }
             defaultsPopups(app);
             sh::endPanel(bar);

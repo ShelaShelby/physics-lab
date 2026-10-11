@@ -1,36 +1,27 @@
-# 0.16 stage 6: the Accurate quark style made more accurate (counts and CPU measured; GPU fps NOT tested)
+# 0.17 stage 1: new Defense Lab, the factory part (speed NOT tested on a GPU; Windows NOT tested)
 
-## What changed (only Accurate changes its look; Classic only its sea colours; Cinematic unchanged)
-1. Text: Fuzzy edge choice "Fuzzy (proton charge profile)" and the readout line say the neutron uses the proton's exp(-r/r0) profile only as a size (also the renderer2d.cpp comment). Learn card "About 99 %..." is now "The three quarks' own masses are only about 1 %", with lattice QCD's 9 % for all quark-mass effects and the 33 / 37 / 23 % split (Yang 2018); Higgs sentence kept. Quark note: dots about 3,000 x bigger than a quark can be (< about 1e-20 m); in Accurate, sea shows colour only and the real sea has more anti-d than anti-u. Readout "quarks are points (<0.001 fm)" -> "(< 0.00001 fm)".
-2. Classic sea: 60 % d, 40 % u pairs (was 60 % u); ratio 1.5, illustrative.
-3. Accurate valence quarks: new pure function atom::accurateQuarks (src/atom/quark_wander.cpp): each quark wanders on its own (seeded by q.ph, no camera, no allocation), centred every frame, softly kept inside 0.6 fm; p = u u d, n = u d d; colour swapping kept.
-4. Accurate gluon field: tube rms radius 0.38 fm (was 0.04-0.09 fm sideways), halo rms 0.65 fm (per axis 0.375, was 0.252); light weighted to the axes and centre (same total, same particle count).
-- About "Where the facts come from" lists PDG 2024, Yang, Bissey, arXiv:2404.11292, Hall C, Miller, E866, SeaQuest. New native/docs/QUARKS.md.
+## What changed
+- A third lab, "Defense Lab" (Labs menu; app.lab = 2; saved as "Defense Lab" in the settings). Top-down 2D with fake depth (soft 3-layer shadows from the top left, lit top face, darker front face, lit edges). Not isometric, not 3D.
+- src/defense (new library defense_core, no graphics): defense_world.* (map, buildings, belts, power, pollution, save), defense_lab.* (camera, placing, steps, autosave), defense_view.* (drawing, app only). UI: ui/shell_defense.cpp (build bar at the bottom: Belt, Miner, Furnace, Chest, Generator, Pole, Turn (R), Save; Controls panel: seed, seed field + New game, Save now, power, core inventory, pollution overlay, how to play, game numbers).
+- Map: endless 32 x 32 chunks made on demand from the seed with our own integer hash + value noise (fbm, no new dependency). Deep / shallow water, sand, grass, rock; water is not buildable. Start area (40 tiles) always land with iron, copper, coal and stone about 13 tiles from the core; other patches in 48-tile cells, richer and bigger with distance.
+- Buildings: core (3 x 3, cannot be removed, counts what is belted in), miner (2 x 2, on ore, needs power, outputs in front), belt (4 items a tile, fixed speed, back-pressure; a belt fed from one side only becomes a corner), furnace (ore -> plate, 2 stone -> brick, burns coal), chest (400), coal generator, pole (5 x 5 area, wires 7.5 tiles). Low power slows miners proportionally. Removing a building puts what it held into the core (no item lost).
+- Pollution: one number a chunk from miners, furnaces and generators, spreading 2 % a second to each neighbour, 1 % absorbed; overlay in Controls > View; no effect yet.
+- Save: defense_save.txt next to settings.txt, versioned text with a checksum, written to .tmp then renamed (MoveFileEx on Windows). Saved by the button, every 60 s and when the app closes; no offline progress. A damaged file: a message, a copy kept as .damaged, "Start a new game".
+- Element names/symbols (Fe, Cu, C) come from atom::symbol. All speeds, costs, sizes, amounts, power and pollution numbers are labelled game design choices in defense_world.h, the Controls panel and About ("Defense Lab (a game)", native edit 37). Changelog 0.17 entry; CMake VERSION 0.17.
+- Stage 2 / 3 hooks: Kind list (new kinds append; the save keeps numbers), entity list, World::pollution per chunk.
 
-## Things the owner should know (found, not hidden)
-- The old triangle's mean quark distance is 0.332 fm (measured over its motion), not "about 0.25 fm". Kept 0.33 fm ("same as now").
-- With a cut at 0.6 fm, a_d / a_u = 1.7^(1/3) gives a d/u MEAN ratio of only 1.07. The test asks for a mean ratio of 1.193, so that is kept; the central density ratio is then larger than 1.7. Profile scales are fitted, not measured (QUARKS.md).
-- The Learn "proton" tab still uses d = 4.67 MeV (PDG 2022 value) while PDG 2024 gives 4.70 +/- 0.07. Not changed (word-for-word web tests; 9.0 MeV and 0.96 % either way). Owner to decide.
-- arxiv.org and nature.com were not reachable: Hall C's 0.75 / ~1 fm NOT confirmed in the paper (as reported by CERN Courier); no fact was re-read.
-- Tube radius is from a quenched lattice with heavy static quarks; taken as the rms radius of the cross-section (definition not re-checked).
+## Speed guard (counts; Linux, software GL; CPU noisy)
+- Big test base (PL_DEFENSE_SAMPLE=big: sample + 64 lines of 48 belts between chests, zoom 6): 3,232 entities, 9,920 items on screen, 40 chunks, 44 draw calls a frame (one retained mesh a chunk + belts/buildings in one triangle batch + 2 square batches an item kind). CPU: simulation about 0.10 ms a frame, building the draw lists 0.34-0.38 ms. Unit test: 0.037 ms a tick for 3,201 entities.
+- Small sample (zoom 24): 12 draw calls, 32 entities, 4 chunks, 0.023 ms draw-list CPU.
+- No per-frame allocation in steady state (item and pole buffers reused, chunk meshes cached). Allocations still happen when a new chunk comes into view, when the layout changes, and at most once a second when pollution reaches a new chunk.
 
-## Speed guard (Ds-281, Cloud, Fuzzy, Accurate, camera turning 0.15 rad/frame, 1280x800, last 30 of 90 frames; CPU us = nucleus part, mean of 3 runs, software GL, noisy)
-| zoom | detail | theme | calls | vertices | blobs | CPU us before -> after |
-|---|---|---|---|---|---|---|
-| x2063 | + Sea | light | 5 -> 5 | 30 -> 30 | 1,642 -> 1,594 | 990 -> 908 (-8 %) |
-| x2063 | + Sea | Midnight | 5 -> 5 | 30 -> 30 | 1,642 -> 1,594 | 920 -> 884 (-4 %) |
-| x2063 | + Gluons | light / Midnight | 5 -> 5 | 30 -> 30 | 1,176 -> 1,128 | 745 -> 734 / 756 -> 727 |
-| x5182 | + Sea | light / Midnight | 5 -> 5 | 30 -> 30 | 371 -> 368 | 353 -> 377 (+7 %) / 352 -> 346 |
-| x5182 | + Gluons | light / Midnight | 5 -> 5 | 30 -> 30 | 263 -> 260 | 300 -> 341 (+14 %) / 300 -> 300 |
-- The x5182 + Gluons light +14 % is noise as far as can be told: the draw stream is identical light vs Midnight (stage 5), and Midnight is +0 %. A first version was +15 % (exp() per particle, trig hash); replaced by closed forms and an integer hash.
-- No new per-segment lines, no new batch flushes. ui6c_ds281sea unchanged and passing.
-
-## Tested (Linux, software OpenGL)
-- New unit test testQuarkWander (atom_physics): mean 0.3295 / 0.3276 fm (p / n), d/u 1.198 / 1.188, farthest 0.6000 fm, centred to 1e-16 fm, largest step 0.026 fm per 1/60 s (limit 0.04; old triangle 0.0099). It cannot run on the parent (no function); broken on purpose (b_d = b_u, no pull-in): 4 checks fail.
-- Word-for-word: atom_learn_reference.inc updated on purpose for the new card (17 places); the web hint test now adds the two new quark-note sentences (adaptNucleusHint); About edit added to kEditsAbout.
-- check.sh quick: 10 of 10. check.sh full (once): 73 of 75; the 2 failures were on purpose and fixed, then only those re-run and passing: app_settings (About now has 36 native edits and 261 entities: counts updated) and shell_pictures (shell_about_dark/light_1280x800 hashes updated: the About sources list is longer; the other 22 hashes unchanged). No saved picture of the Accurate quarks exists, so none changed.
-- Pictures looked at (2 composites, 4 views): Ds-281 x5182, light + Gluons and Midnight + Sea, before vs after.
+## Tested (Linux)
+- New defense_logic (quick label, 62 checks): same seed = identical chunks (also in reverse order and 10,000 tiles out), other seed differs, all 5 terrains occur, no water and all 4 ores within 24 tiles for 12 seeds, ore richer far out, item names use atom::symbol; belts: 20 items on a line with a corner, 1,500 ticks: none made or lost, never closer than 64 units, packed 4 a tile at the blocked end, all reach a chest; chest-fed line fills and stops; a side-belt merge keeps count and gap; one item crosses 8 tiles in exactly 256 ticks; save -> load: identical state hash and text, identical after 1,200 more ticks; atomic write/read; 7 damaged files refused with a message, world unchanged. Broken on purpose: no target-gap rule -> the merge gap check fails; no checksum -> 2 damaged-file checks fail.
+- New defense_pictures (real app, 22 checks): dark and light pictures of the sample base, draw counts, build bar on screen, core drawn in the middle, saved on close, the next start continues from the saved tick, damaged save -> message, .damaged copy, and a scripted "Start a new game".
+- check.sh quick: 11 of 12 the first time (windows_decorated: tooltips must use ui::SetTooltip; fixed, re-run: passed). app_settings: About native edits 36 -> 37 (updated on purpose).
+- Existing UI tests touching the Labs menu, pages and About, run once: shell_ui, shell_state, ui5g_pages, ui5k_pages, ui5k_log, ui5l_popups, ui5p_lit, ui5m2_windows passed. shell_pictures: shell_about_dark/light_1280x800 changed on purpose (the About page is longer: only the scrollbar thumb differs in view; looked at once), hashes updated, re-run passed. Full suite NOT run (job rule).
+- Pictures looked at: sample base dark (with Controls) and light + the damaged-save panel.
 
 ## Not tested / not done
-- fps on a real GPU and Windows behaviour (OWNER-TODO); whether the wider Y reads well at every zoom (the 2 composites showed it faint, as before).
-- Not done (no sourced numbers retrieved): strange sea, pion-cloud tail, spin, pressure.
+- fps on a real GPU, Windows behaviour, a real mouse (OWNER-TODO). Placing by real clicks was not driven by a script (only the logic).
+- Not built (by design of this stage): splitters, junctions, aliens, turrets, ammo, building costs (placing is free in stage 1).

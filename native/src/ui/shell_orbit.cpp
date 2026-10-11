@@ -43,6 +43,14 @@ std::vector<ToolItem> orbitTools(AppState& app) {
 ChipInfo chipInfo(AppState& app) {
     ChipInfo c;
     c.play = true; c.paused = app.paused;
+    if (app.lab == 2) {                                         // 0.17: the Defense Lab: the planet's seed and how long it has been played, with play / pause
+        const unsigned long long s = app.defense.world.tick() / defense::kTicksPerSecond;
+        char b[64];
+        std::snprintf(b, sizeof b, "Played %llu:%02llu:%02llu", s / 3600, s / 60 % 60, s % 60);
+        c.title = "Planet " + std::to_string(app.defense.world.seed());
+        c.sub = app.defense.loaded ? std::string(b) + "  ·  power " + std::to_string(app.defense.world.totalSatPermille() / 10) + " %" : "no planet open";
+        return c;
+    }
     if (app.lab == 1) {                                         // the Atom Lab: "U · Uranium-238" and "92 protons · 146 neutrons"; a click opens the periodic table (stage 5b)
         const atom::ChipText t = atom::elementChipText(app.atom.p.Z, app.atom.p.N);
         c.title = t.title; c.sub = t.sub;
@@ -60,6 +68,7 @@ ChipInfo chipInfo(AppState& app) {
 
 std::string subjectName(const AppState& app) {
     if (app.lab == 1) return atom::name(app.atom.p.Z);
+    if (app.lab == 2) return "Planet " + std::to_string(app.defense.world.seed());
     const orbit::Selection& sel = app.view.sel;
     if (sel.kind == orbit::Selection::None) return "";
     static orbit::Selection cachedSel;                       // the name of a selection never changes: looked up once, not 47 strings built every frame

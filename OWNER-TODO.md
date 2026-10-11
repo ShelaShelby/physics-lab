@@ -2,6 +2,11 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.17 stage 1 (Defense Lab): what only you can do
+- [ ] On Windows with a real mouse: open the Defense Lab (Labs menu), drag to move, wheel to zoom, pick Belt, place a few with left click, turn with R, remove with right click. Does it feel right? Do belt corners form the way you expect?
+- [ ] Build a small chain (iron miner -> belt -> furnace with coal -> belt -> core, a generator with coal and poles to the miner); close the app and open it again: the base and the time must be where you left them.
+- [ ] fps with a big base and zoomed far out (the cloud has no GPU: only counts and CPU time were measured).
+
 ## 0.16 stage 6: what only you can do
 - [ ] Atom Lab, Accurate quarks, deep zoom (Ds-281 at x5182, then dive into one nucleon): does the new look read? Quarks wander on their own (no triangle), the gluon Y and halo are wider. Light theme and Midnight, with "+ Gluons" and "+ Sea".
 - [ ] Repeat the rotating fps test: Accurate, "+ Sea", camera turning (drag fast), light theme and Midnight. Send the fps numbers (the cloud has no GPU; only counts and CPU time were measured).

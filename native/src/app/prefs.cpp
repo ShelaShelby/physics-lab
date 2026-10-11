@@ -106,7 +106,7 @@ Prefs loadPrefs(const std::string& text) {
                 ws.hasPos = f[2] != "-"; ws.x = int(x); ws.y = int(y); ws.maximized = m == 1;
                 p.window = ws;
             }
-        } else if (k == "lab") { if (v == "Orbit Lab" || v == "Atom Lab") p.lab = v; }
+        } else if (k == "lab") { if (v == "Orbit Lab" || v == "Atom Lab" || v == "Defense Lab") p.lab = v; }
         else if (k.rfind("orbit.", 0) == 0) p.orbit[k.substr(6)] = v;
         else if (k.rfind("atom.", 0) == 0) p.atom[k.substr(5)] = v;
     }

@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.17", "New: the Defense Lab, part 1: the factory",
+     "A third lab, next to the Orbit Lab and the Atom Lab: a factory game on an endless planet, seen from above, with soft shadows for depth. Each planet has a seed (shown, and you can type one); "
+     "the same seed always makes the same map: deep and shallow water, sand, grass, rock, and patches of iron, copper, coal and stone, richer and bigger the farther you go. The start always has all four ores close by. "
+     "Build miners, belts (corners form by themselves), furnaces, chests, coal generators and power poles; plates belted into the core are counted. Drag to move, the wheel zooms, left click places, R turns, right click removes. "
+     "Pollution is kept for every chunk of the map and spreads slowly (an overlay shows it); it does nothing yet. The game saves every 60 s, with the Save button and when the app closes. "
+     "All its speeds, costs, sizes and power numbers are game design choices, not measured values (About says so); only the element names and symbols come from real data. Aliens and defences come in a later stage. "
+     "Not measured: speed on a real graphics card, and how it feels on Windows with a real mouse."},
     {"0.16", "Atom Lab: the Accurate quark style is closer to what is measured",
      "Only the Accurate quark style changes its look; Classic and Cinematic look as before, except that Classic's sea now has more down than up pairs. "
      "In Accurate each valence quark wanders on its own round the middle instead of riding a tumbling triangle; down quarks keep a little farther out than up quarks (a heuristic from Miller 2007), "
@@ -504,6 +511,7 @@ const NativeEntry* nativeHistory(int& count) {
 
 // The web's changelog pop-up for the lab on screen ("Orbit Lab · changelog"): each update's number, title and text
 void labLogWindow(bool* open, int lab) {
+    if (lab > 1) { *open = false; return; }                // 0.17: the Defense Lab has no web changelog (its history is in What's new)
     if (!*open) return;
     const app::LabInfo& L = app::kLabInfo[lab];
     const ImGuiViewport* vp = ImGui::GetMainViewport();
