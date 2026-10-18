@@ -53,6 +53,7 @@ struct Prefs {
 
 std::string savePrefs(const Prefs& p);            // the file's text
 Prefs loadPrefs(const std::string& text);         // unknown or broken lines are ignored; bad choices fall back to the defaults
+bool writeSettingsFile(const std::string& path, const std::string& text);   // 0.19: true only when every byte reached the disk
 
 // the labs and their indexes (AppState::lab); a removed or unknown lab name gives the default lab, 0
 constexpr int kLabCount = 3;   // 0.19: Orbit 0, Atom 1, Molecule 2 (the Defense Lab, index 2 in 0.17 and 0.18, was removed)

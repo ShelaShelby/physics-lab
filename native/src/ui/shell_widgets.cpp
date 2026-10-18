@@ -430,6 +430,17 @@ bool button(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, F
     return h.clicked;
 }
 
+bool toolToggle(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, bool on) {
+    const Hit h = hit(id, pos, size);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 q(pos.x + size.x, pos.y + size.y);
+    if (on) dl->AddRectFilled(pos, q, cLitFill(), rc());                       // as iconButton's lit pill (5q: every theme, towards the text colour)
+    else if (h.hovered) hoverFill(id, dl, pos, q, pos, q, cFaceHover(), rc());
+    const float tw = width(Type::Body, false, label);
+    text(dl, Type::Body, false, ImVec2(pos.x + (size.x - tw) / 2, pos.y + (size.y - px(Type::Body)) / 2), cText(), label);
+    return h.clicked;
+}
+
 bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* tip, bool on, float caretW) {
     const Hit h = hit(id, pos, size);
     ImDrawList* dl = ImGui::GetWindowDrawList();

@@ -1,4 +1,4 @@
-HISTORICAL plan (native 0.4/0.5). ROADMAP.md is the current plan.
+HISTORICAL plan (native 0.4/0.5), kept as the record of how the app-wide features were ported. ROADMAP.md is the current plan; since 0.19 the app has three labs (Orbit, Atom, Molecule) and the old header / panel described here was replaced by the 0.15 interface.
 # App-wide features plan (native 0.5)
 
 Reference: `archive/web/index.html` (web Physics Lab 8.6.2). Line numbers are from the current file, which is

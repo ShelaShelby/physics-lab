@@ -9,6 +9,13 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <csignal>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#endif
 
 #include "app/app_data.h"
 #include "app/prefs.h"
@@ -159,6 +166,46 @@ static void testPrefsFuzz() {
         if (labIndex(loadPrefs(t).lab) < 0 || labIndex(loadPrefs(t).lab) >= kLabCount) bad++;
     }
     checkTrue("settings fuzz: 20,000 random settings files load and read back the same (" + std::to_string(bad) + " wrong)", bad == 0);
+}
+
+
+// 0.19 audit: the settings file is written to a side file first and then renamed over the old one, and a failed write says so (the app then keeps the old
+// file and tries again later). Before, a full disk (here a file-size limit) or a crash in the middle left a cut file, and the app believed it was saved.
+static void testSettingsWrite() {
+    const std::string dir = "settings_write_test";
+    std::remove((dir + "/s.txt").c_str()); std::remove((dir + "/s.txt.tmp").c_str());
+#ifdef _WIN32
+    _mkdir(dir.c_str());
+#else
+    mkdir(dir.c_str(), 0755);
+#endif
+    const std::string path = dir + "/s.txt";
+    checkTrue("settings write: a new file", writeSettingsFile(path, "theme=paper\n"));
+    checkTrue("settings write: an old file replaced", writeSettingsFile(path, "theme=dark\nfont=serif\n"));
+    std::string got;
+    if (FILE* f = std::fopen(path.c_str(), "rb")) { char b[256]; std::size_t n; while ((n = std::fread(b, 1, sizeof b, f)) > 0) got.append(b, n); std::fclose(f); }
+    checkStr("settings write: the file holds exactly the new text", got, "theme=dark\nfont=serif\n");
+    FILE* tmp = std::fopen((path + ".tmp").c_str(), "rb");
+    checkTrue("settings write: no side file left behind", tmp == nullptr);
+    if (tmp) std::fclose(tmp);
+#ifndef _WIN32
+    {   // a full disk, made with a file-size limit of 1,000 bytes (the write then fails with EFBIG; SIGXFSZ ignored): reported, and the old file is kept whole
+        struct rlimit old {};
+        getrlimit(RLIMIT_FSIZE, &old);
+        void (*prev)(int) = std::signal(SIGXFSZ, SIG_IGN);
+        struct rlimit small = old;
+        small.rlim_cur = 1000;
+        setrlimit(RLIMIT_FSIZE, &small);
+        const bool ok = writeSettingsFile(path, std::string(100000, 'x'));
+        setrlimit(RLIMIT_FSIZE, &old);
+        std::signal(SIGXFSZ, prev);
+        checkTrue("settings write: a full disk is reported as a failure", !ok);
+        std::string kept;
+        if (FILE* f = std::fopen(path.c_str(), "rb")) { char b[256]; std::size_t n; while ((n = std::fread(b, 1, sizeof b, f)) > 0) kept.append(b, n); std::fclose(f); }
+        checkStr("settings write: after a failed write the old file is still whole", kept, "theme=dark\nfont=serif\n");
+    }
+#endif
+    checkTrue("settings write: a folder that does not exist is a failure", !writeSettingsFile(dir + "/no/such/folder/s.txt", "x"));
 }
 
 static bool isHex(const std::string& s) {
@@ -1957,6 +2004,7 @@ int main() {
     testBadLines();
     testSettingsFrom018();
     testPrefsFuzz();
+    testSettingsWrite();
     testThemes();
     testThemeShownName();
     testProgress();

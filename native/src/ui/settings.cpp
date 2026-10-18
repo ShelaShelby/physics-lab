@@ -216,12 +216,8 @@ void saveSettingsWhenChanged(AppState& app, double nowS) {
     if (nowS - g_changedAt < 0.25) return;                    // written a moment after the last change, like the web's remember()
     const std::string path = settingsPath();
     if (path.empty()) return;
-    if (FILE* f = std::fopen(path.c_str(), "wb")) {
-        std::fwrite(text.data(), 1, text.size(), f);
-        std::fclose(f);
-        g_written = text;
-        g_changedAt = -1;
-    }
+    if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; }
+    else g_changedAt = nowS + 5;                              // 0.19: not written (a full disk, a read-only folder): the old file stays; try again in about 5 s, not every frame
 }
 
 // ---- 0.15 stage 5l: the list of the Settings window's rows (settings.h). The window draws each heading from it, so search (built from the same list) cannot miss one. ----
@@ -256,6 +252,12 @@ bool g_inSettings = false;                                  // the Settings wind
 std::string g_goto;                                         // search asked for this row
 int g_gotoFrames = 0;                                       // the page's lines are measured as they are drawn: the scroll is aimed at the row for a few frames
 double g_hlStart = -100;                                    // when the highlight began (ImGui time)
+// 0.19: with PL_FIXED_DT (the automatic checks) the highlight's clock follows the frames, as the labs' clocks do; before, a slow, busy test machine could
+// let the highlight run out on the wall clock before the picture was taken (ui5l_search failed twice in the parallel full run, never alone)
+double hlNow() {
+    static const double fixedDt = std::getenv("PL_FIXED_DT") ? std::atof(std::getenv("PL_FIXED_DT")) : 0.0;
+    return fixedDt > 0 ? ImGui::GetFrameCount() * fixedDt : ImGui::GetTime();
+}
 struct Hl { float x0 = 0, y0 = 0, x1 = 0, y1 = 0, a = 0; } g_hl;   // the highlight to draw this frame (a == 0: none)
 std::vector<std::string> g_drawnRows;                       // the rows drawn this frame (for the test)
 constexpr double kHighlightSeconds = 1.6;
@@ -271,10 +273,10 @@ void settingMark(const char* id) {
     if (g_goto == id) {
         if (g_gotoFrames > 0) {
             ImGui::SetScrollHereY(0.12f);                   // the row's line near the top of the window
-            if (--g_gotoFrames == 7) g_hlStart = ImGui::GetTime();
+            if (--g_gotoFrames == 7) g_hlStart = hlNow();
         }
     }
-    const double age = ImGui::GetTime() - g_hlStart;
+    const double age = hlNow() - g_hlStart;
     if (g_goto == id && age >= 0 && age < kHighlightSeconds) {
         const float a = static_cast<float>(0.38 * (1.0 - age / kHighlightSeconds));
         const ImVec2 wp = ImGui::GetWindowPos();

@@ -2,20 +2,12 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
-## 0.18 stage 1 (Molecule Lab viewer): what only you can do
-- **Try on the PC:** Labs menu -> Molecule Lab. Drag to turn, wheel to zoom, Shift / right / middle drag to move, click atoms and bonds, both styles, Labels, Spin, Reset view; close and reopen (molecule, style and view must come back). Say how it feels and whether it is fast (no GPU in the cloud).
-- **Check on CCCBDB:** ammonia's rotational constants. Built from rNH 1.012 / aHNH 106.67 the shape gives A = B = 9.974 cm-1; the value given to the job was 9.4443 (5.6 % lower; C agrees within 2.4 %). Please look at the NH3 experimental rotational constants page and send what it says (a typing slip, or a different isotopologue or state).
-- **If you want them shown:** CCCBDB's point group for each molecule and the citation text CCCBDB asks for (the site is unreachable from the cloud).
-
-## 0.17 stage 2 (Defense Lab fixes + new look): what only you can do
-- **Try on the PC:** drag-belts (hold left, drag: a line with automatic corners), the green/red ghost, right drag to remove, WASD and arrow keys, hotkeys 1-8, Q, Esc, H / Home, holding a click on a coal generator. Say what still feels clunky.
-- **Try on the PC:** the new look at several zooms (details and glow vanish below 14 points a tile); fps on the big base (`PL_DEFENSE_SAMPLE=big` on a new save); the core arrow at the screen edge with the Controls panel open and closed.
-- Your stage 1 planet cannot be loaded (map changed): the app says so and keeps it as defense_save.txt.old; start a new planet.
-
-## 0.17 stage 1 (Defense Lab): what only you can do
-- [ ] On Windows with a real mouse: open the Defense Lab (Labs menu), drag to move, wheel to zoom, pick Belt, place a few with left click, turn with R, remove with right click. Does it feel right? Do belt corners form the way you expect?
-- [ ] Build a small chain (iron miner -> belt -> furnace with coal -> belt -> core, a generator with coal and poles to the miner); close the app and open it again: the base and the time must be where you left them.
-- [ ] fps with a big base and zoomed far out (the cloud has no GPU: only counts and CPU time were measured).
+## 0.19 (Defense Lab removed, audit): what only Alex can do
+- [ ] **Molecule Lab on Alex's own PC:** drag to turn, Shift / right / middle drag to move, the wheel to zoom: does it feel right? Click atoms and bonds, both styles, Labels, Spin, Reset view; close and reopen (molecule, style and view must come back). Note the fps (no GPU in the cloud).
+- [ ] **Orbit Lab and Atom Lab after the audit:** a normal session in each (zoom, drag, Jump to a date, search with Ctrl+K, the Atom guide's word "monochrome" now unlocks the Monochrome theme). Nothing should look or behave differently except the fixes in native/AUDIT.md.
+- [ ] **NH3 rotational constants, a second source:** CCCBDB was reachable from the cloud on 18 Oct 2026 and itself lists A = B = 9.44430, C = 6.19600 cm-1 (1966Herzberg) next to the geometry rNH 1.012 / aHNH 106.67, which gives A = B = 9.974, C = 6.346 (so it was not a typing slip in the job text). Please look the constants up in a second source (Herzberg 1966 itself, or the JPL / CDMS line catalogue entry for NH3) and send the numbers; the app shows the listed value unchanged and says it is doubtful.
+- [ ] **If wanted:** CCCBDB's point group for each molecule (now reachable from the cloud: a later job can add them with their source).
+- [ ] An old Defense Lab save (defense_save.txt next to settings.txt in %APPDATA%\PhysicsLab\PhysicsLab) is no longer used: delete it by hand if you like.
 
 ## 0.16 stage 6: what only you can do
 - [ ] Atom Lab, Accurate quarks, deep zoom (Ds-281 at x5182, then dive into one nucleon): does the new look read? Quarks wander on their own (no triangle), the gluon Y and halo are wider. Light theme and Midnight, with "+ Gluons" and "+ Sea".
@@ -29,19 +21,17 @@ Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked
 - [ ] Theme list under the top bar (no top-bar icon covered); About scrollbar stays 12 px when you point at it or drag it; End goes to the very bottom in one press.
 - [ ] Atom Lab Element picker: open it: the atom, toolbar, FPS number and scale bar must not move. At a small window the subject card disappears while the picker would cover it (it comes back when you close the picker). Is that OK, or would you rather have the picker narrower / elsewhere?
 - [ ] Controls sliders are grey in every theme: can you still see where the value is?
-- [ ] Release label 0.14 -> 0.15 (CMake VERSION, window title, About, history chip) at stage 7.
-- [ ] Still open from before: scene 16 worst-frame check (on the 0.16 list); the benchmark with New UI Off.
+- [ ] Still open from before: scene 16 worst-frame check (on the 0.16 list).
 
 ## 0.15 stage 5p (six PC findings): what only you can do
 - [ ] Wheel after About: Atom Lab and Orbit Lab: open About, close it, turn the wheel over the picture: it must zoom. Same after History and the log. (Cloud test passed; your PC is the real test.)
 - [ ] About scroll: wheel, PageUp / PageDown / Home / End scroll it; the scrollbar is 12 px wide with a faint track and you can drag it. Pressing End once stops about 1 % above the bottom (the page grows while its bottom is first drawn); End again reaches it.
 - [ ] Zoom-out in the Atom Lab: Atom, Cloud, Cloud 3D, Slice and the Chart of nuclides: the picture can now get half its old smallest size. Is that far enough, and does it feel right?
 - [ ] Lit buttons (Dark theme, New UI): the bottom toolbars (Orbit's 2D / 3D, Atom's view buttons) and the gear with Settings open: dark fill, white icon, no outline or glow. Can you still see which one is on? Unlit icons are a little dimmer than before.
-- [ ] Element picker doubling (#4): NOT proven to be the same cause as on your PC. I reproduced a flip between two layouts every frame at 880 x 560 and fixed it, but I never saw the doubling you photographed. If it still shows: tell me (a) the display scale in Windows settings (100 / 125 / 150 %), (b) the window size, (c) whether it also happens with Settings or the theme chooser open, (d) whether it happens with New UI Off.
+- [ ] Element picker doubling (#4): NOT proven to be the same cause as on your PC. I reproduced a flip between two layouts every frame at 880 x 560 and fixed it, but I never saw the doubling you photographed. If it still shows: tell me (a) the display scale in Windows settings (100 / 125 / 150 %), (b) the window size, (c) whether it also happens with Settings or the theme chooser open.
 - [ ] Element picker overlap (#5): the info text is hidden while it is open; the picker stops above the fact line, the toolbar and the FPS pill and scrolls inside itself. At 880 x 560 it still covers the subject card, and at 1280 x 800 it covers the left end of the scale bar. Tell me if either matters.
 
 ## 0.15 stage 5o (three layout fixes): what only you can do
-- [x] `ui5l_popups`: decided and done in 5q (test inset 4).
 - [ ] On the PC, Orbit Lab in a small window (880 x 560, Controls open, Earth picked): the subject card now ends above the readout and scrolls (mouse wheel) to "All values". Is that what you want?
 - [ ] On the PC, Atom Lab (Controls open, 1280 x 800): a long fact is whole, on the row above the toolbar, and the scale bar sits above it.
 - [ ] On the PC: the Labs dropdown (top bar): the lower corners and edge look clean over the picture.
@@ -53,7 +43,7 @@ Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked
 - [ ] Settings, About, Learn, the history pages, Benchmark (also the Benchmark result window with Save, which could not be opened in the cloud) in the M1 look: rounded flat cards, grey selected tiles. Also the theme chooser and language pop-ups and the Facts panel (click the fact line). I read "Units popup" and "view-chooser popup" as the pop-up lists; tell me if you meant something else.
 - [ ] The chart tilt slider "flat <-> 3D" above the toolbar, Chart view only: drag it, compare with the Controls panel's Tilt row.
 - [ ] Still unconfirmed from earlier stages: Settings search; Legend closes on an outside click; Cloud / Cloud 3D show one highlight; the Labs dropdown; About Contents jumps.
-- [ ] New UI Off benchmark at the same window size (compare with New UI On); real-GPU numbers.
+- [ ] Real-GPU benchmark numbers.
 - [ ] Delete "Look M*.bat" by hand if you still have them on your PC (none is in the repository).
 - [ ] Not tested here: Windows, Segoe UI widths, 125 / 150 % scale, a real mouse, a real GPU, speed, the feel of the slide.
 

@@ -59,19 +59,19 @@ Rect moleculeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
         const float by = p.origin.y + (m.toolbarH - m.control) / 2.0f, ch = static_cast<float>(m.control);
         for (int i = 0; i < 2; i++) {
             const bool on = static_cast<int>(L.set.style) == i;
-            if (sh::button(i ? "molecule.bar.fill" : "molecule.bar.ball", ImVec2(bx, by), ImVec2(static_cast<float>(i ? sw1 : sw0), ch), names[i], Face::Quiet, on)) L.set.style = static_cast<molecule::Style>(i);
+            if (sh::toolToggle(i ? "molecule.bar.fill" : "molecule.bar.ball", ImVec2(bx, by), ImVec2(static_cast<float>(i ? sw1 : sw0), ch), names[i], on)) L.set.style = static_cast<molecule::Style>(i);
             if (ImGui::IsItemHovered()) ui::SetTooltip("%s", i ? "Space-filling: balls of the van der Waals radius (a convention; a molecule has no hard edge)" : "Ball-and-stick: ball sizes are only a drawing scale");
             bx += static_cast<float>((i ? sw1 : sw0) + m.s4);
         }
         bx += static_cast<float>(m.s12 - m.s4);
-        if (sh::button("molecule.bar.labels", ImVec2(bx, by), ImVec2(static_cast<float>(lw), ch), "Labels", Face::Quiet, L.set.labels)) L.set.labels = !L.set.labels;
+        if (sh::toolToggle("molecule.bar.labels", ImVec2(bx, by), ImVec2(static_cast<float>(lw), ch), "Labels", L.set.labels)) L.set.labels = !L.set.labels;
         if (ImGui::IsItemHovered()) ui::SetTooltip("Element labels on the atoms");
         bx += static_cast<float>(lw + m.s12);
         const bool reduced = ui::look().reduced;
-        if (sh::button("molecule.bar.spin", ImVec2(bx, by), ImVec2(static_cast<float>(pw), ch), "Spin", Face::Quiet, L.set.spin && !reduced) && !reduced) L.set.spin = !L.set.spin;
+        if (sh::toolToggle("molecule.bar.spin", ImVec2(bx, by), ImVec2(static_cast<float>(pw), ch), "Spin", L.set.spin && !reduced) && !reduced) L.set.spin = !L.set.spin;
         if (ImGui::IsItemHovered()) ui::SetTooltip("%s", reduced ? "Auto-spin is off while Motion is Reduced (Settings)" : "Turn the molecule slowly by itself");
         bx += static_cast<float>(pw + m.s12);
-        if (sh::button("molecule.bar.reset", ImVec2(bx, by), ImVec2(static_cast<float>(rw), ch), "Reset view", Face::Secondary)) L.resetView();
+        if (sh::button("molecule.bar.reset", ImVec2(bx, by), ImVec2(static_cast<float>(rw), ch), "Reset view", Face::Quiet)) L.resetView();   // (0.19: quiet, as the other toolbars' unlit buttons, so it is not mistaken for a lit toggle)
         if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the first view (turn, zoom and position)");
         sh::endPanel(p);
     }

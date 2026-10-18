@@ -21,9 +21,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 const Entry kNative[] = {
     {"0.19", "Defense Lab removed, clean-up and audit",
      "The Defense Lab (the factory game of 0.17) is removed: the app has three labs again, Orbit Lab, Atom Lab and Molecule Lab. A settings file from 0.18 still loads: if it was left on the Defense Lab, "
-     "the app opens the Orbit Lab, and every other setting is kept (the Defense Lab's save file is left untouched on the disk). Fixed: the clickable word \"monochrome\" in the Atom Lab guide "
-     "(What am I even looking at?, \"What is to scale\") did nothing since 0.16, so the Monochrome theme and the Sharp Eyes achievement could not be found; it works again. "
-     "Unused code left over from the old interface was deleted. Not measured: speed on a real graphics card, and how the mouse feels on Windows."},
+     "the app opens the Orbit Lab, and every other setting is kept (the Defense Lab's save file is left untouched on the disk). Fixed after a full check of the app: the clickable word \"monochrome\" in the "
+     "Atom Lab guide (What am I even looking at?, \"What is to scale\") did nothing since 0.16, so the Monochrome theme and the Sharp Eyes achievement could not be found; it works again. A year typed far "
+     "in the future in Jump to a date could overflow and was then called a date before 1800. A long search result or fact could be cut in the middle of a character. Numbers that are not numbers "
+     "(NaN, Infinity) or are very large are written as JavaScript writes them instead of garbage. In the Molecule Lab, search no longer offers a changelog, Defaults and a Legend it does not have, and its "
+     "bottom bar lights its buttons like every other toolbar (not in the accent colour). The settings file is written to a side file first and only then replaces the old one, so a full disk or a crash "
+     "can no longer leave a cut file. Unused code left over from the old interface was deleted. Ammonia's listed rotational constants were checked on CCCBDB: CCCBDB itself lists 9.4443 next to a "
+     "geometry that gives 9.97, so the value stays marked as doubtful. Not measured: speed on a real graphics card, and how the mouse feels on Windows."},
     {"0.18", "New: the Molecule Lab, part 1: a viewer",
      "A new lab, third in the lab list: 15 small molecules (H2, N2, O2, HCl, CO2, H2O, O3, NH3, CH4, HCN, C2H2, H2CO, C2H4, CH3OH, C6H6) in 3D, in their MEASURED shape: every bond length and angle "
      "is NIST CCCBDB's experimental value with its reference code, and the 3D shape is built from them (where the shape needs a symmetry, the panel says which). Methanol's H-C-O angle is not in CCCBDB: "

@@ -363,8 +363,8 @@ if(PL_BUILD_APP)
       endforeach()
       # 0.18 stage 1: the Molecule Lab: water (Dark) and benzene space-filling (Light) to look at, draw counts, clicks on an atom and a bond, settings kept and a damaged line (tests/check_molecule.py)
       add_test(NAME molecule_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_molecule.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/molecule_pictures)
-      # 0.19 audit fixes in the real app, one part per fix (tests/check_audit19.py): the guide's "monochrome" word, search in the Molecule Lab
-      foreach(part monokey molsearch)
+      # 0.19 audit fixes in the real app, one part per fix (tests/check_audit19.py): the guide's "monochrome" word, search in the Molecule Lab, its bar's lit buttons
+      foreach(part monokey molsearch molbar)
         add_test(NAME ui19_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_audit19.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui19_${part} ${part})
       endforeach()
       add_test(NAME shell_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_pictures ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference)
@@ -386,7 +386,7 @@ foreach(t orbit_physics atom_physics molecule_logic app_settings font_coverage n
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
-foreach(t gl_phase_colours molecule_pictures ui19_monokey ui19_molsearch shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui6a_atom_gaps ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
+foreach(t gl_phase_colours molecule_pictures ui19_monokey ui19_molsearch ui19_molbar shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui6a_atom_gaps ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
           orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links ui6b_scrollbar ui6b_bench ui6b_rail ui6b_nucleus)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")

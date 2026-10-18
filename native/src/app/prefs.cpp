@@ -1,3 +1,6 @@
+#include <cstdio>
+#include <filesystem>
+#include <system_error>
 #include <algorithm>
 #include <vector>
 #include "prefs.h"
@@ -124,6 +127,19 @@ Prefs loadPrefs(const std::string& text) {
     // a secret theme that is not unlocked cannot be in use (as the web's start-up check)
     if (!themeUsable(p, p.theme)) p.theme = "auto";
     return p;
+}
+
+bool writeSettingsFile(const std::string& path, const std::string& text) {
+    // the whole text into a side file first; only a complete, closed file replaces the old one (a crash or a full disk never leaves a cut settings file)
+    const std::string tmp = path + ".tmp";
+    FILE* f = std::fopen(tmp.c_str(), "wb");
+    if (!f) return false;
+    const bool written = std::fwrite(text.data(), 1, text.size(), f) == text.size();
+    const bool closed = std::fclose(f) == 0;
+    std::error_code ec;
+    if (written && closed) std::filesystem::rename(tmp, path, ec);   // (replaces the old file, also on Windows: MoveFileEx with MOVEFILE_REPLACE_EXISTING)
+    if (!written || !closed || ec) { std::remove(tmp.c_str()); return false; }
+    return true;
 }
 
 WindowState fitWindow(WindowState s, const std::vector<ScreenRect>& screens) {

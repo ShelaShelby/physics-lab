@@ -38,23 +38,6 @@ bool beginPage(const char* title, const char* id, bool* open) {
 
 }  // namespace
 
-// a header button (.ver): a pill with a thin border, bold small text
-bool pillButton(const std::string& label, const char* tip) {
-    const float s = S() * look().textScale;
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, corner(99));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10 * s, 3 * s));
-    ImGui::PushStyleColor(ImGuiCol_Button, glossy() ? vec(look().w.card) : ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_Border, vec(look().w.line));
-    ImGui::PushFont(fonts().bold, ImGui::GetStyle().FontSizeBase * 13 / 16);
-    const bool clicked = ui::Button(displayable(label, fonts().bold).c_str());
-    ImGui::PopFont();
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar(3);
-    if (tip && *tip && ImGui::IsItemHovered()) ui::SetTooltip("%s", tip);
-    return clicked;
-}
-
 // 👤 About: the web's page word for word, with the labs of the native app, and the native version
 void aboutWindow(AppState& app) {
     if (!app.showAbout) return;

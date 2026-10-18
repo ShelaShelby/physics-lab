@@ -1,30 +1,9 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.16 alpha** (0.16 removed the old interface: the New UI is the only one, and the text below that mentions "New UI On / Off", the Old panel or the old header is 0.15 history; "Full UI rework" is under way; the 0.14 Themes work is complete: stage 1 and the plan of stage 2 are documents in `docs/ui-0.15/`; stage 3 built the new shell behind Settings → New UI (preview), Off by default (the picture fills the window, a slim top bar with a date chip, a toolbar, floating panels that collapse, a reading view for About, History, changelogs and the guides; Esc, Ctrl+K and Space); **stage 4 puts the whole Orbit Lab in it, so the Orbit Lab needs no "Old panel" there** (play / pause in the chip, Save picture in the menu, a Time panel with Live / Set manually, a subject card with one big number and an "All values" sheet, the real Legend, a fact line at the bottom left instead of the 💡 button, a search that finds bodies, dates, settings, menu actions and facts); the Atom Lab is stage 5; see `docs/ui-0.15/DESIGN.md` and the tests `check_shell*.py`, `check_orbit_ui.py`); stage 2 also fixes the About page's raw HTML codes, draws the theme effects once instead of every frame, asks Windows not to slow the app when it loses focus, and follows the display scale when the window changes monitor). The app is in **alpha**: features are still being added (beta will follow when everything planned for 1.0 is in, then the plain release). It has the **Orbit Lab and Atom Lab**, each with everything of its web version except a few small items listed in `REPORT.md`, and the web app's own features: Settings, themes, the header with About and history, the "Did you know?" facts, the Learn and Achievements tabs, the **fps counter** in both labs, 📷 **Save image** (a PNG of the picture, saved in your Pictures folder), and everything remembered between runs (see 🕰 history in the app for what is new). The Black Hole Lab, the Spacetime Lab and the Slingshot game are not part of the native app. The web version (`../index.html`) is the
-reference; this folder does not change it.
+Version **0.19 alpha**. The app has **three labs**: the **Orbit Lab** (the real Solar System), the **Atom Lab** (any nucleus with one electron, down to quarks) and the **Molecule Lab** (15 small molecules in their measured shape; stage 1, a viewer). The Defense Lab (0.17-0.18) was removed in 0.19. The picture fills the window; a slim top bar (menu, a Labs dropdown, a chip, search with Ctrl+K), a toolbar at the bottom, floating cards and a Controls panel on the right; About, history, changelogs and the guides open in a reading view. Settings, themes, the facts line, the Learn and Achievements pages, Save picture and the Benchmark are app-wide, and everything is remembered between runs. The app is in **alpha**: features are still being added. The Black Hole Lab, the Spacetime Lab and the Slingshot game of the web version are not part of it. The frozen web version (`archive/web/index.html`) is the reference for the Orbit and Atom Labs; this folder does not change it.
 
-**0.15 stage 5m part 2 + 5n (New UI On, Dark theme):** a bigger handle (32 x 72), grey (not blue) hover and press faces, a light-grey pill for a lit toolbar button, the subject card never covers the Legend, Settings / About / Learn / history / Benchmark windows and pop-up lists in the M1 look, and a chart tilt slider "flat <-> 3D" above the toolbar in the Atom Lab's Chart view. Not tested: Windows, a real mouse, a real GPU.
-
-**0.15 stage 5m part 1:** the themes **Frutiger Aero, Y2K Night and Synthwave were removed** (their code is kept as text in `native/archive/themes/`, see `native/archive/themes/README.md`, with steps to put one back; a saved choice of one of them now opens as **Dark**, with no message). The Settings row **Theme effects** went with them (only they used it), and so did the 🎁 surprise in the "Did you know?" facts, which only unlocked Synthwave (the facts are now 26). With New UI (preview) On and the Dark theme, the look **M1** (Inter font, flat dark cards, a light-grey selected pill) is always on; the looks M2 and M3 and the `PL_LOOK` switch are gone. With New UI Off nothing else changed. Not tested: Windows, a real mouse, a real graphics card, speed.
-
-**0.15 stage 5i (New UI On):** the data sheet (All values) ends above the bottom toolbar. (Stage 5i had trial looks switched by `PL_LOOK`; see stage 5m above.)
-
-**0.15 stage 5h (New UI On):** the Atom data sheet (All values) has tabs Spectrum (NIST), Lifetimes, Nuclear size, Temperature and Radial: the Old panel's own cards, same code, same words and numbers, and it scrolls inside itself; the atom and its label are centred in the space the card, panel and bars leave free; the info text is 14 px. Not tested: a real PC or mouse.
-
-**0.15 stage 5g part 1 (New UI On unless said):** the Contents list in Learn / About works every time (both layouts); Page Up / Page Down / Home / End / arrows scroll those pages; the toolbar's left edge is fixed in every view and lab; the Atom toolbar has Cloud 3D and Slice; the first Atom Lab view is Cloud 3D; the phase ring is clear of the card; the Controls handle is a flat pill. **The light Y2K Ice theme was removed** (saved settings that name it give Dark). Not tested: a real PC or mouse.
-
-**0.15 stage 5f (New UI On):** the Atom Controls panel is tidier (one View selector, long notes behind "Notes about this choice", no Cloud section on the chart); the Atom Lab has a subject card (top right) with a data sheet (Values, Decay, This view) made of the old panel's own words, More / Less info in the card, and on the chart the colour legend and notes live in the Legend chip. The small text in the cards and sheets is at least 14 px. Not tested here: Windows, a real GPU, speed, a real mouse.
-
-**0.15 stages 5d and 5e (New UI On, Atom Lab):** the Atom Lab's view options, marks and photons are in the Controls panel: Orbital (orbital, orientation, energy level), Cloud (style, density, superposition, slice), Orbit (style), Scale and motion, Nucleus (quark and nucleon settings), Chart (tilt, height), Marks (90 % outline, phase colours, the decay chain and its walk) and Photons (emit, absorb, auto, check a jump), each shown when the old panel showed it and changing the same setting. The fact line wraps to two lines and is shown in the Atom Lab too. The benchmark's header says whether the New UI was on. Not tested: Windows, a real GPU, speed. See REPORT.md.
-
-**0.15 stage 5c.1 (polish after the owner tried 5c, New UI On):** the Controls button left the toolbar: a small tab with an arrow on the picture's right edge opens and closes the panel, which slides in and out (180 ms; at once with Settings → Motion reduced). Glows and shadows of the new UI's panels hug their edge (at most 2 px), the panel is solid, its headers, rows and controls share one left and right edge, sections are evenly spaced, and its text is at least 14 px. Not tested: Windows, a real GPU, speed, how smooth the slide looks on a real PC. See REPORT.md.
-
-**0.15 stage 5c (the Controls panel, behind New UI (preview) On, both labs):** all simulation options live in ONE docked panel on the right ("Controls", about 22 em wide, under the top bar, sections that fold, scrolls inside, open by default, closed and opened by the toolbar's Controls button or its ✕). Orbit Lab: Time speed, Show, Pick a body, Zoom / sizes / trails and View options are its sections (same controls, words and tooltips); the toolbar keeps 2D / 3D, Reset view and Controls, no carets. Atom Lab: a View section holds the Nucleus level, Cloud / Cloud 3D / Slice, Build another and Reshuffle (the other Atom controls are still in the Old panel until 5d / 5e). Bug fixes: distance-ring labels are never drawn under the top bar, toolbar or panel; the readout is Body size on a soft dark pill. Tests: `tests/check_controls.py` (new), unit tests in `test_shell.inc` and `test_orbit.cpp`. Not tested: Windows, Segoe UI, scale 125 / 150 %, a real GPU. See REPORT.md.
-
-**0.15 stage 5b (the Atom Lab's element chip, behind New UI (preview) On):** the Atom Lab's chip reads "U · Uranium-238 / 92 protons · 146 neutrons" and opens the periodic table (18 columns, cells of at least 28 u, the chosen element ringed), Protons and Neutrons arrows and sliders, "usual" and the famous isotopes; Build another and Reshuffle nucleons are in the toolbar's Nucleus panel. Tests: `tests/test_atom_chip.inc` (in `atom_tests`) and `tests/check_atom_chip.py` (`atom_chip`: all 118 elements clicked in the real app).
-
-**0.15 stage 5a (the Atom Lab's toolbar, behind New UI (preview) On):** the Atom Lab gets the bottom toolbar of the Orbit Lab: Atom, Nucleus (▾ Nucleus / Nucleon), Cloud (▾ Cloud / Cloud 3D / Slice), Chart of nuclides, Reset view, and Centre / Drag when relevant. The picture fills the window; the bar under it and the picture's "Less info" button are gone (the hint and More / Less info are in the Old panel until 5b). With New UI Off nothing changed. Tests: `tests/test_atom_tools.inc` (button → state, in `atom_tests`) and `tests/check_atom_toolbar.py` (`atom_toolbar`: old controls against the toolbar give the same state).
+What changed in each version is in the app (🕰 What's new) and in `src/ui/changelog.cpp`; the design of the interface is in `docs/ui-0.15/DESIGN.md` (0.15 history). Some lines further down still describe the 0.14-era panels and cards; the controls are the same, but they now live in the Controls panel, the toolbar and the subject card.
 
 ## Getting the .exe without building
 
@@ -79,8 +58,8 @@ The physics tests include `jpl_tests`, which compares the Real planets with JPL 
 
 ## Using it
 
-Pick the lab with the two buttons at the top of the panel: **Orbit Lab** or **Atom Lab**.
-Each lab keeps its state while the other one is on screen.
+Pick the lab in the **Labs** dropdown of the top bar: **Orbit Lab**, **Atom Lab** or **Molecule Lab**.
+Each lab keeps its state while another one is on screen.
 
 ### Across the app (as in the web version)
 
@@ -167,6 +146,12 @@ Each lab keeps its state while the other one is on screen.
 - **Learn**: What am I even looking at?, Scale, Weight and the timeline (the web text, word for word).
 - **Defaults** (asks first) puts the Atom Lab settings back; **Reset** starts a fresh atom.
 
+### Molecule Lab (0.18, stage 1: a viewer)
+- 15 small molecules (H2, N2, O2, HCl, CO2, H2O, O3, NH3, CH4, HCN, C2H2, H2CO, C2H4, CH3OH, C6H6) in 3D, built from NIST CCCBDB's experimental bond lengths and angles (`data/molecules/`), centred on the centre of mass; masses from NIST.
+- Ball-and-stick or space-filling (van der Waals radii), element labels, an optional slow spin (off with Motion Reduced), Reset view.
+- **Mouse**: drag turns, the wheel zooms, Shift / right / middle drag moves. Click an atom or a bond: the measured value with its CCCBDB reference next to the value from the 3D shape; the data sheet has the mass and the rotational constants (listed and from the shape). The shape is a fixed equilibrium structure; the app says what the picture does not show.
+- Not yet (planned, C++): stage 2 builder, stage 3 live simulation.
+
 ## How it is organised
 
 | Folder | What is in it |
@@ -198,6 +183,8 @@ Each lab keeps its state while the other one is on screen.
 | `src/render/rock_compute.*`, `mesh.h` | (0.13 stage 4) The OpenGL 4.3 compute object that places the belt rocks, and the retained-mesh types of the chart of nuclides |
 | `src/orbit/belt_layer.*` | (0.13 stage 4) The belts' rocks on the Orbit Lab picture: the CPU way or the GPU way, no Dear ImGui |
 | `src/atom/chart_mesh.*` | (0.13 stage 4) The chart's tiles and blocks as a retained mesh, and the CPU twin of its vertex shader |
+| `src/molecule/molecule.*` | (0.18) The Molecule Lab: the 15 molecules from the CCCBDB values, masses, picking, camera, settings text; no graphics, tested by `molecule_logic` |
+| `src/molecule/molecule_view.*`, `src/ui/shell_molecule.cpp` | (0.18) Drawing the molecule (one instanced draw call) and its bar and Controls panel |
 | `src/render/` | OpenGL 3.3 loader, batched 2D renderer (instanced dots, planet shader), Earth map |
 | `src/app/prefs.*`, `app_text.inc` | What is remembered (the settings file), themes, achievements; the app-wide web texts |
 | `src/ui/` | The ImGui panels of both labs, Learn guides (rich-text and HTML layout), Settings, themes and the look (`look.*`), the header, About and history (`app_pages.*`), the facts line, tabs and achievements (`app_tabs.*`), Journey and dates, changelogs, fonts |
@@ -237,6 +224,8 @@ and the app-wide texts against runs of the web's own code (`make_app_reference.j
 pop-ups for every count, the header, About, the language menu, the history, the 27 facts, the secret pop-ups, the
 Achievements and Learn tabs, and the dates.
 
+`tests/test_molecule.cpp` (`molecule_logic`) checks the Molecule Lab against the CCCBDB values, symmetry, NIST masses and its own rotational constants (0.18), and fuzzes its settings text (0.19).
+
 ## Command-line helpers for automatic checks
 
 These do nothing in normal use: `PL_EXIT_AFTER_FRAMES=n` quits after n frames,
@@ -246,7 +235,7 @@ names, `PL_DATE=2003-08-27` jumps to a date (and prints the note), `PL_JOURNEY=1
 `PL_LEARN=1|2|3` opens a Learn guide, `PL_IMPERIAL=1` shows imperial units, `PL_SKYOFF=1` turns the
 stars off and `PL_LIGHT=1` pretends the system theme is light. For Atom Lab: `PL_ATOM=1` opens it,
 `PL_ATOM_SET="Z=26;view=Cloud;zoom=4.5"` sets its settings, `PL_ATOM_DO=emit|absorb|auto|nucleus|nucleon` (with `PL_ATOM_DO_FRAME=n`: at frame n, after the cloud has filled) presses a
-button, `PL_ATOM_FOCUS=n` follows nucleon n, `PL_ATOM_LEARN=1..4` (with `PL_ATOM_TAB=ten|miss|...`) opens a guide,
+button, `PL_ATOM_FOCUS=n` follows nucleon n, `PL_ATOM_LEARN=1..4` (with `PL_ATOM_TAB=ten|miss|...`, and `PL_ATOM_JUMP=scale` for a section) opens a guide, `PL_MOLECULE=H2O` (with `PL_MOLECULE_STYLE=fill`) opens the Molecule Lab,
 and `PL_SCROLL=y` scrolls the Atom Lab panel. App-wide: `PL_SETTINGS=file` uses another settings file,
 `PL_THEME=paper`, `PL_TEXTSIZE=xl`, `PL_FONT=easy` and `PL_MOTION=on` set the look, `PL_SELECT=far:sgra` picks a
 far-away thing, `PL_DYK_FIRST=26` puts that fact first (26 is the 🎁), and `PL_EXIT_AFTER_SECONDS=s` quits after s seconds.

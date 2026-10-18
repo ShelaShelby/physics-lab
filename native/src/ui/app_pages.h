@@ -8,7 +8,6 @@
 
 namespace ui {
 
-bool pillButton(const std::string& label, const char* tip);   // a header button (.ver)
 void aboutWindow(AppState& app);
 void historyWindow(AppState& app);
 

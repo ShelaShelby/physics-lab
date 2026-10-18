@@ -81,6 +81,7 @@ float lastHeight(const std::string& id, float dflt);     // the height a panel n
 // ---- controls: each draws at `pos` and returns true when clicked / changed. id: the name a PL_SCRIPT click= uses ----
 enum class Face { Secondary, Primary, Quiet };
 bool button(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, Face face = Face::Secondary, bool selected = false);
+bool toolToggle(const char* id, ImVec2 pos, ImVec2 size, const std::string& label, bool on);   // 0.19: a text button of a bottom toolbar: lit like the icon buttons (quiet fill, never the accent)
 bool iconButton(const char* id, ImVec2 pos, ImVec2 size, Icon icon, const char* tip, bool on = false, float caretW = 0);   // caretW > 0: a small caret at the right end (the button opens a panel)
 bool checkbox(const char* id, ImVec2 pos, float w, const std::string& label, bool* v);
 bool segmented(const char* id, ImVec2 pos, float w, const std::vector<std::string>& labels, int* cur, const std::vector<std::string>* names = nullptr, bool bar = false);   // names: each part is also noted under its own name (stage 5d, for PL_SCRIPT)

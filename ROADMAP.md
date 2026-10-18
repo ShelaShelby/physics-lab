@@ -3,6 +3,10 @@
 Plain list of what is done and what is planned. No dates. Nothing is promised that is not on this list.
 
 ## Done
+- 0.19: the Defense Lab removed (the app has three labs: Orbit, Atom, Molecule), dead code removed, a full bug audit with fixes and tests (native/AUDIT.md) — done in code and tests (the Windows run: see REPORT.md)
+- 0.18 stage 1: Molecule Lab stage 1, the viewer (15 small molecules in their measured CCCBDB geometry) — done
+- 0.17 stages 1-2: the Defense Lab (a factory game) — done, then REMOVED in 0.19 (owner decision of 18 Oct 2026)
+- 0.16 stages 2-6: About scrollbar and benchmark window fixes, benchmark of 11 scenes, nucleus view cheaper at full zoom and with "+ Sea", Accurate quarks more accurate — done (GPU speed not measured)
 - 0.16 stage 1b: the old interface (side panels, header, Old panel button, "New UI (preview)" setting) removed; the New UI is the only one; version 0.16 — done in code and tests (the Windows run: see REPORT.md)
 - 0.13 stage 4 (of 4), "GPU update", which FINISHES 0.13: the Orbit Lab's belt rocks placed by a compute shader (the time and the mean anomaly in double precision on the GPU; every rock of scenes 1 and 6 within 0.003 point of the CPU's, Kepler's equation checked against bisection to ten million years; the old 3-step solver found wrong for e >= 0.8 and replaced by a converged one, the app's rocks unchanged); the chart of nuclides' squares and blocks kept in a GPU buffer with tilt, zoom and pan as uniforms (rebuilt only on a size, theme or height-meaning change; pictures and hit test as before); the Cloud 2D view's extra cost found (a 48,000-blob list rebuilt from nothing every frame) and fixed; measured first; switches "GPU rocks" and "GPU chart cache"; benchmark scenes 31 to 34 with the old ways; the speed-ups are EXPECTED, not measured — done in code and tests (the real GPU, Windows and speed to be confirmed by the owner)
 - 0.13 stage 3 (of 4), "GPU update": the 90 % outline's 64^3 density grid and 90 % level on the GPU (compute, no CPU wait: job + fence, the outline appears a frame or two later) and the Slice contour's density values the same way (a frame behind the cut); exact orbital normalisation (a physics fix on purpose, closed form, every orbital to 1e-10); measured first; CPU functions stay as reference and fallback; Performance card switch, report line, scenes 29 and 30 with the CPU path; the speed-up is EXPECTED, not measured — done in code and tests (the real GPU, Windows and speed to be confirmed by the owner)
@@ -50,7 +54,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- Molecule Lab (the owner's plan of 18 Oct 2026; lab 3 inside the C++ app; only real physics, every number sourced): stage 1 viewer (15 small molecules, measured CCCBDB geometry) DONE in 0.18 stage 1; stage 2 builder (drag atoms, valence rules, formula); stage 3 live simulation. Big molecules later, labelled computed or crystal.
+- Molecule Lab (the owner's plan of 18 Oct 2026; the third lab of the C++ app, and stages 2 and 3 stay C++; only real physics, every number sourced): stage 1 viewer (15 small molecules, measured CCCBDB geometry) DONE in 0.18 stage 1; stage 2 builder (drag atoms, valence rules, formula); stage 3 live simulation. Big molecules later, labelled computed or crystal.
 - The predicted island of stability, drawn from a sourced prediction: waits for a source (one the owner can open and send as text or PDF: a review of the predicted magic numbers and region of superheavy nuclei); until then the chart says it is a prediction and draws nothing — waiting for the owner, not scheduled
 - Photon jumps from a complex state or a superposition: the owner decides between the options in native/REPORT.md (0.11 stage 1) — waiting for the owner, not scheduled
 - **BLOCKED ON DATA (the owner must download by hand: the IAEA pages are behind a bot challenge that no script can pass, and the other hosts are refused by the cloud session's network policy):** HALO nuclei drawn at their measured MATTER radius. Not started. A charge radius cannot do this (neutrons carry no charge), and the quadrupole table of stage 2 does not help. Needs one file from the owner (details in OWNER-TODO.md):
@@ -58,14 +62,14 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
   - then: halo isotopes drawn at the measured matter radius with the halo neutrons outside the core, tests first
 - Magnetic dipole moments are REACHABLE (checked on 2026-10-04 by a plain GET, not stored): `https://www-nds.iaea.org/nuclearmoments/magn_mom_recomm.csv`, 295,121 bytes, 2,365 lines, the same columns as the quadrupole file with `magnetic dipole [nm]`. For a later hyperfine-structure stage (the hyperfine splitting of the hydrogen-like levels needs a nuclear magnetic moment and spin); not scheduled, not started
 - 0.10.6 Atom Lab audit: closed. Fixed: findings 1-9, 11, 13-18 (stages 2-9; finding 11, the cloud jump, in stage 8). All three measured optimisation items of the audit that the owner had DEFERRED are now done in 0.13: the phase-colour scan (finding 10, scene 8) in stage 1, the overlapping superposition (scene 14) in stage 2, and the outline first use (finding 12, scene 16: worst frame 19.9 ms; including the radial graph's one-time cost on a change of orbital with the outline off) in stage 3 (the improvements are expected, not measured, until the owner runs the benchmark).
-- Bug and speed audit before 1.0, the last pass still to do: app and settings (a report only, then small fix tasks for the real findings) — planned
+- Bug and speed audit before 1.0: the bug part was done in 0.19 (native/AUDIT.md: what was fixed, what is left); the speed part needs the owner's PC (no GPU in the cloud) — partly done
 - 1.0 alpha stages — planned:
   - design plan (written in a fresh short chat)
   - new layout (smaller header, readable text, real-looking sliders)
   - Orbit Lab look
   - Atom Lab look
   - quality levels Low to Ultra
-  - new themes "Frutiger Aero" and "Y2K futurism"
+  - (dropped: the themes "Frutiger Aero" and "Y2K futurism" were made in 0.14 and archived in 0.15 stage 5m)
 - 1.0 beta — planned
 - 1.0 release — planned
 
@@ -113,15 +117,14 @@ Also seen: boxes inside boxes and outlines on everything; no breathing room; no 
   - stage 5o — DONE (cloud-tested; one job, two pushes): three of the four old test failures fixed in the app: `cards_orbit` (the Orbit subject card stops above the readout and scrolls), `ui5g_atomtext` (a fact too long for two lines beside the toolbar takes the row above it), `shell_ui` (three About paragraphs reworded; the app's own version label is now 0.15). `ui5l_popups` is NOT fixed on purpose: the test's 3 px inset reaches the Labs dropdown's rounded corner (proof in native/REPORT.md); the owner decides (test inset 4, or a smaller corner radius).
   - stage 5n — DONE (cloud-tested; see native/REPORT.md for what was not tested): Settings, About, Learn, history and Benchmark windows and the pop-up lists in the M1 look (one colour set for all Dear ImGui windows, `Look::w`); the chart tilt slider "flat <-> 3D" above the toolbar in the Atom Lab's Chart view only. Next: stage 6 and 7 (all themes through tokens, New UI as default, old panels removed).
   - stage 5q — DONE (cloud-tested; one job, two pushes): lit buttons in ALL themes (cause: widget code used the new look only for Dark), theme list below the top bar, About scrollbar constant 12 px, End reaches the exact bottom; Atom Lab Element picker HOVERS (nothing moves; the subject card is left out while it would be covered; the picker stops above the scale bar), Controls sliders grey in every theme, `ui5l_popups` inset 3 -> 4 (owner approved).
-  - NEXT JOB: what the owner reports from the PC test of 5p; then stage 6 (below), then stage 7, then the 0.16 list.
+  - (0.15 ended with 0.16 stage 1b, which removed the old interface; stages 6 and 7 below were not done as such and are not scheduled)
   - stage 6 — Learn, Settings (sections), About, history, changelogs, guides, Benchmark in the reading view; the Achievements panel
   - a "modern look" stage (planned, after the cards: the owner wants the whole New UI to look flatter and more modern; to be briefed)
   - stage 7 — all 13 themes through the glass tokens (Aero, Y2K), full search, keyboard, final speed check and clean-up
 
 ## 0.16 list (not scheduled, collected from 0.15 reports)
 - cache the periodic table dropdown in a texture: measured +47 ms per frame in software while open (stage 5b)
-- cache periodic-table dropdown texture
-- compile outline compute shader at startup (scene 16 worst frame 55 ms); re-check the scene 16 worst frame on the PC afterwards
+- compile outline compute shader at startup (scene 16 worst frame 55 ms) — done in 0.16 stage 3 ("outline compute warmed up at start"); re-check the worst frame on the PC
 - Orbit scene 1 about 9% slower in New UI: investigate
 
 ## Later (not scheduled)

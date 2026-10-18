@@ -1,4 +1,4 @@
-HISTORICAL plan (native 0.4/0.5). ROADMAP.md is the current plan.
+HISTORICAL plan (native 0.4), kept as the record of how the Atom Lab was ported. ROADMAP.md is the current plan; the "lab picker at the top of the panel" below is now the Labs dropdown of the top bar (Orbit, Atom, Molecule since 0.19).
 # Atom Lab port plan (native 0.4)
 
 Reference: `archive/web/index.html`, web Atom Lab update 7.7.3. The Atom Lab is `SIMS['Atom Lab']`

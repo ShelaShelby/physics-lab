@@ -36,3 +36,12 @@ Molecule Lab data (0.18 stage 1)
    fetched (pubchem.ncbi.nlm.nih.gov is not reachable from the cloud session). CPK colours H FFFFFF, C 909090, N 3050F8,
    O FF0D0D, Cl 1FF01F; van der Waals radii H 120, C 170, N 155, O 152, Cl 175 pm. Both are drawing conventions.
    Ball-and-stick ball radius = 0.25 x the van der Waals radius: only a drawing scale.
+
+4. 0.19 audit (18 Oct 2026, later the same day): cccbdb.nist.gov WAS reachable from the cloud session (plain GET, HTTP 200).
+   The NH3 experimental data page https://cccbdb.nist.gov/exp2x.asp?casno=7664417 is saved as received:
+   cccbdb_nh3_exp2x_2026-10-18.html. It lists the rotational constants A = B = 9.44430, C = 6.19600 cm^-1 (1966Herzberg),
+   rNH 1.012, aHNH 106.67 (1966Herzberg) and point group C3v, so the values in cccbdb_values.txt match CCCBDB. Its own
+   "Product of moments of inertia" (8.668394 amu^3 A^6) follows from those listed constants, while its own Cartesians (from the
+   listed geometry) give 7.588 (A = B = 9.974, C = 6.346 cm^-1): CCCBDB's NH3 page is not consistent with itself. The listed
+   value stays in the app, marked doubtful, until a second source is checked (OWNER-TODO.md). Other hosts tried for a second
+   source (NIST WebBook, PubChem, JPL spectral catalogue, CDMS, Wikipedia): not reachable from the cloud.
