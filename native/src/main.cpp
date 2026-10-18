@@ -49,6 +49,8 @@
 #include "ui/shell_test.h"
 #include "defense/defense_lab.h"
 #include "defense/defense_view.h"
+#include "molecule/molecule.h"
+#include "molecule/molecule_view.h"
 
 namespace {
 
@@ -299,7 +301,14 @@ int main(int, char**) {
     // Atom Lab checks: PL_ATOM=1 opens the Atom Lab, PL_ATOM_SET="Z=26;view=Cloud;zoom=4.5" sets its settings,
     // PL_ATOM_DO="absorb" presses Emit / Absorb / Auto photons (or ⌕ Nucleus / ⌕ Nucleon: "nucleus", "nucleon"), PL_ATOM_FOCUS=n dives into nucleon n
     if (SDL_getenv("PL_ATOM")) app.lab = 1;
-    if (SDL_getenv("PL_DEFENSE")) app.lab = 2;          // 0.17: PL_DEFENSE=1 opens the Defense Lab
+    if (SDL_getenv("PL_DEFENSE")) app.lab = 2;
+    if (const char* mv = SDL_getenv("PL_MOLECULE")) {   // 0.18: PL_MOLECULE=<id> opens the Molecule Lab on that molecule; PL_MOLECULE_STYLE=fill, PL_MOLECULE_PICK=atom,bond (automatic checks)
+        app.lab = molecule::kLabIndex;
+        if (molecule::findId(mv) >= 0) app.molecule.choose(molecule::findId(mv));
+        if (const char* st = SDL_getenv("PL_MOLECULE_STYLE")) app.molecule.set.style = std::string(st) == "fill" ? molecule::Style::SpaceFill : molecule::Style::BallStick;
+        if (const char* pk = SDL_getenv("PL_MOLECULE_PICK")) std::sscanf(pk, "%d,%d", &app.molecule.sel.atom, &app.molecule.sel.bond);
+        app.visited[molecule::kLabIndex] = true;
+    }          // 0.17: PL_DEFENSE=1 opens the Defense Lab
     if (const char* a = SDL_getenv("PL_ATOM_SET")) {
         std::string list = a;
         std::size_t i = 0;
@@ -395,6 +404,10 @@ int main(int, char**) {
                 break;
             case SDL_EVENT_MOUSE_WHEEL:                 // the web: zoom −= deltaY × 0.0007, about 0.07 per wheel notch
                 if (!app::labInputAllowed(app.benchRunning)) break;
+                if (app.lab == molecule::kLabIndex) {   // Molecule Lab: 15 % a notch (design)
+                    if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) app.molecule.wheel(e.wheel.y);
+                    break;
+                }
                 if (app.lab == 2) {                     // Defense Lab: zoom about the pointer, 15 % a notch (design)
                     if (!io.WantCaptureMouse && !ui::readingShown()) app.defense.zoomAt(std::pow(1.15, e.wheel.y), e.wheel.mouse_x / scale, e.wheel.mouse_y / scale);
                     break;
@@ -431,6 +444,7 @@ int main(int, char**) {
                     if (app.lab == 2 && (app.defense.dragBuild || app.defense.dragRemove)) app.defense.drag(e.motion.x / scale, e.motion.y / scale);   // stage 2: a line of belts / removing along the drag
                     else if (app.lab == 2 && app.defense.feedHeld) {}
                     else if (dragging && app.lab == 2) app.defense.pan((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale);   // Defense Lab: a drag without a building (or the middle button) moves the map
+                    else if (dragging && app.lab == molecule::kLabIndex) app.molecule.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));   // 0.18: turn; Shift / right / middle: move
                     else if (dragging && app.lab == 1) app.atom.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));
                     else if (dragging) app.view.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rotate);
                     lastX = e.motion.x; lastY = e.motion.y;
@@ -440,7 +454,8 @@ int main(int, char**) {
                 if (mouseDown && app::labInputAllowed(app.benchRunning) && app.lab == 2) {   // Defense Lab (stage 2): the press placed / removed / fed; the release ends a belt line or a removing drag
                     if (e.button.button == SDL_BUTTON_LEFT || e.button.button == SDL_BUTTON_RIGHT) app.defense.release(e.button.x / scale, e.button.y / scale, e.button.button == SDL_BUTTON_LEFT, dragging);
                 } else if (mouseDown && !dragging && app::labInputAllowed(app.benchRunning) && e.button.button == SDL_BUTTON_LEFT) {
-                    if (app.lab == 1) app.atom.click(e.button.x / scale, (e.button.y - headerH) / scale);
+                    if (app.lab == molecule::kLabIndex) app.molecule.click(e.button.x / scale, (e.button.y - headerH) / scale);
+                    else if (app.lab == 1) app.atom.click(e.button.x / scale, (e.button.y - headerH) / scale);
                     else app.view.click(e.button.x / scale, (e.button.y - headerH) / scale);
                 }
                 mouseDown = dragging = false;
@@ -492,6 +507,8 @@ int main(int, char**) {
         }
         if (app.pane) {                                 // the Learn or Achievements tab is open: the lab waits (the web draws nothing then)
         } else if (app.lab == 2) {
+        } else if (app.lab == molecule::kLabIndex) {
+            app.molecule.update(frameDt, ui::look().reduced, app.paused || app.pane != 0 || app.benchRunning);
         } else if (app.lab == 1) {                      // Atom Lab: tick every frame (decay clock, glides), fixed steps while running
             app.atom.paused = app.paused;
             app.atom.tick(dt);
@@ -515,7 +532,7 @@ int main(int, char**) {
         ImGui::GetStyle().Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0, 0, 0, app.benchRunning ? 0.0f : 0.45f);   // the benchmark's input lock is a modal that must not dim the picture
         if (static int shownLab = -1; shownLab != app.lab) {   // the window title follows the lab on screen
             shownLab = app.lab;
-            SDL_SetWindowTitle(window, (std::string("Physics Lab ") + ui::appVersion() + " — " + (app.lab == 2 ? defense::kLabName : app::kLabInfo[app.lab].name)).c_str());
+            SDL_SetWindowTitle(window, (std::string("Physics Lab ") + ui::appVersion() + " — " + (app.lab == molecule::kLabIndex ? molecule::kLabName : app.lab == 2 ? defense::kLabName : app::kLabInfo[app.lab].name)).c_str());
         }
         app.atom.reducedMotion = ui::look().reduced;
         ImGui_ImplOpenGL3_NewFrame();
@@ -541,7 +558,10 @@ int main(int, char**) {
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, headerH), ImVec2(canvasWinW, headerH + pictureWinH));
         if (app.pane) text->PopClipRect();              // a tab page covers the lab: nothing to draw
-        else if (app.lab == 2) {
+        else if (app.lab == molecule::kLabIndex) {
+            app.moleculeView.draw(renderer, text, scale, app.molecule, app.canvasW, app.canvasH, ui::look().c);
+            text->PopClipRect();
+        } else if (app.lab == 2) {
             const ImVec2 mp = ImGui::GetIO().MousePos;
             app.defense.hover(mp.x / scale, mp.y / scale, !io.WantCaptureMouse && mp.x >= 0 && mp.y >= ui::shellTopBarH());
             app.defenseView.draw(renderer, text, scale, app.defense, app.canvasW, app.canvasH, ui::look().c);
@@ -584,6 +604,9 @@ int main(int, char**) {
         renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
+        if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
+                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d drawus=%ld mol=%s\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str());
+                        for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
         if (drawStat && app.lab == 2) { const defense::ViewStats& ds = app.defenseView.stats();
                         std::printf("PLDEFSTAT calls=%d entities=%zu drawn=%d items=%d chunks=%d built=%d meshes=%d simus=%ld drawus=%ld steps=%d arrow=%d\n", renderer.lastDrawCalls(), app.defense.world.entities().size(), ds.entitiesDrawn,
                                     ds.items, ds.chunks, ds.meshesBuilt, ds.meshesAlive, long(app.defense.simMs * 1000), long(ds.cpuMs * 1000), app.defense.stepsLastFrame, int(ds.arrow)); }

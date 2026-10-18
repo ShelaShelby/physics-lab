@@ -120,7 +120,7 @@ void takeShot(AppState& app, render::Renderer2D& renderer, const ShotArea& a) {
     SDL_DateTime dt{};
     SDL_GetCurrentTime(&now);
     SDL_TimeToDateTime(now, &dt, true);                // local time
-    const std::string lab = app.lab == 2 ? "Defense Lab" : app.lab == 1 ? "Atom Lab" : "Orbit Lab";
+    const std::string lab = app.lab == 3 ? "Molecule Lab" : app.lab == 2 ? "Defense Lab" : app.lab == 1 ? "Atom Lab" : "Orbit Lab";
     const std::string name = app::shotFileName(lab, app.atom.p.Z, app.atom.p.N, {dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second});
     std::string tried, why;
     for (const std::string& folder : shotFolders()) {

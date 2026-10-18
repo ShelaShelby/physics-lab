@@ -43,6 +43,15 @@ std::vector<ToolItem> orbitTools(AppState& app) {
 ChipInfo chipInfo(AppState& app) {
     ChipInfo c;
     c.play = true; c.paused = app.paused;
+    if (app.lab == 3) {                                         // 0.18: the Molecule Lab: "H2O · Water" and its mass and size (no clock: the shape is fixed)
+        const molecule::Molecule& mo = app.molecule.mol();
+        char b[96];
+        std::snprintf(b, sizeof b, "%.4f u  ·  %zu atoms  ·  measured shape", molecule::massU(mo), mo.atoms.size());
+        c.title = mo.formula + "  ·  " + mo.name;
+        c.sub = b;
+        c.play = false;
+        return c;
+    }
     if (app.lab == 2) {                                         // 0.17: the Defense Lab: the planet's seed and how long it has been played, with play / pause
         const unsigned long long s = app.defense.world.tick() / defense::kTicksPerSecond;
         char b[64];
@@ -68,6 +77,7 @@ ChipInfo chipInfo(AppState& app) {
 
 std::string subjectName(const AppState& app) {
     if (app.lab == 1) return atom::name(app.atom.p.Z);
+    if (app.lab == 3) return app.molecule.mol().name;
     if (app.lab == 2) return "Planet " + std::to_string(app.defense.world.seed());
     const orbit::Selection& sel = app.view.sel;
     if (sel.kind == orbit::Selection::None) return "";

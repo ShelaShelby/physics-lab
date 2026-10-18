@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.18", "New: the Molecule Lab, part 1: a viewer",
+     "A new lab, third in the lab list: 15 small molecules (H2, N2, O2, HCl, CO2, H2O, O3, NH3, CH4, HCN, C2H2, H2CO, C2H4, CH3OH, C6H6) in 3D, in their MEASURED shape: every bond length and angle "
+     "is NIST CCCBDB's experimental value with its reference code, and the 3D shape is built from them (where the shape needs a symmetry, the panel says which). Methanol's H-C-O angle is not in CCCBDB: "
+     "it is derived from H-C-H and marked so. Ball-and-stick or space-filling (van der Waals radii), element labels, drag to turn, the wheel zooms, Shift or right drag moves, Reset view, and an optional slow spin "
+     "(off when Motion is Reduced). Click an atom or a bond: the measured value with its source next to the value worked out from the 3D shape. The data sheet has the mass of the most abundant isotopes "
+     "(NIST) and the measured rotational constants next to the ones the shape gives. The shape is a fixed average (an equilibrium structure); real molecules vibrate. Colours, ball sizes and bond orders are "
+     "drawing conventions, and the app says so. Not yet: building molecules, vibration, reactions, orbitals. Not measured: speed on a real graphics card, and how the mouse feels on Windows."},
     {"0.17", "Defense Lab, part 2: power from the core, a new look, a fixed map",
      "Power no longer dead-ends: the core has a free emergency generator, enough for about 2 miners, that reaches the network through a pole next to it, and a new planet's core starts with 50 coal; "
      "click a coal generator to fill it from the core (hold to keep filling). A new look drawn in code: one invented red rocky planet (Mars-like, not real Mars) with dust, pits, cracks and stones; "

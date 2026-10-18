@@ -84,7 +84,8 @@ void labsToPrefs(const AppState& app, app::Prefs& p) {
               {"cutAxis", a.cutAxis}, {"cstyle", a.cstyle}, {"cdens", a.cdens}, {"outline", a.outline}, {"phase", a.phase}, {"super", a.super}, {"orb2", a.orb2}, {"pAx2", a.pAx2}, {"dAx2", a.dAx2}, {"fAx2", a.fAx2}, {"mix", num(a.mix)}, {"cut", num(a.cut)}, {"n", std::to_string(a.n)}, {"speed", std::to_string(a.speed)}};
     if (a.dirac == "On") p.atom["dirac"] = a.dirac;           // saved only when ON: with the setting off the settings file is byte for byte what it was before 0.10.8
     p.atomMore = app.atom.moreStored;
-    p.lab = app.lab == 2 ? "Defense Lab" : app.lab == 1 ? "Atom Lab" : "Orbit Lab";
+    if (app.visited[molecule::kLabIndex] || !p.molecule.empty()) p.molecule = molecule::saveSettings(app.molecule.set);   // (only once the lab was opened: older settings files stay as they were)
+    p.lab = app.lab == 3 ? "Molecule Lab" : app.lab == 2 ? "Defense Lab" : app.lab == 1 ? "Atom Lab" : "Orbit Lab";
     p.units = fmt::imperial() ? "imperial" : "metric";
 }
 
@@ -139,7 +140,8 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
     app.atom.p = a;
     app.atom.moreStored = p.atomMore;
     app.atom.restart();
-    app.lab = p.lab == "Defense Lab" ? 2 : p.lab == "Atom Lab" ? 1 : 0;
+    app.molecule.set = molecule::loadSettings(p.molecule);
+    app.lab = p.lab == "Molecule Lab" ? 3 : p.lab == "Defense Lab" ? 2 : p.lab == "Atom Lab" ? 1 : 0;
     fmt::setImperial(p.units == "imperial");
 }
 

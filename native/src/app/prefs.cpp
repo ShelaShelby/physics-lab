@@ -48,6 +48,7 @@ std::string savePrefs(const Prefs& p) {
     if (p.window) o << "window=" << p.window->w << "," << p.window->h << "," << (p.window->hasPos ? std::to_string(p.window->x) : "-") << ","
                     << (p.window->hasPos ? std::to_string(p.window->y) : "-") << "," << (p.window->maximized ? 1 : 0) << "\n";
     o << "lab=" << clean(p.lab) << "\n";
+    if (!p.molecule.empty()) o << "molecule=" << clean(p.molecule) << "\n";
     for (const auto& [k, v] : p.orbit) o << "orbit." << clean(k) << "=" << clean(v) << "\n";
     for (const auto& [k, v] : p.atom) o << "atom." << clean(k) << "=" << clean(v) << "\n";
     return o.str();
@@ -68,6 +69,7 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "font") { if (validFont(v)) p.font = v; }
         else if (k == "motion") { if (validMotion(v)) p.motion = v; }
         else if (k == "shellpanels") p.shellPanels = v;
+        else if (k == "molecule") p.molecule = v;
         else if (k == "facts") { if (v == "on" || v == "off") p.facts = v; }
         else if (k == "recent") p.recent = v;
         else if (k == "units") { if (v == "metric" || v == "imperial") p.units = v; }
@@ -106,7 +108,7 @@ Prefs loadPrefs(const std::string& text) {
                 ws.hasPos = f[2] != "-"; ws.x = int(x); ws.y = int(y); ws.maximized = m == 1;
                 p.window = ws;
             }
-        } else if (k == "lab") { if (v == "Orbit Lab" || v == "Atom Lab" || v == "Defense Lab") p.lab = v; }
+        } else if (k == "lab") { if (v == "Orbit Lab" || v == "Atom Lab" || v == "Defense Lab" || v == "Molecule Lab") p.lab = v; }
         else if (k.rfind("orbit.", 0) == 0) p.orbit[k.substr(6)] = v;
         else if (k.rfind("atom.", 0) == 0) p.atom[k.substr(5)] = v;
     }

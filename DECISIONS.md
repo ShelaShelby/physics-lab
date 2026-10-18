@@ -100,3 +100,4 @@
 - Pills (toolbar, chart tilt pill, chips) are flat: one fill, no gradient, no outline except in Monochrome / High contrast; easy to revert in beginPanel (5r).
 - Working rules (owner, 5r): small job 25 minutes, hard stop 40; one push; no full suite unless the owner asks; short outputs (see CLAUDE.md).
 - 0.16 stage 6 (owner's brief, 2026-10-11): the owner chose to make the Accurate quark style more accurate (sourced sizes, own wander per quark, u/d difference); its look changes on purpose. Classic and Cinematic keep their look (Classic's sea colours only: 60 % down). Facts and sources: native/docs/QUARKS.md.
+- Molecule Lab is lab 3 inside the C++ app; stages: 1 viewer, 2 builder, 3 live simulation; big molecules later, labelled computed or crystal. (18 Oct 2026)

@@ -40,6 +40,8 @@ void orbitControls(AppState& app, sh::Panel& p, const SectionFn& section);
 void atomControls(AppState& app, sh::Panel& p, const SectionFn& section);
 void defenseControls(AppState& app, sh::Panel& p, const SectionFn& section);     // 0.17: the Defense Lab's Controls panel (ui/shell_defense.cpp)
 app::shell::Rect defenseBar(AppState& app, const app::shell::Frame& fr, const app::shell::Metrics& m);   // its build bar; returns where it is
+void moleculeControls(AppState& app, sh::Panel& p, const SectionFn& section);    // 0.18: the Molecule Lab's Controls panel (ui/shell_molecule.cpp)
+app::shell::Rect moleculeBar(AppState& app, const app::shell::Frame& fr, const app::shell::Metrics& m);  // its bottom bar (style, labels, spin, Reset view); returns where it is
 bool controlsOpen();
 void controlsToggle();
 const char* controlsSectionOf(PanelId id);       // the section an old toolbar panel's contents moved to ("" if it did not move)

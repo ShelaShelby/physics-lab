@@ -2,6 +2,11 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.18 stage 1 (Molecule Lab viewer): what only you can do
+- **Try on the PC:** Labs menu -> Molecule Lab. Drag to turn, wheel to zoom, Shift / right / middle drag to move, click atoms and bonds, both styles, Labels, Spin, Reset view; close and reopen (molecule, style and view must come back). Say how it feels and whether it is fast (no GPU in the cloud).
+- **Check on CCCBDB:** ammonia's rotational constants. Built from rNH 1.012 / aHNH 106.67 the shape gives A = B = 9.974 cm-1; the value given to the job was 9.4443 (5.6 % lower; C agrees within 2.4 %). Please look at the NH3 experimental rotational constants page and send what it says (a typing slip, or a different isotopologue or state).
+- **If you want them shown:** CCCBDB's point group for each molecule and the citation text CCCBDB asks for (the site is unreachable from the cloud).
+
 ## 0.17 stage 2 (Defense Lab fixes + new look): what only you can do
 - **Try on the PC:** drag-belts (hold left, drag: a line with automatic corners), the green/red ghost, right drag to remove, WASD and arrow keys, hotkeys 1-8, Q, Esc, H / Home, holding a click on a coal generator. Say what still feels clunky.
 - **Try on the PC:** the new look at several zooms (details and glow vanish below 14 points a tile); fps on the big base (`PL_DEFENSE_SAMPLE=big` on a new save); the core arrow at the screen edge with the Controls panel open and closed.

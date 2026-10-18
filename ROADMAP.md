@@ -50,6 +50,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
+- Molecule Lab (the owner's plan of 18 Oct 2026; lab 3 inside the C++ app; only real physics, every number sourced): stage 1 viewer (15 small molecules, measured CCCBDB geometry) DONE in 0.18 stage 1; stage 2 builder (drag atoms, valence rules, formula); stage 3 live simulation. Big molecules later, labelled computed or crystal.
 - The predicted island of stability, drawn from a sourced prediction: waits for a source (one the owner can open and send as text or PDF: a review of the predicted magic numbers and region of superheavy nuclei); until then the chart says it is a prediction and draws nothing — waiting for the owner, not scheduled
 - Photon jumps from a complex state or a superposition: the owner decides between the options in native/REPORT.md (0.11 stage 1) — waiting for the owner, not scheduled
 - **BLOCKED ON DATA (the owner must download by hand: the IAEA pages are behind a bot challenge that no script can pass, and the other hosts are refused by the cloud session's network policy):** HALO nuclei drawn at their measured MATTER radius. Not started. A charge radius cannot do this (neutrons carry no charge), and the quadrupole table of stage 2 does not help. Needs one file from the owner (details in OWNER-TODO.md):

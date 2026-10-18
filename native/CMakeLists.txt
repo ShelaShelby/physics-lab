@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.17 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.18 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -104,6 +104,14 @@ target_include_directories(defense_core PUBLIC src)
 target_link_libraries(defense_core PUBLIC atom_core)   # the element symbols (Fe, Cu, C) come from the Atom Lab's element table
 target_compile_options(defense_core PRIVATE ${PL_WARNINGS})
 
+# Molecule Lab (0.18 stage 1): 15 small molecules in their measured (CCCBDB) geometry, the camera, picking and the settings text (no graphics)
+add_library(molecule_core STATIC
+  src/molecule/molecule.cpp
+)
+target_include_directories(molecule_core PUBLIC src)
+target_link_libraries(molecule_core PUBLIC atom_core)   # the CODATA constants (h, c, u) in atom/atom_core.h
+target_compile_options(molecule_core PRIVATE ${PL_WARNINGS})
+
 # ---- tests ----
 if(PL_BUILD_TESTS)
   enable_testing()
@@ -121,6 +129,10 @@ if(PL_BUILD_TESTS)
   target_link_libraries(defense_tests PRIVATE defense_core)
   target_compile_options(defense_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME defense_logic COMMAND defense_tests)
+  add_executable(molecule_tests tests/test_molecule.cpp)
+  target_link_libraries(molecule_tests PRIVATE molecule_core)
+  target_compile_options(molecule_tests PRIVATE ${PL_WARNINGS})
+  add_test(NAME molecule_logic COMMAND molecule_tests)
   add_executable(app_tests tests/test_app.cpp)
   target_include_directories(app_tests PRIVATE tests)
   target_link_libraries(app_tests PRIVATE app_core atom_core)
@@ -241,6 +253,8 @@ if(PL_BUILD_APP)
     src/atom/chart_draw.cpp
     src/defense/defense_view.cpp
     src/ui/shell_defense.cpp
+    src/molecule/molecule_view.cpp
+    src/ui/shell_molecule.cpp
     src/ui/orbit_panel.cpp
     src/ui/orbit_actions.cpp
     src/ui/shell.cpp
@@ -267,7 +281,7 @@ if(PL_BUILD_APP)
     src/ui/shot.cpp
     src/ui/benchmark.cpp
     src/ui/power.cpp)
-  target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core app_core defense_core imgui SDL3::SDL3-static)
+  target_link_libraries(PhysicsLab PRIVATE orbit_core atom_core app_core defense_core molecule_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)
     target_link_libraries(PhysicsLab PRIVATE opengl32)
@@ -364,6 +378,8 @@ if(PL_BUILD_APP)
       endforeach()
       # 0.17 stage 1: the Defense Lab: a sample base drawn in two themes (pictures to look at), draw counts, the build bar, save on close / continue, a damaged save (tests/check_defense.py)
       add_test(NAME defense_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_defense.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/defense_pictures)
+      # 0.18 stage 1: the Molecule Lab: water (Dark) and benzene space-filling (Light) to look at, draw counts, clicks on an atom and a bond, settings kept and a damaged line (tests/check_molecule.py)
+      add_test(NAME molecule_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_molecule.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/molecule_pictures)
       add_test(NAME shell_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_shell_pictures.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/shell_pictures ${CMAKE_CURRENT_SOURCE_DIR}/tests/reference)
       # 0.15 stage 4: the whole Orbit Lab in the new UI: every INVENTORY.md item reachable by real clicks (incl. the 47 Go to names), the subject card's data sheet equal to the old card's lines
       # (8 things), the Time panel fits, the fact line (visible, changes after 20 s, stands still while hovered, readable, never overlaps), search (20 things, arrows, recent), links
@@ -378,12 +394,12 @@ endif()
 # 0.15 stage 4.1: labels and a fast, identical environment for the tests. quick = the unit test programs, glsl and the source scan (about a minute, no app start);
 # pictures = everything that starts the real app under Mesa's software OpenGL. One llvmpipe thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
 # all of them) and a shared Mesa shader cache (a start no longer rebuilds its shaders): the pictures are the same (the picture guards prove it).
-foreach(t orbit_physics atom_physics defense_logic app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
+foreach(t orbit_physics atom_physics defense_logic molecule_logic app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
-foreach(t gl_phase_colours defense_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui6a_atom_gaps ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
+foreach(t gl_phase_colours defense_pictures molecule_pictures shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui6a_atom_gaps ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
           orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links ui6b_scrollbar ui6b_bench ui6b_rail ui6b_nucleus)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")

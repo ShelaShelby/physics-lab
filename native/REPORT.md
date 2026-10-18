@@ -1,31 +1,32 @@
-# 0.17 stage 2: Defense Lab fixes and new look (speed NOT tested on a GPU; Windows and a real mouse NOT tested)
+# 0.18 stage 1: Molecule Lab viewer (speed NOT tested on a GPU; Windows and a real mouse NOT tested)
 
-## What changed (the owner's five findings + handling)
-- Power: the core has a free emergency generator (kCoreWatts 180 kW = 2 miners, always on, joins a network through a pole in range like any generator; coal generators burn only for demand beyond it). New game: core holds 50 coal. A left click on a coal generator moves core coal into it (up to 10); holding repeats every 0.25 s. How to play explains it in 3 lines.
-- Map: fixed 512 x 512 tiles (16 x 16 chunks), 8-tile dark wasteland band, all constants in defense_world.h (kMapTiles, kMapMin/Max, kBorder, inMap, chunkInMap). Nothing generated or buildable outside; camera clamped to map + band, zoom-out limited (centred) when the window is bigger. Pollution only spreads to chunks inside the map. Big test base moved to (-230, -200).
-- Terrain: water and sand removed; one invented red-rock biome with Dust / Pits / Cracks / Stones looks (all buildable) + Waste outside. Ore infinite (amounts, richness and the "m" save lines removed); patches grow with distance (r = 3.5 + min(7, d/40) + up to 2.5 tiles).
-- New look, all code-drawn: panel floor with soft seams and vignette, soft dust blend, outlined bevelled rounded machines with own accents (miner yellow + spinning drill, furnace copper + orange glow/bloom only when working, generator red-orange + hazard stripes + pulse when burning, chest lid + latch, pole mast + glowing node, core 3 x 3 with hazard stripes and pulsing teal ring), charcoal belts with raised edges and moving chevrons (phase from the tick), outlined item chips (colours named in defense_view.cpp). LOD below 14 pt/tile skips details, outlines on belts and bloom.
-- Find the core: arrow + "Core N tiles" at the edge of the free picture (not under Controls or the bar), hidden while any core tile is on screen; Home (H) button and key H (also 8).
-- Handling: left drag with Belt lays a line (longer axis first, auto corners, ghost line green/red); other buildings place along the drag; right drag removes along the way; right click on ground or Esc drops the tool; WASD / arrows pan; 1-6 build bar, 7 turn, 8 home; Q picks the building under the pointer; the tool stays chosen. Pure functions: beltLine, canPlace, hotkeyFor, coreArrow, clampCamera, minZoomFor.
-- Save version 2. A version-1 save: "saved with an older version. Start a new planet.", copy kept as .old, nothing loaded, no crash.
-- About (native edit 37 reworded, count unchanged): invented red planet, map/ore/core numbers are design choices. Changelog 0.17 part 2 entry. OWNER-TODO: try handling on a real PC.
+## What changed
+- New lab "Molecule Lab" (AppState lab index 3, shown 3rd in the Labs menu: Orbit, Atom, Molecule, Defense). Defense Lab code unchanged (only the shared lab-name ternaries learned index 3).
+- 15 molecules (H2, N2, O2, HCl, CO2, H2O, O3, NH3, CH4, HCN, C2H2, H2CO, C2H4, CH3OH, C6H6). Every length/angle/rotational constant is the CCCBDB value the owner gave (cccbdb.nist.gov is unreachable from the cloud; text saved in data/molecules/cccbdb_values.txt + README.txt with the symmetry used per molecule). 3D shapes built in code (src/molecule/molecule.cpp), centred on the centre of mass, principal axes along x/y/z.
+- **CH3OH: H-C-O angle derived** (109.89 deg, not in CCCBDB) from H-C-H 109.03 assuming three equivalent C-H symmetric about C-O; marked "derived" in the panel and the data sheet.
+- Masses: NIST Atomic Weights and Isotopic Compositions (physics.nist.gov, reachable; 5 pages saved as received). The repo had no NIST mass table (AME data holds binding energies only).
+- Ball-and-stick (ball = 0.25 x vdW radius, labelled a drawing scale) / space-filling (PubChem vdW radii), CPK colours (PubChem), bond orders 1/2/3/aromatic (convention; double/triple as parallel sticks, benzene one stick, panel says "aromatic"; O3 one double + one single = one resonance structure, said in the app).
+- Right panel: molecule list, style, labels, auto-spin (off with Reduced motion), Reset view, the clicked atom/bond (listed value + CCCBDB code + the value from the 3D shape), data sheet (formula, Hill formula, name, mass with uncertainty, rotational constants listed vs from the shape, shape assumption, source), "What the picture does not show" (equilibrium structure, vibration, conventions, no hard edge). Bottom bar in the toolbar's place. Drag turns, wheel zooms, Shift/right/middle drag pans.
+- Settings: one versioned line `molecule=v1 ...` (written only once the lab was opened, so older settings files stay byte-identical); lab "Molecule Lab".
+- About: a "Molecule Lab" source block (CCCBDB with all reference codes, NIST masses, PubChem); changelog 0.18 entry; project VERSION 0.18; workflow release title 0.18.
 
-## Tests changed on purpose (features removed)
-- defense_logic: "chunk 10,000 tiles out identical" -> "the map's corner chunk identical" + "outside the map only unbuildable wasteland" (endless map removed). "no water within 24 tiles" -> "every tile within 24 tiles buildable" (water removed). "all 5 terrains occur" -> "all 5 red-rock looks occur inside the map, no Waste inside" (biomes replaced). "ore far out holds 2x more" -> "ore covers > 1.4x more ground at 180-250 tiles than at 70-140" (richness removed, patches bigger). Merge test: item total + the core's 50 start coal (the rule "no item made or lost" unchanged).
-- defense_pictures: save header "PhysicsLabDefense 2" (version bump); the hand-made damaged file now says version 2 so it still tests a checksum failure.
-- Unchanged and passing: determinism, belt conservation / spacing / back-pressure / speed, save -> load hash, 7 damaged files.
+## Doubtful value found (not hidden)
+- **NH3 rotational constants**: the shape from rNH 1.012 / aHNH 106.67 gives A = B = 9.974 cm-1; CCCBDB value given: 9.4443 (+5.61 %, outside the 3 % rule). C: 6.346 vs 6.196 (+2.4 %). The rule was NOT loosened: the test asserts the reported +5.61 % so any correction shows up; the data sheet says so; OWNER-TODO asks to re-read the CCCBDB page.
+- CH4 aHCH 109.471 and H2CO aHCO 121.9 are values fixed by symmetry (Td: arccos(-1/3) = 109.4712; C2v: 121.93); they are checked to their listed rounding (half the last digit), every other value to 1e-6.
+- Names (Water, Acetylene (ethyne) ...) are the usual names, not checked against CCCBDB page titles. Point groups and CCCBDB's citation text: not given / not reachable, so not shown.
 
-## Tested (Linux, software GL)
-- defense_logic 91 checks (was 62), all pass. New: core power alone runs a miner, coal reaches the generator, generator adds 900 kW, mined tiles still coal, 3 miners get 666 per mille (no deadlock from a fresh core-only world); click-feed moves exactly 7/10/10/10/10/3/0 and conserves coal; furnace in the map corner pollutes its chunks, nothing leaves the map; camera clamp (far out, inside, huge window centred); belt line shapes + the placed turn is a corner; placement (free, last tile, occupied, outside, band, half off, miner off ore, second core); hotkeys; core arrow (on core, partly visible, edge exactly on the screen edge, far diagonal, straight below); old save -> .old + message.
-- Broken on purpose (then restored): no core power -> 4 checks fail; pollution to off-map chunks -> 1 fails; arrow visibility with <= -> the exact-edge check fails.
-- defense_pictures (now with: arrow shown far from the core, not on it) passed. check.sh quick: 11/11 passed. UI tests touching About / changelog / the lab, run once: shell_ui, ui5g_pages, ui5k_pages, ui5k_log passed; shell_pictures: shell_about_dark/light_1280x800 changed on purpose (longer About text: a render with the old text differs only in a 12 x 5 px box at the scrollbar thumb), hashes updated, re-run passed; app_settings passed. Full suite NOT run (job rule).
-- Pictures looked at (4): sample base at zoom 24, zoom 64 crop (core, belt, cracks), big base zoomed out (seams were too strong and dust blocky: fixed in the one correction pass), big base after the fix with the core arrow.
+## Tests
+- New molecule_logic (456 checks, written before the code): every listed length/angle reproduced; CH3OH dihedral 180 for exactly one H, derived angle consistent; CH4 six angles = arccos(-1/3); benzene planar, 6 equal C-C/C-H, CCC 120; C2H4/H2CO planar; linear molecules collinear; H2O equal O-H; bond and atom counts; bond orders; COM at origin; Hill order (own rule); masses vs NIST numbers typed again; rotational constants from own inertia/eigenvalue code vs CCCBDB (all within 3 % except NH3 A/B above; worst others H2O C +2.44 %, NH3 C +2.42 %); picking (atom, bond middle, empty, nearer of two overlapping, none in space-filling); camera (2000 drags stay a rotation, reverse drag, zoom clamp, NaN, pan); settings round trip and 9 kinds of bad text.
+- Broken on purpose once: picking the farther atom -> "the nearer of two overlapping atoms is picked" failed; restored.
+- New molecule_pictures: H2O Dark + C6H6 space-filling Light at 1280x800, draw counts, oxygen pixel red, bottom bar placement, real clicks on an atom and a bond, settings saved and read at the next start, damaged settings line -> defaults.
+- app_settings: the About entity count kept (plain apostrophe); native edit count 37 -> 38 (on purpose). shell_pictures: shell_about_dark/light_1280x800 hashes updated on purpose (longer About page); those two pictures were NOT looked at.
+- check.sh quick green; check.sh full once: 78/79, only shell_pictures (the two About hashes) -> updated, re-run passed.
+- Pictures looked at (3): H2O dark (sticks were painted over the oxygen ball -> sticks now start at the ball surface), H2O crop after the fix, C6H6 space-filling light.
 
-## Speed guard (counts; Linux, software GL; CPU noisy; NOT a speed test)
-- Big test base (3,232 entities, 12,224 items on screen, 40 chunks, zoom 6): 44 draw calls (stage 1: 44; limit 88). Draw-list CPU median 0.85 ms (min 0.78, max 1.13; stage 1 0.34-0.38 ms): more vertices per belt and building. Simulation (unit test): 0.035 ms a tick for 3,201 entities.
-- Sample base: 13 draw calls at zoom 24 and 64 (stage 1: 12), draw-list CPU median 0.11 ms.
-- No per-frame allocation in steady state (belt line and item buffers reused, a fixed dust grid per chunk build, animation from tick/clock).
+## Draw counts (Linux software GL; counts, not speed)
+- The whole molecule is ONE instanced blob draw call in every case: H2O 18 instances, C6H6 ball-and-stick 96, C6H6 space-filling 24, CH3OH 42. Frame total 1 renderer call. Draw-list CPU 4-9 us. No per-frame allocation once the buffers have grown.
+- Painter's order (no depth buffer): overlapping space-filling balls show no intersection curve; an approximation of the picture, not of the data.
 
 ## Not tested / not done
-- fps on a real GPU, Windows, a real mouse and keyboard (drag-belts, ghost, WASD, hotkeys, held feed click): in OWNER-TODO. The input wiring in main.cpp was not driven by a script; only the pure logic is tested.
-- Not built (by design): aliens, turrets, splitters, junctions, building costs.
+- fps on a real GPU, Windows, a real mouse (drag/pan/wheel feel): in OWNER-TODO. Auto-spin not exercised by a picture test (tests run with Reduced motion).
+- Not built (by design): builder, vibration, reactions, orbitals, big molecules, file import.
