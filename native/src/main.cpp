@@ -275,6 +275,13 @@ int main(int, char**) {
         if (const char* pk = SDL_getenv("PL_MOLECULE_PICK")) std::sscanf(pk, "%d,%d", &app.molecule.sel.atom, &app.molecule.sel.bond);
         app.visited[molecule::kLabIndex] = true;
     }
+    if (const char* mb = SDL_getenv("PL_MOLBUILD")) {   // 0.20: PL_MOLBUILD=<a molbuild settings line> opens the Molecule Lab's builder with that sketch (automatic checks)
+        app.lab = molecule::kLabIndex;
+        app.molecule.loadBuild(molecule::build::loadBuild(mb));
+        app.molecule.buildUsed = true;
+        app.visited[molecule::kLabIndex] = true;
+        if (const char* pk = SDL_getenv("PL_MOLECULE_PICK")) std::sscanf(pk, "%d,%d", &app.molecule.sel.atom, &app.molecule.sel.bond);
+    }
     if (const char* a = SDL_getenv("PL_ATOM_SET")) {
         std::string list = a;
         std::size_t i = 0;
@@ -356,6 +363,12 @@ int main(int, char**) {
                 if (!app::labInputAllowed(app.benchRunning)) break;      // the benchmark is running: only Cancel and Esc do anything
                 if (e.key.key == SDLK_F11 && !e.key.repeat) SDL_SetWindowFullscreen(window, !(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN));   // F11: full screen on / off
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) { ui::shellSpace(app, io.WantTextInput); }
+                if (app.lab == molecule::kLabIndex && app.molecule.sketchOn() && !io.WantCaptureKeyboard && !io.WantTextInput && !ui::readingShown()) {   // 0.20: the builder's keys
+                    const bool ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0, shift = (e.key.mod & SDL_KMOD_SHIFT) != 0;
+                    if (e.key.key == SDLK_DELETE || e.key.key == SDLK_BACKSPACE) app.molecule.deletePicked();
+                    else if (ctrl && e.key.key == SDLK_Z && !shift) app.molecule.ed.undo();
+                    else if (ctrl && (e.key.key == SDLK_Y || (e.key.key == SDLK_Z && shift))) app.molecule.ed.redo();
+                }
                 if (app.lab == 1 && app.atom.chartOn() && !io.WantCaptureKeyboard && !ui::readingShown()) {   // (5k: with a page open the arrow keys scroll the page)   // the chart of nuclides: arrow keys walk one proton or one neutron (up = more protons, right = more neutrons)
                     const int dZ = e.key.key == SDLK_UP ? 1 : e.key.key == SDLK_DOWN ? -1 : 0, dN = e.key.key == SDLK_RIGHT ? 1 : e.key.key == SDLK_LEFT ? -1 : 0;
                     if (dZ || dN) app.atom.chartStep(dZ, dN);
@@ -384,6 +397,7 @@ int main(int, char**) {
                 if (app.lab >= 1) {                     // (Atom and Molecule Lab: a press on the picture starts a drag or a click)
                     if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && e.button.y < headerH + pictureWinH) {
                         mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y;
+                        if (app.lab == molecule::kLabIndex && !rightDrag) app.molecule.press(e.button.x / scale, (e.button.y - headerH) / scale);   // 0.20: a press on a sketch atom starts dragging it
                     }
                     break;
                 }
@@ -402,9 +416,15 @@ int main(int, char**) {
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
+                if (mouseDown && dragging && app.lab == molecule::kLabIndex) app.molecule.endDrag();   // 0.20: a dragged sketch atom is let go: it snaps and bonds
                 if (mouseDown && !dragging && app::labInputAllowed(app.benchRunning) && e.button.button == SDL_BUTTON_LEFT) {
                     if (app.lab == molecule::kLabIndex) app.molecule.click(e.button.x / scale, (e.button.y - headerH) / scale);
-                    else if (app.lab == 1) app.atom.click(e.button.x / scale, (e.button.y - headerH) / scale);
+                    else if (app.lab == 1) {
+                        const atom::MarksDrawn& md = atom::marksDrawn();   // 0.20: a click on the folded info text opens it (and folds it again)
+                        const double px = e.button.x / scale, py = (e.button.y - headerH) / scale;
+                        if (md.infoFoldable && md.info[2] > 0 && px >= md.info[0] && px <= md.info[0] + md.info[2] && py >= md.info[1] && py <= md.info[1] + md.info[3]) app.atom.infoOpen = !app.atom.infoOpen;
+                        else app.atom.click(px, py);
+                    }
                     else app.view.click(e.button.x / scale, (e.button.y - headerH) / scale);
                 }
                 mouseDown = dragging = false;
@@ -538,8 +558,9 @@ int main(int, char**) {
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
         if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
-                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d drawus=%ld mol=%s\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str());
-                        for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
+                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode);
+                        for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); }
+                        if (app.molecule.sketchOn()) { const molecule::MoleculeLab& L = app.molecule; for (std::size_t i = 0; i < L.ed.graph().atoms.size(); i++) std::printf("PLMOLSKETCH i=%zu x=%.1f y=%.1f\n", i, (L.cx() + L.ed.graph().atoms[i].x * L.kSketchPt) * scale, (L.cy() + L.ed.graph().atoms[i].y * L.kSketchPt) * scale); } }
         if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
                         std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
                                     ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }

@@ -2,6 +2,7 @@
 //   PL_SCRIPT="frame:command;frame:command"   presses things at given frames, through the real input path (SDL events):
 //       click=<name>[@fraction]   click the control called <name> (its rect from the last frame; for a slider @0.37 clicks at that part of its length)
 //       clickxy=x,y   click at a window position        key=escape | ctrl+k | space        text=abc   type letters
+//       drag=x0,y0,x1,y1   a left-button drag over a few frames;  rdrag=...  the same with the right button (0.20)
 //       state         print one line of the Orbit Lab's state (PLSTATE ...)
 //   PL_LOG_SHELL=1   at the end print what the new UI drew: the text sizes, the rectangles of the panels and bars, the picture's selected body (PLSHELL ...)
 #pragma once

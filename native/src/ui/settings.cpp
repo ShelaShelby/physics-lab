@@ -85,6 +85,7 @@ void labsToPrefs(const AppState& app, app::Prefs& p) {
     if (a.dirac == "On") p.atom["dirac"] = a.dirac;           // saved only when ON: with the setting off the settings file is byte for byte what it was before 0.10.8
     p.atomMore = app.atom.moreStored;
     if (app.visited[molecule::kLabIndex] || !p.molecule.empty()) p.molecule = molecule::saveSettings(app.molecule.set);   // (only once the lab was opened: older settings files stay as they were)
+    if (app.molecule.buildUsed || !p.molbuild.empty()) p.molbuild = molecule::build::saveBuild(app.molecule.buildSettings());   // 0.20: only once Build mode was used (older settings files stay byte for byte)
     p.lab = app::labName(app.lab);
     p.units = fmt::imperial() ? "imperial" : "metric";
 }
@@ -141,6 +142,8 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
     app.atom.moreStored = p.atomMore;
     app.atom.restart();
     app.molecule.set = molecule::loadSettings(p.molecule);
+    app.molecule.loadBuild(molecule::build::loadBuild(p.molbuild));   // a damaged line: Viewer and an empty sketch
+    app.molecule.buildUsed = !p.molbuild.empty();
     app.lab = app::labIndex(p.lab);
     fmt::setImperial(p.units == "imperial");
 }

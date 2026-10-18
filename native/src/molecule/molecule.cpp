@@ -276,6 +276,7 @@ void rotX(double t, double R[9]) { const double c = std::cos(t), s = std::sin(t)
 }  // namespace
 
 const Element& element(int el) { return kEl[el < 0 || el >= kElCount ? 0 : el]; }
+void placePrincipal(Molecule& m) { place(m); }
 double ballRadiusA(int el) { return kBallScale * element(el).vdwPm / 100; }
 int count() { return static_cast<int>(table().size()); }
 const Molecule& get(int i) { return table()[std::clamp(i, 0, count() - 1)]; }
@@ -358,10 +359,15 @@ void rotate(Camera& c, double dx, double dy) {
 void spin(Camera& c, double radians) { if (finite(radians)) { rotY(radians, c.R); orthonormalize(c.R); } }
 void zoomBy(Camera& c, double f) { if (finite(f) && f > 0) c.zoom = std::clamp(c.zoom * f, kZoomMin, kZoomMax); }
 void pan(Camera& c, double dx, double dy, double s) { if (finite(dx) && finite(dy) && s > 0) { c.panX += dx / s; c.panY -= dy / s; } }
-double fitScale(const Molecule& m, double w, double h) {
+double radiusA(const Molecule& m) {
     double e = 0;
     for (const Atom& a : m.atoms) e = std::max(e, std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z) + element(a.el).vdwPm / 100);
-    return 0.42 * std::max(1.0, std::min(w, h)) / std::max(e, 0.1);
+    return e;
+}
+double fitScale(const Molecule& m, double w, double h) { return 0.42 * std::max(1.0, std::min(w, h)) / std::max(radiusA(m), 0.1); }
+void clampPan(Camera& c, double radius) {
+    const double lim = kPanLimitRadii * std::max(radius, 0.1), d = std::hypot(c.panX, c.panY);
+    if (!(d <= lim)) { const double k = d > 0 && std::isfinite(d) ? lim / d : 0; c.panX *= k; c.panY *= k; }
 }
 void project(const Molecule& m, const Camera& c, Style st, double cx, double cy, double s, std::vector<Proj>& out) {
     out.resize(m.atoms.size());
@@ -426,6 +432,7 @@ Settings loadSettings(const std::string& text) {
         else if (k == "pan") { double pp[2]; if (readList(v, pp, 2) && std::fabs(pp[0]) < 1e3 && std::fabs(pp[1]) < 1e3) { s.cam.panX = pp[0]; s.cam.panY = pp[1]; } }
         else if (k == "rot") { double R[9]; if (readList(v, R, 9) && isRotation(R)) { orthonormalize(R); for (int i = 0; i < 9; i++) s.cam.R[i] = R[i]; } }
     }
+    clampPan(s.cam, radiusA(get(s.mol)));                // 0.20: a stored pan beyond the limit is pulled back, as a drag would be
     return s;
 }
 

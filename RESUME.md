@@ -1,6 +1,7 @@
 # Resume
 
 ## Current state
+- 0.20: Molecule Lab stage 2, the builder (src/molecule/builder.*: sketch editor with strict valences, refusals with reasons, undo / redo, Hill formula, mass, names of 23 molecules, ESTIMATED VSEPR shape with CCCBDB bond lengths, molbuild settings line; tests molbuild_logic + molbuild_* pictures) and layout fixes (Atom info text folds over the nucleus, Orbit sheet below the Legend chip, Molecule pan limited to 1.5 radii).
 - 0.19: Defense Lab removed (src/defense, tests, docs; labs Orbit 0, Atom 1, Molecule 2; a 0.18 settings file still loads), dead code removed, full audit (native/AUDIT.md): fixes with tests (guide's "monochrome" word, number formatting, date overflow, search cut, Molecule Lab search, settings re-save); stop rule instead of a time limit; next: Molecule Lab stage 2 builder (C++).
 - 0.18 stage 1: new Molecule Lab (lab index 3 then, 2 since 0.19; shown 3rd), viewer only: 15 molecules from CCCBDB values (owner-given; site unreachable), shapes built + centred + principal axes, NIST masses, ball-and-stick / space-filling, one instanced draw call, click atom/bond, settings v1; src/molecule, ui/shell_molecule.cpp; tests molecule_logic + molecule_pictures. NH3 A/B 5.6 % off CCCBDB (reported). Next: stage 2 builder.
 - 0.16 stage 6: Accurate quarks more accurate (own wander per quark, d farther out than u, cut 0.6 fm, atom::accurateQuarks + testQuarkWander; tube 0.38 fm, halo rms 0.65 fm); Classic sea 60 % d; proton-mass card (Yang 2018), quark note, Fuzzy text; docs/QUARKS.md. Classic / Cinematic look unchanged.

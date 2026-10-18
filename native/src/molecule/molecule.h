@@ -68,6 +68,7 @@ const Molecule& get(int i);                // built once (geometry from the list
 int findId(const std::string& id);         // -1 if unknown
 
 // ---- maths (also used by the tests) ----
+void placePrincipal(Molecule& m);          // the centre of mass to the origin, the principal axes along x, y, z (smallest moment first): how every shape here is placed (0.20: also the builder's)
 double dist(const Atom& a, const Atom& b);
 double angleDeg(const Atom& a, const Atom& centre, const Atom& c);
 double dihedralDeg(const Atom& a, const Atom& b, const Atom& c, const Atom& d);
@@ -98,6 +99,11 @@ void pan(Camera& c, double dxPts, double dyPts, double scale);   // scale: point
 void orthonormalize(double R[9]);
 // points per angstrom so the molecule (with space-filling balls) fits a view of w x h points at zoom 1
 double fitScale(const Molecule& m, double w, double h);
+// 0.20: the molecule's radius (angstrom): the farthest atom centre from the origin plus its van der Waals radius (what fitScale fits)
+double radiusA(const Molecule& m);
+// 0.20 (owner decision): panning is limited, so the molecule's centre stays within 1.5 radii of the view's centre (it can no longer be dragged off screen)
+constexpr double kPanLimitRadii = 1.5;
+void clampPan(Camera& c, double radius);
 
 struct Proj { double x, y, depth, r; };              // screen point, depth (angstrom) and the drawn ball radius (points)
 enum class Style { BallStick = 0, SpaceFill = 1 };
@@ -108,7 +114,7 @@ void project(const Molecule& m, const Camera& c, Style st, double cx, double cy,
 struct Pick { int atom = -1, bond = -1; };
 Pick pick(const Molecule& m, const Camera& c, Style st, double cx, double cy, double s, double x, double y);
 
-// ---- settings: "v1 mol=H2O style=ball labels=1 spin=0 zoom=1 pan=0,0 rot=r0,...,r8"; anything bad falls back to the default, never a crash ----
+// ---- settings (0.20: the stored pan is clamped as a drag is, for the stored molecule): "v1 mol=H2O style=ball labels=1 spin=0 zoom=1 pan=0,0 rot=r0,...,r8"; anything bad falls back to the default, never a crash ----
 struct Settings {
     int mol = 5;                 // H2O
     Style style = Style::BallStick;

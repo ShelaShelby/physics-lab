@@ -19,6 +19,15 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.20", "New: the Molecule Lab, part 2: build your own molecule",
+     "The Molecule Lab has a Build mode next to the Viewer. In the Sketch you click to add H, C, N, O or Cl, drag an atom next to another one with an open valence and let go "
+     "to bond them, click a bond to make it single, double or triple, and undo, redo, delete or clear. Valences are strict (H 1, C 4, N 3, O 2, Cl 1); a bond that does not fit, or "
+     "a bond type with no measured length in our sources, is refused and the reason is shown. The panel shows the Hill formula, the mass with its uncertainty, how many valences are "
+     "still open, and a name when the molecule is one of 23 we know (the 15 of the Viewer, which then also offer their measured shape, and eight more). A complete molecule gets a 3D "
+     "shape, and it is an ESTIMATE, labelled so everywhere: ideal VSEPR angles (180, 120 and 109.47 degrees) and one CCCBDB bond length per bond type, relaxed by a simple spring "
+     "model so rings close. Real angles are smaller where lone pairs sit (water: 104.48 measured, 109.47 here), and a built benzene has alternating bonds where the real one has six "
+     "equal bonds. Also: the Atom Lab's info text folds in the Nucleus view instead of covering the nucleus (a click shows the rest); the Orbit Lab's All values sheet no longer "
+     "covers the Legend; the Molecule Lab's picture can no longer be dragged off screen. Not measured: how dragging feels with a real mouse on Windows."},
     {"0.19", "Defense Lab removed, clean-up and audit",
      "The Defense Lab (the factory game of 0.17) is removed: the app has three labs again, Orbit Lab, Atom Lab and Molecule Lab. A settings file from 0.18 still loads: if it was left on the Defense Lab, "
      "the app opens the Orbit Lab, and every other setting is kept (the Defense Lab's save file is left untouched on the disk). Fixed after a full check of the app: the clickable word \"monochrome\" in the "

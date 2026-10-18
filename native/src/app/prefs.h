@@ -48,6 +48,7 @@ struct Prefs {
     std::optional<WindowState> window;   // the window as it was last time (none: the default size, centred)
     std::string lab = "Orbit Lab";       // the lab on screen
     std::string molecule;                // 0.18: the Molecule Lab's settings text (molecule::saveSettings, versioned; written only when set)
+    std::string molbuild;                // 0.20: the Molecule Lab builder's sketch (molecule::build::saveBuild, versioned; written only once Build mode was used)
     std::map<std::string, std::string> orbit, atom;   // each lab's settings, as text (checked when they are used)
 };
 

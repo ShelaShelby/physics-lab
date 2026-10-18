@@ -37,9 +37,9 @@ Replaced by the next audit. Cloud only: Linux, Mesa llvmpipe (software OpenGL), 
 - 32 functions used nowhere (old panel cards, old header buttons, language menu, Learn buttons, journey card, `nbodyAccel`, `categoryIndex`, `dragText`, ...), 12 unused web texts in app_text.inc (and their lines in tools/make_app_text.js), 5 unused constants (`kSunMassKg` 1.989e30 among them), 2 dead stores. Picture hashes unchanged except the two About pictures (Defense block gone).
 
 ## Not fixed, why
-- Atom Lab, Nucleus view of a heavy atom (U-238): the long info text at the top left is drawn over the nucleus. Needs a layout decision (move the picture, shorten the text or fold it); listed for the owner.
-- Orbit Lab: the "All values" sheet covers the Legend chip at 1280 x 800. Same kind of layout choice.
-- Molecule Lab: panning has no limit, so the molecule can be dragged far off screen (Reset view brings it back; a pan beyond ±1,000 Å is not kept in the settings). Design choice, not changed.
+- **FIXED in 0.20:** Atom Lab, Nucleus view of a heavy atom (U-238): the long info text at the top left was drawn over the nucleus. It now folds above the nucleus (a click shows the rest; test molbuild_u238, also Th-232 and Pb-208).
+- **FIXED in 0.20:** Orbit Lab: the "All values" sheet covered the Legend chip at 1280 x 800. It now starts below the chip (test molbuild_sheet, 1280 x 800 and 1920 x 1080).
+- **FIXED in 0.20:** Molecule Lab: panning had no limit. It is now limited to 1.5 molecule radii from the centre, for a drag and for the stored pan (test molbuild_molpan).
 - NH3 rotational constants: CCCBDB was reachable this time; its page lists A = B = 9.44430, C = 6.19600 cm-1 (1966Herzberg) next to rNH 1.012 / aHNH 106.67, which give A = B = 9.974, C = 6.346; CCCBDB's own product of moments (8.668394 amu^3 A^6) follows the listed constants, its Cartesians give 7.588. The page is inconsistent with itself. NIST WebBook, PubChem, the JPL and CDMS catalogues and Wikipedia were NOT reachable, so no second source: the value is unchanged and still marked doubtful (page saved: data/molecules/cccbdb_nh3_exp2x_2026-10-18.html).
 - Earth's card says "radius 6,378 km": that is the equatorial radius (NASA fact sheet: equatorial 6,378.1 km, volumetric mean 6,371.0 km). Not wrong, but the word "radius" alone is ambiguous; the card text is the web's, word for word. Doubtful wording only.
 - The About intro (web text, word for word) says "real orbits and atoms" and does not mention molecules.

@@ -43,6 +43,17 @@ std::vector<ToolItem> orbitTools(AppState& app) {
 ChipInfo chipInfo(AppState& app) {
     ChipInfo c;
     c.play = true; c.paused = app.paused;
+    if (app.lab == molecule::kLabIndex && app.molecule.buildMode) {   // 0.20: Build mode: the built molecule (Hill formula, its name if it has one in our list) and "estimated shape"
+        const molecule::MoleculeLab& L = app.molecule;
+        const molecule::build::Graph& g = L.ed.graph();
+        char b[128];
+        if (g.atoms.empty()) std::snprintf(b, sizeof b, "an empty sketch");
+        else std::snprintf(b, sizeof b, "%.4f u  ·  %zu atoms  ·  %s", molecule::build::massU(g), g.atoms.size(), L.builtOk ? "estimated shape, not measured" : "no 3D shape yet");
+        c.title = g.atoms.empty() ? std::string("Build") : molecule::build::hill(g) + "  ·  " + (L.knownIdx >= 0 ? molecule::build::known(L.knownIdx).name : "built");
+        c.sub = b;
+        c.play = false;
+        return c;
+    }
     if (app.lab == molecule::kLabIndex) {                       // 0.18: the Molecule Lab: "H2O · Water" and its mass and size (no clock: the shape is fixed)
         const molecule::Molecule& mo = app.molecule.mol();
         char b[96];
@@ -69,7 +80,7 @@ ChipInfo chipInfo(AppState& app) {
 
 std::string subjectName(const AppState& app) {
     if (app.lab == 1) return atom::name(app.atom.p.Z);
-    if (app.lab == molecule::kLabIndex) return app.molecule.mol().name;
+    if (app.lab == molecule::kLabIndex) return app.molecule.buildMode ? (app.molecule.knownIdx >= 0 ? std::string(molecule::build::known(app.molecule.knownIdx).name) : std::string("Build")) : app.molecule.mol().name;
     const orbit::Selection& sel = app.view.sel;
     if (sel.kind == orbit::Selection::None) return "";
     static orbit::Selection cachedSel;                       // the name of a selection never changes: looked up once, not 47 strings built every frame

@@ -38,6 +38,9 @@ struct MarksDrawn {
     double infoPx = 0;                      // 0.15 stage 5h: the font size the info text asks for, in pixels (points x scale x text size)
     double ring[4] = {0, 0, 0, 0};          // the phase ring with its labels (x, y, w, h in points) when drawn; w = 0: not drawn
     int chainNodes = -1, chainEdges = -1;  // the decay chain drawn on the chart (-1: none)
+    double nucleus[3] = {0, 0, 0};          // 0.20: the nucleus disc in the Nucleus, Nucleon and Quarks views (centre x, y and radius, points; radius 0: not one of those views)
+    bool infoFoldable = false;              // 0.20: the info text is folded (or unfolded) because it would cover the nucleus: a click on its plate toggles it
+    int infoFolded = 0;                     // 0.20: how many of its rows are folded away now
 };
 const MarksDrawn& marksDrawn();
 // 0.16 stage 5: what the nucleus part of the last frame cost, in counts and CPU time (for automatic checks and PL_DRAWSTAT; not GPU time)

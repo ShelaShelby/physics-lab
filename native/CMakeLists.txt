@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.19 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.20 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -98,6 +98,7 @@ target_compile_options(app_core PRIVATE ${PL_WARNINGS})
 # Molecule Lab (0.18 stage 1): 15 small molecules in their measured (CCCBDB) geometry, the camera, picking and the settings text (no graphics)
 add_library(molecule_core STATIC
   src/molecule/molecule.cpp
+  src/molecule/builder.cpp
 )
 target_include_directories(molecule_core PUBLIC src)
 target_link_libraries(molecule_core PUBLIC atom_core)   # the CODATA constants (h, c, u) in atom/atom_core.h
@@ -120,6 +121,10 @@ if(PL_BUILD_TESTS)
   target_link_libraries(molecule_tests PRIVATE molecule_core)
   target_compile_options(molecule_tests PRIVATE ${PL_WARNINGS})
   add_test(NAME molecule_logic COMMAND molecule_tests)
+  add_executable(molbuild_tests tests/test_molbuild.cpp)   # 0.20: the Molecule Lab builder (valences, names, the estimated shape, the settings line)
+  target_link_libraries(molbuild_tests PRIVATE molecule_core)
+  target_compile_options(molbuild_tests PRIVATE ${PL_WARNINGS})
+  add_test(NAME molbuild_logic COMMAND molbuild_tests)
   add_executable(app_tests tests/test_app.cpp)
   target_include_directories(app_tests PRIVATE tests)
   target_link_libraries(app_tests PRIVATE app_core atom_core)
@@ -363,6 +368,10 @@ if(PL_BUILD_APP)
       endforeach()
       # 0.18 stage 1: the Molecule Lab: water (Dark) and benzene space-filling (Light) to look at, draw counts, clicks on an atom and a bond, settings kept and a damaged line (tests/check_molecule.py)
       add_test(NAME molecule_pictures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_molecule.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/molecule_pictures)
+      # 0.20: the Molecule Lab builder (sketch, editing, a refusal, the estimated shape, no shape, the molbuild line) and the three layout fixes (tests/check_molbuild.py)
+      foreach(part sketch edit refuse shape noshape settings u238 sheet molpan)
+        add_test(NAME molbuild_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_molbuild.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/molbuild_${part} ${part})
+      endforeach()
       # 0.19 audit fixes in the real app, one part per fix (tests/check_audit19.py): the guide's "monochrome" word, search in the Molecule Lab, its bar's lit buttons
       foreach(part monokey molsearch molbar)
         add_test(NAME ui19_${part} COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_audit19.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui19_${part} ${part})
@@ -381,12 +390,12 @@ endif()
 # 0.15 stage 4.1: labels and a fast, identical environment for the tests. quick = the unit test programs, glsl and the source scan (about a minute, no app start);
 # pictures = everything that starts the real app under Mesa's software OpenGL. One llvmpipe thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
 # all of them) and a shared Mesa shader cache (a start no longer rebuilds its shaders): the pictures are the same (the picture guards prove it).
-foreach(t orbit_physics atom_physics molecule_logic app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
+foreach(t orbit_physics atom_physics molecule_logic molbuild_logic app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
-foreach(t gl_phase_colours molecule_pictures ui19_monokey ui19_molsearch ui19_molbar shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui6a_atom_gaps ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
+foreach(t gl_phase_colours molecule_pictures molbuild_sketch molbuild_edit molbuild_refuse molbuild_shape molbuild_noshape molbuild_settings molbuild_u238 molbuild_sheet molbuild_molpan ui19_monokey ui19_molsearch ui19_molbar shell_ui shell_state atom_toolbar atom_chip controls_panel atom_panel shell_pictures cards_orbit cards_atom ui5g_pages ui5g_contents ui5g_toolbar ui5g_default ui5g_ring ui5g_panel ui5g_atomtext ui5h_centre ui5h_infosize ui5h_cards ui5h_fit ui5i_sheet ui6a_atom_gaps ui5j_look_m1 ui5m_themes ui5k_pages ui5k_contents ui5k_log ui5k_windows ui5k_toggle ui5l_search ui5l_legend ui5l_toolbar ui5l_popups
           orbit_ui_coverage orbit_ui_card orbit_ui_time orbit_ui_chip orbit_ui_facts orbit_ui_facts_long orbit_ui_readable orbit_ui_search orbit_ui_links ui6b_scrollbar ui6b_bench ui6b_rail ui6b_nucleus)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")

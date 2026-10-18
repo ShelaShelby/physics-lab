@@ -2,6 +2,11 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.20 (Molecule Lab builder, layout fixes): what only Alex can do
+- [ ] **The builder on Alex's own PC (Windows and a real mouse were NOT tested in the cloud):** Molecule Lab, Controls, Mode: Build. Add atoms with clicks, drag an atom next to another and let go: does it snap and bond where you expect? Click bonds (single, double, triple; try N-N, which skips the double), Delete, Undo / Redo (buttons and Ctrl+Z / Ctrl+Y), Clear. Try a refused bond (an H onto water's O). Then the 3D shape (estimated): turn, zoom, click atoms and bonds; "Show measured shape" for water or benzene. Close and reopen: the sketch is kept.
+- [ ] **Layout fixes:** Atom Lab, U-238, Nucleus view: the info text is folded above the nucleus; click it to read the rest, click again to fold. Orbit Lab: All values at your usual window size: the Legend chip stays free. Molecule Lab: a long Shift-drag can no longer push the molecule out of the window.
+- [ ] **Decide:** formaldehyde's H-C-H in the estimate is the ideal 120 degrees, 3.87 degrees from the measured 116.13: the job's "within 3 degrees" cannot hold for it with ideal VSEPR angles (the test records it as a known limit). Keep, or change the rule?
+
 ## 0.19 (Defense Lab removed, audit): what only Alex can do
 - [ ] **Molecule Lab on Alex's own PC:** drag to turn, Shift / right / middle drag to move, the wheel to zoom: does it feel right? Click atoms and bonds, both styles, Labels, Spin, Reset view; close and reopen (molecule, style and view must come back). Note the fps (no GPU in the cloud).
 - [ ] **Orbit Lab and Atom Lab after the audit:** a normal session in each (zoom, drag, Jump to a date, search with Ctrl+K, the Atom guide's word "monochrome" now unlocks the Monochrome theme). Nothing should look or behave differently except the fixes in native/AUDIT.md.

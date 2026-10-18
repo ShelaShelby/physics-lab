@@ -80,8 +80,101 @@ Rect moleculeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
     return r;
 }
 
+// 0.20: Build mode's panel: the view (Sketch | 3D shape), the element to add, the edit buttons, the built molecule's formula, mass, status and name,
+// the clicked atom or bond of the ESTIMATED shape, and what the estimate leaves out.
+static void buildControls(AppState& app, Panel& p, const SectionFn& section) {
+    namespace mb = molecule::build;
+    molecule::MoleculeLab& L = app.molecule;
+    const Metrics& m = sh::F().m;
+    const mb::Graph& g = L.ed.graph();
+    if (section("build", "Build", true)) {
+        int v = L.buildView;
+        const std::vector<std::string> vn{"molecule.view.sketch", "molecule.view.3d"};
+        if (pSegmented(p, "molecule.view", {"Sketch", "3D shape (estimated)"}, &v, &vn)) L.setBuildView(v);
+        if (L.buildView == 0) {
+            pHeading(p, "Element (a click on empty space adds it)");
+            int e = L.element;
+            const std::vector<std::string> en{"molecule.el.H", "molecule.el.C", "molecule.el.N", "molecule.el.O", "molecule.el.Cl"};
+            if (pSegmented(p, "molecule.el", {"H", "C", "N", "O", "Cl"}, &e, &en)) L.element = e;
+            const float half = (p.w - static_cast<float>(m.s8)) / 2, ch = static_cast<float>(m.control);
+            const auto pair = [&](const char* id0, const char* l0, bool on0, const char* id1, const char* l1, bool on1, int& hit) {
+                const ImVec2 o = here(p);
+                hit = 0;
+                if (sh::button(id0, o, ImVec2(half, ch), l0, on0 ? Face::Secondary : Face::Quiet)) hit = on0 ? 1 : 0;
+                if (sh::button(id1, ImVec2(o.x + half + static_cast<float>(m.s8), o.y), ImVec2(half, ch), l1, on1 ? Face::Secondary : Face::Quiet)) hit = on1 ? 2 : hit;
+                p.y += ch + static_cast<float>(m.s4);
+            };
+            int hit = 0;
+            pair("molecule.undo", "Undo", L.ed.canUndo(), "molecule.redo", "Redo", L.ed.canRedo(), hit);
+            if (hit == 1) L.ed.undo(); else if (hit == 2) L.ed.redo();
+            pair("molecule.delete", "Delete atom", L.ed.picked >= 0, "molecule.clear", "Clear", !g.atoms.empty(), hit);
+            if (hit == 1) L.deletePicked(); else if (hit == 2) L.ed.clear();
+            pCaption(p, "Click empty space to add the element. Drag an atom next to another one with an open valence (the small open stubs) and let go: it snaps and bonds. "
+                        "Click a bond: single, double, triple. Click an atom to pick it; Delete removes it. Ctrl+Z undoes, Ctrl+Y redoes.");
+        } else pCaption(p, "Drag to turn the shape, the wheel zooms; Shift, right or middle drag moves it. Click an atom or a bond for its estimated values.");
+    }
+    if (section("built", "Built molecule", true)) {
+        const int open = mb::openValences(g), pc = mb::pieces(g);
+        pStat(p, "Formula (Hill order)", g.atoms.empty() ? std::string("none yet") : mb::hill(g));
+        if (!g.atoms.empty()) {
+            char b[96];
+            std::snprintf(b, sizeof b, "%.8f u (± %.1g u)", mb::massU(g), mb::massUncU(g));
+            pStat(p, "Mass (most abundant isotopes)", b);
+        }
+        pStat(p, "Status", g.atoms.empty() ? std::string("empty") : pc > 1 ? std::to_string(pc) + " separate pieces" : open > 0 ? std::to_string(open) + (open == 1 ? " open valence" : " open valences") : std::string("complete"));
+        pStat(p, "Name", L.knownIdx >= 0 ? std::string(mb::known(L.knownIdx).name) : std::string("no name in our list"));
+        if (L.knownIdx >= 0 && mb::known(L.knownIdx).viewer >= 0 && pButton(p, "molecule.showmeasured", "Show measured shape")) L.showMeasured();
+        if (L.knownIdx >= 0 && std::string(mb::known(L.knownIdx).id) == "C6H6")
+            pCaption(p, "Built as a Kekulé ring: alternating single and double bonds, so the estimate has alternating lengths (1.536 and 1.339 Å). Real benzene has six equal C-C bonds, "
+                        "1.397 Å measured (CCCBDB 1966Herzberg): see the measured shape.", false);
+        if (!L.ed.message.empty()) { pHeading(p, "Last message"); pBody(p, L.ed.message); }
+        pCaption(p, "Mass: NIST, Atomic Weights and Isotopic Compositions. Names are conventions; only 23 molecules have one here.");
+    }
+    if (L.buildView == 1 && section("selected", "Clicked atom or bond (estimated)", true)) {
+        const molecule::Molecule& mo = L.built;
+        if (!L.builtOk) pBody(p, "No 3D shape yet. " + L.builtWhy);
+        else if (L.sel.atom >= 0 && L.sel.atom < static_cast<int>(mo.atoms.size())) {
+            const int a = L.sel.atom;
+            const molecule::Element& e = molecule::element(mo.atoms[a].el);
+            pStat(p, "Atom", molecule::atomLabel(mo, a) + "  ·  " + e.name);
+            pStat(p, "Lone pairs, steric number", std::to_string(mb::lonePairs(g, a)) + ", " + std::to_string(mb::steric(g, a)));
+            for (const molecule::Bond& b : mo.bonds) {
+                if (b.a != a && b.b != a) continue;
+                const mb::LengthRef* lr = mb::bondLength(mo.atoms[b.a].el, mo.atoms[b.b].el, b.order);
+                pHeading(p, molecule::atomLabel(mo, b.a) + "–" + molecule::atomLabel(mo, b.b) + " " + orderName(b.order));
+                if (lr) pBody(p, fixed(lr->angstrom, 3) + " Å, estimated, not measured (CCCBDB " + lr->ref + ": the " + mb::bondName(lr->e0, lr->e1, lr->order) + " bond of " + lr->molecule + ")");
+            }
+            const double ideal = mb::idealAngle(mb::steric(g, a));
+            if (std::isfinite(ideal) && mb::steric(g, a) > 1) pBody(p, "Angles at this atom: " + fixed(ideal, ideal == 180 || ideal == 120 ? 0 : 4) + "°, estimated, not measured (ideal VSEPR for steric number " + std::to_string(mb::steric(g, a)) + ")");
+        } else if (L.sel.bond >= 0 && L.sel.bond < static_cast<int>(mo.bonds.size())) {
+            const molecule::Bond& b = mo.bonds[L.sel.bond];
+            pStat(p, "Bond", molecule::atomLabel(mo, b.a) + "–" + molecule::atomLabel(mo, b.b) + ", " + orderName(b.order));
+            if (const mb::LengthRef* lr = mb::bondLength(mo.atoms[b.a].el, mo.atoms[b.b].el, b.order))
+                pBody(p, fixed(lr->angstrom, 3) + " Å, estimated, not measured (CCCBDB " + lr->ref + ": the " + mb::bondName(lr->e0, lr->e1, lr->order) + " bond of " + lr->molecule + ")");
+            pBody(p, "From the 3D shape " + built(molecule::dist(mo.atoms[b.a], mo.atoms[b.b]), 'r'), true);
+        } else pCaption(p, "Nothing chosen. Click an atom or a bond in the picture.");
+    }
+    if (section("limits", "What the estimate does not show", true)) {
+        pCaption(p, "Estimated, not measured: the shape uses the ideal VSEPR angles (Gillespie and Nyholm: 180°, 120°, 109.47°) and one CCCBDB bond length per bond type, then a simple spring model so rings close.", false);
+        pCaption(p, "VSEPR (ideal angles) is a simplified model; lone pairs make real angles smaller (water is 104.48° measured, 109.47° here).", false);
+        pCaption(p, "Each bond length comes from one reference molecule; real lengths vary by 1-3 % with the surroundings. A bond type with no measured length in our sources is refused.", false);
+        pCaption(p, "No energies and no stability check: a molecule the builder accepts is not necessarily a stable real one. Valences H 1, C 4, N 3, O 2, Cl 1 are a convention: "
+                    "molecules that need formal charges (ozone, for example) cannot be built.", false);
+    }
+    std::string orders;
+    for (const mb::SBond& b : g.bonds) orders += (orders.empty() ? "" : ",") + std::to_string(b.order);
+    auditNote("molbuild view=" + std::string(L.buildView ? "3d" : "sketch") + " atoms=" + std::to_string(g.atoms.size()) + " bonds=" + std::to_string(g.bonds.size()) + " orders=" + orders + " hill=" + mb::hill(g) +
+              " open=" + std::to_string(mb::openValences(g)) + " shape=" + (L.builtOk ? "estimated" : "none") + " name=" + (L.knownIdx >= 0 ? mb::known(L.knownIdx).id : "-") + " msg=" + L.ed.message);
+}
+
 void moleculeControls(AppState& app, Panel& p, const SectionFn& section) {
     molecule::MoleculeLab& L = app.molecule;
+    if (section("mode", "Mode", true)) {                  // 0.20: Viewer (the 15 measured molecules) or Build
+        int md = L.buildMode ? 1 : 0;
+        const std::vector<std::string> mn{"molecule.mode.viewer", "molecule.mode.build"};
+        if (pSegmented(p, "molecule.mode", {"Viewer", "Build"}, &md, &mn)) L.setBuild(md == 1);
+    }
+    if (L.buildMode) { buildControls(app, p, section); return; }
     const molecule::Molecule& mo = L.mol();
     if (section("molecules", "Molecule", true)) {
         for (int i = 0; i < molecule::count(); i++) {

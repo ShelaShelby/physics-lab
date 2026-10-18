@@ -70,11 +70,15 @@ std::vector<Cmd> parseScript() {
     return out;
 }
 
-void pushMouse(SDL_Window* w, float x, float y, int what) {   // 0 move, 1 down, 2 up
+void pushMouse(SDL_Window* w, float x, float y, int what) {   // 0 move, 1 down, 2 up; 3 right button down, 4 right button up (0.20)
     SDL_Event e;
     SDL_zero(e);
     if (what == 0) { e.type = SDL_EVENT_MOUSE_MOTION; e.motion.windowID = SDL_GetWindowID(w); e.motion.x = x; e.motion.y = y; }
-    else { e.type = what == 1 ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP; e.button.windowID = SDL_GetWindowID(w); e.button.x = x; e.button.y = y; e.button.button = SDL_BUTTON_LEFT; e.button.down = what == 1; e.button.clicks = 1; }
+    else {
+        const bool down = what == 1 || what == 3;
+        e.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP; e.button.windowID = SDL_GetWindowID(w); e.button.x = x; e.button.y = y;
+        e.button.button = what >= 3 ? SDL_BUTTON_RIGHT : SDL_BUTTON_LEFT; e.button.down = down; e.button.clicks = 1;
+    }
     SDL_PushEvent(&e);
 }
 
@@ -207,13 +211,14 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             SDL_zero(e);
             e.type = SDL_EVENT_MOUSE_WHEEL; e.wheel.windowID = SDL_GetWindowID(window); e.wheel.y = static_cast<float>(std::atof(arg.c_str())); e.wheel.mouse_x = ImGui::GetIO().MousePos.x; e.wheel.mouse_y = ImGui::GetIO().MousePos.y;
             SDL_PushEvent(&e);
-        } else if (verb == "drag") {                       // press at x0,y0, move to x1,y1 over a few frames, release (the picture's drag)
+        } else if (verb == "drag" || verb == "rdrag") {   // press at x0,y0, move to x1,y1 over a few frames, release (the picture's drag; rdrag: with the right button, 0.20)
             float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+            const int right = verb == "rdrag" ? 2 : 0;
             if (std::sscanf(arg.c_str(), "%f,%f,%f,%f", &x0, &y0, &x1, &y1) == 4) {
                 pushMouse(window, x0, y0, 0);
-                pending[frame + 1].push_back({x0, y0, 1});
+                pending[frame + 1].push_back({x0, y0, 1 + right});
                 for (int k = 1; k <= 4; k++) pending[frame + 1 + k].push_back({x0 + (x1 - x0) * k / 4, y0 + (y1 - y0) * k / 4, 0});
-                pending[frame + 6].push_back({x1, y1, 2});
+                pending[frame + 6].push_back({x1, y1, 2 + right});
             }
         } else if (verb == "key") {
             std::string k = arg;
@@ -256,7 +261,8 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             std::printf("PLSCROLL %d %.1f %.1f |%s\n", frame, y, mx, readingAnchorsNow().c_str());
         } else if (verb == "astate") {
             std::printf("PLASTATE %s\n", atomSettingsLine(app).c_str());
-            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g centre=%g,%g label=%g,%g,%g,%g infopx=%g free=%g,%g scale=%g,%g,%g,%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3], d.centre[0], d.centre[1], d.label[0], d.label[1], d.label[2], d.label[3], d.infoPx, app.atom.freeX, app.atom.freeW, d.scale[0], d.scale[1], d.scale[2], d.scale[3]); }   // (stage 5g: where the picture put its info text and phase ring, in points)
+            { const atom::MarksDrawn& d = atom::marksDrawn(); std::printf("PLATOMBOX info=%g,%g,%g,%g ring=%g,%g,%g,%g centre=%g,%g label=%g,%g,%g,%g infopx=%g free=%g,%g scale=%g,%g,%g,%g\n", d.info[0], d.info[1], d.info[2], d.info[3], d.ring[0], d.ring[1], d.ring[2], d.ring[3], d.centre[0], d.centre[1], d.label[0], d.label[1], d.label[2], d.label[3], d.infoPx, app.atom.freeX, app.atom.freeW, d.scale[0], d.scale[1], d.scale[2], d.scale[3]);
+              std::printf("PLATOMNUC x=%g y=%g r=%g foldable=%d folded=%d open=%d\n", d.nucleus[0], d.nucleus[1], d.nucleus[2], d.infoFoldable ? 1 : 0, d.infoFolded, app.atom.infoOpen ? 1 : 0); }   // (0.20: the nucleus and the folded info text)   // (stage 5g: where the picture put its info text and phase ring, in points)
         } else if (verb == "state") {
             std::printf("PLSTATE %s\n", (app.lab == 1 ? atomStateLine(app) : orbitStateLine(app)).c_str());
         }

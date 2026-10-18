@@ -164,6 +164,7 @@ public:
     double insetTop = 0, insetBottom = 0; // new UI: how much of the picture the top bar and the toolbar cover, points (the readout lines and the chart keep clear of it)
     double insetBottomLeft = 0;          // new UI (0.15 stage 5d): how high the toolbar row and the fact line reach at the bottom left, points (the scale bar and the decay lines sit above it); 0 in the old UI
     double insetRight = 0;                // 0.15 stage 5c: points the Controls panel covers at the right: the picture's text lines wrap before it
+    bool infoOpen = false;               // 0.20: the info text folded over the nucleus (Nucleus, Nucleon, Quarks views) was opened with a click
     bool infoHidden = false;             // 0.15 stage 5p: the info text at the top left is not drawn while the new UI's Element picker is open (the picker covers that corner)
     double infoDown = 0;                 // 0.15 stage 5g: the info text starts this far lower (points): below the phase ring when there is no room beside it
     double infoRight = -1;               // 0.15 stage 5g: the info text at the top left stops here (points; -1: the old width). The new UI sets it to the left edge of the subject card or the phase ring

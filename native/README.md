@@ -1,7 +1,7 @@
 # Physics Lab — native Windows version
 
 A native C++ version of Physics Lab for Windows (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
-Version **0.19 alpha**. The app has **three labs**: the **Orbit Lab** (the real Solar System), the **Atom Lab** (any nucleus with one electron, down to quarks) and the **Molecule Lab** (15 small molecules in their measured shape; stage 1, a viewer). The Defense Lab (0.17-0.18) was removed in 0.19. The picture fills the window; a slim top bar (menu, a Labs dropdown, a chip, search with Ctrl+K), a toolbar at the bottom, floating cards and a Controls panel on the right; About, history, changelogs and the guides open in a reading view. Settings, themes, the facts line, the Learn and Achievements pages, Save picture and the Benchmark are app-wide, and everything is remembered between runs. The app is in **alpha**: features are still being added. The Black Hole Lab, the Spacetime Lab and the Slingshot game of the web version are not part of it. The frozen web version (`archive/web/index.html`) is the reference for the Orbit and Atom Labs; this folder does not change it.
+Version **0.20 alpha**. The app has **three labs**: the **Orbit Lab** (the real Solar System), the **Atom Lab** (any nucleus with one electron, down to quarks) and the **Molecule Lab** (15 small molecules in their measured shape, and a builder for your own with an estimated shape). The Defense Lab (0.17-0.18) was removed in 0.19. The picture fills the window; a slim top bar (menu, a Labs dropdown, a chip, search with Ctrl+K), a toolbar at the bottom, floating cards and a Controls panel on the right; About, history, changelogs and the guides open in a reading view. Settings, themes, the facts line, the Learn and Achievements pages, Save picture and the Benchmark are app-wide, and everything is remembered between runs. The app is in **alpha**: features are still being added. The Black Hole Lab, the Spacetime Lab and the Slingshot game of the web version are not part of it. The frozen web version (`archive/web/index.html`) is the reference for the Orbit and Atom Labs; this folder does not change it.
 
 What changed in each version is in the app (🕰 What's new) and in `src/ui/changelog.cpp`; the design of the interface is in `docs/ui-0.15/DESIGN.md` (0.15 history). Some lines further down still describe the 0.14-era panels and cards; the controls are the same, but they now live in the Controls panel, the toolbar and the subject card.
 
@@ -146,11 +146,12 @@ Each lab keeps its state while another one is on screen.
 - **Learn**: What am I even looking at?, Scale, Weight and the timeline (the web text, word for word).
 - **Defaults** (asks first) puts the Atom Lab settings back; **Reset** starts a fresh atom.
 
-### Molecule Lab (0.18, stage 1: a viewer)
+### Molecule Lab (0.18 viewer, 0.20 builder)
 - 15 small molecules (H2, N2, O2, HCl, CO2, H2O, O3, NH3, CH4, HCN, C2H2, H2CO, C2H4, CH3OH, C6H6) in 3D, built from NIST CCCBDB's experimental bond lengths and angles (`data/molecules/`), centred on the centre of mass; masses from NIST.
 - Ball-and-stick or space-filling (van der Waals radii), element labels, an optional slow spin (off with Motion Reduced), Reset view.
-- **Mouse**: drag turns, the wheel zooms, Shift / right / middle drag moves. Click an atom or a bond: the measured value with its CCCBDB reference next to the value from the 3D shape; the data sheet has the mass and the rotational constants (listed and from the shape). The shape is a fixed equilibrium structure; the app says what the picture does not show.
-- Not yet (planned, C++): stage 2 builder, stage 3 live simulation.
+- **Mouse**: drag turns, the wheel zooms, Shift / right / middle drag moves (0.20: at most 1.5 molecule radii from the centre, so it cannot leave the view). Click an atom or a bond: the measured value with its CCCBDB reference next to the value from the 3D shape; the data sheet has the mass and the rotational constants (listed and from the shape). The shape is a fixed equilibrium structure; the app says what the picture does not show.
+- **Build mode (0.20, stage 2)**: Controls, Mode: Build. In the **Sketch**: pick H, C, N, O or Cl and click empty space to add it; drag an atom next to another one with an open valence (open stubs) and let go: it snaps and bonds; click a bond for single, double, triple; click an atom to pick it, Delete removes it; Undo / Redo (100 steps, also Ctrl+Z / Ctrl+Y), Clear. Valences are strict (H 1, C 4, N 3, O 2, Cl 1): a bond that does not fit, or a bond type with no CCCBDB length (N=N, N=O, O-Cl, N-Cl, ...), is refused with the reason. The panel shows the Hill formula, the mass (NIST, with uncertainty), "complete" or the open valences, and a name only for 23 known molecules (the 15 of the viewer, with "Show measured shape", and ethane, methylamine, chloromethane, hydrazine, chlorine, hydrogen peroxide, hydroxylamine, methanimine). The **3D shape** of a complete molecule is ESTIMATED, not measured: ideal VSEPR angles (180, 120, 109.47 degrees) and one CCCBDB bond length per bond type, relaxed by a spring model so rings close (deterministic, about 0.04 ms for 30 atoms here). Up to 30 atoms. The sketch is kept in the settings (`molbuild=v1 ...`).
+- Not yet (planned, C++): stage 3 live simulation.
 
 ## How it is organised
 
@@ -184,7 +185,8 @@ Each lab keeps its state while another one is on screen.
 | `src/orbit/belt_layer.*` | (0.13 stage 4) The belts' rocks on the Orbit Lab picture: the CPU way or the GPU way, no Dear ImGui |
 | `src/atom/chart_mesh.*` | (0.13 stage 4) The chart's tiles and blocks as a retained mesh, and the CPU twin of its vertex shader |
 | `src/molecule/molecule.*` | (0.18) The Molecule Lab: the 15 molecules from the CCCBDB values, masses, picking, camera, settings text; no graphics, tested by `molecule_logic` |
-| `src/molecule/molecule_view.*`, `src/ui/shell_molecule.cpp` | (0.18) Drawing the molecule (one instanced draw call) and its bar and Controls panel |
+| `src/molecule/molecule_view.*`, `src/ui/shell_molecule.cpp` | (0.18) Drawing the molecule (one instanced draw call) and its bar and Controls panel; (0.20) the builder's sketch and Build panel |
+| `src/molecule/builder.*` | (0.20) The builder: valences, the CCCBDB bond-length table, refusals, Hill formula, names, the estimated (VSEPR) shape, the editor with undo / redo, the molbuild settings line; tested by `molbuild_logic` |
 | `src/render/` | OpenGL 3.3 loader, batched 2D renderer (instanced dots, planet shader), Earth map |
 | `src/app/prefs.*`, `app_text.inc` | What is remembered (the settings file), themes, achievements; the app-wide web texts |
 | `src/ui/` | The ImGui panels of both labs, Learn guides (rich-text and HTML layout), Settings, themes and the look (`look.*`), the header, About and history (`app_pages.*`), the facts line, tabs and achievements (`app_tabs.*`), Journey and dates, changelogs, fonts |
@@ -224,7 +226,7 @@ and the app-wide texts against runs of the web's own code (`make_app_reference.j
 pop-ups for every count, the header, About, the language menu, the history, the 27 facts, the secret pop-ups, the
 Achievements and Learn tabs, and the dates.
 
-`tests/test_molecule.cpp` (`molecule_logic`) checks the Molecule Lab against the CCCBDB values, symmetry, NIST masses and its own rotational constants (0.18), and fuzzes its settings text (0.19).
+`tests/test_molecule.cpp` (`molecule_logic`) checks the Molecule Lab against the CCCBDB values, symmetry, NIST masses and its own rotational constants (0.18), and fuzzes its settings text (0.19). `tests/test_molbuild.cpp` (`molbuild_logic`, 0.20) checks the builder: valences and refusals, bond cycling and undo, formula and mass against the viewer, names, the estimated shape against the measured CCCBDB shapes (every difference printed), determinism and the molbuild line (with a fuzz run); `tests/check_molbuild.py` (`molbuild_*`) runs the builder and the three 0.20 layout fixes in the real app.
 
 ## Command-line helpers for automatic checks
 
@@ -235,7 +237,7 @@ names, `PL_DATE=2003-08-27` jumps to a date (and prints the note), `PL_JOURNEY=1
 `PL_LEARN=1|2|3` opens a Learn guide, `PL_IMPERIAL=1` shows imperial units, `PL_SKYOFF=1` turns the
 stars off and `PL_LIGHT=1` pretends the system theme is light. For Atom Lab: `PL_ATOM=1` opens it,
 `PL_ATOM_SET="Z=26;view=Cloud;zoom=4.5"` sets its settings, `PL_ATOM_DO=emit|absorb|auto|nucleus|nucleon` (with `PL_ATOM_DO_FRAME=n`: at frame n, after the cloud has filled) presses a
-button, `PL_ATOM_FOCUS=n` follows nucleon n, `PL_ATOM_LEARN=1..4` (with `PL_ATOM_TAB=ten|miss|...`, and `PL_ATOM_JUMP=scale` for a section) opens a guide, `PL_MOLECULE=H2O` (with `PL_MOLECULE_STYLE=fill`) opens the Molecule Lab,
+button, `PL_ATOM_FOCUS=n` follows nucleon n, `PL_ATOM_LEARN=1..4` (with `PL_ATOM_TAB=ten|miss|...`, and `PL_ATOM_JUMP=scale` for a section) opens a guide, `PL_MOLBUILD=<molbuild line>` opens the builder with that sketch (0.20), `PL_MOLECULE=H2O` (with `PL_MOLECULE_STYLE=fill`) opens the Molecule Lab,
 and `PL_SCROLL=y` scrolls the Atom Lab panel. App-wide: `PL_SETTINGS=file` uses another settings file,
 `PL_THEME=paper`, `PL_TEXTSIZE=xl`, `PL_FONT=easy` and `PL_MOTION=on` set the look, `PL_SELECT=far:sgra` picks a
 far-away thing, `PL_DYK_FIRST=26` puts that fact first (26 is the 🎁), and `PL_EXIT_AFTER_SECONDS=s` quits after s seconds.

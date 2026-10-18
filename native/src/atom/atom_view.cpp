@@ -1037,6 +1037,29 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             rows[i] = line;
             if (!rest.empty()) rows.insert(rows.begin() + i + 1, rest);
         }
+        // 0.20: in the Nucleus, Nucleon and Quarks views the nucleus fills the picture, and a long info text was drawn over it (U-238). Then the text folds: the rows that fit above
+        // the nucleus stay, the rest is behind a "Show n more lines" row that a click opens (and folds again): nothing is lost, the nucleus is clear until the owner asks
+        {
+            const double top = 4 + lab.insetTop + lab.infoDown, rowH = isz + 4;
+            double tw = 0;
+            for (const std::string& t : rows) tw = std::max(tw, T.width(t, isz));
+            const double bw0 = tw + 20, bh0 = rowH * rows.size() + 10;
+            const double qx = std::clamp(cx, 6.0, 6 + bw0), qy = std::clamp(cy, top, top + bh0);   // the plate's point nearest the nucleus centre
+            const bool deep = !bohr && s.layer != "Atom", over = deep && std::hypot(qx - cx, qy - cy) < Rpx;
+            g_marks.nucleus[0] = cx; g_marks.nucleus[1] = cy; g_marks.nucleus[2] = deep ? Rpx : 0;
+            g_marks.infoFoldable = over || (deep && lab.infoOpen);
+            if (g_marks.infoFoldable && rows.size() > 1) {
+                if (lab.infoOpen) rows.push_back("Fold this text (click)");
+                else {
+                    const int fit = static_cast<int>(std::floor((cy - Rpx - 8 - top - 10) / rowH)) - 1;   // rows above the nucleus, less the "Show" row
+                    const std::size_t keep = static_cast<std::size_t>(std::clamp(fit, 1, static_cast<int>(rows.size()) - 1));
+                    const std::size_t more = rows.size() - keep;
+                    rows.resize(keep);
+                    rows.push_back("Show " + std::to_string(more) + (more == 1 ? " more line" : " more lines") + " (click)");
+                    g_marks.infoFolded = static_cast<int>(more);
+                }
+            }
+        }
         bool any = false;
         double mw = 0;
         for (const std::string& t : rows) { if (!t.empty()) any = true; mw = std::max(mw, T.width(t, isz)); }
@@ -1047,7 +1070,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                               ImGui::ColorConvertFloat4ToU32(ImVec4(css.card.r, css.card.g, css.card.b, 0.72f)), float(8 * uiScale));
         }
         // on their see-through panel the rows need no halo (in light themes its 8 copies left faint grey marks between letters)
-        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 8 + isz + lab.insetTop + lab.infoDown + (isz + 4) * i, isz, css.muted, 0, any ? nullptr : &css.card);
+        for (std::size_t i = 0; i < rows.size(); i++) T.draw(rows[i], 12, 8 + isz + lab.insetTop + lab.infoDown + (isz + 4) * i, isz, g_marks.infoFoldable && i + 1 == rows.size() ? css.accent : css.muted, 0, any ? nullptr : &css.card);
     }
 }
 

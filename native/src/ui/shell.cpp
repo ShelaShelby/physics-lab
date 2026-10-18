@@ -787,7 +787,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     }
 
     // ---- 0.18: the Molecule Lab's bar, bottom centre (where the other labs have their toolbar) ----
-    if (!pane && app.lab == molecule::kLabIndex) { const Rect br = moleculeBar(app, fr, m); occ.push_back(br); auditRect("moleculebar", static_cast<float>(br.x), static_cast<float>(br.y), static_cast<float>(br.w), static_cast<float>(br.h)); }
+    if (!pane && app.lab == molecule::kLabIndex && !app.molecule.sketchOn()) { const Rect br = moleculeBar(app, fr, m); occ.push_back(br); auditRect("moleculebar", static_cast<float>(br.x), static_cast<float>(br.y), static_cast<float>(br.w), static_cast<float>(br.h)); }
 
     // ---- the readout, bottom right: Body size on a soft dark pill (stage 5c; before it was Caption with an outline and was hard to read over lines and stars). Its own window, so a saved picture does not carry it ----
     if (!pane && !ro.empty()) {
@@ -1024,6 +1024,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 openRect.h = std::max<double>(m.em(6), std::min(openRect.h, limit - m.s12 - openRect.y));
             }
             if (id == PanelId::Data) openRect.x = std::max<double>(m.s12, std::min(openRect.x, (fr.freeW > 0 ? fr.freeW : fr.window.w) - m.s12 - openRect.w));   // stage 5i: the side step never pushes the sheet under the Controls panel
+            if (id == PanelId::Data)                                              // 0.20: a collapsed card (the Legend chip) the sheet still covers: the sheet starts below it (its bottom stays)
+                for (const Rect& c : cards)
+                    if (c.h <= 2.0 * m.control && openRect.intersects(c)) { const double y = c.bottom() + m.s12; openRect.h = std::max<double>(m.em(6), openRect.bottom() - y); openRect.y = y; }
             sh::Panel p;
             // 5l: a scrollbar only when the content truly does not fit the room (it needed more than the room it was given last frame); the Labs dropdown is opaque and in front of everything
             const float needLast = sh::lastHeight(wid, -1.0f);

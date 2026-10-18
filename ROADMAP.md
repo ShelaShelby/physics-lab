@@ -3,6 +3,7 @@
 Plain list of what is done and what is planned. No dates. Nothing is promised that is not on this list.
 
 ## Done
+- 0.20: Molecule Lab stage 2, the builder (sketch with H, C, N, O, Cl and strict valences, bond orders, undo / redo, Hill formula, mass, names for 23 known molecules, an ESTIMATED 3D shape from ideal VSEPR angles and CCCBDB bond lengths) and three layout fixes (Atom Lab info text over the nucleus, Orbit All values sheet over the Legend, unlimited Molecule pan) — done in code and tests (the Windows run: see REPORT.md)
 - 0.19: the Defense Lab removed (the app has three labs: Orbit, Atom, Molecule), dead code removed, a full bug audit with fixes and tests (native/AUDIT.md) — done in code and tests (the Windows run: see REPORT.md)
 - 0.18 stage 1: Molecule Lab stage 1, the viewer (15 small molecules in their measured CCCBDB geometry) — done
 - 0.17 stages 1-2: the Defense Lab (a factory game) — done, then REMOVED in 0.19 (owner decision of 18 Oct 2026)
@@ -54,7 +55,7 @@ Plain list of what is done and what is planned. No dates. Nothing is promised th
 - 0.10.2: Atom Lab: phase colours (complex orbitals m = ±1 … ±l and a colour wheel), quantum beats (superposition of two states), smooth photon jumps — done
 
 ## Planned, in this order
-- Molecule Lab (the owner's plan of 18 Oct 2026; the third lab of the C++ app, and stages 2 and 3 stay C++; only real physics, every number sourced): stage 1 viewer (15 small molecules, measured CCCBDB geometry) DONE in 0.18 stage 1; stage 2 builder (drag atoms, valence rules, formula); stage 3 live simulation. Big molecules later, labelled computed or crystal.
+- Molecule Lab (the owner's plan of 18 Oct 2026; the third lab of the C++ app, and stages 2 and 3 stay C++; only real physics, every number sourced): stage 1 viewer (15 small molecules, measured CCCBDB geometry) DONE in 0.18 stage 1; stage 2 builder (drag atoms, valence rules, formula, estimated shape) DONE in 0.20; stage 3 live simulation NEXT. Big molecules later, labelled computed or crystal.
 - The predicted island of stability, drawn from a sourced prediction: waits for a source (one the owner can open and send as text or PDF: a review of the predicted magic numbers and region of superheavy nuclei); until then the chart says it is a prediction and draws nothing — waiting for the owner, not scheduled
 - Photon jumps from a complex state or a superposition: the owner decides between the options in native/REPORT.md (0.11 stage 1) — waiting for the owner, not scheduled
 - **BLOCKED ON DATA (the owner must download by hand: the IAEA pages are behind a bot challenge that no script can pass, and the other hosts are refused by the cloud session's network policy):** HALO nuclei drawn at their measured MATTER radius. Not started. A charge radius cannot do this (neutrons carry no charge), and the quadrupole table of stage 2 does not help. Needs one file from the owner (details in OWNER-TODO.md):

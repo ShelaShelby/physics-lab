@@ -52,6 +52,7 @@ std::string savePrefs(const Prefs& p) {
                     << (p.window->hasPos ? std::to_string(p.window->y) : "-") << "," << (p.window->maximized ? 1 : 0) << "\n";
     o << "lab=" << clean(p.lab) << "\n";
     if (!p.molecule.empty()) o << "molecule=" << clean(p.molecule) << "\n";
+    if (!p.molbuild.empty()) o << "molbuild=" << clean(p.molbuild) << "\n";
     for (const auto& [k, v] : p.orbit) o << "orbit." << clean(k) << "=" << clean(v) << "\n";
     for (const auto& [k, v] : p.atom) o << "atom." << clean(k) << "=" << clean(v) << "\n";
     return o.str();
@@ -80,6 +81,7 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "motion") { if (validMotion(v)) p.motion = v; }
         else if (k == "shellpanels") p.shellPanels = v;
         else if (k == "molecule") p.molecule = v;
+        else if (k == "molbuild") p.molbuild = v;
         else if (k == "facts") { if (v == "on" || v == "off") p.facts = v; }
         else if (k == "recent") p.recent = v;
         else if (k == "units") { if (v == "metric" || v == "imperial") p.units = v; }
