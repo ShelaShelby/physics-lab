@@ -9,7 +9,9 @@
 #include <vector>
 
 #include "app/prefs.h"
+#include "atom/cloud_dots.h"
 #include "molecule/builder.h"
+#include "molecule/density.h"
 #include "molecule/molecule.h"
 #include "render/renderer2d.h"
 
@@ -18,6 +20,22 @@ struct ImDrawList;
 namespace molecule {
 
 constexpr double kSpinRadPerS = 0.5;       // design: auto-spin, 0.5 rad a second about the screen's vertical axis
+
+// 0.21 stage 1: the Realistic style's cached data for the molecule on screen: the Monte Carlo dots (rebuilt only when the molecule or the amount changes) and the density
+// surface coloured by the potential (rebuilt only when the molecule or the isovalue changes). Nothing here is rebuilt in a normal frame.
+struct RealCache {
+    const dens::Data* data = nullptr;
+    std::string dotsId; int dotsN = 0;
+    std::vector<float> dots;                 // angstrom, xyz each
+    std::vector<double> cdf;                 // sampling work buffer
+    std::string meshId; int meshIso = -1;
+    dens::Mesh mesh;                         // angstrom; value = the potential (au) at each vertex
+    double gridElectrons = 0;                // the stored grid's integral (shown next to the true count)
+    double potRange = 0;                     // the symmetric colour scale: -potRange..+potRange au (max |V| on this surface)
+    double dotsMs = 0, meshMs = 0;           // how long the last rebuilds took (for the report)
+    unsigned revision = 0;                   // goes up whenever the mesh is rebuilt
+    bool ensure(const std::string& id, int dotsN, int isoIdx);   // false: no data for this molecule
+};
 
 struct MoleculeLab {
     Settings set;
@@ -48,6 +66,9 @@ struct MoleculeLab {
     double sketchX(double x) const { return (x - cx()) / kSketchPt; }   // points -> sketch units
     double sketchY(double y) const { return (y - cy()) / kSketchPt; }
     void choose(int i) { if (i != set.mol) { set.mol = std::clamp(i, 0, count() - 1); sel = Pick{}; clampPan(set.cam, radiusA(mol())); } }
+    RealCache real;                          // 0.21: the Realistic style's dots and surface
+    bool realOn() const { return !buildMode && set.style == Style::Realistic; }   // (Realistic is offered in Viewer mode only: the builder's molecules have no computed density)
+    void setStyle(Style st) { set.style = st; if (st == Style::Realistic) set.realUsed = true; }
     void click(double x, double y) {
         if (sketchOn()) {
             const double sx = sketchX(x), sy = sketchY(y);
@@ -101,7 +122,9 @@ struct MoleculeLab {
     void loadBuild(const build::BuildSettings& b) { buildMode = b.build; buildView = b.view; element = b.element; ed.load(b.graph); seenRev = ~0u; builtFrom = build::Graph{}; builtFrom.atoms.push_back({-1, 0, 0}); refresh(); }
 };
 
-struct ViewStats { int atoms = 0, sticks = 0, blobs = 0, labels = 0, stubs = 0; double cpuMs = 0; const char* mode = "viewer"; };   // (0.20: mode viewer / sketch / shape / noshape; stubs: open valences drawn)
+render::Color realPotColour(double t);       // 0.21: the surface's potential colours (t = V / range, -1 red .. 0 white .. +1 blue), also for the panel's colour bar
+
+struct ViewStats { int atoms = 0, sticks = 0, blobs = 0, labels = 0, stubs = 0, dots = 0, triangles = 0; double cpuMs = 0; bool resorted = false; const char* mode = "viewer"; };   // (0.20: mode viewer / sketch / shape / noshape; stubs: open valences drawn. 0.21: mode realistic; dots and surface triangles drawn; resorted: the triangles were sorted again this frame)
 
 class MoleculeView {
 public:
@@ -112,6 +135,17 @@ public:
 private:
     void drawSketch(render::Renderer2D& r, ImDrawList* text, double uiScale, MoleculeLab& lab, const app::ThemeColors& c);   // 0.20: the builder's flat sketch
     void drawNote(ImDrawList* text, double uiScale, MoleculeLab& lab, const app::ThemeColors& c);                             // 0.20: the estimated shape's label, or why there is none
+    void drawRealistic(render::Renderer2D& r, MoleculeLab& lab, const app::ThemeColors& c);                                    // 0.21: the computed electron density (cloud, surface, nuclei)
+    void drawLabels(ImDrawList* text, double uiScale, const Molecule& m);
+    // the Realistic picture's per-frame buffers (kept: nothing is allocated once they have grown)
+    std::vector<atom::GlowDot> glow_;
+    std::vector<float> sx_, sy_, sz_;                // the surface's vertices on screen (points) and their depth (angstrom, bigger = nearer)
+    std::vector<render::Color> vc_;                  // each vertex's shaded colour (front face)
+    std::vector<float> tz_;                          // each triangle's depth
+    std::vector<int> order_;                         // the triangles far to near
+    double expo_ = 0;                                // the cloud's exposure, smoothed over frames (as the Atom Lab's)
+    double lastCam_[14] = {};                        // the view the triangles were last sorted for (R, pan, zoom, centre, scale)
+    unsigned lastRev_ = ~0u;
     struct Item { double depth; int kind, index, half; };   // kind 0 atom, 1 bond half (half 0 at bond.a, 1 at bond.b)
     std::vector<Proj> proj_;
     std::vector<Item> items_;

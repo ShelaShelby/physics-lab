@@ -381,15 +381,43 @@ static void testSettings() {
     check(loadSettings("v1 mol=NH3 style=fill labels=0 spin=1").style == Style::SpaceFill && !loadSettings("v1 mol=NH3 labels=0").labels && loadSettings("v1 spin=1").spin, "good values read");
 }
 
+// 6b. 0.21: the Realistic style's fields in the same versioned line: added only once the style was used (older files stay byte for byte), each bad value -> its default
+static void testRealSettings() {
+    const std::string old = "v1 mol=NH3 style=fill labels=0 spin=1 zoom=2.5 pan=0.25,-0.5 rot=1,0,0,0,1,0,0,0,1";   // a 0.20 line
+    check(saveSettings(loadSettings(old)) == old, "a 0.20 settings line is written back byte for byte");
+    const Settings d;
+    check(!d.realUsed && d.realDots == 60000 && d.realIso == 2 && d.realPot && d.realShow == 0 && kRealIso[2] == 0.002, "Realistic defaults: not used yet, 60,000 dots, isovalue 0.002, coloured by the potential, cloud and surface");
+    const std::string ds = saveSettings(d);
+    check(ds.find("rdots") == std::string::npos && ds.find("riso") == std::string::npos && ds.find("rcol") == std::string::npos && ds.find("rshow") == std::string::npos && ds.find("real") == std::string::npos, "no Realistic fields before the style was used");
+    Settings s;
+    s.mol = findId("C6H6"); s.style = Style::Realistic; s.realUsed = true; s.realDots = 20000; s.realIso = 1; s.realPot = false; s.realShow = 2;
+    const std::string t = saveSettings(s);
+    check(t.find(" style=real") != std::string::npos && t.find(" rdots=20000 riso=0.0016 rcol=plain rshow=surface") != std::string::npos, "Realistic fields written: " + t);
+    const Settings u = loadSettings(t);
+    check(u.style == Style::Realistic && u.realUsed && u.realDots == 20000 && u.realIso == 1 && !u.realPot && u.realShow == 2 && u.mol == s.mol, "Realistic round trip");
+    s.style = Style::BallStick;
+    const Settings v = loadSettings(saveSettings(s));
+    check(v.style == Style::BallStick && v.realUsed && v.realDots == 20000, "the Realistic choices are kept while another style is on");
+    const Settings w = loadSettings("v1 mol=H2O style=real rdots=7 riso=0.5 rcol=x rshow=all");
+    check(w.style == Style::Realistic && w.realDots == 60000 && w.realIso == 2 && w.realPot && w.realShow == 0 && w.realUsed, "bad Realistic values -> their defaults");
+    const Settings x = loadSettings("v1 mol=H2O style=real rdots=100000 riso=0.01 rcol=pot rshow=cloud");
+    check(x.realDots == 100000 && x.realIso == 3 && x.realPot && x.realShow == 1, "good Realistic values read");
+    check(loadSettings("v1 mol=H2O rdots=").realUsed, "a damaged Realistic field still marks the style as used (so it is written back)");
+    for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) {
+        Settings q; q.realUsed = true; q.realDots = kRealDots[i]; q.realIso = j;
+        const Settings r = loadSettings(saveSettings(q));
+        check(r.realDots == kRealDots[i] && r.realIso == j, "every dots amount and isovalue reads back (" + std::to_string(i) + ", " + std::to_string(j) + ")");
+    }
+}
 
 // 7. 0.19 audit: the settings text fuzzed (random tokens, random bytes): never a crash, always a valid camera (a rotation, zoom in range, finite pan),
 //    and what is read is written back the same way (load(save(load(x))) == load(x))
 static void testSettingsFuzz() {
     uint64_t st = 88172645463325252ull;
     const auto next = [&st] { st ^= st << 13; st ^= st >> 7; st ^= st << 17; return st; };
-    const char* keys[] = {"mol", "style", "labels", "spin", "zoom", "pan", "rot", "", "=", "mol=", "x"};
+    const char* keys[] = {"mol", "style", "labels", "spin", "zoom", "pan", "rot", "", "=", "mol=", "x", "rdots", "riso", "rcol", "rshow"};   // (0.21: + the Realistic fields)
     const char* vals[] = {"H2O", "C6H6", "fill", "ball", "0", "1", "-0", "1e308", "-1e308", "nan", "inf", "0x10", "1,2", "1,,2", ",", "0.5,0.5", "1,0,0,0,1,0,0,0,1",
-                          "0,1,0,-1,0,0,0,0,1", "1e-300", "\xff", "é", "1 2", "9999999999999999999999"};
+                          "0,1,0,-1,0,0,0,0,1", "1e-300", "\xff", "é", "1 2", "9999999999999999999999", "real", "20000", "60000", "100000", "0.0016", "0.01", "0.002", "pot", "plain", "both", "cloud", "surface"};
     int bad = 0;
     for (int i = 0; i < 20000; i++) {
         std::string t = next() % 5 ? "v1" : (next() % 2 ? "v2" : "");
@@ -408,7 +436,7 @@ static void testSettingsFuzz() {
         const Settings b = loadSettings(saveSettings(a));
         double dr = 0;
         for (int j = 0; j < 9; j++) dr = std::fmax(dr, std::fabs(b.cam.R[j] - a.cam.R[j]));   // (reading a view orthonormalises it again: the last bits may move)
-        ok = ok && b.mol == a.mol && b.style == a.style && b.labels == a.labels && b.spin == a.spin && b.cam.zoom == a.cam.zoom && b.cam.panX == a.cam.panX && b.cam.panY == a.cam.panY && dr < 1e-12;
+        ok = ok && b.mol == a.mol && b.style == a.style && b.labels == a.labels && b.spin == a.spin && b.realUsed == a.realUsed && b.realDots == a.realDots && b.realIso == a.realIso && b.realPot == a.realPot && b.realShow == a.realShow && b.cam.zoom == a.cam.zoom && b.cam.panX == a.cam.panX && b.cam.panY == a.cam.panY && dr < 1e-12;
         if (!ok && bad++ < 3) std::printf("  settings fuzz: \"%s\"\n", t.c_str());
     }
     check(bad == 0, "settings fuzz: 20,000 random settings texts give a valid view and read back the same (" + std::to_string(bad) + " wrong)");
@@ -421,6 +449,7 @@ int main() {
     testRotational();
     testPickCamera();
     testSettings();
+    testRealSettings();
     testSettingsFuzz();
     std::printf("molecule_logic: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

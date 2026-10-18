@@ -1,6 +1,0 @@
-recent=-1e400
-ach.monochrome=1,1,0,0,1
-orbit.=
-recent=
-facts=-1e400
-ö

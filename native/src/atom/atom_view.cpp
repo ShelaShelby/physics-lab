@@ -267,41 +267,10 @@ QuarkPts quarkPts(const Nucleon& q, double X, double Y, double rn, double now, c
 }
 
 
-// ---- the cloud's Glow style ----
-// One dot of the cloud on screen: its place, size, depth weight (1 = the plain dot) and the colour group (sign or phase) of the wave there.
-struct GlowDot { float x, y, r, wt; unsigned char g; };   // g: the dot's colour group (Sign: 0 = +, 1 = −; Wheel: the phase bin)
-
-// Draws the dots as soft round dots. Dark pages: the light adds up (additive), so dense places glow and thin ones fade. Light pages: ordinary
-// alpha blending with darker, more saturated colours (opacity builds up as 1 - exp(-light)). `base` is the brightest a single dot may be.
-// The exposure is chosen from the brightest 8 × 8 pixel place so it stays just under white; it is one number for all dots.
+// ---- the cloud's Glow style (0.21: the dots' light and exposure moved to cloud_dots.cpp, glowBlobs, so the Molecule Lab's Realistic cloud is drawn the same way) ----
 void drawGlow(render::Renderer2D& R, const std::vector<GlowDot>& D, long cap, bool light, DotColours dc, bool darken, double base, double w, double h, double& expo) {
-    if (D.empty()) return;
-    constexpr int kCell = 8;
-    const int gw = int(w / kCell) + 2, gh = int(h / kCell) + 2;
-    static std::vector<float> grid;
-    grid.assign(std::size_t(gw) * gh, 0.f);
-    for (const GlowDot& d : D) {                                           // the light one dot puts into its cell: its depth weight × footprint (pi r² / 4 of a Gaussian)
-        const int cx = std::max(0, std::min(gw - 1, int(d.x / kCell))), cy = std::max(0, std::min(gh - 1, int(d.y / kCell)));
-        float& g = grid[std::size_t(cy) * gw + cx];
-        g += d.wt * d.r * d.r * 0.785f;
-    }
-    static std::vector<float> used;                                        // the brightest places, ignoring the top 0.5 % of cells (single random clumps)
-    used.clear();
-    for (float g : grid) if (g > 0) used.push_back(g);
-    const std::size_t top = used.size() - 1 - std::min<std::size_t>(used.size() - 1, used.size() / 200);
-    std::nth_element(used.begin(), used.begin() + top, used.end());
-    const float peak = used[top];
-    const double summed = double(peak) / (kCell * kCell) * cloudDotWeight(cap);   // per unit of dot light, as if the cloud had 12,000 dots
-    const double e = cloudExposure(summed, light ? 2.4 : 1.0, base);
-    expo = expo <= 0 || e < expo ? e : std::exp(0.85 * std::log(expo) + 0.15 * std::log(e));   // never brighter than the picture can show; slowly brighter again
-    if (light && darken) {                                                 // the Sign colours on a light page: darker, more saturated (the wheel has its own light-page colours)
-        const Color cP = dc.c[0], cN = dc.c[1];
-        dc.c[0] = Color{cP.r * 0.85f, cP.g * 0.85f, cP.b * 0.85f, 1}; dc.c[1] = Color{cN.r * 0.85f, cN.g * 0.62f, cN.b * 0.45f, 1};
-    }
     static std::vector<Blob> B;
-    B.clear();
-    B.reserve(D.size());
-    for (const GlowDot& d : D) B.push_back(softDot(dc, d.x, d.y, d.r, d.g, cloudDotLight(cap, expo, base, d.wt)));   // (GPU colours: the dot carries its group, the shader picks the colour)
+    if (!glowBlobs(D, cap, light, dc, darken, base, w, h, expo, B)) return;
     R.blobsPaletteTake(B, !light, dc.palette());
     B.clear();
 }

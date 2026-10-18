@@ -94,8 +94,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $appVer = (Select-String -Path native/CMakeLists.txt -Pattern 'project\(PhysicsLabNative VERSION ([0-9.]+)').Matches[0].Groups[1].Value
-          # The release title names the project's CURRENT version (RESUME.md, ROADMAP.md: 0.20). Change this line at each new version.
-          $ver = '0.20'
+          # The release title names the project's CURRENT version (RESUME.md, ROADMAP.md: 0.21). Change this line at each new version.
+          $ver = '0.21'
           $stage = (Select-String -Path native/src/ui/changelog.cpp -Pattern 'kStage = "([^"]*)"').Matches[0].Groups[1].Value
           if (-not $appVer) { throw "No version found in native/CMakeLists.txt" }
           $label = if ($stage) { "$ver $stage" } else { $ver }

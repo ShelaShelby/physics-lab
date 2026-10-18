@@ -59,7 +59,7 @@ Rect moleculeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
         const float by = p.origin.y + (m.toolbarH - m.control) / 2.0f, ch = static_cast<float>(m.control);
         for (int i = 0; i < 2; i++) {
             const bool on = static_cast<int>(L.set.style) == i;
-            if (sh::toolToggle(i ? "molecule.bar.fill" : "molecule.bar.ball", ImVec2(bx, by), ImVec2(static_cast<float>(i ? sw1 : sw0), ch), names[i], on)) L.set.style = static_cast<molecule::Style>(i);
+            if (sh::toolToggle(i ? "molecule.bar.fill" : "molecule.bar.ball", ImVec2(bx, by), ImVec2(static_cast<float>(i ? sw1 : sw0), ch), names[i], on)) L.setStyle(static_cast<molecule::Style>(i));
             if (ImGui::IsItemHovered()) ui::SetTooltip("%s", i ? "Space-filling: balls of the van der Waals radius (a convention; a molecule has no hard edge)" : "Ball-and-stick: ball sizes are only a drawing scale");
             bx += static_cast<float>((i ? sw1 : sw0) + m.s4);
         }
@@ -75,7 +75,7 @@ Rect moleculeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
         if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the first view (turn, zoom and position)");
         sh::endPanel(p);
     }
-    auditNote(std::string("molecule ") + L.mol().id + " style=" + (L.set.style == molecule::Style::SpaceFill ? "fill" : "ball") + " labels=" + (L.set.labels ? "1" : "0") +
+    auditNote(std::string("molecule ") + L.mol().id + " style=" + (L.set.style == molecule::Style::SpaceFill ? "fill" : L.set.style == molecule::Style::Realistic ? "real" : "ball") + " labels=" + (L.set.labels ? "1" : "0") +
               " spin=" + (L.set.spin ? "1" : "0") + " sel=" + std::to_string(L.sel.atom) + "," + std::to_string(L.sel.bond));
     return r;
 }
@@ -152,7 +152,7 @@ static void buildControls(AppState& app, Panel& p, const SectionFn& section) {
             if (const mb::LengthRef* lr = mb::bondLength(mo.atoms[b.a].el, mo.atoms[b.b].el, b.order))
                 pBody(p, fixed(lr->angstrom, 3) + " Å, estimated, not measured (CCCBDB " + lr->ref + ": the " + mb::bondName(lr->e0, lr->e1, lr->order) + " bond of " + lr->molecule + ")");
             pBody(p, "From the 3D shape " + built(molecule::dist(mo.atoms[b.a], mo.atoms[b.b]), 'r'), true);
-        } else pCaption(p, "Nothing chosen. Click an atom or a bond in the picture.");
+        } else pCaption(p, L.realOn() ? "Nothing chosen. Click a nucleus (a small bright point) in the picture." : "Nothing chosen. Click an atom or a bond in the picture.");
     }
     if (section("limits", "What the estimate does not show", true)) {
         pCaption(p, "Estimated, not measured: the shape uses the ideal VSEPR angles (Gillespie and Nyholm: 180°, 120°, 109.47°) and one CCCBDB bond length per bond type, then a simple spring model so rings close.", false);
@@ -165,6 +165,70 @@ static void buildControls(AppState& app, Panel& p, const SectionFn& section) {
     for (const mb::SBond& b : g.bonds) orders += (orders.empty() ? "" : ",") + std::to_string(b.order);
     auditNote("molbuild view=" + std::string(L.buildView ? "3d" : "sketch") + " atoms=" + std::to_string(g.atoms.size()) + " bonds=" + std::to_string(g.bonds.size()) + " orders=" + orders + " hill=" + mb::hill(g) +
               " open=" + std::to_string(mb::openValences(g)) + " shape=" + (L.builtOk ? "estimated" : "none") + " name=" + (L.knownIdx >= 0 ? mb::known(L.knownIdx).id : "-") + " msg=" + L.ed.message);
+}
+
+// 0.21 stage 1: the Realistic style: what is shown (cloud, surface), the dots, the isovalue, the colours with their scale, the computed vs the measured dipole and the honest notes
+static void realisticControls(molecule::MoleculeLab& L, Panel& p, const SectionFn& section) {
+    namespace dn = molecule::dens;
+    const molecule::Molecule& mo = L.mol();
+    const bool ok = L.real.ensure(mo.id, L.set.realDots, L.set.realIso);
+    if (!section("realistic", "Realistic: electron density", true)) return;
+    if (!ok) { pCaption(p, "No computed density for this molecule.", false); return; }
+    const dn::Data& d = *L.real.data;
+    int show = L.set.realShow;
+    const std::vector<std::string> shn{"molecule.real.both", "molecule.real.cloud", "molecule.real.surface"};
+    if (pSegmented(p, "molecule.real.show", {"Cloud + surface", "Cloud", "Surface"}, &show, &shn)) L.set.realShow = show;
+    if (L.set.realShow != 2) {
+        pHeading(p, "Cloud: dots");
+        int di = 2;
+        for (int i = 0; i < 4; i++) if (molecule::kRealDots[i] == L.set.realDots) di = i;
+        const std::vector<std::string> dnm{"molecule.real.dots20k", "molecule.real.dots40k", "molecule.real.dots60k", "molecule.real.dots100k"};
+        if (pSegmented(p, "molecule.real.dots", {"20,000", "40,000", "60,000", "100,000"}, &di, &dnm)) L.set.realDots = molecule::kRealDots[di];
+        pCaption(p, "Each dot is drawn at random from the computed density (a fixed seed: the same cloud every time). Dots show where the electrons are likely to be, not electrons as little balls.");
+    }
+    if (L.set.realShow != 1) {
+        pHeading(p, "Surface: density cut-off (e/bohr³)");
+        int iso = L.set.realIso;
+        const std::vector<std::string> inm{"molecule.real.iso0010", "molecule.real.iso0016", "molecule.real.iso0020", "molecule.real.iso0100"};
+        if (pSegmented(p, "molecule.real.iso", {"0.001", "0.0016", "0.002", "0.01"}, &iso, &inm)) L.set.realIso = iso;
+        pCaption(p, "0.002: the usual convention (Bader). 0.0016 matched measured molecular surfaces best in a 2024 study of 104 molecules (1.6 % error; 0.002 gave 3.2 %, 0.001 gave 7 %). 0.001: a larger, looser cut-off. 0.01: a tight one, close to the nuclei. A molecule has no hard edge: the surface is a chosen cut-off of the density.");
+        pHeading(p, "Surface colour");
+        int col = L.set.realPot ? 0 : 1;
+        const std::vector<std::string> cnm{"molecule.real.pot", "molecule.real.plain"};
+        if (pSegmented(p, "molecule.real.col", {"Charge (potential)", "Plain"}, &col, &cnm)) L.set.realPot = col == 0;
+        if (L.set.realPot) {                              // the colour bar: red (negative) .. white (0) .. blue (positive), -range..+range
+            const ImVec2 a = here(p);
+            const float bw = p.w, bh = 12 * static_cast<float>(ImGui::GetFontSize() / 16), half = bw / 2;
+            const auto u32 = [](render::Color c) { return IM_COL32(static_cast<int>(c.r * 255 + 0.5f), static_cast<int>(c.g * 255 + 0.5f), static_cast<int>(c.b * 255 + 0.5f), 255); };
+            const ImU32 cr = u32(molecule::realPotColour(-1)), cw = u32(molecule::realPotColour(0)), cb = u32(molecule::realPotColour(1));
+            p.dl->AddRectFilledMultiColor(a, ImVec2(a.x + half, a.y + bh), cr, cw, cw, cr);
+            p.dl->AddRectFilledMultiColor(ImVec2(a.x + half, a.y), ImVec2(a.x + bw, a.y + bh), cw, cb, cb, cw);
+            p.dl->AddRect(a, ImVec2(a.x + bw, a.y + bh), cMuted(0.5f));
+            pGap(p, static_cast<int>(bh + 6));
+            const double r = L.real.potRange;
+            char b[200];
+            std::snprintf(b, sizeof b, "Red −%.3f au (−%.0f kJ/mol per e) · white 0 · blue +%.3f au (+%.0f kJ/mol per e)", r, r * dn::kHartreeKJmol, r, r * dn::kHartreeKJmol);
+            pCaption(p, b, false);
+            pCaption(p, "The electrostatic potential of the molecule's own nuclei and electrons on the surface: red where a positive test charge would be attracted (negative), blue where it would be pushed away. The scale is symmetric and set by this molecule's largest |value| on this surface, so colours are not comparable between molecules. 1 au = 1 hartree per elementary charge = 2625.50 kJ/mol per e (CODATA 2022: E_h × N_A).");
+        }
+    }
+    const double mu = std::sqrt(d.dip[0] * d.dip[0] + d.dip[1] * d.dip[1] + d.dip[2] * d.dip[2]) * dn::kAuDebye;
+    char b[160];
+    std::snprintf(b, sizeof b, "%.3f D (calculated)", mu);
+    pStat(p, "Dipole moment", b);
+    if (const dn::MeasuredDipole* md = dn::measuredDipole(mo.id)) {
+        std::snprintf(b, sizeof b, "%.3f D (NIST CCCBDB, %s)", md->debye, md->ref);
+        pStat(p, "Measured", b);
+    }
+    std::snprintf(b, sizeof b, "%d (the stored grid adds up to %.2f)", d.electrons, L.real.gridElectrons);
+    pStat(p, "Electrons", b);
+    std::string calc = "Calculated, not measured: Kohn-Sham density functional theory, B3LYP / " + std::string(d.basis == "aug-cc-pvtz" ? "aug-cc-pVTZ" : d.basis == "aug-cc-pvdz" ? "aug-cc-pVDZ" : d.basis.c_str()) +
+                       " (PySCF 2.14), at the measured (CCCBDB) shape the other styles show. " + (d.spin2S ? "O2 is a triplet: the total density of both spins (UKS). " : "") +
+                       (mo.id == "O3" ? "Ozone: a closed-shell approximation (ozone has multi-reference character, so this density is less certain). " : "") +
+                       "The potential is the molecule's own at its equilibrium shape; vibrations are ignored.";
+    pCaption(p, calc, false);
+    pCaption(p, "Real pictures of molecules by atomic force microscopy (Gross et al., IBM Research Zurich, 2009: a tip ending in a CO molecule over a flat pentacene molecule) show forces, not the electron density.");
+    pCaption(p, "Drawing: the surface is cut into triangles (marching tetrahedra on a 0.5 bohr grid) and drawn translucent over the cloud, far to near (no depth buffer: the cloud and the surface are not sorted together). Bonds are not drawn in this style.");
 }
 
 void moleculeControls(AppState& app, Panel& p, const SectionFn& section) {
@@ -185,7 +249,8 @@ void moleculeControls(AppState& app, Panel& p, const SectionFn& section) {
     }
     if (section("style", "Style", true)) {
         int cur = static_cast<int>(L.set.style);
-        if (pSegmented(p, "molecule.style", {"Ball-and-stick", "Space-filling"}, &cur)) L.set.style = static_cast<molecule::Style>(cur);
+        const std::vector<std::string> sn{"molecule.style.ball", "molecule.style.fill", "molecule.style.real"};
+        if (pSegmented(p, "molecule.style", {"Ball-and-stick", "Space-filling", "Realistic"}, &cur, &sn)) L.setStyle(static_cast<molecule::Style>(cur));
         bool lab = L.set.labels;
         if (pCheck(p, "molecule.labels", "Element labels", &lab)) L.set.labels = lab;
         const bool reduced = ui::look().reduced;
@@ -195,7 +260,8 @@ void moleculeControls(AppState& app, Panel& p, const SectionFn& section) {
         if (pButton(p, "molecule.reset", "Reset view")) L.resetView();
         pCaption(p, "Drag to turn the molecule, the wheel zooms; Shift, right or middle drag moves it. Click an atom or a bond for its measured values.");
     }
-    if (section("selected", "Clicked atom or bond", true)) {
+    if (L.realOn()) realisticControls(L, p, section);
+    if (section("selected", L.realOn() ? "Clicked atom" : "Clicked atom or bond", true)) {
         const int n = static_cast<int>(mo.atoms.size());
         if (L.sel.atom >= 0 && L.sel.atom < n) {
             const int a = L.sel.atom;
@@ -237,7 +303,7 @@ void moleculeControls(AppState& app, Panel& p, const SectionFn& section) {
             if (const molecule::Value* v = molecule::lengthValue(mo, b.a, b.b)) pBody(p, "Measured " + listed(*v));
             pBody(p, "From the 3D shape " + built(molecule::dist(mo.atoms[b.a], mo.atoms[b.b]), 'r'), true);
             pCaption(p, "Bond order from the usual structural formula: a drawing convention, not a measurement. Uncertainty: not given with the CCCBDB values used here.");
-        } else pCaption(p, "Nothing chosen. Click an atom or a bond in the picture.");
+        } else pCaption(p, L.realOn() ? "Nothing chosen. Click a nucleus (a small bright point) in the picture." : "Nothing chosen. Click an atom or a bond in the picture.");
     }
     if (section("sheet", "Data sheet", true)) {
         pStat(p, "Formula", mo.formula + " (Hill order: " + mo.hill + ")");
@@ -263,6 +329,7 @@ void moleculeControls(AppState& app, Panel& p, const SectionFn& section) {
         pCaption(p, "The shape is a fixed average: an equilibrium structure (CCCBDB calls most values \"re\", acetylene's an \"rm structure\"). Real molecules vibrate and rotate all the time.", false);
         pCaption(p, "Ball sizes in Ball-and-stick are only a drawing scale. Space-filling balls use van der Waals radii (PubChem): a convention, because a molecule has no hard edge; its electrons thin out gradually.", false);
         pCaption(p, "Colours are the CPK convention (PubChem). Double, triple and aromatic bonds come from the usual structural formula, also a convention. The view has no perspective.", false);
+        pCaption(p, "Realistic shows a CALCULATED electron density (quantum chemistry), not a measurement and not a photo; see its own section above.", false);
     }
 }
 

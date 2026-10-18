@@ -2,6 +2,9 @@
 
 Trimmed in the 0.15 docs cleanup: only what is still open. Items that are ticked, or about removed looks and themes, were deleted; the full old text is in git history (before commit "native 0.15 docs cleanup"). Older items are cut to their opening words.
 
+## 0.21 (Molecule Lab Realistic style): what only Alex can do
+- [ ] **Realistic style on Alex's own PC (Windows, a real GPU and a real mouse were NOT tested in the cloud):** Molecule Lab, Viewer, Controls, Style: Realistic. Does it look right (water, benzene, CO2; Dark and Light)? Note the fps with 60,000 dots (and 100,000), with Cloud + surface, while turning the molecule; does turning feel smooth (the surface is sorted again every time the view moves)? Is the cloud too faint away from the nuclei (the exposure is set by the bright core, as in the Atom Lab)?
+
 ## 0.20 (Molecule Lab builder, layout fixes): what only Alex can do
 - [ ] **The builder on Alex's own PC (Windows and a real mouse were NOT tested in the cloud):** Molecule Lab, Controls, Mode: Build. Add atoms with clicks, drag an atom next to another and let go: does it snap and bond where you expect? Click bonds (single, double, triple; try N-N, which skips the double), Delete, Undo / Redo (buttons and Ctrl+Z / Ctrl+Y), Clear. Try a refused bond (an H onto water's O). Then the 3D shape (estimated): turn, zoom, click atoms and bonds; "Show measured shape" for water or benzene. Close and reopen: the sketch is kept.
 - [ ] **Layout fixes:** Atom Lab, U-238, Nucleus view: the info text is folded above the nucleus; click it to read the rest, click again to fold. Orbit Lab: All values at your usual window size: the Legend chip stays free. Molecule Lab: a long Shift-drag can no longer push the molecule out of the window.

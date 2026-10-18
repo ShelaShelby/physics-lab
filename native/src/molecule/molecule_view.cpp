@@ -48,7 +48,13 @@ void MoleculeView::draw(render::Renderer2D& r, ImDrawList* text, double uiScale,
     if (L.buildMode) stats_.mode = "shape";
     const Molecule& m = L.mol();
     const double s = L.scale(), cx = L.cx(), cy = L.cy();
-    const bool ball = L.set.style == Style::BallStick;
+    if (L.realOn()) {                                       // 0.21: the computed electron density
+        drawRealistic(r, L, theme);
+        if (text && L.set.labels) drawLabels(text, uiScale, m);
+        stats_.cpuMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        return;
+    }
+    const bool ball = L.set.style != Style::SpaceFill;      // (Realistic in Build mode: the estimated shape as ball-and-stick)
     project(m, L.set.cam, L.set.style, cx, cy, s, proj_);
     // back to front: atoms at their centre's depth; a stick half (centre of atom A to the bond's middle) at the depth of its own middle, so a half that points
     // towards the viewer is drawn after (over) its ball and one that points away before (under) it
@@ -111,27 +117,29 @@ void MoleculeView::draw(render::Renderer2D& r, ImDrawList* text, double uiScale,
     }
     stats_.blobs = static_cast<int>(blobs_.size());
     if (!blobs_.empty()) r.blobs(blobs_.data(), static_cast<int>(blobs_.size()));   // ONE instanced draw call for the whole molecule
-    // labels: element and number, on the balls that are not hidden behind a nearer ball (text on top, ImGui's draw list)
-    if (text && L.set.labels) {
-        for (std::size_t i = 0; i < m.atoms.size(); i++) {
-            bool hidden = false;
-            for (std::size_t j = 0; j < m.atoms.size() && !hidden; j++)
-                hidden = j != i && proj_[j].depth > proj_[i].depth && std::hypot(proj_[j].x - proj_[i].x, proj_[j].y - proj_[i].y) < proj_[j].r * 0.8;
-            if (hidden) continue;
-            char b[16];
-            std::snprintf(b, sizeof b, "%s", atomLabel(m, static_cast<int>(i)).c_str());
-            const ImVec2 ts = ImGui::CalcTextSize(b);
-            const ImVec2 p(static_cast<float>(proj_[i].x * uiScale - ts.x / 2), static_cast<float>(proj_[i].y * uiScale - ts.y / 2));
-            const unsigned v = element(m.atoms[i].el).rgb;
-            const double lum = 0.2126 * ((v >> 16) & 255) + 0.7152 * ((v >> 8) & 255) + 0.0722 * (v & 255);
-            const bool small = proj_[i].r * 2 < ts.x / uiScale + 2;   // too small a ball: the label sits on a dark pill
-            if (small) text->AddRectFilled(ImVec2(p.x - 3, p.y - 1), ImVec2(p.x + ts.x + 3, p.y + ts.y + 1), IM_COL32(16, 18, 22, 200), 4);
-            text->AddText(p, !small && lum > 140 ? IM_COL32(16, 18, 22, 255) : IM_COL32(245, 247, 250, 255), b);
-            stats_.labels++;
-        }
-    }
+    if (text && L.set.labels) drawLabels(text, uiScale, m);   // labels: element and number, on the balls that are not hidden behind a nearer ball (text on top, ImGui's draw list)
     if (L.buildMode) drawNote(text, uiScale, L, theme);
     stats_.cpuMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+}
+
+
+void MoleculeView::drawLabels(ImDrawList* text, double uiScale, const Molecule& m) {
+    for (std::size_t i = 0; i < m.atoms.size(); i++) {
+        bool hidden = false;
+        for (std::size_t j = 0; j < m.atoms.size() && !hidden; j++)
+            hidden = j != i && proj_[j].depth > proj_[i].depth && std::hypot(proj_[j].x - proj_[i].x, proj_[j].y - proj_[i].y) < proj_[j].r * 0.8;
+        if (hidden) continue;
+        char b[16];
+        std::snprintf(b, sizeof b, "%s", atomLabel(m, static_cast<int>(i)).c_str());
+        const ImVec2 ts = ImGui::CalcTextSize(b);
+        const ImVec2 p(static_cast<float>(proj_[i].x * uiScale - ts.x / 2), static_cast<float>(proj_[i].y * uiScale - ts.y / 2));
+        const unsigned v = element(m.atoms[i].el).rgb;
+        const double lum = 0.2126 * ((v >> 16) & 255) + 0.7152 * ((v >> 8) & 255) + 0.0722 * (v & 255);
+        const bool small = proj_[i].r * 2 < ts.x / uiScale + 2;   // too small a ball: the label sits on a dark pill
+        if (small) text->AddRectFilled(ImVec2(p.x - 3, p.y - 1), ImVec2(p.x + ts.x + 3, p.y + ts.y + 1), IM_COL32(16, 18, 22, 200), 4);
+        text->AddText(p, !small && lum > 140 ? IM_COL32(16, 18, 22, 255) : IM_COL32(245, 247, 250, 255), b);
+        stats_.labels++;
+    }
 }
 
 namespace {
@@ -254,6 +262,143 @@ void MoleculeView::drawSketch(render::Renderer2D& r, ImDrawList* text, double ui
     const double w = L.freeW > 0 ? L.freeW : L.viewW, y0 = L.freeH > 0 ? L.freeY : 0;
     if (g.atoms.empty()) plate(text, uiScale, cx, cy, std::min(420.0, w - 60), "Pick an element in the panel, then click here to add an atom.", true, fg, bg);
     if (!L.ed.message.empty()) plate(text, uiScale, cx, y0 + 34, std::min(560.0, w - 60), L.ed.message.c_str(), true, fg, bg);   // the last refusal, at the top of the picture
+}
+
+// ---- 0.21 stage 1: the Realistic style ----
+bool RealCache::ensure(const std::string& id, int nDots, int isoIdx) {
+    if (!data || data->id != id) { data = dens::get(id); if (data) gridElectrons = dens::electronCount(*data); }
+    if (!data) return false;
+    if (dotsId != id || dotsN != nDots) {                    // the Monte Carlo dots: fixed seed, so the same molecule always shows the same cloud
+        const auto t0 = std::chrono::steady_clock::now();
+        dens::sampleDots(*data, nDots, dens::kDotSeed, dots, cdf);
+        dotsId = id; dotsN = nDots;
+        dotsMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    }
+    isoIdx = std::clamp(isoIdx, 0, 3);
+    if (meshId != id || meshIso != isoIdx) {                 // the surface: marching tetrahedra on ln rho at every 2nd grid point (0.5 bohr)
+        const auto t0 = std::chrono::steady_clock::now();
+        dens::densitySurface(*data, kRealIso[isoIdx], 2, mesh);
+        potRange = std::max(1e-6, dens::potentialRange(mesh));
+        meshId = id; meshIso = isoIdx;
+        revision++;
+        meshMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    }
+    return true;
+}
+
+namespace {
+// the potential's colours: red = negative, white = zero, blue = positive (t = V / range, -1..1). The ends are drawing choices.
+render::Color potColour(double t) {
+    t = std::clamp(t, -1.0, 1.0);
+    const render::Color red{0.86f, 0.16f, 0.13f, 1}, blue{0.15f, 0.36f, 0.90f, 1}, white{0.97f, 0.97f, 0.97f, 1};
+    const render::Color& e = t < 0 ? red : blue;
+    const float a = static_cast<float>(std::fabs(t));
+    return {white.r + (e.r - white.r) * a, white.g + (e.g - white.g) * a, white.b + (e.b - white.b) * a, 1};
+}
+}  // namespace
+
+render::Color realPotColour(double t) { return potColour(t); }
+
+void MoleculeView::drawRealistic(render::Renderer2D& r, MoleculeLab& L, const app::ThemeColors& theme) {
+    stats_.mode = "realistic";
+    const Molecule& m = L.mol();
+    const double s = L.scale(), cx = L.cx(), cy = L.cy(), W = L.viewW, H = L.viewH;
+    project(m, L.set.cam, Style::Realistic, cx, cy, s, proj_);
+    if (!L.real.ensure(m.id, L.set.realDots, L.set.realIso)) return;
+    const RealCache& rc = L.real;
+    const double* R = L.set.cam.R;
+    const double px = L.set.cam.panX, py = L.set.cam.panY;
+    const render::Color accent{theme.accent.r, theme.accent.g, theme.accent.b, 1};
+    const bool light = theme.light;
+    // 1. the cloud: the Atom Lab's Cloud 3D Glow dots (atom/cloud_dots.h glowBlobs): far dots smaller and fainter, near ones larger and brighter; light adds up on a dark page
+    if (L.set.realShow != 2) {
+        const double ext = std::max(0.5, radiusA(m));
+        glow_.clear();
+        const std::size_t nd = rc.dots.size() / 3;
+        glow_.reserve(nd);
+        for (std::size_t i = 0; i < nd; i++) {
+            const double x = rc.dots[3 * i], y = rc.dots[3 * i + 1], z = rc.dots[3 * i + 2];
+            const double vx = R[0] * x + R[1] * y + R[2] * z + px, vy = R[3] * x + R[4] * y + R[5] * z + py, vz = R[6] * x + R[7] * y + R[8] * z;
+            const double X = cx + vx * s, Y = cy - vy * s;
+            if (X < 0 || X > W || Y < 0 || Y > H) continue;
+            const float t = static_cast<float>(std::clamp(-vz / ext, -1.0, 1.0));   // -1 nearest, +1 farthest (as the Atom Lab's depth over the cloud's radius)
+            const float near = 0.5f - 0.5f * t;
+            glow_.push_back({static_cast<float>(X), static_cast<float>(Y), 4.6f * (0.8f + 0.4f * near), 0.3f + 0.9f * near, 0});
+        }
+        atom::DotColours dc = atom::makeDotColours(true, false, light, accent, accent);
+        if (atom::glowBlobs(glow_, static_cast<long>(nd), light, dc, true, 1.0, W, H, expo_, blobs_)) {
+            stats_.dots = static_cast<int>(blobs_.size());
+            r.blobsPaletteTake(blobs_, !light, dc.palette());   // ONE instanced draw call for the cloud (the buffers are swapped, not copied)
+            blobs_.clear();
+        }
+    }
+    // 2. the nuclei: small bright points (CPK tint); the clicked one has an accent ring. Drawn before the surface, so they show through it
+    blobs_.clear();
+    for (std::size_t i = 0; i < m.atoms.size(); i++) {
+        const Proj& p = proj_[i];
+        Blob o{};
+        o.x = static_cast<float>(p.x); o.y = static_cast<float>(p.y); o.r = 3.4f; o.kind = 3;
+        o.c0 = light ? render::Color{0.10f, 0.10f, 0.12f, 0.9f} : render::Color{0, 0, 0, 0.75f};
+        blobs_.push_back(o);
+        Blob b = o;
+        b.r = 2.4f; b.c0 = mixWhite(cpk(m.atoms[i].el), light ? 0.15f : 0.55f);
+        blobs_.push_back(b);
+        if (L.sel.atom == static_cast<int>(i)) {
+            Blob g{};
+            g.x = b.x; g.y = b.y; g.r = 9; g.kind = 7; g.fx = 6.5f / 9; g.f0 = 1.5f / 9; g.c0 = accent;
+            blobs_.push_back(g);
+        }
+        stats_.atoms++;
+    }
+    stats_.blobs = static_cast<int>(blobs_.size()) + stats_.dots;
+    r.blobs(blobs_.data(), static_cast<int>(blobs_.size()));
+    if (L.set.realShow == 1) return;
+    // 3. the density surface: translucent, lit, coloured by the potential; triangles far to near (painter's order: the renderer has no depth buffer). The order is
+    // worked out again only when the view or the surface changed. Approximation: the surface as a whole is drawn over the cloud and the nuclei (they are not sorted together)
+    const dens::Mesh& M = rc.mesh;
+    const std::size_t nv = M.p.size() / 3, nt = M.tri.size() / 3;
+    const double cam[14] = {R[0], R[1], R[2], R[3], R[4], R[5], R[6], R[7], R[8], px, py, cx, cy, s};
+    bool same = lastRev_ == rc.revision && sx_.size() == nv;
+    for (int i = 0; i < 14 && same; i++) same = cam[i] == lastCam_[i];
+    if (!same) {
+        sx_.resize(nv); sy_.resize(nv); sz_.resize(nv);
+        for (std::size_t v = 0; v < nv; v++) {
+            const double x = M.p[3 * v], y = M.p[3 * v + 1], z = M.p[3 * v + 2];
+            sx_[v] = static_cast<float>(cx + (R[0] * x + R[1] * y + R[2] * z + px) * s);
+            sy_[v] = static_cast<float>(cy - (R[3] * x + R[4] * y + R[5] * z + py) * s);
+            sz_[v] = static_cast<float>(R[6] * x + R[7] * y + R[8] * z);
+        }
+        tz_.resize(nt); order_.resize(nt);
+        for (std::size_t t = 0; t < nt; t++) { tz_[t] = sz_[M.tri[3 * t]] + sz_[M.tri[3 * t + 1]] + sz_[M.tri[3 * t + 2]]; order_[t] = static_cast<int>(t); }
+        std::sort(order_.begin(), order_.end(), [&](int a, int b) { return tz_[a] < tz_[b]; });
+        for (int i = 0; i < 14; i++) lastCam_[i] = cam[i];
+        lastRev_ = rc.revision;
+        stats_.resorted = true;
+    }
+    // colours: the vertex's base colour (potential or plain) times a light from the upper left front (a drawing choice), with a little white highlight
+    vc_.resize(nv);
+    const double lx = -0.38, ly = 0.50, lz = 0.78;            // towards the light, view space (normalised below)
+    const double ll = std::sqrt(lx * lx + ly * ly + lz * lz);
+    const render::Color plain = light ? render::Color{0.62f, 0.68f, 0.78f, 1} : render::Color{0.80f, 0.84f, 0.90f, 1};
+    for (std::size_t v = 0; v < nv; v++) {
+        const double nx = M.n[3 * v], ny = M.n[3 * v + 1], nz = M.n[3 * v + 2];
+        const double vx = R[0] * nx + R[1] * ny + R[2] * nz, vy = R[3] * nx + R[4] * ny + R[5] * nz, vz = R[6] * nx + R[7] * ny + R[8] * nz;
+        const double d = std::fabs(vx * lx + vy * ly + vz * lz) / ll;   // (two-sided: the inner side is lit too)
+        const double hl = std::pow(std::max(0.0, d), 24) * 0.35;
+        const render::Color base = L.set.realPot ? potColour(M.value[v] / rc.potRange) : plain;
+        const float k = static_cast<float>(0.62 + 0.38 * d);   // (a soft light: the colours stay readable against the scale)
+        vc_[v] = {std::min(1.0f, base.r * k + static_cast<float>(hl)), std::min(1.0f, base.g * k + static_cast<float>(hl)), std::min(1.0f, base.b * k + static_cast<float>(hl)), 1};
+    }
+    const float aFront = light ? 0.62f : 0.60f, aBack = light ? 0.15f : 0.15f;   // translucent, so the cloud shows through; the far (inner) side fainter, so the near side reads as the surface
+    for (const int t : order_) {
+        const int a = M.tri[3 * static_cast<std::size_t>(t)], b = M.tri[3 * static_cast<std::size_t>(t) + 1], c = M.tri[3 * static_cast<std::size_t>(t) + 2];
+        const double ex = (sx_[b] - sx_[a]) * (sy_[c] - sy_[a]) - (sy_[b] - sy_[a]) * (sx_[c] - sx_[a]);   // screen y points down: < 0 means the triangle faces the viewer
+        const float al = ex < 0 ? aFront : aBack;
+        render::Color ca = vc_[a], cb = vc_[b], cc = vc_[c];
+        ca.a = cb.a = cc.a = al;
+        r.triangle(sx_[a], sy_[a], ca, sx_[b], sy_[b], cb, sx_[c], sy_[c], cc);
+    }
+    stats_.triangles = static_cast<int>(nt);
 }
 
 }  // namespace molecule

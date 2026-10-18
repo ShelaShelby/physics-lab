@@ -1,5 +1,7 @@
 #include "cloud_dots.h"
 
+#include "cloud_light.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -116,6 +118,37 @@ void buildClassic3D(const float* PX, const float* PY, const float* PD, const uns
         const DepthBand& db = kDepthBand[band[std::size_t(i)]];
         out.push_back(squareDot(dc, PX[i], PY[i], db.size / 2, grp[i], db.alpha * weight));
     }
+}
+
+// ---- Glow: soft dots whose light adds up ----
+bool glowBlobs(const std::vector<GlowDot>& D, long cap, bool light, DotColours& dc, bool darken, double base, double w, double h, double& expo, std::vector<Blob>& B) {
+    B.clear();
+    if (D.empty()) return false;
+    constexpr int kCell = 8;
+    const int gw = int(w / kCell) + 2, gh = int(h / kCell) + 2;
+    static std::vector<float> grid;
+    grid.assign(std::size_t(gw) * gh, 0.f);
+    for (const GlowDot& d : D) {                                           // the light one dot puts into its cell: its depth weight × footprint (pi r² / 4 of a Gaussian)
+        const int cx = std::max(0, std::min(gw - 1, int(d.x / kCell))), cy = std::max(0, std::min(gh - 1, int(d.y / kCell)));
+        float& g = grid[std::size_t(cy) * gw + cx];
+        g += d.wt * d.r * d.r * 0.785f;
+    }
+    static std::vector<float> used;                                        // the brightest places, ignoring the top 0.5 % of cells (single random clumps)
+    used.clear();
+    for (float g : grid) if (g > 0) used.push_back(g);
+    const std::size_t top = used.size() - 1 - std::min<std::size_t>(used.size() - 1, used.size() / 200);
+    std::nth_element(used.begin(), used.begin() + top, used.end());
+    const float peak = used[top];
+    const double summed = double(peak) / (kCell * kCell) * cloudDotWeight(cap);   // per unit of dot light, as if the cloud had 12,000 dots
+    const double e = cloudExposure(summed, light ? 2.4 : 1.0, base);
+    expo = expo <= 0 || e < expo ? e : std::exp(0.85 * std::log(expo) + 0.15 * std::log(e));   // never brighter than the picture can show; slowly brighter again
+    if (light && darken) {                                                 // the Sign colours on a light page: darker, more saturated (the wheel has its own light-page colours)
+        const Color cP = dc.c[0], cN = dc.c[1];
+        dc.c[0] = Color{cP.r * 0.85f, cP.g * 0.85f, cP.b * 0.85f, 1}; dc.c[1] = Color{cN.r * 0.85f, cN.g * 0.62f, cN.b * 0.45f, 1};
+    }
+    B.reserve(D.size());
+    for (const GlowDot& d : D) B.push_back(softDot(dc, d.x, d.y, d.r, d.g, cloudDotLight(cap, expo, base, d.wt)));   // (GPU colours: the dot carries its group, the shader picks the colour)
+    return true;
 }
 
 void sideDots(const float* pts, long cnt, const unsigned char* grp, int nGroups, double cx, double cy, double pxm, double w, double h, bool counting, std::vector<SideDot>& out) {

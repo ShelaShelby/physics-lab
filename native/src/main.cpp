@@ -271,7 +271,11 @@ int main(int, char**) {
     if (const char* mv = SDL_getenv("PL_MOLECULE")) {   // 0.18: PL_MOLECULE=<id> opens the Molecule Lab on that molecule; PL_MOLECULE_STYLE=fill, PL_MOLECULE_PICK=atom,bond (automatic checks)
         app.lab = molecule::kLabIndex;
         if (molecule::findId(mv) >= 0) app.molecule.choose(molecule::findId(mv));
-        if (const char* st = SDL_getenv("PL_MOLECULE_STYLE")) app.molecule.set.style = std::string(st) == "fill" ? molecule::Style::SpaceFill : molecule::Style::BallStick;
+        if (const char* st = SDL_getenv("PL_MOLECULE_STYLE")) app.molecule.setStyle(std::string(st) == "fill" ? molecule::Style::SpaceFill : std::string(st) == "real" ? molecule::Style::Realistic : molecule::Style::BallStick);
+        if (const char* rs = SDL_getenv("PL_MOLECULE_REAL")) {   // 0.21: the Realistic options as in the settings line, e.g. "rdots=60000 riso=0.002 rcol=pot rshow=surface"
+            const molecule::Settings t = molecule::loadSettings(std::string("v1 ") + rs);
+            app.molecule.set.realDots = t.realDots; app.molecule.set.realIso = t.realIso; app.molecule.set.realPot = t.realPot; app.molecule.set.realShow = t.realShow;
+        }
         if (const char* pk = SDL_getenv("PL_MOLECULE_PICK")) std::sscanf(pk, "%d,%d", &app.molecule.sel.atom, &app.molecule.sel.bond);
         app.visited[molecule::kLabIndex] = true;
     }
@@ -558,7 +562,7 @@ int main(int, char**) {
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
         if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
-                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode);
+                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices());
                         for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); }
                         if (app.molecule.sketchOn()) { const molecule::MoleculeLab& L = app.molecule; for (std::size_t i = 0; i < L.ed.graph().atoms.size(); i++) std::printf("PLMOLSKETCH i=%zu x=%.1f y=%.1f\n", i, (L.cx() + L.ed.graph().atoms[i].x * L.kSketchPt) * scale, (L.cy() + L.ed.graph().atoms[i].y * L.kSketchPt) * scale); } }
         if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();

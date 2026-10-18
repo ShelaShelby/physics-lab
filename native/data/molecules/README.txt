@@ -1,5 +1,6 @@
 Molecule Lab data (0.18 stage 1)
 ================================
+(0.21: the Realistic style's COMPUTED electron density and potential are in density/, with their own README.txt; the coordinates they were computed at are in xyz/.)
 
 1. Geometry and rotational constants: NIST CCCBDB
    NIST Computational Chemistry Comparison and Benchmark Database, NIST Standard Reference Database 101, Release 22,

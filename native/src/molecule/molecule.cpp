@@ -375,7 +375,7 @@ void project(const Molecule& m, const Camera& c, Style st, double cx, double cy,
     for (std::size_t i = 0; i < m.atoms.size(); i++) {
         const Atom& a = m.atoms[i];
         const double vx = R[0] * a.x + R[1] * a.y + R[2] * a.z + c.panX, vy = R[3] * a.x + R[4] * a.y + R[5] * a.z + c.panY, vz = R[6] * a.x + R[7] * a.y + R[8] * a.z;
-        out[i] = {cx + vx * s, cy - vy * s, vz, (st == Style::SpaceFill ? element(a.el).vdwPm / 100 : ballRadiusA(a.el)) * s};
+        out[i] = {cx + vx * s, cy - vy * s, vz, (st == Style::SpaceFill ? element(a.el).vdwPm / 100 : ballRadiusA(a.el)) * s};   // (Realistic: a nucleus is picked as the ball-and-stick ball)
     }
 }
 Pick pick(const Molecule& m, const Camera& c, Style st, double cx, double cy, double s, double x, double y) {
@@ -408,9 +408,11 @@ Pick pick(const Molecule& m, const Camera& c, Style st, double cx, double cy, do
 std::string saveSettings(const Settings& s) {
     std::ostringstream o;
     o.precision(17);
-    o << "v" << kSettingsVersion << " mol=" << get(s.mol).id << " style=" << (s.style == Style::SpaceFill ? "fill" : "ball") << " labels=" << (s.labels ? 1 : 0) << " spin=" << (s.spin ? 1 : 0)
+    o << "v" << kSettingsVersion << " mol=" << get(s.mol).id << " style=" << (s.style == Style::SpaceFill ? "fill" : s.style == Style::Realistic ? "real" : "ball") << " labels=" << (s.labels ? 1 : 0) << " spin=" << (s.spin ? 1 : 0)
       << " zoom=" << s.cam.zoom << " pan=" << s.cam.panX << "," << s.cam.panY << " rot=";
     for (int i = 0; i < 9; i++) o << (i ? "," : "") << s.cam.R[i];
+    if (s.realUsed || s.style == Style::Realistic)
+        o << " rdots=" << s.realDots << " riso=" << kRealIsoText[std::clamp(s.realIso, 0, 3)] << " rcol=" << (s.realPot ? "pot" : "plain") << " rshow=" << kRealShowText[std::clamp(s.realShow, 0, 2)];
     return o.str();
 }
 Settings loadSettings(const std::string& text) {
@@ -425,7 +427,11 @@ Settings loadSettings(const std::string& text) {
         const std::string k = tok.substr(0, eq), v = tok.substr(eq + 1);
         double d = 0;
         if (k == "mol") { const int i = findId(v); if (i >= 0) s.mol = i; }
-        else if (k == "style") { if (v == "ball") s.style = Style::BallStick; else if (v == "fill") s.style = Style::SpaceFill; }
+        else if (k == "style") { if (v == "ball") s.style = Style::BallStick; else if (v == "fill") s.style = Style::SpaceFill; else if (v == "real") { s.style = Style::Realistic; s.realUsed = true; } }
+        else if (k == "rdots") { s.realUsed = true; for (int n : kRealDots) if (v == std::to_string(n)) s.realDots = n; }
+        else if (k == "riso") { s.realUsed = true; for (int i = 0; i < 4; i++) if (v == kRealIsoText[i]) s.realIso = i; }
+        else if (k == "rcol") { s.realUsed = true; if (v == "pot" || v == "plain") s.realPot = v == "pot"; }
+        else if (k == "rshow") { s.realUsed = true; for (int i = 0; i < 3; i++) if (v == kRealShowText[i]) s.realShow = i; }
         else if (k == "labels") { if (v == "0" || v == "1") s.labels = v == "1"; }
         else if (k == "spin") { if (v == "0" || v == "1") s.spin = v == "1"; }
         else if (k == "zoom") { if (readD(v, d) && d > 0) s.cam.zoom = std::clamp(d, kZoomMin, kZoomMax); }

@@ -106,7 +106,7 @@ constexpr double kPanLimitRadii = 1.5;
 void clampPan(Camera& c, double radius);
 
 struct Proj { double x, y, depth, r; };              // screen point, depth (angstrom) and the drawn ball radius (points)
-enum class Style { BallStick = 0, SpaceFill = 1 };
+enum class Style { BallStick = 0, SpaceFill = 1, Realistic = 2 };   // 0.21: Realistic = the computed electron density (molecule/density.h), Viewer mode only; its nuclei are picked as small balls
 // the atoms on screen; view centre (cx, cy), s points per angstrom (fitScale * zoom)
 void project(const Molecule& m, const Camera& c, Style st, double cx, double cy, double s, std::vector<Proj>& out);
 
@@ -115,11 +115,21 @@ struct Pick { int atom = -1, bond = -1; };
 Pick pick(const Molecule& m, const Camera& c, Style st, double cx, double cy, double s, double x, double y);
 
 // ---- settings (0.20: the stored pan is clamped as a drag is, for the stored molecule): "v1 mol=H2O style=ball labels=1 spin=0 zoom=1 pan=0,0 rot=r0,...,r8"; anything bad falls back to the default, never a crash ----
+// 0.21: style=real, and " rdots=60000 riso=0.002 rcol=pot rshow=both" at the end, written only once the Realistic style was used (a line from an older version is written back byte for byte)
+constexpr int kRealDots[4] = {20000, 40000, 60000, 100000};             // the cloud's dots to choose from
+constexpr double kRealIso[4] = {0.001, 0.0016, 0.002, 0.01};            // the surface's isovalues, e/bohr^3 (0.002: the usual convention, Bader)
+constexpr const char* kRealIsoText[4] = {"0.001", "0.0016", "0.002", "0.01"};
+constexpr const char* kRealShowText[3] = {"both", "cloud", "surface"};
 struct Settings {
     int mol = 5;                 // H2O
     Style style = Style::BallStick;
     bool labels = true, spin = false;
     Camera cam = defaultCamera();
+    bool realUsed = false;       // 0.21: the Realistic style was used (only then are its fields written)
+    int realDots = 60000;        // one of kRealDots
+    int realIso = 2;             // index into kRealIso
+    bool realPot = true;         // colour the surface by the potential (else plain)
+    int realShow = 0;            // 0 the cloud and the surface, 1 the cloud only, 2 the surface only
 };
 constexpr int kSettingsVersion = 1;
 std::string saveSettings(const Settings& s);

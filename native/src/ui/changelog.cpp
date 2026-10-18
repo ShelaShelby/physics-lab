@@ -19,6 +19,16 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.21", "New: the Molecule Lab's Realistic style: the electron cloud and a charge-coloured surface",
+     "A third style next to Ball-and-stick and Space-filling, in the Viewer: Realistic shows the CALCULATED electron density of each of the 15 molecules at its measured shape. "
+     "The cloud is made of dots drawn at random from the density (20,000 to 100,000, 60,000 by default), drawn like the Atom Lab's Cloud 3D; the dots show where the electrons are likely "
+     "to be, not electrons as little balls. Over it lies a see-through surface where the density falls to a chosen value (0.001, 0.0016, 0.002 or 0.01 electrons per cubic bohr; 0.002 is "
+     "the usual convention): a molecule has no hard edge, so the surface is a chosen cut-off. The surface can be coloured by the molecule's own electrostatic potential, red where it is "
+     "negative and blue where it is positive, with a colour bar in atomic units and kJ/mol per elementary charge. The numbers come from a quantum chemistry calculation (density "
+     "functional theory, B3LYP with the aug-cc-pVTZ basis, made with PySCF) and are checked against measurements: the computed dipole moments agree with NIST CCCBDB's measured ones "
+     "within 0.13 debye (ozone, a hard case, differs most), the stored grids hold the right number of electrons within 0.3 %, and the symmetric molecules come out symmetric. "
+     "Ozone is calculated in a simpler, closed-shell approximation and says so. Real pictures of molecules by atomic force microscopy show forces, not this density. Bonds are not "
+     "drawn in this style; clicking a nucleus still shows the atom's details. Not measured: speed and look on a real graphics card and Windows."},
     {"0.20", "New: the Molecule Lab, part 2: build your own molecule",
      "The Molecule Lab has a Build mode next to the Viewer. In the Sketch you click to add H, C, N, O or Cl, drag an atom next to another one with an open valence and let go "
      "to bond them, click a bond to make it single, double or triple, and undo, redo, delete or clear. Valences are strict (H 1, C 4, N 3, O 2, Cl 1); a bond that does not fit, or "

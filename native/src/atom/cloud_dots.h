@@ -73,6 +73,14 @@ void drawOrderByCounting(const unsigned char* band, const unsigned char* grp, lo
 // dc.gpu picks the way: false: the v0.12 scan, true: the counting sort (and blobs that carry the colour index).
 void buildClassic3D(const float* PX, const float* PY, const float* PD, const unsigned char* grp, long cnt, const DotColours& dc, double weight, std::vector<render::Renderer2D::Blob>& out);
 
+// ---- Glow (the app's default cloud style): soft round dots. Dark pages: the light adds up (additive), so dense places glow and thin ones fade. Light pages: ordinary
+// alpha blending with darker, more saturated colours (opacity builds up as 1 - exp(-light)). `base` is the brightest a single dot may be.
+// The exposure is chosen from the brightest 8 x 8 pixel place so it stays just under white; it is one number for all dots, smoothed over frames in `expo`.
+// 0.21: moved here from atom_view.cpp (unchanged) so the Molecule Lab's Realistic cloud is drawn exactly as the Atom Lab's. Fills B (one soft dot each, in order); false when D is empty.
+// Draw with blobsPalette(B, !light, dc.palette()): dc is changed here (the darker light-page colours).
+struct GlowDot { float x, y, r, wt; unsigned char g; };   // place, size, depth weight (1 = the plain dot) and the colour group (Sign: 0 = +, 1 = −; Wheel: the phase bin)
+bool glowBlobs(const std::vector<GlowDot>& D, long cap, bool light, DotColours& dc, bool darken, double base, double w, double h, double& expo, std::vector<render::Renderer2D::Blob>& B);
+
 // ---- Cloud 2D side view: one band; the dots are drawn group by group ----
 struct SideDot { float x, y; unsigned char g; };
 // Every dot on the picture (x, z) in the order: group by group, inside a group in dot order (the same two ways as above, chosen by `counting`).
