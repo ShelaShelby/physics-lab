@@ -225,40 +225,6 @@ const char* atomNote(const std::string& which) {
 
 namespace {
 
-// A number setting: its label with the value in bold, then the slider (optionally with − and +).
-void sliderRow(AppState& app, const char* key, const std::string& label, const std::string& value, double v, double lo, double hi, double step, bool plusMinus, const char* what = nullptr) {
-    ImGui::PushID(key);
-    ImGui::TextUnformatted(displayable(label).c_str());
-    ImGui::SameLine();
-    ImGui::PushFont(fonts().bold, 0.0f);
-    ImGui::TextUnformatted(displayable(value).c_str());
-    ImGui::PopFont();
-    const float bw = ImGui::GetFrameHeight();
-    if (plusMinus) {
-        if (ui::Button("−", ImVec2(bw, 0))) app.atom.setParam(key, v - step);
-        if (ImGui::IsItemHovered() && what) ui::SetTooltip("one fewer %s", what);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - bw - ImGui::GetStyle().ItemSpacing.x);
-    } else ImGui::SetNextItemWidth(-1);
-    if (step >= 1) {
-        int iv = int(std::lround(v));
-        if (ui::SliderInt("##s", &iv, int(lo), int(hi), "")) app.atom.setParam(key, iv);
-        noteItem(("old." + std::string(key)).c_str());
-    } else {
-        float fv = float(v);
-        if (ui::SliderFloat("##s", &fv, float(lo), float(hi), "")) app.atom.setParam(key, std::round(double(fv) / step) * step);
-        noteItem(("old." + std::string(key)).c_str());
-    }
-    if (plusMinus) {
-        ImGui::SameLine();
-        if (ui::Button("+", ImVec2(bw, 0))) app.atom.setParam(key, v + step);
-        if (ImGui::IsItemHovered() && what) ui::SetTooltip("one more %s", what);
-    }
-    ImGui::PopID();
-}
-
-void pickElement(AppState& app, int Z) { app.atom.setParam("Z", Z); app.atom.setParam("N", defaultN(Z)); }
-
 std::string cellTip(int Z) { return std::to_string(Z) + " · " + name(Z) + " (" + categoryName(Z) + ")\n" + isoLine(Z, defaultN(Z)); }
 
 }  // namespace
@@ -306,135 +272,6 @@ int periodicTableCells(const PtGeom& g, int sel, ImU32 fg, ImU32 accent, ImU32 m
 }
 
 namespace {
-
-int periodicTable(int sel, float cellH, bool big) {
-    const float gap = (big ? 2 : 2) * S(), avail = ImGui::GetContentRegionAvail().x;
-    const Theme th = panelTheme();
-    PtGeom g;
-    g.cw = (avail - 17 * gap) / 18; g.ch = cellH; g.gap = gap; g.rowGap = (big ? 10 : 8) * S();
-    g.o = ImGui::GetCursorScreenPos();
-    g.s = S(); g.corner = (big ? 4 : 3) * S(); g.boldAll = big;
-    g.symPx = (big ? 9.0f : 9.5f) * S() * (big && g.cw > 34 * S() ? 15.0f / 9.0f : 1.0f);
-    g.markPx = 11 * S();
-    const int clicked = periodicTableCells(g, sel, U32(th.fg), U32(th.accent), U32(th.muted));
-    const ImVec2 end = g.cellPos(10, 1);
-    ImGui::SetCursorScreenPos(ImVec2(g.o.x, end.y + cellH + 6 * S()));
-    ImGui::Dummy(ImVec2(avail, 0));
-    return clicked;
-}
-
-// the element card (web: elemCardHTML): a tile, the name, chips and "Where you meet it"
-void elementCard(int Z) {
-    const Theme th = panelTheme();
-    const int hue = categoryHue(Z);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float s = S(), pad = 10 * s, tile = 58 * s, width = ImGui::GetContentRegionAvail().x;
-    const ImVec2 o = ImGui::GetCursorScreenPos();
-    dl->ChannelsSplit(2);
-    dl->ChannelsSetCurrent(1);
-    // the tile
-    const ImVec2 ta(o.x + pad, o.y + pad), tb(ta.x + tile, ta.y + tile);
-    dl->AddRectFilled(ta, tb, hsl(hue, 70, 55, 0.24), 10 * s);
-    dl->AddRect(ta, tb, hsl(hue, 60, 55, 1), 10 * s, 0, 1.5f * s);
-    const std::string zt = std::to_string(Z);
-    dl->AddText(fonts().regular, 12 * s, ImVec2(ta.x + 7 * s, ta.y + 5 * s), U32(th.muted), zt.c_str());
-    const ImVec2 ss = fonts().bold->CalcTextSizeA(26 * s, FLT_MAX, 0, symbol(Z));
-    dl->AddText(fonts().bold, 26 * s, ImVec2(ta.x + (tile - ss.x) / 2, ta.y + (tile - ss.y) / 2 + 5 * s), U32(th.fg), symbol(Z));
-    // the body
-    const float bx = tb.x + 12 * s, bwid = o.x + width - pad - bx;
-    ImGui::SetCursorScreenPos(ImVec2(bx, o.y + pad));
-    ImGui::BeginGroup();
-    ImGui::PushFont(fonts().bold, B(17));
-    ImGui::TextUnformatted(name(Z));
-    ImGui::PopFont();
-    // chips
-    float x = 0;
-    const float chipH = 18 * s;
-    ImVec2 cp = ImGui::GetCursorScreenPos();
-    cp.y += 3 * s;
-    for (const std::string& c0 : elementChips(Z)) {
-        const std::string c = displayable(c0);
-        const ImVec2 t = fonts().regular->CalcTextSizeA(12 * s, FLT_MAX, 0, c.c_str());
-        const float w = t.x + 16 * s;
-        if (x > 0 && x + w > bwid) { x = 0; cp.y += chipH + 4 * s; }
-        const ImVec2 a(cp.x + x, cp.y), b(a.x + w, a.y + chipH);
-        dl->AddRectFilled(a, b, U32(th.card), chipH / 2);
-        dl->AddRect(a, b, U32(th.line), chipH / 2);
-        dl->AddText(fonts().regular, 12 * s, ImVec2(a.x + 8 * s, a.y + (chipH - t.y) / 2), U32(th.muted), c.c_str());
-        x += w + 4 * s;
-    }
-    ImGui::SetCursorScreenPos(ImVec2(cp.x, cp.y + chipH + 6 * s));
-    ImGui::PushTextWrapPos(o.x + width - pad);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-    richText("<b>Where you meet it:</b> " + everyday(Z), false, 12.5f / 16, 0);
-    ImGui::PopStyleVar();
-    ImGui::PopTextWrapPos();
-    ImGui::EndGroup();
-    const float bottom = std::max(tb.y, ImGui::GetItemRectMax().y) + pad;
-    dl->ChannelsSetCurrent(0);
-    dl->AddRectFilled(o, ImVec2(o.x + width, bottom), hsl(hue, 70, 55, 0.10), 12 * s);
-    dl->AddRect(o, ImVec2(o.x + width, bottom), hsl(hue, 55, 55, 0.5), 12 * s);
-    dl->ChannelsMerge();
-    ImGui::SetCursorScreenPos(ImVec2(o.x, bottom + 8 * s));
-    ImGui::Dummy(ImVec2(width, 0));
-    {   // (for the automatic checks, PL_LOG_CARD)
-        std::vector<std::string> lines{name(Z)};
-        for (const std::string& c : elementChips(Z)) lines.push_back(c);
-        for (const std::string& l : atomPlainLines("<b>Where you meet it:</b> " + everyday(Z))) lines.push_back(l);
-        logOldAtomCard("element", lines);
-    }
-}
-
-// the facts (web: factsHTML): lines, the solid/liquid/gas bar with room temperature and the slider's temperature, notes
-void factsCard(int Z, double tempK) {
-    const Theme th = panelTheme();
-    const float s = S();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float width = ImGui::GetContentRegionAvail().x;
-    ImVec2 p0 = ImGui::GetCursorScreenPos();
-    dl->AddLine(p0, ImVec2(p0.x + width, p0.y), U32(th.line));
-    ImGui::Dummy(ImVec2(0, 6 * s));
-    richText(factsLinesHtml(Z), true, 13.0f / 16, 0.15f);
-    const Temp& t = tempData(Z);
-    {   // (for the automatic checks, PL_LOG_CARD)
-        std::vector<std::string> lines = atomPlainLines(factsLinesHtml(Z));
-        if (!(std::isnan(t.melt) && std::isnan(t.boil))) {
-            for (const std::string& l : atomPlainLines(factsNotesHtml(Z))) lines.push_back(l);
-            for (const std::string& l : atomPlainLines(kFactsFootnote)) lines.push_back(l);
-        }
-        logOldAtomCard("facts", lines);
-    }
-    if (std::isnan(t.melt) && std::isnan(t.boil)) return;
-    const char f = t.flag;
-    const double m = t.melt, b = t.boil;
-    auto frac = [](double k) { return std::sqrt(std::min(k, kTMax) / kTMax); };
-    const ImVec2 a = ImGui::GetCursorScreenPos();
-    const float bh = 10 * s, by = a.y + 8 * s;
-    dl->AddRectFilled(ImVec2(a.x, by), ImVec2(a.x + width, by + bh), col(look().c.neutral, 51/255.f), 5 * s);
-    const double sEnd = frac(f == 's' ? b : std::isnan(m) ? 0 : m);
-    double lEnd = sEnd;
-    if (!(f == 's' || std::isnan(m))) lEnd = sEnd + (frac(std::isnan(b) ? kTMax : b) - frac(m));
-    dl->AddRectFilled(ImVec2(a.x, by), ImVec2(a.x + float(sEnd) * width, by + bh), IM_COL32(0x5a, 0xa0, 0xe6, 255), 5 * s, ImDrawFlags_RoundCornersLeft);
-    if (lEnd > sEnd) dl->AddRectFilled(ImVec2(a.x + float(sEnd) * width, by), ImVec2(a.x + float(lEnd) * width, by + bh), IM_COL32(0x3f, 0xc0, 0xa8, 255));
-    dl->AddRectFilled(ImVec2(a.x + float(lEnd) * width, by), ImVec2(a.x + width, by + bh), IM_COL32(0xe8, 0xa3, 0x5a, 255), 5 * s, ImDrawFlags_RoundCornersRight);
-    const float rx = a.x + float(frac(kTRoom)) * width;               // room temperature
-    dl->AddRectFilled(ImVec2(rx - 1 * s, by - 3 * s), ImVec2(rx + 1 * s, by + 13 * s), U32(th.fg, 0.75f));
-    const float nx = a.x + float(std::sqrt(tempK / kTMax)) * width;   // the Temperature slider
-    dl->AddTriangleFilled(ImVec2(nx - 5 * s, by - 6 * s), ImVec2(nx + 5 * s, by - 6 * s), ImVec2(nx, by + 1 * s), U32(th.accent));
-    ImGui::Dummy(ImVec2(width, bh + 10 * s));
-    ImGui::PushFont(nullptr, B(11));
-    const float y = ImGui::GetCursorScreenPos().y;
-    const std::string hi = jsNum(kTMax, 6) + " K";
-    dl->AddText(ImVec2(a.x, y), U32(th.fg), "0 K");
-    dl->AddText(ImVec2(a.x + (width - ImGui::CalcTextSize("room").x) / 2, y), U32(th.fg), "room");
-    dl->AddText(ImVec2(a.x + width - ImGui::CalcTextSize(hi.c_str()).x, y), U32(th.fg), hi.c_str());
-    ImGui::Dummy(ImVec2(width, 14 * s));
-    ImGui::PopFont();
-    const std::string notes = factsNotesHtml(Z);
-    if (!notes.empty()) mutedWrapped(notes, 12.0f / 16);
-    mutedWrapped(kFactsFootnote, 12.0f / 16);
-    ImGui::Dummy(ImVec2(0, 4 * s));
-}
 
 // the light-spectrum picture (web: drawSpectrum): every line on a log scale, then visible light to scale
 void spectrumPicture(int Z, int N, const std::vector<SeenLine>& seen, bool dirac) {
@@ -809,18 +646,6 @@ void openLab(AppState& app, int lab) {
     app.lab = lab;
     if (!app.visited[lab] && look().reduced) app.paused = true;   // reduced motion: a lab starts still (the web's load())
     app.visited[lab] = true;
-}
-
-void labPicker(AppState& app) {
-    const float w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2;
-    const char* names[2] = {"Orbit Lab", "Atom Lab"};
-    for (int i = 0; i < 2; i++) {
-        if (i) ImGui::SameLine();
-        const bool on = app.lab == i;
-        if (on) pushOn();
-        if (ui::Button(names[i], ImVec2(w, 0))) openLab(app, i);
-        if (on) popOn();
-    }
 }
 
 // ---------------------------------------------------------------- the panel

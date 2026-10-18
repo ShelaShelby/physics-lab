@@ -207,7 +207,6 @@ public:
     bool showReshuffle() const { return p.Z + p.N > 3; }
     bool showCentre() const;
     bool showDrag() const { return p.view == "Cloud 3D" || p.view == "Orbit" || p.view == "Slice"; }
-    std::string dragText() const;
     bool showResetView() const;
     bool showSpin() const { return p.view == "Cloud 3D"; }
     std::string autoText() const { return s.autoPhotons ? "⏸ Auto photons: on" : "▶ Auto photons"; }

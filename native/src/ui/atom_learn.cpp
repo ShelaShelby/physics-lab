@@ -181,21 +181,6 @@ void timelineGuide(AppState& app) {
 
 }  // namespace
 
-void atomHelpButton(AppState& app) {
-    if (wideButton(displayable("❓ What am I even looking at?").c_str(), "atomHelp")) { app.atomLearn = 1; app.atomLearnJump = "top"; }
-    if (ImGui::IsItemHovered()) ui::SetTooltip("A plain-words guide to the atom on screen");
-}
-
-void atomLearnButtons(AppState& app) {
-    ImGui::SeparatorText("Learn");
-    const char* labels[4] = {"❓ What am I even looking at?", "📏 Scale: how empty is an atom?", "⚖ Weight: what does an atom weigh?", "🕰 Timeline: how we pictured the atom"};
-    for (int i = 0; i < 4; i++)
-        if (wideButton(displayable(labels[i]).c_str(), (std::string("atomLearn") + char('1' + i)).c_str())) {
-            app.atomLearn = i + 1; app.atomLearnJump = "top";
-            app.scaleTab = "scale"; app.scaleObj = 3; app.massTab = "parts";   // each opening starts like the web's
-        }
-}
-
 void atomLearnWindow(AppState& app) {
     if (app.atomLearn <= 0 || app.atomLearn > 4) return;
     const ImGuiViewport* vp = ImGui::GetMainViewport();

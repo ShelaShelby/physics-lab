@@ -7,7 +7,10 @@
 //
 // Run:  ctest --test-dir build   (or run the orbit_tests program directly)
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <regex>
 #include <set>
 #include <cstdio>
@@ -109,8 +112,52 @@ static void testLabelClear() {
     check(drawn > 0 && skipped > 0, "far zoom-out: some ring labels are drawn and some are skipped (the ones in the bands)");
 }
 
+
+// 0.19 audit: the number-formatting functions with extreme and random input. No crash and no undefined behaviour (the unit tests also run under
+// -fsanitize=address,undefined), and the words JavaScript writes for NaN and Infinity (toFixed, toLocaleString('en'), toPrecision, toExponential; ECMA-262 / ECMA-402).
+static void testFormatFuzz() {
+    const double inf = std::numeric_limits<double>::infinity(), nan = std::numeric_limits<double>::quiet_NaN();
+    check(fmt::fixed(nan, 2) == "NaN", "fixed(NaN, 2) = " + fmt::fixed(nan, 2));
+    check(fmt::fixed(-inf, 1) == "-Infinity", "fixed(-Infinity, 1) = " + fmt::fixed(-inf, 1));
+    check(fmt::jsLocale(inf) == "∞" && fmt::jsLocale(-inf) == "-∞", "jsLocale(±Infinity) = " + fmt::jsLocale(inf) + " " + fmt::jsLocale(-inf));
+    check(fmt::jsToPrecision(inf, 3) == "Infinity" && fmt::jsToPrecision(nan, 3) == "NaN", "jsToPrecision(Infinity / NaN)");
+    check(fmt::jsToExponential(-inf, 2) == "-Infinity" && fmt::jsToExponential(nan, 2) == "NaN", "jsToExponential(-Infinity / NaN)");
+    check(fmt::commas(nan) == "NaN" && fmt::commas(inf) == "∞" && fmt::commas(-inf) == "-∞", "commas(NaN / ±Infinity) = " + fmt::commas(nan) + " " + fmt::commas(inf));
+    check(fmt::commas(1e30) == "1,000,000,000,000,000,000,000,000,000,000", "commas(1e30) = " + fmt::commas(1e30));
+    check(fmt::commas(-1e19) == "-10,000,000,000,000,000,000", "commas(-1e19) = " + fmt::commas(-1e19));
+    check(fmt::plainNumber(1e300) == "1e+300", "plainNumber(1e300) = " + fmt::plainNumber(1e300));
+    check(fmt::plainNumber(1e-100) == "0." + std::string(99, '0') + "1", "plainNumber(1e-100) = " + fmt::plainNumber(1e-100));
+    check(fmt::kg(0) == "0 kg" && fmt::kg(nan) == "NaN kg", "kg(0) = " + fmt::kg(0) + ", kg(NaN) = " + fmt::kg(nan));
+    check(fmt::superscript(std::numeric_limits<int>::min()) == "⁻²¹⁴⁷⁴⁸³⁶⁴⁸", "superscript(INT_MIN) = " + fmt::superscript(std::numeric_limits<int>::min()));
+    check(fmt::simDate(ref::kEpochMs, -1e12) == "the year -999,999,997,974", "simDate 10^12 years back = " + fmt::simDate(ref::kEpochMs, -1e12));
+    // random doubles from random bit patterns (every exponent, NaN and Infinity included): every function runs; the finite ones read back
+    uint64_t st = 0x9E3779B97F4A7C15ull;
+    const auto next = [&st] { st ^= st << 13; st ^= st >> 7; st ^= st << 17; return st; };
+    int bad = 0, shown = 0;
+    for (int i = 0; i < 200000; i++) {
+        const int bad0 = bad;
+        double x; const uint64_t b = next(); std::memcpy(&x, &b, sizeof x);
+        if (i % 2) x = std::ldexp(static_cast<double>(next() >> 11) / 9007199254740992.0 - 0.5, static_cast<int>(next() % 140) - 70);   // half of them in a useful range
+        const int d = static_cast<int>(next() % 7);
+        const std::string f = fmt::fixed(x, d), c = fmt::commas(x), l = fmt::jsLocale(x, d), p = fmt::jsToPrecision(x, d + 1), e = fmt::jsToExponential(x, d), j = fmt::jsString(x), pn = fmt::plainNumber(x);
+        (void)fmt::kg(x); (void)fmt::years(x); (void)fmt::au(x); (void)fmt::precision(x, d + 1);
+        if (!std::isfinite(x)) continue;
+        const auto num = [](std::string s) { s.erase(std::remove(s.begin(), s.end(), ','), s.end()); return std::strtod(s.c_str(), nullptr); };
+        if (std::strtod(j.c_str(), nullptr) != x) bad++;                                                         // String(x) is exact
+        if (std::fabs(x) < 1e21 && std::fabs(num(f) - x) > 0.5 * std::pow(10.0, -d) * (1 + 1e-9) + std::fabs(x) * 1e-15) bad++;   // toFixed: within half a unit of the last digit
+        if (std::fabs(num(c) - x) > 0.5 + std::fabs(x) * 1e-15) bad++;                                         // rounded to a whole number
+        if (std::fabs(num(l) - x) > 0.5 * std::pow(10.0, -d) * (1 + 1e-9) + std::fabs(x) * 1e-15) bad++;        // at most d decimals
+        if (x != 0 && std::isfinite(num(p)) && std::fabs(num(p) - x) > std::fabs(x) * 0.5 * std::pow(10.0, -d) * (1 + 1e-9)) bad++;   // d + 1 significant digits (rounded up past
+        if (x != 0 && std::isfinite(num(e)) && std::fabs(num(e) - x) > std::fabs(x) * 0.5 * std::pow(10.0, -d) * (1 + 1e-9)) bad++;   // the largest double, "2e+308" reads back as Infinity)
+        if (num(pn) != x) bad++;                                                                                 // the shortest form reads back exactly
+        if (bad > bad0 && shown++ < 3) std::printf("  format fuzz: x=%.17g d=%d fixed=%s commas=%s locale=%s prec=%s exp=%s str=%s plain=%s\n", x, d, f.c_str(), c.c_str(), l.c_str(), p.c_str(), e.c_str(), j.c_str(), pn.c_str());
+    }
+    check(bad == 0, "format fuzz: 200,000 random numbers read back within their rounding (" + std::to_string(bad) + " wrong)");
+}
+
 int main() {
     testLabelClear();
+    testFormatFuzz();
     testRockKepler();
     // 1) Kepler's equation
     for (const auto& k : ref::kKepler) {
@@ -538,6 +585,10 @@ int main() {
         check(parseDateTime("2003-08-27", "", t) && t == 1061985600000LL, "parseDateTime: no time means 12:00");
         check(!parseDateTime("2003-02-30", "12:00", t) && !parseDateTime("2003-13-01", "12:00", t) && !parseDateTime("2003-08-27", "24:00", t) && !parseDateTime("2003-08-27", "12:00:30", t) && !parseDateTime("27 Aug 2003", "", t) && !parseDateTime("2003-08-27x", "", t), "parseDateTime: 30 February, month 13, 24:00, seconds and other shapes are refused");
         check(parseDateTime("2024-02-29", "00:00", t) && !parseDateTime("2023-02-29", "00:00", t), "parseDateTime: 29 February only in leap years");
+        // 0.19 audit: a year so far away that its milliseconds do not fit in 64 bits (the box holds 15 characters) used to overflow (undefined; it came out as a date
+        // before 1800, so the note said "before 1800"); a far but representable year still reads (and the jump is then clamped to 2100 with its note)
+        check(!parseDateTime("999999999-12-31", "", t), "parseDateTime: the year 999,999,999 is not read (it would overflow)");
+        check(parseDateTime("100000-01-01", "", t) && t > kDateMaxMs, "parseDateTime: the year 100,000 reads, after the lab's last date");
         std::string clampNote;
         check(clampJumpDate(1061985600000LL, clampNote) == 1061985600000LL && clampNote.empty(), "clampJumpDate: a date inside the range is kept, no note");
         const int64_t before = clampJumpDate(-5364662400001LL, clampNote);

@@ -166,6 +166,7 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
             if (r.href[0] == '#') {                          // an action word (.monoKey): its own colour, a dotted underline (solid on hover)
                 const ImU32 tc = r.bold && !forceBold ? boldCol : col;
                 dl->AddText(font, sz, at, tc, word.c_str());
+                noteRect(("html." + r.href.substr(1)).c_str(), at.x, at.y, wt, sz + 4);   // for the automatic checks (PL_SCRIPT click=html.monoKey)
                 const bool hover = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, ImVec2(at.x + wt, at.y + sz + 4));
                 const float uy = at.y + sz + 2;
                 if (hover) dl->AddLine(ImVec2(at.x, uy), ImVec2(at.x + wt, uy), tc);

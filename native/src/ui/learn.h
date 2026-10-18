@@ -6,7 +6,6 @@ namespace ui {
 
 struct AppState;
 
-void learnButtons(AppState& app);   // the Learn card in the panel
 void learnWindow(AppState& app);    // the open guide (if any)
 
 }  // namespace ui

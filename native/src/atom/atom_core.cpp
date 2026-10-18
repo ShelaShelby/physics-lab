@@ -94,7 +94,6 @@ const Temp& tempData(int Z) {
     static_assert(sizeof(Temp) == sizeof(TempData), "same layout");
     return reinterpret_cast<const Temp&>(kTempD[Z]);
 }
-int categoryIndex(int Z) { return kCatOf[Z]; }
 const char* categoryName(int Z) { return kCats[kCatOf[Z]].name; }
 int categoryHue(int Z) { return kCats[kCatOf[Z]].hue; }
 const std::vector<FamousIsotope>& famous() {

@@ -284,13 +284,6 @@ void timeline(AppState& app) {
 
 }  // namespace
 
-void learnButtons(AppState& app) {
-    ImGui::SeparatorText("Learn");
-    if (wideButton(displayable("❓ What am I even looking at?").c_str())) { app.learn = 1; app.learnJump = "top"; }
-    if (wideButton(displayable("🌍 Why do we have seasons?").c_str())) { app.learn = 2; app.learnJump = "top"; }
-    if (wideButton(displayable("🕰 Timeline: how we understood the Solar System").c_str())) { app.learn = 3; app.learnJump = "top"; }
-}
-
 void learnWindow(AppState& app) {
     if (app.learn <= 0 || app.learn > 3) return;
     const ImGuiViewport* vp = ImGui::GetMainViewport();

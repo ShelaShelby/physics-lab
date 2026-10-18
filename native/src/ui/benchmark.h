@@ -28,6 +28,5 @@ void benchmarkTestHook(AppState& app);
 
 // The scenes' names and settings in words (the list in the report and in the result).
 struct BenchSceneInfo { const char* name; const char* what; };
-const std::vector<BenchSceneInfo>& benchmarkScenes();
 
 }  // namespace ui

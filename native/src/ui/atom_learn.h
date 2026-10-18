@@ -6,8 +6,6 @@ namespace ui {
 
 struct AppState;
 
-void atomLearnButtons(AppState& app);   // the Learn card
-void atomHelpButton(AppState& app);     // "❓ What am I even looking at?" at the top of the panel
 void atomLearnWindow(AppState& app);    // the open guide (if any)
 
 }  // namespace ui

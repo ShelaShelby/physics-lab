@@ -20,7 +20,6 @@ static std::uint64_t nextEpoch();   // a new number each call (for the GPU copie
 
 static double jsRound(double x) { const double r = std::floor(x + 0.5); return r == 0 && x < 0 ? -0.0 : r; }
 static double clampZoom(double z) { return std::max(kZoomMin, std::min(7.0, z)); }
-static const char* const kLetter = "spdf";
 static constexpr double kMaxStepAngle = 2 * kPi / 300;   // the largest angle one leapfrog step of the Orbit view may turn, rad (see AtomLab::step)
 static const char* const kGreek[4] = {"α", "β", "γ", "δ"};
 
@@ -838,7 +837,6 @@ void AtomLab::zoomAtom() { s.focus = -1; s.zoomTo = 0; s.panTo = Vec3d{}; }
 void AtomLab::zoomNucleus() { s.focus = -1; s.zoomTo = zoomForNucleus(); s.panTo = Vec3d{}; }
 void AtomLab::zoomNucleon() { if (s.focus < 0) s.focus = 0; s.zoomTo = zoomForNucleon(); s.panTo = Vec3d{}; }
 bool AtomLab::showCentre() const { return p.zoom > 0.001 || (std::fabs(s.pan.x) + std::fabs(s.pan.y)) / kA0 > 0.002; }
-std::string AtomLab::dragText() const { return s.dragMode == "move" ? "✥ Drag: move" : p.view == "Slice" ? "✥ Drag: slide the cut" : "✥ Drag: rotate"; }
 bool AtomLab::showResetView() const {
     return p.view == "Cloud 3D" || (p.view == "Orbit" && (std::fabs(s.oyaw) > 0.02 || std::fabs(s.opitch - kPi / 2) > 0.02));
 }

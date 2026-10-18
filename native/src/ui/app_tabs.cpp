@@ -250,106 +250,6 @@ void factShow(AppState& app, int index) {
     for (int i = 0; i < int(g_order.size()); i++) if (g_order[i] == index) { g_pos = i; g_next = DBL_MAX; g_fadeAt = -1; return; }
 }
 
-void factsLine(AppState& app) {
-    if (g_pos < 0) { showNext(app); setHtmlAction([](const std::string& a) { if (a == "monoKey") secretMono(); }); }
-    const double t = now();
-    if (g_fadeAt >= 0 && t - g_fadeAt >= 0.25) {                 // faded out: the next fact
-        g_fadeAt = -1;
-        g_pos = (g_pos + 1) % int(g_order.size());
-        g_setAt = t;
-        sched(app);
-    }
-    if (t >= g_next) showNext(app);
-    const float s = S() * T(), W = ImGui::GetContentRegionAvail().x, padX = 12 * s, padY = 8 * s;
-    const std::string fact = displayable(textOf(app, g_order[g_pos]));
-    const std::string lead = std::string(app::kDykLead) + " ";
-    const std::string count = std::to_string(g_pos + 1) + "/" + std::to_string(g_order.size());
-    // the text column: between the 💡 and the counter
-    const std::string icon = displayable(app::kDykIcon);
-    const float iconW = icon.empty() ? 0 : ImGui::GetFont()->CalcTextSizeA(18 * s, FLT_MAX, 0, icon.c_str()).x + 10 * s;
-    const float countW = ImGui::GetFont()->CalcTextSizeA(13 * s, FLT_MAX, 0, "00/00").x + 6 * s + ImGui::GetFont()->CalcTextSizeA(18 * s, FLT_MAX, 0, "›").x + 10 * s;
-    const float tx0 = padX + iconW, tw = W - tx0 - countW - padX;
-    // lay the words out: "Did you know?" in the accent colour, then the fact
-    struct Word { std::string w; bool lead; float x, y; };
-    std::vector<Word> words;
-    const float fs = 13.5f * s, lineH = fs * 1.4f;
-    float x = 0, y = 0;
-    auto add = [&](const std::string& text, bool isLead, ImFont* f) {
-        std::size_t a = 0;
-        while (a < text.size()) {
-            std::size_t b = text.find(' ', a);
-            if (b == std::string::npos) b = text.size();
-            const std::string w = text.substr(a, b - a);
-            a = b + 1;
-            if (w.empty()) continue;
-            const float ww = f->CalcTextSizeA(fs, FLT_MAX, 0, w.c_str()).x, sp = f->CalcTextSizeA(fs, FLT_MAX, 0, " ").x;
-            if (x > 0 && x + ww > tw) { x = 0; y += lineH; }
-            words.push_back({w, isLead, x, y});
-            x += ww + sp;
-        }
-    };
-    add(lead, true, fonts().bold);
-    add(fact, false, ImGui::GetFont());
-    const float textH = y + lineH, h = std::max(46 * s, textH + 2 * padY);
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const bool clicked = ImGui::InvisibleButton("##dyk", ImVec2(W, h));
-    const bool hover = ImGui::IsItemHovered();
-    if (hover) { ImGui::SetMouseCursor(ImGuiMouseCursor_Hand); ui::SetTooltip("%s", app::kDykTip); }
-    if (hover != g_held) { g_held = hover; if (g_held) g_next = DBL_MAX; else if (g_fadeAt < 0) sched(app); }
-    if (clicked && g_fadeAt < 0) showNext(app);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    cardRect(dl, p, ImVec2(p.x + W, p.y + h), corner(12 * s), g_held ? look().w.accent : look().w.line);
-    if (!icon.empty()) dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(p.x + padX, p.y + (h - 18 * s) / 2), col(look().w.fg), icon.c_str());
-    // the text fades out and in over 0.25 s (Reduced motion: no fading)
-    float alpha = 1;
-    if (!look().reduced) {
-        if (g_fadeAt >= 0) alpha = float(std::max(0.0, 1 - (t - g_fadeAt) / 0.25));
-        else alpha = float(std::min(1.0, (t - g_setAt) / 0.25));
-    }
-    const float ty = p.y + (h - textH) / 2;
-    for (const Word& w : words) {
-        ImFont* f = w.lead ? fonts().bold : ImGui::GetFont();
-        dl->AddText(f, fs, ImVec2(p.x + tx0 + w.x, ty + w.y + (lineH - fs) / 2), col(w.lead ? look().w.accent : look().w.fg, alpha), w.w.c_str());
-    }
-    const float cw = ImGui::GetFont()->CalcTextSizeA(13 * s, FLT_MAX, 0, count.c_str()).x, gw = ImGui::GetFont()->CalcTextSizeA(18 * s, FLT_MAX, 0, "›").x;
-    const float rx = p.x + W - padX - gw;
-    dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(rx, p.y + (h - 18 * s * 1.15f) / 2), col(look().w.muted), "›");
-    dl->AddText(ImGui::GetFont(), 13 * s, ImVec2(rx - 6 * s - cw, p.y + (h - 13 * s) / 2), col(look().w.muted), count.c_str());
-}
-
-// The tabs (the web's .seg): 🔬 Simulations, 📚 Learn, 🏆 Achievements
-void tabsBar(AppState& app) {
-    const float s = S() * T();
-    const char* labels[3] = {app::kTabSims, app::kTabLearn, app::kTabAch};
-    const ImVec2 p0 = ImGui::GetCursorScreenPos();
-    float x = p0.x;
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImGui::PushFont(nullptr, fontPx(14));
-    const float h = ImGui::GetFontSize() + 14 * s;
-    float total = 0;
-    for (const char* l : labels) total += ImGui::CalcTextSize(displayable(l).c_str()).x + 28 * s;
-    cardRect(dl, p0, ImVec2(p0.x + total, p0.y + h), corner(10 * s), look().w.line, 1, false);
-    for (int i = 0; i < 3; i++) {
-        const std::string l = displayable(labels[i]);
-        const float w = ImGui::CalcTextSize(l.c_str()).x + 28 * s;
-        ImGui::SetCursorScreenPos(ImVec2(x, p0.y));
-        ImGui::PushID(i);
-        if (ImGui::InvisibleButton("##tab", ImVec2(w, h))) app.pane = i;
-        const bool hover = ImGui::IsItemHovered();
-        ImGui::PopID();
-        const bool on = app.pane == i;
-        if (on) faceRect(dl, ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), look().w.accentFill, 1, app::WidgetState::Normal, corner(10 * s),
-                         i == 0 ? ImDrawFlags_RoundCornersLeft : i == 2 ? ImDrawFlags_RoundCornersRight : ImDrawFlags_RoundCornersNone);
-        else if (hover) dl->AddRectFilled(ImVec2(x, p0.y), ImVec2(x + w, p0.y + h), col(look().w.line, 0.6f));
-        dl->AddText(ImVec2(x + 14 * s, p0.y + 7 * s), col(on ? look().w.onacc : look().w.fg), l.c_str());
-        x += w;
-    }
-    ImGui::PopFont();
-    dl->AddRect(p0, ImVec2(p0.x + total, p0.y + h), col(look().w.line), corner(10 * s));
-    ImGui::SetCursorScreenPos(ImVec2(p0.x, p0.y + h));
-    ImGui::Dummy(ImVec2(total, 0));
-}
-
 // The Learn or Achievements tab, in place of the lab (the web hides the picture and the controls)
 void paneWindow(AppState& app, float top) {
     if (!app.pane) return;
@@ -374,6 +274,9 @@ void paneWindow(AppState& app, float top) {
 
 // Every frame: the achievement triggers, the guide that goes back to its lab, the secret pop-ups and the achievement pop-ups
 void appTabsFrame(AppState& app) {
+    // 0.19: the guide's "monochrome" word (Sharp Eyes). Its action used to be set by the old header's fact line, removed in 0.16 stage 1b: since then the word did nothing
+    static const bool actionSet = (setHtmlAction([](const std::string& a) { if (a == "monoKey") secretMono(); }), true);
+    (void)actionSet;
     // Galactic Center: Sagittarius A* picked in the Orbit Lab (the web checks it in the lab's tick)
     static const int sgra = orbit::farIndexOf("sgra");
     if (app.lab == 0 && !app.pane && app.view.sel.kind == orbit::Selection::Far && app.view.sel.moon == sgra) grantAchievement(app, "galactic");

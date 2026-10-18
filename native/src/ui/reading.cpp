@@ -191,10 +191,8 @@ bool readingModeOn() { return g.mode; }
 // so after the first page had been closed main.cpp kept seeing "a page is open" and dropped every wheel and arrow-key event meant for the picture. Now it only counts when the page was drawn
 // in the frame the app is in (events are read before the next frame starts, so that is the last frame drawn).
 bool readingShown() { return pageDrawnNow(); }
-float readingBodyFont() { return g.mode && g.shown ? g.bodyFont : 0; }
 float readingFloorBody() { return g.mode && g.shown ? static_cast<float>(sh::F().m.body) : 0; }
 float readingFloorCaption() { return g.mode && g.shown ? static_cast<float>(sh::F().m.caption) : 0; }
-void readingNote(const std::string& line) { auditNote(line); }
 void readingLongestLine(int chars, bool body) { if (!g.mode) return; int& l = body ? g.longest : g.longestCaption; if (chars > l) l = chars; }
 
 void noteHeading(int level, const std::string& text) {

@@ -78,7 +78,6 @@ void atomScene(AppState& app, int which) {
     atom::benchSetup(app.atom, which, app.canvasW, app.canvasH);
     app.tempK = 293.15;                                  // the Temperature card's little box is drawn every frame: the same temperature for every run
 }
-void atomNucleon(AppState& app) { atomScene(app, 2); }
 
 // 0.16 stage 4: scenes 1 to 11 are the default run; 12 to 18 (the old CPU paths) run only with "Compare old CPU paths". Names and texts: app/bench_scenes.cpp.
 const std::vector<SceneDef>& scenes() {
@@ -158,12 +157,6 @@ app::GpuVerdict checkGpuTimer(render::Renderer2D& r, double wPts, double hPts, i
 }
 
 }  // namespace
-
-const std::vector<BenchSceneInfo>& benchmarkScenes() {
-    static std::vector<BenchSceneInfo> v;
-    if (v.empty()) for (const SceneDef& s : scenes()) v.push_back(s.info);
-    return v;
-}
 
 // everything the benchmark must give back: the labs as they were
 struct BenchState {

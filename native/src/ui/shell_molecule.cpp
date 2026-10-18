@@ -160,7 +160,7 @@ void moleculeControls(AppState& app, Panel& p, const SectionFn& section) {
         if (mo.linear) { std::snprintf(b, sizeof b, "B %.6g (from the shape %.6g)", mo.rotB, molecule::rotConstCm(I[2])); rc = b; }
         else { std::snprintf(b, sizeof b, "A %.6g, B %.6g, C %.6g", mo.rotA, mo.rotB, mo.rotC); rc = b; std::snprintf(b, sizeof b, " (from the shape %.4g, %.4g, %.4g)", molecule::rotConstCm(I[0]), molecule::rotConstCm(I[1]), molecule::rotConstCm(I[2])); rc += b; }
         pStat(p, "Rotational constants, cm⁻¹", rc);
-        if (mo.id == "NH3") pCaption(p, "Note: the A and B worked out from this shape (9.97 cm⁻¹) differ from the listed 9.4443 by 5.6 %; reported for checking against CCCBDB.", false);
+        if (mo.id == "NH3") pCaption(p, "Note: the A and B worked out from this shape (9.97 cm⁻¹) differ from the listed 9.4443 by 5.6 %. CCCBDB's own page lists 9.4443 (Herzberg 1966) next to the same geometry, so the doubt is in the listed value; it is shown unchanged until a second source is checked.", false);
         pCaption(p, "Shape: " + mo.shapeNote, false);
         if (mo.derivedAngle) pCaption(p, "H-C-O angle derived: CCCBDB lists no H-C-O angle, so it is worked out from H-C-H under the stated assumption.", false);
         pCaption(p, std::string("Source: NIST CCCBDB (Computational Chemistry Comparison and Benchmark Database), SRD 101, Release 22, experimental geometry and rotational constants (") + mo.rotRef +

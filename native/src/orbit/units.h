@@ -46,7 +46,6 @@ constexpr double kSimTime = kYear / (2.0 * kPi);            // s   (about 58.13 
 // this one is 3.8e-5 larger, which comes from the 365.25-day Julian year (the Gaussian year is 365.2568983 d). Kept on purpose for now: the year and this GM are not changed in this stage.
 constexpr double kGMSun = 4.0 * kPi * kPi * kAU * kAU * kAU / (kYear * kYear);   // m³/s²
 
-constexpr double kSunMassKg = 1.989e30;               // kg (shown on the Sun's card)
 constexpr double kEarthMassKg = 5.972e24;             // kg
 constexpr double kSunInEarthMasses = 333000.0;        // the web's barycentre uses "the Sun weighs 333,000 Earths"
 
@@ -68,6 +67,5 @@ constexpr double kTspeedDefault = -0.3;               // 1 s = about 29 days
 // Zoom slider: pixels per metre = min(width, height) / 34 / kSimLength × 10^zoom (as in the web)
 constexpr double kZoomMin = -9.0;
 constexpr double kZoomMax = 5.5;
-constexpr double kZoomDefault = -1.2;                 // the web opens the real Solar System at zoom -1.2
 
 }  // namespace units

@@ -28,15 +28,16 @@ constexpr int64_t kDateMinMs = utcMs(1800, 1, 1), kDateMaxMs = utcMs(2100, 12, 3
 
 // "YYYY-MM-DD" and "HH:MM" (empty time = 12:00) to Unix milliseconds (UT). False for anything that is not a real date and time.
 inline bool parseDateTime(const char* date, const char* time, int64_t& ms) {
-    int y = 0, mo = 0, d = 0, h = 12, mi = 0;
+    long long y = 0, mo = 0, d = 0, h = 12, mi = 0;         // (0.19: read as long long, so a long number is not cut to a small one by an int)
     char extra = 0;
-    if (std::sscanf(date, "%d-%d-%d%c", &y, &mo, &d, &extra) != 3) return false;
-    if (time && time[0] && std::sscanf(time, "%d:%d%c", &h, &mi, &extra) != 2) return false;
+    if (std::sscanf(date, "%lld-%lld-%lld%c", &y, &mo, &d, &extra) != 3) return false;
+    if (time && time[0] && std::sscanf(time, "%lld:%lld%c", &h, &mi, &extra) != 2) return false;
     if (mo < 1 || mo > 12 || d < 1 || d > 31 || h < 0 || h > 23 || mi < 0 || mi > 59) return false;
+    if (y < -100000000 || y > 100000000) return false;      // 0.19: further away the milliseconds would not fit in 64 bits (the lab's range is 1800-2100 anyway)
     // reject dates such as 30 February: the day must come back the same
-    const int64_t days = daysFromCivil(y, mo, d);
-    if (daysFromCivil(y, mo, 1) + d - 1 != days || (mo < 12 ? daysFromCivil(y, mo + 1, 1) : daysFromCivil(y + 1, 1, 1)) <= days) return false;
-    ms = utcMs(y, mo, d, h, mi);
+    const int64_t days = daysFromCivil(y, int(mo), int(d));
+    if (daysFromCivil(y, int(mo), 1) + d - 1 != days || (mo < 12 ? daysFromCivil(y, int(mo) + 1, 1) : daysFromCivil(y + 1, 1, 1)) <= days) return false;
+    ms = (days * 1440 + h * 60 + mi) * 60000;
     return true;
 }
 

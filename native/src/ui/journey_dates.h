@@ -39,8 +39,5 @@ std::string jumpToDate(AppState& app, int64_t unixMs);
 // Reads "YYYY-MM-DD" and "HH:MM" (Greenwich time). False if it is not a real date and time.
 bool parseDateTime(const char* date, const char* time, int64_t& unixMs);
 
-// The "Journey and dates" card in the panel. `journeyWasActive`: the Journey was running at the
-// start of this frame (a click on the panel stops it first; the Journey button must not restart it).
-void journeyDatesCard(AppState& app, bool journeyWasActive);
 
 }  // namespace ui

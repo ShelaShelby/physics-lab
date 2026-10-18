@@ -18,30 +18,6 @@
 
 namespace ui {
 
-void shotButton(AppState& app, bool sameLine) {
-    ShotUi& s = app.shot;
-    const bool flashing = ImGui::GetTime() < s.flashUntil;
-    const std::string label = flashing ? displayable(s.flash) : displayable(app::kShotLabel);
-    const ImGuiStyle& st = ImGui::GetStyle();
-    if (sameLine) {                                    // beside the previous button if there is room, else on the next line
-        const float w = ImGui::CalcTextSize(displayable(app::kShotLabel).c_str()).x + 2 * st.FramePadding.x;
-        const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-        if (ImGui::GetItemRectMax().x + st.ItemSpacing.x + w <= right) ImGui::SameLine();
-    }
-    if (ImGui::Button((label + "###shot").c_str())) s.requested = true;
-    noteItem("###shot");
-    if (ImGui::IsItemHovered()) ui::SetTooltip("%s", app::kShotTitle);
-}
-
-void shotNote(AppState& app) {
-    ShotUi& s = app.shot;
-    if (s.note.empty() || ImGui::GetTime() >= s.noteUntil) return;
-    const Look& L = look();
-    ImGui::PushStyleColor(ImGuiCol_Text, s.failed ? vec(L.c.danger) : vec(L.c.muted));
-    ImGui::TextWrapped("%s", s.note.c_str());
-    ImGui::PopStyleColor();
-}
-
 std::vector<std::string> shotFolders() {
     std::vector<std::string> out;
     if (const char* d = SDL_getenv("PL_SHOT_DIR")) { out.push_back(d); return out; }
@@ -120,7 +96,7 @@ void takeShot(AppState& app, render::Renderer2D& renderer, const ShotArea& a) {
     SDL_DateTime dt{};
     SDL_GetCurrentTime(&now);
     SDL_TimeToDateTime(now, &dt, true);                // local time
-    const std::string lab = app.lab == 3 ? "Molecule Lab" : app.lab == 2 ? "Defense Lab" : app.lab == 1 ? "Atom Lab" : "Orbit Lab";
+    const std::string lab = app::labName(app.lab);
     const std::string name = app::shotFileName(lab, app.atom.p.Z, app.atom.p.N, {dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second});
     std::string tried, why;
     for (const std::string& folder : shotFolders()) {

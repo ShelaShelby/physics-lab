@@ -25,14 +25,6 @@ namespace {
 
 float S() { return ImGui::GetFontSize() / 16 / look().textScale; }   // one web px (the web's sizes are then times the text size)
 
-// "🕰 v8.6.2 · history" with the native app's version
-std::string historyLabel() {
-    std::string l = app::kHdrHistory.label;
-    const std::size_t v = l.find(" v"), e = l.find(' ', v + 2);
-    if (v != std::string::npos && e != std::string::npos) l = l.substr(0, v + 2) + appVersionLabel() + l.substr(e);
-    return l;
-}
-
 // a window like the web's Learn pop-up page (lrnOpen): one at a time, centred, closed with ✕ or Escape
 bool beginPage(const char* title, const char* id, bool* open) {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
@@ -42,35 +34,6 @@ bool beginPage(const char* title, const char* id, bool* open) {
     const bool shown = pageBegin(t, open);                     // the floating window as before, or (new UI) the reading view
     if (shown && ImGui::IsKeyPressed(ImGuiKey_Escape) && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) *open = false;
     return shown;
-}
-
-// 🌐 the language menu: English, and Estonian greyed out as "Coming soon"
-void languageMenu(AppState& app) {
-    if (!ImGui::BeginPopup("##lang")) return;
-    panelDecor(app::PanelKind::Floating);
-    const float s = S() * look().textScale, w = 230 * s - 12 * s, h = 36 * s;
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    for (const app::LangOpt& L : app::kLangs) {
-        const bool soon = *L.soon, on = !soon && app.prefs.lang == "en" && std::string(L.name) == "English";
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        ImGui::PushID(L.name);
-        if (soon) ImGui::BeginDisabled();
-        if (ImGui::Selectable("##l", on, 0, ImVec2(w, h)) && !soon) { app.prefs.lang = "en"; ImGui::CloseCurrentPopup(); }
-        if (soon) ImGui::EndDisabled();
-        ImGui::PopID();
-        const float a = soon ? 0.6f : 1;                                   // :disabled{opacity:.6}
-        float x = p.x + 10 * s;
-        const std::string flag = displayable(L.flag);
-        if (!flag.empty()) { dl->AddText(ImGui::GetFont(), 18 * s, ImVec2(x, p.y + (h - 18 * s) / 2), col(look().w.fg, a), flag.c_str()); x += 28 * s; }
-        dl->AddText(ImGui::GetFont(), 14 * s, ImVec2(x, p.y + (h - 14 * s) / 2), col(look().w.fg, a), L.name);
-        if (soon) {                                                        // .soon: a small rounded chip
-            const float fs = 12 * s, tw = fonts().bold->CalcTextSizeA(fs, FLT_MAX, 0, L.soon).x;
-            const ImVec2 b(p.x + w - 8 * s, p.y + h / 2 + fs / 2 + 3 * s), c(b.x - tw - 16 * s, p.y + h / 2 - fs / 2 - 3 * s);
-            dl->AddRect(c, b, col(look().w.line, a), corner(99));
-            dl->AddText(fonts().bold, fs, ImVec2(c.x + 8 * s, c.y + 3 * s), col(look().w.muted, a), L.soon);
-        } else if (on) dl->AddText(fonts().bold, 14 * s, ImVec2(p.x + w - 20 * s, p.y + (h - 14 * s) / 2), col(look().w.accent), "✓");
-    }
-    ImGui::EndPopup();
 }
 
 }  // namespace

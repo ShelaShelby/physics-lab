@@ -41,7 +41,6 @@ const Stop kStops[] = {
     {2.5e8, false, false, "Real stars at their real places: the Pleiades (444 light years) and the Orion Nebula (1,267 light years)."},
     {0, false, true, "The centre of our galaxy, 27,000 light years away, where a black hole of 4.3 million Suns sits (Sagittarius A*). Tap Reset view to come back."},
 };
-constexpr int kStopCount = sizeof(kStops) / sizeof(kStops[0]);
 constexpr double kSpeed = 0.65;              // decades of zoom per second between stops
 
 std::string caption(const AppState& app, int k) {
@@ -178,31 +177,6 @@ void doDateJump(AppState& app, int i) {
     std::snprintf(app.timeText, sizeof app.timeText, "%s", jumps[i].time);
     int64_t ms;
     if (parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = jumpToDate(app, ms);
-}
-
-void journeyDatesCard(AppState& app, bool wasActive) {
-    ImGui::SeparatorText("Journey and dates");
-    if (wideButton(app.journey.active ? "■ Stop the journey" : "Journey: Earth to the galactic centre")) {
-        if (app.journey.active) journeyStop(app);
-        else if (!wasActive) journeyStart(app);   // this click already stopped a running Journey
-    }
-    if (ImGui::IsItemHovered()) ui::SetTooltip("An automatic trip that zooms out, step by step, from Earth to the centre of our galaxy.\nTouch anything to stop it; your view and settings come back.");
-    ImGui::TextUnformatted("Jump to a date (Greenwich time)");
-    const float w = ImGui::GetContentRegionAvail().x;
-    ImGui::SetNextItemWidth(w * 0.42f);
-    ImGui::InputTextWithHint("##date", "YYYY-MM-DD", app.dateText, sizeof app.dateText);
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(w * 0.2f);
-    ImGui::InputTextWithHint("##time", "HH:MM", app.timeText, sizeof app.timeText);
-    ImGui::SameLine();
-    if (wideButton("Jump")) jumpFromBoxes(app);
-    int nJumps = 0;
-    const DateJump* jumps = dateJumps(nJumps);
-    for (int i = 0; i < nJumps; i++) {                    // one tile per row, so the names fit
-        if (wideButton(jumps[i].name)) doDateJump(app, i);
-        if (ImGui::IsItemHovered()) ui::SetTooltip("%s", jumps[i].tip);
-    }
-    ImGui::TextWrapped("%s", app.dateNote.empty() ? datePickHint() : app.dateNote.c_str());
 }
 
 }  // namespace ui

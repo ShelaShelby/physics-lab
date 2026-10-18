@@ -447,4 +447,9 @@ std::string withPanelState(const std::string& saved, const std::string& name, bo
     return out;
 }
 
+void dropLastChar(std::string& s) {
+    while (!s.empty() && (static_cast<unsigned char>(s.back()) & 0xC0) == 0x80) s.pop_back();   // the continuation bytes (10xxxxxx) ...
+    if (!s.empty()) s.pop_back();                                                                 // ... and the first byte (or an ASCII character)
+}
+
 }  // namespace app::shell

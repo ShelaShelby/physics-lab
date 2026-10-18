@@ -152,4 +152,6 @@ double factContrast(const ThemeColors& c);                                // the
 bool panelCollapsed(const std::string& saved, const std::string& name, bool dflt);
 std::string withPanelState(const std::string& saved, const std::string& name, bool collapsed);
 
+void dropLastChar(std::string& s);                                        // 0.19: removes the last UTF-8 character (all its bytes), nothing if s is empty
+
 }  // namespace app::shell

@@ -85,7 +85,7 @@ void labsToPrefs(const AppState& app, app::Prefs& p) {
     if (a.dirac == "On") p.atom["dirac"] = a.dirac;           // saved only when ON: with the setting off the settings file is byte for byte what it was before 0.10.8
     p.atomMore = app.atom.moreStored;
     if (app.visited[molecule::kLabIndex] || !p.molecule.empty()) p.molecule = molecule::saveSettings(app.molecule.set);   // (only once the lab was opened: older settings files stay as they were)
-    p.lab = app.lab == 3 ? "Molecule Lab" : app.lab == 2 ? "Defense Lab" : app.lab == 1 ? "Atom Lab" : "Orbit Lab";
+    p.lab = app::labName(app.lab);
     p.units = fmt::imperial() ? "imperial" : "metric";
 }
 
@@ -141,7 +141,7 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
     app.atom.moreStored = p.atomMore;
     app.atom.restart();
     app.molecule.set = molecule::loadSettings(p.molecule);
-    app.lab = p.lab == "Molecule Lab" ? 3 : p.lab == "Defense Lab" ? 2 : p.lab == "Atom Lab" ? 1 : 0;
+    app.lab = app::labIndex(p.lab);
     fmt::setImperial(p.units == "imperial");
 }
 
@@ -394,14 +394,6 @@ void settingsWindow(AppState& app) {
     if (!app.showSettings) { g_resetDone = false; g_unlockMsg.clear(); }   // the Done lines belong to this visit of the page
 }
 
-// 🎨 Theme: a grid of cards, 3 in a row (rows are added as themes are added): a colour dot, the name, ✓ on the one in use. The small description of a
-// theme is a tooltip. The two secret themes are "???" with their hint until they are unlocked. The cards are as wide as the longest name needs; if three of
-// them do not fit in the window, the cards get narrower and long names wrap onto a second line (a name is never cut off).
-void themeButton(AppState& app) {
-    if (pillButton(app::kHdrTheme.label, app::kHdrTheme.tip)) ImGui::OpenPopup("##themes");
-    themePicker(app);
-}
-
 // The picker's list (0.15 stage 3: also drawn by the new UI's palette button, right after it)
 void themePicker(AppState& app, const ImVec2* hang) {
     static const bool testOpen = SDL_getenv("PL_OPEN") && std::string(SDL_getenv("PL_OPEN")) == "themes";   // for automatic checks: open the picker (after the other windows have appeared)
@@ -502,12 +494,6 @@ void defaultsPopups(AppState& app) {
         ImGui::SetItemDefaultFocus();
         ImGui::EndPopup();
     }
-}
-
-void defaultsButton(AppState& app) {
-    if (ui::Button("Defaults")) ImGui::OpenPopup(app.lab == 1 ? "Put Atom Lab back?" : "Put Orbit Lab back?");
-    if (ImGui::IsItemHovered()) ui::SetTooltip("Put this lab's settings back to how they started");
-    defaultsPopups(app);
 }
 
 }  // namespace ui

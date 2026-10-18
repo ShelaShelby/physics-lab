@@ -129,7 +129,6 @@ void nbodyStepN(int n, const double* gm, Vec3* x, Vec3* v, double h, bool gr) {
     for (int i = 1; i < n; i++) { x[i] = x[0] + Q[i]; v[i] = V[i] + vcm; }
 }
 
-void nbodyAccel(const Vec3* x, Vec3* a) { nbodyAccelN(kNBodies, kRealGM, x, a); }
 void nbodyStep(NBodyState& s, double h, bool gr) { nbodyStepN(kNBodies, kRealGM, s.x, s.v, h, gr); }
 
 double nbodyEnergy(const NBodyState& s) {

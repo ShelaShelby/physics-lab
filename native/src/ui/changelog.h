@@ -7,7 +7,6 @@ namespace ui {
 
 // The version of the native app (whole number = major update, .5 = medium, other decimals = small).
 const char* appVersion();
-const char* appStage();          // "alpha", later "beta", then "" for the plain release
 std::string appVersionLabel();   // "0.9.2 alpha" (just the number when the stage is empty)
 
 // The native app's own updates, newest first (shown in 🕰 history after the web's).

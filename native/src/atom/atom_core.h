@@ -83,7 +83,6 @@ struct Temp { double melt, boil; char flag; double density; };   // K, K, s/p/e/
 const Temp& tempData(int Z);
 const char* categoryName(int Z);
 int categoryHue(int Z);
-int categoryIndex(int Z);
 struct FamousIsotope { int Z, N; const char* why; };
 const std::vector<FamousIsotope>& famous();
 std::pair<int, int> ptPos(int Z);             // [row, column] in the periodic table

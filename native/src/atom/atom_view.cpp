@@ -83,8 +83,6 @@ bool lineBlob(double x0, double y0, double x1, double y1, double wd, Color c, Bl
     b = Blob{}; b.x = float(x0 + hx); b.y = float(y0 + hy); b.r = float(R); b.kind = 8; b.fx = float(hx / R); b.fy = float(hy / R); b.f0 = float(wd / 2 / R); b.c0 = c;
     return true;
 }
-Blob soft(double x, double y, double r, Color c) { Blob b{}; b.x = float(x); b.y = float(y); b.r = float(r); b.kind = 4; b.c0 = c; return b; }
-Blob square(double x, double y, double half, Color c) { Blob b{}; b.x = float(x); b.y = float(y); b.r = float(half); b.kind = 2; b.c0 = c; return b; }
 
 // Text drawn with Dear ImGui on top of the picture; y is the baseline, like the canvas fillText().
 // halo: the canvas strokeText() edge the web draws under some labels (in the card colour).

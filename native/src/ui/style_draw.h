@@ -42,7 +42,6 @@ void SetTooltip(const char* fmt, ...) IM_FMTARGS(1);
 bool BeginCombo(const char* label, const char* preview, ImGuiComboFlags flags = 0);
 bool Combo(const char* label, int* current, const char* items_separated_by_zeros);
 
-void logTitleRect(const char* what, ImVec2 a, ImVec2 b);   // PL_LOG_WINDOWS only: writes where a title text is, for tests/check_y2k_pictures.py
 
 // ---- the page behind everything ----
 // Paints the page gradient into a..b (the window rectangle) as it is at that place on the main window. Used by panelDecor; exposed for the test pictures.

@@ -85,8 +85,6 @@ r.els('themeBtn').onclick();
 const menu = r.body.children.find(e => e.id === 'themeMenu');
 const locked = menu.children.filter(b => b.className === 'lock').map(b => /<small>(.*?)<\/small>/.exec(b.innerHTML)[1]);
 o.push(`static const char* const kThemeLocked[] = {${locked.map(q).join(', ')}};   // synthwave, monochrome`);
-o.push(`static const char* const kThemeBtnTip = ${q(/id="themeBtn" class="ver" title="([^"]*)"/.exec(r.html)[1])};`);
-o.push(`static const char* const kSettingsBtnTip = ${q(/id="settingsBtn" class="ver" title="([^"]*)"/.exec(r.html)[1])};`);
 
 // ---- achievements ----
 o.push('struct AchDef { const char* id; const char* ic; const char* name; const char* how; const char* done; };');
@@ -100,7 +98,6 @@ for (const [name, id] of [['kHdrTheme', 'themeBtn'], ['kHdrLang', 'langBtn'], ['
   const [label, tip] = hb(id);
   o.push(`static const HeaderBtn ${name} = {${q(label)}, ${q(tip)}};`);
 }
-o.push(`static const char* const kHdrTitle = ${q(/<header><h1>([^<]*)<\/h1>/.exec(hdr)[1])};`);
 const simField = (lab, field) => { const a = r.html.indexOf(`SIMS['${lab}'] = {`) >= 0 ? r.html.indexOf(`SIMS['${lab}'] = {`) : r.html.indexOf(`'${lab}': {`); const m = new RegExp(`\\n  ${field}: '((?:[^'\\\\]|\\\\.)*)',`).exec(r.html.slice(a)); return m[1].replace(/\\'/g, "'"); };
 o.push('struct LabInfo { const char* name; const char* update; const char* subtitle; };');
 o.push(`static const LabInfo kLabInfo[] = {${['Orbit Lab', 'Atom Lab'].map(l => `{${q(l)}, ${q(simField(l, 'update'))}, ${q(simField(l, 'subtitle'))}}`).join(', ')}};`);
@@ -134,12 +131,7 @@ o.push(`static const LogEntry kAppLog[] = {${A.APP_LOG.map(e => `\n  {${q(e.v)},
 // ---- 💡 "Did you know?" (DYK, line 5301): the facts in the web's order ('@gift' is the 🎁 surprise) ----
 o.push(`static const char* const kDyk[] = {${A.DYK.map(q).join(',\n  ')}};`);
 const dykBtn = /<button id="dyk" type="button" title="([^"]*)"><span class="dykI">([^<]*)<\/span><span class="dykB"><b>([^<]*)<\/b>/.exec(r.html);
-o.push(`static const char* const kDykTip = ${q(dykBtn[1])};`);
-o.push(`static const char* const kDykIcon = ${q(dykBtn[2])};`);
-o.push(`static const char* const kDykLead = ${q(dykBtn[3])};`);
 const giftT = /const giftText = \(\) => PLTheme\.unlocked\(\) \? '([^']*)' : '([^']*)';/.exec(r.html);
-o.push(`static const char* const kDykGiftUnlocked = ${q(giftT[1])};`);
-o.push(`static const char* const kDykGiftNew = ${q(giftT[2])};`);
 // the two secret pop-ups, for a first find and for a second time (their template literals, checked against a web run below)
 const gTmpl = /bg\.innerHTML = `(<div id="gift" role="dialog" aria-modal="true" aria-labelledby="giftT">.*?)`;/.exec(r.html)[1];
 const mTmpl = /mbg\.innerHTML = `(<div id="gift" role="dialog" aria-modal="true" aria-labelledby="monoT">.*?)`;/.exec(r.html)[1];
@@ -156,9 +148,6 @@ o.push(`static const char* const kGiftMono[2] = {${q(inner(fill(mTmpl, true)))},
 
 // ---- the tabs (🔬 Simulations, 🎮 Games, 📚 Learn, 🏆 Achievements; the native app has no games) ----
 const tab = id => new RegExp(`<button id="${id}" type="button">([^<]*)</button>`).exec(r.html)[1];
-o.push(`static const char* const kTabSims = ${q(tab('kSim'))};`);
-o.push(`static const char* const kTabLearn = ${q(tab('kLearn'))};`);
-o.push(`static const char* const kTabAch = ${q(tab('kAch'))};`);
 
 // ---- 🏆 the Achievements tab and the pop-up ----
 const achHead = /'achHead', `<h2>([^<]*)<\/h2><div class="achCount">\$\{got\} of \$\{list\.length\} unlocked<\/div>/.exec(r.html);

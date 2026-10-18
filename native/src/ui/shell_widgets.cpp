@@ -106,14 +106,12 @@ ImU32 cFace(float a) { return colOf(faceRgb(), a); }
 // 5m part 2: in M1 a hovered / pressed face is the face moved towards the TEXT colour (a light grey, never blue: the owner's "no blue"); the other themes keep their accent tint
 static const app::Rgb& tintOf() { return g_lo ? g_f.c->fg : g_f.c->accent; }
 ImU32 cIconHover() { return colOf(app::mixRgb(faceRgb(), g_f.c->fg, g_lo ? g_lo->hoverMix : 0.18f)); }       // 5q: toolbar / top-bar buttons: towards the text colour in every theme
-ImU32 cIconPress() { return colOf(app::mixRgb(faceRgb(), g_f.c->fg, g_lo ? g_lo->pressMix : 0.30f)); }
 ImU32 cLitFillPub() { return cLitFill(); }
 ImU32 cFaceHover() { return colOf(app::mixRgb(faceRgb(), tintOf(), g_lo ? g_lo->hoverMix : 0.18f)); }
 ImU32 cFacePress() { return colOf(app::mixRgb(faceRgb(), tintOf(), g_lo ? g_lo->pressMix : 0.30f)); }
 ImU32 cEdge() { return g_f.outline ? colOf(g_f.c->fg) : colOf(g_f.c->fg, g_lo ? g_lo->edgeAlpha : app::shell::kEdgeAlpha); }
 ImU32 cHair() { return colOf(g_f.c->line); }
 ImU32 cPanel() { return colOf(g_f.c->card, g_f.panelAlpha); }
-ImU32 cBackdrop(float a) { return colOf(g_f.c->bg, a); }
 ImU32 cFactText() { return colOf(app::shell::factTextColour(*g_f.c)); }
 ImU32 cShadow(float a) { return colOf(app::shell::textShadow(*g_f.c), a); }
 

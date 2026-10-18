@@ -17,9 +17,7 @@ struct AppState;
 void loadSettings(AppState& app);                         // at start-up: read the file and set up both labs
 void saveSettingsWhenChanged(AppState& app, double nowS); // every frame: writes the file a moment after something changed
 void settingsWindow(AppState& app);                       // the Settings window, when open
-void defaultsButton(AppState& app);                       // the "Defaults" button and its "are you sure?" question (for the lab on screen)
 void setMotion(AppState& app, const std::string& k);       // auto / on (reduced) / off (full)
-void themeButton(AppState& app);                          // 🎨 Theme and its menu
 void themePicker(AppState& app, const ImVec2* hang = nullptr);                          // the menu itself: open it with ImGui::OpenPopup("##themes") from the button just before this call (the new UI's palette icon)
 // 0.15 stage 5l: the Settings window's rows, in ONE list. The window takes each heading (and the Performance card each of its rows) from this list, and search builds its "Settings" results from the same
 // list, so a row cannot be missing from search. `heading` is what the window draws; `label` is what search shows and matches; lab: -1 both labs, 0 only the Orbit Lab, 1 only the Atom Lab.

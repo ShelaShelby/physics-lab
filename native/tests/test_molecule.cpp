@@ -7,6 +7,7 @@
 // Distances, angles and the inertia tensor are worked out with this file's own small helpers, not the app's.
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -380,6 +381,39 @@ static void testSettings() {
     check(loadSettings("v1 mol=NH3 style=fill labels=0 spin=1").style == Style::SpaceFill && !loadSettings("v1 mol=NH3 labels=0").labels && loadSettings("v1 spin=1").spin, "good values read");
 }
 
+
+// 7. 0.19 audit: the settings text fuzzed (random tokens, random bytes): never a crash, always a valid camera (a rotation, zoom in range, finite pan),
+//    and what is read is written back the same way (load(save(load(x))) == load(x))
+static void testSettingsFuzz() {
+    uint64_t st = 88172645463325252ull;
+    const auto next = [&st] { st ^= st << 13; st ^= st >> 7; st ^= st << 17; return st; };
+    const char* keys[] = {"mol", "style", "labels", "spin", "zoom", "pan", "rot", "", "=", "mol=", "x"};
+    const char* vals[] = {"H2O", "C6H6", "fill", "ball", "0", "1", "-0", "1e308", "-1e308", "nan", "inf", "0x10", "1,2", "1,,2", ",", "0.5,0.5", "1,0,0,0,1,0,0,0,1",
+                          "0,1,0,-1,0,0,0,0,1", "1e-300", "\xff", "é", "1 2", "9999999999999999999999"};
+    int bad = 0;
+    for (int i = 0; i < 20000; i++) {
+        std::string t = next() % 5 ? "v1" : (next() % 2 ? "v2" : "");
+        const int n = static_cast<int>(next() % 12);
+        for (int k = 0; k < n; k++) {
+            t += next() % 7 ? " " : "\t";
+            if (next() % 9 == 0) { for (int b = static_cast<int>(next() % 8); b > 0; b--) t += static_cast<char>(next() % 256); continue; }   // raw bytes
+            t += std::string(keys[next() % (sizeof keys / sizeof *keys)]) + "=" + vals[next() % (sizeof vals / sizeof *vals)];
+        }
+        const Settings a = loadSettings(t);
+        bool ok = a.mol >= 0 && a.mol < count() && a.cam.zoom >= kZoomMin && a.cam.zoom <= kZoomMax && std::isfinite(a.cam.panX) && std::isfinite(a.cam.panY);
+        double R[9];
+        for (int j = 0; j < 9; j++) R[j] = a.cam.R[j];
+        double det = R[0] * (R[4] * R[8] - R[5] * R[7]) - R[1] * (R[3] * R[8] - R[5] * R[6]) + R[2] * (R[3] * R[7] - R[4] * R[6]);
+        ok = ok && std::fabs(det - 1) < 1e-9;
+        const Settings b = loadSettings(saveSettings(a));
+        double dr = 0;
+        for (int j = 0; j < 9; j++) dr = std::fmax(dr, std::fabs(b.cam.R[j] - a.cam.R[j]));   // (reading a view orthonormalises it again: the last bits may move)
+        ok = ok && b.mol == a.mol && b.style == a.style && b.labels == a.labels && b.spin == a.spin && b.cam.zoom == a.cam.zoom && b.cam.panX == a.cam.panX && b.cam.panY == a.cam.panY && dr < 1e-12;
+        if (!ok && bad++ < 3) std::printf("  settings fuzz: \"%s\"\n", t.c_str());
+    }
+    check(bad == 0, "settings fuzz: 20,000 random settings texts give a valid view and read back the same (" + std::to_string(bad) + " wrong)");
+}
+
 int main() {
     testGeometry();
     testSymmetry();
@@ -387,6 +421,7 @@ int main() {
     testRotational();
     testPickCamera();
     testSettings();
+    testSettingsFuzz();
     std::printf("molecule_logic: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

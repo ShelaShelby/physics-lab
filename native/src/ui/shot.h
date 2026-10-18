@@ -6,10 +6,6 @@
 
 namespace ui {
 
-// The button, with the web's label and tooltip. sameLine: put it on the previous line if it fits.
-void shotButton(AppState& app, bool sameLine);
-// The line under the buttons for a few seconds after a save: where the file is, or why it was not saved.
-void shotNote(AppState& app);
 
 // What the picture area of the window is (pixels, and window coordinates), for takeShot.
 struct ShotArea {

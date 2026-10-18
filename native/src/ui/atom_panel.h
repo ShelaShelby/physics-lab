@@ -38,8 +38,6 @@ std::vector<AtomSheetCard> atomSheetCards(const AppState& app);   // the cards t
 void atomSheetCard(AppState& app, const std::string& id);         // draws one at the current ImGui cursor, by the very same function the old panel calls
 std::vector<std::string> atomPlainLines(const std::string& html);      // "<div><b>A:</b> x</div>" -> {"A: x"}: tags removed, entities decoded, one line per <div> / <p>
 
-// The two buttons at the top of every panel: Orbit Lab / Atom Lab.
-void labPicker(AppState& app);
 void openLab(AppState& app, int lab);          // switch to a lab (0 Orbit Lab, 1 Atom Lab)
 
 

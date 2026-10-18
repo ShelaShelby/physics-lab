@@ -69,8 +69,6 @@ void nbodyAccelN(int n, const double* gm, const Vec3* x, Vec3* a);
 // One Wisdom-Holman step of length h (negative h steps backwards); index 0 is the Sun. gr = true adds the Sun's general-relativity potential (above) to the planets.
 void nbodyStepN(int n, const double* gm, Vec3* x, Vec3* v, double h, bool gr = false);
 
-// Acceleration of every body from the others.
-void nbodyAccel(const Vec3* x, Vec3* a);
 // One step of length h (negative h steps backwards in time): the Wisdom-Holman map above, with the general-relativity potential when gr is true.
 void nbodyStep(NBodyState& s, double h, bool gr = false);
 // The conserved quantities. Energy is per "G" (GM instead of mass): E' = sum GM_i v_i^2 / 2 - sum_{i<j} GM_i GM_j / r_ij (m^5/s^4); the others the same way.

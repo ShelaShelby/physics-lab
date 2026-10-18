@@ -54,6 +54,13 @@ std::string savePrefs(const Prefs& p) {
     return o.str();
 }
 
+static const char* const kLabNames[kLabCount] = {"Orbit Lab", "Atom Lab", "Molecule Lab"};
+const char* labName(int index) { return index >= 0 && index < kLabCount ? kLabNames[index] : kLabNames[0]; }
+int labIndex(const std::string& name) {
+    for (int i = 0; i < kLabCount; i++) if (name == kLabNames[i]) return i;
+    return 0;
+}
+
 Prefs loadPrefs(const std::string& text) {
     Prefs p;
     std::istringstream in(text);
@@ -63,7 +70,7 @@ Prefs loadPrefs(const std::string& text) {
         if (line.empty() || line[0] == '#') continue;
         const std::size_t eq = line.find('=');
         if (eq == std::string::npos) continue;
-        const std::string k = line.substr(0, eq), v = line.substr(eq + 1);
+        const std::string k = line.substr(0, eq), v = clean(line.substr(eq + 1));   // (0.19: a stray CR inside a value is dropped here as when saving, so the file reads back the same)
         if (k == "theme") { if (themeArchived(v)) p.theme = "dark"; else if (validTheme(v)) p.theme = v; }   // 0.15 stage 5m: an archived theme opens as Dark, once, no message
         else if (k == "textSize") { if (validTextSize(v)) p.textSize = v; }
         else if (k == "font") { if (validFont(v)) p.font = v; }
@@ -108,7 +115,7 @@ Prefs loadPrefs(const std::string& text) {
                 ws.hasPos = f[2] != "-"; ws.x = int(x); ws.y = int(y); ws.maximized = m == 1;
                 p.window = ws;
             }
-        } else if (k == "lab") { if (v == "Orbit Lab" || v == "Atom Lab" || v == "Defense Lab" || v == "Molecule Lab") p.lab = v; }
+        } else if (k == "lab") { if (labIndex(v) > 0 || v == kLabNames[0]) p.lab = v; }   // 0.19: a removed lab (Defense Lab) or an unknown name keeps the default
         else if (k.rfind("orbit.", 0) == 0) p.orbit[k.substr(6)] = v;
         else if (k.rfind("atom.", 0) == 0) p.atom[k.substr(5)] = v;
     }

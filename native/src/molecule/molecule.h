@@ -15,8 +15,7 @@
 
 namespace molecule {
 
-constexpr const char* kLabName = "Molecule Lab";
-constexpr int kLabIndex = 3;               // AppState::lab (shown 3rd in the lab picker: Orbit, Atom, Molecule, then the Defense Lab game)
+constexpr int kLabIndex = 2;               // AppState::lab (0.19: Orbit 0, Atom 1, Molecule 2; app::labName)
 
 enum El { H = 0, C, N, O, Cl, kElCount };
 struct Element {

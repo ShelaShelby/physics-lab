@@ -34,13 +34,14 @@ static std::string roundFixed(double x, int d) {
 }
 
 std::string fixed(double x, int d) {
-    if (std::fabs(x) >= 1e21) return jsString(x);            // as toFixed
+    if (std::isnan(x) || std::fabs(x) >= 1e21) return jsString(x);   // as toFixed (also NaN and Infinity)
     std::string s = roundFixed(x, d);
     if (s.size() > 1 && s[0] == '-' && s.find_first_not_of("-0.") == std::string::npos) s.erase(0, 1);   // no "-0.00"
     return s;
 }
 
 std::string commas(double x) {
+    if (!std::isfinite(x) || std::fabs(x) >= 9e15) return jsLocale(std::round(x), 0);   // 0.19: NaN, Infinity and numbers too big for a long long (as toLocaleString)
     long long v = std::llround(x);
     const bool neg = v < 0;
     std::string digits = std::to_string(neg ? -v : v), out;
@@ -52,8 +53,8 @@ std::string commas(double x) {
 }
 
 std::string plainNumber(double x) {
-    if (x == 0 || !std::isfinite(x)) return x == 0 ? "0" : fixed(x, 0);
-    char buf[64];
+    if (x == 0 || !std::isfinite(x) || std::fabs(x) >= 1e21) return x == 0 ? "0" : jsString(x);   // (0.19: 1e21 and up as String(x); the digits no longer cut off)
+    char buf[400];
     int p = 1;
     for (; p < 17; p++) {                             // the fewest significant digits that read back as the same number
         std::snprintf(buf, sizeof buf, "%.*g", p, x);
@@ -74,7 +75,7 @@ std::string precision(double x, int digits) {
 std::string superscript(int n) {
     static const char* sup[] = {"⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"};
     std::string s = n < 0 ? "⁻" : "";
-    for (char c : std::to_string(std::abs(n))) s += sup[c - '0'];
+    for (char c : std::to_string(std::llabs(static_cast<long long>(n)))) s += sup[c - '0'];
     return s;
 }
 
@@ -135,6 +136,7 @@ static void roundSig(double x, int p, std::string& digits, int& e) {
 static std::string expTail(int e) { return std::string("e") + (e >= 0 ? "+" : "-") + std::to_string(std::abs(e)); }
 
 std::string jsToExponential(double x, int f) {
+    if (!std::isfinite(x)) return jsString(x);
     if (x == 0) return (f > 0 ? "0." + std::string(f, '0') : "0") + "e+0";
     if (x < 0) return "-" + jsToExponential(-x, f);
     std::string d; int e;
@@ -143,6 +145,7 @@ std::string jsToExponential(double x, int f) {
 }
 
 std::string jsToPrecision(double x, int p) {
+    if (!std::isfinite(x)) return jsString(x);
     if (x == 0) return p > 1 ? "0." + std::string(p - 1, '0') : "0";
     if (x < 0) return "-" + jsToPrecision(-x, p);
     std::string d; int e;
@@ -154,6 +157,7 @@ std::string jsToPrecision(double x, int p) {
 
 std::string jsLocale(double x, int maxFrac) {   // toLocaleString('en'): grouping, at most maxFrac fraction digits
     if (std::isnan(x)) return "NaN";
+    if (std::isinf(x)) return x > 0 ? "∞" : "-∞";
     if (x == 0) return std::signbit(x) ? "-0" : "0";
     const bool neg = x < 0;
     // Intl rounds the shortest decimal form (1.0005 -> 1.001), ties away from zero
@@ -226,6 +230,7 @@ std::string years(double y) {
 }
 
 std::string kg(double v) {
+    if (!(v > 0) || !std::isfinite(v)) return jsString(v) + " kg";   // 0.19: no logarithm of 0, a negative number or NaN
     const int e = static_cast<int>(std::floor(std::log10(v)));
     return fixed(v / std::pow(10.0, e), 1) + "×10" + superscript(e) + " kg";
 }
@@ -260,7 +265,7 @@ int yearUTC(int64_t ms) {
 }
 
 std::string simDate(int64_t epochMs, double yrs) {
-    if (yrs < 200000) return dateUTC(epochMs + static_cast<int64_t>(std::llround(yrs * 365.25 * 86400000.0)));
+    if (std::fabs(yrs) < 200000) return dateUTC(epochMs + static_cast<int64_t>(std::llround(yrs * 365.25 * 86400000.0)));
     return "the year " + commas(yearUTC(epochMs) + yrs);
 }
 

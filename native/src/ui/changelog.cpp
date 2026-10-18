@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The native app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.19", "Defense Lab removed, clean-up and audit",
+     "The Defense Lab (the factory game of 0.17) is removed: the app has three labs again, Orbit Lab, Atom Lab and Molecule Lab. A settings file from 0.18 still loads: if it was left on the Defense Lab, "
+     "the app opens the Orbit Lab, and every other setting is kept (the Defense Lab's save file is left untouched on the disk). Fixed: the clickable word \"monochrome\" in the Atom Lab guide "
+     "(What am I even looking at?, \"What is to scale\") did nothing since 0.16, so the Monochrome theme and the Sharp Eyes achievement could not be found; it works again. "
+     "Unused code left over from the old interface was deleted. Not measured: speed on a real graphics card, and how the mouse feels on Windows."},
     {"0.18", "New: the Molecule Lab, part 1: a viewer",
      "A new lab, third in the lab list: 15 small molecules (H2, N2, O2, HCl, CO2, H2O, O3, NH3, CH4, HCN, C2H2, H2CO, C2H4, CH3OH, C6H6) in 3D, in their MEASURED shape: every bond length and angle "
      "is NIST CCCBDB's experimental value with its reference code, and the 3D shape is built from them (where the shape needs a symmetry, the panel says which). Methanol's H-C-O angle is not in CCCBDB: "
@@ -514,7 +519,6 @@ const char* const kWebAtomNote =
 constexpr const char* kStage = "alpha";
 
 const char* appVersion() { return PL_VERSION; }
-const char* appStage() { return kStage; }
 std::string appVersionLabel() { return *kStage ? std::string(PL_VERSION) + " " + kStage : std::string(PL_VERSION); }
 
 const NativeEntry* nativeHistory(int& count) {
@@ -526,7 +530,7 @@ const NativeEntry* nativeHistory(int& count) {
 
 // The web's changelog pop-up for the lab on screen ("Orbit Lab · changelog"): each update's number, title and text
 void labLogWindow(bool* open, int lab) {
-    if (lab > 1) { *open = false; return; }                // 0.17: the Defense Lab has no web changelog (its history is in What's new)
+    if (lab > 1) { *open = false; return; }                // the Molecule Lab has no web changelog (its history is in What's new)
     if (!*open) return;
     const app::LabInfo& L = app::kLabInfo[lab];
     const ImGuiViewport* vp = ImGui::GetMainViewport();

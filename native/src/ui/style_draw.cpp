@@ -502,11 +502,6 @@ float panelDecor(PanelKind kind, bool hug) {
     return kind == PanelKind::Floating ? shadowBehind(w->Pos, ImVec2(w->Pos.x + w->Size.x, w->Pos.y + w->Size.y), w->WindowRounding, hug) : 0.0f;
 }
 
-void logTitleRect(const char* what, ImVec2 a, ImVec2 b) {                          // for the automatic picture checks (PL_LOG_WINDOWS): where a title is drawn
-    static const bool logWindows = std::getenv("PL_LOG_WINDOWS") != nullptr;
-    if (logWindows) std::fprintf(stderr, "PLTITLETEXT %s %d %d %d %d\n", what, int(a.x), int(a.y), int(b.x - a.x + 1), int(b.y - a.y + 1));
-}
-
 void pushDockedBg() { if (glassy()) ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0)); }
 void popDockedBg() { if (glassy()) ImGui::PopStyleColor(); }
 // the title bar of a window with a styled bar has its own text colour; and the title (not the content) may be in the theme's display font

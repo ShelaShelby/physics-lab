@@ -26,6 +26,17 @@ struct Lcg {                                                 // a fixed pseudo-r
     double in(double lo, double hi) { return lo + (hi - lo) * next(); }
 };
 
+// 0.19 audit: cutting a long search result removes whole UTF-8 characters, one at a time (the old code removed two ASCII characters at once, and after an
+// ASCII character the last byte of a character such as "°" or "×", which left a broken character on screen)
+void testDropLastChar() {
+    std::string s = "a°b";
+    dropLastChar(s); checkTrue("dropLastChar: one ASCII character (a°b -> a°)", s == "a°");
+    dropLastChar(s); checkTrue("dropLastChar: a 2-byte character (a° -> a)", s == "a");
+    s = "x×yz"; dropLastChar(s); checkTrue("dropLastChar: x×yz -> x×y", s == "x×y");
+    s = "😀"; dropLastChar(s); checkTrue("dropLastChar: a 4-byte character", s.empty());
+    s.clear(); dropLastChar(s); checkTrue("dropLastChar: nothing to drop", s.empty());
+}
+
 void testShellTypeScale() {
     // the numbers written in DESIGN.md section 1
     checkTrue("type: Caption is 13 u with a 12 px floor", typeDef(Type::Caption).u == 13 && typeDef(Type::Caption).floorPx == 12);
@@ -177,7 +188,7 @@ static std::vector<double> freeCentres(double dpi, double W, double H, bool dock
     std::vector<double> centres;
     for (int it = 0; it < 12; it++) {
         const Frame f = makeFrame(W, H, m, tw, rw, rh, dockW, 0, sceneCx);
-        const Rect card{f.freeW - m.s12 - m.em(21) - (dockOpen ? 0 : 0), f.topBar.bottom() + m.s12, m.em(21), m.em(24)};
+        const Rect card{f.freeW - m.s12 - m.em(21), f.topBar.bottom() + m.s12, double(m.em(21)), double(m.em(24))};
         Rect pick = placePanel(Anchor::UnderChip, m.em(38), m.em(60), f, m, W / 2);
         pick = sideStep(pick, card, f.window, m.s12, m.s12);
         const Rect fl = factLineRect(f, m, m.em(60), 0, false);
@@ -815,6 +826,7 @@ void testShellReadout() {
 }
 
 void testShell() {
+    testDropLastChar();
     testShellDock();
     testShellHandle();
     testShellReadout();

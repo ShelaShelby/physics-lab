@@ -5,8 +5,6 @@
 #include "app/prefs.h"
 #include "atom/atom_sim.h"
 #include "atom/atom_view.h"
-#include "defense/defense_lab.h"
-#include "defense/defense_view.h"
 #include "molecule/molecule_view.h"
 #include "orbit/orbit_view.h"
 #include "orbit/solar_system.h"
@@ -60,8 +58,8 @@ struct AppState {
     std::string learnJump;                 // a section to scroll to in the open guide ("bar" = back to the list of headings)
     // ---- Atom Lab ----
     app::Prefs prefs;                      // everything remembered between runs (theme, text size, unlocks, ...); see ui/settings.h
-    int lab = 0;                           // the lab on screen: 0 Orbit Lab, 1 Atom Lab, 2 Defense Lab (0.17), 3 Molecule Lab (0.18; each keeps its state while another is shown)
-    bool visited[4] = {false, false, false, false};      // labs already opened this run (reduced motion pauses a lab the first time it opens)
+    int lab = 0;                           // the lab on screen: 0 Orbit Lab, 1 Atom Lab, 2 Molecule Lab (app::labName; each keeps its state while another is shown)
+    bool visited[app::kLabCount] = {};      // labs already opened this run (reduced motion pauses a lab the first time it opens)
     atom::AtomLab atom;
     atom::AtomView atomView;
     double tempK = 293.15;                 // the Temperature slider, K (kept while you switch elements, as in the web)
@@ -70,9 +68,6 @@ struct AppState {
     std::string atomLearnJump;             // a section to scroll to ("top", "bar" or a section key)
     std::string scaleTab = "scale", massTab = "parts";
     int scaleObj = 3;                      // the Scale guide's object (a football)
-    // ---- Defense Lab (0.17 stage 1) ----
-    defense::DefenseLab defense;
-    defense::DefenseView defenseView;
     // ---- Molecule Lab (0.18 stage 1) ----
     molecule::MoleculeLab molecule;
     molecule::MoleculeView moleculeView;
