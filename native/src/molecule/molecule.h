@@ -61,6 +61,7 @@ struct Molecule {
     bool linear = false, planar = false;
     std::string shapeNote;       // how the 3D shape was fixed (the symmetry assumed)
     bool derivedAngle = false;   // has a derived value (shown "H-C-O angle derived")
+    bool storedFrame = false;    // 0.21: drawn in the stored frame of data/molecules/xyz (the frame of the Realistic data), not re-placed at start-up
 };
 
 int count();                               // 15

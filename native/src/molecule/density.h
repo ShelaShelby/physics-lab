@@ -92,6 +92,7 @@ bool isClosed(const Mesh& m, std::string* why = nullptr);   // every edge in exa
 
 // the density surface of a molecule, angstrom, coloured by the potential (au) at each vertex. The field is ln rho on every `stride`-th grid point (stride 2: 0.5 bohr)
 void densitySurface(const Data& d, double iso, int stride, Mesh& out);
-double potentialRange(const Mesh& m);              // max |V| over the vertices: the symmetric colour scale is -range..+range
+double potentialRange(const Mesh& m);
+              // max |V| over the vertices: the symmetric colour scale is -range..+range
 
 }  // namespace molecule::dens

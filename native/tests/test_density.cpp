@@ -91,13 +91,14 @@ int main() {
         if (mi < 0) continue;
         const Molecule& m = get(mi);
         bool same = m.atoms.size() == d->nuclei.size();
-        double worst = 0;
+        for (std::size_t i = 0; same && i < m.atoms.size(); i++)
+            same = d->nuclei[i].Z == (m.atoms[i].el == H ? 1 : m.atoms[i].el == C ? 6 : m.atoms[i].el == N ? 7 : m.atoms[i].el == O ? 8 : 17);
+        double worst = 0;                                  // 0.21: the viewer draws the molecule in exactly the frame the density was computed in (on every compiler)
         for (std::size_t i = 0; same && i < m.atoms.size(); i++) {
             const dens::Nucleus& u = d->nuclei[i];
-            same = u.Z == (m.atoms[i].el == H ? 1 : m.atoms[i].el == C ? 6 : m.atoms[i].el == N ? 7 : m.atoms[i].el == O ? 8 : 17);
             worst = std::max({worst, std::fabs(u.x * dens::kA0Angstrom - m.atoms[i].x), std::fabs(u.y * dens::kA0Angstrom - m.atoms[i].y), std::fabs(u.z * dens::kA0Angstrom - m.atoms[i].z)});
         }
-        check(same && worst < 1e-8, std::string(r.id) + ": the calculation's nuclei are the viewer's atoms (worst " + f(worst) + " A)");
+        check(same && worst < 1e-8 && m.storedFrame, std::string(r.id) + ": the calculation's nuclei are the viewer's atoms (worst " + f(worst) + " A)");
         check(d->electrons == r.electrons, std::string(r.id) + ": " + std::to_string(r.electrons) + " electrons in the calculation (file says " + std::to_string(d->electrons) + ")");
     }
 

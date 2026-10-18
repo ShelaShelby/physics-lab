@@ -265,9 +265,15 @@ void MoleculeView::drawSketch(render::Renderer2D& r, ImDrawList* text, double ui
 }
 
 // ---- 0.21 stage 1: the Realistic style ----
-bool RealCache::ensure(const std::string& id, int nDots, int isoIdx) {
-    if (!data || data->id != id) { data = dens::get(id); if (data) gridElectrons = dens::electronCount(*data); }
-    if (!data) return false;
+bool RealCache::ensure(const std::string& id, int nDots, int isoIdx, const Molecule& m) {
+    if (!data || data->id != id) {
+        data = dens::get(id);
+        if (data) {
+            gridElectrons = dens::electronCount(*data);
+            dotsId.clear(); meshId.clear();
+        }
+    }
+    if (!data || !m.storedFrame) return false;              // (the data is in the stored frame: a molecule drawn in another frame gets no cloud rather than a wrong one)
     if (dotsId != id || dotsN != nDots) {                    // the Monte Carlo dots: fixed seed, so the same molecule always shows the same cloud
         const auto t0 = std::chrono::steady_clock::now();
         dens::sampleDots(*data, nDots, dens::kDotSeed, dots, cdf);
@@ -304,7 +310,7 @@ void MoleculeView::drawRealistic(render::Renderer2D& r, MoleculeLab& L, const ap
     const Molecule& m = L.mol();
     const double s = L.scale(), cx = L.cx(), cy = L.cy(), W = L.viewW, H = L.viewH;
     project(m, L.set.cam, Style::Realistic, cx, cy, s, proj_);
-    if (!L.real.ensure(m.id, L.set.realDots, L.set.realIso)) return;
+    if (!L.real.ensure(m.id, L.set.realDots, L.set.realIso, m)) return;
     const RealCache& rc = L.real;
     const double* R = L.set.cam.R;
     const double px = L.set.cam.panX, py = L.set.cam.panY;

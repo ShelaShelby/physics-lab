@@ -185,6 +185,7 @@ Each lab keeps its state while another one is on screen.
 | `src/render/rock_compute.*`, `mesh.h` | (0.13 stage 4) The OpenGL 4.3 compute object that places the belt rocks, and the retained-mesh types of the chart of nuclides |
 | `src/orbit/belt_layer.*` | (0.13 stage 4) The belts' rocks on the Orbit Lab picture: the CPU way or the GPU way, no Dear ImGui |
 | `src/atom/chart_mesh.*` | (0.13 stage 4) The chart's tiles and blocks as a retained mesh, and the CPU twin of its vertex shader |
+| `src/molecule/viewer_frame.inc` | (0.21) The 15 viewer molecules' coordinates in the stored frame of `data/molecules/xyz` (made by `tools/make_viewer_frame.py`): drawn as they are, so every compiler shows the frame the Realistic data was computed in |
 | `src/molecule/density.*` | (0.21) The Realistic style's data and maths: reading the embedded density files, integrals (electron count, dipole), the Monte Carlo dots, marching tetrahedra; no graphics, tested by `density_logic` |
 | `src/molecule/molecule.*` | (0.18) The Molecule Lab: the 15 molecules from the CCCBDB values, masses, picking, camera, settings text; no graphics, tested by `molecule_logic` |
 | `src/molecule/molecule_view.*`, `src/ui/shell_molecule.cpp` | (0.18) Drawing the molecule (one instanced draw call) and its bar and Controls panel; (0.20) the builder's sketch and Build panel |

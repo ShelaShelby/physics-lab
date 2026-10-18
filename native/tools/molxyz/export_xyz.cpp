@@ -1,5 +1,5 @@
 // 0.21 stage 1: writes the 15 viewer molecules' coordinates (exactly what the app draws: molecule::get(i).atoms, angstrom) to <dir>/<id>.xyz,
-// for tools/make_density_data.py. Run: molecule_xyz <dir>. %.10f keeps every digit that matters (the coordinates are doubles built from CCCBDB values).
+// for tools/make_density_data.py. Run: molecule_xyz <dir>. %.17g keeps every bit of the double (the coordinates are doubles built from CCCBDB values).
 #include <cstdio>
 #include <string>
 
@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
         FILE* f = std::fopen(path.c_str(), "w");
         if (!f) { std::fprintf(stderr, "cannot write %s\n", path.c_str()); return 1; }
         std::fprintf(f, "%d\n%s %s: the Physics Lab Molecule Lab viewer geometry (CCCBDB experimental, principal axes, centre of mass at 0), angstrom\n", static_cast<int>(m.atoms.size()), m.id.c_str(), m.name.c_str());
-        for (const molecule::Atom& a : m.atoms) std::fprintf(f, "%-2s %16.10f %16.10f %16.10f\n", molecule::element(a.el).sym, a.x, a.y, a.z);
+        for (const molecule::Atom& a : m.atoms) std::fprintf(f, "%-2s %25.17g %25.17g %25.17g\n", molecule::element(a.el).sym, a.x, a.y, a.z);
         std::fclose(f);
     }
     return 0;

@@ -450,6 +450,8 @@ int main() {
     testPickCamera();
     testSettings();
     testRealSettings();
+    for (int i = 0; i < count(); i++)   // 0.21: every viewer molecule is drawn in its stored frame (data/molecules/xyz), the same on every compiler
+        check(get(i).storedFrame, get(i).id + ": drawn in the stored frame (its shape equals the one built from the CCCBDB values)");
     testSettingsFuzz();
     std::printf("molecule_logic: %d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;

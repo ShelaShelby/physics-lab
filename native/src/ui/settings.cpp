@@ -210,13 +210,13 @@ void loadSettings(AppState& app) {
     g_written = app::savePrefs(app.prefs);
 }
 
-void saveSettingsWhenChanged(AppState& app, double nowS) {
+void saveSettingsWhenChanged(AppState& app, double nowS, bool now) {
     if (app.benchRunning) return;                             // the benchmark changes the labs on purpose and gives them back: not written
     labsToPrefs(app, app.prefs);
     const std::string text = app::savePrefs(app.prefs);
     if (text == g_written) { g_changedAt = -1; return; }
     if (g_changedAt < 0) g_changedAt = nowS;
-    if (nowS - g_changedAt < 0.25) return;                    // written a moment after the last change, like the web's remember()
+    if (!now && nowS - g_changedAt < 0.25) return;            // written a moment after the last change, like the web's remember() (0.21: and at once when the app closes)
     const std::string path = settingsPath();
     if (path.empty()) return;
     if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; }

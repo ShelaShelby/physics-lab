@@ -598,6 +598,7 @@ int main(int, char**) {
     SDL_AddEventWatch(onLiveExpose, &live);
     while (running) runFrame(false);
     SDL_RemoveEventWatch(onLiveExpose, &live);
+    ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);   // 0.21: a change in the last quarter second before closing was lost (seen in molecule_pictures on a fast run)
     ui::logFontAtlas();                              // PL_LOG_ATLAS=1 (stage 5j memory check): once, at the end
     {   // PL_LOG_SHELL: what the new UI drew (text sizes, rectangles), for the automatic checks
         int w = 0, h = 0;

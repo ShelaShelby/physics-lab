@@ -34,7 +34,7 @@ struct RealCache {
     double potRange = 0;                     // the symmetric colour scale: -potRange..+potRange au (max |V| on this surface)
     double dotsMs = 0, meshMs = 0;           // how long the last rebuilds took (for the report)
     unsigned revision = 0;                   // goes up whenever the mesh is rebuilt
-    bool ensure(const std::string& id, int dotsN, int isoIdx);   // false: no data for this molecule
+    bool ensure(const std::string& id, int dotsN, int isoIdx, const Molecule& m);   // false: no data for this molecule (or the molecule is not drawn in the stored frame)
 };
 
 struct MoleculeLab {

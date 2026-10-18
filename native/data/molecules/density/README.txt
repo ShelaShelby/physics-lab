@@ -6,7 +6,9 @@ Everything in this folder is COMPUTED, not measured. Made once by tools/make_den
 
 How it was made (18 Oct 2026, in the cloud session):
   1. Geometry: the app's own viewer coordinates, exported by the molecule_xyz tool (tools/molxyz/export_xyz.cpp, built with the unit tests) into
-     ../xyz/<id>.xyz (angstrom, CCCBDB experimental shapes, principal axes, centre of mass at 0), converted to bohr with CODATA 2022 a0 = 0.529177210544 A.
+     ../xyz/<id>.xyz (angstrom, %.17g: every bit of the double; CCCBDB experimental shapes, principal axes, centre of mass at 0), converted to bohr with CODATA 2022
+     a0 = 0.529177210544 A. Since 0.21 the app DRAWS the 15 molecules in exactly this frame (src/molecule/viewer_frame.inc, tools/make_viewer_frame.py): placing them
+     again at start-up gave compiler-dependent in-plane axes for benzene (MSVC vs GCC).
        /home/user/build/molecule_xyz data/molecules/xyz
   2. pip install pyscf numpy   (PySCF 2.14.0 was used), then from native/:
        python3 tools/make_density_data.py data/molecules/xyz data/molecules/density

@@ -15,7 +15,7 @@ namespace ui {
 struct AppState;
 
 void loadSettings(AppState& app);                         // at start-up: read the file and set up both labs
-void saveSettingsWhenChanged(AppState& app, double nowS); // every frame: writes the file a moment after something changed
+void saveSettingsWhenChanged(AppState& app, double nowS, bool now = false); // every frame: writes the file a moment after something changed; now: at once (0.21: when the app closes, so a change in its last moment is kept)
 void settingsWindow(AppState& app);                       // the Settings window, when open
 void setMotion(AppState& app, const std::string& k);       // auto / on (reduced) / off (full)
 void themePicker(AppState& app, const ImVec2* hang = nullptr);                          // the menu itself: open it with ImGui::OpenPopup("##themes") from the button just before this call (the new UI's palette icon)

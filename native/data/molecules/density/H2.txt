@@ -1,7 +1,7 @@
 H2: COMPUTED electron density and electrostatic potential (not measured)
 Software: PySCF 2.14.0; functional: PySCF 'b3lyp' (libxc HYB_GGA_XC_B3LYP, id 402); basis: aug-cc-pvtz; DFT grid level 3; RKS (closed shell)
 Geometry: data/molecules/xyz/H2.xyz (the app's viewer coordinates, CCCBDB experimental), converted to bohr with CODATA 2022 a0 = 0.529177210544 angstrom
-Total energy: -1.18002155 hartree; electrons: 2; SCF + dipole time: 2 s; total time 3 s
-Dipole (from the density matrix): (-0.0000, -0.0000, -0.0000) D, |mu| = 0.0000 D  (1 e bohr = 2.5417464715 D)
+Total energy: -1.18002155 hartree; electrons: 2; SCF + dipole time: 1 s; total time 2 s
+Dipole (from the density matrix): (0.0000, -0.0000, -0.0000) D, |mu| = 0.0000 D  (1 e bohr = 2.5417464715 D)
 Density grid: 47 x 41 x 41 points, step 0.25 bohr, margin 5.0 bohr; fine cubes: none; partition r1 0.1, r0 0.6 bohr
 Potential grid: 31 x 27 x 27 points, step 0.4 bohr, 0.0001 au per unit

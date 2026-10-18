@@ -171,7 +171,7 @@ static void buildControls(AppState& app, Panel& p, const SectionFn& section) {
 static void realisticControls(molecule::MoleculeLab& L, Panel& p, const SectionFn& section) {
     namespace dn = molecule::dens;
     const molecule::Molecule& mo = L.mol();
-    const bool ok = L.real.ensure(mo.id, L.set.realDots, L.set.realIso);
+    const bool ok = L.real.ensure(mo.id, L.set.realDots, L.set.realIso, mo);
     if (!section("realistic", "Realistic: electron density", true)) return;
     if (!ok) { pCaption(p, "No computed density for this molecule.", false); return; }
     const dn::Data& d = *L.real.data;

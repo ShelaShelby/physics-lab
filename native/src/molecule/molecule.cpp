@@ -84,9 +84,30 @@ void place(Molecule& m) {
 
 // The molecules. Every number is CCCBDB's (Release 22, experimental geometry / rotational constants pages, read by the owner on 18 Oct 2026; reference code after it).
 // Names: the usual (IUPAC-accepted) names; not checked against CCCBDB's own page titles (not reachable from the cloud session).
+#include "molecule/viewer_frame.inc"
+
+// 0.21: the shape built from the CCCBDB values is placed (centre of mass, principal axes) and then REPLACED by the stored frame of the same molecule
+// (data/molecules/xyz, written once from this placement on Linux), the frame the Realistic style's density was computed in. Re-diagonalising at every start
+// gave compiler-dependent axes for molecules with two equal moments (MSVC turned benzene in its plane). The stored frame is used only if it has the same
+// elements in the same order and the same shape (every distance within 1e-8 angstrom; tests/test_molecule.cpp and test_density.cpp check it), else the placement is kept.
+void useStoredFrame(Molecule& m) {
+    for (const Frame& f : kViewerFrame) {
+        if (m.id != f.id || f.n != static_cast<int>(m.atoms.size())) continue;
+        for (int i = 0; i < f.n; i++) if (std::string(kEl[m.atoms[i].el].sym) != f.atoms[i].el) return;
+        for (int i = 0; i < f.n; i++)
+            for (int j = i + 1; j < f.n; j++) {
+                const FrameAtom& a = f.atoms[i]; const FrameAtom& b = f.atoms[j];
+                if (std::fabs(std::sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z)) - dist(m.atoms[i], m.atoms[j])) > 1e-8) return;
+            }
+        for (int i = 0; i < f.n; i++) { m.atoms[i].x = f.atoms[i].x; m.atoms[i].y = f.atoms[i].y; m.atoms[i].z = f.atoms[i].z; }
+        m.storedFrame = true;
+        return;
+    }
+}
+
 std::vector<Molecule> buildAll() {
     std::vector<Molecule> all;
-    const auto add = [&](Molecule m) { place(m); all.push_back(std::move(m)); };
+    const auto add = [&](Molecule m) { place(m); useStoredFrame(m); all.push_back(std::move(m)); };
     const auto diatomic = [&](const char* id, const char* formula, const char* hill, const char* name, int e0, int e1, int order, double r, const char* ref, const char* note,
                               double B, const char* bref) {
         Molecule m;
