@@ -1,0 +1,2 @@
+The CODATA 2022 paper (P. J. Mohr, D. B. Newell, B. N. Taylor, E. Tiesinga, arXiv:2409.03787, PDF as received) that tests/test_calc.cpp, tests/test_calc_qm.inc, tests/test_zeeman.inc and the Calculator's constants cite as "data/calc"
+is in the private repo ShelaShelby/physics-lab-sources at data/calc/codata2022_mohr2024_arxiv2409.03787.pdf (native/data/SOURCES.md has its reference, URL and sha256). The tests type the values in and name the table.

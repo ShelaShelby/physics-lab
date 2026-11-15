@@ -1,0 +1,10 @@
+C2H2: B3LYP/aug-cc-pvtz, PySCF 2.14.0, at the app's (measured, CCCBDB) geometry; CALCULATED, not measured
+total energy -77.3644789110 hartree; largest gradient component 1.28e-02 hartree/bohr (the measured shape is not the B3LYP minimum)
+mode  wavenumber/cm-1  IR intensity/(km/mol)
+   1        668.24          0.0000
+   2        668.24          0.0000
+   3        773.94         98.4748
+   4        773.94         98.4748
+   5       2031.49          0.0000
+   6       3399.28         91.7590
+   7       3499.67          0.0000

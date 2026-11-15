@@ -1,0 +1,10 @@
+# Dissociation energies D0 (0 K, gas, ground vibrational state) of N2, O2 and HCl: B. deB. Darwent, "Bond Dissociation Energies in Simple Molecules",
+# NSRDS-NBS 31 (National Bureau of Standards, 1970), the table of bond dissociation energies; the value the author recommends (bold, the last of each bond).
+# Saved as received: darwent_1970_nsrds_nbs31.pdf (nvlpubs.nist.gov/nistpubs/Legacy/NSRDS/nbsnsrds31.pdf, 14 Nov 2026), a scan with a text layer.
+# Read from the text layer (pdftotext -layout) and checked against the page images: N-N page 45, O-O page 47, Cl-H page 32 (PDF pages).
+# The uncertainty is the printed one where the scan shows it next to the kJ/mol value (N2: not legible beside the kJ/mol value, left out).
+# H2's D0 is not taken from here: the lab uses Huber & Herzberg's (the saved WebBook page, footnote 125).
+# molecule bond D0(kJ/mol) unc(kJ/mol) D0(kcal/mol) note
+N2 N-N 941.69 nan 225.07 "Thermochemical; based on [9]" (NBS Technical Note 270-3)
+O2 O-O 493.59 0.4 117.97 "Thermochemical; based on [9]"
+HCl Cl-H 428.02 0.42 102.3 "Thermochemical; based on [9]"

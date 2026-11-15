@@ -1,0 +1,1 @@
+NASA Science, "Oort Cloud Facts" (nasa_oort_cloud_facts_read_2026-11-11.html, saved as received, quoted in src/orbit/belts.h) is in the private repo ShelaShelby/physics-lab-sources at data/oort/ (native/data/SOURCES.md).

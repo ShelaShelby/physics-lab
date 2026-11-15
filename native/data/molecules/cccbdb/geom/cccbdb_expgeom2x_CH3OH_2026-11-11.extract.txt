@@ -1,0 +1,117 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/cccbdb/geom/cccbdb_expgeom2x_CH3OH_2026-11-11.html
+# Reference: NIST Computational Chemistry Comparison and Benchmark Database (CCCBDB), NIST Standard Reference Database 101, Release 22: experimental geometry page of CH3OH (CAS 67-56-1)
+# URL: https://cccbdb.nist.gov/expgeom2x.asp?casno=67-56-1&charge=0
+# Date read: 2026-11-11
+# sha256 of the original: c3cad3d3d6a2864ed08b523d4a4a276617ead182891b48edefcb0d4961aba377
+# Place in the original: the geometry table of the page, from its first heading to the heading that follows it (HTML as received)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin geometry table
+Internal coordinates</H2> (distances (r) in &Aring;) (angles (a) in degrees) (dihedrals (d) in degrees)
+<table border="1">
+<TR>
+<TH ROWSPAN=2>Description</TH>
+<TH ROWSPAN=2 class="exper">Value</TH>
+<TH COLSPAN=4>Connectivity</TH>
+<TH ROWSPAN=2>Reference</TH>
+<TH ROWSPAN=2>Comment</TH>
+</TR>
+<TR>
+<TH>Atom 1</TH>
+<TH>Atom 2</TH>
+<TH>Atom 3</TH>
+<TH>Atom 4</TH>
+</TR>
+
+<TR>
+<TD>rOH</TD>
+
+<TD class="exper num">0.956</TD>
+
+<TD class="center">2</TD>
+<TD class="center">6</TD>
+<TD class="center"></TD>
+<TD class="center"></TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1955Ven/Gor:1200')"><A HREF="#1955Ven/Gor:1200">1955Ven/Gor:1200</A></TD>
+<TD></TD>
+</TR>
+
+<TR>
+<TD>rCO</TD>
+
+<TD class="exper num">1.427</TD>
+
+<TD class="center">1</TD>
+<TD class="center">2</TD>
+<TD class="center"></TD>
+<TD class="center"></TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1955Ven/Gor:1200')"><A HREF="#1955Ven/Gor:1200">1955Ven/Gor:1200</A></TD>
+<TD></TD>
+</TR>
+
+<TR>
+<TD>rCH</TD>
+
+<TD class="exper num">1.096</TD>
+
+<TD class="center">1</TD>
+<TD class="center">3</TD>
+<TD class="center"></TD>
+<TD class="center"></TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1955Ven/Gor:1200')"><A HREF="#1955Ven/Gor:1200">1955Ven/Gor:1200</A></TD>
+<TD></TD>
+</TR>
+
+<TR>
+<TD>aHCH</TD>
+
+<TD class="exper num">109.03</TD>
+
+<TD class="center">3</TD>
+<TD class="center">1</TD>
+<TD class="center">4</TD>
+<TD class="center"></TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1955Ven/Gor:1200')"><A HREF="#1955Ven/Gor:1200">1955Ven/Gor:1200</A></TD>
+<TD></TD>
+</TR>
+
+<TR>
+<TD>aHOC</TD>
+
+<TD class="exper num">108.87</TD>
+
+<TD class="center">1</TD>
+<TD class="center">2</TD>
+<TD class="center">6</TD>
+<TD class="center"></TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1955Ven/Gor:1200')"><A HREF="#1955Ven/Gor:1200">1955Ven/Gor:1200</A></TD>
+<TD></TD>
+</TR>
+
+<TR>
+<TD>dHCOH</TD>
+
+<TD class="exper num">180</TD>
+
+<TD class="center">3</TD>
+<TD class="center">1</TD>
+<TD class="center">2</TD>
+<TD class="center">6</TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1955Ven/Gor:1200')"><A HREF="#1955Ven/Gor:1200">1955Ven/Gor:1200</A></TD>
+<TD>symmetry</TD>
+</TR>
+
+</TABLE>
+
+<IMG SRC="gifs/ch3oh.gif" ALT="picture of Methyl alcohol">
+
+
+<h2>Bond descriptions
+#--- end

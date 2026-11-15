@@ -1,0 +1,122 @@
+# Builds the Windows version of Physics Lab (native/) and uploads PhysicsLab.exe
+# as a downloadable artifact. Runs only when started by hand (Actions tab → Run workflow)
+# or on a push to the `native` branch that changes native/ or this file, to save build minutes.
+name: Native Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [native]
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-windows.yml'
+
+# a newer push cancels a build that is still running, so minutes are not spent twice
+concurrency:
+  group: native-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+# needed to publish the "latest" release
+permissions:
+  contents: write
+
+jobs:
+  # 0.13 stage 1: the checks that need Linux tools. Every shader compiled by glslang (the Khronos reference compiler), and the old-way against new-way pictures of the cloud
+  # dots drawn by the real renderer on Mesa's software OpenGL (llvmpipe, through EGL). No Windows build, no release: it only says pass or fail.
+  linux-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            native
+            .github
+
+      - name: Install glslang and software OpenGL
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build glslang-tools libegl-dev libgl1-mesa-dri libegl-mesa0
+
+      - name: Configure (CMake, Ninja, no app, with the GL picture test)
+        run: cmake -S native -B build -G Ninja -DPL_BUILD_APP=OFF -DPL_GL_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build the picture test
+        run: cmake --build build --target gl_compare_tests
+
+      - name: Shader and picture checks
+        env:
+          PL_REQUIRE_GLSLANG: "1"
+        run: ctest --test-dir build -R "glsl_shaders|gl_phase_colours" --output-on-failure
+
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            native
+            .github
+
+      - name: Configure (CMake, Visual Studio, 64-bit)
+        run: cmake -S native -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Physics unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Font coverage on Windows (printed lists, for the report)
+        run: ctest --test-dir build -C Release -R font_coverage -V
+
+      - name: Collect files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item build/Release/PhysicsLab.exe out/
+          Copy-Item native/README.md out/
+          New-Item -ItemType Directory -Force out/font-licences | Out-Null
+          Copy-Item native/assets/fonts/OFL-*.txt out/font-licences/
+          # 0.52.0: the licences of the two libraries built into the .exe, copied from the sources CMake fetched (the pinned tags of native/CMakeLists.txt)
+          New-Item -ItemType Directory -Force out/licences | Out-Null
+          Copy-Item build/_deps/sdl3-src/LICENSE.txt out/licences/SDL3-LICENSE.txt -ErrorAction Stop
+          Copy-Item build/_deps/imgui-src/LICENSE.txt out/licences/DearImGui-LICENSE.txt -ErrorAction Stop
+
+      # (0.47.3: the account's artifact storage filled up and the failed upload stopped the release; the release does not need this copy, so a failed upload no
+      # longer stops it, and the copies are kept 3 days instead of 30 so the storage does not fill again)
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: PhysicsLab-windows-x64
+          path: out/
+          retention-days: 3
+
+      # The release title and text take the version from the same places the app does: the project VERSION in native/CMakeLists.txt (it becomes PL_VERSION)
+      # and kStage in native/src/ui/changelog.cpp. While kStage is "alpha" or "beta" the release is marked Pre-release.
+      # Replace the release tagged "latest" with this build, so it is always on one fixed page:
+      # https://github.com/<owner>/<repo>/releases/tag/latest
+      - name: Publish to the "latest" release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $appVer = (Select-String -Path native/CMakeLists.txt -Pattern 'project\(PhysicsLabNative VERSION ([0-9.]+)').Matches[0].Groups[1].Value
+          $ver = $appVer   # (0.22: read from CMakeLists.txt, no longer typed here)
+          $stage = (Select-String -Path native/src/ui/changelog.cpp -Pattern 'kStage = "([^"]*)"').Matches[0].Groups[1].Value
+          if (-not $appVer) { throw "No version found in native/CMakeLists.txt" }
+          $label = if ($stage) { "$ver $stage" } else { $ver }
+          Compress-Archive -Path out/* -DestinationPath PhysicsLab-windows-x64.zip -Force
+          gh release delete latest --yes --cleanup-tag -R $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { Write-Host "No earlier 'latest' release to replace." }
+          $notes = @"
+          Physics Lab $label, newest Windows build, from commit $($env:GITHUB_SHA.Substring(0,7)) on branch $env:GITHUB_REF_NAME.
+
+          Download PhysicsLab-windows-x64.zip, unzip it and run PhysicsLab.exe.
+
+          If Windows warns you: the app is not code-signed, so Windows may show a reputation warning. This is not a sign that a virus was found. Before unzipping, right-click the zip, choose Properties, tick Unblock and press OK. Or, when "Windows protected your PC" (SmartScreen) appears, click More info, then Run anyway.
+          "@
+          $ghArgs = @('release', 'create', 'latest', 'PhysicsLab-windows-x64.zip', '-R', $env:GITHUB_REPOSITORY, '--target', $env:GITHUB_SHA, '--title', "Physics Lab $label (latest build)", '--notes', $notes)
+          if ($stage -eq 'alpha' -or $stage -eq 'beta') { $ghArgs += '--prerelease' }
+          gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          exit 0

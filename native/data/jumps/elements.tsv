@@ -1,0 +1,122 @@
+# Neutral atoms: NIST ASD holdings (retrieved 9 Nov 2026, data/jumps/asd) and measured data outside ASD (data/jumps/sources). Made by tools/make_jumps_table.py.
+# measured: yes = ASD has E1 lines with both levels named; levels only = ASD has named levels but its lines carry no classification;
+# for Z >= 85 the saved source decides (other_source); no = nothing measured found.
+Z	symbol	levels	named_levels	lines	classified_E1	E1_with_A	A_B_or_better	other_source	measured
+1	H	105	105	568	476	437	437		yes
+2	He	842	842	2300	2258	2247	2247		yes
+3	Li	181	181	344	328	257	229		yes
+4	Be	212	212	581	570	384	308		yes
+5	B	118	118	371	364	262	60		yes
+6	C	433	433	2102	2093	1607	345		yes
+7	N	366	366	1309	1250	1250	239		yes
+8	O	580	580	910	895	842	143		yes
+9	F	302	302	162	161	119	6		yes
+10	Ne	374	374	1597	1589	533	192		yes
+11	Na	423	423	869	838	505	321		yes
+12	Mg	313	310	1342	1240	997	338		yes
+13	Al	187	187	589	554	316	126		yes
+14	Si	540	540	754	594	593	94		yes
+15	P	284	284	258	114	113	0		yes
+16	S	377	377	1437	1378	1042	20		yes
+17	Cl	374	370	221	99	98	0		yes
+18	Ar	503	503	461	429	428	48		yes
+19	K	296	296	634	320	209	133		yes
+20	Ca	780	780	206	137	136	1		yes
+21	Sc	474	355	2198	1351	260	165		yes
+22	Ti	558	558	4029	4029	496	155		yes
+23	V	549	548	3985	3820	1096	502		yes
+24	Cr	658	618	4369	4092	522	111		yes
+25	Mn	550	537	631	469	469	30		yes
+26	Fe	846	837	10031	9708	2426	1049		yes
+27	Co	329	277	420	337	337	24		yes
+28	Ni	287	287	576	464	464	0		yes
+29	Cu	360	360	1003	962	37	6		yes
+30	Zn	374	374	570	439	16	8		yes
+31	Ga	257	257	342	326	23	5		yes
+32	Ge	619	618	224	223	26	0		yes
+33	As	115	84	52	50	14	0		yes
+34	Se	172	171	138	0	0	0		levels only
+35	Br	264	264	170	169	53	0		yes
+36	Kr	527	527	862	854	183	44		yes
+37	Rb	239	239	213	211	40	23		yes
+38	Sr	377	377	361	351	86	29		yes
+39	Y	193	176	361	347	189	108		yes
+40	Zr	258	255	459	0	0	0		levels only
+41	Nb	378	352	509	0	0	0		levels only
+42	Mo	426	281	818	539	498	475		yes
+43	Tc	289	274	600	546	13	0		yes
+44	Ru	305	228	541	462	11	0		yes
+45	Rh	135	75	468	312	111	36		yes
+46	Pd	143	143	76	75	8	0		yes
+47	Ag	106	106	103	94	7	2		yes
+48	Cd	126	126	69	69	18	0		yes
+49	In	111	111	92	91	27	9		yes
+50	Sn	226	218	227	226	55	0		yes
+51	Sb	152	145	135	125	10	0		yes
+52	Te	119	119	133	110	6	0		yes
+53	I	224	224	1432	1429	416	8		yes
+54	Xe	443	443	1143	1139	187	84		yes
+55	Cs	178	178	230	223	41	13		yes
+56	Ba	355	355	312	312	109	12		yes
+57	La	333	206	393	365	305	187		yes
+58	Ce	943	354	209	135	56	55		yes
+59	Pr	410	125	182	0	0	0		levels only
+60	Nd	709	229	118	4	4	0		yes
+61	Pm	221	12	229	0	0	0		levels only
+62	Sm	475	220	162	10	7	0		yes
+63	Eu	551	316	350	270	142	96		yes
+64	Gd	614	465	371	19	16	0		yes
+65	Tb	590	134	248	7	0	0		yes
+66	Dy	720	302	230	40	40	40		yes
+67	Ho	230	201	282	13	12	0		yes
+68	Er	670	313	232	12	10	0		yes
+69	Tm	614	477	538	497	391	245		yes
+70	Yb	242	182	99	10	5	0		yes
+71	Lu	199	198	133	108	44	36		yes
+72	Hf	332	278	5341	3069	187	60		yes
+73	Ta	286	122	526	264	135	84		yes
+74	W	508	144	7049	330	121	46		yes
+75	Re	283	111	432	0	0	0		levels only
+76	Os	257	31	534	0	0	0		levels only
+77	Ir	222	53	402	106	37	17		yes
+78	Pt	201	184	995	904	162	75		yes
+79	Au	61	61	191	90	20	9		yes
+80	Hg	294	294	754	639	53	20		yes
+81	Tl	67	66	65	11	9	2		yes
+82	Pb	134	134	135	134	28	3		yes
+83	Bi	71	71	69	62	38	12		yes
+84	Po	32	27	37	4	0	0		yes
+85	At	3	3	2	2	0	0	Rothe et al. Nat. Commun. 4, 1835 (2013): ionization potential and Rydberg levels (astatine_rothe2013_doi.html)	yes
+86	Rn	107	107	67	10	0	0		yes
+87	Fr	122	122	149	149	149	0		yes
+88	Ra	81	81	143	112	19	2		yes
+89	Ac	52	52	153	105	87	41		yes
+90	Th	787	187	13387	2053	0	0		yes
+91	Pa	1	1	55	0	0	0	Blaise & Wyart 1992 compilation (osti_blaise_wyart_1992.html; review_block2021.txt Fig. 2); Naubereit et al.: about 1500 high levels near the limit (review_block2021.txt)	yes, not in NIST
+92	U	1	1	216	0	0	0	Blaise & Wyart 1992 and 17 later level papers (review_block2021.txt Fig. 2)	yes, not in NIST
+93	Np	1	1	96	0	0	0	Blaise & Wyart 1992 (review_block2021.txt Fig. 2)	yes, not in NIST
+94	Pu	1	1	141	0	0	0	Blaise & Wyart 1992 and later papers (review_block2021.txt Fig. 2)	yes, not in NIST
+95	Am	1	1	27	0	0	0	Blaise & Wyart 1992 and later papers (review_block2021.txt Fig. 2)	yes, not in NIST
+96	Cm	1	1	140	0	0	0	Blaise & Wyart 1992 (review_block2021.txt Fig. 2)	yes, not in NIST
+97	Bk	1	1	120	0	0	0	Blaise & Wyart 1992 (review_block2021.txt Fig. 2)	yes, not in NIST
+98	Cf	1	1	26	0	0	0	Blaise & Wyart 1992 (review_block2021.txt Fig. 2)	yes, not in NIST
+99	Es	1	1	11	0	0	0	Blaise & Wyart 1992; Wyart, Blaise & Worden (review_block2021.txt Fig. 2)	yes, not in NIST
+100	Fm	1	1	0	0	0	0	Sewtz et al. PRL 90, 163002 (2003): seven transitions (review_block2021.txt); Warbinek et al. Nature 634, 1075 (2024): 5f12.7s7p 5G*5 near 25111.8 cm-1 (fm_warbinek2024_pmc.html)	yes, a few lines, not in NIST
+101	Md	1	1	0	0	0	0		no
+102	No	1	1	0	0	0	0	Laatiaoui et al. Nature 538, 495 (2016): 1S0-1P1 at 29961.5 cm-1; Chhetri et al. PRL 120, 263003 (2018): Rydberg states (review_block2021.txt)	yes, one line and Rydberg levels, not in NIST
+103	Lr	1	1	0	0	0	0	none found; review_block2021.txt section 6.2: first laser spectroscopy still to come	no
+104	Rf	1	1	0	0	0	0		no
+105	Db	1	1	0	0	0	0		no
+106	Sg	1	1	0	0	0	0		no
+107	Bh	1	1	0	0	0	0		no
+108	Hs	1	1	0	0	0	0		no
+109	Mt	0	0	0	0	0	0		no
+110	Ds	0	0	0	0	0	0		no
+111	Rg	0	0	0	0	0	0		no
+112	Cn	0	0	0	0	0	0		no
+113	Nh	0	0	0	0	0	0		no
+114	Fl	0	0	0	0	0	0		no
+115	Mc	0	0	0	0	0	0		no
+116	Lv	0	0	0	0	0	0		no
+117	Ts	0	0	0	0	0	0		no
+118	Og	0	0	0	0	0	0		no

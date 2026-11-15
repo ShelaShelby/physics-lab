@@ -1,0 +1,28 @@
+# Mg: GRASP2018 clouds of the levels the app draws, one orbital set for the whole atom (core-valence + valence-valence MCDHF on the main configurations, then RCI per J and parity with Breit and QED); tools/grasp/run_shared.py + multipoles_two.py, native 0.47.4.
+# computed = excitation energy from the ground level (cm-1; CODATA 2018 hartree); diff_% = (computed - NIST) / NIST; NIST = data/jumps/asd (tools/make_level_data.py).
+# LS_weight = the root's weight in the NIST level's configuration and term (jj2lsj); natural_orbitals, k_max = highest multipole of M_J = J; CSFs, seconds: the block run.
+level	J	NIST_cm	computed_cm	diff_%	LS_weight	natural_orbitals	k_max	CSFs	seconds
+2p6.3s2 1S	0	0.0	0.0		0.931	43	0	6231	29.1
+3s.3p 3P*	0	21850.405	21768.4	-0.375	0.975	43	0	6583	30.5
+3s.3p 3P*	1	21870.464	21792.9	-0.355	0.971	43	2	13191	62.6
+3s.3p 3P*	2	21911.178	21846.4	-0.295	0.965	43	4	10562	52.9
+3s.3p 1P*	1	35051.264	35241.8	+0.544	0.873	43	2	13191	62.6
+3s.4s 3S	1	41197.403	41186.5	-0.026	0.943	43	2	19733	105.3
+3s.3d 1D	2	46403.065	46488.5	+0.184	0.756	43	4	29431	221.8
+3s.4p 3P*	0	47841.119	47800.9	-0.084	0.951	43	0	6583	30.5
+3s.3d 3D	2	47957.027	47980.4	+0.049	0.950	43	4	29431	221.8
+3s.3d 3D	3	47957.045	47984.5	+0.057	0.948	43	6	36105	344.0
+3s.3d 3D	1	47957.058	47979.5	+0.047	0.952	43	2	19733	105.3
+3s.4p 1P*	1	49346.729	49393.7	+0.095	0.913	43	2	13191	62.6
+3s.5s 3S	1	51872.526	51863.1	-0.018	0.932	43	2	19733	105.3
+3s.4d 1D	2	53134.642	53308.9	+0.328	0.746	43	4	29431	221.8
+3s.4d 3D	3	54192.256	54170.8	-0.040	0.950	43	6	36105	344.0
+3s.4d 3D	2	54192.294	54168.8	-0.043	0.954	43	4	29431	221.8
+3s.5p 3P*	0	54248.809	54208.6	-0.074	0.956	43	0	6583	30.5
+3s.4f 1F*	3	54676.438	54680.2	+0.007	0.567	43	6	20369	143.9
+3s.6s 3S	1	55891.8	55881.6	-0.018	0.944	43	2	19733	105.3
+3s.5d 3D	3	56968.218	56941.5	-0.047	0.955	43	6	36105	344.0
+3p2 3P	0	57812.77	57761.6	-0.089	0.965	43	0	6231	29.1
+3p2 3P	1	57833.4	57787.4	-0.079	0.962	43	2	19733	105.3
+3p2 3P	2	57873.94	57828.0	-0.079	0.905	43	4	29431	221.8
+# stored grid: 300 points, r = 0.0002 .. 400.0 bohr (log); natural orbitals under 0.01 electrons drawn together per l. Interpolation check: norm within 1.1e-04 (worst: 3s.5p 3P* J=0: 6d j=3/2 occ 0.0023 (lump)), <r> within 1.0e-04 (relative). clouds.bin: 950677 bytes.

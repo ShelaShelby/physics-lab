@@ -1,0 +1,151 @@
+API VERSION: 1.2
+API SOURCE: NASA/JPL Horizons API
+
+*******************************************************************************
+ Revised: Aug 19, 2022   Voyager 1 Spacecraft (interplanetary) / (Sun)     -31
+                        http://www.jpl.nasa.gov/missions/voyager-1/
+
+ BACKGROUND
+   See the web-page above for information on the Voyager Mission
+
+ TIMELINE
+   1977-Sep-06  Launch from Kennedy Space Center @ 12:56 UTC
+   1979-Mar-05  Jupiter closest-approach, Io imaging
+   1980-Nov-12  Saturn encounter, Titan
+   1990-Jan-01  Interstellar mission begins
+   1990-Feb-14  Final Voyager image return
+   1992-Apr-24  Final two-way tracking measurements
+   1998-Feb-17  Exceeds Pioneer 10 distance (most distant man-made object)
+   2004-Dec-15  Crosses solar system "bow shock" boundary
+   2012-Aug-25  Passes heliopause and termination shock boundary
+
+ SPACECRAFT TRAJECTORY:
+   This trajectory is composed of two merged sections:
+
+     #1) 1977-Sep-5 to 1981-Jan-1:
+          A patched conic mission-design type trajectory in which the conics 
+          were constructed to approximately match specific events, such as
+          satellite encounters, providing a rough accuracy. 
+
+     #2) 1981-Jan-1 to 2100-Jan-1 
+          Refit of tracking data spanning 1981-1992 (end of two-way coherent 
+          transponder data). Done in 2022 by R. Jacobson (former Voyager
+          navigation) using DE440 to generate a new solution and prediction. 
+
+   The reconstruction done in 2022 estimated:
+      - Epoch state vector
+      - Constant and stochastic non-gravitational accelerations 
+         (to account for the activity of three-axis attitude control system)
+      - Thermal radiation from RTG power sources
+      - Mismodelling of solar pressure  
+      - 96 impulsive maneuvers through Feb 1992
+
+   Note there has been no new tracking data possible since 1992. This is a
+   different issue from on-board telemetry, which continued beyond that date. 
+
+   The 2022 update refit the existing old tracking data using modern approaches
+   and standards to allow consistent extrapolation to 2100.
+
+   Formal predicted geocentric pointing uncertainty on 2030-Jan-1:
+     RA +/- 1.701 arcseconds, DEC +/- 1.535 arcseconds
+
+   This uncertainty is consistent with the new solution's difference with 
+   the A54206 prediction made in 1990. 
+ 
+   Tracking data used in 2022 solution:
+     Points Type       First point            Last point       residual rms
+       2366   F2   01-JAN-1981 05:14:00  15-APR-1989 08:09:00  0.133 mm/s
+       2084   F3   07-JAN-1981 12:15:00  24-APR-1992 14:04:00  0.153 mm/s
+       5191  PRA   01-JAN-1981 03:52:18  20-JAN-1989 14:13:59  228 m
+         67  SRA   04-MAR-1989 10:58:56  13-OCT-1991 04:49:30  227 m
+*******************************************************************************
+
+
+*******************************************************************************
+Ephemeris / API_USER Wed Nov 11 01:57:00 2026 Pasadena, USA      / Horizons
+*******************************************************************************
+Target body name: Voyager 1 (spacecraft) (-31)    {source: Voyager_1_ST+refit2022_m}
+Center body name: Sun (10)                        {source: Voyager_1_ST+refit2022_m}
+Center-site name: BODY CENTER
+*******************************************************************************
+Start time      : A.D. 2026-Sep-30 12:00:00.0000 TDB
+Stop  time      : A.D. 2026-Sep-30 13:00:00.0000 TDB
+Step-size       : 60 minutes
+*******************************************************************************
+Center geodetic : 0.0, 0.0, 0.0                   {E-lon(deg),Lat(deg),Alt(km)}
+Center cylindric: 0.0, 0.0, 0.0                   {E-lon(deg),Dxy(km),Dz(km)}
+Center radii    : 695700.0, 695700.0, 695700.0 km {Equator_a, b, pole_c}
+Output units    : AU-D
+Calendar mode   : Mixed Julian/Gregorian
+Output type     : GEOMETRIC cartesian states
+Output format   : 1 (position only)
+Reference frame : Ecliptic of J2000.0
+*******************************************************************************
+            JDTDB,            Calendar Date (TDB),                      X,                      Y,                      Z,
+**************************************************************************************************************************
+$$SOE
+2461314.000000000, A.D. 2026-Sep-30 12:00:00.0000, -3.216242488760788E+01, -1.368206677496722E+02,  9.899239323724404E+01,
+2461314.041666667, A.D. 2026-Sep-30 13:00:00.0000, -3.216247469929176E+01, -1.368209952989110E+02,  9.899262983861392E+01,
+$$EOE
+**************************************************************************************************************************
+ 
+TIME
+
+  Barycentric Dynamical Time ("TDB" or T_eph) output was requested. This
+continuous coordinate time is equivalent to the relativistic proper time
+of a clock at rest in a reference frame co-moving with the solar system
+barycenter but outside the system's gravity well. It is the independent
+variable in the solar system relativistic equations of motion.
+
+  TDB runs at a uniform rate of one SI second per second and is independent
+of irregularities in Earth's rotation.
+ 
+CALENDAR SYSTEM
+
+  Mixed calendar mode was active such that calendar dates after AD 1582-Oct-15
+(if any) are in the modern Gregorian system. Dates prior to 1582-Oct-5 (if any)
+are in the Julian calendar system, which is automatically extended for dates
+prior to its adoption on 45-Jan-1 BC.  The Julian calendar is useful for
+matching historical dates. The Gregorian calendar more accurately corresponds
+to the Earth's orbital motion and seasons. A "Gregorian-only" calendar mode is
+available if such physical events are the primary interest.
+
+REFERENCE FRAME AND COORDINATES
+
+  Ecliptic at the standard reference epoch
+
+    Reference epoch: J2000.0
+    X-Y plane: adopted Earth orbital plane at the reference epoch
+               Note: IAU76 obliquity of 84381.448 arcseconds wrt ICRF X-Y plane
+    X-axis   : ICRF
+    Z-axis   : perpendicular to the X-Y plane in the directional (+ or -) sense
+               of Earth's north pole at the reference epoch.
+
+  Symbol meaning [1 au= 149597870.700 km, 1 day= 86400.0 s]:
+
+    JDTDB    Julian Day Number, Barycentric Dynamical Time
+      X      X-component of position vector (au)
+      Y      Y-component of position vector (au)
+      Z      Z-component of position vector (au)
+
+ABERRATIONS AND CORRECTIONS
+
+ Geometric state vectors have NO corrections or aberrations applied.
+
+Computations by ...
+
+    Solar System Dynamics Group, Horizons On-Line Ephemeris System
+    4800 Oak Grove Drive, Jet Propulsion Laboratory
+    Pasadena, CA  91109   USA
+
+    General site: https://ssd.jpl.nasa.gov/
+    Mailing list: https://ssd.jpl.nasa.gov/email_list.html
+    System news : https://ssd.jpl.nasa.gov/horizons/news.html
+    User Guide  : https://ssd.jpl.nasa.gov/horizons/manual.html
+    Connect     : browser        https://ssd.jpl.nasa.gov/horizons/app.html#/x
+                  API            https://ssd-api.jpl.nasa.gov/doc/horizons.html
+                  command-line   telnet ssd.jpl.nasa.gov 6775
+                  e-mail/batch   https://ssd.jpl.nasa.gov/ftp/ssd/horizons_batch.txt
+                  scripts        https://ssd.jpl.nasa.gov/ftp/ssd/SCRIPTS
+    Inquiries   : Jon.D.Giorgini@jpl.nasa.gov
+*******************************************************************************

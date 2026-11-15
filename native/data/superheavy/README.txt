@@ -1,0 +1,1 @@
+The excerpt of Smits et al., Phys. Rep. 1035 (2023), arXiv:2301.02553v1, section 6 (smits2023_section6.txt, pdftotext, saved as received; cited by src/atom/atom_core.cpp and tests/test_clean.inc) is in the private repo ShelaShelby/physics-lab-sources at data/superheavy/ (native/data/SOURCES.md).

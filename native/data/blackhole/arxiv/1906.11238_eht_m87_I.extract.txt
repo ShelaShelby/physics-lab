@@ -1,0 +1,22 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1906.11238_eht_m87_I.txt.gz
+# Reference: Event Horizon Telescope Collaboration, "First M87 Event Horizon Telescope results. I. The shadow of the supermassive black hole", Astrophys. J. Lett. 875, L1 (2019), arXiv:1906.11238 (the PDF: sha256 be6604770bb0d0a6c2a81071518e89d5bc2f9b460f91390518804e0a1f454472, 2,578,342 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/1906.11238
+# Date read: 2026-11-15
+# sha256 of the original: 714ba793fa0f502c738fec4e4b6663dffc595311ab5abe62558ae1d49b758f01
+# Place in the original: four snippets (the match only), as the text layer prints them: M87* mass, distance, ring diameter and theta_g (Table 1 and the text; pages of the PDF: 1, 8, 1, 8)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# The paper's text layer has private-use spaces (U+F0A0) around some signs; they are kept as received.
+#--- begin mass M
+(6.5±0.7)×109
+#--- end
+#--- begin distance D
+(16.8±0.8) Mpc
+#--- end
+#--- begin ring diameter
+42±3 μas
+#--- end
+#--- begin theta_g
+3.8±0.4 μas
+#--- end

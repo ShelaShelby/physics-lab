@@ -1,0 +1,558 @@
+#include "ui/benchmark.h"
+#include "ui/reading.h"
+#include "ui/shell.h"
+#include "ui/shell_test.h"
+#include "ui/style_draw.h"
+
+#include <SDL3/SDL.h>
+
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <functional>
+#include <memory>
+
+#include "app/bench.h"
+#include "app/bench_scenes.h"
+#include "app/gpu_timer.h"
+#include "app/shot.h"
+#include "atom/atom_bench.h"
+#include "atom/atom_core.h"
+#include "imgui.h"
+#include "orbit/belts.h"
+#include "orbit/units.h"
+#include "render/gl_loader.h"
+#include "render/renderer2d.h"
+#include "ui/app_pages.h"
+#include "ui/changelog.h"
+#include "ui/fonts.h"
+#include "ui/look.h"
+#include "ui/shot.h"
+
+namespace ui {
+
+namespace {
+
+// frame (optional): called at the start of every frame after the set-up, with the frame number from the set-up and the number of the counted frame (-1 while warming up)
+struct SceneDef { BenchSceneInfo info; std::function<void(AppState&)> setup; std::function<void(AppState&, int, int)> frame; };
+constexpr int kStressBeltScale = 8;      // scene 2: 8 times the rocks of scene 1
+
+// ---- the scenes (chosen by measuring which settings cost the most, see REPORT.md) ----
+void commonSetup(AppState& app) {
+    app.paused = false;
+    app.vsync = false;
+    app.learn = 0; app.atomLearn = 0; app.molLearn = 0; app.showSettings = app.showAbout = app.showHistory = false;
+    app.journey.active = false;
+    app.set.realPlanets = false; app.sys.setRealPlanets(false);   // the benchmark always uses Simple planet physics, so the old numbers stay comparable
+}
+
+void orbitHeaviest(AppState& app) {
+    commonSetup(app);
+    app.lab = 0;
+    resetToToday(app);                                   // the Solar System on a fixed day
+    orbit::ViewSettings& s = app.set;
+    s = orbit::ViewSettings();                           // (Planet physics: Simple)
+    s.view3D = true; s.trueScale = true; s.fullTrails = true;
+    s.moons = s.dwarfs = s.comets = s.belts = s.far = true;
+    s.sky = orbit::SkyMode::Full;
+    s.cons = orbit::ConsMode::LinesAndNames;
+    s.tspeed = units::kTspeedMax;                 // fastest time
+    app.view = orbit::OrbitView();
+    app.view.yaw = 0.6; app.view.pitch = 1.0; app.view.spin = false;
+    setZoom(app, 0.0);
+}
+
+// scene 2: the same view as scene 1, with 8 times as many rocks in the belts and the Oort cloud (the rocks do not touch each other: the physics is the same)
+void orbitStress(AppState& app) {
+    orbitHeaviest(app);
+    app.sys.belts = orbit::makeBelts(app.sys.epochMs, kStressBeltScale);
+}
+
+// 0.13 stage 4: the same two scenes with the rocks' places worked out by the CPU (GPU rocks Off): scenes 17 and 18, to compare with scenes 1 and 2
+void orbitHeaviestCpuRocks(AppState& app) { orbitHeaviest(app); app.set.gpuRocks = false; }
+void orbitStressCpuRocks(AppState& app) { orbitStress(app); app.set.gpuRocks = false; }
+
+void atomScene(AppState& app, int which) {
+    commonSetup(app);
+    app.lab = 1;
+    atom::benchSetup(app.atom, which, app.canvasW, app.canvasH);
+    app.tempK = 293.15;                                  // the Temperature card's little box is drawn every frame: the same temperature for every run
+}
+
+// 0.16 stage 4 (0.46: one more each): scenes 1 to 12 are the default run; 13 to 20 (the old CPU paths) run only with "Compare old CPU paths". Names and texts: app/bench_scenes.cpp.
+const std::vector<SceneDef>& scenes() {
+    static const std::vector<SceneDef> v = [] {
+        std::vector<SceneDef> v;
+        static std::vector<std::string> keepName, keepWhat;      // the c_str() of these are kept by the list
+        keepName.reserve(app::kBenchAllScenes); keepWhat.reserve(app::kBenchAllScenes);
+        for (const app::BenchSceneText& t : app::benchSceneTexts()) {
+            keepName.push_back(t.name); keepWhat.push_back(t.what);
+            SceneDef d{{keepName.back().c_str(), keepWhat.back().c_str()}, nullptr, nullptr};
+            const int w = t.atomWhich;
+            switch (t.kind) {
+                case app::BenchKind::OrbitHeaviest: d.setup = orbitHeaviest; break;
+                case app::BenchKind::OrbitRocks8: d.setup = orbitStress; break;
+                case app::BenchKind::OrbitHeaviestCpuRocks: d.setup = orbitHeaviestCpuRocks; break;
+                case app::BenchKind::OrbitRocks8CpuRocks: d.setup = orbitStressCpuRocks; break;
+                case app::BenchKind::Atom:
+                    d.setup = [w](AppState& a) { atomScene(a, w); };
+                    d.frame = [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); };
+                    break;
+            }
+            v.push_back(d);
+        }
+        return v;
+    }();
+    return v;
+}
+
+// ---- the GPU timer ----
+// For every measured frame, from the first GL call of the drawing (the clear) to the last one before the buffer swap (the panels and text):
+//   q[0] GL_TIME_ELAPSED   the time the GPU was busy on it, all passes together (the picture, its soft layer, the instanced draws, ImGui)
+//   q[1] / q[2] GL_TIMESTAMP at the start and at the end: the span from the first to the last GPU command, waiting included
+// The results come a frame or two late; a ring of slots is used in turn, and read oldest first (app/gpu_timer.h).
+struct GpuTimer {
+    static constexpr int kSlots = 8;
+    unsigned q[kSlots][3] = {};
+    app::QueryRing ring{kSlots};
+    int active = -1;
+    bool ok = false, made = false;
+    long framesSkipped = 0;                      // frames whose slots were all still waiting (not measured)
+    void make() { if (!made) { made = true; ok = true; ring.reset(); for (auto& s : q) plgl::glGenQueries(3, s); } }
+    void destroy() { if (made) { for (auto& s : q) plgl::glDeleteQueries(3, s); made = false; } }
+};
+
+struct GpuSample { double busyMs, spanMs; };
+
+// Is GL_TIME_ELAPSED believable on this PC? A known heavy load (many see-through full-picture rectangles) is drawn a few times; the timer
+// and a clock (up to glFinish) must roughly agree. The load is doubled until it takes about 2 ms.
+app::GpuVerdict checkGpuTimer(render::Renderer2D& r, double wPts, double hPts, int fbW, int fbH) {
+    unsigned q = 0;
+    plgl::glGenQueries(1, &q);
+    const double toMs = 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+    double qMed = 0, wMed = 0;
+    for (int n = 16; n <= 16384; n *= 2) {
+        std::vector<double> qs, ws;
+        for (int rep = 0; rep < 9; rep++) {
+            r.begin(wPts, hPts);
+            for (int k = 0; k < n; k++) r.rect(0, 0, wPts, hPts, render::Color{0.5f, 0.5f, 0.5f, 0.02f});
+            plgl::glViewport(0, 0, fbW, fbH);
+            plgl::glFinish();
+            const Uint64 t0 = SDL_GetPerformanceCounter();
+            plgl::glBeginQuery(GL_TIME_ELAPSED, q);
+            r.end(fbW, fbH, 0);
+            plgl::glEndQuery(GL_TIME_ELAPSED);
+            plgl::glFinish();
+            const double wall = static_cast<double>(SDL_GetPerformanceCounter() - t0) * toMs;
+            unsigned long long ns = 0;
+            plgl::glGetQueryObjectui64v(q, GL_QUERY_RESULT, &ns);
+            if (rep >= 2) { qs.push_back(ns / 1e6); ws.push_back(wall); }      // the first two are warm-up (the GPU may still be raising its clock)
+        }
+        std::sort(qs.begin(), qs.end()); std::sort(ws.begin(), ws.end());
+        qMed = qs[qs.size() / 2]; wMed = ws[ws.size() / 2];
+        if (wMed >= 2.0) break;
+    }
+    plgl::glDeleteQueries(1, &q);
+    return app::judgeGpuTimer(qMed, wMed);
+}
+
+}  // namespace
+
+// everything the benchmark must give back: the labs as they were
+struct BenchState {
+    enum class Stage { Closed, Ask, Running, Done } stage = Stage::Closed;
+    std::unique_ptr<app::BenchRun> run;
+    // ---- the user's state, put back at the end (or when cancelled) ----
+    int lab = 0;
+    bool paused = false, vsync = true;
+    int learn = 0, atomLearn = 0;
+    bool showSettings = false, showAbout = false, showHistory = false;
+    std::unique_ptr<orbit::SolarSystem> sys;
+    std::unique_ptr<orbit::OrbitView> view;
+    std::unique_ptr<atom::AtomLab> atom;
+    std::unique_ptr<atom::AtomView> atomView;
+    orbit::ViewSettings set;
+    Journey journey;
+    double tempK = 293.15;
+    // ---- results ----
+    app::BenchEnv env;
+    std::vector<app::BenchScene> results;
+    std::string text, note;
+    std::vector<std::string> atomUsed;        // per scene: the Atom Lab settings it really ran with ("" for an Orbit Lab scene)
+    bool noteFailed = false;
+    GpuTimer gpu;
+    std::vector<GpuSample> gpuReady;
+    app::GpuVerdict gpuCheck;
+    bool gpuChecked = false;
+    bool includeCompare = false;              // the checkbox "Compare old CPU paths": scenes 13 to 20 after the default 12
+    std::vector<int> list;                    // the scenes of this run (indexes into scenes()), fixed when it starts
+    int sceneFrame = 0, measFrame = -1;       // frames since the scene was set up; counted frames so far (-1: still warming up)
+    double warm = app::kBenchWarmupS, measure = app::kBenchMeasureS;
+    bool cancelled = false;
+};
+
+namespace {
+
+// which scenes run: the default 12, then the 8 old-CPU-path twins if asked (indexes into scenes()). PL_BENCH_ONLY="12,20" (for measuring in development): only those scene numbers
+std::vector<int> sceneList(const BenchState& b) {
+    std::vector<int> v;
+    const char* only = SDL_getenv("PL_BENCH_ONLY");
+    for (int i = 0; i < (b.includeCompare || only ? app::kBenchAllScenes : app::kBenchDefaultScenes); i++) {
+        if (only && ("," + std::string(only) + ",").find("," + std::to_string(i + 1) + ",") == std::string::npos) continue;
+        v.push_back(i);
+    }
+    return v;
+}
+int activeScenes(const BenchState& b) { return int(sceneList(b).size()); }
+
+BenchState& st(AppState& app) {
+    if (!app.bench) app.bench = std::make_shared<BenchState>();
+    return *app.bench;
+}
+
+double envNum(const char* name, double def) { const char* v = SDL_getenv(name); return v ? std::atof(v) : def; }
+
+const char* whyNot(const AppState& app) {
+    if (app.pane) return "Learn is open: close it first.";
+    if (app.journey.active) return "A Journey is running: stop it first.";
+    if (app.shot.requested) return "A picture is being saved: wait a moment.";
+    if (app.bench && app.bench->stage == BenchState::Stage::Running) return "The benchmark is already running.";
+    return nullptr;
+}
+
+void restore(AppState& app, BenchState& b) {
+    app.sys = *b.sys; app.view = *b.view; app.atom = *b.atom; app.atomView = *b.atomView;
+    app.set = b.set; app.journey = b.journey; app.tempK = b.tempK;
+    app.lab = b.lab; app.paused = b.paused; app.vsync = b.vsync;
+    app.learn = b.learn; app.atomLearn = b.atomLearn;
+    app.showSettings = b.showSettings; app.showAbout = b.showAbout; app.showHistory = b.showHistory;
+    b.sys.reset(); b.view.reset(); b.atom.reset(); b.atomView.reset();
+    app.benchRunning = false;
+}
+
+std::string whenText(SDL_DateTime& dt) {
+    char b[64];
+    std::snprintf(b, sizeof b, "%04d-%02d-%02d %02d:%02d:%02d", dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+    return b;
+}
+
+void begin(AppState& app) {
+    BenchState& b = st(app);
+    // the environment, as it is when it starts (the window is not changed meanwhile)
+    app::BenchEnv& e = b.env = app::BenchEnv();
+    e.version = appVersion();
+    SDL_Time now = 0; SDL_DateTime dt{};
+    SDL_GetCurrentTime(&now); SDL_TimeToDateTime(now, &dt, true);
+    e.when = whenText(dt);
+    const char* s = reinterpret_cast<const char*>(plgl::glGetString(GL_RENDERER)); e.gpu = s ? s : "";
+    s = reinterpret_cast<const char*>(plgl::glGetString(GL_VERSION)); e.glVersion = s ? s : "";
+    s = reinterpret_cast<const char*>(plgl::glGetString(GL_VENDOR)); e.vendor = s ? s : "";
+    e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks);   // (scenes 1, 2, 17 and 18 are the ones it changes: the benchmark's own settings below start from the defaults, so it is On)
+    e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline);   // (scenes 9, 10, 15 and 16 are the ones it changes)
+    e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute);   // which way the Atom Lab's superposition and jumps run (scenes 7, 8, 13 and 14 are the ones it changes)
+    const ImGuiIO& io = ImGui::GetIO();
+    const float sc = ImGui::GetStyle().FontScaleDpi;
+    e.windowW = int(io.DisplaySize.x * io.DisplayFramebufferScale.x + 0.5f); e.windowH = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);
+    e.pictureW = int(app.canvasW * sc * io.DisplayFramebufferScale.x + 0.5); e.pictureH = int(app.canvasH * sc * io.DisplayFramebufferScale.y + 0.5);
+    if (SDL_Window* w = SDL_GL_GetCurrentWindow()) {
+        e.fullscreen = (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0;
+        if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w))) e.refreshHz = m->refresh_rate;
+    }
+    e.textSize = app.prefs.textSize; e.theme = app.prefs.theme;
+    e.power = app.powerNote;                                          // 0.15 stage 2: whether Windows was asked not to power-throttle the app
+    b.warm = envNum("PL_BENCH_WARMUP", app::kBenchWarmupS);          // for automatic checks: shorter times
+    b.measure = envNum("PL_BENCH_MEASURE", app::kBenchMeasureS);
+    e.warmupS = b.warm; e.measureS = b.measure;
+    // keep everything the user has
+    b.lab = app.lab; b.paused = app.paused; b.vsync = app.vsync; b.learn = app.learn; b.atomLearn = app.atomLearn;
+    b.showSettings = app.showSettings; b.showAbout = app.showAbout; b.showHistory = app.showHistory;
+    b.sys = std::make_unique<orbit::SolarSystem>(app.sys);
+    b.view = std::make_unique<orbit::OrbitView>(app.view);
+    b.atom = std::make_unique<atom::AtomLab>(app.atom);
+    b.atomView = std::make_unique<atom::AtomView>(app.atomView);
+    b.set = app.set; b.journey = app.journey; b.tempK = app.tempK;
+    b.list = sceneList(b);
+    b.atomUsed.assign(b.list.size(), std::string());
+    b.results.clear(); b.text.clear(); b.note.clear(); b.cancelled = false; b.gpuChecked = false; b.gpuCheck = app::GpuVerdict(); b.gpuReady.clear();
+    b.gpu.make();
+    b.run = std::make_unique<app::BenchRun>(activeScenes(b), b.warm, b.measure);
+    b.stage = BenchState::Stage::Running;
+    app.benchRunning = true;
+}
+
+void saveAndCopy(AppState& app, BenchState& b) {
+    b.text = app::benchResultText(b.env, b.results);
+    if (SDL_getenv("PL_BENCH")) std::printf("PLBENCH-RESULT-BEGIN\n%s\nPLBENCH-RESULT-END\n", b.text.c_str());   // (for automatic runs: the result on stdout)
+    SDL_SetClipboardText(b.text.c_str());
+    SDL_Time now = 0; SDL_DateTime dt{};
+    SDL_GetCurrentTime(&now); SDL_TimeToDateTime(now, &dt, true);
+    const std::string name = app::benchFileName({dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second});
+    std::string why;
+    b.noteFailed = true;
+    b.note = "The result could not be saved to a file.";
+    for (const std::string& folder : shotFolders()) {
+        SDL_CreateDirectory(folder.c_str());
+        const std::string path = app::joinPath(folder, name);
+        if (SDL_SaveFile(path.c_str(), b.text.data(), b.text.size())) { b.note = "Saved to " + path + ". It is also on the clipboard."; b.noteFailed = false; std::printf("Benchmark result: %s\n", path.c_str()); break; }
+        why = SDL_GetError();
+    }
+    if (b.noteFailed && !why.empty()) b.note += " (" + why + ") It is on the clipboard.";
+    (void)app;
+}
+
+void finish(AppState& app, BenchState& b, bool cancelled) {
+    if (b.run) {
+        const int n = cancelled ? b.run->doneScenes() : b.run->sceneCount();
+        b.results.clear();
+        for (int i = 0; i < n; i++) { app::BenchScene r = b.run->result(i); r.name = scenes()[b.list[i]].info.name; r.what = scenes()[b.list[i]].info.what; b.results.push_back(r); }
+    }
+    b.env.cancelled = cancelled;
+    b.env.atomSettings.clear();
+    for (int i = 0; i < int(b.atomUsed.size()) && i < int(b.results.size()); i++)
+        if (!b.atomUsed[i].empty()) b.env.atomSettings += (b.env.atomSettings.empty() ? "" : "; ") + std::string("scene ") + std::to_string(b.list[i] + 1) + ": " + b.atomUsed[i];
+    b.env.gpuTimer = b.gpu.ok && std::any_of(b.results.begin(), b.results.end(), [](const app::BenchScene& s) { return s.gpuSamples > 0; });
+    b.env.gpuReliable = b.env.gpuTimer && b.gpuChecked && b.gpuCheck.reliable;
+    b.env.gpuCheck = b.gpuChecked ? b.gpuCheck.why : std::string();
+    restore(app, b);
+    b.gpu.destroy();
+    b.cancelled = cancelled;
+    if (cancelled) { b.stage = BenchState::Stage::Closed; b.run.reset(); return; }
+    saveAndCopy(app, b);
+    b.stage = BenchState::Stage::Done;
+    b.run.reset();
+}
+
+}  // namespace
+
+void benchmarkButton(AppState& app) {
+    const char* why = whyNot(app);
+    if (why) ImGui::BeginDisabled();
+    if (ImGui::Button("Benchmark...")) { st(app).stage = BenchState::Stage::Ask; }
+    if (why) ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("%s", why ? why : "Runs fixed scenes and gives numbers to compare between runs and PCs");
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("A test of about %d seconds: it measures how fast the app draws, to compare between PCs or versions.", int(app::kBenchDefaultScenes * (app::kBenchWarmupS + app::kBenchMeasureS)));
+    ImGui::PopStyleColor();
+}
+
+void benchmarkTestHook(AppState& app) {
+    static int frames = 0;
+    const char* v = SDL_getenv("PL_BENCH");
+    if (!v || ++frames != 5) return;
+    st(app).includeCompare = SDL_getenv("PL_BENCH_RISK") != nullptr;       // for automatic checks: ticks "Compare old CPU paths" (the name is from 0.16 stage 2)
+    if (std::string(v) == "start") begin(app); else st(app).stage = BenchState::Stage::Ask;
+}
+
+void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, int fbH) {
+    if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
+    BenchState& b = *app.bench;
+    if (app.liveFrame) { std::printf("Benchmark stopped: the window was moved or resized\n"); finish(app, b, true); return; }   // the numbers would be wrong
+    if (whyNot(app) && std::string(whyNot(app)) != "The benchmark is already running.") { finish(app, b, true); return; }   // something got in the way: stop and give everything back
+    if (!b.gpuChecked) {                                 // once, before the first scene
+        b.gpuChecked = true;
+        b.gpuCheck = checkGpuTimer(renderer, app.canvasW, app.canvasH, fbW, fbH);
+        std::printf("GPU timer check: %s: %s\n", b.gpuCheck.reliable ? "reliable" : "NOT reliable", b.gpuCheck.why.c_str());
+    }
+    const int i = b.run->sceneToSetUp();
+    if (i >= 0) {
+        scenes()[b.list[i]].setup(app);
+        if (app.lab == 1 && i < int(b.atomUsed.size())) b.atomUsed[i] = atom::benchSettingsText(app.atom);
+        b.run->setUpDone();
+        b.sceneFrame = 0; b.measFrame = -1;
+    }
+    if (b.run->sceneToSetUp() < 0 && b.run->scene() < int(b.list.size())) {      // a scene that needs something done every frame (a jump held, the cut moving)
+        b.measFrame = b.run->measuring() ? b.measFrame + 1 : -1;
+        const SceneDef& sd = scenes()[b.list[b.run->scene()]];
+        if (sd.frame) sd.frame(app, b.sceneFrame, b.measFrame);
+        b.sceneFrame++;
+    }
+    app.vsync = false;
+}
+
+void benchmarkGpuBegin(AppState& app) {
+    if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
+    GpuTimer& g = app.bench->gpu;
+    if (!g.ok || g.active >= 0) return;
+    const int s = g.ring.acquire();
+    if (s < 0) { g.framesSkipped++; return; }            // every slot still waits for its result: this frame is not measured
+    plgl::glQueryCounter(g.q[s][1], GL_TIMESTAMP);
+    plgl::glBeginQuery(GL_TIME_ELAPSED, g.q[s][0]);
+    g.active = s;
+}
+
+void benchmarkGpuEnd(AppState& app) {
+    if (!app.bench) return;
+    GpuTimer& g = app.bench->gpu;
+    if (g.active < 0) return;
+    plgl::glEndQuery(GL_TIME_ELAPSED);
+    plgl::glQueryCounter(g.q[g.active][2], GL_TIMESTAMP);
+    g.ring.submitted(g.active);
+    g.active = -1;
+}
+
+void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
+    if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
+    BenchState& b = *app.bench;
+    // the GPU results that are ready now (they come a frame or two late), oldest first
+    GpuTimer& g = b.gpu;
+    b.gpuReady.clear();
+    g.ring.collect(
+        [&](int s) {
+            GLint a = 0, c = 0;
+            plgl::glGetQueryObjectiv(g.q[s][0], GL_QUERY_RESULT_AVAILABLE, &a);
+            plgl::glGetQueryObjectiv(g.q[s][2], GL_QUERY_RESULT_AVAILABLE, &c);
+            return a && c;
+        },
+        [&](int s) {
+            unsigned long long busy = 0, t0 = 0, t1 = 0;
+            plgl::glGetQueryObjectui64v(g.q[s][0], GL_QUERY_RESULT, &busy);
+            plgl::glGetQueryObjectui64v(g.q[s][1], GL_QUERY_RESULT, &t0);
+            plgl::glGetQueryObjectui64v(g.q[s][2], GL_QUERY_RESULT, &t1);
+            return GpuSample{busy / 1e6, (t1 >= t0 ? t1 - t0 : 0) / 1e6};
+        },
+        b.gpuReady);
+    for (const GpuSample& r : b.gpuReady) b.run->gpuSample(r.busyMs, r.spanMs);
+    if (SDL_Window* w = SDL_GL_GetCurrentWindow()) {   // 0.15 stage 2: a scene during which the window lost focus or was minimised is flagged in the report
+        const SDL_WindowFlags fl = SDL_GetWindowFlags(w);
+        b.run->noteWindow((fl & SDL_WINDOW_INPUT_FOCUS) != 0, (fl & SDL_WINDOW_MINIMIZED) != 0);
+    }
+    b.run->frame(frameMs, cpuMs);
+    if (b.run->finished()) finish(app, b, false);
+}
+
+void benchmarkWindow(AppState& app) {
+    if (!app.bench) return;
+    auditNote(std::string("benchstage ") + std::to_string(static_cast<int>(app.bench->stage)) + " running=" + std::to_string(app.benchRunning ? 1 : 0));
+    BenchState& b = *app.bench;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float fs = ImGui::GetFontSize();
+    const ImGuiWindowFlags fl = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize;
+    const bool esc = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+    // The running box is a modal pop-up: while it is open ImGui ignores every other window (panels, header, tabs, settings). The picture is not ImGui,
+    // so main.cpp also drops its wheel / drag / click / key handling (app::labInputAllowed). The dim behind a modal is made clear there, so the picture stays as it is.
+    // The pop-up is closed here also when the run ended some other way (cancelled from the frame code, finished).
+    static const char* const kRunBox = "##benchrun";
+    const bool running = b.stage == BenchState::Stage::Running;
+    bool cancel = running && esc;
+    if (running || ImGui::IsPopupOpen(kRunBox)) {
+        if (running && !ImGui::IsPopupOpen(kRunBox)) ImGui::OpenPopup(kRunBox);
+        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 12 * fs / 16, vp->WorkPos.y + 12 * fs / 16), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.85f);
+        if (ImGui::BeginPopupModal(kRunBox, nullptr, fl | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav)) {
+            panelDecor(app::PanelKind::Floating);
+            if (running) {
+                const app::BenchRun& r = *b.run;
+                const int shown = std::min(r.scene() + 1, r.sceneCount());
+                ImGui::Text("Scene %d of %d: %s", shown, r.sceneCount(), scenes()[b.list[std::min(r.scene(), r.sceneCount() - 1)]].info.name);
+                ImGui::Text("%s  %.1f s", r.measuring() ? "Counting" : "Warming up", r.sceneElapsedS());
+                const double fps = app.stats.avgFrame() > 0 ? 1000.0 / app.stats.avgFrame() : 0;
+                ImGui::Text("Live: %.0f fps", fps);
+                ImGui::ProgressBar(float(r.doneS() / r.totalS()), ImVec2(24 * fs, 0));
+                ImGui::TextDisabled("Everything else is locked until the test ends.");
+                if (ImGui::Button("Cancel")) cancel = true;
+            }
+            if (cancel || !running) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+    }
+    if (cancel) { finish(app, b, true); return; }
+    if (b.stage == BenchState::Stage::Closed) return;
+    if (b.stage == BenchState::Stage::Ask) {
+        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));   // (always: the height changes after the first frame, so the window stays centred and inside)
+        ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0), ImGuiCond_Always);
+        bool open = true;
+        pushFloatStyle();
+        const bool benchShown = ImGui::Begin("Benchmark###bench", &open, fl);
+        popFloatStyle();
+        if (benchShown) {
+            panelDecor(app::PanelKind::Floating);
+            const std::vector<int> list = sceneList(b);
+            const int count = int(list.size());
+            const int secs = int(count * (app::kBenchWarmupS + app::kBenchMeasureS));
+            ImGui::TextWrapped("This runs %d scenes one after the other, about %d seconds in all. Each one has %d seconds of warm-up that is not counted, then %d seconds that are counted.",
+                               count, secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
+            ImGui::Spacing();
+            // 0.16 stage 2: everything between here and the buttons scrolls INSIDE the window, so the window is never taller than 92 % of the work area and Start / Cancel are always in view.
+            // The body's natural height is measured the frame before (0 on the first frame: it is then cut to the room that is left).
+            static float bodyH = 0;
+            const float buttonsH = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y + ImGui::GetStyle().WindowPadding.y;
+            const float room = std::max(60.0f, std::min(vp->WorkSize.y * 0.92f, vp->Size.y - std::max(0.0f, shellTopBarH()) - 2 * 8.0f) - ImGui::GetCursorPosY() - buttonsH - ImGui::GetStyle().ItemSpacing.y);
+            const float childH = bodyH > 0 ? std::min(bodyH, room) : room;
+            ImGui::BeginChild("##benchBody", ImVec2(0, childH), ImGuiChildFlags_None);
+            for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[list[i]].info.name);
+            ImGui::Checkbox("Compare old CPU paths", &b.includeCompare);
+            if (ImGui::IsItemHovered()) ui::SetTooltip("Adds %d scenes (%d to %d): scenes of the list above run again with the work done by the processor, the way older versions did it, "
+                                                          "so the difference to the graphics card's way can be read. Off by default; it makes the test longer.", app::kBenchAllScenes - app::kBenchDefaultScenes, app::kBenchDefaultScenes + 1, app::kBenchAllScenes);
+            ImGui::Spacing();
+            ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "
+                               "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "
+                               "Before the first scene the graphics card's timer is checked with a known load (about a second).");
+            bodyH = ImGui::GetCursorPosY();
+            ImGui::EndChild();
+            const char* blocked = whyNot(app);                 // 0.50.3 (outside review): Start did nothing, silently, while e.g. a Journey ran: now greyed, with the reason
+            if (blocked) ImGui::BeginDisabled();
+            const bool startClicked = ImGui::Button("Start");
+            if (blocked) ImGui::EndDisabled();
+            if (blocked && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("%s", blocked);
+            noteItem("bench.start");
+            auditRect("bench.start", ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectSize().x, ImGui::GetItemRectSize().y);
+            if (startClicked && !blocked) begin(app);
+            if (blocked) { ImGui::SameLine(); ImGui::TextDisabled("%s", blocked); }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel") || esc) b.stage = BenchState::Stage::Closed;
+            auditRect("win.benchmark", ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowWidth(), ImGui::GetWindowHeight());
+        }
+        ImGui::End();
+        if (!open) b.stage = BenchState::Stage::Closed;
+    } else if (b.stage == BenchState::Stage::Done) {
+        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(std::min(46 * fs, vp->WorkSize.x * 0.97f), std::min(34 * fs, vp->WorkSize.y * 0.92f)), ImGuiCond_Appearing);
+        bool open = true;
+        pushFloatStyle();
+        const bool resultShown = ImGui::Begin("Benchmark result###bench", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+        popFloatStyle();
+        if (resultShown) {
+            panelDecor(app::PanelKind::Floating);
+            ImGui::TextWrapped("%s, %s, OpenGL %s", b.env.gpu.c_str(), b.env.vendor.c_str(), b.env.glVersion.c_str());
+            ImGui::TextWrapped("Atom Lab superposition and jumps: %s", b.env.computePath.c_str());
+            ImGui::TextWrapped("Atom Lab 90 %% outline: %s", b.env.outlinePath.c_str());
+            ImGui::TextWrapped("Orbit Lab rocks: %s", b.env.rocksPath.c_str());
+            ImGui::TextWrapped("Window %d x %d, picture %d x %d pixels%s", b.env.windowW, b.env.windowH, b.env.pictureW, b.env.pictureH, b.env.fullscreen ? ", full screen" : "");
+            ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, vec(look().w.line));      // the header row in the theme's colours (the default is dark on every theme)
+            const bool table = ImGui::BeginTable("##benchtable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp);
+            if (table) {
+                const char* heads[] = {"Scene", "Average", "fps", "1 % low", "Worst", "> 16.7 ms", "CPU", "GPU"};   // > 16.7 ms: how many frames were slower (0.16 stage 3)
+                for (const char* h : heads) ImGui::TableSetupColumn(h);
+                ImGui::TableHeadersRow();
+                for (const app::BenchScene& s : b.results) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::TextWrapped("%s", s.name.c_str());
+                    ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.frames.avgMs);
+                    ImGui::TableNextColumn(); ImGui::Text("%.1f", s.frames.avgFps);
+                    ImGui::TableNextColumn(); ImGui::Text("%.1f fps", s.frames.low1Fps);
+                    ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.frames.worstMs);
+                    ImGui::TableNextColumn(); ImGui::Text("%d", s.frames.slowFrames);
+                    ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.cpuAvgMs);
+                    ImGui::TableNextColumn(); if (s.gpuSamples <= 0) ImGui::TextDisabled("not available");
+                    else if (b.env.gpuReliable && s.gpuProblem.empty()) ImGui::Text("%.2f ms", s.gpuAvgMs);
+                    else ImGui::TextDisabled("not reliable");
+                }
+                ImGui::EndTable();
+            }
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_Text, b.noteFailed ? vec(look().w.danger) : vec(look().w.muted));
+            ImGui::TextWrapped("%s", b.note.c_str());
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+            if (ImGui::Button("Copy result")) SDL_SetClipboardText(b.text.c_str());
+            ImGui::SameLine();
+            if (ImGui::Button("Close") || esc) open = false;
+            ImGui::TextDisabled("To send it: paste the result into your message to Claude.");
+        }
+        ImGui::End();
+        if (!open) { b.stage = BenchState::Stage::Closed; b.text.clear(); }
+    }
+}
+
+}  // namespace ui

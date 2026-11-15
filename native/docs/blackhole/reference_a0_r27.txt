@@ -1,0 +1,22 @@
+Black Hole Lab reference picture (0.54.3): reference_a0_r27.png, 1280 x 800
+==========================================================================
+Made by build/blackhole_picture (tests/blackhole_picture.cpp) from the physics module src/blackhole/ (no graphics card); the PNG was then
+re-compressed losslessly (same pixels) to stay under 2 MB.
+
+What it shows: a non-spinning black hole placed in front of OUR sky as seen from Earth (ESA's Gaia map, assets/maps/gaia_sky.jpg, and the app's
+2,874 catalogue stars). We have no map of the sky as seen from near a real black hole; the sky is ours.
+  Camera: hovering at r = 27 M (27 GM/c^2 from the centre), looking straight at the hole, which sits in front of the galactic centre.
+  Field of view: the night sky's own projection (orbit/sky.h): the angle from the middle is the distance from the middle, 100.3 degrees to a corner,
+  431 pixels per radian (0.133 degrees per pixel).
+  Shadow: angular radius 10.672 degrees = 80.3 pixels (Synge's formula), so it fills about a fifth of the picture's height.
+  Stars: points drawn by the Orbit Lab's rule (orbit/sky.h starDraw) at their magnified brightness; 1,118 star images, 213 of them second or further
+  images (an image is kept until one fainter than magnitude 6.6, the catalogue's faint end).
+  Not drawn: the hovering camera's blueshift. Its light is 1.0392 times bluer (frequency) than at rest far away, so 1.0392^4 = 1.166 times brighter;
+  the picture shows the sky's own colours and brightness.
+
+What is exact and what is soft:
+  - exact (to well under a pixel): the shadow's edge, the bending of every pixel's ray (closed-form elliptic integrals, through a 1,024-point table
+    whose error is below 5e-8 rad), the positions and magnifications of the star images;
+  - soft: the Gaia map itself has about 0.09 degrees per map pixel and is sampled bilinearly at 2 x 2 rays per picture pixel, with no filtering over
+    a ray bundle's footprint. Near the Einstein ring (the bright circle) the map is magnified many times, so it looks smeared there: that is the
+    map's resolution, not the physics. The thin rings close to the shadow hold the whole sky squeezed into less than a pixel.

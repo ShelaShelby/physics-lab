@@ -1,0 +1,76 @@
+# Roadmap
+
+What is planned or worth doing. No dates, no promises beyond this list. Done work is in the app's changelog (`native/src/ui/changelog.cpp`) and git, never here.
+
+## Rules for updating this file (every session follows them)
+- One item = one line: what to do, and why if it is not obvious. No version history, no long explanations.
+- When a job does an item, it DELETES that line in the same commit. If only part is done, the line is rewritten to say what is left.
+- A new idea or a problem found goes under its lab as one line. Mark it: **fix** (something wrong now), **source needed** (a number or file must be found first), **owner decides** (do not start without the owner).
+- Items marked **owner decides** or waiting for a file from the owner go under "Waiting for the owner", not in the lab lists.
+- Whenever a session opens this file, it removes lines that are no longer true. Keep the whole file short (about 60 lines at most).
+- Order inside a section = priority (top first). The owner may reorder; a session does not.
+
+## Atom Lab
+- **source needed**: charge profiles for He-4, Li, Be, B, N-14 (de Vries 1987; drawn as Gaussians, the app says so); nucleus views: Ra pear shapes (Butler et al. PRL 124, 042503 (2020)), alpha clusters in Be-8, C-12, O-16 (save the papers first), the deuteron's two nucleon centres (Forest et al. 1996).
+- **fix**: the Slice view keeps the outer electron's true share of the dots, so its shape is faint (Na 3d): a denser option there, said in the readout (Cloud and Cloud 3D have the choice since 0.54.1).
+- **fix**: levels with no cloud: Ca, Sr, Ba's lowest d levels (6-10 % low: core-core correlation left out); Rydberg orbitals whose Dirac-Fock does not converge (Hg 7s 7p 6d, Zn 5s, Cd 6d 7d); Ca 4p² ¹D is not identified among the roots; Ra 7s8s, 7s9s (+42, +14 %: the ns(n+1)s levels, as Yb 6s7s +33 %), 7s5f (+7 %), 7s8p (8p Dirac-Fock does not converge). Ca, Sr, Ba, Hg clouds were made before the 0.51.3 orthogonality fix (run_shared.ci_orbitals): recompute and compare.
+- Ions between neutral and the one-electron ion (tools/dhf can compute them); clouds: the 7s and 7p shells of the heaviest atoms, correlation in the ground-state clouds of atoms with no jumps, more than 240,000 dots for heavy atoms.
+- One-electron atom: **source needed** the Lamb shift for n >= 3 (Balmer lines miss it); **fix** the recoil beyond the reduced mass (hydrogen's 2p gap is 0.054 % below NIST without it); Dirac clouds: the 90 % outline, superpositions, states m != j; hyperfine structure beyond 1s, drawn in the spectrum.
+- Labels drawn in depth order (needs a renderer change).
+- **source needed**: measured B(E2) for the unstable even-even nuclei (Pritychenko et al. 2016; FRDM(2012) now) and a measured sign for the 29 nuclei that use FRDM's sign (U-238 among them) and the 16 with none.
+- **source needed**: Ga-73's ground-state spin: the IAEA moment table (used for its hyperfine splitting) gives 3/2-, NUBASE2020 1/2-; μ/I differs by 3. Read Cheal et al., PRL 104, 252502 (2010) (refused the cloud).
+- **source needed**: Geiger and Marsden's "about 1 in 8,000" may be platinum, not gold (Proc. R. Soc. A 82, 495, 1909): save the paper and check.
+- Atoms in fields, what is left: hydrogen's Stark effect; the hyperfine regime of the Zeeman effect (Breit-Rabi, low fields); a synthetic spectrum with natural, Doppler and pressure broadening; a Boltzmann-plot temperature from line ratios; the cloud of one M sublevel in the field.
+- **source needed**: measured Landé g for Li, Na, Rb, Cs, Fr, He, Be, Mg, Ca, Sr, Cd, Ra (NIST ASD lists none for their levels; 0.54.0 shows the LS value only there).
+- More Data tables: <r>, <1/r>, <r²> and P(r), Q(r) of the app's DHF orbitals (**source needed**: Desclaux's tables to check them); higher alkali Rydberg levels for the quantum defects (the saved NIST lists end at Na 5s, 4p, 4d: a new ASD fetch); Q-values of typed reactions (AME2020).
+
+## Molecule Lab
+- **source needed**: Bader et al. 1987 (JACS 109, 7968) for the Density surface's cut-off. **fix**: the Density cloud alone (Show: cloud) still clips the nuclei's cores white (0.52.1 keeps them in range only under the surface).
+- Rotation, what is left: the non-linear molecules (symmetric and asymmetric tops), the infrared bands of CO2, C2H2 and HCN, Raman lines of the homonuclear ones; **source needed**: water's pure-rotation band (HITRAN or JPL).
+- O2's triplet splitting of each N level.
+- **source needed**: measured band origins of H2, N2 and O2 for the Birge-Sponer analysis and the levels above the fitted range (O2: Creek & Nicholls 1975, G(v) to v = 28; N2 and O2 pages do not state their constants' range, so only v = 0, 1 count as measured).
+- The moving density for the other molecules (smaller file format); point groups with their axes and planes, linked to which vibrations absorb infrared; HOMO and LUMO from the same DFT runs.
+- More molecules with S, F, P (H2S, SF6, PCl5 ...), same CCCBDB route; big molecules later, labelled computed or crystal.
+- The look of the bonds (Ball-and-stick fills a third of the picture); vibrations as a coherent state (the swinging centre with the Gaussian spread), not only classical swings.
+
+- **source needed**: HCl's reference dipole 1.093 D looks like mu_e; the ground-state mu_0 is 1.1086 D: check what CCCBDB means.
+- Thermochemistry from partition functions (Cp, S, H, G against T; **source needed**: NIST-JANAF tables of the molecules), equilibrium constants; isotope substitution (Teller-Redlich rule); Franck-Condon factors.
+
+## Orbit Lab
+- **source needed**: Eris's size from its occultation, 2,326 +- 12 km (Sicardy et al., Nature 478, 493 (2011)); save the paper first (refused the cloud, 9 Nov 2026).
+- Real mode: the asteroids' and Kuiper belt's mass are not in the model (Neptune 1,436 km off; Ceres 9,324 km; Earth 14 km); Europa's orbit up to 17,700 km off (Laplace terms); belt asteroids ignore Jupiter far from 2026.
+- **fix**: outside 1800-2100 the moons start at made-up angles (the card says so): run JPL's mean elements.
+- **source needed**, drawing choices with no named source: comet tails and the 4 AU switch-on, Haumea's egg shape, the belt cards' counts and masses, the Sun card's frost line and lifetime.
+- Colours: **source needed**: ring spectra, Pluto, the grey moons and their global maps, McEwen 1996's own lunar phase polynomial, the giants' limb darkening.
+- Saturn close up (belts; the rings as a GPU texture: the Cassini profile is cut into up to 700 bands on the CPU each frame); the night sky as a retained GPU mesh; Delta T after the last leap second and UT1 - UTC.
+- Eclipses (0.51.2): **source needed** a dated check against a published eclipse catalogue (NASA's Five Millennium Canon); the red light Earth's air bends onto the eclipsed Moon; shadows on the grey moons, of moons on moons, and the giants' flattened shadows; the Sun's limb darkening (waits for Neckel & Labs).
+- Earth's air (0.51.2): multiple scattering, the glow beyond the disc's edge, twilight; **source needed** a measured ocean colour (Blue Marble paints deep oceans one uniform blue).
+- **fix**: Saturn's ring cards and saturn_rings.h use the fact sheet's optical depths, lower than Cassini's for the B ring (mean 3.3 against 0.4-2.5) and the Cassini Division (0.15 against 0-0.1): check against Colwell et al. 2010 and use Cassini's.
+- Celestial mechanics in the Data panel: an ephemeris table (state vectors and elements at a date, in a chosen frame) beside the Horizons tables; an integrator check (energy and angular-momentum drift against the step); Lagrange points and the Jacobi constant; the asteroids' Kirkwood gaps; a Lambert solver with porkchop plots (Earth to Mars: dates, time, delta-v).
+
+## Black Hole Lab
+- The lab, in the order the owner chose (DECISIONS.md): the screen with the non-spinning hole in front of our sky, presets and the Orbit Lab's link (0.55.0, plan step 1; the physics is done in 0.54.3: src/blackhole/), the thin disc, spin, the looks; then moving cameras, the Data panel's tables. **source needed** before the spinning fall-in: the ray equations in ingoing Kerr coordinates.
+- From 0.54.3's measurements: in single precision the sky's bending is off by up to 2e-3 rad within 0.1 pixel of the shadow's edge (the GPU should form "angle to the edge" without cancelling, or keep the closed edge test per pixel); at a camera exactly at 3M the table is loose (1e-2 rad) within half a pixel of the edge.
+- Later: the "skin" (DECISIONS.md): white paper with the lab's real equations written across it, bent around the hole by the same light-path calculation as the real view; after the real view works. Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
+
+## Whole app
+- Graphics quality presets, Low to Ultra, for older PCs; speed work only where the owner's benchmark shows a problem (0.50.3 review's list: the exposure-grid and Superposition read-backs each frame, the nucleus density grid while still, settings text, guides, cards and Pick a body rebuilt each frame, the molecule surface colours).
+- Data panel: the user's typed data kept between runs; a fit to the user's own formula (typed like a calculator line); a setup as a file, not only the clipboard.
+- Data panel (0.51.1 review): leave out a point by tapping it; asymmetric errors (profile likelihood or bootstrap) for nonlinear fits; a Poisson-likelihood fit for counts and half-lives; AIC/BIC between models; a Voigt profile; correlated x-y errors (York's r); a teaching mode that hides the expected answers; the sources as BibTeX.
+- Data panel physics (0.51.1 review): hydrogen's lines against Dirac's levels (and the Lamb shift), so the Rydberg fit's leftovers are explained; Birge-Sponer from measured band origins (the ladder is now made from the constants it fits).
+
+## Calculator
+- Matrices, what is left after 0.54.2: eigenvectors, the inverse, the matrix exponential (and sqrt, exp of a matrix), eigenvalues of non-Hermitian matrices, sizes above 4x4; a bare 0 beside entries with a unit ([[1 eV, 0], [0, 2 eV]] is refused now: the unit goes outside).
+- Uncertainties carried through (the constants store them); °C and °F (affine units need their own rules); ln, sin ... of complex numbers; units like GF's (J·m³) shown in base units.
+- Measuring tools on the picture (ruler, angle, stopwatch, probe); a calculator curve (a function of x) sent to the Data panel.
+- Worked calculations on the app's own data: the mass formula against AME2020, the molecules' heat capacity against NIST-JANAF; a decay-chain calculator (Bateman).
+- A molecule's infrared absorption beside measured spectra (**source needed**: spectra files).
+
+## Waiting for the owner
+- **Paused by the owner (14 Nov 2026, after 0.51.3)**: element jumps with every electron shown. Left: Yb, Cu, Ag, Au, the p block, transition metals, lanthanides, actinides (native/PLAN_JUMPS.md), and the cloud size budget (16 atoms take about 16.5 MB).
+- "Far labels" in the Orbit Lab: the owner describes what is wrong. Photon jumps from a complex state or a superposition: the owner picks an option of 0.11.
+- **owner decides**: the Simple quark style's static-quark flux tubes inside a moving proton: remove, or keep as a labelled cartoon (review, 0.49.3).
+- Files the owner saves (the cloud is refused): the island of stability (predicted magic numbers), halo nuclei's matter radii (IAEA), Neckel & Labs 1994 or Neckel 2005 for the Sun's limb darkening; for the Black Hole Lab, only to cite the originals (their results are in saved papers; ADS refused, 15 Nov 2026): J. M. Bardeen, "Timelike and null geodesics in the Kerr metric" (the shadow's edge) and I. D. Novikov & K. S. Thorne, "Astrophysics of black holes" (the thin disc), both in Black Holes, eds C. DeWitt & B. S. DeWitt (Gordon and Breach, 1973), pp. 215 and 343.
+- **owner decides**: methanol's torsion at the measured shape is 118 cm^-1 with the app's B3LYP/aug-cc-pVTZ (reproduced in 0.52.1) but 177i with aug-cc-pVDZ (305 at the DZ minimum): at a shape that is not the minimum its sign depends on the basis. Calculate at the TZ minimum, or show no calculated value.
+- **owner decides**: the Atom Lab's Glow core is kept inside the screen's range since 0.52.1, so a whole atom's outer shells are faint beside its core: a tone curve (it changes the dots' relative brightness) would show both.
+- Molecule realism: one fixed charge-colour scale, a bond (deformation density) view. Maybe, or drop: a fog-style electron cloud.

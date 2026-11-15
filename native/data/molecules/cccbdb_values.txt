@@ -1,0 +1,30 @@
+CCCBDB values as given by the owner (read on cccbdb.nist.gov, 18 Oct 2026). Saved word for word from the job text.
+
+DATA (distances in angstrom, angles in degrees, from NIST CCCBDB; reference code after each)
+H2: rHH 0.741 (1979HUB/HER, re)
+N2: rNN 1.098 (1979HUB/HER, re)
+O2: rOO 1.208 (1979HUB/HER, re)
+HCl: rHCl 1.275 (NISTdiatomic, re 1H35Cl)
+CO2: rCO 1.162, aOCO 180 (1966Herzberg)
+H2O: rOH 0.958 (1979Hoy/Bun:1, re), aHOH 104.4776 (1979Hoy/Bun:1, equilibrium)
+O3: rOO 1.278, aOOO 116.8 (1966Herzberg)
+NH3: rNH 1.012, aHNH 106.67 (1966Herzberg)
+CH4: rCH 1.087 (1979Hir:213, re), aHCH 109.471 (1974sve/kov)
+HCN: rCH 1.064, rCN 1.156, aHCN 180 (1966Herzberg)
+C2H2: rCH 1.063, rCC 1.203 (1998Kuc, rm structure), aHCC 180 (1966Herzberg)
+H2CO: rCH 1.111, rCO 1.205, aHCH 116.133, aHCO 121.9 (Gurvich; aHCO from aHCH by symmetry)
+C2H4: rCC 1.339, rCH 1.086, aHCH 117.6, aHCC 121.2 (1966Herzberg), planar
+CH3OH: rOH 0.956, rCO 1.427, rCH 1.096, aHCH 109.03, aHOC 108.87 (1955Ven/Gor:1200), dHCOH 180 for one H (symmetry). CCCBDB gives no H-C-O angle: DERIVE it by assuming the three C-H bonds are equivalent and symmetric about the C-O axis, so aHCH fixes aHCO. Label the molecule "H-C-O angle derived" in the app and in REPORT.md.
+C6H6: rCC 1.397, rCH 1.084, aCCC 120, aHCC 120 (1966Herzberg), planar hexagon
+
+Rotational constants, cm-1, CCCBDB (reference 1966Herzberg unless noted; H2, N2, O2, HCl 1979HUB/HER; CH3OH 1984Her/Mes:42):
+H2 B 60.853; N2 B 1.99824; O2 B 1.43768; HCl B 10.59342; CO2 B 0.39021
+H2O A 27.877 B 14.512 C 9.285
+O3 A 3.55348 B 0.44525 C 0.39479
+NH3 A 9.4443 B 9.4443 C 6.196
+CH4 A=B=C 5.2412
+HCN B 1.47822; C2H2 B 1.1766
+H2CO A 9.4053 B 1.2953 C 1.1342
+C2H4 A 4.828 B 1.0012 C 0.8282
+CH3OH A 4.2573 B 0.82338 C 0.79273
+C6H6 A 0.1896 B 0.1896 C 0.0948

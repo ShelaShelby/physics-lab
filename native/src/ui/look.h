@@ -1,0 +1,39 @@
+// The app's look, from Settings and the theme: colours for the panels and the pictures, text size,
+// font family, square corners (Monochrome) and reduced motion. Applied to Dear ImGui every frame.
+#pragma once
+
+#include <string>
+
+#include "app/prefs.h"
+#include "imgui.h"
+
+namespace ui {
+
+struct Look {
+    app::ThemeColors c;          // the theme's colours (Auto resolved to Light or Dark)
+    app::ThemeColors w;          // 0.15 stage 5n: the colours of the windows (Settings, About, Learn, Benchmark, history, pop-ups): the look M1's when M1 is on (New UI, Dark), else the same as c. The pictures keep c.
+    bool m1 = false;             // the look M1 is on for the windows
+    float textScale = 1;         // Settings → Text size
+    bool reduced = false;        // Settings → Motion (Auto: Windows' "Animation effects" off)
+    bool square = false;         // Monochrome: no rounded corners
+    bool grayscale = false;      // Monochrome: the pictures in shades of grey
+    std::string fontKey = "auto";   // the font family in use (Paper's book font, Monochrome's monospace, or the chosen one)
+};
+const Look& look();
+
+// Works out the look and applies it to Dear ImGui (colours, corners, font, text size). Call before NewFrame.
+void updateLook(const app::Prefs& p, bool systemLight, bool systemReduced);
+void invalidateLook();     // forget what was applied to Dear ImGui, so the next updateLook applies it all again
+bool systemReducedMotion();          // Windows' "Show animations in Windows" is off
+
+ImU32 col(const app::Rgb& c, float a = 1);
+ImVec4 vec(const app::Rgb& c, float a = 1);
+app::Rgb mix(const app::Rgb& a, const app::Rgb& b, float f);
+float corner(float r);               // a corner radius (0 with Monochrome)
+void pushOn();                       // a chosen option button: accent background, accent-text colour
+void popOn();
+bool onIsSolid();                    // 0.38: the chosen look is the solid fill (Monochrome, High contrast), else the tint with the text colour
+void pushPrimary();                  // 0.38: a primary action button: the solid accent fill with its on-fill text
+void popPrimary();
+
+}  // namespace ui

@@ -1,0 +1,53 @@
+// lrnLook, lrnScale, lrnMass and LRN_TL. tests/test_atom.cpp checks them word for word against the
+// The interactive parts (tabs, chips, the element bar, the ▶ buttons)
+// are drawn by the app (ui/atom_learn.cpp); in the HTML a row of them is marked [[chips]].
+#pragma once
+
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "atom_sim.h"
+
+namespace atom {
+
+struct LearnSection { std::string key, title, html; };
+
+// "What am I even looking at?": the sections for the atom and view open now.
+// live: the readout lines at the top of the picture, joined with <br>.
+std::vector<LearnSection> lookSections(const AtomParams& p, const std::string& live);
+extern const char* const kLookIntro;
+
+// "Scale: how empty is an atom?": tab "scale" (obj = the chosen object, 0–4) or "ten".
+std::string scaleHtml(const AtomParams& p, const std::string& tab, int obj);
+extern const char* const kScaleObjects[5];       // the chips: pea, marble, tennis ball, football, beach ball
+
+// "Weight: what does an atom weigh?": tab "parts", "miss", "count", "proton" or "ladder".
+std::string massHtml(const AtomParams& p, const std::string& tab);
+
+// The timeline: 22 steps; some have a ▶ button that sets the lab (settings in order).
+struct TimelineStep {
+    const char* y; const char* who; const char* t; const char* d; const char* svg;
+    const char* lab;                               // the button's words, or ""
+    std::vector<std::pair<std::string, std::string>> set;   // key, value (numbers as text)
+};
+const std::vector<TimelineStep>& timelineSteps();
+extern const char* const kTimelineIntro;
+
+std::string isotopeLine(int Z, int N);                // "☢ Iron-60: half-life ..." or "● Iron-56: stable"
+std::string elemCardHtml(int Z);                      // the element card
+extern const char* const kTableNote;                  // "Click an element for its most common isotope ..."
+std::string factsHtml(int Z);                         // the facts with the temperature bar
+std::string spectrumNote(int Z, int N);               // the note under the light spectrum (the non-relativistic levels)
+std::string spectrumNote(int Z, int N, bool dirac);   // the same with the Dirac levels on (dirac.h): the old note, bit for bit, when dirac is false
+std::string tempStateHtml(int Z, double K);           // "<b>293 K</b> · 20 °C · 68 °F  →  Iron is <b>🧊 solid</b>"
+// 0.46.3: the fraction of X2 pairs split into atoms (X2 <-> 2X) at K kelvin and 1 atm, for the two-atom gases H, N, O, F, Cl, Br, I; -1 for any other element.
+// From NIST-JANAF log Kf of X(g): Kp = Kf^2 (bar), alpha = sqrt(Kp / (Kp + 4 P)), P = 1.01325 bar.
+double pairSplitFraction(int Z, double K);
+std::string tempSpeedHtml(int Z, double K);           // "Typical atom speed here: ..." (follows metric/imperial)
+extern const char* const kTempNote;
+extern const char* const kTempDetailsHtml;            // "What is temperature, really?"
+// the decay history list: (kind, text) with kind decNuc, decStep or decNone
+std::vector<std::pair<std::string, std::string>> decayHistory(const std::vector<ChainStep>& chain, int Z, int N);
+
+}  // namespace atom

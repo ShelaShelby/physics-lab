@@ -1,0 +1,41 @@
+# Sr: GRASP2018 clouds of the levels the app draws, one orbital set for the whole atom (core-valence + valence-valence MCDHF on the main configurations, then RCI per J and parity with Breit and QED); tools/grasp/run_shared.py + multipoles_two.py, native 0.47.4.
+# computed = excitation energy from the ground level (cm-1; CODATA 2018 hartree); diff_% = (computed - NIST) / NIST; NIST = data/jumps/asd (tools/make_level_data.py).
+# LS_weight = the root's weight in the NIST level's configuration and term (jj2lsj); natural_orbitals, k_max = highest multipole of M_J = J; CSFs, seconds: the block run.
+level	J	NIST_cm	computed_cm	diff_%	LS_weight	natural_orbitals	k_max	CSFs	seconds
+5s2 1S	0	0.0	0.0		0.904	50	0	5872	44.6
+5s.5p 3P*	0	14317.507	14446.0	+0.897	0.949	50	0	6803	47.3
+5s.5p 3P*	1	14504.334	14663.0	+1.094	0.938	50	2	14378	107.9
+5s.5p 3P*	2	14898.545	15106.1	+1.393	0.924	50	4	28042	285.6
+5s.4d 3D	2	18218.784	17517.1	-3.852	0.790	50	4	29007	342.8
+5s.4d 3D	3	18319.261	19023.3	+3.843	0.778	50	6	30224	342.2
+5s.4d 1D	2	20149.685	20760.9	+3.033	0.645	50	4	29007	342.8
+5s.5p 1P*	1	21698.452	21599.3	-0.457	0.778	50	2	14378	107.9
+5s.6s 3S	1	29038.773	29111.2	+0.249	0.925	50	2	22324	183.5
+4d.5p 3F*	2	33266.851	32914.5	-1.059	0.694	50	4	28042	285.6
+4d.5p 3F*	3	33589.709	33012.1	-1.719	0.857	50	6	44892	799.4
+4d.5p 1D*	2	33826.899	32544.7	-3.790	0.693	50	4	28042	285.6
+5s.6p 3P*	0	33853.49	33889.5	+0.106	0.845	50	0	6803	47.3
+4d.5p 3F*	4	33919.315	33397.1	-1.540	0.795	50	8	26633	333.1
+5s.5d 1D	2	34727.447	34568.3	-0.458	0.640	50	4	29007	342.8
+5s.5d 3D	1	35006.908	35023.3	+0.047	0.900	50	2	22324	183.5
+5s.5d 3D	2	35021.989	35070.2	+0.138	0.893	50	4	29007	342.8
+5s.5d 3D	3	35045.019	35139.0	+0.268	0.909	50	6	30224	342.2
+5p2 3P	0	35193.442	34872.2	-0.913	0.546	50	0	5872	44.6
+5p2 3P	1	35400.105	35178.0	-0.628	0.551	50	2	22324	183.5
+5p2 3P	2	35674.637	35379.7	-0.827	0.508	50	4	29007	342.8
+4d.5p 3D*	1	36264.151	34998.4	-3.490	0.821	50	2	14378	107.9
+4d.5p 3D*	2	36381.746	35175.0	-3.317	0.794	50	4	28042	285.6
+4d.5p 3D*	3	36559.492	35108.2	-3.970	0.653	50	6	44892	799.4
+4d2 1D	2	36960.842	36271.6	-1.865	0.303	50	4	29007	342.8
+5s.4f 3F*	2	38750.42	38881.0	+0.337	0.930	50	4	28042	285.6
+5s.4f 3F*	3	38752.41	38881.9	+0.334	0.929	50	6	44892	799.4
+5s.4f 3F*	4	38755.175	38887.0	+0.340	0.930	50	8	26633	333.1
+5s.4f 1F*	3	39539.013	38638.2	-2.278	0.691	50	6	44892	799.4
+5s.5f 1F*	3	41519.04	41828.3	+0.745	0.697	50	6	44892	799.4
+4d2 3P	1	44595.92	43590.6	-2.254	0.380	50	2	22324	183.5
+# no cloud: 5s.4d 3D J=1 (18159.04 cm-1): its calculation is -6.2 % from NIST (over the 5 % limit)
+# no cloud: 4d.5p 3P* J=1 (37302.731 cm-1): its calculation is -5.1 % from NIST (over the 5 % limit)
+# no cloud: 4d.5p 3P* J=2 (37336.591 cm-1): its calculation is -5.3 % from NIST (over the 5 % limit)
+# no cloud: 5s.7s 3S J=1 (37424.675 cm-1): its calculation is +8.7 % from NIST (over the 5 % limit)
+# no cloud: 5s.6f 1F* J=3 (42839.589 cm-1): its calculation is -125.6 % from NIST (over the 5 % limit)
+# stored grid: 300 points, r = 0.0002 .. 400.0 bohr (log); natural orbitals under 0.01 electrons drawn together per l. Interpolation check: norm within 3.3e-02 (worst: 4d.5p 3D* J=1: 6f j=5/2 occ 0.0468), <r> within 3.4e-02 (relative). clouds.bin: 2123114 bytes.

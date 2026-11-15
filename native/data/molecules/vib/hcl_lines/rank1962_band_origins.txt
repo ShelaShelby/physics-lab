@@ -1,0 +1,9 @@
+# H35Cl, the measured band origins nu0 of the v-0 bands (vacuum, cm^-1): D. H. Rank, D. P. Eastman, B. S. Rao and T. A. Wiggins, J. Opt. Soc. Am. 52, 1 (1962),
+# page 3, the table of band origins ("nu0 Obs"). The same saved PDF as rank1962_table3.txt (rank_eastman_rao_wiggins_1962_josa52_1.pdf); read from its text layer
+# and checked against the page image (14 Nov 2026). nu0(v-0) = G(v) - G(0), the measured vibrational levels above the lowest.
+# v nu0_obs
+1 2885.9775
+2 5667.9841
+3 8346.782
+4 10922.81
+5 13396.19

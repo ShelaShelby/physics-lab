@@ -1,0 +1,30 @@
+// 0.15 stage 3: the reading view. In the new UI, About, History, the lab changelogs and the guides open in a centred readable column (about 70 characters wide) over the dimmed
+// picture, with a table of contents (a rail on the left in a wide window, else a "Contents" menu) and a close button; Esc closes it. With the new UI off they open in the floating
+// window they always had (pageBegin does exactly what the old code did).
+#pragma once
+
+#include <string>
+
+namespace ui {
+
+struct AppState;
+
+void setReadingMode(bool on);                                // the new UI is on (set by ui/shell.cpp every frame)
+// Opens the page window: `title` ends with "###id". open: cleared when the page is closed. In the reading view the window is the column; else the floating window as before.
+bool pageBegin(const std::string& title, bool* open);
+void dimBehind(const char* id, bool* open);                  // 0.38.1: the reading view's dim over the picture (60 % black, under the bars and cards); a click on it clears *open
+void pageEnd();                                              // ImGui::End() and, in the reading view, what goes with it
+void noteHeading(int level, const std::string& text);        // a heading the contents list shows (level 1..3); only counts inside the reading view
+bool readingModeOn();                                        // 5k: the New UI is on (floating windows are kept inside the app window then)
+bool readingShown();                                         // a page was shown in the reading view this frame
+void closePages(AppState& app);                              // closes every page (About, History, changelog, guides)
+bool pagesOpen(const AppState& app);                         // any of them is open
+float readingFloorBody();                                    // the smallest sizes in px the pages may draw text at in the reading view (Body, Caption); 0 outside it
+float readingFloorCaption();
+void readingLongestLine(int chars, bool body);                // the pages report the characters on each line they lay out (the reading view keeps the longest of the Body text and of the Caption text, PL_LOG_SHELL)
+void readingFrameEnd();                                      // 5k: after all windows of a frame: the app scrolls the open page by the wheel and keys, and applies a Contents choice
+std::string readingAnchorsNow();                             // 5k: the scroll offset of each Contents entry now (the test script's pscroll)
+bool readingScrollNow(float* y, float* mx);                  // 5k: the open page's scroll offset and range (the test script's pscroll)
+std::string readingDiag();                                   // 5k: what the input log file says about the open page
+
+}  // namespace ui

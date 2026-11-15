@@ -1,0 +1,22 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/vib/webbook_diatomic/nist_webbook_h2_constants.html
+# Reference: NIST Chemistry WebBook, SRD 69, "Constants of diatomic molecules" (K. P. Huber and G. Herzberg, 1979): H2
+# URL: https://webbook.nist.gov/cgi/cbook.cgi?ID=C1333740&Mask=1000
+# Date read: 2026-11-06
+# sha256 of the original: 8e109337cf1eac1988b1247e75859bb1febdd51d59b5ae179e19b2f466d3641e
+# Place in the original: the row of the X ground state of the constants table and footnote 125 (row of the footnote list) (HTML as received)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin X ground state row
+<tr>
+<td class="nowrap" rowspan="6"> X <sup>1</sup>&#931;<sub>g</sub><sup> </sup>1s&#963;<sup>2</sup></td><td> 0</td><td> 4401.21<sub>3</sub></td><td> 121.33<sub>6</sub> <a href="#Dia118">118</a></td><td>&nbsp;</td><td> 60.853<sub>0</sub> <a href="#Dia119">119</a></td><td> 3.062<sub>2</sub> <a href="#Dia120">120</a></td><td>&nbsp;</td><td> 0.0471 <a href="#Dia121">121</a></td><td>&nbsp;</td><td> 0.74144 <a href="#Dia122">122</a></td><td class="nowrap">&nbsp;</td><td>&nbsp;</td></tr>
+#--- end
+#--- begin footnote 125
+<tr><td style="vertical-align: top;"><a id="Dia125">125</a></td><td>This is an upper limit (36118.3 &plusmn; 0.5 cm<sup>-1</sup>), the lower limit being 4.4779 eV.
+According to  <a href="#ref-123">Herzberg, 1970</a> the true value is probably close to the upper limit; see also  <a href="#ref-157">Stwalley, 1970</a> who
+gives D<sub>0</sub><sup>0</sup> = 36118.6 cm<sup>-1</sup>  <a href="#ref-157">Stwalley, 1970</a> on the basis of a reassignment of the last
+vibrational levels of the B state. The most recent theoretical value of  <a href="#ref-147">Kolos and Wolniewicz, 1968, 2</a> - including a
+small non-adiabatic correction of  <a href="#ref-158">Bunker, 1979</a> - is D<sub>0</sub><sup>0</sup>= 36117.9 cm<sup>-1</sup>  <a href="#ref-147">Kolos and Wolniewicz, 1968, 2</a>, <a href="#ref-158">Bunker, 1979</a>. An
+earlier independent calculation  <a href="#ref-159">Hunter, 1966</a> (not including the non-adiabatic correction) gave
+D<sub>0</sub><sup>0</sup>= 36118.1 cm<sup>-1</sup>  <a href="#ref-159">Hunter, 1966</a>.</td></tr>
+#--- end

@@ -1,0 +1,19 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/nist_compositions_Cl.html
+# Reference: NIST Physical Measurement Laboratory, "Atomic Weights and Isotopic Compositions with Relative Atomic Masses", chlorine
+# URL: https://physics.nist.gov/cgi-bin/Compositions/stand_alone.pl?ele=Cl&ascii=ascii2&isotype=some
+# Date read: 2026-10-18
+# sha256 of the original: 0af99fc70e16b4dac7bb5f9ba578b57249f3e6d1fbab78956cf3474a2fab6037
+# Place in the original: the entries of mass numbers 35 and 37: Relative Atomic Mass and Isotopic Composition (as received)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin mass number 35
+Mass Number = 35
+Relative Atomic Mass = 34.968852682(37)
+Isotopic Composition = 0.7576(10)
+#--- end
+#--- begin mass number 37
+Mass Number = 37
+Relative Atomic Mass = 36.965902602(55)
+Isotopic Composition = 0.2424(10)
+#--- end

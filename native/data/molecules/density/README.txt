@@ -1,0 +1,52 @@
+[0.54.4] The papers, preprints, journal scans, saved web pages and downloads of unclear terms that this README names are NOT in this public repo any more: they are in the private
+repo ShelaShelby/physics-lab-sources at data/molecules/density/ (same names; the other files named here are still in this folder). native/data/SOURCES.md lists each moved file with its
+reference, URL, date read and sha256. Where a test reads one, its extract (<name>.extract.txt: the lines it needs, copied exactly) is in this folder.
+
+Molecule Lab, Realistic style: computed electron density and electrostatic potential (0.21 stage 1)
+====================================================================================================
+
+Everything in this folder is COMPUTED, not measured. Made once by tools/make_density_data.py (not by the app); the app embeds the .pld files
+(cmake/embed_density.cmake) and reads them with src/molecule/density.cpp. tests/test_density.cpp (density_logic) checks them.
+
+How it was made (18 Oct 2026, in the cloud session):
+  1. Geometry: the app's own viewer coordinates, exported by the molecule_xyz tool (tools/molxyz/export_xyz.cpp, built with the unit tests) into
+     ../xyz/<id>.xyz (angstrom, %.17g: every bit of the double; CCCBDB experimental shapes, principal axes, centre of mass at 0), converted to bohr with CODATA 2022
+     a0 = 0.529177210544 A. Since 0.21 the app DRAWS the 15 molecules in exactly this frame (src/molecule/viewer_frame.inc, tools/make_viewer_frame.py): placing them
+     again at start-up gave compiler-dependent in-plane axes for benzene (MSVC vs GCC).
+       /home/user/build/molecule_xyz data/molecules/xyz
+  2. pip install pyscf numpy   (PySCF 2.14.0 was used), then from native/:
+       python3 tools/make_density_data.py data/molecules/xyz data/molecules/density
+     Kohn-Sham DFT, PySCF's "b3lyp" (libxc HYB_GGA_XC_B3LYP, id 402), basis aug-cc-pVTZ for all 15 (none needed the aug-cc-pVDZ fallback: the slowest,
+     benzene, took about 10 minutes), DFT grid level 3, SCF converged to 1e-10 hartree. O2: triplet, UKS, total density (alpha + beta). Every other
+     molecule closed shell, RKS. Ozone: the closed-shell RKS is an APPROXIMATION (ozone has multi-reference character); the app says so.
+  3. Per molecule, <id>.pld (format at the top of the tool) and <id>.txt (the data sheet: method, energy, the dipole with components, grid sizes):
+     - the density on a cubic grid, point values, step 0.25 bohr, 5 bohr beyond the outermost nuclei, grid points at whole multiples of the step
+       (so mirror planes and inversions of the molecule map grid points onto grid points); uint16, log-scaled (relative step 3.9e-4) from 1e-7 to 1e4 e/bohr^3;
+     - the same density on fine cubes round every non-hydrogen nucleus (step 0.05 bohr; chlorine 0.03), +-0.6 bohr: only for the integrals. The density has a
+       cusp at a nucleus, which a 0.25 bohr grid cannot integrate (the plain grid sum gives 10.6 electrons for water). The integral of f rho is
+       sum_grid f rho (1 - sum_A w_A) h^3 + sum_A sum_cube f rho w_A hf^3, with w_A a C-infinity step from 1 (r <= 0.1 bohr) to 0 (r >= 0.6 bohr);
+     - the electrostatic potential (nuclei minus electrons) on a 0.4 bohr grid, int16 with 1e-4 au per unit (clamped at +-3.27 au, only next to a nucleus);
+     - the dipole moment from the density matrix (PySCF dip_moment), atomic units in the file, debye in the sheet (1 e bohr = 2.5417464715 D, CODATA 2022).
+  Size: 5.5 MB for the 15 files.
+
+Checks (tests/test_density.cpp, against independent references):
+  - electron count of every stored grid: within 0.26 % of 2, 14, 16, 18, 22, 10, 24, 10, 10, 14, 14, 16, 16, 18, 42 (limit 0.5 %);
+  - computed dipole vs NIST CCCBDB experimental (debye; given to the job as text, the site was not opened): HCl 1.107 vs 1.093 (NISTDiatomic), HCN 3.038 vs 2.980
+    (NSRDS-NBS10), H2O 1.855 vs 1.857 (1991Sho/Ebe:5875-5882), O3 0.659 vs 0.530 (NSRDS-NBS10), NH3 1.519 vs 1.476 (1970Shi:3572-3576), H2CO 2.403 vs 2.332
+    (2003The/Cal:8910-8915), CH3OH 1.673 vs 1.672 (1981Sas/Lee:228-230); the eight symmetric molecules 0.0000 (zero by symmetry, NSRDS-NBS10). Limit 0.25 D
+    (zeros 0.02 D): all within. No molecule is marked doubtful. The dipole recomputed from the stored grid is within 0.022 D of the exact one (limit 0.05 D).
+  - symmetry of the stored density (H2O mirrors, CO2 and N2 inversion and axis, CH4 S4 and C3, C6H6 mirror, half turn and sixth of a turn) within 1 %.
+
+0.24: H2O_vib.pld, the density VIBRATING (made by tools/make_vib_density.py; format in that tool). For each of water's 3 modes (src/molecule/vib_data.inc),
+the density at both ends of the "3 times bigger" swing (the nuclei at R0 +- A d, d the zero-point turning point, A = vib::drawnScale), with the same PySCF 2.14.0,
+B3LYP, aug-cc-pVTZ, grid level 3 and on the SAME grids as H2O.pld (fine cubes round the moved nuclei); the app blends still, + and - quadratically.
+Run 4 Nov 2026 in the cloud session (6 SCFs, about 6 s each, 4 cores). 1.7 MB for water's 3 modes: all 15 molecules this way would be about 70 MB, so the
+other molecules wait for a smaller format (the change only, stored coarser) and the owner's look at water.
+Checked (tests/test_density.cpp): 10 electrons at every moment within 0.5 %; the grid's dipole against the calculation's at both ends; the dipole change across
+each swing against the separate vibration calculation's infrared intensity (within 10 %: measured 3.5 %, 4.7 %, 1.5 %).
+
+alibakhshi_schaefer_2024_europepmc_record.json (0.46.3): Europe PMC record (with the abstract) of A. Alibakhshi, L. V. Schaefer, "Electron iso-density surfaces provide a
+thermodynamically consistent representation of atomic and molecular surfaces", Nat. Commun. 15, 6086 (2024), doi:10.1038/s41467-024-50408-8, downloaded 2026-11-08 from
+https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:10.1038/s41467-024-50408-8&format=json&resultType=core (saved as received). The abstract gives the 104
+molecules and the 1.6 % at 0.0016 a.u.; the full text (PMC11271626, read 2026-11-08, not saved: the download was refused) gives 3.17 % for 0.002 and 6.98 % for 0.001 a.u.
+Used for the Density panel's iso-surface caption (src/ui/shell_molecule.cpp) and the About page.

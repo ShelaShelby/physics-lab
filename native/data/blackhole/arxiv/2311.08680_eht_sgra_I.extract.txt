@@ -1,0 +1,15 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/2311.08680_eht_sgra_I.txt.gz
+# Reference: Event Horizon Telescope Collaboration, "First Sagittarius A* Event Horizon Telescope results. I. The shadow of the supermassive black hole in the center of the Milky Way", Astrophys. J. Lett. 930, L12 (2022), arXiv:2311.08680v2 (the PDF: sha256 df498bcaa7f11a5cf6ad15cec6f8d37cd0fad05f6a251505637206cdc01e3c47, 2,786,789 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/2311.08680
+# Date read: 2026-11-15
+# sha256 of the original: d6078a264280fe359d7adacb409cc548053cddd6a1150c86b09c21a783c464bc
+# Place in the original: Table 1 (page 8 of the PDF): the ring-diameter row and the VLTI stellar-orbits row of the angular gravitational radius; a table cell is cut from its line
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin Table 1, ring diameter
+Diameter, d                              51.8 ± 2.3 µas
+#--- end
+#--- begin Table 1, theta_g from the VLTI stellar orbits
+Stellar orbits (VLTI)d             5.125 ± 0.009 ± 0.020 µas
+#--- end

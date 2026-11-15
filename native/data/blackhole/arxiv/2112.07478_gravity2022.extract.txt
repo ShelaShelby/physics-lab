@@ -1,0 +1,18 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/2112.07478_gravity2022.txt.gz
+# Reference: GRAVITY Collaboration, "Mass distribution in the Galactic Center based on interferometric astrometry of multiple stellar orbits", Astron. Astrophys. 657, L12 (2022), arXiv:2112.07478 (the PDF: sha256 541a6bcd46fdcb76a399e166f01742abafa3f3afbb528013a00c7e91d37651e4, 7,691,083 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/2112.07478
+# Date read: 2026-11-15
+# sha256 of the original: 327266a645f5dae00591815e12beee56b403a4fe0e5459039afb97440f2c7677
+# Place in the original: Table B.1 (page 10 of the PDF), its caption and the rows M and R0 of the "this paper" columns
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin table B.1 caption
+Table B.1: Best-fit orbit parameters of the four-star fit determining fSP .
+#--- end
+#--- begin table B.1 columns and the rows M and R0
+                             this paper                Grav. Coll. 2020           Gillessen+ 2017                      Do+ 2019
+
+   M• [106 M ]            4.297         0.012          4.261          0.012       4.280     0.100         3.975                0.058
+   R0 [pc]                8277            9            8247             9         8320        70          7959                  59
+#--- end

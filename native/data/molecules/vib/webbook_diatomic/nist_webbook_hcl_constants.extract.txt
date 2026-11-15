@@ -1,0 +1,20 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/vib/webbook_diatomic/nist_webbook_hcl_constants.html
+# Reference: NIST Chemistry WebBook, SRD 69, "Constants of diatomic molecules" (K. P. Huber and G. Herzberg, 1979): HCl
+# URL: https://webbook.nist.gov/cgi/cbook.cgi?ID=C7647010&Mask=1000
+# Date read: 2026-11-06
+# sha256 of the original: 6e457caffc276a7c59ff6c098202d4b9b8e9c7c8718ea138e753f2e4d93da127
+# Place in the original: the row of the X ground state of the constants table and footnotes 29 and 30 (rows of the footnote list) (HTML as received)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin X ground state row
+<tr>
+<td class="nowrap" rowspan="10"> X <sup>1</sup>&#931;<sup>+</sup></td><td> 0</td><td> 2990.946<sub>3</sub> <a href="#Dia26">26</a></td><td> 52.8186 <a href="#Dia27">27</a></td><td> 0.2243<sub>7</sub></td><td> 10.59341<sub>6</sub> <a href="#Dia26">26</a> <a href="#Dia28">28</a></td><td> 0.30718<sub>1</sub> <a href="#Dia29">29</a></td><td>&nbsp;</td><td> 5.3194E-4 <a href="#Dia28">28</a> <a href="#Dia30">30</a></td><td>&nbsp;</td><td> 1.27455<sub>2</sub> <a href="#Dia31">31</a> <a href="#Dia32">32</a></td><td class="nowrap">&nbsp;</td><td>&nbsp;</td></tr>
+#--- end
+#--- begin footnote 29
+<tr><td style="vertical-align: top;"><a id="Dia29">29</a></td><td>+0.001772<sub>4</sub>(v+1/2)<sup>2</sup> - 0.0001201(v+1/2)<sup>3</sup>.</td></tr>
+#--- end
+#--- begin footnote 30
+<tr><td style="vertical-align: top;"><a id="Dia30">30</a></td><td>-7.51<sub>0</sub>E-6(v+1/2) + 4.0<sub>0</sub>E-7(v+1/2)<sup>2</sup>; higher order terms in  <a href="#ref-12">Rank, Rao, et al., 1965</a>.
+See also  <a href="#ref-31">Herman and Asgharian, 1966</a>.</td></tr>
+#--- end

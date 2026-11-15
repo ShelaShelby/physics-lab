@@ -1,0 +1,13 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/vib/webbook_diatomic/nist_webbook_dcl_constants.html
+# Reference: NIST Chemistry WebBook, SRD 69, "Constants of diatomic molecules" (K. P. Huber and G. Herzberg, 1979): DCl (D35Cl)
+# URL: https://webbook.nist.gov/cgi/cbook.cgi?ID=C7698057&Mask=1000
+# Date read: 2026-11-14
+# sha256 of the original: 4fe3312958a3377aa4fcc48fa5416f41969156f4a4c1e7b49466c122e73aa485
+# Place in the original: the row of the X ground state of the constants table (HTML as received)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin X ground state row
+<tr>
+<td class="nowrap" rowspan="6"> X <sup>1</sup>&#931;<sup>+</sup></td><td> 0</td><td> 2145.163 Z</td><td> 27.1825 <a href="#Dia9">9</a></td><td> 0.08649</td><td> 5.448794 <a href="#Dia10">10</a></td><td> 0.113291 <a href="#Dia9">9</a></td><td> 0.0004589</td><td> 1.39E-4 <a href="#Dia11">11</a></td><td>&nbsp;</td><td> 1.274581 <a href="#Dia12">12</a></td><td class="nowrap">&nbsp;</td><td>&nbsp;</td></tr>
+#--- end

@@ -1,0 +1,13 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/vib/webbook_diatomic/nist_webbook_n2_constants.html
+# Reference: NIST Chemistry WebBook, SRD 69, "Constants of diatomic molecules" (K. P. Huber and G. Herzberg, 1979): N2
+# URL: https://webbook.nist.gov/cgi/cbook.cgi?ID=C7727379&Mask=1000
+# Date read: 2026-11-06
+# sha256 of the original: 13510a4f2d6a2a435ad055dec4d437b13352847cabf594c05ff72cc90361c51b
+# Place in the original: the row of the X ground state of the constants table (HTML as received)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin X ground state row
+<tr>
+<td class="nowrap" rowspan="8"> X <sup>1</sup>&#931;<sub>g</sub><sup>+</sup></td><td> 0</td><td> 2358.57 Z</td><td> 14.324 <a href="#Dia109">109</a></td><td> -2.26E-3</td><td> 1.99824<sub>1</sub> <a href="#Dia110">110</a></td><td> 0.017318 <a href="#Dia110">110</a></td><td>&nbsp;</td><td> [5.76E-6]</td><td>&nbsp;</td><td> 1.09768<sub>5</sub> <a href="#Dia111">111</a></td><td class="nowrap">&nbsp;</td><td>&nbsp;</td></tr>
+#--- end

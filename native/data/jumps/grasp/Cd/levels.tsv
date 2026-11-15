@@ -1,0 +1,22 @@
+# Cd: GRASP2018 clouds of the levels the app draws, one orbital set for the whole atom (core-valence + valence-valence MCDHF on the main configurations, then RCI per J and parity with Breit and QED); tools/grasp/run_shared.py + multipoles_two.py, native 0.47.4.
+# computed = excitation energy from the ground level (cm-1; CODATA 2018 hartree); diff_% = (computed - NIST) / NIST; NIST = data/jumps/asd (tools/make_level_data.py).
+# LS_weight = the root's weight in the NIST level's configuration and term (jj2lsj); natural_orbitals, k_max = highest multipole of M_J = J; CSFs, seconds: the block run.
+level	J	NIST_cm	computed_cm	diff_%	LS_weight	natural_orbitals	k_max	CSFs	seconds
+4d10.5s2 1S	0	0.0	0.0		0.932	47	0	4233	32.0
+4d10.5s.5p 3P*	0	30113.99	29525.7	-1.953	0.957	47	0	2865	28.8
+4d10.5s.5p 3P*	1	30656.087	30063.2	-1.934	0.951	47	2	7766	49.9
+4d10.5s.5p 3P*	2	31826.952	31175.7	-2.046	0.942	47	4	10524	70.6
+4d10.5s.5p 1P*	1	43692.384	42787.7	-2.071	0.886	47	2	7766	49.9
+4d10.5s.5d 3D	1	59485.768	58871.8	-1.032	0.944	47	2	19902	144.9
+4d10.5s.5d 3D	2	59497.868	58867.3	-1.060	0.568	47	4	30658	330.1
+4d10.5s.8s 3S	1	66682.029	67763.4	+1.622	0.934	47	2	19902	144.9
+# no cloud: 4d10.5s.6s 3S J=1 (51483.98 cm-1): its calculation is +21.6 % from NIST (over the 5 % limit)
+# no cloud: 4d10.5s.5d 1D J=2 (59219.734 cm-1): its calculation is +8.3 % from NIST (over the 5 % limit)
+# no cloud: 4d10.5s.5d 3D J=3 (59515.99 cm-1): its calculation is +8.0 % from NIST (over the 5 % limit)
+# no cloud: 4d10.5s.7s 3S J=1 (62563.435 cm-1): its calculation is +5.3 % from NIST (over the 5 % limit)
+# no cloud: 4d10.5s.6d 1D J=2 (65134.783 cm-1): the Dirac-Fock of its 6d orbital did not converge (no cloud from a stand-in orbital)
+# no cloud: 4d10.5s.6d 3D J=1 (65353.372 cm-1): the Dirac-Fock of its 6d orbital did not converge (no cloud from a stand-in orbital)
+# no cloud: 4d10.5s.6d 3D J=2 (65358.881 cm-1): the Dirac-Fock of its 6d orbital did not converge (no cloud from a stand-in orbital)
+# no cloud: 4d10.5s.6d 3D J=3 (65367.227 cm-1): the Dirac-Fock of its 6d orbital did not converge (no cloud from a stand-in orbital)
+# no cloud: 4d10.5s.7d 1D J=2 (67838.401 cm-1): the Dirac-Fock of its 7d orbital did not converge (no cloud from a stand-in orbital)
+# stored grid: 300 points, r = 0.0002 .. 400.0 bohr (log); natural orbitals under 0.01 electrons drawn together per l. Interpolation check: norm within 2.3e-03 (worst: 4d10.5s.5p 1P* J=1: 8d j=5/2 occ 0.0443), <r> within 1.5e-03 (relative). clouds.bin: 526046 bytes.

@@ -1,0 +1,19 @@
+# Bundled fonts
+
+Two fonts are built into PhysicsLab.exe for the Settings → Font choices. Both are free to ship under the SIL Open Font License 1.1 (the
+licence texts are next to them):
+
+| Choice | Font | Files |
+| --- | --- | --- |
+| Easy to read | Atkinson Hyperlegible (Braille Institute of America) | `AtkinsonHyperlegible-{Regular,Bold,Italic}-{latin,latin-ext}.ttf` |
+| Rounded | Nunito (The Nunito Project Authors) | `Nunito-{Regular,Bold,Italic}-{latin,latin-ext}.ttf` |
+
+0.15 stage 5j / 5m: Inter (Regular and SemiBold, `Inter-Regular.otf`, `Inter-SemiBold.otf`, licence `OFL-Inter.txt`) is the font of the New UI's look M1 (Dark theme, Font = Auto).
+It comes from the Ubuntu package `fonts-inter` 4.0+ds-1 (© 2016–2023 The Inter Project Authors, github.com/rsms/inter, SIL OFL 1.1), unchanged.
+(Michroma, the Y2K title font, and IBM Plex Sans, the look M3 font, were removed in 0.15 stage 5m; Michroma is kept in `git history (archive removed in 0.22)fonts/`, Plex is in git history.)
+
+The first two come from the npm packages `@fontsource/atkinson-hyperlegible` and `@fontsource/nunito`
+(version 5.3.0), as WOFF files split by alphabet, and were turned into TrueType with fontTools
+(only the container changes, not the font). The other choices use fonts every Windows PC has,
+so they are not shipped: Theme default = Segoe UI, Serif = Georgia (also the Paper theme's book
+font), Monospace = Consolas (also the Monochrome theme's font).

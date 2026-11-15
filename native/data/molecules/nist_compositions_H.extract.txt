@@ -1,0 +1,19 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/nist_compositions_H.html
+# Reference: NIST Physical Measurement Laboratory, "Atomic Weights and Isotopic Compositions with Relative Atomic Masses", hydrogen
+# URL: https://physics.nist.gov/cgi-bin/Compositions/stand_alone.pl?ele=H&ascii=ascii2&isotype=some
+# Date read: 2026-10-18
+# sha256 of the original: 1348b0f63353d2eac05c7e70a254e104c80e0aa6bd5ed32e3d3ef7f1c3a12204
+# Place in the original: the entries of mass numbers 1 and 2: Relative Atomic Mass and Isotopic Composition (as received)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin mass number 1
+Mass Number = 1
+Relative Atomic Mass = 1.00782503223(9)
+Isotopic Composition = 0.999885(70)
+#--- end
+#--- begin mass number 2
+Mass Number = 2
+Relative Atomic Mass = 2.01410177812(12)
+Isotopic Composition = 0.000115(70)
+#--- end

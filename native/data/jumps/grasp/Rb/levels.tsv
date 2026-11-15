@@ -1,0 +1,16 @@
+# Rb: GRASP2018 core-valence MCDHF + RCI (Breit, QED) clouds of the levels the app uses; tools/grasp/run_level.py + multipoles.py, native 0.47.2.
+# computed = excitation energy from the ground level (cm-1; CODATA 2018 hartree); diff_% = (computed - NIST) / NIST; NIST = src/atom/alkali_data.inc (NIST ASD).
+# occ_outer = the occupation of the outer electron's natural orbital; k_max = highest multipole of the M_J = J state; CSFs, seconds: the series run (all its levels together).
+level	J	NIST_cm	computed_cm	diff_%	occ_outer	natural_orbitals	k_max	CSFs	seconds	DF_start
+5s	1/2	0.0	0.0		0.98855	42	0	438	53.5	tf,tf,h1
+5p	1/2	12578.95	12769.5	+1.515	0.99446	43	0	522	63.7	tf,tf
+5p	3/2	12816.545	13006.2	+1.479	0.99479	43	2	884	67.3	tf,h1
+4d	5/2	19355.203	19335.0	-0.104	0.99374	43	4	1034	80.7	tf,tf
+4d	3/2	19355.649	19338.8	-0.087	0.99344	43	2	875	76.9	tf,tf
+6s	1/2	20132.51	20439.6	+1.525	0.99754	42	0	438	53.5	tf,tf,h1
+6p	1/2	23715.081	24050.4	+1.414	0.99861	43	0	522	63.7	tf,tf
+6p	3/2	23792.591	24126.8	+1.405	0.99867	43	2	884	67.3	tf,h1
+5d	3/2	25700.536	25909.5	+0.813	0.99731	43	2	875	76.9	tf,tf
+5d	5/2	25703.498	25913.9	+0.819	0.99740	43	4	1034	80.7	tf,tf
+7s	1/2	26311.437	26654.9	+1.305	0.99907	42	0	438	53.5	tf,tf,h1
+# stored grid: 300 points, r = 0.0002 .. 400.0 bohr (log); natural orbitals under 0.001 electrons drawn together per l. Interpolation check: norm within 7.0e-04, <r> within 1.1e-04 (relative). clouds.bin: 666604 bytes.

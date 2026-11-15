@@ -1,0 +1,142 @@
+API VERSION: 1.2
+API SOURCE: NASA/JPL Horizons API
+
+*******************************************************************************
+ Revised: July 31, 2013             Moon / (Earth)                          301
+ 
+ GEOPHYSICAL DATA (updated 2018-Aug-15):
+  Vol. mean radius, km  = 1737.53+-0.03    Mass, x10^22 kg       =    7.349
+  Radius (gravity), km  = 1738.0           Surface emissivity    =    0.92
+  Radius (IAU), km      = 1737.4           GM, km^3/s^2          = 4902.800066
+  Density, g/cm^3       =    3.3437        GM 1-sigma, km^3/s^2  =  +-0.0001  
+  V(1,0)                =   +0.21          Surface accel., m/s^2 =    1.62
+  Earth/Moon mass ratio = 81.3005690769    Farside crust. thick. = ~80 - 90 km
+  Mean crustal density  = 2.97+-.07 g/cm^3 Nearside crust. thick.= 58+-8 km 
+  Heat flow, Apollo 15  = 3.1+-.6 mW/m^2   Mean angular diameter = 31'05.2"
+  Heat flow, Apollo 17  = 2.2+-.5 mW/m^2   Sid. rot. rate, rad/s = 0.0000026617
+  Geometric Albedo      = 0.12             Mean solar day        = 29.5306 d
+  Obliquity to orbit    = 6.67 deg         Orbit period          = 27.321582 d
+  Semi-major axis, a    = 384400 km        Eccentricity          = 0.05490
+  Mean motion, rad/s    = 2.6616995x10^-6  Inclination           = 5.145 deg
+  Apsidal period        = 3231.50 d        Nodal period          = 6798.38 d
+                                 Perihelion  Aphelion    Mean
+  Solar Constant (W/m^2)         1414+-7     1323+-7     1368+-7
+  Maximum Planetary IR (W/m^2)   1314        1226        1268
+  Minimum Planetary IR (W/m^2)      5.2         5.2         5.2
+********************************************************************************
+
+
+*******************************************************************************
+Ephemeris / API_USER Wed Nov 11 14:11:33 2026 Pasadena, USA      / Horizons    
+*******************************************************************************
+Target body name: Moon (301)                      {source: DE441}
+Center body name: Earth (399)                     {source: DE441}
+Center-site name: GEOCENTRIC
+*******************************************************************************
+Start time      : A.D. 1800-Jan-01 12:00:00.0000 TT      
+Stop  time      : A.D. 2099-Dec-30 12:00:00.0000 TT      
+Step-size       : DISCRETE TIME-LIST
+*******************************************************************************
+Target pole/equ : MOON_ME                         {East-longitude positive}
+Target radii    : 1737.4, 1737.4, 1737.4 km       {Equator_a, b, pole_c}       
+Center geodetic : 0.0, 0.0, -6378.137             {E-lon(deg),Lat(deg),Alt(km)}
+Center cylindric: 0.0, 0.0, 0.0                   {E-lon(deg),Dxy(km),Dz(km)}
+Center pole/equ : ITRF93                          {East-longitude positive}
+Center radii    : 6378.137, 6378.137, 6356.752 km {Equator_a, b, pole_c}       
+Target primary  : Earth
+Vis. interferer : MOON (R_eq= 1737.400) km        {source: DE441}
+Rel. light bend : Sun                             {source: DE441}
+Rel. lght bnd GM: 1.3271E+11 km^3/s^2                                          
+Atmos refraction: NO (AIRLESS)
+RA format       : DEG
+Time format     : CAL 
+Calendar mode   : Mixed Julian/Gregorian
+EOP file        : eop.261110.p270205                                           
+EOP coverage    : DATA-BASED 1962-JAN-20 TO 2026-NOV-10. PREDICTS-> 2027-FEB-04
+Units conversion: 1 au= 149597870.700 km, c= 299792.458 km/s, 1 day= 86400.0 s 
+Table cut-offs 1: Elevation (-90.0deg=NO ),Airmass (>38.000=NO), Daylight (NO )
+Table cut-offs 2: Solar elongation (  0.0,180.0=NO ),Local Hour Angle( 0.0=NO )
+Table cut-offs 3: RA/DEC angular rate (     0.0=NO )                           
+*******************************************************************************
+ Date__(TT)__HR:MN:SC.fff     ObsSub-LON ObsSub-LAT
+***************************************************
+$$SOE
+ 1800-Jan-01 12:00:00.000       5.883338   4.186550
+ 1900-Jun-15 12:00:00.000     355.980007  -4.607076
+ 1969-Jul-21 00:00:00.000     352.770114   1.918885
+ 2000-Jan-01 12:00:00.000       5.026658  -6.720906
+ 2026-Nov-12 00:00:00.000       1.385436   5.997915
+ 2050-Jul-12 18:00:00.000       5.732522  -1.240993
+ 2099-Dec-30 12:00:00.000     356.688737  -3.679048
+$$EOE
+*******************************************************************************
+Column meaning:
+ 
+TIME
+
+  Terrestrial Time ("TT") output was requested. This continuous timescale
+is the relativistic proper time of a clock at rest on the Earth's geoid (at
+"mean sea level"), but defined for a specified gravitational time dilation,
+so a coordinate time. It is appropriate for observations and measurements
+from the surface of the Earth.
+
+  TT runs at a uniform rate of one SI second per second and is independent of
+irregularities in Earth's rotation. It is a theoretical ideal, approximated
+(with a constant offset of 32.184 seconds) by the measured International Atomic
+Time (TAI) after 1955.  TT is the relativistic successor to the now deprecated
+non-relativistic Ephemeris Time (ET).
+
+  The TT scale requested here is a time-scale conversion from internal
+Barycentric Dynamical Time (TDB) and differs periodically from TDB with an
+amplitude less than 2 ms for several thousand years centered on present.
+The time-scale conversion for Earth is used regardless of observer location
+within the solar system, although clock rates may differ due to the local
+gravity field.
+
+  Any 'b' symbol in the 1st-column denotes a B.C. date. First-column blank
+(" ") denotes an A.D. date.
+ 
+CALENDAR SYSTEM
+
+  Mixed calendar mode was active such that calendar dates after AD 1582-Oct-15
+(if any) are in the modern Gregorian system. Dates prior to 1582-Oct-5 (if any)
+are in the Julian calendar system, which is automatically extended for dates
+prior to its adoption on 45-Jan-1 BC.  The Julian calendar is useful for
+matching historical dates. The Gregorian calendar more accurately corresponds
+to the Earth's orbital motion and seasons. A "Gregorian-only" calendar mode is
+available if such physical events are the primary interest.
+
+  NOTE: "n.a." in output means quantity "not available" at the print-time.
+ 
+ 'ObsSub-LON ObsSub-LAT' =
+   Apparent planetodetic longitude and latitude of the center of the target
+disc seen by the OBSERVER at print-time.  This is NOT exactly the same as the
+"nearest" sub-point for a non-spherical target shape (since the center of the
+disc might not be the point closest to the observer), but is generally very
+close if not a very irregular body shape.  Down-leg light travel-time from
+target to observer is taken into account.  Latitude is the angle between the
+equatorial plane and the line perpendicular to the reference ellipsoid of the
+body, so includes body oblateness. The reference ellipsoid is an oblate
+spheroid with a single flatness coefficient in which the y-axis body radius
+is taken to be the same value as the x-axis radius.  Positive longitude is
+to the EAST for this target. Cartographic system is given in the header.
+   Units: DEGREES DEGREES
+
+Computations by ...
+
+    Solar System Dynamics Group, Horizons On-Line Ephemeris System
+    4800 Oak Grove Drive, Jet Propulsion Laboratory
+    Pasadena, CA  91109   USA
+
+    General site: https://ssd.jpl.nasa.gov/
+    Mailing list: https://ssd.jpl.nasa.gov/email_list.html
+    System news : https://ssd.jpl.nasa.gov/horizons/news.html
+    User Guide  : https://ssd.jpl.nasa.gov/horizons/manual.html
+    Connect     : browser        https://ssd.jpl.nasa.gov/horizons/app.html#/x
+                  API            https://ssd-api.jpl.nasa.gov/doc/horizons.html
+                  command-line   telnet ssd.jpl.nasa.gov 6775
+                  e-mail/batch   https://ssd.jpl.nasa.gov/ftp/ssd/horizons_batch.txt
+                  scripts        https://ssd.jpl.nasa.gov/ftp/ssd/SCRIPTS
+    Inquiries   : Jon.D.Giorgini@jpl.nasa.gov
+
+*******************************************************************************

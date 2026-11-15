@@ -1,0 +1,75 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/molecules/cccbdb/geom/cccbdb_expgeom2x_C2H2_2026-11-11.html
+# Reference: NIST Computational Chemistry Comparison and Benchmark Database (CCCBDB), NIST Standard Reference Database 101, Release 22: experimental geometry page of C2H2 (CAS 74-86-2)
+# URL: https://cccbdb.nist.gov/expgeom2x.asp?casno=74-86-2&charge=0
+# Date read: 2026-11-11
+# sha256 of the original: 925622e89807c80a6344a002bf6957eb69898ae475aa338cae608d462687e5d6
+# Place in the original: the geometry table of the page, from its first heading to the heading that follows it (HTML as received)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin geometry table
+Internal coordinates</H2> (distances (r) in &Aring;) (angles (a) in degrees) (dihedrals (d) in degrees)
+<table border="1">
+<TR>
+<TH ROWSPAN=2>Description</TH>
+<TH ROWSPAN=2 class="exper">Value</TH>
+<TH COLSPAN=4>Connectivity</TH>
+<TH ROWSPAN=2>Reference</TH>
+<TH ROWSPAN=2>Comment</TH>
+</TR>
+<TR>
+<TH>Atom 1</TH>
+<TH>Atom 2</TH>
+<TH>Atom 3</TH>
+<TH>Atom 4</TH>
+</TR>
+
+<TR>
+<TD>rCH</TD>
+
+<TD class="exper num">1.063</TD>
+
+<TD class="center">1</TD>
+<TD class="center">3</TD>
+<TD class="center"></TD>
+<TD class="center"></TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1998Kuc')"><A HREF="#1998Kuc">1998Kuc</A></TD>
+<TD>rm structure</TD>
+</TR>
+
+<TR>
+<TD>rCC</TD>
+
+<TD class="exper num">1.203</TD>
+
+<TD class="center">1</TD>
+<TD class="center">2</TD>
+<TD class="center"></TD>
+<TD class="center"></TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1998Kuc')"><A HREF="#1998Kuc">1998Kuc</A></TD>
+<TD>rm structure</TD>
+</TR>
+
+<TR>
+<TD>aHCC</TD>
+
+<TD class="exper num">180</TD>
+
+<TD class="center">2</TD>
+<TD class="center">1</TD>
+<TD class="center">3</TD>
+<TD class="center"></TD>
+
+<TD class="ref" onmousedown="javascript:refcolor('1966Herzberg')"><A HREF="#1966Herzberg">1966Herzberg</A></TD>
+<TD></TD>
+</TR>
+
+</TABLE>
+
+<IMG SRC="gifs/c2h2.gif" ALT="picture of Acetylene">
+
+
+<h2>Bond descriptions
+#--- end

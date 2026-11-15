@@ -1,0 +1,5 @@
+build/
+build-app/
+*.bmp
+# written by app_tests into the folder it runs from
+settings_write_test/

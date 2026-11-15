@@ -1,0 +1,181 @@
+// The Moon from ELP2000-82B. The series, the arguments and the change of coordinates follow the Fortran subroutine ELP82B (elp82b.f, CDS VI/79) term by term;
+// the constants and the terms are in elp_data.inc, made by tools/make_elp_data.py from the published files (nothing typed by hand).
+//
+// What the series is: longitude and latitude (arcsec) and distance (km) are sums of  amplitude x T^p x sin(argument),  T in Julian centuries of 36525 days from
+// JD 2451545.0 (TDB),  p = 0, 1 or 2. The arguments are integer combinations of the Delaunay arguments (D, l', l, F), the precession term zeta and the mean
+// longitudes of the eight planets. ELP2000-82B contains the main problem, the Earth's and the Moon's figure, tides, relativity and the planetary perturbations
+// (two tables, with their solar-eccentricity terms).
+//
+// What is left out HERE:
+//  * Small terms. elp_data.inc keeps only the largest terms; the rule (measured against Horizons) and the errors with all terms and with the kept terms are in
+//    the header of elp_data.inc and in native/REPORT.md. The dropped terms are mostly planetary-perturbation terms.
+//  * Nothing is refitted: ELP2000-82B's own constants are used as published. They were fitted to the JPL numerical integration DE200/LE200 (1980s), not to DE441,
+//    and the theory itself is a 1988 semi-analytical solution, so it differs from DE441 by more than JPL's own ephemerides differ from each other; the measured
+//    difference is the accuracy of this function, not a statement about the Moon. The slow differences (tidal acceleration, the lunar libration/figure) are not corrected.
+//  * The ELP frame is the mean dynamical ecliptic and inertial equinox of J2000; Horizons' ecliptic is tied to the ICRS (ecliptic and mean equinox of J2000). The small
+//    fixed offset between them is not modelled and is part of the measured difference.
+//  * Geometric only: no light time, no aberration. The Moon's centre, not the Earth-Moon barycentre.
+#include "orbit/moon_elp.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace orbit {
+namespace {
+
+// One term of the merged series: coord 0 = longitude (arcsec), 1 = latitude (arcsec), 2 = distance (km); tpow = power of T the amplitude is multiplied by;
+// basis 0 = the main problem (ELP1..3: Delaunay arguments as polynomials of degree 4 in T), basis 1 = the others (all arguments linear in T);
+// m = integer multipliers of D, l', l, F, zeta, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune; phase in degrees.
+struct ElpTerm {
+    unsigned char coord, tpow, basis;
+    signed char m[13];
+    double phaseDeg;
+    double amp;
+};
+
+#include "orbit/elp_data.inc"
+
+// 0.35: the speed-up. sin(phase + sum of m_j a_j) is the imaginary part of e^{i phase} x the product of (e^{i a_j})^{m_j}. The powers e^{i k a_j} are made once per call
+// (one cos and sin per argument, then products), so a term costs its two or three nonzero multipliers' complex products instead of a fmod and a sin.
+// Each term's nonzero multipliers and its phase's cos and sin are found once, here.
+struct Prepared {
+    unsigned char coord, tpow, basis, n;
+    unsigned char idx[13];
+    signed char mul[13];
+    double c, s, amp;      // cos and sin of the term's fixed phase (with the quarter turn of the main-problem distance's cosines)
+};
+constexpr int kMaxMul = 32;   // the largest |multiplier| in elp_data.inc is 29 (a static_assert-like check below keeps it honest)
+struct PreparedSeries { Prepared t[kElpTermCount]; int maxMul[2][13]; bool ok = true; };
+const PreparedSeries& prepared() {
+    static const PreparedSeries p = [] {
+        PreparedSeries q{};
+        for (int n = 0; n < kElpTermCount; n++) {
+            const ElpTerm& e = kElpTerms[n];
+            Prepared& r = q.t[n];
+            r.coord = e.coord; r.tpow = e.tpow; r.basis = e.basis; r.amp = e.amp; r.n = 0;
+            double ph = e.basis ? e.phaseDeg * kElp_deg : 0.0;
+            if (!e.basis && e.coord == 2) ph += kElp_cpi / 2.0;
+            r.c = std::cos(ph); r.s = std::sin(ph);
+            for (int j = 0; j < 13; j++)
+                if (e.m[j]) {
+                    r.idx[r.n] = static_cast<unsigned char>(j); r.mul[r.n] = e.m[j]; r.n++;
+                    const int a = std::abs(int(e.m[j]));
+                    if (a > kMaxMul) q.ok = false;
+                    q.maxMul[e.basis][j] = std::max(q.maxMul[e.basis][j], std::min(a, kMaxMul));
+                }
+        }
+        return q;
+    }();
+    return p;
+}
+
+}  // namespace
+
+Vec3 moonGeocentricElp(double jdTDB) { return moonGeocentricElp(jdTDB, kElpTermCount); }
+
+Vec3 moonGeocentricElp(double jdTDB, int terms) {
+    const double T = (jdTDB - 2451545.0) / 36525.0;
+    const double t[5] = {1.0, T, T * T, T * T * T, T * T * T * T};
+    const double twoPi = 2.0 * kElp_cpi, halfPi = kElp_cpi / 2.0;
+    static const double kRadPerDeg = kElp_deg;
+
+    // Delaunay's arguments D, l', l, F as in the subroutine: D = W1 - Earth's mean longitude (+ pi), l' = Earth - perihelion, l = W1 - W2, F = W1 - W3.
+    double del[4][5];
+    for (int k = 0; k < 5; k++) {
+        del[0][k] = kElpW[0][k] - kElpEart[k];
+        del[1][k] = kElpEart[k] - kElpPeri[k];
+        del[2][k] = kElpW[0][k] - kElpW[1][k];
+        del[3][k] = kElpW[0][k] - kElpW[2][k];
+    }
+    del[0][0] += kElp_cpi;
+    double full[13] = {0}, lin[13] = {0};
+    for (int i = 0; i < 4; i++) {
+        for (int k = 0; k < 5; k++) full[i] += del[i][k] * t[k];
+        lin[i] = del[i][0] + del[i][1] * T;
+    }
+    lin[4] = kElpW[0][0] + (kElpW[0][1] + kElp_preces) * T;   // zeta
+    for (int i = 0; i < 8; i++) lin[5 + i] = kElpP[i][0] + kElpP[i][1] * T;
+
+    double sum[3] = {0, 0, 0};
+    const int count = std::max(0, std::min(terms, kElpTermCount));
+    const PreparedSeries& P = prepared();
+    if (!P.ok) {   // a multiplier above kMaxMul (cannot happen with the generated table): the plain sum, term by term, as elp82b.f does it
+        for (int n = 0; n < count; n++) {
+            const ElpTerm& e = kElpTerms[n];
+            const double* ang = e.basis ? lin : full;
+            double y = e.basis ? e.phaseDeg * kRadPerDeg : 0.0;
+            for (int j = 0; j < 13; j++)
+                if (e.m[j]) y += e.m[j] * ang[j];
+            if (!e.basis && e.coord == 2) y += halfPi;            // the main-problem distance is a cosine series
+            y = std::fmod(y, twoPi);
+            sum[e.coord] += e.amp * t[e.tpow] * std::sin(y);
+        }
+    } else {
+        // pw[b][j][kMaxMul + k] = e^{i k a_j}, a_j from full (b = 0) or lin (b = 1); only the multiples the series uses
+        static thread_local double pc[2][13][2 * kMaxMul + 1], ps[2][13][2 * kMaxMul + 1];
+        for (int b = 0; b < 2; b++) {
+            const double* ang = b ? lin : full;
+            for (int j = 0; j < 13; j++) {
+                const int K = P.maxMul[b][j];
+                if (!K) continue;
+                const double c1 = std::cos(ang[j]), s1 = std::sin(ang[j]);
+                double c = 1, s = 0;
+                pc[b][j][kMaxMul] = 1; ps[b][j][kMaxMul] = 0;
+                for (int k = 1; k <= K; k++) {
+                    const double cn = c * c1 - s * s1, sn = s * c1 + c * s1;
+                    c = cn; s = sn;
+                    pc[b][j][kMaxMul + k] = c; ps[b][j][kMaxMul + k] = s;
+                    pc[b][j][kMaxMul - k] = c; ps[b][j][kMaxMul - k] = -s;
+                }
+            }
+        }
+        for (int n = 0; n < count; n++) {
+            const Prepared& e = P.t[n];
+            double c = e.c, s = e.s;
+            for (int q = 0; q < e.n; q++) {
+                const double wc = pc[e.basis][e.idx[q]][kMaxMul + e.mul[q]], ws = ps[e.basis][e.idx[q]][kMaxMul + e.mul[q]];
+                const double cn = c * wc - s * ws;
+                s = s * wc + c * ws;
+                c = cn;
+            }
+            sum[e.coord] += e.amp * t[e.tpow] * s;
+        }
+    }
+
+    // Change of coordinates (end of the subroutine): mean longitude added, distance scaled by a0/ath, then the precession matrix to the inertial J2000 frame.
+    const double lonRad = sum[0] / kElp_rad + kElpW[0][0] + kElpW[0][1] * t[1] + kElpW[0][2] * t[2] + kElpW[0][3] * t[3] + kElpW[0][4] * t[4];
+    const double latRad = sum[1] / kElp_rad;
+    const double r = sum[2] * kElp_a0 / kElp_ath;
+    double x1 = r * std::cos(latRad);
+    double x2 = x1 * std::sin(lonRad);
+    x1 = x1 * std::cos(lonRad);
+    const double x3 = r * std::sin(latRad);
+    double pw = (kElp_p1 + kElp_p2 * t[1] + kElp_p3 * t[2] + kElp_p4 * t[3] + kElp_p5 * t[4]) * t[1];
+    double qw = (kElp_q1 + kElp_q2 * t[1] + kElp_q3 * t[2] + kElp_q4 * t[3] + kElp_q5 * t[4]) * t[1];
+    const double ra = 2.0 * std::sqrt(1.0 - pw * pw - qw * qw);
+    const double pwqw = 2.0 * pw * qw, pw2 = 1.0 - 2.0 * pw * pw, qw2 = 1.0 - 2.0 * qw * qw;
+    pw *= ra;
+    qw *= ra;
+    // x, y, z in km -> metres
+    return {1000.0 * (pw2 * x1 + pwqw * x2 + pw * x3), 1000.0 * (pwqw * x1 + qw2 * x2 - qw * x3), 1000.0 * (-pw * x1 + qw * x2 + (pw2 + qw2 - 1.0) * x3)};
+}
+
+MoonPhase moonPhase(Vec3 moonFromEarth, Vec3 sunFromEarth) {
+    static const char* const kNames[8] = {"new moon", "waxing crescent", "first quarter", "waxing gibbous", "full moon", "waning gibbous", "last quarter", "waning crescent"};
+    const double cosE = std::max(-1.0, std::min(1.0, dot(moonFromEarth, sunFromEarth) / (length(moonFromEarth) * length(sunFromEarth))));
+    const double rad = 180.0 / 3.14159265358979323846;
+    const double fraction = (1.0 - cosE) / 2.0;
+    double d = (std::atan2(moonFromEarth.y, moonFromEarth.x) - std::atan2(sunFromEarth.y, sunFromEarth.x)) * rad;   // Moon minus Sun, degrees of ecliptic longitude
+    d = std::fmod(d, 360.0);
+    if (d < 0) d += 360.0;
+    const bool waxing = d < 180.0;
+    int idx;
+    if (fraction < 0.02) idx = 0;
+    else if (fraction > 0.98) idx = 4;
+    else if (fraction < 0.40) idx = waxing ? 1 : 7;
+    else if (fraction <= 0.60) idx = waxing ? 2 : 6;
+    else idx = waxing ? 3 : 5;
+    return {std::acos(cosE) * rad, fraction, idx, kNames[idx]};
+}
+
+}  // namespace orbit
