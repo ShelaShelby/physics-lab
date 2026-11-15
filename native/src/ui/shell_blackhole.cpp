@@ -9,6 +9,7 @@
 
 #include "blackhole/lab.h"
 #include "blackhole/presets.h"
+#include "blackhole/spin_sky.h"
 #include "imgui.h"
 #include "orbit/format.h"
 #include "ui/look.h"
@@ -39,13 +40,25 @@ std::string massText(double m) {
     if (m >= 1e6) return sig(m / 1e6, 4) + " million Suns";
     return fmt::commas(m) + (m == 1 ? " Sun" : " Suns");
 }
+// a time: "42 s", "3.5 min", "2.1 h", "4.7 days", "12 years" (a year of 365.25 days)
+std::string timeText(double sec) {
+    if (sec < 120) return sig(sec, 3) + " s";
+    if (sec < 7200) return sig(sec / 60, 3) + " min";
+    if (sec < 2 * 86400) return sig(sec / 3600, 3) + " h";
+    if (sec < 2 * 365.25 * 86400) return sig(sec / 86400, 3) + " days";
+    return sig(sec / (365.25 * 86400), 3) + " years";
+}
 std::string distText(double d) { return sig(d, d < 10 ? 3 : 4) + " GM/c²"; }
 
 // the preset's one sentence (owner's decision of 15 Nov 2026: mass and distance only; spin not measured; its real gas is not shown)
 std::string presetSentence(const std::string& key) {
-    if (key == "sgra") return "The black hole at the centre of our galaxy. Its real gas is a faint, very hot fog that shines mostly in radio light, not a bright disc, and is not shown here; its spin is not measured (this lab's holes do not spin).";
-    if (key == "m87") return "The black hole at the centre of the galaxy M87, pictured by the Event Horizon Telescope in 2019. Its real gas is a faint, very hot fog, not a bright disc, and is not shown here; its spin is not measured (this lab's holes do not spin).";
-    if (key == blackhole::kFeedingKey) return "A model, not one particular object: a black hole of 100 million Suns feeding from a thin, bright disc of gas. Such discs exist round quasars and round small black holes that feed from a companion star.";
+    if (key == "sgra") return "The black hole at the centre of our galaxy. Its real gas is a faint, very hot fog that shines mostly in radio light, not a bright disc, and is not shown here. "
+                              "Spin not measured: the telescope's models disfavour a hole that does not spin, and the two that pass all its tests spin at 0.5 and 0.94 (EHT Sgr A* paper I). "
+                              "It starts at spin 0; the Spin control is yours.";
+    if (key == "m87") return "The black hole at the centre of the galaxy M87, pictured by the Event Horizon Telescope in 2019. Its real gas is a faint, very hot fog, not a bright disc, and is not shown here. "
+                             "Spin not measured: models with no spin are disfavoured by the power of its jet, and the spin points away from Earth (EHT M87* paper I, section 6). It starts at spin 0; the Spin control is yours.";
+    if (key == blackhole::kFeedingKey) return "A model, not one particular object: a black hole of 100 million Suns feeding from a thin, bright disc of gas. Such discs exist round quasars and round small black holes that feed from a companion star. "
+                                              "It starts at spin 0; the Spin control is yours.";
     return "";
 }
 // 0.55.1: the label on a real hole with the disc switched on (owner's decision of 15 Nov 2026)
@@ -74,9 +87,10 @@ ChipInfo blackholeChip(const AppState& app) {
     ChipInfo c;
     const blackhole::Readout r = blackhole::readout(app.blackhole);
     c.title = "Black hole  ·  " + (r.hasPreset ? r.presetName : massText(r.massSun));
-    c.sub = "A calculated model: no spin, no gas  ·  our sky, seen from Earth";   // the lab's one line of what kind of picture this is (the rest: the guide)
+    const std::string spin = app.blackhole.spin > 0 ? "spin " + sig(app.blackhole.spin, 3) : std::string("no spin");
+    c.sub = "A calculated model: " + spin + ", no gas  ·  our sky, seen from Earth";   // the lab's one line of what kind of picture this is (the rest: the guide)
     if (app.blackhole.disc && app.blackhole.bend)
-        c.sub = r.realPreset ? std::string(kWhatIf) : "A calculated model: no spin; a thin gas disc (model), dimmed  ·  our sky, seen from Earth";
+        c.sub = r.realPreset ? std::string(kWhatIf) : "A calculated model: " + spin + "; a thin gas disc (model), dimmed  ·  our sky, seen from Earth";
     c.play = false;
     return c;
 }
@@ -89,20 +103,28 @@ std::string blackholeSubject(const AppState& app) {
 void blackholeCard(AppState& app, Panel& p) {
     const blackhole::Readout r = blackhole::readout(app.blackhole);
     pStat(p, "Mass", massText(r.massSun) + (r.realPreset ? " (measured)" : r.hasPreset ? " (the model's)" : " (your choice)"));
-    pStat(p, "Horizon radius", kmText(r.horizonKm) + "  ·  " + auText(r.horizonAU));
+    if (r.spin > 0) pStat(p, "Spin", sig(r.spin, 3) + " of the largest possible (your choice; not measured for any real hole here)");
+    pStat(p, "Horizon radius", sig(r.horizonM, 3) + " GM/c²  ·  " + kmText(r.horizonKm) + "  ·  " + auText(r.horizonAU));
     pStat(p, "Your distance", distText(r.dist) + "  ·  " + kmText(r.distKm) + "  ·  " + auText(r.distAU));
-    char b[160];
-    std::snprintf(b, sizeof b, "%.4g° across (%.3g %% of your sky)", r.shadowDeg, 100 * r.skyShare);
+    char b[200];
+    if (r.spin > 0) std::snprintf(b, sizeof b, "%.4g° wide, %.4g° high (%.3g %% of your sky)", r.shadowWideDeg, r.shadowHighDeg, 100 * r.skyShare);
+    else std::snprintf(b, sizeof b, "%.4g° across (%.3g %% of your sky)", r.shadowDeg, 100 * r.skyShare);
     pStat(p, "Shadow on your sky", b);
+    if (r.spin > 0) {                                                       // 0.55.2: the dragged space (J15 (A.2)), the disc's edge and efficiency at this spin
+        pStat(p, "Dragged round", "the space here turns round the axis and carries you: once every " + timeText(r.turnSeconds) + " of far-away time");
+        pStat(p, "Innermost stable orbit", sig(r.rIn, 3) + " GM/c²  ·  " + kmText(r.rInKm) + "  ·  gas falling past it turns " + sig(100 * r.efficiency, 3) + " % of its mass into light");
+    }
     std::snprintf(b, sizeof b, "%.4g × the rate of a clock far away", r.clockRate);
     pStat(p, "Your clock", b);
     std::snprintf(b, sizeof b, "%.4g × bluer, %.4g × brighter (not drawn)", r.blueshift, r.brightening);
     pStat(p, "Starlight reaching you", b);
-    if (r.dist < r.photonOrbitM) pCaption(p, "You are inside the photon orbit (" + sig(r.photonOrbitM, 2) + " GM/c²): the shadow covers more than half your sky.");
+    if (r.spin == 0 && r.dist < r.photonOrbitM) pCaption(p, "You are inside the photon orbit (" + sig(r.photonOrbitM, 2) + " GM/c²): the shadow covers more than half your sky.");
+    if (r.spin > 0 && r.skyShare > 0.5) pCaption(p, "The shadow covers more than half your sky.");
     if (r.disc) {                                                           // 0.55.1: the disc's numbers (blackhole/lab.h readout, the view's discLook)
         const blackhole::DiscLook& L = app.blackholeView.stats().look;
         if (r.realPreset) pCaption(p, kWhatIf, false);
         pStat(p, "Disc's inner edge", sig(r.rIn, 3) + " GM/c²  ·  " + kmText(r.rInKm) + " (nothing shines inside it)");
+        pStat(p, "Light from the infalling gas", sig(100 * r.efficiency, 3) + " % of its mass (the rest falls in)");
         pStat(p, "Hottest ring", tempText(r.tHot) + " at " + sig(r.rHot, 3) + " GM/c²  ·  " + kmText(r.rHotKm));
         if (!app.blackhole.bend) pCaption(p, "Gravity bends light: Off: the disc is not drawn (it needs the hole).");
         else if (L.any) {
@@ -115,10 +137,15 @@ void blackholeCard(AppState& app, Panel& p) {
         auditNote(d);
     } else auditNote("bhdisc on=0");
     if (r.hasPreset && r.realPreset) {
-        std::snprintf(b, sizeof b, "the shadow %.3g µas across; the telescope's ring %.3g ± %.2g µas", r.earthShadowMuas, r.ringMuas, r.ringErr);
+        if (r.spin > 0) std::snprintf(b, sizeof b, "the shadow %.3g × %.3g µas (wide × high, the spin axis tilted as from your place); the telescope's ring %.3g ± %.2g µas", r.earthWideMuas, r.earthHighMuas, r.ringMuas, r.ringErr);
+        else std::snprintf(b, sizeof b, "the shadow %.3g µas across; the telescope's ring %.3g ± %.2g µas", r.earthShadowMuas, r.ringMuas, r.ringErr);
         pStat(p, "Seen from Earth", b);
         pCaption(p, "The ring is what the Event Horizon Telescope measured at 1.3 mm: light of hot gas round the hole. It need not lie exactly on the shadow's edge (EHT M87* paper I, section 6).");
     }
+    {   char q[300];
+        std::snprintf(q, sizeof q, "bhspin spin=%.9g horizon=%.9g rin=%.9g eff=%.9g omega=%.9g turn=%.9g wide=%.9g high=%.9g share=%.9g", r.spin, r.horizonM, r.rIn, r.efficiency, r.omega, r.turnSeconds,
+                      r.shadowWideDeg, r.shadowHighDeg, r.skyShare);
+        auditNote(q); }
     auditNote("bhcard mass=" + sig(r.massSun, 6) + " dist=" + sig(r.dist, 6) + " shadow=" + sig(r.shadowDeg, 6) + " clock=" + sig(r.clockRate, 6) + " blue=" + sig(r.blueshift, 6) +
               " bright=" + sig(r.brightening, 6) + " horizonkm=" + sig(r.horizonKm, 6) + (r.realPreset ? " preset=" + app.blackhole.preset + " earth=" + sig(r.earthShadowMuas, 6) + " ring=" + sig(r.ringMuas, 4) :
               r.hasPreset ? " preset=" + app.blackhole.preset : std::string(" preset=none")));
@@ -146,8 +173,9 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
         endPanel(p);
     }
     char b[320];
-    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
-                  s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expLog, 6).c_str());
+    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
+                  s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expLog, 6).c_str(), s.spin,
+                  app.blackholeView.stats().spinFine ? 1 : 0);
     auditNote(b);
     return r;
 }
@@ -188,6 +216,26 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         pCaption(p, "The picture does not change with the mass. Every length round a black hole grows in step with its mass (the unit is GM/c²), so at the same distance in "
                     "that unit a light and a heavy hole look exactly alike: only the sizes in km and the numbers on the card change.");
     }
+    if (section("spin", "Spin", true)) {                                   // 0.55.2
+        pStat(p, "Spin", s.spin > 0 ? sig(s.spin, 3) + " of the largest possible" : std::string("0: the hole does not spin"));
+        float t = static_cast<float>(s.spin);
+        if (pSlider(p, "blackhole.spin", &t, 0.0f, static_cast<float>(blackhole::kSpinTop))) blackhole::setSpin(s, std::round(t * 100) / 100);
+        char hint[160];
+        std::snprintf(hint, sizeof hint, "0 to %.2g of the largest spin a black hole can have (its angular momentum over GM²/c). Or type one:", blackhole::kSpinTop);
+        pCaption(p, hint);
+        static char typed[32] = "";
+        ImGui::SetCursorScreenPos(here(p));
+        double v;
+        if (typedNumber("##blackhole.spin.text", typed, sizeof typed, "e.g. 0.9", p.w, 0, blackhole::kSpinTop, v)) blackhole::setSpin(s, v);
+        p.y += m.control + m.s4;
+        char top[400];
+        std::snprintf(top, sizeof top, "The spin of the two real holes is not measured: the control is yours, and every preset starts at 0. The top, %.2g, is where this lab's tests "
+                                       "of its light paths stop (higher spins need finer tables than it makes). The gas orbits with the spin; a disc orbiting against it, a tilted "
+                                       "or a warped disc are not in the lab.", blackhole::kSpinTop);
+        pCaption(p, top);
+        if (s.spin > 0) pCaption(p, "Close to a spinning hole nothing can stand still: space is dragged round the axis and the camera goes with it. The picture is one instant; the sky's turning with time is not shown.");
+        if (s.spin > 0 && s.bend && !app.blackholeView.stats().spinFine) pCaption(p, "Working out the light paths: a coarse picture first, the fine one in a moment.", false);
+    }
     if (section("camera", "Camera", true)) {
         pStat(p, "Distance", distText(s.dist) + "  ·  " + kmText(blackhole::readout(s).distKm));
         float t = static_cast<float>(blackhole::distToSlider(s.dist));
@@ -204,7 +252,8 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         if (typedNumber("##blackhole.dist.text", typed, sizeof typed, "e.g. 6", p.w, blackhole::kDistMin, blackhole::kDistMax, v)) blackhole::setDistance(s, v);
         p.y += m.control + m.s4;
         {   const blackhole::Readout r = blackhole::readout(s);
-            pCaption(p, "The horizon is at " + sig(r.horizonM, 3) + " GM/c², the photon orbit at " + sig(r.photonOrbitM, 3) + " (inside it the shadow covers more than half the sky). The closest here, " +
+            if (r.spin > 0) pCaption(p, "The horizon is at " + sig(r.horizonM, 3) + " GM/c² at this spin. The closest here, " + sig(blackhole::kDistMin, 3) + ", is the closest the lab's light paths are tested at.");
+            else pCaption(p, "The horizon is at " + sig(r.horizonM, 3) + " GM/c², the photon orbit at " + sig(r.photonOrbitM, 3) + " (inside it the shadow covers more than half the sky). The closest here, " +
                         sig(blackhole::kDistMin, 3) + ", is the closest the lab's light paths are tested at."); }
         char b[64];
         std::snprintf(b, sizeof b, "%.0f° across the picture's height", s.fovDeg);
@@ -216,7 +265,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             const blackhole::HoleView hv = blackhole::holeView(s, app.canvasW, app.canvasH, cx, cy);
             double far = 0;
             for (double x : {0.0, app.canvasW}) for (double y : {0.0, app.canvasH}) far = std::max(far, std::hypot(x - cx, y - cy));
-            if (s.bend && blackhole::shadowAngle(s.dist) * hv.K > far) pCaption(p, "The shadow fills the whole picture: widen the field of view to see the sky round it.", false);
+            if (s.bend && (s.spin > 0 ? blackhole::readout(s).shadowHighDeg / 2 * 3.14159265358979 / 180 : blackhole::shadowAngle(s.dist)) * hv.K > far) pCaption(p, "The shadow fills the whole picture: widen the field of view to see the sky round it.", false);
         }
         if (pButton(p, "blackhole.reset", "Reset view", Face::Quiet)) blackhole::resetView(s);
         pCaption(p, "Drag to go round the hole (it stays in the middle; the sky behind it changes); the wheel or + − move you closer or farther; R resets the view; 1 2 3 4 switch lab. You hover in place.");
@@ -274,8 +323,9 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         }
     }
     if (section("honest", "What is real in this picture", true)) {
-        pCaption(p, s.disc ? "A calculated model: a black hole that does not spin, with a model disc of gas: flat, thin, opaque, each face a perfect black body, steady. Real black holes spin; a spinning hole's disc reaches further in."
-                           : "A calculated model: a black hole that does not spin and has no gas around it. Real black holes spin and have gas; switch on the gas disc to see the standard model of one.", false);
+        const std::string kind = s.spin > 0 ? "a black hole spinning at " + sig(s.spin, 3) + " of the largest possible spin (your choice)" : std::string("a black hole that does not spin");
+        pCaption(p, s.disc ? "A calculated model: " + kind + ", with a model disc of gas orbiting with the spin: flat, thin, opaque, each face a perfect black body, steady." + (s.spin > 0 ? "" : " Real black holes spin; a spinning hole's disc reaches further in.")
+                           : "A calculated model: " + kind + " with no gas around it. Real black holes have gas; switch on the gas disc to see the standard model of one.", false);
         pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars" + std::string(s.disc ? ", the disc's shape, its colour shift and brightness by the model" : "") +
                     ". Soft: the sky map's own sharpness (about 0.09° a map pixel). Not drawn: the camera's own shift of colour and brightness (numbers on the card).", false);
         if (pButton(p, "blackhole.guide", "What is real in this picture")) { app.bhLearn = 1; app.bhLearnJump = "top"; }
@@ -295,6 +345,7 @@ void blackholeSearch(AppState& app, const SearchAdd& add) {
     add("Black holes", std::string(blackhole::kFeedingName), "bh:feeding", [&app] { blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey); });
     add("Gas", "Gas disc (model): on", "bhdisc:on", [&app] { app.blackhole.disc = true; });
     add("Gas", "Gas disc (model): off", "bhdisc:off", [&app] { app.blackhole.disc = false; });
+    add("Black holes", "Spin: none (0)", "bhspin:0", [&app] { blackhole::setSpin(app.blackhole, 0); });
 }
 
 }  // namespace ui::shellimpl

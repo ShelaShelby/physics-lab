@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.55.1 (15 Nov 2026): the Black Hole Lab's thin gas disc (PLAN_BLACKHOLE.md step 2): Page & Thorne's disc round the non-spinning hole, drawn by the graphics card from the module's double-precision tables (over and under the hole, thin rings, true colour, automatic exposure), feeding rate and outer edge, a third preset "A feeding black hole (model)", the real holes' what-if label, the disc's readout; small version (quick tests and its own UI part).
+- 0.55.2 (15 Nov 2026): the Black Hole Lab's spinning hole (PLAN_BLACKHOLE.md step 3): a Spin control from 0 to 0.99 (the tested top); a table per spin, distance and latitude filled by the ray integrator in double precision (coarse at once, fine when the view rests), the shadow's edge from James et al.'s closed test, the stars by inverting the table, the disc at the spin's innermost stable orbit with Cunningham's shift; spin 0 keeps the closed forms; small version (quick tests and its own UI parts).
 - Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
-- Next: spin, 0.55.2 (PLAN_BLACKHOLE.md step 3). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- Next: the looks and quality levels, 0.55.3 (PLAN_BLACKHOLE.md step 4); "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

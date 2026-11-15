@@ -14,7 +14,10 @@
 #              (nearly face-on and steep), Sagittarius A*'s label; the readout's hottest ring = the papers' (written here); feeding rate and outer edge move
 #              the picture and the readout; a restart keeps the settings (1280 x 800, Dark); the taller card at 880 x 560
 #   precision: the card's bent sky against the double-precision reference (PL_BH_COMPARE): the shadow's edge, the directions, the plain sky = the Orbit Lab's;
-#              0.55.1: the card's gas disc against the double lookup and the reference (two distances, two inclinations)
+#              0.55.1: the card's gas disc against the double lookup and the reference (two distances, two inclinations); 0.55.2: the same round a spinning hole
+#   spin:      0.55.2, spin: the control exists; spin 0 is the picture of 0.55.1 to the pixel; a typed 0.99 (the top) is taken, 0.999 is not; the card's horizon,
+#              inner edge, efficiency and dragging = the papers' (written here); at 0.99 the drawn shadow's edge is the module's at 24 points from the equator
+#              (not round there) and from near the axis (round); the presets start at 0 with their sentence; a restart keeps the spin (1280 x 800, Dark)
 #   check_blackhole.py <PhysicsLab binary> <work folder> [part]
 import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -184,7 +187,7 @@ def part_layout(binary, work):
         if bar and cards: check(not overlap(bar, cards[0]), f"{size}: the bar is clear of the card")
         ctl = [v for k, v in r.rects.items() if k.startswith("ctlhead.")]
         if bar and ctl: check(all(not overlap(bar, c) for c in ctl), f"{size}: the bar is clear of the Controls panel")
-        check(any(n.startswith("ctlsections") and "preset mass camera light disc honest" in n for n in r.notes), f"{size}: the Controls panel has its six sections (0.55.1: the gas disc)")
+        check(any(n.startswith("ctlsections") and "preset mass spin camera light disc honest" in n for n in r.notes), f"{size}: the Controls panel has its seven sections (0.55.1: the gas disc; 0.55.2: spin)")
 
 def part_look(binary, work):
     themes = ("dark", "light", "black", "paper", "monochrome", "contrast")
@@ -241,6 +244,23 @@ def part_precision(binary, work):
         check(int(x["wrong"]) == 0 and float(x["edgeshift"]) < 0.01, f"{w}: the card's disc where the reference's is: {x['wrong']} pixels differ, edges moved by {x['edgeshift']} px")
         check(float(x["dr"]) < 1e-4 and float(x["dg"]) < 1e-5, f"{w}: r and g within float rounding of the double lookup ({x['dr']}, {x['dg']})")
         check(int(x["refwrong"]) == 0 and float(x["refdr"]) < 1e-6 and float(x["refdg"]) < 1e-6, f"{w}: the table against the reference ({x['refwrong']}, {x['refdr']}, {x['refdg']})")
+    # 0.55.2, spin: two spins (0.5, the top 0.99) x two distances (20, 4 M) x two latitudes (near the disc's plane, near the axis), the feeding preset's disc. The card against
+    # the double lookup of the same table at every pixel: the shadow's edge within 0.001 pixel of the closed test (J15 (v)) and no pixel on the wrong side; the far direction
+    # within 2e-3 rad at least a pixel from the edge (float rounding of the table's coordinates where the rays wind); the disc: the same image at every pixel away from an
+    # image's edge, those edges moved by under 0.1 pixel, r within 1e-3 and g within 5e-4. The table against the integrator at every 16th pixel: the far direction within
+    # 2e-3 rad from 1e-3 of the shadow's radius outward, 2e-2 nearer (blackhole_physics's limits); the disc's r and g away from the edges and folds within 3 % and 0.5 % at
+    # spin 0.5 and 12 % and 2.5 % at the top (rays grazing the disc's plane from near it; REPORT 0.55.2), the same image at all but 0.1 % of them.
+    sp = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSPIN ")]
+    check(len(sp) == 8, f"spin: eight cases compared ({len(sp)})")
+    for x in sp:
+        w = f"spin {x['a']} dist {x['dist']} pitch {x['pitch']}"
+        check(float(x["edgeclosed"]) < 1e-3 and int(x["wrongside"]) == 0, f"{w}: the card's shadow edge within 0.001 pixel of the closed test ({x['edgeclosed']}), {x['wrongside']} pixels on the wrong side")
+        check(float(x["dir1"]) < 2e-3, f"{w}: the card's far direction = the double lookup's within 2e-3 rad a pixel or more from the edge ({x['dir1']})")
+        check(int(x["discwrong"]) == 0 and float(x["edgeshift"]) < 0.1 and float(x["dr"]) < 1e-3 and float(x["dg"]) < 5e-4, f"{w}: the card's disc = the double lookup's ({x['discwrong']}, {x['edgeshift']}, {x['dr']}, {x['dg']})")
+        check(float(x["refnear"]) < 2e-2 and float(x["refmid"]) < 2e-3 and float(x["reffar"]) < 2e-3, f"{w}: the table's far direction against the integrator ({x['refnear']}, {x['refmid']}, {x['reffar']})")
+        top = float(x["a"]) > 0.9
+        check(float(x["refdr"]) < (0.12 if top else 0.03) and float(x["refdg"]) < (0.025 if top else 0.005) and int(x["refwrong"]) <= int(x["refpx"]) // 1000,
+              f"{w}: the table's disc against the integrator ({x['refdr']}, {x['refdg']}, {x['refwrong']} of {x['refpx']} another image)")
     p = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHPLAIN ")]
     check(bool(p) and int(p[0]["maxdiff"]) <= 1, f"bending off = the Orbit Lab's sky projection, within one step of 255 ({p})")
 
@@ -336,8 +356,97 @@ def part_disc(binary, work):
     s = bh(k2)
     check(not k1.scripted_missing() and s is not None and s["disc"] == "1" and float(s["feed"]) == 0.05 and float(s["outer"]) == 40 and s["exp"] == "1.5", f"a restart keeps the disc's settings ({s})")
 
+def spin_note(r):
+    return bh(r, "bhspin ")
+def spin_edge(r):
+    s = [ln for ln in r.out.splitlines() if ln.startswith("PLBHSPINEDGE ")]
+    if not s: return None
+    d = dict(kv.split("=", 1) for kv in s[-1].split()[1:])
+    return int(d["fine"]), [tuple(float(a) for a in q.split(",")) for q in d["pts"].split(";") if q]
+def spin_numbers(a, r, th):
+    # the module's numbers written here from the papers (independent of the app's code): the horizon r+ = 1 + (1 - a^2)^(1/2) (BPT (2.6)); the innermost stable orbit
+    # (BPT (2.21)); the efficiency 1 - E(r_ms) with E from BPT (2.12); the frame dragging omega = 2 a r / Sigma^2, Sigma^2 = (r^2 + a^2)^2 - a^2 Delta sin^2 theta (J15 (A.2))
+    z1 = 1 + (1 - a * a) ** (1 / 3) * ((1 + a) ** (1 / 3) + (1 - a) ** (1 / 3)); z2 = math.sqrt(3 * a * a + z1 * z1)
+    rms = 3 + z2 - math.sqrt((3 - z1) * (3 + z1 + 2 * z2))
+    s = math.sqrt(rms)
+    E = (rms * s - 2 * s + a) / (rms ** 0.75 * math.sqrt(rms * s - 3 * s + 2 * a))
+    D = r * r - 2 * r + a * a
+    S2 = (r * r + a * a) ** 2 - a * a * D * math.sin(th) ** 2
+    return 1 + math.sqrt(1 - a * a), rms, 1 - E, 2 * a * r / S2
+
+def part_spin(binary, work):
+    # 0.55.2: the Spin control (one theme, 1280 x 800). It exists; spin 0 is exactly the picture of 0.55.1 (the closed-form path: the same pixels as a run with no spin
+    # setting at all)
+    base = dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=o")
+    r0 = run_app(binary, work, "bh_spin_none", base, frames=12)
+    r1 = run_app(binary, work, "bh_spin_zero", dict(base, PL_BH_SET="spin=0"), frames=12)
+    check(r0.bmp and r1.bmp and Bmp(r0.bmp).d == Bmp(r1.bmp).d, "spin 0 draws exactly the picture of 0.55.1 (the same pixels)")
+    st = stat(r1)
+    check(st is not None and int(st["tablefills"]) >= 1, f"spin 0 uses the non-spinning hole's closed-form table ({st})")
+    # typed: 0.99 (the top) through the text field; the card's numbers are the module's (written here from the papers)
+    rt = run_app(binary, work, "bh_spin_typed", dict(base, PL_BH_SPINWAIT="1", PL_SCRIPT="6:click=##blackhole.spin.text;8:text=0.99"), frames=20)
+    s, n = bh(rt), spin_note(rt)
+    check(any(k.startswith("slider.blackhole.spin") for k in rt.rects), "the Spin slider is in the Controls panel, beside the typed value")
+    check(not rt.scripted_missing() and s is not None and float(s["spin"]) == 0.99, f"a typed spin of 0.99 is taken ({s}, {rt.scripted_missing()})")
+    if n and s:
+        hz, rms, eff, om = spin_numbers(0.99, float(s["dist"]), float(s["pitch"]))
+        check(abs(float(n["horizon"]) - hz) < 1e-8 and abs(float(n["rin"]) - rms) < 1e-8 and abs(float(n["eff"]) - eff) < 1e-8 and abs(float(n["omega"]) / om - 1) < 1e-8,
+              f"the readout's horizon, inner edge, efficiency and dragging = the papers' ({n}; {hz:.9g} {rms:.9g} {eff:.9g} {om:.9g})")
+        check(any("Dragged round" in t[2] for t in rt.texts) and any("Spin" == t[2] or t[2].startswith("Spin") for t in rt.texts), "the card says the camera is dragged round, and shows the spin")
+    else: check(False, f"the spin readout was printed ({n})")
+    # a spin above the top typed: not taken
+    rh = run_app(binary, work, "bh_spin_high", dict(base, PL_SCRIPT="6:click=##blackhole.spin.text;8:text=0.999"), frames=14)
+    s = bh(rh)
+    check(s is not None and float(s["spin"]) == 0, f"a typed spin above the tested top (0.999) is not taken ({s})")
+    # at the top the drawn shadow's edge is the module's (the closed test through the table's edge samples), from the equator and from near the axis:
+    # inside it black, just outside it lit (where the sky there is lit)
+    for name, pitch in (("equator", 1.5707963), ("axis", 0.01)):
+        r = run_app(binary, work, f"bh_spin_edge_{name}", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SPINEDGE="1", PL_BH_SET=f"spin=0.99;pitch={pitch};dist=20"), frames=12)
+        e = spin_edge(r)
+        if e is None or not r.bmp: check(False, f"{name}: the module's edge was printed"); continue
+        fine, pts = e
+        b = Bmp(r.bmp)
+        occ = [v for k, v in r.rects.items() if re.match(r"occ\d+$", k) or k == "handle"]
+        free = lambda x, y: y > 60 and not any(o[0] - 2 <= x <= o[0] + o[2] + 2 and o[1] - 2 <= y <= o[1] + o[3] + 2 for o in occ)
+        dark = lit = used = 0
+        for x, y, ux, uy in pts:
+            xi, yi, xo, yo = x - 3 * ux, y - 3 * uy, x + 3 * ux, y + 3 * uy
+            if not (free(xi, yi) and free(xo, yo)): continue
+            used += 1
+            if max(b.px(int(xi), int(yi))) < 8: dark += 1
+            if max(max(b.px(int(xo + k * ux), int(yo + k * uy))) for k in range(0, 3)) > 20: lit += 1
+        check(fine == 1 and used >= 16 and dark == used and lit >= 0.75 * used, f"{name}: the drawn shadow's edge is the module's: {dark} of {used} points 3 px inside black, {lit} just outside lit (fine table {fine})")
+        if name == "equator":
+            # flattened on the side moving towards the camera: the edge's distance from the middle differs left and right (PeT Table II)
+            st = stat(r)
+            cx, cy = float(st["cx"]), float(st["cy"])
+            left = [math.hypot(x - cx, y - cy) for x, y, ux, uy in pts if ux < -0.9]
+            right = [math.hypot(x - cx, y - cy) for x, y, ux, uy in pts if ux > 0.9]
+            check(left and right and abs(min(left) - min(right)) > 3, f"from the equator the shadow is not round: left {min(left):.1f} px, right {min(right):.1f} px")
+        else:
+            st = stat(r)
+            cx, cy = float(st["cx"]), float(st["cy"])
+            d = [math.hypot(x - cx, y - cy) for x, y, ux, uy in pts]
+            check(max(d) - min(d) < 2, f"from near the axis the shadow is round (radii {min(d):.1f}..{max(d):.1f} px)")
+    # the presets start at 0 with their sentence; the feeding preset too
+    for key in ("sgra", "m87", "feeding"):
+        r = run_app(binary, work, f"bh_spin_preset_{key}", dict(base, PL_BH_SET="spin=0.7;preset=" + ("m87" if key == "sgra" else "sgra"), PL_SCRIPT=f"6:click=blackhole.preset.{key}"), frames=14)
+        s = bh(r)
+        check(not r.scripted_missing() and s is not None and s["preset"] == key and float(s["spin"]) == 0, f"preset {key} starts at spin 0 ({s})")
+        check(any("starts at spin 0" in t[2] for t in r.texts) and (key == "feeding" or any("Spin not measured" in t[2] for t in r.texts)), f"preset {key}: its sentence says so")
+    # Most realistic does not touch the spin (it has no closest-to-reality value); a restart keeps it
+    rr = run_app(binary, work, "bh_spin_realest", dict(BASE, PL_BLACKHOLE="1", PL_BH_SET="spin=0.6;bend=off", PL_SCRIPT="6:click=blackhole.realest"), frames=14)
+    s = bh(rr)
+    check(not rr.scripted_missing() and s is not None and float(s["spin"]) == 0.6 and s["bend"] == "1", f"Most realistic leaves the spin alone ({s})")
+    sf = os.path.join(work, "bh_spin_settings.txt")
+    if os.path.exists(sf): os.remove(sf)
+    k1 = run_app(binary, work, "bh_spin_keep1", dict(BASE, PL_BLACKHOLE="1", PL_SETTINGS=sf, PL_SCRIPT="6:click=##blackhole.spin.text;8:text=0.6"), frames=14)
+    k2 = run_app(binary, work, "bh_spin_keep2", dict(BASE, PL_SETTINGS=sf), frames=10)
+    s = bh(k2)
+    check(not k1.scripted_missing() and s is not None and float(s["spin"]) == 0.6, f"a restart keeps the spin ({s})")
+
 PARTS = {"open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
-         "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc}
+         "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]

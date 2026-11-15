@@ -241,6 +241,17 @@ Readout readout(const Settings& s) {
         r.ringErr = p->ringErr;
         r.presetDistPc = p->distPc;
         r.realPreset = true;
+        if (a > 0) {                                                         // GLb (38)-(40), (55): the far-away edge's extent at inclination = the camera's latitude
+            double amin = 1e9, amax = -1e9, bmax = 0;
+            const double rm = criticalRadiusMinus(a), rp = criticalRadiusPlus(a);
+            for (int i = 0; i <= 4000; i++) {
+                double al, b2;
+                if (!criticalScreen(a, rm + (rp - rm) * i / 4000.0, s.pitch, al, b2)) continue;
+                amin = std::min(amin, al); amax = std::max(amax, al); bmax = std::max(bmax, std::sqrt(b2));
+            }
+            const double perM = r.earthShadowMuas / (2 * std::sqrt(27.0));   // microarcseconds per GM/c^2 at the preset's distance (its a = 0 shadow is 2 sqrt(27) of them, GLb (71))
+            r.earthWideMuas = (amax - amin) * perM; r.earthHighMuas = 2 * bmax * perM;
+        }
     }
     if (s.preset == kFeedingKey) { r.hasPreset = true; r.presetName = kFeedingName; }
     r.disc = s.disc;

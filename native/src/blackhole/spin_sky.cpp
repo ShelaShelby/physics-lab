@@ -88,18 +88,21 @@ SpinHit spinRay(double a, const Camera& cam, double psi, double chi, double rtol
         const double re = e.y[0], th = e.y[1];
         double uv = 0, rest = 0;
         if (h.sky) {
-            // the straight line it leaves on, P + mu d: it meets the plane at mu* = -p_z / d_z (p the part of P across d); mu* > 0: a real crossing beyond the
-            // integration's end (u = 1/mu*); mu* < 0: not made, u = 1 / (mu* - 10): the same function to first order where mu* -> -infinity, bounded by -0.1
+            // the straight line it leaves on, p + mu d (p the part of the end point P across d; the end is at mu_end = P . d): it meets the plane at
+            // mu* = -p_z / d_z. mu* > mu_end: a real crossing beyond the integration's end, u = 1/mu*. Else not made: u = -1 / (mu*^2 + 100)^(1/2), the same
+            // function to first order where mu* -> -infinity (where the crossing appears), smooth, negative and bounded by -0.1 everywhere else
             const Vec3 P{re * std::sin(th) * std::cos(e.y[2]), re * std::sin(th) * std::sin(e.y[2]), re * std::cos(th)}, d = e.dir;
-            const Vec3 p = P - d * dot(P, d);
+            const double muEnd = dot(P, d);
+            const Vec3 p = P - d * muEnd;
             const double mu = d.z != 0 ? -p.z / d.z : -1e300;
-            uv = mu > 0 ? 1 / mu : 1 / (mu - 10);
+            uv = mu > muEnd ? 1 / mu : -1 / std::sqrt(mu * mu + 100);
             rest = 0;
         } else if (e.kind == RayEnd::Horizon) {
-            // going in at the horizon: the plane is delta = (pi/2 - theta) / (dtheta/dr) away in r (delta < 0: further in, not reached);
-            // u = (1 - tanh(delta / r)) / r: 1 / (r + delta) to first order (the real crossing's value just outside), bounded by 2 / r
+            // going in at the horizon: the plane is delta = (pi/2 - theta) / (dtheta/dr) away in r. delta < 0: further in, not reached:
+            // u = (1 - tanh(delta / r)) / r: 1 / (r + delta) to first order (the real crossing's value just outside), between 1/r and 2/r (inside the horizon's
+            // 1/r+: never on the disc). delta >= 0: the plane lies behind (the crossing already made): the next is far off, 2/r, the value of the ones after it.
             const double dthdr = e.dy[1] / e.dy[0], delta = dthdr != 0 ? (kPi / 2 - th) / dthdr : -1e300;
-            uv = (1 - std::tanh(std::max(delta, -1e3) / re)) / re;
+            uv = delta < 0 ? (1 - std::tanh(std::max(delta, -1e3) / re)) / re : 2 / re;
             rest = 2 / re;
         }
         h.u[n] = uv;
@@ -311,12 +314,12 @@ int SpinStars::images(const Vec3& s, std::vector<SpinImage>& out) const {
         e1 = e1 * (1 / length(e1));
         const Vec3 e2 = cross(s, e1);
         double mag = 0;
-        for (int it = 0; it < 4; it++) {
+        for (int it = 0; it < 3; it++) {                                   // (two Newton steps from the triangle's linear map: well inside the cubic's own error)
             const double h = 1e-7;
             const Vec3 d0 = T_.lookup(psi, chi).dir, dp = T_.lookup(psi + h, chi).dir, dc = T_.lookup(psi, chi + h).dir;
             const Vec3 gp = (dp - d0) * (1 / h), gc = (dc - d0) * (1 / h);
             mag = std::sin(psi) / length(cross(gp, gc));
-            if (it == 3) break;
+            if (it == 2) break;
             const double r1 = dot(d0, e1), r2 = dot(d0, e2), a11 = dot(gp, e1), a12 = dot(gc, e1), a21 = dot(gp, e2), a22 = dot(gc, e2), det = a11 * a22 - a12 * a21;
             if (det == 0) break;
             psi -= (a22 * r1 - a12 * r2) / det;

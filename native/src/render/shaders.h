@@ -610,6 +610,159 @@ void main() {
 }
 )";
 
+// 0.55.2, the Black Hole Lab round a SPINNING hole (blackhole/spin_sky.h; the non-spinning hole keeps kLensFS). Each pixel's ray: th = its distance from the middle
+// over uKpx (the angle from the hole's direction), chi its azimuth on the camera's sky (chi = atan2(dn . uKO.zw, dn . uKO.xy): the screen directions of e_theta
+// and e_phi); the shadow's edge psi_e(chi) from the processor's closed test (uKE: nEdge samples, the periodic 4-point cubic of SpinTable::edge), x = th - psi_e,
+// the shadow where x < 0 (anti-aliased by the pixel's covered part x_px + 1/2); then the table (uKA: far direction, b; uKB: u = 1/r at the first four crossings
+// of the equator) by the same 4 x 4 point cubic as SpinTable::lookup: the column from s = ln|x| + |x| / xc between sLo and the side's own end, the row from
+// tau(chi) (uKT, straight lines between nEdge + 1 samples), periodic. The sky: the far direction (normalised) through uKs (the chart's axes for the camera at
+// phi = 0, turned by the camera's phi, onto the view and into galactic coordinates) and the Gaia map as kLensFS. The disc: the first crossing with
+// rIn <= r <= rOut, g = C75 (A9) from r and b (spin.h discShiftKerr: alpha, omega, varpi of J15 (A.2) on the equator, Omega = 1 / (r^(3/2) + a)), T = uDT.x
+// F(r)^(1/4) with F^(1/4) from uDF (Page and Thorne's flux at this spin, against ln r), the colour as kLensFS. uDebug 1: (far direction on the chart's axes,
+// x_px), uDebug 2: (order, r, g, x_px).
+static const char* const kKerrFS = R"(#version 330 core
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform sampler2D uKA;
+uniform sampler2D uKB;
+uniform sampler2D uKE;
+uniform sampler2D uKT;
+uniform sampler2D uDC;
+uniform sampler2D uDF;
+uniform mat3 uKs;
+uniform vec2 uCentre;
+uniform float uKpx;
+uniform ivec3 uKN;
+uniform vec4 uKS;
+uniform vec4 uKO;
+uniform int uDebug;
+uniform float uBright;
+uniform int uSky;
+uniform int uDisc;
+uniform vec4 uDR;
+uniform vec4 uDT;
+uniform ivec3 uDN;
+out vec4 fragColor;
+const float PI = 3.14159265358979;
+vec4 cubicW(float u) { return vec4(-u * (u - 1.0) * (u - 2.0) / 6.0, (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0, -(u + 1.0) * u * (u - 2.0) / 2.0, (u + 1.0) * u * (u - 1.0) / 6.0); }
+int stencil(float q, int n, out vec4 w) { q = clamp(q, 0.0, float(n - 1)); int i = clamp(int(q), 1, n - 3); w = cubicW(q - float(i)); return i - 1; }
+float edgeAt(float chi) {
+    int n = uKN.z;
+    float q = chi / (2.0 * PI) * float(n);
+    q -= floor(q / float(n)) * float(n);
+    int i = int(q);
+    vec4 w = cubicW(q - float(i));
+    float e = 0.0;
+    for (int k = 0; k < 4; k++) e += w[k] * texelFetch(uKE, ivec2((i - 1 + k + n) % n, 0), 0).r   /* (GLSL: % of a negative number is undefined) */;
+    return e;
+}
+float tauAt(float chi) {
+    int n = uKN.z;
+    float q = chi / (2.0 * PI) * float(n);
+    float turns = floor(q / float(n));
+    q -= turns * float(n);
+    int i = min(int(q), n - 1);
+    float t0 = texelFetch(uKT, ivec2(i, 0), 0).r, t1 = texelFetch(uKT, ivec2(i + 1, 0), 0).r;
+    return turns + t0 + (q - float(i)) * (t1 - t0);
+}
+float sOf(float ax) { return log(ax) + ax / uKS.y; }
+// the table's 4 x 4 cubic on one side at (|x|, chi): A (dir, b) and B (u0..u3)
+void tableAt(int side, float ax, float pe, float chi, out vec4 A, out vec4 B) {
+    float sHi = sOf(side == 0 ? PI - pe : pe);
+    float t = (sOf(max(ax, uKS.z)) - uKS.x) / (sHi - uKS.x) * float(uKN.y - 1);
+    vec4 wc;
+    int j0 = stencil(t, uKN.y, wc);
+    float q = tauAt(chi) * float(uKN.x);
+    q -= floor(q / float(uKN.x)) * float(uKN.x);
+    int i = min(int(q), uKN.x - 1);
+    vec4 wr = cubicW(q - float(i));
+    A = vec4(0.0); B = vec4(0.0);
+    for (int r = 0; r < 4; r++) {
+        int row = side * uKN.x + (i - 1 + r + uKN.x) % uKN.x;
+        for (int c = 0; c < 4; c++) {
+            float w = wr[r] * wc[c];
+            A += w * texelFetch(uKA, ivec2(j0 + c, row), 0);
+            B += w * texelFetch(uKB, ivec2(j0 + c, row), 0);
+        }
+    }
+}
+vec2 mapUV(vec3 v) {
+    vec3 g = uKs * v;
+    float l = atan(g.y, g.x), b = asin(clamp(g.z, -1.0, 1.0));
+    return vec2(0.5 - l / (2.0 * PI), 0.5 - b / PI);
+}
+vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
+vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
+float shiftKerr(float r, float b) {                       // C75 (A9) on the equator
+    float a = uKS.w, D = r * r - 2.0 * r + a * a, S2 = (r * r + a * a) * (r * r + a * a) - a * a * D;
+    float al = sqrt(r * r * D / S2), om = 2.0 * a * r / S2, vp = sqrt(S2) / r;
+    float Om = 1.0 / (r * sqrt(r) + a), V = (Om - om) * vp / al;
+    return al * sqrt(max(1.0 - V * V, 0.0)) / (1.0 - Om * b);
+}
+vec3 discColour(float r, float g) {
+    float q = (log(r) - uDR.z) / uDR.w;
+    if (q < 0.0) return vec3(0.0);
+    q = min(q, float(uDN.x - 1) - 0.001);
+    int i = int(q);
+    float f4 = mix(texelFetch(uDF, ivec2(i, 0), 0).r, texelFetch(uDF, ivec2(i + 1, 0), 0).r, q - float(i));
+    float T = uDT.x * f4 * g;
+    if (!(T > 0.0)) return vec3(0.0);
+    float c = (log(T) * 0.43429448 - uDT.z) / uDT.w;
+    if (c < 0.0) return vec3(0.0);
+    c = min(c, float(uDN.y - 1) - 0.001);
+    int k = int(c);
+    vec3 col = mix(texelFetch(uDC, ivec2(k, 0), 0).rgb, texelFetch(uDC, ivec2(k + 1, 0), 0).rgb, c - float(k)) * uDT.y;
+    float m = max(col.r, max(col.g, col.b));
+    return m > 1.0 ? col / m : col;
+}
+void main() {
+    vec2 o = gl_FragCoord.xy - uCentre;                  // right, up, pixels
+    float r = length(o), th = r / uKpx;
+    vec2 dn = r > 0.0 ? o / r : vec2(0.0, 1.0);
+    float chi = atan(dot(dn, uKO.zw), dot(dn, uKO.xy));
+    if (chi < 0.0) chi += 2.0 * PI;
+    float pe = edgeAt(chi);
+    float xpx = r - pe * uKpx, x = th - pe;
+    vec4 A0, B0;
+    tableAt(0, max(x, 0.0), pe, chi, A0, B0);             // the sky (outside; a pixel just inside takes the edge's ray for its covered part)
+    vec3 v = A0.xyz / max(length(A0.xyz), 1e-30);
+    if (uDebug == 1) { fragColor = x > 0.0 ? vec4(v, xpx) : vec4(0.0, 0.0, 0.0, xpx); return; }
+    vec2 uv = mapUV(v);
+    vec2 ux = dFdx(uv), uy = dFdy(uv);
+    ux.x -= floor(ux.x + 0.5); uy.x -= floor(uy.x + 0.5);
+    ux = clamp(ux, vec2(-0.25), vec2(0.25)); uy = clamp(uy, vec2(-0.25), vec2(0.25));
+    vec3 c = textureGrad(uTex, uv, ux, uy).rgb;
+    float cover = clamp(xpx + 0.5, 0.0, 1.0);
+    vec3 back = (th > PI || uSky == 0) ? vec3(0.0) : c * uBright * cover;
+    if (uDisc == 0 && uDebug != 2) { fragColor = vec4(back, 1.0); return; }
+    vec4 A = A0, B = B0;
+    if (x <= 0.0) tableAt(1, -x, pe, chi, A, B);
+    float rk[4];
+    for (int k = 0; k < 4; k++) rk[k] = (B[k] > 0.0 && th <= PI) ? 1.0 / B[k] : 1e9;
+    float fw[4] = float[4](fwidth(rk[0]), fwidth(rk[1]), fwidth(rk[2]), fwidth(rk[3]));
+    float b = A.w;
+    if (uDebug == 2) {
+        for (int k = 0; k < 4; k++)
+            if (rk[k] >= uDR.x && rk[k] <= uDR.y) { fragColor = vec4(float(k), rk[k], shiftKerr(rk[k], b), xpx); return; }
+        fragColor = vec4(-1.0, 0.0, 0.0, xpx);
+        return;
+    }
+    vec3 acc = vec3(0.0);
+    float tr = 1.0;
+    for (int k = 0; k < 4; k++) {
+        // the part of the pixel's radius range on the disc; a range below float's own step at r (the camera close above the disc: every neighbour meets it at
+        // the same r) counts as a point
+        float w = fw[k];
+        float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
+        if (cov <= 0.0) continue;
+        float rc = clamp(rk[k], uDR.x, uDR.y);
+        acc += tr * cov * discColour(rc, shiftKerr(rc, b));
+        tr *= 1.0 - cov;
+    }
+    fragColor = vec4(encS(acc + tr * decS(back)), 1.0);
+}
+)";
+
 // ---- 0.13 stage 2: OpenGL 4.3 compute (GLSL 430 core) ----
 // The colour group of every dot of a superposition or of a cloud jump, worked out on the GPU from the amplitudes stored with each dot when it was made. One kernel, two modes (uMode).
 // Each function is a direct port of its C++ twin, named in its comment; the C++ functions stay the reference (tests/gl_compare.cpp counts every dot that differs, and each must be within

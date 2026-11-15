@@ -1,0 +1,25 @@
+Black Hole Lab reference picture round a spinning hole (0.55.2): reference_spin099_r60.png, 1280 x 800
+=====================================================================================================
+Made by build/blackhole_picture --spin (tests/blackhole_picture.cpp) from the physics module src/blackhole/ (no graphics card); the PNG was then
+re-compressed losslessly (same pixels) to stay under 2 MB (1.66 MB).
+
+What it shows: the preset "A feeding black hole (model)" (100 million Suns, the standard thin disc of Page and Thorne 1974 out to 30 GM/c^2, shining at 0.1
+of the Eddington limit) with the hole spinning at 0.99 of the largest possible spin, the top of the lab's Spin control; the gas orbits with the spin, in its
+plane. No real hole: the spin of Sagittarius A* and M87* is not measured, and this one is a model. In front of OUR sky as seen from Earth.
+  Camera: a FIDO (James et al. 2015 (A.3): no angular momentum, carried round by the dragged space once every 6.9e5 GM/c^3, about 10.7 years for this mass)
+  at 60 GM/c^2, 10 degrees from the disc's plane, looking straight at the hole.
+  The shadow: 8.68 degrees wide, 8.91 high, flattened on the side moving towards the camera (right) and shifted towards the other side.
+  The disc: its inner edge at the innermost stable orbit for this spin, 1.4545 GM/c^2 (Bardeen, Press & Teukolsky 1972 (2.21)); hottest ring 169,900 K at
+  1.975 GM/c^2; 26.4 % of the infalling mass turned into light. Over the hole the far side bent into view, in front the near side, round the shadow the
+  underside and thinner rings. The shift g of each ray from Cunningham 1975 (A9); the approaching side (right) is bluer and much brighter.
+  Colour: each ring a black body (sigma T^4 = F, Page and Thorne at this spin), seen at g T, its colour by the CIE 1931 observer; true colour.
+  Exposure: the lab's automatic one: the brightest channel of the disc in the picture (1,759 times the Sun's surface luminance) at full brightness, so
+  most of the disc looks dim beside its hot inner edge on the approaching side.
+  Rays: 2 x 2 per pixel through the fine spin table (192 azimuths x 384 x 2 rays, filled by the ray integrator in double precision, 147,456 rays, 11 s on
+  4 cores here), in double; the sky through the table's far directions; stars by inverting the table (747 images drawn, 68 hidden behind the disc).
+  Not drawn: the camera's own shift of colour and brightness (a number on the lab's card).
+
+The model's limits: flat, thin, opaque, each face a perfect black body, steady; no turbulence, hot spots, jets or wind; no light from inside the inner
+edge; no light of the disc falling back on itself; a disc orbiting against the spin, a tilted or a warped disc are not in the lab. The table's own limits
+(REPORT 0.55.2): far directions within 2e-3 rad of the integrator from 1e-3 of the shadow's radius outward; near the disc's plane at this spin the disc's
+radius within about 10 % where rays graze the plane.

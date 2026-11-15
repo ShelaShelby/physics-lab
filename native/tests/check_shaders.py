@@ -14,7 +14,8 @@ import os, re, shutil, subprocess, sys, tempfile
 PAIRS = [("kVertexShader", "kFragmentShader"), ("kSquareVS", "kSquareFS"), ("kBlobVS", "kBlobFS"), ("kCompositeVS", "kCompositeFS"),
          ("kCompositeVS", "kGrayFS"), ("kVertexShader", "kPlanetFS"), ("kChartVS", "kFragmentShader"),
          ("kCloudVS", "kBlobFS"), ("kCloudGridVS", "kCloudGridFS"),   # 0.46: the GPU cloud and its brightness grid
-         ("kCompositeVS", "kLensFS")]   # 0.55.0: the Black Hole Lab's bent sky
+         ("kCompositeVS", "kLensFS"),
+         ("kCompositeVS", "kKerrFS")]   # 0.55.0: the Black Hole Lab's bent sky
 
 def main():
     if len(sys.argv) != 2:

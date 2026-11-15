@@ -19,6 +19,17 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.2", "The Black Hole Lab: a spinning black hole",
+     "In the Black Hole Lab's Controls, Spin gives the hole angular momentum, from 0 to 0.99 of the most a black hole can have (a slider and a typed value). "
+     "The shadow loses its round shape: seen from the plane of the spin it is flattened on the side that moves towards you and shifted to the other side; seen "
+     "along the axis it stays round. The sky near it is dragged round, and the gas disc reaches further in, gets hotter there and turns more of the infalling "
+     "mass into light. The card shows the spin, the horizon's radius at that spin, the innermost stable orbit, the share of the infalling mass turned into "
+     "light, and that close to a spinning hole nothing can stand still: space is dragged round and you with it, once every so many hours or days. The real "
+     "holes' spin is not measured: the presets all start at 0 and say what the telescope papers do say; the control is yours. A coarse picture appears at once "
+     "while you change the spin, the distance or the latitude, the fine one a moment after you stop; going round the axis needs no wait. The top, 0.99, is "
+     "where the lab's tests stop. The light paths are followed step by step on the processor (James et al. 2015), the shadow's edge comes from their closed "
+     "test, and everything is checked against Gralla and Lupsasca 2020, Perlick and Tsupko 2022, Bardeen, Press and Teukolsky 1972 and Cunningham 1975. "
+     "The guide has a new part on spin."},
     {"0.55.1", "The Black Hole Lab: a glowing disc of gas",
      "In the Black Hole Lab's Controls, Gas disc (model) switches on the standard thin disc of gas round the hole: gas circling it, heated by its own friction "
      "as it spirals in, shining as a black body from both faces. It is drawn as you would see it: the disc's far side bent up over the hole and its underside "

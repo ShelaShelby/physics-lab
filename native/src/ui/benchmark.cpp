@@ -81,6 +81,8 @@ void blackholeScene(AppState& app) {
     blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);       // 0.55.1: with the gas disc, 10 degrees above it
     blackhole::setDistance(app.blackhole, 20);
     app.blackhole.pitch = 80 * 3.14159265358979323846 / 180;
+    blackhole::setSpin(app.blackhole, 0.9);                              // 0.55.2: the spinning hole (its fine table made first: turning needs no new one)
+    app.blackholeView.ensureSpin(app.blackhole, true);
 }
 
 void atomScene(AppState& app, int which) {

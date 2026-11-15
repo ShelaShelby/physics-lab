@@ -11,16 +11,19 @@
 // s = ln|x| + |x| / kSpinXc from |x| = kSpinXlo to the side's largest |x| (pi - psi_e outside, psi_e inside): close to the edge the rays wind round the hole
 // and the far direction turns with ln|x| (GLb (42)), so that is where the columns crowd. Per ray: where it ends (the far direction, J15 App. A.1 step (vi), on the
 // chart's axes at infinity; or the horizon), its b (J15 (A.12)), and the radii of its first kSpinCross crossings of the equator (the disc's plane), stored as
-// u = 1/r: u = 0 for a crossing it never makes because it escapes to the sky first (new crossings appear from r = infinity), and u = 1/r+ for one it never makes
-// because it falls into the horizon first (they appear from the horizon). So u is continuous across the grid and the disc's edges come out of the interpolation.
+// u = 1/r. The first crossing a ray does not make is continued smoothly, so that u has no corner where that crossing appears and the cubic does not ring
+// there (spinRay): escaping, from the straight line it leaves on (u = 1/(mu* - 10) < 0 where that line meets the plane behind it); falling in, from the
+// slope of theta at the horizon (u between 1/r and 2/r, inside the horizon). The crossings after it: 0 (escaping) or 2/r (falling in). None of these
+// continued values lies on the disc (r < 0, or r inside the horizon).
 // The lookup (as the card does it): the edge by a periodic 4-point cubic in chi over the nEdge samples, x and s from it, then a 4 x 4 point cubic (Lagrange) in the
 // row (periodic) and the column (clamped), the far direction normalised afterwards. The rays within kSpinXlo of the edge are drawn as the ray at kSpinXlo
 // (the cut-off: tested to be far below a pixel).
 // The disc: its first crossing with rIn <= r <= rOut; g = C75 (A9) from r and b (spin.h discShiftKerr). The gas orbits with the spin (a > 0) in the equator.
 //
 // THE STARS: their images by inverting the table (J15 App. A.7: no simple inverse with spin): every grid cell (two triangles) whose far directions contain the
-// star's; the image's place by the triangle's linear map, its magnification = the triangle's solid angle on the camera's sky over its solid angle on the far sky
-// (Riazuelo 2019 (51); J15 App. A.3.1). Cells within kStarXmin of the edge are left out (their images are below a pixel and below any star's brightness cut).
+// star's; the image's place first by the triangle's linear map, then where the table's own cubic sends exactly the star's direction (Newton), its magnification =
+// solid angle on the camera's sky over solid angle on the far sky of that cubic's infinitesimal cell (Riazuelo 2019 (51); J15 App. A.3.1). Cells within kStarXmin
+// of the edge are left out (their images are below a pixel and below any star's brightness cut).
 #pragma once
 
 #include <atomic>
@@ -108,7 +111,7 @@ struct SpinImage { double psi = 0, chi = 0, mag = 0; int side = 0; };
 class SpinStars {
 public:
     explicit SpinStars(const SpinTable& t);           // the triangles binned on the far sky
-    // the images of dir: found by the triangles, then put where the table's own cubic sends exactly dir (Newton, 3 steps) and the magnification from that
+    // the images of dir: found by the triangles, then put where the table's own cubic sends exactly dir (Newton, 2 steps) and the magnification from that
     // cubic's slopes (the solid-angle ratio of the infinitesimal cell: sin psi dpsi dchi over |d dir/dpsi x d dir/dchi| dpsi dchi)
     int images(const Vec3& dir, std::vector<SpinImage>& out) const;
     double ms() const { return ms_; }

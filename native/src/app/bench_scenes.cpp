@@ -88,8 +88,8 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         atomScene(14, 0);    // old 17: the outline with the cut dragged
         atomScene(19, 0);    // old 22: the chart tilted, with the decay chain
         add(BenchKind::Atom, atom::kBenchGlowAllScene, 0, atom::benchSceneInfo(atom::kBenchGlowAllScene).name, atom::benchSceneInfo(atom::kBenchGlowAllScene).what + ". Scene 21 is this scene with GPU cloud Off");   // 0.46 (no renumbering: these texts use the new numbers)
-        add(BenchKind::BlackHole, -1, 0, "Black Hole Lab, the bent sky and the gas disc drawn anew every frame",   // 0.55.0; 0.55.1: with the disc
-            "A feeding black hole (model) seen from 20 GM/c\xC2\xB2, 10\xC2\xB0 above its gas disc, a 90\xC2\xB0 view, our sky with gravity bending light. The camera turns a little every frame, so the "
+        add(BenchKind::BlackHole, -1, 0, "Black Hole Lab, the spinning hole's bent sky and gas disc drawn anew every frame",   // 0.55.0; 0.55.1: with the disc; 0.55.2: spin 0.9
+            "A feeding black hole (model) spinning at 0.9 of the largest spin, seen from 20 GM/c\xC2\xB2, 10\xC2\xB0 above its gas disc, a 90\xC2\xB0 view, our sky with gravity bending light. The camera turns a little every frame, so the "
             "graphics card draws the whole bent sky and disc again each frame and the processor works out the stars' images, the disc's brightest part and the stars it hides "
             "again (in the lab all of it happens only when the view changes)");
         // "Compare old CPU paths": the twins of 6, 7, 8, 9, 10, 1 and 2

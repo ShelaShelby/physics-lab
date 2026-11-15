@@ -9,11 +9,15 @@
 //     pass, which draws the disc in front of the sky; a star image the disc covers (lab.h discPixel at the image's point) is not drawn. The exposure: lab.h discLook.
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 #include "blackhole/lab.h"
+#include "blackhole/spin_sky.h"
 #include "render/renderer2d.h"
 
 namespace blackhole {
@@ -29,11 +33,19 @@ struct ViewStats {
     long discFills = 0;
     DiscLook look;
     int hidden = 0;
+    // 0.55.2, spin: the shown table (fine or coarse), its last coarse and fine fills (processor time, ms), how many, and the star images' inversion
+    bool spinFine = false;
+    double spinCoarseMs = 0, spinFineMs = 0, spinStarsMs = 0;
+    long spinCoarseFills = 0, spinFineFills = 0;
 };
 
 class BlackHoleView {
     friend void compareHook(render::Renderer2D& R, const char* spec);
 public:
+    BlackHoleView() = default;
+    BlackHoleView(const BlackHoleView&) = delete;
+    BlackHoleView& operator=(const BlackHoleView&) = delete;
+    ~BlackHoleView();
     // The picture W x H points with the hole at (cx, cy) points.
     void draw(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);
     const ViewStats& stats() const { return st_; }
@@ -50,6 +62,34 @@ public:
     // the colour of a black body against log10 T for the card (blackhole/disc.h blackBodyLinear), made once
     static const std::vector<float>& colourTable(int& n, double& log0, double& dlog);
 
+    // 0.55.2, spin (s.spin > 0 with bending on): the table for (spin, distance, latitude). A change of any of them makes the coarse table at once (on this thread)
+    // and drops a finer one being made; the fine one is made on a thread of its own once the settings have rested for kSpinRest seconds, and is shown when it is
+    // done if the settings are still its own. A table of other settings is never shown. wait: tests: make the fine one now, on this thread.
+    void ensureSpin(const Settings& s, bool wait = false);
+    const SpinTable* spinTable() const { return spin_.get(); }
+    bool spinMatches(const Settings& s) const { return spin_ && spin_->spin() == s.spin && spin_->rC() == s.dist && spin_->thC() == s.pitch; }
+    // a pixel of the spinning picture through the shown table: the disc's hit and its light as discPixel (lab.h); hit order -1 for none
+    DiscPixel spinPixel(const Settings& s, const HoleView& v, double X, double Y, bool light = true) const;
+    static constexpr double kSpinRest = 0.3;
+    // tests (PL_BH_SPINEDGE): n points of the shown table's shadow edge on the picture (X, Y in points) and the unit direction outward (right, down), 4 numbers each
+    void spinEdgePoints(const Settings& s, double W, double H, double cx, double cy, int n, std::vector<double>& out) const;
+private:
+    std::shared_ptr<const SpinTable> spin_;
+    std::unique_ptr<SpinStars> spinStars_;
+    std::uint64_t spinVer_ = 0;
+    std::thread spinWorker_;
+    std::atomic<bool> spinCancel_{false}, spinDone_{false};
+    std::mutex spinMx_;
+    std::shared_ptr<const SpinTable> spinReady_;
+    double spinChangedAt_ = 0;
+    bool spinFineStarted_ = false;
+    std::vector<float> discF_;
+    double discFSpin_ = -1, discFLog0_ = 0, discFDl_ = 1;
+    std::uint64_t discFVer_ = 0;
+    std::vector<SpinImage> spinScratch_;
+    void stopSpinWorker();
+    void ensureDiscF(double spin);
+    void drawSpin(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);
 private:
     std::unique_ptr<DiscTable> disc_;
     double discDist_ = -1;
@@ -61,7 +101,7 @@ private:
     struct Dot { float x, y, r; render::Color c; };
     std::vector<Dot> dots_;
     std::vector<StarImage> scratch_;
-    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; bool operator==(const Key& o) const; } key_;
+    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; bool operator==(const Key& o) const; } key_;
     ViewStats st_;
 };
 

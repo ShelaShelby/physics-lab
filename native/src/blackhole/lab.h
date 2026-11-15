@@ -119,6 +119,9 @@ struct Readout {
     // sky inside its edge; the camera (a FIDO, J15 (A.3)) is carried round the axis by the dragged space at omega (J15 (A.2)): one turn in dragDays days of
     // far-away time (2 pi / omega, in GM/c^3 times the mass's GM/c^3); the disc's inner edge, efficiency and hottest ring above are at this spin.
     double spin = 0, shadowWideDeg = 0, shadowHighDeg = 0, omega = 0, turnSeconds = 0;
+    // a real hole's shadow seen from Earth at this spin, the spin axis at the camera's latitude to the line of sight: GLb's critical curve (55) across and up-down
+    // (in GM/c^2) times the preset's GM/c^2 over its distance, in microarcseconds
+    double earthWideMuas = 0, earthHighMuas = 0;
 };
 Readout readout(const Settings& s);
 

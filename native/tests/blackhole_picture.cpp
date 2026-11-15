@@ -1,6 +1,7 @@
 // Black Hole Lab (0.54.3): the reference picture and the speed measurements (a tool run by hand; not a test, not part of the app).
 //   blackhole_picture <out.png>      the non-spinning hole in front of our sky (Gaia map + catalogue stars), 1280 x 800, toward the galactic centre
 //   blackhole_picture --measure      the plan's section 6 measurements that need no graphics card (printed)
+//   blackhole_picture --spin <out.png>   0.55.2: the same disc round a hole spinning at 0.99 (spin_sky.h, the fine table in double; spinPicture below)
 //   blackhole_picture --disc <out.png>   0.55.1: the feeding preset's gas disc (blackhole/lab.h), seen from 60 M, 10 degrees above the disc's plane, 1280 x 800:
 //                                    the sky by lensPixel, the disc by discPixel (the table the card uses, in double), 2 x 2 rays per pixel, laid over each other in
 //                                    linear light at the lab's automatic exposure (discLook); stars the disc covers are not drawn
@@ -19,6 +20,8 @@
 
 #include "app/shot.h"
 #include "blackhole/lab.h"
+#include "blackhole/spin.h"
+#include "blackhole/spin_sky.h"
 #include "blackhole/schwarzschild.h"
 #include "orbit/sky.h"
 #include "render/planet_maps.h"
@@ -214,9 +217,129 @@ static int discPicture(const std::string& outPath) {
     return 0;
 }
 
+// 0.55.2: the feeding preset round a spinning hole (spin 0.99, the Spin control's top), seen from 60 M, 10 degrees above the disc's plane, 1280 x 800: the fine
+// spin table (spin_sky.h) in double at 2 x 2 rays per pixel, the disc by its first crossing (C75 (A9) shift, Page & Thorne's flux at this spin), the sky through
+// the table's far direction, the stars by inverting the table (SpinStars); the lab's automatic exposure (the brightest disc channel at full brightness)
+static int spinPicture(const std::string& outPath) {
+    const int W = 1280, H = 800;
+    Settings s = settingsDefaults();
+    applyPreset(s, kFeedingKey);
+    setDistance(s, 60);
+    setSpin(s, kSpinTop);
+    s.pitch = 100 * kPi / 180;
+    const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
+    const SpinTable T(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge);
+    const DiscGeom g = discGeom(s);
+    const DiscPhys P = discPhys(s);
+    const double ph = std::atan2(v.ca * v.sb, v.sa * v.sb), cph = std::cos(ph), sph = std::sin(ph), th = s.pitch;
+    const Vec3 er{std::sin(th) * cph, std::sin(th) * sph, std::cos(th)}, et{std::cos(th) * cph, std::cos(th) * sph, -std::sin(th)}, ep{-sph, cph, 0};
+    const auto at = [&](double X, double Y, SpinHit& h, SpinDisc& d) {
+        const double dx = X - v.cx, dy = v.cy - Y, dd = std::hypot(dx, dy), t = dd / v.K;
+        if (!(t <= kPi)) return false;
+        double chi = std::atan2(-dx / dd, dy / dd);
+        if (chi < 0) chi += 2 * kPi;
+        h = T.lookup(t, chi);
+        d = spinDisc(h, s.spin, g.rIn, g.rOut);
+        return true;
+    };
+    double white = 0;
+    for (int y = 1; y < H; y += 2)
+        for (int x = 1; x < W; x += 2) {
+            SpinHit h; SpinDisc d;
+            if (!at(x, y, h, d) || d.order < 0) continue;
+            const auto c = blackBodyLinearFast(d.g * P.temperature(d.r));
+            white = std::max({white, c[0], c[1], c[2]});
+        }
+    if (!(white > 0)) white = 1;
+    render::MapImage map;
+    if (!render::decodeMap(render::Map::Sky, map)) { std::fprintf(stderr, "no sky map\n"); return 1; }
+    const orbit::Sky& S = orbit::skyData();
+    const Vec3 G0 = S.galCentre, G1 = cross(S.galPole, S.galCentre), G2 = S.galPole;
+    const auto sample = [&](const Vec3& d, double* lin) {
+        const double l = std::atan2(dot(d, G1), dot(d, G0)), b = std::asin(std::clamp(dot(d, G2), -1.0, 1.0));
+        double u, w;
+        render::skyUV(l, b, u, w);
+        const double fx = u * map.w - 0.5, fy = std::clamp(w * map.h - 0.5, 0.0, map.h - 1.0);
+        const int x0 = static_cast<int>(std::floor(fx)), y0 = static_cast<int>(std::floor(fy));
+        const double ax = fx - x0, ay = fy - y0;
+        for (int c = 0; c < 3; c++) {
+            double q = 0;
+            for (int j = 0; j < 2; j++)
+                for (int i = 0; i < 2; i++) {
+                    const int xx = ((x0 + i) % map.w + map.w) % map.w, yy = std::min(y0 + j, map.h - 1);
+                    q += (i ? ax : 1 - ax) * (j ? ay : 1 - ay) * map.rgba[(static_cast<std::size_t>(yy) * map.w + xx) * 4 + c];
+                }
+            lin[c] += decS(q / 255);
+        }
+    };
+    std::vector<double> img(static_cast<std::size_t>(W) * H * 3, 0.0);
+    std::vector<unsigned char> onDisc(static_cast<std::size_t>(W) * H, 0);
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            double lin[3] = {0, 0, 0};
+            int hits = 0;
+            for (int k = 0; k < 4; k++) {
+                const double X = x + 0.25 + 0.5 * (k & 1), Y = y + 0.25 + 0.5 * (k >> 1);
+                SpinHit h; SpinDisc d;
+                if (!at(X, Y, h, d)) continue;
+                if (d.order >= 0) {
+                    const auto c = blackBodyLinearFast(d.g * P.temperature(d.r));
+                    const double m = std::max({c[0], c[1], c[2]}) / white;
+                    for (int q = 0; q < 3; q++) lin[q] += c[q] / white / std::max(1.0, m);
+                    hits++;
+                    continue;
+                }
+                if (h.sky) sample(Vec3{cph * h.dir.x - sph * h.dir.y, sph * h.dir.x + cph * h.dir.y, h.dir.z}, lin);
+            }
+            onDisc[static_cast<std::size_t>(y) * W + x] = hits > 0;
+            for (int c = 0; c < 3; c++) img[(static_cast<std::size_t>(y) * W + x) * 3 + c] = lin[c] / 4;
+        }
+    const SpinStars St(T);
+    std::vector<SpinImage> im;
+    int drawn = 0, hidden = 0;
+    for (const auto& st : S.stars) {
+        im.clear();
+        St.images(Vec3{cph * st.dir.x + sph * st.dir.y, -sph * st.dir.x + cph * st.dir.y, st.dir.z}, im);
+        const auto& col = S.colours[st.bucket];
+        for (const auto& m : im) {
+            if (!(m.mag > 0)) continue;
+            const double mag = st.mag - 2.5 * std::log10(m.mag);
+            if (mag > kImageMagLimit) continue;
+            const Vec3 N = lookAt(m.psi, m.chi), dir = er * N.x + et * N.y + ep * N.z;
+            double X, Y;
+            if (!viewScreen(v, dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
+            SpinHit h; SpinDisc d;
+            if (at(X, Y, h, d) && d.order >= 0) { hidden++; continue; }
+            const orbit::StarDraw sd = orbit::starDraw(mag);
+            drawn++;
+            for (int yy = static_cast<int>(Y - sd.radius - 2); yy <= static_cast<int>(Y + sd.radius + 2); yy++)
+                for (int xx = static_cast<int>(X - sd.radius - 2); xx <= static_cast<int>(X + sd.radius + 2); xx++) {
+                    if (xx < 0 || yy < 0 || xx >= W || yy >= H || onDisc[static_cast<std::size_t>(yy) * W + xx]) continue;
+                    const double cov = std::clamp(sd.radius + 0.5 - std::hypot(xx + 0.5 - X, yy + 0.5 - Y), 0.0, 1.0) * sd.alpha;
+                    double* p = &img[(static_cast<std::size_t>(yy) * W + xx) * 3];
+                    for (int c = 0; c < 3; c++) p[c] = p[c] * (1 - cov) + decS(col[c] / 255.0) * cov;
+                }
+        }
+    }
+    std::vector<uint8_t> rgb(static_cast<std::size_t>(W) * H * 3);
+    for (std::size_t i = 0; i < rgb.size(); i++) rgb[i] = static_cast<uint8_t>(std::lround(encS(img[i]) * 255));
+    const std::vector<uint8_t> png = app::encodePng(W, H, rgb.data());
+    FILE* fo = std::fopen(outPath.c_str(), "wb");
+    if (!fo) return 1;
+    std::fwrite(png.data(), 1, png.size(), fo);
+    std::fclose(fo);
+    const Readout r = readout(s);
+    std::printf("wrote %s (%zu bytes): %s, spin %g, %.4g Suns, L = %.3g L_Edd, disc %.6g to %g M; camera at %g M, 10 degrees from the disc's plane; horizon %.6g M; hottest ring %.0f K at %.4f M;\n"
+                "efficiency %.4f; table %ld rays in %.0f ms; screen white %.4g x the Sun's surface; %d star images drawn, %d hidden by the disc; shadow %.4f x %.4f deg; dragged round once every %.4g GM/c^3\n",
+                outPath.c_str(), png.size(), kFeedingName, s.spin, s.massSun, s.feed, r.rIn, s.outer, s.dist, r.horizonM, r.tHot, r.rHot, r.efficiency, T.rays(), T.fillMs(), white, drawn, hidden,
+                r.shadowWideDeg, r.shadowHighDeg, 2 * kPi / r.omega);
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--measure") == 0) return measure();
     if (argc > 2 && std::strcmp(argv[1], "--disc") == 0) return discPicture(argv[2]);
+    if (argc > 2 && std::strcmp(argv[1], "--spin") == 0) return spinPicture(argv[2]);
     const std::string outPath = argc > 1 ? argv[1] : "blackhole_reference.png";
     const int W = 1280, H = 800;
     const orbit::Sky& S = orbit::skyData();

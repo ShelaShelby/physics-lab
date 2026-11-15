@@ -189,6 +189,22 @@ bool Renderer2D::init() {
             lnDA_ = glGetUniformLocation(lensProgram_, "uDA"); lnDR_ = glGetUniformLocation(lensProgram_, "uDR"); lnDT_ = glGetUniformLocation(lensProgram_, "uDT");
             lnSky_ = glGetUniformLocation(lensProgram_, "uSky");
         }
+        // 0.55.2: the spinning hole's sky
+        const GLuint kv = compile(GL_VERTEX_SHADER, kCompositeVS), kf = compile(GL_FRAGMENT_SHADER, kKerrFS);
+        kerrProgram_ = glCreateProgram();
+        glAttachShader(kerrProgram_, kv);
+        glAttachShader(kerrProgram_, kf);
+        glLinkProgram(kerrProgram_);
+        glDeleteShader(kv);
+        glDeleteShader(kf);
+        glGetProgramiv(kerrProgram_, GL_LINK_STATUS, &ok);
+        if (!ok) { std::fprintf(stderr, "kerr shader link error\n"); glDeleteProgram(kerrProgram_); kerrProgram_ = 0; }
+        else {
+            const auto u = [&](const char* n) { return glGetUniformLocation(kerrProgram_, n); };
+            krTex_ = u("uTex"); krA_ = u("uKA"); krB_ = u("uKB"); krE_ = u("uKE"); krT_ = u("uKT"); krDC_ = u("uDC"); krDF_ = u("uDF"); krKs_ = u("uKs");
+            krCentre_ = u("uCentre"); krKpx_ = u("uKpx"); krKN_ = u("uKN"); krKS_ = u("uKS"); krKO_ = u("uKO"); krDebug_ = u("uDebug"); krBright_ = u("uBright");
+            krSky_ = u("uSky"); krDisc_ = u("uDisc"); krDR_ = u("uDR"); krDT_ = u("uDT"); krDN_ = u("uDN");
+        }
     }
     {   // the planet program (same vertex shader as the shapes; it also draws the sky photo) and the picture maps
         const GLuint v = compile(GL_VERTEX_SHADER, kVertexShader), f = compile(GL_FRAGMENT_SHADER, kPlanetFS);
@@ -285,7 +301,9 @@ void Renderer2D::shutdown() {
     if (lensFbo_) glDeleteFramebuffers(1, &lensFbo_);
     if (lensTex_) glDeleteTextures(1, &lensTex_);
     if (lensTableTex_) glDeleteTextures(1, &lensTableTex_);
-    for (GLuint* tx : {&discUTex_, &discPTex_, &discCTex_}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
+    for (GLuint* tx : {&discUTex_, &discPTex_, &discCTex_, &kATex_, &kBTex_, &kETex_, &kTTex_, &kFTex_}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
+    if (kerrProgram_) glDeleteProgram(kerrProgram_);
+    kerrProgram_ = 0; kVer_ = kFVer_ = ~std::uint64_t(0);
     lensProgram_ = lensFbo_ = lensTex_ = lensTableTex_ = 0; lensW_ = lensH_ = lensN_ = 0; lensValid_ = false; lensTableVer_ = ~std::uint64_t(0);
     discVer_ = colVer_ = ~std::uint64_t(0);
     for (int i = 0; i < int(meshes_.size()); i++) meshDelete(i);
@@ -389,7 +407,44 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         discVer_ = L.discVersion;
     }
     if (disc && L.colVersion != colVer_) { upload(discCTex_, L.discC, 1, GL_RGB32F, GL_RGB, L.discCol->data()); colVer_ = L.colVersion; }
+    const bool kerr = L.kerr && kerrProgram_ && L.bend && L.kA && L.kB && L.kEdge && L.kTau && L.kChi >= 4 && L.kS >= 4 && L.kEdgeN >= 4;
+    const bool kdisc = kerr && L.disc && L.discF && L.discCol && L.discFN >= 2 && L.discC >= 2;
+    if (kerr && L.kVersion != kVer_) {                                     // 0.55.2: a new spin table: to the GPU once
+        upload(kATex_, L.kS, 2 * L.kChi, GL_RGBA32F, GL_RGBA, L.kA->data());
+        upload(kBTex_, L.kS, 2 * L.kChi, GL_RGBA32F, GL_RGBA, L.kB->data());
+        upload(kETex_, L.kEdgeN, 1, GL_R32F, GL_RED, L.kEdge->data());
+        upload(kTTex_, L.kEdgeN + 1, 1, GL_R32F, GL_RED, L.kTau->data());
+        kVer_ = L.kVersion;
+    }
+    if (kdisc && L.discFVersion != kFVer_) { upload(kFTex_, L.discFN, 1, GL_R32F, GL_RED, L.discF->data()); kFVer_ = L.discFVersion; }
+    if (kdisc && L.colVersion != colVer_) { upload(discCTex_, L.discC, 1, GL_RGB32F, GL_RGB, L.discCol->data()); colVer_ = L.colVersion; }
+    const auto kpass = [&](int ox, int oy) {                               // 0.55.2: the spinning hole's pass
+        const double ppp = fbW / width_;
+        const double cxPx = std::round(L.cx * ppp), cyPx = std::round(L.cy * ppp), Kpx = L.kRad * ppp;
+        glUseProgram(kerrProgram_);
+        glUniformMatrix3fv(krKs_, 1, GL_TRUE, L.kM);
+        glUniform2f(krCentre_, static_cast<float>(ox + cxPx), static_cast<float>(oy + fbH - cyPx));
+        glUniform1f(krKpx_, static_cast<float>(Kpx));
+        glUniform3i(krKN_, L.kChi, L.kS, L.kEdgeN);
+        glUniform4f(krKS_, static_cast<float>(L.kSLo), static_cast<float>(L.kXc), static_cast<float>(L.kXlo), static_cast<float>(L.spin));
+        glUniform4f(krKO_, L.kO[0], L.kO[1], L.kO[2], L.kO[3]);
+        glUniform1i(krDebug_, L.debugDisc ? 2 : L.debug ? 1 : 0);
+        glUniform1i(krSky_, L.sky ? 1 : 0);
+        glUniform1i(krDisc_, kdisc ? 1 : 0);
+        glUniform1f(krBright_, static_cast<float>(std::clamp(L.bright, 0.0, 1.0)));
+        glUniform4f(krDR_, static_cast<float>(L.rIn), static_cast<float>(L.rOut), static_cast<float>(L.discFLog0), static_cast<float>(L.discFDl));
+        glUniform4f(krDT_, static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog));
+        glUniform3i(krDN_, L.discFN, L.discC, 0);
+        const GLuint texs[7] = {tex_[static_cast<int>(Map::Sky)], kATex_, kBTex_, kETex_, kTTex_, discCTex_, kFTex_};
+        const GLint locs[7] = {krTex_, krA_, krB_, krE_, krT_, krDC_, krDF_};
+        for (int k = 0; k < 7; k++) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, texs[k]); glUniform1i(locs[k], k); }
+        glActiveTexture(GL_TEXTURE0);
+        glBindVertexArray(cmpVao_);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        for (int k = 6; k >= 0; k--) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, 0); }
+    };
     const auto pass = [&](int ox, int oy) {                                // one full-picture pass into the bound framebuffer, whose picture starts at (ox, oy)
+        if (kerr) { kpass(ox, oy); return; }
         const double ppp = fbW / width_;                                   // pixels per point
         const double cxPx = std::round(L.cx * ppp), cyPx = std::round(L.cy * ppp), Kpx = L.kRad * ppp;
         const double e = L.alphaSh * Kpx, e2 = e * e;
@@ -449,12 +504,15 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
     const bool same = lensValid_ && P.cx == L.cx && P.cy == L.cy && P.kRad == L.kRad && std::equal(L.M, L.M + 9, P.M) && P.bright == L.bright && P.bend == L.bend &&
                       P.alphaSh == L.alphaSh && P.s0 == L.s0 && P.ds == L.ds && P.tableVersion == L.tableVersion && width_ == lensPtW_ &&
                       P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
-                      P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white));
+                      P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&
+                      P.kerr == L.kerr && (!L.kerr || (P.kVersion == L.kVersion && std::equal(L.kM, L.kM + 9, P.kM) && std::equal(L.kO, L.kO + 4, P.kO) && P.spin == L.spin &&
+                      P.discFVersion == L.discFVersion));
     if (!same) {                                                           // (e) of the plan: drawn anew only when the view, the distance or the picture changed
         glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
         glViewport(0, 0, fbW, fbH);
         pass(0, 0);
-        lensLast_ = L; lensLast_.table = nullptr; lensLast_.discU = lensLast_.discP = lensLast_.discCol = nullptr; lensPtW_ = width_; lensValid_ = true; lensRedraws_++;
+        lensLast_ = L; lensLast_.table = nullptr; lensLast_.discU = lensLast_.discP = lensLast_.discCol = nullptr;
+        lensLast_.kA = lensLast_.kB = lensLast_.kEdge = lensLast_.kTau = lensLast_.discF = nullptr; lensPtW_ = width_; lensValid_ = true; lensRedraws_++;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glViewport(vx, vy, fbW, fbH);

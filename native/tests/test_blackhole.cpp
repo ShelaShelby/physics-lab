@@ -1536,6 +1536,14 @@ static void testSpinLab() {
           std::fabs(r.shadowHighDeg - (shadowEdge(0.9, cam, 0) + shadowEdge(0.9, cam, kPi)) * 180 / kPi) < 1e-9, "the shadow's width and height from the closed test: " + f(r.shadowWideDeg) + " x " + f(r.shadowHighDeg));
     const DiscPhys dp = discPhys(s);
     check(dp.aSigned == 0.9 && discGeom(s).rIn == discInner(0.9), "the disc's physics and edges follow the spin (the gas orbits with it)");
+    {   // Sagittarius A* seen from Earth at spin 0.99 with the spin axis across the line of sight: 6 sqrt(3) GM/c^2 up-down (PeT Table III), narrower across
+        Settings e = settingsDefaults();
+        setSpin(e, 0.99);
+        e.pitch = kPi / 2;
+        const Readout q = readout(e);
+        const double perM = q.earthShadowMuas / (2 * std::sqrt(27.0));
+        check(std::fabs(q.earthHighMuas / (6 * std::sqrt(3.0) * perM) - 1) < 1e-6 && q.earthWideMuas < q.earthHighMuas, "Sagittarius A* at spin 0.99 seen side-on from Earth: " + f(q.earthWideMuas) + " x " + f(q.earthHighMuas) + " microarcsec (6 sqrt(3) M up-down, PeT Table III)");
+    }
     Settings z = s; setSpin(z, 0);
     const Readout r0 = readout(z);
     check(std::fabs(r0.shadowDeg - 2 * shadowAngle(20) * 180 / kPi) < 1e-12 && std::fabs(r0.rIn - 6) < 1e-12, "spin 0 keeps the closed forms of 0.55.1 (Synge's shadow, r_ms = 6)");

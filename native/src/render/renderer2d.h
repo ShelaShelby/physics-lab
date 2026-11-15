@@ -181,6 +181,24 @@ public:
         std::uint64_t discVersion = 0, colVersion = 0;
         float discAxis[3] = {0, 0, 1};      // the disc's axis on the view frame (right, up, towards the camera)
         double rO = 20, rIn = 6, rOut = 30, tScale = 0, white = 1, colLog0 = 0, colDlog = 1;
+        // 0.55.2: the spinning hole (kKerrFS, blackhole/spin_sky.h SpinTable), used when kerr is true (then table, alphaSh and the disc's a = 0 table are not).
+        // kA (dir, b) and kB (u0..u3): kS columns x 2 kChi rows; kEdge: kEdgeN edge samples; kTau: kEdgeN + 1 values of tau. kM: the chart's axes (camera at
+        // phi = 0) to galactic, through the camera's phi and the view; kO: the screen directions (right, up) of e_theta and e_phi. discF: F^(1/4) against ln r
+        // (discFN values from ln r = discFLog0 in steps discFDl) for the disc's temperature at this spin; discCol, white, tScale, rIn, rOut as above.
+        bool kerr = false;
+        const std::vector<float>* kA = nullptr;
+        const std::vector<float>* kB = nullptr;
+        const std::vector<float>* kEdge = nullptr;
+        const std::vector<float>* kTau = nullptr;
+        int kChi = 0, kS = 0, kEdgeN = 0;
+        double kSLo = 0, kXc = 0.3, kXlo = 1e-8, spin = 0;
+        float kM[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        float kO[4] = {0, 1, 1, 0};
+        std::uint64_t kVersion = 0;
+        const std::vector<float>* discF = nullptr;
+        int discFN = 0;
+        double discFLog0 = 0, discFDl = 1;
+        std::uint64_t discFVersion = 0;
     };
     void lensSky(const LensSky& s);
     long lensRedraws() const { return lensRedraws_; }   // how many times the bent sky was drawn anew (the rest of the frames reused it)
@@ -235,6 +253,10 @@ private:
     // 0.55.0: the bent sky (lensSky)
     std::vector<LensSky> lens_;                     // this frame's (Segment::slot)
     GLuint lensProgram_ = 0, lensFbo_ = 0, lensTex_ = 0, lensTableTex_ = 0, discUTex_ = 0, discPTex_ = 0, discCTex_ = 0;
+    GLuint kerrProgram_ = 0, kATex_ = 0, kBTex_ = 0, kETex_ = 0, kTTex_ = 0, kFTex_ = 0;   // 0.55.2
+    GLint krTex_ = -1, krA_ = -1, krB_ = -1, krE_ = -1, krT_ = -1, krDC_ = -1, krDF_ = -1, krKs_ = -1, krCentre_ = -1, krKpx_ = -1, krKN_ = -1, krKS_ = -1, krKO_ = -1,
+          krDebug_ = -1, krBright_ = -1, krSky_ = -1, krDisc_ = -1, krDR_ = -1, krDT_ = -1, krDN_ = -1;
+    std::uint64_t kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     GLint lnDisc_ = -1, lnDU_ = -1, lnDP_ = -1, lnDC_ = -1, lnDN_ = -1, lnDS_ = -1, lnDA_ = -1, lnDR_ = -1, lnDT_ = -1, lnSky_ = -1;
     std::uint64_t discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0);
     GLint lnTex_ = -1, lnTable_ = -1, lnK_ = -1, lnCentre_ = -1, lnKpx_ = -1, lnEdge_ = -1, lnT_ = -1, lnN_ = -1, lnBend_ = -1, lnDebug_ = -1, lnBright_ = -1, lnLod_ = -1;
