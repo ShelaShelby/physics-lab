@@ -7,6 +7,8 @@
 
 #include "blackhole/kerr.h"
 #include "blackhole/presets.h"
+#include "blackhole/spin.h"
+#include "blackhole/spin_sky.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
 
@@ -32,7 +34,7 @@ double logV(double t, double lo, double hi) { return std::exp(std::log(lo) + std
 
 bool Settings::operator==(const Settings& o) const {
     return preset == o.preset && massSun == o.massSun && dist == o.dist && fovDeg == o.fovDeg && yaw == o.yaw && pitch == o.pitch && bend == o.bend && skyOurs == o.skyOurs &&
-           disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expLog == o.expLog;
+           disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expLog == o.expLog && spin == o.spin;
 }
 
 Settings settingsDefaults() {
@@ -58,6 +60,7 @@ bool applyPreset(Settings& s, const std::string& key) {
         s.preset = kFeedingKey;
         s.massSun = kFeedingMass;
         s.disc = true;
+        s.spin = 0;                                                     // (no invented spin: the model's start, as the real holes')
         return true;
     }
     const Preset* p = preset(key.c_str());
@@ -65,6 +68,7 @@ bool applyPreset(Settings& s, const std::string& key) {
     s.preset = p->key;
     s.massSun = p->massSun;
     s.disc = false;                                                     // (owner's decision of 15 Nov 2026: the real holes open with no disc)
+    s.spin = 0;                                                         // (owner's decision of 15 Nov 2026: spin not measured; it starts at 0)
     return true;
 }
 
@@ -77,6 +81,7 @@ void setMass(Settings& s, double m) {
 void setFeed(Settings& s, double l) { s.feed = std::clamp(l, kThinMin, kThinMax); }
 void setOuter(Settings& s, double r) { s.outer = std::clamp(r, kOuterMin, kOuterMax); }
 void setExposure(Settings& s, double e) { s.expLog = std::clamp(e, kExpLogMin, kExpLogMax); s.expAuto = false; }
+void setSpin(Settings& s, double a) { s.spin = std::clamp(a, 0.0, kSpinTop); }
 void setDistance(Settings& s, double d) { s.dist = std::clamp(d, kDistMin, kDistMax); }
 void setFov(Settings& s, double f) { s.fovDeg = std::clamp(f, kFovMin, kFovMax); }
 void turn(Settings& s, double dy, double dp) {
@@ -98,6 +103,7 @@ void saveSettings(const Settings& s, std::map<std::string, std::string>& out) {
     out["feed"] = text(s.feed);
     out["outer"] = text(s.outer);
     out["exposure"] = s.expAuto ? "auto" : text(s.expLog);
+    out["spin"] = text(s.spin);
 }
 
 Settings loadSettings(const std::map<std::string, std::string>& in) {
@@ -116,6 +122,7 @@ Settings loadSettings(const std::map<std::string, std::string>& in) {
     if (num(in, "outer", kOuterMin, kOuterMax, v)) s.outer = v;
     if (const auto it = in.find("exposure"); it != in.end() && it->second == "auto") s.expAuto = true;
     else if (num(in, "exposure", kExpLogMin, kExpLogMax, v)) { s.expAuto = false; s.expLog = v; }
+    if (num(in, "spin", 0, kSpinTop, v)) s.spin = v;
     return s;
 }
 
@@ -128,8 +135,8 @@ double sliderToFeed(double t) { return logV(t, kThinMin, kThinMax); }
 double outerToSlider(double r) { return logT(r, kOuterMin, kOuterMax); }
 double sliderToOuter(double t) { return logV(t, kOuterMin, kOuterMax); }
 
-DiscPhys discPhys(const Settings& s) { DiscPhys p; p.massSun = s.massSun; p.lEdd = s.feed; p.aSigned = 0; return p; }
-DiscGeom discGeom(const Settings& s) { DiscGeom g; g.rIn = discInner(0); g.rOut = s.outer; return g; }
+DiscPhys discPhys(const Settings& s) { DiscPhys p; p.massSun = s.massSun; p.lEdd = s.feed; p.aSigned = s.spin; return p; }
+DiscGeom discGeom(const Settings& s) { DiscGeom g; g.rIn = discInner(s.spin); g.rOut = s.outer; return g; }
 Vec3 discAxisView(const HoleView& v) { return Vec3{0, -v.sb, v.cb}; }
 
 DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light) {
@@ -175,21 +182,56 @@ HoleView holeView(const Settings& s, double W, double H, double cx, double cy) {
     return v;
 }
 
+namespace {
+// the spinning hole's shadow on the camera's sky (the closed test along 128 azimuths), kept for the last settings: the readout is asked several times a frame
+struct SpinShadow { double a = -1, r = 0, th = 0, wide = 0, high = 0, share = 0; };
+const SpinShadow& spinShadow(double a, double r, double th) {
+    static SpinShadow c;
+    if (c.a == a && c.r == r && c.th == th) return c;
+    c.a = a; c.r = r; c.th = th;
+    const Camera cam{r, th, 0};
+    const int n = 128;
+    double share = 0;
+    for (int k = 0; k < n; k++) share += (1 - std::cos(shadowEdge(a, cam, 2 * kPi * (k + 0.5) / n))) / (2.0 * n);   // the cap under the edge over 4 pi
+    c.share = share;
+    // chi = 0 along e_theta (up on the picture, holeView), pi/2 along e_phi
+    c.high = (shadowEdge(a, cam, 0) + shadowEdge(a, cam, kPi)) * 180 / kPi;
+    c.wide = (shadowEdge(a, cam, kPi / 2) + shadowEdge(a, cam, -kPi / 2)) * 180 / kPi;
+    return c;
+}
+}  // namespace
+
 Readout readout(const Settings& s) {
     Readout r;
+    const double a = s.spin;
+    r.spin = a;
     r.massSun = s.massSun;
     r.rgM = gravRadiusM(s.massSun);
-    r.horizonM = horizon(0);
+    r.horizonM = horizon(a);
     r.horizonKm = r.horizonM * r.rgM / 1000;
     r.horizonAU = r.horizonM * r.rgM / units::kAU;
     r.dist = s.dist;
     r.distKm = s.dist * r.rgM / 1000;
     r.distAU = s.dist * r.rgM / units::kAU;
-    r.shadowDeg = 2 * shadowAngle(s.dist) * 180 / kPi;
-    r.skyShare = shadowSkyFraction(s.dist);
-    r.clockRate = hoverClockRate(s.dist);
-    r.blueshift = hoverBlueshift(s.dist);
-    r.brightening = hoverBrightening(s.dist);
+    if (a == 0) {
+        r.shadowDeg = 2 * shadowAngle(s.dist) * 180 / kPi;
+        r.shadowWideDeg = r.shadowHighDeg = r.shadowDeg;
+        r.skyShare = shadowSkyFraction(s.dist);
+        r.clockRate = hoverClockRate(s.dist);
+        r.blueshift = hoverBlueshift(s.dist);
+        r.brightening = hoverBrightening(s.dist);
+    } else {
+        const SpinShadow& sh = spinShadow(a, s.dist, s.pitch);
+        r.shadowWideDeg = sh.wide; r.shadowHighDeg = sh.high;
+        r.shadowDeg = 0.5 * (sh.wide + sh.high);
+        r.skyShare = sh.share;
+        const KerrMetric m = kerrMetric(a, s.dist, s.pitch);
+        r.clockRate = m.alpha;                                               // the FIDO's proper time per far-away time: the lapse (J15 (A.1))
+        r.blueshift = hoverShift(a, s.dist, s.pitch, 0);                     // (A.16) for light with b = 0 (from the poles' and the hole's direction)
+        r.brightening = std::pow(r.blueshift, 4);
+        r.omega = m.omega;
+        r.turnSeconds = 2 * kPi / m.omega * r.rgM / 299792458.0;             // GM/c^3 = r_g / c
+    }
     r.photonOrbitM = photonOrbit(0, true);
     if (const Preset* p = s.preset.empty() ? nullptr : preset(s.preset.c_str())) {
         r.hasPreset = true;
@@ -204,13 +246,13 @@ Readout readout(const Settings& s) {
     r.disc = s.disc;
     r.feed = s.feed;
     const DiscPhys dp = discPhys(s);
-    r.rIn = discInner(0);
+    r.rIn = discInner(a);
     r.rInKm = r.rIn * r.rgM / 1000;
     r.rOut = s.outer;
     r.tHot = dp.hottest(&r.rHot);
     r.rHotKm = r.rHot * r.rgM / 1000;
     r.hotVsSun = visibleVsSun(r.tHot);
-    r.efficiency = discEfficiency(0);
+    r.efficiency = discEfficiency(a);
     r.lumW = s.feed * eddingtonLuminosity(s.massSun);
     return r;
 }

@@ -39,8 +39,12 @@ namespace blackhole {
 
 using orbit::Vec3;
 
-struct Camera {                  // hovering (a FIDO); see the header comment for the moving camera of step 5
+struct Camera {                  // hovering (a FIDO) unless beta > 0
     double r = 10, theta = 1.5707963267948966, phi = 0;
+    // 0.55.2: the camera's speed relative to the FIDO and its direction (unit, on e_r, e_theta, e_phi): J15 App. A.1 step (i). The look direction is then on
+    // the camera's own axes (the FIDO's axes boosted along B) and launch turns it into the FIDO's by aberration (A.9), (A.10) (blackhole/spin.h aberrate).
+    double beta = 0;
+    Vec3 B{0, 0, 1};
 };
 
 constexpr int kMaxState = 8;
@@ -54,6 +58,7 @@ struct RayEnd {
     enum Kind { Sky, Horizon, Lost } kind = Lost;   // Lost: the step budget ran out (a ray within about 1e-15 of a trapped photon orbit)
     Vec3 dir;                    // Sky: the unit direction it came from, on the chart's far sky (Cartesian axes of the chart at infinity)
     int steps = 0;
+    double y[kMaxState] = {}, dy[kMaxState] = {};   // 0.55.2: the last state and its rate (Sky or Horizon)
 };
 
 class Chart {
@@ -66,6 +71,8 @@ public:
     virtual Vec3 farDirection(const Ray& ray, const double* y, const double* dy, double zetaSign) const = 0;
     virtual double nullCondition(const Ray& ray, const double* y) const = 0;         // 0 for a light ray (a check, not used to integrate)
     virtual double rFar() const = 0;
+    virtual double plane(const double*) const { return 1; }                        // 0.55.2: changes sign where a ray crosses the chart's plane
+    virtual double planeRate(const double*, const double*) const { return 0; }      // d plane / d zeta, given the state and its rhs
 };
 
 // The Kerr hole in Boyer-Lindquist coordinates, M = 1. State y = (r, theta, phi, p_r, p_theta); constants c = (b, q).
@@ -79,6 +86,8 @@ public:
     Vec3 farDirection(const Ray& ray, const double* y, const double* dy, double zetaSign) const override;
     double nullCondition(const Ray& ray, const double* y) const override;
     double rFar() const override { return rFar_; }
+    double plane(const double* y) const override;                   // cos theta (the equator: the disc's plane)
+    double planeRate(const double* y, const double* dy) const override;
     double hamiltonian(double b, double q, const double* y) const;   // H of (A.15), for the finite-difference test of rhs
     double carterQ(double b, const double* y) const;                 // q from (theta, p_theta) by (A.12)
     double spin() const { return a_; }
@@ -89,6 +98,11 @@ private:
 struct TraceOptions {
     double rtol = 1e-11, atol = 1e-12;   // per step, on the Dormand-Prince error estimate
     int maxSteps = 200000;
+    // 0.55.2: the crossings of the chart's plane (Chart::plane changes sign; KerrBL: the equator, the disc's plane): up to maxCross of them are found to the
+    // integrator's own precision (Newton on the step length from the step's start, each trial a full Dormand-Prince step) and their states appended to
+    // *cross (n numbers each, in the order the ray meets them going into its past).
+    int maxCross = 0;
+    std::vector<double>* cross = nullptr;
 };
 
 // The ray seen in direction `look` by the camera, followed into its past until it ends. If path is given, every accepted state is appended (n numbers each).

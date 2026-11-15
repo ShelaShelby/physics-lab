@@ -53,6 +53,7 @@ struct Settings {
     double outer = kOuterDefault;          // the disc's outer edge, GM/c^2
     bool expAuto = true;                   // exposure: automatic, or expLog
     double expLog = kExpLogDefault;        // log10 of the screen's white in units of the Sun's surface (visible light)
+    double spin = 0;                       // 0.55.2: a / M, 0 .. kSpinTop (spin_sky.h); 0 is exactly the non-spinning hole of 0.55.1 (its closed forms)
     bool operator==(const Settings& o) const;
 };
 Settings settingsDefaults();               // Sagittarius A*, 20 M, 90 degrees, looking at the galactic centre, bending on, our sky
@@ -61,6 +62,7 @@ bool applyPreset(Settings& s, const std::string& key);   // mass from presets.h,
 void setFeed(Settings& s, double lEdd);    // clamps to kThinMin..kThinMax
 void setOuter(Settings& s, double r);      // clamps to kOuterMin..kOuterMax
 void setExposure(Settings& s, double expLog);   // manual: clamps, expAuto off
+void setSpin(Settings& s, double a);       // 0.55.2: clamps to 0 .. kSpinTop (the presets set 0: the real holes' spin is not measured)
 void setMass(Settings& s, double massSun); // clamps; the preset is dropped unless the mass is the preset's own
 void setDistance(Settings& s, double dist);
 void setFov(Settings& s, double fovDeg);
@@ -78,7 +80,7 @@ double sliderToFeed(double t);
 double outerToSlider(double r);
 double sliderToOuter(double t);
 
-// 0.55.1: the disc's numbers for a picture (from disc.h): the physical disc of these settings and its edges
+// 0.55.1: the disc's numbers for a picture (from disc.h): the physical disc of these settings and its edges (0.55.2: at the settings' spin, the gas orbiting with it)
 DiscPhys discPhys(const Settings& s);
 DiscGeom discGeom(const Settings& s);
 // the disc's axis on the view frame (right, up, towards the camera) of a view with these yaw and pitch: the sky frame's z, (0, -sin pitch, cos pitch)
@@ -113,6 +115,10 @@ struct Readout {
     // the light in watts (feed x L_Edd), and the hottest ring's visible brightness against the Sun's surface
     bool disc = false, realPreset = false;     // realPreset: Sagittarius A* or M87*, which have no such disc
     double rIn = 0, rInKm = 0, rOut = 0, tHot = 0, rHot = 0, rHotKm = 0, efficiency = 0, lumW = 0, feed = 0, hotVsSun = 0;
+    // 0.55.2, spin: the spin; the shadow's width (left-right) and height (up-down) on the camera's sky by the closed test (spin.h shadowEdge) and the share of the
+    // sky inside its edge; the camera (a FIDO, J15 (A.3)) is carried round the axis by the dragged space at omega (J15 (A.2)): one turn in dragDays days of
+    // far-away time (2 pi / omega, in GM/c^3 times the mass's GM/c^3); the disc's inner edge, efficiency and hottest ring above are at this spin.
+    double spin = 0, shadowWideDeg = 0, shadowHighDeg = 0, omega = 0, turnSeconds = 0;
 };
 Readout readout(const Settings& s);
 

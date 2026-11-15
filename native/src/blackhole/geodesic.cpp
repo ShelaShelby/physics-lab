@@ -4,13 +4,15 @@
 #include <cmath>
 
 #include "blackhole/kerr.h"
+#include "blackhole/spin.h"
 
 namespace blackhole {
 
 bool KerrBL::launch(const Camera& cam, const Vec3& look, Ray& ray) const {
     if (!(cam.r > horizon(a_))) return false;
     const KerrMetric m = kerrMetric(a_, cam.r, cam.theta);
-    const double nr = -look.x, nth = -look.y, nph = -look.z;              // n_F = -N for a hovering camera ((A.9), beta = 0)
+    const Vec3 nF = cam.beta > 0 ? aberrate(look, cam.beta, cam.B) : look * -1.0;   // n_F = -N for a hovering camera ((A.9), beta = 0)
+    const double nr = nF.x, nth = nF.y, nph = nF.z;
     const double EF = 1 / (m.alpha + m.omega * m.varpi * nph);             // (A.11)
     const double rho = std::sqrt(m.rho2);
     ray.n = 5;
@@ -23,6 +25,9 @@ bool KerrBL::launch(const Camera& cam, const Vec3& look, Ray& ray) const {
     ray.c[2] = std::max(rFar_, 1e4 * cam.r);
     return true;
 }
+
+double KerrBL::plane(const double* y) const { return std::cos(y[1]); }
+double KerrBL::planeRate(const double* y, const double* dy) const { return -std::sin(y[1]) * dy[1]; }
 
 double KerrBL::carterQ(double b, const double* y) const {
     const double c = std::cos(y[1]), s = std::sin(y[1]);
@@ -123,15 +128,33 @@ RayEnd trace(const Chart& ch, const Camera& cam, const Vec3& look, const TraceOp
     std::copy(ray.y, ray.y + ray.n, y);
     ch.rhs(ray, y, k1);
     double h = zs * 0.01 * cam.r;
+    int found = 0;
     if (path) path->insert(path->end(), y, y + ray.n);
     for (int s = 0; s < o.maxSteps; s++) {
         const double err = dpStep(ch, ray, y, k1, h, yn, k7, o);
         if (err > 1) { h *= std::max(0.2, 0.9 * std::pow(err, -0.2)); continue; }
+        if (o.cross && found < o.maxCross && (ch.plane(y) > 0) != (ch.plane(yn) > 0)) {
+            // the plane is crossed inside this step: Newton on the step length from y (each trial one full step of the same pair), from the secant guess
+            const double p0 = ch.plane(y), p1 = ch.plane(yn);
+            double hc = h * p0 / (p0 - p1), yc[kMaxState], kc[kMaxState];
+            for (int it = 0; it < 8; it++) {
+                dpStep(ch, ray, y, k1, hc, yc, kc, o);
+                const double pc = ch.plane(yc), rate = ch.planeRate(yc, kc);
+                if (!(rate != 0)) break;
+                const double dh = -pc / rate;
+                hc += dh;
+                if (std::fabs(dh) <= 1e-14 * std::fabs(h)) break;
+            }
+            dpStep(ch, ray, y, k1, hc, yc, kc, o);
+            o.cross->insert(o.cross->end(), yc, yc + ray.n);
+            found++;
+        }
         std::copy(yn, yn + ray.n, y);
         std::copy(k7, k7 + ray.n, k1);
         out.steps++;
         if (path) path->insert(path->end(), y, y + ray.n);
         const int e = ch.ended(ray, y, k1, zs);
+        if (e) { std::copy(y, y + ray.n, out.y); std::copy(k1, k1 + ray.n, out.dy); }
         if (e == 1) { out.kind = RayEnd::Sky; out.dir = ch.farDirection(ray, y, k1, zs); return out; }
         if (e == 2) { out.kind = RayEnd::Horizon; return out; }
         h *= grow(err);

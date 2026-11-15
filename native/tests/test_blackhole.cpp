@@ -27,6 +27,8 @@
 #include "blackhole/kerr.h"
 #include "blackhole/presets.h"
 #include "blackhole/schwarzschild.h"
+#include "blackhole/spin.h"
+#include "blackhole/spin_sky.h"
 #include "orbit/far_masses.h"
 #include "blackhole/lab.h"
 #include "orbit/sky.h"
@@ -38,6 +40,7 @@ static int g_failed = 0, g_checks = 0;
 static void check(bool ok, const std::string& what) {
     g_checks++;
     if (!ok) { g_failed++; std::printf("FAIL: %s\n", what.c_str()); }
+    else if (std::getenv("PL_BH_VERBOSE")) std::printf("ok: %s\n", what.c_str());
 }
 static std::string f(double v) { char b[64]; std::snprintf(b, sizeof b, "%.10g", v); return b; }
 static const double kPi = 3.14159265358979323846;
@@ -1060,6 +1063,484 @@ static void testDiscSettings() {
     check(std::fabs(N.z - (-mid.z)) < 1e-15, "the axis against the camera's direction: e_r . z");
 }
 
+// =============================================================================================================================================
+// 0.55.2: the spinning hole (plan step 3, section 5's rows "shadow, spin", "repeated images", "disc shifts, spin", "camera motion", "star brightness")
+
+// J15 (A.5), (A.6) against BPT (2.18) and GLb (38)-(40); the cubic of R' against (A.4)
+static void testSpinClosedForms() {
+    for (double a : {1e-6, 0.1, 0.5, 0.9, 0.99, 0.999}) {
+        check(std::fabs(trappedRadius1(a) - photonOrbit(a, true)) < 1e-14 && std::fabs(trappedRadius2(a) - photonOrbit(a, false)) < 1e-14,
+              "J15 (A.6) r1, r2 = BPT (2.18) prograde and retrograde photon orbits, a " + f(a));
+        check(std::fabs(criticalRadiusMinus(a) - trappedRadius1(a)) < 1e-14 && std::fabs(criticalRadiusPlus(a) - trappedRadius2(a)) < 1e-14, "GLb (40) = J15 (A.6), a " + f(a));
+        const double r1 = trappedRadius1(a), r2 = trappedRadius2(a);
+        double worst = 0, worstQ = 0;
+        for (int i = 0; i <= 20; i++) {
+            const double r = r1 + (r2 - r1) * i / 20.0;
+            worst = std::max(worst, std::fabs(trappedB(a, r) - criticalLambda(a, r)) / (1 + std::fabs(trappedB(a, r))));
+            worstQ = std::max(worstQ, std::fabs(trappedQ(a, r) - criticalEta(a, r)) / 27);
+            if (i > 0 && i < 20) {                                  // the inverse
+                const double rb = trappedRadiusOfB(a, trappedB(a, r));
+                worst = std::max(worst, std::fabs(rb - r) / r);
+            }
+        }
+        if (a >= 0.1) check(worst < 1e-9 && worstQ < 1e-9, "J15 (A.5) b_o, q_o = GLb (38), (39) over the photon shell, and b_o inverted, a " + f(a) + ": " + f(worst) + " " + f(worstQ));
+        else {   // (GLb's printed forms cancel at small spin; the factored (A.5) against the a = 0 photon sphere: b^2 + q = 27 M^2, Gralla & Lupsasca (71))
+            double w = 0;
+            for (int i = 0; i <= 20; i++) { const double r = r1 + (r2 - r1) * i / 20.0, b = trappedB(a, r); w = std::max(w, std::fabs(b * b + trappedQ(a, r) - 27) / 27); }
+            check(w < 1e-5, "spin 1e-6: J15 (A.5) gives the photon sphere's b^2 + q = 27 (GLb (71)): " + f(w));
+        }
+        // at the shell's ends the orbits are circular and equatorial (GLb below (40)): q_o = 0; both bound orbits have R = R' = 0 (GLb (37))
+        check(std::fabs(trappedQ(a, r1)) < 1e-6 && std::fabs(trappedQ(a, r2)) < 1e-6, "q_o = 0 at r1 and r2 (equatorial circular photon orbits), a " + f(a));
+        const double rm = 0.5 * (r1 + r2), bm = trappedB(a, rm), qm = trappedQ(a, rm);
+        const double R0 = radialR(a, bm, qm, rm), dR = (radialR(a, bm, qm, rm * (1 + 1e-6)) - radialR(a, bm, qm, rm * (1 - 1e-6))) / (2e-6 * rm);
+        check(std::fabs(R0) < 1e-9 * rm * rm * rm * rm && std::fabs(dR) < 1e-5 * rm * rm * rm, "a trapped orbit is a double root of R (GLb (37)), a " + f(a));
+    }
+    // R' = 4 r^3 + 2 (a^2 - b^2 - q) r + 2 ((b - a)^2 + q) (the cubic in spin.cpp) against a difference of (A.4)
+    double worst = 0;
+    for (double a : {0.3, 0.9})
+        for (double b : {-6.0, -1.0, 2.0, 5.0})
+            for (double q : {0.0, 3.0, 20.0})
+                for (double r : {1.8, 3.0, 7.0}) {
+                    const double h = 1e-5, d = (radialR(a, b, q, r + h) - radialR(a, b, q, r - h)) / (2 * h);
+                    const double c = 4 * r * r * r + 2 * (a * a - b * b - q) * r + 2 * ((b - a) * (b - a) + q);
+                    worst = std::max(worst, std::fabs(d - c) / (1 + std::fabs(c)));
+                }
+    check(worst < 1e-7, "R' as a cubic = d/dr of J15 (A.4): " + f(worst));
+}
+
+// the closed test (J15 (v)) against the integrator (J15 (A.15)) for several spins, distances and latitudes: random directions and a fine band round the edge
+static void testSpinShadow() {
+    int wrong = 0, total = 0, lost = 0, multi = 0;
+    for (double a : {0.5, 0.9, 0.99, 0.999})
+        for (double rc : {2.5, 4.0, 20.0, 1000.0})
+            for (double th : {kPi / 2, 1.0, 0.2, 2.5}) {
+                const Camera cam{rc, th, 0};
+                const KerrBL ch(a);
+                unsigned seed = 12345;
+                const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0; };
+                const auto one = [&](double psi, double chi) {
+                    const Vec3 look = lookAt(psi, chi);
+                    const RayEnd e = trace(ch, cam, look);
+                    if (e.kind == RayEnd::Lost) { lost++; return; }
+                    total++;
+                    if ((e.kind == RayEnd::Horizon) != lookFromHorizon(a, cam, look)) wrong++;
+                };
+                for (int k = 0; k < 12; k++) one(std::acos(1 - 2 * rnd()), 2 * kPi * rnd());
+                for (int k = 0; k < 4; k++) {
+                    const double chi = 2 * kPi * (k + 0.37) / 4, pe = shadowEdge(a, cam, chi);
+                    for (double x : {1e-2, 1e-4, 1e-6}) { one(pe + x, chi); one(pe - x, chi); }
+                }
+                // one change along each azimuth (the table's assumption, spin_sky.h): the closed test at 1000 angles along 24 azimuths
+                for (int k = 0; k < 24; k++) {
+                    const double chi = 2 * kPi * k / 24;
+                    int changes = 0;
+                    bool prev = true;
+                    for (int i = 1; i < 1000; i++) {
+                        const bool h = lookFromHorizon(a, cam, lookAt(kPi * i / 1000, chi));
+                        if (h != prev) changes++;
+                        prev = h;
+                    }
+                    if (changes != 1) multi++;
+                }
+            }
+    check(wrong == 0 && lost == 0 && total == 4 * 4 * 4 * 36, "the integrator's horizon or sky = J15's closed test (A.5), (A.6), (A.13), (A.14), " + f(total) + " rays incl. 1e-6 rad from the edge: " + f(wrong) + " wrong, " + f(lost) + " lost");
+    check(multi == 0, "the shadow's edge is crossed once along every azimuth from the hole's direction (64 cameras x 24 azimuths): " + f(multi) + " not");
+    // a -> 0: the circle of Synge's size (Perlick & Tsupko (6), (7))
+    for (double rc : {2.5, 4.0, 20.0, 1000.0})
+        for (double th : {kPi / 2, 0.7}) {
+            double worst = 0;
+            for (int k = 0; k < 16; k++) worst = std::max(worst, std::fabs(shadowEdge(1e-6, Camera{rc, th, 0}, 2 * kPi * k / 16) - shadowAngle(rc)));
+            check(worst < 1e-5, "spin 1e-6: the edge is Synge's circle, r " + f(rc) + " theta " + f(th) + ": " + f(worst));
+        }
+}
+
+// the far-away edge: GLb's critical curve (55) and PeT's Table III and II
+static void testSpinFarEdge() {
+    const double rc = 1e6;
+    for (double a : {0.5, 0.9, 0.99})
+        for (double thDeg : {17.0, 60.0, 90.0}) {
+            const double th = thDeg * kPi / 180;
+            const Camera cam{rc, th, 0};
+            double worst = 0;
+            int n = 0;
+            const double rm = criticalRadiusMinus(a), rp = criticalRadiusPlus(a);
+            for (int i = 1; i < 40; i++) {
+                const double rt = rm + (rp - rm) * i / 40.0;
+                double al, b2;
+                if (!criticalScreen(a, rt, th, al, b2)) continue;
+                const double be = std::sqrt(b2), chi = std::atan2(al, -be);   // N_phi = alpha / r, N_theta = -beta / r for a far FIDO (J15 (A.11), (A.12))
+                const double psi = shadowEdge(a, cam, chi);
+                worst = std::max(worst, std::fabs(rc * std::tan(psi) / std::hypot(al, be) - 1));
+                n++;
+            }
+            check(n >= 10 && worst < 1e-5, "far camera (1e6 M): the closed test's edge = GLb's critical curve (38)-(40), (55), a " + f(a) + " incl " + f(thDeg) + ": " + f(worst));
+        }
+    // PeT Table III (diameters, in M) and Table II (a = M from the equator spans alpha -2M .. 7M)
+    const auto range = [](double a, double th, double& amin, double& amax, double& bmax) {
+        amin = 1e9; amax = -1e9; bmax = 0;
+        const double rm = criticalRadiusMinus(a), rp = criticalRadiusPlus(a);
+        for (int i = 0; i <= 200000; i++) {
+            const double rt = rm + (rp - rm) * i / 200000.0;
+            double al, b2;
+            if (!criticalScreen(a, rt, th, al, b2)) continue;
+            amin = std::min(amin, al); amax = std::max(amax, al); bmax = std::max(bmax, std::sqrt(b2));
+        }
+    };
+    double amin, amax, bmax;
+    range(1 - 1e-10, kPi / 2, amin, amax, bmax);
+    check(std::fabs(amax - amin - 9) < 2e-3 && std::fabs(2 * bmax - 6 * std::sqrt(3.0)) < 1e-6, "PeT Table III: a = M from the equator, 9M across, 6 sqrt(3) M up-down: " + f(amax - amin) + " " + f(2 * bmax));
+    check(std::fabs(amin + 2) < 2e-3 && std::fabs(amax - 7) < 2e-3, "PeT Table II: a = M from the equator, alpha from -2M to 7M: " + f(amin) + " .. " + f(amax));
+    for (double a : {0.3, 0.7, 0.99}) {
+        range(a, kPi / 2, amin, amax, bmax);
+        check(std::fabs(2 * bmax - 6 * std::sqrt(3.0)) < 1e-6, "PeT Table III: from the equator 6 sqrt(3) M up-down at any spin, a " + f(a) + ": " + f(2 * bmax));
+    }
+    {   // along the axis, a = M: a circle of diameter 4 (1 + sqrt(2)) M: alpha = 0 needs lambda~ = 0, then beta^2 = eta~ + a^2 ((55) at theta_o = 0)
+        const double a = 1 - 1e-10;
+        double lo = criticalRadiusMinus(a), hi = criticalRadiusPlus(a);
+        for (int i = 0; i < 200; i++) { const double m = 0.5 * (lo + hi); (criticalLambda(a, m) > 0 ? lo : hi) = m; }
+        const double d = 2 * std::sqrt(criticalEta(a, lo) + a * a);
+        check(std::fabs(d - 4 * (1 + std::sqrt(2.0))) < 1e-6, "PeT Table III: a = M along the axis, 4 (1 + sqrt(2)) M across: " + f(d));
+    }
+    // which side is flat (seen from the equator, a = 0.99): the prograde side alpha < 0 (lambda > 0) is the near, flat one (Table II: -2M against 7M);
+    // on the camera's sky that is N_phi < 0 (chi = -pi/2); and from near the axis the shadow is round
+    {
+        const Camera eq{1e4, kPi / 2, 0};
+        const double flat = shadowEdge(0.99, eq, -kPi / 2), round = shadowEdge(0.99, eq, kPi / 2);
+        check(flat < round && std::fabs(flat * 1e4 - 2.0) < 0.4 && std::fabs(round * 1e4 - 7.0) < 0.2, "from the equator the shadow is flattened on the side that moves towards the camera (N_phi < 0): " + f(flat * 1e4) + " M against " + f(round * 1e4) + " M");
+        const Camera ax{1e4, 1e-3, 0};
+        double lo2 = 1e9, hi2 = 0;
+        for (int k = 0; k < 32; k++) { const double e = shadowEdge(0.99, ax, 2 * kPi * k / 32); lo2 = std::min(lo2, e); hi2 = std::max(hi2, e); }
+        check(hi2 / lo2 - 1 < 2e-3, "from near the axis (1e-3 rad) the shadow is round: " + f(hi2 / lo2 - 1));
+    }
+    // the Lyapunov exponent (GLb (43)) -> pi at a -> 0 (GLb (72))
+    check(std::fabs(lyapunov(1e-6, 3.0) - kPi) < 1e-5, "GLb (43) at a -> 0 is pi (72): " + f(lyapunov(1e-6, 3.0)));
+}
+
+// further images: each thinner by e^-gamma (GLb (42), (43)): the screen offsets from the edge at which the ray makes one more half-orbit (one more crossing of the equator)
+static void testSpinImages() {
+    const double rc = 1e4;
+    for (double a : {0.5, 0.9})
+        for (double thDeg : {60.0, 90.0}) {
+            const double th = thDeg * kPi / 180;
+            const Camera cam{rc, th, 0};
+            const KerrBL ch(a);
+            const double rt = 0.5 * (criticalRadiusMinus(a) + criticalRadiusPlus(a));
+            double al, b2;
+            if (!criticalScreen(a, rt, th, al, b2)) { check(false, "a critical point on the screen"); continue; }
+            const double chi = std::atan2(al, -std::sqrt(b2)), pe = shadowEdge(a, cam, chi);
+            TraceOptions o;
+            o.rtol = 1e-13; o.atol = 1e-14;
+            std::vector<double> cr;
+            o.cross = &cr; o.maxCross = 60;
+            const auto crossings = [&](double x) { cr.clear(); trace(ch, cam, lookAt(pe + x, chi), o); return static_cast<int>(cr.size() / 5); };
+            // x_k: the largest x with at least k crossings, for k = n0 .. n0 + 3
+            const int n0 = crossings(1e-4 * pe) + 1;
+            std::vector<double> xs;
+            for (int k = n0; k < n0 + 4; k++) {
+                double lo = 1e-12 * pe, hi = 1e-4 * pe;              // lo: >= k crossings
+                if (crossings(lo) < k) break;
+                for (int it = 0; it < 60; it++) { const double m = std::sqrt(lo * hi); (crossings(m) >= k ? lo : hi) = m; }
+                xs.push_back(lo);
+            }
+            const double g = lyapunov(a, rt);
+            bool ok = xs.size() == 4;
+            std::string got;
+            for (std::size_t k = 1; k < xs.size(); k++) { const double ratio = xs[k] / xs[k - 1]; got += " " + f(ratio); if (std::fabs(ratio / std::exp(-g) - 1) > 0.03) ok = false; }
+            check(ok, "each further image thinner by e^-gamma (GLb (42), (43): " + f(std::exp(-g)) + "), a " + f(a) + " incl " + f(thDeg) + ":" + got);
+        }
+}
+
+// the gas's shift at spin: C75 (A9) against the 4-velocity's norm and BPT's energy (2.12); a = 0 = L79 (19); C75's two printed ratios (p. 792)
+static void testSpinShift() {
+    double worst = 0, worstE = 0;
+    for (double a : {0.0, 0.5, 0.9, 0.998})
+        for (double r : {discInner(a), 3.0 + discInner(a), 10.0, 100.0})
+            for (double b : {-5.0, 0.0, 4.0}) {
+                const KerrMetric m = kerrMetric(a, r, kPi / 2);
+                const double Om = orbitOmega(r, a);
+                const double gtt = -m.alpha * m.alpha + m.omega * m.omega * m.varpi * m.varpi, gtp = -m.omega * m.varpi * m.varpi, gpp = m.varpi * m.varpi;   // (A.1)
+                const double ut = 1 / std::sqrt(-(gtt + 2 * Om * gtp + Om * Om * gpp));   // u . u = -1
+                worst = std::max(worst, std::fabs(discShiftKerr(r, b, a) * ut * (1 - Om * b) - 1));
+                worstE = std::max(worstE, std::fabs(-(gtt * ut + gtp * ut * Om) / orbitEnergy(r, a) - 1));
+            }
+    check(worst < 1e-12, "C75 (A9) = 1 / (u^t (1 - Omega b)) with u normalised in J15's metric (A.1): " + f(worst));
+    check(worstE < 1e-12, "that orbit's -u_t = BPT (2.12)'s energy: " + f(worstE));
+    double w0 = 0;
+    for (double r : {6.0, 10.0, 50.0}) for (double b : {-5.0, 3.0}) w0 = std::max(w0, std::fabs(discShiftKerr(r, b, 0) / discShift(r, b) - 1));
+    check(w0 < 1e-13, "a = 0: C75 (A9) = L79 (19) (disc.h discShift): " + f(w0));
+    // C75 p. 792: g_max(r_ms, equatorial) / g(r_ms, axial) "is 15 for a/M = 0.9981, compared with 1.7 for a/M = 0". The axial g is (A9) with lambda = 0
+    // (Fig. 1: one curve); the equatorial one is C75's own family (A5) at theta_o = pi/2 (spin.h): the ray that makes half an oscillation over the plane.
+    // a = 0: r_ms = 6 lies between C75's tabulated radii (19 values, (400M/r)^(1/2) = 1 .. 19; Table 1 columns); at the nearest one, 6.25 M, the ratio is
+    // 1.73, at r_ms itself 1.79: "1.7" is read as the tabulated point (REPORT 0.55.2).
+    {
+        const double r = 6.25, lam = c75EquatorialLambda(r, 0), ratio = discShiftKerr(r, lam, 0) / discShiftKerr(r, 0, 0);
+        check(ratio >= 1.7 && ratio < 1.75, "C75 p. 792: 1.7 at a = 0 (C75's tabulated r = 6.25 M next to r_ms): " + f(ratio));
+        const double rm = discInner(0), l2 = c75EquatorialLambda(rm, 0);
+        check(std::fabs(discShiftKerr(rm, l2, 0) / discShiftKerr(rm, 0, 0) - 1.79) < 0.01, "the same at r_ms = 6M: 1.79 (C75's 1.7 is the table's point, not r_ms): " + f(discShiftKerr(rm, l2, 0) / discShiftKerr(rm, 0, 0)));
+    }
+    {
+        const double a = 0.9981, r = discInner(a), lam = c75EquatorialLambda(r, a), ratio = discShiftKerr(r, lam, a) / discShiftKerr(r, 0, a);
+        check(std::fabs(ratio - 15) < 0.5, "C75 p. 792: 15 at a = 0.9981 (at r_ms): " + f(ratio));
+    }
+    // the disc with spin: the inner edge at BPT's r_ms (2.21), the hottest ring further in and hotter, the light still efficiency x feeding rate
+    {
+        DiscPhys p0, p9;
+        p0.aSigned = 0; p9.aSigned = 0.9;
+        double w0r, w9r;
+        const double t0 = p0.hottest(&w0r), t9 = p9.hottest(&w9r);
+        check(std::fabs(discInner(0.9) - innermostStable(0.9, true)) < 1e-12, "the disc's inner edge at spin 0.9 = BPT (2.21): " + f(discInner(0.9)));
+        check(w9r < w0r && t9 > t0, "spin 0.9 against 0 (10^8 Suns, 0.1 L_Edd): the hottest ring moves in (" + f(w0r) + " -> " + f(w9r) + " M) and is hotter (" + f(t0) + " -> " + f(t9) + " K)");
+        const double L = discLuminosity(0.9, 1e300) * p9.mdot() * 299792458.0 * 299792458.0, want = p9.lEdd * eddingtonLuminosity(p9.massSun);
+        check(std::fabs(L / want - 1) < 1e-7, "spin 0.9: the disc's light = efficiency x feeding rate (PT (30), (31a)): " + f(L / want));
+    }
+}
+
+// the camera: J15 (A.9), (A.10) as special-relativity aberration; a static observer's own frame built from the metric gives the same direction
+static void testSpinCamera() {
+    unsigned seed = 7;
+    const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0 * 2 - 1; };
+    double w1 = 0, w2 = 0;
+    for (int k = 0; k < 200; k++) {
+        Vec3 B{rnd(), rnd(), rnd()}, N{rnd(), rnd(), rnd()};
+        B = B * (1 / length(B)); N = N * (1 / length(N));
+        const double beta = 0.95 * std::fabs(rnd());
+        const Vec3 n = aberrate(N, beta, B);
+        // J15 (A.9), (A.10) literally: N's Cartesian components on e_x, e_y = B, e_z (the triad (A.10) is built from)
+        const double kap = std::sqrt(1 - B.y * B.y);
+        const Vec3 ex{B.z / kap, 0, -B.x / kap}, ez{B.x * B.y / kap, -kap, B.y * B.z / kap};   // the columns of (A.10): e_r, e_theta, e_phi = (x, y, z)
+        const double Nx = dot(N, ex), Ny = dot(N, B), Nz = dot(N, ez), den = 1 - beta * Ny, g = std::sqrt(1 - beta * beta);
+        const double nFy = (-Ny + beta) / den, nFx = -g * Nx / den, nFz = -g * Nz / den;
+        const Vec3 lit{B.z / kap * nFx + B.x * nFy + B.x * B.y / kap * nFz, B.y * nFy - kap * nFz, -B.x / kap * nFx + B.z * nFy + B.y * B.z / kap * nFz};
+        w1 = std::max(w1, length(n - lit));
+        // special relativity: the light's angle to the motion, cos' = (cos + beta) / (1 + beta cos) with cos = -N . B (its direction of motion on the camera's axes)
+        const double c = -Ny, cF = (c + beta) / (1 + beta * c);
+        w2 = std::max(w2, std::fabs(dot(n, B) - cF) + std::fabs(length(n) - 1));
+    }
+    check(w1 < 1e-13, "aberrate = J15 (A.9) with (A.10) written out: " + f(w1));
+    check(w2 < 1e-13, "it is special-relativity aberration (angle to the motion, unit length): " + f(w2));
+    check(length(aberrate(Vec3{0.3, -0.4, std::sqrt(0.75)}, 0, Vec3{0, 0, 1}) + Vec3{0.3, -0.4, std::sqrt(0.75)}) < 1e-15, "beta = 0: n_F = -N (the hovering FIDO)");
+    // a static observer (Omega = 0) moves against the FIDO at beta = -omega varpi / alpha along e_phi ((A.7)'s speed with Omega = 0); its own frame from the
+    // metric: u = d/dt / (-g_tt)^(1/2), e_phi' the unit vector in the (t, phi) plane orthogonal to u. The light's direction cosine along e_phi' measured
+    // there must be the camera's N_phi after launch with that beta.
+    double w3 = 0;
+    for (double a : {0.5, 0.99})
+        for (double r : {2.5, 6.0, 30.0})
+            for (int k = 0; k < 8; k++) {
+                const double th = 1.1;
+                const KerrMetric m = kerrMetric(a, r, th);
+                Camera cam{r, th, 0};
+                cam.beta = -m.omega * m.varpi / m.alpha; cam.B = Vec3{0, 0, 1};
+                if (cam.beta < 0) { cam.beta = -cam.beta; cam.B = Vec3{0, 0, -1}; }
+                const Vec3 N = lookAt(0.3 + 0.35 * k, 0.8 * k);
+                const KerrBL ch(a);
+                Ray ray;
+                ch.launch(cam, N, ray);
+                const double b = ray.c[0], pth = ray.y[4], pr = ray.y[3];
+                const double gtt = -m.alpha * m.alpha + m.omega * m.omega * m.varpi * m.varpi, gtp = -m.omega * m.varpi * m.varpi, gpp = m.varpi * m.varpi;
+                // contravariant p from p_t = -1, p_phi = b: p^t = g^tt p_t + g^tphi p_phi etc. with the inverse of the (t, phi) block
+                const double det = gtt * gpp - gtp * gtp, pt_ = (gpp * -1 - gtp * b) / det, pp_ = (-gtp * -1 + gtt * b) / det;
+                const double ut = 1 / std::sqrt(-gtt);
+                const double E = -(-1) * ut;                               // -p . u = -p_t u^t
+                // e_phi' = (g_tphi d/dt - g_tt d/dphi) / norm, orthogonal to d/dt; its covariant pairing with p: p_t e^t + p_phi e^phi
+                const double ex_t = gtp, ex_p = -gtt, nrm = std::sqrt(std::fabs(gtt * ex_t * ex_t + 2 * gtp * ex_t * ex_p + gpp * ex_p * ex_p));
+                const double pPhi = (-1 * ex_t + b * ex_p) / nrm;
+                const double nPhi = pPhi / E;                             // the light's direction of motion along e_phi' (sign: e_phi' points to +phi)
+                (void)pt_; (void)pp_; (void)pth; (void)pr;
+                w3 = std::max(w3, std::fabs(-nPhi - N.z));
+            }
+    check(w3 < 1e-12, "a static camera: launch with beta = -omega varpi / alpha sees the same N_phi as its own frame built from the metric: " + f(w3));
+    // J15 (A.16) at beta = 0 = kerr.h hoverShift
+    check(std::fabs(cameraShift(0.9, Camera{5, 1.2, 0}, Vec3{0, 0, 1}, 2.0) - hoverShift(0.9, 5, 1.2, 2.0)) < 1e-15, "J15 (A.16) at beta = 0 = the FIDO's shift");
+}
+
+// symmetries and the spin -> 0 limit of the rays (no table)
+static void testSpinSymmetry() {
+    double wNS = 0, wLR = 0, wU = 0;
+    for (double a : {0.6, 0.95})
+        for (double rc : {4.0, 20.0})
+            for (int k = 0; k < 6; k++) {
+                const double th = 1.1, psi = 0.2 + 0.45 * k, chi = 0.4 + 0.9 * k;
+                const SpinHit h = spinRay(a, Camera{rc, th, 0}, psi, chi);
+                const SpinHit s = spinRay(a, Camera{rc, kPi - th, 0}, psi, kPi - chi);    // north-south mirror: N_theta -> -N_theta
+                const SpinHit m = spinRay(-a, Camera{rc, th, 0}, psi, -chi);              // spin reversed: N_phi -> -N_phi
+                if (h.sky != s.sky || h.sky != m.sky) { wNS = wLR = 1; continue; }
+                wNS = std::max({wNS, h.sky ? length(h.dir - Vec3{s.dir.x, s.dir.y, -s.dir.z}) : 0.0, std::fabs(h.b - s.b)});
+                wLR = std::max({wLR, h.sky ? length(h.dir - Vec3{m.dir.x, -m.dir.y, m.dir.z}) : 0.0, std::fabs(h.b + m.b)});
+                for (int q = 0; q < kSpinCross; q++) { wU = std::max({wU, std::fabs(h.u[q] - s.u[q]), std::fabs(h.u[q] - m.u[q])}); }
+            }
+    check(wNS < 1e-7, "north-south mirror: the camera at pi - theta sees the mirror picture (far direction, b): " + f(wNS));
+    check(wLR < 1e-7, "reversing the spin mirrors the picture left-right (far direction, b): " + f(wLR));
+    check(wU < 1e-5, "both mirrors: the disc crossings' u = 1/r (and their continuations, spin_sky.h) agree: " + f(wU));
+    // spin 1e-6 against the closed forms of a = 0 (schwarzschild.h bendFromCamera: the far direction; disc.h discRay: the disc's radius and g)
+    double wd = 0, wr = 0, wg = 0;
+    int n = 0;
+    for (double rc : {4.0, 20.0})
+        for (int k = 0; k < 10; k++) {
+            const double th = 1.3, psi = 0.15 + 0.29 * k, chi = 0.3 + 0.61 * k;
+            const Camera cam{rc, th, 0};
+            const SpinHit h = spinRay(1e-6, cam, psi, chi);
+            // the a = 0 closed form: psi_s from the outward radial direction is pi - psi; the ray bends in the plane of e_r and the look direction
+            const Vec3 er{std::sin(th), 0, std::cos(th)}, et{std::cos(th), 0, -std::sin(th)}, ep{0, 1, 0};
+            const Vec3 N = lookAt(psi, chi), look = er * N.x + et * N.y + ep * N.z;
+            const Bend bd = bendFromCamera(rc, kPi - psi);
+            if (bd.captured != !h.sky) { wd = 1; continue; }
+            if (h.sky) wd = std::max(wd, angleBetween(h.dir, bentDirection(er, look, N.x, bd.dphi)));
+            // the disc: A = e_r . z, B = t . z with t the unit look direction across e_r; Lz / b = (t x e_r) . z
+            Vec3 t = look - er * N.x;
+            t = t * (1 / length(t));
+            DiscGeom g{discInner(0), 1000};
+            const DiscHit dh = discRay(rc, kPi - psi, er.z, t.z, cross(t, er).z, g);
+            const SpinDisc sd = spinDisc(h, 1e-6, g.rIn, g.rOut);
+            if (dh.order != sd.order) { wr = 1; continue; }
+            if (sd.order >= 0) { wr = std::max(wr, std::fabs(sd.r / dh.r - 1)); wg = std::max(wg, std::fabs(sd.g / dh.g - 1)); n++; }
+        }
+    check(wd < 2e-6, "spin 1e-6: the integrator's far direction = the a = 0 closed form (Luminet, Gralla & Lupsasca): " + f(wd));
+    check(n >= 5 && wr < 2e-6 && wg < 2e-6, "spin 1e-6: the disc's radius and g = the a = 0 reference (disc.h discRay), " + f(n) + " hits: r " + f(wr) + " g " + f(wg));
+}
+
+// the table: against the integrator away from the edges, spin -> 0 against the closed forms' picture, the stars by inverting it
+static void testSpinTable() {
+    unsigned seed = 99;
+    const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0; };
+    // two fine tables: a moderate spin and the top of the control (kSpinTop), close in and far out, near the plane
+    struct Case { double a, rc, th; };
+    for (const Case cs : {Case{0.9, 20, 1.3}, Case{kSpinTop, 6, 1.4}}) {
+        const SpinTable T(cs.a, cs.rc, cs.th, kSpinChiFine, kSpinSFine, kSpinEdge);
+        const std::string at = "a " + f(cs.a) + " r " + f(cs.rc) + ": ";
+        check(T.ok() && T.mismatches() == 0, at + "a fine table (" + f(T.rays()) + " rays, " + f(T.fillMs()) + " ms): every ray ends on its side of the closed edge: " + f(T.mismatches()));
+        const Camera cam{cs.rc, cs.th, 0};
+        double band[3] = {0, 0, 0}, wu[2] = {0, 0}, wb = 0, wg[2] = {0, 0}, we = 0;
+        for (int k = 0; k < 150; k++) {
+            const double chi = 2 * kPi * rnd(), pe = T.edge(chi);
+            we = std::max(we, std::fabs(pe - shadowEdge(cs.a, cam, chi)));
+            const int b = k % 3;
+            const double x = pe * std::pow(10.0, b == 0 ? -5 + 2 * rnd() : b == 1 ? -3 + 2 * rnd() : -1 + rnd());   // x / psi_e: 1e-5..1e-3, 1e-3..1e-1, 0.1..1
+            for (int side = 0; side < 2; side++) {
+                const double psi = side == 0 ? pe + x : pe - x;
+                if (psi <= 0 || psi >= kPi) continue;
+                const SpinHit ref = spinRay(cs.a, cam, psi, chi, 1e-12), tb = T.lookup(psi, chi);
+                if (side == 0) band[b] = std::max(band[b], angleBetween(ref.dir, tb.dir));
+                wb = std::max(wb, std::fabs(ref.b - tb.b) / (1 + std::fabs(ref.b)));
+                const double rin = discInner(cs.a);
+                const SpinDisc dr = spinDisc(ref, cs.a, rin, 100), dt = spinDisc(tb, cs.a, rin, 100);
+                // away from the disc's edges in r and from the folds where a ray grazes the plane (two crossings at nearly one radius: a pair of images begins there)
+                bool fold = false;
+                for (int q = 0; q + 1 < kSpinCross; q++) if (ref.u[q] > 0 && ref.u[q + 1] > 0 && std::fabs(ref.u[q] - ref.u[q + 1]) < 0.3 * ref.u[q]) fold = true;
+                if (dr.order >= 0 && dr.order == dt.order && !fold && std::fabs(dr.r - rin) > 0.05 && std::fabs(dr.r - 100) > 1) {
+                    const int bd = dr.order <= 1 && x >= 1e-2 ? 0 : 1;
+                    wu[bd] = std::max(wu[bd], std::fabs(dt.r / dr.r - 1)); wg[bd] = std::max(wg[bd], std::fabs(dt.g / dr.g - 1));
+                }
+            }
+        }
+        check(we < 1e-9, at + "the edge's cubic through 2048 samples = the closed test: " + f(we) + " rad");
+        check(band[0] < 2e-2 && band[1] < 2e-3 && band[2] < 2e-3, at + "the table's far direction against the integrator, x / psi_e 1e-5..1e-3: " + f(band[0]) + ", 1e-3..0.1: " + f(band[1]) + ", 0.1..1: " + f(band[2]) + " rad");
+        check(wb < 1e-4, at + "the table's b against the integrator (its effect on g is in the next two checks): " + f(wb));
+        check(wu[0] < 5e-3 && wg[0] < 5e-3, at + "the disc's radius and g, direct and second image beyond 1e-2 rad from the shadow (away from the disc's edges and folds): r " + f(wu[0]) + " g " + f(wg[0]));
+        check(wu[1] < 5e-2 && wg[1] < 5e-2, at + "the same for the further images and within 1e-2 rad of the shadow: r " + f(wu[1]) + " g " + f(wg[1]));
+    }
+    const SpinTable T(0.9, 20, 1.3, kSpinChiFine, kSpinSFine, kSpinEdge);
+    const Camera cam{20, 1.3, 0};
+    // spin 1e-6: the table against the closed forms of 0.55.1 (LensTable: far direction; DiscTable: radius and g)
+    {
+        const double rc = 20, th = 1.3;
+        const SpinTable S(1e-6, rc, th, kSpinChiFine, kSpinSFine, kSpinEdge);
+        const LensTable L(rc);
+        const DiscTable D(rc);
+        double wd = 0, wr = 0, wgg = 0;
+        int hits = 0;
+        for (int k = 0; k < 120; k++) {
+            const double chi = 2 * kPi * rnd(), psi = kPi * rnd();
+            const Vec3 er{std::sin(th), 0, std::cos(th)}, et{std::cos(th), 0, -std::sin(th)}, ep{0, 1, 0};
+            const Vec3 N = lookAt(psi, chi), look = er * N.x + et * N.y + ep * N.z;
+            const SpinHit h = S.lookup(psi, chi);
+            const double x = psi - shadowAngle(rc);
+            if (std::fabs(x) < 1e-3) continue;
+            double dphi;
+            const bool sky = L.lookupX(kPi - shadowAngle(rc) - (kPi - psi), dphi);
+            if (sky != h.sky) { wd = 1; continue; }
+            if (sky) wd = std::max(wd, angleBetween(h.dir, bentDirection(er, look, N.x, dphi)));
+            Vec3 t = look - er * N.x;
+            t = t * (1 / length(t));
+            const DiscGeom g{discInner(0), 100};
+            const DiscHit dh = discRayTable(D, x, er.z, t.z, cross(t, er).z, g);
+            const SpinDisc sd = spinDisc(h, 1e-6, g.rIn, g.rOut);
+            if (dh.order >= 0 && sd.order == dh.order && std::fabs(dh.r - g.rIn) > 0.05 && std::fabs(dh.r - g.rOut) > 1) {
+                wr = std::max(wr, std::fabs(sd.r / dh.r - 1)); wgg = std::max(wgg, std::fabs(sd.g / dh.g - 1)); hits++;
+            }
+        }
+        check(wd < 3e-4, "spin 1e-6: the spin table's far direction = 0.55.1's closed-form picture (LensTable), |x| > 1e-3: " + f(wd));
+        check(hits >= 10 && wr < 5e-3 && wgg < 5e-3, "spin 1e-6: the spin table's disc radius and g = 0.55.1's (DiscTable), " + f(hits) + " hits: " + f(wr) + " " + f(wgg));
+    }
+    // the stars: a uniformly bright sky stays uniformly bright (lensing keeps surface brightness): averaged over far directions, the summed magnification of
+    // all images = the camera's sky outside the shadow over the whole sky
+    {
+        const SpinStars St(T);
+        double sum = 0;
+        const int n = 4000;
+        std::vector<SpinImage> im;
+        for (int k = 0; k < n; k++) {
+            const double z = 1 - 2 * (k + 0.5) / n, ph = k * 2.399963229728653, s = std::sqrt(1 - z * z);   // a Fibonacci sphere
+            im.clear();
+            St.images(Vec3{s * std::cos(ph), s * std::sin(ph), z}, im);
+            for (const SpinImage& q : im) sum += q.mag;
+        }
+        double shadow = 0;
+        const int m = 4096;
+        for (int k = 0; k < m; k++) shadow += (1 - std::cos(T.edge(2 * kPi * (k + 0.5) / m))) * 2 * kPi / m;   // the cap under the edge
+        const double want = (4 * kPi - shadow) / (4 * kPi), got = sum / n;
+        check(std::fabs(got / want - 1) < 0.01, "a uniform sky stays uniform: summed magnifications over the far sky = the sky outside the shadow, " + f(got) + " against " + f(want));
+        // a star's magnification from the table = the ratio of solid angles from neighbouring rays of the integrator (Riazuelo (51))
+        double wm = 0;
+        int tested = 0;
+        for (int k = 0; k < 6; k++) {
+            const double chi = 0.5 + k, pe = T.edge(chi), psi = pe + 0.05 + 0.3 * k;
+            const SpinHit c0 = spinRay(0.9, cam, psi, chi, 1e-12);
+            im.clear();
+            St.images(c0.dir, im);
+            const SpinImage* best = nullptr;
+            for (const SpinImage& q : im) if (!best || std::hypot(q.psi - psi, std::remainder(q.chi - chi, 2 * kPi)) < std::hypot(best->psi - psi, std::remainder(best->chi - chi, 2 * kPi))) best = &q;
+            if (!best) { wm = 1; continue; }
+            const double h = 1e-5;
+            const Vec3 a1 = spinRay(0.9, cam, psi + h, chi, 1e-12).dir, a0 = spinRay(0.9, cam, psi - h, chi, 1e-12).dir;
+            const Vec3 b1 = spinRay(0.9, cam, psi, chi + h, 1e-12).dir, b0 = spinRay(0.9, cam, psi, chi - h, 1e-12).dir;
+            const double far = length(cross(a1 - a0, b1 - b0)) / (4 * h * h), camA = std::sin(psi);   // dOmega_far / (dpsi dchi) and dOmega_cam / (dpsi dchi)
+            wm = std::max(wm, std::fabs(best->mag / (camA / far) - 1));
+            tested++;
+        }
+        check(tested == 6 && wm < 0.02, "a star's magnification from the table = ratio of solid angles of the integrator's neighbouring rays: " + f(wm));
+    }
+}
+
+// the lab's spin setting and readout (lab.h): all from the module
+static void testSpinLab() {
+    Settings s = settingsDefaults();
+    check(s.spin == 0, "the lab opens at spin 0 (the real holes' spin is not measured)");
+    setSpin(s, 2); check(s.spin == kSpinTop, "the spin is clamped to the tested top " + f(kSpinTop));
+    setSpin(s, -1); check(s.spin == 0, "and to 0 below");
+    setSpin(s, 0.7);
+    std::map<std::string, std::string> kv;
+    saveSettings(s, kv);
+    check(loadSettings(kv) == s && loadSettings(kv).spin == 0.7, "the spin survives a restart (settings key blackhole.spin)");
+    kv["spin"] = "1.5"; check(loadSettings(kv).spin == 0, "a spin above the top in the file keeps the default");
+    for (const char* key : {"sgra", "m87", kFeedingKey}) { Settings p = s; applyPreset(p, key); check(p.spin == 0, std::string("the preset ") + key + " starts at spin 0"); }
+    setSpin(s, 0.9);
+    s.disc = true;
+    setDistance(s, 20);
+    const Readout r = readout(s);
+    check(r.horizonM == horizon(0.9) && r.rIn == discInner(0.9) && r.efficiency == discEfficiency(0.9), "the readout's horizon, inner edge and efficiency at spin 0.9 are BPT (2.6), (2.21) and 1 - E(r_ms)");
+    const KerrMetric m = kerrMetric(0.9, 20, s.pitch);
+    check(std::fabs(r.omega - 2 * 0.9 * 20 / m.Sigma2) < 1e-15 && std::fabs(r.turnSeconds - 2 * kPi / r.omega * r.rgM / 299792458.0) < 1e-9 * r.turnSeconds,
+          "the camera is carried round at omega = 2ar / Sigma^2 (J15 (A.2)): one turn in " + f(r.turnSeconds) + " s for Sagittarius A*'s mass");
+    const Camera cam{20, s.pitch, 0};
+    check(std::fabs(r.shadowWideDeg - (shadowEdge(0.9, cam, kPi / 2) + shadowEdge(0.9, cam, -kPi / 2)) * 180 / kPi) < 1e-9 &&
+          std::fabs(r.shadowHighDeg - (shadowEdge(0.9, cam, 0) + shadowEdge(0.9, cam, kPi)) * 180 / kPi) < 1e-9, "the shadow's width and height from the closed test: " + f(r.shadowWideDeg) + " x " + f(r.shadowHighDeg));
+    const DiscPhys dp = discPhys(s);
+    check(dp.aSigned == 0.9 && discGeom(s).rIn == discInner(0.9), "the disc's physics and edges follow the spin (the gas orbits with it)");
+    Settings z = s; setSpin(z, 0);
+    const Readout r0 = readout(z);
+    check(std::fabs(r0.shadowDeg - 2 * shadowAngle(20) * 180 / kPi) < 1e-12 && std::fabs(r0.rIn - 6) < 1e-12, "spin 0 keeps the closed forms of 0.55.1 (Synge's shadow, r_ms = 6)");
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -1085,6 +1566,15 @@ int main() {
     testDiscShift();
     testDiscTable();
     testDiscSettings();
+    testSpinClosedForms();
+    testSpinShadow();
+    testSpinFarEdge();
+    testSpinImages();
+    testSpinShift();
+    testSpinCamera();
+    testSpinSymmetry();
+    testSpinTable();
+    testSpinLab();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

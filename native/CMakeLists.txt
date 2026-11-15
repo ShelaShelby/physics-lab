@@ -165,6 +165,8 @@ add_library(blackhole_core STATIC
   src/blackhole/presets.cpp
   src/blackhole/lab.cpp
   src/blackhole/disc.cpp
+  src/blackhole/spin.cpp
+  src/blackhole/spin_sky.cpp
 )
 target_include_directories(blackhole_core PUBLIC src)
 target_link_libraries(blackhole_core PUBLIC orbit_core)   # the night sky's projection (orbit/sky.h skyDirection) and the constants of orbit/units.h
