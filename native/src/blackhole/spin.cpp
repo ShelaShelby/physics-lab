@@ -119,41 +119,60 @@ double discShiftKerr(double r, double b, double a) {
     return m.alpha * std::sqrt(1 - V * V) / (1 - Om * b);
 }
 
+namespace {
+// C75's equatorial family (spin.h): plain functions (nested generic lambdas here crashed one compiler)
+struct C75Ray { double a, r; };
+double c75R(const C75Ray& c, double rr, double lam) { return radialR(c.a, lam, 0, rr); }
+// the largest root of R (q = 0) below r, if R < 0 somewhere between the horizon and r
+bool c75Turning(const C75Ray& c, double lam, double& P) {
+    double lo = horizon(c.a) + 1e-9, hi = c.r;
+    if (c75R(c, lo, lam) >= 0) {                                           // R > 0 at the horizon: a barrier, if any, lies between (a quartic: a scan finds it)
+        const int n = 4000;
+        double prev = c75R(c, hi, lam), rp = hi;
+        for (int i = 1; i <= n; i++) {
+            const double rr = hi - (hi - lo) * i / n, v = c75R(c, rr, lam);
+            if ((v < 0) != (prev < 0)) {
+                double l = rr, h = rp;
+                for (int k = 0; k < 100; k++) { const double mm = 0.5 * (l + h); if (c75R(c, mm, lam) < 0) l = mm; else h = mm; }
+                P = h;
+                return true;
+            }
+            prev = v; rp = rr;
+        }
+        return false;
+    }
+    for (int k = 0; k < 200; k++) { const double mm = 0.5 * (lo + hi); if (c75R(c, mm, lam) < 0) lo = mm; else hi = mm; }
+    P = hi;
+    return true;
+}
+// dr / R^(1/2) = du / (R u^4)^(1/2) with u = 1/r
+double c75F(const C75Ray& c, double u, double lam) { return 1 / std::sqrt(std::max(c75R(c, 1 / u, lam) * u * u * u * u, 1e-300)); }
+// Gauss-Legendre (8 points) on 400 panels of [x0, x1] of f(u) (mode 0) or of 2 s f(uP - s^2) (mode 1, near a turning point at uP)
+double c75Integral(const C75Ray& c, double lam, double x0, double x1, int mode, double uP) {
+    static const double xg[8] = {-0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363};
+    static const double wg[8] = {0.1012285362903763, 0.2223810344533745, 0.3137066243625401, 0.3626837833783620, 0.3626837833783620, 0.3137066243625401, 0.2223810344533745, 0.1012285362903763};
+    const int np = 400;
+    double sum = 0;
+    for (int i = 0; i < np; i++) {
+        const double p0 = x0 + (x1 - x0) * i / np, p1 = x0 + (x1 - x0) * (i + 1) / np;
+        for (int k = 0; k < 8; k++) {
+            const double x = 0.5 * (p0 + p1) + 0.5 * (p1 - p0) * xg[k];
+            sum += wg[k] * 0.5 * (p1 - p0) * (mode == 0 ? c75F(c, x, lam) : 2 * x * c75F(c, uP - x * x, lam));
+        }
+    }
+    return sum;
+}
+// Mino time from r to infinity: outward, or inward through the turning point P first
+double c75Mino(const C75Ray& c, double lam, bool inward, double P) {
+    if (!inward) return c75Integral(c, lam, 0.0, 1 / c.r, 0, 0);
+    const double uP = 1 / P;
+    return c75Integral(c, lam, 0.0, std::sqrt(uP - 1 / c.r), 1, uP) + c75Integral(c, lam, 0.0, std::sqrt(uP), 1, uP);
+}
+}  // namespace
+
 double c75EquatorialLambda(double r, double a) {
     // q = 0 rays from the ring at r with Int dr / R^(1/2) (Mino time, from r to infinity, through a turning point if the ray first goes in) = pi / (lambda^2 - a^2)^(1/2)
-    const auto R = [&](double rr, double lam) { return radialR(a, lam, 0, rr); };
-    const auto turning = [&](double lam, double& P) -> bool {              // the largest root of R (q = 0) below r, if R < 0 somewhere between the horizon and r
-        double lo = horizon(a) + 1e-9, hi = r;
-        if (R(lo, lam) >= 0) {                                             // R > 0 at the horizon: a barrier, if any, lies between
-            // scan for a sign change (R is a quartic: few)
-            const int n = 4000;
-            double prev = R(hi, lam), rp = hi;
-            for (int i = 1; i <= n; i++) {
-                const double rr = hi - (hi - lo) * i / n, v = R(rr, lam);
-                if ((v < 0) != (prev < 0)) { double l = rr, h = rp; for (int k = 0; k < 100; k++) { const double mm = 0.5 * (l + h); if (R(mm, lam) < 0) l = mm; else h = mm; } P = h; return true; }
-                prev = v; rp = rr;
-            }
-            return false;
-        }
-        for (int k = 0; k < 200; k++) { const double mm = 0.5 * (lo + hi); if (R(mm, lam) < 0) lo = mm; else hi = mm; }
-        P = hi;
-        return true;
-    };
-    // Int_x^y dr / sqrt(R) with r = 1/u, near a turning point u = uP - s^2 (Gauss-Legendre on many panels)
-    const auto mino = [&](double lam, bool inward, double P) {
-        static const double xg[8] = {-0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363};
-        static const double wg[8] = {0.1012285362903763, 0.2223810344533745, 0.3137066243625401, 0.3626837833783620, 0.3626837833783620, 0.3137066243625401, 0.2223810344533745, 0.1012285362903763};
-        const auto f = [&](double u) { return 1 / std::sqrt(std::max(R(1 / u, lam) * u * u * u * u, 1e-300)); };   // dr / sqrt(R) = du / sqrt(R u^4)
-        const auto integ = [&](double a0, double b0, const auto& g) {
-            const int np = 400; double s = 0;
-            for (int i = 0; i < np; i++) { const double x0 = a0 + (b0 - a0) * i / np, x1 = a0 + (b0 - a0) * (i + 1) / np; for (int k = 0; k < 8; k++) s += wg[k] * 0.5 * (x1 - x0) * g(0.5 * (x0 + x1) + 0.5 * (x1 - x0) * xg[k]); }
-            return s;
-        };
-        if (!inward) return integ(0.0, 1 / r, f);
-        const double uP = 1 / P;
-        const auto g = [&](double s) { return 2 * s * f(uP - s * s); };
-        return integ(0.0, std::sqrt(uP - 1 / r), g) + integ(0.0, std::sqrt(uP), g);
-    };
+    const C75Ray c{a, r};
     double best = 0;
     const int n = 3000;
     for (int pass = 0; pass < 2; pass++) {
@@ -163,16 +182,17 @@ double c75EquatorialLambda(double r, double a) {
         for (int i = 1; i <= n; i++) {
             const double lam = a + (30.0 - a) * i / n;
             double P = 0;
-            const bool tp = turning(lam, P);
-            const bool ok = R(r, lam) >= 0 && (inward ? (tp && P < r) : !(tp && P > r));
+            const bool tp = c75Turning(c, lam, P);
+            const bool ok = c75R(c, r, lam) >= 0 && (inward ? (tp && P < r) : !(tp && P > r));
             if (!ok) { have = false; continue; }
-            const double h = mino(lam, inward, P) - kPi / std::sqrt(lam * lam - a * a);
+            const double h = c75Mino(c, lam, inward, P) - kPi / std::sqrt(lam * lam - a * a);
             if (have && (h > 0) != (prevH > 0)) {
                 double lo = prevL, hi = lam, hlo = prevH;
                 for (int k = 0; k < 60; k++) {
                     const double mm = 0.5 * (lo + hi);
-                    double Pm = 0; turning(mm, Pm);
-                    const double hm = mino(mm, inward, Pm) - kPi / std::sqrt(mm * mm - a * a);
+                    double Pm = 0;
+                    c75Turning(c, mm, Pm);
+                    const double hm = c75Mino(c, mm, inward, Pm) - kPi / std::sqrt(mm * mm - a * a);
                     if ((hm > 0) == (hlo > 0)) { lo = mm; hlo = hm; } else hi = mm;
                 }
                 best = std::max(best, 0.5 * (lo + hi));

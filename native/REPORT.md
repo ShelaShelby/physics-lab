@@ -36,5 +36,5 @@ tabulated r = 6.25 M next to r_ms (1.79 at r_ms) → "1.7"; 15.18 at a = 0.9981 
 ## Differences from the plan and the job
 - The card's shadow test: J15's closed test runs in double on the processor at 2,048 azimuths and the card interpolates that edge (4.4e-4 px from the test per pixel), not the formula
   per pixel (its case (c) needs a quartic's largest root). C75 Table 1 is f, not g; its g are a graph: only the two printed ratios are references. Readout "your clock" at spin: the FIDO's lapse.
-- check.sh quick (PL_SOURCES_DIR set): 17 of 17. By hand: check_blackhole spin (new, 19), disc (23), precision (67; 8 spin cases new), layout (12; its section list has "spin":
+- check.sh quick (PL_SOURCES_DIR set): 17 of 17 (again after rewriting C75's family without nested generic lambdas: they crashed the Windows compiler on the checkpoint). By hand: check_blackhole spin (new, 19), disc (23), precision (67; 8 spin cases new), layout (12; its section list has "spin":
   reference changed on purpose). Full UI suite not run (small version). Looks: equator sky, equator disc (60 M), near the axis, close in.

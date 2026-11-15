@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <thread>
 
 #include "blackhole/kerr.h"
@@ -117,7 +118,7 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
     const auto t0 = std::chrono::steady_clock::now();
     const Camera cam{rC, thC, 0};
     const int nth = threads > 0 ? threads : std::clamp(static_cast<int>(std::thread::hardware_concurrency()), 1, 16);
-    const auto parallel = [&](int n, const auto& job) {
+    const auto parallel = [&](int n, const std::function<void(int)>& job) {   // (a plain std::function: generic lambdas nested in lambdas crashed one compiler)
         std::atomic<int> next{0};
         const auto worker = [&] { for (int i = next++; i < n; i = next++) { if (cancel && cancel->load()) return; job(i); } };
         std::vector<std::thread> pool;
