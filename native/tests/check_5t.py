@@ -142,7 +142,9 @@ def part_solid(binary, work):
         check(x1 - x0 >= 20 and y1 - y0 >= 100, f"{t}: the page overlaps the panel ({x1 - x0} x {y1 - y0} px)")
         ba, bb = Bmp(a.bmp), Bmp(b.bmp)
         diff = sum(1 for yy in range(y0, y1) for xx in range(x0, x1) if ba.px(xx, yy) != bb.px(xx, yy))
-        check(diff == 0, f"{t}: {diff} pixels of the page over the panel change when the panel closes (0 for a solid page)")
+        # 0.55.0: at most 10, not 0: a few pixels of one glyph's anti-aliasing change with the order Dear ImGui bakes glyphs into its atlas (0.55.0: 4 pixels of the "y" of
+        # "why the tails?", by up to 17 of 255, open against closed); a page the panel shows through differs in hundreds (its text over the page's)
+        check(diff <= 10, f"{t}: {diff} pixels of the page over the panel change when the panel closes (a solid page: at most a glyph's few anti-aliased pixels)")
     print(f"check_5t solid: {checks} checks, {fails} failed")
 
 if __name__ == "__main__":

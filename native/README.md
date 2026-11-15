@@ -1,12 +1,13 @@
 # Physics Lab — Windows app
 
-Physics Lab for Windows, in C++ (C++17, SDL3, OpenGL 4.3 with a 3.3 core fallback, Dear ImGui). Version **0.54.3 alpha**. Three labs:
+Physics Lab for Windows, in C++ (C++17, SDL3, OpenGL 4.3 with a 3.3 core fallback, Dear ImGui). Version **0.55.0 alpha**. Four labs:
 - **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini).
 - **Atom Lab**: any nucleus, down to quarks; one electron (exact, with Dirac's relativity) or every electron of the neutral atoms (Dirac-Hartree-Fock orbitals computed for the app);
   photon jumps along NIST's measured lines: one electron for every element, every electron shown for 16 atoms (Li, Na, K, Rb, Cs, Fr, He, Be, Mg, Ca, Zn, Sr, Cd, Ba, Hg, Ra;
   GRASP2018 clouds per level). The other atoms say why they have no jumps. Atoms in a magnetic field: the Zeeman effect from weak to strong field (Paschen-Back), the split lines
   with their polarisations, Landé g against NIST's measured g. The chart of nuclides (NUBASE2020, AME2020) with decay chains.
 - **Molecule Lab**: 15 small molecules in their measured shape, a calculated electron density, vibrations and an infrared spectrum, the diatomics' anharmonic bond that breaks (Morse curve against measured levels and dissociation energies), and the straight molecules' rotation (levels, populations, HCl's rotation-vibration lines).
+- **Black Hole Lab**: a non-spinning black hole in front of our own sky (Gaia's map and the catalogue stars), as a hovering camera sees it: the exact shadow, the bent sky, every star's images; Sagittarius A* and M87* with their measured mass and distance. A calculated model: no spin and no gas yet.
 
 App-wide: a units-aware calculator (CODATA 2022), the Data panel (each lab's tables with units and sources, plots, fits, CSV), search (Ctrl+K), themes, the Learn guides,
 Journey (a scale tour), Save picture and a Benchmark. About lists every data source (*Where the facts come from*); 🕰 What's new has every version (`src/ui/changelog.cpp`).

@@ -7,6 +7,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cfloat>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -471,8 +472,13 @@ void benchmarkWindow(AppState& app) {
     if (cancel) { finish(app, b, true); return; }
     if (b.stage == BenchState::Stage::Closed) return;
     if (b.stage == BenchState::Stage::Ask) {
-        ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));   // (always: the height changes after the first frame, so the window stays centred and inside)
-        ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0), ImGuiCond_Always);
+        {   // (always: the height changes after the first frame, so the window stays centred and inside) 0.55.0: centred in the part below the top bar and never taller
+            // than it (the 13th scene's line made it reach over the top bar at 880 x 560)
+            const float top = shellTopBarH(), room = vp->WorkSize.y - top - 16 * fs / 16;
+            ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + top + (vp->WorkSize.y - top) * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0), ImGuiCond_Always);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0), ImVec2(FLT_MAX, std::max(100.0f, room)));
+        }
         bool open = true;
         pushFloatStyle();
         const bool benchShown = ImGui::Begin("Benchmark###bench", &open, fl);

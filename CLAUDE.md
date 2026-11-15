@@ -3,7 +3,7 @@ Quiet chat (owner decision 14 Nov 2026): do not report progress to the owner. Wr
 This also covers the app's own 'say what you are doing' reminders: answer them with at most three words (for example 'Fix 4 of 9'), never a sentence.
 
 ## Project
-- native/ is the app (Windows C++): Orbit Lab, Atom Lab, Molecule Lab. (The folder and the branch keep the name "native".)
+- native/ is the app (Windows C++): four labs, Orbit Lab, Atom Lab, Molecule Lab, Black Hole Lab. (The folder and the branch keep the name "native".)
 - The app is C++ and stays C++. No Rust code in this repo (owner decision 18 Oct 2026; Rust is for separate apps).
 - There is no other version of Physics Lab: never mention, copy from or compare with one. Tests compare the app with independent references only (published data, textbook formulas, conservation laws). When a deliberate change breaks a test, fix the test's reference and say so in REPORT.md. Never loosen or delete a physics test to make it pass.
 - Physics tests (ctest names orbit_physics, atom_physics, molecule_logic and the other *_physics / *_logic / *_validation tests; the programs are orbit_tests, atom_tests ...) must keep passing unless the physics changes on purpose; then explain why.

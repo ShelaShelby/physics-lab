@@ -321,7 +321,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         pBody(p, tspeedText(set.tspeed));
         float ts = static_cast<float>(set.tspeed);
         if (pSlider(p, "speed.slider", &ts, static_cast<float>(units::kTspeedMin), static_cast<float>(units::kTspeedMax))) set.tspeed = ts;
-        pCaption(p, "Keys: Space play / pause  ·  + − zoom  ·  R reset view  ·  1 2 3 switch lab");
+        pCaption(p, "Keys: Space play / pause  ·  + − zoom  ·  R reset view  ·  1 2 3 4 switch lab");
     }
     if (section("show", "Show", true)) {
         static bool notes = false;

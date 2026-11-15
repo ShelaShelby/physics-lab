@@ -766,7 +766,7 @@ void moleculeControls(AppState& app, Panel& p, const SectionFn& section) {
         if (fastest > 0) std::snprintf(fv, sizeof fv, " (its fastest vibration, %.0f cm⁻¹ measured, swings once every %.0f femtoseconds)", fastest, 1e15 / (2.99792458e10 * fastest));
         pCaption(p, std::string(L.vibOn() ? "A vibration is shown (Vibrations, below); without one the molecule stands" : "Shown standing") + " still at its measured shape (NIST CCCBDB; " + shapeKindText(mo) + "). A real molecule never stops: it vibrates all the time" + fv + ", turns, and "
                     "even at absolute zero its atoms are smeared out a little by zero-point motion, the light hydrogens most. Colours and ball sizes are drawing conventions: atoms have no colour.");
-        pCaption(p, std::string("Drag to turn the molecule, the wheel zooms; Shift, right or middle drag moves it. ") + (L.realOn() ? "Click an atom for its measured values (this style draws no bonds)." : "Click an atom or a bond for its measured values.") + " Keys: + − zoom, R reset view, 1 2 3 switch lab.");   // (0.22 stage 7: Density has no bonds to click)
+        pCaption(p, std::string("Drag to turn the molecule, the wheel zooms; Shift, right or middle drag moves it. ") + (L.realOn() ? "Click an atom for its measured values (this style draws no bonds)." : "Click an atom or a bond for its measured values.") + " Keys: + − zoom, R reset view, 1 2 3 4 switch lab.");   // (0.22 stage 7: Density has no bonds to click)
     }
     vibrationControls(L, p, section);                     // 0.23
     rotationControls(L, p, section);                      // 0.53

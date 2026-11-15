@@ -517,7 +517,7 @@ void atomControls(AppState& app, Panel& p, const SectionFn& section) {
         if (atom::toolShown(L, Tool::Reshuffle) && pButton(p, "nucleus.reshuffle", "Reshuffle nucleons")) atom::pressTool(L, Tool::Reshuffle);
         if (pButton(p, "atom.restart", "Restart atom")) L.restart();     // 0.16 stage 1a: the old panel's Reset (a fresh atom, the same settings)
         // (0.22 stage 6: the keys moved into the notes; the two captions of the view rows took their room)
-        notesFold(p, "view", {std::string("Keys: + − zoom  ·  R reset view  ·  1 2 3 switch lab") + (L.chartOn() ? "  ·  arrows walk the chart" : ""),
+        notesFold(p, "view", {std::string("Keys: + − zoom  ·  R reset view  ·  1 2 3 4 switch lab") + (L.chartOn() ? "  ·  arrows walk the chart" : ""),
                               "Zoom in to a nucleon and click one to dive inside it.",
                               L.manyOn() ? "Each dot is one possible place to find one of the atom's electrons (" + L.manyModel() + " orbitals). " + manyDotsWords(L)   // 0.39.1: it said "one electron" with every electron shown
                                          : "Each dot is one possible place to find the electron (one electron, non-relativistic model)."});

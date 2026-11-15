@@ -34,9 +34,9 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         p("<b>The sky map.</b> Gaia's map has about 0.09° per map pixel. Near the Einstein ring the hole magnifies the sky many times, so the map's own blur "
           "shows there: that is the map's sharpness, not the physics. Close to the shadow's edge the whole sky is squeezed into rings thinner than a pixel; the "
           "picture shows their average colour.") +
-        p("<b>The graphics card</b> draws in single precision. Measured against the double-precision reference (REPORT of 0.55.0): the shadow's edge lies within "
-          "a few thousandths of a pixel of where it should be, and away from it the bent sky is right to float rounding; only within about a tenth of a pixel of "
-          "the edge, where the sky turns round many times inside one pixel, do the directions differ more.") +
+        p("<b>The graphics card</b> draws in single precision, from the table the processor fills in double precision. Measured against the double-precision reference "
+          "(1280 × 800, three distances, REPORT of 0.55.0): the shadow's edge lies within a millionth of a pixel of where it should be, and every pixel's bent "
+          "direction is right to about 5 millionths of a radian (a map pixel is 1,600 millionths), even right at the edge.") +
         p("<b>Very bright images.</b> A star exactly behind the hole would become a ring of light, and its images near the ring are magnified without limit. "
           "A drawn dot cannot show that: no image is drawn brighter than the brightest star of the sky seen without the hole (Sirius).")});
     v.push_back({"limits", "⚠️ What the lab leaves out",

@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.54.4 (15 Nov 2026): housekeeping, nothing changed in the app. The repo is public now: the saved papers, scans, preprints, saved web pages and unclear-licence downloads (541 files, 116 MB) moved to the private repo ShelaShelby/physics-lab-sources (data/<same path>); here stay the extracts the tests read (26 files), native/data/SOURCES.md and tools/check_sources.py (run by check.sh quick; needs PL_SOURCES_DIR). Published as one fresh commit in the new public repo (15 Nov 2026); the history is in the private archive. UI suite not run.
-- Last full UI run: 0.54.0 (the commit "native 0.54.0"), 31 of 31 passed. Next full run at 0.55.
-- Next: the lab itself, 0.55.0 (PLAN_BLACKHOLE.md step 1, the screen: a fourth tab, the non-spinning hole in front of our sky, presets, the Orbit Lab's link), built on src/blackhole/. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.55.0 (15 Nov 2026): the Black Hole Lab, the fourth lab (PLAN_BLACKHOLE.md step 1): a non-spinning hole in front of our sky, bent per pixel by the graphics card from the module's double-precision table, the stars' images as points, presets Sagittarius A* and M87*, a readout card, the guide "What is real in this picture", the Orbit Lab's Sagittarius A* card opens it; benchmark scene 13.
+- Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
+- Next: the thin disc, 0.55.1 (PLAN_BLACKHOLE.md step 2). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

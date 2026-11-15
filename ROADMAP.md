@@ -49,9 +49,9 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Celestial mechanics in the Data panel: an ephemeris table (state vectors and elements at a date, in a chosen frame) beside the Horizons tables; an integrator check (energy and angular-momentum drift against the step); Lagrange points and the Jacobi constant; the asteroids' Kirkwood gaps; a Lambert solver with porkchop plots (Earth to Mars: dates, time, delta-v).
 
 ## Black Hole Lab
-- The lab, in the order the owner chose (DECISIONS.md): the screen with the non-spinning hole in front of our sky, presets and the Orbit Lab's link (0.55.0, plan step 1; the physics is done in 0.54.3: src/blackhole/), the thin disc, spin, the looks; then moving cameras, the Data panel's tables. **source needed** before the spinning fall-in: the ray equations in ingoing Kerr coordinates.
-- From 0.54.3's measurements: in single precision the sky's bending is off by up to 2e-3 rad within 0.1 pixel of the shadow's edge (the GPU should form "angle to the edge" without cancelling, or keep the closed edge test per pixel); at a camera exactly at 3M the table is loose (1e-2 rad) within half a pixel of the edge.
-- Later: the "skin" (DECISIONS.md): white paper with the lab's real equations written across it, bent around the hole by the same light-path calculation as the real view; after the real view works. Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
+- In the order the owner chose (DECISIONS.md; plan steps 2-7, PLAN_BLACKHOLE.md): the thin disc (0.55.1), spin, the Real and Film looks with the quality levels High and Ultra (only Basic exists), moving cameras (orbiting, then falling in), the Data panel's tables, the skin. **source needed** before the spinning fall-in: the ray equations in ingoing Kerr coordinates.
+- A "1979 paper" view that recomputes Luminet's figures in ink-on-paper style, with a credit (after the disc exists).
+- Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
 
 ## Whole app
 - Graphics quality presets, Low to Ultra, for older PCs; speed work only where the owner's benchmark shows a problem (0.50.3 review's list: the exposure-grid and Superposition read-backs each frame, the nucleus density grid while still, settings text, guides, cards and Pick a body rebuilt each frame, the molecule surface colours).
