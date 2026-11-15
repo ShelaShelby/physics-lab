@@ -1,0 +1,20 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1104.5499_abramowicz_fragile2013.txt.gz
+# Reference: M. A. Abramowicz, P. C. Fragile, "Foundations of black hole accretion disk theory", Living Rev. Relativ. 16, 1 (2013), arXiv:1104.5499 (the PDF: sha256 d12209d28b3fbb6e6f02ce24ef02484a429feac93556b272f7e8c57923fd2a1b, 6,637,760 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/1104.5499
+# Date read: 2026-11-15
+# sha256 of the original: 727d3750ceb5243db18cd8e3036c40dd098005e570ef4acb03b93fba6e9156ca
+# Place in the original: section 1 footnote 3 (the Eddington luminosity), section 5.3 (the flux of the outer region, eq. (97)), section 6 (where the thin disc stops applying)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin footnote 3, the Eddington luminosity
+   3 Radiant power in astrophysics is traditionally called “luminosity.” At the Eddington luminosity, L
+                                                                                                               Edd ≡
+1.2 × 1038 M/M [erg/s], radiation force balances the gravity of the central object (with mass M ). In the case of
+#--- end
+#--- begin section 5.3, eq. (97), the flux
+        F     =      [7 × 1026 erg cm−2 s−1 ](m−1 ṁ) r∗−3 B −1 C −1/2 Q,
+#--- end
+#--- begin section 6, the luminosity where advection starts
+long as the accretion rate is small. At some luminosity (L ≈ 0.3 LEdd ), however, the radial velocity
+#--- end

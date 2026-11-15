@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "blackhole/disc.h"
 #include "blackhole/elliptic.h"
 #include "blackhole/geodesic.h"
 #include "blackhole/kerr.h"
@@ -641,6 +642,380 @@ static void testLabSettings() {
     check(std::hypot(640.0, 400.0) / hv.K <= kPi + 1e-12, "a wide field of view keeps the corners within pi");
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.55.1: the thin gas disc (src/blackhole/disc.h). References: Page & Thorne 1974 (PT), Luminet 1979 (L79), Bardeen, Press & Teukolsky 1972 (BPT),
+// Abramowicz & Fragile 2013 (AF, its extract), Yuan & Narayan 2014 (YN, its extract), Cunningham 1975 (C75), Riazuelo 2019 (53), the ray integrator (geodesic.h).
+// The numbers typed below were read from the page images of the scans (the private sources repo, data/blackhole/scans) at the place named.
+
+// AF section 5.3 (97)-(99): F = [7e26] (mdot/m) r*^-3 B^-1 C^-1/2 Q with the functions under (99) (y = (r/M)^(1/2)); returns r*^-3 B^-1 C^-1/2 Q
+static double afShape(double r, double a) {
+    const double y = std::sqrt(r), y0 = std::sqrt(discInner(a));
+    const double B = 1 + a / (y * y * y), C = 1 - 3 / (y * y) + 2 * a / (y * y * y);
+    const double Q0 = (1 + a / (y * y * y)) / (y * std::sqrt(C));
+    const double th = std::acos(a) / 3;
+    const double ys[3] = {2 * std::cos(th - kPi / 3), 2 * std::cos(th + kPi / 3), -2 * std::cos(th)};   // "y1 = 2 cos[(cos^-1 a* - pi)/3]" ...
+    double br = y - y0 - 1.5 * a * std::log(y / y0);
+    for (int i = 0; i < 3; i++) {
+        const double yi = ys[i], yj = ys[(i + 1) % 3], yk = ys[(i + 2) % 3];
+        if (yi == 0) continue;
+        br -= 3 * (yi - a) * (yi - a) / (yi * (yi - yj) * (yi - yk)) * std::log((y - yi) / (y0 - yi));
+    }
+    return std::pow(r, -3) / B / std::sqrt(C) * Q0 * br;
+}
+
+static void testDiscFlux() {
+    // the inner edge: 0.54.3's radii (BPT (2.21) = PT (15k)); 1 - E^2 = (2/3) M / r_ms there (BPT (2.20) with equality); E = PT (15g) C^-1/2 G
+    for (double a : {0.0, 0.5, 0.9, 0.998, -0.5, -0.9}) {
+        const double r = discInner(a);
+        check(std::fabs(r - innermostStable(std::fabs(a), a >= 0)) < 1e-10, "disc inner edge = BPT (2.21), a " + f(a));
+        const double E = orbitEnergy(r, a);
+        check(std::fabs(1 - E * E - 2 / (3 * r)) < 1e-12, "BPT (2.20) at r_ms, a " + f(a));
+        for (double rr : {r, 2 * r, 50.0}) {
+            const double x = std::sqrt(rr), C = 1 - 3 / (x * x) + 2 * a / (x * x * x), G = 1 - 2 / (x * x) + a / (x * x * x);
+            check(std::fabs(orbitEnergy(rr, a) - G / std::sqrt(C)) < 1e-14, "BPT (2.12) = PT (15g), a " + f(a));
+            const double Bf = 1 + a / (x * x * x), Ff = 1 - 2 * a / (x * x * x) + a * a / (x * x * x * x);
+            check(std::fabs(orbitAngMom(rr, a) - x * Ff / std::sqrt(C)) < 1e-12 * rr, "BPT (2.13) = PT (15h), a " + f(a));
+            check(std::fabs(orbitOmega(rr, a) - 1 / (x * x * x * Bf)) < 1e-15, "BPT (2.16) = PT (15f), a " + f(a));
+        }
+        check(discFlux(r, a) == 0 && discFlux(r - 0.1, a) == 0 && discFlux(r * 1.0001, a) > 0, "no light at and inside the inner edge, a " + f(a));
+    }
+    check(std::fabs(discInner(0) - 6) < 1e-13, "r_ms = 6M at a = 0 (BPT p. 351)");
+    check(std::fabs(discEfficiency(0) - (1 - std::sqrt(8.0 / 9))) < 1e-14, "efficiency at a = 0: 1 - E(6M) = 1 - (8/9)^(1/2)");
+    // L79 p. 233: "The flux is maximum at r* ~ 9.55, for which (8 pi / 3 M Mdot) F_max ~ 1.146 10^-4"
+    const double rm = fluxMaxRadius(0), Fm = 8 * kPi / 3 * discFlux(rm, 0);
+    check(std::fabs(rm - 9.55) < 0.005, "F is largest at 9.55 M (L79 p. 233): " + f(rm));
+    check(std::fabs(Fm - 1.146e-4) < 0.0005e-4, "(8 pi / 3 M Mdot) F_max = 1.146e-4 (L79 p. 233): " + f(Fm));
+    // L79's printed (15) with 3^(1/2)/3 before the Log does NOT give its own maximum; with 3^(1/2)/2 (PT) it is PT's F at every radius
+    double printedMax = 0;
+    for (double r = 6.001; r < 40; r += 0.001) printedMax = std::max(printedMax, 8 * kPi / 3 * luminetFlux(r, std::sqrt(3.0) / 3));
+    check(std::fabs(printedMax - 1.146e-4) > 0.05e-4, "L79 (15) as printed (sqrt(3)/3) misses its own maximum: " + f(printedMax));
+    double worst = 0;                                                                 // (against F_max: both forms cancel to 0 at the inner edge)
+    for (double r = 6.0001; r < 2000; r *= 1.01) worst = std::max(worst, std::fabs(luminetFlux(r, std::sqrt(3.0) / 2) - discFlux(r, 0)) / discFlux(rm, 0));
+    check(worst < 1e-11, "L79 (15) with sqrt(3)/2 = PT (11b), (15n) at a = 0: " + f(worst));
+    // AF's form (97) (r*^-3 B^-1 C^-1/2 Q, prefactor 3/(8 pi) Mdot/M^2 in these units) = PT, any spin
+    worst = 0;
+    for (double a : {0.0, 0.5, 0.9, -0.5})
+        for (double r = discInner(a) * 1.001; r < 3000; r *= 1.05) worst = std::max(worst, std::fabs(3 / (8 * kPi) * afShape(r, a) / discFlux(r, a) - 1));
+    check(worst < 1e-10, "AF (97)-(99) = PT (11b), (15n): " + f(worst));
+    // the fall far out: F -> 3 M Mdot / (8 pi r^3) (L79 (15) as r* -> infinity)
+    check(std::fabs(discFlux(1e6, 0) * 8 * kPi / 3 * 1e18 - 1) < 1e-2, "F falls like 3 Mdot / (8 pi r^3) far out");
+    check(std::fabs(discFlux(1e8, 0.9) * 8 * kPi / 3 * 1e24 - 1) < 1e-3, "F falls like 3 Mdot / (8 pi r^3) far out, a = 0.9");
+    // total light = efficiency x feeding rate (PT (30), (31a) with W(r_ms) = 0): a conservation law, by quadrature
+    for (double a : {0.0, 0.5, 0.9, -0.9}) {
+        const double L = discLuminosity(a, 1e300), eta = discEfficiency(a);
+        check(std::fabs(L / eta - 1) < 1e-8, "light of both faces = (1 - E(r_ms)) Mdot, a " + f(a) + ": " + f(L) + " vs " + f(eta));
+    }
+    std::printf("info: disc at a = 0: F largest at %.4f M, (8 pi/3) F_max = %.5g; efficiency %.6f (a = 0), %.6f (0.9)\n", rm, Fm, discEfficiency(0), discEfficiency(0.9));
+}
+
+static void testDiscNumbers() {
+    const std::string af = readExtract("blackhole/arxiv/1104.5499_abramowicz_fragile2013.extract.txt");
+    const std::string yn = readExtract("blackhole/arxiv/1401.0586_yuan_narayan2014.extract.txt");
+    // the Eddington luminosity: YN footnote 1, "LEdd = 4πGM c/κes ... usually taken to be 0.4 cm2 g−1"; AF footnote 3: "1.2 × 1038 M/M [erg/s]"
+    check(yn.find("4πGM c/κes") != std::string::npos && yn.find("usually taken to be 0.4 cm2 g−1") != std::string::npos, "YN footnote 1 in its extract");
+    check(af.find("1.2 × 1038 M/M [erg/s]") != std::string::npos, "AF footnote 3 in its extract");
+    const double Le = eddingtonLuminosity(1) * 1e7;                                  // erg/s
+    check(std::round(Le / 1e37) == 12, "L_Edd(1 Sun) rounds to AF's 1.2e38 erg/s: " + f(Le));
+    check(yn.find("10LEdd /c2 = 1.39 × 1018 (M/M⊙ ) g s−1") != std::string::npos, "YN's Eddington rate in its extract");
+    check(std::round(eddingtonRate(1) * 1e3 / 1e16) == 139, "YN's Mdot_Edd = 10 L_Edd / c^2 = 1.39e18 g/s: " + f(eddingtonRate(1) * 1e3));
+    check(af.find("[7 × 1026 erg cm−2 s−1 ]") != std::string::npos, "AF (97) in its extract");
+    check(std::round(afFluxCoefficient() / 1e26) == 7, "AF's 7e26 erg cm^-2 s^-1 = 3 L_Edd c^4 / (8 pi (G M_sun)^2): " + f(afFluxCoefficient()));
+    // Stefan-Boltzmann against CODATA 2022 (5.670 374 419... x 10^-8, exact; P. J. Mohr et al., arXiv:2409.03787)
+    check(std::fabs(stefanBoltzmann() / 5.670374419e-8 - 1) < 2e-10, "sigma = CODATA 2022's 5.670374419e-8: " + f(stefanBoltzmann()));
+    // where the model applies: YN 4.2.1 "down to ∼ 1.5%LEdd", AF 6 "(L ≈ 0.3 LEdd )"
+    check(yn.find("found at luminosities down to ∼ 1.5%LEdd") != std::string::npos && kThinMin == 0.015, "the lowest feeding rate is YN's 1.5% of L_Edd");
+    check(af.find("At some luminosity (L ≈ 0.3 LEdd )") != std::string::npos && kThinMax == 0.3, "the highest is AF's 0.3 L_Edd");
+    // temperature: sigma T^4 = F; at a fixed r/M, T ~ (mdot / m)^(1/4)
+    DiscPhys p; p.massSun = 1e8; p.lEdd = 0.1;
+    DiscPhys q = p; q.massSun = 16e8;
+    DiscPhys w = p; w.lEdd = 0.1 * 16;
+    for (double r : {7.0, 9.55, 30.0}) {
+        check(std::fabs(q.temperature(r) * 2 / p.temperature(r) - 1) < 1e-12, "T ~ m^(-1/4) at fixed r/M");
+        check(std::fabs(w.temperature(r) / 2 / p.temperature(r) - 1) < 1e-12, "T ~ (L/L_Edd)^(1/4)");
+        check(std::fabs(stefanBoltzmann() * std::pow(p.temperature(r), 4) / p.flux(r) - 1) < 1e-12, "sigma T^4 = F");
+    }
+    // the light out of the disc in watts = L/L_Edd x L_Edd (both faces, by quadrature, then times (energy at infinity / the gas's) as PT (30))
+    check(std::fabs(discLuminosity(0, 1e300) * p.mdot() * 299792458.0 * 299792458.0 / (0.1 * eddingtonLuminosity(1e8)) - 1) < 1e-8, "L = 0.1 L_Edd for lEdd = 0.1");
+    // YN section 1: "the gas temperature in this model lies in the range 104 − 107 K" (10^4 to 10^7 K), depending on the mass: AF section 1's masses (about 10 Suns for
+    // the stellar holes, 10^6 to 10^9 for quasars) over the feeding rates where the model applies
+    check(yn.find("lies in the range 104 − 107 K") != std::string::npos, "YN's temperature range in its extract");
+    double tLo = 1e300, tHi = 0;
+    for (double m : {10.0, 1e6, 1e9})
+        for (double l : {kThinMin, kThinMax}) { DiscPhys d; d.massSun = m; d.lEdd = l; const double T = d.hottest(); tLo = std::min(tLo, T); tHi = std::max(tHi, T); }
+    check(tLo >= 1e4 && tHi <= 1e7, "the hottest ring stays within YN's 10^4 - 10^7 K: " + f(tLo) + " .. " + f(tHi));
+    std::printf("info: hottest ring at L = 0.1 L_Edd, a = 0: 10 Suns %.3g K, 4.297e6 %.3g K, 1e8 %.3g K, 6.5e9 %.3g K\n",
+                DiscPhys{10, 0.1, 0}.hottest(), DiscPhys{4.297e6, 0.1, 0}.hottest(), DiscPhys{1e8, 0.1, 0}.hottest(), DiscPhys{6.5e9, 0.1, 0}.hottest());
+}
+
+static void testDiscLight() {
+    // the colour by tools/star_colour.py's rule: every row of src/orbit/star_colours.inc (its T printed to 0.1 K) within one count
+    const std::string t = readSrc("orbit/star_colours.inc");
+    int rows = 0, worst = 0;
+    for (std::size_t at = t.find("    {"); at != std::string::npos; at = t.find("    {", at + 1)) {
+        double bv, T; int R, G, B;
+        if (std::sscanf(t.c_str() + at, " {%lf, %lf, %d, %d, %d}", &bv, &T, &R, &G, &B) != 5) continue;
+        const auto l = blackBodyLinear(T);
+        const double m = std::max({l[0], l[1], l[2]});
+        const auto enc = [&](double v) { v /= m; return static_cast<int>(std::lround((v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1 / 2.4) - 0.055) * 255)); };
+        worst = std::max({worst, std::abs(enc(l[0]) - R), std::abs(enc(l[1]) - G), std::abs(enc(l[2]) - B)});
+        rows++;
+    }
+    check(rows == 241 && worst <= 1, "black-body colours = tools/star_colour.py's table (" + std::to_string(rows) + " rows, worst " + std::to_string(worst) + ")");
+    // the yardstick: the Sun's surface at JPL's 5772 K (orbit/sun_facts.h) is 1; the visible light of a very hot black body grows like T (Rayleigh-Jeans)
+    check(sunTeff() == 5772 && std::fabs(visibleVsSun(5772) - 1) < 1e-14, "the Sun's surface is the unit of visible brightness");
+    check(std::fabs(visibleVsSun(2e8) / visibleVsSun(1e8) - 2) < 1e-3, "far above the visible, brightness grows like T");
+    double prev = 0; bool mono = true;
+    for (double T = 1000; T < 1e9; T *= 1.1) { const double v = visibleVsSun(T); if (!(v > prev)) mono = false; prev = v; }
+    check(mono, "a hotter black body is brighter in visible light");
+    // the black body stays a black body (R19 (53)): T_obs = g T. Its brightness for g: Y(gT); for large T, about g Y(T) (not g^4: the visible is the far tail)
+    std::printf("info: the visible brightness against the Sun's surface: 3e4 K %.1f, 7e4 K %.1f, 1.5e5 K %.1f, 4e6 K %.0f\n", visibleVsSun(3e4), visibleVsSun(7e4), visibleVsSun(1.5e5), visibleVsSun(4e6));
+}
+
+// the far-away observer's direct and secondary images (L79 (5), (10), (12), (13)): given r and the image angle alpha at inclination theta0 (from the axis), find b.
+// gamma from (10) (direct) or 2 pi - gamma (secondary, p. 231); (13) 1/r = -(Q-P+2M)/(4MP) + (Q-P+6M)/(4MP) sn^2(gamma/2 (Q/P)^(1/2) + F(zeta_inf, k), k)
+// (see luminetInvR for the corrected argument); b^2 = P^3/(P-2M) (5)
+static double snSq(double u, double k) {                       // sn^2(u, k) = sin^2(am), F(am, k) = u, by bisection on ellF
+    const double K = ellK(k);
+    const double per = 2 * K;
+    double v = std::fmod(u, per); if (v < 0) v += per;          // sn^2 has period 2K
+    double lo = 0, hi = kPi;
+    for (int i = 0; i < 64; i++) { const double m = (lo + hi) / 2; if (ellF(m, k) < v) lo = m; else hi = m; }
+    const double s = std::sin((lo + hi) / 2);
+    return s * s;
+}
+static double luminetInvR(double P, double gamma) {
+    const double Q = std::sqrt((P - 2) * (P + 6));
+    const double k = std::sqrt((Q - P + 6) / (2 * Q));
+    const double szi = std::sqrt((Q - P + 2) / (Q - P + 6));
+    const double Fzi = ellF(std::asin(szi), k);
+    // (13) prints the argument as gamma/2 (P/Q)^(1/2) + F(zeta_inf, k); inverting (11), gamma = 2 (P/Q)^(1/2) {F(zeta_r, k) - F(zeta_inf, k)}, gives
+    // gamma/2 (Q/P)^(1/2) + F(zeta_inf, k): (13)'s P/Q is a misprint (at P = 497.2, r = 1000 the printed form is 0.4 % off a direct quadrature of L79 (3);
+    // (11) agrees with it, and with schwarzschild.h, tested in 0.54.3). REPORT 0.55.1.
+    return -(Q - P + 2) / (4 * P) + (Q - P + 6) / (4 * P) * snSq(gamma / 2 * std::sqrt(Q / P) + Fzi, k);
+}
+static double luminetImpact(double r, double gamma) {       // P from large (little bending) down to the first P whose ray reaches r at this gamma; then bisection
+    const double target = 1 / r;
+    double hi = 1e7, lo = hi;
+    bool found = false;
+    while (lo > 3 + 1e-12) {
+        const double next = std::max(3 + 1e-12, lo / 1.05);
+        if (luminetInvR(next, gamma) >= target) { hi = lo; lo = next; found = true; break; }
+        lo = next;
+    }
+    if (!found) return std::nan("");                         // no ray with a periastron (b > b_c) reaches r at this gamma: L79's (13) does not cover it
+    for (int i = 0; i < 200; i++) {
+        const double m = (lo + hi) / 2;
+        if (luminetInvR(m, gamma) >= target) lo = m; else hi = m;
+    }
+    const double P = (lo + hi) / 2;
+    return std::sqrt(P * P * P / (P - 2));
+}
+
+static void testDiscRays() {
+    // 1. the ray's end from Binet's equation = the closed form (schwarzschild.h bendFromCamera) for rays to the far sky
+    double worst = 0;
+    for (double rO : {2.5, 4.0, 20.0, 1000.0}) {
+        const double edge = kPi - shadowAngle(rO);
+        for (int i = 0; i < 30; i++) {
+            const double x = edge * std::pow(1e-6, (i + 0.5) / 30), psi = edge - x;
+            const RayEnd2 e = rayEndAngle(rO, psi);
+            const Bend B = bendFromCameraEdge(rO, x);
+            const double d = std::fabs(e.phiEnd - B.dphi);
+            worst = std::max(worst, d);
+            if (e.captured || d > 1e-9) check(false, "ray end = closed form, rO " + f(rO) + " x " + f(x) + ": " + f(e.phiEnd) + " vs " + f(B.dphi));
+        }
+        const RayEnd2 c = rayEndAngle(rO, edge + 1e-3);
+        check(c.captured, "a ray inside the shadow ends at the horizon, rO " + f(rO));
+    }
+    std::printf("info: ray ends against the closed form: worst %.2e rad\n", worst);
+    // 2. far camera against L79's isoradials, direct and secondary image, at his inclinations (Fig. 5: 30 degrees above the disc, theta0 = 60; Fig. 6: 10 above, 80),
+    //    and the shift against L79 (19). L79's gamma is measured from the observer's direction at infinity, the module's phi from the camera's direction at rO;
+    //    between the two the ray sweeps th = asin(b (1 - 2/rO)^(1/2) / rO), its angle on the camera's sky (plus a bending of order M b / rO^2, 1e-11 here).
+    //    The crossing angle itself: firstCrossing(cos theta0, -cos alpha sin theta0) = L79's gamma of (10) (the image direction dn = (sin alpha, -cos alpha) with
+    //    the disc's axis N = (0, sin theta0, cos theta0) on the camera's frame: right, up, towards the camera).
+    const double rO = 1e6;
+    double wr = 0, wg = 0, wc = 0; int n = 0, skipped = 0;
+    for (double th0deg : {60.0, 80.0}) {
+        const double th0 = th0deg * kPi / 180, A = std::cos(th0);
+        for (double r : {6.0, 10.0, 20.0, 30.0})
+            for (int ia = 0; ia < 24; ia++) {
+                const double al = (ia + 0.37) * 2 * kPi / 24;
+                const double cg = std::cos(al) / std::sqrt(std::cos(al) * std::cos(al) + 1 / (std::tan(th0) * std::tan(th0)));
+                const double gam = std::acos(std::clamp(cg, -1.0, 1.0));          // L79 (10)
+                wc = std::max(wc, std::fabs(firstCrossing(A, -std::cos(al) * std::sin(th0)) - gam));
+                for (int img = 0; img < 2; img++) {
+                    const double b = luminetImpact(r, img == 0 ? gam : 2 * kPi - gam);
+                    if (std::isnan(b)) { skipped++; continue; }           // (b < b_c: compared with the integrator below instead)
+                    const double dnx = std::sin(img == 0 ? al : al + kPi);
+                    const double LzB = -dnx * std::sin(th0);
+                    const double th = std::asin(b * std::sqrt(1 - 2 / rO) / rO);
+                    const double phi = (img == 0 ? gam : 2 * kPi - gam) - th;
+                    const double rm = rayRadius(rO, kPi - th, phi);
+                    wr = std::max(wr, std::fabs(rm / r - 1));
+                    if (std::fabs(rm / r - 1) > 1e-6) check(false, "L79 isoradial, theta0 " + f(th0deg) + " r " + f(r) + " alpha " + f(al) + " image " + std::to_string(img) + ": " + f(rm));
+                    if (img == 0) {
+                        const double z1 = 1 / std::sqrt(1 - 3 / r) * (1 + std::pow(r, -1.5) * b * std::sin(th0) * std::sin(al));   // L79 (19)
+                        const double g = discShift(rm, b * LzB);
+                        wg = std::max(wg, std::fabs(g * z1 - 1));
+                        if (std::fabs(g * z1 - 1) > 1e-6) check(false, "L79 (19), theta0 " + f(th0deg) + " r " + f(r) + " alpha " + f(al));
+                    }
+                    n++;
+                }
+            }
+    }
+    check(wc < 1e-14, "the first crossing = L79 (10)'s gamma: " + f(wc));
+    check(n + skipped == 384 && n >= 340, "L79 isoradials compared: " + std::to_string(n));
+    std::printf("info: far camera against L79's isoradials: %d image points (%d near-side points of r = 6, 10 have b < b_c: no periastron, outside (13)), radius within %.2e, 1 + z within %.2e\n", n, skipped, wr, wg);
+    // the simple far-out form of the direct image (L79 p. 231): b = r (1 + tan^2 theta0 cos^2 alpha)^(-1/2); the difference falls like M/r
+    for (double r : {1e3, 1e4}) {
+        double w = 0;
+        for (int ia = 0; ia < 12; ia++) {
+            const double th0 = 60 * kPi / 180, al = (ia + 0.2) * 2 * kPi / 12;
+            const double b = r / std::sqrt(1 + std::tan(th0) * std::tan(th0) * std::cos(al) * std::cos(al));
+            const double th = std::asin(b * std::sqrt(1 - 2 / rO) / rO);
+            const double rm = rayRadius(rO, kPi - th, firstCrossing(std::cos(th0), -std::cos(al) * std::sin(th0)) - th);
+            w = std::max(w, std::fabs(rm / r - 1));
+        }
+        check(w < 4 * std::sqrt(1.0 / r), "far out the direct image is L79's ellipse, r " + f(r) + ": " + f(w));
+        std::printf("info: L79's ellipse at r = %g: radius within %.2e\n", r, w);
+    }
+    // 3. close in: the ray integrator (geodesic.h, J15 (A.15)) at a = 0, cameras inside 6M and at 15M, two inclinations; every crossing of the disc's plane
+    KerrBL bl(0);
+    double wi = 0; int ni = 0;
+    for (double rc : {4.0, 15.0})
+        for (double incl : {10.0, 60.0}) {
+            Camera cam; cam.r = rc; cam.theta = (90 - incl) * kPi / 180;
+            const double edge = kPi - shadowAngle(rc);
+            for (int i = 0; i < 24; i++) {
+                const double psi = (i < 18 ? 0.3 + (edge - 0.3) * i / 18.0 : edge + 0.05 * (i - 17)), beta = 0.4 + 0.7 * i;
+                const Vec3 look{std::cos(psi), std::sin(psi) * std::cos(beta), std::sin(psi) * std::sin(beta)};
+                std::vector<double> path;
+                Ray ray;
+                bl.launch(cam, look, ray);
+                trace(bl, cam, look, TraceOptions{}, &path);
+                const int ns = static_cast<int>(path.size()) / 5;
+                // the module's crossings
+                const double A = std::cos(cam.theta), B = -std::sin(cam.theta) * std::cos(beta);
+                const RayEnd2 e = rayEndAngle(rc, psi);
+                int k = 0;
+                for (int s = 0; s + 1 < ns && k < 3; s++) {
+                    const double t0 = path[5 * s + 1] - kPi / 2, t1 = path[5 * s + 6] - kPi / 2;
+                    if (!(t0 * t1 < 0) && !(t1 == 0)) continue;
+                    // refine: Newton on the span from the state before the crossing
+                    Ray q = ray;
+                    for (int j = 0; j < 5; j++) q.y[j] = path[5 * s + j];
+                    double span = 0;
+                    for (int it = 0; it < 40; it++) {
+                        Ray z = q;
+                        if (span != 0) integrateSpan(bl, z, span);
+                        double dy[kMaxState];
+                        bl.rhs(z, z.y, dy);
+                        const double d = (z.y[1] - kPi / 2) / dy[1];
+                        span -= d;
+                        if (std::fabs(d) < 1e-14) break;
+                    }
+                    Ray z = q;
+                    integrateSpan(bl, z, span);
+                    const double phi = firstCrossing(A, B) + k * kPi;
+                    if (phi < e.phiEnd) {
+                        const double rm = rayRadius(rc, psi, phi), d = std::fabs(rm / z.y[0] - 1);
+                        wi = std::max(wi, d); ni++;
+                        if (d > 1e-8) check(false, "crossing radius = the integrator's, camera " + f(rc) + " incl " + f(incl) + " psi " + f(psi) + " k " + std::to_string(k) + ": " + f(rm) + " vs " + f(z.y[0]));
+                    }
+                    k++;
+                }
+            }
+        }
+    check(ni >= 40, "crossings compared with the integrator: " + std::to_string(ni));
+    std::printf("info: crossings against the ray integrator: %d, radius within %.2e\n", ni, wi);
+}
+
+static void testDiscShift() {
+    // C75 p. 791: "The axial observer sees radiation from a given emission radius to have a unique value of g" and "that seen by the axial observer is always redshifted";
+    // at a = 0 that value is (1 - 3M/r)^(1/2) (L79 (19) at theta0 = 0). Face on (A = 1, B = 0): Lz = 0 for every pixel.
+    for (double r : {6.0, 9.55, 30.0, 400.0}) {
+        check(std::fabs(discShift(r, 0) - std::sqrt(1 - 3 / r)) < 1e-15 && discShift(r, 0) < 1, "face on: g = (1 - 3M/r)^(1/2) < 1, r " + f(r));
+    }
+    // C75 p. 791: the equatorial observer "sees some blueshifted radiation from every radius outside the radius of marginal stability"
+    const double rO = 1e8, th0 = 89.9 * kPi / 180;
+    for (double r : {6.01, 8.0, 25.0, 100.0, 400.0}) {
+        // alpha = -90 degrees (the approaching side: Lz = b sin theta0): find the direct image's b by bisection on the radius at the first crossing
+        const double A = std::cos(th0), B = 0, LzB = std::sin(th0);
+        double lo = 1e-3, hi = 3 * r + 10;
+        for (int i = 0; i < 200; i++) {
+            const double m = (lo + hi) / 2;
+            const double rm = rayRadius(rO, kPi - std::asin(m / rO), firstCrossing(A, B));
+            if (rm < r) lo = m; else hi = m;
+        }
+        const double b = (lo + hi) / 2, g = discShift(r, b * LzB);
+        check(g > 1, "an equatorial observer sees blueshift from r = " + f(r) + ": g = " + f(g));
+        if (r == 6.01) std::printf("info: g on the approaching side at r_ms, nearly edge-on: %.4f; over the face-on value %.4f (C75 p. 792 prints 1.7 for its g_max ratio at a = 0)\n", g, g / std::sqrt(1 - 3 / r));
+    }
+    // symmetry: face-on rings are circles (the radius depends only on the angle from the hole); left-right mirror: the same radius, Lz of the opposite sign
+    const double rc = 20;
+    for (double th : {0.2, 0.5, 1.0}) {
+        const double psi = kPi - th;
+        double r0 = 0;
+        for (int ia = 0; ia < 8; ia++) {
+            const double a = ia * kPi / 4;
+            const double rr = rayRadius(rc, psi, firstCrossing(1, 0) + 0 * a);
+            if (ia == 0) r0 = rr; else check(rr == r0, "face on: a circle");
+        }
+        const double i = 25 * kPi / 180, A = std::sin(i);
+        for (double a : {0.3, 1.2, 2.5}) {
+            const double dnx = std::sin(a), dny = std::cos(a);
+            const DiscHit L = discRay(rc, psi, A, dny * -std::cos(i), -dnx * std::cos(i), DiscGeom{6, 1e9});
+            const DiscHit R = discRay(rc, psi, A, dny * -std::cos(i), dnx * std::cos(i), DiscGeom{6, 1e9});
+            check(L.order == R.order && L.r == R.r && L.Lz == -R.Lz && (L.order < 0 || L.g != R.g), "mirror: same shape, not the same brightness");
+        }
+    }
+}
+
+static void testDiscTable() {
+    // the card's table against the reference (Binet by Dormand-Prince), away from the very edge of the shadow
+    for (double rO : {4.0, 30.0, 1000.0}) {
+        const DiscTable T(rO);
+        double worst = 0, wend = 0; int n = 0;
+        const double al = T.alphaSh();
+        for (int i = 0; i < 300; i++) {
+            const double sgn = i % 3 == 2 ? -1 : 1;
+            const double xmax = sgn > 0 ? kPi - al : al;
+            const double fr = (i + 1) * 0.618034 - std::floor((i + 1) * 0.618034), x = sgn * xmax * std::pow(1e-6, fr);
+            const double psi = (kPi - al) - x;
+            const RayEnd2 e = rayEndAngle(rO, psi);
+            wend = std::max(wend, std::fabs(e.phiEnd - T.phiEnd(x)) / e.phiEnd);
+            for (int j = 1; j < 8; j++) {
+                const double phi = e.phiEnd * j / 8.0;
+                double u;
+                if (!T.lookup(x, phi, u)) { check(false, "table: inside the ray"); continue; }
+                const double ur = 1 / rayRadius(rO, psi, phi);
+                worst = std::max(worst, std::fabs(u / ur - 1));
+                n++;
+            }
+        }
+        check(worst < 1e-6, "the card's table = the reference within 1e-6 (u = 1/r), rO " + f(rO) + ": " + f(worst));
+        check(wend < 1e-6, "the table's ray ends, rO " + f(rO) + ": " + f(wend));
+        std::printf("info: disc table rO %g: %dx%dx2 values, filled in %.1f ms; u within %.2e, ends within %.2e (%d points)\n", rO, T.rows(), T.cols(), T.fillMs(), worst, wend, n);
+        // the cut-off: how wide (in angle on the camera's sky) the images of a disc from 6 to 20 M are, along the line below the hole, 30 degrees above the disc;
+        // each further one about e^-pi (Gralla & Lupsasca 2020b (72)) of the one before
+        const double i30 = 30 * kPi / 180, A = std::sin(i30), B = std::cos(i30);          // dn = (0, -1): t . N = -(-cos i) = cos i
+        double width[kDiscOrders] = {0, 0, 0, 0};
+        for (int side = 0; side < 2; side++) {
+            double prevX = 0; int prevK = -2;
+            for (int q = 0; q <= 200000; q++) {
+                const double ax = std::exp(std::log(1e-9) + (std::log(side ? al : kPi - al) - std::log(1e-9)) * q / 200000.0), x = side ? -ax : ax;
+                const DiscHit h = discRayTable(T, x, A, B, 0, DiscGeom{6, 20});
+                if (h.order >= 0 && h.order == prevK) width[h.order] += std::fabs(x - prevX);
+                prevX = x; prevK = h.order;
+            }
+        }
+        const double ratio = width[3] / width[2];
+        check(std::fabs(ratio / std::exp(-kPi) - 1) < 0.25, "each further image about e^-pi as wide, rO " + f(rO) + ": " + f(ratio));
+        std::printf("info: disc 6-20 M seen 30 deg above, rO %g: image widths %.3g, %.3g, %.3g, %.3g rad (the 4th: %.2g px at 3840 px across 10 deg); 5th not drawn\n", rO,
+                    width[0], width[1], width[2], width[3], width[3] * 2160 / (10 * kPi / 180));
+    }
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -659,6 +1034,12 @@ int main() {
     testStarsFast();
     testCameraNumbers();
     testLabSettings();
+    testDiscFlux();
+    testDiscNumbers();
+    testDiscLight();
+    testDiscRays();
+    testDiscShift();
+    testDiscTable();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

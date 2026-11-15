@@ -21,7 +21,7 @@ using namespace units;
 struct StarProps { double m, L, R, T, hzIn, hzOut, frost, life; };
 static StarProps sunProps() {
     const double m = 1.0, L = std::pow(m, 3.5), R = m < 1 ? std::pow(m, 0.8) : std::pow(m, 0.57);
-    const double T = 5772 * std::pow(L / (R * R), 0.25), sq = std::sqrt(L);   // K
+    const double T = sunfacts::kSunTeffK * std::pow(L / (R * R), 0.25), sq = std::sqrt(L);   // K
     return {m, L, R, T, sunfacts::hzInnerAU() * sq, sunfacts::hzOuterAU() * sq, 2.7 * sq, 10 * m / L};   // habitable zone (0.49.4: Kopparapu et al. 2014, sun_facts.h) and frost line in AU, life in billion years
 }
 

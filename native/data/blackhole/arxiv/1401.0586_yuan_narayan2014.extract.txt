@@ -1,0 +1,22 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1401.0586_yuan_narayan2014.txt.gz
+# Reference: F. Yuan, R. Narayan, "Hot accretion flows around black holes", Annu. Rev. Astron. Astrophys. 52, 529 (2014), arXiv:1401.0586 (the PDF: sha256 fbb7abcc884b319abbd0c6670b82b8636ae06d1409c0a2b2ed3a48438a4b4b04, 1,738,913 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/1401.0586
+# Date read: 2026-11-15
+# sha256 of the original: 6c2eea22b743a2139d522140035b28aef1be4089f8100621f2243a7997573a89
+# Place in the original: section 1 (the thin disc's temperature and the Eddington rate) and its footnote 1 (the Eddington luminosity), section 4.2.1 (the lowest luminosity of the thin-disc state)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin section 1, the thin disc's temperature
+gas temperature in this model lies in the range 104 − 107 K, which is quite cold
+#--- end
+#--- begin section 1, the Eddington rate
+is below the Eddington rate,1 ṀEdd ≡ 10LEdd /c2 = 1.39 × 1018 (M/M⊙ ) g s−1 ,
+#--- end
+#--- begin footnote 1, the Eddington luminosity
+    While everyone agrees on the definition of the Eddington luminosity, viz., LEdd =
+4πGM c/κes , where κes is the electron scattering opacity, usually taken to be 0.4 cm2 g−1 , many
+#--- end
+#--- begin section 4.2.1, the thin-disc (soft) state
+quiescent state.22 The soft state is found at luminosities down to ∼ 1.5%LEdd
+#--- end

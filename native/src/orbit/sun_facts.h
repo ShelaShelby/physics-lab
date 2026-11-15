@@ -9,6 +9,10 @@ namespace sunfacts {
 // Until 0.49.3 it was (247, 207, 72), from a typed table with no source.
 constexpr int kSunSrgb[3] = {255, 242, 239};
 
+// 0.55.1: the Sun's effective temperature, 5,772 K: JPL Horizons' Sun header (data/jpl/horizons-sun.txt, line 18: "Effective temp, K     = 5772"). The app's one
+// copy (the Orbit Lab's star card and the Black Hole Lab's "times the Sun's surface" use it).
+constexpr double kSunTeffK = 5772;
+
 // The habitable zone for an Earth-mass planet: Kopparapu et al. 2014, ApJL 787, L29 (arXiv:1404.5292v2, data/hz), Table 1, Seff_sun (1 M_Earth):
 // runaway greenhouse 1.107 (inner edge), maximum greenhouse 0.356 (outer edge); Eq. (5): d = (L / L_sun / Seff)^0.5 AU, here L = L_sun.
 constexpr double kHzSeffRunaway = 1.107, kHzSeffMaxGreenhouse = 0.356;
