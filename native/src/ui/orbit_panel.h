@@ -5,6 +5,8 @@
 #include "app/prefs.h"
 #include "atom/atom_sim.h"
 #include "atom/atom_view.h"
+#include "blackhole/blackhole_view.h"
+#include "blackhole/lab.h"
 #include "molecule/molecule_view.h"
 #include "orbit/orbit_view.h"
 #include "orbit/solar_system.h"
@@ -58,7 +60,7 @@ struct AppState {
     std::string learnJump;                 // a section to scroll to in the open guide ("bar" = back to the list of headings)
     // ---- Atom Lab ----
     app::Prefs prefs;                      // everything remembered between runs (theme, text size, ...); see ui/settings.h
-    int lab = 0;                           // the lab on screen: 0 Orbit Lab, 1 Atom Lab, 2 Molecule Lab (app::labName; each keeps its state while another is shown)
+    int lab = 0;                           // the lab on screen: 0 Orbit Lab, 1 Atom Lab, 2 Molecule Lab, 3 Black Hole Lab (app::labName; each keeps its state while another is shown)
     bool visited[app::kLabCount] = {};      // labs already opened this run (reduced motion pauses a lab the first time it opens)
     atom::AtomLab atom;
     atom::AtomView atomView;
@@ -73,6 +75,12 @@ struct AppState {
     // ---- Molecule Lab (0.18 stage 1) ----
     molecule::MoleculeLab molecule;
     molecule::MoleculeView moleculeView;
+    // ---- Black Hole Lab (0.55.0) ----
+    blackhole::Settings blackhole = blackhole::settingsDefaults();
+    blackhole::BlackHoleView blackholeView;
+    double bhFreeX = 0, bhFreeY = 0, bhFreeW = -1, bhFreeH = -1;   // the part of the picture the bars and the Controls panel leave free (points): the hole is at its middle
+    int bhLearn = 0;                       // the open Black Hole Lab guide: 0 none, 1 What is real in this picture
+    std::string bhLearnJump;
     int drawCalls = 0, drawInstances = 0;  // what the renderer drew last frame (the Atom Lab's Performance card)
 };
 

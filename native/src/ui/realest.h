@@ -11,7 +11,7 @@ namespace ui { struct AppState; }
 namespace ui::real {
 
 struct Pick { const char* key; const char* value; std::string why; };
-const Pick* find(const char* lab, const std::string& key);   // lab "orbit" / "atom" / "molecule"; nullptr: this setting has no realistic choice
+const Pick* find(const char* lab, const std::string& key);   // lab "orbit" / "atom" / "molecule" / "blackhole"; nullptr: this setting has no realistic choice
 // marks part `part` of the next segmented control / check box when `key` has a pick and the pick's value is `value` (call once per part that could be the pick)
 void mark(const char* lab, const std::string& key, const std::string& value, int part);
 
@@ -21,6 +21,8 @@ void markCheck(const char* lab, const std::string& key);                        
 void applyOrbit(AppState& app);      // every Orbit Lab pick at once
 void applyAtom(AppState& app);
 void applyMolecule(AppState& app);
+void applyBlackHole(AppState& app);   // 0.55.0
+void applyLab(AppState& app);         // 0.55.0: the lab on screen's
 const char* buttonCaption();         // the words under the button: what the dot means
 
 }  // namespace ui::real

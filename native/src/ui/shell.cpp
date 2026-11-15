@@ -23,6 +23,7 @@
 #include "atom/atom_core.h"
 #include "atom/atom_tools.h"
 #include "atom/chart.h"
+#include "blackhole/lab.h"
 #include "molecule/molecule.h"
 #include "molecule/rotation.h"
 #include "atom/chart_view.h"
@@ -95,7 +96,7 @@ double widthEmOf(PanelId id) {
 }
 void toggle(PanelId id) { S.ui.open = S.ui.open == id ? PanelId::None : id; S.ui.search = false; S.openedFrame = ImGui::GetFrameCount(); }
 }  // namespace
-std::string controlsKey(const AppState& app, const char* what) { return std::string(app.lab == 0 ? "orbit." : app.lab == molecule::kLabIndex ? "molecule." : "atom.") + what; }
+std::string controlsKey(const AppState& app, const char* what) { return std::string(app::labKey(app.lab)) + "." + what; }   // (0.55.0: from the lab's key; it was a two-way ?: that sent any other lab to "atom.")
 namespace shellimpl {
 bool controlsOpen() { return S.app && !panelCollapsed(S.app->prefs.shellPanels, controlsKey(*S.app, "controls"), false); }      // open by default; kept in the settings like the cards' state
 void controlsToggle() { if (S.app) S.app->prefs.shellPanels = withPanelState(S.app->prefs.shellPanels, controlsKey(*S.app, "controls"), controlsOpen()); }
@@ -137,7 +138,7 @@ void menuPanel(AppState& app, sh::Panel& p, bool& close) {
     }
     if (sh::pRow(p, "menu.history", "What's new (history)")) { app.showHistory = true; close = true; }
     if (sh::pRow(p, "menu.about", "About Physics Lab")) { app.showAbout = true; close = true; }
-    if (app.lab < molecule::kLabIndex && sh::pRow(p, "menu.defaults", "Put this lab's settings back…")) { S.askDefaults = true; close = true; }
+    if (app.lab != molecule::kLabIndex && sh::pRow(p, "menu.defaults", "Put this lab's settings back…")) { S.askDefaults = true; close = true; }   // (0.55.0: the Black Hole Lab has Defaults too)
     sh::pGap(p, m.s8);
     sh::pHeading(p, "Text size");
     int cur = 1;
@@ -153,9 +154,8 @@ void menuPanel(AppState& app, sh::Panel& p, bool& close) {
 
 void labMenuPanel(AppState& app, sh::Panel& p, bool& close) {
     sh::pTitle(p, "Labs");
-    static const char* const ids[app::kLabCount] = {"lab.orbit", "lab.atom", "lab.molecule"};   // 0.19: Orbit, Atom, Molecule (the Defense Lab was removed)
-    for (int i = 0; i < app::kLabCount; i++)
-        if (sh::pRow(p, ids[i], app::labName(i), app.lab == i)) { openLab(app, i); close = true; }
+    for (int i = 0; i < app::kLabCount; i++)                                        // (0.55.0: the ids from app::shell::labMenuId, one per lab)
+        if (sh::pRow(p, labMenuId(i).c_str(), app::labName(i), app.lab == i)) { openLab(app, i); close = true; }
 }
 
 void factsPanel(AppState& app, sh::Panel& p, bool& /*close*/) {
@@ -289,7 +289,7 @@ std::vector<SearchEntry> searchEntries(AppState& app) {
     add("Menu", "Settings", "menu:settings", [&app] { app.showSettings = true; });
     add("Menu", "About Physics Lab", "menu:about", [&app] { app.showAbout = true; });
     add("Menu", "What's new (history)", "menu:history", [&app] { app.showHistory = true; });
-    if (app.lab < molecule::kLabIndex) {                                            // 0.19: as the menu: the Molecule Lab has no changelog of its own and no Defaults
+    if (app.lab != molecule::kLabIndex) {                                           // 0.19: as the menu: the Molecule Lab has no changelog of its own and no Defaults
         add("Menu", "Put this lab's settings back…", "menu:defaults", [] { S.askDefaults = true; });
     }
     add("Menu", "Text size", "menu:textsize", [] { shellOpenPanel(PanelId::Menu); });
@@ -298,7 +298,8 @@ std::vector<SearchEntry> searchEntries(AppState& app) {
     for (int i = 0; i < app::kLabCount; i++)                                        // 0.22 stage 7: one entry per other lab (before: Orbit <-> Atom only, and "Go to the Orbit Lab" in the Molecule Lab)
         if (i != app.lab) add("Labs", std::string("Go to the ") + app::labName(i), std::string("lab:") + std::to_string(i), [&app, i] { if (app.journey.active) journeyStop(app); openLab(app, i); });
     // 0.25: the lab's "Most realistic" button (ui/realest.h)
-    add("Settings", "Most realistic: every choice closest to reality", "realest", [&app] { if (app.lab == 0) real::applyOrbit(app); else if (app.lab == molecule::kLabIndex) real::applyMolecule(app); else real::applyAtom(app); });
+    add("Settings", "Most realistic: every choice closest to reality", "realest", [&app] { real::applyLab(app); });
+    if (app.lab == blackhole::kLabIndex) blackholeSearch(app, add);                 // 0.55.0
     if (app.lab == 1) {                                                             // 0.22 stage 7: the Atom Lab had nothing of its own in search: its elements, famous isotopes, pictures and guides
         for (int z = 1; z <= 118; z++) add("Elements", std::string(atom::name(z)) + " (" + atom::symbol(z) + ", Z = " + std::to_string(z) + ")", "el:" + std::to_string(z), [&app, z] { atom::pickElement(app.atom, z); });
         const auto& fam = atom::famous();
@@ -320,7 +321,7 @@ std::vector<SearchEntry> searchEntries(AppState& app) {
         add("Vibrations", "Vibrations: make the molecule vibrate", "mvib:on", [&app] { molecule::MoleculeLab& L = app.molecule; if (L.set.style == molecule::Style::Realistic) L.setStyle(molecule::Style::BallStick); L.setVib(0); shellimpl::shellOpenPanel(PanelId::None); });   // 0.23
     }
     add("Menu", app.prefs.facts == "on" ? "Facts: turn off" : "Facts: turn on", "menu:facts", [&app] { app.prefs.facts = app.prefs.facts == "on" ? "off" : "on"; });
-    if (app.lab < molecule::kLabIndex) add("Menu", "Legend", "menu:legend", [&app] { app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", !panelCollapsed(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", true)); });
+    if (app.lab == 0 || app.lab == 1) add("Menu", "Legend", "menu:legend", [&app] { app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", !panelCollapsed(app.prefs.shellPanels, std::string(app.lab == 0 ? "orbit." : "atom.") + "legend", true)); });
     for (const SettingRow& r : settingRows())                                       // 0.15 stage 5l: EVERY row of the Settings window, from the window's own list (ui/settings.h), after the menu's own entries so that "text size" still lists the menu's quick text-size chooser first; each opens Settings at its row
         if (settingRowShown(r, app)) { const std::string id = r.id; add("Settings", r.label, "setrow:" + id, [&app, id] { settingsGoto(app, id.c_str()); }); }
     for (int i = 0; i < factCount(); i++) {
@@ -408,7 +409,7 @@ static double crumbGap(const Crumb& a, const Crumb& b, const Metrics& m) { retur
 std::vector<Crumb> crumbs(const AppState& app, int mode) {
     const std::string subj = subjectName(app);
     std::vector<Crumb> v;
-    if (mode <= 1) for (int i = 0; i < app::kLabCount; i++) v.push_back({app::labName(i), 4 + i});
+    if (mode <= 1) for (int i = 0; i < app::kLabCount; i++) v.push_back({labTabText(i), 4 + i});
     if (mode == 1) return v;
     if (app.lab == 0) {
         if (mode == 0) v.push_back({"Solar System", subj.empty() ? 3 : 2});
@@ -526,7 +527,7 @@ std::vector<std::string> readoutLines(const AppState& app, double fps) {
 float shellTopBarH() { return S.topBarH; }
 void shellNoteDrag() { S.frozen = true; }
 bool shellSpace(AppState& app, bool textInput) {
-    const KeyOutcome o = applyKey(S.ui, Key::Space, textInput, app.lab != molecule::kLabIndex);   // 0.22 stage 7: the Molecule Lab has no clock (it was always "true": Space played or paused the other labs unseen)
+    const KeyOutcome o = applyKey(S.ui, Key::Space, textInput, app.lab != molecule::kLabIndex && app.lab != blackhole::kLabIndex);   // (0.55.0: nor the Black Hole Lab: the camera hovers, nothing moves)   // 0.22 stage 7: the Molecule Lab has no clock (it was always "true": Space played or paused the other labs unseen)
     if (o.togglePlay) app.paused = !app.paused;
     return o.consumed;
 }
@@ -561,7 +562,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     }
 
     // ---- what the bars hold, and how big that makes them ----
-    std::vector<ToolItem> tools = app.lab == 0 ? orbitTools(app) : app.lab == molecule::kLabIndex ? std::vector<ToolItem>{} : atomTools(app);   // (the Molecule Lab has its own bar instead: shell_molecule.cpp)
+    std::vector<ToolItem> tools = app.lab == 0 ? orbitTools(app) : app.lab == 1 ? atomTools(app) : std::vector<ToolItem>{};   // (0.55.0: was "not Molecule = Atom"; the Black Hole Lab has its own bar too)   // (the Molecule Lab has its own bar instead: shell_molecule.cpp)
     const double gap = m.s4;
     const double segW = std::max(sh::width(Type::Body, false, "2D"), sh::width(Type::Body, false, "3D")) + 2.0 * m.s12;
     std::vector<double> iw;
@@ -629,7 +630,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     std::string legendOpenName;
     // ---- the floating cards: the subject card (top right) and the legend (top left); each collapses to its title ----
     const auto card = [&](const char* key, const char* title, Anchor anchor, double emW, bool defCollapsed, const std::function<void(sh::Panel&)>& body) {
-        const std::string name = std::string(app.lab == 0 ? "orbit." : app.lab == 1 ? "atom." : "molecule.") + key;
+        const std::string name = std::string(app::labKey(app.lab)) + "." + key;
         const bool collapsed = panelCollapsed(app.prefs.shellPanels, name, defCollapsed);
         const double titleW = sh::width(Type::Title, true, title);
         const std::string wid = std::string("##card_") + name;
@@ -761,6 +762,8 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
         const bool esc = ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !escHandled && !settingsOpenAtStart && !io.WantTextInput && !S.ui.search && S.ui.open == PanelId::None;
         if (outside || esc) app.prefs.shellPanels = withPanelState(app.prefs.shellPanels, legendOpenName, true);
     }
+    if (app.lab == blackhole::kLabIndex && !pane)            // 0.55.0: the Black Hole Lab's readout card (top right)
+        card("card", "Black hole", Anchor::TopRight, 21, false, [&](sh::Panel& p) { blackholeCard(app, p); });
     if (app.lab == molecule::kLabIndex && !pane && app.molecule.rotCard && molecule::rot::hasRotation(app.molecule.mol()))   // 0.53: the Rotation card (opened from the Rotation section)
         card("rotation", "Rotation", Anchor::TopRight, 20, false, [&](sh::Panel& p) { moleculeRotationCard(app, p); });
     if (app.lab == molecule::kLabIndex && !pane && app.molecule.anharmOn())   // 0.53.1: the Bond energy card (with Vibrations › Anharmonic ticked)
@@ -874,6 +877,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
 
     // ---- 0.18: the Molecule Lab's bar, bottom centre (where the other labs have their toolbar) ----
     if (!pane && app.lab == molecule::kLabIndex) { const Rect br = moleculeBar(app, fr, m); occ.push_back(br); auditRect("moleculebar", static_cast<float>(br.x), static_cast<float>(br.y), static_cast<float>(br.w), static_cast<float>(br.h)); }
+    if (!pane && app.lab == blackhole::kLabIndex) { const Rect br = blackholeBar(app, fr, m); occ.push_back(br); auditRect("blackholebar", static_cast<float>(br.x), static_cast<float>(br.y), static_cast<float>(br.w), static_cast<float>(br.h)); }   // 0.55.0
 
     // ---- the readout, bottom right: Body size on a soft dark pill (stage 5c; before it was Caption with an outline and was hard to read over lines and stars). Its own window, so a saved picture does not carry it ----
     if (!pane && !ro.empty()) {
@@ -914,8 +918,8 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 // 0.25: the lab's "Most realistic" button, on the title's line (ui/realest.h): it picks every choice closest to reality; the dots mark them
                 const std::string rw = "Most realistic";
                 const float bw = sh::width(Type::Body, false, rw) + 2.0f * m.s12;
-                const char* rid = app.lab == 0 ? "orbit.realest" : app.lab == molecule::kLabIndex ? "molecule.realest" : "atom.realest";
-                if (sh::button(rid, ImVec2(o.x + cp.w - bw, o.y), ImVec2(bw, hb), rw)) { if (app.lab == 0) real::applyOrbit(app); else if (app.lab == molecule::kLabIndex) real::applyMolecule(app); else real::applyAtom(app); }
+                const std::string rid = std::string(app::labKey(app.lab)) + ".realest";
+                if (sh::button(rid.c_str(), ImVec2(o.x + cp.w - bw, o.y), ImVec2(bw, hb), rw)) real::applyLab(app);
                 if (ImGui::IsItemHovered()) { ui::BeginTooltip(); ImGui::PushTextWrapPos(ImGui::GetFontSize() * 22); ImGui::TextUnformatted(real::buttonCaption()); ImGui::PopTextWrapPos(); ImGui::EndTooltip(); }
                 cp.y += std::max(sh::lineH(Type::Title), hb) + m.s4;
             }
@@ -947,7 +951,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             };
             collectPanelItems(true);
             sh::bodyFloor(true);
-            if (app.lab == 0) orbitControls(app, cp, section); else if (app.lab == molecule::kLabIndex) moleculeControls(app, cp, section); else atomControls(app, cp, section);
+            if (app.lab == 0) orbitControls(app, cp, section); else if (app.lab == molecule::kLabIndex) moleculeControls(app, cp, section); else if (app.lab == blackhole::kLabIndex) blackholeControls(app, cp, section); else atomControls(app, cp, section);
             sh::bodyFloor(false);
             collectPanelItems(false);
             auditNote(shownSections);
@@ -1018,17 +1022,17 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
                 if (isTab(c)) {                                                     // 0.38: a lab tab
                     const int lab = c.kind - 4;
                     const float bw = static_cast<float>(sh::width(Type::Body, false, c.text) + 2.0 * m.s12);
-                    static const char* const tabIds[app::kLabCount] = {"top.tab.orbit", "top.tab.atom", "top.tab.molecule"};
+                    const std::string tabId = labTabId(lab);                                // (0.55.0: one per lab, app::shell::labTabId)
                     const ImVec2 pos(x, 0.0f);
                     ImGui::SetCursorScreenPos(pos);
-                    const bool clicked = ImGui::InvisibleButton(tabIds[lab], ImVec2(bw, static_cast<float>(m.topBar)));
+                    const bool clicked = ImGui::InvisibleButton(tabId.c_str(), ImVec2(bw, static_cast<float>(m.topBar)));
                     const bool hov = ImGui::IsItemHovered();
-                    noteItem(tabIds[lab]);
+                    noteItem(tabId.c_str());
                     if (hov) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
                     const bool on = app.lab == lab;
                     sh::text(bar.dl, Type::Body, false, ImVec2(x + m.s12, (m.topBar - sh::px(Type::Body)) / 2), on || hov ? sh::cText() : sh::cMuted(), c.text);
                     if (on) bar.dl->AddRectFilled(ImVec2(x + m.s8, static_cast<float>(m.topBar) - 2.0f * static_cast<float>(sh::F().dpi) - 1.0f), ImVec2(x + bw - m.s8, static_cast<float>(m.topBar) - 1.0f), sh::cAccent());
-                    if (shellLogOn()) auditRect(std::string(tabIds[lab]) + (on ? ".on" : ".off"), x, 0, bw, static_cast<float>(m.topBar));
+                    if (shellLogOn()) auditRect(tabId + (on ? ".on" : ".off"), x, 0, bw, static_cast<float>(m.topBar));
                     if (clicked && !on) openLab(app, lab);
                     x += bw;
                 } else if (c.kind == 3) {
@@ -1130,7 +1134,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (icon("top.data", Icon::Plot, "Data: tables, plots and fits (Ctrl+D)", dataOpen())) dataToggle();   // 0.51
             if (icon("top.search", Icon::Search, "Search (Ctrl+K)", S.ui.search)) { if (S.ui.search) S.ui.search = false; else { S.ui.search = true; S.ui.open = PanelId::None; S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; S.queryGen++; } }   // (5k: a second click closes it)
             if (S.askDefaults && app.lab == molecule::kLabIndex) S.askDefaults = false;   // (the Molecule Lab has no Defaults row: Reset view is in its own bar)
-            if (S.askDefaults) { ImGui::OpenPopup(app.lab == 1 ? "Put Atom Lab back?" : "Put Orbit Lab back?"); S.askDefaults = false; }
+            if (S.askDefaults) { ImGui::OpenPopup(app.lab == 1 ? "Put Atom Lab back?" : app.lab == blackhole::kLabIndex ? "Put Black Hole Lab back?" : "Put Orbit Lab back?"); S.askDefaults = false; }
             defaultsPopups(app);
             sh::endPanel(bar);
         }
@@ -1238,6 +1242,10 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     if (app.lab == molecule::kLabIndex) {                 // 0.18: the molecule is centred in the part of the picture the bars and the Controls panel leave free
         const Rect fr2 = atomFreeRect(fr.window, occ, bottomLeftTop);
         app.molecule.freeX = fr2.x / dpi; app.molecule.freeY = fr2.y / dpi; app.molecule.freeW = fr2.w / dpi; app.molecule.freeH = fr2.h / dpi;
+    }
+    if (app.lab == blackhole::kLabIndex) {                // 0.55.0: the hole stays in the middle of the part of the picture the top bar and the Controls panel leave free (not the card: it folds away)
+        const Rect fr2{0, fr.topBar.bottom(), fr.freeW > 0 ? fr.freeW : W, H - fr.topBar.bottom()};
+        app.bhFreeX = fr2.x / dpi; app.bhFreeY = fr2.y / dpi; app.bhFreeW = fr2.w / dpi; app.bhFreeH = fr2.h / dpi;
     }
     if (app.lab == 1) {                                   // 0.15 stage 5h: the atom is centred in the part of the picture the bars, the Controls panel and the subject card leave free (the label under the nucleus too)
         const bool pickerOpen = S.ui.open == PanelId::Chip && freeSavedOk;      // 5q: with the picker open the picture, toolbar, FPS pill and scale bar keep the place they had

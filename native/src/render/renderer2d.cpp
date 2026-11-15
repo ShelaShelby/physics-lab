@@ -169,6 +169,22 @@ bool Renderer2D::init() {
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), reinterpret_cast<void*>(0));
         glEnableVertexAttribArray(0);
         glBindVertexArray(0);
+        // 0.55.0: the Black Hole Lab's bent sky (drawn over the whole picture with the composite's square)
+        const GLuint lv = compile(GL_VERTEX_SHADER, kCompositeVS), lf = compile(GL_FRAGMENT_SHADER, kLensFS);
+        lensProgram_ = glCreateProgram();
+        glAttachShader(lensProgram_, lv);
+        glAttachShader(lensProgram_, lf);
+        glLinkProgram(lensProgram_);
+        glDeleteShader(lv);
+        glDeleteShader(lf);
+        glGetProgramiv(lensProgram_, GL_LINK_STATUS, &ok);
+        if (!ok) { std::fprintf(stderr, "lens shader link error\n"); glDeleteProgram(lensProgram_); lensProgram_ = 0; }   // (the Black Hole Lab then shows black; the other labs are unaffected)
+        else {
+            lnTex_ = glGetUniformLocation(lensProgram_, "uTex"); lnTable_ = glGetUniformLocation(lensProgram_, "uTable"); lnK_ = glGetUniformLocation(lensProgram_, "uK");
+            lnCentre_ = glGetUniformLocation(lensProgram_, "uCentre"); lnKpx_ = glGetUniformLocation(lensProgram_, "uKpx"); lnEdge_ = glGetUniformLocation(lensProgram_, "uEdge");
+            lnT_ = glGetUniformLocation(lensProgram_, "uT"); lnN_ = glGetUniformLocation(lensProgram_, "uN"); lnBend_ = glGetUniformLocation(lensProgram_, "uBend");
+            lnDebug_ = glGetUniformLocation(lensProgram_, "uDebug"); lnBright_ = glGetUniformLocation(lensProgram_, "uBright"); lnLod_ = glGetUniformLocation(lensProgram_, "uLod");
+        }
     }
     {   // the planet program (same vertex shader as the shapes; it also draws the sky photo) and the picture maps
         const GLuint v = compile(GL_VERTEX_SHADER, kVertexShader), f = compile(GL_FRAGMENT_SHADER, kPlanetFS);
@@ -261,6 +277,11 @@ bool Renderer2D::init() {
 void Renderer2D::disableCompute() { delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr; }
 
 void Renderer2D::shutdown() {
+    if (lensProgram_) glDeleteProgram(lensProgram_);
+    if (lensFbo_) glDeleteFramebuffers(1, &lensFbo_);
+    if (lensTex_) glDeleteTextures(1, &lensTex_);
+    if (lensTableTex_) glDeleteTextures(1, &lensTableTex_);
+    lensProgram_ = lensFbo_ = lensTex_ = lensTableTex_ = 0; lensW_ = lensH_ = lensN_ = 0; lensValid_ = false; lensTableVer_ = ~std::uint64_t(0);
     for (int i = 0; i < int(meshes_.size()); i++) meshDelete(i);
     meshes_.clear();
     if (meshProgram_) glDeleteProgram(meshProgram_);
@@ -313,8 +334,99 @@ void Renderer2D::begin(double w, double h) {
     inst_.clear();
     blobs_.clear();
     clouds_.clear();
+    lens_.clear();
     segments_.clear();
     triStart_ = 0;
+}
+
+void Renderer2D::lensSky(const LensSky& L) {
+    if (!hasMap(Map::Sky) || L.kRad <= 0) return;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::Lens; sg.slot = static_cast<int>(lens_.size());
+    lens_.push_back(L);
+    segments_.push_back(sg);
+}
+
+void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int vx, int vy) {
+    if (!lensProgram_) return;
+    const int n = L.table ? static_cast<int>(L.table->size()) : 0;
+    const bool bend = L.bend && n >= 4;
+    if (bend && L.tableVersion != lensTableVer_) {                         // a new table: to the GPU once
+        std::vector<float> f(L.table->begin(), L.table->end());
+        if (!lensTableTex_) glGenTextures(1, &lensTableTex_);
+        glBindTexture(GL_TEXTURE_2D, lensTableTex_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, n, 1, 0, GL_RED, GL_FLOAT, f.data());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        lensTableVer_ = L.tableVersion; lensN_ = n;
+    }
+    const auto pass = [&](int ox, int oy) {                                // one full-picture pass into the bound framebuffer, whose picture starts at (ox, oy)
+        const double ppp = fbW / width_;                                   // pixels per point
+        const double cxPx = std::round(L.cx * ppp), cyPx = std::round(L.cy * ppp), Kpx = L.kRad * ppp;
+        const double e = L.alphaSh * Kpx, e2 = e * e;
+        const float e2hi = static_cast<float>(e2), e2lo = static_cast<float>(e2 - static_cast<double>(e2hi));
+        glUseProgram(lensProgram_);
+        glUniformMatrix3fv(lnK_, 1, GL_TRUE, L.M);
+        glUniform2f(lnCentre_, static_cast<float>(ox + cxPx), static_cast<float>(oy + fbH - cyPx));
+        glUniform1f(lnKpx_, static_cast<float>(Kpx));
+        glUniform3f(lnEdge_, static_cast<float>(e), e2hi, e2lo);
+        glUniform2f(lnT_, static_cast<float>(std::log(Kpx) + L.s0), static_cast<float>(L.ds));
+        glUniform1i(lnN_, lensN_);
+        glUniform1i(lnBend_, bend ? 1 : 0);
+        glUniform1i(lnDebug_, L.debug ? 1 : 0);
+        glUniform1f(lnBright_, static_cast<float>(std::clamp(L.bright, 0.0, 1.0)));
+        const float tw = static_cast<float>(std::max(texW_[static_cast<int>(Map::Sky)], 1));
+        glUniform1f(lnLod_, std::max(0.0f, std::log2(tw / 6.2831853f / std::max(static_cast<float>(L.kRad), 1.0f))));   // (skyMap's level: the plain sky as the Orbit Lab draws it)
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, tex_[static_cast<int>(Map::Sky)]);
+        glUniform1i(lnTex_, 0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, lensTableTex_);
+        glUniform1i(lnTable_, 1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindVertexArray(cmpVao_);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, 0); glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, 0);
+    };
+    glDisable(GL_BLEND);                                                   // the bent sky is opaque: black space where there is no light
+    if (L.debug) { pass(vx, vy); glEnable(GL_BLEND); return; }             // (tests: straight into the float framebuffer given, every time)
+    if (!lensFbo_) { glGenFramebuffers(1, &lensFbo_); glGenTextures(1, &lensTex_); }
+    if (fbW != lensW_ || fbH != lensH_) {
+        lensW_ = fbW; lensH_ = fbH; lensValid_ = false;
+        glBindTexture(GL_TEXTURE_2D, lensTex_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, fbW, fbH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, lensTex_, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    const LensSky& P = lensLast_;
+    const bool same = lensValid_ && P.cx == L.cx && P.cy == L.cy && P.kRad == L.kRad && std::equal(L.M, L.M + 9, P.M) && P.bright == L.bright && P.bend == L.bend &&
+                      P.alphaSh == L.alphaSh && P.s0 == L.s0 && P.ds == L.ds && P.tableVersion == L.tableVersion && width_ == lensPtW_;
+    if (!same) {                                                           // (e) of the plan: drawn anew only when the view, the distance or the picture changed
+        glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
+        glViewport(0, 0, fbW, fbH);
+        pass(0, 0);
+        lensLast_ = L; lensLast_.table = nullptr; lensPtW_ = width_; lensValid_ = true; lensRedraws_++;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, target);
+    glViewport(vx, vy, fbW, fbH);
+    glUseProgram(cmpProgram_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, lensTex_);
+    glUniform1i(cmpTex_, 0);
+    glBindVertexArray(cmpVao_);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glEnable(GL_BLEND);
 }
 
 void Renderer2D::closeTriangles() {
@@ -565,6 +677,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
     }
     auto normalBlend = [] { glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA); };
     for (const Segment& sg : segments_) {
+        if (sg.kind == Kind::Lens) { drawLens(lens_[std::size_t(sg.slot)], fbW, fbH, target, vx, vy); normalBlend(); continue; }   // 0.55.0
         if (sg.kind == Kind::LayerBegin && sg.hdr) {                          // 0.40: the cloud's float picture, the screen's size
             if (!hdrFbo_) { glGenFramebuffers(1, &hdrFbo_); glGenTextures(1, &hdrTex_); }
             if (fbW != hdrW_ || fbH != hdrH_) {

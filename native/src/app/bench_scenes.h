@@ -7,7 +7,7 @@
 
 namespace app {
 
-enum class BenchKind { OrbitHeaviest, OrbitRocks8, OrbitHeaviestCpuRocks, OrbitRocks8CpuRocks, Atom };
+enum class BenchKind { OrbitHeaviest, OrbitRocks8, OrbitHeaviestCpuRocks, OrbitRocks8CpuRocks, Atom, BlackHole };
 
 struct BenchSceneText {
     std::string name;       // with its number: "3. Atom Lab, ..."
@@ -17,8 +17,8 @@ struct BenchSceneText {
     int twinOf = 0;         // the number of the scene this one repeats with the processor doing the work (0: not a twin)
 };
 
-constexpr int kBenchDefaultScenes = 12;   // scenes 1 to 12 are the default run (0.46: 12, the whole atom's Glow cloud)
-constexpr int kBenchAllScenes = 20;       // 13 to 20 (the old CPU paths, twins of 6, 7, 8, 9, 10, 1, 2, 12) run only with "Compare old CPU paths"
+constexpr int kBenchDefaultScenes = 13;   // scenes 1 to 13 are the default run (0.46: 12, the whole atom's Glow cloud; 0.55.0: 13, the Black Hole Lab's bent sky)
+constexpr int kBenchAllScenes = 21;       // 14 to 21 (the old CPU paths, twins of 6, 7, 8, 9, 10, 1, 2, 12) run only with "Compare old CPU paths"
 
 const std::vector<BenchSceneText>& benchSceneTexts();
 

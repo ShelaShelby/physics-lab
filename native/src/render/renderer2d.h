@@ -155,9 +155,26 @@ public:
     // galactic coordinates (rows: towards l = 0, l = 90°, the north galactic pole); bright: 0..1.
     void skyMap(double W, double H, double kRad, const float M[9], double bright);
     bool hasMap(Map m) const { return tex_[static_cast<int>(m)] != 0; }
+    // 0.55.0, the Black Hole Lab: the Gaia map seen past a non-spinning black hole at (cx, cy) points, kRad points per radian (the night sky's projection), every
+    // pixel's ray bent by the lens table (its values of dphi at s = ln x, x = the angle in radians from the shadow's edge alphaSh: blackhole/schwarzschild.h
+    // LensTable), the shadow black; bend false: the plain map by skyMap's own rule. The picture is drawn into a kept texture only when one of these
+    // changed (or the picture's size); otherwise the kept picture is drawn again. M and bright as skyMap. The middle is put on a whole pixel.
+    struct LensSky {
+        double cx = 0, cy = 0, kRad = 1;
+        float M[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        double bright = 1;
+        bool bend = true;
+        double alphaSh = 0;                 // the shadow's angular radius, rad
+        const std::vector<double>* table = nullptr;
+        double s0 = 0, ds = 0;
+        std::uint64_t tableVersion = 0;     // a new number for a new table (it is sent to the GPU again)
+        bool debug = false;                 // tests: write the far direction (view frame: right, up, depth) and x in pixels as floats, not colours (into a float framebuffer)
+    };
+    void lensSky(const LensSky& s);
+    long lensRedraws() const { return lensRedraws_; }   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
 private:
-    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu };
+    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens };
     struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; bool hdr = false; bool lunar = false; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
@@ -202,6 +219,18 @@ private:
     GLuint grayFbo_ = 0, grayTex_ = 0, grayProgram_ = 0;
     GLint grayTexLoc_ = -1;
     int grayW_ = 0, grayH_ = 0;
+
+    // 0.55.0: the bent sky (lensSky)
+    std::vector<LensSky> lens_;                     // this frame's (Segment::slot)
+    GLuint lensProgram_ = 0, lensFbo_ = 0, lensTex_ = 0, lensTableTex_ = 0;
+    GLint lnTex_ = -1, lnTable_ = -1, lnK_ = -1, lnCentre_ = -1, lnKpx_ = -1, lnEdge_ = -1, lnT_ = -1, lnN_ = -1, lnBend_ = -1, lnDebug_ = -1, lnBright_ = -1, lnLod_ = -1;
+    int lensW_ = 0, lensH_ = 0, lensN_ = 0;
+    std::uint64_t lensTableVer_ = ~std::uint64_t(0);
+    LensSky lensLast_{};
+    double lensPtW_ = 0;
+    bool lensValid_ = false;
+    long lensRedraws_ = 0;
+    void drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int vx, int vy);
 
     struct Vertex { float x, y, u, v, r, g, b, a, mode, p1, p2, p3; };
     void quad(double cx, double cy, double half, Color c, float mode, float p1, float p2, float uvScale, float p3 = 0);

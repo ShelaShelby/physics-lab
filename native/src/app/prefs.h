@@ -45,6 +45,7 @@ struct Prefs {
     std::string lab = "Orbit Lab";       // the lab on screen
     std::string molecule;                // 0.18: the Molecule Lab's settings text (molecule::saveSettings, versioned; written only when set)
     std::map<std::string, std::string> orbit, atom;   // each lab's settings, as text (checked when they are used)
+    std::map<std::string, std::string> blackhole;     // 0.55.0: the Black Hole Lab's settings (blackhole/lab.h saveSettings; written only once the lab was opened)
     std::vector<std::string> calcHistory;  // 0.49: the calculator's last lines, newest first (at most kCalcHistoryMax)
 };
 
@@ -53,9 +54,10 @@ Prefs loadPrefs(const std::string& text);         // unknown or broken lines are
 bool writeSettingsFile(const std::string& path, const std::string& text);   // 0.19: true only when every byte reached the disk
 
 // the labs and their indexes (AppState::lab); a removed or unknown lab name gives the default lab, 0
-constexpr int kLabCount = 3;   // 0.19: Orbit 0, Atom 1, Molecule 2 (the Defense Lab, index 2 in 0.17 and 0.18, was removed)
+constexpr int kLabCount = 4;   // 0.19: Orbit 0, Atom 1, Molecule 2 (the Defense Lab, index 2 in 0.17 and 0.18, was removed); 0.55.0: Black Hole 3
 const char* labName(int index);
 int labIndex(const std::string& name);
+const char* labKey(int index);  // 0.55.0: "orbit", "atom", "molecule", "blackhole": the prefix of the lab's names in the settings file and the panel states (the default lab's for a bad index)
 
 bool validTheme(const std::string& id);
 bool validTextSize(const std::string& k);

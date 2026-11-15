@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,8 @@
 #include "atom/atom_view.h"
 #include "ui/atom_learn.h"
 #include "ui/molecule_learn.h"
+#include "ui/blackhole_learn.h"
+#include "blackhole/blackhole_view.h"
 #include "ui/power.h"
 #include "app/display_scale.h"
 #include "atom/atom_tools.h"
@@ -286,6 +289,27 @@ int main(int, char**) {
         if (const char* pk = SDL_getenv("PL_MOLECULE_PICK")) std::sscanf(pk, "%d,%d", &app.molecule.sel.atom, &app.molecule.sel.bond);
         app.visited[molecule::kLabIndex] = true;
     }
+    if (SDL_getenv("PL_BLACKHOLE")) {                   // 0.55.0: PL_BLACKHOLE=1 opens the Black Hole Lab; PL_BH_SET="preset=m87;dist=3;bend=off;sky=black;fov=120;mass=1e6;yaw=..;pitch=.." (automatic checks)
+        app.lab = blackhole::kLabIndex;
+        app.visited[blackhole::kLabIndex] = true;
+        if (const char* bs = SDL_getenv("PL_BH_SET")) {
+            std::map<std::string, std::string> m;
+            blackhole::saveSettings(app.blackhole, m);
+            const std::string list = bs;
+            bool mass = false, preset = false;
+            for (std::size_t i = 0; i < list.size();) {
+                std::size_t e = list.find(';', i);
+                if (e == std::string::npos) e = list.size();
+                const std::string item = list.substr(i, e - i);
+                const std::size_t q = item.find('=');
+                if (q != std::string::npos) { m[item.substr(0, q)] = item.substr(q + 1); mass |= item.substr(0, q) == "mass"; preset |= item.substr(0, q) == "preset"; }
+                i = e + 1;
+            }
+            if (preset && !mass) m.erase("mass");
+            app.blackhole = blackhole::loadSettings(m);
+        }
+    }
+    if (const char* l = SDL_getenv("PL_BH_LEARN")) app.bhLearn = std::atoi(l);   // 0.55.0: open the Black Hole Lab guide (1)
     if (const char* a = SDL_getenv("PL_ATOM_SET")) {
         std::string list = a;
         std::size_t i = 0;
@@ -378,8 +402,8 @@ int main(int, char**) {
                 if (!io.WantCaptureKeyboard && e.key.key == SDLK_SPACE) { ui::shellSpace(app, io.WantTextInput); }
                 if (!io.WantCaptureKeyboard && !io.WantTextInput && !ui::readingShown() && !app.pane && !(e.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {   // 0.22: 1 2 3 open a lab; + and − zoom; R or Home resets the view
                     const SDL_Keycode k = e.key.key;
-                    if (k == SDLK_1 || k == SDLK_2 || k == SDLK_3 || k == SDLK_KP_1 || k == SDLK_KP_2 || k == SDLK_KP_3) {
-                        const int lab = (k == SDLK_1 || k == SDLK_KP_1) ? 0 : (k == SDLK_2 || k == SDLK_KP_2) ? 1 : molecule::kLabIndex;
+                    if (k == SDLK_1 || k == SDLK_2 || k == SDLK_3 || k == SDLK_4 || k == SDLK_KP_1 || k == SDLK_KP_2 || k == SDLK_KP_3 || k == SDLK_KP_4) {   // (0.55.0: 4, the Black Hole Lab)
+                        const int lab = (k == SDLK_1 || k == SDLK_KP_1) ? 0 : (k == SDLK_2 || k == SDLK_KP_2) ? 1 : (k == SDLK_3 || k == SDLK_KP_3) ? molecule::kLabIndex : blackhole::kLabIndex;
                         if (app.journey.active && lab != app.lab) ui::journeyStop(app);
                         ui::openLab(app, lab);
                     }
@@ -388,6 +412,9 @@ int main(int, char**) {
                     if (app.lab == molecule::kLabIndex) {
                         if (dz) app.molecule.wheel(dz);           // one wheel notch (15 %)
                         if (reset) app.molecule.resetView();
+                    } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: + closer, − farther (15 % of the distance a step, as a wheel notch); R / Home the first view
+                        if (dz) blackhole::setDistance(app.blackhole, app.blackhole.dist * std::pow(1.15, -dz));
+                        if (reset) blackhole::resetView(app.blackhole);
                     } else if (app.lab == 1) {
                         if (dz && app.atom.chartOn()) app.atom.chartZoomAt(std::pow(1.15, dz), (app.canvasW - app.set.insetRight) / 2, app.canvasH / 2);   // about the middle of the free picture
                         else if (dz) app.atom.setParam("zoom", app.atom.p.zoom + dz * 0.4);   // one wheel notch
@@ -407,6 +434,10 @@ int main(int, char**) {
                 if (!app::labInputAllowed(app.benchRunning)) break;
                 if (app.lab == molecule::kLabIndex) {   // Molecule Lab: 15 % a notch (design)
                     if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) app.molecule.wheel(e.wheel.y);
+                    break;
+                }
+                if (app.lab == blackhole::kLabIndex) {  // 0.55.0: the wheel moves the camera closer (up) or farther (down), 15 % of the distance a notch
+                    if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) blackhole::setDistance(app.blackhole, app.blackhole.dist * std::pow(1.15, -e.wheel.y));
                     break;
                 }
                 if (app.lab == 1) {                     // Atom Lab: zoom −= deltaY × 0.004, 0.4 per wheel notch
@@ -437,7 +468,11 @@ int main(int, char**) {
                     if (!dragging && std::hypot(e.motion.x - downX, e.motion.y - downY) > 4 * scale) { dragging = true; ui::shellNoteDrag(); }
                     // 3D: dragging turns the view, unless "Drag moves the view" is on, or with the right button or Shift held
                     const bool rotate = app.set.view3D && !app.view.panMode && !rightDrag && !(SDL_GetModState() & SDL_KMOD_SHIFT);
-                    if (dragging && app.lab == molecule::kLabIndex) app.molecule.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));   // 0.18: turn; Shift / right / middle: move
+                    if (dragging && app.lab == blackhole::kLabIndex) {   // 0.55.0: drag turns you round the hole: the sky follows the pointer at the picture's own scale
+                        const double K = (app.canvasH / 2) / (app.blackhole.fovDeg * 3.14159265358979 / 360);
+                        blackhole::turn(app.blackhole, (e.motion.x - lastX) / scale / K / std::max(0.2, std::sin(app.blackhole.pitch)), -(e.motion.y - lastY) / scale / K);   // (the sky moves with the pointer near the middle)
+                    }
+                    else if (dragging && app.lab == molecule::kLabIndex) app.molecule.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));   // 0.18: turn; Shift / right / middle: move
                     else if (dragging && app.lab == 1) app.atom.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rightDrag || (SDL_GetModState() & SDL_KMOD_SHIFT));
                     else if (dragging) app.view.drag((e.motion.x - lastX) / scale, (e.motion.y - lastY) / scale, rotate);
                     lastX = e.motion.x; lastY = e.motion.y;
@@ -445,7 +480,8 @@ int main(int, char**) {
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
                 if (mouseDown && !dragging && app::labInputAllowed(app.benchRunning) && e.button.button == SDL_BUTTON_LEFT) {
-                    if (app.lab == molecule::kLabIndex) app.molecule.click(e.button.x / scale, (e.button.y - headerH) / scale);
+                    if (app.lab == blackhole::kLabIndex) {}       // 0.55.0: nothing to pick
+                    else if (app.lab == molecule::kLabIndex) app.molecule.click(e.button.x / scale, (e.button.y - headerH) / scale);
                     else if (app.lab == 1) {
                         const atom::MarksDrawn& md = atom::marksDrawn();   // 0.20: a click on the folded info text opens it (and folds it again)
                         const double px = e.button.x / scale, py = (e.button.y - headerH) / scale;
@@ -478,6 +514,7 @@ int main(int, char**) {
         struct Busy { bool& f; explicit Busy(bool& x) : f(x) { f = true; } ~Busy() { f = false; } } busyGuard(live.busy);
 
         ui::benchmarkTestHook(app);
+        if (frame == 0) if (const char* bc = SDL_getenv("PL_BH_COMPARE")) blackhole::compareHook(renderer, bc);   // 0.55.0: the Black Hole Lab's card against its reference (tests)
         if (const char* at = SDL_getenv("PL_SAVE_IMAGE")) { static int n = 0; if (++n == std::atoi(at)) app.shot.requested = true; }   // for automatic checks: press 📷 Save image at frame n
         ui::benchmarkBeginFrame(app, renderer, fbW, fbH);   // a benchmark scene is set up here, before the frame
         app.sys.setRelativity(app.set.relativity);          // Real: General relativity (1PN) on / off (does nothing when it has not changed)
@@ -492,6 +529,7 @@ int main(int, char**) {
         const double dt = app::stepSeconds(frameDt, units::kMaxFrameDt);   // a slow frame counts as at most 0.05 s, a stall (window held by the system) as nothing: no jump, no catching up
         maxPhysicsDt = std::max(maxPhysicsDt, dt);
         if (app.pane) {                                 // the Learn tab is open: the lab waits
+        } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: nothing moves by itself (the camera hovers)
         } else if (app.lab == molecule::kLabIndex) {
             app.molecule.update(frameDt, ui::look().reduced, app.pane != 0 || app.benchRunning);   // (0.23: not app.paused: this lab has no clock, and a pause made in another lab stopped its spin with no way to start it here)
         } else if (app.lab == 1) {                      // Atom Lab: tick every frame (decay clock, glides), fixed steps while running
@@ -546,6 +584,10 @@ int main(int, char**) {
         else if (app.lab == molecule::kLabIndex) {
             app.moleculeView.draw(renderer, text, scale, app.molecule, app.canvasW, app.canvasH, ui::look().c);
             text->PopClipRect();
+        } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: the hole in the middle of the free part of the picture
+            const double cx = app.bhFreeW > 0 ? app.bhFreeX + app.bhFreeW / 2 : app.canvasW / 2, cy = app.bhFreeH > 0 ? app.bhFreeY + app.bhFreeH / 2 : app.canvasH / 2;
+            app.blackholeView.draw(renderer, app.blackhole, app.canvasW, app.canvasH, cx, cy);
+            text->PopClipRect();
         } else if (app.lab == 1) {
             const auto tv0 = std::chrono::steady_clock::now();
             app.atomView.draw(renderer, text, 0, headerH, scale, app.atom, app.canvasW, app.canvasH, ui::look().c, ui::look().textScale);
@@ -561,6 +603,7 @@ int main(int, char**) {
         ui::historyWindow(app);
         if (app.lab == 1) ui::atomLearnWindow(app);
         else if (app.lab == molecule::kLabIndex) ui::moleculeLearnWindow(app);
+        else if (app.lab == blackhole::kLabIndex) ui::blackholeLearnWindow(app);
         else ui::learnWindow(app);
         ui::settingsWindow(app);
         ui::benchmarkWindow(app);                       // the benchmark: what it will do, the progress, the result
@@ -596,6 +639,8 @@ int main(int, char**) {
         if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
                         std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices());
                         for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
+        if (drawStat && app.lab == blackhole::kLabIndex) { const blackhole::ViewStats& bs = app.blackholeView.stats();   // 0.55.0
+                        std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale); }
         if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
                         std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
                                     ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }

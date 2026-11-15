@@ -43,6 +43,10 @@ void moleculeControls(AppState& app, sh::Panel& p, const SectionFn& section);   
 void moleculeRotationCard(AppState& app, sh::Panel& p);                         // 0.53: the Molecule Lab's Rotation card (ui/shell_molecule.cpp)
 void moleculeBondCard(AppState& app, sh::Panel& p);                             // 0.53.1: the Bond energy card (anharmonic diatomics)
 app::shell::Rect moleculeBar(AppState& app, const app::shell::Frame& fr, const app::shell::Metrics& m);  // its bottom bar (style, labels, spin, Reset view); returns where it is
+// 0.55.0: the Black Hole Lab (ui/shell_blackhole.cpp)
+void blackholeControls(AppState& app, sh::Panel& p, const SectionFn& section);
+void blackholeCard(AppState& app, sh::Panel& p);                                // the readout card
+app::shell::Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const app::shell::Metrics& m);   // its bottom bar (Bending, Reset view)
 bool controlsOpen();
 void controlsToggle();
 const char* controlsSectionOf(PanelId id);       // the section an old toolbar panel's contents moved to ("" if it did not move)
@@ -64,6 +68,8 @@ struct ChipInfo {
     int tileZ = 0;            // 0.38: the Atom Lab: the element's tile (its atomic number and symbol, in its periodic-table colour) at the left of the words
 };
 ChipInfo chipInfo(AppState& app);
+ChipInfo blackholeChip(const AppState& app);                 // 0.55.0
+std::string blackholeSubject(const AppState& app);
 void pickFilterClear();                                      // the Pick a body list's filter text goes (the panel was closed)
 void todayAction(AppState& app);                             // the Today button: the date goes back to now (also leaves the Time panel's "Set manually" view)
 std::string subjectName(const AppState& app);                // the selected thing's name (Orbit) or the element (Atom); "" if none
@@ -78,6 +84,7 @@ std::vector<LegendEntry> legendEntries(const AppState& app);
 // Search: everything the Orbit Lab can do, as (group, label, id, action). Ids are stable ("body:Earth", "set:moons", "date:1986-02-09") so recent choices can be kept.
 using SearchAdd = std::function<void(const char* group, const std::string& label, const std::string& id, std::function<void()> act)>;
 void orbitSearch(AppState& app, const SearchAdd& add);
+void blackholeSearch(AppState& app, const SearchAdd& add);   // 0.55.0
 void shellOpenPanel(PanelId id);                              // opens a dropdown or toolbar panel (search uses it); defined in ui/shell.cpp
 
 // The Time panel's pieces that need state of their own

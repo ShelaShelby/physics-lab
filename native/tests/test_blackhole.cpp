@@ -27,6 +27,7 @@
 #include "blackhole/presets.h"
 #include "blackhole/schwarzschild.h"
 #include "orbit/far_masses.h"
+#include "blackhole/lab.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
 
@@ -488,6 +489,158 @@ static void testPresets() {
     check(massOk, "far_masses.h's Sagittarius A* mass = 4.297 million rounded to 4.30 million");
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.55.0: what the lab adds to the module
+// A camera exactly at the photon orbit: b_c - b ~ x^2 there, so the closed form must take b^2 - 27 from b - b_c (0.54.3's table was off by 1e-2 rad
+// within 1e-6 rad of the edge). References: the ray integrator (an independent method) down to 1e-6 rad, and the table against the closed form.
+static void testPhotonOrbitCamera() {
+    KerrBL bl(0);
+    Camera cam; cam.r = 3;
+    const double edge = kPi - shadowAngle(3.0);
+    double worst = 0;
+    for (double x : {1e-4, 1e-5, 1e-6}) {
+        const double psi = edge - x;
+        const Vec3 look{std::cos(psi), 0, std::sin(psi)};
+        const RayEnd e = trace(bl, cam, look);
+        const Bend B = bendFromCamera(3.0, psi);
+        if (e.kind != RayEnd::Sky || B.captured) { check(false, "rO 3: a ray just outside the edge escapes, x " + f(x)); continue; }
+        const Vec3 d = bentDirection({1, 0, 0}, {look.x, look.z, -look.y}, look.x, B.dphi);
+        const double ang = angleBetween(d, e.dir);
+        worst = std::max(worst, ang);
+        check(ang < 1e-6, "rO 3M: closed form = integrator at x " + f(x) + ": " + f(ang) + " rad apart");
+    }
+    LensTable T(3.0);
+    double tw = 0;
+    for (int i = 0; i <= 4000; i++) {
+        const double x = edge * std::pow(1e-8 / edge, i / 4000.0);
+        double dl;
+        T.lookupX(x, dl);
+        tw = std::max(tw, std::fabs(dl - bendFromCameraEdge(3.0, x).dphi));
+    }
+    check(tw < 1e-6, "rO 3M: the table = the closed form down to 1e-8 rad from the edge: " + f(tw));
+    std::printf("info: camera at the photon orbit: integrator against closed form %.2e rad (x 1e-4..1e-6); table against closed form %.2e rad (x down to 1e-8)\n", worst, tw);
+}
+
+// The lab's view: with the middle of the picture and the night sky's scale it is orbit/sky.h's projection; lensPixel is LensView::pixel; round trips.
+static void testHoleView() {
+    const double W = 1280, H = 800, K0 = std::hypot(W, H) / 2 / 1.75;
+    HoleView v; v.cx = W / 2; v.cy = H / 2; v.K = K0;
+    const double yaw = 0.7, pitch = 1.9;
+    v.ca = std::cos(yaw); v.sa = std::sin(yaw); v.cb = std::cos(pitch); v.sb = std::sin(pitch);
+    double wd = 0, ws = 0, wl = 0;
+    int bad = 0;
+    LensTable T(27);
+    const Vec3 hole = viewMiddle(v);
+    Vec3 mid; orbit::skyDirection(W / 2, H / 2, W, H, v.ca, v.sa, v.cb, v.sb, mid);
+    check(angleBetween(mid, hole) < 1e-12, "viewMiddle is the night sky's middle");
+    LensView LV(T, hole, W, H, v.ca, v.sa, v.cb, v.sb);
+    for (int i = 0; i < 2000; i++) {
+        const double X = std::fmod(i * 317.31, W), Y = std::fmod(i * 191.77, H);
+        Vec3 a, b;
+        if (!orbit::skyDirection(X, Y, W, H, v.ca, v.sa, v.cb, v.sb, a)) continue;
+        if (!viewDirection(v, X, Y, b)) { bad++; continue; }
+        wd = std::max(wd, angleBetween(a, b));
+        double X2, Y2;
+        if (!viewScreen(v, b, X2, Y2)) { bad++; continue; }
+        ws = std::max(ws, std::hypot(X2 - X, Y2 - Y));
+        Vec3 da, db;
+        const int ka = LV.pixel(X, Y, da), kb = lensPixel(T, v, X, Y, db);
+        const double th = std::hypot(X - W / 2, Y - H / 2) / K0, x = th - shadowAngle(27);
+        if (std::fabs(x) < 1e-9) continue;
+        if (ka != kb) { bad++; continue; }
+        if (ka == 0) wl = std::max(wl, angleBetween(da, db) * std::min(1.0, x / 1e-3));
+    }
+    check(bad == 0, "the lab's view agrees with the night sky's projection (" + f(bad) + " disagree)");
+    check(wd < 1e-12, "viewDirection = orbit::skyDirection: " + f(wd));
+    check(ws < 1e-9, "viewScreen(viewDirection) round trip, pixels: " + f(ws));
+    check(wl < 1e-9, "lensPixel = LensView::pixel (scaled by x / 1e-3 rad near the edge, where psi's rounding counts): " + f(wl));
+    // up to pi from the middle, any scale: round trip
+    v.K = 200; double wr = 0;
+    for (int i = 0; i < 2000; i++) {
+        const double X = W / 2 + 610 * std::cos(i * 0.71) * (i % 97) / 96.0, Y = H / 2 + 610 * std::sin(i * 0.71) * (i % 89) / 88.0;
+        Vec3 d; double X2, Y2;
+        if (!viewDirection(v, X, Y, d)) continue;
+        if (std::hypot(X - W / 2, Y - H / 2) / v.K > kPi - 1e-3) continue;
+        if (viewScreen(v, d, X2, Y2)) wr = std::max(wr, std::hypot(X2 - X, Y2 - Y)); else wr = 1e9;
+    }
+    check(wr < 1e-6, "viewScreen(viewDirection) up to pi from the middle: " + f(wr));
+}
+
+// The fast star images against the closed-form ones (starImages, tested against Riazuelo above): same images, same places, same magnifications.
+static void testStarsFast() {
+    const orbit::Sky& S = orbit::skyData();
+    const Vec3 hole = S.galCentre;
+    for (double rO : {2.5, 3.0, 27.0, 1000.0}) {
+        LensTable T(rO);
+        int n = 0, nimg = 0, countBad = 0;
+        double wp = 0, wm = 0;
+        for (std::size_t k = 0; k < S.stars.size(); k += 7) {
+            std::vector<StarImage> a, b;
+            starImages(T, hole, S.stars[k].dir, S.stars[k].mag, kImageMagLimit, a);
+            starImagesFast(T, hole, S.stars[k].dir, S.stars[k].mag, kImageMagLimit, b);
+            n++;
+            if (a.size() != b.size()) {                                       // an image right at the magnitude cut may fall either side
+                const StarImage& last = a.size() > b.size() ? a.back() : b.back();
+                if (std::fabs(last.mag - kImageMagLimit) > 1e-3) countBad++;
+            }
+            for (std::size_t j = 0; j < std::min(a.size(), b.size()); j++) {
+                nimg++;
+                wp = std::max(wp, angleBetween(a[j].dir, b[j].dir));
+                wm = std::max(wm, std::fabs(b[j].magnification / a[j].magnification - 1));
+            }
+        }
+        check(countBad == 0, "fast star images: the same images as starImages, rO " + f(rO) + " (" + f(countBad) + " stars differ)");
+        check(wp < 1e-7, "fast star images: places within 1e-7 rad of starImages, rO " + f(rO) + ": " + f(wp));
+        check(wm < 1e-4, "fast star images: magnifications within 1e-4 of starImages, rO " + f(rO) + ": " + f(wm));
+        std::printf("info: fast star images rO %g M: %d stars, %d images, worst place %.2e rad, worst magnification %.2e (relative)\n", rO, n, nimg, wp, wm);
+    }
+}
+
+// The readout's camera numbers. Riazuelo 2019 Fig. 20 caption: z_grav ~ -0.293, -0.423, -0.553 at 4M, 3M, 2.5M (as testShift); the clock runs at 1 + z
+// (the lapse), the light arrives (1 + z)^-1 bluer and (1 + z)^-4 brighter. Half the sky at the photon orbit (Riazuelo Fig. 20; Perlick & Tsupko (7): 90 degrees).
+static void testCameraNumbers() {
+    const double r[3] = {4, 3, 2.5}, z[3] = {-0.293, -0.423, -0.553};
+    for (int i = 0; i < 3; i++) {
+        check(std::fabs(hoverClockRate(r[i]) - (1 + z[i])) < 6e-4, "clock rate = 1 + z_grav (Riazuelo Fig. 20) at " + f(r[i]) + ": " + f(hoverClockRate(r[i])));
+        check(std::fabs(hoverBlueshift(r[i]) * (1 + z[i]) - 1) < 1.5e-3, "blueshift = 1 / (1 + z) at " + f(r[i]));
+        check(std::fabs(hoverBrightening(r[i]) * std::pow(1 + z[i], 4) - 1) < 6e-3, "brightening = (1 + z)^-4 at " + f(r[i]));
+    }
+    check(std::fabs(shadowSkyFraction(3) - 0.5) < 1e-12, "at the photon orbit the shadow covers half the sky");
+    check(shadowSkyFraction(2.5) > 0.5 && shadowSkyFraction(4) < 0.5, "inside 3M more than half, outside less");
+}
+
+// The lab's settings: round trip, fallbacks, presets from presets.h, sliders.
+static void testLabSettings() {
+    Settings d = settingsDefaults();
+    check(d.preset == "sgra" && d.massSun == preset("sgra")->massSun && d.dist == kDistDefault && d.bend && d.skyOurs, "defaults: Sagittarius A*, bending on, our sky");
+    Vec3 mid = viewMiddle(holeView(d, 1280, 800, 640, 400));
+    check(angleBetween(mid, orbit::skyData().galCentre) < 1e-12, "the default view looks at the galactic centre");
+    Settings s = d;
+    applyPreset(s, "m87"); setDistance(s, 3.7); setFov(s, 133); turn(s, 0.3, -0.2); s.bend = false; s.skyOurs = false;
+    std::map<std::string, std::string> m;
+    saveSettings(s, m);
+    check(loadSettings(m) == s, "settings round trip (M87*, 3.7 M, 133 degrees, turned, bending off, black sky)");
+    setMass(s, 12345); saveSettings(s, m);
+    const Settings t = loadSettings(m);
+    check(t == s && t.preset.empty() && t.massSun == 12345, "a mass of one's own drops the preset and survives a restart");
+    std::map<std::string, std::string> bad{{"preset", "vega"}, {"mass", "-5"}, {"dist", "1.5"}, {"fov", "abc"}, {"pitch", "9"}, {"bend", "maybe"}, {"sky", "red"}, {"zzz", "1"}};
+    check(loadSettings(bad) == settingsDefaults(), "bad values fall back to the defaults");
+    check(loadSettings({}) == settingsDefaults(), "no lines: the defaults");
+    for (double v : {2.2, 3.0, 27.0, 1000.0}) check(std::fabs(sliderToDist(distToSlider(v)) / v - 1) < 1e-12, "distance slider round trip " + f(v));
+    for (double v : {1.0, 4.297e6, 1e11}) check(std::fabs(sliderToMass(massToSlider(v)) / v - 1) < 1e-12, "mass slider round trip " + f(v));
+    // the readout is the module's
+    Settings q = d; setDistance(q, 27);
+    const Readout r = readout(q);
+    check(r.hasPreset && r.presetName == "Sagittarius A*" && r.earthShadowMuas == shadowDiameterMuas(*preset("sgra")) && r.ringMuas == 51.8 && r.ringErr == 2.3, "readout: the preset's numbers");
+    check(std::fabs(r.shadowDeg - 2 * shadowAngle(27) * 180 / kPi) < 1e-12 && std::fabs(r.horizonKm - horizonKm(*preset("sgra"))) < 1e-6 * r.horizonKm, "readout: shadow and horizon from the module");
+    check(std::fabs(r.distKm - 27 * gravRadiusM(4.297e6) / 1000) < 1e-6 * r.distKm, "readout: distance in km");
+    // the field of view: the height spans it, and no corner is ever past pi
+    HoleView hv = holeView(q, 1280, 800, 640, 400);
+    check(std::fabs(400 / hv.K - 90 * kPi / 360) < 1e-12, "the field of view spans the height");
+    setFov(q, 360); hv = holeView(q, 1280, 800, 640, 400);
+    check(std::hypot(640.0, 400.0) / hv.K <= kPi + 1e-12, "a wide field of view keeps the corners within pi");
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -501,6 +654,11 @@ int main() {
     testStars();
     testFlatLimit();
     testPresets();
+    testPhotonOrbitCamera();
+    testHoleView();
+    testStarsFast();
+    testCameraNumbers();
+    testLabSettings();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

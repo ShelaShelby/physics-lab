@@ -56,6 +56,9 @@ const std::vector<Row>& table() {
         {"molecule", {"iso", "0.0016", "it matched measured molecular surfaces best in Alibakhshi and Schäfer’s 2024 study of 104 molecules, named under these buttons (1.6 % error)."}},
         {"molecule", {"vibsize", "Real size", "the swing as big as it really is in the lowest vibrational level."}},
         {"molecule", {"anharm", "on", "a real bond is not a perfect spring: its rungs close up as it stretches, and at the top it breaks."}},   // 0.53.1
+        // ---- Black Hole Lab (0.55.0) ----
+        {"blackhole", {"bend", "On", "gravity really bends light: this is what a camera hovering there would see (calculated exactly for a hole that does not spin)."}},
+        {"blackhole", {"sky", "Our sky", "a real black hole has a sky of stars behind it; ours, seen from Earth, is the only whole sky we have a map of."}},
     };
     return t;
 }
@@ -95,6 +98,16 @@ void applyMolecule(AppState& app) {
     L.set.realIso = 1;                         // kRealIso[1] = 0.0016
     L.vibSize = 0;
     L.vibAnharm = true;                        // 0.53.1 (shown in Ball-and-stick and Space-filling)
+}
+void applyBlackHole(AppState& app) {
+    app.blackhole.bend = true;
+    app.blackhole.skyOurs = true;
+}
+void applyLab(AppState& app) {
+    if (app.lab == 0) applyOrbit(app);
+    else if (app.lab == molecule::kLabIndex) applyMolecule(app);
+    else if (app.lab == blackhole::kLabIndex) applyBlackHole(app);
+    else applyAtom(app);
 }
 const char* buttonCaption() { return "Sets every choice closest to reality at once. A dot marks that choice in each setting (a ring by a box: best left unticked); point at it to see why."; }
 

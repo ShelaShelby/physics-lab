@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.54.4 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.55.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -163,6 +163,7 @@ add_library(blackhole_core STATIC
   src/blackhole/geodesic.cpp
   src/blackhole/schwarzschild.cpp
   src/blackhole/presets.cpp
+  src/blackhole/lab.cpp
 )
 target_include_directories(blackhole_core PUBLIC src)
 target_link_libraries(blackhole_core PUBLIC orbit_core)   # the night sky's projection (orbit/sky.h skyDirection) and the constants of orbit/units.h
@@ -229,7 +230,7 @@ if(PL_BUILD_TESTS)
   target_link_libraries(molecule_xyz PRIVATE molecule_core)
   add_executable(app_tests tests/test_app.cpp)
   target_include_directories(app_tests PRIVATE tests)
-  target_link_libraries(app_tests PRIVATE app_core atom_core)
+  target_link_libraries(app_tests PRIVATE app_core atom_core blackhole_core)   # (0.55.0: the About page's Black Hole Lab numbers against presets.h)
   target_compile_options(app_tests PRIVATE ${PL_WARNINGS})
   target_compile_definitions(app_tests PRIVATE PL_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")   # 0.14 stage 2: the bundled font and its licence are checked
   add_test(NAME app_settings COMMAND app_tests)
@@ -358,6 +359,9 @@ if(PL_BUILD_APP)
     src/ui/shell_molecule.cpp
     src/ui/realest.cpp
     src/ui/molecule_learn.cpp
+    src/blackhole/blackhole_view.cpp
+    src/ui/shell_blackhole.cpp
+    src/ui/blackhole_learn.cpp
     src/ui/orbit_panel.cpp
     src/ui/orbit_actions.cpp
     src/ui/shell.cpp
@@ -386,7 +390,7 @@ if(PL_BUILD_APP)
     src/ui/shot.cpp
     src/ui/benchmark.cpp
     src/ui/power.cpp)
-  target_link_libraries(PhysicsLab PRIVATE analysis_core orbit_core atom_core app_core molecule_core maps_core imgui SDL3::SDL3-static)
+  target_link_libraries(PhysicsLab PRIVATE analysis_core orbit_core atom_core app_core molecule_core blackhole_core maps_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   if(WIN32)
     target_link_libraries(PhysicsLab PRIVATE opengl32)
@@ -473,6 +477,12 @@ if(PL_BUILD_APP)
                check_024.py:densfit check_024.py:nobuild check_025.py:molecule check_025.py:guide check_layout020.py:molpan check_022s7.py:space
                check_molecule.py:rotation check_molecule.py:anharm)
       set_tests_properties(ui_molecule PROPERTIES TIMEOUT 3600)
+      # ui_blackhole (0.55.0): the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, layout, look,
+      # and the card's bent sky against the double-precision reference
+      add_test(NAME ui_blackhole COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole
+               check_blackhole.py:open check_blackhole.py:presets check_blackhole.py:distance check_blackhole.py:light check_blackhole.py:realest check_blackhole.py:orbitcard
+               check_blackhole.py:settings check_blackhole.py:layout check_blackhole.py:look check_blackhole.py:precision)
+      set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 3600)
     endif()
   endif()
 endif()

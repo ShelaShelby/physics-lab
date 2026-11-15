@@ -96,6 +96,7 @@ void labsToPrefs(const AppState& app, app::Prefs& p) {
     if (a.vdots != "Easier to see") p.atom["vdots"] = a.vdots;   // 0.54.1: saved only when not the default   // 0.49.3: True scale is the default (was Shells enlarged)
     p.atomMore = app.atom.moreStored;
     if (app.visited[molecule::kLabIndex] || !p.molecule.empty()) p.molecule = molecule::saveSettings(app.molecule.set);   // (only once the lab was opened: older settings files stay as they were)
+    if (app.visited[blackhole::kLabIndex] || !p.blackhole.empty()) blackhole::saveSettings(app.blackhole, p.blackhole);    // 0.55.0 (the same rule)
     p.lab = app::labName(app.lab);
     p.units = fmt::imperial() ? "imperial" : "metric";
 }
@@ -162,6 +163,7 @@ void prefsToLabs(AppState& app, const app::Prefs& p) {
     app.atom.moreStored = p.atomMore;
     app.atom.restart();
     app.molecule.set = molecule::loadSettings(p.molecule);
+    app.blackhole = blackhole::loadSettings(p.blackhole);   // 0.55.0
     app.lab = app::labIndex(p.lab);
     fmt::setImperial(p.units == "imperial");
 }
@@ -484,6 +486,23 @@ void themePicker(AppState& app, const ImVec2* hang) {
 
 // The two "Put ... back?" questions of Defaults (0.15 stage 3: split from the button so the new UI's menu can open them from its own window)
 void defaultsPopups(AppState& app) {
+    if (app.lab == blackhole::kLabIndex) {                  // 0.55.0
+        ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
+        if (ImGui::BeginPopupModal("Put Black Hole Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+            panelDecor(app::PanelKind::Floating);
+            char t[320];
+            std::snprintf(t, sizeof t, "This puts every Black Hole Lab setting back to how it started: Sagittarius A*, %g GM/c\xC2\xB2 away, a %g\xC2\xB0 view towards the "
+                          "centre of our galaxy, gravity bending light, our sky behind. Your units choice stays.", blackhole::kDistDefault, blackhole::kFovDefault);
+            ImGui::TextWrapped("%s", t);
+            ImGui::Spacing();
+            if (ui::Button("Yes, put them back")) { app.blackhole = blackhole::settingsDefaults(); ImGui::CloseCurrentPopup(); }
+            ImGui::SameLine();
+            if (ui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+            ImGui::SetItemDefaultFocus();
+            ImGui::EndPopup();
+        }
+        return;
+    }
     if (app.lab == 1) {
         ImGui::SetNextWindowSize(ImVec2(24 * ImGui::GetFontSize(), 0));
         if (ImGui::BeginPopupModal("Put Atom Lab back?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
@@ -520,12 +539,13 @@ std::string setupText(const AppState& app) {
     app::Prefs p;
     labsToPrefs(app, p);
     p.molecule = molecule::saveSettings(app.molecule.set);
+    blackhole::saveSettings(app.blackhole, p.blackhole);    // 0.55.0
     std::string o = std::string("# Physics Lab ") + appVersion() + " setup: in the app, Menu > Paste setup opens this same state (the lab, its settings, the date, the selected body).\n";
     o += "setup=1\n";
     std::istringstream in(app::savePrefs(p));
     std::string line;
     while (std::getline(in, line))
-        if (line.rfind("lab=", 0) == 0 || line.rfind("molecule=", 0) == 0 || line.rfind("orbit.", 0) == 0 || line.rfind("atom.", 0) == 0) o += line + "\n";
+        if (line.rfind("lab=", 0) == 0 || line.rfind("molecule=", 0) == 0 || line.rfind("orbit.", 0) == 0 || line.rfind("atom.", 0) == 0 || line.rfind("blackhole.", 0) == 0) o += line + "\n";
     o += "date=" + std::to_string(app.sys.currentUnixMs()) + "\n";
     if (app.view.sel.kind == orbit::Selection::Body)
         for (const auto& b : app.sys.bodies) if (b.id == app.view.sel.bodyId) o += "select=" + b.name + "\n";
@@ -535,7 +555,7 @@ bool applySetup(AppState& app, const std::string& text, std::string& why) {
     if (text.find("setup=1") == std::string::npos) { why = "The clipboard holds no Physics Lab setup (Menu > Copy setup makes one)."; return false; }
     const app::Prefs in = app::loadPrefs(text);
     app::Prefs p = app.prefs;
-    p.orbit = in.orbit; p.atom = in.atom; p.molecule = in.molecule; p.lab = in.lab;
+    p.orbit = in.orbit; p.atom = in.atom; p.molecule = in.molecule; p.blackhole = in.blackhole; p.lab = in.lab;
     prefsToLabs(app, p);
     labsToPrefs(app, app.prefs);
     std::istringstream is(text);

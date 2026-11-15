@@ -467,4 +467,8 @@ void dropLastChar(std::string& s) {
     if (!s.empty()) s.pop_back();                                                                 // ... and the first byte (or an ASCII character)
 }
 
+std::string labTabId(int lab) { return std::string("top.tab.") + labKey(lab); }
+std::string labMenuId(int lab) { return std::string("lab.") + labKey(lab); }
+std::string labTabText(int lab) { return labIndex(labName(lab)) == 3 ? std::string("Black Hole") : std::string(labName(lab)); }
+
 }  // namespace app::shell

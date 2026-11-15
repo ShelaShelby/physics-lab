@@ -11,7 +11,7 @@ namespace {
 
 // atom/atom_bench.cpp still numbers its texts the way the benchmark did before 0.16 stage 4 (its tests check them): the old number -> the number now (0: no longer in the benchmark)
 int shownNumber(int old) {
-    static const int m[36] = {0, 1, 0, 0, 5, 0, 2, 0, 6, 0, 0, 7, 0, 0, 0, 8, 9, 10, 3, 0, 0, 0, 11, 13, 0, 14, 0, 0, 15, 16, 17, 18, 19, 0, 0, 4};   // 0.46: the twins moved up one (scene 12 is new)
+    static const int m[36] = {0, 1, 0, 0, 5, 0, 2, 0, 6, 0, 0, 7, 0, 0, 0, 8, 9, 10, 3, 0, 0, 0, 11, 14, 0, 15, 0, 0, 16, 17, 18, 19, 20, 0, 0, 4};   // 0.46: the twins moved up one (scene 12 is new); 0.55.0: again (scene 13, the Black Hole Lab)
     return old >= 0 && old < 36 ? m[old] : 0;
 }
 
@@ -73,11 +73,11 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(BenchKind::OrbitHeaviest, -1, 0, "Orbit Lab, heaviest view",
             "3D view, belts and Oort cloud on, all Solar System extras on, full night sky with constellation lines and names, "
             "far-away things on, full orbit trails, true scale, fastest time speed (1 s = about 50 years), zoom x1, fixed camera. "
-            "From 0.13 stage 4 the rocks' places are worked out on the graphics card when the PC has OpenGL 4.3 (scene 18 is this scene with the processor doing it)");
+            "From 0.13 stage 4 the rocks' places are worked out on the graphics card when the PC has OpenGL 4.3 (scene 19 is this scene with the processor doing it)");
         add(BenchKind::OrbitRocks8, -1, 0, "Orbit Lab, 8 times the rocks",
             "scene 1 (3D, everything on, true scale, zoom x1, fastest time) with 8 times as many rocks in the asteroid belt, the Trojans, the Kuiper belt and the Oort cloud "
             "(48,000 instead of 6,000; the same kinds of orbits, a fixed random seed). The rocks do not pull on each other, so the physics is unchanged. "
-            "From 0.13 stage 4 their places are worked out on the graphics card when the PC has OpenGL 4.3 (scene 19 is this scene with the processor doing it)");
+            "From 0.13 stage 4 their places are worked out on the graphics card when the PC has OpenGL 4.3 (scene 20 is this scene with the processor doing it)");
         atomScene(15, 0);    // old 18: the nucleus view, oganesson-294, the whole nucleus
         atomScene(30, 0);    // old 35: the nucleus at full zoom, the camera moving
         add(BenchKind::Atom, 2, 0, "Atom Lab, one nucleon", "uranium-238, Accurate quarks, + Sea detail, zoomed all the way into one nucleon (the first one)");   // old 4 (atom_bench.cpp has no text for it)
@@ -87,7 +87,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         atomScene(13, 0);    // old 16: first use of an outline
         atomScene(14, 0);    // old 17: the outline with the cut dragged
         atomScene(19, 0);    // old 22: the chart tilted, with the decay chain
-        add(BenchKind::Atom, atom::kBenchGlowAllScene, 0, atom::benchSceneInfo(atom::kBenchGlowAllScene).name, atom::benchSceneInfo(atom::kBenchGlowAllScene).what + ". Scene 20 is this scene with GPU cloud Off");   // 0.46 (no renumbering: these texts use the new numbers)
+        add(BenchKind::Atom, atom::kBenchGlowAllScene, 0, atom::benchSceneInfo(atom::kBenchGlowAllScene).name, atom::benchSceneInfo(atom::kBenchGlowAllScene).what + ". Scene 21 is this scene with GPU cloud Off");   // 0.46 (no renumbering: these texts use the new numbers)
+        add(BenchKind::BlackHole, -1, 0, "Black Hole Lab, the bent sky drawn anew every frame",   // 0.55.0
+            "Sagittarius A* seen from 6 GM/c\xC2\xB2, a 90\xC2\xB0 view, our sky with gravity bending light. The camera turns a little every frame, so the graphics card draws the whole "
+            "bent sky again each frame and the processor works out the stars' images again (in the lab both happen only when the view changes)");
         // "Compare old CPU paths": the twins of 6, 7, 8, 9, 10, 1 and 2
         atomScene(20, 6); atomScene(22, 7); atomScene(25, 8); atomScene(26, 9); atomScene(27, 10);
         add(BenchKind::OrbitHeaviestCpuRocks, -1, 1, "Orbit Lab, heaviest view, GPU rocks OFF (the CPU path, to compare with scene 1)",

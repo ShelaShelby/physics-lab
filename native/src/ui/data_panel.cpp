@@ -39,7 +39,7 @@ constexpr std::size_t kUserMax = 65536;  // the text box for the user's data
 
 struct DataState {
     bool open = false, fieldActive = false;
-    std::string tableId[3] = {"planets", "ionlines", "modes"};   // the table on show in each lab
+    std::string tableId[4] = {"planets", "ionlines", "modes", "user"};   // the table on show in each lab (0.55.0: the Black Hole Lab has no tables yet: only your own data)
     LabContext built;                    // the selection the table was made for
     std::string builtId;
     int builtLab = -1;
@@ -176,7 +176,7 @@ Table recordingTable() {
 // The table for this lab and selection (made again when the selection changes)
 void refreshTable(const AppState& app) {
     const LabContext c = contextOf(app);
-    std::string& id = D.tableId[std::clamp(app.lab, 0, 2)];
+    std::string& id = D.tableId[std::clamp(app.lab, 0, 3)];
     if (id == "user") {
         if (!D.userParsed) { D.userOk = parseText(D.user, D.userTable, D.userWhy, D.userNotes); D.userParsed = true; if (D.userOk) takeTable(D.userTable); }
         if (D.builtId != "user" || D.builtLab != app.lab) { D.builtId = "user"; D.builtLab = app.lab; if (D.userOk) takeTable(D.userTable); else D.have = false; }
@@ -660,8 +660,10 @@ Rect dataPanelDraw(AppState& app, const app::shell::Frame& fr, const app::shell:
         p.y += ib + static_cast<float>(m.s8);
     }
     // ---- which table ----
-    const int lab = std::clamp(app.lab, 0, 2);
+    const int lab = std::clamp(app.lab, 0, 3);
     std::string& id = D.tableId[lab];
+    if (app.lab == 3)                                    // 0.55.0: said plainly, so no other lab's table is taken for this one's
+        sh::pCaption(p, "The Black Hole Lab has no tables yet (planned: its special radii, the shadow's size against distance, the two black holes beside the telescope's rings). You can still type or paste your own data below.", false);
     const std::string shownTitle = id == "user" ? "Your data (type or paste)" : D.have ? D.table.title : id;
     if (fitRow(p, "data.tables", std::string(D.pickTable ? "▾ " : "▸ ") + "Table: " + shownTitle)) D.pickTable = !D.pickTable;
     if (D.pickTable) {

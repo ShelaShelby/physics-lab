@@ -19,6 +19,17 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.0", "The Black Hole Lab: a fourth lab, a black hole in front of our own sky",
+     "A new tab, Black Hole, opens the fourth lab. It shows a black hole that does not spin, in front of our own sky (ESA's Gaia map and the brightest "
+     "stars), as a camera hovering near it would see it: the black shadow with its exact edge, the ring of light where the sky behind the hole is spread into a "
+     "circle, and every star doubled, each image a point at its real place and brightness. Drag to go round the hole, use the wheel to move closer or farther, "
+     "down to 1.1 times the horizon's radius, inside the orbit where light can circle the hole: there the shadow covers more than half of the sky. In Controls: Sagittarius A* and M87* with "
+     "their measured mass and distance, a mass of your own (the picture does not change with the mass, only the sizes do), the distance, the field of view, "
+     "gravity's bending on or off to compare, and a black sky. A card gives the hole's size in km and AU, your distance, the shadow's size on your sky, how "
+     "slowly your clock runs, how much bluer and brighter the starlight arrives (not drawn), and for the two real holes the shadow seen from Earth beside the "
+     "telescope's measured ring. The guide What is real in this picture says what is exact, what is soft and what is left out (spin, gas, the sky as seen "
+     "from there). The Orbit Lab's card of Sagittarius A* opens it. The pictures are drawn by the graphics card from tables the processor fills, so they run "
+     "on the same computers as the rest of the app."},
     {"0.54.4", "Housekeeping: the saved papers moved to a private place (nothing changed in the app)",
      "The project's source code is public now, so the saved papers, journal scans and saved web pages behind the app's numbers moved to a separate private "
      "place. The code keeps a list of each one (what it is, where it came from, when it was read) and, for every check that needs numbers from a paper, "

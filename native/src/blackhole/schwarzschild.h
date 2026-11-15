@@ -68,6 +68,12 @@ public:
     int size() const { return static_cast<int>(v_.size()); }
     bool lookup(double psi, double& dphi) const;            // false: shadow
     bool lookupF(float psi, float& dphi) const;             // the same in single precision throughout (the GPU's precision; a measurement)
+    // 0.55.0: by x = edge - psi itself (no rounding of psi near the edge), and the slope d dphi / d ln x of the same cubic; false: shadow (x <= 0)
+    bool lookupX(double x, double& dphi, double* slopeLnX = nullptr) const;
+    // what a graphics card needs to evaluate the same table: the values at s_i = s0 + i ds, s = ln x (empty for no hole)
+    const std::vector<double>& values() const { return v_; }
+    double s0() const { return s0_; }
+    double ds() const { return ds_; }
 private:
     double rO_, edge_, s0_ = 0, ds_ = 0;
     std::vector<double> v_;
@@ -86,6 +92,30 @@ private:
 };
 
 struct StarImage { Vec3 dir; double magnification = 0, mag = 0, psi = 0; int order = 0; };
+
+// 0.55.0, THE LAB'S VIEW: the hole stays at the middle (cx, cy) of the picture (pixels, y down); K pixels per radian; the night sky's projection (the angle from the
+// middle is the distance from it: orbit/sky.h skyScreen) to any angle up to pi; the yaw and pitch (ca, sa, cb, sb) of skyScreen, so the middle looks along
+// (-sb sa, -sb ca, -cb). With cx = W/2, cy = H/2, K = hypot(W, H)/2/1.75 it is exactly skyScreen / skyDirection (tested).
+struct HoleView { double cx = 0, cy = 0, K = 1, ca = 1, sa = 0, cb = 1, sb = 0; };
+Vec3 viewMiddle(const HoleView& v);                                         // the direction at the middle: from the camera to the hole
+bool viewDirection(const HoleView& v, double X, double Y, Vec3& dir);       // false beyond pi from the middle
+bool viewScreen(const HoleView& v, const Vec3& dir, double& X, double& Y);  // false for the direction straight behind
+// Pixel (X, Y): 0 sky (dir = where on the far sky the light came from), 1 shadow, -1 beyond pi. The angle from the edge is taken from the pixel's own
+// distance to the middle, x = th - alpha_sh with th = distance / K (no rounding of an angle near pi): the double-precision reference of the lab's picture.
+int lensPixel(const LensTable& t, const HoleView& v, double X, double Y, Vec3& dir);
+
+// 0.55.0: the images of point stars, fast enough for every frame while the view turns (the table is filled once per camera distance): the same images as
+// starImages (Riazuelo (44): dphi(psi) = chi + 2 pi j and 2 pi (j+1) - chi), found by inverting the table's cubic instead of the closed form, and their
+// magnification Omega / Omega* = sin(psi) / (sin(chi) |d dphi / d psi|) (Riazuelo (51)) from the cubic's slope. Tested against starImages.
+int starImagesFast(const LensTable& t, const Vec3& hole, const Vec3& s, double mag, double magLimit, std::vector<StarImage>& out);
+// 0.55.0: the hovering camera's frequency factor f_c / f' (kerr.h hoverShift, a = 0), the factor on the light's brightness, its fourth power (as
+// LensView::shift: Riazuelo (52), (53)), and the camera's clock rate against a clock far away, the lapse alpha = (1 - 2M/r)^(1/2) of J15 (A.2)
+// (kerr.h kerrMetric at a = 0): while one hour passes on a clock far away, alpha hours pass on the camera's.
+double hoverBlueshift(double rO);
+double hoverBrightening(double rO);
+double hoverClockRate(double rO);
+// The share of the camera's whole sky the shadow covers: a cap of angular radius alpha_sh, (1 - cos alpha_sh) / 2.
+double shadowSkyFraction(double rO);
 constexpr double kImageMagLimit = 6.6;                      // = orbit/sky.h kStarFaintMag: the catalogue's faint end
 // The images of a star in direction s (unit). Appends to out; returns how many. Stars within 1e-9 rad of the line through the hole (an Einstein ring) give none.
 int starImages(const LensTable& t, const Vec3& hole, const Vec3& s, double mag, double magLimit, std::vector<StarImage>& out);

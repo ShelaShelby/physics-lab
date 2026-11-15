@@ -41,7 +41,7 @@ constexpr int kStressBeltScale = 8;      // scene 2: 8 times the rocks of scene 
 void commonSetup(AppState& app) {
     app.paused = false;
     app.vsync = false;
-    app.learn = 0; app.atomLearn = 0; app.molLearn = 0; app.showSettings = app.showAbout = app.showHistory = false;
+    app.learn = 0; app.atomLearn = 0; app.molLearn = 0; app.bhLearn = 0; app.showSettings = app.showAbout = app.showHistory = false;
     app.journey.active = false;
     app.set.realPlanets = false; app.sys.setRealPlanets(false);   // the benchmark always uses Simple planet physics, so the old numbers stay comparable
 }
@@ -72,6 +72,14 @@ void orbitStress(AppState& app) {
 void orbitHeaviestCpuRocks(AppState& app) { orbitHeaviest(app); app.set.gpuRocks = false; }
 void orbitStressCpuRocks(AppState& app) { orbitStress(app); app.set.gpuRocks = false; }
 
+// 0.55.0, scene 13: the Black Hole Lab's bent sky drawn anew every frame (the camera turns a little each frame; in the lab it is drawn only when the view changes)
+void blackholeScene(AppState& app) {
+    commonSetup(app);
+    app.lab = blackhole::kLabIndex;
+    app.blackhole = blackhole::settingsDefaults();
+    blackhole::setDistance(app.blackhole, 6);
+}
+
 void atomScene(AppState& app, int which) {
     commonSetup(app);
     app.lab = 1;
@@ -94,6 +102,10 @@ const std::vector<SceneDef>& scenes() {
                 case app::BenchKind::OrbitRocks8: d.setup = orbitStress; break;
                 case app::BenchKind::OrbitHeaviestCpuRocks: d.setup = orbitHeaviestCpuRocks; break;
                 case app::BenchKind::OrbitRocks8CpuRocks: d.setup = orbitStressCpuRocks; break;
+                case app::BenchKind::BlackHole:
+                    d.setup = blackholeScene;
+                    d.frame = [](AppState& a, int, int) { blackhole::turn(a.blackhole, 0.002, 0); };
+                    break;
                 case app::BenchKind::Atom:
                     d.setup = [w](AppState& a) { atomScene(a, w); };
                     d.frame = [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); };
@@ -166,6 +178,7 @@ struct BenchState {
     int lab = 0;
     bool paused = false, vsync = true;
     int learn = 0, atomLearn = 0;
+    blackhole::Settings blackhole;          // 0.55.0: the Black Hole Lab's settings, given back after scene 13
     bool showSettings = false, showAbout = false, showHistory = false;
     std::unique_ptr<orbit::SolarSystem> sys;
     std::unique_ptr<orbit::OrbitView> view;
@@ -224,7 +237,7 @@ void restore(AppState& app, BenchState& b) {
     app.sys = *b.sys; app.view = *b.view; app.atom = *b.atom; app.atomView = *b.atomView;
     app.set = b.set; app.journey = b.journey; app.tempK = b.tempK;
     app.lab = b.lab; app.paused = b.paused; app.vsync = b.vsync;
-    app.learn = b.learn; app.atomLearn = b.atomLearn;
+    app.learn = b.learn; app.atomLearn = b.atomLearn; app.blackhole = b.blackhole;
     app.showSettings = b.showSettings; app.showAbout = b.showAbout; app.showHistory = b.showHistory;
     b.sys.reset(); b.view.reset(); b.atom.reset(); b.atomView.reset();
     app.benchRunning = false;
@@ -264,7 +277,7 @@ void begin(AppState& app) {
     b.measure = envNum("PL_BENCH_MEASURE", app::kBenchMeasureS);
     e.warmupS = b.warm; e.measureS = b.measure;
     // keep everything the user has
-    b.lab = app.lab; b.paused = app.paused; b.vsync = app.vsync; b.learn = app.learn; b.atomLearn = app.atomLearn;
+    b.lab = app.lab; b.paused = app.paused; b.vsync = app.vsync; b.learn = app.learn; b.atomLearn = app.atomLearn; b.blackhole = app.blackhole;
     b.showSettings = app.showSettings; b.showAbout = app.showAbout; b.showHistory = app.showHistory;
     b.sys = std::make_unique<orbit::SolarSystem>(app.sys);
     b.view = std::make_unique<orbit::OrbitView>(app.view);

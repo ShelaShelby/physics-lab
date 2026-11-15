@@ -201,8 +201,8 @@ void noteHeading(int level, const std::string& text) {
     g.now.push_back({level, text, ImGui::GetCursorPosY()});
 }
 
-bool pagesOpen(const AppState& app) { return app.showAbout || app.showHistory || (app.lab == 0 ? app.learn > 0 : app.lab == molecule::kLabIndex ? app.molLearn > 0 : app.atomLearn > 0); }
-void closePages(AppState& app) { app.showAbout = app.showHistory = false; app.learn = 0; app.atomLearn = 0; app.molLearn = 0; }
+bool pagesOpen(const AppState& app) { return app.showAbout || app.showHistory || (app.lab == 0 ? app.learn > 0 : app.lab == molecule::kLabIndex ? app.molLearn > 0 : app.lab == blackhole::kLabIndex ? app.bhLearn > 0 : app.atomLearn > 0); }
+void closePages(AppState& app) { app.showAbout = app.showHistory = false; app.learn = 0; app.atomLearn = 0; app.molLearn = 0; app.bhLearn = 0; }
 
 // a click on the dimmed picture closes the page (and never reaches the picture). 0.38.1: also behind Settings (the same dim for every page-like window)
 void dimBehind(const char* id, bool* open) {

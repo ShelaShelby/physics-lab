@@ -668,7 +668,8 @@ std::vector<TableRef> labTables(const LabContext& c) {
     const auto add = [&](const std::string& id) { if (makeTable(id, c, t)) out.push_back({id, t.title}); };
     if (c.lab == 0) for (const char* id : {"planets", "dwarfs", "moons", "comets"}) add(id);
     else if (c.lab == 1) for (const char* id : {"ionlines", "atomlines", "defects", "levels", "isotopes", "binding", "zeeman", "zshift"}) add(id);
-    else for (const char* id : {"modes", "modesall", "ladder", "rotation", "rotlevels", "rotlines"}) add(id);
+    else if (c.lab == 2) for (const char* id : {"modes", "modesall", "ladder", "rotation", "rotlevels", "rotlines"}) add(id);
+    // (0.55.0: lab 3, the Black Hole Lab, has no tables yet; before, any lab that was not 0 or 1 got the Molecule Lab's)
     return out;
 }
 

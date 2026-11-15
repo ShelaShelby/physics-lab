@@ -45,8 +45,8 @@ int utf16Length(const std::string& s) {
 // That theme was archived, so the entry is left out of the facts (everywhere).
 
 // 0.22: each fact belongs to the labs it is about, so the Orbit Lab no longer shows carbon-14 nor the Atom Lab sound in space. One mask per entry of app::kDyk, in its order
-// (1 Orbit Lab, 2 Atom Lab, 4 Molecule Lab; 7: any lab). (The Molecule Lab shows the general facts, mask 7, since 0.22 stage 7: its fact line was hidden under its style bar before.)
-constexpr unsigned kO = 1, kA = 2, kM = 4, kAll = 7;
+// (1 Orbit Lab, 2 Atom Lab, 4 Molecule Lab, 8 Black Hole Lab (0.55.0); kAll: any lab). (The Molecule Lab shows the general facts since 0.22 stage 7: its fact line was hidden under its style bar before.)
+constexpr unsigned kO = 1, kA = 2, kM = 4, kB = 8, kAll = kO | kA | kM | kB;
 constexpr unsigned kFactLabs[] = {
     kO,        // sunlight takes 8 min 20 s
     kO,        // a day on Venus
@@ -66,17 +66,17 @@ constexpr unsigned kFactLabs[] = {
     kA,        // the nucleus is small
     kA | kM,   // water is densest at 4 °C
     kAll,      // the speed of light
-    kO,        // escape speed
+    kO | kB,   // escape speed (0.55.0: and the Black Hole Lab: from a black hole none is enough)
     kO,        // the space station
     kA,        // carbon-14
     kA | kM,   // diamond and graphite
     kO,        // sound in space
     kA | kM,   // hydrogen, the most common element
-    kO};       // a light year
+    kO | kB};  // a light year
 static_assert(sizeof(kFactLabs) / sizeof(kFactLabs[0]) == sizeof(app::kDyk) / sizeof(app::kDyk[0]), "one lab mask per fact");
 static_assert(sizeof(app::kDykSrc) / sizeof(app::kDykSrc[0]) == sizeof(app::kDyk) / sizeof(app::kDyk[0]), "one source per fact (0.40)");
 int g_forced = -1;                                   // a fact chosen in search is shown in any lab, until the next step
-bool factFits(int i, int lab) { return i == g_forced || (lab >= 0 && lab <= 2 && (kFactLabs[i] & (1u << lab)) != 0); }
+bool factFits(int i, int lab) { return i == g_forced || (lab >= 0 && lab < app::kLabCount && (kFactLabs[i] & (1u << lab)) != 0); }
 std::string textOf(const AppState&, int i) { return app::kDyk[i]; }
 
 void sched(const AppState& app) {                    // waits while you hover it; Reduced motion: only on tap
@@ -192,10 +192,11 @@ void learnPane(AppState& app) {
         const int k = cardGrid(cards, true, base);
         base += 100;
         if (k >= 0) {                                    // the guide opens over the Learn tab, with its lab behind it
-            const int lab = std::string(refs[k]->lab) == "Atom Lab" ? 1 : std::string(refs[k]->lab) == "Molecule Lab" ? molecule::kLabIndex : 0;
+            const int lab = app::labIndex(refs[k]->lab);   // (0.55.0: from the lab's name; it was a three-way choice)
             if (lab != app.lab) { app.learnBack = app.lab; openLab(app, lab); }
             if (lab == 1) { app.atomLearn = refs[k]->guide; app.atomLearnJump = "top"; }
             else if (lab == molecule::kLabIndex) { app.molLearn = refs[k]->guide; app.molLearnJump = "top"; }
+            else if (lab == blackhole::kLabIndex) { app.bhLearn = refs[k]->guide; app.bhLearnJump = "top"; }
             else { app.learn = refs[k]->guide; app.learnJump = "top"; }
         }
         ImGui::Dummy(ImVec2(0, 8 * S() * T()));
@@ -251,7 +252,7 @@ void paneWindow(AppState& app, float top) {
 // Every frame: the guide that goes back to its lab
 void appTabsFrame(AppState& app) {
     // a guide opened from the Learn tab in another lab: when it closes, that lab goes away again
-    if (app.learnBack >= 0 && (app.lab == 0 ? app.learn : app.lab == molecule::kLabIndex ? app.molLearn : app.atomLearn) == 0) { app.lab = app.learnBack; app.learnBack = -1; }   // (0.25: only this lab's guide: one left open in another lab kept you here)
+    if (app.learnBack >= 0 && (app.lab == 0 ? app.learn : app.lab == molecule::kLabIndex ? app.molLearn : app.lab == blackhole::kLabIndex ? app.bhLearn : app.atomLearn) == 0) { app.lab = app.learnBack; app.learnBack = -1; }   // (0.25: only this lab's guide: one left open in another lab kept you here)
 }
 
 }  // namespace ui

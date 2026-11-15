@@ -59,6 +59,7 @@ static void checkStr(const std::string& what, const std::string& got, const std:
 }
 static void checkTrue(const std::string& what, bool ok) { checkStr(what, ok ? "true" : "false", "true"); }
 
+#include "blackhole/presets.h"
 #include "test_entities.inc"   // 0.15 stage 2, C1: HTML entities
 #include "test_stage2.inc"     // 0.15 stage 2, C3 and C4: power request, the benchmark's focus flag, display scale
 #include "test_shell.inc"      // 0.15 stage 3: the new UI's shell (type scale, layout, centre shift, glass, keys, reading column, search)
@@ -70,6 +71,7 @@ static void testRoundTrip() {
     p.lab = "Atom Lab";
     p.orbit = {{"zoom", "-2.5"}, {"view3D", "1"}, {"sky", "off"}};
     p.atom = {{"Z", "92"}, {"N", "143"}, {"view", "Cloud 3D"}};
+    p.blackhole = {{"preset", "m87"}, {"dist", "3.5"}, {"bend", "off"}, {"sky", "black"}};   // 0.55.0
     const Prefs q = loadPrefs(savePrefs(p));
     checkStr("theme", q.theme, p.theme);
     checkStr("textSize", q.textSize, p.textSize);
@@ -80,6 +82,8 @@ static void testRoundTrip() {
     checkStr("lab", q.lab, p.lab);
     checkTrue("orbit settings", q.orbit == p.orbit);
     checkTrue("atom settings", q.atom == p.atom);
+    checkTrue("0.55.0: black hole settings", q.blackhole == p.blackhole);
+    { Prefs b = p; b.lab = "Black Hole Lab"; checkStr("0.55.0: the Black Hole Lab is remembered", loadPrefs(savePrefs(b)).lab, "Black Hole Lab"); }
     // the defaults go through unchanged too
     const Prefs d = loadPrefs(savePrefs(Prefs{}));
     checkStr("default theme", d.theme, "auto");
@@ -136,10 +140,16 @@ static void testSettingsFrom018() {
     checkTrue("0.18 file: lab settings kept", p.orbit.at("zoom") == "-2.5" && p.atom.at("Z") == "92");
     checkStr("0.18 file: lab index 3 (old Molecule index) is not a lab name", loadPrefs("lab=3\n").lab, "Orbit Lab");
     checkStr("0.18 file: Molecule Lab kept", loadPrefs("lab=Molecule Lab\n").lab, "Molecule Lab");
-    checkTrue("lab indexes: Orbit 0, Atom 1, Molecule 2", labIndex("Orbit Lab") == 0 && labIndex("Atom Lab") == 1 && labIndex("Molecule Lab") == 2);
-    checkTrue("lab index of a removed or unknown lab is the default lab", labIndex("Defense Lab") == 0 && labIndex("3") == 0 && labIndex("") == 0);
-    checkTrue("lab names round trip", std::string(labName(0)) == "Orbit Lab" && std::string(labName(1)) == "Atom Lab" && std::string(labName(2)) == "Molecule Lab" && std::string(labName(3)) == "Orbit Lab" && std::string(labName(-1)) == "Orbit Lab");
-    checkTrue("lab count", kLabCount == 3);
+    checkTrue("lab indexes: Orbit 0, Atom 1, Molecule 2, Black Hole 3 (0.55.0)", labIndex("Orbit Lab") == 0 && labIndex("Atom Lab") == 1 && labIndex("Molecule Lab") == 2 && labIndex("Black Hole Lab") == 3);
+    checkTrue("lab index of a removed or unknown lab is the default lab", labIndex("Defense Lab") == 0 && labIndex("3") == 0 && labIndex("") == 0 && labIndex("Black Hole lab") == 0);
+    checkTrue("lab names round trip", std::string(labName(0)) == "Orbit Lab" && std::string(labName(1)) == "Atom Lab" && std::string(labName(2)) == "Molecule Lab" && std::string(labName(3)) == "Black Hole Lab" && std::string(labName(4)) == "Orbit Lab" && std::string(labName(-1)) == "Orbit Lab");
+    checkTrue("lab count", kLabCount == 4);
+    checkTrue("0.55.0: lab keys (settings and panel prefixes)", std::string(labKey(0)) == "orbit" && std::string(labKey(1)) == "atom" && std::string(labKey(2)) == "molecule" && std::string(labKey(3)) == "blackhole" && std::string(labKey(9)) == "orbit");
+    // 0.55.0: a 0.54 file (no Black Hole lines) loads as before and saves byte for byte; a newer file read by an older app: an unknown lab name opens the
+    // Orbit Lab (as the Defense Lab above) and unknown lines are ignored, which this app does too for a lab it does not know
+    { const std::string t = "# Physics Lab settings. Written by the app; safe to delete.\ntheme=dark\ntextSize=normal\nfont=auto\nmotion=auto\nunits=metric\nlang=en\nlab=Molecule Lab\nmolecule=v1 mol=H2O\norbit.zoom=-2.5\natom.Z=92\n";
+      const Prefs o = loadPrefs(t); checkTrue("0.54 file: loads and saves the same, no black hole lines", o.blackhole.empty() && savePrefs(o) == t); }
+    { const Prefs n = loadPrefs("lab=Wormhole Lab\nwormhole.size=3\nblackhole.dist=7\n"); checkTrue("a lab this app does not know opens the Orbit Lab; its lines are ignored", n.lab == "Orbit Lab" && n.blackhole.at("dist") == "7"); }
     // 0.20: the builder's line: kept as read; a file without it saves without it, byte for byte (older settings files unchanged)
     { const std::string t = savePrefs(loadPrefs("molbuild=v1 mode=build atoms=C:0:0 bonds=\nlab=Molecule Lab\n")); checkTrue("0.24: an old molbuild line (the builder was removed) is read without harm and dropped", t.find("molbuild") == std::string::npos && t.find("lab=Molecule Lab") != std::string::npos); }
     { const std::string t = savePrefs(loadPrefs("lab=Molecule Lab\nmolecule=v1 mol=H2O\n")); checkTrue("0.20: no molbuild line unless one was set", t.find("molbuild") == std::string::npos && savePrefs(loadPrefs(t)) == t); }
@@ -265,7 +275,18 @@ static void testTextSizes() {
 }
 
 static void testPages() {
-    checkTrue("About names the three labs", std::string(kAboutHtml).find("Labs: Orbit Lab · Atom Lab · Molecule Lab.") != std::string::npos);
+    checkTrue("About names the four labs", std::string(kAboutHtml).find("Labs: Orbit Lab · Atom Lab · Molecule Lab · Black Hole Lab.") != std::string::npos);
+    {   // 0.55.0: About's Black Hole Lab sources: every paper with its public address, and the presets' numbers as presets.h has them
+        const std::string a = kAboutHtml;
+        bool links = true;
+        for (const char* u : {"arxiv.org/abs/1502.03808", "1972ApJ...178..347B", "1979A%26A....75..228L", "arxiv.org/abs/1910.12881", "arxiv.org/abs/1910.12873", "arxiv.org/abs/2603.05810",
+                              "arxiv.org/abs/2105.07101", "arxiv.org/abs/1511.06025", "arxiv.org/abs/2112.07478", "arxiv.org/abs/2311.08680", "arxiv.org/abs/1906.11238"}) links = links && a.find(u) != std::string::npos;
+        checkTrue("0.55.0: About lists the Black Hole Lab's eleven papers with their arXiv or ADS address", links);
+        const blackhole::Preset* sg = blackhole::preset("sgra");
+        const blackhole::Preset* m8 = blackhole::preset("m87");
+        checkTrue("0.55.0: About's preset numbers are presets.h's", sg && m8 && sg->massSun == 4.297e6 && sg->distPc == 8277 && sg->ringMuas == 51.8 && sg->ringErr == 2.3 && m8->massSun == 6.5e9 && m8->distPc == 16.8e6 && m8->ringMuas == 42 && m8->ringErr == 3 &&
+                  a.find("4.297 million Suns, 8,277 parsecs") != std::string::npos && a.find("51.8 &plusmn; 2.3") != std::string::npos && a.find("6.5 billion Suns, 16.8 million parsecs") != std::string::npos && a.find("42 &plusmn; 3") != std::string::npos);
+    }
     checkTrue("the header buttons have a label", *kHdrTheme.label && *kHdrAbout.label && *kHdrSettings.label && *kHdrHistory.label);
 }
 
@@ -384,6 +405,7 @@ static void testShot() {
     checkStr("orbit file name text", shotFileName("Orbit Lab", 1, 0, t), "orbit-lab-2026-10-01-090507.png");
     checkStr("atom file name", shotFileName("Atom Lab", 6, 6, t), "atom-lab-Z6-N6" + stamp);
     checkStr("other lab name", shotFileName("Some other-lab 2", 0, 0, t), "some-other-lab-2" + stamp);
+    checkStr("0.55.0: the Black Hole Lab's file name", shotFileName("Black Hole Lab", 0, 0, t), "black-hole-lab" + stamp);
     checkStr("atom file name with Z and N", shotFileName("Atom Lab", 92, 146, {2027, 12, 31, 23, 59, 59}), "atom-lab-Z92-N146-2027-12-31-235959.png");
     checkTrue("two saves a second apart differ", shotFileName("Orbit Lab", 1, 0, t) != shotFileName("Orbit Lab", 1, 0, {2026, 10, 1, 9, 5, 8}));
     checkTrue("no character Windows refuses", shotFileName("Atom Lab", 6, 6, t).find_first_of("<>:\"/\\|?*") == std::string::npos);
@@ -978,7 +1000,7 @@ static void testBenchGpuColours() {
 // ---- 0.16 stage 4: the trimmed benchmark list (11 scenes, 7 old-CPU twins behind a box): every "scene N" in the texts exists, each twin names its original ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark list: 12 default scenes and 20 in all (0.46, on purpose: scene 12 and its twin 20, the whole atom's Glow cloud)", app::kBenchDefaultScenes == 12 && app::kBenchAllScenes == 20 && int(v.size()) == 20);
+    checkTrue("benchmark list: 13 default scenes and 21 in all (0.46, on purpose: scene 12 and its twin, the whole atom's Glow cloud; 0.55.0: scene 13, the Black Hole Lab)", app::kBenchDefaultScenes == 13 && app::kBenchAllScenes == 21 && int(v.size()) == 21 && v[12].kind == app::BenchKind::BlackHole);
     bool numbered = true, plain = true, inRange = true; int mentions = 0;
     for (std::size_t i = 0; i < v.size(); i++) {
         numbered = numbered && v[i].name.rfind(std::to_string(i + 1) + ". ", 0) == 0;
@@ -987,25 +1009,25 @@ static void testBenchSceneNumbers() {
         for (std::size_t p = 0; (p = t.find("cene", p)) != std::string::npos; p += 4) {
             std::size_t j = p + 4; while (j < t.size() && (t[j] == 's' || t[j] == ' ')) j++;
             while (j < t.size() && std::isdigit((unsigned char)t[j])) {
-                const int n = std::atoi(t.c_str() + j); mentions++; inRange = inRange && n >= 1 && n <= 20 && n != int(i + 1);
+                const int n = std::atoi(t.c_str() + j); mentions++; inRange = inRange && n >= 1 && n <= 21 && n != int(i + 1);
                 while (j < t.size() && std::isdigit((unsigned char)t[j])) j++;
                 if (t.compare(j, 5, " and ") == 0) j += 5; else if (t.compare(j, 4, " to ") == 0) j += 4; else break;
             }
         }
     }
-    checkTrue("benchmark list: the names are numbered 1 to 20 in order, without 'Stress:' or 'Risk NN:'", numbered && plain);
+    checkTrue("benchmark list: the names are numbered 1 to 21 in order, without 'Stress:' or 'Risk NN:'", numbered && plain);
     checkTrue("benchmark list: every scene number in a name or text (" + std::to_string(mentions) + " of them) is a scene of the list, and none is the scene itself", inRange && mentions >= 20);
     bool twins = true;
     for (std::size_t i = 0; i < v.size(); i++) {
         const int o = v[i].twinOf;
-        if ((i >= 12) != (o != 0)) { twins = false; continue; }
+        if ((i >= 13) != (o != 0)) { twins = false; continue; }
         if (!o) continue;
         const std::string want = "scene " + std::to_string(o);
         twins = twins && o <= 12 && v[i].name.find("compare with " + want) != std::string::npos && v[i].what.find(want) != std::string::npos
                 && v[o - 1].what.find("cene " + std::to_string(i + 1)) != std::string::npos        // and the original points back at its twin
                 && (v[i].kind == app::BenchKind::Atom) == (v[o - 1].kind == app::BenchKind::Atom);
     }
-    checkTrue("benchmark list: scenes 13 to 20 are the twins of 6, 7, 8, 9, 10, 1, 2 and 12; each names its original, and the original names it", twins && v[12].twinOf == 6 && v[13].twinOf == 7 && v[14].twinOf == 8 && v[15].twinOf == 9 && v[16].twinOf == 10 && v[17].twinOf == 1 && v[18].twinOf == 2 && v[19].twinOf == 12);
+    checkTrue("benchmark list: scenes 14 to 21 are the twins of 6, 7, 8, 9, 10, 1, 2 and 12; each names its original, and the original names it", twins && v[13].twinOf == 6 && v[14].twinOf == 7 && v[15].twinOf == 8 && v[16].twinOf == 9 && v[17].twinOf == 10 && v[18].twinOf == 1 && v[19].twinOf == 2 && v[20].twinOf == 12);
 }
 // ---- 0.13 stage 2: the CPU-comparison scenes for the superposition and the jump, and the sentence about which way it runs ----
 static void testBenchGpuCompute() {

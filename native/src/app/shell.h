@@ -155,6 +155,11 @@ double factContrast(const ThemeColors& c);                                // the
 bool panelCollapsed(const std::string& saved, const std::string& name, bool dflt);
 std::string withPanelState(const std::string& saved, const std::string& name, bool collapsed);
 
+// ---- 0.55.0: the labs in the top bar and the Labs menu (one entry per lab, app::kLabCount; ids from app::labKey) ----
+std::string labTabId(int lab);                                            // "top.tab.orbit", ... "top.tab.blackhole"
+std::string labMenuId(int lab);                                           // "lab.orbit", ... "lab.blackhole"
+std::string labTabText(int lab);                                          // the tab's words: the lab's name, but "Black Hole" for the Black Hole Lab (four tabs fit in less room)
+
 void dropLastChar(std::string& s);                                        // 0.19: removes the last UTF-8 character (all its bytes), nothing if s is empty
 
 }  // namespace app::shell

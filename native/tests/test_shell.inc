@@ -849,7 +849,20 @@ void testShellReadout() {
     checkTrue("readout: the pill is about 0.6 opaque", kReadoutAlpha > 0.55f && kReadoutAlpha < 0.65f);
 }
 
+// 0.55.0: the shell's lab lists come from one place: every lab has its tab and menu id (distinct, from its settings key) and its tab's words; four labs
+void testShellLabLists() {
+    checkTrue("0.55.0: four labs", kLabCount == 4);
+    std::set<std::string> tabs, menu;
+    for (int i = 0; i < kLabCount; i++) { tabs.insert(labTabId(i)); menu.insert(labMenuId(i)); }
+    checkTrue("0.55.0: one tab and one Labs-menu row per lab, all different", static_cast<int>(tabs.size()) == kLabCount && static_cast<int>(menu.size()) == kLabCount);
+    checkStr("0.55.0: the old ids stay (the UI checks click them)", labTabId(0) + " " + labTabId(1) + " " + labTabId(2) + " " + labMenuId(0) + " " + labMenuId(1) + " " + labMenuId(2),
+             "top.tab.orbit top.tab.atom top.tab.molecule lab.orbit lab.atom lab.molecule");
+    checkStr("0.55.0: the fourth lab's ids", labTabId(3) + " " + labMenuId(3), "top.tab.blackhole lab.blackhole");
+    checkStr("0.55.0: the tabs' words", labTabText(0) + "|" + labTabText(1) + "|" + labTabText(2) + "|" + labTabText(3), "Orbit Lab|Atom Lab|Molecule Lab|Black Hole");
+}
+
 void testShell() {
+    testShellLabLists();
     testDropLastChar();
     testShellDock();
     testShellHandle();

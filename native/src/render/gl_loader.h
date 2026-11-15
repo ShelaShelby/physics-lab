@@ -73,6 +73,7 @@ typedef unsigned long long GLuint64;
 #define GL_NEAREST 0x2600
 #define GL_TEXTURE_2D 0x0DE1
 #define GL_TEXTURE0 0x84C0
+#define GL_TEXTURE1 0x84C1
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_MAG_FILTER 0x2800
 #define GL_TEXTURE_WRAP_S 0x2802
@@ -128,6 +129,7 @@ typedef unsigned long long GLuint64;
     X(void, glUseProgram, (GLuint p))                                                              \
     X(GLint, glGetUniformLocation, (GLuint p, const GLchar* name))                                 \
     X(void, glUniform2f, (GLint loc, GLfloat a, GLfloat b))                                        \
+    X(void, glUniform3f, (GLint loc, GLfloat a, GLfloat b, GLfloat c))                             \
     X(void, glGenVertexArrays, (GLsizei n, GLuint* a))                                             \
     X(void, glDeleteVertexArrays, (GLsizei n, const GLuint* a))                                    \
     X(void, glBindVertexArray, (GLuint a))                                                         \

@@ -47,12 +47,15 @@ std::string savePrefs(const Prefs& p) {
     if (!p.molecule.empty()) o << "molecule=" << clean(p.molecule) << "\n";
     for (const auto& [k, v] : p.orbit) o << "orbit." << clean(k) << "=" << clean(v) << "\n";
     for (const auto& [k, v] : p.atom) o << "atom." << clean(k) << "=" << clean(v) << "\n";
+    for (const auto& [k, v] : p.blackhole) o << "blackhole." << clean(k) << "=" << clean(v) << "\n";   // 0.55.0
     for (std::size_t i = 0; i < p.calcHistory.size() && i < static_cast<std::size_t>(kCalcHistoryMax); i++) o << "calc." << i << "=" << clean(p.calcHistory[i]) << "\n";   // 0.49
     return o.str();
 }
 
-static const char* const kLabNames[kLabCount] = {"Orbit Lab", "Atom Lab", "Molecule Lab"};
+static const char* const kLabNames[kLabCount] = {"Orbit Lab", "Atom Lab", "Molecule Lab", "Black Hole Lab"};
+static const char* const kLabKeys[kLabCount] = {"orbit", "atom", "molecule", "blackhole"};
 const char* labName(int index) { return index >= 0 && index < kLabCount ? kLabNames[index] : kLabNames[0]; }
+const char* labKey(int index) { return index >= 0 && index < kLabCount ? kLabKeys[index] : kLabKeys[0]; }
 int labIndex(const std::string& name) {
     for (int i = 0; i < kLabCount; i++) if (name == kLabNames[i]) return i;
     return 0;
@@ -109,6 +112,7 @@ Prefs loadPrefs(const std::string& text) {
         } else if (k == "lab") { if (labIndex(v) > 0 || v == kLabNames[0]) p.lab = v; }   // 0.19: a removed lab (Defense Lab) or an unknown name keeps the default
         else if (k.rfind("orbit.", 0) == 0) p.orbit[k.substr(6)] = v;
         else if (k.rfind("atom.", 0) == 0) p.atom[k.substr(5)] = v;
+        else if (k.rfind("blackhole.", 0) == 0) p.blackhole[k.substr(10)] = v;   // 0.55.0 (an older app ignores these lines and, not knowing the lab's name, opens the Orbit Lab)
     }
     p.calcHistory.erase(std::remove(p.calcHistory.begin(), p.calcHistory.end(), std::string()), p.calcHistory.end());   // 0.49: no gaps (calc.0 and calc.3 only)
     return p;

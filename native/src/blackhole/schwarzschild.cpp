@@ -47,12 +47,13 @@ double luminetFr(const Luminet& L, double r) {                    // F(zeta_r, k
     return ellFsc(std::sqrt(std::max(0.0, 1 - c2)), std::sqrt(c2), L.kc2);
 }
 
-// b < b_c: the swept angle from r out to infinity, b [F3(inf) - F3(r)], Gralla & Lupsasca 2020a case (3) with r2 = 0
-double sweepOutBelow(double b, double r) {
+// b < b_c: the swept angle from r out to infinity, b [F3(inf) - F3(r)], Gralla & Lupsasca 2020a case (3) with r2 = 0.
+// e = b^2 - 27 < 0 is given by the caller from b - b_c, not formed here from b: 0.55.0, a camera at the photon orbit (rO = 3M) has b_c - b ~ x^2 at
+// x rad from the edge, so b^2 - 27 formed from b lost all its digits below x ~ 1e-6 (the 0.54.3 table's 1e-2 rad error there, ROADMAP).
+double sweepOutBelow(double b, double e, double r) {
     if (b <= 0) return 0;
-    const double b2 = b * b, s = std::sqrt(1 - b2 / 27);
+    const double b2 = b * b, s = std::sqrt(-e / 27);
     double r1 = -(std::cbrt(b2 * (b2 / 27) / (1 + s)) + std::cbrt(b2 * (1 + s)));   // Cardano (1 - s = (b^2/27) / (1 + s))
-    const double e = b2 - 27;
     double d1 = r1 + 6;                                          // refine r1 = -6 + d1 on d1^3 - 18 d1^2 + (81 - e) d1 + 8e = 0 (simple root)
     for (int i = 0; i < 4; i++) {
         const double g = ((d1 - 18) * d1 + (81 - e)) * d1 + 8 * e, dg = (3 * d1 - 36) * d1 + (81 - e);
@@ -98,7 +99,7 @@ Bend bendFromCameraEdge(double rO, double x) {
     const double dbc = -2 * rO * std::cos(edge - x / 2) * std::sin(x / 2) / sf;   // b - b_c = rO (sin psi - sin edge) / sf
     const bool outward = psi <= kPi / 2;
     if (dbc < 0 || (dbc == 0 && !(rO > 3))) {
-        if (outward && dbc < 0) { out.dphi = sweepOutBelow(b, rO); return out; }
+        if (outward && dbc < 0) { out.dphi = sweepOutBelow(b, dbc * (b + kBc), rO); return out; }
         out.captured = true; return out;
     }
     if (!(rO > 3)) { out.captured = true; return out; }
@@ -128,15 +129,23 @@ LensTable::LensTable(double rO, int n) : rO_(rO) {
 
 bool LensTable::lookup(double psi, double& dphi) const {
     if (v_.empty()) { dphi = psi; return true; }
-    const double x = edge_ - psi;
+    return lookupX(edge_ - psi, dphi);
+}
+
+bool LensTable::lookupX(double x, double& dphi, double* slopeLnX) const {
+    if (v_.empty()) { dphi = edge_ - x; if (slopeLnX) *slopeLnX = -x; return x > 0 || x == 0; }
     if (!(x > 0)) return false;
     const double t = (std::log(x) - s0_) / ds_;
     const int n = size();
-    if (t <= 0) { dphi = v_[0] + t * (v_[1] - v_[0]); return true; }
+    if (t <= 0) { dphi = v_[0] + t * (v_[1] - v_[0]); if (slopeLnX) *slopeLnX = (v_[1] - v_[0]) / ds_; return true; }
     const int i = std::clamp(static_cast<int>(t), 1, n - 3);    // points i-1 .. i+2
     const double u = t - i, p0 = v_[i - 1], p1 = v_[i], p2 = v_[i + 1], p3 = v_[i + 2];
     // Lagrange through u = -1, 0, 1, 2
     dphi = p0 * (-u * (u - 1) * (u - 2) / 6) + p1 * ((u + 1) * (u - 1) * (u - 2) / 2) + p2 * (-(u + 1) * u * (u - 2) / 2) + p3 * ((u + 1) * u * (u - 1) / 6);
+    if (slopeLnX) {                                              // the same cubic's derivative in u, over ds
+        const double d0 = -(3 * u * u - 6 * u + 2) / 6, d1 = (3 * u * u - 4 * u - 1) / 2, d2 = -(3 * u * u - 2 * u - 2) / 2, d3 = (3 * u * u - 1) / 6;
+        *slopeLnX = (p0 * d0 + p1 * d1 + p2 * d2 + p3 * d3) / ds_;
+    }
     return true;
 }
 
@@ -220,5 +229,84 @@ int starImages(const LensTable& T, const Vec3& hole, const Vec3& s, double mag, 
     }
     return count;
 }
+
+// ---- 0.55.0: the lab's view ----
+Vec3 viewMiddle(const HoleView& v) { return {-v.sb * v.sa, -v.sb * v.ca, -v.cb}; }
+
+bool viewDirection(const HoleView& v, double X, double Y, Vec3& dir) {
+    // orbit/sky.cpp skyDirection with the middle at (cx, cy), K pixels per radian, up to pi
+    const double dx = (X - v.cx) / v.K, dy = -(Y - v.cy) / v.K, th = std::hypot(dx, dy);
+    if (th > kPi) return false;
+    const double s = th > 1e-12 ? std::sin(th) / th : 1;
+    const double x1 = s * dx, y2 = s * dy, dep = -std::cos(th);
+    const double y1 = y2 * v.cb + dep * v.sb, z = -y2 * v.sb + dep * v.cb;   // undo the pitch
+    dir = {x1 * v.ca + y1 * v.sa, -x1 * v.sa + y1 * v.ca, z};                 // undo the yaw
+    return true;
+}
+
+bool viewScreen(const HoleView& v, const Vec3& d, double& X, double& Y) {
+    // orbit/sky.cpp skyScreen with the middle at (cx, cy), K pixels per radian, up to pi
+    const double x1 = d.x * v.ca - d.y * v.sa, y1 = d.x * v.sa + d.y * v.ca, y2 = y1 * v.cb - d.z * v.sb, dep = y1 * v.sb + d.z * v.cb;
+    const double rho = std::hypot(x1, y2), th = std::atan2(rho, -dep);
+    if (!(rho > 1e-12) && th > 1) return false;                              // straight behind: no one place
+    const double r = th * v.K, q = rho > 1e-300 ? r / rho : 0;
+    X = v.cx + x1 * q; Y = v.cy - y2 * q;
+    return true;
+}
+
+int lensPixel(const LensTable& T, const HoleView& v, double X, double Y, Vec3& dir) {
+    Vec3 look;
+    if (!viewDirection(v, X, Y, look)) return -1;
+    if (!(T.rO() < 1e300)) { dir = look; return 0; }
+    const double th = std::hypot(X - v.cx, Y - v.cy) / v.K;                  // the angle from the hole; psi = pi - th
+    double dphi;
+    if (!T.lookupX(th - (kPi - T.edge()), dphi)) return 1;
+    const Vec3 er = viewMiddle(v) * -1.0;
+    dir = bentDirection(er, look, -std::cos(th), dphi);
+    return 0;
+}
+
+int starImagesFast(const LensTable& T, const Vec3& hole, const Vec3& s, double mag, double magLimit, std::vector<StarImage>& out) {
+    if (!(T.rO() < 1e300)) { out.push_back({s, 1.0, mag, 0, 0}); return 1; }
+    const Vec3 er = hole * -1.0;
+    const double cs = dot(s, er), sn = length(cross(s, er)), chi = std::atan2(sn, cs);
+    if (sn < 1e-9) return 0;                                     // on the line through the hole: an Einstein ring, no point images (as starImages)
+    const Vec3 u = (s - er * cs) * (1 / sn);
+    const std::vector<double>& v = T.values();
+    const int n = T.size();
+    const double edge = T.edge();
+    int count = 0;
+    for (int j = 0; j < 64; j++) {
+        const double target = (j % 2 == 0) ? chi + kPi * j : kPi * (j + 1) - chi;
+        if (!(target < v[0])) break;                             // closer to the edge than the table's first point (1e-9 rad): far below any cut-off
+        // dphi falls along the table (x grows): the last point i with v[i] >= target
+        int lo = 0, hi = n - 1;
+        while (hi - lo > 1) { const int mid = (lo + hi) / 2; if (v[mid] >= target) lo = mid; else hi = mid; }
+        // solve the cubic for s = ln x in [s_lo, s_hi] by bisection then Newton (it falls monotonically there)
+        double a = T.s0() + lo * T.ds(), b = T.s0() + hi * T.ds();
+        for (int it = 0; it < 8; it++) { const double m = 0.5 * (a + b); double d; T.lookupX(std::exp(m), d); if (d > target) a = m; else b = m; }
+        double sx = 0.5 * (a + b), d = 0, sl = 0;
+        for (int it = 0; it < 4; it++) { T.lookupX(std::exp(sx), d, &sl); if (sl < 0) sx = std::clamp(sx - (d - target) / sl, a - T.ds(), b + T.ds()); }
+        T.lookupX(std::exp(sx), d, &sl);
+        const double x = std::exp(sx), psi = edge - x;
+        const double slopePsi = -sl / x;                         // d dphi / d psi = -(d dphi / d ln x) / x
+        const double f = std::sin(psi) / (std::fabs(std::sin(target)) * std::fabs(slopePsi));
+        StarImage im;
+        im.psi = psi;
+        im.order = j;
+        im.magnification = f;
+        im.mag = mag - 2.5 * std::log10(f);
+        im.dir = er * std::cos(psi) + u * ((j % 2 == 0 ? 1.0 : -1.0) * std::sin(psi));
+        if (j > 0 && im.mag > magLimit) break;
+        out.push_back(im);
+        count++;
+    }
+    return count;
+}
+
+double hoverBlueshift(double rO) { return hoverShift(0, rO, kPi / 2, 0); }
+double hoverBrightening(double rO) { const double s = hoverBlueshift(rO); return s * s * s * s; }
+double hoverClockRate(double rO) { return kerrMetric(0, rO, kPi / 2).alpha; }
+double shadowSkyFraction(double rO) { return (1 - std::cos(shadowAngle(rO))) / 2; }
 
 }  // namespace blackhole

@@ -477,6 +477,7 @@ static void testTables() {
     // every table: its units are the calculator's, its presets point at columns of numbers, every column has a source, and the CSV reads back to the same numbers
     std::vector<LabContext> ctxs;
     for (int lab = 0; lab < 3; lab++) { LabContext x; x.lab = lab; ctxs.push_back(x); }
+    { LabContext x; x.lab = 3; check("0.55.0: the Black Hole Lab has no tables yet (none of another lab's)", labTables(x).empty()); }
     for (int z : {1, 2, 3, 11, 12, 20, 26, 55, 92}) { LabContext x; x.lab = 1; x.Z = z; x.N = atom::defaultN(z); ctxs.push_back(x); }
     for (const char* m : {"HCl", "CO", "N2", "H2O", "CH3OH", "CO2"}) { LabContext x; x.lab = 2; x.molecule = m; ctxs.push_back(x); }
     int tables = 0;

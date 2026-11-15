@@ -467,6 +467,69 @@ void main() {
 }
 )";
 
+// 0.55.0, the Black Hole Lab: our sky seen past a non-spinning black hole at the middle (uCentre, window pixels, y up) of the picture, uKpx pixels per radian, by the
+// night sky's projection (the angle from the middle is the distance from it). Each pixel's ray: the angle from the shadow's edge, x = th - alpha_sh, is formed
+// without cancelling, x_px = (r^2 - e^2) / (r + e) with r^2 exact (half-integer offsets from an integer centre) and e^2 given as two floats (uEdge = e, e^2 hi, lo);
+// the bending dphi(x) from the CPU's double-precision table at s = ln x (uTable, uN values; t = (ln x_px - uT.x) / uT.y): the same 4-point cubic as its C++ twin
+// blackhole/schwarzschild.cpp LensTable::lookupX. The far-sky direction cos(dphi) e_r + sin(dphi) t (bentDirection) through uK into galactic coordinates and the
+// Gaia map (render/planet_maps.cpp skyUV), filtered by the map's stretch between neighbouring pixels (textureGrad). The shadow's edge is anti-aliased by the
+// pixel's covered part (x_px + 1/2). uBend 0: the plain sky by kPlanetFS mode 2's own rule (its fixed mip level uLod), for comparison.
+// uDebug 1 (tests): the far direction (view frame) and x_px as floats instead of a colour.
+static const char* const kLensFS = R"(#version 330 core
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform sampler2D uTable;
+uniform mat3 uK;
+uniform vec2 uCentre;
+uniform float uKpx;
+uniform vec3 uEdge;
+uniform vec2 uT;
+uniform int uN;
+uniform int uBend;
+uniform int uDebug;
+uniform float uBright;
+uniform float uLod;
+out vec4 fragColor;
+const float PI = 3.14159265358979;
+float tab(int i) { return texelFetch(uTable, ivec2(clamp(i, 0, uN - 1), 0), 0).r; }
+float bendAt(float xpx) {
+    float t = (log(xpx) - uT.x) / uT.y;
+    if (t <= 0.0) { float v0 = tab(0); return v0 + t * (tab(1) - v0); }
+    int i = clamp(int(t), 1, uN - 3);
+    float u = t - float(i);
+    return tab(i - 1) * (-u * (u - 1.0) * (u - 2.0) / 6.0) + tab(i) * ((u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0)
+         + tab(i + 1) * (-(u + 1.0) * u * (u - 2.0) / 2.0) + tab(i + 2) * ((u + 1.0) * u * (u - 1.0) / 6.0);
+}
+vec2 mapUV(vec3 v) {
+    vec3 g = uK * v;
+    float l = atan(g.y, g.x), b = asin(clamp(g.z, -1.0, 1.0));
+    return vec2(0.5 - l / (2.0 * PI), 0.5 - b / PI);
+}
+void main() {
+    vec2 o = gl_FragCoord.xy - uCentre;                  // right, up, pixels
+    float d2 = dot(o, o), r = sqrt(d2), th = r / uKpx;
+    vec2 dn = r > 0.0 ? o / r : vec2(0.0);
+    if (uBend == 0) {
+        vec3 v = vec3(sin(th) * dn.x, sin(th) * dn.y, -cos(th));
+        if (uDebug == 1) { fragColor = vec4(v, 1e6); return; }
+        if (th > PI) { fragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+        fragColor = vec4(textureLod(uTex, mapUV(v), uLod).rgb * uBright, 1.0);
+        return;
+    }
+    float xpx = (d2 - uEdge.y - uEdge.z) / (r + uEdge.x);
+    float D = bendAt(max(xpx, 1e-3));
+    vec3 v = vec3(sin(D) * dn.x, sin(D) * dn.y, cos(D));
+    if (uDebug == 1) { fragColor = xpx > 0.0 ? vec4(v, xpx) : vec4(0.0, 0.0, 0.0, xpx); return; }
+    vec2 uv = mapUV(v);
+    vec2 ux = dFdx(uv), uy = dFdy(uv);                   // (taken by every pixel, before any choice: the derivatives need the 2 x 2 block)
+    ux.x -= floor(ux.x + 0.5); uy.x -= floor(uy.x + 0.5);   // the map's seam at a whole turn of longitude
+    ux = clamp(ux, vec2(-0.25), vec2(0.25)); uy = clamp(uy, vec2(-0.25), vec2(0.25));
+    vec3 c = textureGrad(uTex, uv, ux, uy).rgb;
+    float cover = clamp(xpx + 0.5, 0.0, 1.0);
+    fragColor = vec4(th > PI ? vec3(0.0) : c * uBright * cover, 1.0);
+}
+)";
+
 // ---- 0.13 stage 2: OpenGL 4.3 compute (GLSL 430 core) ----
 // The colour group of every dot of a superposition or of a cloud jump, worked out on the GPU from the amplitudes stored with each dot when it was made. One kernel, two modes (uMode).
 // Each function is a direct port of its C++ twin, named in its comment; the C++ functions stay the reference (tests/gl_compare.cpp counts every dot that differs, and each must be within

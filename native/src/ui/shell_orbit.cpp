@@ -12,6 +12,7 @@
 #include "orbit/sky.h"
 #include "orbit/real_errors.h"
 #include "orbit/units.h"
+#include "ui/atom_panel.h"
 #include "ui/fonts.h"
 #include "ui/journey_dates.h"
 #include "ui/look.h"
@@ -46,6 +47,7 @@ std::vector<ToolItem> orbitTools(AppState& app) {
 ChipInfo chipInfo(AppState& app) {
     ChipInfo c;
     c.play = true; c.paused = app.paused;
+    if (app.lab == blackhole::kLabIndex) return blackholeChip(app);   // 0.55.0
     if (app.lab == molecule::kLabIndex) {                       // 0.18: the Molecule Lab: "H2O · Water" and its mass and size (no clock: the shape is fixed)
         const molecule::Molecule& mo = app.molecule.mol();
         char b[96];
@@ -76,6 +78,7 @@ ChipInfo chipInfo(AppState& app) {
 std::string subjectName(const AppState& app) {
     if (app.lab == 1) return atom::name(app.atom.p.Z);
     if (app.lab == molecule::kLabIndex) return app.molecule.mol().name;
+    if (app.lab == blackhole::kLabIndex) return blackholeSubject(app);   // 0.55.0
     const orbit::Selection& sel = app.view.sel;
     if (sel.kind == orbit::Selection::None) return "";
     static orbit::Selection cachedSel;                       // the name of a selection never changes: looked up once, not 47 strings built every frame
@@ -95,6 +98,14 @@ bool subjectCardOf(const AppState& app, orbit::SubjectCard& out) {
 }
 
 bool cardAction(AppState& app, CardAction& out) {
+    if (app.lab == 0 && app.view.sel.kind == orbit::Selection::Far) {             // 0.55.0: Sagittarius A*'s card opens the Black Hole Lab on that black hole
+        orbit::FarItem f;
+        if (orbit::farItem(app.sys, app.view.sel.moon, f) && f.key == "sgra") {
+            out.id = "card.blackhole"; out.text = "Open in the Black Hole Lab";
+            out.act = [&app] { blackhole::applyPreset(app.blackhole, "sgra"); if (app.journey.active) journeyStop(app); openLab(app, blackhole::kLabIndex); };
+            return true;
+        }
+    }
     if (slowMoonsAvailable(app)) { out.id = "card.slowmoons"; out.text = "Slow time to watch moons"; out.act = [&app] { slowMoons(app); }; return true; }
     if (slowSpinAvailable(app)) { out.id = "card.slowspin"; out.text = "Slow time to watch it turn"; out.act = [&app] { slowSpin(app); }; return true; }
     return false;
