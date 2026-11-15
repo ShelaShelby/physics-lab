@@ -18,7 +18,7 @@ std::string muted(const std::string& s) { return "<p class=\"lrnP lrnMuted\">" +
 std::vector<BhLearnSection> blackholeLearnSections() {
     std::vector<BhLearnSection> v;
     v.push_back({"big", "🔎 What is on the picture?",
-        p("A black hole that does not spin and has no gas around it, worked out by the laws of general relativity. You hover at the distance shown on the card, "
+        p("A black hole that does not spin, worked out by the laws of general relativity, with no gas around it unless you switch on the model gas disc. You hover at the distance shown on the card, "
           "looking straight at it. Behind it is our own sky as seen from Earth: ESA's Gaia map of the Milky Way and the 2,874 brightest stars of the app's catalogue.") +
         p("The black disc is the hole's <b>shadow</b>: every direction in it leads to the horizon, so no light comes from there. Round it the hole bends the light of the "
           "sky: the bright circle is the <b>Einstein ring</b>, the sky straight behind the hole spread into a ring, and inside it, hugging the shadow, the whole sky "
@@ -30,6 +30,26 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "for your distance; the table agrees with the closed form to better than 2 × 10⁻⁷ rad.") +
         p("<b>The doubled stars.</b> Every star has a first image outside the Einstein ring, a second one on the other side of the hole inside it, and fainter ones "
           "closer to the shadow (Riazuelo 2019). Each image is drawn as a point at its own position and magnified brightness, never as a stretched blob.")});
+    v.push_back({"disc", "🌀 The gas disc (a model)",
+        p("Switch on <b>Gas disc (model)</b> to see the standard thin disc of gas (Novikov and Thorne; Page and Thorne 1974): gas going round the hole on circular orbits, "
+          "heated by its own friction as it slowly spirals in, and shining from both faces. Such discs exist round quasars and round small black holes that feed from "
+          "a companion star (Abramowicz and Fragile 2013; Yuan and Narayan 2014).") +
+        p("<b>What is calculated.</b> How bright each ring of the disc is (Page and Thorne's formula: nothing at the inner edge, brightest at 9.55 GM/c², falling off far "
+          "out), its temperature (each face a black body), the light's shift on the way to you from the gas's speed and from gravity (Luminet 1979), and where every "
+          "pixel's light path meets the disc: over the hole, under it (the disc's underside, bent into view) and in thin rings closer to the shadow. A black body seen "
+          "shifted is still a black body, at the shifted temperature (Riazuelo 2019); its colour and visible brightness come from the CIE 1931 eye, the same rule as "
+          "the stars' colours. The side coming towards you is brighter. The picture is checked pixel by pixel against the double-precision reference.") +
+        p("<b>The inner edge</b> is the innermost stable orbit, 6 GM/c²: inside it the gas falls in and gives no light here. The <b>outer edge</b> is your choice: the "
+          "model does not set it. The <b>feeding rate</b> is shown as the disc's light over the Eddington limit, and only between 1.5 % and 30 %, where the thin-disc "
+          "model applies (Yuan and Narayan 2014; Abramowicz and Fragile 2013).") +
+        p("<b>Blinding.</b> A real disc like this is blue-white and far brighter than the Sun's surface everywhere: the card says how many times, in visible light. "
+          "The picture dims it (the exposure; automatic draws the brightest part at full brightness) so that the sky stays visible. A real disc this bright would "
+          "drown out every star.") +
+        p("<b>The model's limits.</b> Flat, thin, opaque, each face a perfect black body, steady. No turbulence, hot spots, jets or wind; no light from inside the inner "
+          "edge; no light of the disc falling back on itself; each face shines the same in every direction. The hole does not spin: a spinning hole's disc reaches "
+          "further in. The disc lies in a plane the lab chose (parallel to the Earth's orbit, the gas going round as the planets do): its direction against the sky "
+          "is not something measured. Sagittarius A* and M87* do not have such a disc; on them the lab labels it as a what-if.") +
+        p("<b>Not drawn:</b> your own hovering shifts all the light you see, sky and disc alike, bluer and brighter; the card gives that as a number, as for the sky.")});
     v.push_back({"soft", "〰️ What is soft",
         p("<b>The sky map.</b> Gaia's map has about 0.09° per map pixel. Near the Einstein ring the hole magnifies the sky many times, so the map's own blur "
           "shows there: that is the map's sharpness, not the physics. Close to the shadow's edge the whole sky is squeezed into rings thinner than a pixel; the "
@@ -40,7 +60,7 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         p("<b>Very bright images.</b> A star exactly behind the hole would become a ring of light, and its images near the ring are magnified without limit. "
           "A drawn dot cannot show that: no image is drawn brighter than the brightest star of the sky seen without the hole (Sirius).")});
     v.push_back({"limits", "⚠️ What the lab leaves out",
-        p("<b>Spin and gas.</b> Real black holes spin and have gas around them. Neither is in the lab yet.") +
+        p("<b>Spin.</b> Real black holes spin; the lab's does not yet. Their gas: the lab has the standard thin disc as a model (above), nothing else.") +
         p("<b>The sky is ours.</b> It is the sky seen from Earth, placed behind the hole. Nobody has a map of the sky as it looks from the centre of our galaxy or "
           "from M87: one would have to be invented.") +
         p("<b>You hover.</b> Staying still that close to a black hole would take a powerful rocket. Your clock runs slow, and the starlight reaches you bluer and "

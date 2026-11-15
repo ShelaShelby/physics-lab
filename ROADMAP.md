@@ -49,7 +49,9 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Celestial mechanics in the Data panel: an ephemeris table (state vectors and elements at a date, in a chosen frame) beside the Horizons tables; an integrator check (energy and angular-momentum drift against the step); Lagrange points and the Jacobi constant; the asteroids' Kirkwood gaps; a Lambert solver with porkchop plots (Earth to Mars: dates, time, delta-v).
 
 ## Black Hole Lab
-- In the order the owner chose (DECISIONS.md; plan steps 2-7, PLAN_BLACKHOLE.md): the thin disc (0.55.1), spin, the Real and Film looks with the quality levels High and Ultra (only Basic exists), moving cameras (orbiting, then falling in), the Data panel's tables, the skin. **source needed** before the spinning fall-in: the ray equations in ingoing Kerr coordinates.
+- In the order the owner chose (DECISIONS.md; plan steps 3-7, PLAN_BLACKHOLE.md): spin (the disc then reaches further in; the a = 0 closed form of the disc's flux in the shader becomes a table), the Real and Film looks with the quality levels High and Ultra (only Basic exists), moving cameras (orbiting, then falling in), the Data panel's tables, the skin. **source needed** before the spinning fall-in: the ray equations in ingoing Kerr coordinates.
+- For the looks step: one true exposure for the sky and the disc together (needs a traceable brightness for the sky map and the stars; today the disc is dimmed on its own and the sky keeps its own brightness).
+- **fix**: Cunningham 1975 p. 792 gives 1.7 for g_max (edge-on) over g (face-on) at r_ms, a = 0; the module (and Luminet's (19)) give 1.89 on the approaching side of the direct image at 89.9 degrees: find why (C75's equatorial observer, the disc's own shadow, or the figure) before the spin step compares with C75's a = 0.9981 column.
 - A "1979 paper" view that recomputes Luminet's figures in ink-on-paper style, with a credit (after the disc exists).
 - Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
 

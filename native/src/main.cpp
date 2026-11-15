@@ -289,23 +289,24 @@ int main(int, char**) {
         if (const char* pk = SDL_getenv("PL_MOLECULE_PICK")) std::sscanf(pk, "%d,%d", &app.molecule.sel.atom, &app.molecule.sel.bond);
         app.visited[molecule::kLabIndex] = true;
     }
-    if (SDL_getenv("PL_BLACKHOLE")) {                   // 0.55.0: PL_BLACKHOLE=1 opens the Black Hole Lab; PL_BH_SET="preset=m87;dist=3;bend=off;sky=black;fov=120;mass=1e6;yaw=..;pitch=.." (automatic checks)
+    if (SDL_getenv("PL_BLACKHOLE")) {                   // 0.55.0: PL_BLACKHOLE=1 opens the Black Hole Lab; PL_BH_SET="preset=m87;dist=3;bend=off;sky=black;fov=120;mass=1e6;yaw=..;pitch=..;disc=on;feed=0.1;outer=30;exposure=auto" (automatic checks)
         app.lab = blackhole::kLabIndex;
         app.visited[blackhole::kLabIndex] = true;
         if (const char* bs = SDL_getenv("PL_BH_SET")) {
             std::map<std::string, std::string> m;
             blackhole::saveSettings(app.blackhole, m);
             const std::string list = bs;
-            bool mass = false, preset = false;
+            bool mass = false, preset = false, disc = false;
             for (std::size_t i = 0; i < list.size();) {
                 std::size_t e = list.find(';', i);
                 if (e == std::string::npos) e = list.size();
                 const std::string item = list.substr(i, e - i);
                 const std::size_t q = item.find('=');
-                if (q != std::string::npos) { m[item.substr(0, q)] = item.substr(q + 1); mass |= item.substr(0, q) == "mass"; preset |= item.substr(0, q) == "preset"; }
+                if (q != std::string::npos) { m[item.substr(0, q)] = item.substr(q + 1); mass |= item.substr(0, q) == "mass"; preset |= item.substr(0, q) == "preset"; disc |= item.substr(0, q) == "disc"; }
                 i = e + 1;
             }
             if (preset && !mass) m.erase("mass");
+            if (preset && !disc) m.erase("disc");                       // (0.55.1: the preset sets the disc unless it is given)
             app.blackhole = blackhole::loadSettings(m);
         }
     }
@@ -641,6 +642,16 @@ int main(int, char**) {
                         for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
         if (drawStat && app.lab == blackhole::kLabIndex) { const blackhole::ViewStats& bs = app.blackholeView.stats();   // 0.55.0
                         std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale); }
+        if (drawStat && app.lab == blackhole::kLabIndex && SDL_getenv("PL_BH_DISCPTS")) {   // 0.55.1: where the module puts the disc (taken as on), in window pixels
+            const blackhole::ViewStats& bs = app.blackholeView.stats();
+            std::vector<double> on, off;
+            app.blackholeView.discSamples(app.blackhole, app.canvasW, app.canvasH, bs.cx, bs.cy, 400, on, off);
+            std::printf("PLBHDISCPT on=");
+            for (std::size_t q = 0; q + 1 < on.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", on[q] * scale, on[q + 1] * scale);
+            std::printf(" off=");
+            for (std::size_t q = 0; q + 1 < off.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", off[q] * scale, off[q + 1] * scale);
+            std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY);
+        }
         if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
                         std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
                                     ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }

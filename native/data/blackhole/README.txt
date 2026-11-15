@@ -2,6 +2,9 @@
 repo ShelaShelby/physics-lab-sources at data/blackhole/ (same names; the other files named here are still in this folder). native/data/SOURCES.md lists each moved file with its
 reference, URL, date read and sha256. Where a test reads one, its extract (<name>.extract.txt: the lines it needs, copied exactly) is in this folder.
 
+[0.55.1] The thin disc (src/blackhole/disc.h) reads Abramowicz & Fragile 2013 and Yuan & Narayan 2014 through their extracts in arxiv/ (<name>.extract.txt); Page & Thorne 1974,
+Luminet 1979, Bardeen, Press & Teukolsky 1972 and Cunningham 1975 were read from the page images of the scans (numbers typed in tests/test_blackhole.cpp with their page).
+
 Sources for the Black Hole Lab (0.54.2 research job, 15 Nov 2026; the plan is native/PLAN_BLACKHOLE.md)
 =======================================================================================================
 Nothing here is used by the app yet. Every file was fetched on 2026-11-15 (UTC) and is kept as received, except where "text" is said:

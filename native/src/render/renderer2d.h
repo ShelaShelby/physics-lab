@@ -169,6 +169,18 @@ public:
         double s0 = 0, ds = 0;
         std::uint64_t tableVersion = 0;     // a new number for a new table (it is sent to the GPU again)
         bool debug = false;                 // tests: write the far direction (view frame: right, up, depth) and x in pixels as floats, not colours (into a float framebuffer)
+        // 0.55.1: the gas disc in front of the sky (blackhole/disc.h DiscTable: u = 1/r against s and the swept angle, the ray's end Phi per row; the colour of a
+        // black body against log10 T in units of the Sun's surface). Drawn only with bend. debugDisc (tests): the first crossing's order, r and g, and x in pixels.
+        bool sky = true;                    // false: nothing behind (black), the disc alone
+        bool disc = false, debugDisc = false;
+        const std::vector<float>* discU = nullptr;   // nT x (2 nS): rows side 0 then side 1
+        const std::vector<float>* discP = nullptr;   // 2 nS
+        const std::vector<float>* discCol = nullptr; // 3 nC
+        int discS = 0, discT = 0, discC = 0;
+        double discS0 = 0, discDs0 = 0, discDs1 = 0, discXc = 0.1;
+        std::uint64_t discVersion = 0, colVersion = 0;
+        float discAxis[3] = {0, 0, 1};      // the disc's axis on the view frame (right, up, towards the camera)
+        double rO = 20, rIn = 6, rOut = 30, tScale = 0, white = 1, colLog0 = 0, colDlog = 1;
     };
     void lensSky(const LensSky& s);
     long lensRedraws() const { return lensRedraws_; }   // how many times the bent sky was drawn anew (the rest of the frames reused it)
@@ -222,7 +234,9 @@ private:
 
     // 0.55.0: the bent sky (lensSky)
     std::vector<LensSky> lens_;                     // this frame's (Segment::slot)
-    GLuint lensProgram_ = 0, lensFbo_ = 0, lensTex_ = 0, lensTableTex_ = 0;
+    GLuint lensProgram_ = 0, lensFbo_ = 0, lensTex_ = 0, lensTableTex_ = 0, discUTex_ = 0, discPTex_ = 0, discCTex_ = 0;
+    GLint lnDisc_ = -1, lnDU_ = -1, lnDP_ = -1, lnDC_ = -1, lnDN_ = -1, lnDS_ = -1, lnDA_ = -1, lnDR_ = -1, lnDT_ = -1, lnSky_ = -1;
+    std::uint64_t discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0);
     GLint lnTex_ = -1, lnTable_ = -1, lnK_ = -1, lnCentre_ = -1, lnKpx_ = -1, lnEdge_ = -1, lnT_ = -1, lnN_ = -1, lnBend_ = -1, lnDebug_ = -1, lnBright_ = -1, lnLod_ = -1;
     int lensW_ = 0, lensH_ = 0, lensN_ = 0;
     std::uint64_t lensTableVer_ = ~std::uint64_t(0);

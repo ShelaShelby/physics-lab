@@ -184,6 +184,10 @@ bool Renderer2D::init() {
             lnCentre_ = glGetUniformLocation(lensProgram_, "uCentre"); lnKpx_ = glGetUniformLocation(lensProgram_, "uKpx"); lnEdge_ = glGetUniformLocation(lensProgram_, "uEdge");
             lnT_ = glGetUniformLocation(lensProgram_, "uT"); lnN_ = glGetUniformLocation(lensProgram_, "uN"); lnBend_ = glGetUniformLocation(lensProgram_, "uBend");
             lnDebug_ = glGetUniformLocation(lensProgram_, "uDebug"); lnBright_ = glGetUniformLocation(lensProgram_, "uBright"); lnLod_ = glGetUniformLocation(lensProgram_, "uLod");
+            lnDisc_ = glGetUniformLocation(lensProgram_, "uDisc"); lnDU_ = glGetUniformLocation(lensProgram_, "uDU"); lnDP_ = glGetUniformLocation(lensProgram_, "uDP");
+            lnDC_ = glGetUniformLocation(lensProgram_, "uDC"); lnDN_ = glGetUniformLocation(lensProgram_, "uDN"); lnDS_ = glGetUniformLocation(lensProgram_, "uDS");
+            lnDA_ = glGetUniformLocation(lensProgram_, "uDA"); lnDR_ = glGetUniformLocation(lensProgram_, "uDR"); lnDT_ = glGetUniformLocation(lensProgram_, "uDT");
+            lnSky_ = glGetUniformLocation(lensProgram_, "uSky");
         }
     }
     {   // the planet program (same vertex shader as the shapes; it also draws the sky photo) and the picture maps
@@ -281,7 +285,9 @@ void Renderer2D::shutdown() {
     if (lensFbo_) glDeleteFramebuffers(1, &lensFbo_);
     if (lensTex_) glDeleteTextures(1, &lensTex_);
     if (lensTableTex_) glDeleteTextures(1, &lensTableTex_);
+    for (GLuint* tx : {&discUTex_, &discPTex_, &discCTex_}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     lensProgram_ = lensFbo_ = lensTex_ = lensTableTex_ = 0; lensW_ = lensH_ = lensN_ = 0; lensValid_ = false; lensTableVer_ = ~std::uint64_t(0);
+    discVer_ = colVer_ = ~std::uint64_t(0);
     for (int i = 0; i < int(meshes_.size()); i++) meshDelete(i);
     meshes_.clear();
     if (meshProgram_) glDeleteProgram(meshProgram_);
@@ -365,6 +371,24 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glBindTexture(GL_TEXTURE_2D, 0);
         lensTableVer_ = L.tableVersion; lensN_ = n;
     }
+    const bool disc = bend && L.disc && L.discU && L.discP && L.discCol && L.discS >= 4 && L.discT >= 4 && L.discC >= 2;
+    const auto upload = [](GLuint& tex, int w, int h, GLenum ifmt, GLenum fmt, const float* data) {
+        if (!tex) glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        glTexImage2D(GL_TEXTURE_2D, 0, ifmt, w, h, 0, fmt, GL_FLOAT, data);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    };
+    if (disc && L.discVersion != discVer_) {                               // a new disc table: to the GPU once
+        upload(discUTex_, L.discT, 2 * L.discS, GL_R32F, GL_RED, L.discU->data());
+        upload(discPTex_, 2 * L.discS, 1, GL_R32F, GL_RED, L.discP->data());
+        discVer_ = L.discVersion;
+    }
+    if (disc && L.colVersion != colVer_) { upload(discCTex_, L.discC, 1, GL_RGB32F, GL_RGB, L.discCol->data()); colVer_ = L.colVersion; }
     const auto pass = [&](int ox, int oy) {                                // one full-picture pass into the bound framebuffer, whose picture starts at (ox, oy)
         const double ppp = fbW / width_;                                   // pixels per point
         const double cxPx = std::round(L.cx * ppp), cyPx = std::round(L.cy * ppp), Kpx = L.kRad * ppp;
@@ -378,7 +402,19 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glUniform2f(lnT_, static_cast<float>(std::log(Kpx) + L.s0), static_cast<float>(L.ds));
         glUniform1i(lnN_, lensN_);
         glUniform1i(lnBend_, bend ? 1 : 0);
-        glUniform1i(lnDebug_, L.debug ? 1 : 0);
+        glUniform1i(lnDebug_, L.debugDisc ? 2 : L.debug ? 1 : 0);
+        glUniform1i(lnSky_, L.sky ? 1 : 0);
+        glUniform1i(lnDisc_, disc ? 1 : 0);
+        if (disc) {
+            glUniform3i(lnDN_, L.discS, L.discT, L.discC);
+            glUniform4f(lnDS_, static_cast<float>(L.discS0), static_cast<float>(L.discDs0), static_cast<float>(L.discDs1), static_cast<float>(L.discXc));
+            glUniform3f(lnDA_, L.discAxis[0], L.discAxis[1], L.discAxis[2]);
+            glUniform4f(lnDR_, static_cast<float>(L.rO), static_cast<float>(L.rO / std::sqrt(1 - 2 / L.rO)), static_cast<float>(L.rIn), static_cast<float>(L.rOut));
+            glUniform4f(lnDT_, static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog));
+            glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, discUTex_); glUniform1i(lnDU_, 2);
+            glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, discPTex_); glUniform1i(lnDP_, 3);
+            glActiveTexture(GL_TEXTURE4); glBindTexture(GL_TEXTURE_2D, discCTex_); glUniform1i(lnDC_, 4);
+        }
         glUniform1f(lnBright_, static_cast<float>(std::clamp(L.bright, 0.0, 1.0)));
         const float tw = static_cast<float>(std::max(texW_[static_cast<int>(Map::Sky)], 1));
         glUniform1f(lnLod_, std::max(0.0f, std::log2(tw / 6.2831853f / std::max(static_cast<float>(L.kRad), 1.0f))));   // (skyMap's level: the plain sky as the Orbit Lab draws it)
@@ -392,9 +428,10 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glBindVertexArray(cmpVao_);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, 0); glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, 0);
+        if (disc) { for (GLenum u : {GL_TEXTURE2, GL_TEXTURE3, GL_TEXTURE4}) { glActiveTexture(u); glBindTexture(GL_TEXTURE_2D, 0); } glActiveTexture(GL_TEXTURE0); }
     };
     glDisable(GL_BLEND);                                                   // the bent sky is opaque: black space where there is no light
-    if (L.debug) { pass(vx, vy); glEnable(GL_BLEND); return; }             // (tests: straight into the float framebuffer given, every time)
+    if (L.debug || L.debugDisc) { pass(vx, vy); glEnable(GL_BLEND); return; }   // (tests: straight into the float framebuffer given, every time)
     if (!lensFbo_) { glGenFramebuffers(1, &lensFbo_); glGenTextures(1, &lensTex_); }
     if (fbW != lensW_ || fbH != lensH_) {
         lensW_ = fbW; lensH_ = fbH; lensValid_ = false;
@@ -410,12 +447,14 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
     }
     const LensSky& P = lensLast_;
     const bool same = lensValid_ && P.cx == L.cx && P.cy == L.cy && P.kRad == L.kRad && std::equal(L.M, L.M + 9, P.M) && P.bright == L.bright && P.bend == L.bend &&
-                      P.alphaSh == L.alphaSh && P.s0 == L.s0 && P.ds == L.ds && P.tableVersion == L.tableVersion && width_ == lensPtW_;
+                      P.alphaSh == L.alphaSh && P.s0 == L.s0 && P.ds == L.ds && P.tableVersion == L.tableVersion && width_ == lensPtW_ &&
+                      P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
+                      P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white));
     if (!same) {                                                           // (e) of the plan: drawn anew only when the view, the distance or the picture changed
         glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
         glViewport(0, 0, fbW, fbH);
         pass(0, 0);
-        lensLast_ = L; lensLast_.table = nullptr; lensPtW_ = width_; lensValid_ = true; lensRedraws_++;
+        lensLast_ = L; lensLast_.table = nullptr; lensLast_.discU = lensLast_.discP = lensLast_.discCol = nullptr; lensPtW_ = width_; lensValid_ = true; lensRedraws_++;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glViewport(vx, vy, fbW, fbH);

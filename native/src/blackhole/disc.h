@@ -88,6 +88,10 @@ std::array<double, 3> blackBodyXYZ(double T);       // W m^-2 sr^-1 under xbar, 
 std::array<double, 3> blackBodyLinear(double T);    // linear sRGB of the same, in units of the Sun's surface luminance Y (so Y(Sun) = 1)
 double visibleVsSun(double T);                      // Y(T) / Y(Sun's surface)
 double sunTeff();                                   // orbit/sun_facts.h kSunTeffK
+// the same two from a table made once (4096 temperatures evenly in log T from kTmin to kTmax; Y interpolated in log Y, the channels over Y linearly): for many pixels
+// (lab.h discLook). Tested against the full sums.
+double visibleVsSunFast(double T);
+std::array<double, 3> blackBodyLinearFast(double T);
 
 // ---- rays and the disc ----
 // The ray of a hovering camera at rO seen at psi (from the outward radial direction): where it ends, and u = 1/r along it. Reference: Dormand-Prince on Binet's equation.

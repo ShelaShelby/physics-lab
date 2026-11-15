@@ -78,7 +78,9 @@ void blackholeScene(AppState& app) {
     commonSetup(app);
     app.lab = blackhole::kLabIndex;
     app.blackhole = blackhole::settingsDefaults();
-    blackhole::setDistance(app.blackhole, 6);
+    blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);       // 0.55.1: with the gas disc, 10 degrees above it
+    blackhole::setDistance(app.blackhole, 20);
+    app.blackhole.pitch = 80 * 3.14159265358979323846 / 180;
 }
 
 void atomScene(AppState& app, int which) {

@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.55.0 (15 Nov 2026): the Black Hole Lab, the fourth lab (PLAN_BLACKHOLE.md step 1): a non-spinning hole in front of our sky, bent per pixel by the graphics card from the module's double-precision table, the stars' images as points, presets Sagittarius A* and M87*, a readout card, the guide "What is real in this picture", the Orbit Lab's Sagittarius A* card opens it; benchmark scene 13.
+- 0.55.1 (15 Nov 2026): the Black Hole Lab's thin gas disc (PLAN_BLACKHOLE.md step 2): Page & Thorne's disc round the non-spinning hole, drawn by the graphics card from the module's double-precision tables (over and under the hole, thin rings, true colour, automatic exposure), feeding rate and outer edge, a third preset "A feeding black hole (model)", the real holes' what-if label, the disc's readout; small version (quick tests and its own UI part).
 - Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
-- Next: the thin disc, 0.55.1 (PLAN_BLACKHOLE.md step 2). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- Next: spin, 0.55.2 (PLAN_BLACKHOLE.md step 3). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

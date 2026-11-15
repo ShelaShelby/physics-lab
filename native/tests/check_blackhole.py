@@ -10,7 +10,11 @@
 #   settings:  the lab's settings survive a restart; a 0.54 settings file (no Black Hole lines) still opens its lab
 #   layout:    880 x 560 and 1280 x 800 (Dark): the bar, the card, the tab and the Controls panel inside the window, the bar clear of the panel and the card
 #   look:      six themes at 1280 x 800: the card's and the Controls panel's text 4.5:1 over their background on this picture (WCAG 2.x, written here)
-#   precision: the card's bent sky against the double-precision reference (PL_BH_COMPARE): the shadow's edge, the directions, the plain sky = the Orbit Lab's
+#   disc:      0.55.1, the gas disc: off for the two real holes, on for the feeding preset; switched on, the picture changes where the module puts the disc
+#              (nearly face-on and steep), Sagittarius A*'s label; the readout's hottest ring = the papers' (written here); feeding rate and outer edge move
+#              the picture and the readout; a restart keeps the settings (1280 x 800, Dark); the taller card at 880 x 560
+#   precision: the card's bent sky against the double-precision reference (PL_BH_COMPARE): the shadow's edge, the directions, the plain sky = the Orbit Lab's;
+#              0.55.1: the card's gas disc against the double lookup and the reference (two distances, two inclinations)
 #   check_blackhole.py <PhysicsLab binary> <work folder> [part]
 import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -180,7 +184,7 @@ def part_layout(binary, work):
         if bar and cards: check(not overlap(bar, cards[0]), f"{size}: the bar is clear of the card")
         ctl = [v for k, v in r.rects.items() if k.startswith("ctlhead.")]
         if bar and ctl: check(all(not overlap(bar, c) for c in ctl), f"{size}: the bar is clear of the Controls panel")
-        check(any(n.startswith("ctlsections") and "preset mass camera light honest" in n for n in r.notes), f"{size}: the Controls panel has its five sections")
+        check(any(n.startswith("ctlsections") and "preset mass camera light disc honest" in n for n in r.notes), f"{size}: the Controls panel has its six sections (0.55.1: the gas disc)")
 
 def part_look(binary, work):
     themes = ("dark", "light", "black", "paper", "monochrome", "contrast")
@@ -225,11 +229,115 @@ def part_precision(binary, work):
         # the bent map: within float rounding away from the edge (1e-5 rad: a 4K pixel at this scale is about 4e-4 rad)
         check(float(d["dir1"]) < 1e-5 and float(d["dir01"]) < 1e-5, f"dist {d['dist']}: the bent sky within 1e-5 rad of the reference at least 0.1 pixel from the edge ({d['dir1']}, {d['dir01']})")
     check(any(float(d["dist"]) < 3 for d in rows) and any(float(d["dist"]) >= 27 for d in rows), "one camera far away, one inside the photon orbit")
+    # 0.55.1, the disc: two distances (27 M and 4 M, inside the inner edge), two inclinations (10 and 60 degrees above it), the feeding preset's disc of 6 to 30 M.
+    # The card against the double-precision lookup of the same table at every pixel: the same image (order) at every pixel centre, the edges moved by under
+    # 0.01 pixel, r within 1e-4 and g within 1e-5 (float rounding of the table's coordinates: s ~ 30, the column ~ 255); the table against the reference
+    # (Binet by Dormand-Prince) at every 16th pixel: r and g within 1e-6 (blackhole_physics's limit for the table), the same image everywhere.
+    dd = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHDISC ")]
+    check(len(dd) == 4 and {(x["dist"], x["incl"]) for x in dd} == {("27", "10"), ("27", "60"), ("4", "10"), ("4", "60")}, f"the disc at two distances and two inclinations ({len(dd)})")
+    for x in dd:
+        w = f"disc dist {x['dist']} incl {x['incl']}"
+        check(int(x["pixels"]) > 50000 and int(x["edgepixels"]) > 500, f"{w}: the disc covers part of the picture ({x['pixels']} pixels, {x['edgepixels']} at an edge)")
+        check(int(x["wrong"]) == 0 and float(x["edgeshift"]) < 0.01, f"{w}: the card's disc where the reference's is: {x['wrong']} pixels differ, edges moved by {x['edgeshift']} px")
+        check(float(x["dr"]) < 1e-4 and float(x["dg"]) < 1e-5, f"{w}: r and g within float rounding of the double lookup ({x['dr']}, {x['dg']})")
+        check(int(x["refwrong"]) == 0 and float(x["refdr"]) < 1e-6 and float(x["refdg"]) < 1e-6, f"{w}: the table against the reference ({x['refwrong']}, {x['refdr']}, {x['refdg']})")
     p = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHPLAIN ")]
     check(bool(p) and int(p[0]["maxdiff"]) <= 1, f"bending off = the Orbit Lab's sky projection, within one step of 255 ({p})")
 
+def disc_note(r):
+    return bh(r, "bhdisc ")
+def disc_points(r):
+    s = [ln for ln in r.out.splitlines() if ln.startswith("PLBHDISCPT ")]
+    if not s: return None
+    d = dict(kv.split("=", 1) for kv in s[-1].split()[1:])
+    pts = lambda v: [tuple(float(a) for a in q.split(",")) for q in v.split(";") if q]
+    return pts(d["on"]), pts(d["off"]), int(d["grid"])
+def hottest_k(mass, feed):
+    # the hottest ring of the standard thin disc at a = 0, written here from the papers (independent of the app's code): Page & Thorne 1974 (11b), (15n) in Luminet 1979's
+    # (15) form with 3^(1/2)/2 before the log; L = feed L_Edd = (1 - E(6M)) Mdot c^2, E(6M) = (8/9)^(1/2) (Bardeen, Press & Teukolsky 1972 (2.12)); L_Edd = 4 pi G M c / 0.04 m^2/kg
+    # (Yuan & Narayan 2014 fn. 1); sigma T^4 = F with sigma from the exact h, k, c; F in W/m^2 = Mdot c^2 / r_g^2 times the M = Mdot = 1 value
+    GM, c, h, k = 1.32712440041279419e20 * mass, 299792458.0, 6.62607015e-34, 1.380649e-23
+    sigma = 2 * math.pi ** 5 * k ** 4 / (15 * h ** 3 * c ** 2)
+    def F(r):
+        s, s3, s6 = math.sqrt(r), math.sqrt(3), math.sqrt(6)
+        return 3 / (8 * math.pi) / ((r - 3) * r ** 2.5) * (s - s6 + s3 / 2 * math.log((s + s3) * (s6 - s3) / ((s - s3) * (s6 + s3))))
+    fmax = max(F(6 + i * 1e-4) for i in range(1, 200000))
+    mdot = feed * 4 * math.pi * GM * c / 0.04 / ((1 - math.sqrt(8 / 9)) * c * c)
+    rg = GM / c ** 2
+    return (mdot * c * c / rg ** 2 * fmax / sigma) ** 0.25
+
+def part_disc(binary, work):
+    # the presets: the two real holes open with the disc off, the feeding one with it on
+    for key, want in (("m87", "0"), ("feeding", "1"), ("sgra", "0")):
+        r = run_app(binary, work, f"bh_disc_preset_{key}", dict(BASE, PL_BLACKHOLE="1", PL_BH_SET="preset=m87" if key == "sgra" else "", PL_SCRIPT=f"6:click=blackhole.preset.{key}"), frames=14)
+        s = bh(r)
+        check(not r.scripted_missing() and s is not None and s["preset"] == key and s["disc"] == want, f"preset {key}: the disc {'on' if want == '1' else 'off'} ({s}, {r.scripted_missing()})")
+    # switching it on draws it where the module says the disc is (Sagittarius A*: also its label), nearly face-on and steep
+    for name, pitch in (("faceon", 0.35), ("steep", 1.40)):
+        e = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"pitch={pitch}")
+        off = run_app(binary, work, f"bh_disc_{name}_off", e, frames=12)
+        on = run_app(binary, work, f"bh_disc_{name}_on", dict(e, PL_SCRIPT="6:click=blackhole.disc.on"), frames=16)
+        check(not on.scripted_missing(), f"{name}: the switch was there ({on.scripted_missing()})")
+        pts = disc_points(on)
+        if pts is None: check(False, f"{name}: the module's disc points were printed"); continue
+        B0, B1 = Bmp(off.bmp), Bmp(on.bmp)
+        occ = [v for k, v in on.rects.items() if re.match(r"occ\d+$", k) or k == "handle"]
+        free = lambda x, y: not any(o[0] - 2 <= x <= o[0] + o[2] + 2 and o[1] - 2 <= y <= o[1] + o[3] + 2 for o in occ)
+        onp = [(x, y) for x, y in pts[0] if free(x, y) and y > 60]
+        offp = [(x, y) for x, y in pts[1] if free(x, y) and y > 60]
+        changed = sum(1 for x, y in onp if max(abs(a - b) for a, b in zip(B0.px(int(x), int(y)), B1.px(int(x), int(y)))) > 20)
+        same = sum(1 for x, y in offp if max(abs(a - b) for a, b in zip(B0.px(int(x), int(y)), B1.px(int(x), int(y)))) <= 2)
+        check(len(onp) >= 10 and changed >= 0.9 * len(onp), f"{name}: the picture changes where the module puts the disc ({changed} of {len(onp)})")
+        check(len(offp) >= 10 and same >= 0.97 * len(offp), f"{name}: and not elsewhere ({same} of {len(offp)} the same)")
+        check(any("does not have one" in tx[2] for tx in on.texts), f"{name}: Sagittarius A* with the disc says it has none")
+        d = disc_note(on)
+        if d is None or d.get("on") != "1": check(False, f"{name}: the card's disc numbers ({d})"); continue
+        tk = hottest_k(4.297e6, 0.1)
+        check(abs(float(d["thot"]) / tk - 1) < 1e-5 and float(d["rin"]) == 6 and abs(float(d["rhot"]) - 9.551) < 0.001, f"{name}: the readout's hottest ring {d['thot']} K = {tk:.6g} K at {d['rhot']}, inner edge {d['rin']}")
+        check(float(d["bright"]) > 1 and d["auto"] == "1" and float(d["white"]) > 0, f"{name}: brighter than the Sun's surface, automatic exposure ({d['bright']}, {d['white']})")
+    # the feeding rate and the outer edge move the picture and the readout (a fixed exposure, so that brightness shows)
+    runs = {}
+    for name, extra in (("f02", "feed=0.02;exposure=3.5"), ("f20", "feed=0.2;exposure=3.5"), ("o15", "outer=15;exposure=1"), ("o60", "outer=60;exposure=1")):
+        runs[name] = run_app(binary, work, f"bh_disc_{name}", dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"preset=feeding;pitch=1.2;{extra}"), frames=12)
+    a, b = disc_note(runs["f02"]), disc_note(runs["f20"])
+    if a and b:
+        check(abs(float(b["thot"]) / float(a["thot"]) - 10 ** 0.25) < 1e-6 and float(a["feed"]) == 0.02 and float(b["feed"]) == 0.2, f"feeding rate: T ~ rate^(1/4) ({a['thot']}, {b['thot']})")
+        check(abs(float(a["thot"]) / hottest_k(1e8, 0.02) - 1) < 1e-5, f"the feeding preset's hottest ring = the papers' ({a['thot']} K)")
+    else: check(False, "feeding rate runs printed the card")
+    occ = [v for k, v in runs["f02"].rects.items() if re.match(r"occ\d+$", k) or k == "handle"]
+    free = lambda x, y: y > 60 and not any(o[0] - 2 <= x <= o[0] + o[2] + 2 and o[1] - 2 <= y <= o[1] + o[3] + 2 for o in occ)
+    pa = disc_points(runs["f02"])
+    if pa:
+        pa = ([q for q in pa[0] if free(*q)], pa[1], pa[2])
+        Ba, Bb = Bmp(runs["f02"].bmp), Bmp(runs["f20"].bmp)
+        la = sum(lum(Ba.px(int(x), int(y))) for x, y in pa[0])
+        lb = sum(lum(Bb.px(int(x), int(y))) for x, y in pa[0])
+        # ten times the feeding rate: T x 10^(1/4) = 1.78; far above the visible a black body's visible light grows about like T (the same exposure)
+        check(lb > 1.5 * la, f"a higher feeding rate is brighter on the disc (linear light {la:.3g} -> {lb:.3g})")
+    c15, c60 = disc_note(runs["o15"]), disc_note(runs["o60"])
+    p15, p60 = disc_points(runs["o15"]), disc_points(runs["o60"])
+    check(c15 is not None and c60 is not None and float(c15["outer"]) == 15 and float(c60["outer"]) == 60, f"outer edge in the readout ({c15}, {c60})")
+    if p15 and p60:
+        check(p60[2] > p15[2], f"a larger outer edge covers more of the picture ({p15[2]} -> {p60[2]} grid points)")
+        B15, B60 = Bmp(runs["o15"].bmp), Bmp(runs["o60"].bmp)
+        newp = [pt for pt in p60[0] if pt in p15[1] and free(*pt)]           # on the disc of 60 M, off the disc of 15 M
+        diff = sum(1 for x, y in newp if max(abs(a - b) for a, b in zip(B15.px(int(x), int(y)), B60.px(int(x), int(y)))) > 10)
+        check(len(newp) >= 5 and diff >= 0.9 * len(newp), f"the added ring is drawn ({diff} of {len(newp)})")
+    # the card with the disc's rows at the small window (the card grows): inside the window, clear of the bar
+    r = run_app(binary, work, "bh_disc_small", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding"), frames=14, size="880x560")
+    cards = [v for k, v in r.rects.items() if k.startswith("card.blackhole.card")]
+    bar = r.rects.get("blackholebar")
+    check(bool(cards) and inside(cards[0], 880, 560) and bar is not None and not overlap(bar, cards[0]), f"880x560: the card with the disc inside the window, clear of the bar ({cards}, {bar})")
+    # a restart keeps the settings
+    sf = os.path.join(work, "bh_disc_settings.txt")
+    if os.path.exists(sf): os.remove(sf)
+    k1 = run_app(binary, work, "bh_disc_keep1", dict(BASE, PL_BLACKHOLE="1", PL_SETTINGS=sf, PL_BH_SET="feed=0.05;outer=40;exposure=1.5", PL_SCRIPT="6:click=blackhole.disc.on"), frames=14)
+    k2 = run_app(binary, work, "bh_disc_keep2", dict(BASE, PL_SETTINGS=sf), frames=10)
+    s = bh(k2)
+    check(not k1.scripted_missing() and s is not None and s["disc"] == "1" and float(s["feed"]) == 0.05 and float(s["outer"]) == 40 and s["exp"] == "1.5", f"a restart keeps the disc's settings ({s})")
+
 PARTS = {"open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
-         "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision}
+         "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]

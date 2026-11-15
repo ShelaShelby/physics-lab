@@ -767,6 +767,15 @@ static void testDiscLight() {
     double prev = 0; bool mono = true;
     for (double T = 1000; T < 1e9; T *= 1.1) { const double v = visibleVsSun(T); if (!(v > prev)) mono = false; prev = v; }
     check(mono, "a hotter black body is brighter in visible light");
+    // the tables made once for many pixels against the full sums
+    double wy = 0, wc = 0;
+    for (double T = 400; T < 9e8; T *= 1.37) {
+        wy = std::max(wy, std::fabs(visibleVsSunFast(T) / visibleVsSun(T) - 1));
+        const auto a = blackBodyLinearFast(T), b = blackBodyLinear(T);
+        const double m = std::max({b[0], b[1], b[2]});
+        for (int k = 0; k < 3; k++) wc = std::max(wc, std::fabs(a[k] - b[k]) / m);
+    }
+    check(wy < 1e-4 && wc < 1e-4, "the light tables = the full sums within 1e-4: " + f(wy) + ", " + f(wc));
     // the black body stays a black body (R19 (53)): T_obs = g T. Its brightness for g: Y(gT); for large T, about g Y(T) (not g^4: the visible is the far tail)
     std::printf("info: the visible brightness against the Sun's surface: 3e4 K %.1f, 7e4 K %.1f, 1.5e5 K %.1f, 4e6 K %.0f\n", visibleVsSun(3e4), visibleVsSun(7e4), visibleVsSun(1.5e5), visibleVsSun(4e6));
 }
@@ -1016,6 +1025,41 @@ static void testDiscTable() {
     }
 }
 
+static void testDiscSettings() {
+    // presets (owner's decision of 15 Nov 2026): the real holes open with the disc off, the feeding one with it on; a changed mass drops the preset
+    Settings s = settingsDefaults();
+    check(!s.disc && s.feed == kFeedDefault && s.outer == kOuterDefault && s.expAuto, "defaults: no disc, 0.1 L_Edd, 30 M, automatic exposure");
+    check(applyPreset(s, kFeedingKey) && s.disc && s.massSun == kFeedingMass && s.preset == kFeedingKey, "the feeding preset: the disc on, 1e8 Suns");
+    check(readout(s).hasPreset && !readout(s).realPreset && readout(s).presetName == kFeedingName, "the feeding preset is not a measured hole");
+    applyPreset(s, "m87");
+    check(!s.disc && readout(s).realPreset, "M87*: the disc off");
+    applyPreset(s, kFeedingKey); setMass(s, 2e8);
+    check(s.preset.empty() && s.disc, "a new mass drops the feeding preset, the disc stays");
+    // the ranges where the model applies; the settings file
+    setFeed(s, 0.9); check(s.feed == kThinMax, "the feeding rate stops at 0.3 L_Edd");
+    setFeed(s, 1e-4); check(s.feed == kThinMin, "and at 0.015");
+    setOuter(s, 3); check(s.outer == kOuterMin, "the outer edge stays outside the inner one");
+    setExposure(s, 2.25); check(!s.expAuto && s.expLog == 2.25, "a chosen exposure");
+    std::map<std::string, std::string> m;
+    s.feed = 0.05; s.outer = 44;
+    saveSettings(s, m);
+    const Settings b = loadSettings(m);
+    check(b == s && m["disc"] == "on" && m["exposure"] == "2.25", "the disc's settings round trip");
+    m["feed"] = "0.5"; m["outer"] = "abc"; m["exposure"] = "auto"; m["disc"] = "maybe";
+    const Settings c = loadSettings(m);
+    check(c.feed == kFeedDefault && c.outer == kOuterDefault && c.expAuto && !c.disc, "bad disc values keep the defaults");
+    // the readout: from the module
+    Settings f = settingsDefaults(); applyPreset(f, kFeedingKey);
+    const Readout r = readout(f);
+    DiscPhys p; p.massSun = 1e8; p.lEdd = 0.1;
+    double rh;
+    check(r.disc && r.rIn == discInner(0) && std::fabs(r.rIn - 6) < 1e-12 && r.tHot == p.hottest(&rh) && r.rHot == rh && r.efficiency == discEfficiency(0) && r.lumW == 0.1 * eddingtonLuminosity(1e8), "the disc's readout is the module's");
+    // the view: the disc's axis on the view frame is the sky frame's z (lab.h)
+    const HoleView v = holeView(f, 1280, 800, 640, 400);
+    const Vec3 N = discAxisView(v), mid = viewMiddle(v);
+    check(std::fabs(N.z - (-mid.z)) < 1e-15, "the axis against the camera's direction: e_r . z");
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -1040,6 +1084,7 @@ int main() {
     testDiscRays();
     testDiscShift();
     testDiscTable();
+    testDiscSettings();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

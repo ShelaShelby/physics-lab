@@ -19,6 +19,16 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.1", "The Black Hole Lab: a glowing disc of gas",
+     "In the Black Hole Lab's Controls, Gas disc (model) switches on the standard thin disc of gas round the hole: gas circling it, heated by its own friction "
+     "as it spirals in, shining as a black body from both faces. It is drawn as you would see it: the disc's far side bent up over the hole and its underside "
+     "under it, thin rings closer to the shadow, the side coming towards you brighter, in its true colour (blue-white), and stars and sky hidden behind it. "
+     "Drag to look onto it from above or edge-on. Feeding rate (as a share of the Eddington limit, only where the thin-disc model applies), Outer edge and "
+     "Exposure (automatic, or your own) change it. A real disc is far brighter than the Sun's surface: the card says how many times, with the disc's inner "
+     "edge, its hottest ring and the exposure in use. A third preset, A feeding black hole (model), opens with the disc on; Sagittarius A* and M87* open "
+     "without it, and switching it on there says that they have no such disc. The guide has a new part on the disc and what the model leaves out; About "
+     "lists its papers. Every number comes from Page and Thorne 1974, Luminet 1979, Abramowicz and Fragile 2013, Yuan and Narayan 2014 and Cunningham 1975, "
+     "and the picture is checked pixel by pixel against the double-precision reference."},
     {"0.55.0", "The Black Hole Lab: a fourth lab, a black hole in front of our own sky",
      "A new tab, Black Hole, opens the fourth lab. It shows a black hole that does not spin, in front of our own sky (ESA's Gaia map and the brightest "
      "stars), as a camera hovering near it would see it: the black shadow with its exact edge, the ring of light where the sky behind the hole is spread into a "

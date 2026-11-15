@@ -1,0 +1,22 @@
+Black Hole Lab reference picture with the gas disc (0.55.1): reference_disc_r60.png, 1280 x 800
+==============================================================================================
+Made by build/blackhole_picture --disc (tests/blackhole_picture.cpp) from the physics module src/blackhole/ (no graphics card); the PNG was then
+re-compressed losslessly (same pixels) to stay under 2 MB.
+
+What it shows: the preset "A feeding black hole (model)": 100 million Suns, a thin gas disc (the standard model of Novikov and Thorne, Page and Thorne 1974)
+from the innermost stable orbit, 6 GM/c^2, out to 30 GM/c^2, shining at 0.1 of the Eddington limit, in front of OUR sky as seen from Earth (ESA's Gaia map
+and the app's catalogue stars). No particular object: such discs exist round quasars and round small black holes feeding from a star.
+  Camera: hovering at 60 GM/c^2, 10 degrees from the disc's plane, looking straight at the hole. The disc's plane is a chosen one (parallel to the Earth's
+  orbit, the sky frame's z axis as its axis); its direction against the sky is not measured.
+  The disc: over the hole, the far side of the disc bent into view; in front, its near side; hugging the shadow, the underside and the thinner rings. The side
+  coming towards the camera (right) is brighter than the side going away (left): the shift g of each ray (Luminet 1979 (16), (19)).
+  Colour: each ring a black body at its temperature (sigma T^4 = F, Page and Thorne (11b), (15n)); seen at g T (Riazuelo 2019 (53)); its colour and visible
+  brightness by the CIE 1931 observer, as the stars' colours (tools/star_colour.py's rule). Hottest ring: 70,100 K at 9.55 GM/c^2. True colour: blue-white.
+  Exposure: the lab's automatic one: the brightest part of the disc (275.7 times the Sun's surface in visible light; its blue channel 593 times the Sun's
+  luminance) is drawn at full brightness. A real disc this bright would drown out every star: here it is dimmed about 600 times so the sky stays visible.
+  Rays: 2 x 2 per pixel: the disc through the same table the graphics card uses (DiscTable, in double precision), the sky through lensPixel; laid over each
+  other in linear light (IEC 61966-2-1). Stars: 751 images drawn; 67 hidden behind the disc.
+  Not drawn: the hovering camera's own blueshift (1.0171 at 60 GM/c^2), for the sky and the disc alike (a readout in the lab).
+
+The model's limits: flat, thin, opaque, each face a perfect black body, steady; no turbulence, hot spots, jets or wind; no light from inside the inner
+edge; no light of the disc falling back on itself; each face shines the same in every direction; the hole does not spin.

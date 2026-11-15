@@ -1,6 +1,9 @@
 // Black Hole Lab (0.54.3): the reference picture and the speed measurements (a tool run by hand; not a test, not part of the app).
 //   blackhole_picture <out.png>      the non-spinning hole in front of our sky (Gaia map + catalogue stars), 1280 x 800, toward the galactic centre
 //   blackhole_picture --measure      the plan's section 6 measurements that need no graphics card (printed)
+//   blackhole_picture --disc <out.png>   0.55.1: the feeding preset's gas disc (blackhole/lab.h), seen from 60 M, 10 degrees above the disc's plane, 1280 x 800:
+//                                    the sky by lensPixel, the disc by discPixel (the table the card uses, in double), 2 x 2 rays per pixel, laid over each other in
+//                                    linear light at the lab's automatic exposure (discLook); stars the disc covers are not drawn
 // The picture: blackhole/schwarzschild.h LensView for every pixel (2 x 2 rays per pixel, averaged), the map sampled bilinearly at the far-sky direction
 // (render/planet_maps.h skyUV, as the Orbit Lab's sky shader); the map drawn at full strength (the Orbit Lab's sky level 1) over black; the shadow black;
 // each catalogue star's images (starImages) as discs by orbit/sky.h starDraw at the image's magnified magnitude. No colour or brightness shift of the
@@ -15,6 +18,7 @@
 #include <vector>
 
 #include "app/shot.h"
+#include "blackhole/lab.h"
 #include "blackhole/schwarzschild.h"
 #include "orbit/sky.h"
 #include "render/planet_maps.h"
@@ -117,8 +121,102 @@ static int measure() {
     return 0;
 }
 
+static double decS(double e) { return e <= 0.04045 ? e / 12.92 : std::pow((e + 0.055) / 1.055, 2.4); }   // IEC 61966-2-1
+static double encS(double l) { l = std::clamp(l, 0.0, 1.0); return l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055; }
+
+static int discPicture(const std::string& outPath) {
+    const int W = 1280, H = 800;
+    Settings s = settingsDefaults();
+    applyPreset(s, kFeedingKey);
+    setDistance(s, 60);                                                        // (outside the disc's outer edge, 30 M)
+    s.pitch = 100 * kPi / 180;                                                 // 10 degrees from the disc's plane, on the side where the picture's up points away from it
+                                                                               // (lab.h: its axis is the sky frame's z; the view's up is (sa cb, ca cb, -sb))
+    const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
+    const LensTable T(s.dist);
+    const DiscTable D(s.dist);
+    const DiscLook L = discLook(D, s, v, W, H, 2);
+    render::MapImage map;
+    if (!render::decodeMap(render::Map::Sky, map)) { std::fprintf(stderr, "no sky map\n"); return 1; }
+    const orbit::Sky& S = orbit::skyData();
+    const Vec3 G0 = S.galCentre, G1 = cross(S.galPole, S.galCentre), G2 = S.galPole;
+    const auto sample = [&](const Vec3& d, double* lin) {                     // the map, bilinear, decoded to linear light
+        const double l = std::atan2(dot(d, G1), dot(d, G0)), b = std::asin(std::clamp(dot(d, G2), -1.0, 1.0));
+        double u, w;
+        render::skyUV(l, b, u, w);
+        const double fx = u * map.w - 0.5, fy = std::clamp(w * map.h - 0.5, 0.0, map.h - 1.0);
+        const int x0 = static_cast<int>(std::floor(fx)), y0 = static_cast<int>(std::floor(fy));
+        const double ax = fx - x0, ay = fy - y0;
+        for (int c = 0; c < 3; c++) {
+            double q = 0;
+            for (int j = 0; j < 2; j++)
+                for (int i = 0; i < 2; i++) {
+                    const int xx = ((x0 + i) % map.w + map.w) % map.w, yy = std::min(y0 + j, map.h - 1);
+                    q += (i ? ax : 1 - ax) * (j ? ay : 1 - ay) * map.rgba[(static_cast<std::size_t>(yy) * map.w + xx) * 4 + c];
+                }
+            lin[c] += decS(q / 255);
+        }
+    };
+    std::vector<double> img(static_cast<std::size_t>(W) * H * 3, 0.0);
+    std::vector<unsigned char> onDisc(static_cast<std::size_t>(W) * H, 0);
+    int discRays = 0;
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            double lin[3] = {0, 0, 0};
+            int hits = 0;
+            for (int k = 0; k < 4; k++) {
+                const double X = x + 0.25 + 0.5 * (k & 1), Y = y + 0.25 + 0.5 * (k >> 1);
+                const DiscPixel q = discPixel(D, s, v, X, Y);
+                if (q.hit.order >= 0) {
+                    const double m = std::max({q.rgb[0], q.rgb[1], q.rgb[2]}) / L.white;
+                    for (int c = 0; c < 3; c++) lin[c] += q.rgb[c] / L.white / std::max(1.0, m);
+                    hits++; discRays++;
+                    continue;
+                }
+                Vec3 d;
+                if (lensPixel(T, v, X, Y, d) == 0) sample(d, lin);
+            }
+            onDisc[static_cast<std::size_t>(y) * W + x] = hits > 0;
+            for (int c = 0; c < 3; c++) img[(static_cast<std::size_t>(y) * W + x) * 3 + c] = lin[c] / 4;
+        }
+    std::vector<StarImage> im;
+    int drawn = 0, hidden = 0;
+    for (const auto& st : S.stars) {
+        im.clear();
+        starImagesFast(T, viewMiddle(v), st.dir, st.mag, kImageMagLimit, im);
+        const auto& col = S.colours[st.bucket];
+        for (const auto& m : im) {
+            double X, Y;
+            if (!viewScreen(v, m.dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
+            if (discPixel(D, s, v, X, Y, false).hit.order >= 0) { hidden++; continue; }
+            const orbit::StarDraw sd = orbit::starDraw(m.mag);
+            drawn++;
+            for (int yy = static_cast<int>(Y - sd.radius - 2); yy <= static_cast<int>(Y + sd.radius + 2); yy++)
+                for (int xx = static_cast<int>(X - sd.radius - 2); xx <= static_cast<int>(X + sd.radius + 2); xx++) {
+                    if (xx < 0 || yy < 0 || xx >= W || yy >= H || onDisc[static_cast<std::size_t>(yy) * W + xx]) continue;
+                    const double cov = std::clamp(sd.radius + 0.5 - std::hypot(xx + 0.5 - X, yy + 0.5 - Y), 0.0, 1.0) * sd.alpha;
+                    double* p = &img[(static_cast<std::size_t>(yy) * W + xx) * 3];
+                    for (int c = 0; c < 3; c++) p[c] = p[c] * (1 - cov) + decS(col[c] / 255.0) * cov;
+                }
+        }
+    }
+    std::vector<uint8_t> rgb(static_cast<std::size_t>(W) * H * 3);
+    for (std::size_t i = 0; i < rgb.size(); i++) rgb[i] = static_cast<uint8_t>(std::lround(encS(img[i]) * 255));
+    const std::vector<uint8_t> png = app::encodePng(W, H, rgb.data());
+    FILE* fo = std::fopen(outPath.c_str(), "wb");
+    if (!fo) return 1;
+    std::fwrite(png.data(), 1, png.size(), fo);
+    std::fclose(fo);
+    const Readout r = readout(s);
+    std::printf("wrote %s (%zu bytes): %s, %.4g Suns, L = %.3g L_Edd, disc %g to %g M; camera at %g M, 10 degrees from the disc's plane; hottest ring %.0f K at %.4f M;\n"
+                "brightest part %.4g x the Sun's surface (visible), screen white %.4g x; %d disc rays of %d; %d star images drawn, %d hidden by the disc; shadow %.4f deg\n",
+                outPath.c_str(), png.size(), kFeedingName, s.massSun, s.feed, r.rIn, s.outer, s.dist, r.tHot, r.rHot, L.brightY, L.white, discRays, 4 * W * H, drawn, hidden,
+                shadowAngle(s.dist) * 180 / kPi);
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--measure") == 0) return measure();
+    if (argc > 2 && std::strcmp(argv[1], "--disc") == 0) return discPicture(argv[2]);
     const std::string outPath = argc > 1 ? argv[1] : "blackhole_reference.png";
     const int W = 1280, H = 800;
     const orbit::Sky& S = orbit::skyData();

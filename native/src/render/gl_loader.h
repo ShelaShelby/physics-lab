@@ -57,6 +57,9 @@ typedef unsigned long long GLuint64;
 #define GL_RGBA8 0x8058
 #define GL_SRGB8_ALPHA8 0x8C43   // 0.50: OpenGL 3.0 core (glcorearb.h)
 #define GL_RGBA32F 0x8814
+#ifndef GL_RGB32F
+#define GL_RGB32F 0x8815
+#endif
 #ifndef GL_R32F
 #define GL_R32F 0x822E
 #endif
@@ -74,6 +77,9 @@ typedef unsigned long long GLuint64;
 #define GL_TEXTURE_2D 0x0DE1
 #define GL_TEXTURE0 0x84C0
 #define GL_TEXTURE1 0x84C1
+#define GL_TEXTURE2 0x84C2
+#define GL_TEXTURE3 0x84C3
+#define GL_TEXTURE4 0x84C4
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_MAG_FILTER 0x2800
 #define GL_TEXTURE_WRAP_S 0x2802
@@ -130,6 +136,7 @@ typedef unsigned long long GLuint64;
     X(GLint, glGetUniformLocation, (GLuint p, const GLchar* name))                                 \
     X(void, glUniform2f, (GLint loc, GLfloat a, GLfloat b))                                        \
     X(void, glUniform3f, (GLint loc, GLfloat a, GLfloat b, GLfloat c))                             \
+    X(void, glUniform3i, (GLint loc, GLint a, GLint b, GLint c))                                   \
     X(void, glGenVertexArrays, (GLsizei n, GLuint* a))                                             \
     X(void, glDeleteVertexArrays, (GLsizei n, const GLuint* a))                                    \
     X(void, glBindVertexArray, (GLuint a))                                                         \

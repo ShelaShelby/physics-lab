@@ -475,6 +475,14 @@ void main() {
 // Gaia map (render/planet_maps.cpp skyUV), filtered by the map's stretch between neighbouring pixels (textureGrad). The shadow's edge is anti-aliased by the
 // pixel's covered part (x_px + 1/2). uBend 0: the plain sky by kPlanetFS mode 2's own rule (its fixed mip level uLod), for comparison.
 // uDebug 1 (tests): the far direction (view frame) and x_px as floats instead of a colour.
+// 0.55.1: the gas disc (uDisc 1; blackhole/disc.h). For each pixel and each of the first four crossings of the disc's plane (phi_k = phi_0 + k pi, phi_0 from the
+// disc's axis uDA on the view frame: cos(phi) A + sin(phi) B = 0), u = 1/r from the CPU's table uDU by the same 4-point cubic in s = ln|x| + |x|/xc and in
+// the column phi / Phi (DiscTable::lookup), Phi from uDP; the ray must not have ended (phi <= Phi). The shift g = (1 - 3/r)^(1/2) / (1 - r^(-3/2) b Lz/b)
+// (Luminet 1979 (16), (19)), the temperature T = uDT.x F(r)^(1/4) with F Page & Thorne's a = 0 flux in Luminet's (15) form with 3^(1/2)/2 (disc.h), the colour of
+// a black body at g T from uDC (linear sRGB in units of the Sun's surface, against log10 T), over the screen's white (uDT.y = 1/white), scaled down whole if a
+// channel is over 1, laid over the sky in linear light and encoded (IEC 61966-2-1) at the end. Opaque: the crossings are laid front to back, each covering the part of the pixel whose radius range (r +- fwidth/2) overlaps the disc's
+// [rIn, rOut] (the anti-aliasing of the edges and of the thin rings); what is left shows the sky or the shadow behind. uSky 0: black behind.
+// uDebug 2 (tests): the first crossing whose pixel centre lies on the disc: (order, r, g, x_px); order -1 for none.
 static const char* const kLensFS = R"(#version 330 core
 in vec2 vUV;
 uniform sampler2D uTex;
@@ -489,6 +497,16 @@ uniform int uBend;
 uniform int uDebug;
 uniform float uBright;
 uniform float uLod;
+uniform int uSky;
+uniform int uDisc;
+uniform sampler2D uDU;
+uniform sampler2D uDP;
+uniform sampler2D uDC;
+uniform ivec3 uDN;
+uniform vec4 uDS;
+uniform vec3 uDA;
+uniform vec4 uDR;
+uniform vec4 uDT;
 out vec4 fragColor;
 const float PI = 3.14159265358979;
 float tab(int i) { return texelFetch(uTable, ivec2(clamp(i, 0, uN - 1), 0), 0).r; }
@@ -505,6 +523,25 @@ vec2 mapUV(vec3 v) {
     float l = atan(g.y, g.x), b = asin(clamp(g.z, -1.0, 1.0));
     return vec2(0.5 - l / (2.0 * PI), 0.5 - b / PI);
 }
+vec4 cubicW(float u) { return vec4(-u * (u - 1.0) * (u - 2.0) / 6.0, (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0, -(u + 1.0) * u * (u - 2.0) / 2.0, (u + 1.0) * u * (u - 1.0) / 6.0); }
+int stencil(float q, int n, out vec4 w) { q = clamp(q, 0.0, float(n - 1)); int i = clamp(int(q), 1, n - 3); w = cubicW(q - float(i)); return i - 1; }
+float dU(int row, int j) { return texelFetch(uDU, ivec2(j, row), 0).r; }
+float dP(int k) { return texelFetch(uDP, ivec2(k, 0), 0).r; }
+vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
+vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
+vec3 discColour(float r, float g) {
+    float sr = sqrt(r), s3 = 1.7320508, s6 = 2.4494897;
+    float F = 3.0 / (8.0 * PI) / ((r - 3.0) * r * r * sr) * (sr - s6 + 0.8660254 * log((sr + s3) * (s6 - s3) / ((sr - s3) * (s6 + s3))));
+    float T = uDT.x * pow(max(F, 0.0), 0.25) * g;
+    if (!(T > 0.0)) return vec3(0.0);
+    float q = (log(T) * 0.43429448 - uDT.z) / uDT.w;
+    if (q < 0.0) return vec3(0.0);
+    q = min(q, float(uDN.z - 1) - 0.001);
+    int i = int(q);
+    vec3 c = mix(texelFetch(uDC, ivec2(i, 0), 0).rgb, texelFetch(uDC, ivec2(i + 1, 0), 0).rgb, q - float(i)) * uDT.y;
+    float m = max(c.r, max(c.g, c.b));
+    return m > 1.0 ? c / m : c;
+}
 void main() {
     vec2 o = gl_FragCoord.xy - uCentre;                  // right, up, pixels
     float d2 = dot(o, o), r = sqrt(d2), th = r / uKpx;
@@ -512,7 +549,7 @@ void main() {
     if (uBend == 0) {
         vec3 v = vec3(sin(th) * dn.x, sin(th) * dn.y, -cos(th));
         if (uDebug == 1) { fragColor = vec4(v, 1e6); return; }
-        if (th > PI) { fragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+        if (th > PI || uSky == 0) { fragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
         fragColor = vec4(textureLod(uTex, mapUV(v), uLod).rgb * uBright, 1.0);
         return;
     }
@@ -526,7 +563,50 @@ void main() {
     ux = clamp(ux, vec2(-0.25), vec2(0.25)); uy = clamp(uy, vec2(-0.25), vec2(0.25));
     vec3 c = textureGrad(uTex, uv, ux, uy).rgb;
     float cover = clamp(xpx + 0.5, 0.0, 1.0);
-    fragColor = vec4(th > PI ? vec3(0.0) : c * uBright * cover, 1.0);
+    vec3 back = (th > PI || uSky == 0) ? vec3(0.0) : c * uBright * cover;
+    if (uDisc == 0) { fragColor = vec4(back, 1.0); return; }
+    // the disc: the radius at each of the four crossings (every pixel, before any choice: fwidth needs the 2 x 2 block)
+    float x = xpx / uKpx, ax = max(abs(x), 1e-30);
+    int side = x > 0.0 ? 0 : 1;
+    float q = (log(ax) + ax / uDS.w - uDS.x) / (side == 0 ? uDS.y : uDS.z);
+    vec4 wr;
+    int i0 = stencil(q, uDN.x, wr), row0 = side * uDN.x + i0;
+    float P = dot(wr, vec4(dP(row0), dP(row0 + 1), dP(row0 + 2), dP(row0 + 3)));
+    float A = uDA.z, B = dot(dn, uDA.xy), LzB = dn.y * uDA.x - dn.x * uDA.y;
+    float phi0 = atan(-A, B);
+    if (phi0 <= 0.0) phi0 += PI;
+    float rk[4];
+    for (int k = 0; k < 4; k++) {
+        float phi = phi0 + float(k) * PI, rr = 1e9;
+        if (phi <= P && th <= PI) {
+            vec4 wc;
+            int j0 = stencil(phi / P * float(uDN.y - 1), uDN.y, wc);
+            float u = 0.0;
+            for (int a = 0; a < 4; a++) u += wr[a] * dot(wc, vec4(dU(row0 + a, j0), dU(row0 + a, j0 + 1), dU(row0 + a, j0 + 2), dU(row0 + a, j0 + 3)));
+            if (u > 0.0) rr = 1.0 / u;
+        }
+        rk[k] = rr;
+    }
+    float fw[4] = float[4](fwidth(rk[0]), fwidth(rk[1]), fwidth(rk[2]), fwidth(rk[3]));
+    float b = uDR.y * sin(th);
+    if (uDebug == 2) {
+        for (int k = 0; k < 4; k++)
+            if (rk[k] >= uDR.z && rk[k] <= uDR.w) { float g = sqrt(1.0 - 3.0 / rk[k]) / (1.0 - pow(rk[k], -1.5) * b * LzB); fragColor = vec4(float(k), rk[k], g, xpx); return; }
+        fragColor = vec4(-1.0, 0.0, 0.0, xpx);
+        return;
+    }
+    vec3 acc = vec3(0.0);
+    float tr = 1.0;
+    for (int k = 0; k < 4; k++) {
+        float w = max(fw[k], 1e-7);
+        float cov = clamp((min(rk[k] + 0.5 * w, uDR.w) - max(rk[k] - 0.5 * w, uDR.z)) / w, 0.0, 1.0);
+        if (cov <= 0.0) continue;
+        float rc = clamp(rk[k], uDR.z, uDR.w);           // (a pixel that only partly covers the disc: its colour at the nearest radius on it)
+        float g = sqrt(1.0 - 3.0 / rc) / (1.0 - pow(rc, -1.5) * b * LzB);
+        acc += tr * cov * discColour(rc, g);
+        tr *= 1.0 - cov;
+    }
+    fragColor = vec4(encS(acc + tr * decS(back)), 1.0);    // (laid over each other in linear light; the map's colours are sRGB-encoded)
 }
 )";
 

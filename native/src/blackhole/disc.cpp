@@ -129,6 +129,48 @@ std::array<double, 3> blackBodyLinear(double T) {
     return {std::max(0.0, l[0]) / ys, std::max(0.0, l[1]) / ys, std::max(0.0, l[2]) / ys};      // clipped at 0 as tools/star_colour.py
 }
 
+namespace {
+struct LightTable { static constexpr int N = 4096; double l0, dl; std::vector<double> lnY, c; };
+const LightTable& lightTable() {
+    static const LightTable L = [] {
+        LightTable t;
+        t.l0 = std::log10(kTmin); t.dl = (std::log10(kTmax) - t.l0) / (LightTable::N - 1);
+        t.lnY.resize(LightTable::N); t.c.resize(3 * LightTable::N);
+        for (int i = 0; i < LightTable::N; i++) {
+            const double T = std::pow(10.0, t.l0 + i * t.dl);
+            const double Y = std::max(visibleVsSun(T), 1e-300);
+            t.lnY[i] = std::log(Y);
+            const auto l = blackBodyLinear(T);
+            for (int k = 0; k < 3; k++) t.c[3 * i + k] = l[k] / Y;            // (the channels over Y change slowly with T: interpolated linearly)
+        }
+        return t;
+    }();
+    return L;
+}
+inline bool lightAt(double T, int& i, double& f) {
+    const LightTable& L = lightTable();
+    if (!(T >= kTmin)) return false;
+    const double q = std::min((std::log10(T) - L.l0) / L.dl, LightTable::N - 1.000001);
+    i = static_cast<int>(q); f = q - i;
+    return true;
+}
+}  // namespace
+double visibleVsSunFast(double T) {
+    int i; double f;
+    if (!lightAt(T, i, f)) return 0;
+    const LightTable& L = lightTable();
+    return std::exp(L.lnY[i] + f * (L.lnY[i + 1] - L.lnY[i]));
+}
+std::array<double, 3> blackBodyLinearFast(double T) {
+    int i; double f;
+    if (!lightAt(T, i, f)) return {0, 0, 0};
+    const LightTable& L = lightTable();
+    std::array<double, 3> r;
+    const double Y = std::exp(L.lnY[i] + f * (L.lnY[i + 1] - L.lnY[i]));
+    for (int k = 0; k < 3; k++) r[k] = Y * (L.c[3 * i + k] + f * (L.c[3 * i + 3 + k] - L.c[3 * i + k]));
+    return r;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // rays: Binet's equation u'' = 3u^2 - u (L79 (3)) by Dormand-Prince 5(4)
 namespace {
