@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 
+#include "blackhole/looks.h"
 #include "imgui.h"
 #include "html_view.h"
 #include "orbit_panel.h"
@@ -65,6 +66,17 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "edge; no light of the disc falling back on itself; each face shines the same in every direction. The gas orbits with the hole's spin, in its plane. The disc lies in a plane the lab chose (parallel to the Earth's orbit, the gas going round as the planets do): its direction against the sky "
           "is not something measured. Sagittarius A* and M87* do not have such a disc; on them the lab labels it as a what-if.") +
         p("<b>Not drawn:</b> your own hovering shifts all the light you see, sky and disc alike, bluer and brighter; the card gives that as a number, as for the sky.")});
+    {   // 0.55.3: the Film look, one row per choice (blackhole/looks.h filmRows: the physics, the film's choice, the paper's reason, where in the paper)
+        std::string h = p("Controls › Look › <b>Film</b> draws the choices the makers of the film Interstellar made for its black hole, as James, von Tunzelmann, Franklin and "
+                          "Thorne (2015) state them, on the same calculated hole and the same light paths as the Real look. One row per choice:");
+        for (const blackhole::FilmRow& r : blackhole::filmRows())
+            h += "<p class=\"lrnP\"><b>" + r.physics + "</b><br>The film: " + r.choice + ".<br>Why: " + r.reason + ".<br><small>" + r.where + "</small></p>";
+        h += p("<b>Not in the app:</b> the artists' textures, the real lens flare (the measured blur of the IMAX lenses) and the film's colour grading are not published. "
+               "The glow is the app's own, a simple blur of the bright parts. The paper gives no mass for the film's black hole.") +
+             p("<b>The Real look is still a model</b>, not a photograph: the standard thin disc, with every shift it calculates. A real disc would be blinding; the glare an "
+               "eye would see is not drawn yet.");
+        v.push_back({"film", "🎬 What the film changed", h});
+    }
     v.push_back({"soft", "〰️ What is soft",
         p("<b>The sky map.</b> Gaia's map has about 0.09° per map pixel. Near the Einstein ring the hole magnifies the sky many times, so the map's own blur "
           "shows there: that is the map's sharpness, not the physics. Close to the shadow's edge the whole sky is squeezed into rings thinner than a pixel; the "

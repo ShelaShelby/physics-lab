@@ -11,6 +11,9 @@
 //    neighbouring rays (Riazuelo (45)-(51)); light conserved over the whole sky;
 //  - the flat limit: no hole gives exactly the night sky's own projection (orbit/sky.h skyDirection);
 //  - the presets: the saved papers' tables read as received (data/blackhole/arxiv/*.txt.gz), the derived sizes, and agreement with orbit/sky_data.inc and far_masses.h.
+//  - 0.55.3, the looks (looks.h): every number of the Film look read from James et al. 2015 (the extract; with PL_SOURCES_DIR set, the saved original itself,
+//    and every block of the extract found in it); the Film disc's colour = the CIE black body at the paper's temperature through the paper's white balance;
+//    no shift: the same light from the approaching and the receding side (and Real not); the glow's reference adds light only and spreads it without loss.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -31,8 +34,18 @@
 #include "blackhole/spin_sky.h"
 #include "orbit/far_masses.h"
 #include "blackhole/lab.h"
+#include "blackhole/looks.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
+
+// 0.55.3: stb_image's zlib reader (static, so it cannot clash with the app's copy) for the saved paper's .txt.gz in the private sources repo
+#define STB_IMAGE_STATIC
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_NO_STDIO
+#define STBI_NO_LINEAR
+#define STBI_NO_HDR
+#include "stb_image.h"
 
 using namespace blackhole;
 
@@ -1549,6 +1562,145 @@ static void testSpinLab() {
     check(std::fabs(r0.shadowDeg - 2 * shadowAngle(20) * 180 / kPi) < 1e-12 && std::fabs(r0.rIn - 6) < 1e-12, "spin 0 keeps the closed forms of 0.55.1 (Synge's shadow, r_ms = 6)");
 }
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.55.3: the looks. The Film look's numbers against James et al. 2015 (J15): from the extract next to the module's data
+// (data/blackhole/arxiv/1502.03808_james2015.extract.txt), or, with PL_SOURCES_DIR set, from the saved original in the sources repo (and every block of the
+// extract must be found in it, line ends as LF and trailing blanks dropped, as tools/check_sources.py does).
+static std::string gunzip(const std::string& gz) {
+    if (gz.size() < 18 || static_cast<unsigned char>(gz[0]) != 0x1f || static_cast<unsigned char>(gz[1]) != 0x8b || gz[2] != 8) return "";
+    const int flg = static_cast<unsigned char>(gz[3]);
+    std::size_t at = 10;
+    if (flg & 4) at += 2 + (static_cast<unsigned char>(gz[at]) | (static_cast<unsigned char>(gz[at + 1]) << 8));
+    if (flg & 8) { while (at < gz.size() && gz[at]) at++; at++; }
+    if (flg & 16) { while (at < gz.size() && gz[at]) at++; at++; }
+    if (flg & 2) at += 2;
+    if (at >= gz.size()) return "";
+    int n = 0;
+    char* out = stbi_zlib_decode_noheader_malloc(gz.data() + at, static_cast<int>(gz.size() - at), &n);
+    if (!out) return "";
+    std::string s(out, static_cast<std::size_t>(n));
+    STBI_FREE(out);
+    return s;
+}
+static std::string stripTrailing(const std::string& t) {
+    std::string o;
+    std::size_t i = 0;
+    while (i <= t.size()) {
+        std::size_t e = t.find('\n', i);
+        if (e == std::string::npos) e = t.size();
+        std::string ln = t.substr(i, e - i);
+        while (!ln.empty() && (ln.back() == ' ' || ln.back() == '\t' || ln.back() == '\r')) ln.pop_back();
+        o += ln;
+        if (e < t.size()) o += '\n';
+        i = e + 1;
+    }
+    return o;
+}
+static void testLooks() {
+    const std::string ex = readExtract("blackhole/arxiv/1502.03808_james2015.extract.txt");
+    std::string text = ex;
+    if (const char* src = std::getenv("PL_SOURCES_DIR")) {
+        const std::string orig = stripTrailing(gunzip(readBytes(std::string(src) + "/data/blackhole/arxiv/1502.03808_james2015.txt.gz")));
+        check(orig.size() > 100000, "J15: the saved original read from the sources repo (" + std::to_string(orig.size()) + " bytes)");
+        int blocks = 0, found = 0;
+        for (std::size_t b = ex.find("\n#--- begin"); b != std::string::npos; b = ex.find("\n#--- begin", b + 1)) {
+            const std::size_t s0 = ex.find('\n', b + 1) + 1, e0 = ex.find("#--- end", s0);
+            if (e0 == std::string::npos) break;
+            blocks++;
+            if (orig.find(ex.substr(s0, e0 - s0)) != std::string::npos) found++;
+        }
+        check(blocks >= 10 && found == blocks, "J15: every block of the extract is in the original (" + std::to_string(found) + " of " + std::to_string(blocks) + ")");
+        text = orig;
+    }
+    const FilmChoices& c = filmChoices();
+    const auto one = [&](const char* key, int n, int k) { const std::vector<double> v = numbersAfter(text, key, n); return static_cast<int>(v.size()) > k ? v[static_cast<std::size_t>(k)] : -1.0; };
+    check(one("slowed the spin to a/M = ", 1, 0) == c.spin, "Film spin = J15 section 4.1.1 p. 26 (" + f(c.spin) + ")");
+    check(one("time losses in Interstellar, to a/M = ", 1, 0) == c.spin && one("has a moderate spin a/M = ", 1, 0) == c.spin, "Film spin = J15 section 1.2 and App. A.3.1");
+    check(one("slowed from a/M = ", 1, 0) == c.paperSpin, "the paper's own disc figures' spin = Figure 15's caption (0.999)");
+    check(text.find("with a/M = 0.999, as viewed") != std::string::npos, "Figure 13 drawn at a/M = 0.999 (its caption)");
+    check(one("position-independent temperature T = ", 1, 0) == c.discT, "Film disc temperature = J15 section 4.1.1 p. 26 (" + f(c.discT) + " K)");
+    check(text.find("at which it emits a black-body spectrum") != std::string::npos && text.find("It is physically thin and marginally") != std::string::npos, "J15: black body, thin (section 4.1.1)");
+    check(one("outer radii r = ", 1, 0) == c.rIn && one("\nand r = ", 1, 0) == c.rOut, "Film disc edges = Figure 13's caption (" + f(c.rIn) + ", " + f(c.rOut) + " M)");
+    check(one("a camera at rc = ", 1, 0) == c.camR && one("M and θc = ", 2, 0) == c.camThetaPrinted && one("M and θc = ", 2, 1) == c.camThetaDeg, "the paper's view = Figure 13's caption (74.1 M, 1.511 rad, 86.56 deg)");
+    // the caption's two angles agree only one way: 86.56 deg = 1.51076 rad rounds to the printed 1.511, while 1.511 rad = 86.574 deg does not round to 86.56;
+    // the lab uses the degrees (the more digits), REPORT 0.55.3
+    check(std::round(c.camThetaDeg * kPi / 180 * 1000) / 1000 == c.camThetaPrinted && std::fabs(c.camTheta - c.camThetaDeg * kPi / 180) < 1e-15, "Figure 13's 86.56 deg is its 1.511 rad to the printed digits; the camera at 86.56 deg");
+    check(one("to render a ", 1, 0) == c.whiteT && text.find("spectrum with equal red, green and blue pixel values") != std::string::npos, "Film white balance = App. A.6 p. 43 (" + f(c.whiteT) + " K)");
+    check(one("multiplicative factors of order ", 2, 0) == c.approachShift && one("multiplicative factors of order ", 2, 1) == c.recedeShift && one("speeds of roughly ", 1, 0) == c.gasSpeed,
+          "the shifts the film left out = J15 section 4.1.2 (1.5, 0.4 at 0.55 c)");
+    check(text.find("Figure 15: (a) The moderately realistic accretion disk of Figure 14") != std::string::npos && text.find("(no colour or brightness shifts) with lens") != std::string::npos,
+          "no shifts in the film's disc (Figures 15a, 16)");
+    check(text.find("lens flare to an image by convolving it with this point spread function") != std::string::npos, "the flare: a measured point-spread function (section 4.3.1)");
+    // the rule
+    const LookRule F = lookRule(Look::Film), R = lookRule(Look::Real);
+    check(!F.shifts && F.oneTemperature && F.discT == c.discT && F.whiteBalance && F.whiteT == c.whiteT && F.glow && F.fixedSpin && F.spin == c.spin && F.rIn == c.rIn && F.rOut == c.rOut,
+          "lookRule(Film) = the paper's choices");
+    check(R.shifts && !R.oneTemperature && !R.whiteBalance && !R.glow && !R.fixedSpin, "lookRule(Real): the model, unchanged (shifts on, no white balance, no glow)");
+    Look l;
+    check(lookFromKey("film", l) && l == Look::Film && lookFromKey("real", l) && l == Look::Real && !lookFromKey("Film", l) && std::string(lookKey(Look::Film)) == "film", "look keys");
+    // the colour: the CIE black body at 4500 K (disc.h blackBodyLinear) through one gain per channel that makes 6500 K grey with its own luminance
+    const std::array<double, 3> g = whiteBalanceGains(c.whiteT), w = blackBodyLinear(c.whiteT), b = blackBodyLinear(c.discT), d = filmDiscLinear();
+    const double Yw = visibleVsSun(c.whiteT);
+    check(std::fabs(g[0] * w[0] / Yw - 1) < 1e-12 && std::fabs(g[1] * w[1] / Yw - 1) < 1e-12 && std::fabs(g[2] * w[2] / Yw - 1) < 1e-12, "white balance: a 6500 K black body has equal channels (its Y)");
+    check(std::fabs((0.2126 * w[0] + 0.7152 * w[1] + 0.0722 * w[2]) / Yw - 1) < 2e-4, "the sRGB luminance row gives the CIE Y of the table (" + f((0.2126 * w[0] + 0.7152 * w[1] + 0.0722 * w[2]) / Yw - 1) + ")");
+    check(std::fabs(d[0] / (g[0] * b[0]) - 1) < 1e-14 && std::fabs(d[1] / (g[1] * b[1]) - 1) < 1e-14 && std::fabs(d[2] / (g[2] * b[2]) - 1) < 1e-14, "the Film disc = the CIE black body at 4500 K, white-balanced");
+    {   const std::array<double, 3> X = blackBodyXYZ(c.discT);           // its chromaticity from the CIE sums directly (IEC 61966-2-1's matrix), the same gains
+        const double lr = 3.2406 * X[0] - 1.5372 * X[1] - 0.4986 * X[2], lg = -0.9689 * X[0] + 1.8758 * X[1] + 0.0415 * X[2], lb = 0.0557 * X[0] - 0.2040 * X[1] + 1.0570 * X[2];
+        check(std::fabs((b[0] / b[1]) / (lr / lg) - 1) < 2e-3 && std::fabs((b[2] / b[1]) / (lb / lg) - 1) < 2e-3, "4500 K: blackBodyLinear's colour = the CIE 1931 sums through the sRGB matrix");
+        check(d[0] > d[1] && d[1] > d[2] && d[2] > 0, "4500 K through a 6500 K white balance is warm (red > green > blue)"); }
+    // no shift: the same light whatever the ray's g and wherever on the disc; Real: brighter and bluer on the approaching side
+    Settings s = settingsDefaults();
+    applyPreset(s, kFeedingKey);
+    setSpin(s, 0.3);
+    DiscPixel a1, a2, a3, r1, r2;
+    Settings sf = s; setLook(sf, Look::Film);
+    const Settings v = shown(sf);
+    discLight(v, 10, c.approachShift, a1); discLight(v, 10, c.recedeShift, a2); discLight(v, 17, 1.0, a3);
+    check(a1.rgb == a2.rgb && a1.Y == a2.Y && a1.rgb == a3.rgb && a1.T == c.discT && a1.Tobs == c.discT && a1.rgb == d && a1.Y == filmDiscY(), "Film: the same light on the approaching and the receding side and at every radius");
+    discLight(s, 10, c.approachShift, r1); discLight(s, 10, c.recedeShift, r2);
+    check(r1.Y > 2 * r2.Y && r1.rgb[2] / r1.rgb[0] > r2.rgb[2] / r2.rgb[0], "Real: the approaching side brighter and bluer (" + f(r1.Y / r2.Y) + " x)");
+    {   const DiscPhys P = discPhys(s);                                    // Real's rule is 0.55.2's, to the bit
+        const double T = P.temperature(10);
+        check(r1.T == T && r1.Tobs == c.approachShift * T && r1.rgb == blackBodyLinearFast(c.approachShift * T) && r1.Y == visibleVsSunFast(c.approachShift * T), "Real: the light of 0.55.2 (T(r), g T, the fast table)"); }
+    // the settings: shown(), the locked spin and disc, the paper's view, the file
+    check(v.spin == c.spin && v.disc && v.look == Look::Film && sf.spin == 0.3 && shown(s) == s, "Film shows the film's spin and disc; the user's spin is kept; Real shows itself");
+    sf.disc = false;
+    check(shown(sf).disc && discGeom(shown(sf)).rIn == c.rIn && discGeom(shown(sf)).rOut == c.rOut && discGeom(s).rIn == discInner(0.3), "Film's disc edges; Real's at r_ms");
+    Settings pv = s;
+    paperView(pv);
+    check(pv.dist == c.camR && pv.pitch == c.camTheta && pv.yaw == s.yaw && pv.fovDeg == s.fovDeg, "the paper's view: distance and angle from the spin axis, the turn and field of view kept");
+    std::map<std::string, std::string> m;
+    saveSettings(sf, m);
+    check(m["look"] == "film" && loadSettings(m).look == Look::Film && loadSettings(m).spin == 0.3, "the look is saved and read back (with the user's own spin)");
+    m.erase("look");
+    check(loadSettings(m).look == Look::Real, "a settings file without the look opens as Real");
+    m["look"] = "cinema";
+    check(loadSettings(m).look == Look::Real, "an unknown look opens as Real");
+    const Readout rf = readout(shown(sf));
+    check(rf.look == Look::Film && rf.filmT == c.discT && rf.discEdgeIn == c.rIn && rf.discEdgeOut == c.rOut && rf.spin == c.spin, "the readout in the Film look");
+    // the glow's reference (the app's own rule, looks.h): adds light only; spreads the light above the threshold without loss away from the picture's edges
+    {   const int W = 320, H = 200;
+        std::vector<double> img(static_cast<std::size_t>(W) * H * 3, 0.1);
+        double above = 0;
+        for (int y = 90; y < 110; y++)
+            for (int x = 150; x < 170; x++)
+                for (int k = 0; k < 3; k++) { const double q = k == 0 ? 1.0 : k == 1 ? 0.8 : 0.45; img[(static_cast<std::size_t>(y) * W + x) * 3 + k] = q; above += std::max(q - kGlowThreshold, 0.0); }
+        const std::vector<double> gl = glowReference(img, W, H);
+        double sum = 0, mn = 1e9;
+        for (double q : gl) { sum += q; mn = std::min(mn, q); }
+        check(mn >= 0, "glow: adds light only (smallest " + f(mn) + ")");
+        check(std::fabs(sum / above - 1) < 2e-3, "glow: the light above the threshold spread without loss away from the edges (" + f(sum / above) + ")");
+        check(glowRadiusBlocks(800) == 8 && std::fabs(glowSigmaBlocks(800) - 2.5) < 1e-15, "glow: sigma H/80 = 10 px at 800 (2.5 blocks), reach 3 sigma");
+        std::vector<double> dim(img.size(), kGlowThreshold);
+        const std::vector<double> g0 = glowReference(dim, W, H);
+        check(*std::max_element(g0.begin(), g0.end()) == 0, "glow: nothing above the threshold, no glow");
+        double peak = 0, far = 0;
+        for (int k = 0; k < 3; k++) { peak = std::max(peak, gl[(static_cast<std::size_t>(100) * W + 160) * 3 + k]); far = std::max(far, gl[(static_cast<std::size_t>(100) * W + 10) * 3 + k]); }
+        check(peak > 0.1 && far == 0, "glow: round the bright part, none beyond 3 sigma + a block (" + f(peak) + ", " + f(far) + ")");
+    }
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -1583,6 +1735,7 @@ int main() {
     testSpinSymmetry();
     testSpinTable();
     testSpinLab();
+    testLooks();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

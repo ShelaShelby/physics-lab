@@ -587,7 +587,7 @@ int main(int, char**) {
             text->PopClipRect();
         } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: the hole in the middle of the free part of the picture
             const double cx = app.bhFreeW > 0 ? app.bhFreeX + app.bhFreeW / 2 : app.canvasW / 2, cy = app.bhFreeH > 0 ? app.bhFreeY + app.bhFreeH / 2 : app.canvasH / 2;
-            app.blackholeView.draw(renderer, app.blackhole, app.canvasW, app.canvasH, cx, cy);
+            app.blackholeView.draw(renderer, blackhole::shown(app.blackhole), app.canvasW, app.canvasH, cx, cy);
             text->PopClipRect();
         } else if (app.lab == 1) {
             const auto tv0 = std::chrono::steady_clock::now();
@@ -641,11 +641,11 @@ int main(int, char**) {
                         std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices());
                         for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
         if (drawStat && app.lab == blackhole::kLabIndex) { const blackhole::ViewStats& bs = app.blackholeView.stats();   // 0.55.0
-                        std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale); }
-        if (drawStat && app.lab == blackhole::kLabIndex && app.blackhole.spin > 0 && SDL_getenv("PL_BH_SPINEDGE")) {   // 0.55.2: the module's shadow edge on the picture
+                        std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f spinfills=%ld\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale, bs.spinCoarseFills + bs.spinFineFills); }
+        if (drawStat && app.lab == blackhole::kLabIndex && blackhole::shown(app.blackhole).spin > 0 && SDL_getenv("PL_BH_SPINEDGE")) {   // 0.55.2: the module's shadow edge on the picture
             const blackhole::ViewStats& bs = app.blackholeView.stats();
             std::vector<double> e;
-            app.blackholeView.spinEdgePoints(app.blackhole, app.canvasW, app.canvasH, bs.cx, bs.cy, 24, e);
+            app.blackholeView.spinEdgePoints(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 24, e);
             std::printf("PLBHSPINEDGE fine=%d pts=", bs.spinFine ? 1 : 0);
             for (std::size_t q = 0; q + 3 < e.size(); q += 4) std::printf("%s%.2f,%.2f,%.5f,%.5f", q ? ";" : "", e[q] * scale, e[q + 1] * scale, e[q + 2], e[q + 3]);
             std::printf("\n");
@@ -653,7 +653,7 @@ int main(int, char**) {
         if (drawStat && app.lab == blackhole::kLabIndex && SDL_getenv("PL_BH_DISCPTS")) {   // 0.55.1: where the module puts the disc (taken as on), in window pixels
             const blackhole::ViewStats& bs = app.blackholeView.stats();
             std::vector<double> on, off;
-            app.blackholeView.discSamples(app.blackhole, app.canvasW, app.canvasH, bs.cx, bs.cy, 400, on, off);
+            app.blackholeView.discSamples(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 400, on, off);
             std::printf("PLBHDISCPT on=");
             for (std::size_t q = 0; q + 1 < on.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", on[q] * scale, on[q + 1] * scale);
             std::printf(" off=");

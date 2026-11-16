@@ -1,0 +1,93 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1502.03808_james2015.txt.gz
+# Reference: O. James, E. von Tunzelmann, P. Franklin, K. S. Thorne, "Gravitational lensing by spinning black holes in astrophysics, and in the movie Interstellar", Class. Quantum Grav. 32, 065001 (2015), arXiv:1502.03808v2 (the PDF: sha256 2b1cbdb7816fd7585bbe1d9fecba2cb932be67d02f9208d175dda9aa88d4738f; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/1502.03808
+# Date read: 2026-11-16
+# sha256 of the original: 5e4a210c6295be6818eedf2ad0d60c9a4d40dca6e3b79666dc73886b3c02641e
+# Place in the original: section 1.2 (p. 5), the caption of Figure 13 (p. 24), sections 4.1.1, 4.1.2, 4.2 (pp. 25-28), the captions of Figures 15 and 16 (pp. 27, 28), section 4.3.1 (p. 29), Appendix A.3.1 (p. 39), Appendix A.6 (p. 43); pages of arXiv v2
+# Used by: src/blackhole/looks.cpp (the Film look) and tests/test_blackhole.cpp testLooks, which reads every number of the Film look from these lines.
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin section 1.2 (p. 5), the spin the film drew
+why Christopher Nolan and Paul Franklin chose to omit the Doppler shifts in the movie,
+and chose to slow the black hole’s spin from that, a/M ≃ 1, required to explain the huge
+time losses in Interstellar, to a/M = 0.6. And we then discuss and add simulated lens
+#--- end
+#--- begin Figure 13 caption (p. 24), the disc's edges and the camera
+Figure 13: Inset: Paint-swatch accretion disk with inner and outer radii r = 9.26M
+and r = 18.70M before being placed around a black hole. Body: This paint-swatch
+disk, now in the equatorial plane around a black hole with a/M = 0.999, as viewed by
+a camera at rc = 74.1M and θc = 1.511 (86.56o ), ignoring frequency shifts, associated
+#--- end
+#--- begin section 4.1.1 (p. 24), no shifts in Figure 13
+We omitted frequency shifts and their associated colour and brightness changes, and
+also omitted camera lens flare; i.e., we (incorrectly) transported the light’s specific
+intensity Iν = dE/dt dA dΩ dν along each ray, unchanged, as would be appropriate in
+flat spacetime. Here E, t, A, Ω, and ν are energy, time, area, solid angle, and frequency
+#--- end
+#--- begin section 4.1.1 (p. 26), the artists' disc
+it will not get fried by X-rays and gamma-rays. It is physically thin and marginally
+optically thick and lies in the black hole’s equatorial plane. It is not currently accreting
+onto the black hole, and it has cooled to a position-independent temperature T = 4500K,
+at which it emits a black-body spectrum.
+#--- end
+#--- begin section 4.1.1 (p. 26), Figure 14 drawn like Figure 13
+     Figure 14 shows an image of this artists’ disk, generated with a gravitational lensing
+geometry and computational procedure identical to those for our paint-swatch disk,
+Figure 13 (no frequency shifts or associated colour and brightness changes; no lens
+flare). Christopher Nolan and Paul Franklin decided that the flattened left edge of the
+#--- end
+#--- begin section 4.1.1 (p. 26), why the spin was slowed
+flare). Christopher Nolan and Paul Franklin decided that the flattened left edge of the
+black-hole shadow, and the multiple disk images alongside that left edge, and the off-
+centred disk would be too confusing for a mass audience. So—although Interstellar ’s
+black hole had to spin very fast to produce the huge time dilations seen in the movie—
+for visual purposes Nolan and Franklin slowed the spin to a/M = 0.6, resulting in the
+disk of Figure 15a.
+#--- end
+#--- begin section 4.1.2 (p. 26), the shifts the film left out
+with speeds of roughly 0.55c, their light frequencies get shifted blueward on the left
+and redward on the right—by multiplicative factors of order 1.5 and 0.4 respectively
+when one combines the Doppler shift with a ∼ 20 percent gravitational redshift. These
+frequency changes induce changes in the disk’s perceived colours (which we compute by
+#--- end
+#--- begin section 4.2 (pp. 26-28), the fully realistic disc rejected
+images that are exciting and fresh. A fully realistic accretion disk, Figure 15c,
+that is exceedingly lopsided, with the hole’s shadow barely discernible, was obviously
+#--- end
+#--- begin Figure 15 caption (p. 27)
+Figure 15: (a) The moderately realistic accretion disk of Figure 14 but with the black
+hole’s spin slowed from a/M = 0.999 to a/M = 0.6 for reasons discussed in the text. (b)
+This same disk with its colours (light frequencies ν) Doppler shifted and gravitationally
+shifted. (c) The same disk with its specific intensity (brightness) also shifted in accord
+with Liouville’s theorem, Iν ∝ ν 3 . This image is what the disk would truly look like to
+an observer near the black hole.
+#--- end
+#--- begin Figure 16 caption (p. 28), the lens flare
+Figure 16: The accretion disk of Figure 15a (no colour or brightness shifts) with lens
+flare added—a type of lens flare called “veiling flare”, which has the look of a soft glow
+and is very characteristic of IMAX camera lenses. This is a variant of the accretion disk
+#--- end
+#--- begin section 4.2 (p. 28), the film's disc
+     This, with some embellishments, is the accretion disk seen around the black hole
+Gargantua in Interstellar.
+#--- end
+#--- begin section 4.3.1 (p. 29), how the flare was made
+appearance of a distant star on a camera’s focal plane is mainly determined by the point
+spread function of the camera’s optics. For Christopher Nolan’s films we measure the
+point spread function by recording with HDR photography (see e.g. [47]) a point source
+of light with the full set of 35mm and 65mm lenses typically used in his IMAX and
+anamorphic cameras, attached to a single lens reflex camera. We apply the camera’s
+lens flare to an image by convolving it with this point spread function. (For these
+optics concepts see, e.g., [48].) For the image 15a, this produces Figure 16. More recent
+#--- end
+#--- begin Appendix A.3.1 (p. 39), the film's spin
+and resample (See e.g. Chapter 7 of [57]). However, Interstellar ’s black hole, Gargantua,
+when visualized, has a moderate spin a/M = 0.6, which gives rise to few areas of extreme
+#--- end
+#--- begin Appendix A.6 (p. 43), the white balance
+      We set the white balance of our virtual camera to render a 6500 K blackbody
+spectrum with equal red, green and blue pixel values by applying a simple gain to
+each colour channel. We did not model the complex, nonlinear interaction between the
+colour-sensitive layers that occurs in real film.
+#--- end

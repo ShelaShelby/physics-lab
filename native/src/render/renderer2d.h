@@ -199,6 +199,11 @@ public:
         int discFN = 0;
         double discFLog0 = 0, discFDl = 1;
         std::uint64_t discFVersion = 0;
+        // 0.55.3 (blackhole/looks.h): discFix[3] > 0: the disc is one colour, discFix[0..2] (linear, already over the screen's white), in place of the
+        // temperature and shift rule (the spinning hole's pass). glow[0] > 0: the app's own glow over the finished bent picture (glow[0] the strength, glow[1]
+        // the threshold, glow[2] the blur's sigma over the picture's height; blocks of 4 x 4 pixels), made when the picture is drawn anew and kept with it.
+        float discFix[4] = {0, 0, 0, 0};
+        float glow[3] = {0, 0, 0};
     };
     void lensSky(const LensSky& s);
     long lensRedraws() const { return lensRedraws_; }   // how many times the bent sky was drawn anew (the rest of the frames reused it)
@@ -255,7 +260,11 @@ private:
     GLuint lensProgram_ = 0, lensFbo_ = 0, lensTex_ = 0, lensTableTex_ = 0, discUTex_ = 0, discPTex_ = 0, discCTex_ = 0;
     GLuint kerrProgram_ = 0, kATex_ = 0, kBTex_ = 0, kETex_ = 0, kTTex_ = 0, kFTex_ = 0;   // 0.55.2
     GLint krTex_ = -1, krA_ = -1, krB_ = -1, krE_ = -1, krT_ = -1, krDC_ = -1, krDF_ = -1, krKs_ = -1, krCentre_ = -1, krKpx_ = -1, krKN_ = -1, krKS_ = -1, krKO_ = -1,
-          krDebug_ = -1, krBright_ = -1, krSky_ = -1, krDisc_ = -1, krDR_ = -1, krDT_ = -1, krDN_ = -1;
+          krDebug_ = -1, krBright_ = -1, krSky_ = -1, krDisc_ = -1, krDR_ = -1, krDT_ = -1, krDN_ = -1, krDFix_ = -1;
+    GLuint glowDown_ = 0, glowBlur_ = 0, glowAdd_ = 0, glowFbo_ = 0, glowTex_[2] = {0, 0};   // 0.55.3: the Film look's glow (LensSky::glow)
+    int glowW_ = 0, glowH_ = 0;
+    bool glowValid_ = false;
+    void makeGlow(const LensSky& L, int fbW, int fbH);
     std::uint64_t kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     GLint lnDisc_ = -1, lnDU_ = -1, lnDP_ = -1, lnDC_ = -1, lnDN_ = -1, lnDS_ = -1, lnDA_ = -1, lnDR_ = -1, lnDT_ = -1, lnSky_ = -1;
     std::uint64_t discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0);

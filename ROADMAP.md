@@ -49,10 +49,12 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Celestial mechanics in the Data panel: an ephemeris table (state vectors and elements at a date, in a chosen frame) beside the Horizons tables; an integrator check (energy and angular-momentum drift against the step); Lagrange points and the Jacobi constant; the asteroids' Kirkwood gaps; a Lambert solver with porkchop plots (Earth to Mars: dates, time, delta-v).
 
 ## Black Hole Lab
-- In the order the owner chose (DECISIONS.md; plan steps 4-7, PLAN_BLACKHOLE.md): the Real and Film looks with the quality levels High and Ultra (only Basic exists), moving cameras (orbiting, then falling in), the Data panel's tables, the skin. **source needed** before the spinning fall-in: the ray equations in ingoing Kerr coordinates.
-- Spin, what is left after 0.55.2: "Show special radii" (the horizon's equator, the light orbits, the innermost stable orbit as thin lensed rings); spins above 0.99 (the tables need finer rows near the flat side of the shadow and longer fills); a disc orbiting against the spin, tilted or warped; the sky's turning with time for the dragged camera; the fine table's fill (6-8 s on 4 cores) made faster (fewer rays where the sky is smooth, or the shader stepping rays: plan section 6, level High).
-- For the looks step: one true exposure for the sky and the disc together (needs a traceable brightness for the sky map and the stars; today the disc is dimmed on its own and the sky keeps its own brightness).
-- A "1979 paper" view that recomputes Luminet's figures in ink-on-paper style, with a credit (after the disc exists).
+- The Real look's eye glare: the bright disc's glare as an eye would see it (**source needed**: a published model of the human eye's glare, for example the CIE's glare equations).
+- One true exposure for the sky and the disc together (**source needed**: a traceable brightness for the star catalogue and the sky map; today the disc is dimmed on its own and the sky keeps its own brightness).
+- The quality levels High and Ultra (only Basic exists), and a faster fine table (6-8 s on 4 cores now: fewer rays where the sky is smooth, or the shader stepping rays, plan section 6).
+- Then, in the order the owner chose (plan steps 5-7): moving cameras (orbiting, then falling in; **source needed** before the spinning fall-in: the ray equations in ingoing Kerr coordinates), the Data panel's tables, the skin.
+- A "1979 paper" view that recomputes Luminet's figures in ink-on-paper style, with a credit.
+- Spin, what is left after 0.55.2: "Show special radii" (the horizon's equator, the light orbits, the innermost stable orbit as thin lensed rings); spins above 0.99 (finer rows near the flat side of the shadow, so the paper's own a/M = 0.999 figures could be drawn too); a disc orbiting against the spin, tilted or warped; the sky's turning with time for the dragged camera.
 - Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
 
 ## Whole app

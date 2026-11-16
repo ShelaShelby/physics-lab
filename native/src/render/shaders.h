@@ -642,6 +642,7 @@ uniform int uDisc;
 uniform vec4 uDR;
 uniform vec4 uDT;
 uniform ivec3 uDN;
+uniform vec4 uDFix;
 out vec4 fragColor;
 const float PI = 3.14159265358979;
 vec4 cubicW(float u) { return vec4(-u * (u - 1.0) * (u - 2.0) / 6.0, (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0, -(u + 1.0) * u * (u - 2.0) / 2.0, (u + 1.0) * u * (u - 1.0) / 6.0); }
@@ -700,6 +701,7 @@ float shiftKerr(float r, float b) {                       // C75 (A9) on the equ
     return al * sqrt(max(1.0 - V * V, 0.0)) / (1.0 - Om * b);
 }
 vec3 discColour(float r, float g) {
+    if (uDFix.w > 0.0) return uDFix.rgb;                 // 0.55.3, Film: one colour all over the disc, no shift (blackhole/looks.h)
     float q = (log(r) - uDR.z) / uDR.w;
     if (q < 0.0) return vec3(0.0);
     q = min(q, float(uDN.x - 1) - 0.001);
@@ -760,6 +762,71 @@ void main() {
         tr *= 1.0 - cov;
     }
     fragColor = vec4(encS(acc + tr * decS(back)), 1.0);
+}
+)";
+
+// 0.55.3: the Black Hole Lab's Film look: the app's own glow (blackhole/looks.h glowReference is the same in double; no source: the film's flare is a
+// measured point-spread function that is not published). Down: each 4 x 4 block of the bent picture (8-bit sRGB, decoded) -> the mean of max(light - uThr, 0).
+// Blur: a Gaussian of uSig blocks over -uR..uR along uDir, light outside the picture counted as none, the weights summing to 1. Add: the picture plus uStr x the
+// blur (bilinear between the blocks' centres, indices clamped at the edges) in linear light, encoded again: it only adds light.
+static const char* const kGlowDownFS = R"(#version 330 core
+uniform sampler2D uTex;
+uniform ivec2 uSize;
+uniform float uThr;
+out vec4 fragColor;
+vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
+void main() {
+    ivec2 b = ivec2(gl_FragCoord.xy);
+    vec3 acc = vec3(0.0);
+    int n = 0;
+    for (int j = 0; j < 4; j++)
+        for (int i = 0; i < 4; i++) {
+            ivec2 p = b * 4 + ivec2(i, j);
+            if (p.x < uSize.x && p.y < uSize.y) { acc += max(decS(texelFetch(uTex, p, 0).rgb) - vec3(uThr), vec3(0.0)); n++; }
+        }
+    fragColor = vec4(acc / float(max(n, 1)), 1.0);
+}
+)";
+static const char* const kGlowBlurFS = R"(#version 330 core
+uniform sampler2D uTex;
+uniform ivec2 uN;
+uniform ivec2 uDir;
+uniform int uR;
+uniform float uSig;
+out vec4 fragColor;
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec3 acc = vec3(0.0);
+    float sum = 0.0;
+    for (int k = -uR; k <= uR; k++) {
+        float w = exp(-0.5 * float(k * k) / (uSig * uSig));
+        sum += w;
+        ivec2 q = p + uDir * k;
+        if (q.x >= 0 && q.y >= 0 && q.x < uN.x && q.y < uN.y) acc += w * texelFetch(uTex, q, 0).rgb;
+    }
+    fragColor = vec4(acc / sum, 1.0);
+}
+)";
+static const char* const kGlowAddFS = R"(#version 330 core
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform sampler2D uGlow;
+uniform ivec2 uN;
+uniform float uStr;
+out vec4 fragColor;
+vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
+vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
+vec3 G(int x, int y) { return texelFetch(uGlow, ivec2(x, y), 0).rgb; }
+void main() {
+    ivec2 sz = textureSize(uTex, 0);
+    ivec2 px = clamp(ivec2(vUV * vec2(sz)), ivec2(0), sz - 1);
+    vec3 base = decS(texelFetch(uTex, px, 0).rgb);
+    vec2 q = (vec2(px) + 0.5) / 4.0 - 0.5;
+    ivec2 i0 = ivec2(floor(q));
+    vec2 f = q - vec2(i0);
+    ivec2 a = clamp(i0, ivec2(0), uN - 1), b = clamp(i0 + 1, ivec2(0), uN - 1);
+    vec3 g = mix(mix(G(a.x, a.y), G(b.x, a.y), f.x), mix(G(a.x, b.y), G(b.x, b.y), f.x), f.y);
+    fragColor = vec4(encS(base + uStr * g), 1.0);
 }
 )";
 

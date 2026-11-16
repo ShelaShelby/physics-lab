@@ -203,8 +203,23 @@ bool Renderer2D::init() {
             const auto u = [&](const char* n) { return glGetUniformLocation(kerrProgram_, n); };
             krTex_ = u("uTex"); krA_ = u("uKA"); krB_ = u("uKB"); krE_ = u("uKE"); krT_ = u("uKT"); krDC_ = u("uDC"); krDF_ = u("uDF"); krKs_ = u("uKs");
             krCentre_ = u("uCentre"); krKpx_ = u("uKpx"); krKN_ = u("uKN"); krKS_ = u("uKS"); krKO_ = u("uKO"); krDebug_ = u("uDebug"); krBright_ = u("uBright");
-            krSky_ = u("uSky"); krDisc_ = u("uDisc"); krDR_ = u("uDR"); krDT_ = u("uDT"); krDN_ = u("uDN");
+            krSky_ = u("uSky"); krDisc_ = u("uDisc"); krDR_ = u("uDR"); krDT_ = u("uDT"); krDN_ = u("uDN"); krDFix_ = u("uDFix");
         }
+        // 0.55.3: the Film look's glow (three small passes; a failed link leaves the picture without its glow)
+        const auto prog = [&](const char* fs) {
+            const GLuint gv = compile(GL_VERTEX_SHADER, kCompositeVS), gf = compile(GL_FRAGMENT_SHADER, fs);
+            GLuint pr = glCreateProgram();
+            glAttachShader(pr, gv);
+            glAttachShader(pr, gf);
+            glLinkProgram(pr);
+            glDeleteShader(gv);
+            glDeleteShader(gf);
+            GLint ok2 = 0;
+            glGetProgramiv(pr, GL_LINK_STATUS, &ok2);
+            if (!ok2) { std::fprintf(stderr, "glow shader link error\n"); glDeleteProgram(pr); pr = 0; }
+            return pr;
+        };
+        glowDown_ = prog(kGlowDownFS); glowBlur_ = prog(kGlowBlurFS); glowAdd_ = prog(kGlowAddFS);
     }
     {   // the planet program (same vertex shader as the shapes; it also draws the sky photo) and the picture maps
         const GLuint v = compile(GL_VERTEX_SHADER, kVertexShader), f = compile(GL_FRAGMENT_SHADER, kPlanetFS);
@@ -304,6 +319,10 @@ void Renderer2D::shutdown() {
     for (GLuint* tx : {&discUTex_, &discPTex_, &discCTex_, &kATex_, &kBTex_, &kETex_, &kTTex_, &kFTex_}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     if (kerrProgram_) glDeleteProgram(kerrProgram_);
     kerrProgram_ = 0; kVer_ = kFVer_ = ~std::uint64_t(0);
+    for (GLuint* pr : {&glowDown_, &glowBlur_, &glowAdd_}) if (*pr) { glDeleteProgram(*pr); *pr = 0; }
+    for (GLuint* tx : {&glowTex_[0], &glowTex_[1]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
+    if (glowFbo_) glDeleteFramebuffers(1, &glowFbo_);
+    glowFbo_ = 0; glowW_ = glowH_ = 0; glowValid_ = false;
     lensProgram_ = lensFbo_ = lensTex_ = lensTableTex_ = 0; lensW_ = lensH_ = lensN_ = 0; lensValid_ = false; lensTableVer_ = ~std::uint64_t(0);
     discVer_ = colVer_ = ~std::uint64_t(0);
     for (int i = 0; i < int(meshes_.size()); i++) meshDelete(i);
@@ -435,6 +454,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glUniform4f(krDR_, static_cast<float>(L.rIn), static_cast<float>(L.rOut), static_cast<float>(L.discFLog0), static_cast<float>(L.discFDl));
         glUniform4f(krDT_, static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog));
         glUniform3i(krDN_, L.discFN, L.discC, 0);
+        glUniform4f(krDFix_, L.discFix[0], L.discFix[1], L.discFix[2], L.discFix[3]);
         const GLuint texs[7] = {tex_[static_cast<int>(Map::Sky)], kATex_, kBTex_, kETex_, kTTex_, discCTex_, kFTex_};
         const GLint locs[7] = {krTex_, krA_, krB_, krE_, krT_, krDC_, krDF_};
         for (int k = 0; k < 7; k++) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, texs[k]); glUniform1i(locs[k], k); }
@@ -506,24 +526,88 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
                       P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
                       P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&
                       P.kerr == L.kerr && (!L.kerr || (P.kVersion == L.kVersion && std::equal(L.kM, L.kM + 9, P.kM) && std::equal(L.kO, L.kO + 4, P.kO) && P.spin == L.spin &&
-                      P.discFVersion == L.discFVersion));
+                      P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) && std::equal(L.glow, L.glow + 3, P.glow);
+    const bool glow = L.glow[0] > 0 && glowDown_ && glowBlur_ && glowAdd_;
     if (!same) {                                                           // (e) of the plan: drawn anew only when the view, the distance or the picture changed
         glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
         glViewport(0, 0, fbW, fbH);
         pass(0, 0);
         lensLast_ = L; lensLast_.table = nullptr; lensLast_.discU = lensLast_.discP = lensLast_.discCol = nullptr;
         lensLast_.kA = lensLast_.kB = lensLast_.kEdge = lensLast_.kTau = lensLast_.discF = nullptr; lensPtW_ = width_; lensValid_ = true; lensRedraws_++;
+        glowValid_ = false;
+        if (glow) makeGlow(L, fbW, fbH);                                   // 0.55.3: with the picture, kept with it
     }
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glViewport(vx, vy, fbW, fbH);
-    glUseProgram(cmpProgram_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, lensTex_);
-    glUniform1i(cmpTex_, 0);
+    if (glow && glowValid_) {                                              // 0.55.3: the picture plus its glow, in linear light
+        glUseProgram(glowAdd_);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, glowTex_[0]);
+        glUniform1i(glGetUniformLocation(glowAdd_, "uGlow"), 1);
+        glUniform2i(glGetUniformLocation(glowAdd_, "uN"), glowW_, glowH_);
+        glUniform1f(glGetUniformLocation(glowAdd_, "uStr"), L.glow[0]);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, lensTex_);
+        glUniform1i(glGetUniformLocation(glowAdd_, "uTex"), 0);
+    } else {
+        glUseProgram(cmpProgram_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, lensTex_);
+        glUniform1i(cmpTex_, 0);
+    }
     glBindVertexArray(cmpVao_);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, 0); glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glEnable(GL_BLEND);
+}
+
+// 0.55.3: the glow of the bent picture in lensTex_ (blackhole/looks.h): down to 4 x 4 blocks above the threshold, then the Gaussian along rows and columns;
+// the result stays in glowTex_[0] until the picture is drawn anew
+void Renderer2D::makeGlow(const LensSky& L, int fbW, int fbH) {
+    const int gw = (fbW + 3) / 4, gh = (fbH + 3) / 4;
+    if (!glowFbo_) { glGenFramebuffers(1, &glowFbo_); glGenTextures(2, glowTex_); }
+    if (gw != glowW_ || gh != glowH_) {
+        glowW_ = gw; glowH_ = gh;
+        for (GLuint tx : glowTex_) {
+            glBindTexture(GL_TEXTURE_2D, tx);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, gw, gh, 0, GL_RGBA, GL_FLOAT, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    const double sig = L.glow[2] * fbH / 4;                                // the blur's sigma in blocks (looks.h glowSigmaBlocks)
+    const int R = std::max(1, static_cast<int>(std::ceil(3 * sig)));
+    glBindFramebuffer(GL_FRAMEBUFFER, glowFbo_);
+    glViewport(0, 0, gw, gh);
+    glBindVertexArray(cmpVao_);
+    glActiveTexture(GL_TEXTURE0);
+    const auto into = [&](int k) { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, glowTex_[k], 0); };
+    into(0);                                                               // the blocks above the threshold
+    glUseProgram(glowDown_);
+    glBindTexture(GL_TEXTURE_2D, lensTex_);
+    glUniform1i(glGetUniformLocation(glowDown_, "uTex"), 0);
+    glUniform2i(glGetUniformLocation(glowDown_, "uSize"), fbW, fbH);
+    glUniform1f(glGetUniformLocation(glowDown_, "uThr"), L.glow[1]);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glUseProgram(glowBlur_);
+    glUniform1i(glGetUniformLocation(glowBlur_, "uTex"), 0);
+    glUniform2i(glGetUniformLocation(glowBlur_, "uN"), gw, gh);
+    glUniform1i(glGetUniformLocation(glowBlur_, "uR"), R);
+    glUniform1f(glGetUniformLocation(glowBlur_, "uSig"), static_cast<float>(sig));
+    into(1);                                                               // rows: 0 -> 1
+    glBindTexture(GL_TEXTURE_2D, glowTex_[0]);
+    glUniform2i(glGetUniformLocation(glowBlur_, "uDir"), 1, 0);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    into(0);                                                               // columns: 1 -> 0
+    glBindTexture(GL_TEXTURE_2D, glowTex_[1]);
+    glUniform2i(glGetUniformLocation(glowBlur_, "uDir"), 0, 1);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glowValid_ = true;
 }
 
 void Renderer2D::closeTriangles() {

@@ -137,6 +137,7 @@ typedef unsigned long long GLuint64;
     X(void, glUniform2f, (GLint loc, GLfloat a, GLfloat b))                                        \
     X(void, glUniform3f, (GLint loc, GLfloat a, GLfloat b, GLfloat c))                             \
     X(void, glUniform3i, (GLint loc, GLint a, GLint b, GLint c))                                   \
+    X(void, glUniform2i, (GLint loc, GLint a, GLint b))                                             \
     X(void, glGenVertexArrays, (GLsizei n, GLuint* a))                                             \
     X(void, glDeleteVertexArrays, (GLsizei n, const GLuint* a))                                    \
     X(void, glBindVertexArray, (GLuint a))                                                         \

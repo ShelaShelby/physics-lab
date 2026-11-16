@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.55.2 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.55.3 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -164,6 +164,7 @@ add_library(blackhole_core STATIC
   src/blackhole/schwarzschild.cpp
   src/blackhole/presets.cpp
   src/blackhole/lab.cpp
+  src/blackhole/looks.cpp
   src/blackhole/disc.cpp
   src/blackhole/spin.cpp
   src/blackhole/spin_sky.cpp
@@ -481,10 +482,10 @@ if(PL_BUILD_APP)
                check_molecule.py:rotation check_molecule.py:anharm)
       set_tests_properties(ui_molecule PROPERTIES TIMEOUT 3600)
       # ui_blackhole (0.55.0): the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, layout, look,
-      # and the card's bent sky against the double-precision reference; 0.55.2: spin
+      # and the card's bent sky against the double-precision reference; 0.55.2: spin; 0.55.3: the looks
       add_test(NAME ui_blackhole COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole
                check_blackhole.py:open check_blackhole.py:presets check_blackhole.py:distance check_blackhole.py:light check_blackhole.py:disc check_blackhole.py:realest check_blackhole.py:orbitcard
-               check_blackhole.py:settings check_blackhole.py:layout check_blackhole.py:look check_blackhole.py:precision check_blackhole.py:spin)
+               check_blackhole.py:settings check_blackhole.py:layout check_blackhole.py:look check_blackhole.py:precision check_blackhole.py:spin check_blackhole.py:looks)
       set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 3600)
     endif()
   endif()

@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.55.2 (15 Nov 2026): the Black Hole Lab's spinning hole (PLAN_BLACKHOLE.md step 3): a Spin control from 0 to 0.99 (the tested top); a table per spin, distance and latitude filled by the ray integrator in double precision (coarse at once, fine when the view rests), the shadow's edge from James et al.'s closed test, the stars by inverting the table, the disc at the spin's innermost stable orbit with Cunningham's shift; spin 0 keeps the closed forms; small version (quick tests and its own UI parts).
+- 0.55.3 (16 Nov 2026): the Black Hole Lab's looks (PLAN_BLACKHOLE.md step 4, first part): Controls › Look, Real (the dot; the 0.55.2 picture to the pixel) and Film (the film's choices as James et al. 2015 state them: spin 0.6, one 4500 K disc from 9.26 to 18.70 GM/c², no shifts, the paper's white balance, the app's own glow; spin and disc locked; "The paper's view"); the guide's "What the film changed"; small version (quick tests and its own UI parts).
 - Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
-- Next: the looks and quality levels, 0.55.3 (PLAN_BLACKHOLE.md step 4); "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra; the eye glare and one true exposure wait for sources), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

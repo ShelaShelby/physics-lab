@@ -1,10 +1,12 @@
 #include "blackhole/blackhole_view.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <string>
 
@@ -16,6 +18,9 @@ namespace blackhole {
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
+// 0.55.3: a table's version number, unique across every view of the process: the renderer keeps the last table it was sent by its number only, so two views
+// (the picture tests draw several) must never hand it the same number for different tables
+std::uint64_t nextVersion() { static std::atomic<std::uint64_t> n{0}; return ++n; }
 double msSince(std::chrono::steady_clock::time_point t0) { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(); }
 // the brightest catalogue star seen without the hole: the cap of a drawn image (blackhole_view.h)
 float brightestMag() {
@@ -26,7 +31,7 @@ float brightestMag() {
 
 bool BlackHoleView::Key::operator==(const Key& o) const {
     return W == o.W && H == o.H && cx == o.cx && cy == o.cy && dist == o.dist && fov == o.fov && yaw == o.yaw && pitch == o.pitch && bend == o.bend && sky == o.sky &&
-           disc == o.disc && outer == o.outer && feed == o.feed && mass == o.mass && exp == o.exp && expAuto == o.expAuto && spin == o.spin && spinVer == o.spinVer;
+           disc == o.disc && outer == o.outer && feed == o.feed && mass == o.mass && exp == o.exp && expAuto == o.expAuto && spin == o.spin && spinVer == o.spinVer && look == o.look;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -66,7 +71,7 @@ void BlackHoleView::ensureDiscF(double spin) {
     discF_.resize(n);
     for (int i = 0; i < n; i++) discF_[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, discFlux(std::exp(l0 + i * dl), spin)), 0.25));
     discFSpin_ = spin; discFLog0_ = l0; discFDl_ = dl;
-    discFVer_++;
+    discFVer_ = nextVersion();
 }
 
 void BlackHoleView::ensureSpin(const Settings& s, bool wait) {
@@ -74,7 +79,7 @@ void BlackHoleView::ensureSpin(const Settings& s, bool wait) {
     const auto mine = [&](const SpinTable& t) { return t.spin() == a && t.rC() == r && t.thC() == th; };
     const auto show = [&](std::shared_ptr<const SpinTable> t) {
         spin_ = std::move(t);
-        spinVer_++;
+        spinVer_ = nextVersion();
         const auto t0 = std::chrono::steady_clock::now();
         spinStars_ = std::make_unique<SpinStars>(*spin_);
         st_.spinStarsMs = msSince(t0);
@@ -140,11 +145,7 @@ DiscPixel BlackHoleView::spinPixel(const Settings& s, const HoleView& v, double 
     const SpinDisc sd = spinDisc(h, s.spin, g.rIn, g.rOut);
     o.hit.order = sd.order; o.hit.r = sd.r; o.hit.g = sd.g; o.hit.b = h.b; o.hit.Lz = h.b;
     if (sd.order < 0 || !light) return o;
-    const DiscPhys p = discPhys(s);
-    o.T = p.temperature(sd.r);
-    o.Tobs = sd.g * o.T;
-    o.rgb = blackBodyLinearFast(o.Tobs);
-    o.Y = visibleVsSunFast(o.Tobs);
+    discLight(s, sd.r, sd.g, o);                                             // 0.55.3: by the look's rule (lab.h)
     return o;
 }
 
@@ -153,7 +154,7 @@ void BlackHoleView::ensureDisc(double dist) {
     const auto t0 = std::chrono::steady_clock::now();
     disc_ = std::make_unique<DiscTable>(dist);
     discDist_ = dist;
-    discVer_++;
+    discVer_ = nextVersion();
     st_.discMs = msSince(t0);
     st_.discFills++;
 }
@@ -203,7 +204,7 @@ void BlackHoleView::ensureTable(double dist) {
     const auto t0 = std::chrono::steady_clock::now();
     table_ = std::make_unique<LensTable>(dist);
     tableDist_ = dist;
-    tableVer_++;
+    tableVer_ = nextVersion();
     st_.tableMs = msSince(t0);
     st_.tableFills++;
 }
@@ -223,6 +224,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.tableVersion = tableVer_;
     }
     L.sky = s.skyOurs;
+    if (lookRule(s.look).glow) { L.glow[0] = static_cast<float>(kGlowStrength); L.glow[1] = static_cast<float>(kGlowThreshold); L.glow[2] = static_cast<float>(kGlowSigma); }   // 0.55.3 (looks.h)
     if (s.spin > 0 && s.bend && spinMatches(s)) {                            // 0.55.2: the spinning hole
         const SpinTable& T = *spin_;
         L.kerr = true;
@@ -256,6 +258,14 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             L.rIn = g.rIn; L.rOut = g.rOut;
             L.tScale = std::pow(discPhys(s).fluxScale() / stefanBoltzmann(), 0.25);
             L.white = st_.look.white;
+            if (!lookRule(s.look).shifts) {                                 // 0.55.3, Film: one colour all over the disc (lab.h discLight), over the screen's white as discColour does
+                DiscPixel q;
+                discLight(s, g.rIn, 1, q);
+                double c[3] = {q.rgb[0] / L.white, q.rgb[1] / L.white, q.rgb[2] / L.white};
+                const double m = std::max({c[0], c[1], c[2]});
+                for (int k = 0; k < 3; k++) L.discFix[k] = static_cast<float>(m > 1 ? c[k] / m : c[k]);
+                L.discFix[3] = 1;
+            }
         }
         return L;
     }
@@ -290,7 +300,7 @@ void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, dou
     const bool disc = s.disc && s.bend;
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; return; }      // Sky: Black and no disc: nothing is lit, the picture is black
     if (disc) ensureDisc(s.dist);
-    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, 0.0, 0};
+    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, 0.0, 0, static_cast<int>(s.look)};
     const bool changed = !(k == key_);
     if (changed) st_.look = disc ? discLook(*disc_, s, v, W, H) : DiscLook{};   // the exposure first: the shader needs the white
     R.lensSky(lensFor(s, v));
@@ -343,7 +353,7 @@ void BlackHoleView::drawSpin(render::Renderer2D& R, const Settings& s, double W,
     const bool disc = s.disc;
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; return; }
     if (disc) ensureDiscF(s.spin);
-    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, s.spin, spinVer_};
+    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, s.spin, spinVer_, static_cast<int>(s.look)};
     const bool changed = !(k == key_);
     if (changed && disc) {                                                  // the exposure first (lab.h discLook's rule, through the spin table)
         DiscLook L;
@@ -422,8 +432,194 @@ void dropFbo(Fbo& f) { plgl::glDeleteFramebuffers(1, &f.fbo); plgl::glDeleteText
 double angleBetween(const Vec3& a, const Vec3& b) { return std::atan2(length(cross(a, b)), dot(a, b)); }
 }  // namespace
 
+// 0.55.3: one saved case of the Real look (the feeding preset at spin 0.6 seen from the paper's view, 74.1 M and 1.511 rad, field of view 30 degrees,
+// automatic exposure), drawn as the app draws it (sky, disc and stars) into an 8-bit picture: its FNV-1a hash over the RGBA bytes. The test's number was made
+// by 0.55.2's code before this job changed anything (REPORT 0.55.3): Real stays the same to the pixel.
+namespace {
+std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H) {
+    BlackHoleView view;
+    Settings s = settingsDefaults();
+    applyPreset(s, kFeedingKey);
+    setSpin(s, 0.6);
+    setDistance(s, 74.1);
+    s.pitch = 1.511;
+    setFov(s, 30);
+    view.ensureSpin(s, true);
+    Fbo f = makeFbo(W, H, false);
+    R.begin(W, H);
+    view.draw(R, s, W, H, W / 2.0, H / 2.0);
+    R.end(W, H, 0, f.fbo);
+    std::vector<unsigned char> px(static_cast<std::size_t>(W) * H * 4);
+    plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+    plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    dropFbo(f);
+    std::uint64_t h = 1469598103934665603ull;
+    for (unsigned char c : px) { h ^= c; h *= 1099511628211ull; }
+    if (const char* dump = std::getenv("PL_BH_REALDUMP")) {
+        if (FILE* fo = std::fopen(dump, "wb")) { std::fwrite(px.data(), 1, px.size(), fo); std::fclose(fo); }
+    }
+    return h;
+}
+}  // namespace
+
 void compareHook(render::Renderer2D& R, const char* spec) {
     (void)spec;
+    // 0. 0.55.3, the looks: Real's saved case to the pixel; Film at the paper's view (J15 Figure 13: 74.1 M, 86.56 deg; field of view 30 degrees) against the double
+    //    lookup of the same table: the disc's image and edges where the module puts the paper's edges, one colour over the whole disc before the glow; the glow
+    //    against its double reference (looks.h glowReference) on the same picture, no pixel darker; the glow pass's time at 1280 x 800 and 3840 x 2160.
+    {
+        std::printf("PLBHREAL hash=%016llx\n", static_cast<unsigned long long>(realCaseHash(R, 1280, 800)));
+        const int W0 = 1280, H0 = 800;
+        BlackHoleView view;
+        Settings u = settingsDefaults();
+        applyPreset(u, kFeedingKey);
+        setLook(u, Look::Film);
+        paperView(u);
+        setFov(u, 30);
+        const Settings s = shown(u);
+        view.ensureSpin(s, true);
+        const SpinTable& T = *view.spinTable();
+        const HoleView v = holeView(s, W0, H0, W0 / 2.0, H0 / 2.0);
+        {   Fbo f = makeFbo(W0, H0, false);                                     // a frame as the app draws it: the exposure (st_.look) for these settings
+            R.begin(W0, H0); view.draw(R, s, W0, H0, W0 / 2.0, H0 / 2.0); R.end(W0, H0, 0, f.fbo); dropFbo(f); }
+        const DiscGeom g = discGeom(s);
+        const auto readF = [&](const render::Renderer2D::LensSky& L, std::vector<float>& out) {
+            Fbo f = makeFbo(W0, H0, true);
+            R.begin(W0, H0); R.lensSky(L); R.end(W0, H0, 0, f.fbo);
+            out.resize(static_cast<std::size_t>(W0) * H0 * 4);
+            plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+            plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
+            plgl::glReadPixels(0, 0, W0, H0, GL_RGBA, GL_FLOAT, out.data());
+            dropFbo(f);
+        };
+        const auto read8 = [&](const render::Renderer2D::LensSky& L, std::vector<unsigned char>& out) {
+            Fbo f = makeFbo(W0, H0, false);
+            R.begin(W0, H0); R.lensSky(L); R.end(W0, H0, 0, f.fbo);
+            out.resize(static_cast<std::size_t>(W0) * H0 * 4);
+            plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+            plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
+            plgl::glReadPixels(0, 0, W0, H0, GL_RGBA, GL_UNSIGNED_BYTE, out.data());
+            dropFbo(f);
+        };
+        render::Renderer2D::LensSky L = view.lensFor(s, v);
+        L.debugDisc = true;
+        std::vector<float> dbg;
+        readF(L, dbg);
+        render::Renderer2D::LensSky Lc = view.lensFor(s, v);
+        const float glow0[3] = {Lc.glow[0], Lc.glow[1], Lc.glow[2]};
+        Lc.glow[0] = Lc.glow[1] = Lc.glow[2] = 0;
+        std::vector<unsigned char> plain, glowed;
+        read8(Lc, plain);
+        Lc.glow[0] = glow0[0]; Lc.glow[1] = glow0[1]; Lc.glow[2] = glow0[2];
+        read8(Lc, glowed);
+        // the double lookup at every pixel (row 0 at the bottom, as read back)
+        std::vector<int> kk(static_cast<std::size_t>(W0) * H0, -2);
+        std::vector<double> rr(kk.size(), 0);
+        for (int j = 0; j < H0; j++)
+            for (int i = 0; i < W0; i++) {
+                const double X = i + 0.5, Y = H0 - 1 - j + 0.5, dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), th = d / v.K;
+                if (!(th <= kPi) || d == 0) continue;
+                double chi = std::atan2(-dx / d, dy / d);
+                if (chi < 0) chi += 2 * kPi;
+                const SpinDisc sd = spinDisc(T.lookup(th, chi), s.spin, g.rIn, g.rOut);
+                kk[static_cast<std::size_t>(j) * W0 + i] = sd.order; rr[static_cast<std::size_t>(j) * W0 + i] = sd.r;
+            }
+        const double* fix = nullptr;
+        double fixD[3] = {Lc.discFix[0], Lc.discFix[1], Lc.discFix[2]};
+        fix = fixD;
+        int discPx = 0, wrong = 0, edgeWrong = 0, colours = 0, offColour = 0;
+        double rMin = 1e9, rMax = 0, shift = 0;
+        unsigned char want[3];
+        for (int k = 0; k < 3; k++) {
+            const double l = std::clamp(fix[k], 0.0, 1.0), e = l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055;
+            want[k] = static_cast<unsigned char>(std::lround(e * 255));
+        }
+        std::vector<std::uint32_t> seen;
+        for (int j = 1; j + 1 < H0; j++)
+            for (int i = 1; i + 1 < W0; i++) {
+                const std::size_t at = static_cast<std::size_t>(j) * W0 + i;
+                if (kk[at] == -2) continue;
+                const int gk = static_cast<int>(std::lround(dbg[at * 4]));
+                bool edge = false;
+                for (const std::size_t nb : {at - 1, at + 1, at - W0, at + W0}) if (kk[nb] != kk[at]) edge = true;
+                if (gk != kk[at]) { if (edge) edgeWrong++; else wrong++; continue; }
+                if (kk[at] < 0) continue;
+                rMin = std::min(rMin, static_cast<double>(dbg[at * 4 + 1])); rMax = std::max(rMax, static_cast<double>(dbg[at * 4 + 1]));
+                if (edge) {                                                     // an image's edge: how far the card moves it, in pixels
+                    double grad = 0;
+                    for (const std::size_t nb : {at - 1, at + 1, at - W0, at + W0}) if (kk[nb] == kk[at]) grad = std::max(grad, std::fabs(rr[nb] - rr[at]));
+                    if (grad > 0) shift = std::max(shift, std::fabs(dbg[at * 4 + 1] - rr[at]) / grad);
+                    continue;
+                }
+                // the colour where the pixel is fully on the disc: its 8 neighbours on the same image and its radius more than twice the largest step to a
+                // neighbour from either edge (the card's anti-aliasing covers a pixel's radius range r +- fwidth/2)
+                bool inner = true;
+                double step = 0;
+                for (int dj = -1; dj <= 1; dj++)
+                    for (int di = -1; di <= 1; di++) {
+                        const std::size_t nb = at + static_cast<std::size_t>(dj * W0 + di);
+                        if (kk[nb] != kk[at]) inner = false; else step = std::max(step, std::fabs(rr[nb] - rr[at]));
+                    }
+                if (!inner || rr[at] - g.rIn < 2 * step || g.rOut - rr[at] < 2 * step) continue;
+                discPx++;
+                const unsigned char* q = &plain[at * 4];
+                const std::uint32_t key = (static_cast<std::uint32_t>(q[0]) << 16) | (static_cast<std::uint32_t>(q[1]) << 8) | q[2];
+                if (std::find(seen.begin(), seen.end(), key) == seen.end()) seen.push_back(key);
+                if (q[0] != want[0] || q[1] != want[1] || q[2] != want[2]) {
+                    offColour++;
+                    if (std::getenv("PL_BH_DBG")) std::printf("DBGFILM i=%d j=%d order=%d r=%.6f rcpu=%.6f rgb=%d,%d,%d nb=%.5f,%.5f,%.5f,%.5f\n", i, j, kk[at], dbg[at * 4 + 1], rr[at], q[0], q[1], q[2], rr[at - 1], rr[at + 1], rr[at - W0], rr[at + W0]);
+                }
+            }
+        colours = static_cast<int>(seen.size());
+        // the glow against its reference on the same picture (glowReference works top-down; at a height divisible by 4 the blocks are the same either way)
+        std::vector<double> lin(static_cast<std::size_t>(W0) * H0 * 3);
+        for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++)
+            for (int k = 0; k < 3; k++) {
+                const double e = plain[q * 4 + k] / 255.0;
+                lin[q * 3 + k] = e <= 0.04045 ? e / 12.92 : std::pow((e + 0.055) / 1.055, 2.4);
+            }
+        const std::vector<double> gref = glowReference(lin, W0, H0);
+        int darker = 0, glowDiff = 0, brighter = 0;
+        double added = 0, addedRef = 0;
+        for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++)
+            for (int k = 0; k < 3; k++) {
+                const int a0 = plain[q * 4 + k], a1 = glowed[q * 4 + k];
+                if (a1 < a0) darker++;
+                if (a1 > a0) brighter++;
+                const double l = std::clamp(lin[q * 3 + k] + kGlowStrength * gref[q * 3 + k], 0.0, 1.0), e = l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055;
+                glowDiff = std::max(glowDiff, std::abs(a1 - static_cast<int>(std::lround(e * 255))));
+                const double e1 = a1 / 255.0;
+                added += (e1 <= 0.04045 ? e1 / 12.92 : std::pow((e1 + 0.055) / 1.055, 2.4)) - lin[q * 3 + k];
+                addedRef += std::min(1.0, lin[q * 3 + k] + kGlowStrength * gref[q * 3 + k]) - lin[q * 3 + k];
+            }
+        std::printf("PLBHFILM spin=%g dist=%g theta=%.6f rin=%g rout=%g pixels=%d wrong=%d edgewrong=%d edgeshift=%.3e rmin=%.6f rmax=%.6f colours=%d offcolour=%d want=%d,%d,%d white=%.6g "
+                    "darker=%d brighter=%d glowdiff=%d added=%.6g addedref=%.6g\n", s.spin, s.dist, s.pitch, g.rIn, g.rOut, discPx, wrong, edgeWrong, shift, rMin, rMax, colours, offColour,
+                    want[0], want[1], want[2], view.st_.look.white, darker, brighter, glowDiff, added, addedRef);
+        // the glow pass's time: the picture drawn anew with and without it (best of 3), the difference
+        for (const auto& sz : {std::array<int, 2>{1280, 800}, std::array<int, 2>{3840, 2160}}) {
+            Settings s2 = s;
+            double best[2] = {1e30, 1e30};
+            for (int withGlow = 0; withGlow < 2; withGlow++) {
+                Fbo f = makeFbo(sz[0], sz[1], false);
+                for (int rep = 0; rep < 3; rep++) {
+                    s2.yaw += 0.001;                                            // a new view each time: drawn anew
+                    const HoleView v2 = holeView(s2, sz[0], sz[1], sz[0] / 2.0, sz[1] / 2.0);
+                    render::Renderer2D::LensSky L2 = view.lensFor(s2, v2);
+                    if (!withGlow) L2.glow[0] = L2.glow[1] = L2.glow[2] = 0;
+                    R.begin(sz[0], sz[1]);
+                    R.lensSky(L2);
+                    const auto t0 = std::chrono::steady_clock::now();
+                    R.end(sz[0], sz[1], 0, f.fbo);
+                    plgl::glFinish();
+                    best[withGlow] = std::min(best[withGlow], msSince(t0));
+                }
+                dropFbo(f);
+            }
+            std::printf("PLBHTIME film size=%dx%d discms=%.1f withglowms=%.1f glowms=%.1f\n", sz[0], sz[1], best[0], best[1], best[1] - best[0]);
+        }
+    }
+    if (std::getenv("PL_BH_COMPARE_LOOKS")) { R.begin(1280, 800); return; }   // (by hand: the looks part only)
     const bool onlySpin = std::getenv("PL_BH_COMPARE_SPIN") != nullptr;   // (by hand: the spin part only)
     const int W = 1280, H = 800;
     BlackHoleView view;

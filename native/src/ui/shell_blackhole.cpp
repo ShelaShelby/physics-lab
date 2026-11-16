@@ -69,6 +69,18 @@ std::string tempText(double K) {
 }
 std::string timesText(double v) { return v >= 100 ? fmt::commas(std::round(v)) : sig(v, v >= 1 ? 3 : 2); }
 
+// 0.55.3: the Film look's labels, each from the module (blackhole/looks.h: James et al. 2015 and the place of each choice); the UI holds no number of its own
+std::string filmSpinText() { return sig(blackhole::filmChoices().spin, 2) + ", the spin the film drew: its story needs nearly 1, slowed so the picture would not confuse (James et al. 2015, section 4.1.1)"; }
+std::string filmDiscText() {
+    const blackhole::FilmChoices& c = blackhole::filmChoices();
+    return fmt::commas(c.discT) + " K all over (one temperature), thin, not feeding; from " + sig(c.rIn, 3) + " to " + sig(c.rOut, 4) + " GM/c², the edges of the paper's disc figure (Figure 13)";
+}
+const char* kFilmShifts = "None: no colour shift and no brightness shift from the gas's speed and gravity (the film's choice, Figure 15a)";
+std::string filmColourText() { return "The paper's white balance: a " + fmt::commas(blackhole::filmChoices().whiteT) + " K black body drawn white (appendix A.6), by the app's CIE 1931 eye in place of the film stock's colours"; }
+const char* kFilmGlow = "Our own glow, in place of the film's lens flare: a simple blur of the bright parts (the film's lens data is not published)";
+const char* kFilmHonest = "A copy of the film's stated choices, not of its pictures: the artists' textures, the real lens flare and the film's colour grading are not published and are not here.";
+const char* kRealCaption = "A calculated model: the standard thin disc. Real for quasars and for small black holes feeding from a star. A real disc is blinding; the glare an eye would see is not drawn yet.";
+
 // a typed number: applied when it reads as a number inside [lo, hi]; the field keeps what was typed
 bool typedNumber(const char* id, char* buf, std::size_t n, const char* hint, float w, double lo, double hi, double& out) {
     if (!inputField(id, buf, n, hint, w)) return false;
@@ -85,25 +97,32 @@ bool typedNumber(const char* id, char* buf, std::size_t n, const char* hint, flo
 
 ChipInfo blackholeChip(const AppState& app) {
     ChipInfo c;
-    const blackhole::Readout r = blackhole::readout(app.blackhole);
+    const blackhole::Settings v = blackhole::shown(app.blackhole);         // 0.55.3: what the picture draws (the Film look's spin and disc)
+    const blackhole::Readout r = blackhole::readout(v);
     c.title = "Black hole  ·  " + (r.hasPreset ? r.presetName : massText(r.massSun));
-    const std::string spin = app.blackhole.spin > 0 ? "spin " + sig(app.blackhole.spin, 3) : std::string("no spin");
+    const std::string spin = v.spin > 0 ? "spin " + sig(v.spin, 3) : std::string("no spin");
     c.sub = "A calculated model: " + spin + ", no gas  ·  our sky, seen from Earth";   // the lab's one line of what kind of picture this is (the rest: the guide)
-    if (app.blackhole.disc && app.blackhole.bend)
-        c.sub = r.realPreset ? std::string(kWhatIf) : "A calculated model: " + spin + "; a thin gas disc (model), dimmed  ·  our sky, seen from Earth";
+    if (v.disc && v.bend)
+        c.sub = r.realPreset ? std::string(kWhatIf) : "A calculated model: " + spin + "; the standard thin disc, real for quasars and small black holes feeding from a star; dimmed  ·  our sky, seen from Earth";
+    if (v.look == blackhole::Look::Film)
+        c.sub = "The film's choices (James et al. 2015): " + spin + ", one temperature, no shifts, our own glow  ·  a copy of stated choices, not of the film's pictures";
     c.play = false;
+    auditNote("bhchip " + c.sub);
     return c;
 }
 
 std::string blackholeSubject(const AppState& app) {
-    const blackhole::Readout r = blackhole::readout(app.blackhole);
+    const blackhole::Readout r = blackhole::readout(blackhole::shown(app.blackhole));
     return r.hasPreset ? r.presetName : "Black hole";
 }
 
 void blackholeCard(AppState& app, Panel& p) {
-    const blackhole::Readout r = blackhole::readout(app.blackhole);
+    const blackhole::Settings sv = blackhole::shown(app.blackhole);
+    const bool film = sv.look == blackhole::Look::Film;
+    const blackhole::Readout r = blackhole::readout(sv);
     pStat(p, "Mass", massText(r.massSun) + (r.realPreset ? " (measured)" : r.hasPreset ? " (the model's)" : " (your choice)"));
-    if (r.spin > 0) pStat(p, "Spin", sig(r.spin, 3) + " of the largest possible (your choice; not measured for any real hole here)");
+    if (film) pStat(p, "Spin", sig(r.spin, 3) + " of the largest possible (the film's, Film look)");
+    else if (r.spin > 0) pStat(p, "Spin", sig(r.spin, 3) + " of the largest possible (your choice; not measured for any real hole here)");
     pStat(p, "Horizon radius", sig(r.horizonM, 3) + " GM/c²  ·  " + kmText(r.horizonKm) + "  ·  " + auText(r.horizonAU));
     pStat(p, "Your distance", distText(r.dist) + "  ·  " + kmText(r.distKm) + "  ·  " + auText(r.distAU));
     char b[200];
@@ -122,18 +141,23 @@ void blackholeCard(AppState& app, Panel& p) {
     if (r.spin > 0 && r.skyShare > 0.5) pCaption(p, "The shadow covers more than half your sky.");
     if (r.disc) {                                                           // 0.55.1: the disc's numbers (blackhole/lab.h readout, the view's discLook)
         const blackhole::DiscLook& L = app.blackholeView.stats().look;
-        if (r.realPreset) pCaption(p, kWhatIf, false);
-        pStat(p, "Disc's inner edge", sig(r.rIn, 3) + " GM/c²  ·  " + kmText(r.rInKm) + " (nothing shines inside it)");
-        pStat(p, "Light from the infalling gas", sig(100 * r.efficiency, 3) + " % of its mass (the rest falls in)");
-        pStat(p, "Hottest ring", tempText(r.tHot) + " at " + sig(r.rHot, 3) + " GM/c²  ·  " + kmText(r.rHotKm));
+        if (r.realPreset && !film) pCaption(p, kWhatIf, false);
+        if (film) {                                                         // 0.55.3: the film's disc (blackhole/looks.h)
+            pStat(p, "The film's disc", filmDiscText());
+            pStat(p, "Shifts", kFilmShifts);
+        } else {
+            pStat(p, "Disc's inner edge", sig(r.rIn, 3) + " GM/c²  ·  " + kmText(r.rInKm) + " (nothing shines inside it)");
+            pStat(p, "Light from the infalling gas", sig(100 * r.efficiency, 3) + " % of its mass (the rest falls in)");
+            pStat(p, "Hottest ring", tempText(r.tHot) + " at " + sig(r.rHot, 3) + " GM/c²  ·  " + kmText(r.rHotKm));
+        }
         if (!app.blackhole.bend) pCaption(p, "Gravity bends light: Off: the disc is not drawn (it needs the hole).");
         else if (L.any) {
             pStat(p, "Brightest part", timesText(L.brightY) + " × the Sun's surface in visible light");
             pStat(p, "Exposure", std::string("screen white = ") + timesText(L.white) + " × the Sun's surface" + (app.blackhole.expAuto ? " (automatic)" : " (your choice)"));
         } else pCaption(p, "The disc is out of the picture from here.");
         char d[260];
-        std::snprintf(d, sizeof d, "bhdisc on=1 feed=%.6g outer=%.6g rin=%.6g thot=%.6g rhot=%.6g bright=%.6g white=%.6g any=%d auto=%d", r.feed, r.rOut, r.rIn, r.tHot, r.rHot, L.brightY, L.white,
-                      L.any ? 1 : 0, app.blackhole.expAuto ? 1 : 0);
+        std::snprintf(d, sizeof d, "bhdisc on=1 feed=%.6g outer=%.6g rin=%.6g thot=%.6g rhot=%.6g bright=%.6g white=%.6g any=%d auto=%d edgein=%.6g edgeout=%.6g filmt=%.6g", r.feed, r.rOut, r.rIn, r.tHot, r.rHot, L.brightY, L.white,
+                      L.any ? 1 : 0, app.blackhole.expAuto ? 1 : 0, r.discEdgeIn, r.discEdgeOut, r.filmT);
         auditNote(d);
     } else auditNote("bhdisc on=0");
     if (r.hasPreset && r.realPreset) {
@@ -172,10 +196,11 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
         if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the first view: distance, field of view and direction (key R)");
         endPanel(p);
     }
-    char b[320];
-    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
+    char b[400];
+    const blackhole::Settings v = blackhole::shown(s);
+    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
                   s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expLog, 6).c_str(), s.spin,
-                  app.blackholeView.stats().spinFine ? 1 : 0);
+                  app.blackholeView.stats().spinFine ? 1 : 0, blackhole::lookKey(s.look), v.spin, v.disc ? 1 : 0);
     auditNote(b);
     return r;
 }
@@ -200,6 +225,26 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             pCaption(p, b);
         } else pCaption(p, "Your own mass: no real black hole is chosen.");
     }
+    const bool film = s.look == blackhole::Look::Film;
+    if (section("look", "Look", true)) {                                   // 0.55.3 (blackhole/looks.h)
+        int cur = film ? 1 : 0;
+        real::markLabels("blackhole", "look", {"Real", "Film"});
+        const std::vector<std::string> ln{"blackhole.look.real", "blackhole.look.film"};
+        if (pSegmented(p, "blackhole.look", {"Real", "Film"}, &cur, &ln)) blackhole::setLook(s, cur == 1 ? blackhole::Look::Film : blackhole::Look::Real);
+        if (s.look == blackhole::Look::Film) {
+            pCaption(p, "The choices the makers of the film Interstellar made for its black hole, as James, von Tunzelmann, Franklin and Thorne (2015) state them. " + std::string(kFilmHonest));
+            pStat(p, "Spin", filmSpinText());
+            pStat(p, "Disc", filmDiscText());
+            pStat(p, "Shifts", kFilmShifts);
+            pStat(p, "Colour", filmColourText());
+            pStat(p, "Glow", kFilmGlow);
+            if (pButton(p, "blackhole.paperview", "The paper's view")) blackhole::paperView(s);
+            const blackhole::FilmChoices& c = blackhole::filmChoices();
+            pCaption(p, "Puts the camera where the paper's disc figure has it: " + sig(c.camR, 3) + " GM/c², " + sig(c.camThetaDeg, 4) + "° from the spin axis (Figure 13). "
+                        "The paper gives no field of view; the camera stays yours. The paper gives no mass for the film's black hole, so the lab has no preset for it.");
+            auditNote("bhfilm labels=5");
+        } else pCaption(p, kRealCaption);
+    }
     if (section("mass", "Mass", true)) {
         pStat(p, "Mass", massText(s.massSun));
         float t = static_cast<float>(blackhole::massToSlider(s.massSun));
@@ -217,24 +262,28 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                     "that unit a light and a heavy hole look exactly alike: only the sizes in km and the numbers on the card change.");
     }
     if (section("spin", "Spin", true)) {                                   // 0.55.2
-        pStat(p, "Spin", s.spin > 0 ? sig(s.spin, 3) + " of the largest possible" : std::string("0: the hole does not spin"));
-        float t = static_cast<float>(s.spin);
-        if (pSlider(p, "blackhole.spin", &t, 0.0f, static_cast<float>(blackhole::kSpinTop))) blackhole::setSpin(s, std::round(t * 100) / 100);
+        const double shownSpin = blackhole::shown(s).spin;                  // 0.55.3: the Film look shows the film's spin, locked
+        pStat(p, "Spin", shownSpin > 0 ? sig(shownSpin, 3) + " of the largest possible" + std::string(film ? " (the film's)" : "") : std::string("0: the hole does not spin"));
+        if (film) pCaption(p, "Locked while the Film look is chosen: the film drew its black hole at this spin. The Real look gives your own spin back.", false);
+        if (film) ImGui::BeginDisabled();
+        float t = static_cast<float>(shownSpin);
+        if (pSlider(p, "blackhole.spin", &t, 0.0f, static_cast<float>(blackhole::kSpinTop)) && !film) blackhole::setSpin(s, std::round(t * 100) / 100);
         char hint[160];
         std::snprintf(hint, sizeof hint, "0 to %.2g of the largest spin a black hole can have (its angular momentum over GM²/c). Or type one:", blackhole::kSpinTop);
         pCaption(p, hint);
         static char typed[32] = "";
         ImGui::SetCursorScreenPos(here(p));
         double v;
-        if (typedNumber("##blackhole.spin.text", typed, sizeof typed, "e.g. 0.9", p.w, 0, blackhole::kSpinTop, v)) blackhole::setSpin(s, v);
+        if (typedNumber("##blackhole.spin.text", typed, sizeof typed, "e.g. 0.9", p.w, 0, blackhole::kSpinTop, v) && !film) blackhole::setSpin(s, v);
         p.y += m.control + m.s4;
+        if (film) ImGui::EndDisabled();
         char top[400];
         std::snprintf(top, sizeof top, "The spin of the two real holes is not measured: the control is yours, and every preset starts at 0. The top, %.2g, is where this lab's tests "
                                        "of its light paths stop (higher spins need finer tables than it makes). The gas orbits with the spin; a disc orbiting against it, a tilted "
                                        "or a warped disc are not in the lab.", blackhole::kSpinTop);
         pCaption(p, top);
-        if (s.spin > 0) pCaption(p, "Close to a spinning hole nothing can stand still: space is dragged round the axis and the camera goes with it. The picture is one instant; the sky's turning with time is not shown.");
-        if (s.spin > 0 && s.bend && !app.blackholeView.stats().spinFine) pCaption(p, "Working out the light paths: a coarse picture first, the fine one in a moment.", false);
+        if (shownSpin > 0) pCaption(p, "Close to a spinning hole nothing can stand still: space is dragged round the axis and the camera goes with it. The picture is one instant; the sky's turning with time is not shown.");
+        if (shownSpin > 0 && s.bend && !app.blackholeView.stats().spinFine) pCaption(p, "Working out the light paths: a coarse picture first, the fine one in a moment.", false);
     }
     if (section("camera", "Camera", true)) {
         pStat(p, "Distance", distText(s.dist) + "  ·  " + kmText(blackhole::readout(s).distKm));
@@ -286,12 +335,20 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                               : s.disc ? "Black: nothing behind the hole and its disc." : "Black: nothing behind the hole. The hole gives no light of its own, so without the gas disc the whole picture is black.");
     }
     if (section("disc", "Gas disc (model)", true)) {                       // 0.55.1
-        int on = s.disc ? 1 : 0;
+        int on = (s.disc || film) ? 1 : 0;
         const std::vector<std::string> dn{"blackhole.disc.off", "blackhole.disc.on"};
-        if (pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn)) s.disc = on == 1;
+        if (film) {                                                         // 0.55.3: the film's disc, locked
+            pCaption(p, "Locked while the Film look is chosen: the film's disc is shown. The Real look gives your own disc settings back.", false);
+            ImGui::BeginDisabled();
+            pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn);
+            ImGui::EndDisabled();
+            pStat(p, "The film's disc", filmDiscText());
+            pStat(p, "Feeding rate", "none: the film's disc is not feeding (James et al. 2015, section 4.1.1)");
+        } else if (pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn)) s.disc = on == 1;
         const blackhole::Readout r = blackhole::readout(s);
-        if (s.disc && r.realPreset) pCaption(p, kWhatIf, false);
-        if (!s.disc) pCaption(p, "The standard thin disc of gas (Novikov and Thorne; Page and Thorne 1974), as round quasars and round small black holes feeding from a star.");
+        if (s.disc && r.realPreset && !film) pCaption(p, kWhatIf, false);
+        if (film) {
+        } else if (!s.disc) pCaption(p, "The standard thin disc of gas (Novikov and Thorne; Page and Thorne 1974), as round quasars and round small black holes feeding from a star.");
         else {
             char b[160];
             std::snprintf(b, sizeof b, "%.3g %% of the Eddington limit", 100 * s.feed);
@@ -310,6 +367,8 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 blackhole::setOuter(s, std::round(v / q) * q);
             }
             pCaption(p, "The model does not set an outer edge; most of the light comes from inside 30 GM/c² (Luminet 1979). The inner edge is the innermost stable orbit, " + sig(r.rIn, 2) + " GM/c²: inside it the gas falls in and gives no light here.");
+        }
+        if (s.disc || film) {
             pHeading(p, "Exposure");
             int ex = s.expAuto ? 0 : 1;
             const std::vector<std::string> en{"blackhole.exp.auto", "blackhole.exp.manual"};
@@ -323,12 +382,18 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         }
     }
     if (section("honest", "What is real in this picture", true)) {
+      if (film) {                                                           // 0.55.3: the Film look
+        pCaption(p, "The film's choices on a calculated black hole: spin " + sig(blackhole::filmChoices().spin, 2) + ", a thin disc at one temperature, no colour or brightness shift, our own glow. " + std::string(kFilmHonest), false);
+        pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars, the disc's shape. The Real look is still a model, not a photograph.", false);
+        if (pButton(p, "blackhole.guide", "What is real in this picture")) { app.bhLearn = 1; app.bhLearnJump = "top"; }
+      } else {
         const std::string kind = s.spin > 0 ? "a black hole spinning at " + sig(s.spin, 3) + " of the largest possible spin (your choice)" : std::string("a black hole that does not spin");
         pCaption(p, s.disc ? "A calculated model: " + kind + ", with a model disc of gas orbiting with the spin: flat, thin, opaque, each face a perfect black body, steady." + (s.spin > 0 ? "" : " Real black holes spin; a spinning hole's disc reaches further in.")
                            : "A calculated model: " + kind + " with no gas around it. Real black holes have gas; switch on the gas disc to see the standard model of one.", false);
         pCaption(p, "Exact: the shadow, the bending of the sky, the doubled stars" + std::string(s.disc ? ", the disc's shape, its colour shift and brightness by the model" : "") +
                     ". Soft: the sky map's own sharpness (about 0.09° a map pixel). Not drawn: the camera's own shift of colour and brightness (numbers on the card).", false);
         if (pButton(p, "blackhole.guide", "What is real in this picture")) { app.bhLearn = 1; app.bhLearnJump = "top"; }
+      }
     }
 }
 
@@ -346,6 +411,8 @@ void blackholeSearch(AppState& app, const SearchAdd& add) {
     add("Gas", "Gas disc (model): on", "bhdisc:on", [&app] { app.blackhole.disc = true; });
     add("Gas", "Gas disc (model): off", "bhdisc:off", [&app] { app.blackhole.disc = false; });
     add("Black holes", "Spin: none (0)", "bhspin:0", [&app] { blackhole::setSpin(app.blackhole, 0); });
+    add("Look", "Look: Real (the closest to reality)", "bhlook:real", [&app] { blackhole::setLook(app.blackhole, blackhole::Look::Real); });
+    add("Look", "Look: Film (the film's choices, James et al. 2015)", "bhlook:film", [&app] { blackhole::setLook(app.blackhole, blackhole::Look::Film); });
 }
 
 }  // namespace ui::shellimpl

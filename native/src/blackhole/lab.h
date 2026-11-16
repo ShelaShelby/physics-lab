@@ -12,6 +12,7 @@
 #include <string>
 
 #include "blackhole/disc.h"
+#include "blackhole/looks.h"
 #include "blackhole/schwarzschild.h"
 
 namespace blackhole {
@@ -54,6 +55,8 @@ struct Settings {
     bool expAuto = true;                   // exposure: automatic, or expLog
     double expLog = kExpLogDefault;        // log10 of the screen's white in units of the Sun's surface (visible light)
     double spin = 0;                       // 0.55.2: a / M, 0 .. kSpinTop (spin_sky.h); 0 is exactly the non-spinning hole of 0.55.1 (its closed forms)
+    Look look = Look::Real;                // 0.55.3 (looks.h): Real (the dot) or Film. Film draws with the film's spin and disc (shown(), below); the user's own spin,
+                                           // disc, feeding rate and outer edge stay as they were and come back with Real
     bool operator==(const Settings& o) const;
 };
 Settings settingsDefaults();               // Sagittarius A*, 20 M, 90 degrees, looking at the galactic centre, bending on, our sky
@@ -64,6 +67,11 @@ void setOuter(Settings& s, double r);      // clamps to kOuterMin..kOuterMax
 void setExposure(Settings& s, double expLog);   // manual: clamps, expAuto off
 void setSpin(Settings& s, double a);       // 0.55.2: clamps to 0 .. kSpinTop (the presets set 0: the real holes' spin is not measured)
 void setMass(Settings& s, double massSun); // clamps; the preset is dropped unless the mass is the preset's own
+// 0.55.3, the looks (looks.h). shown: the settings the picture and the readout use: s itself for Real; for Film the film's spin and the disc on (J15, looks.h).
+// paperView: the camera where J15's Figure 13 has it (74.1 M, theta 1.511 rad from the spin axis; the turn round the axis and the field of view stay).
+void setLook(Settings& s, Look l);
+Settings shown(const Settings& s);
+void paperView(Settings& s);
 void setDistance(Settings& s, double dist);
 void setFov(Settings& s, double fovDeg);
 void turn(Settings& s, double dYaw, double dPitch);       // the pitch stays inside (0, pi)
@@ -80,15 +88,22 @@ double sliderToFeed(double t);
 double outerToSlider(double r);
 double sliderToOuter(double t);
 
-// 0.55.1: the disc's numbers for a picture (from disc.h): the physical disc of these settings and its edges (0.55.2: at the settings' spin, the gas orbiting with it)
+// 0.55.1: the disc's numbers for a picture (from disc.h): the physical disc of these settings and its edges (0.55.2: at the settings' spin, the gas orbiting with it;
+// 0.55.3: in the Film look the film's edges, looks.h)
 DiscPhys discPhys(const Settings& s);
 DiscGeom discGeom(const Settings& s);
+// 0.55.3: the light of the disc at r for a ray with shift g, by the look's rule (looks.h lookRule): Real: the thin disc's T(r) seen at g T (Riazuelo (53)),
+// true colour; Film: one temperature, no shift, white-balanced (filmDiscLinear). T, Tobs, rgb, Y of a DiscPixel (hit untouched).
+
 // the disc's axis on the view frame (right, up, towards the camera) of a view with these yaw and pitch: the sky frame's z, (0, -sin pitch, cos pitch)
 Vec3 discAxisView(const HoleView& v);
 // One pixel of the picture through the disc's table (as the card draws it, in double): x is the pixel's angle from the shadow's edge, (dx, dy) the unit direction
 // from the middle (right, up). The hit, its observed temperature and its colour (linear sRGB in units of the Sun's surface luminance).
 struct DiscPixel { DiscHit hit; double T = 0, Tobs = 0; std::array<double, 3> rgb{0, 0, 0}; double Y = 0; };
 DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light = true);   // light false: the hit only
+// 0.55.3: the light of the disc at r for a ray with shift g, by the look's rule (looks.h lookRule): Real: the thin disc's T(r) seen at g T (Riazuelo (53)),
+// true colour; Film: one temperature, no shift, white-balanced (filmDiscLinear). Sets T, Tobs, rgb and Y (the hit is left as it is).
+void discLight(const Settings& s, double r, double g, DiscPixel& o);
 // The picture's brightest part of the disc (sampled every `step` pixels): its visible brightness Y and its largest linear sRGB channel, both in units of the Sun's surface
 struct DiscLook { double brightY = 0, brightMax = 0, white = 1; bool any = false; };
 DiscLook discLook(const DiscTable& t, const Settings& s, const HoleView& v, double W, double H, int step = 4);   // (the light from disc.h's tables: *Fast)
@@ -122,6 +137,9 @@ struct Readout {
     // a real hole's shadow seen from Earth at this spin, the spin axis at the camera's latitude to the line of sight: GLb's critical curve (55) across and up-down
     // (in GM/c^2) times the preset's GM/c^2 over its distance, in microarcseconds
     double earthWideMuas = 0, earthHighMuas = 0;
+    // 0.55.3: the look; the disc's drawn edges (Real: rIn and rOut above; Film: the paper's) and, for Film, its one temperature
+    Look look = Look::Real;
+    double discEdgeIn = 0, discEdgeOut = 0, filmT = 0;
 };
 Readout readout(const Settings& s);
 

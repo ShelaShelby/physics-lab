@@ -101,7 +101,7 @@ private:
     struct Dot { float x, y, r; render::Color c; };
     std::vector<Dot> dots_;
     std::vector<StarImage> scratch_;
-    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; bool operator==(const Key& o) const; } key_;
+    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool operator==(const Key& o) const; } key_;
     ViewStats st_;
 };
 

@@ -34,7 +34,7 @@ double logV(double t, double lo, double hi) { return std::exp(std::log(lo) + std
 
 bool Settings::operator==(const Settings& o) const {
     return preset == o.preset && massSun == o.massSun && dist == o.dist && fovDeg == o.fovDeg && yaw == o.yaw && pitch == o.pitch && bend == o.bend && skyOurs == o.skyOurs &&
-           disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expLog == o.expLog && spin == o.spin;
+           disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expLog == o.expLog && spin == o.spin && look == o.look;
 }
 
 Settings settingsDefaults() {
@@ -82,6 +82,20 @@ void setFeed(Settings& s, double l) { s.feed = std::clamp(l, kThinMin, kThinMax)
 void setOuter(Settings& s, double r) { s.outer = std::clamp(r, kOuterMin, kOuterMax); }
 void setExposure(Settings& s, double e) { s.expLog = std::clamp(e, kExpLogMin, kExpLogMax); s.expAuto = false; }
 void setSpin(Settings& s, double a) { s.spin = std::clamp(a, 0.0, kSpinTop); }
+void setLook(Settings& s, Look l) { s.look = l; }
+Settings shown(const Settings& s) {
+    if (s.look != Look::Film) return s;
+    Settings o = s;
+    const LookRule r = lookRule(Look::Film);
+    o.spin = r.spin;                                                    // J15 section 4.1.1 p. 26 (looks.h)
+    o.disc = true;
+    return o;
+}
+void paperView(Settings& s) {
+    const FilmChoices& c = filmChoices();
+    setDistance(s, c.camR);                                             // J15 Figure 13's caption p. 24
+    s.pitch = std::clamp(c.camTheta, kPitchMin, kPitchMax);             // the lab's pitch is the camera's angle from the spin axis (theta), as J15's theta_c
+}
 void setDistance(Settings& s, double d) { s.dist = std::clamp(d, kDistMin, kDistMax); }
 void setFov(Settings& s, double f) { s.fovDeg = std::clamp(f, kFovMin, kFovMax); }
 void turn(Settings& s, double dy, double dp) {
@@ -104,6 +118,7 @@ void saveSettings(const Settings& s, std::map<std::string, std::string>& out) {
     out["outer"] = text(s.outer);
     out["exposure"] = s.expAuto ? "auto" : text(s.expLog);
     out["spin"] = text(s.spin);
+    out["look"] = lookKey(s.look);
 }
 
 Settings loadSettings(const std::map<std::string, std::string>& in) {
@@ -123,6 +138,7 @@ Settings loadSettings(const std::map<std::string, std::string>& in) {
     if (const auto it = in.find("exposure"); it != in.end() && it->second == "auto") s.expAuto = true;
     else if (num(in, "exposure", kExpLogMin, kExpLogMax, v)) { s.expAuto = false; s.expLog = v; }
     if (num(in, "spin", 0, kSpinTop, v)) s.spin = v;
+    if (const auto it = in.find("look"); it != in.end()) { Look l; if (lookFromKey(it->second, l)) s.look = l; }   // (a file without the line: Real)
     return s;
 }
 
@@ -136,7 +152,25 @@ double outerToSlider(double r) { return logT(r, kOuterMin, kOuterMax); }
 double sliderToOuter(double t) { return logV(t, kOuterMin, kOuterMax); }
 
 DiscPhys discPhys(const Settings& s) { DiscPhys p; p.massSun = s.massSun; p.lEdd = s.feed; p.aSigned = s.spin; return p; }
-DiscGeom discGeom(const Settings& s) { DiscGeom g; g.rIn = discInner(s.spin); g.rOut = s.outer; return g; }
+DiscGeom discGeom(const Settings& s) {
+    DiscGeom g;
+    if (s.look == Look::Film) { const LookRule r = lookRule(Look::Film); g.rIn = r.rIn; g.rOut = r.rOut; return g; }   // J15 Figure 13's caption (looks.h)
+    g.rIn = discInner(s.spin); g.rOut = s.outer;
+    return g;
+}
+void discLight(const Settings& s, double r, double g, DiscPixel& o) {
+    if (s.look == Look::Film) {                                         // one temperature, no shift, the film's white balance (looks.h)
+        o.T = o.Tobs = lookRule(Look::Film).discT;
+        o.rgb = filmDiscLinear();
+        o.Y = filmDiscY();
+        return;
+    }
+    const DiscPhys p = discPhys(s);
+    o.T = p.temperature(r);
+    o.Tobs = g * o.T;                                                   // Riazuelo (53)
+    o.rgb = blackBodyLinearFast(o.Tobs);
+    o.Y = visibleVsSunFast(o.Tobs);
+}
 Vec3 discAxisView(const HoleView& v) { return Vec3{0, -v.sb, v.cb}; }
 
 DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, double X, double Y, bool light) {
@@ -149,11 +183,7 @@ DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, do
     const Vec3 N = discAxisView(v);
     o.hit = discRayTable(t, x, N.z, nx * N.x + ny * N.y, ny * N.x - nx * N.y, discGeom(s));
     if (o.hit.order < 0 || !light) return o;
-    const DiscPhys p = discPhys(s);
-    o.T = p.temperature(o.hit.r);
-    o.Tobs = o.hit.g * o.T;                                              // Riazuelo (53)
-    o.rgb = blackBodyLinearFast(o.Tobs);
-    o.Y = visibleVsSunFast(o.Tobs);
+    discLight(s, o.hit.r, o.hit.g, o);
     return o;
 }
 
@@ -265,6 +295,10 @@ Readout readout(const Settings& s) {
     r.hotVsSun = visibleVsSun(r.tHot);
     r.efficiency = discEfficiency(a);
     r.lumW = s.feed * eddingtonLuminosity(s.massSun);
+    r.look = s.look;
+    const DiscGeom dg = discGeom(s);
+    r.discEdgeIn = dg.rIn; r.discEdgeOut = dg.rOut;
+    if (s.look == Look::Film) r.filmT = lookRule(Look::Film).discT;
     return r;
 }
 

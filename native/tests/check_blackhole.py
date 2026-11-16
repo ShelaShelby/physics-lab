@@ -18,6 +18,12 @@
 #   spin:      0.55.2, spin: the control exists; spin 0 is the picture of 0.55.1 to the pixel; a typed 0.99 (the top) is taken, 0.999 is not; the card's horizon,
 #              inner edge, efficiency and dragging = the papers' (written here); at 0.99 the drawn shadow's edge is the module's at 24 points from the equator
 #              (not round there) and from near the axis (round); the presets start at 0 with their sentence; a restart keeps the spin (1280 x 800, Dark)
+#              0.55.3: the looks: Real's saved case to the pixel (its hash made by 0.55.2's code); Film at the paper's view (James et al. 2015, Fig. 13) against the
+#              double lookup: the disc's image and its edges where the module puts the paper's edges, one colour all over the disc before the glow; the glow = its
+#              double reference (blackhole/looks.h glowReference) to one level of 255, no pixel darker
+#   looks:     0.55.3, Controls > Look (1280 x 800, Dark): Real with the dot; Film locks the spin and disc controls (a typed spin and Off are refused), shows its labels
+#              and changes the chip; "The paper's view" sets the camera; switching at the film's spin makes no new table; Most realistic returns to Real; a restart
+#              keeps the look; a 0.55.2 settings file opens as Real; six themes at 1280 x 800: the chip, the card and the Controls panel's text 4.5:1 over the Film disc
 #   check_blackhole.py <PhysicsLab binary> <work folder> [part]
 import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -187,7 +193,7 @@ def part_layout(binary, work):
         if bar and cards: check(not overlap(bar, cards[0]), f"{size}: the bar is clear of the card")
         ctl = [v for k, v in r.rects.items() if k.startswith("ctlhead.")]
         if bar and ctl: check(all(not overlap(bar, c) for c in ctl), f"{size}: the bar is clear of the Controls panel")
-        check(any(n.startswith("ctlsections") and "preset mass spin camera light disc honest" in n for n in r.notes), f"{size}: the Controls panel has its seven sections (0.55.1: the gas disc; 0.55.2: spin)")
+        check(any(n.startswith("ctlsections") and "preset look mass spin camera light disc honest" in n for n in r.notes), f"{size}: the Controls panel has its eight sections (0.55.1: the gas disc; 0.55.2: spin; 0.55.3: look)")
 
 def part_look(binary, work):
     themes = ("dark", "light", "black", "paper", "monochrome", "contrast")
@@ -261,6 +267,24 @@ def part_precision(binary, work):
         top = float(x["a"]) > 0.9
         check(float(x["refdr"]) < (0.12 if top else 0.03) and float(x["refdg"]) < (0.025 if top else 0.005) and int(x["refwrong"]) <= int(x["refpx"]) // 1000,
               f"{w}: the table's disc against the integrator ({x['refdr']}, {x['refdg']}, {x['refwrong']} of {x['refpx']} another image)")
+    # 0.55.3, the looks. Real: the feeding preset at spin 0.6 from 74.1 M, 86.56 deg, field of view 30, drawn as the app draws it: the hash of its 8-bit picture made
+    # by 0.55.2's code before this version changed anything (REPORT 0.55.3; Mesa llvmpipe). Film at the same place (the paper's view): the card's disc against the
+    # double lookup of the same table: the same image at every pixel away from an image's edge, those edges moved by under 0.1 pixel (the spin cases' limit; measured
+    # 0.0018 here), every radius on the disc within the paper's edges 9.26..18.70 M; every pixel fully on the disc exactly the one colour the module gives
+    # (looks.h filmDiscLinear over the screen's white, encoded); the glow: the card's picture with it = the double reference applied to the card's picture without
+    # it, to one level of 255, no channel of any pixel darker, the added light = the reference's to 1 %.
+    rl = [ln for ln in r.out.splitlines() if ln.startswith("PLBHREAL ")]
+    check(bool(rl) and rl[0].split("=")[1] == "7fff50741d132f22", f"Real: the saved case is 0.55.2's picture to the pixel ({rl})")
+    fl = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHFILM ")]
+    check(len(fl) == 1, f"Film compared at the paper's view ({len(fl)})")
+    for x in fl:
+        check(float(x["spin"]) == 0.6 and float(x["dist"]) == 74.1 and abs(float(x["theta"]) - 86.56 * math.pi / 180) < 1e-6 and float(x["rin"]) == 9.26 and float(x["rout"]) == 18.7,
+              f"Film: the paper's spin, view and disc edges ({x['spin']}, {x['dist']}, {x['theta']}, {x['rin']}, {x['rout']})")
+        check(int(x["pixels"]) > 20000 and int(x["wrong"]) == 0 and float(x["edgeshift"]) < 0.1, f"Film: the disc where the module puts it ({x['pixels']} pixels, {x['wrong']} wrong, edges moved {x['edgeshift']} px)")
+        check(float(x["rmin"]) >= 9.26 - 1e-4 and float(x["rmax"]) <= 18.7 + 1e-4, f"Film: every radius on the disc within the paper's edges ({x['rmin']}, {x['rmax']})")
+        check(int(x["colours"]) == 1 and int(x["offcolour"]) == 0, f"Film: one colour all over the disc before the glow ({x['colours']} colours, {x['offcolour']} off; {x['want']})")
+        check(int(x["darker"]) == 0 and int(x["brighter"]) > 1000 and int(x["glowdiff"]) <= 1 and abs(float(x["added"]) / float(x["addedref"]) - 1) < 0.01,
+              f"Film: the glow adds light only and is its reference ({x['darker']} darker, {x['glowdiff']} levels, added {x['added']} against {x['addedref']})")
     p = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHPLAIN ")]
     check(bool(p) and int(p[0]["maxdiff"]) <= 1, f"bending off = the Orbit Lab's sky projection, within one step of 255 ({p})")
 
@@ -445,8 +469,104 @@ def part_spin(binary, work):
     s = bh(k2)
     check(not k1.scripted_missing() and s is not None and float(s["spin"]) == 0.6, f"a restart keeps the spin ({s})")
 
+
+def marks(r):
+    drawn = {k[5:] for k in r.rects if k.startswith("real.")}
+    state = {}
+    for n in r.note("realmark."):
+        k, v = n[len("realmark."):].split()
+        if k in drawn: state[k] = v
+    return state
+def texts_has(r, words):
+    return any(words.lower() in t[2].lower() for t in r.texts)           # (one wrapped line of a caption)
+def chip_sub(r):
+    n = r.note("bhchip ")
+    return n[-1][len("bhchip "):] if n else ""
+
+def part_looks(binary, work):
+    film = blackhole_film()
+    sf = os.path.join(work, "bh_looks_settings.txt")
+    if os.path.exists(sf): os.remove(sf)
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_SETTINGS=sf, PL_BH_SET="preset=feeding;spin=0.3")
+    a = run_app(binary, work, "bh_looks_real", base, frames=10)
+    s, mk = bh(a), marks(a)
+    check(s is not None and s["look"] == "real" and any(k.startswith("seg.blackhole.look") for k in a.rects), f"Look exists and opens on Real ({s and s['look']})")
+    check(mk.get("blackhole.look") == "on", f"the closest-to-reality dot is on Real ({mk.get('blackhole.look')})")
+    check("standard thin disc" in chip_sub(a) and texts_has(a, "real for quasars"), f"Real's chip and caption ({chip_sub(a)[:90]})")
+    # Film: the film's values, the spin and disc locked (a typed spin and Off do nothing), its labels, the chip; then the paper's view
+    b = run_app(binary, work, "bh_looks_film", dict(base, PL_SCRIPT="6:click=blackhole.look.film;10:click=##blackhole.spin.text;12:text=0.8;16:click=blackhole.disc.off;20:click=blackhole.paperview"), frames=26)
+    s = bh(b)
+    check(not b.scripted_missing() and s is not None and s["look"] == "film", f"Film chosen ({b.scripted_missing()}, {s and s['look']})")
+    check(s is not None and float(s["shownspin"]) == film["spin"] and float(s["spin"]) == 0.3 and s["showndisc"] == "1", f"Film: the film's spin drawn, the disc on; the typed spin refused, yours kept ({s})")
+    for w in ("our own glow, in place of the film's lens flare", "the spin the film drew", "K all over (one temperature)", "no colour shift and no brightness shift", "white balance: a",
+              "drawn white (appendix A.6)", "Locked while the Film look is chosen", "not of its pictures"):
+        check(texts_has(b, w), f"Film's label: {w}")
+    check(texts_has(b, f"{film['discT']:,.0f} K all over") and texts_has(b, f"{film['whiteT']:,.0f} K black body") and texts_has(b, f"{film['rOut']:g} GM/c²") and texts_has(b, f"{film['spin']:g}, the spin"),
+          "the labels carry the module's numbers")
+    check("film's choices (James et al. 2015)" in chip_sub(b) and chip_sub(b) != chip_sub(a), f"the chip line changes with the look ({chip_sub(b)[:90]})")
+    check(s is not None and abs(float(s["dist"]) - film["camR"]) < 1e-9 and abs(float(s["pitch"]) - film["camThetaDeg"] * math.pi / 180) < 1e-6, f"The paper's view: 74.1 GM/c², 86.56° from the axis ({s and (s['dist'], s['pitch'])})")
+    # switching to Film at the film's own spin makes no new table
+    c = run_app(binary, work, "bh_looks_notable", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET="preset=feeding;spin=0.6", PL_SCRIPT="6:click=blackhole.look.film"), frames=12)
+    st = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in c.out.splitlines() if ln.startswith("PLBHSTAT ")]
+    check(len(st) > 8 and st[3]["spinfills"] == st[-1]["spinfills"] and bh(c)["look"] == "film", f"switching looks at the same spin refills no table ({st[3].get('spinfills') if st else None} -> {st[-1].get('spinfills') if st else None})")
+    check(marks(c).get("blackhole.look") == "off", f"the dot stays on Real while Film is chosen ({marks(c).get('blackhole.look')})")
+    # a restart keeps the look (and your own spin); Most realistic returns to Real
+    d = run_app(binary, work, "bh_looks_keep", dict(BASE, PL_SETTINGS=sf), frames=10)
+    s = bh(d)
+    check(s is not None and s["look"] == "film" and float(s["spin"]) == 0.3 and float(s["shownspin"]) == film["spin"], f"a restart keeps the Film look ({s})")
+    e = run_app(binary, work, "bh_looks_realest", dict(BASE, PL_SETTINGS=sf, PL_SCRIPT="6:click=blackhole.realest"), frames=12)
+    s = bh(e)
+    check(not e.scripted_missing() and s is not None and s["look"] == "real" and float(s["shownspin"]) == 0.3, f"Most realistic picks Real, your spin back ({s})")
+    old = os.path.join(work, "bh_old0552.txt")
+    with open(old, "w", encoding="utf-8", newline="\r\n") as f:          # a 0.55.2 file: Black Hole lines, no look
+        f.write("# Physics Lab settings. Written by the app; safe to delete.\ntheme=dark\nlab=Black Hole Lab\nblackhole.preset=feeding\nblackhole.dist=20\nblackhole.disc=on\nblackhole.spin=0.5\n")
+    g = run_app(binary, work, "bh_looks_old", dict(BASE, PL_SETTINGS=old), frames=10)
+    s = bh(g)
+    check(s is not None and s["look"] == "real" and float(s["spin"]) == 0.5, f"a 0.55.2 settings file opens as Real ({s})")
+    # the look check: six themes at 1280 x 800, Film from 20 M where the disc fills the picture: the card's text over its glass (card open against closed), the chip's
+    # text over its own pixels, the Controls panel's Look section over its face, each 4.5:1 (WCAG 2.x)
+    themes = ("dark", "light", "black", "paper", "monochrome", "contrast")
+    fb = dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET="preset=feeding;look=film;dist=20")
+    calls = []
+    for t in themes:
+        calls.append(((binary, work, f"bh_looks_{t}", dict(fb, PL_PANELS="blackhole.card=o")), dict(frames=12, theme=t)))
+        calls.append(((binary, work, f"bh_looks_{t}_c", dict(fb, PL_PANELS="blackhole.card=c")), dict(frames=12, theme=t)))
+    prefetch(calls)
+    for t in themes:
+        o = run_app(binary, work, f"bh_looks_{t}", dict(fb, PL_PANELS="blackhole.card=o"), frames=12, theme=t)
+        cl = run_app(binary, work, f"bh_looks_{t}_c", dict(fb, PL_PANELS="blackhole.card=c"), frames=12, theme=t)
+        B, A = Bmp(o.bmp), Bmp(cl.bmp)
+        cr = o.rects.get("card.blackhole.card")
+        if cr:
+            x0, y0, w, h = (int(v) for v in cr)
+            px = sorted((B.px(x, y) for y in range(y0 + 40, y0 + h - 4) for x in range(x0 + 8, x0 + w - 8) if B.px(x, y) != A.px(x, y)), key=lum)
+            if len(px) >= 500:
+                bg = px[len(px) // 2]
+                lo, hi = px[len(px) // 200], px[-(len(px) // 200) - 1]
+                check(max(wcag(lo, bg), wcag(hi, bg)) >= 4.5, f"{t}: Film: the card's text {max(wcag(lo, bg), wcag(hi, bg)):.1f}:1 over its glass")
+            else: check(False, f"{t}: Film: the card drew {len(px)} pixels")
+        else: check(False, f"{t}: Film: the card is open")
+        for name in ("chip", "ctlhead.look"):
+            r0 = o.rects.get(name)
+            if not r0: check(False, f"{t}: Film: {name} is drawn"); continue
+            x0, y0, w, h = (int(v) for v in r0)
+            q = sorted((B.px(x, y) for y in range(y0 + 2, y0 + h - 2) for x in range(x0 + 4, x0 + w - 4)), key=lum)
+            bg = q[len(q) // 2]
+            k = len(q) // 200 if name == "chip" else 0                    # the chip is glass over the picture: past its outliers; the panel is solid (part_look's rule)
+            ratio = max(wcag(q[k], bg), wcag(q[-k - 1], bg))
+            check(ratio >= 4.5, f"{t}: Film: {name}'s text {ratio:.1f}:1 over its own background (need 4.5)")
+
+def blackhole_film():
+    # the Film look's numbers as the module states them (src/blackhole/looks.h FilmChoices), to compare the labels with
+    t = open(os.path.join(SRC, "blackhole", "looks.h"), encoding="utf-8").read()
+    out = {}
+    for k in ("spin", "discT", "whiteT", "rIn", "rOut", "camR", "camThetaDeg"):
+        m = re.search(r"\b" + k + r" = ([\d.]+)", t)
+        out[k] = float(m.group(1))
+    return out
+
 PARTS = {"open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
-         "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin}
+         "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]

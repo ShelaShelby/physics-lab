@@ -58,6 +58,7 @@ const std::vector<Row>& table() {
         {"molecule", {"anharm", "on", "a real bond is not a perfect spring: its rungs close up as it stretches, and at the top it breaks."}},   // 0.53.1
         // ---- Black Hole Lab (0.55.0) ----
         {"blackhole", {"bend", "On", "gravity really bends light: this is what a camera hovering there would see (calculated exactly for a hole that does not spin)."}},
+        {"blackhole", {"look", "Real", "the disc as the standard thin-disc model gives it, with the colour and brightness shifts of the gas's speed and gravity; Film copies the film's stated choices, made for the story, not for accuracy."}},   // 0.55.3
         {"blackhole", {"sky", "Our sky", "a real black hole has a sky of stars behind it; ours, seen from Earth, is the only whole sky we have a map of."}},
     };
     return t;
@@ -102,6 +103,7 @@ void applyMolecule(AppState& app) {
 void applyBlackHole(AppState& app) {
     app.blackhole.bend = true;
     app.blackhole.skyOurs = true;
+    app.blackhole.look = blackhole::Look::Real;                          // 0.55.3
 }
 void applyLab(AppState& app) {
     if (app.lab == 0) applyOrbit(app);

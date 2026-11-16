@@ -19,6 +19,16 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.3", "The Black Hole Lab: the Real and Film looks",
+     "In the Black Hole Lab's Controls, Look offers Real and Film. Real, with the closest-to-reality dot, is the picture as before: your spin and the standard "
+     "thin disc with the colour and brightness changes of the gas's speed and gravity, real for quasars and small black holes feeding from a star. Film shows "
+     "the choices the makers of the film Interstellar made for its black hole, as James, von Tunzelmann, Franklin and Thorne (2015) describe them, each one "
+     "labelled: the spin the film drew (0.6, lower than its story needs, so the picture would not confuse), a thin disc at one temperature, 4,500 K all over, with "
+     "the edges of the paper's disc figure, no colour or brightness change from the gas's motion, the paper's white balance, and a soft glow. The film's lens "
+     "flare was never published, so the glow is the app's own and says so. While Film is chosen the spin and the disc are the film's and locked; your own "
+     "settings come back with Real. \"The paper's view\" puts the camera where the paper's disc figure has it. This copies the paper's stated choices, not the "
+     "film's pictures: its textures, lens flare and colour grading are not published and are not in the app. The paper gives no mass for the film's black hole, "
+     "so there is no preset for it. Most realistic picks Real; the look is kept between runs. The guide has a new part, What the film changed."},
     {"0.55.2", "The Black Hole Lab: a spinning black hole",
      "In the Black Hole Lab's Controls, Spin gives the hole angular momentum, from 0 to 0.99 of the most a black hole can have (a slider and a typed value). "
      "The shadow loses its round shape: seen from the plane of the spin it is flattened on the side that moves towards you and shifted to the other side; seen "

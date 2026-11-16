@@ -2,6 +2,8 @@
 //   blackhole_picture <out.png>      the non-spinning hole in front of our sky (Gaia map + catalogue stars), 1280 x 800, toward the galactic centre
 //   blackhole_picture --measure      the plan's section 6 measurements that need no graphics card (printed)
 //   blackhole_picture --spin <out.png>   0.55.2: the same disc round a hole spinning at 0.99 (spin_sky.h, the fine table in double; spinPicture below)
+//   blackhole_picture --film <out.png>   0.55.3: the Film look (blackhole/looks.h, James et al. 2015) at the paper's view (Figure 13: 74.1 M, 86.56 deg from the axis),
+//                                    field of view 30 deg: the same table and rays, the film's one-colour disc (lab.h discLight), the glow by looks.h glowReference, stars over it
 //   blackhole_picture --disc <out.png>   0.55.1: the feeding preset's gas disc (blackhole/lab.h), seen from 60 M, 10 degrees above the disc's plane, 1280 x 800:
 //                                    the sky by lensPixel, the disc by discPixel (the table the card uses, in double), 2 x 2 rays per pixel, laid over each other in
 //                                    linear light at the lab's automatic exposure (discLook); stars the disc covers are not drawn
@@ -220,17 +222,19 @@ static int discPicture(const std::string& outPath) {
 // 0.55.2: the feeding preset round a spinning hole (spin 0.99, the Spin control's top), seen from 60 M, 10 degrees above the disc's plane, 1280 x 800: the fine
 // spin table (spin_sky.h) in double at 2 x 2 rays per pixel, the disc by its first crossing (C75 (A9) shift, Page & Thorne's flux at this spin), the sky through
 // the table's far direction, the stars by inverting the table (SpinStars); the lab's automatic exposure (the brightest disc channel at full brightness)
-static int spinPicture(const std::string& outPath) {
+static int spinPicture(const std::string& outPath, bool film) {
     const int W = 1280, H = 800;
     Settings s = settingsDefaults();
     applyPreset(s, kFeedingKey);
     setDistance(s, 60);
     setSpin(s, kSpinTop);
     s.pitch = 100 * kPi / 180;
+    if (film) { setLook(s, Look::Film); paperView(s); setFov(s, 30); s = shown(s); }
     const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
     const SpinTable T(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge);
     const DiscGeom g = discGeom(s);
     const DiscPhys P = discPhys(s);
+    (void)P;
     const double ph = std::atan2(v.ca * v.sb, v.sa * v.sb), cph = std::cos(ph), sph = std::sin(ph), th = s.pitch;
     const Vec3 er{std::sin(th) * cph, std::sin(th) * sph, std::cos(th)}, et{std::cos(th) * cph, std::cos(th) * sph, -std::sin(th)}, ep{-sph, cph, 0};
     const auto at = [&](double X, double Y, SpinHit& h, SpinDisc& d) {
@@ -247,7 +251,9 @@ static int spinPicture(const std::string& outPath) {
         for (int x = 1; x < W; x += 2) {
             SpinHit h; SpinDisc d;
             if (!at(x, y, h, d) || d.order < 0) continue;
-            const auto c = blackBodyLinearFast(d.g * P.temperature(d.r));
+            DiscPixel q;
+            discLight(s, d.r, d.g, q);                                    // (Real: blackBodyLinearFast(g T(r)); Film: the one colour)
+            const auto c = q.rgb;
             white = std::max({white, c[0], c[1], c[2]});
         }
     if (!(white > 0)) white = 1;
@@ -283,7 +289,9 @@ static int spinPicture(const std::string& outPath) {
                 SpinHit h; SpinDisc d;
                 if (!at(X, Y, h, d)) continue;
                 if (d.order >= 0) {
-                    const auto c = blackBodyLinearFast(d.g * P.temperature(d.r));
+                    DiscPixel dq;
+                    discLight(s, d.r, d.g, dq);
+                    const auto c = dq.rgb;
                     const double m = std::max({c[0], c[1], c[2]}) / white;
                     for (int q = 0; q < 3; q++) lin[q] += c[q] / white / std::max(1.0, m);
                     hits++;
@@ -294,6 +302,12 @@ static int spinPicture(const std::string& outPath) {
             onDisc[static_cast<std::size_t>(y) * W + x] = hits > 0;
             for (int c = 0; c < 3; c++) img[(static_cast<std::size_t>(y) * W + x) * 3 + c] = lin[c] / 4;
         }
+    if (film) {                                                           // the glow (looks.h) over the sky and disc, in linear light, before the stars (as the card)
+        std::vector<double> lin(img.size());
+        for (std::size_t i = 0; i < img.size(); i++) lin[i] = std::clamp(img[i], 0.0, 1.0);
+        const std::vector<double> gl = glowReference(lin, W, H);
+        for (std::size_t i = 0; i < img.size(); i++) img[i] = lin[i] + kGlowStrength * gl[i];
+    }
     const SpinStars St(T);
     std::vector<SpinImage> im;
     int drawn = 0, hidden = 0;
@@ -333,13 +347,16 @@ static int spinPicture(const std::string& outPath) {
                 "efficiency %.4f; table %ld rays in %.0f ms; screen white %.4g x the Sun's surface; %d star images drawn, %d hidden by the disc; shadow %.4f x %.4f deg; dragged round once every %.4g GM/c^3\n",
                 outPath.c_str(), png.size(), kFeedingName, s.spin, s.massSun, s.feed, r.rIn, s.outer, s.dist, r.horizonM, r.tHot, r.rHot, r.efficiency, T.rays(), T.fillMs(), white, drawn, hidden,
                 r.shadowWideDeg, r.shadowHighDeg, 2 * kPi / r.omega);
+    if (film) std::printf("film: camera %.6g M at %.6f rad (%.4g deg) from the axis; disc %g to %g M at %g K; screen white %.6g x the Sun's surface (the disc's brightest channel)\n",
+                          s.dist, s.pitch, s.pitch * 180 / kPi, r.discEdgeIn, r.discEdgeOut, r.filmT, white);
     return 0;
 }
 
 int main(int argc, char** argv) {
     if (argc > 1 && std::strcmp(argv[1], "--measure") == 0) return measure();
     if (argc > 2 && std::strcmp(argv[1], "--disc") == 0) return discPicture(argv[2]);
-    if (argc > 2 && std::strcmp(argv[1], "--spin") == 0) return spinPicture(argv[2]);
+    if (argc > 2 && std::strcmp(argv[1], "--spin") == 0) return spinPicture(argv[2], false);
+    if (argc > 2 && std::strcmp(argv[1], "--film") == 0) return spinPicture(argv[2], true);
     const std::string outPath = argc > 1 ? argv[1] : "blackhole_reference.png";
     const int W = 1280, H = 800;
     const orbit::Sky& S = orbit::skyData();
