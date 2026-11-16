@@ -232,7 +232,41 @@ def part_look(binary, work):
             ratio = max(wcag(q[0], q[len(q) // 2]), wcag(q[-1], q[len(q) // 2]))
             check(ratio >= 4.5, f"{t}: the Controls panel's heading is {ratio:.1f}:1 over its face")
 
+def precision_card(binary, work):
+    # 0.55.6, the spinning hole's table filled by the graphics card (blackhole/spin_card.h) against the processor's (PL_BH_COMPARE=card). Limits, measured
+    # on llvmpipe (REPORT 0.55.6) with room: the shader's own double sine and cosine within 1e-15, exp, log, atan2, acos, cbrt and x^-0.2 within 4e-15 of
+    # the C++ library's; the start-up check passes; for the benchmark's case, the Film case and spin 0.99 the whole fine table node by node: the same ends
+    # (sky or horizon) everywhere, no ray lost, the far direction within 1e-8 rad from 1e-3 of the shadow's radius outward and 1e-4 rad nearer (the
+    # table's own limits against the integrator are 2e-3 and 2e-2: blackhole_physics), b within 1e-7, u within 1e-3 (relative to 1 + |u|; 1e-4 nearer),
+    # the edge samples within 1e-12 rad, the rows within 1e-8; on 300 of the card's rays the null condition and Carter's q within 1e-8 at the end (the
+    # table's tolerance is 1e-10; blackhole_physics asks 1e-9 at 1e-11), no worse than 10 x the processor's own same rays.
+    r = run_app(binary, work, "bh_precision_card", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="card"), frames=3, timeout=3000)
+    for ln in r.out.splitlines():
+        if ln.startswith("PLBHCARD"): print(ln)
+    m = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCARDMATH ")]
+    check(len(m) == 1, "the card's double functions were compared")
+    if m:
+        x = m[0]
+        check(float(x["sin"]) < 1e-15 and float(x["cos"]) < 1e-15 and all(float(x[k]) < 4e-15 for k in ("exp", "log", "atan2", "acos", "cbrt", "pow")),
+              f"the shader's double functions = the C++ library's ({' '.join(k + '=' + x[k] for k in ('sin', 'cos', 'exp', 'log', 'atan2', 'acos', 'cbrt', 'pow'))})")
+    c = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCARDCHECK ")]
+    check(len(c) == 1 and c[0]["ok"] == "1", f"the start-up check passes on this renderer ({c[0] if c else None})")
+    t = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCARDT ")]
+    check(len(t) == 3 and {x["case"] for x in t} == {"benchmark", "film", "top"}, f"three tables compared ({len(t)})")
+    for x in t:
+        w = f"card table {x['case']} (spin {x['a']}, {x['dist']} M)"
+        check(int(x["nodes"]) == 2 * 192 * 384 and int(x["endsdiffer"]) == 0 and int(x["lost"]) == 0 and int(x["mism"]) == 0,
+              f"{w}: every one of {x['nodes']} nodes ends where the processor's does ({x['endsdiffer']} differ, {x['lost']} lost, {x['mism']} off their side)")
+        check(float(x["dirmid"]) < 1e-8 and float(x["dirfar"]) < 1e-8 and float(x["dirnear"]) < 1e-4,
+              f"{w}: far directions ({x['nmid']} + {x['nfar']} nodes: {x['dirmid']}, {x['dirfar']} rad; {x['nnear']} nearer the edge: {x['dirnear']} rad)")
+        check(float(x["b"]) < 1e-7 and float(x["u"]) < 1e-3 and float(x["unear"]) < 1e-4, f"{w}: b {x['b']}, u {x['u']} (near the edge {x['unear']})")
+        check(float(x["edge"]) < 1e-12 and float(x["rowchi"]) < 1e-8 and float(x["rowedge"]) < 1e-8, f"{w}: the edge {x['edge']}, the rows {x['rowchi']}, their edges {x['rowedge']}")
+        check(int(x["ended"]) == 300 and float(x["null"]) < 1e-8 and float(x["qdrift"]) < 1e-8 and float(x["null"]) <= 10 * float(x["cpunull"]) + 1e-15
+              and float(x["qdrift"]) <= 10 * float(x["cpuqdrift"]) + 1e-15,
+              f"{w}: the conservation laws on the card's rays: null {x['null']} (processor {x['cpunull']}), q {x['qdrift']} (processor {x['cpuqdrift']})")
+
 def part_precision(binary, work):
+    precision_card(binary, work)
     r = run_app(binary, work, "bh_precision", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="1"), frames=3, timeout=1800)
     rows = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCMP ")]
     for ln in r.out.splitlines():
@@ -711,7 +745,9 @@ def frames_of(r):
 def part_smooth(binary, work):
     # Real look, disc on, the default glare, spin 0.6 (1280 x 800, Dark): a scripted tilt drag over the picture, then a spin drag on the slider, then rest
     # (PL_FRAME_MS=16: a frame takes at least 16 ms, as with VSync on a real screen; the rest is long enough for the fine table on this software renderer)
-    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding;spin=0.6")
+    # (0.55.6: this first run is the processor's path, GPU light paths off, as 0.55.5; the card's path follows below)
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding;spin=0.6",
+                PL_BH_GPUPATHS="0")
     reach = "4:click=##blackhole.spin.text;10:key=escape"                # (the Spin row scrolled into the Controls panel's view)
     r0 = run_app(binary, work, "bh_smooth_where", dict(base, PL_SCRIPT=reach), frames=16)
     sl = r0.rects.get("slider.blackhole.spin.fill")
@@ -756,6 +792,31 @@ def part_smooth(binary, work):
     grew = [k for k in keys if tail[0][k] != tail[-1][k]]
     check(not grew, f"at rest nothing is redone in the last 60 frames (grew: {grew})")
     check(any(float(x.get("glarewait", "0")) > 0 for x in f if int(x["f"]) > 130), "after the drags the glare was made (on its own thread)")
+    # 0.55.6, the card's path (GPU light paths on; on this software renderer the card's work runs inside the frame's calls, so its frame times are not
+    # checked here): the same tilt drags, then rest at spin 0.6. Every picture is the card's table at the fine table's quality (no coarse table, the
+    # processor's fine thread never starts), a new picture follows nearly every frame in which the view moved, at rest the picture is the settings' own.
+    # (PL_BH_CARDGRID: a smaller grid, for this renderer's speed; blackhole_physics and the part precision test the full one)
+    cb = dict(base, PL_BH_GPUPATHS="1", PL_BH_CARDGRID="32,64,256")
+    rc = run_app(binary, work, "bh_smooth_card", dict(cb, PL_SCRIPT=";".join(steps[:5]), PL_BH_SETTLE="60:30"), frames=600, timeout=3000)
+    fc = frames_of(rc)
+    sc = bh(rc)
+    check("PLBHCARD state=1" in rc.out and len(fc) > 60 and sc is not None, f"the card's path passed its start-up check and the run settled ({len(fc)} frames)")
+    if len(fc) <= 60 or sc is None: return
+    mv = [i for i in range(1, len(fc) - 1) if 20 <= int(fc[i]["f"]) <= 50 and fc[i].get("want") != fc[i - 1].get("want")]
+    new = [i for i in mv if int(fc[i + 1]["pic"]) > int(fc[i]["pic"])]
+    check(len(mv) >= 8 and len(new) >= 0.9 * len(mv), f"card: a new picture after {len(new)} of {len(mv)} frames in which the view moved")
+    pics = [x for x in fc if int(x["f"]) >= 20 and x.get("pic", "0") != "0"]
+    check(all(x["card"] == "1" for x in pics), f"card: every picture shown is the card's table ({sum(x['card'] != '1' for x in pics)} frames another)")
+    check(fc[-1]["coarse"] == fc[0]["coarse"] == "0", f"card: no coarse table was made ({fc[-1]['coarse']})")
+    check(all(x.get("finethread") == "0" for x in fc), "card: the processor's fine table never started, at rest either")
+    last = fc[-1]
+    check(last["behind"] == "0" and last["card"] == "1" and last["sky"] == last["want"], f"card: at rest the picture is the settings' own ({last['sky']} vs {last['want']})")
+    # the start-up check made to fail (test switch): the processor's path, and Settings, Performance says why
+    rf = run_app(binary, work, "bh_smooth_cardfail", dict(cb, PL_BH_CARDFAIL="1", PL_OPEN="settings"), frames=30, timeout=1200)
+    ff = frames_of(rf)
+    said = any("Light paths of the spinning hole: the processor, because the check was made to fail" in n for n in rf.note("bhpaths"))
+    check("PLBHCARD state=-1" in rf.out and "test switch" in rf.out and len(ff) > 0 and ff[-1]["cardstate"] == "-1" and ff[-1]["card"] == "0" and ff[-1]["pic"] != "0" and said,
+          f"a failed start-up check: the processor's path draws the picture and Settings, Performance says so (said {said})")
 
 def blackhole_film():
     # the Film look's numbers as the module states them (src/blackhole/looks.h FilmChoices), to compare the labels with

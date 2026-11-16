@@ -108,7 +108,9 @@ void cameraFrame(const HoleView& v, double th, Vec3& er, Vec3& et, Vec3& ep) {
 }
 }  // namespace
 
-BlackHoleView::BlackHoleView() = default;
+BlackHoleView::BlackHoleView() {
+    if (const char* e = std::getenv("PL_BH_GPUPATHS")) gpuPaths = std::atoi(e) != 0;   // 0.55.6 (tests): the switch's start value
+}
 
 BlackHoleView::~BlackHoleView() {
     stopWork();
@@ -771,7 +773,7 @@ bool BlackHoleView::cardReady(render::Renderer2D& R) {
 
 // 0.55.6: the card's fill, as far as the card has got (never waits): a finished table goes to the worker with the settings it was started for; then the
 // next fill starts if the settings' spin, distance or tilt have no table yet (none is under way or with the worker for them)
-void BlackHoleView::pumpCard(const Settings& s, double W, double H, double cx, double cy) {
+void BlackHoleView::pumpCard(const Settings& s, double W, double H, double cx, double cy, bool start) {
     static const std::array<int, 3> grid = [] {
         std::array<int, 3> g{kSpinChiFine, kSpinSFine, kSpinEdge};
         if (const char* e = std::getenv("PL_BH_CARDGRID")) std::sscanf(e, "%d,%d,%d", &g[0], &g[1], &g[2]);   // (tests: a smaller grid on the software renderer)
@@ -779,6 +781,7 @@ void BlackHoleView::pumpCard(const Settings& s, double W, double H, double cx, d
     }();
     for (int guard = 0; guard < 4; guard++) {
         std::shared_ptr<CardTableData> d = cardFill_->pump();
+        if (d && !start) { d.reset(); continue; }                           // (the view left the card's path meanwhile: dropped, let go at the next pump)
         if (d) {
             auto r = std::make_unique<Request>();
             r->s = d->s; r->W = d->W; r->H = d->H; r->cx = d->cx; r->cy = d->cy;
@@ -794,7 +797,7 @@ void BlackHoleView::pumpCard(const Settings& s, double W, double H, double cx, d
             workCv_.notify_one();
             continue;
         }
-        if (!cardFill_->idle()) break;
+        if (!cardFill_->idle() || !start) break;
         const bool have = cardFine_ && cardFine_->spin() == s.spin && cardFine_->rC() == s.dist && cardFine_->thC() == s.pitch;
         const bool withWorker = cardPostedKey_[0] == s.spin && cardPostedKey_[1] == s.dist && cardPostedKey_[2] == s.pitch &&
                                 (!cardPosted_.expired() || (cardPostedUsed_ && cardPostedUsed_->load()));
@@ -818,9 +821,9 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     {   std::lock_guard<std::mutex> g(workMx_);
         if (done_) p = std::move(done_); }
     if (p) install(*p);
-    if (card) {
-        if (!fine && cardFine_ && cardFine_->spin() == s.spin && cardFine_->rC() == s.dist && cardFine_->thC() == s.pitch) fine = cardFine_;   // (just installed)
-        pumpCard(s, W, H, cx, cy);
+    if (card && !fine && cardFine_ && cardFine_->spin() == s.spin && cardFine_->rC() == s.dist && cardFine_->thC() == s.pitch) fine = cardFine_;   // (just installed)
+    if (cardFill_) {                                                        // (also when the card's path is not in use now: a finished fill must be let go)
+        pumpCard(s, W, H, cx, cy, card);
         st_.cardMs = cardFill_->lastMs(); st_.cardFills = cardFill_->fills();
     }
     const bool current = hasShown_ && shownKey_ == want;
@@ -913,7 +916,8 @@ void cardCompare(render::Renderer2D& R) {
             const double ref[8] = {std::sin(v), std::cos(v), std::exp(v), std::log(ax), std::atan2(v, 1 - v), std::acos(v / (1 + std::fabs(v))), std::cbrt(v), std::pow(ax, -0.2)};
             for (int i = 0; i < 8; i++) {
                 const double g = out[8 * k + static_cast<std::size_t>(i)];
-                const double d = i < 2 ? std::fabs(g - ref[i]) : std::fabs(g - ref[i]) / std::max(std::fabs(ref[i]), 1e-300);   // sin, cos: absolute; the rest relative
+                if (!std::isfinite(ref[i]) || ref[i] == 0) continue;                        // (exp beyond 709: the shader stops at 709; it never needs more)
+                const double d = i < 2 ? std::fabs(g - ref[i]) : std::fabs(g - ref[i]) / std::fabs(ref[i]);   // sin, cos: absolute; the rest relative
                 e[i] = std::max(e[i], std::isfinite(d) ? d : 1.0);
             }
         }
@@ -966,18 +970,28 @@ void cardCompare(render::Renderer2D& R) {
         std::vector<CardRay> cr;
         cardRays(*K, cs.a, cs.r, cs.th, pc, cr);
         const KerrBL ch(cs.a);
-        double hmax = 0, qmax = 0;
+        double hmax = 0, qmax = 0, hcpu = 0, qcpu = 0;
         int ended = 0;
-        for (const CardRay& c : cr) {
+        const Camera cam{cs.r, cs.th, 0};
+        TraceOptions o;
+        o.rtol = 1e-10; o.atol = 1e-11;                                           // (the table's tolerance, as spinRay)
+        for (std::size_t k = 0; k < cr.size(); k++) {
+            const CardRay& c = cr[k];
             if (c.end == 0) continue;
             ended++;
             Ray ray; ray.n = 5; ray.c[0] = c.h.b; ray.c[1] = c.q;
             hmax = std::max(hmax, std::fabs(ch.nullCondition(ray, c.y)));
             qmax = std::max(qmax, std::fabs(ch.carterQ(c.h.b, c.y) - c.q) / (1 + std::fabs(c.q)));
+            const Vec3 look = lookAt(pc[2 * k], pc[2 * k + 1]);                    // the processor's same ray, for its own numbers at this tolerance
+            Ray r0;
+            ch.launch(cam, look, r0);
+            const RayEnd e = trace(ch, cam, look, o);
+            hcpu = std::max(hcpu, std::fabs(ch.nullCondition(r0, e.y)));
+            qcpu = std::max(qcpu, std::fabs(ch.carterQ(r0.c[0], e.y) - r0.c[1]) / (1 + std::fabs(r0.c[1])));
         }
         std::printf("PLBHCARDT case=%s a=%g dist=%g pitch=%.4f nodes=%ld endsdiffer=%ld lost=%ld dirnear=%.2e dirmid=%.2e dirfar=%.2e nnear=%ld nmid=%ld nfar=%ld b=%.2e u=%.2e unear=%.2e "
-                    "edge=%.2e rowchi=%.2e rowedge=%.2e mism=%ld rays=%zu ended=%d null=%.2e qdrift=%.2e cardms=%.0f cpums=%.0f\n",
-                    cs.name, cs.a, cs.r, cs.th, nodes, ends, lost, dir[0], dir[1], dir[2], cnt[0], cnt[1], cnt[2], db, du[0], du[1], de, dc, drow, G->mismatches(), cr.size(), ended, hmax, qmax, gms, pms);
+                    "edge=%.2e rowchi=%.2e rowedge=%.2e mism=%ld rays=%zu ended=%d null=%.2e qdrift=%.2e cpunull=%.2e cpuqdrift=%.2e cardms=%.0f cpums=%.0f\n",
+                    cs.name, cs.a, cs.r, cs.th, nodes, ends, lost, dir[0], dir[1], dir[2], cnt[0], cnt[1], cnt[2], db, du[0], du[1], de, dc, drow, G->mismatches(), cr.size(), ended, hmax, qmax, hcpu, qcpu, gms, pms);
     }
 }
 }  // namespace

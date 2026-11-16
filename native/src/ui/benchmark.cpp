@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <chrono>
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -88,8 +89,8 @@ void blackholeScene(AppState& app) {
     app.blackholeView.makeFineNow(app.blackhole);
 }
 
-// 0.55.5: every frame of scene 13: in turn 2 s turning round the axis, 2 s tilting, 2 s coming closer (going back the next round), each followed by 1 s
-// at rest; by the clock, not by the frame, so a fast PC moves no further than a slow one. The numbers are gathered by sampleBlackHole.
+// 0.55.5: every frame of scene 13: in turn turning round the axis, tilting, coming closer, each followed by a rest (0.55.6: at spin 0.9, then the same at
+// spin 0, 1 s each); by the clock, not by the frame, so a fast PC moves no further than a slow one. The numbers are gathered by sampleBlackHole.
 void blackholeFrame(AppState& app, int, int);
 
 void atomScene(AppState& app, int which) {
@@ -210,6 +211,9 @@ struct BenchState {
     int bhKind = -1;
     bool bhMoving = false, bhHave = false;
     long bhCount[6] = {0, 0, 0, 0, 0, 0};
+    double bhMoveS[6] = {0, 0, 0, 0, 0, 0};             // 0.55.6: seconds moving in each slot
+    std::uint64_t bhPic = 0;
+    long bhCard = 0;
     std::map<int, app::BenchBlackHole> bhByScene;
     bool noteFailed = false;
     GpuTimer gpu;
@@ -230,12 +234,20 @@ void blackholeFrame(AppState& app, int, int) {
     const auto now = std::chrono::steady_clock::now();
     const double t = std::chrono::duration<double>(now - b.bhStart).count(), dt = std::min(0.1, std::chrono::duration<double>(now - b.bhLast).count());
     b.bhLast = now;
-    b.bhKind = static_cast<int>(t / 3) % 3;
-    b.bhMoving = std::fmod(t, 3.0) < 2.0;
+    // 0.55.6: the warm-up at rest; then six slots of 4/3 s (1 s moving, 1/3 s at rest): turning, tilting, distance at spin 0.9, then the same at spin 0
+    // (going back the way it came, so the view ends where it began)
+    const double slot = 4.0 / 3.0, u = t - app::kBenchWarmupS;
+    if (u < 0) { b.bhKind = -1; b.bhMoving = false; return; }
+    const int k = std::min(5, static_cast<int>(u / slot));
+    b.bhKind = k;
+    b.bhMoving = std::fmod(u, slot) < 1.0 && u < 6 * slot;
+    const double spin = k < 3 ? 0.9 : 0.0;
+    if (app.blackhole.spin != spin) blackhole::setSpin(app.blackhole, spin);
     if (!b.bhMoving) return;
-    const double dir = static_cast<int>(t / 9) % 2 ? -1 : 1;              // the next round goes back, so the view stays where it was
-    if (b.bhKind == 0) blackhole::turn(app.blackhole, 0.2 * dt, 0);         // 0.2 rad a second round the axis
-    else if (b.bhKind == 1) blackhole::turn(app.blackhole, 0, 0.1 * dir * dt);   // 0.1 rad a second up or down
+    b.bhMoveS[k] += dt;
+    const double dir = k < 3 ? 1 : -1;
+    if (k % 3 == 0) blackhole::turn(app.blackhole, 0.2 * dir * dt, 0);    // 0.2 rad a second round the axis
+    else if (k % 3 == 1) blackhole::turn(app.blackhole, 0, 0.1 * dir * dt);   // 0.1 rad a second up or down
     else blackhole::setDistance(app.blackhole, app.blackhole.dist * std::exp(-0.05 * dir * dt));   // 5 % a second closer or farther
 }
 
@@ -246,6 +258,9 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
     if (b.bhHave && b.bhKind >= 0 && b.run->measuring()) {
         app::BenchBlackHole& h = b.bhByScene[b.run->scene()];
         app::BenchBhMove& m = h.move[b.bhKind];
+        if (s.picture != b.bhPic && b.bhMoving) m.pictures++;            // 0.55.6: new pictures while moving
+        m.seconds = b.bhMoveS[b.bhKind];
+        if (s.cardFills != b.bhCard) h.card.add(s.cardMs);
         if (b.bhMoving) {
             m.frames++;
             m.frameSum += s.frameMs;
@@ -258,9 +273,20 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
         if (c[2] != b.bhCount[2]) m.stars.add(s.starsMs);
         if (c[3] != b.bhCount[3]) m.look.add(s.lookMs);
         if (c[4] != b.bhCount[4]) { h.glare.add(R.glareStats().veilMs); h.glareWaitWorst = std::max(h.glareWaitWorst, R.glareStats().waitMs); }
-        if (c[5] != b.bhCount[5]) h.fine.add(s.spinFineMs);
+        if (c[5] != b.bhCount[5] && !s.spinCard) h.fine.add(s.spinFineMs);   // (0.55.6: a table the card filled is counted as the card's fill, not the fine table)
     }
     std::copy(c, c + 6, b.bhCount);
+    b.bhPic = s.picture; b.bhCard = s.cardFills;
+    {   app::BenchBlackHole& h = b.bhByScene[b.run->scene()];               // 0.55.6: which path filled the spinning hole's table, and its start-up check
+        const blackhole::BlackHoleView& v = app.blackholeView;
+        const blackhole::CardCheck& ck = v.cardCheck();
+        char buf[320];
+        if (!v.gpuPaths) h.path = "the processor (GPU light paths switched off)";
+        else if (v.cardState() == 1) { std::snprintf(buf, sizeof buf, "the graphics card (start-up check passed: %d edges, %d rays against the processor's; largest differences: direction %.1e rad, b %.1e, u %.1e; %.0f ms)",
+                                                     ck.edges, ck.rays, ck.dir, ck.b, ck.u, ck.ms); h.path = buf; }
+        else if (v.cardState() == -1) h.path = "the processor, because " + v.cardWhy();
+        else h.path = "not decided yet";
+    }
     b.bhHave = true;
 }
 
@@ -437,6 +463,7 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, i
         b.run->setUpDone();
         b.sceneFrame = 0; b.measFrame = -1;
         b.bhStart = b.bhLast = std::chrono::steady_clock::now(); b.bhKind = -1; b.bhHave = false;
+        for (double& x : b.bhMoveS) x = 0;
     }
     if (b.run->sceneToSetUp() < 0 && b.run->scene() < int(b.list.size())) {      // a scene that needs something done every frame (a jump held, the cut moving)
         b.measFrame = b.run->measuring() ? b.measFrame + 1 : -1;

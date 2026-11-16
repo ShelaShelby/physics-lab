@@ -29,8 +29,10 @@ void cardRays(render::IKerrCompute& K, double a, double rC, double thC, const st
 void cardEdges(render::IKerrCompute& K, double a, double rC, double thC, const std::vector<double>& chi, std::vector<double>& out);
 
 // the start-up check's limits against the processor (spinRay, shadowEdge): the edge (rad), the far direction (rad), b and each u (relative to 1 + |value|);
-// the rays' ends (sky or horizon) must be equal
-constexpr double kCardEdgeTol = 1e-12, kCardDirTol = 1e-8, kCardBTol = 1e-10, kCardUTol = 1e-8;
+// the rays' ends (sky or horizon) must be equal. Measured (REPORT 0.55.6): the processor's own rays move by up to 2.5e-12 rad, u by 5.5e-10 when psi moves
+// by 1e-15 (the step's choices change: the floor two correct double-precision fills can differ by); llvmpipe's card 1.5e-13 rad, u 8.4e-10, edge 0;
+// arithmetic of float precision (psi moved by 1e-7) moves them by 2.5e-5 rad and u by 1.4e-6. The limits sit between, far nearer the floor.
+constexpr double kCardEdgeTol = 1e-12, kCardDirTol = 1e-9, kCardBTol = 1e-10, kCardUTol = 1e-7;
 struct CardCheck {
     bool ok = false;
     int edges = 0, rays = 0, endsDiffer = 0;

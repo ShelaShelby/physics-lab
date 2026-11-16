@@ -1,7 +1,7 @@
 # Resume
 
 ## Current state
-- 0.55.6 (16 Nov 2026), Part A pushed as a checkpoint: the Black Hole Lab's star bins and stars' images on all cores (the same images to the bit; SpinStars::kReference), the spin-0 stars and exposure too; Part B (the graphics card fills the spin table, switched off until tested) is under way; small version.
+- 0.55.6 (16 Nov 2026): the Black Hole Lab's spin table filled by the graphics card (render/kerr_compute, blackhole/spin_card: the integrator ported to GLSL in double, a start-up check against the processor, fallback to the processor's path, Settings line and switch "GPU light paths"); the card's table is the picture moving and at rest (no fine thread); star bins and images on all cores (the same images to the bit); scene 13 also at spin 0, with the card's fill time and pictures a second; small version.
 - Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
 - Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra, a faster fine table), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.

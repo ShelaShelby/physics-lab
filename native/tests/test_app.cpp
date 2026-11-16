@@ -1002,21 +1002,27 @@ static void testBenchGpuColours() {
 static void testBenchBlackHole() {
     BenchBlackHole h;
     h.move[0].frames = 4; h.move[0].frameSum = 4.0; h.move[0].frameWorst = 1.5; h.move[0].behindFrames = 3; h.move[0].behindWorst = 120;
+    h.move[0].pictures = 30; h.move[0].seconds = 1.0;
     h.move[0].stars.add(20); h.move[0].stars.add(30); h.move[0].look.add(10);
     h.move[1].frames = 2; h.move[1].frameSum = 3.0; h.move[1].frameWorst = 2.0; h.move[1].coarse.add(100);
+    h.move[3].frames = 1; h.move[3].frameSum = 0.5; h.move[3].frameWorst = 0.5; h.move[3].pictures = 5; h.move[3].seconds = 0.5;
     h.glare.add(150); h.glareWaitWorst = 400; h.fine.add(2500);
+    h.card.add(40); h.card.add(60); h.path = "the graphics card (start-up check passed)";
     const std::vector<std::string> v = benchBlackHoleLines(h);
     const auto has = [&](const std::string& w) { for (const std::string& l : v) if (l.find(w) != std::string::npos) return true; return false; };
-    checkTrue("black hole lines: turning's frame thread average and worst, behind 3 of 4 frames, at most 120 ms",
-              has("Black Hole Lab, turning round the axis: frame thread 1.00 ms average, 1.50 ms worst; picture behind the settings in 3 of 4 frames, at most 120 ms"));
+    checkTrue("black hole lines: turning's frame thread average and worst, behind 3 of 4 frames, at most 120 ms, 30 new pictures in 1 s",
+              has("Black Hole Lab, spin 0.9, turning round the axis: frame thread 1.00 ms average, 1.50 ms worst; picture behind the settings in 3 of 4 frames, at most 120 ms; 30 new pictures in 1.0 s (30 a second)"));
     checkTrue("black hole lines: the stages' averages, worsts and counts; a stage not made says so",
               has("worker: coarse table not needed; star bins not needed; stars' images 25.0 ms average, 30.0 ms worst (2x); exposure 10.0 ms average, 10.0 ms worst (1x)"));
-    checkTrue("black hole lines: tilting's coarse table; distance with no frames says so", has("coarse table 100.0 ms average, 100.0 ms worst (1x)") && has("Black Hole Lab, changing distance: no frames counted"));
+    checkTrue("black hole lines: tilting's coarse table; distance with no frames says so", has("coarse table 100.0 ms average, 100.0 ms worst (1x)") && has("Black Hole Lab, spin 0.9, changing distance: no frames counted"));
+    checkTrue("black hole lines (0.55.6): the same movements at spin 0", has("Black Hole Lab, spin 0, turning round the axis: frame thread 0.50 ms average") && has("5 new pictures in 0.5 s (10 a second)") && has("Black Hole Lab, spin 0, tilting: no frames counted"));
+    checkTrue("black hole lines (0.55.6): which path filled the spin table, why, and the card's fill time",
+              has("Black Hole Lab, the spinning hole's light paths: the graphics card (start-up check passed); the card's fills 50.0 ms average, 60.0 ms worst (2x)"));
     checkTrue("black hole lines: at rest the glare (and how long after its picture) and the fine table",
               has("Black Hole Lab, at rest: glare 150.0 ms average, 150.0 ms worst (1x), shown 400 ms after its picture at most; fine spin table 2500.0 ms average, 2500.0 ms worst (1x)"));
     BenchScene s; s.name = "13. Black hole"; s.frames = benchStats({5, 5}); s.notes = v;
     const std::string t = benchResultText(BenchEnv(), {s});
-    checkTrue("black hole lines: printed in the report under their scene", t.find("  Black Hole Lab, tilting: frame thread 1.50 ms average") != std::string::npos);
+    checkTrue("black hole lines: printed in the report under their scene", t.find("  Black Hole Lab, spin 0.9, tilting: frame thread 1.50 ms average") != std::string::npos);
 }
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();

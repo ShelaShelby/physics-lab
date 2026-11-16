@@ -19,10 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
-    {"0.55.6", "The Black Hole Lab: pictures come sooner while the view moves",
-     "The Black Hole Lab works out the stars' images on all the processor's cores instead of one, and sorts the light paths for the stars about three times "
-     "faster, so while the view turns, tilts or changes distance a new picture is finished sooner. The spinning and the non-spinning hole both gain. Every "
-     "star image is where it was and as bright as before (tested image by image). One core is left free for the window while the lab works in the background."},
+    {"0.55.6", "The Black Hole Lab: the graphics card works out the light paths",
+     "Round the spinning hole the graphics card now follows the light paths itself, with the same equations and steps as the processor and in double "
+     "precision, so the picture is the fine one even while the view moves: no coarse picture first, and no seconds of processor work after you stop. The card "
+     "is checked against the processor when the lab first draws a spinning hole; if it differs, or the PC has no OpenGL 4.3, the processor does it as before, "
+     "and Settings, Performance says which and why (the switch GPU light paths compares the two). The stars' images are found on all the processor's cores, "
+     "for the spinning and the non-spinning hole, each image where it was and as bright. The benchmark's Black Hole scene also moves at spin 0 and reports "
+     "the card's time and how many new pictures came a second."},
     {"0.55.5", "The Black Hole Lab: the window no longer waits for the picture",
      "The Black Hole Lab no longer makes the window wait while it works out a picture. Turning, tilting, changing the distance or dragging the spin now "
      "moves the controls and readouts at once; the light paths, the stars' images and the exposure are worked out on a worker thread below normal priority, "

@@ -1256,6 +1256,7 @@ uniform int uNS;
 #define TWOOPI Pa[26]
 #define INVLN2 Pa[27]
 #define SQH Pa[28]
+#define LN2C Pa[29]
 #define MAXSTEPS 200000
 #define Z5 double[5](0.0LF, 0.0LF, 0.0LF, 0.0LF, 0.0LF)
 
@@ -1272,7 +1273,7 @@ void dsincos(double x, out double s, out double c) {
 double dexp(double x) {
     if (x < -745.0LF) return 0.0LF;
     double k = floor(min(x, 709.0LF) * INVLN2 + 0.5LF);
-    double r = (min(x, 709.0LF) - k * LN2A) - k * LN2B;
+    double r = ((min(x, 709.0LF) - k * LN2A) - k * LN2B) - k * LN2C;
     double p = 1.0LF + r * (1.0LF + r * (0.5LF + r * (0.16666666666666666LF + r * (0.041666666666666664LF + r * (0.008333333333333333LF + r * (0.001388888888888889LF
                + r * (0.0001984126984126984LF + r * (2.48015873015873e-05LF + r * (2.7557319223985893e-06LF + r * (2.755731922398589e-07LF + r * (2.505210838544172e-08LF
                + r * (2.08767569878681e-09LF + r * 1.6059043836821613e-10LF))))))))))));
@@ -1285,7 +1286,7 @@ double dlog(double x) {
     double f = (m - 1.0LF) / (m + 1.0LF), z = f * f;
     double p = 1.0LF + z * (0.3333333333333333LF + z * (0.2LF + z * (0.14285714285714285LF + z * (0.1111111111111111LF + z * (0.09090909090909091LF + z * (0.07692307692307693LF
                + z * (0.06666666666666667LF + z * (0.058823529411764705LF + z * (0.05263157894736842LF + z * 0.047619047619047616LF)))))))));
-    return double(e) * LN2A + (double(e) * LN2B + 2.0LF * f * p);
+    return double(e) * LN2A + (double(e) * LN2B + (double(e) * LN2C + 2.0LF * f * p));
 }
 double datan2(double y, double x) {
     double m = max(abs(x), abs(y));

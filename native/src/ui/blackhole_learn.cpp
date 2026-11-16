@@ -40,10 +40,12 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "flattened on the side that moves towards you (Perlick and Tsupko 2022; Gralla and Lupsasca 2020), seen along the axis it stays round. The sky near it is "
           "dragged round, and the gas disc reaches further in, gets hotter there and turns more of the infalling mass into light (Bardeen, Press and Teukolsky 1972; "
           "Page and Thorne 1974).") +
-        p("<b>How it is worked out.</b> There is no closed form for every light path round a spinning hole that is quick to use, so the processor follows the light "
-          "paths step by step (the ray equations of James et al. 2015) in double precision and fills a table for your distance, latitude and spin; the graphics card looks "
+        p("<b>How it is worked out.</b> There is no closed form for every light path round a spinning hole that is quick to use, so the light paths are followed "
+          "step by step (the ray equations of James et al. 2015) in double precision into a table for your distance, latitude and spin; the graphics card looks "
           "it up. Which directions lead to the horizon needs no stepping: James et al. give a test from the light's constants alone, and the shadow's edge is drawn "
-          "from it, within a thousandth of a pixel. A coarse table is shown at once while you change a setting, the fine one a moment after you stop. Turning round the "
+          "from it, within a thousandth of a pixel. On a graphics card with OpenGL 4.3 the card itself follows the paths (the same equations and steps, in double "
+          "precision, checked against the processor's own when the lab first draws a spinning hole), so the table is the fine one even while you move; otherwise the "
+          "processor does it: a coarse table at once while you change a setting, the fine one a moment after you stop. Turning round the "
           "spin axis needs no new table. The stars' images are found by turning the table round (where it sends their light), with their magnified brightness.") +
         p("<b>Its limits.</b> The spin of Sagittarius A* and M87* is not measured: the control is yours and every preset starts at 0. The top, 0.99, is where the "
           "lab's tests stop: closer to the largest spin the light paths near the shadow change too fast for the tables it makes. Close to a spinning hole nothing "

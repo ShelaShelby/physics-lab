@@ -109,6 +109,23 @@ void performanceCard(AppState& app) {
                                                       "The outline is the same either way (tested, except a line a hair's breadth off where a cell is within rounding of the level); only the speed differs, and it is expected, not yet measured, to be better On.\n"
                                                       "Used for comparing on your PC with the benchmark's scenes 16, 17, 29 and 30. Not saved: it is On again at the next start.");
     }
+    if (app.lab == blackhole::kLabIndex) {                // 0.55.6: who fills the spinning hole's light-path table: the line says which and why, the switch compares
+        blackhole::BlackHoleView& v = app.blackholeView;
+        const char* line = !v.gpuPaths ? "Light paths of the spinning hole: the processor (GPU light paths is off)."
+                         : v.cardState() == 1 ? "Light paths of the spinning hole: the graphics card (its check on this PC passed)."
+                         : v.cardState() == 0 ? "Light paths of the spinning hole: the graphics card, once its check on this PC has passed (made when a spinning hole is first drawn)."
+                         : nullptr;
+        const std::string text = line ? std::string(line) : "Light paths of the spinning hole: the processor, because " + v.cardWhy() + ".";
+        ImGui::TextWrapped("%s", text.c_str());
+        if (shellLogOn()) auditNote("bhpaths " + text);   // (the checks: the line as drawn)
+        settingMark("gpupaths");
+        wrappedCheckbox("GPU light paths (OpenGL 4.3)", &v.gpuPaths);
+        if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default, needs OpenGL 4.3 with double precision): the light paths' table of the spinning hole is filled by a compute shader on the graphics card,\n"
+                                                      "the same rays and steps as the processor's in double precision, at the fine table's size while the view moves and at rest. It is used only after a check\n"
+                                                      "at the first spinning picture: rays followed by the card against the processor's own; if they differ, the processor's path is used and this page says so.\n"
+                                                      "Off: the processor fills the table, a coarse one while the view moves and the fine one once it rests, as up to 0.55.5.\n"
+                                                      "Used for comparing on your PC with the benchmark's scene 13. Not saved: it is On again at the next start.");
+    }
     if (app.lab == 1) {                                   // the Atom Lab's cloud dots: who picks the phase colours (0.13 stage 1). A debug switch for comparing on a real PC; not saved
         settingMark("gpucolours");
         wrappedCheckbox("GPU colours (Atom Lab cloud dots)", &app.atom.gpuColours);

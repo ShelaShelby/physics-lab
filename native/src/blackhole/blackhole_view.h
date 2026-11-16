@@ -78,10 +78,11 @@ public:
     // 0.55.6 (Settings, Performance, "GPU light paths"): async only: the spinning hole's table filled by the graphics card (spin_card.h) once its start-up
     // check has passed; the card's table is the picture while moving and at rest (no fine table on the processor). Off, or no OpenGL 4.3, or the check
     // failed: the processor's tables of 0.55.5.
-    bool gpuPaths = false;
+    bool gpuPaths = true;
     int cardState() const { return cardState_; }               // 0 not yet asked (the lab has not drawn a spinning hole), 1 the card's path, -1 the processor's
     const std::string& cardWhy() const { return cardWhy_; }    // -1: why
     const CardCheck& cardCheck() const { return cardCheck_; }
+    bool fineThreadBusy() const { return spinWorker_.joinable(); }   // 0.55.6 (tests): the processor's fine table is being made
     void stopWork();                                           // 0.55.6: the worker stopped and joined (before the renderer, which owns the card's memory, shuts down)
     void draw(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);
     void makeFineNow(const Settings& s);                       // 0.55.5 (the benchmark): the fine spin table for s now, on this thread
@@ -177,7 +178,7 @@ private:
     std::shared_ptr<std::atomic<bool>> cardPostedUsed_;
     double cardPostedKey_[3] = {-1, -1, -1};
     bool cardReady(render::Renderer2D& R);
-    void pumpCard(const Settings& s, double W, double H, double cx, double cy);
+    void pumpCard(const Settings& s, double W, double H, double cx, double cy, bool start);
     void pollFine(const Settings& s);
     void install(Picture& p);
     void drawAsync(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);

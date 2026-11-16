@@ -195,16 +195,18 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
     edge_ = p.edge; tau_ = p.tau; rowChi_ = p.rowChi; rowEdge_ = p.rowEdge;
     v_.assign(static_cast<std::size_t>(2) * nChi * nS, SpinHit{});
     std::atomic<long> mism{0}, lost{0};
-    for (std::size_t q = 0; q < v_.size(); q++) {
-        const double* n = p.nodes + 10 * q;
-        SpinHit& h = v_[q];
-        h.dir = Vec3{n[0], n[1], n[2]};
-        h.b = n[3];
-        for (int k = 0; k < kSpinCross; k++) h.u[k] = n[4 + k];
-        h.sky = n[8] == 1;
-        const int side = static_cast<int>(q / (static_cast<std::size_t>(nChi) * nS));
-        if (h.sky != (side == 0)) { mism++; if (length(h.dir) == 0 && !h.sky && side == 0) lost++; }
-    }
+    parallelFor(2 * nChi, [&](int row) {                                    // (the rows on all cores)
+        const int side = row / nChi;
+        for (std::size_t q = static_cast<std::size_t>(row) * nS; q < static_cast<std::size_t>(row + 1) * nS; q++) {
+            const double* n = p.nodes + 10 * q;
+            SpinHit& h = v_[q];
+            h.dir = Vec3{n[0], n[1], n[2]};
+            h.b = n[3];
+            for (int k = 0; k < kSpinCross; k++) h.u[k] = n[4 + k];
+            h.sky = n[8] == 1;
+            if (h.sky != (side == 0)) { mism++; if (length(h.dir) == 0 && !h.sky && side == 0) lost++; }
+        }
+    });
     finish(mism, lost);
 }
 

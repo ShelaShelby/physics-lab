@@ -262,6 +262,7 @@ const std::vector<SettingRow>& settingRows() {
         {"gpuspin", "GPU superposition and jumps (OpenGL 4.3)", "GPU superposition and jumps (OpenGL 4.3)", 1},
         {"gpuoutline", "GPU outline (OpenGL 4.3)", "GPU outline (OpenGL 4.3)", 1},
         {"gpucolours", "GPU colours (Atom Lab cloud dots)", "GPU colours (Atom Lab cloud dots)", 1},
+        {"gpupaths", "GPU light paths (OpenGL 4.3)", "GPU light paths (Black Hole Lab, OpenGL 4.3)", 3},   // 0.55.6 (blackhole::kLabIndex)
         {"frames", "Frame times", "Frame times (fps)", -1},
         {"benchmark", "Benchmark", "Benchmark (speed test)", -1},
     };

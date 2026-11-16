@@ -35,7 +35,8 @@ std::vector<double> cardParams(double a, double rC, double thC, double rtol) {
             std::min(r1, r2), std::max(r1, r2), trappedB(r2), trappedB(r1),                                    // 14..17
             SpinTable::sOf(kSpinXlo), kSpinXc,                                                                  // 18, 19
             p1, p2, std::cos(pio2),                                                // 20..22: pi/2 in three parts (the last: pi/2 less its double, = cos of that double)
-            l1, l2, kPi, 2 / kPi, 1 / ln2, std::sqrt(0.5)};                         // 23..28
+            l1, l2, kPi, 2 / kPi, 1 / ln2, std::sqrt(0.5),                          // 23..28
+            2.3190468138462996e-17};                                                 // 29: ln 2 less its double (ln 2 = 0.693147180559945309417232121458...)
 }
 
 void cardRays(render::IKerrCompute& K, double a, double rC, double thC, const std::vector<double>& psiChi, std::vector<CardRay>& out, double rtol) {
@@ -100,7 +101,7 @@ CardCheck cardSelfCheck(render::IKerrCompute& K) {
         for (std::size_t k = 0; k < pc.size() / 2; k++) {
             const SpinHit ref = spinRay(cs.a, cam, pc[2 * k], pc[2 * k + 1], 1e-10);
             c.rays++;
-            if (k >= got.size() || got[k].h.sky != ref.sky || (got[k].end == 0) != (length(ref.dir) == 0 && !ref.sky && got[k].end != 2)) { c.endsDiffer++; continue; }
+            if (k >= got.size() || got[k].h.sky != ref.sky || got[k].end == 0) { c.endsDiffer++; continue; }   // (a lost ray: none of these is near a trapped orbit)
             const SpinHit& h = got[k].h;
             if (ref.sky) c.dir = std::max(c.dir, std::isfinite(angle(h.dir, ref.dir)) ? angle(h.dir, ref.dir) : 1.0);
             const double db = std::fabs(h.b - ref.b) / (1 + std::fabs(ref.b));
