@@ -67,6 +67,9 @@ double bvTemperatureK(double bv);                   // Ballesteros 2012, EPL 97,
 constexpr double kStarGamma = 0.5, kStarFaintMag = 6.6, kStarFaintLight = 1.2, kStarMinRadius = 0.7;
 struct StarDraw { double radius, alpha; };
 StarDraw starDraw(double mag);
+// 0.55.4: the dot for a drawn light (opacity x area, square points): a disc of radius kStarMinRadius with that light as opacity; above opacity 1 the disc grows
+// instead. starDraw is this with the tone-mapped light above; the Black Hole Lab's true exposure (blackhole/light.h) gives it the star's true light.
+StarDraw starDrawLight(double light);
 double farBV(const char* key);                      // 0.50: a far-away star's measured B−V (HYG v4.1), NaN if it has none
 
 // The far-away things. Index 0..kFarCount-1: stars and objects; then the two Voyagers.

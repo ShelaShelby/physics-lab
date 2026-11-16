@@ -24,6 +24,9 @@
 #   looks:     0.55.3, Controls > Look (1280 x 800, Dark): Real with the dot; Film locks the spin and disc controls (a typed spin and Off are refused), shows its labels
 #              and changes the chip; "The paper's view" sets the camera; switching at the film's spin makes no new table; Most realistic returns to Real; a restart
 #              keeps the look; a 0.55.2 settings file opens as Real; six themes at 1280 x 800: the chip, the card and the Controls panel's text 4.5:1 over the Film disc
+#   truelight: 0.55.4, Sky beside the disc and Glare (Real look, disc on; 1280 x 800, Dark): the controls only there; True brightness blacks the sky, the readout's
+#              factor = the module's rule written here (Willmer 2018's -26.76 for the Sun); a lower exposure brings stars back; the glare lights the sky round the disc
+#              far more than far from it; Most realistic; a restart; a 0.55.3 file; Film's glow leaves the far sky alone; the chip and panel 4.5:1 in six themes
 #   check_blackhole.py <PhysicsLab binary> <work folder> [part]
 import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -285,6 +288,17 @@ def part_precision(binary, work):
         check(int(x["colours"]) == 1 and int(x["offcolour"]) == 0, f"Film: one colour all over the disc before the glow ({x['colours']} colours, {x['offcolour']} off; {x['want']})")
         check(int(x["darker"]) == 0 and int(x["brighter"]) > 1000 and int(x["glowdiff"]) <= 1 and abs(float(x["added"]) / float(x["addedref"]) - 1) < 0.01,
               f"Film: the glow adds light only and is its reference ({x['darker']} darker, {x['glowdiff']} levels, added {x['added']} against {x['addedref']})")
+    # 0.55.4: the Film glow is made from the disc's own light: every pixel its reference leaves alone is the plain picture (the sky untouched); and the eye's glare
+    # on Real's saved case: the veil lays on the picture the light it spreads, less what leaves the picture (blackhole/light.h; light.cpp's own tests check the
+    # rule against the CIE equation and conservation), its time (llvmpipe; reported, not limited)
+    gs = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHGLOWSKY ")]
+    check(len(gs) == 1 and int(gs[0]["free"]) > 100000 and int(gs[0]["touched"]) == 0, f"Film: the glow leaves the sky alone ({gs})")
+    ga = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHGLARE ")]
+    check(len(ga) == 2, f"the glare measured at two sizes ({len(ga)})")
+    for x in ga:
+        sp, ld = float(x["spread"]), float(x["laid"])
+        check(sp > 0 and 0.8 < ld / sp <= 1.01 and abs(float(x["keep"]) - 0.72066) < 1e-4, f"{x['size']}: the veil lays {ld / sp if sp else 0:.4f} of the light it spreads (the rest leaves the picture), keep {x['keep']}")
+        print(f"  glare {x['size']}: block {x['b']} px, grid {x['grid']}, read-back {x['readms']} ms, veil {x['veilms']} ms, picture {x['withoutms']} -> {x['withms']} ms")
     p = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHPLAIN ")]
     check(bool(p) and int(p[0]["maxdiff"]) <= 1, f"bending off = the Orbit Lab's sky projection, within one step of 255 ({p})")
 
@@ -318,7 +332,7 @@ def part_disc(binary, work):
         check(not r.scripted_missing() and s is not None and s["preset"] == key and s["disc"] == want, f"preset {key}: the disc {'on' if want == '1' else 'off'} ({s}, {r.scripted_missing()})")
     # switching it on draws it where the module says the disc is (Sagittarius A*: also its label), nearly face-on and steep
     for name, pitch in (("faceon", 0.35), ("steep", 1.40)):
-        e = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"pitch={pitch}")
+        e = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"pitch={pitch};glare=off")   # (0.55.4: the eye's glare, on by default, veils the sky round the disc)
         off = run_app(binary, work, f"bh_disc_{name}_off", e, frames=12)
         on = run_app(binary, work, f"bh_disc_{name}_on", dict(e, PL_SCRIPT="6:click=blackhole.disc.on"), frames=16)
         check(not on.scripted_missing(), f"{name}: the switch was there ({on.scripted_missing()})")
@@ -556,6 +570,132 @@ def part_looks(binary, work):
             ratio = max(wcag(q[k], bg), wcag(q[-k - 1], bg))
             check(ratio >= 4.5, f"{t}: Film: {name}'s text {ratio:.1f}:1 over its own background (need 4.5)")
 
+def light_module():
+    # the true exposure's constants as the module states them (src/blackhole/light.h, orbit/sky.h, orbit/units.h), to compare the readout with
+    lh = open(os.path.join(SRC, "blackhole", "light.h"), encoding="utf-8").read()
+    sk = open(os.path.join(SRC, "orbit", "sky.h"), encoding="utf-8").read()
+    un = open(os.path.join(SRC, "orbit", "units.h"), encoding="utf-8").read()
+    sunv = float(re.search(r"kSunV = (-?[\d.]+)", lh).group(1))
+    rmin = float(re.search(r"kStarMinRadius = ([\d.]+)", sk).group(1))
+    rsun = float(re.search(r"kSunRadius = ([\d.]+) \* kKm", un).group(1)) * 1000
+    au = float(re.search(r"kAU = ([\d.]+);", un).group(1))
+    return sunv, rmin, rsun, au
+
+def part_truelight(binary, work):
+    # 0.55.4: Sky beside the disc (Shown / True brightness) and Glare (Off / As an eye sees it), Real look with the disc on (1280 x 800, Dark): the controls only
+    # there; True blacks the sky and the readout carries the module's factor (light.h: the Sun's V magnitude -26.76, Willmer 2018 Table 3; the star's light over its
+    # dot, written here); a lower exposure brings stars back; the glare changes the picture round the disc far more than far from it; Most realistic; a restart;
+    # a 0.55.3 file; Film's glow leaves the sky alone (far sky pixels = Real's with Glare Off); the chip's and the panel's text 4.5:1 in six themes.
+    sunv, rmin, rsun, au = light_module()
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_BH_SPINWAIT="1", PL_PANELS="blackhole.card=c")   # (the glare at once, not after the view rests)
+    feed = "preset=feeding;pitch=1.2"
+    runs = {}
+    calls = [((binary, work, f"bh_tl_{n}", dict(base, PL_BH_SET=f"{feed};{x}", PL_SCRIPT=f"4:click=blackhole.{g}")), dict(frames=12)) for n, x, g in
+             (("shown_off", "skybeside=shown;glare=off", "glare.off"), ("true_off", "skybeside=true;glare=off", "skybeside.true"),
+              ("true_eye", "skybeside=true;glare=eye", "skybeside.true"), ("shown_eye", "skybeside=shown;glare=eye", "glare.eye"))]   # (a click on the chosen option: the panel scrolls the two controls into view)
+    prefetch(calls)
+    for (args, kw) in calls: runs[args[2][6:]] = run_app(*args, **kw)
+    a = runs["shown_off"]
+    check(not a.scripted_missing() and any(k.startswith("seg.blackhole.skybeside") for k in a.rects) and any(k.startswith("seg.blackhole.glare") for k in a.rects),
+          f"Real with the disc: both controls ({a.scripted_missing()}, {sorted(k for k in a.rects if 'skybeside' in k or 'glare' in k)})")
+    mk, mk2 = marks(runs["true_eye"]), marks(runs["shown_eye"])
+    check(mk.get("blackhole.skybeside") == "on" and mk2.get("blackhole.glare") == "on", f"the closest-to-reality dots: True brightness and the eye's glare ({mk}, {mk2})")
+    f = run_app(binary, work, "bh_tl_film", dict(base, PL_BH_SET=f"{feed};look=film", PL_SCRIPT="4:click=blackhole.glare.eye"), frames=10)
+    n = run_app(binary, work, "bh_tl_nodisc", dict(base, PL_BH_SET="preset=sgra", PL_SCRIPT="4:click=blackhole.glare.eye"), frames=10)
+    check(all(r.scripted_missing() and not any("skybeside" in k or "blackhole.glare" in k for k in r.rects) for r in (f, n)), "not for Film, not without the disc")
+    # True brightness: every sampled sky pixel off the disc is black (Shown: many are not), with the glare off
+    pts = disc_points(a)
+    occ = [v for k, v in a.rects.items() if re.match(r"occ\d+$", k) or k in ("handle", "chip", "blackholebar") or k.startswith("card.")]
+    free = lambda x, y: y > 60 and not any(o[0] - 2 <= x <= o[0] + o[2] + 2 and o[1] - 2 <= y <= o[1] + o[3] + 2 for o in occ)
+    offp = [(int(x), int(y)) for x, y in (pts[1] if pts else []) if free(x, y)]
+    S, T = Bmp(a.bmp), Bmp(runs["true_off"].bmp)
+    offp = [(x, y) for x, y in offp if S.px(x, y) != T.px(x, y) or max(T.px(x, y)) == 0]   # (not the app's own panels, the same in both)
+    lit = sum(1 for x, y in offp if max(S.px(x, y)) > 8)
+    black = sum(1 for x, y in offp if max(T.px(x, y)) == 0)
+    notb = [(x, y, T.px(x, y)) for x, y in offp if max(T.px(x, y)) != 0][:6]
+    check(len(offp) >= 50 and lit >= 0.5 * len(offp) and black == len(offp), f"True brightness: the sky off the disc black ({black} of {len(offp)}; Shown: {lit} lit; not black: {notb})")
+    # the readout's factor = the module's rule written here: the star's light Omega_Sun 10^(-0.4 (m - m_Sun)) over its dot pi r^2 square points of 1 / K^2 sr each
+    cd = run_app(binary, work, "bh_tl_card", dict(base, PL_PANELS="blackhole.card=o", PL_SCRIPT="4:click=blackhole.skybeside.true", PL_BH_SET=f"{feed};skybeside=true;glare=eye"), frames=10)
+    tr, d, s = bh(cd, "bhtrue "), disc_note(cd), bh(cd)   # (the card's notes: the card open)
+    if tr and d and s:
+        K = 400 / (float(s["fov"]) * math.pi / 360)
+        star = math.pi * (rsun / au) ** 2 * 10 ** (-0.4 * (float(tr["brightmag"]) - sunv)) / (math.pi * rmin ** 2 / K ** 2)
+        want = float(d["bright"]) / star
+        check(abs(float(tr["fainter"]) / want - 1) < 1e-4 and float(tr["brightmag"]) < -1.4, f"the readout: the brightest star {tr['fainter']} x fainter than the disc (written here: {want:.6g}; V {tr['brightmag']})")
+        step = 0.5 / (255 * 12.92)
+        check(abs(float(tr["showsat"]) / (star / step) - 1) < 1e-4 and float(tr["below"]) > 1e6 and int(tr["shown"]) == 0, f"shows first at white {tr['showsat']} (written here {star / step:.6g}); now {tr['below']} x below the step, none drawn")
+        miss = [w for r0, w in ((cd, "fainter than"), (cd, "faintest step"), (runs["true_off"], "there are no stars"), (runs["true_off"], "brightness is not")) if not texts_has(r0, w)]
+        check(not miss, f"the readout's lines and the honest limits (missing: {miss})")
+        # turned down far enough the stars come back (the disc burns out): a thousand times below the readout's exposure (7.5 magnitudes: most of the catalogue)
+        e = math.log10(float(tr["showsat"])) - 3
+        u = run_app(binary, work, "bh_tl_low", dict(base, PL_BH_SET=f"{feed};skybeside=true;glare=off;exposure={e:.4f}"), frames=12)
+        st = stat(u)
+        U = Bmp(u.bmp)
+        lit2 = sum(1 for x, y in offp if max(U.px(x, y)) > 0)
+        check(st is not None and int(st["images"]) >= 20, f"exposure 10^{e:.2f}: stars drawn again ({st and st['images']} images)")
+        Ux = sum(1 for y in range(0, 800, 2) for x in range(0, 1280, 2) if max(U.px(x, y)) > 0)
+        check(Ux > 200, f"and on the picture ({Ux} lit points sampled; {lit2} of the sky samples)")
+    else: check(False, f"the true exposure's readout ({tr}, {d})")
+    # the glare: more light round the disc than far from it; disc points dimmed or kept (light moved), the sky near the disc brighter
+    G = Bmp(runs["true_eye"].bmp)
+    onp = [(int(x), int(y)) for x, y in (pts[0] if pts else []) if free(x, y)]
+    def near(x, y, r):
+        return any(abs(x - a0) <= r and abs(y - b0) <= r for a0, b0 in onp)
+    nearp = [(x, y) for x, y in offp if near(x, y, 40)]
+    farp = [(x, y) for x, y in offp if not near(x, y, 120)]
+    gain = lambda P: sum(lum(G.px(x, y)) - lum(T.px(x, y)) for x, y in P) / max(1, len(P))
+    gn, gf = gain(nearp), gain(farp)
+    check(len(nearp) >= 5 and len(farp) >= 5 and gn > 0 and gn > 2 * max(gf, 0), f"Glare: more light round the disc than far from it ({gn:.4g} near, {gf:.4g} far; {len(nearp)}, {len(farp)} points)")
+    darker = sum(1 for x, y in onp if lum(G.px(x, y)) < lum(T.px(x, y)) - 1e-6)
+    check(texts_has(runs["shown_eye"], "in the eye") and texts_has(runs["shown_eye"], "different veil") and darker > 0,
+          f"Glare's text; the disc gives up light to the veil ({darker} disc points darker)")
+    gl = bh(cd, "bhglare ")
+    check(gl is not None and 0.25 < float(gl["share"]) < 0.3, f"the eye spreads s of each point's light ({gl})")
+    # Most realistic picks True brightness and the eye's glare
+    m = run_app(binary, work, "bh_tl_realest", dict(base, PL_BH_SET=f"{feed};skybeside=shown;glare=off", PL_SCRIPT="6:click=blackhole.realest"), frames=12)
+    s = bh(m)
+    check(not m.scripted_missing() and s is not None and s["skybeside"] == "true" and s["glare"] == "eye", f"Most realistic: True brightness, the eye's glare ({s and (s['skybeside'], s['glare'])})")
+    # a restart keeps the settings; a 0.55.3 file opens as Sky Shown (and the eye's glare, the default)
+    sf = os.path.join(work, "bh_tl_settings.txt")
+    if os.path.exists(sf): os.remove(sf)
+    run_app(binary, work, "bh_tl_keep1", dict(base, PL_SETTINGS=sf, PL_BH_SET=f"{feed};skybeside=shown;glare=eye", PL_SCRIPT="6:click=blackhole.skybeside.true;14:click=blackhole.glare.off"), frames=22)
+    k2 = run_app(binary, work, "bh_tl_keep2", dict(BASE, PL_SETTINGS=sf), frames=10)
+    s = bh(k2)
+    check(s is not None and s["skybeside"] == "true" and s["glare"] == "off", f"a restart keeps True brightness and Glare Off ({s and (s['skybeside'], s['glare'])})")
+    old = os.path.join(work, "bh_old0553.txt")
+    with open(old, "w", encoding="utf-8", newline="\r\n") as fo:
+        fo.write("# Physics Lab settings. Written by the app; safe to delete.\ntheme=dark\nlab=Black Hole Lab\nblackhole.preset=feeding\nblackhole.disc=on\nblackhole.look=real\n")
+    o3 = run_app(binary, work, "bh_tl_old", dict(BASE, PL_SETTINGS=old), frames=10)
+    s = bh(o3)
+    check(s is not None and s["skybeside"] == "shown" and s["glare"] == "eye", f"a 0.55.3 file opens as Sky Shown, the eye's glare ({s and (s['skybeside'], s['glare'])})")
+    # Film's glow leaves the sky alone: at the paper's view, far sky pixels (the corners) are Real's with Glare Off, pixel for pixel
+    pv = "preset=feeding;spin=0.6;dist=74.1;pitch=1.5107643;fov=30"
+    fa = run_app(binary, work, "bh_tl_filmsky", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET=f"{pv};look=film"), frames=12)
+    ra = run_app(binary, work, "bh_tl_realsky", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET=f"{pv};look=real;glare=off"), frames=12)
+    F, R0 = Bmp(fa.bmp), Bmp(ra.bmp)
+    occ2 = [v for k, v in fa.rects.items() if re.match(r"occ\d+$", k) or k == "handle"]
+    corner = [(x, y) for y in range(80, 260, 3) for x in list(range(20, 260, 3)) + list(range(1020, 1260, 3))
+              if not any(o[0] - 2 <= x <= o[0] + o[2] + 2 and o[1] - 2 <= y <= o[1] + o[3] + 2 for o in occ2)]
+    same = sum(1 for x, y in corner if F.px(x, y) == R0.px(x, y))
+    check(len(corner) > 500 and same == len(corner), f"Film: its glow no longer touches the far sky ({same} of {len(corner)} sky pixels = Real's)")
+    # the chip's and the Controls panel's text over the new picture (True brightness with the glare), six themes at 1280 x 800
+    themes = ("dark", "light", "black", "paper", "monochrome", "contrast")
+    tb = dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET=f"{feed};skybeside=true;glare=eye", PL_SCRIPT="4:click=blackhole.glare.eye")
+    prefetch([((binary, work, f"bh_tl_{t}", tb), dict(frames=12, theme=t)) for t in themes])
+    for t in themes:
+        o = run_app(binary, work, f"bh_tl_{t}", tb, frames=12, theme=t)
+        B = Bmp(o.bmp)
+        hd = sorted(k for k in o.rects if k.startswith("ctlhead."))
+        for name in ("chip", hd[0] if hd else "ctlhead"):
+            r0 = o.rects.get(name)
+            if not r0: check(False, f"{t}: {name} is drawn"); continue
+            x0, y0, w, h = (int(v) for v in r0)
+            q = sorted((B.px(x, y) for y in range(y0 + 2, y0 + h - 2) for x in range(x0 + 4, x0 + w - 4)), key=lum)
+            bg = q[len(q) // 2]
+            k = len(q) // 200 if name == "chip" else 0
+            ratio = max(wcag(q[k], bg), wcag(q[-k - 1], bg))
+            check(ratio >= 4.5, f"{t}: True brightness with the glare: {name}'s text {ratio:.1f}:1 over its own background (need 4.5)")
+
 def blackhole_film():
     # the Film look's numbers as the module states them (src/blackhole/looks.h FilmChoices), to compare the labels with
     t = open(os.path.join(SRC, "blackhole", "looks.h"), encoding="utf-8").read()
@@ -566,7 +706,8 @@ def blackhole_film():
     return out
 
 PARTS = {"open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
-         "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks}
+         "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
+         "truelight": part_truelight}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]

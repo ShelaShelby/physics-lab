@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.4", "The Black Hole Lab: real light (true brightness, the eye's glare)",
+     "In the Real look with the gas disc on, two new controls. Sky beside the disc: Shown is the picture as before; True brightness puts the stars on the disc's "
+     "own scale, from each star's measured brightness against the Sun's (Willmer 2018), and the sky goes black: next to such a disc every star is billions of "
+     "times too faint to show. The card says by how much the brightest star is fainter and at which exposure it would first appear; turn the exposure down far "
+     "enough and the stars come back while the disc burns out. Glare: As an eye sees it lays the veil of light a very bright source makes inside an average eye "
+     "(the CIE's disability glare equation, 35 years, brown eyes, 0.1° to 100°); it moves light, it makes none. Most realistic picks both. In the Film look the "
+     "glow now comes from the disc's light only, so the Milky Way beside it is no longer washed out."},
     {"0.55.3", "The Black Hole Lab: the Real and Film looks",
      "In the Black Hole Lab's Controls, Look offers Real and Film. Real, with the closest-to-reality dot, is the picture as before: your spin and the standard "
      "thin disc with the colour and brightness changes of the gas's speed and gravity, real for quasars and small black holes feeding from a star. Film shows "

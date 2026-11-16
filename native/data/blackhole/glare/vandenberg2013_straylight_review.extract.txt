@@ -1,0 +1,39 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/glare/vandenberg2013_straylight_review.txt.gz
+# Reference: T. J. T. P. van den Berg, L. Franssen, B. Kruijt, J. E. Coppens, "History of ocular straylight measurement: A review", Z. Med. Phys. 23, 6-20 (2013), doi:10.1016/j.zemedi.2012.10.009 (the PDF as hosted by the Netherlands Institute for Neuroscience: sha256 e9b6a056a98c0c436f0f4a800ea4f6529f0e7e1858404665239316d14ce056dc; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://nin.nl/wp-content/uploads/sites/2/2025/08/History-of-ocular-straylight-measurement-A-review-1.pdf
+# Date read: 2026-11-16
+# sha256 of the original: 356abd3a8391163ff82dca3ab04cfdfc04371757b4382036ff879656bb627367
+# Place in the original: p. 14, A and p of the CIE equations; p. 15, Figure 4's caption (the total PSF normalised to 1 at 90 degrees) and the general glare equation (equation 11 of the CIE report, its ref. [4]); the reference list (p. 16)
+# Used by: src/blackhole/light.h (a second copy of the general glare equation, checked against the first) and tests/test_blackhole.cpp testGlare.
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin p. 14, the glare angle, the age and the pigmentation factor
+on average to log(s) = 1.1 to 1.2, values normal for a healthy       where θ is the glare angle in degrees, A the age in years and p a
+60 year old phakic eye. What causes this significant elevation       pigmentation factor (p = 0 for very dark eyes, p = 0.5 for brown
+in the pseudophakic eye? And how can this be improved?               eyes, and p = 1.0 for blue-green Caucasians; see also [20]).
+#--- end
+#--- begin p. 15, Figure 4's caption: the total glare function is normalised
+Figure 2. The CIE 1999 total glare function for a 35-year-old negroid     Figure 4. The CIE 1999 total glare function (PSF) integrated from
+(continuous line), a 35-year-old blue-green eyed Caucasian (dashed        the center (0 degrees) outwards, for the same age/pigmentation con-
+line) and a 80-year-old blue-green eyed Caucasian (dash-dotted line).     ditions as in Figure 2. At 90 degrees the integrated value is 1 by
+The vertical dotted line indicates 1 minute of arc. This is customarily   definition, since the PSF is normalized. For angles smaller than 90
+assumed to be the smallest detail that can be resolved by an eye          degrees, the fraction of light up to that angle in the PSF is indicated.
+having a visual acuity of decimal 1.                                      The fraction of light in the central part of the PSF, below 1 minute of
+                                                                          arc (dotted line) that determines visual acuity is only about 30%.
+#--- end
+#--- begin p. 15, the general glare equation (equation 11 of the CIE report)
+                                                                             To also cover the very large angle domain, more terms of
+                                                                          the total glare equation must be taken into account. This is the
+                                                                          general glare equation (equation 11 in the CIE report [4]):
+
+                                                                          PSF = [Leq /Egl ]gen.
+Figure 3. The CIE 1999 total glare function (PSF) multiplied by
+␪2 to represent it in terms of the straylight parameter for the same            = 10/θ 3 + [5/θ 2 + 0.1 · p/θ] · 1 + [A/62.5]4
+age/pigmentation conditions as in Figure 2 (Reprint with permission
+of encyclopedia of the eye, Darlene A. Dartt ed.).                                 + 2.5 · 10−3 · p,
+#--- end
+#--- begin p. 16, its reference [4]
+  [4] Vos JJ, van den Berg TJTP. Report on disability glare. CIE collection       [30] Abrahamsson M, Sjöstrand J. Impairment of contrast sensitivity func-
+      1999;135:1–9.                                                                    tion (CSF) as a measure of disability glare. Invest Ophthalmol Vis Sci
+#--- end

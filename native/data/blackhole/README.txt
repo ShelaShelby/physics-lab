@@ -111,3 +111,14 @@ Not fetched (3 tries each, HTTP 403/404 or no answer; they are book chapters wit
       Its results are taken from James et al. (A.5), (A.6) and Gralla & Lupsasca 2020b (38)-(40), (55), which cite it.
   I. D. Novikov, K. S. Thorne, "Astrophysics of black holes", same book, p. 343. Its disc is taken from Page & Thorne 1974 and Abramowicz & Fragile 2013.
 Leads of the job text that were looked at and not used: Shakura & Sunyaev 1973 (covered by the two disc papers above); Marck 1996 (Class. Quantum Grav. 13, 393).
+
+glare/ (0.55.4, the eye's glare in the Real look; the originals are in the private sources repo, the extracts here)
+bara2023_arxiv2212.09103.pdf (+ .txt.gz, _abs.html)
+    S. Bara, C. Bao-Varela, "Skyglow inside your eyes: intraocular scattering and artificial brightness of the night sky", International Journal of
+    Sustainable Lighting (2023), arXiv:2212.09103v3, saved 16 Nov 2026. Eqs. (1), (2): the CIE general glare equation, valid from 0.1 to about 100 degrees,
+    the PSF normalised to 1, the average observer of Figure 2 (35 years, p = 0.5). Used in src/blackhole/light.h; tests/test_blackhole.cpp testGlare.
+vandenberg2013_straylight_review.pdf (+ .txt.gz)
+    T. J. T. P. van den Berg, L. Franssen, B. Kruijt, J. E. Coppens, "History of ocular straylight measurement: A review", Z. Med. Phys. 23, 6-20 (2013),
+    as hosted by the Netherlands Institute for Neuroscience, saved 16 Nov 2026. p. 15: the same equation as equation 11 of the CIE report (Vos and van den
+    Berg, CIE collection 1999, 135); Figure 4's caption: the total PSF normalised to 1. A second copy, checked against the first in testGlare.
+    The CIE report itself and Vos 2003 (Clin. Exp. Optom. 86, 363) could not be saved (the publisher refused the session).

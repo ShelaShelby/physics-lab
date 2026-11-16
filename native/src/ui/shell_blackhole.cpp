@@ -8,6 +8,7 @@
 #include <string>
 
 #include "blackhole/lab.h"
+#include "blackhole/light.h"
 #include "blackhole/presets.h"
 #include "blackhole/spin_sky.h"
 #include "imgui.h"
@@ -67,7 +68,15 @@ std::string tempText(double K) {
     if (K >= 1e6) return sig(K / 1e6, 3) + " million K";
     return fmt::commas(std::round(K / (K >= 1e5 ? 1000 : 100)) * (K >= 1e5 ? 1000 : 100)) + " K";
 }
-std::string timesText(double v) { return v >= 100 ? fmt::commas(std::round(v)) : sig(v, v >= 1 ? 3 : 2); }
+// 0.55.4: a very large or very small factor as "2.95 × 10¹¹"
+std::string powText(double v) {
+    if (!(v > 0) || (v >= 1e-3 && v < 1e6)) return sig(v, 3);
+    int e = static_cast<int>(std::floor(std::log10(v)));
+    double m = v / std::pow(10.0, e);
+    if (std::round(m * 100) >= 1000) { m /= 10; e++; }
+    return sig(m, 3) + " × 10" + fmt::superscript(e);
+}
+std::string timesText(double v) { if (v > 0 && v < 1e-3) return powText(v); return v >= 100 ? fmt::commas(std::round(v)) : sig(v, v >= 1 ? 3 : 2); }
 
 // 0.55.3: the Film look's labels, each from the module (blackhole/looks.h: James et al. 2015 and the place of each choice); the UI holds no number of its own
 std::string filmSpinText() { return sig(blackhole::filmChoices().spin, 2) + ", the spin the film drew: its story needs nearly 1, slowed so the picture would not confuse (James et al. 2015, section 4.1.1)"; }
@@ -77,9 +86,17 @@ std::string filmDiscText() {
 }
 const char* kFilmShifts = "None: no colour shift and no brightness shift from the gas's speed and gravity (the film's choice, Figure 15a)";
 std::string filmColourText() { return "The paper's white balance: a " + fmt::commas(blackhole::filmChoices().whiteT) + " K black body drawn white (appendix A.6), by the app's CIE 1931 eye in place of the film stock's colours"; }
-const char* kFilmGlow = "Our own glow, in place of the film's lens flare: a simple blur of the bright parts (the film's lens data is not published)";
+const char* kFilmGlow = "Our own glow, in place of the film's lens flare: a simple blur of the disc's bright parts, laid over the sky (the film's lens data is not published)";
 const char* kFilmHonest = "A copy of the film's stated choices, not of its pictures: the artists' textures, the real lens flare and the film's colour grading are not published and are not here.";
-const char* kRealCaption = "A calculated model: the standard thin disc. Real for quasars and for small black holes feeding from a star. A real disc is blinding; the glare an eye would see is not drawn yet.";
+const char* kRealCaption = "A calculated model: the standard thin disc. Real for quasars and for small black holes feeding from a star. A real disc is blinding: Glare draws the veil an average eye would see.";
+// 0.55.4 (blackhole/light.h): the two controls of real light, and their honest limits
+const char* kGlareWhat = "Glare happens in the eye, not at the hole: a very bright light scatters inside the eye and lays a veil of light round itself. Drawn by the CIE's general "
+                         "disability glare equation for an average eye (35 years, brown eyes), from 0.1° to 100° round every bright point; it moves light, it does not make any.";
+const char* kGlareLimits = "A model of an average eye: a camera's lens would show a different veil. Not drawn: the eye's own pattern within 0.1°, its adaptation, afterimages, "
+                           "coloured rings and streaks.";
+const char* kTrueWhat = "The stars on the disc's own scale: each star's measured brightness (V magnitude) against the Sun's, its light spread over its dot. Black space here "
+                        "because the sky cannot compete with the disc, not because there are no stars.";
+const char* kTrueMap = "The sky map is not drawn: its brightness is not calibrated, and its own pixels are fainter than the catalogue stars it contains.";
 
 // a typed number: applied when it reads as a number inside [lo, hi]; the field keeps what was typed
 bool typedNumber(const char* id, char* buf, std::size_t n, const char* hint, float w, double lo, double hi, double& out) {
@@ -103,7 +120,8 @@ ChipInfo blackholeChip(const AppState& app) {
     const std::string spin = v.spin > 0 ? "spin " + sig(v.spin, 3) : std::string("no spin");
     c.sub = "A calculated model: " + spin + ", no gas  ·  our sky, seen from Earth";   // the lab's one line of what kind of picture this is (the rest: the guide)
     if (v.disc && v.bend)
-        c.sub = r.realPreset ? std::string(kWhatIf) : "A calculated model: " + spin + "; the standard thin disc, real for quasars and small black holes feeding from a star; dimmed  ·  our sky, seen from Earth";
+        c.sub = r.realPreset ? std::string(kWhatIf) : "A calculated model: " + spin + "; the standard thin disc, real for quasars and small black holes feeding from a star; dimmed" +
+                (blackhole::glareOn(v) ? ", an average eye's glare" : "") + (blackhole::trueSkyOn(v) ? "  ·  the stars at their true brightness beside it" : "  ·  our sky, seen from Earth");
     if (v.look == blackhole::Look::Film)
         c.sub = "The film's choices (James et al. 2015): " + spin + ", one temperature, no shifts, our own glow  ·  a copy of stated choices, not of the film's pictures";
     c.play = false;
@@ -155,6 +173,21 @@ void blackholeCard(AppState& app, Panel& p) {
             pStat(p, "Brightest part", timesText(L.brightY) + " × the Sun's surface in visible light");
             pStat(p, "Exposure", std::string("screen white = ") + timesText(L.white) + " × the Sun's surface" + (app.blackhole.expAuto ? " (automatic)" : " (your choice)"));
         } else pCaption(p, "The disc is out of the picture from here.");
+        if (L.any && blackhole::trueSkyOn(app.blackhole)) {                 // 0.55.4: the true exposure's numbers (blackhole/light.h, the view's trueNumbers)
+            const blackhole::ViewStats& st = app.blackholeView.stats();
+            const blackhole::TrueSkyNumbers& t = st.trueSky;
+            pStat(p, "Brightest star", powText(t.fainter) + " × fainter than the disc's brightest part (V " + sig(st.brightMag, 3) + ", its light spread over its dot)");
+            pStat(p, "On the screen", t.belowStep > 1 ? powText(t.belowStep) + " × below the faintest step it can show; it would first show at screen white = " + powText(t.showsAtWhite) + " × the Sun's surface"
+                                                      : std::string("bright enough to show at this exposure"));
+            char tq[300];
+            std::snprintf(tq, sizeof tq, "bhtrue fainter=%.6g below=%.6g showsat=%.6g starY=%.6g brightmag=%.6g shown=%d hidden=%d", t.fainter, t.belowStep, t.showsAtWhite, t.starY, st.brightMag, st.trueShown, st.trueHidden);
+            auditNote(tq);
+        }
+        if (blackhole::glareOn(app.blackhole)) {
+            char gq[120];
+            std::snprintf(gq, sizeof gq, "bhglare share=%.9g", blackhole::glareShare());
+            auditNote(gq);
+        }
         char d[260];
         std::snprintf(d, sizeof d, "bhdisc on=1 feed=%.6g outer=%.6g rin=%.6g thot=%.6g rhot=%.6g bright=%.6g white=%.6g any=%d auto=%d edgein=%.6g edgeout=%.6g filmt=%.6g", r.feed, r.rOut, r.rIn, r.tHot, r.rHot, L.brightY, L.white,
                       L.any ? 1 : 0, app.blackhole.expAuto ? 1 : 0, r.discEdgeIn, r.discEdgeOut, r.filmT);
@@ -196,11 +229,12 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
         if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the first view: distance, field of view and direction (key R)");
         endPanel(p);
     }
-    char b[400];
+    char b[560];
     const blackhole::Settings v = blackhole::shown(s);
-    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
+    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
                   s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expLog, 6).c_str(), s.spin,
-                  app.blackholeView.stats().spinFine ? 1 : 0, blackhole::lookKey(s.look), v.spin, v.disc ? 1 : 0);
+                  app.blackholeView.stats().spinFine ? 1 : 0, blackhole::lookKey(s.look), v.spin, v.disc ? 1 : 0, s.trueSky ? "true" : "shown", s.glare ? "eye" : "off",
+                  blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0);
     auditNote(b);
     return r;
 }
@@ -380,6 +414,28 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                         "in the picture is drawn at full brightness. A real disc is blinding: brighter than the Sun's surface everywhere, and blue-white. Here it is dimmed so the sky "
                         "stays visible; a real disc this bright would drown out every star.");
         }
+        if (s.disc && !film) {                                              // 0.55.4: real light (blackhole/light.h), only for the Real look with the disc on
+            pHeading(p, "Sky beside the disc");
+            int ts = s.trueSky ? 1 : 0;
+            real::markLabels("blackhole", "skybeside", {"Shown", "True brightness"});
+            const std::vector<std::string> tn{"blackhole.skybeside.shown", "blackhole.skybeside.true"};
+            if (pSegmented(p, "blackhole.skybeside", {"Shown", "True brightness"}, &ts, &tn)) s.trueSky = ts == 1;
+            if (!s.trueSky) pCaption(p, "Shown: the sky on its own brightness, so you can see it next to the disc (not on the disc's scale).");
+            else {
+                pCaption(p, kTrueWhat);
+                pCaption(p, kTrueMap);
+                if (!s.skyOurs) pCaption(p, "Sky: Black is chosen, so there are no stars to draw.", false);
+                pCaption(p, "Approximate: the V band taken as the eye's visible light; the Sun's surface as a black body at its temperature, evenly bright (Willmer 2018 for the Sun's magnitude).");
+            }
+            pHeading(p, "Glare");
+            int gl = s.glare ? 1 : 0;
+            real::markLabels("blackhole", "glare", {"Off", "As an eye sees it"});
+            const std::vector<std::string> gn{"blackhole.glare.off", "blackhole.glare.eye"};
+            if (pSegmented(p, "blackhole.glare", {"Off", "As an eye sees it"}, &gl, &gn)) s.glare = gl == 1;
+            pCaption(p, kGlareWhat);
+            if (s.glare) pCaption(p, "Worked out when the view rests: while you turn or move, the picture waits without it.", false);
+            if (s.glare) pCaption(p, std::string(kGlareLimits) + " The eye keeps " + sig(100 * (1 - blackhole::glareShare()), 3) + " % of each point's light within 0.1° and spreads the rest (CIE 1999; van den Berg et al. 2013).");
+        }
     }
     if (section("honest", "What is real in this picture", true)) {
       if (film) {                                                           // 0.55.3: the Film look
@@ -413,6 +469,10 @@ void blackholeSearch(AppState& app, const SearchAdd& add) {
     add("Black holes", "Spin: none (0)", "bhspin:0", [&app] { blackhole::setSpin(app.blackhole, 0); });
     add("Look", "Look: Real (the closest to reality)", "bhlook:real", [&app] { blackhole::setLook(app.blackhole, blackhole::Look::Real); });
     add("Look", "Look: Film (the film's choices, James et al. 2015)", "bhlook:film", [&app] { blackhole::setLook(app.blackhole, blackhole::Look::Film); });
+    add("Light", "Sky beside the disc: shown", "bhtrue:off", [&app] { app.blackhole.trueSky = false; });                       // 0.55.4
+    add("Light", "Sky beside the disc: true brightness", "bhtrue:on", [&app] { app.blackhole.trueSky = true; });
+    add("Light", "Glare: off", "bhglare:off", [&app] { app.blackhole.glare = false; });
+    add("Light", "Glare: as an eye sees it", "bhglare:eye", [&app] { app.blackhole.glare = true; });
 }
 
 }  // namespace ui::shellimpl

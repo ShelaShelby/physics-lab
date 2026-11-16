@@ -12,3 +12,11 @@ arxiv_2504.08252_html_2026-11-11.html
     being "the exponential approximation to McEwen's original polynomial weighting function proposed in [6]". McEwen's own papers could not be saved
     (ADS and the journals were not tried again: refused in earlier jobs); his polynomial's coefficients were not typed from memory.
     Used in src/render/shading.h (mcewenLunar) and the planet shader (uLunar) for the Moon only.
+
+The Sun's V magnitude (0.55.4, Black Hole Lab, the true exposure).
+
+willmer2018_arxiv1804.07788.pdf (+ .txt.gz, its pdftotext -layout text; _abs.html)
+    Saved as received on 16 Nov 2026 from https://arxiv.org/pdf/1804.07788 (C. N. A. Willmer, "The Absolute Magnitude of the Sun in Several Filters",
+    ApJS 236, 47 (2018), arXiv:1804.07788v1). Table 3, row Johnson V: absolute 4.81, apparent -26.76 (Vega system). Used in src/blackhole/light.h
+    (kSunV, kSunAbsV); tests/test_blackhole.cpp testTrueLight reads them from willmer2018_arxiv1804.07788.extract.txt (this folder) and checks that the two
+    differ by the distance modulus of 1 AU.

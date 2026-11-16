@@ -9,6 +9,7 @@
 //     pass, which draws the disc in front of the sky; a star image the disc covers (lab.h discPixel at the image's point) is not drawn. The exposure: lab.h discLook.
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -17,6 +18,7 @@
 #include <vector>
 
 #include "blackhole/lab.h"
+#include "blackhole/light.h"
 #include "blackhole/spin_sky.h"
 #include "render/renderer2d.h"
 
@@ -37,7 +39,13 @@ struct ViewStats {
     bool spinFine = false;
     double spinCoarseMs = 0, spinFineMs = 0, spinStarsMs = 0;
     long spinCoarseFills = 0, spinFineFills = 0;
+    // 0.55.4, the true exposure (light.h): the brightest catalogue star, the solid angle of a square point at the middle, the readout's numbers; of the last
+    // stars' fill, the images drawn and those below the screen's faintest step (not drawn)
+    double brightMag = 0, ptSr = 0;
+    TrueSkyNumbers trueSky;
+    int trueShown = 0, trueHidden = 0;
 };
+float catalogueBrightestMag();   // 0.55.4: the brightest catalogue star seen without the hole (the cap of a drawn image), V magnitude
 
 class BlackHoleView {
     friend void compareHook(render::Renderer2D& R, const char* spec);
@@ -71,6 +79,10 @@ public:
     // a pixel of the spinning picture through the shown table: the disc's hit and its light as discPixel (lab.h); hit order -1 for none
     DiscPixel spinPixel(const Settings& s, const HoleView& v, double X, double Y, bool light = true) const;
     static constexpr double kSpinRest = 0.3;
+    // 0.55.4: the eye's glare is made (light.h, on the processor: a fifth of a second at 1280 x 800 on 4 cores) once the view has rested for kGlareRest seconds;
+    // while it moves the picture is drawn without it. glareNow: tests draw it at once.
+    static constexpr double kGlareRest = 0.25;
+    bool glareNow = false;
     // tests (PL_BH_SPINEDGE): n points of the shown table's shadow edge on the picture (X, Y in points) and the unit direction outward (right, down), 4 numbers each
     void spinEdgePoints(const Settings& s, double W, double H, double cx, double cy, int n, std::vector<double>& out) const;
 private:
@@ -99,10 +111,16 @@ private:
     double tableDist_ = -1;
     std::uint64_t tableVer_ = 0;
     struct Dot { float x, y, r; render::Color c; };
+    bool addDot(const Settings& s, const HoleView& v, double X, double Y, double mag, const std::array<int, 3>& c);   // 0.55.4: one star image by the rule in force
+    void trueNumbers(const HoleView& v);
     std::vector<Dot> dots_;
     std::vector<StarImage> scratch_;
-    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool operator==(const Key& o) const; } key_;
+    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool operator==(const Key& o) const; } key_;
     ViewStats st_;
+    Key glareKey_;
+    double glareChangedAt_ = 0;
+    bool glareReady_ = false;
+    void glareRest(const Key& k);
 };
 
 // Tests (PL_BH_COMPARE): the card's picture against the double-precision reference (lensPixel) for the distances given, the plain sky against the Orbit

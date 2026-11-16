@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.55.3 (16 Nov 2026): the Black Hole Lab's looks (PLAN_BLACKHOLE.md step 4, first part): Controls › Look, Real (the dot; the 0.55.2 picture to the pixel) and Film (the film's choices as James et al. 2015 state them: spin 0.6, one 4500 K disc from 9.26 to 18.70 GM/c², no shifts, the paper's white balance, the app's own glow; spin and disc locked; "The paper's view"); the guide's "What the film changed"; small version (quick tests and its own UI parts).
+- 0.55.4 (16 Nov 2026): real light in the Black Hole Lab (PLAN_BLACKHOLE.md step 4, second part; src/blackhole/light.h): Real with the disc on gets "Sky beside the disc" (Shown, as 0.55.3 / True brightness: the stars on the disc's scale through the Sun's V magnitude, Willmer 2018; the map not drawn) and "Glare" (Off, as 0.55.3 / As an eye sees it, the default: the CIE general disability glare equation, light moved, not made); Film's glow from the disc's light only; small version (quick tests and its own UI parts).
 - Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
-- Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra; the eye glare and one true exposure wait for sources), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra, a faster fine table), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

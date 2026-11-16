@@ -1,6 +1,6 @@
-Black Hole Lab reference picture of the Film look (0.55.3): reference_film_r74.png, 1280 x 800
+Black Hole Lab reference picture of the Film look (0.55.3; remade in 0.55.4: the glow from the disc's light only): reference_film_r74.png, 1280 x 800
 ==============================================================================================
-Made by build/blackhole_picture --film (tests/blackhole_picture.cpp) from the physics module src/blackhole/ (no graphics card); 1.85 MB.
+Made by build/blackhole_picture --film (tests/blackhole_picture.cpp) from the physics module src/blackhole/ (no graphics card); 1.91 MB.
 
 What it shows: the Film look, the choices that O. James, E. von Tunzelmann, P. Franklin and K. S. Thorne, Class. Quantum Grav. 32, 065001 (2015), arXiv:1502.03808
 ("J15"), state for the black hole and disc of the film Interstellar, drawn on the lab's calculated hole. Every choice and its place in the paper (arXiv v2 pages):
@@ -10,8 +10,9 @@ What it shows: the Film look, the choices that O. James, E. von Tunzelmann, P. F
   No colour shift and no brightness shift from the gas's speed and gravity (Figure 15a, Figure 16's caption; section 4.2): the disc is one colour everywhere.
   The colour: the paper's white balance, a 6500 K black body with equal red, green and blue (App. A.6 p. 43); the black body by the CIE 1931 observer into sRGB
     (the app's rule for every black body) with one gain per channel, in place of the film stock's colour curves the paper does not give.
-  The glow: the app's OWN (blackhole/looks.h): the light above half of the screen's white, in 4 x 4 pixel blocks, blurred by a Gaussian of 1/80 of the picture's
-    height and 0.6 of it added back. The film's flare was the measured point-spread function of its IMAX lenses (section 4.3.1), not published: not copied.
+  The glow: the app's OWN (blackhole/looks.h): the light of the disc and its images (0.55.4: not the sky, not the stars) above half of the screen's white, in
+    4 x 4 pixel blocks, blurred by a Gaussian of 1/80 of the picture's height and 0.6 of it added back over the picture; until 0.55.3 it was made from the whole
+    picture, so the bright Milky Way beside the disc was washed out. The film's flare was the measured point-spread function of its IMAX lenses (section 4.3.1), not published: not copied.
   Camera: the paper's view (Figure 13's caption): 74.1 GM/c^2 from the hole, 86.56 degrees from the spin axis (3.44 degrees above the disc), hovering;
     the field of view, 30 degrees across the picture's height, is the lab's choice (the paper gives none).
 Not from the paper, the app's own: the sky behind (ours, seen from Earth: the Gaia map and the catalogue stars, looking towards the galactic centre), the exposure

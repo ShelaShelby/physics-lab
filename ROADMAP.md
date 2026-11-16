@@ -49,8 +49,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Celestial mechanics in the Data panel: an ephemeris table (state vectors and elements at a date, in a chosen frame) beside the Horizons tables; an integrator check (energy and angular-momentum drift against the step); Lagrange points and the Jacobi constant; the asteroids' Kirkwood gaps; a Lambert solver with porkchop plots (Earth to Mars: dates, time, delta-v).
 
 ## Black Hole Lab
-- The Real look's eye glare: the bright disc's glare as an eye would see it (**source needed**: a published model of the human eye's glare, for example the CIE's glare equations).
-- One true exposure for the sky and the disc together (**source needed**: a traceable brightness for the star catalogue and the sky map; today the disc is dimmed on its own and the sky keeps its own brightness).
+- Real light, what is left after 0.55.4: the stars' own glare (left out: under the true exposure no star reaches the screen beside the disc); the glare's change with colour and the eye's adaptation (the CIE equation has neither); a calibrated sky map (**source needed**: Gaia's map has no surface brightness); the Sun's limb darkening in the bridge (**source needed**, see "Waiting for the owner").
 - The quality levels High and Ultra (only Basic exists), and a faster fine table (6-8 s on 4 cores now: fewer rays where the sky is smooth, or the shader stepping rays, plan section 6).
 - Then, in the order the owner chose (plan steps 5-7): moving cameras (orbiting, then falling in; **source needed** before the spinning fall-in: the ray equations in ingoing Kerr coordinates), the Data panel's tables, the skin.
 - A "1979 paper" view that recomputes Luminet's figures in ink-on-paper style, with a credit.

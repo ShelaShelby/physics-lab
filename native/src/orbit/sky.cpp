@@ -54,7 +54,10 @@ double farBV(const char* key) {
 }
 
 StarDraw starDraw(double mag) {
-    const double light = kStarFaintLight * std::pow(10.0, -0.4 * kStarGamma * (mag - kStarFaintMag));   // opacity x area, square pixels
+    return starDrawLight(kStarFaintLight * std::pow(10.0, -0.4 * kStarGamma * (mag - kStarFaintMag)));   // opacity x area, square pixels
+}
+
+StarDraw starDrawLight(double light) {
     const double a0 = kPi * kStarMinRadius * kStarMinRadius;
     if (light <= a0) return {kStarMinRadius, light / a0};
     return {std::sqrt(light / kPi), 1.0};

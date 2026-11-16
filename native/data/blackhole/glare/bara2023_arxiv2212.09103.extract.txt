@@ -1,0 +1,60 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/glare/bara2023_arxiv2212.09103.txt.gz
+# Reference: S. Bara, C. Bao-Varela, "Skyglow inside your eyes: intraocular scattering and artificial brightness of the night sky", International Journal of Sustainable Lighting (2023), arXiv:2212.09103v3 (the PDF: sha256 25459ce6f499495de06f8738c65fbdfea505739093b84c9acc4c94074dbea0fc; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/2212.09103
+# Date read: 2026-11-16
+# sha256 of the original: 4897f807186e49c218939978519b43e7e7a290fc8f9e66f9fc63abe0b52030fe
+# Place in the original: section 2, Eqs. (1) and (2) and the text round them (pp. 2-3); section 4, the range of the model (p. 7)
+# Used by: src/blackhole/light.h (the eye's glare: the CIE general disability glare equation) and tests/test_blackhole.cpp testGlare, which reads the coefficients from these lines.
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin section 2 (p. 2), Eq. (1): the glare point-spread function
+within the eye. The quantitative evaluation of this luminance is made with the help of the glare point-spread
+function [21, 22], Ψ(𝜃), defined as
+
+                                                         Ψ(𝜃) = 𝐿𝑒𝑞 (𝜃)⁄𝐸𝑔𝑙 ,                                                            (1)
+
+where 𝐸𝑔𝑙 is the illuminance produced on the input pupil of the eye by a pointlike glaring source, and 𝜃 is the
+visual angle between the source and the line of sight (Figure 1). The scattering PSF has units of inverse steradians
+(sr-1) and is normalized such that its integral across the visual field is unity.
+#--- end
+#--- begin section 2 (pp. 2-3), Eq. (2): the general glare equation, its range, A and p
+    Several expressions with different degrees of complexity have been proposed for Ψ(𝜃). For the purposes of
+the present work, we will use the so-called general glare equation [21], which is valid for 𝜃 ranging from 0.1°
+to the limit of the visual field (~100°):
+
+
+
+                                                                      2
+                           S. Bará and C. Bao-Varela/International Journal of Sustainable Lighting IJSL (2023) 1-9
+
+
+
+
+                                                   10     5 0.1 · 𝑝          𝐴 4
+                                       Ψ(𝜃) =         + (   +       ) [1 + (     ) ] + 2.5 · 10−3 · 𝑝 ,                                     (2)
+                                                   𝜃3    𝜃2   𝜃             62.5
+
+where 𝜃 is expressed in degrees, 𝐴 is the age of the observer (in years) and 𝑝 is an iris pigmentation factor,
+equal to 0 for dark eyes, 0.5 for brown, and 1.0 for blue-green ones.
+#--- end
+#--- begin section 2 (p. 3), the photopic band and the V band
+magnitudes per square arcsecond, mag/arcsec2. The CIE photopic spectral luminous efficiency function [24] is
+the native photometric band for defining the astronomical magnitude system corresponding to the brightness in
+cd·m–2 [25]. However, the Johnson-Cousins V band [26] can also be used for this purpose. This facilitates the
+comparisons with other works, since skyglow contributions are frequently expressed or measured in this
+astronomical band. It shall be kept in mind that the accurate conversion from cd·m–2 to magV/arcsec2 depends on
+the spectrum of the light [27, 28]. For the figures below we have chosen a transformation based on an equivalence
+#--- end
+#--- begin Figure 2's caption (p. 3): the average observer
+Fig. 2. Value of 𝐿𝑒𝑞 , the equivalent sky brightness (glare luminance), for several amounts of illuminance on the eye pupil (in lx). Average
+observer of age 35 yr and pigmentation factor p=0.5 When looking toward the zenith, the relevant input is the horizontal illuminance on the
+#--- end
+#--- begin section 4 (p. 7), the range and what the model leaves out
+source (assumed pointlike) and the line of sight. The standard PSFs represent the scattering for an average observer,
+with controls of age and eye pigmentation. The PSF model used in this paper, Eq. (2), is valid with enough
+accuracy for scattering angles within the interval 𝜃 ∈ [0.1°, 100°], which is more than enough for our present
+purposes. Other standard forms of the PSF, with wider or narrower angular ranges of validity, may be found in
+[21, 22]. Note that the structure of the retinal image at smaller angles (i.e. 𝜃 ≤ 6 arcmin) is strongly determined
+by the particular features of the geometric and diffractive eye aberration pattern of each person [17-20], rather
+#--- end

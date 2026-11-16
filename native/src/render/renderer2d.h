@@ -204,7 +204,17 @@ public:
         // the threshold, glow[2] the blur's sigma over the picture's height; blocks of 4 x 4 pixels), made when the picture is drawn anew and kept with it.
         float discFix[4] = {0, 0, 0, 0};
         float glow[3] = {0, 0, 0};
+        // 0.55.4 (blackhole/light.h): glareKeep > 0: the eye's glare over the finished bent picture: the disc's light (before its colour is scaled into the screen)
+        // averaged over blocks of glareBlock(...) pixels, read back, glareVeil(...) makes the veil on the processor; the picture is then the disc's light x glareKeep
+        // (its colour scaled into the screen when brighter), the sky behind it, and the veil (bilinear between the blocks' centres). Made when the picture is drawn
+        // anew and kept with it. W, H, cx, cy (window pixels, y up) and K (pixels per radian) are the picture's.
+        float glareKeep = 0;
+        int (*glareBlock)(int W, int H, double cx, double cy, double K) = nullptr;
+        void (*glareVeil)(int W, int H, double cx, double cy, double K, const std::vector<float>& src, std::vector<float>& veil, double out[3]) = nullptr;
     };
+    // 0.55.4: the last glare made (tests and the benchmark): the block in pixels, the grid, the read-back and the veil's time (ms), the light spread and laid (white x sr)
+    struct GlareStats { int b = 0, nx = 0, ny = 0; double readMs = 0, veilMs = 0, spread = 0, laid = 0; long made = 0; };
+    const GlareStats& glareStats() const { return glareStats_; }
     void lensSky(const LensSky& s);
     long lensRedraws() const { return lensRedraws_; }   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
@@ -265,6 +275,13 @@ private:
     int glowW_ = 0, glowH_ = 0;
     bool glowValid_ = false;
     void makeGlow(const LensSky& L, int fbW, int fbH);
+    GLuint bhLayer_[2] = {0, 0};                   // 0.55.4: the disc's light and the sky behind it (float), lensFbo_'s attachments 1 and 2 while a glow or the glare is made
+    int layerTexW_ = 0, layerTexH_ = 0;
+    GLuint glareDown_ = 0, glareAdd_ = 0, glareFbo_ = 0, glareSrcTex_ = 0, glareVeilTex_ = 0;
+    int glareNx_ = 0, glareNy_ = 0, glareB_ = 1;
+    bool glareValid_ = false;
+    GlareStats glareStats_;
+    void makeGlare(const LensSky& L, int fbW, int fbH);
     std::uint64_t kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     GLint lnDisc_ = -1, lnDU_ = -1, lnDP_ = -1, lnDC_ = -1, lnDN_ = -1, lnDS_ = -1, lnDA_ = -1, lnDR_ = -1, lnDT_ = -1, lnSky_ = -1;
     std::uint64_t discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0);

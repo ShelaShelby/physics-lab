@@ -10,6 +10,7 @@
 #include <cstring>
 #include <string>
 
+#include "blackhole/light.h"
 #include "blackhole/spin.h"
 #include "orbit/sky.h"
 #include "render/gl_loader.h"
@@ -27,11 +28,56 @@ float brightestMag() {
     static const float m = [] { float b = 99; for (const orbit::SkyStar& s : orbit::skyData().stars) b = std::min(b, s.mag); return b; }();
     return m;
 }
+// 0.55.4: the eye's glare for the renderer (light.h): the finest block and the veil, on the picture's own grid
+int glareBlockFn(int W, int H, double cx, double cy, double K) { return glareGrid(W, H, cx, cy, K).b; }
+void glareVeilFn(int W, int H, double cx, double cy, double K, const std::vector<float>& src, std::vector<float>& veil, double out[3]) {
+    GlareSums g;
+    glareVeil(glareGrid(W, H, cx, cy, K), src, veil, &g);
+    out[0] = g.ms; out[1] = g.spread; out[2] = g.laid;
+}
+// 0.55.4: the sRGB encoding of a linear opacity (IEC 61966-2-1), so a dot laid over black at this opacity shows the star's true light
+double encodeSrgb(double l) { l = std::clamp(l, 0.0, 1.0); return l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055; }
 }  // namespace
+
+float catalogueBrightestMag() { return brightestMag(); }
+
+// One star image as a dot (both pictures' rule): Shown: the night sky's tone map (orbit/sky.h starDraw); 0.55.4, the true exposure (light.h): the star's own
+// light on the disc's scale, spread over its dot, at the screen's white; an image below the screen's faintest step is not drawn (it would draw nothing).
+bool BlackHoleView::addDot(const Settings& s, const HoleView& v, double X, double Y, double mag, const std::array<int, 3>& c) {
+    orbit::StarDraw d;
+    double a;
+    if (trueSkyOn(s)) {
+        d = orbit::starDrawLight(starTrueLight(mag, st_.look.white, pointSolidAngle(v.K, v.cx, v.cy, X, Y)));
+        if (!(d.alpha >= kScreenStep)) { st_.trueHidden++; return false; }
+        a = encodeSrgb(d.alpha);
+        st_.trueShown++;
+    } else {
+        d = orbit::starDraw(mag);
+        a = d.alpha;
+    }
+    dots_.push_back({static_cast<float>(X), static_cast<float>(Y), static_cast<float>(d.radius), render::rgba(c[0], c[1], c[2], static_cast<float>(a))});
+    return true;
+}
+
+// 0.55.4: the glare waits until the view has rested (blackhole_view.h kGlareRest)
+void BlackHoleView::glareRest(const Key& k) {
+    static const bool wait = std::getenv("PL_BH_SPINWAIT") != nullptr;   // (automatic checks: at once)
+    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (!(k == glareKey_)) { glareKey_ = k; glareChangedAt_ = now; }
+    glareReady_ = glareNow || wait || now - glareChangedAt_ >= kGlareRest;
+}
+
+// 0.55.4: the readout's numbers for the true exposure (light.h trueSkyNumbers): the brightest catalogue star at the middle of the picture beside the disc's brightest part
+void BlackHoleView::trueNumbers(const HoleView& v) {
+    st_.brightMag = brightestMag();
+    st_.ptSr = 1 / (v.K * v.K);
+    st_.trueSky = trueSkyNumbers(st_.brightMag, st_.look.brightY, st_.look.white, st_.ptSr);
+}
 
 bool BlackHoleView::Key::operator==(const Key& o) const {
     return W == o.W && H == o.H && cx == o.cx && cy == o.cy && dist == o.dist && fov == o.fov && yaw == o.yaw && pitch == o.pitch && bend == o.bend && sky == o.sky &&
-           disc == o.disc && outer == o.outer && feed == o.feed && mass == o.mass && exp == o.exp && expAuto == o.expAuto && spin == o.spin && spinVer == o.spinVer && look == o.look;
+           disc == o.disc && outer == o.outer && feed == o.feed && mass == o.mass && exp == o.exp && expAuto == o.expAuto && spin == o.spin && spinVer == o.spinVer && look == o.look &&
+           trueSky == o.trueSky && glare == o.glare;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -223,7 +269,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.s0 = table_->s0(); L.ds = table_->ds();
         L.tableVersion = tableVer_;
     }
-    L.sky = s.skyOurs;
+    L.sky = s.skyOurs && !trueSkyOn(s);                                    // 0.55.4: under the true exposure the map is not drawn (light.h)
     if (lookRule(s.look).glow) { L.glow[0] = static_cast<float>(kGlowStrength); L.glow[1] = static_cast<float>(kGlowThreshold); L.glow[2] = static_cast<float>(kGlowSigma); }   // 0.55.3 (looks.h)
     if (s.spin > 0 && s.bend && spinMatches(s)) {                            // 0.55.2: the spinning hole
         const SpinTable& T = *spin_;
@@ -266,6 +312,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
                 for (int k = 0; k < 3; k++) L.discFix[k] = static_cast<float>(m > 1 ? c[k] / m : c[k]);
                 L.discFix[3] = 1;
             }
+            if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
         }
         return L;
     }
@@ -286,6 +333,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         const DiscPhys p = discPhys(s);
         L.tScale = std::pow(p.fluxScale() / stefanBoltzmann(), 0.25);       // T = tScale F(r)^(1/4), F for Mdot = M = 1 (disc.h)
         L.white = st_.look.white;
+        if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
     }
     return L;
 }
@@ -300,8 +348,9 @@ void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, dou
     const bool disc = s.disc && s.bend;
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; return; }      // Sky: Black and no disc: nothing is lit, the picture is black
     if (disc) ensureDisc(s.dist);
-    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, 0.0, 0, static_cast<int>(s.look)};
+    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, 0.0, 0, static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
     const bool changed = !(k == key_);
+    glareRest(k);
     if (changed) st_.look = disc ? discLook(*disc_, s, v, W, H) : DiscLook{};   // the exposure first: the shader needs the white
     R.lensSky(lensFor(s, v));
     if (!s.skyOurs) { dots_.clear(); key_ = k; return; }
@@ -310,6 +359,8 @@ void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, dou
         int hidden = 0;
         const auto t0 = std::chrono::steady_clock::now();
         dots_.clear();
+        st_.trueShown = st_.trueHidden = 0;
+        trueNumbers(v);
         const orbit::Sky& S = orbit::skyData();
         const Vec3 hole = viewMiddle(v);
         const float cap = brightestMag();
@@ -325,9 +376,7 @@ void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, dou
                 if (disc && discPixel(*disc_, s, v, X, Y, false).hit.order >= 0) { hidden++; continue; }   // behind the opaque disc
                 double mag = im.mag;
                 if (mag < cap) { mag = cap; capped++; }
-                const orbit::StarDraw d = orbit::starDraw(mag);
-                const auto& c = S.colours[st.bucket];
-                dots_.push_back({static_cast<float>(X), static_cast<float>(Y), static_cast<float>(d.radius), render::rgba(c[0], c[1], c[2], static_cast<float>(d.alpha))});
+                if (!addDot(s, v, X, Y, mag, S.colours[st.bucket])) continue;
                 images++;
                 if (im.order > 0) extra++;
                 any = true;
@@ -353,8 +402,9 @@ void BlackHoleView::drawSpin(render::Renderer2D& R, const Settings& s, double W,
     const bool disc = s.disc;
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; return; }
     if (disc) ensureDiscF(s.spin);
-    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, s.spin, spinVer_, static_cast<int>(s.look)};
+    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, s.spin, spinVer_, static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
     const bool changed = !(k == key_);
+    glareRest(k);
     if (changed && disc) {                                                  // the exposure first (lab.h discLook's rule, through the spin table)
         DiscLook L;
         const int step = 4;
@@ -376,6 +426,8 @@ void BlackHoleView::drawSpin(render::Renderer2D& R, const Settings& s, double W,
         int hidden = 0, stars = 0, images = 0, capped = 0;
         const auto t0 = std::chrono::steady_clock::now();
         dots_.clear();
+        st_.trueShown = st_.trueHidden = 0;
+        trueNumbers(v);
         const orbit::Sky& S = orbit::skyData();
         const float cap = brightestMag();
         const double ph = cameraPhi(v), c = std::cos(ph), sn = std::sin(ph);
@@ -396,9 +448,7 @@ void BlackHoleView::drawSpin(render::Renderer2D& R, const Settings& s, double W,
                 if (disc && spinPixel(s, v, X, Y, false).hit.order >= 0) { hidden++; continue; }   // behind the opaque disc
                 double m2 = mag;
                 if (m2 < cap) { m2 = cap; capped++; }
-                const orbit::StarDraw dd = orbit::starDraw(m2);
-                const auto& col = S.colours[st.bucket];
-                dots_.push_back({static_cast<float>(X), static_cast<float>(Y), static_cast<float>(dd.radius), render::rgba(col[0], col[1], col[2], static_cast<float>(dd.alpha))});
+                if (!addDot(s, v, X, Y, m2, S.colours[st.bucket])) continue;
                 images++;
                 any = true;
             }
@@ -444,6 +494,7 @@ std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H) {
     setDistance(s, 74.1);
     s.pitch = 1.511;
     setFov(s, 30);
+    s.glare = false;                                                    // 0.55.4: Glare Off (and Sky Shown, the default) is 0.55.3's Real
     view.ensureSpin(s, true);
     Fbo f = makeFbo(W, H, false);
     R.begin(W, H);
@@ -509,8 +560,11 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         render::Renderer2D::LensSky Lc = view.lensFor(s, v);
         const float glow0[3] = {Lc.glow[0], Lc.glow[1], Lc.glow[2]};
         Lc.glow[0] = Lc.glow[1] = Lc.glow[2] = 0;
-        std::vector<unsigned char> plain, glowed;
+        std::vector<unsigned char> plain, glowed, discOnly;
         read8(Lc, plain);
+        Lc.sky = false;                                                     // 0.55.4: the disc's own light (the glow is made from it alone)
+        read8(Lc, discOnly);
+        Lc.sky = true;
         Lc.glow[0] = glow0[0]; Lc.glow[1] = glow0[1]; Lc.glow[2] = glow0[2];
         read8(Lc, glowed);
         // the double lookup at every pixel (row 0 at the bottom, as read back)
@@ -572,14 +626,28 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 }
             }
         colours = static_cast<int>(seen.size());
-        // the glow against its reference on the same picture (glowReference works top-down; at a height divisible by 4 the blocks are the same either way)
-        std::vector<double> lin(static_cast<std::size_t>(W0) * H0 * 3);
+        // the glow against its reference (glowReference works top-down; at a height divisible by 4 the blocks are the same either way): 0.55.4: made from the
+        // disc's own light (the picture with the sky black), added to the picture with the sky; where the reference adds nothing the picture is the plain one
+        std::vector<double> lin(static_cast<std::size_t>(W0) * H0 * 3), dl(lin.size());
         for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++)
             for (int k = 0; k < 3; k++) {
-                const double e = plain[q * 4 + k] / 255.0;
+                const double e = plain[q * 4 + k] / 255.0, e2 = discOnly[q * 4 + k] / 255.0;
                 lin[q * 3 + k] = e <= 0.04045 ? e / 12.92 : std::pow((e + 0.055) / 1.055, 2.4);
+                dl[q * 3 + k] = e2 <= 0.04045 ? e2 / 12.92 : std::pow((e2 + 0.055) / 1.055, 2.4);
             }
-        const std::vector<double> gref = glowReference(lin, W0, H0);
+        for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++)   // (a pixel wholly on the disc: its colour unrounded, as the glow pass reads it)
+            if (discOnly[q * 4] == want[0] && discOnly[q * 4 + 1] == want[1] && discOnly[q * 4 + 2] == want[2]) for (int k = 0; k < 3; k++) dl[q * 3 + k] = std::clamp(fix[k], 0.0, 1.0);
+        const std::vector<double> gref = glowReference(dl, W0, H0);
+        int skyTouched = 0, skyFree = 0;
+        for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++) {
+            if (gref[q * 3] > 0 || gref[q * 3 + 1] > 0 || gref[q * 3 + 2] > 0) continue;
+            skyFree++;
+            for (int k = 0; k < 3; k++) if (glowed[q * 4 + k] != plain[q * 4 + k]) { skyTouched++; break; }
+        }
+        {   const std::vector<double> gAll = glowReference(lin, W0, H0);  // what 0.55.3's rule (from the whole picture) would have added beyond the disc's glow
+            double extra = 0;
+            for (std::size_t q = 0; q < gAll.size(); q++) extra += std::max(0.0, gAll[q] - gref[q]);
+            std::printf("PLBHGLOWSKY free=%d touched=%d oldextra=%.6g\n", skyFree, skyTouched, extra); }
         int darker = 0, glowDiff = 0, brighter = 0;
         double added = 0, addedRef = 0;
         for (std::size_t q = 0; q < static_cast<std::size_t>(W0) * H0; q++)
@@ -617,6 +685,48 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 dropFbo(f);
             }
             std::printf("PLBHTIME film size=%dx%d discms=%.1f withglowms=%.1f glowms=%.1f\n", sz[0], sz[1], best[0], best[1], best[1] - best[0]);
+        }
+    }
+    // 0b. 0.55.4, the eye's glare on Real's saved case: the light the veil lays on the picture against the light it spreads (light leaving the picture: the
+    //     difference, which is small and positive here), the picture with Glare Off = without the glare's passes (the hash above), the glare's time at
+    //     1280 x 800 and 3840 x 2160 (the picture drawn anew with and without it, best of 3), the share of the light kept
+    {
+        BlackHoleView view;
+        view.glareNow = true;
+        Settings s = settingsDefaults();
+        applyPreset(s, kFeedingKey);
+        setSpin(s, 0.6);
+        setDistance(s, 74.1);
+        s.pitch = 1.511;
+        setFov(s, 30);
+        view.ensureSpin(s, true);
+        for (const auto& sz : {std::array<int, 2>{1280, 800}, std::array<int, 2>{3840, 2160}}) {
+            double best[2] = {1e30, 1e30};
+            render::Renderer2D::GlareStats gs;
+            Fbo f = makeFbo(sz[0], sz[1], false);
+            for (int withGlare = 0; withGlare < 2; withGlare++) {
+                Settings s2 = s;
+                s2.glare = withGlare == 1;
+                for (int rep = 0; rep < 3; rep++) {
+                    s2.yaw += 0.001;
+                    R.begin(sz[0], sz[1]);
+                    view.draw(R, s2, sz[0], sz[1], sz[0] / 2.0, sz[1] / 2.0);   // (the exposure for this view first, as the app does)
+                    R.end(sz[0], sz[1], 0, f.fbo);
+                    const HoleView v2 = holeView(s2, sz[0], sz[1], sz[0] / 2.0, sz[1] / 2.0);
+                    render::Renderer2D::LensSky L2 = view.lensFor(s2, v2);
+                    L2.cx += 1e-9;                                              // (a new picture: drawn anew)
+                    R.begin(sz[0], sz[1]);
+                    R.lensSky(L2);
+                    const auto t0 = std::chrono::steady_clock::now();
+                    R.end(sz[0], sz[1], 0, f.fbo);
+                    plgl::glFinish();
+                    best[withGlare] = std::min(best[withGlare], msSince(t0));
+                    if (withGlare) gs = R.glareStats();
+                }
+            }
+            dropFbo(f);
+            std::printf("PLBHGLARE size=%dx%d b=%d grid=%dx%d spread=%.9g laid=%.9g keep=%.9g readms=%.1f veilms=%.1f withoutms=%.1f withms=%.1f glarems=%.1f\n", sz[0], sz[1], gs.b, gs.nx, gs.ny,
+                        gs.spread, gs.laid, 1 - glareShare(), gs.readMs, gs.veilMs, best[0], best[1], best[1] - best[0]);
         }
     }
     if (std::getenv("PL_BH_COMPARE_LOOKS")) { R.begin(1280, 800); return; }   // (by hand: the looks part only)

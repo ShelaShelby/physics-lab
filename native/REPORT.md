@@ -1,40 +1,40 @@
-# 0.55.3: the Real and Film looks (Black Hole Lab, plan step 4, first part)
-## What the user gets
-- Controls › Look: Real (the closest-to-reality dot; Most realistic picks it) / Film; key `blackhole.look`, a file without it opens as Real. Real is 0.55.2's picture to the pixel;
-  its caption: "A calculated model: the standard thin disc. Real for quasars and for small black holes feeding from a star. A real disc is blinding; the glare an eye would see is not drawn yet."
-- Film: each choice labelled in the panel, the card, the chip and the guide's new part "What the film changed" (one row per choice: the physics, the film's choice, the paper's reason,
-  where). Spin and disc controls show the film's values, locked, with a line why; the user's own spin and disc come back with Real. "The paper's view" sets 74.1 GM/c², 86.56° from the axis.
-  About: J15's entry names its use for the Film look. No fourth preset: **the paper gives no mass for the film's black hole** (its text searched for Gargantua, solar mass, M⊙, million and 10^8: none gives one).
-## The Film choices, each read in James, von Tunzelmann, Franklin & Thorne 2015 (arXiv v2 pages; saved text in the sources repo, extract data/blackhole/arxiv/1502.03808_james2015.extract.txt)
-- Spin 0.6: §4.1.1 p. 26, §1.2 p. 5, App. A.3.1 p. 39; reason p. 26 ("too confusing for a mass audience"); the story needs a/M ≃ 1 (§1.2), the paper's disc figures use 0.999 (Figs 13-15).
-- Disc: thin, "marginally optically thick" (drawn opaque), not accreting, one temperature T = 4500 K, black body (§4.1.1 p. 26). Edges 9.26 and 18.70 M: Fig. 13's caption p. 24 (the
-  paint-swatch disc; Fig. 14 "the same geometry", Fig. 15a = Fig. 14 at 0.6). The paper gives no other edges for the film's disc.
-- No colour and no brightness shift: Fig. 15a and 16 captions, §4.1.1 p. 24 ("transported ... unchanged"), reason §4.2 ("exceedingly lopsided").
-- Colour: App. A.6 p. 43: a 6500 K black body with equal R, G, B by one gain per channel. The paper's camera used film-stock curves (its ref. [64], not given): the app's CIE 1931 table
-  into sRGB in their place, gains keeping 6500 K's luminance. The Film disc = gains × blackBodyLinear(4500 K): (255, 227, 188) at automatic exposure.
-- Glow: Fig. 16 / §4.3.1: the flare was the measured point-spread function of the IMAX lenses, not published. Ours (labelled "our own glow, in place of the film's lens flare"):
-  **the light above half the screen's white, averaged in 4 × 4 blocks, blurred by a Gaussian of σ = height/80 (to 3σ, light outside the picture counted as none), 0.6 of it added back in
-  linear light**. It only adds light; it does not conserve light (it adds 0.6 × the light above the threshold, spread out; the reference loses none away from the edges, test 2e-3).
-  Made when the picture is drawn anew and kept with it (3 small passes); switching looks refills no table unless the spin changes (tested at the film's spin).
-- Paper's view: Fig. 13's caption "rc = 74.1M and θc = 1.511 (86.56o)": the two angles disagree in the last digit (1.511 rad = 86.574°; 86.56° = 1.51076 rad, which rounds to 1.511):
-  the lab uses 86.56° (more digits). The caption gives no field of view nor the camera's motion; the lab's camera hovers there.
-- Not in the paper, so not in the app: the mass, the textures, the real flare, the colour grading, the "embellishments" (§4.2 p. 28). The app text says Film is a copy of stated choices.
-## Module (src/blackhole/looks.h, .cpp: FilmChoices with every number's place, lookRule, white balance, glowReference, the guide's rows); lab.h: Settings::look, shown(), paperView(),
-  discLight() (Real: 0.55.2's rule to the bit; Film: one colour), discGeom (Film: the paper's edges). Same ray tables and images; the Kerr shader gets one uniform (the fixed colour).
-## Tests
-- blackhole_physics 764 checks with PL_SOURCES_DIR (38 new; 762 without): every Film number parsed from the paper's text (the saved original via stb's zlib when PL_SOURCES_DIR is set,
-  all 14 extract blocks found in it; the extract otherwise); the Film colour = CIE black body at 4500 K through the gains (6500 K → equal channels to 1e-12); same light at g = 1.5 and 0.4
-  and at every radius (Real: 5.4 × brighter and bluer on the approaching side); Real's light = 0.55.2's rule exactly; settings, readout, paper's view; the glow reference adds only, loses none.
-- Picture test (check_blackhole precision, Mesa llvmpipe): Real's saved case (feeding preset, spin 0.6, the paper's view, fov 30) = 0.55.2's picture, hash 7fff50741d132f22 made with
-  0.55.2's code before any change. Film at the paper's view against the double lookup: 0 pixels of another image, edges moved ≤ 0.0018 px (limit 0.1),
-  radii 9.26005..18.69989, one colour over 56,179 fully covered disc pixels; with the glow = its double reference to 1 level of 255, 0 channels darker, added light 0.3 % from the reference's.
-- **Found and fixed (test harness only)**: the renderer keeps the last spin/disc table by its version number, and each view counted from 1, so a second view in one process (the
-  picture tests draw several) could be shown the first view's table. The first run of precision failed on spin 0.5 that way (and Film's edges moved 0.16 px, a table of 1.511 rad).
-  Versions are now unique across views (blackhole_view.cpp nextVersion). The app has one view: no user saw it.
-- UI part `looks` (new, 39 checks, 1280 × 800): Look and its dot; Film locks (typed spin and Off refused), labels with the module's numbers, chip changes, paper's view, no refill at the same
-  spin, Most realistic → Real, restart keeps Film, a 0.55.2 file opens as Real; six themes: card, chip and Look heading ≥ 4.5:1 over the Film disc.
-- check.sh quick (PL_SOURCES_DIR set): 17 of 17. By hand: looks 39, disc 23, spin 19, layout 12 (its section list now has "look": reference changed on purpose), precision 74 (on the second run, after the fix above).
-  **The full UI suite was not run (small version).**
-## Measurements (llvmpipe, 4 cores): glow pass 11-19 ms at 1280 × 800, 131-135 ms at 3840 × 2160 (two runs; Film without it 43-51, 344-352 ms); only on a new picture.
-- docs/blackhole/reference_film_r74.png (+ .txt naming every choice): Film at the paper's view, 1280 × 800, 1.85 MB, by `blackhole_picture --film`.
-## Skipped / left: quality levels High and Ultra, the eye's glare, one true exposure (ROADMAP lines, sources needed). Looks: Film at the paper's view, from above, Real/Film side by side, the guide.
+# 0.55.4: real light in the Black Hole Lab (plan step 4, second part)
+## A. Film's glow from the disc only (fix)
+- The lens pass now also writes the disc's own light and the sky behind it to two float layers (only while a glow or the glare is made; otherwise the draw is
+  0.55.3's). The glow reads the disc layer: the sky and the stars are drawn unchanged under it. Rule, label, guide, looks.h and the reference caption updated.
+- Test (precision): every pixel the reference leaves alone equals the no-glow picture (802,336 pixels, 0 touched; 0.55.3's rule would have added 253,927 more
+  units of light over the sky); the glow = its double reference made from the disc alone (1 level, added light 0.5 % off). docs/blackhole/reference_film_r74.png remade.
+## B. One true exposure (src/blackhole/light.h)
+- Bridge: the catalogue's mag is V (HYG README fields 12 and 25, saved); the Sun's apparent V = −26.76 (Willmer 2018, ApJS 236, 47, Table 3, Johnson V, col. 5);
+  a star's light = Ω_Sun·10^(−0.4(m+26.76)) in (Sun's surface luminance × sr), Ω_Sun = π(R_Sun/au)² (IAU values, units.h). The disc was already on the Sun's
+  surface scale. Approximate (stated): V as the eye's visible light, the Sun a 5,772 K black body, evenly bright. A star is spread over its drawn dot (sky.h starDrawLight, now the one rule; starDraw = it with the tone map); a dot shows when its light reaches
+  the 8-bit screen's faintest step, 0.5/(255·12.92) of white (IEC 61966-2-1). The Gaia map is not drawn under True (not calibrated; the app says so).
+- Factor (feeding preset, 20 GM/c², fov 90°, 1280 × 800, automatic exposure): Sirius (V −1.46) is 2.95 × 10¹¹ × fainter than the disc's brightest part and
+  9.6 × 10⁷ × below the screen's step; it first shows at screen white 5.7 × 10⁻⁶ Sun's surfaces. The exposure slider now reaches 10⁻¹⁰ (was 10⁻¹).
+- Controls (Real, disc on): Sky beside the disc: Shown (default) / True brightness (the dot); the card gives the factor and the exposure where a star first shows.
+- Tests (blackhole_physics testTrueLight): Willmer's row and abstract parsed (and found in the saved original); absolute − apparent = 5 log10(10 pc/au) to 0.01;
+  the identity (Sun's magnitude over the Sun's disc = 1 to 1e-14); Pogson (5 mag = 100×); starDraw = starDrawLight; the step; a star shows exactly at the exposure
+  the readout names; settings and a 0.55.3 file (Shown).
+## C. The eye's glare (light.h, light.cpp)
+- Model: the CIE general disability glare equation (Vos & van den Berg, CIE 135/1999 eq. 11), printed identically by Bará & Bao-Varela 2023 (arXiv:2212.09103,
+  Eq. 2) and van den Berg et al. 2013 (Z. Med. Phys. 23, 6, p. 15): Ψ = 10/θ³ + (5/θ² + 0.1p/θ)[1 + (A/62.5)⁴] + 2.5·10⁻³p sr⁻¹, θ in degrees, 0.1°–100°.
+  Eye: 35 years, p = 0.5 (brown; Bará's Figure 2 observer). The PSF is normalised to 1 (both papers): s = ∫ from 0.1° to 100° = 0.27934 is spread, 1 − s = 0.72066
+  stays within 0.1°: light moved, not made. Left out (app text): the pattern within 0.1°, adaptation, afterimages, rings and streaks, colour dependence; a camera differs.
+- Picture: disc light (before its colour is scaled into the screen) averaged in blocks of 0.2°, read back; the veil on the CPU by a multi-level sum (near pairs:
+  Ψ's mean over the two blocks on the source's local map, a table; far pairs: Ψ at the exact angle with the coarse source's spread as a second-order term; 3 × 3
+  points per coarse block, quadratic within each parent); composite = 0.72 × disc + sky + veil. Made only when the picture is drawn anew and only once the view
+  has rested 0.25 s (while it moves, no glare; the panel says so). Glare: Off / As an eye sees it (the dot, default with the disc); Most realistic picks both.
+- Tests (testGlare, 40 checks with the true-exposure ones): the equation's text in both extracts and saved originals; Ψ = the printed formula at 8 angles × 9 eyes
+  (2e-16); s by Simpson in ln θ = Gauss-Legendre (1e-9); a point in a fisheye holding the full 100°: laid/spread 0.99997 (limit 1 %); a point near the edge: laid
+  0.2409 + outside the picture 0.0382 (sphere quadrature) = s 0.2793 (1 %); the function itself from 1° to 55° (0.4 % from 3°, 2.3 % at 1°, the block's size);
+  the levels against every pair directly 0.15 % (where the veil is above 1 % of its peak; farther, near the 100° edge, coarse blocks straddle it).
+- Measured (llvmpipe, 4 cores, Real saved case): 1280 × 800: blocks of 5 px, veil 169 ms, picture 45 → 216 ms; 3840 × 2160: 14 px, veil 181 ms, 366 → 717 ms.
+  On the picture 88.6 % of the spread light lands inside it (fov 30°). Unchanged, checked: Real with Glare Off and Sky Shown = 0.55.3 (hash 7fff50741d132f22).
+## UI part `truelight` (new, 28 checks; the job called it `light`, a name the 0.55.0 part already has): controls only in Real with the disc; True blacks the sky,
+  readout = the rule written in Python; 1000× lower exposure brings ≥ 20 star images back; the glare lights the sky near the disc > 2× farther out and takes light
+  from the disc; Most realistic; restart; a 0.55.3 file (Shown, eye); Film's far sky = Real's pixel for pixel; chip and panel ≥ 4.5:1 in six themes.
+- Reference: docs/blackhole/reference_eye_r74.png (+ .txt; True brightness with the glare, 0.22 MB), reference_film_r74.png remade (1.91 MB).
+## Sources (private repo; extracts + SOURCES.md here): Willmer 2018, the HYG README, Bará 2023, van den Berg 2013. The CIE report and Vos 2003: publisher 403.
+## Tests run: check.sh quick (PL_SOURCES_DIR set) 17 of 17 (blackhole_physics 804 checks); by hand: truelight 28, precision 78, looks 39, disc 23, spin 19, all passing.
+  disc's "not elsewhere" failed at first (the default glare veils the sky round the disc): its runs now set glare=off (reference changed on purpose). Other
+  ui_blackhole parts that draw a disc were not run. **The full UI suite was not run (small version).**

@@ -30,3 +30,8 @@ iau2015_resolution_b2_arxiv1510.06262.pdf
     Saved as received on 11 Nov 2026 from https://arxiv.org/pdf/1510.06262 (IAU 2015 Resolution B2 on bolometric magnitudes, Mamajek et al.).
     Eq. (4): m = -2.5 log(f / f0), Pogson's scale: a star's light f is proportional to 10^(-0.4 m). The app draws every star by one rule
     (src/orbit/sky.h starDraw): drawn light (opacity x disc area) = 1.2 x (f / f(m = 6.6))^0.5 square pixels.
+
+hyg_readme.md (0.55.4)
+    Saved as received on 16 Nov 2026 from https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/README.md (the HYG Database's description of
+    its fields, CC BY-SA 4.0). Field 12: "mag: The star's apparent visual magnitude"; field 25: the variables' range "adjusted to the V magnitude scale to match
+    the "mag" field". So the sky's magnitudes are V magnitudes: src/blackhole/light.h compares them with the Sun's V magnitude. Extract: hyg_readme.extract.txt.

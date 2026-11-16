@@ -1,6 +1,7 @@
 #include "renderer2d.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstddef>
@@ -220,6 +221,7 @@ bool Renderer2D::init() {
             return pr;
         };
         glowDown_ = prog(kGlowDownFS); glowBlur_ = prog(kGlowBlurFS); glowAdd_ = prog(kGlowAddFS);
+        glareDown_ = prog(kGlareDownFS); glareAdd_ = prog(kGlareAddFS);   // 0.55.4: the eye's glare
     }
     {   // the planet program (same vertex shader as the shapes; it also draws the sky photo) and the picture maps
         const GLuint v = compile(GL_VERTEX_SHADER, kVertexShader), f = compile(GL_FRAGMENT_SHADER, kPlanetFS);
@@ -323,6 +325,10 @@ void Renderer2D::shutdown() {
     for (GLuint* tx : {&glowTex_[0], &glowTex_[1]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     if (glowFbo_) glDeleteFramebuffers(1, &glowFbo_);
     glowFbo_ = 0; glowW_ = glowH_ = 0; glowValid_ = false;
+    for (GLuint* pr : {&glareDown_, &glareAdd_}) if (*pr) { glDeleteProgram(*pr); *pr = 0; }
+    for (GLuint* tx : {&bhLayer_[0], &bhLayer_[1], &glareSrcTex_, &glareVeilTex_}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
+    if (glareFbo_) glDeleteFramebuffers(1, &glareFbo_);
+    glareFbo_ = 0; glareNx_ = glareNy_ = 0; layerTexW_ = layerTexH_ = 0; glareValid_ = false;
     lensProgram_ = lensFbo_ = lensTex_ = lensTableTex_ = 0; lensW_ = lensH_ = lensN_ = 0; lensValid_ = false; lensTableVer_ = ~std::uint64_t(0);
     discVer_ = colVer_ = ~std::uint64_t(0);
     for (int i = 0; i < int(meshes_.size()); i++) meshDelete(i);
@@ -409,6 +415,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         lensTableVer_ = L.tableVersion; lensN_ = n;
     }
     const bool disc = bend && L.disc && L.discU && L.discP && L.discCol && L.discS >= 4 && L.discT >= 4 && L.discC >= 2;
+    const bool glareOn = L.glareKeep > 0 && L.glareBlock && L.glareVeil && glareDown_ && glareAdd_;   // 0.55.4
     const auto upload = [](GLuint& tex, int w, int h, GLenum ifmt, GLenum fmt, const float* data) {
         if (!tex) glGenTextures(1, &tex);
         glBindTexture(GL_TEXTURE_2D, tex);
@@ -455,6 +462,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glUniform4f(krDT_, static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog));
         glUniform3i(krDN_, L.discFN, L.discC, 0);
         glUniform4f(krDFix_, L.discFix[0], L.discFix[1], L.discFix[2], L.discFix[3]);
+        glUniform1i(glGetUniformLocation(kerrProgram_, "uRaw"), glareOn ? 1 : 0);   // 0.55.4
         const GLuint texs[7] = {tex_[static_cast<int>(Map::Sky)], kATex_, kBTex_, kETex_, kTTex_, discCTex_, kFTex_};
         const GLint locs[7] = {krTex_, krA_, krB_, krE_, krT_, krDC_, krDF_};
         for (int k = 0; k < 7; k++) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, texs[k]); glUniform1i(locs[k], k); }
@@ -480,6 +488,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glUniform1i(lnDebug_, L.debugDisc ? 2 : L.debug ? 1 : 0);
         glUniform1i(lnSky_, L.sky ? 1 : 0);
         glUniform1i(lnDisc_, disc ? 1 : 0);
+        glUniform1i(glGetUniformLocation(lensProgram_, "uRaw"), glareOn ? 1 : 0);    // 0.55.4
         if (disc) {
             glUniform3i(lnDN_, L.discS, L.discT, L.discC);
             glUniform4f(lnDS_, static_cast<float>(L.discS0), static_cast<float>(L.discDs0), static_cast<float>(L.discDs1), static_cast<float>(L.discXc));
@@ -526,19 +535,63 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
                       P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
                       P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&
                       P.kerr == L.kerr && (!L.kerr || (P.kVersion == L.kVersion && std::equal(L.kM, L.kM + 9, P.kM) && std::equal(L.kO, L.kO + 4, P.kO) && P.spin == L.spin &&
-                      P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) && std::equal(L.glow, L.glow + 3, P.glow);
+                      P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) && std::equal(L.glow, L.glow + 3, P.glow) &&
+                      P.glareKeep == L.glareKeep && P.glareVeil == L.glareVeil;
     const bool glow = L.glow[0] > 0 && glowDown_ && glowBlur_ && glowAdd_;
+    const bool layers = glow || glareOn;                                   // 0.55.4: the disc's light and the sky behind it, as their own pictures
     if (!same) {                                                           // (e) of the plan: drawn anew only when the view, the distance or the picture changed
         glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
+        if (layers) {
+            if (!bhLayer_[0]) glGenTextures(2, bhLayer_);
+            if (layerTexW_ != fbW || layerTexH_ != fbH) {
+                layerTexW_ = fbW; layerTexH_ = fbH;
+                for (GLuint tx : bhLayer_) {
+                    glBindTexture(GL_TEXTURE_2D, tx);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, fbW, fbH, 0, GL_RGBA, GL_FLOAT, nullptr);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                }
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, bhLayer_[0], 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, bhLayer_[1], 0);
+            const GLenum bufs[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+            glDrawBuffers(3, bufs);
+        } else {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, 0, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, 0, 0);
+            const GLenum buf0 = GL_COLOR_ATTACHMENT0;
+            glDrawBuffers(1, &buf0);
+        }
         glViewport(0, 0, fbW, fbH);
         pass(0, 0);
+        if (layers) { const GLenum buf0 = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, &buf0); }
         lensLast_ = L; lensLast_.table = nullptr; lensLast_.discU = lensLast_.discP = lensLast_.discCol = nullptr;
         lensLast_.kA = lensLast_.kB = lensLast_.kEdge = lensLast_.kTau = lensLast_.discF = nullptr; lensPtW_ = width_; lensValid_ = true; lensRedraws_++;
         glowValid_ = false;
+        glareValid_ = false;
         if (glow) makeGlow(L, fbW, fbH);                                   // 0.55.3: with the picture, kept with it
+        if (glareOn) makeGlare(L, fbW, fbH);                               // 0.55.4: the same
     }
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glViewport(vx, vy, fbW, fbH);
+    if (glareOn && glareValid_) {                                          // 0.55.4: the picture with the eye's glare
+        glUseProgram(glareAdd_);
+        const GLuint tx[3] = {bhLayer_[0], bhLayer_[1], glareVeilTex_};
+        const char* nm[3] = {"uDisc", "uSky", "uVeil"};
+        for (int k = 0; k < 3; k++) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, tx[k]); glUniform1i(glGetUniformLocation(glareAdd_, nm[k]), k); }
+        glUniform2i(glGetUniformLocation(glareAdd_, "uN"), glareNx_, glareNy_);
+        glUniform1i(glGetUniformLocation(glareAdd_, "uB"), glareB_);
+        glUniform1f(glGetUniformLocation(glareAdd_, "uKeep"), L.glareKeep);
+        glActiveTexture(GL_TEXTURE0);
+        glBindVertexArray(cmpVao_);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        for (int k = 2; k >= 0; k--) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, 0); }
+        glEnable(GL_BLEND);
+        return;
+    }
     if (glow && glowValid_) {                                              // 0.55.3: the picture plus its glow, in linear light
         glUseProgram(glowAdd_);
         glActiveTexture(GL_TEXTURE1);
@@ -588,7 +641,7 @@ void Renderer2D::makeGlow(const LensSky& L, int fbW, int fbH) {
     const auto into = [&](int k) { glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, glowTex_[k], 0); };
     into(0);                                                               // the blocks above the threshold
     glUseProgram(glowDown_);
-    glBindTexture(GL_TEXTURE_2D, lensTex_);
+    glBindTexture(GL_TEXTURE_2D, bhLayer_[0]);                            // 0.55.4: the disc's own light (until 0.55.3: the whole picture)
     glUniform1i(glGetUniformLocation(glowDown_, "uTex"), 0);
     glUniform2i(glGetUniformLocation(glowDown_, "uSize"), fbW, fbH);
     glUniform1f(glGetUniformLocation(glowDown_, "uThr"), L.glow[1]);
@@ -608,6 +661,55 @@ void Renderer2D::makeGlow(const LensSky& L, int fbW, int fbH) {
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindTexture(GL_TEXTURE_2D, 0);
     glowValid_ = true;
+}
+
+// 0.55.4: the eye's glare of the bent picture (blackhole/light.h): the disc's light averaged over blocks, read back, the veil made on the processor and kept in
+// glareVeilTex_ until the picture is drawn anew
+void Renderer2D::makeGlare(const LensSky& L, int fbW, int fbH) {
+    const auto t0 = std::chrono::steady_clock::now();
+    const double ppp = fbW / width_;
+    const double cxPx = std::round(L.cx * ppp), cyGl = fbH - std::round(L.cy * ppp), Kpx = L.kRad * ppp;
+    const int b = std::max(1, L.glareBlock(fbW, fbH, cxPx, cyGl, Kpx)), nx = (fbW + b - 1) / b, ny = (fbH + b - 1) / b;
+    if (!glareFbo_) { glGenFramebuffers(1, &glareFbo_); glGenTextures(1, &glareSrcTex_); glGenTextures(1, &glareVeilTex_); }
+    if (nx != glareNx_ || ny != glareNy_) {
+        glareNx_ = nx; glareNy_ = ny;
+        glBindTexture(GL_TEXTURE_2D, glareSrcTex_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, nx, ny, 0, GL_RGBA, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    glareB_ = b;
+    glBindFramebuffer(GL_FRAMEBUFFER, glareFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, glareSrcTex_, 0);
+    glViewport(0, 0, nx, ny);
+    glBindVertexArray(cmpVao_);
+    glActiveTexture(GL_TEXTURE0);
+    glUseProgram(glareDown_);
+    glBindTexture(GL_TEXTURE_2D, bhLayer_[0]);
+    glUniform1i(glGetUniformLocation(glareDown_, "uTex"), 0);
+    glUniform2i(glGetUniformLocation(glareDown_, "uSize"), fbW, fbH);
+    glUniform1i(glGetUniformLocation(glareDown_, "uB"), b);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    std::vector<float> rgba(static_cast<std::size_t>(nx) * ny * 4), src(static_cast<std::size_t>(nx) * ny * 3), veil;
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glReadPixels(0, 0, nx, ny, GL_RGBA, GL_FLOAT, rgba.data());
+    for (std::size_t q = 0; q < src.size() / 3; q++) for (int k = 0; k < 3; k++) src[3 * q + k] = rgba[4 * q + k];
+    const double readMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    double out[3] = {0, 0, 0};
+    L.glareVeil(fbW, fbH, cxPx, cyGl, Kpx, src, veil, out);
+    if (veil.size() != src.size()) veil.assign(src.size(), 0.0f);
+    glBindTexture(GL_TEXTURE_2D, glareVeilTex_);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, nx, ny, 0, GL_RGB, GL_FLOAT, veil.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glareStats_.b = b; glareStats_.nx = nx; glareStats_.ny = ny; glareStats_.readMs = readMs; glareStats_.veilMs = out[0];
+    glareStats_.spread = out[1]; glareStats_.laid = out[2]; glareStats_.made++;
+    glareValid_ = true;
 }
 
 void Renderer2D::closeTriangles() {

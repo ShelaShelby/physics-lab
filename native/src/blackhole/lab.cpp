@@ -34,7 +34,8 @@ double logV(double t, double lo, double hi) { return std::exp(std::log(lo) + std
 
 bool Settings::operator==(const Settings& o) const {
     return preset == o.preset && massSun == o.massSun && dist == o.dist && fovDeg == o.fovDeg && yaw == o.yaw && pitch == o.pitch && bend == o.bend && skyOurs == o.skyOurs &&
-           disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expLog == o.expLog && spin == o.spin && look == o.look;
+           disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expLog == o.expLog && spin == o.spin && look == o.look &&
+           trueSky == o.trueSky && glare == o.glare;
 }
 
 Settings settingsDefaults() {
@@ -83,6 +84,8 @@ void setOuter(Settings& s, double r) { s.outer = std::clamp(r, kOuterMin, kOuter
 void setExposure(Settings& s, double e) { s.expLog = std::clamp(e, kExpLogMin, kExpLogMax); s.expAuto = false; }
 void setSpin(Settings& s, double a) { s.spin = std::clamp(a, 0.0, kSpinTop); }
 void setLook(Settings& s, Look l) { s.look = l; }
+bool trueSkyOn(const Settings& s) { return s.look == Look::Real && s.disc && s.bend && s.skyOurs && s.trueSky; }
+bool glareOn(const Settings& s) { return s.look == Look::Real && s.disc && s.bend && s.glare; }
 Settings shown(const Settings& s) {
     if (s.look != Look::Film) return s;
     Settings o = s;
@@ -119,6 +122,8 @@ void saveSettings(const Settings& s, std::map<std::string, std::string>& out) {
     out["exposure"] = s.expAuto ? "auto" : text(s.expLog);
     out["spin"] = text(s.spin);
     out["look"] = lookKey(s.look);
+    out["skybeside"] = s.trueSky ? "true" : "shown";                   // 0.55.4 (light.h)
+    out["glare"] = s.glare ? "eye" : "off";
 }
 
 Settings loadSettings(const std::map<std::string, std::string>& in) {
@@ -139,6 +144,8 @@ Settings loadSettings(const std::map<std::string, std::string>& in) {
     else if (num(in, "exposure", kExpLogMin, kExpLogMax, v)) { s.expAuto = false; s.expLog = v; }
     if (num(in, "spin", 0, kSpinTop, v)) s.spin = v;
     if (const auto it = in.find("look"); it != in.end()) { Look l; if (lookFromKey(it->second, l)) s.look = l; }   // (a file without the line: Real)
+    if (const auto it = in.find("skybeside"); it != in.end() && (it->second == "true" || it->second == "shown")) s.trueSky = it->second == "true";   // 0.55.4: a file without it: Shown
+    if (const auto it = in.find("glare"); it != in.end() && (it->second == "eye" || it->second == "off")) s.glare = it->second == "eye";            // (without it: the eye's, the default)
     return s;
 }
 

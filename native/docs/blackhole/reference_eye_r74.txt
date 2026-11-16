@@ -1,0 +1,16 @@
+Black Hole Lab reference picture of real light (0.55.4): reference_eye_r74.png, 1280 x 800
+=========================================================================================
+Made by build/blackhole_picture --eye (tests/blackhole_picture.cpp) from the physics module src/blackhole/ (no graphics card); 0.22 MB.
+
+What it shows: the feeding preset (a model black hole of 100 million Suns with the standard thin disc at 0.1 of the Eddington limit, outer edge 30 GM/c^2) at spin
+0.6, from the place of the paper's view (74.1 GM/c^2, 86.56 degrees from the spin axis), field of view 30 degrees; the Real look with
+  Sky beside the disc: True brightness (src/blackhole/light.h): the catalogue stars on the disc's own scale, each star's V magnitude against the Sun's (-26.76,
+    Willmer 2018, ApJS 236, 47, Table 3), the Sun's surface as the yardstick, the star's light spread over its drawn dot. At the automatic exposure (the screen's
+    white = 848 x the Sun's surface) no star reaches the screen's faintest step: the sky is black because it cannot compete with the disc, not because there are no
+    stars. The Gaia sky map is not drawn: its brightness is not calibrated, and its own pixels are fainter than the stars it contains.
+  Glare: As an eye sees it: the CIE general disability glare equation (Vos and van den Berg, CIE 135/1999 equation 11, as printed by van den Berg et al. 2013 and
+    Bara and Bao-Varela 2023) for an average eye of 35 years with brown eyes (p = 0.5), from 0.1 to 100 degrees round every bright point. Each point keeps 72.1 %
+    of its light within 0.1 degrees and lays the rest round itself: the soft veil round the disc. Light is moved, not made.
+Not drawn: the eye's own pattern within 0.1 degrees, its adaptation, afterimages, coloured rings and streaks; a camera's lens would show a different veil.
+Rays: 2 x 2 per pixel through the fine spin table (147,456 rays filled by the ray integrator in double precision), in double; the glare by light.h glareVeil on
+blocks of 0.2 degrees (the same code as the app).

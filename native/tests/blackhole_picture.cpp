@@ -2,6 +2,7 @@
 //   blackhole_picture <out.png>      the non-spinning hole in front of our sky (Gaia map + catalogue stars), 1280 x 800, toward the galactic centre
 //   blackhole_picture --measure      the plan's section 6 measurements that need no graphics card (printed)
 //   blackhole_picture --spin <out.png>   0.55.2: the same disc round a hole spinning at 0.99 (spin_sky.h, the fine table in double; spinPicture below)
+//   blackhole_picture --eye <out.png>    0.55.4: Real at the same place (spin 0.6): True brightness (the map not drawn, stars by light.h) and the eye's glare (light.h glareVeil)
 //   blackhole_picture --film <out.png>   0.55.3: the Film look (blackhole/looks.h, James et al. 2015) at the paper's view (Figure 13: 74.1 M, 86.56 deg from the axis),
 //                                    field of view 30 deg: the same table and rays, the film's one-colour disc (lab.h discLight), the glow by looks.h glowReference, stars over it
 //   blackhole_picture --disc <out.png>   0.55.1: the feeding preset's gas disc (blackhole/lab.h), seen from 60 M, 10 degrees above the disc's plane, 1280 x 800:
@@ -22,6 +23,7 @@
 
 #include "app/shot.h"
 #include "blackhole/lab.h"
+#include "blackhole/light.h"
 #include "blackhole/spin.h"
 #include "blackhole/spin_sky.h"
 #include "blackhole/schwarzschild.h"
@@ -222,7 +224,7 @@ static int discPicture(const std::string& outPath) {
 // 0.55.2: the feeding preset round a spinning hole (spin 0.99, the Spin control's top), seen from 60 M, 10 degrees above the disc's plane, 1280 x 800: the fine
 // spin table (spin_sky.h) in double at 2 x 2 rays per pixel, the disc by its first crossing (C75 (A9) shift, Page & Thorne's flux at this spin), the sky through
 // the table's far direction, the stars by inverting the table (SpinStars); the lab's automatic exposure (the brightest disc channel at full brightness)
-static int spinPicture(const std::string& outPath, bool film) {
+static int spinPicture(const std::string& outPath, bool film, bool eye = false) {
     const int W = 1280, H = 800;
     Settings s = settingsDefaults();
     applyPreset(s, kFeedingKey);
@@ -230,6 +232,7 @@ static int spinPicture(const std::string& outPath, bool film) {
     setSpin(s, kSpinTop);
     s.pitch = 100 * kPi / 180;
     if (film) { setLook(s, Look::Film); paperView(s); setFov(s, 30); s = shown(s); }
+    if (eye) { setSpin(s, 0.6); paperView(s); setFov(s, 30); s.trueSky = true; s.glare = true; }   // 0.55.4: Real, True brightness, the eye's glare
     const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
     const SpinTable T(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge);
     const DiscGeom g = discGeom(s);
@@ -278,11 +281,11 @@ static int spinPicture(const std::string& outPath, bool film) {
             lin[c] += decS(q / 255);
         }
     };
-    std::vector<double> img(static_cast<std::size_t>(W) * H * 3, 0.0);
+    std::vector<double> img(static_cast<std::size_t>(W) * H * 3, 0.0), discImg(img.size(), 0.0), rawDisc(img.size(), 0.0);   // 0.55.4: the disc's own light (drawn, unscaled)
     std::vector<unsigned char> onDisc(static_cast<std::size_t>(W) * H, 0);
     for (int y = 0; y < H; y++)
         for (int x = 0; x < W; x++) {
-            double lin[3] = {0, 0, 0};
+            double lin[3] = {0, 0, 0}, dl[3] = {0, 0, 0}, rl[3] = {0, 0, 0};
             int hits = 0;
             for (int k = 0; k < 4; k++) {
                 const double X = x + 0.25 + 0.5 * (k & 1), Y = y + 0.25 + 0.5 * (k >> 1);
@@ -293,20 +296,58 @@ static int spinPicture(const std::string& outPath, bool film) {
                     discLight(s, d.r, d.g, dq);
                     const auto c = dq.rgb;
                     const double m = std::max({c[0], c[1], c[2]}) / white;
-                    for (int q = 0; q < 3; q++) lin[q] += c[q] / white / std::max(1.0, m);
+                    for (int q = 0; q < 3; q++) { lin[q] += c[q] / white / std::max(1.0, m); dl[q] += c[q] / white / std::max(1.0, m); rl[q] += c[q] / white; }
                     hits++;
                     continue;
                 }
-                if (h.sky) sample(Vec3{cph * h.dir.x - sph * h.dir.y, sph * h.dir.x + cph * h.dir.y, h.dir.z}, lin);
+                if (h.sky && !trueSkyOn(s)) sample(Vec3{cph * h.dir.x - sph * h.dir.y, sph * h.dir.x + cph * h.dir.y, h.dir.z}, lin);
             }
             onDisc[static_cast<std::size_t>(y) * W + x] = hits > 0;
-            for (int c = 0; c < 3; c++) img[(static_cast<std::size_t>(y) * W + x) * 3 + c] = lin[c] / 4;
+            for (int c = 0; c < 3; c++) {
+                const std::size_t i = (static_cast<std::size_t>(y) * W + x) * 3 + c;
+                img[i] = lin[c] / 4; discImg[i] = dl[c] / 4; rawDisc[i] = rl[c] / 4;
+            }
         }
-    if (film) {                                                           // the glow (looks.h) over the sky and disc, in linear light, before the stars (as the card)
+    if (film) {                                                           // the glow (looks.h) of the disc's own light (0.55.4), added over the sky and disc, before the stars (as the card)
         std::vector<double> lin(img.size());
-        for (std::size_t i = 0; i < img.size(); i++) lin[i] = std::clamp(img[i], 0.0, 1.0);
+        for (std::size_t i = 0; i < img.size(); i++) lin[i] = std::clamp(discImg[i], 0.0, 1.0);
         const std::vector<double> gl = glowReference(lin, W, H);
-        for (std::size_t i = 0; i < img.size(); i++) img[i] = lin[i] + kGlowStrength * gl[i];
+        for (std::size_t i = 0; i < img.size(); i++) img[i] = std::clamp(img[i], 0.0, 1.0) + kGlowStrength * gl[i];
+    }
+    double glareMs = 0;
+    if (glareOn(s)) {                                                     // 0.55.4: the eye's glare (light.h), as the card: the disc keeps 1 - s, the veil laid round it
+        const GlareGrid gg = glareGrid(W, H, v.cx, v.cy, v.K);
+        std::vector<float> src(static_cast<std::size_t>(gg.nx) * gg.ny * 3, 0.0f), veil;
+        std::vector<int> cnt(static_cast<std::size_t>(gg.nx) * gg.ny, 0);
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++) {
+                const std::size_t b = static_cast<std::size_t>(y / gg.b) * gg.nx + x / gg.b;
+                for (int c = 0; c < 3; c++) src[3 * b + c] += static_cast<float>(rawDisc[(static_cast<std::size_t>(y) * W + x) * 3 + c]);
+                cnt[b]++;
+            }
+        for (std::size_t b = 0; b < cnt.size(); b++) for (int c = 0; c < 3; c++) src[3 * b + c] /= static_cast<float>(std::max(1, cnt[b]));
+        GlareSums su;
+        glareVeil(gg, src, veil, &su);
+        glareMs = su.ms;
+        const double keep = 1 - glareShare();
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++) {
+                const std::size_t i = (static_cast<std::size_t>(y) * W + x) * 3;
+                double d[3] = {keep * rawDisc[i], keep * rawDisc[i + 1], keep * rawDisc[i + 2]};
+                const double m = std::max({d[0], d[1], d[2]});
+                if (m > 1) for (double& q : d) q /= m;
+                const double qx = (x + 0.5) / gg.b - 0.5, qy = (y + 0.5) / gg.b - 0.5;
+                const int i0 = static_cast<int>(std::floor(qx)), j0 = static_cast<int>(std::floor(qy));
+                const double fx = std::clamp(qx - i0, 0.0, 1.0), fy = std::clamp(qy - j0, 0.0, 1.0);
+                for (int c = 0; c < 3; c++) {
+                    double vv[4];
+                    for (int k = 0; k < 4; k++) {
+                        const int aa = std::clamp(i0 + (k & 1), 0, gg.nx - 1), bb = std::clamp(j0 + (k >> 1), 0, gg.ny - 1);
+                        vv[k] = veil[3 * (static_cast<std::size_t>(bb) * gg.nx + aa) + c];
+                    }
+                    img[i + c] = (img[i + c] - discImg[i + c]) + d[c] + (1 - fy) * ((1 - fx) * vv[0] + fx * vv[1]) + fy * ((1 - fx) * vv[2] + fx * vv[3]);
+                }
+            }
     }
     const SpinStars St(T);
     std::vector<SpinImage> im;
@@ -324,7 +365,11 @@ static int spinPicture(const std::string& outPath, bool film) {
             if (!viewScreen(v, dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
             SpinHit h; SpinDisc d;
             if (at(X, Y, h, d) && d.order >= 0) { hidden++; continue; }
-            const orbit::StarDraw sd = orbit::starDraw(mag);
+            orbit::StarDraw sd = orbit::starDraw(mag);
+            if (trueSkyOn(s)) {                                           // 0.55.4: the true exposure (light.h): only a star the screen can show
+                sd = orbit::starDrawLight(starTrueLight(mag, white, pointSolidAngle(v.K, v.cx, v.cy, X, Y)));
+                if (!(sd.alpha >= kScreenStep)) continue;
+            }
             drawn++;
             for (int yy = static_cast<int>(Y - sd.radius - 2); yy <= static_cast<int>(Y + sd.radius + 2); yy++)
                 for (int xx = static_cast<int>(X - sd.radius - 2); xx <= static_cast<int>(X + sd.radius + 2); xx++) {
@@ -347,6 +392,7 @@ static int spinPicture(const std::string& outPath, bool film) {
                 "efficiency %.4f; table %ld rays in %.0f ms; screen white %.4g x the Sun's surface; %d star images drawn, %d hidden by the disc; shadow %.4f x %.4f deg; dragged round once every %.4g GM/c^3\n",
                 outPath.c_str(), png.size(), kFeedingName, s.spin, s.massSun, s.feed, r.rIn, s.outer, s.dist, r.horizonM, r.tHot, r.rHot, r.efficiency, T.rays(), T.fillMs(), white, drawn, hidden,
                 r.shadowWideDeg, r.shadowHighDeg, 2 * kPi / r.omega);
+    if (eye) std::printf("eye: Real, True brightness (the map not drawn), the eye's glare (keep %.4f, %.0f ms on the processor); camera %.6g M at %.6f rad\n", 1 - glareShare(), glareMs, s.dist, s.pitch);
     if (film) std::printf("film: camera %.6g M at %.6f rad (%.4g deg) from the axis; disc %g to %g M at %g K; screen white %.6g x the Sun's surface (the disc's brightest channel)\n",
                           s.dist, s.pitch, s.pitch * 180 / kPi, r.discEdgeIn, r.discEdgeOut, r.filmT, white);
     return 0;
@@ -357,6 +403,7 @@ int main(int argc, char** argv) {
     if (argc > 2 && std::strcmp(argv[1], "--disc") == 0) return discPicture(argv[2]);
     if (argc > 2 && std::strcmp(argv[1], "--spin") == 0) return spinPicture(argv[2], false);
     if (argc > 2 && std::strcmp(argv[1], "--film") == 0) return spinPicture(argv[2], true);
+    if (argc > 2 && std::strcmp(argv[1], "--eye") == 0) return spinPicture(argv[2], false, true);   // 0.55.4
     const std::string outPath = argc > 1 ? argv[1] : "blackhole_reference.png";
     const int W = 1280, H = 800;
     const orbit::Sky& S = orbit::skyData();

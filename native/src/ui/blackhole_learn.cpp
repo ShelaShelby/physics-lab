@@ -2,8 +2,11 @@
 
 #include <cstdlib>
 
+#include "blackhole/light.h"
 #include "blackhole/looks.h"
 #include "imgui.h"
+#include "orbit/format.h"
+#include "orbit/sun_facts.h"
 #include "html_view.h"
 #include "orbit_panel.h"
 #include "rich_text.h"
@@ -62,6 +65,17 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         p("<b>Blinding.</b> A real disc like this is blue-white and far brighter than the Sun's surface everywhere: the card says how many times, in visible light. "
           "The picture dims it (the exposure; automatic draws the brightest part at full brightness) so that the sky stays visible. A real disc this bright would "
           "drown out every star.") +
+        p("<b>Sky beside the disc: True brightness</b> (the Real look) puts the stars on the disc's own scale: each catalogue star's measured V magnitude against the "
+          "Sun's (" + fmt::precision(blackhole::kSunV, 4) + ", Willmer 2018), the Sun's surface as the yardstick, its light spread over the dot the app draws. Beside a bright disc the sky is then black: "
+          "the sky cannot compete with the disc, not because there are no stars. Turn the exposure far down and the stars come back while the disc burns out. "
+          "The sky map is not drawn then: it has no calibrated brightness, and its own pixels are fainter than the stars it contains. Approximate: the V band taken as "
+          "the eye's visible light, the Sun's surface as a black body at " + fmt::commas(sunfacts::kSunTeffK) + " K, the Sun's disc evenly bright.") +
+        p("<b>Glare: as an eye sees it.</b> A very bright light scatters inside the eye and lays a veil of light round itself: this happens in the eye, not at the "
+          "hole. It is drawn by the CIE's general disability glare equation (Vos and van den Berg, CIE 1999; as printed by van den Berg et al. 2013 and Bará and "
+          "Bao-Varela 2023) for an average eye of 35 years with brown eyes, from 0.1° to 100° from each bright point. It moves light, it does not make any: the eye "
+          "keeps " + fmt::precision(100 * (1 - blackhole::glareShare()), 3) + " % of each point's light within 0.1° and spreads the rest. Not drawn: the structure "
+          "within 0.1° (each eye's own), the eye's adaptation, afterimages, coloured rings and streaks, and the change of scatter with colour. A camera's lens would "
+          "show a different veil.") +
         p("<b>The model's limits.</b> Flat, thin, opaque, each face a perfect black body, steady. No turbulence, hot spots, jets or wind; no light from inside the inner "
           "edge; no light of the disc falling back on itself; each face shines the same in every direction. The gas orbits with the hole's spin, in its plane. The disc lies in a plane the lab chose (parallel to the Earth's orbit, the gas going round as the planets do): its direction against the sky "
           "is not something measured. Sagittarius A* and M87* do not have such a disc; on them the lab labels it as a what-if.") +
@@ -72,9 +86,9 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         for (const blackhole::FilmRow& r : blackhole::filmRows())
             h += "<p class=\"lrnP\"><b>" + r.physics + "</b><br>The film: " + r.choice + ".<br>Why: " + r.reason + ".<br><small>" + r.where + "</small></p>";
         h += p("<b>Not in the app:</b> the artists' textures, the real lens flare (the measured blur of the IMAX lenses) and the film's colour grading are not published. "
-               "The glow is the app's own, a simple blur of the bright parts. The paper gives no mass for the film's black hole.") +
-             p("<b>The Real look is still a model</b>, not a photograph: the standard thin disc, with every shift it calculates. A real disc would be blinding; the glare an "
-               "eye would see is not drawn yet.");
+               "The glow is the app's own, a simple blur of the disc's bright parts (the sky and the stars are not part of it). The paper gives no mass for the film's black hole.") +
+             p("<b>The Real look is still a model</b>, not a photograph: the standard thin disc, with every shift it calculates. A real disc would be blinding; Glare "
+               "draws the veil an average eye would see.");
         v.push_back({"film", "🎬 What the film changed", h});
     }
     v.push_back({"soft", "〰️ What is soft",

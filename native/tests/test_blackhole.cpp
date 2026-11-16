@@ -35,6 +35,7 @@
 #include "orbit/far_masses.h"
 #include "blackhole/lab.h"
 #include "blackhole/looks.h"
+#include "blackhole/light.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
 
@@ -1701,6 +1702,201 @@ static void testLooks() {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.55.4, one true exposure (light.h): the Sun's V magnitude from Willmer 2018 (the extract; the saved original with PL_SOURCES_DIR), the catalogue's mag is V
+// (the HYG README), the bridge's identity, Pogson's rule, the screen's faintest step, the readout's numbers
+static std::string checkedExtract(const std::string& rel, const std::string& orig, const std::string& who) {
+    const std::string ex = readExtract(rel);
+    std::string text = ex;
+    if (const char* src = std::getenv("PL_SOURCES_DIR")) {
+        const std::string raw = readBytes(std::string(src) + "/data/" + orig);
+        const std::string o = stripTrailing(orig.size() > 3 && orig.compare(orig.size() - 3, 3, ".gz") == 0 ? gunzip(raw) : raw);
+        int blocks = 0, found = 0;
+        for (std::size_t b = ex.find("\n#--- begin"); b != std::string::npos; b = ex.find("\n#--- begin", b + 1)) {
+            const std::size_t s0 = ex.find('\n', b + 1) + 1, e0 = ex.find("#--- end", s0);
+            if (e0 == std::string::npos) break;
+            blocks++;
+            if (o.find(ex.substr(s0, e0 - s0)) != std::string::npos) found++;
+        }
+        check(o.size() > 1000 && blocks >= 2 && found == blocks, who + ": every block of the extract is in the saved original (" + std::to_string(found) + " of " + std::to_string(blocks) + ")");
+        text = o;
+    }
+    return text;
+}
+
+static void testTrueLight() {
+    const std::string w = checkedExtract("photometry/willmer2018_arxiv1804.07788.extract.txt", "photometry/willmer2018_arxiv1804.07788.txt.gz", "Willmer 2018");
+    const std::vector<double> row = numbersAfter(w, "Johnson V  ", 10);
+    check(row.size() == 10 && row[0] == kSunAbsV && row[3] == kSunV, "the Sun's V magnitudes = Willmer 2018 Table 3, Johnson V: absolute (2) " + f(row.size() > 0 ? row[0] : 0) +
+          ", apparent (5) " + f(row.size() > 3 ? row[3] : 0));
+    check(w.find("App         App       App") != std::string::npos && w.find("(Vega)     (AB)     (ST)     (Vega)") != std::string::npos && w.find("the ap-") != std::string::npos,
+          "Table 3: columns (2) and (5) are the absolute and the apparent magnitude in the Vega system");
+    check(numbersAfter(w, "the Sun are MB = 5.44, MV = ", 1) == std::vector<double>{kSunAbsV}, "the abstract's M_V = 4.81");
+    // Willmer's two columns differ by the distance modulus of 1 AU: 5 log10(10 pc / 1 AU), the parsec 648000/pi au (presets.h parsecM): both printed to 0.01
+    const double dm = 5 * std::log10(10 * parsecM() / units::kAU);
+    check(std::fabs((kSunAbsV - kSunV) - dm) <= 0.01, "absolute - apparent = the distance modulus of 1 AU (" + f(kSunAbsV - kSunV) + " against " + f(dm) + ")");
+    const std::string hyg = checkedExtract("stars/hyg_readme.extract.txt", "stars/hyg_readme.md", "HYG README");
+    check(hyg.find("`mag`: The star's apparent visual magnitude.") != std::string::npos && hyg.find("adjusted to the V magnitude scale to match the \"mag\" field") != std::string::npos,
+          "the catalogue's mag is the V magnitude (HYG README fields 12 and 25)");
+    // the bridge
+    const double om = sunSolidAngle(), a = units::kSunRadius / units::kAU;
+    check(std::fabs(om / (kPi * a * a) - 1) < 1e-15 && std::fabs(om - 6.8e-5) < 0.1e-5, "the Sun's disc seen from 1 AU: pi (R_Sun / au)^2 = " + f(om) + " sr");
+    check(std::fabs(starSurface(kSunV, om) - 1) < 1e-14, "the identity: a star of the Sun's magnitude spread over the Sun's disc is the Sun's surface (" + f(starSurface(kSunV, om)) + ")");
+    check(std::fabs(starLight(1.0) / starLight(6.0) / 100 - 1) < 1e-13 && std::fabs(starLight(-1.46) / starLight(0.0) / std::pow(10.0, 0.4 * 1.46) - 1) < 1e-13,
+          "the stars' relative light is still Pogson's rule (5 magnitudes = 100 times)");
+    {   // the night sky's rule (orbit/sky.h) is one function, the tone map is the true rule's input
+        bool same = true;
+        for (double m : {-1.5, 0.0, 3.3, 6.6}) { const orbit::StarDraw a1 = orbit::starDraw(m), a2 = orbit::starDrawLight(orbit::kStarFaintLight * std::pow(10.0, -0.4 * orbit::kStarGamma * (m - orbit::kStarFaintMag))); same = same && a1.radius == a2.radius && a1.alpha == a2.alpha; }
+        check(same, "starDraw = starDrawLight of the tone-mapped light (one rule)"); }
+    // the screen's faintest step: 0.5 of 255 after the sRGB linear segment
+    check(std::fabs(kScreenStep * 12.92 * 255 - 0.5) < 1e-15, "the faintest step: 12.92 x 255 x L = 0.5 (rounds to code 1)");
+    // a star at the middle of a 1280 x 800 picture, field of view 90 degrees (K = 400 / (pi / 4) points per radian)
+    const double K = 400 / (kPi / 4), pt = 1 / (K * K), sirius = -1.46;
+    check(std::fabs(pointSolidAngle(K, 640, 400, 640, 400) - pt) < 1e-20 && pointSolidAngle(K, 640, 400, 1280, 800) < pt, "a square point's solid angle: 1 / K^2 at the middle, less towards the edge (sin th / th)");
+    const TrueSkyNumbers t = trueSkyNumbers(sirius, 100, 100, pt);
+    check(std::fabs(t.starY - starLight(sirius) / (starDotArea() * pt)) < 1e-30 && std::fabs(t.fainter * t.starY / 100 - 1) < 1e-12, "the readout: the star's dot's luminance and the disc's over it (" + f(t.fainter) + " times)");
+    check(std::fabs(t.belowStep - kScreenStep * 100 / t.starY) < 1e-9 * t.belowStep && t.belowStep > 1e6, "at a white of 100 Suns' surfaces Sirius is far below the screen's step (" + f(t.belowStep) + " times)");
+    check(!starVisible(sirius, t.showsAtWhite * 1.001, pt) && starVisible(sirius, t.showsAtWhite * 0.999, pt), "the star shows exactly from the exposure the readout names (" + f(t.showsAtWhite) + ")");
+    check(t.showsAtWhite > std::pow(10.0, kExpLogMin) && t.showsAtWhite < std::pow(10.0, kExpLogMax), "that exposure is inside the slider's range (log " + f(std::log10(t.showsAtWhite)) + ")");
+    check(starTrueLight(sirius, 1, pt) / starTrueLight(sirius, 10, pt) == 10, "ten times the white, a tenth of the light on the screen");
+    // the settings
+    Settings s = settingsDefaults();
+    applyPreset(s, kFeedingKey);
+    check(!s.trueSky && s.glare && !trueSkyOn(s) && glareOn(s), "defaults: the sky Shown, the eye's glare on (with the disc, Real)");
+    s.trueSky = true;
+    check(trueSkyOn(s), "True brightness on with the disc and Real");
+    Settings f2 = s; setLook(f2, Look::Film);
+    check(!trueSkyOn(f2) && !glareOn(f2), "Film: neither (the film's own look)");
+    Settings d2 = s; d2.disc = false;
+    check(!trueSkyOn(d2) && !glareOn(d2), "no disc: neither");
+    std::map<std::string, std::string> m;
+    s.glare = false;
+    saveSettings(s, m);
+    check(m["skybeside"] == "true" && m["glare"] == "off" && loadSettings(m).trueSky && !loadSettings(m).glare, "saved and read back");
+    m.erase("skybeside"); m.erase("glare");
+    check(!loadSettings(m).trueSky && loadSettings(m).glare, "a 0.55.3 file: Sky Shown, the eye's glare (the default)");
+}
+
+// 0.55.4, the eye's glare (light.h): the CIE general disability glare equation as both saved papers print it, its range and the app's eye; conservation by
+// quadrature; the veil on a picture against the direct sum, the function itself from a point, the light conserved (light leaving the picture counted)
+static void testGlare() {
+    const std::string b = checkedExtract("blackhole/glare/bara2023_arxiv2212.09103.extract.txt", "blackhole/glare/bara2023_arxiv2212.09103.txt.gz", "Bara & Bao-Varela 2023");
+    const std::string v = checkedExtract("blackhole/glare/vandenberg2013_straylight_review.extract.txt", "blackhole/glare/vandenberg2013_straylight_review.txt.gz", "van den Berg et al. 2013");
+    check(b.find("10     5 0.1 · 𝑝          𝐴 4") != std::string::npos && b.find("+ (   +       ) [1 + (     ) ] + 2.5 · 10−3 · 𝑝 ,") != std::string::npos &&
+          b.find("𝜃3    𝜃2   𝜃             62.5") != std::string::npos, "Bara Eq. (2): 10/theta^3 + (5/theta^2 + 0.1 p/theta)[1 + (A/62.5)^4] + 2.5e-3 p");
+    check(v.find("= 10/θ 3 + [5/θ 2 + 0.1 · p/θ] · 1 + [A/62.5]4") != std::string::npos && v.find("+ 2.5 · 10−3 · p,") != std::string::npos,
+          "van den Berg et al. 2013 p. 15 prints the same equation (CIE report equation 11)");
+    check(b.find("valid for 𝜃 ranging from 0.1°") != std::string::npos && b.find("to the limit of the visual field (~100°)") != std::string::npos && b.find("units of inverse steradians") != std::string::npos,
+          "its range, 0.1 to 100 degrees, and its unit, sr^-1 (Bara section 2)");
+    check(b.find("observer of age 35 yr and pigmentation factor p=0.5") != std::string::npos && kEyeAge == 35 && kEyePigment == 0.5 &&
+          b.find("equal to 0 for dark eyes, 0.5 for brown, and 1.0 for blue-green ones.") != std::string::npos, "the app's eye: 35 years, p = 0.5 (brown; Figure 2's average observer)");
+    check(b.find("normalized such that its integral across the visual field is unity") != std::string::npos && v.find("At 90 degrees the integrated value is 1 by") != std::string::npos,
+          "the whole PSF is normalised to 1 (both papers)");
+    // the formula, written here, at angles across its range, three eyes
+    double worst = 0;
+    for (double A : {20.0, 35.0, 80.0})
+        for (double p : {0.0, 0.5, 1.0})
+            for (double th : {0.1, 0.25, 1.0, 3.0, 10.0, 30.0, 60.0, 100.0}) {
+                const double want = 10 / std::pow(th, 3) + (5 / std::pow(th, 2) + 0.1 * p / th) * (1 + std::pow(A / 62.5, 4)) + 2.5e-3 * p;
+                worst = std::max(worst, std::fabs(glarePsf(th, A, p) / want - 1));
+            }
+    check(worst < 1e-14, "Psi = the printed formula at 8 angles from 0.1 to 100 degrees, ages 20, 35, 80, p 0, 0.5, 1 (" + f(worst) + ")");
+    check(glarePsf(0.0999) == 0 && glarePsf(100.01) == 0 && glarePsf(0.1) > 0 && glarePsf(100) > 0, "outside 0.1 to 100 degrees: nothing (the model's range)");
+    // conservation: the share between 0.1 and 100 degrees by two quadratures; the rest stays within 0.1 degrees, so the whole integrates to one
+    const double s = glareShare(), sg = glareShareGauss(kEyeAge, kEyePigment);
+    check(std::fabs(s - sg) < 1e-9 && s > 0 && s < 1, "the share spread from 0.1 to 100 degrees, s = " + f(s) + " (Simpson in ln theta) = " + f(sg) + " (Gauss-Legendre); 1 - s = " + f(1 - s) +
+          " stays within 0.1 degrees: the whole is 1");
+    check(glareShare(80, 1) > glareShare(20, 0), "an older, lighter eye spreads more (" + f(glareShare(20, 0)) + " at 20 and p 0, " + f(glareShare(80, 1)) + " at 80 and p 1)");
+    // a single bright point at the middle of a fisheye picture that holds the whole 100 degrees: its light conserved, the function itself given back
+    {   const int W = 600, H = 600;
+        const double K = 300 / (100 * kPi / 180) * 1.02;   // 100 degrees at 294 pixels from the middle
+        const GlareGrid g = glareGrid(W, H, 300, 300, K);
+        std::vector<float> src(static_cast<std::size_t>(g.nx) * g.ny * 3, 0.0f), veil;
+        const int ci = static_cast<int>(300 / g.b), cj = ci;
+        for (int k = 0; k < 3; k++) src[3 * (static_cast<std::size_t>(cj) * g.nx + ci) + k] = 1000.0f;
+        GlareSums su;
+        glareVeil(g, src, veil, &su);
+        const double E = 1000 * glareBlockSolidAngle(g, ci, cj);
+        check(std::fabs(su.spread / (3 * s * E) - 1) < 1e-12, "a point: the light spread is s x its light (three channels)");
+        check(std::fabs(su.laid / su.spread - 1) < 0.01, "a point: the veil lays the light it spreads, the whole 100 degrees inside the picture (" + f(su.laid / su.spread) + ", limit 1 %); " +
+              std::to_string(g.nx) + " x " + std::to_string(g.ny) + " blocks of " + std::to_string(g.b) + " px, " + f(su.ms) + " ms");
+    }
+    {   // the function itself: a point at the middle of a finer picture (0.1 degrees a pixel, 60 degrees to the edge), the veil along a row against E Psi
+        const int W = 1201, H = 1201;
+        const double K = 600 / (60 * kPi / 180);
+        const GlareGrid g = glareGrid(W, H, 600.5, 600.5, K);
+        std::vector<float> src(static_cast<std::size_t>(g.nx) * g.ny * 3, 0.0f), veil;
+        const int ci = static_cast<int>(600.5 / g.b), cj = ci;
+        for (int k = 0; k < 3; k++) src[3 * (static_cast<std::size_t>(cj) * g.nx + ci) + k] = 1000.0f;
+        glareVeil(g, src, veil);
+        const double E = 1000 * glareBlockSolidAngle(g, ci, cj), X0 = (ci + 0.5) * g.b;
+        double wf = 0;
+        std::string at;
+        for (double th : {1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 12.0, 16.0, 20.0, 25.0, 30.0, 35.0, 40.0, 55.0}) {
+            const int i = static_cast<int>(std::lround((X0 + th * kPi / 180 * K) / g.b - 0.5));
+            const double thAt = ((i + 0.5) * g.b - X0) / K * 180 / kPi;
+            const double r = veil[3 * (static_cast<std::size_t>(cj) * g.nx + i)] / (E * glarePsf(thAt));
+            wf = std::max(wf, std::fabs(r - 1));
+            at += " " + f(thAt) + ":" + f(r);
+        }
+        check(wf < 0.03, "a point gives the function itself back from 1 to 55 degrees (blocks of " + std::to_string(g.b) + " px = " + f(g.b / K * 180 / kPi) +
+              " deg; veil / (E Psi):" + at + "; limit 3 %)");
+    }
+    // the coarse levels against the direct sum of every pair (a small picture, a bright ring like a disc's image)
+    {   const int W = 128, H = 80;
+        const double K = 40 / (kPi / 4);
+        const GlareGrid g = glareGrid(W, H, 64, 40, K);
+        std::vector<float> src(static_cast<std::size_t>(g.nx) * g.ny * 3, 0.0f), veil, ref;
+        for (int j = 0; j < g.ny; j++)
+            for (int i = 0; i < g.nx; i++) {
+                const double r = std::hypot((i + 0.5) * g.b - 64, ((j + 0.5) * g.b - 40) * 3);
+                if (r > 20 && r < 30) for (int k = 0; k < 3; k++) src[3 * (static_cast<std::size_t>(j) * g.nx + i) + k] = static_cast<float>(1 + 0.5 * k);
+            }
+        GlareSums su;
+        glareVeil(g, src, veil, &su);
+        glareVeilDirect(g, src, ref);
+        double mx = 0, worst = 0, tv = 0, tr = 0;
+        std::size_t wq = 0;
+        for (float q : ref) mx = std::max(mx, static_cast<double>(q));
+        for (std::size_t q = 0; q < ref.size(); q++) {
+            if (ref[q] > 1e-2 * mx && std::fabs(static_cast<double>(veil[q]) / ref[q] - 1) > worst) { worst = std::fabs(static_cast<double>(veil[q]) / ref[q] - 1); wq = q; }
+            tv += static_cast<double>(veil[q]); tr += static_cast<double>(ref[q]);
+        }
+        check(worst < 0.03 && std::fabs(tv / tr - 1) < 0.005, "the levels against every pair directly: largest difference " + f(worst) + " at block " + std::to_string(wq / 3 % g.nx) + ", " + std::to_string(wq / 3 / g.nx) +
+              " of " + std::to_string(g.nx) + " x " + std::to_string(g.ny) + " (veil " + f(ref[wq] / mx) + " of the largest; limit 3 % where the veil is above 1 % of its largest: farther out, near the model's 100 degrees, coarse blocks straddle its edge), total " + f(tv / tr - 1) + " (limit 0.5 %)");
+    }
+    // light leaving the picture counted: a point near the edge of a 90 degree picture; the part of Psi outside the picture by quadrature over the sphere
+    {   const int W = 400, H = 250;
+        const double K = 125 / (kPi / 4), cx = 200, cy = 125;
+        const GlareGrid g = glareGrid(W, H, cx, cy, K);
+        const int ci = g.nx - 3, cj = g.ny / 2;
+        std::vector<float> src(static_cast<std::size_t>(g.nx) * g.ny * 3, 0.0f), veil;
+        for (int k = 0; k < 3; k++) src[3 * (static_cast<std::size_t>(cj) * g.nx + ci) + k] = 1.0f;
+        GlareSums su;
+        glareVeil(g, src, veil, &su);
+        const double E = glareBlockSolidAngle(g, ci, cj);
+        int x0 = ci * g.b, x1 = std::min(W, x0 + g.b), y0 = cj * g.b, y1 = std::min(H, y0 + g.b);
+        const double X = (x0 + x1) / 2.0, Y = (y0 + y1) / 2.0, dx = (X - cx) / K, dy = (Y - cy) / K, th0 = std::hypot(dx, dy);
+        const Vec3 S{std::sin(th0) / th0 * dx, std::sin(th0) / th0 * dy, -std::cos(th0)};
+        const Vec3 c1 = cross(S, Vec3{0, 0, 1}), e1 = c1 * (1 / length(c1));
+        const Vec3 e2 = cross(S, e1);
+        double out = 0;
+        const int nt = 4000, np = 720;
+        const double l0 = std::log(kGlareMinDeg), l1 = std::log(kGlareMaxDeg), du = (l1 - l0) / nt;
+        for (int a = 0; a < nt; a++) {
+            const double th = std::exp(l0 + (a + 0.5) * du), tr = th * kPi / 180;
+            for (int c = 0; c < np; c++) {
+                const double ph = (c + 0.5) * 2 * kPi / np;
+                const Vec3 d = S * std::cos(tr) + (e1 * std::cos(ph) + e2 * std::sin(ph)) * std::sin(tr);
+                const double rho = std::hypot(d.x, d.y), t2 = std::atan2(rho, -d.z), Xd = cx + d.x / rho * t2 * K, Yd = cy + d.y / rho * t2 * K;
+                if (Xd < 0 || Xd >= W || Yd < 0 || Yd >= H) out += glarePsf(th) * std::sin(tr) * tr * du * (2 * kPi / np);
+            }
+        }
+        check(out > 0.05 * s && std::fabs((su.laid / (3 * E) + out) / s - 1) < 0.01, "a point at the edge: laid " + f(su.laid / (3 * E)) + " + outside the picture " + f(out) + " = s " + f(s) +
+              " (limit 1 %)");
+    }
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -1736,6 +1932,8 @@ int main() {
     testSpinTable();
     testSpinLab();
     testLooks();
+    testTrueLight();
+    testGlare();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

@@ -507,7 +507,10 @@ uniform vec4 uDS;
 uniform vec3 uDA;
 uniform vec4 uDR;
 uniform vec4 uDT;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 discOut;                    // 0.55.4: the disc's own light (linear; uRaw 1: before its colour is scaled into the screen) and the sky
+layout(location = 2) out vec4 skyOut;                     // behind it (linear, its covered part), for the Film glow and the eye's glare (unused otherwise)
+uniform int uRaw;
 const float PI = 3.14159265358979;
 float tab(int i) { return texelFetch(uTable, ivec2(clamp(i, 0, uN - 1), 0), 0).r; }
 float bendAt(float xpx) {
@@ -529,7 +532,7 @@ float dU(int row, int j) { return texelFetch(uDU, ivec2(j, row), 0).r; }
 float dP(int k) { return texelFetch(uDP, ivec2(k, 0), 0).r; }
 vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
 vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
-vec3 discColour(float r, float g) {
+vec3 discColourRaw(float r, float g) {
     float sr = sqrt(r), s3 = 1.7320508, s6 = 2.4494897;
     float F = 3.0 / (8.0 * PI) / ((r - 3.0) * r * r * sr) * (sr - s6 + 0.8660254 * log((sr + s3) * (s6 - s3) / ((sr - s3) * (s6 + s3))));
     float T = uDT.x * pow(max(F, 0.0), 0.25) * g;
@@ -539,10 +542,11 @@ vec3 discColour(float r, float g) {
     q = min(q, float(uDN.z - 1) - 0.001);
     int i = int(q);
     vec3 c = mix(texelFetch(uDC, ivec2(i, 0), 0).rgb, texelFetch(uDC, ivec2(i + 1, 0), 0).rgb, q - float(i)) * uDT.y;
-    float m = max(c.r, max(c.g, c.b));
-    return m > 1.0 ? c / m : c;
+    return c;
 }
+vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
 void main() {
+    discOut = vec4(0.0); skyOut = vec4(0.0);
     vec2 o = gl_FragCoord.xy - uCentre;                  // right, up, pixels
     float d2 = dot(o, o), r = sqrt(d2), th = r / uKpx;
     vec2 dn = r > 0.0 ? o / r : vec2(0.0);
@@ -551,6 +555,7 @@ void main() {
         if (uDebug == 1) { fragColor = vec4(v, 1e6); return; }
         if (th > PI || uSky == 0) { fragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
         fragColor = vec4(textureLod(uTex, mapUV(v), uLod).rgb * uBright, 1.0);
+        skyOut = vec4(decS(fragColor.rgb), 1.0);
         return;
     }
     float xpx = (d2 - uEdge.y - uEdge.z) / (r + uEdge.x);
@@ -564,7 +569,7 @@ void main() {
     vec3 c = textureGrad(uTex, uv, ux, uy).rgb;
     float cover = clamp(xpx + 0.5, 0.0, 1.0);
     vec3 back = (th > PI || uSky == 0) ? vec3(0.0) : c * uBright * cover;
-    if (uDisc == 0) { fragColor = vec4(back, 1.0); return; }
+    if (uDisc == 0) { fragColor = vec4(back, 1.0); skyOut = vec4(decS(back), 1.0); return; }
     // the disc: the radius at each of the four crossings (every pixel, before any choice: fwidth needs the 2 x 2 block)
     float x = xpx / uKpx, ax = max(abs(x), 1e-30);
     int side = x > 0.0 ? 0 : 1;
@@ -595,7 +600,7 @@ void main() {
         fragColor = vec4(-1.0, 0.0, 0.0, xpx);
         return;
     }
-    vec3 acc = vec3(0.0);
+    vec3 acc = vec3(0.0), accRaw = vec3(0.0);
     float tr = 1.0;
     for (int k = 0; k < 4; k++) {
         float w = max(fw[k], 1e-7);
@@ -603,10 +608,14 @@ void main() {
         if (cov <= 0.0) continue;
         float rc = clamp(rk[k], uDR.z, uDR.w);           // (a pixel that only partly covers the disc: its colour at the nearest radius on it)
         float g = sqrt(1.0 - 3.0 / rc) / (1.0 - pow(rc, -1.5) * b * LzB);
-        acc += tr * cov * discColour(rc, g);
+        vec3 cr = discColourRaw(rc, g);
+        acc += tr * cov * scaledColour(cr);
+        accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
     }
     fragColor = vec4(encS(acc + tr * decS(back)), 1.0);    // (laid over each other in linear light; the map's colours are sRGB-encoded)
+    discOut = vec4(uRaw == 1 ? accRaw : acc, 1.0);
+    skyOut = vec4(tr * decS(back), 1.0);
 }
 )";
 
@@ -643,7 +652,10 @@ uniform vec4 uDR;
 uniform vec4 uDT;
 uniform ivec3 uDN;
 uniform vec4 uDFix;
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 discOut;                    // 0.55.4: the disc's own light (linear; uRaw 1: before its colour is scaled into the screen) and the sky
+layout(location = 2) out vec4 skyOut;                     // behind it (linear, its covered part), for the Film glow and the eye's glare (unused otherwise)
+uniform int uRaw;
 const float PI = 3.14159265358979;
 vec4 cubicW(float u) { return vec4(-u * (u - 1.0) * (u - 2.0) / 6.0, (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0, -(u + 1.0) * u * (u - 2.0) / 2.0, (u + 1.0) * u * (u - 1.0) / 6.0); }
 int stencil(float q, int n, out vec4 w) { q = clamp(q, 0.0, float(n - 1)); int i = clamp(int(q), 1, n - 3); w = cubicW(q - float(i)); return i - 1; }
@@ -700,7 +712,7 @@ float shiftKerr(float r, float b) {                       // C75 (A9) on the equ
     float Om = 1.0 / (r * sqrt(r) + a), V = (Om - om) * vp / al;
     return al * sqrt(max(1.0 - V * V, 0.0)) / (1.0 - Om * b);
 }
-vec3 discColour(float r, float g) {
+vec3 discColourRaw(float r, float g) {
     if (uDFix.w > 0.0) return uDFix.rgb;                 // 0.55.3, Film: one colour all over the disc, no shift (blackhole/looks.h)
     float q = (log(r) - uDR.z) / uDR.w;
     if (q < 0.0) return vec3(0.0);
@@ -714,10 +726,11 @@ vec3 discColour(float r, float g) {
     c = min(c, float(uDN.y - 1) - 0.001);
     int k = int(c);
     vec3 col = mix(texelFetch(uDC, ivec2(k, 0), 0).rgb, texelFetch(uDC, ivec2(k + 1, 0), 0).rgb, c - float(k)) * uDT.y;
-    float m = max(col.r, max(col.g, col.b));
-    return m > 1.0 ? col / m : col;
+    return col;
 }
+vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
 void main() {
+    discOut = vec4(0.0); skyOut = vec4(0.0);
     vec2 o = gl_FragCoord.xy - uCentre;                  // right, up, pixels
     float r = length(o), th = r / uKpx;
     vec2 dn = r > 0.0 ? o / r : vec2(0.0, 1.0);
@@ -736,7 +749,7 @@ void main() {
     vec3 c = textureGrad(uTex, uv, ux, uy).rgb;
     float cover = clamp(xpx + 0.5, 0.0, 1.0);
     vec3 back = (th > PI || uSky == 0) ? vec3(0.0) : c * uBright * cover;
-    if (uDisc == 0 && uDebug != 2) { fragColor = vec4(back, 1.0); return; }
+    if (uDisc == 0 && uDebug != 2) { fragColor = vec4(back, 1.0); skyOut = vec4(decS(back), 1.0); return; }
     vec4 A = A0, B = B0;
     if (x <= 0.0) tableAt(1, -x, pe, chi, A, B);
     float rk[4];
@@ -749,7 +762,7 @@ void main() {
         fragColor = vec4(-1.0, 0.0, 0.0, xpx);
         return;
     }
-    vec3 acc = vec3(0.0);
+    vec3 acc = vec3(0.0), accRaw = vec3(0.0);
     float tr = 1.0;
     for (int k = 0; k < 4; k++) {
         // the part of the pixel's radius range on the disc; a range below float's own step at r (the camera close above the disc: every neighbour meets it at
@@ -758,15 +771,20 @@ void main() {
         float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
         if (cov <= 0.0) continue;
         float rc = clamp(rk[k], uDR.x, uDR.y);
-        acc += tr * cov * discColour(rc, shiftKerr(rc, b));
+        vec3 cr = discColourRaw(rc, shiftKerr(rc, b));
+        acc += tr * cov * scaledColour(cr);
+        accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
     }
     fragColor = vec4(encS(acc + tr * decS(back)), 1.0);
+    discOut = vec4(uRaw == 1 ? accRaw : acc, 1.0);
+    skyOut = vec4(tr * decS(back), 1.0);
 }
 )";
 
 // 0.55.3: the Black Hole Lab's Film look: the app's own glow (blackhole/looks.h glowReference is the same in double; no source: the film's flare is a
-// measured point-spread function that is not published). Down: each 4 x 4 block of the bent picture (8-bit sRGB, decoded) -> the mean of max(light - uThr, 0).
+// measured point-spread function that is not published). Down: each 4 x 4 block of the disc's own light (0.55.4: the lens pass's second output, linear, the
+// disc and its images only; until 0.55.3 the whole picture, sky included) -> the mean of max(light - uThr, 0).
 // Blur: a Gaussian of uSig blocks over -uR..uR along uDir, light outside the picture counted as none, the weights summing to 1. Add: the picture plus uStr x the
 // blur (bilinear between the blocks' centres, indices clamped at the edges) in linear light, encoded again: it only adds light.
 static const char* const kGlowDownFS = R"(#version 330 core
@@ -782,7 +800,7 @@ void main() {
     for (int j = 0; j < 4; j++)
         for (int i = 0; i < 4; i++) {
             ivec2 p = b * 4 + ivec2(i, j);
-            if (p.x < uSize.x && p.y < uSize.y) { acc += max(decS(texelFetch(uTex, p, 0).rgb) - vec3(uThr), vec3(0.0)); n++; }
+            if (p.x < uSize.x && p.y < uSize.y) { acc += max(texelFetch(uTex, p, 0).rgb - vec3(uThr), vec3(0.0)); n++; }
         }
     fragColor = vec4(acc / float(max(n, 1)), 1.0);
 }
@@ -827,6 +845,53 @@ void main() {
     ivec2 a = clamp(i0, ivec2(0), uN - 1), b = clamp(i0 + 1, ivec2(0), uN - 1);
     vec3 g = mix(mix(G(a.x, a.y), G(b.x, a.y), f.x), mix(G(a.x, b.y), G(b.x, b.y), f.x), f.y);
     fragColor = vec4(encS(base + uStr * g), 1.0);
+}
+)";
+
+// 0.55.4: the eye's glare in the Real look (blackhole/light.h: the CIE general disability glare equation). Down: each uB x uB block of the disc's own light
+// (the lens pass's second output, before its colour is scaled into the screen) -> its mean (pixels outside the picture not counted); read back, the veil is
+// made on the processor (light.cpp glareVeil). Add: the disc's light x uKeep (the share each source keeps; scaled down when brighter than the screen, its hue
+// kept, as the lens pass does), the sky behind it (the lens pass's third output), and the veil, bilinear between the blocks' centres (indices clamped).
+static const char* const kGlareDownFS = R"(#version 330 core
+uniform sampler2D uTex;
+uniform ivec2 uSize;
+uniform int uB;
+out vec4 fragColor;
+void main() {
+    ivec2 b = ivec2(gl_FragCoord.xy);
+    vec3 acc = vec3(0.0);
+    int n = 0;
+    for (int j = 0; j < uB; j++)
+        for (int i = 0; i < uB; i++) {
+            ivec2 p = b * uB + ivec2(i, j);
+            if (p.x < uSize.x && p.y < uSize.y) { acc += texelFetch(uTex, p, 0).rgb; n++; }
+        }
+    fragColor = vec4(acc / float(max(n, 1)), 1.0);
+}
+)";
+static const char* const kGlareAddFS = R"(#version 330 core
+in vec2 vUV;
+uniform sampler2D uDisc;
+uniform sampler2D uSky;
+uniform sampler2D uVeil;
+uniform ivec2 uN;
+uniform int uB;
+uniform float uKeep;
+out vec4 fragColor;
+vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
+vec3 V(int x, int y) { return texelFetch(uVeil, ivec2(x, y), 0).rgb; }
+void main() {
+    ivec2 sz = textureSize(uDisc, 0);
+    ivec2 px = clamp(ivec2(vUV * vec2(sz)), ivec2(0), sz - 1);
+    vec3 d = uKeep * texelFetch(uDisc, px, 0).rgb;
+    float m = max(d.r, max(d.g, d.b));
+    if (m > 1.0) d /= m;
+    vec2 q = (vec2(px) + 0.5) / float(uB) - 0.5;
+    ivec2 i0 = ivec2(floor(q));
+    vec2 f = clamp(q - vec2(i0), 0.0, 1.0);
+    ivec2 a = clamp(i0, ivec2(0), uN - 1), b = clamp(i0 + 1, ivec2(0), uN - 1);
+    vec3 g = mix(mix(V(a.x, a.y), V(b.x, a.y), f.x), mix(V(a.x, b.y), V(b.x, b.y), f.x), f.y);
+    fragColor = vec4(encS(d + texelFetch(uSky, px, 0).rgb + g), 1.0);
 }
 )";
 

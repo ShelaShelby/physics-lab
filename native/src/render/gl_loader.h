@@ -93,6 +93,8 @@ typedef unsigned long long GLuint64;
 #define GL_RENDERER 0x1F01
 #define GL_FRAMEBUFFER 0x8D40
 #define GL_COLOR_ATTACHMENT0 0x8CE0
+#define GL_COLOR_ATTACHMENT1 0x8CE1
+#define GL_COLOR_ATTACHMENT2 0x8CE2
 // OpenGL 4.3 (0.13 stage 2): compute shaders and shader storage buffers
 #define GL_MAJOR_VERSION 0x821B
 #define GL_MINOR_VERSION 0x821C
@@ -180,6 +182,7 @@ typedef unsigned long long GLuint64;
     X(void, glQueryCounter, (GLuint id, GLenum target))                                            \
     X(void, glFinish, ())                                                                          \
     X(void, glReadPixels, (GLint x, GLint y, GLsizei w, GLsizei h, GLenum f, GLenum t, void* data))        \
+    X(void, glDrawBuffers, (GLsizei n, const GLenum* bufs))                                        \
     X(void, glGetIntegerv, (GLenum pname, GLint* data))
 
 // The OpenGL 4.3 functions the compute path needs. They are loaded SEPARATELY (loadGL43), and only on a 4.3 context: on a 3.3 one the app runs without them (the CPU paths).

@@ -34,7 +34,7 @@ constexpr double kMassMin = 1, kMassMax = 1e11;                      // Suns: th
 // whose visible light is the larger share of its light.
 constexpr double kFeedDefault = 0.1;
 constexpr double kOuterMin = 7, kOuterMax = 1000, kOuterDefault = 30;
-constexpr double kExpLogMin = -1, kExpLogMax = 5, kExpLogDefault = 2;
+constexpr double kExpLogMin = -10, kExpLogMax = 5, kExpLogDefault = 2;   // 0.55.4: down to 10^-10 (was 10^-1), so the true exposure can show the stars
 constexpr double kFeedingMass = 1e8;
 constexpr const char* kFeedingKey = "feeding";
 constexpr const char* kFeedingName = "A feeding black hole (model)";
@@ -57,6 +57,10 @@ struct Settings {
     double spin = 0;                       // 0.55.2: a / M, 0 .. kSpinTop (spin_sky.h); 0 is exactly the non-spinning hole of 0.55.1 (its closed forms)
     Look look = Look::Real;                // 0.55.3 (looks.h): Real (the dot) or Film. Film draws with the film's spin and disc (shown(), below); the user's own spin,
                                            // disc, feeding rate and outer edge stay as they were and come back with Real
+    // 0.55.4 (light.h), only while the disc is on and the look is Real: the sky beside the disc on the disc's own exposure (trueSky; off: Shown, today's
+    // picture) and the eye's glare (on by default; off: 0.55.3's picture)
+    bool trueSky = false;
+    bool glare = true;
     bool operator==(const Settings& o) const;
 };
 Settings settingsDefaults();               // Sagittarius A*, 20 M, 90 degrees, looking at the galactic centre, bending on, our sky
@@ -71,6 +75,9 @@ void setMass(Settings& s, double massSun); // clamps; the preset is dropped unle
 // paperView: the camera where J15's Figure 13 has it (74.1 M, theta 1.511 rad from the spin axis; the turn round the axis and the field of view stay).
 void setLook(Settings& s, Look l);
 Settings shown(const Settings& s);
+// 0.55.4: whether the true exposure and the eye's glare are drawn: Real, the disc on and bending on (the true sky also needs our sky)
+bool trueSkyOn(const Settings& s);
+bool glareOn(const Settings& s);
 void paperView(Settings& s);
 void setDistance(Settings& s, double dist);
 void setFov(Settings& s, double fovDeg);

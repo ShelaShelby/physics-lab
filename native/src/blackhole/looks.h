@@ -25,7 +25,7 @@
 //     picture film" (its ref. [64], not in the paper): here the CIE 1931 observer and sRGB (disc.h blackBodyLinear, like every black body in the app) take
 //     their place, with one gain per channel so that a 6500 K black body has equal red, green and blue (and its own luminance Y).
 //   - the glow: Figure 16's caption p. 28 ("veiling flare", "the look of a soft glow"), section 4.3.1 p. 29: made by convolving the picture with the measured
-//     point-spread function of the IMAX lenses, which the paper does not publish. The app's glow is its OWN, a simple blur of the bright parts (glow* below);
+//     point-spread function of the IMAX lenses, which the paper does not publish. The app's glow is its OWN, a simple blur of the disc's bright parts (glow* below);
 //     the label says so ("our own glow, in place of the film's lens flare").
 //   - the paper's view: Figure 13's caption p. 24: "a camera at rc = 74.1M and theta_c = 1.511 (86.56 deg)". The caption gives the camera's place only (not
 //     its motion nor its field of view); the lab's camera hovers there.
@@ -81,7 +81,8 @@ std::array<double, 3> filmDiscLinear();
 double filmDiscY();
 
 // THE GLOW (the app's own; no source: J15's flare is a measured point-spread function it does not publish). Its rule: the part of each pixel's linear light
-// above kGlowThreshold of the screen's white (per channel), averaged over 4 x 4 pixel blocks, blurred by a Gaussian of standard deviation kGlowSigma x the
+// FROM THE DISC AND ITS IMAGES ONLY (0.55.4: the film's flare came from its bright disc; the sky and the stars are drawn unchanged under the glow; until 0.55.3
+// the whole picture, so the Milky Way was washed out) above kGlowThreshold of the screen's white (per channel), averaged over 4 x 4 pixel blocks, blurred by a Gaussian of standard deviation kGlowSigma x the
 // picture's height (in two passes, rows then columns, over at most 3 sigma, light outside the picture counted as none), and kGlowStrength of it added back
 // (bilinear between the blocks' centres) in linear light. It adds light only, never darkens a pixel; it does not conserve light: away from the picture's
 // edges it adds kGlowStrength x the light above the threshold, spread out (the kernel sums to 1).
@@ -90,7 +91,7 @@ constexpr int kGlowBlock = 4;
 // the blur's standard deviation and reach in block units for a picture H pixels high
 double glowSigmaBlocks(int H);
 int glowRadiusBlocks(int H);
-// The reference (double): lin is W x H x 3 linear light over the screen's white, row by row; returns the glow to add (same layout), not yet times the strength
+// The reference (double): lin is W x H x 3 linear light of the disc alone over the screen's white, row by row; returns the glow to add (same layout), not yet times the strength
 std::vector<double> glowReference(const std::vector<double>& lin, int W, int H);
 
 // The guide's table "What the film changed": one row per choice

@@ -1,0 +1,33 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/photometry/willmer2018_arxiv1804.07788.txt.gz
+# Reference: C. N. A. Willmer, "The Absolute Magnitude of the Sun in Several Filters", ApJS 236, 47 (2018), arXiv:1804.07788v1 (the PDF: sha256 3836b15f0abe96ca525a84726bda623c0f9417f0ea1163a2400cc97652664bd2; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/1804.07788
+# Date read: 2026-11-16
+# sha256 of the original: 9fe500155787fb61935fa2c9b96d77acad051468fec2f308833729dbb2df6129
+# Place in the original: the abstract (p. 1); Table 3, "Magnitudes of the Sun", its column heads and the row Johnson V, with the text that names the columns (p. 5)
+# Used by: src/blackhole/light.cpp (the Sun's apparent V magnitude, the bridge from a star's magnitude to the disc's scale) and tests/test_blackhole.cpp testTrueLight, which reads the numbers from these lines.
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin abstract (p. 1), the Sun's absolute magnitudes
+                                                       estimated absolute magnitudes of the Sun are MB = 5.44, MV = 4.81 and MK = 3.27 mag in the
+                                                       vegamag system and MB = 5.31, MV = 4.80 and MK = 5.08 mag in AB.
+#--- end
+#--- begin p. 5, what the columns of Table 3 are
+magnitude of MBol =4.74.                                                             AB and vegamag and ST systems followed in column
+  Table 3 lists in columns (1) the filter, (2), (3) and (4)                          (10) by the pivot wavelength and in column (11) the
+the absolute magnitude of the Sun in the vegamag, AB                                 source of the throughput curves, identified in the table
+and ST systems, in columns (5) and (6) and (7) the ap-                               notes.
+parent magnitude in vegamag, AB, ST; in columns (8)
+#--- end
+#--- begin Table 3 (p. 5): its head and the Johnson V row
+                                                          Table 3. Magnitudes of the Sun
+
+                       Filter             Abs      Abs      Abs        App         App       App      Vega       Vega        λpivot       Source
+
+                                        (Vega)     (AB)     (ST)     (Vega)        (AB)       (ST)    (AB)        (ST)           µm
+                       (1)                  (2)      (3)      (4)         (5)        (6)        (7)      (8)           (9)       (10)     (11)
+
+               Johnson U                   5.61     6.33     5.42      -25.97     -25.25     -26.15   0.721      -0.183       0.3611        1
+               Johnson B                   5.44     5.31     4.84      -26.13     -26.26     -26.74   -0.128     -0.605       0.4396        1
+               Johnson V                   4.81     4.80     4.81      -26.76     -26.77     -26.76   -0.013      0.001       0.5511        1
+#--- end
