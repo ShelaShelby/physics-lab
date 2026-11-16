@@ -98,13 +98,22 @@ std::vector<std::string> benchBlackHoleLines(const BenchBlackHole& b) {
     v.push_back("Black Hole Lab: the frame's own thread draws the last finished picture; the tables, star bins, stars' images and exposure are worked out on a worker "
                 "thread, the glare's veil and the fine spin table on threads of their own (below normal priority).");
     v.push_back("Black Hole Lab, the spinning hole's light paths: " + (b.path.empty() ? std::string("not decided yet") : b.path) + "; the card's fills " + stage(b.card));
+    if (!b.skyPath.empty())
+        v.push_back("Black Hole Lab, the spinning hole's sky and disc: " + b.skyPath + "; the pass on the card " + stage(b.skyGpu) + " for the whole picture; the exposure: " +
+                    (b.lookPath.empty() ? std::string("not decided yet") : b.lookPath));
     for (int k = 0; k < 6; k++) {
         const BenchBhMove& m = b.move[k];
         if (m.frames == 0) { v.push_back(std::string("Black Hole Lab, ") + names[k] + ": no frames counted"); continue; }
         v.push_back(std::string("Black Hole Lab, ") + names[k] + ": frame thread " + f("%.2f", m.frameSum / m.frames) + " ms average, " + f("%.2f", m.frameWorst) +
                     " ms worst; picture behind the settings in " + std::to_string(m.behindFrames) + " of " + std::to_string(m.frames) + " frames, at most " + f("%.0f", m.behindWorst) + " ms; " +
                     std::to_string(m.pictures) + " new pictures in " + f("%.1f", m.seconds) + " s" + (m.seconds > 0 ? " (" + f("%.0f", m.pictures / m.seconds) + " a second)" : std::string()));
-        v.push_back("  worker: coarse table " + stage(m.coarse) + "; star bins " + stage(m.bins) + "; stars' images " + stage(m.stars) + "; exposure " + stage(m.look));
+        v.push_back("  worker: coarse table " + stage(m.coarse) + "; star bins " + stage(m.bins) + "; stars' images " + stage(m.stars) + "; exposure " + stage(m.look) +
+                    (m.disc.n > 0 ? "; disc table " + stage(m.disc) : std::string()));
+        if (m.skyPictures > 0)
+            v.push_back("  the card: sky and disc " + std::to_string(m.skyPictures) + " new pictures in " + f("%.1f", m.seconds) + " s" +
+                        (m.seconds > 0 ? " (" + f("%.0f", m.skyPictures / m.seconds) + " a second)" : std::string()) + ", at " + f("%.0f", 100 * m.scaleMin) +
+                        " % of the picture's width at the lowest; the stars: " + std::to_string(m.pictures) + " new pictures" +
+                        (m.seconds > 0 ? " (" + f("%.0f", m.pictures / m.seconds) + " a second)" : std::string()));
         if (k < 3) v.push_back(m.sharpMs >= 0 ? "  at rest: the sharp picture (the fine table) " + f("%.0f", m.sharpMs) + " ms after the stop"
                                               : "  at rest: no sharp picture within the " + f("%.1f", m.restS) + " s at rest");
     }

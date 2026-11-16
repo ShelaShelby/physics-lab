@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.56.0", "The Black Hole Lab: the graphics card draws the spinning hole's sky and disc for every pixel",
+     "Round the spinning hole the graphics card now works out each pixel's light path itself from the closed formulas (Gralla and Lupsasca 2020) in "
+     "single precision: the bent sky and the disc are drawn anew in every frame while you turn, tilt or change the distance, with no table in between, so "
+     "the moving picture and the picture at rest are the same picture. When the card is slow, the picture is drawn at a lower resolution while you move "
+     "and always at full resolution at rest. The picture's exposure is found on the card in the same frame (at spin 0 too). Before it is used, a check "
+     "at the first spinning picture compares the card's rays with the processor's double precision; it has its own guard, its own steps in the log, and "
+     "Settings, Performance says which path draws the spinning hole and why. The stars still come from the processor and may trail the sky by a few "
+     "frames while you move; the disc and the shadow hide them. At spin 0 the disc's table is made three times faster while the distance changes."},
     {"0.55.9", "The Black Hole Lab: the spinning hole's light paths from closed formulas",
      "Round the spinning hole every light path is now worked out from its closed formula (elliptic integrals and Jacobi functions, from Gralla and Lupsasca "
      "2020) instead of being followed step by step: the sharp picture after you stop comes about ten times sooner, and the picture made while you tilt or "

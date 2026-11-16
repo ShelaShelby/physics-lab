@@ -56,6 +56,7 @@ public:
     // later; white the screen's white it gives, 0 none yet) and how many sample points it had
     struct SkyStats { double fullMs = -1, lastMs = -1, scale = 1; long draws = 0, lowDraws = 0; double white = 0, whiteY = 0; long whiteReads = 0; int expN = 0; double expMs = -1; long timed = 0; };
     const SkyStats& skyStats() const { return skyStats_; }
+    double skyWhiteWait();                         // (tests) the card's exposure of the last picture, waiting for its read-back; 0 none
     // 0.56.0: one star image laid over the bent picture through its open-sky share (LensSky::kerrSky's fourth output): hidden where the disc or the shadow is
     void maskedDisc(double x, double y, double r, Color c);
 
@@ -298,7 +299,7 @@ private:
     GLint uMask_ = -1, uMaskOn_ = -1, uMaskOrigin_ = -1;
     int maskOx_ = 0, maskOy_ = 0;
     void skyPass(const LensSky& L, int fbW, int fbH, int ox, int oy, double scale, int mode, bool layers);
-    GLuint skyExposure(const LensSky& L, int fbW, int fbH);
+    GLuint skyExposure(const LensSky& L, const std::function<void()>& sample);
     void skyTimes();
     void skyPicture(const LensSky& L, int fbW, int fbH, bool layers, bool raw);
     bool lensSkyDrawn_ = false;                    // the kept picture was drawn by the sky pass

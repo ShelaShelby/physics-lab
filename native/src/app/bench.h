@@ -54,6 +54,9 @@ struct BenchBhMove {
     BenchStage coarse, bins, stars, look;                   // the worker's: the coarse table, the star bins, the stars' images, the exposure (ms each)
     double sharpMs = -1;                                    // 0.55.8: at spin, the first frame at rest showing the fine table, after the stop (ms; -1 none)
     double restS = 0;                                       // 0.55.8: the slot's time at rest (s)
+    int skyPictures = 0;                                    // 0.56.0: new pictures of sky and disc drawn by the card while moving
+    double scaleMin = 1;                                    //   the lowest resolution's scale while moving (of the picture's width)
+    BenchStage disc;                                        //   the worker's disc table (spin 0)
 };
 struct BenchBlackHole {
     BenchBhMove move[6];                                    // turning round the axis, tilting, changing distance; at spin 0.9, then at spin 0 (0.55.6)
@@ -62,6 +65,8 @@ struct BenchBlackHole {
     std::string path;                                       // 0.55.6: which path filled the spin table and why (the start-up check)
     double glareWaitWorst = 0;                              // the longest wait from a picture to its glare (ms)
     double fineStartMs = 0;                                 // 0.55.8: the fine spin table made at the scene's start (all cores, normal priority)
+    std::string skyPath, lookPath;                          // 0.56.0: which path drew the sky and disc and why; the exposure's path
+    BenchStage skyGpu;                                      //   the card's pass for the whole picture (its own timer)
 };
 std::vector<std::string> benchBlackHoleLines(const BenchBlackHole& b);
 

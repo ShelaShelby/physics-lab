@@ -520,6 +520,11 @@ layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 discOut;                    // 0.55.4: the disc's own light (linear; uRaw 1: before its colour is scaled into the screen) and the sky
 layout(location = 2) out vec4 skyOut;                     // behind it (linear, its covered part), for the Film glow and the eye's glare (unused otherwise)
 uniform int uRaw;
+uniform int uExp;                                     // 0.56.0: the exposure's sample at (uSamp.x + i uSamp.y, uSamp.z - j uSamp.w): (the first disc image's
+uniform vec4 uSamp;                                   // brightest channel, its Y) before the white; uWhiteMode 1: the white from uWhite (the card's own)
+uniform sampler2D uWhite;
+uniform int uWhiteMode;
+float gInv = 1.0;
 const float PI = 3.14159265358979;
 float tab(int i) { return texelFetch(uTable, ivec2(clamp(i, 0, uN - 1), 0), 0).r; }
 float bendAt(float xpx) {
@@ -550,13 +555,15 @@ vec3 discColourRaw(float r, float g) {
     if (q < 0.0) return vec3(0.0);
     q = min(q, float(uDN.z - 1) - 0.001);
     int i = int(q);
-    vec3 c = mix(texelFetch(uDC, ivec2(i, 0), 0).rgb, texelFetch(uDC, ivec2(i + 1, 0), 0).rgb, q - float(i)) * uDT.y;
+    vec3 c = mix(texelFetch(uDC, ivec2(i, 0), 0).rgb, texelFetch(uDC, ivec2(i + 1, 0), 0).rgb, q - float(i)) * gInv;
     return c;
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0);
-    vec2 o = gl_FragCoord.xy - uCentre;                  // right, up, pixels
+    float wt = texelFetch(uWhite, ivec2(0, 0), 0).r;
+    gInv = uExp == 1 ? 1.0 : (uWhiteMode == 1 ? (wt > 0.0 ? 1.0 / wt : 1.0) : uDT.y);
+    vec2 o = (uExp == 1 ? vec2(uSamp.x + floor(gl_FragCoord.x) * uSamp.y, uSamp.z - floor(gl_FragCoord.y) * uSamp.w) : gl_FragCoord.xy) - uCentre;   // right, up, pixels
     float d2 = dot(o, o), r = sqrt(d2), th = r / uKpx;
     vec2 dn = r > 0.0 ? o / r : vec2(0.0);
     if (uBend == 0) {
@@ -603,6 +610,16 @@ void main() {
     }
     float fw[4] = float[4](fwidth(rk[0]), fwidth(rk[1]), fwidth(rk[2]), fwidth(rk[3]));
     float b = uDR.y * sin(th);
+    if (uExp == 1) {
+        for (int k = 0; k < 4; k++)
+            if (rk[k] >= uDR.z && rk[k] <= uDR.w) {
+                vec3 c = discColourRaw(rk[k], sqrt(1.0 - 3.0 / rk[k]) / (1.0 - pow(rk[k], -1.5) * b * LzB));
+                fragColor = vec4(max(c.r, max(c.g, c.b)), dot(c, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+                return;
+            }
+        fragColor = vec4(0.0);
+        return;
+    }
     if (uDebug == 2) {
         for (int k = 0; k < 4; k++)
             if (rk[k] >= uDR.z && rk[k] <= uDR.w) { float g = sqrt(1.0 - 3.0 / rk[k]) / (1.0 - pow(rk[k], -1.5) * b * LzB); fragColor = vec4(float(k), rk[k], g, xpx); return; }

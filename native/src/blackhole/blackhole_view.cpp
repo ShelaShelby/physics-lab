@@ -169,7 +169,11 @@ bool BlackHoleView::ensureSpinTable(const Settings& s, bool wait, const std::ato
         if (!fineExternal_) stopSpinWorker();
         static const bool old = std::getenv("PL_BH_MOVING558") != nullptr;  // 0.55.9 (the check's failing run): 0.55.8's moving table, its size and rays
         auto c = old ? std::make_shared<SpinTable>(a, r, th, 32, 64, kSpinEdgeCoarse, cancel, 0, kSpinMovingMino)
-                     : std::make_shared<SpinTable>(a, r, th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, cancel, 0, kSpinMoving);
+                     : [&] {
+                           static const double* tryv = [] { static double v[4] = {kSpinChiCoarse, kSpinSCoarse, kSpinMoving.xc, kSpinMoving.xlo};   // (PL_BH_MOVINGTRY, tests: rows, columns, xc, xlo)
+                                                            if (const char* e = std::getenv("PL_BH_MOVINGTRY")) std::sscanf(e, "%lf,%lf,%lf,%lf", &v[0], &v[1], &v[2], &v[3]); return v; }();
+                           SpinFill f = kSpinMoving; f.xc = tryv[2]; f.xlo = tryv[3];
+                           return std::make_shared<SpinTable>(a, r, th, static_cast<int>(tryv[0]), static_cast<int>(tryv[1]), kSpinEdgeCoarse, cancel, 0, f); }();
         if (!c->ok()) return false;
         st_.spinCoarseMs = c->fillMs();
         st_.spinCoarseFills++;
@@ -238,10 +242,11 @@ DiscPixel BlackHoleView::spinPixel(const Settings& s, const HoleView& v, double 
     return o;
 }
 
-void BlackHoleView::ensureDisc(double dist) {
-    if (disc_ && discDist_ == dist) return;
+void BlackHoleView::ensureDisc(double dist, bool moving) {
+    if (disc_ && discDist_ == dist && (moving || !discCoarse_)) return;
     const auto t0 = std::chrono::steady_clock::now();
-    disc_ = std::make_shared<const DiscTable>(dist);
+    disc_ = moving ? std::make_shared<const DiscTable>(dist, kDiscMovingRows, kDiscMovingCols) : std::make_shared<const DiscTable>(dist);
+    discCoarse_ = moving;
     discDist_ = dist;
     discVer_ = nextVersion();
     st_.discMs = msSince(t0);
@@ -368,7 +373,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.bend = true;
         L.kA = &T.texA(); L.kB = &T.texB(); L.kEdge = &T.texEdge(); L.kTau = &T.texTau();
         L.kChi = T.nChi(); L.kS = T.nS(); L.kEdgeN = T.nEdge();
-        L.kSLo = T.sLo(); L.kXc = kSpinXc; L.kXlo = T.xlo(); L.spin = s.spin;
+        L.kSLo = T.sLo(); L.kXc = T.xc(); L.kXlo = T.xlo(); L.spin = s.spin;
         L.kVersion = spinVer_;
         Vec3 rows[3];
         viewRows(v, rows);
@@ -425,6 +430,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         const DiscPhys p = discPhys(s);
         L.tScale = std::pow(p.fluxScale() / stefanBoltzmann(), 0.25);       // T = tScale F(r)^(1/4), F for Mdot = M = 1 (disc.h)
         L.white = st_.look.white;
+        if (lookUse_ && s.expAuto) { L.whiteMode = 1; L.expStep = 4; }      // 0.56.0: the card finds the exposure (spin 0 too)
         if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
         L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread;   // 0.55.5
     }
@@ -453,10 +459,17 @@ bool BlackHoleView::prepare(const Settings& s, double W, double H, double cx, do
     const bool disc = s.disc && s.bend;
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; lit_ = false; return true; }   // Sky: Black and no disc: nothing is lit, the picture is black
     lit_ = true;
-    if (disc) ensureDisc(s.dist);
+    if (disc) ensureDisc(s.dist, movingEngine_);
     const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, 0.0, 0, static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
     const bool changed = !(k == key_) || (exact_ && !keyExact_);
-    if (changed) {                                                          // the exposure first: the shader needs the white
+    if (changed && disc && lookEngine_) {                                   // 0.56.0: the card finds the exposure; the stars use what it last said
+        st_.look = DiscLook{};
+        st_.look.any = true;
+        st_.look.white = s.expAuto ? (skyWhite_ > 0 ? skyWhite_ : 1) : std::pow(10.0, s.expLog);
+        st_.lookMs = 0;
+        st_.lookFills++;
+        made_[0] = s.yaw; made_[1] = s.pitch; made_[2] = s.dist; made_[3] = 0;
+    } else if (changed) {                                                   // the exposure first: the shader needs the white
         const auto tl = std::chrono::steady_clock::now();
         st_.look = disc ? discLook(*disc_, s, v, W, H, lookStep(W, H, exact_)) : DiscLook{};
         st_.lookMs = msSince(tl);
@@ -672,6 +685,7 @@ struct BlackHoleView::Request {
     std::uint64_t seq = 0;
     std::shared_ptr<CardTableData> card;                                    // 0.55.6: a table filled by the card: the worker makes it (the fine one) first
     bool sky = false;                                                       // 0.56.0: the card draws sky and disc (the worker: the stars only, no exposure scan)
+    bool cardLook = false, moving = false;                                  //   the card finds the exposure (also at spin 0); the view is moving (spin 0: the moving disc table)
     double skyWhite = 0;                                                    //   and the card's exposure as last read back (0: none yet)
 };
 struct BlackHoleView::Picture {
@@ -692,6 +706,7 @@ struct BlackHoleView::Picture {
     bool lit = false;
     double made[4] = {0, 0, 0, 0};
     double workMs = 0;
+    bool discCoarse = false;                                                // 0.56.0: made with the moving disc table (spin 0)
 };
 
 void BlackHoleView::ensureWorker() {
@@ -725,7 +740,7 @@ void BlackHoleView::workLoop() {
         }
         E.fineOffer_ = r->fine;
         E.exact_ = r->exact;
-        E.skyEngine_ = r->sky; E.skyWhite_ = r->skyWhite;
+        E.skyEngine_ = r->sky; E.skyWhite_ = r->skyWhite; E.lookEngine_ = r->cardLook; E.movingEngine_ = r->moving;
         if (!E.prepare(r->s, r->W, r->H, r->cx, r->cy, &stale_)) continue;  // (stopped: the view is closing)
         auto p = std::make_unique<Picture>();
         p->table = E.table_; p->tableDist = E.tableDist_; p->tableVer = E.tableVer_;
@@ -737,6 +752,7 @@ void BlackHoleView::workLoop() {
         p->lit = E.lit_;
         std::copy(E.made_, E.made_ + 4, p->made);
         p->workMs = msSince(t0);
+        p->discCoarse = E.discCoarse_ && p->disc != nullptr;
         p->req = std::move(*r);
         std::unique_ptr<Picture> old;                                       // (a picture the frame did not take is freed here, outside the lock)
         {   std::lock_guard<std::mutex> g(workMx_);
@@ -751,9 +767,10 @@ void BlackHoleView::workLoop() {
 // mean, in pixels. (0.55.8: seen nearly edge on, the moving table's 32 rows missed the disc's thin near side; REPORT 0.55.9.)
 namespace {
 void discShift(const BlackHoleView& v, const SpinTable& moving, const SpinTable& rest, const Settings& s, double W, double H, double cx, double cy) {
+    // 0.56.0: every pixel (was every second), and the largest connected patch (4-neighbours) of the pixels that change between disc and no disc
     const HoleView hv = holeView(s, W, H, cx, cy);
     const DiscGeom g = discGeom(s);
-    const int nx = static_cast<int>(W) / 2, ny = static_cast<int>(H) / 2;
+    const int nx = static_cast<int>(W), ny = static_cast<int>(H);
     std::vector<signed char> mr(static_cast<std::size_t>(nx) * ny), mm(mr.size());
     const auto on = [&](const SpinTable& T, double X, double Y) {
         const double dx = X - hv.cx, dy = hv.cy - Y, d = std::hypot(dx, dy), th = d / hv.K;
@@ -762,28 +779,53 @@ void discShift(const BlackHoleView& v, const SpinTable& moving, const SpinTable&
         if (chi < 0) chi += 2 * kPi;
         return spinDisc(T.lookup(th, chi), s.spin, g.rIn, g.rOut).order >= 0;
     };
+    parallelFor(ny, [&](int j) {
+        for (int i = 0; i < nx; i++) {
+            const std::size_t k = static_cast<std::size_t>(j) * nx + i;
+            mr[k] = on(rest, i + 0.5, j + 0.5); mm[k] = on(moving, i + 0.5, j + 0.5);
+        }
+    });
     long pix = 0, differ = 0;
-    for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
-        const double X = 2 * i + 1, Y = 2 * j + 1;
-        const std::size_t k = static_cast<std::size_t>(j) * nx + i;
-        mr[k] = on(rest, X, Y); mm[k] = on(moving, X, Y);
-        pix += mr[k];
-    }
+    for (std::size_t k = 0; k < mr.size(); k++) { pix += mr[k]; differ += mr[k] != mm[k]; }
     double worst = 0, sum = 0;
+    std::vector<int> stack;
+    std::vector<char> seen(mr.size(), 0);
+    long patch = 0;
     for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
         const std::size_t k = static_cast<std::size_t>(j) * nx + i;
         if (mr[k] == mm[k]) continue;
-        differ++;
-        double best = 1e9;                                                  // the nearest sample of the other kind in the picture at rest (its outline)
+        double best = 1e9;                                                  // the nearest pixel of the other kind in the picture at rest (its outline)
         for (int r = 1; r <= 40 && best > r - 1; r++)
             for (int jj = std::max(0, j - r); jj <= std::min(ny - 1, j + r); jj++) for (int ii = std::max(0, i - r); ii <= std::min(nx - 1, i + r); ii++)
                 if (mr[static_cast<std::size_t>(jj) * nx + ii] != mr[k]) best = std::min(best, std::hypot(ii - i, jj - j));
-        best = 2 * (std::min(best, 40.0) - 0.5);                            // (in pixels, the samples 2 pixels apart: the outline lies at least half a step past it)
+        best = std::min(best, 40.0) - 0.5;                                  // (the outline lies half a pixel past the pixel of the other kind)
         worst = std::max(worst, best); sum += best;
+        if (seen[k]) continue;
+        long n = 0;
+        stack.assign(1, static_cast<int>(k)); seen[k] = 1;
+        while (!stack.empty()) {
+            const int q = stack.back(); stack.pop_back(); n++;
+            const int qi = q % nx, qj = q / nx;
+            const int nb[4][2] = {{qi - 1, qj}, {qi + 1, qj}, {qi, qj - 1}, {qi, qj + 1}};
+            for (const auto& p : nb) {
+                if (p[0] < 0 || p[0] >= nx || p[1] < 0 || p[1] >= ny) continue;
+                const std::size_t m = static_cast<std::size_t>(p[1]) * nx + p[0];
+                if (!seen[m] && mr[m] != mm[m]) { seen[m] = 1; stack.push_back(static_cast<int>(m)); }
+            }
+        }
+        patch = std::max(patch, n);
     }
     (void)v;
-    std::printf("PLBHDISCSHIFT a=%g dist=%g pitch=%.6f look=%d disc=%ld differ=%ld maxpx=%.1f meanpx=%.2f moving=%dx%d\n", s.spin, s.dist, s.pitch, static_cast<int>(s.look),
-                pix, differ, worst, differ ? sum / differ : 0.0, moving.nChi(), moving.nS());
+    if (const char* dump = std::getenv("PL_BH_DISCSHIFTDUMP")) {           // (tests: the two masks as a picture: rest white, moving red, both yellow)
+        std::FILE* f = std::fopen(dump, "wb");
+        if (f) {
+            std::fprintf(f, "P6 %d %d 255\n", nx, ny);
+            for (std::size_t k = 0; k < mr.size(); k++) { const unsigned char c[3] = {static_cast<unsigned char>(mr[k] || mm[k] ? 255 : 0), static_cast<unsigned char>(mr[k] ? 255 : 0), static_cast<unsigned char>(mr[k] && !mm[k] ? 255 : 0)}; std::fwrite(c, 1, 3, f); }
+            std::fclose(f);
+        }
+    }
+    std::printf("PLBHDISCSHIFT a=%g dist=%g pitch=%.6f look=%d disc=%ld differ=%ld maxpx=%.1f meanpx=%.2f patch=%ld moving=%dx%d\n", s.spin, s.dist, s.pitch, static_cast<int>(s.look),
+                pix, differ, worst, differ ? sum / differ : 0.0, patch, moving.nChi(), moving.nS());
     std::fflush(stdout);
 }
 }  // namespace
@@ -806,6 +848,7 @@ void BlackHoleView::install(Picture& p) {
     shownKey_ = p.req.want; shownExact_ = p.req.exact; shownSeq_ = p.req.seq;
     hasShown_ = true;
     installs_++;
+    shownDiscCoarse_ = p.discCoarse;
     st_.spinCard = spin_ && spin_->filledByCard() && p.req.s.spin > 0 && p.req.s.bend;
     if (st_.spinCard) cardFine_ = spin_;                                    // 0.55.6: later pictures of the same spin, distance and tilt use it (turning)
 }
@@ -984,13 +1027,16 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
         }
     }
     const bool current = hasShown_ && shownKey_ == want;
-    const bool upToDate = current && (shownExact_ || !exact) && (!fine || st_.spinFine);
-    const bool asked = posted_ && postedKey_ == want && (postedExact_ || !exact) && postedFine_ == fine.get();
+    const bool movingNow = now - wantSince_ < kGlareRest;
+    const bool cardLook = sky || (!spinning && gpuSky && s.disc && s.bend);   // 0.56.0: the exposure on the card (also at spin 0)
+    lookUse_ = cardLook;
+    const bool upToDate = current && (shownExact_ || !exact) && (!fine || st_.spinFine) && !(shownDiscCoarse_ && !movingNow);
+    const bool asked = posted_ && postedKey_ == want && (postedExact_ || !exact) && postedFine_ == fine.get() && !(postedMoving_ && !movingNow);
     if (!upToDate && !asked && !((card || cardWait) && !fine)) {                         // (card: a view of a new spin, distance or tilt is the card's to start)
         auto r = std::make_unique<Request>();
         r->s = s; r->W = W; r->H = H; r->cx = cx; r->cy = cy; r->exact = exact; r->fine = fine; r->want = want; r->seq = ++reqSeq_;
-        r->sky = sky; r->skyWhite = R.skyStats().white;
-        posted_ = true; postedKey_ = want; postedExact_ = exact; postedFine_ = fine.get();
+        r->sky = sky; r->skyWhite = R.skyStats().white; r->cardLook = cardLook; r->moving = movingNow;
+        posted_ = true; postedKey_ = want; postedExact_ = exact; postedFine_ = fine.get(); postedMoving_ = movingNow;
         {   std::lock_guard<std::mutex> g(workMx_);
             req_ = std::move(r); }                                          // (a request not yet taken is replaced: the newest wins)
         workCv_.notify_one();
@@ -1003,7 +1049,7 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     std::copy(made_, made_ + 4, st_.made);
     const render::Renderer2D::SkyStats& ks = R.skyStats();
     st_.skyCard = sky; st_.skyGpuMs = ks.fullMs; st_.skyScale = ks.scale; st_.skyPictures = ks.draws; st_.starPictures = installs_;
-    st_.lookCard = sky && s.disc && s.expAuto;
+    st_.lookCard = cardLook && s.disc && s.expAuto;
     if (st_.lookCard && ks.white > 0) { st_.look.white = ks.white; st_.look.brightMax = ks.white; st_.look.brightY = ks.whiteY; st_.look.any = true; }
     if (sky) {                                                              // 0.56.0: the sky and the disc of the settings asked for, the stars of the last picture
         glareRest(want);
@@ -1271,7 +1317,71 @@ void cardCompare(render::Renderer2D& R) {
 
 void compareHook(render::Renderer2D& R, const char* spec) {
     if (spec && std::string(spec) == "card") { cardCompare(R); return; }
-    if (spec && std::string(spec) == "sky") { skyCompareHook(R); return; }   // 0.56.0
+    if (spec && std::string(spec) == "sky") {                              // 0.56.0
+        skyCompareHook(R);
+        // the exposure found on the card (the brightest channel of the first disc image at the scan's points, reduced on the card) against the processor's
+        // scan of the same points (prepare: lab.h discLook's rule through the fine table, or the disc table at spin 0), 640 x 400, at rest
+        const int W = 640, H = 400;
+        const FilmChoices film;
+        struct Ex { const char* name; double spin; bool filmLook; };
+        for (const Ex& e : {Ex{"benchmark", 0.9, false}, Ex{"film", 0, true}, Ex{"spin0", 0, false}}) {
+            BlackHoleView view;
+            Settings u = settingsDefaults();
+            applyPreset(u, kFeedingKey);
+            u.dist = 20; u.pitch = 80 * kPi / 180;
+            if (e.filmLook) { setLook(u, Look::Film); paperView(u); setFov(u, 30); }
+            else setSpin(u, e.spin);
+            const Settings s = shown(u);
+            view.exact_ = true;
+            if (s.spin > 0) view.ensureSpin(s, true);
+            view.prepare(s, W, H, W / 2.0, H / 2.0, nullptr);
+            const double cpu = view.st_.look.white;
+            const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
+            view.skyUse_ = s.spin > 0; view.lookUse_ = true;
+            if (s.spin > 0) view.ensureSkyF(s.spin);
+            render::Renderer2D::LensSky L = view.lensFor(s, v);
+            L.glareKeep = 0;
+            Fbo f = makeFbo(W, H, false);
+            R.begin(W, H); R.lensSky(L); R.end(W, H, 0, f.fbo);
+            const double card = R.skyWhiteWait();
+            dropFbo(f);
+            std::printf("PLBHSKYEXP case=%s spin=%g whitemode=%d cpu=%.6g card=%.6g rel=%.2e n=%d\n", e.name, s.spin, L.whiteMode, cpu, card, card > 0 ? std::fabs(card / cpu - 1) : 1.0, R.skyStats().expN);
+        }
+        // the card's moving picture and its picture at rest come from the same formulas: at the same resolution not one pixel differs (Film, the paper's
+        // view and 3 degrees below the plane); at half the resolution (a pass forced slow) the pixels that differ by more than 8 levels of 255 are counted
+        for (double tilt : {film.camTheta, kPi / 2 + 3 * kPi / 180}) {
+            BlackHoleView view;
+            Settings u = settingsDefaults();
+            applyPreset(u, kFeedingKey);
+            setLook(u, Look::Film); paperView(u); setFov(u, 30);
+            u.pitch = tilt;
+            const Settings s = shown(u);
+            const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
+            view.skyUse_ = true; view.lookUse_ = true;
+            view.ensureSkyF(s.spin);
+            std::vector<unsigned char> pic[3];
+            for (int k = 0; k < 3; k++) {
+                render::Renderer2D::LensSky L = view.lensFor(s, v);
+                L.moving = k != 1; L.frameBudgetMs = k == 0 ? 1e9 : 8; L.slowMs = k == 2 ? 32 : 0; L.white = 1; L.whiteMode = 0;
+                Fbo f = makeFbo(W, H, false);
+                R.begin(W, H); R.lensSky(L); R.end(W, H, 0, f.fbo);
+                pic[k].resize(static_cast<std::size_t>(W) * H * 4);
+                plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
+                plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pic[k].data());
+                dropFbo(f);
+            }
+            long same = 0, half = 0;
+            for (std::size_t i = 0; i < pic[0].size(); i += 4)
+                for (int c = 0; c < 3; c++) {
+                    if (pic[0][i + c] != pic[1][i + c]) { same++; break; }
+                }
+            for (std::size_t i = 0; i < pic[0].size(); i += 4)
+                for (int c = 0; c < 3; c++) if (std::abs(int(pic[2][i + c]) - int(pic[1][i + c])) > 8) { half++; break; }
+            std::printf("PLBHSKYSTOP tilt=%.5f samesize=%ld halfsize=%ld scale=%.3f pixels=%d\n", tilt, same, half, R.skyStats().scale, W * H);
+        }
+        std::fflush(stdout);
+        return;
+    }
     // 0. 0.55.3, the looks: Real's saved case to the pixel; Film at the paper's view (J15 Figure 13: 74.1 M, 86.56 deg; field of view 30 degrees) against the double
     //    lookup of the same table: the disc's image and edges where the module puts the paper's edges, one colour over the whole disc before the glow; the glow
     //    against its double reference (looks.h glowReference) on the same picture, no pixel darker; the glow pass's time at 1280 x 800 and 3840 x 2160.

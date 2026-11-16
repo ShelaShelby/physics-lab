@@ -1027,6 +1027,18 @@ static void testBenchBlackHole() {
     checkTrue("black hole lines (0.55.8): how long after the stop the sharp picture came, or that it did not within the rest; the fine table made at the start",
               has("  at rest: the sharp picture (the fine table) 450 ms after the stop") && has("  at rest: the sharp picture (the fine table) 0 ms after the stop") &&
               !has("spin 0.9, changing distance: no frames counted\n  at rest") && has("the fine spin table made at the scene's start (all cores) 700 ms"));
+    // 0.56.0: which path drew the sky and disc and why, the pass's time on the card, the resolution while moving, new pictures a second of sky and disc
+    // apart from the stars', the exposure's path; the disc table at spin 0 (the stage that made spin 0's distance slow)
+    {   BenchBlackHole g = h;
+        g.skyPath = "the graphics card (start-up check passed)"; g.lookPath = "the graphics card"; g.skyGpu.add(1.5); g.skyGpu.add(2.5);
+        g.move[0].skyPictures = 120; g.move[0].scaleMin = 0.75; g.move[5].frames = 3; g.move[5].frameSum = 3; g.move[5].disc.add(8);
+        const std::vector<std::string> w = benchBlackHoleLines(g);
+        const auto in = [&](const std::string& x) { for (const std::string& l : w) if (l.find(x) != std::string::npos) return true; return false; };
+        checkTrue("black hole lines (0.56.0): the sky's path, the pass's time on the card, the exposure's path",
+                  in("Black Hole Lab, the spinning hole's sky and disc: the graphics card (start-up check passed); the pass on the card 2.0 ms average, 2.5 ms worst (2x) for the whole picture; the exposure: the graphics card"));
+        checkTrue("black hole lines (0.56.0): the card's new pictures a second apart from the stars', the lowest resolution while moving",
+                  in("  the card: sky and disc 120 new pictures in 1.0 s (120 a second), at 75 % of the picture's width at the lowest; the stars: 30 new pictures (30 a second)"));
+        checkTrue("black hole lines (0.56.0): the disc table's stage", in("disc table 8.0 ms average, 8.0 ms worst (1x)")); }
     h.move[2].frames = 1; h.move[2].frameSum = 1; h.move[2].restS = 1.4;
     checkTrue("black hole lines (0.55.8): no sharp picture within the rest says so", [&] { for (const std::string& l : benchBlackHoleLines(h)) if (l == "  at rest: no sharp picture within the 1.4 s at rest") return true; return false; }());
     BenchScene s; s.name = "13. Black hole"; s.frames = benchStats({5, 5}); s.notes = v;

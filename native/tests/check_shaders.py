@@ -27,7 +27,8 @@ ASSEMBLED = {"kKerrSkyMathFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyMa
 # (kKerrSkyFS) inlined may not exceed SPIRV_ROOM times the largest inlined shader known to run on the owner's card (every shader of the app but
 # kKerrTableCS), nor a third of kKerrTableCS inlined. (Measured for 0.56.0: REPORT.md.)
 SPIRV_ROOM = 3.5
-KNOWN_BAD = {"kKerrTableCS"}
+# the shaders known to run on the owner's card as they are (his 0.55.9 benchmark); kLensFS gained the card's exposure in 0.56.0 and is left out until it has run
+KNOWN_RUN = {"kKerrFS", "kPlanetFS", "kBlobFS", "kGroupsCS", "kRocksCS", "kOutlineDensityCS", "kOutlineLevelCS", "kCloudVS", "kBlobVS", "kGlareAddFS", "kGlowAddFS"}
 
 def main():
     if len(sys.argv) != 2:
@@ -91,7 +92,7 @@ def main():
                 print("FAIL link %s + %s:\n%s%s" % (v, f, r.stdout, r.stderr)); failed += 1
             else:
                 print("ok   link %s + %s" % (v, f))
-    known = {n: v for n, v in inlined.items() if n not in KNOWN_BAD and not n.startswith("kKerrSky")}
+    known = {n: v for n, v in inlined.items() if n in KNOWN_RUN}
     if known and "kKerrSkyFS" in inlined and "kKerrTableCS" in inlined:
         big = max(known, key=known.get)
         print("SPIR-V sizes in bytes, plain / inlined: " + ", ".join("%s %d / %d" % (n, sizes.get(n, 0), inlined[n]) for n in sorted(inlined, key=inlined.get, reverse=True)))

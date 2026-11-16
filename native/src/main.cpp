@@ -689,7 +689,7 @@ int main(int, char**) {
                         bs.spinCoarseFills + bs.tableFills, bs.spinFineFills, bs.starFills, bs.behind ? 1 : 0, blackhole::shown(app.blackhole).spin > 0 ? bs.spinCoarseMs : bs.tableMs, bs.spinStarsMs, bs.starsMs, bs.lookMs, bs.spinFineMs, bs.discMs,
                         static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs,
                         wk.yaw, wk.pitch, wk.dist, wk.spin > 0 && wk.bend ? wk.spin : 0.0, bs.spinCard ? 1 : 0, app.blackholeView.cardState(), bs.cardFills, bs.cardMs, app.blackholeView.fineThreadBusy() ? 1 : 0,
-                        bs.skyCard ? 1 : 0, app.blackholeView.skyState(), bs.skyGpuMs, bs.skyScale, bs.skyPictures, bs.starPictures, bs.lookCard ? 1 : 0, bs.look.white);   // 0.55.6: want, the card; 0.56.0: the card's sky
+                        bs.skyCard ? 1 : 0, app.blackholeView.skyState(), renderer.skyStats().fullMs, renderer.skyStats().scale, renderer.skyStats().draws, bs.starPictures, bs.lookCard ? 1 : 0, bs.look.white);   // 0.55.6: want, the card; 0.56.0: the card's sky
         }
         static const bool timeStat = SDL_getenv("PL_TIMESTAT") != nullptr;   // for measuring in development (0.46): the Atom Lab picture's build time and the renderer's end(), averaged over 60 frames
         if (timeStat && app.lab == 1) {

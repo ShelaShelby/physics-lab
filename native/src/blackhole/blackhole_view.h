@@ -112,7 +112,10 @@ public:
     // the renderer's description of the bent sky for this view (also used by the tests and the benchmark)
     render::Renderer2D::LensSky lensFor(const Settings& s, const HoleView& v) const;
     void ensureTable(double dist);
-    void ensureDisc(double dist);                              // 0.55.1: the disc's table for this distance
+    void ensureDisc(double dist, bool moving = false);         // 0.55.1: the disc's table for this distance (0.56.0: moving: kDiscMovingRows x kDiscMovingCols)
+    // 0.56.0: the disc's table while the distance changes (spin 0): 256 x 128 rows and columns per side in place of 768 x 256 (a third of the time; at
+    // 1280 x 800 not one pixel changes between disc and no disc against the full table and r within 1.1e-5, 10, 3 and 0.5 degrees above the disc: REPORT 0.56.0)
+    static constexpr int kDiscMovingRows = 256, kDiscMovingCols = 128;
     const DiscTable* discTable() const { return disc_.get(); }
     // tests (PL_DRAWSTAT): up to n pixel centres where the disc of s (taken as switched on) covers the picture, and n where it does not, each at least 3 points
     // from an edge of the disc's image (lab.h discPixel), on a grid; points of the picture
@@ -210,6 +213,7 @@ private:
     bool skyFirst_ = false, skyUse_ = false, skyMoving_ = false, skyEngine_ = false;
     double skyWhite_ = 0, skyChangedAt_ = 0;
     long skyDrawn_ = 0, installs_ = 0;
+    bool lookEngine_ = false, movingEngine_ = false, discCoarse_ = false, shownDiscCoarse_ = false, postedMoving_ = false, lookUse_ = false;
     std::shared_ptr<const std::vector<float>> skyF_;
     double skyFSpin_ = -1, skyFLog0_ = 0, skyFDl_ = 1;
     std::uint64_t skyFVer_ = 0;

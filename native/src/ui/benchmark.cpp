@@ -220,7 +220,7 @@ struct BenchState {
     long bhCount[6] = {0, 0, 0, 0, 0, 0};
     double bhMoveS[6] = {0, 0, 0, 0, 0, 0};             // 0.55.6: seconds moving in each slot
     std::uint64_t bhPic = 0;
-    long bhCard = 0;
+    long bhCard = 0, bhSkyPics = 0, bhDiscFills = 0;              // (0.56.0: the card's sky pictures, the disc table's fills)
     std::map<int, app::BenchBlackHole> bhByScene;
     bool noteFailed = false;
     GpuTimer gpu;
@@ -271,6 +271,11 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
         app::BenchBlackHole& h = b.bhByScene[b.run->scene()];
         app::BenchBhMove& m = h.move[b.bhKind];
         if (s.picture != b.bhPic && b.bhMoving) m.pictures++;            // 0.55.6: new pictures while moving
+        if (s.skyCard && R.skyStats().draws != b.bhSkyPics) {             // 0.56.0: the card's new pictures of sky and disc (this frame's), the pass's time, the resolution
+            if (b.bhMoving) { m.skyPictures++; m.scaleMin = std::min(m.scaleMin, R.skyStats().scale); }
+            if (R.skyStats().fullMs >= 0) h.skyGpu.add(R.skyStats().fullMs);
+        }
+        if (s.discFills != b.bhDiscFills) m.disc.add(s.discMs);
         m.seconds = b.bhMoveS[b.bhKind];
         m.restS = (b.bhKind == 0 ? kBhSlotEnd[0] : kBhSlotEnd[b.bhKind] - kBhSlotEnd[b.bhKind - 1]) - kBhMove[b.bhKind];
         if (s.cardFills != b.bhCard) h.card.add(s.cardMs);
@@ -291,7 +296,7 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
         if (c[5] != b.bhCount[5] && !s.spinCard) h.fine.add(s.spinFineMs);   // (0.55.6: a table the card filled is counted as the card's fill, not the fine table)
     }
     std::copy(c, c + 6, b.bhCount);
-    b.bhPic = s.picture; b.bhCard = s.cardFills;
+    b.bhPic = s.picture; b.bhCard = s.cardFills; b.bhSkyPics = R.skyStats().draws; b.bhDiscFills = s.discFills;
     {   app::BenchBlackHole& h = b.bhByScene[b.run->scene()];               // 0.55.6: which path filled the spinning hole's table, and its start-up check
         const blackhole::BlackHoleView& v = app.blackholeView;
         const blackhole::CardCheck& ck = v.cardCheck();
@@ -301,6 +306,13 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
                                                      ck.edges, ck.rays, ck.dir, ck.b, ck.u, ck.ms); h.path = buf; }
         else if (v.cardState() == -1) h.path = "the processor, because " + v.cardWhy();
         else h.path = "not decided yet";
+        const blackhole::SkyCheck& sk = v.skyCheck();                     // 0.56.0: who drew the sky and disc, and why
+        if (!v.gpuSky) h.skyPath = "the processor's table (GPU sky per pixel switched off)";
+        else if (v.skyState() == 1) { std::snprintf(buf, sizeof buf, "the graphics card, every pixel from the closed formulas (start-up check passed: far direction %.1e / %.1e rad, disc r %.1e / %.1e, benchmark / Film)",
+                                                    sk.m[0].dir, sk.m[1].dir, sk.m[0].r, sk.m[1].r); h.skyPath = buf; }
+        else if (v.skyState() == -1) h.skyPath = "the processor's table, because " + v.skyWhy();
+        else h.skyPath = "not decided yet";
+        h.lookPath = s.lookCard ? "the graphics card (reduced in the same frame)" : "the processor's scan";
     }
     b.bhHave = true;
 }

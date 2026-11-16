@@ -302,6 +302,15 @@ def precision_sky(binary, work):
               f"{w}: the disc's first image ({disc} px: {x['discwrong']} another image, r {x['r']}, g {x['g']}, {x['rbad']} over 1e-3)")
     c = [ln for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECK ")]
     check(bool(c) and " ok=1 " in c[0], f"the sky's start-up check passes on this renderer ({c[:1]})")
+    # the exposure found on the card against the processor's scan of the same points (at rest, 640 x 400): within 1e-3 (measured 4e-5, 3e-8, 1.2e-4)
+    ex = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYEXP ")]
+    check({x["case"] for x in ex} == {"benchmark", "film", "spin0"}, f"the card's exposure compared at spin 0.9, Film and spin 0 ({len(ex)})")
+    for x in ex:
+        check(x["whitemode"] == "1" and float(x["rel"]) < 1e-3 and int(x["n"]) > 1000, f"the card's exposure ({x['case']}): {x['card']} against the processor's {x['cpu']} ({x['rel']}, {x['n']} points)")
+    # the card's moving picture and its picture at rest at the same resolution: not one pixel differs (the same formulas), Film at the paper's view and
+    # 3 degrees below the plane; at half the resolution the pixels more than 8 levels off are counted (printed)
+    st = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYSTOP ")]
+    check(len(st) == 2 and all(x["samesize"] == "0" for x in st), f"the card's moving picture = its picture at rest at the same resolution ({[(x['tilt'], x['samesize'], x['halfsize']) for x in st]})")
 
 def part_precision(binary, work):
     precision_sky(binary, work)
@@ -794,7 +803,7 @@ def part_smooth(binary, work):
     # (PL_FRAME_MS=16: a frame takes at least 16 ms, as with VSync on a real screen; the rest is long enough for the fine table on this software renderer)
     # (0.55.6: this first run is the processor's path, GPU light paths off, as 0.55.5; the card's path follows below)
     base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding;spin=0.6",
-                PL_BH_GPUPATHS="0")
+                PL_BH_GPUPATHS="0", PL_BH_GPUSKY="0")   # (0.56.0: the processor's tables draw sky and disc here: the fallback; the card's sky below, smooth_sky)
     reach = "4:click=##blackhole.spin.text;10:key=escape"                # (the Spin row scrolled into the Controls panel's view)
     r0 = run_app(binary, work, "bh_smooth_where", dict(base, PL_SCRIPT=reach), frames=16)
     sl = r0.rects.get("slider.blackhole.spin.fill")
@@ -872,33 +881,118 @@ def part_smooth(binary, work):
           f"a failed start-up check: the processor's path draws the picture and Settings, Performance says so (said {said})")
     smooth_guard(binary, work, cb)
     smooth_disc(binary, work, base)
+    smooth_sky(binary, work, base, steps)
+    sky_guard(binary, work, dict(base, PL_BH_GPUSKY="1"))
+
+SKY_STEPS = ["compile the tiny shader", "link the tiny shader", "compile the elliptic functions alone", "link the elliptic functions alone",
+             "compile the whole sky shader", "link the whole sky shader", "a first small draw", "the check", "the first full picture"]
+
+def sky_guard(binary, work, sb):
+    # 0.56.0, the card's sky has a guard of its own (app/gpu_guard.h gpuSkyGuard: its marker gpu-sky-step.txt, the settings line "gpusky=", the same log
+    # with its lines marked [sky]). A normal first run logs every step in order, each with its time, and keeps "ok". Then the process is ended inside each
+    # step once (PL_GPU_DIE): the marker names the step; the next start compiles nothing of the sky's shaders, the processor's table draws, Settings,
+    # Performance names the step, the settings file keeps it off; after the first: the same driver stays off, a changed sky shader tries again, and
+    # "Try again" passes in the same run.
+    sb = dict(sb, PL_BH_GPUPATHS="0")
+    gd = os.path.join(work, "skyguard_ok"); os.makedirs(gd, exist_ok=True)
+    for f in os.listdir(gd): os.remove(os.path.join(gd, f))
+    sf = os.path.join(gd, "settings.txt")
+    ok = run_app(binary, work, "bh_skyguard_ok", dict(sb, PL_SETTINGS=sf), frames=60, size="880x560", timeout=1200)
+    log = open(os.path.join(gd, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(gd, "gpu-paths-log.txt")) else ""
+    sky = "\n".join(ln for ln in log.splitlines() if ln.startswith("[sky] "))
+    at, missing = 0, []
+    for w in [x for st in SKY_STEPS for x in ("begin " + st, "end " + st)] + ["the whole path succeeded"]:
+        k = sky.find(w, at)
+        if k < 0: missing.append(w)
+        else: at = k
+    timed = all(re.search(r"end " + re.escape(st) + r"[^\n]* in \d+ ms", sky) for st in SKY_STEPS[:6])
+    check("PLBHSKY state=1" in ok.out and not missing and timed, f"sky guard: the log names every step in order, the shaders' with their times (missing or out of order: {missing})")
+    txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+    check("gpusky=ok | sky " in txt and not os.path.exists(os.path.join(gd, "gpu-sky-step.txt")), "sky guard: the whole path succeeded: kept as ok, no marker left")
+    for i, step in enumerate(SKY_STEPS):
+        d = os.path.join(work, f"skyguard_die{i}"); os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d): os.remove(os.path.join(d, f))
+        sf = os.path.join(d, "settings.txt")
+        run_app(binary, work, f"bh_skyguard_die{i}", dict(sb, PL_SETTINGS=sf, PL_GPU_DIE=step), frames=60, size="880x560", timeout=1200)
+        mk = os.path.join(d, "gpu-sky-step.txt")
+        marker = open(mk, encoding="utf-8").read() if os.path.exists(mk) else ""
+        check(f"step={step}\n" in marker and "version=sky " in marker, f"sky guard: the process ended inside '{step}': the marker names the step ({marker!r})")
+        r = run_app(binary, work, f"bh_skyguard_after{i}", dict(sb, PL_SETTINGS=sf, PL_OPEN="settings"), frames=30, size="880x560", timeout=1200)
+        fr = frames_of(r)
+        lg = open(os.path.join(d, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(d, "gpu-paths-log.txt")) else ""
+        said = [n for n in r.note("bhsky") if "stopped the app last time" in n and f"'{step}'" in n]
+        check("PLBHSKY state=-1" in r.out and "[sky]" in lg and not any(("begin " + x) in lg for x in SKY_STEPS) and fr and fr[-1]["skycard"] == "0" and fr[-1]["pic"] != "0" and said,
+              f"sky guard: after '{step}' nothing of the sky's path runs, the processor's table draws, Settings names the step (said {bool(said)})")
+        txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+        check("gpusky=off | sky " in txt and f"| {step}\n" in txt and not os.path.exists(mk), "sky guard: the settings file keeps it off with the step, the marker gone")
+        if i != 0: continue
+        r2 = run_app(binary, work, "bh_skyguard_same", dict(sb, PL_SETTINGS=sf), frames=20, size="880x560", timeout=1200)
+        check("PLBHSKY state=-1" in r2.out, "sky guard: a restart with the same sky shader and driver stays off")
+        sf3 = os.path.join(d, "settings_shader.txt")
+        with open(sf3, "w", encoding="utf-8") as f: f.write(open(sf, encoding="utf-8").read())
+        r5 = run_app(binary, work, "bh_skyguard_shader", dict(sb, PL_SETTINGS=sf3, PL_GPU_SKYSHADER="sky 0000000000000000"), frames=60, size="880x560", timeout=1200)
+        check("PLBHSKY state=1" in r5.out, "sky guard: a changed sky shader tries again (and passes here)")
+        r4 = run_app(binary, work, "bh_skyguard_again", dict(sb, PL_SETTINGS=sf, PL_OPEN="settings:gpusky", PL_SCRIPT="14:click=gpusky.again"), frames=70, size="880x560", timeout=1200)
+        txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+        check(not r4.scripted_missing() and "PLBHSKY state=1" in r4.out and "gpusky=ok | " in txt, f"sky guard: Try again: the card's sky passes in the same run, kept ok ({r4.scripted_missing()})")
+    # the start-up check made to fail (test switch): the processor's table, Settings says why
+    rf = run_app(binary, work, "bh_skyguard_fail", dict(sb, PL_BH_SKYFAIL="1", PL_OPEN="settings"), frames=40, size="880x560", timeout=1200)
+    said = any("the processor's table, because the check was made to fail" in n for n in rf.note("bhsky"))
+    ff = frames_of(rf)
+    check("PLBHSKY state=-1" in rf.out and said and ff and ff[-1]["skycard"] == "0", f"sky guard: a failed start-up check: the processor's table draws and Settings says so (said {said})")
+
+def smooth_sky(binary, work, base, steps):
+    # 0.56.0, the card draws sky and disc per pixel (render/shaders.h kKerrSkyFS; the processor's tables serve the stars). The same tilt drags at spin 0.6,
+    # 880 x 560: the card's start-up check passes; in every frame in which the view moved a new picture of sky and disc is drawn in that frame (the stars'
+    # pictures may come later); at rest the stars' picture is the settings' own and the sky is drawn at full resolution. Then the same with the pass forced
+    # slow (PL_BH_SKYSLOW=100: its time on the card taken as 100 ms, the budget at 60 Hz 8.3 ms): while moving at a quarter of the width (the rule's least),
+    # still a new picture in every moved frame; at rest at full resolution.
+    sb = dict(base, PL_BH_GPUSKY="1")
+    for slow in ("0", "100"):
+        env = dict(sb, PL_SCRIPT=";".join(re.sub(r"drag=(\d+),(\d+),(\d+),(\d+)", r"drag=100,\2,100,\4", st) for st in steps[:5]), PL_BH_SETTLE="60:30", PL_PANELS="")
+        if slow != "0": env["PL_BH_SKYSLOW"] = slow
+        r = run_app(binary, work, "bh_smooth_sky" + slow, env, frames=800, size="880x560", timeout=3000)
+        f = frames_of(r)
+        w = "card's sky" + (f" (pass forced slow, {slow} ms)" if slow != "0" else "")
+        check("PLBHSKY state=1" in r.out and len(f) > 60, f"{w}: the start-up check passed and the run settled ({len(f)} frames)")
+        if len(f) <= 60: continue
+        mv = [i for i in range(1, len(f)) if 20 <= int(f[i]["f"]) <= 50 and f[i].get("want") != f[i - 1].get("want")]
+        new = [i for i in mv if f[i]["skycard"] == "1" and int(f[i]["skypics"]) > int(f[i - 1]["skypics"])]
+        check(len(mv) >= 8 and len(new) == len(mv), f"{w}: a new sky and disc in {len(new)} of {len(mv)} frames in which the view moved (all needed)")
+        stars = [i for i in mv if int(f[i]["starpics"]) > int(f[i - 1]["starpics"])]
+        print(f"  {w}: the stars' pictures in {len(stars)} of the {len(mv)} moved frames; scales while moving {sorted(set(f[i]['skyscale'] for i in mv))}")
+        if slow != "0":
+            check(all(float(f[i]["skyscale"]) == 0.25 for i in mv), f"{w}: while moving the pass is drawn at a quarter of the width ({sorted(set(f[i]['skyscale'] for i in mv))})")
+        last = f[-1]
+        check(last["behind"] == "0" and last["sky"] == last["want"] and float(last["skyscale"]) == 1 and last["skycard"] == "1",
+              f"{w}: at rest the stars caught up ({last['sky']} vs {last['want']}) and the sky is at full resolution (scale {last['skyscale']})")
 
 # 0.55.9: the picture at rest and the last one shown while moving are of the same settings and show the same disc. The owner's report (0.55.8, Film look):
-# while he dragged, the disc looked as if seen from exactly inside its plane; at rest, from a little above. The cause (REPORT 0.55.9): the moving table's 32
-# rows missed the disc's thin near side when it is seen nearly edge on. The view prints, when the picture at rest replaces a moving one of the same spin,
-# distance and tilt, how far the disc's outline moved (PL_BH_DISCSHIFT, blackhole_view.cpp discShift: every second pixel). Limits from the moving table's
-# measured disc (spin_sky.h kSpinMoving; against each pixel's own ray at the paper's view it misses 508 of 22482 disc samples, 0.55.8's moving table 2242):
-# the outline moves at most DISC_SHIFT_MAX pixels anywhere, DISC_SHIFT_MEAN on average where it moved, and no more than DISC_SHIFT_SHARE of the disc's samples
-# change. Measured here (llvmpipe, 1280 x 800): paper's view 3 px, 1.27, 2.9 %; in the plane 7, 1.57, 2.8 %; 3 deg below 7, 1.75, 2.8 %; 60 deg 1, 1.0, 0.007 %.
-# Run once against 0.55.8's moving table (PL_BH_MOVING558=1): 9 px, 2.49, 23 %; 15.1, 2.04, 9.2 %; 13, 4.08, 20 %; 1, 1.0, 0.1 %: three cases fail (REPORT 0.55.9).
-DISC_SHIFT_MAX, DISC_SHIFT_MEAN, DISC_SHIFT_SHARE = 8.0, 2.0, 0.05
+# while he dragged, the disc looked as if seen from exactly inside its plane; at rest, from a little above. 0.56.0: the owner saw it again in 0.55.9 (a dark
+# blob below the centre in front of the shadow and a broken line while dragging, a clean line at rest): 0.55.9's limits (8 px, 2 px mean, 5 % of the disc)
+# allowed it and are withdrawn (the planner's decision). The view prints, when the picture at rest replaces a moving one of the same spin, distance and tilt
+# on the processor's path (the fallback: the card's own picture is of the same formulas at rest and moving, part precision, PLBHSKYSTOP), every pixel that
+# changes between disc and no disc, how far it lies from the outline at rest, and the largest connected patch (PL_BH_DISCSHIFT, blackhole_view.cpp
+# discShift). The aim: no patch larger than DISC_PATCH_AIM pixels and the outline moved by at most 1 px. NOT REACHED within the failure rule (REPORT 0.56.0,
+# ROADMAP: the measured patches are printed here); this part checks only that the stop is measured and the picture at rest is the settings' own, and prints
+# KNOWN for each case over the aim. No limit that passes the measured patches is set.
+DISC_PATCH_AIM = 4
 
 def smooth_disc(binary, work, base):
     cases = [("film, the paper's view (86.56 deg)", "look=film;dist=74.1;pitch=1.5107643"), ("film, exactly in the plane", "look=film;dist=74.1;pitch=1.5707963"),
-             ("real, 3 deg below the plane", "preset=feeding;spin=0.6;dist=74.1;pitch=1.6231562"), ("real, far from the plane (60 deg)", "preset=feeding;spin=0.6;dist=20;pitch=1.0471976")]
-    old = os.environ.get("PL_BH_MOVING558") is not None
+             ("film, 2 deg below the plane", "look=film;dist=74.1;pitch=1.6057029"), ("real, 3 deg below the plane", "preset=feeding;spin=0.6;dist=74.1;pitch=1.6231562"),
+             ("real, far from the plane (60 deg)", "preset=feeding;spin=0.6;dist=20;pitch=1.0471976")]
     for name, st in cases:
-        env = dict(base, PL_BH_SET=st, PL_BH_DISCSHIFT="1", PL_SCRIPT="20:drag=300,300,300,330;40:drag=300,330,300,300", PL_BH_SETTLE="60:30")
-        if old: env["PL_BH_MOVING558"] = "1"
+        env = dict(base, PL_BH_SET=st, PL_BH_DISCSHIFT="1", PL_BH_GPUSKY="0", PL_SCRIPT="20:drag=300,300,300,330;40:drag=300,330,300,300", PL_BH_SETTLE="60:30")
         r = run_app(binary, work, "bh_discshift_" + name.split(",")[0] + str(cases.index((name, st))), env, frames=3000, timeout=3000)
         ln = [dict(kv.split("=", 1) for kv in x.split()[1:]) for x in r.out.splitlines() if x.startswith("PLBHDISCSHIFT ")]
         f = frames_of(r)
         check(not r.scripted_missing() and len(ln) >= 1, f"disc at rest, {name}: the picture at rest replaced a moving one of the same settings ({len(ln)} times, {r.scripted_missing()})")
         if not ln: continue
         x = ln[-1]
-        print(f"  disc at rest, {name}: {x}")
-        check(int(x["disc"]) > 500 and float(x["maxpx"]) <= DISC_SHIFT_MAX and float(x["meanpx"]) <= DISC_SHIFT_MEAN and int(x["differ"]) <= DISC_SHIFT_SHARE * int(x["disc"]),
-              f"disc at rest, {name}: the outline moved at most {x['maxpx']} px (limit {DISC_SHIFT_MAX}), {x['meanpx']} px on average (limit {DISC_SHIFT_MEAN}), {x['differ']} of {x['disc']} samples changed (limit {DISC_SHIFT_SHARE:.0%}){' (0.55.8 moving table)' if old else ''}")
+        over = int(x["patch"]) > DISC_PATCH_AIM or float(x["maxpx"]) > 1
+        print(f"  {'KNOWN ' if over else ''}disc at rest, {name} (processor's path): {x['differ']} of {x['disc']} disc pixels change, the largest patch {x['patch']} px, "
+              f"the outline moved up to {x['maxpx']} px ({x['meanpx']} mean; aim {DISC_PATCH_AIM} px, 1 px)")
         last = f[-1] if f else {}
         check(last.get("behind") == "0" and last.get("sky") == last.get("want"), f"disc at rest, {name}: at rest the picture is the settings' own")
 
@@ -988,14 +1082,19 @@ def blackhole_film():
 PARTS = {"sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
          "truelight": part_truelight, "smooth": part_smooth,
-         "smoothdisc": lambda b, w: smooth_disc(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_BH_GPUPATHS="0"))}
+         "smoothdisc": lambda b, w: smooth_disc(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_BH_GPUPATHS="0", PL_BH_GPUSKY="0")),
+         "skyguard": lambda b, w: sky_guard(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o",
+                                                       PL_BH_SET="preset=feeding;spin=0.6", PL_BH_GPUSKY="1")),
+         "smoothsky": lambda b, w: smooth_sky(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o",
+                                                         PL_BH_SET="preset=feeding;spin=0.6", PL_BH_GPUPATHS="0"),
+                                              ["4:click=##blackhole.spin.text;10:key=escape"] + [f"{20 + 7 * k}:drag=300,{300 + 30 * k},300,{330 + 30 * k}" for k in range(4)])}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]
     os.makedirs(work, exist_ok=True)
     part = sys.argv[3] if len(sys.argv) > 3 else None
     for name, fn in PARTS.items():
-        if (part is None and name not in ("smoothdisc", "sky")) or part == name:   # (smoothdisc: the smooth part's last check alone, by hand; sky: inside precision)
+        if (part is None and name not in ("smoothdisc", "sky", "smoothsky", "skyguard")) or part == name:   # (smoothdisc: the smooth part's last check alone, by hand; sky: inside precision)
             fn(binary, work)
     print(f"check_blackhole: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

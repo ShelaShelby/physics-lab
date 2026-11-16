@@ -60,6 +60,8 @@ struct SpinFill {
                                  // forms cannot answer is followed (mino.h at rtol)
     double discRows = 0;         // 0.55.9: > 0: this share of the rows (against 1 for the far direction's and 1 even) also where the disc's image changes fast (SpinTable::rowsOf; REPORT 0.55.9: seen nearly edge on, the moving table's
                                  // 32 rows missed the disc's thin near side, so the picture changed shape when the view came to rest)
+    double xc = kSpinXc;         // 0.56.0: the columns' law s = ln|x| + |x| / xc (smaller: more columns far from the edge, where the disc's near side
+                                 // crosses in front of the hole; REPORT 0.56.0)
 };
 // 0.55.8, the lab's two (blackhole_view.cpp; REPORT 0.55.8; SpinFill{} is 0.55.7's: KerrBL at 1e-10 for every ray): the fine one, Mino's form at 0.55.7's
 // tolerance up to 1e-2 of psi_e, looser beyond (tests/test_blackhole.cpp testSpinTable keeps its limits); the one made while the view moves, Mino's form at the
@@ -68,6 +70,8 @@ struct SpinFill {
 constexpr SpinFill kSpinFineFillMino{1e-10, true, kSpinXlo, 1e-8};
 constexpr SpinFill kSpinMovingMino{1e-8, true, kSpinXlo, 1e-5};
 constexpr SpinFill kSpinFineFill{1e-10, true, kSpinXlo, 1e-8, true};
+// (0.56.0 tried more columns far from the edge for the moving table, SpinFill::xc 0.03 or 0.06, 96 columns, |x| from 1e-5: the disc's change at the stop
+// shrank, but the far direction near the edge got 3 to 60 times worse than 0.55.7's coarse table, which testMovingTable forbids; kept as 0.55.9: REPORT 0.56.0)
 constexpr SpinFill kSpinMoving{1e-8, true, kSpinXlo, 1e-5, true, 0.3};
 
 class SpinTable {
@@ -108,8 +112,9 @@ public:
     double sLo() const;
     double xlo() const { return xlo_; }              // 0.55.8 (SpinFill)
     double sHi(int side, double psiE) const;         // the side's largest s for an edge at psiE
-    static double sOf(double ax);
-    static double absXOf(double s);                  // the inverse (Newton)
+    static double sOf(double ax, double xc = kSpinXc);       // 0.56.0: xc per table (SpinFill::xc)
+    static double absXOf(double s, double xc = kSpinXc);     // the inverse (Newton)
+    double xc() const { return xc_; }
     // the node (side, row i, column j)
     const SpinHit& node(int side, int i, int j) const { return v_[index(side, i, j)]; }
     double nodePsi(int side, int i, int j) const;
@@ -121,7 +126,7 @@ public:
     // the lookup the card does, in double
     SpinHit lookup(double psi, double chi) const;
 private:
-    double a_, rC_, thC_, xlo_ = kSpinXlo;
+    double a_, rC_, thC_, xlo_ = kSpinXlo, xc_ = kSpinXc;
     int nChi_, nS_, nEdge_;
     bool ok_ = true, card_ = false;
     double ms_ = 0;

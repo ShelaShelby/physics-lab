@@ -525,6 +525,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glDrawArrays(GL_TRIANGLES, 0, 6);
         for (int k = 6; k >= 0; k--) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, 0); }
     };
+    bool lensExp = false;                                                  // 0.56.0: the pass draws the exposure's samples (spin 0)
     const auto pass = [&](int ox, int oy) {                                // one full-picture pass into the bound framebuffer, whose picture starts at (ox, oy)
         if (ksky) { skyPass(L, fbW, fbH, ox, oy, 1, L.skyMode, glareOn); return; }
         if (kerr) { kpass(ox, oy); return; }
@@ -544,6 +545,14 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glUniform1i(lnSky_, L.sky ? 1 : 0);
         glUniform1i(lnDisc_, disc ? 1 : 0);
         glUniform1i(glGetUniformLocation(lensProgram_, "uRaw"), glareOn ? 1 : 0);    // 0.55.4
+        {   const double st = L.expStep * ppp;                             // 0.56.0: the card's exposure (spin 0)
+            const bool cw = L.whiteMode == 1 && disc && !expTex_.empty() && !lensExp;
+            glUniform1i(glGetUniformLocation(lensProgram_, "uExp"), lensExp ? 1 : 0);
+            glUniform4f(glGetUniformLocation(lensProgram_, "uSamp"), static_cast<float>(ox + 0.5 * st), static_cast<float>(st), static_cast<float>(oy + fbH - 0.5 * st), static_cast<float>(st));
+            glUniform1i(glGetUniformLocation(lensProgram_, "uWhiteMode"), cw ? 1 : 0);
+            glActiveTexture(GL_TEXTURE0 + 5); glBindTexture(GL_TEXTURE_2D, cw ? expTex_.back() : whiteTex_);
+            glUniform1i(glGetUniformLocation(lensProgram_, "uWhite"), 5);
+            glActiveTexture(GL_TEXTURE0); }
         if (disc) {
             glUniform3i(lnDN_, L.discS, L.discT, L.discC);
             glUniform4f(lnDS_, static_cast<float>(L.discS0), static_cast<float>(L.discDs0), static_cast<float>(L.discDs1), static_cast<float>(L.discXc));
@@ -571,7 +580,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
     };
     glDisable(GL_BLEND);                                                   // the bent sky is opaque: black space where there is no light
     if (L.debug || L.debugDisc || (ksky && L.skyMode > 0)) { pass(vx, vy); glEnable(GL_BLEND); return; }   // (tests: straight into the float framebuffer given, every time)
-    if (ksky) skyTimes();                                                  // 0.56.0: the timer's and the exposure's results that have come back
+    skyTimes();                                                            // 0.56.0: the timer's and the exposure's results that have come back
     if (!lensFbo_) { glGenFramebuffers(1, &lensFbo_); glGenTextures(1, &lensTex_); }
     if (fbW != lensW_ || fbH != lensH_) {
         lensW_ = fbW; lensH_ = fbH; lensValid_ = false;
@@ -596,7 +605,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
                       P.kerrSky == L.kerrSky && (!L.kerrSky || (std::equal(L.skyCam, L.skyCam + 4, P.skyCam) && std::equal(L.skyMet, L.skyMet + 4, P.skyMet) &&
                       std::equal(L.skyMet2, L.skyMet2 + 4, P.skyMet2) && std::equal(L.filmRaw, L.filmRaw + 4, P.filmRaw) && std::equal(L.kM, L.kM + 9, P.kM) &&
                       std::equal(L.kO, L.kO + 4, P.kO) && P.whiteMode == L.whiteMode && P.expStep == L.expStep && P.moving == L.moving && P.spin == L.spin &&
-                      P.discFVersion == L.discFVersion && ksky == lensSkyDrawn_)) && (L.kerrSky || !lensSkyDrawn_);
+                      P.discFVersion == L.discFVersion && ksky == lensSkyDrawn_)) && (L.kerrSky || !lensSkyDrawn_) && P.whiteMode == L.whiteMode && P.expStep == L.expStep;
     const bool glow = L.glow[0] > 0 && glowDown_ && glowBlur_ && glowAdd_;
     const bool layers = glow || glareOn;                                   // 0.55.4: the disc's light and the sky behind it, as their own pictures
     if (!same) {                                                           // (e) of the plan: drawn anew only when the view, the distance or the picture changed
@@ -628,6 +637,13 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glViewport(0, 0, fbW, fbH);
         if (ksky) skyPicture(L, fbW, fbH, layers, glareOn);               // 0.56.0
         else {
+            if (L.whiteMode == 1 && disc) {                                // 0.56.0: the card's exposure at spin 0 too (the lens pass's own samples)
+                skyExposure(L, [&] { lensExp = true; pass(0, 0); lensExp = false; });
+                glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
+                if (layers) { const GLenum bufs[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2}; glDrawBuffers(3, bufs); }
+                else { const GLenum buf0 = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, &buf0); }
+                glViewport(0, 0, fbW, fbH);
+            }
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, 0, 0);
             pass(0, 0);
         }
@@ -726,7 +742,7 @@ void Renderer2D::skyPass(const LensSky& L, int fbW, int fbH, int ox, int oy, dou
 // 0.56.0: the card's exposure (LensSky::whiteMode 1): the first disc image's brightest channel and Y at the scan's points (the sky pass, uMode 10), then
 // blocks of 4 x 4 reduced to their largest until one texel is left (kMaxDownFS); that texel is the white the picture's pass reads. Nothing is read back
 // in the frame's way: the texel is copied into a pixel buffer behind a fence and looked at in later frames (skyTimes: the readout and the stars).
-GLuint Renderer2D::skyExposure(const LensSky& L, int fbW, int fbH) {
+GLuint Renderer2D::skyExposure(const LensSky& L, const std::function<void()>& sample) {
     if (!maxDown_) return 0;
     int nx = 0, ny = 0;
     for (double X = L.expStep / 2; X < width_; X += L.expStep) nx++;
@@ -753,7 +769,7 @@ GLuint Renderer2D::skyExposure(const LensSky& L, int fbW, int fbH) {
     glDrawBuffers(1, &buf0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, expTex_[0], 0);
     glViewport(0, 0, nx, ny);
-    skyPass(L, fbW, fbH, 0, 0, 1, 10, false);
+    sample();
     glUseProgram(maxDown_);
     glUniform1i(glGetUniformLocation(maxDown_, "uTex"), 0);
     glBindVertexArray(cmpVao_);
@@ -831,7 +847,7 @@ void Renderer2D::skyPicture(const LensSky& L, int fbW, int fbH, bool layers, boo
     const bool disc = L.disc && L.discF && L.discCol && L.discFN >= 2 && L.discC >= 2;
     if (L.whiteMode == 1 && disc) {
         const auto e0 = std::chrono::steady_clock::now();
-        skyExposure(L, fbW, fbH);
+        skyExposure(L, [&] { skyPass(L, fbW, fbH, 0, 0, 1, 10, false); });
         skyStats_.expMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - e0).count();
         glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
     }
@@ -954,6 +970,14 @@ void Renderer2D::skyProbeRead(std::vector<float>& out) {
         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
     }
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+}
+
+double Renderer2D::skyWhiteWait() {
+    if (!whiteFence_) return 0;
+    glClientWaitSync(whiteFence_, 0x00000001 /* GL_SYNC_FLUSH_COMMANDS_BIT */, 10000000000ULL);
+    const long n = skyStats_.whiteReads;
+    skyTimes();
+    return skyStats_.whiteReads > n ? skyStats_.white : 0;
 }
 
 void Renderer2D::maskedDisc(double x, double y, double r, Color c) {

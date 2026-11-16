@@ -1,8 +1,8 @@
 # Resume
 
 ## Current state
-- 0.55.9 (16 Nov 2026): the spinning hole's table from closed forms (blackhole/kerr_closed.h, Gralla & Lupsasca 2020a: every radial case and both polar types; elliptic.h gained Carlson's R_J, R_C, the third kind and the Jacobi amplitude): fine table x10, moving table x2.3 at 2.25x its rays (64 x 72, rows also where the disc's image changes fast: the disc no longer changes shape when a drag stops, check_blackhole smooth); Real's saved hash changed on purpose (within one level of 0.55.8's picture); the light paths' guard keeps the shader's hash, not the app version; the owner's rule of 16 Nov 2026 in DECISIONS.md and CLAUDE.md.
-- Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
+- 0.56.0 (16 Nov 2026): the spinning hole's sky and disc drawn per pixel by the graphics card from the closed forms in single precision (render/shaders.h kKerrSkyFS, render/kerr_sky.h, blackhole/sky_card.h; its own guard gpusky=, steps in rising order, a start-up check against kerr_closed.h in double); the exposure found on the card in the same frame (spin 0 too); a lower resolution while moving when the pass is slow; the stars still from the processor (they trail while moving; ROADMAP); the processor's tables stay as reference and fallback (Settings, Performance switch); old forms of the gpupaths= line read as off; spin 0's moving disc table 3x faster.
+- Last full UI run: 0.56.0 (the commit "native 0.56.0"), 33 of 33, nothing to fix.
 - Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 

@@ -20,8 +20,7 @@ std::string kerrSkySource(int stage);
 
 class KerrSky {
 public:
-    ~KerrSky() { reset(); }
-    void reset();                                      // the programs deleted (the renderer's shutdown)
+    void reset();                                      // the programs deleted (the renderer's shutdown; no destructor: the context may be gone by then)
     static constexpr int kStages = 3;                  // 0 the tiny shader, 1 the elliptic functions alone, 2 the whole
     static const char* stageName(int stage);
     // compile and link one stage: two steps told to steps (begin, end with the driver's log and the time in ms); false: it failed (why)

@@ -32,18 +32,18 @@ double triSolid(const Vec3& a, const Vec3& b, const Vec3& c) {   // the solid an
 }
 }  // namespace
 
-double SpinTable::sOf(double ax) { return std::log(ax) + ax / kSpinXc; }
-double SpinTable::absXOf(double s) {
-    double x = std::min(std::exp(s), kSpinXc * std::max(s, 1.0));      // a start on the right side of the root
+double SpinTable::sOf(double ax, double xc) { return std::log(ax) + ax / xc; }
+double SpinTable::absXOf(double s, double xc) {
+    double x = std::min(std::exp(s), xc * std::max(s, 1.0));            // a start on the right side of the root
     for (int it = 0; it < 100; it++) {
-        const double f = std::log(x) + x / kSpinXc - s, d = 1 / x + 1 / kSpinXc, nx = x - f / d;
+        const double f = std::log(x) + x / xc - s, d = 1 / x + 1 / xc, nx = x - f / d;
         x = nx > 0 ? nx : x / 2;
         if (std::fabs(f) < 1e-15 * std::max(1.0, std::fabs(s))) break;
     }
     return x;
 }
-double SpinTable::sLo() const { return sOf(xlo_); }
-double SpinTable::sHi(int side, double psiE) const { return sOf(side == 0 ? kPi - psiE : psiE); }
+double SpinTable::sLo() const { return sOf(xlo_, xc_); }
+double SpinTable::sHi(int side, double psiE) const { return sOf(side == 0 ? kPi - psiE : psiE, xc_); }
 
 double SpinTable::edge(double chi) const {
     double q = chi / (2 * kPi) * nEdge_;
@@ -67,7 +67,7 @@ double SpinTable::tauOf(double chi) const {
 double SpinTable::nodePsi(int side, int i, int j) const {
     const double pe = rowEdge_[static_cast<std::size_t>(i)];
     const double s = sLo() + (sHi(side, pe) - sLo()) * j / (nS_ - 1);
-    const double ax = absXOf(s);
+    const double ax = absXOf(s, xc_);
     return side == 0 ? pe + ax : pe - ax;
 }
 
@@ -177,7 +177,7 @@ SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, doubl
 }
 
 SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const std::atomic<bool>* cancel, int threads, const SpinFill& fill)
-    : a_(a), rC_(rC), thC_(thC), xlo_(fill.xlo), nChi_(nChi), nS_(nS), nEdge_(nEdge) {
+    : a_(a), rC_(rC), thC_(thC), xlo_(fill.xlo), xc_(fill.xc), nChi_(nChi), nS_(nS), nEdge_(nEdge) {
     const auto t0 = std::chrono::steady_clock::now();
     const Camera cam{rC, thC, 0};
     SpinHit (*const ray)(double, const Camera&, double, double, double) = fill.closed ? spinRayClosed : fill.mino ? spinRayMino : spinRay;
@@ -332,7 +332,7 @@ SpinHit SpinTable::lookup(double psi, double chi) const {
     const double pe = edge(chi), x = psi - pe;
     const int side = x > 0 ? 0 : 1;
     const double ax = std::max(std::fabs(x), xlo_);
-    const double t = (sOf(ax) - sLo()) / (sHi(side, pe) - sLo()) * (nS_ - 1);
+    const double t = (sOf(ax, xc_) - sLo()) / (sHi(side, pe) - sLo()) * (nS_ - 1);
     double wc[4];
     const int j0 = stencil(t, nS_, wc);
     double q = tauOf(chi) * nChi_;
@@ -392,7 +392,7 @@ SpinStars::SpinStars(const SpinTable& t, int threads) : T_(t) {
         const float chF = static_cast<float>(t.rowChi(i));
         for (int j = 0; j < nS; j++) {
             const std::size_t q = static_cast<std::size_t>(i) * nS + j;
-            ax[q] = SpinTable::absXOf(t.sLo() + (t.sHi(0, pe) - t.sLo()) * j / (nS - 1));
+            ax[q] = SpinTable::absXOf(t.sLo() + (t.sHi(0, pe) - t.sLo()) * j / (nS - 1), t.xc());
             cam[q] = lookAt(static_cast<float>(pe + ax[q]), chF);
         }
     }, threads);
@@ -495,7 +495,7 @@ void SpinStars::buildReference() {
     const SpinTable& t = T_;
     std::vector<std::vector<int>> bins(static_cast<std::size_t>(nb_) * 2 * nb_);
     const int nChi = t.nChi(), nS = t.nS();
-    const auto colX = [&](int i, int j) { const double pe = t.rowEdge(i); return SpinTable::absXOf(t.sLo() + (t.sHi(0, pe) - t.sLo()) * j / (nS - 1)); };
+    const auto colX = [&](int i, int j) { const double pe = t.rowEdge(i); return SpinTable::absXOf(t.sLo() + (t.sHi(0, pe) - t.sLo()) * j / (nS - 1), t.xc()); };
     for (int i = 0; i < nChi; i++) {
         const int i1 = (i + 1) % nChi;
         for (int j = 0; j + 1 < nS; j++) {
