@@ -28,6 +28,7 @@
 #include "blackhole/elliptic.h"
 #include "blackhole/geodesic.h"
 #include "blackhole/kerr.h"
+#include "blackhole/mino.h"
 #include "blackhole/presets.h"
 #include "blackhole/schwarzschild.h"
 #include "blackhole/spin.h"
@@ -1419,7 +1420,7 @@ static void testSpinTable() {
     // two fine tables: a moderate spin and the top of the control (kSpinTop), close in and far out, near the plane
     struct Case { double a, rc, th; };
     for (const Case cs : {Case{0.9, 20, 1.3}, Case{kSpinTop, 6, 1.4}}) {
-        const SpinTable T(cs.a, cs.rc, cs.th, kSpinChiFine, kSpinSFine, kSpinEdge);
+        const SpinTable T(cs.a, cs.rc, cs.th, kSpinChiFine, kSpinSFine, kSpinEdge, nullptr, 0, kSpinFineFill);
         const std::string at = "a " + f(cs.a) + " r " + f(cs.rc) + ": ";
         check(T.ok() && T.mismatches() == 0, at + "a fine table (" + f(T.rays()) + " rays, " + f(T.fillMs()) + " ms): every ray ends on its side of the closed edge: " + f(T.mismatches()));
         const Camera cam{cs.rc, cs.th, 0};
@@ -1452,12 +1453,12 @@ static void testSpinTable() {
         check(wu[0] < 5e-3 && wg[0] < 5e-3, at + "the disc's radius and g, direct and second image beyond 1e-2 rad from the shadow (away from the disc's edges and folds): r " + f(wu[0]) + " g " + f(wg[0]));
         check(wu[1] < 5e-2 && wg[1] < 5e-2, at + "the same for the further images and within 1e-2 rad of the shadow: r " + f(wu[1]) + " g " + f(wg[1]));
     }
-    const SpinTable T(0.9, 20, 1.3, kSpinChiFine, kSpinSFine, kSpinEdge);
+    const SpinTable T(0.9, 20, 1.3, kSpinChiFine, kSpinSFine, kSpinEdge, nullptr, 0, kSpinFineFill);
     const Camera cam{20, 1.3, 0};
     // spin 1e-6: the table against the closed forms of 0.55.1 (LensTable: far direction; DiscTable: radius and g)
     {
         const double rc = 20, th = 1.3;
-        const SpinTable S(1e-6, rc, th, kSpinChiFine, kSpinSFine, kSpinEdge);
+        const SpinTable S(1e-6, rc, th, kSpinChiFine, kSpinSFine, kSpinEdge, nullptr, 0, kSpinFineFill);
         const LensTable L(rc);
         const DiscTable D(rc);
         double wd = 0, wr = 0, wgg = 0;
@@ -1539,6 +1540,137 @@ static void testSpinTable() {
         for (const orbit::SkyStar& st : orbit::skyData().stars) same(st.dir);
         for (int k = 0; k < n; k++) { const double z = 1 - 2 * (k + 0.5) / n, ph = k * 2.399963229728653, s = std::sqrt(1 - z * z); same(Vec3{s * std::cos(ph), s * std::sin(ph), z}); }
         check(diff == 0 && imgs > 10000, "the stars' bins on all cores = 0.55.5's one-thread build: " + f(dirs) + " directions, " + f(imgs) + " images, " + f(diff) + " differ (place or brightness)");
+    }
+}
+
+// 0.55.8: Mino's form of the ray equations (mino.h) against KerrBL (geodesic.h, J15 (A.15)), the integrator of every earlier version
+static void testMino() {
+    unsigned seed = 2024;
+    const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0; };
+    // 1. the same equations: at random states on a light ray, Mino's rates = rho^2 times KerrBL's, turned into u = 1/r, mu = cos theta, s = -lambda:
+    //    du/ds = rho^2 u^2 dr/dzeta, dmu/ds = rho^2 sin theta dtheta/dzeta, dphi/ds = -rho^2 dphi/dzeta, and the second derivative of u from KerrBL's chain rule
+    //    d(du/ds)/ds = -rho^2 d/dzeta (u^2 Delta p_r) = -rho^2 [(2/r^2 - 2 a^2/r^3) dr/dzeta p_r + (1 - 2/r + a^2/r^2) dp_r/dzeta]; of mu likewise from
+    //    dmu/ds = sin theta p_theta: -rho^2 [cos theta dtheta/dzeta p_theta + sin theta dp_theta/dzeta]
+    double w = 0;
+    for (int k = 0; k < 200; k++) {
+        const double a = std::vector<double>{0.01, 0.6, 0.9, 0.99}[static_cast<std::size_t>(k % 4)];
+        const KerrBL ch(a);
+        const Camera cam{horizon(a) + 0.5 + 40 * rnd(), 0.2 + 2.7 * rnd(), 0};
+        const Vec3 look = lookAt(kPi * rnd(), 2 * kPi * rnd());
+        Ray ray;
+        if (!ch.launch(cam, look, ray)) continue;
+        const double* y = ray.y;
+        double dz[kMaxState];
+        ch.rhs(ray, y, dz);
+        const double r = y[0], th = y[1], u = 1 / r, c = std::cos(th), sn = std::sin(th), rho2 = r * r + a * a * c * c, D = r * r - 2 * r + a * a;
+        const double ym[5] = {u, u * u * D * y[3], c, sn * y[4], y[2]};
+        double dm[5];
+        minoRhs(a, ray.c[0], ray.c[1], ym, dm);
+        const double want[5] = {rho2 * u * u * dz[0], -rho2 * ((2 / (r * r) - 2 * a * a / (r * r * r)) * dz[0] * y[3] + (1 - 2 / r + a * a / (r * r)) * dz[3]),
+                                rho2 * sn * dz[1], -rho2 * (c * dz[1] * y[4] + sn * dz[4]), -rho2 * dz[2]};
+        for (int i = 0; i < 5; i++) w = std::max(w, std::fabs(dm[i] - want[i]) / (1e-12 + std::fabs(want[i]) + std::fabs(dm[i]) + 1e-3));
+    }
+    check(w < 1e-9, "Mino's form: its rates = rho^2 times KerrBL's (J15 (A.15)) at 200 states on light rays, spin 0.01 to 0.99: " + f(w));
+    // 2. the rays against KerrBL's trace at 1e-12, both at the fine table's tolerance 1e-10 (the far direction, b, the equator's crossings as u = 1/r, where the ray
+    //    ends) and the conservation laws: the two null conditions at the ray's end, relative to their terms
+    struct Case { double a, rc, th; };
+    for (const Case cs : {Case{0.01, 20, 1.3}, Case{0.6, 74.1, 1.5107}, Case{0.9, 20, 1.396}, Case{0.99, 6, 1.4}, Case{0.9, 8, 0.4}}) {
+        const Camera cam{cs.rc, cs.th, 0};
+        double dir[2] = {0, 0}, du[2] = {0, 0}, db = 0, nu = 0, nm = 0;
+        int ends = 0, n = 0, pole = 0;
+        for (int k = 0; k < 48; k++) {
+            const double chi = k < 4 ? kPi / 2 * k : 2 * kPi * rnd(), pe = shadowEdge(cs.a, cam, chi);   // (chi 0 and pi: rays over the pole, KerrBL's)
+            for (int band = 0; band < 2; band++) for (int side = 0; side < 2; side++) {
+                const double x = pe * std::pow(10.0, band == 0 ? -6 + 2 * rnd() : -2 + 2 * rnd()), psi = side ? pe - x : pe + x;
+                if (psi <= 0 || psi >= kPi) continue;
+                const SpinHit ref = spinRay(cs.a, cam, psi, chi, 1e-12), m = spinRayMino(cs.a, cam, psi, chi, 1e-10);
+                TraceOptions o;
+                o.rtol = 1e-10; o.atol = 1e-11;
+                const MinoEnd e = traceMino(cs.a, cam, lookAt(psi, chi), o);
+                n++;
+                if (e.nearPole) { pole++; continue; }
+                if (m.sky != ref.sky) { ends++; continue; }
+                if (ref.sky) dir[band] = std::max(dir[band], angleBetween(m.dir, ref.dir));
+                db = std::max(db, std::fabs(m.b - ref.b));
+                for (int q = 0; q < kSpinCross; q++) if (ref.u[q] > 0) du[band] = std::max(du[band], std::fabs(m.u[q] / ref.u[q] - 1));
+                double eu, em;
+                minoNull(cs.a, e.b, e.q, e.y, eu, em);
+                nu = std::max(nu, std::fabs(eu)); nm = std::max(nm, std::fabs(em));
+            }
+        }
+        const std::string at = "Mino's form, a " + f(cs.a) + " r " + f(cs.rc) + " theta " + f(cs.th) + ", " + f(n) + " rays (" + f(pole) + " over the pole: KerrBL's): ";
+        check(ends == 0 && db == 0, at + "every ray ends where KerrBL's does (" + f(ends) + " differ), the same b (" + f(db) + ")");
+        check(dir[0] < 3e-5 && dir[1] < 5e-8, at + "the far direction against KerrBL at 1e-12, x / psi_e 1e-6..1e-4: " + f(dir[0]) + ", 1e-2..1: " + f(dir[1]) + " rad");
+        check(du[0] < 1.5e-3 && du[1] < 1.5e-3, at + "the equator's crossings' radii against KerrBL at 1e-12, near: " + f(du[0]) + ", far: " + f(du[1]));
+        check(nu < 3e-9 && nm < 3e-9, at + "the null conditions (du/ds)^2 = U(u), (dmu/ds)^2 = Mu(mu) at every ray's end: " + f(nu) + ", " + f(nm));
+    }
+    // 3. the pole: a ray passing the axis within sin^2 theta = kMinoPole is left to KerrBL (its phi turns by about pi in a stretch shorter than a step); just outside
+    //    that, Mino's far direction against KerrBL at 1e-12 (rows at chi near 0 and pi, the camera's own plane through the axis)
+    {
+        double wp = 0, near = 1;
+        for (double a : {0.01, 0.9}) for (double th : {1.3, 0.4}) for (double base : {0.0, kPi}) for (double dc = 1e-6; dc < 0.3; dc *= 1.5) {
+            const Camera cam{20, th, 0};
+            const double chi = base + dc, pe = shadowEdge(a, cam, chi), psi = pe + 0.05 * (kPi - pe);
+            TraceOptions o;
+            o.rtol = 1e-10; o.atol = 1e-11;
+            const MinoEnd e = traceMino(a, cam, lookAt(psi, chi), o);
+            if (e.nearPole || e.kind != RayEnd::Sky) continue;
+            const double c3 = e.q + e.b * e.b - a * a, m2 = 2 * e.q / (c3 + std::sqrt(c3 * c3 + 4 * a * a * e.q));
+            near = std::min(near, 1 - m2);
+            wp = std::max(wp, angleBetween(e.dir, spinRay(a, cam, psi, chi, 1e-12).dir));
+        }
+        check(near < 2 * kMinoPole && wp < 1e-6, "Mino's form next to the pole (sin^2 theta down to " + f(near) + "): the far direction against KerrBL at 1e-12: " + f(wp) + " rad");
+    }
+}
+
+// 0.55.8: the table made while the view moves (kSpinMoving) against the integrator at full tolerance (KerrBL, 1e-12): no worse than 0.55.7's coarse table
+// (KerrBL at 1e-8 for every ray, the same grid) on the same rays, in each band of x / psi_e, its b, and its disc's radius and g (the measures of testSpinTable;
+// within 2 %: two integrators of one tolerance, sampled at 480 places); each table's numbers are printed (REPORT 0.55.8)
+static void testMovingTable() {
+    struct Case { double a, rc, th; };
+    for (const Case cs : {Case{0.01, 20, 1.3}, Case{0.6, 74.1, 1.5107}, Case{0.9, 20, 1.396}, Case{0.99, 6, 1.4}, Case{0.9, 8, 0.4}}) {
+        const Camera cam{cs.rc, cs.th, 0};
+        unsigned seed = 7;
+        const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0; };
+        struct P { double psi, chi, x; int side; SpinHit h; };
+        std::vector<P> ps;
+        for (int k = 0; k < 240; k++) {
+            const double chi = 2 * kPi * rnd(), pe = shadowEdge(cs.a, cam, chi);
+            const int b = k % 4;
+            const double x = pe * std::pow(10.0, b == 0 ? -5 + 2 * rnd() : b == 1 ? -3 + 2 * rnd() : b == 2 ? -1 + rnd() : -0.5 + 0.5 * rnd());
+            for (int side = 0; side < 2; side++) {
+                const double psi = side == 0 ? pe + x : pe - x;
+                if (psi > 0 && psi < kPi) ps.push_back({psi, chi, x / pe, side, spinRay(cs.a, cam, psi, chi, 1e-12)});
+            }
+        }
+        const double rin = discInner(cs.a);
+        const auto measure = [&](const SpinTable& T, double out[8]) {
+            for (int i = 0; i < 8; i++) out[i] = 0;
+            for (const P& q : ps) {
+                const SpinHit tb = T.lookup(q.psi, q.chi);
+                const int b = q.x < 1e-3 ? 0 : q.x < 1e-1 ? 1 : 2;
+                if (q.side == 0) out[b] = std::max(out[b], angleBetween(q.h.dir, tb.dir));
+                out[3] = std::max(out[3], std::fabs(q.h.b - tb.b) / (1 + std::fabs(q.h.b)));
+                const SpinDisc dr = spinDisc(q.h, cs.a, rin, 100), dt = spinDisc(tb, cs.a, rin, 100);
+                bool fold = false;
+                for (int k = 0; k + 1 < kSpinCross; k++) if (q.h.u[k] > 0 && q.h.u[k + 1] > 0 && std::fabs(q.h.u[k] - q.h.u[k + 1]) < 0.3 * q.h.u[k]) fold = true;
+                if (dr.order >= 0 && dr.order == dt.order && !fold && std::fabs(dr.r - rin) > 0.05 && std::fabs(dr.r - 100) > 1) {
+                    const int bd = dr.order <= 1 && q.x >= 1e-2 ? 0 : 1;
+                    out[4 + bd] = std::max(out[4 + bd], std::fabs(dt.r / dr.r - 1)); out[6 + bd] = std::max(out[6 + bd], std::fabs(dt.g / dr.g - 1));
+                }
+            }
+        };
+        const SpinTable O(cs.a, cs.rc, cs.th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, nullptr, 0, SpinFill{1e-8, false}), M(cs.a, cs.rc, cs.th, kSpinChiCoarse, kSpinSCoarse,
+                          kSpinEdgeCoarse, nullptr, 0, kSpinMoving);
+        double o[8], m[8];
+        measure(O, o); measure(M, m);
+        bool ok = M.ok() && M.mismatches() == 0;
+        std::string txt;
+        const char* name[8] = {"dir x/psi_e 1e-5..1e-3", "dir 1e-3..0.1", "dir 0.1..1", "b", "disc r near", "disc r far/further", "disc g near", "disc g far/further"};
+        for (int i = 0; i < 8; i++) { ok = ok && m[i] <= 1.02 * o[i] + 1e-9; txt += std::string(" ") + name[i] + " " + f(m[i]) + " (0.55.7 " + f(o[i]) + ");"; }
+        check(ok, "the moving table, a " + f(cs.a) + " r " + f(cs.rc) + " theta " + f(cs.th) + ": " + f(M.fillMs()) + " ms (0.55.7's coarse " + f(O.fillMs()) + " ms), mismatches " +
+                  f(M.mismatches()) + ", against KerrBL at 1e-12:" + txt);
+        std::printf("info: moving table a %g r %g: %.1f ms (0.55.7 %.1f ms)%s\n", cs.a, cs.rc, M.fillMs(), O.fillMs(), txt.c_str());
     }
 }
 
@@ -1947,6 +2079,8 @@ int main() {
     testSpinCamera();
     testSpinSymmetry();
     testSpinTable();
+    testMino();
+    testMovingTable();
     testSpinLab();
     testLooks();
     testTrueLight();

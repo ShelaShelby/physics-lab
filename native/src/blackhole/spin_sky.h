@@ -47,10 +47,25 @@ struct SpinHit {
     double u[kSpinCross] = {};   // 1 / r at the crossings of the equator (see above)
 };
 
+// 0.55.8: how a table's rays are followed: their tolerance (spinRay's rtol), the form (mino.h: the Mino-time form; else geodesic.h's KerrBL) and the
+// columns' nearest |x| to the edge (rays nearer are drawn as the ray there)
+struct SpinFill {
+    double rtol = 1e-10;
+    bool mino = false;
+    double xlo = kSpinXlo;
+    double rtolFar = 0;          // > rtol: a node's tolerance is rtol up to |x| / psi_e = 1e-4, then grows in proportion to |x| / psi_e up to rtolFar (the far
+                                 // direction's error from the integrator grows as 1/|x| near the edge, GLb (42); far from it the table's interpolation is the larger)
+};
+// 0.55.8, the lab's two (blackhole_view.cpp; REPORT 0.55.8; SpinFill{} is 0.55.7's: KerrBL at 1e-10 for every ray): the fine one, Mino's form at 0.55.7's
+// tolerance up to 1e-2 of psi_e, looser beyond (tests/test_blackhole.cpp testSpinTable keeps its limits); the one made while the view moves, Mino's form at the
+// coarse table's 0.55.7 tolerance near the edge, looser far from it (testMovingTable: no worse than 0.55.7's coarse table)
+constexpr SpinFill kSpinFineFill{1e-10, true, kSpinXlo, 1e-8};
+constexpr SpinFill kSpinMoving{1e-8, true, kSpinXlo, 1e-5};
+
 class SpinTable {
 public:
     // cancel (may be null): the fill stops early when it becomes true (ok() is then false). threads 0: all cores.
-    SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const std::atomic<bool>* cancel = nullptr, int threads = 0, double rtol = 1e-10);
+    SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const std::atomic<bool>* cancel = nullptr, int threads = 0, const SpinFill& fill = {});
     // 0.55.6: a table whose rays were followed elsewhere (the graphics card, blackhole/spin_card.h) on this table's grid: the edge samples, the rows' azimuths
     // and edges, and per node (side, row, column) 10 numbers: the far direction (3), b, u (4), the end (1 sky, 2 horizon, 0 lost), the steps (spinRay's values)
     struct Parts { std::vector<double> edge, tau, rowChi, rowEdge; const double* nodes = nullptr; double ms = 0; };
@@ -80,6 +95,7 @@ public:
     double rowChi(int i) const { return rowChi_[static_cast<std::size_t>(i)]; }
     double rowEdge(int i) const { return rowEdge_[static_cast<std::size_t>(i)]; }
     double sLo() const;
+    double xlo() const { return xlo_; }              // 0.55.8 (SpinFill)
     double sHi(int side, double psiE) const;         // the side's largest s for an edge at psiE
     static double sOf(double ax);
     static double absXOf(double s);                  // the inverse (Newton)
@@ -94,7 +110,7 @@ public:
     // the lookup the card does, in double
     SpinHit lookup(double psi, double chi) const;
 private:
-    double a_, rC_, thC_;
+    double a_, rC_, thC_, xlo_ = kSpinXlo;
     int nChi_, nS_, nEdge_;
     bool ok_ = true, card_ = false;
     double ms_ = 0;
@@ -108,6 +124,8 @@ private:
 
 // one ray of the camera (the reference, rtol as given): the same numbers as a node
 SpinHit spinRay(double a, const Camera& cam, double psi, double chi, double rtol = 1e-11);
+// 0.55.8: the same from the Mino-time form (mino.h): the moving table's rays
+SpinHit spinRayMino(double a, const Camera& cam, double psi, double chi, double rtol);
 
 // the disc through a hit: the first crossing with rIn <= r <= rOut (order, r, g); order -1 for none
 struct SpinDisc { int order = -1; double r = 0, g = 0; };

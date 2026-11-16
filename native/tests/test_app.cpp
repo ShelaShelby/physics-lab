@@ -1009,7 +1009,8 @@ static void testBenchBlackHole() {
     h.move[0].stars.add(20); h.move[0].stars.add(30); h.move[0].look.add(10);
     h.move[1].frames = 2; h.move[1].frameSum = 3.0; h.move[1].frameWorst = 2.0; h.move[1].coarse.add(100);
     h.move[3].frames = 1; h.move[3].frameSum = 0.5; h.move[3].frameWorst = 0.5; h.move[3].pictures = 5; h.move[3].seconds = 0.5;
-    h.glare.add(150); h.glareWaitWorst = 400; h.fine.add(2500);
+    h.glare.add(150); h.glareWaitWorst = 400; h.fine.add(2500); h.fineStartMs = 700;
+    h.move[1].sharpMs = 450; h.move[1].restS = 1.4; h.move[0].sharpMs = 0;
     h.card.add(40); h.card.add(60); h.path = "the graphics card (start-up check passed)";
     const std::vector<std::string> v = benchBlackHoleLines(h);
     const auto has = [&](const std::string& w) { for (const std::string& l : v) if (l.find(w) != std::string::npos) return true; return false; };
@@ -1023,6 +1024,11 @@ static void testBenchBlackHole() {
               has("Black Hole Lab, the spinning hole's light paths: the graphics card (start-up check passed); the card's fills 50.0 ms average, 60.0 ms worst (2x)"));
     checkTrue("black hole lines: at rest the glare (and how long after its picture) and the fine table",
               has("Black Hole Lab, at rest: glare 150.0 ms average, 150.0 ms worst (1x), shown 400 ms after its picture at most; fine spin table 2500.0 ms average, 2500.0 ms worst (1x)"));
+    checkTrue("black hole lines (0.55.8): how long after the stop the sharp picture came, or that it did not within the rest; the fine table made at the start",
+              has("  at rest: the sharp picture (the fine table) 450 ms after the stop") && has("  at rest: the sharp picture (the fine table) 0 ms after the stop") &&
+              !has("spin 0.9, changing distance: no frames counted\n  at rest") && has("the fine spin table made at the scene's start (all cores) 700 ms"));
+    h.move[2].frames = 1; h.move[2].frameSum = 1; h.move[2].restS = 1.4;
+    checkTrue("black hole lines (0.55.8): no sharp picture within the rest says so", [&] { for (const std::string& l : benchBlackHoleLines(h)) if (l == "  at rest: no sharp picture within the 1.4 s at rest") return true; return false; }());
     BenchScene s; s.name = "13. Black hole"; s.frames = benchStats({5, 5}); s.notes = v;
     const std::string t = benchResultText(BenchEnv(), {s});
     checkTrue("black hole lines: printed in the report under their scene", t.find("  Black Hole Lab, spin 0.9, tilting: frame thread 1.50 ms average") != std::string::npos);

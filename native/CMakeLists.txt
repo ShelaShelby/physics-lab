@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.55.7 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.55.8 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -162,6 +162,7 @@ add_library(blackhole_core STATIC
   src/blackhole/elliptic.cpp
   src/blackhole/kerr.cpp
   src/blackhole/geodesic.cpp
+  src/blackhole/mino.cpp
   src/blackhole/schwarzschild.cpp
   src/blackhole/presets.cpp
   src/blackhole/lab.cpp

@@ -234,7 +234,7 @@ static int spinPicture(const std::string& outPath, bool film, bool eye = false) 
     if (film) { setLook(s, Look::Film); paperView(s); setFov(s, 30); s = shown(s); }
     if (eye) { setSpin(s, 0.6); paperView(s); setFov(s, 30); s.trueSky = true; s.glare = true; }   // 0.55.4: Real, True brightness, the eye's glare
     const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
-    const SpinTable T(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge);
+    const SpinTable T(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge, nullptr, 0, kSpinFineFill);
     const DiscGeom g = discGeom(s);
     const DiscPhys P = discPhys(s);
     (void)P;

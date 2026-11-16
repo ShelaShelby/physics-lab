@@ -79,6 +79,9 @@ public:
     // check has passed; the card's table is the picture while moving and at rest (no fine table on the processor). Off, or no OpenGL 4.3, or the check
     // failed: the processor's tables of 0.55.5.
     bool gpuPaths = true;
+    // 0.55.8: how the fine table's rays are followed (spin_sky.h; the checks set SpinFill{} to draw with 0.55.7's rays)
+    SpinFill fineFill = kSpinFineFill;
+    double fineFillMs() const { return fine_ ? fine_->fillMs() : 0; }   // 0.55.8: the fine table's fill (the benchmark: the one makeFineNow made)
     int cardState() const { return cardState_; }               // 0 not yet asked (the lab has not drawn a spinning hole), 2 (0.55.7) its check under way, 1 the card's path, -1 the processor's
     const std::string& cardWhy() const { return cardWhy_; }    // -1: why
     const CardCheck& cardCheck() const { return cardCheck_; }

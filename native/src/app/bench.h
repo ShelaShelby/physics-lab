@@ -52,6 +52,8 @@ struct BenchBhMove {
     double seconds = 0;
     double frameSum = 0, frameWorst = 0, behindWorst = 0;   // the frame thread's time in the lab (ms); the longest time the picture was behind (ms)
     BenchStage coarse, bins, stars, look;                   // the worker's: the coarse table, the star bins, the stars' images, the exposure (ms each)
+    double sharpMs = -1;                                    // 0.55.8: at spin, the first frame at rest showing the fine table, after the stop (ms; -1 none)
+    double restS = 0;                                       // 0.55.8: the slot's time at rest (s)
 };
 struct BenchBlackHole {
     BenchBhMove move[6];                                    // turning round the axis, tilting, changing distance; at spin 0.9, then at spin 0 (0.55.6)
@@ -59,6 +61,7 @@ struct BenchBlackHole {
     BenchStage card;                                        // 0.55.6: the graphics card's fills of the spin table (from its start to the frame that found it done)
     std::string path;                                       // 0.55.6: which path filled the spin table and why (the start-up check)
     double glareWaitWorst = 0;                              // the longest wait from a picture to its glare (ms)
+    double fineStartMs = 0;                                 // 0.55.8: the fine spin table made at the scene's start (all cores, normal priority)
 };
 std::vector<std::string> benchBlackHoleLines(const BenchBlackHole& b);
 
@@ -128,6 +131,7 @@ public:
     int scene() const { return scene_; }
     int sceneCount() const { return count_; }
     bool measuring() const { return measuring_; }
+    double warmupS() const { return warm_; }                    // 0.55.8
     double sceneElapsedS() const { return elapsed_; }          // into the warm-up or the measuring part
     double totalS() const { return count_ * (warm_ + measure_); }
     double doneS() const;                                      // how much of totalS has passed

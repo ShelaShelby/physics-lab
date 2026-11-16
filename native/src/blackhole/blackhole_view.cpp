@@ -165,7 +165,7 @@ bool BlackHoleView::ensureSpinTable(const Settings& s, bool wait, const std::ato
     if (!spinMatches(s)) {                                                  // settings changed: drop the fine one being made, the coarse one now
         if (offered) { showOffered(); return true; }
         if (!fineExternal_) stopSpinWorker();
-        auto c = std::make_shared<SpinTable>(a, r, th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, cancel, 0, 1e-8);
+        auto c = std::make_shared<SpinTable>(a, r, th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, cancel, 0, kSpinMoving);
         if (!c->ok()) return false;
         st_.spinCoarseMs = c->fillMs();
         st_.spinCoarseFills++;
@@ -178,7 +178,7 @@ bool BlackHoleView::ensureSpinTable(const Settings& s, bool wait, const std::ato
     if (fineExternal_) { if (offered) showOffered(); return true; }
     if (wait) {
         stopSpinWorker();
-        auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge);
+        auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge, nullptr, 0, fineFill);
         st_.spinFineMs = f->fillMs(); st_.spinFineFills++; st_.spinFine = true;
         show(std::move(f));
         return true;
@@ -187,9 +187,10 @@ bool BlackHoleView::ensureSpinTable(const Settings& s, bool wait, const std::ato
         spinFineStarted_ = true;
         spinDone_ = false;
         const int threads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
-        const std::function<void()> job = [this, a, r, th, threads] {
+        const SpinFill fill = fineFill;
+        const std::function<void()> job = [this, a, r, th, threads, fill] {
             lowerThisThread();                                              // 0.55.5: below normal priority (low_priority.h)
-            auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge, &spinCancel_, threads);
+            auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge, &spinCancel_, threads, fill);
             if (f->ok()) { std::lock_guard<std::mutex> g(spinMx_); spinReady_ = std::move(f); }
             spinDone_ = true;
         };
@@ -315,7 +316,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.bend = true;
         L.kA = &T.texA(); L.kB = &T.texB(); L.kEdge = &T.texEdge(); L.kTau = &T.texTau();
         L.kChi = T.nChi(); L.kS = T.nS(); L.kEdgeN = T.nEdge();
-        L.kSLo = T.sLo(); L.kXc = kSpinXc; L.kXlo = kSpinXlo; L.spin = s.spin;
+        L.kSLo = T.sLo(); L.kXc = kSpinXc; L.kXlo = T.xlo(); L.spin = s.spin;
         L.kVersion = spinVer_;
         Vec3 rows[3];
         viewRows(v, rows);
@@ -727,9 +728,10 @@ void BlackHoleView::pollFine(const Settings& s) {
         spinCancel_ = false;
         const double a = s.spin, r = s.dist, th = s.pitch;
         const int threads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
-        const std::function<void()> job = [this, a, r, th, threads] {
+        const SpinFill fill = fineFill;
+        const std::function<void()> job = [this, a, r, th, threads, fill] {
             lowerThisThread();
-            auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge, &spinCancel_, threads);
+            auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge, &spinCancel_, threads, fill);
             if (f->ok()) { std::lock_guard<std::mutex> g(spinMx_); spinReady_ = std::move(f); }
             spinDone_ = true;
         };
@@ -748,7 +750,7 @@ void BlackHoleView::makeFineNow(const Settings& s) {
     if (!async) { ensureSpin(s, true); return; }
     if (gpuPaths && cardState_ >= 0) return;                               // 0.55.6: the card's path fills its own (if its check fails, the fine thread does)
     if (!(s.spin > 0 && s.bend)) return;
-    fine_ = std::make_shared<SpinTable>(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge);
+    fine_ = std::make_shared<SpinTable>(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge, nullptr, 0, fineFill);
     fineA_ = s.spin; fineR_ = s.dist; fineTh_ = s.pitch;
     spinFineStarted_ = true;
 }
@@ -911,8 +913,9 @@ double angleBetween(const Vec3& a, const Vec3& b) { return std::atan2(length(cro
 // automatic exposure), drawn as the app draws it (sky, disc and stars) into an 8-bit picture: its FNV-1a hash over the RGBA bytes. The test's number was made
 // by 0.55.2's code before this job changed anything (REPORT 0.55.3): Real stays the same to the pixel.
 namespace {
-std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H) {
+std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H, const SpinFill& fill, std::vector<unsigned char>* keep) {
     BlackHoleView view;
+    view.fineFill = fill;
     Settings s = settingsDefaults();
     applyPreset(s, kFeedingKey);
     setSpin(s, 0.6);
@@ -932,6 +935,7 @@ std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H) {
     dropFbo(f);
     std::uint64_t h = 1469598103934665603ull;
     for (unsigned char c : px) { h ^= c; h *= 1099511628211ull; }
+    if (keep) *keep = px;
     if (const char* dump = std::getenv("PL_BH_REALDUMP")) {
         if (FILE* fo = std::fopen(dump, "wb")) { std::fwrite(px.data(), 1, px.size(), fo); std::fclose(fo); }
     }
@@ -974,7 +978,7 @@ void cardCompare(render::Renderer2D& R) {
         const std::shared_ptr<SpinTable> G = cardTableNow(*K, cs.a, cs.r, cs.th, kSpinChiFine, kSpinSFine, kSpinEdge);
         const double gms = msSince(t0);
         const auto t1 = std::chrono::steady_clock::now();
-        const SpinTable P(cs.a, cs.r, cs.th, kSpinChiFine, kSpinSFine, kSpinEdge);
+        const SpinTable P(cs.a, cs.r, cs.th, kSpinChiFine, kSpinSFine, kSpinEdge, nullptr, 0, SpinFill{});   // (KerrBL, as the card's rays)
         const double pms = msSince(t1);
         if (!G) { std::printf("PLBHCARDT case=%s none=1\n", cs.name); continue; }
         long nodes = 0, ends = 0, lost = 0;
@@ -1042,7 +1046,20 @@ void compareHook(render::Renderer2D& R, const char* spec) {
     //    lookup of the same table: the disc's image and edges where the module puts the paper's edges, one colour over the whole disc before the glow; the glow
     //    against its double reference (looks.h glowReference) on the same picture, no pixel darker; the glow pass's time at 1280 x 800 and 3840 x 2160.
     {
-        std::printf("PLBHREAL hash=%016llx\n", static_cast<unsigned long long>(realCaseHash(R, 1280, 800)));
+        // 0.55.8: the fine table's rays now follow Mino's form (spin_sky.h kSpinFineFill): the same picture drawn with 0.55.7's rays (SpinFill{}) gives the
+        // saved hash, and the two pictures differ by at most one level of 255 (their largest difference and the pixels that differ at all)
+        std::vector<unsigned char> pNew, pOld;
+        const std::uint64_t hNew = realCaseHash(R, 1280, 800, kSpinFineFill, &pNew), hOld = realCaseHash(R, 1280, 800, SpinFill{}, &pOld);
+        int maxDiff = 0;
+        long differ = 0;
+        for (std::size_t i = 0; i < pNew.size() && pNew.size() == pOld.size(); i += 4) {
+            int d = 0;
+            for (int c = 0; c < 4; c++) d = std::max(d, std::abs(int(pNew[i + c]) - int(pOld[i + c])));
+            maxDiff = std::max(maxDiff, d);
+            if (d) differ++;
+        }
+        std::printf("PLBHREAL hash=%016llx old=%016llx maxdiff=%d differ=%ld pixels=%zu\n", static_cast<unsigned long long>(hNew), static_cast<unsigned long long>(hOld), maxDiff,
+                    differ, pNew.size() / 4);
         const int W0 = 1280, H0 = 800;
         BlackHoleView view;
         Settings u = settingsDefaults();

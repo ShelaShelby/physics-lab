@@ -8,6 +8,7 @@
 
 #include "blackhole/kerr.h"
 #include "blackhole/low_priority.h"
+#include "blackhole/mino.h"
 #include "blackhole/spin.h"
 
 namespace blackhole {
@@ -40,7 +41,7 @@ double SpinTable::absXOf(double s) {
     }
     return x;
 }
-double SpinTable::sLo() const { return sOf(kSpinXlo); }
+double SpinTable::sLo() const { return sOf(xlo_); }
 double SpinTable::sHi(int side, double psiE) const { return sOf(side == 0 ? kPi - psiE : psiE); }
 
 double SpinTable::edge(double chi) const {
@@ -114,10 +115,47 @@ SpinHit spinRay(double a, const Camera& cam, double psi, double chi, double rtol
     return h;
 }
 
-SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const std::atomic<bool>* cancel, int threads, double rtol)
-    : a_(a), rC_(rC), thC_(thC), nChi_(nChi), nS_(nS), nEdge_(nEdge) {
+// 0.55.8: the same numbers from the Mino-time form (mino.h): the ray is followed to infinity itself, so the escaping ray's continued crossing uses the
+// asymptote at infinity (the end point's mu_end is infinite: a crossing beyond the end is never made); falling in, as spinRay
+SpinHit spinRayMino(double a, const Camera& cam, double psi, double chi, double rtol) {
+    TraceOptions o;
+    o.rtol = rtol; o.atol = rtol * 0.1;
+    o.maxCross = kSpinCross;
+    std::vector<double> cr;
+    cr.reserve(kSpinCross);
+    const MinoEnd e = traceMino(a, cam, lookAt(psi, chi), o, &cr);
+    if (e.nearPole) return spinRay(a, cam, psi, chi, rtol);
+    SpinHit h;
+    h.b = e.b;
+    h.sky = e.kind == RayEnd::Sky;
+    h.dir = e.dir;
+    const int n = static_cast<int>(cr.size());
+    for (int k = 0; k < n; k++) h.u[k] = cr[static_cast<std::size_t>(k)];
+    if (n < kSpinCross) {
+        double uv = 0, rest = 0;
+        if (h.sky) {
+            const double mu = e.dir.z != 0 ? -e.pz / e.dir.z : -1e300;    // where the asymptote meets the plane (spinRay: mu* = -p_z / d_z)
+            uv = -1 / std::sqrt(mu * mu + 100);
+        } else if (e.kind == RayEnd::Horizon) {
+            const double u = e.y[0], re = 1 / u, m = std::clamp(e.y[2], -1.0, 1.0), th = std::acos(m), sn = std::sqrt(1 - m * m);
+            const double dthdr = e.y[1] != 0 && sn > 0 ? e.y[3] * u * u / (sn * e.y[1]) : 0;   // (dtheta/ds) / (dr/ds) = (-mu'/sin) / (-u'/u^2)
+            const double delta = dthdr != 0 ? (kPi / 2 - th) / dthdr : -1e300;
+            uv = delta < 0 ? (1 - std::tanh(std::max(delta, -1e3) / re)) / re : 2 / re;
+            rest = 2 / re;
+        }
+        h.u[n] = uv;
+        for (int k = n + 1; k < kSpinCross; k++) h.u[k] = rest;
+    }
+    if (e.kind == RayEnd::Lost) h.dir = Vec3{0, 0, 0};
+    return h;
+}
+
+SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const std::atomic<bool>* cancel, int threads, const SpinFill& fill)
+    : a_(a), rC_(rC), thC_(thC), xlo_(fill.xlo), nChi_(nChi), nS_(nS), nEdge_(nEdge) {
     const auto t0 = std::chrono::steady_clock::now();
     const Camera cam{rC, thC, 0};
+    SpinHit (*const ray)(double, const Camera&, double, double, double) = fill.mino ? spinRayMino : spinRay;
+    const double rtol = fill.rtol;
     const int nth = threads > 0 ? threads : std::clamp(static_cast<int>(std::thread::hardware_concurrency()), 1, 16);
     const auto parallel = [&](int n, const std::function<void(int)>& job) {   // (a plain std::function: generic lambdas nested in lambdas crashed one compiler)
         std::atomic<int> next{0};
@@ -137,7 +175,7 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
         std::vector<Vec3> probe(static_cast<std::size_t>(nEdge_));
         parallel(nEdge_, [&](int i) {
             const double pe = edge_[static_cast<std::size_t>(i)];
-            probe[static_cast<std::size_t>(i)] = spinRay(a, cam, pe + 1e-4 * pe, 2 * kPi * i / nEdge_, rtol).dir;
+            probe[static_cast<std::size_t>(i)] = ray(a, cam, pe + 1e-4 * pe, 2 * kPi * i / nEdge_, rtol).dir;
         });
         if (cancel && cancel->load()) { ok_ = false; return; }
         rowsOf(edge_, probe, nChi, tau_, rowChi_);
@@ -151,7 +189,9 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
         const int side = row / nChi, i = row % nChi;
         const double chi = rowChi_[static_cast<std::size_t>(i)];
         for (int j = 0; j < nS; j++) {
-            SpinHit h = spinRay(a, cam, nodePsi(side, i, j), chi, rtol);
+            const double psi = nodePsi(side, i, j), xr = std::fabs(psi - rowEdge_[static_cast<std::size_t>(i)]) / rowEdge_[static_cast<std::size_t>(i)];
+            const double tol = fill.rtolFar > rtol ? std::clamp(rtol * xr / 1e-4, rtol, fill.rtolFar) : rtol;
+            SpinHit h = ray(a, cam, psi, chi, tol);
             if (h.sky != (side == 0)) { mism++; if (length(h.dir) == 0 && h.sky == false && side == 0) lost++; }
             v_[index(side, i, j)] = h;
         }
@@ -226,7 +266,7 @@ void SpinTable::finish(const std::atomic<long>& mism, const std::atomic<long>& l
 SpinHit SpinTable::lookup(double psi, double chi) const {
     const double pe = edge(chi), x = psi - pe;
     const int side = x > 0 ? 0 : 1;
-    const double ax = std::max(std::fabs(x), kSpinXlo);
+    const double ax = std::max(std::fabs(x), xlo_);
     const double t = (sOf(ax) - sLo()) / (sHi(side, pe) - sLo()) * (nS_ - 1);
     double wc[4];
     const int j0 = stencil(t, nS_, wc);

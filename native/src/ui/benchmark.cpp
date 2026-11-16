@@ -93,6 +93,12 @@ void blackholeScene(AppState& app) {
 // 0.55.5: every frame of scene 13: in turn turning round the axis, tilting, coming closer, each followed by a rest (0.55.6: at spin 0.9, then the same at
 // spin 0, 1 s each); by the clock, not by the frame, so a fast PC moves no further than a slow one. The numbers are gathered by sampleBlackHole.
 void blackholeFrame(AppState& app, int, int);
+// 0.55.8: the slots of the counted 8 s (moving, then at rest until the slot's end): see blackholeFrame
+constexpr double kBhRest = 1.4;
+constexpr double kBhMove[6] = {1, 1, 1, 0.5, 0.5, 0.5};
+constexpr double kBhSlotEnd[6] = {4.0 / 3, 4.0 / 3 + 1 + kBhRest, 4.0 / 3 + 2 * (1 + kBhRest), 4.0 / 3 + 2 * (1 + kBhRest) + 0.6, 4.0 / 3 + 2 * (1 + kBhRest) + 1.2,
+                                  4.0 / 3 + 2 * (1 + kBhRest) + 1.8};
+static_assert(kBhSlotEnd[5] <= app::kBenchMeasureS, "the Black Hole Lab's slots fit into the counted time");
 
 void atomScene(AppState& app, int which) {
     commonSetup(app);
@@ -208,7 +214,7 @@ struct BenchState {
     std::vector<std::string> atomUsed;        // per scene: the Atom Lab settings it really ran with ("" for an Orbit Lab scene)
     // 0.55.5: the Black Hole Lab's scene: its clock, the movement of the frame being drawn (0 turn, 1 tilt, 2 distance; moving or at rest), the counters
     // of the last frame, and the numbers per scene
-    std::chrono::steady_clock::time_point bhStart, bhLast;
+    double bhLastU = -1e9, bhRestS = -1;                // 0.55.8: the run's clock in the scene (s); seconds at rest in the slot (-1 moving)
     int bhKind = -1;
     bool bhMoving = false, bhHave = false;
     long bhCount[6] = {0, 0, 0, 0, 0, 0};
@@ -232,24 +238,29 @@ namespace {
 
 void blackholeFrame(AppState& app, int, int) {
     BenchState& b = *app.bench;
-    const auto now = std::chrono::steady_clock::now();
-    const double t = std::chrono::duration<double>(now - b.bhStart).count(), dt = std::min(0.1, std::chrono::duration<double>(now - b.bhLast).count());
-    b.bhLast = now;
-    // 0.55.6: the warm-up at rest; then six slots of 4/3 s (1 s moving, 1/3 s at rest): turning, tilting, distance at spin 0.9, then the same at spin 0
-    // (going back the way it came, so the view ends where it began)
-    const double slot = 4.0 / 3.0, u = t - app::kBenchWarmupS;
+    // 0.55.8: by the run's own clock (the frames' times summed, app/bench.h BenchRun), the clock that decides when counting starts and ends: 0.55.7 went
+    // by the wall clock from the scene's set-up, which also holds the set-up's frame (the fine table made at once), so counting ended before the last slot
+    const double u = b.run->measuring() ? b.run->sceneElapsedS() : b.run->sceneElapsedS() - b.run->warmupS();
+    const double dt = std::clamp(u - b.bhLastU, 0.0, 0.1);
+    b.bhLastU = u;
+    // the warm-up at rest; then six slots: turning, tilting, distance at spin 0.9 (1 s moving each; then at rest 1/3 s after turning, which needs no new table, and
+    // kBhRest s after tilting and distance, for the fine table: how long after the stop the sharp picture comes), then the same at spin 0 (0.5 s moving, 0.1 s
+    // at rest; going back the way it came, so the view ends where it began)
     if (u < 0) { b.bhKind = -1; b.bhMoving = false; return; }
-    const int k = std::min(5, static_cast<int>(u / slot));
+    int k = 0;
+    while (k < 5 && u >= kBhSlotEnd[k]) k++;
+    const double start = k == 0 ? 0 : kBhSlotEnd[k - 1];
     b.bhKind = k;
-    b.bhMoving = std::fmod(u, slot) < 1.0 && u < 6 * slot;
+    b.bhMoving = u - start < kBhMove[k] && u < kBhSlotEnd[5];
+    b.bhRestS = b.bhMoving ? -1 : u - start - kBhMove[k];
     const double spin = k < 3 ? 0.9 : 0.0;
     if (app.blackhole.spin != spin) blackhole::setSpin(app.blackhole, spin);
     if (!b.bhMoving) return;
     b.bhMoveS[k] += dt;
-    const double dir = k < 3 ? 1 : -1;
-    if (k % 3 == 0) blackhole::turn(app.blackhole, 0.2 * dir * dt, 0);    // 0.2 rad a second round the axis
-    else if (k % 3 == 1) blackhole::turn(app.blackhole, 0, 0.1 * dir * dt);   // 0.1 rad a second up or down
-    else blackhole::setDistance(app.blackhole, app.blackhole.dist * std::exp(-0.05 * dir * dt));   // 5 % a second closer or farther
+    const double dir = k < 3 ? 1 : -1, back = k < 3 ? 1.0 : kBhMove[k - 3] / kBhMove[k];   // (the way back at spin 0 in its shorter time)
+    if (k % 3 == 0) blackhole::turn(app.blackhole, 0.2 * dir * back * dt, 0);    // 0.2 rad a second round the axis
+    else if (k % 3 == 1) blackhole::turn(app.blackhole, 0, 0.1 * dir * back * dt);   // 0.1 rad a second up or down
+    else blackhole::setDistance(app.blackhole, app.blackhole.dist * std::exp(-0.05 * dir * back * dt));   // 5 % a second closer or farther
 }
 
 // 0.55.5: the Black Hole Lab's numbers of the frame just drawn, while the scene is counted (the counters follow during the warm-up too)
@@ -261,6 +272,7 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
         app::BenchBhMove& m = h.move[b.bhKind];
         if (s.picture != b.bhPic && b.bhMoving) m.pictures++;            // 0.55.6: new pictures while moving
         m.seconds = b.bhMoveS[b.bhKind];
+        m.restS = (b.bhKind == 0 ? kBhSlotEnd[0] : kBhSlotEnd[b.bhKind] - kBhSlotEnd[b.bhKind - 1]) - kBhMove[b.bhKind];
         if (s.cardFills != b.bhCard) h.card.add(s.cardMs);
         if (b.bhMoving) {
             m.frames++;
@@ -269,6 +281,8 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
             if (s.behind) m.behindFrames++;
         }
         m.behindWorst = std::max(m.behindWorst, s.behindMs);
+        // 0.55.8: at rest after moving at spin: the first frame that shows the fine table of the settings (not behind): its time after the stop
+        if (!b.bhMoving && b.bhRestS >= 0 && app.blackhole.spin > 0 && m.sharpMs < 0 && s.spinFine && !s.behind) m.sharpMs = 1000 * b.bhRestS;
         if (c[0] != b.bhCount[0]) m.coarse.add(app.blackhole.spin > 0 && app.blackhole.bend ? s.spinCoarseMs : s.tableMs);
         if (c[1] != b.bhCount[1]) m.bins.add(s.spinStarsMs);
         if (c[2] != b.bhCount[2]) m.stars.add(s.starsMs);
@@ -469,7 +483,8 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, i
         if (app.lab == 1 && i < int(b.atomUsed.size())) b.atomUsed[i] = atom::benchSettingsText(app.atom);
         b.run->setUpDone();
         b.sceneFrame = 0; b.measFrame = -1;
-        b.bhStart = b.bhLast = std::chrono::steady_clock::now(); b.bhKind = -1; b.bhHave = false;
+        b.bhLastU = -1e9; b.bhRestS = -1; b.bhKind = -1; b.bhHave = false;
+        if (app::benchSceneTexts()[std::size_t(b.list[i])].kind == app::BenchKind::BlackHole) b.bhByScene[i].fineStartMs = app.blackholeView.fineFillMs();   // 0.55.8
         for (double& x : b.bhMoveS) x = 0;
     }
     if (b.run->sceneToSetUp() < 0 && b.run->scene() < int(b.list.size())) {      // a scene that needs something done every frame (a jump held, the cut moving)

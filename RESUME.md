@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.55.7 (16 Nov 2026): a guard round the graphics card's light paths (app/gpu_guard: a marker file per step beside the settings file until the path has worked once for the app version and driver; a marker left behind, or a step over 10 s, switches the path off for that pair, kept in the settings file, Settings, Performance names the step with Try again); the start-up check a step per frame, only from the view's third frame; the first fill piece by piece from 64 rays; the log gpu-paths-log.txt beside the settings file (Settings opens its folder; the benchmark report ends with its last 40 lines). Owner's Radeon crash in 0.55.6: cause not yet known, waiting for his log; small version.
+- 0.55.8 (16 Nov 2026): the spinning hole's rays on the processor in Mino time (blackhole/mino.h: u = 1/r, mu = cos theta, polynomial equations, followed to infinity; rays within sin^2 theta < 1e-3 of the axis keep KerrBL) and a tolerance that grows away from the shadow's edge (spin_sky.h SpinFill): the moving table x3.7, the fine table x4.7 on this box; Real's saved hash changed on purpose (within one level of 255 of 0.55.7's picture); the benchmark's Black Hole scene goes by the run's clock (its last movement is counted) and reports the sharp picture's time after a stop. Graphics-card light paths unchanged (off on the owner's Radeon); small version.
 - Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
-- Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra, a faster fine table), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

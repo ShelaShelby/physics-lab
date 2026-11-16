@@ -105,9 +105,11 @@ std::vector<std::string> benchBlackHoleLines(const BenchBlackHole& b) {
                     " ms worst; picture behind the settings in " + std::to_string(m.behindFrames) + " of " + std::to_string(m.frames) + " frames, at most " + f("%.0f", m.behindWorst) + " ms; " +
                     std::to_string(m.pictures) + " new pictures in " + f("%.1f", m.seconds) + " s" + (m.seconds > 0 ? " (" + f("%.0f", m.pictures / m.seconds) + " a second)" : std::string()));
         v.push_back("  worker: coarse table " + stage(m.coarse) + "; star bins " + stage(m.bins) + "; stars' images " + stage(m.stars) + "; exposure " + stage(m.look));
+        if (k < 3) v.push_back(m.sharpMs >= 0 ? "  at rest: the sharp picture (the fine table) " + f("%.0f", m.sharpMs) + " ms after the stop"
+                                              : "  at rest: no sharp picture within the " + f("%.1f", m.restS) + " s at rest");
     }
     v.push_back("Black Hole Lab, at rest: glare " + stage(b.glare) + (b.glare.n > 0 ? ", shown " + f("%.0f", b.glareWaitWorst) + " ms after its picture at most" : std::string()) +
-                "; fine spin table " + stage(b.fine));
+                "; fine spin table " + stage(b.fine) + "; the fine spin table made at the scene's start (all cores) " + f("%.0f", b.fineStartMs) + " ms");
     return v;
 }
 

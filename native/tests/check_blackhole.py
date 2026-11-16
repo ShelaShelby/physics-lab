@@ -18,7 +18,7 @@
 #   spin:      0.55.2, spin: the control exists; spin 0 is the picture of 0.55.1 to the pixel; a typed 0.99 (the top) is taken, 0.999 is not; the card's horizon,
 #              inner edge, efficiency and dragging = the papers' (written here); at 0.99 the drawn shadow's edge is the module's at 24 points from the equator
 #              (not round there) and from near the axis (round); the presets start at 0 with their sentence; a restart keeps the spin (1280 x 800, Dark)
-#              0.55.3: the looks: Real's saved case to the pixel (its hash made by 0.55.2's code); Film at the paper's view (James et al. 2015, Fig. 13) against the
+#              0.55.3: the looks: Real's saved case to the pixel (its hash made by 0.55.2's code; 0.55.8: drawn with 0.55.7's rays, and the new fine table within one level); Film at the paper's view (James et al. 2015, Fig. 13) against the
 #              double lookup: the disc's image and its edges where the module puts the paper's edges, one colour all over the disc before the glow; the glow = its
 #              double reference (blackhole/looks.h glowReference) to one level of 255, no pixel darker
 #   looks:     0.55.3, Controls > Look (1280 x 800, Dark): Real with the dot; Film locks the spin and disc controls (a typed spin and Off are refused), shows its labels
@@ -315,7 +315,11 @@ def part_precision(binary, work):
     # (looks.h filmDiscLinear over the screen's white, encoded); the glow: the card's picture with it = the double reference applied to the card's picture without
     # it, to one level of 255, no channel of any pixel darker, the added light = the reference's to 1 %.
     rl = [ln for ln in r.out.splitlines() if ln.startswith("PLBHREAL ")]
-    check(bool(rl) and rl[0].split("=")[1] == "7fff50741d132f22", f"Real: the saved case is 0.55.2's picture to the pixel ({rl})")
+    # 0.55.8: the fine table's rays follow Mino's form (src/blackhole/mino.h): the same case drawn with 0.55.7's rays is still 0.55.2's picture to the pixel; the
+    # new picture differs from it by at most one level of 255 (measured: 695 of 1,024,000 pixels by one level); its hash saved on purpose (REPORT 0.55.8)
+    rv = dict(kv.split("=") for kv in rl[0].split()[1:]) if rl else {}
+    check(rv.get("old") == "7fff50741d132f22", f"Real: drawn with 0.55.7's rays, the saved case is 0.55.2's picture to the pixel ({rl})")
+    check(rv.get("hash") == "b37c532bb4916030" and int(rv.get("maxdiff", 9)) <= 1, f"Real: the saved case with the fine table of 0.55.8, within one level of 255 of 0.55.2's picture ({rl})")
     fl = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHFILM ")]
     check(len(fl) == 1, f"Film compared at the paper's view ({len(fl)})")
     for x in fl:
@@ -743,6 +747,8 @@ def frames_of(r):
             out.append(dict(kv.split("=", 1) for kv in ln.split()[1:]))
     return out
 
+SMOOTH_TILT_SHARE = 0.9   # (measured here, LP_NUM_THREADS=1: 16 of 16; with 0.55.7's coarse table 12 of 16; REPORT 0.55.8)
+
 def part_smooth(binary, work):
     # Real look, disc on, the default glare, spin 0.6 (1280 x 800, Dark): a scripted tilt drag over the picture, then a spin drag on the slider, then rest
     # (PL_FRAME_MS=16: a frame takes at least 16 ms, as with VSync on a real screen; the rest is long enough for the fine table on this software renderer)
@@ -774,6 +780,12 @@ def part_smooth(binary, work):
     worst = max(float(x["draw"]) + float(x["glare"]) for x in moving)
     check(worst < SMOOTH_LIMIT_MS, f"during the tilt and spin drags the frame thread's worst time in the lab is {worst:.2f} ms (limit {SMOOTH_LIMIT_MS} ms)")
     check(any(x.get("behind") == "1" for x in moving), "while the view moves the lab says the picture is behind (the worker's picture comes later)")
+    # 0.55.8: the tilt drag at spin on the processor's path: a new picture follows nearly every frame in which the view moved (the moving table, spin_sky.h
+    # kSpinMoving; 0.55.7's coarse table on this machine: see REPORT 0.55.8)
+    tm = [i for i in range(1, len(f) - 1) if 20 <= int(f[i]["f"]) <= 50 and f[i].get("want") != f[i - 1].get("want")]
+    tn = [i for i in tm if int(f[i + 1].get("pic", "0")) > int(f[i].get("pic", "0"))]
+    print(f"  tilt at spin 0.6 (processor): a new picture after {len(tn)} of {len(tm)} moved frames; coarse ms {[f[i].get('coarsems') for i in tm]}")
+    check(len(tm) >= 8 and len(tn) >= SMOOTH_TILT_SHARE * len(tm), f"processor: a new picture after {len(tn)} of {len(tm)} frames of the tilt drag at spin 0.6 in which the view moved (needs {SMOOTH_TILT_SHARE:.0%})")
     shown = [x for x in f if x.get("pic", "0") != "0"]                   # (frames with a picture)
     one = [x for x in shown if x["sky"] == x["made"]]
     check(len(shown) > 0.9 * len(f) and len(one) == len(shown), f"every frame shows one view: the sky's settings = those its exposure and stars were made for ({len(shown) - len(one)} of {len(shown)} frames differ)")

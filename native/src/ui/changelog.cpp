@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.8", "The Black Hole Lab: the spinning hole's light paths about 3.5 times faster on the processor",
+     "Round the spinning hole the processor now follows each light path in a second, equivalent form of the same equations (the time usually called Mino time: the motion "
+     "away from the hole and the motion round its axis separate, and both become plain polynomials without sines), and follows each escaping path all the way out "
+     "to infinity instead of stopping far out. The picture made while you tilt or change the distance is ready in about a quarter of the time, so it follows "
+     "the view nearly every frame; the sharp picture at rest also comes about 3.5 times sooner. Its numbers are tested against the earlier form at its highest "
+     "precision; the paths that pass close to the spin axis keep the earlier form. The benchmark's Black Hole scene now counts its last movement too, and reports "
+     "the fine table's time and how long after a stop the sharp picture came."},
     {"0.55.7", "The Black Hole Lab: the graphics card's light paths can no longer stop the app",
      "On one PC the app closed by itself a few seconds after it opened, every time, when its saved settings opened the Black Hole Lab with a spinning hole. "
      "The graphics card's light paths now start only after the window is on screen, a step at a time without the window ever waiting, and until they have worked once "
