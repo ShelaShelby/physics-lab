@@ -73,6 +73,10 @@ GpuGuardRecord gpuGuardParse(const std::string& line) {
 GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecord& marker, const std::string& version, const std::string& driver) {
     GpuGuardDecision d;
     d.keep = marker.state.empty() ? saved : marker;                // a marker left behind: the last run died inside its step
+    // 0.56.0: a line of an older form (0.55.7 and 0.55.8 kept the app's version, not "shader <hash>"; 0.55.9 tried the dead shader once more because of it):
+    // read as "off" for its driver, kept from now on in the new form with this shader's id (a later changed shader still tries again)
+    if (!d.keep.state.empty() && d.keep.version.rfind("shader ", 0) != 0 && d.keep.version.rfind("sky ", 0) != 0 && d.keep.driver == field(driver))
+        d.keep = GpuGuardRecord{"off", field(version), d.keep.driver, d.keep.step.empty() ? std::string("(kept by an older version of the app)") : d.keep.step};
     const bool same = d.keep.version == field(version) && d.keep.driver == field(driver);
     if ((d.keep.state == "off" || d.keep.state == "slow") && same) {
         d.allowed = false; d.guarded = false; d.crashed = d.keep.state == "off";
@@ -100,9 +104,9 @@ void GpuGuard::start(const std::string& folder, const std::string& version, cons
     if (const char* e = std::getenv("PL_GPU_DIE")) die_ = e;
     GpuGuardRecord marker;
     if (!folder_.empty()) {
-        marker = readMarker(folder_ + kMarker);
+        marker = readMarker(folder_ + markerName_);
         staleMarker_ = !marker.state.empty();
-        if (std::FILE* f = std::fopen((folder_ + kLog).c_str(), "wb")) std::fclose(f);   // (overwritten at each start)
+        if (truncateLog_) if (std::FILE* f = std::fopen((folder_ + logName_).c_str(), "wb")) std::fclose(f);   // (overwritten at each start; 0.56.0: by the first guard)
     }
     d_ = gpuGuardDecide(gpuGuardParse(saved), marker, version_, driver_);
     lines_ = 0; logFull_ = false;
@@ -123,22 +127,23 @@ std::string GpuGuard::offText() const {
 
 void GpuGuard::writeMarker(const std::string& step) {
     if (folder_.empty()) return;
-    writeCommitted(folder_ + kMarker, "version=" + version_ + "\ndriver=" + driver_ + "\nstep=" + field(step) + "\n");
+    writeCommitted(folder_ + markerName_, "version=" + version_ + "\ndriver=" + driver_ + "\nstep=" + field(step) + "\n");
     staleMarker_ = false;
 }
 
 void GpuGuard::removeMarker() {
     if (folder_.empty()) return;
-    std::remove((folder_ + kMarker).c_str());
+    std::remove((folder_ + markerName_).c_str());
     staleMarker_ = false;
 }
 
 void GpuGuard::line(const std::string& text, bool commit) {
     if (folder_.empty() || logFull_) return;
-    std::FILE* f = std::fopen((folder_ + kLog).c_str(), "ab");
+    std::FILE* f = std::fopen((folder_ + logName_).c_str(), "ab");
     if (!f) return;
     char stamp[32];
     std::snprintf(stamp, sizeof stamp, "[%9.1f ms] ", nowMs() - t0_);
+    if (!prefix_.empty()) std::fputs(prefix_.c_str(), f);
     if (++lines_ >= kLogMax) { std::fputs(stamp, f); std::fputs("(the log is full: later lines are not written)\n", f); logFull_ = true; }
     else { std::fputs(stamp, f); std::fputs(text.c_str(), f); std::fputc('\n', f); }
     if (commit) commitFile(f); else std::fflush(f);
@@ -195,7 +200,7 @@ void GpuGuard::tryAgain() {
 void GpuGuard::closing() {
     std::lock_guard<std::mutex> g(mx_);
     if (!started_ || staleMarker_ || folder_.empty()) return;
-    if (std::FILE* f = std::fopen((folder_ + kMarker).c_str(), "rb")) {
+    if (std::FILE* f = std::fopen((folder_ + markerName_).c_str(), "rb")) {
         std::fclose(f);
         removeMarker();
         line("The app closes normally: the marker of a step still open was removed", true);
@@ -222,6 +227,11 @@ std::vector<std::string> GpuGuard::logTail(int n) const {
 
 GpuGuard& gpuGuard() {
     static GpuGuard g;
+    return g;
+}
+
+GpuGuard& gpuSkyGuard() {
+    static GpuGuard g("gpu-sky-step.txt", GpuGuard::kLog, false, "[sky] ");
     return g;
 }
 

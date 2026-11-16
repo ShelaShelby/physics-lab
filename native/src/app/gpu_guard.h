@@ -38,6 +38,10 @@ GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecor
 
 class GpuGuard {
 public:
+    GpuGuard() {}
+    // 0.56.0: a guard of its own (the spinning hole drawn per pixel, gpuSkyGuard): its marker file, the log it writes into (truncated at start only by
+    // the guard that says so) and a prefix for its lines
+    GpuGuard(const char* marker, const char* log, bool truncateLog, const char* prefix) : markerName_(marker), logName_(log), prefix_(prefix), truncateLog_(truncateLog) {}
     static constexpr const char* kMarker = "gpu-paths-step.txt";   // plain ASCII names (Windows)
     static constexpr const char* kLog = "gpu-paths-log.txt";
     static constexpr int kLogMax = 400;                           // lines; later ones are dropped (one line says so)
@@ -66,9 +70,12 @@ public:
     void closing();                                               // the app ends normally: a marker of this run's still open step is removed (logged)
     void settingsWritten();                                       // the settings file now holds saved(): a marker from the last run can go
     std::string folder() const { return folder_; }
-    std::string logPath() const { return folder_.empty() ? std::string() : folder_ + kLog; }
+    std::string logPath() const { return folder_.empty() ? std::string() : folder_ + logName_; }
+    std::string markerPath() const { return folder_.empty() ? std::string() : folder_ + markerName_; }
     std::vector<std::string> logTail(int n) const;                // the log's last n lines (read back from the file)
 private:
+    std::string markerName_ = kMarker, logName_ = kLog, prefix_;
+    bool truncateLog_ = true;
     mutable std::mutex mx_;
     bool started_ = false, staleMarker_ = false, logFull_ = false;
     std::string folder_, version_, driver_, die_;
@@ -80,7 +87,10 @@ private:
     void line(const std::string& text, bool commit);
 };
 
-GpuGuard& gpuGuard();                                             // the app's one
+GpuGuard& gpuGuard();                                             // the app's one (0.55.6's compute shader for the table)
+// 0.56.0: the spinning hole's sky and disc drawn per pixel (render/kerr_sky.h): its own marker (gpu-sky-step.txt), the settings line "gpusky=", the same
+// log (its lines start "[sky] "), its version field "sky <hash>" (render/kerr_sky.h kerrSkyShaderId)
+GpuGuard& gpuSkyGuard();
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);

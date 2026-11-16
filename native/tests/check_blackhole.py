@@ -266,7 +266,45 @@ def precision_card(binary, work):
               and float(x["qdrift"]) <= 10 * float(x["cpuqdrift"]) + 1e-15,
               f"{w}: the conservation laws on the card's rays: null {x['null']} (processor {x['cpunull']}), q {x['qdrift']} (processor {x['cpuqdrift']})")
 
+def precision_sky(binary, work):
+    # 0.56.0, the spinning hole drawn per pixel by the card from the closed forms in single precision (render/shaders.h kKerrSkyFS) against kerr_closed.h and
+    # elliptic.cpp in double (PL_BH_COMPARE=sky; measured on llvmpipe, REPORT 0.56.0). The elliptic functions on 3576 argument sets: R_F, R_J, R_C, F, Pi
+    # (n below 1 and past the pole), E, K within 1e-5 relative (measured 1.5e-6 at most), am within 1e-5 (1 + |u|). Per pixel, four pictures of 320 x 200
+    # (the benchmark's camera, the Film's, spin 0.99 at 6 M, a camera in the disc's plane): no ray lost; no pixel ending elsewhere (sky or horizon) farther
+    # than 1.5 pixels from the shadow's edge (the closed test's edge, single precision runs out only there); the far direction within 2e-3 rad (today's
+    # limit for the fine table) 2 pixels or more from the edge at all but 1 in 10000 sky pixels (counted and placed); b within 1e-4; the disc's first image
+    # the same at all but 1 in 10000 of its pixels, its radius within 5e-3 and g within 1e-3 (both measured 1.6e-3 / 2.4e-4 at spin 0.99, 3e-5 elsewhere),
+    # over 1e-3 at no more than 1 in 10000 disc pixels. The start-up check passes on this renderer.
+    r = run_app(binary, work, "bh_precision_sky", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="sky", PL_EXIT_AFTER_FRAMES="1"), frames=1, timeout=1800)
+    seen = set()
+    for ln in r.out.splitlines():
+        if ln.startswith("PLBHSKY") and ln not in seen: print(ln); seen.add(ln)
+    m = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYMATH ")]
+    check(len(m) >= 1, "the sky shader's elliptic functions were compared")
+    if m:
+        x = m[0]
+        check(all(float(x[k]) < 1e-5 for k in ("rf", "rj", "rc", "am", "f", "pi", "e", "k")),
+              "the sky shader's elliptic functions = elliptic.cpp's within single precision (" + " ".join(k + "=" + x[k] for k in ("rf", "rj", "rc", "am", "f", "pi", "e", "k")) + ")")
+    pics = {}
+    for ln in r.out.splitlines():
+        if ln.startswith("PLBHSKYPIC "):
+            d = dict(kv.split("=") for kv in ln.split()[1:]); pics[d["case"]] = d
+    check(set(pics) == {"benchmark", "film", "top", "plane"}, f"four pictures compared per pixel ({sorted(pics)})")
+    for name, x in pics.items():
+        w = f"sky per pixel, {name} (spin {x['a']}, {x['dist']} M)"
+        sky, disc = int(x["sky"]), int(x["discpx"])
+        check(int(x["lost"]) == 0 and int(x["reflost"]) == 0 and int(x["endsfar"]) == 0,
+              f"{w}: every ray ends where traceClosed's does more than 1.5 px from the edge ({x['ends']} differ next to it, {x['lost']} lost)")
+        check(float(x["dir"]) < 2e-3 or int(x["dirbad"]) * 10000 <= sky,
+              f"{w}: far direction within 2e-3 rad (largest {x['dir']}; {x['dirbad']} of {sky} sky pixels over it, the farthest {x['dirbadfar']} px from the edge; within 2 px of it {x['dirnear']})")
+        check(float(x["b"]) < 1e-4, f"{w}: b within 1e-4 ({x['b']})")
+        check(int(x["discwrong"]) * 10000 <= disc and float(x["r"]) < 5e-3 and float(x["g"]) < 1e-3 and int(x["rbad"]) * 10000 <= disc,
+              f"{w}: the disc's first image ({disc} px: {x['discwrong']} another image, r {x['r']}, g {x['g']}, {x['rbad']} over 1e-3)")
+    c = [ln for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECK ")]
+    check(bool(c) and " ok=1 " in c[0], f"the sky's start-up check passes on this renderer ({c[:1]})")
+
 def part_precision(binary, work):
+    precision_sky(binary, work)
     precision_card(binary, work)
     r = run_app(binary, work, "bh_precision", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="1"), frames=3, timeout=1800)
     rows = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCMP ")]
@@ -947,7 +985,7 @@ def blackhole_film():
         out[k] = float(m.group(1))
     return out
 
-PARTS = {"open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
+PARTS = {"sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
          "truelight": part_truelight, "smooth": part_smooth,
          "smoothdisc": lambda b, w: smooth_disc(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_BH_GPUPATHS="0"))}
@@ -957,7 +995,7 @@ if __name__ == "__main__":
     os.makedirs(work, exist_ok=True)
     part = sys.argv[3] if len(sys.argv) > 3 else None
     for name, fn in PARTS.items():
-        if (part is None and name != "smoothdisc") or part == name:   # (smoothdisc: the smooth part's last check alone, by hand)
+        if (part is None and name not in ("smoothdisc", "sky")) or part == name:   # (smoothdisc: the smooth part's last check alone, by hand; sky: inside precision)
             fn(binary, work)
     print(f"check_blackhole: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

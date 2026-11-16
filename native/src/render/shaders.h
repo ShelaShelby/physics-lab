@@ -25,6 +25,9 @@ in vec2 vUV;
 in vec4 vColor;
 in vec4 vParam;
 uniform vec3 uSpace;         // 0.50: the colour of empty space (sRGB); a lit ball's zero light (render/shading.h)
+uniform sampler2D uMask;     // 0.56.0 (mode 6)
+uniform int uMaskOn;
+uniform ivec2 uMaskOrigin;
 out vec4 fragColor;
 // 0.50: IEC 61966-2-1 (sRGB) transfer functions; C++ twin render/shading.h (srgbDecode, srgbEncode)
 vec3 srgbDecode(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)); }
@@ -53,6 +56,12 @@ void main() {
         return;
     }
     if (mode == 5) { fragColor = vec4(vColor.rgb, vColor.a * clamp(1.0 - d, 0.0, 1.0)); return; }   // soft dot fading to nothing at the edge
+    if (mode == 6) {                                         // 0.56.0: a round dot through the spinning hole's open-sky share (Renderer2D::maskedDisc)
+        float m = 1.0;
+        if (uMaskOn == 1) { ivec2 q = clamp(ivec2(gl_FragCoord.xy) - uMaskOrigin, ivec2(0), textureSize(uMask, 0) - 1); m = texelFetch(uMask, q, 0).r; }
+        fragColor = vec4(vColor.rgb, vColor.a * edge * m);
+        return;
+    }
     fragColor = vColor;   // (mode 4, the Sun's glow, removed in 0.49.4: the corona is far too faint to show next to the disc)
 }
 )";
@@ -1498,6 +1507,572 @@ void main() {
         Ou[8 * k] = s; Ou[8 * k + 1] = c; Ou[8 * k + 2] = dexp(x); Ou[8 * k + 3] = dlog(ax);
         Ou[8 * k + 4] = datan2(x, 1.0LF - x); Ou[8 * k + 5] = dacos(x / (1.0LF + abs(x))); Ou[8 * k + 6] = dcbrt(x); Ou[8 * k + 7] = dpowm02(ax);
     }
+}
+)";
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------
+// 0.56.0: the spinning hole's sky and disc drawn per pixel by the graphics card from the closed forms (blackhole/kerr_closed.h, elliptic.h) in single
+// precision: for each pixel its ray's constants (J15 (A.8)-(A.12), KerrBL::launch), GLa's roots and case (the closed shadow test: J15 (v) decided by the
+// roots, as traceClosed decides where a ray goes), the far direction or the horizon, the first four crossings of the disc's plane, then kKerrFS's colour
+// rules. No table. Three shaders are made from the pieces below (render/kerr_sky.h; tests/check_shaders.py assembles them the same way, its ASSEMBLED list):
+//   kKerrSkyTinyFS (a few lines: the first link), head + kEllipticPart + kKerrSkyMathPart (the elliptic functions alone: the second link and the tests' hook),
+//   head + kEllipticPart + kKerrSkyTracePart + kKerrSkyMainPart (the whole).
+// SIZE (decision of 0.56.0: the 0.55.6 compute shader was hundreds of kilobytes once a driver had inlined it): every function is called from ONE place, so
+// that a driver that inlines everything still holds one copy of each: carlsonRCf in carlsonFJ (R_F and R_J by one duplication: their x, y, z steps are the
+// same), carlsonFJ in a loop of two in ellFP (the amplitude, and the complete integral for a reflection), ellFP in the ray's one loop over its nine
+// elliptic integrals (kKerrSkyTracePart: the jobs), amAGM in that loop's one stage of five amplitudes. Every loop has a constant bound; no double.
+static const char* const kKerrSkyTinyFS = R"(#version 330 core
+out vec4 fragColor;
+uniform vec4 uValue;
+void main() { fragColor = uValue + vec4(gl_FragCoord.xy, 0.0, 0.0); }
+)";
+
+static const char* const kKerrSkyHeadPart = R"(#version 330 core
+)";
+
+// elliptic.h in single precision. R_C in closed form (elliptic.cpp carlsonRC; its series below |e| < 0.05 here, to the e^6 term: the next is below 3e-10).
+// R_F and R_J by Carlson's duplication together (elliptic.cpp carlsonRF, carlsonRJ; each ends when its arguments are within 4e-3 of their mean: the
+// fifth-order series then leaves about 4e-15). ellFP: (F, Pi) or (F, E) for any amplitude in (-pi, pi] given by its sine and cosine (ellFang, ellPiang with
+// n > 1 past the pole by G, kerr_closed.cpp's nearR2 for E); nc = 1 - n given (no rounding near n = 1). amAGM: the Jacobi amplitude by the AGM (elliptic.cpp
+// amAGM; ends when c_N < 3e-8 a_N); amAny: also for m < 0 by the transformation of elliptic.h, with K(mu) given.
+static const char* const kEllipticPart = R"(
+const float PI = 3.14159265358979;
+// atan, asin and acos to single precision (the built-in ones have no precision the GLSL specification promises; Mesa's asin is off by 1e-4): atan by
+// atan(z) = pi/6 + atan((z sqrt3 - 1) / (z + sqrt3)) down to |z| <= tan(pi/12) and its series to z^11 (the next term below 3e-9); asin and acos from it
+float atan1(float t) {
+    float z = abs(t);
+    bool inv = z > 1.0;
+    if (inv) z = 1.0 / z;
+    bool red = z > 0.26794919;
+    float w = red ? (z * 1.7320508 - 1.0) / (z + 1.7320508) : z, w2 = w * w;
+    float r = w * (1.0 - w2 * (1.0 / 3.0 - w2 * (0.2 - w2 * (1.0 / 7.0 - w2 * (1.0 / 9.0 - w2 / 11.0)))));
+    if (red) r += 0.52359878;
+    if (inv) r = 1.5707963 - r;
+    return t < 0.0 ? -r : r;
+}
+float atanS(float y, float x) {
+    if (x > 0.0) return atan1(y / x);
+    if (x < 0.0) return y >= 0.0 ? atan1(y / x) + PI : atan1(y / x) - PI;
+    return y > 0.0 ? 0.5 * PI : (y < 0.0 ? -0.5 * PI : 0.0);
+}
+float atanS(float t) { return atan1(t); }
+float asinS(float x) { float c = sqrt(max((1.0 - x) * (1.0 + x), 0.0)); return 2.0 * atan1(x / (1.0 + c)); }
+float acosS(float x) { return x <= -1.0 ? PI : 2.0 * atan1(sqrt(max((1.0 - x) / (1.0 + x), 0.0))); }
+float cbrtS(float x) { return x < 0.0 ? -pow(-x, 1.0 / 3.0) : pow(x, 1.0 / 3.0); }
+float carlsonRCf(float x, float y) {
+    float e = (y - x) / y;
+    if (abs(e) < 0.05) return (1.0 + e * (1.0 / 6.0 + e * (3.0 / 40.0 + e * (5.0 / 112.0 + e * (35.0 / 1152.0 + e * (63.0 / 2816.0 + e * (231.0 / 13312.0))))))) / sqrt(y);
+    if (x < y) return x > 0.0 ? atanS(sqrt((y - x) / x)) / sqrt(y - x) : 1.5707963 / sqrt(y);
+    float z = sqrt((x - y) / x);
+    return 0.5 * log((1.0 + z) * (1.0 + z) * x / y) / sqrt(x - y);
+}
+vec2 carlsonFJ(float x0, float y0, float z0, float p0) {
+    float x = x0, y = y0, z = z0, p = p0, sum = 0.0, fac = 1.0, rf = 0.0, rj = 0.0;
+    bool hasF = false, hasJ = false;
+    for (int it = 0; it < 32; it++) {
+        if (!hasF) {
+            float A = (x + y + z) / 3.0, dx = (A - x) / A, dy = (A - y) / A, dz = (A - z) / A;
+            if (max(abs(dx), max(abs(dy), abs(dz))) < 4e-3) {
+                float e2 = dx * dy - dz * dz, e3 = dx * dy * dz;
+                rf = (1.0 + (e2 / 24.0 - 0.1 - 3.0 / 44.0 * e3) * e2 + e3 / 14.0) / sqrt(A);
+                hasF = true;
+            }
+        }
+        if (!hasJ) {
+            float A = (x + y + z + p + p) / 5.0, dx = (A - x) / A, dy = (A - y) / A, dz = (A - z) / A, dp = (A - p) / A;
+            if (max(max(abs(dx), abs(dy)), max(abs(dz), abs(dp))) < 4e-3) {
+                float C1 = 3.0 / 14.0, C2 = 1.0 / 3.0, C3 = 3.0 / 22.0, C4 = 3.0 / 26.0, C5 = 0.75 * C3, C6 = 1.5 * C4, C7 = 0.5 * C2, C8 = C3 + C3;
+                float ea = dx * (dy + dz) + dy * dz, eb = dx * dy * dz, ec = dp * dp, ed = ea - 3.0 * ec, ee = eb + 2.0 * dp * (ea - ec);
+                rj = 3.0 * sum + fac * (1.0 + ed * (-C1 + C5 * ed - C6 * ee) + eb * (C7 + dp * (-C8 + dp * C4)) + dp * ea * (C2 - dp * C3) - C2 * dp * ec) / (A * sqrt(A));
+                hasJ = true;
+            }
+        }
+        if (hasF && hasJ) break;
+        float sx = sqrt(x), sy = sqrt(y), sz = sqrt(z), l = sx * sy + sy * sz + sz * sx;
+        if (!hasJ) {
+            float al = p * (sx + sy + sz) + sx * sy * sz, be = p * (p + l) * (p + l);
+            sum += fac * carlsonRCf(al * al, be);
+            fac *= 0.25;
+            p = (p + l) * 0.25;
+        }
+        x = (x + l) * 0.25; y = (y + l) * 0.25; z = (z + l) * 0.25;
+    }
+    return vec2(rf, rj);
+}
+vec2 ellFP(float n, float nc, float s, float c, float kc2, bool eMode) {
+    float as = abs(s), ac = abs(c), m = 1.0 - kc2;
+    bool beyond = !eMode && n > 1.0 && (c < 0.0 || nc + n * ac * ac <= 0.0);
+    float nn = beyond ? m / n : n, nnc = beyond ? (n - m) / n : nc;
+    float cj = eMode ? -m / 3.0 : nn / 3.0;
+    vec2 amp0 = vec2(0.0), full = vec2(0.0);
+    for (int k = 0; k < 2; k++) {
+        if (k == 1 && c >= 0.0) break;
+        float ss = k == 0 ? as : 1.0, cc = k == 0 ? ac : 0.0;
+        vec2 r = carlsonFJ(cc * cc, cc * cc + kc2 * ss * ss, 1.0, eMode ? 1.0 : nnc + nn * cc * cc);
+        vec2 v = vec2(ss * r.x, ss * r.x + cj * ss * ss * ss * r.y);
+        if (k == 0) amp0 = v; else full = v;
+    }
+    vec2 v = c >= 0.0 ? amp0 : 2.0 * full - amp0;
+    if (beyond) {
+        float P = sqrt((n - 1.0) * nnc), d = sqrt(c * c + kc2 * s * s);
+        float pole = (nc + n * ac * ac) * (nnc + nn * ac * ac);
+        float plus = d * c + P * as, minus = d * c - P * as;
+        float L = abs(plus) >= abs(minus) ? log(abs(plus * plus / pole)) : log(abs(pole / (minus * minus)));
+        v.y = v.x - v.y + L / (2.0 * P);
+    }
+    return s < 0.0 ? -v : v;
+}
+float amAGM(float u, float kc2) {
+    if (kc2 >= 1.0) return u;
+    float a[16];
+    float c[16];
+    for (int i = 0; i < 16; i++) { a[i] = 0.0; c[i] = 0.0; }
+    float b = sqrt(kc2);
+    a[0] = 1.0; c[0] = sqrt(1.0 - kc2);
+    int N = 0;
+    for (int i = 0; i < 15; i++) {
+        if (abs(c[i]) <= 3e-8 * a[i]) break;
+        a[i + 1] = (a[i] + b) * 0.5; c[i + 1] = (a[i] - b) * 0.5; b = sqrt(a[i] * b); N = i + 1;
+    }
+    float phi = exp2(float(N)) * a[N] * u;
+    for (int j = 15; j >= 1; j--) if (j <= N) phi = (phi + asinS(clamp(c[j] * sin(phi) / a[j], -1.0, 1.0))) * 0.5;
+    return phi;
+}
+float amAny(float u, float kc2, float Kmu) {
+    bool neg = kc2 > 1.0;
+    float ph = amAGM(neg ? Kmu - u * sqrt(kc2) : u, neg ? 1.0 / kc2 : kc2);
+    return neg ? 1.5707963267949 - ph : ph;
+}
+)";
+
+// The tests' hook (and the second link): per argument set i (texel 2i: x, y, z, p; texel 2i + 1: n, nc, s, c; texel 2i + 2... see kerr_sky.cpp math) the
+// row y = 0: (R_F, R_J, R_C(x, y), am(u | m)), y = 1: (F, Pi(n; phi | m), E(phi | m), K(m))
+static const char* const kKerrSkyMathPart = R"(
+uniform sampler2D uArgs;
+out vec4 fragColor;
+void main() {
+    int i = int(gl_FragCoord.x);
+    vec4 A = texelFetch(uArgs, ivec2(3 * i, 0), 0), B = texelFetch(uArgs, ivec2(3 * i + 1, 0), 0), C = texelFetch(uArgs, ivec2(3 * i + 2, 0), 0);
+    float kc2 = C.x, u = C.y;
+    if (int(gl_FragCoord.y) == 0) {
+        vec2 fj = carlsonFJ(A.x, A.y, A.z, A.w);
+        float Kmu = kc2 > 1.0 ? ellFP(0.0, 1.0, 1.0, 0.0, 1.0 / kc2, false).x : 0.0;
+        fragColor = vec4(fj, carlsonRCf(A.x, A.y), amAny(u, kc2, Kmu));
+    } else {
+        vec2 fp = ellFP(B.x, B.y, B.z, B.w, kc2, false);
+        vec2 fe = ellFP(0.0, 1.0, B.z, B.w, kc2, true);
+        fragColor = vec4(fp, fe.y, ellFP(0.0, 1.0, 1.0, 0.0, kc2, false).x);
+    }
+}
+)";
+
+// One ray (kerr_closed.cpp traceClosed in single precision; the same names). The camera: uCam (a, r_c, cos theta_c, sin theta_c), uMet (alpha, omega,
+// varpi, rho of J15 (A.1), (A.2) at the camera), uMet2 (Delta^(1/2), r+, r-, the end r+ + 1e-3), all made in double on the processor. Its nine elliptic
+// integrals are evaluated by the one call of ellFP in the loop at the end of the set-up (jobs 0..7 need only the ray's constants: the polar start, the polar
+// complete integrals, K(mu) of the polar amplitude for m < 0, the radial K, the radial antiderivatives at the camera and at the end for r+ and r-; job 8,
+// the polar Pi at the end, needs the amplitudes, made by the loop's one stage of amAny: the polar end and the radii of the four crossings).
+// kind: 1 sky, 2 horizon, 0 lost. f: a quantity that changes sign at the shadow's edge and is linear across it (the radial discriminant -A/2 - z^2 - B/(4z):
+// r3 = r4 = z on the edge's spherical orbits; GLa (95)), signed + on the sky's side, used only where its sign agrees with the ray's end (else +-1e30).
+static const char* const kKerrSkyTracePart = R"(
+struct SkyRay { int kind; vec3 dir; float b; float q; vec4 u; float f; int sub; };
+uniform vec4 uCam;
+uniform vec4 uMet;
+uniform vec4 uMet2;
+SkyRay traceRay(vec3 look) {
+    SkyRay o;
+    o.kind = 0; o.dir = vec3(0.0); o.b = 0.0; o.q = 0.0; o.u = vec4(0.0); o.f = 1e30; o.sub = 0;
+    float a = uCam.x, rc = uCam.y, cth = uCam.z, sth = uCam.w;
+    float rp = uMet2.y, rm = uMet2.z, rEnd = uMet2.w;
+    // the launch (KerrBL::launch: n_F = -N for the hovering camera; J15 (A.11), (A.12))
+    float nr = -look.x, nth = -look.y, nph = -look.z;
+    float EF = 1.0 / (uMet.x + uMet.y * uMet.z * nph);
+    float pr = EF * uMet.w / uMet2.x * nr, pth = EF * uMet.w * nth;
+    float lam = EF * uMet.z * nph, eta = pth * pth + cth * cth * (lam * lam / (sth * sth) - a * a);
+    o.b = lam; o.q = eta;
+    float nuR = pr > 0.0 ? -1.0 : 1.0, nu = pth > 0.0 ? -1.0 : 1.0;
+    float A = a * a - eta - lam * lam, root = sqrt(A * A + 4.0 * a * a * eta);
+    // ---- the polar motion (Polar::init)
+    bool eq0 = false, vort = false, noG = false;
+    float h = 1.0, up = 0.0, um = 0.0, sq = 1.0, pk = 1.0, pn = 0.0, pnc = 1.0, gscale = 1.0, ps0 = 0.0, pc0 = 1.0;
+    if (eta > 0.0) {
+        float ma2 = A < 0.0 ? (root - A) * 0.5 : 2.0 * a * a * eta / (A + root);
+        up = eta / ma2; sq = sqrt(ma2); pk = 1.0 + up * a * a / ma2; pn = up; pnc = lam * lam / (a * a + ma2);
+        float s0 = clamp(cth / sqrt(up), -1.0, 1.0);
+        float c02 = sth * sth * pth * pth / ((a * a * cth * cth + ma2) * up);
+        ps0 = -nu * s0; pc0 = sqrt(clamp(c02, 0.0, 1.0));
+        noG = !(pnc > 0.0);
+        gscale = 1.0 / sq;
+    } else if (eta < 0.0) {
+        vort = true;
+        h = cth >= 0.0 ? 1.0 : -1.0;
+        float u2 = -2.0 * a * a * eta / (A + root);
+        um = u2 / (a * a); up = -eta / u2; sq = sqrt(u2); pk = up / um; pn = (up - um) / (1.0 - um); pnc = (1.0 - up) / (1.0 - um);
+        float s2 = clamp((cth * cth - um) / (up - um), 0.0, 1.0);
+        ps0 = -h * nu * sqrt(s2); pc0 = sqrt(1.0 - s2);
+        noG = !(pnc > 0.0);
+        gscale = 1.0 / ((1.0 - um) * sq);
+    } else eq0 = true;
+    float ph0 = asin(clamp(ps0, -1.0, 1.0));
+    // ---- the radial roots (rootsOf) and the case (Radial::init)
+    float B = 2.0 * (eta + (lam - a) * (lam - a)), C = -a * a * eta;
+    float P = -A * A / 12.0 - C, Q = -A / 3.0 * ((A / 6.0) * (A / 6.0) - C) - B * B / 8.0;
+    float D = (P / 3.0) * (P / 3.0) * (P / 3.0) + (Q / 2.0) * (Q / 2.0);
+    float t = 0.0;
+    if (D >= 0.0) { float sd = sqrt(D); t = cbrtS(-Q / 2.0 + sd) + cbrtS(-Q / 2.0 - sd); }
+    else t = 2.0 * sqrt(-P / 3.0) * cos(acos(clamp(3.0 * Q / (2.0 * P) * sqrt(-3.0 / P), -1.0, 1.0)) / 3.0);
+    float xi = t - A / 3.0;
+    for (int it = 0; it < 3; it++) {
+        float fx = ((xi + A) * xi + (A * A / 4.0 - C)) * xi - B * B / 8.0, df = (3.0 * xi + 2.0 * A) * xi + (A * A / 4.0 - C);
+        if (df != 0.0) xi -= fx / df;
+    }
+    float z = sqrt(max(xi, 0.0) * 0.5);
+    float d12 = -A / 2.0 - z * z + B / (4.0 * z), d34 = -A / 2.0 - z * z - B / (4.0 * z);
+    int sub = 0;
+    float r1 = 0.0, r2 = 0.0, r3 = 0.0, r4 = 0.0, r21 = 0.0, r31 = 0.0, r41 = 0.0, r32 = 0.0, r42 = 0.0, r43 = 0.0;
+    float rk = 1.0, pref = 1.0, AA = 0.0, BB = 0.0, b1 = 0.0, a2 = 0.0, g0 = 0.0;
+    if (d12 < 0.0) {
+        sub = 4;
+        b1 = z; a2 = sqrt(-d12);
+        float a1 = d34 < 0.0 ? sqrt(-d34) : 0.0, bb = 2.0 * z;
+        float CC = sqrt((a1 - a2) * (a1 - a2) + bb * bb), DD = sqrt((a1 + a2) * (a1 + a2) + bb * bb);
+        pref = 2.0 / (CC + DD);
+        rk = (DD - CC) * (DD - CC) / ((CC + DD) * (CC + DD));
+        g0 = sqrt((4.0 * a2 * a2 - (CC - DD) * (CC - DD)) / ((CC + DD) * (CC + DD) - 4.0 * a2 * a2));
+    } else {
+        float s12 = sqrt(d12);
+        r1 = -z - s12; r2 = -z + s12; r21 = 2.0 * s12;
+        if (d34 < 0.0) {
+            sub = 3;
+            float a1 = sqrt(-d34);
+            b1 = z;
+            AA = sqrt((b1 - r2) * (b1 - r2) + a1 * a1); BB = sqrt((b1 - r1) * (b1 - r1) + a1 * a1);
+            pref = 1.0 / sqrt(AA * BB);
+            float dAB = abs(AA - BB);
+            rk = (r21 - dAB) * (r21 + dAB) / (4.0 * AA * BB);
+        } else {
+            float s34 = sqrt(d34);
+            r3 = z - s34; r4 = z + s34; r43 = 2.0 * s34;
+            r31 = 2.0 * z - s34 + s12; r42 = 2.0 * z + s34 - s12; r41 = 2.0 * z + s34 + s12; r32 = 2.0 * z - s34 - s12;
+            pref = 2.0 / sqrt(r31 * r42);
+            rk = r21 * r43 / (r31 * r42);
+            sub = r4 > rp ? (rc <= r3 ? 1 : 2) : 5;
+            if (sub == 2 && rc < r4 * (1.0 - 1e-4)) return o;            // (a camera at its own turning point: r4 within float rounding of r_c)
+        }
+    }
+    o.sub = sub;
+    if (!(rk > 0.0) || isinf(pref) || isnan(pref)) return o;
+    bool two = sub == 2 || sub == 5;
+    // where the ray goes (traceClosed)
+    bool sky = sub != 1 && (nuR > 0.0 || sub == 2);
+    float sg = nuR > 0.0 ? -1.0 : 1.0;
+    // the shadow's edge: f where its sign agrees with the end (see above)
+    {
+        float fe = rc > z ? d34 : -d34;
+        bool relevant = z > rp && ((nuR < 0.0) == (rc > z));
+        if (relevant && ((fe > 0.0) == sky)) o.f = fe;
+        else o.f = sky ? 1e30 : -1e30;
+    }
+    // the amplitudes (Radial::amp) at the camera (k = 0) and the end (k = 1)
+    float as_[2]; float ac_[2];
+    as_[0] = 0.0; as_[1] = 0.0; ac_[0] = 1.0; ac_[1] = 1.0;
+    for (int k = 0; k < 2; k++) {
+        bool inf = k == 1 && sky;
+        float r = k == 0 ? rc : rEnd, s = 0.0, c = 1.0;
+        if (sub == 1) {
+            s = sqrt(clamp((r - r2) * r31 / ((r - r1) * r32), 0.0, 1.0)); c = sqrt(clamp(r21 * (r3 - r) / ((r - r1) * r32), 0.0, 1.0));
+        } else if (two) {
+            s = sqrt(max(inf ? r31 / r41 : (r - r4) * r31 / ((r - r3) * r41), 0.0)); c = sqrt(max(inf ? r43 / r41 : r43 * (r - r1) / ((r - r3) * r41), 0.0));
+        } else if (sub == 3) {
+            if (inf) { c = (AA - BB) / (AA + BB); s = 2.0 * sqrt(AA * BB) / (AA + BB); }
+            else { float pp = AA * (r - r1), qq = BB * (r - r2), den = pp + qq; c = (pp - qq) / den; s = 2.0 * sqrt(pp * qq) / den; }
+        } else {
+            float n0 = sqrt(1.0 + g0 * g0), s2 = g0 / n0, c2 = 1.0 / n0;
+            if (inf) { s = c2; c = -s2; }
+            else { float x = (r + b1) / a2, n1 = sqrt(1.0 + x * x), s1 = x / n1, c1 = 1.0 / n1; s = s1 * c2 + c1 * s2; c = c1 * c2 - s1 * s2; }
+        }
+        as_[k] = s; ac_[k] = c;
+    }
+    // the jobs (see above): n, 1 - n, sin, cos, kc2, E instead of Pi
+    float jn[9]; float jnc[9]; float js[9]; float jc[9]; float jk[9]; bool je[9]; vec2 jr[9];
+    for (int k = 0; k < 9; k++) { jn[k] = 0.0; jnc[k] = 1.0; js[k] = 1.0; jc[k] = 0.0; jk[k] = 1.0; je[k] = false; jr[k] = vec2(0.0); }
+    jn[0] = pn; jnc[0] = pnc; js[0] = ps0; jc[0] = pc0; jk[0] = pk;
+    jn[1] = pn; jnc[1] = pnc; jk[1] = pk;
+    jk[2] = pk > 1.0 ? 1.0 / pk : 0.5;
+    jk[3] = rk;
+    float al[4];
+    for (int k = 0; k < 4; k++) {
+        int pt = k / 2;
+        float rr = (k % 2) == 0 ? rp : rm, n = 0.0, nc = 1.0;
+        bool e = false;
+        al[k] = 0.0;
+        if (two) {
+            float r3_ = rr - r3, r4_ = rr - r4;
+            n = r3_ * r41 / (r4_ * r31); nc = -(rr - r1) * r43 / (r4_ * r31);
+        } else if (sub == 3) {
+            float q1 = rr - r1, q2 = rr - r2;
+            al[k] = (BB * q2 + AA * q1) / (BB * q2 - AA * q1);
+            e = abs(al[k] * al[k] - 1.0) < 1e-3;
+            n = al[k] * al[k] / (al[k] * al[k] - 1.0); nc = -1.0 / (al[k] * al[k] - 1.0);
+        } else if (sub == 4) {
+            float x = (rr + b1) / a2;
+            al[k] = (g0 * x - 1.0) / (g0 + x);
+            n = 1.0 + al[k] * al[k]; nc = -al[k] * al[k];
+        }
+        jn[4 + k] = n; jnc[4 + k] = nc; js[4 + k] = as_[pt]; jc[4 + k] = ac_[pt]; jk[4 + k] = rk; je[4 + k] = e;
+    }
+    float tau = 0.0, Kp = 1.0, PiFull = 0.0, F0 = 0.0, G0 = 0.0, Kmu = 0.0, Kr = 1.0, ps = 0.0;
+    float taus[4];
+    float rx[4];
+    int nx = 0;
+    for (int k = 0; k < 4; k++) { taus[k] = 0.0; rx[k] = 0.0; }
+    bool bad = false;
+    for (int k = 0; k < 9; k++) {
+        if (k == 8) {
+            // the set-up's results; the Mino time to the end (traceClosed) and the amplitudes at it
+            F0 = jr[0].x; G0 = noG ? 0.0 : jr[0].y; Kp = jr[1].x; PiFull = jr[1].y; Kmu = jr[2].x; Kr = jr[3].x;
+            float Ic = pref * jr[4].x, Ie = pref * jr[6].x;
+            if (sub == 1) tau = nuR < 0.0 ? Ic - Ie : 2.0 * pref * Kr - Ic - Ie;
+            else if (sky) tau = Ie + (nuR > 0.0 ? -1.0 : 1.0) * Ic;
+            else tau = Ic - Ie;
+            if (!(tau > 0.0) || isinf(tau)) { bad = true; break; }
+            if (!eq0 && !vort) {
+                for (int j = 0; j < 8; j++) {
+                    float tj = (2.0 * float(j) * Kp - F0) / sq;
+                    if (tj >= tau || nx >= 4) break;
+                    if (tj > 0.0) { taus[nx] = tj; nx++; }
+                }
+            }
+            float Fc = jr[4].x;
+            for (int i = 0; i < 5; i++) {
+                if (i > 0 && i > nx) break;
+                bool pol = i == 0;
+                float uu = pol ? sq * tau + F0 : (sub == 4 ? nuR * taus[i - 1] / pref + Fc : taus[i - 1] / pref + nuR * Fc);
+                float am = amAny(uu, pol ? pk : rk, pol ? Kmu : 0.0);
+                if (pol) { ps = am; continue; }
+                float rr = 0.0;
+                if (sub == 4) rr = a2 * tan(am - atanS(g0)) - b1;
+                else if (sub == 3) { float cn = cos(am); rr = ((BB * r2 - AA * r1) + (BB * r2 + AA * r1) * cn) / ((BB - AA) + (BB + AA) * cn); }
+                else { float s2 = sin(am) * sin(am); rr = sub == 1 ? (r2 * r31 - r1 * r32 * s2) / (r31 - r32 * s2) : (r4 * r31 - r3 * r41 * s2) / (r31 - r41 * s2); }
+                rx[i - 1] = rr;
+            }
+            if (eq0) ps = 0.0;
+            float jj = floor(ps / PI + 0.5), pp = ps - jj * PI;
+            jn[8] = pn; jnc[8] = pnc; js[8] = sin(pp); jc[8] = cos(pp); jk[8] = pk;
+            if (eq0 || noG) break;
+        }
+        if (k == 2 && !(pk > 1.0)) continue;
+        if ((k == 0 || k == 1) && eq0) continue;
+        if (k >= 4 && k < 8 && sub == 1 && (k % 2) == 1) continue;
+        jr[k] = ellFP(jn[k], jnc[k], js[k], jc[k], jk[k], je[k]);
+    }
+    if (bad) return o;
+    // the crossings' u (and the first one not made, continued as spinRayClosed does), the end
+    float dmu = 0.0, mu = cth, G = 0.0;
+    if (eq0) { G = tau / (sth * sth); }
+    else {
+        float s = sin(ps), c = cos(ps), dn = sqrt(max(1.0 - (1.0 - pk) * s * s, 0.0));
+        if (!vort) { mu = -nu * sqrt(up) * s; dmu = -nu * sqrt(up) * c * sq * dn; }
+        else { float w = sqrt(um + (up - um) * s * s); mu = h * w; dmu = h * (up - um) * s * c * sq * dn / w; }
+        float jj = floor(ps / PI + 0.5);
+        G = noG ? 0.0 : (jr[8].y + 2.0 * jj * PiFull - G0) * gscale;
+    }
+    mu = clamp(mu, -1.0, 1.0);
+    vec4 u = vec4(0.0);
+    int nCross = 0;
+    for (int i = 0; i < 4; i++) if (i < nx && rx[i] > 0.0 && nCross == i) { u[i] = 1.0 / rx[i]; nCross++; }
+    if (sky) {
+        float ip[2]; float im[2];
+        ip[0] = 0.0; ip[1] = 0.0; im[0] = 0.0; im[1] = 0.0;
+        if (sub != 1) for (int k = 0; k < 4; k++) {
+            int pt = k / 2;
+            float rr = (k % 2) == 0 ? rp : rm, F = pref * jr[4 + 2 * pt].x, Pi = jr[4 + k].y, s = as_[pt], c = ac_[pt], v = 0.0;
+            if (two) {
+                float r3_ = rr - r3, r4_ = rr - r4;
+                v = -pref * r43 / (r3_ * r4_) * Pi - F / r3_;
+            } else if (sub == 3) {
+                float q1 = rr - r1, q2 = rr - r2, l = al[k], l2 = l * l, jm = 1.0 - rk;
+                if (je[4 + k]) {
+                    float d = sqrt(c * c + rk * s * s), Ft = F / pref, R1m = -d * (1.0 + c) / s + Ft - Pi;
+                    v = pref / (r21 * AA) * (-(BB + AA) * Ft + 2.0 * BB * R1m);
+                } else {
+                    float w = jm + (1.0 - jm) * l2, p1 = sqrt((l2 - 1.0) / w), d = sqrt(c * c + rk * s * s), pl = p1 * d + s;
+                    float f1 = p1 * 0.5 * log(abs(pl * pl * w / (l2 * c * c - 1.0)));
+                    float R1 = (Pi - l * f1) / (1.0 - l2);
+                    v = -1.0 / (BB * q2 + AA * q1) * ((BB + AA) * F + 2.0 * r21 * sqrt(AA * BB) / (BB * q2 - AA * q1) * R1);
+                }
+            } else {
+                float x = (rr + b1) / a2, l = al[k], l2 = l * l, d = sqrt(c * c + rk * s * s);
+                float p2 = sqrt((1.0 + l2) / (rk + l2));
+                float f2 = p2 * 0.5 * log(abs((1.0 + p2 * d) * (1.0 + p2 * d) / ((1.0 + p2) * (1.0 + p2) * ((1.0 + l2) * s * s - 1.0))));
+                float S1 = (F / pref + l2 * Pi - l * f2) / (1.0 + l2);
+                v = g0 / (a2 * (1.0 - g0 * x)) * F - pref * (1.0 + g0 * g0) / (a2 * (1.0 - g0 * x) * (g0 + x)) * S1;
+            }
+            if ((k % 2) == 0) ip[pt] = v; else im[pt] = v;
+        }
+        float Ip = ip[1] + sg * ip[0], Im = im[1] + sg * im[0];
+        float Iphi = 2.0 * a / (rp - rm) * ((rp - a * lam * 0.5) * Ip - (rm - a * lam * 0.5) * Im);
+        float npol = 0.0;
+        if (noG && !eq0) { float off = vort ? 0.0 : PI * 0.5; npol = floor((ps - off) / PI) - floor((ph0 - off) / PI); }
+        float phi = -Iphi - lam * G + PI * npol;
+        float sn = sqrt(1.0 - mu * mu);
+        o.dir = vec3(sn * cos(phi), sn * sin(phi), mu);
+        o.kind = 1;
+        if (nCross < 4) { float ms = o.dir.z != 0.0 ? dmu / o.dir.z : -1e18; u[nCross] = -1.0 / sqrt(ms * ms + 100.0); }
+    } else {
+        float Pq = rEnd * rEnd + a * a - a * lam, Dq = rEnd * rEnd - 2.0 * rEnd + a * a;
+        float drds = -sqrt(max(Pq * Pq - Dq * (eta + (lam - a) * (lam - a)), 0.0)), sn = sqrt(max(1.0 - mu * mu, 1e-30));
+        float dthdr = drds != 0.0 ? (-dmu / sn) / drds : 0.0, thEnd = acos(mu);
+        o.kind = 2;
+        if (nCross < 4) {
+            float delta = dthdr != 0.0 ? (PI * 0.5 - thEnd) / dthdr : -1e30;
+            u[nCross] = delta < 0.0 ? (1.0 - tanh(max(delta, -1e3) / rEnd)) / rEnd : 2.0 / rEnd;
+            for (int i = 0; i < 4; i++) if (i > nCross) u[i] = 2.0 / rEnd;
+        }
+    }
+    o.u = u;
+    if (isnan(o.dir.x + o.dir.y + o.dir.z) || isinf(o.dir.x + o.dir.y + o.dir.z)) o.kind = 0;
+    return o;
+}
+)";
+
+// The pixel (kKerrFS's rules with the table replaced by traceRay): the ray at the pixel's angle th = |o| / uKpx from the middle and azimuth chi
+// (uKO: the screen directions of e_theta and e_phi), the shadow by its end, anti-aliased by f's distance in pixels (f / |grad f|) on the sky's side only
+// (a pixel just inside the shadow has no sky ray: its covered part is left black, at most half a pixel), the sky through uKs and the Gaia map, the disc's
+// four crossings with kKerrFS's coverage, light and colour. The screen's white: uWhiteMode 0 from uDT.y (1 / white, as kKerrFS), 1 from the card's own
+// reduction (uWhite, its .r the brightest channel; 0.56.0) or a set exposure (uWhiteSet). uDFix (Film): the film's colour before the white (rgb), on (w).
+// The fourth output (0.56.0): the share of the pixel where the far sky shows (the stars' dots are laid over the picture through it: a star image the
+// processor found for an older view never shows through the disc or the shadow). uMode: 0 the picture; 1 (dir, xpx); 2 (order, r, g, xpx); 3 (kind, b, q,
+// sub); 4 (u0..u3); 10 the exposure's sample at (uSamp.x + i uSamp.y, uSamp.z - j uSamp.w): (the first disc image's brightest channel, its Y, 0, 1) in
+// the disc's own light before the white (lab.h discLook's rule, its sample points).
+static const char* const kKerrSkyMainPart = R"(
+uniform sampler2D uTex;
+uniform sampler2D uDC;
+uniform sampler2D uDF;
+uniform sampler2D uWhite;
+uniform mat3 uKs;
+uniform vec2 uCentre;
+uniform float uKpx;
+uniform vec4 uKO;
+uniform int uMode;
+uniform float uBright;
+uniform int uSky;
+uniform int uDisc;
+uniform vec4 uDR;
+uniform vec4 uDT;
+uniform ivec3 uDN;
+uniform vec4 uDFix;
+uniform int uWhiteMode;
+uniform float uWhiteSet;
+uniform vec4 uSamp;
+uniform int uRaw;
+layout(location = 0) out vec4 fragColor;
+layout(location = 1) out vec4 discOut;
+layout(location = 2) out vec4 skyOut;
+layout(location = 3) out vec4 maskOut;
+vec2 mapUV(vec3 v) {
+    vec3 g = uKs * v;
+    float l = atan(g.y, g.x), b = asin(clamp(g.z, -1.0, 1.0));
+    return vec2(0.5 - l / (2.0 * PI), 0.5 - b / PI);
+}
+vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }
+vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
+float shiftKerr(float r, float b) {
+    float a = uCam.x, D = r * r - 2.0 * r + a * a, S2 = (r * r + a * a) * (r * r + a * a) - a * a * D;
+    float al = sqrt(r * r * D / S2), om = 2.0 * a * r / S2, vp = sqrt(S2) / r;
+    float Om = 1.0 / (r * sqrt(r) + a), V = (Om - om) * vp / al;
+    return al * sqrt(max(1.0 - V * V, 0.0)) / (1.0 - Om * b);
+}
+vec3 discLightRaw(float r, float g) {
+    if (uDFix.w > 0.0) return uDFix.rgb;
+    float q = (log(r) - uDR.z) / uDR.w;
+    if (q < 0.0) return vec3(0.0);
+    q = min(q, float(uDN.x - 1) - 0.001);
+    int i = int(q);
+    float f4 = mix(texelFetch(uDF, ivec2(i, 0), 0).r, texelFetch(uDF, ivec2(i + 1, 0), 0).r, q - float(i));
+    float T = uDT.x * f4 * g;
+    if (!(T > 0.0)) return vec3(0.0);
+    float c = (log(T) * 0.43429448 - uDT.z) / uDT.w;
+    if (c < 0.0) return vec3(0.0);
+    c = min(c, float(uDN.y - 1) - 0.001);
+    int k = int(c);
+    return mix(texelFetch(uDC, ivec2(k, 0), 0).rgb, texelFetch(uDC, ivec2(k + 1, 0), 0).rgb, c - float(k));
+}
+vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }
+void main() {
+    discOut = vec4(0.0); skyOut = vec4(0.0); maskOut = vec4(0.0);
+    vec2 pos = gl_FragCoord.xy;
+    if (uMode == 10) pos = vec2(uSamp.x + floor(gl_FragCoord.x) * uSamp.y, uSamp.z - floor(gl_FragCoord.y) * uSamp.w);
+    vec2 o = pos - uCentre;
+    float rr = length(o), th = rr / uKpx;
+    vec2 dn = rr > 0.0 ? o / rr : vec2(0.0, 1.0);
+    float chi = atanS(dot(dn, uKO.zw), dot(dn, uKO.xy));
+    if (chi < 0.0) chi += 2.0 * PI;
+    float thc = min(th, PI);
+    SkyRay R = traceRay(vec3(-cos(thc), sin(thc) * cos(chi), sin(thc) * sin(chi)));
+    bool skyEnd = R.kind == 1;
+    // the edge's distance in pixels (derivatives taken by every pixel: uniform control flow)
+    float gx = dFdx(R.f), gy = dFdy(R.f), gl = length(vec2(gx, gy));
+    float xpx = (abs(R.f) < 1e29 && gl > 0.0 && gl < 1e20) ? R.f / gl : (skyEnd ? 1e3 : -1e3);
+    if (!skyEnd && xpx > 0.0) xpx = -xpx;
+    if (skyEnd && xpx < 0.0) xpx = -xpx;
+    vec4 rk = vec4(1e9);
+    for (int k = 0; k < 4; k++) rk[k] = (R.u[k] > 0.0 && th <= PI && R.kind != 0) ? 1.0 / R.u[k] : 1e9;
+    vec4 fw = fwidth(rk);
+    if (uMode == 1) { fragColor = skyEnd ? vec4(R.dir, xpx) : vec4(0.0, 0.0, 0.0, xpx); return; }
+    if (uMode == 3) { fragColor = vec4(float(R.kind), R.b, R.q, float(R.sub)); return; }
+    if (uMode == 4) { fragColor = R.u; return; }
+    int first = -1;
+    for (int k = 0; k < 4; k++) if (first < 0 && rk[k] >= uDR.x && rk[k] <= uDR.y) first = k;
+    bool probe = uMode == 2 || uMode == 10;
+    if (probe && first < 0) { fragColor = uMode == 2 ? vec4(-1.0, 0.0, 0.0, xpx) : vec4(0.0); return; }
+    vec2 uv = mapUV(skyEnd ? R.dir : vec3(1.0, 0.0, 0.0));
+    vec2 ux = dFdx(uv), uy = dFdy(uv);
+    ux.x -= floor(ux.x + 0.5); uy.x -= floor(uy.x + 0.5);
+    ux = clamp(ux, vec2(-0.25), vec2(0.25)); uy = clamp(uy, vec2(-0.25), vec2(0.25));
+    vec3 c = textureGrad(uTex, uv, ux, uy).rgb;
+    float cover = skyEnd && th <= PI ? clamp(xpx + 0.5, 0.0, 1.0) : 0.0;
+    vec3 back = uSky == 0 ? vec3(0.0) : c * uBright * cover;
+    if (uDisc == 0 && !probe) { fragColor = vec4(back, 1.0); skyOut = vec4(decS(back), 1.0); maskOut = vec4(cover); return; }
+    float white = uWhiteMode == 1 ? texelFetch(uWhite, ivec2(0, 0), 0).r : uWhiteSet;
+    float inv = uWhiteMode == 0 ? uDT.y : (white > 0.0 ? 1.0 / white : 1.0);
+    vec3 acc = vec3(0.0), accRaw = vec3(0.0);
+    float tr = 1.0;
+    for (int k = 0; k < 4; k++) {
+        float w = fw[k];
+        float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
+        if (probe ? k != first : cov <= 0.0) continue;
+        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b);
+        vec3 raw = discLightRaw(rc, g);
+        if (uMode == 2) { fragColor = vec4(float(k), rk[k], g, xpx); return; }
+        if (uMode == 10) { fragColor = vec4(max(raw.r, max(raw.g, raw.b)), dot(raw, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0); return; }
+        vec3 cr = raw * inv;
+        if (uDFix.w > 0.0) cr = scaledColour(cr);
+        acc += tr * cov * scaledColour(cr);
+        accRaw += tr * cov * cr;
+        tr *= 1.0 - cov;
+    }
+    fragColor = vec4(encS(acc + tr * decS(back)), 1.0);
+    discOut = vec4(uRaw == 1 ? accRaw : acc, 1.0);
+    skyOut = vec4(tr * decS(back), 1.0);
+    maskOut = vec4(tr * cover);
+}
+)";
+
+
+// 0.56.0: the card's exposure: each texel the largest of a 4 x 4 block of the texture below (texels past uN left out); repeated down to one texel
+static const char* const kMaxDownFS = R"(#version 330 core
+uniform sampler2D uTex;
+uniform ivec2 uN;
+out vec4 fragColor;
+void main() {
+    ivec2 b = ivec2(gl_FragCoord.xy) * 4;
+    vec4 m = vec4(0.0);
+    for (int j = 0; j < 4; j++)
+        for (int i = 0; i < 4; i++) {
+            ivec2 q = b + ivec2(i, j);
+            if (q.x < uN.x && q.y < uN.y) m = max(m, texelFetch(uTex, q, 0));
+        }
+    fragColor = m;
 }
 )";
 

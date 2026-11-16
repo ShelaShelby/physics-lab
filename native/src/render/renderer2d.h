@@ -23,6 +23,7 @@
 #include "outline_compute.h"
 #include "rock_compute.h"
 #include "kerr_compute.h"
+#include "kerr_sky.h"
 
 namespace render {
 
@@ -47,6 +48,16 @@ public:
     // 0.55.6: the Black Hole Lab's light paths on the card (render/kerr_compute.h), made at the first call; nullptr when this PC cannot (kerrWhy() says why)
     IKerrCompute* kerrCompute(KerrSteps* steps = nullptr);   // 0.55.7: steps told of the compile and link (the guard: app/gpu_guard.h)
     const std::string& kerrWhy() const { return kerrWhy_; }
+    // 0.56.0: the spinning hole per pixel (render/kerr_sky.h): the object that makes its shaders (the caller builds the stages, guarded); always there
+    KerrSky& kerrSky() { return sky_; }
+    void skyMath(const std::vector<float>& in, std::vector<float>& out) { sky_.math(in, out, cmpVao_); }   // (tests)
+    // 0.56.0: the last sky pass: its time on the card (GL_TIMESTAMP pairs, read back without waiting: a few frames old) for the whole picture and at the
+    // resolution drawn, the resolution's scale (1 = full), the passes drawn, the card's exposure (its brightest disc channel and Y, read back a frame or two
+    // later; white the screen's white it gives, 0 none yet) and how many sample points it had
+    struct SkyStats { double fullMs = -1, lastMs = -1, scale = 1; long draws = 0, lowDraws = 0; double white = 0, whiteY = 0; long whiteReads = 0; int expN = 0; double expMs = -1; long timed = 0; };
+    const SkyStats& skyStats() const { return skyStats_; }
+    // 0.56.0: one star image laid over the bent picture through its open-sky share (LensSky::kerrSky's fourth output): hidden where the disc or the shadow is
+    void maskedDisc(double x, double y, double r, Color c);
 
     // Start a frame for a picture `width` × `height` points.
     void begin(double width, double height);
@@ -224,12 +235,33 @@ public:
         // the same picture is shown without the glare. A newer picture drops an older glare. false: all of it at once in this frame (automatic checks).
         bool glareAsync = false;
         void (*glareThread)() = nullptr;
+        // 0.56.0: the spinning hole per pixel from the closed forms (render/shaders.h kKerrSkyFS) in place of kerr's table (kA, kB, kEdge, kTau unused; kM, kO,
+        // spin, the disc's fields as for kerr). skyCam (a, r_c, cos theta_c, sin theta_c), skyMet (alpha, omega, varpi, rho), skyMet2 (Delta^(1/2), r+, r-, r+ + 1e-3):
+        // the camera, made in double by the caller (blackhole/kerr.h kerrMetric). filmRaw: the Film's one colour before the screen's white (w > 0: Film).
+        // whiteMode 0: the screen's white is `white`; 1: found by the card in the same frame (auto exposure): the brightest channel of the first disc image
+        // at the points (expStep / 2 + i expStep, expStep / 2 + j expStep) of the picture in points (lab.h discLook's rule), reduced on the card, no read-back
+        // in the frame's way. moving: the view is changing (the pass may be drawn at a lower resolution: frameBudgetMs, the rule in drawLens); slowMs > 0
+        // (tests): the pass's time on the card taken as this. skyMode (tests): 1..4 the shader's probe outputs (uMode) into the float framebuffer given.
+        bool kerrSky = false;
+        float skyCam[4] = {0, 20, 0, 1}, skyMet[4] = {1, 0, 1, 1}, skyMet2[4] = {1, 2, 0, 2};
+        float filmRaw[4] = {0, 0, 0, 0};
+        int whiteMode = 0;
+        double expStep = 4;
+        bool moving = false;
+        double frameBudgetMs = 8, slowMs = 0;
+        int skyMode = 0;
     };
     // 0.55.4: the last glare made (tests and the benchmark): the block in pixels, the grid, the read-back and the veil's time (ms), the light spread and laid (white x sr)
     // 0.55.5: waitMs: from the picture to its glare (asynchronous: over the frames between; at once: readMs + veilMs); frameMs: the frame thread's own share
     struct GlareStats { int b = 0, nx = 0, ny = 0; double readMs = 0, veilMs = 0, spread = 0, laid = 0; long made = 0; double waitMs = 0, frameMs = 0; };
     const GlareStats& glareStats() const { return glareStats_; }
     void lensSky(const LensSky& s);
+    // 0.56.0 (the start-up check and the tests): the sky pass's probe outputs (its uMode 1..4: far direction and x_px; order, r, g, x_px; end, b, q, case; u0..u3)
+    // of a w x h picture of L (cx, cy, kRad in pixels), 16 floats per pixel, rows from the bottom. queue: copied into a pixel buffer behind a fence, read by
+    // skyProbeRead once skyProbeDone (the frame never waits); else read at once into out (waits)
+    void skyProbe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out);
+    bool skyProbeDone();
+    void skyProbeRead(std::vector<float>& out);
     long lensRedraws() const { return lensRedraws_; }
     bool glareBusy() const { return glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
@@ -251,6 +283,28 @@ private:
     IOutlineCompute* outline_ = nullptr;      // owned; see outlineCompute()
     IRockCompute* rocks_ = nullptr;           // owned; see rockCompute()
     IKerrCompute* kerr_ = nullptr;            // owned; see kerrCompute()
+    // 0.56.0: the spinning hole per pixel: the shaders, its open-sky mask (lensFbo_'s fourth output, kept with the picture), the exposure's chain of
+    // reductions, the lower-resolution layers while moving, the timer and the exposure's read-back
+    KerrSky sky_;
+    GLuint maskTex_ = 0, whiteTex_ = 0, maxDown_ = 0, expFbo_ = 0, lowFbo_ = 0, lowTex_[4] = {0, 0, 0, 0}, skyQ_[8] = {}, whitePbo_ = 0;
+    std::vector<GLuint> expTex_;
+    std::vector<int> expW_, expH_;
+    int lowW_ = 0, lowH_ = 0, maskW_ = 0, maskH_ = 0, skyQHead_ = 0, skyQTail_ = 0;
+    double skyQScale_[4] = {1, 1, 1, 1};
+    GLsync whiteFence_ = nullptr;
+    bool maskValid_ = false, maskUsed_ = false;
+    double skyScale_ = 1;
+    SkyStats skyStats_;
+    GLint uMask_ = -1, uMaskOn_ = -1, uMaskOrigin_ = -1;
+    int maskOx_ = 0, maskOy_ = 0;
+    void skyPass(const LensSky& L, int fbW, int fbH, int ox, int oy, double scale, int mode, bool layers);
+    GLuint skyExposure(const LensSky& L, int fbW, int fbH);
+    void skyTimes();
+    void skyPicture(const LensSky& L, int fbW, int fbH, bool layers, bool raw);
+    bool lensSkyDrawn_ = false;                    // the kept picture was drawn by the sky pass
+    GLuint probeFbo_ = 0, probeTex_ = 0, probePbo_ = 0;
+    GLsync probeFence_ = nullptr;
+    int probeW_ = 0, probeH_ = 0;
     bool kerrTried_ = false;
     std::string kerrWhy_;
     struct Mesh { GLuint vbo = 0, vao = 0; int count = 0; bool used = false; };

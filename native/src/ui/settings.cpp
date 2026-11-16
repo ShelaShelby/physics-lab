@@ -88,7 +88,8 @@ const char* const kSky[3] = {"soft", "full", "off"};
 const char* const kCons[3] = {"off", "lines", "names"};
 
 void labsToPrefs(const AppState& app, app::Prefs& p) {
-    if (app::gpuGuard().started()) p.gpuPaths = app::gpuGuard().saved();   // 0.55.7: what the light paths' guard keeps (before it starts: the file's line as read)
+    if (app::gpuGuard().started()) p.gpuPaths = app::gpuGuard().saved();
+    if (app::gpuSkyGuard().started()) p.gpuSky = app::gpuSkyGuard().saved();   // 0.56.0   // 0.55.7: what the light paths' guard keeps (before it starts: the file's line as read)
     const orbit::ViewSettings& v = app.set;
     p.orbit = {{"view3D", v.view3D ? "1" : "0"}, {"zoom", num(v.zoom)}, {"tspeed", num(v.tspeed)}, {"trueScale", v.trueScale ? "1" : "0"},
                {"fullTrails", v.fullTrails ? "1" : "0"}, {"moons", v.moons ? "1" : "0"}, {"dwarfs", v.dwarfs ? "1" : "0"}, {"comets", v.comets ? "1" : "0"},
@@ -256,7 +257,7 @@ void saveSettingsWhenChanged(AppState& app, double nowS, bool now) {
     if (!now && nowS - g_changedAt < 0.25) return;
     const std::string path = settingsPath();
     if (path.empty()) return;
-    if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; app::gpuGuard().settingsWritten(); }   // (0.55.7: a marker the file now keeps can go)
+    if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); }   // (0.55.7: a marker the file now keeps can go)
     else g_changedAt = nowS + 5;                              // 0.19: not written (a full disk, a read-only folder): the old file stays; try again in about 5 s, not every frame
 }
 
@@ -275,6 +276,7 @@ const std::vector<SettingRow>& settingRows() {
         {"gpuoutline", "GPU outline (OpenGL 4.3)", "GPU outline (OpenGL 4.3)", 1},
         {"gpucolours", "GPU colours (Atom Lab cloud dots)", "GPU colours (Atom Lab cloud dots)", 1},
         {"gpupaths", "GPU light paths (OpenGL 4.3)", "GPU light paths (Black Hole Lab, OpenGL 4.3)", 3},   // 0.55.6 (blackhole::kLabIndex)
+        {"gpusky", "GPU sky per pixel (spinning hole)", "GPU sky per pixel (Black Hole Lab)", 3},   // 0.56.0
         {"frames", "Frame times", "Frame times (fps)", -1},
         {"benchmark", "Benchmark", "Benchmark (speed test)", -1},
     };

@@ -145,6 +145,29 @@ void performanceCard(AppState& app) {
                                                       "at the first spinning picture: rays followed by the card against the processor's own; if they differ, the processor's path is used and this page says so.\n"
                                                       "Off: the processor fills the table, a coarse one while the view moves and the fine one once it rests, as up to 0.55.5.\n"
                                                       "Used for comparing on your PC with the benchmark's scene 13. Not saved: it is On again at the next start.");
+        // 0.56.0: who draws the spinning hole's sky and disc: one line which and why; the switch compares; its own guard (Try again)
+        app::GpuGuard& S = app::gpuSkyGuard();
+        const std::string soff = S.offText();
+        const std::string sline = !soff.empty() ? "The spinning hole's sky and disc: the processor's table, because the graphics card's own drawing of them " +
+                                                      soff.substr(soff.find("stopped") != std::string::npos ? soff.find("stopped") : 0)
+                                : !v.gpuSky ? std::string("The spinning hole's sky and disc: the processor's table (GPU sky per pixel is off).")
+                                : v.skyState() == 1 ? std::string("The spinning hole's sky and disc: the graphics card, every pixel from the closed formulas (its check on this PC passed); the stars from the processor.")
+                                : v.skyState() == 0 || v.skyState() == 2 ? std::string("The spinning hole's sky and disc: the graphics card, once its check on this PC has passed (made when a spinning hole is first drawn).")
+                                : "The spinning hole's sky and disc: the processor's table, because " + v.skyWhy() + ".";
+        settingMark("gpusky");
+        ImGui::TextWrapped("%s", sline.c_str());
+        if (shellLogOn()) auditNote("bhsky " + sline);
+        if (!soff.empty()) {
+            if (ImGui::Button("Try again##gpusky")) S.tryAgain();
+            noteItem("gpusky.again");
+            if (ImGui::IsItemHovered()) ui::SetTooltip("The graphics card's drawing of the spinning hole is tried again at the next spinning picture, with a marker before each step:\n"
+                                                          "if the app stops again, it starts the next time with it switched off, as now.");
+        }
+        wrappedCheckbox("GPU sky per pixel (spinning hole)", &v.gpuSky);
+        if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default): the spinning hole's sky and disc are drawn by the graphics card for every pixel from the closed formulas of the light paths\n"
+                                                      "(Gralla and Lupsasca 2020) in single precision, after a check at the first spinning picture against the processor's double precision.\n"
+                                                      "Off: the processor's table of light paths draws them, as in 0.55.9. Either way the stars come from the processor's table.\n"
+                                                      "Used for comparing on your PC with the benchmark's scene 13. Not saved: it is On again at the next start.");
     }
     if (app.lab == 1) {                                   // the Atom Lab's cloud dots: who picks the phase colours (0.13 stage 1). A debug switch for comparing on a real PC; not saved
         settingMark("gpucolours");

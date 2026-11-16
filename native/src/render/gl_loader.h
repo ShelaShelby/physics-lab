@@ -95,6 +95,11 @@ typedef unsigned long long GLuint64;
 #define GL_COLOR_ATTACHMENT0 0x8CE0
 #define GL_COLOR_ATTACHMENT1 0x8CE1
 #define GL_COLOR_ATTACHMENT2 0x8CE2
+#define GL_COLOR_ATTACHMENT3 0x8CE3   // 0.56.0
+#ifndef GL_NONE
+#define GL_NONE 0u
+#endif
+#define GL_R8 0x8229                  // 0.56.0
 // OpenGL 4.3 (0.13 stage 2): compute shaders and shader storage buffers
 #define GL_MAJOR_VERSION 0x821B
 #define GL_MINOR_VERSION 0x821C

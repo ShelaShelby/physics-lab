@@ -23,6 +23,7 @@
 #include "blackhole/light.h"
 #include "blackhole/spin_card.h"
 #include "blackhole/spin_sky.h"
+#include "blackhole/sky_card.h"
 #include "render/renderer2d.h"
 
 namespace blackhole {
@@ -60,6 +61,12 @@ struct ViewStats {
     bool spinCard = false;
     double cardMs = 0;
     long cardFills = 0;
+    // 0.56.0: the spinning hole's sky and disc drawn per pixel by the graphics card (skyCard; sky_card.h): the pass's time on the card for the whole picture
+    // and the resolution's scale of the last one, the new pictures of sky and disc the card has drawn (skyPictures) and the stars' pictures installed
+    // (starPictures), the exposure found on the card (lookCard)
+    bool skyCard = false, lookCard = false;
+    double skyGpuMs = -1, skyScale = 1;
+    long skyPictures = 0, starPictures = 0;
 };
 float catalogueBrightestMag();   // 0.55.4: the brightest catalogue star seen without the hole (the cap of a drawn image), V magnitude
 
@@ -79,6 +86,15 @@ public:
     // check has passed; the card's table is the picture while moving and at rest (no fine table on the processor). Off, or no OpenGL 4.3, or the check
     // failed: the processor's tables of 0.55.5.
     bool gpuPaths = true;
+    // 0.56.0 (Settings, Performance): the spinning hole's sky and disc drawn per pixel by the graphics card from the closed forms (render/kerr_sky.h) once
+    // its start-up check has passed; the processor's tables then serve the stars only (they may be a few pictures behind while the view moves). Off, or the
+    // check failed, or the guard switched it off: the processor's (or 0.55.6's card's) table draws them, as in 0.55.9. refreshHz: the screen's (the
+    // resolution rule's budget: half its period)
+    bool gpuSky = true;
+    double refreshHz = 60;
+    int skyState() const { return skyState_; }                 // 0 not yet asked, 2 its steps under way, 1 the card draws, -1 the processor's (skyWhy says why)
+    const std::string& skyWhy() const { return skyWhy_; }
+    const SkyCheck& skyCheck() const { return skyCheck_; }
     // 0.55.8: how the fine table's rays are followed (spin_sky.h; the checks set SpinFill{} to draw with 0.55.7's rays)
     SpinFill fineFill = kSpinFineFill;
     double fineFillMs() const { return fine_ ? fine_->fillMs() : 0; }   // 0.55.8: the fine table's fill (the benchmark: the one makeFineNow made)
@@ -114,6 +130,7 @@ public:
     // a pixel of the spinning picture through the shown table: the disc's hit and its light as discPixel (lab.h); hit order -1 for none
     DiscPixel spinPixel(const Settings& s, const HoleView& v, double X, double Y, bool light = true) const;
     static constexpr double kSpinRest = 0.3;
+    static constexpr double kSkyRest = 0.15;                    // 0.56.0: the view rests (the card's sky at full resolution) this long after its last change
     // 0.55.4: the eye's glare is made (light.h, on the processor: a fifth of a second at 1280 x 800 on 4 cores) once the view has rested for kGlareRest seconds;
     // while it moves the picture is drawn without it. glareNow: tests draw it at once.
     static constexpr double kGlareRest = 0.25;
@@ -183,6 +200,22 @@ private:
     std::shared_ptr<std::atomic<bool>> cardPostedUsed_;
     double cardPostedKey_[3] = {-1, -1, -1};
     bool cardReady(render::Renderer2D& R);
+    // 0.56.0, the sky's path (frame thread): the steps (build 0..2, the probes, the check, the first picture), one per frame
+    int skyState_ = 0, skyStep_ = 0, skyGen_ = 0, skyFrames_ = 0;
+    std::string skyWhy_;
+    SkyCheck skyCheck_;
+    std::vector<float> skyProbe_[2];
+    double skyStepAt_ = 0;
+    long skyTimed0_ = 0;
+    bool skyFirst_ = false, skyUse_ = false, skyMoving_ = false, skyEngine_ = false;
+    double skyWhite_ = 0, skyChangedAt_ = 0;
+    long skyDrawn_ = 0, installs_ = 0;
+    std::shared_ptr<const std::vector<float>> skyF_;
+    double skyFSpin_ = -1, skyFLog0_ = 0, skyFDl_ = 1;
+    std::uint64_t skyFVer_ = 0;
+    bool skyReady(render::Renderer2D& R);
+    void skyOff(const std::string& why);
+    void ensureSkyF(double spin);
     void cardOff(const std::string& why);                      // 0.55.7: the processor's path from now on in this run (said, logged, printed)
     void pumpCard(const Settings& s, double W, double H, double cx, double cy, bool start);
     void pollFine(const Settings& s);
@@ -203,7 +236,7 @@ private:
     std::vector<StarImage> scratch_;
     struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool operator==(const Key& o) const; } key_;
     static Key keyOf(const Settings& s, double W, double H, double cx, double cy);   // 0.55.5: the view asked for (spinVer 0)
-    Key wantKey_, shownKey_, postedKey_;
+    Key wantKey_, shownKey_, postedKey_, skyKey_;
     void emit(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy, const Key& restKey);
     ViewStats st_;
     Key glareKey_;

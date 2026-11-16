@@ -59,6 +59,7 @@ bool Renderer2D::init() {
     }
     uSize_ = glGetUniformLocation(program_, "uSize");
     uSpace_ = glGetUniformLocation(program_, "uSpace");
+    uMask_ = glGetUniformLocation(program_, "uMask"); uMaskOn_ = glGetUniformLocation(program_, "uMaskOn"); uMaskOrigin_ = glGetUniformLocation(program_, "uMaskOrigin");   // 0.56.0
     {   // the instanced-squares program
         const GLuint v = compile(GL_VERTEX_SHADER, kSquareVS), f = compile(GL_FRAGMENT_SHADER, kSquareFS);
         sqProgram_ = glCreateProgram();
@@ -208,6 +209,24 @@ bool Renderer2D::init() {
             krCentre_ = u("uCentre"); krKpx_ = u("uKpx"); krKN_ = u("uKN"); krKS_ = u("uKS"); krKO_ = u("uKO"); krDebug_ = u("uDebug"); krBright_ = u("uBright");
             krSky_ = u("uSky"); krDisc_ = u("uDisc"); krDR_ = u("uDR"); krDT_ = u("uDT"); krDN_ = u("uDN"); krDFix_ = u("uDFix");
         }
+        // 0.56.0: the card's exposure (its reductions) and a white 1 x 1 texture (the open-sky mask when there is none)
+        {   const GLuint mv = compile(GL_VERTEX_SHADER, kCompositeVS), mf = compile(GL_FRAGMENT_SHADER, kMaxDownFS);
+            maxDown_ = glCreateProgram();
+            glAttachShader(maxDown_, mv); glAttachShader(maxDown_, mf);
+            glLinkProgram(maxDown_);
+            glDeleteShader(mv); glDeleteShader(mf);
+            GLint mok = 0;
+            glGetProgramiv(maxDown_, GL_LINK_STATUS, &mok);
+            if (!mok) { glDeleteProgram(maxDown_); maxDown_ = 0; }
+            const unsigned char one[4] = {255, 255, 255, 255};
+            glGenTextures(1, &whiteTex_);
+            glBindTexture(GL_TEXTURE_2D, whiteTex_);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, one);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glBindTexture(GL_TEXTURE_2D, 0); }
         // 0.55.3: the Film look's glow (three small passes; a failed link leaves the picture without its glow)
         const auto prog = [&](const char* fs) {
             const GLuint gv = compile(GL_VERTEX_SHADER, kCompositeVS), gf = compile(GL_FRAGMENT_SHADER, fs);
@@ -333,6 +352,20 @@ void Renderer2D::shutdown() {
     if (lensTableTex_) glDeleteTextures(1, &lensTableTex_);
     for (GLuint* tx : {&discUTex_, &discPTex_, &discCTex_, &kATex_, &kBTex_, &kETex_, &kTTex_, &kFTex_}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     if (kerrProgram_) glDeleteProgram(kerrProgram_);
+    sky_.reset();                                                          // 0.56.0
+    for (GLuint* tx : {&maskTex_, &whiteTex_, &lowTex_[0], &lowTex_[1], &lowTex_[2], &lowTex_[3]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
+    for (GLuint& tx : expTex_) glDeleteTextures(1, &tx);
+    expTex_.clear(); expW_.clear(); expH_.clear();
+    for (GLuint* fb : {&expFbo_, &lowFbo_, &probeFbo_}) if (*fb) { glDeleteFramebuffers(1, fb); *fb = 0; }
+    if (probeTex_) glDeleteTextures(1, &probeTex_);
+    if (probePbo_) glDeleteBuffers(1, &probePbo_);
+    if (probeFence_) glDeleteSync(probeFence_);
+    probeTex_ = probePbo_ = 0; probeFence_ = nullptr; probeW_ = probeH_ = 0;
+    if (maxDown_) glDeleteProgram(maxDown_);
+    if (skyQ_[0]) glDeleteQueries(8, skyQ_);
+    if (whitePbo_) glDeleteBuffers(1, &whitePbo_);
+    if (whiteFence_) glDeleteSync(whiteFence_);
+    maxDown_ = whitePbo_ = 0; whiteFence_ = nullptr; skyQ_[0] = 0; skyQHead_ = skyQTail_ = 0; lowW_ = lowH_ = maskW_ = maskH_ = 0; maskValid_ = false; skyStats_ = SkyStats{};
     kerrProgram_ = 0; kVer_ = kFVer_ = ~std::uint64_t(0);
     for (GLuint* pr : {&glowDown_, &glowBlur_, &glowAdd_}) if (*pr) { glDeleteProgram(*pr); *pr = 0; }
     for (GLuint* tx : {&glowTex_[0], &glowTex_[1]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
@@ -461,8 +494,10 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         upload(kTTex_, L.kEdgeN + 1, 1, GL_R32F, GL_RED, L.kTau->data());
         kVer_ = L.kVersion;
     }
-    if (kdisc && L.discFVersion != kFVer_) { upload(kFTex_, L.discFN, 1, GL_R32F, GL_RED, L.discF->data()); kFVer_ = L.discFVersion; }
-    if (kdisc && L.colVersion != colVer_) { upload(discCTex_, L.discC, 1, GL_RGB32F, GL_RGB, L.discCol->data()); colVer_ = L.colVersion; }
+    const bool ksky = L.kerrSky && sky_.ready() && L.bend;                // 0.56.0: the spinning hole per pixel (no table)
+    const bool skdisc = ksky && L.disc && L.discF && L.discCol && L.discFN >= 2 && L.discC >= 2;
+    if ((kdisc || skdisc) && L.discFVersion != kFVer_) { upload(kFTex_, L.discFN, 1, GL_R32F, GL_RED, L.discF->data()); kFVer_ = L.discFVersion; }
+    if ((kdisc || skdisc) && L.colVersion != colVer_) { upload(discCTex_, L.discC, 1, GL_RGB32F, GL_RGB, L.discCol->data()); colVer_ = L.colVersion; }
     const auto kpass = [&](int ox, int oy) {                               // 0.55.2: the spinning hole's pass
         const double ppp = fbW / width_;
         const double cxPx = std::round(L.cx * ppp), cyPx = std::round(L.cy * ppp), Kpx = L.kRad * ppp;
@@ -491,6 +526,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         for (int k = 6; k >= 0; k--) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, 0); }
     };
     const auto pass = [&](int ox, int oy) {                                // one full-picture pass into the bound framebuffer, whose picture starts at (ox, oy)
+        if (ksky) { skyPass(L, fbW, fbH, ox, oy, 1, L.skyMode, glareOn); return; }
         if (kerr) { kpass(ox, oy); return; }
         const double ppp = fbW / width_;                                   // pixels per point
         const double cxPx = std::round(L.cx * ppp), cyPx = std::round(L.cy * ppp), Kpx = L.kRad * ppp;
@@ -534,7 +570,8 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         if (disc) { for (GLenum u : {GL_TEXTURE2, GL_TEXTURE3, GL_TEXTURE4}) { glActiveTexture(u); glBindTexture(GL_TEXTURE_2D, 0); } glActiveTexture(GL_TEXTURE0); }
     };
     glDisable(GL_BLEND);                                                   // the bent sky is opaque: black space where there is no light
-    if (L.debug || L.debugDisc) { pass(vx, vy); glEnable(GL_BLEND); return; }   // (tests: straight into the float framebuffer given, every time)
+    if (L.debug || L.debugDisc || (ksky && L.skyMode > 0)) { pass(vx, vy); glEnable(GL_BLEND); return; }   // (tests: straight into the float framebuffer given, every time)
+    if (ksky) skyTimes();                                                  // 0.56.0: the timer's and the exposure's results that have come back
     if (!lensFbo_) { glGenFramebuffers(1, &lensFbo_); glGenTextures(1, &lensTex_); }
     if (fbW != lensW_ || fbH != lensH_) {
         lensW_ = fbW; lensH_ = fbH; lensValid_ = false;
@@ -555,7 +592,11 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
                       P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&
                       P.kerr == L.kerr && (!L.kerr || (P.kVersion == L.kVersion && std::equal(L.kM, L.kM + 9, P.kM) && std::equal(L.kO, L.kO + 4, P.kO) && P.spin == L.spin &&
                       P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) && std::equal(L.glow, L.glow + 3, P.glow) &&
-                      P.glareKeep == L.glareKeep && P.glareVeil == L.glareVeil;
+                      P.glareKeep == L.glareKeep && P.glareVeil == L.glareVeil &&
+                      P.kerrSky == L.kerrSky && (!L.kerrSky || (std::equal(L.skyCam, L.skyCam + 4, P.skyCam) && std::equal(L.skyMet, L.skyMet + 4, P.skyMet) &&
+                      std::equal(L.skyMet2, L.skyMet2 + 4, P.skyMet2) && std::equal(L.filmRaw, L.filmRaw + 4, P.filmRaw) && std::equal(L.kM, L.kM + 9, P.kM) &&
+                      std::equal(L.kO, L.kO + 4, P.kO) && P.whiteMode == L.whiteMode && P.expStep == L.expStep && P.moving == L.moving && P.spin == L.spin &&
+                      P.discFVersion == L.discFVersion && ksky == lensSkyDrawn_)) && (L.kerrSky || !lensSkyDrawn_);
     const bool glow = L.glow[0] > 0 && glowDown_ && glowBlur_ && glowAdd_;
     const bool layers = glow || glareOn;                                   // 0.55.4: the disc's light and the sky behind it, as their own pictures
     if (!same) {                                                           // (e) of the plan: drawn anew only when the view, the distance or the picture changed
@@ -585,8 +626,14 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
             glDrawBuffers(1, &buf0);
         }
         glViewport(0, 0, fbW, fbH);
-        pass(0, 0);
-        if (layers) { const GLenum buf0 = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, &buf0); }
+        if (ksky) skyPicture(L, fbW, fbH, layers, glareOn);               // 0.56.0
+        else {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, 0, 0);
+            pass(0, 0);
+        }
+        lensSkyDrawn_ = ksky;
+        maskValid_ = ksky;
+        if (layers || ksky) { const GLenum buf0 = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, &buf0); }
         lensLast_ = L; lensLast_.table = nullptr; lensLast_.discU = lensLast_.discP = lensLast_.discCol = nullptr;
         lensLast_.kA = lensLast_.kB = lensLast_.kEdge = lensLast_.kTau = lensLast_.discF = nullptr; lensPtW_ = width_; lensValid_ = true; lensRedraws_++;
         glowValid_ = false;
@@ -635,6 +682,284 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
     glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, 0); glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glEnable(GL_BLEND);
+}
+
+// 0.56.0: the spinning hole per pixel (kKerrSkyFS): one pass into the bound framebuffer, whose picture starts at (ox, oy), drawn at `scale` of the picture's
+// pixels (the framebuffer then holds the smaller picture from its corner); mode: the shader's uMode
+void Renderer2D::skyPass(const LensSky& L, int fbW, int fbH, int ox, int oy, double scale, int mode, bool raw) {
+    const GLuint pr = sky_.program(2);
+    const double ppp = fbW / width_;
+    const double cxPx = std::round(L.cx * ppp), cyPx = std::round(L.cy * ppp), Kpx = L.kRad * ppp;
+    const bool disc = L.disc && L.discF && L.discCol && L.discFN >= 2 && L.discC >= 2;
+    glUseProgram(pr);
+    const auto u = [&](const char* n) { return glGetUniformLocation(pr, n); };
+    glUniform4f(u("uCam"), L.skyCam[0], L.skyCam[1], L.skyCam[2], L.skyCam[3]);
+    glUniform4f(u("uMet"), L.skyMet[0], L.skyMet[1], L.skyMet[2], L.skyMet[3]);
+    glUniform4f(u("uMet2"), L.skyMet2[0], L.skyMet2[1], L.skyMet2[2], L.skyMet2[3]);
+    glUniformMatrix3fv(u("uKs"), 1, GL_TRUE, L.kM);
+    glUniform2f(u("uCentre"), static_cast<float>((ox + cxPx) * scale), static_cast<float>((oy + fbH - cyPx) * scale));
+    glUniform1f(u("uKpx"), static_cast<float>(Kpx * scale));
+    glUniform4f(u("uKO"), L.kO[0], L.kO[1], L.kO[2], L.kO[3]);
+    glUniform1i(u("uMode"), mode);
+    glUniform1f(u("uBright"), static_cast<float>(std::clamp(L.bright, 0.0, 1.0)));
+    glUniform1i(u("uSky"), L.sky ? 1 : 0);
+    glUniform1i(u("uDisc"), disc ? 1 : 0);
+    glUniform4f(u("uDR"), static_cast<float>(L.rIn), static_cast<float>(L.rOut), static_cast<float>(L.discFLog0), static_cast<float>(L.discFDl));
+    glUniform4f(u("uDT"), static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog));
+    glUniform3i(u("uDN"), L.discFN, L.discC, 0);
+    glUniform4f(u("uDFix"), L.filmRaw[0], L.filmRaw[1], L.filmRaw[2], L.filmRaw[3]);
+    const bool cardWhite = L.whiteMode == 1 && disc && !expTex_.empty() && mode == 0;
+    glUniform1i(u("uWhiteMode"), cardWhite ? 1 : 0);
+    glUniform1f(u("uWhiteSet"), static_cast<float>(L.white));
+    const double st = L.expStep * ppp;
+    glUniform4f(u("uSamp"), static_cast<float>(ox + 0.5 * st), static_cast<float>(st), static_cast<float>(oy + fbH - 0.5 * st), static_cast<float>(st));
+    glUniform1i(u("uRaw"), raw ? 1 : 0);
+    const GLuint texs[4] = {tex_[static_cast<int>(Map::Sky)], discCTex_ ? discCTex_ : whiteTex_, kFTex_ ? kFTex_ : whiteTex_, cardWhite ? expTex_.back() : whiteTex_};
+    const char* names[4] = {"uTex", "uDC", "uDF", "uWhite"};
+    for (int k = 0; k < 4; k++) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, texs[k]); glUniform1i(u(names[k]), k); }
+    glActiveTexture(GL_TEXTURE0);
+    glBindVertexArray(cmpVao_);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    for (int k = 3; k >= 0; k--) { glActiveTexture(GL_TEXTURE0 + k); glBindTexture(GL_TEXTURE_2D, 0); }
+}
+
+// 0.56.0: the card's exposure (LensSky::whiteMode 1): the first disc image's brightest channel and Y at the scan's points (the sky pass, uMode 10), then
+// blocks of 4 x 4 reduced to their largest until one texel is left (kMaxDownFS); that texel is the white the picture's pass reads. Nothing is read back
+// in the frame's way: the texel is copied into a pixel buffer behind a fence and looked at in later frames (skyTimes: the readout and the stars).
+GLuint Renderer2D::skyExposure(const LensSky& L, int fbW, int fbH) {
+    if (!maxDown_) return 0;
+    int nx = 0, ny = 0;
+    for (double X = L.expStep / 2; X < width_; X += L.expStep) nx++;
+    for (double Y = L.expStep / 2; Y < height_; Y += L.expStep) ny++;
+    if (nx == 0 || ny == 0) return 0;
+    std::vector<int> w{nx}, h{ny};
+    while (w.back() > 1 || h.back() > 1) { w.push_back((w.back() + 3) / 4); h.push_back((h.back() + 3) / 4); }
+    if (w != expW_ || h != expH_) {
+        for (GLuint& tx : expTex_) glDeleteTextures(1, &tx);
+        expTex_.assign(w.size(), 0);
+        glGenTextures(static_cast<GLsizei>(w.size()), expTex_.data());
+        for (std::size_t k = 0; k < w.size(); k++) {
+            glBindTexture(GL_TEXTURE_2D, expTex_[k]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, w[k], h[k], 0, GL_RGBA, GL_FLOAT, nullptr);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+        expW_ = w; expH_ = h;
+    }
+    if (!expFbo_) glGenFramebuffers(1, &expFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, expFbo_);
+    const GLenum buf0 = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &buf0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, expTex_[0], 0);
+    glViewport(0, 0, nx, ny);
+    skyPass(L, fbW, fbH, 0, 0, 1, 10, false);
+    glUseProgram(maxDown_);
+    glUniform1i(glGetUniformLocation(maxDown_, "uTex"), 0);
+    glBindVertexArray(cmpVao_);
+    for (std::size_t k = 1; k < w.size(); k++) {
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, expTex_[k], 0);
+        glViewport(0, 0, w[k], h[k]);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, expTex_[k - 1]);
+        glUniform2i(glGetUniformLocation(maxDown_, "uN"), w[k - 1], h[k - 1]);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+    glBindTexture(GL_TEXTURE_2D, 0);
+    skyStats_.expN = nx * ny;
+    if (!whiteFence_) {                                                    // (one read-back at a time; a newer one waits for it)
+        if (!whitePbo_) { glGenBuffers(1, &whitePbo_); glBindBuffer(GL_PIXEL_PACK_BUFFER, whitePbo_); glBufferData(GL_PIXEL_PACK_BUFFER, 16, nullptr, GL_STREAM_READ); }
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, whitePbo_);
+        glPixelStorei(GL_PACK_ALIGNMENT, 4);
+        glReadPixels(0, 0, 1, 1, GL_RGBA, GL_FLOAT, nullptr);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        whiteFence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    }
+    return expTex_.back();
+}
+
+// 0.56.0: what has come back from the card without waiting: the pass's times (GL_TIMESTAMP pairs) and the exposure's texel
+void Renderer2D::skyTimes() {
+    while (skyQTail_ < skyQHead_) {
+        const int t = skyQTail_ % 4;
+        GLint avail = 0;
+        glGetQueryObjectiv(skyQ_[2 * t + 1], GL_QUERY_RESULT_AVAILABLE, &avail);
+        if (!avail) break;
+        unsigned long long a = 0, b = 0;
+        glGetQueryObjectui64v(skyQ_[2 * t], GL_QUERY_RESULT, &a);
+        glGetQueryObjectui64v(skyQ_[2 * t + 1], GL_QUERY_RESULT, &b);
+        const double ms = b > a ? (b - a) / 1e6 : 0, sc = skyQScale_[t];
+        skyStats_.lastMs = ms;
+        skyStats_.fullMs = ms / (sc * sc);
+        skyStats_.timed++;
+        skyQTail_++;
+    }
+    if (whiteFence_) {
+        const GLenum r = glClientWaitSync(whiteFence_, 0, 0);
+        if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) {
+            glDeleteSync(whiteFence_);
+            whiteFence_ = nullptr;
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, whitePbo_);
+            if (const float* v = static_cast<const float*>(glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, 16, GL_MAP_READ_BIT))) {
+                skyStats_.white = v[0] > 0 ? v[0] : 1;
+                skyStats_.whiteY = v[1];
+                skyStats_.whiteReads++;
+                glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+            }
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        }
+    }
+}
+
+// 0.56.0: the picture of the spinning hole per pixel into lensFbo_ (bound, its attachments 0..2 set by drawLens): the open-sky mask as attachment 3, the
+// exposure first (whiteMode 1), then the pass, timed. THE RESOLUTION RULE: at rest always every pixel. While the view moves, if the pass's last measured
+// time for the whole picture (fullMs, the card's own timer) is over the frame's budget (frameBudgetMs: half the screen's refresh period), the pass is
+// drawn at scale = sqrt(budget / fullMs), rounded down to eighths, at least 1/4, into smaller layers that are then stretched over the picture's own
+// (bilinear): a new picture every frame at a lower resolution rather than an old one at full.
+void Renderer2D::skyPicture(const LensSky& L, int fbW, int fbH, bool layers, bool raw) {
+    if (!maskTex_ || maskW_ != fbW || maskH_ != fbH) {                     // the mask: fbW x fbH, one byte
+        if (!maskTex_) glGenTextures(1, &maskTex_);
+        maskW_ = fbW; maskH_ = fbH;
+        glBindTexture(GL_TEXTURE_2D, maskTex_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, fbW, fbH, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    const bool disc = L.disc && L.discF && L.discCol && L.discFN >= 2 && L.discC >= 2;
+    if (L.whiteMode == 1 && disc) {
+        const auto e0 = std::chrono::steady_clock::now();
+        skyExposure(L, fbW, fbH);
+        skyStats_.expMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - e0).count();
+        glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
+    }
+    double scale = 1;
+    if (L.moving) {
+        const double full = L.slowMs > 0 ? L.slowMs : skyStats_.fullMs;
+        if (L.frameBudgetMs > 0 && full > L.frameBudgetMs) scale = std::clamp(std::floor(std::sqrt(L.frameBudgetMs / full) * 8) / 8, 0.25, 1.0);
+    }
+    skyScale_ = scale;
+    skyStats_.scale = scale;
+    if (!skyQ_[0]) glGenQueries(8, skyQ_);
+    const bool timed = skyQHead_ - skyQTail_ < 4;
+    if (timed) { skyQScale_[skyQHead_ % 4] = scale; glQueryCounter(skyQ_[2 * (skyQHead_ % 4)], GL_TIMESTAMP); }
+    const GLenum all[4] = {GL_COLOR_ATTACHMENT0, layers ? GL_COLOR_ATTACHMENT1 : GL_NONE, layers ? GL_COLOR_ATTACHMENT2 : GL_NONE, GL_COLOR_ATTACHMENT3};
+    if (scale >= 1) {
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, maskTex_, 0);
+        glDrawBuffers(4, all);
+        glViewport(0, 0, fbW, fbH);
+        skyPass(L, fbW, fbH, 0, 0, 1, 0, raw);
+    } else {
+        const int w = std::max(1, static_cast<int>(std::ceil(fbW * scale))), h = std::max(1, static_cast<int>(std::ceil(fbH * scale)));
+        if (!lowFbo_) { glGenFramebuffers(1, &lowFbo_); glGenTextures(4, lowTex_); }
+        if (w != lowW_ || h != lowH_) {
+            lowW_ = w; lowH_ = h;
+            const GLenum fmt[4] = {GL_RGBA8, GL_RGBA32F, GL_RGBA32F, GL_R8};
+            for (int k = 0; k < 4; k++) {
+                glBindTexture(GL_TEXTURE_2D, lowTex_[k]);
+                glTexImage2D(GL_TEXTURE_2D, 0, fmt[k], w, h, 0, k == 3 ? GL_RED : GL_RGBA, k == 0 || k == 3 ? GL_UNSIGNED_BYTE : GL_FLOAT, nullptr);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            }
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, lowFbo_);
+        for (int k = 0; k < 4; k++) glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + k, GL_TEXTURE_2D, lowTex_[k], 0);
+        const GLenum lowBufs[4] = {GL_COLOR_ATTACHMENT0, layers ? GL_COLOR_ATTACHMENT1 : GL_NONE, layers ? GL_COLOR_ATTACHMENT2 : GL_NONE, GL_COLOR_ATTACHMENT3};
+        glDrawBuffers(4, lowBufs);
+        glViewport(0, 0, w, h);
+        skyPass(L, fbW, fbH, 0, 0, scale, 0, raw);
+        // stretched over the picture's own layers
+        glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, maskTex_, 0);
+        glViewport(0, 0, fbW, fbH);
+        glUseProgram(cmpProgram_);
+        glUniform1i(cmpTex_, 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindVertexArray(cmpVao_);
+        for (int k = 0; k < 4; k++) {
+            if (all[k] == GL_NONE) continue;
+            glDrawBuffers(1, &all[k]);
+            glBindTexture(GL_TEXTURE_2D, lowTex_[k]);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+        skyStats_.lowDraws++;
+    }
+    if (timed) { glQueryCounter(skyQ_[2 * (skyQHead_ % 4) + 1], GL_TIMESTAMP); skyQHead_++; }
+    skyStats_.draws++;
+}
+
+void Renderer2D::skyProbe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out) {
+    if (!sky_.ready() || w <= 0 || h <= 0) return;
+    if (!probeFbo_) { glGenFramebuffers(1, &probeFbo_); glGenTextures(1, &probeTex_); }
+    if (probeW_ != w || probeH_ != h) {
+        probeW_ = w; probeH_ = h;
+        glBindTexture(GL_TEXTURE_2D, probeTex_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4 * w, h, 0, GL_RGBA, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    const double w0 = width_, h0 = height_;
+    width_ = w; height_ = h;                                               // (the probe's own picture: one point = one pixel)
+    glBindFramebuffer(GL_FRAMEBUFFER, probeFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, probeTex_, 0);
+    const GLenum buf0 = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &buf0);
+    glDisable(GL_BLEND);
+    for (int m = 1; m <= 4; m++) {
+        glViewport((m - 1) * w, 0, w, h);
+        skyPass(L, w, h, (m - 1) * w, 0, 1, m, false);
+    }
+    width_ = w0; height_ = h0;
+    const std::size_t n = static_cast<std::size_t>(4 * w) * h * 4;
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    if (queue) {
+        if (!probePbo_) glGenBuffers(1, &probePbo_);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, probePbo_);
+        glBufferData(GL_PIXEL_PACK_BUFFER, static_cast<GLsizeiptr>(n * sizeof(float)), nullptr, GL_STREAM_READ);
+        glReadPixels(0, 0, 4 * w, h, GL_RGBA, GL_FLOAT, nullptr);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        if (probeFence_) glDeleteSync(probeFence_);
+        probeFence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    } else if (out) {
+        std::vector<float> raw(n);
+        glReadPixels(0, 0, 4 * w, h, GL_RGBA, GL_FLOAT, raw.data());
+        out->swap(raw);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_BLEND);
+}
+
+bool Renderer2D::skyProbeDone() {
+    if (!probeFence_) return false;
+    const GLenum r = glClientWaitSync(probeFence_, 0, 0);
+    return r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED;
+}
+
+void Renderer2D::skyProbeRead(std::vector<float>& out) {
+    out.clear();
+    if (!probeFence_ || !probePbo_) return;
+    glDeleteSync(probeFence_);
+    probeFence_ = nullptr;
+    const std::size_t n = static_cast<std::size_t>(4 * probeW_) * probeH_ * 4;
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, probePbo_);
+    if (const float* v = static_cast<const float*>(glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, static_cast<GLsizeiptr>(n * sizeof(float)), GL_MAP_READ_BIT))) {
+        out.assign(v, v + n);
+        glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+    }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+}
+
+void Renderer2D::maskedDisc(double x, double y, double r, Color c) {
+    if (r <= 0) return;
+    const double half = r + 1.5;
+    quad(x, y, half, c, 6, 0, 0, static_cast<float>(half / r));
 }
 
 // 0.55.3: the glow of the bent picture in lensTex_ (blackhole/looks.h): down to 4 x 4 blocks above the threshold, then the Gaussian along rows and columns;
@@ -1308,6 +1633,12 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
             glUseProgram(program_);
             glUniform2f(uSize_, static_cast<float>(width_), static_cast<float>(height_));
             { const float sp[3] = {space_.r, space_.g, space_.b}; glUniform3fv(uSpace_, 1, sp); }
+            glActiveTexture(GL_TEXTURE0 + 7);                               // 0.56.0: the open-sky mask of the spinning hole's picture (mode 6)
+            glBindTexture(GL_TEXTURE_2D, maskValid_ && maskTex_ ? maskTex_ : whiteTex_);
+            glActiveTexture(GL_TEXTURE0);
+            glUniform1i(uMask_, 7);
+            glUniform1i(uMaskOn_, maskValid_ && maskTex_ ? 1 : 0);
+            glUniform2i(uMaskOrigin_, vx, vy);
             glBindVertexArray(vao_);
             glDrawArrays(GL_TRIANGLES, sg.first, sg.count);
         } else {

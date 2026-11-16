@@ -1835,6 +1835,21 @@ static void testGpuGuard() {
     checkTrue("guard: a step that ran out of time (same driver): off, not called a crash", !dec.allowed && !dec.crashed);
     dec = app::gpuGuardDecide(GpuGuardRecord{"ok", v, d, ""}, marker, v, d);
     checkTrue("guard: a marker wins over a kept ok", !dec.allowed && dec.keep == marker);
+    // 0.56.0: every older form of the line (0.55.7 and 0.55.8 kept the app's version; 0.55.9 tried the dead shader once more because of it) is read as
+    // "off" for its driver, whatever its state, and kept in the new form; with another driver it is tried once more
+    for (const char* oldVersion : {"0.55.7", "0.55.8", "0.55.6"}) for (const char* st : {"off", "slow", "ok"}) {
+        const GpuGuardRecord old{st, oldVersion, d, std::string(st) == "ok" ? "" : "check: dispatch 1"};
+        dec = app::gpuGuardDecide(app::gpuGuardParse(app::gpuGuardText(old)), none, v, d);
+        checkTrue(std::string("guard: an older line (") + st + ", app " + oldVersion + "), the same driver: off, kept in the new form",
+                  !dec.allowed && dec.crashed && dec.keep.state == "off" && dec.keep.version == v && dec.keep.driver == d);
+        dec = app::gpuGuardDecide(old, none, v, "AMD / Radeon / 4.6 26.11.2");
+        checkTrue(std::string("guard: an older line (") + st + ", app " + oldVersion + "), another driver: tried once more, guarded", dec.allowed && dec.guarded);
+    }
+    {   const std::string sv = "sky 00112233aabbccdd";                 // the sky's guard: its own id form
+        dec = app::gpuGuardDecide(GpuGuardRecord{"off", sv, d, "link the whole sky shader"}, none, sv, d);
+        checkTrue("guard (sky): kept off with the same sky shader and driver: stays off", !dec.allowed && dec.crashed);
+        dec = app::gpuGuardDecide(GpuGuardRecord{"off", sv, d, "link the whole sky shader"}, none, "sky 99999999aabbccdd", d);
+        checkTrue("guard (sky): a changed sky shader: tried once more", dec.allowed && dec.guarded); }
     // the files: a folder of its own
 #ifdef _WIN32
     const std::string dir = std::string(std::getenv("TEMP") ? std::getenv("TEMP") : ".") + "\\pl_gpuguard_test\\";

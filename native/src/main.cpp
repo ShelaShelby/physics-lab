@@ -213,8 +213,12 @@ int main(int, char**) {
         // 0.55.9: the guard keeps the light-path shader's own text (its hash) in place of the app version: a new app version alone does not try again
         const char* fakeShader = SDL_getenv("PL_GPU_SHADER");          // (tests: another shader's text)
         app::gpuGuard().start(ui::settingsFolder(), fakeShader ? std::string(fakeShader) : render::kerrShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuPaths, head);
-        if (app::gpuGuard().saved() != app.prefs.gpuPaths) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
-        else app::gpuGuard().settingsWritten();
+        // 0.56.0: the spinning hole drawn per pixel: a guard of its own (its marker, the settings line "gpusky=", the same log); PL_GPU_SKYSHADER (tests)
+        const char* fakeSky = SDL_getenv("PL_GPU_SKYSHADER");
+        app::gpuSkyGuard().start(ui::settingsFolder(), fakeSky ? std::string(fakeSky) : render::kerrSkyShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSky,
+                                 {"The spinning hole drawn per pixel by the graphics card (closed forms, single precision): its own guard, its lines start [sky]"});
+        if (app::gpuGuard().saved() != app.prefs.gpuPaths || app::gpuSkyGuard().saved() != app.prefs.gpuSky) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+        else { app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); }
     }
     {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
         GLint maj = 0, min = 0;
@@ -327,6 +331,7 @@ int main(int, char**) {
     // 0.55.5: the Black Hole Lab works out its pictures on worker threads (the frame never waits for the processor); the automatic checks keep the
     // synchronous path (PL_BH_SPINWAIT, or PL_DRAWSTAT without PL_BH_ASYNC): their pictures are of the settings of the frame they are taken in
     app.blackholeView.async = !SDL_getenv("PL_BH_SPINWAIT") && (!SDL_getenv("PL_DRAWSTAT") || SDL_getenv("PL_BH_ASYNC"));
+    if (const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window))) if (dm->refresh_rate > 0) app.blackholeView.refreshHz = dm->refresh_rate;   // 0.56.0
     if (SDL_getenv("PL_BLACKHOLE")) {                   // 0.55.0: PL_BLACKHOLE=1 opens the Black Hole Lab; PL_BH_SET="preset=m87;dist=3;bend=off;sky=black;fov=120;mass=1e6;yaw=..;pitch=..;disc=on;feed=0.1;outer=30;exposure=auto" (automatic checks)
         app.lab = blackhole::kLabIndex;
         app.visited[blackhole::kLabIndex] = true;
@@ -680,10 +685,11 @@ int main(int, char**) {
             const blackhole::ViewStats& bs = app.blackholeView.stats();
             const blackhole::Settings& sk = app.blackholeView.shownSettings();
             const blackhole::Settings wk = blackhole::shown(app.blackhole);
-            std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f want=%.6f,%.6f,%.6f,%.6f card=%d cardstate=%d cardfills=%ld cardms=%.1f finethread=%d\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
+            std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f want=%.6f,%.6f,%.6f,%.6f card=%d cardstate=%d cardfills=%ld cardms=%.1f finethread=%d skycard=%d skystate=%d skyms=%.3f skyscale=%.3f skypics=%ld starpics=%ld lookcard=%d white=%.6g\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
                         bs.spinCoarseFills + bs.tableFills, bs.spinFineFills, bs.starFills, bs.behind ? 1 : 0, blackhole::shown(app.blackhole).spin > 0 ? bs.spinCoarseMs : bs.tableMs, bs.spinStarsMs, bs.starsMs, bs.lookMs, bs.spinFineMs, bs.discMs,
                         static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs,
-                        wk.yaw, wk.pitch, wk.dist, wk.spin > 0 && wk.bend ? wk.spin : 0.0, bs.spinCard ? 1 : 0, app.blackholeView.cardState(), bs.cardFills, bs.cardMs, app.blackholeView.fineThreadBusy() ? 1 : 0);   // 0.55.6: want, the card
+                        wk.yaw, wk.pitch, wk.dist, wk.spin > 0 && wk.bend ? wk.spin : 0.0, bs.spinCard ? 1 : 0, app.blackholeView.cardState(), bs.cardFills, bs.cardMs, app.blackholeView.fineThreadBusy() ? 1 : 0,
+                        bs.skyCard ? 1 : 0, app.blackholeView.skyState(), bs.skyGpuMs, bs.skyScale, bs.skyPictures, bs.starPictures, bs.lookCard ? 1 : 0, bs.look.white);   // 0.55.6: want, the card; 0.56.0: the card's sky
         }
         static const bool timeStat = SDL_getenv("PL_TIMESTAT") != nullptr;   // for measuring in development (0.46): the Atom Lab picture's build time and the renderer's end(), averaged over 60 frames
         if (timeStat && app.lab == 1) {
@@ -776,7 +782,8 @@ int main(int, char**) {
     ImGui::DestroyContext();
     atom::setOutlineCompute(nullptr);
     app.blackholeView.stopWork();                    // 0.55.6: its worker may read the card's memory, which the renderer frees
-    app::gpuGuard().closing();                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
+    app::gpuGuard().closing();
+    app::gpuSkyGuard().closing();                    // 0.56.0                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
     renderer.shutdown();
     SDL_GL_DestroyContext(gl);
     SDL_DestroyWindow(window);

@@ -1,4 +1,5 @@
 #include "blackhole/blackhole_view.h"
+#include "blackhole/sky_card.h"
 
 #include <algorithm>
 #include <array>
@@ -111,6 +112,7 @@ void cameraFrame(const HoleView& v, double th, Vec3& er, Vec3& et, Vec3& ep) {
 
 BlackHoleView::BlackHoleView() {
     if (const char* e = std::getenv("PL_BH_GPUPATHS")) gpuPaths = std::atoi(e) != 0;   // 0.55.6 (tests): the switch's start value
+    if (const char* e = std::getenv("PL_BH_GPUSKY")) gpuSky = std::atoi(e) != 0;       // 0.56.0 (tests): the sky switch's start value
 }
 
 BlackHoleView::~BlackHoleView() {
@@ -312,6 +314,54 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
     }
     L.sky = s.skyOurs && !trueSkyOn(s);                                    // 0.55.4: under the true exposure the map is not drawn (light.h)
     if (lookRule(s.look).glow) { L.glow[0] = static_cast<float>(kGlowStrength); L.glow[1] = static_cast<float>(kGlowThreshold); L.glow[2] = static_cast<float>(kGlowSigma); }   // 0.55.3 (looks.h)
+    const auto spinFrame = [&](float kM[9], float kO[4]) {                  // the chart's axes to galactic, the screen directions of e_theta and e_phi
+        Vec3 rows[3];
+        viewRows(v, rows);
+        const double ph = cameraPhi(v), c = std::cos(ph), sn = std::sin(ph);
+        double RV[3][3];
+        for (int i = 0; i < 3; i++) {
+            const Vec3 col[3] = {Vec3{c, sn, 0}, Vec3{-sn, c, 0}, Vec3{0, 0, 1}};
+            for (int j = 0; j < 3; j++) RV[i][j] = dot(rows[i], col[j]);
+        }
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++) kM[3 * i + j] = static_cast<float>(M[3 * i] * RV[0][j] + M[3 * i + 1] * RV[1][j] + M[3 * i + 2] * RV[2][j]);
+        Vec3 er, et, ep;
+        cameraFrame(v, s.pitch, er, et, ep);
+        kO[0] = static_cast<float>(dot(et, rows[0])); kO[1] = static_cast<float>(dot(et, rows[1]));
+        kO[2] = static_cast<float>(dot(ep, rows[0])); kO[3] = static_cast<float>(dot(ep, rows[1]));
+    };
+    if (skyUse_ && s.spin > 0 && s.bend) {                                   // 0.56.0: the spinning hole per pixel on the card (no table)
+        L.kerrSky = true;
+        L.bend = true;
+        spinFrame(L.kM, L.kO);
+        skyCamera(L, s.spin, s.dist, s.pitch);
+        L.moving = skyMoving_;
+        L.frameBudgetMs = 500 / std::max(refreshHz, 1.0);
+        static const double slow = std::getenv("PL_BH_SKYSLOW") ? std::atof(std::getenv("PL_BH_SKYSLOW")) : 0;   // (tests: the pass taken as this slow, ms)
+        L.slowMs = slow;
+        if (s.disc && skyF_) {
+            L.disc = true;
+            L.discF = skyF_.get(); L.discFN = static_cast<int>(skyF_->size()); L.discFLog0 = skyFLog0_; L.discFDl = skyFDl_; L.discFVersion = skyFVer_;
+            double l0, dl;
+            L.discCol = &colourTable(L.discC, l0, dl);
+            L.colLog0 = l0; L.colDlog = dl; L.colVersion = 1;
+            const DiscGeom g = discGeom(s);
+            L.rIn = g.rIn; L.rOut = g.rOut;
+            L.tScale = std::pow(discPhys(s).fluxScale() / stefanBoltzmann(), 0.25);
+            L.whiteMode = s.expAuto ? 1 : 0;
+            L.white = s.expAuto ? (st_.look.white > 0 ? st_.look.white : 1) : std::pow(10.0, s.expLog);
+            L.expStep = 4;
+            if (!lookRule(s.look).shifts) {                                 // Film: the one colour before the white (the card divides and scales it)
+                DiscPixel q;
+                discLight(s, g.rIn, 1, q);
+                for (int k = 0; k < 3; k++) L.filmRaw[k] = static_cast<float>(q.rgb[static_cast<std::size_t>(k)]);
+                L.filmRaw[3] = 1;
+            }
+            if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }
+            L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread;
+        }
+        return L;
+    }
     if (s.spin > 0 && s.bend && spinMatches(s)) {                            // 0.55.2: the spinning hole
         const SpinTable& T = *spin_;
         L.kerr = true;
@@ -486,7 +536,12 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
         made_[0] = s.yaw; made_[1] = s.pitch; made_[2] = s.dist; made_[3] = s.spin;
         st_.lookFills++;
     }
-    if (changed && disc) {                                                  // the exposure first (lab.h discLook's rule, through the spin table)
+    if (changed && disc && skyEngine_) {                                    // 0.56.0: the card finds the exposure; the stars use what it last said
+        st_.look = DiscLook{};
+        st_.look.any = true;
+        st_.look.white = s.expAuto ? (skyWhite_ > 0 ? skyWhite_ : 1) : std::pow(10.0, s.expLog);
+        st_.lookMs = 0;
+    } else if (changed && disc) {                                           // the exposure first (lab.h discLook's rule, through the spin table)
         const auto tl = std::chrono::steady_clock::now();
         DiscLook L;
         const int step = lookStep(W, H, exact_);                            // 0.55.5: 4 at rest (as before); while moving, no more points than 1280 x 800 in steps of 4
@@ -554,7 +609,7 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
                     const Vec3 N = lookAt(im.psi, im.chi), dir = er * N.x + et * N.y + ep * N.z;
                     double X, Y;
                     if (!viewScreen(v, dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
-                    const bool behind = disc && spinPixel(s, v, X, Y, false).hit.order >= 0;   // behind the opaque disc
+                    const bool behind = disc && !skyEngine_ && spinPixel(s, v, X, Y, false).hit.order >= 0;   // behind the opaque disc (0.56.0: the card's own disc hides it)
                     out.push_back({X, Y, mag, k, 0, behind});
                 }
             }
@@ -616,6 +671,8 @@ struct BlackHoleView::Request {
     Key want;
     std::uint64_t seq = 0;
     std::shared_ptr<CardTableData> card;                                    // 0.55.6: a table filled by the card: the worker makes it (the fine one) first
+    bool sky = false;                                                       // 0.56.0: the card draws sky and disc (the worker: the stars only, no exposure scan)
+    double skyWhite = 0;                                                    //   and the card's exposure as last read back (0: none yet)
 };
 struct BlackHoleView::Picture {
     Request req;
@@ -668,6 +725,7 @@ void BlackHoleView::workLoop() {
         }
         E.fineOffer_ = r->fine;
         E.exact_ = r->exact;
+        E.skyEngine_ = r->sky; E.skyWhite_ = r->skyWhite;
         if (!E.prepare(r->s, r->W, r->H, r->cx, r->cy, &stale_)) continue;  // (stopped: the view is closing)
         auto p = std::make_unique<Picture>();
         p->table = E.table_; p->tableDist = E.tableDist_; p->tableVer = E.tableVer_;
@@ -747,6 +805,7 @@ void BlackHoleView::install(Picture& p) {
     shownS_ = p.req.s; shownW_ = p.req.W; shownH_ = p.req.H; shownCx_ = p.req.cx; shownCy_ = p.req.cy;
     shownKey_ = p.req.want; shownExact_ = p.req.exact; shownSeq_ = p.req.seq;
     hasShown_ = true;
+    installs_++;
     st_.spinCard = spin_ && spin_->filledByCard() && p.req.s.spin > 0 && p.req.s.bend;
     if (st_.spinCard) cardFine_ = spin_;                                    // 0.55.6: later pictures of the same spin, distance and tilt use it (turning)
 }
@@ -901,6 +960,13 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     const double now = nowSeconds();
     const Key want = keyOf(s, W, H, cx, cy);
     if (!(want == wantKey_)) { wantKey_ = want; wantSince_ = now; }
+    const bool sky = spinning && gpuSky && skyReady(R);                    // 0.56.0: sky and disc per pixel on the card
+    skyUse_ = sky;
+    if (sky) {
+        ensureSkyF(s.spin);
+        if (!(want == skyKey_)) { skyKey_ = want; skyChangedAt_ = now; }
+        skyMoving_ = now - skyChangedAt_ < kSkyRest;
+    }
     const bool exact = lookStep(W, H, false) == 4 || now - wantSince_ >= kGlareRest;   // the exposure in steps of 4 once the view rests
     const std::shared_ptr<const SpinTable>& have = card ? cardFine_ : fine_;
     std::shared_ptr<const SpinTable> fine = spinning && have && have->spin() == s.spin && have->rC() == s.dist && have->thC() == s.pitch ? have : nullptr;
@@ -923,6 +989,7 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     if (!upToDate && !asked && !((card || cardWait) && !fine)) {                         // (card: a view of a new spin, distance or tilt is the card's to start)
         auto r = std::make_unique<Request>();
         r->s = s; r->W = W; r->H = H; r->cx = cx; r->cy = cy; r->exact = exact; r->fine = fine; r->want = want; r->seq = ++reqSeq_;
+        r->sky = sky; r->skyWhite = R.skyStats().white;
         posted_ = true; postedKey_ = want; postedExact_ = exact; postedFine_ = fine.get();
         {   std::lock_guard<std::mutex> g(workMx_);
             req_ = std::move(r); }                                          // (a request not yet taken is replaced: the newest wins)
@@ -934,7 +1001,120 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     st_.behindMs = st_.behind ? 1000 * (now - behindSince_) : 0;
     st_.picture = shownSeq_;
     std::copy(made_, made_ + 4, st_.made);
+    const render::Renderer2D::SkyStats& ks = R.skyStats();
+    st_.skyCard = sky; st_.skyGpuMs = ks.fullMs; st_.skyScale = ks.scale; st_.skyPictures = ks.draws; st_.starPictures = installs_;
+    st_.lookCard = sky && s.disc && s.expAuto;
+    if (st_.lookCard && ks.white > 0) { st_.look.white = ks.white; st_.look.brightMax = ks.white; st_.look.brightY = ks.whiteY; st_.look.any = true; }
+    if (sky) {                                                              // 0.56.0: the sky and the disc of the settings asked for, the stars of the last picture
+        glareRest(want);
+        if (skyMoving_) glareReady_ = glareNow;
+        R.lensSky(lensFor(s, holeView(s, W, H, cx, cy)));
+        if (hasShown_ && lit_) for (const Dot& d : dots_) R.maskedDisc(d.x, d.y, d.r, d.c);
+        return;
+    }
     if (hasShown_) emit(R, shownS_, shownW_, shownH_, shownCx_, shownCy_, want);
+}
+
+// 0.56.0: the sky's path, decided once per run (and again after "Try again"): within its own guard (app/gpu_guard.h gpuSkyGuard), off at once when a past
+// run died inside it with this sky shader and driver; nothing of it before the view's third frame; then a step per frame, each guarded and logged with its
+// time: the three shaders made in rising order (the tiny one, the elliptic functions alone, the whole), a first small draw (the check's first probe,
+// read back without waiting), the check (the second probe; both against kerr_closed.h in double: sky_card.h skyCheckOf), the first full picture (until the
+// card's timer has come back for it). A step that does not finish within cardStepLimitMs() switches the path off (kept as "slow").
+namespace {
+struct SkySteps : render::KerrSteps {
+    void begin(const std::string& step) override { app::gpuSkyGuard().begin(step); }
+    void end(const std::string& step, const std::string& result) override { app::gpuSkyGuard().end(step, result); }
+};
+}  // namespace
+
+void BlackHoleView::skyOff(const std::string& why) {
+    skyState_ = -1;
+    skyWhy_ = why;
+    std::printf("PLBHSKY state=-1 why=%s\n", why.c_str());
+    std::fflush(stdout);
+}
+
+bool BlackHoleView::skyReady(render::Renderer2D& R) {
+    app::GpuGuard& G = app::gpuSkyGuard();
+    if (skyGen_ != G.generation()) {
+        skyGen_ = G.generation();
+        if (skyState_ == -1) { skyState_ = 0; skyWhy_.clear(); skyCheck_ = SkyCheck{}; }
+    }
+    const double now = nowSeconds(), limit = cardStepLimitMs() / 1000;
+    const auto stepText = [&](const char* what) { char b[96]; std::snprintf(b, sizeof b, "%s after %.0f ms", what, 1000 * (now - skyStepAt_)); return std::string(b); };
+    if (skyState_ == 0) {
+        if (G.started() && !G.allowed()) { skyOff(G.offText().empty() ? std::string("the spinning hole on the graphics card is switched off") : G.offText()); return false; }
+        if (++skyFrames_ < 3) return false;                                // (the first frames on screen first)
+        skyState_ = 2; skyStep_ = 0;
+    }
+    if (skyState_ == 2) {
+        static SkySteps steps;
+        std::string why;
+        if (skyStep_ <= 2) {
+            if (!R.kerrSky().build(skyStep_, &steps, why)) { G.finished(false, why); skyOff(why); return false; }
+            skyStep_++;
+            return false;
+        }
+        if (skyStep_ == 3) {
+            G.begin("a first small draw");
+            R.skyProbe(skyProbeLens(skyCheckCase(0)), kSkyCheckW, kSkyCheckH, true, nullptr);
+            skyStepAt_ = now; skyStep_ = 4;
+            return false;
+        }
+        if (skyStep_ == 4 || skyStep_ == 5) {
+            const char* name = skyStep_ == 4 ? "a first small draw" : "the check";
+            if (!R.skyProbeDone()) {
+                if (now - skyStepAt_ > limit) { G.timedOut(name); skyOff(std::string("a step of the card's sky did not finish in time (") + name + ")"); }
+                return false;
+            }
+            R.skyProbeRead(skyProbe_[skyStep_ - 4]);
+            if (skyStep_ == 4) {
+                G.end(name, stepText("read back"));
+                G.begin("the check");
+                R.skyProbe(skyProbeLens(skyCheckCase(1)), kSkyCheckW, kSkyCheckH, true, nullptr);
+                skyStepAt_ = now; skyStep_ = 5;
+                return false;
+            }
+            const std::vector<float>* p[2] = {&skyProbe_[0], &skyProbe_[1]};
+            skyCheck_ = skyCheckOf(p);
+            static const bool forced = std::getenv("PL_BH_SKYFAIL") != nullptr;   // (tests: as if the check had failed)
+            if (forced) { skyCheck_.ok = false; skyCheck_.why = "the check was made to fail (test switch PL_BH_SKYFAIL)"; }
+            char b[400];
+            std::snprintf(b, sizeof b, "%s: %s; far direction %.1e / %.1e rad, b %.1e / %.1e, disc r %.1e / %.1e, g %.1e / %.1e (benchmark / Film), %.0f ms on the processor",
+                          stepText("read back").c_str(), skyCheck_.ok ? "passed" : "FAILED", skyCheck_.m[0].dir, skyCheck_.m[1].dir, skyCheck_.m[0].b, skyCheck_.m[1].b,
+                          skyCheck_.m[0].r, skyCheck_.m[1].r, skyCheck_.m[0].g, skyCheck_.m[1].g, skyCheck_.ms);
+            G.end(name, b);
+            for (int k = 0; k < 2; k++) std::printf("PLBHSKYCHECKCASE %s\n", skyCompareText(skyCheckCase(k), skyCheck_.m[k]).c_str());
+            if (!skyCheck_.ok) { G.finished(false, skyCheck_.why); skyOff(skyCheck_.why); return false; }
+            G.begin("the first full picture");
+            skyTimed0_ = R.skyStats().timed;
+            skyStepAt_ = now; skyFirst_ = true;
+            skyState_ = 1;
+            std::printf("PLBHSKY state=1 why=-\n");
+            std::fflush(stdout);
+        }
+    }
+    if (skyState_ == 1 && skyFirst_) {
+        if (R.skyStats().timed > skyTimed0_) {
+            char b[128];
+            std::snprintf(b, sizeof b, "drawn, %.1f ms on the card for the whole picture", R.skyStats().fullMs);
+            G.end("the first full picture", stepText(b));
+            G.finished(true);
+            skyFirst_ = false;
+        } else if (now - skyStepAt_ > limit) { G.timedOut("the first full picture"); skyOff("a step of the card's sky did not finish in time (the first full picture)"); return false; }
+    }
+    return skyState_ == 1;
+}
+
+void BlackHoleView::ensureSkyF(double spin) {
+    if (skyFSpin_ == spin && skyF_) return;
+    const int n = 1024;
+    const double r0 = discInner(spin), l0 = std::log(r0), l1 = std::log(kOuterMax), dl = (l1 - l0) / (n - 1);
+    auto f = std::make_shared<std::vector<float>>(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, discFlux(std::exp(l0 + i * dl), spin)), 0.25));
+    skyF_ = std::move(f);
+    skyFSpin_ = spin; skyFLog0_ = l0; skyFDl_ = dl;
+    skyFVer_ = nextVersion();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -1091,6 +1271,7 @@ void cardCompare(render::Renderer2D& R) {
 
 void compareHook(render::Renderer2D& R, const char* spec) {
     if (spec && std::string(spec) == "card") { cardCompare(R); return; }
+    if (spec && std::string(spec) == "sky") { skyCompareHook(R); return; }   // 0.56.0
     // 0. 0.55.3, the looks: Real's saved case to the pixel; Film at the paper's view (J15 Figure 13: 74.1 M, 86.56 deg; field of view 30 degrees) against the double
     //    lookup of the same table: the disc's image and edges where the module puts the paper's edges, one colour over the whole disc before the glow; the glow
     //    against its double reference (looks.h glowReference) on the same picture, no pixel darker; the glow pass's time at 1280 x 800 and 3840 x 2160.

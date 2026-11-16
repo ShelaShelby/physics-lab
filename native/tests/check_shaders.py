@@ -16,7 +16,18 @@ PAIRS = [("kVertexShader", "kFragmentShader"), ("kSquareVS", "kSquareFS"), ("kBl
          ("kCompositeVS", "kGrayFS"), ("kVertexShader", "kPlanetFS"), ("kChartVS", "kFragmentShader"),
          ("kCloudVS", "kBlobFS"), ("kCloudGridVS", "kCloudGridFS"),   # 0.46: the GPU cloud and its brightness grid
          ("kCompositeVS", "kLensFS"),
-         ("kCompositeVS", "kKerrFS")]   # 0.55.0: the Black Hole Lab's bent sky
+         ("kCompositeVS", "kKerrFS"),   # 0.55.0: the Black Hole Lab's bent sky
+         ("kCompositeVS", "kKerrSkyTinyFS"), ("kCompositeVS", "kKerrSkyMathFS"), ("kCompositeVS", "kKerrSkyFS"), ("kCompositeVS", "kMaxDownFS")]   # 0.56.0: the spinning hole per pixel
+
+# 0.56.0: shaders the renderer puts together from pieces (render/kerr_sky.cpp, the same order); a piece's name ends in "Part"
+ASSEMBLED = {"kKerrSkyMathFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyMathPart"],
+             "kKerrSkyFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyTracePart", "kKerrSkyMainPart"]}
+# 0.56.0, SIZE: every shader's SPIR-V for OpenGL is measured as glslang writes it and with its size optimiser (-Os: every function inlined, as a driver
+# does; the 0.55.6 compute shader kKerrTableCS, which died at link on the owner's card, is 61 KB plain and 251 KB inlined). The per-pixel spinning hole
+# (kKerrSkyFS) inlined may not exceed SPIRV_ROOM times the largest inlined shader known to run on the owner's card (every shader of the app but
+# kKerrTableCS), nor a third of kKerrTableCS inlined. (Measured for 0.56.0: REPORT.md.)
+SPIRV_ROOM = 3.5
+KNOWN_BAD = {"kKerrTableCS"}
 
 def main():
     if len(sys.argv) != 2:
@@ -29,7 +40,15 @@ def main():
         print("SKIPPED: " + msg); return 77
     src = open(sys.argv[1], encoding="utf-8").read()
     shaders = dict((m.group(1), m.group(2)) for m in re.finditer(r'static const char\* const (k\w+) = R"\((.*?)\)";', src, re.S))
+    for name, parts in ASSEMBLED.items():
+        missing = [q for q in parts if q not in shaders]
+        if missing:
+            print("FAIL %s: pieces missing: %s" % (name, missing)); return 1
+        shaders[name] = "".join(shaders[q] for q in parts)
+    for q in [n for n in shaders if n.endswith("Part")]:
+        del shaders[q]
     names = sorted(shaders)
+    sizes, inlined = {}, {}
     failed = 0
     if len(shaders) < 15 or sum(n.endswith("CS") for n in shaders) < 4:
         print("FAIL: found only %d shaders in %s (expected at least 15, four of them compute shaders)" % (len(shaders), sys.argv[1])); return 1
@@ -50,6 +69,11 @@ def main():
                 print("FAIL %s (a warning):\n%s%s" % (n, r.stdout, r.stderr)); failed += 1
             else:
                 print("ok   %s (GLSL %s core)" % (n, "430" if kind == "comp" else "330"))
+            for opt, into in (([], sizes), (["-Os"], inlined)):   # 0.56.0: the size of each as SPIR-V for OpenGL, plain and inlined
+                spv = os.path.join(d, n + ".size.spv")
+                r = subprocess.run([tool, "-G", "--aml", "--amb"] + opt + ["-o", spv, p], capture_output=True, text=True)
+                if r.returncode == 0 and os.path.exists(spv):
+                    into[n] = os.path.getsize(spv)
             if kind == "comp":
                 # 0.55.7: the compute shaders also through glslang's whole compiler into SPIR-V for OpenGL (uniforms and buffers given places automatically)
                 # and, if spirv-val is installed, that SPIR-V validated: a deeper check of the code than the front end's (types, control flow, doubles)
@@ -67,6 +91,16 @@ def main():
                 print("FAIL link %s + %s:\n%s%s" % (v, f, r.stdout, r.stderr)); failed += 1
             else:
                 print("ok   link %s + %s" % (v, f))
+    known = {n: v for n, v in inlined.items() if n not in KNOWN_BAD and not n.startswith("kKerrSky")}
+    if known and "kKerrSkyFS" in inlined and "kKerrTableCS" in inlined:
+        big = max(known, key=known.get)
+        print("SPIR-V sizes in bytes, plain / inlined: " + ", ".join("%s %d / %d" % (n, sizes.get(n, 0), inlined[n]) for n in sorted(inlined, key=inlined.get, reverse=True)))
+        line = "kKerrSkyFS inlined %d bytes against the largest known to run, %s %d (limit x%.1f), and kKerrTableCS %d (limit a third)" % (
+            inlined["kKerrSkyFS"], big, known[big], SPIRV_ROOM, inlined["kKerrTableCS"])
+        if inlined["kKerrSkyFS"] > SPIRV_ROOM * known[big] or 3 * inlined["kKerrSkyFS"] > inlined["kKerrTableCS"]:
+            print("FAIL size: " + line); failed += 1
+        else:
+            print("ok   size: " + line)
     print("%d shaders, %d failed" % (len(shaders), failed))
     return 1 if failed else 0
 
