@@ -163,6 +163,7 @@ add_library(blackhole_core STATIC
   src/blackhole/kerr.cpp
   src/blackhole/geodesic.cpp
   src/blackhole/mino.cpp
+  src/blackhole/kerr_closed.cpp
   src/blackhole/schwarzschild.cpp
   src/blackhole/presets.cpp
   src/blackhole/lab.cpp

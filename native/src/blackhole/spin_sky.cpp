@@ -8,6 +8,7 @@
 
 #include "blackhole/kerr.h"
 #include "blackhole/low_priority.h"
+#include "blackhole/kerr_closed.h"
 #include "blackhole/mino.h"
 #include "blackhole/spin.h"
 
@@ -150,11 +151,36 @@ SpinHit spinRayMino(double a, const Camera& cam, double psi, double chi, double 
     return h;
 }
 
+SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, double rtol) {
+    const ClosedEnd e = traceClosed(a, cam, lookAt(psi, chi), kSpinCross);
+    if (e.kind == RayEnd::Lost) { SpinHit h = spinRayMino(a, cam, psi, chi, rtol); h.fallback = true; return h; }
+    SpinHit h;
+    h.b = e.b;
+    h.sky = e.kind == RayEnd::Sky;
+    h.dir = e.dir;
+    const int n = e.nCross;
+    for (int k = 0; k < n && k < kSpinCross; k++) h.u[k] = e.u[k];
+    if (n < kSpinCross) {   // the first crossing not made, continued as spinRayMino does (spin_sky.h)
+        double uv = 0, rest = 0;
+        if (h.sky) {
+            const double mu = e.dir.z != 0 ? -e.pz / e.dir.z : -1e300;
+            uv = -1 / std::sqrt(mu * mu + 100);
+        } else {
+            const double re = e.rEnd, delta = e.dthdr != 0 ? (kPi / 2 - e.thEnd) / e.dthdr : -1e300;
+            uv = delta < 0 ? (1 - std::tanh(std::max(delta, -1e3) / re)) / re : 2 / re;
+            rest = 2 / re;
+        }
+        h.u[n] = uv;
+        for (int k = n + 1; k < kSpinCross; k++) h.u[k] = rest;
+    }
+    return h;
+}
+
 SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const std::atomic<bool>* cancel, int threads, const SpinFill& fill)
     : a_(a), rC_(rC), thC_(thC), xlo_(fill.xlo), nChi_(nChi), nS_(nS), nEdge_(nEdge) {
     const auto t0 = std::chrono::steady_clock::now();
     const Camera cam{rC, thC, 0};
-    SpinHit (*const ray)(double, const Camera&, double, double, double) = fill.mino ? spinRayMino : spinRay;
+    SpinHit (*const ray)(double, const Camera&, double, double, double) = fill.closed ? spinRayClosed : fill.mino ? spinRayMino : spinRay;
     const double rtol = fill.rtol;
     const int nth = threads > 0 ? threads : std::clamp(static_cast<int>(std::thread::hardware_concurrency()), 1, 16);
     const auto parallel = [&](int n, const std::function<void(int)>& job) {   // (a plain std::function: generic lambdas nested in lambdas crashed one compiler)
@@ -178,13 +204,33 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
             probe[static_cast<std::size_t>(i)] = ray(a, cam, pe + 1e-4 * pe, 2 * kPi * i / nEdge_, rtol).dir;
         });
         if (cancel && cancel->load()) { ok_ = false; return; }
-        rowsOf(edge_, probe, nChi, tau_, rowChi_);
+        std::vector<double> discW;
+        if (fill.discRows > 0) {
+            // 0.55.9: where the disc's image changes fast from azimuth to azimuth (seen nearly edge on, the near side is a thin band about the plane's
+            // directions): the first crossing's u = 1/r (clamped to [0, 1]: r >= 1) of probe rays at four angles (inside the edge, and outside it at 2, 6 and 15 %
+            // of the way to the opposite direction), at every fourth edge sample; its change between neighbours, spread over the samples between
+            const int step = 4, nP = (nEdge_ + step - 1) / step;
+            std::vector<double> u0(static_cast<std::size_t>(nP) * 4, 0.0);
+            parallel(nP * 4, [&](int k) {
+                const int i = (k / 4) * step, q = k % 4;
+                const double pe = edge_[static_cast<std::size_t>(i)], psi = q == 0 ? 0.5 * pe : pe + (kPi - pe) * (q == 1 ? 0.02 : q == 2 ? 0.06 : 0.15);
+                u0[static_cast<std::size_t>(k)] = std::clamp(ray(a, cam, psi, 2 * kPi * i / nEdge_, fill.rtolFar > rtol ? fill.rtolFar : rtol).u[0], 0.0, 1.0);
+            });
+            if (cancel && cancel->load()) { ok_ = false; return; }
+            discW.assign(static_cast<std::size_t>(nEdge_), 0.0);
+            for (int p = 0; p < nP; p++) {
+                double w = 0;
+                for (int q = 0; q < 4; q++) w += std::fabs(u0[static_cast<std::size_t>(((p + 1) % nP) * 4 + q)] - u0[static_cast<std::size_t>(p * 4 + q)]);
+                for (int i = p * step; i < std::min(nEdge_, (p + 1) * step); i++) discW[static_cast<std::size_t>(i)] = w / step;
+            }
+        }
+        rowsOf(edge_, probe, nChi, tau_, rowChi_, fill.discRows > 0 ? &discW : nullptr, fill.discRows);
         rowEdge_.assign(static_cast<std::size_t>(nChi), 0);
         parallel(nChi, [&](int i) { rowEdge_[static_cast<std::size_t>(i)] = shadowEdge(a, cam, rowChi_[static_cast<std::size_t>(i)]); });
         if (cancel && cancel->load()) { ok_ = false; return; }
     }
     v_.assign(static_cast<std::size_t>(2) * nChi * nS, SpinHit{});
-    std::atomic<long> mism{0}, lost{0};
+    std::atomic<long> mism{0}, lost{0}, fall{0};
     parallel(2 * nChi, [&](int row) {
         const int side = row / nChi, i = row % nChi;
         const double chi = rowChi_[static_cast<std::size_t>(i)];
@@ -192,16 +238,19 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
             const double psi = nodePsi(side, i, j), xr = std::fabs(psi - rowEdge_[static_cast<std::size_t>(i)]) / rowEdge_[static_cast<std::size_t>(i)];
             const double tol = fill.rtolFar > rtol ? std::clamp(rtol * xr / 1e-4, rtol, fill.rtolFar) : rtol;
             SpinHit h = ray(a, cam, psi, chi, tol);
+            if (h.fallback) fall++;
             if (h.sky != (side == 0)) { mism++; if (length(h.dir) == 0 && h.sky == false && side == 0) lost++; }
             v_[index(side, i, j)] = h;
         }
     });
     if (cancel && cancel->load()) { ok_ = false; return; }
+    fall_ = fall.load();
     finish(mism, lost);
     ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
 
-void SpinTable::rowsOf(const std::vector<double>& edge, const std::vector<Vec3>& probe, int nChi, std::vector<double>& tau, std::vector<double>& rowChi) {
+void SpinTable::rowsOf(const std::vector<double>& edge, const std::vector<Vec3>& probe, int nChi, std::vector<double>& tau, std::vector<double>& rowChi,
+                       const std::vector<double>* discW, double discShare) {
     const int nEdge = static_cast<int>(edge.size());
     std::vector<double> rt(static_cast<std::size_t>(nEdge)), d(static_cast<std::size_t>(nEdge));
     for (int i = 0; i < nEdge; i++) {
@@ -215,9 +264,25 @@ void SpinTable::rowsOf(const std::vector<double>& edge, const std::vector<Vec3>&
         d[static_cast<std::size_t>(i)] = m / 17;
         V += d[static_cast<std::size_t>(i)];
     }
+    // 0.55.9: the disc's share (the moving table, spin_sky.h SpinFill::discRows): the change of the first crossing between neighbouring azimuths, smoothed the same way
+    std::vector<double> dd(static_cast<std::size_t>(nEdge), 0.0);
+    double VD = 0;
+    if (discW && static_cast<int>(discW->size()) == nEdge) {
+        for (int i = 0; i < nEdge; i++) {
+            double m = 0;
+            // (smoothed more widely than the far direction's share, with weights falling linearly to 0 at +-W: tau's slope then changes gently, so a
+            // smooth quantity of chi stays smooth in tau, where the lookup's cubic works)
+            const int W = std::max(8, nEdge / 12);
+            double ws = 0;
+            for (int k = -W; k <= W; k++) { const double wk = W + 1 - std::abs(k); m += wk * (*discW)[static_cast<std::size_t>(((i + k) % nEdge + nEdge) % nEdge)]; ws += wk; }
+            dd[static_cast<std::size_t>(i)] = m / ws;
+            VD += dd[static_cast<std::size_t>(i)];
+        }
+    }
     tau.assign(static_cast<std::size_t>(nEdge) + 1, 0);
     for (int i = 0; i < nEdge; i++)
-        tau[static_cast<std::size_t>(i) + 1] = tau[static_cast<std::size_t>(i)] + (V > 1e-9 ? d[static_cast<std::size_t>(i)] / V : 0) + 1.0 / nEdge;
+        tau[static_cast<std::size_t>(i) + 1] = tau[static_cast<std::size_t>(i)] + (V > 1e-9 ? d[static_cast<std::size_t>(i)] / V : 0) + 1.0 / nEdge
+                                               + (VD > 1e-12 ? discShare * dd[static_cast<std::size_t>(i)] / VD : 0);
     const double tot = tau.back();
     for (double& x : tau) x /= tot;
     rowChi.assign(static_cast<std::size_t>(nChi), 0);

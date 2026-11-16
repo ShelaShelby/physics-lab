@@ -20,6 +20,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -28,6 +30,7 @@
 #include "blackhole/elliptic.h"
 #include "blackhole/geodesic.h"
 #include "blackhole/kerr.h"
+#include "blackhole/kerr_closed.h"
 #include "blackhole/mino.h"
 #include "blackhole/presets.h"
 #include "blackhole/schwarzschild.h"
@@ -1623,6 +1626,177 @@ static void testMino() {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.55.9: the spinning hole's closed forms (kerr_closed.h, Gralla & Lupsasca 2020a) and what they need beyond F (elliptic.h)
+static double gauss5(const std::function<double(double)>& g, double a, double b, int panels) {
+    const double xg[5] = {-0.906179845938664, -0.538469310105683, 0, 0.538469310105683, 0.906179845938664},
+                 wg[5] = {0.236926885056189, 0.478628670499366, 0.568888888888889, 0.478628670499366, 0.236926885056189};
+    double q = 0;
+    for (int i = 0; i < panels; i++) {
+        const double l = a + (b - a) * i / panels, r = a + (b - a) * (i + 1) / panels;
+        for (int j = 0; j < 5; j++) q += 0.5 * (r - l) * wg[j] * g(0.5 * (l + r) + 0.5 * (r - l) * xg[j]);
+    }
+    return q;
+}
+static void testClosedElliptic() {
+    // R_C in closed form against the duplication method
+    double w = 0;
+    for (double x : {0.0, 1e-9, 0.3, 0.999, 0.9995, 1.0, 1.0004, 1.002, 3.0, 1e6}) for (double y : {1e-6, 1.0, 7.0}) w = std::max(w, std::fabs(carlsonRC(x * y, y) / carlsonRCdup(x * y, y) - 1));
+    check(w < 1e-14, "R_C in closed form = the duplication method: " + f(w));
+    // Pi(n; phi | m), n < 1, any amplitude, m from -30 to 0.99, against a direct quadrature of its integral
+    w = 0;
+    for (double m : {-30.0, -2.0, -0.3, 0.0, 0.4, 0.9, 0.99}) for (double n : {-5.0, -0.5, 0.3, 0.95}) for (double ph : {0.3, 1.2, 1.57, 2.0, 2.9, -2.5}) {
+        const double q = gauss5([&](double t) { const double s = std::sin(t); return 1 / ((1 - n * s * s) * std::sqrt(1 - m * s * s)); }, 0, ph, 4000);
+        w = std::max(w, std::fabs(ellPiang(n, std::sin(ph), std::cos(ph), 1 - m) / q - 1));
+    }
+    check(w < 1e-12, "Pi(n < 1; phi | m) = its quadrature, 168 cases (m -30 to 0.99, phi -2.5 to 2.9): " + f(w));
+    // n > 1: the antiderivative continued past the pole (elliptic.h): its difference between two amplitudes on one side of a pole = the quadrature there
+    w = 0;
+    int nn = 0;
+    for (double m : {-30.0, -2.0, 0.0, 0.4, 0.9}) for (double n : {1.5, 4.0, 30.0}) {
+        const double p = std::asin(1 / std::sqrt(n));
+        const double iv[4][2] = {{0.05, p - 0.05}, {p + 0.03, 1.5}, {1.7, kPi - p - 0.04}, {kPi - p + 0.02, 3.0}};
+        for (const auto& ab : iv) {
+            if (ab[1] <= ab[0]) continue;
+            const double q = gauss5([&](double t) { const double s = std::sin(t); return 1 / ((1 - n * s * s) * std::sqrt(1 - m * s * s)); }, ab[0], ab[1], 20000);
+            const double v = ellPiang(n, std::sin(ab[1]), std::cos(ab[1]), 1 - m) - ellPiang(n, std::sin(ab[0]), std::cos(ab[0]), 1 - m);
+            w = std::max(w, std::fabs(v / q - 1)); nn++;
+        }
+    }
+    check(nn >= 50 && w < 1e-12, "Pi(n > 1): differences on either side of the poles = the quadrature, " + f(nn) + " intervals: " + f(w));
+    // the amplitude: F(am(u | m) | m) = u, m from -30 to 1 - 1e-8, u from -7 to 40 (several periods)
+    w = 0;
+    for (double m : {-30.0, -2.0, -0.3, 0.0, 0.4, 0.9, 0.99999999}) for (double u : {-7.0, -0.3, 0.1, 1.0, 3.3, 12.0, 40.0}) {
+        const double ph = jacobiAm(u, 1 - m), j = std::floor(ph / kPi + 0.5), p = ph - j * kPi;
+        w = std::max(w, std::fabs((ellFang(std::sin(p), std::cos(p), 1 - m) + 2 * j * ellKc(1 - m)) / u - 1));
+    }
+    check(w < 1e-12, "F(am(u | m) | m) = u, m -30 to 1 - 1e-8, u -7 to 40: " + f(w));
+}
+
+static void testClosed() {
+    testClosedElliptic();
+    // 1. the radial roots (GLa (95)): their sum is 0 (GLa (96)), R vanishes at each real one; on the critical curve (GLa (107), (108) at r~ in [r~2, r~3])
+    //    r3 = r4 = r~ (GLa: "On the critical curve C+, we have r3 = r4 > r+")
+    double ws = 0, wr = 0, wc = 0;
+    for (double a : {0.01, 0.6, 0.9, 0.99}) for (int k = 0; k < 40; k++) {
+        const double lam = -10 + 20.0 * k / 39, eta = 0.5 + 0.7 * k;
+        const ClosedRadial c = closedRoots(a, lam, eta);
+        ws = std::max(ws, std::fabs(c.r1 + c.r2 + c.r3 + c.r4) / (std::fabs(c.r1) + std::fabs(c.r4)));
+        const auto R = [&](double r) { const double P = r * r + a * a - a * lam, D = r * r - 2 * r + a * a; return P * P - D * (eta + (lam - a) * (lam - a)); };
+        for (double r : {c.r1, c.r2, c.r3, c.r4}) if (c.im1 == 0 && c.im3 == 0) wr = std::max(wr, std::fabs(R(r)) / (r * r * r * r + std::fabs(lam * lam + eta) * r * r + 1));
+        const double r2t = 2 * (1 + std::cos(2 * std::acos(-a) / 3)), r3t = 2 * (1 + std::cos(2 * std::acos(a) / 3)), rt = r2t + (r3t - r2t) * (k + 0.5) / 40;
+        const ClosedRadial cc = closedRoots(a, criticalLambda(a, rt), criticalEta(a, rt));
+        wc = std::max(wc, std::max(std::fabs(cc.r3 - rt), std::fabs(cc.r4 - rt)) / rt);
+    }
+    check(ws < 1e-13 && wr < 1e-12, "the radial roots: r1 + r2 + r3 + r4 = 0 (GLa (96)): " + f(ws) + "; R(r_i) = 0: " + f(wr));
+    check(wc < 1e-5, "on the critical curve (GLa (107), (108)) r3 = r4 = r~ (a double root; found to the square root of the rounding): " + f(wc));
+    // 2. the radial path integrals from a radius to infinity (GLa App. B, every substitution that reaches infinity) against a direct quadrature of (B4)
+    {
+        unsigned seed = 11;
+        const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0; };
+        double wi[6][3] = {};
+        int cnt[6] = {};
+        for (int k = 0; k < 6000; k++) {
+            const double a = std::vector<double>{0.01, 0.6, 0.9, 0.99}[static_cast<std::size_t>(k % 4)];
+            const double lam = k % 8 < 4 ? -12 + 24 * rnd() : -2 + 4 * rnd(), eta = k % 8 < 4 ? -1 + 40 * rnd() : -1 + 4 * rnd();
+            if (eta < 0 && (std::fabs(lam) > a || eta < -(std::fabs(lam) - a) * (std::fabs(lam) - a))) continue;   // outside the allowed region (GLa (24))
+            const double rp = horizon(a), rm = 2 - rp, rs = rp + 0.05 + 30 * rnd();
+            const auto R = [&](double r) { const double P = r * r + a * a - a * lam, D = r * r - 2 * r + a * a; return P * P - D * (eta + (lam - a) * (lam - a)); };
+            if (R(rs) <= 0) continue;
+            const ClosedRadial c = closedRoots(a, lam, eta);
+            const int sub = c.im1 != 0 ? 4 : c.im3 != 0 ? 3 : c.r4 > rp ? (rs <= c.r3 ? 1 : 2) : 5;
+            if (sub == 1) continue;
+            double I0, Ip, Im;
+            if (!closedRadialIntegrals(a, lam, eta, rs, std::numeric_limits<double>::infinity(), I0, Ip, Im)) { check(false, "radial integrals: no answer"); continue; }
+            double q[3] = {0, 0, 0};
+            for (int j = 0; j < 3; j++) q[j] = gauss5([&](double t) { const double r = rs + t / (1 - t), g = 1 / ((1 - t) * (1 - t) * std::sqrt(R(r))); return j == 0 ? g : g / (r - (j == 1 ? rp : rm)); }, 0, 1, 2000);
+            const double e[3] = {std::fabs(I0 / q[0] - 1), std::fabs(Ip / q[1] - 1), std::fabs(Im / q[2] - 1)};
+            cnt[sub]++;
+            for (int j = 0; j < 3; j++) wi[sub][j] = std::max(wi[sub][j], e[j]);
+        }
+        for (int sub : {2, 3, 4, 5}) {
+            // (case (2): near lambda = (r+^2 + a^2) / a the root r3 meets r+ (R(r+) = P(r+)^2 = 0) and the two terms of I+ (B39) cancel; the term's
+            // factor r+ - a lambda / 2 (B2) vanishes there too: the effect on phi is below 1e-10 rad at the samples (REPORT 0.55.9))
+            // (case (3) at small spin: r- within a relative 1e-4 of r2, I_- is taken as the integral with r2 in its place (kerr_closed.cpp nearR2): 2e-5 of I_-,
+            // whose weight in I_phi is of order a^2)
+            const double lim = sub == 2 ? 1e-2 : 1e-8, limM = sub == 3 ? 2e-5 : 1e-8;
+            check(cnt[sub] > 0 && wi[sub][0] < 1e-11 && wi[sub][1] < lim && wi[sub][2] < limM,
+                  "radial path integrals to infinity, substitution " + f(sub) + " (5: case II), " + f(cnt[sub]) + " cases: I_r " + f(wi[sub][0]) + ", I_+ " + f(wi[sub][1]) + ", I_- " + f(wi[sub][2]));
+        }
+    }
+    // 3. every ray of the camera against KerrBL at 1e-12 (the reference of testMino): spin 0.01, 0.6, 0.9, 0.99, cameras far and close in (inside the
+    //    photon shell: case (1)), near the axis (vortical rays, case (4)); rays near and far from the shadow's edge, both sides, the rows over the poles
+    //    (chi 0, pi: lambda = 0). Counted per substitution and polar type, so that no case is left untested.
+    {
+        unsigned seed = 7;
+        const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0; };
+        struct Case { double a, rc, th; };
+        int tot[6] = {}, vort = 0, all = 0;
+        for (const Case cs : {Case{0.01, 20, 1.3}, Case{0.6, 74.1, 1.5107}, Case{0.9, 20, 1.396}, Case{0.99, 6, 1.4}, Case{0.9, 8, 0.4}, Case{0.9, 2.5, 1.2}, Case{0.6, 3, 0.3}}) {
+            const Camera cam{cs.rc, cs.th, 0};
+            double dir[2] = {0, 0}, du = 0, db = 0;
+            int ends = 0, lost = 0, n = 0, crossN = 0;
+            for (int k = 0; k < 60; k++) {
+                const double chi = k < 4 ? kPi / 2 * k : 2 * kPi * rnd(), pe = shadowEdge(cs.a, cam, chi);
+                for (int band = 0; band < 2; band++) for (int side = 0; side < 2; side++) {
+                    const double x = pe * std::pow(10.0, band == 0 ? -6 + 2 * rnd() : -2 + 2 * rnd());
+                    const double psi = side == 0 && band == 1 ? pe + (kPi - pe) * rnd() : side ? pe - x : pe + x;
+                    if (psi <= 0 || psi >= kPi) continue;
+                    const SpinHit ref = spinRay(cs.a, cam, psi, chi, 1e-12);
+                    const ClosedEnd e = traceClosed(cs.a, cam, lookAt(psi, chi), kSpinCross);
+                    n++;
+                    if (e.kind == RayEnd::Lost) { lost++; continue; }
+                    tot[e.radial]++; vort += e.vortical;
+                    if ((e.kind == RayEnd::Sky) != ref.sky) { ends++; continue; }
+                    db = std::max(db, std::fabs(e.b - ref.b));
+                    if (ref.sky) dir[band] = std::max(dir[band], angleBetween(e.dir, ref.dir));
+                    for (int q = 0; q < kSpinCross; q++) {
+                        if (!(ref.u[q] > 0 && ref.u[q] < 1 / (horizon(cs.a) + 2e-3))) continue;   // (the real crossings; spinRay continues the rest inside the horizon)
+                        crossN++;
+                        du = std::max(du, q < e.nCross ? std::fabs(e.u[q] / ref.u[q] - 1) : 1.0);
+                    }
+                }
+            }
+            all += n;
+            const std::string at = "closed forms, a " + f(cs.a) + " r " + f(cs.rc) + " theta " + f(cs.th) + ", " + f(n) + " rays: ";
+            check(lost == 0 && ends == 0 && db == 0, at + "every ray answered (" + f(lost) + " not), ends where KerrBL's does (" + f(ends) + " differ), the same b (" + f(db) + ")");
+            check(dir[0] < 3e-6 && dir[1] < 5e-8, at + "the far direction against KerrBL at 1e-12, x / psi_e 1e-6..1e-4: " + f(dir[0]) + " rad (testMino's limit 3e-5), farther: " + f(dir[1]) + " (5e-8)");
+            check(du < 1e-6, at + f(crossN) + " crossings of the equator, their radii against KerrBL at 1e-12: " + f(du) + " (testMino's limit 1.5e-3)");
+        }
+        std::printf("info: closed forms against KerrBL: %d rays; substitution (1) %d, (2) %d, (3) %d, (4) %d, case II %d; polar type A %d, B (vortical) %d\n", all, tot[1], tot[2],
+                    tot[3], tot[4], tot[5], all - vort, vort);
+        check(tot[1] > 0 && tot[2] > 0 && tot[3] > 0 && tot[4] > 0 && tot[5] > 0 && vort > 0, "closed forms: every radial substitution, case II and both polar types met by the rays above");
+    }
+    // 4. spin towards 0 against the non-spinning closed form (schwarzschild.h, Luminet 1979; testIntegratorVsClosed's rays and limit, camera in the plane).
+    //    Near the edge the far direction changes as 1/x with b, and the spin moves b's critical value by about a: so spin 1e-12 for the limit, and the
+    //    difference at spins 1e-9, 1e-10, 1e-11 shrinks in proportion to the spin (the first-order effect of the spin, not a rounding floor).
+    //    (i = 0, psi = 0: a ray straight out along e_r has eta + (lambda - a)^2 = 0, GLa's excluded principal null ray (77); not used.)
+    double wa[4] = {0, 0, 0, 0};
+    for (int ia = 0; ia < 4; ia++) {
+        const double a = std::vector<double>{1e-12, 1e-11, 1e-10, 1e-9}[static_cast<std::size_t>(ia)];
+        double worst = 0;
+        int n = 0;
+        for (double rO : {2.5, 3.5, 6.0, 30.0, 1000.0}) {
+            const Camera cam{rO, kPi / 2, 0};
+            const double edge = kPi - shadowAngle(rO);
+            for (int i = 1; i < 31; i++) {
+                const double x = edge * std::pow(1e-4, i / 29.0), psi = edge - x, tilt = 0.37 + 0.9 * i;
+                const Vec3 look{std::cos(psi), std::sin(psi) * std::sin(tilt), std::sin(psi) * std::cos(tilt)};
+                const ClosedEnd e = traceClosed(a, cam, look, 0);
+                const Bend B = bendFromCamera(rO, psi);
+                if (e.kind != RayEnd::Sky || B.captured) { check(false, "spin " + f(a) + ": a ray outside the shadow escapes, rO " + f(rO)); continue; }
+                const Vec3 d = bentDirection(Vec3{1, 0, 0}, Vec3{look.x, look.z, -look.y}, look.x, B.dphi);
+                worst = std::max(worst, angleBetween(d, e.dir) / (2e-8 + 1e-11 / x));
+                n++;
+            }
+        }
+        wa[ia] = worst;
+        if (ia == 0) check(n == 150 && worst < 1, "closed forms at spin 1e-12 = the non-spinning closed form (schwarzschild.h), 150 rays to 1e-4 rad from the edge: worst " + f(worst) + " of the limit 2e-8 + 1e-11/x rad");
+    }
+    check(std::fabs(wa[2] / wa[1] - 10) < 0.5 && std::fabs(wa[3] / wa[2] - 10) < 0.5, "closed forms: the difference from the non-spinning form grows in proportion to the spin (1e-11, 1e-10, 1e-9: "
+          + f(wa[1]) + ", " + f(wa[2]) + ", " + f(wa[3]) + " of the limit)");
+}
+
 // 0.55.8: the table made while the view moves (kSpinMoving) against the integrator at full tolerance (KerrBL, 1e-12): no worse than 0.55.7's coarse table
 // (KerrBL at 1e-8 for every ray, the same grid) on the same rays, in each band of x / psi_e, its b, and its disc's radius and g (the measures of testSpinTable;
 // within 2 %: two integrators of one tolerance, sampled at 480 places); each table's numbers are printed (REPORT 0.55.8)
@@ -1660,7 +1834,8 @@ static void testMovingTable() {
                 }
             }
         };
-        const SpinTable O(cs.a, cs.rc, cs.th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, nullptr, 0, SpinFill{1e-8, false}), M(cs.a, cs.rc, cs.th, kSpinChiCoarse, kSpinSCoarse,
+        // (0.55.7's coarse table at its own size, 32 x 64 x 256; 0.55.9's moving table has more rows, spin_sky.h)
+        const SpinTable O(cs.a, cs.rc, cs.th, 32, 64, 256, nullptr, 0, SpinFill{1e-8, false}), M(cs.a, cs.rc, cs.th, kSpinChiCoarse, kSpinSCoarse,
                           kSpinEdgeCoarse, nullptr, 0, kSpinMoving);
         double o[8], m[8];
         measure(O, o); measure(M, m);
@@ -2080,6 +2255,7 @@ int main() {
     testSpinSymmetry();
     testSpinTable();
     testMino();
+    testClosed();
     testMovingTable();
     testSpinLab();
     testLooks();

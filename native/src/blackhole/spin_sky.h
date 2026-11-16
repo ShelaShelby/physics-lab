@@ -37,7 +37,7 @@ constexpr double kSpinXlo = 1e-8, kSpinXc = 0.3;
 constexpr int kSpinCross = 4;
 // the lab's two table sizes (rows nChi, columns nS per side, edge samples): the coarse one at once while a setting changes, the fine one when the view rests
 // (the fine one: the far direction within 2e-3 rad of the integrator from 1e-3 of the shadow's radius outward, 1e-2 rad nearer, up to spin kSpinTop)
-constexpr int kSpinChiFine = 192, kSpinSFine = 384, kSpinEdge = 2048, kSpinChiCoarse = 32, kSpinSCoarse = 64, kSpinEdgeCoarse = 256;
+constexpr int kSpinChiFine = 192, kSpinSFine = 384, kSpinEdge = 2048, kSpinChiCoarse = 64, kSpinSCoarse = 72, kSpinEdgeCoarse = 256;
 constexpr double kSpinTop = 0.99;   // the highest spin the tests pass at (tests/test_blackhole.cpp testSpinTable; REPORT 0.55.2): the Spin control's top
 
 struct SpinHit {
@@ -45,6 +45,7 @@ struct SpinHit {
     Vec3 dir;                    // sky: the far direction (chart axes at infinity, camera at phi = 0)
     double b = 0;
     double u[kSpinCross] = {};   // 1 / r at the crossings of the equator (see above)
+    bool fallback = false;       // 0.55.9: followed by mino.h because the closed forms gave no answer (spinRayClosed; counted by the table)
 };
 
 // 0.55.8: how a table's rays are followed: their tolerance (spinRay's rtol), the form (mino.h: the Mino-time form; else geodesic.h's KerrBL) and the
@@ -55,12 +56,19 @@ struct SpinFill {
     double xlo = kSpinXlo;
     double rtolFar = 0;          // > rtol: a node's tolerance is rtol up to |x| / psi_e = 1e-4, then grows in proportion to |x| / psi_e up to rtolFar (the far
                                  // direction's error from the integrator grows as 1/|x| near the edge, GLb (42); far from it the table's interpolation is the larger)
+    bool closed = false;         // 0.55.9: every ray from the closed forms (kerr_closed.h; no tolerance); the rest of the fields then only say how a ray the closed
+                                 // forms cannot answer is followed (mino.h at rtol)
+    double discRows = 0;         // 0.55.9: > 0: this share of the rows (against 1 for the far direction's and 1 even) also where the disc's image changes fast (SpinTable::rowsOf; REPORT 0.55.9: seen nearly edge on, the moving table's
+                                 // 32 rows missed the disc's thin near side, so the picture changed shape when the view came to rest)
 };
 // 0.55.8, the lab's two (blackhole_view.cpp; REPORT 0.55.8; SpinFill{} is 0.55.7's: KerrBL at 1e-10 for every ray): the fine one, Mino's form at 0.55.7's
 // tolerance up to 1e-2 of psi_e, looser beyond (tests/test_blackhole.cpp testSpinTable keeps its limits); the one made while the view moves, Mino's form at the
 // coarse table's 0.55.7 tolerance near the edge, looser far from it (testMovingTable: no worse than 0.55.7's coarse table)
-constexpr SpinFill kSpinFineFill{1e-10, true, kSpinXlo, 1e-8};
-constexpr SpinFill kSpinMoving{1e-8, true, kSpinXlo, 1e-5};
+// 0.55.9: both from the closed forms (kerr_closed.h); kSpinFineFillMino and kSpinMovingMino are 0.55.8's, kept as the switch for comparing
+constexpr SpinFill kSpinFineFillMino{1e-10, true, kSpinXlo, 1e-8};
+constexpr SpinFill kSpinMovingMino{1e-8, true, kSpinXlo, 1e-5};
+constexpr SpinFill kSpinFineFill{1e-10, true, kSpinXlo, 1e-8, true};
+constexpr SpinFill kSpinMoving{1e-8, true, kSpinXlo, 1e-5, true, 0.3};
 
 class SpinTable {
 public:
@@ -72,7 +80,9 @@ public:
     SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const Parts& parts);
     // 0.55.6: the rows from the edge samples and the probe rays' far directions (one per sample, at x = 1e-4 psi_e): tau and the rows' azimuths (the step
     // the processor's fill takes between its probes and its rows' edges)
-    static void rowsOf(const std::vector<double>& edge, const std::vector<Vec3>& probe, int nChi, std::vector<double>& tau, std::vector<double>& rowChi);
+    // 0.55.9: discW (one per edge sample, or null): a further share of the rows (discShare against 1 + 1) where the disc's image changes fast (SpinFill::discRows)
+    static void rowsOf(const std::vector<double>& edge, const std::vector<Vec3>& probe, int nChi, std::vector<double>& tau, std::vector<double>& rowChi,
+                       const std::vector<double>* discW = nullptr, double discShare = 0);
     bool ok() const { return ok_; }
     double spin() const { return a_; }
     double rC() const { return rC_; }
@@ -85,6 +95,7 @@ public:
     long rays() const { return rays_; }
     long mismatches() const { return mism_; }        // rays whose end disagrees with their side of the closed edge (expected 0)
     long lost() const { return lost_; }
+    long fallbacks() const { return fall_; }          // 0.55.9: rays the closed forms could not answer (followed by mino.h instead)
     double edgeSample(int i) const { return edge_[static_cast<std::size_t>(i)]; }
     double edge(double chi) const;                   // the cubic through the samples
     // the rows are not evenly spaced in chi: evenly in tau, which grows with chi and with the change of the far direction close to the edge (a probe ray at
@@ -114,7 +125,7 @@ private:
     int nChi_, nS_, nEdge_;
     bool ok_ = true, card_ = false;
     double ms_ = 0;
-    long rays_ = 0, mism_ = 0, lost_ = 0;
+    long rays_ = 0, mism_ = 0, lost_ = 0, fall_ = 0;
     std::vector<double> edge_, tau_, rowChi_, rowEdge_;
     std::vector<SpinHit> v_;
     std::vector<float> fa_, fb_, fe_, ft_;
@@ -126,6 +137,9 @@ private:
 SpinHit spinRay(double a, const Camera& cam, double psi, double chi, double rtol = 1e-11);
 // 0.55.8: the same from the Mino-time form (mino.h): the moving table's rays
 SpinHit spinRayMino(double a, const Camera& cam, double psi, double chi, double rtol);
+// 0.55.9: the same from the closed forms (kerr_closed.h; the crossings continued as spinRayMino does); a ray they cannot answer is followed by spinRayMino at
+// rtol (its fallback flag set)
+SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, double rtol);
 
 // the disc through a hit: the first crossing with rIn <= r <= rOut (order, r, g); order -1 for none
 struct SpinDisc { int order = -1; double r = 0, g = 0; };
