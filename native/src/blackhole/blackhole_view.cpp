@@ -8,9 +8,15 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <functional>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "blackhole/light.h"
+#include "blackhole/low_priority.h"
 #include "blackhole/spin.h"
 #include "orbit/sky.h"
 #include "render/gl_loader.h"
@@ -99,7 +105,16 @@ void cameraFrame(const HoleView& v, double th, Vec3& er, Vec3& et, Vec3& ep) {
 }
 }  // namespace
 
-BlackHoleView::~BlackHoleView() { stopSpinWorker(); }
+BlackHoleView::BlackHoleView() = default;
+
+BlackHoleView::~BlackHoleView() {
+    {   std::lock_guard<std::mutex> g(workMx_);                             // 0.55.5: the worker stops after its job (a table fill stops at once)
+        workQuit_ = true; }
+    stale_ = true;
+    workCv_.notify_all();
+    if (worker_.joinable()) worker_.join();
+    stopSpinWorker();
+}
 
 void BlackHoleView::stopSpinWorker() {
     spinCancel_ = true;
@@ -111,16 +126,20 @@ void BlackHoleView::stopSpinWorker() {
 }
 
 void BlackHoleView::ensureDiscF(double spin) {
-    if (discFSpin_ == spin && !discF_.empty()) return;
+    if (discFSpin_ == spin && discF_ && !discF_->empty()) return;
     const int n = 1024;
     const double r0 = discInner(spin), l0 = std::log(r0), l1 = std::log(kOuterMax), dl = (l1 - l0) / (n - 1);
-    discF_.resize(n);
-    for (int i = 0; i < n; i++) discF_[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, discFlux(std::exp(l0 + i * dl), spin)), 0.25));
+    auto f = std::make_shared<std::vector<float>>(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, discFlux(std::exp(l0 + i * dl), spin)), 0.25));
+    discF_ = std::move(f);
     discFSpin_ = spin; discFLog0_ = l0; discFDl_ = dl;
     discFVer_ = nextVersion();
 }
 
-void BlackHoleView::ensureSpin(const Settings& s, bool wait) {
+void BlackHoleView::ensureSpin(const Settings& s, bool wait) { ensureSpinTable(s, wait, nullptr); }
+
+// (false: the coarse fill was stopped by cancel; the table shown is unchanged)
+bool BlackHoleView::ensureSpinTable(const Settings& s, bool wait, const std::atomic<bool>* cancel) {
     const double a = s.spin, r = s.dist, th = s.pitch;
     const auto mine = [&](const SpinTable& t) { return t.spin() == a && t.rC() == r && t.thC() == th; };
     const auto show = [&](std::shared_ptr<const SpinTable> t) {
@@ -129,10 +148,15 @@ void BlackHoleView::ensureSpin(const Settings& s, bool wait) {
         const auto t0 = std::chrono::steady_clock::now();
         spinStars_ = std::make_unique<SpinStars>(*spin_);
         st_.spinStarsMs = msSince(t0);
+        st_.spinBins++;
     };
+    const bool offered = fineExternal_ && fineOffer_ && mine(*fineOffer_);   // 0.55.5 (the worker's view): the owner's fine table
+    const auto showOffered = [&] { st_.spinFineMs = fineOffer_->fillMs(); st_.spinFineFills++; st_.spinFine = true; show(fineOffer_); };
     if (!spinMatches(s)) {                                                  // settings changed: drop the fine one being made, the coarse one now
-        stopSpinWorker();
-        auto c = std::make_shared<SpinTable>(a, r, th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, nullptr, 0, 1e-8);
+        if (offered) { showOffered(); return true; }
+        if (!fineExternal_) stopSpinWorker();
+        auto c = std::make_shared<SpinTable>(a, r, th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, cancel, 0, 1e-8);
+        if (!c->ok()) return false;
         st_.spinCoarseMs = c->fillMs();
         st_.spinCoarseFills++;
         st_.spinFine = false;
@@ -140,23 +164,26 @@ void BlackHoleView::ensureSpin(const Settings& s, bool wait) {
         spinChangedAt_ = nowSeconds();
         spinFineStarted_ = false;
     }
-    if (st_.spinFine) return;
+    if (st_.spinFine) return true;
+    if (fineExternal_) { if (offered) showOffered(); return true; }
     if (wait) {
         stopSpinWorker();
         auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge);
         st_.spinFineMs = f->fillMs(); st_.spinFineFills++; st_.spinFine = true;
         show(std::move(f));
-        return;
+        return true;
     }
     if (!spinFineStarted_ && nowSeconds() - spinChangedAt_ >= kSpinRest) {   // the view has rested: the fine one on a thread of its own
         spinFineStarted_ = true;
         spinDone_ = false;
         const int threads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
-        spinWorker_ = std::thread([this, a, r, th, threads] {
+        const std::function<void()> job = [this, a, r, th, threads] {
+            lowerThisThread();                                              // 0.55.5: below normal priority (low_priority.h)
             auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge, &spinCancel_, threads);
             if (f->ok()) { std::lock_guard<std::mutex> g(spinMx_); spinReady_ = std::move(f); }
             spinDone_ = true;
-        });
+        };
+        spinWorker_ = std::thread(job);
     }
     if (spinFineStarted_ && spinDone_) {
         if (spinWorker_.joinable()) spinWorker_.join();
@@ -165,6 +192,7 @@ void BlackHoleView::ensureSpin(const Settings& s, bool wait) {
         spinDone_ = false;
         if (f && mine(*f)) { st_.spinFineMs = f->fillMs(); st_.spinFineFills++; st_.spinFine = true; show(std::move(f)); }
     }
+    return true;
 }
 
 void BlackHoleView::spinEdgePoints(const Settings& s, double W, double H, double cx, double cy, int n, std::vector<double>& out) const {
@@ -198,7 +226,7 @@ DiscPixel BlackHoleView::spinPixel(const Settings& s, const HoleView& v, double 
 void BlackHoleView::ensureDisc(double dist) {
     if (disc_ && discDist_ == dist) return;
     const auto t0 = std::chrono::steady_clock::now();
-    disc_ = std::make_unique<DiscTable>(dist);
+    disc_ = std::make_shared<const DiscTable>(dist);
     discDist_ = dist;
     discVer_ = nextVersion();
     st_.discMs = msSince(t0);
@@ -248,7 +276,7 @@ const std::vector<float>& BlackHoleView::colourTable(int& n, double& log0, doubl
 void BlackHoleView::ensureTable(double dist) {
     if (table_ && tableDist_ == dist) return;
     const auto t0 = std::chrono::steady_clock::now();
-    table_ = std::make_unique<LensTable>(dist);
+    table_ = std::make_shared<const LensTable>(dist);
     tableDist_ = dist;
     tableVer_ = nextVersion();
     st_.tableMs = msSince(t0);
@@ -296,7 +324,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.kO[2] = static_cast<float>(dot(ep, rows[0])); L.kO[3] = static_cast<float>(dot(ep, rows[1]));
         if (s.disc) {
             L.disc = true;
-            L.discF = &discF_; L.discFN = static_cast<int>(discF_.size()); L.discFLog0 = discFLog0_; L.discFDl = discFDl_; L.discFVersion = discFVer_;
+            L.discF = discF_.get(); L.discFN = discF_ ? static_cast<int>(discF_->size()) : 0; L.discFLog0 = discFLog0_; L.discFDl = discFDl_; L.discFVersion = discFVer_;
             double l0, dl;
             L.discCol = &colourTable(L.discC, l0, dl);
             L.colLog0 = l0; L.colDlog = dl; L.colVersion = 1;
@@ -313,6 +341,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
                 L.discFix[3] = 1;
             }
             if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
+            L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread;   // 0.55.5
         }
         return L;
     }
@@ -334,28 +363,47 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.tScale = std::pow(p.fluxScale() / stefanBoltzmann(), 0.25);       // T = tScale F(r)^(1/4), F for Mdot = M = 1 (disc.h)
         L.white = st_.look.white;
         if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
+        L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread;   // 0.55.5
     }
     return L;
 }
 
-void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy) {
-    R.rect(0, 0, W, H, render::Color{0, 0, 0, 1});                          // space: black, whatever the theme's page
-    if (s.spin > 0 && s.bend) { drawSpin(R, s, W, H, cx, cy); return; }
+int BlackHoleView::lookStep(double W, double H, bool exact) {
+    if (exact) return 4;
+    return std::max(4, static_cast<int>(std::ceil(4 * std::sqrt(std::max(1.0, W * H) / (1280.0 * 800.0)) - 1e-9)));
+}
+
+BlackHoleView::Key BlackHoleView::keyOf(const Settings& s, double W, double H, double cx, double cy) {
+    const bool spinning = s.spin > 0 && s.bend;
+    const bool disc = spinning ? s.disc : s.disc && s.bend;
+    return Key{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, spinning ? s.spin : 0.0, 0,
+               static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
+}
+
+// 0.55.5: the processor's part of a picture (until 0.55.4 the first half of draw): the tables, the exposure and the stars' images, only when the view changed
+bool BlackHoleView::prepare(const Settings& s, double W, double H, double cx, double cy, const std::atomic<bool>* cancel) {
+    if (s.spin > 0 && s.bend) return prepareSpin(s, W, H, cx, cy, cancel);
     ensureTable(s.dist);
     const HoleView v = holeView(s, W, H, cx, cy);
     st_.shadowPx = s.bend ? (kPi - table_->edge()) * v.K : 0;
     st_.cx = cx; st_.cy = cy;
     const bool disc = s.disc && s.bend;
-    if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; return; }      // Sky: Black and no disc: nothing is lit, the picture is black
+    if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; lit_ = false; return true; }   // Sky: Black and no disc: nothing is lit, the picture is black
+    lit_ = true;
     if (disc) ensureDisc(s.dist);
     const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, 0.0, 0, static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
-    const bool changed = !(k == key_);
-    glareRest(k);
-    if (changed) st_.look = disc ? discLook(*disc_, s, v, W, H) : DiscLook{};   // the exposure first: the shader needs the white
-    R.lensSky(lensFor(s, v));
-    if (!s.skyOurs) { dots_.clear(); key_ = k; return; }
+    const bool changed = !(k == key_) || (exact_ && !keyExact_);
+    if (changed) {                                                          // the exposure first: the shader needs the white
+        const auto tl = std::chrono::steady_clock::now();
+        st_.look = disc ? discLook(*disc_, s, v, W, H, lookStep(W, H, exact_)) : DiscLook{};
+        st_.lookMs = msSince(tl);
+        st_.lookFills++;
+        made_[0] = s.yaw; made_[1] = s.pitch; made_[2] = s.dist; made_[3] = 0;
+    }
+    if (!s.skyOurs) { dots_.clear(); key_ = k; keyExact_ = exact_; return true; }
     if (changed) {                                                          // the stars' images only when the view changed
         key_ = k;
+        keyExact_ = exact_;
         int hidden = 0;
         const auto t0 = std::chrono::steady_clock::now();
         dots_.clear();
@@ -387,12 +435,12 @@ void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, dou
         st_.starsMs = msSince(t0);
         st_.starFills++;
     }
-    for (const Dot& d : dots_) R.disc(d.x, d.y, d.r, d.c);
+    return true;
 }
 
-void BlackHoleView::drawSpin(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy) {
+bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx, double cy, const std::atomic<bool>* cancel) {
     static const bool wait = std::getenv("PL_BH_SPINWAIT") != nullptr;      // (automatic checks: the fine table at once, on this thread)
-    ensureSpin(s, wait);
+    if (!ensureSpinTable(s, wait, cancel)) return false;
     const HoleView v = holeView(s, W, H, cx, cy);
     const SpinTable& T = *spin_;
     double mean = 0;
@@ -400,29 +448,53 @@ void BlackHoleView::drawSpin(render::Renderer2D& R, const Settings& s, double W,
     st_.shadowPx = mean * v.K;
     st_.cx = cx; st_.cy = cy;
     const bool disc = s.disc;
-    if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; return; }
+    if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; lit_ = false; return true; }
+    lit_ = true;
     if (disc) ensureDiscF(s.spin);
     const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, s.spin, spinVer_, static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
-    const bool changed = !(k == key_);
-    glareRest(k);
+    const bool changed = !(k == key_) || (exact_ && !keyExact_);
+    if (changed) {
+        made_[0] = s.yaw; made_[1] = s.pitch; made_[2] = s.dist; made_[3] = s.spin;
+        st_.lookFills++;
+    }
     if (changed && disc) {                                                  // the exposure first (lab.h discLook's rule, through the spin table)
+        const auto tl = std::chrono::steady_clock::now();
         DiscLook L;
-        const int step = 4;
-        for (double Y = step / 2.0; Y < H; Y += step)
-            for (double X = step / 2.0; X < W; X += step) {
-                const DiscPixel q = spinPixel(s, v, X, Y);
-                if (q.hit.order < 0) continue;
-                L.any = true;
-                L.brightY = std::max(L.brightY, q.Y);
-                L.brightMax = std::max({L.brightMax, q.rgb[0], q.rgb[1], q.rgb[2]});
-            }
+        const int step = lookStep(W, H, exact_);                            // 0.55.5: 4 at rest (as before); while moving, no more points than 1280 x 800 in steps of 4
+        // 0.55.5: the rows shared out over threads (the largest values are the same in any order: the result is exactly the one-thread scan's)
+        std::vector<double> rows;
+        for (double Y = step / 2.0; Y < H; Y += step) rows.push_back(Y);
+        const int nth = std::max(1, std::min(8, static_cast<int>(std::thread::hardware_concurrency())));
+        std::vector<DiscLook> part(static_cast<std::size_t>(nth));
+        const std::function<void(int)> scan = [&](int k) {
+            DiscLook& P = part[static_cast<std::size_t>(k)];
+            for (std::size_t j = static_cast<std::size_t>(k); j < rows.size(); j += static_cast<std::size_t>(nth))
+                for (double X = step / 2.0; X < W; X += step) {
+                    const DiscPixel q = spinPixel(s, v, X, rows[j]);
+                    if (q.hit.order < 0) continue;
+                    P.any = true;
+                    P.brightY = std::max(P.brightY, q.Y);
+                    P.brightMax = std::max({P.brightMax, q.rgb[0], q.rgb[1], q.rgb[2]});
+                }
+        };
+        {   const bool low = thisThreadLow();
+            std::vector<std::thread> pool;
+            for (int k = 1; k < nth; k++) pool.emplace_back([&scan, k, low] { if (low) lowerThisThread(); scan(k); });
+            scan(0);
+            for (std::thread& th : pool) th.join(); }
+        for (const DiscLook& P : part) {
+            L.any = L.any || P.any;
+            L.brightY = std::max(L.brightY, P.brightY);
+            L.brightMax = std::max(L.brightMax, P.brightMax);
+        }
         L.white = s.expAuto ? (L.brightMax > 0 ? L.brightMax : 1) : std::pow(10.0, s.expLog);
         st_.look = L;
+        st_.lookMs = msSince(tl);
     } else if (changed) st_.look = DiscLook{};
-    R.lensSky(lensFor(s, v));
-    if (!s.skyOurs) { dots_.clear(); key_ = k; return; }
+    if (!s.skyOurs) { dots_.clear(); key_ = k; keyExact_ = exact_; return true; }
     if (changed) {                                                          // the stars' images by inverting the table (spin_sky.h SpinStars)
         key_ = k;
+        keyExact_ = exact_;
         int hidden = 0, stars = 0, images = 0, capped = 0;
         const auto t0 = std::chrono::steady_clock::now();
         dots_.clear();
@@ -458,7 +530,208 @@ void BlackHoleView::drawSpin(render::Renderer2D& R, const Settings& s, double W,
         st_.starsMs = msSince(t0);
         st_.starFills++;
     }
+    return true;
+}
+
+// hands the prepared picture to the renderer (until 0.55.4 the second half of draw)
+void BlackHoleView::emit(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy, const Key& restKey) {
+    if (!lit_) return;
+    glareRest(restKey);
+    if (async && (st_.behind || !shownExact_)) glareReady_ = glareNow;     // 0.55.5: the glare only on the picture of the settings asked for, at rest
+    const HoleView v = holeView(s, W, H, cx, cy);
+    R.lensSky(lensFor(s, v));
     for (const Dot& d : dots_) R.disc(d.x, d.y, d.r, d.c);
+}
+
+void BlackHoleView::draw(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy) {
+    const auto t0 = std::chrono::steady_clock::now();
+    R.rect(0, 0, W, H, render::Color{0, 0, 0, 1});                          // space: black, whatever the theme's page
+    if (async) drawAsync(R, s, W, H, cx, cy);
+    else {
+        exact_ = true;
+        prepare(s, W, H, cx, cy, nullptr);
+        shownS_ = s; shownExact_ = true; hasShown_ = true;
+        st_.behind = false; st_.behindMs = 0;
+        std::copy(made_, made_ + 4, st_.made);
+        emit(R, s, W, H, cx, cy, key_);
+    }
+    st_.frameMs = msSince(t0);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.55.5: the worker
+
+// a request to the worker and the finished picture it hands back: the view's whole state for the frame, of one set of settings
+struct BlackHoleView::Request {
+    Settings s;
+    double W = 0, H = 0, cx = 0, cy = 0;
+    bool exact = true;
+    std::shared_ptr<const SpinTable> fine;
+    Key want;
+    std::uint64_t seq = 0;
+};
+struct BlackHoleView::Picture {
+    Request req;
+    std::shared_ptr<const LensTable> table;
+    double tableDist = -1;
+    std::uint64_t tableVer = 0;
+    std::shared_ptr<const DiscTable> disc;
+    double discDist = -1;
+    std::uint64_t discVer = 0;
+    std::shared_ptr<const SpinTable> spin;
+    std::uint64_t spinVer = 0;
+    std::shared_ptr<const std::vector<float>> discF;
+    double discFSpin = -1, discFLog0 = 0, discFDl = 1;
+    std::uint64_t discFVer = 0;
+    std::vector<Dot> dots;
+    ViewStats st;
+    bool lit = false;
+    double made[4] = {0, 0, 0, 0};
+    double workMs = 0;
+};
+
+void BlackHoleView::ensureWorker() {
+    if (engine_) return;
+    engine_ = std::make_unique<BlackHoleView>();
+    engine_->fineExternal_ = true;
+    const std::function<void()> loop = [this] { workLoop(); };
+    worker_ = std::thread(loop);
+}
+
+void BlackHoleView::workLoop() {
+    lowerThisThread();
+    BlackHoleView& E = *engine_;
+    {   int n = 0; double l0 = 0, dl = 0;                                   // the tables made once, here rather than in the frame that first needs them
+        colourTable(n, l0, dl);
+        (void)brightestMag(); }
+    for (;;) {
+        std::unique_ptr<Request> r;
+        {   std::unique_lock<std::mutex> lk(workMx_);
+            workBusy_ = false;
+            workCv_.wait(lk, [this] { return workQuit_ || req_ != nullptr; });
+            if (workQuit_) return;
+            r = std::move(req_);
+            workBusy_ = true;
+        }
+        const auto t0 = std::chrono::steady_clock::now();
+        E.fineOffer_ = r->fine;
+        E.exact_ = r->exact;
+        if (!E.prepare(r->s, r->W, r->H, r->cx, r->cy, &stale_)) continue;  // (stopped: the view is closing)
+        auto p = std::make_unique<Picture>();
+        p->table = E.table_; p->tableDist = E.tableDist_; p->tableVer = E.tableVer_;
+        p->disc = E.disc_; p->discDist = E.discDist_; p->discVer = E.discVer_;
+        p->spin = E.spin_; p->spinVer = E.spinVer_;
+        p->discF = E.discF_; p->discFSpin = E.discFSpin_; p->discFLog0 = E.discFLog0_; p->discFDl = E.discFDl_; p->discFVer = E.discFVer_;
+        p->dots = E.dots_;
+        p->st = E.st_;
+        p->lit = E.lit_;
+        std::copy(E.made_, E.made_ + 4, p->made);
+        p->workMs = msSince(t0);
+        p->req = std::move(*r);
+        std::unique_ptr<Picture> old;                                       // (a picture the frame did not take is freed here, outside the lock)
+        {   std::lock_guard<std::mutex> g(workMx_);
+            old = std::move(done_);
+            done_ = std::move(p); }
+    }
+}
+
+void BlackHoleView::install(Picture& p) {
+    table_ = std::move(p.table); tableDist_ = p.tableDist; tableVer_ = p.tableVer;
+    disc_ = std::move(p.disc); discDist_ = p.discDist; discVer_ = p.discVer;
+    spin_ = std::move(p.spin); spinVer_ = p.spinVer;
+    discF_ = std::move(p.discF); discFSpin_ = p.discFSpin; discFLog0_ = p.discFLog0; discFDl_ = p.discFDl; discFVer_ = p.discFVer;
+    dots_ = std::move(p.dots);
+    st_ = p.st;
+    st_.workMs = p.workMs;
+    lit_ = p.lit;
+    std::copy(p.made, p.made + 4, made_);
+    shownS_ = p.req.s; shownW_ = p.req.W; shownH_ = p.req.H; shownCx_ = p.req.cx; shownCy_ = p.req.cy;
+    shownKey_ = p.req.want; shownExact_ = p.req.exact; shownSeq_ = p.req.seq;
+    hasShown_ = true;
+}
+
+// the fine spin table (async): made on a thread of its own, below normal priority, once the spin, distance and tilt have rested kSpinRest seconds;
+// dropped when they change (the thread stops at its next ray and is joined once it has, never waited for)
+void BlackHoleView::pollFine(const Settings& s) {
+    const bool want = s.spin > 0 && s.bend;
+    const bool same = want && fineA_ == s.spin && fineR_ == s.dist && fineTh_ == s.pitch;
+    if (!same) {
+        if (spinWorker_.joinable()) spinCancel_ = true;
+        fineA_ = want ? s.spin : -1; fineR_ = s.dist; fineTh_ = s.pitch;
+        spinChangedAt_ = nowSeconds();
+        spinFineStarted_ = false;
+    }
+    if (spinWorker_.joinable() && spinDone_) {
+        spinWorker_.join();
+        spinDone_ = false;
+        spinCancel_ = false;
+        std::shared_ptr<const SpinTable> f;
+        { std::lock_guard<std::mutex> g(spinMx_); f = std::move(spinReady_); }
+        if (f && want && f->spin() == fineA_ && f->rC() == fineR_ && f->thC() == fineTh_) fine_ = std::move(f);
+    }
+    const bool have = want && fine_ && fine_->spin() == s.spin && fine_->rC() == s.dist && fine_->thC() == s.pitch;
+    if (want && !have && !spinFineStarted_ && !spinWorker_.joinable() && nowSeconds() - spinChangedAt_ >= kSpinRest) {
+        spinFineStarted_ = true;
+        spinDone_ = false;
+        spinCancel_ = false;
+        const double a = s.spin, r = s.dist, th = s.pitch;
+        const int threads = std::max(1, static_cast<int>(std::thread::hardware_concurrency()) - 1);
+        const std::function<void()> job = [this, a, r, th, threads] {
+            lowerThisThread();
+            auto f = std::make_shared<SpinTable>(a, r, th, kSpinChiFine, kSpinSFine, kSpinEdge, &spinCancel_, threads);
+            if (f->ok()) { std::lock_guard<std::mutex> g(spinMx_); spinReady_ = std::move(f); }
+            spinDone_ = true;
+        };
+        spinWorker_ = std::thread(job);
+    }
+}
+
+bool BlackHoleView::settled() {
+    if (!async) return true;
+    if (st_.behind || spinWorker_.joinable() || (fineA_ > 0 && !st_.spinFine)) return false;
+    std::lock_guard<std::mutex> g(workMx_);
+    return !workBusy_ && !req_ && !done_;
+}
+
+void BlackHoleView::makeFineNow(const Settings& s) {
+    if (!async) { ensureSpin(s, true); return; }
+    if (!(s.spin > 0 && s.bend)) return;
+    fine_ = std::make_shared<SpinTable>(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge);
+    fineA_ = s.spin; fineR_ = s.dist; fineTh_ = s.pitch;
+    spinFineStarted_ = true;
+}
+
+void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy) {
+    ensureWorker();
+    pollFine(s);
+    const double now = nowSeconds();
+    const Key want = keyOf(s, W, H, cx, cy);
+    if (!(want == wantKey_)) { wantKey_ = want; wantSince_ = now; }
+    const bool exact = lookStep(W, H, false) == 4 || now - wantSince_ >= kGlareRest;   // the exposure in steps of 4 once the view rests
+    const bool spinning = s.spin > 0 && s.bend;
+    std::shared_ptr<const SpinTable> fine = spinning && fine_ && fine_->spin() == s.spin && fine_->rC() == s.dist && fine_->thC() == s.pitch ? fine_ : nullptr;
+    std::unique_ptr<Picture> p;
+    {   std::lock_guard<std::mutex> g(workMx_);
+        if (done_) p = std::move(done_); }
+    if (p) install(*p);
+    const bool current = hasShown_ && shownKey_ == want;
+    const bool upToDate = current && (shownExact_ || !exact) && (!fine || st_.spinFine);
+    const bool asked = posted_ && postedKey_ == want && (postedExact_ || !exact) && postedFine_ == fine.get();
+    if (!upToDate && !asked) {
+        auto r = std::make_unique<Request>();
+        r->s = s; r->W = W; r->H = H; r->cx = cx; r->cy = cy; r->exact = exact; r->fine = fine; r->want = want; r->seq = ++reqSeq_;
+        posted_ = true; postedKey_ = want; postedExact_ = exact; postedFine_ = fine.get();
+        {   std::lock_guard<std::mutex> g(workMx_);
+            req_ = std::move(r); }                                          // (a request not yet taken is replaced: the newest wins)
+        workCv_.notify_one();
+    }
+    st_.behind = !current;
+    if (!st_.behind) behindSince_ = 0;
+    else if (behindSince_ == 0) behindSince_ = now;
+    st_.behindMs = st_.behind ? 1000 * (now - behindSince_) : 0;
+    st_.picture = shownSeq_;
+    std::copy(made_, made_ + 4, st_.made);
+    if (hasShown_) emit(R, shownS_, shownW_, shownH_, shownCx_, shownCy_, want);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------

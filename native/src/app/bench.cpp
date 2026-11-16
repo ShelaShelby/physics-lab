@@ -78,6 +78,7 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
             t += "  GPU time per frame: not reliable (" + why + ")\n";
             t += "  (raw values, do not trust them: busy " + f("%.2f", s.gpuAvgMs) + " ms, span " + f("%.2f", s.gpuSpanAvgMs) + " ms, " + std::to_string(s.gpuSamples) + " of " + std::to_string(s.frames.frames) + " frames)\n";
         }
+        for (const std::string& n : s.notes) t += "  " + n + "\n";   // 0.55.5
     }
     if (!scenes.empty()) {
         double sum = 0;
@@ -85,6 +86,26 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
         t += "\nAverage fps over the scenes: " + f("%.1f", sum / scenes.size()) + "\n";
     }
     return t;
+}
+
+std::vector<std::string> benchBlackHoleLines(const BenchBlackHole& b) {
+    const auto stage = [](const BenchStage& s) {
+        return s.n > 0 ? f("%.1f", s.sum / s.n) + " ms average, " + f("%.1f", s.worst) + " ms worst (" + std::to_string(s.n) + "x)" : std::string("not needed");
+    };
+    static const char* const names[3] = {"turning round the axis", "tilting", "changing distance"};
+    std::vector<std::string> v;
+    v.push_back("Black Hole Lab: the frame's own thread draws the last finished picture; the tables, star bins, stars' images and exposure are worked out on a worker "
+                "thread, the glare's veil and the fine spin table on threads of their own (below normal priority).");
+    for (int k = 0; k < 3; k++) {
+        const BenchBhMove& m = b.move[k];
+        if (m.frames == 0) { v.push_back(std::string("Black Hole Lab, ") + names[k] + ": no frames counted"); continue; }
+        v.push_back(std::string("Black Hole Lab, ") + names[k] + ": frame thread " + f("%.2f", m.frameSum / m.frames) + " ms average, " + f("%.2f", m.frameWorst) +
+                    " ms worst; picture behind the settings in " + std::to_string(m.behindFrames) + " of " + std::to_string(m.frames) + " frames, at most " + f("%.0f", m.behindWorst) + " ms");
+        v.push_back("  worker: coarse table " + stage(m.coarse) + "; star bins " + stage(m.bins) + "; stars' images " + stage(m.stars) + "; exposure " + stage(m.look));
+    }
+    v.push_back("Black Hole Lab, at rest: glare " + stage(b.glare) + (b.glare.n > 0 ? ", shown " + f("%.0f", b.glareWaitWorst) + " ms after its picture at most" : std::string()) +
+                "; fine spin table " + stage(b.fine));
+    return v;
 }
 
 std::string benchFileName(const ShotTime& t) {

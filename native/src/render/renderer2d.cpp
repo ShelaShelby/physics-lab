@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <cstddef>
 #include <cstdlib>
+#include <functional>
+#include <thread>
 
 #include "group_compute.h"
 #include "outline_compute.h"
@@ -328,6 +330,10 @@ void Renderer2D::shutdown() {
     for (GLuint* pr : {&glareDown_, &glareAdd_}) if (*pr) { glDeleteProgram(*pr); *pr = 0; }
     for (GLuint* tx : {&bhLayer_[0], &bhLayer_[1], &glareSrcTex_, &glareVeilTex_}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     if (glareFbo_) glDeleteFramebuffers(1, &glareFbo_);
+    glareStopThread();                                                     // 0.55.5: the asynchronous glare's thread, buffer and fence
+    if (glarePbo_) glDeleteBuffers(1, &glarePbo_);
+    if (glareFence_) glDeleteSync(glareFence_);
+    glarePbo_ = 0; glareFence_ = nullptr; glareStage_ = 0; glareWant_ = GlareJob{}; glareJob_ = GlareJob{};
     glareFbo_ = 0; glareNx_ = glareNy_ = 0; layerTexW_ = layerTexH_ = 0; glareValid_ = false;
     lensProgram_ = lensFbo_ = lensTex_ = lensTableTex_ = 0; lensW_ = lensH_ = lensN_ = 0; lensValid_ = false; lensTableVer_ = ~std::uint64_t(0);
     discVer_ = colVer_ = ~std::uint64_t(0);
@@ -399,6 +405,7 @@ void Renderer2D::lensSky(const LensSky& L) {
 
 void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int vx, int vy) {
     if (!lensProgram_) return;
+    glareStats_.frameMs = 0;                                               // 0.55.5: this frame's share of the glare (makeGlare or glarePump)
     const int n = L.table ? static_cast<int>(L.table->size()) : 0;
     const bool bend = L.bend && n >= 4;
     if (bend && L.tableVersion != lensTableVer_) {                         // a new table: to the GPU once
@@ -573,8 +580,11 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glowValid_ = false;
         glareValid_ = false;
         if (glow) makeGlow(L, fbW, fbH);                                   // 0.55.3: with the picture, kept with it
-        if (glareOn) makeGlare(L, fbW, fbH);                               // 0.55.4: the same
+        if (glareOn && !L.glareAsync) makeGlare(L, fbW, fbH);              // 0.55.4: the same
+        if (glareOn && L.glareAsync) glareWant(L, fbW, fbH);               // 0.55.5: asked for; made over the next frames (glarePump)
+        else glareWant_.gen = 0;                                           // (an older one under way is dropped)
     }
+    if (glareOn && L.glareAsync) glarePump();
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glViewport(vx, vy, fbW, fbH);
     if (glareOn && glareValid_) {                                          // 0.55.4: the picture with the eye's glare
@@ -670,6 +680,24 @@ void Renderer2D::makeGlare(const LensSky& L, int fbW, int fbH) {
     const double ppp = fbW / width_;
     const double cxPx = std::round(L.cx * ppp), cyGl = fbH - std::round(L.cy * ppp), Kpx = L.kRad * ppp;
     const int b = std::max(1, L.glareBlock(fbW, fbH, cxPx, cyGl, Kpx)), nx = (fbW + b - 1) / b, ny = (fbH + b - 1) / b;
+    glareDownPass(fbW, fbH, b, nx, ny);
+    std::vector<float> rgba(static_cast<std::size_t>(nx) * ny * 4), src(static_cast<std::size_t>(nx) * ny * 3), veil;
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glReadPixels(0, 0, nx, ny, GL_RGBA, GL_FLOAT, rgba.data());
+    for (std::size_t q = 0; q < src.size() / 3; q++) for (int k = 0; k < 3; k++) src[3 * q + k] = rgba[4 * q + k];
+    const double readMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    double out[3] = {0, 0, 0};
+    L.glareVeil(fbW, fbH, cxPx, cyGl, Kpx, src, veil, out);
+    if (veil.size() != src.size()) veil.assign(src.size(), 0.0f);
+    glareUpload(nx, ny, veil);
+    glareStats_.b = b; glareStats_.nx = nx; glareStats_.ny = ny; glareStats_.readMs = readMs; glareStats_.veilMs = out[0];
+    glareStats_.spread = out[1]; glareStats_.laid = out[2]; glareStats_.made++;
+    glareStats_.waitMs = glareStats_.frameMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    glareValid_ = true;
+}
+
+// the disc's light averaged over blocks of b pixels into glareSrcTex_ (nx x ny); glareFbo_ is left bound
+void Renderer2D::glareDownPass(int fbW, int fbH, int b, int nx, int ny) {
     if (!glareFbo_) { glGenFramebuffers(1, &glareFbo_); glGenTextures(1, &glareSrcTex_); glGenTextures(1, &glareVeilTex_); }
     if (nx != glareNx_ || ny != glareNy_) {
         glareNx_ = nx; glareNy_ = ny;
@@ -691,14 +719,10 @@ void Renderer2D::makeGlare(const LensSky& L, int fbW, int fbH) {
     glUniform2i(glGetUniformLocation(glareDown_, "uSize"), fbW, fbH);
     glUniform1i(glGetUniformLocation(glareDown_, "uB"), b);
     glDrawArrays(GL_TRIANGLES, 0, 6);
-    std::vector<float> rgba(static_cast<std::size_t>(nx) * ny * 4), src(static_cast<std::size_t>(nx) * ny * 3), veil;
-    glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    glReadPixels(0, 0, nx, ny, GL_RGBA, GL_FLOAT, rgba.data());
-    for (std::size_t q = 0; q < src.size() / 3; q++) for (int k = 0; k < 3; k++) src[3 * q + k] = rgba[4 * q + k];
-    const double readMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    double out[3] = {0, 0, 0};
-    L.glareVeil(fbW, fbH, cxPx, cyGl, Kpx, src, veil, out);
-    if (veil.size() != src.size()) veil.assign(src.size(), 0.0f);
+}
+
+// the veil (nx x ny, RGB) into glareVeilTex_
+void Renderer2D::glareUpload(int nx, int ny, const std::vector<float>& veil) {
     glBindTexture(GL_TEXTURE_2D, glareVeilTex_);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, nx, ny, 0, GL_RGB, GL_FLOAT, veil.data());
@@ -707,9 +731,108 @@ void Renderer2D::makeGlare(const LensSky& L, int fbW, int fbH) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
-    glareStats_.b = b; glareStats_.nx = nx; glareStats_.ny = ny; glareStats_.readMs = readMs; glareStats_.veilMs = out[0];
-    glareStats_.spread = out[1]; glareStats_.laid = out[2]; glareStats_.made++;
-    glareValid_ = true;
+}
+
+// 0.55.5: the newest picture asks for its glare (made by glarePump over the next frames)
+void Renderer2D::glareWant(const LensSky& L, int fbW, int fbH) {
+    const double ppp = fbW / width_;
+    GlareJob j;
+    j.fbW = fbW; j.fbH = fbH;
+    j.cx = std::round(L.cx * ppp); j.cy = fbH - std::round(L.cy * ppp); j.K = L.kRad * ppp;
+    j.b = std::max(1, L.glareBlock(fbW, fbH, j.cx, j.cy, j.K)); j.nx = (fbW + j.b - 1) / j.b; j.ny = (fbH + j.b - 1) / j.b;
+    j.veil = L.glareVeil; j.lower = L.glareThread;
+    j.gen = ++glareGen_;
+    glareWant_ = j;
+}
+
+// 0.55.5: one look at the glare under way, never waiting (each step waits for a fence that has already passed): once the newest picture is drawn
+// (stage 4) its blocks are drawn (stage 1), read back into a pixel buffer (stage 3), the veil made on its own thread (stage 2) and shown if its picture
+// is still the newest
+void Renderer2D::glarePump() {
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto since = [](std::chrono::steady_clock::time_point a) { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - a).count(); };
+    if (glareStage_ == 2 && glareThreadDone_.load()) {
+        glareThread_.join();
+        glareStage_ = 0;
+        if (glareJob_.gen == glareWant_.gen) {
+            if (glareVeilBuf_.size() != glareSrcBuf_.size()) glareVeilBuf_.assign(glareSrcBuf_.size(), 0.0f);
+            glareUpload(glareJob_.nx, glareJob_.ny, glareVeilBuf_);
+            glareStats_.b = glareJob_.b; glareStats_.nx = glareJob_.nx; glareStats_.ny = glareJob_.ny; glareStats_.veilMs = glareOut_[0];
+            glareStats_.spread = glareOut_[1]; glareStats_.laid = glareOut_[2]; glareStats_.made++;
+            glareStats_.waitMs = since(glareT0_);
+            glareValid_ = true;
+        }
+    }
+    const auto signalled = [this](GLenum& r) {
+        r = glClientWaitSync(glareFence_, 0, 0);
+        if (r != GL_ALREADY_SIGNALED && r != GL_CONDITION_SATISFIED && r != GL_WAIT_FAILED) return false;
+        glDeleteSync(glareFence_);
+        glareFence_ = nullptr;
+        return true;
+    };
+    GLenum r = 0;
+    if (glareStage_ == 4 && signalled(r)) {                               // the picture is drawn: its blocks (reading the picture now waits for nothing)
+        glareStage_ = 0;
+        if (r == GL_WAIT_FAILED) glareJob_.gen = 0;
+        else if (glareJob_.gen == glareWant_.gen) {
+            glareDownPass(glareJob_.fbW, glareJob_.fbH, glareJob_.b, glareJob_.nx, glareJob_.ny);
+            glareFence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            glareStage_ = 1;
+        }
+    } else if (glareStage_ == 1 && signalled(r)) {                        // the blocks are drawn: read them back (without waiting)
+        glareStage_ = 0;
+        if (r == GL_WAIT_FAILED) glareJob_.gen = 0;                        // (tried again)
+        else if (glareJob_.gen == glareWant_.gen) {
+            if (!glarePbo_) glGenBuffers(1, &glarePbo_);
+            glBindFramebuffer(GL_FRAMEBUFFER, glareFbo_);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, glareSrcTex_, 0);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, glarePbo_);
+            glBufferData(GL_PIXEL_PACK_BUFFER, static_cast<GLsizeiptr>(static_cast<std::size_t>(glareJob_.nx) * glareJob_.ny * 4 * sizeof(float)), nullptr, GL_STREAM_READ);
+            glPixelStorei(GL_PACK_ALIGNMENT, 4);
+            glReadPixels(0, 0, glareJob_.nx, glareJob_.ny, GL_RGBA, GL_FLOAT, nullptr);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            glareFence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            glareStage_ = 3;
+        }
+    } else if (glareStage_ == 3 && signalled(r)) {                        // read back: the veil on its own thread
+        glareStage_ = 0;
+        if (r == GL_WAIT_FAILED) glareJob_.gen = 0;
+        else if (glareJob_.gen == glareWant_.gen) {
+            const std::size_t n = static_cast<std::size_t>(glareJob_.nx) * glareJob_.ny;
+            std::vector<float> rgba(n * 4);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, glarePbo_);
+            glGetBufferSubData(GL_PIXEL_PACK_BUFFER, 0, static_cast<GLsizeiptr>(rgba.size() * sizeof(float)), rgba.data());
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            glareSrcBuf_.resize(n * 3);
+            for (std::size_t q = 0; q < n; q++) for (int k = 0; k < 3; k++) glareSrcBuf_[3 * q + k] = rgba[4 * q + k];
+            glareStats_.readMs = since(glareT0_);
+            glareThreadDone_ = false;
+            const GlareJob j = glareJob_;
+            const std::vector<float>* src = &glareSrcBuf_;
+            std::vector<float>* veil = &glareVeilBuf_;
+            double* out = glareOut_;
+            std::atomic<bool>* done = &glareThreadDone_;
+            const std::function<void()> job = [j, src, veil, out, done] {
+                if (j.lower) j.lower();
+                j.veil(j.fbW, j.fbH, j.cx, j.cy, j.K, *src, *veil, out);
+                done->store(true);
+            };
+            glareThread_ = std::thread(job);
+            glareStage_ = 2;
+        }
+    }
+    if (glareStage_ == 0 && glareWant_.gen != 0 && !glareValid_ && glareWant_.gen != glareJob_.gen) {   // the newest picture: a fence behind it
+        glareJob_ = glareWant_;
+        glareT0_ = t0;
+        glareFence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        glareStage_ = 4;
+    }
+    glareStats_.frameMs = since(t0);
+}
+
+void Renderer2D::glareStopThread() {
+    if (glareThread_.joinable()) glareThread_.join();
+    glareThreadDone_ = false;
 }
 
 void Renderer2D::closeTriangles() {

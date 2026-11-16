@@ -7,6 +7,7 @@
 #include <mutex>
 #include <thread>
 
+#include "blackhole/low_priority.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
 
@@ -121,7 +122,8 @@ void runRows(int n, const F& fn) {
     const int threads = std::max(1, std::min(8, static_cast<int>(std::thread::hardware_concurrency())));
     if (threads == 1 || n < 16) { fn(0, n); return; }
     std::vector<std::thread> t;
-    for (int k = 0; k < threads; k++) t.emplace_back([&fn, n, k, threads] { fn(n * k / threads, n * (k + 1) / threads); });
+    const bool low = thisThreadLow();                                   // 0.55.5 (low_priority.h)
+    for (int k = 0; k < threads; k++) t.emplace_back([&fn, n, k, threads, low] { if (low) lowerThisThread(); fn(n * k / threads, n * (k + 1) / threads); });
     for (std::thread& x : t) x.join();
 }
 

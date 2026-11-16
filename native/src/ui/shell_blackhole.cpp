@@ -203,6 +203,7 @@ void blackholeCard(AppState& app, Panel& p) {
         std::snprintf(q, sizeof q, "bhspin spin=%.9g horizon=%.9g rin=%.9g eff=%.9g omega=%.9g turn=%.9g wide=%.9g high=%.9g share=%.9g", r.spin, r.horizonM, r.rIn, r.efficiency, r.omega, r.turnSeconds,
                       r.shadowWideDeg, r.shadowHighDeg, r.skyShare);
         auditNote(q); }
+    if (app.blackholeView.stats().behind) pCaption(p, "Working out the picture: the one shown is the last finished.", false);   // 0.55.5 (BlackHoleView::async)
     auditNote("bhcard mass=" + sig(r.massSun, 6) + " dist=" + sig(r.dist, 6) + " shadow=" + sig(r.shadowDeg, 6) + " clock=" + sig(r.clockRate, 6) + " blue=" + sig(r.blueshift, 6) +
               " bright=" + sig(r.brightening, 6) + " horizonkm=" + sig(r.horizonKm, 6) + (r.realPreset ? " preset=" + app.blackhole.preset + " earth=" + sig(r.earthShadowMuas, 6) + " ring=" + sig(r.ringMuas, 4) :
               r.hasPreset ? " preset=" + app.blackhole.preset : std::string(" preset=none")));
@@ -231,10 +232,10 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
     }
     char b[560];
     const blackhole::Settings v = blackhole::shown(s);
-    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
+    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d behind=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
                   s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expLog, 6).c_str(), s.spin,
                   app.blackholeView.stats().spinFine ? 1 : 0, blackhole::lookKey(s.look), v.spin, v.disc ? 1 : 0, s.trueSky ? "true" : "shown", s.glare ? "eye" : "off",
-                  blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0);
+                  blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0, app.blackholeView.stats().behind ? 1 : 0);
     auditNote(b);
     return r;
 }

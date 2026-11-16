@@ -41,15 +41,23 @@ std::array<double, 3> whiteBalanceGains(double whiteT) {
     return {Y / w[0], Y / w[1], Y / w[2]};
 }
 
+// 0.55.5: worked out once (the film's numbers are fixed): the exposure's scan asks for them at every point of the disc, and three black-body integrals per
+// point made the Film look's scan take seconds (the owner's 1 frame per second). The same numbers as before, bit for bit.
 std::array<double, 3> filmDiscLinear() {
-    const FilmChoices& c = filmChoices();
-    const std::array<double, 3> g = whiteBalanceGains(c.whiteT), b = blackBodyLinear(c.discT);
-    return {g[0] * b[0], g[1] * b[1], g[2] * b[2]};
+    static const std::array<double, 3> v = [] {
+        const FilmChoices& c = filmChoices();
+        const std::array<double, 3> g = whiteBalanceGains(c.whiteT), b = blackBodyLinear(c.discT);
+        return std::array<double, 3>{g[0] * b[0], g[1] * b[1], g[2] * b[2]};
+    }();
+    return v;
 }
 
 double filmDiscY() {
-    const std::array<double, 3> l = filmDiscLinear();
-    return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];   // IEC 61966-2-1: the luminance of linear sRGB
+    static const double y = [] {
+        const std::array<double, 3> l = filmDiscLinear();
+        return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];   // IEC 61966-2-1: the luminance of linear sRGB
+    }();
+    return y;
 }
 
 double glowSigmaBlocks(int H) { return kGlowSigma * H / kGlowBlock; }

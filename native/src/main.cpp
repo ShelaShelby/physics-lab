@@ -123,6 +123,21 @@ const char* const kDriverAdvice =
 }  // namespace
 
 static double g_viewMs = 0;   // (PL_TIMESTAT)
+// 0.55.5 (automatic checks and measuring): PL_BH_MOVE="kind:first:count" moves the Black Hole Lab's view every frame from frame first for count frames
+// (turn: round the axis; tilt: up; dist: closer by 1 % a frame; spin: +0.005 a frame); PL_BH_FRAMETIME prints, per frame, the frame thread's time in the lab
+static double g_bhDrawMs = 0;
+static void bhMoveStep(blackhole::Settings& s, const char* spec, int frame) {   // (a list: "turn:20:20,tilt:60:20")
+    for (const char* q = spec; q && *q; q = std::strchr(q, ',') ? std::strchr(q, ',') + 1 : nullptr) {
+        char kind[16] = {0};
+        int first = 0, count = 0;
+        if (std::sscanf(q, "%15[a-z]:%d:%d", kind, &first, &count) != 3 || frame < first || frame >= first + count) continue;
+        const std::string k = kind;
+        if (k == "turn") blackhole::turn(s, 0.01, 0);
+        else if (k == "tilt") blackhole::turn(s, 0, -0.01);
+        else if (k == "dist") blackhole::setDistance(s, s.dist * 0.99);
+        else if (k == "spin") blackhole::setSpin(s, s.spin + 0.005);
+    }
+}
 int main(int, char**) {
     if (!SDL_Init(SDL_INIT_VIDEO)) { fail("Could not start the window system", "Physics Lab could not start its window system, so it has nothing to draw on.", "Restart the computer and try again. If it still fails, please report it with your Windows version."); return 1; }
 
@@ -289,6 +304,9 @@ int main(int, char**) {
         if (const char* pk = SDL_getenv("PL_MOLECULE_PICK")) std::sscanf(pk, "%d,%d", &app.molecule.sel.atom, &app.molecule.sel.bond);
         app.visited[molecule::kLabIndex] = true;
     }
+    // 0.55.5: the Black Hole Lab works out its pictures on worker threads (the frame never waits for the processor); the automatic checks keep the
+    // synchronous path (PL_BH_SPINWAIT, or PL_DRAWSTAT without PL_BH_ASYNC): their pictures are of the settings of the frame they are taken in
+    app.blackholeView.async = !SDL_getenv("PL_BH_SPINWAIT") && (!SDL_getenv("PL_DRAWSTAT") || SDL_getenv("PL_BH_ASYNC"));
     if (SDL_getenv("PL_BLACKHOLE")) {                   // 0.55.0: PL_BLACKHOLE=1 opens the Black Hole Lab; PL_BH_SET="preset=m87;dist=3;bend=off;sky=black;fov=120;mass=1e6;yaw=..;pitch=..;disc=on;feed=0.1;outer=30;exposure=auto" (automatic checks)
         app.lab = blackhole::kLabIndex;
         app.visited[blackhole::kLabIndex] = true;
@@ -587,7 +605,11 @@ int main(int, char**) {
             text->PopClipRect();
         } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: the hole in the middle of the free part of the picture
             const double cx = app.bhFreeW > 0 ? app.bhFreeX + app.bhFreeW / 2 : app.canvasW / 2, cy = app.bhFreeH > 0 ? app.bhFreeY + app.bhFreeH / 2 : app.canvasH / 2;
+            static const char* bhMove = SDL_getenv("PL_BH_MOVE");
+            if (bhMove) bhMoveStep(app.blackhole, bhMove, frame);
+            const auto tb0 = std::chrono::steady_clock::now();
             app.blackholeView.draw(renderer, blackhole::shown(app.blackhole), app.canvasW, app.canvasH, cx, cy);
+            g_bhDrawMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tb0).count();
             text->PopClipRect();
         } else if (app.lab == 1) {
             const auto tv0 = std::chrono::steady_clock::now();
@@ -628,7 +650,19 @@ int main(int, char**) {
         const int headerFbH = static_cast<int>(std::lround(headerH * fbH / std::max(1, winH)));
         renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
         const auto te0 = std::chrono::steady_clock::now();
+        const long glareMade0 = renderer.glareStats().made;
         renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
+        static const bool bhTime = SDL_getenv("PL_BH_FRAMETIME") != nullptr;
+        if (bhTime && app.lab == blackhole::kLabIndex && !app.pane) {
+            const render::Renderer2D::GlareStats& g = renderer.glareStats();
+            const double glareMs = g.frameMs, glareVeil = g.made != glareMade0 ? g.veilMs : 0, glareWait = g.made != glareMade0 ? g.waitMs : 0;
+            const double endMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
+            const blackhole::ViewStats& bs = app.blackholeView.stats();
+            const blackhole::Settings& sk = app.blackholeView.shownSettings();
+            std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
+                        bs.spinCoarseFills + bs.tableFills, bs.spinFineFills, bs.starFills, bs.behind ? 1 : 0, blackhole::shown(app.blackhole).spin > 0 ? bs.spinCoarseMs : bs.tableMs, bs.spinStarsMs, bs.starsMs, bs.lookMs, bs.spinFineMs, bs.discMs,
+                        static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs);
+        }
         static const bool timeStat = SDL_getenv("PL_TIMESTAT") != nullptr;   // for measuring in development (0.46): the Atom Lab picture's build time and the renderer's end(), averaged over 60 frames
         if (timeStat && app.lab == 1) {
             static double sv = 0, se = 0; static int nf = 0;
@@ -670,7 +704,13 @@ int main(int, char**) {
             ui::takeShot(app, renderer, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
         }
         static const double maxSeconds = SDL_getenv("PL_EXIT_AFTER_SECONDS") ? std::atof(SDL_getenv("PL_EXIT_AFTER_SECONDS")) : 0;   // for automatic checks
-        if ((maxFrames && ++frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds)) {
+        static int bhSettleFrom = -1, bhSettleN = 0, bhSettled = 0;          // 0.55.5 (automatic checks): PL_BH_SETTLE="from:n": the run ends once the Black Hole Lab
+        if (bhSettleFrom < 0) {                                              // has had nothing to do for n frames after frame from (or at PL_EXIT_AFTER_FRAMES)
+            bhSettleFrom = 0;
+            if (const char* q = SDL_getenv("PL_BH_SETTLE")) std::sscanf(q, "%d:%d", &bhSettleFrom, &bhSettleN);
+        }
+        bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && !renderer.glareBusy() ? bhSettled + 1 : 0;
+        if ((maxFrames && ++frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds) || (bhSettleN > 0 && bhSettled >= bhSettleN)) {
             running = false;
             if (screenshot) {                           // read the finished frame back and save it
                 if (SDL_Surface* shot = fbW > 0 && fbH > 0 ? SDL_CreateSurface(fbW, fbH, SDL_PIXELFORMAT_ABGR8888) : nullptr) {   // 0.50.3 (outside review): no surface, no read
@@ -686,6 +726,11 @@ int main(int, char**) {
         app.live.frame(isLive, frameDt * 1000.0);
         ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs);
         SDL_GL_SwapWindow(window);
+        static const double paceMs = SDL_getenv("PL_FRAME_MS") ? std::atof(SDL_getenv("PL_FRAME_MS")) : 0;   // 0.55.5 (automatic checks, measuring): a frame takes at
+        if (paceMs > 0) {                                                                                       // least this long, as with VSync on a real screen
+            const double usedMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();
+            if (usedMs < paceMs) SDL_Delay(static_cast<Uint32>(paceMs - usedMs));
+        }
         ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0);
         if (app.vsync != vsyncOn) { vsyncOn = app.vsync; SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
     };

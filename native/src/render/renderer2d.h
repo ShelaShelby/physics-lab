@@ -9,8 +9,11 @@
 
 #include "planet_maps.h"
 
+#include <atomic>
+#include <chrono>
 #include <functional>
 #include <cstdint>
+#include <thread>
 #include <vector>
 
 #include "gl_loader.h"
@@ -211,12 +214,19 @@ public:
         float glareKeep = 0;
         int (*glareBlock)(int W, int H, double cx, double cy, double K) = nullptr;
         void (*glareVeil)(int W, int H, double cx, double cy, double K, const std::vector<float>& src, std::vector<float>& veil, double out[3]) = nullptr;
+        // 0.55.5: glareAsync: the frame never waits for the glare: the blocks are read back without waiting for the graphics card (a pixel buffer and a fence,
+        // looked at in later frames), the veil is made on a thread of its own (glareThread is called on it first: below normal priority), and until it is done
+        // the same picture is shown without the glare. A newer picture drops an older glare. false: all of it at once in this frame (automatic checks).
+        bool glareAsync = false;
+        void (*glareThread)() = nullptr;
     };
     // 0.55.4: the last glare made (tests and the benchmark): the block in pixels, the grid, the read-back and the veil's time (ms), the light spread and laid (white x sr)
-    struct GlareStats { int b = 0, nx = 0, ny = 0; double readMs = 0, veilMs = 0, spread = 0, laid = 0; long made = 0; };
+    // 0.55.5: waitMs: from the picture to its glare (asynchronous: over the frames between; at once: readMs + veilMs); frameMs: the frame thread's own share
+    struct GlareStats { int b = 0, nx = 0, ny = 0; double readMs = 0, veilMs = 0, spread = 0, laid = 0; long made = 0; double waitMs = 0, frameMs = 0; };
     const GlareStats& glareStats() const { return glareStats_; }
     void lensSky(const LensSky& s);
-    long lensRedraws() const { return lensRedraws_; }   // how many times the bent sky was drawn anew (the rest of the frames reused it)
+    long lensRedraws() const { return lensRedraws_; }
+    bool glareBusy() const { return glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
 private:
     enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens };
@@ -282,6 +292,25 @@ private:
     bool glareValid_ = false;
     GlareStats glareStats_;
     void makeGlare(const LensSky& L, int fbW, int fbH);
+    // 0.55.5: the asynchronous glare (LensSky::glareAsync): the newest picture's request (gen 0: none), the stage (0 idle, 4 the picture, 1 its blocks, 3 read back under way,
+    // 2 the veil on its thread), the job under way, the pixel buffer and fence, the thread and its buffers
+    struct GlareJob { int fbW = 0, fbH = 0, b = 1, nx = 0, ny = 0; double cx = 0, cy = 0, K = 0; std::uint64_t gen = 0;
+                      void (*veil)(int, int, double, double, double, const std::vector<float>&, std::vector<float>&, double*) = nullptr; void (*lower)() = nullptr; };
+    void glareDownPass(int fbW, int fbH, int b, int nx, int ny);
+    void glareUpload(int nx, int ny, const std::vector<float>& veil);
+    void glareWant(const LensSky& L, int fbW, int fbH);
+    void glarePump();
+    void glareStopThread();
+    GlareJob glareWant_, glareJob_;
+    std::uint64_t glareGen_ = 0;
+    int glareStage_ = 0;
+    GLuint glarePbo_ = 0;
+    GLsync glareFence_ = nullptr;
+    std::thread glareThread_;
+    std::atomic<bool> glareThreadDone_{false};
+    std::vector<float> glareSrcBuf_, glareVeilBuf_;
+    double glareOut_[3] = {0, 0, 0};
+    std::chrono::steady_clock::time_point glareT0_;
     std::uint64_t kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     GLint lnDisc_ = -1, lnDU_ = -1, lnDP_ = -1, lnDC_ = -1, lnDN_ = -1, lnDS_ = -1, lnDA_ = -1, lnDR_ = -1, lnDT_ = -1, lnSky_ = -1;
     std::uint64_t discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0);

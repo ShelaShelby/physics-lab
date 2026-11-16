@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.5", "The Black Hole Lab: the window no longer waits for the picture",
+     "The Black Hole Lab no longer makes the window wait while it works out a picture. Turning, tilting, changing the distance or dragging the spin now "
+     "moves the controls and readouts at once; the light paths, the stars' images and the exposure are worked out on a worker thread below normal priority, "
+     "and until a newer picture is finished the last finished one stays on screen, all of one view. While the picture is behind, the card says it is being "
+     "worked out. The eye's glare and the fine table are made the same way once the view rests. The Film look's exposure no longer works out the film's "
+     "colour anew at every point (it took seconds each time the view moved). The pictures at rest are the same as before. The benchmark's Black Hole scene "
+     "now turns, tilts and changes distance in turn, and its report gives the time of each stage and how long the picture was behind."},
     {"0.55.4", "The Black Hole Lab: real light (true brightness, the eye's glare)",
      "In the Real look with the gas disc on, two new controls. Sky beside the disc: Shown is the picture as before; True brightness puts the stars on the disc's "
      "own scale, from each star's measured brightness against the Sun's (Willmer 2018), and the sky goes black: next to such a disc every star is billions of "

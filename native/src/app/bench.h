@@ -36,7 +36,27 @@ struct BenchScene {
     int gpuSamples = 0;          // frames that gave a GPU result
     std::string gpuProblem;      // "" if the GPU numbers look right; else why they are not reliable
     bool windowInactive = false; // 0.15 stage 2: the window lost focus or was minimised at some time during this scene (warm-up or measuring): Windows can slow a background app
+    std::vector<std::string> notes;   // 0.55.5: lines of the scene's own (the Black Hole Lab's: benchBlackHoleLines), printed after its numbers
 };
+
+// 0.55.5: the Black Hole Lab's own numbers in its scene: the frame thread's time in the lab and each worker stage's time, per movement (turning, tilting,
+// changing distance), how long the picture was behind the settings, and the stages made only at rest (the glare's veil, the fine spin table).
+struct BenchStage {
+    int n = 0;
+    double sum = 0, worst = 0;
+    void add(double v) { n++; sum += v; if (v > worst) worst = v; }
+};
+struct BenchBhMove {
+    int frames = 0, behindFrames = 0;
+    double frameSum = 0, frameWorst = 0, behindWorst = 0;   // the frame thread's time in the lab (ms); the longest time the picture was behind (ms)
+    BenchStage coarse, bins, stars, look;                   // the worker's: the coarse table, the star bins, the stars' images, the exposure (ms each)
+};
+struct BenchBlackHole {
+    BenchBhMove move[3];                                    // turning round the axis, tilting, changing distance
+    BenchStage glare, fine;                                 // at rest: the glare's veil (its own thread), the fine spin table (its own threads)
+    double glareWaitWorst = 0;                              // the longest wait from a picture to its glare (ms)
+};
+std::vector<std::string> benchBlackHoleLines(const BenchBlackHole& b);
 
 // While the benchmark runs nothing may change the labs or the app except its Cancel button and Esc, so a run cannot be faked:
 // the picture's wheel, drag, clicks and the keyboard shortcuts (Space, F11) ask this first; the panels are blocked by a modal box (ui/benchmark.cpp).

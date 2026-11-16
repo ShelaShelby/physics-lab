@@ -11,6 +11,7 @@
 
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -44,20 +45,36 @@ struct ViewStats {
     double brightMag = 0, ptSr = 0;
     TrueSkyNumbers trueSky;
     int trueShown = 0, trueHidden = 0;
+    // 0.55.5: the exposure's last scan (processor time, ms) and how many; the star bins' (SpinStars) builds; behind: the picture shown is not yet of the
+    // settings asked for (it is being worked out), for behindMs; frameMs: this frame's time in draw (the frame's own thread); workMs: the shown picture's
+    // time on the worker; picture: the shown picture's number; made: the view (yaw, pitch, distance, spin) its exposure and stars were worked out for
+    double lookMs = 0;
+    long lookFills = 0, spinBins = 0;
+    bool behind = false;
+    double behindMs = 0, frameMs = 0, workMs = 0;
+    std::uint64_t picture = 0;
+    double made[4] = {0, 0, 0, 0};
 };
 float catalogueBrightestMag();   // 0.55.4: the brightest catalogue star seen without the hole (the cap of a drawn image), V magnitude
 
 class BlackHoleView {
     friend void compareHook(render::Renderer2D& R, const char* spec);
 public:
-    BlackHoleView() = default;
+    BlackHoleView();                                           // (0.55.5: in the .cpp, where Request and Picture are complete)
     BlackHoleView(const BlackHoleView&) = delete;
     BlackHoleView& operator=(const BlackHoleView&) = delete;
     ~BlackHoleView();
     // The picture W x H points with the hole at (cx, cy) points.
+    // 0.55.5: async (the app): the frame never waits for the processor: the tables, the stars' images and the exposure are worked out on a worker thread
+    // (a request not yet taken is replaced by a newer one; every finished picture is shown), the eye's glare on a thread of the renderer's; the frame draws the last finished picture,
+    // all of one view, until a newer one is done (stats().behind). Off (the default; the automatic checks and the tests' own views): all of it in draw, as before.
+    bool async = false;
     void draw(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);
+    void makeFineNow(const Settings& s);                       // 0.55.5 (the benchmark): the fine spin table for s now, on this thread
+    bool settled();                                            // 0.55.5 (automatic checks): nothing under way, the picture shown is the settings' (fine table included)
     const ViewStats& stats() const { return st_; }
     const LensTable* table() const { return table_.get(); }
+    const Settings& shownSettings() const { return shownS_; }  // 0.55.5: the settings of the picture shown (async: may be behind the ones asked for)
     // the renderer's description of the bent sky for this view (also used by the tests and the benchmark)
     render::Renderer2D::LensSky lensFor(const Settings& s, const HoleView& v) const;
     void ensureTable(double dist);
@@ -82,10 +99,15 @@ public:
     // 0.55.4: the eye's glare is made (light.h, on the processor: a fifth of a second at 1280 x 800 on 4 cores) once the view has rested for kGlareRest seconds;
     // while it moves the picture is drawn without it. glareNow: tests draw it at once.
     static constexpr double kGlareRest = 0.25;
+    // 0.55.5: while the view moves the exposure is scanned on a grid of at most the points of 1280 x 800 in steps of 4 (its cost does not grow with the
+    // picture); once the view has rested kGlareRest seconds, in steps of 4 everywhere (lab.h discLook's rule: the picture at rest is exactly as before)
+    static int lookStep(double W, double H, bool exact);
     bool glareNow = false;
     // tests (PL_BH_SPINEDGE): n points of the shown table's shadow edge on the picture (X, Y in points) and the unit direction outward (right, down), 4 numbers each
     void spinEdgePoints(const Settings& s, double W, double H, double cx, double cy, int n, std::vector<double>& out) const;
 private:
+    struct Request;
+    struct Picture;
     std::shared_ptr<const SpinTable> spin_;
     std::unique_ptr<SpinStars> spinStars_;
     std::uint64_t spinVer_ = 0;
@@ -95,19 +117,51 @@ private:
     std::shared_ptr<const SpinTable> spinReady_;
     double spinChangedAt_ = 0;
     bool spinFineStarted_ = false;
-    std::vector<float> discF_;
+    std::shared_ptr<const std::vector<float>> discF_;
     double discFSpin_ = -1, discFLog0_ = 0, discFDl_ = 1;
     std::uint64_t discFVer_ = 0;
     std::vector<SpinImage> spinScratch_;
     void stopSpinWorker();
     void ensureDiscF(double spin);
-    void drawSpin(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);
+    bool ensureSpinTable(const Settings& s, bool wait, const std::atomic<bool>* cancel);
+    // 0.55.5: prepare: the processor's part of a picture (the tables, the exposure, the stars' images; false: a table fill was stopped); emit: hands it to
+    // the renderer (restKey: the view asked for, for the glare's rest)
+    bool prepare(const Settings& s, double W, double H, double cx, double cy, const std::atomic<bool>* cancel);
+    bool prepareSpin(const Settings& s, double W, double H, double cx, double cy, const std::atomic<bool>* cancel);
+    bool lit_ = false;                                         // something is lit (Sky: Black and no disc: the picture is black)
+    bool exact_ = true, keyExact_ = false;                     // the exposure in steps of 4 (asked; made for key_)
+    // 0.55.5, the worker (async): engine_ is a view of its own that only the worker thread touches; it hands finished Pictures back
+    bool fineExternal_ = false;                                // (the engine) the fine table comes from the owner (fineOffer_), never a thread of its own
+    std::shared_ptr<const SpinTable> fineOffer_;
+    std::unique_ptr<BlackHoleView> engine_;
+    std::thread worker_;
+    std::mutex workMx_;
+    std::condition_variable workCv_;
+    bool workQuit_ = false, workBusy_ = false;
+    std::unique_ptr<Request> req_;
+    std::unique_ptr<Picture> done_;
+    std::atomic<bool> stale_{false};                           // the view is closing: a table fill under way stops
+    std::uint64_t reqSeq_ = 0;
+    // the frame's side: the fine table (made on its own thread once the settings rest) and what was asked and shown
+    std::shared_ptr<const SpinTable> fine_;
+    double fineA_ = -1, fineR_ = -1, fineTh_ = -1;
+    bool hasShown_ = false, shownExact_ = false, postedExact_ = false, posted_ = false;
+    const SpinTable* postedFine_ = nullptr;
+    Settings shownS_;
+    double shownW_ = 0, shownH_ = 0, shownCx_ = 0, shownCy_ = 0, wantSince_ = 0, behindSince_ = 0;
+    std::uint64_t shownSeq_ = 0;
+    double made_[4] = {0, 0, 0, 0};
+    void ensureWorker();
+    void workLoop();
+    void pollFine(const Settings& s);
+    void install(Picture& p);
+    void drawAsync(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);
 private:
-    std::unique_ptr<DiscTable> disc_;
+    std::shared_ptr<const DiscTable> disc_;
     double discDist_ = -1;
     int discGridOn_ = 0;
     std::uint64_t discVer_ = 0;
-    std::unique_ptr<LensTable> table_;
+    std::shared_ptr<const LensTable> table_;
     double tableDist_ = -1;
     std::uint64_t tableVer_ = 0;
     struct Dot { float x, y, r; render::Color c; };
@@ -116,6 +170,9 @@ private:
     std::vector<Dot> dots_;
     std::vector<StarImage> scratch_;
     struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool operator==(const Key& o) const; } key_;
+    static Key keyOf(const Settings& s, double W, double H, double cx, double cy);   // 0.55.5: the view asked for (spinVer 0)
+    Key wantKey_, shownKey_, postedKey_;
+    void emit(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy, const Key& restKey);
     ViewStats st_;
     Key glareKey_;
     double glareChangedAt_ = 0;

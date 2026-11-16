@@ -112,6 +112,12 @@ typedef unsigned long long GLuint64;
 #define GL_TIMEOUT_EXPIRED 0x911B
 #define GL_CONDITION_SATISFIED 0x911C
 #define GL_WAIT_FAILED 0x911D
+#ifndef GL_PIXEL_PACK_BUFFER
+#define GL_PIXEL_PACK_BUFFER 0x88EB
+#endif
+#ifndef GL_STREAM_READ
+#define GL_STREAM_READ 0x88E1
+#endif
 
 #define PL_GL_FUNCTIONS(X)                                                                         \
     X(void, glClear, (GLbitfield mask))                                                            \

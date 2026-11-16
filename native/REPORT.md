@@ -1,40 +1,41 @@
-# 0.55.4: real light in the Black Hole Lab (plan step 4, second part)
-## A. Film's glow from the disc only (fix)
-- The lens pass now also writes the disc's own light and the sky behind it to two float layers (only while a glow or the glare is made; otherwise the draw is
-  0.55.3's). The glow reads the disc layer: the sky and the stars are drawn unchanged under it. Rule, label, guide, looks.h and the reference caption updated.
-- Test (precision): every pixel the reference leaves alone equals the no-glow picture (802,336 pixels, 0 touched; 0.55.3's rule would have added 253,927 more
-  units of light over the sky); the glow = its double reference made from the disc alone (1 level, added light 0.5 % off). docs/blackhole/reference_film_r74.png remade.
-## B. One true exposure (src/blackhole/light.h)
-- Bridge: the catalogue's mag is V (HYG README fields 12 and 25, saved); the Sun's apparent V = −26.76 (Willmer 2018, ApJS 236, 47, Table 3, Johnson V, col. 5);
-  a star's light = Ω_Sun·10^(−0.4(m+26.76)) in (Sun's surface luminance × sr), Ω_Sun = π(R_Sun/au)² (IAU values, units.h). The disc was already on the Sun's
-  surface scale. Approximate (stated): V as the eye's visible light, the Sun a 5,772 K black body, evenly bright. A star is spread over its drawn dot (sky.h starDrawLight, now the one rule; starDraw = it with the tone map); a dot shows when its light reaches
-  the 8-bit screen's faintest step, 0.5/(255·12.92) of white (IEC 61966-2-1). The Gaia map is not drawn under True (not calibrated; the app says so).
-- Factor (feeding preset, 20 GM/c², fov 90°, 1280 × 800, automatic exposure): Sirius (V −1.46) is 2.95 × 10¹¹ × fainter than the disc's brightest part and
-  9.6 × 10⁷ × below the screen's step; it first shows at screen white 5.7 × 10⁻⁶ Sun's surfaces. The exposure slider now reaches 10⁻¹⁰ (was 10⁻¹).
-- Controls (Real, disc on): Sky beside the disc: Shown (default) / True brightness (the dot); the card gives the factor and the exposure where a star first shows.
-- Tests (blackhole_physics testTrueLight): Willmer's row and abstract parsed (and found in the saved original); absolute − apparent = 5 log10(10 pc/au) to 0.01;
-  the identity (Sun's magnitude over the Sun's disc = 1 to 1e-14); Pogson (5 mag = 100×); starDraw = starDrawLight; the step; a star shows exactly at the exposure
-  the readout names; settings and a 0.55.3 file (Shown).
-## C. The eye's glare (light.h, light.cpp)
-- Model: the CIE general disability glare equation (Vos & van den Berg, CIE 135/1999 eq. 11), printed identically by Bará & Bao-Varela 2023 (arXiv:2212.09103,
-  Eq. 2) and van den Berg et al. 2013 (Z. Med. Phys. 23, 6, p. 15): Ψ = 10/θ³ + (5/θ² + 0.1p/θ)[1 + (A/62.5)⁴] + 2.5·10⁻³p sr⁻¹, θ in degrees, 0.1°–100°.
-  Eye: 35 years, p = 0.5 (brown; Bará's Figure 2 observer). The PSF is normalised to 1 (both papers): s = ∫ from 0.1° to 100° = 0.27934 is spread, 1 − s = 0.72066
-  stays within 0.1°: light moved, not made. Left out (app text): the pattern within 0.1°, adaptation, afterimages, rings and streaks, colour dependence; a camera differs.
-- Picture: disc light (before its colour is scaled into the screen) averaged in blocks of 0.2°, read back; the veil on the CPU by a multi-level sum (near pairs:
-  Ψ's mean over the two blocks on the source's local map, a table; far pairs: Ψ at the exact angle with the coarse source's spread as a second-order term; 3 × 3
-  points per coarse block, quadratic within each parent); composite = 0.72 × disc + sky + veil. Made only when the picture is drawn anew and only once the view
-  has rested 0.25 s (while it moves, no glare; the panel says so). Glare: Off / As an eye sees it (the dot, default with the disc); Most realistic picks both.
-- Tests (testGlare, 40 checks with the true-exposure ones): the equation's text in both extracts and saved originals; Ψ = the printed formula at 8 angles × 9 eyes
-  (2e-16); s by Simpson in ln θ = Gauss-Legendre (1e-9); a point in a fisheye holding the full 100°: laid/spread 0.99997 (limit 1 %); a point near the edge: laid
-  0.2409 + outside the picture 0.0382 (sphere quadrature) = s 0.2793 (1 %); the function itself from 1° to 55° (0.4 % from 3°, 2.3 % at 1°, the block's size);
-  the levels against every pair directly 0.15 % (where the veil is above 1 % of its peak; farther, near the 100° edge, coarse blocks straddle it).
-- Measured (llvmpipe, 4 cores, Real saved case): 1280 × 800: blocks of 5 px, veil 169 ms, picture 45 → 216 ms; 3840 × 2160: 14 px, veil 181 ms, 366 → 717 ms.
-  On the picture 88.6 % of the spread light lands inside it (fov 30°). Unchanged, checked: Real with Glare Off and Sky Shown = 0.55.3 (hash 7fff50741d132f22).
-## UI part `truelight` (new, 28 checks; the job called it `light`, a name the 0.55.0 part already has): controls only in Real with the disc; True blacks the sky,
-  readout = the rule written in Python; 1000× lower exposure brings ≥ 20 star images back; the glare lights the sky near the disc > 2× farther out and takes light
-  from the disc; Most realistic; restart; a 0.55.3 file (Shown, eye); Film's far sky = Real's pixel for pixel; chip and panel ≥ 4.5:1 in six themes.
-- Reference: docs/blackhole/reference_eye_r74.png (+ .txt; True brightness with the glare, 0.22 MB), reference_film_r74.png remade (1.91 MB).
-## Sources (private repo; extracts + SOURCES.md here): Willmer 2018, the HYG README, Bará 2023, van den Berg 2013. The CIE report and Vos 2003: publisher 403.
-## Tests run: check.sh quick (PL_SOURCES_DIR set) 17 of 17 (blackhole_physics 804 checks); by hand: truelight 28, precision 78, looks 39, disc 23, spin 19, all passing.
-  disc's "not elsewhere" failed at first (the default glare veils the sky round the disc): its runs now set glare=off (reference changed on purpose). Other
-  ui_blackhole parts that draw a disc were not run. **The full UI suite was not run (small version).**
+# 0.55.5: the Black Hole Lab's frame never waits for the processor
+No benchmark file was pasted (the job's placeholder was empty): all numbers are from this Linux box (4 cores, Mesa llvmpipe, a SOFTWARE renderer), not the owner's RX 9060 XT.
+## Step 1, measured before (frame thread = BlackHoleView::draw + the glare's read-back and veil; ms mean / worst over 20 moving frames; spin drag = +0.005 a frame)
+| 1280 x 800 | turn | tilt | distance | spin drag | glare at rest |   | 3840 x 2160 | turn | tilt | distance | spin drag | glare at rest |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Real, spin 0 | 32 / 69 | 30 / 49 | 91 / 158 | 181 / 331 | 2224 | | Real, spin 0 | 178 / 267 | 183 / 228 | 249 / 348 | 437 / 646 | 5989 |
+| Real, spin 0.9 | 64 / 133 | 201 / 457 | 200 / 311 | 174 / 358 | 3394 | | Real, spin 0.9 | 355 / 594 | 435 / 859 | 497 / 722 | 402 / 915 | 4890 |
+| Film | 2240 / 3072 | 2424 / 3158 | 2475 / 3033 | (locked) | none | | Film (3 frames each) | 12668 / 23939 | 13505 / 23961 | 13333 / 22668 | (locked) | none |
+- Stages (spin 0.9, 1280): coarse table 111-129, star bins 16-21, star images 18-27, exposure scan 37-40 (4K: 293-333) per change. At rest: no redraw, no fill.
+- **A cause the planner did not name**: in Film the exposure scan took 2.3 s (4K: 20 s) per change: lab.cpp discLight called looks.cpp filmDiscLinear() at every point,
+  which works out the white balance and two black-body integrals each time. Now made once (function statics; the same numbers bit for bit). This alone was ~1 frame per second.
+## Step 2, after (the app's path, PL_BH_ASYNC; frames paced to 16 ms as VSync would; ms mean / worst)
+| 1280 x 800 | turn | tilt | distance | spin drag | glare share at rest |   | 3840 x 2160 | turn | tilt | distance | spin drag | glare share at rest |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Real, spin 0 | 0.03 / 0.06 | 0.11 / 1.8 | 0.02 / 0.06 | 0.02 / 0.04 | 37 | | Real, spin 0 | 0.04 / 0.06 | 0.20 / 3.4 | 0.68 / 5.0 | 0.04 / 0.12 | 586 |
+| Real, spin 0.9 | 0.02 / 0.04 | 0.02 / 0.04 | 0.02 / 0.04 | 0.02 / 0.05 | 60 | | Real, spin 0.9 | 0.83 / 5.5 | 0.18 / 3.0 | 0.04 / 0.10 | 0.04 / 0.14 | 669 |
+| Film | 0.21 / 4.0 | 0.03 / 0.08 | 0.03 / 0.05 | (locked) | none | | Film | 0.32 / 4.4 | 0.21 / 4.0 | 0.08 / 0.23 | (locked) | none |
+- The limit chosen: **8 ms** worst during drags (UI part `smooth`); typical 0.02-0.2 ms, the worst frames (3-6 ms) are this busy box preempting the thread.
+- Worker stages now (1280, spin 0.9): coarse table 127-431, bins 17-60, star images 23-90, exposure 24-40; the moving scan has at most 1280 x 800 / 16 points at any size.
+- **Glare share at rest is not met on this box**: the veil runs on its own thread, the read-back goes through a pixel buffer and fences and never waits for one, but on
+  llvmpipe the GL calls themselves (drawing the blocks, the copy into the buffer) are executed by the processor inside the call (37-670 ms, once per rest). On a graphics card
+  they are queued commands; unverified here: the owner's benchmark will show it.
+- **Behind**: while moving, the picture was behind in 20-22 of 22 frames, at most 1-2 s at 1280 and 8-21 s at 4K on this box (llvmpipe's drawing of every new 4K picture
+  takes all 4 cores at normal priority; the worker is below it). At rest it catches up. ROADMAP line added.
+- At rest: no redraw, no fill, the lab's worker and fine threads use 0.000 of a core (per-thread /proc times over 10 s); the rest is llvmpipe redrawing the kept picture each frame.
+## What moved where
+- Worker thread (below normal; BlackHoleView::workLoop): the lens/disc/spin tables, SpinStars, star images, exposure; it hands back a Picture (tables, dots, exposure,
+  stats of ONE set of settings); the frame installs it whole. A request not yet taken is replaced (newest wins); every finished picture is shown; the coarse scan's rows on threads.
+- Fine table: its own thread(s) after 0.3 s of rest, dropped when spin/distance/tilt change, never joined while running. Glare: renderer glarePump (fences, PBO, veil thread).
+- Priority: low_priority.cpp (Windows SetThreadPriority BELOW_NORMAL, Linux nice +5 per thread); the pools of disc.cpp, light.cpp, spin_sky.cpp lower their threads too.
+- Card: "Working out the picture: the one shown is the last finished." while behind. No frame rate promised anywhere.
+- Synchronous path kept for the checks (PL_BH_SPINWAIT, glareNow, or PL_DRAWSTAT without PL_BH_ASYNC): the same code as before, run in draw.
+## Step 3, benchmark
+- Scene 13 now turns, tilts and changes distance in turn (2 s each + 1 s rest, by the clock); its report adds per movement: frame thread average/worst, each worker stage
+  (coarse table, bins, star images, exposure), frames behind and the longest behind; at rest the glare and the fine table. Same length. Texts in bench_scenes.cpp; app_tests testBenchBlackHole.
+## Tests
+- New UI part `smooth` (ui_blackhole): tilt drag + spin drag; worst frame-thread time < 8 ms; every frame's sky = the settings its exposure and stars were made for; pictures
+  never older; at rest caught up, 60 frames without any counter growing, glare made. Failing before: worst 1665 ms. (Ends the spin drag at 0: a fine-table picture takes over a minute on llvmpipe.)
+- No unit check of "newest wins": the logic lives in the view with the renderer; `smooth` covers it. Test helpers added: PL_BH_MOVE, PL_BH_FRAMETIME, PL_FRAME_MS, PL_BH_SETTLE.
+- By hand: smooth 10, precision 78 (Real saved hash unchanged), spin 19, disc 23, looks 39, truelight 28, all passing. check.sh quick 17 of 17. **The full UI suite was not run (small version).**
+- No physics test or reference changed.

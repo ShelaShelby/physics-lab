@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "blackhole/kerr.h"
+#include "blackhole/low_priority.h"
 #include "blackhole/presets.h"
 #include "blackhole/schwarzschild.h"
 #include "orbit/sun_facts.h"
@@ -318,7 +319,8 @@ DiscTable::DiscTable(double rO, int nS, int nT) : rO_(rO), alpha_(shadowAngle(rO
         for (int k; (k = next++) < 2 * nS;) rowJob(k / nS, k % nS, tg, out);
     };
     std::vector<std::thread> pool;
-    for (int w = 1; w < nth; w++) pool.emplace_back(worker);
+    const bool low = thisThreadLow();                                         // 0.55.5 (low_priority.h)
+    for (int w = 1; w < nth; w++) pool.emplace_back([&worker, low] { if (low) lowerThisThread(); worker(); });
     worker();
     for (std::thread& th : pool) th.join();
     uf_.assign(u_.begin(), u_.end());

@@ -7,6 +7,7 @@
 #include <thread>
 
 #include "blackhole/kerr.h"
+#include "blackhole/low_priority.h"
 #include "blackhole/spin.h"
 
 namespace blackhole {
@@ -122,7 +123,8 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
         std::atomic<int> next{0};
         const auto worker = [&] { for (int i = next++; i < n; i = next++) { if (cancel && cancel->load()) return; job(i); } };
         std::vector<std::thread> pool;
-        for (int w = 1; w < nth; w++) pool.emplace_back(worker);
+        const bool low = thisThreadLow();                                     // 0.55.5 (low_priority.h)
+        for (int w = 1; w < nth; w++) pool.emplace_back([&worker, low] { if (low) lowerThisThread(); worker(); });
         worker();
         for (std::thread& t : pool) t.join();
     };

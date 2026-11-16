@@ -27,6 +27,9 @@
 #   truelight: 0.55.4, Sky beside the disc and Glare (Real look, disc on; 1280 x 800, Dark): the controls only there; True brightness blacks the sky, the readout's
 #              factor = the module's rule written here (Willmer 2018's -26.76 for the Sun); a lower exposure brings stars back; the glare lights the sky round the disc
 #              far more than far from it; Most realistic; a restart; a 0.55.3 file; Film's glow leaves the far sky alone; the chip and panel 4.5:1 in six themes
+#   smooth:    0.55.5, the frame never waits for the processor (1280 x 800, Dark; the app's asynchronous path, PL_BH_ASYNC): during a tilt drag and a spin drag
+#              the frame thread's worst time stays under SMOOTH_LIMIT_MS; every frame shows one view (sky, exposure and stars of the same settings), never an older
+#              one; at rest the picture catches up with the settings (fine table, glare) and nothing is redone afterwards
 #   check_blackhole.py <PhysicsLab binary> <work folder> [part]
 import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -696,6 +699,62 @@ def part_truelight(binary, work):
             ratio = max(wcag(q[k], bg), wcag(q[-k - 1], bg))
             check(ratio >= 4.5, f"{t}: True brightness with the glare: {name}'s text {ratio:.1f}:1 over its own background (need 4.5)")
 
+# 0.55.5: the frame never waits for the processor (BlackHoleView::async; PL_BH_FRAMETIME prints each frame's own-thread time and the shown picture)
+SMOOTH_LIMIT_MS = 8.0          # the frame thread's worst time in the lab during the drags (measured on this software renderer: REPORT.md of 0.55.5)
+def frames_of(r):
+    out = []
+    for ln in r.out.splitlines():
+        if ln.startswith("PLBHFRAME "):
+            out.append(dict(kv.split("=", 1) for kv in ln.split()[1:]))
+    return out
+
+def part_smooth(binary, work):
+    # Real look, disc on, the default glare, spin 0.6 (1280 x 800, Dark): a scripted tilt drag over the picture, then a spin drag on the slider, then rest
+    # (PL_FRAME_MS=16: a frame takes at least 16 ms, as with VSync on a real screen; the rest is long enough for the fine table on this software renderer)
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding;spin=0.6")
+    reach = "4:click=##blackhole.spin.text;10:key=escape"                # (the Spin row scrolled into the Controls panel's view)
+    r0 = run_app(binary, work, "bh_smooth_where", dict(base, PL_SCRIPT=reach), frames=16)
+    sl = r0.rects.get("slider.blackhole.spin.fill")
+    kn = r0.rects.get("slider.blackhole.spin.knob")
+    check(sl is not None and kn is not None, "the Spin slider's place was printed")
+    if sl is None or kn is None: return
+    sx, sy = kn[0] + kn[2] / 2, kn[1] + kn[3] / 2                      # (from the knob: a press there keeps the value)
+    steps = [reach]
+    for k in range(4):                                                   # tilt: four drags straight down over the free sky left of the hole
+        steps.append(f"{20 + 7 * k}:drag=300,{300 + 30 * k},300,{330 + 30 * k}")
+    for k in range(4):                                                   # spin: four drags along the slider to the left, down to 0 (no fine table to wait for at the end:
+        x0 = sx - 70 * k                                                 # on this software renderer its picture takes over a minute to draw)
+        steps.append(f"{90 + 7 * k}:drag={x0:.1f},{sy:.1f},{x0 - 70:.1f},{sy:.1f}")
+    # the run ends once the lab has had nothing to do for 90 frames after the drags (PL_BH_SETTLE), at the latest after 4000 frames (64 s)
+    r = run_app(binary, work, "bh_smooth", dict(base, PL_SCRIPT=";".join(steps), PL_BH_SETTLE="140:90"), frames=4000)
+    f = frames_of(r)
+    s = bh(r)
+    check(not r.scripted_missing() and 230 <= len(f) < 3999 and s is not None, f"the run printed its frames and the lab settled ({len(f)} frames, {r.scripted_missing()})")
+    if len(f) < 230 or s is None: return
+    moving = [x for x in f if 20 <= int(x["f"]) <= 50 or 90 <= int(x["f"]) <= 120]   # (while a drag is under way)
+    worst = max(float(x["draw"]) + float(x["glare"]) for x in moving)
+    check(worst < SMOOTH_LIMIT_MS, f"during the tilt and spin drags the frame thread's worst time in the lab is {worst:.2f} ms (limit {SMOOTH_LIMIT_MS} ms)")
+    check(any(x.get("behind") == "1" for x in moving), "while the view moves the lab says the picture is behind (the worker's picture comes later)")
+    shown = [x for x in f if x.get("pic", "0") != "0"]                   # (frames with a picture)
+    one = [x for x in shown if x["sky"] == x["made"]]
+    check(len(shown) > 0.9 * len(f) and len(one) == len(shown), f"every frame shows one view: the sky's settings = those its exposure and stars were made for ({len(shown) - len(one)} of {len(shown)} frames differ)")
+    pics = [int(x.get("pic", "0")) for x in f]
+    check(all(b >= a for a, b in zip(pics, pics[1:])), "the shown picture is never an older one than the frame before")
+    last = f[-1]
+    if "sky" not in last: check(False, "the frames name the shown picture's settings"); return
+    sky = [float(v) for v in last["sky"].split(",")]
+    want = [float(s["yaw"]), float(s["pitch"]), float(s["dist"]), float(s["spin"])]
+    s0 = bh(r0)
+    check(s0 is not None and float(s["spin"]) == 0 and float(s["pitch"]) != float(s0["pitch"]),
+          f"the drags moved the settings (spin {s['spin']}, pitch {s['pitch']})")
+    check(last["behind"] == "0" and all(abs(a - b) < 1e-5 for a, b in zip(sky, want)),
+          f"at rest the picture caught up with the settings ({last['sky']} vs {want}, fine {s['fine']}, behind {last['behind']})")
+    tail = f[-60:]
+    keys = ("redraws", "coarse", "fine", "stars", "pic")
+    grew = [k for k in keys if tail[0][k] != tail[-1][k]]
+    check(not grew, f"at rest nothing is redone in the last 60 frames (grew: {grew})")
+    check(any(float(x.get("glarewait", "0")) > 0 for x in f if int(x["f"]) > 130), "after the drags the glare was made (on its own thread)")
+
 def blackhole_film():
     # the Film look's numbers as the module states them (src/blackhole/looks.h FilmChoices), to compare the labels with
     t = open(os.path.join(SRC, "blackhole", "looks.h"), encoding="utf-8").read()
@@ -707,7 +766,7 @@ def blackhole_film():
 
 PARTS = {"open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
-         "truelight": part_truelight}
+         "truelight": part_truelight, "smooth": part_smooth}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]
