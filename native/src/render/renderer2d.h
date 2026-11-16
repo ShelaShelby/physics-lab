@@ -45,7 +45,7 @@ public:
     void useRockCompute(IRockCompute* r) { delete rocks_; rocks_ = r; }   // tests: put a stand-in (or nullptr) in place of the OpenGL object; the renderer owns it
     void disableCompute();                // forget the compute object: the CPU paths are used (PL_NO_COMPUTE; tests)
     // 0.55.6: the Black Hole Lab's light paths on the card (render/kerr_compute.h), made at the first call; nullptr when this PC cannot (kerrWhy() says why)
-    IKerrCompute* kerrCompute();
+    IKerrCompute* kerrCompute(KerrSteps* steps = nullptr);   // 0.55.7: steps told of the compile and link (the guard: app/gpu_guard.h)
     const std::string& kerrWhy() const { return kerrWhy_; }
 
     // Start a frame for a picture `width` × `height` points.

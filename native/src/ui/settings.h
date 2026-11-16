@@ -14,6 +14,7 @@ namespace ui {
 
 struct AppState;
 
+std::string settingsFolder();                              // 0.55.7: the settings file's folder, its separator at the end ("" when unknown): the light paths' marker and log go there
 void loadSettings(AppState& app);                         // at start-up: read the file and set up both labs
 void saveSettingsWhenChanged(AppState& app, double nowS, bool now = false); // every frame: writes the file a moment after something changed; now: at once (0.21: when the app closes, so a change in its last moment is kept)
 void settingsWindow(AppState& app);                       // the Settings window, when open

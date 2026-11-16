@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.7", "The Black Hole Lab: the graphics card's light paths can no longer stop the app",
+     "On one PC the app closed by itself a few seconds after it opened, every time, when its saved settings opened the Black Hole Lab with a spinning hole. "
+     "The graphics card's light paths now start only after the window is on screen, a step at a time without the window ever waiting, and until they have worked once "
+     "with your graphics driver the app writes down each step before it begins. If the app stops inside one of them, the next start leaves them switched off for that "
+     "driver (a new driver or a new version of the app tries once more), the processor draws the picture as before, and Settings, Performance says so, names the step "
+     "and has a button Try again. A step that does not finish within 10 seconds counts the same way. The steps, the driver's messages and their times go into a "
+     "log file beside the settings file (Settings, Performance opens its folder); the benchmark report ends with its last 40 lines."},
     {"0.55.6", "The Black Hole Lab: the graphics card works out the light paths",
      "Round the spinning hole the graphics card now follows the light paths itself, with the same equations and steps as the processor and in double "
      "precision, so the picture is the fine one even while the view moves: no coarse picture first, and no seconds of processor work after you stop. The card "

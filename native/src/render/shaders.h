@@ -1376,18 +1376,21 @@ void ray(double psi, double chi, int o, bool ext) {
         if (err > 1.0LF) { h = h * dmax(0.2LF, 0.9LF * dpowm02(err)); continue; }
         double p0 = planeOf(y[1]), p1 = planeOf(yn[1]);
         if (found < 4 && (p0 > 0.0LF) != (p1 > 0.0LF)) {
+            // (0.55.7: Newton's steps on the crossing and the last trial step at the found hc share one call of dpStep, the same steps in the same order as
+            // before: a driver that inlines every call now copies the step's seven ray equations twice instead of three times)
             double hc = h * p0 / (p0 - p1), yc[5] = Z5, kc[5] = Z5;
-            for (int it = 0; it < 8; it++) {
+            bool last = false;
+            for (int it = 0; it < 9; it++) {
                 dpStep(b, q, y, k1, hc, yc, kc);
+                if (last || it == 8) break;
                 double s = 0.0LF, c = 0.0LF;
                 dsincos(yc[1], s, c);
                 double rate = -s * kc[1];
-                if (!(rate != 0.0LF)) break;
+                if (!(rate != 0.0LF)) { last = true; continue; }
                 double dh = -c / rate;
                 hc = hc + dh;
-                if (abs(dh) <= 1e-14LF * abs(h)) break;
+                if (abs(dh) <= 1e-14LF * abs(h)) last = true;
             }
-            dpStep(b, q, y, k1, hc, yc, kc);
             u[found] = 1.0LF / yc[0];
             found++;
         }

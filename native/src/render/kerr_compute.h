@@ -3,9 +3,18 @@
 // are checked is blackhole/spin_card.h. Nothing here waits for the card unless it says so: a pass is queued, done() looks whether it has finished.
 #pragma once
 
+#include <string>
 #include <vector>
 
 namespace render {
+
+// 0.55.7: the steps of making the shader, named to the caller before they begin and after they end (the guard's marker and log, app/gpu_guard.h)
+class KerrSteps {
+public:
+    virtual ~KerrSteps() {}
+    virtual void begin(const std::string& step) = 0;
+    virtual void end(const std::string& step, const std::string& result) = 0;
+};
 
 class IKerrCompute {
 public:
@@ -16,7 +25,23 @@ public:
     // (a long single dispatch can trip the operating system's graphics timeout)
     static constexpr int kPiece = 8192;
     virtual void passB(const std::vector<double>& par, const std::vector<double>& rowChi, int nS) = 0;
-    virtual bool done(bool wait) = 0;                                                   // the last pass has finished (wait: waits for it)
+    // 0.55.7: pass B in steps, each with its own fence (the first fill on a new PC, piece by piece, growing; passB is the three without fences between)
+    virtual bool passBRows(const std::vector<double>& par, const std::vector<double>& rowChi, int nS) = 0;   // false: the last table is still mapped
+    virtual void passBPiece(int first, int n) = 0;
+    virtual void passBCopy() = 0;
+    int nodes() const { return nodes_; }                                                 // pass B's rays (2 x rows x nS)
+    // the last queued work has finished. wait: waits for it, at most kWaitLimitMs in all (0.55.7: a fence that never signals cannot hold the app);
+    // false then too. queuedMs: how long ago the last work was queued (the callers' time limits)
+    static constexpr double kWaitLimitMs = 10000;
+    virtual bool done(bool wait) = 0;
+    virtual double queuedMs() const = 0;
+    // 0.55.7: the waiting calls below in two halves, so the start-up check runs over frames without waiting: queue, then (done) read
+    virtual void queueRays(const std::vector<double>& par, const std::vector<double>& psiChi) = 0;
+    virtual void readRays(std::vector<double>& out) = 0;
+    virtual void queueEdges(const std::vector<double>& par, const std::vector<double>& chi) = 0;
+    virtual void readEdges(std::vector<double>& out) = 0;
+    virtual void queueMath(const std::vector<double>& par, const std::vector<double>& x) = 0;
+    virtual void readMath(std::vector<double>& out) = 0;
     virtual void readA(std::vector<double>& edge, std::vector<double>& probe) = 0;    // after pass A
     // after pass B: the rows' edges, and the nodes' numbers in memory the processor reads directly; valid until release()
     virtual const double* mapB(std::vector<double>& rowEdge) = 0;
@@ -27,10 +52,13 @@ public:
     virtual void edges(const std::vector<double>& par, const std::vector<double>& chi, std::vector<double>& out) = 0;
     // tests: the shader's own double functions at x (8 numbers each: sin, cos, exp(x), log(|x|), atan2(x, 1 - x), acos(x / (1 + |x|)), cbrt(x), |x|^-0.2)
     virtual void math(const std::vector<double>& par, const std::vector<double>& x, std::vector<double>& out) = 0;
+protected:
+    int nodes_ = 0;
 };
 
 // The OpenGL 4.3 implementation for the current context, or nullptr (a 3.3 context, a missing function, a shader the driver does not compile); why says
-// which. The caller owns it.
-IKerrCompute* makeKerrCompute(const char** why);
+// which. The caller owns it. steps (0.55.7, may be null): told before and after the compile and the link, with the driver's info logs (also when it compiled).
+// PL_BH_CARDHANG (tests): its fences never signal.
+IKerrCompute* makeKerrCompute(const char** why, KerrSteps* steps = nullptr);
 
 }  // namespace render

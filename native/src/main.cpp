@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "app/gpu_guard.h"
 #include "app/app_data.h"
 #include "app/bench.h"
 #include "app/frame_time.h"
@@ -197,6 +198,22 @@ int main(int, char**) {
     render::Renderer2D renderer;
     if (!renderer.init()) { fail("Could not set up the OpenGL shaders", "Your graphics driver started, but would not accept the drawing programs Physics Lab sends it.", kDriverAdvice); return 1; }
     if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // for the owner and automatic checks: run the CPU path even on a PC that has OpenGL 4.3
+    {   // 0.55.7: the guard round the graphics card's light paths and their log (app/gpu_guard.h), beside the settings file; a marker left by the last run
+        // switches the path off before anything of it runs; the settings file keeps that at once
+        const auto str = [](GLenum e) { const char* t = reinterpret_cast<const char*>(plgl::glGetString(e)); return std::string(t ? t : "?"); };
+        const std::string vendor = str(GL_VENDOR), gpu = str(GL_RENDERER), version = str(GL_VERSION), glsl = str(0x8B8C /* GL_SHADING_LANGUAGE_VERSION */);
+        const bool fp64 = SDL_GL_ExtensionSupported("GL_ARB_gpu_shader_fp64");
+        GLint maj = 0, min = 0;
+        plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
+        const std::vector<std::string> head = {
+            std::string("Physics Lab ") + ui::appVersion() + ": the log of the graphics card's light paths (the Black Hole Lab's spinning hole); overwritten at each start",
+            "GPU: " + gpu, "Vendor: " + vendor, "OpenGL: " + version + " (context " + std::to_string(maj) + "." + std::to_string(min) + ")", "GLSL: " + glsl,
+            std::string("Double precision (GL_ARB_gpu_shader_fp64): ") + (fp64 ? "reported" : "NOT reported") + (maj >= 4 ? " (core in OpenGL 4.0 and later)" : "")};
+        const char* fakeDriver = SDL_getenv("PL_GPU_DRIVER");          // (tests: another driver's version string)
+        app::gpuGuard().start(ui::settingsFolder(), ui::appVersion(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuPaths, head);
+        if (app::gpuGuard().saved() != app.prefs.gpuPaths) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+        else app::gpuGuard().settingsWritten();
+    }
     {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
         GLint maj = 0, min = 0;
         plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
@@ -288,7 +305,8 @@ int main(int, char**) {
     if (SDL_getenv("PL_JOURNEY")) ui::journeyStart(app);
     if (const char* pn = SDL_getenv("PL_PANE")) app.pane = std::atoi(pn) == 1 ? 1 : 0;     // for automatic checks: open the Learn tab (1)
     if (const char* l = SDL_getenv("PL_LEARN")) app.learn = std::atoi(l);     // open a Learn guide (1, 2 or 3)
-    if (const char* o = SDL_getenv("PL_OPEN")) { const std::string w = o; app.showSettings = w == "settings"; app.showAbout = w == "about"; app.showHistory = w == "history"; }   // for automatic checks: open a window
+    if (const char* o = SDL_getenv("PL_OPEN")) { const std::string w = o; app.showSettings = w == "settings"; app.showAbout = w == "about"; app.showHistory = w == "history";   // for automatic checks: open a window
+                                              if (w.rfind("settings:", 0) == 0) ui::settingsGoto(app, w.substr(9).c_str()); }   // (0.55.7: "settings:<row>": at that row)
     if (SDL_getenv("PL_CONS")) app.set.cons = orbit::ConsMode::LinesAndNames;
     // Atom Lab checks: PL_ATOM=1 opens the Atom Lab, PL_ATOM_SET="Z=26;view=Cloud;zoom=4.5" sets its settings,
     // PL_ATOM_DO="absorb" presses Emit / Absorb / Auto photons (or ⌕ Nucleus / ⌕ Nucleon: "nucleus", "nucleon"), PL_ATOM_FOCUS=n dives into nucleon n
@@ -756,6 +774,7 @@ int main(int, char**) {
     ImGui::DestroyContext();
     atom::setOutlineCompute(nullptr);
     app.blackholeView.stopWork();                    // 0.55.6: its worker may read the card's memory, which the renderer frees
+    app::gpuGuard().closing();                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
     renderer.shutdown();
     SDL_GL_DestroyContext(gl);
     SDL_DestroyWindow(window);

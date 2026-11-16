@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "app/app_data.h"
+#include "app/gpu_guard.h"
 #include "app/grid.h"
 #include "fonts.h"
 #include "html_view.h"
@@ -46,6 +47,16 @@ std::string settingsPath() {
     SDL_free(dir);
     return p;
 }
+
+}  // namespace
+
+std::string settingsFolder() {
+    const std::string p = settingsPath();
+    const std::size_t k = p.find_last_of("/\\");
+    return k == std::string::npos ? std::string() : p.substr(0, k + 1);
+}
+
+namespace {
 
 std::string g_written;            // what the file holds now
 double g_changedAt = -1;          // when the settings last changed (s), -1 = nothing waiting to be written
@@ -77,6 +88,7 @@ const char* const kSky[3] = {"soft", "full", "off"};
 const char* const kCons[3] = {"off", "lines", "names"};
 
 void labsToPrefs(const AppState& app, app::Prefs& p) {
+    if (app::gpuGuard().started()) p.gpuPaths = app::gpuGuard().saved();   // 0.55.7: what the light paths' guard keeps (before it starts: the file's line as read)
     const orbit::ViewSettings& v = app.set;
     p.orbit = {{"view3D", v.view3D ? "1" : "0"}, {"zoom", num(v.zoom)}, {"tspeed", num(v.tspeed)}, {"trueScale", v.trueScale ? "1" : "0"},
                {"fullTrails", v.fullTrails ? "1" : "0"}, {"moons", v.moons ? "1" : "0"}, {"dwarfs", v.dwarfs ? "1" : "0"}, {"comets", v.comets ? "1" : "0"},
@@ -244,7 +256,7 @@ void saveSettingsWhenChanged(AppState& app, double nowS, bool now) {
     if (!now && nowS - g_changedAt < 0.25) return;
     const std::string path = settingsPath();
     if (path.empty()) return;
-    if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; }
+    if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; app::gpuGuard().settingsWritten(); }   // (0.55.7: a marker the file now keeps can go)
     else g_changedAt = nowS + 5;                              // 0.19: not written (a full disk, a read-only folder): the old file stays; try again in about 5 s, not every frame
 }
 

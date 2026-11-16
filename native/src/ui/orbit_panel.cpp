@@ -20,6 +20,8 @@
 #include "shot.h"
 #include "benchmark.h"
 #include "app/bench.h"
+#include "app/gpu_guard.h"
+#include <SDL3/SDL_misc.h>
 #include "orbit/format.h"
 #include "orbit/moon_elp.h"
 #include "orbit/date_text.h"
@@ -111,14 +113,32 @@ void performanceCard(AppState& app) {
     }
     if (app.lab == blackhole::kLabIndex) {                // 0.55.6: who fills the spinning hole's light-path table: the line says which and why, the switch compares
         blackhole::BlackHoleView& v = app.blackholeView;
-        const char* line = !v.gpuPaths ? "Light paths of the spinning hole: the processor (GPU light paths is off)."
+        // 0.55.7: switched off by the guard (a past run died inside the card's path, or a step did not finish in time, with this app version and driver):
+        // that line instead, with "Try again"; the log's folder can be opened (the benchmark report ends with the log's last lines)
+        app::GpuGuard& G = app::gpuGuard();
+        const std::string off = G.offText();
+        const char* line = !off.empty() ? nullptr
+                         : !v.gpuPaths ? "Light paths of the spinning hole: the processor (GPU light paths is off)."
                          : v.cardState() == 1 ? "Light paths of the spinning hole: the graphics card (its check on this PC passed)."
-                         : v.cardState() == 0 ? "Light paths of the spinning hole: the graphics card, once its check on this PC has passed (made when a spinning hole is first drawn)."
+                         : v.cardState() == 0 || v.cardState() == 2 ? "Light paths of the spinning hole: the graphics card, once its check on this PC has passed (made when a spinning hole is first drawn)."
                          : nullptr;
-        const std::string text = line ? std::string(line) : "Light paths of the spinning hole: the processor, because " + v.cardWhy() + ".";
+        const std::string text = !off.empty() ? off : line ? std::string(line) : "Light paths of the spinning hole: the processor, because " + v.cardWhy() + ".";
+        settingMark("gpupaths");                          // (0.55.7: the row starts at its line, so "go to" shows the buttons too)
         ImGui::TextWrapped("%s", text.c_str());
         if (shellLogOn()) auditNote("bhpaths " + text);   // (the checks: the line as drawn)
-        settingMark("gpupaths");
+        if (!off.empty()) {
+            if (ImGui::Button("Try again##gpupaths")) G.tryAgain();
+            noteItem("gpupaths.again");
+            if (ImGui::IsItemHovered()) ui::SetTooltip("The graphics card's light paths are tried again at the next spinning picture, with a marker before each step:\n"
+                                                          "if the app stops again, it starts the next time with them switched off, as now.");
+            ImGui::SameLine();
+        }
+        if (!G.folder().empty()) {
+            if (ImGui::Button("Open the log's folder##gpupaths")) SDL_OpenURL(("file:///" + G.folder()).c_str());
+            noteItem("gpupaths.log");
+            if (ImGui::IsItemHovered()) ui::SetTooltip("The folder with %s: what the graphics card's light paths did at this start, step by step\n"
+                                                          "(the driver's messages, each step's time, the check's numbers). The benchmark report ends with its last 40 lines.", app::GpuGuard::kLog);
+        }
         wrappedCheckbox("GPU light paths (OpenGL 4.3)", &v.gpuPaths);
         if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default, needs OpenGL 4.3 with double precision): the light paths' table of the spinning hole is filled by a compute shader on the graphics card,\n"
                                                       "the same rays and steps as the processor's in double precision, at the fine table's size while the view moves and at rest. It is used only after a check\n"

@@ -27,7 +27,8 @@
 #   truelight: 0.55.4, Sky beside the disc and Glare (Real look, disc on; 1280 x 800, Dark): the controls only there; True brightness blacks the sky, the readout's
 #              factor = the module's rule written here (Willmer 2018's -26.76 for the Sun); a lower exposure brings stars back; the glare lights the sky round the disc
 #              far more than far from it; Most realistic; a restart; a 0.55.3 file; Film's glow leaves the far sky alone; the chip and panel 4.5:1 in six themes
-#   smooth:    0.55.5, the frame never waits for the processor (1280 x 800, Dark; the app's asynchronous path, PL_BH_ASYNC): during a tilt drag and a spin drag
+#   smooth:    (0.55.7: also the guard round the card's path, its marker, Try again, a fence that never signals, the log's steps in order)
+#              0.55.5, the frame never waits for the processor (1280 x 800, Dark; the app's asynchronous path, PL_BH_ASYNC): during a tilt drag and a spin drag
 #              the frame thread's worst time stays under SMOOTH_LIMIT_MS; every frame shows one view (sky, exposure and stars of the same settings), never an older
 #              one; at rest the picture catches up with the settings (fine table, glare) and nothing is redone afterwards
 #   check_blackhole.py <PhysicsLab binary> <work folder> [part]
@@ -817,6 +818,71 @@ def part_smooth(binary, work):
     said = any("Light paths of the spinning hole: the processor, because the check was made to fail" in n for n in rf.note("bhpaths"))
     check("PLBHCARD state=-1" in rf.out and "test switch" in rf.out and len(ff) > 0 and ff[-1]["cardstate"] == "-1" and ff[-1]["card"] == "0" and ff[-1]["pic"] != "0" and said,
           f"a failed start-up check: the processor's path draws the picture and Settings, Performance says so (said {said})")
+    smooth_guard(binary, work, cb)
+
+def smooth_guard(binary, work, cb):
+    # 0.55.7, the guard round the card's path (app/gpu_guard.h) and its log, beside the settings file (here PL_SETTINGS in a folder of its own per case).
+    # The log of a normal first run: the start's lines, then every step in order, the check's numbers, the first fill piece by piece, the verdict.
+    gd = os.path.join(work, "guard_ok"); os.makedirs(gd, exist_ok=True)
+    for f in os.listdir(gd): os.remove(os.path.join(gd, f))
+    sf = os.path.join(gd, "settings.txt")
+    ok = run_app(binary, work, "bh_guard_ok", dict(cb, PL_SETTINGS=sf), frames=60, timeout=1200)
+    log = open(os.path.join(gd, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(gd, "gpu-paths-log.txt")) else ""
+    order = ["GPU: ", "OpenGL: ", "Double precision", "begin compile", "end compile the light paths' shader: compiled", "begin link", "end link",
+             "begin check: dispatch 1", "begin check: fence wait, dispatch 1", "end check: fence wait", "begin check: read back dispatch 1", "double functions",
+             "case 1 (spin 0.90, r 20, theta 1.3): dispatch the shadow's edge", "begin check: case 1 (spin 0.90, r 20, theta 1.3): dispatch 16 rays", "case 2 (spin 0.99",
+             "32 rays: edge", "PASSED", "begin fill 1: dispatch pass A", "begin fill 1: fence wait, pass A", "begin fill 1: dispatch the rows' edges",
+             "begin dispatch fill 1: piece 1 (rays 0 to 63 of", "begin fence wait, fill 1: piece 1", "begin dispatch fill 1: piece 2 (rays 64 to 319",
+             "begin fill 1: copy", "begin fill 1: map the nodes", "begin fill 1: the worker reads the nodes", "end fill 1: the worker reads", "the whole path succeeded"]
+    at, missing = 0, []
+    for w in order:
+        k = log.find(w, at)
+        if k < 0: missing.append(w)
+        else: at = k
+    check("PLBHCARD state=1" in ok.out and not missing and len(log.splitlines()) < 400, f"guard: the log names every step in order on the software renderer's run (missing or out of order: {missing})")
+    txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+    check("gpupaths=ok | " in txt and not os.path.exists(os.path.join(gd, "gpu-paths-step.txt")), "guard: the whole path succeeded: kept as ok, no marker left")
+    # the process ended inside a named step (test switch PL_GPU_DIE): the marker names it; the next start compiles nothing, draws on the processor's path,
+    # and Settings, Performance names the step; a restart with the same driver stays off, another driver string tries again; "Try again" clears it
+    for i, (die, want) in enumerate([("compile", "compile the light paths' shader"), ("check: fence wait, case 1", "check: fence wait, case 1 (spin 0.90, r 20, theta 1.3) edges"),
+                                     ("dispatch fill 1: piece 2", "dispatch fill 1: piece 2 (rays 64 to 319 of 4096)")]):
+        d = os.path.join(work, f"guard_die{i}"); os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d): os.remove(os.path.join(d, f))
+        sf = os.path.join(d, "settings.txt")
+        run_app(binary, work, f"bh_guard_die{i}", dict(cb, PL_SETTINGS=sf, PL_GPU_DIE=die), frames=60, timeout=1200)
+        mk = os.path.join(d, "gpu-paths-step.txt")
+        marker = open(mk, encoding="utf-8").read() if os.path.exists(mk) else ""
+        check(f"step={want}\n" in marker and "driver=" in marker and "version=" in marker, f"guard: the process ended inside '{die}': the marker names the step ({marker!r})")
+        r = run_app(binary, work, f"bh_guard_after{i}", dict(cb, PL_SETTINGS=sf, PL_OPEN="settings"), frames=30, timeout=1200)
+        fr = frames_of(r)
+        lg = open(os.path.join(d, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(d, "gpu-paths-log.txt")) else ""
+        said = [n for n in r.note("bhpaths") if "stopped the app last time" in n and f"'{want}'" in n]
+        check("PLBHCARD state=-1" in r.out and "begin compile" not in lg and len(fr) > 0 and fr[-1]["cardstate"] == "-1" and fr[-1]["card"] == "0" and fr[-1]["pic"] != "0" and said,
+              f"guard: after '{die}' the shader is not compiled, the processor's path draws, Settings names the step (said {bool(said)})")
+        txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+        check("gpupaths=off | " in txt and f"| {want}\n" in txt, "guard: the settings file keeps it off with the step")
+        check(not os.path.exists(mk), "guard: the marker is gone once the settings file keeps it")
+        if i != 0: continue
+        r2 = run_app(binary, work, "bh_guard_same", dict(cb, PL_SETTINGS=sf), frames=20, timeout=1200)
+        check("PLBHCARD state=-1" in r2.out and "stopped the app last time" in r2.out, "guard: a restart with the same driver stays off")
+        sf2 = os.path.join(d, "settings_other.txt")
+        with open(sf2, "w", encoding="utf-8") as f: f.write(open(sf, encoding="utf-8").read())
+        r3 = run_app(binary, work, "bh_guard_other", dict(cb, PL_SETTINGS=sf2, PL_GPU_DRIVER="Another driver 1.2.3"), frames=60, timeout=1200)
+        check("PLBHCARD state=1" in r3.out, "guard: another driver string tries again (and passes here)")
+        r4 = run_app(binary, work, "bh_guard_again", dict(cb, PL_SETTINGS=sf, PL_OPEN="settings:gpupaths", PL_SCRIPT="14:click=gpupaths.again"), frames=70, timeout=1200)
+        txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+        check(not r4.scripted_missing() and "PLBHCARD state=1" in r4.out and "gpupaths=ok | " in txt and "stopped the app" not in (r4.note("bhpaths") or [""])[-1],
+              f"guard: Try again clears it: the card's path passes in the same run and the settings file keeps ok ({r4.scripted_missing()})")
+    # a fence that never signals (test switch PL_BH_CARDHANG; the step's limit 3 s here): the frames go on meanwhile, then the processor's path, kept as slow
+    d = os.path.join(work, "guard_hang"); os.makedirs(d, exist_ok=True)
+    for f in os.listdir(d): os.remove(os.path.join(d, f))
+    sf = os.path.join(d, "settings.txt")
+    rh = run_app(binary, work, "bh_guard_hang", dict(cb, PL_SETTINGS=sf, PL_BH_CARDHANG="1", PL_BH_CARDLIMIT="3"), frames=400, timeout=1200)
+    fh = frames_of(rh)
+    waiting = [x for x in fh if x["cardstate"] == "2"]
+    txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+    check("PLBHCARD state=-1" in rh.out and "did not finish in time (fence wait, dispatch 1)" in rh.out and len(waiting) >= 20 and fh and fh[-1]["card"] == "0" and fh[-1]["pic"] != "0"
+          and "gpupaths=slow | " in txt, f"guard: a fence that never signals: {len(waiting)} frames drawn while the check waited, then the processor's path, kept as slow")
 
 def blackhole_film():
     # the Film look's numbers as the module states them (src/blackhole/looks.h FilmChoices), to compare the labels with

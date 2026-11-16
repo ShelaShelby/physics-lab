@@ -79,7 +79,7 @@ public:
     // check has passed; the card's table is the picture while moving and at rest (no fine table on the processor). Off, or no OpenGL 4.3, or the check
     // failed: the processor's tables of 0.55.5.
     bool gpuPaths = true;
-    int cardState() const { return cardState_; }               // 0 not yet asked (the lab has not drawn a spinning hole), 1 the card's path, -1 the processor's
+    int cardState() const { return cardState_; }               // 0 not yet asked (the lab has not drawn a spinning hole), 2 (0.55.7) its check under way, 1 the card's path, -1 the processor's
     const std::string& cardWhy() const { return cardWhy_; }    // -1: why
     const CardCheck& cardCheck() const { return cardCheck_; }
     bool fineThreadBusy() const { return spinWorker_.joinable(); }   // 0.55.6 (tests): the processor's fine table is being made
@@ -173,11 +173,14 @@ private:
     std::string cardWhy_;
     CardCheck cardCheck_;
     std::unique_ptr<CardFill> cardFill_;
+    std::unique_ptr<CardStartup> cardStartup_;                 // 0.55.7: the start-up check, a step per frame
+    int asyncDraws_ = 0, guardGen_ = 0;                        // 0.55.7: the card's path starts only once the first frames are on screen; "Try again" seen
     std::shared_ptr<const SpinTable> cardFine_;                // the last table the card filled (installed with a picture)
     std::weak_ptr<CardTableData> cardPosted_;                  // the last fill handed to the worker, its (a, r, th), and whether the worker used it
     std::shared_ptr<std::atomic<bool>> cardPostedUsed_;
     double cardPostedKey_[3] = {-1, -1, -1};
     bool cardReady(render::Renderer2D& R);
+    void cardOff(const std::string& why);                      // 0.55.7: the processor's path from now on in this run (said, logged, printed)
     void pumpCard(const Settings& s, double W, double H, double cx, double cy, bool start);
     void pollFine(const Settings& s);
     void install(Picture& p);

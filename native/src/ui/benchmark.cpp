@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 
+#include "app/gpu_guard.h"
 #include "app/bench.h"
 #include "app/bench_scenes.h"
 #include "app/gpu_timer.h"
@@ -379,6 +380,12 @@ void begin(AppState& app) {
 
 void saveAndCopy(AppState& app, BenchState& b) {
     b.text = app::benchResultText(b.env, b.results);
+    {   // 0.55.7: the report ends with the last 40 lines of the graphics card's light paths' log (app/gpu_guard.h), so one paste carries both
+        const std::vector<std::string> tail = app::gpuGuard().logTail(40);
+        b.text += "\nThe graphics card's light paths, the last " + std::to_string(tail.size()) + " lines of " + (app::gpuGuard().logPath().empty() ? std::string("their log") : app::gpuGuard().logPath()) + ":\n";
+        for (const std::string& l : tail) b.text += l + "\n";
+        if (tail.empty()) b.text += "(no log)\n";
+    }
     if (SDL_getenv("PL_BENCH")) std::printf("PLBENCH-RESULT-BEGIN\n%s\nPLBENCH-RESULT-END\n", b.text.c_str());   // (for automatic runs: the result on stdout)
     SDL_SetClipboardText(b.text.c_str());
     SDL_Time now = 0; SDL_DateTime dt{};

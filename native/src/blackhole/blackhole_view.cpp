@@ -15,6 +15,7 @@
 #include <thread>
 #include <vector>
 
+#include "app/gpu_guard.h"
 #include "blackhole/light.h"
 #include "blackhole/low_priority.h"
 #include "blackhole/spin.h"
@@ -738,7 +739,7 @@ void BlackHoleView::pollFine(const Settings& s) {
 
 bool BlackHoleView::settled() {
     if (!async) return true;
-    if (st_.behind || spinWorker_.joinable() || (fineA_ > 0 && !st_.spinFine && !st_.spinCard) || (cardFill_ && !cardFill_->idle())) return false;
+    if (st_.behind || spinWorker_.joinable() || (fineA_ > 0 && !st_.spinFine && !st_.spinCard) || (cardFill_ && !cardFill_->idle()) || cardState_ == 2) return false;
     std::lock_guard<std::mutex> g(workMx_);
     return !workBusy_ && !req_ && !done_;
 }
@@ -752,21 +753,55 @@ void BlackHoleView::makeFineNow(const Settings& s) {
     spinFineStarted_ = true;
 }
 
-// 0.55.6: the card's path, decided once: OpenGL 4.3 with its shader compiled, and the start-up check on this card (spin_card.h cardSelfCheck)
+// 0.55.6: the card's path, decided once: OpenGL 4.3 with its shader compiled, and the start-up check on this card (spin_card.h CardStartup).
+// 0.55.7: within the guard (app/gpu_guard.h): off at once when a past run died inside the path (or a step ran out of time) with this app version and driver:
+// the shader is not compiled; nothing of it before the view's third frame (the first frames are on screen, the window usable); the check runs a step per
+// frame and a step that does not finish within cardStepLimitMs() switches the path off
+namespace {
+struct GuardSteps : render::KerrSteps {
+    void begin(const std::string& step) override { app::gpuGuard().begin(step); }
+    void end(const std::string& step, const std::string& result) override { app::gpuGuard().end(step, result); }
+};
+}  // namespace
+
+void BlackHoleView::cardOff(const std::string& why) {
+    cardState_ = -1;
+    cardWhy_ = why;
+    std::printf("PLBHCARD state=%d checkms=%.1f edge=%.2e dir=%.2e b=%.2e u=%.2e ends=%d why=%s\n", cardState_, cardCheck_.ms, cardCheck_.edge, cardCheck_.dir,
+                cardCheck_.b, cardCheck_.u, cardCheck_.endsDiffer, cardWhy_.empty() ? "-" : cardWhy_.c_str());
+}
+
 bool BlackHoleView::cardReady(render::Renderer2D& R) {
+    app::GpuGuard& G = app::gpuGuard();
+    if (guardGen_ != G.generation()) {                                     // Settings, Performance, "Try again": the path is tried afresh
+        guardGen_ = G.generation();
+        if (cardState_ == -1) { cardState_ = 0; cardWhy_.clear(); cardCheck_ = CardCheck{}; cardStartup_.reset(); if (cardFill_) cardFill_->clearLate(); }
+    }
     if (cardState_ == 0) {
-        render::IKerrCompute* K = R.kerrCompute();
-        if (!K) { cardState_ = -1; cardWhy_ = R.kerrWhy(); }
-        else {
-            cardCheck_ = cardSelfCheck(*K);
-            static const bool forced = std::getenv("PL_BH_CARDFAIL") != nullptr;   // (tests: as if the check had failed)
-            if (forced) { cardCheck_.ok = false; cardCheck_.why = "the check was made to fail (test switch PL_BH_CARDFAIL)"; }
-            cardState_ = cardCheck_.ok ? 1 : -1;
-            cardWhy_ = cardCheck_.why;
-            if (cardCheck_.ok) cardFill_ = std::make_unique<CardFill>(*K);
-        }
-        std::printf("PLBHCARD state=%d checkms=%.1f edge=%.2e dir=%.2e b=%.2e u=%.2e ends=%d why=%s\n", cardState_, cardCheck_.ms, cardCheck_.edge, cardCheck_.dir,
-                    cardCheck_.b, cardCheck_.u, cardCheck_.endsDiffer, cardWhy_.empty() ? "-" : cardWhy_.c_str());
+        if (G.started() && !G.allowed()) { cardOff(G.offText().empty() ? std::string("the graphics card's light paths are switched off") : G.offText()); return false; }
+        if (++asyncDraws_ < 3) return false;                               // (the first frames on screen first)
+        static GuardSteps steps;
+        render::IKerrCompute* K = R.kerrCompute(&steps);
+        if (!K) { G.finished(false, R.kerrWhy()); cardOff(R.kerrWhy()); return false; }
+        cardStartup_ = std::make_unique<CardStartup>(*K, &G, cardStepLimitMs());
+        cardState_ = 2;
+    }
+    if (cardState_ == 2) {
+        const int r = cardStartup_->pump(false);
+        if (r == 0) return false;
+        cardCheck_ = cardStartup_->check();
+        const std::string late = cardStartup_->lateStep();
+        cardStartup_.reset();
+        static const bool forced = std::getenv("PL_BH_CARDFAIL") != nullptr;   // (tests: as if the check had failed)
+        if (forced && r == 1) { cardCheck_.ok = false; cardCheck_.why = "the check was made to fail (test switch PL_BH_CARDFAIL)"; }
+        if (r == -2) { G.timedOut(late); cardOff(cardCheck_.why); return false; }
+        if (!cardCheck_.ok) { G.finished(false, cardCheck_.why); cardOff(cardCheck_.why); return false; }
+        cardState_ = 1;
+        cardWhy_.clear();
+        G.begin("between the check and the first fill");
+        if (!cardFill_) cardFill_ = std::make_unique<CardFill>(*R.kerrCompute(), &G, cardStepLimitMs());
+        std::printf("PLBHCARD state=%d checkms=%.1f edge=%.2e dir=%.2e b=%.2e u=%.2e ends=%d why=-\n", cardState_, cardCheck_.ms, cardCheck_.edge, cardCheck_.dir,
+                    cardCheck_.b, cardCheck_.u, cardCheck_.endsDiffer);
     }
     return cardState_ == 1;
 }
@@ -810,7 +845,8 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     ensureWorker();
     const bool spinning = s.spin > 0 && s.bend;
     const bool card = spinning && gpuPaths && cardReady(R);                // 0.55.6: the card fills the table (no coarse table, no fine thread)
-    if (!card) pollFine(s);
+    const bool cardWait = spinning && gpuPaths && (cardState_ == 0 || cardState_ == 2);   // 0.55.7: its check is under way (or starts in a frame or two)
+    if (!card && !cardWait) pollFine(s);
     const double now = nowSeconds();
     const Key want = keyOf(s, W, H, cx, cy);
     if (!(want == wantKey_)) { wantKey_ = want; wantSince_ = now; }
@@ -825,11 +861,15 @@ void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W
     if (cardFill_) {                                                        // (also when the card's path is not in use now: a finished fill must be let go)
         pumpCard(s, W, H, cx, cy, card);
         st_.cardMs = cardFill_->lastMs(); st_.cardFills = cardFill_->fills();
+        if (!cardFill_->lateStep().empty() && cardState_ == 1) {           // 0.55.7: a step of a fill ran out of time: the processor's path from now on
+            app::gpuGuard().timedOut(cardFill_->lateStep());
+            cardOff("a step of the card's fill did not finish in time (" + cardFill_->lateStep() + ")");
+        }
     }
     const bool current = hasShown_ && shownKey_ == want;
     const bool upToDate = current && (shownExact_ || !exact) && (!fine || st_.spinFine);
     const bool asked = posted_ && postedKey_ == want && (postedExact_ || !exact) && postedFine_ == fine.get();
-    if (!upToDate && !asked && !(card && !fine)) {                         // (card: a view of a new spin, distance or tilt is the card's to start)
+    if (!upToDate && !asked && !((card || cardWait) && !fine)) {                         // (card: a view of a new spin, distance or tilt is the card's to start)
         auto r = std::make_unique<Request>();
         r->s = s; r->W = W; r->H = H; r->cx = cx; r->cy = cy; r->exact = exact; r->fine = fine; r->want = want; r->seq = ++reqSeq_;
         posted_ = true; postedKey_ = want; postedExact_ = exact; postedFine_ = fine.get();

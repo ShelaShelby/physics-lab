@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 #ifdef _WIN32
@@ -13,6 +14,7 @@
 #include <csignal>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #include "app/app_data.h"
@@ -24,6 +26,7 @@
 #include "app/grid.h"
 #include "app/frame_time.h"
 #include "app/gpu_timer.h"
+#include "app/gpu_guard.h"
 #include "orbit/time_scale.h"
 #include "orbit/belts.h"
 #include "orbit/far_masses.h"
@@ -1785,6 +1788,103 @@ static void testSunWobble() {
 #include "test_theme_style.inc"   // 0.14 stage 1: richer theme styles and Frutiger Aero
 #include "test_look.inc"          // 0.15 stage 5i: the three look options (contrast by the WCAG formula, written out in the test)
 
+
+// 0.55.7: the guard round the graphics card's light paths (app/gpu_guard.h), without graphics: the settings line, the decision at start, the marker file
+// (a step named before it begins, read back by the next start), "Try again", the time limit's "slow", the log's order
+static std::string readAll(const std::string& path) {
+    std::string t;
+    if (FILE* f = std::fopen(path.c_str(), "rb")) { char buf[4096]; std::size_t n; while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) t.append(buf, n); std::fclose(f); }
+    return t;
+}
+static bool exists(const std::string& path) { FILE* f = std::fopen(path.c_str(), "rb"); if (f) std::fclose(f); return f != nullptr; }
+static void testGpuGuard() {
+    using app::GpuGuardRecord;
+    const GpuGuardRecord r{"off", "0.55.7", "ATI | AMD Radeon RX 9060 XT | 4.6.0 Core 26.10.1", "compile the light paths' shader"};
+    const GpuGuardRecord back = app::gpuGuardParse(app::gpuGuardText(r));
+    checkStr("guard: the settings line reads back (a '|' inside the driver's string becomes '/')", app::gpuGuardText(back),
+             "off | 0.55.7 | ATI / AMD Radeon RX 9060 XT / 4.6.0 Core 26.10.1 | compile the light paths' shader");
+    checkTrue("guard: a broken or unknown line is the empty record", app::gpuGuardParse("maybe | 1 | x | y").state.empty() && app::gpuGuardParse("off | 1 | x").state.empty() &&
+              app::gpuGuardParse("").state.empty() && app::gpuGuardText(GpuGuardRecord{}).empty());
+    const std::string v = "0.55.7", d = "AMD / Radeon / 4.6 26.10.1";
+    const GpuGuardRecord none, marker{"off", v, d, "check: dispatch 1"};
+    auto dec = app::gpuGuardDecide(none, none, v, d);
+    checkTrue("guard: never tried: allowed, guarded, nothing kept", dec.allowed && dec.guarded && dec.keep.state.empty());
+    dec = app::gpuGuardDecide(none, marker, v, d);
+    checkTrue("guard: a marker left behind (same version and driver): off, crashed, the step kept", !dec.allowed && dec.crashed && dec.keep == marker);
+    dec = app::gpuGuardDecide(marker, none, v, d);
+    checkTrue("guard: kept off, the same driver after a restart: stays off", !dec.allowed && dec.crashed);
+    dec = app::gpuGuardDecide(marker, none, v, "AMD / Radeon / 4.6 26.11.2");
+    checkTrue("guard: kept off, another driver: tried once more, guarded", dec.allowed && dec.guarded && dec.keep == marker);
+    dec = app::gpuGuardDecide(marker, none, "0.55.8", d);
+    checkTrue("guard: kept off, another app version: tried once more, guarded", dec.allowed && dec.guarded);
+    dec = app::gpuGuardDecide(GpuGuardRecord{"ok", v, d, ""}, none, v, d);
+    checkTrue("guard: succeeded once with this version and driver: allowed, no markers", dec.allowed && !dec.guarded);
+    dec = app::gpuGuardDecide(GpuGuardRecord{"ok", v, d, ""}, none, v, "other");
+    checkTrue("guard: succeeded with another driver: guarded again", dec.allowed && dec.guarded);
+    dec = app::gpuGuardDecide(GpuGuardRecord{"slow", v, d, "fence wait, case 1 edges"}, none, v, d);
+    checkTrue("guard: a step that ran out of time (same driver): off, not called a crash", !dec.allowed && !dec.crashed);
+    dec = app::gpuGuardDecide(GpuGuardRecord{"ok", v, d, ""}, marker, v, d);
+    checkTrue("guard: a marker wins over a kept ok", !dec.allowed && dec.keep == marker);
+    // the files: a folder of its own
+#ifdef _WIN32
+    const std::string dir = std::string(std::getenv("TEMP") ? std::getenv("TEMP") : ".") + "\\pl_gpuguard_test\\";
+    _mkdir(dir.c_str());
+#else
+    const std::string dir = "/tmp/pl_gpuguard_test_" + std::to_string(static_cast<long>(getpid())) + "/";
+    mkdir(dir.c_str(), 0755);
+#endif
+    const std::string mk = dir + app::GpuGuard::kMarker, lg = dir + app::GpuGuard::kLog;
+    std::remove(mk.c_str()); std::remove(lg.c_str());
+    {   app::GpuGuard g;
+        g.start(dir, v, d, "", {"head line 1", "head line 2"});
+        checkTrue("guard files: a first start: allowed, guarded, no marker yet", g.allowed() && g.guarded() && !exists(mk));
+        g.begin("compile the light paths' shader");
+        const std::string m = readAll(mk);
+        checkTrue("guard files: the marker names the version, the driver and the step before it begins", m.find("version=0.55.7\n") != std::string::npos &&
+                  m.find("driver=" + d + "\n") != std::string::npos && m.find("step=compile the light paths' shader\n") != std::string::npos);
+        g.end("compile the light paths' shader", "compiled");
+        g.begin("check: dispatch 1");
+        // (the process "dies" here: the object is dropped with the marker on disk)
+    }
+    {   app::GpuGuard g;
+        g.start(dir, v, d, "", {});
+        checkTrue("guard files: the next start finds the marker: off, the step named in the Settings line",
+                  !g.allowed() && g.crashed() && g.offText().find("stopped the app last time") != std::string::npos && g.offText().find("'check: dispatch 1'") != std::string::npos);
+        checkStr("guard files: the settings file keeps it", g.saved(), "off | 0.55.7 | " + d + " | check: dispatch 1");
+        checkTrue("guard files: the marker stays until the settings file holds that", exists(mk));
+        g.settingsWritten();
+        checkTrue("guard files: then it is removed", !exists(mk));
+        g.closing();
+        const std::string saved = g.saved();
+        app::GpuGuard h;                                   // a restart, same driver: stays off without a marker
+        h.start(dir, v, d, saved, {});
+        checkTrue("guard files: a restart with the same driver stays off", !h.allowed() && h.offText().find("check: dispatch 1") != std::string::npos);
+        app::GpuGuard k;                                   // another driver: tried again
+        k.start(dir, v, d + " new", saved, {});
+        checkTrue("guard files: another driver string tries again (guarded)", k.allowed() && k.guarded() && k.offText().empty());
+        h.tryAgain();
+        checkTrue("guard files: Try again: allowed, guarded, nothing kept, a new generation", h.allowed() && h.guarded() && h.saved().empty() && h.generation() == 1 && h.offText().empty());
+        h.begin("check: dispatch 1");
+        h.finished(true);
+        checkTrue("guard files: the whole path succeeded: the marker removed, ok kept, no markers any more", !exists(mk) && h.saved() == "ok | 0.55.7 | " + d + " | " && !h.guarded());
+        h.begin("fill 2: something");
+        checkTrue("guard files: after success a step writes no marker", !exists(mk));
+        h.timedOut("fill 2: fence wait, pass B (not finished after 60 s)");
+        checkTrue("guard files: a step out of time: off for this run, kept as slow with its step", !h.allowed() && !h.crashed() &&
+                  h.saved() == "slow | 0.55.7 | " + d + " | fill 2: fence wait, pass B (not finished after 60 s)" && h.offText().find("did not finish a step in time") != std::string::npos);
+        const std::vector<std::string> tail = h.logTail(4);
+        checkTrue("guard files: the log's tail is its last lines", tail.size() == 4 && tail.back().find("did not finish within its time limit") != std::string::npos);
+        const std::string log = readAll(lg);
+        const std::size_t a = log.find("begin check: dispatch 1"), b2 = log.find("the whole path succeeded"), c = log.find("begin fill 2: something");
+        checkTrue("guard files: the log has the steps in order (overwritten at each start)", log.find("head line 1") == std::string::npos && a != std::string::npos &&
+                  b2 != std::string::npos && c != std::string::npos && a < b2 && b2 < c);
+    }
+    std::remove(mk.c_str()); std::remove(lg.c_str());
+    app::Prefs p; p.gpuPaths = "off | 0.55.7 | x / y | compile";
+    checkStr("guard: the settings file's line goes through the settings file unchanged", app::loadPrefs(app::savePrefs(p)).gpuPaths, p.gpuPaths);
+    checkTrue("guard: no line when nothing is kept", app::savePrefs(app::Prefs{}).find("gpupaths") == std::string::npos);
+}
+
 int main() {
     testLookContrast();
     testRoundTrip();
@@ -1834,6 +1934,7 @@ int main() {
     testBenchFocusFlag();
     testDisplayScale();
     testShell();
+    testGpuGuard();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

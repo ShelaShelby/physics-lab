@@ -2,7 +2,8 @@
 """Compiles every GLSL shader of the renderer (src/render/shaders.h) with glslang: the vertex and fragment shaders as GLSL 330 core, alone and linked in the pairs the renderer links,
 and (0.13 stage 2) the compute shaders (names ending in CS) as GLSL 430 core.
 
-A shader that does not compile, or a pair whose outputs and inputs do not match, fails the test. glslang is the Khronos reference compiler: it needs no graphics card.
+A shader that does not compile (0.55.7: or gives a warning; a compute shader also as SPIR-V for OpenGL, validated by spirv-val when installed), or a pair
+whose outputs and inputs do not match, fails the test. glslang is the Khronos reference compiler: it needs no graphics card.
 (It checks the language; what a GPU's own driver does with the shader is only tested on a real PC.)
 
 Usage: check_shaders.py path/to/shaders.h
@@ -45,8 +46,21 @@ def main():
             r = subprocess.run([tool, p], capture_output=True, text=True)
             if r.returncode != 0:
                 print("FAIL %s:\n%s%s" % (n, r.stdout, r.stderr)); failed += 1
+            elif "WARNING" in r.stdout + r.stderr:            # 0.55.7: a warning fails too (a stricter driver may reject what glslang only warns about)
+                print("FAIL %s (a warning):\n%s%s" % (n, r.stdout, r.stderr)); failed += 1
             else:
                 print("ok   %s (GLSL %s core)" % (n, "430" if kind == "comp" else "330"))
+            if kind == "comp":
+                # 0.55.7: the compute shaders also through glslang's whole compiler into SPIR-V for OpenGL (uniforms and buffers given places automatically)
+                # and, if spirv-val is installed, that SPIR-V validated: a deeper check of the code than the front end's (types, control flow, doubles)
+                spv = os.path.join(d, n + ".spv")
+                r = subprocess.run([tool, "-G", "--aml", "--amb", "-o", spv, p], capture_output=True, text=True)
+                val = shutil.which("spirv-val")
+                v = subprocess.run([val, "--target-env", "opengl4.5", spv], capture_output=True, text=True) if r.returncode == 0 and val else None
+                if r.returncode != 0 or "WARNING" in r.stdout + r.stderr or (v is not None and v.returncode != 0):
+                    print("FAIL %s as SPIR-V:\n%s%s%s" % (n, r.stdout, r.stderr, (v.stdout + v.stderr) if v else "")); failed += 1
+                else:
+                    print("ok   %s as SPIR-V for OpenGL%s" % (n, ", validated by spirv-val" if v else " (spirv-val not installed)"))
         for v, f in PAIRS:
             r = subprocess.run([tool, "-l", paths[v], paths[f]], capture_output=True, text=True)
             if r.returncode != 0:

@@ -1,6 +1,10 @@
 #include "kerr_compute.h"
 
+#include <chrono>
 #include <cstdio>
+#include <cmath>
+#include <cstdlib>
+#include <string>
 
 #include "gl_loader.h"
 #include "shaders.h"
@@ -10,13 +14,24 @@ using namespace plgl;
 namespace render {
 
 namespace {
+double nowMs() { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 class KerrCompute : public IKerrCompute {
 public:
     ~KerrCompute() override;
-    bool init(const char** why);
+    bool init(const char** why, KerrSteps* steps);
     void passA(const std::vector<double>& par, const std::vector<double>& chi) override;
     void passB(const std::vector<double>& par, const std::vector<double>& rowChi, int nS) override;
+    bool passBRows(const std::vector<double>& par, const std::vector<double>& rowChi, int nS) override;
+    void passBPiece(int first, int n) override;
+    void passBCopy() override;
     bool done(bool wait) override;
+    double queuedMs() const override { return fence_ ? nowMs() - fenceAt_ : 0; }
+    void queueRays(const std::vector<double>& par, const std::vector<double>& psiChi) override;
+    void readRays(std::vector<double>& out) override;
+    void queueEdges(const std::vector<double>& par, const std::vector<double>& chi) override;
+    void readEdges(std::vector<double>& out) override;
+    void queueMath(const std::vector<double>& par, const std::vector<double>& x) override;
+    void readMath(std::vector<double>& out) override;
     void readA(std::vector<double>& edge, std::vector<double>& probe) override;
     const double* mapB(std::vector<double>& rowEdge) override;
     void release() override;
@@ -30,13 +45,17 @@ private:
     GLsizeiptr size_[kBufs] = {};
     GLint uMode_ = -1, uN_ = -1, uFirst_ = -1, uNChi_ = -1, uNS_ = -1;
     GLsync fence_ = nullptr;
+    double fenceAt_ = 0;
     int nA_ = 0, nChi_ = 0, nS_ = 0;
-    bool mapped_ = false;
+    bool mapped_ = false, hang_ = false;
     void put(int b, const std::vector<double>& v);
     void room(int b, GLsizeiptr bytes);
     void bind(int par, int in, int edge, int out);
     void run(int mode, int n, int first);
     void fence();
+    bool rowsOnly(const std::vector<double>& par, const std::vector<double>& rowChi, int nS);
+    void piece(int first, int n);
+    void copyOut();
 };
 
 KerrCompute::~KerrCompute() {
@@ -46,32 +65,44 @@ KerrCompute::~KerrCompute() {
     if (prog_) glDeleteProgram(prog_);
 }
 
-bool KerrCompute::init(const char** why) {
+bool KerrCompute::init(const char** why, KerrSteps* steps) {
+    hang_ = std::getenv("PL_BH_CARDHANG") != nullptr;
     GLint maj = 0, min = 0;
     glGetIntegerv(GL_MAJOR_VERSION, &maj); glGetIntegerv(GL_MINOR_VERSION, &min);
     if (maj < 4 || (maj == 4 && min < 3)) { *why = "the graphics driver has no OpenGL 4.3"; return false; }
     const char* missing = nullptr;
     if (!loadGL43(&missing)) { *why = "an OpenGL 4.3 function is missing"; return false; }
+    // (0.55.7: the driver's info logs are told to steps also when it compiled and linked: a warning there can explain a later failure)
+    const auto infoText = [](const char* log, bool good) {
+        std::string t = good ? "compiled" : "FAILED";
+        if (log[0]) { t += ", the driver's log: "; for (const char* c = log; *c; c++) t += (*c == '\n' || *c == '\r') ? ' ' : *c; }
+        else t += ", the driver's log is empty";
+        return t;
+    };
+    if (steps) steps->begin("compile the light paths' shader");
     const GLuint cs = glCreateShader(GL_COMPUTE_SHADER);
     glShaderSource(cs, 1, &kKerrTableCS, nullptr);
     glCompileShader(cs);
     GLint good = 0;
     glGetShaderiv(cs, GL_COMPILE_STATUS, &good);
+    {   char log[2048] = {0}; glGetShaderInfoLog(cs, sizeof log, nullptr, log);
+        if (!good) std::fprintf(stderr, "light paths compute shader compile error: %s\n", log);
+        if (steps) steps->end("compile the light paths' shader", infoText(log, good != 0)); }
     if (!good) {
-        char log[2048]; glGetShaderInfoLog(cs, sizeof log, nullptr, log);
-        std::fprintf(stderr, "light paths compute shader compile error: %s\n", log);
         glDeleteShader(cs);
         *why = "the graphics driver did not compile the light paths' shader";
         return false;
     }
+    if (steps) steps->begin("link the light paths' shader");
     prog_ = glCreateProgram();
     glAttachShader(prog_, cs);
     glLinkProgram(prog_);
     glDeleteShader(cs);
     glGetProgramiv(prog_, GL_LINK_STATUS, &good);
+    {   char log[2048] = {0}; glGetProgramInfoLog(prog_, sizeof log, nullptr, log);
+        if (!good) std::fprintf(stderr, "light paths compute shader link error: %s\n", log);
+        if (steps) steps->end("link the light paths' shader", infoText(log, good != 0)); }
     if (!good) {
-        char log[2048]; glGetProgramInfoLog(prog_, sizeof log, nullptr, log);
-        std::fprintf(stderr, "light paths compute shader link error: %s\n", log);
         *why = "the graphics driver did not link the light paths' shader";
         return false;
     }
@@ -114,6 +145,7 @@ void KerrCompute::run(int mode, int n, int first) {
 void KerrCompute::fence() {
     if (fence_) glDeleteSync(fence_);
     fence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    fenceAt_ = nowMs();
 }
 
 void KerrCompute::passA(const std::vector<double>& par, const std::vector<double>& chi) {
@@ -128,9 +160,11 @@ void KerrCompute::passA(const std::vector<double>& par, const std::vector<double
     fence();
 }
 
-void KerrCompute::passB(const std::vector<double>& par, const std::vector<double>& rowChi, int nS) {
+// (0.55.7: refused while the last table is mapped: kHost's storage must not be replaced under the worker that reads it)
+bool KerrCompute::rowsOnly(const std::vector<double>& par, const std::vector<double>& rowChi, int nS) {
+    if (mapped_) return false;
     nChi_ = static_cast<int>(rowChi.size()); nS_ = nS;
-    const int n = 2 * nChi_ * nS_;
+    const int n = nodes_ = 2 * nChi_ * nS_;
     put(kPar, par);
     put(kInB, rowChi);
     room(kEdgeB, static_cast<GLsizeiptr>(nChi_) * 8);
@@ -138,19 +172,46 @@ void KerrCompute::passB(const std::vector<double>& par, const std::vector<double
     room(kHost, static_cast<GLsizeiptr>(n) * 80);
     bind(kPar, kInB, kEdgeB, kOutB);
     run(0, nChi_, 0);
-    for (int first = 0; first < n; first += kPiece) run(3, n - first < kPiece ? n - first : kPiece, first);
+    return true;
+}
+
+void KerrCompute::piece(int first, int n) {
+    bind(kPar, kInB, kEdgeB, kOutB);
+    run(3, n, first);
+}
+
+void KerrCompute::copyOut() {
     glBindBuffer(GL_COPY_READ_BUFFER, buf_[kOutB]);
     glBindBuffer(GL_COPY_WRITE_BUFFER, buf_[kHost]);
-    glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, static_cast<GLsizeiptr>(n) * 80);
+    glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, static_cast<GLsizeiptr>(nodes_) * 80);
+}
+
+void KerrCompute::passB(const std::vector<double>& par, const std::vector<double>& rowChi, int nS) {
+    if (!rowsOnly(par, rowChi, nS)) return;
+    const int n = nodes_;
+    for (int first = 0; first < n; first += kPiece) run(3, n - first < kPiece ? n - first : kPiece, first);
+    copyOut();
     fence();
 }
 
+bool KerrCompute::passBRows(const std::vector<double>& par, const std::vector<double>& rowChi, int nS) {
+    if (!rowsOnly(par, rowChi, nS)) return false;
+    fence();
+    return true;
+}
+void KerrCompute::passBPiece(int first, int n) { piece(first, n); fence(); }
+void KerrCompute::passBCopy() { copyOut(); fence(); }
+
 bool KerrCompute::done(bool wait) {
     if (!fence_) return true;
+    const double t0 = nowMs();
     for (;;) {
-        const GLenum r = glClientWaitSync(fence_, GL_SYNC_FLUSH_COMMANDS_BIT, wait ? 1000000000ull : 0ull);
-        if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED || r == GL_WAIT_FAILED) break;
-        if (!wait) return false;
+        // (PL_BH_CARDHANG, tests: as if the fence never signalled; the work itself is flushed as usual)
+        const GLenum r = glClientWaitSync(fence_, GL_SYNC_FLUSH_COMMANDS_BIT, wait ? 100000000ull : 0ull);
+        if (hang_) { if (!wait || nowMs() - t0 >= kWaitLimitMs) return false; continue; }
+        if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) break;
+        if (r == GL_WAIT_FAILED) return false;                     // (0.55.7: an error is not "finished": the results are not read)
+        if (!wait || nowMs() - t0 >= kWaitLimitMs) return false;
     }
     glDeleteSync(fence_);
     fence_ = nullptr;
@@ -182,8 +243,8 @@ void KerrCompute::release() {
     mapped_ = false;
 }
 
-void KerrCompute::rays(const std::vector<double>& par, const std::vector<double>& psiChi, std::vector<double>& out) {
-    const int n = static_cast<int>(psiChi.size() / 2);
+void KerrCompute::queueRays(const std::vector<double>& par, const std::vector<double>& psiChi) {
+    const int n = nA_ = static_cast<int>(psiChi.size() / 2);
     put(kPar, par);
     put(kInA, psiChi);
     room(kEdgeA, 8);
@@ -191,14 +252,20 @@ void KerrCompute::rays(const std::vector<double>& par, const std::vector<double>
     bind(kPar, kInA, kEdgeA, kOutA);
     run(1, n, 0);
     fence();
-    done(true);
-    out.resize(static_cast<std::size_t>(n) * 16);
+}
+void KerrCompute::readRays(std::vector<double>& out) {
+    out.assign(static_cast<std::size_t>(nA_) * 16, 0.0);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, buf_[kOutA]);
-    if (n > 0) glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr>(n) * 128, out.data());
+    if (nA_ > 0) glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr>(nA_) * 128, out.data());
+}
+// (0.55.7: a wait that ran out of time gives NaN, never the last run's numbers: the check then fails)
+void KerrCompute::rays(const std::vector<double>& par, const std::vector<double>& psiChi, std::vector<double>& out) {
+    queueRays(par, psiChi);
+    if (done(true)) readRays(out); else out.assign(psiChi.size() / 2 * 16, std::nan(""));
 }
 
-void KerrCompute::edges(const std::vector<double>& par, const std::vector<double>& chi, std::vector<double>& out) {
-    const int n = static_cast<int>(chi.size());
+void KerrCompute::queueEdges(const std::vector<double>& par, const std::vector<double>& chi) {
+    const int n = nA_ = static_cast<int>(chi.size());
     put(kPar, par);
     put(kInA, chi);
     room(kEdgeA, static_cast<GLsizeiptr>(n) * 8);
@@ -206,14 +273,19 @@ void KerrCompute::edges(const std::vector<double>& par, const std::vector<double
     bind(kPar, kInA, kEdgeA, kOutA);
     run(0, n, 0);
     fence();
-    done(true);
-    out.resize(static_cast<std::size_t>(n));
+}
+void KerrCompute::readEdges(std::vector<double>& out) {
+    out.assign(static_cast<std::size_t>(nA_), 0.0);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, buf_[kEdgeA]);
-    if (n > 0) glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr>(n) * 8, out.data());
+    if (nA_ > 0) glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr>(nA_) * 8, out.data());
+}
+void KerrCompute::edges(const std::vector<double>& par, const std::vector<double>& chi, std::vector<double>& out) {
+    queueEdges(par, chi);
+    if (done(true)) readEdges(out); else out.assign(chi.size(), std::nan(""));
 }
 
-void KerrCompute::math(const std::vector<double>& par, const std::vector<double>& x, std::vector<double>& out) {
-    const int n = static_cast<int>(x.size());
+void KerrCompute::queueMath(const std::vector<double>& par, const std::vector<double>& x) {
+    const int n = nA_ = static_cast<int>(x.size());
     put(kPar, par);
     put(kInA, x);
     room(kEdgeA, 8);
@@ -221,18 +293,23 @@ void KerrCompute::math(const std::vector<double>& par, const std::vector<double>
     bind(kPar, kInA, kEdgeA, kOutA);
     run(4, n, 0);
     fence();
-    done(true);
-    out.resize(static_cast<std::size_t>(n) * 8);
+}
+void KerrCompute::readMath(std::vector<double>& out) {
+    out.assign(static_cast<std::size_t>(nA_) * 8, 0.0);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, buf_[kOutA]);
-    if (n > 0) glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr>(n) * 64, out.data());
+    if (nA_ > 0) glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr>(nA_) * 64, out.data());
+}
+void KerrCompute::math(const std::vector<double>& par, const std::vector<double>& x, std::vector<double>& out) {
+    queueMath(par, x);
+    if (done(true)) readMath(out); else out.assign(x.size() * 8, std::nan(""));
 }
 }  // namespace
 
-IKerrCompute* makeKerrCompute(const char** why) {
+IKerrCompute* makeKerrCompute(const char** why, KerrSteps* steps) {
     static const char* none = "";
     if (!why) why = &none;
     KerrCompute* k = new KerrCompute();
-    if (!k->init(why)) { delete k; return nullptr; }
+    if (!k->init(why, steps)) { delete k; return nullptr; }
     return k;
 }
 

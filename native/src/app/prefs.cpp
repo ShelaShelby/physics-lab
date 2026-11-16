@@ -48,6 +48,7 @@ std::string savePrefs(const Prefs& p) {
     for (const auto& [k, v] : p.orbit) o << "orbit." << clean(k) << "=" << clean(v) << "\n";
     for (const auto& [k, v] : p.atom) o << "atom." << clean(k) << "=" << clean(v) << "\n";
     for (const auto& [k, v] : p.blackhole) o << "blackhole." << clean(k) << "=" << clean(v) << "\n";   // 0.55.0
+    if (!p.gpuPaths.empty()) o << "gpupaths=" << clean(p.gpuPaths) << "\n";            // 0.55.7 (only written when the guard has something to keep)
     for (std::size_t i = 0; i < p.calcHistory.size() && i < static_cast<std::size_t>(kCalcHistoryMax); i++) o << "calc." << i << "=" << clean(p.calcHistory[i]) << "\n";   // 0.49
     return o.str();
 }
@@ -80,6 +81,7 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "fps") { if (v == "on" || v == "off") p.fps = v; }
         else if (k == "facts") { if (v == "on" || v == "off") p.facts = v; }
         else if (k == "recent") p.recent = v;
+        else if (k == "gpupaths") p.gpuPaths = v;                              // 0.55.7 (read by app/gpu_guard.h, which checks it)
         else if (k.rfind("calc.", 0) == 0) {                                   // 0.49: the calculator's history, calc.0 the newest; a bad number or an empty line is ignored
             const std::string n = k.substr(5);
             if (n.size() == 1 && n[0] >= '0' && n[0] < '0' + kCalcHistoryMax && !v.empty()) {

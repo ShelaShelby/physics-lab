@@ -17,6 +17,8 @@
 #include "blackhole/spin_sky.h"
 #include "render/kerr_compute.h"
 
+namespace app { class GpuGuard; }
+
 namespace blackhole {
 
 // the camera's numbers the shader takes (its Pa[]): made by the processor, so they are the processor's numbers to the bit
@@ -33,13 +35,41 @@ void cardEdges(render::IKerrCompute& K, double a, double rC, double thC, const s
 // by 1e-15 (the step's choices change: the floor two correct double-precision fills can differ by); llvmpipe's card 1.5e-13 rad, u 8.4e-10, edge 0;
 // arithmetic of float precision (psi moved by 1e-7) moves them by 2.5e-5 rad and u by 1.4e-6. The limits sit between, far nearer the floor.
 constexpr double kCardEdgeTol = 1e-12, kCardDirTol = 1e-9, kCardBTol = 1e-10, kCardUTol = 1e-7;
+// 0.55.7: the check's first dispatch is the smallest that can be checked: the shader's own double functions at 8 values (one work group) against the C++
+// library's. Measured (REPORT 0.55.6, 4,400 values): within 6e-16 (sin, cos absolute; the others relative); float arithmetic would be 1e-7. Limit between.
+constexpr double kCardMathTol = 1e-13;
 struct CardCheck {
     bool ok = false;
     int edges = 0, rays = 0, endsDiffer = 0;
-    double edge = 0, dir = 0, b = 0, u = 0, ms = 0;
+    double edge = 0, dir = 0, b = 0, u = 0, math = 0, ms = 0;
     std::string why;                                       // empty when ok
 };
-CardCheck cardSelfCheck(render::IKerrCompute& K);
+CardCheck cardSelfCheck(render::IKerrCompute& K);         // waits (tests, PL_BH_COMPARE); the app uses CardStartup
+
+// 0.55.7: the time a step of the card's path may take (a fence that never signals counts as failed after it): 10 s for a step of the start-up check, a pass
+// or a piece of the first fill; 60 s for a later fill's whole pass B (queued at once). PL_BH_CARDLIMIT=<seconds> (tests) sets the first.
+double cardStepLimitMs();
+constexpr int kCardWholeFactor = 6;
+
+// 0.55.7: the start-up check in steps, at most a step per frame (the frame never waits): each step named to the guard (its marker and log) before it begins
+class CardStartup {
+public:
+    CardStartup(render::IKerrCompute& K, app::GpuGuard* guard, double limitMs);
+    int pump(bool wait);                                   // 0 under way, 1 passed, -1 failed (check().why), -2 a step ran out of time (lateStep())
+    const CardCheck& check() const { return c_; }
+    const std::string& lateStep() const { return late_; }
+private:
+    render::IKerrCompute& K_;
+    app::GpuGuard* g_;
+    double limit_, t0_ = 0, tq_ = 0;
+    int stage_ = 0;
+    std::string wait_, late_;
+    std::vector<double> chis_, ref_, pc_;
+    CardCheck c_;
+    void begin(const std::string& s);
+    void end(const std::string& s, const std::string& r = std::string());
+    void queued(const std::string& what);                  // a dispatch queued: its fence's wait begins
+};
 
 // a finished fill: the view it was started for, the table's parts; its nodes stay in the card's mapped memory until the worker has made the table (used)
 struct CardTableData {
@@ -52,18 +82,31 @@ struct CardTableData {
 };
 
 // the asynchronous fill, driven by the frame's thread (never waits)
+// 0.55.7: the first fill of a run goes step by step, each with its fence and time: pass A, the rows' edges, then pieces growing from 64 rays (x4 each) to
+// kPiece, the copy, the mapping, the worker's read (with a guard: each step named to it; the last step's end = the whole path succeeded once)
 class CardFill {
 public:
-    explicit CardFill(render::IKerrCompute& K) : K_(K) {}
+    explicit CardFill(render::IKerrCompute& K, app::GpuGuard* guard = nullptr, double limitMs = 1e300) : K_(K), g_(guard), limit_(limitMs) {}
     bool idle() const { return stage_ == 0; }
     void start(const Settings& s, double W, double H, double cx, double cy, int nChi, int nS, int nEdge);
     // as far as the card has got: a finished table once (else null); a table handed out stays mapped until its data is used or dropped
     std::shared_ptr<CardTableData> pump();
     long fills() const { return fills_; }
     double lastMs() const { return lastMs_; }
+    void clearLate() { late_.clear(); }
+    const std::string& lateStep() const { return late_; }  // a step ran out of time (the fill was dropped; the caller switches the card's path off)
+    static constexpr int kFirstPiece = 64;
 private:
     render::IKerrCompute& K_;
-    int stage_ = 0;                                        // 0 idle, 1 pass A queued, 2 pass B queued, 3 a finished table mapped
+    app::GpuGuard* g_;
+    double limit_;
+    std::string wait_, late_;
+    bool stepwise_ = true, reading_ = false;               // (the first fill: step by step; reading_: the worker's read of the mapped nodes is a step)
+    int next_ = 0, piece_ = kFirstPiece, pieces_ = 0;
+    double tStep_ = 0;
+    bool late(double limit);
+    void say(const std::string& line);
+    int stage_ = 0;                                        // 0 idle, 1 pass A queued, 2 pass B queued, 3 a finished table mapped, 4 (first fill) a part of pass B queued
     std::shared_ptr<CardTableData> run_, out_;
     std::vector<double> par_, edgeChi_;
     double t0_ = 0, lastMs_ = 0;
