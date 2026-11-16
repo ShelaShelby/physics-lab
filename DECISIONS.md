@@ -72,8 +72,10 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - Orbital normalisation is the exact closed form, not a numerical sum (0.13). Belt rocks are Kepler ellipses; anything that grows without limit stays in double (0.13).
 
 ## Graphics and speed
-- Repeated per-item work runs on the GPU so the app runs on old PCs (target a 2013 Core i7-4770K): OpenGL 4.3 with compute shaders, falling back to 3.3 and the
-  CPU paths, which are kept as the reference and as switches in Settings, Performance (5 Oct 2026).
+- Every simulation is built to run on the graphics card. The processor's version is kept: it is the exact reference the tests check the card against, and it
+  takes over on a PC whose card or driver cannot do it (through the guard of 0.55.7). A feature is not finished while its heavy repeated work runs only on the
+  processor. A job that adds something drawn adds a benchmark scene for it; the target is the screen's refresh rate on the owner's PC for every scene. The owner
+  sends the benchmark after each version X.Y and the planning chat checks every scene (16 Nov 2026; replaces the line of 5 Oct 2026).
 
 ## Look and interface
 - The 0.38 look (6 Nov 2026): sharp corners, flat surfaces with a 1 px edge, a chosen option as a soft accent tint, the labs as tabs in the top bar; in every theme.

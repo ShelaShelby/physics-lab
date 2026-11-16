@@ -1,0 +1,417 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1910.12881_gralla_lupsasca2020a.txt.gz
+# Reference: S. E. Gralla, A. Lupsasca, "Null geodesics of the Kerr exterior", Phys. Rev. D 101, 044032 (2020), arXiv:1910.12881v3 (the original here is the pdftotext -layout text of the PDF, gzip -9)
+# URL: https://arxiv.org/pdf/1910.12881
+# Date read: 2026-11-16
+# sha256 of the original: 1543d31d5b4a966be0207146a25bec967354d2b5669973d7f2a621174e2f4d4e
+# Place in the original: Sec. II (7)-(14), Sec. III (18)-(19), (29)-(31), (38), (46)-(49), (56)-(59), (66)-(69); Sec. IV (78)-(81), (95), the classification; Sec. VI; App. B (B2)-(B4), (B15)-(B23), (B27), (B35)-(B46), (B55)-(B75), (B83)-(B109)
+# Used by: src/blackhole/kerr_closed.h/.cpp (0.55.9: every ray of the spin table in closed form) and tests/test_blackhole.cpp testClosed (its checks against the
+# integrator, a direct quadrature of (B4) and the non-spinning closed form; no test reads these lines). The equations in this text are broken across lines
+# (two columns); the module was written from them and checked number by number (REPORT 0.55.9). Found by 0.55.9: (B100) as printed here has g0 (g0 + x4(r+-))
+# in its second term's denominator; the integral (B4) needs a2 (1 - g0 x4(r+-)) (g0 + x4(r+-)) (derived in kerr_closed.cpp, tested against the quadrature).
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin (7), (8): the potentials
+ where we introduced “potentials”                                        where we set τ = 0 at the source point xµs . The Mino time
+                        2        h         i                            approach is more convenient for analyzing individual tra-
+                                          2
+    R(r) = r2 + a2 − aλ − ∆(r) η + (λ − a) ,                     (7)     jectories, while the integral approach is more useful for
+                                                                         determining general properties.
+     Θ(θ) = η + a2 cos2 θ − λ2 cot2 θ.                           (8)
+#--- end
+#--- begin (10)-(13): the path integrals
+ This method converts Eqs. (6) into four decoupled ordi-                 (λ, η). Then, for each of the cases that may arise, and
+ nary differential equations for xµ (τ ). Alternatively, one             for each integral Ii or Gi , we find an antiderivative that
+ may also convert the equations into integral form,                      is real and smooth over the relevant range of r or θ. All
+                            Ir = Gθ ,                           (10)     of our antiderivatives are reduced to manifestly real Leg-
+                                                                         endre elliptic form. That is, they are expressed in terms
+                       φo − φs = Iφ + λGφ ,                     (11)
+                                                                         of the (incomplete) elliptic integrals F (ϕ|k), E(ϕ|k), and
+                        to − ts = It + a2 Gt ,                  (12)     Π(n; ϕ|k) of the first, second, and third kind, respectively,
+                                                                         which are real and smooth provided max(k, n) < 1.5
+ where xµs and xµo are “source” and “observer” points, φ
+                                                                         When ϕ = π/2, the integrals become “complete” and
+ can take any real value (with b(φo −φs )/(2π)c the number
+                                                                         are denoted by K(k) = F (π/2|k), or else by Π(n; k) and
+ of azimuthal windings of the trajectory), and we define
+                                                                         E(k) with the first argument ϕ omitted.
+               ro
+                   dr                                                       Our notation for antiderivatives will be a calligraphic
+       Ir =        p      ,                                   (13a)
+           rs  ± r   R(r)                                                version of the original symbol, and we will choose the plus
+            ro                                                           sign in the integrand. For example, the antiderivative Ir
+               a(2M r − aλ)
+      Iφ =             p    dr,                               (13b)      associated with Ir in Eq. (13a) will satisfy
+           rs ±r ∆(r) R(r)
+                                                                                                 dIr    1
+               ro
+                    r2 ∆(r) + 2M r r2 + a2 − aλ                                                       =p     .                           (17)
+       It =                        p              dr,         (13c)                               dr    R(r)
+              rs            ±r ∆(r) R(r)
+               θo                                                        These antiderivatives are useful for both the Mino-time
+                      dθ                                                 approach and the integral approach. For the Mino-time
+      Gθ =            p     ,                                 (13d)
+              θs    ±θ Θ(θ)                                              approach, we invert the integrals to provide full parame-
+               θo
+                     csc2 θ                                              terized trajectories xµ (τ ) in terms of the initial data (ini-
+     Gφ =             p     dθ,                               (13e)      tial position xµs as well as the initial signs ±r and ±θ ).6
+              θs    ±θ Θ(θ)                                              For the integral approach, we provide formulas that give
+               θo
+                   cos2 θ                                                each of the path integrals (13) as a function of the initial
+      Gt =          p       dθ.                         (13f)            position, initial sign of momentum, final position, and
+             θs ±θ    Θ(θ)
+#--- end
+#--- begin (14), (18): Mino time; the polar potential
+ cally increasing along the trajectory.                                  the spherical coordinate system. In terms of u = cos2 θ,
+   These two approaches are related by the fact that Ir                  the angular potential (8) is given by
+ and Gθ are both equal to the elapsed Mino time,4                                                              
+                                                                              (1 − u)Θ(u) = η + a2 − η − λ2 u − a2 u2 .     (18)
+                           τ = Ir = Gθ ,                        (14)
+#--- end
+#--- begin (19)-(23): the polar roots
+The right-hand side is a quadratic polynomial, whose
+roots u± are given by
+             r                                
+                  2   η           1     η + λ2
+  u± = 4θ ± 4θ + 2 , 4θ =            1−         . (19)
+                      a           2       a2
+                                        √ 
+The four roots of Θ(θ) are thus arccos ± u± , or
+                              √ 
+                  θ1 = arccos u+ ,                (20)
+                              √ 
+                  θ2 = arccos u− ,                (21)
+                                √ 
+                  θ3 = arccos − u− ,              (22)
+                                √ 
+                  θ4 = arccos − u+ .              (23)
+Roots coincide when (and only when) u+ = 0, u− = 0,
+#--- end
+#--- begin (29)-(31): the ordinary polar antiderivatives
+  A. Ordinary geodesics (η > 0). These admit two real              The angular integrals Gθ , Gφ , and Gt were reduced to
+     roots θ1 < π/2 < θ4 , with the potential positive in        manifestly real elliptic form in Ref. [8]. Since u+ /u− < 0,
+     between them. The photon librates between θ1 and            the antiderivatives
+     θ4 , crossing the equatorial plane each time.                                                           
+                                                                                 1                 cos θ u+
+                                                                     Gθ = − p          F arcsin √                 ,      (29)
+  B. Vortical geodesics (η < 0). These admit four real                        −u− a2                 u+ u−
+                                                                                                                 
+     roots θ1 < θ2 < π/2 < θ3 < θ4 , with the poten-                             1                      cos θ u+
+     tial positive in (θ1 , θ2 ) and (θ3 , θ4 ). There are two       Gφ = − p          Π u+ ; arcsin √                , (30)
+                                                                              −u− a2                      u+ u−
+     distinct motions: one that librates between turning                                                    
+     points (θ1 , θ2 ) in the northern hemisphere, and one                   2u+       0          cos θ u+
+                                                                     Gt = p          E arcsin √                 ,        (31)
+     that librates between turning points (θ3 , θ4 ) in the                  −u− a2                 u+ u−
+#--- end
+#--- begin (36)-(47): inversion and G_phi
+                  1.    Inversion for θo (τ )                  Applying the formula (43) to Eq. (38) yields
+                                                                                            
+  Now consider the path integral Gθ = τ beginning from                                cos θo
+                                                                              arcsin √         = −νθ Ψτ ,               (45)
+θ = θs . Before the first turning point is reached, we have                             u+
+                                                 
+         τ = Gθ = νθ (Gθo − Gθs ), νθ = sign pθs ,     (36)    where the (monotonically increasing in τ ) amplitude is
+                                                                                                           
+                                                                                  p                      u+
+where Gθi indicates the antiderivative Gθ evaluated at the              Ψτ = am     −u− a2 (τ + νθ Gθs )     ,     (46)
+source (i = s) or observer (i = o). This equation can be                                                 u−
+inverted for θo using the Jacobi elliptic sine function,
+                                                               and the restriction |ϕ| ≤ K(k) is satisfied on account of
+                  sn(F (arcsin ϕ|k)) = ϕ,              (37)    our assumption that a turning point has not yet been
+                                                               reached. Plugging Eq. (45) into Eqs. (41) and (42) as
+which is odd in its first argument, sn(−ϕ|k) = − sn(ϕ|k).      needed, and noting that both Π(n; −ϕ|k) = −Π(n; ϕ|k)
+Combining Eqs. (29), (36), and (37) therefore gives            and E 0 (−ϕ|k) = −E 0 (ϕ|k) are odd in ϕ, we then find
+                                                                                                  
+    cos θo              p                                                       1                 u+
+                                2         s u+                       Gφ = p           Π u+ ; Ψτ        − νθ Gφs ,   (47)
+    √      = −νθ sn        −u− a (τ + νθ Gθ )      . (38)                                         u−
+       u+                                     u−                              −u− a2
+                                                                                                   
+                                                                                2u+             u+
+#--- end
+#--- begin (54)-(59): vortical motion
+  We next turn to vortical geodesics (type B with η < 0),         h = ±1 to obtain the motion in the correct hemisphere
+which oscillate within a single hemisphere determined by          via Eq. (54). Although Eq. (64) was derived under the as-
+                                                                  sumption that a turning point has not yet been reached,
+                        h = sign(cos θ).                  (54)    it in fact continues properly past turning points to pro-
+The motion lies within a cone θ− < θ+ in the north-               vide the full parameterized trajectory θo (τ ), as before.
+ern hemisphere (h = +1), or θ+ < θ− in the southern               Noting that when√k < 0, dn(ϕ|k) oscillates smoothly be-
+hemisphere (h = −1), with the turning points given by             tween +1 and + 1 − k with period 2K(k), we see that
+                              √                                  Eq. (64) defines a trajectory θo (τ ) that oscillates between
+                θ± = arccos h u∓ ,                 (55)
+                                                                  θ− and θ+ with half-period Ĝθ . Thus, it has the correct
+so that θ−,+ = θ1,2 for h = 1 and θ+,− = θ3,4 for h = −1.         quantitative behavior at turning points, and we need only
+   The angular integrals Gθ , Gφ , and Gt were reduced to         check that it satisfies the squared differential equation
+manifestly real elliptic form in Ref. [8]. Since u+ /u− > 0,      (25) is satisfied, which is easily verified using the ellip-
+the antiderivatives                                               tic identities (39) and (40). This completes the proof
+                                
+             h               u+                                   that Eq. (64) is the unique solution for θo (τ ) with initial
+ Gθ = − p         F Υ 1−            ,                   (56)      conditions θo (0) = θs and sign[θo0 (0)] = νθ .
+            u− a2            u−
+                                                    
+                  h             u+ − u−           u+
+ Gφ = −            p        Π            ;Υ 1 −       , (57)
+         (1 − u− ) u− a2         1 − u−           u−
+          r                                                               2.   Path integrals as functions of Mino time
+                               
+             u−             u+
+  Gt = −h        E   Υ  1 −       ,                     (58)
+              a2            u−                                       We have Gθ = τ by definition, and the other path
+are real and smooth, with                                         integrals may be expressed in terms of Mino time τ by
+                              s                                   the same method as in the ordinary case above. Before
+                                  cos2 θ − u−                     a turning point is reached, we once again have Eqs. (41)
+                 Υ = arcsin                   .           (59)    and (42). Applying the formula (43) to Eq. (63) yields
+                                   u+ − u−
+#--- end
+#--- begin (78)-(95): the radial roots
+                    r4 + Ar2 + Br + C = 0,              (78)    To see this, consider separately the cases where 43 < 0
+which our potential (73) already takes, with coefficients       and 43 > 0. If 43 < 0, then ω± are real, implying that
+                                                                ξ0 is real and ξ1 = ξ¯2 are complex conjugates. If 43 > 0,
+               A = a2 − η − λ2 ,                        (79)    then ω+ = ω̄− are complex conjugates, implying that all
+                      h            i                            three roots ξ0 , ξ1 and ξ2 are real. In that
+                                 2
+               B = 2M η + (λ − a) > 0,                  (80)                                                  √ case, ξ0 is
+                                                                the largest root, since by the definition of 3 x, ω+ has a
+                C = −a2 η.                              (81)    larger real part than either of the other two cube roots
+                                                                     3
+                                                                of ω+   (and likewise for ω− ); that is, we have Re[ω± ] >
+Here, the positivity of B follows from Eq. (77). Ferrari’s      Re[e2πi/3 ω± ] and Re[ω± ] > Re[e−2πi/3 ω± ]. Thus, in all
+method gives the general solution of the quartic (78) as        cases, ξ0 is the largest real root. Finally, since the orig-
+                       r                                      inal polynomial (83) ranges from R(0) = −B 2 /8 < 0 to
+             √                           √
+                                                                R(+∞) = +∞ over the positive real axis, it always ad-
+          ±1 2ξ0 ±2 − 2A + 2ξ0 ±1 √2B      ξ0
+                                                                mits at least one positive real root. This proves that ξ0
+      r=                                        ,    (82)
+                             2                                  is always real and positive (and the largest such root).
+                                                                   We now use this root ξ0 in Ferrari’s formula (82) for
+where the four choices of sign ±1,2 yield the four roots,
+                                                                the solution of the quartic. Defining
+and where ξ0 is any root of the “resolvent cubic”                                           r
+                              2                                                             ξ0
+                              A             B2                                          z=       > 0,                   (94)
+        R(ξ) = ξ 3 + Aξ 2 +       −C ξ−        .     (83)                                      2
+                               4            8
+                                                                the four roots are obtained in the particularly simple form
+To obtain such a root, we first let ξ = t − A/3 to bring
+the resolvent cubic into the depressed form                                               r
+                                                                                           A         B
+                              3
+                                                                              r1 = −z −      − z2 + ,
+                                                                                              −                       (95a)
+                     R(t) = t + Pt + Q,                 (84)                               2        4z
+                                                                                       r
+                                                                                           A         B
+with coefficients                                                             r2 = −z + − − z 2 + ,                   (95b)
+                                                                                           2        4z
+                  A      2                                                            r
+              P=−     − C,                              (85)                             A         B
+                  12"                                                         r3 = z − − − z 2 − ,                    (95c)
+                      2    #                                                           2        4z
+                  A    A        B2                                                    r
+              Q=−          −C −    .                    (86)                             A         B
+                  3     6       8                                             r4 = z + − − z 2 − .                    (95d)
+                                                                                         2        4z
+#--- end
+#--- begin Sec. IV B: the classification and ranges
+any subregion, it suffices to evaluate the formulas (95) at        In case Ia, the ray emerges from the white hole, reaches
+a single point therein. Doing so results in the general            a turning point at r = r3 , and falls into the black hole.
+classification:                                                    In case Ib, the ray enters from infinity, reaches a turning
+                                                                   point at r = r4 , and returns to infinity. In cases II, III,
+   I. Four real roots, two outside horizon:                        and IV, the ray either starts from the white hole horizon
+      r1 < r2 < r− < r+ < r3 < r4 .                                and ends at infinity, or starts from infinity and ends at
+  II. Four real roots, all inside horizon:                         the black hole horizon. Fig. 3 illustrates these regions.
+      r1 < r2 < r3 < r4 < r− < r+ .
+ III. Two real roots, both inside horizon:                                    C.    Radial integrals and inversion
+      r1 < r2 < r− < r+ and r3 = r̄4 .
+                                                                      The above classification of the radial motions enables
+ IV. No real roots: r1 = r̄2 and r3 = r̄4 .                        the radial integrals Ir , Iφ , It , and Iσ to be expressed in
+Notice that there are never any real roots between the             manifestly real elliptic form using standard transforma-
+inner and outer horizons r− and r+ . On the critical curve         tions. The needed transformations group themselves into
+C+ , we have r3 = r4 > r+ , while on the portion of C−             yet another logically distinct set of cases, according to the
+in the upper-half plane (η > 0), we have r3 = r4 < r− ,            turning point(s) of the maximally extended trajectory:8
+with r̂ = r2 = r3 = r4 < r− at the triple-root (λ̂, η̂).             (1) Case Ia: r2 < r < r3 .
+On the portion of C− in the lower-half plane (η < 0), we
+have r1 = r2 < r− , with all four roots coinciding at the            (2) Cases Ib and II: r4 < r < ∞.
+intersection of C− with the horizontal axis η = 0.                   (3) Case III: r2 < r < ∞.
+   The allowed range(s) of r for each of the four cases can
+be determined by checking where the radial potential is              (4) Case IV: −z < r < ∞.
+positive for a single choice of conserved quantities in each
+region. Noting that the potential is always positive at            For each case (1)-(4), we proceed as with the polar mo-
+r → ±∞, the ranges are: r < r1 , r2 < r < r3 , and r > r4          tion above: first, we find smooth real antiderivatives for
+for cases I and II; r < r1 and r > r2 for case III; and any        each integral; next, we invert Ir = τ to find ro (τ ); and
+value of r for case IV. Restricting to motion outside the          finally, we find expressions for Iφ and It , both as func-
+horizon, the relevant ranges are thus:                             tions of τ and expressed in terms of the number of turning
+
+      Ia. r+ < r < r3 (white hole to black hole).
+                                                                  8 In Case IV, the trajectory has no turning point (−∞ < r < ∞),
+      Ib. r4 < r < ∞ (scattering).
+                                                                   but the Legendre form of the antiderivative we give is smooth only
+      II, III, IV. r+ < r < ∞ (fly in or out).                     over the range −z < r < ∞, which covers the exterior since z > 0.
+#--- end
+#--- begin Sec. VI: the recipe
+points. Since the method is essentially the same as in the             VI.    RECIPE FOR TRAJECTORIES
+polar case (but lengthier), we defer treatment to App. B.
+The results are summarized in Sec. VI below.                      We now explain how to use the results of this paper
+                                                               to construct a parameterized trajectory for a given set of
+                                                               initial conditions, excluding certain measure-zero cases.
+                                                               Beginning with the initial position xµs and momentum pµs ,
+                                                               one first determines λ and η via Eqs. (3)–(5). Next, one
+                                                               determines the type of polar motion (type A or B) ac-
+   V.    COMPARISON TO PREVIOUS WORK                           cording to whether η is positive or negative, respectively.
+                                                               One then evaluates the roots {r1 , r2 , r3 , r4 } [Eqs. (95)] to
+                                                               determine the radial case I, II, III, or IV. (One way to
+   We now compare our results to previous work. For the        do so is the following: If r2 is not real, the motion is case
+polar motion, the formulas for the roots, classification of    IV; if r2 is real, then the motion is case III, II, or I if r4
+motion types, reduction to elliptic integrals, and inver-      is complex, real but inside the horizon, or real and out-
+sion for θo (τ ) have all appeared before in the literature.   side the horizon, respectively.) Next, one determines the
+We provide a unified presentation, introduce a method          substitution class (1), (2), (3), or (4) according to the fol-
+of derivation that generalizes to the radial case, and also    lowing: If case I, choose (1) or (2) according to whether
+give for the first time the Mino-time parameterization         the initial radius is less than r3 or greater than r4 ; if case
+of the path integrals Gφ (τ ) and Gt (τ ). For the radial      II, III, or IV, choose (2), (3), or (4), respectively.
+#--- end
+#--- begin App. B: (B1)-(B7)
+                                          Appendix B: Radial integrals and inversion
+
+   In this appendix, we analyze the radial integrals and trajectories following the approach established in the polar
+ case in Sec. III. It is convenient to rewrite the radial integrals as
+
+                     Ir = I0 ,                                                                                                       (B1)
+                                                           
+                            2M a          aλ               aλ
+                     Iφ =            r+ −       I+ − r− −      I− ,                                                                  (B2)
+                          r+ − r−         2M               2M
+                                                               
+                           (2M )2            aλ                aλ
+                     It =          r+ r+ −        I+ − r− r− −      I− + (2M )2 I0 + (2M )I1 + I2 ,                                  (B3)
+                          r+ − r−           2M                 2M
+
+ where we introduced
+                                              ro                                            ro
+                                                             dr                                    r` dr
+                                     I± =                       p     ,             I` =           p     ,                           (B4)
+                                             rs     ±r (r − r± ) R(r)                      rs    ±r R(r)
+
+ for ` ∈ {0, 1, 2}. Note that Ir = I0 and Iσ = I2 . The radial trajectory satisfies the squared differential equation
+                                                                     2
+                                                                dro
+                                                                           = R(ro (τ )),                                             (B5)
+                                                                dτ
+
+ while the radial integrals (B4) satisfy
+
+                                                  dI`            `           dI±          1
+                                                      = [ro (τ )] ,              =              .                                    (B6)
+                                                  dτ                          dτ   ro (τ ) − r±
+
+    Below we will go through each case (1)-(4) [Sec. IV C], following the basic approach established in our treatment
+ of the angular integrals in Sec. III above. Each case requires a different substitution of variables to obtain real
+ and smooth antiderivatives for the integrals.9 Many of the relevant substitutions are summarized in §3.145–3.151 of
+ Ref. [19], and full details are presented in §250–267 of Ref. [15]. The antiderivatives can be used to calculate the path
+ integrals as functions of rs , ro , νr , and the number of turning points w encountered along the trajectory via
+
+                                                             Ii = (−1)w Iio − Iis ,                                                  (B7)
+
+ where Iij indicates the antiderivative Ii evaluated at the source (j = s) or observer (j = o). Here, we assumed that
+ the trajectory encounters either no turning points (w = 0) or a single turning point (w = 1), which is appropriate for
+ our restriction to motion in the black hole exterior.
+#--- end
+#--- begin App. B.2: case (2)
+                                                               2.   Case (2)
+
+    In case (2), all four roots are real and the range of radial motion is r1 < r2 < r3 < r4 ≤ r. An appropriate
+  substitution for the evaluation of the integrals (B4) is then (see Eq. (8) in §3.147 of Ref. [19] and §258 of Ref. [15])
+                                                 r                r      
+                                                    r − r4 r31        r31
+                                        x2 (r) =               ∈ 0,         ⊂ [0, 1).                                 (B35)
+                                                    r − r3 r41        r41
+  The parameter (B13) is less than unity, k ∈ (0, 1), and the antiderivatives
+
+                                           I0 = F (2) (r),                                                                            (B36)
+                                                                    (2)
+                                           I1 = r3 F (2) (r) + r43 Π1 (r),                                                            (B37)
+                                                  p
+                                                 R(r) r1 r4 + r2 r3 (2)
+                                           I2 =       −              F (r) − E (2) (r),                                               (B38)
+                                               r − r3        2
+                                                  (2)    F (2) (r)
+                                          I± = −Π± (r) −           ,                                                                  (B39)
+                                                           r±3
+  are real and smooth, with11
+                                                      2                     
+                                      F (2) (r) = √      F arcsin x2 (r) k ≥ 0,                                                       (B40)
+                                                 r31 r42
+                                               √                           
+                                       (2)
+                                      E (r) = r31 r42 E arcsin x2 (r) k ≥ 0,                                                          (B41)
+                                                                                 
+                                       (2)        2          r41
+                                      Π1 (r) = √         Π       ; arcsin x2 (r) k ≥ 0,                                               (B42)
+                                                 r31 r42     r31
+                                                                                              
+                                       (2)        2        r43        r±3 r41
+                                      Π± (r) = √                  Π           ; arcsin x2 (r) k ,                                     (B43)
+                                                 r31 r42 r±3 r±4      r±4 r31
+  In general, the expression for I2 contains an additional contribution from the antiderivative
+                                      r1 + r2 + r3 + r4                      (2)
+                                                                                   
+                                                          r3 F (2) (r) + r43 Π1 (r) = 0,                                              (B44)
+                                              2
+  which in this case vanishes by Eq. (96).
+
+
+                                                          a.   Inversion for ro (τ )
+
+    Before a turning point is reached, the path integral Ir = τ beginning from r = rs is still given by Eq. (B25). As
+  usual, we may use the Jacobi elliptic sine function to invert this equation. Recalling that Ir = I0 = F (2) (r), Eqs. (37),
+  (B25), and (B40) can be combined to give
+                                                                          √
+                                                                           r31 r42
+                               x2 (ro ) = νr sn X2 (τ ) k ,     X2 (τ ) =           (τ + νr Irs ).                    (B45)
+                                                                             2
+
+
+                                                                                                       h             i
+11 F (2) ≥ 0, E (2) ≥ 0, and Π(2) ≥ 0 because F (ϕ|k) ≥ 0, E(ϕ|k) ≥ 0 and Π(n; ϕ|k) ≥ 0 whenever ϕ ∈    0, arcsin √1n , k ∈ [0, 1], and n ≥ 1.
+                              1
+                          (2)
+   On the other hand, Π± can be negative.
+                                                                                                                        17
+
+Solving for ro using Eq. (B35), we then find
+                                                                                          
+                                                          r4 r31 − r3 r41 sn2 X2 (τ ) k
+                                             ro(2) (τ ) =                                    .                       (B46)
+                                                             r31 − r41 sn2 X2 (τ ) k
+                  (2)
+where we write ro to emphasize that this formula for ro (τ ) was derived in case (2), even though it will extend to
+the other cases with little modification. Although Eq. (B46) was derived under the assumption that a turning point
+has not yet been reached, it in fact continues properly through the turning point r4 (if encountered) to provide the
+full parameterized trajectory ro (τ ). (If νr < 0 there is no turning point in the future of the initial data.) Noting that
+#--- end
+#--- begin App. B.4: (B97)-(B102), with (B100) as printed
+         I0 = F (4) (r),                                                                                                                (B97)
+                        
+                a2                       (4)
+         I1 =        − b1 F (4) (r) − Π1 (r),                                                                                           (B98)
+                g0
+                        2                         
+                a2            (4)            a2        (4)      (4)
+         I2 =        − b1 F (r) − 2             − b1 Π1 (r) + Π2 (r),                                                                   (B99)
+                g0                           g0
+                                                                                                          
+                       g0            (4)           2        1 + g02
+         I± =                       F (r) −                               S1 g± ; arctan x4 (r) + arctan g0 k4 ,                       (B100)
+              a2 [1 − g0 x4 (r± )]              C + D g0 [g0 + x4 (r± )]
+  are real and smooth, with16
+                                           2                               
+                                F (4) (r) =   F arctan x4 (r) + arctan g0 k4 > 0,                                                      (B101)
+                                         C +D
+                                                          
+                                 (4)       2    a2      2
+                                                           `                                
+                                Π` (r) =           1 + g0 S` g0 ; arctan x4 (r) + arctan g0 k4 .                                       (B102)
+                                         C + D g0
+
+#--- end

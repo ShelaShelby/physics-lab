@@ -1,0 +1,45 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/2603.05810_berens2026.txt.gz
+# Reference: R. Berens, D. O. Chang, T. Gravely, A. Lupsasca, "Black Hole Vision: an interactive iOS application for visualizing black holes", Publ. Astron. Soc. Pac. 138, 114501 (2026), arXiv:2603.05810v1 (pdftotext -layout text of the PDF, gzip -9)
+# URL: https://arxiv.org/pdf/2603.05810
+# Date read: 2026-11-16
+# sha256 of the original: 977d881616a2ff4a0fb44644477085756962580a480a89a50be19e4eb58961af
+# Place in the original: Sec. III (its restriction to case (2)), Sec. IV A-B ((30)-(47)): the same forms per pixel for a far camera
+# Used by: src/blackhole/kerr_closed.h (how it orders the cases: only polar type A and radial case (2), the rest drawn as the shadow); no test reads it.
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin Sec. III: the restriction to case (2)
+
+                                                      8
+   To compute this integral, we further note that in BHV, ro < rs and pro < 0. That is,
+photons are launched from some radius ro inwards towards the black hole and exhibit two
+possible behaviors: either (1) the trajectory intersects the event horizon on the inbound
+portion of the photon trajectory or (2) the photon falls inward, hits a minimum radius,
+turns around, and travels all the way back out to rs .
+   The trajectories in case (1) make up the “shadow” of the black hole, which appears as a
+central dark patch in the output of BHV. We thus restrict to case (2), in which the radial
+turning point is the largest root of the radial potential, that is, the largest solution to
+#--- end
+#--- begin (42)-(47): the radial integrals of case (2)
+
+Again, each of the I± is given by a sum of antiderivatives evaluated at the endpoints,
+
+                                                   I± = I±o + I±s .                                           (45)
+
+Another direct integration shows that [9]
+                                                       (2)           F (2) (r)
+                                            I± = −Π± (r) −                     ,                              (46)
+                                                                       r±3
+with F (2) (r) as defined in Eq. (42) and
+                                                                                  
+                         (2)            2       r43       r±3 r41
+                        Π± = √                        Π           ; arcsin x2 (r) k .                         (47)
+                                      r31 r42 r±3 r±4     r±4 r31
+This completes the computation of Iϕ . Plugging it into Eq. (25b), along with Gϕ given in
+Eq. (35), yields the azimuthal trajectory ϕ(τ ) parameterized by Mino time. Evaluating at
+τ = Ir yields the total azimuth swept ϕs = ϕ(Ir ).
+   This completes the discussion of lensing in the Kerr spacetime (ignoring time delay). In
+summary, we have shown how, given an observer at radius ro and inclination θo who shoots a
+ray backwards into the geometry with conserved quantities (λ, η), one can explicitly compute
+the source inclination θs and azimuth ϕs of the ray at its source radius rs . This defines the
+#--- end

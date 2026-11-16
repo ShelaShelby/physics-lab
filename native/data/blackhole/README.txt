@@ -8,6 +8,10 @@ Luminet 1979, Bardeen, Press & Teukolsky 1972 and Cunningham 1975 were read from
 [0.55.3] The Film look (src/blackhole/looks.h) reads James, von Tunzelmann, Franklin & Thorne 2015 (1502.03808) through its extract arxiv/1502.03808_james2015.extract.txt
 (sections 1.2, 4.1-4.3, the captions of Figures 13, 15, 16, appendices A.3.1 and A.6; pages of arXiv v2); with PL_SOURCES_DIR set the test reads the saved text itself.
 
+[0.55.9] The spinning hole's light paths in closed form (src/blackhole/kerr_closed.h) read Gralla & Lupsasca 2020a (1910.12881) and Berens et al. 2026
+(2603.05810); their extracts in arxiv/ (<name>.extract.txt) hold the equations used. Found: (B100) of 1910.12881 as printed (v3 text) has g0 (g0 + x4(r+-))
+in a denominator where the integral needs a2 (1 - g0 x4(r+-)) (g0 + x4(r+-)) (REPORT 0.55.9).
+
 Sources for the Black Hole Lab (0.54.2 research job, 15 Nov 2026; the plan is native/PLAN_BLACKHOLE.md)
 =======================================================================================================
 Nothing here is used by the app yet. Every file was fetched on 2026-11-15 (UTC) and is kept as received, except where "text" is said:

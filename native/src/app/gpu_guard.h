@@ -2,8 +2,11 @@
 // A crash or a hang inside a graphics driver cannot be caught by the app. So before each step of the card's path (until the whole path has succeeded once
 // for this app version and this driver) a small marker file is written beside the settings file, flushed and committed to disk, naming the step; it is
 // removed when the steps have finished (passed or failed). A marker found at the next start means the last run died inside that step: the card's path is
-// then switched off (the shader is not even compiled) and the settings file keeps that, with the app version and the driver's version string. A new app
-// version or a new driver tries once more by itself; the same pair does not; Settings, Performance, "Try again" clears it.
+// then switched off (the shader is not even compiled) and the settings file keeps that, with the light-path shader's own text (0.55.9: a hash of it, in
+// place of the app version: the owner's app died once more at the first start of 0.55.8, whose shader had not changed) and the driver's version string. A
+// changed shader or a new driver tries once more by itself; a new app version alone does not; Settings, Performance, "Try again" clears it.
+// (The field is still called version below: it holds "shader <hash>" from 0.55.9 on; a line kept by 0.55.7 or 0.55.8 names an app version, which is
+// another text, so the shader is tried once more, guarded, after this update.)
 // A step that does not finish within its time limit (a fence that never signals) counts as failed and is kept the same way; the frame never waits for it.
 // The log: one plain text file beside the settings file, overwritten at each start, each line flushed (and, while guarded, committed) before the step it
 // names begins. No graphics here: the steps are named by the callers.

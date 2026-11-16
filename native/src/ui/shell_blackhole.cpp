@@ -168,6 +168,8 @@ void blackholeCard(AppState& app, Panel& p) {
             pStat(p, "Light from the infalling gas", sig(100 * r.efficiency, 3) + " % of its mass (the rest falls in)");
             pStat(p, "Hottest ring", tempText(r.tHot) + " at " + sig(r.rHot, 3) + " GM/c²  ·  " + kmText(r.rHotKm));
         }
+        // 0.55.9: the camera can stand exactly in the disc's plane (the tilt reaches 90 degrees); the model's disc has no thickness
+        if (std::fabs(sv.pitch - 1.5707963267948966) < 1e-9) pCaption(p, "You are exactly in the disc's plane: a disc with no thickness seen exactly edge on is a line (the model's disc is infinitely thin).");
         if (!app.blackhole.bend) pCaption(p, "Gravity bends light: Off: the disc is not drawn (it needs the hole).");
         else if (L.any) {
             pStat(p, "Brightest part", timesText(L.brightY) + " × the Sun's surface in visible light");

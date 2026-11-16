@@ -9,6 +9,9 @@ This also covers the app's own 'say what you are doing' reminders: answer them w
 - Physics tests (ctest names orbit_physics, atom_physics, molecule_logic and the other *_physics / *_logic / *_validation tests; the programs are orbit_tests, atom_tests ...) must keep passing unless the physics changes on purpose; then explain why.
 - If the job is much bigger than described, say so in REPORT.md and keep going unless the job says to stop.
 
+## Graphics and speed (owner decision 16 Nov 2026)
+Every simulation is built to run on the graphics card; the processor's version stays as the exact reference the tests check the card against and takes over where the card or driver cannot (the guard of 0.55.7). A feature is not finished while its heavy repeated work runs only on the processor. A job that adds something drawn adds a benchmark scene for it; the target is the screen's refresh rate on the owner's PC in every scene (the owner sends the benchmark after each X.Y; the planning chat checks it).
+
 ## Two models (owner decision 4 Nov 2026)
 Three roles (owner decision 14 Nov 2026): a planning chat leads (architecture, design, what comes next) and writes each job, but writes no code and does not push; the Opus session builds the job and leads its Haiku helpers as below.
 The session's own model (Opus) is the lead developer; it uses Haiku helper agents (Agent tool, model "haiku") for the routine work below. Opus decides what goes to Haiku and may keep anything.

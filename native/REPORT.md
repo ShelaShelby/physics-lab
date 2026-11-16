@@ -1,40 +1,31 @@
-# 0.55.8: the spinning hole's light paths about 3.7 times faster on the processor (moving table) and 4.7 times (fine table)
-No source read or saved. The fine table's numbers changed on purpose (new form of the same equations): Real's saved hash was changed on purpose (below).
-## Step 1: where the time went (0.55.7's code, this box: 4 cores, GCC; tables as the lab makes them, all cores)
-| table (rays) | whole | edges | probes | rows | node rays | finish | threads | steps/ray | rejected | rhs/ray | steps beyond 10 rC |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| benchmark coarse (4096) | 92 ms | 1.7 | 6.2 | 0.3 | 85.4 | <1 % | 0.1/stage | 262 | 19 | 1820 | 16 (6 %) |
-| benchmark fine (147456) | 6916 ms | 12.5 | 107 | 1.7 | 6490 | <1 % | 0.1/stage | 662 | 2.6 | 4120 | 35 (5 %) |
-| Film coarse | 86 ms | 1.4 | 5.7 | 0.2 | 71.4 | <1 % | 0.1/stage | 236 | 23 | 1678 | 15 (6 %) |
-| Film fine | 6323 ms | 11.8 | 103 | 1.4 | 6163 | <1 % | 0.1/stage | 597 | 2.3 | 3719 | 32 (5 %) |
-- Rays within 1e-3 psi_e of the edge: 43-45 % of the rays, 2.5x the steps (397 against 113 far out): about 2/3 of the time. ~40 ns per right-hand side (a sine,
-  a cosine, ~8 divisions). Decided from this: the far tail (5-6 % of steps), the threads (0.1 ms a stage) and the edges/probes/rows (9 %) cannot give much;
-  a looser tolerance gives only 1.8x at 1e-6 and its error near the edge grows as 1/x (a = 0.01: 4e-4 -> 1.7e-2 rad): the rays themselves had to get cheaper.
-## What changed, and what each gained
-- **mino.h/.cpp (new)**: the same equations (J15 (A.4), (A.12), (A.15)) in Mino time with u = 1/r, mu = cos theta: polynomial right-hand sides, no sine, two
-  divisions; derived in the header. Each escaping ray is followed to u = 0 (infinity) itself: no tail left out. Rays passing within sin^2 theta < 1e-3 of the
-  spin axis keep KerrBL (phi turns by ~pi in less than a step there; measured: error grows to 4e-3 rad at 1e-6). Gain, same tolerance: coarse x3.2-3.4, fine x3.9-4.3.
-- **spin_sky SpinFill** (tolerance, form, xlo, rtolFar): a node's tolerance grows with |x|/psi_e beyond 1e-4 (moving: to 1e-5, fine: to 1e-8): a further x1.13-1.17 on both.
-- **After**: benchmark coarse 92 -> 24.7 ms (x3.7), Film 85 -> 22.1 (x3.9); fine 7304 -> 1549 ms (x4.7), Film 6824 -> 1412 (x4.8). Left: 107 steps/ray, 6 % of rays on KerrBL (rows chi = 0, pi), edges + probes 3.4 ms.
-- Tried and dropped (measured): an error-scale floor (no gain); the null conditions kept by projection (6x worse near the edge at spin 0.01); a larger xlo or fewer columns (disc's further images 14 % worse at 0.01); a thread pool (0.3 ms a table).
-## Accuracy shown (blackhole_tests 826 checks, 0 failed)
-- testMino: Mino's rates = rho^2 times KerrBL's at 200 states (2e-12); against KerrBL at 1e-12 (rtol 1e-10), spin 0.01/0.6/0.9/0.99 + 0.9 near the axis, 192 rays
-  each: same ends, same b; far direction near the edge (x/psi_e 1e-6..1e-4) <= 5.8e-6 rad (limit 3e-5), far <= 1.6e-8 (5e-8); crossings' radii <= 4e-4 (1.5e-3);
-  null conditions at the end <= 4.5e-10 (3e-9); next to the pole (sin^2 theta 1.1e-3) 3.7e-8 rad (1e-6).
-- testMovingTable: the moving table against KerrBL at 1e-12 at 480 places, 5 cases: every band of the far direction, b, the disc's r and g within 2 % of
-  0.55.7's coarse table on the same places (all equal to 3 digits or better; the limit is 0.55.7's own measured numbers, printed per case), 0 mismatches.
-- testSpinTable (fine table), limits unchanged: its numbers = 0.55.7's to 4 digits (a 0.9 far direction 3.26e-5 / 1.86e-5 / 1.43e-5 rad).
-- **Real's saved hash changed on purpose**: 7fff50741d132f22 -> b37c532bb4916030. The precision part draws the case twice: with 0.55.7's rays still 7fff50741d132f22;
-  the new picture differs by at most 1 level of 255, in 695 of 1,024,000 pixels.
-## Benchmark (ui/benchmark.cpp, app/bench.*)
-- "Spin 0, changing distance: no frames counted": the scene went by the wall clock from its set-up, which holds the set-up frame (the fine table); the counting
-  goes by the frames' summed times, so it ended before the last slot. Now the scene uses the run's own clock. Rests 1.4 s after tilting and distance at spin 0.9
-  (spin 0: 0.5 s moves, 0.1 s rests; fits the 8 s, static_assert). New lines: the sharp picture's time after each stop (or none), the fine table's time at the start; run here (PL_BENCH_ONLY=13): all six counted, fine table 1677 ms.
-## Estimate for the owner's PC (ratio of his 0.55.7 numbers to this box's, same stage; an estimate, not measured)
-- Coarse table tilting 64 -> ~17 ms, distance 56 -> ~15 ms; with the other stages (~15 ms) about 30 pictures a second while tilting at spin 0.9 (was 12),
-  turning stays ~88. Fine table 2837 -> ~600 ms: the sharp picture ~1 s after a stop. **The tenth was not reached (x3.7)**: bound by the rays near the edge
-  (2/3 of the time; their tolerance cannot be loosened, the error grows as 1/x) and the step count of the Dormand-Prince pair at 1e-8.
-## Tests
-- check.sh quick: 17 of 17. By hand (LP_NUM_THREADS=1 as ctest): precision 98/98, smooth 36/36 (new: a new picture after 16 of 16 tilt frames at spin 0.6 on
-  the processor; with 0.55.7's coarse table 12 of 16, so the 90 % check fails there), spin 19/19, disc 23/23, looks 39/39, truelight 28/28. app_tests 0 failed.
-- **The full UI suite was not run (small version).** The card's light paths are untouched (parked).
+# 0.55.9: the spinning hole's light paths from closed formulas (no step-by-step integration)
+Read: Gralla & Lupsasca 2020a (1910.12881) and Berens et al. 2026 (2603.05810), saved text in the sources repo; extracts added beside them (SOURCES.md lines now name kerr_closed).
+## Step 0, the gate (this box, 4 cores, GCC; a 0.9, r 20, 80 deg; per ray, one core)
+- Closed far direction 3.96 us near the edge (x/psi_e 1e-6..1e-4) against mino.h 29.8 us at the moving table's 1e-8 (x7.5) and 64.7 us at the fine table's 1e-10 (x16.3); far out 3.36 against 10.7 / 22.9 us. Passed (needed x5).
+## Part A: src/blackhole/kerr_closed.h/.cpp (GLa equations named in the header; FROM A FINITE RADIUS: GLa's antiderivatives are functions of r on the whole range, so camera -> infinity and camera -> horizon are differences of the same ones; nothing had to be built beyond the paper)
+- elliptic.h gained Carlson's R_C (closed form, tested against duplication 1e-15), R_J, Pi(n; phi|m) for any amplitude (n > 1 past its pole by an antiderivative derived in the header), the Jacobi amplitude (AGM; m < 0 by a derived transformation), E via R_D. Tests: Pi against quadrature 168 + 52 intervals (< 1e-12), F(am(u)) = u.
+- Berens et al. order only polar type A + radial case (2) and draw the rest as the shadow; the lab needs every case (rays seen inside the shadow cross the disc; a camera close in sees case (1)), so all are built.
+- **Found in GLa**: (B100) as printed (v3 text) has g0 (g0 + x4(r+-)) in a denominator; the integral (B4) needs a2 (1 - g0 x4(r+-))(g0 + x4(r+-)) (derived in kerr_closed.cpp; with the printed form I_+- was wrong by up to x200, with the derived one within 6e-11 of the quadrature).
+- Two corners handled and stated: lambda = 0 (rays over the pole: phi turns by pi per passage); case (3) at small spin, r- within 1e-4 of r2: I_- by its exact closed form at r2 (derived; 2e-5 of I_-, weight of order a^2).
+- testClosed (all limits new, chosen from the measured numbers): roots (sum 0, R(r_i) = 0, double root on GLb's critical curve); the radial integrals of every case against a quadrature of (B4) (I_r < 1e-11, I_+- < 1e-8; case (2) I_+ within 1e-2 only next to lambda = (r+^2 + a^2)/a, where r3 meets r+ and the weight of I_+ vanishes too); rays against KerrBL at 1e-12, spin 0.01/0.6/0.9/0.99, seven cameras: 1680 rays, substitution (1) 70, (2) 636, (3) 964, (4) 8, case II 2; polar A 1657, B 23. Ends and b identical; far direction near the edge <= 8.4e-7 rad (limit 3e-6; testMino's 3e-5), farther <= 4.1e-8 (5e-8); crossings' radii <= 5.1e-7 (1e-6; testMino's 1.5e-3).
+- Spin to 0: at 1e-12 the non-spinning closed form within 0.05 of testIntegratorVsClosed's limit on 150 rays to 1e-4 from the edge; the difference grows x10 per decade of spin (1e-11 .. 1e-9): the spin's first-order effect.
+- No fallback was needed: 0 rays of any table went to mino.h (counted per table, spin_sky.h fallbacks()). GLa's excluded principal null rays (eta + (lambda - a)^2 = 0: a radial ray at spin 0 exactly) would fall back to mino.h.
+- Shader-ready: no recursion, every loop bounded (60 / 16 / 15); the elementary functions are listed in the header.
+## Part B: the tables (SpinFill.closed; the integrator stays as reference and switch: kSpinFineFillMino, kSpinMovingMino)
+| stage (this box, 4 cores) | 0.55.8 | 0.55.9 |
+|---|---|---|
+| fine table 192 x 384 (benchmark / Film) | 1676 / 1404 ms | 166 / 157 ms (x10.1 / x8.9) |
+| moving table (benchmark / Film) | 32 x 64: 29.9 / 24.2 ms | 64 x 72 with disc rows: 12.8 / 11.2 ms (x2.3 / x2.2) |
+| stars' bins of the moving table | 6.2 / 5.9 ms | 10.0 / 8.9 ms (2.25x the triangles) |
+- One table? No: the fine table is about 0.1 s even on the owner's PC; the moving stage stays, larger (Part E).
+- Owner's PC (his 0.55.8 numbers / this box's, same stage; an estimate): moving table 23.1 -> ~10 ms tilting, 20.6 -> ~9 ms distance; with bins, images, exposure (~15 ms + ~3 ms more bins) about 35 pictures a second at spin 0.9 (was 25); fine 1010 -> ~100 ms: the sharp picture ~0.5 s after a stop (was 1.4). **Tilting at spin does not reach turning (88 estimated; 116-176 without spin)**: the stars' bins, images and exposure now dominate (ROADMAP).
+- Real's saved hash changed on purpose: b37c532bb4916030 -> e31a10335ce4dab6; with 0.55.8's rays the case is still 0.55.8's picture; the new one differs by at most 1 level of 255 in 1053 of 1,024,000 pixels.
+- testMovingTable: its 0.55.7 reference is now built at 0.55.7's own size (32 x 64); the moving table is no worse on every measure, the disc far better (Film: disc r near 0.047 against 0.55).
+## Part C: the guard keeps "shader <FNV-1a of kKerrTableCS>" in place of the app version (render/kerr_compute.h kerrShaderId): a new app version alone stays off
+- app_tests: the decision with the same shader and driver stays off; a changed shader tries again (test references changed from "0.55.7" to the shader id on purpose). smooth: the kept line holds the shader id and no app version; a restart compiles nothing; PL_GPU_SHADER (another text) tries again and passes.
+## Part D: DECISIONS.md "Graphics and speed" (replaces 5 Oct 2026) and CLAUDE.md; ROADMAP: the benchmark scenes below 255 Hz, the closed forms on the card.
+## Part E: the disc changed shape when the drag stopped. Cause: the moving table near the disc's plane (cause 2)
+- Not an old picture (every check of smooth on the shown picture's settings passes) and not the Film's locked values. Seen nearly edge on the disc's near side is a thin band about the plane's azimuths; 0.55.8's 32 rows missed it (against each pixel's own ray: 2242 of 22482 disc samples wrong at the paper's view; fine table 21). Now 64 x 72 rays and a share of the rows where the first crossing changes fast (probe rays, spin_sky.h rowsOf): 508.
+- smooth's new check (PL_BH_DISCSHIFT; the picture at rest against the last moving one of the same settings): paper's view 3 px / 1.27 mean / 2.9 % of disc samples; in the plane 7 / 1.57 / 2.8 %; 3 deg below 7 / 1.75 / 2.8 %; 60 deg 1 / 1.0 / 0.007 %. Limits 8 px, 2 px, 5 %. Run once with 0.55.8's moving table (PL_BH_MOVING558): 9 / 2.49 / 23 %, 15.1 / 2.04 / 9.2 %, 13 / 4.08 / 20 %: three fail.
+- The camera can stand exactly in the plane (tilt 90 deg): the card then says a disc with no thickness seen edge on is a line.
+## Tests: check.sh quick 17 of 17 (PL_SOURCES_DIR set), check_sources ok, blackhole_tests 860/860, app_tests 0 failed; by hand: smooth 50/50, precision 98/98, spin 19/19, disc 23/23, looks 39/39, truelight 28/28 (guard part inside smooth). **The full UI suite was not run (small version).**

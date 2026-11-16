@@ -9,6 +9,10 @@
 namespace render {
 
 // 0.55.7: the steps of making the shader, named to the caller before they begin and after they end (the guard's marker and log, app/gpu_guard.h)
+// 0.55.9: "shader " and a 64-bit FNV-1a hash of the light-path shader's text (render/shaders.h kKerrTableCS), in hex: what the guard keeps in place of the
+// app version (app/gpu_guard.h), so that only a changed shader (or driver) tries the card's path again
+std::string kerrShaderId();
+
 class KerrSteps {
 public:
     virtual ~KerrSteps() {}

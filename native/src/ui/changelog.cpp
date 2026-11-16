@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.9", "The Black Hole Lab: the spinning hole's light paths from closed formulas",
+     "Round the spinning hole every light path is now worked out from its closed formula (elliptic integrals and Jacobi functions, from Gralla and Lupsasca "
+     "2020) instead of being followed step by step: the sharp picture after you stop comes about ten times sooner, and the picture made while you tilt or "
+     "change the distance about three times sooner while it has more than twice the rays. The step-by-step integrator stays as the reference the tests check every "
+     "formula against, in every case the paper distinguishes. Seen nearly edge on, the picture made while you dragged showed the disc's thin near side "
+     "wrongly, so the disc changed shape when you stopped: that picture now has more rows, also where the disc's image changes fast. If you stand exactly in the "
+     "disc's plane, the card says that a disc with no thickness is then a line. And the graphics card's light paths, once switched off on a PC because "
+     "they stopped the app, are no longer tried again just because the app was updated: only when their own shader or the driver changes, or you press Try again."},
     {"0.55.8", "The Black Hole Lab: the spinning hole's light paths about 3.5 times faster on the processor",
      "Round the spinning hole the processor now follows each light path in a second, equivalent form of the same equations (the time usually called Mino time: the motion "
      "away from the hole and the motion round its axis separate, and both become plain polynomials without sines), and follows each escaping path all the way out "

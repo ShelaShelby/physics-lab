@@ -165,7 +165,9 @@ bool BlackHoleView::ensureSpinTable(const Settings& s, bool wait, const std::ato
     if (!spinMatches(s)) {                                                  // settings changed: drop the fine one being made, the coarse one now
         if (offered) { showOffered(); return true; }
         if (!fineExternal_) stopSpinWorker();
-        auto c = std::make_shared<SpinTable>(a, r, th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, cancel, 0, kSpinMoving);
+        static const bool old = std::getenv("PL_BH_MOVING558") != nullptr;  // 0.55.9 (the check's failing run): 0.55.8's moving table, its size and rays
+        auto c = old ? std::make_shared<SpinTable>(a, r, th, 32, 64, kSpinEdgeCoarse, cancel, 0, kSpinMovingMino)
+                     : std::make_shared<SpinTable>(a, r, th, kSpinChiCoarse, kSpinSCoarse, kSpinEdgeCoarse, cancel, 0, kSpinMoving);
         if (!c->ok()) return false;
         st_.spinCoarseMs = c->fillMs();
         st_.spinCoarseFills++;
@@ -685,7 +687,54 @@ void BlackHoleView::workLoop() {
     }
 }
 
+// 0.55.9 (automatic checks, PL_BH_DISCSHIFT=1): when the picture at rest (the fine table) replaces a moving one of the same spin, distance and tilt (the
+// moving table): where the disc is on the picture under each (spinPixel, the lookup the card does), every second pixel both ways: how many pixels differ,
+// and how far each differing one is from the nearest pixel where the picture at rest changes between disc and no disc (its outline): the largest and the
+// mean, in pixels. (0.55.8: seen nearly edge on, the moving table's 32 rows missed the disc's thin near side; REPORT 0.55.9.)
+namespace {
+void discShift(const BlackHoleView& v, const SpinTable& moving, const SpinTable& rest, const Settings& s, double W, double H, double cx, double cy) {
+    const HoleView hv = holeView(s, W, H, cx, cy);
+    const DiscGeom g = discGeom(s);
+    const int nx = static_cast<int>(W) / 2, ny = static_cast<int>(H) / 2;
+    std::vector<signed char> mr(static_cast<std::size_t>(nx) * ny), mm(mr.size());
+    const auto on = [&](const SpinTable& T, double X, double Y) {
+        const double dx = X - hv.cx, dy = hv.cy - Y, d = std::hypot(dx, dy), th = d / hv.K;
+        if (!(th <= kPi)) return false;
+        double chi = std::atan2(-(d > 0 ? dx / d : 0), d > 0 ? dy / d : 1);
+        if (chi < 0) chi += 2 * kPi;
+        return spinDisc(T.lookup(th, chi), s.spin, g.rIn, g.rOut).order >= 0;
+    };
+    long pix = 0, differ = 0;
+    for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
+        const double X = 2 * i + 1, Y = 2 * j + 1;
+        const std::size_t k = static_cast<std::size_t>(j) * nx + i;
+        mr[k] = on(rest, X, Y); mm[k] = on(moving, X, Y);
+        pix += mr[k];
+    }
+    double worst = 0, sum = 0;
+    for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
+        const std::size_t k = static_cast<std::size_t>(j) * nx + i;
+        if (mr[k] == mm[k]) continue;
+        differ++;
+        double best = 1e9;                                                  // the nearest sample of the other kind in the picture at rest (its outline)
+        for (int r = 1; r <= 40 && best > r - 1; r++)
+            for (int jj = std::max(0, j - r); jj <= std::min(ny - 1, j + r); jj++) for (int ii = std::max(0, i - r); ii <= std::min(nx - 1, i + r); ii++)
+                if (mr[static_cast<std::size_t>(jj) * nx + ii] != mr[k]) best = std::min(best, std::hypot(ii - i, jj - j));
+        best = 2 * (std::min(best, 40.0) - 0.5);                            // (in pixels, the samples 2 pixels apart: the outline lies at least half a step past it)
+        worst = std::max(worst, best); sum += best;
+    }
+    (void)v;
+    std::printf("PLBHDISCSHIFT a=%g dist=%g pitch=%.6f look=%d disc=%ld differ=%ld maxpx=%.1f meanpx=%.2f moving=%dx%d\n", s.spin, s.dist, s.pitch, static_cast<int>(s.look),
+                pix, differ, worst, differ ? sum / differ : 0.0, moving.nChi(), moving.nS());
+    std::fflush(stdout);
+}
+}  // namespace
+
 void BlackHoleView::install(Picture& p) {
+    static const bool shift = std::getenv("PL_BH_DISCSHIFT") != nullptr;
+    if (shift && spin_ && p.spin && p.spin != spin_ && !spin_->filledByCard() && spin_->nChi() != kSpinChiFine && p.spin->nChi() == kSpinChiFine && p.req.s.disc &&
+        spin_->spin() == p.spin->spin() && spin_->rC() == p.spin->rC() && spin_->thC() == p.spin->thC())
+        discShift(*this, *spin_, *p.spin, p.req.s, p.req.W, p.req.H, p.req.cx, p.req.cy);
     table_ = std::move(p.table); tableDist_ = p.tableDist; tableVer_ = p.tableVer;
     disc_ = std::move(p.disc); discDist_ = p.discDist; discVer_ = p.discVer;
     spin_ = std::move(p.spin); spinVer_ = p.spinVer;
@@ -1046,10 +1095,11 @@ void compareHook(render::Renderer2D& R, const char* spec) {
     //    lookup of the same table: the disc's image and edges where the module puts the paper's edges, one colour over the whole disc before the glow; the glow
     //    against its double reference (looks.h glowReference) on the same picture, no pixel darker; the glow pass's time at 1280 x 800 and 3840 x 2160.
     {
-        // 0.55.8: the fine table's rays now follow Mino's form (spin_sky.h kSpinFineFill): the same picture drawn with 0.55.7's rays (SpinFill{}) gives the
-        // saved hash, and the two pictures differ by at most one level of 255 (their largest difference and the pixels that differ at all)
+        // 0.55.9: the fine table's rays now come from the closed forms (spin_sky.h kSpinFineFill, kerr_closed.h): the same picture drawn with 0.55.8's rays
+        // (Mino's form, kSpinFineFillMino) gives 0.55.8's saved hash, and the two pictures differ by at most one level of 255 (their largest difference and
+        // the pixels that differ at all). (0.55.8 did the same against 0.55.7's rays.)
         std::vector<unsigned char> pNew, pOld;
-        const std::uint64_t hNew = realCaseHash(R, 1280, 800, kSpinFineFill, &pNew), hOld = realCaseHash(R, 1280, 800, SpinFill{}, &pOld);
+        const std::uint64_t hNew = realCaseHash(R, 1280, 800, kSpinFineFill, &pNew), hOld = realCaseHash(R, 1280, 800, kSpinFineFillMino, &pOld);
         int maxDiff = 0;
         long differ = 0;
         for (std::size_t i = 0; i < pNew.size() && pNew.size() == pOld.size(); i += 4) {

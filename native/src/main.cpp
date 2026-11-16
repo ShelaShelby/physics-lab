@@ -210,7 +210,9 @@ int main(int, char**) {
             "GPU: " + gpu, "Vendor: " + vendor, "OpenGL: " + version + " (context " + std::to_string(maj) + "." + std::to_string(min) + ")", "GLSL: " + glsl,
             std::string("Double precision (GL_ARB_gpu_shader_fp64): ") + (fp64 ? "reported" : "NOT reported") + (maj >= 4 ? " (core in OpenGL 4.0 and later)" : "")};
         const char* fakeDriver = SDL_getenv("PL_GPU_DRIVER");          // (tests: another driver's version string)
-        app::gpuGuard().start(ui::settingsFolder(), ui::appVersion(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuPaths, head);
+        // 0.55.9: the guard keeps the light-path shader's own text (its hash) in place of the app version: a new app version alone does not try again
+        const char* fakeShader = SDL_getenv("PL_GPU_SHADER");          // (tests: another shader's text)
+        app::gpuGuard().start(ui::settingsFolder(), fakeShader ? std::string(fakeShader) : render::kerrShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuPaths, head);
         if (app::gpuGuard().saved() != app.prefs.gpuPaths) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
         else app::gpuGuard().settingsWritten();
     }

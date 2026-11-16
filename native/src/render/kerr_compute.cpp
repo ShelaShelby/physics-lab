@@ -13,6 +13,14 @@ using namespace plgl;
 
 namespace render {
 
+std::string kerrShaderId() {
+    unsigned long long h = 1469598103934665603ULL;                  // FNV-1a, 64 bit
+    for (const char* p = kKerrTableCS; *p; p++) { h ^= static_cast<unsigned char>(*p); h *= 1099511628211ULL; }
+    char b[40];
+    std::snprintf(b, sizeof b, "shader %016llx", h);
+    return b;
+}
+
 namespace {
 double nowMs() { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 class KerrCompute : public IKerrCompute {

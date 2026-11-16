@@ -315,11 +315,13 @@ def part_precision(binary, work):
     # (looks.h filmDiscLinear over the screen's white, encoded); the glow: the card's picture with it = the double reference applied to the card's picture without
     # it, to one level of 255, no channel of any pixel darker, the added light = the reference's to 1 %.
     rl = [ln for ln in r.out.splitlines() if ln.startswith("PLBHREAL ")]
-    # 0.55.8: the fine table's rays follow Mino's form (src/blackhole/mino.h): the same case drawn with 0.55.7's rays is still 0.55.2's picture to the pixel; the
-    # new picture differs from it by at most one level of 255 (measured: 695 of 1,024,000 pixels by one level); its hash saved on purpose (REPORT 0.55.8)
+    # 0.55.8: the fine table's rays followed Mino's form (src/blackhole/mino.h); 0.55.9: they come from the closed forms (src/blackhole/kerr_closed.h). The same
+    # case drawn with 0.55.8's rays (spin_sky.h kSpinFineFillMino) is still 0.55.8's picture to the pixel (0.55.8 showed that picture within one level of
+    # 0.55.2's); the new picture differs from it by at most one level of 255 (measured: 1053 of 1,024,000 pixels by one level); its hash saved on purpose
+    # (REPORT 0.55.9)
     rv = dict(kv.split("=") for kv in rl[0].split()[1:]) if rl else {}
-    check(rv.get("old") == "7fff50741d132f22", f"Real: drawn with 0.55.7's rays, the saved case is 0.55.2's picture to the pixel ({rl})")
-    check(rv.get("hash") == "b37c532bb4916030" and int(rv.get("maxdiff", 9)) <= 1, f"Real: the saved case with the fine table of 0.55.8, within one level of 255 of 0.55.2's picture ({rl})")
+    check(rv.get("old") == "b37c532bb4916030", f"Real: drawn with 0.55.8's rays, the saved case is 0.55.8's picture to the pixel ({rl})")
+    check(rv.get("hash") == "e31a10335ce4dab6" and int(rv.get("maxdiff", 9)) <= 1, f"Real: the saved case with the fine table of 0.55.9, within one level of 255 of 0.55.8's picture ({rl})")
     fl = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHFILM ")]
     check(len(fl) == 1, f"Film compared at the paper's view ({len(fl)})")
     for x in fl:
@@ -831,6 +833,36 @@ def part_smooth(binary, work):
     check("PLBHCARD state=-1" in rf.out and "test switch" in rf.out and len(ff) > 0 and ff[-1]["cardstate"] == "-1" and ff[-1]["card"] == "0" and ff[-1]["pic"] != "0" and said,
           f"a failed start-up check: the processor's path draws the picture and Settings, Performance says so (said {said})")
     smooth_guard(binary, work, cb)
+    smooth_disc(binary, work, base)
+
+# 0.55.9: the picture at rest and the last one shown while moving are of the same settings and show the same disc. The owner's report (0.55.8, Film look):
+# while he dragged, the disc looked as if seen from exactly inside its plane; at rest, from a little above. The cause (REPORT 0.55.9): the moving table's 32
+# rows missed the disc's thin near side when it is seen nearly edge on. The view prints, when the picture at rest replaces a moving one of the same spin,
+# distance and tilt, how far the disc's outline moved (PL_BH_DISCSHIFT, blackhole_view.cpp discShift: every second pixel). Limits from the moving table's
+# measured disc (spin_sky.h kSpinMoving; against each pixel's own ray at the paper's view it misses 508 of 22482 disc samples, 0.55.8's moving table 2242):
+# the outline moves at most DISC_SHIFT_MAX pixels anywhere, DISC_SHIFT_MEAN on average where it moved, and no more than DISC_SHIFT_SHARE of the disc's samples
+# change. Measured here (llvmpipe, 1280 x 800): paper's view 3 px, 1.27, 2.9 %; in the plane 7, 1.57, 2.8 %; 3 deg below 7, 1.75, 2.8 %; 60 deg 1, 1.0, 0.007 %.
+# Run once against 0.55.8's moving table (PL_BH_MOVING558=1): 9 px, 2.49, 23 %; 15.1, 2.04, 9.2 %; 13, 4.08, 20 %; 1, 1.0, 0.1 %: three cases fail (REPORT 0.55.9).
+DISC_SHIFT_MAX, DISC_SHIFT_MEAN, DISC_SHIFT_SHARE = 8.0, 2.0, 0.05
+
+def smooth_disc(binary, work, base):
+    cases = [("film, the paper's view (86.56 deg)", "look=film;dist=74.1;pitch=1.5107643"), ("film, exactly in the plane", "look=film;dist=74.1;pitch=1.5707963"),
+             ("real, 3 deg below the plane", "preset=feeding;spin=0.6;dist=74.1;pitch=1.6231562"), ("real, far from the plane (60 deg)", "preset=feeding;spin=0.6;dist=20;pitch=1.0471976")]
+    old = os.environ.get("PL_BH_MOVING558") is not None
+    for name, st in cases:
+        env = dict(base, PL_BH_SET=st, PL_BH_DISCSHIFT="1", PL_SCRIPT="20:drag=300,300,300,330;40:drag=300,330,300,300", PL_BH_SETTLE="60:30")
+        if old: env["PL_BH_MOVING558"] = "1"
+        r = run_app(binary, work, "bh_discshift_" + name.split(",")[0] + str(cases.index((name, st))), env, frames=3000, timeout=3000)
+        ln = [dict(kv.split("=", 1) for kv in x.split()[1:]) for x in r.out.splitlines() if x.startswith("PLBHDISCSHIFT ")]
+        f = frames_of(r)
+        check(not r.scripted_missing() and len(ln) >= 1, f"disc at rest, {name}: the picture at rest replaced a moving one of the same settings ({len(ln)} times, {r.scripted_missing()})")
+        if not ln: continue
+        x = ln[-1]
+        print(f"  disc at rest, {name}: {x}")
+        check(int(x["disc"]) > 500 and float(x["maxpx"]) <= DISC_SHIFT_MAX and float(x["meanpx"]) <= DISC_SHIFT_MEAN and int(x["differ"]) <= DISC_SHIFT_SHARE * int(x["disc"]),
+              f"disc at rest, {name}: the outline moved at most {x['maxpx']} px (limit {DISC_SHIFT_MAX}), {x['meanpx']} px on average (limit {DISC_SHIFT_MEAN}), {x['differ']} of {x['disc']} samples changed (limit {DISC_SHIFT_SHARE:.0%}){' (0.55.8 moving table)' if old else ''}")
+        last = f[-1] if f else {}
+        check(last.get("behind") == "0" and last.get("sky") == last.get("want"), f"disc at rest, {name}: at rest the picture is the settings' own")
 
 def smooth_guard(binary, work, cb):
     # 0.55.7, the guard round the card's path (app/gpu_guard.h) and its log, beside the settings file (here PL_SETTINGS in a folder of its own per case).
@@ -876,7 +908,17 @@ def smooth_guard(binary, work, cb):
         check(not os.path.exists(mk), "guard: the marker is gone once the settings file keeps it")
         if i != 0: continue
         r2 = run_app(binary, work, "bh_guard_same", dict(cb, PL_SETTINGS=sf), frames=20, timeout=1200)
-        check("PLBHCARD state=-1" in r2.out and "stopped the app last time" in r2.out, "guard: a restart with the same driver stays off")
+        lg2 = open(os.path.join(d, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(d, "gpu-paths-log.txt")) else ""
+        check("PLBHCARD state=-1" in r2.out and "stopped the app last time" in r2.out and "begin compile" not in lg2, "guard: a restart with the same driver stays off, nothing compiled")
+        # 0.55.9: the settings file keeps the light-path shader's id, not the app version: a new app version with the same shader and driver stays off
+        # (the kept line names no app version at all); a changed shader text tries again
+        txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+        kept = [ln for ln in txt.splitlines() if ln.startswith("gpupaths=")]
+        check(len(kept) == 1 and kept[0].startswith("gpupaths=off | shader ") and " | 0.55" not in kept[0], f"guard: the kept line holds the shader's id, no app version ({kept})")
+        sf3 = os.path.join(d, "settings_shader.txt")
+        with open(sf3, "w", encoding="utf-8") as f: f.write(txt)
+        r5 = run_app(binary, work, "bh_guard_shader", dict(cb, PL_SETTINGS=sf3, PL_GPU_SHADER="shader 0000000000000000"), frames=60, timeout=1200)
+        check("PLBHCARD state=1" in r5.out, "guard: a changed light-path shader tries again (and passes here)")
         sf2 = os.path.join(d, "settings_other.txt")
         with open(sf2, "w", encoding="utf-8") as f: f.write(open(sf, encoding="utf-8").read())
         r3 = run_app(binary, work, "bh_guard_other", dict(cb, PL_SETTINGS=sf2, PL_GPU_DRIVER="Another driver 1.2.3"), frames=60, timeout=1200)
@@ -907,14 +949,15 @@ def blackhole_film():
 
 PARTS = {"open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
-         "truelight": part_truelight, "smooth": part_smooth}
+         "truelight": part_truelight, "smooth": part_smooth,
+         "smoothdisc": lambda b, w: smooth_disc(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_BH_GPUPATHS="0"))}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]
     os.makedirs(work, exist_ok=True)
     part = sys.argv[3] if len(sys.argv) > 3 else None
     for name, fn in PARTS.items():
-        if part is None or part == name:
+        if (part is None and name != "smoothdisc") or part == name:   # (smoothdisc: the smooth part's last check alone, by hand)
             fn(binary, work)
     print(f"check_blackhole: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

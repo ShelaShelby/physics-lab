@@ -108,10 +108,10 @@ void GpuGuard::start(const std::string& folder, const std::string& version, cons
     lines_ = 0; logFull_ = false;
     for (const std::string& h : head) line(h, false);
     if (!marker.state.empty()) line("A marker was left by the last run (app " + marker.version + ", driver " + marker.driver + "): it died inside the step '" + marker.step + "'", true);
-    if (!d_.allowed) line(std::string("The graphics card's light paths are switched off for this app version and driver: ") +
+    if (!d_.allowed) line(std::string("The graphics card's light paths are switched off for this light-path shader and driver: ") +
                           (d_.crashed ? "the app died inside the step '" : "this step did not finish in time: '") + d_.keep.step + "' (Settings, Performance: Try again)", true);
     else line(d_.guarded ? "The graphics card's light paths: allowed, guarded (a marker before each step until the whole path has succeeded once)"
-                         : "The graphics card's light paths: allowed (they succeeded once with this app version and driver)", false);
+                         : "The graphics card's light paths: allowed (they succeeded once with this light-path shader and driver)", false);
 }
 
 std::string GpuGuard::offText() const {
@@ -169,7 +169,7 @@ void GpuGuard::finished(bool ok, const std::string& why) {
     std::lock_guard<std::mutex> g(mx_);
     removeMarker();
     if (ok) {
-        line("The graphics card's light paths: the whole path succeeded" + std::string(d_.guarded ? " (kept: no markers any more for this app version and driver)" : ""), true);
+        line("The graphics card's light paths: the whole path succeeded" + std::string(d_.guarded ? " (kept: no markers any more for this light-path shader and driver)" : ""), true);
         if (d_.guarded) { d_.keep = GpuGuardRecord{"ok", version_, driver_, ""}; d_.guarded = false; }
     } else {
         line("The graphics card's light paths: not used in this run (the processor's path), because " + why, true);
@@ -179,7 +179,7 @@ void GpuGuard::finished(bool ok, const std::string& why) {
 void GpuGuard::timedOut(const std::string& step) {
     std::lock_guard<std::mutex> g(mx_);
     removeMarker();
-    line("The step '" + step + "' did not finish within its time limit: the graphics card's light paths are switched off (kept for this app version and driver)", true);
+    line("The step '" + step + "' did not finish within its time limit: the graphics card's light paths are switched off (kept for this light-path shader and driver)", true);
     d_.keep = GpuGuardRecord{"slow", version_, driver_, field(step)};
     d_.allowed = false; d_.guarded = false; d_.crashed = false;
 }

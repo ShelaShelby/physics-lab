@@ -1811,7 +1811,8 @@ static void testGpuGuard() {
              "off | 0.55.7 | ATI / AMD Radeon RX 9060 XT / 4.6.0 Core 26.10.1 | compile the light paths' shader");
     checkTrue("guard: a broken or unknown line is the empty record", app::gpuGuardParse("maybe | 1 | x | y").state.empty() && app::gpuGuardParse("off | 1 | x").state.empty() &&
               app::gpuGuardParse("").state.empty() && app::gpuGuardText(GpuGuardRecord{}).empty());
-    const std::string v = "0.55.7", d = "AMD / Radeon / 4.6 26.10.1";
+    // (0.55.9: the second field holds the light-path shader's id, render/kerr_compute.h kerrShaderId, in place of the app version)
+    const std::string v = "shader 0123456789abcdef", d = "AMD / Radeon / 4.6 26.10.1";
     const GpuGuardRecord none, marker{"off", v, d, "check: dispatch 1"};
     auto dec = app::gpuGuardDecide(none, none, v, d);
     checkTrue("guard: never tried: allowed, guarded, nothing kept", dec.allowed && dec.guarded && dec.keep.state.empty());
@@ -1821,8 +1822,11 @@ static void testGpuGuard() {
     checkTrue("guard: kept off, the same driver after a restart: stays off", !dec.allowed && dec.crashed);
     dec = app::gpuGuardDecide(marker, none, v, "AMD / Radeon / 4.6 26.11.2");
     checkTrue("guard: kept off, another driver: tried once more, guarded", dec.allowed && dec.guarded && dec.keep == marker);
-    dec = app::gpuGuardDecide(marker, none, "0.55.8", d);
-    checkTrue("guard: kept off, another app version: tried once more, guarded", dec.allowed && dec.guarded);
+    dec = app::gpuGuardDecide(marker, none, "shader fedcba9876543210", d);
+    checkTrue("guard: kept off, the light-path shader's text changed: tried once more, guarded", dec.allowed && dec.guarded);
+    // 0.55.9: a new app version with the same shader and driver: the same id (the app version is not kept), so it stays off
+    dec = app::gpuGuardDecide(marker, none, v, d);
+    checkTrue("guard: kept off, a new app version with the same shader and driver: stays off", !dec.allowed && dec.crashed && dec.keep.version == v);
     dec = app::gpuGuardDecide(GpuGuardRecord{"ok", v, d, ""}, none, v, d);
     checkTrue("guard: succeeded once with this version and driver: allowed, no markers", dec.allowed && !dec.guarded);
     dec = app::gpuGuardDecide(GpuGuardRecord{"ok", v, d, ""}, none, v, "other");
@@ -1846,7 +1850,7 @@ static void testGpuGuard() {
         checkTrue("guard files: a first start: allowed, guarded, no marker yet", g.allowed() && g.guarded() && !exists(mk));
         g.begin("compile the light paths' shader");
         const std::string m = readAll(mk);
-        checkTrue("guard files: the marker names the version, the driver and the step before it begins", m.find("version=0.55.7\n") != std::string::npos &&
+        checkTrue("guard files: the marker names the version, the driver and the step before it begins", m.find("version=" + v + "\n") != std::string::npos &&
                   m.find("driver=" + d + "\n") != std::string::npos && m.find("step=compile the light paths' shader\n") != std::string::npos);
         g.end("compile the light paths' shader", "compiled");
         g.begin("check: dispatch 1");
@@ -1856,7 +1860,7 @@ static void testGpuGuard() {
         g.start(dir, v, d, "", {});
         checkTrue("guard files: the next start finds the marker: off, the step named in the Settings line",
                   !g.allowed() && g.crashed() && g.offText().find("stopped the app last time") != std::string::npos && g.offText().find("'check: dispatch 1'") != std::string::npos);
-        checkStr("guard files: the settings file keeps it", g.saved(), "off | 0.55.7 | " + d + " | check: dispatch 1");
+        checkStr("guard files: the settings file keeps it", g.saved(), "off | " + v + " | " + d + " | check: dispatch 1");
         checkTrue("guard files: the marker stays until the settings file holds that", exists(mk));
         g.settingsWritten();
         checkTrue("guard files: then it is removed", !exists(mk));
@@ -1872,12 +1876,12 @@ static void testGpuGuard() {
         checkTrue("guard files: Try again: allowed, guarded, nothing kept, a new generation", h.allowed() && h.guarded() && h.saved().empty() && h.generation() == 1 && h.offText().empty());
         h.begin("check: dispatch 1");
         h.finished(true);
-        checkTrue("guard files: the whole path succeeded: the marker removed, ok kept, no markers any more", !exists(mk) && h.saved() == "ok | 0.55.7 | " + d + " | " && !h.guarded());
+        checkTrue("guard files: the whole path succeeded: the marker removed, ok kept, no markers any more", !exists(mk) && h.saved() == "ok | " + v + " | " + d + " | " && !h.guarded());
         h.begin("fill 2: something");
         checkTrue("guard files: after success a step writes no marker", !exists(mk));
         h.timedOut("fill 2: fence wait, pass B (not finished after 60 s)");
         checkTrue("guard files: a step out of time: off for this run, kept as slow with its step", !h.allowed() && !h.crashed() &&
-                  h.saved() == "slow | 0.55.7 | " + d + " | fill 2: fence wait, pass B (not finished after 60 s)" && h.offText().find("did not finish a step in time") != std::string::npos);
+                  h.saved() == "slow | " + v + " | " + d + " | fill 2: fence wait, pass B (not finished after 60 s)" && h.offText().find("did not finish a step in time") != std::string::npos);
         const std::vector<std::string> tail = h.logTail(4);
         checkTrue("guard files: the log's tail is its last lines", tail.size() == 4 && tail.back().find("did not finish within its time limit") != std::string::npos);
         const std::string log = readAll(lg);
