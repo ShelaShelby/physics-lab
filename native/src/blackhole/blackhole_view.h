@@ -15,11 +15,13 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
 #include "blackhole/lab.h"
 #include "blackhole/light.h"
+#include "blackhole/spin_card.h"
 #include "blackhole/spin_sky.h"
 #include "render/renderer2d.h"
 
@@ -54,6 +56,10 @@ struct ViewStats {
     double behindMs = 0, frameMs = 0, workMs = 0;
     std::uint64_t picture = 0;
     double made[4] = {0, 0, 0, 0};
+    // 0.55.6: the shown spin table was filled by the graphics card; the card's last fill (ms, from its start to the frame that found it done) and how many
+    bool spinCard = false;
+    double cardMs = 0;
+    long cardFills = 0;
 };
 float catalogueBrightestMag();   // 0.55.4: the brightest catalogue star seen without the hole (the cap of a drawn image), V magnitude
 
@@ -69,6 +75,14 @@ public:
     // (a request not yet taken is replaced by a newer one; every finished picture is shown), the eye's glare on a thread of the renderer's; the frame draws the last finished picture,
     // all of one view, until a newer one is done (stats().behind). Off (the default; the automatic checks and the tests' own views): all of it in draw, as before.
     bool async = false;
+    // 0.55.6 (Settings, Performance, "GPU light paths"): async only: the spinning hole's table filled by the graphics card (spin_card.h) once its start-up
+    // check has passed; the card's table is the picture while moving and at rest (no fine table on the processor). Off, or no OpenGL 4.3, or the check
+    // failed: the processor's tables of 0.55.5.
+    bool gpuPaths = false;
+    int cardState() const { return cardState_; }               // 0 not yet asked (the lab has not drawn a spinning hole), 1 the card's path, -1 the processor's
+    const std::string& cardWhy() const { return cardWhy_; }    // -1: why
+    const CardCheck& cardCheck() const { return cardCheck_; }
+    void stopWork();                                           // 0.55.6: the worker stopped and joined (before the renderer, which owns the card's memory, shuts down)
     void draw(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);
     void makeFineNow(const Settings& s);                       // 0.55.5 (the benchmark): the fine spin table for s now, on this thread
     bool settled();                                            // 0.55.5 (automatic checks): nothing under way, the picture shown is the settings' (fine table included)
@@ -153,6 +167,17 @@ private:
     double made_[4] = {0, 0, 0, 0};
     void ensureWorker();
     void workLoop();
+    // 0.55.6, the card's fill (frame thread)
+    int cardState_ = 0;
+    std::string cardWhy_;
+    CardCheck cardCheck_;
+    std::unique_ptr<CardFill> cardFill_;
+    std::shared_ptr<const SpinTable> cardFine_;                // the last table the card filled (installed with a picture)
+    std::weak_ptr<CardTableData> cardPosted_;                  // the last fill handed to the worker, its (a, r, th), and whether the worker used it
+    std::shared_ptr<std::atomic<bool>> cardPostedUsed_;
+    double cardPostedKey_[3] = {-1, -1, -1};
+    bool cardReady(render::Renderer2D& R);
+    void pumpCard(const Settings& s, double W, double H, double cx, double cy);
     void pollFine(const Settings& s);
     void install(Picture& p);
     void drawAsync(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy);

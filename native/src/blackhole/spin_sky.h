@@ -51,6 +51,13 @@ class SpinTable {
 public:
     // cancel (may be null): the fill stops early when it becomes true (ok() is then false). threads 0: all cores.
     SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const std::atomic<bool>* cancel = nullptr, int threads = 0, double rtol = 1e-10);
+    // 0.55.6: a table whose rays were followed elsewhere (the graphics card, blackhole/spin_card.h) on this table's grid: the edge samples, the rows' azimuths
+    // and edges, and per node (side, row, column) 10 numbers: the far direction (3), b, u (4), the end (1 sky, 2 horizon, 0 lost), the steps (spinRay's values)
+    struct Parts { std::vector<double> edge, tau, rowChi, rowEdge; const double* nodes = nullptr; double ms = 0; };
+    SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const Parts& parts);
+    // 0.55.6: the rows from the edge samples and the probe rays' far directions (one per sample, at x = 1e-4 psi_e): tau and the rows' azimuths (the step
+    // the processor's fill takes between its probes and its rows' edges)
+    static void rowsOf(const std::vector<double>& edge, const std::vector<Vec3>& probe, int nChi, std::vector<double>& tau, std::vector<double>& rowChi);
     bool ok() const { return ok_; }
     double spin() const { return a_; }
     double rC() const { return rC_; }
@@ -59,6 +66,7 @@ public:
     int nS() const { return nS_; }
     int nEdge() const { return nEdge_; }
     double fillMs() const { return ms_; }
+    bool filledByCard() const { return card_; }       // 0.55.6: made from the graphics card's rays (the Parts constructor)
     long rays() const { return rays_; }
     long mismatches() const { return mism_; }        // rays whose end disagrees with their side of the closed edge (expected 0)
     long lost() const { return lost_; }
@@ -88,13 +96,14 @@ public:
 private:
     double a_, rC_, thC_;
     int nChi_, nS_, nEdge_;
-    bool ok_ = true;
+    bool ok_ = true, card_ = false;
     double ms_ = 0;
     long rays_ = 0, mism_ = 0, lost_ = 0;
     std::vector<double> edge_, tau_, rowChi_, rowEdge_;
     std::vector<SpinHit> v_;
     std::vector<float> fa_, fb_, fe_, ft_;
     std::size_t index(int side, int i, int j) const { return (static_cast<std::size_t>(side) * nChi_ + i) * nS_ + j; }
+    void finish(const std::atomic<long>& mism, const std::atomic<long>& lost);
 };
 
 // one ray of the camera (the reference, rtol as given): the same numbers as a node
@@ -110,8 +119,8 @@ constexpr double kStarXmin = 1e-6;
 struct SpinImage { double psi = 0, chi = 0, mag = 0; int side = 0; };
 class SpinStars {
 public:
-    explicit SpinStars(const SpinTable& t);           // the triangles binned on the far sky
-    // the images of dir: found by the triangles, then put where the table's own cubic sends exactly dir (Newton, 2 steps) and the magnification from that
+    explicit SpinStars(const SpinTable& t, int threads = 0);   // the triangles binned on the far sky (0.55.6: threads 0: all cores)
+    static constexpr int kReference = -1;            // threads = kReference: 0.55.5's build on one thread, kept as the tests' reference    // the images of dir: found by the triangles, then put where the table's own cubic sends exactly dir (Newton, 2 steps) and the magnification from that
     // cubic's slopes (the solid-angle ratio of the infinitesimal cell: sin psi dpsi dchi over |d dir/dpsi x d dir/dchi| dpsi dchi)
     int images(const Vec3& dir, std::vector<SpinImage>& out) const;
     double ms() const { return ms_; }
@@ -120,9 +129,12 @@ private:
     const SpinTable& T_;
     std::vector<Tri> tri_;
     int nb_ = 0;                                      // bins: nb_ x 2 nb_ in (cos theta, phi)
-    std::vector<std::vector<int>> bins_;
+    // 0.55.6: the bins in one array (binStart_[b] .. binStart_[b + 1] - 1 in binIds_: the triangles of bin b in the order of their numbers, as the lists of
+    // 0.55.5 had them); built on all cores, the same triangles, numbers and order as the one-thread build
+    std::vector<int> binStart_, binIds_;
     double ms_ = 0;
     int binOf(const Vec3& d) const;
+    void buildReference();
 };
 
 }  // namespace blackhole

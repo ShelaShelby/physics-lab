@@ -1,7 +1,7 @@
 # Resume
 
 ## Current state
-- 0.55.5 (16 Nov 2026): the Black Hole Lab's frame never waits for the processor (BlackHoleView::async): tables, star images and exposure on a worker thread (newest request wins, the last finished picture of one view shown until the next, "Working out the picture" on the card), the glare's read-back and veil and the fine table on their own threads below normal priority, the exposure scan bounded while moving; Film's exposure no longer recomputes the film's colour per point (seconds per change); the benchmark's scene 13 turns, tilts and changes distance and reports each stage; small version (quick tests and its own UI parts).
+- 0.55.6 (16 Nov 2026), Part A pushed as a checkpoint: the Black Hole Lab's star bins and stars' images on all cores (the same images to the bit; SpinStars::kReference), the spin-0 stars and exposure too; Part B (the graphics card fills the spin table, switched off until tested) is under way; small version.
 - Last full UI run: 0.55.0 (the commits "native 0.55.0"), 33 of 33 after fixing ui_look (check_5t solid) and ui_popups (check_5k windows) and re-running those two.
 - Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra, a faster fine table), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.

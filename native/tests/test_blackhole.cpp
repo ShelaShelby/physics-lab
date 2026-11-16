@@ -1522,6 +1522,23 @@ static void testSpinTable() {
             tested++;
         }
         check(tested == 6 && wm < 0.02, "a star's magnification from the table = ratio of solid angles of the integrator's neighbouring rays: " + f(wm));
+        // 0.55.6: the bins built on all cores give every star the same images as 0.55.5's one-thread build (kept as SpinStars::kReference): the same
+        // number, in the same order, at the same place and brightness, to the last bit; for every catalogue star and 4000 directions over the whole sky
+        const SpinStars R(T, SpinStars::kReference), P2(T, 2), P0(T);
+        long dirs = 0, imgs = 0, diff = 0;
+        std::vector<SpinImage> ia, ib, ic;
+        const auto same = [&](const Vec3& d) {
+            ia.clear(); ib.clear(); ic.clear();
+            R.images(d, ia); P2.images(d, ib); P0.images(d, ic);
+            dirs++;
+            imgs += static_cast<long>(ia.size());
+            if (ia.size() != ib.size() || ia.size() != ic.size()) { diff++; return; }
+            for (std::size_t q = 0; q < ia.size(); q++)
+                if (ia[q].psi != ib[q].psi || ia[q].chi != ib[q].chi || ia[q].mag != ib[q].mag || ia[q].psi != ic[q].psi || ia[q].chi != ic[q].chi || ia[q].mag != ic[q].mag) diff++;
+        };
+        for (const orbit::SkyStar& st : orbit::skyData().stars) same(st.dir);
+        for (int k = 0; k < n; k++) { const double z = 1 - 2 * (k + 0.5) / n, ph = k * 2.399963229728653, s = std::sqrt(1 - z * z); same(Vec3{s * std::cos(ph), s * std::sin(ph), z}); }
+        check(diff == 0 && imgs > 10000, "the stars' bins on all cores = 0.55.5's one-thread build: " + f(dirs) + " directions, " + f(imgs) + " images, " + f(diff) + " differ (place or brightness)");
     }
 }
 

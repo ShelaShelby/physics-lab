@@ -1212,4 +1212,289 @@ void main() {
 }
 )";
 
+static const char* const kKerrTableCS = R"(#version 430 core
+// 0.55.6: the spinning hole's light paths on the graphics card (blackhole/spin_card.h): the rays, the step and the stored values of the processor's table
+// (geodesic.cpp KerrBL::launch, rhs, ended, farDirection and trace; spin_sky.cpp spinRay and the node's psi; spin.cpp shadowEdge), all in double precision.
+// GLSL has no double sine, cosine, arctangent, exponential or logarithm: they are written here (Taylor series after range reduction, the arctangent by Newton
+// from the float one) and tested against the processor's. The camera's constants come from the processor (Pa[]), so they are its numbers to the bit.
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer ParB { double Pa[]; };
+layout(std430, binding = 1) readonly buffer InB { double In[]; };
+layout(std430, binding = 2) buffer EdgeB { double Ed[]; };
+layout(std430, binding = 3) writeonly buffer OutB { double Ou[]; };
+uniform int uMode;    // 0: edges at azimuths In[i] into Ed[i]; 1: rays at (psi, chi) In[2i], In[2i+1] with the end state; 2: probes (edge Ed[i], azimuth In[i]); 3: nodes; 4: tests
+uniform int uN;
+uniform int uFirst;
+uniform int uNChi;
+uniform int uNS;
+#define SPA Pa[0]
+#define RC Pa[1]
+#define THC Pa[2]
+#define RTOL Pa[3]
+#define ATOL Pa[4]
+#define RFAR Pa[5]
+#define HZ Pa[6]
+#define ALPHA Pa[7]
+#define OMEGA Pa[8]
+#define VARPI Pa[9]
+#define RHO Pa[10]
+#define SQD Pa[11]
+#define COST Pa[12]
+#define SINT Pa[13]
+#define TLO Pa[14]
+#define THI Pa[15]
+#define B1 Pa[16]
+#define B2 Pa[17]
+#define SLO Pa[18]
+#define XC Pa[19]
+#define PIO2A Pa[20]
+#define PIO2B Pa[21]
+#define PIO2C Pa[22]
+#define LN2A Pa[23]
+#define LN2B Pa[24]
+#define PI Pa[25]
+#define TWOOPI Pa[26]
+#define INVLN2 Pa[27]
+#define SQH Pa[28]
+#define MAXSTEPS 200000
+#define Z5 double[5](0.0LF, 0.0LF, 0.0LF, 0.0LF, 0.0LF)
+
+void dsincos(double x, out double s, out double c) {
+    double k = floor(x * TWOOPI + 0.5LF);
+    double r = ((x - k * PIO2A) - k * PIO2B) - k * PIO2C, z = r * r;
+    double ps = r + r * z * (-0.16666666666666666LF + z * (0.008333333333333333LF + z * (-0.0001984126984126984LF + z * (2.7557319223985893e-06LF
+                + z * (-2.505210838544172e-08LF + z * (1.6059043836821613e-10LF + z * (-7.647163731819816e-13LF + z * 2.8114572543455206e-15LF)))))));
+    double pc = 1.0LF + z * (-0.5LF + z * (0.041666666666666664LF + z * (-0.001388888888888889LF + z * (2.48015873015873e-05LF + z * (-2.755731922398589e-07LF
+                + z * (2.08767569878681e-09LF + z * (-1.1470745597729725e-11LF + z * (4.779477332387385e-14LF + z * -1.5619206968586225e-16LF))))))));
+    int n = int(k - 4.0LF * floor(k * 0.25LF));
+    if (n == 0) { s = ps; c = pc; } else if (n == 1) { s = pc; c = -ps; } else if (n == 2) { s = -ps; c = -pc; } else { s = -pc; c = ps; }
+}
+double dexp(double x) {
+    if (x < -745.0LF) return 0.0LF;
+    double k = floor(min(x, 709.0LF) * INVLN2 + 0.5LF);
+    double r = (min(x, 709.0LF) - k * LN2A) - k * LN2B;
+    double p = 1.0LF + r * (1.0LF + r * (0.5LF + r * (0.16666666666666666LF + r * (0.041666666666666664LF + r * (0.008333333333333333LF + r * (0.001388888888888889LF
+               + r * (0.0001984126984126984LF + r * (2.48015873015873e-05LF + r * (2.7557319223985893e-06LF + r * (2.755731922398589e-07LF + r * (2.505210838544172e-08LF
+               + r * (2.08767569878681e-09LF + r * 1.6059043836821613e-10LF))))))))))));
+    return ldexp(p, int(k));
+}
+double dlog(double x) {
+    int e = 0;
+    double m = frexp(x, e);
+    if (m < SQH) { m = 2.0LF * m; e = e - 1; }
+    double f = (m - 1.0LF) / (m + 1.0LF), z = f * f;
+    double p = 1.0LF + z * (0.3333333333333333LF + z * (0.2LF + z * (0.14285714285714285LF + z * (0.1111111111111111LF + z * (0.09090909090909091LF + z * (0.07692307692307693LF
+               + z * (0.06666666666666667LF + z * (0.058823529411764705LF + z * (0.05263157894736842LF + z * 0.047619047619047616LF)))))))));
+    return double(e) * LN2A + (double(e) * LN2B + 2.0LF * f * p);
+}
+double datan2(double y, double x) {
+    double m = max(abs(x), abs(y));
+    if (m == 0.0LF) return 0.0LF;
+    double xs = x / m, ys = y / m, t = double(atan(float(ys), float(xs))), s = 0.0LF, c = 0.0LF;
+    for (int it = 0; it < 2; it++) { dsincos(t, s, c); t = t - (xs * s - ys * c) / (xs * c + ys * s); }
+    return t;
+}
+double dacos(double x) { double v = clamp(x, -1.0LF, 1.0LF); return datan2(sqrt((1.0LF - v) * (1.0LF + v)), v); }
+double dcbrt(double v) {
+    if (v == 0.0LF) return 0.0LF;
+    int e = 0;
+    double m = frexp(abs(v), e);
+    int q = e >= 0 ? e / 3 : -((2 - e) / 3);
+    m = ldexp(m, e - 3 * q);
+    double y = double(pow(float(m), 0.33333334));
+    for (int it = 0; it < 2; it++) y = y - (y * y * y - m) / (3.0LF * y * y);
+    y = ldexp(y, q);
+    return v < 0.0LF ? -y : y;
+}
+double dpowm02(double x) { return dexp(-0.2LF * dlog(x)); }   // x^-0.2
+double dmax(double a, double b) { return a < b ? b : a; }        // std::max's rule (NaN in b: a)
+
+// KerrBL::launch for a hovering camera looking at (psi, chi) (spin.h lookAt): y = (r, theta, phi, p_r, p_theta) and the constants b, q (J15 (A.11), (A.12))
+void launch(double psi, double chi, out double y[5], out double b, out double q) {
+    double sp = 0.0LF, cp = 0.0LF, sc = 0.0LF, cc = 0.0LF;
+    dsincos(psi, sp, cp); dsincos(chi, sc, cc);
+    double nr = cp, nth = -(sp * cc), nph = -(sp * sc);
+    double EF = 1.0LF / (ALPHA + OMEGA * VARPI * nph);
+    y[0] = RC; y[1] = THC; y[2] = 0.0LF; y[3] = EF * RHO / SQD * nr; y[4] = EF * RHO * nth;
+    b = EF * VARPI * nph;
+    q = y[4] * y[4] + COST * COST * (b * b / (SINT * SINT) - SPA * SPA);
+}
+// the ray equations J15 (A.15) (KerrBL::rhs)
+void rhs(double b, double q, double y[5], out double dy[5]) {
+    double s = 0.0LF, c = 0.0LF;
+    dsincos(y[1], s, c);
+    double r = y[0], pr = y[3], pt = y[4], a = SPA;
+    double rho2 = r * r + a * a * c * c, D = r * r - 2.0LF * r + a * a, dD = 2.0LF * r - 2.0LF;
+    double P = r * r + a * a - a * b, Kc = (b - a) * (b - a) + q, R = P * P - D * Kc, dR = 4.0LF * r * P - dD * Kc;
+    double Th = q - c * c * (b * b / (s * s) - a * a), dTh = 2.0LF * c * (b * b / (s * s * s) - a * a * s);
+    double N = -D * pr * pr - pt * pt + R / D + Th;
+    double dNr = -dD * pr * pr + (dR * D - R * dD) / (D * D), drho2t = -2.0LF * a * a * c * s;
+    dy[0] = D * pr / rho2;
+    dy[1] = pt / rho2;
+    dy[2] = (a * P / D + (b - a) + b * c * c / (s * s)) / rho2;
+    dy[3] = dNr / (2.0LF * rho2) - N * 2.0LF * r / (2.0LF * rho2 * rho2);
+    dy[4] = dTh / (2.0LF * rho2) - N * drho2t / (2.0LF * rho2 * rho2);
+}
+// one Dormand-Prince 5(4) trial step (geodesic.cpp dpStep)
+double dpStep(double b, double q, double y[5], double k1[5], double h, out double yn[5], out double k7[5]) {
+    double k2[5] = Z5, k3[5] = Z5, k4[5] = Z5, k5[5] = Z5, k6[5] = Z5, t[5] = Z5;
+    for (int i = 0; i < 5; i++) t[i] = y[i] + h * (1.0LF / 5.0LF) * k1[i];
+    rhs(b, q, t, k2);
+    for (int i = 0; i < 5; i++) t[i] = y[i] + h * ((3.0LF / 40.0LF) * k1[i] + (9.0LF / 40.0LF) * k2[i]);
+    rhs(b, q, t, k3);
+    for (int i = 0; i < 5; i++) t[i] = y[i] + h * ((44.0LF / 45.0LF) * k1[i] + (-56.0LF / 15.0LF) * k2[i] + (32.0LF / 9.0LF) * k3[i]);
+    rhs(b, q, t, k4);
+    for (int i = 0; i < 5; i++) t[i] = y[i] + h * ((19372.0LF / 6561.0LF) * k1[i] + (-25360.0LF / 2187.0LF) * k2[i] + (64448.0LF / 6561.0LF) * k3[i] + (-212.0LF / 729.0LF) * k4[i]);
+    rhs(b, q, t, k5);
+    for (int i = 0; i < 5; i++) t[i] = y[i] + h * ((9017.0LF / 3168.0LF) * k1[i] + (-355.0LF / 33.0LF) * k2[i] + (46732.0LF / 5247.0LF) * k3[i] + (49.0LF / 176.0LF) * k4[i]
+                                                   + (-5103.0LF / 18656.0LF) * k5[i]);
+    rhs(b, q, t, k6);
+    for (int i = 0; i < 5; i++) yn[i] = y[i] + h * ((35.0LF / 384.0LF) * k1[i] + (500.0LF / 1113.0LF) * k3[i] + (125.0LF / 192.0LF) * k4[i] + (-2187.0LF / 6784.0LF) * k5[i]
+                                                    + (11.0LF / 84.0LF) * k6[i]);
+    rhs(b, q, yn, k7);
+    double err = 0.0LF;
+    for (int i = 0; i < 5; i++) {
+        double e = h * ((71.0LF / 57600.0LF) * k1[i] + (-71.0LF / 16695.0LF) * k3[i] + (71.0LF / 1920.0LF) * k4[i] + (-17253.0LF / 339200.0LF) * k5[i]
+                        + (22.0LF / 525.0LF) * k6[i] + (-1.0LF / 40.0LF) * k7[i]);
+        double sc = ATOL + RTOL * max(abs(y[i]), abs(yn[i]));
+        err = dmax(err, abs(e) / sc);
+    }
+    return (isnan(err) || isinf(err)) ? 1e30LF : err;
+}
+double planeOf(double th) { double s = 0.0LF, c = 0.0LF; dsincos(th, s, c); return c; }
+// the ray at (psi, chi) followed into its past (geodesic.cpp trace with the equator's crossings) and stored as spinRay stores it: Ou[o] = dir (3), b,
+// u (4), the end (1 sky, 2 horizon, 0 lost), steps; with ext the end state y (5) and q follow
+void ray(double psi, double chi, int o, bool ext) {
+    double y[5] = Z5, k1[5] = Z5, yn[5] = Z5, k7[5] = Z5, b = 0.0LF, q = 0.0LF, u[4] = double[4](0.0LF, 0.0LF, 0.0LF, 0.0LF);
+    launch(psi, chi, y, b, q);
+    rhs(b, q, y, k1);
+    double h = -0.01LF * RC, dir[3] = double[3](0.0LF, 0.0LF, 0.0LF);
+    int found = 0, kind = 0, steps = 0;
+    for (int st = 0; st < MAXSTEPS && kind == 0; st++) {
+        double err = dpStep(b, q, y, k1, h, yn, k7);
+        if (err > 1.0LF) { h = h * dmax(0.2LF, 0.9LF * dpowm02(err)); continue; }
+        double p0 = planeOf(y[1]), p1 = planeOf(yn[1]);
+        if (found < 4 && (p0 > 0.0LF) != (p1 > 0.0LF)) {
+            double hc = h * p0 / (p0 - p1), yc[5] = Z5, kc[5] = Z5;
+            for (int it = 0; it < 8; it++) {
+                dpStep(b, q, y, k1, hc, yc, kc);
+                double s = 0.0LF, c = 0.0LF;
+                dsincos(yc[1], s, c);
+                double rate = -s * kc[1];
+                if (!(rate != 0.0LF)) break;
+                double dh = -c / rate;
+                hc = hc + dh;
+                if (abs(dh) <= 1e-14LF * abs(h)) break;
+            }
+            dpStep(b, q, y, k1, hc, yc, kc);
+            u[found] = 1.0LF / yc[0];
+            found++;
+        }
+        for (int i = 0; i < 5; i++) { y[i] = yn[i]; k1[i] = k7[i]; }
+        steps++;
+        double drdz = -k1[0];
+        if (y[0] >= RFAR && drdz > 0.0LF) kind = 1;
+        else if (y[0] < HZ && drdz < 0.0LF) kind = 2;
+        else h = h * (err <= 0.0LF ? 5.0LF : clamp(0.9LF * dpowm02(err), 0.2LF, 5.0LF));
+    }
+    double re = y[0], th = y[1];
+    if (kind == 1) {   // KerrBL::farDirection
+        double st = 0.0LF, ct = 0.0LF, sp = 0.0LF, cp = 0.0LF;
+        dsincos(th, st, ct); dsincos(y[2], sp, cp);
+        double vx = st * cp * k1[0] + ct * cp * (re * k1[1]) + -sp * (re * st * k1[2]);
+        double vy = st * sp * k1[0] + ct * sp * (re * k1[1]) + cp * (re * st * k1[2]);
+        double vz = ct * k1[0] + -st * (re * k1[1]) + 0.0LF * (re * st * k1[2]);
+        double f = -1.0LF / sqrt(vx * vx + vy * vy + vz * vz);
+        dir[0] = vx * f; dir[1] = vy * f; dir[2] = vz * f;
+    }
+    if (found < 4) {   // the first crossing not made, continued smoothly (spinRay)
+        double uv = 0.0LF, rest = 0.0LF;
+        if (kind == 1) {
+            double st = 0.0LF, ct = 0.0LF, sp = 0.0LF, cp = 0.0LF;
+            dsincos(th, st, ct); dsincos(y[2], sp, cp);
+            double Px = re * st * cp, Py = re * st * sp, Pz = re * ct;
+            double muEnd = Px * dir[0] + Py * dir[1] + Pz * dir[2];
+            double pz = Pz - dir[2] * muEnd;
+            double mu = dir[2] != 0.0LF ? -pz / dir[2] : -1e300LF;
+            uv = mu > muEnd ? 1.0LF / mu : -1.0LF / sqrt(mu * mu + 100.0LF);
+        } else if (kind == 2) {
+            double dthdr = k1[1] / k1[0], delta = dthdr != 0.0LF ? (PI / 2.0LF - th) / dthdr : -1e300LF;
+            double z = dmax(delta, -1e3LF) / re, t = dexp(2.0LF * min(z, 0.0LF)), tz = (t - 1.0LF) / (t + 1.0LF);
+            uv = delta < 0.0LF ? (1.0LF - tz) / re : 2.0LF / re;
+            rest = 2.0LF / re;
+        }
+        u[found] = uv;
+        for (int k = found + 1; k < 4; k++) u[k] = rest;
+    }
+    Ou[o] = dir[0]; Ou[o + 1] = dir[1]; Ou[o + 2] = dir[2]; Ou[o + 3] = b;
+    for (int k = 0; k < 4; k++) Ou[o + 4 + k] = u[k];
+    Ou[o + 8] = double(kind); Ou[o + 9] = double(steps);
+    if (ext) { for (int i = 0; i < 5; i++) Ou[o + 10 + i] = y[i]; Ou[o + 15] = q; }
+}
+// the closed shadow test (spin.cpp fromHorizonPos, J15 (v)) and the edge by bisection (shadowEdge)
+double radialR(double b, double q, double r) { double a = SPA, D = r * r - 2.0LF * r + a * a, P = r * r + a * a - a * b; return P * P - D * ((b - a) * (b - a) + q); }
+bool fromHorizon(double psi, double chi) {
+    double y[5] = Z5, b = 0.0LF, q = 0.0LF, a = SPA;
+    launch(psi, chi, y, b, q);
+    if (B1 < b && b < B2) {
+        double lo = TLO, hi = THI, flo = lo * lo * (lo - 3.0LF) + a * a * (lo + 1.0LF) + a * b * (lo - 1.0LF);
+        for (int it = 0; it < 200 && hi - lo > 1e-15LF * hi; it++) {
+            double mid = 0.5LF * (lo + hi), fm = mid * mid * (mid - 3.0LF) + a * a * (mid + 1.0LF) + a * b * (mid - 1.0LF);
+            if ((fm > 0.0LF) == (flo > 0.0LF)) lo = mid; else hi = mid;
+        }
+        double r = 0.5LF * (lo + hi), d = r - 3.0LF;
+        if (q < -r * r * r * (r * d * d - 4.0LF * a * a) / (a * a * (r - 1.0LF) * (r - 1.0LF))) return y[3] > 0.0LF;
+    }
+    double p = (a * a - b * b - q) / 2.0LF, c = ((b - a) * (b - a) + q) / 2.0LF, t[3] = double[3](0.0LF, 0.0LF, 0.0LF);
+    int n = 3;
+    if (p == 0.0LF) { t[0] = dcbrt(-c); n = 1; }
+    else {
+        double disc = c * c / 4.0LF + p * p * p / 27.0LF;
+        if (disc > 0.0LF) { double s = sqrt(disc); t[0] = dcbrt(-c / 2.0LF + s) + dcbrt(-c / 2.0LF - s); n = 1; }
+        else {
+            double m = 2.0LF * sqrt(-p / 3.0LF), th = dacos(clamp(3.0LF * c / (p * m), -1.0LF, 1.0LF)) / 3.0LF;
+            for (int k = 0; k < 3; k++) { double s = 0.0LF, cs = 0.0LF; dsincos(th - 2.0LF * PI * double(k) / 3.0LF, s, cs); t[k] = m * cs; }
+        }
+    }
+    for (int i = 0; i < n; i++) if (t[i] > RC && radialR(b, q, t[i]) < 0.0LF) return true;
+    return false;
+}
+double shadowEdge(double chi) {
+    double lo = 0.0LF, hi = PI;
+    for (int it = 0; it < 80 && hi - lo > 1e-14LF; it++) { double mid = 0.5LF * (lo + hi); if (fromHorizon(mid, chi)) lo = mid; else hi = mid; }
+    return 0.5LF * (lo + hi);
+}
+double sOf(double ax) { return dlog(ax) + ax / XC; }
+double absXOf(double s) {   // SpinTable::absXOf
+    double x = min(dexp(s), XC * max(s, 1.0LF));
+    for (int it = 0; it < 100; it++) {
+        double f = dlog(x) + x / XC - s, d = 1.0LF / x + 1.0LF / XC, nx = x - f / d;
+        x = nx > 0.0LF ? nx : x / 2.0LF;
+        if (abs(f) < 1e-15LF * max(1.0LF, abs(s))) break;
+    }
+    return x;
+}
+void main() {
+    int k = int(gl_GlobalInvocationID.x);
+    if (uMode == 3) {
+        int q = uFirst + k;
+        if (k >= uN) return;
+        int side = q / (uNChi * uNS), i = (q / uNS) % uNChi, j = q % uNS;
+        double pe = Ed[i], s = SLO + (sOf(side == 0 ? PI - pe : pe) - SLO) * double(j) / double(uNS - 1), ax = absXOf(s);
+        ray(side == 0 ? pe + ax : pe - ax, In[i], 10 * q, false);
+        return;
+    }
+    if (k >= uN) return;
+    if (uMode == 0) Ed[k] = shadowEdge(In[k]);
+    else if (uMode == 1) ray(In[2 * k], In[2 * k + 1], 16 * k, true);
+    else if (uMode == 2) { double pe = Ed[k]; ray(pe + 1e-4LF * pe, In[k], 10 * k, false); }
+    else {   // 4: the functions above at x (tests)
+        double x = In[k], s = 0.0LF, c = 0.0LF, ax = abs(x) + 1e-300LF;
+        dsincos(x, s, c);
+        Ou[8 * k] = s; Ou[8 * k + 1] = c; Ou[8 * k + 2] = dexp(x); Ou[8 * k + 3] = dlog(ax);
+        Ou[8 * k + 4] = datan2(x, 1.0LF - x); Ou[8 * k + 5] = dacos(x / (1.0LF + abs(x))); Ou[8 * k + 6] = dcbrt(x); Ou[8 * k + 7] = dpowm02(ax);
+    }
+}
+)";
+
 }  // namespace render

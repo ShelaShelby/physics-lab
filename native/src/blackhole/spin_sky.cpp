@@ -132,39 +132,15 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
     parallel(nEdge_, [&](int i) { edge_[static_cast<std::size_t>(i)] = shadowEdge(a, cam, 2 * kPi * i / nEdge_); });
     if (cancel && cancel->load()) { ok_ = false; return; }
     // tau: rows equidistribute the change of the far direction from azimuth to azimuth close to the edge (a probe ray at x = 1e-4 psi_e at each edge sample:
-    // the angle between neighbours), smoothed over +-8 samples, plus an even share (half the rows)
+    // the angle between neighbours), smoothed over +-8 samples, plus an even share (half the rows) (rowsOf)
     {
-        std::vector<double> rt(static_cast<std::size_t>(nEdge_)), d(static_cast<std::size_t>(nEdge_));
         std::vector<Vec3> probe(static_cast<std::size_t>(nEdge_));
         parallel(nEdge_, [&](int i) {
             const double pe = edge_[static_cast<std::size_t>(i)];
             probe[static_cast<std::size_t>(i)] = spinRay(a, cam, pe + 1e-4 * pe, 2 * kPi * i / nEdge_, rtol).dir;
         });
         if (cancel && cancel->load()) { ok_ = false; return; }
-        for (int i = 0; i < nEdge_; i++) {
-            const Vec3 &p0 = probe[static_cast<std::size_t>(i)], &p1 = probe[static_cast<std::size_t>((i + 1) % nEdge_)];
-            rt[static_cast<std::size_t>(i)] = std::atan2(length(cross(p0, p1)), dot(p0, p1));
-        }
-        double V = 0;
-        for (int i = 0; i < nEdge_; i++) {
-            double m = 0;
-            for (int k = -8; k <= 8; k++) m += rt[static_cast<std::size_t>(((i + k) % nEdge_ + nEdge_) % nEdge_)];
-            d[static_cast<std::size_t>(i)] = m / 17;
-            V += d[static_cast<std::size_t>(i)];
-        }
-        tau_.assign(static_cast<std::size_t>(nEdge_) + 1, 0);
-        for (int i = 0; i < nEdge_; i++)
-            tau_[static_cast<std::size_t>(i) + 1] = tau_[static_cast<std::size_t>(i)] + (V > 1e-9 ? d[static_cast<std::size_t>(i)] / V : 0) + 1.0 / nEdge_;
-        const double tot = tau_.back();
-        for (double& t : tau_) t /= tot;
-        rowChi_.assign(static_cast<std::size_t>(nChi), 0);
-        int k = 0;
-        for (int i = 0; i < nChi; i++) {
-            const double t = static_cast<double>(i) / nChi;
-            while (k + 1 < nEdge_ && tau_[static_cast<std::size_t>(k) + 1] <= t) k++;
-            const double f = (t - tau_[static_cast<std::size_t>(k)]) / (tau_[static_cast<std::size_t>(k) + 1] - tau_[static_cast<std::size_t>(k)]);
-            rowChi_[static_cast<std::size_t>(i)] = 2 * kPi * (k + f) / nEdge_;
-        }
+        rowsOf(edge_, probe, nChi, tau_, rowChi_);
         rowEdge_.assign(static_cast<std::size_t>(nChi), 0);
         parallel(nChi, [&](int i) { rowEdge_[static_cast<std::size_t>(i)] = shadowEdge(a, cam, rowChi_[static_cast<std::size_t>(i)]); });
         if (cancel && cancel->load()) { ok_ = false; return; }
@@ -181,8 +157,60 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
         }
     });
     if (cancel && cancel->load()) { ok_ = false; return; }
+    finish(mism, lost);
+    ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+}
+
+void SpinTable::rowsOf(const std::vector<double>& edge, const std::vector<Vec3>& probe, int nChi, std::vector<double>& tau, std::vector<double>& rowChi) {
+    const int nEdge = static_cast<int>(edge.size());
+    std::vector<double> rt(static_cast<std::size_t>(nEdge)), d(static_cast<std::size_t>(nEdge));
+    for (int i = 0; i < nEdge; i++) {
+        const Vec3 &p0 = probe[static_cast<std::size_t>(i)], &p1 = probe[static_cast<std::size_t>((i + 1) % nEdge)];
+        rt[static_cast<std::size_t>(i)] = std::atan2(length(cross(p0, p1)), dot(p0, p1));
+    }
+    double V = 0;
+    for (int i = 0; i < nEdge; i++) {
+        double m = 0;
+        for (int k = -8; k <= 8; k++) m += rt[static_cast<std::size_t>(((i + k) % nEdge + nEdge) % nEdge)];
+        d[static_cast<std::size_t>(i)] = m / 17;
+        V += d[static_cast<std::size_t>(i)];
+    }
+    tau.assign(static_cast<std::size_t>(nEdge) + 1, 0);
+    for (int i = 0; i < nEdge; i++)
+        tau[static_cast<std::size_t>(i) + 1] = tau[static_cast<std::size_t>(i)] + (V > 1e-9 ? d[static_cast<std::size_t>(i)] / V : 0) + 1.0 / nEdge;
+    const double tot = tau.back();
+    for (double& x : tau) x /= tot;
+    rowChi.assign(static_cast<std::size_t>(nChi), 0);
+    int k = 0;
+    for (int i = 0; i < nChi; i++) {
+        const double t = static_cast<double>(i) / nChi;
+        while (k + 1 < nEdge && tau[static_cast<std::size_t>(k) + 1] <= t) k++;
+        const double f = (t - tau[static_cast<std::size_t>(k)]) / (tau[static_cast<std::size_t>(k) + 1] - tau[static_cast<std::size_t>(k)]);
+        rowChi[static_cast<std::size_t>(i)] = 2 * kPi * (k + f) / nEdge;
+    }
+}
+
+SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const Parts& p)
+    : a_(a), rC_(rC), thC_(thC), nChi_(nChi), nS_(nS), nEdge_(nEdge), card_(true), ms_(p.ms) {
+    edge_ = p.edge; tau_ = p.tau; rowChi_ = p.rowChi; rowEdge_ = p.rowEdge;
+    v_.assign(static_cast<std::size_t>(2) * nChi * nS, SpinHit{});
+    std::atomic<long> mism{0}, lost{0};
+    for (std::size_t q = 0; q < v_.size(); q++) {
+        const double* n = p.nodes + 10 * q;
+        SpinHit& h = v_[q];
+        h.dir = Vec3{n[0], n[1], n[2]};
+        h.b = n[3];
+        for (int k = 0; k < kSpinCross; k++) h.u[k] = n[4 + k];
+        h.sky = n[8] == 1;
+        const int side = static_cast<int>(q / (static_cast<std::size_t>(nChi) * nS));
+        if (h.sky != (side == 0)) { mism++; if (length(h.dir) == 0 && !h.sky && side == 0) lost++; }
+    }
+    finish(mism, lost);
+}
+
+void SpinTable::finish(const std::atomic<long>& mism, const std::atomic<long>& lost) {
     mism_ = mism; lost_ = lost;
-    rays_ = 2L * nChi * nS;
+    rays_ = 2L * nChi_ * nS_;
     fa_.resize(v_.size() * 4); fb_.resize(v_.size() * 4);
     for (std::size_t q = 0; q < v_.size(); q++) {
         const SpinHit& h = v_[q];
@@ -191,7 +219,6 @@ SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdg
     }
     fe_.assign(edge_.begin(), edge_.end());
     ft_.assign(tau_.begin(), tau_.end());
-    ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
 
 SpinHit SpinTable::lookup(double psi, double chi) const {
@@ -244,12 +271,123 @@ int SpinStars::binOf(const Vec3& d) const {
     return bi * 2 * nb_ + bj;
 }
 
-SpinStars::SpinStars(const SpinTable& t) : T_(t) {
+SpinStars::SpinStars(const SpinTable& t, int threads) : T_(t) {
     const auto t0 = std::chrono::steady_clock::now();
     nb_ = 90;
-    bins_.assign(static_cast<std::size_t>(nb_) * 2 * nb_, {});
-    const int nChi = t.nChi(), nS = t.nS();
+    if (threads == kReference) { buildReference(); ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(); return; }
+    const int nChi = t.nChi(), nS = t.nS(), nBins = nb_ * 2 * nb_;
+    // 0.55.6: each node's |x| (and so its psi) once, not again for every cell that has it as a corner; the rows on all cores
+    // and its direction on the camera's sky (from psi and chi rounded to floats, as the triangles keep them)
+    std::vector<double> ax(static_cast<std::size_t>(nChi) * nS);
+    std::vector<Vec3> cam(static_cast<std::size_t>(nChi) * nS);
+    parallelFor(nChi, [&](int i) {
+        const double pe = t.rowEdge(i);
+        const float chF = static_cast<float>(t.rowChi(i));
+        for (int j = 0; j < nS; j++) {
+            const std::size_t q = static_cast<std::size_t>(i) * nS + j;
+            ax[q] = SpinTable::absXOf(t.sLo() + (t.sHi(0, pe) - t.sLo()) * j / (nS - 1));
+            cam[q] = lookAt(static_cast<float>(pe + ax[q]), chF);
+        }
+    }, threads);
     // the first column whose |x| reaches kStarXmin (the same for every row: s is spaced from the common sLo)
+    const auto colX = [&](int i, int j) { return ax[static_cast<std::size_t>(i) * nS + j]; };
+    // the triangles of each row (cells (i, j) to (i + 1, j + 1)), with where each lies on the far sky; numbered afterwards in the order of the rows
+    struct Cover { int b0 = 0, b1 = 0, j0 = 0, j1 = 0; bool all = false; };
+    std::vector<std::vector<Tri>> rowTri(static_cast<std::size_t>(nChi));
+    std::vector<std::vector<Cover>> rowCov(static_cast<std::size_t>(nChi));
+    parallelFor(nChi, [&](int i) {
+        const int i1 = (i + 1) % nChi;
+        std::vector<Tri>& RT = rowTri[static_cast<std::size_t>(i)];
+        std::vector<Cover>& RC = rowCov[static_cast<std::size_t>(i)];
+        RT.reserve(2 * static_cast<std::size_t>(nS)); RC.reserve(2 * static_cast<std::size_t>(nS));
+        for (int j = 0; j + 1 < nS; j++) {
+            if (colX(i, j) < kStarXmin || colX(i1, j) < kStarXmin) continue;
+            const int ci[4] = {i, i1, i, i1}, cj[4] = {j, j, j + 1, j + 1};
+            Vec3 d[4], c[4];
+            float ps[4], ch[4];
+            bool good = true;
+            for (int k = 0; k < 4; k++) {
+                const SpinHit& h = t.node(0, ci[k], cj[k]);
+                if (!h.sky || length(h.dir) == 0) good = false;
+                d[k] = h.dir;
+                ps[k] = static_cast<float>(t.rowEdge(ci[k]) + colX(ci[k], cj[k]));   // (nodePsi on side 0: the edge plus |x|)
+                ch[k] = static_cast<float>(t.rowChi(ci[k]));
+                c[k] = cam[static_cast<std::size_t>(ci[k]) * nS + cj[k]];
+            }
+            if (!good) continue;
+            if (i1 == 0) { ch[1] = static_cast<float>(ch[1] + 2 * kPi); ch[3] = static_cast<float>(ch[3] + 2 * kPi); }   // (the last row's neighbour: one whole turn on)
+            const int tris[2][3] = {{0, 1, 2}, {1, 3, 2}};
+            for (const auto& tr : tris) {
+                Tri T;
+                for (int k = 0; k < 3; k++) { T.psi[k] = ps[tr[k]]; T.chi[k] = ch[tr[k]]; T.d[k] = d[tr[k]]; }
+                T.omegaCam = triSolid(c[tr[0]], c[tr[1]], c[tr[2]]);
+                Vec3 m = T.d[0] + T.d[1] + T.d[2];
+                const double Lm = length(m);
+                if (!(Lm > 1e-9)) continue;
+                m = m * (1 / Lm);
+                double R = 0;
+                for (int k = 0; k < 3; k++) R = std::max(R, std::acos(std::clamp(dot(m, T.d[k]), -1.0, 1.0)));
+                if (R > 0.5) continue;                                       // a cell stretched over more than about 30 degrees of the far sky: not a straight map
+                const double th = std::acos(std::clamp(m.z, -1.0, 1.0)), lo = std::max(0.0, th - R), hi = std::min(kPi, th + R);
+                Cover cv;
+                cv.b0 = std::min(static_cast<int>(lo / kPi * nb_), nb_ - 1); cv.b1 = std::min(static_cast<int>(hi / kPi * nb_), nb_ - 1);
+                double ph = std::atan2(m.y, m.x);
+                if (ph < 0) ph += 2 * kPi;
+                const bool pole = th - R <= 0 || th + R >= kPi;
+                const double dph = pole ? kPi : std::asin(std::min(1.0, std::sin(R) / std::sin(th))) + 1e-9;
+                cv.all = pole || dph >= kPi;
+                if (!cv.all) { cv.j0 = static_cast<int>(std::floor((ph - dph) / (2 * kPi) * 2 * nb_)); cv.j1 = static_cast<int>(std::floor((ph + dph) / (2 * kPi) * 2 * nb_)); }
+                RT.push_back(T);
+                RC.push_back(cv);
+            }
+        }
+    }, threads);
+    std::vector<std::size_t> rowAt(static_cast<std::size_t>(nChi) + 1, 0);
+    for (int i = 0; i < nChi; i++) rowAt[static_cast<std::size_t>(i) + 1] = rowAt[static_cast<std::size_t>(i)] + rowTri[static_cast<std::size_t>(i)].size();
+    tri_.resize(rowAt.back());
+    std::vector<Cover> cov(rowAt.back());
+    parallelFor(nChi, [&](int i) {
+        std::copy(rowTri[static_cast<std::size_t>(i)].begin(), rowTri[static_cast<std::size_t>(i)].end(), tri_.begin() + static_cast<std::ptrdiff_t>(rowAt[static_cast<std::size_t>(i)]));
+        std::copy(rowCov[static_cast<std::size_t>(i)].begin(), rowCov[static_cast<std::size_t>(i)].end(), cov.begin() + static_cast<std::ptrdiff_t>(rowAt[static_cast<std::size_t>(i)]));
+    }, threads);
+    // the bins: each band of bins (one theta row) counted and filled by one thread, going through the triangles in the order of their numbers, so a bin
+    // lists them as the one-thread build did (a triangle wider than the whole turn in phi is listed in a bin as often as that build listed it)
+    const int nTri = static_cast<int>(tri_.size());
+    std::vector<int> count(static_cast<std::size_t>(nBins) + 1, 0);
+    // the triangles of each band, in id order (a counting sort)
+    std::vector<int> bandStart(static_cast<std::size_t>(nb_) + 1, 0);
+    for (const Cover& cv : cov) for (int bi = cv.b0; bi <= cv.b1; bi++) bandStart[static_cast<std::size_t>(bi) + 1]++;
+    for (int bi = 0; bi < nb_; bi++) bandStart[static_cast<std::size_t>(bi) + 1] += bandStart[static_cast<std::size_t>(bi)];
+    std::vector<int> bandIds(static_cast<std::size_t>(bandStart.back()));
+    {   std::vector<int> at(bandStart.begin(), bandStart.end() - 1);
+        for (int id = 0; id < nTri; id++) {
+            const Cover& cv = cov[static_cast<std::size_t>(id)];
+            for (int bi = cv.b0; bi <= cv.b1; bi++) bandIds[static_cast<std::size_t>(at[static_cast<std::size_t>(bi)]++)] = id;
+        } }
+    const auto visit = [&](int bi, const std::function<void(int, int)>& put) {   // every (bin, id) of band bi, in id order
+        for (int q = bandStart[static_cast<std::size_t>(bi)]; q < bandStart[static_cast<std::size_t>(bi) + 1]; q++) {
+            const int id = bandIds[static_cast<std::size_t>(q)];
+            const Cover& cv = cov[static_cast<std::size_t>(id)];
+            if (cv.all) { for (int bj = 0; bj < 2 * nb_; bj++) put(bi * 2 * nb_ + bj, id); continue; }
+            for (int bj = cv.j0; bj <= cv.j1; bj++) put(bi * 2 * nb_ + ((bj % (2 * nb_)) + 2 * nb_) % (2 * nb_), id);
+        }
+    };
+    parallelFor(nb_, [&](int bi) { visit(bi, [&](int b, int) { count[static_cast<std::size_t>(b) + 1]++; }); }, threads);
+    binStart_.assign(static_cast<std::size_t>(nBins) + 1, 0);
+    for (int b = 0; b < nBins; b++) binStart_[static_cast<std::size_t>(b) + 1] = binStart_[static_cast<std::size_t>(b)] + count[static_cast<std::size_t>(b) + 1];
+    binIds_.assign(static_cast<std::size_t>(binStart_.back()), 0);
+    parallelFor(nb_, [&](int bi) {
+        std::vector<int> at(binStart_.begin() + bi * 2 * nb_, binStart_.begin() + (bi + 1) * 2 * nb_);
+        visit(bi, [&](int b, int id) { binIds_[static_cast<std::size_t>(at[static_cast<std::size_t>(b - bi * 2 * nb_)]++)] = id; });
+    }, threads);
+    ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+}
+
+// 0.55.5's build, on one thread (the tests' reference for the build above): lists per bin, packed into the same arrays at the end
+void SpinStars::buildReference() {
+    const SpinTable& t = T_;
+    std::vector<std::vector<int>> bins(static_cast<std::size_t>(nb_) * 2 * nb_);
+    const int nChi = t.nChi(), nS = t.nS();
     const auto colX = [&](int i, int j) { const double pe = t.rowEdge(i); return SpinTable::absXOf(t.sLo() + (t.sHi(0, pe) - t.sLo()) * j / (nS - 1)); };
     for (int i = 0; i < nChi; i++) {
         const int i1 = (i + 1) % nChi;
@@ -268,7 +406,7 @@ SpinStars::SpinStars(const SpinTable& t) : T_(t) {
                 c[k] = lookAt(ps[k], ch[k]);
             }
             if (!good) continue;
-            if (i1 == 0) { ch[1] = static_cast<float>(ch[1] + 2 * kPi); ch[3] = static_cast<float>(ch[3] + 2 * kPi); }   // (the last row's neighbour: one whole turn on)
+            if (i1 == 0) { ch[1] = static_cast<float>(ch[1] + 2 * kPi); ch[3] = static_cast<float>(ch[3] + 2 * kPi); }
             const int tris[2][3] = {{0, 1, 2}, {1, 3, 2}};
             for (const auto& tr : tris) {
                 Tri T;
@@ -280,7 +418,7 @@ SpinStars::SpinStars(const SpinTable& t) : T_(t) {
                 m = m * (1 / Lm);
                 double R = 0;
                 for (int k = 0; k < 3; k++) R = std::max(R, std::acos(std::clamp(dot(m, T.d[k]), -1.0, 1.0)));
-                if (R > 0.5) continue;                                       // a cell stretched over more than about 30 degrees of the far sky: not a straight map
+                if (R > 0.5) continue;
                 const int id = static_cast<int>(tri_.size());
                 tri_.push_back(T);
                 const double th = std::acos(std::clamp(m.z, -1.0, 1.0)), lo = std::max(0.0, th - R), hi = std::min(kPi, th + R);
@@ -290,20 +428,24 @@ SpinStars::SpinStars(const SpinTable& t) : T_(t) {
                 const bool pole = th - R <= 0 || th + R >= kPi;
                 const double dph = pole ? kPi : std::asin(std::min(1.0, std::sin(R) / std::sin(th))) + 1e-9;
                 for (int bi = b0; bi <= b1; bi++) {
-                    if (pole || dph >= kPi) { for (int bj = 0; bj < 2 * nb_; bj++) bins_[static_cast<std::size_t>(bi) * 2 * nb_ + bj].push_back(id); continue; }
+                    if (pole || dph >= kPi) { for (int bj = 0; bj < 2 * nb_; bj++) bins[static_cast<std::size_t>(bi) * 2 * nb_ + bj].push_back(id); continue; }
                     const int j0 = static_cast<int>(std::floor((ph - dph) / (2 * kPi) * 2 * nb_)), j1 = static_cast<int>(std::floor((ph + dph) / (2 * kPi) * 2 * nb_));
-                    for (int bj = j0; bj <= j1; bj++) bins_[static_cast<std::size_t>(bi) * 2 * nb_ + ((bj % (2 * nb_)) + 2 * nb_) % (2 * nb_)].push_back(id);
+                    for (int bj = j0; bj <= j1; bj++) bins[static_cast<std::size_t>(bi) * 2 * nb_ + ((bj % (2 * nb_)) + 2 * nb_) % (2 * nb_)].push_back(id);
                 }
             }
         }
     }
-    ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    binStart_.assign(bins.size() + 1, 0);
+    for (std::size_t b = 0; b < bins.size(); b++) binStart_[b + 1] = binStart_[b] + static_cast<int>(bins[b].size());
+    binIds_.clear();
+    for (const std::vector<int>& b : bins) binIds_.insert(binIds_.end(), b.begin(), b.end());
 }
 
 int SpinStars::images(const Vec3& s, std::vector<SpinImage>& out) const {
     int n = 0;
-    for (const int id : bins_[static_cast<std::size_t>(binOf(s))]) {
-        const Tri& T = tri_[static_cast<std::size_t>(id)];
+    const int bin = binOf(s);
+    for (int q = binStart_[static_cast<std::size_t>(bin)]; q < binStart_[static_cast<std::size_t>(bin) + 1]; q++) {
+        const Tri& T = tri_[static_cast<std::size_t>(binIds_[static_cast<std::size_t>(q)])];
         const double l0 = dot(s, cross(T.d[1], T.d[2])), l1 = dot(s, cross(T.d[2], T.d[0])), l2 = dot(s, cross(T.d[0], T.d[1]));
         if (!((l0 >= 0 && l1 >= 0 && l2 >= 0) || (l0 <= 0 && l1 <= 0 && l2 <= 0))) continue;
         if (dot(s, T.d[0] + T.d[1] + T.d[2]) <= 0) continue;

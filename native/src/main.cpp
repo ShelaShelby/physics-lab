@@ -659,9 +659,11 @@ int main(int, char**) {
             const double endMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
             const blackhole::ViewStats& bs = app.blackholeView.stats();
             const blackhole::Settings& sk = app.blackholeView.shownSettings();
-            std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
+            const blackhole::Settings wk = blackhole::shown(app.blackhole);
+            std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f want=%.6f,%.6f,%.6f,%.6f card=%d cardstate=%d cardfills=%ld cardms=%.1f\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
                         bs.spinCoarseFills + bs.tableFills, bs.spinFineFills, bs.starFills, bs.behind ? 1 : 0, blackhole::shown(app.blackhole).spin > 0 ? bs.spinCoarseMs : bs.tableMs, bs.spinStarsMs, bs.starsMs, bs.lookMs, bs.spinFineMs, bs.discMs,
-                        static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs);
+                        static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs,
+                        wk.yaw, wk.pitch, wk.dist, wk.spin > 0 && wk.bend ? wk.spin : 0.0, bs.spinCard ? 1 : 0, app.blackholeView.cardState(), bs.cardFills, bs.cardMs);   // 0.55.6: want, the card
         }
         static const bool timeStat = SDL_getenv("PL_TIMESTAT") != nullptr;   // for measuring in development (0.46): the Atom Lab picture's build time and the renderer's end(), averaged over 60 frames
         if (timeStat && app.lab == 1) {
@@ -753,6 +755,7 @@ int main(int, char**) {
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
     atom::setOutlineCompute(nullptr);
+    app.blackholeView.stopWork();                    // 0.55.6: its worker may read the card's memory, which the renderer frees
     renderer.shutdown();
     SDL_GL_DestroyContext(gl);
     SDL_DestroyWindow(window);

@@ -731,7 +731,9 @@ def part_smooth(binary, work):
     s = bh(r)
     check(not r.scripted_missing() and 230 <= len(f) < 3999 and s is not None, f"the run printed its frames and the lab settled ({len(f)} frames, {r.scripted_missing()})")
     if len(f) < 230 or s is None: return
-    moving = [x for x in f if 20 <= int(x["f"]) <= 50 or 90 <= int(x["f"]) <= 120]   # (while a drag is under way)
+    # (while a drag is under way: 0.55.6, only the frames in which the settings moved, so a picture that caught up during a pause between two drag steps
+    # may make its glare: on this software renderer the glare's drawing runs inside the frame's own calls, on a graphics card it is queued)
+    moving = [x for a, x in zip(f, f[1:]) if (20 <= int(x["f"]) <= 50 or 90 <= int(x["f"]) <= 120) and x.get("want") != a.get("want")]
     worst = max(float(x["draw"]) + float(x["glare"]) for x in moving)
     check(worst < SMOOTH_LIMIT_MS, f"during the tilt and spin drags the frame thread's worst time in the lab is {worst:.2f} ms (limit {SMOOTH_LIMIT_MS} ms)")
     check(any(x.get("behind") == "1" for x in moving), "while the view moves the lab says the picture is behind (the worker's picture comes later)")

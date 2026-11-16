@@ -13,6 +13,7 @@
 #include <chrono>
 #include <functional>
 #include <cstdint>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "mesh.h"
 #include "outline_compute.h"
 #include "rock_compute.h"
+#include "kerr_compute.h"
 
 namespace render {
 
@@ -42,6 +44,9 @@ public:
     IRockCompute* rockCompute() const { return rocks_; }           // the same for the Orbit Lab's belt rocks (0.13 stage 4)
     void useRockCompute(IRockCompute* r) { delete rocks_; rocks_ = r; }   // tests: put a stand-in (or nullptr) in place of the OpenGL object; the renderer owns it
     void disableCompute();                // forget the compute object: the CPU paths are used (PL_NO_COMPUTE; tests)
+    // 0.55.6: the Black Hole Lab's light paths on the card (render/kerr_compute.h), made at the first call; nullptr when this PC cannot (kerrWhy() says why)
+    IKerrCompute* kerrCompute();
+    const std::string& kerrWhy() const { return kerrWhy_; }
 
     // Start a frame for a picture `width` × `height` points.
     void begin(double width, double height);
@@ -245,6 +250,9 @@ private:
     IGroupCompute* compute_ = nullptr;        // owned; see compute()
     IOutlineCompute* outline_ = nullptr;      // owned; see outlineCompute()
     IRockCompute* rocks_ = nullptr;           // owned; see rockCompute()
+    IKerrCompute* kerr_ = nullptr;            // owned; see kerrCompute()
+    bool kerrTried_ = false;
+    std::string kerrWhy_;
     struct Mesh { GLuint vbo = 0, vao = 0; int count = 0; bool used = false; };
     std::vector<Mesh> meshes_;
     GLuint meshProgram_ = 0;

@@ -1,9 +1,11 @@
 #include "blackhole/lab.h"
+#include "blackhole/low_priority.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <vector>
 
 #include "blackhole/kerr.h"
 #include "blackhole/presets.h"
@@ -196,14 +198,23 @@ DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, do
 
 DiscLook discLook(const DiscTable& t, const Settings& s, const HoleView& v, double W, double H, int step) {
     DiscLook L;
-    for (double Y = step / 2.0; Y < H; Y += step)
-        for (double X = step / 2.0; X < W; X += step) {
-            const DiscPixel q = discPixel(t, s, v, X, Y);
-            if (q.hit.order < 0) continue;
-            L.any = true;
-            L.brightY = std::max(L.brightY, q.Y);
-            L.brightMax = std::max({L.brightMax, q.rgb[0], q.rgb[1], q.rgb[2]});
-        }
+    // 0.55.6: the rows on all cores (only largest values are kept: the same result in any order)
+    std::vector<double> rows;
+    for (double Y = step / 2.0; Y < H; Y += step) rows.push_back(Y);
+    const int nJob = static_cast<int>((rows.size() + 15) / 16);
+    std::vector<DiscLook> part(static_cast<std::size_t>(nJob));
+    parallelFor(nJob, [&](int k) {
+        DiscLook& P = part[static_cast<std::size_t>(k)];
+        for (std::size_t j = static_cast<std::size_t>(k) * 16; j < std::min(rows.size(), static_cast<std::size_t>(k + 1) * 16); j++)
+            for (double X = step / 2.0; X < W; X += step) {
+                const DiscPixel q = discPixel(t, s, v, X, rows[j]);
+                if (q.hit.order < 0) continue;
+                P.any = true;
+                P.brightY = std::max(P.brightY, q.Y);
+                P.brightMax = std::max({P.brightMax, q.rgb[0], q.rgb[1], q.rgb[2]});
+            }
+    });
+    for (const DiscLook& P : part) { L.any = L.any || P.any; L.brightY = std::max(L.brightY, P.brightY); L.brightMax = std::max(L.brightMax, P.brightMax); }
     L.white = s.expAuto ? (L.brightMax > 0 ? L.brightMax : 1) : std::pow(10.0, s.expLog);
     return L;
 }

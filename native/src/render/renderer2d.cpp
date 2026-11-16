@@ -313,7 +313,18 @@ bool Renderer2D::init() {
     return true;
 }
 
-void Renderer2D::disableCompute() { delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr; }
+void Renderer2D::disableCompute() { delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr; delete kerr_; kerr_ = nullptr; kerrTried_ = true; kerrWhy_ = "switched off (PL_NO_COMPUTE)"; }
+
+// 0.55.6: made at the first call (the shader is large: a PC that never opens the Black Hole Lab's spinning hole never compiles it)
+IKerrCompute* Renderer2D::kerrCompute() {
+    if (!kerrTried_) {
+        kerrTried_ = true;
+        const char* why = "";
+        kerr_ = makeKerrCompute(&why);
+        kerrWhy_ = kerr_ ? "" : why;
+    }
+    return kerr_;
+}
 
 void Renderer2D::shutdown() {
     if (lensProgram_) glDeleteProgram(lensProgram_);
@@ -344,6 +355,7 @@ void Renderer2D::shutdown() {
     delete compute_; compute_ = nullptr;
     delete outline_; outline_ = nullptr;
     delete rocks_; rocks_ = nullptr;
+    delete kerr_; kerr_ = nullptr; kerrTried_ = false;
     for (GLuint& t : tex_) { if (t) glDeleteTextures(1, &t); t = 0; }
     if (plProgram_) glDeleteProgram(plProgram_);
     plProgram_ = 0;

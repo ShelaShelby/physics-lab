@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.55.5 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.55.6 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -286,13 +286,13 @@ if(PL_BUILD_TESTS)
     target_link_libraries(stage2_timing PRIVATE atom_core)
     add_executable(stage3_timing tests/timing_stage3.cpp)
     target_link_libraries(stage3_timing PRIVATE atom_core)
-    add_executable(stage4_timing tests/timing_stage4.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/orbit/belt_layer.cpp)
+    add_executable(stage4_timing tests/timing_stage4.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/orbit/belt_layer.cpp)
     target_include_directories(stage4_timing PRIVATE src/render)
     target_link_libraries(stage4_timing PRIVATE atom_core maps_core)
   endif()
   if(PL_GL_TESTS)
     find_library(PL_EGL_LIBRARY EGL REQUIRED)
-    add_executable(gl_compare_tests tests/gl_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/orbit/belt_layer.cpp)
+    add_executable(gl_compare_tests tests/gl_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/orbit/belt_layer.cpp)
     target_include_directories(gl_compare_tests PRIVATE src/render)
     target_link_libraries(gl_compare_tests PRIVATE atom_core maps_core ${PL_EGL_LIBRARY})
     target_compile_options(gl_compare_tests PRIVATE ${PL_WARNINGS})
@@ -357,6 +357,8 @@ if(PL_BUILD_APP)
     src/render/group_compute.cpp
     src/render/outline_compute.cpp
     src/render/rock_compute.cpp
+    src/render/kerr_compute.cpp
+    src/blackhole/spin_card.cpp
     src/orbit/belt_layer.cpp
     src/orbit/orbit_view.cpp
     src/atom/atom_view.cpp

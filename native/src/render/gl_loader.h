@@ -118,6 +118,15 @@ typedef unsigned long long GLuint64;
 #ifndef GL_STREAM_READ
 #define GL_STREAM_READ 0x88E1
 #endif
+#ifndef GL_MAP_READ_BIT
+#define GL_MAP_READ_BIT 0x0001
+#endif
+#ifndef GL_COPY_READ_BUFFER
+#define GL_COPY_READ_BUFFER 0x8F36
+#endif
+#ifndef GL_COPY_WRITE_BUFFER
+#define GL_COPY_WRITE_BUFFER 0x8F37
+#endif
 
 #define PL_GL_FUNCTIONS(X)                                                                         \
     X(void, glClear, (GLbitfield mask))                                                            \
@@ -200,7 +209,10 @@ typedef unsigned long long GLuint64;
     X(void, glGetBufferSubData, (GLenum target, GLintptr offset, GLsizeiptr size, void* data))              \
     X(GLsync, glFenceSync, (GLenum condition, GLbitfield flags))                                   \
     X(GLenum, glClientWaitSync, (GLsync sync, GLbitfield flags, GLuint64 timeout))                 \
-    X(void, glDeleteSync, (GLsync sync))
+    X(void, glDeleteSync, (GLsync sync))                                                           \
+    X(void*, glMapBufferRange, (GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access)) \
+    X(GLboolean, glUnmapBuffer, (GLenum target))                                                   \
+    X(void, glCopyBufferSubData, (GLenum rt, GLenum wt, GLintptr ro, GLintptr wo, GLsizeiptr size))
 
 // The function pointers live in their own namespace, so they never clash with the
 // system's OpenGL library (which exports functions with the same names).

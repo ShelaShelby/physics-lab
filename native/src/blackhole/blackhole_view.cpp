@@ -42,6 +42,9 @@ void glareVeilFn(int W, int H, double cx, double cy, double K, const std::vector
     out[0] = g.ms; out[1] = g.spread; out[2] = g.laid;
 }
 // 0.55.4: the sRGB encoding of a linear opacity (IEC 61966-2-1), so a dot laid over black at this opacity shows the star's true light
+// 0.55.6: a star image found on a worker thread, laid down afterwards in the catalogue's order (its place, magnitude, the star, its order, behind the disc)
+struct Cand { double X, Y, mag; int star, order; bool hidden; };
+constexpr int kStarChunk = 64;                       // stars per job
 double encodeSrgb(double l) { l = std::clamp(l, 0.0, 1.0); return l <= 0.0031308 ? 12.92 * l : 1.055 * std::pow(l, 1 / 2.4) - 0.055; }
 }  // namespace
 
@@ -108,12 +111,16 @@ void cameraFrame(const HoleView& v, double th, Vec3& er, Vec3& et, Vec3& ep) {
 BlackHoleView::BlackHoleView() = default;
 
 BlackHoleView::~BlackHoleView() {
+    stopWork();
+    stopSpinWorker();
+}
+
+void BlackHoleView::stopWork() {
     {   std::lock_guard<std::mutex> g(workMx_);                             // 0.55.5: the worker stops after its job (a table fill stops at once)
         workQuit_ = true; }
     stale_ = true;
     workCv_.notify_all();
     if (worker_.joinable()) worker_.join();
-    stopSpinWorker();
 }
 
 void BlackHoleView::stopSpinWorker() {
@@ -413,24 +420,40 @@ bool BlackHoleView::prepare(const Settings& s, double W, double H, double cx, do
         const Vec3 hole = viewMiddle(v);
         const float cap = brightestMag();
         int stars = 0, images = 0, extra = 0, capped = 0;
-        for (const orbit::SkyStar& st : S.stars) {
-            scratch_.clear();
-            if (s.bend) starImagesFast(*table_, hole, st.dir, st.mag, kImageMagLimit, scratch_);
-            else scratch_.push_back({st.dir, 1.0, st.mag, 0, 0});
-            bool any = false;
-            for (const StarImage& im : scratch_) {
-                double X, Y;
-                if (!viewScreen(v, im.dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
-                if (disc && discPixel(*disc_, s, v, X, Y, false).hit.order >= 0) { hidden++; continue; }   // behind the opaque disc
-                double mag = im.mag;
+        // 0.55.6: the stars' images on all cores (each star on its own), then laid down in the catalogue's order as before: the same dots in the same order
+        const std::vector<orbit::SkyStar>& all = S.stars;
+        const int nStar = static_cast<int>(all.size()), nChunk = (nStar + kStarChunk - 1) / kStarChunk;
+        std::vector<std::vector<Cand>> found(static_cast<std::size_t>(nChunk));
+        parallelFor(nChunk, [&](int c) {
+            std::vector<StarImage> sc;
+            std::vector<Cand>& out = found[static_cast<std::size_t>(c)];
+            for (int k = c * kStarChunk; k < std::min(nStar, (c + 1) * kStarChunk); k++) {
+                const orbit::SkyStar& st = all[static_cast<std::size_t>(k)];
+                sc.clear();
+                if (s.bend) starImagesFast(*table_, hole, st.dir, st.mag, kImageMagLimit, sc);
+                else sc.push_back({st.dir, 1.0, st.mag, 0, 0});
+                for (const StarImage& im : sc) {
+                    double X, Y;
+                    if (!viewScreen(v, im.dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
+                    const bool behind = disc && discPixel(*disc_, s, v, X, Y, false).hit.order >= 0;   // behind the opaque disc
+                    out.push_back({X, Y, im.mag, k, im.order, behind});
+                }
+            }
+        });
+        int last = -1;
+        bool any = false;
+        for (const std::vector<Cand>& ch : found)
+            for (const Cand& q : ch) {
+                if (q.star != last) { if (any) stars++; any = false; last = q.star; }
+                if (q.hidden) { hidden++; continue; }
+                double mag = q.mag;
                 if (mag < cap) { mag = cap; capped++; }
-                if (!addDot(s, v, X, Y, mag, S.colours[st.bucket])) continue;
+                if (!addDot(s, v, q.X, q.Y, mag, S.colours[all[static_cast<std::size_t>(q.star)].bucket])) continue;
                 images++;
-                if (im.order > 0) extra++;
+                if (q.order > 0) extra++;
                 any = true;
             }
-            if (any) stars++;
-        }
+        if (any) stars++;
         st_.stars = stars; st_.images = images; st_.extraImages = extra; st_.capped = capped; st_.hidden = hidden;
         st_.starsMs = msSince(t0);
         st_.starFills++;
@@ -464,7 +487,7 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
         // 0.55.5: the rows shared out over threads (the largest values are the same in any order: the result is exactly the one-thread scan's)
         std::vector<double> rows;
         for (double Y = step / 2.0; Y < H; Y += step) rows.push_back(Y);
-        const int nth = std::max(1, std::min(8, static_cast<int>(std::thread::hardware_concurrency())));
+        const int nth = std::max(1, std::min(16, static_cast<int>(std::thread::hardware_concurrency()) - (thisThreadLow() ? 1 : 0)));   // (0.55.6: up to 16, one core left for the frame)
         std::vector<DiscLook> part(static_cast<std::size_t>(nth));
         const std::function<void(int)> scan = [&](int k) {
             DiscLook& P = part[static_cast<std::size_t>(k)];
@@ -505,27 +528,44 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
         const double ph = cameraPhi(v), c = std::cos(ph), sn = std::sin(ph);
         Vec3 er, et, ep;
         cameraFrame(v, s.pitch, er, et, ep);
-        for (const orbit::SkyStar& st : S.stars) {
-            const Vec3 d{c * st.dir.x + sn * st.dir.y, -sn * st.dir.x + c * st.dir.y, st.dir.z};   // the sky frame turned back by the camera's phi: the chart's axes
-            spinScratch_.clear();
-            spinStars_->images(d, spinScratch_);
-            bool any = false;
-            for (const SpinImage& im : spinScratch_) {
-                if (!(im.mag > 0)) continue;
-                const double mag = st.mag - 2.5 * std::log10(im.mag);
-                if (mag > kImageMagLimit) continue;
-                const Vec3 N = lookAt(im.psi, im.chi), dir = er * N.x + et * N.y + ep * N.z;
-                double X, Y;
-                if (!viewScreen(v, dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
-                if (disc && spinPixel(s, v, X, Y, false).hit.order >= 0) { hidden++; continue; }   // behind the opaque disc
-                double m2 = mag;
+        // 0.55.6: the stars' images on all cores (each star on its own), then laid down in the catalogue's order as before: the same dots in the same order
+        const std::vector<orbit::SkyStar>& all = S.stars;
+        const int nStar = static_cast<int>(all.size()), nChunk = (nStar + kStarChunk - 1) / kStarChunk;
+        std::vector<std::vector<Cand>> found(static_cast<std::size_t>(nChunk));
+        const SpinStars& SS = *spinStars_;
+        parallelFor(nChunk, [&](int ck) {
+            std::vector<SpinImage> sc;
+            std::vector<Cand>& out = found[static_cast<std::size_t>(ck)];
+            for (int k = ck * kStarChunk; k < std::min(nStar, (ck + 1) * kStarChunk); k++) {
+                const orbit::SkyStar& st = all[static_cast<std::size_t>(k)];
+                const Vec3 d{c * st.dir.x + sn * st.dir.y, -sn * st.dir.x + c * st.dir.y, st.dir.z};   // the sky frame turned back by the camera's phi: the chart's axes
+                sc.clear();
+                SS.images(d, sc);
+                for (const SpinImage& im : sc) {
+                    if (!(im.mag > 0)) continue;
+                    const double mag = st.mag - 2.5 * std::log10(im.mag);
+                    if (mag > kImageMagLimit) continue;
+                    const Vec3 N = lookAt(im.psi, im.chi), dir = er * N.x + et * N.y + ep * N.z;
+                    double X, Y;
+                    if (!viewScreen(v, dir, X, Y) || X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
+                    const bool behind = disc && spinPixel(s, v, X, Y, false).hit.order >= 0;   // behind the opaque disc
+                    out.push_back({X, Y, mag, k, 0, behind});
+                }
+            }
+        });
+        int last = -1;
+        bool any = false;
+        for (const std::vector<Cand>& ch : found)
+            for (const Cand& q : ch) {
+                if (q.star != last) { if (any) stars++; any = false; last = q.star; }
+                if (q.hidden) { hidden++; continue; }
+                double m2 = q.mag;
                 if (m2 < cap) { m2 = cap; capped++; }
-                if (!addDot(s, v, X, Y, m2, S.colours[st.bucket])) continue;
+                if (!addDot(s, v, q.X, q.Y, m2, S.colours[all[static_cast<std::size_t>(q.star)].bucket])) continue;
                 images++;
                 any = true;
             }
-            if (any) stars++;
-        }
+        if (any) stars++;
         st_.stars = stars; st_.images = images; st_.extraImages = 0; st_.capped = capped; st_.hidden = hidden;
         st_.starsMs = msSince(t0);
         st_.starFills++;
@@ -569,6 +609,7 @@ struct BlackHoleView::Request {
     std::shared_ptr<const SpinTable> fine;
     Key want;
     std::uint64_t seq = 0;
+    std::shared_ptr<CardTableData> card;                                    // 0.55.6: a table filled by the card: the worker makes it (the fine one) first
 };
 struct BlackHoleView::Picture {
     Request req;
@@ -614,6 +655,11 @@ void BlackHoleView::workLoop() {
             workBusy_ = true;
         }
         const auto t0 = std::chrono::steady_clock::now();
+        if (r->card) {                                                      // 0.55.6: the card's rays into a table (read from the card's mapped memory)
+            r->fine = r->card->make();
+            r->card->used->store(true);
+            r->card.reset();
+        }
         E.fineOffer_ = r->fine;
         E.exact_ = r->exact;
         if (!E.prepare(r->s, r->W, r->H, r->cx, r->cy, &stale_)) continue;  // (stopped: the view is closing)
@@ -648,6 +694,8 @@ void BlackHoleView::install(Picture& p) {
     shownS_ = p.req.s; shownW_ = p.req.W; shownH_ = p.req.H; shownCx_ = p.req.cx; shownCy_ = p.req.cy;
     shownKey_ = p.req.want; shownExact_ = p.req.exact; shownSeq_ = p.req.seq;
     hasShown_ = true;
+    st_.spinCard = spin_ && spin_->filledByCard() && p.req.s.spin > 0 && p.req.s.bend;
+    if (st_.spinCard) cardFine_ = spin_;                                    // 0.55.6: later pictures of the same spin, distance and tilt use it (turning)
 }
 
 // the fine spin table (async): made on a thread of its own, below normal priority, once the spin, distance and tilt have rested kSpinRest seconds;
@@ -688,36 +736,97 @@ void BlackHoleView::pollFine(const Settings& s) {
 
 bool BlackHoleView::settled() {
     if (!async) return true;
-    if (st_.behind || spinWorker_.joinable() || (fineA_ > 0 && !st_.spinFine)) return false;
+    if (st_.behind || spinWorker_.joinable() || (fineA_ > 0 && !st_.spinFine && !st_.spinCard) || (cardFill_ && !cardFill_->idle())) return false;
     std::lock_guard<std::mutex> g(workMx_);
     return !workBusy_ && !req_ && !done_;
 }
 
 void BlackHoleView::makeFineNow(const Settings& s) {
     if (!async) { ensureSpin(s, true); return; }
+    if (gpuPaths && cardState_ >= 0) return;                               // 0.55.6: the card's path fills its own (if its check fails, the fine thread does)
     if (!(s.spin > 0 && s.bend)) return;
     fine_ = std::make_shared<SpinTable>(s.spin, s.dist, s.pitch, kSpinChiFine, kSpinSFine, kSpinEdge);
     fineA_ = s.spin; fineR_ = s.dist; fineTh_ = s.pitch;
     spinFineStarted_ = true;
 }
 
+// 0.55.6: the card's path, decided once: OpenGL 4.3 with its shader compiled, and the start-up check on this card (spin_card.h cardSelfCheck)
+bool BlackHoleView::cardReady(render::Renderer2D& R) {
+    if (cardState_ == 0) {
+        render::IKerrCompute* K = R.kerrCompute();
+        if (!K) { cardState_ = -1; cardWhy_ = R.kerrWhy(); }
+        else {
+            cardCheck_ = cardSelfCheck(*K);
+            static const bool forced = std::getenv("PL_BH_CARDFAIL") != nullptr;   // (tests: as if the check had failed)
+            if (forced) { cardCheck_.ok = false; cardCheck_.why = "the check was made to fail (test switch PL_BH_CARDFAIL)"; }
+            cardState_ = cardCheck_.ok ? 1 : -1;
+            cardWhy_ = cardCheck_.why;
+            if (cardCheck_.ok) cardFill_ = std::make_unique<CardFill>(*K);
+        }
+        std::printf("PLBHCARD state=%d checkms=%.1f edge=%.2e dir=%.2e b=%.2e u=%.2e ends=%d why=%s\n", cardState_, cardCheck_.ms, cardCheck_.edge, cardCheck_.dir,
+                    cardCheck_.b, cardCheck_.u, cardCheck_.endsDiffer, cardWhy_.empty() ? "-" : cardWhy_.c_str());
+    }
+    return cardState_ == 1;
+}
+
+// 0.55.6: the card's fill, as far as the card has got (never waits): a finished table goes to the worker with the settings it was started for; then the
+// next fill starts if the settings' spin, distance or tilt have no table yet (none is under way or with the worker for them)
+void BlackHoleView::pumpCard(const Settings& s, double W, double H, double cx, double cy) {
+    static const std::array<int, 3> grid = [] {
+        std::array<int, 3> g{kSpinChiFine, kSpinSFine, kSpinEdge};
+        if (const char* e = std::getenv("PL_BH_CARDGRID")) std::sscanf(e, "%d,%d,%d", &g[0], &g[1], &g[2]);   // (tests: a smaller grid on the software renderer)
+        return g;
+    }();
+    for (int guard = 0; guard < 4; guard++) {
+        std::shared_ptr<CardTableData> d = cardFill_->pump();
+        if (d) {
+            auto r = std::make_unique<Request>();
+            r->s = d->s; r->W = d->W; r->H = d->H; r->cx = d->cx; r->cy = d->cy;
+            r->exact = lookStep(d->W, d->H, false) == 4;
+            r->want = keyOf(d->s, d->W, d->H, d->cx, d->cy);
+            r->seq = ++reqSeq_;
+            r->card = d;
+            cardPosted_ = d; cardPostedUsed_ = d->used;
+            cardPostedKey_[0] = d->s.spin; cardPostedKey_[1] = d->s.dist; cardPostedKey_[2] = d->s.pitch;
+            posted_ = true; postedKey_ = r->want; postedExact_ = r->exact; postedFine_ = nullptr;
+            {   std::lock_guard<std::mutex> g(workMx_);
+                req_ = std::move(r); }
+            workCv_.notify_one();
+            continue;
+        }
+        if (!cardFill_->idle()) break;
+        const bool have = cardFine_ && cardFine_->spin() == s.spin && cardFine_->rC() == s.dist && cardFine_->thC() == s.pitch;
+        const bool withWorker = cardPostedKey_[0] == s.spin && cardPostedKey_[1] == s.dist && cardPostedKey_[2] == s.pitch &&
+                                (!cardPosted_.expired() || (cardPostedUsed_ && cardPostedUsed_->load()));
+        if (have || withWorker) break;
+        cardFill_->start(s, W, H, cx, cy, grid[0], grid[1], grid[2]);
+    }
+}
+
 void BlackHoleView::drawAsync(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy) {
     ensureWorker();
-    pollFine(s);
+    const bool spinning = s.spin > 0 && s.bend;
+    const bool card = spinning && gpuPaths && cardReady(R);                // 0.55.6: the card fills the table (no coarse table, no fine thread)
+    if (!card) pollFine(s);
     const double now = nowSeconds();
     const Key want = keyOf(s, W, H, cx, cy);
     if (!(want == wantKey_)) { wantKey_ = want; wantSince_ = now; }
     const bool exact = lookStep(W, H, false) == 4 || now - wantSince_ >= kGlareRest;   // the exposure in steps of 4 once the view rests
-    const bool spinning = s.spin > 0 && s.bend;
-    std::shared_ptr<const SpinTable> fine = spinning && fine_ && fine_->spin() == s.spin && fine_->rC() == s.dist && fine_->thC() == s.pitch ? fine_ : nullptr;
+    const std::shared_ptr<const SpinTable>& have = card ? cardFine_ : fine_;
+    std::shared_ptr<const SpinTable> fine = spinning && have && have->spin() == s.spin && have->rC() == s.dist && have->thC() == s.pitch ? have : nullptr;
     std::unique_ptr<Picture> p;
     {   std::lock_guard<std::mutex> g(workMx_);
         if (done_) p = std::move(done_); }
     if (p) install(*p);
+    if (card) {
+        if (!fine && cardFine_ && cardFine_->spin() == s.spin && cardFine_->rC() == s.dist && cardFine_->thC() == s.pitch) fine = cardFine_;   // (just installed)
+        pumpCard(s, W, H, cx, cy);
+        st_.cardMs = cardFill_->lastMs(); st_.cardFills = cardFill_->fills();
+    }
     const bool current = hasShown_ && shownKey_ == want;
     const bool upToDate = current && (shownExact_ || !exact) && (!fine || st_.spinFine);
     const bool asked = posted_ && postedKey_ == want && (postedExact_ || !exact) && postedFine_ == fine.get();
-    if (!upToDate && !asked) {
+    if (!upToDate && !asked && !(card && !fine)) {                         // (card: a view of a new spin, distance or tilt is the card's to start)
         auto r = std::make_unique<Request>();
         r->s = s; r->W = W; r->H = H; r->cx = cx; r->cy = cy; r->exact = exact; r->fine = fine; r->want = want; r->seq = ++reqSeq_;
         posted_ = true; postedKey_ = want; postedExact_ = exact; postedFine_ = fine.get();
@@ -787,8 +896,94 @@ std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H) {
 }
 }  // namespace
 
+// 0.55.6 (PL_BH_COMPARE=card): the card's light paths against the processor's. The shader's double functions against the C++ library's; the start-up check;
+// for the benchmark's case, the Film case and spin 0.99, the card's whole fine table against the processor's node by node (the processor's table is the
+// reference: blackhole_physics tests it against the integrator); the conservation laws on rays the card followed (the null condition and Carter's q at the end)
+namespace {
+void cardCompare(render::Renderer2D& R) {
+    render::IKerrCompute* K = R.kerrCompute();
+    if (!K) { std::printf("PLBHCARDNONE why=%s\n", R.kerrWhy().c_str()); return; }
+    {   std::vector<double> x, out;
+        for (int k = 0; k < 4000; k++) x.push_back(-40 + 80.0 * k / 3999 + 1e-3 * std::sin(k));   // -40 .. 40 (the angles, the exponents of the step's rule)
+        for (int k = 0; k < 400; k++) x.push_back(std::ldexp(1.0 + k / 400.0, -30 + k / 10));       // 1e-9 .. 1e3 (small and large logs)
+        K->math(cardParams(0.5, 20, 1.3), x, out);
+        double e[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        for (std::size_t k = 0; k < x.size(); k++) {
+            const double v = x[k], ax = std::fabs(v) + 1e-300;
+            const double ref[8] = {std::sin(v), std::cos(v), std::exp(v), std::log(ax), std::atan2(v, 1 - v), std::acos(v / (1 + std::fabs(v))), std::cbrt(v), std::pow(ax, -0.2)};
+            for (int i = 0; i < 8; i++) {
+                const double g = out[8 * k + static_cast<std::size_t>(i)];
+                const double d = i < 2 ? std::fabs(g - ref[i]) : std::fabs(g - ref[i]) / std::max(std::fabs(ref[i]), 1e-300);   // sin, cos: absolute; the rest relative
+                e[i] = std::max(e[i], std::isfinite(d) ? d : 1.0);
+            }
+        }
+        std::printf("PLBHCARDMATH n=%zu sin=%.2e cos=%.2e exp=%.2e log=%.2e atan2=%.2e acos=%.2e cbrt=%.2e pow=%.2e\n", x.size(), e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+    }
+    {   const CardCheck c = cardSelfCheck(*K);
+        std::printf("PLBHCARDCHECK ok=%d edges=%d rays=%d ends=%d edge=%.2e dir=%.2e b=%.2e u=%.2e ms=%.1f\n", c.ok ? 1 : 0, c.edges, c.rays, c.endsDiffer, c.edge, c.dir, c.b, c.u, c.ms);
+    }
+    const FilmChoices film;
+    struct Case { const char* name; double a, r, th; };
+    const Case cases[3] = {{"benchmark", 0.9, 20, 80 * kPi / 180}, {"film", film.spin, film.camR, film.camThetaDeg * kPi / 180}, {"top", kSpinTop, 6, 1.4}};
+    for (const Case& cs : cases) {
+        const auto t0 = std::chrono::steady_clock::now();
+        const std::shared_ptr<SpinTable> G = cardTableNow(*K, cs.a, cs.r, cs.th, kSpinChiFine, kSpinSFine, kSpinEdge);
+        const double gms = msSince(t0);
+        const auto t1 = std::chrono::steady_clock::now();
+        const SpinTable P(cs.a, cs.r, cs.th, kSpinChiFine, kSpinSFine, kSpinEdge);
+        const double pms = msSince(t1);
+        if (!G) { std::printf("PLBHCARDT case=%s none=1\n", cs.name); continue; }
+        long nodes = 0, ends = 0, lost = 0;
+        double dir[3] = {0, 0, 0}, db = 0, du[2] = {0, 0}, de = 0, dc = 0, drow = 0;
+        long cnt[3] = {0, 0, 0};
+        for (int i = 0; i < kSpinEdge; i++) de = std::max(de, std::fabs(G->edgeSample(i) - P.edgeSample(i)));
+        for (int i = 0; i < kSpinChiFine; i++) { dc = std::max(dc, std::fabs(G->rowChi(i) - P.rowChi(i))); drow = std::max(drow, std::fabs(G->rowEdge(i) - P.rowEdge(i))); }
+        for (int side = 0; side < 2; side++)
+            for (int i = 0; i < kSpinChiFine; i++)
+                for (int j = 0; j < kSpinSFine; j++) {
+                    const SpinHit &g = G->node(side, i, j), &p = P.node(side, i, j);
+                    nodes++;
+                    if (g.sky != p.sky) { ends++; continue; }
+                    if (!g.sky && length(g.dir) == 0 && side == 0) lost++;
+                    const double xpe = std::fabs(P.nodePsi(side, i, j) - P.rowEdge(i)) / P.rowEdge(i);
+                    const int bd = xpe < 1e-3 ? 0 : xpe < 0.1 ? 1 : 2;
+                    if (g.sky) { dir[bd] = std::max(dir[bd], angleBetween(g.dir, p.dir)); cnt[bd]++; }
+                    db = std::max(db, std::fabs(g.b - p.b) / (1 + std::fabs(p.b)));
+                    for (int k = 0; k < kSpinCross; k++) {
+                        const double d = std::fabs(g.u[k] - p.u[k]) / (1 + std::fabs(p.u[k]));
+                        du[bd == 0 ? 1 : 0] = std::max(du[bd == 0 ? 1 : 0], std::isfinite(d) ? d : 1.0);
+                    }
+                }
+        // the conservation laws on 300 of the card's rays (camera sky between 1e-3 of the edge and the far side)
+        std::vector<double> pc;
+        unsigned seed = 7;
+        const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0; };
+        for (int k = 0; k < 300; k++) {
+            const double chi = 2 * kPi * rnd(), pe = P.edge(chi), side = k % 3 == 0 ? -1 : 1, x = pe * std::pow(10.0, -3 + 3 * rnd());
+            const double psi = std::clamp(pe + side * x, 1e-3, kPi - 1e-3);
+            pc.push_back(psi); pc.push_back(chi);
+        }
+        std::vector<CardRay> cr;
+        cardRays(*K, cs.a, cs.r, cs.th, pc, cr);
+        const KerrBL ch(cs.a);
+        double hmax = 0, qmax = 0;
+        int ended = 0;
+        for (const CardRay& c : cr) {
+            if (c.end == 0) continue;
+            ended++;
+            Ray ray; ray.n = 5; ray.c[0] = c.h.b; ray.c[1] = c.q;
+            hmax = std::max(hmax, std::fabs(ch.nullCondition(ray, c.y)));
+            qmax = std::max(qmax, std::fabs(ch.carterQ(c.h.b, c.y) - c.q) / (1 + std::fabs(c.q)));
+        }
+        std::printf("PLBHCARDT case=%s a=%g dist=%g pitch=%.4f nodes=%ld endsdiffer=%ld lost=%ld dirnear=%.2e dirmid=%.2e dirfar=%.2e nnear=%ld nmid=%ld nfar=%ld b=%.2e u=%.2e unear=%.2e "
+                    "edge=%.2e rowchi=%.2e rowedge=%.2e mism=%ld rays=%zu ended=%d null=%.2e qdrift=%.2e cardms=%.0f cpums=%.0f\n",
+                    cs.name, cs.a, cs.r, cs.th, nodes, ends, lost, dir[0], dir[1], dir[2], cnt[0], cnt[1], cnt[2], db, du[0], du[1], de, dc, drow, G->mismatches(), cr.size(), ended, hmax, qmax, gms, pms);
+    }
+}
+}  // namespace
+
 void compareHook(render::Renderer2D& R, const char* spec) {
-    (void)spec;
+    if (spec && std::string(spec) == "card") { cardCompare(R); return; }
     // 0. 0.55.3, the looks: Real's saved case to the pixel; Film at the paper's view (J15 Figure 13: 74.1 M, 86.56 deg; field of view 30 degrees) against the double
     //    lookup of the same table: the disc's image and edges where the module puts the paper's edges, one colour over the whole disc before the glow; the glow
     //    against its double reference (looks.h glowReference) on the same picture, no pixel darker; the glow pass's time at 1280 x 800 and 3840 x 2160.

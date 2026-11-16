@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.55.6", "The Black Hole Lab: pictures come sooner while the view moves",
+     "The Black Hole Lab works out the stars' images on all the processor's cores instead of one, and sorts the light paths for the stars about three times "
+     "faster, so while the view turns, tilts or changes distance a new picture is finished sooner. The spinning and the non-spinning hole both gain. Every "
+     "star image is where it was and as bright as before (tested image by image). One core is left free for the window while the lab works in the background."},
     {"0.55.5", "The Black Hole Lab: the window no longer waits for the picture",
      "The Black Hole Lab no longer makes the window wait while it works out a picture. Turning, tilting, changing the distance or dragging the spin now "
      "moves the controls and readouts at once; the light paths, the stars' images and the exposure are worked out on a worker thread below normal priority, "
