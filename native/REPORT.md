@@ -1,20 +1,39 @@
-# 0.56.2: the Black Hole Lab sharp while moving; the row of wrong pixels beside the shadow; the 15-second lab switch
-No source read or saved. Based on "native 0.56.1". The full UI suite was not run (small version).
-## Part 0: reproduced first
-- **Fault 2** (sky_card.cpp, new PL_BH_SKYFULL: Film's hole 0.6 / 74.1 M, 2560 x 1369, 30 deg across the height, every pixel against traceClosed): the 0.56.1 shader lost 79 / 70 / 60 / 70 rays at the paper's view / 88 / 90 / 92 deg, all on columns 1488-1490 (one vertical line, above and below the disc's plane), b = 5.97 to 6.03, sub 2 (case I, camera beyond r4); 1-2 more pixels near it over 2e-3 rad. A lost ray is black and spoils its 2 x 2 neighbours' disc coverage (fwidth): the owner's dark specks (a partly lost row: the grey streak).
-- The line in the hole's terms: **lambda = 2 r+ / a** (6.0 at a = 0.6), where P(r+) = 0, so R(r+) = 0 and the root r3 = r+ (python roots: r3 - r+ = 8e-8 at b = 6.006). There GLa's (B39) I+ = -pref r43 / (r_{+3} r_{+4}) Pi - F / r_{+3} is two terms of size 1 / r_{+3} that cancel; in single precision r_{+3} is rounding noise over a band of about +-0.03 in b. Not lambda = 0 (column 1280: nothing), not the spin axis, not the shader's own atan/asin/acos: the lead is rejected.
-- Fix (card and kerr_closed.cpp Ipm): Pi = F + n J, J = s^3/3 R_J (its own term, no subtraction), r43 / r_{+4} + 1 = r_{+3} / r_{+4}: I = -(pref / r_{+4}) (F + r43 r41 / (r_{+4} r31) J), no division by r_{+3}. The processor's version in double had the same cancellation: blackhole_tests' I+ in case (2) was allowed 1e-2 (0.55.9's note); it was 1.1e-6, now under the 1e-8 of the other cases, and the limit is now 1e-8 (tightened; the old code fails it).
-- **The 15-s switch** was real, not the stopwatch: after a scene with the eye's glare (blackhole.real_move), the glare's asynchronous steps were only pumped while the glare is on; switched off half way (Film, spin 0) the glare stayed "under way" for ever (Renderer2D::glareBusy), so benchLabFinished said "not finished": every wait into the lab capped, and film_tilt's rest comparison was never reached. Reproduced here (PL_BENCH_ONLY=blackhole.real_move,response.lab_switch.molecule_blackhole, card's light paths off as on his PC: 15000 ms x 3). Fix: with the glare off, the one under way is let go (drawLens). After: 61-694 ms, 12-15 ms; film_tilt compared (0 pixels change, 119,328 disc pixels).
-## Part 1: the pass measured (llvmpipe, 4 cores, 2560 x 1369, uMode 2, median of 5, mean of 3 runs; PL_BH_SKYTIME, PL_BH_SKYSTOP)
-- Parts (cumulative): launch 13 ms, + roots and case 30, + the integrals' loop 390-480 (9 Carlson pairs R_F+R_J per sky ray of type A, 8 for eta = 0, 7 in case (1); each a second time past pi/2; plus 5 AGM amplitudes), whole 380-460. The integrals are about 90 %.
-- Change 1, work not used or already known: K(mu) from the polar amplitude's own AGM (a_N K = pi/2), the radial K only in case (1), for rays ending at the horizon no I+- and no third kind (R_J skipped): 7 pairs per sky ray. 443 -> 380 ms (benchmark), 426 -> 358 (Film): **0.86 / 0.84, kept**.
-- Change 2, Carlson's stop at 0.03 (from 4e-3; series error < 1e-9): 0.92 / 0.91: **below the gate, not kept**. One duplication shared by the two R_J of one amplitude: estimated about 0.9, not tried (ROADMAP).
-- To keep the size (below): the reflection of F, Pi past pi/2 summed in one line, R_C's series below |e| < 0.01 to e^3 (was 0.05 to e^6; the next term < 3e-10), no zeroing of arrays written before read. Final: 364 / 347 ms: **0.82 / 0.81** of 0.56.1. Estimate for the owner's card: 5.5 x 0.82 = **about 4.5 ms** (an estimate).
-- SPIR-V kKerrSkyFS plain / inlined: 0.56.0-0.56.1 101.7 / 62.7 KB; now **101.4 / 62.3 KB**. The shader hash changes: the owner's PC runs the [sky] guard's steps once more.
-- Accuracy (check_blackhole precision, limits unchanged): elliptic functions R_J 6.8e-7 (was 3.7e-7), others as before; far direction benchmark 7.7e-6 rad (was 3.8e-4), Film 4.4e-6 (2.3e-4), in the plane 1.05e-5 (6.1e-3), spin 0.99 at 6 M 9.0e-4 (6.4e-3); r and g as before (spin 0.99: 1 pixel over 1e-3, as 0.56.0). Start-up check: dir 2.2e-6 / 1.7e-6.
-## Part 2: always every pixel
-- renderer2d skyPicture: a lower resolution only while moving, only with LensSky::lowRes (Settings, Performance, "Lower resolution while moving": Auto (default) / Off, not saved), and only when the whole picture takes over 16.7 ms; then 0.56.0's rule. Otherwise a slow pass makes the frame wait (the last sharp picture stays on screen). Settings says so in one line only on such a card. The benchmark: "100 % of the picture's width in N of M moved frames" (and the lowest only if below 100 %).
-## Part 3: the test
-- check_blackhole precision: PL_BH_SKYFULL at 2560 x 1369, four tilts, every pixel, no allowance: 0 lost, 0 far ends, 0 dir over 2e-3, 0 disc image differing (a radius within 1e-3 of rIn/rOut excepted), 0 r/g/crossing radius over 1e-3. On 0.56.1's shader: 60-79 lost: fails (run once).
+# 0.56.3: research: moving gas in the Black Hole Lab (no change to what the app does)
+Based on "native 0.56.2". The full UI suite was not run (small version). The app's behaviour is unchanged; the plan is native/PLAN_MOVINGGAS.md.
+## Slip from 0.56.2
+- native/CMakeLists.txt said `VERSION 0.56.1`, so the 0.56.2 build called itself 0.56.1. Now 0.56.3 (0.56.2's changelog entry stays).
+## Papers saved (private sources repo, data/blackhole/, commit c94baa4; one SOURCES.md line each; check_sources ok, 566 lines)
+- arxiv/1810.12641_gravity2018 (GRAVITY, A&A 618, L10; volume and page from Crossref for its DOI, the arXiv page has none), arxiv/2209.09926_wielgus2022
+  (A&A 665, L6), arxiv/astro-ph_0506433_broderick_loeb2005 (MNRAS 363, 353), arxiv/astro-ph_0509237_broderick_loeb2006 (MNRAS 367, 905),
+  arxiv/astro-ph_0606615_schnittman_krolik_hawley2006 (ApJ 651, 1031): each .pdf, .txt.gz (pdftotext -layout), _abs.html; scans/balbus_hawley_1991_ApJ376_214.pdf (ADS).
+- Read again (already saved): GLa (B3), (12), (13c), (13f) and the I1, I2 of every case; GLb (52), (72); J15 App. A.6; Cunningham & Bardeen 1973 pp. 249-256 (text of the scan).
+- Not used: arXiv:2207.06829 (Wielgus et al., the 2017 EHT millimetre light curves; fetched by mistake for the A&A paper) and Noble, Krolik & Hawley 2009 (arXiv:0808.3140): titles only, deleted.
+  Nothing the job named was unreachable.
+## The answers (details and equations in the plan)
+- Q1 speeds and times: at the innermost stable orbit V = 0.500 c (spin 0) and 0.625 c (0.9); one orbit 4.55 ms / 32.6 min / 34.2 days (10 Suns / Sgr A* / M87*, spin 0),
+  1.37 ms / 9.83 min / 10.3 days (0.9). Checked: Kepler in SI (1e-8); GRAVITY's "31 minutes" (30.3 at 4.0e6 Suns, 31.4 at their 4.14e6) and 40 +- 8 min at 7 Rg (39.5);
+  Wielgus's 74 +- 6 min at 10.0-11.2 r_g (67.8-80.3) and t_g = 20.46 s (20.465).
+- Q2 clocks: far away (t), the gas's own dtau/dt = alpha (1 - V^2)^(1/2) (C75 (A7a), = the metric's normalisation to 1e-14, -u_t = BPT's E to 2e-15), the hovering
+  camera's alpha (kerr.h hoverShift). Sgr A*, spin 0, 6 M: one orbit 32.6 min far away, 23.0 min on the clump.
+- Q3 light travel time: added to the app's integrator in the tool (GLa (12) as an affine-step integrand); GLb (72)'s 3 sqrt(3) pi M = 16.3242 M reproduced
+  between successive crossings near the edge, radial light against its closed form to 1e-9. Closed forms exist for every case (GLa (B3) with E(phi|k)).
+  At spin 0.6, 10 degrees above the disc: 0.17 orbit across the direct image at 6 M, the secondary image 0.03-0.34 orbit older; the clump's flash 4.4 x mean
+  with it, 3.1 without. Recommended: exact per pixel.
+- Q4 clump: observed (GRAVITY, Wielgus) and modelled (CB73, BL05, BL06); defensible: orbit, period, size R_S = 1.5 M or ~6 r_g; a choice: brightness, radius,
+  no shear. Light curve by the processor reference; checked: periodic in one orbit, not in half; the secondary peak earlier than the direct one, as CB73 p. 254 say
+  (qualitative only; a figure-point check against a published curve is NOT done: ROADMAP).
+- Q5 structure: MRI (Balbus & Hawley 1991); no thin disc's face has been resolved; model from SKH06 (25 degrees by dr/r = 0.3, life 0.3 orbit), sheared at the
+  true speeds; its strength set so the 6-10 M ring flickers 42 % rms (SKH06 Table 2: 43.8 %).
+- Q6 Film: J15 A.6 describes an artist's disc (image, voxels, procedural "fractal noise" textures, not accreting, 4500 K) and says nothing about motion.
+  Recommended: Film gets the moving gas, labelled as the lab's; alternative: Film stays still.
+## Pictures (native/docs/blackhole, each with a .txt; 1000 px wide)
+- moving_clump_strip.png (6 frames, the secondary image visible in the 3rd), moving_clump_lightcurve.png (direct, secondary, both, both without travel time),
+  disc_structure_options.png (smooth today; the model; half an orbit later). False colour, log brightness: not the app's looks (said in each .txt).
+## Tools
+- native/tools/movinggas/movinggas.cpp (--check, --table, --render; the processor reference: KerrBL with t added, BL06's clump, SKH06's patches) and
+  native/tools/movinggas_pictures.py (needs numpy and matplotlib; about 40 s). Its checks are the new quick test movinggas_physics (0.01 s).
 ## Tests
-- check.sh quick 17/17; blackhole_tests 860/860; app_tests 0 failed; check_shaders 30/30; by hand: check_blackhole precision 128/128, truelight 28/28 (the glare), check_6b benchwaits 10/10 (new: after real_move the switch is not capped; on 0.56.1's renderer it capped), check_blackhole smooth 93 of 95: the lowres checks pass (PL_BH_SKYSLOW 5.5: scale 1 in every moved frame; 20: 5/8 while moving, the Settings line, Off keeps it sharp); two fails are this box's, not this job's: the card part's 12 of 16 (ROADMAP's known line) and the processor's tilt drag (needs 90 %; here the coarse table takes 15-110 ms under llvmpipe's load): A/B on the same box 8 and 4 of 16 without this job's renderer change, 6 and 3 with it.
+- check.sh quick with PL_SOURCES_DIR: 18/18 (movinggas_physics new, 11 checks); check_sources.py ok. No shader, UI or app code touched.
+## Docs
+- PLAN_MOVINGGAS.md (new), PLAN_BLACKHOLE.md section 9 (row 4d), ROADMAP.md (moving gas first; the open figure check), DECISIONS.md (the owner's choice of
+  17 Nov 2026), RESUME.md, changelog.cpp, data/blackhole/README.txt, data/SOURCES.md.

@@ -126,3 +126,16 @@ vandenberg2013_straylight_review.pdf (+ .txt.gz)
     as hosted by the Netherlands Institute for Neuroscience, saved 16 Nov 2026. p. 15: the same equation as equation 11 of the CIE report (Vos and van den
     Berg, CIE collection 1999, 135); Figure 4's caption: the total PSF normalised to 1. A second copy, checked against the first in testGlare.
     The CIE report itself and Vos 2003 (Clin. Exp. Optom. 86, 363) could not be saved (the publisher refused the session).
+
+Moving gas (0.56.3 research, native/PLAN_MOVINGGAS.md; the originals in the private sources repo, saved 17 Nov 2026; journal references from each arXiv page,
+GRAVITY 2018's from Crossref for its DOI). Read by tools/movinggas/movinggas.cpp's comments and checks; no app code reads them yet.
+arxiv/1810.12641_gravity2018 (.pdf, .txt.gz, _abs.html)  GRAVITY Collaboration, A&A 618, L10 (2018): flares orbiting Sgr A* near the ISCO; "31 minutes" at the
+    ISCO for 4 million Suns; R ~ 7 +- 0.5 Rg, P = 40 +- 8 min; "the differential rotation in an accretion disk would in a single orbital period shear out an initially compact gas cloud".
+arxiv/2209.09926_wielgus2022 (...)  M. Wielgus et al., A&A 665, L6 (2022): ALMA loops, period 74 +- 6 min = 10.0-11.2 r_g (a = 0), t_g = 20.46 s; a Gaussian
+    hot spot "diameter of ~6 rg"; light travel time and secondary images included in their model.
+arxiv/astro-ph_0506433_broderick_loeb2005, arxiv/astro-ph_0509237_broderick_loeb2006 (...)  A. E. Broderick, A. Loeb, MNRAS 363, 353 (2005) and 367, 905 (2006):
+    the hot-spot model, a Gaussian in the spot's rest frame ((5) of 2006), R_S = 1.5 M, on a Keplerian orbit.
+arxiv/astro-ph_0606615_schnittman_krolik_hawley2006 (...)  J. D. Schnittman, J. H. Krolik, J. F. Hawley, ApJ 651, 1031 (2006): patches in a simulated
+    (MHD, Schwarzschild) disc: 25 degrees by dr/r = 0.3, life 0.3 of an orbit ((36)); Table 2, light of the 6-10 M ring 43.8 % rms (thermal, > 10 Hz).
+scans/balbus_hawley_1991_ApJ376_214.pdf  S. A. Balbus, J. F. Hawley, ApJ 376, 214 (1991): the magnetic shear instability (abstract) that makes discs turbulent.
+Cunningham & Bardeen 1973 (scans/, saved 15 Nov) read again: p. 254, the one-orbit image's peak "shifts to earlier times" off the plane.

@@ -1,0 +1,12 @@
+disc_structure_options.png (0.56.3 research; PLAN_MOVINGGAS.md)
+What it shows, same view each (spin 0.6, camera 60 GM/c^2 away, 10 degrees above the disc, disc to 12 GM/c^2):
+1. Today: the smooth thin disc (Page & Thorne 1974).
+2. The proposed model: bright and dark patches in the gas, plus the clump.
+3. The same, half a clump orbit (17 min for Sagittarius A*'s mass) later: each ring has turned at its own true speed, so the patches
+   have sheared into trailing spirals.
+Real: the shearing at the true orbit speeds (Bardeen, Press & Teukolsky 1972), the bending, the shifts, the light travel time.
+Model (labelled): no telescope has seen the face of a thin disc. The patches follow a computer simulation of a magnetised disc
+(Schnittman, Krolik & Hawley 2006): patch size 25 degrees round and 0.3 x the radius across, life 0.3 of an orbit; strength chosen so
+the ring from 6 to 10 GM/c^2 flickers by about 42 % (their 44 %). Where each patch appears is random.
+Colours: false colour, brightness on a log scale, NOT the app's Real or Film colours.
+Made by native/tools/movinggas and native/tools/movinggas_pictures.py (processor, no graphics card).

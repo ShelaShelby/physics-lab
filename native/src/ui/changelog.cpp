@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.56.3", "Research for moving gas in the Black Hole Lab; no change to the app",
+     "A plan for gas that moves at its true speed round the hole, a bright clump circling it, a time control with two clocks, and structure in the disc, with "
+     "every number from saved papers (the GRAVITY flares near Sagittarius A*, ALMA's loops, the classic hot-spot models, a simulated magnetised disc). The time "
+     "light takes along each path was added to the processor's reference and checked against published values. The app itself does not change yet. The "
+     "version number in the program, which still said 0.56.1 in 0.56.2, is right again."},
     {"0.56.2", "The Black Hole Lab stays sharp while you move it; a row of wrong pixels beside the shadow is gone",
      "The spinning hole is now drawn at every pixel while you drag, too. Only on a graphics card that cannot draw 60 sharp pictures a second does it drop to a "
      "lower resolution while the view moves; Settings, Performance then says so and has the switch Lower resolution while moving (Auto or Off). The row of dark "

@@ -1,0 +1,11 @@
+moving_clump_lightcurve.png (0.56.3 research; PLAN_MOVINGGAS.md)
+What it shows: how much of the clump's light reaches the camera, against far-away time, over two orbits: the direct image (orange), the
+secondary image under the hole (blue), both (dark), and grey dashed: both if light took no time to travel (every part of the picture at
+one moment, shifted by the average travel time so the curves line up).
+Same settings as moving_clump_strip.png (spin 0.6, camera 60 GM/c^2 away and 10 degrees above the disc, clump at 6 GM/c^2).
+Read: the bright peak is the clump coming towards the camera (Doppler effect). The secondary image peaks a little EARLIER than the direct
+one, as Cunningham & Bardeen 1973 describe for an observer away from the disc's plane (p. 254; their hole spins at 1, ours 0.6). With the true travel time the peak is
+higher and narrower: different parts of the picture show the gas at different past moments (up to 0.17 of an orbit apart across the
+direct image, and the secondary image shows the clump 0.03 to 0.34 of an orbit further in the past). This is why the plan keeps the
+exact travel time per pixel.
+Real: as in moving_clump_strip.txt. Model: the clump (a choice). Units: 1 = the clump's average light.

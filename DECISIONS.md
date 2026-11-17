@@ -63,6 +63,8 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   look stays a roadmap idea; build order: the lab, the disc, spin, the looks.
 - No lower resolution while moving (17 Nov 2026): the picture stays sharp while the user drags. A lower resolution only on a card whose whole picture takes
   over 16.7 ms (fewer than 60 sharp pictures a second); Settings, Performance then says so, with the switch "Lower resolution while moving" (Auto / Off).
+- Something must happen in the lab (17 Nov 2026): moving gas comes before flying the camera. Wishes: true speeds, a bright clump circling the hole, a time
+  control and two clocks, structure in the disc. Rule: as realistic as possible and researched; where the real look is unknown, a labelled model (native/PLAN_MOVINGGAS.md).
 
 ## Molecule Lab
 - The Molecule Lab is the 15 measured molecules; the builder is removed (4 Nov 2026). Density shows a DFT electron density at the measured shape (18 Oct 2026).

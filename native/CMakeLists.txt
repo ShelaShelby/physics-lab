@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.56.1 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.56.3 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -231,6 +231,11 @@ if(PL_BUILD_TESTS)
   add_executable(blackhole_picture tests/blackhole_picture.cpp)
   target_link_libraries(blackhole_picture PRIVATE blackhole_core maps_core app_core)
   target_compile_options(blackhole_picture PRIVATE ${PL_WARNINGS})
+  # 0.56.3: moving gas worked out on the processor (PLAN_MOVINGGAS.md; a tool run by hand, its self-checks a quick test)
+  add_executable(movinggas tools/movinggas/movinggas.cpp)
+  target_link_libraries(movinggas PRIVATE blackhole_core)
+  target_compile_options(movinggas PRIVATE ${PL_WARNINGS})
+  add_test(NAME movinggas_physics COMMAND movinggas --check)
   add_executable(density_tests tests/test_density.cpp)   # 0.21: the Realistic style (electron counts, dipoles, symmetry, dots, the surface)
   target_link_libraries(density_tests PRIVATE molecule_core)
   target_compile_options(density_tests PRIVATE ${PL_WARNINGS})
@@ -505,7 +510,7 @@ endif()
 # 0.15 stage 4.1: labels and a fast, identical environment for the tests. quick = the unit test programs, glsl and the source scan (about a minute, no app start);
 # pictures = everything that starts the real app under Mesa's software OpenGL. One llvmpipe thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
 # all of them) and a shared Mesa shader cache (a start no longer rebuilds its shaders): the pictures are the same (the picture guards prove it).
-foreach(t orbit_physics atom_physics blackhole_physics calc_logic analysis_logic molecule_logic vibration_logic rotation_logic density_logic app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
+foreach(t orbit_physics atom_physics blackhole_physics movinggas_physics calc_logic analysis_logic molecule_logic vibration_logic rotation_logic density_logic app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
   if(TEST ${t})
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()

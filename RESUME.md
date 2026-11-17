@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.56.2 (17 Nov 2026): the Black Hole Lab's spinning hole is drawn at every pixel while moving too (a lower resolution only on a card slower than 16.7 ms a picture; Settings, Performance: "Lower resolution while moving", Auto / Off); the row of lost rays beside the shadow (lambda = 2 r+ / a, GLa (B39) cancelling in single precision) fixed on the card and in kerr_closed.cpp; the card's pass about 0.82 of 0.56.1's (unused integrals skipped, K(mu) from the AGM); a glare left half made no longer keeps the lab "unfinished" (the benchmark's 15 s lab switch).
-- Last full UI run: 0.56.0 (the commit "native 0.56.0"), 33 of 33, nothing to fix. (0.56.1, 0.56.2: not run, small versions.)
-- Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.56.3 (17 Nov 2026): research only, the app unchanged: native/PLAN_MOVINGGAS.md (moving gas in the Black Hole Lab: true speeds, a clump, a time control and two clocks, sheared patches, the exact light travel time per pixel), its pictures in native/docs/blackhole (moving_clump_*.png, disc_structure_options.png), the processor tool native/tools/movinggas (its self-checks are the quick test movinggas_physics); six papers saved in the sources repo; the program's version number fixed (0.56.2's build still said 0.56.1).
+- Last full UI run: 0.56.0 (the commit "native 0.56.0"), 33 of 33, nothing to fix. (0.56.1, 0.56.2, 0.56.3: not run, small versions.)
+- Next: the moving gas (owner's choice of 17 Nov 2026), PLAN_MOVINGGAS.md section 7, step 1 (the physics); then the rest of PLAN_BLACKHOLE.md step 4 (quality levels) and step 5, moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

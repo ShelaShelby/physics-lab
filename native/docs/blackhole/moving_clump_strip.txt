@@ -1,0 +1,13 @@
+moving_clump_strip.png (0.56.3 research; PLAN_MOVINGGAS.md)
+What it shows: a bright clump of gas going once round a black hole, 6 frames, the far-away time under each (minutes, for Sagittarius A*'s
+mass, 4.297 million Suns: one orbit = 33.9 min). In the 3rd frame the clump is behind the hole: its light comes over the top (direct image)
+and, smaller, under the hole on the inner ring (secondary image).
+Settings: spin 0.6; camera hovering 60 GM/c^2 away, 10 degrees above the disc; disc from the innermost stable orbit (3.83 GM/c^2) to 12;
+clump at 6 GM/c^2. Made on the processor by native/tools/movinggas (the app's own ray integrator, every pixel's ray traced once with its
+travel time) and native/tools/movinggas_pictures.py.
+Real: the bending of light, the orbit speed (Bardeen, Press & Teukolsky 1972), the shifts g (Cunningham 1975), the time light takes on
+each path (Gralla & Lupsasca 2020). The disc's brightness is the thin-disc model of Page & Thorne 1974.
+Model (a choice): the clump: a round spot that keeps its shape (Broderick & Loeb 2006, size 1.5 GM/c^2), 5 times brighter than the gas
+round it at its centre. Real gas would smear it into an arc within about an orbit (GRAVITY 2018).
+Colours: false colour, brightness on a log scale (light reaching the camera, g^4 x flux). NOT the app's Real or Film colours.
+The left side moves towards the camera, so it is brighter.
