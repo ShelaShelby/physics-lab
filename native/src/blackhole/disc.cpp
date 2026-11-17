@@ -172,6 +172,16 @@ std::array<double, 3> blackBodyLinearFast(double T) {
     return r;
 }
 
+double bolometricVsSun(double T) { const double q = T / sunfacts::kSunTeffK; return q * q * q * q; }
+std::array<double, 3> allLightLinear(double T) {
+    std::array<double, 3> c = blackBodyLinearFast(T);
+    const double y = kLumR * c[0] + kLumG * c[1] + kLumB * c[2];
+    if (!(y > 0)) return {0, 0, 0};
+    const double k = bolometricVsSun(T) / y;
+    for (double& v : c) v *= k;
+    return c;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // rays: Binet's equation u'' = 3u^2 - u (L79 (3)) by Dormand-Prince 5(4)
 namespace {

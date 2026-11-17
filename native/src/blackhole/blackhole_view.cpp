@@ -89,7 +89,7 @@ void BlackHoleView::trueNumbers(const HoleView& v) {
 bool BlackHoleView::Key::operator==(const Key& o) const {
     return W == o.W && H == o.H && cx == o.cx && cy == o.cy && dist == o.dist && fov == o.fov && yaw == o.yaw && pitch == o.pitch && bend == o.bend && sky == o.sky &&
            disc == o.disc && outer == o.outer && feed == o.feed && mass == o.mass && exp == o.exp && expAuto == o.expAuto && spin == o.spin && spinVer == o.spinVer && look == o.look &&
-           trueSky == o.trueSky && glare == o.glare;
+           trueSky == o.trueSky && glare == o.glare && allLight == o.allLight;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -456,7 +456,7 @@ BlackHoleView::Key BlackHoleView::keyOf(const Settings& s, double W, double H, d
     const bool spinning = s.spin > 0 && s.bend;
     const bool disc = spinning ? s.disc : s.disc && s.bend;
     return Key{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, spinning ? s.spin : 0.0, 0,
-               static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
+               static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s)};
 }
 
 // 0.55.5: the processor's part of a picture (until 0.55.4 the first half of draw): the tables, the exposure and the stars' images, only when the view changed
@@ -470,7 +470,7 @@ bool BlackHoleView::prepare(const Settings& s, double W, double H, double cx, do
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; lit_ = false; return true; }   // Sky: Black and no disc: nothing is lit, the picture is black
     lit_ = true;
     if (disc) ensureDisc(s.dist, movingEngine_);
-    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, 0.0, 0, static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
+    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, 0.0, 0, static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s)};
     const bool changed = !(k == key_) || (exact_ && !keyExact_);
     if (changed && disc && lookEngine_) {                                   // 0.56.0: the card finds the exposure; the stars use what it last said
         st_.look = DiscLook{};
@@ -553,7 +553,7 @@ bool BlackHoleView::prepareSpin(const Settings& s, double W, double H, double cx
     if (!s.skyOurs && !disc) { dots_.clear(); key_ = Key{}; lit_ = false; return true; }
     lit_ = true;
     if (disc) ensureDiscF(s.spin);
-    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, s.spin, spinVer_, static_cast<int>(s.look), trueSkyOn(s), glareOn(s)};
+    const Key k{W, H, cx, cy, s.dist, s.fovDeg, s.yaw, s.pitch, s.bend, s.skyOurs, disc, s.outer, s.feed, s.massSun, s.expLog, s.expAuto, s.spin, spinVer_, static_cast<int>(s.look), trueSkyOn(s), glareOn(s), allLightOn(s)};
     const bool changed = !(k == key_) || (exact_ && !keyExact_);
     if (changed) {
         made_[0] = s.yaw; made_[1] = s.pitch; made_[2] = s.dist; made_[3] = s.spin;

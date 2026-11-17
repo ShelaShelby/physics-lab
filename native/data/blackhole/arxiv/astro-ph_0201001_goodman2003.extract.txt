@@ -1,0 +1,21 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/astro-ph_0201001_goodman2003.txt.gz
+# Reference: J. Goodman, "Self-gravity and quasi-stellar object discs", Mon. Not. R. Astron. Soc. 339, 937-948 (2003), arXiv:astro-ph/0201001 (the PDF: sha256 4d9428deb9725662f1e1e9a3a3a58c3f19d9ac152a2c747c3576aeeff4b9e669, 259,288 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/astro-ph/0201001
+# Date read: 2026-11-17
+# sha256 of the original: 55375251c02c496f3d4670d6a0d4038f79c2622845a26b1cdfe754cd94c6605c
+# Place in the original: the abstract (where thin discs end), section 1 (where Q falls to unity for 10^8 Suns), section 4 (the range)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: src/blackhole/lab.h kOuterDefault, kOuterMax (2000 GM/c^2 = 1000 Schwarzschild radii, R_S = 2GM/c^2); tests/test_blackhole.cpp testDiscSettings.
+#--- begin the abstract, where thin discs end
+                                                                        thin disks may not exist beyond a thousand Schwarzshild radii or so
+                                                                        (0.01 parsec), in which case QSOs must be fueled by gas with small
+#--- end
+#--- begin section 1, where the disc's own gravity takes over for 10^8 Suns
+                                      shown in §2 for a standard α disk, Q falls to unity at a distance r ∼ 10−2 pc from a central black hole of
+                                      mass 108 M⊙ accreting at the Eddington rate. The mass of the disk within this radius is much less than
+#--- end
+#--- begin section 4, the range
+be selfgravitating at radii r & 102 − 103 RS , or 10−3 − 10−2 pc, where RS = 2GM/c2 is the Schwarzschild
+#--- end

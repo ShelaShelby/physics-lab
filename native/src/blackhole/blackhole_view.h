@@ -247,7 +247,7 @@ private:
     void trueNumbers(const HoleView& v);
     std::vector<Dot> dots_;
     std::vector<StarImage> scratch_;
-    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool operator==(const Key& o) const; } key_;
+    struct Key { double W = -1, H, cx, cy, dist, fov, yaw, pitch; bool bend, sky; bool disc; double outer, feed, mass, exp; bool expAuto; double spin; std::uint64_t spinVer; int look; bool trueSky = false, glare = false; bool allLight = false; bool operator==(const Key& o) const; } key_;
     static Key keyOf(const Settings& s, double W, double H, double cx, double cy);   // 0.55.5: the view asked for (spinVer 0)
     Key wantKey_, shownKey_, postedKey_, skyKey_;
     void emit(render::Renderer2D& R, const Settings& s, double W, double H, double cx, double cy, const Key& restKey);

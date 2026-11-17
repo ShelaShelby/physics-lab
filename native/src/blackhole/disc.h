@@ -92,6 +92,15 @@ double sunTeff();                                   // orbit/sun_facts.h kSunTef
 // (lab.h discLook). Tested against the full sums.
 double visibleVsSunFast(double T);
 std::array<double, 3> blackBodyLinearFast(double T);
+// 0.58.0, "All light" (lab.h Settings::allLight): the total light of all wavelengths. A black body at T (each face of the disc: sigma T^4 = F, PT (11b)) has
+// the intensity sigma T^4 / pi in every direction; seen with the shift g it is a black body at g T (Riazuelo (53)), so the observed total intensity is
+// g^4 sigma T^4 / pi = g^4 F / pi (L79 p. 234: "the observed bolometric flux F0 = Fs/(1+z)^4"; C75 (A9) is the g of a spinning hole, the same law: I_nu / nu^3 is
+// the same along a ray). bolometricVsSun: that intensity against the Sun's surface's own, sigma T_sun^4 / pi: (T / T_sun)^4.
+// allLightLinear: the eye's colour of the black body at T (blackBodyLinearFast) scaled so that its luminance on the screen (the IEC 61966-2-1 row
+// 0.2126 R + 0.7152 G + 0.0722 B of linear sRGB) is bolometricVsSun(T): brightness of all light, colour as the eye sees it. Black below kTmin (no colour).
+constexpr double kLumR = 0.2126, kLumG = 0.7152, kLumB = 0.0722;   // IEC 61966-2-1: Y of linear sRGB
+double bolometricVsSun(double T);
+std::array<double, 3> allLightLinear(double T);
 
 // ---- rays and the disc ----
 // The ray of a hovering camera at rO seen at psi (from the outward radial direction): where it ends, and u = 1/r along it. Reference: Dormand-Prince on Binet's equation.

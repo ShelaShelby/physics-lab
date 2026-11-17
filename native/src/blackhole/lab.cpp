@@ -37,7 +37,7 @@ double logV(double t, double lo, double hi) { return std::exp(std::log(lo) + std
 bool Settings::operator==(const Settings& o) const {
     return preset == o.preset && massSun == o.massSun && dist == o.dist && fovDeg == o.fovDeg && yaw == o.yaw && pitch == o.pitch && bend == o.bend && skyOurs == o.skyOurs &&
            disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expLog == o.expLog && spin == o.spin && look == o.look &&
-           trueSky == o.trueSky && glare == o.glare;
+           trueSky == o.trueSky && glare == o.glare && allLight == o.allLight;
 }
 
 Settings settingsDefaults() {
@@ -63,6 +63,7 @@ bool applyPreset(Settings& s, const std::string& key) {
         s.preset = kFeedingKey;
         s.massSun = kFeedingMass;
         s.disc = true;
+        s.outer = kOuterDefault;                                        // 0.58.0: Goodman 2003's edge (lab.h)
         s.spin = 0;                                                     // (no invented spin: the model's start, as the real holes')
         return true;
     }
@@ -86,8 +87,9 @@ void setOuter(Settings& s, double r) { s.outer = std::clamp(r, kOuterMin, kOuter
 void setExposure(Settings& s, double e) { s.expLog = std::clamp(e, kExpLogMin, kExpLogMax); s.expAuto = false; }
 void setSpin(Settings& s, double a) { s.spin = std::clamp(a, 0.0, kSpinTop); }
 void setLook(Settings& s, Look l) { s.look = l; }
-bool trueSkyOn(const Settings& s) { return s.look == Look::Real && s.disc && s.bend && s.skyOurs && s.trueSky; }
-bool glareOn(const Settings& s) { return s.look == Look::Real && s.disc && s.bend && s.glare; }
+bool allLightOn(const Settings& s) { return s.look == Look::Real && s.disc && s.allLight; }
+bool trueSkyOn(const Settings& s) { return s.look == Look::Real && s.disc && s.bend && s.skyOurs && s.trueSky && !s.allLight; }
+bool glareOn(const Settings& s) { return s.look == Look::Real && s.disc && s.bend && s.glare && !s.allLight; }
 Settings shown(const Settings& s) {
     if (s.look != Look::Film) return s;
     Settings o = s;
@@ -126,6 +128,7 @@ void saveSettings(const Settings& s, std::map<std::string, std::string>& out) {
     out["look"] = lookKey(s.look);
     out["skybeside"] = s.trueSky ? "true" : "shown";                   // 0.55.4 (light.h)
     out["glare"] = s.glare ? "eye" : "off";
+    out["light"] = s.allLight ? "all" : "eye";                         // 0.58.0
 }
 
 Settings loadSettings(const std::map<std::string, std::string>& in) {
@@ -148,6 +151,7 @@ Settings loadSettings(const std::map<std::string, std::string>& in) {
     if (const auto it = in.find("look"); it != in.end()) { Look l; if (lookFromKey(it->second, l)) s.look = l; }   // (a file without the line: Real)
     if (const auto it = in.find("skybeside"); it != in.end() && (it->second == "true" || it->second == "shown")) s.trueSky = it->second == "true";   // 0.55.4: a file without it: Shown
     if (const auto it = in.find("glare"); it != in.end() && (it->second == "eye" || it->second == "off")) s.glare = it->second == "eye";            // (without it: the eye's, the default)
+    if (const auto it = in.find("light"); it != in.end() && (it->second == "all" || it->second == "eye")) s.allLight = it->second == "all";          // 0.58.0 (without it: the eye's)
     return s;
 }
 
@@ -177,6 +181,11 @@ void discLight(const Settings& s, double r, double g, DiscPixel& o) {
     const DiscPhys p = discPhys(s);
     o.T = p.temperature(r);
     o.Tobs = g * o.T;                                                   // Riazuelo (53)
+    if (s.allLight) {                                                   // 0.58.0: all light, the eye's colour (disc.h allLightLinear)
+        o.rgb = allLightLinear(o.Tobs);
+        o.Y = o.rgb[0] > 0 || o.rgb[1] > 0 || o.rgb[2] > 0 ? bolometricVsSun(o.Tobs) : 0;
+        return;
+    }
     o.rgb = blackBodyLinearFast(o.Tobs);
     o.Y = visibleVsSunFast(o.Tobs);
 }

@@ -1050,7 +1050,19 @@ static void testDiscTable() {
 static void testDiscSettings() {
     // presets (owner's decision of 15 Nov 2026): the real holes open with the disc off, the feeding one with it on; a changed mass drops the preset
     Settings s = settingsDefaults();
-    check(!s.disc && s.feed == kFeedDefault && s.outer == kOuterDefault && s.expAuto, "defaults: no disc, 0.1 L_Edd, 30 M, automatic exposure");
+    check(!s.disc && s.feed == kFeedDefault && s.outer == kOuterDefault && s.expAuto, "defaults: no disc, 0.1 L_Edd, the outer edge kOuterDefault, automatic exposure");
+    // 0.58.0: the outer edge (until 0.57: 30 M, L79's "living core"; reference changed on purpose): Goodman 2003's "a thousand Schwarzshild radii" (R_S = 2 GM/c^2)
+    {
+        const std::string g = readExtract("blackhole/arxiv/astro-ph_0201001_goodman2003.extract.txt");
+        check(g.find("thin disks may not exist beyond a thousand Schwarzshild radii or so") != std::string::npos && kOuterDefault == 2 * 1000.0 && kOuterMax >= kOuterDefault,
+              "the outer edge: 1000 Schwarzschild radii = 2000 GM/c^2 (Goodman 2003's abstract)");
+        // its section 1: Q = 1 at about 10^-2 pc for 10^8 Suns: 0.01 pc in GM/c^2 of 10^8 Suns (pc = 648000/pi au, au = 149,597,870,700 m (IAU 2012 B2, 2015 B2), GM_sun from JPL DE440 (orbit/units.h))
+        const double gmc2 = gravRadiusM(1e8), pcM = 3.0856775814913673e16;
+        check(g.find("Q falls to unity at a distance r ") != std::string::npos && g.find(" pc from a central black hole of\n") != std::string::npos && std::fabs(0.01 * pcM / gmc2 / kOuterDefault - 1) < 0.1,
+              "and 0.01 pc for 10^8 Suns is " + f(0.01 * pcM / gmc2) + " GM/c^2, within 10 % of it");
+        Settings fd = settingsDefaults(); fd.outer = 44; applyPreset(fd, kFeedingKey);
+        check(fd.outer == kOuterDefault, "the feeding preset sets the outer edge to it");
+    }
     check(applyPreset(s, kFeedingKey) && s.disc && s.massSun == kFeedingMass && s.preset == kFeedingKey, "the feeding preset: the disc on, 1e8 Suns");
     check(readout(s).hasPreset && !readout(s).realPreset && readout(s).presetName == kFeedingName, "the feeding preset is not a measured hole");
     applyPreset(s, "m87");
@@ -2637,6 +2649,99 @@ static void testTimedOnRequest() {
             }
 }
 
+// 0.58.0, "Light: All light" (lab.h allLight, disc.h allLightLinear). Tests written before the code's use in the picture:
+// (a) the observed total intensity g^4 sigma T^4 / pi = g^4 F / pi (L79 p. 233, "the inverse 4th power of the redshift factor 1+z"; Riazuelo (53)) at chosen points,
+//     spin 0 (F from L79 (15) with PT's factor sqrt(3)/2, written out here) and spin 0.9 (PT (15n)), against the Sun's sigma T_sun^4 / pi; the colour the eye's;
+// (b) the whole disc's light over all directions against the efficiency: NOT tested, see below;
+// (c) L79's Figs 9 and 10 for a far observer (spin 0), the direct image;
+// (d) the eye's picture unchanged: What an eye sees (the default) is 0.57's rule bit for bit.
+static void testAllLight() {
+    const double sig = stefanBoltzmann(), Ts = sunTeff(), Ts4 = Ts * Ts * Ts * Ts;
+    // (a)
+    Settings s = settingsDefaults(); applyPreset(s, kFeedingKey);
+    check(!s.allLight, "What an eye sees is the default");
+    {   std::map<std::string, std::string> m; s.allLight = true; saveSettings(s, m);
+        check(m["light"] == "all" && loadSettings(m).allLight && allLightOn(s) && !glareOn(s) && !trueSkyOn(s), "All light: saved, no eye's glare, no true sky beside it");
+        m["light"] = "x"; check(!loadSettings(m).allLight, "a bad value: the eye's");
+        s.allLight = false; }
+    double worstY = 0, worstC = 0, worstLum = 0; int n = 0;
+    for (double a : {0.0, 0.9}) {
+        Settings q = s; q.spin = a;
+        const DiscPhys P = discPhys(q);
+        const double rIn = discInner(a);
+        for (double r : {rIn * 1.05, 9.55, 30.0, 400.0, 1900.0})
+            for (double g : {0.45, 0.8, 1.0, 1.3, 1.7}) {
+                double Fc;                                                             // W/m^2, the closed forms
+                if (a == 0) {
+                    const double sr = std::sqrt(r), s3 = std::sqrt(3.0), s6 = std::sqrt(6.0);
+                    Fc = 3 / (8 * kPi) / ((r - 3) * std::pow(r, 2.5)) * (sr - s6 + s3 / 2 * std::log((sr + s3) * (s6 - s3) / ((sr - s3) * (s6 + s3))));
+                } else Fc = ptF(r, a) / (4 * kPi * r);
+                Fc *= P.fluxScale();
+                const double want = std::pow(g, 4) * Fc / kPi / (sig * Ts4 / kPi);      // g^4 sigma T^4 / pi over sigma T_sun^4 / pi
+                DiscPixel e, all; Settings qa = q; qa.allLight = true;
+                discLight(q, r, g, e); discLight(qa, r, g, all);
+                worstY = std::max(worstY, std::fabs(all.Y / want - 1));
+                const double lum = kLumR * all.rgb[0] + kLumG * all.rgb[1] + kLumB * all.rgb[2];
+                worstLum = std::max(worstLum, std::fabs(lum / want - 1));
+                const double se = e.rgb[0] + e.rgb[1] + e.rgb[2], sa = all.rgb[0] + all.rgb[1] + all.rgb[2];
+                for (int k = 0; k < 3; k++) worstC = std::max(worstC, std::fabs(all.rgb[k] / sa - e.rgb[k] / se));
+                check(all.Tobs == e.Tobs, "the same observed temperature in both modes");
+                n++;
+            }
+    }
+    check(n == 50 && worstY < 1e-9 && worstLum < 1e-9, "All light = g^4 sigma T^4 / pi against the Sun's sigma T_sun^4 / pi, spins 0 and 0.9, 50 points: " + f(worstY) + ", on the screen " + f(worstLum));
+    check(worstC < 1e-12, "All light keeps the eye's colour: " + f(worstC));
+    check(bolometricVsSun(Ts) == 1 && allLightLinear(100).at(1) == 0, "the Sun's surface is 1; below the colour table's range: no light");
+    // (b) The light of the whole disc summed over every direction far away is NOT compared with the efficiency 1 - E(r_ms) (disc.h discLuminosity, tested in
+    // testDiscFlux): part of the light falls into the hole and part falls back onto the disc, and no saved source gives those shares; far out, where neither
+    // matters, the shift is too small (g - 1 ~ (M/r)^(1/2)) for the sum to tell g^4 from another power. The law itself is tested in (a) and by L79 in (c).
+    // (c) L79 Figs 9, 10: the observed bolometric flux of the direct image in units of F_S max, a far observer 30 and 10 degrees above the plane
+    const std::string ex = readExtract("blackhole/scans/luminet_1979_AA75_228.extract.txt");
+    check(ex.find("the inverse 4th\npower of the redshift factor 1+z") != std::string::npos && ex.find("F0=FS/(1+z)4") != std::string::npos, "L79: F0 = FS / (1 + z)^4 (the extract)");
+    const double Fmax = discFlux(fluxMaxRadius(0), 0);
+    const auto maxF0 = [&](double aboveDeg, double& rAt, double& alphaAt) {
+        const double th0 = (90 - aboveDeg) * kPi / 180, rO = 1e8;
+        const auto at = [&](double b, double al, double& r) {
+            const DiscHit h = discRay(rO, kPi - std::asin(b / rO), std::cos(th0), std::cos(al) * std::sin(th0), -std::sin(al) * std::sin(th0), DiscGeom{6, 1e9});
+            if (h.order != 0) return -1.0;
+            r = h.r;
+            return std::pow(h.g, 4) * discFlux(h.r, 0) / Fmax;
+        };
+        double best = -1, bb = 0, ba = 0, r = 0;
+        for (double b = 6; b <= 20; b += 0.5) for (int i = 0; i < 180; i++) { const double v = at(b, i * kPi / 90, r); if (v > best) { best = v; bb = b; ba = i * kPi / 90; rAt = r; } }
+        double db = 0.5, da = kPi / 90;
+        for (int it = 0; it < 60 && db > 1e-6; it++) {
+            bool better = false;
+            for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+                const double v = at(bb + i * db, ba + j * da, r);
+                if (v > best) { best = v; bb += i * db; ba += j * da; rAt = r; better = true; }
+            }
+            if (!better) { db /= 2; da /= 2; }
+        }
+        alphaAt = ba;
+        return best;
+    };
+    double r30, a30, r10, a10;
+    const double m30 = maxF0(30, r30, a30), m10 = maxF0(10, r10, a10);
+    // Fig. 9 (30 degrees): its largest labelled curve is 1.80, with a small unlabelled closed curve inside it (the next level of its steps of 0.30, 2.10): the largest
+    // value just above 2.10. Fig. 10 (10 degrees): "The maximum value within the area limited by F0=2.10 is 2.62".
+    check(ex.find("1.80, 1.50, 1.20, 0.90, 0.60, 0.30") != std::string::npos && m30 > 2.10 && m30 < 2.40, "L79 Fig. 9, 30 degrees: the largest value just above 2.10 (no 2.40 curve): " + f(m30));
+    check(ex.find("The maximum value within the area limited by F0=2.10 is 2.62") != std::string::npos && m10 > 2.10, "L79 Fig. 10, 10 degrees: a region above 2.10: largest " + f(m10));
+    // L79: "the flux is of course maximum in the regions where the spectral shift is a blueshift, occurring at a mean distance corresponding roughly to maximum
+    // intrinsic luminosity" (r* ~ 9.55): on the approaching side (Lz > 0, here sin alpha < 0), near 9.55
+    check(std::sin(a30) < 0 && std::sin(a10) < 0 && std::fabs(r30 - 9.55) < 1 && std::fabs(r10 - 9.55) < 1, "the largest where the gas approaches, at r " + f(r30) + " and " + f(r10));
+    // NOT reproduced (REPORT 0.58.0): L79's 2.62 at 10 degrees; this app gives the number printed here. Its own Fig. 10 draws no 2.40 curve inside 2.10, which a
+    // largest value of 2.62 (steps of 0.30) would need too; so the paper's figure and its sentence do not agree with each other either.
+    std::printf("info: L79 Fig. 10 prints 2.62 as the largest F0 / F_S max at 10 degrees; here %.4f at r = %.3f (and %.4f at 30 degrees, r = %.3f)\n", m10, r10, m30, r30);
+    // (d) the eye's picture: discLight is 0.57's rule bit for bit
+    for (double r : {6.5, 9.55, 30.0, 1500.0}) for (double g : {0.6, 1.0, 1.4}) {
+        DiscPixel e; discLight(s, r, g, e);
+        const double T = discPhys(s).temperature(r) * g;
+        const auto c = blackBodyLinearFast(T);
+        check(e.Tobs == T && e.rgb == c && e.Y == visibleVsSunFast(T), "What an eye sees: unchanged at r " + f(r) + ", g " + f(g));
+    }
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -2680,6 +2785,7 @@ int main() {
     testGas();
     testClosedTime();
     testTimedOnRequest();
+    testAllLight();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

@@ -33,7 +33,12 @@ constexpr double kMassMin = 1, kMassMax = 1e11;                      // Suns: th
 // luminous AGNs are modelled as thin discs; of AF's two ranges (about 10 Suns, and quasars) the quasar's gives the cooler disc (about 7 x 10^4 K at 0.1 L_Edd),
 // whose visible light is the larger share of its light.
 constexpr double kFeedDefault = 0.1;
-constexpr double kOuterMin = 7, kOuterMax = 1000, kOuterDefault = 30;
+// 0.58.0: the outer edge's default (and the feeding preset's) and top, 2000 GM/c^2 = 1000 Schwarzschild radii: J. Goodman, MNRAS 339, 937 (2003),
+// arXiv:astro-ph/0201001 (data/blackhole/arxiv/astro-ph_0201001_goodman2003.extract.txt): its abstract, "thin disks may not exist beyond a thousand Schwarzshild
+// radii or so (0.01 parsec)", and section 1: the Toomre Q "falls to unity at a distance r ~ 10^-2 pc from a central black hole of mass 10^8 M_sun accreting at the
+// Eddington rate" (beyond it the disc's own gravity breaks it up). Until 0.57 the default was 30 (L79's "living core", above): a cut, not the disc's end.
+// The same Page-Thorne flux all the way out: the disc fades by its own physics (T ~ r^-3/4 far out), no fade is added.
+constexpr double kOuterMin = 7, kOuterMax = 2000, kOuterDefault = 2000;
 constexpr double kExpLogMin = -10, kExpLogMax = 5, kExpLogDefault = 2;   // 0.55.4: down to 10^-10 (was 10^-1), so the true exposure can show the stars
 constexpr double kFeedingMass = 1e8;
 constexpr const char* kFeedingKey = "feeding";
@@ -61,6 +66,9 @@ struct Settings {
     // picture) and the eye's glare (on by default; off: 0.55.3's picture)
     bool trueSky = false;
     bool glare = true;
+    // 0.58.0, Real only: "Light": What an eye sees (false, the default: the visible light by the CIE observer) or All light (true: each point's brightness the
+    // total light of all wavelengths, disc.h allLightLinear; its colour the eye's). All light is not an eye's picture: no glare, the sky beside the disc as Shown.
+    bool allLight = false;
     bool operator==(const Settings& o) const;
 };
 Settings settingsDefaults();               // Sagittarius A*, 20 M, 90 degrees, looking at the galactic centre, bending on, our sky
@@ -78,6 +86,7 @@ Settings shown(const Settings& s);
 // 0.55.4: whether the true exposure and the eye's glare are drawn: Real, the disc on and bending on (the true sky also needs our sky)
 bool trueSkyOn(const Settings& s);
 bool glareOn(const Settings& s);
+bool allLightOn(const Settings& s);        // 0.58.0: Real, the disc on and allLight
 void paperView(Settings& s);
 void setDistance(Settings& s, double dist);
 void setFov(Settings& s, double fovDeg);
@@ -112,6 +121,7 @@ DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, do
 // true colour; Film: one temperature, no shift, white-balanced (filmDiscLinear). Sets T, Tobs, rgb and Y (the hit is left as it is).
 void discLight(const Settings& s, double r, double g, DiscPixel& o);
 // The picture's brightest part of the disc (sampled every `step` pixels): its visible brightness Y and its largest linear sRGB channel, both in units of the Sun's surface
+// (0.58.0: in All light (allLightOn) both are the total light against the Sun's surface's total light, disc.h bolometricVsSun)
 struct DiscLook { double brightY = 0, brightMax = 0, white = 1; bool any = false; };
 DiscLook discLook(const DiscTable& t, const Settings& s, const HoleView& v, double W, double H, int step = 4);   // (the light from disc.h's tables: *Fast)
 

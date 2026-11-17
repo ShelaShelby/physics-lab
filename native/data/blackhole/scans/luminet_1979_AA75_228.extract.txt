@@ -1,0 +1,37 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/scans/luminet_1979_AA75_228_typed.txt
+# Reference: J.-P. Luminet, "Image of a spherical black hole with thin accretion disk", Astron. Astrophys. 75, 228 (1979) ("L79"); the original here is the lines
+#   typed by hand from the page images of the scan data/blackhole/scans/luminet_1979_AA75_228.pdf (it has no text layer)
+# URL: https://articles.adsabs.harvard.edu/pdf/1979A%26A....75..228L
+# Date read: 2026-11-17
+# sha256 of the original: 6a8cb184757496d05157573b1ae7089f168ceb886e64a4a98f87735e3e635a5f
+# Place in the original: p. 233 (the observed bolometric flux, the 4th power), p. 234 (Figs 9 and 10: the observed flux in units of F_S max at 30 and 10 degrees above the plane), p. 235 (Fig. 11)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+# Used by: tests/test_blackhole.cpp testAllLight (0.58.0); src/blackhole/disc.h allLightLinear.
+#--- begin p. 233, the observed bolometric flux
+As explained by Ellis (1971), the observed bolometric flux F0
+will differ from the intrinsic flux of the source FS by the inverse 4th
+power of the redshift factor 1+z. The 4th power may be under-
+stood as arising from (i) the loss of energy suffered by each photon
+due to the redshift (one power), (ii) the lower measured rate of
+arrival of photons due to the time dilatation (one power), and
+(iii) the relativistic correction to solid-angle measurements (two
+powers).
+#--- end
+#--- begin p. 234, Fig. 9 and Fig. 10
+Fig. 9. Curves of constant flux in units of FSmax, as senn by an observer at 30° above the disk's plane. Dashed line: the apparent inner edge of the disk (flux=0)
+Fig. 10. Curves of constant flux in units of FSmax, as seen by an observer at 10° above the disk's plane. The maximum value within the area limited by F0=2.10 is 2.62
+p. 234, the contour labels of Fig. 9 read from the figure (largest first): 1.80, 1.50, 1.20, 0.90, 0.60, 0.30, 0.25, 0.20, 0.15, 0.10, 0.05; inside the 1.80 curve a small closed curve without a label
+p. 234, the contour labels of Fig. 10 read from the figure (largest first): 2.10, 1.80, 1.50, 1.20, 0.90, 0.60, 0.30, 0.25, 0.20, 0.15, 0.10, 0.05; no curve inside the 2.10 curve
+#--- end
+#--- begin p. 234, F0
+photographic plate at polar coordinates (b,α), the observed
+bolometric flux F0=FS/(1+z)4 may be computed relative to a
+total factor FSmax. Figures 9-10 show the curves of constant F0 as
+#--- end
+#--- begin p. 235, Fig. 11
+The results are taken into account in Fig. 11, which represents
+the final result of this paper, namely a simulated "bolometric
+photography" of a static black hole with thin accretion disk.
+#--- end
