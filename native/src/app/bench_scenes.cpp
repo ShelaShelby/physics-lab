@@ -73,6 +73,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "blackhole.extreme", BenchKind::BlackHoleExtreme, -1, "Black Hole Lab, the top spin, the closest distance and the widest view",
             "A feeding hole, Real look: the spin dragged from 0 to 0.99 (the control's top) and back, then at 0.99 the camera at 2.2 GM/c\xC2\xB2 (the closest the control allows) "
             "with a 360\xC2\xB0 view (the widest), turning and tilting.");
+        add(true, "blackhole.all_light", BenchKind::BlackHoleAllLight, -1, "Black Hole Lab, Light: All light on the spinning hole while the view moves",
+            "A feeding hole spinning at 0.9 with its disc out to 2000 GM/c\xC2\xB2, Real look, Light: All light, from 20 GM/c\xC2\xB2 with a 90\xC2\xB0 view (the hardest of "
+            "five views tried, REPORT 0.58.0): the camera turns round the axis and tilts through the disc's plane and back, as a drag does. The sky and disc per pixel on "
+            "the graphics card where its check passed.");
         add(true, "ui.guide_scroll", BenchKind::UiGuideScroll, -1, "Pages, the longest Learn guide scrolled",
             "The longest Learn guide (the Orbit Lab's timeline: 7,157 px of scrolling at 1280 x 800) open in the reading view over its lab, scrolled from top to bottom "
             "at a steady rate in the counted time (and back up in the warm-up).");

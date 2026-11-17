@@ -1059,14 +1059,14 @@ static void testBenchBlackHole() {
 // ---- 0.56.1: the two lists, the stable ids, the summary table's rules, the waits and the rest (made-up results), the run's length, the texts ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark lists (0.56.1, on purpose): 24 Hard scenes first, 40 in All", app::kBenchHardScenes == 24 && app::kBenchAllScenes == 40 && int(v.size()) == 40);
+    checkTrue("benchmark lists (0.58.0, on purpose: blackhole.all_light): 25 Hard scenes first, 41 in All", app::kBenchHardScenes == 25 && app::kBenchAllScenes == 41 && int(v.size()) == 41);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[40] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
+    static const char* const ids[41] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
         "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
-        "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme",
+        "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light",
         "ui.guide_scroll", "ui.data_plot", "ui.settings_open",
         "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first", "atom.chart_chain", "atom.uranium_true",
         "atom.phase_wheel_cpu", "atom.jump_held_cpu", "atom.superposition_cpu", "atom.outline_first_cpu", "atom.slice_drag_cpu", "orbit.heaviest_cpu", "orbit.rocks8_cpu", "atom.uranium_true_cpu"};

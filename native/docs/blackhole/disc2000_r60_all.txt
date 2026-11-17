@@ -1,0 +1,4 @@
+Black Hole Lab, Light: All light, the disc out to 2000 GM/c^2 (0.58.0): disc2000_r60_all.png, 1280 x 800
+====================================================================================================
+Made by PL_PIC_ALL=1 build/blackhole_picture --disc: disc2000_r60_eye.png's view and disc in All light. The total light falls as T^4 (about r^-3 far out), so
+beyond a few tens of GM/c^2 the disc is dark next to its bright, lopsided core: the outer edge at 2000 GM/c^2 hardly shows in all light.

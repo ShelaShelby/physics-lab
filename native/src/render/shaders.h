@@ -546,6 +546,12 @@ float dU(int row, int j) { return texelFetch(uDU, ivec2(j, row), 0).r; }
 float dP(int k) { return texelFetch(uDP, ivec2(k, 0), 0).r; }
 vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
 vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
+uniform float uAll;                                   // 0.58.0: 0 the eye's light; > 0 All light, 1 / T_sun (blackhole/disc.h allLightLinear)
+vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (times s) of a black body at T scaled so its luminance is (T / T_sun)^4 (times s);
+    float y = dot(c, vec3(0.2126, 0.7152, 0.0722)), q = T * uAll;   // called only when uAll > 0 (the eye's picture keeps 0.57's operations)
+    q *= q;
+    return y > 0.0 ? c * (q * q * s / y) : vec3(0.0);
+}
 vec3 discColourRaw(float r, float g) {
     float sr = sqrt(r), s3 = 1.7320508, s6 = 2.4494897;
     float F = 3.0 / (8.0 * PI) / ((r - 3.0) * r * r * sr) * (sr - s6 + 0.8660254 * log((sr + s3) * (s6 - s3) / ((sr - s3) * (s6 + s3))));
@@ -556,6 +562,7 @@ vec3 discColourRaw(float r, float g) {
     q = min(q, float(uDN.z - 1) - 0.001);
     int i = int(q);
     vec3 c = mix(texelFetch(uDC, ivec2(i, 0), 0).rgb, texelFetch(uDC, ivec2(i + 1, 0), 0).rgb, q - float(i)) * gInv;
+    if (uAll > 0.0) c = allLight(c, gInv, T);
     return c;
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
@@ -738,6 +745,12 @@ float shiftKerr(float r, float b) {                       // C75 (A9) on the equ
     float Om = 1.0 / (r * sqrt(r) + a), V = (Om - om) * vp / al;
     return al * sqrt(max(1.0 - V * V, 0.0)) / (1.0 - Om * b);
 }
+uniform float uAll;                                   // 0.58.0: 0 the eye's light; > 0 All light, 1 / T_sun (blackhole/disc.h allLightLinear)
+vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (times s) of a black body at T scaled so its luminance is (T / T_sun)^4 (times s);
+    float y = dot(c, vec3(0.2126, 0.7152, 0.0722)), q = T * uAll;   // called only when uAll > 0 (the eye's picture keeps 0.57's operations)
+    q *= q;
+    return y > 0.0 ? c * (q * q * s / y) : vec3(0.0);
+}
 vec3 discColourRaw(float r, float g) {
     if (uDFix.w > 0.0) return uDFix.rgb;                 // 0.55.3, Film: one colour all over the disc, no shift (blackhole/looks.h)
     float q = (log(r) - uDR.z) / uDR.w;
@@ -752,6 +765,7 @@ vec3 discColourRaw(float r, float g) {
     c = min(c, float(uDN.y - 1) - 0.001);
     int k = int(c);
     vec3 col = mix(texelFetch(uDC, ivec2(k, 0), 0).rgb, texelFetch(uDC, ivec2(k + 1, 0), 0).rgb, c - float(k)) * uDT.y;
+    if (uAll > 0.0) col = allLight(col, uDT.y, T);
     return col;
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
@@ -2006,6 +2020,22 @@ float shiftKerr(float r, float b) {
     float Om = 1.0 / (r * sqrt(r) + a), V = (Om - om) * vp / al;
     return al * sqrt(max(1.0 - V * V, 0.0)) / (1.0 - Om * b);
 }
+uniform float uAll;                                   // 0.58.0: 0 the eye's light; > 0 All light, 1 / T_sun (blackhole/disc.h allLightLinear)
+vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (times s) of a black body at T scaled so its luminance is (T / T_sun)^4 (times s);
+    float y = dot(c, vec3(0.2126, 0.7152, 0.0722)), q = T * uAll;   // called only when uAll > 0 (the eye's picture keeps 0.57's operations)
+    q *= q;
+    return y > 0.0 ? c * (q * q * s / y) : vec3(0.0);
+}
+vec3 lightOfT(float T) {                              // 0.58.0: the light of a black body seen at T (the eye's or All light), before the white
+    float c = (log(T) * 0.43429448 - uDT.z) / uDT.w;
+    if (c < 0.0) return vec3(0.0);
+    c = min(c, float(uDN.y - 1) - 0.001);
+    int k = int(c);
+    vec3 col = mix(texelFetch(uDC, ivec2(k, 0), 0).rgb, texelFetch(uDC, ivec2(k + 1, 0), 0).rgb, c - float(k));
+    if (uAll > 0.0) col = allLight(col, 1.0, T);
+    return col;
+}
+uniform vec4 uLP;                                     // 0.58.0, uMode 11 (the start-up check's light): the pass's corner (x, y), its width, its pixel count
 vec3 discLightRaw(float r, float g) {
     if (uDFix.w > 0.0) return uDFix.rgb;
     float q = (log(r) - uDR.z) / uDR.w;
@@ -2015,15 +2045,17 @@ vec3 discLightRaw(float r, float g) {
     float f4 = mix(texelFetch(uDF, ivec2(i, 0), 0).r, texelFetch(uDF, ivec2(i + 1, 0), 0).r, q - float(i));
     float T = uDT.x * f4 * g;
     if (!(T > 0.0)) return vec3(0.0);
-    float c = (log(T) * 0.43429448 - uDT.z) / uDT.w;
-    if (c < 0.0) return vec3(0.0);
-    c = min(c, float(uDN.y - 1) - 0.001);
-    int k = int(c);
-    return mix(texelFetch(uDC, ivec2(k, 0), 0).rgb, texelFetch(uDC, ivec2(k + 1, 0), 0).rgb, c - float(k));
+    return lightOfT(T);
 }
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0); maskOut = vec4(0.0);
+    if (uMode == 11) {                                // 0.58.0: the light of black bodies at 10^3 to 10^7 K, even in log T over the pass's pixels: (light, T)
+        float kk = (floor(gl_FragCoord.y) - uLP.y) * uLP.z + floor(gl_FragCoord.x) - uLP.x;
+        float T = pow(10.0, 3.0 + 4.0 * (kk + 0.5) / uLP.w);
+        fragColor = vec4(lightOfT(T), T);
+        return;
+    }
     vec2 pos = gl_FragCoord.xy;
     if (uMode == 10) pos = vec2(uSamp.x + floor(gl_FragCoord.x) * uSamp.y, uSamp.z - floor(gl_FragCoord.y) * uSamp.w);
     vec2 o = pos - uCentre;

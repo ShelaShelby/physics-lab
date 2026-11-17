@@ -209,6 +209,8 @@ public:
         std::uint64_t discVersion = 0, colVersion = 0;
         float discAxis[3] = {0, 0, 1};      // the disc's axis on the view frame (right, up, towards the camera)
         double rO = 20, rIn = 6, rOut = 30, tScale = 0, white = 1, colLog0 = 0, colDlog = 1;
+        float lp[4] = {0, 0, 0, 0};          // 0.58.0: the light check's pass (kKerrSkyFS uMode 11: corner x, y, width, pixels; set by skyProbe)
+        double allInvTsun = 0;              // 0.58.0, All light (blackhole/lab.h allLightOn): 1 / T_sun; 0: the eye's light (the shaders' uAll)
         // 0.55.2: the spinning hole (kKerrFS, blackhole/spin_sky.h SpinTable), used when kerr is true (then table, alphaSh and the disc's a = 0 table are not).
         // kA (dir, b) and kB (u0..u3): kS columns x 2 kChi rows; kEdge: kEdgeN edge samples; kTau: kEdgeN + 1 values of tau. kM: the chart's axes (camera at
         // phi = 0) to galactic, through the camera's phi and the view; kO: the screen directions (right, up) of e_theta and e_phi. discF: F^(1/4) against ln r

@@ -302,6 +302,10 @@ def precision_sky(binary, work):
               f"{w}: the disc's first image ({disc} px: {x['discwrong']} another image, r {x['r']}, g {x['g']}, {x['rbad']} over 1e-3)")
     c = [ln for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECK ")]
     check(bool(c) and " ok=1 " in c[0], f"the sky's start-up check passes on this renderer ({c[:1]})")
+    # 0.58.0: the start-up check's light, both Light modes (sky_card.h skyLightCompare: each pixel within its limit derived from the shader's operations)
+    lt = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECKLIGHT ")]
+    check(bool(lt) and int(lt[0]["eyepx"]) == 2 * 48 * 40 and int(lt[0]["allpx"]) == 2 * 48 * 40 and lt[0]["eyebad"] == "0" and lt[0]["allbad"] == "0",
+          f"the start-up check's light: every probe pixel within its limit, the eye's and All light ({lt[:1]})")
     # 0.56.2: the owner's window (2560 x 1369), Film's hole (0.6, 74.1 M) at 30 deg across the height, the paper's view and 88, 90, 92 deg from the spin axis,
     # EVERY pixel against traceClosed in double, no allowance: no ray lost, none ending elsewhere more than 1.5 px from the edge, the far direction within
     # 2e-3 rad, the disc's first image the same (a radius within 1e-3 of rIn or rOut excepted: the radius's own limit), its r and g within 1e-3, and every
@@ -317,7 +321,7 @@ def precision_sky(binary, work):
         check(not bad, f"every pixel of {x['case']} (2560 x 1369) within the limits ({bad or 'none over'}; dir {x['dir']}, r {x['r']}, u {x['u']})")
     # the exposure found on the card against the processor's scan of the same points (at rest, 640 x 400): within 1e-3 (measured 4e-5, 3e-8, 1.2e-4)
     ex = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYEXP ")]
-    check({x["case"] for x in ex} == {"benchmark", "film", "spin0"}, f"the card's exposure compared at spin 0.9, Film and spin 0 ({len(ex)})")
+    check({x["case"] for x in ex} == {"benchmark", "film", "spin0", "all", "allspin0"}, f"the card's exposure compared at spin 0.9, Film, spin 0 and All light at 0.9 and 0 ({len(ex)})")
     for x in ex:
         check(x["whitemode"] == "1" and float(x["rel"]) < 1e-3 and int(x["n"]) > 1000, f"the card's exposure ({x['case']}): {x['card']} against the processor's {x['cpu']} ({x['rel']}, {x['n']} points)")
     # the card's moving picture and its picture at rest at the same resolution: not one pixel differs (the same formulas), Film at the paper's view and
@@ -692,7 +696,7 @@ def part_truelight(binary, work):
     # a 0.55.3 file; Film's glow leaves the sky alone (far sky pixels = Real's with Glare Off); the chip's and the panel's text 4.5:1 in six themes.
     sunv, rmin, rsun, au = light_module()
     base = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_BH_SPINWAIT="1", PL_PANELS="blackhole.card=c")   # (the glare at once, not after the view rests)
-    feed = "preset=feeding;pitch=1.2"
+    feed = "preset=feeding;pitch=1.2;outer=30"                          # (0.58.0: this part's disc, 6 to 30 M, the default until 0.57: sky beside it to compare)
     runs = {}
     calls = [((binary, work, f"bh_tl_{n}", dict(base, PL_BH_SET=f"{feed};{x}", PL_SCRIPT=f"4:click=blackhole.{g}")), dict(frames=12)) for n, x, g in
              (("shown_off", "skybeside=shown;glare=off", "glare.off"), ("true_off", "skybeside=true;glare=off", "skybeside.true"),
@@ -773,7 +777,7 @@ def part_truelight(binary, work):
     s = bh(o3)
     check(s is not None and s["skybeside"] == "shown" and s["glare"] == "eye", f"a 0.55.3 file opens as Sky Shown, the eye's glare ({s and (s['skybeside'], s['glare'])})")
     # Film's glow leaves the sky alone: at the paper's view, far sky pixels (the corners) are Real's with Glare Off, pixel for pixel
-    pv = "preset=feeding;spin=0.6;dist=74.1;pitch=1.5107643;fov=30"
+    pv = "preset=feeding;spin=0.6;dist=74.1;pitch=1.5107643;fov=30;outer=30"   # (0.58.0: Real's disc 6 to 30 M, so the corners are sky in both)
     fa = run_app(binary, work, "bh_tl_filmsky", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET=f"{pv};look=film"), frames=12)
     ra = run_app(binary, work, "bh_tl_realsky", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET=f"{pv};look=real;glare=off"), frames=12)
     F, R0 = Bmp(fa.bmp), Bmp(ra.bmp)
@@ -1095,6 +1099,38 @@ def smooth_guard(binary, work, cb):
     check("PLBHCARD state=-1" in rh.out and "did not finish in time (fence wait, dispatch 1)" in rh.out and len(waiting) >= 20 and fh and fh[-1]["card"] == "0" and fh[-1]["pic"] != "0"
           and "gpupaths=slow | " in txt, f"guard: a fence that never signals: {len(waiting)} frames drawn while the check waited, then the processor's path, kept as slow")
 
+def part_alllight(binary, work):
+    # 0.58.0: Light: What an eye sees (the default, the dot) / All light, Real look with the disc on (1280 x 800, Dark): the control there and not for Film; a click
+    # sets All light (the state line), which leaves out the eye's glare and the true sky; the disc's picture changes (its centre line brighter on the approaching
+    # side against the other far more than in the eye's picture: the 4th power of the shift); the panel's sentence; a restart keeps it.
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_BH_SPINWAIT="1", PL_PANELS="blackhole.card=c")
+    feed = "preset=feeding;pitch=1.2;glare=off"
+    sf = os.path.join(work, "bh_al_settings.txt")
+    if os.path.exists(sf): os.remove(sf)
+    e = run_app(binary, work, "bh_al_eye", dict(base, PL_BH_SET=feed, PL_SCRIPT="4:click=blackhole.light.eye"), frames=12)
+    a = run_app(binary, work, "bh_al_all", dict(base, PL_BH_SET=feed, PL_SCRIPT="4:click=blackhole.light.all", PL_SETTINGS=sf), frames=12)
+    f = run_app(binary, work, "bh_al_film", dict(base, PL_BH_SET=f"{feed};look=film", PL_SCRIPT="4:click=blackhole.light.all"), frames=10)
+    se, sa = bh(e), bh(a)
+    check(not e.scripted_missing() and not a.scripted_missing() and se is not None and sa is not None and se.get("light") == "eye" and sa.get("light") == "all"
+          and sa.get("glareon") == "0" and sa.get("trueon") == "0", f"Light: the control, a click sets All light, no glare, no true sky ({se and se.get('light')}, {sa and {k: sa.get(k) for k in ('light', 'glareon', 'trueon')}})")
+    check(marks(e).get("blackhole.light") == "on" and marks(a).get("blackhole.light") == "off", f"the closest-to-reality dot on What an eye sees ({marks(e)}, {marks(a)})")
+    check(f.scripted_missing() and not any("blackhole.light" in k for k in f.rects), "not for Film")
+    check(texts_has(a, "most of it ultraviolet") and texts_has(a, "4th power"), "All light's sentence")
+    # the light far more gathered in the hot, approaching part (the 4th power of T and of the shift): the picture's mean light over its brightest, sampled over the
+    # middle of the picture (Part 0: from the hottest ring to 30 GM/c^2 the eye's light falls about 3 times, all light about 40 times)
+    E, A = Bmp(e.bmp), Bmp(a.bmp)
+    pts = disc_points(e)
+    occ = [v for k, v in e.rects.items() if re.match(r"occ\d+$", k) or k in ("handle", "chip", "blackholebar") or k.startswith("card.")]
+    onp = [(int(x), int(y)) for x, y in (pts[0] if pts else []) if y > 60 and not any(o[0] - 2 <= x <= o[0] + o[2] + 2 and o[1] - 2 <= y <= o[1] + o[3] + 2 for o in occ)]
+    def spread(B):                                                       # (over the disc's own sampled points, the panels left out)
+        v = [lum(B.px(x, y)) for x, y in onp] or [0.0]
+        return sum(v) / len(v) / max(1e-9, max(v))
+    se_, sa_ = spread(E), spread(A)
+    check(len(onp) >= 50 and sa_ < 0.5 * se_, f"All light: the light gathered in the hot, approaching part (disc points: mean over brightest {sa_:.3g} against the eye's {se_:.3g}; {len(onp)} points)")
+    k = run_app(binary, work, "bh_al_restart", dict(base, PL_SETTINGS=sf), frames=6)
+    sk = bh(k)
+    check(sk is not None and sk.get("light") == "all", f"a restart keeps All light ({sk and sk.get('light')})")
+
 def blackhole_film():
     # the Film look's numbers as the module states them (src/blackhole/looks.h FilmChoices), to compare the labels with
     t = open(os.path.join(SRC, "blackhole", "looks.h"), encoding="utf-8").read()
@@ -1106,7 +1142,7 @@ def blackhole_film():
 
 PARTS = {"sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
-         "truelight": part_truelight, "smooth": part_smooth,
+         "truelight": part_truelight, "alllight": part_alllight, "smooth": part_smooth,
          "smoothdisc": lambda b, w: smooth_disc(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_BH_GPUPATHS="0", PL_BH_GPUSKY="0")),
          "skyguard": lambda b, w: sky_guard(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o",
                                                        PL_BH_SET="preset=feeding;spin=0.6", PL_BH_GPUSKY="1")),

@@ -1,0 +1,11 @@
+Black Hole Lab, the disc out to its new edge (0.58.0): disc2000_r60_eye.png, 1280 x 800
+=====================================================================================
+Made by build/blackhole_picture --disc (tests/blackhole_picture.cpp), as reference_disc_r60.png (the "before": the same view with the disc cut at 30 GM/c^2;
+this build draws that one again pixel for pixel with PL_PIC_OUTER=30). Light: What an eye sees.
+What changed: only the outer edge, 30 -> 2000 GM/c^2 (1000 Schwarzschild radii: Goodman 2003, MNRAS 339, 937, where such discs are believed to end). The same
+Page-Thorne flux all the way out; nothing added. The camera hovers at 60 GM/c^2, 10 degrees above the disc's plane, so it is now ABOVE the disc: the disc
+fills the lower half of the picture under the camera, and its far side reaches over the hole to a dark horizon where the gas, 2000 GM/c^2 away, has cooled
+to about 1,000-2,000 K. The hard rim of 0.57 is gone: the disc fades by its own physics.
+Exposure automatic (the brightest part, 275.7 x the Sun's surface in visible light, at the screen's white; the same as before). Visible light falls only
+slowly outward for a disc this hot (Part 0 of REPORT 0.58.0: the eye's brightness at 30 GM/c^2 is still about a third of the brightest), so the gas round the
+camera is pale blue-white: this is what the model gives, not an exposure choice. 348 star images drawn, 470 hidden behind the disc.

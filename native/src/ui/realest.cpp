@@ -61,6 +61,7 @@ const std::vector<Row>& table() {
         {"blackhole", {"look", "Real", "the disc as the standard thin-disc model gives it, with the colour and brightness shifts of the gas's speed and gravity; Film copies the film's stated choices, made for the story, not for accuracy."}},   // 0.55.3
         {"blackhole", {"sky", "Our sky", "a real black hole has a sky of stars behind it; ours, seen from Earth, is the only whole sky we have a map of."}},
         {"blackhole", {"skybeside", "True brightness", "the stars at their measured brightness on the disc's own scale: beside a bright disc they are far too faint to show, as they would be."}},   // 0.55.4
+        {"blackhole", {"light", "What an eye sees", "the picture an eye would see, its visible light; All light shows the light of all wavelengths, mostly ultraviolet here, which no eye sees."}},   // 0.58.0
         {"blackhole", {"glare", "As an eye sees it", "a light this bright scatters inside the eye and veils its surroundings; drawn for an average eye by the CIE's glare equation."}},   // 0.55.4
     };
     return t;
@@ -108,6 +109,7 @@ void applyBlackHole(AppState& app) {
     app.blackhole.look = blackhole::Look::Real;                          // 0.55.3
     app.blackhole.trueSky = true;                                        // 0.55.4: the stars at their true brightness beside the disc
     app.blackhole.glare = true;                                          //         and the eye's glare (both drawn only with the disc on)
+    app.blackhole.allLight = false;                                      // 0.58.0: what an eye sees
 }
 void applyLab(AppState& app) {
     if (app.lab == 0) applyOrbit(app);

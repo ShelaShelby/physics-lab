@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.57.2 (17 Nov 2026): the spinning hole's tables fast again (0.56.4 made traceClosed take phi and t at every crossing of every ray: now only on request, traceClosed's timed, SpinFill::timed; tables bit for bit 0.56.3's apart from 0.56.4's Psi_0 fix); the card sky check's reference made off the frame (sky_card skyReference); the readout's preset edge loop kept per spin and tilt.
-- Last full UI run: 0.57.0 (the commit "native 0.57.0"), 33 of 34 after fixes: ui_popups fails only check_6b benchwaits' response.atom_density at its 15 s cap on the software renderer (0.56.4 the same; ROADMAP).
-- Next: the owner's 0.57.0 and 0.57.1 benchmark; the Hard-list scenes still below his 255 Hz, slowest first (owner decision 17 Nov 2026, ROADMAP "Whole app"); then the moving gas, PLAN_MOVINGGAS.md section 7, step 2 (the card, the time control and clocks, the labels, the benchmark scene); then the rest of PLAN_BLACKHOLE.md step 4 (quality levels) and step 5, moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.58.0 (17 Nov 2026): the Black Hole Lab's Real look: the disc's outer edge 30 -> 2000 GM/c^2 (Goodman 2003; the same Page-Thorne flux, it fades by itself); "Light: What an eye sees / All light" (g^4 sigma T^4 / pi, the eye's colour; disc.h allLightLinear) on the card in all three disc shaders (kLensFS, kKerrFS, kKerrSkyFS) with a light check in the card sky's start-up check; benchmark scene blackhole.all_light; the spin card's ergosphere sentence (BPT (2.7)).
+- Last full UI run: 0.58.0 (the commit "native 0.58.0"), 31 of 34; after fixing truelight's setup: ui_popups (check_6b benchwaits, load only: alone 10/10) and ui_molecule (check_molecule card, fails with 0.57.2's build too; ROADMAP) left.
+- Next: the owner's 0.58.0 benchmark; the Black Hole Lab's look first (owner decision 17 Nov 2026, evening), then the Hard-list scenes below his 255 Hz, slowest first (ROADMAP "Whole app"); then the moving gas (PLAN_MOVINGGAS.md section 7, step 2), the quality levels and moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

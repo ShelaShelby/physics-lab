@@ -140,8 +140,9 @@ void BlackHoleView::stopSpinWorker() {
 
 void BlackHoleView::ensureDiscF(double spin) {
     if (discFSpin_ == spin && discF_ && !discF_->empty()) return;
-    const int n = 1024;
-    const double r0 = discInner(spin), l0 = std::log(r0), l1 = std::log(kOuterMax), dl = (l1 - l0) / (n - 1);
+    // 0.57's grid kept point for point (1024 values from r_ms to 1000 M; the eye's picture bit for bit), continued with the same step past kOuterMax (0.58.0: 2000)
+    const double r0 = discInner(spin), l0 = std::log(r0), dl = (std::log(1000.0) - l0) / (1024 - 1);
+    const int n = 1024 + static_cast<int>(std::ceil((std::log(kOuterMax) - std::log(1000.0)) / dl)) + 1;
     auto f = std::make_shared<std::vector<float>>(static_cast<std::size_t>(n));
     for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, discFlux(std::exp(l0 + i * dl), spin)), 0.25));
     discF_ = std::move(f);
@@ -279,20 +280,7 @@ void BlackHoleView::discSamples(const Settings& s0, double W, double H, double c
     discGridOn_ = static_cast<int>(all[0].size() / 2);
 }
 
-const std::vector<float>& BlackHoleView::colourTable(int& n, double& log0, double& dlog) {
-    static const int N = 512;
-    static const double l0 = std::log10(kTmin), dl = (std::log10(kTmax) - l0) / (N - 1);
-    static const std::vector<float> c = [] {
-        std::vector<float> v(3 * N);
-        for (int i = 0; i < N; i++) {
-            const auto l = blackBodyLinear(std::pow(10.0, l0 + i * dl));
-            for (int k = 0; k < 3; k++) v[3 * i + k] = static_cast<float>(l[k]);
-        }
-        return v;
-    }();
-    n = N; log0 = l0; dlog = dl;
-    return c;
-}
+const std::vector<float>& BlackHoleView::colourTable(int& n, double& log0, double& dlog) { return cardColourTable(n, log0, dlog); }   // (0.58.0: in sky_card, the light check's too)
 
 void BlackHoleView::ensureTable(double dist) {
     if (table_ && tableDist_ == dist) return;
@@ -363,6 +351,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             const DiscGeom g = discGeom(s);
             L.rIn = g.rIn; L.rOut = g.rOut;
             L.tScale = std::pow(discPhys(s).fluxScale() / stefanBoltzmann(), 0.25);
+            L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
             L.whiteMode = s.expAuto ? 1 : 0;
             L.white = s.expAuto ? (st_.look.white > 0 ? st_.look.white : 1) : std::pow(10.0, s.expLog);
             L.expStep = 4;
@@ -409,6 +398,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             const DiscGeom g = discGeom(s);
             L.rIn = g.rIn; L.rOut = g.rOut;
             L.tScale = std::pow(discPhys(s).fluxScale() / stefanBoltzmann(), 0.25);
+            L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
             L.white = st_.look.white;
             if (!lookRule(s.look).shifts) {                                 // 0.55.3, Film: one colour all over the disc (lab.h discLight), over the screen's white as discColour does
                 DiscPixel q;
@@ -439,6 +429,7 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.rIn = g.rIn; L.rOut = g.rOut;
         const DiscPhys p = discPhys(s);
         L.tScale = std::pow(p.fluxScale() / stefanBoltzmann(), 0.25);       // T = tScale F(r)^(1/4), F for Mdot = M = 1 (disc.h)
+        L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
         L.white = st_.look.white;
         if (lookUse_ && s.expAuto) { L.whiteMode = 1; L.expStep = 4; }      // 0.56.0: the card finds the exposure (spin 0 too)
         if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
@@ -1153,12 +1144,15 @@ bool BlackHoleView::skyReady(render::Renderer2D& R) {
             skyCheck_ = skyCheckOf(p, skyRefs_->data());
             static const bool forced = std::getenv("PL_BH_SKYFAIL") != nullptr;   // (tests: as if the check had failed)
             if (forced) { skyCheck_.ok = false; skyCheck_.why = "the check was made to fail (test switch PL_BH_SKYFAIL)"; }
-            char b[400];
-            std::snprintf(b, sizeof b, "%s: %s; far direction %.1e / %.1e rad, b %.1e / %.1e, disc r %.1e / %.1e, g %.1e / %.1e (benchmark / Film), %.0f ms on the processor",
+            char b[600];
+            std::snprintf(b, sizeof b, "%s: %s; far direction %.1e / %.1e rad, b %.1e / %.1e, disc r %.1e / %.1e, g %.1e / %.1e (benchmark / Film); light %.2f / %.2f of "
+                          "its limit (eye / all light); %.0f ms on the processor",
                           skyReadText_.c_str(), skyCheck_.ok ? "passed" : "FAILED", skyCheck_.m[0].dir, skyCheck_.m[1].dir, skyCheck_.m[0].b, skyCheck_.m[1].b,
-                          skyCheck_.m[0].r, skyCheck_.m[1].r, skyCheck_.m[0].g, skyCheck_.m[1].g, skyCheck_.ms);
+                          skyCheck_.m[0].r, skyCheck_.m[1].r, skyCheck_.m[0].g, skyCheck_.m[1].g, skyCheck_.light[0].worst, skyCheck_.light[1].worst, skyCheck_.ms);
             G.end(name, b);
             for (int k = 0; k < 2; k++) std::printf("PLBHSKYCHECKCASE %s\n", skyCompareText(skyCheckCase(k), skyCheck_.m[k]).c_str());
+            std::printf("PLBHSKYCHECKLIGHT eyepx=%ld eyebad=%ld eyeworst=%.3f allpx=%ld allbad=%ld allworst=%.3f\n", skyCheck_.light[0].px, skyCheck_.light[0].bad,
+                        skyCheck_.light[0].worst, skyCheck_.light[1].px, skyCheck_.light[1].bad, skyCheck_.light[1].worst);
             if (!skyCheck_.ok) { G.finished(false, skyCheck_.why); skyOff(skyCheck_.why); return false; }
             G.begin("the first full picture");
             skyTimed0_ = R.skyStats().timed;
@@ -1182,8 +1176,9 @@ bool BlackHoleView::skyReady(render::Renderer2D& R) {
 
 void BlackHoleView::ensureSkyF(double spin) {
     if (skyFSpin_ == spin && skyF_) return;
-    const int n = 1024;
-    const double r0 = discInner(spin), l0 = std::log(r0), l1 = std::log(kOuterMax), dl = (l1 - l0) / (n - 1);
+    // 0.57's grid kept point for point (1024 values from r_ms to 1000 M; the eye's picture bit for bit), continued with the same step past kOuterMax (0.58.0: 2000)
+    const double r0 = discInner(spin), l0 = std::log(r0), dl = (std::log(1000.0) - l0) / (1024 - 1);
+    const int n = 1024 + static_cast<int>(std::ceil((std::log(kOuterMax) - std::log(1000.0)) / dl)) + 1;
     auto f = std::make_shared<std::vector<float>>(static_cast<std::size_t>(n));
     for (int i = 0; i < n; i++) (*f)[static_cast<std::size_t>(i)] = static_cast<float>(std::pow(std::max(0.0, discFlux(std::exp(l0 + i * dl), spin)), 0.25));
     skyF_ = std::move(f);
@@ -1221,6 +1216,7 @@ std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H, const SpinFill& 
     view.fineFill = fill;
     Settings s = settingsDefaults();
     applyPreset(s, kFeedingKey);
+    s.outer = 30;                                                       // 0.58.0: the saved case's disc (6 to 30 M, the default until 0.57)
     setSpin(s, 0.6);
     setDistance(s, 74.1);
     s.pitch = 1.511;
@@ -1351,14 +1347,15 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         // scan of the same points (prepare: lab.h discLook's rule through the fine table, or the disc table at spin 0), 640 x 400, at rest
         const int W = 640, H = 400;
         const FilmChoices film;
-        struct Ex { const char* name; double spin; bool filmLook; };
-        for (const Ex& e : {Ex{"benchmark", 0.9, false}, Ex{"film", 0, true}, Ex{"spin0", 0, false}}) {
+        struct Ex { const char* name; double spin; bool filmLook; bool all; };   // 0.58.0: all, the Light mode All light
+        for (const Ex& e : {Ex{"benchmark", 0.9, false, false}, Ex{"film", 0, true, false}, Ex{"spin0", 0, false, false}, Ex{"all", 0.9, false, true}, Ex{"allspin0", 0, false, true}}) {
             BlackHoleView view;
             Settings u = settingsDefaults();
             applyPreset(u, kFeedingKey);
             u.dist = 20; u.pitch = 80 * kPi / 180;
             if (e.filmLook) { setLook(u, Look::Film); paperView(u); setFov(u, 30); }
             else setSpin(u, e.spin);
+            u.allLight = e.all;
             const Settings s = shown(u);
             view.exact_ = true;
             if (s.spin > 0) view.ensureSpin(s, true);
@@ -1721,6 +1718,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
             if (onlySpin) break;
             Settings s = settingsDefaults();
             applyPreset(s, kFeedingKey);
+            s.outer = 30;                                                   // 0.58.0: this test's disc, 6 to 30 M (the default until 0.57); the far disc: REPORT 0.58.0
             setDistance(s, dist);
             s.pitch = (90 - incl) * kPi / 180;
             if (dist < 6) setFov(s, 150);
@@ -1814,6 +1812,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
             for (double pitch : {1.5, 0.35}) {
                 Settings s = settingsDefaults();
                 applyPreset(s, kFeedingKey);
+                s.outer = 30;                                                   // 0.58.0: this test's disc, 6 to 30 M (the default until 0.57); the far disc: REPORT 0.58.0
                 setDistance(s, dist);
                 setSpin(s, a);
                 s.pitch = pitch;

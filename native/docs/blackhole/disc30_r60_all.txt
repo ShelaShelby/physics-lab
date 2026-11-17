@@ -1,0 +1,7 @@
+Black Hole Lab, Light: All light, the disc cut at 30 GM/c^2 (0.58.0): disc30_r60_all.png, 1280 x 800
+=================================================================================================
+Made by PL_PIC_OUTER=30 PL_PIC_ALL=1 build/blackhole_picture --disc: reference_disc_r60.png's view and disc (0.57's edge), Light: All light.
+Each point's brightness is its total light of all wavelengths (g^4 sigma T^4 / pi: Luminet 1979 p. 233, Riazuelo 2019 (53); disc.h allLightLinear), its colour
+the eye's colour there. Automatic exposure: the brightest part, 61,200 x the Sun's surface in all light, at the screen's white. The total light falls about
+40 times from the hottest ring to the edge (the eye's light about 3 times) and the side coming towards the camera (right) outshines the other about 16 times
+on the line through the middle (the eye's light: about 2.4 times): the lopsided picture of Luminet 1979.

@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "blackhole/disc.h"
 #include "blackhole/elliptic.h"
 #include "blackhole/kerr.h"
 #include "blackhole/kerr_closed.h"
@@ -39,7 +40,72 @@ render::Renderer2D::LensSky skyProbeLens(const SkyCase& c) {
     L.kO[0] = 0; L.kO[1] = 1; L.kO[2] = -1; L.kO[3] = 0;                 // e_theta up, e_phi left
     L.rIn = c.rIn; L.rOut = c.rOut;
     skyCamera(L, c.a, c.r, c.th);
+    double l0, dl;                                                         // 0.58.0: the light check's colour table (skyLightCompare)
+    L.discCol = &cardColourTable(L.discC, l0, dl);
+    L.colLog0 = l0; L.colDlog = dl; L.colVersion = 1;
+    L.allInvTsun = 1 / sunTeff();
     return L;
+}
+
+const std::vector<float>& cardColourTable(int& n, double& log0, double& dlog) {
+    static const int N = 512;
+    static const double l0 = std::log10(kTmin), dl = (std::log10(kTmax) - l0) / (N - 1);
+    static const std::vector<float> c = [] {
+        std::vector<float> v(3 * N);
+        for (int i = 0; i < N; i++) {
+            const auto l = blackBodyLinear(std::pow(10.0, l0 + i * dl));
+            for (int k = 0; k < 3; k++) v[3 * i + k] = static_cast<float>(l[k]);
+        }
+        return v;
+    }();
+    n = N; log0 = l0; dlog = dl;
+    return c;
+}
+
+void skyLightCompare(const std::vector<float>& P, int w, int h, SkyLight out[2]) {
+    out[0] = out[1] = SkyLight{};
+    if (P.size() < static_cast<std::size_t>(32) * w * h) return;
+    int nC; double l0d, dld;
+    const std::vector<float>& tab = cardColourTable(nC, l0d, dld);
+    const double u = std::ldexp(1.0, -24), l0 = static_cast<float>(l0d), dl = static_cast<float>(dld), lg = static_cast<float>(0.43429448);
+    const double ua = static_cast<float>(1 / sunTeff());
+    for (int m = 0; m < 2; m++)
+        for (int j = 0; j < h; j++)
+            for (int i = 0; i < w; i++) {
+                const float* p = &P[(static_cast<std::size_t>(h + j) * 4 * w + static_cast<std::size_t>(m * w + i)) * 4];
+                const double T = p[3];
+                SkyLight& o = out[m];
+                o.px++;
+                if (!(T > 0)) { o.bad++; o.worst = 1e9; continue; }
+                const double lnT = std::log(T), ulpLn = std::ldexp(1.0, std::ilogb(lnT) - 23);
+                double c = (lnT * lg - l0) / dl;
+                if (c < 0) continue;                                       // (below the table: no light on either side; T here is 10^3 K or more)
+                c = std::min(c, nC - 1 - 0.001);
+                const int k = static_cast<int>(c);
+                const double f = c - k;
+                double ref[3], top = 0, D = 0;
+                for (int q = 0; q < 3; q++) {
+                    const double a = tab[3 * static_cast<std::size_t>(k) + q], b = tab[3 * static_cast<std::size_t>(k + 1) + q];
+                    ref[q] = a + f * (b - a);
+                    top = std::max(top, ref[q]);
+                    D = std::max(D, std::fabs(b - a));
+                }
+                if (!(top > 0)) continue;
+                D /= top;
+                const double dc = (3 * ulpLn * lg + 4 * u * std::fabs(lnT * lg) + 2 * u * std::fabs(c * dl)) / dl;
+                double lim = D * dc + 3 * u;
+                if (m == 1) {
+                    const double y = kLumR * ref[0] + kLumG * ref[1] + kLumB * ref[2], q = T * ua, k4 = q * q * q * q / y;
+                    for (double& v : ref) v *= k4;
+                    top *= k4;
+                    lim = 2 * lim + 15 * u;
+                }
+                lim *= 2;
+                double e = 0;
+                for (int q = 0; q < 3; q++) e = std::max(e, std::fabs(p[q] - ref[q]) / top);
+                o.worst = std::max(o.worst, e / lim);
+                if (e > lim) o.bad++;
+            }
 }
 
 // 0.57.2: the reference (traceClosed at every pixel's centre, the ends, each pixel's distance from the edge) apart from the comparison: it needs no probe, so
@@ -200,6 +266,12 @@ SkyCheck skyCheckOf(const std::vector<float>* probes[2], const SkyRef* refs) {
         else if (m.dirBad > 0) bad = "the far direction off by " + std::to_string(m.dir) + " rad";
         else if (m.b > 1e-4) bad = "b off by " + std::to_string(m.b);
         else if (m.rBad > 0) bad = "the disc's radius or shift off by " + std::to_string(std::max(m.r, m.g));
+        SkyLight L[2];
+        skyLightCompare(*probes[k], cs.w, cs.h, L);                        // 0.58.0: the light, both modes (summed over the two cases)
+        for (int q = 0; q < 2; q++) { c.light[q].px += L[q].px; c.light[q].bad += L[q].bad; c.light[q].worst = std::max(c.light[q].worst, L[q].worst); }
+        if (bad.empty() && (L[0].px != static_cast<long>(cs.w) * cs.h || L[1].px != static_cast<long>(cs.w) * cs.h)) bad = "no light probe";
+        else if (bad.empty() && (L[0].bad > 0 || L[1].bad > 0))
+            bad = "the disc's light off (" + std::to_string(L[0].bad) + " eye, " + std::to_string(L[1].bad) + " all light pixels over their limit)";
         if (!bad.empty() && c.ok) { c.ok = false; c.why = std::string("the start-up check on this graphics card failed (") + cs.name + ": " + bad + ")"; }
     }
     c.ms = msSince(t0) + refMs;
@@ -337,6 +409,8 @@ void skyCompareHook(render::Renderer2D& R) {
         const SkyCheck c = skyCheckOf(p);
         std::printf("PLBHSKYCHECK ok=%d ms=%.1f why=%s\n", c.ok ? 1 : 0, c.ms, c.ok ? "-" : c.why.c_str());
         for (int k = 0; k < 2; k++) std::printf("PLBHSKYCHECKCASE %s\n", skyCompareText(skyCheckCase(k), c.m[k]).c_str());
+        std::printf("PLBHSKYCHECKLIGHT eyepx=%ld eyebad=%ld eyeworst=%.3f allpx=%ld allbad=%ld allworst=%.3f\n", c.light[0].px, c.light[0].bad, c.light[0].worst,
+                    c.light[1].px, c.light[1].bad, c.light[1].worst);
     }
     std::fflush(stdout);
 }

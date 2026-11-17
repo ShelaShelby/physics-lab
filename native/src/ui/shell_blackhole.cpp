@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "blackhole/kerr.h"
 #include "blackhole/lab.h"
 #include "blackhole/light.h"
 #include "blackhole/presets.h"
@@ -121,7 +122,7 @@ ChipInfo blackholeChip(const AppState& app) {
     c.sub = "A calculated model: " + spin + ", no gas  ·  our sky, seen from Earth";   // the lab's one line of what kind of picture this is (the rest: the guide)
     if (v.disc && v.bend)
         c.sub = r.realPreset ? std::string(kWhatIf) : "A calculated model: " + spin + "; the standard thin disc, real for quasars and small black holes feeding from a star; dimmed" +
-                (blackhole::glareOn(v) ? ", an average eye's glare" : "") + (blackhole::trueSkyOn(v) ? "  ·  the stars at their true brightness beside it" : "  ·  our sky, seen from Earth");
+                (blackhole::allLightOn(v) ? ", all light (not an eye's picture)" : "") + (blackhole::glareOn(v) ? ", an average eye's glare" : "") + (blackhole::trueSkyOn(v) ? "  ·  the stars at their true brightness beside it" : "  ·  our sky, seen from Earth");
     if (v.look == blackhole::Look::Film)
         c.sub = "The film's choices (James et al. 2015): " + spin + ", one temperature, no shifts, our own glow  ·  a copy of stated choices, not of the film's pictures";
     c.play = false;
@@ -172,7 +173,7 @@ void blackholeCard(AppState& app, Panel& p) {
         if (std::fabs(sv.pitch - 1.5707963267948966) < 1e-9) pCaption(p, "You are exactly in the disc's plane: a disc with no thickness seen exactly edge on is a line (the model's disc is infinitely thin).");
         if (!app.blackhole.bend) pCaption(p, "Gravity bends light: Off: the disc is not drawn (it needs the hole).");
         else if (L.any) {
-            pStat(p, "Brightest part", timesText(L.brightY) + " × the Sun's surface in visible light");
+            pStat(p, "Brightest part", timesText(L.brightY) + (blackhole::allLightOn(sv) ? " × the Sun's surface in all light (all wavelengths)" : " × the Sun's surface in visible light"));
             pStat(p, "Exposure", std::string("screen white = ") + timesText(L.white) + " × the Sun's surface" + (app.blackhole.expAuto ? " (automatic)" : " (your choice)"));
         } else pCaption(p, "The disc is out of the picture from here.");
         if (L.any && blackhole::trueSkyOn(app.blackhole)) {                 // 0.55.4: the true exposure's numbers (blackhole/light.h, the view's trueNumbers)
@@ -234,10 +235,10 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
     }
     char b[560];
     const blackhole::Settings v = blackhole::shown(s);
-    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d behind=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
+    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d behind=%d light=%s", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
                   s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expLog, 6).c_str(), s.spin,
                   app.blackholeView.stats().spinFine ? 1 : 0, blackhole::lookKey(s.look), v.spin, v.disc ? 1 : 0, s.trueSky ? "true" : "shown", s.glare ? "eye" : "off",
-                  blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0, app.blackholeView.stats().behind ? 1 : 0);
+                  blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0, app.blackholeView.stats().behind ? 1 : 0, s.allLight ? "all" : "eye");
     auditNote(b);
     return r;
 }
@@ -319,7 +320,12 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                                        "of its light paths stop (higher spins need finer tables than it makes). The gas orbits with the spin; a disc orbiting against it, a tilted "
                                        "or a warped disc are not in the lab.", blackhole::kSpinTop);
         pCaption(p, top);
-        if (shownSpin > 0) pCaption(p, "Close to a spinning hole nothing can stand still: space is dragged round the axis and the camera goes with it. The picture is one instant; the sky's turning with time is not shown.");
+        if (shownSpin > 0) {                                                // 0.58.0: true only inside the ergosphere (BPT 1972 (2.7))
+            const double rEq = blackhole::staticLimit(shownSpin, 1.5707963267948966), rPole = blackhole::staticLimit(shownSpin, 0);
+            pCaption(p, "Inside the ergosphere, out to " + sig(rEq, 3) + " GM/c² in the disc's plane and " + sig(rPole, 3) + " GM/c² (the horizon) at the poles, nothing can stand still: "
+                        "space there drags everything round the axis (Bardeen, Press & Teukolsky 1972). Farther out something could hover without turning, but this lab's camera "
+                        "turns with the dragged space wherever it is (a locally non-rotating observer). The picture is one instant; the sky's turning with time is not shown.");
+        }
         if (shownSpin > 0 && s.bend && !app.blackholeView.stats().spinFine) pCaption(p, "Working out the light paths: a coarse picture first, the fine one in a moment.", false);
     }
     if (section("camera", "Camera", true)) {
@@ -403,7 +409,9 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 const double v = blackhole::sliderToOuter(o), q = std::pow(10.0, std::floor(std::log10(v)) - 1);
                 blackhole::setOuter(s, std::round(v / q) * q);
             }
-            pCaption(p, "The model does not set an outer edge; most of the light comes from inside 30 GM/c² (Luminet 1979). The inner edge is the innermost stable orbit, " + sig(r.rIn, 2) + " GM/c²: inside it the gas falls in and gives no light here.");
+            pCaption(p, "The model does not set an outer edge. The default, 2000 GM/c² (a thousand Schwarzschild radii, about 0.01 parsec for 100 million Suns), is where such discs "
+                        "are believed to end: farther out the disc's own gravity breaks it up (Goodman 2003). The same physics all the way out: the disc fades by itself as it cools "
+                        "outward; most of its light comes from inside 30 GM/c² (Luminet 1979). The inner edge is the innermost stable orbit, " + sig(r.rIn, 2) + " GM/c²: inside it the gas falls in and gives no light here.");
         }
         if (s.disc || film) {
             pHeading(p, "Exposure");
@@ -413,11 +421,25 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             float e = static_cast<float>(s.expAuto ? std::log10(std::max(1e-9, app.blackholeView.stats().look.white)) : s.expLog);
             e = std::clamp(e, static_cast<float>(blackhole::kExpLogMin), static_cast<float>(blackhole::kExpLogMax));
             if (pSlider(p, "blackhole.exposure", &e, static_cast<float>(blackhole::kExpLogMin), static_cast<float>(blackhole::kExpLogMax))) blackhole::setExposure(s, std::round(e * 20) / 20);
-            pCaption(p, "The screen's white stands for this many times the Sun's surface in visible light (" + timesText(std::pow(10.0, e)) + " ×). Automatic: the brightest part of the disc "
+            pCaption(p, std::string("The screen's white stands for this many times the Sun's surface in ") + (s.allLight && !film ? "all light" : "visible light") + " (" + timesText(std::pow(10.0, e)) + " ×). Automatic: the brightest part of the disc "
                         "in the picture is drawn at full brightness. A real disc is blinding: brighter than the Sun's surface everywhere, and blue-white. Here it is dimmed so the sky "
                         "stays visible; a real disc this bright would drown out every star.");
         }
-        if (s.disc && !film) {                                              // 0.55.4: real light (blackhole/light.h), only for the Real look with the disc on
+        if (s.disc && !film) {                                              // 0.58.0: Light: what an eye sees or all light (blackhole/disc.h allLightLinear)
+            pHeading(p, "Light");
+            int li = s.allLight ? 1 : 0;
+            real::markLabels("blackhole", "light", {"What an eye sees", "All light"});
+            const std::vector<std::string> ln{"blackhole.light.eye", "blackhole.light.all"};
+            if (pSegmented(p, "blackhole.light", {"What an eye sees", "All light"}, &li, &ln)) s.allLight = li == 1;
+            if (!s.allLight) pCaption(p, "What an eye sees: each point's visible light, weighed as the eye weighs colours (the CIE 1931 observer).");
+            else {
+                pCaption(p, "All light: each point's brightness is the light of all wavelengths together, most of it ultraviolet for this disc, which no eye sees; "
+                            "its colour is still the colour the eye would see there. The gas's speed and gravity change the total light as the 4th power of the shift "
+                            "(Luminet 1979; Cunningham 1975), much more than they change the visible light, so the side coming towards you outshines the other.");
+                pCaption(p, "Not an eye's picture: the eye's glare and the stars' true brightness are left out here.", false);
+            }
+        }
+        if (s.disc && !film && !s.allLight) {                               // 0.55.4: real light (blackhole/light.h), only for the Real look with the disc on
             pHeading(p, "Sky beside the disc");
             int ts = s.trueSky ? 1 : 0;
             real::markLabels("blackhole", "skybeside", {"Shown", "True brightness"});
@@ -474,6 +496,8 @@ void blackholeSearch(AppState& app, const SearchAdd& add) {
     add("Look", "Look: Film (the film's choices, James et al. 2015)", "bhlook:film", [&app] { blackhole::setLook(app.blackhole, blackhole::Look::Film); });
     add("Light", "Sky beside the disc: shown", "bhtrue:off", [&app] { app.blackhole.trueSky = false; });                       // 0.55.4
     add("Light", "Sky beside the disc: true brightness", "bhtrue:on", [&app] { app.blackhole.trueSky = true; });
+    add("Light", "Light: what an eye sees", "bhlight:eye", [&app] { app.blackhole.allLight = false; });                       // 0.58.0
+    add("Light", "Light: all light", "bhlight:all", [&app] { app.blackhole.allLight = true; });
     add("Light", "Glare: off", "bhglare:off", [&app] { app.blackhole.glare = false; });
     add("Light", "Glare: as an eye sees it", "bhglare:eye", [&app] { app.blackhole.glare = true; });
 }

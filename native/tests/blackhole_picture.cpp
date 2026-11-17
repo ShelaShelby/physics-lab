@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -135,9 +136,15 @@ static int discPicture(const std::string& outPath) {
     const int W = 1280, H = 800;
     Settings s = settingsDefaults();
     applyPreset(s, kFeedingKey);
-    setDistance(s, 60);                                                        // (outside the disc's outer edge, 30 M)
+    setDistance(s, 60);                                                        // (0.58.0: inside the disc's outer edge, 2000 M; until 0.57 outside it, 30 M)
     s.pitch = 100 * kPi / 180;                                                 // 10 degrees from the disc's plane, on the side where the picture's up points away from it
                                                                                // (lab.h: its axis is the sky frame's z; the view's up is (sa cb, ca cb, -sb))
+    // 0.58.0: PL_PIC_OUTER (the outer edge, M; 30 gives 0.57's disc), PL_PIC_ALL=1 (Light: All light), PL_PIC_L79=1 (Luminet 1979's geometry: spin 0, a far
+    // camera at 1000 M (the lab's farthest), 10 degrees above the plane, 4 degrees across the picture's height, no sky)
+    bool noSky = false;
+    if (const char* e = std::getenv("PL_PIC_OUTER")) s.outer = std::atof(e);
+    if (const char* e = std::getenv("PL_PIC_ALL")) s.allLight = std::atoi(e) == 1;
+    if (const char* e = std::getenv("PL_PIC_L79"); e && std::atoi(e) == 1) { setDistance(s, 1000); s.fovDeg = 4; noSky = true; }
     const HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
     const LensTable T(s.dist);
     const DiscTable D(s.dist);
@@ -180,14 +187,14 @@ static int discPicture(const std::string& outPath) {
                     continue;
                 }
                 Vec3 d;
-                if (lensPixel(T, v, X, Y, d) == 0) sample(d, lin);
+                if (!noSky && lensPixel(T, v, X, Y, d) == 0) sample(d, lin);
             }
             onDisc[static_cast<std::size_t>(y) * W + x] = hits > 0;
             for (int c = 0; c < 3; c++) img[(static_cast<std::size_t>(y) * W + x) * 3 + c] = lin[c] / 4;
         }
     std::vector<StarImage> im;
     int drawn = 0, hidden = 0;
-    for (const auto& st : S.stars) {
+    if (!noSky) for (const auto& st : S.stars) {
         im.clear();
         starImagesFast(T, viewMiddle(v), st.dir, st.mag, kImageMagLimit, im);
         const auto& col = S.colours[st.bucket];
@@ -215,8 +222,8 @@ static int discPicture(const std::string& outPath) {
     std::fclose(fo);
     const Readout r = readout(s);
     std::printf("wrote %s (%zu bytes): %s, %.4g Suns, L = %.3g L_Edd, disc %g to %g M; camera at %g M, 10 degrees from the disc's plane; hottest ring %.0f K at %.4f M;\n"
-                "brightest part %.4g x the Sun's surface (visible), screen white %.4g x; %d disc rays of %d; %d star images drawn, %d hidden by the disc; shadow %.4f deg\n",
-                outPath.c_str(), png.size(), kFeedingName, s.massSun, s.feed, r.rIn, s.outer, s.dist, r.tHot, r.rHot, L.brightY, L.white, discRays, 4 * W * H, drawn, hidden,
+                "brightest part %.4g x the Sun's surface (%s), screen white %.4g x; %d disc rays of %d; %d star images drawn, %d hidden by the disc; shadow %.4f deg\n",
+                outPath.c_str(), png.size(), kFeedingName, s.massSun, s.feed, r.rIn, s.outer, s.dist, r.tHot, r.rHot, L.brightY, s.allLight ? "all light" : "visible", L.white, discRays, 4 * W * H, drawn, hidden,
                 shadowAngle(s.dist) * 180 / kPi);
     return 0;
 }

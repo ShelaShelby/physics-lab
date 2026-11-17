@@ -19,7 +19,7 @@ enum class BenchKind {
     OrbitSaturn, OrbitEarth, OrbitRealFast, OrbitSky, OrbitJourney,               // 0.56.1
     Atom,                                                                        // atom/atom_bench.h, scene `atomWhich`
     MoleculeDensity, MoleculeVibDensity, MoleculeSpaceVib,                       // 0.56.1
-    BlackHole, BlackHoleFilmTilt, BlackHoleExtreme,                              // 0.56.1: the first is 0.55.0's scene (blackhole.real_move)
+    BlackHole, BlackHoleFilmTilt, BlackHoleExtreme, BlackHoleAllLight,                              // 0.56.1: the first is 0.55.0's scene (blackhole.real_move)
     UiGuideScroll, UiDataPlot, UiSettingsOpen                                    // 0.56.1: the pages and panels the 0.50.3 review suspected
 };
 
@@ -33,8 +33,8 @@ struct BenchSceneText {
     bool hard = false;      // in the default run
 };
 
-constexpr int kBenchHardScenes = 24;      // 0.56.1: the default run
-constexpr int kBenchAllScenes = 40;       // ... and with "All scenes"
+constexpr int kBenchHardScenes = 25;      // 0.56.1: the default run (0.58.0: 25, blackhole.all_light)
+constexpr int kBenchAllScenes = 41;       // ... and with "All scenes"
 
 const std::vector<BenchSceneText>& benchSceneTexts();   // the Hard scenes first, in the order they run, then the others of All
 int benchSceneIndex(const std::string& id);             // -1: no such scene

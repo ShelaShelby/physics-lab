@@ -1,0 +1,11 @@
+Black Hole Lab, All light at Luminet 1979's geometry (0.58.0): l79_view_all.png, 1280 x 800
+=========================================================================================
+Made by PL_PIC_L79=1 PL_PIC_ALL=1 build/blackhole_picture --disc: spin 0, the camera at 1000 GM/c^2 (the lab's farthest; Luminet's observer is at infinity),
+10 degrees above the disc's plane, 4 degrees across the picture's height, no sky; the feeding preset's disc (6 to 2000 GM/c^2), Light: All light, automatic
+exposure. No copy of the paper's figure is in this repository.
+Luminet 1979 (J.-P. Luminet, A&A 75, 228), Fig. 11 p. 235, "Simulated photograph of a spherical black hole with thin accretion disk", a "bolometric photography"
+made from his Figs 9-10 (the observed bolometric flux F0 = FS/(1+z)^4): a dark shadow with the thin ring of the disc's secondary image hugging it, the disc's
+far side bent up over the hole, one side of the disc much brighter than the other next to the shadow, the light fading outward with no visible rim; drawn as
+dots on paper. This picture shows the same features; its bright side is on the right because the lab's gas turns the other way round (on the left in L79).
+Numbers: L79's Fig. 9 (30 degrees) has its largest curve 1.80 with a small unlabelled curve inside it; this lab's largest is 2.11 F_S max there. Fig. 10
+(10 degrees) prints 2.62 as the largest; this lab gives 2.81 (REPORT 0.58.0: not reproduced; the figure itself draws no 2.40 curve).

@@ -44,7 +44,19 @@ std::string skyCompareText(const SkyCase& c, const SkyCompare& m);   // one line
 constexpr int kSkyCheckW = 48, kSkyCheckH = 40;
 constexpr double kSkyDirLimit = 2e-3, kSkyRLimit = 1e-3;
 const SkyCase& skyCheckCase(int k);   // k = 0, 1
-struct SkyCheck { bool ok = false; std::string why; SkyCompare m[2]; double ms = 0; };
+// 0.58.0, the light check (both "Light" modes): the probe's rows h..2h-1 (Renderer2D::skyProbe, kKerrSkyFS uMode 11): the card's light of black bodies at
+// w x h temperatures (10^3 to 10^7 K, even in log T; the card's own T in .a) from the card's colour table (cardColourTable), the eye's (columns 0..w-1) and
+// All light (w..2w-1, uAll = 1 / T_sun as float), against the same lookup in double from the card's own T and the same float table and constants.
+// Each pixel's limit is derived from the shader's operations before any card result (u = 2^-24, GLSL 4.60 / Vulkan: log within 3 ulp of its result outside
+// [0.5, 2], +, -, *, / correctly rounded or within the 2.5 ulp of division, mix in 3 operations): the table's index c = (ln T log10 e - l0) / dl is off by at
+// most dc = (3 ulp(ln T) log10 e + 4 u |log10 T| + 2 u |c dl|) / dl cells (the subtraction's and division's roundings), so each channel by at most
+// D dc + 3 u (D: the largest step of the two table entries used, over the brightest channel); All light: also (T u_all)^4 s in 4 multiplications after
+// one (8 u), the luminance's dot product (5 u), the division and the product (2 u), and the table's error twice (the colour and its luminance):
+// 2 (D dc + 3 u) + 15 u. Doubled for room (the error counted is of the brightest channel; a pixel passes when every channel is within it).
+struct SkyLight { long px = 0, bad = 0; double worst = 0; };   // pixels per mode (eye, all); over the limit; the largest error over its limit
+const std::vector<float>& cardColourTable(int& n, double& log0, double& dlog);   // 512 colours, linear sRGB in the Sun's surface units, even in log10 T from kTmin to kTmax
+void skyLightCompare(const std::vector<float>& probe, int w, int h, SkyLight out[2]);
+struct SkyCheck { bool ok = false; std::string why; SkyCompare m[2]; SkyLight light[2]; double ms = 0; };
 // refs (0.57.2): the two cases' references made ahead (skyReference), or null: made here
 SkyCheck skyCheckOf(const std::vector<float>* probes[2], const SkyRef* refs = nullptr);
 

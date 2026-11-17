@@ -209,6 +209,21 @@ void blackholeExtreme(AppState& app) {
     blackhole::setSpin(app.blackhole, 0);
 }
 
+// 0.58.0: blackhole.all_light: Light: All light on the spinning hole; PL_BENCH_ZOOM="distance,fov" to try other views (REPORT 0.58.0)
+void blackholeAllLight(AppState& app) {
+    commonSetup(app);
+    app.lab = blackhole::kLabIndex;
+    app.blackhole = blackhole::settingsDefaults();
+    blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);
+    app.blackhole.allLight = true;
+    double d = 20, f = 90;                                               // the hardest of five views tried (REPORT 0.58.0)
+    if (envHas("PL_BENCH_ZOOM")) std::sscanf(SDL_getenv("PL_BENCH_ZOOM"), "%lf,%lf", &d, &f);
+    blackhole::setDistance(app.blackhole, d); blackhole::setFov(app.blackhole, f);
+    app.blackhole.pitch = 80 * kPi / 180;
+    blackhole::setSpin(app.blackhole, 0.9);
+    app.blackholeView.makeFineNow(app.blackhole);
+}
+
 // 0.55.5: blackhole.real_move, by the run's clock: in turn turning round the axis, tilting, coming closer, each followed by a rest, at spin 0.9, then the
 // same at spin 0 going back. 0.56.1: the slots are 0.65 of 0.55.8's (the counted time is 0.65 of 8 s).
 constexpr double kBhK = app::kBenchMeasureS / 8.0;
@@ -461,6 +476,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::BlackHole: blackholeScene(app); break;
         case K::BlackHoleFilmTilt: blackholeFilm(app); break;
         case K::BlackHoleExtreme: blackholeExtreme(app); break;
+        case K::BlackHoleAllLight: blackholeAllLight(app); break;
         case K::UiGuideScroll: {
             commonSetup(app);
             // the longest Learn guide (measured in 0.56.1 at 1280 x 800: the Orbit Lab's timeline, 7,157 px of scrolling; the next the Orbit Lab's "What am I looking
@@ -566,6 +582,13 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
             }
             break;
         }
+        case K::BlackHoleAllLight: {                                          // 0.58.0: turning 0.3 rad a second, tilting 12 degrees each way through the disc's plane
+            const double m = u - warm;
+            if (m < 0) break;
+            blackhole::turn(app.blackhole, 0.3 * dt, 0.0);
+            app.blackhole.pitch = kPi / 2 + 12 * kPi / 180 * std::sin(1.3 * m);
+            break;
+        }
         case K::UiGuideScroll: {
             ImGuiWindow* w = ImGui::FindWindowByName("##reading");               // (the page drawn last frame: its scroll range)
             const float mx = w ? w->ScrollMax.y : 0;
@@ -594,7 +617,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
 long pictureCounter(AppState& app, const render::Renderer2D& R, int idx) {
     const app::BenchSceneText& t = sceneText(idx);
     using K = app::BenchKind;
-    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme) {
+    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme || t.kind == K::BlackHoleAllLight) {
         const blackhole::ViewStats& s = app.blackholeView.stats();
         return s.skyCard ? R.skyStats().draws : static_cast<long>(s.picture);   // the card's sky and disc, else the worker's finished pictures
     }
@@ -604,7 +627,7 @@ long pictureCounter(AppState& app, const render::Renderer2D& R, int idx) {
 std::string picturesBy(AppState& app, int idx) {
     const app::BenchSceneText& t = sceneText(idx);
     using K = app::BenchKind;
-    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme) return app.blackholeView.stats().skyCard ? "graphics card" : "processor";
+    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme || t.kind == K::BlackHoleAllLight) return app.blackholeView.stats().skyCard ? "graphics card" : "processor";
     if (t.kind == K::Atom) return app.atom.gpuOutline && app.computeOk ? "graphics card" : "processor";
     return "";
 }
@@ -629,7 +652,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
         case K::MoleculeDensity: case K::MoleculeVibDensity:          // 0.57.1
             return molecule::molCardPaths().pathText(app.moleculeView.gpuCloud, app.computeOk) + "; the surface: the processor (its triangles " +
                    (t.kind == K::MoleculeVibDensity ? "made again for each new phase of the swing, and sorted and coloured each frame)" : "sorted again and coloured each frame as the camera turns)");
-        case K::BlackHole: case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: {
+        case K::BlackHole: case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight: {
             const auto it = b.bhByScene.find(runIdx);
             if (it != b.bhByScene.end() && !it->second.skyPath.empty()) return "the sky and disc: " + it->second.skyPath;
             const blackhole::BlackHoleView& v = app.blackholeView;
@@ -654,7 +677,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
             std::snprintf(z, sizeof z, "Molecule Lab: %s (%zu atoms), zoom x%.2f%s", app.molecule.mol().id.c_str(), app.molecule.mol().atoms.size(), app.molecule.set.cam.zoom,
                           app.molecule.vibOn() ? (", vibration mode " + std::to_string(app.molecule.vibMode + 1)).c_str() : "");
             return z;
-        case K::BlackHoleFilmTilt: case K::BlackHoleExtreme:
+        case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight:
             std::snprintf(z, sizeof z, "Black Hole Lab: distance %.1f GM/c\xC2\xB2, field of view %.0f\xC2\xB0, pitch %.3f rad (at the set-up)", app.blackhole.dist, app.blackhole.fovDeg, app.blackhole.pitch);
             return z;
         case K::UiGuideScroll: return "Learn guide " + b.pickedGuide + " (lab:guide)";

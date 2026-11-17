@@ -517,6 +517,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glUniform1f(krBright_, static_cast<float>(std::clamp(L.bright, 0.0, 1.0)));
         glUniform4f(krDR_, static_cast<float>(L.rIn), static_cast<float>(L.rOut), static_cast<float>(L.discFLog0), static_cast<float>(L.discFDl));
         glUniform4f(krDT_, static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog));
+        glUniform1f(glGetUniformLocation(kerrProgram_, "uAll"), static_cast<float>(L.allInvTsun));   // 0.58.0
         glUniform3i(krDN_, L.discFN, L.discC, 0);
         glUniform4f(krDFix_, L.discFix[0], L.discFix[1], L.discFix[2], L.discFix[3]);
         glUniform1i(glGetUniformLocation(kerrProgram_, "uRaw"), glareOn ? 1 : 0);   // 0.55.4
@@ -562,6 +563,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
             glUniform3f(lnDA_, L.discAxis[0], L.discAxis[1], L.discAxis[2]);
             glUniform4f(lnDR_, static_cast<float>(L.rO), static_cast<float>(L.rO / std::sqrt(1 - 2 / L.rO)), static_cast<float>(L.rIn), static_cast<float>(L.rOut));
             glUniform4f(lnDT_, static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog));
+            glUniform1f(glGetUniformLocation(lensProgram_, "uAll"), static_cast<float>(L.allInvTsun));   // 0.58.0
             glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, discUTex_); glUniform1i(lnDU_, 2);
             glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_2D, discPTex_); glUniform1i(lnDP_, 3);
             glActiveTexture(GL_TEXTURE4); glBindTexture(GL_TEXTURE_2D, discCTex_); glUniform1i(lnDC_, 4);
@@ -727,6 +729,8 @@ void Renderer2D::skyPass(const LensSky& L, int fbW, int fbH, int ox, int oy, dou
     glUniform1i(u("uDisc"), disc ? 1 : 0);
     glUniform4f(u("uDR"), static_cast<float>(L.rIn), static_cast<float>(L.rOut), static_cast<float>(L.discFLog0), static_cast<float>(L.discFDl));
     glUniform4f(u("uDT"), static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog));
+    glUniform1f(u("uAll"), static_cast<float>(L.allInvTsun));   // 0.58.0
+    glUniform4f(u("uLP"), L.lp[0], L.lp[1], L.lp[2], L.lp[3]);
     glUniform3i(u("uDN"), L.discFN, L.discC, 0);
     glUniform4f(u("uDFix"), L.filmRaw[0], L.filmRaw[1], L.filmRaw[2], L.filmRaw[3]);
     const bool cardWhite = L.whiteMode == 1 && disc && !expTex_.empty() && mode == 0;
@@ -923,7 +927,7 @@ void Renderer2D::skyProbe(const LensSky& L, int w, int h, bool queue, std::vecto
     if (probeW_ != w || probeH_ != h) {
         probeW_ = w; probeH_ = h;
         glBindTexture(GL_TEXTURE_2D, probeTex_);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4 * w, h, 0, GL_RGBA, GL_FLOAT, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 4 * w, 2 * h, 0, GL_RGBA, GL_FLOAT, nullptr);   // 0.58.0: rows h..2h-1 the light check
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -939,20 +943,42 @@ void Renderer2D::skyProbe(const LensSky& L, int w, int h, bool queue, std::vecto
         glViewport((m - 1) * w, 0, w, h);
         skyPass(L, w, h, (m - 1) * w, 0, 1, m, false);
     }
+    // 0.58.0: the light check (uMode 11): the colour table's light at w x h temperatures, the eye's (columns 0..w-1) and All light (w..2w-1), above the rays
+    if (L.discCol && L.discC >= 2) {
+        if (L.colVersion != colVer_) {
+            if (!discCTex_) glGenTextures(1, &discCTex_);
+            glBindTexture(GL_TEXTURE_2D, discCTex_);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, L.discC, 1, 0, GL_RGB, GL_FLOAT, L.discCol->data());
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            colVer_ = L.colVersion;
+        }
+        for (int m = 0; m < 2; m++) {
+            LensSky Lm = L;
+            Lm.allInvTsun = m == 0 ? 0 : L.allInvTsun;
+            Lm.lp[0] = static_cast<float>(m * w); Lm.lp[1] = static_cast<float>(h); Lm.lp[2] = static_cast<float>(w); Lm.lp[3] = static_cast<float>(w * h);
+            glViewport(m * w, h, w, h);
+            skyPass(Lm, w, h, m * w, h, 1, 11, false);
+        }
+    }
     width_ = w0; height_ = h0;
-    const std::size_t n = static_cast<std::size_t>(4 * w) * h * 4;
+    const std::size_t n = static_cast<std::size_t>(4 * w) * (2 * h) * 4;
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
     if (queue) {
         if (!probePbo_) glGenBuffers(1, &probePbo_);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, probePbo_);
         glBufferData(GL_PIXEL_PACK_BUFFER, static_cast<GLsizeiptr>(n * sizeof(float)), nullptr, GL_STREAM_READ);
-        glReadPixels(0, 0, 4 * w, h, GL_RGBA, GL_FLOAT, nullptr);
+        glReadPixels(0, 0, 4 * w, 2 * h, GL_RGBA, GL_FLOAT, nullptr);
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         if (probeFence_) glDeleteSync(probeFence_);
         probeFence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
     } else if (out) {
         std::vector<float> raw(n);
-        glReadPixels(0, 0, 4 * w, h, GL_RGBA, GL_FLOAT, raw.data());
+        glReadPixels(0, 0, 4 * w, 2 * h, GL_RGBA, GL_FLOAT, raw.data());
         out->swap(raw);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -997,7 +1023,7 @@ void Renderer2D::skyProbeRead(std::vector<float>& out) {
     if (!probeFence_ || !probePbo_) return;
     glDeleteSync(probeFence_);
     probeFence_ = nullptr;
-    const std::size_t n = static_cast<std::size_t>(4 * probeW_) * probeH_ * 4;
+    const std::size_t n = static_cast<std::size_t>(4 * probeW_) * (2 * probeH_) * 4;
     glBindBuffer(GL_PIXEL_PACK_BUFFER, probePbo_);
     if (const float* v = static_cast<const float*>(glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, static_cast<GLsizeiptr>(n * sizeof(float)), GL_MAP_READ_BIT))) {
         out.assign(v, v + n);

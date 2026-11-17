@@ -19,6 +19,15 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.58.0", "The Black Hole Lab's disc reaches as far as real ones, and a new Light choice",
+     "The disc used to stop at 30 times the hole's own length, with a hard pale rim. That was a cut, not physics: discs round massive black holes are believed "
+     "to reach about a thousand Schwarzschild radii, where their own gravity breaks them up (Goodman 2003). The disc now goes out to 2000 GM/c\xC2\xB2 with the "
+     "same physics all the way, and fades by itself as it cools outward; nothing else in the picture changed. A new Real-look choice, Light: What an eye sees "
+     "(the picture as before) or All light, where each point's brightness is its light of all wavelengths together, most of it ultraviolet for this disc, "
+     "with the colour the eye would see. In All light the hot inner ring and the side coming towards you stand out strongly, as in Luminet's 1979 picture: "
+     "the total light changes with the 4th power of the shift. It is drawn on the graphics card, whose start-up check now also compares the disc's light in "
+     "both modes with the processor's. The spin card no longer says that nothing can stand still anywhere near a spinning hole: that is true inside the "
+     "ergosphere, and the lab's camera turns with the dragged space wherever it is."},
     {"0.57.2", "The spinning hole is quick again",
      "Since 0.56.4 every light ray of the spinning hole also worked out where and when it crossed the disc's plane, for the moving gas still to come. Nothing "
      "used those numbers yet, and they made each ray about three times as slow, so the tables behind the picture took five times as long and dragging the "
