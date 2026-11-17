@@ -14,6 +14,8 @@
 //    Cauchy-Schwarz). This holds for the real orbitals and the complex m states alike.
 // The direction step is textbook rejection sampling and the radius step the inverse-transform method: the point has exactly the target density. The tests compare the samples with exact moments.
 
+#include <vector>
+
 #include "orbit/belts.h"
 
 namespace atom {
@@ -28,6 +30,17 @@ CloudPoint sampleState(int id, int Z, orbit::Mulberry32& r);
 // normalisation of normFactor), which a mixture of two states needs to pick a component (cloud_sample.cpp).
 bool tryStateOnPlane(int id, int Z, int axis, double off, orbit::Mulberry32& r, CloudPoint& out);
 double planeMass(int id, int Z, int axis, double off);
+// 0.57.0: the same attempt with what depends only on the state and the plane worked out once (a batch of attempts on one plane): tryPoint gives the same point from
+// the same random numbers as tryStateOnPlane, bit for bit. One attempt takes exactly three random numbers, except where the radius comes out 0 (two; probability ~2^-32).
+struct PlaneSampler {
+    int id = 0, Z = 1, axis = 1, n = 1, l = 0, ang = 0, m = 0;
+    bool complex = false;
+    double off = 0, x0 = 0, g0 = 0, bound = 1;
+    const void* cdf = nullptr;                             // the radial tail's table (cloud_sample.cpp)
+    bool tryPoint(orbit::Mulberry32& r, CloudPoint& out) const;
+    const std::vector<double>& tailPoly() const;           // h_j of the tail G(x) = e^(-x) sum h_j x^j on the plane (the card's copy, 0.57.0)
+};
+PlaneSampler planeSampler(int id, int Z, int axis, double off);
 
 // 0.39: the direction step alone (a unit vector with density |P(u)|^2 / norm): a many-electron orbital (atom/hf.h) takes its radius from its own Hartree-Fock radial function and its
 // direction from the one-electron orbital of the same l and orientation (the angular part does not depend on the radial one).

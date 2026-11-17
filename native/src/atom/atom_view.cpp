@@ -1,4 +1,7 @@
 #include "atom_view.h"
+
+#include <cstdint>
+
 #include "chart_draw.h"
 #include "cloud_dots.h"
 #include "cloud_light.h"
@@ -302,10 +305,14 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         long cnt = std::min<long>(s.k, cap);
         const bool jump = lab.jumpDrawn();                                 // a photon jump: the old dots and the new ones are drawn together, each shown with its own odds (while its dots are still being built, in the first few frames, the cloud is drawn as it was)
         static std::vector<float> allPts;
+        static std::uint64_t allEpoch = 0;                                 // 0.57.0: the jump's two populations put together once per jump, not every frame (neither changes while the jump is drawn)
         const float* PTS = s.pts.data();
         if (jump) {
             const long jn = lab.jumpDots();
-            allPts.assign(s.pts.begin(), s.pts.begin() + 3 * jn); allPts.insert(allPts.end(), s.jp.begin(), s.jp.begin() + 3 * jn);
+            if (allEpoch != s.jumpEpoch || allPts.size() != std::size_t(6 * jn)) {
+                allPts.assign(s.pts.begin(), s.pts.begin() + 3 * jn); allPts.insert(allPts.end(), s.jp.begin(), s.jp.begin() + 3 * jn);
+                allEpoch = s.jumpEpoch;
+            }
             PTS = allPts.data(); cnt = 2 * jn;
         }
         const bool glow = p.cstyle == "Glow";

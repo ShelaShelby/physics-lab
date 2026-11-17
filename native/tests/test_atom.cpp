@@ -39,6 +39,7 @@
 #include "atom/atom_bench.h"
 #include "atom/cloud_dots.h"
 #include "atom/cloud_light.h"
+#include "atom/cloud_sample.h"
 #include "render/shaders.h"
 #include "atom/chart_draw.cpp"   // 0.11 stage 2: the chart drawing is tested through a recording stand-in for the renderer below (it only calls rect and hexColor)
 
@@ -2126,6 +2127,119 @@ static void testJumpSameDots() {
 }
 
 // The new parts of the jump's speed work, each against the old way of getting the same numbers.
+// 0.57.0, the plain waste taken out of the Slice's dots, the jump with every electron and the Glow core's dots: each new way against the old one, exactly.
+static void testPlainWaste057() {
+    using namespace atom;
+    // 1. the Slice's attempt with the plane's part worked out once (PlaneSampler) = tryStateOnPlane, the same random numbers into the same points, bit for bit:
+    //    real and complex states, both axes, planes through the nucleus, near it and far out, 20,000 attempts each
+    {
+        long tries = 0, same = 0, kept = 0;
+        std::vector<int> ids = {orbIndex("1s"), orbIndex("2p|z"), orbIndex("3d|z2"), orbIndex("4f|z3"), orbIndex("4f|xx23y2"), orbIndex("6s"), complexState(orbIndex("4f|z3"), 2), complexState(orbIndex("3d|z2"), -1)};
+        for (int id : ids)
+            for (int axis : {1, 2})
+                for (double off : {0.0, 0.07, -0.5, 3.0, 40.0}) {
+                    const PlaneSampler ps = planeSampler(id, 92, axis, off);
+                    orbit::Mulberry32 a(0x1234567u + std::uint32_t(id) * 7u + std::uint32_t(axis)), b(a.seed);
+                    for (int k = 0; k < 20000; k++) {
+                        CloudPoint p, q;
+                        const bool ka = tryStateOnPlane(id, 92, axis, off, a, p), kb = ps.tryPoint(b, q);
+                        tries++;
+                        same += ka == kb && a.seed == b.seed && (!ka || (p.x == q.x && p.y == q.y && p.z == q.z));
+                        kept += ka;
+                    }
+                }
+        checkTrue("Slice: the attempt prepared once per plane = tryStateOnPlane bit for bit (" + std::to_string(tries) + " attempts, " + std::to_string(kept) + " kept; 8 states, 2 axes, 5 planes)", same == tries && kept > tries / 20);
+    }
+    // 2. the Slice view's batch (AtomLab::addDots on the plane) = the dots of tryStateOnPlane one by one from the cloud's generator, the colour from psi
+    {
+        AtomLab lab; lab.nowMs = [] { return 0.0; };
+        seedRandom(57);
+        lab.p = oneParams(); lab.restart();
+        lab.setParam("Z", 92.0); lab.setParam("N", 146.0); lab.setParam("view", std::string("Slice")); lab.setParam("orb", std::string("4f"));
+        lab.setParam("cut", 0.3);
+        lab.s.k = 0;
+        orbit::Mulberry32 r(lab.s.crng);
+        const int id = lab.stateId();
+        const double u = lab.aUnit();
+        lab.step(1.0 / 240);
+        const int axis = lab.s.sliceAxis;                        // (the plane the step made its dots on)
+        const double off = lab.s.sliceOff;
+        long same = 0, n = 0;
+        for (long i = 0; i < std::min<long>(lab.s.k, 1500); i++) {
+            CloudPoint q;
+            while (!tryStateOnPlane(id, 92, axis, off, r, q)) {}
+            const double pv = psi(id, 92, q.x, q.y, q.z);
+            same += lab.s.pts[3 * i] == float(q.x * u) && lab.s.pts[3 * i + 1] == float(q.y * u) && lab.s.pts[3 * i + 2] == float(q.z * u) && lab.s.sg[i] == (pv >= 0 ? 1 : -1);
+            n++;
+        }
+        checkTrue("Slice: a step's " + std::to_string(n) + " new dots on the plane = tryStateOnPlane's, one by one, and their signs", n == 1500 && same == n && lab.s.crng == r.seed);
+    }
+    // 3. a jump with every electron (a level atom, Ca): every dot's group in one call = jumpGroup(pop, i) dot by dot, Sign and Wheel, at several moments
+    for (const char* phase : {"Sign", "Wheel"}) {
+        AtomLab lab; lab.nowMs = [] { return 0.0; };
+        seedRandom(58);
+        lab.p = AtomParams::appDefaults(); lab.restart();
+        lab.setParam("Z", 20.0); lab.setParam("N", 20.0);
+        lab.p.elec = "All"; lab.p.mrel = "Relativistic"; lab.p.show = "Whole atom"; lab.p.cdens = "Normal"; lab.p.phase = phase;
+        const std::vector<JLine>& ln = jumpLines(20);
+        int line = -1;
+        for (int k = 0; k < int(ln.size()); k++) if (jumpOffered(20, k)) { line = k; lab.s.lvl = ln[std::size_t(k)].hi; break; }
+        lab.setParam("view", std::string("Cloud 3D"));
+        for (int i = 0; i < 40000 && lab.s.k < lab.cloudCap(); i++) lab.step(1.0 / 240);
+        if (line >= 0) lab.emitLevelLine(line);
+        for (int i = 0; i < 2000 && !lab.s.trans; i++) { if (lab.s.photon) lab.s.photon.reset(); lab.step(1.0 / 240); }
+        bool ok = lab.s.trans && lab.levelOn();
+        long same = 0, shown = 0, jn = 0;
+        if (ok) {
+            lab.completeJump();
+            jn = lab.jumpDots();
+            const double dur = lab.s.trans->dur;
+            for (double t : {0.0, 0.05, 0.3, 0.5, 0.9, 0.99}) {
+                lab.s.trans->t = t * dur;
+                std::vector<unsigned char> g(std::size_t(2 * jn), 7);
+                lab.jumpGroups(g.data());
+                for (long i = 0; i < jn; i++) { same += g[std::size_t(i)] == (unsigned char)lab.jumpGroup(0, i); same += g[std::size_t(jn + i)] == (unsigned char)lab.jumpGroup(1, i); shown += g[std::size_t(i)] != 255; }
+            }
+        }
+        checkTrue(std::string("every electron, a level jump of Ca: jumpGroups = jumpGroup for every dot (") + phase + ", " + std::to_string(jn) + " dots x 2 x 6 moments)", ok && jn > 0 && lab.s.jb.many && same == 12 * jn && shown > 0);
+    }
+    // 4. the Glow core's dots with the quick pass first = the full pass alone (the 0.52.1 loop, kept here as the reference), cameras at several turns and zooms
+    {
+        AtomLab lab; lab.nowMs = [] { return 0.0; };
+        seedRandom(59);
+        lab.p = AtomParams::appDefaults(); lab.restart();
+        lab.setParam("Z", 54.0); lab.setParam("N", 77.0); lab.p.elec = "All"; lab.p.cdens = "High";
+        lab.setParam("view", std::string("Cloud 3D"));
+        for (int i = 0; i < 40000 && lab.s.k < lab.cloudCap(); i++) lab.step(1.0 / 240);
+        const long cnt = std::min<long>(lab.s.k, lab.cloudCap());
+        std::vector<unsigned char> groups(static_cast<std::size_t>(cnt));
+        for (long i = 0; i < cnt; i++) groups[std::size_t(i)] = i % 7 == 3 ? 255 : (unsigned char)(i % 2);
+        long cases = 0, same = 0, found = 0;
+        const double ext = lab.cloudExtM();
+        for (double zoom : {0.5, 2.0, 30.0, 400.0})
+            for (double yaw : {0.0, 0.7, 2.9})
+                for (double pitch : {-1.2, 0.3}) {
+                    const CloudCamera cam{640, 400, zoom * 400 / ext, std::cos(yaw), std::sin(yaw), std::cos(pitch), std::sin(pitch), ext};
+                    std::vector<GlowDot> ref, got;
+                    for (long i = 0; i < cnt; i++) {
+                        if (groups[std::size_t(i)] == 255) continue;
+                        const double x = lab.s.pts[3 * i], y = lab.s.pts[3 * i + 1], z = lab.s.pts[3 * i + 2];
+                        const double x1 = x * cam.ca - y * cam.sa, y1 = x * cam.sa + y * cam.ca, dep = y1 * cam.cb - z * cam.sb, up = y1 * cam.sb + z * cam.cb;
+                        const double f = 1 / (1 + dep / (4 * cam.ext));
+                        const float px = float(cam.cx + x1 * cam.pxm * f), py = float(cam.cy - up * cam.pxm * f);
+                        const float t = std::max(-1.f, std::min(1.f, float(dep / cam.ext))), nr = 0.5f - 0.5f * t;
+                        const float rr = 4.6f * (0.8f + 0.4f * nr);
+                        if ((px - 640.0) * (px - 640.0) + (py - 400.0) * (py - 400.0) < double(rr) * rr) ref.push_back({px, py, rr, 0.3f + 0.9f * nr, groups[std::size_t(i)]});
+                    }
+                    glowDotsNear(lab.s.pts.data(), cnt, groups.data(), cam, 640, 400, got);
+                    bool eq = ref.size() == got.size();
+                    for (std::size_t k = 0; eq && k < ref.size(); k++) eq = ref[k].x == got[k].x && ref[k].y == got[k].y && ref[k].r == got[k].r && ref[k].wt == got[k].wt && ref[k].g == got[k].g;
+                    cases++; same += eq; found += long(ref.size());
+                }
+        checkTrue("Glow core: the dots over the nucleus with the quick pass first = the full pass alone (" + std::to_string(cases) + " cameras, " + std::to_string(found) + " dots found)", same == cases && found > 100);
+    }
+}
+
 static void testJumpBuild() {
     using namespace atom;
     // random numbers: skipping n is the same as drawing n
@@ -4239,6 +4353,7 @@ int main() {
     // before the fix (0.10.6 stage 2 code, one leapfrog step per frame): radius 7.783e-3 (n = 1, speed 30), energy 5.964e-5, rate 5.165e-3, so this fails without the sub-steps.
     testJumpSameDots();
     testJumpBuild();
+    testPlainWaste057();
     testOrbitAccuracy(2.192e-4, 4.754e-8, 1.469e-4);
     testFixedExtent();
     // guards: outline margin 0.10 = about half the smallest MEASURED difference (0.1867, 4f m=+1 against its fallback 4fz3); norm 6.69e-4 = measured 6.62289e-4 (the midpoint quadrature's own error on the orthogonal

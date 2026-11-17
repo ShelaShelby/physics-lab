@@ -159,7 +159,27 @@ void glowCapExposure(const std::vector<GlowDot>& D, long cap, double base, const
 }
 void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out) {
     out.clear();
-    for (long i = 0; i < cnt; i++) {
+    // 0.57.0: a quick pass in single precision first, which can only leave out dots at least a point farther from (X, Y) than the largest disc (5.52 points):
+    // its rounding is about 1e-3 of a point on any picture, so the dots kept below are exactly those of the full pass (tested); a NaN goes on to the full pass
+    const float ca = float(cam.ca), sa = float(cam.sa), cb = float(cam.cb), sb = float(cam.sb), k4 = float(1 / (4 * cam.ext)), pxm = float(cam.pxm);
+    const float dx0 = float(cam.cx - X), dy0 = float(cam.cy - Y), lim = (4.6f * 1.2f + 1.f) * (4.6f * 1.2f + 1.f);
+    static std::vector<int> near;
+    near.clear();
+    constexpr long kBlock = 1024;
+    unsigned char keep[kBlock];
+    for (long b0 = 0; b0 < cnt; b0 += kBlock) {
+        const long nb = std::min(kBlock, cnt - b0);
+        const float* q = pts + 3 * b0;
+        for (long j = 0; j < nb; j++) {
+            const float x = q[3 * j], y = q[3 * j + 1], z = q[3 * j + 2];
+            const float x1 = x * ca - y * sa, y1 = x * sa + y * ca, dep = y1 * cb - z * sb, up = y1 * sb + z * cb;
+            const float f = pxm / (1.f + dep * k4);
+            const float ex = dx0 + x1 * f, ey = dy0 - up * f;
+            keep[j] = !(ex * ex + ey * ey >= lim);
+        }
+        for (long j = 0; j < nb; j++) if (keep[j]) near.push_back(int(b0 + j));
+    }
+    for (const int i : near) {
         if (grp && grp[i] == 255) continue;
         const double x = pts[3 * i], y = pts[3 * i + 1], z = pts[3 * i + 2];
         const double x1 = x * cam.ca - y * cam.sa, y1 = x * cam.sa + y * cam.ca, dep = y1 * cam.cb - z * cam.sb, up = y1 * cam.sb + z * cam.cb;   // as projectCloud

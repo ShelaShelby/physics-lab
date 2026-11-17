@@ -749,7 +749,7 @@ void AtomLab::recordDot(double x, double y, double z) {
     } else if (diracCloudOn()) {                                 // 0.49.3: a Dirac wave has four components: no one sign or phase to colour, so every dot has the first colour
         s.sg[i] = 1; s.ph[i] = 0.f;
     } else {
-        const int id = stateId();
+        const int id = idNow_ >= 0 ? idNow_ : stateId();
         if (isComplexState(id)) {
             const std::complex<double> v = psiComplex(id, p.Z, x, y, z);
             s.sg[i] = v.real() >= 0 ? 1 : -1;                  // (the sign of the real part: only used where a sign is wanted)
@@ -777,12 +777,22 @@ long AtomLab::addDots(long want) {
     gNow_ = manyNow_ && (valenceOn() || levelOn()) ? graspOfAtom(manyNow_) : nullptr;   // 0.47.2 (the aligned state's shape; 0.47.3: and a level atom's)
     valSetNow_ = manyNow_ ? levelValenceSet(*this, *manyNow_) : std::vector<int>();
     if (manyNow_ && sliceDots()) manyPlane_ = hf::planeOf(*manyNow_, sliceOffNow());   // (once per batch: about 3,000 exponentials, for the atom and plane of this moment)
+    const bool one = !manyNow_ && !superOn() && !diracCloudOn();
+    idNow_ = one ? stateId() : -1;                               // 0.57.0: the state looked up once per batch (it searched the orbitals by name for every dot: a third of the Slice's time)
     orbit::Mulberry32 r(s.crng);
     long got = 0;
+    if (one && sliceDots()) {                                    // 0.57.0: the Slice's one-electron dots: the plane's part of an attempt worked out once (the same dots, bit for bit)
+        const PlaneSampler ps = planeSampler(idNow_, p.Z, sliceAxisNow(), sliceOffNow());
+        for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {
+            CloudPoint q;
+            if (ps.tryPoint(r, q)) { recordDot(q.x, q.y, q.z); got++; }
+        }
+    } else
     for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {     // (an attempt on a plane can be rejected; the cap only matters where the plane holds almost nothing)
         double x, y, z;
         if (tryDot(r, x, y, z)) { recordDot(x, y, z); got++; }
     }
+    idNow_ = -1;
     s.crng = r.seed;
     s.sliceFresh += got;
     return got;
@@ -862,8 +872,18 @@ void AtomLab::jumpGroups(unsigned char* grp) const {
     const long jn = s.jn;
     if (!s.trans || jn <= 0) { for (long i = 0; i < 2 * jn; i++) grp[i] = 255; return; }
     if (!jumpReady()) const_cast<AtomLab*>(this)->completeJump();
-    if (s.jb.many) { for (int pop = 0; pop < 2; pop++) for (long i = 0; i < jn; i++) grp[(pop ? jn : 0) + i] = (unsigned char)jumpGroup(pop, i); return; }
     const double sh = jumpShareTo();
+    if (s.jb.many) {                                             // 0.57.0: as jumpGroup(pop, i) dot by dot, bit for bit (tested), with the share and the mode worked out once, not once per dot
+        const bool wheelM = usesWheel();                         // (dot by dot it was 40 ms a frame for 480,000 dots: the share's exponentials and the checks, again for every dot)
+        for (int pop = 0; pop < 2; pop++) {
+            const float* ph = pop ? s.jph.data() : s.ph.data();
+            const signed char* sg = pop ? s.jsg.data() : s.sg.data();
+            unsigned char* g = grp + (pop ? jn : 0);
+            const double f = pop ? sh : 1 - sh;
+            for (long i = 0; i < jn; i++) g[i] = !(jumpUniform(pop, i) < f) ? 255 : (unsigned char)(wheelM ? phaseBin(ph[i]) : (sg[i] > 0 ? 0 : 1));
+        }
+        return;
+    }
     const bool wheel = p.phase == "Wheel";
     for (int pop = 0; pop < 2; pop++) {
         const float* a = (pop ? s.jB : s.jA).data();

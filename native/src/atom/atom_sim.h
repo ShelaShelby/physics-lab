@@ -430,6 +430,7 @@ private:
     int valSubNow_ = -1;                                  // 0.47: the outer electron's subshell in manyNow_ (valence jumps on), else -1
     const GraspLevel* gNow_ = nullptr;                    // 0.47.2: the GRASP level drawn (its aligned-state shape), else nullptr
     std::vector<int> valSetNow_;                          // 0.47.3: a level atom: the subshells of its outer electrons in manyNow_ (drawn denser, as the alkalis' outer electron)
+    int idNow_ = -1;                                      // 0.57.0: stateId() for the batch addDots is making (one electron, no superposition, not Dirac), else -1
     hf::Plane manyPlane_;                                 // 0.39.1, Slice with many electrons: every subshell's mass on the cut plane, worked out once per batch
     bool overlap_ = false;                                // Superposition: the two states overlap (<A|B> != 0: the same n, l and a non-orthogonal angular part). They then share one energy, the state is static, and the walker samples its renormalised density directly (every dot is shown)
     void buildJump(long upTo);                            // build the jump's dots up to upTo (old and new dots with the same index)

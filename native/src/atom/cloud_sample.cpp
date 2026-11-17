@@ -111,6 +111,38 @@ double planeMass(int id, int Z, int axis, double off) {
     return nf * nf * angularBound(id) * 2 * pi * std::pow(half, 2 * o.l) * sc * sc * tailG(cdfOf(stateOrbital(id), true), x0);
 }
 
+// 0.57.0: what one attempt needs that depends only on the state and the plane, worked out once per batch (planeSampler) and not once per attempt (the lookups and
+// the tail above the plane took about 40 % of an attempt). tryPoint makes the same random numbers into the same point, bit for bit, as before (tested).
+PlaneSampler planeSampler(int id, int Z, int axis, double off) {
+    PlaneSampler s;
+    const int orb = stateOrbital(id);
+    const Orbital& o = orbitals()[orb];
+    s.id = id; s.Z = Z; s.axis = axis; s.off = off;
+    s.n = o.n; s.l = o.l; s.ang = o.ang; s.m = stateM(id); s.complex = isComplexState(id);
+    s.x0 = 2.0 * Z * std::fabs(off) / o.n;
+    const RadialCdf& d = cdfOf(orb, true);
+    s.cdf = &d;
+    s.g0 = tailG(d, s.x0);
+    s.bound = angularBound(id);
+    return s;
+}
+
+const std::vector<double>& PlaneSampler::tailPoly() const { return static_cast<const RadialCdf*>(cdf)->h; }
+
+bool PlaneSampler::tryPoint(orbit::Mulberry32& r, CloudPoint& out) const {
+    constexpr double pi = 3.14159265358979323846;
+    if (!(g0 > 0)) return false;                                             // (the plane is beyond the reach of double numbers)
+    const double s = radiusX(*static_cast<const RadialCdf*>(cdf), 1 - r.next(), x0, g0) * n / (2.0 * Z);
+    const double rho = std::sqrt(std::max(0.0, s * s - off * off));
+    const CloudPoint q = onPlane(axis, off, rho, 2 * pi * r.next());
+    if (!(s > 0)) return false;
+    const double ux = q.x / s, uy = q.y / s, uz = q.z / s;
+    const double a2 = complex ? std::norm(angularComplex(l, m, ux, uy, uz)) : [&] { const double a = angular(ang, ux, uy, uz); return a * a; }();
+    if (r.next() * bound > a2) return false;
+    out = q;
+    return true;
+}
+
 bool tryStateOnPlane(int id, int Z, int axis, double off, orbit::Mulberry32& r, CloudPoint& out) {
     constexpr double pi = 3.14159265358979323846;
     const int orb = stateOrbital(id);

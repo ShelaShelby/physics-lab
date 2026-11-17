@@ -1,37 +1,25 @@
-# 0.56.4: moving gas, step 1: the physics (no change on screen)
-Based on "native 0.56.3". PLAN_MOVINGGAS.md section 7 step 1. No shader, UI or app drawing touched; the full UI suite was not run (small version).
-## What changed
-- src/blackhole/gas.h/.cpp (new): the clocks (far, on the gas C75 (A7a), the hovering camera alpha), the clump (BL06 (5), R_S = 1.5 M; choices A = 4, r = 6 M,
-  no shear), the SKH06 pattern (32-bit hash, Gaussians in (ln r, phi), carried at Omega(r), T_life = 0.3 T_orb), the integrator with t (and Mino time).
-  Moved from tools/movinggas, which now calls gas.h (one copy); its clock and period checks moved to blackhole_tests (same limits), --check keeps the integrator's.
-- kerr_closed: per crossing phi_k and t_k (ClosedEnd::phi, ::t) from GLa (11), (12), (B2), (B3): I1, I2 of every case ((B17)-(B18), (B37)-(B38), (B68)-(B69)
-  with R2 (B64), (B98)-(B99) with S2 (B94)), I+- of case (1) ((B19), (B23), re-derived), G_t of both polar types ((48), (68), without dividing by m). Written per
-  amplitude of the substitution (odd antiderivatives), so turning points need no case; only differences camera - crossing. No recursion, bounded loops.
-  closedStateAt (tests): the point at any Mino time. E(phi|m) and D = (F - E)/m by Carlson's R_D.
-- spin_sky: SpinHit stores phi, t, nCross, timed per entry (closed-form rays); nothing reads them yet.
-## Found and fixed
-- kerr_closed Polar: Psi_0 was asin(s0); where the camera sits at the ray's polar turning point (looks exactly along e_phi) that turned rounding into 2e-8 rad
-  of G_phi (and of the crossings' Mino times). Now atan2(s0, c0) with c0 from p_theta. All 0.55.9 closed-form tests still pass.
-- The pattern's norm (0.56.3 tool: 20000 points in one 2000 M window) was about 20 % high (the disc 19 % darker on average): found by the conservation test.
-  Now the light-weighted mean over independent samples (10 lifetimes apart). The tool's pictures of 0.56.3 were made with the old norm (rms unaffected).
-## Tests (blackhole_tests testGas, testClosedTime; all 905 checks pass)
-- Clocks: 1/u^t vs the normalisation with J15 (A.1) 1.5e-14; -u_t vs BPT (2.12) 1.8e-15; camera alpha vs 1/hoverShift 1e-16; Kepler in SI 1e-9.
-  GRAVITY 2018 (30.3 min vs "31"; 39.5 in 40 +- 8) and Wielgus 2022 (t_g 20.465 s; 67.8-80.3 min) now read from new extracts of the saved papers.
-- Travel time: GLb (72) at a = 0: 16.324195 M vs 3 sqrt(3) pi = 16.324194 (limit 1e-4); nearly radial light at a = 0 within 0.47 of the bound b^2/r2 (2e-7 M).
-- Closed t, phi, r, cos theta vs the integrator (rtol 1e-12) at 947 crossings and about 1000 points, spins 0.01, 0.6, 0.9, 0.99, every substitution (1) 21 rays,
-  (2) 178, (3) 261, (4) 7, case II 3, vortical 21. LIMIT (set before looking): per camera, the integrator's own spread between rtol 1e-10 and 1e-12 (crossings;
-  points compared at the same Mino time). Closed errors 10-100x below it, e.g. t 1.5e-6 M vs 1.3e-4, phi 2e-8 rad vs 4e-5 near the edge.
-- Cancellation at r3 = r+: rays with lambda = 2 r+ / a exactly (found to 2e-16) and 1 +- 1e-6, spins 0.01 (camera 1000 M), 0.6, 0.9, 0.99: within the limit;
-  at 1e-13 against the integrator at rtol 1e-14 the crossing's phi agrees to 1e-14 rad and t to 3e-13 M.
-- Clump light curve (closed forms, 120 x 72 px): one orbit later 5e-14 of the peak, half an orbit later 0.98.
-- Pattern: an unfading mark returns after T_orb = 2 pi (r^1.5 + a) exactly; the light-weighted factor averages 1.018 (3 standard errors 0.068);
-  face-on 6-10 M ring 42.4 % rms vs SKH06 Table 2 43.8 % (within the plan's 20 %; new extract of SKH06).
-- Spin table: phi and t at 464 crossings of its entries = the closed forms exactly.
-- check.sh quick with PL_SOURCES_DIR: 17/17 (font_coverage needs the app build); movinggas_physics passes; check_sources ok (38 extracts).
-## Not done
-- Cunningham & Bardeen 1973 figure-point check (ROADMAP line kept): their star orbits an a = 1 hole exactly (Figs 9-12, r_s = 20, 7, 3, 1.5); the closed forms
-  divide by r+ - r- (0 at a = 1) and the lab stops at 0.99, and theirs is a point star, not the clump: their setup cannot be reproduced exactly, so not tried.
-- The plan's "3 phi cells" per eta bin and slot for the card: a patch's birth time spreads over 0.3 orbit (108 degrees of turn), so more cells can reach a
-  point; step 2 counts them. About's sources (BL06, SKH06, GRAVITY, Wielgus) come with step 3, as the plan says.
-## Docs
-- changelog.cpp, RESUME.md, ROADMAP.md, DECISIONS.md (the owner's choice), PLAN_MOVINGGAS.md (step 1 done), data/SOURCES.md (users), CMake VERSION 0.56.4.
+# 0.57.0 (checkpoint): Part 0, the Atom Lab's two slowest scenes measured; the plain waste taken out
+Based on "native 0.56.4". The card's programs come after this checkpoint; the full UI suite was not run yet.
+## Part 0: where the time goes (this box: Xeon 2.3 GHz, llvmpipe; each scene alone, PL_BENCH_ONLY; pieces timed alone with the lab's own functions)
+- atom.slice_drag (U-238 4f, one electron, Slice, 12,000 dots; manyPlane_ is not used: one electron). A frame's work is the new dots on the moved plane:
+  kSliceDotsPerFrame (1,500) per 1/240 s physics step, so a frame of 80 ms runs ~19 steps and remakes all 12,000 dots (8 steps), a self-feeding loop.
+  One step (1,500 dots) 9.90 ms = 6.6 us a dot, the same as the owner's 79.34 ms / 12,000. Inside a dot (gdb samples, 50): the state looked up by name
+  (orbIndex, fullOrb, stateId) and the plane's offset 40 %; the radius by Newton's inversion of the tail (radiusX, exp) 54 %. The contour's values are on
+  the card (processor reference 1.0 ms for 200 x 200), its marching squares 0.10 ms; the 12,000 dots' upload is small.
+  0.55.5 -> 0.56.4 (65.8 -> 79.3 ms): git shows no change to the Slice's dot code since 0.55.5 (cloud_sample.cpp, atom_sim.cpp untouched); both frames
+  remake the whole 12,000 a frame. The benchmark itself was rebuilt in 0.56.1 (ui/benchmark.cpp, 1,122 lines); the gap is not explained by the atom code.
+- atom.jump_all (Ra-226, every electron, 2 x 240,000 dots): the GPU cloud buffer is not used during a jump (atom_view.cpp: gpuCloud needs !jump), so the
+  processor does everything: each dot's group (AtomLab::jumpGroups, many path: jumpGroup dot by dot, the share's exp/expm1 again for every dot) 39.3 ms,
+  projecting 3.7, building glow dots 1.7, blobs + exposure 5.3, the Glow core's pass 3.4, the copy of old + new dots 1.1 ms; then 19.2 MB of blobs sent
+  a frame. The owner's 48.6 ms is mostly the groups (~70 %).
+- atom.all_enlarged's 5 ms: the colour groups of 240,000 dots (plainGroups), the Glow core's pass over every dot (glowDotsNear, 1.4 ms here after the fix
+  below) and the exposure grid read back each frame.
+## Plain waste taken out (no shader; the same results, bit for bit, tested)
+- cloud_sample: PlaneSampler (planeSampler, tryPoint): the plane's tail G(x0), the orbital and the bound once per batch; AtomLab::addDots uses it on the
+  Slice and looks up the state once per batch (idNow_, also for recordDot's colour). One step 9.90 -> 4.66 ms.
+- AtomLab::jumpGroups, the every-electron jump: the share and the mode once, not per dot: 39.3 -> 5.1 ms.
+- atom_view.cpp: the jump's old + new dots put together once per jump (jumpEpoch), not every frame (1.1 ms).
+- cloud_dots.cpp glowDotsNear: a single-precision pass first that can only drop dots a point beyond the largest disc: 3.35 -> 1.27 ms (all scenes).
+- Tests (atom_tests testPlainWaste057, written first): PlaneSampler = tryStateOnPlane on 1.6 million attempts (8 states, 2 axes, 5 planes); a Slice step's
+  1,500 dots = tryStateOnPlane's one by one with their signs; Ca's level jump: jumpGroups = jumpGroup for every dot, Sign and Wheel, 6 moments; the Glow
+  core's dots = the old full pass at 24 cameras. check.sh quick: 18/18.
