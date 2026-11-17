@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "chart_draw.h"
+#include "atom_card_paths.h"
 #include "cloud_dots.h"
 #include "cloud_light.h"
 #include "outline.h"
@@ -244,6 +245,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     g_textScale = textScale;
     const Text T{dl, ox, oy, uiScale};
     lab.viewW = w; lab.viewH = h;
+    atomCardPaths().frame(R, lab);                                         // 0.57.0: the card's Slice dots and jump groups, made and checked a step a frame (guarded)
     setChartInsets(std::max(lab.insetTop, lab.legendBottom + 6), lab.insetBottom + lab.chartTiltH, lab.insetRight);   // (0.22 stage 6: below the Legend and left of the Controls panel)
     R.rect(0, 0, w, h, css.card);                                          // the canvas background
 
@@ -327,7 +329,10 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         grp.resize(std::size_t(cnt));
         // each dot's colour group: a jump in flight, a superposition (thinned and coloured from the CURRENT beat phase) or a plain cloud. 0.13 stage 2: on a PC with OpenGL 4.3 (and the
         // "GPU superposition and jumps" switch on) the first two come from a compute shader, else from the CPU functions, which are the reference (255 = not shown now)
-        fillGroups(lab, R.compute(), cnt, grp.data());
+        // 0.57.0: a jump with every electron in the Glow Cloud 3D: drawn from the card's cloud buffer with its groups made on the card each frame
+        // (atom_card_paths.h), once the card's check on this PC passed; until then, and on any other PC, the processor's path below
+        const unsigned jumpBuf = jump && glow && d3 && lab.gpuCloud && dc.gpu && R.cloudGpuOk() ? atomCardPaths().jumpGroupsBuffer(R, lab) : 0;
+        if (!jumpBuf) fillGroups(lab, R.compute(), cnt, grp.data());
         const bool outlineOn = p.outline == "On" && !lab.superOn() && !lab.manyOn() && !lab.diracCloudOn() && lab.outlineAlpha() > 0.01;   // (0.49.3: not on a Dirac cloud: the outline is the non-relativistic shape)   // (0.39.1: not with many electrons: the outline is the one-electron orbital's)         // (the 90 % outline is of one orbital: not drawn for a superposition)
         const int fo = lab.outlineStateId();                                // the state on screen (a complex state's own id), not the real fallback fullOrb()
         const double olA = lab.outlineAlpha();                             // the outline fades out as a jump leaves its orbital and back in after landing
@@ -383,10 +388,11 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         } else {                                                           // rotate by yaw (about z), then pitch, then project
             const double ext = lab.cloudExtM();
             static std::vector<float> PX, PY, PD;
-            const bool gpuCloud = glow && lab.gpuCloud && dc.gpu && !jump && R.cloudGpuOk();   // 0.46 (C4): the dots from the GPU buffer, projected and lit there; the same picture
+            const bool gpuCloud = glow && lab.gpuCloud && dc.gpu && (!jump || jumpBuf) && R.cloudGpuOk();   // 0.46 (C4): the dots from the GPU buffer, projected and lit there; the same picture
             if (gpuCloud) {
                 render::Renderer2D::CloudGpuDraw cd;
                 cd.pts = PTS; cd.cnt = cnt; cd.cap = cap; cd.epoch = s.ptsEpoch; cd.k = s.k; cd.grp = grp.data();
+                if (jumpBuf) { cd.cap = cnt; cd.k = cnt; cd.epoch = s.jumpEpoch; cd.grp = nullptr; cd.grpBuf = jumpBuf; }   // 0.57.0: both populations, sent once per jump
                 cd.cx = float(cx); cd.cy = float(cy); cd.pxm = float(pxm); cd.ext = float(ext); cd.ca = float(ca); cd.sa = float(sa); cd.cb = float(cb); cd.sb = float(sb); cd.w = float(w); cd.h = float(h);
                 cd.additive = !css.light;
                 DotColours dcl = dc;
@@ -399,7 +405,17 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 static std::vector<GlowDot> nearCore;
                 static std::vector<std::array<double, 2>> core(1);
                 core[0] = {cx, cy};
-                if (!lightPage) glowDotsNear(PTS, cnt, grp.data(), CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, cx, cy, nearCore); else nearCore.clear();
+                if (!lightPage && jumpBuf) {                               // 0.57.0: the card made the groups: the few dots over the nucleus asked here whether they are shown
+                    static std::vector<int> nearIdx;
+                    glowDotsNear(PTS, cnt, nullptr, CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, cx, cy, nearCore, &nearIdx);
+                    const long jn = lab.jumpDots();
+                    std::size_t keep = 0;
+                    for (std::size_t k = 0; k < nearCore.size(); k++) {
+                        const int i = nearIdx[k], pop = i >= jn ? 1 : 0;
+                        if (lab.jumpShown(pop, i - pop * jn)) nearCore[keep++] = nearCore[k];
+                    }
+                    nearCore.resize(keep);
+                } else if (!lightPage) glowDotsNear(PTS, cnt, grp.data(), CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, cx, cy, nearCore); else nearCore.clear();
                 cd.exposure = [ex, capL, lightPage](const std::vector<float>& g) {
                     if (!glowExposure(g, capL, lightPage, 1.0, *ex)) return -1.0;
                     if (!lightPage && !nearCore.empty()) glowCapExposure(nearCore, capL, 1.0, core, *ex);

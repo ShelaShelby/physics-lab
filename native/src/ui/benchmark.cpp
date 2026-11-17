@@ -3,6 +3,7 @@
 #include "ui/shell.h"
 #include "ui/shell_test.h"
 #include "ui/style_draw.h"
+#include "atom/atom_card_paths.h"
 
 #include <SDL3/SDL.h>
 
@@ -614,7 +615,12 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
             return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? "the graphics card (OpenGL 4.3 rock compute)" : !app.rocksOk ? "the processor (no OpenGL 4.3 rock compute on this PC)" : "the processor (GPU rocks switched off for this scene)");
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
-            if (t.atomWhich == 14 || t.atomWhich == 27) return "the outline's contour: " + std::string(L.gpuOutline && app.computeOk ? "the graphics card (OpenGL 4.3 compute)" : !app.computeOk ? "the processor (no OpenGL 4.3 compute on this PC)" : "the processor (GPU outline switched off for this scene)");
+            if (t.atomWhich == 14 || t.atomWhich == 27) return atom::atomCardPaths().pathText(0, L, app.computeOk) + "; the outline's contour: " + std::string(L.gpuOutline && app.computeOk ? "the graphics card (OpenGL 4.3 compute)" : !app.computeOk ? "the processor (no OpenGL 4.3 compute on this PC)" : "the processor (GPU outline switched off for this scene)");
+            if (L.manyOn() && L.p.cstyle == "Glow" && L.s.trans) {         // 0.57.0: a jump: the card's buffer only with the card's groups
+                const bool card = L.gpuCloud && L.gpuJump && atom::atomCardPaths().state(1) == 1;
+                return std::string("the every-electron cloud: ") + (card ? "drawn from a buffer on the graphics card; " : !L.gpuCloud ? "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene); "
+                                                                         : "the processor turns, sorts and sends every dot of both levels; ") + atom::atomCardPaths().pathText(1, L, app.computeOk);
+            }
             if (L.manyOn() && L.p.cstyle == "Glow") return "the every-electron cloud: " + std::string(L.gpuCloud ? "drawn from a buffer on the graphics card" : "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene)");
             if (L.p.super == "On" || L.s.trans) return "the colour groups: " + app::computePathText(app.glMajor, app.glMinor, app.computeOk, L.gpuCompute);
             return "";

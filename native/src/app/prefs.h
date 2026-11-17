@@ -47,6 +47,7 @@ struct Prefs {
     std::map<std::string, std::string> orbit, atom;   // each lab's settings, as text (checked when they are used)
     std::map<std::string, std::string> blackhole;     // 0.55.0: the Black Hole Lab's settings (blackhole/lab.h saveSettings; written only once the lab was opened)
     std::string gpuSky;                  // 0.56.0: the same for the spinning hole drawn per pixel (app/gpu_guard.h gpuSkyGuard)
+    std::string gpuSlice, gpuJump;       // 0.57.0: the same for the Atom Lab's Slice dots and jump groups on the card (gpuSliceGuard, gpuJumpGuard)
     std::string gpuPaths;                // 0.55.7: the graphics card's light paths' guard (app/gpu_guard.h GpuGuard::saved): switched off or passed, for which app and driver
     std::vector<std::string> calcHistory;  // 0.49: the calculator's last lines, newest first (at most kCalcHistoryMax)
 };

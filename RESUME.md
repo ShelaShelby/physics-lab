@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.56.4 (17 Nov 2026): moving gas, step 1 (PLAN_MOVINGGAS.md section 7), physics only, no change on screen: src/blackhole/gas.h (the clocks, the clump of Broderick & Loeb 2006, the SKH06 pattern, the integrator with t; moved from tools/movinggas, which calls it), the azimuth and light travel time at each disc crossing in closed form (kerr_closed.h, every radial case), stored in the processor's spin table; tests in blackhole_tests (testGas, testClosedTime).
-- Last full UI run: 0.56.0 (the commit "native 0.56.0"), 33 of 33, nothing to fix. (0.56.1 to 0.56.4: not run, small versions.)
-- Next: the moving gas (owner's choice of 17 Nov 2026), PLAN_MOVINGGAS.md section 7, step 2 (the card, the time control and clocks, the labels, the benchmark scene); then the rest of PLAN_BLACKHOLE.md step 4 (quality levels) and step 5, moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.57.0 (17 Nov 2026): the Atom Lab's two slowest scenes' heavy loops on the graphics card, each a compute shader under its own guard (render/atom_card.h, atom/atom_card_paths.cpp, app/gpu_guard.h gpuSliceGuard / gpuJumpGuard): the Slice view's new one-electron dots (kSliceDotsCS, the processor's PlaneSampler the reference) and the groups of a jump with every electron drawn from the card's cloud buffer (kJumpShowCS, exact); plain waste taken out on the processor (Slice attempts, jumpGroups, the Glow core's pass). Owner decision of 17 Nov 2026: below the screen's rate first, then features.
+- Last full UI run: 0.57.0 (the commit "native 0.57.0"), 33 of 34 after fixes: ui_popups fails only check_6b benchwaits' response.atom_density at its 15 s cap on the software renderer (0.56.4 the same; ROADMAP).
+- Next: the owner's 0.57.0 benchmark; the Hard-list scenes still below his 255 Hz, slowest first (owner decision 17 Nov 2026, ROADMAP "Whole app"); then the moving gas, PLAN_MOVINGGAS.md section 7, step 2 (the card, the time control and clocks, the labels, the benchmark scene); then the rest of PLAN_BLACKHOLE.md step 4 (quality levels) and step 5, moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

@@ -82,6 +82,8 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   takes over on a PC whose card or driver cannot do it (through the guard of 0.55.7). A feature is not finished while its heavy repeated work runs only on the
   processor. A job that adds something drawn adds a benchmark scene for it; the target is the screen's refresh rate on the owner's PC for every scene. The owner
   sends the benchmark after each version X.Y and the planning chat checks every scene (16 Nov 2026; replaces the line of 5 Oct 2026).
+- No scene below the screen's refresh rate is acceptable (his PC: 255 Hz). Moving heavy repeated work to the graphics card comes before new features, slowest
+  benchmark scene first, until every scene of the Hard list reaches it; the Black Hole Lab's moving gas waits until then (17 Nov 2026).
 
 ## Look and interface
 - The 0.38 look (6 Nov 2026): sharp corners, flat surfaces with a 1 px edge, a chosen option as a soft accent tint, the labs as tabs in the top bar; in every theme.

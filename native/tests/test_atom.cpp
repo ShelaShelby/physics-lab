@@ -40,6 +40,7 @@
 #include "atom/cloud_dots.h"
 #include "atom/cloud_light.h"
 #include "atom/cloud_sample.h"
+#include "atom/atom_card.h"
 #include "render/shaders.h"
 #include "atom/chart_draw.cpp"   // 0.11 stage 2: the chart drawing is tested through a recording stand-in for the renderer below (it only calls rect and hexColor)
 
@@ -2240,6 +2241,67 @@ static void testPlainWaste057() {
     }
 }
 
+// 0.57.0, the processor's side of the card's two programs (atom/atom_card.h): the jump's 53-bit thresholds give exactly jumpUniform < share; the Slice's
+// comparison passes the processor's own answers rounded to single precision and catches a moved point and a flipped answer far from its margin.
+static void testCardReference057() {
+    using namespace atom;
+    {   // the threshold: z >> 11 < ceil(share 2^53) exactly when (z >> 11) / 2^53 < share, at random shares, shares on and next to the grid, and the ends
+        std::mt19937_64 g(57);
+        long n = 0, same = 0;
+        std::vector<double> shares = {0.0, 1.0, 0.5, 1e-300, 1 - 1e-16, std::ldexp(1.0, -53), std::ldexp(3.0, -53), 0.25 + std::ldexp(1.0, -53)};
+        for (int k = 0; k < 200; k++) shares.push_back(std::ldexp(double(g() >> 11), -53));
+        for (int k = 0; k < 200; k++) shares.push_back(std::uniform_real_distribution<double>(0, 1)(g));
+        for (double f : shares)
+            for (int pop = 0; pop < 2; pop++) {
+                const std::uint64_t T = render::jumpShareThreshold(f);
+                for (long i = 0; i < 2000; i++) {
+                    const double u = jumpUniformOf(pop, i);
+                    const std::uint64_t m = std::uint64_t(u * 9007199254740992.0);      // exact: u is m / 2^53
+                    same += (m < T) == (u < f);
+                    n++;
+                }
+                // the share exactly at a dot's own number: not shown (u < f is false), and just above it: shown
+                const double u0 = jumpUniformOf(pop, 17);
+                const std::uint64_t m0 = std::uint64_t(u0 * 9007199254740992.0);
+                same += !(m0 < render::jumpShareThreshold(u0)) && (m0 < render::jumpShareThreshold(std::nextafter(u0, 2.0)));
+                n++;
+            }
+        checkTrue("card: the jump's 53-bit threshold test = jumpUniform < share for " + std::to_string(n) + " dots and shares", same == n);
+    }
+    {   // the Slice's comparison: the processor's own attempts rounded once to single precision (what a perfect card would give) pass; a point moved by
+        // more than its limit, and an answer flipped where the margin is large, are found
+        const PlaneSampler ps = planeSampler(orbIndex("4f|z3"), 92, 1, 0.05);
+        const std::uint32_t seed = 0xC0FFEEu;
+        const int tries = 3000;
+        std::vector<float> res(std::size_t(4 * tries));
+        long keptAt = -1, farAt = -1;
+        for (int t = 0; t < tries; t++) {
+            orbit::Mulberry32 r(mulberryAfter(seed, 3ull * std::uint64_t(t)));
+            const PlaneSampler::Detail d = ps.tryDetail(r);
+            res[std::size_t(4 * t)] = float(d.q.x); res[std::size_t(4 * t + 1)] = float(d.q.y); res[std::size_t(4 * t + 2)] = float(d.q.z);
+            res[std::size_t(4 * t + 3)] = d.radiusZero ? -1.f : d.kept ? 1.f : 0.f;
+            if (d.kept && keptAt < 0 && d.rho > 0.01) keptAt = t;
+            if (!d.kept && farAt < 0 && d.r3 * ps.bound > d.a2 + 0.2 * ps.bound) farAt = t;
+        }
+        // the generator's counter: the attempts made from mulberryAfter are the attempts of one generator run straight through
+        orbit::Mulberry32 straight(seed);
+        bool sameRun = true;
+        for (int t = 0; t < 200; t++) { orbit::Mulberry32 r(mulberryAfter(seed, 3ull * std::uint64_t(t))); const PlaneSampler::Detail a = ps.tryDetail(straight), b = ps.tryDetail(r); sameRun = sameRun && a.q.x == b.q.x && a.q.z == b.q.z && a.kept == b.kept; }
+        const SliceCompare good = compareSlice(ps, seed, res, tries);
+        std::vector<float> moved = res, flipped = res;
+        if (keptAt >= 0) moved[std::size_t(4 * keptAt)] += 1e-3f;
+        if (farAt >= 0) flipped[std::size_t(4 * farAt + 3)] = 1.f;
+        const SliceCompare m = compareSlice(ps, seed, moved, tries), f = compareSlice(ps, seed, flipped, tries);
+        checkTrue("card: the Slice's comparison passes the processor's own answers in single precision (" + sliceCompareText(good) + ")", sameRun && good.ok() && good.kept > 100 && good.flagDiff == 0);
+        checkTrue("card: ... and finds a kept dot moved by 1e-3 Bohr radii and an answer flipped far from its margin", keptAt >= 0 && farAt >= 0 && !m.ok() && m.pointBad == 1 && !f.ok() && f.flagDiff == 1 && f.flagExplained == 0);
+        // the card's batch carries the processor's numbers, each rounded once
+        const render::SliceDotsJob j = sliceJobOf(ps, seed, tries);
+        bool carried = j.seed == seed && j.tries == tries && j.axis == 1 && j.nh == int(ps.tailPoly().size()) && j.angIm == -1 && j.ang == ps.ang && j.bound == float(ps.bound);
+        for (int i = 0; i < j.nh; i++) carried = carried && j.h[i] == float(ps.tailPoly()[std::size_t(i)]) && j.c[i] == float(ps.densPoly()[std::size_t(i)]);
+        checkTrue("card: the Slice's batch carries the plane's numbers (tail and density polynomials, bound, angular part)", carried);
+    }
+}
+
 static void testJumpBuild() {
     using namespace atom;
     // random numbers: skipping n is the same as drawing n
@@ -4354,6 +4416,7 @@ int main() {
     testJumpSameDots();
     testJumpBuild();
     testPlainWaste057();
+    testCardReference057();
     testOrbitAccuracy(2.192e-4, 4.754e-8, 1.469e-4);
     testFixedExtent();
     // guards: outline margin 0.10 = about half the smallest MEASURED difference (0.1867, 4f m=+1 against its fallback 4fz3); norm 6.69e-4 = measured 6.62289e-4 (the midpoint quadrature's own error on the orthogonal

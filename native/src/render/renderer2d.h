@@ -24,6 +24,7 @@
 #include "rock_compute.h"
 #include "kerr_compute.h"
 #include "kerr_sky.h"
+#include "atom_card.h"
 
 namespace render {
 
@@ -50,6 +51,7 @@ public:
     const std::string& kerrWhy() const { return kerrWhy_; }
     // 0.56.0: the spinning hole per pixel (render/kerr_sky.h): the object that makes its shaders (the caller builds the stages, guarded); always there
     KerrSky& kerrSky() { return sky_; }
+    AtomCard& atomCard();                                            // 0.57.0: the Atom Lab's Slice dots and jump groups on the card (made at the first call)
     void skyMath(const std::vector<float>& in, std::vector<float>& out) { sky_.math(in, out, cmpVao_); }   // (tests)
     // 0.56.0: the last sky pass: its time on the card (GL_TIMESTAMP pairs, read back without waiting: a few frames old) for the whole picture and at the
     // resolution drawn, the resolution's scale (1 = full), the passes drawn, the card's exposure (its brightest disc channel and Y, read back a frame or two
@@ -137,6 +139,7 @@ public:
         const float* pts = nullptr; long cnt = 0, cap = 0;          // places (m, x y z), dots shown (0 .. cnt), the ring's size
         std::uint64_t epoch = 0; long k = 0;                        // which cloud (a new number when its dots were changed other than by being added) and dots recorded so far
         const unsigned char* grp = nullptr;                         // colour group of each dot (255: not shown), cnt of them
+        unsigned grpBuf = 0;                                        // 0.57.0: or a buffer on the card that already holds them (a jump's groups made there: AtomCard::jumpGroups)
         float cx = 0, cy = 0, pxm = 0, ext = 1, ca = 1, sa = 0, cb = 1, sb = 0, w = 0, h = 0;
         bool additive = true;
         PhasePalette pal;
@@ -292,6 +295,7 @@ private:
     // 0.56.0: the spinning hole per pixel: the shaders, its open-sky mask (lensFbo_'s fourth output, kept with the picture), the exposure's chain of
     // reductions, the lower-resolution layers while moving, the timer and the exposure's read-back
     KerrSky sky_;
+    AtomCard* atomCard_ = nullptr;           // owned (a pointer: the classes that hold a renderer without its code need no AtomCard)
     GLuint maskTex_ = 0, whiteTex_ = 0, maxDown_ = 0, expFbo_ = 0, lowFbo_ = 0, lowTex_[4] = {0, 0, 0, 0}, skyQ_[8] = {}, whitePbo_ = 0;
     std::vector<GLuint> expTex_;
     std::vector<int> expW_, expH_;

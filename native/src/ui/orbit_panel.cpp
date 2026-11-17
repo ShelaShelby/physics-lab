@@ -20,6 +20,7 @@
 #include "shot.h"
 #include "benchmark.h"
 #include "app/bench.h"
+#include "atom/atom_card_paths.h"
 #include "app/gpu_guard.h"
 #include <SDL3/SDL_misc.h>
 #include "orbit/format.h"
@@ -110,6 +111,33 @@ void performanceCard(AppState& app) {
                                                       "Off, or on a PC without OpenGL 4.3: the processor makes it (about 30 ms the first time for each orbital).\n"
                                                       "The outline is the same either way (tested, except a line a hair's breadth off where a cell is within rounding of the level); only the speed differs, and it is expected, not yet measured, to be better On.\n"
                                                       "Used for comparing on your PC with the benchmark's scenes 16, 17, 29 and 30. Not saved: it is On again at the next start.");
+        // 0.57.0: the Slice's new dots and the every-electron jump's groups on the card: one line each (who and why), Try again when its guard switched it off, the switch
+        for (int which = 0; which < 2; which++) {
+            app::GpuGuard& A = which == 0 ? app::gpuSliceGuard() : app::gpuJumpGuard();
+            const std::string aoff = A.offText();
+            const char* name = which == 0 ? "The Slice view's new dots" : "A jump with every electron";
+            const std::string aline = !aoff.empty() ? std::string(name) + ": the processor, because the graphics card's program for it " + aoff.substr(aoff.find("stopped") != std::string::npos ? aoff.find("stopped") : 0)
+                                                    : std::string(name) + ": " + atom::atomCardPaths().pathText(which, app.atom, app.computeOk).substr(which == 0 ? 22 : 19) + ".";
+            settingMark(which == 0 ? "gpuslice" : "gpujump");
+            ImGui::TextWrapped("%s", aline.c_str());
+            if (shellLogOn()) auditNote(std::string(which == 0 ? "atomslice " : "atomjump ") + aline);
+            if (!aoff.empty()) {
+                if (ImGui::Button(which == 0 ? "Try again##gpuslice" : "Try again##gpujump")) A.tryAgain();
+                noteItem(which == 0 ? "gpuslice.again" : "gpujump.again");
+                if (ImGui::IsItemHovered()) ui::SetTooltip("The graphics card's program is made and checked again when its picture is next shown, with a marker before each step:\n"
+                                                              "if the app stops again, it starts the next time with it switched off, as now.");
+            }
+            ImGui::BeginDisabled(!app.computeOk);
+            wrappedCheckbox(which == 0 ? "GPU Slice dots (OpenGL 4.3)" : "GPU jump groups (OpenGL 4.3)", which == 0 ? &app.atom.gpuSlice : &app.atom.gpuJump);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ui::SetTooltip(which == 0 ? "On (the default, needs OpenGL 4.3): in the Slice view (one electron) the new dots on a moved cut are made by a compute shader on the graphics card,\n"
+                                            "from the same random numbers as the processor's, once its start-up check on this PC has passed; they arrive a frame after the cut moved.\n"
+                                            "Off: the processor makes them. Used for comparing with the benchmark's atom.slice_drag. Not saved: it is On again at the next start."
+                                          : "On (the default, needs OpenGL 4.3): a jump with every electron (Glow, Cloud 3D) is drawn from the cloud's buffer on the graphics card, which also\n"
+                                            "decides each frame which dots are shown (exactly the processor's rule), once its start-up check on this PC has passed.\n"
+                                            "Off: the processor does it dot by dot and sends every dot. Used for comparing with the benchmark's atom.jump_all. Not saved: it is On again at the next start.");
+        }
     }
     if (app.lab == blackhole::kLabIndex) {                // 0.55.6: who fills the spinning hole's light-path table: the line says which and why, the switch compares
         blackhole::BlackHoleView& v = app.blackholeView;

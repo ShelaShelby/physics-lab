@@ -92,7 +92,8 @@ double glowSumAt(const std::vector<GlowDot>& D, long cap, double expo, double ba
 // 1 - exp(-light) never clips)
 void glowCapExposure(const std::vector<GlowDot>& D, long cap, double base, const std::vector<std::array<double, 2>>& at, double& expo);
 // the Cloud 3D glow dots (projectCloud, the atom view's depth size and weight) whose disc covers the point (X, Y): for glowCapExposure on the GPU path
-void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out);
+void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out,
+                  std::vector<int>* indices = nullptr);   // 0.57.0: indices: each found dot's index (the card's jump: the processor then asks whether it is shown)
 
 // ---- Cloud 2D side view: one band; the dots are drawn group by group ----
 struct SideDot { float x, y; unsigned char g; };

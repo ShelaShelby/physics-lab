@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.57.0", "The Atom Lab's two slowest pictures move to the graphics card",
+     "Dragging the cut in the Slice view and a jump with every electron were the slowest scenes of the benchmark (about 12 and 20 pictures a second on a fast "
+     "PC). The Slice's new dots on a moved cut are now made by the graphics card from the same random numbers as before, and a jump with every electron is "
+     "drawn from the cloud's buffer on the card, which also decides each picture which dots are shown. The processor's way stays as the exact reference: each "
+     "card program is checked against it when first used and switched off safely if the card or its driver fails (Settings, Performance says which ran and "
+     "why). Work the processor did again and again for nothing was also taken out. What you see is the same; in the Slice view the new dots arrive one "
+     "picture after the cut moved, as the outline already did."},
     {"0.56.4", "Moving gas, step 1: the physics behind the scenes; no change on screen",
      "The Black Hole Lab now knows, for every point where a light ray meets the disc, where on the disc that point is and how long the light took from there "
      "to the camera, worked out exactly from formulas instead of step by step. Also new inside: the clocks of the gas and of the camera, the bright clump "

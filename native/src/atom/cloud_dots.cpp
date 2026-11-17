@@ -157,8 +157,9 @@ void glowCapExposure(const std::vector<GlowDot>& D, long cap, double base, const
         expo /= top;
     }
 }
-void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out) {
+void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const CloudCamera& cam, double X, double Y, std::vector<GlowDot>& out, std::vector<int>* indices) {
     out.clear();
+    if (indices) indices->clear();
     // 0.57.0: a quick pass in single precision first, which can only leave out dots at least a point farther from (X, Y) than the largest disc (5.52 points):
     // its rounding is about 1e-3 of a point on any picture, so the dots kept below are exactly those of the full pass (tested); a NaN goes on to the full pass
     const float ca = float(cam.ca), sa = float(cam.sa), cb = float(cam.cb), sb = float(cam.sb), k4 = float(1 / (4 * cam.ext)), pxm = float(cam.pxm);
@@ -187,7 +188,7 @@ void glowDotsNear(const float* pts, long cnt, const unsigned char* grp, const Cl
         const float px = float(cam.cx + x1 * cam.pxm * f), py = float(cam.cy - up * cam.pxm * f);
         const float t = std::max(-1.f, std::min(1.f, float(dep / cam.ext))), near = 0.5f - 0.5f * t;   // as the atom view's Cloud 3D glow
         const float r = 4.6f * (0.8f + 0.4f * near);
-        if ((px - X) * (px - X) + (py - Y) * (py - Y) < double(r) * r) out.push_back({px, py, r, 0.3f + 0.9f * near, grp ? grp[i] : (unsigned char)0});
+        if ((px - X) * (px - X) + (py - Y) * (py - Y) < double(r) * r) { out.push_back({px, py, r, 0.3f + 0.9f * near, grp ? grp[i] : (unsigned char)0}); if (indices) indices->push_back(i); }
     }
 }
 bool glowBlobs(const std::vector<GlowDot>& D, long cap, bool light, DotColours& dc, bool darken, double base, double w, double h, double& expo, std::vector<Blob>& B,

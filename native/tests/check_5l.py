@@ -35,7 +35,8 @@ ROWS_ALL = {"text": ("Text size (Settings)", "size"), "font": ("Font", "font"), 
             "facts": ("Did you know facts", "did"), "perf": ("Performance", "performance"), "vsync": ("VSync (wait for the screen)", "vsync"),
             "frames": ("Frame times (fps)", "frame"), "benchmark": ("Benchmark (speed test)", "benchmark")}
 ROWS_LAB = {0: {"gpurocks": ("GPU rocks (OpenGL 4.3)", "rocks")},
-            1: {"gpuspin": ("GPU superposition and jumps (OpenGL 4.3)", "superposition"), "gpuoutline": ("GPU outline (OpenGL 4.3)", "outline"), "gpucolours": ("GPU colours (Atom Lab cloud dots)", "colours")}}
+            1: {"gpuspin": ("GPU superposition and jumps (OpenGL 4.3)", "superposition"), "gpuoutline": ("GPU outline (OpenGL 4.3)", "outline"), "gpucolours": ("GPU colours (Atom Lab cloud dots)", "colours"),
+                "gpuslice": ("GPU Slice dots (Atom Lab, OpenGL 4.3)", "slice"), "gpujump": ("GPU jump groups (Atom Lab, OpenGL 4.3)", "groups")}}   # 0.57.0
 LAB_ENV = {0: {}, 1: {"PL_ATOM": "1", "PL_ATOM_SET": "view=Chart of nuclides"}}
 
 def searches(r):

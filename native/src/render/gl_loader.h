@@ -217,7 +217,9 @@ typedef unsigned long long GLuint64;
     X(void, glDeleteSync, (GLsync sync))                                                           \
     X(void*, glMapBufferRange, (GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access)) \
     X(GLboolean, glUnmapBuffer, (GLenum target))                                                   \
-    X(void, glCopyBufferSubData, (GLenum rt, GLenum wt, GLintptr ro, GLintptr wo, GLsizeiptr size))
+    X(void, glCopyBufferSubData, (GLenum rt, GLenum wt, GLintptr ro, GLintptr wo, GLsizeiptr size)) \
+    X(void, glUniform1ui, (GLint loc, GLuint v))                                                   \
+    X(void, glUniform2ui, (GLint loc, GLuint a, GLuint b))
 
 // The function pointers live in their own namespace, so they never clash with the
 // system's OpenGL library (which exports functions with the same names).

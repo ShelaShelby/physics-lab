@@ -218,14 +218,24 @@ int main(int, char**) {
         const char* fakeSky = SDL_getenv("PL_GPU_SKYSHADER");
         app::gpuSkyGuard().start(ui::settingsFolder(), fakeSky ? std::string(fakeSky) : render::kerrSkyShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSky,
                                  {"The spinning hole drawn per pixel by the graphics card (closed forms, single precision): its own guard, its lines start [sky]"});
-        if (app::gpuGuard().saved() != app.prefs.gpuPaths || app::gpuSkyGuard().saved() != app.prefs.gpuSky) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
-        else { app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); }
+        // 0.57.0: the Atom Lab's two card programs, a guard each (their markers, the settings lines "gpuslice=" and "gpujump=", the same log); PL_GPU_SLICESHADER,
+        // PL_GPU_JUMPSHADER (tests: another program's text)
+        const char* fakeSlice = SDL_getenv("PL_GPU_SLICESHADER");
+        const char* fakeJump = SDL_getenv("PL_GPU_JUMPSHADER");
+        app::gpuSliceGuard().start(ui::settingsFolder(), fakeSlice ? std::string(fakeSlice) : render::sliceShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSlice,
+                                   {"The Atom Lab's Slice dots made by the graphics card (single precision): its own guard, its lines start [slice]"});
+        app::gpuJumpGuard().start(ui::settingsFolder(), fakeJump ? std::string(fakeJump) : render::jumpShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuJump,
+                                  {"The Atom Lab's jump groups (every electron) made by the graphics card: its own guard, its lines start [jump]"});
+        if (app::gpuGuard().saved() != app.prefs.gpuPaths || app::gpuSkyGuard().saved() != app.prefs.gpuSky || app::gpuSliceGuard().saved() != app.prefs.gpuSlice ||
+            app::gpuJumpGuard().saved() != app.prefs.gpuJump) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+        else { app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); }
     }
     {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
         GLint maj = 0, min = 0;
         plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
         app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr;
         atom::setOutlineCompute(renderer.outlineCompute());           // the 90 % outline's compute object (null on a 3.3 PC or with PL_NO_COMPUTE: the CPU makes it)
+        if (const char* c = SDL_getenv("PL_ATOM_CARD")) if (std::string(c) == "0") { app.atom.gpuSlice = false; app.atom.gpuJump = false; }   // 0.57.0 (tests: the processor for both, to compare)
         std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
         std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(maj, min, app.rocksOk, true).c_str());
     }
@@ -786,6 +796,7 @@ int main(int, char**) {
     atom::setOutlineCompute(nullptr);
     app.blackholeView.stopWork();                    // 0.55.6: its worker may read the card's memory, which the renderer frees
     app::gpuGuard().closing();
+    app::gpuSliceGuard().closing(); app::gpuJumpGuard().closing();   // 0.57.0
     app::gpuSkyGuard().closing();                    // 0.56.0                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
     renderer.shutdown();
     SDL_GL_DestroyContext(gl);

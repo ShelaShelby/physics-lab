@@ -39,6 +39,10 @@ struct PlaneSampler {
     const void* cdf = nullptr;                             // the radial tail's table (cloud_sample.cpp)
     bool tryPoint(orbit::Mulberry32& r, CloudPoint& out) const;
     const std::vector<double>& tailPoly() const;           // h_j of the tail G(x) = e^(-x) sum h_j x^j on the plane (the card's copy, 0.57.0)
+    const std::vector<double>& densPoly() const;           // c_m of the density on the plane in x, f(x) = sum c_m x^m (G' = -f e^(-x))
+    // the same attempt as tryPoint with its pieces kept (the card's check, 0.57.0): the same arithmetic, so kept and the point are tryPoint's
+    struct Detail { double u = 0, x = 0, s = 0, rho = 0, turn = 0, r3 = 0, a2 = 0; CloudPoint q; bool kept = false, radiusZero = false; };
+    Detail tryDetail(orbit::Mulberry32& r) const;
 };
 PlaneSampler planeSampler(int id, int Z, int axis, double off);
 

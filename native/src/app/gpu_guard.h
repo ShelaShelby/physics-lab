@@ -91,6 +91,10 @@ GpuGuard& gpuGuard();                                             // the app's o
 // 0.56.0: the spinning hole's sky and disc drawn per pixel (render/kerr_sky.h): its own marker (gpu-sky-step.txt), the settings line "gpusky=", the same
 // log (its lines start "[sky] "), its version field "sky <hash>" (render/kerr_sky.h kerrSkyShaderId)
 GpuGuard& gpuSkyGuard();
+// 0.57.0: the Atom Lab's two card programs (render/atom_card.h), a guard each: the Slice's new dots (gpu-slice-step.txt, the settings line "gpuslice=",
+// log lines "[slice] ", version "slice <hash>") and the groups of a jump with every electron (gpu-jump-step.txt, "gpujump=", "[jump] ", "jump <hash>")
+GpuGuard& gpuSliceGuard();
+GpuGuard& gpuJumpGuard();
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);

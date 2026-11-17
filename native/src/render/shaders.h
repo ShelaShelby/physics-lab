@@ -2100,4 +2100,162 @@ void main() {
 }
 )";
 
+// ---- 0.57.0: the Atom Lab's two heavy loops on the graphics card (compute, GLSL 430; single precision only: no double anywhere) ----
+// The Slice view's new dots (atom/cloud_sample.cpp PlaneSampler::tryPoint is the reference, in double): one invocation per ATTEMPT t of a batch. The lab's
+// generator (orbit::Mulberry32) is a counter: its n-th number after the state S is a hash of S + (n + 1) 0x6D2B79F5, so attempt t, which takes numbers
+// 3t, 3t + 1, 3t + 2, is made here without the attempts before it. The radius x = 2 Z s / n inverts the tail G(x) = e^(-x) H(x) above the plane
+// (G(x) = u G(x0)), in logarithms (no underflow far out): ln H(x) - x = ln u + ln G(x0), by Newton's method (d/dx = -f / H) kept in a bracket.
+// The direction's sine and cosine come from a polynomial of their own (no driver's sin / cos, whose precision GLSL does not fix).
+// Output per attempt: x, y, z (Bohr radii) and w = 1 kept, 0 rejected, -1 the radius came out 0 (the reference then takes 2 numbers, not 3).
+static const char* const kSliceDotsCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) writeonly buffer Out { vec4 res[]; };
+uniform uint uSeed;
+uniform int uTries;
+uniform int uAxis;
+uniform float uOff;
+uniform float uX0;
+uniform float uLnG0;
+uniform float uScale;
+uniform float uBound;
+uniform int uAng;
+uniform int uAngIm;
+uniform float uCIm;
+uniform int uNh;
+uniform float uH[16];
+uniform float uC[16];
+
+uint mulberry(uint n) {
+    uint s = uSeed + (n + 1u) * 0x6D2B79F5u;
+    uint t = (s ^ (s >> 15u)) * (1u | s);
+    t = (t + ((t ^ (t >> 7u)) * (61u | t))) ^ t;
+    return t ^ (t >> 14u);
+}
+float poly(int which, float x) {
+    float v = 0.0;
+    for (int i = 15; i >= 0; i--) {
+        if (i >= uNh) continue;
+        v = v * x + (which == 0 ? uH[i] : uC[i]);
+    }
+    return v;
+}
+float angular(int a, vec3 p) {
+    float x = p.x, y = p.y, z = p.z, r2 = x * x + y * y + z * z;
+    if (a == 0) return 1.0;
+    if (a == 1) return x;
+    if (a == 2) return y;
+    if (a == 3) return z;
+    if (a == 4) return 3.0 * z * z - r2;
+    if (a == 5) return x * z;
+    if (a == 6) return y * z;
+    if (a == 7) return x * y;
+    if (a == 8) return x * x - y * y;
+    if (a == 9) return z * (5.0 * z * z - 3.0 * r2);
+    if (a == 10) return x * (5.0 * z * z - r2);
+    if (a == 11) return y * (5.0 * z * z - r2);
+    if (a == 12) return x * y * z;
+    if (a == 13) return z * (x * x - y * y);
+    if (a == 14) return x * (x * x - 3.0 * y * y);
+    return y * (3.0 * x * x - y * y);
+}
+// cos and sin of 2 pi t, t in [0, 1): a quarter turn taken out, then Taylor series on [-pi/4, pi/4] (error below 4e-9 before rounding)
+vec2 cosSinTurn(float t) {
+    float q = floor(4.0 * t + 0.5);
+    float a = 6.28318530717958648 * (t - 0.25 * q);
+    float a2 = a * a;
+    float c = 1.0 + a2 * (-0.5 + a2 * (1.0 / 24.0 + a2 * (-1.0 / 720.0 + a2 * (1.0 / 40320.0))));
+    float s = a * (1.0 + a2 * (-1.0 / 6.0 + a2 * (1.0 / 120.0 + a2 * (-1.0 / 5040.0 + a2 * (1.0 / 362880.0)))));
+    int k = int(q) & 3;
+    if (k == 0) return vec2(c, s);
+    if (k == 1) return vec2(-s, c);
+    if (k == 2) return vec2(-c, -s);
+    return vec2(s, -c);
+}
+float lnTail(float x) { return log(max(poly(0, x), 1e-37)) - x; }
+
+void main() {
+    int t = int(gl_GlobalInvocationID.x);
+    if (t >= uTries) return;
+    uint n0 = 3u * uint(t);
+    uint k1 = mulberry(n0), k2 = mulberry(n0 + 1u), k3 = mulberry(n0 + 2u);
+    // 1 - k1 / 2^32, in (0, 1]
+    float u = (float(~k1) + 1.0) * 2.3283064365386963e-10;
+    float target = log(u) + uLnG0;
+    float lo = uX0, hi = uX0 + 4.0;
+    for (int i = 0; i < 40; i++) {
+        if (!(lnTail(hi) > target) || hi >= 1e4) break;
+        lo = hi; hi = uX0 + 2.0 * (hi - uX0);
+    }
+    float x = 0.5 * (lo + hi);
+    for (int i = 0; i < 60; i++) {
+        float h = poly(0, x);
+        float g = log(max(h, 1e-37)) - x - target;
+        if (g > 0.0) lo = x; else hi = x;
+        float f = poly(1, x);
+        float nx = f > 0.0 ? x + g * h / f : 0.5 * (lo + hi);
+        if (!(nx > lo && nx < hi)) nx = 0.5 * (lo + hi);
+        float tol = 9.5367431640625e-7 * (1.0 + x);
+        if (abs(nx - x) <= tol || hi - lo <= tol) { x = nx; break; }
+        x = nx;
+    }
+    float s = x * uScale;
+    float rho = sqrt(max(0.0, s * s - uOff * uOff));
+    vec2 cs = cosSinTurn(float(k2) * 2.3283064365386963e-10);
+    float a = rho * cs.x, b = rho * cs.y;
+    vec3 q = uAxis == 2 ? vec3(a, b, uOff) : vec3(a, uOff, b);
+    if (!(s > 0.0)) { res[t] = vec4(q, -1.0); return; }
+    vec3 un = q / s;
+    float re = angular(uAng, un);
+    float a2 = re * re;
+    if (uAngIm >= 0) { float im = angular(uAngIm, un); a2 = 0.5 * (re * re + uCIm * uCIm * im * im); }
+    bool kept = !(float(k3) * 2.3283064365386963e-10 * uBound > a2);
+    res[t] = vec4(q, kept ? 1.0 : 0.0);
+}
+)";
+
+// 0.57.0: a jump with every electron drawn from the card's cloud buffer: each dot's group for this frame (atom_sim.cpp AtomLab::jumpGroups is the reference):
+// its fixed group (its shell's colour, uploaded once per jump, 4 a word), shown when its fixed random number, the lab's splitmix64 of i + (pop << 40) as
+// z >> 11, is below the share times 2^53, an integer compare (uT0 for the old dots, uT1 for the new, each the 53-bit integer ceil(share 2^53) as (low, high)
+// words): the same decision as the processor's double, bit for bit. Written 4 groups a word, read by the cloud's programs as their group attribute.
+static const char* const kJumpShowCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Fixed { uint fixedG[]; };
+layout(std430, binding = 1) writeonly buffer Shown { uint shownG[]; };
+uniform int uJn;
+uniform uvec2 uT0;
+uniform uvec2 uT1;
+
+uvec2 mul64(uvec2 a, uvec2 b) { uint hi, lo; umulExtended(a.x, b.x, hi, lo); return uvec2(lo, hi + a.x * b.y + a.y * b.x); }
+uvec2 add64(uvec2 a, uvec2 b) { uint c; uint lo = uaddCarry(a.x, b.x, c); return uvec2(lo, a.y + b.y + c); }
+uvec2 xorShift(uvec2 z, int n) {
+    uvec2 s = n >= 32 ? uvec2(z.y >> uint(n - 32), 0u) : uvec2((z.x >> uint(n)) | (z.y << uint(32 - n)), z.y >> uint(n));
+    return z ^ s;
+}
+bool shown(uint i, uint pop) {
+    uvec2 z = add64(mul64(uvec2(i, pop << 8), uvec2(0x7F4A7C15u, 0x9E3779B9u)), uvec2(0xD9B4E019u, 0x632BE59Bu));
+    z = mul64(xorShift(z, 30), uvec2(0x1CE4E5B9u, 0xBF58476Du));
+    z = mul64(xorShift(z, 27), uvec2(0x133111EBu, 0x94D049BBu));
+    z = xorShift(z, 31);
+    uvec2 m = uvec2((z.x >> 11u) | (z.y << 21u), z.y >> 11u);
+    uvec2 T = pop == 1u ? uT1 : uT0;
+    return m.y < T.y || (m.y == T.y && m.x < T.x);
+}
+void main() {
+    uint w = gl_GlobalInvocationID.x;
+    uint total = 2u * uint(uJn);
+    if (w >= (total + 3u) / 4u) return;
+    uint fixedWord = fixedG[w], word = 0u;
+    for (uint j = 0u; j < 4u; j++) {
+        uint k = 4u * w + j, v = 255u;
+        if (k < total) {
+            uint pop = k >= uint(uJn) ? 1u : 0u;
+            uint g = (fixedWord >> (8u * j)) & 255u;
+            if (g != 255u && shown(k - pop * uint(uJn), pop)) v = g;
+        }
+        word |= v << (8u * j);
+    }
+    shownG[w] = word;
+}
+)";
+
 }  // namespace render

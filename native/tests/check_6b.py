@@ -100,7 +100,9 @@ SCENES = {
 
 def part_benchscenes(binary, work):
     ids = ",".join(SCENES)
-    r = run_app(binary, work, "b_scenes", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.3", PL_BENCH_MEASURE="1.6", PL_BENCH_SHOT="0.1,1.0"), frames=100000, size="880x560", timeout=2400)
+    # (0.57.0: 4 s counted and the second picture at 2.4 s, was 1.6 and 1.0: the Black Hole scenes draw a frame in 1.4 s or more here, so their second picture
+    # could fall after the counted time (film_tilt failed so with 0.56.4 too); the second picture stays in the second half, where nucleus_density turns)
+    r = run_app(binary, work, "b_scenes", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.3", PL_BENCH_MEASURE="4.0", PL_BENCH_SHOT="0.1,2.4"), frames=100000, size="880x560", timeout=2400)
     t = report(r)
     check(bool(t), "the benchmark ran the new scenes and gave its report")
     w, h = 880, 560

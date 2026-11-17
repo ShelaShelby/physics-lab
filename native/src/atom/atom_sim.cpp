@@ -17,6 +17,7 @@
 #include <map>
 
 #include "cloud_sample.h"
+#include "atom_card.h"
 #include "orbit/belts.h"
 #include "orbit/format.h"
 #include "phase_wheel.h"
@@ -783,6 +784,13 @@ long AtomLab::addDots(long want) {
     long got = 0;
     if (one && sliceDots()) {                                    // 0.57.0: the Slice's one-electron dots: the plane's part of an attempt worked out once (the same dots, bit for bit)
         const PlaneSampler ps = planeSampler(idNow_, p.Z, sliceAxisNow(), sliceOffNow());
+        if (gpuSlice && sliceCard && sliceCard->ready() && ps.g0 > 0 && ps.tailPoly().size() <= 16) {   // 0.57.0: on the card (its start-up check passed)
+            got = addDotsCard(ps, want);
+            idNow_ = -1;
+            return got;
+        }
+        if (sliceJob_.job && sliceCard) sliceCard->cancelSlice(sliceJob_.job);   // (the processor again: a batch in flight is forgotten; it used no numbers)
+        sliceJob_ = SliceJob{};
         for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {
             CloudPoint q;
             if (ps.tryPoint(r, q)) { recordDot(q.x, q.y, q.z); got++; }
@@ -795,6 +803,46 @@ long AtomLab::addDots(long want) {
     idNow_ = -1;
     s.crng = r.seed;
     s.sliceFresh += got;
+    return got;
+}
+
+// 0.57.0: the Slice's one-electron dots made by the card (render/atom_card.h, shaders.h kSliceDotsCS), the frame never waiting for it. A batch of attempts
+// is started from the generator's state of the moment for the plane of the moment; a later step takes its kept dots in the order of the attempts, as the
+// processor's loop above would have made them from the same state (the generator is a counter: attempt t takes numbers 3t .. 3t + 2), so the cloud gets
+// the same dots up to single-precision rounding (the start-up check and the tests: atom_card.h compareSlice). The difference the eye can meet: the dots
+// of a batch arrive one step (a frame) after the plane moved, as the outline's contour does. A batch made for another state or cloud, or after the
+// generator was used for something else, is dropped; dots made for a plane that has moved on are kept but not counted as the new plane's.
+long AtomLab::addDotsCard(const PlaneSampler& ps, long want) {
+    static std::vector<float> res;
+    long got = 0, need = want;
+    if (sliceJob_.job) {
+        const render::JobState st = sliceCard->pollSlice(sliceJob_.job, res);
+        if (st == render::JobState::Pending) return 0;
+        const SliceJob j = sliceJob_;
+        sliceJob_ = SliceJob{};
+        if (st == render::JobState::Done && j.id == idNow_ && j.Z == p.Z && j.epoch == s.ptsEpoch && j.seed == s.crng && int(res.size()) >= 4 * j.tries) {
+            std::uint64_t numbers = 3ull * std::uint64_t(j.tries);
+            long kept = 0;
+            for (int t = 0; t < j.tries; t++) {
+                const float w = res[std::size_t(4 * t + 3)];
+                if (w < -0.5f) { numbers = 3ull * std::uint64_t(t) + 2; break; }   // a radius of 0: the processor takes 2 numbers there; the rest is made again
+                if (w > 0.5f) {
+                    kept++;
+                    recordDot(res[std::size_t(4 * t)], res[std::size_t(4 * t + 1)], res[std::size_t(4 * t + 2)]);
+                    if (++got == j.want) { numbers = 3ull * std::uint64_t(t + 1); break; }
+                }
+            }
+            s.crng = mulberryAfter(j.seed, numbers);
+            sliceRate_ = std::max(0.002, double(std::max<long>(kept, 1)) / double(std::max<std::uint64_t>(1, numbers / 3)));
+            sliceCardDots_ += got;
+            if (j.axis == s.sliceAxis && j.off == s.sliceOff) { s.sliceFresh += got; need = want - got; }   // (dots of an older plane: not the new plane's)
+        }
+    }
+    if (need > 0) {                                                  // the next batch, for the plane of the moment
+        const int tries = int(std::min(262144.0, std::max(64.0, double(need) / sliceRate_ * 1.3 + 64)));
+        const int job = sliceCard->beginSlice(sliceJobOf(ps, s.crng, tries));
+        if (job) sliceJob_ = SliceJob{job, s.crng, tries, need, idNow_, p.Z, s.sliceAxis, s.sliceOff, s.ptsEpoch};
+    }
     return got;
 }
 
@@ -817,6 +865,7 @@ static double jumpUniform(int pop, long i) {                     // a fixed unif
     z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL; z ^= z >> 31;
     return double(z >> 11) * (1.0 / 9007199254740992.0);
 }
+double jumpUniformOf(int pop, long i) { return jumpUniform(pop, i); }   // (atom_card.cpp: the card's check)
 bool AtomLab::jumpShown(int pop, long i) const {
     if (!s.trans || i < 0 || i >= s.jn) return false;
     if (!jumpReady()) const_cast<AtomLab*>(this)->completeJump();
@@ -865,6 +914,25 @@ bool AtomLab::jumpGroupsGpu(render::IGroupCompute& gc, unsigned char* out) {
     if (!gc.ok() || !s.trans || jn <= 0 || s.jb.many) return false;   // (0.46: a valence jump's groups come from the CPU)
     if (!jumpReady()) completeJump();
     return gc.jumpGroups(s.jA.data(), s.jB.data(), jn, s.jumpEpoch, jumpGpuParams(), out);
+}
+// 0.57.0: the card's half of jumpGroups for a jump with every electron: each dot's group when shown (it does not change during the jump: its shell's colour,
+// the old dots then the new), and the two populations' shares as 53-bit integers (a dot is shown when its fixed number z >> 11 is below: the same test as
+// jumpUniform(pop, i) < share, exactly)
+void AtomLab::jumpFixedGroups(std::vector<unsigned char>& g) const {
+    const long jn = s.jn;
+    g.assign(std::size_t(2 * jn), 255);
+    if (!s.trans || jn <= 0 || !s.jb.many) return;
+    if (!jumpReady()) const_cast<AtomLab*>(this)->completeJump();
+    const bool wheelM = usesWheel();
+    for (int pop = 0; pop < 2; pop++) {
+        const float* ph = pop ? s.jph.data() : s.ph.data();
+        const signed char* sg = pop ? s.jsg.data() : s.sg.data();
+        for (long i = 0; i < jn; i++) g[std::size_t(pop * jn + i)] = (unsigned char)(wheelM ? phaseBin(ph[i]) : (sg[i] > 0 ? 0 : 1));
+    }
+}
+void AtomLab::jumpThresholds(std::uint64_t& t0, std::uint64_t& t1) const {
+    const double sh = jumpShareTo();
+    t0 = render::jumpShareThreshold(1 - sh); t1 = render::jumpShareThreshold(sh);
 }
 // Every dot of the jump, in one go (the picture asks for this each frame): the same numbers as jumpGroup(pop, i) one by one, bit for bit (tested), but cos, sin and the complex exponentials
 // of the jump's progress, and the jump's energy step (levelEV, which looks up the nucleus's mass), are worked out once here and not once per dot (0.10.6 stage 8; the benchmark's scene 11 spent about 26 of 30 ms here).

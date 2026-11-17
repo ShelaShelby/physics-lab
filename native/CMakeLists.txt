@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.56.4 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.57.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -78,6 +78,7 @@ add_library(atom_core STATIC
   src/atom/atom_bench.cpp
   src/atom/cloud_dots.cpp
   src/atom/cloud_sample.cpp
+  src/atom/atom_card.cpp
   src/atom/hf.cpp
   src/atom/alkali.cpp
   src/atom/levels.cpp
@@ -295,13 +296,13 @@ if(PL_BUILD_TESTS)
     target_link_libraries(stage2_timing PRIVATE atom_core)
     add_executable(stage3_timing tests/timing_stage3.cpp)
     target_link_libraries(stage3_timing PRIVATE atom_core)
-    add_executable(stage4_timing tests/timing_stage4.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/orbit/belt_layer.cpp)
+    add_executable(stage4_timing tests/timing_stage4.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/render/atom_card.cpp src/orbit/belt_layer.cpp)
     target_include_directories(stage4_timing PRIVATE src/render)
     target_link_libraries(stage4_timing PRIVATE atom_core maps_core)
   endif()
   if(PL_GL_TESTS)
     find_library(PL_EGL_LIBRARY EGL REQUIRED)
-    add_executable(gl_compare_tests tests/gl_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/orbit/belt_layer.cpp)
+    add_executable(gl_compare_tests tests/gl_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/render/atom_card.cpp src/orbit/belt_layer.cpp)
     target_include_directories(gl_compare_tests PRIVATE src/render)
     target_link_libraries(gl_compare_tests PRIVATE atom_core maps_core ${PL_EGL_LIBRARY})
     target_compile_options(gl_compare_tests PRIVATE ${PL_WARNINGS})
@@ -368,11 +369,13 @@ if(PL_BUILD_APP)
     src/render/rock_compute.cpp
     src/render/kerr_compute.cpp
     src/render/kerr_sky.cpp
+    src/render/atom_card.cpp
     src/blackhole/spin_card.cpp
     src/blackhole/sky_card.cpp
     src/orbit/belt_layer.cpp
     src/orbit/orbit_view.cpp
     src/atom/atom_view.cpp
+    src/atom/atom_card_paths.cpp
     src/atom/chart_draw.cpp
     src/molecule/molecule_view.cpp
     src/ui/shell_molecule.cpp
@@ -481,9 +484,9 @@ if(PL_BUILD_APP)
       add_test(NAME ui_atom_panel COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_panel
                check_atom_panel.py)
       set_tests_properties(ui_atom_panel PROPERTIES TIMEOUT 3600)
-      # ui_atom: the Atom Lab: element chip, its old-panel features, view words, jump check, Most realistic, Monochrome key, honesty notes, density, nucleus controls and full zoom
+      # ui_atom: the Atom Lab: element chip (0.57.0: and the card's Slice dots and jump groups with their guards), its old-panel features, view words, jump check, Most realistic, Monochrome key, honesty notes, density, nucleus controls and full zoom
       add_test(NAME ui_atom COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom
-               check_atom_chip.py check_6a.py:gaps check_022.py:words check_022s7.py:jumpcheck check_025.py:atom
+               check_atom_chip.py check_atom_chip.py:card check_6a.py:gaps check_022.py:words check_022s7.py:jumpcheck check_025.py:atom
                check_022.py:honest check_022.py:spectrum check_022.py:density check_6b.py:nucleus check_6c.py:fullzoom check_6c.py:ds281sea)
       set_tests_properties(ui_atom PROPERTIES TIMEOUT 3600)
       # ui_atom_layout: the Atom Lab layout: centre, info text, card tabs, fit, rings, default view, U-238 info text

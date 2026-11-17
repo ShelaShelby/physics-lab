@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # 0.15 stage 5b: the Atom Lab's element chip and its dropdown (New UI On) in the real app.
-#   check_atom_chip.py <PhysicsLab binary> <work folder>
+#   check_atom_chip.py <PhysicsLab binary> <work folder> [card]
+#   card (0.57.0): the Atom Lab's two card programs (render/atom_card.h) on this PC's renderer (Mesa llvmpipe here, NOT the owner's card): their start-up
+#   checks against the processor at the same seeds within the derived single-precision limits (atom/atom_card.h), the benchmark's paths, and their guards:
+#   the process ended once inside each step (PL_GPU_DIE), the next start runs nothing of that program and Settings, Performance names the step; a changed
+#   shader tries again; Try again works in the same run.
 # References (nothing here is an earlier output of ours): the standard periodic table's places (H in column 1, He in 18, Fe in row 4 column 8, B in row 2 column 13; the lanthanides and
 # actinides in two rows below), the spec's words ("1 proton", "0 neutrons"), the element names written in the famous list's own labels, and the app's own old setParam rule that a new element
 # gets its usual isotope (the unit test in atom_tests holds the textbook mass numbers). All 118 elements are clicked in the real app.
-import os, sys
+import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, inside, overlap
+from shell_lib import run_app, inside, overlap, prefetch
 
 KEYS = ["view", "layer", "zoom", "zoomTo", "focus", "drag", "paused", "yaw", "pitch", "oyaw", "opitch", "ctilt", "czoom", "Z", "N", "usualN", "seed"]
 
@@ -21,11 +25,114 @@ def states(r):
         out.append(d)
     return out
 
+CARD_STEPS = {"slice": ["compile the Slice's dots shader", "link the Slice's dots shader", "the Slice's first small run", "the Slice's check", "the Slice's first full use"],
+              "jump": ["compile the jump's groups shader", "link the jump's groups shader", "the jump's first small run", "the jump's check", "the jump's first full use"]}
+CARD_BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all",
+              "PL_BENCH_WARMUP": "1.0", "PL_BENCH_MEASURE": "1.5"}
+
+def card_part(binary, work):
+    os.makedirs(work, exist_ok=True)
+    fails = checks = 0
+    def check(ok, what):
+        nonlocal fails, checks
+        checks += 1
+        if not ok:
+            fails += 1
+            print("FAIL", what)
+    def folder(name):
+        d = os.path.join(work, name); os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d): os.remove(os.path.join(d, f))
+        return d
+    def read(path):
+        return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+    def lines_of(log, which):
+        return "\n".join(ln for ln in log.splitlines() if ln.startswith(f"[{which}] "))
+    # one normal run of both scenes, the steps of every die run and the runs after them, in parallel
+    BIG = dict(frames=100000, size="880x560", timeout=1500)
+    dirs = {"ok": folder("card_ok")}
+    calls = [((binary, work, "card_ok", dict(CARD_BENCH, PL_SETTINGS=os.path.join(dirs["ok"], "settings.txt"))), BIG)]
+    for which, steps in CARD_STEPS.items():
+        for i, st in enumerate(steps):
+            d = folder(f"card_die_{which}{i}")
+            dirs[(which, i)] = d
+            calls.append(((binary, work, f"card_die_{which}{i}", dict(CARD_BENCH, PL_SETTINGS=os.path.join(d, "settings.txt"), PL_GPU_DIE=st)), BIG))
+    prefetch(calls)
+    results = [run_app(*a, **kw) for a, kw in calls]
+    ok = results[0]
+    out = ok.out
+    # 1. the start-up checks passed, every case within its limits
+    check("PLATOMCARD slice state=1" in out and "PLATOMCARD jump state=1" in out, "card: both programs pass their start-up check here")
+    cases = [ln for ln in out.splitlines() if ln.startswith("PLATOMCARDCASE ")]
+    sl = [ln for ln in cases if ln.startswith("PLATOMCARDCASE slice")]
+    jp = [ln for ln in cases if ln.startswith("PLATOMCARDCASE jump")]
+    def slice_ok(ln):
+        m = re.search(r"(\d+) answered differently \((\d+) within the rounding there\); points (\d+) beyond their limit", ln)
+        return m and m.group(1) == m.group(2) and m.group(3) == "0"
+    check(len(sl) == 5 and all(slice_ok(ln) for ln in sl), f"card: the Slice's dots at 5 planes, the same seeds: every point within its derived limit, every differing answer within the rounding at its margin {sl}")
+    check(len(jp) == 3 and all(re.search(r": 0 of \d+ groups differ", ln) for ln in jp), f"card: the jump's groups equal the processor's exactly {jp}")
+    # 2. the benchmark says which path ran and why
+    rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
+    paths = [ln.strip() for ln in rep.splitlines() if ln.strip().startswith("Path:")]
+    check(any("the Slice's new dots: the graphics card (its start-up check passed" in p for p in paths) and any("drawn from a buffer on the graphics card; the jump's groups: the graphics card (its start-up check passed" in p for p in paths),
+          f"card: the benchmark's report names the card for both scenes, with the check {paths}")
+    # 3. the log: every step in order with its time, the whole path succeeded, kept "ok", no marker left
+    log = read(os.path.join(dirs["ok"], "gpu-paths-log.txt"))
+    st = read(os.path.join(dirs["ok"], "settings.txt"))
+    for which, steps in CARD_STEPS.items():
+        part = lines_of(log, which)
+        at, missing = 0, []
+        for w in [x for s_ in steps for x in ("begin " + s_, "end " + s_)] + ["the whole path succeeded"]:
+            k = part.find(w, at)
+            if k < 0: missing.append(w)
+            else: at = k
+        timed = all(re.search(r"end " + re.escape(s_) + r"[^\n]* in \d+ ms", part) for s_ in steps[:2])
+        check(not missing and timed, f"card: {which}: the log names every step in order, the compile and link with their times (missing: {missing})")
+        check(f"gpu{which}=ok | {which} " in st and not os.path.exists(os.path.join(dirs["ok"], f"gpu-{which}-step.txt")), f"card: {which}: kept as ok in the settings file, no marker left")
+    # 4. the process ended inside each step: the marker names it; the next start runs nothing of that program, the processor is used, Settings names the step
+    after = []
+    for which, steps in CARD_STEPS.items():
+        for i, s_ in enumerate(steps):
+            d = dirs[(which, i)]
+            after.append(((binary, work, f"card_after_{which}{i}", {"PL_ATOM": "1", "PL_SETTINGS": os.path.join(d, "settings.txt"), "PL_OPEN": "settings", "PL_ATOM_SET": "Z=92;view=Slice" if which == "slice" else "Z=88"}),
+                          dict(frames=40, size="880x560", timeout=900)))
+    for which, steps in CARD_STEPS.items():
+        for i, s_ in enumerate(steps):
+            mk = os.path.join(dirs[(which, i)], f"gpu-{which}-step.txt")
+            marker = read(mk)
+            check(f"step={s_}\n" in marker and f"version={which} " in marker, f"card: {which}: the process ended inside '{s_}': the marker names the step ({marker!r})")
+    prefetch(after)
+    for k, (which, steps) in enumerate(CARD_STEPS.items()):
+        for i, s_ in enumerate(steps):
+            a, kw = after[k * 5 + i]
+            r = run_app(*a, **kw)
+            d = dirs[(which, i)]
+            lg = lines_of(read(os.path.join(d, "gpu-paths-log.txt")), which)
+            said = [n for n in r.notes if n.startswith(f"atom{which} ") and "stopped the app last time" in n and f"'{s_}'" in n]
+            check(f"PLATOMCARD {which} state=-1" in r.out and not any(("begin " + x) in lg for x in steps) and said,
+                  f"card: {which}: after '{s_}' nothing of the program runs, the processor is used, Settings names the step (said {bool(said)})")
+            txt = read(os.path.join(d, "settings.txt"))
+            check(f"gpu{which}=off | {which} " in txt and f"| {s_}\n" in txt and not os.path.exists(os.path.join(d, f"gpu-{which}-step.txt")), f"card: {which}: the settings file keeps it off with the step '{s_}', the marker gone")
+    # 5. a changed shader tries again (and passes here); Try again passes in the same run
+    for which in CARD_STEPS:
+        sf = os.path.join(dirs[(which, 0)], "settings.txt")
+        sf2 = os.path.join(dirs[(which, 0)], "settings_shader.txt")
+        with open(sf2, "w", encoding="utf-8") as f: f.write(read(sf))
+        r5 = run_app(binary, work, f"card_shader_{which}", dict(CARD_BENCH, PL_SETTINGS=sf2, **{f"PL_GPU_{which.upper()}SHADER": f"{which} 0000000000000000"}), frames=100000, size="880x560", timeout=1500)
+        check(f"PLATOMCARD {which} state=1" in r5.out, f"card: {which}: a changed shader tries again (and passes here)")
+    sf = os.path.join(dirs[("slice", 1)], "settings.txt")
+    r4 = run_app(binary, work, "card_again", {"PL_ATOM": "1", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpuslice", "PL_ATOM_SET": "Z=92;view=Slice", "PL_SCRIPT": "14:click=gpuslice.again"}, frames=90, size="880x560", timeout=900)
+    # (the cut does not move here, so no new dots are asked for: its first full use waits; the settings file no longer keeps it off)
+    check(not r4.scripted_missing() and "PLATOMCARD slice state=1" in r4.out and "gpuslice=off" not in read(sf), f"card: Try again: the Slice's program is made and checked again in the same run ({r4.scripted_missing()})")
+    print(f"{checks} checks, {fails} failed")
+    return 1 if fails else 0
+
 # standard periodic table: (Z, row, column) for a few; lanthanide row 9, actinide row 10 in the app's own numbering
 PLACES = [(1, 1, 1), (2, 1, 18), (5, 2, 13), (6, 2, 14), (11, 3, 1), (26, 4, 8), (36, 4, 18), (57, 9, 3), (58, 9, 4), (71, 9, 17), (89, 10, 3), (91, 10, 5), (103, 10, 17), (118, 7, 18)]   # (Z, row, column); rows 9 and 10: lanthanides La-Lu and actinides Ac-Lr, 15 each, under group 3 to group 17 (column 2 holds the * and ** marks)
 
 def main():
     binary, work = sys.argv[1], sys.argv[2]
+    if len(sys.argv) > 3 and sys.argv[3] == "card":
+        return card_part(binary, work)
     os.makedirs(work, exist_ok=True)
     fails = checks = 0
     def check(ok, what):

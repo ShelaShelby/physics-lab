@@ -353,6 +353,7 @@ void Renderer2D::shutdown() {
     for (GLuint* tx : {&discUTex_, &discPTex_, &discCTex_, &kATex_, &kBTex_, &kETex_, &kTTex_, &kFTex_}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     if (kerrProgram_) glDeleteProgram(kerrProgram_);
     sky_.reset();                                                          // 0.56.0
+    if (atomCard_) { atomCard_->reset(); delete atomCard_; atomCard_ = nullptr; }   // 0.57.0
     for (GLuint* tx : {&maskTex_, &whiteTex_, &lowTex_[0], &lowTex_[1], &lowTex_[2], &lowTex_[3]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     for (GLuint& tx : expTex_) glDeleteTextures(1, &tx);
     expTex_.clear(); expW_.clear(); expH_.clear();
@@ -1364,8 +1365,13 @@ void Renderer2D::blobsPaletteTake(std::vector<Blob>& b, bool additive, const Pha
     b.clear();
 }
 
+AtomCard& Renderer2D::atomCard() {
+    if (!atomCard_) atomCard_ = new AtomCard();
+    return *atomCard_;
+}
+
 void Renderer2D::cloudGpu(const CloudGpuDraw& d) {
-    if (!cloudGpuOk() || d.cnt <= 0 || !d.pts || !d.grp) return;
+    if (!cloudGpuOk() || d.cnt <= 0 || !d.pts || (!d.grp && !d.grpBuf)) return;
     closeTriangles();
     Segment sg{};
     sg.kind = Kind::CloudGpu; sg.slot = static_cast<int>(clouds_.size()); sg.count = static_cast<int>(d.cnt); sg.additive = d.additive; sg.pal = d.pal;
@@ -1588,8 +1594,18 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
                 if (lo < hi) send(lo, hi); else { send(lo, d.cap); send(0, hi); }
             }
             clEpoch_ = d.epoch; clCap_ = d.cap; clK_ = d.k;
-            glBindBuffer(GL_ARRAY_BUFFER, clGrpVbo_);                         // 2. the colour groups (one byte a dot: they change with the beat or a jump)
-            glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(d.cnt), d.grp, GL_STREAM_DRAW);
+            const GLuint grpSrc = d.grpBuf ? static_cast<GLuint>(d.grpBuf) : clGrpVbo_;   // 0.57.0: a jump's groups made on the card: read where they are
+            if (!d.grpBuf) {
+                glBindBuffer(GL_ARRAY_BUFFER, clGrpVbo_);                     // 2. the colour groups (one byte a dot: they change with the beat or a jump)
+                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(d.cnt), d.grp, GL_STREAM_DRAW);
+            }
+            const auto groupsFrom = [&](GLuint vao, GLuint buf) {
+                glBindVertexArray(vao);
+                glBindBuffer(GL_ARRAY_BUFFER, buf);
+                glVertexAttribPointer(2, 1, GL_UNSIGNED_BYTE, GL_FALSE, 1, reinterpret_cast<void*>(0));
+                glBindVertexArray(0);
+            };
+            if (d.grpBuf) { groupsFrom(clVao_, grpSrc); groupsFrom(grVao_, grpSrc); }
             // 3. the exposure's grid, summed on the GPU, read back
             const int gw = static_cast<int>(d.w / 8) + 2, gh = static_cast<int>(d.h / 8) + 2;
             if (!grFbo_) { glGenFramebuffers(1, &grFbo_); glGenTextures(1, &grTex_); }
@@ -1619,7 +1635,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
             glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo)); glViewport(vp[0], vp[1], vp[2], vp[3]);
             normalBlend();
             const double light = d.exposure ? d.exposure(grCells_) : -1;
-            if (!(light >= 0)) continue;
+            if (!(light >= 0)) { if (d.grpBuf) { groupsFrom(clVao_, clGrpVbo_); groupsFrom(grVao_, clGrpVbo_); } continue; }
             // 4. the dots, instanced, in dot order (as the CPU list)
             if (sg.additive) glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ONE, GL_ONE);
             glUseProgram(clProgram_);
@@ -1633,6 +1649,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
             glBindVertexArray(clVao_);
             glDrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(d.cnt));
             if (sg.additive) normalBlend();
+            if (d.grpBuf) { groupsFrom(clVao_, clGrpVbo_); groupsFrom(grVao_, clGrpVbo_); }   // (back to the uploaded groups)
             continue;
         }
         if (sg.kind == Kind::Mesh) {

@@ -128,6 +128,25 @@ PlaneSampler planeSampler(int id, int Z, int axis, double off) {
 }
 
 const std::vector<double>& PlaneSampler::tailPoly() const { return static_cast<const RadialCdf*>(cdf)->h; }
+const std::vector<double>& PlaneSampler::densPoly() const { return static_cast<const RadialCdf*>(cdf)->c; }
+
+PlaneSampler::Detail PlaneSampler::tryDetail(orbit::Mulberry32& r) const {
+    constexpr double pi = 3.14159265358979323846;
+    Detail d;
+    if (!(g0 > 0)) return d;
+    d.u = 1 - r.next();
+    d.x = radiusX(*static_cast<const RadialCdf*>(cdf), d.u, x0, g0);
+    d.s = d.x * n / (2.0 * Z);
+    d.rho = std::sqrt(std::max(0.0, d.s * d.s - off * off));
+    d.turn = r.next();
+    d.q = onPlane(axis, off, d.rho, 2 * pi * d.turn);
+    if (!(d.s > 0)) { d.radiusZero = true; return d; }
+    const double ux = d.q.x / d.s, uy = d.q.y / d.s, uz = d.q.z / d.s;
+    d.a2 = complex ? std::norm(angularComplex(l, m, ux, uy, uz)) : [&] { const double a = angular(ang, ux, uy, uz); return a * a; }();
+    d.r3 = r.next();
+    d.kept = !(d.r3 * bound > d.a2);
+    return d;
+}
 
 bool PlaneSampler::tryPoint(orbit::Mulberry32& r, CloudPoint& out) const {
     constexpr double pi = 3.14159265358979323846;

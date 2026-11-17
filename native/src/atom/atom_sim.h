@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <optional>
@@ -22,6 +23,8 @@
 #include "decay_chain.h"
 #include "orbit/belts.h"
 #include "render/group_compute.h"
+#include "render/atom_card_types.h"
+#include "atom/cloud_sample.h"
 
 namespace atom {
 
@@ -182,6 +185,10 @@ public:
     bool gpuChart = true;                // 0.13 stage 4 part B: the chart of nuclides' tiles / blocks and ground are kept in a GPU buffer and drawn from it (OpenGL 3.3 is enough); false: made and sent again every frame, as up to 0.13 stage 3 (the reference). Not saved
     bool gpuCloud = true;                // 0.46 (C4): Cloud 3D Glow dots from a GPU buffer, projected and lit in the vertex shader (Renderer2D::cloudGpu); false: the CPU builds every dot each frame (the reference). Not saved
     bool gpuColours = true;              // 0.13 stage 1: the cloud's dots carry a colour INDEX and the shader picks the colour (true), or the CPU colours every dot as in 0.12 (false: for comparing). Not saved; the Performance card has the switch
+    bool gpuSlice = true;                // 0.57.0: the Slice's new one-electron dots from the card (render/atom_card.h) once its start-up check passed; false: the processor (the reference). Not saved
+    bool gpuJump = true;                 // 0.57.0: a jump with every electron drawn from the card's cloud buffer, its groups made there (the start-up check passed); false: the processor. Not saved
+    render::ISliceCompute* sliceCard = nullptr;   // 0.57.0: the card's Slice program (the app sets it; null: the processor)
+    long sliceCardDots() const { return sliceCardDots_; }   // dots the card has made in this run (tests)
     bool hold = false;                   // a control is being held: the decay clock waits
     std::optional<bool> moreStored;      // the remembered ⓘ choice
     mutable ChartScene chartScene_;
@@ -356,6 +363,8 @@ public:
     bool superGroupsGpu(render::IGroupCompute& gc, long cnt, double theta, unsigned char* out);   // out[i] = superGroup(i, theta) for i < cnt
     bool jumpGroupsGpu(render::IGroupCompute& gc, unsigned char* out);                            // out = jumpGroups()'s 2 jn entries
     void jumpGroups(unsigned char* grp) const;            // jumpGroup(0, i) into grp[i] and jumpGroup(1, i) into grp[jumpDots() + i], all dots, the terms that do not depend on the dot worked out once
+    void jumpFixedGroups(std::vector<unsigned char>& g) const;           // 0.57.0, a jump with every electron: each dot's group when shown (2 jn; the card's input)
+    void jumpThresholds(std::uint64_t& t0, std::uint64_t& t1) const;     // 0.57.0: the old and new dots' shares as 53-bit thresholds (render::jumpShareThreshold)
     bool jumpShown(int pop, long i) const;                // pop 0: the old dots, 1: the new ones
     double jumpPhase(int pop, long i) const;              // arg of the wave at the dot (gauge: ends on the new orbital's own phase)
     int jumpGroup(int pop, long i) const;                 // 255 = not shown, else the colour group (phase bin, or 0 / 1 for the sign)
@@ -431,6 +440,12 @@ private:
     const GraspLevel* gNow_ = nullptr;                    // 0.47.2: the GRASP level drawn (its aligned-state shape), else nullptr
     std::vector<int> valSetNow_;                          // 0.47.3: a level atom: the subshells of its outer electrons in manyNow_ (drawn denser, as the alkalis' outer electron)
     int idNow_ = -1;                                      // 0.57.0: stateId() for the batch addDots is making (one electron, no superposition, not Dirac), else -1
+    // 0.57.0: the card's batch of Slice attempts in flight (at most one): what it was made for, so its dots are taken only for that cloud and state
+    struct SliceJob { int job = 0; std::uint32_t seed = 0; int tries = 0; long want = 0; int id = -1, Z = 0, axis = 0; double off = 0; std::uint64_t epoch = 0; };
+    SliceJob sliceJob_;
+    double sliceRate_ = 0.1;                              // the share of attempts kept in the last batch (sizes the next one)
+    long sliceCardDots_ = 0;
+    long addDotsCard(const PlaneSampler& ps, long want);   // the Slice's dots from the card (see addDots)
     hf::Plane manyPlane_;                                 // 0.39.1, Slice with many electrons: every subshell's mass on the cut plane, worked out once per batch
     bool overlap_ = false;                                // Superposition: the two states overlap (<A|B> != 0: the same n, l and a non-orthogonal angular part). They then share one energy, the state is static, and the walker samples its renormalised density directly (every dot is shown)
     void buildJump(long upTo);                            // build the jump's dots up to upTo (old and new dots with the same index)
