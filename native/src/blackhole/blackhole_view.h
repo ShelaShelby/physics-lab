@@ -13,6 +13,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -212,6 +213,9 @@ private:
     int skyState_ = 0, skyStep_ = 0, skyGen_ = 0, skyFrames_ = 0;
     std::string skyWhy_;
     SkyCheck skyCheck_;
+    std::future<std::shared_ptr<const std::array<SkyRef, 2>>> skyRefJob_;   // 0.57.2: the check's reference, made on a thread of its own (skyReady)
+    std::shared_ptr<const std::array<SkyRef, 2>> skyRefs_;
+    std::string skyReadText_;
     std::vector<float> skyProbe_[2];
     double skyStepAt_ = 0;
     long skyTimed0_ = 0;

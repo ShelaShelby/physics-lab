@@ -2293,7 +2293,7 @@ static void testGas() {
         for (int y = 0; y < H; y++)
             for (int x = 0; x < W; x++) {
                 const double U = (x + 0.5 - W / 2.0) / fpx, V = -(y + 0.5 - H / 2.0) / fpx, rho = std::sqrt(U * U + V * V);
-                const ClosedEnd e = traceClosed(a, cam, lookAt(std::atan(rho), std::atan2(U, -V)), 3);
+                const ClosedEnd e = traceClosed(a, cam, lookAt(std::atan(rho), std::atan2(U, -V)), 3, true);
                 for (int k = 0; k < e.nCross; k++) {
                     const double r = 1 / e.u[k];
                     if (r < rIn || r > rOut) continue;
@@ -2392,7 +2392,7 @@ static void testClosedTime() {
     {
         const Camera cam{1e4, 1.0, 0};
         const double edge = std::asin(3 * std::sqrt(3.0) * std::sqrt(1 - 2 / cam.r) / cam.r);   // Synge's edge (b = 3 sqrt(3) M; schwarzschild.h cameraImpact)
-        const ClosedEnd e = traceClosed(0.0, cam, lookAt(edge * (1 + 4e-9), 0.3), kClosedCross);
+        const ClosedEnd e = traceClosed(0.0, cam, lookAt(edge * (1 + 4e-9), 0.3), kClosedCross, true);
         int kb = 0;
         for (int k = 0; k + 1 < e.nCross; k++)
             if (std::fabs(1 / e.u[k] - 3) + std::fabs(1 / e.u[k + 1] - 3) < std::fabs(1 / e.u[kb] - 3) + std::fabs(1 / e.u[kb + 1] - 3)) kb = k;
@@ -2476,7 +2476,7 @@ static void testClosedTime() {
             double spread[4] = {0, 0, 0, 0}, diff[4] = {0, 0, 0, 0};
             int nC = 0, nP = 0, bad = 0;
             for (const Vec3& look : looks) {
-                const ClosedEnd e = traceClosed(cs.a, cam, look, kClosedCross);
+                const ClosedEnd e = traceClosed(cs.a, cam, look, kClosedCross, true);
                 if (e.kind == RayEnd::Lost) { bad++; continue; }
                 subs[e.radial]++;
                 vort += e.vortical;
@@ -2554,7 +2554,9 @@ static void testClosedTime() {
     {
         const double a = 0.9;
         const Camera cam{20, 1.396, 0};
-        const SpinTable tb(a, cam.r, cam.theta, 8, 12, 64, nullptr, 0, kSpinFineFill);
+        SpinFill timedFill = kSpinFineFill;   // 0.57.2: phi and t asked for
+        timedFill.timed = true;
+        const SpinTable tb(a, cam.r, cam.theta, 8, 12, 64, nullptr, 0, timedFill);
         double worst = 0;
         int n = 0, untimed = 0;
         for (int side = 0; side < 2; side++)
@@ -2562,13 +2564,77 @@ static void testClosedTime() {
                 for (int j = 0; j < tb.nS(); j++) {
                     const SpinHit& h = tb.node(side, i, j);
                     if (!h.timed) { untimed++; continue; }
-                    const ClosedEnd e = traceClosed(a, cam, lookAt(tb.nodePsi(side, i, j), tb.rowChi(i)), kSpinCross);
+                    const ClosedEnd e = traceClosed(a, cam, lookAt(tb.nodePsi(side, i, j), tb.rowChi(i)), kSpinCross, true);
                     if (std::min(e.nCross, kSpinCross) != h.nCross) { worst = 1e9; continue; }
                     for (int k = 0; k < h.nCross; k++) { worst = std::max(worst, std::max(std::fabs(h.phi[k] - e.phi[k]), std::fabs(h.t[k] - e.t[k]))); n++; }
                 }
         check(tb.ok() && n > 0 && worst == 0 && untimed == static_cast<int>(tb.fallbacks()), "spin table: phi and t at " + f(n) + " crossings of its entries = the closed forms (" +
               f(worst) + "); entries without them = the rays followed by the integrator (" + f(untimed) + ")");
     }
+}
+
+// 0.57.2: phi and t only on request (traceClosed's timed, SpinFill::timed). 0.56.4 took them at every crossing of every ray, and the spin tables took five times
+// as long (REPORT 0.57.2). The reference is this build's own timed run: without the request every other number is the same bit for bit (the session that made
+// 0.57.2 also compared the untimed numbers with 0.56.3's build on the same machine: equal bit for bit once 0.56.4's Psi_0 by atan2 is put back to asin, REPORT
+// 0.57.2), and phi and t are not made (0, timed false); with it, the moving gas's tests above read them (testClosedTime, testDiscFlux's crossings).
+static bool sameBits(double x, double y) { return std::memcmp(&x, &y, sizeof x) == 0; }
+static bool sameBits(const Vec3& x, const Vec3& y) { return sameBits(x.x, y.x) && sameBits(x.y, y.y) && sameBits(x.z, y.z); }
+static void testTimedOnRequest() {
+    const double spins[4] = {0, 0.6, 0.9, 0.99};
+    const Camera cams[4] = {{20, 80 * kPi / 180, 0}, {74.1, 86.56 * kPi / 180, 0}, {6, 1.2, 0}, {60, kPi / 2, 0}};   // the benchmark's, the Film's (paper), close, in the plane
+    int rays = 0, diff = 0, made = 0, timedCross = 0;
+    for (double a : spins)
+        for (const Camera& c : cams)
+            for (int j = 0; j < 24; j++) {
+                const double chi = 2 * kPi * j / 24 + 0.01, pe = shadowEdge(a, c, chi);
+                const double ps[10] = {0.3 * pe, 0.9 * pe, pe * (1 - 1e-6), pe * (1 - 1e-9), pe * (1 + 1e-9), pe * (1 + 1e-6), pe * (1 + 1e-3), 1.1 * pe, 2 * pe, 0.5 * (kPi + pe)};
+                for (double psi : ps) {
+                    const ClosedEnd u = traceClosed(a, c, lookAt(psi, chi), kClosedCross), w = traceClosed(a, c, lookAt(psi, chi), kClosedCross, true);
+                    rays++;
+                    bool same = u.kind == w.kind && sameBits(u.dir, w.dir) && sameBits(u.b, w.b) && sameBits(u.q, w.q) && u.nCross == w.nCross && sameBits(u.pz, w.pz) &&
+                                sameBits(u.rEnd, w.rEnd) && sameBits(u.thEnd, w.thEnd) && sameBits(u.dthdr, w.dthdr) && u.radial == w.radial && u.vortical == w.vortical;
+                    for (int k = 0; k < kClosedCross; k++) {
+                        same = same && sameBits(u.u[k], w.u[k]);
+                        if (u.phi[k] != 0 || u.t[k] != 0) made++;
+                    }
+                    if (u.timed || !w.timed) made++;
+                    timedCross += w.nCross;
+                    if (!same) diff++;
+                }
+            }
+    check(diff == 0 && made == 0 && timedCross > 0, "traceClosed without phi and t: every other number the same bit for bit as with them (" + f(rays) + " rays, " + f(diff) +
+                                                     " differ), phi and t not made (" + f(made) + ")");
+    // the tables: the moving (coarse) one at every spin from the benchmark's and the Film's cameras, the fine one at the benchmark's spin 0.9
+    for (double a : spins)
+        for (int q = 0; q < 2; q++)
+            for (int fine = 0; fine < 2; fine++) {
+                if (fine && !(a == 0.9 && q == 0)) continue;
+                const Camera& c = cams[q];
+                SpinFill fu = fine ? kSpinFineFill : kSpinMoving, fw = fu;
+                fw.timed = true;
+                const int nChi = fine ? kSpinChiFine : kSpinChiCoarse, nS = fine ? kSpinSFine : kSpinSCoarse, nE = fine ? kSpinEdge : kSpinEdgeCoarse;
+                const SpinTable U(a, c.r, c.theta, nChi, nS, nE, nullptr, 0, fu), W(a, c.r, c.theta, nChi, nS, nE, nullptr, 0, fw);
+                int bad = 0, untimed = 0, timedBad = 0;
+                for (int i = 0; i < nE; i++) bad += !sameBits(U.edgeSample(i), W.edgeSample(i));
+                for (int i = 0; i < nChi; i++) bad += !sameBits(U.rowChi(i), W.rowChi(i)) + !sameBits(U.rowEdge(i), W.rowEdge(i));
+                for (int s = 0; s < 2; s++)
+                    for (int i = 0; i < nChi; i++)
+                        for (int j = 0; j < nS; j++) {
+                            const SpinHit &x = U.node(s, i, j), &y = W.node(s, i, j);
+                            bool same = sameBits(U.nodePsi(s, i, j), W.nodePsi(s, i, j)) && x.sky == y.sky && sameBits(x.dir, y.dir) && sameBits(x.b, y.b) &&
+                                        x.fallback == y.fallback && x.nCross == y.nCross;
+                            for (int k = 0; k < kSpinCross; k++) same = same && sameBits(x.u[k], y.u[k]) && x.phi[k] == 0 && x.t[k] == 0;
+                            bad += !same;
+                            untimed += x.timed;
+                            timedBad += y.timed == y.fallback;
+                        }
+                const std::vector<float>* tu[4] = {&U.texA(), &U.texB(), &U.texEdge(), &U.texTau()};
+                const std::vector<float>* tw[4] = {&W.texA(), &W.texB(), &W.texEdge(), &W.texTau()};
+                for (int k = 0; k < 4; k++) bad += *tu[k] != *tw[k];
+                check(U.ok() && W.ok() && bad == 0 && untimed == 0 && timedBad == 0 && U.rays() == W.rays() && U.fallbacks() == W.fallbacks() && U.mismatches() == W.mismatches(),
+                      std::string(fine ? "fine" : "moving") + " spin table at spin " + f(a) + " from r " + f(c.r) + " without phi and t: the same bit for bit as with them (" +
+                          f(bad) + " numbers differ), none timed (" + f(untimed) + "); with them, every closed-form entry timed (" + f(timedBad) + " not)");
+            }
 }
 
 int main() {
@@ -2613,6 +2679,7 @@ int main() {
     testGlare();
     testGas();
     testClosedTime();
+    testTimedOnRequest();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.57.2", "The spinning hole is quick again",
+     "Since 0.56.4 every light ray of the spinning hole also worked out where and when it crossed the disc's plane, for the moving gas still to come. Nothing "
+     "used those numbers yet, and they made each ray about three times as slow, so the tables behind the picture took five times as long and dragging the "
+     "view stuttered. They are now worked out only where they are asked for, and the tables are as fast as before. The card's start-up check now does its "
+     "processor part on a thread of its own instead of holding up a picture, and the panel no longer works out the same shadow numbers several times a "
+     "picture. What you see is the same."},
     {"0.57.1", "The Molecule Lab's Density cloud moves to the graphics card",
      "The Density style with its 100,000 dots was among the slowest scenes of the benchmark, the vibrating water most of all. The cloud is now made and drawn "
      "by the graphics card: the dots stay on the card, and each picture a small program there places, sizes and lights every dot as the processor did. The "

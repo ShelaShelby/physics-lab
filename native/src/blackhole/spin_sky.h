@@ -48,7 +48,7 @@ struct SpinHit {
     bool fallback = false;       // 0.55.9: followed by mino.h because the closed forms gave no answer (spinRayClosed; counted by the table)
     // 0.56.4 (moving gas, PLAN_MOVINGGAS section 7): at the crossings the ray makes (the first nCross of u), the azimuth phi and the time the light took from
     // there to the camera (far clock, M), from the closed forms (kerr_closed.h); timed is false where they are not known (rays followed by an integrator, or
-    // made on the card): nothing reads them yet
+    // made on the card). 0.57.2: only where asked (SpinFill::timed, spinRayClosed's timed); the lab does not ask yet (the moving gas will)
     int nCross = 0;
     bool timed = false;
     double phi[kSpinCross] = {}, t[kSpinCross] = {};
@@ -68,6 +68,8 @@ struct SpinFill {
                                  // 32 rows missed the disc's thin near side, so the picture changed shape when the view came to rest)
     double xc = kSpinXc;         // 0.56.0: the columns' law s = ln|x| + |x| / xc (smaller: more columns far from the edge, where the disc's near side
                                  // crosses in front of the hole; REPORT 0.56.0)
+    bool timed = false;          // 0.57.2: the closed forms' rays also give phi and t at their crossings (SpinHit; about five times a ray's cost: only where
+                                 // a reader needs them)
 };
 // 0.55.8, the lab's two (blackhole_view.cpp; REPORT 0.55.8; SpinFill{} is 0.55.7's: KerrBL at 1e-10 for every ray): the fine one, Mino's form at 0.55.7's
 // tolerance up to 1e-2 of psi_e, looser beyond (tests/test_blackhole.cpp testSpinTable keeps its limits); the one made while the view moves, Mino's form at the
@@ -150,7 +152,7 @@ SpinHit spinRay(double a, const Camera& cam, double psi, double chi, double rtol
 SpinHit spinRayMino(double a, const Camera& cam, double psi, double chi, double rtol);
 // 0.55.9: the same from the closed forms (kerr_closed.h; the crossings continued as spinRayMino does); a ray they cannot answer is followed by spinRayMino at
 // rtol (its fallback flag set)
-SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, double rtol);
+SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, double rtol, bool timed = false);
 
 // the disc through a hit: the first crossing with rIn <= r <= rOut (order, r, g); order -1 for none
 struct SpinDisc { int order = -1; double r = 0, g = 0; };

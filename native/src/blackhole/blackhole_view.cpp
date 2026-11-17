@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -1101,6 +1102,15 @@ bool BlackHoleView::skyReady(render::Renderer2D& R) {
         if (G.started() && !G.allowed()) { skyOff(G.offText().empty() ? std::string("the spinning hole on the graphics card is switched off") : G.offText()); return false; }
         if (++skyFrames_ < 3) return false;                                // (the first frames on screen first)
         skyState_ = 2; skyStep_ = 0;
+        // 0.57.2: the check's reference (traceClosed at the probes' 3,840 pixels, about 13 ms here) on a thread of its own while the card builds and draws: the
+        // frame only compares (it was made on the frame, one frame of 25-48 ms in blackhole.film_tilt: REPORT 0.57.2). Made once per run (the cases are fixed).
+        if (!skyRefs_ && !skyRefJob_.valid())
+            skyRefJob_ = std::async(std::launch::async, [] {
+                lowerThisThread();
+                auto r = std::make_shared<std::array<SkyRef, 2>>();
+                for (int k = 0; k < 2; k++) (*r)[static_cast<std::size_t>(k)] = skyReference(skyCheckCase(k));
+                return std::shared_ptr<const std::array<SkyRef, 2>>(std::move(r));
+            });
     }
     if (skyState_ == 2) {
         static SkySteps steps;
@@ -1130,13 +1140,22 @@ bool BlackHoleView::skyReady(render::Renderer2D& R) {
                 skyStepAt_ = now; skyStep_ = 5;
                 return false;
             }
+            skyReadText_ = stepText("read back");
+            skyStep_ = 6;
+        }
+        if (skyStep_ == 6) {                                               // 0.57.2: the reference made on its thread? (never waited for: the next frame asks again)
+            const char* name = "the check";
+            if (!skyRefs_) {
+                if (!skyRefJob_.valid() || skyRefJob_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return false;
+                skyRefs_ = skyRefJob_.get();
+            }
             const std::vector<float>* p[2] = {&skyProbe_[0], &skyProbe_[1]};
-            skyCheck_ = skyCheckOf(p);
+            skyCheck_ = skyCheckOf(p, skyRefs_->data());
             static const bool forced = std::getenv("PL_BH_SKYFAIL") != nullptr;   // (tests: as if the check had failed)
             if (forced) { skyCheck_.ok = false; skyCheck_.why = "the check was made to fail (test switch PL_BH_SKYFAIL)"; }
             char b[400];
             std::snprintf(b, sizeof b, "%s: %s; far direction %.1e / %.1e rad, b %.1e / %.1e, disc r %.1e / %.1e, g %.1e / %.1e (benchmark / Film), %.0f ms on the processor",
-                          stepText("read back").c_str(), skyCheck_.ok ? "passed" : "FAILED", skyCheck_.m[0].dir, skyCheck_.m[1].dir, skyCheck_.m[0].b, skyCheck_.m[1].b,
+                          skyReadText_.c_str(), skyCheck_.ok ? "passed" : "FAILED", skyCheck_.m[0].dir, skyCheck_.m[1].dir, skyCheck_.m[0].b, skyCheck_.m[1].b,
                           skyCheck_.m[0].r, skyCheck_.m[1].r, skyCheck_.m[0].g, skyCheck_.m[1].g, skyCheck_.ms);
             G.end(name, b);
             for (int k = 0; k < 2; k++) std::printf("PLBHSKYCHECKCASE %s\n", skyCompareText(skyCheckCase(k), skyCheck_.m[k]).c_str());

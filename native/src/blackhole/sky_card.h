@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "blackhole/kerr_closed.h"
 #include "render/renderer2d.h"
 
 namespace blackhole {
@@ -31,6 +32,10 @@ struct SkyCompare {
     double endsFarPx = 0, dir = 0, dirNear = 0, dirBadFar = 0, b = 0, r = 0, g = 0, discWrongFar = 0, discWrongEdge = 1, u = 0, ms = 0;
 };
 SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& probe, double dirLimit, double rLimit);
+// 0.57.2: the same in two parts: the reference (no probe needed: any thread, made ahead) and the comparison with it (the same numbers; ms counts both)
+struct SkyRef { std::vector<ClosedEnd> ref; std::vector<signed char> kind; std::vector<float> edge; double ms = 0; };
+SkyRef skyReference(const SkyCase& c);
+SkyCompare skyCompare(const SkyCase& c, const SkyRef& ref, const std::vector<float>& probe, double dirLimit, double rLimit);
 std::string skyCompareText(const SkyCase& c, const SkyCompare& m);   // one line "case=... px=..." (the tests read it)
 
 // The start-up check (and its limits, measured on Mesa's llvmpipe with room; REPORT 0.56.0): two cases (the benchmark's camera and the Film's), each a
@@ -40,7 +45,8 @@ constexpr int kSkyCheckW = 48, kSkyCheckH = 40;
 constexpr double kSkyDirLimit = 2e-3, kSkyRLimit = 1e-3;
 const SkyCase& skyCheckCase(int k);   // k = 0, 1
 struct SkyCheck { bool ok = false; std::string why; SkyCompare m[2]; double ms = 0; };
-SkyCheck skyCheckOf(const std::vector<float>* probes[2]);
+// refs (0.57.2): the two cases' references made ahead (skyReference), or null: made here
+SkyCheck skyCheckOf(const std::vector<float>* probes[2], const SkyRef* refs = nullptr);
 
 // tests (PL_BH_COMPARE=sky): the shader's elliptic functions against elliptic.cpp on a grid of arguments, the probe cases, the exposure (printed lines)
 void skyCompareHook(render::Renderer2D& R);

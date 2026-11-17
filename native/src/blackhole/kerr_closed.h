@@ -65,6 +65,7 @@ struct ClosedEnd {
     double b = 0, q = 0;
     int nCross = 0;
     double u[kClosedCross] = {};  // 1 / r at the first crossings of the equator, in the order the ray meets them going into its past
+    bool timed = false;            // 0.57.2: phi and t below were asked for (traceClosed's timed); else they are 0
     double phi[kClosedCross] = {}; // 0.56.4: the azimuth (Boyer-Lindquist phi) at those crossings, and the time the light took from there to the camera
     double t[kClosedCross] = {};   //   (far clock, M, > 0): GLa (11), (12) (kerr_closed.h "TIME AND AZIMUTH")
     double pz = 0;               // Sky: the z-part of the asymptote's offset (M) = (dmu/ds) / (du/ds) at infinity (mino.h)
@@ -73,8 +74,9 @@ struct ClosedEnd {
     bool vortical = false;       // polar type B
 };
 
-// the ray the camera sees in direction look (KerrBL's launch), into its past; at most maxCross crossings (<= kClosedCross)
-ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCross);
+// the ray the camera sees in direction look (KerrBL's launch), into its past; at most maxCross crossings (<= kClosedCross). timed (0.57.2): also phi and t at
+// the crossings (the moving gas; about five times the cost of the rest, so only where asked)
+ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCross, bool timed = false);
 
 // for the tests: the roots (95) and the case, and the path integrals of App. B evaluated from the camera's radius rs to r (no turning point between; r may be
 // infinite): I0 = Int dr / sqrt R, Ip and Im = Int dr / ((r - r+-) sqrt R)

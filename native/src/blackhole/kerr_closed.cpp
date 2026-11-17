@@ -364,13 +364,23 @@ struct Radial {
 //   phi = phi_camera - I_phi - lambda G_phi (+ pi per passage over the axis when lambda = 0), and the time the light took, t_camera - t = I_t + a^2 G_t (12).
 // Only differences between the camera and the point are used (I2 grows without bound at infinity; the camera is at a finite radius). Where r3 = r+
 // (lambda = 2 r+ / a) the weight r+ - a lambda / 2 is 0 and I+ is the cancellation-free form of 0.56.2 (Ipm).
-void phiTimeAt(const Polar& pol, const Radial& rad, double a, double lam, double camPhi, double Fc, double nuR, double tau, double& phi, double& t) {
+// 0.57.2: the camera's end of the path integrals (the same for every crossing of a ray) once per ray, then each crossing's end (the same numbers as 0.56.4's
+// phiTimeAt, which took both ends at every crossing)
+struct CamInts { double x0, sg, a1, a2, ap, am; };
+CamInts camInts(const Radial& rad, double Fc, double nuR) {
     const bool four = rad.sub == 4;
-    const double x0 = four ? Fc : nuR * Fc, x1 = four ? Fc + nuR * tau / rad.pref : tau / rad.pref + nuR * Fc, sg = four ? nuR : 1;
-    double a1, a2, ap, am, b1, b2, bp, bm;
-    rad.timeInts(jacobiAm(x0, rad.kc2), a1, a2, ap, am);
+    CamInts c{};
+    c.x0 = four ? Fc : nuR * Fc;
+    c.sg = four ? nuR : 1;
+    rad.timeInts(jacobiAm(c.x0, rad.kc2), c.a1, c.a2, c.ap, c.am);
+    return c;
+}
+void phiTimeAt(const Polar& pol, const Radial& rad, const CamInts& c, double a, double lam, double camPhi, double Fc, double nuR, double tau, double& phi, double& t) {
+    const bool four = rad.sub == 4;
+    const double x1 = four ? Fc + nuR * tau / rad.pref : tau / rad.pref + nuR * Fc, sg = c.sg;
+    double b1, b2, bp, bm;
     rad.timeInts(jacobiAm(x1, rad.kc2), b1, b2, bp, bm);
-    const double I1 = sg * (b1 - a1), I2 = sg * (b2 - a2), Ip = sg * (bp - ap), Im = sg * (bm - am);
+    const double I1 = sg * (b1 - c.a1), I2 = sg * (b2 - c.a2), Ip = sg * (bp - c.ap), Im = sg * (bm - c.am);
     const double rp = rad.rp, rm = rad.rm, wp = rp - a * lam / 2, wm = rm - a * lam / 2;
     const double Iphi = 2 * a / (rp - rm) * (wp * Ip - wm * Im);
     const double It = 4 / (rp - rm) * (rp * wp * Ip - rm * wm * Im) + 4 * tau + 2 * I1 + I2;
@@ -406,8 +416,9 @@ bool closedRadialIntegrals(double a, double lambda, double eta, double rs, doubl
     return true;
 }
 
-ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCross) {
+ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCross, bool timed) {
     ClosedEnd out;
+    out.timed = timed;
     const KerrBL ch(a);
     Ray ray;
     if (!ch.launch(cam, look, ray)) return out;
@@ -443,10 +454,13 @@ ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCros
     // the crossings of the equator before the end
     double taus[kClosedCross];
     const int nc = pol.crossings(tau, std::min(maxCross, kClosedCross), taus);
+    // 0.57.2: phi and t only when asked (timed): 0.56.4 took them at every crossing of every ray, five times the cost of the rest (REPORT 0.57.2)
+    CamInts ci{};
+    if (timed && nc > 0) ci = camInts(rad, Fc, nuR);
     for (int i = 0; i < nc; i++) {
         const double r = rad.rOf(taus[i], rad.sub == 4 ? Fc : Fc, nuR);
         if (!(r > 0) || !std::isfinite(r)) break;
-        phiTimeAt(pol, rad, a, lam, cam.phi, Fc, nuR, taus[i], out.phi[out.nCross], out.t[out.nCross]);
+        if (timed) phiTimeAt(pol, rad, ci, a, lam, cam.phi, Fc, nuR, taus[i], out.phi[out.nCross], out.t[out.nCross]);
         out.u[out.nCross++] = 1 / r;
     }
     double mu, dmu, G;
@@ -491,7 +505,7 @@ bool closedStateAt(double a, const Camera& cam, const Vec3& look, double tau, Cl
     st.r = rad.rOf(tau, Fc, nuR);
     double dmu, G;
     pol.at(tau, std::sin(th), st.mu, dmu, G);
-    phiTimeAt(pol, rad, a, lam, cam.phi, Fc, nuR, tau, st.phi, st.t);
+    phiTimeAt(pol, rad, camInts(rad, Fc, nuR), a, lam, cam.phi, Fc, nuR, tau, st.phi, st.t);
     st.sub = rad.sub;
     st.vortical = pol.vort;
     return std::isfinite(st.r + st.mu + st.phi + st.t);

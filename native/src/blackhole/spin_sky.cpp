@@ -151,8 +151,8 @@ SpinHit spinRayMino(double a, const Camera& cam, double psi, double chi, double 
     return h;
 }
 
-SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, double rtol) {
-    const ClosedEnd e = traceClosed(a, cam, lookAt(psi, chi), kSpinCross);
+SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, double rtol, bool timed) {
+    const ClosedEnd e = traceClosed(a, cam, lookAt(psi, chi), kSpinCross, timed);
     if (e.kind == RayEnd::Lost) { SpinHit h = spinRayMino(a, cam, psi, chi, rtol); h.fallback = true; return h; }
     SpinHit h;
     h.b = e.b;
@@ -161,7 +161,7 @@ SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, doubl
     const int n = e.nCross;
     for (int k = 0; k < n && k < kSpinCross; k++) { h.u[k] = e.u[k]; h.phi[k] = e.phi[k]; h.t[k] = e.t[k]; }
     h.nCross = std::min(n, kSpinCross);
-    h.timed = true;
+    h.timed = timed;
     if (n < kSpinCross) {   // the first crossing not made, continued as spinRayMino does (spin_sky.h)
         double uv = 0, rest = 0;
         if (h.sky) {
@@ -178,11 +178,17 @@ SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, doubl
     return h;
 }
 
+namespace {
+// 0.57.2: the table's two closed-form rays (a plain function pointer each, as the table's other rays)
+SpinHit spinRayClosedUntimed(double a, const Camera& cam, double psi, double chi, double rtol) { return spinRayClosed(a, cam, psi, chi, rtol, false); }
+SpinHit spinRayClosedTimed(double a, const Camera& cam, double psi, double chi, double rtol) { return spinRayClosed(a, cam, psi, chi, rtol, true); }
+}  // namespace
+
 SpinTable::SpinTable(double a, double rC, double thC, int nChi, int nS, int nEdge, const std::atomic<bool>* cancel, int threads, const SpinFill& fill)
     : a_(a), rC_(rC), thC_(thC), xlo_(fill.xlo), xc_(fill.xc), nChi_(nChi), nS_(nS), nEdge_(nEdge) {
     const auto t0 = std::chrono::steady_clock::now();
     const Camera cam{rC, thC, 0};
-    SpinHit (*const ray)(double, const Camera&, double, double, double) = fill.closed ? spinRayClosed : fill.mino ? spinRayMino : spinRay;
+    SpinHit (*const ray)(double, const Camera&, double, double, double) = fill.closed ? (fill.timed ? spinRayClosedTimed : spinRayClosedUntimed) : fill.mino ? spinRayMino : spinRay;
     const double rtol = fill.rtol;
     const int nth = threads > 0 ? threads : std::clamp(static_cast<int>(std::thread::hardware_concurrency()), 1, 16);
     const auto parallel = [&](int n, const std::function<void(int)>& job) {   // (a plain std::function: generic lambdas nested in lambdas crashed one compiler)

@@ -1,7 +1,7 @@
 # Resume
 
 ## Current state
-- 0.57.1 (17 Nov 2026): the Molecule Lab's Density cloud on the graphics card under its own guard (render/molecule_card.h kMolDotsCS + kMolDotVS + kMolGridVS, molecule/molecule_card_paths.cpp, app/gpu_guard.h gpuMolCloudGuard; molecule/mol_cloud.h the processor's reference and the derived float limits); plain waste out (the panel undid the swing every frame, the still surface made again each frame, the blend's copies, marchTets' hash map). The surface stays on the processor (ROADMAP).
+- 0.57.2 (17 Nov 2026): the spinning hole's tables fast again (0.56.4 made traceClosed take phi and t at every crossing of every ray: now only on request, traceClosed's timed, SpinFill::timed; tables bit for bit 0.56.3's apart from 0.56.4's Psi_0 fix); the card sky check's reference made off the frame (sky_card skyReference); the readout's preset edge loop kept per spin and tilt.
 - Last full UI run: 0.57.0 (the commit "native 0.57.0"), 33 of 34 after fixes: ui_popups fails only check_6b benchwaits' response.atom_density at its 15 s cap on the software renderer (0.56.4 the same; ROADMAP).
 - Next: the owner's 0.57.0 and 0.57.1 benchmark; the Hard-list scenes still below his 255 Hz, slowest first (owner decision 17 Nov 2026, ROADMAP "Whole app"); then the moving gas, PLAN_MOVINGGAS.md section 7, step 2 (the card, the time control and clocks, the labels, the benchmark scene); then the rest of PLAN_BLACKHOLE.md step 4 (quality levels) and step 5, moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.

@@ -42,15 +42,18 @@ render::Renderer2D::LensSky skyProbeLens(const SkyCase& c) {
     return L;
 }
 
-SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirLimit, double rLimit) {
-    SkyCompare m;
+// 0.57.2: the reference (traceClosed at every pixel's centre, the ends, each pixel's distance from the edge) apart from the comparison: it needs no probe, so
+// the start-up check makes it on a thread of its own while the card draws (blackhole_view.cpp skyReady), and the frame only compares
+SkyRef skyReference(const SkyCase& c) {
+    SkyRef R;
     const auto t0 = std::chrono::steady_clock::now();
     const int w = c.w, h = c.h, n = w * h;
-    if (P.size() < static_cast<std::size_t>(16) * n) return m;
     const Camera cam{c.r, c.th, 0};
     const double cx = std::round(w / 2.0), cy = h - std::round(h / 2.0);
-    std::vector<ClosedEnd> ref(static_cast<std::size_t>(n));
-    std::vector<signed char> kind(static_cast<std::size_t>(n));
+    std::vector<ClosedEnd>& ref = R.ref;
+    std::vector<signed char>& kind = R.kind;
+    ref.resize(static_cast<std::size_t>(n));
+    kind.resize(static_cast<std::size_t>(n));
     const auto row = [&](int j) {
         for (int i = 0; i < w; i++) {
             const double ox = i + 0.5 - cx, oy = j + 0.5 - cy, d = std::hypot(ox, oy), th = std::min(d / c.K, kPi);
@@ -70,10 +73,28 @@ SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirL
                 if (kind[static_cast<std::size_t>(jj * w + ii)] != k0) best = std::min(best, std::hypot(ii - i, jj - j) - 0.5);
         return best;
     };
-    std::vector<float> edge(static_cast<std::size_t>(n));
+    std::vector<float>& edge = R.edge;
+    edge.resize(static_cast<std::size_t>(n));
     const auto edgeRow = [&](int j) { for (int i = 0; i < w; i++) edge[static_cast<std::size_t>(j * w + i)] = static_cast<float>(edgeDist(i, j)); };
     if (n > 20000) parallelFor(h, edgeRow);
     else for (int j = 0; j < h; j++) edgeRow(j);
+    R.ms = msSince(t0);
+    return R;
+}
+
+SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirLimit, double rLimit) {
+    if (P.size() < static_cast<std::size_t>(16) * c.w * c.h) return SkyCompare{};
+    return skyCompare(c, skyReference(c), P, dirLimit, rLimit);
+}
+
+SkyCompare skyCompare(const SkyCase& c, const SkyRef& R, const std::vector<float>& P, double dirLimit, double rLimit) {
+    SkyCompare m;
+    const auto t0 = std::chrono::steady_clock::now();
+    const int w = c.w, h = c.h, n = w * h;
+    if (P.size() < static_cast<std::size_t>(16) * n || R.ref.size() != static_cast<std::size_t>(n)) return m;
+    const std::vector<ClosedEnd>& ref = R.ref;
+    const std::vector<signed char>& kind = R.kind;
+    const std::vector<float>& edge = R.edge;
     const bool dump = std::getenv("PL_BH_SKYDUMP") != nullptr;
     for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++) {
@@ -142,7 +163,7 @@ SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirL
             if (ed >= 2) { m.r = std::max(m.r, dr); m.g = std::max(m.g, dg); if (dr > rLimit || dg > rLimit) { m.rBad++;
                 if (dump) std::printf("SKYRBAD %s i=%d j=%d dr=%.3g dg=%.3g r=%.6g b=%.6g q=%.6g edge=%.1f\n", c.name, i, j, dr, dg, rr, e.b, e.q, ed); } }
         }
-    m.ms = msSince(t0);
+    m.ms = R.ms + msSince(t0);
     return m;
 }
 
@@ -162,13 +183,15 @@ const SkyCase& skyCheckCase(int k) {
     return cases[k == 0 ? 0 : 1];
 }
 
-SkyCheck skyCheckOf(const std::vector<float>* probes[2]) {
+SkyCheck skyCheckOf(const std::vector<float>* probes[2], const SkyRef* refs) {
     SkyCheck c;
     const auto t0 = std::chrono::steady_clock::now();
     c.ok = true;
+    double refMs = 0;
     for (int k = 0; k < 2; k++) {
         const SkyCase& cs = skyCheckCase(k);
-        c.m[k] = skyCompare(cs, *probes[k], kSkyDirLimit, kSkyRLimit);
+        c.m[k] = refs ? skyCompare(cs, refs[k], *probes[k], kSkyDirLimit, kSkyRLimit) : skyCompare(cs, *probes[k], kSkyDirLimit, kSkyRLimit);
+        if (refs) refMs += refs[k].ms;
         const SkyCompare& m = c.m[k];
         std::string bad;
         if (m.px != static_cast<long>(cs.w) * cs.h) bad = "no probe picture";
@@ -179,7 +202,7 @@ SkyCheck skyCheckOf(const std::vector<float>* probes[2]) {
         else if (m.rBad > 0) bad = "the disc's radius or shift off by " + std::to_string(std::max(m.r, m.g));
         if (!bad.empty() && c.ok) { c.ok = false; c.why = std::string("the start-up check on this graphics card failed (") + cs.name + ": " + bad + ")"; }
     }
-    c.ms = msSince(t0);
+    c.ms = msSince(t0) + refMs;
     return c;
 }
 

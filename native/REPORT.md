@@ -1,35 +1,38 @@
-# 0.57.1: the Molecule Lab's Density cloud on the graphics card (molecule.vib_density, molecule.density)
-Based on "native 0.57.0". This box: Xeon 2.3 GHz, 4 threads, Mesa llvmpipe (software: its card times are NOT the owner's; the benchmark's 190 ms frames here are llvmpipe's rasterizer).
-## Part 0 (measured first, each scene alone with PL_BENCH_ONLY, the view's parts timed with temporary timers; per frame, this box)
-- vib_density (water, 100,000 dots): 17.8 ms of the lab's own work. The Density panel asked for the still molecule each frame, which undid the swing: the still
-  surface made again (1.9 ms) and one swing moment's 100,000 dots sampled again (6.8-9.5 ms); the vibrating surface 2.3 ms (blend 0.43, ln field 0.15, marching
-  1.36, normals and potential 0.37); the dots projected 0.65 and glowBlobs 3.4; nuclei 0.35, sort 0.25, colours 0.06, triangles 0.17; 8.0 MB of blobs sent.
-- density (benzene, 100,000 dots, camera turning): 9.6 ms: dots projected 0.8, glowBlobs 4-8 (the nuclei cap: 12 nuclei x every dot x up to 4 rounds),
-  project + sort of 14,128 triangles 0.73, colours 0.16, triangles 0.53; 8.0 MB of blobs and 2.0 MB of triangle vertices sent.
-## Plain waste out (bit for bit; density_tests testPlainWaste0571, 17 checks)
-- MoleculeLab::ensureReal (the panel and the picture ask the same), RealCache::ensure (meshVib: the still surface no longer made in every swing frame),
-  dens::blendVib (no whole copy before writing; withFine false for the surface), dens::marchTets (a table in place of the hash map; hashEdges keeps the
-  old way as reference). Vibrating surface 2.3 -> 1.0 ms; both surfaces equal bit for bit (water, benzene, methanol, strides 1 and 2, two isovalues).
-## Part 1: the cloud on the card (render/molecule_card.*, molecule/molecule_card_paths.*, guard gpuMolCloudGuard: compile, link, first small run, check, first full use)
-- kMolDotsCS: each dot's X, Y, size and depth weight (molecule/mol_cloud.h cloudDot, the processor's formulas unchanged, is the reference); kMolGridVS sums the
-  exposure grid on the card (read back, as the Atom Lab's card cloud); kMolDotVS draws the soft dots with kBlobFS. The dots are sent once per set (18 sets kept:
-  the still cloud and the swing's 17 moments). The nuclei cap: only each nucleus's own nearby dots on the processor (cloudNear, exactly glowCapExposure's sums).
-- Gate: the processor's cloud work 4.4-9.3 ms -> 0.2-0.75 ms (cloudNear 0.19 ms for 100,000 dots); kMolDotsCS for 100,000 dots 0.3 ms on llvmpipe.
-- SPIR-V plain / inlined: kMolDotsCS 4.7 / 3.7 KB, kMolDotVS 3.3 / 2.7, kMolGridVS 2.4 / 2.0 (beside kKerrFS 27.3 / 19.5, kKerrSkyFS 101.4 / 62.3, kSliceDotsCS 16.1 / 13.0). Float only.
-- Limits (mol_cloud.h cloudLimit, derived from the operations before any card result: GLSL 4.30 4.7.1 rounding, R/pan/s/ext rounded to float, the
-  processor's own float casts). Start-up check here: 6 cameras x (8,192 of the lab's dots, 4,096 in a box beyond them) = 73,728 dots, 0 beyond their limit,
-  the largest 0.65 of its limit, 0 drawn by one side only.
-- Pictures here (llvmpipe): card against processor pixel for pixel: water and benzene dark identical; water light 4 pixels 1 level off.
-- Found and fixed on the way: gpuGuardDecide read a "molcloud ..." record as an older line (a changed shader would never retry; test_app check, failed
-  before); the first-full-use fence made again every frame was never seen signalled while the card was a frame behind (now made once). The Atom Lab's jump has
-  the same fence pattern: ROADMAP **fix**.
-- Changed: density (blendVib, marchTets), molecule_view (ensure, drawRealistic), shell_molecule, renderer2d (molCloud, Kind::MolCloud), shaders.h, gpu_guard,
-  prefs, settings (row gpumolcloud), orbit_panel (Performance line, Try again, switch "GPU Density cloud"), benchmark (Path lines), main (PL_MOL_CARD=0, guard start).
-  Nothing checks for the benchmark.
-## Estimate for the owner's PC (an estimate: llvmpipe is not his card)
-- The lab's own processor work after: vib 2.3 ms, density 2.2 ms on this box (from 17.8 and 9.6), the 8 MB of blobs a frame gone. Scaled to his 14.45 / 7.44 ms:
-  about 2.5-3.5 ms (vib) and 1.5-2.5 ms (density), under 3.9 ms. Card: as before (0.96 ms) plus the dots' compute and grid, and a short wait for the grid read-back.
-- Left on the processor (ROADMAP): the surface's sort and colours each frame, the vibrating surface each new phase, the grid read-back.
+# 0.57.2: the spinning hole's tables fast again (a 0.56.4 regression) and film_tilt's slow frames
+Based on "native 0.57.1". This box: Xeon 2.1 GHz, 4 cores, Mesa llvmpipe (software: its card times are NOT the owner's).
+## Part 0: measured first (0.56.3 = 2152e14, 0.57.1 = eca308c, each in its own build; 5 runs each, two rounds, median (spread))
+- Coarse spin table, spin 0.9, the benchmark's camera (r 20, 80 degrees; kSpinMoving): 0.56.3 15.2-15.6 ms (14.9-17.9); 0.57.1 74.9-77.4 ms (71.6-88.4).
+- Fine spin table (kSpinFineFill): 0.56.3 194-197 ms (185-214); 0.57.1 1,133 ms (1,103-1,234). traceClosed per ray: 3.3-3.6 us against 9.4-9.5 us.
+- The lead was right: 0.56.4's phiTimeAt at every crossing of every ray (four elliptic sets per crossing, the camera's end taken again each time) is the
+  whole difference (after the fix below: coarse 15.3-16.5 ms (15.2-19.2), fine 203-211 ms (191-220), traceClosed 3.2-3.3 us: inside 0.56.3's spread).
+- blackhole.real_move and film_tilt alone run here at 1-20 pictures a second (llvmpipe draws the sky per pixel), a few frames per slot: they give no table
+  numbers worth comparing (real_move with the card's tables off: the coarse table 145-166 ms in 0.57.1 against 25-44 ms now). The table program above is the measure.
+## Part 1: phi and t only on request (tests first: blackhole_tests testTimedOnRequest, 10 checks)
+- traceClosed(a, cam, look, maxCross, timed = false) and SpinFill::timed (spinRayClosed's timed): phi and t are made only when asked; nothing in the app asks
+  yet (the moving gas will). The camera's end of the path integrals is now taken once per ray (CamInts), the same numbers. ClosedEnd::timed says which.
+- (a) Against 0.56.3's own build, this session, same compiler and machine: 3,840 rays (spins 0, 0.6, 0.9, 0.99; the benchmark's, the Film's, a close and an
+  in-plane camera; rays at 1e-9, 1e-6, 1e-3 of the shadow's edge) and 16 tables (coarse and fine, two cameras, four spins), every field: 90 rays and most
+  table entries differ in the last bits, all from 0.56.4's Psi_0 by atan2 (a deliberate accuracy fix, kept): with asin put back in a scratch copy every number
+  was equal bit for bit. The committed test uses this build's own timed run as reference: without the request every other number (ends, directions, b, q,
+  u, rows, edges, the textures) is equal bit for bit, phi and t not made; 3,840 rays and 9 tables (the fine one at spin 0.9).
+- (b) With the request phi and t equal bit for bit to 0.57.1's on the same rays and tables (this session). The moving gas's tests in testDiscFlux's crossings
+  and testClosedTime are unchanged except for asking for the time (traceClosed(..., true), the table's fill with timed).
+## Part 2: film_tilt's frames (the frame thread's own processor time per frame, thread CPU clock, renderer's GL end left out; temporary timers, removed)
+- What the slow frames were: (1) the card sky's start-up check made its reference (traceClosed at 3,840 pixels) on the frame: one counted frame of 45-48 ms
+  in 0.57.1 (25 ms with the faster rays); (2) the panel's readout, asked 7 times a frame, ran its 4,001-point edge loop each time (0.1 ms each) and, while the
+  tilt moves, the shadow's 132 edges once (about 4 ms here); (3) with the card's tables (this box's default) the fills' dispatches run on llvmpipe inside the
+  frame's GL calls (2.4-5.3 ms of thread time in CardFill::pump here; on a real card a dispatch costs microseconds). No frame waited on a worker or read-back
+  (install, post and pollFine under 0.04 ms; the card's fences are only polled).
+- Fixed: the check's reference on a thread of its own from the start of the sky's steps (sky_card skyReference; the frame only compares; never waited for:
+  the frame asks again next time); the readout's edge loop kept per spin and tilt. The check's numbers are the same (PLBHSKYCHECKCASE lines identical).
+- Over 8 ms, counted frames, 20 s runs. Processor tables (PL_BH_GPUPATHS=0, as the owner's numbers suggest): 0.57.1 5 of 260 (worst 44.9 ms); now 0 of 326
+  (worst 8.0, median 2.2). Card tables: 0.57.1 14 of 67 (worst 44.8); now 5 of 88 (8.3-11.8 ms, each with 2.4-5.3 ms of llvmpipe's dispatch; without it 5.2-6.5).
+- Disc at the stop ("pixels that change between disc and not-disc"): card tables 3,441 / 3,438 before / after; processor tables 3,439 / 3,436; largest patch 682 in all.
+- Left (ROADMAP): the readout's 132 edges on the frame while the view moves.
+## Estimate for the owner's PC (an estimate, not a measurement: his next benchmark decides)
+- Coarse table back to about 0.56.3's 7.8 ms (here it went 15.4 -> 76 -> 16 ms), so at his 8 ms target's edge; the fine table at start about 71 ms, the sharp
+  picture after a stop about 0.46 s again; the stars' new pictures while tilting back toward 60 a second. film_tilt: the 5x tables kept every core busy
+  while tilting and the check's frame was 15-20 ms; both gone, so its 1 % low should come back toward 0.56.3's 168; no frame over 16.7 ms is likely, not sure.
 ## Tests
-- check.sh quick 18/18. check_molecule.py card (added to ui_molecule) by hand: 28/28 (check, paths, log, killed in each of the 5 steps, changed shader, Try again, pictures).
+- check.sh quick: 18 of 18. blackhole_tests 915 checks (testTimedOnRequest new: 10 of them). Nothing new on the graphics card; no physics changed.
 - The full UI suite was not run (a small version).
