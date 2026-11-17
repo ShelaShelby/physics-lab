@@ -45,6 +45,11 @@
 // THE THIRD KIND beyond its pole (cases (2) case II, (3), (4) have n s^2 > 1 on the path): elliptic.h's ellPiang continues the antiderivative past the pole, so
 //   a difference between two points on the path (which never meets r+-) is exact; tested against a direct quadrature of (B4) (test_blackhole.cpp testClosed).
 //
+// TIME AND AZIMUTH AT A CROSSING (0.56.4, PLAN_MOVINGGAS section 3): phi = phi_camera - I_phi - lambda G_phi (11), (B2), and the time the light took from the
+//   crossing to the camera, I_t + a^2 G_t (12), (B3), with (13c), (13f): I1, I2 of every case ((B17)-(B18), (B37)-(B38), (B68)-(B69) with R2 (B64), (B98)-(B99)
+//   with S2 (B94)), I+- of case (1) ((B19), (B23)), G_t of type A ((31), (48)) and B ((58), (68)), written per amplitude of the substitution so that turning
+//   points need no case of their own (kerr_closed.cpp Radial::timeInts, Polar::Gt). E(phi | m) by Carlson's R_D. Only differences between the camera and the
+//   crossing (the camera is at a finite radius; I2 grows without bound at infinity). Tested against the integrator with t added (gas.h KerrBLt).
 // FOR A SHADER LATER: no recursion; every loop has a fixed bound (Carlson's R_F, R_J, R_C: 60 at most; the AGM: 15). Elementary functions used: sqrt, sin, cos,
 // asin, acos, atan, log, cbrt, fabs, floor, ldexp (a power of two).
 #pragma once
@@ -60,6 +65,8 @@ struct ClosedEnd {
     double b = 0, q = 0;
     int nCross = 0;
     double u[kClosedCross] = {};  // 1 / r at the first crossings of the equator, in the order the ray meets them going into its past
+    double phi[kClosedCross] = {}; // 0.56.4: the azimuth (Boyer-Lindquist phi) at those crossings, and the time the light took from there to the camera
+    double t[kClosedCross] = {};   //   (far clock, M, > 0): GLa (11), (12) (kerr_closed.h "TIME AND AZIMUTH")
     double pz = 0;               // Sky: the z-part of the asymptote's offset (M) = (dmu/ds) / (du/ds) at infinity (mino.h)
     double rEnd = 0, thEnd = 0, dthdr = 0;   // Horizon: where the ray is ended (r+ + 1e-3), its theta and dtheta/dr there
     int radial = 0;              // the substitution used: 1..4 (GLa App. B); 5: case II (substitution (2), all roots inside the horizon)
@@ -74,5 +81,9 @@ ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCros
 struct ClosedRadial { double r1, r2, r3, r4; double im1, im2, im3, im4; int sub; };
 ClosedRadial closedRoots(double a, double lambda, double eta);
 bool closedRadialIntegrals(double a, double lambda, double eta, double rs, double r, double& I0, double& Ip, double& Im);
+// 0.56.4, for the tests: the ray's point at Mino time tau from the camera (no crossing needed; tau below the ray's end): r, cos theta, phi, and the time the light
+// took from there to the camera (t_camera - t, M)
+struct ClosedState { double r = 0, mu = 0, phi = 0, t = 0; int sub = 0; bool vortical = false; };
+bool closedStateAt(double a, const Camera& cam, const Vec3& look, double tau, ClosedState& st);
 
 }  // namespace blackhole

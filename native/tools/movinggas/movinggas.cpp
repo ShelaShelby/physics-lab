@@ -5,6 +5,8 @@
 //                              reference integrator (geodesic.h KerrBL, Dormand-Prince) plus the time it takes; then the frames, light curves and the structure
 //                              model written as raw float32 files for tools/movinggas_pictures.py
 // G = c = 1, lengths and times in M (one M of time = GM/c^3).
+// 0.56.4: the gas (clocks, the clump, the pattern) and the integrator with t moved into the app (src/blackhole/gas.h); this tool calls them (one copy).
+//   The checks of the clocks and the published periods moved to tests/test_blackhole.cpp (testGas); --check keeps those of the integrator's time.
 //
 // TIME ALONG A RAY. Per unit of the ray's affine parameter (J15's zeta, the app's KerrBL), with p_t = -1 and b = p_phi:
 //   dt/dzeta = [ (r^2 + a^2) P / Delta + a (b - a sin^2 theta) ] / rho^2,   P = r^2 + a^2 - a b.
@@ -35,6 +37,7 @@
 #include <vector>
 
 #include "blackhole/disc.h"
+#include "blackhole/gas.h"
 #include "blackhole/geodesic.h"
 #include "blackhole/kerr.h"
 #include "blackhole/presets.h"
@@ -44,44 +47,10 @@
 using namespace blackhole;
 constexpr double kPi = 3.14159265358979323846;
 
-// ---------------------------------------------------------------- time along the ray
-class KerrBLt : public KerrBL {   // the app's chart with t as a sixth number of the state
-public:
-    explicit KerrBLt(double a, double rFar = 1e5) : KerrBL(a, rFar), a_(a) {}
-    bool launch(const Camera& cam, const Vec3& look, Ray& ray) const override {
-        if (!KerrBL::launch(cam, look, ray)) return false;
-        ray.n = 6; ray.y[5] = 0;
-        return true;
-    }
-    void rhs(const Ray& ray, const double* y, double* dy) const override {
-        KerrBL::rhs(ray, y, dy);
-        const double r = y[0], s = std::sin(y[1]), c = std::cos(y[1]), a = a_, b = ray.c[0];
-        const double rho2 = r * r + a * a * c * c, D = r * r - 2 * r + a * a, P = r * r + a * a - a * b;
-        dy[5] = ((r * r + a * a) * P / D + a * (b - a * s * s)) / rho2;
-    }
-private:
-    double a_;
-};
-
-// ---------------------------------------------------------------- the gas
-static double omegaK(double r, double a) { return orbitOmega(r, a); }
-static double orbitPeriod(double r, double a) { return 2 * kPi / omegaK(r, a); }
-static double gasSpeed(double r, double a) {    // V, C75 (A7c)
-    const KerrMetric m = kerrMetric(a, r, kPi / 2);
-    return m.varpi / m.alpha * (omegaK(r, a) - m.omega);
-}
-static double gasUt(double r, double a) { const KerrMetric m = kerrMetric(a, r, kPi / 2); const double V = gasSpeed(r, a); return 1 / (m.alpha * std::sqrt(1 - V * V)); }
-static double gasUtMetric(double r, double a) {  // the normalisation u.u = -1 with J15 (A.1)
-    const KerrMetric m = kerrMetric(a, r, kPi / 2);
-    const double W = omegaK(r, a), gtt = -m.alpha * m.alpha + m.omega * m.omega * m.varpi * m.varpi, gtp = -m.omega * m.varpi * m.varpi, gpp = m.varpi * m.varpi;
-    return 1 / std::sqrt(-(gtt + 2 * gtp * W + gpp * W * W));
-}
-static double gasUlowT(double r, double a) {     // -u_t, to compare with BPT (2.12)
-    const KerrMetric m = kerrMetric(a, r, kPi / 2);
-    const double W = omegaK(r, a), ut = gasUt(r, a), gtt = -m.alpha * m.alpha + m.omega * m.omega * m.varpi * m.varpi, gtp = -m.omega * m.varpi * m.varpi;
-    return -(gtt * ut + gtp * W * ut);
-}
-static double tgSeconds(double massSun) { return massSun * units::kGMSun / std::pow(units::kLightSpeed, 3); }
+// ---------------------------------------------------------------- the gas (blackhole/gas.h)
+static double orbitPeriod(double r, double a) { return gasPeriod(r, a); }
+static double gasUt(double r, double a) { return 1 / gasClockRate(r, a); }
+static double tgSeconds(double massSun) { return massTimeSeconds(massSun); }
 
 // ---------------------------------------------------------------- checks
 static int fails = 0;
@@ -89,41 +58,6 @@ static void check(bool ok, const std::string& what) { std::printf("%s %s\n", ok 
 static std::string f(double x) { char b[64]; std::snprintf(b, sizeof b, "%.6g", x); return b; }
 
 static int runChecks() {
-    // 1. Kepler far out: the period from BPT (2.16) in seconds against 2 pi (r^3 / GM)^(1/2) in SI (r in metres), 10 Suns, r = 1e6 M
-    {
-        const double m = 10, r = 1e6, rm = r * gravRadiusM(m);
-        const double tBPT = orbitPeriod(r, 0.9) * tgSeconds(m), tKep = 2 * kPi * std::sqrt(rm * rm * rm / (m * units::kGMSun));
-        check(std::fabs(tBPT / tKep - 1) < 1e-8, "Kepler's law far out (r = 1e6 M, spin 0.9): " + f(tBPT) + " s against " + f(tKep) + " s");
-    }
-    // 2. the gas's clock two ways and its energy against BPT (2.12)
-    {
-        double w1 = 0, w2 = 0;
-        for (double a : {0.0, 0.6, 0.9, 0.998})
-            for (double r : {innermostStable(a, true), 6.0, 10.0, 30.0}) {
-                w1 = std::max(w1, std::fabs(gasUt(r, a) / gasUtMetric(r, a) - 1));
-                w2 = std::max(w2, std::fabs(gasUlowT(r, a) / orbitEnergy(r, a) - 1));
-            }
-        check(w1 < 1e-12, "u^t = 1 / (alpha (1 - V^2)^(1/2)) (C75 (A7a)) = the normalisation of J15 (A.1): " + f(w1));
-        check(w2 < 1e-12, "-u_t = E / mu of BPT (2.12): " + f(w2));
-        check(std::fabs(gasUt(6, 0) - std::sqrt(2.0)) < 1e-12, "a = 0, r = 6 M: u^t = (1 - 3M/r)^(-1/2) = 2^(1/2)");
-        check(std::fabs(gasSpeed(6, 0) - 0.5) < 1e-12, "a = 0, r = 6 M: V = 1/2 (the gas at the innermost stable orbit moves at half the speed of light)");
-    }
-    // 3. published periods. GRAVITY 2018 (A&A 618, L10, p. 2): "a compact, hot spot orbiting a black hole of 4 million solar masses near the ISCO, which for a
-    //    non-rotating black hole corresponds to ... an orbital period of 31 minutes"; p. 3: "R ~ 7 +- 0.5 Rg ... P = 40 +- 8 minutes, for orbits in ... a = 0",
-    //    with M = 4.14e6 (their Fig. 2). Wielgus et al. 2022 (A&A 665, L6, section 3): t_g = 20.46 s (M = 4.155e6), period 74 +- 6 min = "10.0 - 11.2 r_g ...
-    //    (a* = 0) or 9.8 - 11.0 r_g ... (a* = 1)".
-    {
-        const double p31 = orbitPeriod(6, 0) * tgSeconds(4e6) / 60;
-        check(std::fabs(p31 - 31) < 1, "GRAVITY 2018: a = 0, r_ms, 4 million Suns: " + f(p31) + " min against \"31 minutes\" (their rounding: 4.14e6 gives " +
-                                         f(orbitPeriod(6, 0) * tgSeconds(4.14e6) / 60) + ")");
-        const double p7 = orbitPeriod(7, 0) * tgSeconds(4.14e6) / 60;
-        check(std::fabs(p7 - 40) < 8, "GRAVITY 2018: a = 0, r = 7 M, 4.14e6 Suns: " + f(p7) + " min, inside 40 +- 8");
-        const double tg = tgSeconds(4.155e6);
-        check(std::fabs(tg - 20.46) < 0.01, "Wielgus 2022: t_g for 4.155e6 Suns = " + f(tg) + " s against their printed 20.46 s (to its last digit)");
-        const double lo0 = orbitPeriod(10.0, 0) * tg / 60, hi0 = orbitPeriod(11.2, 0) * tg / 60, lo1 = orbitPeriod(9.8, 1) * tg / 60, hi1 = orbitPeriod(11.0, 1) * tg / 60;
-        check(std::fabs(lo0 - 68) < 0.5 && std::fabs(hi0 - 80) < 0.5 && std::fabs(lo1 - 68) < 0.5 && std::fabs(hi1 - 80) < 0.5,
-              "Wielgus 2022: 74 +- 6 min at 10.0 / 11.2 r_g (a = 0): " + f(lo0) + " / " + f(hi0) + "; at 9.8 / 11.0 r_g (a = 1): " + f(lo1) + " / " + f(hi1));
-    }
     // 4. the time along a ray: GLb (72), a = 0: successive crossings of the plane by a ray just outside the shadow's edge differ by tau_0 = 3 sqrt(3) pi M
     {
         const KerrBLt ch(0.0);
@@ -132,18 +66,18 @@ static int runChecks() {
         std::vector<double> cr;
         TraceOptions o; o.maxCross = 8; o.cross = &cr; o.maxSteps = 400000;
         const RayEnd e = trace(ch, cam, lookAt(edge * (1 + 4e-9), 0.3), o);
-        const int n = static_cast<int>(cr.size() / 6);
+        const int n = static_cast<int>(cr.size() / kTState);
         bool ok = e.kind == RayEnd::Sky && n >= 5;
         double d = 0;
         int kb = 0;   // the two successive crossings nearest the photon sphere (around the ray's closest approach)
         for (int k = 0; ok && k + 1 < n; k++)
-            if (std::fabs(cr[6 * k] - 3) + std::fabs(cr[6 * (k + 1)] - 3) < std::fabs(cr[6 * kb] - 3) + std::fabs(cr[6 * (kb + 1)] - 3)) kb = k;
-        if (ok) d = cr[6 * kb + 5] - cr[6 * (kb + 1) + 5];   // t falls along the ray followed into the past
+            if (std::fabs(cr[kTState * k] - 3) + std::fabs(cr[kTState * (k + 1)] - 3) < std::fabs(cr[kTState * kb] - 3) + std::fabs(cr[kTState * (kb + 1)] - 3)) kb = k;
+        if (ok) d = cr[kTState * kb + 5] - cr[kTState * (kb + 1) + 5];   // t falls along the ray followed into the past
         const double tau0 = 3 * std::sqrt(3.0) * kPi;
         check(ok && std::fabs(d / tau0 - 1) < 1e-4, "GLb (72): the delay between two successive crossings of a ray near the edge = " + f(d) + " M against 3 sqrt(3) pi = " +
                                                      f(tau0) + " (" + std::to_string(n) + " crossings)");
         // the same ray: the radius at those crossings is the photon sphere's 3 M
-        if (ok) check(std::fabs(cr[6 * kb] - 3) < 1e-3 && std::fabs(cr[6 * (kb + 1)] - 3) < 1e-3, "those crossings at r = " + f(cr[6 * kb]) + ", " + f(cr[6 * (kb + 1)]) + " M (the photon sphere: 3 M)");
+        if (ok) check(std::fabs(cr[kTState * kb] - 3) < 1e-3 && std::fabs(cr[kTState * (kb + 1)] - 3) < 1e-3, "those crossings at r = " + f(cr[kTState * kb]) + ", " + f(cr[kTState * (kb + 1)]) + " M (the photon sphere: 3 M)");
     }
     // 5. a ray along the hole's direction from far away at a = 0 (b = 0, radial): the time from r1 to the crossing radius equals the closed form
     //    t = r1 - r2 + 2 ln((r1 - 2) / (r2 - 2)) of dt/dr = 1 / (1 - 2/r) (Schwarzschild, radial light). Camera on the plane looking straight in: it falls to
@@ -210,53 +144,7 @@ struct Cross { float r, ph, t, g; };          // one crossing of the disc's plan
 constexpr int kOrders = 3;
 struct Pix { int order = -1; Cross c[kOrders]; int nc = 0; float w = 0; };   // order: index of the first crossing on the disc (-1: none)
 
-static std::uint32_t hash3(std::uint32_t a, std::uint32_t b, std::uint32_t c) {   // a small integer hash (the shader can do the same)
-    std::uint32_t h = a * 0x9E3779B1u ^ (b + 0x7F4A7C15u) * 0x85EBCA77u ^ (c + 0x165667B1u) * 0xC2B2AE3Du;
-    h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12; h *= 0x297A2D39u; h ^= h >> 15;
-    return h;
-}
-static double u01(std::uint32_t h) { return (h & 0xFFFFFF) / 16777216.0; }
-
-struct Structure {   // SKH06 patches (see the header)
-    double a, rIn, rOut, contrast, norm = 1;   // norm: the mean of exp(c S), so that the pattern moves light around without adding any
-    static constexpr double kWidthEta = 0.26, kWidthPhi = 25 * kPi / 180;   // SKH06 section 5 (full widths)
-    static constexpr double kLife = 0.3;                                       // T_life / T_orb, SKH06 (36)
-    static constexpr int kPerCell = 1;
-    // cells: eta bins of width kWidthEta / 2, phi bins of width kWidthPhi / 2 (at birth), birth slots of T_life(r_bin) each
-    double sum(double r, double phi, double t) const {
-        const double eta = std::log(r), de = kWidthEta / 2, dp = kWidthPhi / 2;
-        const double se = kWidthEta / 2.3548, sp = kWidthPhi / 2.3548;          // Gaussian sigma from the full width at half maximum
-        const int ie = static_cast<int>(std::floor(eta / de));
-        double s = 0;
-        for (int je = ie - 2; je <= ie + 2; je++) {
-            const double rb = std::exp((je + 0.5) * de);
-            if (rb < rIn * 0.8 || rb > rOut * 1.3) continue;
-            const double life = kLife * orbitPeriod(std::max(rb, rIn), a);
-            const int k0 = static_cast<int>(std::floor(t / life));
-            for (int k = k0 - 8; k <= k0; k++) {          // patches born up to 8 lifetimes ago (x e^(1-x) < 2.5e-3 after that)
-                const int nphi = static_cast<int>(std::floor(2 * kPi / dp));
-                for (int jp = 0; jp < nphi; jp++) {
-                    const std::uint32_t h = hash3(static_cast<std::uint32_t>(je + 1000), static_cast<std::uint32_t>(k + 100000), static_cast<std::uint32_t>(jp));
-                    const double tb = (k + u01(h)) * life;
-                    const double x = (t - tb) / life;
-                    if (x <= 0) continue;
-                    const double env = x * std::exp(1 - x);
-                    if (env < 2e-3) continue;
-                    const double eb = (je + u01(h * 747796405u + 1u)) * de;
-                    const double pb = (jp + u01(h * 2891336453u + 7u)) * dp;
-                    const double sign = (h >> 31) ? 1.0 : -1.0;           // bright or dark patches
-                    const double dE = eta - eb;
-                    if (std::fabs(dE) > 3.5 * se) continue;
-                    double dP = phi - omegaK(r, a) * (t - tb) - pb;     // where this piece of gas was when the patch was born
-                    dP = std::remainder(dP, 2 * kPi);
-                    s += sign * env * std::exp(-0.5 * (dE * dE / (se * se) + dP * dP / (sp * sp)));
-                }
-            }
-        }
-        return s;
-    }
-    double factor(double r, double phi, double t) const { return std::exp(contrast * sum(r, phi, t)) / norm; }
-};
+using Structure = GasPattern;   // SKH06 patches (blackhole/gas.h)
 
 static void writeRaw(const std::string& path, const std::vector<float>& v) {
     FILE* fp = std::fopen(path.c_str(), "wb");
@@ -289,10 +177,10 @@ static int runRender(const std::string& dir) {
                     if (!ch.launch(cam, lookAt(psi, chi), ray)) continue;
                     const double b = ray.c[0];
                     trace(ch, cam, lookAt(psi, chi), o);
-                    p.nc = static_cast<int>(cr.size() / 6);
+                    p.nc = static_cast<int>(cr.size() / kTState);
                     for (int i = 0; i < p.nc; i++) {
-                        const double r = cr[6 * i];
-                        p.c[i] = {static_cast<float>(r), static_cast<float>(cr[6 * i + 2]), static_cast<float>(-cr[6 * i + 5]),
+                        const double r = cr[kTState * i];
+                        p.c[i] = {static_cast<float>(r), static_cast<float>(cr[kTState * i + 2]), static_cast<float>(-cr[kTState * i + 5]),
                                   static_cast<float>(r > rIn ? discShiftKerr(r, b, a) : 0)};
                         if (p.order < 0 && r >= rIn && r <= rOut) p.order = i;
                     }
@@ -302,13 +190,9 @@ static int runRender(const std::string& dir) {
 
     // the clump (BL06 (5)) at rc
     const double rc = 6, RS = 1.5, A = 4;
-    const KerrMetric mc = kerrMetric(a, rc, kPi / 2);
-    const double grr = rc * rc / mc.Delta, uph = orbitAngMom(rc, a), gpp = mc.varpi * mc.varpi + uph * uph, Wc = omegaK(rc, a), Tc = 2 * kPi / Wc;
-    auto clump = [&](double r, double ph, double tEmit) {
-        const double dr = r - rc;
-        const double dp = std::remainder(ph - (Wc * tEmit), 2 * kPi);   // clump at phi = 0 at t = 0 (phi = 0: the camera's side)
-        return std::exp(-(grr * dr * dr + gpp * dp * dp) / (2 * RS * RS));
-    };
+    Clump cl; cl.a = a; cl.rc = rc; cl.RS = RS; cl.A = A; cl.init();   // clump at phi = 0 at t = 0 (phi = 0: the camera's side)
+    const double Tc = cl.period();
+    auto clump = [&](double r, double ph, double tEmit) { return cl.density(r, ph, tEmit); };
     double tConst = 0;
     // brightness of a pixel at observed time T (far clock at the camera): g^4 F (1 + A n) [* structure]
     auto shade = [&](const Pix& p, double T, bool withClump, bool clumpOnly, bool travel, const Structure* st, int onlyOrder) {
@@ -392,15 +276,12 @@ static int runRender(const std::string& dir) {
     writeRaw(dir + "/order.f32", img);
 
     // the structure model: three looks at the same view
-    Structure st{a, rIn, rOut, 0.0};
+    Structure st;
+    st.a = a; st.rIn = rIn; st.rOut = rOut;
     st.contrast = 0.65;   // chosen so that the face-on 6-10 M annulus varies by about SKH06 Table 2's 43.8 % rms (printed below)
     if (const char* e = std::getenv("PL_MG_CONTRAST")) st.contrast = std::atof(e);   // for trying other strengths by hand
-    {
-        double m = 0; int n = 0;
-        for (int i = 0; i < 20000; i++) { const std::uint32_t h = hash3(7u, 11u, static_cast<std::uint32_t>(i)); m += st.factor(rIn + (rOut - rIn) * u01(h), 2 * kPi * u01(h * 747796405u + 1u), 3000 + 2000 * u01(h * 2891336453u + 7u)); n++; }
-        st.norm = m / n;
-        std::fprintf(meta, "structNorm %.4f\n", st.norm);
-    }
+    st.normalise(20000);
+    std::fprintf(meta, "structNorm %.4f\n", st.norm);
     // its strength in numbers: the rms of a face-on 6-10 M annulus's light over time (SKH06 Table 2 lists 43.8 % rms above 10 Hz for its thermal model there)
     {
         std::vector<double> L;

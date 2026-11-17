@@ -1,0 +1,21 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/1810.12641_gravity2018.txt.gz
+# Reference: GRAVITY Collaboration, "Detection of orbital motions near the last stable circular orbit of the massive black hole SgrA*", Astron. Astrophys. 618, L10 (2018), arXiv:1810.12641v1 (the PDF: sha256 64f2ba2ad4a6f54d78ddc6ee93a7515f0183d42f9c1960d4035d9b375ecfd1ab, 1,370,553 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/1810.12641
+# Date read: 2026-11-17
+# sha256 of the original: 4dd246a29b48fc0389d6108ae2c5bc6069c77278ac7d5bafe596db47a69897eb
+# Place in the original: section 1 (the mass), page 2 (the period at the ISCO) and page 3 (the fit of the flares: R and P)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin section 1: the mass
+                                               bours a concentration of 4.14 million solar masses, plausibly a             sive black hole paradigm.
+#--- end
+#--- begin page 2: the period at the ISCO
+black hole of 4 million solar masses near the ISCO, which for
+a non-rotating black hole corresponds to an orbital diameter of
+60 µas and an orbital period of 31 minutes.
+#--- end
+#--- begin page 3: R and P
+poorer than in Figure 1, owing to the less favourable atmospheric           etc.) yield R ≈ 7 ± 0.5 Rg , a line of nodes at Ω ≈ 115◦ − 160◦ and
+conditions and lower fluxes. The short lifetimes observed for all           an inclination i ≈ 160◦ ±10◦ , with an orbital period of P = 40±8
+#--- end

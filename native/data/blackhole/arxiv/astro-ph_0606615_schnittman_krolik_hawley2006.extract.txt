@@ -1,0 +1,27 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/astro-ph_0606615_schnittman_krolik_hawley2006.txt.gz
+# Reference: J. D. Schnittman, J. H. Krolik, J. F. Hawley, "Light curves from an MHD simulation of a black hole accretion disk", Astrophys. J. 651, 1031 (2006), arXiv:astro-ph/0606615v1 (the PDF: sha256 44b01df45e7fa4c4f999983547dd88ca6ed0dd92d13582b3d9f09302c78dee99, 1,506,381 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/astro-ph/0606615
+# Date read: 2026-11-17
+# sha256 of the original: 7a42dc2752914f3475777ed462a0bf0d0a1724097fee8a82ec51cd4ae188ae28
+# Place in the original: the abstract (patch size and lifetime), eq. (36), Table 2 (rms power of the annuli, thermal model, i = 0)
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin abstract: patches
+      density perturbations in the inner disk. These “hot spot” structures appear to
+      be roughly self-similar over a range of disk radii, with a single characteristic size
+      δφ = 25◦ and δr/r = 0.3, and typical lifetimes Tl ≈ 0.3Torb .
+#--- end
+#--- begin (36)
+spots over a large range of radii (3M ≤ r ≤ 25M), with nearly exponential decay at early
+times with a time constant of
+                                         Tlife ≈ 0.3Torb .                                  (36)
+#--- end
+#--- begin Table 2
+Table 2: RMS power from different annuli of the accretion disk with i = 0◦ for the thermal
+emission model
+   radii Power > 10 Hz Power > 100 Hz Γ(10 − 100 Hz) Γ(100 − 1000 Hz)
+ (r/M)      (% rms)          (% rms)
+     2-6       83.2            26.2               1.8                 2.9
+   6-10        43.8             6.6               2.7                 3.6
+#--- end

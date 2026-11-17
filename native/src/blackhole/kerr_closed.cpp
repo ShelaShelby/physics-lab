@@ -20,6 +20,22 @@ double piAny(double n, double nc, double psi, double kc2) {
     return (s < 0 ? -v : v) + 2 * j * full;
 }
 
+// 0.56.4: E(phi | m) for phi in (-pi, pi] given by s = sin phi, c = cos phi: E = s R_F(c^2, d^2, 1) - (m/3) s^3 R_D(c^2, d^2, 1), R_D(x, y, z) = R_J(x, y, z, z)
+// (Carlson's reduction, as nearR2 below), the reflection E(pi - phi) = 2 E(pi/2) - E(phi) for c < 0, odd in phi
+double ellEang(double s, double c, double kc2) {
+    const double m = 1 - kc2, as = std::fabs(s), c2 = c * c, d2 = c2 + kc2 * s * s;
+    double v = as * carlsonRF(c2, d2, 1) - m / 3 * as * as * as * carlsonRJ(c2, d2, 1, 1);
+    if (c < 0) v = 2 * (carlsonRF(0, kc2, 1) - m / 3 * carlsonRJ(0, kc2, 1, 1)) - v;
+    return s < 0 ? -v : v;
+}
+// 0.56.4: D(psi | m) = (F - E) / m = Int_0^psi sin^2 t / (1 - m sin^2 t)^(1/2) dt for any real psi, without the division by m (m may be small or negative):
+// D = s^3 / 3 R_D(c^2, d^2, 1) for |psi| <= pi/2 (from F - E = (m/3) s^3 R_D), D(psi + pi) = D(psi) + 2 D(pi/2), D(pi/2) = R_D(0, 1 - m, 1) / 3
+double dAny(double psi, double kc2) {
+    const double j = std::floor(psi / kPi + 0.5), p = psi - j * kPi, s = std::sin(p), c = std::cos(p), c2 = c * c;
+    const double v = s * s * s / 3 * carlsonRJ(c2, c2 + kc2 * s * s, 1, 1);
+    return v + (j != 0 ? 2 * j * carlsonRJ(0, kc2, 1, 1) / 3 : 0);
+}
+
 // ---- the polar motion (GLa Sec. III; kerr_closed.h) ----
 struct Polar {
     bool flat = false, vort = false, noG = false;   // noG: lambda = 0 (through the pole): G_phi is multiplied by lambda = 0 and Pi(1; ...) is not finite
@@ -39,7 +55,10 @@ struct Polar {
             const double s0 = std::clamp(cth / std::sqrt(up), -1.0, 1.0);
             const double c02 = std::sin(th) * std::sin(th) * pth * pth / ((a * a * cth * cth + ma2) * up);
             const double c0 = std::sqrt(std::clamp(c02, 0.0, 1.0));
-            ph0 = -nu * std::asin(s0);
+            // 0.56.4: Psi_0 from both its sine and its cosine (atan2), not asin(s0): where the camera is at the ray's polar turning point (p_theta = 0, e.g. a look
+            // straight along e_phi) s0 is 1 within rounding and asin turns a rounding of 1e-16 into 1e-8 rad of Psi_0 (G_phi, the crossings' Mino times); c0 from
+            // p_theta is exact there (found by the time and azimuth test: 2e-8 rad at a crossing, testClosedTime)
+            ph0 = -nu * std::atan2(std::fabs(s0), c0) * (s0 < 0 ? -1 : 1);
             F0 = ellFang(-nu * s0, c0, kc2);
             K = ellKc(kc2);
             noG = !(nc > 0);
@@ -82,6 +101,14 @@ struct Polar {
             dmu = h * (up - um) * s * c * sq * dn / w;
         }
         G = noG ? 0 : (piAny(n, nc, ps, kc2) - G0) * gscale;
+    }
+    // 0.56.4: G_t = Int cos^2 theta / sqrt(Theta) dtheta along the path (GLa (13f)) at Mino time tau. Type A: cos theta = -nu u+^(1/2) sn(X), dX/dtau = sq, so
+    // G_t = (u+ / sq) Int sn^2 dX = (u+ / sq) (D(Psi_tau) - D(Psi_0)) with D = (F - E) / m (GLa (48) with E' = (E - F) / (2m) (32): the same, written without
+    // the division by m = u+/u-). Type B: cos^2 theta = u- + (u+ - u-) sn^2(X) ((69)), G_t = u- tau + ((u+ - u-) / sq) (D(Upsilon_tau) - D(Upsilon_0)) ((68)).
+    double Gt(double tau) const {
+        if (flat) return cth * cth * tau;
+        const double ps = jacobiAm(sq * tau + F0, kc2), dd = dAny(ps, kc2) - dAny(ph0, kc2);
+        return vort ? um * tau + (up - um) / sq * dd : up / sq * dd;
     }
     // lambda = 0 (noG): the ray passes through the axis, where the turning angle is the pole (u+ = 1); each passage turns phi by pi (the limit of lambda G_phi
     // from either side: G_phi's jump over a passage is pi / |lambda| to leading order). The passages: Psi crossing pi/2 + j pi between its start and tau.
@@ -245,6 +272,11 @@ struct Radial {
                     const double D = (s < 0 ? -1 : 1) * (c >= 0 ? q : 2 * carlsonRJ(0, kc2, 1, 1 - n) / 3 - q);
                     v = -pref / r4_ * (F / pref + r43 * r41 / (r4_ * r31) * D);
                 } else v = -pref * r43 / (r3_ * r4_) * ellPiang(n, s, c, kc2) - F / r3_;                         // (B39), (B43)
+            } else if (sub == 1) {
+                // 0.56.4: (B19), (B23): I+- = -F^(1) / r+-1 - (2 / (r31 r42)^(1/2)) r21 / (r+-1 r+-2) Pi(r+-1 r32 / (r+-2 r31); phi | k) (derived again here:
+                // r - r1 = r21 / (1 - n1 s^2), n1 = r32 / r31, so 1 / (r - r+-) = -1 / r+-1 - r21 / (r+-1 r+-2 (1 - n+- s^2)))
+                const double q1 = rr - r1, q2 = rr - r2, np = q1 * (r3 - r2) / (q2 * (r3 - r1));
+                v = -F / q1 - pref * (r2 - r1) / (q1 * q2) * ellPiang(np, s, c, kc2);
             } else if (sub == 3) {
                 const double q1 = rr - r1, q2 = rr - r2, al = (BB * q2 + AA * q1) / (BB * q2 - AA * q1);
                 if (std::fabs(al * al - 1) < kNearR2) { v = nearR2(s, c, F); (k == 0 ? ip : im) = v; continue; }
@@ -256,6 +288,53 @@ struct Radial {
             }
             (k == 0 ? ip : im) = v;
         }
+    }
+    // 0.56.4: R2 (B63)-(B64) and S2 (B93)-(B94) for amplitude (s, c), s >= 0 in case (3); (alpha - tan phi) / (1 + alpha tan phi) written with s and c (no
+    // division by cos phi)
+    double R2(double al, double s, double c) const {
+        const double j = 1 - kc2, al2 = al * al, d = std::sqrt(c * c + kc2 * s * s), w = j + (1 - j) * al2;
+        const double F = ellFang(s, c, kc2), E = ellEang(s, c, kc2);
+        return (F - al2 / w * (E - al * s * d / (1 + al * c))) / (al2 - 1) + (2 * j - al2 / (al2 - 1)) / w * R1(al, s, c);
+    }
+    double S2(double al, double s, double c) const {
+        const double j = 1 - kc2, al2 = al * al, d = std::sqrt(c * c + kc2 * s * s);
+        const double F = ellFang(s, c, kc2), E = ellEang(s, c, kc2);
+        return -((1 - j) * F + al2 * E + al2 * d * (al * c - s) / (c + al * s) - al2 * al) / ((1 + al2) * (1 - j + al2)) +
+               (1 / (1 + al2) + (1 - j) / (1 - j + al2)) * S1(al, s, c);
+    }
+    // 0.56.4: the antiderivatives of r / sqrt R and r^2 / sqrt R (GLa (B4), l = 1, 2) and of 1 / ((r - r+-) sqrt R) at the amplitude phi of the substitution
+    // (the Jacobi amplitude of rOf: any phi the path reaches), so that the path integral from the camera is A(phi(tau)) - A(phi(0)) (times nu in case (4),
+    // whose amplitude runs as nu tau). In cases (1), (2), (3) r is even in phi and every antiderivative is odd: A(phi) = sign(phi) A(|phi|), so a turning
+    // point (r4 in case (2), r3 in case (1)) needs no case of its own (GLa (B30): "they in fact extend properly through turning points").
+    //   (1) r = r1 + r21 / (1 - n1 s^2), n1 = r32 / r31 ((B15), (B27)): I1 = r1 F^(1) + r21 Pi1^(1) (B17), (B22); I2 = H - (r1 r4 + r2 r3) / 2 F^(1) - E^(1) (B18),
+    //       (B21), (B30b), with the sqrt R / (r - r1) of (B18) taken with the sign of dr/dtau (B31): H = (dr/dtau) / (r - r1) = 2 n1 s c d / (pref (1 - n1 s^2)),
+    //       d = (1 - k s^2)^(1/2) (from dr/dphi and dphi/dtau = d / pref).
+    //   (2) r = r3 + r43 / (1 - n2 s^2), n2 = r41 / r31 ((B35), (B46)): I1 = r3 F^(2) + r43 Pi1^(2) (B37), (B42); I2 as (1) with r - r3 (B38), (B41).
+    //   (3) r - q = W' / (1 + alpha0 cos phi), q = (B r2 + A r1) / (B + A), W' = 2 A B r21 / (B^2 - A^2) (from (B75)): I1 = q F^(3) + Pi1^(3) (B68),
+    //       I2 = q^2 F^(3) + 2 q Pi1^(3) + (AB)^(1/2) Pi2^(3) (B69), Pi_l^(3) = (2 r21 (AB)^(1/2) / (B^2 - A^2))^l R_l(alpha0; phi | k3) (B72).
+    //   (4) r = Q - P / (1 + g0 tan phi), Q = a2 / g0 - b1, P = a2 (1 + g0^2) / g0 ((B109)): I1 = Q F^(4) - Pi1^(4) (B98), I2 = Q^2 F^(4) - 2 Q Pi1^(4) + Pi2^(4)
+    //       (B99), Pi_l^(4) = (2 / (C + D)) P^l S_l(g0; phi | k4) (B102).
+    void timeInts(double ph, double& i1, double& i2, double& ip, double& im) const {
+        const bool odd = sub != 4;
+        const double sg = odd && ph < 0 ? -1 : 1, p = odd ? std::fabs(ph) : ph, s = std::sin(p), c = std::cos(p);
+        const double d = std::sqrt(c * c + kc2 * s * s), Fu = ellFang(s, c, kc2), F = pref * Fu;
+        if (sub == 1 || two()) {
+            const double rA = sub == 1 ? r1 : r3, rB = sub == 1 ? r2 - r1 : r4 - r3, n = sub == 1 ? (r3 - r2) / (r3 - r1) : (r4 - r1) / (r3 - r1);
+            const double rt = std::sqrt((r3 - r1) * (r4 - r2));
+            i1 = rA * F + rB * pref * ellPiang(n, s, c, kc2);
+            i2 = 2 * n * s * c * d / (pref * (1 - n * s * s)) - (r1 * r4 + r2 * r3) / 2 * F - rt * ellEang(s, c, kc2);
+        } else if (sub == 3) {
+            const double q = (BB * r2 + AA * r1) / (BB + AA), al = (BB + AA) / (BB - AA), sab = std::sqrt(AA * BB), W = 2 * (r2 - r1) * sab / (BB * BB - AA * AA);
+            const double p1 = W * R1(al, s, c);
+            i1 = q * F + p1;
+            i2 = q * q * F + 2 * q * p1 + sab * W * W * R2(al, s, c);
+        } else {
+            const double Q = a2 / g0 - b1, P = a2 * (1 + g0 * g0) / g0, p1 = pref * P * S1(g0, s, c);
+            i1 = Q * F - p1;
+            i2 = Q * Q * F - 2 * Q * p1 + pref * P * P * S2(g0, s, c);
+        }
+        Ipm(s, c, ip, im);
+        i1 *= sg; i2 *= sg; ip *= sg; im *= sg;
     }
     // r at Mino time tau from the camera (rc, initial sign nu): (B27), (B46), (B75), (B109)
     double rOf(double tau, double F0, double nu) const {
@@ -277,6 +356,29 @@ struct Radial {
         return P * P - D * (eta + (lam - a) * (lam - a));
     }
 };
+
+// 0.56.4: the azimuth and the far time at Mino time tau from the camera (GLa (11), (12), (B2), (B3)): with the path integrals I+-, I0 = tau, I1, I2 between the
+// camera and that point (Radial::timeInts) and G_phi, G_t of the polar motion,
+//   I_phi = (2a / (r+ - r-)) [(r+ - a lambda / 2) I+ - (r- - a lambda / 2) I-] (B2),
+//   I_t = (4 / (r+ - r-)) [r+ (r+ - a lambda / 2) I+ - r- (r- - a lambda / 2) I-] + 4 I0 + 2 I1 + I2 (B3)   (M = 1),
+//   phi = phi_camera - I_phi - lambda G_phi (+ pi per passage over the axis when lambda = 0), and the time the light took, t_camera - t = I_t + a^2 G_t (12).
+// Only differences between the camera and the point are used (I2 grows without bound at infinity; the camera is at a finite radius). Where r3 = r+
+// (lambda = 2 r+ / a) the weight r+ - a lambda / 2 is 0 and I+ is the cancellation-free form of 0.56.2 (Ipm).
+void phiTimeAt(const Polar& pol, const Radial& rad, double a, double lam, double camPhi, double Fc, double nuR, double tau, double& phi, double& t) {
+    const bool four = rad.sub == 4;
+    const double x0 = four ? Fc : nuR * Fc, x1 = four ? Fc + nuR * tau / rad.pref : tau / rad.pref + nuR * Fc, sg = four ? nuR : 1;
+    double a1, a2, ap, am, b1, b2, bp, bm;
+    rad.timeInts(jacobiAm(x0, rad.kc2), a1, a2, ap, am);
+    rad.timeInts(jacobiAm(x1, rad.kc2), b1, b2, bp, bm);
+    const double I1 = sg * (b1 - a1), I2 = sg * (b2 - a2), Ip = sg * (bp - ap), Im = sg * (bm - am);
+    const double rp = rad.rp, rm = rad.rm, wp = rp - a * lam / 2, wm = rm - a * lam / 2;
+    const double Iphi = 2 * a / (rp - rm) * (wp * Ip - wm * Im);
+    const double It = 4 / (rp - rm) * (rp * wp * Ip - rm * wm * Im) + 4 * tau + 2 * I1 + I2;
+    double mu, dmu, G;
+    pol.at(tau, std::sqrt(std::max(1 - pol.cth * pol.cth, 0.0)), mu, dmu, G);
+    phi = camPhi - Iphi - lam * G + kPi * pol.poles(tau);
+    t = It + a * a * pol.Gt(tau);
+}
 }  // namespace
 
 ClosedRadial closedRoots(double a, double lambda, double eta) {
@@ -344,6 +446,7 @@ ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCros
     for (int i = 0; i < nc; i++) {
         const double r = rad.rOf(taus[i], rad.sub == 4 ? Fc : Fc, nuR);
         if (!(r > 0) || !std::isfinite(r)) break;
+        phiTimeAt(pol, rad, a, lam, cam.phi, Fc, nuR, taus[i], out.phi[out.nCross], out.t[out.nCross]);
         out.u[out.nCross++] = 1 / r;
     }
     double mu, dmu, G;
@@ -371,6 +474,27 @@ ClosedEnd traceClosed(double a, const Camera& cam, const Vec3& look, int maxCros
     }
     if (!std::isfinite(out.dir.x + out.dir.y + out.dir.z + out.dthdr)) out.kind = RayEnd::Lost;
     return out;
+}
+
+bool closedStateAt(double a, const Camera& cam, const Vec3& look, double tau, ClosedState& st) {
+    const KerrBL ch(a);
+    Ray ray;
+    if (!ch.launch(cam, look, ray)) return false;
+    const double rc = ray.y[0], th = ray.y[1], pr = ray.y[3], pth = ray.y[4], lam = ray.c[0], eta = ray.c[1];
+    const double nuR = pr > 0 ? -1 : 1, nuTh = pth > 0 ? -1 : 1;
+    Polar pol;
+    Radial rad;
+    if (!pol.init(a, lam, eta, th, pth, nuTh) || !rad.init(a, lam, eta, rc)) return false;
+    double sc, cc;
+    rad.amp(rc, false, sc, cc);
+    const double Fc = rad.I0(sc, cc) / rad.pref;
+    st.r = rad.rOf(tau, Fc, nuR);
+    double dmu, G;
+    pol.at(tau, std::sin(th), st.mu, dmu, G);
+    phiTimeAt(pol, rad, a, lam, cam.phi, Fc, nuR, tau, st.phi, st.t);
+    st.sub = rad.sub;
+    st.vortical = pol.vort;
+    return std::isfinite(st.r + st.mu + st.phi + st.t);
 }
 
 }  // namespace blackhole

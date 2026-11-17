@@ -159,7 +159,9 @@ SpinHit spinRayClosed(double a, const Camera& cam, double psi, double chi, doubl
     h.sky = e.kind == RayEnd::Sky;
     h.dir = e.dir;
     const int n = e.nCross;
-    for (int k = 0; k < n && k < kSpinCross; k++) h.u[k] = e.u[k];
+    for (int k = 0; k < n && k < kSpinCross; k++) { h.u[k] = e.u[k]; h.phi[k] = e.phi[k]; h.t[k] = e.t[k]; }
+    h.nCross = std::min(n, kSpinCross);
+    h.timed = true;
     if (n < kSpinCross) {   // the first crossing not made, continued as spinRayMino does (spin_sky.h)
         double uv = 0, rest = 0;
         if (h.sky) {

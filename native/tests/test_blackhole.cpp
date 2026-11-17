@@ -28,6 +28,7 @@
 
 #include "blackhole/disc.h"
 #include "blackhole/elliptic.h"
+#include "blackhole/gas.h"
 #include "blackhole/geodesic.h"
 #include "blackhole/kerr.h"
 #include "blackhole/kerr_closed.h"
@@ -2221,6 +2222,355 @@ static void testGlare() {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.56.4: moving gas, step 1 (PLAN_MOVINGGAS section 7; gas.h): the clocks and periods (moved from tools/movinggas --check, the same limits), the clump's light
+// curve, the pattern
+static void testGas() {
+    // 1. Kepler far out: the period from BPT (2.16) in seconds against 2 pi (r^3 / GM)^(1/2) in SI (r in metres), 10 Suns, r = 1e6 M
+    {
+        const double m = 10, r = 1e6, rm = r * gravRadiusM(m);
+        const double tBPT = gasPeriod(r, 0.9) * massTimeSeconds(m), tKep = 2 * kPi * std::sqrt(rm * rm * rm / (m * units::kGMSun));
+        check(std::fabs(tBPT / tKep - 1) < 1e-8, "gas: Kepler's law far out (r = 1e6 M, spin 0.9): " + f(tBPT) + " s against " + f(tKep) + " s");
+    }
+    // 2. the gas's clock against the normalisation u.u = -1 with J15 (A.1)'s metric, its energy -u_t against BPT (2.12); the camera's clock against 1 / hoverShift
+    {
+        double w1 = 0, w2 = 0, w3 = 0;
+        for (double a : {0.0, 0.6, 0.9, 0.998})
+            for (double r : {innermostStable(a, true), 6.0, 10.0, 30.0}) {
+                const KerrMetric mt = kerrMetric(a, r, kPi / 2);
+                const double W = gasOmega(r, a), gtt = -mt.alpha * mt.alpha + mt.omega * mt.omega * mt.varpi * mt.varpi, gtp = -mt.omega * mt.varpi * mt.varpi,
+                             gpp = mt.varpi * mt.varpi;
+                const double utNorm = 1 / std::sqrt(-(gtt + 2 * gtp * W + gpp * W * W)), ut = 1 / gasClockRate(r, a);
+                w1 = std::max(w1, std::fabs(ut / utNorm - 1));
+                w2 = std::max(w2, std::fabs(-(gtt * ut + gtp * W * ut) / orbitEnergy(r, a) - 1));
+                for (double th : {0.3, 1.2, kPi / 2}) w3 = std::max(w3, std::fabs(cameraClockRate(a, 3 * r, th) * hoverShift(a, 3 * r, th, 0) - 1));
+            }
+        check(w1 < 1e-12, "gas clock: dtau/dt = alpha (1 - V^2)^(1/2) (C75 (A7a)) = 1 / u^t of the normalisation with J15 (A.1): " + f(w1));
+        check(w2 < 1e-12, "gas clock: -u_t = E / mu of BPT (2.12): " + f(w2));
+        check(w3 < 1e-14, "camera clock: alpha = 1 / hoverShift(b = 0) (J15 (A.1)-(A.3)): " + f(w3));
+        check(std::fabs(1 / gasClockRate(6, 0) - std::sqrt(2.0)) < 1e-12, "gas clock: a = 0, r = 6 M: u^t = (1 - 3M/r)^(-1/2) = 2^(1/2)");
+        check(std::fabs(gasSpeed(6, 0) - 0.5) < 1e-12, "gas: a = 0, r = 6 M: V = 1/2 (the innermost stable orbit at half the speed of light)");
+    }
+    // 3. published periods (their numbers read from the extracts of the saved papers). GRAVITY 2018: "4 million solar masses near the ISCO ... an orbital period of
+    //    31 minutes" (p. 2; their M 4.14e6, section 1); "R ~ 7 +- 0.5 Rg ... P = 40+-8" (p. 3). Wielgus 2022 section 3: M = 4.155e6, t_g = 20.46 s, 74 +- 6 min
+    //    = 10.0 - 11.2 r_g (a = 0), 9.8 - 11.0 r_g (a = 1).
+    {
+        const std::string gr = readExtract("blackhole/arxiv/1810.12641_gravity2018.extract.txt"), wi = readExtract("blackhole/arxiv/2209.09926_wielgus2022.extract.txt");
+        const std::vector<double> m414 = numbersAfter(gr, "concentration of ", 1), m4 = numbersAfter(gr, "black hole of ", 1), p31 = numbersAfter(gr, "orbital period of ", 1);
+        const std::vector<double> r7 = numbersAfter(gr, "yield R ", 2), p40 = numbersAfter(gr, "period of P = ", 2);
+        const std::vector<double> mw = numbersAfter(wi, "Assuming M", 1), tgw = numbersAfter(wi, "we find tg = ", 1), pw = numbersAfter(wi, "measured LP is a co-", 2);
+        const std::vector<double> r0 = numbersAfter(wi, "two components, we can", 2), r1 = numbersAfter(wi, "in the loopy period", 2);
+        const bool read = m414.size() == 1 && m4.size() == 1 && p31.size() == 1 && r7.size() == 2 && p40.size() == 2 && mw.size() == 1 && tgw.size() == 1 && pw.size() == 2 &&
+                          r0.size() == 2 && r1.size() == 2;
+        check(read && m414[0] == 4.14 && m4[0] == 4 && p31[0] == 31 && r7[0] == 7 && p40[0] == 40 && p40[1] == 8 && mw[0] == 4.155 && tgw[0] == 20.46 && pw[0] == 74 &&
+                  pw[1] == 6 && r0[0] == 10.0 && r0[1] == 11.2 && r1[0] == 9.8 && r1[1] == 11.0,
+              "gas: the numbers of GRAVITY 2018 and Wielgus 2022 read from their extracts");
+        if (read) {
+            const double p = gasPeriod(6, 0) * massTimeSeconds(m4[0] * 1e6) / 60;
+            check(std::fabs(p - p31[0]) < 1, "GRAVITY 2018: a = 0, r_ms, 4 million Suns: " + f(p) + " min against \"31 minutes\" (their rounding: 4.14e6 gives " +
+                                                 f(gasPeriod(6, 0) * massTimeSeconds(m414[0] * 1e6) / 60) + ")");
+            const double p7 = gasPeriod(r7[0], 0) * massTimeSeconds(m414[0] * 1e6) / 60;
+            check(std::fabs(p7 - p40[0]) < p40[1], "GRAVITY 2018: a = 0, r = 7 M, 4.14e6 Suns: " + f(p7) + " min, inside 40 +- 8");
+            const double tg = massTimeSeconds(mw[0] * 1e6);
+            check(std::fabs(tg - tgw[0]) < 0.01, "Wielgus 2022: t_g for 4.155e6 Suns = " + f(tg) + " s against their printed 20.46 s (to its last digit)");
+            const double lo0 = gasPeriod(r0[0], 0) * tg / 60, hi0 = gasPeriod(r0[1], 0) * tg / 60, lo1 = gasPeriod(r1[0], 1) * tg / 60, hi1 = gasPeriod(r1[1], 1) * tg / 60;
+            const double lo = pw[0] - pw[1], hi = pw[0] + pw[1];
+            check(std::fabs(lo0 - lo) < 0.5 && std::fabs(hi0 - hi) < 0.5 && std::fabs(lo1 - lo) < 0.5 && std::fabs(hi1 - hi) < 0.5,
+                  "Wielgus 2022: 74 +- 6 min at 10.0 / 11.2 r_g (a = 0): " + f(lo0) + " / " + f(hi0) + "; at 9.8 / 11.0 r_g (a = 1): " + f(lo1) + " / " + f(hi1));
+        }
+    }
+    // 4. the clump's light curve (BL06 (5) on the disc's face, each pixel at its own emission time T - t from the closed forms): spin 0.6, the camera hovering at
+    //    60 M 10 degrees above the disc (the plan's view), 120 x 72 pixels, the clump at 6 M. It repeats after one orbit 2 pi / Omega(r_c) (to rounding) and
+    //    not after half (by more than a tenth of its peak)
+    {
+        const double a = 0.6, rIn = innermostStable(a, true), rOut = 12;
+        const Camera cam{60, 80 * kPi / 180, 0};
+        const int W = 120, H = 72;
+        const double fpx = (W / 2.0) / std::tan(12.6 * kPi / 180);
+        struct Px { double r, phi, t, w; };
+        std::vector<Px> px;
+        int orders[3] = {0, 0, 0};
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++) {
+                const double U = (x + 0.5 - W / 2.0) / fpx, V = -(y + 0.5 - H / 2.0) / fpx, rho = std::sqrt(U * U + V * V);
+                const ClosedEnd e = traceClosed(a, cam, lookAt(std::atan(rho), std::atan2(U, -V)), 3);
+                for (int k = 0; k < e.nCross; k++) {
+                    const double r = 1 / e.u[k];
+                    if (r < rIn || r > rOut) continue;
+                    const double g = discShiftKerr(r, e.b, a), w = 1 / ((1 + rho * rho) * std::sqrt(1 + rho * rho) * fpx * fpx);   // the pixel's solid angle
+                    px.push_back(Px{r, e.phi[k], e.t[k], w * std::pow(g, 4) * discFlux(r, a)});
+                    orders[std::min(k, 2)]++;
+                    break;
+                }
+            }
+        Clump cl;
+        cl.a = a; cl.rc = 6; cl.init();
+        const double Tc = cl.period();
+        const auto L = [&](double T) { double s = 0; for (const Px& p : px) s += p.w * cl.A * cl.density(p.r, p.phi, T - p.t); return s; };
+        double peak = 0, dOrbit = 0, dHalf = 0;
+        for (int i = 0; i < 60; i++) {
+            const double T = 5000 + Tc * i / 60, l = L(T);
+            peak = std::max(peak, l);
+            dOrbit = std::max(dOrbit, std::fabs(L(T + Tc) - l));
+            dHalf = std::max(dHalf, std::fabs(L(T + Tc / 2) - l));
+        }
+        check(peak > 0 && dOrbit < 1e-9 * peak && dHalf > 0.1 * peak, "clump light curve (spin 0.6, camera at 60 M, 10 degrees above the disc; " + f(orders[0]) +
+              " pixels see the disc directly, " + f(orders[1] + orders[2]) + " through a later crossing): one orbit later it differs by " + f(dOrbit / peak) +
+              " of its peak, half an orbit later by " + f(dHalf / peak));
+    }
+    // 5. the pattern (SKH06): (a) a mark that does not fade comes back to its phi after one orbit T = 2 pi (r^(3/2) + a) (BPT (2.16)) and is half a turn on
+    //    after half; (b) the brightness factor averages 1 weighted by the disc's light (r F(r) dr dphi: the disc's total light unchanged), over points and times
+    //    not used for the norm, within 3 standard errors of the sample; (c) the face-on 6-10 M ring's light varies by SKH06 Table 2's rms within the plan's 20 %
+    {
+        const double a = 0.9, r = 8, T = 2 * kPi * (std::pow(r, 1.5) + a);
+        GasPatch p;
+        p.eta = std::log(r); p.phi = 1.0; p.tBirth = 100; p.life = 1;
+        const double back = GasPattern::patch(p, r, 1.0, 100 + T, a, false), half = GasPattern::patch(p, r, 1.0 + kPi, 100 + T / 2, a, false);
+        const double lateFade = GasPattern::patch(p, r, 1.0, 100 + T, a, true);
+        check(std::fabs(back - 1) < 1e-12 && std::fabs(half - 1) < 1e-12 && lateFade < 1e-30, "pattern: an unfading mark at 8 M (spin 0.9) is back at its phi after T_orb (" +
+              f(back) + ") and half a turn on after half (" + f(half) + "); with the fading of SKH06 (36) it is gone after " + f(T) + " M (" + f(lateFade) + ")");
+        GasPattern pat;
+        pat.a = 0; pat.rIn = 6; pat.rOut = 25;
+        pat.normalise();
+        // the test's own samples: as normalise() (r stratified, weighted by r F(r), times 10 lifetimes of the outermost bins apart: independent) at other
+        // places and times; the standard error of the difference is that of both means
+        const double gap = 10 * GasPattern::kLife * gasPeriod(1.3 * pat.rOut * std::exp(GasPattern::kWidthEta), 0);
+        double sw = 0, sx = 0, sx2 = 0, sw2 = 0;
+        const int n = 20000;
+        for (int i = 0; i < n; i++) {
+            const std::uint32_t h = gasHash(13u, 17u, static_cast<std::uint32_t>(i));
+            const double rr = pat.rIn + (pat.rOut - pat.rIn) * gasU01(h * 2891336453u + 7u), w = rr * discFlux(rr, 0);
+            const double x = pat.factor(rr, 2 * kPi * gasU01(h), 2e8 + gap * (i + gasU01(h * 747796405u + 1u)));
+            sw += w; sx += w * x; sx2 += w * x * x; sw2 += w * w;
+        }
+        const double mean = sx / sw, var = sx2 / sw - mean * mean, se = std::sqrt(var * sw2) / sw, se2 = std::sqrt(se * se + pat.normErr * pat.normErr);
+        check(std::fabs(mean - 1) < 3 * se2, "pattern: the brightness factor weighted by the disc's light averages " + f(mean) + " at 20000 independent places and times (1 within 3 standard errors of it and the norm, " +
+              f(3 * se2) + "; norm " + f(pat.norm) + ")");
+        const std::string skh = readExtract("blackhole/arxiv/astro-ph_0606615_schnittman_krolik_hawley2006.extract.txt");
+        const std::vector<double> row = numbersAfter(skh, "   6-10 ", 1);
+        double rms = 0;
+        {
+            std::vector<double> Ls;
+            for (int i = 0; i < 400; i++) {
+                const double t = 2000 + i * 8.0;
+                double s = 0;
+                for (double rr = 6.1; rr < 10; rr += 0.2)
+                    for (int j = 0; j < 90; j++) s += discFlux(rr, 0) * rr * pat.factor(rr, 2 * kPi * j / 90, t);
+                Ls.push_back(s);
+            }
+            double m = 0, v = 0;
+            for (double x : Ls) m += x;
+            m /= static_cast<double>(Ls.size());
+            for (double x : Ls) v += (x - m) * (x - m);
+            rms = std::sqrt(v / static_cast<double>(Ls.size())) / m;
+        }
+        check(row.size() == 1 && row[0] == 43.8 && std::fabs(rms / (row[0] / 100) - 1) < 0.2, "pattern: the face-on 6-10 M ring (spin 0, contrast " + f(pat.contrast) +
+              ") varies by " + f(100 * rms) + " % rms over 3200 M against SKH06 Table 2's " + (row.empty() ? std::string("?") : f(row[0])) + " % (thermal, > 10 Hz; the plan's 20 %)");
+    }
+}
+
+// 0.56.4: the azimuth and the time the light took at each disc crossing, in closed form (kerr_closed.h "TIME AND AZIMUTH"), against GLb (72), radial light, and
+// the integrator with t added (gas.h KerrBLt)
+// the integrator's state over the axis: KerrBL lets theta run past 0 or pi; a point at -theta is the one at theta, phi + pi (the closed forms count the passage)
+static void foldAxis(double& th, double& ph) {
+    th = std::remainder(th, 2 * kPi);
+    if (th < 0) { th = -th; ph += kPi; }
+}
+class KerrBLtz : public KerrBLt {   // KerrBLt with the affine parameter itself as y[7] (to stop a looser run at the same zeta)
+public:
+    explicit KerrBLtz(double a) : KerrBLt(a) {}
+    bool launch(const Camera& cam, const Vec3& look, Ray& ray) const override {
+        if (!KerrBLt::launch(cam, look, ray)) return false;
+        ray.n = 8; ray.y[7] = 0;
+        return true;
+    }
+    void rhs(const Ray& ray, const double* y, double* dy) const override { KerrBLt::rhs(ray, y, dy); dy[7] = 1; }
+};
+static void testClosedTime() {
+    // 1. GLb (72), a = 0: successive crossings of the plane by a ray just outside the shadow's edge are delayed by tau_0 = 3 sqrt(3) pi M, held to the limit of
+    //    tools/movinggas's integrator check (1e-4: the delay tends to tau_0 as the ray nears the edge)
+    {
+        const Camera cam{1e4, 1.0, 0};
+        const double edge = std::asin(3 * std::sqrt(3.0) * std::sqrt(1 - 2 / cam.r) / cam.r);   // Synge's edge (b = 3 sqrt(3) M; schwarzschild.h cameraImpact)
+        const ClosedEnd e = traceClosed(0.0, cam, lookAt(edge * (1 + 4e-9), 0.3), kClosedCross);
+        int kb = 0;
+        for (int k = 0; k + 1 < e.nCross; k++)
+            if (std::fabs(1 / e.u[k] - 3) + std::fabs(1 / e.u[k + 1] - 3) < std::fabs(1 / e.u[kb] - 3) + std::fabs(1 / e.u[kb + 1] - 3)) kb = k;
+        const double tau0 = 3 * std::sqrt(3.0) * kPi, d = e.nCross >= 5 ? e.t[kb + 1] - e.t[kb] : 0;
+        check(e.kind == RayEnd::Sky && e.nCross >= 5 && std::fabs(d / tau0 - 1) < 1e-4, "closed t: GLb (72), a = 0: the delay between successive crossings near the edge " + f(d) +
+              " M against 3 sqrt(3) pi = " + f(tau0) + " (" + f(e.nCross) + " crossings, at r = " + f(1 / e.u[kb]) + ", " + f(1 / e.u[kb + 1]) + ")");
+    }
+    // 2. nearly radial light at a = 0 (psi = 1e-5 from the hole's direction: b = 1e-3 M; the radial ray itself is GLa's excluded principal ray (77)): from 100 M
+    //    to r2 against t = r1 - r2 + 2 ln((r1 - 2)/(r2 - 2)) (dt/dr = 1 / (1 - 2/r)); the ray's angular momentum adds at most b^2 / (2 r2) (dt/dr =
+    //    1 / ((1 - 2/r)(1 - b^2 (1 - 2/r) / r^2)^(1/2))): the limit b^2 / r2
+    {
+        const Camera cam{100, 1.2, 0};
+        double worst = 0, lim = 0;
+        for (double tau : {0.02, 0.09, 0.2}) {
+            ClosedState st;
+            if (!closedStateAt(0.0, cam, lookAt(1e-5, 0.4), tau, st)) { worst = 1e9; continue; }
+            const double ref = cam.r - st.r + 2 * std::log((cam.r - 2) / (st.r - 2)), b = cam.r * 1e-5 / std::sqrt(1 - 2 / cam.r);
+            worst = std::max(worst, std::fabs(st.t - ref) / (b * b / st.r));
+            lim = b * b / st.r;
+        }
+        check(worst < 1, "closed t: nearly radial light at a = 0 against its closed form: the worst difference " + f(worst) + " of b^2 / r2 (" + f(lim) + " M at the last)");
+    }
+    // 3. against the integrator (KerrBLt at rtol 1e-12) for every radial substitution and both polar types, spins 0.01, 0.6, 0.9, 0.99 (testClosed's cameras):
+    //    at the crossings (r, phi, t) and at three points along each ray (r, cos theta, phi, t at the integrator's own Mino time; vortical rays never cross).
+    //    THE LIMIT is what the integrator reaches: per camera and per number, the largest difference between the integrator at 1e-10 and at 1e-12 (the same
+    //    crossings; along the ray, at the same Mino time). The closed forms are held to it against the 1e-12 run. Plus, at spins 0.6, 0.9, 0.99 and 0.01 (camera at
+    //    1000 M there), rays with lambda = 2 r+ / a exactly (r3 = r+, the cancellation 0.56.2 found) and at 1 +- 1e-6 of it.
+    {
+        unsigned seed = 5;
+        const auto rnd = [&] { seed = seed * 1103515245u + 12345u; return ((seed >> 8) & 0xffffff) / 16777216.0; };
+        struct Case { double a, rc, th; int nray; };
+        int subs[6] = {}, vort = 0, crossAll = 0;
+        for (const Case cs : {Case{0.01, 20, 1.3, 14}, Case{0.6, 74.1, 1.5107, 14}, Case{0.9, 20, 1.396, 14}, Case{0.99, 6, 1.4, 14}, Case{0.9, 8, 0.4, 14},
+                              Case{0.9, 2.5, 1.2, 14}, Case{0.6, 3, 0.3, 14}, Case{0.6, 30, 1.3, -1}, Case{0.9, 30, 1.3, -1}, Case{0.99, 30, 1.3, -1}, Case{0.01, 1000, 1.3, -1}}) {
+            const Camera cam{cs.rc, cs.th, 0};
+            const KerrBLtz ch(cs.a);
+            std::vector<Vec3> looks;
+            if (cs.nray > 0) {
+                for (int k = 0; k < cs.nray; k++) {
+                    const double chi = k < 4 ? kPi / 2 * k : 2 * kPi * rnd(), pe = shadowEdge(cs.a, cam, chi);
+                    for (int band = 0; band < 2; band++) for (int side = 0; side < 2; side++) {
+                        const double x = pe * std::pow(10.0, band == 0 ? -5 + 2 * rnd() : -2 + 2 * rnd());
+                        const double psi = side == 0 && band == 1 ? pe + (kPi - pe) * rnd() : side ? pe - x : pe + x;
+                        if (psi > 0 && psi < kPi) looks.push_back(lookAt(psi, chi));
+                    }
+                }
+                // and up to 3 rays of each substitution and of the vortical type that a 60 x 60 grid over the camera's sky meets (case II and (4) are rare)
+                int found[7] = {};
+                for (int i = 0; i < 60; i++)
+                    for (int j = 0; j < 60; j++) {
+                        const double psi = kPi * (j + 0.5) / 60, chi = 2 * kPi * (i + 0.5) / 60;
+                        const ClosedEnd e = traceClosed(cs.a, cam, lookAt(psi, chi), 0);
+                        const int kind = e.kind == RayEnd::Lost ? 0 : e.vortical ? 6 : e.radial;
+                        if (kind > 0 && found[kind] < 3) { found[kind]++; looks.push_back(lookAt(psi, chi)); }
+                    }
+            } else {
+                // lambda = 2 r+ / a: on the rows chi = +-pi/2, the first psi from the edge outward where lambda passes the target (a scan of 2000, then bisection),
+                // times 1 and 1 +- 1e-6
+                const double target = 2 * horizon(cs.a) / cs.a;
+                for (double fac : {1.0, 1 - 1e-6, 1 + 1e-6}) {
+                    bool got = false;
+                    for (double chi : {kPi / 2, -kPi / 2}) {
+                        const double pe = shadowEdge(cs.a, cam, chi);
+                        const auto lamAt = [&](double psi) { Ray rr; ch.launch(cam, lookAt(psi, chi), rr); return rr.c[0] - fac * target; };
+                        double lo = pe * (1 + 1e-9), slo = lamAt(lo), hi = lo;
+                        for (int k = 1; k <= 2000 && !got; k++) {
+                            hi = pe + (kPi - pe) * k / 2000.0;
+                            if (lamAt(hi) * slo <= 0) got = true; else lo = hi;
+                        }
+                        if (!got) continue;
+                        for (int it = 0; it < 200; it++) { const double mid = 0.5 * (lo + hi); if (lamAt(mid) * slo > 0) lo = mid; else hi = mid; }
+                        const double psi = 0.5 * (lo + hi);
+                        if (fac == 1.0) check(std::fabs(lamAt(psi) / target) < 1e-13, "closed t: the ray with lambda = 2 r+ / a found at spin " + f(cs.a) + ": " + f(lamAt(psi) / target));
+                        looks.push_back(lookAt(psi, chi));
+                        break;
+                    }
+                    if (!got) check(false, "closed t: no ray with lambda = 2 r+ / a seen from r " + f(cs.rc) + " at spin " + f(cs.a));
+                }
+            }
+            // per number: [0] r (relative), [1] phi (rad), [2] t (M), [3] cos theta: the integrator's spread and the closed forms' difference
+            double spread[4] = {0, 0, 0, 0}, diff[4] = {0, 0, 0, 0};
+            int nC = 0, nP = 0, bad = 0;
+            for (const Vec3& look : looks) {
+                const ClosedEnd e = traceClosed(cs.a, cam, look, kClosedCross);
+                if (e.kind == RayEnd::Lost) { bad++; continue; }
+                subs[e.radial]++;
+                vort += e.vortical;
+                std::vector<double> cr12, cr10, path;
+                TraceOptions o12;
+                o12.rtol = 1e-12; o12.atol = 1e-12; o12.maxCross = kClosedCross; o12.cross = &cr12; o12.maxSteps = 400000;
+                TraceOptions o10 = o12;
+                o10.rtol = 1e-10; o10.atol = 1e-10; o10.cross = &cr10;
+                const RayEnd end12 = trace(ch, cam, look, o12, &path);
+                trace(ch, cam, look, o10);
+                const int n12 = static_cast<int>(cr12.size() / 8), n10 = static_cast<int>(cr10.size() / 8);
+                const double rEnd = horizon(cs.a) + 1e-3;
+                for (int k = 0; k < n12 && k < n10; k++) {
+                    double A[8], B[8];
+                    std::copy(&cr12[8 * static_cast<std::size_t>(k)], &cr12[8 * static_cast<std::size_t>(k)] + 8, A);
+                    std::copy(&cr10[8 * static_cast<std::size_t>(k)], &cr10[8 * static_cast<std::size_t>(k)] + 8, B);
+                    foldAxis(A[1], A[2]);
+                    foldAxis(B[1], B[2]);
+                    if (!(A[0] > rEnd)) continue;
+                    spread[0] = std::max(spread[0], std::fabs(B[0] / A[0] - 1));
+                    spread[1] = std::max(spread[1], std::fabs(std::remainder(B[2] - A[2], 2 * kPi)));
+                    spread[2] = std::max(spread[2], std::fabs(B[5] - A[5]));
+                    if (k >= e.nCross) { bad++; continue; }
+                    nC++;
+                    diff[0] = std::max(diff[0], std::fabs(1 / e.u[k] / A[0] - 1));
+                    diff[1] = std::max(diff[1], std::fabs(std::remainder(e.phi[k] - A[2], 2 * kPi)));
+                    diff[2] = std::max(diff[2], std::fabs(e.t[k] - (-A[5])));
+                }
+                // three points along the ray (a quarter, half, three quarters of its accepted steps; outside 1.05 r+ and inside 200 M)
+                const std::size_t ns = path.size() / 8;
+                for (std::size_t q = 1; q <= 3 && ns > 8; q++) {
+                    double A[8];
+                    std::copy(&path[8 * (ns * q / 4)], &path[8 * (ns * q / 4)] + 8, A);
+                    foldAxis(A[1], A[2]);
+                    if (A[0] < 1.05 * horizon(cs.a) || A[0] > 200 || end12.kind == RayEnd::Lost) continue;
+                    Ray rb;
+                    ch.launch(cam, look, rb);
+                    TraceOptions oS;
+                    oS.rtol = 1e-10; oS.atol = 1e-10;
+                    integrateSpan(ch, rb, A[7], oS);
+                    // the looser run moved along its ray to the 1e-12 run's Mino time (the closed forms are compared at a Mino time, whose own integration error
+                    // the comparison at one zeta would leave out): q(tau) = q + (dq/dzeta) / (dtau/dzeta) (tau_12 - tau_10)
+                    double dy[8];
+                    ch.rhs(rb, rb.y, dy);
+                    const double sh = (A[6] - rb.y[6]) / dy[6];
+                    double y10[8];
+                    for (int q = 0; q < 8; q++) y10[q] = rb.y[q] + dy[q] * sh;
+                    foldAxis(y10[1], y10[2]);
+                    spread[0] = std::max(spread[0], std::fabs(y10[0] / A[0] - 1));
+                    spread[1] = std::max(spread[1], std::fabs(std::remainder(y10[2] - A[2], 2 * kPi)));
+                    spread[2] = std::max(spread[2], std::fabs(y10[5] - A[5]));
+                    spread[3] = std::max(spread[3], std::fabs(std::cos(y10[1]) - std::cos(A[1])));
+                    ClosedState st;
+                    if (!closedStateAt(cs.a, cam, look, -A[6], st)) { bad++; continue; }
+                    nP++;
+                    diff[0] = std::max(diff[0], std::fabs(st.r / A[0] - 1));
+                    diff[1] = std::max(diff[1], std::fabs(std::remainder(st.phi - A[2], 2 * kPi)));
+                    diff[2] = std::max(diff[2], std::fabs(st.t - (-A[5])));
+                    diff[3] = std::max(diff[3], std::fabs(st.mu - std::cos(A[1])));
+                }
+            }
+            crossAll += nC;
+            const std::string at = "closed t and phi, a " + f(cs.a) + " r " + f(cs.rc) + " theta " + f(cs.th) + (cs.nray < 0 ? " (lambda = 2 r+ / a and 1 +- 1e-6)" : "") + ", " +
+                                   f(static_cast<double>(looks.size())) + " rays, " + f(nC) + " crossings, " + f(nP) + " points: ";
+            check(bad == 0 && nC + nP > 0, at + "every crossing and point answered (" + f(bad) + " not)");
+            check(diff[0] <= spread[0] && diff[1] <= spread[1] && diff[2] <= spread[2] && diff[3] <= spread[3],
+                  at + "against the integrator at 1e-12: r " + f(diff[0]) + " (its own spread 1e-10 to 1e-12: " + f(spread[0]) + "), phi " + f(diff[1]) + " rad (" + f(spread[1]) +
+                      "), t " + f(diff[2]) + " M (" + f(spread[2]) + "), cos theta " + f(diff[3]) + " (" + f(spread[3]) + ")");
+        }
+        std::printf("info: closed t and phi against the integrator: %d crossings; rays by substitution (1) %d, (2) %d, (3) %d, (4) %d, case II %d; vortical %d\n", crossAll,
+                    subs[1], subs[2], subs[3], subs[4], subs[5], vort);
+        check(subs[1] > 0 && subs[2] > 0 && subs[3] > 0 && subs[4] > 0 && subs[5] > 0 && vort > 0, "closed t and phi: every radial substitution, case II and both polar types met");
+    }
+    // 4. the processor's spin table (the fallback path) stores each ray's phi and t at its crossings: the same as the closed forms at its own entries
+    {
+        const double a = 0.9;
+        const Camera cam{20, 1.396, 0};
+        const SpinTable tb(a, cam.r, cam.theta, 8, 12, 64, nullptr, 0, kSpinFineFill);
+        double worst = 0;
+        int n = 0, untimed = 0;
+        for (int side = 0; side < 2; side++)
+            for (int i = 0; i < tb.nChi(); i++)
+                for (int j = 0; j < tb.nS(); j++) {
+                    const SpinHit& h = tb.node(side, i, j);
+                    if (!h.timed) { untimed++; continue; }
+                    const ClosedEnd e = traceClosed(a, cam, lookAt(tb.nodePsi(side, i, j), tb.rowChi(i)), kSpinCross);
+                    if (std::min(e.nCross, kSpinCross) != h.nCross) { worst = 1e9; continue; }
+                    for (int k = 0; k < h.nCross; k++) { worst = std::max(worst, std::max(std::fabs(h.phi[k] - e.phi[k]), std::fabs(h.t[k] - e.t[k]))); n++; }
+                }
+        check(tb.ok() && n > 0 && worst == 0 && untimed == static_cast<int>(tb.fallbacks()), "spin table: phi and t at " + f(n) + " crossings of its entries = the closed forms (" +
+              f(worst) + "); entries without them = the rays followed by the integrator (" + f(untimed) + ")");
+    }
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -2261,6 +2611,8 @@ int main() {
     testLooks();
     testTrueLight();
     testGlare();
+    testGas();
+    testClosedTime();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

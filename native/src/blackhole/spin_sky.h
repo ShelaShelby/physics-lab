@@ -46,6 +46,12 @@ struct SpinHit {
     double b = 0;
     double u[kSpinCross] = {};   // 1 / r at the crossings of the equator (see above)
     bool fallback = false;       // 0.55.9: followed by mino.h because the closed forms gave no answer (spinRayClosed; counted by the table)
+    // 0.56.4 (moving gas, PLAN_MOVINGGAS section 7): at the crossings the ray makes (the first nCross of u), the azimuth phi and the time the light took from
+    // there to the camera (far clock, M), from the closed forms (kerr_closed.h); timed is false where they are not known (rays followed by an integrator, or
+    // made on the card): nothing reads them yet
+    int nCross = 0;
+    bool timed = false;
+    double phi[kSpinCross] = {}, t[kSpinCross] = {};
 };
 
 // 0.55.8: how a table's rays are followed: their tolerance (spinRay's rtol), the form (mino.h: the Mino-time form; else geodesic.h's KerrBL) and the

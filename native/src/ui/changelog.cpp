@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.56.4", "Moving gas, step 1: the physics behind the scenes; no change on screen",
+     "The Black Hole Lab now knows, for every point where a light ray meets the disc, where on the disc that point is and how long the light took from there "
+     "to the camera, worked out exactly from formulas instead of step by step. Also new inside: the clocks of the gas and of the camera, the bright clump "
+     "astronomers use to model flares, and the moving bright and dark patches of a simulated disc, each checked against published numbers. Nothing is drawn with "
+     "them yet: that is the next version."},
     {"0.56.3", "Research for moving gas in the Black Hole Lab; no change to the app",
      "A plan for gas that moves at its true speed round the hole, a bright clump circling it, a time control with two clocks, and structure in the disc, with "
      "every number from saved papers (the GRAVITY flares near Sagittarius A*, ALMA's loops, the classic hot-spot models, a simulated magnetised disc). The time "

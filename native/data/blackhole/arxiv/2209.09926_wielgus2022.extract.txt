@@ -1,0 +1,18 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/arxiv/2209.09926_wielgus2022.txt.gz
+# Reference: M. Wielgus et al., "Orbital motion near Sagittarius A*: Constraints from polarimetric ALMA observations", Astron. Astrophys. 665, L6 (2022), arXiv:2209.09926v1 (the PDF: sha256 bf88baa3f652b3a263bfd27d036ebe59fb9ac27341f950b10383ce72c5e5521b, 1,739,089 bytes; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://arxiv.org/pdf/2209.09926
+# Date read: 2026-11-17
+# sha256 of the original: 692b3bae74e9c8877f449a1c2c2881bcb90df01ec9eaaa1783b2d47337182397
+# Place in the original: section 3 (right column): t_g, the loop's period and the orbit radii
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin section 3: t_g, period, radii
+|Phsp | ≈ |Psha |. Hence, our best chance of characterizing the hot       mensionless black hole spin. Assuming M• = 4.155 × 106 M ,
+spot component is through LP, rather than through the total in-           which is between the two competing results of Do et al. (2019a)
+tensity. Furthermore, we assume that during the 68 min between            and Gravity Collaboration et al. (2022), we find tg = 20.46 s.
+T 0 and T 5 in Fig. 2 we can approximate Psha with a constant             We estimate the period of the large loop shown in Fig. 2 to be
+value with |Psha | ≈ 0.2 Jy, and since the measured LP is a co-           74 ± 6 min. This range implies a Keplerian orbit radius rorb in the
+herent sum of the polarization of the two components, we can              10.0 − 11.2 rg range for a Schwarzschild black hole (a∗ = 0) or
+assume that a variation in the observed LP in the loopy period            9.8 − 11.0 rg for a maximally spinning Kerr black hole (a∗ = 1).
+#--- end

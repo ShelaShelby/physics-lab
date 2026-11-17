@@ -95,6 +95,6 @@ moving_clump_lightcurve.png, disc_structure_options.png (each with a .txt). Numb
   radial closed form, GLa's closed t against the integrator for each radial case at 1e-8); crossing azimuth closed against integrator; clump light curve period =
   2 pi / Omega(r_c); pattern: a mark returns to its phi after T_orb(r) when it does not fade, its mean factor 1, the ring's rms against SKH06 within 20 %;
   card against processor (clump and pattern per pixel within float rounding).
-- **Steps** (one session each): (1) physics: gas.h (clock, clump, pattern), the closed phi and t per crossing, tests; checkpoint push.
+- **Steps** (one session each; step 1 done in 0.56.4, REPORT.md): (1) physics: gas.h (clock, clump, pattern), the closed phi and t per crossing, tests; checkpoint push.
   (2) card and lab: the shader's phi and t, clump, pattern, time control and clocks, the labels, benchmark scene, card-against-processor test.
   (3) Film's labels, the guide's page "Moving gas", About's sources.

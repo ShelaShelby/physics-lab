@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.56.3 (17 Nov 2026): research only, the app unchanged: native/PLAN_MOVINGGAS.md (moving gas in the Black Hole Lab: true speeds, a clump, a time control and two clocks, sheared patches, the exact light travel time per pixel), its pictures in native/docs/blackhole (moving_clump_*.png, disc_structure_options.png), the processor tool native/tools/movinggas (its self-checks are the quick test movinggas_physics); six papers saved in the sources repo; the program's version number fixed (0.56.2's build still said 0.56.1).
-- Last full UI run: 0.56.0 (the commit "native 0.56.0"), 33 of 33, nothing to fix. (0.56.1, 0.56.2, 0.56.3: not run, small versions.)
-- Next: the moving gas (owner's choice of 17 Nov 2026), PLAN_MOVINGGAS.md section 7, step 1 (the physics); then the rest of PLAN_BLACKHOLE.md step 4 (quality levels) and step 5, moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.56.4 (17 Nov 2026): moving gas, step 1 (PLAN_MOVINGGAS.md section 7), physics only, no change on screen: src/blackhole/gas.h (the clocks, the clump of Broderick & Loeb 2006, the SKH06 pattern, the integrator with t; moved from tools/movinggas, which calls it), the azimuth and light travel time at each disc crossing in closed form (kerr_closed.h, every radial case), stored in the processor's spin table; tests in blackhole_tests (testGas, testClosedTime).
+- Last full UI run: 0.56.0 (the commit "native 0.56.0"), 33 of 33, nothing to fix. (0.56.1 to 0.56.4: not run, small versions.)
+- Next: the moving gas (owner's choice of 17 Nov 2026), PLAN_MOVINGGAS.md section 7, step 2 (the card, the time control and clocks, the labels, the benchmark scene); then the rest of PLAN_BLACKHOLE.md step 4 (quality levels) and step 5, moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

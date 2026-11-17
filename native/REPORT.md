@@ -1,39 +1,37 @@
-# 0.56.3: research: moving gas in the Black Hole Lab (no change to what the app does)
-Based on "native 0.56.2". The full UI suite was not run (small version). The app's behaviour is unchanged; the plan is native/PLAN_MOVINGGAS.md.
-## Slip from 0.56.2
-- native/CMakeLists.txt said `VERSION 0.56.1`, so the 0.56.2 build called itself 0.56.1. Now 0.56.3 (0.56.2's changelog entry stays).
-## Papers saved (private sources repo, data/blackhole/, commit c94baa4; one SOURCES.md line each; check_sources ok, 566 lines)
-- arxiv/1810.12641_gravity2018 (GRAVITY, A&A 618, L10; volume and page from Crossref for its DOI, the arXiv page has none), arxiv/2209.09926_wielgus2022
-  (A&A 665, L6), arxiv/astro-ph_0506433_broderick_loeb2005 (MNRAS 363, 353), arxiv/astro-ph_0509237_broderick_loeb2006 (MNRAS 367, 905),
-  arxiv/astro-ph_0606615_schnittman_krolik_hawley2006 (ApJ 651, 1031): each .pdf, .txt.gz (pdftotext -layout), _abs.html; scans/balbus_hawley_1991_ApJ376_214.pdf (ADS).
-- Read again (already saved): GLa (B3), (12), (13c), (13f) and the I1, I2 of every case; GLb (52), (72); J15 App. A.6; Cunningham & Bardeen 1973 pp. 249-256 (text of the scan).
-- Not used: arXiv:2207.06829 (Wielgus et al., the 2017 EHT millimetre light curves; fetched by mistake for the A&A paper) and Noble, Krolik & Hawley 2009 (arXiv:0808.3140): titles only, deleted.
-  Nothing the job named was unreachable.
-## The answers (details and equations in the plan)
-- Q1 speeds and times: at the innermost stable orbit V = 0.500 c (spin 0) and 0.625 c (0.9); one orbit 4.55 ms / 32.6 min / 34.2 days (10 Suns / Sgr A* / M87*, spin 0),
-  1.37 ms / 9.83 min / 10.3 days (0.9). Checked: Kepler in SI (1e-8); GRAVITY's "31 minutes" (30.3 at 4.0e6 Suns, 31.4 at their 4.14e6) and 40 +- 8 min at 7 Rg (39.5);
-  Wielgus's 74 +- 6 min at 10.0-11.2 r_g (67.8-80.3) and t_g = 20.46 s (20.465).
-- Q2 clocks: far away (t), the gas's own dtau/dt = alpha (1 - V^2)^(1/2) (C75 (A7a), = the metric's normalisation to 1e-14, -u_t = BPT's E to 2e-15), the hovering
-  camera's alpha (kerr.h hoverShift). Sgr A*, spin 0, 6 M: one orbit 32.6 min far away, 23.0 min on the clump.
-- Q3 light travel time: added to the app's integrator in the tool (GLa (12) as an affine-step integrand); GLb (72)'s 3 sqrt(3) pi M = 16.3242 M reproduced
-  between successive crossings near the edge, radial light against its closed form to 1e-9. Closed forms exist for every case (GLa (B3) with E(phi|k)).
-  At spin 0.6, 10 degrees above the disc: 0.17 orbit across the direct image at 6 M, the secondary image 0.03-0.34 orbit older; the clump's flash 4.4 x mean
-  with it, 3.1 without. Recommended: exact per pixel.
-- Q4 clump: observed (GRAVITY, Wielgus) and modelled (CB73, BL05, BL06); defensible: orbit, period, size R_S = 1.5 M or ~6 r_g; a choice: brightness, radius,
-  no shear. Light curve by the processor reference; checked: periodic in one orbit, not in half; the secondary peak earlier than the direct one, as CB73 p. 254 say
-  (qualitative only; a figure-point check against a published curve is NOT done: ROADMAP).
-- Q5 structure: MRI (Balbus & Hawley 1991); no thin disc's face has been resolved; model from SKH06 (25 degrees by dr/r = 0.3, life 0.3 orbit), sheared at the
-  true speeds; its strength set so the 6-10 M ring flickers 42 % rms (SKH06 Table 2: 43.8 %).
-- Q6 Film: J15 A.6 describes an artist's disc (image, voxels, procedural "fractal noise" textures, not accreting, 4500 K) and says nothing about motion.
-  Recommended: Film gets the moving gas, labelled as the lab's; alternative: Film stays still.
-## Pictures (native/docs/blackhole, each with a .txt; 1000 px wide)
-- moving_clump_strip.png (6 frames, the secondary image visible in the 3rd), moving_clump_lightcurve.png (direct, secondary, both, both without travel time),
-  disc_structure_options.png (smooth today; the model; half an orbit later). False colour, log brightness: not the app's looks (said in each .txt).
-## Tools
-- native/tools/movinggas/movinggas.cpp (--check, --table, --render; the processor reference: KerrBL with t added, BL06's clump, SKH06's patches) and
-  native/tools/movinggas_pictures.py (needs numpy and matplotlib; about 40 s). Its checks are the new quick test movinggas_physics (0.01 s).
-## Tests
-- check.sh quick with PL_SOURCES_DIR: 18/18 (movinggas_physics new, 11 checks); check_sources.py ok. No shader, UI or app code touched.
+# 0.56.4: moving gas, step 1: the physics (no change on screen)
+Based on "native 0.56.3". PLAN_MOVINGGAS.md section 7 step 1. No shader, UI or app drawing touched; the full UI suite was not run (small version).
+## What changed
+- src/blackhole/gas.h/.cpp (new): the clocks (far, on the gas C75 (A7a), the hovering camera alpha), the clump (BL06 (5), R_S = 1.5 M; choices A = 4, r = 6 M,
+  no shear), the SKH06 pattern (32-bit hash, Gaussians in (ln r, phi), carried at Omega(r), T_life = 0.3 T_orb), the integrator with t (and Mino time).
+  Moved from tools/movinggas, which now calls gas.h (one copy); its clock and period checks moved to blackhole_tests (same limits), --check keeps the integrator's.
+- kerr_closed: per crossing phi_k and t_k (ClosedEnd::phi, ::t) from GLa (11), (12), (B2), (B3): I1, I2 of every case ((B17)-(B18), (B37)-(B38), (B68)-(B69)
+  with R2 (B64), (B98)-(B99) with S2 (B94)), I+- of case (1) ((B19), (B23), re-derived), G_t of both polar types ((48), (68), without dividing by m). Written per
+  amplitude of the substitution (odd antiderivatives), so turning points need no case; only differences camera - crossing. No recursion, bounded loops.
+  closedStateAt (tests): the point at any Mino time. E(phi|m) and D = (F - E)/m by Carlson's R_D.
+- spin_sky: SpinHit stores phi, t, nCross, timed per entry (closed-form rays); nothing reads them yet.
+## Found and fixed
+- kerr_closed Polar: Psi_0 was asin(s0); where the camera sits at the ray's polar turning point (looks exactly along e_phi) that turned rounding into 2e-8 rad
+  of G_phi (and of the crossings' Mino times). Now atan2(s0, c0) with c0 from p_theta. All 0.55.9 closed-form tests still pass.
+- The pattern's norm (0.56.3 tool: 20000 points in one 2000 M window) was about 20 % high (the disc 19 % darker on average): found by the conservation test.
+  Now the light-weighted mean over independent samples (10 lifetimes apart). The tool's pictures of 0.56.3 were made with the old norm (rms unaffected).
+## Tests (blackhole_tests testGas, testClosedTime; all 905 checks pass)
+- Clocks: 1/u^t vs the normalisation with J15 (A.1) 1.5e-14; -u_t vs BPT (2.12) 1.8e-15; camera alpha vs 1/hoverShift 1e-16; Kepler in SI 1e-9.
+  GRAVITY 2018 (30.3 min vs "31"; 39.5 in 40 +- 8) and Wielgus 2022 (t_g 20.465 s; 67.8-80.3 min) now read from new extracts of the saved papers.
+- Travel time: GLb (72) at a = 0: 16.324195 M vs 3 sqrt(3) pi = 16.324194 (limit 1e-4); nearly radial light at a = 0 within 0.47 of the bound b^2/r2 (2e-7 M).
+- Closed t, phi, r, cos theta vs the integrator (rtol 1e-12) at 947 crossings and about 1000 points, spins 0.01, 0.6, 0.9, 0.99, every substitution (1) 21 rays,
+  (2) 178, (3) 261, (4) 7, case II 3, vortical 21. LIMIT (set before looking): per camera, the integrator's own spread between rtol 1e-10 and 1e-12 (crossings;
+  points compared at the same Mino time). Closed errors 10-100x below it, e.g. t 1.5e-6 M vs 1.3e-4, phi 2e-8 rad vs 4e-5 near the edge.
+- Cancellation at r3 = r+: rays with lambda = 2 r+ / a exactly (found to 2e-16) and 1 +- 1e-6, spins 0.01 (camera 1000 M), 0.6, 0.9, 0.99: within the limit;
+  at 1e-13 against the integrator at rtol 1e-14 the crossing's phi agrees to 1e-14 rad and t to 3e-13 M.
+- Clump light curve (closed forms, 120 x 72 px): one orbit later 5e-14 of the peak, half an orbit later 0.98.
+- Pattern: an unfading mark returns after T_orb = 2 pi (r^1.5 + a) exactly; the light-weighted factor averages 1.018 (3 standard errors 0.068);
+  face-on 6-10 M ring 42.4 % rms vs SKH06 Table 2 43.8 % (within the plan's 20 %; new extract of SKH06).
+- Spin table: phi and t at 464 crossings of its entries = the closed forms exactly.
+- check.sh quick with PL_SOURCES_DIR: 17/17 (font_coverage needs the app build); movinggas_physics passes; check_sources ok (38 extracts).
+## Not done
+- Cunningham & Bardeen 1973 figure-point check (ROADMAP line kept): their star orbits an a = 1 hole exactly (Figs 9-12, r_s = 20, 7, 3, 1.5); the closed forms
+  divide by r+ - r- (0 at a = 1) and the lab stops at 0.99, and theirs is a point star, not the clump: their setup cannot be reproduced exactly, so not tried.
+- The plan's "3 phi cells" per eta bin and slot for the card: a patch's birth time spreads over 0.3 orbit (108 degrees of turn), so more cells can reach a
+  point; step 2 counts them. About's sources (BL06, SKH06, GRAVITY, Wielgus) come with step 3, as the plan says.
 ## Docs
-- PLAN_MOVINGGAS.md (new), PLAN_BLACKHOLE.md section 9 (row 4d), ROADMAP.md (moving gas first; the open figure check), DECISIONS.md (the owner's choice of
-  17 Nov 2026), RESUME.md, changelog.cpp, data/blackhole/README.txt, data/SOURCES.md.
+- changelog.cpp, RESUME.md, ROADMAP.md, DECISIONS.md (the owner's choice), PLAN_MOVINGGAS.md (step 1 done), data/SOURCES.md (users), CMake VERSION 0.56.4.
