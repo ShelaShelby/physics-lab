@@ -92,6 +92,11 @@ public:
     // resolution rule's budget: half its period)
     bool gpuSky = true;
     double refreshHz = 60;
+    // 0.56.2 (Settings, Performance, shown only on a slow card): "Lower resolution while moving", 0 Auto (0.56.0's rule, only where the card's whole
+    // picture takes longer than kSkySharpMs), 1 Off (always every pixel). Not saved. skySlowMs: the card's time for the whole picture (> kSkySharpMs: slow)
+    static constexpr double kSkySharpMs = 1000.0 / 60;
+    int lowResMode = 0;
+    double skySlowMs() const;
     int skyState() const { return skyState_; }                 // 0 not yet asked, 2 its steps under way, 1 the card draws, -1 the processor's (skyWhy says why)
     const std::string& skyWhy() const { return skyWhy_; }
     const SkyCheck& skyCheck() const { return skyCheck_; }

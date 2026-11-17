@@ -1715,11 +1715,11 @@ static void testClosed() {
             for (int j = 0; j < 3; j++) wi[sub][j] = std::max(wi[sub][j], e[j]);
         }
         for (int sub : {2, 3, 4, 5}) {
-            // (case (2): near lambda = (r+^2 + a^2) / a the root r3 meets r+ (R(r+) = P(r+)^2 = 0) and the two terms of I+ (B39) cancel; the term's
-            // factor r+ - a lambda / 2 (B2) vanishes there too: the effect on phi is below 1e-10 rad at the samples (REPORT 0.55.9))
+            // (case (2): near lambda = (r+^2 + a^2) / a the root r3 meets r+ (R(r+) = P(r+)^2 = 0) and the two terms of I+ (B39) cancelled; 0.56.2 writes
+            // (B39) without the division by r+ - r3 (kerr_closed.cpp Ipm), so I+ is held to 1e-8 there too (0.55.9 allowed 1e-2))
             // (case (3) at small spin: r- within a relative 1e-4 of r2, I_- is taken as the integral with r2 in its place (kerr_closed.cpp nearR2): 2e-5 of I_-,
             // whose weight in I_phi is of order a^2)
-            const double lim = sub == 2 ? 1e-2 : 1e-8, limM = sub == 3 ? 2e-5 : 1e-8;
+            const double lim = 1e-8, limM = sub == 3 ? 2e-5 : 1e-8;
             check(cnt[sub] > 0 && wi[sub][0] < 1e-11 && wi[sub][1] < lim && wi[sub][2] < limM,
                   "radial path integrals to infinity, substitution " + f(sub) + " (5: case II), " + f(cnt[sub]) + " cases: I_r " + f(wi[sub][0]) + ", I_+ " + f(wi[sub][1]) + ", I_- " + f(wi[sub][2]));
         }

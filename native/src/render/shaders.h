@@ -1536,7 +1536,7 @@ void main() {
 //   head + kEllipticPart + kKerrSkyTracePart + kKerrSkyMainPart (the whole).
 // SIZE (decision of 0.56.0: the 0.55.6 compute shader was hundreds of kilobytes once a driver had inlined it): every function is called from ONE place, so
 // that a driver that inlines everything still holds one copy of each: carlsonRCf in carlsonFJ (R_F and R_J by one duplication: their x, y, z steps are the
-// same), carlsonFJ in a loop of two in ellFP (the amplitude, and the complete integral for a reflection), ellFP in the ray's one loop over its nine
+// same), carlsonFJ in a loop of two in ellFP (the amplitude, and the complete integral for a reflection), ellFP in the ray's one loop over its eight
 // elliptic integrals (kKerrSkyTracePart: the jobs), amAGM in that loop's one stage of five amplitudes. Every loop has a constant bound; no double.
 static const char* const kKerrSkyTinyFS = R"(#version 330 core
 out vec4 fragColor;
@@ -1547,15 +1547,17 @@ void main() { fragColor = uValue + vec4(gl_FragCoord.xy, 0.0, 0.0); }
 static const char* const kKerrSkyHeadPart = R"(#version 330 core
 )";
 
-// elliptic.h in single precision. R_C in closed form (elliptic.cpp carlsonRC; its series below |e| < 0.05 here, to the e^6 term: the next is below 3e-10).
+// elliptic.h in single precision. R_C in closed form (elliptic.cpp carlsonRC; its series below |e| < 0.01 here (0.56.2, smaller), to the e^3 term: the next is below 3e-10).
 // R_F and R_J by Carlson's duplication together (elliptic.cpp carlsonRF, carlsonRJ; each ends when its arguments are within 4e-3 of their mean: the
 // fifth-order series then leaves about 4e-15). ellFP: (F, Pi) or (F, E) for any amplitude in (-pi, pi] given by its sine and cosine (ellFang, ellPiang with
-// n > 1 past the pole by G, kerr_closed.cpp's nearR2 for E); nc = 1 - n given (no rounding near n = 1). amAGM: the Jacobi amplitude by the AGM (elliptic.cpp
-// amAGM; ends when c_N < 3e-8 a_N); amAny: also for m < 0 by the transformation of elliptic.h, with K(mu) given.
+// n > 1 past the pole by G, kerr_closed.cpp's nearR2 for E); nc = 1 - n given (no rounding near n = 1); dv (0.56.2): for n < 1 (Pi - F) / n in place of Pi
+// (its R_J term alone: no cancellation for small n). amAGM: the Jacobi amplitude by the AGM (elliptic.cpp
+// amAGM; ends when c_N < 3e-8 a_N; 0.56.2: am(u + kf K(m)), K from the AGM's own a_N); amAny: also for m < 0 by the transformation of elliptic.h
+// (am(K(mu) - u sqrt(kc2) | mu), K(mu) from the same AGM).
 static const char* const kEllipticPart = R"(
 const float PI = 3.14159265358979;
 // atan, asin and acos to single precision (the built-in ones have no precision the GLSL specification promises; Mesa's asin is off by 1e-4): atan by
-// atan(z) = pi/6 + atan((z sqrt3 - 1) / (z + sqrt3)) down to |z| <= tan(pi/12) and its series to z^11 (the next term below 3e-9); asin and acos from it
+// atan(z) = pi/6 + atan((z sqrt3 - 1) / (z + sqrt3)) down to |z| <= tan(pi/12) and its series to z^11 (the next term below 3e-9); asin from it
 float atan1(float t) {
     float z = abs(t);
     bool inv = z > 1.0;
@@ -1574,18 +1576,17 @@ float atanS(float y, float x) {
 }
 float atanS(float t) { return atan1(t); }
 float asinS(float x) { float c = sqrt(max((1.0 - x) * (1.0 + x), 0.0)); return 2.0 * atan1(x / (1.0 + c)); }
-float acosS(float x) { return x <= -1.0 ? PI : 2.0 * atan1(sqrt(max((1.0 - x) / (1.0 + x), 0.0))); }
 float cbrtS(float x) { return x < 0.0 ? -pow(-x, 1.0 / 3.0) : pow(x, 1.0 / 3.0); }
 float carlsonRCf(float x, float y) {
     float e = (y - x) / y;
-    if (abs(e) < 0.05) return (1.0 + e * (1.0 / 6.0 + e * (3.0 / 40.0 + e * (5.0 / 112.0 + e * (35.0 / 1152.0 + e * (63.0 / 2816.0 + e * (231.0 / 13312.0))))))) / sqrt(y);
+    if (abs(e) < 0.01) return (1.0 + e * (1.0 / 6.0 + e * (3.0 / 40.0 + e * (5.0 / 112.0)))) / sqrt(y);
     if (x < y) return x > 0.0 ? atanS(sqrt((y - x) / x)) / sqrt(y - x) : 1.5707963 / sqrt(y);
     float z = sqrt((x - y) / x);
     return 0.5 * log((1.0 + z) * (1.0 + z) * x / y) / sqrt(x - y);
 }
-vec2 carlsonFJ(float x0, float y0, float z0, float p0) {
+vec2 carlsonFJ(float x0, float y0, float z0, float p0, bool noJ) {
     float x = x0, y = y0, z = z0, p = p0, sum = 0.0, fac = 1.0, rf = 0.0, rj = 0.0;
-    bool hasF = false, hasJ = false;
+    bool hasF = false, hasJ = noJ;
     for (int it = 0; it < 32; it++) {
         if (!hasF) {
             float A = (x + y + z) / 3.0, dx = (A - x) / A, dy = (A - y) / A, dz = (A - z) / A;
@@ -1616,20 +1617,19 @@ vec2 carlsonFJ(float x0, float y0, float z0, float p0) {
     }
     return vec2(rf, rj);
 }
-vec2 ellFP(float n, float nc, float s, float c, float kc2, bool eMode) {
+vec2 ellFP(float n, float nc, float s, float c, float kc2, bool eMode, bool dv, bool noJ) {
     float as = abs(s), ac = abs(c), m = 1.0 - kc2;
     bool beyond = !eMode && n > 1.0 && (c < 0.0 || nc + n * ac * ac <= 0.0);
     float nn = beyond ? m / n : n, nnc = beyond ? (n - m) / n : nc;
-    float cj = eMode ? -m / 3.0 : nn / 3.0;
-    vec2 amp0 = vec2(0.0), full = vec2(0.0);
+    bool dn = !eMode && dv && n < 1.0;
+    float cj = eMode ? -m / 3.0 : (dn ? 1.0 / 3.0 : nn / 3.0);
+    vec2 v = vec2(0.0);
     for (int k = 0; k < 2; k++) {
         if (k == 1 && c >= 0.0) break;
         float ss = k == 0 ? as : 1.0, cc = k == 0 ? ac : 0.0;
-        vec2 r = carlsonFJ(cc * cc, cc * cc + kc2 * ss * ss, 1.0, eMode ? 1.0 : nnc + nn * cc * cc);
-        vec2 v = vec2(ss * r.x, ss * r.x + cj * ss * ss * ss * r.y);
-        if (k == 0) amp0 = v; else full = v;
+        vec2 r = carlsonFJ(cc * cc, cc * cc + kc2 * ss * ss, 1.0, eMode ? 1.0 : nnc + nn * cc * cc, noJ);
+        v += (k == 1 ? 2.0 : (c >= 0.0 ? 1.0 : -1.0)) * vec2(ss * r.x, (dn ? 0.0 : ss * r.x) + cj * ss * ss * ss * r.y);   // (past pi/2: 2 K - F(pi - phi))
     }
-    vec2 v = c >= 0.0 ? amp0 : 2.0 * full - amp0;
     if (beyond) {
         float P = sqrt((n - 1.0) * nnc), d = sqrt(c * c + kc2 * s * s);
         float pole = (nc + n * ac * ac) * (nnc + nn * ac * ac);
@@ -1637,13 +1637,13 @@ vec2 ellFP(float n, float nc, float s, float c, float kc2, bool eMode) {
         float L = abs(plus) >= abs(minus) ? log(abs(plus * plus / pole)) : log(abs(pole / (minus * minus)));
         v.y = v.x - v.y + L / (2.0 * P);
     }
+    if (dv && !dn) v.y = (v.y - v.x) / n;
     return s < 0.0 ? -v : v;
 }
-float amAGM(float u, float kc2) {
-    if (kc2 >= 1.0) return u;
+float amAGM(float u, float kc2, float kf) {
+    if (kc2 >= 1.0) return u + kf * 0.5 * PI;
     float a[16];
     float c[16];
-    for (int i = 0; i < 16; i++) { a[i] = 0.0; c[i] = 0.0; }
     float b = sqrt(kc2);
     a[0] = 1.0; c[0] = sqrt(1.0 - kc2);
     int N = 0;
@@ -1651,13 +1651,13 @@ float amAGM(float u, float kc2) {
         if (abs(c[i]) <= 3e-8 * a[i]) break;
         a[i + 1] = (a[i] + b) * 0.5; c[i + 1] = (a[i] - b) * 0.5; b = sqrt(a[i] * b); N = i + 1;
     }
-    float phi = exp2(float(N)) * a[N] * u;
+    float phi = exp2(float(N)) * (a[N] * u + kf * 0.5 * PI);   // (am(u + kf K): a_N K = pi/2)
     for (int j = 15; j >= 1; j--) if (j <= N) phi = (phi + asinS(clamp(c[j] * sin(phi) / a[j], -1.0, 1.0))) * 0.5;
     return phi;
 }
-float amAny(float u, float kc2, float Kmu) {
+float amAny(float u, float kc2) {
     bool neg = kc2 > 1.0;
-    float ph = amAGM(neg ? Kmu - u * sqrt(kc2) : u, neg ? 1.0 / kc2 : kc2);
+    float ph = amAGM(neg ? -u * sqrt(kc2) : u, neg ? 1.0 / kc2 : kc2, neg ? 1.0 : 0.0);
     return neg ? 1.5707963267949 - ph : ph;
 }
 )";
@@ -1672,21 +1672,21 @@ void main() {
     vec4 A = texelFetch(uArgs, ivec2(3 * i, 0), 0), B = texelFetch(uArgs, ivec2(3 * i + 1, 0), 0), C = texelFetch(uArgs, ivec2(3 * i + 2, 0), 0);
     float kc2 = C.x, u = C.y;
     if (int(gl_FragCoord.y) == 0) {
-        vec2 fj = carlsonFJ(A.x, A.y, A.z, A.w);
-        float Kmu = kc2 > 1.0 ? ellFP(0.0, 1.0, 1.0, 0.0, 1.0 / kc2, false).x : 0.0;
-        fragColor = vec4(fj, carlsonRCf(A.x, A.y), amAny(u, kc2, Kmu));
+        vec2 fj = carlsonFJ(A.x, A.y, A.z, A.w, false);
+        fragColor = vec4(fj, carlsonRCf(A.x, A.y), amAny(u, kc2));
     } else {
-        vec2 fp = ellFP(B.x, B.y, B.z, B.w, kc2, false);
-        vec2 fe = ellFP(0.0, 1.0, B.z, B.w, kc2, true);
-        fragColor = vec4(fp, fe.y, ellFP(0.0, 1.0, 1.0, 0.0, kc2, false).x);
+        vec2 fp = ellFP(B.x, B.y, B.z, B.w, kc2, false, false, false);
+        vec2 fe = ellFP(0.0, 1.0, B.z, B.w, kc2, true, false, false);
+        fragColor = vec4(fp, fe.y, ellFP(0.0, 1.0, 1.0, 0.0, kc2, false, false, false).x);
     }
 }
 )";
 
 // One ray (kerr_closed.cpp traceClosed in single precision; the same names). The camera: uCam (a, r_c, cos theta_c, sin theta_c), uMet (alpha, omega,
-// varpi, rho of J15 (A.1), (A.2) at the camera), uMet2 (Delta^(1/2), r+, r-, the end r+ + 1e-3), all made in double on the processor. Its nine elliptic
-// integrals are evaluated by the one call of ellFP in the loop at the end of the set-up (jobs 0..7 need only the ray's constants: the polar start, the polar
-// complete integrals, K(mu) of the polar amplitude for m < 0, the radial K, the radial antiderivatives at the camera and at the end for r+ and r-; job 8,
+// varpi, rho of J15 (A.1), (A.2) at the camera), uMet2 (Delta^(1/2), r+, r-, the end r+ + 1e-3), all made in double on the processor. Its eight elliptic
+// integrals are evaluated by the one call of ellFP in the loop at the end of the set-up (jobs 0..6 need only the ray's constants: the polar start, the polar
+// complete integrals, the radial K, the radial antiderivatives at the camera and at the end for r+ and r- (0.56.2: K(mu) of the polar amplitude for m < 0
+// comes from that amplitude's own AGM); job 7,
 // the polar Pi at the end, needs the amplitudes, made by the loop's one stage of amAny: the polar end and the radii of the four crossings).
 // kind: 1 sky, 2 horizon, 0 lost. f: a quantity that changes sign at the shadow's edge and is linear across it (the radial discriminant -A/2 - z^2 - B/(4z):
 // r3 = r4 = z on the edge's spherical orbits; GLa (95)), signed + on the sky's side, used only where its sign agrees with the ray's end (else +-1e30).
@@ -1708,6 +1708,9 @@ SkyRay traceRay(vec3 look) {
     o.b = lam; o.q = eta;
     float nuR = pr > 0.0 ? -1.0 : 1.0, nu = pth > 0.0 ? -1.0 : 1.0;
     float A = a * a - eta - lam * lam, root = sqrt(A * A + 4.0 * a * a * eta);
+#if defined(SKY_STOP) && SKY_STOP == 1
+    o.kind = 1; o.dir = normalize(vec3(A, root, pr + 1e-3)); return o;
+#endif
     // ---- the polar motion (Polar::init)
     bool eq0 = false, vort = false, noG = false;
     float h = 1.0, up = 0.0, um = 0.0, sq = 1.0, pk = 1.0, pn = 0.0, pnc = 1.0, gscale = 1.0, ps0 = 0.0, pc0 = 1.0;
@@ -1777,6 +1780,9 @@ SkyRay traceRay(vec3 look) {
         }
     }
     o.sub = sub;
+#if defined(SKY_STOP) && SKY_STOP == 2
+    o.kind = 1; o.dir = normalize(vec3(rk, pref + ph0, pk + gscale + pnc)); return o;
+#endif
     if (!(rk > 0.0) || isinf(pref) || isnan(pref)) return o;
     bool two = sub == 2 || sub == 5;
     // where the ray goes (traceClosed)
@@ -1791,7 +1797,6 @@ SkyRay traceRay(vec3 look) {
     }
     // the amplitudes (Radial::amp) at the camera (k = 0) and the end (k = 1)
     float as_[2]; float ac_[2];
-    as_[0] = 0.0; as_[1] = 0.0; ac_[0] = 1.0; ac_[1] = 1.0;
     for (int k = 0; k < 2; k++) {
         bool inf = k == 1 && sky;
         float r = k == 0 ? rc : rEnd, s = 0.0, c = 1.0;
@@ -1810,12 +1815,11 @@ SkyRay traceRay(vec3 look) {
         as_[k] = s; ac_[k] = c;
     }
     // the jobs (see above): n, 1 - n, sin, cos, kc2, E instead of Pi
-    float jn[9]; float jnc[9]; float js[9]; float jc[9]; float jk[9]; bool je[9]; vec2 jr[9];
-    for (int k = 0; k < 9; k++) { jn[k] = 0.0; jnc[k] = 1.0; js[k] = 1.0; jc[k] = 0.0; jk[k] = 1.0; je[k] = false; jr[k] = vec2(0.0); }
+    float jn[8]; float jnc[8]; float js[8]; float jc[8]; float jk[8]; bool je[8]; vec2 jr[8];
+    for (int k = 0; k < 8; k++) { jn[k] = 0.0; jnc[k] = 1.0; js[k] = 1.0; jc[k] = 0.0; jk[k] = 1.0; je[k] = false; jr[k] = vec2(0.0); }
     jn[0] = pn; jnc[0] = pnc; js[0] = ps0; jc[0] = pc0; jk[0] = pk;
     jn[1] = pn; jnc[1] = pnc; jk[1] = pk;
-    jk[2] = pk > 1.0 ? 1.0 / pk : 0.5;
-    jk[3] = rk;
+    jk[2] = rk;
     float al[4];
     for (int k = 0; k < 4; k++) {
         int pt = k / 2;
@@ -1835,19 +1839,18 @@ SkyRay traceRay(vec3 look) {
             al[k] = (g0 * x - 1.0) / (g0 + x);
             n = 1.0 + al[k] * al[k]; nc = -al[k] * al[k];
         }
-        jn[4 + k] = n; jnc[4 + k] = nc; js[4 + k] = as_[pt]; jc[4 + k] = ac_[pt]; jk[4 + k] = rk; je[4 + k] = e;
+        jn[3 + k] = n; jnc[3 + k] = nc; js[3 + k] = as_[pt]; jc[3 + k] = ac_[pt]; jk[3 + k] = rk; je[3 + k] = e;
     }
-    float tau = 0.0, Kp = 1.0, PiFull = 0.0, F0 = 0.0, G0 = 0.0, Kmu = 0.0, Kr = 1.0, ps = 0.0;
+    float tau = 0.0, Kp = 1.0, PiFull = 0.0, F0 = 0.0, G0 = 0.0, Kr = 1.0, ps = 0.0;
     float taus[4];
     float rx[4];
     int nx = 0;
-    for (int k = 0; k < 4; k++) { taus[k] = 0.0; rx[k] = 0.0; }
     bool bad = false;
-    for (int k = 0; k < 9; k++) {
-        if (k == 8) {
+    for (int k = 0; k < 8; k++) {
+        if (k == 7) {
             // the set-up's results; the Mino time to the end (traceClosed) and the amplitudes at it
-            F0 = jr[0].x; G0 = noG ? 0.0 : jr[0].y; Kp = jr[1].x; PiFull = jr[1].y; Kmu = jr[2].x; Kr = jr[3].x;
-            float Ic = pref * jr[4].x, Ie = pref * jr[6].x;
+            F0 = jr[0].x; G0 = noG ? 0.0 : jr[0].y; Kp = jr[1].x; PiFull = jr[1].y; Kr = jr[2].x;
+            float Ic = pref * jr[3].x, Ie = pref * jr[5].x;
             if (sub == 1) tau = nuR < 0.0 ? Ic - Ie : 2.0 * pref * Kr - Ic - Ie;
             else if (sky) tau = Ie + (nuR > 0.0 ? -1.0 : 1.0) * Ic;
             else tau = Ic - Ie;
@@ -1859,12 +1862,12 @@ SkyRay traceRay(vec3 look) {
                     if (tj > 0.0) { taus[nx] = tj; nx++; }
                 }
             }
-            float Fc = jr[4].x;
+            float Fc = jr[3].x;
             for (int i = 0; i < 5; i++) {
                 if (i > 0 && i > nx) break;
                 bool pol = i == 0;
                 float uu = pol ? sq * tau + F0 : (sub == 4 ? nuR * taus[i - 1] / pref + Fc : taus[i - 1] / pref + nuR * Fc);
-                float am = amAny(uu, pol ? pk : rk, pol ? Kmu : 0.0);
+                float am = amAny(uu, pol ? pk : rk);
                 if (pol) { ps = am; continue; }
                 float rr = 0.0;
                 if (sub == 4) rr = a2 * tan(am - atanS(g0)) - b1;
@@ -1874,15 +1877,20 @@ SkyRay traceRay(vec3 look) {
             }
             if (eq0) ps = 0.0;
             float jj = floor(ps / PI + 0.5), pp = ps - jj * PI;
-            jn[8] = pn; jnc[8] = pnc; js[8] = sin(pp); jc[8] = cos(pp); jk[8] = pk;
-            if (eq0 || noG) break;
+            jn[7] = pn; jnc[7] = pnc; js[7] = sin(pp); jc[7] = cos(pp); jk[7] = pk;
+            if (eq0 || noG || !sky) break;
         }
-        if (k == 2 && !(pk > 1.0)) continue;
+        // (0.56.2: not made where not used: K(mu) (job 2; the polar amplitude's AGM has it), the radial K but for case (1), and for a ray that ends at
+        // the horizon the far direction's integrals: the I_+- terms (jobs 4, 6, the third kind of 3, 5) and the polar third kind (0, 1, 7))
+        if (k == 2 && sub != 1) continue;
         if ((k == 0 || k == 1) && eq0) continue;
-        if (k >= 4 && k < 8 && sub == 1 && (k % 2) == 1) continue;
-        jr[k] = ellFP(jn[k], jnc[k], js[k], jc[k], jk[k], je[k]);
+        if (k >= 3 && k < 7 && (sub == 1 || !sky) && (k % 2) == 0) continue;
+        jr[k] = ellFP(jn[k], jnc[k], js[k], jc[k], jk[k], je[k], two && k >= 3 && k < 7, k == 2 || !sky);
     }
     if (bad) return o;
+#if defined(SKY_STOP) && SKY_STOP == 3
+    o.kind = 1; o.dir = normalize(vec3(jr[0].x + jr[1].y + jr[2].x, jr[3].y + jr[4].y + jr[5].y + jr[6].y + jr[7].y, ps + rx[0] + rx[1] + rx[2] + rx[3] + 1.0)); return o;
+#endif
     // the crossings' u (and the first one not made, continued as spinRayClosed does), the end
     float dmu = 0.0, mu = cth, G = 0.0;
     if (eq0) { G = tau / (sth * sth); }
@@ -1891,7 +1899,7 @@ SkyRay traceRay(vec3 look) {
         if (!vort) { mu = -nu * sqrt(up) * s; dmu = -nu * sqrt(up) * c * sq * dn; }
         else { float w = sqrt(um + (up - um) * s * s); mu = h * w; dmu = h * (up - um) * s * c * sq * dn / w; }
         float jj = floor(ps / PI + 0.5);
-        G = noG ? 0.0 : (jr[8].y + 2.0 * jj * PiFull - G0) * gscale;
+        G = noG ? 0.0 : (jr[7].y + 2.0 * jj * PiFull - G0) * gscale;
     }
     mu = clamp(mu, -1.0, 1.0);
     vec4 u = vec4(0.0);
@@ -1899,16 +1907,15 @@ SkyRay traceRay(vec3 look) {
     for (int i = 0; i < 4; i++) if (i < nx && rx[i] > 0.0 && nCross == i) { u[i] = 1.0 / rx[i]; nCross++; }
     if (sky) {
         float ip[2]; float im[2];
-        ip[0] = 0.0; ip[1] = 0.0; im[0] = 0.0; im[1] = 0.0;
         if (sub != 1) for (int k = 0; k < 4; k++) {
             int pt = k / 2;
-            float rr = (k % 2) == 0 ? rp : rm, F = pref * jr[4 + 2 * pt].x, Pi = jr[4 + k].y, s = as_[pt], c = ac_[pt], v = 0.0;
+            float rr = (k % 2) == 0 ? rp : rm, F = pref * jr[3 + 2 * pt].x, Pi = jr[3 + k].y, s = as_[pt], c = ac_[pt], v = 0.0;
             if (two) {
-                float r3_ = rr - r3, r4_ = rr - r4;
-                v = -pref * r43 / (r3_ * r4_) * Pi - F / r3_;
+                float r4_ = rr - r4;
+                v = -pref / r4_ * (jr[3 + 2 * pt].x + r43 * r41 / (r4_ * r31) * Pi);   // (Pi here (Pi - F) / n: kerr_closed.cpp Ipm)
             } else if (sub == 3) {
                 float q1 = rr - r1, q2 = rr - r2, l = al[k], l2 = l * l, jm = 1.0 - rk;
-                if (je[4 + k]) {
+                if (je[3 + k]) {
                     float d = sqrt(c * c + rk * s * s), Ft = F / pref, R1m = -d * (1.0 + c) / s + Ft - Pi;
                     v = pref / (r21 * AA) * (-(BB + AA) * Ft + 2.0 * BB * R1m);
                 } else {

@@ -14,7 +14,7 @@
 #              (nearly face-on and steep), Sagittarius A*'s label; the readout's hottest ring = the papers' (written here); feeding rate and outer edge move
 #              the picture and the readout; a restart keeps the settings (1280 x 800, Dark); the taller card at 880 x 560
 #   precision: the card's bent sky against the double-precision reference (PL_BH_COMPARE): the shadow's edge, the directions, the plain sky = the Orbit Lab's;
-#              0.55.1: the card's gas disc against the double lookup and the reference (two distances, two inclinations); 0.55.2: the same round a spinning hole
+#              0.55.1: the card's gas disc against the double lookup and the reference (two distances, two inclinations); 0.55.2: the same round a spinning hole; 0.56.2: the Film at 2560 x 1369, every pixel
 #   spin:      0.55.2, spin: the control exists; spin 0 is the picture of 0.55.1 to the pixel; a typed 0.99 (the top) is taken, 0.999 is not; the card's horizon,
 #              inner edge, efficiency and dragging = the papers' (written here); at 0.99 the drawn shadow's edge is the module's at 24 points from the equator
 #              (not round there) and from near the axis (round); the presets start at 0 with their sentence; a restart keeps the spin (1280 x 800, Dark)
@@ -302,6 +302,19 @@ def precision_sky(binary, work):
               f"{w}: the disc's first image ({disc} px: {x['discwrong']} another image, r {x['r']}, g {x['g']}, {x['rbad']} over 1e-3)")
     c = [ln for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECK ")]
     check(bool(c) and " ok=1 " in c[0], f"the sky's start-up check passes on this renderer ({c[:1]})")
+    # 0.56.2: the owner's window (2560 x 1369), Film's hole (0.6, 74.1 M) at 30 deg across the height, the paper's view and 88, 90, 92 deg from the spin axis,
+    # EVERY pixel against traceClosed in double, no allowance: no ray lost, none ending elsewhere more than 1.5 px from the edge, the far direction within
+    # 2e-3 rad, the disc's first image the same (a radius within 1e-3 of rIn or rOut excepted: the radius's own limit), its r and g within 1e-3, and every
+    # crossing in [rIn, rOut] within 1e-3, all 2 px or more from the edge. 0.56.1's shader lost 60-79 rays on one column here (lambda = 2 r+ / a, where
+    # r3 = r+ and (B39)'s two terms cancelled in single precision): the owner's row of dark specks beside the shadow
+    r = run_app(binary, work, "bh_precision_skyfull", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="sky", PL_BH_SKYFULL="2560,1369,30", PL_EXIT_AFTER_FRAMES="1"), frames=1, timeout=1800)
+    full = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYFULL ")]
+    for ln in r.out.splitlines():
+        if ln.startswith("PLBHSKYFULL "): print(ln)
+    check(len(full) == 4 and all(int(x["px"]) == 2560 * 1369 for x in full), f"Film at 2560 x 1369 compared at four tilts ({len(full)})")
+    for x in full:
+        bad = {k: x[k] for k in ("lost", "reflost", "endsfar", "dirbad", "discwrongout", "rbad", "ubad") if int(x[k]) != 0}
+        check(not bad, f"every pixel of {x['case']} (2560 x 1369) within the limits ({bad or 'none over'}; dir {x['dir']}, r {x['r']}, u {x['u']})")
     # the exposure found on the card against the processor's scan of the same points (at rest, 640 x 400): within 1e-3 (measured 4e-5, 3e-8, 1.2e-4)
     ex = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYEXP ")]
     check({x["case"] for x in ex} == {"benchmark", "film", "spin0"}, f"the card's exposure compared at spin 0.9, Film and spin 0 ({len(ex)})")
@@ -944,11 +957,13 @@ def sky_guard(binary, work, sb):
 def smooth_sky(binary, work, base, steps):
     # 0.56.0, the card draws sky and disc per pixel (render/shaders.h kKerrSkyFS; the processor's tables serve the stars). The same tilt drags at spin 0.6,
     # 880 x 560: the card's start-up check passes; in every frame in which the view moved a new picture of sky and disc is drawn in that frame (the stars'
-    # pictures may come later); at rest the stars' picture is the settings' own and the sky is drawn at full resolution. Then the same with the pass forced
-    # slow (PL_BH_SKYSLOW=100: its time on the card taken as 100 ms, the budget at 60 Hz 8.3 ms): while moving at a quarter of the width (the rule's least),
-    # still a new picture in every moved frame; at rest at full resolution.
+    # pictures may come later); at rest the stars' picture is the settings' own and the sky is drawn at full resolution. 0.56.2 (the owner's decision: no
+    # lower resolution while moving unless the card cannot give 60 sharp pictures a second): with the pass's time taken as the owner's measured 5.5 ms
+    # (PL_BH_SKYSLOW=5.5, over 0.56.0's budget of 8.3 / 2 ms) every moved frame is drawn at every pixel; taken as 20 ms (slower than 16.7) it drops while
+    # moving (0.56.0's rule: sqrt(8.3 / 20) rounded down to eighths, 5/8), still a new picture in every moved frame, full at rest, and Settings, Performance
+    # says so (the line and its switch Lower resolution while moving).
     sb = dict(base, PL_BH_GPUSKY="1")
-    for slow in ("0", "100"):
+    for slow in ("0", "5.5", "20"):
         env = dict(sb, PL_SCRIPT=";".join(re.sub(r"drag=(\d+),(\d+),(\d+),(\d+)", r"drag=100,\2,100,\4", st) for st in steps[:5]), PL_BH_SETTLE="60:30", PL_PANELS="")
         if slow != "0": env["PL_BH_SKYSLOW"] = slow
         r = run_app(binary, work, "bh_smooth_sky" + slow, env, frames=800, size="880x560", timeout=3000)
@@ -961,11 +976,21 @@ def smooth_sky(binary, work, base, steps):
         check(len(mv) >= 8 and len(new) == len(mv), f"{w}: a new sky and disc in {len(new)} of {len(mv)} frames in which the view moved (all needed)")
         stars = [i for i in mv if int(f[i]["starpics"]) > int(f[i - 1]["starpics"])]
         print(f"  {w}: the stars' pictures in {len(stars)} of the {len(mv)} moved frames; scales while moving {sorted(set(f[i]['skyscale'] for i in mv))}")
-        if slow != "0":
-            check(all(float(f[i]["skyscale"]) == 0.25 for i in mv), f"{w}: while moving the pass is drawn at a quarter of the width ({sorted(set(f[i]['skyscale'] for i in mv))})")
+        if slow == "5.5":
+            check(all(float(f[i]["skyscale"]) == 1 for i in mv), f"{w}: every pixel in every moved frame ({sorted(set(f[i]['skyscale'] for i in mv))})")
+        if slow == "20":
+            check(all(float(f[i]["skyscale"]) == 0.625 for i in mv), f"{w}: while moving the pass is drawn at 5/8 of the width ({sorted(set(f[i]['skyscale'] for i in mv))})")
         last = f[-1]
         check(last["behind"] == "0" and last["sky"] == last["want"] and float(last["skyscale"]) == 1 and last["skycard"] == "1",
               f"{w}: at rest the stars caught up ({last['sky']} vs {last['want']}) and the sky is at full resolution (scale {last['skyscale']})")
+    for slow, click in (("5.5", ""), ("20", ""), ("20", "50:click=bhlowres.off")):
+        r = run_app(binary, work, "bh_lowres_" + slow + ("_off" if click else ""), dict(sb, PL_BH_SKYSLOW=slow, PL_OPEN="settings:gpusky", PL_SCRIPT=click),
+                    frames=70, size="880x560", timeout=1200)
+        said = r.note("bhlowres ")
+        if slow == "5.5": check("PLBHSKY state=1" in r.out and not said, f"pass taken as 5.5 ms: Settings, Performance says nothing of a lower resolution ({said})")
+        elif not click: check("PLBHSKY state=1" in r.out and any("20.0 ms" in n and "drawn at a lower resolution" in n for n in said),
+                              f"pass taken as 20 ms: Settings, Performance says the picture drops while moving ({said[-1:]})")
+        else: check(not r.scripted_missing() and bool(said) and "stays sharp" in said[-1], f"pass taken as 20 ms: the switch Off: it stays sharp ({said[-1:]})")
 
 # 0.55.9: the picture at rest and the last one shown while moving are of the same settings and show the same disc. The owner's report (0.55.8, Film look):
 # while he dragged, the disc looked as if seen from exactly inside its plane; at rest, from a little above. 0.56.0: the owner saw it again in 0.55.9 (a dark

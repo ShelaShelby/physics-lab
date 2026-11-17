@@ -209,8 +209,9 @@ std::vector<std::string> benchBlackHoleLines(const BenchBlackHole& b) {
                     (m.disc.n > 0 ? "; disc table " + stage(m.disc) : std::string()));
         if (m.skyPictures > 0)
             v.push_back("  the card: sky and disc " + std::to_string(m.skyPictures) + " new pictures in " + f("%.1f", m.seconds) + " s" +
-                        (m.seconds > 0 ? " (" + f("%.0f", m.skyPictures / m.seconds) + " a second)" : std::string()) + ", at " + f("%.0f", 100 * m.scaleMin) +
-                        " % of the picture's width at the lowest; the stars: " + std::to_string(m.pictures) + " new pictures" +
+                        (m.seconds > 0 ? " (" + f("%.0f", m.skyPictures / m.seconds) + " a second)" : std::string()) + ", 100 % of the picture's width in " +
+                        std::to_string(m.fullPictures) + " of " + std::to_string(m.skyPictures) + " moved frames" +
+                        (m.scaleMin < 1 ? ", " + f("%.0f", 100 * m.scaleMin) + " % at the lowest" : std::string()) + "; the stars: " + std::to_string(m.pictures) + " new pictures" +
                         (m.seconds > 0 ? " (" + f("%.0f", m.pictures / m.seconds) + " a second)" : std::string()));
         if (k < 3) v.push_back(m.sharpMs >= 0 ? "  at rest: the sharp picture (the fine table) " + f("%.0f", m.sharpMs) + " ms after the stop"
                                               : "  at rest: no sharp picture within the " + f("%.1f", m.restS) + " s at rest");

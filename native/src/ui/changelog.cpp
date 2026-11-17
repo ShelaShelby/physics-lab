@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.56.2", "The Black Hole Lab stays sharp while you move it; a row of wrong pixels beside the shadow is gone",
+     "The spinning hole is now drawn at every pixel while you drag, too. Only on a graphics card that cannot draw 60 sharp pictures a second does it drop to a "
+     "lower resolution while the view moves; Settings, Performance then says so and has the switch Lower resolution while moving (Auto or Off). The row of dark "
+     "specks (or a grey streak) to the right of the shadow, near the disc's plane, is gone: on one line of the sky, where the light's angular momentum is twice "
+     "the horizon's radius over the spin, two terms of a formula cancelled in the card's single precision and some rays were lost. The formula is now written "
+     "without that cancellation, on the card and in the processor's version; in the views tested the card's far directions are now about 50 times closer to the "
+     "double-precision reference. The card's pass is about a fifth faster (integrals that were not used are no longer made). Switching to the Black Hole Lab after "
+     "the eye's glare had been on no longer waits 15 seconds in the benchmark: a glare half made is let go when the glare is switched off."},
     {"0.56.1", "The benchmark tests only what is hard, and says plainly what is slow",
      "The Benchmark now runs, by default, only scenes that are hard to draw, each moving as you would move it: Saturn and Earth close up (Earth on the 12 August "
      "2026 eclipse, with the Moon's shadow), Real planet physics at the fastest time, the turning night sky, the Journey, every-electron clouds that fill the "

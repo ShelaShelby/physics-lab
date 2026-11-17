@@ -23,10 +23,12 @@ render::Renderer2D::LensSky skyProbeLens(const SkyCase& c);
 // pixel its distance in pixels from the edge (to the nearest pixel that ends the other way, up to 12). Counted: pixels whose end differs (and the farthest of
 // them from the edge), the far direction's error (largest, and pixels over dirLimit, each 2 or more pixels from the edge; within 2 pixels reported apart),
 // b's relative error, the disc's first image in [rIn, rOut]: another image (pixels; farthest from the edge, nearest to rIn or rOut relative), r's and g's
-// relative errors where both have the same image, and the rays lost on the card.
+// relative errors where both have the same image, and the rays lost on the card. 0.56.2: discWrongOut, those 2 pixels or more from the edge whose radius is more than rLimit (relative) from rIn and rOut; u, uBad: every
+// crossing (up to four) the reference makes at a radius in [rIn, rOut], its radius's relative error 2 pixels or more from the edge (over rLimit: uBad).
+// PL_BH_SKYDUMP prints every pixel over a limit with its place.
 struct SkyCompare {
-    long px = 0, sky = 0, ends = 0, endsFar = 0, lost = 0, refLost = 0, dirBad = 0, discPx = 0, discWrong = 0, rBad = 0;
-    double endsFarPx = 0, dir = 0, dirNear = 0, dirBadFar = 0, b = 0, r = 0, g = 0, discWrongFar = 0, discWrongEdge = 1, ms = 0;
+    long px = 0, sky = 0, ends = 0, endsFar = 0, lost = 0, refLost = 0, dirBad = 0, discPx = 0, discWrong = 0, rBad = 0, discWrongOut = 0, uBad = 0;
+    double endsFarPx = 0, dir = 0, dirNear = 0, dirBadFar = 0, b = 0, r = 0, g = 0, discWrongFar = 0, discWrongEdge = 1, u = 0, ms = 0;
 };
 SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& probe, double dirLimit, double rLimit);
 std::string skyCompareText(const SkyCase& c, const SkyCompare& m);   // one line "case=... px=..." (the tests read it)

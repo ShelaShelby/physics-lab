@@ -163,6 +163,25 @@ void performanceCard(AppState& app) {
             if (ImGui::IsItemHovered()) ui::SetTooltip("The graphics card's drawing of the spinning hole is tried again at the next spinning picture, with a marker before each step:\n"
                                                           "if the app stops again, it starts the next time with it switched off, as now.");
         }
+        // 0.56.2: only on a card too slow for 60 sharp pictures a second: one line, and the switch Lower resolution while moving (Auto / Off)
+        const double slowMs = v.gpuSky ? v.skySlowMs() : -1;
+        if (slowMs > blackhole::BlackHoleView::kSkySharpMs) {
+            char lb[400];
+            std::snprintf(lb, sizeof lb, v.lowResMode == 0
+                ? "This graphics card takes %.1f ms for the whole picture (fewer than 60 sharp pictures a second): while you move the view it is drawn at a lower resolution, sharp again at rest."
+                : "This graphics card takes %.1f ms for the whole picture (fewer than 60 sharp pictures a second): it stays sharp while you move the view, at fewer pictures a second.", slowMs);
+            ImGui::TextWrapped("%s", lb);
+            if (shellLogOn()) auditNote(std::string("bhlowres ") + lb);
+            ImGui::TextUnformatted("Lower resolution while moving:");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Auto##bhlowres", v.lowResMode == 0)) v.lowResMode = 0;
+            noteItem("bhlowres.auto");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Off##bhlowres", v.lowResMode == 1)) v.lowResMode = 1;
+            noteItem("bhlowres.off");
+            if (ImGui::IsItemHovered()) ui::SetTooltip("Auto: while the view moves, the spinning hole is drawn at a lower resolution so that it keeps up with your hand.\n"
+                                                          "Off: every pixel always; the picture changes less often while you move it. Not saved: Auto again at the next start.");
+        }
         wrappedCheckbox("GPU sky per pixel (spinning hole)", &v.gpuSky);
         if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default): the spinning hole's sky and disc are drawn by the graphics card for every pixel from the closed formulas of the light paths\n"
                                                       "(Gralla and Lupsasca 2020) in single precision, after a check at the first spinning picture against the processor's double precision.\n"

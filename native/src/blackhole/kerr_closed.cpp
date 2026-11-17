@@ -236,7 +236,15 @@ struct Radial {
             if (two()) {
                 const double r3_ = rr - r3, r4_ = rr - r4, r31 = r3 - r1, r41 = r4 - r1, r43 = r4 - r3;
                 const double n = r3_ * r41 / (r4_ * r31);
-                v = -pref * r43 / (r3_ * r4_) * ellPiang(n, s, c, kc2) - F / r3_;                              // (B39), (B43)
+                if (n < 1) {
+                    // 0.56.2: (B39), (B43) rewritten without the division by r_+-3: where r3 = r+- (lambda = 2 r+- / a: R(r+-) = 0) both terms grow as 1 / r_+-3
+                    // and cancel. With Pi = F + n D, D = (Pi - F) / n = s^3 / 3 R_J(c^2, d^2, 1, 1 - n s^2) (and its reflection past pi/2), and
+                    // r43 / r4_ + 1 = r3_ / r4_: v = -(pref / r4_) (F / pref + r43 r41 / (r4_ r31) D). Exact; the single-precision card needs it (0.56.2)
+                    const double as = std::fabs(s), c2 = c * c, d2 = c2 + kc2 * s * s;
+                    const double q = as * as * as / 3 * carlsonRJ(c2, d2, 1, 1 - n * s * s);
+                    const double D = (s < 0 ? -1 : 1) * (c >= 0 ? q : 2 * carlsonRJ(0, kc2, 1, 1 - n) / 3 - q);
+                    v = -pref / r4_ * (F / pref + r43 * r41 / (r4_ * r31) * D);
+                } else v = -pref * r43 / (r3_ * r4_) * ellPiang(n, s, c, kc2) - F / r3_;                         // (B39), (B43)
             } else if (sub == 3) {
                 const double q1 = rr - r1, q2 = rr - r2, al = (BB * q2 + AA * q1) / (BB * q2 - AA * q1);
                 if (std::fabs(al * al - 1) < kNearR2) { v = nearR2(s, c, F); (k == 0 ? ip : im) = v; continue; }

@@ -108,6 +108,7 @@ struct BenchBhMove {
     double restS = 0;                                       // 0.55.8: the slot's time at rest (s)
     int skyPictures = 0;                                    // 0.56.0: new pictures of sky and disc drawn by the card while moving
     double scaleMin = 1;                                    //   the lowest resolution's scale while moving (of the picture's width)
+    int fullPictures = 0;                                   //   0.56.2: of those, drawn at every pixel
     BenchStage disc;                                        //   the worker's disc table (spin 0)
 };
 struct BenchBlackHole {

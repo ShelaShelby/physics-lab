@@ -660,6 +660,8 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         else glareWant_.gen = 0;                                           // (an older one under way is dropped)
     }
     if (glareOn && L.glareAsync) glarePump();
+    else if (glareStage_ != 0 || glareWant_.gen != 0) { glareWant_.gen = 0; glarePump(); }   // 0.56.2: the glare off (or not yet at rest): the one under way
+                                                                           // is let go over the next frames (it stayed half made, glareBusy true, until the glare came back)
     glBindFramebuffer(GL_FRAMEBUFFER, target);
     glViewport(vx, vy, fbW, fbH);
     if (glareOn && glareValid_) {                                          // 0.55.4: the picture with the eye's glare
@@ -828,10 +830,12 @@ void Renderer2D::skyTimes() {
 }
 
 // 0.56.0: the picture of the spinning hole per pixel into lensFbo_ (bound, its attachments 0..2 set by drawLens): the open-sky mask as attachment 3, the
-// exposure first (whiteMode 1), then the pass, timed. THE RESOLUTION RULE: at rest always every pixel. While the view moves, if the pass's last measured
-// time for the whole picture (fullMs, the card's own timer) is over the frame's budget (frameBudgetMs: half the screen's refresh period), the pass is
-// drawn at scale = sqrt(budget / fullMs), rounded down to eighths, at least 1/4, into smaller layers that are then stretched over the picture's own
-// (bilinear): a new picture every frame at a lower resolution rather than an old one at full.
+// exposure first (whiteMode 1), then the pass, timed. THE RESOLUTION RULE (0.56.2, the owner's decision): every pixel, at rest and while moving. Only on a
+// card whose whole picture takes longer than sharpMs (fewer than 60 sharp pictures a second), with lowRes allowed (Settings, Performance, "Lower
+// resolution while moving": Auto), 0.56.0's rule while the view moves: if the pass's last measured time for the whole picture (fullMs, the card's own
+// timer) is over the frame's budget (frameBudgetMs: half the screen's refresh period), the pass is drawn at scale = sqrt(budget / fullMs), rounded down
+// to eighths, at least 1/4, into smaller layers that are then stretched over the picture's own (bilinear). Otherwise a slow pass makes the frame wait:
+// the screen keeps the last sharp picture until the next is finished, never a coarse one.
 void Renderer2D::skyPicture(const LensSky& L, int fbW, int fbH, bool layers, bool raw) {
     if (!maskTex_ || maskW_ != fbW || maskH_ != fbH) {                     // the mask: fbW x fbH, one byte
         if (!maskTex_) glGenTextures(1, &maskTex_);
@@ -852,9 +856,9 @@ void Renderer2D::skyPicture(const LensSky& L, int fbW, int fbH, bool layers, boo
         glBindFramebuffer(GL_FRAMEBUFFER, lensFbo_);
     }
     double scale = 1;
-    if (L.moving) {
+    if (L.moving && L.lowRes) {
         const double full = L.slowMs > 0 ? L.slowMs : skyStats_.fullMs;
-        if (L.frameBudgetMs > 0 && full > L.frameBudgetMs) scale = std::clamp(std::floor(std::sqrt(L.frameBudgetMs / full) * 8) / 8, 0.25, 1.0);
+        if (full > L.sharpMs && L.frameBudgetMs > 0 && full > L.frameBudgetMs) scale = std::clamp(std::floor(std::sqrt(L.frameBudgetMs / full) * 8) / 8, 0.25, 1.0);
     }
     skyScale_ = scale;
     skyStats_.scale = scale;
@@ -950,6 +954,33 @@ void Renderer2D::skyProbe(const LensSky& L, int w, int h, bool queue, std::vecto
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glEnable(GL_BLEND);
+}
+
+double Renderer2D::skyTimePass(const LensSky& L, int w, int h, int mode) {
+    if (!sky_.ready() || w <= 0 || h <= 0) return -1;
+    GLuint fbo = 0, tex = 0;
+    glGenFramebuffers(1, &fbo); glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, w, h, 0, GL_RGBA, GL_FLOAT, nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    const double w0 = width_, h0 = height_;
+    width_ = w; height_ = h;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+    const GLenum buf0 = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &buf0);
+    glDisable(GL_BLEND);
+    glViewport(0, 0, w, h);
+    glFinish();
+    const auto t0 = std::chrono::steady_clock::now();
+    skyPass(L, w, h, 0, 0, 1, mode, false);
+    glFinish();
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    width_ = w0; height_ = h0;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_BLEND);
+    glDeleteTextures(1, &tex); glDeleteFramebuffers(1, &fbo);
+    return ms;
 }
 
 bool Renderer2D::skyProbeDone() {

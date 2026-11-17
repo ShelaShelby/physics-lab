@@ -388,7 +388,7 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
         app::BenchBhMove& m = h.move[b.bhKind];
         if (s.picture != b.bhPic && b.bhMoving) m.pictures++;            // 0.55.6: new pictures while moving
         if (s.skyCard && R.skyStats().draws != b.bhSkyPics) {             // 0.56.0: the card's new pictures of sky and disc (this frame's), the pass's time, the resolution
-            if (b.bhMoving) { m.skyPictures++; m.scaleMin = std::min(m.scaleMin, R.skyStats().scale); }
+            if (b.bhMoving) { m.skyPictures++; m.scaleMin = std::min(m.scaleMin, R.skyStats().scale); if (R.skyStats().scale >= 1) m.fullPictures++; }
             if (R.skyStats().fullMs >= 0) h.skyGpu.add(R.skyStats().fullMs);
         }
         if (s.discFills != b.bhDiscFills) m.disc.add(s.discMs);

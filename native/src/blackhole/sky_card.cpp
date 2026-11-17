@@ -10,6 +10,7 @@
 #include "blackhole/kerr.h"
 #include "blackhole/kerr_closed.h"
 #include "blackhole/looks.h"
+#include "blackhole/low_priority.h"
 #include "blackhole/spin.h"
 #include "blackhole/spin_sky.h"
 #include "render/gl_loader.h"
@@ -50,7 +51,7 @@ SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirL
     const double cx = std::round(w / 2.0), cy = h - std::round(h / 2.0);
     std::vector<ClosedEnd> ref(static_cast<std::size_t>(n));
     std::vector<signed char> kind(static_cast<std::size_t>(n));
-    for (int j = 0; j < h; j++)
+    const auto row = [&](int j) {
         for (int i = 0; i < w; i++) {
             const double ox = i + 0.5 - cx, oy = j + 0.5 - cy, d = std::hypot(ox, oy), th = std::min(d / c.K, kPi);
             const double chi = std::atan2(d > 0 ? -ox / d : 0, d > 0 ? oy / d : 1);
@@ -58,6 +59,9 @@ SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirL
             ref[static_cast<std::size_t>(j * w + i)] = e;
             kind[static_cast<std::size_t>(j * w + i)] = static_cast<signed char>(e.kind == RayEnd::Sky ? 1 : e.kind == RayEnd::Horizon ? 2 : 0);
         }
+    };
+    if (n > 20000) parallelFor(h, row);                                    // (the full-size pictures of the tests)
+    else for (int j = 0; j < h; j++) row(j);
     const auto edgeDist = [&](int i, int j) {
         const int k0 = kind[static_cast<std::size_t>(j * w + i)];
         double best = 12;
@@ -66,6 +70,11 @@ SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirL
                 if (kind[static_cast<std::size_t>(jj * w + ii)] != k0) best = std::min(best, std::hypot(ii - i, jj - j) - 0.5);
         return best;
     };
+    std::vector<float> edge(static_cast<std::size_t>(n));
+    const auto edgeRow = [&](int j) { for (int i = 0; i < w; i++) edge[static_cast<std::size_t>(j * w + i)] = static_cast<float>(edgeDist(i, j)); };
+    if (n > 20000) parallelFor(h, edgeRow);
+    else for (int j = 0; j < h; j++) edgeRow(j);
+    const bool dump = std::getenv("PL_BH_SKYDUMP") != nullptr;
     for (int j = 0; j < h; j++)
         for (int i = 0; i < w; i++) {
             const std::size_t q = static_cast<std::size_t>(j * w + i);
@@ -78,11 +87,16 @@ SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirL
             const int gk = static_cast<int>(std::lround(p3[0]));
             if (gk == 0) {
                 m.lost++;
-                if (std::getenv("PL_BH_SKYDUMP")) std::printf("SKYLOST %s i=%d j=%d sub=%d refsub=%d b=%.6g q=%.6g gb=%.6g gq=%.6g edge=%.1f\n", c.name, i, j, static_cast<int>(p3[3]), e.radial, e.b, e.q, p3[1], p3[2], edgeDist(i, j));
+                if (dump) std::printf("SKYLOST %s i=%d j=%d sub=%d refsub=%d b=%.6g q=%.6g gb=%.6g gq=%.6g edge=%.1f\n", c.name, i, j, static_cast<int>(p3[3]), e.radial, e.b, e.q, p3[1], p3[2], edge[q]);
                 continue;
             }
-            const double ed = edgeDist(i, j);
-            if (gk != kind[q]) { m.ends++; if (ed > 1.5) { m.endsFar++; m.endsFarPx = std::max(m.endsFarPx, ed); } continue; }
+            const double ed = edge[q];
+            if (gk != kind[q]) {
+                m.ends++;
+                if (ed > 1.5) { m.endsFar++; m.endsFarPx = std::max(m.endsFarPx, ed);
+                    if (dump) std::printf("SKYENDS %s i=%d j=%d kind=%d refkind=%d sub=%d refsub=%d b=%.6g q=%.6g edge=%.1f\n", c.name, i, j, gk, kind[q], static_cast<int>(p3[3]), e.radial, e.b, e.q, ed); }
+                continue;
+            }
             m.b = std::max(m.b, std::fabs(p3[1] - e.b) / std::max(1.0, std::fabs(e.b)));
             if (gk == 1) {
                 m.sky++;
@@ -91,8 +105,21 @@ SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirL
                 if (ed >= 2) {
                     m.dir = std::max(m.dir, ang);
                     if (ang > dirLimit) { m.dirBad++; m.dirBadFar = std::max(m.dirBadFar, ed);
-                        if (std::getenv("PL_BH_SKYDUMP")) std::printf("SKYDIRBAD %s i=%d j=%d ang=%.3g sub=%d refsub=%d b=%.6g q=%.6g edge=%.1f\n", c.name, i, j, ang, static_cast<int>(p3[3]), e.radial, e.b, e.q, ed); }
+                        if (dump) std::printf("SKYDIRBAD %s i=%d j=%d ang=%.3g sub=%d refsub=%d b=%.6g q=%.6g edge=%.1f\n", c.name, i, j, ang, static_cast<int>(p3[3]), e.radial, e.b, e.q, ed); }
                 } else m.dirNear = std::max(m.dirNear, ang);
+            }
+            // 0.56.2: every crossing of the disc's plane the reference makes (up to four) at a radius in [rIn, rOut] on either side: 1/u within rLimit
+            if (ed >= 2) {
+                const float* p4 = &P[(static_cast<std::size_t>(j) * 4 * w + 3 * w + i) * 4];   // (u0..u3)
+                for (int k = 0; k < 4; k++) {
+                    const bool rk = k < e.nCross && e.u[k] > 0, gIn = p4[k] > 0 && 1 / p4[k] >= c.rIn && 1 / p4[k] <= c.rOut;
+                    const bool rIn = rk && 1 / e.u[k] >= c.rIn && 1 / e.u[k] <= c.rOut;
+                    if (!rIn && !(gIn && (gk == 1 || k < e.nCross))) continue;
+                    const double rr = rk ? 1 / e.u[k] : 0, rel = rk && p4[k] > 0 ? std::fabs(1 / p4[k] - rr) / rr : 1;
+                    m.u = std::max(m.u, rel);
+                    if (rel > rLimit) { m.uBad++;
+                        if (dump) std::printf("SKYUBAD %s i=%d j=%d k=%d r=%.6g gr=%.6g sub=%d refsub=%d b=%.6g q=%.6g edge=%.1f\n", c.name, i, j, k, rr, p4[k] > 0 ? 1 / p4[k] : 0.0, static_cast<int>(p3[3]), e.radial, e.b, e.q, ed); }
+                }
             }
             // the disc's first image in [rIn, rOut]
             int ro = -1;
@@ -106,22 +133,25 @@ SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& P, double dirL
                                            : std::min(std::fabs(p2[1] - c.rIn), std::fabs(p2[1] - c.rOut)) / std::max(1.0, static_cast<double>(p2[1]));
                 m.discWrong++;
                 m.discWrongFar = std::max(m.discWrongFar, ed);
+                if (ed >= 2 && rel > rLimit) m.discWrongOut++;   // (a radius within rLimit of the disc's edge is within the radius's own limit)
+                if (dump && ed >= 2 && rel > rLimit) std::printf("SKYDISCWRONG %s i=%d j=%d order=%d reforder=%d r=%.6g gr=%.6g b=%.6g q=%.6g edge=%.1f\n", c.name, i, j, go, ro, rr, static_cast<double>(p2[1]), e.b, e.q, ed);
                 m.discWrongEdge = std::min(m.discWrongEdge, rel);
                 continue;
             }
             const double dr = std::fabs(p2[1] - rr) / rr, dg = std::fabs(p2[2] - discShiftKerr(rr, e.b, c.a)) / discShiftKerr(rr, e.b, c.a);
-            if (ed >= 2) { m.r = std::max(m.r, dr); m.g = std::max(m.g, dg); if (dr > rLimit || dg > rLimit) m.rBad++; }
+            if (ed >= 2) { m.r = std::max(m.r, dr); m.g = std::max(m.g, dg); if (dr > rLimit || dg > rLimit) { m.rBad++;
+                if (dump) std::printf("SKYRBAD %s i=%d j=%d dr=%.3g dg=%.3g r=%.6g b=%.6g q=%.6g edge=%.1f\n", c.name, i, j, dr, dg, rr, e.b, e.q, ed); } }
         }
     m.ms = msSince(t0);
     return m;
 }
 
 std::string skyCompareText(const SkyCase& c, const SkyCompare& m) {
-    char b[700];
+    char b[900];
     std::snprintf(b, sizeof b, "case=%s a=%g dist=%g th=%.5f px=%ld sky=%ld ends=%ld endsfar=%ld endsfarpx=%.1f lost=%ld reflost=%ld dir=%.2e dirnear=%.2e dirbad=%ld "
-                  "dirbadfar=%.1f b=%.2e discpx=%ld discwrong=%ld discwrongfar=%.1f discwrongedge=%.2e r=%.2e g=%.2e rbad=%ld",
+                  "dirbadfar=%.1f b=%.2e discpx=%ld discwrong=%ld discwrongfar=%.1f discwrongedge=%.2e discwrongout=%ld r=%.2e g=%.2e rbad=%ld u=%.2e ubad=%ld",
                   c.name, c.a, c.r, c.th, m.px, m.sky, m.ends, m.endsFar, m.endsFarPx, m.lost, m.refLost, m.dir, m.dirNear, m.dirBad, m.dirBadFar, m.b, m.discPx,
-                  m.discWrong, m.discWrongFar, m.discWrongEdge, m.r, m.g, m.rBad);
+                  m.discWrong, m.discWrongFar, m.discWrongEdge, m.discWrongOut, m.r, m.g, m.rBad, m.u, m.uBad);
     return b;
 }
 
@@ -170,6 +200,52 @@ void skyCompareHook(render::Renderer2D& R) {
     for (int st = 0; st < render::KerrSky::kStages; st++)
         if (!K.build(st, &steps, why)) { std::printf("PLBHSKYNONE why=%s\n", why.c_str()); return; }
     std::printf("PLBHSKYBUILD tinyms=%.1f mathms=%.1f wholems=%.1f id=%s\n", K.buildMs(0), K.buildMs(1), K.buildMs(2), render::kerrSkyShaderId().c_str());
+    // 0.56.2 (PL_BH_SKYTIME="w,h"): the pass's time at w x h, waited for (median of 5), uMode 1 (the ray and its far direction) and 2 (also the disc's first
+    // image and its shift), at the benchmark's view (0.9, 20 M, 80 deg, 90 deg across the height) and the Film's (30 deg); with PL_BH_SKYSTOP the parts
+    if (const char* tm = std::getenv("PL_BH_SKYTIME")) {
+        int w = 2560, h = 1369;
+        std::sscanf(tm, "%d,%d", &w, &h);
+        const FilmChoices film;
+        const SkyCase cases[2] = {{"benchmark", 0.9, 20, 80 * kPi / 180, w, h, (h / 2.0) / (90 * kPi / 360), 2.32, 30},
+                                  {"film", film.spin, film.camR, film.camTheta, w, h, (h / 2.0) / (30 * kPi / 360), film.rIn, film.rOut}};
+        for (const SkyCase& c : cases)
+            for (int mode : {1, 2}) {
+                double t[5];
+                for (double& x : t) x = R.skyTimePass(skyProbeLens(c), w, h, mode);
+                std::sort(t, t + 5);
+                std::printf("PLBHSKYTIME case=%s mode=%d stop=%s w=%d h=%d ms=%.1f\n", c.name, mode, std::getenv("PL_BH_SKYSTOP") ? std::getenv("PL_BH_SKYSTOP") : "-", w, h, t[2]);
+            }
+        std::fflush(stdout);
+        return;
+    }
+    // 0.56.2 (PL_BH_SKYFULL="w,h,fov[,deg...]"): the Film's hole at a whole window's size, every pixel against traceClosed; the cameras at the given angles
+    // from the spin axis (default: the paper's 86.56 and 88, 90, 92 degrees); only this part runs
+    if (const char* full = std::getenv("PL_BH_SKYFULL")) {
+        const FilmChoices film;
+        double v[16] = {2560, 1369, 30};
+        int nv = 0;
+        for (const char* p = full; *p && nv < 16; ) {
+            char* e = nullptr;
+            v[nv++] = std::strtod(p, &e);
+            if (e == p) break;
+            p = *e == ',' ? e + 1 : e;
+        }
+        std::vector<double> ths;
+        for (int k = 3; k < nv; k++) ths.push_back(v[k]);
+        if (ths.empty()) ths = {film.camThetaDeg, 88, 90, 92};
+        const int w = static_cast<int>(v[0]), h = static_cast<int>(v[1]);
+        for (double deg : ths) {
+            char name[32];
+            std::snprintf(name, sizeof name, "film%.2f", deg);
+            const SkyCase c{name, film.spin, film.camR, deg * kPi / 180, w, h, (h / 2.0) / (v[2] * kPi / 360), film.rIn, film.rOut};
+            std::vector<float> probe;
+            R.skyProbe(skyProbeLens(c), c.w, c.h, false, &probe);
+            const SkyCompare m = skyCompare(c, probe, kSkyDirLimit, kSkyRLimit);
+            std::printf("PLBHSKYFULL fov=%g %s\n", v[2], skyCompareText(c, m).c_str());
+            std::fflush(stdout);
+        }
+        return;
+    }
     // 1. the elliptic functions: R_F, R_J, R_C on arguments over 12 decades, am(u | m) for m from -4 to 1 - 1e-6, F, Pi (n < 1, and n > 1 on both sides of the
     //    pole), E for amplitudes over (-pi, pi]. Errors relative to the value (am: absolute, over 1 + |u|); Pi's error relative to max(|Pi|, |F|) (near the
     //    pole Pi's own size is the log's, which the antiderivative carries exactly; its single-precision rounding is that of the terms)

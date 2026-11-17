@@ -6,7 +6,8 @@
 #   nucleus:   Quark style / Nucleon detail / Nucleon edge can be clicked at the default zoom
 #   0.56.1, the benchmark (its only-scene switch PL_BENCH_ONLY):
 #   benchscenes:  every new scene sets up what its text says, and its picture changes between two moments of its counted time
-#   benchwaits:   a wait is timed to the finished picture, not the first frame (the cloud filling, the spinning hole's sharp picture)
+#   benchwaits:   a wait is timed to the finished picture, not the first frame (the cloud filling, the spinning hole's sharp picture); after the glare's
+#                 scene the switch to the Black Hole Lab is not capped (0.56.2)
 #   benchrest:    a lab made busy on purpose (PL_BENCH_BUSY) is said to be busy at rest
 #   benchrestore: after the run every lab, page and panel is as it was
 #   check_6b.py <PhysicsLab binary> <work folder> scrollbar|bench|rail|nucleus|benchscenes|benchwaits|benchrest|benchrestore
@@ -125,6 +126,12 @@ def part_benchwaits(binary, work):
             check(frames >= 2 and "(capped)" not in " ".join(l), f"{wid}: timed to the finished picture over {frames} frames, not the first frame ({' '.join(l)})")
     t = report(r)
     check("WAITS (each done 3 times" in t and "response.atom_density" in t, "the report has the waits table")
+    # 0.56.2: after a scene with the eye's glare (real_move) the glare half made stayed under way once the glare was off: every wait for the Black Hole Lab
+    # then ran to the cap (the owner's 0.56.1 run: 15 s from the Molecule Lab). The card's light paths off, as on the owner's PC.
+    r = run_app(binary, work, "b_waits_glare", dict(BENCH, PL_BENCH_ONLY="blackhole.real_move,response.lab_switch.molecule_blackhole", PL_BENCH_WARMUP="0.3",
+                PL_BENCH_MEASURE="1.5", PL_FRAME_MS="16", PL_BH_GPUPATHS="0"), frames=100000, size="880x560", timeout=600)
+    tries = [l for l in r.out.splitlines() if l.startswith("PLBENCH-WAIT response.lab_switch.molecule_blackhole ")]
+    check(len(tries) == 3 and not any("(capped)" in l for l in tries), f"after the glare's scene the Black Hole Lab is finished after a switch ({tries})")
 
 def part_benchrest(binary, work):
     r = run_app(binary, work, "b_rest", dict(BENCH, PL_BENCH_ONLY="rest.molecule", PL_BENCH_BUSY="1"), frames=100000, size="880x560", timeout=600)

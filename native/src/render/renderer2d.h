@@ -243,6 +243,8 @@ public:
         // at the points (expStep / 2 + i expStep, expStep / 2 + j expStep) of the picture in points (lab.h discLook's rule), reduced on the card, no read-back
         // in the frame's way. moving: the view is changing (the pass may be drawn at a lower resolution: frameBudgetMs, the rule in drawLens); slowMs > 0
         // (tests): the pass's time on the card taken as this. skyMode (tests): 1..4 the shader's probe outputs (uMode) into the float framebuffer given.
+        // 0.56.2: lowRes: a lower resolution allowed while moving, and then only when the whole picture takes longer than sharpMs on the card (the owner's
+        // decision, 17 Nov 2026: every pixel always, unless the card cannot give 60 sharp pictures a second).
         bool kerrSky = false;
         float skyCam[4] = {0, 20, 0, 1}, skyMet[4] = {1, 0, 1, 1}, skyMet2[4] = {1, 2, 0, 2};
         float filmRaw[4] = {0, 0, 0, 0};
@@ -250,6 +252,8 @@ public:
         double expStep = 4;
         bool moving = false;
         double frameBudgetMs = 8, slowMs = 0;
+        bool lowRes = true;
+        double sharpMs = 1000.0 / 60;
         int skyMode = 0;
     };
     // 0.55.4: the last glare made (tests and the benchmark): the block in pixels, the grid, the read-back and the veil's time (ms), the light spread and laid (white x sr)
@@ -261,6 +265,7 @@ public:
     // of a w x h picture of L (cx, cy, kRad in pixels), 16 floats per pixel, rows from the bottom. queue: copied into a pixel buffer behind a fence, read by
     // skyProbeRead once skyProbeDone (the frame never waits); else read at once into out (waits)
     void skyProbe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out);
+    double skyTimePass(const LensSky& L, int w, int h, int mode);   // (tests, 0.56.2: one pass of w x h in the given uMode, waited for; ms)
     bool skyProbeDone();
     void skyProbeRead(std::vector<float>& out);
     long lensRedraws() const { return lensRedraws_; }

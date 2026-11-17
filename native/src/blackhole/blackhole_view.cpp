@@ -303,6 +303,14 @@ void BlackHoleView::ensureTable(double dist) {
     st_.tableFills++;
 }
 
+namespace {
+double skySlowEnv() {                                                       // (tests: the pass taken as this slow, ms)
+    static const double slow = std::getenv("PL_BH_SKYSLOW") ? std::atof(std::getenv("PL_BH_SKYSLOW")) : 0;
+    return slow;
+}
+}  // namespace
+double BlackHoleView::skySlowMs() const { return skyState_ == 1 ? (skySlowEnv() > 0 ? skySlowEnv() : st_.skyGpuMs) : -1; }
+
 render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const HoleView& v) const {
     render::Renderer2D::LensSky L;
     L.cx = v.cx; L.cy = v.cy; L.kRad = v.K;
@@ -342,8 +350,9 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         skyCamera(L, s.spin, s.dist, s.pitch);
         L.moving = skyMoving_;
         L.frameBudgetMs = 500 / std::max(refreshHz, 1.0);
-        static const double slow = std::getenv("PL_BH_SKYSLOW") ? std::atof(std::getenv("PL_BH_SKYSLOW")) : 0;   // (tests: the pass taken as this slow, ms)
-        L.slowMs = slow;
+        L.slowMs = skySlowEnv();
+        L.lowRes = lowResMode == 0;
+        L.sharpMs = kSkySharpMs;
         if (s.disc && skyF_) {
             L.disc = true;
             L.discF = skyF_.get(); L.discFN = static_cast<int>(skyF_->size()); L.discFLog0 = skyFLog0_; L.discFDl = skyFDl_; L.discFVersion = skyFVer_;

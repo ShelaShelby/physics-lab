@@ -1,8 +1,8 @@
 # Resume
 
 ## Current state
-- 0.56.1 (17 Nov 2026): the benchmark tests only what is hard: "Hard scenes" (24, stable ids such as orbit.saturn, atom.slice_drag, blackhole.film_tilt; app/bench_scenes.cpp) by default, "All scenes" adds the easy ones and the processor twins; every scene moves as a user does, with the hardest view of four zooms tried; the report opens with one table slowest first (fps, 1 % low, new pictures a second, reaches the screen's rate, limited by), then 11 waits to the finished picture and 6 labs left alone (busy or quiet), the processor, memory, start-up time and worst frame in its head; about four minutes. The Controls panel says the true dot counts with every electron (48,000 per electron at Ultra, at most 240,000).
-- Last full UI run: 0.56.0 (the commit "native 0.56.0"), 33 of 33, nothing to fix. (0.56.1: not run, a small version.)
+- 0.56.2 (17 Nov 2026): the Black Hole Lab's spinning hole is drawn at every pixel while moving too (a lower resolution only on a card slower than 16.7 ms a picture; Settings, Performance: "Lower resolution while moving", Auto / Off); the row of lost rays beside the shadow (lambda = 2 r+ / a, GLa (B39) cancelling in single precision) fixed on the card and in kerr_closed.cpp; the card's pass about 0.82 of 0.56.1's (unused integrals skipped, K(mu) from the AGM); a glare left half made no longer keeps the lab "unfinished" (the benchmark's 15 s lab switch).
+- Last full UI run: 0.56.0 (the commit "native 0.56.0"), 33 of 33, nothing to fix. (0.56.1, 0.56.2: not run, small versions.)
 - Next: the rest of PLAN_BLACKHOLE.md step 4 (quality levels High and Ultra), then step 5, moving cameras; "Show special radii" is a ROADMAP line. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
