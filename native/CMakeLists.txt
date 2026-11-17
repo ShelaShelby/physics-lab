@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.57.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.57.1 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -296,13 +296,13 @@ if(PL_BUILD_TESTS)
     target_link_libraries(stage2_timing PRIVATE atom_core)
     add_executable(stage3_timing tests/timing_stage3.cpp)
     target_link_libraries(stage3_timing PRIVATE atom_core)
-    add_executable(stage4_timing tests/timing_stage4.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/render/atom_card.cpp src/orbit/belt_layer.cpp)
+    add_executable(stage4_timing tests/timing_stage4.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp)
     target_include_directories(stage4_timing PRIVATE src/render)
     target_link_libraries(stage4_timing PRIVATE atom_core maps_core)
   endif()
   if(PL_GL_TESTS)
     find_library(PL_EGL_LIBRARY EGL REQUIRED)
-    add_executable(gl_compare_tests tests/gl_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/render/atom_card.cpp src/orbit/belt_layer.cpp)
+    add_executable(gl_compare_tests tests/gl_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp)
     target_include_directories(gl_compare_tests PRIVATE src/render)
     target_link_libraries(gl_compare_tests PRIVATE atom_core maps_core ${PL_EGL_LIBRARY})
     target_compile_options(gl_compare_tests PRIVATE ${PL_WARNINGS})
@@ -370,12 +370,14 @@ if(PL_BUILD_APP)
     src/render/kerr_compute.cpp
     src/render/kerr_sky.cpp
     src/render/atom_card.cpp
+    src/render/molecule_card.cpp
     src/blackhole/spin_card.cpp
     src/blackhole/sky_card.cpp
     src/orbit/belt_layer.cpp
     src/orbit/orbit_view.cpp
     src/atom/atom_view.cpp
     src/atom/atom_card_paths.cpp
+    src/molecule/molecule_card_paths.cpp
     src/atom/chart_draw.cpp
     src/molecule/molecule_view.cpp
     src/ui/shell_molecule.cpp
@@ -498,7 +500,7 @@ if(PL_BUILD_APP)
       add_test(NAME ui_molecule COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_molecule
                check_molecule.py check_realistic.py check_audit19.py:molbar check_022.py:molbar check_023.py:vib check_024.py:densvib
                check_024.py:densfit check_024.py:nobuild check_025.py:molecule check_025.py:guide check_layout020.py:molpan check_022s7.py:space
-               check_molecule.py:rotation check_molecule.py:anharm)
+               check_molecule.py:rotation check_molecule.py:anharm check_molecule.py:card)
       set_tests_properties(ui_molecule PROPERTIES TIMEOUT 3600)
       # ui_blackhole (0.55.0): the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, layout, look,
       # and the card's bent sky against the double-precision reference; 0.55.2: spin; 0.55.3: the looks; 0.55.4: truelight (the true exposure, the eye's glare);

@@ -7,10 +7,14 @@
 #            is one line for water; the Rotation card's lines can be pointed at (the strongest line is named), and Turn turns the molecule at its slowed-down rate.
 #   anharm (0.53.1, its own part): HCl's Vibrations show the tick box "Anharmonic (real bond)"; ticked, the level control and the Bond energy card appear; the
 #            level goes to the last bound one and one above it, where the readout says dissociated; water has no tick box.
-#   check_molecule.py <PhysicsLab binary> <work folder> [rotation | anharm]
+#   card (0.57.1, its own part): the Density cloud on this PC's renderer (Mesa llvmpipe here, NOT the owner's card): its start-up check against the
+#            processor (every dot within its derived single-precision limit, molecule/mol_cloud.h), the benchmark's paths, the picture against the
+#            processor's, and its guard: the process ended once inside each step (PL_GPU_DIE), the next start runs nothing of it and Settings, Performance
+#            names the step; a changed shader tries again; Try again works in the same run.
+#   check_molecule.py <PhysicsLab binary> <work folder> [rotation | anharm | card]
 import os, sys, re
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, Bmp, inside
+from shell_lib import run_app, Bmp, inside, prefetch
 
 fails = checks = 0
 def check(ok, what):
@@ -178,6 +182,101 @@ def anharm(binary, work):
     wv = vibnote(w)
     check(wv is not None and wv["on"] == "1" and wv["anhbox"] == "0" and not any("Anharmonic (real bond)" in t[2] for t in w.texts) and not w.note("bondcard "), f"water: no tick box, no card ({wv})")
 
+MOL_STEPS = ["compile the Density cloud's shaders", "link the Density cloud's shaders", "the Density cloud's first small run", "the Density cloud's check", "the Density cloud's first full use"]
+MOL_BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "molecule.density,molecule.vib_density",
+             "PL_BENCH_WARMUP": "1.0", "PL_BENCH_MEASURE": "1.5"}
+
+def card(binary, work):
+    def folder(name):
+        d = os.path.join(work, name); os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d): os.remove(os.path.join(d, f))
+        return d
+    def read(path):
+        return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+    def lines_of(log):
+        return "\n".join(ln for ln in log.splitlines() if ln.startswith("[molcloud] "))
+    BIG = dict(frames=100000, size="880x560", timeout=1500)
+    dirs = {"ok": folder("mc_ok")}
+    calls = [((binary, work, "mc_ok", dict(MOL_BENCH, PL_SETTINGS=os.path.join(dirs["ok"], "settings.txt"))), BIG)]
+    for i, st in enumerate(MOL_STEPS):
+        d = folder(f"mc_die{i}")
+        dirs[i] = d
+        calls.append(((binary, work, f"mc_die{i}", dict(MOL_BENCH, PL_SETTINGS=os.path.join(d, "settings.txt"), PL_GPU_DIE=st)), BIG))
+    # the picture: water and benzene in the Density style, cloud and surface, the card's cloud and the processor's (PL_MOL_CARD=0), the same frames
+    look = {"PL_MOLECULE_STYLE": "real", "PL_DRAWSTAT": "1"}
+    PICS = [("H2O", "dark"), ("C6H6", "dark"), ("H2O", "light")]   # (the light page: the darker dot colour, drawn over instead of added)
+    pics = [((binary, work, f"mc_pic_{m}_{th}_{w}", dict(look, PL_MOLECULE=m, PL_THEME=th, **({"PL_MOL_CARD": "0"} if w == "cpu" else {}))), dict(frames=90, theme=th)) for m, th in PICS for w in ("card", "cpu")]   # (90 frames: the steps take a frame each, the read-backs a few more on a busy PC)
+    prefetch(calls + pics)
+    results = [run_app(*a, **kw) for a, kw in calls]
+    ok = results[0]
+    out = ok.out
+    # 1. the start-up check passed, every case within its derived limits
+    check("PLMOLCARD state=1" in out, "card: the Density cloud's program passes its start-up check here")
+    cases = [ln for ln in out.splitlines() if ln.startswith("PLMOLCARDCASE ")]
+    def case_ok(ln):
+        m = re.search(r"(\d+) drawn by one side only \((\d+) within the rounding at the picture's edge\); (\d+) beyond their limit", ln)
+        return m and m.group(1) == m.group(2) and m.group(3) == "0"
+    check(len(cases) == 12 and all(case_ok(ln) for ln in cases), f"card: 6 cameras x (the lab's own dots, a box beyond them): every dot within its derived limit, every one-sided dot at the picture's edge {cases}")
+    # 2. the benchmark says which path ran and why
+    rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
+    paths = [ln.strip() for ln in rep.splitlines() if ln.strip().startswith("Path:")]
+    card_paths = [p for p in paths if "the Density cloud's dots: the graphics card (its start-up check passed" in p]
+    check(len(card_paths) == 2, f"card: the benchmark's report names the card for both scenes, with the check {paths}")
+    # 3. the log: every step in order with its time, the whole path succeeded, kept "ok", no marker left
+    log = lines_of(read(os.path.join(dirs["ok"], "gpu-paths-log.txt")))
+    st = read(os.path.join(dirs["ok"], "settings.txt"))
+    at, missing = 0, []
+    for w in [x for s_ in MOL_STEPS for x in ("begin " + s_, "end " + s_)] + ["the whole path succeeded"]:
+        k = log.find(w, at)
+        if k < 0: missing.append(w)
+        else: at = k
+    timed = all(re.search(r"end " + re.escape(s_) + r"[^\n]* in \d+ ms", log) for s_ in MOL_STEPS[:2])
+    check(not missing and timed, f"card: the log names every step in order, the compile and link with their times (missing: {missing})")
+    check("gpumolcloud=ok | molcloud " in st and not os.path.exists(os.path.join(dirs["ok"], "gpu-molcloud-step.txt")), "card: kept as ok in the settings file, no marker left")
+    # 4. the process ended inside each step: the marker names it; the next start runs nothing of it, the processor is used, Settings names the step
+    for i, s_ in enumerate(MOL_STEPS):
+        marker = read(os.path.join(dirs[i], "gpu-molcloud-step.txt"))
+        check(f"step={s_}\n" in marker and "version=molcloud " in marker, f"card: the process ended inside '{s_}': the marker names the step ({marker!r})")
+    after = [((binary, work, f"mc_after{i}", {"PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": os.path.join(dirs[i], "settings.txt"), "PL_OPEN": "settings", "PL_DRAWSTAT": "1"}),
+              dict(frames=30, size="880x560", timeout=900)) for i in range(len(MOL_STEPS))]
+    prefetch(after)
+    for i, s_ in enumerate(MOL_STEPS):
+        a, kw = after[i]
+        r = run_app(*a, **kw)
+        lg = lines_of(read(os.path.join(dirs[i], "gpu-paths-log.txt")))
+        said = [n for n in r.notes if n.startswith("molcloud ") and "stopped the app last time" in n and f"'{s_}'" in n]
+        st_ = stats(r)
+        check("PLMOLCARD state=-1" in r.out and not any(("begin " + x) in lg for x in MOL_STEPS) and said and st_ and all(x.get("card") == "0" for x in st_) and int(st_[-1]["dots"]) > 50000,
+              f"card: after '{s_}' nothing of the program runs, the processor draws the cloud, Settings names the step (said {bool(said)})")
+        txt = read(os.path.join(dirs[i], "settings.txt"))
+        check("gpumolcloud=off | molcloud " in txt and f"| {s_}\n" in txt and not os.path.exists(os.path.join(dirs[i], "gpu-molcloud-step.txt")), f"card: the settings file keeps it off with the step '{s_}', the marker gone")
+    # 5. a changed shader tries again (and passes here); Try again passes in the same run
+    sf = os.path.join(dirs[0], "settings.txt")
+    sf2 = os.path.join(dirs[0], "settings_shader.txt")
+    with open(sf2, "w", encoding="utf-8") as f: f.write(read(sf))
+    r5 = run_app(binary, work, "mc_shader", dict(MOL_BENCH, PL_SETTINGS=sf2, PL_GPU_MOLSHADER="molcloud 0000000000000000"), frames=100000, size="880x560", timeout=1500)
+    check("PLMOLCARD state=1" in r5.out, "card: a changed shader tries again (and passes here)")
+    sf = os.path.join(dirs[1], "settings.txt")
+    r4 = run_app(binary, work, "mc_again", {"PL_MOLECULE": "H2O", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpumolcloud", "PL_SCRIPT": "14:click=gpumolcloud.again"}, frames=60, size="880x560", timeout=900)
+    check(not r4.scripted_missing() and "PLMOLCARD state=1" in r4.out and "gpumolcloud=ok" in read(sf), f"card: Try again: the program is made, checked and used again in the same run ({r4.scripted_missing()})")
+    # 6. the picture: the card's cloud against the processor's. The dots themselves are checked against their derived limits above; here a sanity bound on
+    #    the whole picture (a wrong exposure, a missing or misplaced set of dots or the wrong colour gives tens of levels): every frame drawn by the card
+    #    once its check passed, and the mean difference per channel under one level of 255
+    for k, (m, th) in enumerate(PICS):
+        rc, rp = run_app(*pics[2 * k][0], **pics[2 * k][1]), run_app(*pics[2 * k + 1][0], **pics[2 * k + 1][1])
+        m = m + " " + th
+        sc, sp = stats(rc), stats(rp)
+        check(sc and sc[-1].get("card") == "1" and sp and sp[-1].get("card") == "0" and abs(int(sc[-1]["dots"]) - int(sp[-1]["dots"])) <= 5,
+              f"card: {m}: the card drew the last frames, the processor the other run, the same dots on the picture ({sc[-1] if sc else None} / {sp[-1] if sp else None})")
+        A, B = Bmp(rc.bmp), Bmp(rp.bmp)
+        tot = n = big = 0
+        for y in range(0, A.h, 2):
+            for x in range(0, A.w, 2):
+                a, b = A.px(x, y), B.px(x, y)
+                dd = max(abs(a[i] - b[i]) for i in range(3))
+                tot += sum(abs(a[i] - b[i]) for i in range(3)); n += 3; big += dd > 8
+        check(n and tot / n < 1.0 and big < 0.001 * n / 3, f"card: {m}: the card's picture is the processor's (mean difference {tot / max(n, 1):.3f} of 255 per channel, {big} pixels more than 8 levels off)")
+
 def differ_ok(a, b):
     A, B = Bmp(a.bmp), Bmp(b.bmp)
     return sum(1 for y in range(60, 740, 3) for x in range(0, 900, 3) if A.px(x, y) != B.px(x, y)) > 30
@@ -189,6 +288,8 @@ if __name__ == "__main__":
         rotation(binary, work)
     elif len(sys.argv) > 3 and sys.argv[3] == "anharm":
         anharm(binary, work)
+    elif len(sys.argv) > 3 and sys.argv[3] == "card":
+        card(binary, work)
     else:
         main(binary, work)
         spheres(binary, work)

@@ -95,6 +95,9 @@ GpuGuard& gpuSkyGuard();
 // log lines "[slice] ", version "slice <hash>") and the groups of a jump with every electron (gpu-jump-step.txt, "gpujump=", "[jump] ", "jump <hash>")
 GpuGuard& gpuSliceGuard();
 GpuGuard& gpuJumpGuard();
+// 0.57.1: the Molecule Lab's Density cloud on the card (render/molecule_card.h): its own marker (gpu-molcloud-step.txt), the settings line "gpumolcloud=",
+// the same log (its lines start "[molcloud] "), its version field "molcloud <hash>"
+GpuGuard& gpuMolCloudGuard();
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);

@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.57.1", "The Molecule Lab's Density cloud moves to the graphics card",
+     "The Density style with its 100,000 dots was among the slowest scenes of the benchmark, the vibrating water most of all. The cloud is now made and drawn "
+     "by the graphics card: the dots stay on the card, and each picture a small program there places, sizes and lights every dot as the processor did. The "
+     "processor's way stays as the exact reference: the card's program is checked against it when first used and switched off safely if the card or its driver "
+     "fails (Settings, Performance says which ran and why). Work the processor did again and again for nothing was also taken out: while a vibration played, "
+     "the still surface and a moment's whole cloud were made again in every picture. What you see is the same."},
     {"0.57.0", "The Atom Lab's two slowest pictures move to the graphics card",
      "Dragging the cut in the Slice view and a jump with every electron were the slowest scenes of the benchmark (about 12 and 20 pictures a second on a fast "
      "PC). The Slice's new dots on a moved cut are now made by the graphics card from the same random numbers as before, and a jump with every electron is "

@@ -75,7 +75,8 @@ GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecor
     d.keep = marker.state.empty() ? saved : marker;                // a marker left behind: the last run died inside its step
     // 0.56.0: a line of an older form (0.55.7 and 0.55.8 kept the app's version, not "shader <hash>"; 0.55.9 tried the dead shader once more because of it):
     // read as "off" for its driver, kept from now on in the new form with this shader's id (a later changed shader still tries again)
-    if (!d.keep.state.empty() && d.keep.version.rfind("shader ", 0) != 0 && d.keep.version.rfind("sky ", 0) != 0 && d.keep.version.rfind("slice ", 0) != 0 && d.keep.version.rfind("jump ", 0) != 0 && d.keep.driver == field(driver))
+    if (!d.keep.state.empty() && d.keep.version.rfind("shader ", 0) != 0 && d.keep.version.rfind("sky ", 0) != 0 && d.keep.version.rfind("slice ", 0) != 0 && d.keep.version.rfind("jump ", 0) != 0 &&
+        d.keep.version.rfind("molcloud ", 0) != 0 && d.keep.driver == field(driver))   // (0.57.1: molcloud)
         d.keep = GpuGuardRecord{"off", field(version), d.keep.driver, d.keep.step.empty() ? std::string("(kept by an older version of the app)") : d.keep.step};
     const bool same = d.keep.version == field(version) && d.keep.driver == field(driver);
     if ((d.keep.state == "off" || d.keep.state == "slow") && same) {
@@ -242,6 +243,11 @@ GpuGuard& gpuSliceGuard() {
 
 GpuGuard& gpuJumpGuard() {
     static GpuGuard g("gpu-jump-step.txt", GpuGuard::kLog, false, "[jump] ");
+    return g;
+}
+
+GpuGuard& gpuMolCloudGuard() {
+    static GpuGuard g("gpu-molcloud-step.txt", GpuGuard::kLog, false, "[molcloud] ");
     return g;
 }
 

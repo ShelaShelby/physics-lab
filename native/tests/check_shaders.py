@@ -17,7 +17,8 @@ PAIRS = [("kVertexShader", "kFragmentShader"), ("kSquareVS", "kSquareFS"), ("kBl
          ("kCloudVS", "kBlobFS"), ("kCloudGridVS", "kCloudGridFS"),   # 0.46: the GPU cloud and its brightness grid
          ("kCompositeVS", "kLensFS"),
          ("kCompositeVS", "kKerrFS"),   # 0.55.0: the Black Hole Lab's bent sky
-         ("kCompositeVS", "kKerrSkyTinyFS"), ("kCompositeVS", "kKerrSkyMathFS"), ("kCompositeVS", "kKerrSkyFS"), ("kCompositeVS", "kMaxDownFS")]   # 0.56.0: the spinning hole per pixel
+         ("kCompositeVS", "kKerrSkyTinyFS"), ("kCompositeVS", "kKerrSkyMathFS"), ("kCompositeVS", "kKerrSkyFS"), ("kCompositeVS", "kMaxDownFS"),   # 0.56.0: the spinning hole per pixel
+         ("kMolDotVS", "kBlobFS"), ("kMolGridVS", "kCloudGridFS")]   # 0.57.1: the Molecule Lab's Density cloud on the card
 
 # 0.56.0: shaders the renderer puts together from pieces (render/kerr_sky.cpp, the same order); a piece's name ends in "Part"
 ASSEMBLED = {"kKerrSkyMathFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyMathPart"],

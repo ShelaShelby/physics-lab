@@ -122,8 +122,71 @@ static void testVibDensity() {
     check(dens::vibDensity("H2O", 3) == nullptr && dens::vibDensity("CO2", 0) == nullptr, "no vibrating density where none was made");
 }
 
+// 0.57.1: blendVib no longer copies the whole still density before writing its values over it (plain waste). The same numbers bit for bit as the earlier way
+// (copy everything, then the same quadratic per value, written out here as it was), also into a Data that held another molecule before (its lists reused).
+static void testPlainWaste0571() {
+    const dens::Data* d = dens::get("H2O");
+    const dens::VibDensityMode* m = dens::vibDensity("H2O", 0);
+    check(d && m, "plain waste: water's density and its first vibrating mode");
+    if (!d || !m) return;
+    dens::Data out;
+    if (const dens::Data* other = dens::get("C6H6")) out = *other;
+    for (double s : {-1.0, -0.37, 0.0, 0.81, 1.0}) {
+        dens::Data ref = *d;                                     // the earlier way
+        const double a = s / 2, b = s * s / 2;
+        const auto q = [&](float f0, float fp, float fm) { return static_cast<float>(f0 + a * (fp - fm) + b * (fp + fm - 2.0 * f0)); };
+        for (std::size_t i = 0; i < ref.rho.v.size(); i++) ref.rho.v[i] = std::max(0.0f, q(d->rho.v[i], m->plus.rho[i], m->minus.rho[i]));
+        for (std::size_t g = 0; g < ref.fine.size(); g++)
+            for (std::size_t i = 0; i < ref.fine[g].v.size(); i++) ref.fine[g].v[i] = std::max(0.0f, q(d->fine[g].v[i], m->plus.fine[g].v[i], m->minus.fine[g].v[i]));
+        for (std::size_t i = 0; i < ref.pot.v.size(); i++) ref.pot.v[i] = q(d->pot.v[i], m->plus.pot[i], m->minus.pot[i]);
+        for (std::size_t k = 0; k < ref.nuclei.size(); k++) {
+            ref.nuclei[k].x = d->nuclei[k].x + a * (m->plus.nuclei[k].x - m->minus.nuclei[k].x);
+            ref.nuclei[k].y = d->nuclei[k].y + a * (m->plus.nuclei[k].y - m->minus.nuclei[k].y);
+            ref.nuclei[k].z = d->nuclei[k].z + a * (m->plus.nuclei[k].z - m->minus.nuclei[k].z);
+        }
+        for (int c = 0; c < 3; c++) ref.dip[c] = q(static_cast<float>(d->dip[c]), static_cast<float>(m->plus.dip[c]), static_cast<float>(m->minus.dip[c]));
+        dens::blendVib(*d, *m, s, out);
+        const auto sameGrid = [](const dens::Grid& x, const dens::Grid& y) { return x.ox == y.ox && x.oy == y.oy && x.oz == y.oz && x.h == y.h && x.nx == y.nx && x.ny == y.ny && x.nz == y.nz && x.v == y.v; };
+        bool same = out.id == ref.id && out.basis == ref.basis && out.method == ref.method && out.energy == ref.energy && out.electrons == ref.electrons && out.spin2S == ref.spin2S &&
+                    out.r1 == ref.r1 && out.r0 == ref.r0 && out.lnMin == ref.lnMin && out.lnStep == ref.lnStep && out.potScale == ref.potScale &&
+                    sameGrid(out.rho, ref.rho) && sameGrid(out.pot, ref.pot) && out.fine.size() == ref.fine.size() && out.nuclei.size() == ref.nuclei.size();
+        for (int c = 0; c < 3; c++) same = same && out.dip[c] == ref.dip[c];
+        for (std::size_t k = 0; same && k < ref.nuclei.size(); k++) same = out.nuclei[k].Z == ref.nuclei[k].Z && out.nuclei[k].x == ref.nuclei[k].x && out.nuclei[k].y == ref.nuclei[k].y && out.nuclei[k].z == ref.nuclei[k].z;
+        for (std::size_t g = 0; same && g < ref.fine.size(); g++) same = out.fine[g].atom == ref.fine[g].atom && out.fine[g].h == ref.fine[g].h && out.fine[g].m == ref.fine[g].m && out.fine[g].v == ref.fine[g].v;
+        check(same, "plain waste: blendVib at s = " + f(s) + " gives the earlier way's density bit for bit (into a reused Data)");
+        // the vibrating surface is made from a blend without the fine cubes (the surface does not read them): the same surface bit for bit
+        dens::Data noFine;
+        dens::blendVib(*d, *m, s, noFine, false);
+        dens::Mesh ma, mb;
+        dens::densitySurface(ref, 0.002, 2, ma);
+        dens::densitySurface(noFine, 0.002, 2, mb);
+        check(noFine.fine.empty() && ma.p == mb.p && ma.n == mb.n && ma.tri == mb.tri && ma.value == mb.value && ma.triangles() > 1000,
+              "plain waste: the surface at s = " + f(s) + " from the blend without fine cubes is the same bit for bit (" + std::to_string(ma.triangles()) + " triangles)");
+    }
+    // marchTets: the crossed edges' vertices from a table in place of the hash map: the same mesh bit for bit (vertices, their order, normals, triangles)
+    for (const char* id : {"H2O", "C6H6", "CH3OH"}) {
+        const dens::Data* q = dens::get(id);
+        if (!q) { check(false, std::string("plain waste: ") + id + "'s density"); continue; }
+        for (int stride : {1, 2}) {
+            const dens::Grid& g = q->rho;
+            const int nx = (g.nx - 1) / stride + 1, ny = (g.ny - 1) / stride + 1, nz = (g.nz - 1) / stride + 1;
+            std::vector<float> lf(static_cast<std::size_t>(nx) * ny * nz);
+            for (int k = 0; k < nz; k++) for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++)
+                lf[(static_cast<std::size_t>(k) * ny + j) * nx + i] = std::log(std::max(g.at(i * stride, j * stride, k * stride), 1e-30f));
+            for (double iso : {0.001, 0.02}) {
+                dens::Mesh a, b;
+                dens::marchTets(lf.data(), nx, ny, nz, g.ox, g.oy, g.oz, g.h * stride, std::log(iso), a, true);
+                dens::marchTets(lf.data(), nx, ny, nz, g.ox, g.oy, g.oz, g.h * stride, std::log(iso), b);
+                check(a.p == b.p && a.n == b.n && a.tri == b.tri && a.value == b.value && a.triangles() > 100,
+                      std::string("plain waste: marchTets ") + id + " stride " + std::to_string(stride) + " iso " + f(iso) + ": the table gives the hash map's mesh bit for bit (" + std::to_string(a.triangles()) + " triangles)");
+            }
+        }
+    }
+}
+
 int main() {
     testVibDensity();
+    testPlainWaste0571();
     // ---- 0. every molecule has data, made at the app's own shape ----
     std::map<std::string, const dens::Data*> D;
     for (const Ref& r : kRef) {

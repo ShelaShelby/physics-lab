@@ -7,6 +7,9 @@
 #include <cstdio>
 
 #include "imgui.h"
+#include "atom/cloud_light.h"
+#include "molecule/mol_cloud.h"
+#include "molecule/molecule_card_paths.h"
 
 namespace molecule {
 namespace {
@@ -169,6 +172,7 @@ void MoleculeView::drawLabels(ImDrawList* text, double uiScale, const Molecule& 
 
 
 // ---- 0.21 stage 1: the Realistic style ----
+namespace { std::uint64_t epochs = 0; }   // 0.57.1: the sets of dots made so far (RealCache::activeEpoch)
 bool RealCache::ensure(const std::string& id, int nDots, int isoIdx, const Molecule& m, int vibMode, double vibS) {
     if (!data || data->id != id) {
         data = dens::get(id);
@@ -181,7 +185,7 @@ bool RealCache::ensure(const std::string& id, int nDots, int isoIdx, const Molec
     if (dotsId != id || dotsN != nDots) {                    // the Monte Carlo dots: fixed seed, so the same molecule always shows the same cloud
         const auto t0 = std::chrono::steady_clock::now();
         dens::sampleDots(*data, nDots, dens::kDotSeed, dots, cdf);
-        dotsId = id; dotsN = nDots;
+        dotsId = id; dotsN = nDots; dotsEpoch = ++epochs;
         dotsMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     }
     isoIdx = std::clamp(isoIdx, 0, 3);
@@ -191,26 +195,28 @@ bool RealCache::ensure(const std::string& id, int nDots, int isoIdx, const Molec
         potRange = std::max(1e-6, dens::potentialRange(mesh));
         meshRadius = 0;
         for (std::size_t v = 0; v + 2 < mesh.p.size(); v += 3) meshRadius = std::max(meshRadius, std::sqrt(double(mesh.p[v]) * mesh.p[v] + double(mesh.p[v + 1]) * mesh.p[v + 1] + double(mesh.p[v + 2]) * mesh.p[v + 2]));
-        meshId = id; meshIso = isoIdx;
+        meshId = id; meshIso = isoIdx; meshVib = false;
         revision++;
         meshMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     }
     if (const dens::VibDensityMode* vm = vibMode >= 0 ? dens::vibDensity(id, vibMode) : nullptr) {   // 0.24: the density vibrating
-        if (vibKeyId != id || vibKeyMode != vibMode || vibKeyDots != nDots) { vibDots.assign(kVibLevels, {}); vibKeyId = id; vibKeyMode = vibMode; vibKeyDots = nDots; vibKeyS = 2; }
-        if (vibS != vibKeyS || vibKeyIso != isoIdx) {
-            dens::blendVib(*data, *vm, vibS, vibNow);
+        if (vibKeyId != id || vibKeyMode != vibMode || vibKeyDots != nDots) { vibDots.assign(kVibLevels, {}); vibEpoch.assign(kVibLevels, 0); vibKeyId = id; vibKeyMode = vibMode; vibKeyDots = nDots; vibKeyS = 2; }
+        // 0.57.1: meshVib in place of clearing meshId here: the still surface was made again in every frame of the swing only to be replaced (plain waste; the
+        // same surfaces, colour scale and zoom as before)
+        if (vibS != vibKeyS || vibKeyIso != isoIdx || !meshVib) {
+            dens::blendVib(*data, *vm, vibS, vibNow, false);   // (0.57.1: without the fine cubes, which the surface does not read)
             const double keepRange = potRange;
             dens::densitySurface(vibNow, kRealIso[isoIdx], 2, mesh);
             potRange = keepRange;                                  // (the still surface's scale: the colours do not jump as the cloud moves)
-            vibKeyS = vibS; vibKeyIso = isoIdx; meshId.clear();    // (back to still: the still surface is made again)
+            vibKeyS = vibS; vibKeyIso = isoIdx; meshVib = true;    // (back to still: the still surface is made again)
             revision++;
         }
         const int lv = std::clamp(static_cast<int>(std::lround((std::clamp(vibS, -1.0, 1.0) + 1) / 2 * (kVibLevels - 1))), 0, kVibLevels - 1);
-        if (vibDots[lv].empty()) { dens::Data at; dens::blendVib(*data, *vm, -1 + 2.0 * lv / (kVibLevels - 1), at); dens::sampleDots(at, nDots, dens::kDotSeed, vibDots[lv], cdf); }
-        activeDots = &vibDots[lv];
+        if (vibDots[lv].empty()) { dens::Data at; dens::blendVib(*data, *vm, -1 + 2.0 * lv / (kVibLevels - 1), at); dens::sampleDots(at, nDots, dens::kDotSeed, vibDots[lv], cdf); vibEpoch[lv] = ++epochs; }
+        activeDots = &vibDots[lv]; activeEpoch = vibEpoch[lv];
     } else {
-        if (vibKeyMode >= 0) { vibKeyMode = -1; vibKeyId.clear(); meshId.clear(); return ensure(id, nDots, isoIdx, m); }   // (a swing just stopped: the still surface again)
-        activeDots = &dots;
+        if (vibKeyMode >= 0 || meshVib) { vibKeyMode = -1; vibKeyId.clear(); meshId.clear(); meshVib = false; return ensure(id, nDots, isoIdx, m); }   // (a swing just stopped: the still surface again)
+        activeDots = &dots; activeEpoch = dotsEpoch;
     }
     return true;
 }
@@ -233,10 +239,7 @@ void MoleculeView::drawRealistic(render::Renderer2D& r, MoleculeLab& L, const ap
     const Molecule& m = L.shown();                         // (0.24: the nuclei where a vibration has moved them)
     const double s = L.scale(), cx = L.cx(), cy = L.cy(), W = L.viewW, H = L.viewH;
     project(m, L.set.cam, Style::Realistic, cx, cy, s, proj_);
-    double vs = 0;                                         // the swing's moment in units of the vibrating density's A ("3 times bigger" = the ends; Real size = 1 / A of them)
-    const dens::VibDensityMode* vm = L.vibOn() ? dens::vibDensity(m.id, L.vibMode) : nullptr;
-    if (vm) vs = L.vibPhase * vib::drawnScale(L.mol(), vib::modes(m.id)[L.vibMode], L.vibSize == 1) / vm->A;
-    if (!L.real.ensure(m.id, L.set.realDots, L.set.realIso, m, vm ? L.vibMode : -1, vs)) return;
+    if (!L.ensureReal()) return;
     const RealCache& rc = L.real;
     const double* R = L.set.cam.R;
     const double px = L.set.cam.panX, py = L.set.cam.panY;
@@ -244,29 +247,49 @@ void MoleculeView::drawRealistic(render::Renderer2D& r, MoleculeLab& L, const ap
     const bool light = theme.light;
     // 1. the cloud: the Atom Lab's Cloud 3D Glow dots (atom/cloud_dots.h glowBlobs): far dots smaller and fainter, near ones larger and brighter; light adds up on a dark page
     if (L.set.realShow != 2) {
-        const double ext = std::max(0.5, radiusA(m));
-        glow_.clear();
         const std::vector<float>& dots = *rc.activeDots;
         const std::size_t nd = dots.size() / 3;
-        glow_.reserve(nd);
-        for (std::size_t i = 0; i < nd; i++) {
-            const double x = dots[3 * i], y = dots[3 * i + 1], z = dots[3 * i + 2];
-            const double vx = R[0] * x + R[1] * y + R[2] * z + px, vy = R[3] * x + R[4] * y + R[5] * z + py, vz = R[6] * x + R[7] * y + R[8] * z;
-            const double X = cx + vx * s, Y = cy - vy * s;
-            if (X < 0 || X > W || Y < 0 || Y > H) continue;
-            const float t = static_cast<float>(std::clamp(-vz / ext, -1.0, 1.0));   // -1 nearest, +1 farthest (as the Atom Lab's depth over the cloud's radius)
-            const float near = 0.5f - 0.5f * t;
-            glow_.push_back({static_cast<float>(X), static_cast<float>(Y), 4.6f * (0.8f + 0.4f * near), 0.3f + 0.9f * near, 0});
-        }
+        CloudCam cam;                                      // (0.57.1: the per-dot formulas in molecule/mol_cloud.h cloudDot, unchanged, shared with the card's check)
+        for (int k = 0; k < 9; k++) cam.R[k] = R[k];
+        cam.px = px; cam.py = py; cam.cx = cx; cam.cy = cy; cam.s = s; cam.ext = std::max(0.5, radiusA(m)); cam.w = W; cam.h = H;
         atom::DotColours dc = atom::makeDotColours(true, false, light, accent, accent);
         // 0.52.1: under the surface (Show: both) the cores at the nuclei are kept inside the displayable range (atom::glowCapExposure): water's O core was clipped
         // white and glared through the surface, as if on top of it. The cloud alone keeps the brighter exposure, which shows its thin outer parts
-        std::vector<std::array<double, 2>> cores;
-        if (L.set.realShow == 0) for (std::size_t i = 0; i < m.atoms.size(); i++) cores.push_back({proj_[i].x, proj_[i].y});
-        if (atom::glowBlobs(glow_, static_cast<long>(nd), light, dc, true, 1.0, W, H, expo_, blobs_, cores.empty() ? nullptr : &cores)) {
-            stats_.dots = static_cast<int>(blobs_.size());
-            r.blobsPaletteTake(blobs_, !light, dc.palette());   // ONE instanced draw call for the cloud (the buffers are swapped, not copied)
-            blobs_.clear();
+        cores_.clear();
+        if (L.set.realShow == 0) for (std::size_t i = 0; i < m.atoms.size(); i++) cores_.push_back({proj_[i].x, proj_[i].y});
+        MolCardPaths& card = molCardPaths();
+        card.frame(r, dots.data(), static_cast<long>(nd));
+        if (card.use(r, gpuCloud)) {
+            // 0.57.1: the card makes, sums and draws every dot (render/molecule_card.h); here only the dots that can reach a nucleus (the exposure's cap)
+            const long onPicture = cloudNear(dots.data(), static_cast<long>(nd), cam, light ? std::vector<std::array<double, 2>>() : cores_, near_);
+            if (light) atom::darkenForLightPage(dc);              // (as glowBlobs does with darken)
+            render::MolCloudDraw d;
+            d.pts = dots.data(); d.cnt = static_cast<long>(nd); d.epoch = rc.activeEpoch; d.cam = cardCam(cam); d.additive = !light;
+            d.colour[0] = dc.c[0].r; d.colour[1] = dc.c[0].g; d.colour[2] = dc.c[0].b; d.colour[3] = dc.c[0].a;
+            d.fenceAfter = card.fenceWanted();
+            const long cap = static_cast<long>(nd);
+            double* expo = &expo_;
+            const std::vector<std::vector<atom::GlowDot>>* nearDots = &near_;
+            const std::vector<std::array<double, 2>>* at = &cores_;
+            d.exposure = [expo, cap, light, nearDots, at](const std::vector<float>& g) {
+                if (!atom::glowExposure(g, cap, light, 1.0, *expo)) return -1.0;
+                if (!light && !at->empty()) cloudCapExposure(*nearDots, cap, *at, *expo);   // (glowCapExposure's sums, each nucleus's dots only)
+                return 1.0 * *expo * atom::cloudDotWeight(cap);
+            };
+            if (r.molCloud(d)) { stats_.dots = static_cast<int>(onPicture); stats_.cloudCard = true; }
+        } else {
+            // 1. the cloud: the Atom Lab's Cloud 3D Glow dots (atom/cloud_dots.h glowBlobs): far dots smaller and fainter, near ones larger and brighter; light adds up on a dark page
+            glow_.clear();
+            glow_.reserve(nd);
+            for (std::size_t i = 0; i < nd; i++) {
+                atom::GlowDot g{};
+                if (cloudDot(cam, &dots[3 * i], g)) glow_.push_back(g);
+            }
+            if (atom::glowBlobs(glow_, static_cast<long>(nd), light, dc, true, 1.0, W, H, expo_, blobs_, cores_.empty() ? nullptr : &cores_)) {
+                stats_.dots = static_cast<int>(blobs_.size());
+                r.blobsPaletteTake(blobs_, !light, dc.palette());   // ONE instanced draw call for the cloud (the buffers are swapped, not copied)
+                blobs_.clear();
+            }
         }
     }
     // 2. the nuclei: small bright points (CPK tint); the clicked one has an accent ring. Drawn before the surface, so they show through it

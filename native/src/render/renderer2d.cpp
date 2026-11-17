@@ -354,6 +354,7 @@ void Renderer2D::shutdown() {
     if (kerrProgram_) glDeleteProgram(kerrProgram_);
     sky_.reset();                                                          // 0.56.0
     if (atomCard_) { atomCard_->reset(); delete atomCard_; atomCard_ = nullptr; }   // 0.57.0
+    if (molCard_) { molCard_->reset(); delete molCard_; molCard_ = nullptr; }      // 0.57.1
     for (GLuint* tx : {&maskTex_, &whiteTex_, &lowTex_[0], &lowTex_[1], &lowTex_[2], &lowTex_[3]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     for (GLuint& tx : expTex_) glDeleteTextures(1, &tx);
     expTex_.clear(); expW_.clear(); expH_.clear();
@@ -435,6 +436,7 @@ void Renderer2D::begin(double w, double h) {
     inst_.clear();
     blobs_.clear();
     clouds_.clear();
+    molClouds_.clear();
     lens_.clear();
     segments_.clear();
     triStart_ = 0;
@@ -1370,6 +1372,21 @@ AtomCard& Renderer2D::atomCard() {
     return *atomCard_;
 }
 
+MoleculeCard& Renderer2D::moleculeCard() {
+    if (!molCard_) molCard_ = new MoleculeCard();
+    return *molCard_;
+}
+
+bool Renderer2D::molCloud(const MolCloudDraw& d) {
+    if (!molCard_ || !molCard_->ready() || d.cnt <= 0 || !d.pts) return false;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::MolCloud; sg.slot = static_cast<int>(molClouds_.size()); sg.count = static_cast<int>(d.cnt); sg.additive = d.additive;
+    segments_.push_back(sg);
+    molClouds_.push_back(d);
+    return true;
+}
+
 void Renderer2D::cloudGpu(const CloudGpuDraw& d) {
     if (!cloudGpuOk() || d.cnt <= 0 || !d.pts || (!d.grp && !d.grpBuf)) return;
     closeTriangles();
@@ -1437,7 +1454,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
     lastCalls_ = 0; lastInstances_ = 0; lastVerts_ = static_cast<long>(verts_.size());
     for (const Segment& sg : segments_) {
         if (sg.kind != Kind::LayerBegin) lastCalls_++;
-        if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu || sg.kind == Kind::CloudGpu) lastInstances_ += sg.count;
+        if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu || sg.kind == Kind::CloudGpu || sg.kind == Kind::MolCloud) lastInstances_ += sg.count;
     }
     if (segments_.empty()) return;
     // Monochrome: draw into an offscreen picture first, then copy it over in grey (at the bottom of end())
@@ -1579,6 +1596,11 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
             glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, reinterpret_cast<void*>(base + 16 * sizeof(float)));
             glDrawArraysInstanced(GL_TRIANGLES, 0, 6, sg.count);
             if (sg.additive) normalBlend();
+            continue;
+        }
+        if (sg.kind == Kind::MolCloud) {                                      // 0.57.1
+            if (molCard_) molCard_->drawCloud(molClouds_[std::size_t(sg.slot)], width_, height_, fuzzTable(), molCells_);
+            normalBlend();
             continue;
         }
         if (sg.kind == Kind::CloudGpu) {                                      // 0.46 (C4)

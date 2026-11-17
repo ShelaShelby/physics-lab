@@ -2258,4 +2258,74 @@ void main() {
 }
 )";
 
+// ---- 0.57.1: the Molecule Lab's Density cloud on the graphics card (single precision only: no double anywhere) ----
+// Each dot's place on the picture, size and depth weight, per frame (molecule/mol_cloud.h molGlowDot is the reference, in double, the formulas of the
+// processor's path in the same order): the view R p + pan (R the camera's rotation, rows uR0..uR2), X = cx + vx s, Y = cy - vy s; off the picture: r = 0
+// (not drawn); else t = clamp(-vz / ext, -1, 1), near = 0.5 - 0.5 t, r = 4.6 (0.8 + 0.4 near), wt = 0.3 + 0.9 near. One invocation a dot.
+static const char* const kMolDotsCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Pts { float pts[]; };
+layout(std430, binding = 1) writeonly buffer Dots { vec4 dots[]; };
+uniform vec4 uR0;                           // R[0] R[1] R[2] panX
+uniform vec4 uR1;                           // R[3] R[4] R[5] panY
+uniform vec4 uR2;                           // R[6] R[7] R[8] ext (the molecule's radius, angstrom)
+uniform vec4 uScr;                          // cx, cy (points), s (points per angstrom), unused
+uniform vec2 uView;                         // the picture's width and height (points)
+uniform int uN;
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(uN)) return;
+    float x = pts[3u * i], y = pts[3u * i + 1u], z = pts[3u * i + 2u];
+    float vx = uR0.x * x + uR0.y * y + uR0.z * z + uR0.w;
+    float vy = uR1.x * x + uR1.y * y + uR1.z * z + uR1.w;
+    float vz = uR2.x * x + uR2.y * y + uR2.z * z;
+    float X = uScr.x + vx * uScr.z, Y = uScr.y - vy * uScr.z;
+    if (X < 0.0 || X > uView.x || Y < 0.0 || Y > uView.y) { dots[i] = vec4(X, Y, 0.0, 0.0); return; }
+    float t = clamp(-vz / uR2.w, -1.0, 1.0);
+    float near = 0.5 - 0.5 * t;
+    dots[i] = vec4(X, Y, 4.6 * (0.8 + 0.4 * near), 0.3 + 0.9 * near);
+}
+)";
+// 0.57.1: the cloud's soft dots from the dots the compute shader above wrote (one instance a dot, its vec4 as an attribute): what softDot and the blob
+// shader (kBlobVS, kind 6 with one colour group) hand the blob fragment shader (kBlobFS), a kind-4 soft dot of light min(1, uLight wt); r = 0: not drawn.
+static const char* const kMolDotVS = R"(#version 330 core
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aDot;          // X, Y (points), r (points; 0 = not drawn), wt (the depth weight)
+uniform vec2 uSize;
+uniform float uLight;                       // the exposure x 12,000 / dots: the light of a dot of depth weight 1 (cloud_light.h cloudDotLight before its depth weight)
+uniform vec4 uColour;
+out vec2 vLocal;
+flat out vec4 vPosKind;
+flat out vec4 vFocal;
+flat out vec4 vC0;
+flat out vec4 vC1;
+flat out vec4 vC2;
+void main() {
+    vFocal = vec4(0.0); vC1 = vec4(0.0); vC2 = vec4(0.0);
+    if (!(aDot.z > 0.0)) { vLocal = vec2(0.0); vPosKind = vec4(0.0); vC0 = vec4(0.0); gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    float r = aDot.z;
+    float a = clamp(min(1.0, uLight * aDot.w), 0.0, 1.0);
+    float ext = r + 1.0;
+    vec2 p = aDot.xy + aCorner * 2.0 * ext;
+    vLocal = aCorner * 2.0 * ext / max(r, 1e-6);
+    vPosKind = vec4(aDot.xy, r, 4.0); vC0 = vec4(uColour.rgb, a * uColour.a);
+    gl_Position = vec4(p.x / uSize.x * 2.0 - 1.0, 1.0 - p.y / uSize.y * 2.0, 0.0, 1.0);
+}
+)";
+// 0.57.1: the exposure's grid from the same dots: each drawn dot one point in its 8 x 8-point cell adding its footprint wt r^2 0.785 (glowBlobs' grid, summed
+// in another order), drawn into the small float picture with kCloudGridFS
+static const char* const kMolGridVS = R"(#version 330 core
+layout(location = 1) in vec4 aDot;
+uniform vec2 uGrid;                         // the grid's cells across and down (int(w / 8) + 2, int(h / 8) + 2)
+out float vVal;
+void main() {
+    vVal = 0.0;
+    gl_PointSize = 1.0;
+    if (!(aDot.z > 0.0)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    vVal = aDot.w * aDot.z * aDot.z * 0.785;
+    int cx = max(0, min(int(uGrid.x) - 1, int(aDot.x / 8.0))), cy = max(0, min(int(uGrid.y) - 1, int(aDot.y / 8.0)));
+    gl_Position = vec4((float(cx) + 0.5) / uGrid.x * 2.0 - 1.0, (float(cy) + 0.5) / uGrid.y * 2.0 - 1.0, 0.0, 1.0);
+}
+)";
+
 }  // namespace render

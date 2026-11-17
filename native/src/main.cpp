@@ -226,9 +226,13 @@ int main(int, char**) {
                                    {"The Atom Lab's Slice dots made by the graphics card (single precision): its own guard, its lines start [slice]"});
         app::gpuJumpGuard().start(ui::settingsFolder(), fakeJump ? std::string(fakeJump) : render::jumpShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuJump,
                                   {"The Atom Lab's jump groups (every electron) made by the graphics card: its own guard, its lines start [jump]"});
+        // 0.57.1: the Molecule Lab's Density cloud on the card (its marker, the settings line "gpumolcloud=", the same log); PL_GPU_MOLSHADER (tests)
+        const char* fakeMol = SDL_getenv("PL_GPU_MOLSHADER");
+        app::gpuMolCloudGuard().start(ui::settingsFolder(), fakeMol ? std::string(fakeMol) : render::molCloudShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuMolCloud,
+                                      {"The Molecule Lab's Density cloud made and drawn by the graphics card (single precision): its own guard, its lines start [molcloud]"});
         if (app::gpuGuard().saved() != app.prefs.gpuPaths || app::gpuSkyGuard().saved() != app.prefs.gpuSky || app::gpuSliceGuard().saved() != app.prefs.gpuSlice ||
-            app::gpuJumpGuard().saved() != app.prefs.gpuJump) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
-        else { app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); }
+            app::gpuJumpGuard().saved() != app.prefs.gpuJump || app::gpuMolCloudGuard().saved() != app.prefs.gpuMolCloud) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+        else { app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); app::gpuMolCloudGuard().settingsWritten(); }
     }
     {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
         GLint maj = 0, min = 0;
@@ -236,6 +240,7 @@ int main(int, char**) {
         app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr;
         atom::setOutlineCompute(renderer.outlineCompute());           // the 90 % outline's compute object (null on a 3.3 PC or with PL_NO_COMPUTE: the CPU makes it)
         if (const char* c = SDL_getenv("PL_ATOM_CARD")) if (std::string(c) == "0") { app.atom.gpuSlice = false; app.atom.gpuJump = false; }   // 0.57.0 (tests: the processor for both, to compare)
+        if (const char* c = SDL_getenv("PL_MOL_CARD")) if (std::string(c) == "0") app.moleculeView.gpuCloud = false;   // 0.57.1 (tests: the processor's Density cloud, to compare)
         std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
         std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(maj, min, app.rocksOk, true).c_str());
     }
@@ -711,7 +716,7 @@ int main(int, char**) {
         app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
         static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
         if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
-                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices());
+                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld card=%d\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices(), ms.cloudCard ? 1 : 0);
                         for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
         if (drawStat && app.lab == blackhole::kLabIndex) { const blackhole::ViewStats& bs = app.blackholeView.stats();   // 0.55.0
                         std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f spinfills=%ld\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale, bs.spinCoarseFills + bs.spinFineFills); }
@@ -797,6 +802,7 @@ int main(int, char**) {
     app.blackholeView.stopWork();                    // 0.55.6: its worker may read the card's memory, which the renderer frees
     app::gpuGuard().closing();
     app::gpuSliceGuard().closing(); app::gpuJumpGuard().closing();   // 0.57.0
+    app::gpuMolCloudGuard().closing();                               // 0.57.1
     app::gpuSkyGuard().closing();                    // 0.56.0                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
     renderer.shutdown();
     SDL_GL_DestroyContext(gl);

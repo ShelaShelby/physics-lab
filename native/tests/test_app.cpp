@@ -1995,6 +1995,11 @@ static void testGpuGuard() {
         checkTrue("guard (sky): kept off with the same sky shader and driver: stays off", !dec.allowed && dec.crashed);
         dec = app::gpuGuardDecide(GpuGuardRecord{"off", sv, d, "link the whole sky shader"}, none, "sky 99999999aabbccdd", d);
         checkTrue("guard (sky): a changed sky shader: tried once more", dec.allowed && dec.guarded); }
+    {   const std::string mv = "molcloud 00112233aabbccdd";            // 0.57.1: the Density cloud's guard: its own id form, not read as an older line
+        dec = app::gpuGuardDecide(GpuGuardRecord{"off", mv, d, "the Density cloud's check"}, none, mv, d);
+        checkTrue("guard (molcloud): kept off with the same program and driver: stays off", !dec.allowed && dec.crashed);
+        dec = app::gpuGuardDecide(GpuGuardRecord{"off", mv, d, "the Density cloud's check"}, none, "molcloud 99999999aabbccdd", d);
+        checkTrue("guard (molcloud): a changed program: tried once more", dec.allowed && dec.guarded); }
     // the files: a folder of its own
 #ifdef _WIN32
     const std::string dir = std::string(std::getenv("TEMP") ? std::getenv("TEMP") : ".") + "\\pl_gpuguard_test\\";

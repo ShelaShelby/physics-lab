@@ -4,7 +4,9 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -30,6 +32,7 @@ struct RealCache {
     std::string dotsId; int dotsN = 0;
     std::vector<float> dots;                 // angstrom, xyz each
     const std::vector<float>* activeDots = &dots;   // (0.24: the dots to draw: the still ones, or the vibrating swing's at this moment)
+    std::uint64_t dotsEpoch = 0, activeEpoch = 0;   // 0.57.1: a new number whenever a set of dots is made (the card keeps each set once)
     std::vector<double> cdf;                 // sampling work buffer
     std::string meshId; int meshIso = -1;
     dens::Mesh mesh;                         // angstrom; value = the potential (au) at each vertex
@@ -44,7 +47,9 @@ struct RealCache {
     static constexpr int kVibLevels = 17;
     int vibKeyMode = -1; double vibKeyS = 2; std::string vibKeyId; int vibKeyDots = 0, vibKeyIso = -1;
     std::vector<std::vector<float>> vibDots;     // per level (empty: not made yet)
+    std::vector<std::uint64_t> vibEpoch;         // 0.57.1: each level's set number
     dens::Data vibNow;                           // the blended density (kept: no allocation per frame once grown)
+    bool meshVib = false;                        // 0.57.1: mesh holds the vibrating surface (the still one is made again when the swing stops)
 };
 
 struct MoleculeLab {
@@ -163,6 +168,15 @@ struct MoleculeLab {
     }
     bool held = false;                       // Reduced motion: the anharmonic swing is held at its outer turning point
     RealCache real;                          // 0.21: the Realistic style's dots and surface
+    // 0.57.1: the Density style's data for what is on screen, the swing's moment included: the picture and the panel ask the same (the panel asked for the still
+    // molecule, which undid the swing every frame: the still surface and one moment's 100,000 dots were made again in every frame of a vibration)
+    bool ensureReal() {
+        const Molecule& m = shown();
+        double vs = 0;                       // the swing's moment in units of the vibrating density's A ("3 times bigger" = the ends; Real size = 1 / A of them)
+        const dens::VibDensityMode* vm = vibOn() ? dens::vibDensity(m.id, vibMode) : nullptr;
+        if (vm) vs = vibPhase * vib::drawnScale(mol(), vib::modes(m.id)[vibMode], vibSize == 1) / vm->A;
+        return real.ensure(m.id, set.realDots, set.realIso, m, vm ? vibMode : -1, vs);
+    }
     bool realOn() const { return set.style == Style::Realistic; }
     void setStyle(Style st) { set.style = st; if (st == Style::Realistic) set.realUsed = true; }
     void click(double x, double y) {
@@ -198,13 +212,14 @@ struct MoleculeLab {
 
 render::Color realPotColour(double t);       // 0.21: the surface's potential colours (t = V / range, -1 red .. 0 white .. +1 blue), also for the panel's colour bar
 
-struct ViewStats { int atoms = 0, sticks = 0, blobs = 0, labels = 0, stubs = 0, dots = 0, triangles = 0; double cpuMs = 0; bool resorted = false; const char* mode = "viewer"; };   // (mode: viewer / realistic; stubs: open valences drawn. 0.21: mode realistic; dots and surface triangles drawn; resorted: the triangles were sorted again this frame)
+struct ViewStats { int atoms = 0, sticks = 0, blobs = 0, labels = 0, stubs = 0, dots = 0, triangles = 0; double cpuMs = 0; bool resorted = false, cloudCard = false; const char* mode = "viewer"; };   // (0.57.1 cloudCard: the cloud was drawn by the card)   // (mode: viewer / realistic; stubs: open valences drawn. 0.21: mode realistic; dots and surface triangles drawn; resorted: the triangles were sorted again this frame)
 
 class MoleculeView {
 public:
     void draw(render::Renderer2D& r, ImDrawList* text, double uiScale, MoleculeLab& lab, double w, double h, const app::ThemeColors& c);
     const ViewStats& stats() const { return stats_; }
     const std::vector<Proj>& projected() const { return proj_; }   // the atoms on screen last frame (points; for the automatic checks)
+    bool gpuCloud = true;                    // 0.57.1: the Density cloud made and drawn on the card (once its start-up check passed); false: the processor. Not saved
 
 private:
     void drawRealistic(render::Renderer2D& r, MoleculeLab& lab, const app::ThemeColors& c);                                    // 0.21: the computed electron density (cloud, surface, nuclei)
@@ -216,6 +231,8 @@ private:
     std::vector<float> tz_;                          // each triangle's depth
     std::vector<int> order_;                         // the triangles far to near
     double expo_ = 0;                                // the cloud's exposure, smoothed over frames (as the Atom Lab's)
+    std::vector<std::vector<atom::GlowDot>> near_;   // 0.57.1: the card's cloud: the dots that can reach a nucleus, and the nuclei (for the exposure's cap; kept until the frame's end)
+    std::vector<std::array<double, 2>> cores_;
     double lastCam_[14] = {};                        // the view the triangles were last sorted for (R, pan, zoom, centre, scale)
     unsigned lastRev_ = ~0u;
     struct Item { double depth; int kind, index, half; };   // kind 0 atom, 1 bond half (half 0 at bond.a, 1 at bond.b)

@@ -25,6 +25,7 @@
 #include "kerr_compute.h"
 #include "kerr_sky.h"
 #include "atom_card.h"
+#include "molecule_card.h"
 
 namespace render {
 
@@ -52,6 +53,7 @@ public:
     // 0.56.0: the spinning hole per pixel (render/kerr_sky.h): the object that makes its shaders (the caller builds the stages, guarded); always there
     KerrSky& kerrSky() { return sky_; }
     AtomCard& atomCard();                                            // 0.57.0: the Atom Lab's Slice dots and jump groups on the card (made at the first call)
+    MoleculeCard& moleculeCard();                                    // 0.57.1: the Molecule Lab's Density cloud on the card (made at the first call)
     void skyMath(const std::vector<float>& in, std::vector<float>& out) { sky_.math(in, out, cmpVao_); }   // (tests)
     // 0.56.0: the last sky pass: its time on the card (GL_TIMESTAMP pairs, read back without waiting: a few frames old) for the whole picture and at the
     // resolution drawn, the resolution's scale (1 = full), the passes drawn, the card's exposure (its brightest disc channel and Y, read back a frame or two
@@ -146,6 +148,9 @@ public:
         std::function<double(const std::vector<float>&)> exposure;
     };
     bool cloudGpuOk() const { return clProgram_ != 0 && grProgram_ != 0; }
+    // 0.57.1: the Molecule Lab's Density cloud from the card (render/molecule_card.h): its dots made, summed into the exposure's grid and drawn there, in the
+    // order of the other shapes; the same picture as glowBlobs + blobsPaletteTake up to float rounding. False (nothing added): the card's programs are not ready.
+    bool molCloud(const MolCloudDraw& d);
     void cloudGpu(const CloudGpuDraw& d);
     long cloudBytesSent() const { return clBytes_; }                           // bytes of dot places sent to the GPU so far (for tests: a still cloud sends nothing)
 
@@ -275,7 +280,7 @@ public:
     bool glareBusy() const { return glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
 private:
-    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens };
+    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud };
     struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; bool hdr = false; bool lunar = false; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
@@ -296,6 +301,9 @@ private:
     // reductions, the lower-resolution layers while moving, the timer and the exposure's read-back
     KerrSky sky_;
     AtomCard* atomCard_ = nullptr;           // owned (a pointer: the classes that hold a renderer without its code need no AtomCard)
+    MoleculeCard* molCard_ = nullptr;        // 0.57.1: owned, the same way
+    std::vector<MolCloudDraw> molClouds_;    // this frame's (Segment::slot)
+    std::vector<float> molCells_;
     GLuint maskTex_ = 0, whiteTex_ = 0, maxDown_ = 0, expFbo_ = 0, lowFbo_ = 0, lowTex_[4] = {0, 0, 0, 0}, skyQ_[8] = {}, whitePbo_ = 0;
     std::vector<GLuint> expTex_;
     std::vector<int> expW_, expH_;

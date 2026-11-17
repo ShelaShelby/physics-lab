@@ -144,11 +144,19 @@ const VibDensityMode* vibDensity(const std::string& id, int mode) {
     return nullptr;
 }
 
-void blendVib(const Data& d, const VibDensityMode& m, double s, Data& out) {
+void blendVib(const Data& d, const VibDensityMode& m, double s, Data& out, bool withFine) {
     s = std::clamp(s, -1.0, 1.0);
     const double a = s / 2, b = s * s / 2;                          // f(s) = f0 + s (f+ - f-) / 2 + s^2 (f+ + f- - 2 f0) / 2: through f- at -1, f0 at 0, f+ at +1
     const auto q = [&](float f0, float fp, float fm) { return static_cast<float>(f0 + a * (fp - fm) + b * (fp + fm - 2.0 * f0)); };
-    out = d;
+    // 0.57.1: everything but the three big value lists copied (they were copied whole and then written over: plain waste, the same numbers)
+    out.id = d.id; out.basis = d.basis; out.method = d.method; out.nuclei = d.nuclei;
+    for (int c = 0; c < 3; c++) out.dip[c] = d.dip[c];
+    out.energy = d.energy; out.electrons = d.electrons; out.spin2S = d.spin2S; out.r1 = d.r1; out.r0 = d.r0;
+    out.lnMin = d.lnMin; out.lnStep = d.lnStep; out.potScale = d.potScale;
+    const auto shape = [](const Grid& from, Grid& to) { to.ox = from.ox; to.oy = from.oy; to.oz = from.oz; to.h = from.h; to.nx = from.nx; to.ny = from.ny; to.nz = from.nz; to.v.resize(from.v.size()); };
+    shape(d.rho, out.rho); shape(d.pot, out.pot);
+    out.fine.resize(withFine ? d.fine.size() : 0);
+    for (std::size_t f = 0; f < out.fine.size(); f++) { out.fine[f].atom = d.fine[f].atom; out.fine[f].h = d.fine[f].h; out.fine[f].m = d.fine[f].m; out.fine[f].v.resize(d.fine[f].v.size()); }
     for (std::size_t i = 0; i < out.rho.v.size(); i++) out.rho.v[i] = std::max(0.0f, q(d.rho.v[i], m.plus.rho[i], m.minus.rho[i]));
     for (std::size_t f = 0; f < out.fine.size(); f++)
         for (std::size_t i = 0; i < out.fine[f].v.size(); i++) out.fine[f].v[i] = std::max(0.0f, q(d.fine[f].v[i], m.plus.fine[f].v[i], m.minus.fine[f].v[i]));
@@ -310,12 +318,16 @@ void sampleDots(const Data& d, int n, std::uint64_t seed, std::vector<float>& ou
 }
 
 // ---- the surface ----
-void marchTets(const float* f, int nx, int ny, int nz, double ox, double oy, double oz, double h, double iso, Mesh& out) {
+void marchTets(const float* f, int nx, int ny, int nz, double ox, double oy, double oz, double h, double iso, Mesh& out, bool hashEdges) {
     out.p.clear(); out.n.clear(); out.tri.clear(); out.value.clear();
     if (nx < 2 || ny < 2 || nz < 2) return;
     static const int kTet[6][4] = {{0, 1, 3, 7}, {0, 1, 5, 7}, {0, 2, 3, 7}, {0, 2, 6, 7}, {0, 4, 5, 7}, {0, 4, 6, 7}};   // corner bits: x 1, y 2, z 4; each a path 0 -> 7 along the axes
+    const long long slots = static_cast<long long>(nx) * ny * nz * 8;
+    hashEdges = hashEdges || slots > (1LL << 26);
     std::unordered_map<long long, int> edgeVertex;
-    edgeVertex.reserve(1 << 16);
+    if (hashEdges) edgeVertex.reserve(1 << 16);
+    static std::vector<int> table;                               // 0.57.1: -1 = no vertex on that edge yet
+    if (!hashEdges) table.assign(static_cast<std::size_t>(slots), -1);
     const auto index = [&](int i, int j, int k) { return (static_cast<long long>(k) * ny + j) * nx + i; };
     int ci[8][3];
     double cv[8];
@@ -323,8 +335,8 @@ void marchTets(const float* f, int nx, int ny, int nz, double ox, double oy, dou
     const auto vertexOn = [&](int a, int b) {                    // the crossing on the edge between corners a and b (one inside, one out)
         const int lo = (a & b) == a ? a : b, hi = lo == a ? b : a;   // in the Kuhn split every edge goes from a corner to one with more bits set
         const long long key = cidx[lo] * 8 + (hi ^ lo);
-        auto it = edgeVertex.find(key);
-        if (it != edgeVertex.end()) return it->second;
+        if (!hashEdges) { if (table[static_cast<std::size_t>(key)] >= 0) return table[static_cast<std::size_t>(key)]; }
+        else { auto it = edgeVertex.find(key); if (it != edgeVertex.end()) return it->second; }
         double t = (iso - cv[a]) / (cv[b] - cv[a]);
         t = std::clamp(t, 1e-4, 1 - 1e-4);                     // never exactly on a grid point: no zero-area triangles
         const int v = static_cast<int>(out.p.size() / 3);
@@ -332,7 +344,7 @@ void marchTets(const float* f, int nx, int ny, int nz, double ox, double oy, dou
             const double o = c == 0 ? ox : c == 1 ? oy : oz;
             out.p.push_back(static_cast<float>(o + h * (ci[a][c] + t * (ci[b][c] - ci[a][c]))));
         }
-        edgeVertex.emplace(key, v);
+        if (!hashEdges) table[static_cast<std::size_t>(key)] = v; else edgeVertex.emplace(key, v);
         return v;
     };
     const auto emit = [&](int v0, int v1, int v2, const double dir[3]) {   // oriented so the normal points along dir (from inside to outside)

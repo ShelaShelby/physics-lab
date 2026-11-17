@@ -4,6 +4,7 @@
 #include "ui/shell_test.h"
 #include "ui/style_draw.h"
 #include "atom/atom_card_paths.h"
+#include "molecule/molecule_card_paths.h"
 
 #include <SDL3/SDL.h>
 
@@ -625,6 +626,9 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
             if (L.p.super == "On" || L.s.trans) return "the colour groups: " + app::computePathText(app.glMajor, app.glMinor, app.computeOk, L.gpuCompute);
             return "";
         }
+        case K::MoleculeDensity: case K::MoleculeVibDensity:          // 0.57.1
+            return molecule::molCardPaths().pathText(app.moleculeView.gpuCloud, app.computeOk) + "; the surface: the processor (its triangles " +
+                   (t.kind == K::MoleculeVibDensity ? "made again for each new phase of the swing, and sorted and coloured each frame)" : "sorted again and coloured each frame as the camera turns)");
         case K::BlackHole: case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: {
             const auto it = b.bhByScene.find(runIdx);
             if (it != b.bhByScene.end() && !it->second.skyPath.empty()) return "the sky and disc: " + it->second.skyPath;

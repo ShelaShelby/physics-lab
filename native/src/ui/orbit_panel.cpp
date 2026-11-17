@@ -21,6 +21,7 @@
 #include "benchmark.h"
 #include "app/bench.h"
 #include "atom/atom_card_paths.h"
+#include "molecule/molecule_card_paths.h"
 #include "app/gpu_guard.h"
 #include <SDL3/SDL_misc.h>
 #include "orbit/format.h"
@@ -138,6 +139,29 @@ void performanceCard(AppState& app) {
                                             "decides each frame which dots are shown (exactly the processor's rule), once its start-up check on this PC has passed.\n"
                                             "Off: the processor does it dot by dot and sends every dot. Used for comparing with the benchmark's atom.jump_all. Not saved: it is On again at the next start.");
         }
+    }
+    if (app.lab == molecule::kLabIndex) {                 // 0.57.1: the Density cloud on the card: one line (who and why), Try again when its guard switched it off, the switch
+        app::GpuGuard& A = app::gpuMolCloudGuard();
+        const std::string aoff = A.offText();
+        const std::string aline = !aoff.empty() ? std::string("The Density style's cloud: the processor, because the graphics card's program for it ") + aoff.substr(aoff.find("stopped") != std::string::npos ? aoff.find("stopped") : 0)
+                                                : "The Density style's cloud: " + molecule::molCardPaths().pathText(app.moleculeView.gpuCloud, app.computeOk).substr(26) + ".";
+        settingMark("gpumolcloud");
+        ImGui::TextWrapped("%s", aline.c_str());
+        if (shellLogOn()) auditNote("molcloud " + aline);
+        if (!aoff.empty()) {
+            if (ImGui::Button("Try again##gpumolcloud")) A.tryAgain();
+            noteItem("gpumolcloud.again");
+            if (ImGui::IsItemHovered()) ui::SetTooltip("The graphics card's program is made and checked again when the Density style's cloud is next shown, with a marker before each step:\n"
+                                                          "if the app stops again, it starts the next time with it switched off, as now.");
+        }
+        ImGui::BeginDisabled(!app.computeOk);
+        wrappedCheckbox("GPU Density cloud (OpenGL 4.3)", &app.moleculeView.gpuCloud);
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ui::SetTooltip("On (the default, needs OpenGL 4.3): the Density style's cloud is made and drawn by the graphics card: each frame a compute shader turns every dot\n"
+                           "(kept on the card) into its place, size and brightness, and the exposure is summed there, once its start-up check on this PC has passed.\n"
+                           "The picture is the same as the processor's up to rounding in the last digits. Off: the processor turns, sizes and sends every dot each frame.\n"
+                           "Used for comparing with the benchmark's molecule.density and molecule.vib_density. Not saved: it is On again at the next start.");
     }
     if (app.lab == blackhole::kLabIndex) {                // 0.55.6: who fills the spinning hole's light-path table: the line says which and why, the switch compares
         blackhole::BlackHoleView& v = app.blackholeView;

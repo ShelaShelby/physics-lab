@@ -59,7 +59,8 @@ struct VibDensityMode { int mode = -1; double A = 1; VibEnd plus, minus; };   //
 bool parseVib(const unsigned char* p, std::size_t n, const Data& still, std::vector<VibDensityMode>& out, std::string& err);
 const VibDensityMode* vibDensity(const std::string& id, int mode);   // nullptr: no vibrating density for this mode
 // the density at phase s of the swing (-1 = the - end, 0 = still, +1 = the + end, in units of the mode's A): quadratic through the three, never below 0; nuclei moved linearly
-void blendVib(const Data& still, const VibDensityMode& m, double s, Data& out);
+void blendVib(const Data& still, const VibDensityMode& m, double s, Data& out, bool withFine = true);   // 0.57.1 withFine false: no fine cubes (out.fine
+                                                                                                    // empty; for the surface, which does not read them)
 
 bool parse(const unsigned char* p, std::size_t n, Data& out, std::string& err);
 const unsigned char* embedded(const std::string& id, std::size_t& size);   // the embedded file (nullptr if none)
@@ -95,7 +96,9 @@ struct Mesh {
     int triangles() const { return static_cast<int>(tri.size() / 3); }
 };
 // field: nx ny nz values at o + h (i, j, k), index (k ny + j) nx + i
-void marchTets(const float* field, int nx, int ny, int nz, double ox, double oy, double oz, double h, double iso, Mesh& out);
+// 0.57.1: the crossed edges' vertices found in a table over the whole grid (8 slots a grid point) in place of a hash map: the same vertices in the same
+// order (hashEdges = true: the hash map, kept for grids too large for the table and as the tests' reference)
+void marchTets(const float* field, int nx, int ny, int nz, double ox, double oy, double oz, double h, double iso, Mesh& out, bool hashEdges = false);
 double enclosedVolume(const Mesh& m);              // divergence theorem; > 0 for an outward-facing closed surface
 bool isClosed(const Mesh& m, std::string* why = nullptr);   // every edge in exactly two triangles, once each way
 

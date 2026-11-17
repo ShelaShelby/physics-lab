@@ -115,7 +115,7 @@ Rect moleculeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
 static void realisticControls(molecule::MoleculeLab& L, Panel& p, const SectionFn& section) {
     namespace dn = molecule::dens;
     const molecule::Molecule& mo = L.mol();
-    const bool ok = L.real.ensure(mo.id, L.set.realDots, L.set.realIso, mo);
+    const bool ok = L.ensureReal();          // (0.57.1: with the swing's moment, as the picture asks)
     if (!section("realistic", "Electron density (computed)", true)) return;
     if (!ok) { pCaption(p, "No computed density for this molecule.", false); return; }
     const dn::Data& d = *L.real.data;
