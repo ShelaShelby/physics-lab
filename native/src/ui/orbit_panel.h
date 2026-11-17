@@ -42,6 +42,7 @@ struct AppState {
     ShotUi shot;
     std::shared_ptr<BenchState> bench;     // the benchmark: its window, its run and the settings it will give back
     bool benchRunning = false;             // a benchmark is running: nothing is written to the settings file
+    double startupMs = -1;                 // 0.56.1: from the start of the app to its first finished picture (ms; the benchmark report's head), -1 not yet
     int fitStart = 2;                      // 0.24: the Orbit Lab opens fitted to Neptune's orbit, once per start, this many Orbit Lab frames after the start (the panels' sizes are known by then); 0 done, -1 never (PL_ZOOM)
     double canvasW = 800, canvasH = 600;   // picture size in points (for the Go to zoom levels)
     int glMajor = 3, glMinor = 3;          // the OpenGL version the window got (0.13 stage 2)

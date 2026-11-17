@@ -71,7 +71,9 @@ public:
     bool shows(int orb, bool hz) const { return orb_ == orb && hz_ == hz; }   // is the contour held the one for this orbital and plane?
     const std::vector<OutSeg2>& segments() const { return segs_; }
     bool jobInFlight() const { return job_ != 0; }
+    long made() const { return made_; }                                       // 0.56.1: contours made so far (the benchmark's new pictures)
 private:
+    long made_ = 0;
     int orb_ = -1; bool hz_ = false; double off_ = 0; std::vector<OutSeg2> segs_;   // the contour held, and what it is for
     int job_ = 0, jobOrb_ = -1; bool jobHz_ = false; double jobOff_ = 0;           // the job in flight (0: none) and what it is for
 };

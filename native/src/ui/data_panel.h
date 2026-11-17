@@ -4,6 +4,8 @@
 // The logic is analysis/* (tested by tests/test_analysis.cpp); this file draws it.
 #pragma once
 
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "app/shell.h"
@@ -12,6 +14,13 @@ struct AppState;
 
 namespace ui {
 
+// 0.56.1 (the benchmark's ui.data_plot): the panel's whole state kept and given back; the most rows among the shown lab's tables; open the panel with that
+// table plotted and a fit (its first worked analysis with a fit, else a straight line), and say which
+struct DataBenchKeep;
+std::shared_ptr<DataBenchKeep> dataBenchSave();
+void dataBenchRestore(const std::shared_ptr<DataBenchKeep>& k);
+int dataBenchLargest(const AppState& app, std::string* id, std::string* title);
+std::string dataBenchShow(AppState& app);
 bool dataOpen();
 void dataToggle();
 void dataClose();

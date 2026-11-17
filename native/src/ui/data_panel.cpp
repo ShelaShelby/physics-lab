@@ -613,6 +613,36 @@ void drawTable(sh::Panel& p) {
 
 }  // namespace
 
+// ---- 0.56.1: the benchmark's ui.data_plot (the panel's whole state kept and given back) ----
+struct DataBenchKeep { DataState d; };
+std::shared_ptr<DataBenchKeep> dataBenchSave() { auto k = std::make_shared<DataBenchKeep>(); k->d = D; return k; }
+void dataBenchRestore(const std::shared_ptr<DataBenchKeep>& k) { if (k) D = k->d; }
+int dataBenchLargest(const AppState& app, std::string* id, std::string* title) {
+    int best = -1;
+    for (const TableRef& r : labTables(contextOf(app))) {
+        Table t;
+        if (!makeTable(r.id, contextOf(app), t)) continue;
+        if (static_cast<int>(t.rows()) > best) { best = static_cast<int>(t.rows()); if (id) *id = r.id; if (title) *title = r.title; }
+    }
+    return best;
+}
+std::string dataBenchShow(AppState& app) {
+    std::string id, title;
+    const int rows = dataBenchLargest(app, &id, &title);
+    if (rows < 0) return "no table";
+    D.open = true; D.showTable = true;
+    D.tableId[std::clamp(app.lab, 0, 3)] = id;
+    D.builtId.clear();
+    refreshTable(app);
+    int fit = -1;
+    for (std::size_t i = 0; i < D.table.presets.size() && fit < 0; i++) if (D.table.presets[i].fit) fit = static_cast<int>(i);
+    if (fit >= 0) applyPreset(D.table.presets[std::size_t(fit)]);
+    else { D.xCol = firstNumeric(0); D.yCol = firstNumeric(D.xCol + 1); setModel(static_cast<int>(Model::Line)); }
+    D.showBand = true;
+    rebuild();
+    return title + " (" + std::to_string(rows) + " rows), " + (fit >= 0 ? "fit: " + D.table.presets[std::size_t(fit)].label : std::string("a straight line fitted"));
+}
+
 bool dataOpen() { return D.open; }
 void dataToggle() { D.open = !D.open; }
 void dataClose() { D.open = false; D.fieldActive = false; }

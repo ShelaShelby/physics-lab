@@ -25,6 +25,7 @@ void readingLongestLine(int chars, bool body);                // the pages repor
 void readingFrameEnd();                                      // 5k: after all windows of a frame: the app scrolls the open page by the wheel and keys, and applies a Contents choice
 std::string readingAnchorsNow();                             // 5k: the scroll offset of each Contents entry now (the test script's pscroll)
 bool readingScrollNow(float* y, float* mx);                  // 5k: the open page's scroll offset and range (the test script's pscroll)
-std::string readingDiag();                                   // 5k: what the input log file says about the open page
+std::string readingDiag();
+void readingScrollTo(float y);                               // 0.56.1 (the benchmark): scroll the open page to y (applied at the end of the frame, as a Contents choice)                                   // 5k: what the input log file says about the open page
 
 }  // namespace ui

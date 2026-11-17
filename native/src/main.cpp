@@ -123,6 +123,7 @@ const char* const kDriverAdvice =
 
 }  // namespace
 
+static const std::chrono::steady_clock::time_point g_appStart = std::chrono::steady_clock::now();   // 0.56.1: the start of the app (static initialisation, before main), for the start-up time
 static double g_viewMs = 0;   // (PL_TIMESTAT)
 // 0.55.5 (automatic checks and measuring): PL_BH_MOVE="kind:first:count" moves the Black Hole Lab's view every frame from frame first for count frames
 // (turn: round the axis; tilt: up; dist: closer by 1 % a frame; spin: +0.005 a frame); PL_BH_FRAMETIME prints, per frame, the frame thread's time in the lab
@@ -575,7 +576,7 @@ int main(int, char**) {
         if (app.pane) {                                 // the Learn tab is open: the lab waits
         } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: nothing moves by itself (the camera hovers)
         } else if (app.lab == molecule::kLabIndex) {
-            app.molecule.update(frameDt, ui::look().reduced, app.pane != 0 || app.benchRunning);   // (0.23: not app.paused: this lab has no clock, and a pause made in another lab stopped its spin with no way to start it here)
+            app.molecule.update(frameDt, ui::look().reduced, app.pane != 0);   // (0.23: not app.paused: this lab has no clock, and a pause made in another lab stopped its spin with no way to start it here; 0.56.1: not while the benchmark runs either: its molecule scenes play a vibration)
         } else if (app.lab == 1) {                      // Atom Lab: tick every frame (decay clock, glides), fixed steps while running
             app.atom.paused = app.paused;
             app.atom.tick(dt);
@@ -754,6 +755,8 @@ int main(int, char**) {
         app.live.frame(isLive, frameDt * 1000.0);
         ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs);
         SDL_GL_SwapWindow(window);
+        if (app.startupMs < 0 && ui::benchLabFinished(app, renderer))      // 0.56.1: the start-up time for the benchmark report (to the first finished picture)
+            app.startupMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - g_appStart).count();
         static const double paceMs = SDL_getenv("PL_FRAME_MS") ? std::atof(SDL_getenv("PL_FRAME_MS")) : 0;   // 0.55.5 (automatic checks, measuring): a frame takes at
         if (paceMs > 0) {                                                                                       // least this long, as with VSync on a real screen
             const double usedMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();

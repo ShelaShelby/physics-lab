@@ -52,8 +52,12 @@ public:
     // points into window pixels (for the text, which Dear ImGui draws). Also sets lab.s.layer, the
     void draw(render::Renderer2D& r, ImDrawList* text, double originX, double originY, double uiScale,
               AtomLab& lab, double w, double h, const app::ThemeColors& colours, double textScale = 1);
+    // 0.56.1 (the benchmark): how many times the Slice view's outline contour was made (new pictures of atom.slice_drag) and the nucleus's Density grid
+    long sliceContoursMade() const { return olSlice_.made(); }
+    long densityGridsMade() const { return densGridsMade_; }
 
 private:
+    long densGridsMade_ = 0;
     std::string quarkKey_;                 // which nucleus the quark bookkeeping below belongs to
     std::vector<int> qset_;                // nucleons that show their quarks, in the order they were added
     std::string densKey_;                  // 0.22: which nucleus, axis (and deuteron spin state) the Density look's density belongs to

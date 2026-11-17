@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.56.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.56.1 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -402,6 +402,7 @@ if(PL_BUILD_APP)
     src/ui/settings.cpp
     src/ui/shot.cpp
     src/ui/benchmark.cpp
+    src/ui/sysinfo.cpp
     src/ui/power.cpp)
   target_link_libraries(PhysicsLab PRIVATE analysis_core orbit_core atom_core app_core molecule_core blackhole_core maps_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
@@ -442,7 +443,7 @@ if(PL_BUILD_APP)
       # ui_popups: windows and pop-ups: Settings, legend, pickers, menus, Benchmark
       add_test(NAME ui_popups COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_popups
                check_5m2.py:windows check_5m2.py:popups check_5l.py:popups check_5l.py:legend check_5p.py:picker check_5q.py:picker
-               check_5k.py:windows check_6b.py:bench)
+               check_5k.py:windows check_6b.py:bench check_6b.py:benchscenes check_6b.py:benchwaits check_6b.py:benchrest check_6b.py:benchrestore)
       set_tests_properties(ui_popups PROPERTIES TIMEOUT 3600)
       # ui_pages: the reading pages: wheel and keys, scrollbar, Contents menu and rail
       add_test(NAME ui_pages COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_pages

@@ -581,6 +581,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         std::snprintf(gk, sizeof gk, "%d|%d|%.9f,%.9f,%.9f,%.9f", G, mode, ca, sa, cb, sb);
         if (densGridKey_ != gk) {
             densGridKey_ = gk;
+            densGridsMade_++;
             // the picture's axes in the lab frame (Proj above): x = (ca, -sa, 0), y = (sa sb, ca sb, cb), the line of sight (sa cb, ca cb, -sb); side view x, z; top view x, y
             double e1[3] = {1, 0, 0}, e2[3] = {0, 0, 1}, e3[3] = {0, 1, 0};
             if (mode == 0) { e1[0] = ca; e1[1] = -sa; e1[2] = 0; e2[0] = sa * sb; e2[1] = ca * sb; e2[2] = cb; e3[0] = sa * cb; e3[1] = ca * cb; e3[2] = -sb; }

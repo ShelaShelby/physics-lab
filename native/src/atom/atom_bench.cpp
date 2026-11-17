@@ -2,8 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <utility>
 #include <string>
 
+#include "atom/hf.h"
+#include "atom/levels.h"
 #include "atom/outline.h"
 
 namespace atom {
@@ -65,7 +69,71 @@ void superScene(AtomLab& L, const char* a, const char* axA, const char* b, const
 void still(AtomLab& L) { L.s.zoomTo.reset(); L.s.panTo.reset(); L.s.pan = Vec3d{}; }   // no camera glide to wait for
 }  // namespace
 
+int heaviestAll() {
+    static const int z = [] { for (int Z = 118; Z > 1; Z--) if (hf::find(Z, 0, true)) return Z; return 2; }();
+    return z;
+}
+int heaviestLevelAtom() {
+    static const int z = [] { for (int Z = 118; Z > 1; Z--) if (levelJumps(Z)) return Z; return 2; }();
+    return z;
+}
+double benchZoom(int which) {
+    // 0.56.1: chosen from four zooms tried in the lab's own range (REPORT 0.56.1): the heaviest a user reaches with the cloud filling the picture
+    switch (which) {
+        case kBenchAllEnlarged: return 0.5;        // tried 0, 0.5, 1.0, 1.5: 0 leaves the cloud a third of the picture; 0.5 fills it and is the heaviest
+        case kBenchAllTrueZoomed: return 2.5;      // tried 0.8 to 4.0: below 2.5 the inner shells are a dot; from 3.0 the view passes into the nucleus
+        case kBenchAllOneOrbital: return 0.3;      // tried 0, 0.3, 0.6, 0.9
+        case kBenchAllClassic: return 0.5;         // tried 0, 0.5, 1.0, 1.5: 0 does not fill the picture
+        case kBenchJumpAll: return 0.0;            // tried 0, 0.3, 0.6, 0.9 (Shells enlarged: at True scale the cloud is a dot at all four)
+        case kBenchNucleusDensity: return 0.3;     // relative to zoomForNucleus(); tried 0, 0.3, 0.6, 0.9: from 0.6 the Density look gives way to the nucleons
+        default: return 0.0;
+    }
+}
+
+namespace {
+// One orbital keeps the same number of dots whichever orbital it is (cloudCap), and the view fits the orbital, so every one has all its dots on screen: the scene
+// takes the orbital of the lab's list (1s .. 4f) with the most lobes that the atom fills (the largest l, then the largest n), the most work per dot for phase colours
+std::string oneOrbitalPick(int Z) {
+    const hf::Atom* a = hf::find(Z, 0, true);
+    std::string best = "1s"; int bl = -1, bn = -1;
+    for (const Orbital& o : orbitals()) {
+        const int i = a ? hf::subshellIndex(*a, o.n, o.l) : -1;
+        if (i < 0 || a->sub[std::size_t(i)].occ <= 0) continue;
+        if (o.l > bl || (o.l == bl && o.n > bn)) { bl = o.l; bn = o.n; best = o.shell; }
+    }
+    return best;
+}
+void fill(AtomLab& L, int most = 2000000) { for (int i = 0; i < most && L.s.k < L.cloudCap(); i++) L.step(1.0 / 240); }
+// the every-electron scenes of 0.56.1
+void manyScene(AtomLab& L, int which, double w, double h) {
+    const int Z = which == kBenchJumpAll ? heaviestLevelAtom() : heaviestAll();
+    fresh(L, Z, defaultN(Z), w, h);
+    L.p.elec = "All"; L.p.mrel = "Relativistic"; L.p.show = "Whole atom"; L.p.cdens = "Ultra"; L.p.cstyle = "Glow";
+    L.p.rscale = which == kBenchAllTrueZoomed ? "True scale" : "Shells enlarged";   // (the jump's cloud at True scale is a dot of a few pixels at every zoom tried: REPORT 0.56.1)
+    if (which == kBenchAllClassic) { L.p.cstyle = "Classic"; L.p.phase = "Wheel"; }
+    if (which == kBenchAllOneOrbital) { L.p.show = "One orbital"; L.p.orb = oneOrbitalPick(Z); }
+    if (which == kBenchJumpAll) {                       // the atom put in the upper level of its first line on offer; the jump starts in benchFrame
+        const std::vector<JLine>& ln = jumpLines(Z);
+        for (int k = 0; k < int(ln.size()); k++) if (jumpOffered(Z, k)) { L.s.lvl = ln[std::size_t(k)].hi; break; }
+    }
+    L.setParam("view", std::string("Cloud 3D"));
+    L.setParam("zoom", benchZoom(which));
+    L.resetView();
+    L.setParam("zoom", benchZoom(which));
+    fill(L);
+}
+}  // namespace
+
 void benchSetup(AtomLab& L, int which, double w, double h) {
+    if (which >= kBenchAllEnlarged && which <= kBenchJumpAll) { manyScene(L, which, w, h); still(L); return; }
+    if (which == kBenchNucleusDensity) {                // 0.56.1: the biggest nucleus in the Density look (the 0.50.3 review suspected its grid is made again while nothing changes)
+        fresh(L, 118, 176, w, h);
+        L.setParam("view", std::string("Orbit")); L.setParam("ostyle", std::string("Modern")); L.setParam("style", std::string("Density"));
+        L.ensureNucleus();
+        L.setParam("zoom", L.zoomForNucleus() + benchZoom(which));
+        still(L);
+        return;
+    }
     const int base0 = baseScene(which);
     if (base0 == kBenchChartScene || base0 == kBenchLandscapeScene || base0 == kBenchBindingScene || base0 == kBenchChainScene) {   // the chart of nuclides: the whole map (flat) or the landscape (full tilt), U-238 chosen (the marker is drawn), nothing to wait for
         fresh(L, 92, 146, w, h);
@@ -189,11 +257,24 @@ const BenchInfo& benchSceneInfo(int which) {
          "From 0.16 stage 3 the nucleons, blobs, rings and lines that lie wholly outside the picture are not made at all"},
         {"Whole atom, every electron, Glow, Ultra, True scale: uranium-238, GPU cloud", "uranium-238, Cloud 3D, Electrons All, Whole atom, True scale, cloud style Glow, density Ultra (240,000 dots), fixed camera. From 0.46 the dots stay in a buffer on the graphics card: only the dots that changed are sent, the graphics card turns and lights them, and the brightness grid is summed there too"},
         {"Whole atom, every electron, Glow, Ultra, True scale: uranium-238, GPU cloud OFF", "the same scene with GPU cloud Off: the processor turns, sorts and sends every dot each frame, as up to 0.45. The DIFFERENCE between the two is what the GPU cloud is worth on this PC"},
+        {"Every electron, Shells enlarged, Glow, Ultra, the heaviest atom", "0.56.1: the texts are app/bench_scenes.cpp's"},
+        {"Every electron, True scale zoomed in on the inner shells, Glow, Ultra", "0.56.1"},
+        {"Every electron, One orbital, Ultra", "0.56.1"},
+        {"Every electron, Classic with phase colours Wheel, Ultra", "0.56.1"},
+        {"A jump with every electron held half way, the heaviest level atom, Ultra", "0.56.1"},
+        {"The biggest nucleus in the Density look", "0.56.1"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchAtomScenes - 1)) - kBenchFirstRisk];
 }
 
 void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
+    if (which == kBenchJumpAll) {                        // 0.56.1: a jump between two levels held half way in flight (the emitted photon is not part of it)
+        if (L.s.trans) { L.s.trans->t = std::min(L.s.trans->t, 0.5 * L.s.trans->dur); return; }
+        if (L.s.photon) { L.s.photon.reset(); return; }
+        const std::vector<JLine>& ln = jumpLines(L.p.Z);
+        for (int k = 0; k < int(ln.size()); k++) if (jumpOffered(L.p.Z, k)) { L.emitLevelLine(k); break; }
+        return;
+    }
     which = baseScene(which);                            // a CPU-comparison scene does what its original does
     if (which == 8 || which == 9) {
         if (L.s.trans) { if (which == 8) L.s.trans->t = std::min(L.s.trans->t, 0.6); return; }       // 8: held half way (the jump lasts 1.2 s)
@@ -217,6 +298,20 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
         const int k = sceneFrame % 360, tri = k <= 180 ? k : 360 - k;                                   // up from -0.90 to +0.90 and back, 0.01 a frame
         L.setParam("cut", std::round((-0.9 + 0.01 * tri) * 100) / 100);
     }
+}
+
+std::string benchShortText(const AtomLab& L) {
+    std::string t = std::string("Atom Lab: ") + symbol(L.p.Z) + "-" + std::to_string(L.p.Z + L.p.N) + ", " + L.p.view;
+    if (L.chartOn()) return t + ", tilt " + std::to_string(int(std::lround(L.s.chartView.tilt * 100))) + " %";
+    char z[32]; std::snprintf(z, sizeof z, ", zoom %.2f", L.p.zoom);
+    if (L.p.view == "Orbit") return t + ", " + L.p.style + (L.p.style == "Nucleons" ? ", " + L.p.qstyle + ", " + L.p.detail : std::string()) + z;
+    t += L.manyOn() ? ", every electron, " + L.p.show + (L.manySub() >= 0 ? " " + L.p.orb : std::string()) + ", " + L.p.rscale : ", one electron, " + L.p.orb;
+    t += ", " + L.p.cstyle + ", " + std::to_string(L.cloudCap()) + " dots" + (L.p.phase == "Wheel" ? ", phase Wheel" : "") + z;
+    if (L.p.outline == "On") t += ", outline On";
+    if (L.p.super == "On") t += ", superposition " + L.p.orb + " + " + L.p.orb2;
+    for (const auto& sw : {std::make_pair(L.gpuColours, "GPU colours"), std::make_pair(L.gpuCompute, "GPU superposition"), std::make_pair(L.gpuOutline, "GPU outline"), std::make_pair(L.gpuCloud, "GPU cloud")})
+        if (!sw.first) t += std::string(", ") + sw.second + " Off";
+    return t;
 }
 
 std::string benchSettingsText(const AtomLab& L) {

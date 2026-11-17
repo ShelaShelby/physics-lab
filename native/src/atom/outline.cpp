@@ -254,7 +254,7 @@ void SliceContour::update(const Outline& O, int orb, bool hz, double off0, bool 
         std::vector<float> values;
         const render::JobState st = oc->pollPlane(job_, values);
         if (st != render::JobState::Pending) {
-            if (st == render::JobState::Done && jobOrb_ == orb) { segs_ = outlineSliceFromValues(O, values); orb_ = jobOrb_; hz_ = jobHz_; off_ = jobOff_; }
+            if (st == render::JobState::Done && jobOrb_ == orb) { segs_ = outlineSliceFromValues(O, values); orb_ = jobOrb_; hz_ = jobHz_; off_ = jobOff_; made_++; }
             job_ = 0;
             if (st == render::JobState::Failed) cpuNow = true;
         }
@@ -263,7 +263,7 @@ void SliceContour::update(const Outline& O, int orb, bool hz, double off0, bool 
         job_ = oc->beginPlane(outlineDensityOf(orb), 200, float(O.half), hz, float(off0));
         if (job_) { jobOrb_ = orb; jobHz_ = hz; jobOff_ = off0; } else cpuNow = true;
     }
-    if (cpuNow && stale()) { segs_ = outlineSlice(orb, hz, off0); orb_ = orb; hz_ = hz; off_ = off0; }
+    if (cpuNow && stale()) { segs_ = outlineSlice(orb, hz, off0); orb_ = orb; hz_ = hz; off_ = off0; made_++; }
 }
 
 std::vector<OutSeg2> outlineSlice(int orb, bool horizontal, double offset, int n) {

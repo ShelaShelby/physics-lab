@@ -28,17 +28,28 @@ namespace atom {
 //   26, 27 scenes 16 and 17 again with GPU outline Off (0.13 stage 3): the CPU makes the outline's grid and the Slice's contour values (scenes 16 and 17 are the same with it On)
 // NUMBERS: `which` here is not the number the benchmark shows: the benchmark's scene number is which + 3 for which >= 5 (which 5 = "scene 8", which 19 = "scene 22", which 20 = "scene 23"),
 // and which 0 to 4 are scenes 2, 3, 4, 5 and 7 (see ui/benchmark.cpp). Texts shown to the owner use the benchmark's numbers.
-constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchLandscapeScene = 17, kBenchBindingScene = 18, kBenchChainScene = 19, kBenchWheelCpuScene = 20, kBenchWheel2DCpuScene = 21, kBenchJumpCpuScene = 22, kBenchSuperCpuFirst = 23, kBenchOutlineCpuFirst = 26, kBenchSceneCount = 28, kBenchChartCpuFirst = 28, kBenchFullZoomScene = 30, kBenchGlowAllScene = 31, kBenchGlowAllCpuScene = 32, kBenchAtomScenes = 33;   // 22: scene 11 with the CPU path; 23, 24, 25: scenes 13, 14, 15; 26, 27: scenes 16 and 17 with the CPU outline
+constexpr int kBenchFirstRisk = 5, kBenchChartScene = 16, kBenchLandscapeScene = 17, kBenchBindingScene = 18, kBenchChainScene = 19, kBenchWheelCpuScene = 20, kBenchWheel2DCpuScene = 21, kBenchJumpCpuScene = 22, kBenchSuperCpuFirst = 23, kBenchOutlineCpuFirst = 26, kBenchSceneCount = 28, kBenchChartCpuFirst = 28, kBenchFullZoomScene = 30, kBenchGlowAllScene = 31, kBenchGlowAllCpuScene = 32,
+              kBenchAllEnlarged = 33, kBenchAllTrueZoomed = 34, kBenchAllOneOrbital = 35, kBenchAllClassic = 36, kBenchJumpAll = 37, kBenchNucleusDensity = 38, kBenchAtomScenes = 39;   // 22: scene 11 with the CPU path; 23, 24, 25: scenes 13, 14, 15; 26, 27: scenes 16 and 17 with the CPU outline
 struct BenchInfo { std::string name, what; };       // name: without a number (the benchmark adds it); what: the settings in words
 const BenchInfo& benchSceneInfo(int which);          // which = kBenchFirstRisk .. kBenchAtomScenes - 1
 // Some scenes need something done every frame (a jump held half way, the cut moving, the outline's cache emptied): the benchmark calls this at the start of every frame
 // after the scene is set up (and before the picture is drawn). sceneFrame: 0, 1, 2 ... from the set-up, the warm-up included; measureFrame: -1 while warming up, then 0, 1, 2 ... the counted frames.
 // It does nothing for the scenes that need nothing (0 to 4, 5 to 7, 10 to 12, 15), so it can be called for any scene.
 void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame);
+// 0.56.1, the every-electron clouds as a user looks at them (the Hard scenes; the camera is turned by ui/benchmark.cpp, by the clock):
+//   33 the heaviest atom with every electron (heaviestAll()), Whole atom, Shells enlarged, Glow, Ultra; 34 the same at True scale, zoomed in on the inner shells;
+//   35 One orbital (the one with the most dots on screen: oneOrbitalPick()), Ultra; 36 the whole atom Classic with phase colours Wheel;
+//   37 a jump between two levels of the heaviest level atom (heaviestLevelAtom()) held half way in flight, every electron, Ultra;
+//   38 the biggest nucleus (oganesson-294) in the Density look, whole nucleus. The zoom of each is benchZoom(which) (chosen in 0.56.1 from four tried, REPORT).
+int heaviestAll();                                   // the heaviest Z with every-electron (Dirac-Hartree-Fock) tables
+int heaviestLevelAtom();                             // the heaviest Z with level clouds and a jump on offer (levels.h levelJumps)
+double benchZoom(int which);                         // the scene's zoom (log10), the same for every run
 // width, height: the picture's size in points.
 // Every scene starts from the Atom Lab's default settings (AtomParams{}), then applies its own.
 void benchSetup(AtomLab& L, int which, double width, double height);
 // "view Orbit, Orbit style Modern, quark style Accurate, ..." as the lab is now: put in the result so a wrong run is visible.
 std::string benchSettingsText(const AtomLab& L);
+// 0.56.1: the same in one short line ("Atom Lab: U-238, Cloud 3D, every electron, Whole atom, True scale, Glow, 240000 dots, zoom 0.15"), printed under each Atom Lab scene
+std::string benchShortText(const AtomLab& L);
 
 }  // namespace atom

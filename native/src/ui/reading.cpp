@@ -172,6 +172,8 @@ bool readingScrollNow(float* y, float* mx) {   // 5k: for the test script (verb 
     return true;
 }
 
+void readingScrollTo(float y) { g.scrollTo = std::max(0.0f, y); g.jumpHead = -1; }   // 0.56.1: the benchmark's ui.guide_scroll
+
 std::string readingDiag() {
     ImGuiWindow* w = g.mode && g.shown ? ImGui::FindWindowByName("##reading") : nullptr;
     char b[400];

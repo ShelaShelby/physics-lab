@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <set>
 #include <string>
 #include <vector>
 #ifdef _WIN32
@@ -583,18 +584,28 @@ static void testBench() {
         frames++;
     }
     checkTrue("3 scenes set up in order", setups == 3 && order == std::vector<int>({0, 1, 2}));
-    checkTrue("every scene takes 10 s: 100 frames of 100 ms", frames >= 300 && frames <= 303);
-    checkTrue("finished, total 30 s", run.finished() && near(run.totalS(), 30) && near(run.doneS(), 30));
+    checkTrue("every scene takes 6.5 s (0.56.1: 1.3 s + 5.2 s): 65 frames of 100 ms", frames >= 195 && frames <= 198);
+    checkTrue("finished, total 19.5 s", run.finished() && near(run.totalS(), 19.5) && near(run.doneS(), 19.5));
     for (int i = 0; i < 3; i++) {
         const BenchScene r = run.result(i);
-        checkTrue("scene " + std::to_string(i) + ": about 80 counted frames, the warm-up not counted", r.frames.frames >= 79 && r.frames.frames <= 81);
+        checkTrue("scene " + std::to_string(i) + ": about 52 counted frames, the warm-up not counted", r.frames.frames >= 51 && r.frames.frames <= 53);
         checkTrue("scene " + std::to_string(i) + ": CPU average", near(r.cpuAvgMs, 4 + i));
         checkTrue("scene " + std::to_string(i) + ": GPU average or not available", i == 1 ? (r.gpuAvgMs < 0 && r.gpuSamples == 0) : (near(r.gpuAvgMs, 2) && near(r.gpuSpanAvgMs, 3) && r.gpuSamples > 0 && r.gpuProblem.empty()));
         checkTrue("scene " + std::to_string(i) + ": 10 fps", near(r.frames.avgFps, 10));
     }
+    {   // 0.56.1: a frame that read the picture back is neither counted nor on the scene's clock while counting
+        BenchRun g(1, 0.1, 0.95);
+        g.setUpDone();
+        g.frame(200, 1);                                                    // the warm-up ends
+        for (int i = 0; i < 5; i++) g.frame(100, 1);
+        g.frame(5000, 1, false);
+        const double at = g.sceneElapsedS();
+        for (int i = 0; i < 5; i++) g.frame(100, 1);
+        checkTrue("bench run: a read-back frame of 5 s is not counted and does not end the scene", near(at, 0.5) && g.finished() && g.result(0).frames.frames == 10 && near(g.result(0).frames.worstMs, 100));
+    }
     BenchRun early(2);
     early.setUpDone();
-    for (int i = 0; i < 150; i++) early.frame(100, 1);                  // 15 s: scene 0 done, scene 1 waiting for its set-up
+    for (int i = 0; i < 100; i++) early.frame(100, 1);                  // 10 s: scene 0 done (6.5 s), scene 1 waiting for its set-up
     checkTrue("a cancelled run knows how many scenes are done", !early.finished() && early.doneScenes() == 1 && early.sceneToSetUp() == 1);
 
     // the text
@@ -607,7 +618,7 @@ static void testBench() {
     checkTrue("result text: the frames slower than 16.7 ms, for every scene (0.16 stage 3)", t.find("  Worst frame: 20.00 ms\n  Frames slower than 16.7 ms: 2 of 2\n") != std::string::npos);
     const char* want[] = {"Physics Lab benchmark", "Version: 0.9", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "OpenGL: 3.3.0 Test", "Driver / vendor: Test Vendor",
                           "Window: 1400 x 860 pixels, full screen", "Picture area: 1040 x 713 pixels", "Display refresh rate: 144 Hz", "Text size: xl, theme: paper",
-                          "VSync: off during the test. Each scene: 2 s warm-up (not counted), then 8 s counted.", "GPU timer (GL_TIME_ELAPSED): available", "GPU timer check: reliable, self-check with a known load: timer 3.10 ms, clock 3.20 ms"};
+                          "VSync: off during the scenes, on during the waits and while the labs are left alone. Each scene: 1.3 s warm-up (not counted), then 5.2 s counted.", "GPU timer (GL_TIME_ELAPSED): available", "GPU timer check: reliable, self-check with a known load: timer 3.10 ms, clock 3.20 ms"};
     std::size_t at = 0;
     bool inOrder = true;
     for (const char* w : want) { const std::size_t p = t.find(w, at); if (p == std::string::npos) { inOrder = false; checkTrue(std::string("result text has: ") + w, false); break; } at = p; }
@@ -616,7 +627,7 @@ static void testBench() {
     checkTrue("result text: scene 1 numbers", t.find("  Average: 10.00 ms per frame = 100.0 fps\n  1 % low: 100.0 fps") != std::string::npos && t.find("  Worst frame: 10.00 ms\n  Frames slower than 16.7 ms: 0 of 4\n  CPU work per frame: 3.50 ms\n  GPU time per frame: 6.25 ms") != std::string::npos);
     checkTrue("result text: the GPU span line", t.find("  GPU span per frame: 7.50 ms") != std::string::npos);
     checkTrue("result text: no GPU time says not available, it does not guess", t.find("2. Second\n") != std::string::npos && t.find("GPU time per frame: not available") != std::string::npos);
-    checkTrue("result text: the average over the scenes", t.find("Average fps over the scenes: 75.0") != std::string::npos);
+    checkTrue("result text (0.56.1): no average over the scenes any more (it mixed easy and hard scenes; removed on purpose)", t.find("Average fps over the scenes") == std::string::npos);
     BenchEnv none = env; none.gpuTimer = false; none.refreshHz = 0; none.vendor = ""; none.fullscreen = false; none.cancelled = true;
     const std::string t2 = benchResultText(none, {s1});
     checkTrue("unknown things are said to be unknown", t2.find("Display refresh rate: not available") != std::string::npos && t2.find("Driver / vendor: not available") != std::string::npos &&
@@ -1045,36 +1056,155 @@ static void testBenchBlackHole() {
     const std::string t = benchResultText(BenchEnv(), {s});
     checkTrue("black hole lines: printed in the report under their scene", t.find("  Black Hole Lab, spin 0.9, tilting: frame thread 1.50 ms average") != std::string::npos);
 }
+// ---- 0.56.1: the two lists, the stable ids, the summary table's rules, the waits and the rest (made-up results), the run's length, the texts ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark list: 13 default scenes and 21 in all (0.46, on purpose: scene 12 and its twin, the whole atom's Glow cloud; 0.55.0: scene 13, the Black Hole Lab)", app::kBenchDefaultScenes == 13 && app::kBenchAllScenes == 21 && int(v.size()) == 21 && v[12].kind == app::BenchKind::BlackHole);
-    bool numbered = true, plain = true, inRange = true; int mentions = 0;
+    checkTrue("benchmark lists (0.56.1, on purpose): 24 Hard scenes first, 40 in All", app::kBenchHardScenes == 24 && app::kBenchAllScenes == 40 && int(v.size()) == 40);
+    bool hardFirst = true;
+    for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
+    checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
+    // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
+    static const char* const ids[40] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
+        "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
+        "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme",
+        "ui.guide_scroll", "ui.data_plot", "ui.settings_open",
+        "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first", "atom.chart_chain", "atom.uranium_true",
+        "atom.phase_wheel_cpu", "atom.jump_held_cpu", "atom.superposition_cpu", "atom.outline_first_cpu", "atom.slice_drag_cpu", "orbit.heaviest_cpu", "orbit.rocks8_cpu", "atom.uranium_true_cpu"};
+    bool same = true, unique = true, form = true;
+    std::set<std::string> seen;
     for (std::size_t i = 0; i < v.size(); i++) {
-        numbered = numbered && v[i].name.rfind(std::to_string(i + 1) + ". ", 0) == 0;
-        plain = plain && v[i].name.find("Stress") == std::string::npos && v[i].name.find("Risk ") == std::string::npos;
-        const std::string t = v[i].name.substr(v[i].name.find(". ") + 2) + " " + v[i].what;       // (the scene's own number in front of the name is not a mention)
-        for (std::size_t p = 0; (p = t.find("cene", p)) != std::string::npos; p += 4) {
-            std::size_t j = p + 4; while (j < t.size() && (t[j] == 's' || t[j] == ' ')) j++;
-            while (j < t.size() && std::isdigit((unsigned char)t[j])) {
-                const int n = std::atoi(t.c_str() + j); mentions++; inRange = inRange && n >= 1 && n <= 21 && n != int(i + 1);
-                while (j < t.size() && std::isdigit((unsigned char)t[j])) j++;
-                if (t.compare(j, 5, " and ") == 0) j += 5; else if (t.compare(j, 4, " to ") == 0) j += 4; else break;
-            }
-        }
+        same = same && v[i].id == ids[i];
+        unique = unique && seen.insert(v[i].id).second;
+        const std::size_t dot = v[i].id.find('.');
+        const std::string lab = dot == std::string::npos ? "" : v[i].id.substr(0, dot);
+        form = form && (lab == "orbit" || lab == "atom" || lab == "molecule" || lab == "blackhole" || lab == "ui") && dot + 1 < v[i].id.size();
+        for (char c : v[i].id) form = form && ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.');
+        checkTrue("benchmark id " + v[i].id + ": benchSceneIndex finds it", app::benchSceneIndex(v[i].id) == int(i));
     }
-    checkTrue("benchmark list: the names are numbered 1 to 21 in order, without 'Stress:' or 'Risk NN:'", numbered && plain);
-    checkTrue("benchmark list: every scene number in a name or text (" + std::to_string(mentions) + " of them) is a scene of the list, and none is the scene itself", inRange && mentions >= 20);
-    bool twins = true;
-    for (std::size_t i = 0; i < v.size(); i++) {
-        const int o = v[i].twinOf;
-        if ((i >= 13) != (o != 0)) { twins = false; continue; }
-        if (!o) continue;
-        const std::string want = "scene " + std::to_string(o);
-        twins = twins && o <= 12 && v[i].name.find("compare with " + want) != std::string::npos && v[i].what.find(want) != std::string::npos
-                && v[o - 1].what.find("cene " + std::to_string(i + 1)) != std::string::npos        // and the original points back at its twin
-                && (v[i].kind == app::BenchKind::Atom) == (v[o - 1].kind == app::BenchKind::Atom);
+    checkTrue("benchmark ids: the stable list, in order", same);
+    checkTrue("benchmark ids: unique, lab.what in small letters, digits and _", unique && form && app::benchSceneIndex("no.such") == -1);
+    // the scenes moved out of the default run (the owner, 16 Nov 2026): the dot of uranium at True scale, the chart, the old easy ones and the processor twins
+    for (const char* id : {"atom.uranium_true", "atom.chart_chain", "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first"})
+        checkTrue(std::string("benchmark lists: ") + id + " is in All scenes only", app::benchSceneIndex(id) >= app::kBenchHardScenes);
+    bool twins = true; int nTwins = 0;
+    for (const app::BenchSceneText& t : v) {
+        if (t.twinOf.empty()) continue;
+        nTwins++;
+        const int o = app::benchSceneIndex(t.twinOf);
+        twins = twins && !t.hard && o >= 0 && v[std::size_t(o)].twinOf.empty() && v[std::size_t(o)].kind != app::BenchKind::BlackHole && t.what.find(t.twinOf) != std::string::npos;
     }
-    checkTrue("benchmark list: scenes 14 to 21 are the twins of 6, 7, 8, 9, 10, 1, 2 and 12; each names its original, and the original names it", twins && v[13].twinOf == 6 && v[14].twinOf == 7 && v[15].twinOf == 8 && v[16].twinOf == 9 && v[17].twinOf == 10 && v[18].twinOf == 1 && v[19].twinOf == 2 && v[20].twinOf == 12);
+    checkTrue("benchmark lists: 8 processor twins, each in All only, naming a scene of the lists that is not itself a twin", twins && nTwins == 8);
+    // the texts: what the scene tests today, in two or three lines; no history, no scene numbers
+    bool shortText = true, noHistory = true;
+    for (const app::BenchSceneText& t : v) {
+        shortText = shortText && !t.name.empty() && t.what.size() >= 40 && t.what.size() <= 420 && t.name.size() <= 90;
+        for (const char* w : {"stage", "up to 0.", "from 0.", "Scene ", "scene ", "0.13", "0.46", "0.55"}) noHistory = noHistory && t.what.find(w) == std::string::npos && t.name.find(w) == std::string::npos;
+    }
+    checkTrue("benchmark texts: a name of at most 90 characters and two or three lines of what it tests (40 to 420 characters)", shortText);
+    checkTrue("benchmark texts: no history (stage, up to, from version) and no scene numbers: the ids name the scenes", noHistory);
+    checkTrue("benchmark texts: the new scenes say their zoom, distance or field of view", v[1].what.find("zoom 4.1") != std::string::npos && v[2].what.find("zoom 5.5") != std::string::npos &&
+              v[9].what.find("zoom 0.5") != std::string::npos && v[10].what.find("zoom 2.5") != std::string::npos && v[20].what.find("2.2 GM/c") != std::string::npos && v[20].what.find("360") != std::string::npos);
+    // the run's length: about four minutes (rule 8 of the job; a static_assert holds it too)
+    checkTrue("benchmark run: planned at about four minutes (" + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 255);
+    checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
+}
+static void testBenchSummary() {
+    // made-up results: three scenes on a 144 Hz screen
+    BenchScene fast; fast.id = "x.fast"; fast.name = "Fast"; fast.frames = benchStats(std::vector<double>(100, 2.0)); fast.cpuAvgMs = 1.8; fast.gpuAvgMs = 0.5; fast.gpuSamples = 100;
+    BenchScene gpuBound; gpuBound.id = "x.gpu"; gpuBound.name = "GPU"; gpuBound.frames = benchStats(std::vector<double>(100, 10.0)); gpuBound.cpuAvgMs = 2; gpuBound.gpuAvgMs = 9; gpuBound.gpuSamples = 100;
+    BenchScene behind; behind.id = "x.behind"; behind.name = "Behind"; behind.frames = benchStats(std::vector<double>(100, 2.0)); behind.cpuAvgMs = 1.5; behind.gpuAvgMs = 1.2; behind.gpuSamples = 100;
+    behind.pictures = 10; behind.picturesBy = "processor";               // 10 new pictures in 0.2 s: 50 a second while the frames run at 500
+    BenchScene both; both.id = "x.both"; both.name = "Both"; both.frames = benchStats(std::vector<double>(100, 5.0)); both.cpuAvgMs = 4; both.gpuAvgMs = 3.5; both.gpuSamples = 100;
+    std::vector<double> spiky(100, 2.0); spiky[3] = 50;                  // fast on average, but its 1 % low is 20 fps
+    BenchScene hitch; hitch.id = "x.hitch"; hitch.name = "Hitch"; hitch.frames = benchStats(spiky); hitch.cpuAvgMs = 2; hitch.gpuAvgMs = 0.2; hitch.gpuSamples = 100;
+    checkTrue("reaches: yes when the 1 % low and the new pictures are at least the rate, no when either is below, not known with no rate",
+              benchReaches(150, 150, 144) == 1 && benchReaches(144, 144, 144) == 1 && benchReaches(143.9, 500, 144) == 0 && benchReaches(500, 100, 144) == 0 && benchReaches(500, 500, 0) == -1);
+    checkStr("limited by: c >= 1.5 g is the processor", benchLimitedBy(fast, true), "processor");
+    checkStr("limited by: g >= 1.5 c is the graphics card", benchLimitedBy(gpuBound, true), "graphics card");
+    checkStr("limited by: neither is both", benchLimitedBy(both, true), "both");
+    checkStr("limited by: pictures behind the frames name what makes them", benchLimitedBy(behind, true), "processor (the pictures, made off the frame)");
+    checkStr("limited by: no reliable GPU time and c near the frame: processor?", benchLimitedBy(fast, false), "processor? (no GPU time)");
+    BenchScene light = gpuBound; light.cpuAvgMs = 2;
+    checkStr("limited by: no reliable GPU time and c far below the frame: not known", benchLimitedBy(light, false), "not known (no GPU time)");
+    const std::vector<BenchSummaryRow> rows = benchSummary({fast, gpuBound, behind, both, hitch}, 144, true);
+    std::string order;
+    for (const BenchSummaryRow& r : rows) order += r.id + " ";
+    checkStr("summary: slowest first by the lower of the 1 % low and the new pictures a second", order, "x.hitch x.behind x.gpu x.both x.fast ");
+    checkTrue("summary: the new pictures a second and the verdicts", near(rows[1].picsPerS, 50) && rows[1].reaches == 0 && rows[0].reaches == 0 && rows[2].reaches == 0 && rows[4].reaches == 1 && rows[3].reaches == 1);
+    BenchEnv env; env.refreshHz = 144; env.gpuReliable = true; env.gpuTimer = true;
+    env.cpu = "Test CPU 7"; env.cores = 8; env.threads = 16; env.memoryMB = 32768; env.peakMB = 812.4; env.startupMs = 1234.4;
+    const std::string t = benchResultText(env, {fast, gpuBound, behind});
+    checkTrue("report: the head names the processor, cores and threads, the memory and the app's peak, the start-up, the worst frame and its scene",
+              t.find("Processor: Test CPU 7, 8 cores, 16 threads\n") != std::string::npos && t.find("Memory installed: 32.0 GB; the app's peak during the run: 812 MB\n") != std::string::npos &&
+              t.find("Start-up: 1234 ms from the start of the app to its first finished picture\n") != std::string::npos && t.find("Worst single frame: 10.0 ms, in x.gpu\n") != std::string::npos &&
+              t.find("Run: Hard scenes\n") != std::string::npos);
+    const std::size_t sum = t.find("SCENES, slowest first"), det = t.find("DETAILS"), r1 = t.find("x.behind "), r2 = t.find("x.gpu "), r3 = t.find("x.fast ");
+    checkTrue("report: the summary table comes before the details, slowest first", sum != std::string::npos && det != std::string::npos && sum < r1 && r1 < r2 && r2 < r3 && r3 < det);
+    checkTrue("report: a summary row has the fps, the 1 % low, the pictures a second, reaches and limited by", t.find("x.gpu       100.0     100.0     100.0       no         graphics card                                 GPU\n") != std::string::npos);
+    checkTrue("report: the rules are stated under the table", t.find("Rules: \"reaches\" is yes when the 1 % low and the new pictures a second are both at least the display's refresh rate (144 Hz)") != std::string::npos &&
+              t.find("processor when c >= 1.5 g, graphics card when g >= 1.5 c, else both") != std::string::npos);
+    checkTrue("report: the details say the new pictures", t.find("  New pictures: 10 in 0.2 s (50.0 a second)\n") != std::string::npos && t.find("  New pictures: every frame\n") != std::string::npos);
+    const std::string none = benchResultText(BenchEnv(), {fast});
+    checkTrue("report: what cannot be read says not available", none.find("Processor: not available, not available cores, not available threads\n") != std::string::npos &&
+              none.find("Memory installed: not available; the app's peak during the run: not available\n") != std::string::npos && none.find("Start-up: not measured\n") != std::string::npos &&
+              none.find("not known") != std::string::npos);
+}
+static void testBenchWaitsAndRest() {
+    checkTrue("waits: the middle of 3 tries is the median, the worst the largest", near(benchMiddle({300, 100, 200}), 200) && near(benchWorst({300, 100, 200}), 300));
+    checkTrue("waits: an even count takes the mean of the two middle ones; none is 0", near(benchMiddle({1, 2, 3, 4}), 2.5) && benchMiddle({}) == 0 && benchWorst({}) == 0);
+    BenchResponse r; r.id = "response.atom_density"; r.name = "Cloud density Normal to Ultra"; r.ms = {450, 610, 520}; r.worstFrameMs = {30, 41.5, 33};
+    BenchResponse c; c.id = "response.orbit_date"; c.name = "a far date"; c.ms = {15000, 900, 950}; c.worstFrameMs = {12, 12, 12}; c.capped = 1;
+    const std::string t = benchResultText(BenchEnv(), {}, {r, c});
+    checkTrue("report: the waits table with the middle, the worst and the worst frame", t.find("WAITS (each done 3 times") != std::string::npos &&
+              t.find("response.atom_density  520 ms      610 ms      41.5 ms      Cloud density Normal to Ultra\n") != std::string::npos);
+    checkTrue("report: a try that hit the cap is shown as more than", t.find("> 15000 ms") != std::string::npos);
+    // the rest: the rule on made-up numbers
+    BenchIdle q; q.id = "rest.orbit"; q.name = "Orbit Lab"; q.cpuShare = 0.01; q.threads = 16; q.gpuMs = 0.4; q.frames = 300;   // 16 % of a thread
+    BenchIdle cpu = q; cpu.cpuShare = 0.02;                                                    // 32 % of a thread
+    BenchIdle work = q; work.workerBusy = true;
+    BenchIdle kept = q; kept.keepsPicture = true; kept.redraws = 2;
+    BenchIdle keptQuiet = q; keptQuiet.keepsPicture = true; keptQuiet.redraws = 0;
+    BenchIdle drawsAll = q; drawsAll.keepsPicture = false; drawsAll.redraws = 300;            // a lab that draws every frame: not a fault by itself
+    checkTrue("rest: quiet under a quarter of one thread with no worker and no redraw", !benchIdleBusy(q) && !benchIdleBusy(keptQuiet) && !benchIdleBusy(drawsAll));
+    checkTrue("rest: busy above a quarter of one thread, with a worker busy, or a kept picture drawn anew", benchIdleBusy(cpu) && benchIdleBusy(work) && benchIdleBusy(kept));
+    BenchIdle na = q; na.cpuShare = -1;
+    checkTrue("rest: a share that cannot be read does not make a lab busy by itself", !benchIdleBusy(na));
+    const std::string u = benchResultText(BenchEnv(), {}, {}, {q, kept, na});
+    checkTrue("report: the rest table says quiet or busy per lab, the share, the GPU time and whether it was drawn anew", t.find("AT REST") == std::string::npos && u.find("AT REST") != std::string::npos &&
+              u.find("rest.orbit  quiet    1.0 % (16 % of a thread)  0.40 ms      every frame (this lab)  idle    Orbit Lab\n") != std::string::npos &&
+              u.find("busy     1.0 % (16 % of a thread)  0.40 ms      2 times") != std::string::npos && u.find("not available") != std::string::npos &&
+              u.find("Rule: busy when a worker thread was busy") != std::string::npos);
+}
+// 0.56.1: orbit.earth's date is a solar eclipse by the app's own Moon and eclipse geometry (none taken from memory): at 12 Aug 2026 17:46 UTC the Moon's shadow
+// axis (the line from the Sun's centre through the Moon's) passes within one Earth radius of Earth's centre, the Moon between the Sun and Earth
+// 0.56.1: what the every-electron cloud really keeps at Ultra (the panel said 48,000; the old uranium scene said 240,000): 48,000 per electron, at most 240,000
+static void testBenchUltraDots() {
+    atom::AtomLab L;
+    atom::benchSetup(L, atom::kBenchGlowAllScene, 800, 600);                // uranium-238, every electron, Whole atom, Ultra
+    checkTrue("Ultra with every electron: uranium's cloud keeps 240,000 dots, and the set-up filled them all", L.cloudCap() == 240000 && L.s.k >= 240000 && L.manyOn());
+    L.p.cdens = "Normal"; checkTrue("Normal with every electron: 60,000 (12,000 per electron, at most five times)", L.cloudCap() == 60000);
+    L.setParam("show", std::string("One orbital")); L.p.cdens = "Ultra";
+    checkTrue("Ultra, one orbital of the atom: 48,000", L.cloudCap() == 48000);
+    atom::AtomLab He; He.p.elec = "All"; He.p.cdens = "Ultra"; He.setParam("Z", 2.0); He.setParam("view", std::string("Cloud 3D"));
+    checkTrue("Ultra with every electron of helium: 96,000 (48,000 per electron)", He.cloudCap() == 96000);
+}
+static void testBenchEclipseDate() {
+    orbit::SolarSystem sys;
+    double best = 1e9; int64_t at = 0;
+    for (int64_t t = 1786556760000LL - 3600000; t <= 1786556760000LL + 3600000; t += 60000) {
+        sys.loadAt(t);
+        const orbit::Body* e = nullptr;
+        for (const orbit::Body& b : sys.bodies) if (b.name == "Earth") e = &b;
+        if (!e || !sys.realMoon()) continue;
+        const orbit::Vec3 E = e->pos, M = E + sys.moonGeocentric();
+        const orbit::Vec3 u = M * (1 / length(M));
+        const double along = dot(E, u);
+        if (along < length(M)) continue;
+        const double g = length(E - u * along) / e->radius;
+        if (g < best) { best = g; at = t; }
+    }
+    checkTrue("orbit.earth's date: the app's Moon puts its shadow axis within one Earth radius of Earth's centre (gamma " + std::to_string(best) + ")", best < 1.0);
+    checkTrue("orbit.earth's date: the closest is at 17:46 UTC (within a minute)", std::llabs(at - 1786556760000LL) <= 60000);
 }
 // ---- 0.13 stage 2: the CPU-comparison scenes for the superposition and the jump, and the sentence about which way it runs ----
 static void testBenchGpuCompute() {
@@ -1116,7 +1246,7 @@ static void testBenchGpuChart() {
     // 0.13 stage 4 part B: the GPU chart cache switch and its two twin scenes (which 28, 29 = benchmark scenes 33, 34, after the Orbit Lab twins 31, 32)
     using atom::kBenchChartCpuFirst; using atom::kBenchAtomScenes;
     atom::AtomLab fresh; checkTrue("GPU chart cache: a new lab has the switch On (the default)", fresh.gpuChart);
-    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31, 0.46: -> 33 with the two whole-atom Glow scenes)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 33 && atom::kBenchSceneCount == 28);
+    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31, 0.46: -> 33 with the two whole-atom Glow scenes; 0.56.1: -> 39 with the six every-electron and nucleus-density scenes)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 39 && atom::kBenchSceneCount == 28);
     {   // 0.16 stage 3: the nucleus at full zoom with the camera turning (the owner's slow case), the last scene of the list
         atom::AtomLab L; L.p.qstyle = "Simple"; L.gpuChart = false;
         atom::benchSetup(L, atom::kBenchFullZoomScene, 1040, 713);
@@ -1192,11 +1322,14 @@ static void testBenchGpuOutline() {
 static void testBenchInputLock() {
     checkTrue("input is allowed when no benchmark runs", labInputAllowed(false));
     checkTrue("input to the labs and app is blocked while the benchmark runs", !labInputAllowed(true));
-    BenchEnv env; env.version = "0.9.3"; env.atomSettings = "scene 2: view Orbit, Orbit style Modern, quark style Cinematic";
-    const std::string t = benchResultText(env, {});
+    BenchEnv env; env.version = "0.9.3";
+    BenchScene a; a.id = "atom.nucleon"; a.name = "Atom Lab, one nucleon"; a.what = "x"; a.line = "Atom Lab: uranium-238, Orbit view, Accurate, + Sea"; a.frames = benchStats({5});
+    BenchScene o; o.id = "orbit.saturn"; o.name = "Orbit Lab, Saturn"; o.what = "y"; o.frames = benchStats({5});
+    const std::string t = benchResultText(env, {a, o});
     checkTrue("result says input was blocked", t.find("Input during the test: blocked\n") != std::string::npos);
-    checkTrue("result lists the Atom Lab settings used", t.find("Atom Lab settings used: scene 2: view Orbit, Orbit style Modern, quark style Cinematic\n") != std::string::npos);
-    checkTrue("no Atom Lab line when no Atom Lab scene ran", benchResultText(BenchEnv(), {}).find("Atom Lab settings used") == std::string::npos);
+    checkTrue("result (0.56.1): the Atom Lab settings a scene ran with are one short line under that scene, not one long line at the head",
+              t.find("atom.nucleon  Atom Lab, one nucleon\n  What it tests: x\n  Atom Lab: uranium-238, Orbit view, Accurate, + Sea\n") != std::string::npos &&
+              t.find("orbit.saturn  Orbit Lab, Saturn\n  What it tests: y\n  Frames counted") != std::string::npos && t.find("Atom Lab settings used") == std::string::npos);
 }
 
 // ---- 0.9.4: the glowing, denser electron cloud. Only how the dots are drawn and how many are kept change; the sampling does not. ----
@@ -1941,6 +2074,10 @@ int main() {
     testBenchAtomScenes();
     testBenchRiskScenes();
     testBenchSceneNumbers();
+    testBenchSummary();
+    testBenchWaitsAndRest();
+    testBenchEclipseDate();
+    testBenchUltraDots();
     testBenchBlackHole();
     testBenchGpuColours();
     testBenchGpuCompute();

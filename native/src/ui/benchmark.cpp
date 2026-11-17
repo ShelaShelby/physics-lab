@@ -16,46 +16,74 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "app/gpu_guard.h"
 #include "app/bench.h"
 #include "app/bench_scenes.h"
 #include "app/gpu_timer.h"
+#include "app/shell.h"
 #include "app/shot.h"
 #include "atom/atom_bench.h"
 #include "atom/atom_core.h"
 #include "imgui.h"
+#include "imgui_internal.h"
+#include "molecule/density.h"
+#include "molecule/molecule.h"
+#include "molecule/vibration.h"
 #include "orbit/belts.h"
 #include "orbit/units.h"
 #include "render/gl_loader.h"
 #include "render/renderer2d.h"
 #include "ui/app_pages.h"
 #include "ui/changelog.h"
+#include "ui/data_panel.h"
 #include "ui/fonts.h"
+#include "ui/journey_dates.h"
 #include "ui/look.h"
+#include "ui/orbit_actions.h"
 #include "ui/shot.h"
+#include "ui/sysinfo.h"
 
 namespace ui {
 
 namespace {
 
-// frame (optional): called at the start of every frame after the set-up, with the frame number from the set-up and the number of the counted frame (-1 while warming up)
-struct SceneDef { BenchSceneInfo info; std::function<void(AppState&)> setup; std::function<void(AppState&, int, int)> frame; };
-constexpr int kStressBeltScale = 8;      // scene 2: 8 times the rocks of scene 1
+constexpr int kStressBeltScale = 8;      // orbit.rocks8: 8 times the rocks of orbit.heaviest
+constexpr double kPi = 3.14159265358979323846;
+constexpr int64_t kEclipseMs = 1786556760000LL;   // 12 Aug 2026 17:46 UTC: the app's own Moon puts its shadow on Earth (gamma 0.90; tests/test_app.cpp testBenchEclipseDate)
 
-// ---- the scenes (chosen by measuring which settings cost the most, see REPORT.md) ----
+const app::BenchSceneText& sceneText(int i) { return app::benchSceneTexts()[std::size_t(i)]; }
+double envNum(const char* name, double def) { const char* v = SDL_getenv(name); return v ? std::atof(v) : def; }
+bool envHas(const char* name) { return SDL_getenv(name) != nullptr; }
+
+// ---- 0.56.1: the zoom, distance and field of view of the new scenes (the heaviest of four tried within the controls' range, REPORT 0.56.1) ----
+// PL_BENCH_ZOOM (development: the trials) replaces the scene's zoom (the Black Hole Lab's: "distance,fov").
+constexpr double kSaturnZoom = 4.1, kEarthZoom = 5.5, kSkyZoom = 0.0;
+constexpr double kDensityZoom = 1.6, kSpaceZoom = 4.0;           // the Molecule Lab's zoom factor (its control: 0.3 to 8)
+constexpr double kFilmFov = 30;                                   // degrees, at the paper's distance (74.1 GM/c^2)
+double zoomOr(double z) { return envHas("PL_BENCH_ZOOM") ? envNum("PL_BENCH_ZOOM", z) : z; }
+
 void commonSetup(AppState& app) {
     app.paused = false;
     app.vsync = false;
+    app.pane = 0;
     app.learn = 0; app.atomLearn = 0; app.molLearn = 0; app.bhLearn = 0; app.showSettings = app.showAbout = app.showHistory = false;
-    app.journey.active = false;
-    app.set.realPlanets = false; app.sys.setRealPlanets(false);   // the benchmark always uses Simple planet physics, so the old numbers stay comparable
+    if (app.journey.active) journeyStop(app);
+    app.set.realPlanets = false; app.sys.setRealPlanets(false);   // Simple planet physics unless the scene says Real, so the numbers stay comparable
+    if (dataOpen()) dataClose();
+}
+
+int bodyId(const AppState& app, const char* name) {
+    for (const orbit::Body& b : app.sys.bodies) if (b.name == name) return b.id;
+    return -1;
 }
 
 void orbitHeaviest(AppState& app) {
     commonSetup(app);
     app.lab = 0;
-    resetToToday(app);                                   // the Solar System on a fixed day
+    resetToToday(app);                                   // the Solar System today
     orbit::ViewSettings& s = app.set;
     s = orbit::ViewSettings();                           // (Planet physics: Simple)
     s.view3D = true; s.trueScale = true; s.fullTrails = true;
@@ -67,76 +95,129 @@ void orbitHeaviest(AppState& app) {
     app.view.yaw = 0.6; app.view.pitch = 1.0; app.view.spin = false;
     setZoom(app, 0.0);
 }
+void orbitStress(AppState& app) { orbitHeaviest(app); app.sys.belts = orbit::makeBelts(app.sys.epochMs, kStressBeltScale); }
 
-// scene 2: the same view as scene 1, with 8 times as many rocks in the belts and the Oort cloud (the rocks do not touch each other: the physics is the same)
-void orbitStress(AppState& app) {
+// a planet close up, followed, time stopped: Saturn, or Earth on the eclipse's date
+void orbitClose(AppState& app, const char* body, double zoom) {
+    commonSetup(app);
+    app.lab = 0;
+    resetToToday(app);
+    if (std::string(body) == "Earth") jumpToDate(app, kEclipseMs);
+    app.set = orbit::ViewSettings();
+    app.set.view3D = true; app.set.trueScale = true; app.set.moons = true;
+    app.view = orbit::OrbitView();
+    app.view.spin = false;
+    app.paused = true;
+    const int id = bodyId(app, body);
+    if (id >= 0) app.view.select({orbit::Selection::Body, id}, true);
+    app.view.ox = app.view.oy = 0;
+    setZoom(app, zoomOr(zoom));
+}
+void orbitRealFast(AppState& app) {
     orbitHeaviest(app);
-    app.sys.belts = orbit::makeBelts(app.sys.epochMs, kStressBeltScale);
+    app.set.realPlanets = true; app.set.relativity = true;   // the main loop switches the Solar System to Real (n-body) from this
+}
+void orbitSky(AppState& app) {
+    commonSetup(app);
+    app.lab = 0;
+    resetToToday(app);
+    orbit::ViewSettings& s = app.set;
+    s = orbit::ViewSettings();
+    s.view3D = true; s.sky = orbit::SkyMode::Full; s.cons = orbit::ConsMode::LinesAndNames;
+    s.moons = s.dwarfs = s.comets = s.belts = s.far = false;   // the sky is the picture
+    app.view = orbit::OrbitView();
+    app.view.spin = false;
+    app.paused = true;
+    setZoom(app, zoomOr(kSkyZoom));
+}
+void orbitJourney(AppState& app) {
+    commonSetup(app);
+    app.lab = 0;
+    resetToToday(app);
+    app.set = orbit::ViewSettings();
+    app.set.view3D = false;
+    app.view = orbit::OrbitView();
+    journeyStart(app);
 }
 
-// 0.13 stage 4: the same two scenes with the rocks' places worked out by the CPU (GPU rocks Off): scenes 17 and 18, to compare with scenes 1 and 2
-void orbitHeaviestCpuRocks(AppState& app) { orbitHeaviest(app); app.set.gpuRocks = false; }
-void orbitStressCpuRocks(AppState& app) { orbitStress(app); app.set.gpuRocks = false; }
+// ---- the Molecule Lab ----
+int moleculeIndex(const char* id) {
+    for (int i = 0; i < molecule::count(); i++) if (molecule::get(i).id == id) return i;
+    return 0;
+}
+int mostAtoms(bool needDensity) {
+    int best = 0; std::size_t n = 0;
+    for (int i = 0; i < molecule::count(); i++) {
+        const molecule::Molecule& m = molecule::get(i);
+        std::size_t sz = 0;
+        if (needDensity && !molecule::dens::embedded(m.id, sz)) continue;
+        if (m.atoms.size() > n) { n = m.atoms.size(); best = i; }
+    }
+    return best;
+}
+void moleculeSetup(AppState& app, app::BenchKind k) {
+    commonSetup(app);
+    app.lab = molecule::kLabIndex;
+    molecule::MoleculeLab& M = app.molecule;
+    M = molecule::MoleculeLab();
+    M.set.spin = false; M.set.labels = true;
+    const int which = k == app::BenchKind::MoleculeVibDensity ? moleculeIndex("H2O") : mostAtoms(k == app::BenchKind::MoleculeDensity);
+    M.choose(which);
+    M.resetView();
+    if (k == app::BenchKind::MoleculeSpaceVib) {
+        M.setStyle(molecule::Style::SpaceFill);
+        M.vibSize = 1; M.vibPlaying = true; M.setVib(0);
+    } else {
+        M.setStyle(molecule::Style::Realistic);
+        M.set.realDots = molecule::kRealDots[3]; M.set.realShow = 0; M.set.realPot = true;
+        if (k == app::BenchKind::MoleculeVibDensity) {
+            int mode = 0;
+            while (mode < int(molecule::vib::modes(M.mol().id).size()) && !molecule::dens::vibDensity(M.mol().id, mode)) mode++;
+            M.vibPlaying = true; M.setVib(mode);
+        }
+    }
+    M.set.cam.zoom = zoomOr(k == app::BenchKind::MoleculeSpaceVib ? kSpaceZoom : kDensityZoom);
+}
 
-// 0.55.0, scene 13: the Black Hole Lab's bent sky drawn anew every frame (the camera turns a little each frame; in the lab it is drawn only when the view changes)
+// ---- the Black Hole Lab ----
 void blackholeScene(AppState& app) {
     commonSetup(app);
     app.lab = blackhole::kLabIndex;
     app.blackhole = blackhole::settingsDefaults();
-    blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);       // 0.55.1: with the gas disc, 10 degrees above it
+    blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);       // with the gas disc, 10 degrees above it
     blackhole::setDistance(app.blackhole, 20);
-    app.blackhole.pitch = 80 * 3.14159265358979323846 / 180;
-    blackhole::setSpin(app.blackhole, 0.9);                              // 0.55.2: the spinning hole (its fine table made first: turning needs no new one)
+    app.blackhole.pitch = 80 * kPi / 180;
+    blackhole::setSpin(app.blackhole, 0.9);                              // the spinning hole (its fine table made first: turning needs no new one)
     app.blackholeView.makeFineNow(app.blackhole);
 }
+void blackholeFilm(AppState& app) {
+    commonSetup(app);
+    app.lab = blackhole::kLabIndex;
+    app.blackhole = blackhole::settingsDefaults();
+    blackhole::setLook(app.blackhole, blackhole::Look::Film);
+    blackhole::paperView(app.blackhole);
+    blackhole::setFov(app.blackhole, kFilmFov);
+    if (envHas("PL_BENCH_ZOOM")) { double d = 0, f = 0; if (std::sscanf(SDL_getenv("PL_BENCH_ZOOM"), "%lf,%lf", &d, &f) == 2) { blackhole::setDistance(app.blackhole, d); blackhole::setFov(app.blackhole, f); } }
+}
+void blackholeExtreme(AppState& app) {
+    commonSetup(app);
+    app.lab = blackhole::kLabIndex;
+    app.blackhole = blackhole::settingsDefaults();
+    blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);
+    blackhole::setSpin(app.blackhole, 0);
+}
 
-// 0.55.5: every frame of scene 13: in turn turning round the axis, tilting, coming closer, each followed by a rest (0.55.6: at spin 0.9, then the same at
-// spin 0, 1 s each); by the clock, not by the frame, so a fast PC moves no further than a slow one. The numbers are gathered by sampleBlackHole.
-void blackholeFrame(AppState& app, int, int);
-// 0.55.8: the slots of the counted 8 s (moving, then at rest until the slot's end): see blackholeFrame
-constexpr double kBhRest = 1.4;
-constexpr double kBhMove[6] = {1, 1, 1, 0.5, 0.5, 0.5};
-constexpr double kBhSlotEnd[6] = {4.0 / 3, 4.0 / 3 + 1 + kBhRest, 4.0 / 3 + 2 * (1 + kBhRest), 4.0 / 3 + 2 * (1 + kBhRest) + 0.6, 4.0 / 3 + 2 * (1 + kBhRest) + 1.2,
-                                  4.0 / 3 + 2 * (1 + kBhRest) + 1.8};
+// 0.55.5: blackhole.real_move, by the run's clock: in turn turning round the axis, tilting, coming closer, each followed by a rest, at spin 0.9, then the
+// same at spin 0 going back. 0.56.1: the slots are 0.65 of 0.55.8's (the counted time is 0.65 of 8 s).
+constexpr double kBhK = app::kBenchMeasureS / 8.0;
+constexpr double kBhRest = 1.4 * kBhK;
+constexpr double kBhMove[6] = {1 * kBhK, 1 * kBhK, 1 * kBhK, 0.5 * kBhK, 0.5 * kBhK, 0.5 * kBhK};
+constexpr double kBhSlotEnd[6] = {4.0 / 3 * kBhK, (4.0 / 3 + 1 + 1.4) * kBhK, (4.0 / 3 + 2 * 2.4) * kBhK, (4.0 / 3 + 2 * 2.4 + 0.6) * kBhK, (4.0 / 3 + 2 * 2.4 + 1.2) * kBhK,
+                                  (4.0 / 3 + 2 * 2.4 + 1.8) * kBhK};
 static_assert(kBhSlotEnd[5] <= app::kBenchMeasureS, "the Black Hole Lab's slots fit into the counted time");
 
-void atomScene(AppState& app, int which) {
-    commonSetup(app);
-    app.lab = 1;
-    atom::benchSetup(app.atom, which, app.canvasW, app.canvasH);
-    app.tempK = 293.15;                                  // the Temperature card's little box is drawn every frame: the same temperature for every run
-}
-
-// 0.16 stage 4 (0.46: one more each): scenes 1 to 12 are the default run; 13 to 20 (the old CPU paths) run only with "Compare old CPU paths". Names and texts: app/bench_scenes.cpp.
-const std::vector<SceneDef>& scenes() {
-    static const std::vector<SceneDef> v = [] {
-        std::vector<SceneDef> v;
-        static std::vector<std::string> keepName, keepWhat;      // the c_str() of these are kept by the list
-        keepName.reserve(app::kBenchAllScenes); keepWhat.reserve(app::kBenchAllScenes);
-        for (const app::BenchSceneText& t : app::benchSceneTexts()) {
-            keepName.push_back(t.name); keepWhat.push_back(t.what);
-            SceneDef d{{keepName.back().c_str(), keepWhat.back().c_str()}, nullptr, nullptr};
-            const int w = t.atomWhich;
-            switch (t.kind) {
-                case app::BenchKind::OrbitHeaviest: d.setup = orbitHeaviest; break;
-                case app::BenchKind::OrbitRocks8: d.setup = orbitStress; break;
-                case app::BenchKind::OrbitHeaviestCpuRocks: d.setup = orbitHeaviestCpuRocks; break;
-                case app::BenchKind::OrbitRocks8CpuRocks: d.setup = orbitStressCpuRocks; break;
-                case app::BenchKind::BlackHole:
-                    d.setup = blackholeScene;
-                    d.frame = blackholeFrame;
-                    break;
-                case app::BenchKind::Atom:
-                    d.setup = [w](AppState& a) { atomScene(a, w); };
-                    d.frame = [w](AppState& a, int f, int m) { atom::benchFrame(a.atom, w, f, m); };
-                    break;
-            }
-            v.push_back(d);
-        }
-        return v;
-    }();
-    return v;
-}
+// ---- 0.56.1: blackhole.film_tilt's check: the picture at rest against the last moving one ----
+struct PixelGrab { int w = 0, h = 0; std::vector<unsigned char> rgb; };
 
 // ---- the GPU timer ----
 // For every measured frame, from the first GL call of the drawing (the clear) to the last one before the buffer swap (the panels and text):
@@ -190,62 +271,97 @@ app::GpuVerdict checkGpuTimer(render::Renderer2D& r, double wPts, double hPts, i
 
 }  // namespace
 
-// everything the benchmark must give back: the labs as they were
+// everything the benchmark must give back, and what it gathers
 struct BenchState {
     enum class Stage { Closed, Ask, Running, Done } stage = Stage::Closed;
     std::unique_ptr<app::BenchRun> run;
     // ---- the user's state, put back at the end (or when cancelled) ----
-    int lab = 0;
+    int lab = 0, pane = 0, learnBack = -1;
     bool paused = false, vsync = true;
-    int learn = 0, atomLearn = 0;
-    blackhole::Settings blackhole;          // 0.55.0: the Black Hole Lab's settings, given back after scene 13
+    int learn = 0, atomLearn = 0, molLearn = 0, bhLearn = 0;
+    std::string learnJump, atomLearnJump, molLearnJump, bhLearnJump;
+    blackhole::Settings blackhole;
     bool showSettings = false, showAbout = false, showHistory = false;
     std::unique_ptr<orbit::SolarSystem> sys;
     std::unique_ptr<orbit::OrbitView> view;
     std::unique_ptr<atom::AtomLab> atom;
     std::unique_ptr<atom::AtomView> atomView;
+    std::unique_ptr<molecule::MoleculeLab> molecule;
+    std::unique_ptr<app::Prefs> prefs;
+    std::shared_ptr<DataBenchKeep> data;
     orbit::ViewSettings set;
     Journey journey;
     double tempK = 293.15;
+    std::string dateNote;
+    char dateText[16] = "", timeText[8] = "";
     // ---- results ----
     app::BenchEnv env;
     std::vector<app::BenchScene> results;
+    std::vector<app::BenchResponse> responses;
+    std::vector<app::BenchIdle> idle;
     std::string text, note;
-    std::vector<std::string> atomUsed;        // per scene: the Atom Lab settings it really ran with ("" for an Orbit Lab scene)
-    // 0.55.5: the Black Hole Lab's scene: its clock, the movement of the frame being drawn (0 turn, 1 tilt, 2 distance; moving or at rest), the counters
-    // of the last frame, and the numbers per scene
-    double bhLastU = -1e9, bhRestS = -1;                // 0.55.8: the run's clock in the scene (s); seconds at rest in the slot (-1 moving)
+    std::vector<std::string> lines, paths;   // per scene: its own line (the Atom Lab's settings); the path that ran
+    std::vector<long> pics;                  // per scene: new pictures while counted (-1: every frame is one)
+    std::vector<std::string> picsBy;
+    std::vector<std::vector<std::string>> notes;
+    long picLast = -1;
+    // the Black Hole Lab's real_move: its clock, the movement of the frame being drawn (0 turn, 1 tilt, 2 distance; moving or at rest), the counters of the last frame
+    double bhLastU = -1e9, bhRestS = -1;
     int bhKind = -1;
     bool bhMoving = false, bhHave = false;
     long bhCount[6] = {0, 0, 0, 0, 0, 0};
-    double bhMoveS[6] = {0, 0, 0, 0, 0, 0};             // 0.55.6: seconds moving in each slot
+    double bhMoveS[6] = {0, 0, 0, 0, 0, 0};
     std::uint64_t bhPic = 0;
-    long bhCard = 0, bhSkyPics = 0, bhDiscFills = 0;              // (0.56.0: the card's sky pictures, the disc table's fills)
+    long bhCard = 0, bhSkyPics = 0, bhDiscFills = 0;
     std::map<int, app::BenchBlackHole> bhByScene;
+    // film_tilt: the last moving picture and the one at rest (read back), and whether the next frame reads one back (1 moving, 2 at rest)
+    PixelGrab grabMoving, grabRest;
+    int grabNext = 0, shotFor = -1, shotK = 0;
+    int wFrames = 0;                         // frames since the wait's action
+    bool grabSkip = false;                   // a development picture was saved this frame (not counted)
+    bool filmStopped = false, filmDone = false;
+    // the scene's own clock (s from its set-up, by the run's clock) and phase counters
+    double lastU = 0;
+    double split[2][3] = {{0, 0, 0}, {0, 0, 0}};   // atom.nucleus_density: per half (still, turning): frames, ms, cpu ms
+    long gridsAt[2] = {0, 0};
+    std::string pickedGuide, dataText;
+    float boxX = 0, boxY = 0, boxW = 0, boxH = 0;  // the running box (ImGui pixels), left out of film_tilt's comparison
+    double peakMB = -1, lastMemS = -1;
+    render::Renderer2D* R = nullptr;
     bool noteFailed = false;
     GpuTimer gpu;
     std::vector<GpuSample> gpuReady;
     app::GpuVerdict gpuCheck;
     bool gpuChecked = false;
-    bool includeCompare = false;              // the checkbox "Compare old CPU paths": scenes 13 to 20 after the default 12
-    std::vector<int> list;                    // the scenes of this run (indexes into scenes()), fixed when it starts
+    bool allScenes = false;                   // the checkbox "All scenes"
+    std::vector<int> list;                    // the scenes of this run (indexes into benchSceneTexts()), fixed when it starts
     int sceneFrame = 0, measFrame = -1;       // frames since the scene was set up; counted frames so far (-1: still warming up)
     double warm = app::kBenchWarmupS, measure = app::kBenchMeasureS;
     bool cancelled = false;
+    // ---- 0.56.1, Parts 2 and 3: after the scenes, the waits, then the labs left alone ----
+    int phase = 0;                            // 0 scenes, 1 waits, 2 rest
+    std::vector<int> waits, rests;            // the waits and the rests of this run (indexes into waitDefs() / restDefs())
+    int wAt = 0, wTry = 0, wStage = 0;        // the wait (index into waits), its try, and its stage: 0 prepare, 1 settling, 2 acted (waiting for the finished picture), 3 pause
+    double wStageS = 0, wWorst = 0;           // seconds in the stage (the frames' times summed); the worst frame since the action
+    Uint64 wT0 = 0;
+    int rAt = 0, rStage = 0;                  // the rest (index into rests) and its stage: 0 prepare, 1 settling, 2 counting
+    double rStageS = 0, rCpu0 = 0, rGpuSum = 0;
+    Uint64 rT0 = 0;
+    long rRedraw0 = 0;
+    int rGpuN = 0;
+    app::BenchIdle rNow;
 };
 
 namespace {
 
-void blackholeFrame(AppState& app, int, int) {
-    BenchState& b = *app.bench;
-    // 0.55.8: by the run's own clock (the frames' times summed, app/bench.h BenchRun), the clock that decides when counting starts and ends: 0.55.7 went
-    // by the wall clock from the scene's set-up, which also holds the set-up's frame (the fine table made at once), so counting ended before the last slot
+// the scene's clock: seconds from its set-up by the run's own clock (the frames' times summed), the warm-up included
+double sceneU(const BenchState& b) { return b.run->measuring() ? b.run->warmupS() + b.run->sceneElapsedS() : b.run->sceneElapsedS(); }
+
+void blackholeFrame(AppState& app, BenchState& b) {
+    // 0.55.8: by the run's own clock; the warm-up at rest; then six slots: turning, tilting, distance at spin 0.9, then the same at spin 0 going back
     const double u = b.run->measuring() ? b.run->sceneElapsedS() : b.run->sceneElapsedS() - b.run->warmupS();
     const double dt = std::clamp(u - b.bhLastU, 0.0, 0.1);
     b.bhLastU = u;
-    // the warm-up at rest; then six slots: turning, tilting, distance at spin 0.9 (1 s moving each; then at rest 1/3 s after turning, which needs no new table, and
-    // kBhRest s after tilting and distance, for the fine table: how long after the stop the sharp picture comes), then the same at spin 0 (0.5 s moving, 0.1 s
-    // at rest; going back the way it came, so the view ends where it began)
     if (u < 0) { b.bhKind = -1; b.bhMoving = false; return; }
     int k = 0;
     while (k < 5 && u >= kBhSlotEnd[k]) k++;
@@ -317,12 +433,378 @@ void sampleBlackHole(AppState& app, BenchState& b, const render::Renderer2D& R) 
     b.bhHave = true;
 }
 
-// which scenes run: the default 12, then the 8 old-CPU-path twins if asked (indexes into scenes()). PL_BENCH_ONLY="12,20" (for measuring in development): only those scene numbers
+// ---- the scenes' set-up, their frames, their new pictures and paths (0.56.1) ----
+void setupScene(AppState& app, BenchState& b, int idx) {
+    const app::BenchSceneText& t = sceneText(idx);
+    using K = app::BenchKind;
+    switch (t.kind) {
+        case K::OrbitHeaviest: orbitHeaviest(app); break;
+        case K::OrbitRocks8: orbitStress(app); break;
+        case K::OrbitHeaviestCpuRocks: orbitHeaviest(app); app.set.gpuRocks = false; break;
+        case K::OrbitRocks8CpuRocks: orbitStress(app); app.set.gpuRocks = false; break;
+        case K::OrbitSaturn: orbitClose(app, "Saturn", kSaturnZoom); break;
+        case K::OrbitEarth: orbitClose(app, "Earth", kEarthZoom); break;
+        case K::OrbitRealFast: orbitRealFast(app); break;
+        case K::OrbitSky: orbitSky(app); break;
+        case K::OrbitJourney: orbitJourney(app); break;
+        case K::Atom:
+            commonSetup(app);
+            app.lab = 1;
+            atom::benchSetup(app.atom, t.atomWhich, app.canvasW, app.canvasH);
+            app.atom.hold = true;
+            if (envHas("PL_BENCH_ZOOM") && t.atomWhich >= atom::kBenchAllEnlarged) app.atom.setParam("zoom", envNum("PL_BENCH_ZOOM", 0) + (t.atomWhich == atom::kBenchNucleusDensity ? app.atom.zoomForNucleus() : 0));
+            app.tempK = 293.15;                          // the Temperature card's little box is drawn every frame: the same temperature for every run
+            break;
+        case K::MoleculeDensity: case K::MoleculeVibDensity: case K::MoleculeSpaceVib: moleculeSetup(app, t.kind); break;
+        case K::BlackHole: blackholeScene(app); break;
+        case K::BlackHoleFilmTilt: blackholeFilm(app); break;
+        case K::BlackHoleExtreme: blackholeExtreme(app); break;
+        case K::UiGuideScroll: {
+            commonSetup(app);
+            // the longest Learn guide (measured in 0.56.1 at 1280 x 800: the Orbit Lab's timeline, 7,157 px of scrolling; the next the Orbit Lab's "What am I looking
+            // at?", 6,221; PL_BENCH_GUIDE="lab:guide" measures another)
+            int lab = 0, g = 3;
+            if (const char* s = SDL_getenv("PL_BENCH_GUIDE")) std::sscanf(s, "%d:%d", &lab, &g);
+            app.lab = lab;
+            if (lab == 0) app.learn = g; else if (lab == 1) app.atomLearn = g; else if (lab == molecule::kLabIndex) app.molLearn = g; else app.bhLearn = g;
+            b.pickedGuide = std::to_string(lab) + ":" + std::to_string(g);
+            break;
+        }
+        case K::UiDataPlot: {
+            commonSetup(app);
+            app.atom.p = atom::AtomParams::appDefaults();
+            app.atom.restart();
+            int bestLab = 0, bestRows = -1;
+            for (int lab = 0; lab < 3; lab++) { app.lab = lab; const int r = dataBenchLargest(app, nullptr, nullptr); if (r > bestRows) { bestRows = r; bestLab = lab; } }   // the largest table of the labs' tables
+            app.lab = bestLab;
+            b.dataText = std::string("Data panel over the ") + app::labName(bestLab) + ": " + dataBenchShow(app);
+            break;
+        }
+        case K::UiSettingsOpen:
+            orbitHeaviest(app);
+            app.showSettings = true;
+            app.prefs.shellPanels = app::shell::withPanelState(app.prefs.shellPanels, std::string(app::labKey(app.lab)) + ".controls", false);
+            app.prefs.shellPanels = app::shell::withPanelState(app.prefs.shellPanels, std::string(app::labKey(app.lab)) + ".ctl.pick", false);
+            break;
+    }
+}
+
+// the scene's frame: what moves (by the scene's clock u, s since its set-up; dt the step since the last frame)
+void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
+    const app::BenchSceneText& t = sceneText(idx);
+    using K = app::BenchKind;
+    const double warm = b.run->warmupS(), meas = b.measure;
+    switch (t.kind) {
+        case K::OrbitSaturn: case K::OrbitSky:
+            app.view.yaw = 0.6 + 0.5 * u;                                        // turning 0.5 rad a second, tilting with it
+            app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
+            break;
+        case K::OrbitEarth: {                                                    // turning back and forth round the sunlit side, where the Moon's shadow falls
+            // the camera on the line from Earth's centre towards the Moon (the shadow falls near its foot): orbit_view.cpp's viewer sits along
+            // (sin yaw sin pitch, cos yaw sin pitch, cos pitch)
+            // aimed at the point where the Moon's shadow axis (the line from the Sun's centre through the Moon's) meets Earth's sunlit side
+            orbit::Vec3 n{0, 0, 1};
+            for (const orbit::Body& e : app.sys.bodies) {
+                if (e.name != "Earth") continue;
+                const orbit::Vec3 M = e.pos + app.sys.moonGeocentric();
+                const orbit::Vec3 ax = M * (1 / length(M));
+                const orbit::Vec3 off = ax * dot(ax, e.pos) - e.pos;              // from Earth's centre to the axis, at right angles to it
+                const double h2 = e.radius * e.radius - dot(off, off);
+                const orbit::Vec3 p = off - ax * std::sqrt(std::max(0.0, h2));     // the axis's foot on the side facing the Sun
+                n = p * (1 / std::max(1.0, length(p)));
+            }
+            app.view.yaw = std::atan2(n.x, n.y) + 0.35 * std::sin(0.6 * u);
+            app.view.pitch = std::acos(std::clamp(n.z, -1.0, 1.0)) + 0.1 * std::sin(0.8 * u);
+            break;
+        }
+        case K::OrbitJourney:
+            if (!app.journey.active) journeyStart(app);                         // round again
+            if (!app.journey.moving) app.journey.t = 1e9;                       // the holds at the stops are skipped: the next frame flies on
+            else for (double left = 3 * dt; left > 1e-9; left -= 0.1) journeyTick(app, std::min(0.1, left));   // 4 times its own speed (with the main loop's tick)
+            break;
+        case K::Atom:
+            app.atom.hold = true;                                               // the decay clock held: the nucleus stays the one the scene names (oganesson-294 lives about a millisecond)
+            atom::benchFrame(app.atom, t.atomWhich, b.sceneFrame, b.measFrame);
+            if (t.atomWhich >= atom::kBenchAllEnlarged && t.atomWhich <= atom::kBenchJumpAll) app.atom.s.yaw = 0.8 * u;   // turning 0.8 rad a second, as a steady drag
+            if (t.atomWhich == atom::kBenchNucleusDensity) {
+                const double half = warm + 0.5 * meas;
+                if (u > half) app.atom.s.oyaw = 0.8 * (u - half);              // still for the first half of the counted time, then turning
+            }
+            break;
+        case K::MoleculeDensity: case K::MoleculeSpaceVib: case K::MoleculeVibDensity:
+            if (t.kind != K::MoleculeVibDensity) molecule::spin(app.molecule.set.cam, 0.8 * dt);
+            if (t.kind != K::MoleculeDensity) { app.molecule.vibPlaying = false; app.molecule.vibT = u; }   // the swing by the scene's clock (the lab's own Play skips frames over 0.25 s)
+            break;
+        case K::BlackHole: blackholeFrame(app, b); break;
+        case K::BlackHoleFilmTilt: {
+            // three tilts 6 degrees down through the disc's plane and back (0.11 rad below the paper's view's 3.4 degrees above it), in the first 60 % of the counted
+            // time; then at rest. The last moving frame and the first finished frame at rest are read back.
+            const double m = u - warm, moveT = 0.6 * meas;
+            blackhole::Settings& s = app.blackhole;
+            const double p0 = blackhole::filmChoices().camTheta, amp = (kPi / 2 - p0) + 6 * kPi / 180;
+            if (m < 0) break;
+            if (m < moveT) { s.pitch = p0 + amp * std::pow(std::sin(kPi * 3 * m / moveT), 2.0); b.filmStopped = false; }
+            else {
+                if (!b.filmStopped) { b.filmStopped = true; s.pitch = p0; b.grabNext = 1; }   // this frame is the last that moved: it is read back
+                else if (!b.filmDone && b.grabNext == 0 && app.blackholeView.settled() && b.R && !b.R->glareBusy()) { b.grabNext = 2; b.filmDone = true; }
+            }
+            break;
+        }
+        case K::BlackHoleExtreme: {
+            const double m = u - warm, half = 0.4 * meas;
+            blackhole::Settings& s = app.blackhole;
+            if (m < 0) break;
+            if (m < half) blackhole::setSpin(s, blackhole::kSpinTop * std::sin(kPi * m / half));      // the spin dragged from 0 to its top and back
+            else {
+                blackhole::setSpin(s, blackhole::kSpinTop);
+                double d = blackhole::kDistMin, f = blackhole::kFovMax;
+                if (envHas("PL_BENCH_ZOOM")) std::sscanf(SDL_getenv("PL_BENCH_ZOOM"), "%lf,%lf", &d, &f);
+                blackhole::setDistance(s, d); blackhole::setFov(s, f);
+                blackhole::turn(s, 0.3 * dt, 0.15 * std::cos(1.3 * (m - half)) * dt);   // turning and tilting
+            }
+            break;
+        }
+        case K::UiGuideScroll: {
+            ImGuiWindow* w = ImGui::FindWindowByName("##reading");               // (the page drawn last frame: its scroll range)
+            const float mx = w ? w->ScrollMax.y : 0;
+            if (envHas("PL_BENCH_SLOW") && b.sceneFrame % 20 == 0) std::printf("PLBENCH-GUIDE %s scroll range %.0f px (window %d, frame %d)\n", b.pickedGuide.c_str(), mx, w ? 1 : 0, b.sceneFrame);   // (which guide is longest)
+            if (mx > 0) {
+                const double f = u < warm ? 1 - u / warm : std::clamp((u - warm) / meas, 0.0, 1.0);   // back to the top in the warm-up, then down at a steady rate
+                readingScrollTo(static_cast<float>(f * mx));
+            }
+            break;
+        }
+        case K::UiDataPlot:
+            if (app.lab == 1) app.atom.s.yaw = 0.8 * u;                         // the lab's picture turning behind the panel, as a drag does
+            else if (app.lab == molecule::kLabIndex) molecule::spin(app.molecule.set.cam, 0.8 * dt);
+            break;
+        case K::UiSettingsOpen:
+            if (ImGuiWindow* w = ImGui::FindWindowByName("##shellControls")) {
+                const double f = 0.5 - 0.5 * std::cos(2 * kPi * u / 2.6);      // down and up every 2.6 s
+                ImGui::SetScrollY(w, static_cast<float>(f * w->ScrollMax.y));
+            }
+            break;
+        default: break;
+    }
+}
+
+// new pictures: a counter that goes up with each new picture, for the scenes whose picture can be older than the frame; -1: every frame draws one
+long pictureCounter(AppState& app, const render::Renderer2D& R, int idx) {
+    const app::BenchSceneText& t = sceneText(idx);
+    using K = app::BenchKind;
+    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme) {
+        const blackhole::ViewStats& s = app.blackholeView.stats();
+        return s.skyCard ? R.skyStats().draws : static_cast<long>(s.picture);   // the card's sky and disc, else the worker's finished pictures
+    }
+    if (t.kind == K::Atom && (t.atomWhich == 14 || t.atomWhich == 27)) return app.atomView.sliceContoursMade();   // the Slice view's contour
+    return -1;
+}
+std::string picturesBy(AppState& app, int idx) {
+    const app::BenchSceneText& t = sceneText(idx);
+    using K = app::BenchKind;
+    if (t.kind == K::BlackHole || t.kind == K::BlackHoleFilmTilt || t.kind == K::BlackHoleExtreme) return app.blackholeView.stats().skyCard ? "graphics card" : "processor";
+    if (t.kind == K::Atom) return app.atom.gpuOutline && app.computeOk ? "graphics card" : "processor";
+    return "";
+}
+std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
+    const app::BenchSceneText& t = sceneText(idx);
+    using K = app::BenchKind;
+    switch (t.kind) {
+        case K::OrbitHeaviest: case K::OrbitRocks8: case K::OrbitHeaviestCpuRocks: case K::OrbitRocks8CpuRocks: case K::OrbitRealFast: case K::UiSettingsOpen:
+            return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? "the graphics card (OpenGL 4.3 rock compute)" : !app.rocksOk ? "the processor (no OpenGL 4.3 rock compute on this PC)" : "the processor (GPU rocks switched off for this scene)");
+        case K::Atom: {
+            const atom::AtomLab& L = app.atom;
+            if (t.atomWhich == 14 || t.atomWhich == 27) return "the outline's contour: " + std::string(L.gpuOutline && app.computeOk ? "the graphics card (OpenGL 4.3 compute)" : !app.computeOk ? "the processor (no OpenGL 4.3 compute on this PC)" : "the processor (GPU outline switched off for this scene)");
+            if (L.manyOn() && L.p.cstyle == "Glow") return "the every-electron cloud: " + std::string(L.gpuCloud ? "drawn from a buffer on the graphics card" : "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene)");
+            if (L.p.super == "On" || L.s.trans) return "the colour groups: " + app::computePathText(app.glMajor, app.glMinor, app.computeOk, L.gpuCompute);
+            return "";
+        }
+        case K::BlackHole: case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: {
+            const auto it = b.bhByScene.find(runIdx);
+            if (it != b.bhByScene.end() && !it->second.skyPath.empty()) return "the sky and disc: " + it->second.skyPath;
+            const blackhole::BlackHoleView& v = app.blackholeView;
+            if (!v.gpuSky) return "the sky and disc: the processor's table (GPU sky per pixel switched off)";
+            if (v.skyState() == 1) return "the sky and disc: the graphics card, every pixel from the closed formulas (its start-up check passed)";
+            if (v.skyState() == -1) return "the sky and disc: the processor's table, because " + v.skyWhy();
+            return "the sky and disc: not decided yet";
+        }
+        default: return "";
+    }
+}
+std::string sceneLine(AppState& app, BenchState& b, int idx) {
+    const app::BenchSceneText& t = sceneText(idx);
+    using K = app::BenchKind;
+    char z[200];
+    switch (t.kind) {
+        case K::Atom: return atom::benchShortText(app.atom);
+        case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitSky:
+            std::snprintf(z, sizeof z, "Orbit Lab: zoom %.2f (log10), picture %.0f x %.0f points", app.set.zoom, app.canvasW, app.canvasH);
+            return z;
+        case K::MoleculeDensity: case K::MoleculeVibDensity: case K::MoleculeSpaceVib:
+            std::snprintf(z, sizeof z, "Molecule Lab: %s (%zu atoms), zoom x%.2f%s", app.molecule.mol().id.c_str(), app.molecule.mol().atoms.size(), app.molecule.set.cam.zoom,
+                          app.molecule.vibOn() ? (", vibration mode " + std::to_string(app.molecule.vibMode + 1)).c_str() : "");
+            return z;
+        case K::BlackHoleFilmTilt: case K::BlackHoleExtreme:
+            std::snprintf(z, sizeof z, "Black Hole Lab: distance %.1f GM/c\xC2\xB2, field of view %.0f\xC2\xB0, pitch %.3f rad (at the set-up)", app.blackhole.dist, app.blackhole.fovDeg, app.blackhole.pitch);
+            return z;
+        case K::UiGuideScroll: return "Learn guide " + b.pickedGuide + " (lab:guide)";
+        case K::OrbitJourney:
+            std::snprintf(z, sizeof z, "Orbit Lab: the Journey started at Earth, zoom %.2f", app.set.zoom);
+            return z;
+        case K::UiDataPlot: return b.dataText;
+        default: return "";
+    }
+}
+
+// blackhole.film_tilt's comparison: a pixel counts as disc where its brightest channel is at least a fifth of the brightest pixel of the picture at rest; the
+// pixels whose kind differs between the two pictures, and the largest 4-connected patch of them (the running box left out)
+std::vector<std::string> filmCompare(const PixelGrab& a, const PixelGrab& r) {
+    if (a.w != r.w || a.h != r.h || a.w <= 0) return {"Film at rest against the last moving picture: not compared (no picture read back)"};
+    const std::size_t n = std::size_t(a.w) * a.h;
+    unsigned char top = 0;
+    for (std::size_t k = 0; k < n; k++) for (int c = 0; c < 3; c++) top = std::max(top, r.rgb[3 * k + c]);
+    const int th = std::max(1, top / 5);
+    const auto disc = [&](const PixelGrab& p, std::size_t k) { return std::max({p.rgb[3 * k], p.rgb[3 * k + 1], p.rgb[3 * k + 2]}) >= th; };
+    std::vector<char> diff(n, 0);
+    long differ = 0, discPx = 0;
+    for (std::size_t k = 0; k < n; k++) { const bool x = disc(a, k), y = disc(r, k); discPx += y; if (x != y) { diff[k] = 1; differ++; } }
+    long patch = 0;
+    std::vector<int> st;
+    for (std::size_t k0 = 0; k0 < n; k0++) {
+        if (diff[k0] != 1) continue;
+        long cnt = 0;
+        st.assign(1, int(k0)); diff[k0] = 2;
+        while (!st.empty()) {
+            const int q = st.back(); st.pop_back(); cnt++;
+            const int qi = q % a.w, qj = q / a.w;
+            const int nb[4][2] = {{qi - 1, qj}, {qi + 1, qj}, {qi, qj - 1}, {qi, qj + 1}};
+            for (const auto& p : nb) {
+                if (p[0] < 0 || p[0] >= a.w || p[1] < 0 || p[1] >= a.h) continue;
+                const std::size_t m = std::size_t(p[1]) * a.w + p[0];
+                if (diff[m] == 1) { diff[m] = 2; st.push_back(int(m)); }
+            }
+        }
+        patch = std::max(patch, cnt);
+    }
+    char t[400];
+    std::snprintf(t, sizeof t, "Film at rest against the last moving picture (%d x %d pixels, a pixel is disc where its brightest channel is at least a fifth of the brightest): "
+                  "%ld disc pixels at rest, %ld pixels change between disc and not-disc, the largest connected patch %ld pixels", a.w, a.h, discPx, differ, patch);
+    return {t};
+}
+
+// ---- 0.56.1, Part 2: the waits. Each is done app::kBenchResponseRepeats times: prepare (the state before), wait until its picture is finished, act, then time
+// until the lab's picture is finished again (benchLabFinished), at the end of the frame that draws it. ----
+struct WaitDef { const char* id; const char* name; const char* what; };
+const std::vector<WaitDef>& waitDefs() {
+    static const std::vector<WaitDef> v = {
+        {"response.lab_switch.orbit_atom", "From the Orbit Lab to the Atom Lab", "each lab at its defaults; the time to the new lab's first finished picture"},
+        {"response.lab_switch.atom_molecule", "From the Atom Lab to the Molecule Lab", ""},
+        {"response.lab_switch.molecule_blackhole", "From the Molecule Lab to the Black Hole Lab", ""},
+        {"response.lab_switch.blackhole_orbit", "From the Black Hole Lab to the Orbit Lab", ""},
+        {"response.atom_element", "Carbon to the heaviest atom, every electron", "Cloud 3D, every electron, Ultra: from carbon to oganesson; until its cloud has all its dots"},
+        {"response.atom_density", "Cloud density Normal to Ultra, every electron", "oganesson, Cloud 3D, every electron: Cloud density from Normal (60,000 dots) to Ultra (240,000); until the cloud is complete"},
+        {"response.molecule_pick", "Another molecule in the Density style", "Density style, 100,000 dots, cloud and surface: water to benzene, benzene to methanol, methanol to ethylene; until its cloud and surface are made"},
+        {"response.blackhole_spin", "A new spin and distance typed in", "a feeding hole, Real look: from spin 0.5 at 20 GM/c\xC2\xB2 to 0.8, 0.85, 0.9 at 15, 18, 21 GM/c\xC2\xB2; until the sharp picture"},
+        {"response.blackhole_look", "Real to Film", "a feeding hole: the look changed from Real to Film; until the finished picture"},
+        {"response.blackhole_look_back", "Film back to Real", "the look changed from Film back to Real (with the glare); until the finished picture"},
+        {"response.orbit_date", "A jump to a far date in Real physics", "Planet physics Real: from today to 1850-06-01, 2095-01-01 and 1805-03-01; until the picture of that date is drawn"},
+    };
+    return v;
+}
+// ---- Part 3: each lab left alone (VSync on, nothing moving) ----
+struct RestDef { const char* id; const char* name; };
+const std::vector<RestDef>& restDefs() {
+    static const std::vector<RestDef> v = {
+        {"rest.orbit", "Orbit Lab at its defaults, time stopped"}, {"rest.atom", "Atom Lab at its defaults"}, {"rest.molecule", "Molecule Lab at its defaults"},
+        {"rest.blackhole", "Black Hole Lab at its defaults"}, {"rest.blackhole_spin", "Black Hole Lab, the hole spinning at 0.9"},
+        {"rest.blackhole_glare", "Black Hole Lab, a feeding hole with the eye's glare"}};
+    return v;
+}
+
+// every lab at its defaults (the waits and the rests start from them, so the numbers do not depend on the user's settings)
+void labsToDefaults(AppState& app) {
+    commonSetup(app);
+    resetToToday(app);
+    app.set = orbit::ViewSettings();
+    app.view = orbit::OrbitView();
+    app.atom.p = atom::AtomParams::appDefaults();
+    app.atom.restart();
+    app.atom.hold = true;
+    app.molecule = molecule::MoleculeLab();
+    app.blackhole = blackhole::settingsDefaults();
+}
+
+void waitPrepare(AppState& app, int w, int t) {
+    const std::string id = waitDefs()[std::size_t(w)].id;
+    atom::AtomLab& L = app.atom;
+    const auto atomAll = [&](int Z, const char* dens) {
+        L.p = atom::AtomParams::appDefaults(); L.p.elec = "All"; L.p.cdens = dens; L.p.view = "Cloud 3D";
+        L.setParam("Z", double(Z)); L.restart(); L.hold = true;
+    };
+    static const char* const mols[4] = {"H2O", "C6H6", "CH3OH", "C2H4"};
+    if (id.rfind("response.lab_switch.", 0) == 0) app.lab = id == "response.lab_switch.orbit_atom" ? 0 : id == "response.lab_switch.atom_molecule" ? 1 : id == "response.lab_switch.molecule_blackhole" ? molecule::kLabIndex : blackhole::kLabIndex;
+    else if (id == "response.atom_element") { app.lab = 1; atomAll(6, "Ultra"); }
+    else if (id == "response.atom_density") { app.lab = 1; atomAll(atom::heaviestAll(), "Normal"); }
+    else if (id == "response.molecule_pick") {
+        app.lab = molecule::kLabIndex;
+        app.molecule.setStyle(molecule::Style::Realistic); app.molecule.set.realDots = molecule::kRealDots[3]; app.molecule.set.realShow = 0;
+        app.molecule.choose(moleculeIndex(mols[t]));
+    } else if (id.rfind("response.blackhole", 0) == 0) {
+        app.lab = blackhole::kLabIndex;
+        app.blackhole = blackhole::settingsDefaults();
+        blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);
+        if (id == "response.blackhole_spin") { blackhole::setSpin(app.blackhole, 0.5); blackhole::setDistance(app.blackhole, 20); }
+        if (id == "response.blackhole_look_back") blackhole::setLook(app.blackhole, blackhole::Look::Film);
+    } else if (id == "response.orbit_date") {
+        app.lab = 0;
+        resetToToday(app);
+        app.set = orbit::ViewSettings(); app.set.realPlanets = true;
+        app.paused = true;
+    }
+}
+void waitAct(AppState& app, int w, int t) {
+    const std::string id = waitDefs()[std::size_t(w)].id;
+    static const char* const mols[4] = {"H2O", "C6H6", "CH3OH", "C2H4"};
+    if (id == "response.lab_switch.orbit_atom") app.lab = 1;
+    else if (id == "response.lab_switch.atom_molecule") app.lab = molecule::kLabIndex;
+    else if (id == "response.lab_switch.molecule_blackhole") app.lab = blackhole::kLabIndex;
+    else if (id == "response.lab_switch.blackhole_orbit") app.lab = 0;
+    else if (id == "response.atom_element") app.atom.setParam("Z", double(atom::heaviestAll()));
+    else if (id == "response.atom_density") app.atom.setParam("cdens", std::string("Ultra"));
+    else if (id == "response.molecule_pick") app.molecule.choose(moleculeIndex(mols[t + 1]));
+    else if (id == "response.blackhole_spin") { blackhole::setSpin(app.blackhole, 0.8 + 0.05 * t); blackhole::setDistance(app.blackhole, 15 + 3 * t); }
+    else if (id == "response.blackhole_look") blackhole::setLook(app.blackhole, blackhole::Look::Film);
+    else if (id == "response.blackhole_look_back") blackhole::setLook(app.blackhole, blackhole::Look::Real);
+    else if (id == "response.orbit_date") {
+        static const int64_t dates[3] = {-3773779200000LL, 3944678400000LL, -5201798400000LL};   // 1850-06-01, 2095-01-01, 1805-03-01 (00:00 UTC)
+        jumpToDate(app, dates[t]);
+    }
+}
+void restPrepare(AppState& app, int r) {
+    const std::string id = restDefs()[std::size_t(r)].id;
+    labsToDefaults(app);
+    if (id == "rest.orbit") { app.lab = 0; app.paused = true; }
+    else if (id == "rest.atom") app.lab = 1;
+    else if (id == "rest.molecule") app.lab = molecule::kLabIndex;
+    else {
+        app.lab = blackhole::kLabIndex;
+        if (id == "rest.blackhole_spin") blackhole::setSpin(app.blackhole, 0.9);
+        if (id == "rest.blackhole_glare") blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);
+    }
+    app.vsync = true;                                     // as the user has it
+}
+bool onlyHas(const char* id) {
+    const char* only = SDL_getenv("PL_BENCH_ONLY");
+    return !only || ("," + std::string(only) + ",").find("," + std::string(id) + ",") != std::string::npos;
+}
+
+// which scenes run: the Hard ones, or All. PL_BENCH_ONLY="atom.slice_drag,blackhole.extreme" (development and the UI checks): only those ids
 std::vector<int> sceneList(const BenchState& b) {
     std::vector<int> v;
     const char* only = SDL_getenv("PL_BENCH_ONLY");
-    for (int i = 0; i < (b.includeCompare || only ? app::kBenchAllScenes : app::kBenchDefaultScenes); i++) {
-        if (only && ("," + std::string(only) + ",").find("," + std::to_string(i + 1) + ",") == std::string::npos) continue;
+    const int n = b.allScenes || only ? app::kBenchAllScenes : app::kBenchHardScenes;
+    for (int i = 0; i < n; i++) {
+        if (only && ("," + std::string(only) + ",").find("," + sceneText(i).id + ",") == std::string::npos) continue;
         v.push_back(i);
     }
     return v;
@@ -334,8 +816,6 @@ BenchState& st(AppState& app) {
     return *app.bench;
 }
 
-double envNum(const char* name, double def) { const char* v = SDL_getenv(name); return v ? std::atof(v) : def; }
-
 const char* whyNot(const AppState& app) {
     if (app.pane) return "Learn is open: close it first.";
     if (app.journey.active) return "A Journey is running: stop it first.";
@@ -345,12 +825,19 @@ const char* whyNot(const AppState& app) {
 }
 
 void restore(AppState& app, BenchState& b) {
-    app.sys = *b.sys; app.view = *b.view; app.atom = *b.atom; app.atomView = *b.atomView;
+    if (app.journey.active) { app.journey.active = false; app.view.journey = false; app.view.caption.clear(); }
+    app.sys = *b.sys; app.view = *b.view; app.atom = *b.atom; app.atomView = *b.atomView; app.molecule = *b.molecule;
     app.set = b.set; app.journey = b.journey; app.tempK = b.tempK;
-    app.lab = b.lab; app.paused = b.paused; app.vsync = b.vsync;
-    app.learn = b.learn; app.atomLearn = b.atomLearn; app.blackhole = b.blackhole;
+    app.lab = b.lab; app.pane = b.pane; app.learnBack = b.learnBack; app.paused = b.paused; app.vsync = b.vsync;
+    app.learn = b.learn; app.atomLearn = b.atomLearn; app.molLearn = b.molLearn; app.bhLearn = b.bhLearn;
+    app.learnJump = b.learnJump; app.atomLearnJump = b.atomLearnJump; app.molLearnJump = b.molLearnJump; app.bhLearnJump = b.bhLearnJump;
+    app.blackhole = b.blackhole;
     app.showSettings = b.showSettings; app.showAbout = b.showAbout; app.showHistory = b.showHistory;
-    b.sys.reset(); b.view.reset(); b.atom.reset(); b.atomView.reset();
+    app.prefs = *b.prefs;
+    dataBenchRestore(b.data);
+    app.dateNote = b.dateNote;
+    std::snprintf(app.dateText, sizeof app.dateText, "%s", b.dateText); std::snprintf(app.timeText, sizeof app.timeText, "%s", b.timeText);
+    b.sys.reset(); b.view.reset(); b.atom.reset(); b.atomView.reset(); b.molecule.reset(); b.prefs.reset(); b.data.reset();
     app.benchRunning = false;
 }
 
@@ -360,8 +847,23 @@ std::string whenText(SDL_DateTime& dt) {
     return b;
 }
 
+// (the checks: what the benchmark must give back, as one line: the lab, the pages and panels, every lab's settings)
+std::string stateLine(AppState& app) {
+    std::map<std::string, std::string> bh;
+    blackhole::saveSettings(app.blackhole, bh);
+    std::string t = "lab=" + std::to_string(app.lab) + " pane=" + std::to_string(app.pane) + " settings=" + std::to_string(app.showSettings) + " about=" + std::to_string(app.showAbout) +
+                    " learn=" + std::to_string(app.learn) + "," + std::to_string(app.atomLearn) + "," + std::to_string(app.molLearn) + "," + std::to_string(app.bhLearn) +
+                    " data=" + std::to_string(dataOpen()) + " panels=" + app.prefs.shellPanels + " vsync=" + std::to_string(app.vsync) + " paused=" + std::to_string(app.paused) +
+                    " mol=" + molecule::saveSettings(app.molecule.set) + " vib=" + std::to_string(app.molecule.vibMode) +
+                    " atom=" + atom::benchShortText(app.atom) + "," + app.atom.p.elec + "," + app.atom.p.cdens + " journey=" + std::to_string(app.journey.active) +
+                    " orbit=" + std::to_string(app.set.view3D) + "," + std::to_string(app.set.zoom) + "," + std::to_string(app.set.realPlanets) + "," + std::to_string(int(app.set.sky)) + "," + std::to_string(app.view.sel.kind) + " bh=";
+    for (const auto& kv : bh) t += kv.first + ":" + kv.second + ";";
+    return t;
+}
+
 void begin(AppState& app) {
     BenchState& b = st(app);
+    if (SDL_getenv("PL_BENCH")) std::printf("PLBENCH-STATE before %s\n", stateLine(app).c_str());
     // the environment, as it is when it starts (the window is not changed meanwhile)
     app::BenchEnv& e = b.env = app::BenchEnv();
     e.version = appVersion();
@@ -371,9 +873,9 @@ void begin(AppState& app) {
     const char* s = reinterpret_cast<const char*>(plgl::glGetString(GL_RENDERER)); e.gpu = s ? s : "";
     s = reinterpret_cast<const char*>(plgl::glGetString(GL_VERSION)); e.glVersion = s ? s : "";
     s = reinterpret_cast<const char*>(plgl::glGetString(GL_VENDOR)); e.vendor = s ? s : "";
-    e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks);   // (scenes 1, 2, 17 and 18 are the ones it changes: the benchmark's own settings below start from the defaults, so it is On)
-    e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline);   // (scenes 9, 10, 15 and 16 are the ones it changes)
-    e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute);   // which way the Atom Lab's superposition and jumps run (scenes 7, 8, 13 and 14 are the ones it changes)
+    e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, true);          // (the benchmark's own settings start from the defaults: On)
+    e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, true);
+    e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, true);
     const ImGuiIO& io = ImGui::GetIO();
     const float sc = ImGui::GetStyle().FontScaleDpi;
     e.windowW = int(io.DisplaySize.x * io.DisplayFramebufferScale.x + 0.5f); e.windowH = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);
@@ -383,21 +885,41 @@ void begin(AppState& app) {
         if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w))) e.refreshHz = m->refresh_rate;
     }
     e.textSize = app.prefs.textSize; e.theme = app.prefs.theme;
-    e.power = app.powerNote;                                          // 0.15 stage 2: whether Windows was asked not to power-throttle the app
+    e.power = app.powerNote;
+    const SysInfo si = sysInfo();
+    e.cpu = si.cpu; e.cores = si.cores; e.threads = si.threads; e.memoryMB = si.memoryMB;
+    e.startupMs = app.startupMs;
+    e.allScenes = b.allScenes;
+    b.peakMB = processMemoryMB(); b.lastMemS = -1;
     b.warm = envNum("PL_BENCH_WARMUP", app::kBenchWarmupS);          // for automatic checks: shorter times
     b.measure = envNum("PL_BENCH_MEASURE", app::kBenchMeasureS);
     e.warmupS = b.warm; e.measureS = b.measure;
     // keep everything the user has
-    b.lab = app.lab; b.paused = app.paused; b.vsync = app.vsync; b.learn = app.learn; b.atomLearn = app.atomLearn; b.blackhole = app.blackhole;
+    b.lab = app.lab; b.pane = app.pane; b.learnBack = app.learnBack; b.paused = app.paused; b.vsync = app.vsync;
+    b.learn = app.learn; b.atomLearn = app.atomLearn; b.molLearn = app.molLearn; b.bhLearn = app.bhLearn;
+    b.learnJump = app.learnJump; b.atomLearnJump = app.atomLearnJump; b.molLearnJump = app.molLearnJump; b.bhLearnJump = app.bhLearnJump;
+    b.blackhole = app.blackhole;
     b.showSettings = app.showSettings; b.showAbout = app.showAbout; b.showHistory = app.showHistory;
     b.sys = std::make_unique<orbit::SolarSystem>(app.sys);
     b.view = std::make_unique<orbit::OrbitView>(app.view);
     b.atom = std::make_unique<atom::AtomLab>(app.atom);
     b.atomView = std::make_unique<atom::AtomView>(app.atomView);
+    b.molecule = std::make_unique<molecule::MoleculeLab>(app.molecule);
+    b.prefs = std::make_unique<app::Prefs>(app.prefs);
+    b.data = dataBenchSave();
     b.set = app.set; b.journey = app.journey; b.tempK = app.tempK;
+    b.dateNote = app.dateNote;
+    std::snprintf(b.dateText, sizeof b.dateText, "%s", app.dateText); std::snprintf(b.timeText, sizeof b.timeText, "%s", app.timeText);
+    app.prefs.motion = "off";                                       // the scenes move whatever Reduced motion says (a held jump or swing measures nothing); put back at the end
     b.list = sceneList(b);
-    b.atomUsed.assign(b.list.size(), std::string());
-    b.results.clear(); b.text.clear(); b.note.clear(); b.cancelled = false; b.gpuChecked = false; b.gpuCheck = app::GpuVerdict(); b.gpuReady.clear();
+    b.waits.clear(); b.rests.clear();
+    for (int k = 0; k < int(waitDefs().size()); k++) if (onlyHas(waitDefs()[std::size_t(k)].id) || (SDL_getenv("PL_BENCH_ONLY") && onlyHas("response"))) b.waits.push_back(k);
+    for (int k = 0; k < int(restDefs().size()); k++) if (onlyHas(restDefs()[std::size_t(k)].id) || (SDL_getenv("PL_BENCH_ONLY") && onlyHas("rest"))) b.rests.push_back(k);
+    b.phase = 0; b.wAt = b.wTry = b.wStage = 0; b.rAt = b.rStage = 0;
+    b.lines.assign(b.list.size(), std::string()); b.paths.assign(b.list.size(), std::string());
+    b.pics.assign(b.list.size(), -1); b.picsBy.assign(b.list.size(), std::string()); b.notes.assign(b.list.size(), {});
+    b.results.clear(); b.responses.clear(); b.idle.clear(); b.text.clear(); b.note.clear(); b.cancelled = false; b.gpuChecked = false; b.gpuCheck = app::GpuVerdict(); b.gpuReady.clear();
+    b.bhByScene.clear();
     b.gpu.make();
     b.run = std::make_unique<app::BenchRun>(activeScenes(b), b.warm, b.measure);
     b.stage = BenchState::Stage::Running;
@@ -405,7 +927,7 @@ void begin(AppState& app) {
 }
 
 void saveAndCopy(AppState& app, BenchState& b) {
-    b.text = app::benchResultText(b.env, b.results);
+    b.text = app::benchResultText(b.env, b.results, b.responses, b.idle);
     {   // 0.55.7: the report ends with the last 40 lines of the graphics card's light paths' log (app/gpu_guard.h), so one paste carries both
         const std::vector<std::string> tail = app::gpuGuard().logTail(40);
         b.text += "\nThe graphics card's light paths, the last " + std::to_string(tail.size()) + " lines of " + (app::gpuGuard().logPath().empty() ? std::string("their log") : app::gpuGuard().logPath()) + ":\n";
@@ -435,75 +957,204 @@ void finish(AppState& app, BenchState& b, bool cancelled) {
         const int n = cancelled ? b.run->doneScenes() : b.run->sceneCount();
         b.results.clear();
         for (int i = 0; i < n; i++) {
-            app::BenchScene r = b.run->result(i); r.name = scenes()[b.list[i]].info.name; r.what = scenes()[b.list[i]].info.what;
+            const app::BenchSceneText& t = sceneText(b.list[std::size_t(i)]);
+            app::BenchScene r = b.run->result(i);
+            r.id = t.id; r.name = t.name; r.what = t.what;
+            r.line = b.lines[std::size_t(i)]; r.path = b.paths[std::size_t(i)]; r.pictures = b.pics[std::size_t(i)]; r.picturesBy = b.picsBy[std::size_t(i)];
+            r.notes = b.notes[std::size_t(i)];
+            if (t.kind == app::BenchKind::BlackHoleFilmTilt && r.notes.empty())
+                r.notes.push_back("Film at rest against the last moving picture: not compared (the picture at rest was not finished within the counted time)");
             const auto bh = b.bhByScene.find(i);
-            if (bh != b.bhByScene.end()) r.notes = app::benchBlackHoleLines(bh->second);   // 0.55.5
+            if (bh != b.bhByScene.end() && t.kind == app::BenchKind::BlackHole) { const std::vector<std::string> l = app::benchBlackHoleLines(bh->second); r.notes.insert(r.notes.end(), l.begin(), l.end()); }
             b.results.push_back(r);
         }
     }
     b.bhByScene.clear();
     b.env.cancelled = cancelled;
-    b.env.atomSettings.clear();
-    for (int i = 0; i < int(b.atomUsed.size()) && i < int(b.results.size()); i++)
-        if (!b.atomUsed[i].empty()) b.env.atomSettings += (b.env.atomSettings.empty() ? "" : "; ") + std::string("scene ") + std::to_string(b.list[i] + 1) + ": " + b.atomUsed[i];
+    b.env.peakMB = b.peakMB;
     b.env.gpuTimer = b.gpu.ok && std::any_of(b.results.begin(), b.results.end(), [](const app::BenchScene& s) { return s.gpuSamples > 0; });
     b.env.gpuReliable = b.env.gpuTimer && b.gpuChecked && b.gpuCheck.reliable;
     b.env.gpuCheck = b.gpuChecked ? b.gpuCheck.why : std::string();
     restore(app, b);
+    if (SDL_getenv("PL_BENCH")) std::printf("PLBENCH-STATE after %s\n", stateLine(app).c_str());
     b.gpu.destroy();
     b.cancelled = cancelled;
     if (cancelled) { b.stage = BenchState::Stage::Closed; b.run.reset(); return; }
     saveAndCopy(app, b);
     b.stage = BenchState::Stage::Done;
     b.run.reset();
+    if (envHas("PL_BENCH_QUIT")) { SDL_Event q{}; q.type = SDL_EVENT_QUIT; SDL_PushEvent(&q); }   // (automatic runs: the app ends with the report)
 }
 
+
+bool labFinishedNow(AppState& app, BenchState& b);
+double ticksMs(Uint64 from) { return static_cast<double>(SDL_GetPerformanceCounter() - from) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency()); }
+
+// after the scenes: the waits (phase 1), then the labs left alone (phase 2), then the end
+void nextPhase(AppState& app, BenchState& b) {
+    if (b.phase == 0) {
+        b.phase = 1; b.wAt = 0; b.wTry = 0; b.wStage = 0; b.wStageS = 0;
+        if (!b.waits.empty()) { labsToDefaults(app); return; }
+    }
+    if (b.phase == 1) {
+        b.phase = 2; b.rAt = 0; b.rStage = 0; b.rStageS = 0;
+        if (!b.rests.empty()) return;
+    }
+    finish(app, b, false);
+}
+
+void partsBeginFrame(AppState& app, BenchState& b) {
+    if (b.phase == 1) {
+        if (b.wAt >= int(b.waits.size())) { nextPhase(app, b); return; }
+        const int w = b.waits[std::size_t(b.wAt)];
+        if (b.wStage == 0) { waitPrepare(app, w, b.wTry); b.wStage = 1; b.wStageS = 0; }
+        else if (b.wStage == 4) {                                    // settled: the action, timed from here
+            b.wT0 = SDL_GetPerformanceCounter();
+            waitAct(app, w, b.wTry);
+            b.wStage = 2; b.wStageS = 0; b.wWorst = 0; b.wFrames = 0;
+        }
+        app.vsync = true;                                             // as the user waits: VSync on (with it off the frame loop takes a whole core and the
+                                                                      // workers below normal priority wait for it on a PC with few cores)
+    } else if (b.phase == 2) {
+        if (b.rAt >= int(b.rests.size())) { nextPhase(app, b); return; }
+        if (b.rStage == 0) { restPrepare(app, b.rests[std::size_t(b.rAt)]); b.rStage = 1; b.rStageS = 0; }
+        if (b.rStage == 2 && envHas("PL_BENCH_BUSY")) {           // (the UI check: a lab made busy on purpose: 20 ms of the processor every frame)
+            const Uint64 t = SDL_GetPerformanceCounter();
+            while (ticksMs(t) < 20) {}
+        }
+        app.vsync = true;
+    }
+}
+
+void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
+    if (b.phase == 1 && b.wAt < int(b.waits.size())) {
+        const int w = b.waits[std::size_t(b.wAt)];
+        b.wStageS += frameMs / 1000;
+        if (b.wStage == 1 && ((labFinishedNow(app, b) && b.wStageS >= 0.3) || b.wStageS > app::kBenchResponseCapS)) b.wStage = 4;   // the state before is finished: act next frame
+        else if (b.wStage == 2) {
+            b.wWorst = std::max(b.wWorst, frameMs);
+            b.wFrames++;
+            const bool done = labFinishedNow(app, b), capped = !done && b.wStageS > app::kBenchResponseCapS;
+            if (done || capped) {
+                if (b.responses.size() <= std::size_t(b.wAt)) {
+                    const WaitDef& d = waitDefs()[std::size_t(w)];
+                    app::BenchResponse r; r.id = d.id; r.name = d.name; r.what = d.what;
+                    b.responses.push_back(r);
+                }
+                app::BenchResponse& r = b.responses[std::size_t(b.wAt)];
+                r.ms.push_back(capped ? app::kBenchResponseCapS * 1000 : ticksMs(b.wT0));
+                r.worstFrameMs.push_back(b.wWorst);
+                if (capped) r.capped++;
+                std::printf("PLBENCH-WAIT %s %.1f ms frames=%d%s\n", r.id.c_str(), r.ms.back(), b.wFrames, capped ? " (capped)" : "");
+                b.wStage = 3; b.wStageS = 0;
+            }
+        } else if (b.wStage == 3 && b.wStageS >= 0.2) {             // a short pause, then the next try
+            if (++b.wTry >= app::kBenchResponseRepeats) { b.wTry = 0; b.wAt++; }
+            b.wStage = 0;
+        }
+    } else if (b.phase == 2 && b.rAt < int(b.rests.size())) {
+        const RestDef& d = restDefs()[std::size_t(b.rests[std::size_t(b.rAt)])];
+        b.rStageS += frameMs / 1000;
+        const bool bh = app.lab == blackhole::kLabIndex;
+        if (b.rStage == 1) {
+            const bool fin = labFinishedNow(app, b);
+            if ((fin && b.rStageS >= 0.5) || b.rStageS > app::kBenchIdleSettleCapS) {   // finished (or waited long enough): count from here
+                b.rNow = app::BenchIdle();
+                b.rNow.id = d.id; b.rNow.name = d.name; b.rNow.threads = b.env.threads; b.rNow.keepsPicture = bh; b.rNow.settled = fin;
+                b.rCpu0 = processCpuSeconds(); b.rT0 = SDL_GetPerformanceCounter(); b.rRedraw0 = b.R ? b.R->lensRedraws() : 0; b.rGpuSum = 0; b.rGpuN = 0;
+                b.rStage = 2; b.rStageS = 0;
+            }
+        } else if (b.rStage == 2) {
+            b.rNow.frames++;
+            if (bh && b.R && (!app.blackholeView.settled() || b.R->glareBusy() || app.blackholeView.fineThreadBusy())) b.rNow.workerBusy = true;
+            if (b.rStageS >= app::kBenchIdleS) {
+                const double wall = ticksMs(b.rT0) / 1000, cpu = processCpuSeconds();
+                b.rNow.cpuShare = b.rCpu0 >= 0 && cpu >= 0 && wall > 0 && b.env.threads > 0 ? (cpu - b.rCpu0) / wall / b.env.threads : -1;
+                b.rNow.redraws = b.R ? b.R->lensRedraws() - b.rRedraw0 : 0;
+                b.rNow.gpuMs = b.rGpuN > 0 && b.gpuChecked && b.gpuCheck.reliable ? b.rGpuSum / b.rGpuN : -1;
+                b.idle.push_back(b.rNow);
+                std::printf("PLBENCH-REST %s %s cpu=%.3f redraws=%ld worker=%d frames=%d\n", b.rNow.id.c_str(), app::benchIdleBusy(b.rNow) ? "busy" : "quiet", b.rNow.cpuShare, b.rNow.redraws, b.rNow.workerBusy ? 1 : 0, b.rNow.frames);
+                b.rAt++; b.rStage = 0;
+                if (b.rAt >= int(b.rests.size())) nextPhase(app, b);
+            }
+        }
+    }
+}
 }  // namespace
+
+// 0.56.1: the lab on screen has its finished picture (nothing being made for it): the start-up time, the waits and the rest use it
+bool benchLabFinished(AppState& app, render::Renderer2D& R);
+namespace { bool labFinishedNow(AppState& app, BenchState& b) { return b.R ? benchLabFinished(app, *b.R) : true; } }
+bool benchLabFinished(AppState& app, render::Renderer2D& R) {
+    if (app.pane) return true;
+    if (app.lab == blackhole::kLabIndex) return app.blackholeView.settled() && !R.glareBusy();
+    if (app.lab == 1) {
+        const atom::AtomLab& L = app.atom;
+        if (L.p.view == "Orbit" || L.chartOn()) return true;
+        return L.s.k >= L.cloudCap() && !L.s.trans;
+    }
+    if (app.lab == molecule::kLabIndex) {
+        const molecule::MoleculeLab& M = app.molecule;
+        if (!M.realOn()) return true;
+        return M.real.dotsId == M.mol().id && M.real.dotsN == M.set.realDots && M.real.meshId == M.mol().id;
+    }
+    return true;
+}
 
 void benchmarkButton(AppState& app) {
     const char* why = whyNot(app);
     if (why) ImGui::BeginDisabled();
     if (ImGui::Button("Benchmark...")) { st(app).stage = BenchState::Stage::Ask; }
     if (why) ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("%s", why ? why : "Runs fixed scenes and gives numbers to compare between runs and PCs");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("%s", why ? why : "Runs the scenes that are hard to draw and says plainly what is slow");
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("A test of about %d seconds: it measures how fast the app draws, to compare between PCs or versions.", int(app::kBenchDefaultScenes * (app::kBenchWarmupS + app::kBenchMeasureS)));
-    ImGui::PopStyleColor();
+    ImGui::TextWrapped("A test of about %d minutes: it measures the scenes that are hard to draw, how long you wait for a picture, and whether each lab is quiet at rest.", int(std::lround(app::benchPlannedS() / 60)));
+    ImGui::PopStyleColor(2);
 }
 
 void benchmarkTestHook(AppState& app) {
     static int frames = 0;
     const char* v = SDL_getenv("PL_BENCH");
     if (!v || ++frames != 5) return;
-    st(app).includeCompare = SDL_getenv("PL_BENCH_RISK") != nullptr;       // for automatic checks: ticks "Compare old CPU paths" (the name is from 0.16 stage 2)
+    st(app).allScenes = SDL_getenv("PL_BENCH_RISK") != nullptr || SDL_getenv("PL_BENCH_ALL") != nullptr;   // for automatic checks: ticks "All scenes"
     if (std::string(v) == "start") begin(app); else st(app).stage = BenchState::Stage::Ask;
 }
 
 void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, int fbH) {
     if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
     BenchState& b = *app.bench;
+    b.R = &renderer;
     if (app.liveFrame) { std::printf("Benchmark stopped: the window was moved or resized\n"); finish(app, b, true); return; }   // the numbers would be wrong
-    if (whyNot(app) && std::string(whyNot(app)) != "The benchmark is already running.") { finish(app, b, true); return; }   // something got in the way: stop and give everything back
+    if (app.pane || app.shot.requested) { finish(app, b, true); return; }        // something got in the way: stop and give everything back (a Journey is the benchmark's own)
     if (!b.gpuChecked) {                                 // once, before the first scene
         b.gpuChecked = true;
         b.gpuCheck = checkGpuTimer(renderer, app.canvasW, app.canvasH, fbW, fbH);
         std::printf("GPU timer check: %s: %s\n", b.gpuCheck.reliable ? "reliable" : "NOT reliable", b.gpuCheck.why.c_str());
     }
+    if (b.phase == 0 && b.run->sceneCount() == 0) nextPhase(app, b);
+    if (b.phase >= 1) { if (b.stage == BenchState::Stage::Running) partsBeginFrame(app, b); return; }
     const int i = b.run->sceneToSetUp();
     if (i >= 0) {
-        scenes()[b.list[i]].setup(app);
-        if (app.lab == 1 && i < int(b.atomUsed.size())) b.atomUsed[i] = atom::benchSettingsText(app.atom);
-        b.run->setUpDone();
-        b.sceneFrame = 0; b.measFrame = -1;
+        const int idx = b.list[std::size_t(i)];
         b.bhLastU = -1e9; b.bhRestS = -1; b.bhKind = -1; b.bhHave = false;
-        if (app::benchSceneTexts()[std::size_t(b.list[i])].kind == app::BenchKind::BlackHole) b.bhByScene[i].fineStartMs = app.blackholeView.fineFillMs();   // 0.55.8
         for (double& x : b.bhMoveS) x = 0;
+        b.grabNext = 0; b.filmStopped = b.filmDone = false; b.grabMoving = b.grabRest = PixelGrab();
+        b.lastU = 0; for (auto& r : b.split) for (double& x : r) x = 0;
+        setupScene(app, b, idx);
+        b.lines[std::size_t(i)] = sceneLine(app, b, idx);
+        b.run->setUpDone();
+        b.sceneFrame = 0; b.measFrame = -1; b.picLast = -1;
+        if (sceneText(idx).kind == app::BenchKind::BlackHole) b.bhByScene[i].fineStartMs = app.blackholeView.fineFillMs();   // 0.55.8
+        std::printf("PLBENCH-SCENE %s\n", sceneText(idx).id.c_str());
     }
-    if (b.run->sceneToSetUp() < 0 && b.run->scene() < int(b.list.size())) {      // a scene that needs something done every frame (a jump held, the cut moving)
+    if (b.run->sceneToSetUp() < 0 && b.run->scene() < int(b.list.size())) {      // what moves in the scene
+        const int idx = b.list[std::size_t(b.run->scene())];
         b.measFrame = b.run->measuring() ? b.measFrame + 1 : -1;
-        const SceneDef& sd = scenes()[b.list[b.run->scene()]];
-        if (app::benchSceneTexts()[std::size_t(b.list[b.run->scene()])].kind == app::BenchKind::BlackHole) sampleBlackHole(app, b, renderer);   // 0.55.5
-        if (sd.frame) sd.frame(app, b.sceneFrame, b.measFrame);
+        const double u = sceneU(b), dt = std::clamp(u - b.lastU, 0.0, 0.1);
+        b.lastU = u;
+        if (sceneText(idx).kind == app::BenchKind::BlackHole) sampleBlackHole(app, b, renderer);   // 0.55.5
+        frameScene(app, b, idx, u, dt);
         b.sceneFrame++;
     }
     app.vsync = false;
@@ -522,12 +1173,52 @@ void benchmarkGpuBegin(AppState& app) {
 
 void benchmarkGpuEnd(AppState& app) {
     if (!app.bench) return;
-    GpuTimer& g = app.bench->gpu;
-    if (g.active < 0) return;
-    plgl::glEndQuery(GL_TIME_ELAPSED);
-    plgl::glQueryCounter(g.q[g.active][2], GL_TIMESTAMP);
-    g.ring.submitted(g.active);
-    g.active = -1;
+    BenchState& b = *app.bench;
+    GpuTimer& g = b.gpu;
+    if (g.active >= 0) {
+        plgl::glEndQuery(GL_TIME_ELAPSED);
+        plgl::glQueryCounter(g.q[g.active][2], GL_TIMESTAMP);
+        g.ring.submitted(g.active);
+        g.active = -1;
+    }
+    static const bool finishEach = envHas("PL_BENCH_FINISH");     // (the session box's software renderer queues frames for seconds: the checks wait for each one)
+    if (finishEach && b.stage == BenchState::Stage::Running) plgl::glFinish();
+    // (development and the checks: PL_BENCH_SHOT="a" or "a,b": each scene's picture saved as <id>.bmp a s into its counted time, and as <id>_2.bmp at b s)
+    static double shotAt[2] = {-1, -1};
+    static const bool shotRead = [] { if (const char* v = SDL_getenv("PL_BENCH_SHOT")) std::sscanf(v, "%lf,%lf", &shotAt[0], &shotAt[1]); return true; }();
+    (void)shotRead;
+    const bool scenesNow = b.stage == BenchState::Stage::Running && b.run && b.phase == 0;
+    const int shotK = !scenesNow || b.shotFor != b.run->scene() ? 0 : b.shotK;
+    if (scenesNow && shotK < 2 && shotAt[shotK] >= 0 && b.run->measuring() && b.run->sceneElapsedS() >= shotAt[shotK] && b.run->scene() < int(b.list.size())) {
+        b.shotFor = b.run->scene(); b.shotK = shotK + 1;
+        const ImGuiIO& io = ImGui::GetIO();
+        const int W = int(io.DisplaySize.x * io.DisplayFramebufferScale.x + 0.5f), H = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);
+        if (SDL_Surface* shot = W > 0 && H > 0 ? SDL_CreateSurface(W, H, SDL_PIXELFORMAT_ABGR8888) : nullptr) {
+            plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, shot->pixels);
+            SDL_FlipSurface(shot, SDL_FLIP_VERTICAL);
+            SDL_SaveBMP(shot, (sceneText(b.list[std::size_t(b.run->scene())]).id + (shotK ? "_2" : "") + ".bmp").c_str());
+            SDL_DestroySurface(shot);
+        }
+        b.grabSkip = true;
+    }
+    if (scenesNow && b.grabNext > 0) {   // 0.56.1, film_tilt: read the free part of the picture back (this frame is not counted)
+        const ImGuiIO& io = ImGui::GetIO();
+        const double k = ImGui::GetStyle().FontScaleDpi * io.DisplayFramebufferScale.x;
+        const int fbH = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);
+        const int x0 = std::max(0, int(app.bhFreeX * k)), y0 = std::max(0, int(app.bhFreeY * k));
+        const int w = std::max(0, int((app.bhFreeW > 0 ? app.bhFreeW : app.canvasW) * k)), h = std::max(0, int((app.bhFreeH > 0 ? app.bhFreeH : app.canvasH) * k));
+        PixelGrab& p = b.grabNext == 1 ? b.grabMoving : b.grabRest;
+        p.w = w; p.h = h; p.rgb.assign(std::size_t(w) * h * 3, 0);
+        std::vector<unsigned char> rgba(std::size_t(w) * h * 4);
+        if (w > 0 && h > 0) plgl::glReadPixels(x0, std::max(0, fbH - y0 - h), w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        const double fx = io.DisplayFramebufferScale.x;
+        const int bx0 = int(b.boxX * fx) - x0, by0 = int(b.boxY * fx) - y0, bx1 = int((b.boxX + b.boxW) * fx) - x0 + 2, by1 = int((b.boxY + b.boxH) * fx) - y0 + 2;
+        for (int j = 0; j < h; j++) for (int i2 = 0; i2 < w; i2++) {
+            const int jt = h - 1 - j;                    // (rows from the top)
+            if (i2 >= bx0 && i2 < bx1 && jt >= by0 && jt < by1) continue;   // the running box is left black in both
+            for (int c = 0; c < 3; c++) p.rgb[(std::size_t(jt) * w + i2) * 3 + c] = rgba[(std::size_t(j) * w + i2) * 4 + c];
+        }
+    }
 }
 
 void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
@@ -551,13 +1242,56 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
             return GpuSample{busy / 1e6, (t1 >= t0 ? t1 - t0 : 0) / 1e6};
         },
         b.gpuReady);
-    for (const GpuSample& r : b.gpuReady) b.run->gpuSample(r.busyMs, r.spanMs);
+    for (const GpuSample& r : b.gpuReady) {
+        b.run->gpuSample(r.busyMs, r.spanMs);
+        if (b.phase == 2 && b.rStage == 2) { b.rGpuSum += r.busyMs; b.rGpuN++; }
+    }
     if (SDL_Window* w = SDL_GL_GetCurrentWindow()) {   // 0.15 stage 2: a scene during which the window lost focus or was minimised is flagged in the report
         const SDL_WindowFlags fl = SDL_GetWindowFlags(w);
         b.run->noteWindow((fl & SDL_WINDOW_INPUT_FOCUS) != 0, (fl & SDL_WINDOW_MINIMIZED) != 0);
     }
-    b.run->frame(frameMs, cpuMs);
-    if (b.run->finished()) finish(app, b, false);
+    {   // the app's memory, four times a second
+        const double now = SDL_GetTicks() / 1000.0;
+        if (now - b.lastMemS >= 0.25) { b.lastMemS = now; b.peakMB = std::max(b.peakMB, processMemoryMB()); }
+    }
+    if (b.phase >= 1) { partsEndFrame(app, b, frameMs); return; }
+    const int sc = b.run->scene();
+    const bool grabbed = b.grabNext > 0 || b.grabSkip;
+    b.grabSkip = false;
+    if (sc < int(b.list.size()) && b.run->sceneToSetUp() < 0 && b.R) {
+        const int idx = b.list[std::size_t(sc)];
+        // new pictures while counted (0.56.1)
+        const long c = pictureCounter(app, *b.R, idx);
+        if (c >= 0) {
+            if (b.run->measuring()) { if (b.pics[std::size_t(sc)] < 0) b.pics[std::size_t(sc)] = 0; if (b.picLast >= 0) b.pics[std::size_t(sc)] += std::clamp(c - b.picLast, 0L, 1L); }   // (at most one new picture a frame: the one shown)
+            b.picLast = c;
+            b.picsBy[std::size_t(sc)] = picturesBy(app, idx);
+        }
+        // atom.nucleus_density: the two halves apart (still, turning) and the density grids made in each
+        const app::BenchSceneText& t = sceneText(idx);
+        if (t.kind == app::BenchKind::Atom && t.atomWhich == atom::kBenchNucleusDensity && b.run->measuring()) {
+            const int h = b.run->sceneElapsedS() < 0.5 * b.measure ? 0 : 1;
+            if (b.split[h][0] == 0) b.gridsAt[h] = app.atomView.densityGridsMade();
+            b.split[h][0] += 1; b.split[h][1] += frameMs; b.split[h][2] += cpuMs;
+            const long made = app.atomView.densityGridsMade();
+            char l[300];
+            std::vector<std::string>& nt = b.notes[std::size_t(sc)];
+            nt.clear();
+            for (int k = 0; k < 2; k++) if (b.split[k][0] > 0) {
+                const long grids = (k == 0 ? (b.split[1][0] > 0 ? b.gridsAt[1] : made) : made) - b.gridsAt[k];
+                std::snprintf(l, sizeof l, "%s: %.0f frames, %.2f ms a frame (%.1f fps), CPU work %.2f ms; the density grid made %ld times", k == 0 ? "Standing still" : "Turning",
+                              b.split[k][0], b.split[k][1] / b.split[k][0], 1000.0 * b.split[k][0] / b.split[k][1], b.split[k][2] / b.split[k][0], grids);
+                nt.push_back(l);
+            }
+        }
+        if (t.kind == app::BenchKind::BlackHoleFilmTilt && b.filmDone && b.grabNext == 0 && b.grabRest.w > 0) b.notes[std::size_t(sc)] = filmCompare(b.grabMoving, b.grabRest);
+        if (b.run->measuring()) b.paths[std::size_t(sc)] = scenePath(app, b, idx, sc);
+    }
+    static const bool slowLog = envHas("PL_BENCH_SLOW");                  // (development: the frames over 250 ms, with their scene)
+    if (slowLog && frameMs > 250 && sc < int(b.list.size())) std::printf("PLBENCH-SLOW %s %.0f ms %s at %.2f s\n", sceneText(b.list[std::size_t(sc)]).id.c_str(), frameMs, b.run->measuring() ? "counted" : "warm-up", b.run->sceneElapsedS());
+    b.run->frame(frameMs, cpuMs, !grabbed);
+    if (grabbed) b.grabNext = 0;
+    if (b.run->finished()) nextPhase(app, b);
 }
 
 void benchmarkWindow(AppState& app) {
@@ -570,7 +1304,6 @@ void benchmarkWindow(AppState& app) {
     const bool esc = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
     // The running box is a modal pop-up: while it is open ImGui ignores every other window (panels, header, tabs, settings). The picture is not ImGui,
     // so main.cpp also drops its wheel / drag / click / key handling (app::labInputAllowed). The dim behind a modal is made clear there, so the picture stays as it is.
-    // The pop-up is closed here also when the run ended some other way (cancelled from the frame code, finished).
     static const char* const kRunBox = "##benchrun";
     const bool running = b.stage == BenchState::Stage::Running;
     bool cancel = running && esc;
@@ -582,15 +1315,27 @@ void benchmarkWindow(AppState& app) {
             panelDecor(app::PanelKind::Floating);
             if (running) {
                 const app::BenchRun& r = *b.run;
-                const int shown = std::min(r.scene() + 1, r.sceneCount());
-                ImGui::Text("Scene %d of %d: %s", shown, r.sceneCount(), scenes()[b.list[std::min(r.scene(), r.sceneCount() - 1)]].info.name);
-                ImGui::Text("%s  %.1f s", r.measuring() ? "Counting" : "Warming up", r.sceneElapsedS());
+                if (b.phase == 0 && r.sceneCount() > 0) {
+                    const int shown = std::min(r.scene() + 1, r.sceneCount());
+                    const app::BenchSceneText& t = sceneText(b.list[std::size_t(std::min(r.scene(), r.sceneCount() - 1))]);
+                    ImGui::Text("Scene %d of %d: %s", shown, r.sceneCount(), t.id.c_str());
+                    ImGui::Text("%s  %.1f s", r.measuring() ? "Counting" : "Warming up", r.sceneElapsedS());
+                } else if (b.phase == 1 && b.wAt < int(b.waits.size())) {
+                    ImGui::Text("Wait %d of %d: %s", b.wAt + 1, int(b.waits.size()), waitDefs()[std::size_t(b.waits[std::size_t(b.wAt)])].id);
+                    ImGui::Text("Try %d of %d", b.wTry + 1, app::kBenchResponseRepeats);
+                } else if (b.phase == 2 && b.rAt < int(b.rests.size())) {
+                    ImGui::Text("At rest %d of %d: %s", b.rAt + 1, int(b.rests.size()), restDefs()[std::size_t(b.rests[std::size_t(b.rAt)])].id);
+                    ImGui::Text("%s", b.rStage == 2 ? "Counting" : "Waiting for the finished picture");
+                }
                 const double fps = app.stats.avgFrame() > 0 ? 1000.0 / app.stats.avgFrame() : 0;
                 ImGui::Text("Live: %.0f fps", fps);
-                ImGui::ProgressBar(float(r.doneS() / r.totalS()), ImVec2(24 * fs, 0));
+                {   const double total = r.totalS() + b.waits.size() * app::kBenchResponseRepeats * app::kBenchResponsePlanS + b.rests.size() * app::kBenchIdlePlanS;
+                    const double done = r.doneS() + (b.phase >= 1 ? (b.wAt * app::kBenchResponseRepeats + b.wTry) * app::kBenchResponsePlanS : 0) + (b.phase >= 2 ? b.rAt * app::kBenchIdlePlanS : 0);
+                    ImGui::ProgressBar(float(total > 0 ? std::min(1.0, done / total) : 1.0), ImVec2(24 * fs, 0)); }
                 ImGui::TextDisabled("Everything else is locked until the test ends.");
                 if (ImGui::Button("Cancel")) cancel = true;
             }
+            b.boxX = ImGui::GetWindowPos().x; b.boxY = ImGui::GetWindowPos().y; b.boxW = ImGui::GetWindowWidth(); b.boxH = ImGui::GetWindowHeight();
             if (cancel || !running) ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
@@ -598,8 +1343,7 @@ void benchmarkWindow(AppState& app) {
     if (cancel) { finish(app, b, true); return; }
     if (b.stage == BenchState::Stage::Closed) return;
     if (b.stage == BenchState::Stage::Ask) {
-        {   // (always: the height changes after the first frame, so the window stays centred and inside) 0.55.0: centred in the part below the top bar and never taller
-            // than it (the 13th scene's line made it reach over the top bar at 880 x 560)
+        {   // centred in the part below the top bar and never taller than it
             const float top = shellTopBarH(), room = vp->WorkSize.y - top - 16 * fs / 16;
             ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + top + (vp->WorkSize.y - top) * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
             ImGui::SetNextWindowSize(ImVec2(std::min(34 * fs, vp->WorkSize.x * 0.95f), 0), ImGuiCond_Always);
@@ -613,28 +1357,28 @@ void benchmarkWindow(AppState& app) {
             panelDecor(app::PanelKind::Floating);
             const std::vector<int> list = sceneList(b);
             const int count = int(list.size());
-            const int secs = int(count * (app::kBenchWarmupS + app::kBenchMeasureS));
-            ImGui::TextWrapped("This runs %d scenes one after the other, about %d seconds in all. Each one has %d seconds of warm-up that is not counted, then %d seconds that are counted.",
-                               count, secs, int(app::kBenchWarmupS), int(app::kBenchMeasureS));
+            const double planned = count * (app::kBenchWarmupS + app::kBenchMeasureS) + app::kBenchResponseActions * app::kBenchResponsePlanS + app::kBenchIdleEntries * app::kBenchIdlePlanS;
+            ImGui::TextWrapped("This runs %d scenes that are hard to draw, each moving as you would move it (%.1f s of warm-up that is not counted, then %.1f s counted), then times %d waits "
+                               "for a finished picture and leaves each lab alone for %.0f s. About %.0f minutes in all.",
+                               count, app::kBenchWarmupS, app::kBenchMeasureS, app::kBenchResponseActions, app::kBenchIdleS, std::ceil(planned / 60));
             ImGui::Spacing();
-            // 0.16 stage 2: everything between here and the buttons scrolls INSIDE the window, so the window is never taller than 92 % of the work area and Start / Cancel are always in view.
-            // The body's natural height is measured the frame before (0 on the first frame: it is then cut to the room that is left).
+            // everything between here and the buttons scrolls INSIDE the window, so Start / Cancel are always in view (the body's height is measured the frame before)
             static float bodyH = 0;
             const float buttonsH = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y + ImGui::GetStyle().WindowPadding.y;
             const float room = std::max(60.0f, std::min(vp->WorkSize.y * 0.92f, vp->Size.y - std::max(0.0f, shellTopBarH()) - 2 * 8.0f) - ImGui::GetCursorPosY() - buttonsH - ImGui::GetStyle().ItemSpacing.y);
             const float childH = bodyH > 0 ? std::min(bodyH, room) : room;
             ImGui::BeginChild("##benchBody", ImVec2(0, childH), ImGuiChildFlags_None);
-            for (int i = 0; i < count; i++) ImGui::BulletText("%s", scenes()[list[i]].info.name);
-            ImGui::Checkbox("Compare old CPU paths", &b.includeCompare);
-            if (ImGui::IsItemHovered()) ui::SetTooltip("Adds %d scenes (%d to %d): scenes of the list above run again with the work done by the processor, the way older versions did it, "
-                                                          "so the difference to the graphics card's way can be read. Off by default; it makes the test longer.", app::kBenchAllScenes - app::kBenchDefaultScenes, app::kBenchDefaultScenes + 1, app::kBenchAllScenes);
+            for (int i = 0; i < count; i++) ImGui::BulletText("%s  %s", sceneText(list[std::size_t(i)]).id.c_str(), sceneText(list[std::size_t(i)]).name.c_str());
+            ImGui::Checkbox("All scenes", &b.allScenes);
+            if (ImGui::IsItemHovered()) ui::SetTooltip("Adds %d scenes: the easy ones and the old processor paths (the work done by the processor the way older versions did it). "
+                                                          "Off by default; it makes the test longer.", app::kBenchAllScenes - app::kBenchHardScenes);
             ImGui::Spacing();
-            ImGui::TextWrapped("VSync is switched off during the test, and the picture is drawn at the size it has now. "
-                               "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the lab and the view are put back when it ends, and Esc stops it. "
+            ImGui::TextWrapped("VSync is switched off during the scenes (on for the waits and the rest), and the picture is drawn at the size it has now. "
+                               "Close other programs for the most useful number. Do not move or resize the window: that stops the test. Your settings, the labs, the pages and the panels are put back when it ends, and Esc stops it. "
                                "Before the first scene the graphics card's timer is checked with a known load (about a second).");
             bodyH = ImGui::GetCursorPosY();
             ImGui::EndChild();
-            const char* blocked = whyNot(app);                 // 0.50.3 (outside review): Start did nothing, silently, while e.g. a Journey ran: now greyed, with the reason
+            const char* blocked = whyNot(app);
             if (blocked) ImGui::BeginDisabled();
             const bool startClicked = ImGui::Button("Start");
             if (blocked) ImGui::EndDisabled();
@@ -651,36 +1395,27 @@ void benchmarkWindow(AppState& app) {
         if (!open) b.stage = BenchState::Stage::Closed;
     } else if (b.stage == BenchState::Stage::Done) {
         ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(std::min(46 * fs, vp->WorkSize.x * 0.97f), std::min(34 * fs, vp->WorkSize.y * 0.92f)), ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(ImVec2(std::min(52 * fs, vp->WorkSize.x * 0.97f), std::min(34 * fs, vp->WorkSize.y * 0.92f)), ImGuiCond_Appearing);
         bool open = true;
         pushFloatStyle();
         const bool resultShown = ImGui::Begin("Benchmark result###bench", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
         popFloatStyle();
         if (resultShown) {
             panelDecor(app::PanelKind::Floating);
-            ImGui::TextWrapped("%s, %s, OpenGL %s", b.env.gpu.c_str(), b.env.vendor.c_str(), b.env.glVersion.c_str());
-            ImGui::TextWrapped("Atom Lab superposition and jumps: %s", b.env.computePath.c_str());
-            ImGui::TextWrapped("Atom Lab 90 %% outline: %s", b.env.outlinePath.c_str());
-            ImGui::TextWrapped("Orbit Lab rocks: %s", b.env.rocksPath.c_str());
-            ImGui::TextWrapped("Window %d x %d, picture %d x %d pixels%s", b.env.windowW, b.env.windowH, b.env.pictureW, b.env.pictureH, b.env.fullscreen ? ", full screen" : "");
+            ImGui::TextWrapped("%s, %s, OpenGL %s; %s", b.env.gpu.c_str(), b.env.vendor.c_str(), b.env.glVersion.c_str(), b.env.cpu.empty() ? "processor not available" : b.env.cpu.c_str());
+            ImGui::TextWrapped("Window %d x %d, picture %d x %d pixels%s, screen %.0f Hz", b.env.windowW, b.env.windowH, b.env.pictureW, b.env.pictureH, b.env.fullscreen ? ", full screen" : "", b.env.refreshHz);
             ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, vec(look().w.line));      // the header row in the theme's colours (the default is dark on every theme)
-            const bool table = ImGui::BeginTable("##benchtable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp);
-            if (table) {
-                const char* heads[] = {"Scene", "Average", "fps", "1 % low", "Worst", "> 16.7 ms", "CPU", "GPU"};   // > 16.7 ms: how many frames were slower (0.16 stage 3)
-                for (const char* h : heads) ImGui::TableSetupColumn(h);
+            if (ImGui::BeginTable("##benchtable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {   // 0.56.1: the summary, slowest first
+                for (const char* h : {"Scene", "fps", "1 % low", "Pictures/s", "Reaches", "Limited by"}) ImGui::TableSetupColumn(h);
                 ImGui::TableHeadersRow();
-                for (const app::BenchScene& s : b.results) {
+                for (const app::BenchSummaryRow& r : app::benchSummary(b.results, b.env.refreshHz, b.env.gpuReliable)) {
                     ImGui::TableNextRow();
-                    ImGui::TableNextColumn(); ImGui::TextWrapped("%s", s.name.c_str());
-                    ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.frames.avgMs);
-                    ImGui::TableNextColumn(); ImGui::Text("%.1f", s.frames.avgFps);
-                    ImGui::TableNextColumn(); ImGui::Text("%.1f fps", s.frames.low1Fps);
-                    ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.frames.worstMs);
-                    ImGui::TableNextColumn(); ImGui::Text("%d", s.frames.slowFrames);
-                    ImGui::TableNextColumn(); ImGui::Text("%.2f ms", s.cpuAvgMs);
-                    ImGui::TableNextColumn(); if (s.gpuSamples <= 0) ImGui::TextDisabled("not available");
-                    else if (b.env.gpuReliable && s.gpuProblem.empty()) ImGui::Text("%.2f ms", s.gpuAvgMs);
-                    else ImGui::TextDisabled("not reliable");
+                    ImGui::TableNextColumn(); ImGui::TextWrapped("%s", r.id.c_str());
+                    ImGui::TableNextColumn(); ImGui::Text("%.1f", r.avgFps);
+                    ImGui::TableNextColumn(); ImGui::Text("%.1f", r.low1Fps);
+                    ImGui::TableNextColumn(); ImGui::Text("%.1f", r.picsPerS);
+                    ImGui::TableNextColumn(); ImGui::TextUnformatted(r.reaches > 0 ? "yes" : r.reaches == 0 ? "no" : "not known");
+                    ImGui::TableNextColumn(); ImGui::TextWrapped("%s", r.limitedBy.c_str());
                 }
                 ImGui::EndTable();
             }

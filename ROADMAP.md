@@ -23,7 +23,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Atoms in fields, what is left: hydrogen's Stark effect; the hyperfine regime of the Zeeman effect (Breit-Rabi, low fields); a synthetic spectrum with natural, Doppler and pressure broadening; a Boltzmann-plot temperature from line ratios; the cloud of one M sublevel in the field.
 - **source needed**: measured Landé g for Li, Na, Rb, Cs, Fr, He, Be, Mg, Ca, Sr, Cd, Ra (NIST ASD lists none for their levels; 0.54.0 shows the LS value only there).
 - More Data tables: <r>, <1/r>, <r²> and P(r), Q(r) of the app's DHF orbitals (**source needed**: Desclaux's tables to check them); higher alkali Rydberg levels for the quantum defects (the saved NIST lists end at Na 5s, 4p, 4d: a new ASD fetch); Q-values of typed reactions (AME2020).
-- **fix**: the Slice view with the cut dragged runs at 15 fps on the owner's PC (benchmark scene 10, 0.55.5: 65.8 ms of processor work a frame, the card 0.26 ms).
+- **fix**: the Slice view with the cut dragged runs at 15 fps on the owner's PC (atom.slice_drag, 0.55.5: 65.8 ms of processor work a frame, the card 0.26 ms).
 
 ## Molecule Lab
 - **source needed**: Bader et al. 1987 (JACS 109, 7968) for the Density surface's cut-off. **fix**: the Density cloud alone (Show: cloud) still clips the nuclei's cores white (0.52.1 keeps them in range only under the surface).
@@ -63,8 +63,10 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
 
 ## Whole app
-- The owner's benchmark scenes below his screen's rate (255 Hz) in 0.55.8: Slice with the cut dragged 15 fps; the nucleus at full zoom 108; one nucleon 127; the whole atom, Glow Ultra, 129.
-- Graphics quality presets, Low to Ultra, for older PCs; speed work only where the owner's benchmark shows a problem (0.50.3 review's list: the exposure-grid and Superposition read-backs each frame, the nucleus density grid while still, settings text, guides, cards and Pick a body rebuilt each frame, the molecule surface colours).
+- After the owner's 0.56.1 benchmark: move scenes far above his screen's rate to All scenes; fix the ones below it, slowest first; fix every response he would feel and every lab that is busy at rest.
+- **fix**, to check in the owner's 0.56.1 run: orbit.sky had a 4.8-5.7 s frame while turning (here, inside the software renderer's shader code); here the Black Hole Lab never settled while every core was busy (its workers run below normal priority).
+- The owner's benchmark scenes below his screen's rate (255 Hz) in 0.55.8: atom.slice_drag 15 fps; atom.nucleus_zoom 108; atom.nucleon 127; atom.uranium_true 129 (in All scenes since 0.56.1).
+- Graphics quality presets, Low to Ultra, for older PCs; speed work only where the owner's benchmark shows a problem (0.50.3 review's list, now measured by ui.settings_open, ui.guide_scroll, atom.nucleus_density and molecule.density: the exposure-grid and Superposition read-backs each frame, settings text, guides, cards and Pick a body rebuilt each frame, the molecule surface colours; 0.56.1: the nucleus density grid is made once while still).
 - Data panel: the user's typed data kept between runs; a fit to the user's own formula (typed like a calculator line); a setup as a file, not only the clipboard.
 - Data panel (0.51.1 review): leave out a point by tapping it; asymmetric errors (profile likelihood or bootstrap) for nonlinear fits; a Poisson-likelihood fit for counts and half-lives; AIC/BIC between models; a Voigt profile; correlated x-y errors (York's r); a teaching mode that hides the expected answers; the sources as BibTeX.
 - Data panel physics (0.51.1 review): hydrogen's lines against Dirac's levels (and the Lamb shift), so the Rydberg fit's leftovers are explained; Birge-Sponer from measured band origins (the ladder is now made from the constants it fits).

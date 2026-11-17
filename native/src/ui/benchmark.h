@@ -26,7 +26,7 @@ void benchmarkGpuEnd(AppState& app);
 // For automatic checks (PL_BENCH=ask opens the dialog, PL_BENCH=start starts at once; PL_BENCH_WARMUP / PL_BENCH_MEASURE shorten the times): call every frame.
 void benchmarkTestHook(AppState& app);
 
-// The scenes' names and settings in words (the list in the report and in the result).
-struct BenchSceneInfo { const char* name; const char* what; };
+// 0.56.1: the lab on screen has its finished picture (nothing is being made for it): the start-up time, the waits and the labs left alone use it.
+bool benchLabFinished(AppState& app, render::Renderer2D& renderer);
 
 }  // namespace ui

@@ -19,6 +19,17 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.56.1", "The benchmark tests only what is hard, and says plainly what is slow",
+     "The Benchmark now runs, by default, only scenes that are hard to draw, each moving as you would move it: Saturn and Earth close up (Earth on the 12 August "
+     "2026 eclipse, with the Moon's shadow), Real planet physics at the fastest time, the turning night sky, the Journey, every-electron clouds that fill the "
+     "picture, a jump with every electron, the nucleus in its Density look, the Molecule Lab's Density style and vibrations, the Black Hole Lab's Film look tilted "
+     "through the disc and its top spin at the closest distance, a long guide scrolled, the Data panel and Settings over the heaviest Orbit view. The easy scenes "
+     "and the old processor paths are under All scenes. Every scene has a short id that stays the same in every version. The report starts with one table, slowest "
+     "first: the frames a second, the 1 % low, the new pictures a second, whether it reaches your screen's rate, and whether the processor or the graphics card "
+     "holds it back. Then how long you wait for a finished picture (switching labs, a new element or density, another molecule, a new spin, Film and back, a far "
+     "date), and whether each lab is quiet when left alone. The head names the processor, the memory, the app's peak memory, the start-up time and the worst "
+     "frame. About four minutes. The Controls panel now says the true number of dots under Cloud density: with every electron it is 48,000 per electron at Ultra, "
+     "at most 240,000."},
     {"0.56.0", "The Black Hole Lab: the graphics card draws the spinning hole's sky and disc for every pixel",
      "Round the spinning hole the graphics card now works out each pixel's light path itself from the closed formulas (Gralla and Lupsasca 2020) in "
      "single precision: the bent sky and the disc are drawn anew in every frame while you turn, tilt or change the distance, with no table in between, so "
