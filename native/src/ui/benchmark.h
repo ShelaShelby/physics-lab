@@ -8,6 +8,9 @@
 #include "render/renderer2d.h"
 #include "ui/orbit_panel.h"
 
+struct SDL_Window;
+namespace render { class VkBackend; }
+
 namespace ui {
 
 // The Benchmark button and a note, for the Performance card (both labs). Disabled, with a tooltip that says why, while the Learn page
@@ -20,8 +23,11 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, i
 void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs);
 // Around the whole GL work of the frame (from the clear to just before the buffer swap, the picture, its soft layer and the panels included):
 // the GPU time (GL_TIME_ELAPSED and timestamps), only measured while the benchmark runs. The first frame of a run also checks the timer with a known load.
+// 0.63.0 (Vulkan step 5): on Vulkan around vk.render(): timestamp queries (render/vk_backend.h benchTimer), the card's batches included.
 void benchmarkGpuBegin(AppState& app);
 void benchmarkGpuEnd(AppState& app);
+// 0.63.0: the window, and the Vulkan backend when this start draws with Vulkan (null: OpenGL); set once at start
+void benchmarkUse(SDL_Window* window, render::VkBackend* vk);
 
 // For automatic checks (PL_BENCH=ask opens the dialog, PL_BENCH=start starts at once; PL_BENCH_WARMUP / PL_BENCH_MEASURE shorten the times): call every frame.
 void benchmarkTestHook(AppState& app);

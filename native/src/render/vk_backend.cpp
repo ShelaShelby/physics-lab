@@ -5,6 +5,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -117,6 +118,16 @@ struct VkBackend::Impl {
     VkCards* cards = nullptr;                  // 0.61.0: the card programs (initCards)
     bool float64 = false, computeQueue = false, sync2 = false;
     VkDevCtx ctx;
+    // 0.63.0: the benchmark's timer (benchTimer): kBenchSlots frames in flight, two timestamps each, then two for benchLoad
+    static constexpr int kBenchSlots = 8;
+    VkQueryPool benchPool = VK_NULL_HANDLE;
+    bool benchOn = false, benchNext = false, benchImage = false;
+    int benchSlot = -1;
+    double tsNs = 0, imageGpuMs = -1, imageWallMs = -1;
+    std::uint64_t tsMask = ~std::uint64_t(0), benchTicket = 0;
+    bool benchUsed[kBenchSlots] = {};
+    struct BenchFrame { int slot; std::uint64_t first, last; };
+    std::vector<BenchFrame> benchPending;
     int errors = 0, warnings = 0, failedCalls = 0, rebuilds = 0;
     std::string lastFailure;
 
@@ -518,6 +529,8 @@ void VkBackend::shutdown() {
     Impl& d = *d_;
     if (d.device) vkDeviceWaitIdle(d.device);
     if (d.cards) { delete d.cards; d.cards = nullptr; }   // 0.61.0 (the programs made from it are gone: Renderer2D::useVulkan(nullptr))
+    if (d.benchPool && d.device) { vkDestroyQueryPool(d.device, d.benchPool, nullptr); d.benchPool = VK_NULL_HANDLE; }   // 0.63.0
+    d.benchOn = false; d.benchPending.clear();
     if (d.d2) { delete d.d2; d.d2 = nullptr; }  // 0.60.0 (its destructor frees what it made)
     if (d.imguiOn) { ImGui_ImplVulkan_Shutdown(); d.imguiOn = false; }
     if (d.device) {
@@ -580,6 +593,12 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     if (!d.check(vkBeginCommandBuffer(fd.CommandBuffer, &bi), "vkBeginCommandBuffer")) { ok_ = false; return false; }
+    const int timed = d.benchOn && d.benchNext ? d.benchSlot : -1;       // 0.63.0: the benchmark's timer: the frame's start
+    d.benchNext = false;
+    if (timed >= 0) {
+        vkCmdResetQueryPool(fd.CommandBuffer, d.benchPool, static_cast<uint32_t>(2 * timed), 2);
+        vkCmdWriteTimestamp2(fd.CommandBuffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, static_cast<uint32_t>(2 * timed));
+    }
     bool pictured = false;
     if (pic && d.d2 && pw > 0 && ph > 0) {                                // 0.60.0: the lab's picture first, in passes of its own (render/vk_draw2d.cpp)
         d.d2->beginFrame(static_cast<int>(wd.FrameIndex), static_cast<int>(wd.ImageCount), fd.CommandBuffer);
@@ -612,6 +631,7 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     }
     ImGui_ImplVulkan_RenderDrawData(dd, fd.CommandBuffer);
     vkCmdEndRenderPass(fd.CommandBuffer);
+    if (timed >= 0) vkCmdWriteTimestamp2(fd.CommandBuffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, static_cast<uint32_t>(2 * timed + 1));   // (its end)
     if (!d.check(vkEndCommandBuffer(fd.CommandBuffer), "vkEndCommandBuffer")) { ok_ = false; return false; }
     const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo si{};
@@ -625,7 +645,89 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     si.pSignalSemaphores = &complete;
     if (!d.check(vkQueueSubmit(d.queue, 1, &si, fd.Fence), "vkQueueSubmit")) { ok_ = false; return false; }
     d.drewFrame = true;
+    if (d.benchOn) {                                                      // (the card batches submitted since the frame before belong to this frame)
+        const std::uint64_t last = d.cards ? d.cards->lastTicket() : 0;
+        if (timed >= 0) d.benchPending.push_back({timed, d.benchTicket + 1, last});
+        d.benchTicket = last;
+    }
     return true;
+}
+
+bool VkBackend::benchTimer(bool on) {
+    Impl& d = *d_;
+    if (!on) {
+        d.benchOn = false; d.benchNext = false; d.benchPending.clear();
+        for (bool& u : d.benchUsed) u = false;
+        if (d.cards) d.cards->setTiming(false);
+        return true;
+    }
+    if (!d.device) return false;
+    if (!d.benchPool) {
+        VkPhysicalDeviceProperties p{};
+        vkGetPhysicalDeviceProperties(d.phys, &p);
+        uint32_t nq = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(d.phys, &nq, nullptr);
+        std::vector<VkQueueFamilyProperties> qf(nq);
+        vkGetPhysicalDeviceQueueFamilyProperties(d.phys, &nq, qf.data());
+        const uint32_t bits = d.family < nq ? qf[d.family].timestampValidBits : 0;
+        if (bits == 0 || !(p.limits.timestampPeriod > 0)) return false;
+        d.tsNs = p.limits.timestampPeriod;
+        d.tsMask = bits >= 64 ? ~std::uint64_t(0) : (std::uint64_t(1) << bits) - 1;
+        VkQueryPoolCreateInfo qi{};
+        qi.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        qi.queryCount = 2 * Impl::kBenchSlots + 2;
+        if (!d.check(vkCreateQueryPool(d.device, &qi, nullptr, &d.benchPool), "vkCreateQueryPool (the benchmark's timer)")) { d.benchPool = VK_NULL_HANDLE; return false; }
+    }
+    if (d.cards && !d.cards->setTiming(true)) return false;
+    d.benchOn = true; d.benchNext = false; d.benchPending.clear();
+    for (bool& u : d.benchUsed) u = false;
+    d.benchTicket = d.cards ? d.cards->lastTicket() : 0;
+    return true;
+}
+
+bool VkBackend::benchMark() {
+    Impl& d = *d_;
+    if (!d.benchOn) return false;
+    if (d.benchNext) return true;
+    for (int s = 0; s < Impl::kBenchSlots; s++)
+        if (!d.benchUsed[s]) { d.benchUsed[s] = true; d.benchSlot = s; d.benchNext = true; return true; }
+    return false;
+}
+
+void VkBackend::benchCollect(std::vector<std::pair<double, double>>& out) {
+    Impl& d = *d_;
+    out.clear();
+    if (!d.benchOn) return;
+    while (!d.benchPending.empty()) {
+        const Impl::BenchFrame f = d.benchPending.front();
+        std::uint64_t r[4] = {0, 0, 0, 0};                                // (value, available) twice; never waits
+        const VkResult res = vkGetQueryPoolResults(d.device, d.benchPool, static_cast<uint32_t>(2 * f.slot), 2, sizeof r, r, 2 * sizeof(std::uint64_t),
+                                                   VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+        if (res == VK_NOT_READY || !r[1] || !r[3]) break;
+        double cardsMs = 0, c0 = -1, c1 = -1;
+        if (d.cards && !d.cards->batchTimes(f.first, f.last, cardsMs, c0, c1)) break;
+        const double a = static_cast<double>(r[0] & d.tsMask) * d.tsNs, b = static_cast<double>(r[2] & d.tsMask) * d.tsNs;
+        const double busy = (b > a ? (b - a) / 1e6 : 0) + cardsMs;
+        const double first = c0 >= 0 && c0 < a ? c0 : a, last = c1 > b ? c1 : b;
+        if (res == VK_SUCCESS) out.push_back({busy, last > first ? (last - first) / 1e6 : 0});
+        d.benchUsed[f.slot] = false;
+        d.benchPending.erase(d.benchPending.begin());
+    }
+}
+
+bool VkBackend::benchLoad(Renderer2D& pic, int w, int h, double& gpuMs, double& wallMs) {
+    Impl& d = *d_;
+    gpuMs = wallMs = -1;
+    if (!d.benchPool) return false;
+    const float clear[4] = {0, 0, 0, 1};
+    ImDrawData none;                                                       // (no panels: Dear ImGui draws nothing for a draw list of size 0)
+    std::vector<uint8_t> rgb;
+    d.benchImage = true; d.imageGpuMs = d.imageWallMs = -1;
+    const bool ok = renderToImage(&none, w, h, clear, rgb, &pic);
+    d.benchImage = false;
+    gpuMs = d.imageGpuMs; wallMs = d.imageWallMs;
+    return ok && gpuMs >= 0 && wallMs >= 0;
 }
 
 void VkBackend::present() {
@@ -680,7 +782,9 @@ template <class F> static bool runOnce(VkBackend::Impl& d, F record) {
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.commandBufferCount = 1;
         si.pCommandBuffers = &cmd;
+        const auto t0 = std::chrono::steady_clock::now();
         ok = d.check(vkQueueSubmit(d.queue, 1, &si, fence), "vkQueueSubmit (once)") && d.check(vkWaitForFences(d.device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences (once)");
+        if (d.benchImage) d.imageWallMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();   // 0.63.0 (benchLoad)
     }
     if (fence) vkDestroyFence(d.device, fence, nullptr);
     vkFreeCommandBuffers(d.device, d.oncePool, 1, &cmd);
@@ -855,7 +959,10 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
     const VkDeviceSize size = VkDeviceSize(w) * VkDeviceSize(h) * 4;
     if (ok) ok = makeHostBuffer(d, size, hb);
     bool pictured = false;
+    const uint32_t tq = 2 * Impl::kBenchSlots;                            // 0.63.0 (benchLoad): the picture's time on the card
+    const bool timeIt = d.benchImage && d.benchPool;
     if (ok) ok = runOnce(d, [&](VkCommandBuffer cmd) {
+        if (timeIt) { vkCmdResetQueryPool(cmd, d.benchPool, tq, 2); vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, tq); }
         if (pic && d.d2) {                                                // 0.60.0: the lab's picture (one sample, as OpenGL's offscreen picture)
             d.d2->beginFrame(static_cast<int>(d.wd.FrameIndex), std::max(1, static_cast<int>(d.wd.ImageCount)), cmd);
             pic->endVulkan(w, h, clear, true);
@@ -874,6 +981,7 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         if (pictured) d.d2->present(cmd, 0, 0, w, h);
         if (dd) ImGui_ImplVulkan_RenderDrawData(dd, cmd);
         vkCmdEndRenderPass(cmd);
+        if (timeIt) vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, tq + 1);
         barrier(cmd, image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
         VkBufferImageCopy c{};
@@ -882,6 +990,13 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         c.imageExtent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1};
         vkCmdCopyImageToBuffer(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, hb.buf, 1, &c);
     });
+    if (ok && timeIt) {
+        std::uint64_t r[4] = {0, 0, 0, 0};
+        if (vkGetQueryPoolResults(d.device, d.benchPool, tq, 2, sizeof r, r, 2 * sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) == VK_SUCCESS && r[1] && r[3]) {
+            const double a = static_cast<double>(r[0] & d.tsMask) * d.tsNs, b = static_cast<double>(r[2] & d.tsMask) * d.tsNs;
+            d.imageGpuMs = b > a ? (b - a) / 1e6 : 0;
+        }
+    }
     if (ok) {
         void* p = nullptr;
         ok = d.check(vkMapMemory(d.device, hb.memory, 0, size, 0, &p), "vkMapMemory (picture)");

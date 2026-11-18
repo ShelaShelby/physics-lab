@@ -277,7 +277,7 @@ const std::vector<SettingRow>& settingRows() {
         {"facts", "💡 Facts", "Did you know facts", -1},
         {"perf", "Performance", "Performance", -1},
         {"vsync", "VSync (wait for the screen)", "VSync (wait for the screen)", -1},
-        {"graphics", "Graphics: OpenGL / Vulkan (test)", "Graphics (OpenGL or Vulkan)", -1},   // 0.59.0
+        {"graphics", "Graphics: Vulkan / OpenGL (backup)", "Graphics (Vulkan or OpenGL)", -1},   // 0.59.0 (0.63.0: Vulkan the default)
         {"gpurocks", "GPU rocks (OpenGL 4.3)", "GPU rocks (OpenGL 4.3)", 0},
         {"gpuspin", "GPU superposition and jumps (OpenGL 4.3)", "GPU superposition and jumps (OpenGL 4.3)", 1},
         {"gpuoutline", "GPU outline (OpenGL 4.3)", "GPU outline (OpenGL 4.3)", 1},

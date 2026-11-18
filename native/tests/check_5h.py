@@ -97,7 +97,7 @@ def part_cards(binary, work):
         for vn, view in (("cloud3d", "view=Cloud 3D;orb=2p"), ("orbit", "view=Orbit")):
             st = zn + ";" + view
             old = old_run("5h", f"cd_old_{nm}_{vn}", {"PL_ATOM": "1", "PL_ATOM_SET": st, "PL_LOG_CARD": "1"}, frames=40)   # (saved from the last build with the old panel: tests/reference/old_ui_runs.json)
-            new = run_app(binary, work, f"cd_new_{nm}_{vn}", {"PL_ATOM": "1", "PL_NEWUI": "on", "PL_ATOM_SET": st + ";elec=Hydrogen-like", "PL_LOG_CARD": "1", "PL_SCRIPT": seq, "PL_LOG_SHELL": "1"}, frames=70)   # (0.46: the default became All; the recording is one electron)
+            new = run_app(binary, work, f"cd_new_{nm}_{vn}", {"PL_GRAPHICS": "opengl", "PL_ATOM": "1", "PL_NEWUI": "on", "PL_ATOM_SET": st + ";elec=Hydrogen-like", "PL_LOG_CARD": "1", "PL_SCRIPT": seq, "PL_LOG_SHELL": "1"}, frames=70)   # (0.46: the default became All; the recording is one electron)
             for t in TABS:
                 tag = f"{nm} {vn} {t}"
                 if t == "radial" and vn == "orbit":

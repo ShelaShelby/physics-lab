@@ -317,7 +317,10 @@ def part_sliders(binary, work):
                 pc = r.rects.get("panel.controls")                          # a slider scrolled out of the panel is clipped away: its rectangle says nothing about pixels
                 if f[2] < 8 or not kn or not pc or not (pc[0] <= kn[0] and kn[0] + kn[2] <= pc[0] + pc[2] and pc[1] <= kn[1] and kn[1] + kn[3] <= pc[1] + pc[3]):
                     continue
-                fp = b.px(int(f[0] + f[2] / 2), int(f[1] + f[3] / 2))
+                vis = min(f[0] + f[2], kn[0]) - f[0]                       # 0.63.0: the fill's part left of the thumb (a short fill's middle lay on the thumb's
+                if vis < 3:                                                 # anti-aliased edge, whose pixels differ between drivers)
+                    continue
+                fp = b.px(int(f[0] + vis / 2), int(f[1] + f[3] / 2))
                 kp = b.px(int(kn[0] + kn[2] / 2), int(kn[1] + kn[3] / 2))
                 tested += 1
                 # 0.38 (the owner's new look; reference changed on purpose): the filled part is the theme's accent fill (5q made it grey); the thumb stays a neutral light / card colour

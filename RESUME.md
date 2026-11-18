@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.62.0 (18 Nov 2026): Vulkan, step 4 of 5 (native/PLAN_VULKAN.md): the Black Hole Lab's programs on Vulkan (render/vk_blackhole.*: lens, table pass, sky per pixel, exposure, low resolution, probe, glow, glare, light paths), Vulkan 1.3's dynamic rendering and synchronization2, big pipelines on a worker with a pipeline cache, guards "gpuvklightpaths=", "gpuvksky=", "gpuvklens="; Vulkan 1.3 required, 1.4 used where present. OpenGL unchanged.
-- Last full UI run: 0.62.0 (the commit "native 0.62.0"), 32 of 34 (gl_phase_colours run alone: 647 checks, 0 failed); ui_popups (check_6b benchwaits) and ui_molecule (check_molecule card) left, as in 0.61.0 (ROADMAP).
-- Next: the owner tries Vulkan (test) on his PC with the Black Hole Lab (REPORT.md); then Vulkan step 5 (ROADMAP "Whole app"); the owner's 0.58.0 benchmark and the Hard-list scenes below his 255 Hz, slowest first; then the moving gas (PLAN_MOVINGGAS.md). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.63.0 (18 Nov 2026): Vulkan, step 5 of 5 (native/PLAN_VULKAN.md): Vulkan the default, OpenGL the backup; the benchmark on Vulkan (timestamp queries, report names the API and the guards' states); new Hard scene atom.slice_super_drag; one guarded step open at a time in the whole process (the guard's wrong-program fix); steps 1-3 on dynamic rendering and synchronization2. OpenGL's removal waits for the owner.
+- Last full UI run: 0.63.0 (the commit "native 0.63.0"), on Vulkan; see native/REPORT.md for the checks left failing (check_6b benchscenes film_tilt, benchwaits, all_light).
+- Next: the owner's Vulkan benchmark (Hard) on his PC; then all the speed work on Vulkan, slowest scene first (DECISIONS 18 Nov 2026); OpenGL removed when the owner decides. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

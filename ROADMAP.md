@@ -11,6 +11,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Order inside a section = priority (top first). The owner may reorder; a session does not.
 
 ## Atom Lab
+- The Slice of a superposition, many electrons or a Dirac cloud on the card (its card program takes one plain state only; atom.slice_super_drag, 0.63.0, about 4 fps here: the processor's work).
 - **fix**: the jump's "first full use" fence is made again every frame until seen signalled (AtomCardPaths::jumpGroupsBuffer); on a card a frame behind it may never be seen and the step times out (0.57.1 found it in the Molecule Lab's copy: one fence, kept until signalled).
 - **source needed**: charge profiles for He-4, Li, Be, B, N-14 (de Vries 1987; drawn as Gaussians, the app says so); nucleus views: Ra pear shapes (Butler et al. PRL 124, 042503 (2020)), alpha clusters in Be-8, C-12, O-16 (save the papers first), the deuteron's two nucleon centres (Forest et al. 1996).
 - **fix**: the Slice view keeps the outer electron's true share of the dots, so its shape is faint (Na 3d): a denser option there, said in the readout (Cloud and Cloud 3D have the choice since 0.54.1).
@@ -69,12 +70,12 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
 
 ## Whole app
-- Vulkan step 5: the benchmark, picture tests and UI suite on Vulkan; Vulkan the default; OpenGL removed once the owner's PC shows every scene works; steps 1-3's code moved to Vulkan 1.3's dynamic rendering and synchronization2 (as render/vk_blackhole.cpp, 0.62.0).
 - Speed (both APIs): the Glow and Density clouds' exposure grid is read back in the frame that draws it (OpenGL glReadPixels, Vulkan a waited batch, 0.61.0): a grid one frame late would remove that wait.
-- Vulkan: the extra copy of the picture into the window (present.frag) stays while the soft layer, the cloud layer and the grey pass sample OpenGL's rows (0.61.0 REPORT); drop it when step 5 renders in Vulkan's row order.
+- Vulkan: the extra copy of the picture into the window (present.frag) stays: drawing in Vulkan's rows needs shaders.h's gl_FragCoord readers (the lens, the sky, the mask, the grids, the grey pass) told the row order, text OpenGL runs too (0.63.0 REPORT); with OpenGL's removal.
 - After the owner's 0.56.1 benchmark: move scenes far above his screen's rate to All scenes; fix the ones below it, slowest first; fix every response he would feel and every lab that is busy at rest.
 - **fix**: check_molecule card "the benchmark's report names the card for both scenes" fails on the session box (0.57.2's build too, 0.58.0): the first scene's path still says "once its start-up check has passed".
 - **fix**: check_6b benchscenes: a Black Hole scene (blackhole.extreme or all_light) sometimes leaves no picture to compare ("-1.0000 of the pixels") on this box; 0.58.0's build the same.
+- **fix**: check_6b benchscenes: blackhole.film_tilt has no new picture in its counted time on a fresh settings folder (0.63.0, both APIs): the guards' one-step-at-a-time order holds the sky back behind the light paths' first fill on this box.
 - **fix**: check_6b benchwaits' response.atom_density reaches its 15 s cap on this box's software renderer with one thread (ui_popups fails; 0.56.4 the same): a cap or a cloud filling that does not depend on the frame time.
 - **fix**, to check in the owner's 0.56.1 run: orbit.sky had a 4.8-5.7 s frame while turning (here, inside the software renderer's shader code).
 - The owner's benchmark scenes below his screen's rate (255 Hz), slowest first (0.56.1 run; owner decision 17 Nov 2026, evening: after the Black Hole Lab's look): atom.slice_drag 12.5 fps and atom.jump_all 20.5 (0.57.0 moved their heavy loops to the card: his next run decides); molecule.vib_density 68.9 and molecule.density 133 (0.57.1 moved the Density cloud to the card and took out the waste, estimate under 3.9 ms of processor work: his next run decides); atom.nucleus_zoom 108; atom.nucleon 127; atom.all_enlarged 199; atom.uranium_true 129 (in All scenes).
@@ -91,6 +92,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - A molecule's infrared absorption beside measured spectra (**source needed**: spectra files).
 
 ## Waiting for the owner
+- **owner decides**: OpenGL removed (Vulkan step 5's last part), once the owner's Vulkan benchmark shows every scene works; Vulkan 1.3 on Windows needs NVIDIA GTX 900+, Intel Skylake+, AMD Vega+, so e.g. an RX 580 on Windows would lose the app.
 - the disc's patches from MHD simulations (PLAN_MOVINGGAS): owner decides; he wants no visuals that are not measured or calculated.
 - **Paused by the owner (14 Nov 2026, after 0.51.3)**: element jumps with every electron shown. Left: Yb, Cu, Ag, Au, the p block, transition metals, lanthanides, actinides (native/PLAN_JUMPS.md), and the cloud size budget (16 atoms take about 16.5 MB).
 - "Far labels" in the Orbit Lab: the owner describes what is wrong. Photon jumps from a complex state or a superposition: the owner picks an option of 0.11.

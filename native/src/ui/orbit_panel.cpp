@@ -81,23 +81,25 @@ void performanceCard(AppState& app) {
     wrappedCheckbox("VSync (wait for the screen)", &app.vsync);
     noteItem("vsync");                                    // (0.59.0: the checks switch it: Vulkan makes its swapchain again)
     if (ImGui::IsItemHovered()) ui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom. For this run only: the app always starts with VSync on.");
-    {   // 0.59.0: Graphics: OpenGL (the default) or Vulkan (the test of step 1 of 5, PLAN_VULKAN.md); used from the next start. The line says what this start
-        // draws with and, when Vulkan was chosen but OpenGL is in use, why (the Vulkan guard: a step that failed or stopped the app), with Try again
+    {   // 0.59.0: Graphics, used from the next start (0.63.0, Vulkan step 5 of 5, PLAN_VULKAN.md: Vulkan the default, OpenGL the backup). The line says what
+        // this start draws with and, when Vulkan was chosen but OpenGL is in use, why (the Vulkan guard: a step that failed or stopped the app), with Try again
         settingMark("graphics");
         ImGui::TextUnformatted("Graphics:");
         ImGui::SameLine();
-        if (ImGui::RadioButton("OpenGL##graphics", app.prefs.graphics != "vulkan")) app.prefs.graphics = "opengl";
-        noteItem("graphics.opengl");
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Vulkan (test)##graphics", app.prefs.graphics == "vulkan")) app.prefs.graphics = "vulkan";
+        if (ImGui::RadioButton("Vulkan##graphics", app.prefs.graphics != "opengl")) app.prefs.graphics = "vulkan";
         noteItem("graphics.vulkan");
-        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan, step 4 of 5 (needs Vulkan 1.3): the menus, panels, pages and guides and all four labs' pictures are drawn by Vulkan,\n"
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan (needs Vulkan 1.3; the default): the menus, panels, pages and guides and all four labs' pictures are drawn by Vulkan,\n"
                                                       "with the graphics card's own programs (the belts' rocks, the electron clouds, the outlines, the Density cloud, the black hole's sky, light paths, glow and glare).\n"
                                                       "Each step of Vulkan's start is guarded: if one fails or stops the app, the next start uses OpenGL and this page says why.");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("OpenGL (backup)##graphics", app.prefs.graphics == "opengl")) app.prefs.graphics = "opengl";
+        noteItem("graphics.opengl");
+        if (ImGui::IsItemHovered()) ui::SetTooltip("OpenGL, the backup: for an older graphics card without Vulkan 1.3, or when a driver problem stops Vulkan.\n"
+                                                      "The app also starts on OpenGL by itself when this card has no Vulkan 1.3 or a step of Vulkan's start failed.");
         const app::GpuGuard& V = app::gpuVulkanGuard();
         const bool vk = app.graphicsInUse == "vulkan";
         std::string gline = "Takes effect at the next start. In use now: ";
-        if (vk) {                                         // 0.61.0 (step 3): the card's own programs too; only the Black Hole Lab is left (step 4)
+        if (vk) {                                         // 0.61.0 (step 3): the card's own programs too (0.62.0: the Black Hole Lab's too)
             gline += "Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). All four labs are drawn, with the card's own programs.";   // 0.62.0 (step 4)
             if (!app.rocksOk && !app.rocksWhy.empty()) gline += " The belts' rocks: the processor, because " + app.rocksWhy + ".";
             for (const auto& [name, g] : app::vulkanCardGuards())   // a card program its guard switched off on Vulkan (the Slice's, the jump's and the

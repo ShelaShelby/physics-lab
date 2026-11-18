@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 #ifdef _WIN32
 #include <direct.h>
@@ -621,7 +622,7 @@ static void testBench() {
     BenchScene s2; s2.name = "2. Second"; s2.what = "other settings"; s2.frames = benchStats({20, 20}); s2.cpuAvgMs = 1; s2.gpuAvgMs = -1;
     const std::string t = benchResultText(env, {s1, s2});
     checkTrue("result text: the frames slower than 16.7 ms, for every scene (0.16 stage 3)", t.find("  Worst frame: 20.00 ms\n  Frames slower than 16.7 ms: 2 of 2\n") != std::string::npos);
-    const char* want[] = {"Physics Lab benchmark", "Version: 0.9", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "OpenGL: 3.3.0 Test", "Driver / vendor: Test Vendor",
+    const char* want[] = {"Physics Lab benchmark", "Version: 0.9", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "Graphics: OpenGL 3.3.0 Test", "Driver / vendor: Test Vendor",
                           "Window: 1400 x 860 pixels, full screen", "Picture area: 1040 x 713 pixels", "Display refresh rate: 144 Hz", "Text size: xl, theme: paper",
                           "VSync: off during the scenes, on during the waits and while the labs are left alone. Each scene: 1.3 s warm-up (not counted), then 5.2 s counted.", "GPU timer (GL_TIME_ELAPSED): available", "GPU timer check: reliable, self-check with a known load: timer 3.10 ms, clock 3.20 ms"};
     std::size_t at = 0;
@@ -755,6 +756,11 @@ static void testLiveAndGpu() {
     BenchScene bad = s; bad.gpuProblem = "only 1 of 4 frames gave a result";
     checkTrue("text: a reliable timer but a bad scene still says not reliable", benchResultText(okEnv, {bad}).find("not reliable (only 1 of 4 frames gave a result)") != std::string::npos);
     checkTrue("text: it says what the GPU time covers", t.find("up to just before the buffer swap") != std::string::npos);
+    {   BenchEnv v = env; v.api = "Vulkan"; v.glVersion = "1.4.318, FIFO";   // 0.63.0 (Vulkan step 5): the report says which API ran and what its timer is
+        const std::string tv = benchResultText(v, {s});
+        checkTrue("text (Vulkan): the Graphics line names Vulkan and its version; the timer is Vulkan's timestamps; what it covers", tv.find("Graphics: Vulkan 1.4.318, FIFO\n") != std::string::npos &&
+                  tv.find("GPU timer (Vulkan timestamp queries): ") != std::string::npos && tv.find("the card programs' batches submitted for it, summed") != std::string::npos &&
+                  tv.find("GL_TIME_ELAPSED") == std::string::npos && t.find("Graphics: OpenGL ") != std::string::npos); }
 
     // the stress belts: scale 1 is the app's normal belts; scale 8 has 8 times the rocks of the same kinds, always the same
     const int64_t day = 1790000000000LL;
@@ -1064,13 +1070,13 @@ static void testBenchBlackHole() {
 // ---- 0.56.1: the two lists, the stable ids, the summary table's rules, the waits and the rest (made-up results), the run's length, the texts ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark lists (0.58.0, on purpose: blackhole.all_light): 25 Hard scenes first, 41 in All", app::kBenchHardScenes == 25 && app::kBenchAllScenes == 41 && int(v.size()) == 41);
+    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag): 26 Hard scenes first, 42 in All", app::kBenchHardScenes == 26 && app::kBenchAllScenes == 42 && int(v.size()) == 42);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[41] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
-        "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
+    static const char* const ids[42] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
+        "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.slice_super_drag", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
         "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light",
         "ui.guide_scroll", "ui.data_plot", "ui.settings_open",
         "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first", "atom.chart_chain", "atom.uranium_true",
@@ -1108,7 +1114,7 @@ static void testBenchSceneNumbers() {
     checkTrue("benchmark texts: a name of at most 90 characters and two or three lines of what it tests (40 to 420 characters)", shortText);
     checkTrue("benchmark texts: no history (stage, up to, from version) and no scene numbers: the ids name the scenes", noHistory);
     checkTrue("benchmark texts: the new scenes say their zoom, distance or field of view", v[1].what.find("zoom 4.1") != std::string::npos && v[2].what.find("zoom 5.5") != std::string::npos &&
-              v[9].what.find("zoom 0.5") != std::string::npos && v[10].what.find("zoom 2.5") != std::string::npos && v[20].what.find("2.2 GM/c") != std::string::npos && v[20].what.find("360") != std::string::npos);
+              v[10].what.find("zoom 0.5") != std::string::npos && v[11].what.find("zoom 2.5") != std::string::npos && v[21].what.find("2.2 GM/c") != std::string::npos && v[21].what.find("360") != std::string::npos);
     // the run's length: about four minutes (rule 8 of the job; a static_assert holds it too)
     checkTrue("benchmark run: planned at about four minutes (" + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 255);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
@@ -1251,7 +1257,7 @@ static void testBenchGpuChart() {
     // 0.13 stage 4 part B: the GPU chart cache switch and its two twin scenes (which 28, 29 = benchmark scenes 33, 34, after the Orbit Lab twins 31, 32)
     using atom::kBenchChartCpuFirst; using atom::kBenchAtomScenes;
     atom::AtomLab fresh; checkTrue("GPU chart cache: a new lab has the switch On (the default)", fresh.gpuChart);
-    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31, 0.46: -> 33 with the two whole-atom Glow scenes; 0.56.1: -> 39 with the six every-electron and nucleus-density scenes)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 39 && atom::kBenchSceneCount == 28);
+    checkTrue("chart twins: which 28 and 29 come after the run of scenes numbered which + 3; 0.16 stage 3 adds which 30 after them (changed on purpose: kBenchAtomScenes 30 -> 31, 0.46: -> 33 with the two whole-atom Glow scenes; 0.56.1: -> 39 with the six every-electron and nucleus-density scenes; 0.63.0: -> 40 with the superposition's Slice)", kBenchChartCpuFirst == 28 && atom::kBenchFullZoomScene == 30 && kBenchAtomScenes == 40 && atom::kBenchSceneCount == 28);
     {   // 0.16 stage 3: the nucleus at full zoom with the camera turning (the owner's slow case), the last scene of the list
         atom::AtomLab L; L.p.qstyle = "Simple"; L.gpuChart = false;
         atom::benchSetup(L, atom::kBenchFullZoomScene, 1040, 713);
@@ -2081,15 +2087,49 @@ static void testGpuGuard() {
         checkTrue("guard files: Try again after a failed step: allowed, nothing kept", f.allowed() && f.saved().empty() && f.offText().empty());
     }
     std::remove(mk.c_str()); std::remove(lg.c_str());
+    // 0.63.0: at most one guarded step open at a time in the whole process (0.62.0 on the owner's PC: the light paths' pipeline was made on a worker while
+    // the outline's marker was still on disk; the driver's crash left both markers and the next start switched both off)
+    {   const std::string mA = dir + "gpu-ta-step.txt", mB = dir + "gpu-tb-step.txt";
+        std::remove(mA.c_str()); std::remove(mB.c_str());
+        app::GpuGuard a(mA.substr(dir.size()).c_str(), "gpu-turn-log.txt", true, "[a] ", "Guard A"), b(mB.substr(dir.size()).c_str(), "gpu-turn-log.txt", false, "[b] ", "Guard B");
+        a.start(dir, "vulkan a 1", d, "", {});
+        b.start(dir, "vulkan b 1", d, "", {});
+        a.begin("a's small run");
+        std::thread w([&b] { b.begin("b's pipeline"); });             // a worker: waits for its turn
+        for (int i = 0; i < 50 && app::gpuGuardTurn().find("Guard B") == std::string::npos; i++) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        checkTrue("guard turn: a second guard's step begun on a worker while the first's is open writes no marker (it waits)", exists(mA) && !exists(mB));
+        a.end("a's small run", "done");
+        w.join();
+        checkTrue("guard turn: once the first step ends, its marker is gone and the waiting step begins (its marker written)", !exists(mA) && exists(mB));
+        app::gpuGuardFrameThread();                                     // this thread is now the frame's: it never waits
+        checkTrue("guard turn: the frame asks for the turn while another guard's step is open: no (a later frame), no marker", !a.hold() && !exists(mA));
+        b.end("b's pipeline", "made");
+        checkTrue("guard turn: then yes; a run of steps keeps the turn between its steps", a.hold() && app::gpuGuardTurn().find("Guard A") != std::string::npos);
+        a.begin("a's check"); a.end("a's check", "passed");
+        checkTrue("guard turn: held: still A's after a step ended (no marker: no step open)", !b.hold() && app::gpuGuardTurn().find("Guard A") != std::string::npos && !exists(mA));
+        a.rest();
+        checkTrue("guard turn: rest gives the turn back", b.hold());
+        b.finished(true);
+        checkTrue("guard turn: a guard that passed (ok) is not held back and writes no marker", app::gpuGuardTurn().empty() && a.hold() && b.hold());
+        a.rest();
+        const std::string tl = readAll(dir + "gpu-turn-log.txt");
+        checkTrue("guard turn: the log says that a step waited, naming the other", tl.find("the step 'b's pipeline' waits for its turn: Guard A (its step 'a's small run') is open") != std::string::npos &&
+                  tl.find("the step 'b's pipeline' has its turn") != std::string::npos);
+        std::remove(mA.c_str()); std::remove(mB.c_str()); std::remove((dir + "gpu-turn-log.txt").c_str()); }
     app::Prefs p; p.gpuPaths = "off | 0.55.7 | x / y | compile";
     checkStr("guard: the settings file's line goes through the settings file unchanged", app::loadPrefs(app::savePrefs(p)).gpuPaths, p.gpuPaths);
     checkTrue("guard: no line when nothing is kept", app::savePrefs(app::Prefs{}).find("gpupaths") == std::string::npos);
     {   app::Prefs q; q.gpuVulkan = "fail | vulkan 0.59.0 | any | device: x"; q.graphics = "vulkan";   // 0.59.0: Graphics (Settings, Performance) and the Vulkan guard's line
         const app::Prefs r = app::loadPrefs(app::savePrefs(q));
         checkTrue("graphics: the choice and the Vulkan guard's line go through the settings file", r.graphics == "vulkan" && r.gpuVulkan == q.gpuVulkan);
-        checkTrue("graphics: OpenGL is the default and is not written (older files stay byte for byte)", app::Prefs{}.graphics == "opengl" && app::savePrefs(app::Prefs{}).find("graphics") == std::string::npos &&
+        // 0.63.0 (Vulkan step 5): Vulkan the default, not written; OpenGL written when chosen; a file without the line starts on Vulkan, one with it keeps it
+        checkTrue("graphics: Vulkan is the default and is not written", app::Prefs{}.graphics == "vulkan" && app::savePrefs(app::Prefs{}).find("graphics") == std::string::npos &&
                   app::savePrefs(app::Prefs{}).find("gpuvulkan") == std::string::npos);
-        checkTrue("graphics: an unknown value is ignored", app::loadPrefs("graphics=directx\n").graphics == "opengl"); }
+        app::Prefs o; o.graphics = "opengl";
+        checkTrue("graphics: OpenGL (the backup) is written when chosen and read back", app::savePrefs(o).find("graphics=opengl\n") != std::string::npos && app::loadPrefs(app::savePrefs(o)).graphics == "opengl");
+        checkTrue("graphics: a file without the line starts on Vulkan; graphics=vulkan and graphics=opengl are kept", app::loadPrefs("units=metric\n").graphics == "vulkan" &&
+                  app::loadPrefs("graphics=vulkan\n").graphics == "vulkan" && app::loadPrefs("graphics=opengl\n").graphics == "opengl");
+        checkTrue("graphics: an unknown value is ignored", app::loadPrefs("graphics=directx\n").graphics == "vulkan"); }
 }
 
 int main() {

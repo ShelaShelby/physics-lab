@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -105,14 +106,28 @@ public:
     // ---- the guarded first use of a program (the step "... first full use" ends when the batch with its first real work has finished) ----
     struct FirstUse { app::GpuGuard* guard = nullptr; std::string step; std::uint64_t ticket = 0; double at = 0; int state = 0; };   // state 0 waiting, 1 begun, 2 done, -1 failed
     void firstUse(FirstUse& f);                              // called where the program's real work is recorded
+    bool firstUseTurn(FirstUse& f);                          // 0.63.0: before it is recorded: false = another guard's step is open (the use moves to a later frame)
     bool pollFirstUse(FirstUse& f, double limitS);           // each frame: false when the step failed or timed out (the program goes off)
 
+    // ---- 0.63.0: the benchmark's timer: each batch's time on the card (a timestamp at its start and at its end), while on ----
+    bool setTiming(bool on);                                 // false: this queue has no timestamps (nothing is timed)
+    std::uint64_t lastTicket() const { return nextTicket_ - 1; }   // the last batch submitted
+    // the batches first..last (tickets) once all have finished: their times summed (ms), the first start and the last end (the card's ticks, in ns);
+    // false while one is still on the card. Untimed batches count 0.
+    bool batchTimes(std::uint64_t first, std::uint64_t last, double& busyMs, double& t0Ns, double& t1Ns);
+
 private:
-    struct Slot { VkCommandBuffer cmd = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE; std::uint64_t ticket = 0; bool submitted = false;
+    struct Slot { VkCommandBuffer cmd = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE; std::uint64_t ticket = 0; bool submitted = false, timed = false;
                   std::vector<VkDescriptorPool> pools; std::size_t pool = 0; Buf ubo; VkDeviceSize uboUsed = 0; Buf stage; VkDeviceSize stageUsed = 0;
                   std::vector<Buf> spare; };
     struct Grid { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; VkFramebuffer fb = VK_NULL_HANDLE; Buf host; int w = 0, h = 0; };
     bool openSlot();
+    void readTimes();
+    VkQueryPool tq_ = VK_NULL_HANDLE;
+    bool timing_ = false;
+    double tsNs_ = 0;
+    std::uint64_t tsMask_ = ~std::uint64_t(0);
+    std::map<std::uint64_t, std::pair<std::uint64_t, std::uint64_t>> times_;   // ticket -> the batch's start and end ticks (read once it has finished)
     void freeBuffer(Buf& b);
     bool gridTarget(Grid& g, int w, int h);
     void freeGrid(Grid& g);

@@ -219,6 +219,7 @@ const Outline* outlineReady(int orb, bool useGpu) {
             const double half = 1.15 * kExt[o.n], h = 2 * half / kOutlineGrid, dV = h * h * h;
             const int job = g_gpu->beginGrid(outlineDensityOf(orb), kOutlineGrid, float(half), float(dV / orbitalNorm(orb)), float(kOutlineProb));
             if (job > 0) { pend[orb] = {g_gpu, job}; return nullptr; }
+            if (g_gpu->waiting()) return nullptr;                 // 0.63.0: its guard waits for its turn: asked again next frame
         } else {                                                 // asked before: has the GPU finished? (never waits)
             std::vector<float> grid; float level = 0;
             const render::JobState st = g_gpu->pollGrid(pi->second.job, grid, level);
@@ -261,7 +262,7 @@ void SliceContour::update(const Outline& O, int orb, bool hz, double off0, bool 
     }
     if (!cpuNow && !job_ && stale()) {
         job_ = oc->beginPlane(outlineDensityOf(orb), 200, float(O.half), hz, float(off0));
-        if (job_) { jobOrb_ = orb; jobHz_ = hz; jobOff_ = off0; } else cpuNow = true;
+        if (job_) { jobOrb_ = orb; jobHz_ = hz; jobOff_ = off0; } else if (!oc->waiting()) cpuNow = true;   // (0.63.0: a guard's wait: next frame)
     }
     if (cpuNow && stale()) { segs_ = outlineSlice(orb, hz, off0); orb_ = orb; hz_ = hz; off_ = off0; made_++; }
 }

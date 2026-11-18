@@ -37,6 +37,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "atom.slice_drag", BenchKind::Atom, 14, "Atom Lab, the Slice view with the cut dragged",
             "uranium-238, Slice view, 4f, Classic, 12,000 dots, 90 % outline On: the cut moves 0.01 every frame from -0.90 to +0.90 and back, so the cut's dots and the "
             "outline's contour are made again every frame (the contour on the graphics card where it has OpenGL 4.3: new pictures are the contours that came back).");
+        add(true, "atom.slice_super_drag", BenchKind::Atom, atom::kBenchSliceSuper, "Atom Lab, the Slice of a superposition with the cut dragged",
+            "mendelevium-258 (one electron), Slice view, the superposition 2p + 5f (50 %), Relativity (Dirac levels) On, phase colours Wheel, Classic, Ultra: the cut moves "
+            "0.01 every frame from -0.90 to +0.90 and back, as atom.slice_drag. The owner's slowest view. The Slice's card program takes one plain state only, so "
+            "a superposition's dots are the processor's work on both APIs.");
         add(true, "atom.all_enlarged", BenchKind::Atom, atom::kBenchAllEnlarged, "Atom Lab, every electron, Shells enlarged, Glow, Ultra, the camera turning",
             "The heaviest atom with every electron (oganesson-294, 118 electrons; its decay clock held), Cloud 3D, Whole atom, Radius Shells enlarged, Glow, Cloud density "
             "Ultra (240,000 dots: 48,000 per electron, at most 240,000), zoom 0.5 (log10; the cloud fills the picture), the camera turning 0.8 rad a second.");

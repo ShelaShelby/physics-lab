@@ -26,6 +26,7 @@ class IOutlineCompute {
 public:
     virtual ~IOutlineCompute() {}
     virtual bool ok() const = 0;                     // false: no OpenGL 4.3 (the CPU path is used)
+    virtual bool waiting() const { return false; }   // 0.63.0: the last begin was 0 only because its guard waits for its turn (asked again next frame, not the CPU)
     // The density on an N x N x N grid over [-half, half]^3 (cell centres at -half + (i + 1/2) h, h = 2 half / N, index (k N + j) N + i for x = i, y = j, z = k), and the level c of the densest
     // cells that hold `target` of the probability: the largest cell value c such that the sum of (value * scale) over the cells with value >= c is >= target (scale = dV / norm).
     // Returns a job number (> 0, never reused), or 0 if it could not be started.

@@ -88,6 +88,7 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   Replaces the order of 17 Nov 2026 (speed before new features) for now; the 255 Hz target stays (17 Nov 2026, evening).
 - 18 Nov 2026: the app moves to Vulkan in five steps (native/PLAN_VULKAN.md); OpenGL is the backup until every part works on Vulkan on the owner's PC, then removed.
 - Vulkan needs version 1.3 and uses 1.4 where the card has it (owner decision 18 Nov 2026).
+- Order: finish Vulkan fully, then all the speed work on Vulkan, slowest scene first; the outside review, the Black Hole Lab's look and new features are talked about after that (owner decision 18 Nov 2026).
 
 ## Look and interface
 - The 0.38 look (6 Nov 2026): sharp corners, flat surfaces with a 1 px edge, a chosen option as a soft accent tint, the labs as tabs in the top bar; in every theme.

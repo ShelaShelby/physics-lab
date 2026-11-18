@@ -1,39 +1,45 @@
-# 0.62.0: Vulkan, step 4 of 5: the Black Hole Lab's card programs on Vulkan; Vulkan 1.3 required, 1.4 used where present (based on 0.61.0; box: 4 cores, Mesa 25.2.8, lavapipe / llvmpipe)
-## Part 0: Vulkan 1.3 required (owner decision 18 Nov 2026)
-- The instance asks for the loader's newest version up to 1.4 (here 1.4); a card below 1.3 is not used: "this graphics card offers Vulkan X.Y; Physics Lab needs 1.3", the app on
-  OpenGL (PL_VK_PRETEND_API=1.2: checked). The device step logs the card's version and the one asked for; dynamic rendering and synchronization2 are queried and enabled.
-- Oldest families with a Vulkan 1.3 conformance submission (Khronos, "Conformant Products: Vulkan", read 18 Nov 2026; saved in the sources repo, data/vulkan/):
-  NVIDIA: first Maxwell (GTX 745/750/750 Ti, GTX 9xx), Windows driver 510.57 and Linux 510.24 (entries 614-617, 25 Jan 2022); NVIDIA's own page lists Vulkan 1.4 for Turing
-  and later. AMD's own drivers: Vega (RX Vega 56/64, Radeon VII) on Windows (entry 654), Polaris (RX 460-590) on Linux (655, 657); Mesa's RADV: GCN 1 (HD 7730 ...) on Linux
-  (820). Intel: Gen9, Skylake HD 510-580 (634) and Apollo Lake HD 500/505 (646) on Windows; Broadwell HD 5300-6200 on Linux with Mesa 22.1 (622).
-## Part 1: times (ms, 1280 x 800, software renderers: the record only). Benchmark on 0.61.0, OpenGL: blackhole.real_move 1077.9 a frame, sky pass 627.4;
-  film_tilt 436.3; extreme 2038.6 (the benchmark does not run on Vulkan until step 5). Same three views by PL_BH_FRAMETIME on 0.62.0 (frame median / sky pass),
-  OpenGL -> Vulkan: real_move's view turning 67.7 / 282.7 -> 78.7 / 496.4; Film with glow at rest 3.4 / 119.2 -> 23.7 / 131.1; feeding hole with glare at rest
-  3.0 / 127.9 -> 21.8 / 129.8 (Vulkan's frame waits for its fence: on lavapipe that is the processor's own drawing time).
-## Part 2: the programs (render/vk_blackhole.*): shaders.h's own text as SPIR-V (extract_glsl.cmake joins kKerrSkyFS's parts with "+"), Vulkan 1.3 dynamic rendering
-- Ported pass by pass from renderer2d.cpp: lens, table pass, sky per pixel, exposure chain + white read-back, lower resolution while moving (stretched only where the card
-  filters RGBA32F), probe + light check, Film glow, glare (blocks read back in the batch after the picture, veil on its thread; at once in the checks), mask for maskedDisc,
-  the kept picture (Renderer2D::lensSameView shared). Batches on VkCards before the frame; the frame lays the picture over (kComposite, no blend). Images' layouts and last
-  uses tracked, synchronization2 barriers per use. Timestamps: queries (timestampValidBits 64 here). Read-backs: host-visible buffers, read once their batch is done.
-- Pipelines (lavapipe, first start; SPIR-V bytes): whole sky 253-286 ms, 103,908 (OpenGL: 103.5 / 64.7 KB plain / inlined); table pass 21 ms, 28,756 (28.4 / 20.1 KB);
-  lens 52 ms, 30,560; elliptic functions 59 ms, 26,660; tiny 1 ms, 776; light paths 422 ms, 61,216; small ones 1-8 ms. Lens, table pass, sky stages, light paths on a worker.
-- Pipeline cache (settings folder, vulkan-pipeline-cache.bin: our size + hash header, then the driver's, checked against this card): written, read at the next start, a
-  damaged file ignored (PL_VK_CACHE_CORRUPT). lavapipe keeps only the 32-byte header, no pipelines: the speed-up can only show on the owner's PC.
-- Guards: Vulkan twins of gpuGuard ("[vulkan] [lightpaths] ", "gpuvklightpaths=", "vulkan lightpaths <hash>") and gpuSkyGuard ("[vulkan] [sky] "), new gpuVkLensGuard
-  ("[vulkan] [lens] ": pipelines, first full picture). OpenGL's records are never written from a Vulkan start. blackhole_view: PL_BH_COMPARE skipped on Vulkan (no
-  OpenGL call); its hooks (probe, kerrCompute) go through the renderer's Vulkan halves; the sky's and light paths' steps wait for their worker (building()).
-- Light paths on Vulkan (full steps: pipeline, the start-up check, first fills): passed here: math 2.1e-16, edges 0, dir 1.0e-13, b 8.5e-17, u 1.8e-10, 0 ends differ.
-## Part 3: zero validation errors with synchronisation checks in every view; formats queried (RGBA8, RGBA32F + linear filter, R8, R32F); includes, no nested generic lambdas.
-## Part 4: tests
-- check_shell.py vulkanbh (in the vulkancards half of ui_shell), Vulkan vs OpenGL, one sample, settled: lens (spin 0) 0.001 %, Real 0.001, Film with glow 0.001, glare
-  0.001, All light 0.001, Sky black 0.001, True brightness 0.001 % over 8 levels (limit 1 %); glare made over the frames = at once (0.000 %); PL_VK_CARDFAIL=sky: only the
-  sky falls back, log says why; Vulkan 1.2 card -> OpenGL with the reason; cache as above. 42 checks, 0 failed; on 0.61.0's build 27 failed.
-  (PL_BH_GLARENOW, checks only: the glare at once; OpenGL's low-priority veil thread can wait minutes here behind llvmpipe's threads, so settled pictures differed.)
-- gl_compare_tests' Vulkan twin: light paths vs the processor (cardSelfCheck, OpenGL's limits) passed; vs OpenGL's, 384 rays: within 2.4e-6 relative (the end state,
-  number 10 of 16; limit max(1e-5, kCardUTol)); sky probes: dir 2.2e-6 / 1.7e-6 rad, b 3.4e-6 / 6.4e-6, r 3.9e-6 / 4.0e-6, light 0.077 / 0.012 of its limit. 647 checks, 0 failed.
-- OpenGL screenshots (orbit, atom Glow, atom Slice, molecule, black hole) byte-identical to 0.61.0's; check_blackhole precision 131 / 0; check.sh quick 18 / 18.
-- Full UI suite: 32 of 34 (this build has no gl_phase_colours: run alone, above); ui_shell with vulkanbh passed; ui_popups (check_6b benchwaits) and ui_molecule
-  (check_molecule card) fail as in 0.60.0 and 0.61.0 (ROADMAP).
+# 0.63.0: Vulkan, step 5 of 5: Vulkan the default, the benchmark and the tests on Vulkan, the guard's wrong-program fix, steps 1-3 on Vulkan 1.3 (based on 0.62.0; box: 4 cores, Mesa 25.2.8, lavapipe / llvmpipe)
+The job was bigger than written (Part D touched 9 check scripts, Part E four files); the present.frag part of Part E is left (below).
+## Part A: the guard blamed the wrong program (app/gpu_guard.*)
+- Cause: a step's marker stayed on disk after the step ended, until the whole path had passed: the outline's "first small run" marker was still there when the light
+  paths' pipeline crashed the driver. Now a guarded step's marker goes when it ends, and at most one guarded step is open in the whole process (all guards, both APIs).
+  A worker's begin() waits for its turn (logged: "the step '...' waits for its turn: <other> is open", then "has its turn (waited N ms)"); the frame never waits:
+  each step the frame starts asks hold() first and moves to a later frame (logged once: "... waits for its turn (moved to a later frame)"). A run of steps (the
+  light paths' pipeline, check and first fill; the sky's) keeps the turn between its steps; rest() gives it back before a wait of unknown length (the first full
+  use). Guards that passed ("ok") are not held back. Deferred first uses: that frame on the processor; the outline asks again next frame (waiting()).
+- Tests first: test_app (two guards: the second's begin on a worker writes no marker until the first ends; hold() says no on the frame; rest; ok not held) and
+  check_shell.py:guardturn (ui_shell): PL_GPU_DIE in the light paths' pipeline, next start: light paths off, outline allowed, its first full use drawn.
+  On 0.62.0's build: 1 of 4 failed (gpuvkoutline=off, "the outline's first small run", as on the owner's PC); on 0.63.0: 4 of 4.
+- Cost on this box: at a FIRST start the sky per pixel now waits for the light paths' check and first fill (over a minute on lavapipe). On the owner's PC the light
+  paths are off (AMD crash) and the other guards are "ok", so nothing waits. PL_BH_SETTLE also waits while a guarded step is open or waiting (gpuGuardBusy).
+## Part B: Vulkan the default
+- prefs: default "vulkan" (not written), "opengl" written when chosen; a file with graphics=vulkan/opengl keeps it (test_app). Settings row "Graphics: Vulkan /
+  OpenGL (backup)", radio "OpenGL (backup)" with its help (older cards, a driver problem). The fall-back to OpenGL (card below 1.3, PL_VK_FAIL, PL_VK_CHECK=break)
+  unchanged and checked (check_shell vulkan, vulkan2d, vulkanbh). No lab's Most realistic names a graphics system (nothing to change there).
+## Part C: the benchmark on Vulkan
+- The refusal removed. Card time per frame from timestamp queries: the frame's command buffer plus the card batches submitted for it (VkCards::setTiming), summed;
+  span first start to last end. Timer check as OpenGL's: the same known load drawn into an image, timestamps against a clock (here: 31.4 vs 33.4 ms, reliable).
+  Report: "Graphics: Vulkan 1.4.318, FIFO ..." / "Graphics: OpenGL ...", the timer's name, and "The card programs' guards (Vulkan|OpenGL)" with each state.
+  Shots and film_tilt's grab read back from Vulkan. Zero validation errors in a benchmark run.
+- New Hard scene atom.slice_super_drag (stable id, which 39): Md-258, Slice, 2p + 5f 50 %, Relativity (Dirac levels) On, Wheel, Classic Ultra, the cut dragged as
+  slice_drag. Zooms tried (1 % low fps here): -0.5 2.70, 0 2.70, 0.5 2.95, 1.0 3.35, 1.5 2.86: zoom 0 kept. Processor work on both APIs (ROADMAP Atom Lab).
+## Part D: the tests on Vulkan
+- The UI suite runs on the default (Vulkan). On OpenGL by their own setting (PL_GRAPHICS=opengl): check_shell's reference runs, check_blackhole's PL_BH_COMPARE,
+  guard and smooth parts, check_atom_chip card and check_molecule card (OpenGL's guard records), check_5h cards (compared with stored OpenGL runs). New part
+  check_shell.py:openglbackup (ui_shell): no choice = Vulkan; graphics=opengl in the file = OpenGL; each lab opens on OpenGL and draws.
+- The checks' diagnostics (PL_DRAWSTAT, PL_BH_FRAMETIME ...) were printed in main.cpp's OpenGL branch only: now on both. Deliberate reference changes: check_5l
+  (the row's new label), test_app (Graphics: line, 26 / 42 scenes, kBenchAtomScenes 40), check_5q sliders (the fill sampled left of the thumb: the thumb's
+  anti-aliased edge differs between drivers).
+- Suite time: about 64 min on Vulkan (0.62.0 on OpenGL: 35 min).
+## Part E: steps 1-3 on Vulkan 1.3
+- vk_draw2d, vk_card (the exposure grid), vk_backend (window, Save image): render passes and framebuffers -> dynamic rendering, every barrier ->
+  synchronization2, each picture image's layout tracked. Before == after: orbit, atom Glow + outline, atom Slice, monochrome, molecule, black hole Film:
+  0.000 % of pixels differ; zero validation errors with VK_KHRONOS_VALIDATION_VALIDATE_SYNC=true in each (one sync error found and fixed: the present barrier).
+- Left (3-try rule not needed, a design limit): drawing in Vulkan's rows and dropping present.frag. shaders.h's lens, sky, mask, grid and grey shaders read
+  gl_FragCoord with OpenGL's bottom-left origin and are OpenGL's text too; changing them is for the job that removes OpenGL (ROADMAP "Whole app").
+## Not fixed (3 tries each)
+- check_6b benchscenes: blackhole.film_tilt shows no new picture in its counted time on a fresh settings folder (both APIs; 0.62.0 passed): the guards' one-at-a-
+  time order (Part A) holds the sky back; warm-up starts before the run did not cure it. all_light's -1 and benchwaits as before (ROADMAP).
 ## For the owner's PC
-- Settings, Performance, Graphics: Vulkan (test), restart. Open the Black Hole Lab: each preset, Real and Film, glare on; restart once (the pipeline cache: the
-  sky's pipeline should be faster the second time). Send gpu-paths-log.txt (its "[vulkan] [lens]", "[vulkan] [sky]", "[vulkan] [lightpaths]" and "[cache]" lines).
+- Start 0.63.0: it opens on Vulkan. Run the benchmark (Hard) and send it with gpu-paths-log.txt. The outline is "allowed again, guarded" and should now run its
+  first step; the light paths stay off (the crash is caught).

@@ -59,12 +59,13 @@ void AtomCardPaths::frame(render::Renderer2D& R, AtomLab& L) {
             if (!R.computeShaders()) { off(which, R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "this PC has no OpenGL 4.3 compute shaders (or they are switched off)"); continue; }
             if (G.started() && !G.allowed()) { off(which, G.offText().empty() ? std::string("its guard switched it off") : G.offText()); continue; }
             if (!shown || ++P.frames < 3) continue;                          // (its picture on screen first)
+            if (!G.hold()) continue;                                         // 0.63.0: its start-up steps wait for the guards' turn (a later frame)
             P.state = 2; P.step = 0;
         }
         if (P.state == 2) { advance(which, R, L); continue; }
         if (P.state != 1) continue;
         if (which == 0) {
-            if (!C.ready() && !P.firstDone) {                                // ready for the lab: the first batch it asks for begins the step "the first full use" (its marker first)
+            if (!C.ready() && !P.firstDone && G.hold()) {                    // (0.63.0: the first full use waits for its turn)                                // ready for the lab: the first batch it asks for begins the step "the first full use" (its marker first)
                 Path* pp = &P;
                 C.beforeFirstUse = [pp] { app::gpuSliceGuard().begin(stepName(0, "first full use")); pp->firstUse = true; pp->stepAt = nowS(); };
                 C.setSliceReady(true);
@@ -204,6 +205,7 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
         G.end(checkName, msText(P.allOk ? "passed" : "FAILED", now - P.stepAt) + ": " + b);
         if (!P.allOk) { G.finished(false, why); off(which, why); return; }
         P.state = 1;
+        G.rest();                                                            // 0.63.0: the first full use comes when the lab asks (the turn given back meanwhile)
         std::printf("PLATOMCARD %s state=1 check=%s\n", nameOf(which), b);
         std::fflush(stdout);
         if (which == 1) C.setJumpReady(true);
@@ -219,6 +221,7 @@ unsigned AtomCardPaths::jumpGroupsBuffer(render::Renderer2D& R, AtomLab& L) {
     if (fixedEpoch != L.s.jumpEpoch || fixedG.size() != std::size_t(2 * L.jumpDots())) { L.jumpFixedGroups(fixedG); fixedEpoch = L.s.jumpEpoch; }   // once per jump
     std::uint64_t t0 = 0, t1 = 0;
     L.jumpThresholds(t0, t1);
+    if (!P.firstUse && !app::gpuJumpGuard().hold()) return 0;               // 0.63.0: the first full use waits for its turn (this frame: the processor's groups)
     if (!P.firstUse) { app::gpuJumpGuard().begin(stepName(1, "first full use")); P.firstUse = true; P.stepAt = nowS(); }
     if (!C.jumpGroups(fixedG.data(), L.jumpDots(), L.s.jumpEpoch, t0, t1)) return 0;
     if (!P.firstDone) C.fence();

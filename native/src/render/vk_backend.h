@@ -59,6 +59,16 @@ public:
     // 0.60.0: pic: the lab's picture under the text (one sample, as OpenGL's offscreen picture)
     bool renderToImage(ImDrawData* dd, int w, int h, const float clear[4], std::vector<uint8_t>& rgb, Renderer2D* pic = nullptr);
     void setVsync(bool on);                                  // takes effect at the next frame (the swapchain is made again)
+    // 0.63.0 (step 5): the benchmark's timer on Vulkan: timestamp queries at the start and the end of the frame's command buffer and of each card batch
+    // (render/vk_card.h setTiming). benchTimer(true): false when this queue has no timestamps. benchMark(): the next render() is timed (false: every
+    // slot still waits for its result: that frame is not measured). benchCollect: the frames whose times have come back, oldest first: the card's busy
+    // time (the frame's command buffer plus the batches submitted since the frame before, summed) and the span from the first start to the last end (ms).
+    bool benchTimer(bool on);
+    bool benchMark();
+    void benchCollect(std::vector<std::pair<double, double>>& busySpanMs);
+    // the timer's check (as OpenGL's GL_TIME_ELAPSED check): pic's picture drawn once into an image of its own, timed by the timestamps and by a clock
+    // from the submit to the end of the wait. False: not timed.
+    bool benchLoad(Renderer2D& pic, int w, int h, double& gpuMs, double& wallMs);
 
     const std::string& deviceName() const { return deviceName_; }
     const std::string& driverText() const { return driverText_; }   // "<driver name> <version>" as the driver reports it

@@ -27,7 +27,7 @@ def states(r):
 
 CARD_STEPS = {"slice": ["compile the Slice's dots shader", "link the Slice's dots shader", "the Slice's first small run", "the Slice's check", "the Slice's first full use"],
               "jump": ["compile the jump's groups shader", "link the jump's groups shader", "the jump's first small run", "the jump's check", "the jump's first full use"]}
-CARD_BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all",
+CARD_BENCH = {"PL_GRAPHICS": "opengl", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all",
               "PL_BENCH_WARMUP": "1.0", "PL_BENCH_MEASURE": "1.5"}
 
 def card_part(binary, work):
@@ -93,7 +93,7 @@ def card_part(binary, work):
     for which, steps in CARD_STEPS.items():
         for i, s_ in enumerate(steps):
             d = dirs[(which, i)]
-            after.append(((binary, work, f"card_after_{which}{i}", {"PL_ATOM": "1", "PL_SETTINGS": os.path.join(d, "settings.txt"), "PL_OPEN": "settings", "PL_ATOM_SET": "Z=92;view=Slice" if which == "slice" else "Z=88"}),
+            after.append(((binary, work, f"card_after_{which}{i}", {"PL_GRAPHICS": "opengl", "PL_ATOM": "1", "PL_SETTINGS": os.path.join(d, "settings.txt"), "PL_OPEN": "settings", "PL_ATOM_SET": "Z=92;view=Slice" if which == "slice" else "Z=88"}),
                           dict(frames=40, size="880x560", timeout=900)))
     for which, steps in CARD_STEPS.items():
         for i, s_ in enumerate(steps):
@@ -120,7 +120,7 @@ def card_part(binary, work):
         r5 = run_app(binary, work, f"card_shader_{which}", dict(CARD_BENCH, PL_SETTINGS=sf2, **{f"PL_GPU_{which.upper()}SHADER": f"{which} 0000000000000000"}), frames=100000, size="880x560", timeout=1500)
         check(f"PLATOMCARD {which} state=1" in r5.out, f"card: {which}: a changed shader tries again (and passes here)")
     sf = os.path.join(dirs[("slice", 1)], "settings.txt")
-    r4 = run_app(binary, work, "card_again", {"PL_ATOM": "1", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpuslice", "PL_ATOM_SET": "Z=92;view=Slice", "PL_SCRIPT": "14:click=gpuslice.again"}, frames=90, size="880x560", timeout=900)
+    r4 = run_app(binary, work, "card_again", {"PL_GRAPHICS": "opengl", "PL_ATOM": "1", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpuslice", "PL_ATOM_SET": "Z=92;view=Slice", "PL_SCRIPT": "14:click=gpuslice.again"}, frames=90, size="880x560", timeout=900)
     # (the cut does not move here, so no new dots are asked for: its first full use waits; the settings file no longer keeps it off)
     check(not r4.scripted_missing() and "PLATOMCARD slice state=1" in r4.out and "gpuslice=off" not in read(sf), f"card: Try again: the Slice's program is made and checked again in the same run ({r4.scripted_missing()})")
     print(f"{checks} checks, {fails} failed")

@@ -52,6 +52,7 @@ void MolCardPaths::frame(render::Renderer2D& R, const float* pts, long n) {
         if (!R.computeShaders()) { off(R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "this PC has no OpenGL 4.3 compute shaders (or they are switched off)"); return; }
         if (G.started() && !G.allowed()) { off(G.offText().empty() ? std::string("its guard switched it off") : G.offText()); return; }
         if (!pts || n <= 0 || ++frames_ < 3) return;                     // (its picture on screen first)
+        if (!G.hold()) return;                                           // 0.63.0: its start-up steps wait for the guards' turn (a later frame)
         state_ = 2; step_ = 0;
     }
     if (state_ == 2) { advance(R, pts, n); return; }
@@ -68,6 +69,7 @@ void MolCardPaths::frame(render::Renderer2D& R, const float* pts, long n) {
 
 bool MolCardPaths::use(render::Renderer2D& R, bool switchOn) {
     if (state_ != 1 || !switchOn || !R.moleculeCard().ready()) return false;
+    if (!firstUse_ && !app::gpuMolCloudGuard().hold()) return false;     // 0.63.0: the first full use waits for its turn (this frame: the processor)
     if (!firstUse_) { app::gpuMolCloudGuard().begin(stepName("first full use")); firstUse_ = true; stepAt_ = nowS(); }
     return true;
 }
@@ -151,6 +153,7 @@ void MolCardPaths::advance(render::Renderer2D& R, const float* pts, long n) {
         G.end(checkName, msText(allOk_ ? "passed" : "FAILED", now - stepAt_) + ": " + b);
         if (!allOk_) { G.finished(false, why); off(why); return; }
         state_ = 1;
+        G.rest();                                                        // 0.63.0: the first full use comes when the lab asks (the turn given back meanwhile)
         C.setReady(true);
         std::printf("PLMOLCARD state=1 check=%s\n", b);
         std::fflush(stdout);

@@ -1,10 +1,12 @@
 #include "app/gpu_guard.h"
 
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <thread>
 
 #ifdef _WIN32
 #include <io.h>        // _commit, _fileno
@@ -48,7 +50,104 @@ GpuGuardRecord readMarker(const std::string& path) {
     if (r.step.empty()) r.step = "(not named)";
     return r;
 }
+// 0.63.0: the turn: the one guard whose guarded step (or run of steps: hold) is open in this process
+std::mutex g_turnMx;
+std::condition_variable g_turnCv;
+const GpuGuard* g_turn = nullptr;
+std::string g_turnName, g_turnStep;
+std::thread::id g_frame;
+bool g_frameSet = false;
+int g_waiting = 0;                                                  // guards whose step waits for its turn
 }  // namespace
+
+bool gpuGuardBusy() {
+    std::lock_guard<std::mutex> t(g_turnMx);
+    return g_turn != nullptr || g_waiting > 0;
+}
+
+void GpuGuard::setWaiting(bool w) {                                 // (with g_turnMx held)
+    if (w == waiting_) return;
+    waiting_ = w;
+    g_waiting += w ? 1 : -1;
+}
+
+void gpuGuardFrameThread() {
+    std::lock_guard<std::mutex> t(g_turnMx);
+    g_frame = std::this_thread::get_id();
+    g_frameSet = true;
+}
+
+std::string gpuGuardTurn() {
+    std::lock_guard<std::mutex> t(g_turnMx);
+    return g_turn ? g_turnName + (g_turnStep.empty() ? std::string() : ", '" + g_turnStep + "'") : std::string();
+}
+
+std::string GpuGuard::name() const {
+    if (!what_.empty()) return what_;
+    if (prefix_.empty()) return "The graphics card's light paths";
+    std::string p = prefix_;
+    while (!p.empty() && p.back() == ' ') p.pop_back();
+    return p;
+}
+
+// (never called with mx_ held: the log line is written after the turn's lock is let go)
+bool GpuGuard::takeTurn(const std::string& step, bool mayWait) {
+    std::unique_lock<std::mutex> t(g_turnMx);
+    if (!g_turn || g_turn == this) {
+        setWaiting(false);
+        g_turn = this; g_turnName = name();
+        if (!step.empty() || g_turnStep.empty()) g_turnStep = step;
+        return true;
+    }
+    const std::string other = g_turnName + (g_turnStep.empty() ? std::string() : " (its step '" + g_turnStep + "')");
+    if (!mayWait) {
+        setWaiting(true);
+        t.unlock();
+        const std::string what = step.empty() ? std::string("the next step") : "the step '" + step + "'";
+        std::lock_guard<std::mutex> g(mx_);
+        if (waitLogged_ != other + what) { waitLogged_ = other + what; line(what + " waits for its turn (moved to a later frame): " + other + " is open", false); }
+        return false;
+    }
+    t.unlock();
+    {   std::lock_guard<std::mutex> g(mx_);
+        line("the step '" + step + "' waits for its turn: " + other + " is open", false); }
+    const double w0 = nowMs();
+    t.lock();
+    g_turnCv.wait(t, [] { return g_turn == nullptr; });
+    g_turn = this; g_turnName = name(); g_turnStep = step;
+    setWaiting(false);
+    t.unlock();
+    char b[64];
+    std::snprintf(b, sizeof b, " (waited %.0f ms)", nowMs() - w0);
+    std::lock_guard<std::mutex> g(mx_);
+    line("the step '" + step + "' has its turn" + b, false);
+    return true;
+}
+
+void GpuGuard::giveTurn() {
+    std::lock_guard<std::mutex> t(g_turnMx);
+    setWaiting(false);
+    if (g_turn != this) return;
+    g_turn = nullptr; g_turnName.clear(); g_turnStep.clear();
+    g_turnCv.notify_all();
+}
+
+bool GpuGuard::hold() {
+    {   std::lock_guard<std::mutex> g(mx_);
+        if (!d_.guarded) return true;
+        if (held_) return true; }
+    if (!takeTurn(std::string(), false)) return false;
+    std::lock_guard<std::mutex> g(mx_);
+    held_ = true; waitLogged_.clear();
+    return true;
+}
+
+void GpuGuard::rest() {
+    {   std::lock_guard<std::mutex> g(mx_);
+        held_ = false;
+        if (open_ > 0) return; }
+    giveTurn();
+}
 
 std::string gpuGuardText(const GpuGuardRecord& r) {
     if (r.state.empty()) return std::string();
@@ -159,7 +258,21 @@ void GpuGuard::line(const std::string& text, bool commit) {
 }
 
 void GpuGuard::begin(const std::string& step) {
+    bool guarded = false;
+    {   std::lock_guard<std::mutex> g(mx_);
+        guarded = d_.guarded; }
+    if (guarded) {
+        bool frame = false;
+        {   std::lock_guard<std::mutex> t(g_turnMx);
+            frame = g_frameSet && std::this_thread::get_id() == g_frame; }
+        if (!takeTurn(step, !frame)) {                               // (a frame's step begun without hold(): it does not wait; logged above)
+            std::lock_guard<std::mutex> g(mx_);
+            line("(the frame never waits: the step '" + step + "' begins while another guard's step is open)", false);
+        }
+    }
     std::lock_guard<std::mutex> g(mx_);
+    waitLogged_.clear();
+    if (d_.guarded) open_++;
     if (d_.guarded) writeMarker(step);
     line("begin " + step, d_.guarded);
     if (!die_.empty() && step.compare(0, die_.size(), die_) == 0) {
@@ -169,8 +282,13 @@ void GpuGuard::begin(const std::string& step) {
 }
 
 void GpuGuard::end(const std::string& step, const std::string& result) {
-    std::lock_guard<std::mutex> g(mx_);
-    line("end " + step + (result.empty() ? std::string() : ": " + result), d_.guarded);
+    bool give = false;
+    {   std::lock_guard<std::mutex> g(mx_);
+        line("end " + step + (result.empty() ? std::string() : ": " + result), d_.guarded);
+        if (d_.guarded && open_ > 0) open_--;
+        if (d_.guarded && open_ == 0) removeMarker();               // 0.63.0: no step open: a crash now names no step of this guard
+        give = !held_ && open_ == 0; }
+    if (give) giveTurn();
 }
 
 void GpuGuard::log(const std::string& text) {
@@ -179,7 +297,8 @@ void GpuGuard::log(const std::string& text) {
 }
 
 void GpuGuard::finished(bool ok, const std::string& why) {
-    std::lock_guard<std::mutex> g(mx_);
+    {   std::lock_guard<std::mutex> g(mx_);
+    held_ = false; open_ = 0;
     removeMarker();
     if (ok) {
         line((what_.empty() ? std::string("The graphics card's light paths") : what_) + ": the whole path succeeded" +
@@ -188,33 +307,45 @@ void GpuGuard::finished(bool ok, const std::string& why) {
     } else {
         line(what_.empty() ? "The graphics card's light paths: not used in this run (the processor's path), because " + why : what_ + ": not used in this run, because " + why, true);
     }
+    }
+    giveTurn();
 }
 
 void GpuGuard::timedOut(const std::string& step) {
-    std::lock_guard<std::mutex> g(mx_);
+    {   std::lock_guard<std::mutex> g(mx_);
+    held_ = false; open_ = 0;
     removeMarker();
     line("The step '" + step + "' did not finish within its time limit: " + (what_.empty() ? std::string("the graphics card's light paths are switched off (kept for this light-path shader and driver)") : what_ + " is switched off (kept for this version)"), true);
     d_.keep = GpuGuardRecord{"slow", version_, driver_, field(step)};
     d_.allowed = false; d_.guarded = false; d_.crashed = false;
+    }
+    giveTurn();
 }
 
 void GpuGuard::failed(const std::string& step, const std::string& why) {
-    std::lock_guard<std::mutex> g(mx_);
+    {   std::lock_guard<std::mutex> g(mx_);
+    held_ = false; open_ = 0;
     removeMarker();
     line("The step '" + step + "' failed: " + why + " (kept; Settings, Performance: Try again)", true);
     d_.keep = GpuGuardRecord{"fail", version_, driver_, field(step + ": " + why)};
     d_.allowed = false; d_.guarded = false; d_.crashed = false; d_.failed = true;
+    }
+    giveTurn();
 }
 
 void GpuGuard::tryAgain() {
-    std::lock_guard<std::mutex> g(mx_);
+    {   std::lock_guard<std::mutex> g(mx_);
+    held_ = false; open_ = 0;
     d_.keep = GpuGuardRecord{};
     d_.allowed = true; d_.guarded = true; d_.crashed = false; d_.failed = false;
     generation_++;
     line("Try again (Settings, Performance): " + (what_.empty() ? std::string("the graphics card's light paths are") : what_ + " is") + " allowed again, guarded", true);
+    }
+    giveTurn();
 }
 
 void GpuGuard::closing() {
+    struct Give { GpuGuard* g; ~Give() { g->rest(); } } give{this};   // (0.63.0: the turn given back)
     std::lock_guard<std::mutex> g(mx_);
     if (!started_ || staleMarker_ || folder_.empty()) return;
     if (std::FILE* f = std::fopen((folder_ + markerName_).c_str(), "rb")) {

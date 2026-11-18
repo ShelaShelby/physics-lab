@@ -92,7 +92,8 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
         t += "Worst single frame: " + (at.empty() ? std::string("none") : f("%.1f", w) + " ms, in " + at) + "\n";
     }
     t += "GPU: " + (e.gpu.empty() ? "unknown" : e.gpu) + "\n";
-    t += "OpenGL: " + (e.glVersion.empty() ? "unknown" : e.glVersion) + "\n";
+    const bool vk = e.api == "Vulkan";                 // 0.63.0 (Vulkan step 5): which API ran
+    t += "Graphics: " + std::string(vk ? "Vulkan " : "OpenGL ") + (e.glVersion.empty() ? "unknown" : e.glVersion) + "\n";
     t += "Atom Lab superposition and jumps: " + (e.computePath.empty() ? "unknown" : e.computePath) + "\n";
     t += "Atom Lab 90 % outline: " + (e.outlinePath.empty() ? "unknown" : e.outlinePath) + "\n";
     t += "Orbit Lab rocks: " + (e.rocksPath.empty() ? "unknown" : e.rocksPath) + "\n";
@@ -103,9 +104,10 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
     t += "Text size: " + e.textSize + ", theme: " + e.theme + "\n";
     if (!e.power.empty()) t += e.power + "\n";
     t += "VSync: off during the scenes, on during the waits and while the labs are left alone. Each scene: " + f("%.1f", e.warmupS) + " s warm-up (not counted), then " + f("%.1f", e.measureS) + " s counted.\n";
-    t += std::string("GPU timer (GL_TIME_ELAPSED): ") + (e.gpuTimer ? "available" : "not available") + "\n";
+    t += std::string(vk ? "GPU timer (Vulkan timestamp queries): " : "GPU timer (GL_TIME_ELAPSED): ") + (e.gpuTimer ? "available" : "not available") + "\n";
     if (e.gpuTimer) t += std::string("GPU timer check: ") + (e.gpuReliable ? "reliable, " : "NOT RELIABLE, ") + (e.gpuCheck.empty() ? "no check was made" : e.gpuCheck) + "\n";
-    t += "GPU time covers the whole drawing of a frame (clear, picture with its soft layer and instanced draws, panels and text), up to just before the buffer swap.\n";
+    if (vk) t += "GPU time covers the whole drawing of a frame (the frame's command buffer: picture, panels and text; and the card programs' batches submitted for it, summed), up to just before the present.\n";
+    else t += "GPU time covers the whole drawing of a frame (clear, picture with its soft layer and instanced draws, panels and text), up to just before the buffer swap.\n";
     t += "Input during the test: blocked\n";
     if (e.cancelled) t += "THE TEST WAS CANCELLED: only the finished scenes are listed.\n";
     {   // 0.15 stage 2: scenes during which the window lost focus or was minimised (Windows can slow a background app, so those numbers may be lower than the PC can do)

@@ -157,6 +157,7 @@ static void bhMoveStep(blackhole::Settings& s, const char* spec, int frame) {   
     }
 }
 int main(int, char**) {
+    app::gpuGuardFrameThread();                         // 0.63.0: the guards never make this thread wait (app/gpu_guard.h)
     if (!SDL_Init(SDL_INIT_VIDEO)) { fail("Could not start the window system", "Physics Lab could not start its window system, so it has nothing to draw on.", "Restart the computer and try again. If it still fails, please report it with your Windows version."); return 1; }
 
     // 0.15 stage 2 (C3): ask Windows not to power-throttle the app (the owner saw the frame rate fall a lot when the window merely lost focus on his second monitor)
@@ -197,7 +198,7 @@ int main(int, char**) {
         app::GpuGuard& V = app::gpuVulkanGuard();
         V.start(ui::settingsFolder(), std::string("vulkan ") + ui::appVersion(), "any", app.prefs.gpuVulkan,
                 {std::string("Physics Lab ") + ui::appVersion() + ": the log of Vulkan's start and of the graphics card's paths; overwritten at each start",
-                 "Graphics: Vulkan (test, step 1 of 5): its own guard, its lines start [vulkan]"});
+                 "Graphics: Vulkan (the default; OpenGL the backup): its own guard, its lines start [vulkan]"});
         if (!V.allowed()) app.vulkanWhy = V.offText();
         else if (!(window = createWindow(scale, false, start, false, true))) { V.failed("window", std::string("SDL_CreateWindow: ") + SDL_GetError()); app.vulkanWhy = V.offText(); }
         else {
@@ -482,6 +483,7 @@ int main(int, char**) {
     if (const char* l = SDL_getenv("PL_ATOM_LEARN")) { app.atomLearn = std::atoi(l); if (const char* t = SDL_getenv("PL_ATOM_TAB")) { app.scaleTab = t; app.massTab = t; } }   // open an Atom Lab guide (1–4), on a tab
     if (const char* j = SDL_getenv("PL_ATOM_JUMP")) app.atomLearnJump = j;   // 0.19: ... scrolled to a section ("scale": the "monochrome" word)
     int frame = 0;
+    ui::benchmarkUse(window, useVulkan ? &vk : nullptr);   // 0.63.0 (Vulkan step 5): the benchmark runs on the API this start draws with
     int vkFirst = 0;                                    // 0.59.0: Vulkan's first frame: 0 not begun, 1 begun (guarded), 2 shown, 3 a call failed (kept)
     const bool pictureOff = SDL_getenv("PL_NO_PICTURE") != nullptr;   // 0.59.0: no lab picture (PL_NO_PICTURE, for the checks that compare OpenGL and Vulkan; 0.60.0: Vulkan draws the pictures)
     bool running = true;
@@ -783,12 +785,16 @@ int main(int, char**) {
         const int canvasFbW = static_cast<int>(std::lround(canvasWinW * fbW / std::max(1, winW)));
         const int pictureFbH = static_cast<int>(std::lround(pictureWinH * fbH / std::max(1, winH)));
         const int headerFbH = static_cast<int>(std::lround(headerH * fbH / std::max(1, winH)));
+        const auto te0 = std::chrono::steady_clock::now();   // (0.63.0: before either API's drawing: the diagnostics below print on both)
+        const long glareMade0 = renderer.glareStats().made;
         if (useVulkan) {                                // 0.59.0: cleared to the page colour, the picture area filled with it (step 2: the labs' pictures), the panels on top
             const float bgc[4] = {pageBg.r, pageBg.g, pageBg.b, 1.0f};
-            if (vkFirst == 0) { app::gpuVulkanGuard().begin("first frame"); vkFirst = 1; }
+            if (vkFirst == 0 && app::gpuVulkanGuard().hold()) { app::gpuVulkanGuard().begin("first frame"); vkFirst = 1; }   // (0.63.0: its turn first)
             const bool drawPicture = !pictureOff && !app.pane;   // 0.60.0: the lab's picture (renderer2d on Vulkan; 0.62.0: the Black Hole Lab's too)
             if (drawPicture) renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
+            ui::benchmarkGpuBegin(app);                 // 0.63.0: the GPU time of this frame on Vulkan (timestamps; only while the benchmark runs)
             vk.render(ImGui::GetDrawData(), bgc, bgc, 0, headerFbH, canvasFbW, pictureFbH, drawPicture ? &renderer : nullptr);
+            ui::benchmarkGpuEnd(app);
             if (drawPicture) { app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances(); }
         } else {
             ui::benchmarkGpuBegin(app);                     // the GPU time of this frame (only while the benchmark runs)
@@ -796,59 +802,59 @@ int main(int, char**) {
             plgl::glClearColor(pageBg.r, pageBg.g, pageBg.b, 1);
             plgl::glClear(GL_COLOR_BUFFER_BIT);
             renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
-            const auto te0 = std::chrono::steady_clock::now();
-            const long glareMade0 = renderer.glareStats().made;
             renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
-            static const bool bhTime = SDL_getenv("PL_BH_FRAMETIME") != nullptr;
-            if (bhTime && app.lab == blackhole::kLabIndex && !app.pane) {
-                const render::Renderer2D::GlareStats& g = renderer.glareStats();
-                const double glareMs = g.frameMs, glareVeil = g.made != glareMade0 ? g.veilMs : 0, glareWait = g.made != glareMade0 ? g.waitMs : 0;
-                const double endMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
-                const blackhole::ViewStats& bs = app.blackholeView.stats();
-                const blackhole::Settings& sk = app.blackholeView.shownSettings();
-                const blackhole::Settings wk = blackhole::shown(app.blackhole);
-                std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f want=%.6f,%.6f,%.6f,%.6f card=%d cardstate=%d cardfills=%ld cardms=%.1f finethread=%d skycard=%d skystate=%d skyms=%.3f skyscale=%.3f skypics=%ld starpics=%ld lookcard=%d white=%.6g\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
-                            bs.spinCoarseFills + bs.tableFills, bs.spinFineFills, bs.starFills, bs.behind ? 1 : 0, blackhole::shown(app.blackhole).spin > 0 ? bs.spinCoarseMs : bs.tableMs, bs.spinStarsMs, bs.starsMs, bs.lookMs, bs.spinFineMs, bs.discMs,
-                            static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs,
-                            wk.yaw, wk.pitch, wk.dist, wk.spin > 0 && wk.bend ? wk.spin : 0.0, bs.spinCard ? 1 : 0, app.blackholeView.cardState(), bs.cardFills, bs.cardMs, app.blackholeView.fineThreadBusy() ? 1 : 0,
-                            bs.skyCard ? 1 : 0, app.blackholeView.skyState(), renderer.skyStats().fullMs, renderer.skyStats().scale, renderer.skyStats().draws, bs.starPictures, bs.lookCard ? 1 : 0, bs.look.white);   // 0.55.6: want, the card; 0.56.0: the card's sky
-            }
-            static const bool timeStat = SDL_getenv("PL_TIMESTAT") != nullptr;   // for measuring in development (0.46): the Atom Lab picture's build time and the renderer's end(), averaged over 60 frames
-            if (timeStat && app.lab == 1) {
-                static double sv = 0, se = 0; static int nf = 0;
-                sv += g_viewMs; se += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
-                if (++nf == 60) { std::printf("PLTIME view=%.3f end=%.3f ms (60 frames)\n", sv / 60, se / 60); sv = se = 0; nf = 0; }
-            }
             app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
-            static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
-            if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
-                            std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld card=%d\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices(), ms.cloudCard ? 1 : 0);
-                            for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
-            if (drawStat && app.lab == blackhole::kLabIndex) { const blackhole::ViewStats& bs = app.blackholeView.stats();   // 0.55.0
-                            std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f spinfills=%ld\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale, bs.spinCoarseFills + bs.spinFineFills); }
-            if (drawStat && app.lab == blackhole::kLabIndex && blackhole::shown(app.blackhole).spin > 0 && SDL_getenv("PL_BH_SPINEDGE")) {   // 0.55.2: the module's shadow edge on the picture
-                const blackhole::ViewStats& bs = app.blackholeView.stats();
-                std::vector<double> e;
-                app.blackholeView.spinEdgePoints(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 24, e);
-                std::printf("PLBHSPINEDGE fine=%d pts=", bs.spinFine ? 1 : 0);
-                for (std::size_t q = 0; q + 3 < e.size(); q += 4) std::printf("%s%.2f,%.2f,%.5f,%.5f", q ? ";" : "", e[q] * scale, e[q + 1] * scale, e[q + 2], e[q + 3]);
-                std::printf("\n");
-            }
-            if (drawStat && app.lab == blackhole::kLabIndex && SDL_getenv("PL_BH_DISCPTS")) {   // 0.55.1: where the module puts the disc (taken as on), in window pixels
-                const blackhole::ViewStats& bs = app.blackholeView.stats();
-                std::vector<double> on, off;
-                app.blackholeView.discSamples(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 400, on, off);
-                std::printf("PLBHDISCPT on=");
-                for (std::size_t q = 0; q + 1 < on.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", on[q] * scale, on[q + 1] * scale);
-                std::printf(" off=");
-                for (std::size_t q = 0; q + 1 < off.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", off[q] * scale, off[q + 1] * scale);
-                std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY);
-            }
-            if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
-                            std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
-                                        ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             ui::benchmarkGpuEnd(app);
+        }
+        {   // the checks' diagnostics (PL_BH_FRAMETIME, PL_TIMESTAT, PL_DRAWSTAT ...): 0.63.0: printed on Vulkan too (they were in the OpenGL branch)
+        static const bool bhTime = SDL_getenv("PL_BH_FRAMETIME") != nullptr;
+        if (bhTime && app.lab == blackhole::kLabIndex && !app.pane) {
+            const render::Renderer2D::GlareStats& g = renderer.glareStats();
+            const double glareMs = g.frameMs, glareVeil = g.made != glareMade0 ? g.veilMs : 0, glareWait = g.made != glareMade0 ? g.waitMs : 0;
+            const double endMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
+            const blackhole::ViewStats& bs = app.blackholeView.stats();
+            const blackhole::Settings& sk = app.blackholeView.shownSettings();
+            const blackhole::Settings wk = blackhole::shown(app.blackhole);
+            std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f want=%.6f,%.6f,%.6f,%.6f card=%d cardstate=%d cardfills=%ld cardms=%.1f finethread=%d skycard=%d skystate=%d skyms=%.3f skyscale=%.3f skypics=%ld starpics=%ld lookcard=%d white=%.6g\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
+                        bs.spinCoarseFills + bs.tableFills, bs.spinFineFills, bs.starFills, bs.behind ? 1 : 0, blackhole::shown(app.blackhole).spin > 0 ? bs.spinCoarseMs : bs.tableMs, bs.spinStarsMs, bs.starsMs, bs.lookMs, bs.spinFineMs, bs.discMs,
+                        static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs,
+                        wk.yaw, wk.pitch, wk.dist, wk.spin > 0 && wk.bend ? wk.spin : 0.0, bs.spinCard ? 1 : 0, app.blackholeView.cardState(), bs.cardFills, bs.cardMs, app.blackholeView.fineThreadBusy() ? 1 : 0,
+                        bs.skyCard ? 1 : 0, app.blackholeView.skyState(), renderer.skyStats().fullMs, renderer.skyStats().scale, renderer.skyStats().draws, bs.starPictures, bs.lookCard ? 1 : 0, bs.look.white);   // 0.55.6: want, the card; 0.56.0: the card's sky
+        }
+        static const bool timeStat = SDL_getenv("PL_TIMESTAT") != nullptr;   // for measuring in development (0.46): the Atom Lab picture's build time and the renderer's end(), averaged over 60 frames
+        if (timeStat && app.lab == 1) {
+            static double sv = 0, se = 0; static int nf = 0;
+            sv += g_viewMs; se += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
+            if (++nf == 60) { std::printf("PLTIME view=%.3f end=%.3f ms (60 frames)\n", sv / 60, se / 60); sv = se = 0; nf = 0; }
+        }
+        static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
+        if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
+                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld card=%d\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices(), ms.cloudCard ? 1 : 0);
+                        for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
+        if (drawStat && app.lab == blackhole::kLabIndex) { const blackhole::ViewStats& bs = app.blackholeView.stats();   // 0.55.0
+                        std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f spinfills=%ld\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale, bs.spinCoarseFills + bs.spinFineFills); }
+        if (drawStat && app.lab == blackhole::kLabIndex && blackhole::shown(app.blackhole).spin > 0 && SDL_getenv("PL_BH_SPINEDGE")) {   // 0.55.2: the module's shadow edge on the picture
+            const blackhole::ViewStats& bs = app.blackholeView.stats();
+            std::vector<double> e;
+            app.blackholeView.spinEdgePoints(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 24, e);
+            std::printf("PLBHSPINEDGE fine=%d pts=", bs.spinFine ? 1 : 0);
+            for (std::size_t q = 0; q + 3 < e.size(); q += 4) std::printf("%s%.2f,%.2f,%.5f,%.5f", q ? ";" : "", e[q] * scale, e[q + 1] * scale, e[q + 2], e[q + 3]);
+            std::printf("\n");
+        }
+        if (drawStat && app.lab == blackhole::kLabIndex && SDL_getenv("PL_BH_DISCPTS")) {   // 0.55.1: where the module puts the disc (taken as on), in window pixels
+            const blackhole::ViewStats& bs = app.blackholeView.stats();
+            std::vector<double> on, off;
+            app.blackholeView.discSamples(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 400, on, off);
+            std::printf("PLBHDISCPT on=");
+            for (std::size_t q = 0; q + 1 < on.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", on[q] * scale, on[q + 1] * scale);
+            std::printf(" off=");
+            for (std::size_t q = 0; q + 1 < off.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", off[q] * scale, off[q + 1] * scale);
+            std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY);
+        }
+        if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
+                        std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
+                                    ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }
         }
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
             app.shot.requested = false;
@@ -861,7 +867,8 @@ int main(int, char**) {
             bhSettleFrom = 0;
             if (const char* q = SDL_getenv("PL_BH_SETTLE")) std::sscanf(q, "%d:%d", &bhSettleFrom, &bhSettleN);
         }
-        bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && !renderer.glareBusy() ? bhSettled + 1 : 0;
+        // (0.63.0: and no card program's guarded step open or waiting for its turn: one runs at a time, so at a first start the sky can wait for the light paths)
+        bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && !renderer.glareBusy() && !app::gpuGuardBusy() ? bhSettled + 1 : 0;
         if ((maxFrames && ++frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds) || (bhSettleN > 0 && bhSettled >= bhSettleN)) {
             running = false;
             if (screenshot && useVulkan) {              // 0.59.0: read back from the swapchain's image (RGBA, top row first: the same bytes as below)

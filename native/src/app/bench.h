@@ -152,7 +152,8 @@ inline std::string rocksPathText(int major, int minor, bool rocksOk, bool switch
 
 struct BenchEnv {
     std::string version, when;                   // the app version; the local date and time
-    std::string gpu, glVersion, vendor;          // GL_RENDERER, GL_VERSION, GL_VENDOR
+    std::string gpu, glVersion, vendor;          // GL_RENDERER, GL_VERSION, GL_VENDOR (0.63.0, Vulkan: the device, its Vulkan version and present mode, the driver)
+    std::string api;                             // 0.63.0: "Vulkan" or "OpenGL" ("" = OpenGL): the report's "Graphics:" line and its timer's words
     std::string outlinePath;                     // outlinePathText() (0.13 stage 3)
     std::string rocksPath;                       // rocksPathText() (0.13 stage 4)
     std::string computePath;                     // computePathText(): "OpenGL 4.3: GPU superposition on" or "OpenGL 3.3: CPU path" (0.13 stage 2)

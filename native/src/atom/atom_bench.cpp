@@ -86,6 +86,7 @@ double benchZoom(int which) {
         case kBenchAllClassic: return 0.5;         // tried 0, 0.5, 1.0, 1.5: 0 does not fill the picture
         case kBenchJumpAll: return 0.0;            // tried 0, 0.3, 0.6, 0.9 (Shells enlarged: at True scale the cloud is a dot at all four)
         case kBenchNucleusDensity: return 0.3;     // relative to zoomForNucleus(); tried 0, 0.3, 0.6, 0.9: from 0.6 the Density look gives way to the nucleons
+        case kBenchSliceSuper: return 0.0;         // 0.63.0: tried -0.5, 0, 0.5, 1.0, 1.5 (1 % low 2.70, 2.70, 2.95, 3.35, 2.86 fps here): 0 and -0.5 the slowest
         default: return 0.0;
     }
 }
@@ -126,6 +127,18 @@ void manyScene(AtomLab& L, int which, double w, double h) {
 
 void benchSetup(AtomLab& L, int which, double w, double h) {
     if (which >= kBenchAllEnlarged && which <= kBenchJumpAll) { manyScene(L, which, w, h); still(L); return; }
+    if (which == kBenchSliceSuper) {                    // 0.63.0: the owner's view at 5 fps (the Slice of a superposition is the processor's work on both APIs)
+        fresh(L, 101, 157, w, h);                        // mendelevium-258
+        L.p.cstyle = "Classic"; L.p.cdens = "Ultra";
+        L.setParam("dirac", std::string("On")); L.setParam("phase", std::string("Wheel"));
+        L.setParam("view", std::string("Slice")); L.setParam("orb", std::string("2p")); L.setParam("orb2", std::string("5f"));
+        L.setParam("mix", 50.0); L.setParam("super", std::string("On"));
+        L.resetView();
+        L.setParam("zoom", benchZoom(which));
+        for (int i = 0; i < 40000 && L.s.k < L.cloudCap(); i++) L.step(1.0 / 240);
+        still(L);
+        return;
+    }
     if (which == kBenchNucleusDensity) {                // 0.56.1: the biggest nucleus in the Density look (the 0.50.3 review suspected its grid is made again while nothing changes)
         fresh(L, 118, 176, w, h);
         L.setParam("view", std::string("Orbit")); L.setParam("ostyle", std::string("Modern")); L.setParam("style", std::string("Density"));
@@ -263,6 +276,7 @@ const BenchInfo& benchSceneInfo(int which) {
         {"Every electron, Classic with phase colours Wheel, Ultra", "0.56.1"},
         {"A jump with every electron held half way, the heaviest level atom, Ultra", "0.56.1"},
         {"The biggest nucleus in the Density look", "0.56.1"},
+        {"The Slice of a superposition dragged, mendelevium-258", "0.63.0"},
     };
     return v[std::max(kBenchFirstRisk, std::min(which, kBenchAtomScenes - 1)) - kBenchFirstRisk];
 }
@@ -294,7 +308,7 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
         if (measureFrame < 0) return;
         if (measureFrame == 0) L.setParam("outline", std::string("On"));
         if (measureFrame % 120 == 0) clearOutlineCache();
-    } else if (which == 14) {
+    } else if (which == 14 || which == kBenchSliceSuper) {   // (0.63.0: the superposition's Slice dragged the same way)
         const int k = sceneFrame % 360, tri = k <= 180 ? k : 360 - k;                                   // up from -0.90 to +0.90 and back, 0.01 a frame
         L.setParam("cut", std::round((-0.9 + 0.01 * tri) * 100) / 100);
     }

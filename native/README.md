@@ -1,6 +1,6 @@
 # Physics Lab — Windows app
 
-Physics Lab for Windows, in C++ (C++17, SDL3, OpenGL 4.3 with a 3.3 core fallback, Dear ImGui). Version **0.62.0 alpha**. Vulkan in test (Settings, Performance, Graphics: step 4 of 5, Vulkan 1.3 needed, 1.4 used where present: the menus, panels and all four labs' pictures with the graphics card's own programs; PLAN_VULKAN.md). Four labs:
+Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan 1.3 (1.4 used where present), Dear ImGui). Version **0.63.0 alpha**. The app draws with Vulkan; OpenGL 4.3 (3.3 core fallback) is the backup: Settings, Performance, Graphics, and by itself on a card without Vulkan 1.3 or when Vulkan cannot start (PLAN_VULKAN.md). Four labs:
 - **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini).
 - **Atom Lab**: any nucleus, down to quarks; one electron (exact, with Dirac's relativity) or every electron of the neutral atoms (Dirac-Hartree-Fock orbitals computed for the app);
   photon jumps along NIST's measured lines: one electron for every element, every electron shown for 16 atoms (Li, Na, K, Rb, Cs, Fr, He, Be, Mg, Ca, Zn, Sr, Cd, Ba, Hg, Ra;

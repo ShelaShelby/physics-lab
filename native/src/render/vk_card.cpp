@@ -126,6 +126,8 @@ void VkCards::destroy() {
         if (s.fence) vkDestroyFence(c_.device, s.fence, nullptr);
     }
     slots_.clear();
+    if (tq_) { vkDestroyQueryPool(c_.device, tq_, nullptr); tq_ = VK_NULL_HANDLE; }
+    timing_ = false; times_.clear();
     for (Grid& g : grids_) freeGrid(g);
     grids_.clear();
     for (VkPipeline& p : gridPipe_) if (p) { vkDestroyPipeline(c_.device, p, nullptr); p = VK_NULL_HANDLE; }
@@ -191,6 +193,7 @@ void VkCards::collect() {
 bool VkCards::openSlot() {
     if (open_ >= 0) return true;
     if (!ok_ || failed_) return false;
+    if (timing_) readTimes();                                 // (0.63.0: a finished batch's times kept before its slot is used again)
     int pick = -1;
     for (int i = 0; i < static_cast<int>(slots_.size()) && pick < 0; i++) {
         const Slot& s = slots_[static_cast<std::size_t>(i)];
@@ -241,7 +244,69 @@ bool VkCards::openSlot() {
     vkCmdPipelineBarrier(s.cmd, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
                          VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
                          0, 1, &mb, 0, nullptr, 0, nullptr);
+    s.timed = false;
+    if (timing_ && tq_) {                                     // 0.63.0: the benchmark's timer: the batch's start
+        const std::uint32_t q = 2u * static_cast<std::uint32_t>(pick);
+        vkCmdResetQueryPool(s.cmd, tq_, q, 2);
+        vkCmdWriteTimestamp2(s.cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, tq_, q);
+        s.timed = true;
+    }
     open_ = pick;
+    return true;
+}
+
+bool VkCards::setTiming(bool on) {
+    if (!on) { timing_ = false; times_.clear(); return true; }
+    if (!tq_) {
+        VkPhysicalDeviceProperties p{};
+        vkGetPhysicalDeviceProperties(c_.phys, &p);
+        std::uint32_t nq = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(c_.phys, &nq, nullptr);
+        std::vector<VkQueueFamilyProperties> qf(nq);
+        vkGetPhysicalDeviceQueueFamilyProperties(c_.phys, &nq, qf.data());
+        const std::uint32_t bits = c_.family < nq ? qf[c_.family].timestampValidBits : 0;
+        if (bits == 0 || !(p.limits.timestampPeriod > 0)) return false;
+        tsNs_ = p.limits.timestampPeriod;
+        tsMask_ = bits >= 64 ? ~std::uint64_t(0) : (std::uint64_t(1) << bits) - 1;
+        VkQueryPoolCreateInfo qi{};
+        qi.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        qi.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        qi.queryCount = 2u * static_cast<std::uint32_t>(kSlots);
+        if (!c_.check(vkCreateQueryPool(c_.device, &qi, nullptr, &tq_), "vkCreateQueryPool (the benchmark's batch times)")) { tq_ = VK_NULL_HANDLE; return false; }
+    }
+    timing_ = true;
+    return true;
+}
+
+void VkCards::readTimes() {
+    if (!tq_) return;
+    for (std::size_t i = 0; i < slots_.size(); i++) {
+        Slot& s = slots_[i];
+        if (!s.timed || !s.submitted || vkGetFenceStatus(c_.device, s.fence) != VK_SUCCESS) continue;
+        std::uint64_t r[4] = {0, 0, 0, 0};                    // (value, available) twice
+        const VkResult res = vkGetQueryPoolResults(c_.device, tq_, 2u * static_cast<std::uint32_t>(i), 2, sizeof r, r, 2 * sizeof(std::uint64_t),
+                                                   VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+        if (res == VK_NOT_READY || !r[1] || !r[3]) continue;
+        s.timed = false;
+        if (res != VK_SUCCESS) continue;
+        times_[s.ticket] = {r[0] & tsMask_, r[2] & tsMask_};
+    }
+    while (times_.size() > 4096) times_.erase(times_.begin());
+}
+
+bool VkCards::batchTimes(std::uint64_t first, std::uint64_t last, double& busyMs, double& t0Ns, double& t1Ns) {
+    busyMs = 0; t0Ns = -1; t1Ns = -1;
+    if (last < first) return true;
+    if (!done(last)) return false;
+    readTimes();
+    for (const Slot& s : slots_) if (s.timed && s.submitted && s.ticket >= first && s.ticket <= last) return false;   // (its times not yet there)
+    for (auto it = times_.lower_bound(first); it != times_.end() && it->first <= last; it = times_.erase(it)) {
+        const double a = static_cast<double>(it->second.first) * tsNs_, b = static_cast<double>(it->second.second) * tsNs_;
+        if (b > a) busyMs += (b - a) / 1e6;
+        if (t0Ns < 0 || a < t0Ns) t0Ns = a;
+        if (b > t1Ns) t1Ns = b;
+    }
+    while (!times_.empty() && times_.begin()->first < first) times_.erase(times_.begin());
     return true;
 }
 
@@ -439,8 +504,10 @@ std::uint64_t VkCards::flush(bool wait) {
         return last;
     }
     Slot& s = slots_[static_cast<std::size_t>(open_)];
+    const std::uint32_t q = 2u * static_cast<std::uint32_t>(open_);
     open_ = -1;
     if (failed_) return 0;
+    if (s.timed && tq_) vkCmdWriteTimestamp2(s.cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, tq_, q + 1);   // 0.63.0: the batch's end
     if (!c_.check(vkEndCommandBuffer(s.cmd), "vkEndCommandBuffer (card programs)")) { failed_ = true; return 0; }
     VkSubmitInfo si{};
     si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -733,6 +800,8 @@ const float* VkCards::cells(int index) const {
     return index >= 0 && index < static_cast<int>(grids_.size()) ? static_cast<const float*>(grids_[static_cast<std::size_t>(index)].host.map) : nullptr;
 }
 
+bool VkCards::firstUseTurn(FirstUse& f) { return f.state != 0 || !f.guard || f.guard->hold(); }
+
 void VkCards::firstUse(FirstUse& f) {
     if (f.state != 0 || !f.guard) return;
     f.guard->begin(f.step);
@@ -780,7 +849,7 @@ public:
     bool make(std::string& why) { return c_.makeKernel(k_r2d_groups_comp, sizeof k_r2d_groups_comp, k_, why); }
     bool ok() const override { return k_.pipe != VK_NULL_HANDLE && c_.ok(); }
     bool superGroups(const float* amps, long count, std::uint64_t epoch, long dirtyLo, long dirtyHi, const SuperGroupParams& p, unsigned char* out) override {
-        if (!ok() || count <= 0) return false;
+        if (!ok() || count <= 0 || !c_.firstUseTurn(use)) return false;   // (0.63.0: the first full use waits for its guard's turn: this frame on the processor)
         const bool full = epoch != superEpoch_ || count != superCount_;
         if (!upload(super_, amps, count, full, dirtyLo, dirtyHi)) return false;
         superEpoch_ = epoch; superCount_ = count;
@@ -788,7 +857,7 @@ public:
         return run(count, 0, 0, p0, p1, p.overlap ? 1 : 0, out);
     }
     bool jumpGroups(const float* ampsA, const float* ampsB, long jn, std::uint64_t epoch, const JumpGroupParams& p, unsigned char* out) override {
-        if (!ok() || jn <= 0) return false;
+        if (!ok() || jn <= 0 || !c_.firstUseTurn(use)) return false;
         if (epoch != jumpEpoch_ || jn != jumpCount_) {
             if (!upload(jumpA_, ampsA, jn, true, 0, 0) || !upload(jumpB_, ampsB, jn, true, 0, 0)) return false;
             jumpEpoch_ = epoch; jumpCount_ = jn;
@@ -900,7 +969,9 @@ public:
     void cancel(int job) override { release(job); }
     VkCards::FirstUse use;
     bool counting = true;                                     // (the start-up step's own run is not the first full use)
+    bool waiting() const override { return waiting_; }
 private:
+    bool waiting_ = false;
     struct Job { int id = 0; bool grid = false; std::uint64_t ticket = 0; VkCards::Buf vals, level; long count = 0; };
     Job* find(int id) { for (Job& j : jobs_) if (j.id == id) return &j; return nullptr; }
     void release(int id) {
@@ -908,7 +979,9 @@ private:
             if (jobs_[i].id == id) { c_.dropBuffer(jobs_[i].vals); c_.dropBuffer(jobs_[i].level); jobs_.erase(jobs_.begin() + static_cast<std::ptrdiff_t>(i)); return; }
     }
     int begin(const OutlineDensity& d, int mode, int n, float half, bool horizontal, float offset, float scale, float target) {
+        waiting_ = false;
         if (!ok() || n < 4 || n % 4 != 0 || jobs_.size() >= 8) return 0;
+        if (counting && !c_.firstUseTurn(use)) { waiting_ = true; return 0; }   // (0.63.0: its first full use waits for the guards' turn)
         Job j;
         j.id = nextId_++; j.grid = mode == 0;
         j.count = mode == 0 ? static_cast<long>(n) * n * n : static_cast<long>(n) * n;
@@ -1013,7 +1086,7 @@ public:
         return freeAt;
     }
     bool dispatch(int slot, const RockFrame& f) override {
-        if (!ok() || slot < 0 || slot >= kSlotsR || !slots_[slot].used) return false;
+        if (!ok() || slot < 0 || slot >= kSlotsR || !slots_[slot].used || (counting && !c_.firstUseTurn(use))) return false;
         const Slot& sl = slots_[slot];
         const float tHi = static_cast<float>(f.t), tLo = static_cast<float>(f.t - static_cast<double>(tHi));   // t = tHi + tLo exactly (24 + 24 bits), as OpenGL's
         const int st = sl.isStatic ? 1 : 0, d3 = f.d3 ? 1 : 0;
@@ -1393,7 +1466,7 @@ public:
     explicit VkGlow(VkCards& c) : c_(c) {}
     ~VkGlow() { c_.dropBuffer(pos_); c_.dropBuffer(grp_); }
     int record(const Renderer2D::CloudGpuDraw& d, VkBuffer jump, long& bytes) {
-        if (!c_.ok() || d.cnt <= 0 || !d.pts || (!d.grp && !jump)) return -1;
+        if (!c_.ok() || d.cnt <= 0 || !d.pts || (!d.grp && !jump) || (counting && !c_.firstUseTurn(use))) return -1;
         // 1. the places: the whole ring when it is another cloud (or it was changed other than by adding), else only the dots added since the last frame
         if (d.epoch != epoch_ || d.cap != cap_ || d.k < k_ || d.k - k_ >= d.cap) {
             if (pos_.size != VkDeviceSize(d.cap) * 12u) {

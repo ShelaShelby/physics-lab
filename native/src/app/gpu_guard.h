@@ -41,6 +41,9 @@ GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecor
 class GpuGuard {
 public:
     GpuGuard() {}
+    ~GpuGuard() { giveTurn(); }                                   // (0.63.0: a guard dropped with its step open gives the turn back)
+    GpuGuard(const GpuGuard&) = delete;
+    GpuGuard& operator=(const GpuGuard&) = delete;
     // 0.56.0: a guard of its own (the spinning hole drawn per pixel, gpuSkyGuard): its marker file, the log it writes into (truncated at start only by
     // the guard that says so) and a prefix for its lines
     GpuGuard(const char* marker, const char* log, bool truncateLog, const char* prefix) : markerName_(marker), logName_(log), prefix_(prefix), truncateLog_(truncateLog) {}
@@ -64,8 +67,16 @@ public:
     std::string offText() const;
     // a step of the card's path: logged; while guarded the marker names it first (flushed and committed); PL_GPU_DIE=<start of a step's name> ends the
     // process inside that step (tests: as if the driver had crashed there)
+    // 0.63.0: at most one guarded step open at a time in the whole process, across all guards (a crash then leaves one marker, naming the guilty step).
+    // A worker's begin waits for its turn; on the frame's thread (gpuGuardFrameThread) begin never waits: a step the frame starts begins with hold() first,
+    // and moves to a later frame while hold() says no. end() removes the marker (no step open) and gives the turn back unless the guard holds it.
     void begin(const std::string& step);
     void end(const std::string& step, const std::string& result = std::string());
+    // 0.63.0: the frame takes the turn for a run of steps (never waits; false: another guard's step is open, logged once, ask again next frame); true at once
+    // when the guard is not guarded (its steps write no markers). The turn is given back by rest() (a gap of unknown length follows, such as the wait for
+    // the first full use), finished(), timedOut() or failed().
+    bool hold();
+    void rest();
     void log(const std::string& line);
     // the sequence of steps finished: the marker removed; ok and guarded: "ok" kept (no markers any more for this version and driver)
     void finished(bool ok, const std::string& why = std::string());
@@ -89,6 +100,14 @@ private:
     GpuGuardDecision d_;
     int generation_ = 0, lines_ = 0;
     double t0_ = 0;
+    bool held_ = false;
+    int open_ = 0;                                                // guarded steps of this guard open now (two workers of one guard may overlap)
+    std::string waitLogged_;
+    bool waiting_ = false;                                        // its last hold() / frame begin was told to wait (counted in gpuGuardBusy)
+    void setWaiting(bool w);
+    std::string name() const;
+    bool takeTurn(const std::string& step, bool mayWait);
+    void giveTurn();
     void writeMarker(const std::string& step);
     void removeMarker();
     void line(const std::string& text, bool commit);
@@ -126,6 +145,13 @@ GpuGuard& gpuVkCloudGuard();
 // (the lens, the table pass, the exposure, the glow, the glare) have one: gpuVkLensGuard ("gpuvklens=", "[vulkan] [lens] ")
 GpuGuard& gpuVkLensGuard();
 std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the ten Vulkan guards by their settings name (gpuvk<name>=)
+
+// 0.63.0: the frame's thread (main.cpp, at start): a guarded begin() there never waits for another guard's open step (every other thread does)
+void gpuGuardFrameThread();
+// the guard whose step (or run of steps) has the turn now, and that step ("" when none: tests)
+std::string gpuGuardTurn();
+// a guarded step is open or waits for its turn (the start-up of a card program is under way: the labs are not settled; tests, the benchmark's waits)
+bool gpuGuardBusy();
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);

@@ -934,6 +934,7 @@ bool BlackHoleView::cardReady(render::Renderer2D& R) {
     if (cardState_ == 0) {
         if (G.started() && !G.allowed()) { cardOff(G.offText().empty() ? std::string("the graphics card's light paths are switched off") : G.offText()); return false; }
         if (++asyncDraws_ < 3) return false;                               // (the first frames on screen first)
+        if (!G.hold()) return false;                                       // 0.63.0: its steps (the pipeline, the check, the first fill) wait for the guards' turn
         static GuardSteps steps;
         render::IKerrCompute* K = R.kerrCompute(&steps);
         if (!K) { G.finished(false, R.kerrWhy()); cardOff(R.kerrWhy()); return false; }
@@ -1093,6 +1094,7 @@ bool BlackHoleView::skyReady(render::Renderer2D& R) {
     if (skyState_ == 0) {
         if (G.started() && !G.allowed()) { skyOff(G.offText().empty() ? std::string("the spinning hole on the graphics card is switched off") : G.offText()); return false; }
         if (++skyFrames_ < 3) return false;                                // (the first frames on screen first)
+        if (!G.hold()) return false;                                       // 0.63.0: its steps wait for the guards' turn (a later frame)
         skyState_ = 2; skyStep_ = 0;
         // 0.57.2: the check's reference (traceClosed at the probes' 3,840 pixels, about 13 ms here) on a thread of its own while the card builds and draws: the
         // frame only compares (it was made on the frame, one frame of 25-48 ms in blackhole.film_tilt: REPORT 0.57.2). Made once per run (the cases are fixed).

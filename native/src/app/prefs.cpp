@@ -53,7 +53,7 @@ std::string savePrefs(const Prefs& p) {
     if (!p.gpuSlice.empty()) o << "gpuslice=" << clean(p.gpuSlice) << "\n";            // 0.57.0
     if (!p.gpuJump.empty()) o << "gpujump=" << clean(p.gpuJump) << "\n";               // 0.57.0
     if (!p.gpuMolCloud.empty()) o << "gpumolcloud=" << clean(p.gpuMolCloud) << "\n";   // 0.57.1
-    if (p.graphics != "opengl") o << "graphics=" << clean(p.graphics) << "\n";        // 0.59.0
+    if (p.graphics != "vulkan") o << "graphics=" << clean(p.graphics) << "\n";        // 0.59.0 (0.63.0: Vulkan the default, OpenGL written)
     if (!p.gpuVulkan.empty()) o << "gpuvulkan=" << clean(p.gpuVulkan) << "\n";       // 0.59.0
     for (const auto& [name, line] : p.gpuVk) if (!line.empty()) o << "gpuvk" << name << "=" << clean(line) << "\n";   // 0.61.0
     for (std::size_t i = 0; i < p.calcHistory.size() && i < static_cast<std::size_t>(kCalcHistoryMax); i++) o << "calc." << i << "=" << clean(p.calcHistory[i]) << "\n";   // 0.49

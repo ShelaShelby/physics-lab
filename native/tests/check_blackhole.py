@@ -46,6 +46,7 @@ def check(ok, what):
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src")
 BASE = {"PL_NEWUI": "on", "PL_DRAWSTAT": "1", "PL_FACTS": "off"}
+GL = dict(BASE, PL_GRAPHICS="opengl")   # 0.63.0 (Vulkan the default): the checks of OpenGL-only things (PL_BH_COMPARE, OpenGL's guard records) run on OpenGL
 
 def bh(r, prefix="blackhole "):
     n = r.note(prefix)
@@ -241,7 +242,7 @@ def precision_card(binary, work):
     # table's own limits against the integrator are 2e-3 and 2e-2: blackhole_physics), b within 1e-7, u within 1e-3 (relative to 1 + |u|; 1e-4 nearer),
     # the edge samples within 1e-12 rad, the rows within 1e-8; on 300 of the card's rays the null condition and Carter's q within 1e-8 at the end (the
     # table's tolerance is 1e-10; blackhole_physics asks 1e-9 at 1e-11), no worse than 10 x the processor's own same rays.
-    r = run_app(binary, work, "bh_precision_card", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="card"), frames=3, timeout=3000)
+    r = run_app(binary, work, "bh_precision_card", dict(GL, PL_BLACKHOLE="1", PL_BH_COMPARE="card"), frames=3, timeout=3000)
     for ln in r.out.splitlines():
         if ln.startswith("PLBHCARD"): print(ln)
     m = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCARDMATH ")]
@@ -275,7 +276,7 @@ def precision_sky(binary, work):
     # limit for the fine table) 2 pixels or more from the edge at all but 1 in 10000 sky pixels (counted and placed); b within 1e-4; the disc's first image
     # the same at all but 1 in 10000 of its pixels, its radius within 5e-3 and g within 1e-3 (both measured 1.6e-3 / 2.4e-4 at spin 0.99, 3e-5 elsewhere),
     # over 1e-3 at no more than 1 in 10000 disc pixels. The start-up check passes on this renderer.
-    r = run_app(binary, work, "bh_precision_sky", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="sky", PL_EXIT_AFTER_FRAMES="1"), frames=1, timeout=1800)
+    r = run_app(binary, work, "bh_precision_sky", dict(GL, PL_BLACKHOLE="1", PL_BH_COMPARE="sky", PL_EXIT_AFTER_FRAMES="1"), frames=1, timeout=1800)
     seen = set()
     for ln in r.out.splitlines():
         if ln.startswith("PLBHSKY") and ln not in seen: print(ln); seen.add(ln)
@@ -311,7 +312,7 @@ def precision_sky(binary, work):
     # 2e-3 rad, the disc's first image the same (a radius within 1e-3 of rIn or rOut excepted: the radius's own limit), its r and g within 1e-3, and every
     # crossing in [rIn, rOut] within 1e-3, all 2 px or more from the edge. 0.56.1's shader lost 60-79 rays on one column here (lambda = 2 r+ / a, where
     # r3 = r+ and (B39)'s two terms cancelled in single precision): the owner's row of dark specks beside the shadow
-    r = run_app(binary, work, "bh_precision_skyfull", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="sky", PL_BH_SKYFULL="2560,1369,30", PL_EXIT_AFTER_FRAMES="1"), frames=1, timeout=1800)
+    r = run_app(binary, work, "bh_precision_skyfull", dict(GL, PL_BLACKHOLE="1", PL_BH_COMPARE="sky", PL_BH_SKYFULL="2560,1369,30", PL_EXIT_AFTER_FRAMES="1"), frames=1, timeout=1800)
     full = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYFULL ")]
     for ln in r.out.splitlines():
         if ln.startswith("PLBHSKYFULL "): print(ln)
@@ -332,7 +333,7 @@ def precision_sky(binary, work):
 def part_precision(binary, work):
     precision_sky(binary, work)
     precision_card(binary, work)
-    r = run_app(binary, work, "bh_precision", dict(BASE, PL_BLACKHOLE="1", PL_BH_COMPARE="1"), frames=3, timeout=1800)
+    r = run_app(binary, work, "bh_precision", dict(GL, PL_BLACKHOLE="1", PL_BH_COMPARE="1"), frames=3, timeout=1800)
     rows = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHCMP ")]
     for ln in r.out.splitlines():
         if ln.startswith("PLBH"): print(ln)
@@ -905,6 +906,7 @@ SKY_STEPS = ["compile the tiny shader", "link the tiny shader", "compile the ell
              "compile the whole sky shader", "link the whole sky shader", "a first small draw", "the check", "the first full picture"]
 
 def sky_guard(binary, work, sb):
+    sb = dict(sb, PL_GRAPHICS="opengl")   # 0.63.0: OpenGL's guard records (Vulkan's twins: check_shell.py vulkanbh)
     # 0.56.0, the card's sky has a guard of its own (app/gpu_guard.h gpuSkyGuard: its marker gpu-sky-step.txt, the settings line "gpusky=", the same log
     # with its lines marked [sky]). A normal first run logs every step in order, each with its time, and keeps "ok". Then the process is ended inside each
     # step once (PL_GPU_DIE): the marker names the step; the next start compiles nothing of the sky's shaders, the processor's table draws, Settings,
@@ -959,6 +961,7 @@ def sky_guard(binary, work, sb):
     check("PLBHSKY state=-1" in rf.out and said and ff and ff[-1]["skycard"] == "0", f"sky guard: a failed start-up check: the processor's table draws and Settings says so (said {said})")
 
 def smooth_sky(binary, work, base, steps):
+    base = dict(base, PL_GRAPHICS="opengl")   # 0.63.0: OpenGL's guard records (Vulkan's twins: check_shell.py vulkanbh)
     # 0.56.0, the card draws sky and disc per pixel (render/shaders.h kKerrSkyFS; the processor's tables serve the stars). The same tilt drags at spin 0.6,
     # 880 x 560: the card's start-up check passes; in every frame in which the view moved a new picture of sky and disc is drawn in that frame (the stars'
     # pictures may come later); at rest the stars' picture is the settings' own and the sky is drawn at full resolution. 0.56.2 (the owner's decision: no
@@ -1026,6 +1029,7 @@ def smooth_disc(binary, work, base):
         check(last.get("behind") == "0" and last.get("sky") == last.get("want"), f"disc at rest, {name}: at rest the picture is the settings' own")
 
 def smooth_guard(binary, work, cb):
+    cb = dict(cb, PL_GRAPHICS="opengl")   # 0.63.0: OpenGL's guard records (Vulkan's twins: check_shell.py vulkanbh)
     # 0.55.7, the guard round the card's path (app/gpu_guard.h) and its log, beside the settings file (here PL_SETTINGS in a folder of its own per case).
     # The log of a normal first run: the start's lines, then every step in order, the check's numbers, the first fill piece by piece, the verdict.
     gd = os.path.join(work, "guard_ok"); os.makedirs(gd, exist_ok=True)

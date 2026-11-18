@@ -1163,7 +1163,9 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
         maskValid_ = ksky;
         last_ = L; last_.table = nullptr; last_.discU = last_.discP = last_.discCol = nullptr;
         last_.kA = last_.kB = last_.kEdge = last_.kTau = last_.discF = nullptr; lastPtW_ = ptW; lensValid_ = true; redraws_++;
-        if (guardState_ == 0 && prog_[pKerr].state == 2) { G.begin("the first full picture"); firstTicket_ = c_->pending(); guardState_ = 1; }
+        // 0.63.0: its step begins once it has the guards' turn (one guarded step at a time); the picture is drawn meanwhile all the same: the frame never
+        // waits, and the step open then (the sky's first full picture, say) is this same drawing
+        if (guardState_ == 0 && prog_[pKerr].state == 2 && G.hold()) { G.begin("the first full picture"); firstTicket_ = c_->pending(); guardState_ = 1; }
         glowValid_ = false;
         glareValid_ = false;
         composed_ = false;

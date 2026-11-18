@@ -49,7 +49,8 @@ struct Prefs {
     std::string gpuSky;                  // 0.56.0: the same for the spinning hole drawn per pixel (app/gpu_guard.h gpuSkyGuard)
     std::string gpuSlice, gpuJump;       // 0.57.0: the same for the Atom Lab's Slice dots and jump groups on the card (gpuSliceGuard, gpuJumpGuard)
     std::string gpuMolCloud;             // 0.57.1: the same for the Molecule Lab's Density cloud on the card (gpuMolCloudGuard)
-    std::string graphics = "opengl";     // 0.59.0: Settings, Performance, Graphics: "opengl" (the default, not written) or "vulkan" (the test of Vulkan step 1); used from the next start
+    std::string graphics = "vulkan";     // 0.59.0: Settings, Performance, Graphics; used from the next start. 0.63.0: "vulkan" the default (not written), "opengl" the backup
+                                         // (written when chosen); a file with graphics=vulkan or graphics=opengl keeps it
     std::string gpuVulkan;               // 0.59.0: the Vulkan start's guard (app/gpu_guard.h gpuVulkanGuard)
     std::map<std::string, std::string> gpuVk;   // 0.61.0: the card programs' guards on Vulkan, by name (groups outline rocks cloud slice jump molcloud): lines "gpuvk<name>="
     std::string gpuPaths;                // 0.55.7: the graphics card's light paths' guard (app/gpu_guard.h GpuGuard::saved): switched off or passed, for which app and driver

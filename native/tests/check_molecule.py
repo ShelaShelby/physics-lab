@@ -183,7 +183,7 @@ def anharm(binary, work):
     check(wv is not None and wv["on"] == "1" and wv["anhbox"] == "0" and not any("Anharmonic (real bond)" in t[2] for t in w.texts) and not w.note("bondcard "), f"water: no tick box, no card ({wv})")
 
 MOL_STEPS = ["compile the Density cloud's shaders", "link the Density cloud's shaders", "the Density cloud's first small run", "the Density cloud's check", "the Density cloud's first full use"]
-MOL_BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "molecule.density,molecule.vib_density",
+MOL_BENCH = {"PL_GRAPHICS": "opengl", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "molecule.density,molecule.vib_density",
              "PL_BENCH_WARMUP": "1.0", "PL_BENCH_MEASURE": "1.5"}
 
 def card(binary, work):
@@ -203,7 +203,7 @@ def card(binary, work):
         dirs[i] = d
         calls.append(((binary, work, f"mc_die{i}", dict(MOL_BENCH, PL_SETTINGS=os.path.join(d, "settings.txt"), PL_GPU_DIE=st)), BIG))
     # the picture: water and benzene in the Density style, cloud and surface, the card's cloud and the processor's (PL_MOL_CARD=0), the same frames
-    look = {"PL_MOLECULE_STYLE": "real", "PL_DRAWSTAT": "1"}
+    look = {"PL_MOLECULE_STYLE": "real", "PL_DRAWSTAT": "1", "PL_GRAPHICS": "opengl"}   # (0.63.0: OpenGL's card program and guard records)
     PICS = [("H2O", "dark"), ("C6H6", "dark"), ("H2O", "light")]   # (the light page: the darker dot colour, drawn over instead of added)
     pics = [((binary, work, f"mc_pic_{m}_{th}_{w}", dict(look, PL_MOLECULE=m, PL_THEME=th, **({"PL_MOL_CARD": "0"} if w == "cpu" else {}))), dict(frames=90, theme=th)) for m, th in PICS for w in ("card", "cpu")]   # (90 frames: the steps take a frame each, the read-backs a few more on a busy PC)
     prefetch(calls + pics)
@@ -237,7 +237,7 @@ def card(binary, work):
     for i, s_ in enumerate(MOL_STEPS):
         marker = read(os.path.join(dirs[i], "gpu-molcloud-step.txt"))
         check(f"step={s_}\n" in marker and "version=molcloud " in marker, f"card: the process ended inside '{s_}': the marker names the step ({marker!r})")
-    after = [((binary, work, f"mc_after{i}", {"PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": os.path.join(dirs[i], "settings.txt"), "PL_OPEN": "settings", "PL_DRAWSTAT": "1"}),
+    after = [((binary, work, f"mc_after{i}", {"PL_GRAPHICS": "opengl", "PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": os.path.join(dirs[i], "settings.txt"), "PL_OPEN": "settings", "PL_DRAWSTAT": "1"}),
               dict(frames=30, size="880x560", timeout=900)) for i in range(len(MOL_STEPS))]
     prefetch(after)
     for i, s_ in enumerate(MOL_STEPS):
@@ -257,7 +257,7 @@ def card(binary, work):
     r5 = run_app(binary, work, "mc_shader", dict(MOL_BENCH, PL_SETTINGS=sf2, PL_GPU_MOLSHADER="molcloud 0000000000000000"), frames=100000, size="880x560", timeout=1500)
     check("PLMOLCARD state=1" in r5.out, "card: a changed shader tries again (and passes here)")
     sf = os.path.join(dirs[1], "settings.txt")
-    r4 = run_app(binary, work, "mc_again", {"PL_MOLECULE": "H2O", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpumolcloud", "PL_SCRIPT": "14:click=gpumolcloud.again"}, frames=60, size="880x560", timeout=900)
+    r4 = run_app(binary, work, "mc_again", {"PL_GRAPHICS": "opengl", "PL_MOLECULE": "H2O", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpumolcloud", "PL_SCRIPT": "14:click=gpumolcloud.again"}, frames=60, size="880x560", timeout=900)
     check(not r4.scripted_missing() and "PLMOLCARD state=1" in r4.out and "gpumolcloud=ok" in read(sf), f"card: Try again: the program is made, checked and used again in the same run ({r4.scripted_missing()})")
     # 6. the picture: the card's cloud against the processor's. The dots themselves are checked against their derived limits above; here a sanity bound on
     #    the whole picture (a wrong exposure, a missing or misplaced set of dots or the wrong colour gives tens of levels): every frame drawn by the card
