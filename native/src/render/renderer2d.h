@@ -30,6 +30,8 @@
 namespace render {
 
 class VkDraw2D;   // 0.60.0: render/vk_draw2d.h (Vulkan, step 2)
+class VkCards;    // 0.61.0: render/vk_card.h (Vulkan, step 3)
+class VkGlow;
 
 struct Color {
     float r = 1, g = 1, b = 1, a = 1;
@@ -73,6 +75,14 @@ public:
     void useVulkan(VkDraw2D* d);                       // (render/renderer2d_vk.cpp: renderer2d.cpp itself needs no Vulkan to link)
     bool vulkan() const { return vk_ != nullptr; }
     bool loadMapsVulkan(std::string& why);
+    // 0.61.0 (Vulkan, step 3 of 5): the card programs on Vulkan (render/vk_card.h), made here, each under its own guard (app/gpu_guard.h: groups,
+    // outline, rocks and the Glow dots at once; the Slice, the jump and the Density cloud by their labs' paths, as on OpenGL): compute(), outlineCompute(),
+    // rockCompute(), cloudGpuOk(), atomCard() and moleculeCard() then give Vulkan's objects. why: a line for each program that could not be made.
+    // null: every Vulkan object of the card programs deleted (before the Vulkan device goes)
+    void useVulkanCards(VkCards* c, std::vector<std::string>* why = nullptr);
+    // this start has the card's compute programs (OpenGL 4.3, or Vulkan's) and they are not switched off (PL_NO_COMPUTE): the labs' card paths ask this
+    bool computeShaders() const { return vk_ ? vkc_ != nullptr && !noCompute_ : outline_ != nullptr; }
+    const std::string& rocksWhy() const { return rocksWhy_; }   // 0.61.0: why the rocks are not on the card ("" when they are, or on OpenGL)
     void endVulkan(int fbW, int fbH, const float clear[4], bool forShot);
     // 0.60.0 (tests: the coverage of the views): how many times each drawing call was made since the start, "rect=12 line=40 ..." (PL_LOG_DRAWKINDS)
     std::string drawKindsText() const;
@@ -160,7 +170,7 @@ public:
         PhasePalette pal;
         std::function<double(const std::vector<float>&)> exposure;
     };
-    bool cloudGpuOk() const { return clProgram_ != 0 && grProgram_ != 0; }
+    bool cloudGpuOk() const { return vk_ ? vkGlow_ != nullptr : (clProgram_ != 0 && grProgram_ != 0); }
     // 0.57.1: the Molecule Lab's Density cloud from the card (render/molecule_card.h): its dots made, summed into the exposure's grid and drawn there, in the
     // order of the other shapes; the same picture as glowBlobs + blobsPaletteTake up to float rounding. False (nothing added): the card's programs are not ready.
     bool molCloud(const MolCloudDraw& d);
@@ -428,6 +438,17 @@ private:
     GLint uSize_ = -1, uSpace_ = -1, plSpace_ = -1, plLunar_ = -1;
     Color space_{0, 0, 0, 1};
     VkDraw2D* vk_ = nullptr;                        // 0.60.0: Vulkan draws the picture (not owned)
+    VkCards* vkc_ = nullptr;                        // 0.61.0: the card programs on Vulkan (not owned; their objects below are)
+    VkGlow* vkGlow_ = nullptr;
+    AtomCard* (*vkAtomCard_)(VkCards&) = nullptr;
+    MoleculeCard* (*vkMolCard_)(VkCards&) = nullptr;
+    void (*vkDropCards_)(Renderer2D&) = nullptr;
+    bool noCompute_ = false;
+    std::string rocksWhy_;
+    std::vector<int> vkGrid_;                       // 0.61.0: this frame's grids (by segment), their lights
+    std::vector<double> vkLight_;
+    std::vector<char> vkRocks_;
+    bool vkCardsFrame(bool forShot);
     bool vkMap_[static_cast<int>(Map::Count)] = {};
     enum DrawKind { kdRect, kdLine, kdTriangle, kdDisc, kdRing, kdSphere, kdSunDisc, kdFadeDisc, kdMaskedDisc, kdSquares, kdBlobs, kdSpheres, kdMesh, kdSoftLayer,
                     kdCloudLayer, kdPlanet, kdPlanetMap, kdPlanetRings, kdPlanetEclipse, kdPlanetAir, kdSkyMap, kdGray, kdBlobKind0, kdKindCount = kdBlobKind0 + 10 };

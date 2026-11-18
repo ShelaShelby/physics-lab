@@ -33,11 +33,13 @@ struct VkDevCtx {
     std::function<bool(VkResult, const char*)> check;                         // false (and logged) on an error
     std::function<bool(const std::function<void(VkCommandBuffer)>&)> once;   // one-time commands, submitted and waited for (start-up, uploads, Save image)
     app::GpuGuard* guard = nullptr;
+    std::uint32_t family = 0;                                                 // 0.61.0: the queue's family, and whether it also runs compute shaders
+    bool compute = false;
 };
 
 class VkDraw2D {
 public:
-    enum Prog { kTri, kPlanet, kSquare, kBlob, kMesh, kComposite, kGray, kProgCount };
+    enum Prog { kTri, kPlanet, kSquare, kBlob, kMesh, kComposite, kGray, kCloud, kMolDot, kProgCount };   // 0.61.0: kCloud (kCloudVS), kMolDot (kMolDotVS), with kBlobFS
     enum Blend { kNoBlend, kNormal, kAdditive, kPremul, kOneOne, kBlendCount };   // as Renderer2D::end: normalBlend; additive blobs; premultiplied over; GL_ONE, GL_ONE
     enum Pass { kPassMs, kPass8, kPassF, kPassCount };                        // the picture (S samples), an 8-bit picture of 1 sample, the cloud's float picture
 
@@ -72,6 +74,16 @@ public:
     // a draw with the current pass: vertices from this frame's buffer at vbOff (binding 0) and, for the instanced programs, the corners at binding 0 and
     // the instances at ibOff (binding 1) (vertex buffer bindings). tex: 0 the white texture, 1..31 a map, -1 the current layer (composite), -2 the picture (grey pass)
     void draw(Prog p, Blend b, VkDeviceSize vbOff, int first, int count, VkDeviceSize ibOff = 0, int instances = 0, int firstInstance = 0, int tex = 0);
+    // 0.61.0 (Vulkan step 3): the card programs' draws, from buffers on the card: kSquare with the rocks' places (binding 1, 2 floats an instance), kCloud
+    // with the dots' places (binding 1, 3 floats) and groups (binding 2, one byte, read as a float as OpenGL's GL_UNSIGNED_BYTE), kMolDot with the dots made
+    // by kMolDotsCS (binding 1, 4 floats); the corners at binding 0
+    void drawInst(Prog p, Blend b, VkBuffer inst1, VkBuffer inst2, int instances);
+    // kCloud and kMolDot are made when their card program is first built (their own guarded steps, render/vk_card.cpp), not at init: false, why says it
+    bool addProgram(Prog p, std::string& why);
+    bool hasProgram(Prog p) const { return prog_[p].pipe[kPass8][kNormal] != VK_NULL_HANDLE; }
+    // a buffer or other object that a frame on the card may still use: f() is called once the frames up to this one are done
+    void later(std::function<void()> f) { garbage_.push_back({frameNo_, std::move(f)}); }
+    VkRenderPass passOf(Pass p) const { return passes_[p][0]; }
     // meshes (render/mesh.h MeshVertex), kept on the card
     int meshCreate(const void* v, std::size_t bytes);
     void meshDelete(int id);
@@ -89,7 +101,7 @@ public:
     struct Img { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; int w = 0, h = 0; };
     struct Member { std::uint32_t offset = 0, arrayStride = 0, matrixStride = 0; };
     struct Block { std::uint32_t size = 0; std::map<std::string, Member> m; std::vector<std::uint8_t> data; };
-    struct Shader { std::map<std::string, int> in, out; Block block; int blockBinding = -1, samplerBinding = -1; };   // (reflection of one stage)
+    struct Shader { std::map<std::string, int> in, out; Block block; int blockBinding = -1, samplerBinding = -1; std::vector<int> storage; };   // (reflection of one stage; 0.61.0: its storage buffers' bindings)
 
 private:
     struct Targets { int w = 0, h = 0, s = 1; Img ms, pic, gray; VkFramebuffer fbPic = VK_NULL_HANDLE, fbGray = VK_NULL_HANDLE; };

@@ -31,7 +31,7 @@ std::string molCloudShaderId() {
     return b;
 }
 
-bool MoleculeCard::build(KerrSteps* steps, std::string& why) {
+bool MoleculeCardGl::build(KerrSteps* steps, std::string& why) {
     if (built()) return true;
     const std::string cName = "compile the Density cloud's shaders", lName = "link the Density cloud's shaders";
     struct Src { GLenum kind; const char* text; const char* name; };
@@ -91,7 +91,7 @@ bool MoleculeCard::build(KerrSteps* steps, std::string& why) {
     return true;
 }
 
-void MoleculeCard::reset() {
+void MoleculeCardGl::reset() {
     while (!jobs_.empty()) release(jobs_.back().id);
     for (GLuint* p : {&cs_, &dot_, &grid_}) if (*p) { glDeleteProgram(*p); *p = 0; }
     for (Set& s : sets_) if (s.buf) glDeleteBuffers(1, &s.buf);
@@ -108,7 +108,7 @@ void MoleculeCard::reset() {
     ready_ = false;
 }
 
-void MoleculeCard::release(int id) {
+void MoleculeCardGl::release(int id) {
     for (std::size_t i = 0; i < jobs_.size(); i++)
         if (jobs_[i].id == id) {
             if (jobs_[i].sync) glDeleteSync(jobs_[i].sync);
@@ -119,7 +119,7 @@ void MoleculeCard::release(int id) {
         }
 }
 
-void MoleculeCard::dispatch(GLuint ptsBuf, GLuint outBuf, long n, const MolCloudCam& c) {
+void MoleculeCardGl::dispatch(GLuint ptsBuf, GLuint outBuf, long n, const MolCloudCam& c) {
     glUseProgram(cs_);
     glUniform4f(uR0_, c.R[0], c.R[1], c.R[2], c.panX);
     glUniform4f(uR1_, c.R[3], c.R[4], c.R[5], c.panY);
@@ -134,7 +134,7 @@ void MoleculeCard::dispatch(GLuint ptsBuf, GLuint outBuf, long n, const MolCloud
     glUseProgram(0);
 }
 
-int MoleculeCard::beginProject(const float* pts, long n, const MolCloudCam& cam) {
+int MoleculeCardGl::beginProject(const float* pts, long n, const MolCloudCam& cam) {
     if (!cs_ || !pts || n <= 0 || n > (1 << 20) || jobs_.size() >= 16) return 0;
     Job j;
     j.id = nextId_++;
@@ -151,7 +151,7 @@ int MoleculeCard::beginProject(const float* pts, long n, const MolCloudCam& cam)
     return j.id;
 }
 
-JobState MoleculeCard::pollProject(int job, std::vector<float>& out) {
+JobState MoleculeCardGl::pollProject(int job, std::vector<float>& out) {
     Job* j = nullptr;
     for (Job& q : jobs_) if (q.id == job) j = &q;
     if (!j) return JobState::Failed;
@@ -167,7 +167,7 @@ JobState MoleculeCard::pollProject(int job, std::vector<float>& out) {
     return done ? JobState::Done : JobState::Failed;
 }
 
-void MoleculeCard::drawCloud(const MolCloudDraw& d, double width, double height, const float* fuzz, std::vector<float>& cells) {
+void MoleculeCardGl::drawCloud(const MolCloudDraw& d, double width, double height, const float* fuzz, std::vector<float>& cells) {
     if (!built() || !d.pts || d.cnt <= 0) return;
     // 1. the dots of this set on the card (sent once per set; the least recently used set's buffer is taken for a new one)
     Set* set = nullptr;
@@ -267,7 +267,7 @@ void MoleculeCard::drawCloud(const MolCloudDraw& d, double width, double height,
                                                                                             // when the card stays a frame behind)
 }
 
-int MoleculeCard::fenceState() {
+int MoleculeCardGl::fenceState() {
     if (!fence_) return -1;
     const GLenum r = glClientWaitSync(fence_, GL_SYNC_FLUSH_COMMANDS_BIT, 0);
     if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) { glDeleteSync(fence_); fence_ = nullptr; return 1; }

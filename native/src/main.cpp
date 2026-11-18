@@ -30,6 +30,7 @@
 #include "render/gl_loader.h"
 #include "render/renderer2d.h"
 #include "render/vk_backend.h"
+#include "render/vk_card.h"
 #include "ui/changelog.h"
 #include "ui/fonts.h"
 #include "ui/learn.h"
@@ -41,6 +42,7 @@
 #include "orbit/sky.h"
 #include "ui/app_pages.h"
 #include "ui/app_tabs.h"
+#include "atom/atom_bench.h"
 #include "atom/outline.h"
 #include "atom/atom_view.h"
 #include "ui/atom_learn.h"
@@ -218,12 +220,27 @@ int main(int, char**) {
         app.vulkanDevice = vk.deviceName(); app.vulkanDriver = vk.driverText();
         std::printf("Vulkan: %s | driver %s | Vulkan %s | %s\n", vk.deviceName().c_str(), vk.driverText().c_str(), vk.apiText().c_str(), vk.presentText().c_str());
         std::printf("Vulkan picture: %s\n", vk.pictureText().c_str());   // 0.60.0
-        // 0.60.0 (step 2): no OpenGL object is made on Vulkan, so every card program is absent (compute(), outlineCompute(), rockCompute() and kerrCompute()
-        // give nullptr, rocksGpu() false, cloudGpuOk() false, molCloud() false, the Atom and Molecule Labs' card paths go off): each lab takes its processor path
-        const char* fb = "Vulkan, step 2 of 5: the card programs (Atom Lab superposition, jumps, Slice dots, outline, Cloud 3D Glow dots; Molecule Lab Density cloud; "
-                         "Orbit Lab rocks) run on the processor here until step 3; the Black Hole Lab is not drawn until step 4";
-        std::printf("%s\n", fb);
-        app::gpuVulkanGuard().log(fb);
+        // 0.61.0 (step 3): the card programs on Vulkan, each under a guard of its own (their markers, the settings lines "gpuvk<name>=", the log's lines
+        // "[vulkan] [<name>] "): the groups, the outline, the rocks and the Glow dots are made now; the Slice, the jump and the Density cloud by their labs'
+        // paths when first shown, as on OpenGL. A program that fails takes the processor's path; the rest of Vulkan stays on.
+        app::useVulkanGuards(true);
+        bool cardsChanged = false;
+        for (const auto& [name, g] : app::vulkanCardGuards()) {
+            g->start(ui::settingsFolder(), render::vkCardVersion(name), vk.deviceName() + " / " + vk.driverText(), app.prefs.gpuVk[name], {});
+            cardsChanged = cardsChanged || g->saved() != app.prefs.gpuVk[name];
+        }
+        if (cardsChanged) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);   // kept at once (a crash later must not lose it)
+        else for (const auto& [name, g] : app::vulkanCardGuards()) g->settingsWritten();
+        std::vector<std::string> cardsWhy;
+        vk.initCards(renderer, cardsWhy);
+        for (const std::string& w : cardsWhy) { app::gpuVulkanGuard().log("card program on the processor: " + w); std::printf("Vulkan card program on the processor: %s\n", w.c_str()); }
+        if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // (as on OpenGL: the processor's paths, to compare)
+        app.glMajor = 0; app.glMinor = 0;                             // (0: Vulkan, app/bench.h computePathText)
+        app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr; app.rocksWhy = renderer.rocksWhy();
+        atom::setOutlineCompute(renderer.outlineCompute());
+        std::printf("Vulkan card programs: %zu bytes of SPIR-V; double precision in shaders: %s\n", vk.cardSpirvBytes(), vk.float64() ? "yes" : "no");
+        std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(0, 0, app.computeOk, true).c_str());
+        std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(0, 0, app.rocksOk, true, app.rocksWhy).c_str());
     } else {
         // 0.13 stage 2: first ask for OpenGL 4.3 (the Atom Lab's superposition and jumps then run on the GPU), with smooth edges, then without them; if the PC cannot give 4.3, the same two tries
         // for 3.3 as before (and the CPU does that work).
@@ -240,6 +257,8 @@ int main(int, char**) {
         if (SDL_getenv("PL_FAKE_GLFAIL")) { if (gl) SDL_GL_DestroyContext(gl); gl = nullptr; if (window) SDL_DestroyWindow(window); window = nullptr; }   // for automatic checks: pretend OpenGL is missing
         if (!window || !gl) { fail("Could not open an OpenGL 3.3 window", "Physics Lab draws with OpenGL 3.3 (3D graphics), and your computer did not give it a window to draw in. This usually means the graphics driver is too old, or missing.", kDriverAdvice); return 1; }
     }
+    if (const char* c = SDL_getenv("PL_ATOM_CARD")) if (std::string(c) == "0") { app.atom.gpuSlice = false; app.atom.gpuJump = false; }   // 0.57.0 (tests: the processor for both, to compare)
+    if (const char* c = SDL_getenv("PL_MOL_CARD")) if (std::string(c) == "0") app.moleculeView.gpuCloud = false;   // 0.57.1 (tests: the processor's Density cloud, to compare)
     if (SDL_Surface* icon = SDL_CreateSurfaceFrom(64, 64, SDL_PIXELFORMAT_RGBA32, const_cast<unsigned char*>(kIconRgba), 64 * 4)) {   // the window's icon (title bar, taskbar)
         SDL_SetWindowIcon(window, icon);
         SDL_DestroySurface(icon);
@@ -300,8 +319,6 @@ int main(int, char**) {
             plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
             app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr;
             atom::setOutlineCompute(renderer.outlineCompute());           // the 90 % outline's compute object (null on a 3.3 PC or with PL_NO_COMPUTE: the CPU makes it)
-            if (const char* c = SDL_getenv("PL_ATOM_CARD")) if (std::string(c) == "0") { app.atom.gpuSlice = false; app.atom.gpuJump = false; }   // 0.57.0 (tests: the processor for both, to compare)
-            if (const char* c = SDL_getenv("PL_MOL_CARD")) if (std::string(c) == "0") app.moleculeView.gpuCloud = false;   // 0.57.1 (tests: the processor's Density cloud, to compare)
             std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
             std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(maj, min, app.rocksOk, true).c_str());
         }
@@ -476,10 +493,20 @@ int main(int, char**) {
     // One frame. live: drawn from the event watch while the window system holds the loop (no events are read then).
     int atomDoCount = 0;
     const double atomSpin = SDL_getenv("PL_ATOM_SPIN") ? std::atof(SDL_getenv("PL_ATOM_SPIN")) : 0;
+    const int atomBench = SDL_getenv("PL_ATOM_BENCHSCENE") ? std::atoi(SDL_getenv("PL_ATOM_BENCHSCENE")) : -1;
+    int atomBenchFrame = 0;
+    const int atomBenchStop = SDL_getenv("PL_ATOM_BENCHSTOP") ? std::atoi(SDL_getenv("PL_ATOM_BENCHSTOP")) : 0;
     const auto runFrame = [&](bool isLive) {
         app.liveFrame = isLive;
         if (atomDoFrame > 0 && ++atomDoCount == atomDoFrame) doAtom();
         if (atomSpin != 0) app.atom.s.oyaw += atomSpin;   // PL_ATOM_SPIN=0.15: the camera turns every frame as a fast drag does (0.16 stage 5, automatic checks)
+        if (atomBench >= 0 && app.canvasW > 1 && (atomBenchStop <= 0 || atomBenchFrame < atomBenchStop)) {   // (PL_ATOM_BENCHSTOP=n: still from frame n on)          // 0.61.0: PL_ATOM_BENCHSCENE=n (checks, measuring): the benchmark's Atom scene n set up and moved as the benchmark does
+            if (atomBenchFrame == 0) atom::benchSetup(app.atom, atomBench, app.canvasW, app.canvasH);
+            app.atom.hold = true;                       // (as the benchmark: the decay clock held)
+            atom::benchFrame(app.atom, atomBench, atomBenchFrame, atomBenchFrame);
+            if (atomBench >= atom::kBenchAllEnlarged && atomBench <= atom::kBenchJumpAll) app.atom.s.yaw = 0.8 * 0.016 * atomBenchFrame;   // turning as the benchmark's (its 60 frames a second)
+            atomBenchFrame++;
+        }
         int winW = 0, winH = 0, fbW = 0, fbH = 0;
         float canvasWinW = 1, headerH = 0, pictureWinH = 1;
         const auto measure = [&] {                      // the window as it is now (it can change while the window system has the loop)

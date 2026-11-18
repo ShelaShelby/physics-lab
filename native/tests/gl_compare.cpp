@@ -800,6 +800,9 @@ using namespace orbit;
 }
 #include "gl_rocks.inc"   // 0.13 stage 4 part A: the Orbit Lab's rocks on the GPU
 #include "gl_chart.inc"   // 0.13 stage 4 part B: the chart of nuclides from the retained mesh
+#ifdef PL_VK_TESTS
+#include "gl_vulkan.inc"  // 0.61.0: the card programs on Vulkan (lavapipe) against the processor and against OpenGL's
+#endif
 
 static void fallback33(EGLDisplay dpy, EGLConfig cfg, EGLSurface surf, const std::string& dir) {
     setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1); setenv("MESA_GLSL_VERSION_OVERRIDE", "330", 1);
@@ -894,6 +897,9 @@ int main(int argc, char** argv) {
     gpuRocksPictures(R, dir);
     chartPictures(R, dir);
     chartShaderRules(R);
+#ifdef PL_VK_TESTS
+    vulkanTwins(R);
+#endif
     R.shutdown();
     fallback33(dpy, cfg, surf, dir);
     std::printf("%d GL checks, %d failed\n", g_checks, g_failed);

@@ -8,7 +8,8 @@ the card; the target is the screen's rate (his PC: 255 Hz).
    volk, glslang by FetchContent; SPIR-V made at build time). Code: render/vk_backend.*, render/vk/*.vert|frag.
 2. **renderer2d on Vulkan** (0.60.0, done): the Orbit, Atom and Molecule Labs' drawing with OpenGL's own shader text as SPIR-V (render/vk_draw2d.*,
    render/renderer2d_vk.cpp), 4x multisampling, Save image; the card programs take the processor's path on Vulkan until step 3.
-3. **The card programs** of the Atom and Molecule Labs and the Orbit Lab's (atom_card, molecule_card, group/outline/rock compute).
+3. **The card programs** (0.61.0, done): the groups, the outline, the rocks (double precision: shaderFloat64), the Glow dots, the Slice, the jump and the
+   Density cloud on Vulkan from shaders.h's text (render/vk_card.*), each under its own Vulkan guard; their batches on the window's queue, fenced.
 4. **The Black Hole Lab's programs** (kerr_sky, kerr_compute, the lens and Kerr shaders); retry the compute path parked since 0.55.7.
 5. **The benchmark, the picture tests and the UI suite on Vulkan**; Vulkan the default; then OpenGL removed once the owner's PC shows every scene works.
 

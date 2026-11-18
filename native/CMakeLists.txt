@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.60.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.61.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -402,7 +402,12 @@ if(PL_BUILD_APP)
   # fragment shader's texture at binding 0 (glslang's own choice); the in/out locations by declaration order (the app checks the bindings, and that the
   # locations match between the stages, from the SPIR-V itself: vk_draw2d.cpp).
   set(PL_VK2D_SHADERS "tri_vert:kVertexShader" "tri_frag:kFragmentShader" "sq_vert:kSquareVS" "sq_frag:kSquareFS" "blob_vert:kBlobVS" "blob_frag:kBlobFS"
-                      "cmp_vert:kCompositeVS" "cmp_frag:kCompositeFS" "gray_frag:kGrayFS" "planet_frag:kPlanetFS" "chart_vert:kChartVS")
+                      "cmp_vert:kCompositeVS" "cmp_frag:kCompositeFS" "gray_frag:kGrayFS" "planet_frag:kPlanetFS" "chart_vert:kChartVS"
+                      # 0.61.0 (Vulkan step 3): the card programs, the same way (compute shaders: their loose uniforms in a block at set 0 binding 7; their
+                      # storage buffers keep the bindings of their text)
+                      "cloud_vert:kCloudVS" "moldot_vert:kMolDotVS" "cgrid_vert:kCloudGridVS" "mgrid_vert:kMolGridVS" "grid_frag:kCloudGridFS"
+                      "groups_comp:kGroupsCS" "outdens_comp:kOutlineDensityCS" "outlevel_comp:kOutlineLevelCS" "rocks_comp:kRocksCS" "slice_comp:kSliceDotsCS"
+                      "jump_comp:kJumpShowCS" "moldots_comp:kMolDotsCS")
   foreach(pair ${PL_VK2D_SHADERS})
     string(REPLACE ":" ";" parts ${pair})
     list(GET parts 0 shId)
@@ -412,6 +417,8 @@ if(PL_BUILD_APP)
     set(shOut ${CMAKE_BINARY_DIR}/vk_shaders/r2d_${shId}.h)
     if(shStage STREQUAL "vert")
       set(shFlags --sdub uDefault 0 2)
+    elseif(shStage STREQUAL "comp")
+      set(shFlags --sdub uDefault 0 7)
     else()
       set(shFlags --sdub uDefault 0 1)
     endif()
@@ -430,6 +437,7 @@ if(PL_BUILD_APP)
     src/render/vk_backend.cpp
     src/render/vk_draw2d.cpp
     src/render/renderer2d_vk.cpp
+    src/render/vk_card.cpp
     src/render/gl_loader.cpp
     src/render/renderer2d.cpp
    
@@ -495,6 +503,12 @@ if(PL_BUILD_APP)
     target_sources(PhysicsLab PRIVATE assets/physics_lab.rc)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
+  if(TARGET gl_compare_tests)                            # 0.61.0: the card programs on Vulkan in the same test program (tests/gl_vulkan.inc)
+    target_sources(gl_compare_tests PRIVATE src/render/vk_card.cpp src/render/vk_draw2d.cpp ${PL_VK_SHADER_HEADERS})
+    target_include_directories(gl_compare_tests PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
+    target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core volk::volk)
+    target_compile_definitions(gl_compare_tests PRIVATE PL_VK_TESTS=1)
+  endif()
   # 0.16 stage 1b: theme_pictures and window_pictures (pictures of the OLD interface) were deleted with it. The New UI's picture tests are below. Linux only (the cloud session); the GitHub Windows build does not run them. Needs -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON.
   option(PL_PICTURE_TESTS "Register the theme picture test (needs a headless Mesa and the app built on Linux)" OFF)
   if(PL_PICTURE_TESTS AND UNIX)

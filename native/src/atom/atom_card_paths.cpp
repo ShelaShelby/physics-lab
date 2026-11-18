@@ -56,7 +56,7 @@ void AtomCardPaths::frame(render::Renderer2D& R, AtomLab& L) {
         }
         const bool shown = which == 0 ? L.p.view == "Slice" : (L.manyOn() && L.p.view == "Cloud 3D" && L.p.cstyle == "Glow" && L.s.trans);   // (the jump's: only once a jump is under way)
         if (P.state == 0) {
-            if (!R.outlineCompute()) { off(which, R.vulkan() ? "on Vulkan the card programs come in step 3: the processor's path is used" : "this PC has no OpenGL 4.3 compute shaders (or they are switched off)"); continue; }
+            if (!R.computeShaders()) { off(which, R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "this PC has no OpenGL 4.3 compute shaders (or they are switched off)"); continue; }
             if (G.started() && !G.allowed()) { off(which, G.offText().empty() ? std::string("its guard switched it off") : G.offText()); continue; }
             if (!shown || ++P.frames < 3) continue;                          // (its picture on screen first)
             P.state = 2; P.step = 0;

@@ -337,7 +337,7 @@ bool Renderer2D::init() {
     return true;
 }
 
-void Renderer2D::disableCompute() { delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr; delete kerr_; kerr_ = nullptr; kerrTried_ = true; kerrWhy_ = "switched off (PL_NO_COMPUTE)"; }
+void Renderer2D::disableCompute() { noCompute_ = true; delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr; delete kerr_; kerr_ = nullptr; kerrTried_ = true; kerrWhy_ = "switched off (PL_NO_COMPUTE)"; }
 
 // 0.55.6: made at the first call (the shader is large: a PC that never opens the Black Hole Lab's spinning hole never compiles it)
 IKerrCompute* Renderer2D::kerrCompute(KerrSteps* steps) {
@@ -1414,12 +1414,12 @@ void Renderer2D::blobsPaletteTake(std::vector<Blob>& b, bool additive, const Pha
 }
 
 AtomCard& Renderer2D::atomCard() {
-    if (!atomCard_) atomCard_ = new AtomCard();
+    if (!atomCard_) atomCard_ = !vk_ ? static_cast<AtomCard*>(new AtomCardGl()) : vkc_ && vkAtomCard_ ? vkAtomCard_(*vkc_) : new AtomCardNone();   // 0.61.0: Vulkan's
     return *atomCard_;
 }
 
 MoleculeCard& Renderer2D::moleculeCard() {
-    if (!molCard_) molCard_ = new MoleculeCard();
+    if (!molCard_) molCard_ = !vk_ ? static_cast<MoleculeCard*>(new MoleculeCardGl()) : vkc_ && vkMolCard_ ? vkMolCard_(*vkc_) : new MoleculeCardNone();   // 0.61.0: Vulkan's
     return *molCard_;
 }
 

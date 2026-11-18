@@ -130,22 +130,23 @@ inline bool labInputAllowed(bool benchRunning) { return !benchRunning; }
 // The sentence the Performance card and the benchmark report use for the Atom Lab's superposition and jumps (0.13 stage 2). computeOk: the renderer has the OpenGL 4.3 compute path;
 // switchOn: the "GPU superposition and jumps" switch (AtomLab::gpuCompute).
 inline std::string computePathText(int major, int minor, bool computeOk, bool switchOn) {
-    const std::string v = "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
+    const std::string v = major == 0 ? std::string("Vulkan") : "OpenGL " + std::to_string(major) + "." + std::to_string(minor);   // (0.61.0: major 0 is Vulkan)
     if (!computeOk) return v + ": CPU path";
     return v + (switchOn ? ": GPU superposition on" : ": GPU superposition off (switched off, CPU path)");
 }
 
 // The same for the 90 % outline (0.13 stage 3).
 inline std::string outlinePathText(int major, int minor, bool computeOk, bool switchOn) {
-    const std::string v = "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
+    const std::string v = major == 0 ? std::string("Vulkan") : "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
     if (!computeOk) return v + ": CPU path";
     return v + (switchOn ? ": GPU outline on" : ": GPU outline off (switched off, CPU path)");
 }
 
 // The same for the Orbit Lab's rocks (0.13 stage 4). rocksOk: the renderer has the rock compute object (OpenGL 4.3 and a shader with double precision that compiled).
-inline std::string rocksPathText(int major, int minor, bool rocksOk, bool switchOn) {
-    const std::string v = "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
-    if (!rocksOk) return v + ": CPU path";
+// 0.61.0: why (Vulkan): why the card does not place them (no double precision in its shaders: the precision rule keeps the rocks' time in double)
+inline std::string rocksPathText(int major, int minor, bool rocksOk, bool switchOn, const std::string& why = std::string()) {
+    const std::string v = major == 0 ? std::string("Vulkan") : "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
+    if (!rocksOk) return v + ": CPU path" + (why.empty() ? std::string() : " (" + why + ")");
     return v + (switchOn ? ": GPU rocks on" : ": GPU rocks off (switched off, CPU path)");
 }
 

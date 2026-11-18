@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.61.0", "Vulkan, step 3 of 5: the graphics card's own programs on Vulkan, as a test",
+     "With Settings, Performance, Graphics: Vulkan (test), the work OpenGL gives the graphics card's own programs is now done by the card on Vulkan too: the "
+     "belts' rocks on their orbits, the Atom Lab's Cloud 3D Glow dots, the superpositions and the jumps' colours, the 90 % outline, the Slice's dots, a jump "
+     "with every electron, and the Molecule Lab's Density cloud. They run the same shader text as on OpenGL and give the same pictures (checked against the "
+     "processor's own results and against OpenGL's). Each has its own start-up check: one that fails or stops the app is switched off on Vulkan alone and "
+     "the processor does its work, while OpenGL keeps its own. The belts' rocks need double precision on the card; a card without it places them on the "
+     "processor and Settings says so. Only the Black Hole Lab is left (step 4). OpenGL stays the default and is unchanged."},
     {"0.60.0", "Vulkan, step 2 of 5: the Orbit, Atom and Molecule Labs drawn on Vulkan, as a test",
      "With Settings, Performance, Graphics: Vulkan (test), the Orbit, Atom and Molecule Labs now draw their pictures on Vulkan: the planets with their maps, "
      "rings, eclipses and Earth's air, the night sky, the belts, the electron clouds, the nucleus and its quarks, the chart of nuclides and the molecules, "

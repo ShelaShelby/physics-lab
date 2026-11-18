@@ -6,6 +6,7 @@
 // 0.60.0 (step 2): the labs' pictures: renderer2d drawn by render/vk_draw2d.* into the picture area (initPicture, render(..., pic)).
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -41,6 +42,11 @@ public:
     // has them (PL_NO_MSAA: 1). False: why says it (kept by the guard as "fail"; call shutdown() then and start on OpenGL).
     bool initPicture(Renderer2D& r, bool msaa, bool breakCheck, std::string& why);
     std::string pictureText() const;                         // the samples and the cloud layer's format ("" before initPicture)
+    // 0.61.0 (step 3): the card programs on Vulkan (render/vk_card.h): the renderer then makes the superposition and jump groups, the outline, the
+    // rocks and the Glow dots, each under its own guard (app/gpu_guard.h); why: a line for each that could not be made. False: none at all.
+    bool initCards(Renderer2D& r, std::vector<std::string>& why);
+    bool float64() const;                                    // the device has double precision in its shaders (shaderFloat64; PL_VK_NO_FLOAT64: no)
+    std::size_t cardSpirvBytes() const;
     void newFrame();                                         // ImGui_ImplVulkan_NewFrame
     // the frame: cleared to clear[] (the theme's page colour), the picture area (pixels, from the top left) filled by our pipeline with fill[], then
     // Dear ImGui's draw data. False: nothing drawn this frame (the swapchain is being made again, or the window has no size)

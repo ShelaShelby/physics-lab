@@ -10,6 +10,7 @@
 #include <string>
 
 #include "shading.h"
+#include "vk_card.h"
 #include "vk_draw2d.h"
 
 namespace render {
@@ -21,10 +22,77 @@ static_assert(sizeof(MeshVertex) == 48, "the mesh's vertex input (render/vk_draw
 static_assert(sizeof(Renderer2D::Blob) == 80, "the blobs' instance input (render/vk_draw2d.cpp kBlob) is 80 bytes");
 
 void Renderer2D::useVulkan(VkDraw2D* d) {
+    if (!d) useVulkanCards(nullptr);
     vk_ = d;
     vkMeshCreate_ = d ? +[](VkDraw2D* v, const void* p, std::size_t n) { return v->meshCreate(p, n); } : nullptr;
     vkMeshDelete_ = d ? +[](VkDraw2D* v, int id) { v->meshDelete(id); } : nullptr;
     if (!d) for (bool& m : vkMap_) m = false;
+}
+
+// 0.61.0: the card programs on Vulkan; null: Vulkan's objects deleted (the labs' card paths then see none)
+void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
+    if (atomCard_) { atomCard_->reset(); delete atomCard_; atomCard_ = nullptr; }
+    if (molCard_) { molCard_->reset(); delete molCard_; molCard_ = nullptr; }
+    if (vkc_ || !c) {
+        delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr;
+        dropVkGlow(vkGlow_); vkGlow_ = nullptr;
+        if (vkc_) vkc_->collect();
+    }
+    vkc_ = c;
+    vkAtomCard_ = c ? +[](VkCards& v) { return makeVkAtomCard(v); } : nullptr;
+    vkMolCard_ = c ? +[](VkCards& v) { return makeVkMoleculeCard(v); } : nullptr;
+    rocksWhy_.clear();
+    if (!c) return;
+    std::string w;
+    const auto note = [&](const char* what) { if (why) why->push_back(std::string(what) + ": " + w); w.clear(); };
+    if (!(compute_ = makeVkGroupCompute(*c, w))) note("the superposition and jump groups");
+    if (!(outline_ = makeVkOutlineCompute(*c, w))) note("the 90 % outline");
+    if (!(rocks_ = makeVkRockCompute(*c, w))) { rocksWhy_ = w; note("the belts' rocks"); }
+    if (!(vkGlow_ = makeVkGlow(*c, w))) note("the Cloud 3D Glow dots");
+}
+
+// 0.61.0: the card programs' work of this frame in one batch before the picture: the rocks' places, the Glow and Density clouds' grids (and what the
+// lab recorded before: a jump's groups); the batch is waited for only when a grid must be read back (OpenGL reads it back at once too, glReadPixels)
+bool Renderer2D::vkCardsFrame(bool forShot) {
+    const std::size_t n = segments_.size();
+    vkGrid_.assign(n, -1);
+    vkLight_.assign(n, -1.0);
+    vkRocks_.assign(n, 0);
+    if (!vkc_) return true;
+    if (!forShot) {                                                            // each program's first full use (its guarded step), once a frame
+        const int off = vkPollFirstUses(*vkc_, compute_, outline_, rocks_, vkGlow_);
+        if (off & 1) { delete compute_; compute_ = nullptr; }
+        if (off & 2) { delete outline_; outline_ = nullptr; }
+        if (off & 4) { delete rocks_; rocks_ = nullptr; rocksWhy_ = "its first full use did not finish in time"; }
+        if (off & 8) { dropVkGlow(vkGlow_); vkGlow_ = nullptr; }
+    }
+    bool grids = false;
+    for (std::size_t i = 0; i < n; i++) {
+        const Segment& sg = segments_[i];
+        if (sg.kind == Kind::RocksGpu) vkRocks_[i] = rocks_ && rocks_->dispatch(sg.slot, sg.rf) ? 1 : 0;
+        else if (sg.kind == Kind::CloudGpu && vkGlow_) {
+            const CloudGpuDraw& d = clouds_[std::size_t(sg.slot)];
+            const VkBuffer jump = d.grpBuf ? vkJumpGroups(atomCard_) : VK_NULL_HANDLE;
+            if (!d.grpBuf || jump) vkGrid_[i] = vkGlowRecord(vkGlow_, d, jump, clBytes_);
+        } else if (sg.kind == Kind::MolCloud && molCard_) vkGrid_[i] = vkMolCloudRecord(molCard_, molClouds_[std::size_t(sg.slot)]);
+        grids = grids || vkGrid_[i] >= 0;
+    }
+    if (!vkc_->flush(grids) && vkc_->failed()) return false;
+    std::vector<float> cells;
+    for (std::size_t i = 0; i < n; i++) {
+        if (vkGrid_[i] < 0) continue;
+        const Segment& sg = segments_[i];
+        const bool glow = sg.kind == Kind::CloudGpu;
+        const float w = glow ? clouds_[std::size_t(sg.slot)].w : molClouds_[std::size_t(sg.slot)].cam.w, h = glow ? clouds_[std::size_t(sg.slot)].h : molClouds_[std::size_t(sg.slot)].cam.h;
+        const std::size_t cnt = std::size_t(static_cast<int>(w / 8) + 2) * std::size_t(static_cast<int>(h / 8) + 2);
+        const float* c = vkc_->cells(vkGrid_[i]);
+        if (!c) continue;
+        cells.assign(c, c + cnt);
+        const auto& exposure = glow ? clouds_[std::size_t(sg.slot)].exposure : molClouds_[std::size_t(sg.slot)].exposure;
+        vkLight_[i] = exposure ? exposure(cells) : -1;
+    }
+    vkc_->collect();
+    return !vkc_->failed();
 }
 
 bool Renderer2D::loadMapsVulkan(std::string& why) {
@@ -68,16 +136,54 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
     if (gray_ && logDrawKinds()) kinds_[kdGray]++;
     const float bg[4] = {grayBg_.r, grayBg_.g, grayBg_.b, 1.0f};               // Monochrome: the page behind the picture, so the grey copy is opaque (as end())
     const std::size_t bytes = verts_.size() * sizeof(Vertex) + inst_.size() * sizeof(float) + blobs_.size() * sizeof(Blob) + 64;
+    if (!vkCardsFrame(forShot)) std::fprintf(stderr, "[vulkan] the card programs' batch failed this frame\n");   // 0.61.0 (before the picture's pass)
     if (!V.beginPicture(fbW, fbH, gray_ ? bg : clear, gray_ || forShot, bytes, static_cast<int>(segments_.size()) + 4, forShot)) return;
     const VkDeviceSize vb = V.put(verts_.data(), verts_.size() * sizeof(Vertex));
     const VkDeviceSize ib = V.put(inst_.data(), inst_.size() * sizeof(float));
     const VkDeviceSize bb = V.put(blobs_.data(), blobs_.size() * sizeof(Blob));
     const float size[2] = {static_cast<float>(width_), static_cast<float>(height_)};
     const float space[3] = {space_.r, space_.g, space_.b};
-    for (const Segment& sg : segments_) {
+    for (std::size_t si = 0; si < segments_.size(); si++) {
+        const Segment& sg = segments_[si];
         switch (sg.kind) {
-        case Kind::Lens: case Kind::CloudGpu: case Kind::MolCloud: case Kind::RocksGpu:
-            break;                                                             // card programs: never recorded on Vulkan (their objects are not made; step 3)
+        case Kind::Lens:
+            break;                                                             // (the Black Hole Lab's: step 4)
+        case Kind::RocksGpu: {                                                 // 0.61.0: the squares at the places the card worked out
+            if (!vkRocks_[si]) break;
+            const float col[4] = {sg.c.r, sg.c.g, sg.c.b, sg.c.a};
+            V.setF(VkDraw2D::kSquare, "uSize", size, 2);
+            V.setF(VkDraw2D::kSquare, "uSide", &sg.size, 1);
+            V.setF(VkDraw2D::kSquare, "uColor", col, 4);
+            V.drawInst(VkDraw2D::kSquare, VkDraw2D::kNormal, vkRockPositions(rocks_, sg.slot), VK_NULL_HANDLE, sg.count);
+            break;
+        }
+        case Kind::CloudGpu: {                                                 // 0.61.0: the dots, instanced, in dot order (as the processor's list)
+            if (!(vkLight_[si] >= 0) || !vkGlow_) break;
+            const CloudGpuDraw& d = clouds_[std::size_t(sg.slot)];
+            const float cam0[4] = {d.cx, d.cy, d.pxm, d.ext}, cam1[4] = {d.ca, d.sa, d.cb, d.sb}, view[2] = {d.w, d.h}, light = static_cast<float>(vkLight_[si]);
+            const int wheel = sg.pal.wheel ? 1 : 0, lightPage = sg.pal.light ? 1 : 0, zero = 0;
+            const float plus[4] = {sg.pal.sign[0].r, sg.pal.sign[0].g, sg.pal.sign[0].b, sg.pal.sign[0].a}, minus[4] = {sg.pal.sign[1].r, sg.pal.sign[1].g, sg.pal.sign[1].b, sg.pal.sign[1].a};
+            V.setF(VkDraw2D::kCloud, "uSize", size, 2);
+            V.setF(VkDraw2D::kCloud, "uCam0", cam0, 4); V.setF(VkDraw2D::kCloud, "uCam1", cam1, 4); V.setF(VkDraw2D::kCloud, "uView", view, 2);
+            V.setF(VkDraw2D::kCloud, "uLight", &light, 1);
+            V.setI(VkDraw2D::kCloud, "uPalWheel", &wheel, 1); V.setI(VkDraw2D::kCloud, "uPalLight", &lightPage, 1);
+            V.setF(VkDraw2D::kCloud, "uPalPlus", plus, 4); V.setF(VkDraw2D::kCloud, "uPalMinus", minus, 4);
+            V.setF(VkDraw2D::kCloud, "uFuzz", fuzzTableVk(), 1, 17); V.setI(VkDraw2D::kCloud, "uSphN", &zero, 1);
+            V.drawInst(VkDraw2D::kCloud, sg.additive ? VkDraw2D::kAdditive : VkDraw2D::kNormal, vkGlowPlaces(vkGlow_), vkGlowGroups(vkGlow_), sg.count);
+            break;
+        }
+        case Kind::MolCloud: {                                                 // 0.61.0: the Density cloud's soft dots, from the dots the card made
+            if (!(vkLight_[si] >= 0) || !molCard_) break;
+            const MolCloudDraw& d = molClouds_[std::size_t(sg.slot)];
+            const float light = static_cast<float>(vkLight_[si]);
+            const int zero = 0;
+            V.setF(VkDraw2D::kMolDot, "uSize", size, 2);
+            V.setF(VkDraw2D::kMolDot, "uLight", &light, 1);
+            V.setF(VkDraw2D::kMolDot, "uColour", d.colour, 4);
+            V.setF(VkDraw2D::kMolDot, "uFuzz", fuzzTableVk(), 1, 17); V.setI(VkDraw2D::kMolDot, "uSphN", &zero, 1);
+            V.drawInst(VkDraw2D::kMolDot, d.additive ? VkDraw2D::kAdditive : VkDraw2D::kNormal, vkMolCloudDots(molCard_), VK_NULL_HANDLE, sg.count);
+            break;
+        }
         case Kind::LayerBegin:
             if (sg.hdr) V.beginLayer(true, fbW, fbH);                          // 0.40: the cloud's float picture, the screen's size
             else V.beginLayer(false, std::max(1, static_cast<int>(std::ceil(fbW * layerScale_))), std::max(1, static_cast<int>(std::ceil(fbH * layerScale_))));

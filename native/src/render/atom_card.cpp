@@ -32,7 +32,7 @@ std::string jumpShaderId() { return idOf("jump", kJumpShowCS); }
 
 const char* AtomCard::programName(int which) { return which == kSlice ? "the Slice's dots shader" : "the jump's groups shader"; }
 
-bool AtomCard::build(int which, KerrSteps* steps, std::string& why) {
+bool AtomCardGl::build(int which, KerrSteps* steps, std::string& why) {
     which &= 1;
     if (prog_[which]) return true;
     const std::string name = programName(which), cName = "compile " + name, lName = "link " + name;
@@ -75,7 +75,7 @@ bool AtomCard::build(int which, KerrSteps* steps, std::string& why) {
     return true;
 }
 
-void AtomCard::reset() {
+void AtomCardGl::reset() {
     while (!jobs_.empty()) release(jobs_.back().id);
     for (GLuint& p : prog_) if (p) { glDeleteProgram(p); p = 0; }
     if (jumpFixed_) glDeleteBuffers(1, &jumpFixed_);
@@ -86,7 +86,7 @@ void AtomCard::reset() {
     sliceReady_ = jumpReady_ = sliceUsed_ = false;
 }
 
-void AtomCard::release(int id) {
+void AtomCardGl::release(int id) {
     for (std::size_t i = 0; i < jobs_.size(); i++)
         if (jobs_[i].id == id) {
             if (jobs_[i].sync) glDeleteSync(jobs_[i].sync);
@@ -96,17 +96,17 @@ void AtomCard::release(int id) {
         }
 }
 
-JobState AtomCard::poll(Job& j) {
+JobState AtomCardGl::poll(Job& j) {
     const GLenum r = glClientWaitSync(j.sync, GL_SYNC_FLUSH_COMMANDS_BIT, 0);   // a zero timeout: it never waits
     if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) return JobState::Done;
     if (r == GL_TIMEOUT_EXPIRED) return JobState::Pending;
     return JobState::Failed;
 }
 
-int AtomCard::beginSlice(const SliceDotsJob& s) {
+int AtomCardGl::beginSlice(const SliceDotsJob& s) {
     const GLuint pr = prog_[kSlice];
     if (!pr || s.tries <= 0 || s.tries > (1 << 20) || s.nh <= 0 || s.nh > 16 || jobs_.size() >= 8) return 0;
-    if (sliceReady_ && !sliceUsed_) { sliceUsed_ = true; if (beforeFirstUse) beforeFirstUse(); }   // (the guard's marker before the first batch the lab asks for)
+    firstBatch();                                                    // (the guard's marker before the first batch the lab asks for)
     Job j;
     j.id = nextId_++;
     j.bytes = static_cast<long>(s.tries) * 16;
@@ -137,7 +137,7 @@ int AtomCard::beginSlice(const SliceDotsJob& s) {
     return j.id;
 }
 
-JobState AtomCard::pollSlice(int job, std::vector<float>& res) {
+JobState AtomCardGl::pollSlice(int job, std::vector<float>& res) {
     Job* j = find(job);
     if (!j) return JobState::Failed;
     const JobState st = poll(*j);
@@ -151,7 +151,7 @@ JobState AtomCard::pollSlice(int job, std::vector<float>& res) {
     return st;
 }
 
-void AtomCard::dispatchJump(GLuint fixedBuf, GLuint outBuf, long jn, std::uint64_t t0, std::uint64_t t1) {
+void AtomCardGl::dispatchJump(GLuint fixedBuf, GLuint outBuf, long jn, std::uint64_t t0, std::uint64_t t1) {
     const GLuint pr = prog_[kJump];
     glUseProgram(pr);
     glUniform1i(glGetUniformLocation(pr, "uJn"), static_cast<GLint>(jn));
@@ -165,7 +165,7 @@ void AtomCard::dispatchJump(GLuint fixedBuf, GLuint outBuf, long jn, std::uint64
     glUseProgram(0);
 }
 
-bool AtomCard::jumpGroups(const unsigned char* fixedGroups, long jn, std::uint64_t epoch, std::uint64_t t0, std::uint64_t t1) {
+bool AtomCardGl::jumpGroups(const unsigned char* fixedGroups, long jn, std::uint64_t epoch, std::uint64_t t0, std::uint64_t t1) {
     if (!prog_[kJump] || jn <= 0 || !fixedGroups) return false;
     const long bytes = (2 * jn + 3) / 4 * 4;
     if (!jumpFixed_) { glGenBuffers(1, &jumpFixed_); glGenBuffers(1, &jumpOut_); }
@@ -182,7 +182,7 @@ bool AtomCard::jumpGroups(const unsigned char* fixedGroups, long jn, std::uint64
     return true;
 }
 
-int AtomCard::beginJumpRead(const unsigned char* fixedGroups, long jn, std::uint64_t t0, std::uint64_t t1) {
+int AtomCardGl::beginJumpRead(const unsigned char* fixedGroups, long jn, std::uint64_t t0, std::uint64_t t1) {
     if (!prog_[kJump] || jn <= 0 || !fixedGroups || jobs_.size() >= 8) return 0;
     const long bytes = (2 * jn + 3) / 4 * 4;
     std::vector<unsigned char> padded(fixedGroups, fixedGroups + 2 * jn);
@@ -204,7 +204,7 @@ int AtomCard::beginJumpRead(const unsigned char* fixedGroups, long jn, std::uint
     return j.id;
 }
 
-JobState AtomCard::pollJumpRead(int job, std::vector<unsigned char>& groups) {
+JobState AtomCardGl::pollJumpRead(int job, std::vector<unsigned char>& groups) {
     Job* j = find(job);
     if (!j) return JobState::Failed;
     const JobState st = poll(*j);
@@ -218,12 +218,12 @@ JobState AtomCard::pollJumpRead(int job, std::vector<unsigned char>& groups) {
     return st;
 }
 
-void AtomCard::fence() {
+void AtomCardGl::fence() {
     if (fence_) glDeleteSync(fence_);
     fence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 }
 
-int AtomCard::fenceState() {
+int AtomCardGl::fenceState() {
     if (!fence_) return -1;
     const GLenum r = glClientWaitSync(fence_, GL_SYNC_FLUSH_COMMANDS_BIT, 0);
     if (r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED) { glDeleteSync(fence_); fence_ = nullptr; return 1; }

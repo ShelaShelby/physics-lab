@@ -17,6 +17,7 @@
 #include "app/gpu_guard.h"
 #include "imgui.h"
 #include "render/renderer2d.h"
+#include "render/vk_card.h"
 #include "render/vk_draw2d.h"
 #include "imgui_impl_vulkan.h"
 
@@ -113,6 +114,9 @@ struct VkBackend::Impl {
     VkCommandPool oncePool = VK_NULL_HANDLE;   // one-time commands: readback, the picture for 📷 Save image
     VkPhysicalDeviceMemoryProperties mem{};
     VkDraw2D* d2 = nullptr;                    // 0.60.0: the labs' pictures (initPicture)
+    VkCards* cards = nullptr;                  // 0.61.0: the card programs (initCards)
+    bool float64 = false, computeQueue = false;
+    VkDevCtx ctx;
     int errors = 0, warnings = 0, failedCalls = 0, rebuilds = 0;
     std::string lastFailure;
 
@@ -317,7 +321,20 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     qi.queueCount = 1;
     qi.pQueuePriorities = &prio;
     const char* devExts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    // 0.61.0 (step 3): double precision in shaders where the card has it (the belts' rocks: kRocksCS); PL_VK_NO_FLOAT64 (tests) pretends it has not
+    VkPhysicalDeviceFeatures feat{}, want{};
+    vkGetPhysicalDeviceFeatures(d.phys, &feat);
+    d.float64 = feat.shaderFloat64 == VK_TRUE && !std::getenv("PL_VK_NO_FLOAT64");
+    want.shaderFloat64 = d.float64 ? VK_TRUE : VK_FALSE;
+    {
+        uint32_t nq = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(d.phys, &nq, nullptr);
+        std::vector<VkQueueFamilyProperties> qf(nq);
+        vkGetPhysicalDeviceQueueFamilyProperties(d.phys, &nq, qf.data());
+        d.computeQueue = d.family < nq && (qf[d.family].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
+    }
     VkDeviceCreateInfo di{};
+    di.pEnabledFeatures = &want;
     di.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     di.queueCreateInfoCount = 1;
     di.pQueueCreateInfos = &qi;
@@ -326,7 +343,9 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     if (!d.check(vkCreateDevice(d.phys, &di, nullptr, &d.device), "vkCreateDevice")) { d.device = VK_NULL_HANDLE; return fail("device", d.lastFailure); }
     volkLoadDevice(d.device);
     vkGetDeviceQueue(d.device, d.family, 0, &d.queue);
-    guard.end("device", deviceName_ + ", driver " + driverText_ + ", Vulkan " + apiText_ + ", queue family " + std::to_string(d.family));
+    guard.end("device", deviceName_ + ", driver " + driverText_ + ", Vulkan " + apiText_ + ", queue family " + std::to_string(d.family) +
+                        (d.computeQueue ? " (graphics and compute)" : " (graphics; no compute)") + ", double precision in shaders (shaderFloat64): " +
+                        (d.float64 ? "yes" : feat.shaderFloat64 ? "switched off (PL_VK_NO_FLOAT64)" : "no"));
 
     // ---- swapchain ----
     guard.begin("swapchain");
@@ -466,6 +485,7 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
 void VkBackend::shutdown() {
     Impl& d = *d_;
     if (d.device) vkDeviceWaitIdle(d.device);
+    if (d.cards) { delete d.cards; d.cards = nullptr; }   // 0.61.0 (the programs made from it are gone: Renderer2D::useVulkan(nullptr))
     if (d.d2) { delete d.d2; d.d2 = nullptr; }  // 0.60.0 (its destructor frees what it made)
     if (d.imguiOn) { ImGui_ImplVulkan_Shutdown(); d.imguiOn = false; }
     if (d.device) {
@@ -547,7 +567,8 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     rp.pClearValues = &cv;
     vkCmdBeginRenderPass(fd.CommandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
     const int x0 = std::clamp(px, 0, wd.Width), y0 = std::clamp(py, 0, wd.Height), x1 = std::clamp(px + pw, 0, wd.Width), y1 = std::clamp(py + ph, 0, wd.Height);
-    if (pictured && x1 > x0 && y1 > y0) d.d2->present(fd.CommandBuffer, x0, y0, x1 - x0, y1 - y0);   // 0.60.0: the lab's picture
+    static const bool noCopy = std::getenv("PL_VK_NOCOPY") != nullptr;   // 0.61.0 (measuring only): the picture is drawn but not copied into the window
+    if (pictured && x1 > x0 && y1 > y0 && !noCopy) d.d2->present(fd.CommandBuffer, x0, y0, x1 - x0, y1 - y0);   // 0.60.0: the lab's picture
     else if (d.fill && x1 > x0 && y1 > y0) {                              // the picture area without a picture (the theme's background)
         VkViewport vp{0.0f, 0.0f, static_cast<float>(wd.Width), static_cast<float>(wd.Height), 0.0f, 1.0f};
         VkRect2D sc{{x0, y0}, {static_cast<uint32_t>(x1 - x0), static_cast<uint32_t>(y1 - y0)}};
@@ -863,6 +884,9 @@ bool VkBackend::initPicture(Renderer2D& r, bool msaa, bool breakCheck, std::stri
     c.check = [&d](VkResult res, const char* what) { return d.check(res, what); };
     c.once = [&d](const std::function<void(VkCommandBuffer)>& f) { return runOnce(d, [&](VkCommandBuffer cmd) { f(cmd); }); };
     c.guard = d.guard;
+    c.family = d.family;
+    c.compute = d.computeQueue;
+    d.ctx = c;
     d.d2 = new VkDraw2D();
     std::string w;
     if (!d.d2->init(c, d.wd.RenderPass, msaa ? 4 : 1, w)) return fail("renderer2d pipelines", "renderer2d on Vulkan: " + w);
@@ -913,6 +937,20 @@ bool VkBackend::initPicture(Renderer2D& r, bool msaa, bool breakCheck, std::stri
     guard.end("renderer2d check", "flat rect, added blob, soft layer: " + got);
     return true;
 }
+
+// 0.61.0 (step 3): the card programs (render/vk_card.h); the renderer makes each under its own guard
+bool VkBackend::initCards(Renderer2D& r, std::vector<std::string>& why) {
+    Impl& d = *d_;
+    if (!d.d2 || !d.device) { why.push_back("Vulkan's picture has not started"); return false; }
+    d.cards = new VkCards();
+    std::string w;
+    if (!d.cards->init(d.ctx, d.d2, d.float64, w)) { why.push_back("the card programs: " + w); delete d.cards; d.cards = nullptr; return false; }
+    r.useVulkanCards(d.cards, &why);
+    return true;
+}
+
+bool VkBackend::float64() const { return d_->float64; }
+std::size_t VkBackend::cardSpirvBytes() const { return d_->cards ? d_->cards->spirvBytes() : 0; }
 
 std::string VkBackend::pictureText() const { return d_->d2 ? d_->d2->samplesText() + "; the cloud's layer " + d_->d2->floatFormatText() : std::string(); }
 

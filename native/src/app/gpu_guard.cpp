@@ -252,13 +252,41 @@ GpuGuard& gpuSkyGuard() {
     return g;
 }
 
+// 0.61.0: on Vulkan (step 3) the card programs have guards of their own (their markers, settings lines and versions differ from OpenGL's, so a failure
+// on one API never switches the other off); the functions below give the guard of the API this start draws with
+static bool g_vulkanGuards = false;
+void useVulkanGuards(bool on) { g_vulkanGuards = on; }
+bool vulkanGuards() { return g_vulkanGuards; }
+
 GpuGuard& gpuSliceGuard() {
     static GpuGuard g("gpu-slice-step.txt", GpuGuard::kLog, false, "[slice] ");
-    return g;
+    static GpuGuard v("gpu-vkslice-step.txt", GpuGuard::kLog, false, "[vulkan] [slice] ", "The Slice's dots on Vulkan");
+    return g_vulkanGuards ? v : g;
 }
 
 GpuGuard& gpuJumpGuard() {
     static GpuGuard g("gpu-jump-step.txt", GpuGuard::kLog, false, "[jump] ");
+    static GpuGuard v("gpu-vkjump-step.txt", GpuGuard::kLog, false, "[vulkan] [jump] ", "The jump's groups on Vulkan");
+    return g_vulkanGuards ? v : g;
+}
+
+GpuGuard& gpuVkGroupsGuard() {
+    static GpuGuard g("gpu-vkgroups-step.txt", GpuGuard::kLog, false, "[vulkan] [groups] ", "The superposition and jump groups on Vulkan");
+    return g;
+}
+
+GpuGuard& gpuVkOutlineGuard() {
+    static GpuGuard g("gpu-vkoutline-step.txt", GpuGuard::kLog, false, "[vulkan] [outline] ", "The 90 % outline on Vulkan");
+    return g;
+}
+
+GpuGuard& gpuVkRocksGuard() {
+    static GpuGuard g("gpu-vkrocks-step.txt", GpuGuard::kLog, false, "[vulkan] [rocks] ", "The belts' rocks on Vulkan");
+    return g;
+}
+
+GpuGuard& gpuVkCloudGuard() {
+    static GpuGuard g("gpu-vkcloud-step.txt", GpuGuard::kLog, false, "[vulkan] [cloud] ", "The Cloud 3D Glow dots on Vulkan");
     return g;
 }
 
@@ -269,7 +297,17 @@ GpuGuard& gpuVulkanGuard() {
 
 GpuGuard& gpuMolCloudGuard() {
     static GpuGuard g("gpu-molcloud-step.txt", GpuGuard::kLog, false, "[molcloud] ");
-    return g;
+    static GpuGuard v("gpu-vkmolcloud-step.txt", GpuGuard::kLog, false, "[vulkan] [molcloud] ", "The Density cloud on Vulkan");
+    return g_vulkanGuards ? v : g;
+}
+
+std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards() {
+    const bool was = g_vulkanGuards;
+    g_vulkanGuards = true;
+    std::vector<std::pair<std::string, GpuGuard*>> v = {{"groups", &gpuVkGroupsGuard()}, {"outline", &gpuVkOutlineGuard()}, {"rocks", &gpuVkRocksGuard()}, {"cloud", &gpuVkCloudGuard()},
+                                                       {"slice", &gpuSliceGuard()}, {"jump", &gpuJumpGuard()}, {"molcloud", &gpuMolCloudGuard()}};
+    g_vulkanGuards = was;
+    return v;
 }
 
 }  // namespace app

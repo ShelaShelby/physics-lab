@@ -19,6 +19,8 @@
 #include "r2d_gray_frag.h"
 #include "r2d_planet_frag.h"
 #include "r2d_chart_vert.h"
+#include "r2d_cloud_vert.h"
+#include "r2d_moldot_vert.h"
 #include "present_vert.h"
 #include "present_frag.h"
 
@@ -49,7 +51,7 @@ bool reflectSpirv(const std::uint32_t* w, std::size_t n, VkDraw2D::Shader& out, 
     std::map<std::uint32_t, std::string> names;
     std::map<std::pair<std::uint32_t, std::uint32_t>, std::string> memberNames;
     std::map<std::uint32_t, std::uint32_t> location, binding, arrayStride, constant;
-    std::map<std::uint32_t, bool> isBlock;
+    std::map<std::uint32_t, bool> isBlock, isBufferBlock;
     std::map<std::pair<std::uint32_t, std::uint32_t>, std::uint32_t> offset, matrixStride;
     struct Type { std::uint32_t op = 0; std::vector<std::uint32_t> a; };
     std::map<std::uint32_t, Type> types;
@@ -66,6 +68,7 @@ bool reflectSpirv(const std::uint32_t* w, std::size_t n, VkDraw2D::Shader& out, 
         case 71:                                                                                                  // OpDecorate
             if (m >= 2) {
                 if (o[1] == 2) isBlock[o[0]] = true;
+                else if (o[1] == 3) isBufferBlock[o[0]] = true;                                                   // (0.61.0: a storage buffer)
                 else if (m >= 3 && o[1] == 6) arrayStride[o[0]] = o[2];
                 else if (m >= 3 && o[1] == 30) location[o[0]] = o[2];
                 else if (m >= 3 && o[1] == 33) binding[o[0]] = o[2];
@@ -89,7 +92,7 @@ bool reflectSpirv(const std::uint32_t* w, std::size_t n, VkDraw2D::Shader& out, 
         const auto it = types.find(t);
         if (it == types.end()) return 0;
         const Type& T = it->second;
-        if (T.op == 21 || T.op == 22) return 4;
+        if (T.op == 21 || T.op == 22) return T.a.empty() ? 4u : T.a[0] / 8u;      // (0.61.0: by its width: a double is 8 bytes)
         if (T.op == 23 && T.a.size() >= 2) return sizeOf(T.a[0], 0) * T.a[1];
         if (T.op == 24 && T.a.size() >= 2) return (mstride ? mstride : sizeOf(T.a[0], 0)) * T.a[1];
         if (T.op == 28 && T.a.size() >= 2) return arrayStride[t] * constant[T.a[1]];
@@ -101,6 +104,10 @@ bool reflectSpirv(const std::uint32_t* w, std::size_t n, VkDraw2D::Shader& out, 
         const std::uint32_t pointee = pt->second.a[1];
         const std::string& nm = names[id];
         if ((v.storage == 1 || v.storage == 3) && location.count(id) && nm.rfind("gl_", 0) != 0) (v.storage == 1 ? out.in : out.out)[nm] = static_cast<int>(location[id]);
+        if ((v.storage == 2 && isBufferBlock[pointee]) || (v.storage == 12 && isBlock[pointee])) {               // 0.61.0: a storage buffer (compute)
+            out.storage.push_back(binding.count(id) ? static_cast<int>(binding[id]) : -1);
+            continue;
+        }
         if (v.storage == 2 && isBlock[pointee]) {
             const Type& S = types[pointee];
             out.blockBinding = binding.count(id) ? static_cast<int>(binding[id]) : -1;
@@ -251,6 +258,14 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
         bind.push_back({0, 8, VK_VERTEX_INPUT_RATE_VERTEX}); bind.push_back({1, 80, VK_VERTEX_INPUT_RATE_INSTANCE});
         at(0, 0, f2, 0); for (uint32_t i = 0; i < 5; i++) at(1 + i, 1, f4, 16 * i);
         break;
+    case kCloud:                                      // 0.61.0: the corners; the dots' places (3 floats) and groups (a byte as a float: OpenGL's GL_UNSIGNED_BYTE, not normalised)
+        bind.push_back({0, 8, VK_VERTEX_INPUT_RATE_VERTEX}); bind.push_back({1, 12, VK_VERTEX_INPUT_RATE_INSTANCE}); bind.push_back({2, 1, VK_VERTEX_INPUT_RATE_INSTANCE});
+        at(0, 0, f2, 0); at(1, 1, f3, 0); at(2, 2, VK_FORMAT_R8_USCALED, 0);
+        break;
+    case kMolDot:                                     // 0.61.0: the corners; the dots made by kMolDotsCS (X, Y, r, wt)
+        bind.push_back({0, 8, VK_VERTEX_INPUT_RATE_VERTEX}); bind.push_back({1, 16, VK_VERTEX_INPUT_RATE_INSTANCE});
+        at(0, 0, f2, 0); at(1, 1, f4, 0);
+        break;
     case kMesh:                                       // render/mesh.h MeshVertex: p0, p1, rgba, corner, height (48 bytes)
         bind.push_back({0, 48, VK_VERTEX_INPUT_RATE_VERTEX});
         at(0, 0, f3, 0); at(1, 0, f3, 12); at(2, 0, f4, 24); at(3, 0, f2, 40);
@@ -334,7 +349,7 @@ bool VkDraw2D::init(const VkDevCtx& c, VkRenderPass swapPass, int samples, std::
     const char* codeName[] = {"tri.vert", "tri.frag", "planet.frag", "square.vert", "square.frag", "blob.vert", "blob.frag", "chart.vert", "composite.vert", "composite.frag", "grey.frag"};
     constexpr int nCode = 11;
     // program: its vertex and fragment shader (indices into code[])
-    const int pair[kProgCount][2] = {{0, 1}, {0, 2}, {3, 4}, {5, 6}, {7, 1}, {8, 9}, {8, 10}};
+    const int pair[kCloud][2] = {{0, 1}, {0, 2}, {3, 4}, {5, 6}, {7, 1}, {8, 9}, {8, 10}};   // (kCloud, kMolDot: addProgram)
     Shader sh[nCode];
     VkShaderModule mod[nCode] = {};
     spirvBytes_ = 0;
@@ -352,7 +367,7 @@ bool VkDraw2D::init(const VkDevCtx& c, VkRenderPass swapPass, int samples, std::
         if (!c_.check(vkCreateShaderModule(c_.device, &si, nullptr, &mod[i]), "vkCreateShaderModule (renderer2d)")) { mod[i] = VK_NULL_HANDLE; ok = false; why = std::string(codeName[i]) + ": vkCreateShaderModule failed"; }
         spirvBytes_ += code[i].bytes;
     }
-    for (int p = 0; p < kProgCount && ok; p++) {
+    for (int p = 0; p < kCloud && ok; p++) {
         const Shader& v = sh[pair[p][0]];
         const Shader& f = sh[pair[p][1]];
         for (const auto& [name, loc] : f.in) {
@@ -929,6 +944,61 @@ void VkDraw2D::draw(Prog p, Blend b, VkDeviceSize vbOff, int first, int count, V
         vkCmdBindVertexBuffers(cmd_, 0, 1, &corners_.b, &off);
         vkCmdDraw(cmd_, 6, 1, 0, 0);
     }
+}
+
+// 0.61.0: kCloud or kMolDot with the blob fragment shader (kBlobFS), every pass, the normal and the added blend
+bool VkDraw2D::addProgram(Prog p, std::string& why) {
+    if (!ok_ || (p != kCloud && p != kMolDot)) { why = "renderer2d on Vulkan has not started"; return false; }
+    if (hasProgram(p)) return true;
+    const Code vc = p == kCloud ? Code{k_r2d_cloud_vert, sizeof k_r2d_cloud_vert} : Code{k_r2d_moldot_vert, sizeof k_r2d_moldot_vert};
+    const Code fc{k_r2d_blob_frag, sizeof k_r2d_blob_frag};
+    Shader vs, fs;
+    if (!reflectSpirv(vc.w, vc.bytes / 4, vs, why) || !reflectSpirv(fc.w, fc.bytes / 4, fs, why)) return false;
+    if (vs.blockBinding != 2) { why = "its vertex shader's uniform block is not at binding 2"; return false; }
+    for (const auto& [name, loc] : fs.in) {
+        const auto it = vs.out.find(name);
+        if (it == vs.out.end() || it->second != loc) { why = "the blob fragment shader's input " + name + " does not meet the vertex shader at the same location"; return false; }
+    }
+    if (p == kCloud) {                                                       // the groups' format, as queried (OpenGL's GL_UNSIGNED_BYTE attribute)
+        VkFormatProperties fp{};
+        vkGetPhysicalDeviceFormatProperties(c_.phys, VK_FORMAT_R8_USCALED, &fp);
+        if (!(fp.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT)) { why = "this card cannot read R8_USCALED vertex data (the dots' colour groups)"; return false; }
+    }
+    VkShaderModule mod[2] = {};
+    bool ok = true;
+    for (int i = 0; i < 2 && ok; i++) {
+        VkShaderModuleCreateInfo si{};
+        si.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        si.codeSize = i ? fc.bytes : vc.bytes;
+        si.pCode = i ? fc.w : vc.w;
+        if (!c_.check(vkCreateShaderModule(c_.device, &si, nullptr, &mod[i]), "vkCreateShaderModule (card draw)")) { mod[i] = VK_NULL_HANDLE; ok = false; why = "vkCreateShaderModule failed"; }
+    }
+    prog_[p].blk[0] = vs.block;
+    prog_[p].blk[1] = fs.block;
+    for (const Pass ps : {kPassMs, kPass8, kPassF}) {
+        if (!ok || (ps == kPassMs && samples_ == 1)) continue;
+        for (const Blend b : {kNormal, kAdditive})
+            if (ok && !(prog_[p].pipe[ps][b] = makePipeline(p, b, ps, mod[0], mod[1]))) { ok = false; why = "vkCreateGraphicsPipelines failed"; }
+    }
+    for (VkShaderModule m : mod) if (m) vkDestroyShaderModule(c_.device, m, nullptr);
+    if (!ok) for (auto& row : prog_[p].pipe) for (VkPipeline& pl : row) if (pl) { vkDestroyPipeline(c_.device, pl, nullptr); pl = VK_NULL_HANDLE; }
+    spirvBytes_ += ok ? vc.bytes : 0;
+    return ok;
+}
+
+void VkDraw2D::drawInst(Prog p, Blend b, VkBuffer inst1, VkBuffer inst2, int instances) {
+    if (!inPass_ || failed_ || instances <= 0 || !inst1 || (p == kCloud && !inst2)) return;
+    const Program& pr = prog_[p];
+    const VkPipeline pl = pr.pipe[pass_][b];
+    if (!pl) { if (!failed_) c_.check(VK_ERROR_FEATURE_NOT_PRESENT, "renderer2d: no pipeline for this card program, blend and pass"); failed_ = true; return; }
+    const VkDescriptorSet set = descriptors(pr, white_.view, nearestClamp_);
+    if (!set) return;
+    vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, pl);
+    vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &set, 0, nullptr);
+    const VkBuffer bufs[3] = {corners_.b, inst1, inst2};
+    const VkDeviceSize offs[3] = {0, 0, 0};
+    vkCmdBindVertexBuffers(cmd_, 0, p == kCloud ? 3u : 2u, bufs, offs);
+    vkCmdDraw(cmd_, 6, static_cast<uint32_t>(instances), 0, 0);
 }
 
 int VkDraw2D::meshCreate(const void* v, std::size_t bytes) {

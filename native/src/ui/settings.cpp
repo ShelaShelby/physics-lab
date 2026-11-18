@@ -90,10 +90,11 @@ const char* const kCons[3] = {"off", "lines", "names"};
 void labsToPrefs(const AppState& app, app::Prefs& p) {
     if (app::gpuGuard().started()) p.gpuPaths = app::gpuGuard().saved();
     if (app::gpuSkyGuard().started()) p.gpuSky = app::gpuSkyGuard().saved();
-    if (app::gpuSliceGuard().started()) p.gpuSlice = app::gpuSliceGuard().saved();   // 0.57.0
-    if (app::gpuMolCloudGuard().started()) p.gpuMolCloud = app::gpuMolCloudGuard().saved();   // 0.57.1
+    if (!app::vulkanGuards() && app::gpuSliceGuard().started()) p.gpuSlice = app::gpuSliceGuard().saved();   // 0.57.0
+    if (!app::vulkanGuards() && app::gpuMolCloudGuard().started()) p.gpuMolCloud = app::gpuMolCloudGuard().saved();   // 0.57.1
+    if (app::vulkanGuards()) for (const auto& [name, g] : app::vulkanCardGuards()) if (g->started()) p.gpuVk[name] = g->saved();   // 0.61.0 (Vulkan's own)
     if (app::gpuVulkanGuard().started()) p.gpuVulkan = app::gpuVulkanGuard().saved();   // 0.59.0
-    if (app::gpuJumpGuard().started()) p.gpuJump = app::gpuJumpGuard().saved();   // 0.56.0   // 0.55.7: what the light paths' guard keeps (before it starts: the file's line as read)
+    if (!app::vulkanGuards() && app::gpuJumpGuard().started()) p.gpuJump = app::gpuJumpGuard().saved();   // 0.56.0   // 0.55.7: what the light paths' guard keeps (before it starts: the file's line as read)
     const orbit::ViewSettings& v = app.set;
     p.orbit = {{"view3D", v.view3D ? "1" : "0"}, {"zoom", num(v.zoom)}, {"tspeed", num(v.tspeed)}, {"trueScale", v.trueScale ? "1" : "0"},
                {"fullTrails", v.fullTrails ? "1" : "0"}, {"moons", v.moons ? "1" : "0"}, {"dwarfs", v.dwarfs ? "1" : "0"}, {"comets", v.comets ? "1" : "0"},
@@ -261,7 +262,8 @@ void saveSettingsWhenChanged(AppState& app, double nowS, bool now) {
     if (!now && nowS - g_changedAt < 0.25) return;
     const std::string path = settingsPath();
     if (path.empty()) return;
-    if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); app::gpuMolCloudGuard().settingsWritten(); app::gpuVulkanGuard().settingsWritten(); }   // (0.55.7: a marker the file now keeps can go)
+    if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); app::gpuMolCloudGuard().settingsWritten(); app::gpuVulkanGuard().settingsWritten();
+                                                   if (app::vulkanGuards()) for (const auto& [name, g] : app::vulkanCardGuards()) g->settingsWritten(); }   // (0.55.7: a marker the file now keeps can go)
     else g_changedAt = nowS + 5;                              // 0.19: not written (a full disk, a read-only folder): the old file stays; try again in about 5 s, not every frame
 }
 

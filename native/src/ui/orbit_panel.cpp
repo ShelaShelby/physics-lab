@@ -91,27 +91,37 @@ void performanceCard(AppState& app) {
         ImGui::SameLine();
         if (ImGui::RadioButton("Vulkan (test)##graphics", app.prefs.graphics == "vulkan")) app.prefs.graphics = "vulkan";
         noteItem("graphics.vulkan");
-        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan, step 2 of 5: the menus, panels, pages and guides and the Orbit, Atom and Molecule Labs' pictures are drawn by Vulkan.\n"
-                                                      "The graphics card's own programs (the belts' rocks, the electron clouds, the outlines, the Density cloud) and the Black Hole Lab come in the next steps.\n"
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan, step 3 of 5: the menus, panels, pages and guides and the Orbit, Atom and Molecule Labs' pictures are drawn by Vulkan,\n"
+                                                      "with the graphics card's own programs (the belts' rocks, the electron clouds, the outlines, the Density cloud). The Black Hole Lab comes in step 4.\n"
                                                       "Each step of Vulkan's start is guarded: if one fails or stops the app, the next start uses OpenGL and this page says why.");
         const app::GpuGuard& V = app::gpuVulkanGuard();
         const bool vk = app.graphicsInUse == "vulkan";
         std::string gline = "Takes effect at the next start. In use now: ";
-        if (vk) gline += "Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). The Orbit, Atom and Molecule Labs are drawn; the processor does the "
-                         "work of the card's own programs for now (some scenes are slower), and the Black Hole Lab comes in a later step.";
+        if (vk) {                                         // 0.61.0 (step 3): the card's own programs too; only the Black Hole Lab is left (step 4)
+            gline += "Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). The Orbit, Atom and Molecule Labs are drawn, with the card's own "
+                     "programs; the Black Hole Lab comes in step 4.";
+            if (!app.rocksOk && !app.rocksWhy.empty()) gline += " The belts' rocks: the processor, because " + app.rocksWhy + ".";
+            for (const auto& [name, g] : app::vulkanCardGuards())   // a card program its guard switched off on Vulkan (the Slice's, the jump's and the
+                if (name != "slice" && name != "jump" && name != "molcloud" && !g->offText().empty()) gline += " " + g->offText();   // Density cloud's: their labs' rows)
+        }
         else if (!app.vulkanWhy.empty()) gline += "OpenGL, because " + app.vulkanWhy;
         else gline += "OpenGL.";
         ImGui::TextWrapped("%s", gline.c_str());
         if (shellLogOn()) auditNote("graphics " + gline);
-        if (!V.offText().empty() || (!vk && !app.vulkanWhy.empty() && V.started() && !V.allowed())) {
-            if (ImGui::Button("Try again##graphics")) { app::gpuVulkanGuard().tryAgain(); app.prefs.graphics = "vulkan"; app.vulkanWhy.clear(); }
+        bool cardsOff = false;                            // 0.61.0: Try again also gives the card programs switched off on Vulkan another start
+        if (vk) for (const auto& [name, g] : app::vulkanCardGuards()) cardsOff = cardsOff || (name != "slice" && name != "jump" && name != "molcloud" && !g->offText().empty());
+        if (!V.offText().empty() || cardsOff || (!vk && !app.vulkanWhy.empty() && V.started() && !V.allowed())) {
+            if (ImGui::Button("Try again##graphics")) {
+                app::gpuVulkanGuard().tryAgain(); app.prefs.graphics = "vulkan"; app.vulkanWhy.clear();
+                if (vk) for (const auto& [name, g] : app::vulkanCardGuards()) if (name != "slice" && name != "jump" && name != "molcloud" && !g->offText().empty()) g->tryAgain();
+            }
             noteItem("graphics.again");
             if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan is tried again at the next start, with a marker before each step:\n"
                                                           "if it fails or stops the app again, the start after that uses OpenGL, as now.");
         }
     }
     if (app.lab == 0) {                                   // 0.13 stage 4: who places the belts' rocks: the line says what this PC has, the switch compares the two ways
-        ImGui::TextWrapped("%s", app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks).c_str());
+        ImGui::TextWrapped("%s", app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks, app.rocksWhy).c_str());
         ImGui::BeginDisabled(!app.rocksOk);
         settingMark("gpurocks");
         wrappedCheckbox("GPU rocks (OpenGL 4.3)", &app.set.gpuRocks);

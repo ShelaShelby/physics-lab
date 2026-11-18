@@ -49,7 +49,7 @@ void MolCardPaths::frame(render::Renderer2D& R, const float* pts, long n) {
         }
     }
     if (state_ == 0) {
-        if (!R.outlineCompute()) { off(R.vulkan() ? "on Vulkan the card programs come in step 3: the processor's path is used" : "this PC has no OpenGL 4.3 compute shaders (or they are switched off)"); return; }
+        if (!R.computeShaders()) { off(R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "this PC has no OpenGL 4.3 compute shaders (or they are switched off)"); return; }
         if (G.started() && !G.allowed()) { off(G.offText().empty() ? std::string("its guard switched it off") : G.offText()); return; }
         if (!pts || n <= 0 || ++frames_ < 3) return;                     // (its picture on screen first)
         state_ = 2; step_ = 0;

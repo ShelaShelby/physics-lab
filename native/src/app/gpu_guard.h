@@ -14,6 +14,7 @@
 
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace app {
@@ -108,6 +109,19 @@ GpuGuard& gpuMolCloudGuard();
 // (gpu-vulkan-step.txt), the settings line "gpuvulkan=", the same log (its lines start "[vulkan] "; it starts the log when Vulkan is tried), its version
 // field "vulkan <app version>" (the Vulkan code changes with each step, so a new version tries once more)
 GpuGuard& gpuVulkanGuard();
+
+// 0.61.0 (Vulkan step 3 of 5): useVulkanGuards(true) at a Vulkan start: gpuSliceGuard, gpuJumpGuard and gpuMolCloudGuard then give Vulkan's twins (markers
+// gpu-vk<name>-step.txt, settings lines "gpuvk<name>=", log lines "[vulkan] [<name>] ", versions "vulkan <name> <hash>"), so a failure on one API never switches
+// the other off. The four card programs that have no guard of their own on OpenGL (made with the renderer there) have one on Vulkan: the superposition and
+// jump groups (gpuVkGroupsGuard, "gpuvkgroups="), the 90 % outline (gpuVkOutlineGuard, "gpuvkoutline="), the belts' rocks (gpuVkRocksGuard, "gpuvkrocks=")
+// and the Cloud 3D Glow dots (gpuVkCloudGuard, "gpuvkcloud=").
+void useVulkanGuards(bool on);
+bool vulkanGuards();
+GpuGuard& gpuVkGroupsGuard();
+GpuGuard& gpuVkOutlineGuard();
+GpuGuard& gpuVkRocksGuard();
+GpuGuard& gpuVkCloudGuard();
+std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the seven Vulkan guards by their settings name (gpuvk<name>=)
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);

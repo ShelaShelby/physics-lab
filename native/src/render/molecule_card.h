@@ -33,31 +33,47 @@ struct MolCloudDraw {                             // one frame's cloud (Renderer
     bool fenceAfter = false;                      // a fence after the dots unless one is waiting (the guard's step "the first full use" ends when it has signalled)
 };
 
+// 0.61.0: as the lab sees it; MoleculeCardGl is OpenGL's (render/molecule_card.cpp), Vulkan's is made by render/vk_card.cpp (makeVkMoleculeCard), and
+// MoleculeCardNone stands in where neither can be made
 class MoleculeCard {
 public:
+    virtual ~MoleculeCard() {}
     // compile and link the three programs: two steps told to steps (begin, end with the driver's logs and the time); false: it failed (why)
-    bool build(KerrSteps* steps, std::string& why);
-    bool built() const { return cs_ != 0 && dot_ != 0 && grid_ != 0; }
-    void reset();                                 // the programs and buffers deleted (the renderer's shutdown)
+    virtual bool build(KerrSteps* steps, std::string& why) = 0;
+    virtual bool built() const = 0;
+    virtual void reset() = 0;                     // the programs and buffers deleted (the renderer's shutdown)
     bool ready() const { return ready_ && built(); }
     void setReady(bool on) { ready_ = on; }
 
     // the check: n dots projected with cam into 4 floats each (X, Y, r, wt), read back later without waiting
-    int beginProject(const float* pts, long n, const MolCloudCam& cam);
-    JobState pollProject(int job, std::vector<float>& out);
+    virtual int beginProject(const float* pts, long n, const MolCloudCam& cam) = 0;
+    virtual JobState pollProject(int job, std::vector<float>& out) = 0;
 
-    // the frame's cloud, inside Renderer2D::end(): the dots sent if their set is new on the card, made, the grid summed and read back, the dots drawn.
-    // fuzz: the blob shader's table; cells: a work buffer. Leaves the blending to the caller.
-    void drawCloud(const MolCloudDraw& d, double width, double height, const float* fuzz, std::vector<float>& cells);
+    // the frame's cloud, inside Renderer2D::end() (OpenGL): the dots sent if their set is new on the card, made, the grid summed and read back, the dots
+    // drawn. fuzz: the blob shader's table; cells: a work buffer. Leaves the blending to the caller. (Vulkan: render/vk_card.h vkMolCloudRecord.)
+    virtual void drawCloud(const MolCloudDraw& d, double width, double height, const float* fuzz, std::vector<float>& cells) { (void)d; (void)width; (void)height; (void)fuzz; (void)cells; }
     long bytesSent() const { return bytes_; }     // dot places sent to the card so far (a still cloud sends nothing)
-    int fenceState();                             // 1 signalled, 0 not yet, -1 failed / none
+    virtual int fenceState() = 0;                 // 1 signalled, 0 not yet, -1 failed / none
+protected:
+    bool ready_ = false;
+    long bytes_ = 0;
+};
+
+class MoleculeCardGl : public MoleculeCard {
+public:
+    bool build(KerrSteps* steps, std::string& why) override;
+    bool built() const override { return cs_ != 0 && dot_ != 0 && grid_ != 0; }
+    void reset() override;
+    int beginProject(const float* pts, long n, const MolCloudCam& cam) override;
+    JobState pollProject(int job, std::vector<float>& out) override;
+    void drawCloud(const MolCloudDraw& d, double width, double height, const float* fuzz, std::vector<float>& cells) override;
+    int fenceState() override;
 
 private:
     struct Job { int id = 0; GLsync sync = nullptr; GLuint pts = 0, out = 0; long n = 0; };
     void release(int id);
     void dispatch(GLuint ptsBuf, GLuint outBuf, long n, const MolCloudCam& c);
     GLuint cs_ = 0, dot_ = 0, grid_ = 0;
-    bool ready_ = false;
     std::vector<Job> jobs_;
     int nextId_ = 1;
     // the dots on the card: a few sets kept (a vibration's moments: the cloud of each is sent once), the least recently used one replaced
@@ -67,9 +83,18 @@ private:
     GLuint out_ = 0; long outN_ = 0;
     GLuint dotVao_ = 0, gridVao_ = 0, corner_ = 0, gridFbo_ = 0, gridTex_ = 0;
     int gridW_ = 0, gridH_ = 0;
-    long bytes_ = 0;
     GLsync fence_ = nullptr;
     GLint uR0_ = -1, uR1_ = -1, uR2_ = -1, uScr_ = -1, uView_ = -1, uN_ = -1, dSize_ = -1, dLight_ = -1, dColour_ = -1, dFuzz_ = -1, dSphN_ = -1, gGrid_ = -1;
+};
+
+class MoleculeCardNone : public MoleculeCard {
+public:
+    bool build(KerrSteps*, std::string& why) override { why = "the graphics card's programs are not available on this start"; return false; }
+    bool built() const override { return false; }
+    void reset() override { ready_ = false; }
+    int beginProject(const float*, long, const MolCloudCam&) override { return 0; }
+    JobState pollProject(int, std::vector<float>&) override { return JobState::Failed; }
+    int fenceState() override { return -1; }
 };
 
 }  // namespace render

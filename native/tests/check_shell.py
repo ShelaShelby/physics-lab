@@ -11,7 +11,7 @@
 #   shift     with a card or panel over the middle, the selected body is moved outside every open panel; with the shift switched off (PL_SHIFT=off) it is not (so the test can fail)
 #   reading   About opens in the reading view: a column of at most 34 em, headings, a contents list, body lines of at most 75 characters (DejaVu Sans here, wider than Segoe UI)
 #   old       no Old panel button in either lab, and PL_NEWUI=off no longer switches the New UI off (0.16 stage 1b)
-import os, sys
+import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap, prefetch, Bmp
 
@@ -268,6 +268,70 @@ VK2D_VIEWS = {   # name: (settings, the drawing calls the view must make)
     "mol_ball": ({"PL_MOLECULE": "H2O"}, "blob0 blob3 blob8"),
 }
 
+# 0.61.0 (Vulkan step 3 of 5): the card views: each card program drawing on Vulkan against the same view drawn by OpenGL's card programs (one sample on both,
+# the validation layers with their synchronisation checks on; the planner's limit as above: at most 1 % of the pixels over 8 levels). The Vulkan log must
+# name the program's first full use (so the view really drew from the card). Then: one program broken on purpose (PL_VK_CARDFAIL=cloud: only it falls back,
+# the log says why, the picture is the processor's) and a card without double precision (PL_VK_NO_FLOAT64: the belts on the processor, Settings says so).
+VK3_VIEWS = {   # name: (settings, frames, the Vulkan log line of its first full use, OpenGL's log line or "")
+    "glow": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=1;view=Cloud 3D;orb=3d;cstyle=Glow"}, 60, "[vulkan] [cloud] |end the Glow dots' first full use", ""),
+    "super": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "12", "PL_MOTION": "off"}, 60, "[vulkan] [groups] |end the groups' first full use", ""),
+    "outline": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=1;view=Cloud 3D;orb=3d;outline=On"}, 60, "[vulkan] [outline] |end the outline's first full use", ""),
+    "slice": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "14", "PL_ATOM_BENCHSTOP": "60", "PL_MOTION": "off"}, 120, "[vulkan] [slice] |end the Slice's first full use", "[slice] |end the Slice's first full use"),
+    "jump": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "37", "PL_MOTION": "off"}, 150, "[vulkan] [jump] |end the jump's first full use", "[jump] |end the jump's first full use"),
+    "density": ({"PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "real"}, 90, "[vulkan] [molcloud] |end the Density cloud's first full use", "[molcloud] |end the Density cloud's first full use"),
+    "belts": ({"PL_SELECT": "Earth"}, 60, "[vulkan] [rocks] |end the rocks' first full use", ""),
+}
+# (PL_VK_SYNC: a batch the app asks about is waited for, so the Slice's dots and the outline arrive at the frame that asks, every run, as OpenGL's software
+# driver gives them here: without it Vulkan's pictures of a moving Slice differ from run to run by when the batches finished)
+VK3_SYNC = {"PL_GRAPHICS": "vulkan", "PL_VK_VALIDATION": "1", "VK_KHRONOS_VALIDATION_VALIDATE_SYNC": "true", "PL_NO_MSAA": "1", "PL_VK_SYNC": "1"}
+
+def _logged(log, prefix, text):   # a line of the guard's log: its prefix, its time, then the text
+    return any(l.startswith(prefix) and re.search(r"\]\s*" + re.escape(text), l[len(prefix):]) for l in log.splitlines())
+
+def part_vulkancards(binary, work):
+    calls = []
+    for name, (env, frames, _v, _g) in VK3_VIEWS.items():
+        calls.append(((binary, work, "v3_vk_" + name, dict(env, **VK3_SYNC)), dict(frames=frames)))
+        calls.append(((binary, work, "v3_gl_" + name, dict(env, PL_NO_MSAA="1")), dict(frames=frames)))
+    glow = VK3_VIEWS["glow"][0]
+    calls.append(((binary, work, "v3_fail", dict(glow, PL_VK_CARDFAIL="cloud", **VK3_SYNC)), dict(frames=60)))
+    calls.append(((binary, work, "v3_cpuglow", dict(glow, PL_GPU_CLOUD="off", **VK3_SYNC)), dict(frames=60)))
+    calls.append(((binary, work, "v3_nof64", dict(PL_SELECT="Earth", PL_VK_NO_FLOAT64="1", PL_OPEN="settings:graphics", PL_LOG_DRAWKINDS="1", **VK3_SYNC)), dict(frames=40)))
+    prefetch(calls)
+    for name, (env, frames, vline, gline) in VK3_VIEWS.items():
+        v = run_app(binary, work, "v3_vk_" + name, dict(env, **VK3_SYNC), frames=frames)
+        g = run_app(binary, work, "v3_gl_" + name, dict(env, PL_NO_MSAA="1"), frames=frames)
+        vlog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v3_vk_" + name))
+        glog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v3_gl_" + name))
+        check("Vulkan: " in v.out and "OpenGL: " in g.out, f"card {name}: the app started on Vulkan (and the reference on OpenGL)")
+        check(_logged(vlog, *vline.split("|")), f"card {name}: Vulkan drew it from the card program (the log: '{vline}')")
+        if gline:
+            check(_logged(glog, *gline.split("|")) and "[vulkan]" not in glog, f"card {name}: OpenGL drew it from its card program (the log: '{gline}')")
+        errs = _vk_errors(v)
+        check("PLVK validation errors=0" in v.out and not errs, f"card {name}: zero validation errors, synchronisation checks on ({len(errs)}; first: {errs[:1]})")
+        frac = _differ(v.bmp, g.bmp) if os.path.exists(v.bmp) and os.path.exists(g.bmp) else None
+        print(f"vulkancards {name}: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels")
+        check(frac is not None and frac <= 0.01, f"card {name}: Vulkan's card program against OpenGL's, one sample: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels (at most 1 %)")
+    # one program broken on purpose: only it falls back, the log says why, the picture is the processor's
+    f = run_app(binary, work, "v3_fail", dict(glow, PL_VK_CARDFAIL="cloud", **VK3_SYNC), frames=60)
+    c = run_app(binary, work, "v3_cpuglow", dict(glow, PL_GPU_CLOUD="off", **VK3_SYNC), frames=60)
+    flog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v3_fail"))
+    check("Vulkan card program on the processor: the Cloud 3D Glow dots: made to fail on purpose (PL_VK_CARDFAIL=cloud)" in f.out, "a broken program (PL_VK_CARDFAIL=cloud): the app says the Glow dots are on the processor, and why")
+    check("[vulkan] [cloud]" in flog and "failed: made to fail on purpose" in flog, "a broken program: the log says why")
+    check("end the groups' first small run" in flog and "end the outline's first small run" in flog and "end the rocks' first small run" in flog and "Vulkan: " in f.out,
+          "a broken program: the other programs and Vulkan stay on")
+    frac = _differ(f.bmp, c.bmp) if os.path.exists(f.bmp) and os.path.exists(c.bmp) else None
+    print(f"vulkancards broken program: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ from the processor's picture")
+    check(frac is not None and frac <= 0.0001, f"a broken program: the picture is the processor's ({('%.4f %%' % (100 * frac)) if frac is not None else 'no pair'} of the pixels differ by more than 8 levels)")
+    # a card without double precision in its shaders: the belts on the processor, Settings' Graphics row says so
+    n = run_app(binary, work, "v3_nof64", dict(PL_SELECT="Earth", PL_VK_NO_FLOAT64="1", PL_OPEN="settings:graphics", PL_LOG_DRAWKINDS="1", **VK3_SYNC), frames=40)
+    nlog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v3_nof64"))
+    note = [x for x in n.notes if x.startswith("graphics ")]
+    check("Orbit Lab rocks: Vulkan: CPU path (this card has no double precision in its shaders (shaderFloat64)" in n.out and "shaderFloat64): switched off" in nlog,
+          "no double precision (PL_VK_NO_FLOAT64): the rocks are placed by the processor, the log says so")
+    check("squares" in _kinds(n), "no double precision: the belts are still drawn (the processor's squares)")
+    check(note and "The belts' rocks: the processor, because this card has no double precision in its shaders (shaderFloat64)" in note[0], f"no double precision: Settings' Graphics row says so: {note[:1]}")
+
 def _kinds(r):
     line = [l for l in r.out.splitlines() if l.startswith("PLDRAWKINDS ")]
     return {k for k, v in (p.split("=") for p in line[-1].split()[1:]) if v != "0"} if line else set()
@@ -381,6 +445,9 @@ def main():
         part_vulkan(binary, work)
     if only is not None and "vulkan2d" in only:                            # (0.60.0: only when asked; ui_shell lists check_shell.py:vulkan2d)
         part_vulkan2d(binary, work)
+        part_vulkancards(binary, work)                                     # (0.61.0: the card programs on Vulkan, in the same part)
+    elif only is not None and "vulkancards" in only:                       # (0.61.0: that half alone, by hand)
+        part_vulkancards(binary, work)
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0
 
