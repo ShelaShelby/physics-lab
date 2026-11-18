@@ -86,6 +86,7 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   benchmark scene first, until every scene of the Hard list reaches it; the Black Hole Lab's moving gas waits until then (17 Nov 2026).
 - The Black Hole Lab's look comes first, then the speed work; every new drawing on the graphics card from the start (the processor as reference and fallback).
   Replaces the order of 17 Nov 2026 (speed before new features) for now; the 255 Hz target stays (17 Nov 2026, evening).
+- 18 Nov 2026: the app moves to Vulkan in five steps (native/PLAN_VULKAN.md); OpenGL is the backup until every part works on Vulkan on the owner's PC, then removed.
 
 ## Look and interface
 - The 0.38 look (6 Nov 2026): sharp corners, flat surfaces with a 1 px edge, a chosen option as a soft accent tint, the labs as tabs in the top bar; in every theme.

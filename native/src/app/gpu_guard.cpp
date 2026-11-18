@@ -65,7 +65,7 @@ GpuGuardRecord gpuGuardParse(const std::string& line) {
         a = b + 1;
     }
     GpuGuardRecord r;
-    if (f.size() != 4 || (f[0] != "off" && f[0] != "slow" && f[0] != "ok") || f[1].empty()) return r;
+    if (f.size() != 4 || (f[0] != "off" && f[0] != "slow" && f[0] != "ok" && f[0] != "fail") || f[1].empty()) return r;
     r.state = f[0]; r.version = f[1]; r.driver = f[2]; r.step = f[3];
     return r;
 }
@@ -76,11 +76,11 @@ GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecor
     // 0.56.0: a line of an older form (0.55.7 and 0.55.8 kept the app's version, not "shader <hash>"; 0.55.9 tried the dead shader once more because of it):
     // read as "off" for its driver, kept from now on in the new form with this shader's id (a later changed shader still tries again)
     if (!d.keep.state.empty() && d.keep.version.rfind("shader ", 0) != 0 && d.keep.version.rfind("sky ", 0) != 0 && d.keep.version.rfind("slice ", 0) != 0 && d.keep.version.rfind("jump ", 0) != 0 &&
-        d.keep.version.rfind("molcloud ", 0) != 0 && d.keep.driver == field(driver))   // (0.57.1: molcloud)
+        d.keep.version.rfind("molcloud ", 0) != 0 && d.keep.version.rfind("vulkan ", 0) != 0 && d.keep.driver == field(driver))   // (0.57.1: molcloud; 0.59.0: vulkan)
         d.keep = GpuGuardRecord{"off", field(version), d.keep.driver, d.keep.step.empty() ? std::string("(kept by an older version of the app)") : d.keep.step};
     const bool same = d.keep.version == field(version) && d.keep.driver == field(driver);
-    if ((d.keep.state == "off" || d.keep.state == "slow") && same) {
-        d.allowed = false; d.guarded = false; d.crashed = d.keep.state == "off";
+    if ((d.keep.state == "off" || d.keep.state == "slow" || d.keep.state == "fail") && same) {
+        d.allowed = false; d.guarded = false; d.crashed = d.keep.state == "off"; d.failed = d.keep.state == "fail";
     } else if (d.keep.state == "ok" && same) {
         d.allowed = true; d.guarded = false;
     } else {
@@ -113,16 +113,23 @@ void GpuGuard::start(const std::string& folder, const std::string& version, cons
     lines_ = 0; logFull_ = false;
     for (const std::string& h : head) line(h, false);
     if (!marker.state.empty()) line("A marker was left by the last run (app " + marker.version + ", driver " + marker.driver + "): it died inside the step '" + marker.step + "'", true);
-    if (!d_.allowed) line(std::string("The graphics card's light paths are switched off for this light-path shader and driver: ") +
-                          (d_.crashed ? "the app died inside the step '" : "this step did not finish in time: '") + d_.keep.step + "' (Settings, Performance: Try again)", true);
-    else line(d_.guarded ? "The graphics card's light paths: allowed, guarded (a marker before each step until the whole path has succeeded once)"
-                         : "The graphics card's light paths: allowed (they succeeded once with this light-path shader and driver)", false);
+    const std::string w = what_.empty() ? std::string("The graphics card's light paths") : what_;
+    if (!d_.allowed) line(w + (what_.empty() ? " are switched off for this light-path shader and driver: " : " is switched off for this version: ") +
+                          (d_.crashed ? "the app died inside the step '" : d_.failed ? "this step failed: '" : "this step did not finish in time: '") + d_.keep.step + "' (Settings, Performance: Try again)", true);
+    else line(d_.guarded ? w + ": allowed, guarded (a marker before each step until the whole path has succeeded once)"
+                         : w + (what_.empty() ? ": allowed (they succeeded once with this light-path shader and driver)" : ": allowed (it succeeded once with this version)"), false);
 }
 
 std::string GpuGuard::offText() const {
     std::lock_guard<std::mutex> g(mx_);
     if (!started_ || d_.allowed) return std::string();
+    if (!what_.empty()) {                                            // 0.59.0 (Vulkan): one thing, and its id is the app version
+        if (d_.crashed) return what_ + " stopped the app last time (in the step '" + d_.keep.step + "').";
+        if (d_.failed) return what_ + " could not start last time (in the step '" + d_.keep.step + "').";
+        return what_ + " did not finish a step in time last time ('" + d_.keep.step + "').";
+    }
     if (d_.crashed) return "The graphics card's light paths stopped the app last time (in the step '" + d_.keep.step + "') and are switched off for this graphics driver.";
+    if (d_.failed) return "The graphics card's light paths failed (in the step '" + d_.keep.step + "') and are switched off for this graphics driver.";
     return "The graphics card's light paths did not finish a step in time last time ('" + d_.keep.step + "') and are switched off for this graphics driver.";
 }
 
@@ -175,27 +182,36 @@ void GpuGuard::finished(bool ok, const std::string& why) {
     std::lock_guard<std::mutex> g(mx_);
     removeMarker();
     if (ok) {
-        line("The graphics card's light paths: the whole path succeeded" + std::string(d_.guarded ? " (kept: no markers any more for this light-path shader and driver)" : ""), true);
+        line((what_.empty() ? std::string("The graphics card's light paths") : what_) + ": the whole path succeeded" +
+             std::string(d_.guarded ? (what_.empty() ? " (kept: no markers any more for this light-path shader and driver)" : " (kept: no markers any more for this version)") : ""), true);
         if (d_.guarded) { d_.keep = GpuGuardRecord{"ok", version_, driver_, ""}; d_.guarded = false; }
     } else {
-        line("The graphics card's light paths: not used in this run (the processor's path), because " + why, true);
+        line(what_.empty() ? "The graphics card's light paths: not used in this run (the processor's path), because " + why : what_ + ": not used in this run, because " + why, true);
     }
 }
 
 void GpuGuard::timedOut(const std::string& step) {
     std::lock_guard<std::mutex> g(mx_);
     removeMarker();
-    line("The step '" + step + "' did not finish within its time limit: the graphics card's light paths are switched off (kept for this light-path shader and driver)", true);
+    line("The step '" + step + "' did not finish within its time limit: " + (what_.empty() ? std::string("the graphics card's light paths are switched off (kept for this light-path shader and driver)") : what_ + " is switched off (kept for this version)"), true);
     d_.keep = GpuGuardRecord{"slow", version_, driver_, field(step)};
     d_.allowed = false; d_.guarded = false; d_.crashed = false;
+}
+
+void GpuGuard::failed(const std::string& step, const std::string& why) {
+    std::lock_guard<std::mutex> g(mx_);
+    removeMarker();
+    line("The step '" + step + "' failed: " + why + " (kept; Settings, Performance: Try again)", true);
+    d_.keep = GpuGuardRecord{"fail", version_, driver_, field(step + ": " + why)};
+    d_.allowed = false; d_.guarded = false; d_.crashed = false; d_.failed = true;
 }
 
 void GpuGuard::tryAgain() {
     std::lock_guard<std::mutex> g(mx_);
     d_.keep = GpuGuardRecord{};
-    d_.allowed = true; d_.guarded = true; d_.crashed = false;
+    d_.allowed = true; d_.guarded = true; d_.crashed = false; d_.failed = false;
     generation_++;
-    line("Try again (Settings, Performance): the graphics card's light paths are allowed again, guarded", true);
+    line("Try again (Settings, Performance): " + (what_.empty() ? std::string("the graphics card's light paths are") : what_ + " is") + " allowed again, guarded", true);
 }
 
 void GpuGuard::closing() {
@@ -243,6 +259,11 @@ GpuGuard& gpuSliceGuard() {
 
 GpuGuard& gpuJumpGuard() {
     static GpuGuard g("gpu-jump-step.txt", GpuGuard::kLog, false, "[jump] ");
+    return g;
+}
+
+GpuGuard& gpuVulkanGuard() {
+    static GpuGuard g("gpu-vulkan-step.txt", GpuGuard::kLog, true, "[vulkan] ", "Vulkan");
     return g;
 }
 

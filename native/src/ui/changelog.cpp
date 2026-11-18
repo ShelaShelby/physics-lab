@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.59.0", "Vulkan, step 1 of 5: the menus and panels on Vulkan, as a test",
+     "The app is moving from OpenGL to Vulkan, a newer way of talking to the graphics card, in five steps. This first one lays the foundation: Settings, "
+     "Performance has a new row, Graphics: OpenGL / Vulkan (test), used from the next start. On Vulkan the menus, panels, Settings, pages and guides are drawn "
+     "by Vulkan, the same as on OpenGL; the labs' pictures are not drawn yet (the picture area says so), they come in the next steps. OpenGL stays the default "
+     "and is unchanged. Each step of Vulkan's start is guarded: if one fails, or stops the app, the next start uses OpenGL and the row says why, with Try "
+     "again. The benchmark runs on OpenGL only until step 5. About credits the two Vulkan libraries now built into the app (volk, the Khronos Vulkan headers)."},
     {"0.58.0", "The Black Hole Lab's disc reaches as far as real ones, and a new Light choice",
      "The disc used to stop at 30 times the hole's own length, with a hard pale rim. That was a cut, not physics: discs round massive black holes are believed "
      "to reach about a thousand Schwarzschild radii, where their own gravity breaks them up (Goodman 2003). The disc now goes out to 2000 GM/c\xC2\xB2 with the "

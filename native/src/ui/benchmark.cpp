@@ -850,6 +850,7 @@ BenchState& st(AppState& app) {
 }
 
 const char* whyNot(const AppState& app) {
+    if (app.graphicsInUse == "vulkan") return "The benchmark runs on OpenGL until Vulkan's step 5: Settings, Graphics, OpenGL, then start again.";   // 0.59.0
     if (app.pane) return "Learn is open: close it first.";
     if (app.journey.active) return "A Journey is running: stop it first.";
     if (app.shot.requested) return "A picture is being saved: wait a moment.";

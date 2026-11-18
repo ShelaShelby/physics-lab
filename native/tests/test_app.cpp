@@ -473,6 +473,11 @@ static void testAppTexts() {
               std::string(kAboutHtml).find("https://github.com/libsdl-org/SDL") != std::string::npos &&
               std::string(kAboutHtml).find("Dear ImGui 1.92.9b") != std::string::npos && std::string(kAboutHtml).find("https://github.com/ocornut/imgui") != std::string::npos &&
               std::string(kAboutHtml).find("Dear ImGui 1.92.9b (Omar Cornut)</a> (the panels, buttons and text; MIT licence") != std::string::npos);
+    // 0.59.0 (Vulkan step 1): the two Vulkan libraries built into the .exe, the same way
+    checkTrue("About credits volk and the Khronos Vulkan headers (the pinned tag, licence, link)",
+              std::string(kAboutHtml).find("volk vulkan-sdk-1.4.350.1 (Arseny Kapoulkine)</a> (loads the PC&rsquo;s Vulkan driver; MIT licence, volk-LICENSE.md") != std::string::npos &&
+              std::string(kAboutHtml).find("https://github.com/zeux/volk") != std::string::npos && std::string(kAboutHtml).find("https://github.com/KhronosGroup/Vulkan-Headers") != std::string::npos &&
+              std::string(kAboutHtml).find("Vulkan-Headers vulkan-sdk-1.4.350.1 (The Khronos Group)</a> (Apache-2.0 or MIT licence") != std::string::npos);
     checkTrue("About still lists the sources of both labs", std::string(kAboutHtml).find("NASA/JPL: planet positions") != std::string::npos && std::string(kAboutHtml).find("NUBASE") != std::string::npos);
     // the far-away things and the Solar System timeline
     using nativeorbit::kFar;
@@ -2000,6 +2005,19 @@ static void testGpuGuard() {
         checkTrue("guard (molcloud): kept off with the same program and driver: stays off", !dec.allowed && dec.crashed);
         dec = app::gpuGuardDecide(GpuGuardRecord{"off", mv, d, "the Density cloud's check"}, none, "molcloud 99999999aabbccdd", d);
         checkTrue("guard (molcloud): a changed program: tried once more", dec.allowed && dec.guarded); }
+    {   // 0.59.0: the Vulkan guard (Vulkan step 1, PLAN_VULKAN.md): its own id form "vulkan <app version>" (not read as an older line), and the state "fail":
+        // a step that returned an error (no crash): off for this id and driver, not called a crash, Try again clears it
+        const std::string vv = "vulkan 0.59.0", vd = "any";
+        dec = app::gpuGuardDecide(GpuGuardRecord{"ok", vv, vd, ""}, none, vv, vd);
+        checkTrue("guard (vulkan): ok with the same id: allowed, no markers (not read as an older line)", dec.allowed && !dec.guarded && dec.keep.state == "ok");
+        dec = app::gpuGuardDecide(GpuGuardRecord{"off", vv, vd, "swapchain"}, none, vv, vd);
+        checkTrue("guard (vulkan): kept off (a crash) with the same id: stays off, a crash", !dec.allowed && dec.crashed && !dec.failed);
+        const GpuGuardRecord fr{"fail", vv, vd, "device: no device can draw on this window"};
+        checkStr("guard (vulkan): a failed step's line reads back", app::gpuGuardText(app::gpuGuardParse(app::gpuGuardText(fr))), "fail | vulkan 0.59.0 | any | device: no device can draw on this window");
+        dec = app::gpuGuardDecide(fr, none, vv, vd);
+        checkTrue("guard (vulkan): kept fail with the same id: off, failed, not a crash", !dec.allowed && dec.failed && !dec.crashed);
+        dec = app::gpuGuardDecide(fr, none, "vulkan 0.59.1", vd);
+        checkTrue("guard (vulkan): kept fail, a new app version: tried once more, guarded", dec.allowed && dec.guarded); }
     // the files: a folder of its own
 #ifdef _WIN32
     const std::string dir = std::string(std::getenv("TEMP") ? std::getenv("TEMP") : ".") + "\\pl_gpuguard_test\\";
@@ -2053,11 +2071,25 @@ static void testGpuGuard() {
         const std::size_t a = log.find("begin check: dispatch 1"), b2 = log.find("the whole path succeeded"), c = log.find("begin fill 2: something");
         checkTrue("guard files: the log has the steps in order (overwritten at each start)", log.find("head line 1") == std::string::npos && a != std::string::npos &&
                   b2 != std::string::npos && c != std::string::npos && a < b2 && b2 < c);
+        app::GpuGuard f;                                   // 0.59.0: a step that returned an error: off for this run and kept as "fail", the reason in Settings' line
+        f.start(dir, v, d, "", {});
+        f.begin("device");
+        f.failed("device", "no device can draw on this window");
+        checkTrue("guard files: a failed step: off, not a crash, kept as fail with its step and reason, the marker removed", !f.allowed() && !f.crashed() && !exists(mk) &&
+                  f.saved() == "fail | " + v + " | " + d + " | device: no device can draw on this window" && f.offText().find("no device can draw on this window") != std::string::npos);
+        f.tryAgain();
+        checkTrue("guard files: Try again after a failed step: allowed, nothing kept", f.allowed() && f.saved().empty() && f.offText().empty());
     }
     std::remove(mk.c_str()); std::remove(lg.c_str());
     app::Prefs p; p.gpuPaths = "off | 0.55.7 | x / y | compile";
     checkStr("guard: the settings file's line goes through the settings file unchanged", app::loadPrefs(app::savePrefs(p)).gpuPaths, p.gpuPaths);
     checkTrue("guard: no line when nothing is kept", app::savePrefs(app::Prefs{}).find("gpupaths") == std::string::npos);
+    {   app::Prefs q; q.gpuVulkan = "fail | vulkan 0.59.0 | any | device: x"; q.graphics = "vulkan";   // 0.59.0: Graphics (Settings, Performance) and the Vulkan guard's line
+        const app::Prefs r = app::loadPrefs(app::savePrefs(q));
+        checkTrue("graphics: the choice and the Vulkan guard's line go through the settings file", r.graphics == "vulkan" && r.gpuVulkan == q.gpuVulkan);
+        checkTrue("graphics: OpenGL is the default and is not written (older files stay byte for byte)", app::Prefs{}.graphics == "opengl" && app::savePrefs(app::Prefs{}).find("graphics") == std::string::npos &&
+                  app::savePrefs(app::Prefs{}).find("gpuvulkan") == std::string::npos);
+        checkTrue("graphics: an unknown value is ignored", app::loadPrefs("graphics=directx\n").graphics == "opengl"); }
 }
 
 int main() {

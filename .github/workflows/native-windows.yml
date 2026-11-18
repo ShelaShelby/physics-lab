@@ -81,6 +81,10 @@ jobs:
           New-Item -ItemType Directory -Force out/licences | Out-Null
           Copy-Item build/_deps/sdl3-src/LICENSE.txt out/licences/SDL3-LICENSE.txt -ErrorAction Stop
           Copy-Item build/_deps/imgui-src/LICENSE.txt out/licences/DearImGui-LICENSE.txt -ErrorAction Stop
+          # 0.59.0 (Vulkan step 1): volk and the Khronos Vulkan headers are built into the .exe too (glslang only runs at build time)
+          Copy-Item build/_deps/volk-src/LICENSE.md out/licences/volk-LICENSE.md -ErrorAction Stop
+          Copy-Item build/_deps/vulkanheaders-src/LICENSE.md out/licences/Vulkan-Headers-LICENSE.md -ErrorAction Stop
+          Copy-Item build/_deps/vulkanheaders-src/LICENSES/Apache-2.0.txt out/licences/Vulkan-Headers-Apache-2.0.txt -ErrorAction Stop
 
       # (0.47.3: the account's artifact storage filled up and the failed upload stopped the release; the release does not need this copy, so a failed upload no
       # longer stops it, and the copies are kept 3 days instead of 30 so the storage does not fill again)

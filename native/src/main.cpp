@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
 #include <cstdlib>
 #include <functional>
@@ -28,6 +29,7 @@
 #include "orbit/units.h"
 #include "render/gl_loader.h"
 #include "render/renderer2d.h"
+#include "render/vk_backend.h"
 #include "ui/changelog.h"
 #include "ui/fonts.h"
 #include "ui/learn.h"
@@ -62,20 +64,22 @@ namespace {
 
 #include "ui/icon_data.inc"      // kIconRgba: the window icon (64 x 64)
 
-SDL_Window* createWindow(float scale, bool multisample, const app::WindowState& ws, bool gl43) {   // gl43: ask for an OpenGL 4.3 core context (0.13 stage 2: compute shaders), else 3.3
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, gl43 ? 4 : 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, multisample ? 1 : 0);   // smooth edges on lines and dots
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, multisample ? 4 : 0);
+SDL_Window* createWindow(float scale, bool multisample, const app::WindowState& ws, bool gl43, bool vulkan) {   // gl43: ask for an OpenGL 4.3 core context (0.13 stage 2: compute shaders), else 3.3; 0.59.0: vulkan: a Vulkan window
+    if (!vulkan) {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, gl43 ? 4 : 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, multisample ? 1 : 0);   // smooth edges on lines and dots
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, multisample ? 4 : 0);
+    }
     const std::string title = std::string("Physics Lab ") + ui::appVersion() + " — Orbit Lab";
     int w = static_cast<int>(1400 * scale), h = static_cast<int>(860 * scale);          // the first time: 1400 × 860 points
     if (ws.w > 0) { w = ws.w; h = ws.h; }                                              // later: where it was (window-system units)
     if (const char* wh = SDL_getenv("PL_WINDOW")) { int a = 0, b = 0; if (std::sscanf(wh, "%dx%d", &a, &b) == 2) { w = static_cast<int>(a * scale); h = static_cast<int>(b * scale); } }   // for automatic checks: PL_WINDOW=1000x640
     return SDL_CreateWindow(title.c_str(), w, h,
-                            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+                            (vulkan ? SDL_WINDOW_VULKAN : SDL_WINDOW_OPENGL) | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
 }
 
 // line breaks at about 70 characters (not every message box wraps long lines by itself)
@@ -114,6 +118,17 @@ bool SDLCALL onLiveExpose(void* userdata, SDL_Event* ev) {
     LiveWatch* w = static_cast<LiveWatch*>(userdata);
     if (!w->busy && w->draw) w->draw();
     return true;
+}
+
+// 0.59.0 (Vulkan step 1): the picture area without the lab's picture: one line in its middle (wrapped on a narrow window)
+void pictureNote(ImDrawList* dl, ImVec2 pos, ImVec2 size, app::Rgb c) {
+    const char* note = "Vulkan test: the labs' pictures come in the next steps (Settings, Graphics, OpenGL to see them)";
+    ImFont* font = ImGui::GetFont();
+    const float fs = ImGui::GetFontSize();
+    const float wrap = std::max(40.0f, size.x - 2.0f * fs);
+    const ImVec2 ts = font->CalcTextSizeA(fs, wrap, wrap, note);
+    const ImVec2 at(std::floor(pos.x + (size.x - ts.x) * 0.5f), std::floor(pos.y + (size.y - ts.y) * 0.5f));
+    dl->AddText(font, fs, at, ImGui::ColorConvertFloat4ToU32(ImVec4(c.r, c.g, c.b, 1.0f)), note, nullptr, wrap);
 }
 
 const char* const kDriverAdvice =
@@ -166,87 +181,122 @@ int main(int, char**) {
     }
     app::WindowState start;                             // size 0: the default
     if (app.prefs.window) start = app::fitWindow(*app.prefs.window, screens);
-    // 0.13 stage 2: first ask for OpenGL 4.3 (the Atom Lab's superposition and jumps then run on the GPU), with smooth edges, then without them; if the PC cannot give 4.3, the same two tries
-    // for 3.3 as before (and the CPU does that work).
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();                             // (0.59.0: before the window: Vulkan's start makes Dear ImGui's Vulkan pipeline, and falls back to OpenGL if it cannot)
+    // 0.59.0: Vulkan, step 1 of 5 (PLAN_VULKAN.md): Settings, Performance, Graphics (the settings line "graphics="; PL_GRAPHICS=vulkan / opengl for tests).
+    // Each step of Vulkan's start is guarded (app/gpu_guard.h gpuVulkanGuard, log lines "[vulkan] ..."): a step that fails or crashes is kept, and the app
+    // starts on OpenGL (this start too, when a step fails). Vulkan never stops the app from starting.
+    if (const char* g = SDL_getenv("PL_GRAPHICS")) if (std::string(g) == "vulkan" || std::string(g) == "opengl") app.prefs.graphics = g;
     SDL_Window* window = nullptr;
     SDL_GLContext gl = nullptr;
-    for (const bool want43 : {true, false}) {
-        for (const bool multisample : {true, false}) {
-            window = createWindow(scale, multisample, start, want43);
-            gl = window ? SDL_GL_CreateContext(window) : nullptr;
-            if (gl) break;
-            if (window) { SDL_DestroyWindow(window); window = nullptr; }
+    render::VkBackend vk;
+    bool useVulkan = false;
+    if (app.prefs.graphics == "vulkan") {
+        app::GpuGuard& V = app::gpuVulkanGuard();
+        V.start(ui::settingsFolder(), std::string("vulkan ") + ui::appVersion(), "any", app.prefs.gpuVulkan,
+                {std::string("Physics Lab ") + ui::appVersion() + ": the log of Vulkan's start and of the graphics card's paths; overwritten at each start",
+                 "Graphics: Vulkan (test, step 1 of 5): its own guard, its lines start [vulkan]"});
+        if (!V.allowed()) app.vulkanWhy = V.offText();
+        else if (!(window = createWindow(scale, false, start, false, true))) { V.failed("window", std::string("SDL_CreateWindow: ") + SDL_GetError()); app.vulkanWhy = V.offText(); }
+        else {
+            render::VkBackend::Options o;
+            o.validation = SDL_getenv("PL_VK_VALIDATION") != nullptr;
+            if (const char* f = SDL_getenv("PL_VK_FAIL")) o.failAt = f;   // for automatic checks: that step fails, as on a PC whose driver says no
+            std::string why;
+            if (vk.init(window, V, o, why)) useVulkan = true;
+            else { vk.shutdown(); SDL_DestroyWindow(window); window = nullptr; app.vulkanWhy = V.offText().empty() ? why : V.offText(); }
         }
-        if (gl) break;
+        if (!useVulkan) { V.log("This start uses OpenGL: " + app.vulkanWhy); app::gpuGuard().appendToLog(); }
+        if (V.saved() != app.prefs.gpuVulkan) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);   // kept at once (a crash later must not lose it)
+        else V.settingsWritten();
     }
-    if (SDL_getenv("PL_FAKE_GLFAIL")) { if (gl) SDL_GL_DestroyContext(gl); gl = nullptr; if (window) SDL_DestroyWindow(window); window = nullptr; }   // for automatic checks: pretend OpenGL is missing
-    if (!window || !gl) { fail("Could not open an OpenGL 3.3 window", "Physics Lab draws with OpenGL 3.3 (3D graphics), and your computer did not give it a window to draw in. This usually means the graphics driver is too old, or missing.", kDriverAdvice); return 1; }
+    app.graphicsInUse = useVulkan ? "vulkan" : "opengl";
+    if (useVulkan) {
+        app.vulkanDevice = vk.deviceName(); app.vulkanDriver = vk.driverText();
+        std::printf("Vulkan: %s | driver %s | Vulkan %s | %s\n", vk.deviceName().c_str(), vk.driverText().c_str(), vk.apiText().c_str(), vk.presentText().c_str());
+    } else {
+        // 0.13 stage 2: first ask for OpenGL 4.3 (the Atom Lab's superposition and jumps then run on the GPU), with smooth edges, then without them; if the PC cannot give 4.3, the same two tries
+        // for 3.3 as before (and the CPU does that work).
+        for (const bool want43 : {true, false}) {
+            for (const bool multisample : {true, false}) {
+                window = createWindow(scale, multisample, start, want43, false);
+                gl = window ? SDL_GL_CreateContext(window) : nullptr;
+                if (gl) break;
+                if (window) { SDL_DestroyWindow(window); window = nullptr; }
+            }
+            if (gl) break;
+        }
+        if (SDL_getenv("PL_FAKE_GLFAIL")) { if (gl) SDL_GL_DestroyContext(gl); gl = nullptr; if (window) SDL_DestroyWindow(window); window = nullptr; }   // for automatic checks: pretend OpenGL is missing
+        if (!window || !gl) { fail("Could not open an OpenGL 3.3 window", "Physics Lab draws with OpenGL 3.3 (3D graphics), and your computer did not give it a window to draw in. This usually means the graphics driver is too old, or missing.", kDriverAdvice); return 1; }
+    }
     if (SDL_Surface* icon = SDL_CreateSurfaceFrom(64, 64, SDL_PIXELFORMAT_RGBA32, const_cast<unsigned char*>(kIconRgba), 64 * 4)) {   // the window's icon (title bar, taskbar)
         SDL_SetWindowIcon(window, icon);
         SDL_DestroySurface(icon);
     }
-    SDL_GL_MakeCurrent(window, gl);
-    SDL_GL_SetSwapInterval(1);                          // vsync: smooth, and no wasted work
+    if (!useVulkan) {
+        SDL_GL_MakeCurrent(window, gl);
+        SDL_GL_SetSwapInterval(1);                      // vsync: smooth, and no wasted work (Vulkan: FIFO, render/vk_backend.cpp)
+    }
     if (start.w > 0 && start.hasPos) SDL_SetWindowPosition(window, start.x, start.y);
     else SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);   // the first time, or the saved place is off every screen now
     SDL_ShowWindow(window);
     Uint64 maximizeUntil = 0;                           // the window system maximises a moment later: do not record the old state meanwhile
     if (start.w > 0 && start.maximized) { SDL_MaximizeWindow(window); maximizeUntil = SDL_GetTicks() + 1500; }
 
-    const char* missing = nullptr;
-    if (!plgl::loadGL(&missing)) { std::fprintf(stderr, "OpenGL function missing: %s\n", missing); fail("OpenGL 3.3 is not available", "Physics Lab needs OpenGL 3.3 (3D graphics), and your graphics driver does not offer all of it.", kDriverAdvice); return 1; }
-    std::printf("OpenGL: %s | %s\n", plgl::glGetString(GL_VERSION), plgl::glGetString(GL_RENDERER));
     render::Renderer2D renderer;
-    if (!renderer.init()) { fail("Could not set up the OpenGL shaders", "Your graphics driver started, but would not accept the drawing programs Physics Lab sends it.", kDriverAdvice); return 1; }
-    if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // for the owner and automatic checks: run the CPU path even on a PC that has OpenGL 4.3
-    {   // 0.55.7: the guard round the graphics card's light paths and their log (app/gpu_guard.h), beside the settings file; a marker left by the last run
-        // switches the path off before anything of it runs; the settings file keeps that at once
-        const auto str = [](GLenum e) { const char* t = reinterpret_cast<const char*>(plgl::glGetString(e)); return std::string(t ? t : "?"); };
-        const std::string vendor = str(GL_VENDOR), gpu = str(GL_RENDERER), version = str(GL_VERSION), glsl = str(0x8B8C /* GL_SHADING_LANGUAGE_VERSION */);
-        const bool fp64 = SDL_GL_ExtensionSupported("GL_ARB_gpu_shader_fp64");
-        GLint maj = 0, min = 0;
-        plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
-        const std::vector<std::string> head = {
-            std::string("Physics Lab ") + ui::appVersion() + ": the log of the graphics card's light paths (the Black Hole Lab's spinning hole); overwritten at each start",
-            "GPU: " + gpu, "Vendor: " + vendor, "OpenGL: " + version + " (context " + std::to_string(maj) + "." + std::to_string(min) + ")", "GLSL: " + glsl,
-            std::string("Double precision (GL_ARB_gpu_shader_fp64): ") + (fp64 ? "reported" : "NOT reported") + (maj >= 4 ? " (core in OpenGL 4.0 and later)" : "")};
-        const char* fakeDriver = SDL_getenv("PL_GPU_DRIVER");          // (tests: another driver's version string)
-        // 0.55.9: the guard keeps the light-path shader's own text (its hash) in place of the app version: a new app version alone does not try again
-        const char* fakeShader = SDL_getenv("PL_GPU_SHADER");          // (tests: another shader's text)
-        app::gpuGuard().start(ui::settingsFolder(), fakeShader ? std::string(fakeShader) : render::kerrShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuPaths, head);
-        // 0.56.0: the spinning hole drawn per pixel: a guard of its own (its marker, the settings line "gpusky=", the same log); PL_GPU_SKYSHADER (tests)
-        const char* fakeSky = SDL_getenv("PL_GPU_SKYSHADER");
-        app::gpuSkyGuard().start(ui::settingsFolder(), fakeSky ? std::string(fakeSky) : render::kerrSkyShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSky,
-                                 {"The spinning hole drawn per pixel by the graphics card (closed forms, single precision): its own guard, its lines start [sky]"});
-        // 0.57.0: the Atom Lab's two card programs, a guard each (their markers, the settings lines "gpuslice=" and "gpujump=", the same log); PL_GPU_SLICESHADER,
-        // PL_GPU_JUMPSHADER (tests: another program's text)
-        const char* fakeSlice = SDL_getenv("PL_GPU_SLICESHADER");
-        const char* fakeJump = SDL_getenv("PL_GPU_JUMPSHADER");
-        app::gpuSliceGuard().start(ui::settingsFolder(), fakeSlice ? std::string(fakeSlice) : render::sliceShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSlice,
-                                   {"The Atom Lab's Slice dots made by the graphics card (single precision): its own guard, its lines start [slice]"});
-        app::gpuJumpGuard().start(ui::settingsFolder(), fakeJump ? std::string(fakeJump) : render::jumpShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuJump,
-                                  {"The Atom Lab's jump groups (every electron) made by the graphics card: its own guard, its lines start [jump]"});
-        // 0.57.1: the Molecule Lab's Density cloud on the card (its marker, the settings line "gpumolcloud=", the same log); PL_GPU_MOLSHADER (tests)
-        const char* fakeMol = SDL_getenv("PL_GPU_MOLSHADER");
-        app::gpuMolCloudGuard().start(ui::settingsFolder(), fakeMol ? std::string(fakeMol) : render::molCloudShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuMolCloud,
-                                      {"The Molecule Lab's Density cloud made and drawn by the graphics card (single precision): its own guard, its lines start [molcloud]"});
-        if (app::gpuGuard().saved() != app.prefs.gpuPaths || app::gpuSkyGuard().saved() != app.prefs.gpuSky || app::gpuSliceGuard().saved() != app.prefs.gpuSlice ||
-            app::gpuJumpGuard().saved() != app.prefs.gpuJump || app::gpuMolCloudGuard().saved() != app.prefs.gpuMolCloud) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
-        else { app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); app::gpuMolCloudGuard().settingsWritten(); }
-    }
-    {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
-        GLint maj = 0, min = 0;
-        plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
-        app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr;
-        atom::setOutlineCompute(renderer.outlineCompute());           // the 90 % outline's compute object (null on a 3.3 PC or with PL_NO_COMPUTE: the CPU makes it)
-        if (const char* c = SDL_getenv("PL_ATOM_CARD")) if (std::string(c) == "0") { app.atom.gpuSlice = false; app.atom.gpuJump = false; }   // 0.57.0 (tests: the processor for both, to compare)
-        if (const char* c = SDL_getenv("PL_MOL_CARD")) if (std::string(c) == "0") app.moleculeView.gpuCloud = false;   // 0.57.1 (tests: the processor's Density cloud, to compare)
-        std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
-        std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(maj, min, app.rocksOk, true).c_str());
+    if (!useVulkan) {
+        const char* missing = nullptr;
+        if (!plgl::loadGL(&missing)) { std::fprintf(stderr, "OpenGL function missing: %s\n", missing); fail("OpenGL 3.3 is not available", "Physics Lab needs OpenGL 3.3 (3D graphics), and your graphics driver does not offer all of it.", kDriverAdvice); return 1; }
+        std::printf("OpenGL: %s | %s\n", plgl::glGetString(GL_VERSION), plgl::glGetString(GL_RENDERER));
+        if (!renderer.init()) { fail("Could not set up the OpenGL shaders", "Your graphics driver started, but would not accept the drawing programs Physics Lab sends it.", kDriverAdvice); return 1; }
+        if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // for the owner and automatic checks: run the CPU path even on a PC that has OpenGL 4.3
+        {   // 0.55.7: the guard round the graphics card's light paths and their log (app/gpu_guard.h), beside the settings file; a marker left by the last run
+            // switches the path off before anything of it runs; the settings file keeps that at once
+            const auto str = [](GLenum e) { const char* t = reinterpret_cast<const char*>(plgl::glGetString(e)); return std::string(t ? t : "?"); };
+            const std::string vendor = str(GL_VENDOR), gpu = str(GL_RENDERER), version = str(GL_VERSION), glsl = str(0x8B8C /* GL_SHADING_LANGUAGE_VERSION */);
+            const bool fp64 = SDL_GL_ExtensionSupported("GL_ARB_gpu_shader_fp64");
+            GLint maj = 0, min = 0;
+            plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
+            const std::vector<std::string> head = {
+                std::string("Physics Lab ") + ui::appVersion() + ": the log of the graphics card's light paths (the Black Hole Lab's spinning hole); overwritten at each start",
+                "GPU: " + gpu, "Vendor: " + vendor, "OpenGL: " + version + " (context " + std::to_string(maj) + "." + std::to_string(min) + ")", "GLSL: " + glsl,
+                std::string("Double precision (GL_ARB_gpu_shader_fp64): ") + (fp64 ? "reported" : "NOT reported") + (maj >= 4 ? " (core in OpenGL 4.0 and later)" : "")};
+            const char* fakeDriver = SDL_getenv("PL_GPU_DRIVER");          // (tests: another driver's version string)
+            // 0.55.9: the guard keeps the light-path shader's own text (its hash) in place of the app version: a new app version alone does not try again
+            const char* fakeShader = SDL_getenv("PL_GPU_SHADER");          // (tests: another shader's text)
+            app::gpuGuard().start(ui::settingsFolder(), fakeShader ? std::string(fakeShader) : render::kerrShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuPaths, head);
+            // 0.56.0: the spinning hole drawn per pixel: a guard of its own (its marker, the settings line "gpusky=", the same log); PL_GPU_SKYSHADER (tests)
+            const char* fakeSky = SDL_getenv("PL_GPU_SKYSHADER");
+            app::gpuSkyGuard().start(ui::settingsFolder(), fakeSky ? std::string(fakeSky) : render::kerrSkyShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSky,
+                                     {"The spinning hole drawn per pixel by the graphics card (closed forms, single precision): its own guard, its lines start [sky]"});
+            // 0.57.0: the Atom Lab's two card programs, a guard each (their markers, the settings lines "gpuslice=" and "gpujump=", the same log); PL_GPU_SLICESHADER,
+            // PL_GPU_JUMPSHADER (tests: another program's text)
+            const char* fakeSlice = SDL_getenv("PL_GPU_SLICESHADER");
+            const char* fakeJump = SDL_getenv("PL_GPU_JUMPSHADER");
+            app::gpuSliceGuard().start(ui::settingsFolder(), fakeSlice ? std::string(fakeSlice) : render::sliceShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSlice,
+                                       {"The Atom Lab's Slice dots made by the graphics card (single precision): its own guard, its lines start [slice]"});
+            app::gpuJumpGuard().start(ui::settingsFolder(), fakeJump ? std::string(fakeJump) : render::jumpShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuJump,
+                                      {"The Atom Lab's jump groups (every electron) made by the graphics card: its own guard, its lines start [jump]"});
+            // 0.57.1: the Molecule Lab's Density cloud on the card (its marker, the settings line "gpumolcloud=", the same log); PL_GPU_MOLSHADER (tests)
+            const char* fakeMol = SDL_getenv("PL_GPU_MOLSHADER");
+            app::gpuMolCloudGuard().start(ui::settingsFolder(), fakeMol ? std::string(fakeMol) : render::molCloudShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuMolCloud,
+                                          {"The Molecule Lab's Density cloud made and drawn by the graphics card (single precision): its own guard, its lines start [molcloud]"});
+            if (app::gpuGuard().saved() != app.prefs.gpuPaths || app::gpuSkyGuard().saved() != app.prefs.gpuSky || app::gpuSliceGuard().saved() != app.prefs.gpuSlice ||
+                app::gpuJumpGuard().saved() != app.prefs.gpuJump || app::gpuMolCloudGuard().saved() != app.prefs.gpuMolCloud) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+            else { app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); app::gpuMolCloudGuard().settingsWritten(); }
+        }
+        {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
+            GLint maj = 0, min = 0;
+            plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
+            app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr;
+            atom::setOutlineCompute(renderer.outlineCompute());           // the 90 % outline's compute object (null on a 3.3 PC or with PL_NO_COMPUTE: the CPU makes it)
+            if (const char* c = SDL_getenv("PL_ATOM_CARD")) if (std::string(c) == "0") { app.atom.gpuSlice = false; app.atom.gpuJump = false; }   // 0.57.0 (tests: the processor for both, to compare)
+            if (const char* c = SDL_getenv("PL_MOL_CARD")) if (std::string(c) == "0") app.moleculeView.gpuCloud = false;   // 0.57.1 (tests: the processor's Density cloud, to compare)
+            std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
+            std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(maj, min, app.rocksOk, true).c_str());
+        }
     }
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;                           // nothing saved next to the .exe
     if (SDL_getenv("PL_FIXED_DT")) io.ConfigInputTextCursorBlink = false;       // for automatic checks: a text field's cursor does not blink (its phase follows the real clock), so two runs draw the same picture
@@ -258,8 +308,11 @@ int main(int, char**) {
     style.FontScaleDpi = scale;
     style.WindowRounding = 0;
     std::printf("Font: %s\n", ui::loadFonts(16.0f));
-    ImGui_ImplSDL3_InitForOpenGL(window, gl);
-    ImGui_ImplOpenGL3_Init("#version 330 core");
+    if (useVulkan) ImGui_ImplSDL3_InitForVulkan(window);   // (Dear ImGui's Vulkan backend was started with the device: render/vk_backend.cpp)
+    else {
+        ImGui_ImplSDL3_InitForOpenGL(window, gl);
+        ImGui_ImplOpenGL3_Init("#version 330 core");
+    }
 
     if (SDL_getenv("PL_IMPERIAL")) fmt::setImperial(true);   // for automatic checks
     if (const char* t = SDL_getenv("PL_THEME")) app.prefs.theme = t;   // for automatic checks
@@ -401,6 +454,8 @@ int main(int, char**) {
     if (const char* l = SDL_getenv("PL_ATOM_LEARN")) { app.atomLearn = std::atoi(l); if (const char* t = SDL_getenv("PL_ATOM_TAB")) { app.scaleTab = t; app.massTab = t; } }   // open an Atom Lab guide (1–4), on a tab
     if (const char* j = SDL_getenv("PL_ATOM_JUMP")) app.atomLearnJump = j;   // 0.19: ... scrolled to a section ("scale": the "monochrome" word)
     int frame = 0;
+    int vkFirst = 0;                                    // 0.59.0: Vulkan's first frame: 0 not begun, 1 begun (guarded), 2 shown, 3 a call failed (kept)
+    const bool pictureOff = useVulkan || SDL_getenv("PL_NO_PICTURE") != nullptr;   // 0.59.0: no lab picture (Vulkan step 1; PL_NO_PICTURE: the same on OpenGL, for the checks that compare the two)
     bool running = true;
 
     LiveWatch live;
@@ -574,7 +629,7 @@ int main(int, char**) {
         struct Busy { bool& f; explicit Busy(bool& x) : f(x) { f = true; } ~Busy() { f = false; } } busyGuard(live.busy);
 
         ui::benchmarkTestHook(app);
-        if (frame == 0) if (const char* bc = SDL_getenv("PL_BH_COMPARE")) blackhole::compareHook(renderer, bc);   // 0.55.0: the Black Hole Lab's card against its reference (tests)
+        if (frame == 0 && !useVulkan) if (const char* bc = SDL_getenv("PL_BH_COMPARE")) blackhole::compareHook(renderer, bc);   // 0.55.0: the Black Hole Lab's card against its reference (tests)
         if (const char* at = SDL_getenv("PL_SAVE_IMAGE")) { static int n = 0; if (++n == std::atoi(at)) app.shot.requested = true; }   // for automatic checks: press 📷 Save image at frame n
         ui::benchmarkBeginFrame(app, renderer, fbW, fbH);   // a benchmark scene is set up here, before the frame
         app.sys.setRelativity(app.set.relativity);          // Real: General relativity (1PN) on / off (does nothing when it has not changed)
@@ -618,7 +673,8 @@ int main(int, char**) {
             SDL_SetWindowTitle(window, (std::string("Physics Lab ") + ui::appVersion() + " — " + app::labName(app.lab)).c_str());
         }
         app.atom.reducedMotion = ui::look().reduced;
-        ImGui_ImplOpenGL3_NewFrame();
+        if (useVulkan) vk.newFrame();
+        else ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         {   // for automatic checks: PL_MOUSE=x,y puts the pointer there every frame (a hovered button, a tooltip); a mouse that is really used is not affected
             static const char* mouse = SDL_getenv("PL_MOUSE");
@@ -637,10 +693,14 @@ int main(int, char**) {
         app.set.theme = ui::look().c;
         app.set.textScale = ui::look().textScale;
         if (app.pane) ui::paneWindow(app, ui::shellTopBarH());
-        renderer.begin(app.canvasW, app.canvasH);
+        if (!pictureOff) renderer.begin(app.canvasW, app.canvasH);
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, headerH), ImVec2(canvasWinW, headerH + pictureWinH));
         if (app.pane) text->PopClipRect();              // a tab page covers the lab: nothing to draw
+        else if (pictureOff) {                          // 0.59.0: Vulkan step 1 draws no lab picture yet: the theme's background and one line in its middle
+            pictureNote(text, ImVec2(0, headerH), ImVec2(canvasWinW, pictureWinH), ui::look().c.muted);
+            text->PopClipRect();
+        }
         else if (app.lab == molecule::kLabIndex) {
             app.moleculeView.draw(renderer, text, scale, app.molecule, app.canvasW, app.canvasH, ui::look().c);
             text->PopClipRect();
@@ -681,71 +741,78 @@ int main(int, char**) {
         ImGui::Render();
 
         // ---- draw: the picture first, then the panels and text on top ----
-        ui::benchmarkGpuBegin(app);                     // the GPU time of this frame (only while the benchmark runs)
-        plgl::glViewport(0, 0, fbW, fbH);
         const app::Rgb pageBg = ui::look().c.bg;           // the theme's page colour
-        plgl::glClearColor(pageBg.r, pageBg.g, pageBg.b, 1);
-        plgl::glClear(GL_COLOR_BUFFER_BIT);
         const int canvasFbW = static_cast<int>(std::lround(canvasWinW * fbW / std::max(1, winW)));
         const int pictureFbH = static_cast<int>(std::lround(pictureWinH * fbH / std::max(1, winH)));
         const int headerFbH = static_cast<int>(std::lround(headerH * fbH / std::max(1, winH)));
-        renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
-        const auto te0 = std::chrono::steady_clock::now();
-        const long glareMade0 = renderer.glareStats().made;
-        renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
-        static const bool bhTime = SDL_getenv("PL_BH_FRAMETIME") != nullptr;
-        if (bhTime && app.lab == blackhole::kLabIndex && !app.pane) {
-            const render::Renderer2D::GlareStats& g = renderer.glareStats();
-            const double glareMs = g.frameMs, glareVeil = g.made != glareMade0 ? g.veilMs : 0, glareWait = g.made != glareMade0 ? g.waitMs : 0;
-            const double endMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
-            const blackhole::ViewStats& bs = app.blackholeView.stats();
-            const blackhole::Settings& sk = app.blackholeView.shownSettings();
-            const blackhole::Settings wk = blackhole::shown(app.blackhole);
-            std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f want=%.6f,%.6f,%.6f,%.6f card=%d cardstate=%d cardfills=%ld cardms=%.1f finethread=%d skycard=%d skystate=%d skyms=%.3f skyscale=%.3f skypics=%ld starpics=%ld lookcard=%d white=%.6g\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
-                        bs.spinCoarseFills + bs.tableFills, bs.spinFineFills, bs.starFills, bs.behind ? 1 : 0, blackhole::shown(app.blackhole).spin > 0 ? bs.spinCoarseMs : bs.tableMs, bs.spinStarsMs, bs.starsMs, bs.lookMs, bs.spinFineMs, bs.discMs,
-                        static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs,
-                        wk.yaw, wk.pitch, wk.dist, wk.spin > 0 && wk.bend ? wk.spin : 0.0, bs.spinCard ? 1 : 0, app.blackholeView.cardState(), bs.cardFills, bs.cardMs, app.blackholeView.fineThreadBusy() ? 1 : 0,
-                        bs.skyCard ? 1 : 0, app.blackholeView.skyState(), renderer.skyStats().fullMs, renderer.skyStats().scale, renderer.skyStats().draws, bs.starPictures, bs.lookCard ? 1 : 0, bs.look.white);   // 0.55.6: want, the card; 0.56.0: the card's sky
+        if (useVulkan) {                                // 0.59.0: cleared to the page colour, the picture area filled with it (step 2: the labs' pictures), the panels on top
+            const float bgc[4] = {pageBg.r, pageBg.g, pageBg.b, 1.0f};
+            if (vkFirst == 0) { app::gpuVulkanGuard().begin("first frame"); vkFirst = 1; }
+            vk.render(ImGui::GetDrawData(), bgc, bgc, 0, headerFbH, canvasFbW, pictureFbH);
+        } else {
+            ui::benchmarkGpuBegin(app);                     // the GPU time of this frame (only while the benchmark runs)
+            plgl::glViewport(0, 0, fbW, fbH);
+            plgl::glClearColor(pageBg.r, pageBg.g, pageBg.b, 1);
+            plgl::glClear(GL_COLOR_BUFFER_BIT);
+            renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
+            const auto te0 = std::chrono::steady_clock::now();
+            const long glareMade0 = renderer.glareStats().made;
+            renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
+            static const bool bhTime = SDL_getenv("PL_BH_FRAMETIME") != nullptr;
+            if (bhTime && app.lab == blackhole::kLabIndex && !app.pane) {
+                const render::Renderer2D::GlareStats& g = renderer.glareStats();
+                const double glareMs = g.frameMs, glareVeil = g.made != glareMade0 ? g.veilMs : 0, glareWait = g.made != glareMade0 ? g.waitMs : 0;
+                const double endMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
+                const blackhole::ViewStats& bs = app.blackholeView.stats();
+                const blackhole::Settings& sk = app.blackholeView.shownSettings();
+                const blackhole::Settings wk = blackhole::shown(app.blackhole);
+                std::printf("PLBHFRAME f=%d draw=%.3f glare=%.3f glareveil=%.3f glarewait=%.3f end=%.3f redraws=%ld coarse=%ld fine=%ld stars=%ld behind=%d coarsems=%.3f binms=%.3f starms=%.3f lookms=%.3f finems=%.3f discms=%.3f pic=%llu sky=%.6f,%.6f,%.6f,%.6f made=%.6f,%.6f,%.6f,%.6f behindms=%.1f want=%.6f,%.6f,%.6f,%.6f card=%d cardstate=%d cardfills=%ld cardms=%.1f finethread=%d skycard=%d skystate=%d skyms=%.3f skyscale=%.3f skypics=%ld starpics=%ld lookcard=%d white=%.6g\n", frame, g_bhDrawMs, glareMs, glareVeil, glareWait, endMs, renderer.lensRedraws(),
+                            bs.spinCoarseFills + bs.tableFills, bs.spinFineFills, bs.starFills, bs.behind ? 1 : 0, blackhole::shown(app.blackhole).spin > 0 ? bs.spinCoarseMs : bs.tableMs, bs.spinStarsMs, bs.starsMs, bs.lookMs, bs.spinFineMs, bs.discMs,
+                            static_cast<unsigned long long>(bs.picture), sk.yaw, sk.pitch, sk.dist, sk.spin > 0 && sk.bend ? sk.spin : 0.0, bs.made[0], bs.made[1], bs.made[2], bs.made[3], bs.behindMs,
+                            wk.yaw, wk.pitch, wk.dist, wk.spin > 0 && wk.bend ? wk.spin : 0.0, bs.spinCard ? 1 : 0, app.blackholeView.cardState(), bs.cardFills, bs.cardMs, app.blackholeView.fineThreadBusy() ? 1 : 0,
+                            bs.skyCard ? 1 : 0, app.blackholeView.skyState(), renderer.skyStats().fullMs, renderer.skyStats().scale, renderer.skyStats().draws, bs.starPictures, bs.lookCard ? 1 : 0, bs.look.white);   // 0.55.6: want, the card; 0.56.0: the card's sky
+            }
+            static const bool timeStat = SDL_getenv("PL_TIMESTAT") != nullptr;   // for measuring in development (0.46): the Atom Lab picture's build time and the renderer's end(), averaged over 60 frames
+            if (timeStat && app.lab == 1) {
+                static double sv = 0, se = 0; static int nf = 0;
+                sv += g_viewMs; se += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
+                if (++nf == 60) { std::printf("PLTIME view=%.3f end=%.3f ms (60 frames)\n", sv / 60, se / 60); sv = se = 0; nf = 0; }
+            }
+            app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
+            static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
+            if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
+                            std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld card=%d\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices(), ms.cloudCard ? 1 : 0);
+                            for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
+            if (drawStat && app.lab == blackhole::kLabIndex) { const blackhole::ViewStats& bs = app.blackholeView.stats();   // 0.55.0
+                            std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f spinfills=%ld\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale, bs.spinCoarseFills + bs.spinFineFills); }
+            if (drawStat && app.lab == blackhole::kLabIndex && blackhole::shown(app.blackhole).spin > 0 && SDL_getenv("PL_BH_SPINEDGE")) {   // 0.55.2: the module's shadow edge on the picture
+                const blackhole::ViewStats& bs = app.blackholeView.stats();
+                std::vector<double> e;
+                app.blackholeView.spinEdgePoints(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 24, e);
+                std::printf("PLBHSPINEDGE fine=%d pts=", bs.spinFine ? 1 : 0);
+                for (std::size_t q = 0; q + 3 < e.size(); q += 4) std::printf("%s%.2f,%.2f,%.5f,%.5f", q ? ";" : "", e[q] * scale, e[q + 1] * scale, e[q + 2], e[q + 3]);
+                std::printf("\n");
+            }
+            if (drawStat && app.lab == blackhole::kLabIndex && SDL_getenv("PL_BH_DISCPTS")) {   // 0.55.1: where the module puts the disc (taken as on), in window pixels
+                const blackhole::ViewStats& bs = app.blackholeView.stats();
+                std::vector<double> on, off;
+                app.blackholeView.discSamples(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 400, on, off);
+                std::printf("PLBHDISCPT on=");
+                for (std::size_t q = 0; q + 1 < on.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", on[q] * scale, on[q + 1] * scale);
+                std::printf(" off=");
+                for (std::size_t q = 0; q + 1 < off.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", off[q] * scale, off[q + 1] * scale);
+                std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY);
+            }
+            if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
+                            std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
+                                        ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+            ui::benchmarkGpuEnd(app);
         }
-        static const bool timeStat = SDL_getenv("PL_TIMESTAT") != nullptr;   // for measuring in development (0.46): the Atom Lab picture's build time and the renderer's end(), averaged over 60 frames
-        if (timeStat && app.lab == 1) {
-            static double sv = 0, se = 0; static int nf = 0;
-            sv += g_viewMs; se += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - te0).count();
-            if (++nf == 60) { std::printf("PLTIME view=%.3f end=%.3f ms (60 frames)\n", sv / 60, se / 60); sv = se = 0; nf = 0; }
-        }
-        app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
-        static const bool drawStat = SDL_getenv("PL_DRAWSTAT") != nullptr;   // for automatic checks (0.16 stage 3): what the picture cost this frame, in counts (not time)
-        if (drawStat && app.lab == molecule::kLabIndex) { const molecule::ViewStats& ms = app.moleculeView.stats();
-                        std::printf("PLMOLSTAT calls=%d instances=%d atoms=%d sticks=%d blobs=%d labels=%d stubs=%d drawus=%ld mol=%s mode=%s dots=%d tris=%d resorted=%d verts=%ld card=%d\n", renderer.lastDrawCalls(), renderer.lastInstances(), ms.atoms, ms.sticks, ms.blobs, ms.labels, ms.stubs, long(ms.cpuMs * 1000), app.molecule.mol().id.c_str(), ms.mode, ms.dots, ms.triangles, ms.resorted ? 1 : 0, renderer.lastVertices(), ms.cloudCard ? 1 : 0);
-                        for (std::size_t i = 0; i < app.moleculeView.projected().size(); i++) { const molecule::Proj& q = app.moleculeView.projected()[i]; std::printf("PLMOLATOM i=%zu x=%.1f y=%.1f r=%.1f\n", i, q.x * scale, q.y * scale, q.r * scale); } }
-        if (drawStat && app.lab == blackhole::kLabIndex) { const blackhole::ViewStats& bs = app.blackholeView.stats();   // 0.55.0
-                        std::printf("PLBHSTAT redraws=%ld tablefills=%ld starfills=%ld stars=%d images=%d extra=%d capped=%d shadowpx=%.3f cx=%.2f cy=%.2f spinfills=%ld\n", renderer.lensRedraws(), bs.tableFills, bs.starFills, bs.stars, bs.images, bs.extraImages, bs.capped, bs.shadowPx * scale, bs.cx * scale, bs.cy * scale, bs.spinCoarseFills + bs.spinFineFills); }
-        if (drawStat && app.lab == blackhole::kLabIndex && blackhole::shown(app.blackhole).spin > 0 && SDL_getenv("PL_BH_SPINEDGE")) {   // 0.55.2: the module's shadow edge on the picture
-            const blackhole::ViewStats& bs = app.blackholeView.stats();
-            std::vector<double> e;
-            app.blackholeView.spinEdgePoints(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 24, e);
-            std::printf("PLBHSPINEDGE fine=%d pts=", bs.spinFine ? 1 : 0);
-            for (std::size_t q = 0; q + 3 < e.size(); q += 4) std::printf("%s%.2f,%.2f,%.5f,%.5f", q ? ";" : "", e[q] * scale, e[q + 1] * scale, e[q + 2], e[q + 3]);
-            std::printf("\n");
-        }
-        if (drawStat && app.lab == blackhole::kLabIndex && SDL_getenv("PL_BH_DISCPTS")) {   // 0.55.1: where the module puts the disc (taken as on), in window pixels
-            const blackhole::ViewStats& bs = app.blackholeView.stats();
-            std::vector<double> on, off;
-            app.blackholeView.discSamples(blackhole::shown(app.blackhole), app.canvasW, app.canvasH, bs.cx, bs.cy, 400, on, off);
-            std::printf("PLBHDISCPT on=");
-            for (std::size_t q = 0; q + 1 < on.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", on[q] * scale, on[q + 1] * scale);
-            std::printf(" off=");
-            for (std::size_t q = 0; q + 1 < off.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", off[q] * scale, off[q + 1] * scale);
-            std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY);
-        }
-        if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
-                        std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
-                                    ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        ui::benchmarkGpuEnd(app);
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
             app.shot.requested = false;
-            ui::takeShot(app, renderer, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
+            if (useVulkan) ui::takeShotVulkan(app, vk, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
+            else ui::takeShot(app, renderer, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
         }
         static const double maxSeconds = SDL_getenv("PL_EXIT_AFTER_SECONDS") ? std::atof(SDL_getenv("PL_EXIT_AFTER_SECONDS")) : 0;   // for automatic checks
         static int bhSettleFrom = -1, bhSettleN = 0, bhSettled = 0;          // 0.55.5 (automatic checks): PL_BH_SETTLE="from:n": the run ends once the Black Hole Lab
@@ -753,10 +820,19 @@ int main(int, char**) {
             bhSettleFrom = 0;
             if (const char* q = SDL_getenv("PL_BH_SETTLE")) std::sscanf(q, "%d:%d", &bhSettleFrom, &bhSettleN);
         }
-        bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && !renderer.glareBusy() ? bhSettled + 1 : 0;
+        bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && (useVulkan || !renderer.glareBusy()) ? bhSettled + 1 : 0;
         if ((maxFrames && ++frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds) || (bhSettleN > 0 && bhSettled >= bhSettleN)) {
             running = false;
-            if (screenshot) {                           // read the finished frame back and save it
+            if (screenshot && useVulkan) {              // 0.59.0: read back from the swapchain's image (RGBA, top row first: the same bytes as below)
+                std::vector<uint8_t> px;
+                int sw = 0, sh = 0;
+                SDL_Surface* shot = vk.readback(px, sw, sh) ? SDL_CreateSurface(sw, sh, SDL_PIXELFORMAT_ABGR8888) : nullptr;
+                if (shot) {
+                    for (int y = 0; y < sh; y++) std::memcpy(static_cast<uint8_t*>(shot->pixels) + std::size_t(y) * std::size_t(shot->pitch), px.data() + std::size_t(y) * std::size_t(sw) * 4, std::size_t(sw) * 4);
+                    SDL_SaveBMP(shot, screenshot);
+                    SDL_DestroySurface(shot);
+                } else SDL_Log("PL_SCREENSHOT: no picture (Vulkan: the swapchain could not be read)");
+            } else if (screenshot) {                    // read the finished frame back and save it
                 if (SDL_Surface* shot = fbW > 0 && fbH > 0 ? SDL_CreateSurface(fbW, fbH, SDL_PIXELFORMAT_ABGR8888) : nullptr) {   // 0.50.3 (outside review): no surface, no read
                     plgl::glReadPixels(0, 0, fbW, fbH, GL_RGBA, GL_UNSIGNED_BYTE, shot->pixels);
                     SDL_FlipSurface(shot, SDL_FLIP_VERTICAL);
@@ -769,8 +845,16 @@ int main(int, char**) {
         app.stats.add(frameDt * 1000.0, workMs);
         app.live.frame(isLive, frameDt * 1000.0);
         ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs);
-        SDL_GL_SwapWindow(window);
-        if (app.startupMs < 0 && ui::benchLabFinished(app, renderer))      // 0.56.1: the start-up time for the benchmark report (to the first finished picture)
+        if (useVulkan) {
+            vk.present();
+            if (vkFirst == 1 && vk.ok()) { app::gpuVulkanGuard().end("first frame", "shown"); app::gpuVulkanGuard().finished(true); vkFirst = 2; }
+            if (!vk.ok() && vkFirst != 3) {             // a call failed after the start (the device lost, say): kept, so the next start uses OpenGL
+                app::gpuVulkanGuard().failed(vkFirst == 1 ? "first frame" : "a frame", "a Vulkan call failed (the log has it)");
+                vkFirst = 3;
+                ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+            }
+        } else SDL_GL_SwapWindow(window);
+        if (app.startupMs < 0 && (useVulkan || ui::benchLabFinished(app, renderer)))      // 0.56.1: the start-up time for the benchmark report (to the first finished picture)
             app.startupMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - g_appStart).count();
         static const double paceMs = SDL_getenv("PL_FRAME_MS") ? std::atof(SDL_getenv("PL_FRAME_MS")) : 0;   // 0.55.5 (automatic checks, measuring): a frame takes at
         if (paceMs > 0) {                                                                                       // least this long, as with VSync on a real screen
@@ -778,7 +862,7 @@ int main(int, char**) {
             if (usedMs < paceMs) SDL_Delay(static_cast<Uint32>(paceMs - usedMs));
         }
         ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0);
-        if (app.vsync != vsyncOn) { vsyncOn = app.vsync; SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
+        if (app.vsync != vsyncOn) { vsyncOn = app.vsync; if (useVulkan) vk.setVsync(vsyncOn); else SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
     };
 
     live.draw = [&] { runFrame(true); };
@@ -795,7 +879,10 @@ int main(int, char**) {
     if (SDL_getenv("PL_LIVE_REPORT"))
         std::printf("Live frames: %ld in %d drags, worst gap %.1f ms, lead-in %.1f ms, biggest physics step %.4f s\n", app.live.frames, app.live.drags, app.live.worstGapMs, app.live.leadInMs, maxPhysicsDt);
 
-    ImGui_ImplOpenGL3_Shutdown();
+    if (useVulkan) {
+        if (SDL_getenv("PL_VK_VALIDATION")) std::printf("PLVK validation errors=%d warnings=%d\n", vk.validationErrors(), vk.validationWarnings());
+        vk.shutdown();                                  // (Dear ImGui's Vulkan backend too)
+    } else ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
     atom::setOutlineCompute(nullptr);
@@ -803,9 +890,12 @@ int main(int, char**) {
     app::gpuGuard().closing();
     app::gpuSliceGuard().closing(); app::gpuJumpGuard().closing();   // 0.57.0
     app::gpuMolCloudGuard().closing();                               // 0.57.1
+    app::gpuVulkanGuard().closing();                 // 0.59.0
     app::gpuSkyGuard().closing();                    // 0.56.0                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
-    renderer.shutdown();
-    SDL_GL_DestroyContext(gl);
+    if (!useVulkan) {
+        renderer.shutdown();
+        SDL_GL_DestroyContext(gl);
+    }
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.58.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.59.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -330,7 +330,30 @@ if(PL_BUILD_APP)
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG v1.92.9b
     GIT_SHALLOW TRUE)
-  FetchContent_MakeAvailable(SDL3 imgui)
+  # 0.59.0: Vulkan, step 1 of 5 (PLAN_VULKAN.md). No Vulkan SDK on the build machines: the Khronos headers, volk (loads the Vulkan loader of the PC at run
+  # time; a PC without Vulkan still starts, on OpenGL) and glslang (the Khronos reference compiler, built here) to turn the GLSL into SPIR-V at build time.
+  # One SDK release for all three (tags checked to exist on 18 Nov 2026).
+  FetchContent_Declare(VulkanHeaders
+    GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+    GIT_TAG vulkan-sdk-1.4.350.1
+    GIT_SHALLOW TRUE)
+  FetchContent_Declare(volk
+    GIT_REPOSITORY https://github.com/zeux/volk.git
+    GIT_TAG vulkan-sdk-1.4.350.1
+    GIT_SHALLOW TRUE)
+  set(ENABLE_OPT OFF CACHE BOOL "" FORCE)                 # glslang: no SPIRV-Tools optimiser (not needed, saves the build)
+  set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+  set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
+  set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
+  set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+  set(ENABLE_GLSLANG_BINARIES ON CACHE BOOL "" FORCE)
+  FetchContent_Declare(glslang
+    GIT_REPOSITORY https://github.com/KhronosGroup/glslang.git
+    GIT_TAG vulkan-sdk-1.4.350.1
+    GIT_SHALLOW TRUE)
+  FetchContent_MakeAvailable(SDL3 imgui VulkanHeaders)
+  set(VULKAN_HEADERS_INSTALL_DIR ${vulkanheaders_SOURCE_DIR} CACHE PATH "" FORCE)   # volk: these headers, never an SDK's found on the machine
+  FetchContent_MakeAvailable(volk glslang)
 
   add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -338,10 +361,11 @@ if(PL_BUILD_APP)
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)  # 0.59.0: the same version's Vulkan backend, through volk
   target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
-  target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32)   # characters beyond U+FFFF (e.g. 🌍 in the Learn headings)
-  target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
+  target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32 IMGUI_IMPL_VULKAN_USE_VOLK)   # characters beyond U+FFFF (e.g. 🌍 in the Learn headings); 0.59.0: Vulkan functions from volk
+  target_link_libraries(imgui PUBLIC SDL3::SDL3-static volk::volk)
   # 0.15 stage 5j: glyph coverage of the look fonts, read from the font files with stb_truetype (no window, no app start)
   add_executable(font_tests tests/test_fonts.cpp)
   target_include_directories(font_tests SYSTEM PRIVATE ${imgui_SOURCE_DIR})
@@ -358,9 +382,27 @@ if(PL_BUILD_APP)
     DEPENDS ${PL_FONT_FILES} ${CMAKE_SOURCE_DIR}/cmake/embed_fonts.cmake
     COMMENT "Embedding fonts")
 
+  # 0.59.0: the Vulkan shaders, GLSL to SPIR-V at build time by glslang (built above), each into a header with a uint32_t array (vk_shaders/<name>_<stage>.h)
+  set(PL_VK_SHADERS src/render/vk/fill.vert src/render/vk/fill.frag)
+  set(PL_VK_SHADER_HEADERS)
+  file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/vk_shaders)
+  foreach(sh ${PL_VK_SHADERS})
+    get_filename_component(shName ${sh} NAME_WE)
+    get_filename_component(shExt ${sh} EXT)
+    string(SUBSTRING ${shExt} 1 -1 shStage)
+    set(shOut ${CMAKE_BINARY_DIR}/vk_shaders/${shName}_${shStage}.h)
+    add_custom_command(OUTPUT ${shOut}
+      COMMAND $<TARGET_FILE:glslang-standalone> -V --target-env vulkan1.0 --vn k_${shName}_${shStage} -o ${shOut} ${CMAKE_CURRENT_SOURCE_DIR}/${sh}
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${sh} glslang-standalone
+      COMMENT "SPIR-V: ${sh}")
+    list(APPEND PL_VK_SHADER_HEADERS ${shOut})
+  endforeach()
+
   add_executable(PhysicsLab WIN32
     ${CMAKE_BINARY_DIR}/embedded_fonts.cpp
+    ${PL_VK_SHADER_HEADERS}
     src/main.cpp
+    src/render/vk_backend.cpp
     src/render/gl_loader.cpp
     src/render/renderer2d.cpp
    
@@ -417,6 +459,7 @@ if(PL_BUILD_APP)
     src/ui/power.cpp)
   target_link_libraries(PhysicsLab PRIVATE analysis_core orbit_core atom_core app_core molecule_core blackhole_core maps_core imgui SDL3::SDL3-static)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
+  target_include_directories(PhysicsLab PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
   if(WIN32)
     target_link_libraries(PhysicsLab PRIVATE opengl32)
   endif()
@@ -433,9 +476,9 @@ if(PL_BUILD_APP)
     if(Python3_FOUND)
       # 0.38.1 stage 3 (the owner: "merge them"): ONE test per screen. tests/run_group.py runs the check scripts of the screen one after the other, each exactly as it ran as
       # its own test before (99 tests became 15); a failure prints the name of its check. To run one check by hand: python3 tests/<script> <PhysicsLab> <folder> [part].
-      # ui_shell: the shell: text sizes and floors, windows, keys, start view, date entry, panel toggles
+      # ui_shell: the shell: text sizes and floors, windows, keys, start view, date entry, panel toggles; 0.59.0: Vulkan (step 1) against OpenGL
       add_test(NAME ui_shell COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_shell
-               check_shell.py check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
+               check_shell.py check_shell.py:vulkan check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
       set_tests_properties(ui_shell PROPERTIES TIMEOUT 3600)
       # ui_controls: the Controls panel: layout, sections, sliders, End key, its scrollbar
       add_test(NAME ui_controls COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_controls

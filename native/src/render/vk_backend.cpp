@@ -1,0 +1,820 @@
+// 0.59.0: Vulkan, step 1 of 5 (render/vk_backend.h, native/PLAN_VULKAN.md)
+#include "render/vk_backend.h"
+
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
+
+#include <volk.h>                 // (its functions are compiled once, in volk's own library)
+
+#include "app/gpu_guard.h"
+#include "imgui.h"
+#include "imgui_impl_vulkan.h"
+
+// the SPIR-V of render/vk/fill.vert and fill.frag, made at build time by glslang (CMakeLists.txt: PL_VK_SHADERS)
+#include "fill_vert.h"
+#include "fill_frag.h"
+
+namespace render {
+
+namespace {
+
+const char* resultName(VkResult r) {
+    switch (r) {
+    case VK_SUCCESS: return "VK_SUCCESS";
+    case VK_NOT_READY: return "VK_NOT_READY";
+    case VK_TIMEOUT: return "VK_TIMEOUT";
+    case VK_INCOMPLETE: return "VK_INCOMPLETE";
+    case VK_SUBOPTIMAL_KHR: return "VK_SUBOPTIMAL_KHR";
+    case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+    case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
+    case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
+    case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
+    case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
+    case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
+    case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
+    case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
+    case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
+    case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+    case VK_ERROR_SURFACE_LOST_KHR: return "VK_ERROR_SURFACE_LOST_KHR";
+    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+    case VK_ERROR_OUT_OF_DATE_KHR: return "VK_ERROR_OUT_OF_DATE_KHR";
+    default: return "another VkResult";
+    }
+}
+std::string resultText(VkResult r) { return std::string(resultName(r)) + " (" + std::to_string(static_cast<int>(r)) + ")"; }
+
+// Dear ImGui's backend reports its own calls' results here (CheckVkResultFn has no user pointer: one backend at a time)
+VkBackend::Impl* g_impl = nullptr;
+void checkFromImGui(VkResult r);
+
+// the driver's version as the vendors write it (VkPhysicalDeviceProperties::driverVersion is packed differently by NVIDIA and Intel on Windows)
+std::string driverVersionText(uint32_t vendor, uint32_t v) {
+    char b[64];
+    if (vendor == 0x10DE) std::snprintf(b, sizeof b, "%u.%u.%u.%u", (v >> 22) & 0x3ffu, (v >> 14) & 0xffu, (v >> 6) & 0xffu, v & 0x3fu);   // NVIDIA
+#ifdef _WIN32
+    else if (vendor == 0x8086) std::snprintf(b, sizeof b, "%u.%u", v >> 14, v & 0x3fffu);                                                // Intel on Windows
+#endif
+    else std::snprintf(b, sizeof b, "%u.%u.%u", VK_API_VERSION_MAJOR(v), VK_API_VERSION_MINOR(v), VK_API_VERSION_PATCH(v));
+    return b;
+}
+std::string versionText(uint32_t v) { return std::to_string(VK_API_VERSION_MAJOR(v)) + "." + std::to_string(VK_API_VERSION_MINOR(v)) + "." + std::to_string(VK_API_VERSION_PATCH(v)); }
+const char* typeName(VkPhysicalDeviceType t) {
+    switch (t) {
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return "discrete";
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return "integrated";
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: return "virtual";
+    case VK_PHYSICAL_DEVICE_TYPE_CPU: return "processor (software)";
+    default: return "other";
+    }
+}
+int typeScore(VkPhysicalDeviceType t) {   // a discrete card first, then the one in the processor's package, then the rest
+    switch (t) {
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return 4;
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return 3;
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: return 2;
+    case VK_PHYSICAL_DEVICE_TYPE_CPU: return 1;
+    default: return 0;
+    }
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL onDebug(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT* data, void* user);
+
+}  // namespace
+
+struct VkBackend::Impl {
+    app::GpuGuard* guard = nullptr;
+    SDL_Window* window = nullptr;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerEXT messenger = VK_NULL_HANDLE;
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
+    VkPhysicalDevice phys = VK_NULL_HANDLE;
+    VkDevice device = VK_NULL_HANDLE;
+    uint32_t family = 0;
+    VkQueue queue = VK_NULL_HANDLE;
+    VkDescriptorPool pool = VK_NULL_HANDLE;
+    ImGui_ImplVulkanH_Window wd;
+    VkImageUsageFlags extraUsage = 0;          // TRANSFER_SRC when the surface allows it (readback)
+    uint32_t minImages = 2;
+    uint32_t apiVersion = VK_API_VERSION_1_0;
+    bool imguiOn = false, rebuild = false, drewFrame = false, vsync = true;
+    VkPipelineLayout fillLayout = VK_NULL_HANDLE;
+    VkPipeline fill = VK_NULL_HANDLE;
+    VkCommandPool oncePool = VK_NULL_HANDLE;   // one-time commands: readback, the picture for 📷 Save image
+    VkPhysicalDeviceMemoryProperties mem{};
+    int errors = 0, warnings = 0, failedCalls = 0, rebuilds = 0;
+    std::string lastFailure;
+
+    bool check(VkResult r, const char* what) {
+        if (r == VK_SUCCESS) return true;
+        if (r > 0) return true;                // VK_SUBOPTIMAL_KHR, VK_INCOMPLETE: not errors (handled where they matter)
+        failedCalls++;
+        lastFailure = std::string(what) + ": " + resultText(r);
+        std::fprintf(stderr, "[vulkan] %s\n", lastFailure.c_str());
+        if (guard && failedCalls <= 20) guard->log("error: " + lastFailure);
+        return false;
+    }
+    uint32_t memoryType(uint32_t bits, VkMemoryPropertyFlags want) const {
+        for (uint32_t i = 0; i < mem.memoryTypeCount; i++)
+            if ((bits & (1u << i)) && (mem.memoryTypes[i].propertyFlags & want) == want) return i;
+        return UINT32_MAX;
+    }
+    VkPresentModeKHR choosePresent(bool on) const {
+        uint32_t n = 0;
+        std::vector<VkPresentModeKHR> modes;
+        if (vkGetPhysicalDeviceSurfacePresentModesKHR(phys, surface, &n, nullptr) == VK_SUCCESS && n > 0) {
+            modes.resize(n);
+            if (vkGetPhysicalDeviceSurfacePresentModesKHR(phys, surface, &n, modes.data()) < 0) modes.clear();
+            modes.resize(n);
+        }
+        const auto has = [&](VkPresentModeKHR m) { return std::find(modes.begin(), modes.end(), m) != modes.end(); };
+        if (!on) {                             // as SDL_GL_SetSwapInterval(0): do not wait for the screen
+            if (has(VK_PRESENT_MODE_IMMEDIATE_KHR)) return VK_PRESENT_MODE_IMMEDIATE_KHR;
+            if (has(VK_PRESENT_MODE_MAILBOX_KHR)) return VK_PRESENT_MODE_MAILBOX_KHR;
+        }
+        return VK_PRESENT_MODE_FIFO_KHR;       // as SDL_GL_SetSwapInterval(1); every Vulkan driver has it
+    }
+    static const char* presentName(VkPresentModeKHR m) {
+        return m == VK_PRESENT_MODE_FIFO_KHR ? "FIFO (waits for the screen)" : m == VK_PRESENT_MODE_IMMEDIATE_KHR ? "IMMEDIATE (does not wait)" :
+               m == VK_PRESENT_MODE_MAILBOX_KHR ? "MAILBOX (does not wait)" : "other";
+    }
+    bool makeSwapchain(int w, int h) {
+        ImGui_ImplVulkanH_CreateOrResizeWindow(instance, phys, device, &wd, family, nullptr, w, h, minImages, extraUsage);
+        return wd.Swapchain != VK_NULL_HANDLE && wd.RenderPass != VK_NULL_HANDLE && wd.ImageCount >= 2 && wd.Frames.Size == static_cast<int>(wd.ImageCount) &&
+               wd.Frames[0].Framebuffer != VK_NULL_HANDLE;
+    }
+};
+
+namespace {
+void checkFromImGui(VkResult r) {
+    if (g_impl) g_impl->check(r, "Dear ImGui's Vulkan backend");
+}
+VKAPI_ATTR VkBool32 VKAPI_CALL onDebug(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT* data, void* user) {
+    VkBackend::Impl* d = static_cast<VkBackend::Impl*>(user);
+    const bool error = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0;
+    if (d) { if (error) d->errors++; else d->warnings++; }
+    const char* msg = data && data->pMessage ? data->pMessage : "(no text)";
+    std::fprintf(stderr, "PLVKVALIDATION %s: %s\n", error ? "error" : "warning", msg);
+    if (d && d->guard && d->errors + d->warnings <= 10) d->guard->log(std::string("validation ") + (error ? "error: " : "warning: ") + msg);
+    return VK_FALSE;
+}
+}  // namespace
+
+VkBackend::VkBackend() : d_(new Impl) {}
+VkBackend::~VkBackend() { shutdown(); delete d_; }
+
+int VkBackend::validationErrors() const { return d_->errors; }
+int VkBackend::validationWarnings() const { return d_->warnings; }
+
+bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o, std::string& why) {
+    Impl& d = *d_;
+    d.guard = &guard;
+    d.window = window;
+    d.vsync = o.vsync;
+    g_impl = &d;
+    const auto fail = [&](const std::string& step, const std::string& text) {
+        why = text;
+        guard.failed(step, text);
+        return false;
+    };
+    const auto forced = [&](const char* step) { return !o.failAt.empty() && o.failAt == step; };
+
+    // ---- instance ----
+    guard.begin("instance");
+    PFN_vkGetInstanceProcAddr gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr());
+    if (!gipa) return fail("instance", std::string("no Vulkan loader on this PC (") + SDL_GetError() + ")");
+    volkInitializeCustom(gipa);
+    uint32_t loaderVersion = VK_API_VERSION_1_0;
+    if (vkEnumerateInstanceVersion && vkEnumerateInstanceVersion(&loaderVersion) != VK_SUCCESS) loaderVersion = VK_API_VERSION_1_0;
+    d.apiVersion = loaderVersion >= VK_API_VERSION_1_1 ? VK_API_VERSION_1_1 : VK_API_VERSION_1_0;   // step 1 needs only 1.0; 1.1 where the loader has it
+    std::vector<const char*> exts;
+    {
+        Uint32 n = 0;
+        const char* const* sdlExts = SDL_Vulkan_GetInstanceExtensions(&n);
+        if (!sdlExts) return fail("instance", std::string("SDL found no Vulkan surface extensions (") + SDL_GetError() + ")");
+        for (Uint32 i = 0; i < n; i++) exts.push_back(sdlExts[i]);
+    }
+    uint32_t extCount = 0;
+    std::vector<VkExtensionProperties> have;
+    if (!d.check(vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr), "vkEnumerateInstanceExtensionProperties")) return fail("instance", d.lastFailure);
+    have.resize(extCount);
+    if (!d.check(vkEnumerateInstanceExtensionProperties(nullptr, &extCount, have.data()), "vkEnumerateInstanceExtensionProperties")) return fail("instance", d.lastFailure);
+    const auto instanceHas = [&](const char* e) { for (const VkExtensionProperties& p : have) if (std::strcmp(p.extensionName, e) == 0) return true; return false; };
+    for (const char* e : exts) if (!instanceHas(e)) return fail("instance", std::string("the Vulkan driver lacks the instance extension ") + e);
+    std::vector<const char*> layers;
+    bool validation = false;
+    if (o.validation) {
+        uint32_t ln = 0;
+        std::vector<VkLayerProperties> lp;
+        if (vkEnumerateInstanceLayerProperties(&ln, nullptr) == VK_SUCCESS) { lp.resize(ln); if (vkEnumerateInstanceLayerProperties(&ln, lp.data()) < 0) ln = 0; lp.resize(ln); }
+        for (const VkLayerProperties& l : lp) if (std::strcmp(l.layerName, "VK_LAYER_KHRONOS_validation") == 0) validation = true;
+        if (validation && instanceHas(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) { layers.push_back("VK_LAYER_KHRONOS_validation"); exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME); }
+        else { validation = false; guard.log("validation layers asked for (PL_VK_VALIDATION) but not installed: none"); std::fprintf(stderr, "PLVKVALIDATION missing\n"); }
+    }
+    VkApplicationInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    ai.pApplicationName = "Physics Lab";
+    ai.applicationVersion = 1;
+    ai.pEngineName = "Physics Lab";
+    ai.engineVersion = 1;
+    ai.apiVersion = d.apiVersion;
+    VkDebugUtilsMessengerCreateInfoEXT dm{};
+    dm.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    dm.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    dm.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    dm.pfnUserCallback = onDebug;
+    dm.pUserData = &d;
+    VkInstanceCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    ci.pNext = validation ? &dm : nullptr;   // also the messages of vkCreateInstance itself
+    ci.pApplicationInfo = &ai;
+    ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
+    ci.ppEnabledExtensionNames = exts.data();
+    ci.enabledLayerCount = static_cast<uint32_t>(layers.size());
+    ci.ppEnabledLayerNames = layers.data();
+    if (forced("instance")) return fail("instance", "made to fail on purpose (PL_VK_FAIL=instance)");
+    if (!d.check(vkCreateInstance(&ci, nullptr, &d.instance), "vkCreateInstance")) { d.instance = VK_NULL_HANDLE; return fail("instance", d.lastFailure); }
+    volkLoadInstance(d.instance);
+    if (validation && vkCreateDebugUtilsMessengerEXT && !d.check(vkCreateDebugUtilsMessengerEXT(d.instance, &dm, nullptr, &d.messenger), "vkCreateDebugUtilsMessengerEXT"))
+        return fail("instance", d.lastFailure);
+    guard.end("instance", "Vulkan loader " + versionText(loaderVersion) + ", asked for " + versionText(d.apiVersion) + (validation ? ", validation layers on" : ""));
+
+    // ---- surface (SDL3: Win32, X11, Wayland, or the headless one of the automatic checks) ----
+    guard.begin("surface");
+    if (forced("surface")) return fail("surface", "made to fail on purpose (PL_VK_FAIL=surface)");
+    if (!SDL_Vulkan_CreateSurface(window, d.instance, nullptr, &d.surface)) { d.surface = VK_NULL_HANDLE; return fail("surface", std::string("SDL_Vulkan_CreateSurface: ") + SDL_GetError()); }
+    guard.end("surface", SDL_GetCurrentVideoDriver() ? std::string("video driver ") + SDL_GetCurrentVideoDriver() : std::string());
+
+    // ---- device: every card that can draw on this window and present; a discrete card first ----
+    guard.begin("device");
+    uint32_t nDev = 0;
+    if (!d.check(vkEnumeratePhysicalDevices(d.instance, &nDev, nullptr), "vkEnumeratePhysicalDevices")) return fail("device", d.lastFailure);
+    std::vector<VkPhysicalDevice> devs(nDev);
+    if (nDev && !d.check(vkEnumeratePhysicalDevices(d.instance, &nDev, devs.data()), "vkEnumeratePhysicalDevices")) return fail("device", d.lastFailure);
+    devs.resize(nDev);
+    int best = -1, bestScore = -1;
+    uint32_t bestFamily = 0;
+    for (std::size_t i = 0; i < devs.size(); i++) {
+        VkPhysicalDeviceProperties p{};
+        vkGetPhysicalDeviceProperties(devs[i], &p);
+        uint32_t nq = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(devs[i], &nq, nullptr);
+        std::vector<VkQueueFamilyProperties> qf(nq);
+        vkGetPhysicalDeviceQueueFamilyProperties(devs[i], &nq, qf.data());
+        int family = -1;
+        for (uint32_t q = 0; q < nq && family < 0; q++) {
+            VkBool32 present = VK_FALSE;
+            if ((qf[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) && vkGetPhysicalDeviceSurfaceSupportKHR(devs[i], q, d.surface, &present) == VK_SUCCESS && present == VK_TRUE) family = static_cast<int>(q);
+        }
+        uint32_t ne = 0;
+        bool swap = false;
+        if (vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, nullptr) == VK_SUCCESS) {
+            std::vector<VkExtensionProperties> de(ne);
+            if (vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, de.data()) >= 0)
+                for (uint32_t k = 0; k < ne; k++) if (std::strcmp(de[k].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0) swap = true;
+        }
+        const bool usable = family >= 0 && swap;
+        guard.log(std::string("card ") + std::to_string(i) + ": " + p.deviceName + " (" + typeName(p.deviceType) + ", Vulkan " + versionText(p.apiVersion) + ", driver " +
+                  driverVersionText(p.vendorID, p.driverVersion) + ")" + (usable ? "" : family < 0 ? ": cannot draw on this window" : ": no swapchain"));
+        if (usable && typeScore(p.deviceType) > bestScore) { best = static_cast<int>(i); bestScore = typeScore(p.deviceType); bestFamily = static_cast<uint32_t>(family); }
+    }
+    if (forced("device")) return fail("device", "made to fail on purpose (PL_VK_FAIL=device)");
+    if (best < 0) return fail("device", nDev ? "no graphics card here can draw on this window with Vulkan" : "the Vulkan driver lists no graphics card");
+    d.phys = devs[static_cast<std::size_t>(best)];
+    d.family = bestFamily;
+    {
+        VkPhysicalDeviceProperties p{};
+        vkGetPhysicalDeviceProperties(d.phys, &p);
+        deviceName_ = p.deviceName;
+        driverText_ = driverVersionText(p.vendorID, p.driverVersion);
+        apiText_ = versionText(p.apiVersion);
+        if (vkGetPhysicalDeviceProperties2 && p.apiVersion >= VK_API_VERSION_1_2 && d.apiVersion >= VK_API_VERSION_1_1) {   // the driver's own name and text (Vulkan 1.2)
+            VkPhysicalDeviceDriverProperties dp{};
+            dp.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
+            VkPhysicalDeviceProperties2 p2{};
+            p2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            p2.pNext = &dp;
+            vkGetPhysicalDeviceProperties2(d.phys, &p2);
+            if (dp.driverName[0]) driverText_ = std::string(dp.driverName) + " " + driverText_ + (dp.driverInfo[0] ? std::string(" (") + dp.driverInfo + ")" : std::string());
+        }
+        vkGetPhysicalDeviceMemoryProperties(d.phys, &d.mem);
+    }
+    const float prio = 1.0f;
+    VkDeviceQueueCreateInfo qi{};
+    qi.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    qi.queueFamilyIndex = d.family;
+    qi.queueCount = 1;
+    qi.pQueuePriorities = &prio;
+    const char* devExts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    VkDeviceCreateInfo di{};
+    di.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    di.queueCreateInfoCount = 1;
+    di.pQueueCreateInfos = &qi;
+    di.enabledExtensionCount = 1;
+    di.ppEnabledExtensionNames = devExts;
+    if (!d.check(vkCreateDevice(d.phys, &di, nullptr, &d.device), "vkCreateDevice")) { d.device = VK_NULL_HANDLE; return fail("device", d.lastFailure); }
+    volkLoadDevice(d.device);
+    vkGetDeviceQueue(d.device, d.family, 0, &d.queue);
+    guard.end("device", deviceName_ + ", driver " + driverText_ + ", Vulkan " + apiText_ + ", queue family " + std::to_string(d.family));
+
+    // ---- swapchain ----
+    guard.begin("swapchain");
+    VkSurfaceCapabilitiesKHR caps{};
+    if (!d.check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(d.phys, d.surface, &caps), "vkGetPhysicalDeviceSurfaceCapabilitiesKHR")) return fail("swapchain", d.lastFailure);
+    d.extraUsage = (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0;
+    const VkFormat wantFormats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};   // not *_SRGB: the colours go to the screen as written, as the OpenGL path's
+    d.wd.Surface = d.surface;
+    d.wd.SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(d.phys, d.surface, wantFormats, 2, VK_COLORSPACE_SRGB_NONLINEAR_KHR);
+    if (d.wd.SurfaceFormat.format != VK_FORMAT_B8G8R8A8_UNORM && d.wd.SurfaceFormat.format != VK_FORMAT_R8G8B8A8_UNORM)
+        return fail("swapchain", "the window offers no 8-bit RGBA format without sRGB conversion (format " + std::to_string(static_cast<int>(d.wd.SurfaceFormat.format)) + ")");
+    d.wd.PresentMode = d.choosePresent(d.vsync);
+    int w = 0, h = 0;
+    SDL_GetWindowSizeInPixels(window, &w, &h);
+    if (forced("swapchain")) return fail("swapchain", "made to fail on purpose (PL_VK_FAIL=swapchain)");
+    if (w <= 0 || h <= 0 || !d.makeSwapchain(w, h)) return fail("swapchain", "the swapchain could not be made (" + std::to_string(w) + " x " + std::to_string(h) + ")");
+    presentText_ = Impl::presentName(d.wd.PresentMode);
+    guard.end("swapchain", std::to_string(d.wd.Width) + " x " + std::to_string(d.wd.Height) + ", " + std::to_string(d.wd.ImageCount) + " images, " +
+              (d.wd.SurfaceFormat.format == VK_FORMAT_B8G8R8A8_UNORM ? "B8G8R8A8_UNORM" : "R8G8B8A8_UNORM") + ", " + presentText_ +
+              (d.extraUsage ? ", can be read back" : ", cannot be read back (no screenshots)"));
+
+    // ---- pipelines: Dear ImGui's (its own SPIR-V) and ours (render/vk/fill.*) ----
+    guard.begin("pipelines");
+    VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, IMGUI_IMPL_VULKAN_MINIMUM_SAMPLED_IMAGE_POOL_SIZE},
+                                    {VK_DESCRIPTOR_TYPE_SAMPLER, IMGUI_IMPL_VULKAN_MINIMUM_SAMPLER_POOL_SIZE}};
+    VkDescriptorPoolCreateInfo pi{};
+    pi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pi.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    pi.maxSets = IMGUI_IMPL_VULKAN_MINIMUM_SAMPLED_IMAGE_POOL_SIZE + IMGUI_IMPL_VULKAN_MINIMUM_SAMPLER_POOL_SIZE;
+    pi.poolSizeCount = 2;
+    pi.pPoolSizes = sizes;
+    if (!d.check(vkCreateDescriptorPool(d.device, &pi, nullptr, &d.pool), "vkCreateDescriptorPool")) { d.pool = VK_NULL_HANDLE; return fail("pipelines", d.lastFailure); }
+    ImGui_ImplVulkan_InitInfo ii{};
+    ii.ApiVersion = d.apiVersion;
+    ii.Instance = d.instance;
+    ii.PhysicalDevice = d.phys;
+    ii.Device = d.device;
+    ii.QueueFamily = d.family;
+    ii.Queue = d.queue;
+    ii.DescriptorPool = d.pool;
+    ii.MinImageCount = d.minImages;
+    ii.ImageCount = d.wd.ImageCount;
+    ii.PipelineInfoMain.RenderPass = d.wd.RenderPass;
+    ii.PipelineInfoMain.Subpass = 0;
+    ii.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    ii.CheckVkResultFn = checkFromImGui;
+    const int failed0 = d.failedCalls;
+    if (!ImGui_ImplVulkan_Init(&ii) || d.failedCalls != failed0) {
+        if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplVulkan_Shutdown();
+        return fail("pipelines", "Dear ImGui's Vulkan backend did not start" + (d.lastFailure.empty() ? std::string() : " (" + d.lastFailure + ")"));
+    }
+    d.imguiOn = true;
+    {   // ours: one triangle over the target, one colour from the push constant; viewport and scissor set when drawn
+        VkShaderModule vs = VK_NULL_HANDLE, fs = VK_NULL_HANDLE;
+        VkShaderModuleCreateInfo si{};
+        si.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        si.codeSize = sizeof k_fill_vert;
+        si.pCode = k_fill_vert;
+        if (!d.check(vkCreateShaderModule(d.device, &si, nullptr, &vs), "vkCreateShaderModule (fill.vert)")) return fail("pipelines", d.lastFailure);
+        si.codeSize = sizeof k_fill_frag;
+        si.pCode = k_fill_frag;
+        if (!d.check(vkCreateShaderModule(d.device, &si, nullptr, &fs), "vkCreateShaderModule (fill.frag)")) { vkDestroyShaderModule(d.device, vs, nullptr); return fail("pipelines", d.lastFailure); }
+        VkPushConstantRange pc{};
+        pc.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        pc.offset = 0;
+        pc.size = 4 * sizeof(float);
+        VkPipelineLayoutCreateInfo li{};
+        li.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        li.pushConstantRangeCount = 1;
+        li.pPushConstantRanges = &pc;
+        bool ok = d.check(vkCreatePipelineLayout(d.device, &li, nullptr, &d.fillLayout), "vkCreatePipelineLayout (fill)");
+        if (ok) {
+            VkPipelineShaderStageCreateInfo st[2]{};
+            st[0].sType = st[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            st[0].stage = VK_SHADER_STAGE_VERTEX_BIT; st[0].module = vs; st[0].pName = "main";
+            st[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; st[1].module = fs; st[1].pName = "main";
+            VkPipelineVertexInputStateCreateInfo vi{};
+            vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+            VkPipelineInputAssemblyStateCreateInfo ia{};
+            ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+            ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+            VkPipelineViewportStateCreateInfo vp{};
+            vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+            vp.viewportCount = 1;
+            vp.scissorCount = 1;
+            VkPipelineRasterizationStateCreateInfo rs{};
+            rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+            rs.polygonMode = VK_POLYGON_MODE_FILL;
+            rs.cullMode = VK_CULL_MODE_NONE;
+            rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+            rs.lineWidth = 1.0f;
+            VkPipelineMultisampleStateCreateInfo ms{};
+            ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+            ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+            VkPipelineColorBlendAttachmentState ba{};
+            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+            VkPipelineColorBlendStateCreateInfo cb{};
+            cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+            cb.attachmentCount = 1;
+            cb.pAttachments = &ba;
+            const VkDynamicState dyn[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+            VkPipelineDynamicStateCreateInfo ds{};
+            ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+            ds.dynamicStateCount = 2;
+            ds.pDynamicStates = dyn;
+            VkGraphicsPipelineCreateInfo gi{};
+            gi.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+            gi.stageCount = 2;
+            gi.pStages = st;
+            gi.pVertexInputState = &vi;
+            gi.pInputAssemblyState = &ia;
+            gi.pViewportState = &vp;
+            gi.pRasterizationState = &rs;
+            gi.pMultisampleState = &ms;
+            gi.pColorBlendState = &cb;
+            gi.pDynamicState = &ds;
+            gi.layout = d.fillLayout;
+            gi.renderPass = d.wd.RenderPass;
+            gi.subpass = 0;
+            ok = d.check(vkCreateGraphicsPipelines(d.device, VK_NULL_HANDLE, 1, &gi, nullptr, &d.fill), "vkCreateGraphicsPipelines (fill)");
+        }
+        vkDestroyShaderModule(d.device, vs, nullptr);
+        vkDestroyShaderModule(d.device, fs, nullptr);
+        if (!ok) { d.fill = VK_NULL_HANDLE; return fail("pipelines", d.lastFailure); }
+    }
+    VkCommandPoolCreateInfo cpi{};
+    cpi.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cpi.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    cpi.queueFamilyIndex = d.family;
+    if (!d.check(vkCreateCommandPool(d.device, &cpi, nullptr, &d.oncePool), "vkCreateCommandPool")) { d.oncePool = VK_NULL_HANDLE; return fail("pipelines", d.lastFailure); }
+    if (forced("pipelines")) return fail("pipelines", "made to fail on purpose (PL_VK_FAIL=pipelines)");
+    guard.end("pipelines", std::string("Dear ImGui's and the picture area's (SPIR-V ") + std::to_string(sizeof k_fill_vert + sizeof k_fill_frag) + " bytes)");
+    ok_ = true;
+    return true;
+}
+
+void VkBackend::shutdown() {
+    Impl& d = *d_;
+    if (d.device) vkDeviceWaitIdle(d.device);
+    if (d.imguiOn) { ImGui_ImplVulkan_Shutdown(); d.imguiOn = false; }
+    if (d.device) {
+        if (d.oncePool) vkDestroyCommandPool(d.device, d.oncePool, nullptr);
+        if (d.fill) vkDestroyPipeline(d.device, d.fill, nullptr);
+        if (d.fillLayout) vkDestroyPipelineLayout(d.device, d.fillLayout, nullptr);
+        if (d.wd.Swapchain || d.wd.RenderPass) ImGui_ImplVulkanH_DestroyWindow(d.instance, d.device, &d.wd, nullptr);
+        if (d.pool) vkDestroyDescriptorPool(d.device, d.pool, nullptr);
+        vkDestroyDevice(d.device, nullptr);
+    }
+    d.oncePool = VK_NULL_HANDLE; d.fill = VK_NULL_HANDLE; d.fillLayout = VK_NULL_HANDLE; d.pool = VK_NULL_HANDLE; d.device = VK_NULL_HANDLE;
+    d.wd = ImGui_ImplVulkanH_Window();
+    if (d.instance) {
+        if (d.surface) vkDestroySurfaceKHR(d.instance, d.surface, nullptr);
+        if (d.messenger && vkDestroyDebugUtilsMessengerEXT) vkDestroyDebugUtilsMessengerEXT(d.instance, d.messenger, nullptr);
+        vkDestroyInstance(d.instance, nullptr);
+    }
+    d.surface = VK_NULL_HANDLE; d.messenger = VK_NULL_HANDLE; d.instance = VK_NULL_HANDLE;
+    if (g_impl == &d) g_impl = nullptr;
+    ok_ = false;
+}
+
+void VkBackend::newFrame() { ImGui_ImplVulkan_NewFrame(); }
+
+void VkBackend::setVsync(bool on) {
+    Impl& d = *d_;
+    if (!d.device || on == d.vsync) return;
+    d.vsync = on;
+    const VkPresentModeKHR m = d.choosePresent(on);
+    if (m != d.wd.PresentMode) { d.wd.PresentMode = m; d.rebuild = true; }
+}
+
+bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4], int px, int py, int pw, int ph) {
+    Impl& d = *d_;
+    d.drewFrame = false;
+    if (!d.device) return false;
+    int w = 0, h = 0;
+    SDL_GetWindowSizeInPixels(d.window, &w, &h);
+    if (w <= 0 || h <= 0) return false;                                   // minimised: nothing to draw on
+    if (d.rebuild || w != d.wd.Width || h != d.wd.Height) {               // resized, out of date, or VSync changed
+        ImGui_ImplVulkan_SetMinImageCount(d.minImages);
+        if (!d.makeSwapchain(w, h)) { d.check(VK_ERROR_INITIALIZATION_FAILED, "the swapchain could not be made again"); ok_ = false; return false; }
+        presentText_ = Impl::presentName(d.wd.PresentMode);
+        if (d.guard && ++d.rebuilds <= 50) d.guard->log("swapchain made again: " + std::to_string(d.wd.Width) + " x " + std::to_string(d.wd.Height) + ", " + presentText_);
+        d.wd.FrameIndex = 0;
+        d.rebuild = false;
+    }
+    ImGui_ImplVulkanH_Window& wd = d.wd;
+    VkSemaphore acquired = wd.FrameSemaphores[static_cast<int>(wd.SemaphoreIndex)].ImageAcquiredSemaphore;
+    VkSemaphore complete = wd.FrameSemaphores[static_cast<int>(wd.SemaphoreIndex)].RenderCompleteSemaphore;
+    VkResult r = vkAcquireNextImageKHR(d.device, wd.Swapchain, UINT64_MAX, acquired, VK_NULL_HANDLE, &wd.FrameIndex);
+    if (r == VK_ERROR_OUT_OF_DATE_KHR) { d.rebuild = true; return false; }
+    if (r == VK_SUBOPTIMAL_KHR) d.rebuild = true;                         // drawn and shown, then made again
+    else if (!d.check(r, "vkAcquireNextImageKHR")) { ok_ = false; return false; }
+    ImGui_ImplVulkanH_Frame& fd = wd.Frames[static_cast<int>(wd.FrameIndex)];
+    if (!d.check(vkWaitForFences(d.device, 1, &fd.Fence, VK_TRUE, UINT64_MAX), "vkWaitForFences")) { ok_ = false; return false; }
+    if (!d.check(vkResetFences(d.device, 1, &fd.Fence), "vkResetFences")) { ok_ = false; return false; }
+    if (!d.check(vkResetCommandPool(d.device, fd.CommandPool, 0), "vkResetCommandPool")) { ok_ = false; return false; }
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    if (!d.check(vkBeginCommandBuffer(fd.CommandBuffer, &bi), "vkBeginCommandBuffer")) { ok_ = false; return false; }
+    VkClearValue cv{};
+    for (int i = 0; i < 4; i++) cv.color.float32[i] = clear[i];
+    VkRenderPassBeginInfo rp{};
+    rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rp.renderPass = wd.RenderPass;
+    rp.framebuffer = fd.Framebuffer;
+    rp.renderArea.extent.width = static_cast<uint32_t>(wd.Width);
+    rp.renderArea.extent.height = static_cast<uint32_t>(wd.Height);
+    rp.clearValueCount = 1;
+    rp.pClearValues = &cv;
+    vkCmdBeginRenderPass(fd.CommandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
+    const int x0 = std::clamp(px, 0, wd.Width), y0 = std::clamp(py, 0, wd.Height), x1 = std::clamp(px + pw, 0, wd.Width), y1 = std::clamp(py + ph, 0, wd.Height);
+    if (d.fill && x1 > x0 && y1 > y0) {                                   // the picture area (step 2: the labs' pictures here)
+        VkViewport vp{0.0f, 0.0f, static_cast<float>(wd.Width), static_cast<float>(wd.Height), 0.0f, 1.0f};
+        VkRect2D sc{{x0, y0}, {static_cast<uint32_t>(x1 - x0), static_cast<uint32_t>(y1 - y0)}};
+        vkCmdBindPipeline(fd.CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, d.fill);
+        vkCmdSetViewport(fd.CommandBuffer, 0, 1, &vp);
+        vkCmdSetScissor(fd.CommandBuffer, 0, 1, &sc);
+        vkCmdPushConstants(fd.CommandBuffer, d.fillLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4 * sizeof(float), fill);
+        vkCmdDraw(fd.CommandBuffer, 3, 1, 0, 0);
+    }
+    ImGui_ImplVulkan_RenderDrawData(dd, fd.CommandBuffer);
+    vkCmdEndRenderPass(fd.CommandBuffer);
+    if (!d.check(vkEndCommandBuffer(fd.CommandBuffer), "vkEndCommandBuffer")) { ok_ = false; return false; }
+    const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.waitSemaphoreCount = 1;
+    si.pWaitSemaphores = &acquired;
+    si.pWaitDstStageMask = &waitStage;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &fd.CommandBuffer;
+    si.signalSemaphoreCount = 1;
+    si.pSignalSemaphores = &complete;
+    if (!d.check(vkQueueSubmit(d.queue, 1, &si, fd.Fence), "vkQueueSubmit")) { ok_ = false; return false; }
+    d.drewFrame = true;
+    return true;
+}
+
+void VkBackend::present() {
+    Impl& d = *d_;
+    if (!d.drewFrame) return;
+    d.drewFrame = false;
+    ImGui_ImplVulkanH_Window& wd = d.wd;
+    VkSemaphore complete = wd.FrameSemaphores[static_cast<int>(wd.SemaphoreIndex)].RenderCompleteSemaphore;
+    VkPresentInfoKHR pi{};
+    pi.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    pi.waitSemaphoreCount = 1;
+    pi.pWaitSemaphores = &complete;
+    pi.swapchainCount = 1;
+    pi.pSwapchains = &wd.Swapchain;
+    pi.pImageIndices = &wd.FrameIndex;
+    const VkResult r = vkQueuePresentKHR(d.queue, &pi);
+    if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) d.rebuild = true;   // resized, moved to another screen: made again at the next frame
+    else if (!d.check(r, "vkQueuePresentKHR")) ok_ = false;
+    wd.SemaphoreIndex = (wd.SemaphoreIndex + 1) % wd.SemaphoreCount;
+}
+
+namespace {
+// a buffer the processor can read, its memory bound
+struct HostBuffer {
+    VkDevice device = VK_NULL_HANDLE;
+    VkBuffer buf = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    ~HostBuffer() { if (buf) vkDestroyBuffer(device, buf, nullptr); if (memory) vkFreeMemory(device, memory, nullptr); }
+};
+}  // namespace
+
+// one-time commands: record(cmd), submit, wait; false on any error
+template <class F> static bool runOnce(VkBackend::Impl& d, F record) {
+    VkCommandBufferAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    ai.commandPool = d.oncePool;
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = 1;
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    if (!d.check(vkAllocateCommandBuffers(d.device, &ai, &cmd), "vkAllocateCommandBuffers")) return false;
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    bool ok = d.check(vkBeginCommandBuffer(cmd, &bi), "vkBeginCommandBuffer (once)");
+    if (ok) { record(cmd); ok = d.check(vkEndCommandBuffer(cmd), "vkEndCommandBuffer (once)"); }
+    VkFence fence = VK_NULL_HANDLE;
+    VkFenceCreateInfo fi{};
+    fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    if (ok) ok = d.check(vkCreateFence(d.device, &fi, nullptr, &fence), "vkCreateFence (once)");
+    if (ok) {
+        VkSubmitInfo si{};
+        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        si.commandBufferCount = 1;
+        si.pCommandBuffers = &cmd;
+        ok = d.check(vkQueueSubmit(d.queue, 1, &si, fence), "vkQueueSubmit (once)") && d.check(vkWaitForFences(d.device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences (once)");
+    }
+    if (fence) vkDestroyFence(d.device, fence, nullptr);
+    vkFreeCommandBuffers(d.device, d.oncePool, 1, &cmd);
+    return ok;
+}
+
+static bool makeHostBuffer(VkBackend::Impl& d, VkDeviceSize size, HostBuffer& hb) {
+    hb.device = d.device;
+    VkBufferCreateInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bi.size = size;
+    bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (!d.check(vkCreateBuffer(d.device, &bi, nullptr, &hb.buf), "vkCreateBuffer (readback)")) { hb.buf = VK_NULL_HANDLE; return false; }
+    VkMemoryRequirements req{};
+    vkGetBufferMemoryRequirements(d.device, hb.buf, &req);
+    const uint32_t type = d.memoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    if (type == UINT32_MAX) { d.check(VK_ERROR_FEATURE_NOT_PRESENT, "no memory the processor can read"); return false; }
+    VkMemoryAllocateInfo mi{};
+    mi.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mi.allocationSize = req.size;
+    mi.memoryTypeIndex = type;
+    if (!d.check(vkAllocateMemory(d.device, &mi, nullptr, &hb.memory), "vkAllocateMemory (readback)")) { hb.memory = VK_NULL_HANDLE; return false; }
+    return d.check(vkBindBufferMemory(d.device, hb.buf, hb.memory, 0), "vkBindBufferMemory (readback)");
+}
+
+static void barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to, VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                    VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage) {
+    VkImageMemoryBarrier b{};
+    b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    b.srcAccessMask = srcAccess;
+    b.dstAccessMask = dstAccess;
+    b.oldLayout = from;
+    b.newLayout = to;
+    b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.image = image;
+    b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    b.subresourceRange.levelCount = 1;
+    b.subresourceRange.layerCount = 1;
+    vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
+}
+
+// the bytes of an 8-bit BGRA or RGBA image to RGBA (or RGB), top row first
+static void unpack(const uint8_t* src, int w, int h, bool bgra, int channels, std::vector<uint8_t>& out) {
+    out.resize(std::size_t(w) * std::size_t(h) * std::size_t(channels));
+    for (std::size_t i = 0, n = std::size_t(w) * std::size_t(h); i < n; i++) {
+        const uint8_t* s = src + i * 4;
+        uint8_t* o = out.data() + i * std::size_t(channels);
+        o[0] = bgra ? s[2] : s[0]; o[1] = s[1]; o[2] = bgra ? s[0] : s[2];
+        if (channels == 4) o[3] = 255;
+    }
+}
+
+bool VkBackend::readback(std::vector<uint8_t>& rgba, int& w, int& h) {
+    Impl& d = *d_;
+    if (!d.drewFrame || !d.extraUsage) return false;
+    w = d.wd.Width; h = d.wd.Height;
+    if (!d.check(vkQueueWaitIdle(d.queue), "vkQueueWaitIdle (readback)")) return false;
+    HostBuffer hb;
+    const VkDeviceSize size = VkDeviceSize(w) * VkDeviceSize(h) * 4;
+    if (!makeHostBuffer(d, size, hb)) return false;
+    const VkImage image = d.wd.Frames[static_cast<int>(d.wd.FrameIndex)].Backbuffer;
+    const bool ok = runOnce(d, [&](VkCommandBuffer cmd) {
+        barrier(cmd, image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        VkBufferImageCopy c{};
+        c.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        c.imageSubresource.layerCount = 1;
+        c.imageExtent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1};
+        vkCmdCopyImageToBuffer(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, hb.buf, 1, &c);
+        barrier(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_ACCESS_TRANSFER_READ_BIT, 0,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+    });
+    if (!ok) return false;
+    void* p = nullptr;
+    if (!d.check(vkMapMemory(d.device, hb.memory, 0, size, 0, &p), "vkMapMemory (readback)")) return false;
+    unpack(static_cast<const uint8_t*>(p), w, h, d.wd.SurfaceFormat.format == VK_FORMAT_B8G8R8A8_UNORM, 4, rgba);
+    vkUnmapMemory(d.device, hb.memory);
+    return true;
+}
+
+bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4], std::vector<uint8_t>& rgb) {
+    Impl& d = *d_;
+    if (!d.device || w <= 0 || h <= 0) return false;
+    if (!d.check(vkQueueWaitIdle(d.queue), "vkQueueWaitIdle (image)")) return false;   // Dear ImGui's vertex buffers rotate per call: none may be in use
+    const VkFormat fmt = d.wd.SurfaceFormat.format;
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    VkRenderPass pass = VK_NULL_HANDLE;
+    VkFramebuffer fb = VK_NULL_HANDLE;
+    HostBuffer hb;
+    bool ok = true;
+    VkImageCreateInfo ii{};
+    ii.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ii.imageType = VK_IMAGE_TYPE_2D;
+    ii.format = fmt;
+    ii.extent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1};
+    ii.mipLevels = 1;
+    ii.arrayLayers = 1;
+    ii.samples = VK_SAMPLE_COUNT_1_BIT;
+    ii.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ii.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    ok = d.check(vkCreateImage(d.device, &ii, nullptr, &image), "vkCreateImage (picture)");
+    if (ok) {
+        VkMemoryRequirements req{};
+        vkGetImageMemoryRequirements(d.device, image, &req);
+        VkMemoryAllocateInfo mi{};
+        mi.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        mi.allocationSize = req.size;
+        mi.memoryTypeIndex = d.memoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (mi.memoryTypeIndex == UINT32_MAX) mi.memoryTypeIndex = d.memoryType(req.memoryTypeBits, 0);
+        ok = mi.memoryTypeIndex != UINT32_MAX && d.check(vkAllocateMemory(d.device, &mi, nullptr, &memory), "vkAllocateMemory (picture)") &&
+             d.check(vkBindImageMemory(d.device, image, memory, 0), "vkBindImageMemory (picture)");
+    }
+    if (ok) {
+        VkImageViewCreateInfo vi{};
+        vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        vi.image = image;
+        vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        vi.format = fmt;
+        vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        vi.subresourceRange.levelCount = 1;
+        vi.subresourceRange.layerCount = 1;
+        ok = d.check(vkCreateImageView(d.device, &vi, nullptr, &view), "vkCreateImageView (picture)");
+    }
+    if (ok) {   // compatible with the window's pass (same format and samples), so Dear ImGui's pipeline draws in it; ends ready to be copied
+        VkAttachmentDescription a = d.wd.AttachmentDesc;
+        a.format = fmt;
+        a.samples = VK_SAMPLE_COUNT_1_BIT;
+        a.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        a.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        a.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        VkSubpassDescription sub{};
+        sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        sub.colorAttachmentCount = 1;
+        sub.pColorAttachments = &ref;
+        VkSubpassDependency dep{};
+        dep.srcSubpass = 0;
+        dep.dstSubpass = VK_SUBPASS_EXTERNAL;
+        dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dep.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dep.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dep.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        VkRenderPassCreateInfo rpi{};
+        rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        rpi.attachmentCount = 1;
+        rpi.pAttachments = &a;
+        rpi.subpassCount = 1;
+        rpi.pSubpasses = &sub;
+        rpi.dependencyCount = 1;
+        rpi.pDependencies = &dep;
+        ok = d.check(vkCreateRenderPass(d.device, &rpi, nullptr, &pass), "vkCreateRenderPass (picture)");
+    }
+    if (ok) {
+        VkFramebufferCreateInfo fi{};
+        fi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        fi.renderPass = pass;
+        fi.attachmentCount = 1;
+        fi.pAttachments = &view;
+        fi.width = static_cast<uint32_t>(w);
+        fi.height = static_cast<uint32_t>(h);
+        fi.layers = 1;
+        ok = d.check(vkCreateFramebuffer(d.device, &fi, nullptr, &fb), "vkCreateFramebuffer (picture)");
+    }
+    const VkDeviceSize size = VkDeviceSize(w) * VkDeviceSize(h) * 4;
+    if (ok) ok = makeHostBuffer(d, size, hb);
+    if (ok) ok = runOnce(d, [&](VkCommandBuffer cmd) {
+        VkClearValue cv{};
+        for (int i = 0; i < 4; i++) cv.color.float32[i] = clear[i];
+        VkRenderPassBeginInfo rp{};
+        rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rp.renderPass = pass;
+        rp.framebuffer = fb;
+        rp.renderArea.extent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
+        rp.clearValueCount = 1;
+        rp.pClearValues = &cv;
+        vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
+        if (dd) ImGui_ImplVulkan_RenderDrawData(dd, cmd);
+        vkCmdEndRenderPass(cmd);
+        VkBufferImageCopy c{};
+        c.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        c.imageSubresource.layerCount = 1;
+        c.imageExtent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1};
+        vkCmdCopyImageToBuffer(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, hb.buf, 1, &c);
+    });
+    if (ok) {
+        void* p = nullptr;
+        ok = d.check(vkMapMemory(d.device, hb.memory, 0, size, 0, &p), "vkMapMemory (picture)");
+        if (ok) { unpack(static_cast<const uint8_t*>(p), w, h, fmt == VK_FORMAT_B8G8R8A8_UNORM, 3, rgb); vkUnmapMemory(d.device, hb.memory); }
+    }
+    if (fb) vkDestroyFramebuffer(d.device, fb, nullptr);
+    if (pass) vkDestroyRenderPass(d.device, pass, nullptr);
+    if (view) vkDestroyImageView(d.device, view, nullptr);
+    if (image) vkDestroyImage(d.device, image, nullptr);
+    if (memory) vkFreeMemory(d.device, memory, nullptr);
+    return ok;
+}
+
+}  // namespace render

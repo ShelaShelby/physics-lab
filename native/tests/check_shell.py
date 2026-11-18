@@ -13,7 +13,7 @@
 #   old       no Old panel button in either lab, and PL_NEWUI=off no longer switches the New UI off (0.16 stage 1b)
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, inside, overlap, prefetch
+from shell_lib import run_app, inside, overlap, prefetch, Bmp
 
 # From docs/ui-0.15/DESIGN.md section 1 (the owner's chosen design): kind -> (size in units, floor in px)
 SCALE = {"caption": (13, 12), "body": (15, 14), "readout": (15, 14),   # (stage 5c: the readout is Body size)
@@ -184,6 +184,68 @@ def part_old(binary, work):
     r = run_app(binary, work, "off", {"PL_NEWUI": "off"}, frames=30)
     check(r.window is not None and r.texts, "the New UI is always on (PL_NEWUI=off is ignored)")
 
+# 0.59.0 (Vulkan step 1 of 5, PLAN_VULKAN.md): PL_GRAPHICS=vulkan with the validation layers on: the app starts on Vulkan (lavapipe here), the log has every
+# [vulkan] step, zero validation errors; Settings and a page drawn by Vulkan against the same state drawn by OpenGL (PL_NO_PICTURE: OpenGL leaves the lab's
+# picture out too): at most 1 % of the pixels differ by more than 8 levels (the planner's limit: the same Dear ImGui triangles, only rasterisation may
+# differ); with a step made to fail (PL_VK_FAIL=device) the app starts on OpenGL and Settings says why. Only when asked (check_shell.py ... vulkan).
+VK_STEPS = ["instance", "surface", "device", "swapchain", "pipelines", "first frame"]
+
+def _settings_files(home):
+    log, cfg = "", ""
+    for root, _dirs, files in os.walk(home):
+        if "gpu-paths-log.txt" in files:
+            log = open(os.path.join(root, "gpu-paths-log.txt"), errors="replace").read()
+        for f in files:
+            if f.endswith(".txt") and f.startswith("settings"):
+                cfg = open(os.path.join(root, f), errors="replace").read()
+    return log, cfg
+
+def _differ(a, b, limit=8):
+    from shell_lib import Bmp
+    A, B = Bmp(a), Bmp(b)
+    if (A.w, A.h) != (B.w, B.h):
+        return None
+    big = 0
+    for y in range(A.h):
+        for x in range(A.w):
+            p, q = A.px(x, y), B.px(x, y)
+            if max(abs(p[0] - q[0]), abs(p[1] - q[1]), abs(p[2] - q[2])) > limit:
+                big += 1
+    return big / float(A.w * A.h)
+
+def part_vulkan(binary, work):
+    vk_env = {"PL_GRAPHICS": "vulkan", "PL_VK_VALIDATION": "1"}
+    for name, opened in (("settings", "settings"), ("page", "about")):         # (Settings at its top: the Graphics row itself says which is in use)
+        v = run_app(binary, work, "vk_" + name, dict(vk_env, PL_OPEN=opened), frames=40)
+        g = run_app(binary, work, "gl_" + name, {"PL_OPEN": opened, "PL_NO_PICTURE": "1"}, frames=40)
+        check("Vulkan: " in v.out and "OpenGL: " not in v.out, f"{name}: the app started on Vulkan ({[l for l in v.out.splitlines() if l.startswith(('Vulkan', 'OpenGL'))]})")
+        check("PLVKVALIDATION missing" not in v.err, f"{name}: the validation layers are installed and on")
+        errs = [l for l in v.err.splitlines() if l.startswith("PLVKVALIDATION error")]
+        warns = [l for l in v.err.splitlines() if l.startswith("PLVKVALIDATION warning")]
+        check("PLVK validation errors=0" in v.out and not errs, f"{name}: zero validation errors ({len(errs)}; first: {errs[:1]}; warnings {len(warns)})")
+        log, _cfg = _settings_files(os.path.join(os.path.abspath(work), "home_vk_" + name))
+        missing = [st for st in VK_STEPS if f"[vulkan] " not in log or f"begin {st}" not in log or f"end {st}" not in log]
+        check(not missing and "Vulkan: the whole path succeeded" in log, f"{name}: the log has every [vulkan] step (missing: {missing})")
+        frac = _differ(v.bmp, g.bmp) if os.path.exists(v.bmp) and os.path.exists(g.bmp) else None
+        check(frac is not None and frac <= 0.01, f"{name}: Vulkan against OpenGL: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels (at most 1 %)")
+        if name == "settings":
+            gl_note = [n for n in v.notes if n.startswith("graphics ")]
+            check(gl_note and "In use now: Vulkan, on " in gl_note[0], f"Settings says Vulkan is in use: {gl_note[:1]}")
+    # the swapchain made again: the window resized twice and VSync switched off and on (other present modes), validation still silent
+    m = run_app(binary, work, "vk_resize", dict(vk_env, PL_OPEN="settings:vsync", PL_SCRIPT="8:size=1000x700;14:click=vsync;20:size=1280x800;26:click=vsync"), frames=34)
+    errs = [l for l in m.err.splitlines() if l.startswith("PLVKVALIDATION error")]
+    check("Vulkan: " in m.out and "PLVK validation errors=0" in m.out and not errs and not m.scripted_missing(), f"resized and VSync switched: zero validation errors ({errs[:1]}, {m.scripted_missing()})")
+    check(os.path.exists(m.bmp) and Bmp(m.bmp).w == 1280, "after the resize the swapchain has the window's new size (the last picture 1280 wide)")
+    f = run_app(binary, work, "vk_fail", dict(vk_env, PL_OPEN="settings:graphics", PL_VK_FAIL="device"), frames=30)
+    check("OpenGL: " in f.out and "Vulkan: " not in f.out, "a Vulkan step that fails: the app starts on OpenGL")
+    note = [n for n in f.notes if n.startswith("graphics ")]
+    check(note and "In use now: OpenGL, because Vulkan could not start" in note[0] and "device" in note[0] and "made to fail on purpose" in note[0],
+          f"Settings says why it is OpenGL: {note[:1]}")
+    log, cfg = _settings_files(os.path.join(os.path.abspath(work), "home_vk_fail"))
+    check("[vulkan]" in log and "failed: made to fail on purpose" in log and "This start uses OpenGL" in log and "Physics Lab" in log.splitlines()[0],
+          "the log keeps the [vulkan] lines and says this start uses OpenGL")
+    check("gpuvulkan=fail | vulkan " in cfg and "graphics=vulkan" in cfg, "the settings file keeps the failed step (the next start uses OpenGL until Try again)")
+
 def main():
     binary, work = sys.argv[1], sys.argv[2]
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None       # a third argument runs only some parts (for the perturbation runs): sizes1 sizes reading_sizes small collapse keys shift reading old
@@ -205,6 +267,8 @@ def main():
         part_reading(binary, work)
     if want("old"):
         part_old(binary, work)
+    if only is not None and "vulkan" in only:                              # (0.59.0: only when asked; ui_shell lists check_shell.py:vulkan)
+        part_vulkan(binary, work)
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0
 

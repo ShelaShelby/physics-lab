@@ -18,8 +18,8 @@
 
 namespace app {
 
-// what the settings file keeps (the line "gpupaths="): state "off" (the app died inside step), "slow" (step did not finish within its time limit) or "ok"
-// (the whole path succeeded once), for this app version and driver; "" = nothing kept
+// what the settings file keeps (the line "gpupaths="): state "off" (the app died inside step), "slow" (step did not finish within its time limit), "fail"
+// (0.59.0: step returned an error; the step field holds "step: why") or "ok" (the whole path succeeded once), for this app version and driver; "" = nothing kept
 struct GpuGuardRecord {
     std::string state, version, driver, step;
     bool operator==(const GpuGuardRecord& o) const { return state == o.state && version == o.version && driver == o.driver && step == o.step; }
@@ -32,7 +32,8 @@ struct GpuGuardDecision {
     bool allowed = true;          // the card's path may be tried in this run
     bool guarded = true;          // markers before each step (the path has not yet succeeded once for this version and driver)
     GpuGuardRecord keep;          // what the settings file keeps from now on
-    bool crashed = false;         // not allowed because a run died inside a step (false: a step timed out)
+    bool crashed = false;         // not allowed because a run died inside a step (false: a step timed out or failed)
+    bool failed = false;          // 0.59.0: not allowed because a step returned an error (kept as "fail")
 };
 GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecord& marker, const std::string& version, const std::string& driver);
 
@@ -42,6 +43,9 @@ public:
     // 0.56.0: a guard of its own (the spinning hole drawn per pixel, gpuSkyGuard): its marker file, the log it writes into (truncated at start only by
     // the guard that says so) and a prefix for its lines
     GpuGuard(const char* marker, const char* log, bool truncateLog, const char* prefix) : markerName_(marker), logName_(log), prefix_(prefix), truncateLog_(truncateLog) {}
+    // 0.59.0: what the guarded thing is called in its lines and in offText ("" = the light paths' own wording)
+    GpuGuard(const char* marker, const char* log, bool truncateLog, const char* prefix, const char* what) : markerName_(marker), logName_(log), prefix_(prefix), what_(what), truncateLog_(truncateLog) {}
+    void appendToLog() { truncateLog_ = false; }                  // 0.59.0: another guard started the log in this run (the Vulkan guard, before OpenGL's)
     static constexpr const char* kMarker = "gpu-paths-step.txt";   // plain ASCII names (Windows)
     static constexpr const char* kLog = "gpu-paths-log.txt";
     static constexpr int kLogMax = 400;                           // lines; later ones are dropped (one line says so)
@@ -66,6 +70,8 @@ public:
     void finished(bool ok, const std::string& why = std::string());
     // a step that did not finish within its time limit: the path off for this run, kept as "slow" with the step's name; the marker removed
     void timedOut(const std::string& step);
+    // 0.59.0: a step that returned an error (the driver said no; no crash): the path off for this run, kept as "fail" with the step and why; the marker removed
+    void failed(const std::string& step, const std::string& why);
     void tryAgain();                                              // Settings, Performance: forget the kept "off", try the path again (guarded)
     void closing();                                               // the app ends normally: a marker of this run's still open step is removed (logged)
     void settingsWritten();                                       // the settings file now holds saved(): a marker from the last run can go
@@ -74,7 +80,7 @@ public:
     std::string markerPath() const { return folder_.empty() ? std::string() : folder_ + markerName_; }
     std::vector<std::string> logTail(int n) const;                // the log's last n lines (read back from the file)
 private:
-    std::string markerName_ = kMarker, logName_ = kLog, prefix_;
+    std::string markerName_ = kMarker, logName_ = kLog, prefix_, what_;
     bool truncateLog_ = true;
     mutable std::mutex mx_;
     bool started_ = false, staleMarker_ = false, logFull_ = false;
@@ -98,6 +104,10 @@ GpuGuard& gpuJumpGuard();
 // 0.57.1: the Molecule Lab's Density cloud on the card (render/molecule_card.h): its own marker (gpu-molcloud-step.txt), the settings line "gpumolcloud=",
 // the same log (its lines start "[molcloud] "), its version field "molcloud <hash>"
 GpuGuard& gpuMolCloudGuard();
+// 0.59.0: Vulkan (step 1 of 5, native/PLAN_VULKAN.md): the window's Vulkan start (instance, surface, device, swapchain, first frame), its own marker
+// (gpu-vulkan-step.txt), the settings line "gpuvulkan=", the same log (its lines start "[vulkan] "; it starts the log when Vulkan is tried), its version
+// field "vulkan <app version>" (the Vulkan code changes with each step, so a new version tries once more)
+GpuGuard& gpuVulkanGuard();
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);

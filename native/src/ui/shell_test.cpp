@@ -209,6 +209,10 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             if (it != g_items.end()) { x = it->second.x + it->second.w / 2; y = it->second.y + it->second.h / 2; found = true; }
             else found = std::sscanf(arg.c_str(), "%f,%f", &x, &y) == 2;
             if (found) pushMouse(window, x, y, 0); else std::printf("PLSCRIPT frame %d: no control called \"%s\"\n", frame, arg.c_str());
+        } else if (verb == "size") {                       // 0.59.0: the window takes this size (units), as a drag of its edge would (Vulkan: the swapchain is made again)
+            int w = 0, h = 0;
+            if (std::sscanf(arg.c_str(), "%dx%d", &w, &h) == 2 && w > 0 && h > 0) SDL_SetWindowSize(window, w, h);
+            else std::printf("PLSCRIPT frame %d: not a size \"%s\"\n", frame, arg.c_str());
         } else if (verb == "wheel") {                      // the mouse wheel turns by n notches (negative: down) at the pointer
             SDL_Event e;
             SDL_zero(e);

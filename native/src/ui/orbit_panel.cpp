@@ -79,7 +79,35 @@ void performanceCard(AppState& app) {
     ImGui::SeparatorText("Performance");
     settingMark("vsync");
     wrappedCheckbox("VSync (wait for the screen)", &app.vsync);
+    noteItem("vsync");                                    // (0.59.0: the checks switch it: Vulkan makes its swapchain again)
     if (ImGui::IsItemHovered()) ui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom. For this run only: the app always starts with VSync on.");
+    {   // 0.59.0: Graphics: OpenGL (the default) or Vulkan (the test of step 1 of 5, PLAN_VULKAN.md); used from the next start. The line says what this start
+        // draws with and, when Vulkan was chosen but OpenGL is in use, why (the Vulkan guard: a step that failed or stopped the app), with Try again
+        settingMark("graphics");
+        ImGui::TextUnformatted("Graphics:");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("OpenGL##graphics", app.prefs.graphics != "vulkan")) app.prefs.graphics = "opengl";
+        noteItem("graphics.opengl");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Vulkan (test)##graphics", app.prefs.graphics == "vulkan")) app.prefs.graphics = "vulkan";
+        noteItem("graphics.vulkan");
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan, step 1 of 5: the menus, panels, pages and guides are drawn by Vulkan; the labs' pictures come in the next steps.\n"
+                                                      "Each step of Vulkan's start is guarded: if one fails or stops the app, the next start uses OpenGL and this page says why.");
+        const app::GpuGuard& V = app::gpuVulkanGuard();
+        const bool vk = app.graphicsInUse == "vulkan";
+        std::string gline = "Takes effect at the next start. In use now: ";
+        if (vk) gline += "Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). The labs' pictures are not drawn on Vulkan yet.";
+        else if (!app.vulkanWhy.empty()) gline += "OpenGL, because " + app.vulkanWhy;
+        else gline += "OpenGL.";
+        ImGui::TextWrapped("%s", gline.c_str());
+        if (shellLogOn()) auditNote("graphics " + gline);
+        if (!V.offText().empty() || (!vk && !app.vulkanWhy.empty() && V.started() && !V.allowed())) {
+            if (ImGui::Button("Try again##graphics")) { app::gpuVulkanGuard().tryAgain(); app.prefs.graphics = "vulkan"; app.vulkanWhy.clear(); }
+            noteItem("graphics.again");
+            if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan is tried again at the next start, with a marker before each step:\n"
+                                                          "if it fails or stops the app again, the start after that uses OpenGL, as now.");
+        }
+    }
     if (app.lab == 0) {                                   // 0.13 stage 4: who places the belts' rocks: the line says what this PC has, the switch compares the two ways
         ImGui::TextWrapped("%s", app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks).c_str());
         ImGui::BeginDisabled(!app.rocksOk);

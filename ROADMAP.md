@@ -69,8 +69,13 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
 
 ## Whole app
+- Vulkan step 2 (PLAN_VULKAN.md): renderer2d on Vulkan: every lab's normal drawing (lines, dots, discs, textures, text in the picture, the sky, the maps).
+- Vulkan step 3: the card programs of the Atom, Molecule and Orbit Labs (atom_card, molecule_card, group/outline/rock compute).
+- Vulkan step 4: the Black Hole Lab's programs (kerr_sky, kerr_compute, the lens and Kerr shaders); retry the compute path parked since 0.55.7.
+- Vulkan step 5: the benchmark, picture tests and UI suite on Vulkan; Vulkan the default; OpenGL removed once the owner's PC shows every scene works.
 - After the owner's 0.56.1 benchmark: move scenes far above his screen's rate to All scenes; fix the ones below it, slowest first; fix every response he would feel and every lab that is busy at rest.
 - **fix**: check_molecule card "the benchmark's report names the card for both scenes" fails on the session box (0.57.2's build too, 0.58.0): the first scene's path still says "once its start-up check has passed".
+- **fix**: check_6b benchscenes: a Black Hole scene (blackhole.extreme or all_light) sometimes leaves no picture to compare ("-1.0000 of the pixels") on this box; 0.58.0's build the same.
 - **fix**: check_6b benchwaits' response.atom_density reaches its 15 s cap on this box's software renderer with one thread (ui_popups fails; 0.56.4 the same): a cap or a cloud filling that does not depend on the frame time.
 - **fix**, to check in the owner's 0.56.1 run: orbit.sky had a 4.8-5.7 s frame while turning (here, inside the software renderer's shader code).
 - The owner's benchmark scenes below his screen's rate (255 Hz), slowest first (0.56.1 run; owner decision 17 Nov 2026, evening: after the Black Hole Lab's look): atom.slice_drag 12.5 fps and atom.jump_all 20.5 (0.57.0 moved their heavy loops to the card: his next run decides); molecule.vib_density 68.9 and molecule.density 133 (0.57.1 moved the Density cloud to the card and took out the waste, estimate under 3.9 ms of processor work: his next run decides); atom.nucleus_zoom 108; atom.nucleon 127; atom.all_enlarged 199; atom.uranium_true 129 (in All scenes).

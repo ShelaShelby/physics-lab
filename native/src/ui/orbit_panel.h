@@ -49,6 +49,9 @@ struct AppState {
     bool rocksOk = false;                  // the renderer has the OpenGL 4.3 rock compute object (the Orbit Lab's GPU rocks, 0.13 stage 4); false: the CPU places the rocks
     bool computeOk = false;                // the renderer has the OpenGL 4.3 compute path (the Atom Lab's GPU superposition and jumps); false: the CPU does that work
     bool vsync = true;                     // wait for the screen's refresh (off: draw as fast as possible, to measure headroom)
+    std::string graphicsInUse = "opengl";  // 0.59.0: what this start draws with ("opengl" / "vulkan"; Settings, Performance, Graphics)
+    std::string vulkanWhy;                 // 0.59.0: why this start uses OpenGL although Vulkan was chosen ("" when it does not)
+    std::string vulkanDevice, vulkanDriver;   // 0.59.0: Vulkan's card and driver, as the driver names them
     FrameStats stats;
     std::string powerNote;                 // 0.15 stage 2: app::powerNote() (Windows power throttling asked off), printed in the benchmark report
     app::LiveStats live;                   // frames drawn while the window system had the window in its move / resize loop

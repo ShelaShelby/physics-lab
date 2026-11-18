@@ -53,6 +53,8 @@ std::string savePrefs(const Prefs& p) {
     if (!p.gpuSlice.empty()) o << "gpuslice=" << clean(p.gpuSlice) << "\n";            // 0.57.0
     if (!p.gpuJump.empty()) o << "gpujump=" << clean(p.gpuJump) << "\n";               // 0.57.0
     if (!p.gpuMolCloud.empty()) o << "gpumolcloud=" << clean(p.gpuMolCloud) << "\n";   // 0.57.1
+    if (p.graphics != "opengl") o << "graphics=" << clean(p.graphics) << "\n";        // 0.59.0
+    if (!p.gpuVulkan.empty()) o << "gpuvulkan=" << clean(p.gpuVulkan) << "\n";       // 0.59.0
     for (std::size_t i = 0; i < p.calcHistory.size() && i < static_cast<std::size_t>(kCalcHistoryMax); i++) o << "calc." << i << "=" << clean(p.calcHistory[i]) << "\n";   // 0.49
     return o.str();
 }
@@ -90,6 +92,8 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "gpuslice") p.gpuSlice = v;                              // 0.57.0
         else if (k == "gpujump") p.gpuJump = v;                                // 0.57.0
         else if (k == "gpumolcloud") p.gpuMolCloud = v;                        // 0.57.1
+        else if (k == "graphics") { if (v == "opengl" || v == "vulkan") p.graphics = v; }   // 0.59.0
+        else if (k == "gpuvulkan") p.gpuVulkan = v;                            // 0.59.0
         else if (k.rfind("calc.", 0) == 0) {                                   // 0.49: the calculator's history, calc.0 the newest; a bad number or an empty line is ignored
             const std::string n = k.substr(5);
             if (n.size() == 1 && n[0] >= '0' && n[0] < '0' + kCalcHistoryMax && !v.empty()) {

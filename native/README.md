@@ -1,6 +1,6 @@
 # Physics Lab — Windows app
 
-Physics Lab for Windows, in C++ (C++17, SDL3, OpenGL 4.3 with a 3.3 core fallback, Dear ImGui). Version **0.55.0 alpha**. Four labs:
+Physics Lab for Windows, in C++ (C++17, SDL3, OpenGL 4.3 with a 3.3 core fallback, Dear ImGui). Version **0.59.0 alpha**. Vulkan in test (Settings, Performance, Graphics: step 1 of 5, the menus and panels only; PLAN_VULKAN.md). Four labs:
 - **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini).
 - **Atom Lab**: any nucleus, down to quarks; one electron (exact, with Dirac's relativity) or every electron of the neutral atoms (Dirac-Hartree-Fock orbitals computed for the app);
   photon jumps along NIST's measured lines: one electron for every element, every electron shown for 16 atoms (Li, Na, K, Rb, Cs, Fr, He, Be, Mg, Ca, Zn, Sr, Cd, Ba, Hg, Ra;
@@ -51,7 +51,7 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 | `src/molecule/` | The Molecule Lab: molecules (`molecule.*`), density (`density.*`), vibrations (`vibration.*`), rotation (`rotation.*`), the anharmonic bond (`morse.*`), the picture (`molecule_view.*`) |
 | `src/analysis/` | The Data panel's tables (`lab_tables.*`), text in and out (`table.*`) and fitting (`fit.*`); no graphics |
 | `src/app/` | App-wide logic without graphics: settings file (`prefs.*`), texts and About (`app_text.inc`), themes (`theme_style.*`), calculator (`calc*.*`), benchmark (`bench*.*`), the graphics card's light paths' guard and log (`gpu_guard.*`) |
-| `src/render/` | OpenGL loader, 2D renderer, shaders (`shaders.h`), the spinning hole's per-pixel shader's steps (`kerr_sky.*`), compute objects, planet maps, the CIE 1931 table (`cie1931.h`) |
+| `src/render/` | OpenGL loader, the Vulkan start and frames (`vk_backend.*`, shaders in `vk/`), 2D renderer, shaders (`shaders.h`), the spinning hole's per-pixel shader's steps (`kerr_sky.*`), compute objects, planet maps, the CIE 1931 table (`cie1931.h`) |
 | `src/ui/` | The panels and pages: shell, Controls, Settings, Learn tab and facts (`app_tabs.*`), About and history (`app_pages.*`), guides, calculator and Data panels |
 | `data/` | The saved sources: data files and papers, most folders with a README (where it came from, when) |
 | `tools/` | The scripts that build the `.inc` tables from `data/`, the DHF and GRASP2018 pipelines, `check.sh` |

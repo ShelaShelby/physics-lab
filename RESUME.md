@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.58.0 (17 Nov 2026): the Black Hole Lab's Real look: the disc's outer edge 30 -> 2000 GM/c^2 (Goodman 2003; the same Page-Thorne flux, it fades by itself); "Light: What an eye sees / All light" (g^4 sigma T^4 / pi, the eye's colour; disc.h allLightLinear) on the card in all three disc shaders (kLensFS, kKerrFS, kKerrSkyFS) with a light check in the card sky's start-up check; benchmark scene blackhole.all_light; the spin card's ergosphere sentence (BPT (2.7)).
-- Last full UI run: 0.58.0 (the commit "native 0.58.0"), 31 of 34; after fixing truelight's setup: ui_popups (check_6b benchwaits, load only: alone 10/10) and ui_molecule (check_molecule card, fails with 0.57.2's build too; ROADMAP) left.
-- Next: the owner's 0.58.0 benchmark; the Black Hole Lab's look first (owner decision 17 Nov 2026, evening), then the Hard-list scenes below his 255 Hz, slowest first (ROADMAP "Whole app"); then the moving gas (PLAN_MOVINGGAS.md section 7, step 2), the quality levels and moving cameras. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.59.0 (18 Nov 2026): Vulkan, step 1 of 5 (native/PLAN_VULKAN.md): Settings, Performance, Graphics: OpenGL (default) / Vulkan (test, next start; PL_GRAPHICS); on Vulkan (render/vk_backend.*: volk, SDL3 surface, discrete card first, swapchain by the VSync rule, Dear ImGui's Vulkan backend, SPIR-V by glslang at build time) the menus, panels and pages are drawn, the labs' pictures not yet; the guard gpuVulkanGuard ("[vulkan]" log lines, state "fail") falls back to OpenGL. OpenGL unchanged bit for bit.
+- Last full UI run: 0.59.0 (the commit "native 0.59.0"), 31 of 34; ui_search (the new Settings row in check_5l's list) fixed and passed after; ui_popups (check_6b benchwaits; benchscenes blackhole.extreme, the same with 0.58.0) and ui_molecule (check_molecule card) left, as in 0.58.0 (ROADMAP).
+- Next: the owner tries Vulkan (test) on his PC (REPORT.md); then Vulkan step 2, renderer2d (ROADMAP "Whole app"); the owner's 0.58.0 benchmark and the Hard-list scenes below his 255 Hz, slowest first; then the moving gas (PLAN_MOVINGGAS.md). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows
