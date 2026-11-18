@@ -121,8 +121,8 @@ void takeShot(AppState& app, render::Renderer2D& renderer, const ShotArea& a) {
 }
 
 // 0.59.0: the lab's text (the background list, the readout included; no panels) drawn by Vulkan into an image the size of the picture area, on the
-// card colour as the OpenGL path's; the labs' shapes come with renderer2d on Vulkan (step 2)
-void takeShotVulkan(AppState& app, render::VkBackend& vk, const ShotArea& a) {
+// card colour as the OpenGL path's; 0.60.0: over the lab's shapes (renderer2d on Vulkan, one sample as OpenGL's offscreen picture; Monochrome: grey)
+void takeShotVulkan(AppState& app, render::VkBackend& vk, render::Renderer2D* picture, const ShotArea& a) {
     const int w = std::max(1, a.pictureFbW), h = std::max(1, a.pictureFbH);
     ImDrawData* src = ImGui::GetDrawData();
     ImDrawList* bgList = ImGui::GetBackgroundDrawList();
@@ -145,7 +145,7 @@ void takeShotVulkan(AppState& app, render::VkBackend& vk, const ShotArea& a) {
     const app::Rgb bg = look().c.card;
     const float clear[4] = {bg.r, bg.g, bg.b, 1.0f};
     std::vector<uint8_t> rgb;
-    const bool ok = vk.renderToImage(has ? &dd : nullptr, w, h, clear, rgb);
+    const bool ok = vk.renderToImage(has ? &dd : nullptr, w, h, clear, rgb, picture);
     dd.CmdLists.clear();
     if (!ok) { report(app, false, "The picture could not be saved (Vulkan could not draw it)."); std::fprintf(stderr, "Save image failed: Vulkan\n"); return; }
     saveShot(app, w, h, rgb);

@@ -6,7 +6,8 @@ the card; the target is the screen's rate (his PC: 255 Hz).
 1. **The foundation** (0.59.0, done): window, device (a discrete card first), swapchain, Dear ImGui on Vulkan, screenshots, the switch (Settings,
    Performance, Graphics; PL_GRAPHICS), the guard (app/gpu_guard.h gpuVulkanGuard, log lines "[vulkan] ..."), the build on Linux and Windows (Vulkan-Headers,
    volk, glslang by FetchContent; SPIR-V made at build time). Code: render/vk_backend.*, render/vk/*.vert|frag.
-2. **renderer2d on Vulkan**: every lab's normal drawing (lines, dots, discs, textures, text in the picture, the sky, the maps).
+2. **renderer2d on Vulkan** (0.60.0, done): the Orbit, Atom and Molecule Labs' drawing with OpenGL's own shader text as SPIR-V (render/vk_draw2d.*,
+   render/renderer2d_vk.cpp), 4x multisampling, Save image; the card programs take the processor's path on Vulkan until step 3.
 3. **The card programs** of the Atom and Molecule Labs and the Orbit Lab's (atom_card, molecule_card, group/outline/rock compute).
 4. **The Black Hole Lab's programs** (kerr_sky, kerr_compute, the lens and Kerr shaders); retry the compute path parked since 0.55.7.
 5. **The benchmark, the picture tests and the UI suite on Vulkan**; Vulkan the default; then OpenGL removed once the owner's PC shows every scene works.

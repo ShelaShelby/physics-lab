@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.60.0", "Vulkan, step 2 of 5: the Orbit, Atom and Molecule Labs drawn on Vulkan, as a test",
+     "With Settings, Performance, Graphics: Vulkan (test), the Orbit, Atom and Molecule Labs now draw their pictures on Vulkan: the planets with their maps, "
+     "rings, eclipses and Earth's air, the night sky, the belts, the electron clouds, the nucleus and its quarks, the chart of nuclides and the molecules, "
+     "with smooth edges (4x multisampling) as on OpenGL, Monochrome too, and Save image keeps the lab's picture. They are drawn with the same shader text "
+     "as on OpenGL and look the same. What OpenGL does with the graphics card's own programs (the belts' rocks, the Atom Lab's cloud dots, superpositions, "
+     "jumps and outlines, the Molecule Lab's Density cloud) is done by the processor on Vulkan for now, so some scenes are slower until step 3; the Black "
+     "Hole Lab comes in step 4 (its picture area says so). A new check at Vulkan's start draws a tiny known picture and checks its colours: if they are "
+     "wrong, the app starts on OpenGL and Settings says why. OpenGL stays the default and is unchanged."},
     {"0.59.0", "Vulkan, step 1 of 5: the menus and panels on Vulkan, as a test",
      "The app is moving from OpenGL to Vulkan, a newer way of talking to the graphics card, in five steps. This first one lays the foundation: Settings, "
      "Performance has a new row, Graphics: OpenGL / Vulkan (test), used from the next start. On Vulkan the menus, panels, Settings, pages and guides are drawn "

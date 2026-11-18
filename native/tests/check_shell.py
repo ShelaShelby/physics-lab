@@ -188,7 +188,7 @@ def part_old(binary, work):
 # [vulkan] step, zero validation errors; Settings and a page drawn by Vulkan against the same state drawn by OpenGL (PL_NO_PICTURE: OpenGL leaves the lab's
 # picture out too): at most 1 % of the pixels differ by more than 8 levels (the planner's limit: the same Dear ImGui triangles, only rasterisation may
 # differ); with a step made to fail (PL_VK_FAIL=device) the app starts on OpenGL and Settings says why. Only when asked (check_shell.py ... vulkan).
-VK_STEPS = ["instance", "surface", "device", "swapchain", "pipelines", "first frame"]
+VK_STEPS = ["instance", "surface", "device", "swapchain", "pipelines", "renderer2d pipelines", "renderer2d textures", "renderer2d check", "first frame"]   # (0.60.0: + renderer2d)
 
 def _settings_files(home):
     log, cfg = "", ""
@@ -216,7 +216,7 @@ def _differ(a, b, limit=8):
 def part_vulkan(binary, work):
     vk_env = {"PL_GRAPHICS": "vulkan", "PL_VK_VALIDATION": "1"}
     for name, opened in (("settings", "settings"), ("page", "about")):         # (Settings at its top: the Graphics row itself says which is in use)
-        v = run_app(binary, work, "vk_" + name, dict(vk_env, PL_OPEN=opened), frames=40)
+        v = run_app(binary, work, "vk_" + name, dict(vk_env, PL_OPEN=opened, PL_NO_PICTURE="1"), frames=40)   # (0.60.0: Vulkan draws the picture too: left out on both)
         g = run_app(binary, work, "gl_" + name, {"PL_OPEN": opened, "PL_NO_PICTURE": "1"}, frames=40)
         check("Vulkan: " in v.out and "OpenGL: " not in v.out, f"{name}: the app started on Vulkan ({[l for l in v.out.splitlines() if l.startswith(('Vulkan', 'OpenGL'))]})")
         check("PLVKVALIDATION missing" not in v.err, f"{name}: the validation layers are installed and on")
@@ -246,6 +246,116 @@ def part_vulkan(binary, work):
           "the log keeps the [vulkan] lines and says this start uses OpenGL")
     check("gpuvulkan=fail | vulkan " in cfg and "graphics=vulkan" in cfg, "the settings file keeps the failed step (the next start uses OpenGL until Try again)")
 
+# 0.60.0 (Vulkan step 2 of 5, PLAN_VULKAN.md): renderer2d on Vulkan. Each view of REPORT.md's coverage table (every drawing call of Renderer2D that is not a
+# card program -> one view that makes it; PL_LOG_DRAWKINDS says which calls a run made, so a view that stops making its call fails here) drawn by Vulkan with
+# the validation layers on and by OpenGL, both with one sample (PL_NO_MSAA: the two cards' multisample patterns differ) and both on the processor's paths
+# (PL_NO_COMPUTE and the labs' card switches off: on Vulkan they are not there yet, step 3), so the pictures compare the drawing alone. The planner's limit
+# (fixed): at most 1 % of the pixels differ by more than 8 levels in a channel, per view. Then: every view with 4 samples on Vulkan (zero validation errors,
+# the log says 4 samples), one view with the synchronisation checks on and Save image (zero errors), Save image against OpenGL's saved file (same limit),
+# and the start-up check broken on purpose (PL_VK_CHECK=break: the app starts on OpenGL and Settings says why). Only when asked (check_shell.py ... vulkan2d).
+VK2D_CPU = {"PL_NO_COMPUTE": "1", "PL_GPU_CLOUD": "off", "PL_MOL_CARD": "0", "PL_ATOM_CARD": "0", "PL_LOG_DRAWKINDS": "1"}
+VK2D_VIEWS = {   # name: (settings, the drawing calls the view must make)
+    "orbit_2d": ({"PL_SELECT": "Earth"}, "rect line triangle disc ring sphere sunDisc fadeDisc squares skyMap"),
+    "orbit_earth": ({"PL_SELECT": "Earth", "PL_3D": "1", "PL_ZOOM": "5.5", "PL_DATE": "2026-08-12", "PL_TIME": "17:46", "PL_PAUSED": "1"}, "planet planetMap planetEclipse planetAir"),
+    "orbit_saturn": ({"PL_SELECT": "Saturn", "PL_3D": "1", "PL_ZOOM": "4.1", "PL_PAUSED": "1"}, "planet planetMap planetRings"),
+    "orbit_mono": ({"PL_SELECT": "Earth", "PL_THEME": "monochrome"}, "gray skyMap"),
+    "atom_nucleon": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;qstyle=Simple;detail=+ Sea", "PL_ATOM_DO": "nucleon"}, "softLayer cloudLayer blob0 blob1 blob3 blob4 blob6 blob7 blob8"),
+    "atom_classic": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;view=Cloud 3D;orb=2p;cstyle=Classic"}, "blob5"),
+    "atom_density": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;view=Orbit;style=Density", "PL_ATOM_DO": "nucleus"}, "blob2"),
+    "atom_chart": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;view=Chart of nuclides"}, "mesh"),
+    "mol_fill": ({"PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "fill"}, "spheres"),
+    "mol_real": ({"PL_MOLECULE": "CH3OH", "PL_MOLECULE_STYLE": "real"}, "triangle blob3 blob6"),
+    "mol_ball": ({"PL_MOLECULE": "H2O"}, "blob0 blob3 blob8"),
+}
+
+def _kinds(r):
+    line = [l for l in r.out.splitlines() if l.startswith("PLDRAWKINDS ")]
+    return {k for k, v in (p.split("=") for p in line[-1].split()[1:]) if v != "0"} if line else set()
+
+def _vk_errors(r):
+    return [l for l in r.err.splitlines() if l.startswith("PLVKVALIDATION error")]
+
+def _png_rgb(path):   # (8-bit RGB or RGBA PNG, as ui/shot.cpp writes it) -> (w, h, rows of bytes RGB)
+    import zlib, struct
+    d = open(path, "rb").read()
+    assert d[:8] == b"\x89PNG\r\n\x1a\n"
+    i, idat, w, h, ct = 8, b"", 0, 0, 2
+    while i < len(d):
+        n, t = struct.unpack(">I4s", d[i:i + 8]); c = d[i + 8:i + 8 + n]; i += 12 + n
+        if t == b"IHDR": w, h, _bd, ct = struct.unpack(">IIBB", c[:10])
+        elif t == b"IDAT": idat += c
+    bpp = 4 if ct == 6 else 3
+    raw, rows, prev, o = zlib.decompress(idat), [], bytearray(w * bpp), 0
+    for _y in range(h):
+        f, line = raw[o], bytearray(raw[o + 1:o + 1 + w * bpp]); o += 1 + w * bpp
+        for x in range(len(line)):
+            a = line[x - bpp] if x >= bpp else 0; b = prev[x]; c = prev[x - bpp] if x >= bpp else 0
+            if f == 1: line[x] = (line[x] + a) & 255
+            elif f == 2: line[x] = (line[x] + b) & 255
+            elif f == 3: line[x] = (line[x] + (a + b) // 2) & 255
+            elif f == 4:
+                p = a + b - c; pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append(bytes(line[k] for x in range(w) for k in range(x * bpp, x * bpp + 3))); prev = line
+    return w, h, rows
+
+def part_vulkan2d(binary, work):
+    vk = {"PL_GRAPHICS": "vulkan", "PL_VK_VALIDATION": "1"}
+    one = {"PL_NO_MSAA": "1"}
+    calls = []
+    for name, (env, _want) in VK2D_VIEWS.items():
+        calls.append(((binary, work, "v2_vk_" + name, dict(VK2D_CPU, **one, **vk, **env)), dict(frames=40)))
+        calls.append(((binary, work, "v2_gl_" + name, dict(VK2D_CPU, **one, **env)), dict(frames=40)))
+        calls.append(((binary, work, "v2_ms_" + name, dict(VK2D_CPU, **vk, **env)), dict(frames=40)))
+    prefetch(calls)
+    for name, (env, want) in VK2D_VIEWS.items():
+        v = run_app(binary, work, "v2_vk_" + name, dict(VK2D_CPU, **one, **vk, **env), frames=40)
+        g = run_app(binary, work, "v2_gl_" + name, dict(VK2D_CPU, **one, **env), frames=40)
+        check("Vulkan: " in v.out and "OpenGL: " not in v.out and "OpenGL: " in g.out, f"{name}: the app started on Vulkan (and the reference on OpenGL)")
+        missing = set(want.split()) - _kinds(v)
+        check(not missing, f"{name}: the view makes its drawing calls on Vulkan (missing: {sorted(missing)})")
+        errs = _vk_errors(v)
+        check("PLVK validation errors=0" in v.out and not errs, f"{name}: zero validation errors, one sample ({len(errs)}; first: {errs[:1]})")
+        frac = _differ(v.bmp, g.bmp) if os.path.exists(v.bmp) and os.path.exists(g.bmp) else None
+        print(f"vulkan2d {name}: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels")
+        check(frac is not None and frac <= 0.01, f"{name}: Vulkan against OpenGL, one sample: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels (at most 1 %)")
+        m = run_app(binary, work, "v2_ms_" + name, dict(VK2D_CPU, **vk, **env), frames=40)
+        errs = _vk_errors(m)
+        check("Vulkan picture: 4 samples" in m.out and "PLVK validation errors=0" in m.out and not errs, f"{name}: 4 samples on Vulkan, zero validation errors ({len(errs)}; first: {errs[:1]})")
+    log, _cfg = _settings_files(os.path.join(os.path.abspath(work), "home_v2_ms_orbit_2d"))
+    check("end renderer2d pipelines" in log and "4 samples" in log, "the log says the picture has 4 samples")
+    # the synchronisation checks (the layer's validate_sync) on a view with both layers, and Save image on it
+    sv = run_app(binary, work, "v2_sync", dict(VK2D_CPU, **vk, **VK2D_VIEWS["atom_nucleon"][0], VK_KHRONOS_VALIDATION_VALIDATE_SYNC="true",
+                                                PL_SAVE_IMAGE="20", PL_SHOT_DIR=os.path.join(os.path.abspath(work), "v2_sync_shots")), frames=40)
+    errs = _vk_errors(sv)
+    check("Vulkan: " in sv.out and "PLVK validation errors=0" in sv.out and not errs, f"synchronisation checks on (layers, Save image): zero errors ({len(errs)}; first: {errs[:1]})")
+    # Save image: the saved file has the lab's picture, as OpenGL's
+    shots = {}
+    for gfx in ("vk", "gl"):
+        d = os.path.join(os.path.abspath(work), "v2_shots_" + gfx)
+        if os.path.isdir(d):
+            for f in os.listdir(d): os.remove(os.path.join(d, f))
+        env = dict(VK2D_CPU, **one, **VK2D_VIEWS["orbit_2d"][0], PL_SAVE_IMAGE="20", PL_SHOT_DIR=d)
+        if gfx == "vk": env.update(vk)
+        run_app(binary, work, "v2_save_" + gfx, env, frames=40)
+        pngs = [f for f in os.listdir(d) if f.endswith(".png")] if os.path.isdir(d) else []
+        shots[gfx] = _png_rgb(os.path.join(d, pngs[0])) if pngs else None
+    ok = shots["vk"] and shots["gl"] and shots["vk"][:2] == shots["gl"][:2]
+    if ok:
+        (w, h, A), (_w, _h, B) = shots["vk"], shots["gl"]
+        big = sum(1 for y in range(h) for x in range(0, 3 * w, 3) if max(abs(A[y][x + k] - B[y][x + k]) for k in range(3)) > 8)
+        frac = big / float(w * h)
+        lit = sum(1 for y in range(0, h, 4) for x in range(0, 3 * w, 12) if max(A[y][x:x + 3]) > 90)   # (the picture is there: stars, paths, labels)
+        print(f"vulkan2d save image: {100 * frac:.3f} % of the pixels differ by more than 8 levels; {lit} bright samples")
+        check(frac <= 0.01 and lit > 50, f"Save image on Vulkan has the lab's picture: {100 * frac:.3f} % of the pixels differ from OpenGL's saved file (at most 1 %), {lit} bright samples")
+    else:
+        check(False, f"Save image wrote a PNG on both, of one size ({[None if s is None else s[:2] for s in shots.values()]})")
+    # the start-up check broken on purpose: OpenGL, and Settings says why
+    b = run_app(binary, work, "v2_break", dict(vk, PL_OPEN="settings:graphics", PL_VK_CHECK="break"), frames=30)
+    check("OpenGL: " in b.out and "Vulkan: " not in b.out, "the start-up check failed on purpose: the app starts on OpenGL")
+    note = [n for n in b.notes if n.startswith("graphics ")]
+    check(note and "In use now: OpenGL, because" in note[0] and "renderer2d check" in note[0] and "wrong" in note[0], f"Settings says why it is OpenGL: {note[:1]}")
+
 def main():
     binary, work = sys.argv[1], sys.argv[2]
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None       # a third argument runs only some parts (for the perturbation runs): sizes1 sizes reading_sizes small collapse keys shift reading old
@@ -269,6 +379,8 @@ def main():
         part_old(binary, work)
     if only is not None and "vulkan" in only:                              # (0.59.0: only when asked; ui_shell lists check_shell.py:vulkan)
         part_vulkan(binary, work)
+    if only is not None and "vulkan2d" in only:                            # (0.60.0: only when asked; ui_shell lists check_shell.py:vulkan2d)
+        part_vulkan2d(binary, work)
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0
 

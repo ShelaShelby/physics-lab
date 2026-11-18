@@ -5,6 +5,8 @@
 #include <SDL3/SDL_vulkan.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -14,6 +16,8 @@
 
 #include "app/gpu_guard.h"
 #include "imgui.h"
+#include "render/renderer2d.h"
+#include "render/vk_draw2d.h"
 #include "imgui_impl_vulkan.h"
 
 // the SPIR-V of render/vk/fill.vert and fill.frag, made at build time by glslang (CMakeLists.txt: PL_VK_SHADERS)
@@ -108,6 +112,7 @@ struct VkBackend::Impl {
     VkPipeline fill = VK_NULL_HANDLE;
     VkCommandPool oncePool = VK_NULL_HANDLE;   // one-time commands: readback, the picture for 📷 Save image
     VkPhysicalDeviceMemoryProperties mem{};
+    VkDraw2D* d2 = nullptr;                    // 0.60.0: the labs' pictures (initPicture)
     int errors = 0, warnings = 0, failedCalls = 0, rebuilds = 0;
     std::string lastFailure;
 
@@ -461,6 +466,7 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
 void VkBackend::shutdown() {
     Impl& d = *d_;
     if (d.device) vkDeviceWaitIdle(d.device);
+    if (d.d2) { delete d.d2; d.d2 = nullptr; }  // 0.60.0 (its destructor frees what it made)
     if (d.imguiOn) { ImGui_ImplVulkan_Shutdown(); d.imguiOn = false; }
     if (d.device) {
         if (d.oncePool) vkDestroyCommandPool(d.device, d.oncePool, nullptr);
@@ -492,7 +498,7 @@ void VkBackend::setVsync(bool on) {
     if (m != d.wd.PresentMode) { d.wd.PresentMode = m; d.rebuild = true; }
 }
 
-bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4], int px, int py, int pw, int ph) {
+bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4], int px, int py, int pw, int ph, Renderer2D* pic) {
     Impl& d = *d_;
     d.drewFrame = false;
     if (!d.device) return false;
@@ -522,6 +528,13 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     if (!d.check(vkBeginCommandBuffer(fd.CommandBuffer, &bi), "vkBeginCommandBuffer")) { ok_ = false; return false; }
+    bool pictured = false;
+    if (pic && d.d2 && pw > 0 && ph > 0) {                                // 0.60.0: the lab's picture first, in passes of its own (render/vk_draw2d.cpp)
+        d.d2->beginFrame(static_cast<int>(wd.FrameIndex), static_cast<int>(wd.ImageCount), fd.CommandBuffer);
+        pic->endVulkan(pw, ph, clear, false);
+        if (d.d2->failed()) { d.check(VK_ERROR_UNKNOWN, "renderer2d (the lab's picture)"); ok_ = false; }
+        pictured = d.d2->pictureDrawn();
+    }
     VkClearValue cv{};
     for (int i = 0; i < 4; i++) cv.color.float32[i] = clear[i];
     VkRenderPassBeginInfo rp{};
@@ -534,7 +547,8 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     rp.pClearValues = &cv;
     vkCmdBeginRenderPass(fd.CommandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
     const int x0 = std::clamp(px, 0, wd.Width), y0 = std::clamp(py, 0, wd.Height), x1 = std::clamp(px + pw, 0, wd.Width), y1 = std::clamp(py + ph, 0, wd.Height);
-    if (d.fill && x1 > x0 && y1 > y0) {                                   // the picture area (step 2: the labs' pictures here)
+    if (pictured && x1 > x0 && y1 > y0) d.d2->present(fd.CommandBuffer, x0, y0, x1 - x0, y1 - y0);   // 0.60.0: the lab's picture
+    else if (d.fill && x1 > x0 && y1 > y0) {                              // the picture area without a picture (the theme's background)
         VkViewport vp{0.0f, 0.0f, static_cast<float>(wd.Width), static_cast<float>(wd.Height), 0.0f, 1.0f};
         VkRect2D sc{{x0, y0}, {static_cast<uint32_t>(x1 - x0), static_cast<uint32_t>(y1 - y0)}};
         vkCmdBindPipeline(fd.CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, d.fill);
@@ -696,7 +710,7 @@ bool VkBackend::readback(std::vector<uint8_t>& rgba, int& w, int& h) {
     return true;
 }
 
-bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4], std::vector<uint8_t>& rgb) {
+bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4], std::vector<uint8_t>& rgb, Renderer2D* pic) {
     Impl& d = *d_;
     if (!d.device || w <= 0 || h <= 0) return false;
     if (!d.check(vkQueueWaitIdle(d.queue), "vkQueueWaitIdle (image)")) return false;   // Dear ImGui's vertex buffers rotate per call: none may be in use
@@ -742,26 +756,28 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         vi.subresourceRange.layerCount = 1;
         ok = d.check(vkCreateImageView(d.device, &vi, nullptr, &view), "vkCreateImageView (picture)");
     }
-    if (ok) {   // compatible with the window's pass (same format and samples), so Dear ImGui's pipeline draws in it; ends ready to be copied
+    if (ok) {   // compatible with the window's pass (same format and samples), so Dear ImGui's pipeline draws in it
         VkAttachmentDescription a = d.wd.AttachmentDesc;
         a.format = fmt;
         a.samples = VK_SAMPLE_COUNT_1_BIT;
         a.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         a.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        a.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        a.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;          // 0.60.0: to TRANSFER_SRC by the barrier after the pass (ordered after the drawing)
         VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
         VkSubpassDescription sub{};
         sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         sub.colorAttachmentCount = 1;
         sub.pColorAttachments = &ref;
+        // 0.60.0: the same dependency as the window's pass (Dear ImGui's), so the pipelines made for that pass are compatible with this one (render pass
+        // compatibility includes the dependencies); the copy below waits for the drawing with a barrier of its own
         VkSubpassDependency dep{};
-        dep.srcSubpass = 0;
-        dep.dstSubpass = VK_SUBPASS_EXTERNAL;
+        dep.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dep.dstSubpass = 0;
         dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep.dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dep.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dep.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dep.srcAccessMask = 0;
+        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         VkRenderPassCreateInfo rpi{};
         rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         rpi.attachmentCount = 1;
@@ -785,7 +801,13 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
     }
     const VkDeviceSize size = VkDeviceSize(w) * VkDeviceSize(h) * 4;
     if (ok) ok = makeHostBuffer(d, size, hb);
+    bool pictured = false;
     if (ok) ok = runOnce(d, [&](VkCommandBuffer cmd) {
+        if (pic && d.d2) {                                                // 0.60.0: the lab's picture (one sample, as OpenGL's offscreen picture)
+            d.d2->beginFrame(static_cast<int>(d.wd.FrameIndex), std::max(1, static_cast<int>(d.wd.ImageCount)), cmd);
+            pic->endVulkan(w, h, clear, true);
+            pictured = d.d2->pictureDrawn() && !d.d2->failed();
+        }
         VkClearValue cv{};
         for (int i = 0; i < 4; i++) cv.color.float32[i] = clear[i];
         VkRenderPassBeginInfo rp{};
@@ -796,8 +818,11 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         rp.clearValueCount = 1;
         rp.pClearValues = &cv;
         vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
+        if (pictured) d.d2->present(cmd, 0, 0, w, h);
         if (dd) ImGui_ImplVulkan_RenderDrawData(dd, cmd);
         vkCmdEndRenderPass(cmd);
+        barrier(cmd, image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
         VkBufferImageCopy c{};
         c.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         c.imageSubresource.layerCount = 1;
@@ -809,6 +834,7 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         ok = d.check(vkMapMemory(d.device, hb.memory, 0, size, 0, &p), "vkMapMemory (picture)");
         if (ok) { unpack(static_cast<const uint8_t*>(p), w, h, fmt == VK_FORMAT_B8G8R8A8_UNORM, 3, rgb); vkUnmapMemory(d.device, hb.memory); }
     }
+    if (d.d2) { if (d.d2->failed()) ok = false; d.d2->dropShot(); }
     if (fb) vkDestroyFramebuffer(d.device, fb, nullptr);
     if (pass) vkDestroyRenderPass(d.device, pass, nullptr);
     if (view) vkDestroyImageView(d.device, view, nullptr);
@@ -816,5 +842,78 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
     if (memory) vkFreeMemory(d.device, memory, nullptr);
     return ok;
 }
+
+// 0.60.0 (step 2): renderer2d on Vulkan, three guarded steps; the last draws a tiny known picture off screen and reads it back
+bool VkBackend::initPicture(Renderer2D& r, bool msaa, bool breakCheck, std::string& why) {
+    Impl& d = *d_;
+    if (!d.device || !d.guard) { why = "Vulkan has not started"; return false; }
+    app::GpuGuard& guard = *d.guard;
+    const auto fail = [&](const std::string& step, const std::string& text) { why = text; guard.failed(step, text); return false; };
+    guard.begin("renderer2d pipelines");
+    VkDevCtx c;
+    c.phys = d.phys;
+    c.device = d.device;
+    c.queue = d.queue;
+    c.mem = d.mem;
+    {
+        VkPhysicalDeviceProperties p{};
+        vkGetPhysicalDeviceProperties(d.phys, &p);
+        c.limits = p.limits;
+    }
+    c.check = [&d](VkResult res, const char* what) { return d.check(res, what); };
+    c.once = [&d](const std::function<void(VkCommandBuffer)>& f) { return runOnce(d, [&](VkCommandBuffer cmd) { f(cmd); }); };
+    c.guard = d.guard;
+    d.d2 = new VkDraw2D();
+    std::string w;
+    if (!d.d2->init(c, d.wd.RenderPass, msaa ? 4 : 1, w)) return fail("renderer2d pipelines", "renderer2d on Vulkan: " + w);
+    guard.end("renderer2d pipelines", "OpenGL's shaders as SPIR-V (" + std::to_string(d.d2->spirvBytes()) + " bytes; the picture area's fill: " +
+              std::to_string(sizeof k_fill_vert + sizeof k_fill_frag) + "), " + d.d2->samplesText() + ", the cloud's layer " + d.d2->floatFormatText());
+    r.useVulkan(d.d2);
+    guard.begin("renderer2d textures");
+    if (!r.loadMapsVulkan(w)) { r.useVulkan(nullptr); return fail("renderer2d textures", "the picture maps on Vulkan: " + w); }
+    guard.end("renderer2d textures", "the picture maps with their mip levels");
+    // the check: 32 x 16 points on 32 x 16 pixels over the colour B: a flat rect (normal blend), a flat disc blob added (additive), a rect in the soft layer
+    // laid over (a textured quad, premultiplied); the values each must give, from the shaders' formulas and the blend factors (8-bit layer rounded)
+    guard.begin("renderer2d check");
+    const float B[3] = {0.25f, 0.5f, 0.75f};                               // (held in 8 bits by the picture: the formulas below use the stored value)
+    const Color rc{1.0f, 0.2f, 0.4f, 0.5f}, bc{0.2f, 0.3f, 0.1f, 1.0f}, lc{0.0f, 1.0f, 0.5f, 0.75f};
+    r.begin(32, 16);
+    r.rect(0, 0, 8, 16, breakCheck ? rc.withAlpha(0.25f) : rc);
+    Renderer2D::Blob b{};
+    b.x = 12; b.y = 8; b.r = 3; b.kind = 3; b.c0 = bc;
+    r.blobs(&b, 1, true);
+    r.beginSoftLayer(1.0f);
+    r.rect(16, 0, 16, 16, lc);
+    r.endSoftLayer();
+    std::vector<uint8_t> rgb;
+    const float clear[4] = {B[0], B[1], B[2], 1.0f};
+    const bool drawn = renderToImage(nullptr, 32, 16, clear, rgb, &r);
+    r.begin(1, 1);
+    if (!drawn || rgb.size() != 32u * 16u * 3u) { r.useVulkan(nullptr); return fail("renderer2d check", "the check's picture could not be drawn and read back"); }
+    const auto q = [](double v) { return static_cast<int>(std::lround(std::clamp(v, 0.0, 1.0) * 255.0)); };
+    const double La = q(lc.a) / 255.0;                                     // the soft layer holds 8 bits: its alpha and premultiplied colour rounded
+    int want[3][3];
+    for (int k = 0; k < 3; k++) {
+        const double Bk = q(B[k]) / 255.0;
+        const double rcK = k == 0 ? rc.r : k == 1 ? rc.g : rc.b, bcK = k == 0 ? bc.r : k == 1 ? bc.g : bc.b, lcK = k == 0 ? lc.r : k == 1 ? lc.g : lc.b;
+        want[0][k] = q(rcK * rc.a + Bk * (1.0 - rc.a));                     // SRC_ALPHA, ONE_MINUS_SRC_ALPHA
+        want[1][k] = q(Bk + bcK * bc.a);                                    // additive: SRC_ALPHA, ONE
+        want[2][k] = q(q(lcK * lc.a) / 255.0 + Bk * (1.0 - La));            // the layer: c a; laid over: ONE, ONE_MINUS_SRC_ALPHA
+    }
+    const int at[3][2] = {{4, 8}, {12, 8}, {24, 8}};
+    std::string got, bad;
+    for (int i = 0; i < 3; i++) {
+        const uint8_t* p = rgb.data() + (std::size_t(at[i][1]) * 32u + std::size_t(at[i][0])) * 3u;
+        char t[96];
+        std::snprintf(t, sizeof t, "%s(%d,%d,%d) want (%d,%d,%d)", i ? "; " : "", p[0], p[1], p[2], want[i][0], want[i][1], want[i][2]);
+        got += t;
+        for (int k = 0; k < 3; k++) if (std::abs(int(p[k]) - want[i][k]) > 2) bad += std::string(bad.empty() ? "" : ", ") + (i == 0 ? "the flat rect" : i == 1 ? "the added blob" : "the soft layer");
+    }
+    if (!bad.empty()) { r.useVulkan(nullptr); return fail("renderer2d check", "the check's picture is wrong (" + bad.substr(0, bad.find(',')) + "): " + got); }
+    guard.end("renderer2d check", "flat rect, added blob, soft layer: " + got);
+    return true;
+}
+
+std::string VkBackend::pictureText() const { return d_->d2 ? d_->d2->samplesText() + "; the cloud's layer " + d_->d2->floatFormatText() : std::string(); }
 
 }  // namespace render

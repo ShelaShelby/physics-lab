@@ -3,10 +3,11 @@
 // wait for the screen, FIFO; off = do not wait: IMMEDIATE, else MAILBOX, else FIFO), Dear ImGui's own Vulkan backend (the same version as the OpenGL one)
 // and one small pipeline of our own (render/vk/fill.*: the picture area's background; the SPIR-V is made at build time). Every step is logged by the
 // Vulkan guard (app/gpu_guard.h gpuVulkanGuard) and every VkResult is checked; a step that fails is kept by the guard and the app starts on OpenGL.
-// The labs' pictures are not drawn on Vulkan in this step (renderer2d comes in step 2).
+// 0.60.0 (step 2): the labs' pictures: renderer2d drawn by render/vk_draw2d.* into the picture area (initPicture, render(..., pic)).
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,8 @@ struct ImDrawData;
 namespace app { class GpuGuard; }
 
 namespace render {
+
+class Renderer2D;
 
 class VkBackend {
 public:
@@ -32,15 +35,23 @@ public:
     // (the guard keeps it as "fail"); call shutdown() then.
     bool init(SDL_Window* window, app::GpuGuard& guard, const Options& o, std::string& why);
     void shutdown();                                         // everything made, in reverse (safe after a failed init)
+    // 0.60.0 (step 2): the labs' pictures (renderer2d on Vulkan, render/vk_draw2d.h), three guarded steps: "renderer2d pipelines" (OpenGL's shaders as
+    // SPIR-V, the passes and pipelines), "renderer2d textures" (the maps with their mip levels), "renderer2d check" (a tiny known picture drawn off screen
+    // and read back against the values its shaders' formulas give; breakCheck: drawn wrong on purpose, PL_VK_CHECK=break). msaa: 4 samples where the card
+    // has them (PL_NO_MSAA: 1). False: why says it (kept by the guard as "fail"; call shutdown() then and start on OpenGL).
+    bool initPicture(Renderer2D& r, bool msaa, bool breakCheck, std::string& why);
+    std::string pictureText() const;                         // the samples and the cloud layer's format ("" before initPicture)
     void newFrame();                                         // ImGui_ImplVulkan_NewFrame
     // the frame: cleared to clear[] (the theme's page colour), the picture area (pixels, from the top left) filled by our pipeline with fill[], then
     // Dear ImGui's draw data. False: nothing drawn this frame (the swapchain is being made again, or the window has no size)
-    bool render(ImDrawData* dd, const float clear[4], const float fill[4], int px, int py, int pw, int ph);
+    // 0.60.0: pic: the lab's picture (Renderer2D::endVulkan, cleared to clear[]) drawn there in place of the fill
+    bool render(ImDrawData* dd, const float clear[4], const float fill[4], int px, int py, int pw, int ph, Renderer2D* pic = nullptr);
     void present();                                          // after render() (does nothing when render() drew nothing)
     // the frame just drawn (after render, before present), RGBA bytes, top row first; false when it cannot be read
     bool readback(std::vector<uint8_t>& rgba, int& w, int& h);
     // Dear ImGui's draw data drawn into an image of its own (w x h, cleared to clear[]), RGB bytes, top row first (📷 Save image)
-    bool renderToImage(ImDrawData* dd, int w, int h, const float clear[4], std::vector<uint8_t>& rgb);
+    // 0.60.0: pic: the lab's picture under the text (one sample, as OpenGL's offscreen picture)
+    bool renderToImage(ImDrawData* dd, int w, int h, const float clear[4], std::vector<uint8_t>& rgb, Renderer2D* pic = nullptr);
     void setVsync(bool on);                                  // takes effect at the next frame (the swapchain is made again)
 
     const std::string& deviceName() const { return deviceName_; }

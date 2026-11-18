@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.59.0 (18 Nov 2026): Vulkan, step 1 of 5 (native/PLAN_VULKAN.md): Settings, Performance, Graphics: OpenGL (default) / Vulkan (test, next start; PL_GRAPHICS); on Vulkan (render/vk_backend.*: volk, SDL3 surface, discrete card first, swapchain by the VSync rule, Dear ImGui's Vulkan backend, SPIR-V by glslang at build time) the menus, panels and pages are drawn, the labs' pictures not yet; the guard gpuVulkanGuard ("[vulkan]" log lines, state "fail") falls back to OpenGL. OpenGL unchanged bit for bit.
-- Last full UI run: 0.59.0 (the commit "native 0.59.0"), 31 of 34; ui_search (the new Settings row in check_5l's list) fixed and passed after; ui_popups (check_6b benchwaits; benchscenes blackhole.extreme, the same with 0.58.0) and ui_molecule (check_molecule card) left, as in 0.58.0 (ROADMAP).
-- Next: the owner tries Vulkan (test) on his PC (REPORT.md); then Vulkan step 2, renderer2d (ROADMAP "Whole app"); the owner's 0.58.0 benchmark and the Hard-list scenes below his 255 Hz, slowest first; then the moving gas (PLAN_MOVINGGAS.md). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.60.0 (18 Nov 2026): Vulkan, step 2 of 5 (native/PLAN_VULKAN.md): on Vulkan (test) the Orbit, Atom and Molecule Labs draw their pictures: Renderer2D's recording is shared, Renderer2D::endVulkan (render/renderer2d_vk.cpp) draws it through render/vk_draw2d.* with shaders.h's own text as SPIR-V (glslang -R at build time), 4x MSAA, Save image; card programs take the processor's path (step 3); the Black Hole Lab shows a note (step 4); start-up check "renderer2d check". OpenGL unchanged bit for bit.
+- Last full UI run: 0.60.0 (the commit "native 0.60.0"), 32 of 34; ui_popups (check_6b benchwaits; benchscenes blackhole.all_light) and ui_molecule (check_molecule card) left, as in 0.59.0 (ROADMAP).
+- Next: the owner tries Vulkan (test) on his PC (REPORT.md); then Vulkan step 3, the card programs (ROADMAP "Whole app"); the owner's 0.58.0 benchmark and the Hard-list scenes below his 255 Hz, slowest first; then the moving gas (PLAN_MOVINGGAS.md). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

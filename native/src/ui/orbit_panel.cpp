@@ -91,12 +91,14 @@ void performanceCard(AppState& app) {
         ImGui::SameLine();
         if (ImGui::RadioButton("Vulkan (test)##graphics", app.prefs.graphics == "vulkan")) app.prefs.graphics = "vulkan";
         noteItem("graphics.vulkan");
-        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan, step 1 of 5: the menus, panels, pages and guides are drawn by Vulkan; the labs' pictures come in the next steps.\n"
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan, step 2 of 5: the menus, panels, pages and guides and the Orbit, Atom and Molecule Labs' pictures are drawn by Vulkan.\n"
+                                                      "The graphics card's own programs (the belts' rocks, the electron clouds, the outlines, the Density cloud) and the Black Hole Lab come in the next steps.\n"
                                                       "Each step of Vulkan's start is guarded: if one fails or stops the app, the next start uses OpenGL and this page says why.");
         const app::GpuGuard& V = app::gpuVulkanGuard();
         const bool vk = app.graphicsInUse == "vulkan";
         std::string gline = "Takes effect at the next start. In use now: ";
-        if (vk) gline += "Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). The labs' pictures are not drawn on Vulkan yet.";
+        if (vk) gline += "Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). The Orbit, Atom and Molecule Labs are drawn; the processor does the "
+                         "work of the card's own programs for now (some scenes are slower), and the Black Hole Lab comes in a later step.";
         else if (!app.vulkanWhy.empty()) gline += "OpenGL, because " + app.vulkanWhy;
         else gline += "OpenGL.";
         ImGui::TextWrapped("%s", gline.c_str());

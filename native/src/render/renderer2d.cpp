@@ -27,6 +27,11 @@ Color hexColor(const char* hex, float alpha) {
     return rgba(static_cast<int>((v >> 16) & 255), static_cast<int>((v >> 8) & 255), static_cast<int>(v & 255), alpha);
 }
 
+
+// 0.60.0 (tests, PL_LOG_DRAWKINDS): which drawing calls the views make (the coverage of the Vulkan checks); nothing is counted otherwise
+static bool logKinds() { static const bool on = std::getenv("PL_LOG_DRAWKINDS") != nullptr; return on; }
+#define PL_KIND(k) do { if (logKinds()) kinds_[k]++; } while (0)
+
 static GLuint compile(GLenum type, const char* src) {
     const GLuint s = glCreateShader(type);
     glShaderSource(s, 1, &src, nullptr);
@@ -1041,6 +1046,7 @@ double Renderer2D::skyWhiteWait() {
 }
 
 void Renderer2D::maskedDisc(double x, double y, double r, Color c) {
+    PL_KIND(kdMaskedDisc);
     if (r <= 0) return;
     const double half = r + 1.5;
     quad(x, y, half, c, 6, 0, 0, static_cast<float>(half / r));
@@ -1267,6 +1273,7 @@ void Renderer2D::closeTriangles() {
 
 void Renderer2D::planet(double x, double y, double r, Color base, double lx, double ly, double lz, const float K[9], Map map, const float* rings, int nRings, double shapeY, double shapeZ, bool lunar,
                         const PlanetLight* light) {
+    PL_KIND(kdPlanet); if (logKinds()) { if (map != Map::None && map != Map::Sky && hasMap(map)) kinds_[kdPlanetMap]++; if (rings && nRings > 0) kinds_[kdPlanetRings]++; if (light && light->nOcc > 0) kinds_[kdPlanetEclipse]++; if (light && light->air) kinds_[kdPlanetAir]++; }
     if (r <= 0) return;
     closeTriangles();
     const double half = r + 1.5;
@@ -1289,6 +1296,7 @@ void Renderer2D::planet(double x, double y, double r, Color base, double lx, dou
 }
 
 void Renderer2D::skyMap(double W, double H, double kRad, const float M[9], double bright) {
+    PL_KIND(kdSkyMap);
     if (!hasMap(Map::Sky) || bright <= 0 || kRad <= 0) return;
     closeTriangles();
     const float u0 = static_cast<float>(-W / 2 / kRad), u1 = static_cast<float>(W / 2 / kRad), v0 = static_cast<float>(-H / 2 / kRad), v1 = static_cast<float>(H / 2 / kRad);
@@ -1303,6 +1311,7 @@ void Renderer2D::skyMap(double W, double H, double kRad, const float M[9], doubl
 }
 
 void Renderer2D::squares(const float* xy, int count, double size, Color c) {
+    PL_KIND(kdSquares);
     if (count <= 0) return;
     closeTriangles();
     Segment sg{};
@@ -1317,6 +1326,12 @@ int Renderer2D::meshCreate(const std::vector<MeshVertex>& v) {
     if (id < 0) { id = int(meshes_.size()); meshes_.emplace_back(); }
     Mesh& m = meshes_[std::size_t(id)];
     m.used = true; m.count = static_cast<int>(v.size());
+    if (vk_) {                                         // 0.60.0: on Vulkan, a buffer on the card made once (render/vk_draw2d.cpp)
+        m.vk = vkMeshCreate(v.data(), v.size() * sizeof(MeshVertex));
+        if (m.vk < 0) { m = Mesh(); return -1; }
+        meshUploads_ += static_cast<long>(v.size());
+        return id;
+    }
     glGenVertexArrays(1, &m.vao);
     glGenBuffers(1, &m.vbo);
     glBindVertexArray(m.vao);
@@ -1336,6 +1351,7 @@ int Renderer2D::meshCreate(const std::vector<MeshVertex>& v) {
 void Renderer2D::meshDelete(int id) {
     if (id < 0 || id >= int(meshes_.size()) || !meshes_[std::size_t(id)].used) return;
     Mesh& m = meshes_[std::size_t(id)];
+    if (m.vk >= 0) vkMeshDelete(m.vk);                 // 0.60.0
     if (m.vbo) glDeleteBuffers(1, &m.vbo);
     if (m.vao) glDeleteVertexArrays(1, &m.vao);
     m = Mesh();
@@ -1344,6 +1360,7 @@ void Renderer2D::meshDelete(int id) {
 int Renderer2D::meshesAlive() const { int n = 0; for (const Mesh& m : meshes_) n += m.used; return n; }
 
 void Renderer2D::drawMesh(int id, int first, int count, const MeshProjection& P) {
+    PL_KIND(kdMesh);
     if (id < 0 || id >= int(meshes_.size()) || !meshes_[std::size_t(id)].used || count <= 0) return;
     closeTriangles();
     Segment sg{};
@@ -1365,6 +1382,7 @@ bool Renderer2D::rocksGpu(const RockSet& set, const RockFrame& f, double size, C
 void Renderer2D::blobs(const Blob* b, int count, bool additive) { blobsPalette(b, count, additive, PhasePalette()); }
 
 void Renderer2D::blobsPalette(const Blob* b, int count, bool additive, const PhasePalette& pal) {
+    PL_KIND(kdBlobs); if (logKinds()) for (int i = 0; i < count; i++) kindOf(b[i]);
     if (count <= 0) return;
     closeTriangles();
     Segment sg{};
@@ -1374,6 +1392,7 @@ void Renderer2D::blobsPalette(const Blob* b, int count, bool additive, const Pha
 }
 
 void Renderer2D::spheres(const Blob* b, int count) {
+    PL_KIND(kdSpheres);
     if (count <= 0) return;
     closeTriangles();
     Segment sg{};
@@ -1383,6 +1402,7 @@ void Renderer2D::spheres(const Blob* b, int count) {
 }
 
 void Renderer2D::blobsPaletteTake(std::vector<Blob>& b, bool additive, const PhasePalette& pal) {
+    PL_KIND(kdBlobs); if (logKinds()) for (const Blob& x : b) kindOf(x);
     if (b.empty()) return;
     closeTriangles();
     Segment sg{};
@@ -1423,6 +1443,7 @@ void Renderer2D::cloudGpu(const CloudGpuDraw& d) {
 }
 
 void Renderer2D::beginSoftLayer(float scale) {
+    PL_KIND(kdSoftLayer);
     closeTriangles();
     layerScale_ = scale;
     Segment sg{};
@@ -1431,6 +1452,7 @@ void Renderer2D::beginSoftLayer(float scale) {
 }
 
 void Renderer2D::beginCloudLayer() {
+    PL_KIND(kdCloudLayer);
     closeTriangles();
     Segment sg{};
     sg.kind = Kind::LayerBegin; sg.hdr = true;
@@ -1464,6 +1486,9 @@ static const float* fuzzTable() {
     return t;
 }
 
+const float* fuzzTableVk() { return fuzzTable(); }   // 0.60.0 (render/renderer2d_vk.cpp: the same table)
+bool logDrawKinds() { return logKinds(); }
+
 float Renderer2D::fuzzAt(float d) {
     if (!(d < 1.f)) return 0.f;
     const float* t = fuzzTable();
@@ -1487,6 +1512,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
     GLuint target = outFbo;
     int vx = 0, vy = fbY;
     if (gray_) {
+        PL_KIND(kdGray);
         if (!grayFbo_) { glGenFramebuffers(1, &grayFbo_); glGenTextures(1, &grayTex_); }
         if (fbW != grayW_ || fbH != grayH_) {
             grayW_ = fbW; grayH_ = fbH;
@@ -1795,15 +1821,18 @@ void Renderer2D::push(double x, double y, float u, float v, Color c, float mode,
 }
 
 void Renderer2D::rect(double x, double y, double w, double h, Color c) {
+    PL_KIND(kdRect);
     push(x, y, 0, 0, c, 0); push(x + w, y, 0, 0, c, 0); push(x + w, y + h, 0, 0, c, 0);
     push(x, y, 0, 0, c, 0); push(x + w, y + h, 0, 0, c, 0); push(x, y + h, 0, 0, c, 0);
 }
 
 void Renderer2D::triangle(double x0, double y0, Color c0, double x1, double y1, Color c1, double x2, double y2, Color c2) {
+    PL_KIND(kdTriangle);
     push(x0, y0, 0, 0, c0, 0); push(x1, y1, 0, 0, c1, 0); push(x2, y2, 0, 0, c2, 0);
 }
 
 void Renderer2D::line(double x0, double y0, double x1, double y1, double width, Color c) {
+    PL_KIND(kdLine);
     const double dx = x1 - x0, dy = y1 - y0, len = std::hypot(dx, dy);
     if (len < 1e-9) return;
     // thin lines are drawn 1 point wide with lower alpha, so they do not flicker
@@ -1820,29 +1849,34 @@ void Renderer2D::quad(double cx, double cy, double half, Color c, float mode, fl
 }
 
 void Renderer2D::disc(double x, double y, double r, Color c) {
+    PL_KIND(kdDisc);
     if (r <= 0) return;
     const double half = r + 1.5;                          // a little room for the smooth edge
     quad(x, y, half, c, 1, 0, 0, static_cast<float>(half / r));
 }
 
 void Renderer2D::sphere(double x, double y, double r, Color c, double lx, double ly, double lz) {
+    PL_KIND(kdSphere);
     if (r <= 0) return;
     const double half = r + 1.5;
     quad(x, y, half, c, 2, static_cast<float>(lx), static_cast<float>(ly), static_cast<float>(half / r), static_cast<float>(lz));
 }
 
 void Renderer2D::sunDisc(double x, double y, double r, Color c) {
+    PL_KIND(kdSunDisc);
     if (r <= 0) return;
     const double half = r + 1.5;
     quad(x, y, half, c, 3, 0, 0, static_cast<float>(half / r));
 }
 
 void Renderer2D::fadeDisc(double x, double y, double r, Color c) {
+    PL_KIND(kdFadeDisc);
     if (r <= 0) return;
     quad(x, y, r, c, 5, 0, 0, 1);
 }
 
 void Renderer2D::ring(double x, double y, double r, double width, Color c) {
+    PL_KIND(kdRing);
     const int n = static_cast<int>(std::fmin(720, std::fmax(24, r * 0.75)));
     double px = x + r, py = y;
     for (int i = 1; i <= n; i++) {

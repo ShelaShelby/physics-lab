@@ -29,6 +29,8 @@
 
 namespace render {
 
+class VkDraw2D;   // 0.60.0: render/vk_draw2d.h (Vulkan, step 2)
+
 struct Color {
     float r = 1, g = 1, b = 1, a = 1;
     Color withAlpha(float alpha) const { return {r, g, b, alpha}; }
@@ -63,6 +65,17 @@ public:
     double skyWhiteWait();                         // (tests) the card's exposure of the last picture, waiting for its read-back; 0 none
     // 0.56.0: one star image laid over the bent picture through its open-sky share (LensSky::kerrSky's fourth output): hidden where the disc or the shadow is
     void maskedDisc(double x, double y, double r, Color c);
+
+    // 0.60.0 (Vulkan, step 2 of 5): the same recording, drawn by Vulkan at the end (render/renderer2d_vk.cpp, render/vk_draw2d.h). useVulkan before
+    // anything is recorded (no init(): no OpenGL object is made, so every card program of OpenGL is absent and each lab takes its processor path);
+    // loadMapsVulkan: the picture maps as init() loads them; endVulkan: as end(), into Vulkan's picture (fbW x fbH pixels, cleared to clear[]; forShot:
+    // Save image's own picture, one sample as OpenGL's offscreen one). The frame's command buffer is the backend's (render/vk_backend.cpp).
+    void useVulkan(VkDraw2D* d) { vk_ = d; if (!d) for (bool& m : vkMap_) m = false; }
+    bool vulkan() const { return vk_ != nullptr; }
+    bool loadMapsVulkan(std::string& why);
+    void endVulkan(int fbW, int fbH, const float clear[4], bool forShot);
+    // 0.60.0 (tests: the coverage of the views): how many times each drawing call was made since the start, "rect=12 line=40 ..." (PL_LOG_DRAWKINDS)
+    std::string drawKindsText() const;
 
     // Start a frame for a picture `width` × `height` points.
     void begin(double width, double height);
@@ -182,7 +195,7 @@ public:
     // middle (the night sky's map, orbit/sky.cpp); M turns a direction in the view frame (right, up, depth) into
     // galactic coordinates (rows: towards l = 0, l = 90°, the north galactic pole); bright: 0..1.
     void skyMap(double W, double H, double kRad, const float M[9], double bright);
-    bool hasMap(Map m) const { return tex_[static_cast<int>(m)] != 0; }
+    bool hasMap(Map m) const { return tex_[static_cast<int>(m)] != 0 || vkMap_[static_cast<int>(m)]; }
     // 0.55.0, the Black Hole Lab: the Gaia map seen past a non-spinning black hole at (cx, cy) points, kRad points per radian (the night sky's projection), every
     // pixel's ray bent by the lens table (its values of dphi at s = ln x, x = the angle in radians from the shadow's edge alphaSh: blackhole/schwarzschild.h
     // LensTable), the shadow black; bend false: the plain map by skyMap's own rule. The picture is drawn into a kept texture only when one of these
@@ -327,7 +340,7 @@ private:
     int probeW_ = 0, probeH_ = 0;
     bool kerrTried_ = false;
     std::string kerrWhy_;
-    struct Mesh { GLuint vbo = 0, vao = 0; int count = 0; bool used = false; };
+    struct Mesh { GLuint vbo = 0, vao = 0; int count = 0; bool used = false; int vk = -1; };   // vk: its buffer on Vulkan (VkDraw2D's id)
     std::vector<Mesh> meshes_;
     GLuint meshProgram_ = 0;
     GLint mSize_ = -1, mRot_ = -1, mCen_ = -1, mFit_ = -1;
@@ -414,6 +427,14 @@ private:
     GLuint program_ = 0, vao_ = 0, vbo_ = 0;
     GLint uSize_ = -1, uSpace_ = -1, plSpace_ = -1, plLunar_ = -1;
     Color space_{0, 0, 0, 1};
+    VkDraw2D* vk_ = nullptr;                        // 0.60.0: Vulkan draws the picture (not owned)
+    bool vkMap_[static_cast<int>(Map::Count)] = {};
+    enum DrawKind { kdRect, kdLine, kdTriangle, kdDisc, kdRing, kdSphere, kdSunDisc, kdFadeDisc, kdMaskedDisc, kdSquares, kdBlobs, kdSpheres, kdMesh, kdSoftLayer,
+                    kdCloudLayer, kdPlanet, kdPlanetMap, kdPlanetRings, kdPlanetEclipse, kdPlanetAir, kdSkyMap, kdGray, kdBlobKind0, kdKindCount = kdBlobKind0 + 10 };
+    mutable long kinds_[kdKindCount] = {};
+    int vkMeshCreate(const void* v, std::size_t bytes);   // 0.60.0 (render/renderer2d_vk.cpp)
+    void vkMeshDelete(int id);
+    void kindOf(const Blob& b) const { const int k = static_cast<int>(b.kind + 0.5f); if (k >= 0 && k < 10) kinds_[kdBlobKind0 + k]++; }
 };
 
 }  // namespace render

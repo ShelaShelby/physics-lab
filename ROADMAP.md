@@ -69,8 +69,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
 
 ## Whole app
-- Vulkan step 2 (PLAN_VULKAN.md): renderer2d on Vulkan: every lab's normal drawing (lines, dots, discs, textures, text in the picture, the sky, the maps).
-- Vulkan step 3: the card programs of the Atom, Molecule and Orbit Labs (atom_card, molecule_card, group/outline/rock compute).
+- Vulkan step 3: the card programs of the Atom, Molecule and Orbit Labs, which take the processor's path on Vulkan since 0.60.0: compute() (superposition and jump groups), outlineCompute() (the 90 % outline), rockCompute()/rocksGpu() (the belts' rocks), cloudGpu() (Cloud 3D Glow dots), molCloud() and MoleculeCard (the Density cloud), AtomCard (Slice dots, jump groups).
 - Vulkan step 4: the Black Hole Lab's programs (kerr_sky, kerr_compute, the lens and Kerr shaders); retry the compute path parked since 0.55.7.
 - Vulkan step 5: the benchmark, picture tests and UI suite on Vulkan; Vulkan the default; OpenGL removed once the owner's PC shows every scene works.
 - After the owner's 0.56.1 benchmark: move scenes far above his screen's rate to All scenes; fix the ones below it, slowest first; fix every response he would feel and every lab that is busy at rest.

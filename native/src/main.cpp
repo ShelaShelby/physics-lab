@@ -120,9 +120,8 @@ bool SDLCALL onLiveExpose(void* userdata, SDL_Event* ev) {
     return true;
 }
 
-// 0.59.0 (Vulkan step 1): the picture area without the lab's picture: one line in its middle (wrapped on a narrow window)
-void pictureNote(ImDrawList* dl, ImVec2 pos, ImVec2 size, app::Rgb c) {
-    const char* note = "Vulkan test: the labs' pictures come in the next steps (Settings, Graphics, OpenGL to see them)";
+// 0.59.0 (Vulkan step 1): the picture area without the lab's picture: one line in its middle (wrapped on a narrow window); 0.60.0: the Black Hole Lab on Vulkan
+void pictureNote(ImDrawList* dl, ImVec2 pos, ImVec2 size, app::Rgb c, const char* note) {
     ImFont* font = ImGui::GetFont();
     const float fs = ImGui::GetFontSize();
     const float wrap = std::max(40.0f, size.x - 2.0f * fs);
@@ -190,6 +189,7 @@ int main(int, char**) {
     SDL_Window* window = nullptr;
     SDL_GLContext gl = nullptr;
     render::VkBackend vk;
+    render::Renderer2D renderer;                        // (0.60.0: before Vulkan's start, whose last steps make the labs' pictures on Vulkan)
     bool useVulkan = false;
     if (app.prefs.graphics == "vulkan") {
         app::GpuGuard& V = app::gpuVulkanGuard();
@@ -203,8 +203,11 @@ int main(int, char**) {
             o.validation = SDL_getenv("PL_VK_VALIDATION") != nullptr;
             if (const char* f = SDL_getenv("PL_VK_FAIL")) o.failAt = f;   // for automatic checks: that step fails, as on a PC whose driver says no
             std::string why;
-            if (vk.init(window, V, o, why)) useVulkan = true;
-            else { vk.shutdown(); SDL_DestroyWindow(window); window = nullptr; app.vulkanWhy = V.offText().empty() ? why : V.offText(); }
+            // 0.60.0 (step 2): then the labs' pictures (renderer2d on Vulkan: its pipelines, the maps, a start-up check of a tiny known picture), guarded too;
+            // PL_NO_MSAA (checks): one sample, on OpenGL too; PL_VK_CHECK=break (checks): the start-up check's picture drawn wrong on purpose
+            const char* chk = SDL_getenv("PL_VK_CHECK");
+            if (vk.init(window, V, o, why) && vk.initPicture(renderer, !SDL_getenv("PL_NO_MSAA"), chk && std::string(chk) == "break", why)) useVulkan = true;
+            else { renderer.useVulkan(nullptr); vk.shutdown(); SDL_DestroyWindow(window); window = nullptr; app.vulkanWhy = V.offText().empty() ? why : V.offText(); }
         }
         if (!useVulkan) { V.log("This start uses OpenGL: " + app.vulkanWhy); app::gpuGuard().appendToLog(); }
         if (V.saved() != app.prefs.gpuVulkan) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);   // kept at once (a crash later must not lose it)
@@ -214,11 +217,19 @@ int main(int, char**) {
     if (useVulkan) {
         app.vulkanDevice = vk.deviceName(); app.vulkanDriver = vk.driverText();
         std::printf("Vulkan: %s | driver %s | Vulkan %s | %s\n", vk.deviceName().c_str(), vk.driverText().c_str(), vk.apiText().c_str(), vk.presentText().c_str());
+        std::printf("Vulkan picture: %s\n", vk.pictureText().c_str());   // 0.60.0
+        // 0.60.0 (step 2): no OpenGL object is made on Vulkan, so every card program is absent (compute(), outlineCompute(), rockCompute() and kerrCompute()
+        // give nullptr, rocksGpu() false, cloudGpuOk() false, molCloud() false, the Atom and Molecule Labs' card paths go off): each lab takes its processor path
+        const char* fb = "Vulkan, step 2 of 5: the card programs (Atom Lab superposition, jumps, Slice dots, outline, Cloud 3D Glow dots; Molecule Lab Density cloud; "
+                         "Orbit Lab rocks) run on the processor here until step 3; the Black Hole Lab is not drawn until step 4";
+        std::printf("%s\n", fb);
+        app::gpuVulkanGuard().log(fb);
     } else {
         // 0.13 stage 2: first ask for OpenGL 4.3 (the Atom Lab's superposition and jumps then run on the GPU), with smooth edges, then without them; if the PC cannot give 4.3, the same two tries
         // for 3.3 as before (and the CPU does that work).
         for (const bool want43 : {true, false}) {
             for (const bool multisample : {true, false}) {
+                if (multisample && SDL_getenv("PL_NO_MSAA")) continue;   // 0.60.0 (checks): one sample, to compare with Vulkan's pictures pixel for pixel
                 window = createWindow(scale, multisample, start, want43, false);
                 gl = window ? SDL_GL_CreateContext(window) : nullptr;
                 if (gl) break;
@@ -243,7 +254,6 @@ int main(int, char**) {
     Uint64 maximizeUntil = 0;                           // the window system maximises a moment later: do not record the old state meanwhile
     if (start.w > 0 && start.maximized) { SDL_MaximizeWindow(window); maximizeUntil = SDL_GetTicks() + 1500; }
 
-    render::Renderer2D renderer;
     if (!useVulkan) {
         const char* missing = nullptr;
         if (!plgl::loadGL(&missing)) { std::fprintf(stderr, "OpenGL function missing: %s\n", missing); fail("OpenGL 3.3 is not available", "Physics Lab needs OpenGL 3.3 (3D graphics), and your graphics driver does not offer all of it.", kDriverAdvice); return 1; }
@@ -455,7 +465,7 @@ int main(int, char**) {
     if (const char* j = SDL_getenv("PL_ATOM_JUMP")) app.atomLearnJump = j;   // 0.19: ... scrolled to a section ("scale": the "monochrome" word)
     int frame = 0;
     int vkFirst = 0;                                    // 0.59.0: Vulkan's first frame: 0 not begun, 1 begun (guarded), 2 shown, 3 a call failed (kept)
-    const bool pictureOff = useVulkan || SDL_getenv("PL_NO_PICTURE") != nullptr;   // 0.59.0: no lab picture (Vulkan step 1; PL_NO_PICTURE: the same on OpenGL, for the checks that compare the two)
+    const bool pictureOff = SDL_getenv("PL_NO_PICTURE") != nullptr;   // 0.59.0: no lab picture (PL_NO_PICTURE, for the checks that compare OpenGL and Vulkan; 0.60.0: Vulkan draws the pictures)
     bool running = true;
 
     LiveWatch live;
@@ -697,8 +707,9 @@ int main(int, char**) {
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, headerH), ImVec2(canvasWinW, headerH + pictureWinH));
         if (app.pane) text->PopClipRect();              // a tab page covers the lab: nothing to draw
-        else if (pictureOff) {                          // 0.59.0: Vulkan step 1 draws no lab picture yet: the theme's background and one line in its middle
-            pictureNote(text, ImVec2(0, headerH), ImVec2(canvasWinW, pictureWinH), ui::look().c.muted);
+        else if (pictureOff || (useVulkan && app.lab == blackhole::kLabIndex)) {   // PL_NO_PICTURE; 0.60.0: the Black Hole Lab is not drawn on Vulkan yet (its card programs: step 4)
+            pictureNote(text, ImVec2(0, headerH), ImVec2(canvasWinW, pictureWinH), ui::look().c.muted, pictureOff ? "Test: the lab's picture is left out (PL_NO_PICTURE)"
+                        : "The black hole's picture comes to Vulkan in a later step; Settings, Graphics, OpenGL to see it");
             text->PopClipRect();
         }
         else if (app.lab == molecule::kLabIndex) {
@@ -748,7 +759,10 @@ int main(int, char**) {
         if (useVulkan) {                                // 0.59.0: cleared to the page colour, the picture area filled with it (step 2: the labs' pictures), the panels on top
             const float bgc[4] = {pageBg.r, pageBg.g, pageBg.b, 1.0f};
             if (vkFirst == 0) { app::gpuVulkanGuard().begin("first frame"); vkFirst = 1; }
-            vk.render(ImGui::GetDrawData(), bgc, bgc, 0, headerFbH, canvasFbW, pictureFbH);
+            const bool drawPicture = !pictureOff && !app.pane && app.lab != blackhole::kLabIndex;   // 0.60.0: the lab's picture (renderer2d on Vulkan)
+            if (drawPicture) renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
+            vk.render(ImGui::GetDrawData(), bgc, bgc, 0, headerFbH, canvasFbW, pictureFbH, drawPicture ? &renderer : nullptr);
+            if (drawPicture) { app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances(); }
         } else {
             ui::benchmarkGpuBegin(app);                     // the GPU time of this frame (only while the benchmark runs)
             plgl::glViewport(0, 0, fbW, fbH);
@@ -811,7 +825,7 @@ int main(int, char**) {
         }
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
             app.shot.requested = false;
-            if (useVulkan) ui::takeShotVulkan(app, vk, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
+            if (useVulkan) ui::takeShotVulkan(app, vk, !pictureOff && !app.pane && app.lab != blackhole::kLabIndex ? &renderer : nullptr, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
             else ui::takeShot(app, renderer, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
         }
         static const double maxSeconds = SDL_getenv("PL_EXIT_AFTER_SECONDS") ? std::atof(SDL_getenv("PL_EXIT_AFTER_SECONDS")) : 0;   // for automatic checks
@@ -878,9 +892,11 @@ int main(int, char**) {
     }
     if (SDL_getenv("PL_LIVE_REPORT"))
         std::printf("Live frames: %ld in %d drags, worst gap %.1f ms, lead-in %.1f ms, biggest physics step %.4f s\n", app.live.frames, app.live.drags, app.live.worstGapMs, app.live.leadInMs, maxPhysicsDt);
+    if (SDL_getenv("PL_LOG_DRAWKINDS")) std::printf("PLDRAWKINDS %s\n", renderer.drawKindsText().c_str());   // 0.60.0 (checks: which drawing calls this run made)
 
     if (useVulkan) {
         if (SDL_getenv("PL_VK_VALIDATION")) std::printf("PLVK validation errors=%d warnings=%d\n", vk.validationErrors(), vk.validationWarnings());
+        renderer.useVulkan(nullptr);                    // 0.60.0 (its Vulkan objects go with the backend)
         vk.shutdown();                                  // (Dear ImGui's Vulkan backend too)
     } else ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL3_Shutdown();

@@ -21,7 +21,7 @@ struct ShotArea {
 // Pictures folder (Downloads if that fails). Sets the message on app.shot. Call after the frame was drawn.
 void takeShot(AppState& app, render::Renderer2D& renderer, const ShotArea& a);
 // 0.59.0 (Vulkan step 1): the same on the Vulkan path: the lab's text on the background list drawn by Vulkan into an image of its own (no lab picture yet)
-void takeShotVulkan(AppState& app, render::VkBackend& vk, const ShotArea& a);
+void takeShotVulkan(AppState& app, render::VkBackend& vk, render::Renderer2D* picture, const ShotArea& a);   // 0.60.0: picture: the lab's shapes under the text (nullptr: none)
 
 // The folders to try, best first: the Pictures folder, then Downloads. PL_SHOT_DIR overrides them (for automatic checks).
 std::vector<std::string> shotFolders();

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.59.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.60.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -383,7 +383,7 @@ if(PL_BUILD_APP)
     COMMENT "Embedding fonts")
 
   # 0.59.0: the Vulkan shaders, GLSL to SPIR-V at build time by glslang (built above), each into a header with a uint32_t array (vk_shaders/<name>_<stage>.h)
-  set(PL_VK_SHADERS src/render/vk/fill.vert src/render/vk/fill.frag)
+  set(PL_VK_SHADERS src/render/vk/fill.vert src/render/vk/fill.frag src/render/vk/present.vert src/render/vk/present.frag)
   set(PL_VK_SHADER_HEADERS)
   file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/vk_shaders)
   foreach(sh ${PL_VK_SHADERS})
@@ -397,12 +397,39 @@ if(PL_BUILD_APP)
       COMMENT "SPIR-V: ${sh}")
     list(APPEND PL_VK_SHADER_HEADERS ${shOut})
   endforeach()
+  # 0.60.0 (Vulkan step 2): renderer2d's shaders for Vulkan, made from the same text as OpenGL's (src/render/shaders.h, taken out by cmake/extract_glsl.cmake):
+  # glslang's relaxed Vulkan rules (-R) put the loose uniforms into one block per stage (vertex: set 0 binding 2; fragment: set 0 binding 1), the
+  # fragment shader's texture at binding 0 (glslang's own choice); the in/out locations by declaration order (the app checks the bindings, and that the
+  # locations match between the stages, from the SPIR-V itself: vk_draw2d.cpp).
+  set(PL_VK2D_SHADERS "tri_vert:kVertexShader" "tri_frag:kFragmentShader" "sq_vert:kSquareVS" "sq_frag:kSquareFS" "blob_vert:kBlobVS" "blob_frag:kBlobFS"
+                      "cmp_vert:kCompositeVS" "cmp_frag:kCompositeFS" "gray_frag:kGrayFS" "planet_frag:kPlanetFS" "chart_vert:kChartVS")
+  foreach(pair ${PL_VK2D_SHADERS})
+    string(REPLACE ":" ";" parts ${pair})
+    list(GET parts 0 shId)
+    list(GET parts 1 shVar)
+    string(REGEX MATCH "[a-z]+$" shStage ${shId})
+    set(shGlsl ${CMAKE_BINARY_DIR}/vk_shaders/r2d_${shId}.${shStage})
+    set(shOut ${CMAKE_BINARY_DIR}/vk_shaders/r2d_${shId}.h)
+    if(shStage STREQUAL "vert")
+      set(shFlags --sdub uDefault 0 2)
+    else()
+      set(shFlags --sdub uDefault 0 1)
+    endif()
+    add_custom_command(OUTPUT ${shOut}
+      COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h -DNAME=${shVar} -DOUT=${shGlsl} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/extract_glsl.cmake
+      COMMAND $<TARGET_FILE:glslang-standalone> -V -R --aml --amb ${shFlags} --target-env vulkan1.0 -S ${shStage} --vn k_r2d_${shId} -o ${shOut} ${shGlsl}
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h ${CMAKE_CURRENT_SOURCE_DIR}/cmake/extract_glsl.cmake glslang-standalone
+      COMMENT "SPIR-V (Vulkan, from shaders.h ${shVar}): r2d_${shId}")
+    list(APPEND PL_VK_SHADER_HEADERS ${shOut})
+  endforeach()
 
   add_executable(PhysicsLab WIN32
     ${CMAKE_BINARY_DIR}/embedded_fonts.cpp
     ${PL_VK_SHADER_HEADERS}
     src/main.cpp
     src/render/vk_backend.cpp
+    src/render/vk_draw2d.cpp
+    src/render/renderer2d_vk.cpp
     src/render/gl_loader.cpp
     src/render/renderer2d.cpp
    
@@ -478,7 +505,7 @@ if(PL_BUILD_APP)
       # its own test before (99 tests became 15); a failure prints the name of its check. To run one check by hand: python3 tests/<script> <PhysicsLab> <folder> [part].
       # ui_shell: the shell: text sizes and floors, windows, keys, start view, date entry, panel toggles; 0.59.0: Vulkan (step 1) against OpenGL
       add_test(NAME ui_shell COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_shell
-               check_shell.py check_shell.py:vulkan check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
+               check_shell.py check_shell.py:vulkan check_shell.py:vulkan2d check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
       set_tests_properties(ui_shell PROPERTIES TIMEOUT 3600)
       # ui_controls: the Controls panel: layout, sections, sliders, End key, its scrollbar
       add_test(NAME ui_controls COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_controls
