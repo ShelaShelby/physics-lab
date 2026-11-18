@@ -120,7 +120,7 @@ private:
     struct Slot { VkCommandBuffer cmd = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE; std::uint64_t ticket = 0; bool submitted = false, timed = false;
                   std::vector<VkDescriptorPool> pools; std::size_t pool = 0; Buf ubo; VkDeviceSize uboUsed = 0; Buf stage; VkDeviceSize stageUsed = 0;
                   std::vector<Buf> spare; };
-    struct Grid { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; VkFramebuffer fb = VK_NULL_HANDLE; Buf host; int w = 0, h = 0; };
+    struct Grid { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; Buf host; int w = 0, h = 0; };
     bool openSlot();
     void readTimes();
     VkQueryPool tq_ = VK_NULL_HANDLE;
@@ -141,7 +141,6 @@ private:
     std::uint64_t nextTicket_ = 1, doneTicket_ = 0;
     std::vector<std::pair<std::uint64_t, std::function<void()>>> drop_;   // destroyed once the batch of that ticket (and the frames after it) are done
     std::size_t spirv_ = 0;
-    VkRenderPass gridPass_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout gridDsl_ = VK_NULL_HANDLE;
     VkPipelineLayout gridLayout_ = VK_NULL_HANDLE;
     VkPipeline gridPipe_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};

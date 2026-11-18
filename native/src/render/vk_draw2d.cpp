@@ -220,13 +220,6 @@ void VkDraw2D::dropImage(Img& i) {
     garbage_.push_back({frameNo_, [dev, im, v, mm] { if (v) vkDestroyImageView(dev, v, nullptr); if (im) vkDestroyImage(dev, im, nullptr); if (mm) vkFreeMemory(dev, mm, nullptr); }});
     i = Img();
 }
-void VkDraw2D::dropFramebuffer(VkFramebuffer& f) {
-    if (!f) return;
-    const VkDevice dev = c_.device;
-    const VkFramebuffer ff = f;
-    garbage_.push_back({frameNo_, [dev, ff] { vkDestroyFramebuffer(dev, ff, nullptr); }});
-    f = VK_NULL_HANDLE;
-}
 void VkDraw2D::collect() {
     std::size_t k = 0;
     for (std::size_t i = 0; i < garbage_.size(); i++) {
@@ -332,14 +325,18 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
     gi.pColorBlendState = &cb;
     gi.pDynamicState = &ds;
     gi.layout = layout_;
-    gi.renderPass = passes_[p][0];
-    gi.subpass = 0;
+    const VkFormat fmt = p == kPassF ? floatFormat_ : kRgba8;           // 0.63.0: dynamic rendering: the pass's format in place of a render pass
+    VkPipelineRenderingCreateInfo ri{};
+    ri.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    ri.colorAttachmentCount = 1;
+    ri.pColorAttachmentFormats = &fmt;
+    gi.pNext = &ri;
     VkPipeline pipe = VK_NULL_HANDLE;
     if (!c_.check(vkCreateGraphicsPipelines(c_.device, VK_NULL_HANDLE, 1, &gi, nullptr, &pipe), "vkCreateGraphicsPipelines (renderer2d)")) return VK_NULL_HANDLE;
     return pipe;
 }
 
-bool VkDraw2D::init(const VkDevCtx& c, VkRenderPass swapPass, int samples, std::string& why) {
+bool VkDraw2D::init(const VkDevCtx& c, VkFormat windowFormat, int samples, std::string& why) {
     c_ = c;
     // ---- the shaders: OpenGL's text as SPIR-V; the stages' inputs and outputs must meet at the same locations, the blocks and the texture where expected ----
     const Code code[] = {{k_r2d_tri_vert, sizeof k_r2d_tri_vert}, {k_r2d_tri_frag, sizeof k_r2d_tri_frag}, {k_r2d_planet_frag, sizeof k_r2d_planet_frag},
@@ -399,63 +396,7 @@ bool VkDraw2D::init(const VkDevCtx& c, VkRenderPass swapPass, int samples, std::
         if (floatFormat_ == VK_FORMAT_UNDEFINED) { ok = false; why = "no float format can be drawn into with blending here (the electron cloud's layer)"; }
         floatText_ = floatFormat_ == VK_FORMAT_R32G32B32A32_SFLOAT ? "R32G32B32A32_SFLOAT (as OpenGL's GL_RGBA32F)" : "R16G16B16A16_SFLOAT (32-bit float cannot blend on this card)";
     }
-    // ---- the passes: [0] cleared, [1] kept (after a layer); first row at the bottom is only a matter of the viewport, not of the passes ----
-    const auto makePass = [&](Pass p, bool load) -> bool {
-        VkAttachmentDescription a[2]{};
-        VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}, res{1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-        const bool msaa = p == kPassMs;
-        a[0].format = p == kPassF ? floatFormat_ : kRgba8;
-        a[0].samples = msaa ? static_cast<VkSampleCountFlagBits>(samples_) : VK_SAMPLE_COUNT_1_BIT;
-        a[0].loadOp = load ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-        a[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        a[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        a[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        a[0].initialLayout = load ? (msaa ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) : VK_IMAGE_LAYOUT_UNDEFINED;
-        a[0].finalLayout = msaa ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        if (msaa) {                                   // the resolve: the picture the later passes read
-            a[1].format = kRgba8;
-            a[1].samples = VK_SAMPLE_COUNT_1_BIT;
-            a[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            a[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            a[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            a[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            a[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            a[1].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        }
-        VkSubpassDescription sub{};
-        sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        sub.colorAttachmentCount = 1;
-        sub.pColorAttachments = &ref;
-        sub.pResolveAttachments = msaa ? &res : nullptr;
-        // in: the last frame's (or pass's) reads of this image and its writes are done before it is drawn again; out: written before a later pass reads it
-        VkSubpassDependency dep[2]{};
-        dep[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-        dep[0].dstSubpass = 0;
-        dep[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dep[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dep[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dep[1].srcSubpass = 0;
-        dep[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        dep[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dep[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        VkRenderPassCreateInfo rpi{};
-        rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        rpi.attachmentCount = msaa ? 2u : 1u;
-        rpi.pAttachments = a;
-        rpi.subpassCount = 1;
-        rpi.pSubpasses = &sub;
-        rpi.dependencyCount = 2;
-        rpi.pDependencies = dep;
-        return c_.check(vkCreateRenderPass(c_.device, &rpi, nullptr, &passes_[p][load ? 1 : 0]), "vkCreateRenderPass (renderer2d)");
-    };
-    for (int p = 0; p < kPassCount && ok; p++) {
-        if (p == kPassMs && samples_ == 1) continue;
-        ok = makePass(static_cast<Pass>(p), false) && makePass(static_cast<Pass>(p), true);
-        if (!ok) why = "a render pass could not be made";
-    }
+    // (0.63.0: no render passes: dynamic rendering, beginPass)
     // ---- the layouts: binding 2 the vertex stage's block, 1 the fragment stage's, 0 its texture (the white one where it has none) ----
     if (ok) {
         VkDescriptorSetLayoutBinding b[3]{};
@@ -556,8 +497,11 @@ bool VkDraw2D::init(const VkDevCtx& c, VkRenderPass swapPass, int samples, std::
             gi.pColorBlendState = &cb;
             gi.pDynamicState = &ds;
             gi.layout = presentLayout_;
-            gi.renderPass = swapPass;
-            gi.subpass = 0;
+            VkPipelineRenderingCreateInfo ri{};                              // 0.63.0: dynamic rendering into the window
+            ri.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+            ri.colorAttachmentCount = 1;
+            ri.pColorAttachmentFormats = &windowFormat;
+            gi.pNext = &ri;
             ok = c_.check(vkCreateGraphicsPipelines(c_.device, VK_NULL_HANDLE, 1, &gi, nullptr, &presentPipe_), "vkCreateGraphicsPipelines (present)");
             if (!ok) presentPipe_ = VK_NULL_HANDLE;
         }
@@ -615,20 +559,11 @@ bool VkDraw2D::upload(int map, int w, int h, const std::vector<std::uint8_t>& rg
         vkUnmapMemory(c_.device, stage.m); vkDestroyBuffer(c_.device, stage.b, nullptr); vkFreeMemory(c_.device, stage.m, nullptr);
         why = "the map's image"; return false;
     }
-    const auto barrier = [](VkCommandBuffer cmd, VkImage img, int level, int count, VkImageLayout from, VkImageLayout to, VkAccessFlags sa, VkAccessFlags da, VkPipelineStageFlags ss, VkPipelineStageFlags ds) {
-        VkImageMemoryBarrier b{};
-        b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        b.srcAccessMask = sa; b.dstAccessMask = da; b.oldLayout = from; b.newLayout = to;
-        b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        b.image = img;
-        b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        b.subresourceRange.baseMipLevel = static_cast<uint32_t>(level);
-        b.subresourceRange.levelCount = static_cast<uint32_t>(count);
-        b.subresourceRange.layerCount = 1;
-        vkCmdPipelineBarrier(cmd, ss, ds, 0, 0, nullptr, 0, nullptr, 1, &b);
+    const auto barrier = [](VkCommandBuffer cmd, VkImage img, int level, int count, VkImageLayout from, VkImageLayout to, VkAccessFlags2 sa, VkAccessFlags2 da, VkPipelineStageFlags2 ss, VkPipelineStageFlags2 ds) {
+        vkImageBarrier2(cmd, img, from, to, ss, sa, ds, da, static_cast<uint32_t>(level), static_cast<uint32_t>(count));   // (0.63.0: synchronization2)
     };
     const bool ok = c_.once([&](VkCommandBuffer cmd) {
-        barrier(cmd, im.img, 0, mips, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        barrier(cmd, im.img, 0, mips, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_NONE, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT);
         VkBufferImageCopy cp{};
         cp.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         cp.imageSubresource.layerCount = 1;
@@ -636,8 +571,8 @@ bool VkDraw2D::upload(int map, int w, int h, const std::vector<std::uint8_t>& rg
         vkCmdCopyBufferToImage(cmd, stage.b, im.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cp);
         int lw = w, lh = h;
         for (int i = 1; i < mips; i++) {                                     // each level from the one above, filtered (the sRGB maps in linear light, as OpenGL's)
-            barrier(cmd, im.img, i - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            barrier(cmd, im.img, i - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
+                    VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT);
             const int nw = std::max(1, lw / 2), nh = std::max(1, lh / 2);
             VkImageBlit bl{};
             bl.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(i - 1), 0, 1};
@@ -645,18 +580,19 @@ bool VkDraw2D::upload(int map, int w, int h, const std::vector<std::uint8_t>& rg
             bl.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(i), 0, 1};
             bl.dstOffsets[1] = {nw, nh, 1};
             vkCmdBlitImage(cmd, im.img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, im.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bl, VK_FILTER_LINEAR);
-            barrier(cmd, im.img, i - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            barrier(cmd, im.img, i - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_2_TRANSFER_READ_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
             lw = nw; lh = nh;
         }
-        barrier(cmd, im.img, mips - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        barrier(cmd, im.img, mips - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT);
     });
     vkUnmapMemory(c_.device, stage.m);
     vkDestroyBuffer(c_.device, stage.b, nullptr);
     vkFreeMemory(c_.device, stage.m, nullptr);
     if (!ok) { vkDestroyImageView(c_.device, im.view, nullptr); vkDestroyImage(c_.device, im.img, nullptr); vkFreeMemory(c_.device, im.m, nullptr); why = "the map's upload failed"; return false; }
     if (maps_[map].img) dropImage(maps_[map]);
+    im.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     maps_[map] = im;
     return true;
 }
@@ -665,8 +601,8 @@ void VkDraw2D::destroy() {
     if (!c_.device) return;
     vkDeviceWaitIdle(c_.device);                                             // (the end of the app, or a failed start)
     doneUpTo_ = ~std::uint64_t(0);
-    for (Targets* t : {&screen_, &shot_}) { dropFramebuffer(t->fbPic); dropFramebuffer(t->fbGray); dropImage(t->ms); dropImage(t->pic); dropImage(t->gray); *t = Targets(); }
-    for (Layer* l : {&soft_, &hdr_}) { dropFramebuffer(l->fb); dropImage(l->img); *l = Layer(); }
+    for (Targets* t : {&screen_, &shot_}) { dropImage(t->ms); dropImage(t->pic); dropImage(t->gray); *t = Targets(); }
+    for (Layer* l : {&soft_, &hdr_}) { dropImage(l->img); *l = Layer(); }
     for (Img& m : maps_) dropImage(m);
     dropImage(white_);
     for (Mesh& m : meshes_) dropBuffer(m.buf);
@@ -677,7 +613,6 @@ void VkDraw2D::destroy() {
     collect();
     for (Program& p : prog_) for (auto& row : p.pipe) for (VkPipeline& pl : row) if (pl) { vkDestroyPipeline(c_.device, pl, nullptr); pl = VK_NULL_HANDLE; }
     if (presentPipe_) vkDestroyPipeline(c_.device, presentPipe_, nullptr);
-    for (auto& row : passes_) for (VkRenderPass& rp : row) if (rp) { vkDestroyRenderPass(c_.device, rp, nullptr); rp = VK_NULL_HANDLE; }
     for (VkSampler s : {linearClamp_, nearestClamp_, mapSampler_}) if (s) vkDestroySampler(c_.device, s, nullptr);
     if (layout_) vkDestroyPipelineLayout(c_.device, layout_, nullptr);
     if (presentLayout_) vkDestroyPipelineLayout(c_.device, presentLayout_, nullptr);
@@ -701,29 +636,11 @@ void VkDraw2D::beginFrame(int slot, int slots, VkCommandBuffer cmd) {
 
 bool VkDraw2D::targetsFor(Targets& t, int w, int h, int s) {
     if (t.w == w && t.h == h && t.s == s && t.pic.img) return true;
-    dropFramebuffer(t.fbPic); dropFramebuffer(t.fbGray); dropImage(t.ms); dropImage(t.pic); dropImage(t.gray);
+    dropImage(t.ms); dropImage(t.pic); dropImage(t.gray);
     t = Targets();
     bool ok = makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, t.pic, "the picture") &&
               makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, t.gray, "the grey picture");
     if (ok && s > 1) ok = makeImage(w, h, kRgba8, static_cast<VkSampleCountFlagBits>(s), VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, t.ms, "the multisampled picture");
-    VkFramebufferCreateInfo fi{};
-    fi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fi.width = static_cast<uint32_t>(w);
-    fi.height = static_cast<uint32_t>(h);
-    fi.layers = 1;
-    if (ok) {
-        const VkImageView v2[2] = {t.ms.view, t.pic.view};
-        fi.renderPass = s > 1 ? passes_[kPassMs][0] : passes_[kPass8][0];
-        fi.attachmentCount = s > 1 ? 2u : 1u;
-        fi.pAttachments = s > 1 ? v2 : &t.pic.view;
-        ok = c_.check(vkCreateFramebuffer(c_.device, &fi, nullptr, &t.fbPic), "vkCreateFramebuffer (picture)");
-    }
-    if (ok) {
-        fi.renderPass = passes_[kPass8][0];
-        fi.attachmentCount = 1;
-        fi.pAttachments = &t.gray.view;
-        ok = c_.check(vkCreateFramebuffer(c_.device, &fi, nullptr, &t.fbGray), "vkCreateFramebuffer (grey)");
-    }
     if (!ok) { failed_ = true; return false; }
     t.w = w; t.h = h; t.s = s;
     return true;
@@ -731,36 +648,46 @@ bool VkDraw2D::targetsFor(Targets& t, int w, int h, int s) {
 
 bool VkDraw2D::layerFor(Layer& l, bool hdr, int w, int h) {
     if (l.w == w && l.h == h && l.img.img) return true;
-    dropFramebuffer(l.fb); dropImage(l.img);
+    dropImage(l.img);
     l = Layer();
-    bool ok = makeImage(w, h, hdr ? floatFormat_ : kRgba8, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, l.img, hdr ? "the cloud's layer" : "the soft layer");
-    if (ok) {
-        VkFramebufferCreateInfo fi{};
-        fi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fi.renderPass = passes_[hdr ? kPassF : kPass8][0];
-        fi.attachmentCount = 1;
-        fi.pAttachments = &l.img.view;
-        fi.width = static_cast<uint32_t>(w);
-        fi.height = static_cast<uint32_t>(h);
-        fi.layers = 1;
-        ok = c_.check(vkCreateFramebuffer(c_.device, &fi, nullptr, &l.fb), "vkCreateFramebuffer (layer)");
-    }
-    if (!ok) { failed_ = true; return false; }
+    if (!makeImage(w, h, hdr ? floatFormat_ : kRgba8, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, l.img, hdr ? "the cloud's layer" : "the soft layer")) { failed_ = true; return false; }
     l.w = w; l.h = h;
     return true;
 }
 
-void VkDraw2D::beginPass(Pass p, VkFramebuffer fb, int w, int h, bool clear, const float c[4]) {
-    VkClearValue cv[2]{};
-    for (int i = 0; i < 4; i++) cv[0].color.float32[i] = c ? c[i] : 0.0f;
-    VkRenderPassBeginInfo rp{};
-    rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rp.renderPass = passes_[p][clear ? 0 : 1];
-    rp.framebuffer = fb;
-    rp.renderArea.extent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
-    rp.clearValueCount = clear ? (p == kPassMs ? 2u : 1u) : 0u;
-    rp.pClearValues = clear ? cv : nullptr;
-    vkCmdBeginRenderPass(cmd_, &rp, VK_SUBPASS_CONTENTS_INLINE);
+// 0.63.0 (Vulkan step 5): dynamic rendering and synchronization2 (as render/vk_blackhole.cpp), in place of 0.60.0's render passes and their dependencies.
+// Before: the last reads of this image (a later pass or the window's copy, fragment shader) and its writes are done before it is drawn again; after: its
+// writes are made visible to the passes that sample it. The multisampled image stays an attachment (a kept pass draws on); the others become sampled.
+void VkDraw2D::beginPass(Pass p, Img& color, Img* resolve, int w, int h, bool clear, const float c[4]) {
+    const VkPipelineStageFlags2 before = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    const VkAccessFlags2 rw = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    vkImageBarrier2(cmd_, color.img, clear ? VK_IMAGE_LAYOUT_UNDEFINED : color.layout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, before, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, rw);
+    color.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (resolve) {                                                            // (wholly written by the resolve)
+        vkImageBarrier2(cmd_, resolve->img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, before, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, rw);
+        resolve->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+    VkRenderingAttachmentInfo at{};
+    at.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    at.imageView = color.view;
+    at.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    at.loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+    at.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    for (int i = 0; i < 4; i++) at.clearValue.color.float32[i] = c ? c[i] : 0.0f;
+    if (resolve) {
+        at.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;                         // (the render pass's resolve attachment: the average of the samples)
+        at.resolveImageView = resolve->view;
+        at.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+    VkRenderingInfo ri{};
+    ri.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    ri.renderArea.extent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
+    ri.layerCount = 1;
+    ri.colorAttachmentCount = 1;
+    ri.pColorAttachments = &at;
+    vkCmdBeginRendering(cmd_, &ri);
     const VkViewport vp{0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h), 0.0f, 1.0f};   // OpenGL's rows: NDC y = -1 is the image's first row
     const VkRect2D sc{{0, 0}, {static_cast<uint32_t>(w), static_cast<uint32_t>(h)}};
     vkCmdSetViewport(cmd_, 0, 1, &vp);
@@ -768,13 +695,23 @@ void VkDraw2D::beginPass(Pass p, VkFramebuffer fb, int w, int h, bool clear, con
     inPass_ = true;
     pass_ = p;
     passW_ = w; passH_ = h;
+    passColor_ = &color; passResolve_ = resolve;
     vbBound_ = ~VkDeviceSize(0);
 }
 
 void VkDraw2D::endPass() {
     if (!inPass_) return;
-    vkCmdEndRenderPass(cmd_);
+    vkCmdEndRendering(cmd_);
     inPass_ = false;
+    const VkPipelineStageFlags2 after = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    const VkAccessFlags2 reads = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    Img* sampled = passResolve_ ? passResolve_ : passColor_;
+    if (sampled) {
+        vkImageBarrier2(cmd_, sampled->img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, after, reads);
+        sampled->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    passColor_ = passResolve_ = nullptr;
 }
 
 bool VkDraw2D::beginPicture(int w, int h, const float clear[4], bool oneSample, std::size_t bytes, int sets, bool forShot) {
@@ -807,7 +744,7 @@ bool VkDraw2D::beginPicture(int w, int h, const float clear[4], bool oneSample, 
         pi.pPoolSizes = ps;
         if (!c_.check(vkCreateDescriptorPool(c_.device, &pi, nullptr, &s.pool), "vkCreateDescriptorPool (renderer2d)")) { s.pool = VK_NULL_HANDLE; s.poolSets = 0; failed_ = true; return false; }
     } else if (!c_.check(vkResetDescriptorPool(c_.device, s.pool, 0), "vkResetDescriptorPool")) { failed_ = true; return false; }
-    beginPass(oneSample_ ? kPass8 : kPassMs, t.fbPic, w, h, true, clear);
+    beginPass(oneSample_ ? kPass8 : kPassMs, oneSample_ ? t.pic : t.ms, oneSample_ ? nullptr : &t.pic, w, h, true, clear);
     return true;
 }
 
@@ -826,7 +763,7 @@ void VkDraw2D::beginLayer(bool hdr, int w, int h) {
     Layer& l = hdr ? hdr_ : soft_;
     if (!layerFor(l, hdr, w, h)) return;
     const float zero[4] = {0, 0, 0, 0};
-    beginPass(hdr ? kPassF : kPass8, l.fb, w, h, true, zero);
+    beginPass(hdr ? kPassF : kPass8, l.img, nullptr, w, h, true, zero);
     inLayer_ = true;
     layerHdr_ = hdr;
 }
@@ -835,7 +772,7 @@ void VkDraw2D::endLayer() {
     if (!cur_ || failed_ || !inLayer_) return;
     endPass();
     inLayer_ = false;
-    beginPass(oneSample_ ? kPass8 : kPassMs, cur_->fbPic, cur_->w, cur_->h, false, nullptr);
+    beginPass(oneSample_ ? kPass8 : kPassMs, oneSample_ ? cur_->pic : cur_->ms, oneSample_ ? nullptr : &cur_->pic, cur_->w, cur_->h, false, nullptr);
 }
 
 void VkDraw2D::composite(bool hdr, Blend b) {
@@ -1015,14 +952,7 @@ int VkDraw2D::meshCreate(const void* v, std::size_t bytes) {
     if (ok) ok = c_.once([&](VkCommandBuffer cmd) {                          // once, as OpenGL's GL_STATIC_DRAW buffer (the mesh is then only drawn)
         const VkBufferCopy cp{0, 0, bytes};
         vkCmdCopyBuffer(cmd, stage.b, m.buf.b, 1, &cp);
-        VkBufferMemoryBarrier b{};
-        b.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        b.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-        b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        b.buffer = m.buf.b;
-        b.size = VK_WHOLE_SIZE;
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr, 1, &b, 0, nullptr);
+        vkMemoryBarrier2(cmd, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT, VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT);   // (0.63.0)
     });
     vkUnmapMemory(c_.device, stage.m);
     vkDestroyBuffer(c_.device, stage.b, nullptr);
@@ -1059,7 +989,7 @@ void VkDraw2D::endPicture(bool gray) {
     usedGray_ = false;
     if (failed_) return;
     if (gray) {                                                              // OpenGL: the picture drawn into its own image, then copied over in grey (kGrayFS)
-        beginPass(kPass8, cur_->fbGray, cur_->w, cur_->h, true, nullptr);
+        beginPass(kPass8, cur_->gray, nullptr, cur_->w, cur_->h, true, nullptr);
         draw(kGray, kNoBlend, 0, 0, 6, 0, 0, 0, -2);
         endPass();
         usedGray_ = true;
@@ -1099,7 +1029,7 @@ void VkDraw2D::present(VkCommandBuffer cmd, int x, int y, int w, int h) {
 }
 
 void VkDraw2D::dropShot() {
-    dropFramebuffer(shot_.fbPic); dropFramebuffer(shot_.fbGray); dropImage(shot_.ms); dropImage(shot_.pic); dropImage(shot_.gray);
+    dropImage(shot_.ms); dropImage(shot_.pic); dropImage(shot_.gray);
     shot_ = Targets();
     if (cur_ == &shot_) cur_ = nullptr;
 }

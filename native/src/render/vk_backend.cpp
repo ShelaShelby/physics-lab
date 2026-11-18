@@ -165,9 +165,9 @@ struct VkBackend::Impl {
                m == VK_PRESENT_MODE_MAILBOX_KHR ? "MAILBOX (does not wait)" : "other";
     }
     bool makeSwapchain(int w, int h) {
+        wd.UseDynamicRendering = true;                                    // 0.63.0 (Vulkan step 5): no render pass, no framebuffers (Vulkan 1.3)
         ImGui_ImplVulkanH_CreateOrResizeWindow(instance, phys, device, &wd, family, nullptr, w, h, minImages, extraUsage);
-        return wd.Swapchain != VK_NULL_HANDLE && wd.RenderPass != VK_NULL_HANDLE && wd.ImageCount >= 2 && wd.Frames.Size == static_cast<int>(wd.ImageCount) &&
-               wd.Frames[0].Framebuffer != VK_NULL_HANDLE;
+        return wd.Swapchain != VK_NULL_HANDLE && wd.ImageCount >= 2 && wd.Frames.Size == static_cast<int>(wd.ImageCount) && wd.Frames[0].BackbufferView != VK_NULL_HANDLE;
     }
 };
 
@@ -431,8 +431,10 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     ii.DescriptorPool = d.pool;
     ii.MinImageCount = d.minImages;
     ii.ImageCount = d.wd.ImageCount;
-    ii.PipelineInfoMain.RenderPass = d.wd.RenderPass;
-    ii.PipelineInfoMain.Subpass = 0;
+    ii.UseDynamicRendering = true;                                       // 0.63.0: Dear ImGui's pipeline for dynamic rendering into the window's format
+    ii.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    ii.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+    ii.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &d.wd.SurfaceFormat.format;
     ii.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     ii.CheckVkResultFn = checkFromImGui;
     const int failed0 = d.failedCalls;
@@ -506,8 +508,11 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
             gi.pColorBlendState = &cb;
             gi.pDynamicState = &ds;
             gi.layout = d.fillLayout;
-            gi.renderPass = d.wd.RenderPass;
-            gi.subpass = 0;
+            VkPipelineRenderingCreateInfo ri{};                              // 0.63.0: dynamic rendering into the window's format
+            ri.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+            ri.colorAttachmentCount = 1;
+            ri.pColorAttachmentFormats = &d.wd.SurfaceFormat.format;
+            gi.pNext = &ri;
             ok = d.check(vkCreateGraphicsPipelines(d.device, VK_NULL_HANDLE, 1, &gi, nullptr, &d.fill), "vkCreateGraphicsPipelines (fill)");
         }
         vkDestroyShaderModule(d.device, vs, nullptr);
@@ -608,15 +613,23 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     }
     VkClearValue cv{};
     for (int i = 0; i < 4; i++) cv.color.float32[i] = clear[i];
-    VkRenderPassBeginInfo rp{};
-    rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rp.renderPass = wd.RenderPass;
-    rp.framebuffer = fd.Framebuffer;
-    rp.renderArea.extent.width = static_cast<uint32_t>(wd.Width);
-    rp.renderArea.extent.height = static_cast<uint32_t>(wd.Height);
-    rp.clearValueCount = 1;
-    rp.pClearValues = &cv;
-    vkCmdBeginRenderPass(fd.CommandBuffer, &rp, VK_SUBPASS_CONTENTS_INLINE);
+    // 0.63.0 (step 5): dynamic rendering into the swapchain's image (synchronization2): from the acquire (its semaphore waits at the colour output stage)
+    vkImageBarrier2(fd.CommandBuffer, fd.Backbuffer, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+    VkRenderingAttachmentInfo at{};
+    at.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    at.imageView = fd.BackbufferView;
+    at.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    at.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    at.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    at.clearValue = cv;
+    VkRenderingInfo rinfo{};
+    rinfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    rinfo.renderArea.extent = {static_cast<uint32_t>(wd.Width), static_cast<uint32_t>(wd.Height)};
+    rinfo.layerCount = 1;
+    rinfo.colorAttachmentCount = 1;
+    rinfo.pColorAttachments = &at;
+    vkCmdBeginRendering(fd.CommandBuffer, &rinfo);
     const int x0 = std::clamp(px, 0, wd.Width), y0 = std::clamp(py, 0, wd.Height), x1 = std::clamp(px + pw, 0, wd.Width), y1 = std::clamp(py + ph, 0, wd.Height);
     static const bool noCopy = std::getenv("PL_VK_NOCOPY") != nullptr;   // 0.61.0 (measuring only): the picture is drawn but not copied into the window
     if (pictured && x1 > x0 && y1 > y0 && !noCopy) d.d2->present(fd.CommandBuffer, x0, y0, x1 - x0, y1 - y0);   // 0.60.0: the lab's picture
@@ -630,7 +643,9 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
         vkCmdDraw(fd.CommandBuffer, 3, 1, 0, 0);
     }
     ImGui_ImplVulkan_RenderDrawData(dd, fd.CommandBuffer);
-    vkCmdEndRenderPass(fd.CommandBuffer);
+    vkCmdEndRendering(fd.CommandBuffer);
+    vkImageBarrier2(fd.CommandBuffer, fd.Backbuffer, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0);   // (to the present: the semaphore signalled after it)
     if (timed >= 0) vkCmdWriteTimestamp2(fd.CommandBuffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, static_cast<uint32_t>(2 * timed + 1));   // (its end)
     if (!d.check(vkEndCommandBuffer(fd.CommandBuffer), "vkEndCommandBuffer")) { ok_ = false; return false; }
     const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -812,20 +827,9 @@ static bool makeHostBuffer(VkBackend::Impl& d, VkDeviceSize size, HostBuffer& hb
 }
 
 static void barrier(VkCommandBuffer cmd, VkImage image, VkImageLayout from, VkImageLayout to, VkAccessFlags srcAccess, VkAccessFlags dstAccess,
-                    VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage) {
-    VkImageMemoryBarrier b{};
-    b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    b.srcAccessMask = srcAccess;
-    b.dstAccessMask = dstAccess;
-    b.oldLayout = from;
-    b.newLayout = to;
-    b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b.image = image;
-    b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    b.subresourceRange.levelCount = 1;
-    b.subresourceRange.layerCount = 1;
-    vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
+                    VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage) {   // (0.63.0: synchronization2; the legacy bits have the same values there)
+    vkImageBarrier2(cmd, image, from, to, static_cast<VkPipelineStageFlags2>(srcStage), static_cast<VkAccessFlags2>(srcAccess), static_cast<VkPipelineStageFlags2>(dstStage),
+                    static_cast<VkAccessFlags2>(dstAccess));
 }
 
 // the bytes of an 8-bit BGRA or RGBA image to RGBA (or RGB), top row first
@@ -875,8 +879,6 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
     VkImage image = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImageView view = VK_NULL_HANDLE;
-    VkRenderPass pass = VK_NULL_HANDLE;
-    VkFramebuffer fb = VK_NULL_HANDLE;
     HostBuffer hb;
     bool ok = true;
     VkImageCreateInfo ii{};
@@ -913,49 +915,7 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         vi.subresourceRange.layerCount = 1;
         ok = d.check(vkCreateImageView(d.device, &vi, nullptr, &view), "vkCreateImageView (picture)");
     }
-    if (ok) {   // compatible with the window's pass (same format and samples), so Dear ImGui's pipeline draws in it
-        VkAttachmentDescription a = d.wd.AttachmentDesc;
-        a.format = fmt;
-        a.samples = VK_SAMPLE_COUNT_1_BIT;
-        a.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        a.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        a.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;          // 0.60.0: to TRANSFER_SRC by the barrier after the pass (ordered after the drawing)
-        VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-        VkSubpassDescription sub{};
-        sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        sub.colorAttachmentCount = 1;
-        sub.pColorAttachments = &ref;
-        // 0.60.0: the same dependency as the window's pass (Dear ImGui's), so the pipelines made for that pass are compatible with this one (render pass
-        // compatibility includes the dependencies); the copy below waits for the drawing with a barrier of its own
-        VkSubpassDependency dep{};
-        dep.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dep.dstSubpass = 0;
-        dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep.srcAccessMask = 0;
-        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        VkRenderPassCreateInfo rpi{};
-        rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        rpi.attachmentCount = 1;
-        rpi.pAttachments = &a;
-        rpi.subpassCount = 1;
-        rpi.pSubpasses = &sub;
-        rpi.dependencyCount = 1;
-        rpi.pDependencies = &dep;
-        ok = d.check(vkCreateRenderPass(d.device, &rpi, nullptr, &pass), "vkCreateRenderPass (picture)");
-    }
-    if (ok) {
-        VkFramebufferCreateInfo fi{};
-        fi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fi.renderPass = pass;
-        fi.attachmentCount = 1;
-        fi.pAttachments = &view;
-        fi.width = static_cast<uint32_t>(w);
-        fi.height = static_cast<uint32_t>(h);
-        fi.layers = 1;
-        ok = d.check(vkCreateFramebuffer(d.device, &fi, nullptr, &fb), "vkCreateFramebuffer (picture)");
-    }
+    // (0.63.0: dynamic rendering into the image: no render pass, no framebuffer; Dear ImGui's pipeline is made for the window's format, the image's too)
     const VkDeviceSize size = VkDeviceSize(w) * VkDeviceSize(h) * 4;
     if (ok) ok = makeHostBuffer(d, size, hb);
     bool pictured = false;
@@ -970,17 +930,25 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         }
         VkClearValue cv{};
         for (int i = 0; i < 4; i++) cv.color.float32[i] = clear[i];
-        VkRenderPassBeginInfo rp{};
-        rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rp.renderPass = pass;
-        rp.framebuffer = fb;
-        rp.renderArea.extent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
-        rp.clearValueCount = 1;
-        rp.pClearValues = &cv;
-        vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
+        barrier(cmd, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        VkRenderingAttachmentInfo at{};
+        at.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        at.imageView = view;
+        at.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        at.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        at.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        at.clearValue = cv;
+        VkRenderingInfo ri{};
+        ri.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        ri.renderArea.extent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h)};
+        ri.layerCount = 1;
+        ri.colorAttachmentCount = 1;
+        ri.pColorAttachments = &at;
+        vkCmdBeginRendering(cmd, &ri);
         if (pictured) d.d2->present(cmd, 0, 0, w, h);
         if (dd) ImGui_ImplVulkan_RenderDrawData(dd, cmd);
-        vkCmdEndRenderPass(cmd);
+        vkCmdEndRendering(cmd);
         if (timeIt) vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, tq + 1);
         barrier(cmd, image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
@@ -1003,8 +971,6 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         if (ok) { unpack(static_cast<const uint8_t*>(p), w, h, fmt == VK_FORMAT_B8G8R8A8_UNORM, 3, rgb); vkUnmapMemory(d.device, hb.memory); }
     }
     if (d.d2) { if (d.d2->failed()) ok = false; d.d2->dropShot(); }
-    if (fb) vkDestroyFramebuffer(d.device, fb, nullptr);
-    if (pass) vkDestroyRenderPass(d.device, pass, nullptr);
     if (view) vkDestroyImageView(d.device, view, nullptr);
     if (image) vkDestroyImage(d.device, image, nullptr);
     if (memory) vkFreeMemory(d.device, memory, nullptr);
@@ -1036,7 +1002,7 @@ bool VkBackend::initPicture(Renderer2D& r, bool msaa, bool breakCheck, std::stri
     d.ctx = c;
     d.d2 = new VkDraw2D();
     std::string w;
-    if (!d.d2->init(c, d.wd.RenderPass, msaa ? 4 : 1, w)) return fail("renderer2d pipelines", "renderer2d on Vulkan: " + w);
+    if (!d.d2->init(c, d.wd.SurfaceFormat.format, msaa ? 4 : 1, w)) return fail("renderer2d pipelines", "renderer2d on Vulkan: " + w);
     guard.end("renderer2d pipelines", "OpenGL's shaders as SPIR-V (" + std::to_string(d.d2->spirvBytes()) + " bytes; the picture area's fill: " +
               std::to_string(sizeof k_fill_vert + sizeof k_fill_frag) + "), " + d.d2->samplesText() + ", the cloud's layer " + d.d2->floatFormatText());
     r.useVulkan(d.d2);

@@ -106,7 +106,6 @@ void VkCards::freeBuffer(Buf& b) {
 }
 
 void VkCards::freeGrid(Grid& g) {
-    if (g.fb) vkDestroyFramebuffer(c_.device, g.fb, nullptr);
     if (g.view) vkDestroyImageView(c_.device, g.view, nullptr);
     if (g.img) vkDestroyImage(c_.device, g.img, nullptr);
     if (g.m) vkFreeMemory(c_.device, g.m, nullptr);
@@ -133,8 +132,7 @@ void VkCards::destroy() {
     for (VkPipeline& p : gridPipe_) if (p) { vkDestroyPipeline(c_.device, p, nullptr); p = VK_NULL_HANDLE; }
     if (gridLayout_) vkDestroyPipelineLayout(c_.device, gridLayout_, nullptr);
     if (gridDsl_) vkDestroyDescriptorSetLayout(c_.device, gridDsl_, nullptr);
-    if (gridPass_) vkDestroyRenderPass(c_.device, gridPass_, nullptr);
-    gridLayout_ = VK_NULL_HANDLE; gridDsl_ = VK_NULL_HANDLE; gridPass_ = VK_NULL_HANDLE;
+    gridLayout_ = VK_NULL_HANDLE; gridDsl_ = VK_NULL_HANDLE;
     if (pool_) vkDestroyCommandPool(c_.device, pool_, nullptr);
     pool_ = VK_NULL_HANDLE;
     open_ = -1;
@@ -237,13 +235,10 @@ bool VkCards::openSlot() {
     if (!c_.check(vkBeginCommandBuffer(s.cmd, &bi), "vkBeginCommandBuffer (card programs)")) { failed_ = true; return false; }
     // after everything submitted before it: the frames that drew from buffers this batch may write again (their vertex input and shaders, write after
     // read), the batches whose writes this one reads (compute, transfer)
-    VkMemoryBarrier mb{};
-    mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-    mb.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    vkCmdPipelineBarrier(s.cmd, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
-                         0, 1, &mb, 0, nullptr, 0, nullptr);
+    vkMemoryBarrier2(s.cmd, VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+                     VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                     VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
+                     VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT);   // (0.63.0: synchronization2)
     s.timed = false;
     if (timing_ && tq_) {                                     // 0.63.0: the benchmark's timer: the batch's start
         const std::uint32_t q = 2u * static_cast<std::uint32_t>(pick);
@@ -347,11 +342,9 @@ void VkCards::barrier(VkPipelineStageFlags by, unsigned to) {
     if (to & kToVertex) { dst |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT; da |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_SHADER_READ_BIT; }
     if (to & kToHost) { dst |= VK_PIPELINE_STAGE_HOST_BIT; da |= VK_ACCESS_HOST_READ_BIT; }
     if (to & kToTransfer) { dst |= VK_PIPELINE_STAGE_TRANSFER_BIT; da |= VK_ACCESS_TRANSFER_READ_BIT; }
-    VkMemoryBarrier mb{};
-    mb.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    mb.srcAccessMask = by == VK_PIPELINE_STAGE_TRANSFER_BIT ? VK_ACCESS_TRANSFER_WRITE_BIT : VK_ACCESS_SHADER_WRITE_BIT;
-    mb.dstAccessMask = da;
-    vkCmdPipelineBarrier(slots_[static_cast<std::size_t>(open_)].cmd, by, dst, 0, 1, &mb, 0, nullptr, 0, nullptr);
+    vkMemoryBarrier2(slots_[static_cast<std::size_t>(open_)].cmd, static_cast<VkPipelineStageFlags2>(by),        // (0.63.0: synchronization2; the legacy stage and
+                     by == VK_PIPELINE_STAGE_TRANSFER_BIT ? VK_ACCESS_2_TRANSFER_WRITE_BIT : VK_ACCESS_2_SHADER_WRITE_BIT,    // access bits have the same values in it)
+                     static_cast<VkPipelineStageFlags2>(dst), static_cast<VkAccessFlags2>(da));
 }
 
 bool VkCards::uniformBlock(const VkUniforms& u, VkDescriptorBufferInfo& bi) {
@@ -554,47 +547,11 @@ bool VkCards::makeGrid(int which, std::string& why) {
     which &= 1;
     if (gridPipe_[which]) return true;
     if (!ok_) { why = "the card programs have not started"; return false; }
-    if (!gridPass_) {
+    if (!gridLayout_) {
         VkFormatProperties fp{};
         vkGetPhysicalDeviceFormatProperties(c_.phys, VK_FORMAT_R32_SFLOAT, &fp);
         const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
         if ((fp.optimalTilingFeatures & need) != need) { why = "this card cannot add up into an R32_SFLOAT picture (the exposure's grid, OpenGL's GL_R32F)"; return false; }
-        VkAttachmentDescription a{};
-        a.format = VK_FORMAT_R32_SFLOAT;
-        a.samples = VK_SAMPLE_COUNT_1_BIT;
-        a.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        a.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        a.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        a.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        a.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        VkAttachmentReference ref{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-        VkSubpassDescription sp{};
-        sp.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        sp.colorAttachmentCount = 1;
-        sp.pColorAttachments = &ref;
-        VkSubpassDependency dep[2]{};
-        dep[0].srcSubpass = VK_SUBPASS_EXTERNAL;                 // the last read-back of this grid (a transfer) before it is cleared and added into again
-        dep[0].dstSubpass = 0;
-        dep[0].srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dep[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep[0].srcAccessMask = 0;
-        dep[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dep[1].srcSubpass = 0;                                   // the sums, then copied out
-        dep[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        dep[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep[1].dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dep[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dep[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        VkRenderPassCreateInfo rp{};
-        rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        rp.attachmentCount = 1;
-        rp.pAttachments = &a;
-        rp.subpassCount = 1;
-        rp.pSubpasses = &sp;
-        rp.dependencyCount = 2;
-        rp.pDependencies = dep;
-        if (!c_.check(vkCreateRenderPass(c_.device, &rp, nullptr, &gridPass_), "vkCreateRenderPass (grid)")) { gridPass_ = VK_NULL_HANDLE; why = "vkCreateRenderPass failed"; return false; }
         VkDescriptorSetLayoutBinding b{2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
         VkDescriptorSetLayoutCreateInfo li{};
         li.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -688,7 +645,12 @@ bool VkCards::makeGrid(int which, std::string& why) {
     gi.pColorBlendState = &cb;
     gi.pDynamicState = &ds;
     gi.layout = gridLayout_;
-    gi.renderPass = gridPass_;
+    const VkFormat gridFormat = VK_FORMAT_R32_SFLOAT;             // 0.63.0: dynamic rendering (no render pass)
+    VkPipelineRenderingCreateInfo ri{};
+    ri.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    ri.colorAttachmentCount = 1;
+    ri.pColorAttachmentFormats = &gridFormat;
+    gi.pNext = &ri;
     bool ok = mod[0] && mod[1] && c_.check(vkCreateGraphicsPipelines(c_.device, VK_NULL_HANDLE, 1, &gi, nullptr, &gridPipe_[which]), "vkCreateGraphicsPipelines (grid)");
     if (!ok) { gridPipe_[which] = VK_NULL_HANDLE; why = "the grid's pipeline could not be made"; }
     for (VkShaderModule m : mod) if (m) vkDestroyShaderModule(c_.device, m, nullptr);
@@ -733,15 +695,6 @@ bool VkCards::gridTarget(Grid& g, int w, int h) {
     vi.subresourceRange.levelCount = 1;
     vi.subresourceRange.layerCount = 1;
     if (!c_.check(vkCreateImageView(c_.device, &vi, nullptr, &g.view), "vkCreateImageView (grid)")) { g.view = VK_NULL_HANDLE; freeGrid(g); failed_ = true; return false; }
-    VkFramebufferCreateInfo fi{};
-    fi.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fi.renderPass = gridPass_;
-    fi.attachmentCount = 1;
-    fi.pAttachments = &g.view;
-    fi.width = static_cast<std::uint32_t>(w);
-    fi.height = static_cast<std::uint32_t>(h);
-    fi.layers = 1;
-    if (!c_.check(vkCreateFramebuffer(c_.device, &fi, nullptr, &g.fb), "vkCreateFramebuffer (grid)")) { g.fb = VK_NULL_HANDLE; freeGrid(g); failed_ = true; return false; }
     if (!makeBuffer(VkDeviceSize(w) * VkDeviceSize(h) * 4u, VK_BUFFER_USAGE_TRANSFER_DST_BIT, true, g.host, "the grid's read-back")) { freeGrid(g); return false; }
     g.w = w; g.h = h;
     return true;
@@ -766,15 +719,22 @@ int VkCards::grid(int which, int gw, int gh, VkBuffer b0, VkBuffer b1, std::uint
     wr.pBufferInfo = &ub;
     vkUpdateDescriptorSets(c_.device, 1, &wr, 0, nullptr);
     const VkCommandBuffer cb = slots_[static_cast<std::size_t>(open_)].cmd;
-    VkClearValue cv{};
-    VkRenderPassBeginInfo rp{};
-    rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rp.renderPass = gridPass_;
-    rp.framebuffer = g.fb;
-    rp.renderArea.extent = {static_cast<std::uint32_t>(gw), static_cast<std::uint32_t>(gh)};
-    rp.clearValueCount = 1;
-    rp.pClearValues = &cv;
-    vkCmdBeginRenderPass(cb, &rp, VK_SUBPASS_CONTENTS_INLINE);
+    // 0.63.0: dynamic rendering, synchronization2: the last read-back of this grid (a transfer) before it is cleared and added into again
+    vkImageBarrier2(cb, g.img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, 0,
+                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+    VkRenderingAttachmentInfo at{};
+    at.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    at.imageView = g.view;
+    at.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    at.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    at.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    VkRenderingInfo ri{};
+    ri.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    ri.renderArea.extent = {static_cast<std::uint32_t>(gw), static_cast<std::uint32_t>(gh)};
+    ri.layerCount = 1;
+    ri.colorAttachmentCount = 1;
+    ri.pColorAttachments = &at;
+    vkCmdBeginRendering(cb, &ri);
     // OpenGL's glViewport(0, 0, gw, gh): y = -1 is its first row, and glReadPixels gives that row first; here y = -1 is the image's first row too
     const VkViewport v{0.0f, 0.0f, static_cast<float>(gw), static_cast<float>(gh), 0.0f, 1.0f};
     const VkRect2D sc{{0, 0}, {static_cast<std::uint32_t>(gw), static_cast<std::uint32_t>(gh)}};
@@ -786,7 +746,9 @@ int VkCards::grid(int which, int gw, int gh, VkBuffer b0, VkBuffer b1, std::uint
     const VkDeviceSize offs[2] = {0, 0};
     vkCmdBindVertexBuffers(cb, 0, which == 0 ? 2u : 1u, bufs, offs);
     if (points) vkCmdDraw(cb, points, 1, 0, 0);
-    vkCmdEndRenderPass(cb);
+    vkCmdEndRendering(cb);
+    vkImageBarrier2(cb, g.img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);   // (the sums, then copied out)
     VkBufferImageCopy c{};
     c.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     c.imageSubresource.layerCount = 1;

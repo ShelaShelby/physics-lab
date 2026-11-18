@@ -75,6 +75,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - After the owner's 0.56.1 benchmark: move scenes far above his screen's rate to All scenes; fix the ones below it, slowest first; fix every response he would feel and every lab that is busy at rest.
 - **fix**: check_molecule card "the benchmark's report names the card for both scenes" fails on the session box (0.57.2's build too, 0.58.0): the first scene's path still says "once its start-up check has passed".
 - **fix**: check_6b benchscenes: a Black Hole scene (blackhole.extreme or all_light) sometimes leaves no picture to compare ("-1.0000 of the pixels") on this box; 0.58.0's build the same.
+- **fix**: check_blackhole smooth: the card's light paths give a new picture in only 3-9 of 16 moved frames on this box (0.63.0, Vulkan the default; timing on the software renderer).
 - **fix**: check_6b benchscenes: blackhole.film_tilt has no new picture in its counted time on a fresh settings folder (0.63.0, both APIs): the guards' one-step-at-a-time order holds the sky back behind the light paths' first fill on this box.
 - **fix**: check_6b benchwaits' response.atom_density reaches its 15 s cap on this box's software renderer with one thread (ui_popups fails; 0.56.4 the same): a cap or a cloud filling that does not depend on the frame time.
 - **fix**, to check in the owner's 0.56.1 run: orbit.sky had a 4.8-5.7 s frame while turning (here, inside the software renderer's shader code).

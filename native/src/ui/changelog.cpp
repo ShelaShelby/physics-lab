@@ -26,7 +26,8 @@ const Entry kNative[] = {
      "OpenGL), and its report says which graphics system ran and the state of each card program's start-up guard. New Hard scene atom.slice_super_drag: the "
      "Slice of the superposition 2p + 5f of mendelevium-258, Relativity On, phase colours Wheel, the cut dragged. Fixed: the start-up guards blamed the wrong "
      "program after a driver crash (on one PC the light paths crashed and the outline was switched off too): now only one guarded step is open at a time, and "
-     "a step's marker goes when it ends."},
+     "a step's marker goes when it ends. Inside, the Vulkan drawing of the first steps now uses Vulkan 1.3's dynamic rendering and "
+     "synchronization2, as the Black Hole Lab's does (the pictures are unchanged)."},
     {"0.62.0", "Vulkan, step 4 of 5: the Black Hole Lab on Vulkan, as a test; Vulkan 1.3 needed",
      "With Settings, Performance, Graphics: Vulkan (test), the Black Hole Lab is now drawn on Vulkan too, with the same shader text as on OpenGL: the bent sky "
      "and the disc, the spinning hole worked out for every pixel, the automatic exposure, the lower resolution while moving on a slow card, the Film look's "

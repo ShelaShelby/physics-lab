@@ -37,6 +37,37 @@ struct VkDevCtx {
     bool compute = false;
 };
 
+// 0.63.0 (Vulkan step 5): synchronization2 everywhere (as render/vk_blackhole.cpp): one image's layout change and the writes before it made visible to the
+// reads and writes after it; one memory barrier (buffers)
+inline void vkImageBarrier2(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImageLayout to, VkPipelineStageFlags2 ss, VkAccessFlags2 sa, VkPipelineStageFlags2 ds,
+                            VkAccessFlags2 da, std::uint32_t baseMip = 0, std::uint32_t mips = 1) {
+    VkImageMemoryBarrier2 b{};
+    b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    b.srcStageMask = ss; b.srcAccessMask = sa; b.dstStageMask = ds; b.dstAccessMask = da;
+    b.oldLayout = from; b.newLayout = to;
+    b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    b.image = img;
+    b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    b.subresourceRange.baseMipLevel = baseMip;
+    b.subresourceRange.levelCount = mips;
+    b.subresourceRange.layerCount = 1;
+    VkDependencyInfo d{};
+    d.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    d.imageMemoryBarrierCount = 1;
+    d.pImageMemoryBarriers = &b;
+    vkCmdPipelineBarrier2(cb, &d);
+}
+inline void vkMemoryBarrier2(VkCommandBuffer cb, VkPipelineStageFlags2 ss, VkAccessFlags2 sa, VkPipelineStageFlags2 ds, VkAccessFlags2 da) {
+    VkMemoryBarrier2 m{};
+    m.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    m.srcStageMask = ss; m.srcAccessMask = sa; m.dstStageMask = ds; m.dstAccessMask = da;
+    VkDependencyInfo d{};
+    d.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    d.memoryBarrierCount = 1;
+    d.pMemoryBarriers = &m;
+    vkCmdPipelineBarrier2(cb, &d);
+}
+
 class VkDraw2D {
 public:
     enum Prog { kTri, kPlanet, kSquare, kBlob, kMesh, kComposite, kGray, kCloud, kMolDot, kProgCount };   // 0.61.0: kCloud (kCloudVS), kMolDot (kMolDotVS), with kBlobFS
@@ -45,8 +76,8 @@ public:
 
     ~VkDraw2D();
     // the shaders (their uniform blocks read from the SPIR-V), the passes, the pipelines (every program x blend x pass used), the samplers and the white
-    // texture; swapPass: the window's render pass (the copy into the picture area). samples: 4 wanted (1: off, PL_NO_MSAA). False: why says it.
-    bool init(const VkDevCtx& c, VkRenderPass swapPass, int samples, std::string& why);
+    // texture; windowFormat: the window's format (the copy into the picture area). samples: 4 wanted (1: off, PL_NO_MSAA). False: why says it.
+    bool init(const VkDevCtx& c, VkFormat windowFormat, int samples, std::string& why);   // (0.63.0: the window's format: dynamic rendering, no render passes)
     void destroy();
     bool upload(int map, int w, int h, const std::vector<std::uint8_t>& rgba, bool srgb, std::string& why);   // a picture map with its mip levels
     bool hasMap(int map) const { return map >= 0 && map < 32 && maps_[map].img != VK_NULL_HANDLE; }
@@ -88,7 +119,6 @@ public:
     bool hasProgram(Prog p) const { return prog_[p].pipe[kPass8][kNormal] != VK_NULL_HANDLE; }
     // a buffer or other object that a frame on the card may still use: f() is called once the frames up to this one are done
     void later(std::function<void()> f) { garbage_.push_back({frameNo_, std::move(f)}); }
-    VkRenderPass passOf(Pass p) const { return passes_[p][0]; }
     // meshes (render/mesh.h MeshVertex), kept on the card
     int meshCreate(const void* v, std::size_t bytes);
     void meshDelete(int id);
@@ -103,14 +133,14 @@ public:
     void dropShot();                                                        // Save image's own images (after its picture was used)
 
     struct Buf { VkBuffer b = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; void* map = nullptr; VkDeviceSize size = 0; };
-    struct Img { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; int w = 0, h = 0; };
+    struct Img { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; int w = 0, h = 0; VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED; };
     struct Member { std::uint32_t offset = 0, arrayStride = 0, matrixStride = 0; };
     struct Block { std::uint32_t size = 0; std::map<std::string, Member> m; std::vector<std::uint8_t> data; };
     struct Shader { std::map<std::string, int> in, out; Block block; int blockBinding = -1, samplerBinding = -1; std::vector<int> storage; std::map<std::string, int> samplers; };   // (0.62.0: every texture by name)   // (reflection of one stage; 0.61.0: its storage buffers' bindings)
 
 private:
-    struct Targets { int w = 0, h = 0, s = 1; Img ms, pic, gray; VkFramebuffer fbPic = VK_NULL_HANDLE, fbGray = VK_NULL_HANDLE; };
-    struct Layer { int w = 0, h = 0; Img img; VkFramebuffer fb = VK_NULL_HANDLE; };
+    struct Targets { int w = 0, h = 0, s = 1; Img ms, pic, gray; };
+    struct Layer { int w = 0, h = 0; Img img; };
     struct Slot { Buf buf; VkDeviceSize used = 0; VkDescriptorPool pool = VK_NULL_HANDLE; std::uint32_t poolSets = 0; std::uint64_t frame = 0; };
     struct Program { Block blk[2]; VkPipeline pipe[kPassCount][kBlendCount] = {}; };
     struct Mesh { Buf buf; bool used = false; };
@@ -119,11 +149,13 @@ private:
     bool makeImage(int w, int h, VkFormat f, VkSampleCountFlagBits s, VkImageUsageFlags usage, int mips, Img& i, const char* what);
     void dropBuffer(Buf& b);                                                // kept until the frames that may use it are done
     void dropImage(Img& i);
-    void dropFramebuffer(VkFramebuffer& f);
     void collect();                                                          // what is no longer used, destroyed
     bool targetsFor(Targets& t, int w, int h, int s);
     bool layerFor(Layer& l, bool hdr, int w, int h);
-    void beginPass(Pass p, VkFramebuffer fb, int w, int h, bool clear, const float c[4]);
+    // 0.63.0: dynamic rendering into color (resolved into *resolve: the multisampled picture), synchronization2 barriers before and after (each image's layout tracked)
+    void beginPass(Pass p, Img& color, Img* resolve, int w, int h, bool clear, const float c[4]);
+    Img* passColor_ = nullptr;
+    Img* passResolve_ = nullptr;
     void endPass();
     VkDescriptorSet descriptors(const Program& pr, VkImageView tex, VkSampler smp);
     VkPipeline makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, VkShaderModule fs);
@@ -134,7 +166,6 @@ private:
     std::string floatText_, samplesText_;
     std::size_t spirvBytes_ = 0;
     VkFormat floatFormat_ = VK_FORMAT_R32G32B32A32_SFLOAT;
-    VkRenderPass passes_[kPassCount][2] = {};                                // [pass][0 clear, 1 load]
     VkDescriptorSetLayout setLayout_ = VK_NULL_HANDLE, presentSetLayout_ = VK_NULL_HANDLE;
     VkPipelineLayout layout_ = VK_NULL_HANDLE, presentLayout_ = VK_NULL_HANDLE;
     VkPipeline presentPipe_ = VK_NULL_HANDLE;
