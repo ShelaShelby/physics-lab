@@ -19,6 +19,15 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.62.0", "Vulkan, step 4 of 5: the Black Hole Lab on Vulkan, as a test; Vulkan 1.3 needed",
+     "With Settings, Performance, Graphics: Vulkan (test), the Black Hole Lab is now drawn on Vulkan too, with the same shader text as on OpenGL: the bent sky "
+     "and the disc, the spinning hole worked out for every pixel, the automatic exposure, the lower resolution while moving on a slow card, the Film look's "
+     "glow, the eye's glare (its veil made on a thread of its own, the frame never waits) and the graphics card's light paths. The pictures are the same as "
+     "on OpenGL (checked view by view). The large programs are made on a thread of their own, never in a frame, and kept in a pipeline cache in the settings "
+     "folder, so later starts are faster. Each has its own start-up check on Vulkan: the light paths, switched off on OpenGL on some PCs, get their own try "
+     "on Vulkan, and a failure on one graphics system never switches the other off. Vulkan now needs version 1.3 (1.4 is used where the card has it): with "
+     "an older driver the app starts on OpenGL and Settings says why. The GPU switches in Settings name the graphics system in use. OpenGL stays the default "
+     "and is unchanged."},
     {"0.61.0", "Vulkan, step 3 of 5: the graphics card's own programs on Vulkan, as a test",
      "With Settings, Performance, Graphics: Vulkan (test), the work OpenGL gives the graphics card's own programs is now done by the card on Vulkan too: the "
      "belts' rocks on their orbits, the Atom Lab's Cloud 3D Glow dots, the superpositions and the jumps' colours, the 90 % outline, the Slice's dots, a jump "

@@ -47,6 +47,7 @@ void KerrSky::reset() {
 
 bool KerrSky::build(int stage, KerrSteps* steps, std::string& why) {
     if (stage < 0 || stage >= kStages) return false;
+    if (vkBuild_) { const int r = vkBuild_(stage, steps, why); building_ = r == 0; return r >= 0; }   // 0.62.0: Vulkan's
     if (prog_[stage]) return true;
     const double t0 = nowMs();
     const std::string src = kerrSkySource(stage), name = stageName(stage);

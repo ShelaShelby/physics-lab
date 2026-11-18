@@ -66,7 +66,7 @@ public:
     std::size_t spirvBytes() const { return spirv_; }
 
     // a compute program from its SPIR-V (its uniform block at binding 7, its storage buffers at their bindings); false: why
-    bool makeKernel(const std::uint32_t* words, std::size_t bytes, Kernel& k, std::string& why);
+    bool makeKernel(const std::uint32_t* words, std::size_t bytes, Kernel& k, std::string& why, VkPipelineCache cache = VK_NULL_HANDLE);   // (0.62.0: a cache)
     void dropKernel(Kernel& k);
     bool makeBuffer(VkDeviceSize size, VkBufferUsageFlags usage, bool host, Buf& b, const char* what);
     void dropBuffer(Buf& b);                                 // destroyed once the batches and frames that may use it are done
@@ -85,6 +85,13 @@ public:
     bool waitFor(std::uint64_t ticket, double seconds);      // the start-up steps only (with a time limit)
     bool failed() const { return failed_; }
     void collect();                                          // what is no longer used, destroyed (called once a frame)
+    // 0.62.0 (step 4, the Black Hole Lab's passes: render/vk_blackhole.h): a descriptor set of any layout from the open batch's pools (uniform buffers,
+    // storage buffers, textures), a uniform block in the batch's buffer, the staging buffer the last stage() wrote into, f() once the open batch (or the
+    // last submitted one) and the frames after it are done
+    VkDescriptorSet descriptorSet(VkDescriptorSetLayout dsl);
+    bool uniformBlock(const VkUniforms& u, VkDescriptorBufferInfo& bi);
+    VkBuffer stageBuffer() const;
+    void later(std::function<void()> f) { drop_.push_back({open_ >= 0 ? nextTicket_ : nextTicket_ - 1, std::move(f)}); }
 
     // ---- the exposure's grid (the Glow and Density clouds): points summed into a small float picture, read back after flush(true) ----
     // which: 0 the Cloud 3D dots (kCloudGridVS: their places at binding 0, groups at binding 1), 1 the Density dots (kMolGridVS: the dots at binding 0).
@@ -106,8 +113,6 @@ private:
                   std::vector<Buf> spare; };
     struct Grid { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; VkFramebuffer fb = VK_NULL_HANDLE; Buf host; int w = 0, h = 0; };
     bool openSlot();
-    VkDescriptorSet descriptorSet(VkDescriptorSetLayout dsl);
-    bool uniformBlock(const VkUniforms& u, VkDescriptorBufferInfo& bi);
     void freeBuffer(Buf& b);
     bool gridTarget(Grid& g, int w, int h);
     void freeGrid(Grid& g);

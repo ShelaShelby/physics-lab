@@ -937,6 +937,7 @@ bool BlackHoleView::cardReady(render::Renderer2D& R) {
         static GuardSteps steps;
         render::IKerrCompute* K = R.kerrCompute(&steps);
         if (!K) { G.finished(false, R.kerrWhy()); cardOff(R.kerrWhy()); return false; }
+        if (K->building()) return false;                                   // 0.62.0 (Vulkan): its pipeline is made on a thread of its own; asked again next frame
         cardStartup_ = std::make_unique<CardStartup>(*K, &G, cardStepLimitMs());
         cardState_ = 2;
     }
@@ -1108,6 +1109,7 @@ bool BlackHoleView::skyReady(render::Renderer2D& R) {
         std::string why;
         if (skyStep_ <= 2) {
             if (!R.kerrSky().build(skyStep_, &steps, why)) { G.finished(false, why); skyOff(why); return false; }
+            if (R.kerrSky().building()) return false;                      // 0.62.0 (Vulkan): the stage's pipeline is made on a thread of its own
             skyStep_++;
             return false;
         }
@@ -1340,6 +1342,7 @@ void cardCompare(render::Renderer2D& R) {
 }  // namespace
 
 void compareHook(render::Renderer2D& R, const char* spec) {
+    if (R.vulkan()) { std::printf("PLBHCOMPARE skipped: its pictures are read back with OpenGL (on Vulkan: gl_compare_tests' Vulkan twin)\n"); return; }   // 0.62.0
     if (spec && std::string(spec) == "card") { cardCompare(R); return; }
     if (spec && std::string(spec) == "sky") {                              // 0.56.0
         skyCompareHook(R);

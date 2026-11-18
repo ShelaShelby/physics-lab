@@ -88,8 +88,8 @@ const char* const kSky[3] = {"soft", "full", "off"};
 const char* const kCons[3] = {"off", "lines", "names"};
 
 void labsToPrefs(const AppState& app, app::Prefs& p) {
-    if (app::gpuGuard().started()) p.gpuPaths = app::gpuGuard().saved();
-    if (app::gpuSkyGuard().started()) p.gpuSky = app::gpuSkyGuard().saved();
+    if (!app::vulkanGuards() && app::gpuGuard().started()) p.gpuPaths = app::gpuGuard().saved();      // (0.62.0: on Vulkan these give Vulkan's twins,
+    if (!app::vulkanGuards() && app::gpuSkyGuard().started()) p.gpuSky = app::gpuSkyGuard().saved();  // kept in gpuVk below)
     if (!app::vulkanGuards() && app::gpuSliceGuard().started()) p.gpuSlice = app::gpuSliceGuard().saved();   // 0.57.0
     if (!app::vulkanGuards() && app::gpuMolCloudGuard().started()) p.gpuMolCloud = app::gpuMolCloudGuard().saved();   // 0.57.1
     if (app::vulkanGuards()) for (const auto& [name, g] : app::vulkanCardGuards()) if (g->started()) p.gpuVk[name] = g->saved();   // 0.61.0 (Vulkan's own)

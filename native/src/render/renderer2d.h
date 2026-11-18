@@ -32,6 +32,7 @@ namespace render {
 class VkDraw2D;   // 0.60.0: render/vk_draw2d.h (Vulkan, step 2)
 class VkCards;    // 0.61.0: render/vk_card.h (Vulkan, step 3)
 class VkGlow;
+class VkBlackHole;   // 0.62.0: render/vk_blackhole.h (Vulkan, step 4)
 
 struct Color {
     float r = 1, g = 1, b = 1, a = 1;
@@ -58,7 +59,7 @@ public:
     KerrSky& kerrSky() { return sky_; }
     AtomCard& atomCard();                                            // 0.57.0: the Atom Lab's Slice dots and jump groups on the card (made at the first call)
     MoleculeCard& moleculeCard();                                    // 0.57.1: the Molecule Lab's Density cloud on the card (made at the first call)
-    void skyMath(const std::vector<float>& in, std::vector<float>& out) { sky_.math(in, out, cmpVao_); }   // (tests)
+    void skyMath(const std::vector<float>& in, std::vector<float>& out) { if (vk_) { out.assign(in.size() / 12 * 8, 0.0f); return; } sky_.math(in, out, cmpVao_); }   // (tests; OpenGL's only)
     // 0.56.0: the last sky pass: its time on the card (GL_TIMESTAMP pairs, read back without waiting: a few frames old) for the whole picture and at the
     // resolution drawn, the resolution's scale (1 = full), the passes drawn, the card's exposure (its brightest disc channel and Y, read back a frame or two
     // later; white the screen's white it gives, 0 none yet) and how many sample points it had
@@ -294,6 +295,9 @@ public:
     struct GlareStats { int b = 0, nx = 0, ny = 0; double readMs = 0, veilMs = 0, spread = 0, laid = 0; long made = 0; double waitMs = 0, frameMs = 0; };
     const GlareStats& glareStats() const { return glareStats_; }
     void lensSky(const LensSky& s);
+    // the kept bent picture still shows L (drawLens's rule: the view, the tables' versions, the looks; ksky: the sky per pixel would draw it now, skyDrawn:
+    // it drew the kept one; width / lastPtW: the picture's width in points now and then). 0.62.0: shared with Vulkan's (render/vk_blackhole.cpp)
+    static bool lensSameView(const LensSky& P, const LensSky& L, bool ksky, bool skyDrawn, double width, double lastPtW);
     // 0.56.0 (the start-up check and the tests): the sky pass's probe outputs (its uMode 1..4: far direction and x_px; order, r, g, x_px; end, b, q, case; u0..u3)
     // of a w x h picture of L (cx, cy, kRad in pixels), 16 floats per pixel, rows from the bottom. queue: copied into a pixel buffer behind a fence, read by
     // skyProbeRead once skyProbeDone (the frame never waits); else read at once into out (waits)
@@ -302,7 +306,7 @@ public:
     bool skyProbeDone();
     void skyProbeRead(std::vector<float>& out);
     long lensRedraws() const { return lensRedraws_; }
-    bool glareBusy() const { return glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
+    bool glareBusy() const { return vk_ ? vkGlareBusy_ : glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // (0.62.0: Vulkan's mirrored each frame)   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
 private:
     enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud };
@@ -440,6 +444,12 @@ private:
     VkDraw2D* vk_ = nullptr;                        // 0.60.0: Vulkan draws the picture (not owned)
     VkCards* vkc_ = nullptr;                        // 0.61.0: the card programs on Vulkan (not owned; their objects below are)
     VkGlow* vkGlow_ = nullptr;
+    VkBlackHole* vkbh_ = nullptr;                   // 0.62.0 (step 4): the Black Hole Lab's programs on Vulkan (owned); its Vulkan halves of the calls below
+    void (*vkProbe_)(Renderer2D&, const LensSky&, int, int, bool, std::vector<float>*) = nullptr;
+    bool (*vkProbeDone_)(Renderer2D&) = nullptr;
+    void (*vkProbeRead_)(Renderer2D&, std::vector<float>&) = nullptr;
+    IKerrCompute* (*vkKerr_)(Renderer2D&, KerrSteps*) = nullptr;
+    bool vkGlareBusy_ = false;
     AtomCard* (*vkAtomCard_)(VkCards&) = nullptr;
     MoleculeCard* (*vkMolCard_)(VkCards&) = nullptr;
     void (*vkDropCards_)(Renderer2D&) = nullptr;
@@ -448,7 +458,7 @@ private:
     std::vector<int> vkGrid_;                       // 0.61.0: this frame's grids (by segment), their lights
     std::vector<double> vkLight_;
     std::vector<char> vkRocks_;
-    bool vkCardsFrame(bool forShot);
+    bool vkCardsFrame(bool forShot, int fbW, int fbH);
     bool vkMap_[static_cast<int>(Map::Count)] = {};
     enum DrawKind { kdRect, kdLine, kdTriangle, kdDisc, kdRing, kdSphere, kdSunDisc, kdFadeDisc, kdMaskedDisc, kdSquares, kdBlobs, kdSpheres, kdMesh, kdSoftLayer,
                     kdCloudLayer, kdPlanet, kdPlanetMap, kdPlanetRings, kdPlanetEclipse, kdPlanetAir, kdSkyMap, kdGray, kdBlobKind0, kdKindCount = kdBlobKind0 + 10 };

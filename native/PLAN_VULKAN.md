@@ -10,8 +10,12 @@ the card; the target is the screen's rate (his PC: 255 Hz).
    render/renderer2d_vk.cpp), 4x multisampling, Save image; the card programs take the processor's path on Vulkan until step 3.
 3. **The card programs** (0.61.0, done): the groups, the outline, the rocks (double precision: shaderFloat64), the Glow dots, the Slice, the jump and the
    Density cloud on Vulkan from shaders.h's text (render/vk_card.*), each under its own Vulkan guard; their batches on the window's queue, fenced.
-4. **The Black Hole Lab's programs** (kerr_sky, kerr_compute, the lens and Kerr shaders); retry the compute path parked since 0.55.7.
+4. **The Black Hole Lab's programs** (0.62.0, done): the lens, the table pass, the sky per pixel (kKerrSkyFS from its parts), the exposure, the lower
+   resolution while moving, the probe, the Film glow, the eye's glare and the light paths (kKerrTableCS) on Vulkan (render/vk_blackhole.*), Vulkan 1.3's
+   dynamic rendering and synchronization2, the big pipelines on a worker thread with a pipeline cache; Vulkan 1.3 required, 1.4 used where present.
 5. **The benchmark, the picture tests and the UI suite on Vulkan**; Vulkan the default; then OpenGL removed once the owner's PC shows every scene works.
+   Clean-up then: steps 1-3's code (vk_draw2d, vk_card, the backend's passes) to 1.3's dynamic rendering and synchronization2, as vk_blackhole uses; the
+   extra copy of the picture into the window (present.frag) once the picture is drawn in Vulkan's row order.
 
 Rules for every step: zero validation errors in this box's test runs (lavapipe, PL_VK_VALIDATION=1); every VkResult checked; only features that are
 queried; no implicit int/float conversions in shaders, every variable initialised (AMD's compiler is stricter than Mesa's); the OpenGL path bit for bit

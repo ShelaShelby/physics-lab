@@ -242,19 +242,27 @@ std::vector<std::string> GpuGuard::logTail(int n) const {
     return all;
 }
 
+// 0.61.0: on Vulkan (step 3) the card programs have guards of their own (their markers, settings lines and versions differ from OpenGL's, so a failure
+// on one API never switches the other off); the functions below give the guard of the API this start draws with
+static bool g_vulkanGuards = false;
+
+// 0.62.0 (step 4): the Black Hole Lab's light paths and its sky per pixel have Vulkan twins too
 GpuGuard& gpuGuard() {
     static GpuGuard g;
-    return g;
+    static GpuGuard v("gpu-vklightpaths-step.txt", GpuGuard::kLog, false, "[vulkan] [lightpaths] ", "The light paths on Vulkan");
+    return g_vulkanGuards ? v : g;
 }
 
 GpuGuard& gpuSkyGuard() {
     static GpuGuard g("gpu-sky-step.txt", GpuGuard::kLog, false, "[sky] ");
-    return g;
+    static GpuGuard v("gpu-vksky-step.txt", GpuGuard::kLog, false, "[vulkan] [sky] ", "The spinning hole's sky per pixel on Vulkan");
+    return g_vulkanGuards ? v : g;
 }
 
-// 0.61.0: on Vulkan (step 3) the card programs have guards of their own (their markers, settings lines and versions differ from OpenGL's, so a failure
-// on one API never switches the other off); the functions below give the guard of the API this start draws with
-static bool g_vulkanGuards = false;
+GpuGuard& gpuVkLensGuard() {
+    static GpuGuard g("gpu-vklens-step.txt", GpuGuard::kLog, false, "[vulkan] [lens] ", "The Black Hole Lab's picture on Vulkan");
+    return g;
+}
 void useVulkanGuards(bool on) { g_vulkanGuards = on; }
 bool vulkanGuards() { return g_vulkanGuards; }
 
@@ -305,7 +313,8 @@ std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards() {
     const bool was = g_vulkanGuards;
     g_vulkanGuards = true;
     std::vector<std::pair<std::string, GpuGuard*>> v = {{"groups", &gpuVkGroupsGuard()}, {"outline", &gpuVkOutlineGuard()}, {"rocks", &gpuVkRocksGuard()}, {"cloud", &gpuVkCloudGuard()},
-                                                       {"slice", &gpuSliceGuard()}, {"jump", &gpuJumpGuard()}, {"molcloud", &gpuMolCloudGuard()}};
+                                                       {"slice", &gpuSliceGuard()}, {"jump", &gpuJumpGuard()}, {"molcloud", &gpuMolCloudGuard()},
+                                                       {"lightpaths", &gpuGuard()}, {"sky", &gpuSkyGuard()}, {"lens", &gpuVkLensGuard()}};   // (0.62.0)
     g_vulkanGuards = was;
     return v;
 }

@@ -11,7 +11,7 @@
 #   shift     with a card or panel over the middle, the selected body is moved outside every open panel; with the shift switched off (PL_SHIFT=off) it is not (so the test can fail)
 #   reading   About opens in the reading view: a column of at most 34 em, headings, a contents list, body lines of at most 75 characters (DejaVu Sans here, wider than Segoe UI)
 #   old       no Old panel button in either lab, and PL_NEWUI=off no longer switches the New UI off (0.16 stage 1b)
-import os, re, sys
+import os, re, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap, prefetch, Bmp
 
@@ -332,6 +332,96 @@ def part_vulkancards(binary, work):
     check("squares" in _kinds(n), "no double precision: the belts are still drawn (the processor's squares)")
     check(note and "The belts' rocks: the processor, because this card has no double precision in its shaders (shaderFloat64)" in note[0], f"no double precision: Settings' Graphics row says so: {note[:1]}")
 
+# 0.62.0 (Vulkan step 4 of 5): the Black Hole Lab on Vulkan. Each view drawn by Vulkan (one sample, the validation layers with their synchronisation checks)
+# and by OpenGL, both running until the lab has settled (its tables, the sky's check, the exposure and the glare done: PL_BH_SETTLE); the planner's limit
+# (unchanged since step 2): at most 1 % of the pixels over 8 levels per view. The Vulkan log must name the first full picture of the lab's passes (and of
+# the sky per pixel for the spinning hole). Then: Vulkan 1.3 required (a card that offers 1.2: OpenGL, and Settings says why), the pipeline cache (the
+# second start makes the sky's pipeline faster than the first; a damaged file is ignored), one program broken on purpose (PL_VK_CARDFAIL=sky: only the
+# sky per pixel falls back, to the processor's table, and the log says why).
+VK4_FEED = "preset=feeding;spin=0.6"
+VK4_VIEWS = {   # name: PL_BH_SET
+    "lens": "preset=feeding;spin=0",
+    "real": VK4_FEED + ";glare=off",
+    "film": VK4_FEED + ";look=film",
+    "glare": VK4_FEED + ";glare=eye",
+    "alllight": VK4_FEED + ";light=all;glare=off",
+    "skyblack": VK4_FEED + ";sky=black;glare=off",
+    "truebright": VK4_FEED + ";skybeside=true;glare=off",
+}
+VK4_RUN = {"PL_BLACKHOLE": "1", "PL_BH_SETTLE": "20:30", "PL_BH_GLARENOW": "1"}   # (the glare at once, in its frame: OpenGL's thread of the veil, below normal
+                                                                                  # priority, can wait for minutes here behind llvmpipe's own threads)
+
+def _sky_ms(r):
+    m = [l for l in r.out.splitlines() if l.startswith("PLVKBH pipeline the whole sky shader")]
+    return float(m[-1].split("ms=")[1].split()[0]) if m else None
+
+def part_vulkanbh(binary, work):
+    calls = []
+    for name, bh in VK4_VIEWS.items():
+        calls.append(((binary, work, "v4_vk_" + name, dict(VK4_RUN, PL_BH_SET=bh, **VK3_SYNC)), dict(frames=1500, timeout=2400)))
+        calls.append(((binary, work, "v4_gl_" + name, dict(VK4_RUN, PL_BH_SET=bh, PL_NO_MSAA="1")), dict(frames=1500, timeout=2400)))
+    fail_env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], PL_VK_CARDFAIL="sky", **VK3_SYNC)
+    calls.append(((binary, work, "v4_fail", fail_env), dict(frames=1500, timeout=2400)))
+    async_env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["glare"], **VK3_SYNC)
+    del async_env["PL_BH_GLARENOW"]
+    calls.append(((binary, work, "v4_async", async_env), dict(frames=1500, timeout=2400)))
+    calls.append(((binary, work, "v4_old", dict(PL_GRAPHICS="vulkan", PL_VK_PRETEND_API="1.2", PL_OPEN="settings:graphics")), dict(frames=30)))
+    prefetch(calls)
+    for name, bh in VK4_VIEWS.items():
+        v = run_app(binary, work, "v4_vk_" + name, dict(VK4_RUN, PL_BH_SET=bh, **VK3_SYNC), frames=1500, timeout=2400)
+        g = run_app(binary, work, "v4_gl_" + name, dict(VK4_RUN, PL_BH_SET=bh, PL_NO_MSAA="1"), frames=1500, timeout=2400)
+        vlog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v4_vk_" + name))
+        check("Vulkan: " in v.out and "OpenGL: " in g.out, f"black hole {name}: the app started on Vulkan (and the reference on OpenGL)")
+        check(_logged(vlog, "[vulkan] [lens] ", "end the first full picture"), f"black hole {name}: Vulkan drew it with the lab's passes (the log: the lens guard's first full picture)")
+        if name != "lens":
+            check(_logged(vlog, "[vulkan] [sky] ", "end the first full picture") and "PLBHSKY state=1" in v.out,
+                  f"black hole {name}: the spinning hole per pixel on Vulkan (its check passed, its first full picture)")
+        errs = _vk_errors(v)
+        check("PLVK validation errors=0" in v.out and not errs, f"black hole {name}: zero validation errors, synchronisation checks on ({len(errs)}; first: {errs[:1]})")
+        frac = _differ(v.bmp, g.bmp) if os.path.exists(v.bmp) and os.path.exists(g.bmp) else None
+        print(f"vulkanbh {name}: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels")
+        check(frac is not None and frac <= 0.01, f"black hole {name}: Vulkan against OpenGL, one sample: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels (at most 1 %)")
+    # the glare made over the frames (the app's way: its blocks read back without waiting, the veil on a thread of its own): the same picture
+    a = run_app(binary, work, "v4_async", async_env, frames=1500, timeout=2400)
+    v = run_app(binary, work, "v4_vk_glare", dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["glare"], **VK3_SYNC), frames=1500, timeout=2400)
+    frac = _differ(a.bmp, v.bmp) if os.path.exists(a.bmp) and os.path.exists(v.bmp) else None
+    print(f"vulkanbh glare over the frames: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ from the glare made at once")
+    check(frac is not None and frac <= 0.01 and not _vk_errors(a), "the glare made over the frames on Vulkan (read back without waiting, the veil on its thread) is the glare made at once")
+    # the light paths on Vulkan (gpuGuard's twin): their pipeline and the check against the processor (the same limits as OpenGL's)
+    vlog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v4_vk_real"))
+    v = run_app(binary, work, "v4_vk_real", dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], **VK3_SYNC), frames=1500, timeout=2400)
+    check(_logged(vlog, "[vulkan] [lightpaths] ", "end the light paths' pipeline: made") and "PLBHCARD state=1" in v.out,
+          f"the light paths on Vulkan: their pipeline made, their check against the processor passed ({[l for l in v.out.splitlines() if l.startswith('PLBHCARD')][-1:]})")
+    # one program broken on purpose: only the sky per pixel falls back (the processor's table), the log says why, the rest stays on Vulkan
+    f = run_app(binary, work, "v4_fail", fail_env, frames=1500, timeout=2400)
+    flog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v4_fail"))
+    check("Vulkan: " in f.out and "PLBHSKY state=-1" in f.out and "made to fail on purpose (PL_VK_CARDFAIL=sky)" in flog and "[vulkan] [sky]" in flog,
+          "a broken sky program (PL_VK_CARDFAIL=sky): only it falls back, the log says why")
+    check(_logged(flog, "[vulkan] [lens] ", "end the first full picture") and "PLBHCARD state=1" in f.out and not _vk_errors(f),
+          "a broken sky program: the lab's passes and the light paths stay on Vulkan, zero validation errors")
+    # Vulkan 1.3 required: a card that offers 1.2 is not used
+    o = run_app(binary, work, "v4_old", dict(PL_GRAPHICS="vulkan", PL_VK_PRETEND_API="1.2", PL_OPEN="settings:graphics"), frames=30)
+    note = [n for n in o.notes if n.startswith("graphics ")]
+    check("OpenGL: " in o.out and note and "this graphics card offers Vulkan 1.2; Physics Lab needs 1.3" in note[0], f"a card with Vulkan 1.2: OpenGL, and Settings says why: {note[:1]}")
+    log, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v4_vk_lens"))
+    check(re.search(r"asked for 1\.[34]\.0", log) is not None and "the card's" in log, "the log keeps the version asked for and the card's own")
+    # the pipeline cache: kept in the settings folder; the second start makes the sky's pipeline faster; a damaged file is ignored
+    home = os.path.join(os.path.abspath(work), "home_v4_cache")
+    subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
+    env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], PL_GRAPHICS="vulkan", HOME=home, PL_BH_SETTLE="20:5")
+    c1 = run_app(binary, work, "v4_cache1", env, frames=600, timeout=2400)
+    c2 = run_app(binary, work, "v4_cache2", env, frames=600, timeout=2400)
+    c3 = run_app(binary, work, "v4_cache3", dict(env, PL_VK_CACHE_CORRUPT="1"), frames=600, timeout=2400)
+    t1, t2 = _sky_ms(c1), _sky_ms(c2)
+    print(f"vulkanbh pipeline cache: the whole sky shader's pipeline {t1} ms at the first start, {t2} ms at the second")
+    held = re.search(r"PLVKCACHE read, (\d+) bytes", c2.out)
+    check("PLVKCACHE none yet" in c1.out and held is not None and t1 is not None and t2 is not None, f"the pipeline cache: written at the first start, read at the second ({t1} -> {t2} ms)")
+    if held and int(held.group(1)) > 32:                                   # (lavapipe keeps only the cache's 32-byte header, no pipelines: nothing to be faster with)
+        check(t2 < t1, f"the pipeline cache holds pipelines ({held.group(1)} bytes): the sky's pipeline is made faster at the second start ({t1} -> {t2} ms)")
+    else:
+        print(f"vulkanbh pipeline cache: this driver keeps no pipelines in it ({held.group(1) if held else '?'} bytes): the second start cannot be faster here")
+    check("PLVKCACHE ignored: the file is damaged" in c3.out and "Vulkan: " in c3.out and _sky_ms(c3) is not None, "a damaged pipeline cache is ignored (no crash, the pipelines made anew)")
+
 def _kinds(r):
     line = [l for l in r.out.splitlines() if l.startswith("PLDRAWKINDS ")]
     return {k for k, v in (p.split("=") for p in line[-1].split()[1:]) if v != "0"} if line else set()
@@ -446,8 +536,12 @@ def main():
     if only is not None and "vulkan2d" in only:                            # (0.60.0: only when asked; ui_shell lists check_shell.py:vulkan2d)
         part_vulkan2d(binary, work)
         part_vulkancards(binary, work)                                     # (0.61.0: the card programs on Vulkan, in the same part)
-    elif only is not None and "vulkancards" in only:                       # (0.61.0: that half alone, by hand)
+        part_vulkanbh(binary, work)                                        # (0.62.0: the Black Hole Lab on Vulkan, in the same part)
+    elif only is not None and "vulkancards" in only:                       # (0.61.0: that half alone, by hand; 0.62.0: with the Black Hole Lab's)
         part_vulkancards(binary, work)
+        part_vulkanbh(binary, work)
+    elif only is not None and "vulkanbh" in only:                          # (0.62.0: the Black Hole Lab's alone, by hand)
+        part_vulkanbh(binary, work)
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0
 

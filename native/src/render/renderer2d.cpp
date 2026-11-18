@@ -341,6 +341,7 @@ void Renderer2D::disableCompute() { noCompute_ = true; delete compute_; compute_
 
 // 0.55.6: made at the first call (the shader is large: a PC that never opens the Black Hole Lab's spinning hole never compiles it)
 IKerrCompute* Renderer2D::kerrCompute(KerrSteps* steps) {
+    if (vk_) return vkKerr_ ? vkKerr_(*this, steps) : nullptr;      // 0.62.0: Vulkan's (render/renderer2d_vk.cpp)
     if (!kerrTried_) {
         kerrTried_ = true;
         const char* why = "";
@@ -454,6 +455,20 @@ void Renderer2D::lensSky(const LensSky& L) {
     sg.kind = Kind::Lens; sg.slot = static_cast<int>(lens_.size());
     lens_.push_back(L);
     segments_.push_back(sg);
+}
+
+bool Renderer2D::lensSameView(const LensSky& P, const LensSky& L, bool ksky, bool skyDrawn, double width, double lastPtW) {
+    return P.cx == L.cx && P.cy == L.cy && P.kRad == L.kRad && std::equal(L.M, L.M + 9, P.M) && P.bright == L.bright && P.bend == L.bend &&
+                      P.alphaSh == L.alphaSh && P.s0 == L.s0 && P.ds == L.ds && P.tableVersion == L.tableVersion && width == lastPtW &&
+                      P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
+                      P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&
+                      P.kerr == L.kerr && (!L.kerr || (P.kVersion == L.kVersion && std::equal(L.kM, L.kM + 9, P.kM) && std::equal(L.kO, L.kO + 4, P.kO) && P.spin == L.spin &&
+                      P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) && std::equal(L.glow, L.glow + 3, P.glow) &&
+                      P.glareKeep == L.glareKeep && P.glareVeil == L.glareVeil &&
+                      P.kerrSky == L.kerrSky && (!L.kerrSky || (std::equal(L.skyCam, L.skyCam + 4, P.skyCam) && std::equal(L.skyMet, L.skyMet + 4, P.skyMet) &&
+                      std::equal(L.skyMet2, L.skyMet2 + 4, P.skyMet2) && std::equal(L.filmRaw, L.filmRaw + 4, P.filmRaw) && std::equal(L.kM, L.kM + 9, P.kM) &&
+                      std::equal(L.kO, L.kO + 4, P.kO) && P.whiteMode == L.whiteMode && P.expStep == L.expStep && P.moving == L.moving && P.spin == L.spin &&
+                      P.discFVersion == L.discFVersion && ksky == skyDrawn)) && (L.kerrSky || !skyDrawn) && P.whiteMode == L.whiteMode && P.expStep == L.expStep;
 }
 
 void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int vx, int vy) {
@@ -605,17 +620,7 @@ void Renderer2D::drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int
         glBindTexture(GL_TEXTURE_2D, 0);
     }
     const LensSky& P = lensLast_;
-    const bool same = lensValid_ && P.cx == L.cx && P.cy == L.cy && P.kRad == L.kRad && std::equal(L.M, L.M + 9, P.M) && P.bright == L.bright && P.bend == L.bend &&
-                      P.alphaSh == L.alphaSh && P.s0 == L.s0 && P.ds == L.ds && P.tableVersion == L.tableVersion && width_ == lensPtW_ &&
-                      P.sky == L.sky && P.disc == L.disc && (!L.disc || (P.discVersion == L.discVersion && P.colVersion == L.colVersion && std::equal(L.discAxis, L.discAxis + 3, P.discAxis) &&
-                      P.rO == L.rO && P.rIn == L.rIn && P.rOut == L.rOut && P.tScale == L.tScale && P.white == L.white)) &&
-                      P.kerr == L.kerr && (!L.kerr || (P.kVersion == L.kVersion && std::equal(L.kM, L.kM + 9, P.kM) && std::equal(L.kO, L.kO + 4, P.kO) && P.spin == L.spin &&
-                      P.discFVersion == L.discFVersion)) && std::equal(L.discFix, L.discFix + 4, P.discFix) && std::equal(L.glow, L.glow + 3, P.glow) &&
-                      P.glareKeep == L.glareKeep && P.glareVeil == L.glareVeil &&
-                      P.kerrSky == L.kerrSky && (!L.kerrSky || (std::equal(L.skyCam, L.skyCam + 4, P.skyCam) && std::equal(L.skyMet, L.skyMet + 4, P.skyMet) &&
-                      std::equal(L.skyMet2, L.skyMet2 + 4, P.skyMet2) && std::equal(L.filmRaw, L.filmRaw + 4, P.filmRaw) && std::equal(L.kM, L.kM + 9, P.kM) &&
-                      std::equal(L.kO, L.kO + 4, P.kO) && P.whiteMode == L.whiteMode && P.expStep == L.expStep && P.moving == L.moving && P.spin == L.spin &&
-                      P.discFVersion == L.discFVersion && ksky == lensSkyDrawn_)) && (L.kerrSky || !lensSkyDrawn_) && P.whiteMode == L.whiteMode && P.expStep == L.expStep;
+    const bool same = lensValid_ && lensSameView(P, L, ksky, lensSkyDrawn_, width_, lensPtW_);
     const bool glow = L.glow[0] > 0 && glowDown_ && glowBlur_ && glowAdd_;
     const bool layers = glow || glareOn;                                   // 0.55.4: the disc's light and the sky behind it, as their own pictures
     if (!same) {                                                           // (e) of the plan: drawn anew only when the view, the distance or the picture changed
@@ -927,6 +932,7 @@ void Renderer2D::skyPicture(const LensSky& L, int fbW, int fbH, bool layers, boo
 }
 
 void Renderer2D::skyProbe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out) {
+    if (vk_) { if (vkProbe_) vkProbe_(*this, L, w, h, queue, out); return; }   // 0.62.0: Vulkan's
     if (!sky_.ready() || w <= 0 || h <= 0) return;
     if (!probeFbo_) { glGenFramebuffers(1, &probeFbo_); glGenTextures(1, &probeTex_); }
     if (probeW_ != w || probeH_ != h) {
@@ -991,6 +997,7 @@ void Renderer2D::skyProbe(const LensSky& L, int w, int h, bool queue, std::vecto
 }
 
 double Renderer2D::skyTimePass(const LensSky& L, int w, int h, int mode) {
+    if (vk_) return -1;                                                    // (tests: OpenGL's only)
     if (!sky_.ready() || w <= 0 || h <= 0) return -1;
     GLuint fbo = 0, tex = 0;
     glGenFramebuffers(1, &fbo); glGenTextures(1, &tex);
@@ -1018,12 +1025,14 @@ double Renderer2D::skyTimePass(const LensSky& L, int w, int h, int mode) {
 }
 
 bool Renderer2D::skyProbeDone() {
+    if (vk_) return vkProbeDone_ && vkProbeDone_(*this);
     if (!probeFence_) return false;
     const GLenum r = glClientWaitSync(probeFence_, 0, 0);
     return r == GL_ALREADY_SIGNALED || r == GL_CONDITION_SATISFIED;
 }
 
 void Renderer2D::skyProbeRead(std::vector<float>& out) {
+    if (vk_) { out.clear(); if (vkProbeRead_) vkProbeRead_(*this, out); return; }
     out.clear();
     if (!probeFence_ || !probePbo_) return;
     glDeleteSync(probeFence_);
@@ -1038,6 +1047,7 @@ void Renderer2D::skyProbeRead(std::vector<float>& out) {
 }
 
 double Renderer2D::skyWhiteWait() {
+    if (vk_) return 0;                                                     // (tests: OpenGL's only)
     if (!whiteFence_) return 0;
     glClientWaitSync(whiteFence_, 0x00000001 /* GL_SYNC_FLUSH_COMMANDS_BIT */, 10000000000ULL);
     const long n = skyStats_.whiteReads;

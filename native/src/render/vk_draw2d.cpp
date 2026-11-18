@@ -126,7 +126,7 @@ bool reflectSpirv(const std::uint32_t* w, std::size_t n, VkDraw2D::Shader& out, 
         }
         if (v.storage == 0) {
             const auto tt = types.find(pointee);
-            if (tt != types.end() && tt->second.op == 27) out.samplerBinding = binding.count(id) ? static_cast<int>(binding[id]) : -1;
+            if (tt != types.end() && tt->second.op == 27) { out.samplerBinding = binding.count(id) ? static_cast<int>(binding[id]) : -1; out.samplers[nm] = out.samplerBinding; }
         }
     }
     return true;
@@ -494,7 +494,7 @@ bool VkDraw2D::init(const VkDevCtx& c, VkRenderPass swapPass, int samples, std::
             return true;
         };
         ok = want(kTri, kNormal) && want(kPlanet, kNormal) && want(kSquare, kNormal) && want(kBlob, kNormal) && want(kBlob, kAdditive) && want(kMesh, kNormal) &&
-             want(kComposite, kPremul) && want(kComposite, kOneOne) && want(kGray, kNoBlend);
+             want(kComposite, kPremul) && want(kComposite, kOneOne) && want(kGray, kNoBlend) && want(kComposite, kNoBlend);   // (0.62.0: the bent picture laid over)
         if (!ok) why = "a pipeline could not be made";
     }
     for (VkShaderModule m : mod) if (m) vkDestroyShaderModule(c_.device, m, nullptr);
@@ -926,6 +926,7 @@ void VkDraw2D::draw(Prog p, Blend b, VkDeviceSize vbOff, int first, int count, V
     if (tex > 0 && tex < 32 && maps_[tex].view) { view = maps_[tex].view; smp = mapSampler_; }
     else if (tex == -1) { view = (layerHdr_ ? hdr_ : soft_).img.view; smp = layerHdr_ ? nearestClamp_ : linearClamp_; }
     else if (tex == -2 && cur_) { view = cur_->pic.view; smp = linearClamp_; }
+    else if ((tex == -3 || tex == -4) && ext_[-3 - tex]) { view = ext_[-3 - tex]; smp = nearestClamp_; }   // 0.62.0: the Black Hole Lab's
     const VkDescriptorSet set = descriptors(pr, view, smp);
     if (!set) return;
     vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, pl);

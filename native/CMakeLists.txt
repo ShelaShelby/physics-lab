@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.61.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.62.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -407,7 +407,12 @@ if(PL_BUILD_APP)
                       # storage buffers keep the bindings of their text)
                       "cloud_vert:kCloudVS" "moldot_vert:kMolDotVS" "cgrid_vert:kCloudGridVS" "mgrid_vert:kMolGridVS" "grid_frag:kCloudGridFS"
                       "groups_comp:kGroupsCS" "outdens_comp:kOutlineDensityCS" "outlevel_comp:kOutlineLevelCS" "rocks_comp:kRocksCS" "slice_comp:kSliceDotsCS"
-                      "jump_comp:kJumpShowCS" "moldots_comp:kMolDotsCS")
+                      "jump_comp:kJumpShowCS" "moldots_comp:kMolDotsCS"
+                      # 0.62.0 (Vulkan step 4): the Black Hole Lab's, the same way (kKerrSkyFS from its parts, as render/kerr_sky.cpp; the light paths' compute
+                      # shader in double precision: shaderFloat64)
+                      "lens_frag:kLensFS" "kerr_frag:kKerrFS" "skytiny_frag:kKerrSkyTinyFS" "skymath_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyMathPart"
+                      "sky_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyTracePart+kKerrSkyMainPart" "maxdown_frag:kMaxDownFS" "glowdown_frag:kGlowDownFS"
+                      "glowblur_frag:kGlowBlurFS" "glowadd_frag:kGlowAddFS" "glaredown_frag:kGlareDownFS" "glareadd_frag:kGlareAddFS" "kerrtable_comp:kKerrTableCS")
   foreach(pair ${PL_VK2D_SHADERS})
     string(REPLACE ":" ";" parts ${pair})
     list(GET parts 0 shId)
@@ -438,6 +443,7 @@ if(PL_BUILD_APP)
     src/render/vk_draw2d.cpp
     src/render/renderer2d_vk.cpp
     src/render/vk_card.cpp
+    src/render/vk_blackhole.cpp
     src/render/gl_loader.cpp
     src/render/renderer2d.cpp
    
@@ -504,9 +510,9 @@ if(PL_BUILD_APP)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
   if(TARGET gl_compare_tests)                            # 0.61.0: the card programs on Vulkan in the same test program (tests/gl_vulkan.inc)
-    target_sources(gl_compare_tests PRIVATE src/render/vk_card.cpp src/render/vk_draw2d.cpp ${PL_VK_SHADER_HEADERS})
+    target_sources(gl_compare_tests PRIVATE src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp ${PL_VK_SHADER_HEADERS})
     target_include_directories(gl_compare_tests PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
-    target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core volk::volk)
+    target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core blackhole_core volk::volk)
     target_compile_definitions(gl_compare_tests PRIVATE PL_VK_TESTS=1)
   endif()
   # 0.16 stage 1b: theme_pictures and window_pictures (pictures of the OLD interface) were deleted with it. The New UI's picture tests are below. Linux only (the cloud session); the GitHub Windows build does not run them. Needs -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON.

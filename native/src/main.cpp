@@ -427,6 +427,7 @@ int main(int, char**) {
     // 0.55.5: the Black Hole Lab works out its pictures on worker threads (the frame never waits for the processor); the automatic checks keep the
     // synchronous path (PL_BH_SPINWAIT, or PL_DRAWSTAT without PL_BH_ASYNC): their pictures are of the settings of the frame they are taken in
     app.blackholeView.async = !SDL_getenv("PL_BH_SPINWAIT") && (!SDL_getenv("PL_DRAWSTAT") || SDL_getenv("PL_BH_ASYNC"));
+    if (SDL_getenv("PL_BH_GLARENOW")) app.blackholeView.glareNow = true;   // 0.62.0 (checks): the eye's glare made at once in its frame, on both APIs
     if (const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window))) if (dm->refresh_rate > 0) app.blackholeView.refreshHz = dm->refresh_rate;   // 0.56.0
     if (SDL_getenv("PL_BLACKHOLE")) {                   // 0.55.0: PL_BLACKHOLE=1 opens the Black Hole Lab; PL_BH_SET="preset=m87;dist=3;bend=off;sky=black;fov=120;mass=1e6;yaw=..;pitch=..;disc=on;feed=0.1;outer=30;exposure=auto" (automatic checks)
         app.lab = blackhole::kLabIndex;
@@ -734,9 +735,8 @@ int main(int, char**) {
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, headerH), ImVec2(canvasWinW, headerH + pictureWinH));
         if (app.pane) text->PopClipRect();              // a tab page covers the lab: nothing to draw
-        else if (pictureOff || (useVulkan && app.lab == blackhole::kLabIndex)) {   // PL_NO_PICTURE; 0.60.0: the Black Hole Lab is not drawn on Vulkan yet (its card programs: step 4)
-            pictureNote(text, ImVec2(0, headerH), ImVec2(canvasWinW, pictureWinH), ui::look().c.muted, pictureOff ? "Test: the lab's picture is left out (PL_NO_PICTURE)"
-                        : "The black hole's picture comes to Vulkan in a later step; Settings, Graphics, OpenGL to see it");
+        else if (pictureOff) {                          // PL_NO_PICTURE (0.62.0: the Black Hole Lab is drawn on Vulkan too)
+            pictureNote(text, ImVec2(0, headerH), ImVec2(canvasWinW, pictureWinH), ui::look().c.muted, "Test: the lab's picture is left out (PL_NO_PICTURE)");
             text->PopClipRect();
         }
         else if (app.lab == molecule::kLabIndex) {
@@ -786,7 +786,7 @@ int main(int, char**) {
         if (useVulkan) {                                // 0.59.0: cleared to the page colour, the picture area filled with it (step 2: the labs' pictures), the panels on top
             const float bgc[4] = {pageBg.r, pageBg.g, pageBg.b, 1.0f};
             if (vkFirst == 0) { app::gpuVulkanGuard().begin("first frame"); vkFirst = 1; }
-            const bool drawPicture = !pictureOff && !app.pane && app.lab != blackhole::kLabIndex;   // 0.60.0: the lab's picture (renderer2d on Vulkan)
+            const bool drawPicture = !pictureOff && !app.pane;   // 0.60.0: the lab's picture (renderer2d on Vulkan; 0.62.0: the Black Hole Lab's too)
             if (drawPicture) renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
             vk.render(ImGui::GetDrawData(), bgc, bgc, 0, headerFbH, canvasFbW, pictureFbH, drawPicture ? &renderer : nullptr);
             if (drawPicture) { app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances(); }
@@ -852,7 +852,7 @@ int main(int, char**) {
         }
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
             app.shot.requested = false;
-            if (useVulkan) ui::takeShotVulkan(app, vk, !pictureOff && !app.pane && app.lab != blackhole::kLabIndex ? &renderer : nullptr, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
+            if (useVulkan) ui::takeShotVulkan(app, vk, !pictureOff && !app.pane ? &renderer : nullptr, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
             else ui::takeShot(app, renderer, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
         }
         static const double maxSeconds = SDL_getenv("PL_EXIT_AFTER_SECONDS") ? std::atof(SDL_getenv("PL_EXIT_AFTER_SECONDS")) : 0;   // for automatic checks
@@ -861,7 +861,7 @@ int main(int, char**) {
             bhSettleFrom = 0;
             if (const char* q = SDL_getenv("PL_BH_SETTLE")) std::sscanf(q, "%d:%d", &bhSettleFrom, &bhSettleN);
         }
-        bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && (useVulkan || !renderer.glareBusy()) ? bhSettled + 1 : 0;
+        bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && !renderer.glareBusy() ? bhSettled + 1 : 0;
         if ((maxFrames && ++frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds) || (bhSettleN > 0 && bhSettled >= bhSettleN)) {
             running = false;
             if (screenshot && useVulkan) {              // 0.59.0: read back from the swapchain's image (RGBA, top row first: the same bytes as below)
@@ -884,6 +884,8 @@ int main(int, char**) {
         }
         const double workMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();
         app.stats.add(frameDt * 1000.0, workMs);
+        static const bool bhMs = SDL_getenv("PL_BH_FRAMETIME") != nullptr;   // 0.62.0 (measuring, both APIs): the frame's time and the sky pass's time on the card
+        if (bhMs && app.lab == blackhole::kLabIndex && !app.pane) std::printf("PLBHMS f=%d frame=%.2f sky=%.3f scale=%.3f\n", frame, frameDt * 1000.0, renderer.skyStats().fullMs, renderer.skyStats().scale);
         app.live.frame(isLive, frameDt * 1000.0);
         ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs);
         if (useVulkan) {
@@ -934,6 +936,7 @@ int main(int, char**) {
     app::gpuSliceGuard().closing(); app::gpuJumpGuard().closing();   // 0.57.0
     app::gpuMolCloudGuard().closing();                               // 0.57.1
     app::gpuVulkanGuard().closing();                 // 0.59.0
+    if (useVulkan) app::gpuVkLensGuard().closing(); // 0.62.0 (the light paths' and the sky's twins: gpuGuard, gpuSkyGuard below)
     app::gpuSkyGuard().closing();                    // 0.56.0                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
     if (!useVulkan) {
         renderer.shutdown();

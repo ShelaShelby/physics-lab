@@ -50,6 +50,11 @@ public:
     void destroy();
     bool upload(int map, int w, int h, const std::vector<std::uint8_t>& rgba, bool srgb, std::string& why);   // a picture map with its mip levels
     bool hasMap(int map) const { return map >= 0 && map < 32 && maps_[map].img != VK_NULL_HANDLE; }
+    // 0.62.0 (step 4): the Black Hole Lab's (render/vk_blackhole.h): a map's view and its sampler (the sky's), and two pictures of its own the frame draws from:
+    // draw(..., tex) -3 the open-sky mask (kTri's uMask), -4 the finished bent picture (kComposite, kNoBlend)
+    VkImageView mapView(int map) const { return hasMap(map) ? maps_[map].view : white_.view; }
+    VkSampler mapSampler() const { return mapSampler_; }
+    void setExternal(int k, VkImageView v) { if (k >= 0 && k < 2) ext_[k] = v; }
     int samples() const { return samples_; }
     const std::string& floatFormatText() const { return floatText_; }
     const std::string& samplesText() const { return samplesText_; }
@@ -101,7 +106,7 @@ public:
     struct Img { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; int w = 0, h = 0; };
     struct Member { std::uint32_t offset = 0, arrayStride = 0, matrixStride = 0; };
     struct Block { std::uint32_t size = 0; std::map<std::string, Member> m; std::vector<std::uint8_t> data; };
-    struct Shader { std::map<std::string, int> in, out; Block block; int blockBinding = -1, samplerBinding = -1; std::vector<int> storage; };   // (reflection of one stage; 0.61.0: its storage buffers' bindings)
+    struct Shader { std::map<std::string, int> in, out; Block block; int blockBinding = -1, samplerBinding = -1; std::vector<int> storage; std::map<std::string, int> samplers; };   // (0.62.0: every texture by name)   // (reflection of one stage; 0.61.0: its storage buffers' bindings)
 
 private:
     struct Targets { int w = 0, h = 0, s = 1; Img ms, pic, gray; VkFramebuffer fbPic = VK_NULL_HANDLE, fbGray = VK_NULL_HANDLE; };
@@ -150,6 +155,7 @@ private:
     VkDeviceSize vbBound_ = ~VkDeviceSize(0);
     std::vector<Mesh> meshes_;
     bool usedGray_ = false;
+    VkImageView ext_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
 };
 
 // SPIR-V reflection of one stage (exposed for the start-up step's log and for tests)

@@ -69,8 +69,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Idea, not planned: a "radio picture" look of the hot gas at 1.3 mm (needs a gas simulation).
 
 ## Whole app
-- Vulkan step 4: the Black Hole Lab's programs (kerr_sky, kerr_compute, the lens and Kerr shaders); retry the compute path parked since 0.55.7.
-- Vulkan step 5: the benchmark, picture tests and UI suite on Vulkan; Vulkan the default; OpenGL removed once the owner's PC shows every scene works.
+- Vulkan step 5: the benchmark, picture tests and UI suite on Vulkan; Vulkan the default; OpenGL removed once the owner's PC shows every scene works; steps 1-3's code moved to Vulkan 1.3's dynamic rendering and synchronization2 (as render/vk_blackhole.cpp, 0.62.0).
 - Speed (both APIs): the Glow and Density clouds' exposure grid is read back in the frame that draws it (OpenGL glReadPixels, Vulkan a waited batch, 0.61.0): a grid one frame late would remove that wait.
 - Vulkan: the extra copy of the picture into the window (present.frag) stays while the soft layer, the cloud layer and the grey pass sample OpenGL's rows (0.61.0 REPORT); drop it when step 5 renders in Vulkan's row order.
 - After the owner's 0.56.1 benchmark: move scenes far above his screen's rate to All scenes; fix the ones below it, slowest first; fix every response he would feel and every lab that is busy at rest.

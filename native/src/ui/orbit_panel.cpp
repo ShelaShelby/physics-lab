@@ -91,29 +91,28 @@ void performanceCard(AppState& app) {
         ImGui::SameLine();
         if (ImGui::RadioButton("Vulkan (test)##graphics", app.prefs.graphics == "vulkan")) app.prefs.graphics = "vulkan";
         noteItem("graphics.vulkan");
-        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan, step 3 of 5: the menus, panels, pages and guides and the Orbit, Atom and Molecule Labs' pictures are drawn by Vulkan,\n"
-                                                      "with the graphics card's own programs (the belts' rocks, the electron clouds, the outlines, the Density cloud). The Black Hole Lab comes in step 4.\n"
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan, step 4 of 5 (needs Vulkan 1.3): the menus, panels, pages and guides and all four labs' pictures are drawn by Vulkan,\n"
+                                                      "with the graphics card's own programs (the belts' rocks, the electron clouds, the outlines, the Density cloud, the black hole's sky, light paths, glow and glare).\n"
                                                       "Each step of Vulkan's start is guarded: if one fails or stops the app, the next start uses OpenGL and this page says why.");
         const app::GpuGuard& V = app::gpuVulkanGuard();
         const bool vk = app.graphicsInUse == "vulkan";
         std::string gline = "Takes effect at the next start. In use now: ";
         if (vk) {                                         // 0.61.0 (step 3): the card's own programs too; only the Black Hole Lab is left (step 4)
-            gline += "Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). The Orbit, Atom and Molecule Labs are drawn, with the card's own "
-                     "programs; the Black Hole Lab comes in step 4.";
+            gline += "Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). All four labs are drawn, with the card's own programs.";   // 0.62.0 (step 4)
             if (!app.rocksOk && !app.rocksWhy.empty()) gline += " The belts' rocks: the processor, because " + app.rocksWhy + ".";
             for (const auto& [name, g] : app::vulkanCardGuards())   // a card program its guard switched off on Vulkan (the Slice's, the jump's and the
-                if (name != "slice" && name != "jump" && name != "molcloud" && !g->offText().empty()) gline += " " + g->offText();   // Density cloud's: their labs' rows)
+                if (name != "slice" && name != "jump" && name != "molcloud" && name != "lightpaths" && name != "sky" && !g->offText().empty()) gline += " " + g->offText();   // Density cloud's: their labs' rows)
         }
         else if (!app.vulkanWhy.empty()) gline += "OpenGL, because " + app.vulkanWhy;
         else gline += "OpenGL.";
         ImGui::TextWrapped("%s", gline.c_str());
         if (shellLogOn()) auditNote("graphics " + gline);
         bool cardsOff = false;                            // 0.61.0: Try again also gives the card programs switched off on Vulkan another start
-        if (vk) for (const auto& [name, g] : app::vulkanCardGuards()) cardsOff = cardsOff || (name != "slice" && name != "jump" && name != "molcloud" && !g->offText().empty());
+        if (vk) for (const auto& [name, g] : app::vulkanCardGuards()) cardsOff = cardsOff || (name != "slice" && name != "jump" && name != "molcloud" && name != "lightpaths" && name != "sky" && !g->offText().empty());
         if (!V.offText().empty() || cardsOff || (!vk && !app.vulkanWhy.empty() && V.started() && !V.allowed())) {
             if (ImGui::Button("Try again##graphics")) {
                 app::gpuVulkanGuard().tryAgain(); app.prefs.graphics = "vulkan"; app.vulkanWhy.clear();
-                if (vk) for (const auto& [name, g] : app::vulkanCardGuards()) if (name != "slice" && name != "jump" && name != "molcloud" && !g->offText().empty()) g->tryAgain();
+                if (vk) for (const auto& [name, g] : app::vulkanCardGuards()) if (name != "slice" && name != "jump" && name != "molcloud" && name != "lightpaths" && name != "sky" && !g->offText().empty()) g->tryAgain();
             }
             noteItem("graphics.again");
             if (ImGui::IsItemHovered()) ui::SetTooltip("Vulkan is tried again at the next start, with a marker before each step:\n"
@@ -124,7 +123,7 @@ void performanceCard(AppState& app) {
         ImGui::TextWrapped("%s", app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks, app.rocksWhy).c_str());
         ImGui::BeginDisabled(!app.rocksOk);
         settingMark("gpurocks");
-        wrappedCheckbox("GPU rocks (OpenGL 4.3)", &app.set.gpuRocks);
+        wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU rocks (Vulkan)" : "GPU rocks (OpenGL 4.3)", &app.set.gpuRocks);   // (0.62.0: the API in use)
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): the places of the belts' rocks (Kepler's equation for every rock, and where it lands on the picture) are worked out by a compute shader on the graphics card; "
                                                       "the processor only sends the time and the camera.\n"
@@ -136,7 +135,7 @@ void performanceCard(AppState& app) {
         ImGui::TextWrapped("%s", app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute).c_str());
         ImGui::BeginDisabled(!app.computeOk);
         settingMark("gpuspin");
-        wrappedCheckbox("GPU superposition and jumps (OpenGL 4.3)", &app.atom.gpuCompute);
+        wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU superposition and jumps (Vulkan)" : "GPU superposition and jumps (OpenGL 4.3)", &app.atom.gpuCompute);
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): for a superposition or a photon jump, a compute shader on the graphics card works out which dots are shown and their colours;\n"
                                                       "Off, or on a PC without OpenGL 4.3: the processor does it dot by dot, as versions up to 0.13 stage 1 did.\n"
@@ -145,7 +144,7 @@ void performanceCard(AppState& app) {
         ImGui::TextWrapped("%s", app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline).c_str());
         ImGui::BeginDisabled(!app.computeOk);
         settingMark("gpuoutline");
-        wrappedCheckbox("GPU outline (OpenGL 4.3)", &app.atom.gpuOutline);
+        wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU outline (Vulkan)" : "GPU outline (OpenGL 4.3)", &app.atom.gpuOutline);
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): the 90 %% outline's density grid and its 90 %% level (and, in the Slice view, the cut's contour) are made by compute shaders\n"
                                                       "on the graphics card, without the picture waiting for them: the outline appears a frame or two after it is switched on, instead of a half-frame hitch.\n"
@@ -169,7 +168,7 @@ void performanceCard(AppState& app) {
                                                               "if the app stops again, it starts the next time with it switched off, as now.");
             }
             ImGui::BeginDisabled(!app.computeOk);
-            wrappedCheckbox(which == 0 ? "GPU Slice dots (OpenGL 4.3)" : "GPU jump groups (OpenGL 4.3)", which == 0 ? &app.atom.gpuSlice : &app.atom.gpuJump);
+            wrappedCheckbox(which == 0 ? (app.graphicsInUse == "vulkan" ? "GPU Slice dots (Vulkan)" : "GPU Slice dots (OpenGL 4.3)") : (app.graphicsInUse == "vulkan" ? "GPU jump groups (Vulkan)" : "GPU jump groups (OpenGL 4.3)"), which == 0 ? &app.atom.gpuSlice : &app.atom.gpuJump);
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ui::SetTooltip(which == 0 ? "On (the default, needs OpenGL 4.3): in the Slice view (one electron) the new dots on a moved cut are made by a compute shader on the graphics card,\n"
@@ -195,7 +194,7 @@ void performanceCard(AppState& app) {
                                                           "if the app stops again, it starts the next time with it switched off, as now.");
         }
         ImGui::BeginDisabled(!app.computeOk);
-        wrappedCheckbox("GPU Density cloud (OpenGL 4.3)", &app.moleculeView.gpuCloud);
+        wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU Density cloud (Vulkan)" : "GPU Density cloud (OpenGL 4.3)", &app.moleculeView.gpuCloud);
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ui::SetTooltip("On (the default, needs OpenGL 4.3): the Density style's cloud is made and drawn by the graphics card: each frame a compute shader turns every dot\n"
@@ -231,7 +230,7 @@ void performanceCard(AppState& app) {
             if (ImGui::IsItemHovered()) ui::SetTooltip("The folder with %s: what the graphics card's light paths did at this start, step by step\n"
                                                           "(the driver's messages, each step's time, the check's numbers). The benchmark report ends with its last 40 lines.", app::GpuGuard::kLog);
         }
-        wrappedCheckbox("GPU light paths (OpenGL 4.3)", &v.gpuPaths);
+        wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU light paths (Vulkan)" : "GPU light paths (OpenGL 4.3)", &v.gpuPaths);
         if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default, needs OpenGL 4.3 with double precision): the light paths' table of the spinning hole is filled by a compute shader on the graphics card,\n"
                                                       "the same rays and steps as the processor's in double precision, at the fine table's size while the view moves and at rest. It is used only after a check\n"
                                                       "at the first spinning picture: rays followed by the card against the processor's own; if they differ, the processor's path is used and this page says so.\n"

@@ -56,6 +56,8 @@ public:
     virtual void edges(const std::vector<double>& par, const std::vector<double>& chi, std::vector<double>& out) = 0;
     // tests: the shader's own double functions at x (8 numbers each: sin, cos, exp(x), log(|x|), atan2(x, 1 - x), acos(x / (1 + |x|)), cbrt(x), |x|^-0.2)
     virtual void math(const std::vector<double>& par, const std::vector<double>& x, std::vector<double>& out) = 0;
+    // 0.62.0 (Vulkan, render/vk_blackhole.h): its pipeline is still being made on a thread of its own (OpenGL's: never)
+    virtual bool building() const { return false; }
 protected:
     int nodes_ = 0;
 };

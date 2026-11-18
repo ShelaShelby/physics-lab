@@ -121,7 +121,11 @@ GpuGuard& gpuVkGroupsGuard();
 GpuGuard& gpuVkOutlineGuard();
 GpuGuard& gpuVkRocksGuard();
 GpuGuard& gpuVkCloudGuard();
-std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the seven Vulkan guards by their settings name (gpuvk<name>=)
+// 0.62.0 (Vulkan step 4): gpuGuard (the light paths) and gpuSkyGuard (the sky per pixel) give Vulkan's twins too (gpu-vklightpaths-step.txt, "gpuvklightpaths=",
+// "[vulkan] [lightpaths] ", "vulkan lightpaths <hash>"; gpu-vksky-step.txt, "gpuvksky=", "[vulkan] [sky] "), and the Black Hole Lab's own passes on Vulkan
+// (the lens, the table pass, the exposure, the glow, the glare) have one: gpuVkLensGuard ("gpuvklens=", "[vulkan] [lens] ")
+GpuGuard& gpuVkLensGuard();
+std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the ten Vulkan guards by their settings name (gpuvk<name>=)
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);

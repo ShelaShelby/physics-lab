@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.61.0 (18 Nov 2026): Vulkan, step 3 of 5 (native/PLAN_VULKAN.md): the card programs on Vulkan (render/vk_card.*): groups, outline, rocks (shaderFloat64; without it the processor), Glow dots, Slice, jump, Density cloud from shaders.h's text, the same interfaces, batches fenced on the window's queue, each under its own Vulkan guard ("gpuvk<name>="); the Black Hole Lab is left (step 4). OpenGL unchanged bit for bit.
-- Last full UI run: 0.61.0 (the commit "native 0.61.0"), 33 of 35; ui_popups (check_6b benchwaits; benchscenes blackhole.all_light) and ui_molecule (check_molecule card) left, as in 0.60.0 (ROADMAP).
-- Next: the owner tries Vulkan (test) on his PC with the card views (REPORT.md); then Vulkan step 4, the Black Hole Lab (ROADMAP "Whole app"); the owner's 0.58.0 benchmark and the Hard-list scenes below his 255 Hz, slowest first; then the moving gas (PLAN_MOVINGGAS.md). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
+- 0.62.0 (18 Nov 2026): Vulkan, step 4 of 5 (native/PLAN_VULKAN.md): the Black Hole Lab's programs on Vulkan (render/vk_blackhole.*: lens, table pass, sky per pixel, exposure, low resolution, probe, glow, glare, light paths), Vulkan 1.3's dynamic rendering and synchronization2, big pipelines on a worker with a pipeline cache, guards "gpuvklightpaths=", "gpuvksky=", "gpuvklens="; Vulkan 1.3 required, 1.4 used where present. OpenGL unchanged.
+- Last full UI run: 0.62.0 (the commit "native 0.62.0"), 32 of 34 (gl_phase_colours run alone: 647 checks, 0 failed); ui_popups (check_6b benchwaits) and ui_molecule (check_molecule card) left, as in 0.61.0 (ROADMAP).
+- Next: the owner tries Vulkan (test) on his PC with the Black Hole Lab (REPORT.md); then Vulkan step 5 (ROADMAP "Whole app"); the owner's 0.58.0 benchmark and the Hard-list scenes below his 255 Hz, slowest first; then the moving gas (PLAN_MOVINGGAS.md). Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
 ## How work flows

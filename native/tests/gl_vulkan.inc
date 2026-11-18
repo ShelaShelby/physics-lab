@@ -12,6 +12,9 @@
 #include "render/atom_card.h"
 #include "render/molecule_card.h"
 #include "render/vk_card.h"
+#include "render/vk_blackhole.h"
+#include "blackhole/sky_card.h"
+#include "blackhole/spin_card.h"
 
 namespace vkt {
 
@@ -49,7 +52,7 @@ bool start(Ctx& h, std::string& why) {
     VkApplicationInfo ai{};
     ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     ai.pApplicationName = "gl_compare_tests";
-    ai.apiVersion = VK_API_VERSION_1_1;
+    ai.apiVersion = VK_API_VERSION_1_3;                                           // 0.62.0: Vulkan 1.3 (the Black Hole Lab's passes)
     VkInstanceCreateInfo ii{};
     ii.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     ii.pApplicationInfo = &ai;
@@ -95,6 +98,11 @@ bool start(Ctx& h, std::string& why) {
     di.queueCreateInfoCount = 1;
     di.pQueueCreateInfos = &qi;
     di.pEnabledFeatures = &want;
+    VkPhysicalDeviceVulkan13Features f13{};                                      // 0.62.0: dynamic rendering and synchronization2, as the app asks for them
+    f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    f13.dynamicRendering = VK_TRUE;
+    f13.synchronization2 = VK_TRUE;
+    di.pNext = &f13;
     if (vkCreateDevice(h.phys, &di, nullptr, &h.dev) != VK_SUCCESS) { why = "vkCreateDevice failed"; return false; }
     volkLoadDevice(h.dev);
     vkGetDeviceQueue(h.dev, h.fam, 0, &h.q);
@@ -429,6 +437,70 @@ static void vkGlowGrid(render::VkCards& cards) {
     render::dropVkGlow(g);
 }
 
+// 0.62.0 (Vulkan step 4): the Black Hole Lab's programs on Vulkan. The light paths (kKerrTableCS, double precision): the start-up check against the processor
+// with its own limits (spin_card.h cardSelfCheck: the same function and limits as on OpenGL), then rays at a grid of (psi, chi) against OpenGL's program on the
+// same input (the planner's limit for Vulkan against OpenGL, at the top of this file: within 1e-5 relative (to 1 + |value|) or the check's loosest limit,
+// kCardUTol, whichever is larger; the ends equal). The sky per pixel: its three stages made,
+// the start-up check's two probes and its light check (sky_card.h skyCheckOf: the same limits as on OpenGL).
+static void vkBlackHole(render::VkCards& cards, render::Renderer2D& R, bool f64) {
+    std::string why;
+    if (f64) {
+        render::IKerrCompute* K = render::makeVkKerrCompute(cards, VK_NULL_HANDLE, nullptr, why);
+        check("Vulkan light paths: the program starts (" + why + ")", K != nullptr);
+        if (K) {
+            while (K->building()) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            std::string w;
+            const int st = render::vkKerrState(K, w);
+            check("Vulkan light paths: the pipeline is made (" + w + ")", st == 2);
+            if (st == 2) {
+                const blackhole::CardCheck c = blackhole::cardSelfCheck(*K);
+                std::printf("Vulkan light paths against the processor: %s; math %.1e, edges %d (%.1e), rays %d: dir %.1e b %.1e u %.1e, ends differ %d (%s)\n", c.ok ? "passed" : "FAILED",
+                            c.math, c.edges, c.edge, c.rays, c.dir, c.b, c.u, c.endsDiffer, c.why.empty() ? "-" : c.why.c_str());
+                check("Vulkan light paths: the start-up check against the processor passes with OpenGL's limits", c.ok);
+                if (render::IKerrCompute* G = R.kerrCompute()) {
+                    std::vector<double> pc, a, b;
+                    for (int i = 0; i < 24; i++) for (int j = 0; j < 16; j++) { pc.push_back(0.02 + 0.011 * i); pc.push_back(-3.1 + 0.39 * j); }
+                    const std::vector<double> par = blackhole::cardParams(0.6, 20, 1.3);
+                    K->rays(par, pc, a);
+                    G->rays(par, pc, b);
+                    double worst = 0;
+                    long ends = 0;
+                    std::size_t at = 0;
+                    for (std::size_t k = 0; k < a.size() && k < b.size(); k++) {
+                        const double e = std::fabs(a[k] - b[k]) / (1 + std::fabs(b[k]));
+                        if (std::isnan(a[k]) != std::isnan(b[k])) ends++;
+                        else if (!std::isnan(e) && e > worst) { worst = e; at = k % 16; }
+                    }
+                    std::printf("Vulkan light paths against OpenGL's: %zu rays, every number within %.1e (relative to 1 + |value|; the largest at number %zu of 16), %ld NaN differ\n", pc.size() / 2, worst, at, ends);
+                    check("Vulkan light paths against OpenGL's: the same rays within max(1e-5, kCardUTol)", a.size() == b.size() && worst <= std::max(1e-5, blackhole::kCardUTol) && ends == 0);
+                } else check("OpenGL's light paths for the comparison (" + R.kerrWhy() + ")", false);
+            }
+            delete K;
+        }
+    }
+    render::VkBlackHole bh;
+    check("Vulkan Black Hole Lab: its programs start (" + why + ")", bh.init(cards, "", why));
+    int st = 0;
+    for (int stage = 0; stage < 3; stage++) {
+        std::string w;
+        while ((st = bh.buildSky(stage, nullptr, w)) == 0) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        check(std::string("Vulkan sky: ") + render::VkBlackHole::progName(stage == 0 ? 2 : stage == 1 ? 3 : 4) + " made (" + w + ")", st == 1);
+    }
+    std::printf("Vulkan Black Hole pipelines: %s\n", bh.pipelineText().c_str());
+    if (st == 1) {
+        std::vector<float> p0, p1;
+        bh.probe(blackhole::skyProbeLens(blackhole::skyCheckCase(0)), blackhole::kSkyCheckW, blackhole::kSkyCheckH, false, &p0);
+        bh.probe(blackhole::skyProbeLens(blackhole::skyCheckCase(1)), blackhole::kSkyCheckW, blackhole::kSkyCheckH, false, &p1);
+        const std::vector<float>* p[2] = {&p0, &p1};
+        const blackhole::SkyCheck c = blackhole::skyCheckOf(p);
+        for (int k = 0; k < 2; k++) std::printf("Vulkan sky probe %s\n", blackhole::skyCompareText(blackhole::skyCheckCase(k), c.m[k]).c_str());
+        std::printf("Vulkan sky light check: eye %ld pixels, %ld over, worst %.3f of its limit; all light %ld, %ld over, worst %.3f\n", c.light[0].px, c.light[0].bad, c.light[0].worst,
+                    c.light[1].px, c.light[1].bad, c.light[1].worst);
+        check("Vulkan sky: the start-up check (both probes and the light check) passes with OpenGL's limits (" + c.why + ")", c.ok);
+    }
+    bh.destroy();
+}
+
 static void vulkanTwins(render::Renderer2D& R) {
     vkt::Ctx h;
     std::string why;
@@ -452,6 +524,7 @@ static void vulkanTwins(render::Renderer2D& R) {
         render::MoleculeCard* m = render::makeVkMoleculeCard(cards);
         vkMolCloud(*m, &R.moleculeCard());
         vkGlowGrid(cards);
+        vkBlackHole(cards, R, h.f64);                                            // 0.62.0
         delete g; delete o; delete r; delete a; delete m;
         cards.collect();
     }

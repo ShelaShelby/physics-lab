@@ -115,7 +115,7 @@ struct VkBackend::Impl {
     VkPhysicalDeviceMemoryProperties mem{};
     VkDraw2D* d2 = nullptr;                    // 0.60.0: the labs' pictures (initPicture)
     VkCards* cards = nullptr;                  // 0.61.0: the card programs (initCards)
-    bool float64 = false, computeQueue = false;
+    bool float64 = false, computeQueue = false, sync2 = false;
     VkDevCtx ctx;
     int errors = 0, warnings = 0, failedCalls = 0, rebuilds = 0;
     std::string lastFailure;
@@ -201,7 +201,12 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     volkInitializeCustom(gipa);
     uint32_t loaderVersion = VK_API_VERSION_1_0;
     if (vkEnumerateInstanceVersion && vkEnumerateInstanceVersion(&loaderVersion) != VK_SUCCESS) loaderVersion = VK_API_VERSION_1_0;
-    d.apiVersion = loaderVersion >= VK_API_VERSION_1_1 ? VK_API_VERSION_1_1 : VK_API_VERSION_1_0;   // step 1 needs only 1.0; 1.1 where the loader has it
+    // 0.62.0 (owner decision 18 Nov 2026): Vulkan 1.3 is needed (dynamic rendering, synchronization2: the Black Hole Lab's passes), 1.4 is asked for
+    // where the loader has it; a card below 1.3 is not used (the app starts on OpenGL and Settings says why)
+    d.apiVersion = std::min<uint32_t>(VK_MAKE_API_VERSION(0, VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion), 0), VK_API_VERSION_1_4);
+    if (d.apiVersion < VK_API_VERSION_1_3)
+        return fail("instance", "this PC's Vulkan loader offers Vulkan " + std::to_string(VK_API_VERSION_MAJOR(loaderVersion)) + "." + std::to_string(VK_API_VERSION_MINOR(loaderVersion)) +
+                                "; Physics Lab needs 1.3");
     std::vector<const char*> exts;
     {
         Uint32 n = 0;
@@ -269,6 +274,11 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     devs.resize(nDev);
     int best = -1, bestScore = -1;
     uint32_t bestFamily = 0;
+    // PL_VK_PRETEND_API=1.2 (tests): every card is taken to offer that version, as an older driver would
+    uint32_t pretend = 0;
+    if (const char* pa = std::getenv("PL_VK_PRETEND_API")) { unsigned ma = 0, mi = 0; if (std::sscanf(pa, "%u.%u", &ma, &mi) == 2) pretend = VK_MAKE_API_VERSION(0, ma, mi, 0); }
+    std::string oldCard;                                                  // the newest version a card below 1.3 offers (the reason when no card is left)
+    uint32_t oldVersion = 0;
     for (std::size_t i = 0; i < devs.size(); i++) {
         VkPhysicalDeviceProperties p{};
         vkGetPhysicalDeviceProperties(devs[i], &p);
@@ -288,12 +298,19 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
             if (vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, de.data()) >= 0)
                 for (uint32_t k = 0; k < ne; k++) if (std::strcmp(de[k].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0) swap = true;
         }
-        const bool usable = family >= 0 && swap;
-        guard.log(std::string("card ") + std::to_string(i) + ": " + p.deviceName + " (" + typeName(p.deviceType) + ", Vulkan " + versionText(p.apiVersion) + ", driver " +
-                  driverVersionText(p.vendorID, p.driverVersion) + ")" + (usable ? "" : family < 0 ? ": cannot draw on this window" : ": no swapchain"));
+        const uint32_t api = pretend ? pretend : p.apiVersion;
+        const bool new13 = VK_MAKE_API_VERSION(0, VK_API_VERSION_MAJOR(api), VK_API_VERSION_MINOR(api), 0) >= VK_API_VERSION_1_3;
+        const bool usable = family >= 0 && swap && new13;
+        if (!new13 && family >= 0 && swap && api >= oldVersion) { oldVersion = api; oldCard = p.deviceName; }
+        guard.log(std::string("card ") + std::to_string(i) + ": " + p.deviceName + " (" + typeName(p.deviceType) + ", Vulkan " + versionText(api) + (pretend ? " (PL_VK_PRETEND_API)" : "") +
+                  ", driver " + driverVersionText(p.vendorID, p.driverVersion) + ")" +
+                  (usable ? "" : family < 0 ? ": cannot draw on this window" : !swap ? ": no swapchain" : ": below Vulkan 1.3, not used"));
         if (usable && typeScore(p.deviceType) > bestScore) { best = static_cast<int>(i); bestScore = typeScore(p.deviceType); bestFamily = static_cast<uint32_t>(family); }
     }
     if (forced("device")) return fail("device", "made to fail on purpose (PL_VK_FAIL=device)");
+    if (best < 0 && !oldCard.empty())
+        return fail("device", "this graphics card offers Vulkan " + std::to_string(VK_API_VERSION_MAJOR(oldVersion)) + "." + std::to_string(VK_API_VERSION_MINOR(oldVersion)) +
+                              "; Physics Lab needs 1.3 (" + oldCard + ")");
     if (best < 0) return fail("device", nDev ? "no graphics card here can draw on this window with Vulkan" : "the Vulkan driver lists no graphics card");
     d.phys = devs[static_cast<std::size_t>(best)];
     d.family = bestFamily;
@@ -333,7 +350,21 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
         vkGetPhysicalDeviceQueueFamilyProperties(d.phys, &nq, qf.data());
         d.computeQueue = d.family < nq && (qf[d.family].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
     }
+    // 0.62.0: Vulkan 1.3's dynamic rendering and synchronization2 (the Black Hole Lab's passes, render/vk_blackhole.cpp), as queried
+    VkPhysicalDeviceVulkan13Features have13{};
+    have13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    VkPhysicalDeviceFeatures2 f2{};
+    f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    f2.pNext = &have13;
+    vkGetPhysicalDeviceFeatures2(d.phys, &f2);
+    if (!have13.dynamicRendering || !have13.synchronization2) return fail("device", "this graphics card's Vulkan 1.3 lacks dynamic rendering or synchronization2");
+    VkPhysicalDeviceVulkan13Features want13{};
+    want13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    want13.dynamicRendering = VK_TRUE;
+    want13.synchronization2 = VK_TRUE;
+    d.sync2 = true;
     VkDeviceCreateInfo di{};
+    di.pNext = &want13;
     di.pEnabledFeatures = &want;
     di.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     di.queueCreateInfoCount = 1;
@@ -343,7 +374,8 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     if (!d.check(vkCreateDevice(d.phys, &di, nullptr, &d.device), "vkCreateDevice")) { d.device = VK_NULL_HANDLE; return fail("device", d.lastFailure); }
     volkLoadDevice(d.device);
     vkGetDeviceQueue(d.device, d.family, 0, &d.queue);
-    guard.end("device", deviceName_ + ", driver " + driverText_ + ", Vulkan " + apiText_ + ", queue family " + std::to_string(d.family) +
+    guard.end("device", deviceName_ + ", driver " + driverText_ + ", Vulkan " + apiText_ + " (the card's; asked for " + versionText(d.apiVersion) +
+                        ", dynamic rendering and synchronization2 on), queue family " + std::to_string(d.family) +
                         (d.computeQueue ? " (graphics and compute)" : " (graphics; no compute)") + ", double precision in shaders (shaderFloat64): " +
                         (d.float64 ? "yes" : feat.shaderFloat64 ? "switched off (PL_VK_NO_FLOAT64)" : "no"));
 

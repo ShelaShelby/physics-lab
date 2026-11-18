@@ -9,7 +9,9 @@
 #include <cstdio>
 #include <string>
 
+#include "app/gpu_guard.h"
 #include "shading.h"
+#include "vk_blackhole.h"
 #include "vk_card.h"
 #include "vk_draw2d.h"
 
@@ -36,6 +38,10 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     if (vkc_ || !c) {
         delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr;
         dropVkGlow(vkGlow_); vkGlow_ = nullptr;
+        delete kerr_; kerr_ = nullptr; kerrTried_ = false; kerrWhy_.clear();   // 0.62.0: the light paths and the Black Hole Lab's passes (Vulkan's)
+        delete vkbh_; vkbh_ = nullptr;
+        sky_.useVulkan(nullptr, nullptr);
+        vkProbe_ = nullptr; vkProbeDone_ = nullptr; vkProbeRead_ = nullptr; vkKerr_ = nullptr; vkGlareBusy_ = false;
         if (vkc_) vkc_->collect();
     }
     vkc_ = c;
@@ -49,11 +55,33 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     if (!(outline_ = makeVkOutlineCompute(*c, w))) note("the 90 % outline");
     if (!(rocks_ = makeVkRockCompute(*c, w))) { rocksWhy_ = w; note("the belts' rocks"); }
     if (!(vkGlow_ = makeVkGlow(*c, w))) note("the Cloud 3D Glow dots");
+    // 0.62.0 (step 4): the Black Hole Lab's programs: the small ones now, the lens and the table pass on a thread of their own; the sky's stages when the
+    // view asks (KerrSky's steps, its guard gpuSkyGuard's Vulkan twin), the light paths at their first use (gpuGuard's twin)
+    vkbh_ = new VkBlackHole();
+    if (!vkbh_->init(*c, app::gpuVulkanGuard().folder(), w)) { delete vkbh_; vkbh_ = nullptr; note("the Black Hole Lab's pictures"); }
+    else if (!w.empty()) note("the Black Hole Lab's pictures");
+    VkBlackHole* bh = vkbh_;
+    sky_.useVulkan([bh](int stage, KerrSteps* steps, std::string& why) { if (!bh) { why = "the Black Hole Lab's programs did not start on Vulkan"; return -1; } return bh->buildSky(stage, steps, why); },
+                   [bh] { return bh && bh->skyReady(); });
+    vkProbe_ = +[](Renderer2D& r, const LensSky& L, int pw, int ph, bool queue, std::vector<float>* out) { if (r.vkbh_) r.vkbh_->probe(L, pw, ph, queue, out); };
+    vkProbeDone_ = +[](Renderer2D& r) { return r.vkbh_ && r.vkbh_->probeDone(); };
+    vkProbeRead_ = +[](Renderer2D& r, std::vector<float>& out) { if (r.vkbh_) r.vkbh_->probeRead(out); };
+    vkKerr_ = +[](Renderer2D& r, KerrSteps* steps) -> IKerrCompute* {
+        if (!r.kerrTried_) {
+            r.kerrTried_ = true;
+            std::string kw;
+            r.kerr_ = r.vkc_ ? makeVkKerrCompute(*r.vkc_, r.vkbh_ ? r.vkbh_->cache() : VK_NULL_HANDLE, steps, kw) : nullptr;
+            r.kerrWhy_ = r.kerr_ ? std::string() : r.vkc_ ? kw : std::string("Vulkan's card programs did not start");
+        }
+        std::string kw;
+        if (r.kerr_ && vkKerrState(r.kerr_, kw) == -1) { delete r.kerr_; r.kerr_ = nullptr; r.kerrWhy_ = kw; }
+        return r.kerr_;
+    };
 }
 
 // 0.61.0: the card programs' work of this frame in one batch before the picture: the rocks' places, the Glow and Density clouds' grids (and what the
 // lab recorded before: a jump's groups); the batch is waited for only when a grid must be read back (OpenGL reads it back at once too, glReadPixels)
-bool Renderer2D::vkCardsFrame(bool forShot) {
+bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
     const std::size_t n = segments_.size();
     vkGrid_.assign(n, -1);
     vkLight_.assign(n, -1.0);
@@ -75,6 +103,11 @@ bool Renderer2D::vkCardsFrame(bool forShot) {
             const VkBuffer jump = d.grpBuf ? vkJumpGroups(atomCard_) : VK_NULL_HANDLE;
             if (!d.grpBuf || jump) vkGrid_[i] = vkGlowRecord(vkGlow_, d, jump, clBytes_);
         } else if (sg.kind == Kind::MolCloud && molCard_) vkGrid_[i] = vkMolCloudRecord(molCard_, molClouds_[std::size_t(sg.slot)]);
+        else if (sg.kind == Kind::Lens && vkbh_) {                             // 0.62.0: the Black Hole Lab's passes, before the frame (render/vk_blackhole.h)
+            vkbh_->lens(lens_[std::size_t(sg.slot)], width_, height_, texW_[static_cast<int>(Map::Sky)], fbW, fbH);
+            skyStats_ = vkbh_->skyStats(); glareStats_ = vkbh_->glareStats(); lensRedraws_ = vkbh_->redraws(); vkGlareBusy_ = vkbh_->glareBusy();
+            maskValid_ = vkbh_->mask() != VK_NULL_HANDLE;
+        }
         grids = grids || vkGrid_[i] >= 0;
     }
     if (!vkc_->flush(grids) && vkc_->failed()) return false;
@@ -136,7 +169,8 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
     if (gray_ && logDrawKinds()) kinds_[kdGray]++;
     const float bg[4] = {grayBg_.r, grayBg_.g, grayBg_.b, 1.0f};               // Monochrome: the page behind the picture, so the grey copy is opaque (as end())
     const std::size_t bytes = verts_.size() * sizeof(Vertex) + inst_.size() * sizeof(float) + blobs_.size() * sizeof(Blob) + 64;
-    if (!vkCardsFrame(forShot)) std::fprintf(stderr, "[vulkan] the card programs' batch failed this frame\n");   // 0.61.0 (before the picture's pass)
+    maskValid_ = false;
+    if (!vkCardsFrame(forShot, fbW, fbH)) std::fprintf(stderr, "[vulkan] the card programs' batch failed this frame\n");   // 0.61.0 (before the picture's pass)
     if (!V.beginPicture(fbW, fbH, gray_ ? bg : clear, gray_ || forShot, bytes, static_cast<int>(segments_.size()) + 4, forShot)) return;
     const VkDeviceSize vb = V.put(verts_.data(), verts_.size() * sizeof(Vertex));
     const VkDeviceSize ib = V.put(inst_.data(), inst_.size() * sizeof(float));
@@ -146,8 +180,12 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
     for (std::size_t si = 0; si < segments_.size(); si++) {
         const Segment& sg = segments_[si];
         switch (sg.kind) {
-        case Kind::Lens:
-            break;                                                             // (the Black Hole Lab's: step 4)
+        case Kind::Lens:                                                       // 0.62.0: the bent picture laid over (opaque, as OpenGL's drawLens)
+            if (vkbh_ && vkbh_->picture()) {
+                V.setExternal(1, vkbh_->picture());
+                V.draw(VkDraw2D::kComposite, VkDraw2D::kNoBlend, 0, 0, 6, 0, 0, 0, -4);
+            }
+            break;
         case Kind::RocksGpu: {                                                 // 0.61.0: the squares at the places the card worked out
             if (!vkRocks_[si]) break;
             const float col[4] = {sg.c.r, sg.c.g, sg.c.b, sg.c.a};
@@ -259,9 +297,11 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             const int origin[2] = {0, 0};
             V.setF(VkDraw2D::kTri, "uSize", size, 2);
             V.setF(VkDraw2D::kTri, "uSpace", space, 3);
-            V.setI(VkDraw2D::kTri, "uMaskOn", &zero, 1);                        // (the open-sky mask: the Black Hole Lab's, not drawn on Vulkan in this step)
+            const int maskOn = vkbh_ && maskValid_ && vkbh_->mask() ? 1 : 0;   // 0.62.0: the spinning hole's open-sky mask (maskedDisc), as OpenGL's
+            V.setI(VkDraw2D::kTri, "uMaskOn", maskOn ? &maskOn : &zero, 1);
             V.setI(VkDraw2D::kTri, "uMaskOrigin", origin, 2);
-            V.draw(VkDraw2D::kTri, VkDraw2D::kNormal, vb, sg.first, sg.count);
+            if (maskOn) V.setExternal(0, vkbh_->mask());
+            V.draw(VkDraw2D::kTri, VkDraw2D::kNormal, vb, sg.first, sg.count, 0, 0, 0, maskOn ? -3 : 0);
             break;
         }
         case Kind::Squares: {

@@ -60,6 +60,9 @@ std::string vkCardVersion(const std::string& name) {
     if (name == "cloud") return vkCardId("cloud", {kCloudVS, kCloudGridVS, kCloudGridFS, kBlobFS});
     if (name == "slice") return "vulkan " + sliceShaderId();
     if (name == "jump") return "vulkan " + jumpShaderId();
+    if (name == "lightpaths") return vkCardId("lightpaths", {kKerrTableCS});                       // 0.62.0 (step 4): the Black Hole Lab's
+    if (name == "sky") return vkCardId("sky", {kKerrSkyTinyFS, kKerrSkyHeadPart, kEllipticPart, kKerrSkyMathPart, kKerrSkyTracePart, kKerrSkyMainPart});
+    if (name == "lens") return vkCardId("lens", {kCompositeVS, kLensFS, kKerrFS, kMaxDownFS, kGlowDownFS, kGlowBlurFS, kGlowAddFS, kGlareDownFS, kGlareAddFS, kCompositeFS});
     return "vulkan " + molCloudShaderId();
 }
 
@@ -242,6 +245,8 @@ bool VkCards::openSlot() {
     return true;
 }
 
+VkBuffer VkCards::stageBuffer() const { return open_ >= 0 ? slots_[static_cast<std::size_t>(open_)].stage.b : VK_NULL_HANDLE; }
+
 VkCommandBuffer VkCards::cmd() { return openSlot() ? slots_[static_cast<std::size_t>(open_)].cmd : VK_NULL_HANDLE; }
 
 VkDeviceSize VkCards::stage(const void* data, std::size_t bytes) {
@@ -285,6 +290,7 @@ void VkCards::barrier(VkPipelineStageFlags by, unsigned to) {
 }
 
 bool VkCards::uniformBlock(const VkUniforms& u, VkDescriptorBufferInfo& bi) {
+    if (!openSlot()) return false;
     Slot& s = slots_[static_cast<std::size_t>(open_)];
     const VkDeviceSize align = std::max<VkDeviceSize>(16, c_.limits.minUniformBufferOffsetAlignment);
     const VkDeviceSize n = std::max<VkDeviceSize>(16, u.blk.size);
@@ -306,14 +312,16 @@ bool VkCards::uniformBlock(const VkUniforms& u, VkDescriptorBufferInfo& bi) {
 }
 
 VkDescriptorSet VkCards::descriptorSet(VkDescriptorSetLayout dsl) {
+    if (!openSlot()) return VK_NULL_HANDLE;
     Slot& s = slots_[static_cast<std::size_t>(open_)];
     for (int attempt = 0; attempt < 2; attempt++) {
         if (s.pool >= s.pools.size()) {
-            const VkDescriptorPoolSize ps[2] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 256}, {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 64}};
+            const VkDescriptorPoolSize ps[3] = {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 256}, {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 64},
+                                                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 256}};   // (0.62.0: the Black Hole Lab's textures)
             VkDescriptorPoolCreateInfo pi{};
             pi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
             pi.maxSets = 64;
-            pi.poolSizeCount = 2;
+            pi.poolSizeCount = 3;
             pi.pPoolSizes = ps;
             VkDescriptorPool p = VK_NULL_HANDLE;
             if (!c_.check(vkCreateDescriptorPool(c_.device, &pi, nullptr, &p), "vkCreateDescriptorPool (card programs)")) { failed_ = true; return VK_NULL_HANDLE; }
@@ -335,7 +343,7 @@ VkDescriptorSet VkCards::descriptorSet(VkDescriptorSetLayout dsl) {
     return VK_NULL_HANDLE;
 }
 
-bool VkCards::makeKernel(const std::uint32_t* words, std::size_t bytes, Kernel& k, std::string& why) {
+bool VkCards::makeKernel(const std::uint32_t* words, std::size_t bytes, Kernel& k, std::string& why, VkPipelineCache cache) {
     k = Kernel();
     VkDraw2D::Shader sh;
     if (!reflectSpirv(words, bytes / 4, sh, why)) return false;
@@ -369,7 +377,7 @@ bool VkCards::makeKernel(const std::uint32_t* words, std::size_t bytes, Kernel& 
     ci.stage.module = k.mod;
     ci.stage.pName = "main";
     ci.layout = k.pl;
-    if (!c_.check(vkCreateComputePipelines(c_.device, VK_NULL_HANDLE, 1, &ci, nullptr, &k.pipe), "vkCreateComputePipelines (card program)")) { k.pipe = VK_NULL_HANDLE; dropKernel(k); why = "vkCreateComputePipelines failed"; return false; }
+    if (!c_.check(vkCreateComputePipelines(c_.device, cache, 1, &ci, nullptr, &k.pipe), "vkCreateComputePipelines (card program)")) { k.pipe = VK_NULL_HANDLE; dropKernel(k); why = "vkCreateComputePipelines failed"; return false; }
     spirv_ += bytes;
     return true;
 }
