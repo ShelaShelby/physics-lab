@@ -70,7 +70,7 @@ public:
     // anything is recorded (no init(): no OpenGL object is made, so every card program of OpenGL is absent and each lab takes its processor path);
     // loadMapsVulkan: the picture maps as init() loads them; endVulkan: as end(), into Vulkan's picture (fbW x fbH pixels, cleared to clear[]; forShot:
     // Save image's own picture, one sample as OpenGL's offscreen one). The frame's command buffer is the backend's (render/vk_backend.cpp).
-    void useVulkan(VkDraw2D* d) { vk_ = d; if (!d) for (bool& m : vkMap_) m = false; }
+    void useVulkan(VkDraw2D* d);                       // (render/renderer2d_vk.cpp: renderer2d.cpp itself needs no Vulkan to link)
     bool vulkan() const { return vk_ != nullptr; }
     bool loadMapsVulkan(std::string& why);
     void endVulkan(int fbW, int fbH, const float clear[4], bool forShot);
@@ -432,8 +432,8 @@ private:
     enum DrawKind { kdRect, kdLine, kdTriangle, kdDisc, kdRing, kdSphere, kdSunDisc, kdFadeDisc, kdMaskedDisc, kdSquares, kdBlobs, kdSpheres, kdMesh, kdSoftLayer,
                     kdCloudLayer, kdPlanet, kdPlanetMap, kdPlanetRings, kdPlanetEclipse, kdPlanetAir, kdSkyMap, kdGray, kdBlobKind0, kdKindCount = kdBlobKind0 + 10 };
     mutable long kinds_[kdKindCount] = {};
-    int vkMeshCreate(const void* v, std::size_t bytes);   // 0.60.0 (render/renderer2d_vk.cpp)
-    void vkMeshDelete(int id);
+    int (*vkMeshCreate_)(VkDraw2D*, const void*, std::size_t) = nullptr;   // 0.60.0: set by useVulkan (render/renderer2d_vk.cpp)
+    void (*vkMeshDelete_)(VkDraw2D*, int) = nullptr;
     void kindOf(const Blob& b) const { const int k = static_cast<int>(b.kind + 0.5f); if (k >= 0 && k < 10) kinds_[kdBlobKind0 + k]++; }
 };
 

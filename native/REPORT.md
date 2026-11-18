@@ -33,7 +33,7 @@
   _classic, _density, _chart 0.002 %, orbit_mono 0.054 %, mol_fill, _real, _ball 0.001 %; none skipped; zero validation errors; each view's calls made.
   4 samples: every view zero errors, the log says 4 samples. Sync validation (layers, Save image): 0 errors. Save image 0.000 % against OpenGL's file.
   PL_VK_CHECK=break: OpenGL, Settings names the step. Step 1's part (vulkan): 17 checks pass (PL_NO_PICTURE on both sides now).
-- OpenGL: the four labs' screenshots byte-identical to 0.59.0's. check.sh quick 18/18. Full UI suite 32 of 34 (ui_shell, with vulkan2d, passed); ui_popups
+- OpenGL: the four labs' screenshots byte-identical to 0.59.0's. check.sh quick 18/18 (also after the link fix for gl_compare_tests). Full UI suite 32 of 34 (ui_shell, with vulkan2d, passed); ui_popups
   (check_6b benchwaits; benchscenes blackhole.all_light "-1.0000") and ui_molecule (check_molecule card) as in 0.59.0 (ROADMAP).
 ## For the owner's PC
 - Settings, Performance, Graphics: Vulkan (test), restart. Each lab (planets close up, Saturn; Atom's clouds and nucleus; each Molecule style) should look as

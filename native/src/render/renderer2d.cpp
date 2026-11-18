@@ -1327,7 +1327,7 @@ int Renderer2D::meshCreate(const std::vector<MeshVertex>& v) {
     Mesh& m = meshes_[std::size_t(id)];
     m.used = true; m.count = static_cast<int>(v.size());
     if (vk_) {                                         // 0.60.0: on Vulkan, a buffer on the card made once (render/vk_draw2d.cpp)
-        m.vk = vkMeshCreate(v.data(), v.size() * sizeof(MeshVertex));
+        m.vk = vkMeshCreate_ ? vkMeshCreate_(vk_, v.data(), v.size() * sizeof(MeshVertex)) : -1;
         if (m.vk < 0) { m = Mesh(); return -1; }
         meshUploads_ += static_cast<long>(v.size());
         return id;
@@ -1351,7 +1351,7 @@ int Renderer2D::meshCreate(const std::vector<MeshVertex>& v) {
 void Renderer2D::meshDelete(int id) {
     if (id < 0 || id >= int(meshes_.size()) || !meshes_[std::size_t(id)].used) return;
     Mesh& m = meshes_[std::size_t(id)];
-    if (m.vk >= 0) vkMeshDelete(m.vk);                 // 0.60.0
+    if (m.vk >= 0 && vkMeshDelete_) vkMeshDelete_(vk_, m.vk);                 // 0.60.0
     if (m.vbo) glDeleteBuffers(1, &m.vbo);
     if (m.vao) glDeleteVertexArrays(1, &m.vao);
     m = Mesh();

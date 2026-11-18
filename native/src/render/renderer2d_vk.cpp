@@ -20,8 +20,12 @@ bool logDrawKinds();
 static_assert(sizeof(MeshVertex) == 48, "the mesh's vertex input (render/vk_draw2d.cpp kMesh) is 48 bytes");
 static_assert(sizeof(Renderer2D::Blob) == 80, "the blobs' instance input (render/vk_draw2d.cpp kBlob) is 80 bytes");
 
-int Renderer2D::vkMeshCreate(const void* v, std::size_t bytes) { return vk_ ? vk_->meshCreate(v, bytes) : -1; }
-void Renderer2D::vkMeshDelete(int id) { if (vk_) vk_->meshDelete(id); }
+void Renderer2D::useVulkan(VkDraw2D* d) {
+    vk_ = d;
+    vkMeshCreate_ = d ? +[](VkDraw2D* v, const void* p, std::size_t n) { return v->meshCreate(p, n); } : nullptr;
+    vkMeshDelete_ = d ? +[](VkDraw2D* v, int id) { v->meshDelete(id); } : nullptr;
+    if (!d) for (bool& m : vkMap_) m = false;
+}
 
 bool Renderer2D::loadMapsVulkan(std::string& why) {
     if (!vk_) { why = "no Vulkan"; return false; }
