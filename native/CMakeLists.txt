@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.63.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.63.1 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -122,6 +122,7 @@ add_library(app_core STATIC
   src/app/calc.cpp
   src/app/calc_lab.cpp
   src/app/gpu_guard.cpp
+  src/app/frame_cost.cpp
 )
 target_include_directories(app_core PUBLIC src)
 target_link_libraries(app_core PUBLIC atom_core)   # 0.16 stage 4: bench_scenes.cpp reads the Atom Lab scene texts

@@ -1,6 +1,7 @@
 // 0.60.0: Vulkan, step 2 of 5 (native/PLAN_VULKAN.md): Renderer2D's end() on Vulkan. The shapes, blobs and segments are recorded by the same code as
 // for OpenGL (render/renderer2d.cpp); this file only draws them, segment by segment in their order, with the same shaders (render/shaders.h as SPIR-V),
 // the same uniforms and the same blend of each step as Renderer2D::end (render/vk_draw2d.h has the how).
+#include "app/frame_cost.h"
 #include "renderer2d.h"
 
 #include <algorithm>
@@ -110,7 +111,8 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
         }
         grids = grids || vkGrid_[i] >= 0;
     }
-    if (!vkc_->flush(grids) && vkc_->failed()) return false;
+    {   app::FrameCostLabel l(grids ? "the exposure grids (Glow or Density cloud)" : "the frame's card batch");
+        if (!vkc_->flush(grids) && vkc_->failed()) return false; }
     std::vector<float> cells;
     for (std::size_t i = 0; i < n; i++) {
         if (vkGrid_[i] < 0) continue;

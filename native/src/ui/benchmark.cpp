@@ -24,6 +24,7 @@
 
 #include "app/gpu_guard.h"
 #include "app/bench.h"
+#include "app/frame_cost.h"
 #include "app/bench_scenes.h"
 #include "app/gpu_timer.h"
 #include "app/shell.h"
@@ -247,6 +248,7 @@ struct PixelGrab { int w = 0, h = 0; std::vector<unsigned char> rgb; };
 // card batches submitted for it, their times summed (busy), and the span from the first start to the last end.
 SDL_Window* g_window = nullptr;
 render::VkBackend* g_vk = nullptr;
+int g_checkLoads = 0;                            // 0.63.1: the known loads the timer check drew (the report's start line)
 
 struct GpuTimer {
     static constexpr int kSlots = 8;
@@ -283,6 +285,7 @@ app::GpuVerdict checkGpuTimer(render::Renderer2D& r, double wPts, double hPts, i
                 r.begin(wPts, hPts);
                 for (int k = 0; k < n; k++) r.rect(0, 0, wPts, hPts, render::Color{0.5f, 0.5f, 0.5f, 0.02f});
                 double gq = -1, gw = -1;
+                g_checkLoads++;
                 if (!g_vk->benchLoad(r, fbW, fbH, gq, gw)) { app::GpuVerdict v; v.why = "the timestamps gave no result for the known load"; return v; }
                 if (rep >= 2) { qs.push_back(gq); ws.push_back(gw); }
             }
@@ -371,7 +374,7 @@ struct BenchState {
     int grabNext = 0, shotFor = -1, shotK = 0;
     int wFrames = 0;                         // frames since the wait's action
     bool grabSkip = false;                   // a development picture was saved this frame (not counted)
-    bool filmStopped = false, filmDone = false;
+    bool filmStopped = false, filmDone = false, filmCompared = false;   // (0.63.1: filmCompared: the two pictures compared once)
     // the scene's own clock (s from its set-up, by the run's clock) and phase counters
     double lastU = 0;
     double split[2][3] = {{0, 0, 0}, {0, 0, 0}};   // atom.nucleus_density: per half (still, turning): frames, ms, cpu ms
@@ -385,6 +388,10 @@ struct BenchState {
     std::vector<GpuSample> gpuReady;
     app::GpuVerdict gpuCheck;
     bool gpuChecked = false;
+    // 0.63.1: the benchmark's own start (the owner's PC: 5-7 s that looked frozen): measured part by part for the report's header
+    double startT0 = -1, beginMs = -1, checkMs = -1, setupMs = -1, swapMs = 0, toSceneMs = -1;
+    int prepFrames = 0, checkLoads = 0;
+    bool grabPrev = false;                    // 0.63.1: the frame before read the picture back
     bool allScenes = false;                   // the checkbox "All scenes"
     std::vector<int> list;                    // the scenes of this run (indexes into benchSceneTexts()), fixed when it starts
     int sceneFrame = 0, measFrame = -1;       // frames since the scene was set up; counted frames so far (-1: still warming up)
@@ -671,11 +678,13 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
     using K = app::BenchKind;
     switch (t.kind) {
         case K::OrbitHeaviest: case K::OrbitRocks8: case K::OrbitHeaviestCpuRocks: case K::OrbitRocks8CpuRocks: case K::OrbitRealFast: case K::UiSettingsOpen:
-            return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? "the graphics card (OpenGL 4.3 rock compute)" : !app.rocksOk ? "the processor (no OpenGL 4.3 rock compute on this PC)" : "the processor (GPU rocks switched off for this scene)");
+            return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? (g_vk ? "the graphics card (Vulkan rock compute)" : "the graphics card (OpenGL 4.3 rock compute)") :   // (0.63.1: the API in use)
+                                                      !app.rocksOk ? (g_vk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (no OpenGL 4.3 rock compute on this PC)") : "the processor (GPU rocks switched off for this scene)");
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
             if (t.atomWhich == atom::kBenchSliceSuper) return "the Slice's dots: the processor (a superposition: the Slice's card program takes one plain state only)";   // 0.63.0
-            if (t.atomWhich == 14 || t.atomWhich == 27) return atom::atomCardPaths().pathText(0, L, app.computeOk) + "; the outline's contour: " + std::string(L.gpuOutline && app.computeOk ? "the graphics card (OpenGL 4.3 compute)" : !app.computeOk ? "the processor (no OpenGL 4.3 compute on this PC)" : "the processor (GPU outline switched off for this scene)");
+            if (t.atomWhich == 14 || t.atomWhich == 27) return atom::atomCardPaths().pathText(0, L, app.computeOk) + "; the outline's contour: " + std::string(L.gpuOutline && app.computeOk ? (g_vk ? "the graphics card (Vulkan compute)" : "the graphics card (OpenGL 4.3 compute)") :
+                                                                                                                               !app.computeOk ? (g_vk ? "the processor (no Vulkan compute on this PC)" : "the processor (no OpenGL 4.3 compute on this PC)") : "the processor (GPU outline switched off for this scene)");
             if (L.manyOn() && L.p.cstyle == "Glow" && L.s.trans) {         // 0.57.0: a jump: the card's buffer only with the card's groups
                 const bool card = L.gpuCloud && L.gpuJump && atom::atomCardPaths().state(1) == 1;
                 return std::string("the every-electron cloud: ") + (card ? "drawn from a buffer on the graphics card; " : !L.gpuCloud ? "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene); "
@@ -932,6 +941,8 @@ std::string stateLine(AppState& app) {
 
 void begin(AppState& app) {
     BenchState& b = st(app);
+    const double t0 = app::frameCostNowMs();                         // 0.63.1: the start, part by part
+    b.startT0 = t0; b.checkMs = b.setupMs = b.toSceneMs = -1; b.swapMs = 0; b.prepFrames = 0; b.checkLoads = 0;
     if (SDL_getenv("PL_BENCH")) std::printf("PLBENCH-STATE before %s\n", stateLine(app).c_str());
     // the environment, as it is when it starts (the window is not changed meanwhile)
     app::BenchEnv& e = b.env = app::BenchEnv();
@@ -950,6 +961,12 @@ void begin(AppState& app) {
     e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, true);          // (the benchmark's own settings start from the defaults: On)
     e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, true);
     e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, true);
+    if (g_vk) {                                          // 0.63.1: a card program its guard switched off says so (0.63.0 said "GPU outline on" with the outline off)
+        const auto off = [](const app::GpuGuard& g) { return g.started() && !g.allowed() ? (g.offText().empty() ? std::string("switched off by its guard") : g.offText()) : std::string(); };
+        if (const std::string w = off(app::gpuVkOutlineGuard()); !w.empty()) e.outlinePath = "Vulkan: GPU outline off by its guard: " + w;
+        if (const std::string w = off(app::gpuVkRocksGuard()); !w.empty()) e.rocksPath = "Vulkan: GPU rocks off by its guard: " + w;
+        if (const std::string w = off(app::gpuVkGroupsGuard()); !w.empty()) e.computePath = "Vulkan: GPU superposition off by its guard: " + w;
+    }
     const ImGuiIO& io = ImGui::GetIO();
     const float sc = ImGui::GetStyle().FontScaleDpi;
     e.windowW = int(io.DisplaySize.x * io.DisplayFramebufferScale.x + 0.5f); e.windowH = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);
@@ -998,6 +1015,7 @@ void begin(AppState& app) {
     b.run = std::make_unique<app::BenchRun>(activeScenes(b), b.warm, b.measure);
     b.stage = BenchState::Stage::Running;
     app.benchRunning = true;
+    b.beginMs = app::frameCostNowMs() - t0;
 }
 
 void saveAndCopy(AppState& app, BenchState& b) {
@@ -1061,6 +1079,14 @@ void finish(AppState& app, BenchState& b, bool cancelled) {
     b.env.gpuTimer = b.gpu.ok && std::any_of(b.results.begin(), b.results.end(), [](const app::BenchScene& s) { return s.gpuSamples > 0; });
     b.env.gpuReliable = b.env.gpuTimer && b.gpuChecked && b.gpuCheck.reliable;
     b.env.gpuCheck = b.gpuChecked ? b.gpuCheck.why : std::string();
+    if (g_vk && g_vk->benchRejected() > 0) b.env.gpuCheck += "; " + std::to_string(g_vk->benchRejected()) + " frame(s) whose timestamps were thrown away (a zero, an end before its start, or over 10 s)";   // 0.63.1
+    if (b.toSceneMs >= 0) {                              // 0.63.1: the start, part by part
+        char s[400];
+        std::snprintf(s, sizeof s, "%.0f ms from Start to the first scene's warm-up (settings kept and the run made %.0f ms; two frames showing \"Preparing the benchmark ...\"; "
+                      "the GPU timer's check %.0f ms, %d known loads; the first scene set up %.0f ms); then the swapchain made again for VSync off %.0f ms",
+                      b.toSceneMs, b.beginMs, b.checkMs, b.checkLoads, b.setupMs, b.swapMs);
+        b.env.startParts = s;
+    }
     restore(app, b);
     if (SDL_getenv("PL_BENCH")) std::printf("PLBENCH-STATE after %s\n", stateLine(app).c_str());
     b.gpu.destroy();
@@ -1214,8 +1240,12 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, i
     if (app.liveFrame) { std::printf("Benchmark stopped: the window was moved or resized\n"); finish(app, b, true); return; }   // the numbers would be wrong
     if (app.pane || app.shot.requested) { finish(app, b, true); return; }        // something got in the way: stop and give everything back (a Journey is the benchmark's own)
     if (!b.gpuChecked) {                                 // once, before the first scene
+        if (b.prepFrames++ < 2) return;                  // 0.63.1: two frames first, so the box shows "Preparing the benchmark ..." before the check
         b.gpuChecked = true;
+        const double c0 = app::frameCostNowMs();
+        g_checkLoads = 0;
         b.gpuCheck = checkGpuTimer(renderer, app.canvasW, app.canvasH, fbW, fbH);
+        b.checkMs = app::frameCostNowMs() - c0; b.checkLoads = g_checkLoads;
         std::printf("GPU timer check: %s: %s\n", b.gpuCheck.reliable ? "reliable" : "NOT reliable", b.gpuCheck.why.c_str());
     }
     if (b.phase == 0 && b.run->sceneCount() == 0) nextPhase(app, b);
@@ -1225,11 +1255,13 @@ void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, i
         const int idx = b.list[std::size_t(i)];
         b.bhLastU = -1e9; b.bhRestS = -1; b.bhKind = -1; b.bhHave = false;
         for (double& x : b.bhMoveS) x = 0;
-        b.grabNext = 0; b.filmStopped = b.filmDone = false; b.grabMoving = b.grabRest = PixelGrab();
+        b.grabNext = 0; b.filmStopped = b.filmDone = b.filmCompared = false; b.grabMoving = b.grabRest = PixelGrab();
         b.lastU = 0; for (auto& r : b.split) for (double& x : r) x = 0;
+        const double s0 = app::frameCostNowMs();
         setupScene(app, b, idx);
         b.lines[std::size_t(i)] = sceneLine(app, b, idx);
         b.run->setUpDone();
+        if (i == 0) { b.setupMs = app::frameCostNowMs() - s0; b.toSceneMs = app::frameCostNowMs() - b.startT0; }   // 0.63.1
         b.sceneFrame = 0; b.measFrame = -1; b.picLast = -1;
         if (sceneText(idx).kind == app::BenchKind::BlackHole) b.bhByScene[i].fineStartMs = app.blackholeView.fineFillMs();   // 0.55.8
         std::printf("PLBENCH-SCENE %s\n", sceneText(idx).id.c_str());
@@ -1252,7 +1284,15 @@ void benchmarkGpuBegin(AppState& app) {
     if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
     GpuTimer& g = app.bench->gpu;
     if (!g.ok || g.active >= 0) return;
-    if (g_vk) { if (!g_vk->benchMark()) g.framesSkipped++; return; }   // 0.63.0: the next vk.render() is timed
+    if (g_vk) {                                          // 0.63.0: the next vk.render() is timed
+        // 0.63.1: only frames that are counted (a scene's counted time, a lab at rest being counted): a warm-up frame's result, a frame or two late, was
+        // counted in the scene before (here a slow scene's card time came out above its frame time)
+        const BenchState& bs = *app.bench;
+        const bool counted = (bs.phase == 0 && bs.run && bs.run->measuring()) || (bs.phase == 2 && bs.rStage == 2);
+        if (!counted) return;
+        if (!g_vk->benchMark()) g.framesSkipped++;
+        return;
+    }
     const int s = g.ring.acquire();
     if (s < 0) { g.framesSkipped++; return; }            // every slot still waits for its result: this frame is not measured
     plgl::glQueryCounter(g.q[s][1], GL_TIMESTAMP);
@@ -1322,7 +1362,7 @@ void benchmarkGpuEnd(AppState& app) {
     }
 }
 
-void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
+void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::BenchFrameCost* last) {
     if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
     BenchState& b = *app.bench;
     // the GPU results that are ready now (they come a frame or two late), oldest first
@@ -1361,7 +1401,9 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
     }
     if (b.phase >= 1) { partsEndFrame(app, b, frameMs); return; }
     const int sc = b.run->scene();
-    const bool grabbed = b.grabNext > 0 || b.grabSkip;
+    // (0.63.1: the frame after a read-back is not counted either: its time, from the frame before's start, holds the read-back; 0.63.0 counted it)
+    const bool grabbed = b.grabNext > 0 || b.grabSkip || b.grabPrev;
+    b.grabPrev = b.grabNext > 0 || b.grabSkip;
     b.grabSkip = false;
     if (sc < int(b.list.size()) && b.run->sceneToSetUp() < 0 && b.R) {
         const int idx = b.list[std::size_t(sc)];
@@ -1389,12 +1431,14 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs) {
                 nt.push_back(l);
             }
         }
-        if (t.kind == app::BenchKind::BlackHoleFilmTilt && b.filmDone && b.grabNext == 0 && b.grabRest.w > 0) b.notes[std::size_t(sc)] = filmCompare(b.grabMoving, b.grabRest);
+        // (0.63.1: once: 0.63.0 compared the two whole pictures again in every frame after the one at rest, in the counted time)
+        if (t.kind == app::BenchKind::BlackHoleFilmTilt && b.filmDone && !b.filmCompared && b.grabNext == 0 && b.grabRest.w > 0) { b.notes[std::size_t(sc)] = filmCompare(b.grabMoving, b.grabRest); b.filmCompared = true; }
         if (b.run->measuring()) b.paths[std::size_t(sc)] = scenePath(app, b, idx, sc);
     }
     static const bool slowLog = envHas("PL_BENCH_SLOW");                  // (development: the frames over 250 ms, with their scene)
     if (slowLog && frameMs > 250 && sc < int(b.list.size())) std::printf("PLBENCH-SLOW %s %.0f ms %s at %.2f s\n", sceneText(b.list[std::size_t(sc)]).id.c_str(), frameMs, b.run->measuring() ? "counted" : "warm-up", b.run->sceneElapsedS());
-    b.run->frame(frameMs, cpuMs, !grabbed);
+    if (last && sc == 0 && !b.run->measuring()) b.swapMs += last->swapchainMs;   // 0.63.1: the swapchain made again for VSync off (the first scene's warm-up)
+    b.run->frame(frameMs, cpuMs, !grabbed, last);
     if (grabbed) b.grabNext = 0;
     if (b.run->finished()) nextPhase(app, b);
 }
@@ -1420,7 +1464,10 @@ void benchmarkWindow(AppState& app) {
             panelDecor(app::PanelKind::Floating);
             if (running) {
                 const app::BenchRun& r = *b.run;
-                if (b.phase == 0 && r.sceneCount() > 0) {
+                if (b.phase == 0 && !b.gpuChecked) {    // 0.63.1: the timer's check and the first scene's set-up (seconds on some PCs)
+                    ImGui::Text("Preparing the benchmark ...");
+                    ImGui::TextDisabled("Checking the GPU timer, then setting up the first scene.");
+                } else if (b.phase == 0 && r.sceneCount() > 0) {
                     const int shown = std::min(r.scene() + 1, r.sceneCount());
                     const app::BenchSceneText& t = sceneText(b.list[std::size_t(std::min(r.scene(), r.sceneCount() - 1))]);
                     ImGui::Text("Scene %d of %d: %s", shown, r.sceneCount(), t.id.c_str());

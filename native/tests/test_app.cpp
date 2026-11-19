@@ -609,6 +609,29 @@ static void testBench() {
         for (int i = 0; i < 5; i++) g.frame(100, 1);
         checkTrue("bench run: a read-back frame of 5 s is not counted and does not end the scene", near(at, 0.5) && g.finished() && g.result(0).frames.frames == 10 && near(g.result(0).frames.worstMs, 100));
     }
+    {   // 0.63.1: the three worst counted frames with where their time went, worst first; the waits for the card a frame; their text
+        BenchRun g(1, 0.1, 5.0);
+        g.setUpDone();
+        g.frame(200, 1);                                                    // the warm-up ends (not counted)
+        const double ms[6] = {100, 300, 50, 969, 120, 210};
+        for (double m : ms) {
+            app::BenchFrameCost c;
+            c.workMs = 2; c.cardWaitMs = 1; c.acquireMs = 0.5; c.presentMs = 0.5; c.readbacks = m > 900 ? 1 : 0; c.readbackMs = m > 900 ? 900 : 0;
+            if (m > 900) c.readbackWhat = "the glare's blocks";
+            g.frame(m, 2, true, &c);
+        }
+        const app::BenchScene r = g.result(0);
+        checkTrue("bench run (0.63.1): the three worst frames, worst first, with their own frame time",
+                  r.worst.size() == 3 && near(r.worst[0].frameMs, 969) && near(r.worst[1].frameMs, 300) && near(r.worst[2].frameMs, 210));
+        checkTrue("bench run (0.63.1): the waits for the card a frame (fence, acquire, batches waited for)", near(r.waitAvgMs, (6 * 1.5 + 900) / 6.0));
+        const std::string w = app::benchFrameCostText(r.worst[0]);
+        checkTrue("bench run (0.63.1): a worst frame's text names the batch waited for and what is left", w.find("969.0 ms: frame thread 2.0 ms, waited for the card 1.0 ms") == 0 &&
+                  w.find("1 batch(es) waited for 900.0 ms (the longest: the glare's blocks)") != std::string::npos && w.find("the rest 65.0 ms") != std::string::npos);
+        app::BenchScene sw = r; sw.name = "w"; sw.what = "x";
+        const std::string tw = benchResultText(BenchEnv(), {sw});
+        checkTrue("bench run (0.63.1): the report has the waits and the worst frames", tw.find("  Waited for the card per frame: ") != std::string::npos &&
+                  tw.find("  Worst frame 1: 969.0 ms") != std::string::npos && tw.find("(the waits for the card taken out)") != std::string::npos);
+    }
     BenchRun early(2);
     early.setUpDone();
     for (int i = 0; i < 100; i++) early.frame(100, 1);                  // 10 s: scene 0 done (6.5 s), scene 1 waiting for its set-up
@@ -759,7 +782,7 @@ static void testLiveAndGpu() {
     {   BenchEnv v = env; v.api = "Vulkan"; v.glVersion = "1.4.318, FIFO";   // 0.63.0 (Vulkan step 5): the report says which API ran and what its timer is
         const std::string tv = benchResultText(v, {s});
         checkTrue("text (Vulkan): the Graphics line names Vulkan and its version; the timer is Vulkan's timestamps; what it covers", tv.find("Graphics: Vulkan 1.4.318, FIFO\n") != std::string::npos &&
-                  tv.find("GPU timer (Vulkan timestamp queries): ") != std::string::npos && tv.find("the card programs' batches submitted for it, summed") != std::string::npos &&
+                  tv.find("GPU timer (Vulkan timestamp queries): ") != std::string::npos && tv.find("the card programs' batches submitted for it, summed; a worker thread's batches") != std::string::npos &&
                   tv.find("GL_TIME_ELAPSED") == std::string::npos && t.find("Graphics: OpenGL ") != std::string::npos); }
 
     // the stress belts: scale 1 is the app's normal belts; scale 8 has 8 times the rocks of the same kinds, always the same
@@ -2024,6 +2047,31 @@ static void testGpuGuard() {
         checkTrue("guard (vulkan): kept fail with the same id: off, failed, not a crash", !dec.allowed && dec.failed && !dec.crashed);
         dec = app::gpuGuardDecide(fr, none, "vulkan 0.59.1", vd);
         checkTrue("guard (vulkan): kept fail, a new app version: tried once more, guarded", dec.allowed && dec.guarded); }
+    {   // 0.63.1: a crash kept from a marker of 0.63.0 or older is not trusted (0.62.0 left the outline's marker after its step had passed; the owner's
+        // 0.63.0 switched the outline off): tried once more, guarded; a marker that names 0.63.1 or later is trusted; the light paths (keepOld) stay off
+        const std::string ov = "vulkan outline cdf40fa24b97d9f0", od = "any";
+        const GpuGuardRecord old{"off", ov, od, "the outline's first small run"};
+        dec = app::gpuGuardDecide(old, none, ov, od, false);
+        checkTrue("guard (0.63.1): an off kept without an app version (0.63.0 or older): tried once more, guarded, the old line kept until it passes",
+                  dec.allowed && dec.guarded && dec.untrusted && dec.keep == old);
+        dec = app::gpuGuardDecide(none, old, ov, od, false);
+        checkTrue("guard (0.63.1): a marker on disk without an app version: the same", dec.allowed && dec.guarded && dec.untrusted);
+        GpuGuardRecord o62 = old; o62.app = "0.62.0";
+        dec = app::gpuGuardDecide(o62, none, ov, od, false);
+        checkTrue("guard (0.63.1): a marker from 0.62.0: tried once more", dec.allowed && dec.guarded && dec.untrusted);
+        GpuGuardRecord o631 = old; o631.app = "0.63.1";
+        dec = app::gpuGuardDecide(o631, none, ov, od, false);
+        checkTrue("guard (0.63.1): a marker from 0.63.1: trusted, off, a crash", !dec.allowed && dec.crashed && !dec.untrusted);
+        GpuGuardRecord o100 = old; o100.app = "1.0.0";
+        checkTrue("guard (0.63.1): a marker from a later version (0.64.0, 1.0.0): trusted", !app::gpuGuardDecide(o100, none, ov, od, false).allowed &&
+                  app::gpuGuardAppTrusted("0.64.0") && app::gpuGuardAppTrusted("0.63.1") && !app::gpuGuardAppTrusted("0.63.0") && !app::gpuGuardAppTrusted("0.62.0") && !app::gpuGuardAppTrusted(""));
+        dec = app::gpuGuardDecide(old, none, ov, od, true);
+        checkTrue("guard (0.63.1): the light paths (keepOld): an off without an app version stays off", !dec.allowed && dec.crashed && !dec.untrusted);
+        GpuGuardRecord slow = old; slow.state = "slow";
+        checkTrue("guard (0.63.1): only a crash (a marker) is retried: a kept slow stays off", !app::gpuGuardDecide(slow, none, ov, od, false).allowed);
+        checkStr("guard (0.63.1): the settings line names the app version as a fifth field and reads back", app::gpuGuardText(app::gpuGuardParse(app::gpuGuardText(o631))),
+                 "off | vulkan outline cdf40fa24b97d9f0 | any | the outline's first small run | app 0.63.1");
+        checkTrue("guard (0.63.1): a fifth field that is not 'app ...' is a broken line", app::gpuGuardParse("off | a | b | c | d").state.empty() && app::gpuGuardParse("off | a | b | c").state == "off"); }
     // the files: a folder of its own
 #ifdef _WIN32
     const std::string dir = std::string(std::getenv("TEMP") ? std::getenv("TEMP") : ".") + "\\pl_gpuguard_test\\";
@@ -2116,6 +2164,33 @@ static void testGpuGuard() {
         checkTrue("guard turn: the log says that a step waited, naming the other", tl.find("the step 'b's pipeline' waits for its turn: Guard A (its step 'a's small run') is open") != std::string::npos &&
                   tl.find("the step 'b's pipeline' has its turn") != std::string::npos);
         std::remove(mA.c_str()); std::remove(mB.c_str()); std::remove((dir + "gpu-turn-log.txt").c_str()); }
+    {   // 0.63.1: the marker names the app version; a named guard (the outline's) finding a marker without it tries once more, guarded, and says why;
+        // one that names 0.63.1 is trusted; the light paths' guard (default) keeps an unnamed one off
+        const std::string mO = dir + "gpu-to-step.txt", lO = dir + "gpu-to-log.txt";
+        std::remove(mO.c_str()); std::remove(lO.c_str());
+        app::gpuGuardSetApp("0.63.1");
+        {   app::GpuGuard o("gpu-to-step.txt", "gpu-to-log.txt", true, "[o] ", "The outline");
+            o.start(dir, "vulkan outline 1", d, "", {});
+            o.begin("the outline's first small run");
+            checkTrue("guard app: the marker names the app version that wrote it", readAll(mO).find("app=0.63.1\n") != std::string::npos); }   // ("dies" here)
+        {   app::GpuGuard o("gpu-to-step.txt", "gpu-to-log.txt", true, "[o] ", "The outline");
+            o.start(dir, "vulkan outline 1", d, "", {});
+            checkTrue("guard app: a marker of 0.63.1: trusted (off), kept with its app version", !o.allowed() && o.crashed() && o.saved().find("| app 0.63.1") != std::string::npos);
+            o.settingsWritten(); }
+        app::writeCommitted(mO, "version=vulkan outline 1\ndriver=" + d + "\nstep=the outline's first small run\n");   // as 0.62.0 and 0.63.0 wrote it
+        {   app::GpuGuard o("gpu-to-step.txt", "gpu-to-log.txt", true, "[o] ", "The outline");
+            o.start(dir, "vulkan outline 1", d, "", {});
+            checkTrue("guard app: a marker without an app version (0.63.0 or older): allowed, guarded", o.allowed() && o.guarded() && !o.crashed());
+            checkTrue("guard app: the log says why", readAll(lO).find("Not trusted: the crash in the step 'the outline's first small run' was kept from a marker of 0.63.0 or older") != std::string::npos);
+            o.closing(); }
+        app::writeCommitted(mO, "version=vulkan outline 1\ndriver=" + d + "\nstep=check: dispatch 1\n");
+        {   app::GpuGuard o("gpu-to-step.txt", "gpu-to-log.txt", true, "[o] ", "The outline");
+            o.keepOldMarkers();                                          // (as the light paths' guards)
+            o.start(dir, "vulkan outline 1", d, "", {});
+            checkTrue("guard app: a light-path guard keeps an unnamed marker's crash off", !o.allowed() && o.crashed());
+            o.settingsWritten(); }
+        app::gpuGuardSetApp("");
+        std::remove(mO.c_str()); std::remove(lO.c_str()); }
     app::Prefs p; p.gpuPaths = "off | 0.55.7 | x / y | compile";
     checkStr("guard: the settings file's line goes through the settings file unchanged", app::loadPrefs(app::savePrefs(p)).gpuPaths, p.gpuPaths);
     checkTrue("guard: no line when nothing is kept", app::savePrefs(app::Prefs{}).find("gpupaths") == std::string::npos);

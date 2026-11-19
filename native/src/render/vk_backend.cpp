@@ -1,4 +1,5 @@
 // 0.59.0: Vulkan, step 1 of 5 (render/vk_backend.h, native/PLAN_VULKAN.md)
+#include "app/frame_cost.h"
 #include "render/vk_backend.h"
 
 #include <SDL3/SDL.h>
@@ -126,7 +127,11 @@ struct VkBackend::Impl {
     double tsNs = 0, imageGpuMs = -1, imageWallMs = -1;
     std::uint64_t tsMask = ~std::uint64_t(0), benchTicket = 0;
     bool benchUsed[kBenchSlots] = {};
-    struct BenchFrame { int slot; std::uint64_t first, last; };
+    struct BenchFrame { int slot; std::uint64_t first, last, serial; int image; };
+    // 0.63.1: a frame's timestamps are read only once its fence has signalled (serial <= doneSerial): availability alone gave nonsense on the owner's card
+    std::uint64_t frameSerial = 0, doneSerial = 0;
+    std::vector<std::uint64_t> fenceSerial;                // per swapchain image: the serial of the frame last submitted with its fence
+    int benchRejected = 0;
     std::vector<BenchFrame> benchPending;
     int errors = 0, warnings = 0, failedCalls = 0, rebuilds = 0;
     std::string lastFailure;
@@ -577,21 +582,29 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     if (w <= 0 || h <= 0) return false;                                   // minimised: nothing to draw on
     if (d.rebuild || w != d.wd.Width || h != d.wd.Height) {               // resized, out of date, or VSync changed
         ImGui_ImplVulkan_SetMinImageCount(d.minImages);
+        app::FrameCostSpan made(app::FrameCostKind::Swapchain);   // (0.63.1: the benchmark's worst frames)
         if (!d.makeSwapchain(w, h)) { d.check(VK_ERROR_INITIALIZATION_FAILED, "the swapchain could not be made again"); ok_ = false; return false; }
         presentText_ = Impl::presentName(d.wd.PresentMode);
         if (d.guard && ++d.rebuilds <= 50) d.guard->log("swapchain made again: " + std::to_string(d.wd.Width) + " x " + std::to_string(d.wd.Height) + ", " + presentText_);
         d.wd.FrameIndex = 0;
         d.rebuild = false;
+        d.doneSerial = d.frameSerial;                                     // (0.63.1: the swapchain is made after the device is idle: every frame done)
+        d.fenceSerial.assign(static_cast<std::size_t>(d.wd.ImageCount), 0);
     }
     ImGui_ImplVulkanH_Window& wd = d.wd;
     VkSemaphore acquired = wd.FrameSemaphores[static_cast<int>(wd.SemaphoreIndex)].ImageAcquiredSemaphore;
     VkSemaphore complete = wd.FrameSemaphores[static_cast<int>(wd.SemaphoreIndex)].RenderCompleteSemaphore;
-    VkResult r = vkAcquireNextImageKHR(d.device, wd.Swapchain, UINT64_MAX, acquired, VK_NULL_HANDLE, &wd.FrameIndex);
+    VkResult r = VK_SUCCESS;
+    {   app::FrameCostSpan span(app::FrameCostKind::Acquire);   // (0.63.1: counted apart from the frame's own work)
+        r = vkAcquireNextImageKHR(d.device, wd.Swapchain, UINT64_MAX, acquired, VK_NULL_HANDLE, &wd.FrameIndex); }
     if (r == VK_ERROR_OUT_OF_DATE_KHR) { d.rebuild = true; return false; }
     if (r == VK_SUBOPTIMAL_KHR) d.rebuild = true;                         // drawn and shown, then made again
     else if (!d.check(r, "vkAcquireNextImageKHR")) { ok_ = false; return false; }
     ImGui_ImplVulkanH_Frame& fd = wd.Frames[static_cast<int>(wd.FrameIndex)];
-    if (!d.check(vkWaitForFences(d.device, 1, &fd.Fence, VK_TRUE, UINT64_MAX), "vkWaitForFences")) { ok_ = false; return false; }
+    {   app::FrameCostSpan span(app::FrameCostKind::CardWait);   // (0.63.1: the frame that used this image before: waiting for the card)
+        if (!d.check(vkWaitForFences(d.device, 1, &fd.Fence, VK_TRUE, UINT64_MAX), "vkWaitForFences")) { ok_ = false; return false; } }
+    if (d.fenceSerial.size() < static_cast<std::size_t>(wd.ImageCount)) d.fenceSerial.resize(static_cast<std::size_t>(wd.ImageCount), 0);
+    d.doneSerial = std::max(d.doneSerial, d.fenceSerial[static_cast<std::size_t>(wd.FrameIndex)]);   // (0.63.1)
     if (!d.check(vkResetFences(d.device, 1, &fd.Fence), "vkResetFences")) { ok_ = false; return false; }
     if (!d.check(vkResetCommandPool(d.device, fd.CommandPool, 0), "vkResetCommandPool")) { ok_ = false; return false; }
     VkCommandBufferBeginInfo bi{};
@@ -660,9 +673,10 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     si.pSignalSemaphores = &complete;
     if (!d.check(vkQueueSubmit(d.queue, 1, &si, fd.Fence), "vkQueueSubmit")) { ok_ = false; return false; }
     d.drewFrame = true;
+    d.fenceSerial[static_cast<std::size_t>(wd.FrameIndex)] = ++d.frameSerial;   // (0.63.1)
     if (d.benchOn) {                                                      // (the card batches submitted since the frame before belong to this frame)
         const std::uint64_t last = d.cards ? d.cards->lastTicket() : 0;
-        if (timed >= 0) d.benchPending.push_back({timed, d.benchTicket + 1, last});
+        if (timed >= 0) d.benchPending.push_back({timed, d.benchTicket + 1, last, d.frameSerial, static_cast<int>(wd.FrameIndex)});
         d.benchTicket = last;
     }
     return true;
@@ -695,7 +709,7 @@ bool VkBackend::benchTimer(bool on) {
         if (!d.check(vkCreateQueryPool(d.device, &qi, nullptr, &d.benchPool), "vkCreateQueryPool (the benchmark's timer)")) { d.benchPool = VK_NULL_HANDLE; return false; }
     }
     if (d.cards && !d.cards->setTiming(true)) return false;
-    d.benchOn = true; d.benchNext = false; d.benchPending.clear();
+    d.benchOn = true; d.benchNext = false; d.benchPending.clear(); d.benchRejected = 0;
     for (bool& u : d.benchUsed) u = false;
     d.benchTicket = d.cards ? d.cards->lastTicket() : 0;
     return true;
@@ -716,16 +730,26 @@ void VkBackend::benchCollect(std::vector<std::pair<double, double>>& out) {
     if (!d.benchOn) return;
     while (!d.benchPending.empty()) {
         const Impl::BenchFrame f = d.benchPending.front();
+        if (f.serial > d.doneSerial) {                                    // 0.63.1: its fence first (never waits)
+            const std::size_t im = static_cast<std::size_t>(f.image);
+            if (im >= d.fenceSerial.size() || d.fenceSerial[im] != f.serial || im >= static_cast<std::size_t>(d.wd.ImageCount) ||
+                vkGetFenceStatus(d.device, d.wd.Frames[f.image].Fence) != VK_SUCCESS) break;
+            d.doneSerial = f.serial;
+        }
         std::uint64_t r[4] = {0, 0, 0, 0};                                // (value, available) twice; never waits
         const VkResult res = vkGetQueryPoolResults(d.device, d.benchPool, static_cast<uint32_t>(2 * f.slot), 2, sizeof r, r, 2 * sizeof(std::uint64_t),
                                                    VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
         if (res == VK_NOT_READY || !r[1] || !r[3]) break;
         double cardsMs = 0, c0 = -1, c1 = -1;
         if (d.cards && !d.cards->batchTimes(f.first, f.last, cardsMs, c0, c1)) break;
-        const double a = static_cast<double>(r[0] & d.tsMask) * d.tsNs, b = static_cast<double>(r[2] & d.tsMask) * d.tsNs;
-        const double busy = (b > a ? (b - a) / 1e6 : 0) + cardsMs;
+        const std::uint64_t ra = r[0] & d.tsMask, rb = r[2] & d.tsMask;
+        const double a = static_cast<double>(ra) * d.tsNs, b = static_cast<double>(rb) * d.tsNs;
+        const double busy = (b - a) / 1e6 + cardsMs;
         const double first = c0 >= 0 && c0 < a ? c0 : a, last = c1 > b ? c1 : b;
-        if (res == VK_SUCCESS) out.push_back({busy, last > first ? (last - first) / 1e6 : 0});
+        // 0.63.1: a zero, an end before its start or a frame over 10 s on the card is not a time (cardsMs < 0: a batch of the frame was thrown away)
+        const bool sane = ra != 0 && rb >= ra && cardsMs >= 0 && busy < 1e4 && last >= first && (last - first) / 1e6 < 1e4;
+        if (res == VK_SUCCESS && sane) out.push_back({busy, (last - first) / 1e6});
+        else if (res == VK_SUCCESS) d.benchRejected++;
         d.benchUsed[f.slot] = false;
         d.benchPending.erase(d.benchPending.begin());
     }
@@ -745,6 +769,8 @@ bool VkBackend::benchLoad(Renderer2D& pic, int w, int h, double& gpuMs, double& 
     return ok && gpuMs >= 0 && wallMs >= 0;
 }
 
+int VkBackend::benchRejected() const { return d_->benchRejected; }
+
 void VkBackend::present() {
     Impl& d = *d_;
     if (!d.drewFrame) return;
@@ -758,7 +784,9 @@ void VkBackend::present() {
     pi.swapchainCount = 1;
     pi.pSwapchains = &wd.Swapchain;
     pi.pImageIndices = &wd.FrameIndex;
-    const VkResult r = vkQueuePresentKHR(d.queue, &pi);
+    VkResult r = VK_SUCCESS;
+    {   app::FrameCostSpan span(app::FrameCostKind::Present);   // (0.63.1)
+        r = vkQueuePresentKHR(d.queue, &pi); }
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) d.rebuild = true;   // resized, moved to another screen: made again at the next frame
     else if (!d.check(r, "vkQueuePresentKHR")) ok_ = false;
     wd.SemaphoreIndex = (wd.SemaphoreIndex + 1) % wd.SemaphoreCount;
@@ -847,6 +875,8 @@ bool VkBackend::readback(std::vector<uint8_t>& rgba, int& w, int& h) {
     Impl& d = *d_;
     if (!d.drewFrame || !d.extraUsage) return false;
     w = d.wd.Width; h = d.wd.Height;
+    app::FrameCostLabel label("the window's picture read back (a screenshot, the benchmark's own check)");
+    app::FrameCostSpan span(app::FrameCostKind::Readback);   // (0.63.1: the frame read back: the benchmark's own checks)
     if (!d.check(vkQueueWaitIdle(d.queue), "vkQueueWaitIdle (readback)")) return false;
     HostBuffer hb;
     const VkDeviceSize size = VkDeviceSize(w) * VkDeviceSize(h) * 4;
@@ -917,7 +947,7 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
     }
     // (0.63.0: dynamic rendering into the image: no render pass, no framebuffer; Dear ImGui's pipeline is made for the window's format, the image's too)
     const VkDeviceSize size = VkDeviceSize(w) * VkDeviceSize(h) * 4;
-    if (ok) ok = makeHostBuffer(d, size, hb);
+    if (ok && !d.benchImage) ok = makeHostBuffer(d, size, hb);           // (0.63.1: the timer's check needs no copy to the processor: the start's waste)
     bool pictured = false;
     const uint32_t tq = 2 * Impl::kBenchSlots;                            // 0.63.0 (benchLoad): the picture's time on the card
     const bool timeIt = d.benchImage && d.benchPool;
@@ -950,6 +980,7 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         if (dd) ImGui_ImplVulkan_RenderDrawData(dd, cmd);
         vkCmdEndRendering(cmd);
         if (timeIt) vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, tq + 1);
+        if (d.benchImage) return;                                         // (0.63.1)
         barrier(cmd, image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
         VkBufferImageCopy c{};
@@ -965,7 +996,7 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
             d.imageGpuMs = b > a ? (b - a) / 1e6 : 0;
         }
     }
-    if (ok) {
+    if (ok && !d.benchImage) {
         void* p = nullptr;
         ok = d.check(vkMapMemory(d.device, hb.memory, 0, size, 0, &p), "vkMapMemory (picture)");
         if (ok) { unpack(static_cast<const uint8_t*>(p), w, h, fmt == VK_FORMAT_B8G8R8A8_UNORM, 3, rgb); vkUnmapMemory(d.device, hb.memory); }

@@ -76,6 +76,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - **fix**: check_molecule card "the benchmark's report names the card for both scenes" fails on the session box (0.57.2's build too, 0.58.0): the first scene's path still says "once its start-up check has passed".
 - **fix**: check_6b benchscenes: a Black Hole scene (blackhole.extreme or all_light) sometimes leaves no picture to compare ("-1.0000 of the pixels") on this box; 0.58.0's build the same.
 - **fix**: check_blackhole smooth: the card's light paths give a new picture in only 3-9 of 16 moved frames on this box (0.63.0, Vulkan the default; timing on the software renderer).
+- **fix**: on this box (lavapipe) reading the benchmark's GPU results (a fence's state, the timestamps) waits up to 260 ms while the card is busy, after the frame's work ("the benchmark's numbers" in the worst frames); check it in the owner's run.
 - **fix**: check_6b benchscenes: blackhole.film_tilt has no new picture in its counted time on a fresh settings folder (0.63.0, both APIs): the guards' one-step-at-a-time order holds the sky back behind the light paths' first fill on this box.
 - **fix**: check_6b benchwaits' response.atom_density reaches its 15 s cap on this box's software renderer with one thread (ui_popups fails; 0.56.4 the same): a cap or a cloud filling that does not depend on the frame time.
 - **fix**, to check in the owner's 0.56.1 run: orbit.sky had a 4.8-5.7 s frame while turning (here, inside the software renderer's shader code).
@@ -93,6 +94,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - A molecule's infrared absorption beside measured spectra (**source needed**: spectra files).
 
 ## Waiting for the owner
+- After the owner's 0.63.1 benchmark (Vulkan): read each scene's three worst frames: blackhole.film_tilt's 969 ms frame, orbit.heaviest's 20.7 ms and atom.nucleus_zoom's 19.1 ms, and why the Black Hole scenes' 1 % low is lower on Vulkan than on OpenGL (extreme 207.8 -> 160.6, all_light 218.1 -> 190.5, real_move 192.1 -> 151.5); this box could not show them (0.63.1 REPORT).
 - **owner decides**: OpenGL removed (Vulkan step 5's last part), once the owner's Vulkan benchmark shows every scene works; Vulkan 1.3 on Windows needs NVIDIA GTX 900+, Intel Skylake+, AMD Vega+, so e.g. an RX 580 on Windows would lose the app.
 - the disc's patches from MHD simulations (PLAN_MOVINGGAS): owner decides; he wants no visuals that are not measured or calculated.
 - **Paused by the owner (14 Nov 2026, after 0.51.3)**: element jumps with every electron shown. Left: Yb, Cu, Ag, Au, the p block, transition metals, lanthanides, actinides (native/PLAN_JUMPS.md), and the cloud size budget (16 atoms take about 16.5 MB).

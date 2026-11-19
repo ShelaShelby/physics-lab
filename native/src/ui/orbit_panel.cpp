@@ -127,9 +127,9 @@ void performanceCard(AppState& app) {
         settingMark("gpurocks");
         wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU rocks (Vulkan)" : "GPU rocks (OpenGL 4.3)", &app.set.gpuRocks);   // (0.62.0: the API in use)
         ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): the places of the belts' rocks (Kepler's equation for every rock, and where it lands on the picture) are worked out by a compute shader on the graphics card; "
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs Vulkan, or OpenGL 4.3 on the backup): the places of the belts' rocks (Kepler's equation for every rock, and where it lands on the picture) are worked out by a compute shader on the graphics card; "
                                                       "the processor only sends the time and the camera.\n"
-                                                      "Off, or on a PC without OpenGL 4.3: the processor does it rock by rock, as versions up to 0.13 stage 3 did.\n"
+                                                      "Off, or on a PC without Vulkan or OpenGL 4.3: the processor does it rock by rock, as versions up to 0.13 stage 3 did.\n"
                                                       "The picture is the same either way (tested to a few thousandths of a point); only the speed differs, and it is expected, not yet measured, to be better On.\n"
                                                       "Used for comparing on your PC with the benchmark's scenes 1, 6, 31 and 32. Not saved: it is On again at the next start.");
     }
@@ -139,8 +139,8 @@ void performanceCard(AppState& app) {
         settingMark("gpuspin");
         wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU superposition and jumps (Vulkan)" : "GPU superposition and jumps (OpenGL 4.3)", &app.atom.gpuCompute);
         ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): for a superposition or a photon jump, a compute shader on the graphics card works out which dots are shown and their colours;\n"
-                                                      "Off, or on a PC without OpenGL 4.3: the processor does it dot by dot, as versions up to 0.13 stage 1 did.\n"
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs Vulkan, or OpenGL 4.3 on the backup): for a superposition or a photon jump, a compute shader on the graphics card works out which dots are shown and their colours;\n"
+                                                      "Off, or on a PC without Vulkan or OpenGL 4.3: the processor does it dot by dot, as versions up to 0.13 stage 1 did.\n"
                                                       "The picture is the same either way (tested, except a rare dot within rounding of a threshold); only the speed differs, and it is expected, not yet measured, to be better On.\n"
                                                       "Used for comparing on your PC with the benchmark's scenes 11, 13, 14, 15 and 25 to 28. Not saved: it is On again at the next start.");
         ImGui::TextWrapped("%s", app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline).c_str());
@@ -148,9 +148,9 @@ void performanceCard(AppState& app) {
         settingMark("gpuoutline");
         wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU outline (Vulkan)" : "GPU outline (OpenGL 4.3)", &app.atom.gpuOutline);
         ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs OpenGL 4.3): the 90 %% outline's density grid and its 90 %% level (and, in the Slice view, the cut's contour) are made by compute shaders\n"
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ui::SetTooltip("On (the default, needs Vulkan, or OpenGL 4.3 on the backup): the 90 %% outline's density grid and its 90 %% level (and, in the Slice view, the cut's contour) are made by compute shaders\n"
                                                       "on the graphics card, without the picture waiting for them: the outline appears a frame or two after it is switched on, instead of a half-frame hitch.\n"
-                                                      "Off, or on a PC without OpenGL 4.3: the processor makes it (about 30 ms the first time for each orbital).\n"
+                                                      "Off, or on a PC without Vulkan or OpenGL 4.3: the processor makes it (about 30 ms the first time for each orbital).\n"
                                                       "The outline is the same either way (tested, except a line a hair's breadth off where a cell is within rounding of the level); only the speed differs, and it is expected, not yet measured, to be better On.\n"
                                                       "Used for comparing on your PC with the benchmark's scenes 16, 17, 29 and 30. Not saved: it is On again at the next start.");
         // 0.57.0: the Slice's new dots and the every-electron jump's groups on the card: one line each (who and why), Try again when its guard switched it off, the switch
@@ -173,10 +173,10 @@ void performanceCard(AppState& app) {
             wrappedCheckbox(which == 0 ? (app.graphicsInUse == "vulkan" ? "GPU Slice dots (Vulkan)" : "GPU Slice dots (OpenGL 4.3)") : (app.graphicsInUse == "vulkan" ? "GPU jump groups (Vulkan)" : "GPU jump groups (OpenGL 4.3)"), which == 0 ? &app.atom.gpuSlice : &app.atom.gpuJump);
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                ui::SetTooltip(which == 0 ? "On (the default, needs OpenGL 4.3): in the Slice view (one electron) the new dots on a moved cut are made by a compute shader on the graphics card,\n"
+                ui::SetTooltip(which == 0 ? "On (the default, needs Vulkan, or OpenGL 4.3 on the backup): in the Slice view (one electron) the new dots on a moved cut are made by a compute shader on the graphics card,\n"
                                             "from the same random numbers as the processor's, once its start-up check on this PC has passed; they arrive a frame after the cut moved.\n"
                                             "Off: the processor makes them. Used for comparing with the benchmark's atom.slice_drag. Not saved: it is On again at the next start."
-                                          : "On (the default, needs OpenGL 4.3): a jump with every electron (Glow, Cloud 3D) is drawn from the cloud's buffer on the graphics card, which also\n"
+                                          : "On (the default, needs Vulkan, or OpenGL 4.3 on the backup): a jump with every electron (Glow, Cloud 3D) is drawn from the cloud's buffer on the graphics card, which also\n"
                                             "decides each frame which dots are shown (exactly the processor's rule), once its start-up check on this PC has passed.\n"
                                             "Off: the processor does it dot by dot and sends every dot. Used for comparing with the benchmark's atom.jump_all. Not saved: it is On again at the next start.");
         }
@@ -199,7 +199,7 @@ void performanceCard(AppState& app) {
         wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU Density cloud (Vulkan)" : "GPU Density cloud (OpenGL 4.3)", &app.moleculeView.gpuCloud);
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ui::SetTooltip("On (the default, needs OpenGL 4.3): the Density style's cloud is made and drawn by the graphics card: each frame a compute shader turns every dot\n"
+            ui::SetTooltip("On (the default, needs Vulkan, or OpenGL 4.3 on the backup): the Density style's cloud is made and drawn by the graphics card: each frame a compute shader turns every dot\n"
                            "(kept on the card) into its place, size and brightness, and the exposure is summed there, once its start-up check on this PC has passed.\n"
                            "The picture is the same as the processor's up to rounding in the last digits. Off: the processor turns, sizes and sends every dot each frame.\n"
                            "Used for comparing with the benchmark's molecule.density and molecule.vib_density. Not saved: it is On again at the next start.");
@@ -233,7 +233,7 @@ void performanceCard(AppState& app) {
                                                           "(the driver's messages, each step's time, the check's numbers). The benchmark report ends with its last 40 lines.", app::GpuGuard::kLog);
         }
         wrappedCheckbox(app.graphicsInUse == "vulkan" ? "GPU light paths (Vulkan)" : "GPU light paths (OpenGL 4.3)", &v.gpuPaths);
-        if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default, needs OpenGL 4.3 with double precision): the light paths' table of the spinning hole is filled by a compute shader on the graphics card,\n"
+        if (ImGui::IsItemHovered()) ui::SetTooltip("On (the default, needs double precision on the card: Vulkan, or OpenGL 4.3 on the backup): the light paths' table of the spinning hole is filled by a compute shader on the graphics card,\n"
                                                       "the same rays and steps as the processor's in double precision, at the fine table's size while the view moves and at rest. It is used only after a check\n"
                                                       "at the first spinning picture: rays followed by the card against the processor's own; if they differ, the processor's path is used and this page says so.\n"
                                                       "Off: the processor fills the table, a coarse one while the view moves and the fine one once it rests, as up to 0.55.5.\n"

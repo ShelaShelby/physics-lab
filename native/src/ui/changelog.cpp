@@ -19,6 +19,18 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.63.1", "Vulkan fixes from the first Vulkan benchmark: the outline back on, the GPU timer, the worst frames",
+     "Fixed: the Atom Lab's 90 % outline (and on some PCs the superposition groups and the Cloud 3D Glow dots) stayed switched off on Vulkan after 0.62.0: "
+     "0.62.0 left a start-up marker on disk after a step that had passed (checked here: its outline marker stayed after a normal close), and the next start "
+     "read it as a crash. A marker now names the app version that wrote it; a crash kept from 0.63.0 or older is tried once more, guarded (the light paths "
+     "stay off: their crash was real). Fixed: on Vulkan the benchmark's GPU time per frame was nonsense on some cards (about 10^12 ms): a frame's timestamps "
+     "are now read only after its fence has signalled, and a zero or backwards pair is thrown away and counted. The benchmark's CPU work no longer includes "
+     "waiting for the graphics card (a line of its own), each scene lists its three worst frames with where their time went (the frame's work, waiting for "
+     "the card, the present, a pipeline made, a batch read back and what it was, a guarded step deferred), and the header gives the benchmark's own start "
+     "part by part; the box says \"Preparing the benchmark ...\" meanwhile. The GPU timer's check no longer copies each test picture to the processor (most "
+     "of the start's time on a fast card). blackhole.film_tilt no longer compares its two pictures again in every frame after the one at rest, and the "
+     "frame after a picture read back for the benchmark's own check is no longer counted. The report says when a card program's guard has it off, and the "
+     "texts and Settings rows that said \"OpenGL 4.3\" name Vulkan too."},
     {"0.63.0", "Vulkan, step 5 of 5: the app starts on Vulkan; OpenGL the backup; the benchmark on Vulkan",
      "The app now draws with Vulkan by itself. OpenGL stays as the backup (Settings, Performance, Graphics: OpenGL (backup)) for an older graphics card or a "
      "driver problem, and a card without Vulkan 1.3 still starts on OpenGL as before, with Settings saying why. A settings file that chose OpenGL keeps it. "

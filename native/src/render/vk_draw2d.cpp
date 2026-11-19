@@ -1,4 +1,5 @@
 // 0.60.0: Vulkan, step 2 of 5: renderer2d's drawing on Vulkan (render/vk_draw2d.h)
+#include "app/frame_cost.h"
 #include "render/vk_draw2d.h"
 
 #include <algorithm>
@@ -332,6 +333,7 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
     ri.pColorAttachmentFormats = &fmt;
     gi.pNext = &ri;
     VkPipeline pipe = VK_NULL_HANDLE;
+    app::FrameCostSpan made(app::FrameCostKind::Pipeline);   // (0.63.1: the benchmark's worst frames)
     if (!c_.check(vkCreateGraphicsPipelines(c_.device, VK_NULL_HANDLE, 1, &gi, nullptr, &pipe), "vkCreateGraphicsPipelines (renderer2d)")) return VK_NULL_HANDLE;
     return pipe;
 }

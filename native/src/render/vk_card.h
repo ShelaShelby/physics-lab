@@ -117,7 +117,7 @@ public:
     bool batchTimes(std::uint64_t first, std::uint64_t last, double& busyMs, double& t0Ns, double& t1Ns);
 
 private:
-    struct Slot { VkCommandBuffer cmd = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE; std::uint64_t ticket = 0; bool submitted = false, timed = false;
+    struct Slot { VkCommandBuffer cmd = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE; std::uint64_t ticket = 0; bool submitted = false, timed = false, frame = false;
                   std::vector<VkDescriptorPool> pools; std::size_t pool = 0; Buf ubo; VkDeviceSize uboUsed = 0; Buf stage; VkDeviceSize stageUsed = 0;
                   std::vector<Buf> spare; };
     struct Grid { VkImage img = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; VkImageView view = VK_NULL_HANDLE; Buf host; int w = 0, h = 0; };
@@ -128,6 +128,8 @@ private:
     double tsNs_ = 0;
     std::uint64_t tsMask_ = ~std::uint64_t(0);
     std::map<std::uint64_t, std::pair<std::uint64_t, std::uint64_t>> times_;   // ticket -> the batch's start and end ticks (read once it has finished)
+    // 0.63.1: only batches submitted on the frame's thread are timed: a worker's (the light paths' fill, a start-up check) is not the frame's work and ran
+    // beside it (here it made a frame's card time longer than the frame)
     void freeBuffer(Buf& b);
     bool gridTarget(Grid& g, int w, int h);
     void freeGrid(Grid& g);

@@ -11,7 +11,7 @@
 #   benchrest:    a lab made busy on purpose (PL_BENCH_BUSY) is said to be busy at rest
 #   benchrestore: after the run every lab, page and panel is as it was
 #   check_6b.py <PhysicsLab binary> <work folder> scrollbar|bench|rail|nucleus|benchscenes|benchwaits|benchrest|benchrestore
-import os, sys
+import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, Bmp
 
@@ -99,7 +99,7 @@ SCENES = {
 }
 
 def part_benchscenes(binary, work):
-    ids = ",".join(SCENES)
+    ids = ",".join(SCENES) + ",rest.orbit,rest.molecule"   # (0.63.1: two rest lines: their GPU time)
     # (0.57.0: 4 s counted and the second picture at 2.4 s, was 1.6 and 1.0: the Black Hole scenes draw a frame in 1.4 s or more here, so their second picture
     # could fall after the counted time (film_tilt failed so with 0.56.4 too); the second picture stays in the second half, where nucleus_density turns)
     r = run_app(binary, work, "b_scenes", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.3", PL_BENCH_MEASURE="4.0", PL_BENCH_SHOT="0.1,2.4"), frames=100000, size="880x560", timeout=2400)
@@ -115,6 +115,24 @@ def part_benchscenes(binary, work):
         check(frac > 0.0005, f"{sid}: the picture changes from one moment to the next ({frac:.4f} of the pixels)")
         print(f"  {sid}: {frac:.4f} of the pixels changed")
     check("SCENES, slowest first" in t and t.find("SCENES, slowest first") < t.find("DETAILS"), "the summary table comes first")
+    # 0.63.1: a GPU time for every scene and rest line, below the frame's own time (the owner's 0.63.0 run on Vulkan: about 1e12 ms in most); each scene's
+    # three worst frames with where their time went; the CPU work without the waits for the card; the benchmark's own start, part by part
+    check("The benchmark's own start: " in t and "the GPU timer's check" in t, "the header has the benchmark's own start, part by part")
+    d = t[t.find("DETAILS"):]
+    for sid in SCENES:
+        sec = d[d.find("\n" + sid + "  "):] if ("\n" + sid + "  ") in d else ""
+        nxt = [sec.find("\n" + o + "  ", 1) for o in SCENES if o != sid and sec.find("\n" + o + "  ", 1) > 0]
+        sec = sec[:min(nxt)] if nxt else sec
+        g = re.search(r"GPU time per frame: ([\d.]+) ms", sec)
+        a_ = re.search(r"Average: ([\d.]+) ms per frame", sec)
+        # (25 % room: a frame's card time comes in a frame or more late, and here the software renderer makes the slow scenes card-bound with a handful of frames)
+        check(bool(g) and bool(a_) and 0 < float(g.group(1)) < 1.25 * float(a_.group(1)), f"{sid}: a GPU time below the frame's own time ({g.group(0) if g else 'none'}; {a_.group(0) if a_ else ''})")
+        check(sec.count("  Worst frame ") >= 2 and "Worst frame 1: " in sec and "frame thread" in sec, f"{sid}: its worst frames with where their time went")
+        check("Waited for the card per frame: " in sec and "(the waits for the card taken out)" in sec, f"{sid}: the CPU work without the waits for the card, the waits on a line of their own")
+    for rid in ("rest.orbit", "rest.molecule"):
+        row = [l for l in t.splitlines() if l.startswith(rid + " ")]
+        m = re.search(r"([\d.]+) ms", row[0]) if row else None
+        check(bool(m) and float(m.group(1)) < 1000, f"{rid}: a GPU time a frame at rest ({row[0][:120] if row else 'no row'})")
 
 def part_benchwaits(binary, work):
     # (PL_FRAME_MS: frames paced as VSync paces them on a screen; the session box has none, and the frame loop would take the cores the workers need)

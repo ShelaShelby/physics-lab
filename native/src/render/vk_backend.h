@@ -66,6 +66,8 @@ public:
     bool benchTimer(bool on);
     bool benchMark();
     void benchCollect(std::vector<std::pair<double, double>>& busySpanMs);
+    // 0.63.1: frames whose timestamps were thrown away (a zero, an end before its start, or over 10 s: the owner's 0.63.0 run gave about 1e12 ms a frame)
+    int benchRejected() const;
     // the timer's check (as OpenGL's GL_TIME_ELAPSED check): pic's picture drawn once into an image of its own, timed by the timestamps and by a clock
     // from the submit to the end of the wait. False: not timed.
     bool benchLoad(Renderer2D& pic, int w, int h, double& gpuMs, double& wallMs);

@@ -1,3 +1,4 @@
+#include "app/frame_cost.h"
 #include "blackhole/blackhole_view.h"
 #include "blackhole/sky_card.h"
 
@@ -207,7 +208,7 @@ bool BlackHoleView::ensureSpinTable(const Settings& s, bool wait, const std::ato
         spinWorker_ = std::thread(job);
     }
     if (spinFineStarted_ && spinDone_) {
-        if (spinWorker_.joinable()) spinWorker_.join();
+        if (spinWorker_.joinable()) { app::FrameCostSpan w(app::FrameCostKind::WorkerWait); spinWorker_.join(); }   // (0.63.1: the benchmark's worst frames)
         std::shared_ptr<const SpinTable> f;
         { std::lock_guard<std::mutex> g(spinMx_); f = std::move(spinReady_); }
         spinDone_ = false;
@@ -866,7 +867,7 @@ void BlackHoleView::pollFine(const Settings& s) {
         spinFineStarted_ = false;
     }
     if (spinWorker_.joinable() && spinDone_) {
-        spinWorker_.join();
+        { app::FrameCostSpan w(app::FrameCostKind::WorkerWait); spinWorker_.join(); }   // (0.63.1)
         spinDone_ = false;
         spinCancel_ = false;
         std::shared_ptr<const SpinTable> f;

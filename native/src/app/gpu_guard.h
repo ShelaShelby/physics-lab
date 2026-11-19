@@ -21,9 +21,13 @@ namespace app {
 
 // what the settings file keeps (the line "gpupaths="): state "off" (the app died inside step), "slow" (step did not finish within its time limit), "fail"
 // (0.59.0: step returned an error; the step field holds "step: why") or "ok" (the whole path succeeded once), for this app version and driver; "" = nothing kept
+// 0.63.1: app: the app version that wrote it (a marker's line "app=", the settings line's fifth field "app 0.63.1"); "" = written by 0.63.0 or older
 struct GpuGuardRecord {
-    std::string state, version, driver, step;
-    bool operator==(const GpuGuardRecord& o) const { return state == o.state && version == o.version && driver == o.driver && step == o.step; }
+    std::string state, version, driver, step, app;
+    GpuGuardRecord() = default;
+    GpuGuardRecord(std::string st, std::string v, std::string d, std::string sp, std::string a = std::string())
+        : state(std::move(st)), version(std::move(v)), driver(std::move(d)), step(std::move(sp)), app(std::move(a)) {}
+    bool operator==(const GpuGuardRecord& o) const { return state == o.state && version == o.version && driver == o.driver && step == o.step && app == o.app; }
 };
 std::string gpuGuardText(const GpuGuardRecord& r);       // "off | 0.55.7 | <driver> | <step>" (a '|' or line break inside a field becomes '/' or ' ')
 GpuGuardRecord gpuGuardParse(const std::string& line);   // a broken line gives the empty record
@@ -35,12 +39,19 @@ struct GpuGuardDecision {
     GpuGuardRecord keep;          // what the settings file keeps from now on
     bool crashed = false;         // not allowed because a run died inside a step (false: a step timed out or failed)
     bool failed = false;          // 0.59.0: not allowed because a step returned an error (kept as "fail")
+    bool untrusted = false;       // 0.63.1: a crash kept from a marker of 0.63.0 or older, not trusted (tried once more, guarded)
 };
-GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecord& marker, const std::string& version, const std::string& driver);
+// 0.63.1: keepOld = false: a crash ("off") kept from a marker that names no app version or one before 0.63.0 is not trusted: 0.62.0's guard could leave a
+// marker after its step had passed (end() kept it; the Vulkan card guards had no closing()); 0.63.0's markers name no app version either, so they are
+// retried too (once, guarded: a real crash then writes a marker that names 0.63.1 and is trusted). keepOld = true (the light paths, both APIs: their
+// crash inside AMD's shader compiler is real): kept as before.
+GpuGuardDecision gpuGuardDecide(const GpuGuardRecord& saved, const GpuGuardRecord& marker, const std::string& version, const std::string& driver, bool keepOld = true);
+bool gpuGuardAppTrusted(const std::string& app);               // 0.63.1: a marker written by this app version is trusted (0.63.1 or later; "" no)
+void gpuGuardSetApp(const std::string& app);                   // 0.63.1: the running app's version, written into each marker (main.cpp, tests)
 
 class GpuGuard {
 public:
-    GpuGuard() {}
+    GpuGuard() : keepOld_(true) {}                                // (the light paths' guard)
     ~GpuGuard() { giveTurn(); }                                   // (0.63.0: a guard dropped with its step open gives the turn back)
     GpuGuard(const GpuGuard&) = delete;
     GpuGuard& operator=(const GpuGuard&) = delete;
@@ -50,6 +61,7 @@ public:
     // 0.59.0: what the guarded thing is called in its lines and in offText ("" = the light paths' own wording)
     GpuGuard(const char* marker, const char* log, bool truncateLog, const char* prefix, const char* what) : markerName_(marker), logName_(log), prefix_(prefix), what_(what), truncateLog_(truncateLog) {}
     void appendToLog() { truncateLog_ = false; }                  // 0.59.0: another guard started the log in this run (the Vulkan guard, before OpenGL's)
+    void keepOldMarkers() { keepOld_ = true; }                    // 0.63.1: the light paths' guards: a crash kept by an older version stays trusted
     static constexpr const char* kMarker = "gpu-paths-step.txt";   // plain ASCII names (Windows)
     static constexpr const char* kLog = "gpu-paths-log.txt";
     static constexpr int kLogMax = 400;                           // lines; later ones are dropped (one line says so)
@@ -94,9 +106,10 @@ public:
 private:
     std::string markerName_ = kMarker, logName_ = kLog, prefix_, what_;
     bool truncateLog_ = true;
+    bool keepOld_ = false;                                        // (the default guard, the light paths, sets it in its constructor)
     mutable std::mutex mx_;
     bool started_ = false, staleMarker_ = false, logFull_ = false;
-    std::string folder_, version_, driver_, die_;
+    std::string folder_, version_, driver_, die_, app_;
     GpuGuardDecision d_;
     int generation_ = 0, lines_ = 0;
     double t0_ = 0;

@@ -28,6 +28,19 @@ struct BenchStats {
 };
 BenchStats benchStats(const std::vector<double>& frameMs);
 
+// 0.63.1: where one frame's time went (main.cpp from app/frame_cost.h; the benchmark keeps each scene's three worst frames). The frame's time runs from
+// one frame's start to the next: the frame thread's work, the waits for the card inside it, then the present.
+struct BenchFrameCost {
+    double frameMs = 0, workMs = 0;              // the frame's time; the frame thread's work (its waits for the card taken out)
+    double cardWaitMs = 0, acquireMs = 0, presentMs = 0;   // the fence of the swapchain image's last frame; its next image; the present
+    double pipelineMs = 0, readbackMs = 0, swapchainMs = 0, workerWaitMs = 0;
+    int pipelines = 0, readbacks = 0, swapchains = 0, workerWaits = 0, deferred = 0;   // pipelines made, batches waited for, swapchain made again, guard steps deferred
+    double beforeMs = 0;                         // the benchmark's own step before the frame's clock (its scene's set-up and movement)
+    double eventsMs = 0, bookMs = 0, settingsMs = 0;   // the window's events; the benchmark's numbers; the settings file saved (after the frame's clock)
+    std::string readbackWhat;                    // the longest batch waited for, by name ("" not named)
+};
+std::string benchFrameCostText(const BenchFrameCost& c);   // "969.2 ms: frame thread 3.1 ms, waited for the card 0.2 ms, ..."
+
 struct BenchScene {
     std::string id;              // 0.56.1: the stable short id ("orbit.saturn"), the same in every version
     std::string name;            // "Orbit Lab, Saturn close up"
@@ -44,6 +57,8 @@ struct BenchScene {
     std::string gpuProblem;      // "" if the GPU numbers look right; else why they are not reliable
     bool windowInactive = false; // 0.15 stage 2: the window lost focus or was minimised at some time during this scene (warm-up or measuring): Windows can slow a background app
     std::vector<std::string> notes;   // 0.55.5: lines of the scene's own (the Black Hole Lab's: benchBlackHoleLines), printed after its numbers
+    double waitAvgMs = -1;       // 0.63.1: the frame thread's waits for the card a frame (fence, acquire, batches read back), not in cpuAvgMs; < 0 not measured
+    std::vector<BenchFrameCost> worst;   // 0.63.1: the three worst counted frames, worst first, with where their time went
     double picturesPerS() const { return pictures < 0 ? frames.avgFps : frames.totalS > 0 ? pictures / frames.totalS : 0; }
 };
 
@@ -173,6 +188,7 @@ struct BenchEnv {
     int cores = 0, threads = 0;                  // 0: not available
     double memoryMB = -1, peakMB = -1;           // installed memory; the app's largest working set sampled during the run (-1 not available)
     double startupMs = -1;                       // from the start of main() to the first finished picture (-1 not measured)
+    std::string startParts;                      // 0.63.1: the benchmark's own start, part by part ("" not measured)
 };
 
 // The plain text of a result: the head (version, date, computer, graphics, the run's times), the summary table, the response and idle tables, then
@@ -190,7 +206,8 @@ public:
     void setUpDone() { setup_ = -1; }
     // One finished frame: its time (ms) and the CPU work (ms). count false (0.56.1): a frame that read the picture back for the scene's own check: while
     // counting it is neither counted nor on the scene's clock (reading back waits for every frame the driver still holds)
-    void frame(double frameMs, double cpuMs, bool count = true);
+    // 0.63.1: cost (may be null): where the frame's time went; cpuMs is then the work without the waits for the card (cost->workMs)
+    void frame(double frameMs, double cpuMs, bool count = true, const BenchFrameCost* cost = nullptr);
     // 0.15 stage 2: call once per frame BEFORE frame() with the window's state; a scene during which the window was not focused or was minimised is flagged (BenchScene::windowInactive).
     void noteWindow(bool focused, bool minimised);
     // A GPU result that came in (a frame or two late): the busy time and the span (ms). Counted only while a scene is being measured.
@@ -211,8 +228,9 @@ private:
     double warm_, measure_, elapsed_ = 0;
     bool measuring_ = false, finished_ = false;
     std::vector<std::vector<double>> frameMs_;
-    std::vector<double> cpuSum_, gpuSum_, spanSum_;
-    std::vector<int> cpuN_, gpuN_;
+    std::vector<double> cpuSum_, gpuSum_, spanSum_, waitSum_;
+    std::vector<int> cpuN_, gpuN_, waitN_;
+    std::vector<std::vector<BenchFrameCost>> worst_;
     std::vector<char> inactive_;
 };
 

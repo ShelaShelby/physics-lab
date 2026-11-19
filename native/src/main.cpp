@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "app/gpu_guard.h"
+#include "app/frame_cost.h"
 #include "app/app_data.h"
 #include "app/bench.h"
 #include "app/frame_time.h"
@@ -194,6 +195,7 @@ int main(int, char**) {
     render::VkBackend vk;
     render::Renderer2D renderer;                        // (0.60.0: before Vulkan's start, whose last steps make the labs' pictures on Vulkan)
     bool useVulkan = false;
+    app::gpuGuardSetApp(ui::appVersion());               // 0.63.1: each marker names the app version that wrote it
     if (app.prefs.graphics == "vulkan") {
         app::GpuGuard& V = app::gpuVulkanGuard();
         V.start(ui::settingsFolder(), std::string("vulkan ") + ui::appVersion(), "any", app.prefs.gpuVulkan,
@@ -491,6 +493,7 @@ int main(int, char**) {
     LiveWatch live;
     int normalFrames = 0;
     double maxPhysicsDt = 0;                            // the biggest time step any frame gave the simulation (PL_LIVE_REPORT prints it)
+    double prevWorkMs = 0;                              // 0.63.1: the last frame's own work (ms), for the benchmark's worst frames
     const double fakeModalS = SDL_getenv("PL_FAKE_MODAL") ? std::atof(SDL_getenv("PL_FAKE_MODAL")) : 0;   // for automatic checks: pretend the window system holds the loop for n seconds
     const bool fakeResize = SDL_getenv("PL_FAKE_MODAL_RESIZE") != nullptr;
     // One frame. live: drawn from the event watch while the window system holds the loop (no events are read then).
@@ -535,6 +538,7 @@ int main(int, char**) {
         }
         if (!isLive) { static int scriptFrame = 0; ui::runScript(app, scriptFrame++, window); }   // PL_SCRIPT: automatic checks press things through the real input path
         SDL_Event e;
+        const double ev0 = app::frameCostNowMs();         // 0.63.1: the events' time (the benchmark's worst frames)
         while (!isLive && SDL_PollEvent(&e)) {
             ImGui_ImplSDL3_ProcessEvent(&e);
             if (e.type == SDL_EVENT_MOUSE_WHEEL) ui::inputNoteWheel(e.wheel.y, e.wheel.mouse_x, e.wheel.mouse_y);
@@ -650,6 +654,7 @@ int main(int, char**) {
             default: break;
             }
         }
+        app::frameCostAdd(app::FrameCostKind::Events, app::frameCostNowMs() - ev0);
         measure();                                      // a drag may have changed the window while the events were read
         if (!isLive) {   // remember the window: its size and place when it is a normal window, and whether it is maximised
             const SDL_WindowFlags fl = SDL_GetWindowFlags(window);
@@ -671,7 +676,8 @@ int main(int, char**) {
         ui::benchmarkTestHook(app);
         if (frame == 0 && !useVulkan) if (const char* bc = SDL_getenv("PL_BH_COMPARE")) blackhole::compareHook(renderer, bc);   // 0.55.0: the Black Hole Lab's card against its reference (tests)
         if (const char* at = SDL_getenv("PL_SAVE_IMAGE")) { static int n = 0; if (++n == std::atoi(at)) app.shot.requested = true; }   // for automatic checks: press 📷 Save image at frame n
-        ui::benchmarkBeginFrame(app, renderer, fbW, fbH);   // a benchmark scene is set up here, before the frame
+        { app::FrameCostSpan step(app::FrameCostKind::BenchStep, false);   // (0.63.1: before the frame's clock)
+          ui::benchmarkBeginFrame(app, renderer, fbW, fbH); }   // a benchmark scene is set up here, before the frame
         app.sys.setRelativity(app.set.relativity);          // Real: General relativity (1PN) on / off (does nothing when it has not changed)
         app.sys.setRealPlanets(app.set.realPlanets);        // Planet physics: Simple / Real (does nothing when it has not changed)
         // ---- time and physics ----
@@ -679,6 +685,17 @@ int main(int, char**) {
         static const double fixedDt = SDL_getenv("PL_FIXED_DT") ? std::atof(SDL_getenv("PL_FIXED_DT")) : 0.0;   // for automatic checks: every frame lasts exactly this many seconds, so two runs draw the same pictures
         const double frameDt = fixedDt > 0 ? fixedDt : static_cast<double>(now - last) / SDL_GetPerformanceFrequency();
         last = now;
+        // 0.63.1: where the last whole frame's time went (from its start to this one's: its work, its waits for the card, its present), for the benchmark
+        app::BenchFrameCost lastCost;
+        {   const app::FrameCost fc = app::frameCostTake();
+            using K = app::FrameCostKind;
+            lastCost.frameMs = frameDt * 1000.0; lastCost.workMs = prevWorkMs;
+            lastCost.cardWaitMs = fc.get(K::CardWait); lastCost.acquireMs = fc.get(K::Acquire); lastCost.presentMs = fc.get(K::Present);
+            lastCost.pipelineMs = fc.get(K::Pipeline); lastCost.pipelines = fc.count(K::Pipeline); lastCost.readbackMs = fc.get(K::Readback); lastCost.readbacks = fc.count(K::Readback);
+            lastCost.swapchainMs = fc.get(K::Swapchain); lastCost.swapchains = fc.count(K::Swapchain); lastCost.workerWaitMs = fc.get(K::WorkerWait); lastCost.workerWaits = fc.count(K::WorkerWait);
+            lastCost.deferred = fc.count(K::GuardDeferred); lastCost.beforeMs = fc.get(K::BenchStep);
+            lastCost.eventsMs = fc.get(K::Events); lastCost.bookMs = fc.get(K::Bookkeeping); lastCost.settingsMs = fc.get(K::Settings);
+            if (const char* w = fc.what[static_cast<int>(K::Readback)]) lastCost.readbackWhat = w; }
         static double fixedClockMs = 0;                  // with PL_FIXED_DT the Atom Lab's own clock (glides, messages, decay) follows the frames too
         if (fixedDt > 0) { fixedClockMs += fixedDt * 1000; app.atom.nowMs = [] { return fixedClockMs; }; }
         const double dt = app::stepSeconds(frameDt, units::kMaxFrameDt);   // a slow frame counts as at most 0.05 s, a stall (window held by the system) as nothing: no jump, no catching up
@@ -889,12 +906,16 @@ int main(int, char**) {
                 } else SDL_Log("PL_SCREENSHOT: no picture (framebuffer %d x %d)", fbW, fbH);
             }
         }
-        const double workMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();
+        // 0.63.1: the frame thread's own work: its waits for the card (the swapchain image's fence, the acquire, batches waited for) counted apart
+        const double workMs = std::max(0.0, static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency() - app::frameCostPeek().waitMs());
+        prevWorkMs = workMs;
         app.stats.add(frameDt * 1000.0, workMs);
         static const bool bhMs = SDL_getenv("PL_BH_FRAMETIME") != nullptr;   // 0.62.0 (measuring, both APIs): the frame's time and the sky pass's time on the card
         if (bhMs && app.lab == blackhole::kLabIndex && !app.pane) std::printf("PLBHMS f=%d frame=%.2f sky=%.3f scale=%.3f\n", frame, frameDt * 1000.0, renderer.skyStats().fullMs, renderer.skyStats().scale);
         app.live.frame(isLive, frameDt * 1000.0);
-        ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs);
+        const double bk0 = app::frameCostNowMs();
+        ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs, &lastCost);
+        app::frameCostAdd(app::FrameCostKind::Bookkeeping, app::frameCostNowMs() - bk0);
         if (useVulkan) {
             vk.present();
             if (vkFirst == 1 && vk.ok()) { app::gpuVulkanGuard().end("first frame", "shown"); app::gpuVulkanGuard().finished(true); vkFirst = 2; }
@@ -911,7 +932,9 @@ int main(int, char**) {
             const double usedMs = static_cast<double>(SDL_GetPerformanceCounter() - now) * 1000.0 / SDL_GetPerformanceFrequency();
             if (usedMs < paceMs) SDL_Delay(static_cast<Uint32>(paceMs - usedMs));
         }
-        ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0);
+        {   const double sv0 = app::frameCostNowMs();
+            ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0);
+            app::frameCostAdd(app::FrameCostKind::Settings, app::frameCostNowMs() - sv0); }
         if (app.vsync != vsyncOn) { vsyncOn = app.vsync; if (useVulkan) vk.setVsync(vsyncOn); else SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
     };
 
@@ -943,7 +966,8 @@ int main(int, char**) {
     app::gpuSliceGuard().closing(); app::gpuJumpGuard().closing();   // 0.57.0
     app::gpuMolCloudGuard().closing();                               // 0.57.1
     app::gpuVulkanGuard().closing();                 // 0.59.0
-    if (useVulkan) app::gpuVkLensGuard().closing(); // 0.62.0 (the light paths' and the sky's twins: gpuGuard, gpuSkyGuard below)
+    if (useVulkan) for (const auto& [name, g] : app::vulkanCardGuards()) g->closing();   // 0.63.1: all ten (0.62.0 and 0.63.0 closed only the lens:
+                                                     // the outline's, groups', rocks' and cloud's markers of a step still open stayed after a normal end)
     app::gpuSkyGuard().closing();                    // 0.56.0                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
     if (!useVulkan) {
         renderer.shutdown();

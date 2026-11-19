@@ -8,6 +8,8 @@
 #include "render/renderer2d.h"
 #include "ui/orbit_panel.h"
 
+namespace app { struct BenchFrameCost; }
+
 struct SDL_Window;
 namespace render { class VkBackend; }
 
@@ -20,7 +22,8 @@ void benchmarkButton(AppState& app);
 void benchmarkWindow(AppState& app);
 // Call at the start of every frame (sets up the next scene) and at the end of it with that frame's numbers.
 void benchmarkBeginFrame(AppState& app, render::Renderer2D& renderer, int fbW, int fbH);
-void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs);
+// 0.63.1: cpuMs is the frame thread's work without its waits for the card; last: where the last whole frame's time went (its frameMs: frameMs here)
+void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::BenchFrameCost* last = nullptr);
 // Around the whole GL work of the frame (from the clear to just before the buffer swap, the picture, its soft layer and the panels included):
 // the GPU time (GL_TIME_ELAPSED and timestamps), only measured while the benchmark runs. The first frame of a run also checks the timer with a known load.
 // 0.63.0 (Vulkan step 5): on Vulkan around vk.render(): timestamp queries (render/vk_backend.h benchTimer), the card's batches included.

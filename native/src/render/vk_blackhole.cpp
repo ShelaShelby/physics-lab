@@ -1,5 +1,6 @@
 // 0.62.0: Vulkan, step 4 of 5: the Black Hole Lab's card programs on Vulkan (render/vk_blackhole.h has the how). Each pass below is renderer2d.cpp's OpenGL
 // pass of the same name with the same uniforms, the same textures and the same viewport; only the API differs.
+#include "app/frame_cost.h"
 #include "render/vk_blackhole.h"
 
 #include <algorithm>
@@ -380,6 +381,7 @@ bool VkBlackHole::makePipelines(int p, std::string& why) {
         gi.pDynamicState = &ds;
         gi.layout = P.pl;
         VkPipeline pipe = VK_NULL_HANDLE;
+        app::FrameCostSpan made(app::FrameCostKind::Pipeline);   // (0.63.1: the benchmark's worst frames)
         if (!c_->ctx().check(vkCreateGraphicsPipelines(dev_, cache_, 1, &gi, nullptr, &pipe), "vkCreateGraphicsPipelines (black hole)")) { why = "vkCreateGraphicsPipelines failed"; return false; }
         P.pipe[k] = pipe;
     }
@@ -974,7 +976,7 @@ void VkBlackHole::makeGlare(const LensSky& L, int fbW, int fbH) {
     if (!cb) return;
     glareDown(cb, fbW, fbH, b, nx, ny);
     readBack(cb, glareSrc_, 0, 0, nx, ny, glareBuf_);
-    c_->flush(true);
+    { app::FrameCostLabel l("the glare's blocks, read back in the frame"); c_->flush(true); }
     glareBuf_.busy = false;
     const float* rgba = static_cast<const float*>(glareBuf_.b.map);
     std::vector<float> src(static_cast<std::size_t>(nx) * static_cast<std::size_t>(ny) * 3), veil;
@@ -1214,7 +1216,7 @@ void VkBlackHole::probe(const LensSky& L, int w, int h, bool queue, std::vector<
     ptW_ = w0; ptH_ = h0;
     readBack(cb, probe_, 0, 0, 4 * w, 2 * h, probeBuf_);
     if (queue) { c_->flush(false); return; }                           // (submitted now: read in a later frame)
-    c_->flush(true);
+    { app::FrameCostLabel l("the sky's check pictures, read back"); c_->flush(true); }
     probeBuf_.busy = false;
     const std::size_t nf = static_cast<std::size_t>(4 * w) * static_cast<std::size_t>(2 * h) * 4;
     if (out && probeBuf_.b.map) { const float* v = static_cast<const float*>(probeBuf_.b.map); out->assign(v, v + nf); }
@@ -1315,6 +1317,7 @@ public:
         }
         if (c_.done(ticket_)) { ticket_ = 0; return !c_.failed(); }
         if (!wait) return false;
+        app::FrameCostLabel l("the light paths' fill");
         if (!c_.waitFor(ticket_, kWaitLimitMs / 1000)) return false;
         ticket_ = 0;
         return !c_.failed();

@@ -278,14 +278,14 @@ const std::vector<SettingRow>& settingRows() {
         {"perf", "Performance", "Performance", -1},
         {"vsync", "VSync (wait for the screen)", "VSync (wait for the screen)", -1},
         {"graphics", "Graphics: Vulkan / OpenGL (backup)", "Graphics (Vulkan or OpenGL)", -1},   // 0.59.0 (0.63.0: Vulkan the default)
-        {"gpurocks", "GPU rocks (OpenGL 4.3)", "GPU rocks (OpenGL 4.3)", 0},
-        {"gpuspin", "GPU superposition and jumps (OpenGL 4.3)", "GPU superposition and jumps (OpenGL 4.3)", 1},
-        {"gpuoutline", "GPU outline (OpenGL 4.3)", "GPU outline (OpenGL 4.3)", 1},
+        {"gpurocks", "GPU rocks (Vulkan or OpenGL 4.3)", "GPU rocks (Vulkan or OpenGL 4.3)", 0},
+        {"gpuspin", "GPU superposition and jumps (Vulkan or OpenGL 4.3)", "GPU superposition and jumps (Vulkan or OpenGL 4.3)", 1},
+        {"gpuoutline", "GPU outline (Vulkan or OpenGL 4.3)", "GPU outline (Vulkan or OpenGL 4.3)", 1},
         {"gpucolours", "GPU colours (Atom Lab cloud dots)", "GPU colours (Atom Lab cloud dots)", 1},
-        {"gpuslice", "GPU Slice dots (OpenGL 4.3)", "GPU Slice dots (Atom Lab, OpenGL 4.3)", 1},     // 0.57.0
-        {"gpujump", "GPU jump groups (OpenGL 4.3)", "GPU jump groups (Atom Lab, OpenGL 4.3)", 1},     // 0.57.0
-        {"gpumolcloud", "GPU Density cloud (OpenGL 4.3)", "GPU Density cloud (Molecule Lab, OpenGL 4.3)", 2},   // 0.57.1
-        {"gpupaths", "GPU light paths (OpenGL 4.3)", "GPU light paths (Black Hole Lab, OpenGL 4.3)", 3},   // 0.55.6 (blackhole::kLabIndex)
+        {"gpuslice", "GPU Slice dots (Vulkan or OpenGL 4.3)", "GPU Slice dots (Atom Lab, Vulkan or OpenGL 4.3)", 1},     // 0.57.0
+        {"gpujump", "GPU jump groups (Vulkan or OpenGL 4.3)", "GPU jump groups (Atom Lab, Vulkan or OpenGL 4.3)", 1},     // 0.57.0
+        {"gpumolcloud", "GPU Density cloud (Vulkan or OpenGL 4.3)", "GPU Density cloud (Molecule Lab, Vulkan or OpenGL 4.3)", 2},   // 0.57.1
+        {"gpupaths", "GPU light paths (Vulkan or OpenGL 4.3)", "GPU light paths (Black Hole Lab, Vulkan or OpenGL 4.3)", 3},   // 0.55.6 (blackhole::kLabIndex)
         {"gpusky", "GPU sky per pixel (spinning hole)", "GPU sky per pixel (Black Hole Lab)", 3},   // 0.56.0
         {"frames", "Frame times", "Frame times (fps)", -1},
         {"benchmark", "Benchmark", "Benchmark (speed test)", -1},

@@ -86,6 +86,7 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
     t += "Memory installed: " + (e.memoryMB > 0 ? f("%.1f", e.memoryMB / 1024) + " GB" : std::string("not available")) + "; the app's peak during the run: " +
          (e.peakMB > 0 ? f("%.0f", e.peakMB) + " MB" : std::string("not available")) + "\n";
     t += "Start-up: " + (e.startupMs >= 0 ? f("%.0f", e.startupMs) + " ms from the start of the app to its first finished picture" : std::string("not measured")) + "\n";
+    if (!e.startParts.empty()) t += "The benchmark's own start: " + e.startParts + "\n";   // 0.63.1
     {   // 0.56.1: the worst single frame of the run and its scene
         double w = 0; std::string at;
         for (const BenchScene& s : scenes) if (s.frames.worstMs > w) { w = s.frames.worstMs; at = s.id; }
@@ -106,7 +107,7 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
     t += "VSync: off during the scenes, on during the waits and while the labs are left alone. Each scene: " + f("%.1f", e.warmupS) + " s warm-up (not counted), then " + f("%.1f", e.measureS) + " s counted.\n";
     t += std::string(vk ? "GPU timer (Vulkan timestamp queries): " : "GPU timer (GL_TIME_ELAPSED): ") + (e.gpuTimer ? "available" : "not available") + "\n";
     if (e.gpuTimer) t += std::string("GPU timer check: ") + (e.gpuReliable ? "reliable, " : "NOT RELIABLE, ") + (e.gpuCheck.empty() ? "no check was made" : e.gpuCheck) + "\n";
-    if (vk) t += "GPU time covers the whole drawing of a frame (the frame's command buffer: picture, panels and text; and the card programs' batches submitted for it, summed), up to just before the present.\n";
+    if (vk) t += "GPU time covers the whole drawing of a frame (the frame's command buffer: picture, panels and text; and the card programs' batches submitted for it, summed; a worker thread's batches, such as the light paths' fill, are not the frame's), up to just before the present. A frame's timestamps are read once its fence has signalled; a zero or backwards pair is thrown away (the timer check's line counts them).\n";
     else t += "GPU time covers the whole drawing of a frame (clear, picture with its soft layer and instanced draws, panels and text), up to just before the buffer swap.\n";
     t += "Input during the test: blocked\n";
     if (e.cancelled) t += "THE TEST WAS CANCELLED: only the finished scenes are listed.\n";
@@ -173,7 +174,9 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
         t += "  New pictures: " + (s.pictures < 0 ? std::string("every frame") : std::to_string(s.pictures) + " in " + f("%.1f", s.frames.totalS) + " s (" + f("%.1f", s.picturesPerS()) + " a second)") + "\n";
         t += "  Worst frame: " + f("%.2f", s.frames.worstMs) + " ms\n";
         t += "  Frames slower than 16.7 ms: " + std::to_string(s.frames.slowFrames) + " of " + std::to_string(s.frames.frames) + "\n";   // 0.16 stage 3: 1 = a one-time hitch, many = a repeating one
-        t += "  CPU work per frame: " + f("%.2f", s.cpuAvgMs) + " ms\n";
+        t += "  CPU work per frame: " + f("%.2f", s.cpuAvgMs) + " ms" + (s.waitAvgMs >= 0 ? std::string(" (the waits for the card taken out)") : std::string()) + "\n";
+        if (s.waitAvgMs >= 0) t += "  Waited for the card per frame: " + f("%.2f", s.waitAvgMs) + " ms (the swapchain image's fence, its acquire, card batches waited for)\n";   // 0.63.1
+        for (std::size_t k = 0; k < s.worst.size(); k++) t += "  Worst frame " + std::to_string(k + 1) + ": " + benchFrameCostText(s.worst[k]) + "\n";
         if (s.gpuSamples <= 0) t += "  GPU time per frame: not available\n";
         else if (e.gpuReliable && s.gpuProblem.empty()) {
             t += "  GPU time per frame: " + f("%.2f", s.gpuAvgMs) + " ms\n";
@@ -230,7 +233,25 @@ std::string benchFileName(const ShotTime& t) {
 }
 
 BenchRun::BenchRun(int sceneCount, double warmupS, double measureS)
-    : count_(sceneCount), warm_(warmupS), measure_(measureS), frameMs_(sceneCount), cpuSum_(sceneCount), gpuSum_(sceneCount), spanSum_(sceneCount), cpuN_(sceneCount), gpuN_(sceneCount), inactive_(sceneCount, 0) {}
+    : count_(sceneCount), warm_(warmupS), measure_(measureS), frameMs_(sceneCount), cpuSum_(sceneCount), gpuSum_(sceneCount), spanSum_(sceneCount), waitSum_(sceneCount),
+      cpuN_(sceneCount), gpuN_(sceneCount), waitN_(sceneCount), worst_(sceneCount), inactive_(sceneCount, 0) {}
+
+std::string benchFrameCostText(const BenchFrameCost& c) {
+    std::string t = f("%.1f", c.frameMs) + " ms: frame thread " + f("%.1f", c.workMs) + " ms, waited for the card " + f("%.1f", c.cardWaitMs) + " ms, acquire " +
+                    f("%.1f", c.acquireMs) + " ms, present " + f("%.1f", c.presentMs) + " ms";
+    if (c.pipelines) t += ", " + std::to_string(c.pipelines) + " pipeline(s) made " + f("%.1f", c.pipelineMs) + " ms";
+    if (c.readbacks) t += ", " + std::to_string(c.readbacks) + " batch(es) waited for " + f("%.1f", c.readbackMs) + " ms" + (c.readbackWhat.empty() ? std::string() : " (the longest: " + c.readbackWhat + ")");
+    if (c.beforeMs > 0.05) t += ", the benchmark's own step " + f("%.1f", c.beforeMs) + " ms";
+    if (c.eventsMs > 0.05) t += ", events " + f("%.1f", c.eventsMs) + " ms";
+    if (c.bookMs > 0.05) t += ", the benchmark's numbers " + f("%.1f", c.bookMs) + " ms";
+    if (c.settingsMs > 0.05) t += ", the settings file saved " + f("%.1f", c.settingsMs) + " ms";
+    if (c.swapchains) t += ", the swapchain made again " + f("%.1f", c.swapchainMs) + " ms";
+    if (c.workerWaits) t += ", waited for a worker " + std::to_string(c.workerWaits) + "x " + f("%.1f", c.workerWaitMs) + " ms";
+    if (c.deferred) t += ", " + std::to_string(c.deferred) + " guarded step(s) deferred";
+    const double rest = c.frameMs - c.workMs - c.cardWaitMs - c.acquireMs - c.presentMs - c.readbackMs - c.beforeMs - c.eventsMs - c.bookMs - c.settingsMs;
+    if (rest > 0.05) t += ", the rest " + f("%.1f", rest) + " ms (not counted above)";
+    return t;
+}
 
 void BenchRun::gpuSample(double busyMs, double spanMs) {
     if (finished_ || setup_ >= 0 || !measuring_) return;
@@ -242,7 +263,7 @@ void BenchRun::noteWindow(bool focused, bool minimised) {
     if (!focused || minimised) inactive_[scene_] = 1;
 }
 
-void BenchRun::frame(double frameMs, double cpuMs, bool count) {
+void BenchRun::frame(double frameMs, double cpuMs, bool count, const BenchFrameCost* cost) {
     if (finished_ || setup_ >= 0) return;
     if (!count && measuring_) return;                      // (a frame that read the picture back: neither counted nor on the scene's clock)
     elapsed_ += frameMs / 1000;
@@ -251,6 +272,15 @@ void BenchRun::frame(double frameMs, double cpuMs, bool count) {
         return;
     }
     if (count) { frameMs_[scene_].push_back(frameMs); cpuSum_[scene_] += cpuMs; cpuN_[scene_]++; }
+    if (count && cost) {                                   // 0.63.1
+        waitSum_[scene_] += cost->cardWaitMs + cost->acquireMs + cost->readbackMs; waitN_[scene_]++;
+        std::vector<BenchFrameCost>& w = worst_[scene_];
+        BenchFrameCost c = *cost;
+        c.frameMs = frameMs;
+        w.push_back(c);
+        std::sort(w.begin(), w.end(), [](const BenchFrameCost& a, const BenchFrameCost& b) { return a.frameMs > b.frameMs; });
+        if (w.size() > 3) w.pop_back();
+    }
     if (elapsed_ >= measure_) {
         measuring_ = false; elapsed_ = 0;
         if (++scene_ >= count_) finished_ = true; else setup_ = scene_;
@@ -270,6 +300,8 @@ BenchScene BenchRun::result(int i) const {
     s.gpuAvgMs = gpuN_[i] ? gpuSum_[i] / gpuN_[i] : -1;
     s.gpuSpanAvgMs = gpuN_[i] ? spanSum_[i] / gpuN_[i] : -1;
     s.windowInactive = inactive_[i] != 0;
+    s.waitAvgMs = waitN_[i] ? waitSum_[i] / waitN_[i] : -1;    // 0.63.1
+    s.worst = worst_[i];
     s.gpuProblem = gpuN_[i] ? gpuSceneProblem(s.frames.frames, gpuN_[i], s.gpuAvgMs, s.gpuSpanAvgMs, s.frames.avgMs) : "";
     return s;
 }

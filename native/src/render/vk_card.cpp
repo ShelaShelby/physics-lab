@@ -1,4 +1,5 @@
 // 0.61.0: Vulkan, step 3 of 5: the card programs on Vulkan (render/vk_card.h has the how).
+#include "app/frame_cost.h"
 #include "render/vk_card.h"
 
 #include <algorithm>
@@ -216,6 +217,8 @@ bool VkCards::openSlot() {
     if (pick < 0) {                                           // every batch still on the card (rare): wait for the oldest
         std::uint64_t oldest = UINT64_MAX;
         for (int i = 0; i < static_cast<int>(slots_.size()); i++) if (slots_[static_cast<std::size_t>(i)].ticket < oldest) { oldest = slots_[static_cast<std::size_t>(i)].ticket; pick = i; }
+        app::FrameCostLabel l("the oldest card batch (every batch slot was still on the card)");
+        app::FrameCostSpan span(app::FrameCostKind::Readback);   // (0.63.1: the benchmark's worst frames)
         if (!c_.check(vkWaitForFences(c_.device, 1, &slots_[static_cast<std::size_t>(pick)].fence, VK_TRUE, UINT64_MAX), "vkWaitForFences (card programs)")) { failed_ = true; return false; }
     }
     Slot& s = slots_[static_cast<std::size_t>(pick)];
@@ -278,6 +281,7 @@ void VkCards::readTimes() {
     for (std::size_t i = 0; i < slots_.size(); i++) {
         Slot& s = slots_[i];
         if (!s.timed || !s.submitted || vkGetFenceStatus(c_.device, s.fence) != VK_SUCCESS) continue;
+        if (!s.frame) { s.timed = false; continue; }          // (0.63.1: a worker's batch: not the frame's)
         std::uint64_t r[4] = {0, 0, 0, 0};                    // (value, available) twice
         const VkResult res = vkGetQueryPoolResults(c_.device, tq_, 2u * static_cast<std::uint32_t>(i), 2, sizeof r, r, 2 * sizeof(std::uint64_t),
                                                    VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
@@ -292,12 +296,13 @@ void VkCards::readTimes() {
 bool VkCards::batchTimes(std::uint64_t first, std::uint64_t last, double& busyMs, double& t0Ns, double& t1Ns) {
     busyMs = 0; t0Ns = -1; t1Ns = -1;
     if (last < first) return true;
-    if (!done(last)) return false;
     readTimes();
-    for (const Slot& s : slots_) if (s.timed && s.submitted && s.ticket >= first && s.ticket <= last) return false;   // (its times not yet there)
+    // (0.63.1: only the frame thread's batches: a worker's long batch in the range no longer holds the frame's result back)
+    for (const Slot& s : slots_) if (s.frame && s.timed && s.submitted && s.ticket >= first && s.ticket <= last) return false;   // (its times not yet there)
     for (auto it = times_.lower_bound(first); it != times_.end() && it->first <= last; it = times_.erase(it)) {
         const double a = static_cast<double>(it->second.first) * tsNs_, b = static_cast<double>(it->second.second) * tsNs_;
-        if (b > a) busyMs += (b - a) / 1e6;
+        if (it->second.first == 0 || it->second.second < it->second.first || (b - a) / 1e6 >= 1e4) { busyMs = -1; continue; }   // 0.63.1: not a time: the frame is thrown away
+        if (busyMs >= 0) busyMs += (b - a) / 1e6;
         if (t0Ns < 0 || a < t0Ns) t0Ns = a;
         if (b > t1Ns) t1Ns = b;
     }
@@ -435,6 +440,7 @@ bool VkCards::makeKernel(const std::uint32_t* words, std::size_t bytes, Kernel& 
     ci.stage.module = k.mod;
     ci.stage.pName = "main";
     ci.layout = k.pl;
+    app::FrameCostSpan made(app::FrameCostKind::Pipeline);   // (0.63.1)
     if (!c_.check(vkCreateComputePipelines(c_.device, cache, 1, &ci, nullptr, &k.pipe), "vkCreateComputePipelines (card program)")) { k.pipe = VK_NULL_HANDLE; dropKernel(k); why = "vkCreateComputePipelines failed"; return false; }
     spirv_ += bytes;
     return true;
@@ -509,7 +515,9 @@ std::uint64_t VkCards::flush(bool wait) {
     if (!c_.check(vkQueueSubmit(c_.queue, 1, &si, s.fence), "vkQueueSubmit (card programs)")) { failed_ = true; return 0; }
     s.ticket = nextTicket_++;
     s.submitted = true;
+    s.frame = app::frameCostFrameThread();                    // (0.63.1)
     if (wait) {
+        app::FrameCostSpan span(app::FrameCostKind::Readback);   // (0.63.1)
         if (!c_.check(vkWaitForFences(c_.device, 1, &s.fence, VK_TRUE, UINT64_MAX), "vkWaitForFences (card programs)")) { failed_ = true; return 0; }
     }
     return s.ticket;
@@ -534,6 +542,7 @@ bool VkCards::done(std::uint64_t ticket) {
 bool VkCards::waitFor(std::uint64_t ticket, double seconds) {
     for (const Slot& s : slots_)
         if (s.submitted && s.ticket == ticket) {
+            app::FrameCostSpan span(app::FrameCostKind::Readback);   // (0.63.1)
             const VkResult r = vkWaitForFences(c_.device, 1, &s.fence, VK_TRUE, static_cast<std::uint64_t>(seconds * 1e9));
             if (r == VK_TIMEOUT) return false;
             if (r != VK_SUCCESS) { c_.check(r, "vkWaitForFences (card programs)"); failed_ = true; return false; }
@@ -651,6 +660,7 @@ bool VkCards::makeGrid(int which, std::string& why) {
     ri.colorAttachmentCount = 1;
     ri.pColorAttachmentFormats = &gridFormat;
     gi.pNext = &ri;
+    app::FrameCostSpan made(app::FrameCostKind::Pipeline);   // (0.63.1)
     bool ok = mod[0] && mod[1] && c_.check(vkCreateGraphicsPipelines(c_.device, VK_NULL_HANDLE, 1, &gi, nullptr, &gridPipe_[which]), "vkCreateGraphicsPipelines (grid)");
     if (!ok) { gridPipe_[which] = VK_NULL_HANDLE; why = "the grid's pipeline could not be made"; }
     for (VkShaderModule m : mod) if (m) vkDestroyShaderModule(c_.device, m, nullptr);
@@ -797,6 +807,7 @@ struct Steps {
     bool run(VkCards& c, const std::string& step) {
         const std::uint64_t t = c.flush(false);
         if (!t || c.failed()) return fail(step, "a Vulkan call failed (the log has it)");
+        app::FrameCostLabel l("a card program's start-up check");
         if (!c.waitFor(t, kStepLimitS)) { G.timedOut(step); why = "the step did not finish in time"; return false; }
         return true;
     }
@@ -852,6 +863,7 @@ private:
         if (!c_.dispatch(k_, {mode == 0 ? &super_ : &jumpA_, &jumpB_, &out_}, static_cast<std::uint32_t>((words + 63) / 64))) return false;
         c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
         c_.firstUse(use);
+        app::FrameCostLabel l("the superposition or jump groups");
         if (!c_.flush(true) || c_.failed()) return false;     // waits, as OpenGL's glGetBufferSubData: the processor needs the groups to order the dots
         std::memcpy(out, out_.map, static_cast<std::size_t>(count));
         return true;
@@ -1073,6 +1085,7 @@ public:
         const VkBufferCopy cp{0, 0, bytes};
         vkCmdCopyBuffer(cb, slots_[slot].pos.b, read_.b, 1, &cp);
         c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToHost);
+        app::FrameCostLabel l("the rocks' places");
         if (!c_.flush(true) || c_.failed()) return false;
         xy.resize(static_cast<std::size_t>(slots_[slot].count) * 2u);
         std::memcpy(xy.data(), read_.map, static_cast<std::size_t>(bytes));
