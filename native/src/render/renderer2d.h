@@ -176,6 +176,7 @@ public:
         std::uint64_t epoch = 0; long k = 0;                        // which cloud (a new number when its dots were changed other than by being added) and dots recorded so far
         const unsigned char* grp = nullptr;                         // colour group of each dot (255: not shown), cnt of them
         unsigned grpBuf = 0;                                        // 0.57.0: or a buffer on the card that already holds them (a jump's groups made there: AtomCard::jumpGroups)
+        std::uint64_t grpEpoch = 0;                                 // 0.65.0: the groups' epoch (atom/cloud_dots.h keepGroups): unchanged since the last frame: not sent again (Vulkan); 0: sent
         float cx = 0, cy = 0, pxm = 0, ext = 1, ca = 1, sa = 0, cb = 1, sb = 0, w = 0, h = 0;
         bool additive = true;
         PhasePalette pal;

@@ -11,6 +11,7 @@
 // next bin for a phase within about 1e-7 of a bin edge, and a jump or a superposition already works its indices out on the CPU.
 #pragma once
 #include <array>
+#include <cstdint>
 
 #include <vector>
 
@@ -47,6 +48,14 @@ void plainGroups(bool wheel, const float* ph, const signed char* sg, long cnt, u
 // from the CPU functions AtomLab::jumpGroups / superGroup, which are the reference. Returns which one did the work (so a test and the Performance card can say).
 enum class GroupsBy { Cpu, Gpu };
 GroupsBy fillGroups(AtomLab& L, render::IGroupCompute* gc, long cnt, unsigned char* grp);
+// 0.65.0: the plain dots' groups kept between frames, as the cards keep the places: only the dots recorded since the last frame get theirs (a group
+// depends on the dot's own phase and sign and the Wheel / Sign choice only). Made whole (fillGroups) for a new cloud (its epoch), another Phase colour
+// choice or ring size, or after more than a ring of new dots; every frame for a jump or a superposition. cap: the ring's size (the dots' places
+// are at k mod cap). Returns the groups' epoch: a new number when they were made whole, the same while only new dots were added (the card programs
+// then send only those dots' groups, the places' way: Renderer2D::CloudGpuDraw, ClassicDraw); 0 for a jump or a superposition (sent whole every
+// frame). The kept groups equal fillGroups' of the same frame byte for byte (app_tests testKeptGroups).
+struct GroupsKept { std::uint64_t cloud = 0; long k = -1, cap = -1; int wheel = -1; std::uint64_t epoch = 0; };
+std::uint64_t keepGroups(GroupsKept& kept, AtomLab& L, render::IGroupCompute* gc, long cnt, long cap, unsigned char* grp);
 
 // ---- Classic Cloud 3D: three depth bands, far = faint and small, near = bright and larger ----
 constexpr int kDepthBands = 3;

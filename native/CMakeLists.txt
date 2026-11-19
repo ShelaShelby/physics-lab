@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.64.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.65.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -21,7 +21,13 @@ endif()
 
 option(PL_BUILD_APP "Build the Physics Lab app (needs SDL3 and Dear ImGui)" ON)
 option(PL_BUILD_TESTS "Build the physics unit tests" ON)
-option(PL_GL_TESTS "Also build gl_compare_tests: draws pictures with the real renderer on Mesa's software OpenGL (llvmpipe, through EGL) and compares them (Linux, needs libEGL)" OFF)
+# 0.65.0: on by default with the picture tests on Linux, so the card-vs-processor comparison (gl_vulkan_cards) runs in the full suite
+if(PL_PICTURE_TESTS AND UNIX AND NOT APPLE)
+  set(PL_GL_TESTS_DEFAULT ON)
+else()
+  set(PL_GL_TESTS_DEFAULT OFF)
+endif()
+option(PL_GL_TESTS "Also build gl_compare_tests: draws pictures with the real renderer on Mesa's software OpenGL (llvmpipe, through EGL) and compares them (Linux, needs libEGL)"  ${PL_GL_TESTS_DEFAULT})
 
 if(MSVC)
   add_compile_options(/utf-8 /W3)           # the source has UTF-8 text (°, ☉, ×, ...)
@@ -520,6 +526,9 @@ if(PL_BUILD_APP)
     target_include_directories(gl_compare_tests PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
     target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core blackhole_core volk::volk)
     target_compile_definitions(gl_compare_tests PRIVATE PL_VK_TESTS=1)
+    # 0.65.0: the card programs on Vulkan against the processor (PL_VK_ONLY=1: the Vulkan part alone), so it cannot silently break again
+    add_test(NAME gl_vulkan_cards COMMAND gl_compare_tests ${CMAKE_BINARY_DIR}/gl_pictures)
+    set_tests_properties(gl_vulkan_cards PROPERTIES ENVIRONMENT "PL_VK_ONLY=1" TIMEOUT 1500)
   endif()
   # 0.16 stage 1b: theme_pictures and window_pictures (pictures of the OLD interface) were deleted with it. The New UI's picture tests are below. Linux only (the cloud session); the GitHub Windows build does not run them. Needs -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON.
   option(PL_PICTURE_TESTS "Register the theme picture test (needs a headless Mesa and the app built on Linux)" OFF)
@@ -623,6 +632,10 @@ get_property(pl_all_tests DIRECTORY PROPERTY TESTS)
 foreach(t ${pl_all_tests})
   get_test_property(${t} LABELS pl_lab)
   if(NOT pl_lab STREQUAL "quick")
-    set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache")
+    get_test_property(${t} ENVIRONMENT pl_env)             # 0.65.0: a test's own settings kept (gl_vulkan_cards: PL_VK_ONLY=1)
+    if(NOT pl_env)
+      set(pl_env "")
+    endif()
+    set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache;${pl_env}")
   endif()
 endforeach()

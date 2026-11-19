@@ -30,6 +30,24 @@ render::ClassicDraw classicDraw(const float* pts, long cnt, long cap, std::uint6
     return d;
 }
 
+render::ClassicDraw sideDraw(const float* pts, long cnt, long cap, std::uint64_t epoch, long k, const unsigned char* grp, double cx, double cy, double pxm, double w, double h,
+                             const DotColours& dc, double weight, bool glow) {
+    render::ClassicDraw d = classicDraw(pts, cnt, cap, epoch, k, grp, CloudCamera{cx, cy, pxm, 1, 0, 1, 0, 1}, w, h, dc, weight);
+    d.side = true; d.soft = glow; d.half = glow ? 4.4f : 1.f;
+    return d;
+}
+
+void sideGlowGrid(const std::vector<float>& counts, std::vector<float>& grid) {
+    const float wt = 1.f, r = 4.4f;
+    const float v = wt * r * r * 0.785f;                                   // (glowBlobs: g += d.wt * d.r * d.r * 0.785f, in float)
+    grid.assign(counts.size(), 0.f);
+    for (std::size_t c = 0; c < counts.size(); c++) {
+        float g = 0.f;
+        for (long n = long(counts[c]); n > 0; n--) g += v;
+        grid[c] = g;
+    }
+}
+
 ClassicCase classicCheckCase() {
     ClassicCase c;
     std::uint32_t s = 0x2545F491u;
@@ -48,12 +66,36 @@ ClassicCase classicCheckCase() {
     return c;
 }
 
-ClassicCompare compareClassic(const ClassicCase& cs, const std::vector<std::uint32_t>& keys, const std::vector<float>& sq, long total) {
+ClassicCase classicSideCase(bool glow) {
+    ClassicCase c = classicCheckCase();
+    c.side = true; c.soft = glow;
+    c.cam = CloudCamera{150, 170, 160, 1, 0, 1, 0, 1};                    // (x across, z up: a part of the cloud beyond the picture's left and lower edges)
+    if (glow) c.weight = 0.37;                                              // (the dots' light, as the exposure gives it)
+    return c;
+}
+
+render::ClassicDraw classicCaseDraw(const ClassicCase& c) {
+    const long n = long(c.grp.size());
+    if (c.side) return sideDraw(c.pts.data(), n, n, 1, n, c.grp.data(), c.cam.cx, c.cam.cy, c.cam.pxm, c.w, c.h, c.dc, c.weight, c.soft);
+    return classicDraw(c.pts.data(), n, n, 1, n, c.grp.data(), c.cam, c.w, c.h, c.dc, c.weight);
+}
+
+ClassicCompare compareClassic(const ClassicCase& cs, const std::vector<std::uint32_t>& keys, const std::vector<float>& sq, long total, const std::vector<std::uint32_t>& cells) {
     ClassicCompare r;
     const long cnt = long(cs.grp.size());
     if (long(keys.size()) < 3 * cnt || long(sq.size()) < 20 * cnt) return r;
     std::vector<float> PX, PY, PD;
-    projectCloud(cs.pts.data(), cnt, cs.cam, cs.w, cs.h, PX, PY, PD);
+    if (!cs.side) projectCloud(cs.pts.data(), cnt, cs.cam, cs.w, cs.h, PX, PY, PD);
+    else {                                                                  // 0.65.0: sideDots' places (in double), in view or not (NaN), one band
+        PX.resize(std::size_t(cnt)); PY.resize(std::size_t(cnt)); PD.resize(std::size_t(cnt));
+        for (long i = 0; i < cnt; i++) {
+            const double X = cs.cam.cx + cs.pts[std::size_t(3 * i)] * cs.cam.pxm - 1, Y = cs.cam.cy - cs.pts[std::size_t(3 * i + 2)] * cs.cam.pxm - 1;
+            PX[std::size_t(i)] = float(X + 1); PY[std::size_t(i)] = float(Y + 1);
+            PD[std::size_t(i)] = X > -2 && X < cs.w && Y > -2 && Y < cs.h ? 0.f : NAN;
+        }
+    }
+    const double lo = cs.side ? -1 : 0, hiX = cs.side ? cs.w + 1 : cs.w, hiY = cs.side ? cs.h + 1 : cs.h;   // (the picture's edges for the dots' final places)
+    const auto bandOf = [&](long i) { return cs.side ? (std::isnan(PD[std::size_t(i)]) ? kNoBand : (unsigned char)0) : depthBandOf(PD[std::size_t(i)]); };
     const int ng = std::min(cs.dc.n, 24);
     const auto fl = [](std::uint32_t u) { float f; std::memcpy(&f, &u, 4); return f; };
     std::map<std::uint32_t, std::vector<std::pair<float, float>>> byKey;     // the card's own dots of each key
@@ -61,10 +103,10 @@ ClassicCompare compareClassic(const ClassicCase& cs, const std::vector<std::uint
         r.dots++;
         const std::uint32_t k = keys[std::size_t(3 * i)];
         const float X = fl(keys[std::size_t(3 * i + 1)]), Y = fl(keys[std::size_t(3 * i + 2)]);
-        const unsigned char band = depthBandOf(PD[std::size_t(i)]);
+        const unsigned char band = bandOf(i);
         const bool cpuShown = band != kNoBand && cs.grp[std::size_t(i)] < ng, cardShown = k != 0xFFFFFFFFu;
         if (cardShown) { r.shown++; byKey[k].push_back({X, Y}); }
-        const bool nearEdge = std::fabs(PX[std::size_t(i)]) < 2e-3 || std::fabs(PX[std::size_t(i)] - float(cs.w)) < 2e-3 || std::fabs(PY[std::size_t(i)]) < 2e-3 || std::fabs(PY[std::size_t(i)] - float(cs.h)) < 2e-3;
+        const bool nearEdge = std::fabs(PX[std::size_t(i)] - lo) < 2e-3 || std::fabs(PX[std::size_t(i)] - hiX) < 2e-3 || std::fabs(PY[std::size_t(i)] - lo) < 2e-3 || std::fabs(PY[std::size_t(i)] - hiY) < 2e-3;
         if (cpuShown != cardShown) { if (nearEdge) r.bandFlip++; else r.bandBad++; continue; }
         if (!cpuShown) continue;
         const double e = std::max(std::fabs(double(X) - PX[std::size_t(i)]), std::fabs(double(Y) - PY[std::size_t(i)]));
@@ -80,38 +122,66 @@ ClassicCompare compareClassic(const ClassicCase& cs, const std::vector<std::uint
     long at = 0;
     for (auto& [k, pl] : byKey) {
         const int band = int(k / std::uint32_t(ng)), g = int(k % std::uint32_t(ng));
-        const DepthBand& db = kDepthBand[band];
-        const float half = float(db.size / 2), alpha = float(std::max(0.0, std::min(1.0, db.alpha * cs.weight)) * cs.dc.c[g].a);
+        const DepthBand db = cs.side ? DepthBand{1.0, 2.0 * (cs.soft ? 4.4f : 1.f)} : kDepthBand[band];
+        const float half = float(db.size / 2), alpha = float(std::max(0.0, std::min(1.0, db.alpha * cs.weight)) * cs.dc.c[g].a), kind = cs.soft ? 6.f : 5.f;
         std::vector<std::pair<float, float>> got;
         for (std::size_t j = 0; j < pl.size(); j++, at++) {
             if (at >= cnt) { r.orderBad++; break; }
             const float* b = &sq[std::size_t(20 * at)];
             got.push_back({b[0], b[1]});
-            if (b[2] != half || b[3] != 5.f || b[4] != float(g) || !(std::fabs(b[11] - alpha) <= alpha * 2.4e-7f)) r.squareBad++;
+            if (b[2] != half || b[3] != kind || b[4] != float(g) || !(std::fabs(b[11] - alpha) <= alpha * 2.4e-7f)) r.squareBad++;
         }
         std::sort(pl.begin(), pl.end()); std::sort(got.begin(), got.end());
         if (got != pl) r.orderBad++;
     }
     if (total != at) r.orderBad++;
     for (long j = at; j < cnt; j++) if (sq[std::size_t(20 * j + 11)] != 0.f) r.squareBad++;
+    if (cs.soft) {                                                          // 0.65.0: the Glow's cells (glowBlobs: int(x / 8), int(y / 8), clamped) against the processor's
+        const int gw = int(cs.w / 8) + 2, gh = int(cs.h / 8) + 2;           // count; a dot within 2e-3 points of a cell's edge may be counted in the next cell
+        std::vector<long> want(std::size_t(gw * gh), 0), slack(want.size(), 0);
+        for (long i = 0; i < cnt; i++) {
+            if (bandOf(i) == kNoBand || cs.grp[std::size_t(i)] >= ng) continue;
+            const float x = PX[std::size_t(i)], y = PY[std::size_t(i)];
+            const int cx = std::max(0, std::min(gw - 1, int(x / 8))), cy = std::max(0, std::min(gh - 1, int(y / 8)));
+            want[std::size_t(cy * gw + cx)]++;
+            const double fx = x / 8.0 - std::floor(x / 8.0), fy = y / 8.0 - std::floor(y / 8.0);
+            if (fx < 2.5e-4 || fx > 1 - 2.5e-4 || fy < 2.5e-4 || fy > 1 - 2.5e-4)
+                for (int ax = -1; ax <= 1; ax++) for (int ay = -1; ay <= 1; ay++) {
+                    const int qx = cx + ax, qy = cy + ay;
+                    if (qx >= 0 && qx < gw && qy >= 0 && qy < gh) slack[std::size_t(qy * gw + qx)]++;
+                }
+        }
+        r.cells = long(want.size());
+        if (cells.size() != want.size()) r.cellBad = r.cells;
+        else for (std::size_t c = 0; c < want.size(); c++) {
+            const long d = std::labs(long(cells[c]) - want[c]);
+            if (d > slack[c]) r.cellBad++; else if (d > 0) r.cellEdge++;
+        }
+    }
     return r;
 }
 
 std::string classicCompareText(const ClassicCompare& c) {
-    char b[300];
+    char b[400];
     std::snprintf(b, sizeof b, "%ld dots, %ld shown: %ld in another group, %ld in another band (%ld at a band's edge within the rounding), %ld places beyond 2e-3 points "
                                "(the largest %.2g), %ld keys out of order, %ld squares wrong", c.dots, c.shown, c.groupBad, c.bandBad + c.bandFlip, c.bandFlip, c.placeBad, c.worstPlace, c.orderBad, c.squareBad);
-    return b;
+    std::string t = b;
+    if (c.cells > 0) { std::snprintf(b, sizeof b, "; %ld cells, %ld beyond their limit (%ld differ by a dot at a cell's edge)", c.cells, c.cellBad, c.cellEdge); t += b; }
+    return t;
 }
 
 namespace {
 double nowS() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
-struct Path { int state = 0, step = 0, frames = 0, gen = -1, usedFrames = 0, job = 0; double stepAt = 0; bool firstUse = false, firstDone = false; std::string why, check; };
+struct Path { int state = 0, step = 0, frames = 0, gen = -1, usedFrames = 0, job[3] = {0, 0, 0}; double stepAt = 0; bool firstUse = false, firstDone = false; std::string why, check; };
 Path g_p;
 const char* kPipe = "the Classic dots' pipeline";
 const char* kCheck = "the Classic dots' check";
 const char* kFirst = "the Classic dots' first full use";
-ClassicCase& checkCase() { static ClassicCase c = classicCheckCase(); return c; }
+// the check's three cases (0.65.0: the side view's Classic squares and Glow dots with their cells too)
+const ClassicCase& checkCase(int k) {
+    static const ClassicCase c[3] = {classicCheckCase(), classicSideCase(false), classicSideCase(true)};
+    return c[k];
+}
 
 void off(const std::string& why) {
     g_p.state = -1;
@@ -137,24 +207,32 @@ void advance(render::Renderer2D& R) {
     }
     if (g_p.step == 1) {
         G.begin(kCheck);
-        const ClassicCase& c = checkCase();
-        const long n = long(c.grp.size());
-        g_p.job = C->beginCheck(classicDraw(c.pts.data(), n, n, 1, n, c.grp.data(), c.cam, c.w, c.h, c.dc, c.weight));
-        if (!g_p.job) { G.end(kCheck, "could not be started"); G.finished(false, "the Classic dots' check could not be started"); off("the Classic dots' check could not be started"); return; }
+        for (int k = 0; k < 3; k++) g_p.job[k] = C->beginCheck(classicCaseDraw(checkCase(k)));
+        if (!g_p.job[0] || !g_p.job[1] || !g_p.job[2]) { G.end(kCheck, "could not be started"); G.finished(false, "the Classic dots' check could not be started"); off("the Classic dots' check could not be started"); return; }
         g_p.stepAt = nowS(); g_p.step = 2;
         return;
     }
-    std::vector<std::uint32_t> keys;
-    std::vector<float> sq;
-    long total = 0;
-    const render::JobState st = C->pollCheck(g_p.job, keys, sq, total);
-    if (st == render::JobState::Pending) { if (nowS() - g_p.stepAt > 10) { G.timedOut(kCheck); off("a step of the Classic dots on the card did not finish in time (the check)"); } return; }
-    ClassicCompare cmp;
-    if (st == render::JobState::Done) cmp = compareClassic(checkCase(), keys, sq, total);
-    bool ok = st == render::JobState::Done && cmp.ok();
+    // (the three jobs come back in order: the first still pending means all are)
+    static ClassicCompare done[3];
+    static int doneN = 0;
+    static bool batchOk = true;
+    if (doneN == 0) batchOk = true;
+    while (doneN < 3) {
+        std::vector<std::uint32_t> keys;
+        std::vector<float> sq;
+        long total = 0;
+        const render::JobState st = C->pollCheck(g_p.job[doneN], keys, sq, total);
+        if (st == render::JobState::Pending) { if (nowS() - g_p.stepAt > 10) { doneN = 0; G.timedOut(kCheck); off("a step of the Classic dots on the card did not finish in time (the check)"); } return; }
+        done[doneN] = st == render::JobState::Done ? compareClassic(checkCase(doneN), keys, sq, total, C->checkCells()) : ClassicCompare();
+        batchOk = batchOk && st == render::JobState::Done;
+        doneN++;
+    }
+    doneN = 0;
+    bool ok = batchOk && done[0].ok() && done[1].ok() && done[2].ok();
     static const bool forced = std::getenv("PL_CLASSIC_CARDFAIL") != nullptr;   // (tests: as if the check had failed)
     if (forced) ok = false;
-    const std::string text = st == render::JobState::Done ? classicCompareText(cmp) : std::string("the batch failed on the card");
+    const std::string text = batchOk ? "Cloud 3D " + classicCompareText(done[0]) + " | the side view, Classic " + classicCompareText(done[1]) + " | the side view, Glow " + classicCompareText(done[2])
+                                     : std::string("the batch failed on the card");
     char t[80];
     std::snprintf(t, sizeof t, "%s after %.0f ms: ", ok ? "passed" : "FAILED", 1000 * (nowS() - g_p.stepAt));
     G.end(kCheck, t + text);
@@ -198,11 +276,11 @@ bool drawClassicOnCard(render::Renderer2D& R, const render::ClassicDraw& d) {
 
 int classicCardState() { return g_p.state == 1 ? 1 : g_p.state == -1 ? -1 : 0; }
 
-std::string classicCardPathText(bool vulkan) {
-    if (!vulkan) return "the Classic dots: the processor (no card program for them on OpenGL)";
-    if (g_p.state == 1) return "the Classic dots: the graphics card (Vulkan; its start-up check passed: " + g_p.check + ")";
-    if (g_p.state == -1) return "the Classic dots: the processor, because " + g_p.why;
-    return "the Classic dots: the graphics card once its start-up check has passed (made when the Classic Cloud 3D is first shown)";
+std::string classicCardPathText(bool vulkan, const std::string& what) {
+    if (!vulkan) return what + ": the processor (no card program for them on OpenGL)";
+    if (g_p.state == 1) return what + ": the graphics card (Vulkan; its start-up check passed: " + g_p.check + ")";
+    if (g_p.state == -1) return what + ": the processor, because " + g_p.why;
+    return what + ": the graphics card once its start-up check has passed (made when the Classic Cloud 3D or the side view with every electron is first shown)";
 }
 
 }  // namespace atom

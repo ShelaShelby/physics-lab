@@ -370,7 +370,9 @@ public:
     int jumpGroup(int pop, long i) const;                 // 255 = not shown, else the colour group (phase bin, or 0 / 1 for the sign)
     double outlineAlpha() const;                          // how strongly the 90 % outline is drawn (it fades out as the cloud leaves its orbital, and back in after landing)
     // ---- quantum beats ----
-    bool overlapPair() const { return superOn() && overlap_; }   // 0.64.0: the superposition's two states overlap (one energy): its Slice stays the processor's
+    bool overlapPair() const { return superOn() && overlap_; }
+    // 0.65.0: the Slice whose dots the Slice's card program can make (one state, or an orthogonal superposition): not every electron, a Dirac state or an overlapping pair
+    bool sliceCardKind() const { return sliceDots() && !manyOn() && !diracCloudOn() && !overlapPair(); }   // 0.64.0: the superposition's two states overlap (one energy): its Slice stays the processor's
     bool superOn() const { return p.super == "On" && p.view != "Orbit" && !manyOn(); }
     // ---- 0.49.3 (outside review): the Dirac cloud of the one-electron atom (atom/dirac_cloud.h) ----
     bool diracCloudOn() const;                            // Hydrogen-like, a cloud view (not Orbit or the chart), no superposition, and the model is Dirac (Auto: from kRelativityZ)

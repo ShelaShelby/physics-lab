@@ -109,7 +109,11 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
             const VkBuffer jump = d.grpBuf ? vkJumpGroups(atomCard_) : VK_NULL_HANDLE;
             if (!d.grpBuf || jump) vkGrid_[i] = vkGlowRecord(vkGlow_, d, jump, clBytes_);
         } else if (sg.kind == Kind::MolCloud && molCard_) vkGrid_[i] = vkMolCloudRecord(molCard_, molClouds_[std::size_t(sg.slot)]);
-        else if (sg.kind == Kind::CloudClassic) classicOk_[i] = vkClassicRecord(classicCard_, classicDraws_[std::size_t(sg.slot)], clBytes_) ? 1 : 0;   // 0.64.0
+        else if (sg.kind == Kind::CloudClassic) {                             // 0.64.0
+            const ClassicDraw& d = classicDraws_[std::size_t(sg.slot)];
+            classicOk_[i] = vkClassicRecord(classicCard_, d, clBytes_) ? 1 : 0;
+            if (classicOk_[i] && d.soft) { classicOk_[i] = 2; grids = true; }   // 0.65.0: the side view's Glow: its cells read back with the grids
+        }
         else if (sg.kind == Kind::Lens && vkbh_) {                             // 0.62.0: the Black Hole Lab's passes, before the frame (render/vk_blackhole.h)
             vkbh_->lens(lens_[std::size_t(sg.slot)], width_, height_, texW_[static_cast<int>(Map::Sky)], fbW, fbH);
             skyStats_ = vkbh_->skyStats(); glareStats_ = vkbh_->glareStats(); lensRedraws_ = vkbh_->redraws(); vkGlareBusy_ = vkbh_->glareBusy();
@@ -120,6 +124,18 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
     {   app::FrameCostLabel l(grids ? "the exposure grids (Glow or Density cloud)" : "the frame's card batch");
         if (!vkc_->flush(grids) && vkc_->failed()) return false; }
     std::vector<float> cells;
+    bool more = false;
+    for (std::size_t i = 0; i < n; i++) {                                     // 0.65.0: the side view's Glow: the dots' light from its cells, then its last two steps
+        if (classicOk_[i] != 2) continue;
+        const ClassicDraw& d = classicDraws_[std::size_t(segments_[i].slot)];
+        const double light = vkClassicCells(classicCard_, cells) && d.exposure ? d.exposure(cells) : -1;
+        classicOk_[i] = light >= 0 && vkClassicFinish(classicCard_, d, static_cast<float>(light)) ? 1 : 0;
+        more = more || classicOk_[i] == 1;
+    }
+    if (more) {
+        app::FrameCostLabel l("the frame's card batch");
+        if (!vkc_->flush(false) && vkc_->failed()) return false;
+    }
     for (std::size_t i = 0; i < n; i++) {
         if (vkGrid_[i] < 0) continue;
         const Segment& sg = segments_[i];
@@ -284,7 +300,7 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             V.setF(VkDraw2D::kBlob, "uPalPlus", d.plus, 4);
             V.setF(VkDraw2D::kBlob, "uPalMinus", d.minus, 4);
             V.setI(VkDraw2D::kBlob, "uSphN", &zero, 1);
-            V.drawInst(VkDraw2D::kBlob, VkDraw2D::kNormal, vkClassicSquares(classicCard_), VK_NULL_HANDLE, sg.count);
+            V.drawInst(VkDraw2D::kBlob, d.additive ? VkDraw2D::kAdditive : VkDraw2D::kNormal, vkClassicSquares(classicCard_), VK_NULL_HANDLE, sg.count);   // (0.65.0: the side view's Glow on a dark page adds up)
             break;
         }
         case Kind::Rings: {                                                    // 0.64.0: Saturn's rings per pixel (kRingsFS)

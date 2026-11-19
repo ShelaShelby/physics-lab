@@ -695,6 +695,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
                                                                          : "the processor turns, sorts and sends every dot of both levels; ") + atom::atomCardPaths().pathText(1, L, app.computeOk);
             }
             if (t.atomWhich == atom::kBenchAllClassic) return atom::classicCardPathText(g_vk != nullptr);   // 0.64.0
+            if (t.atomWhich == atom::kBenchSideAll || t.atomWhich == atom::kBenchSideAllClassic) return atom::classicCardPathText(g_vk != nullptr, "the side view's dots");   // 0.65.0
             if (L.manyOn() && L.p.cstyle == "Glow") return "the every-electron cloud: " + std::string(L.gpuCloud ? "drawn from a buffer on the graphics card" : "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene)");
             if (L.p.super == "On" || L.s.trans) return "the colour groups: " + app::computePathText(app.glMajor, app.glMinor, app.computeOk, L.gpuCompute);
             return "";

@@ -72,6 +72,29 @@ GroupsBy fillGroups(AtomLab& L, render::IGroupCompute* gc, long cnt, unsigned ch
     return GroupsBy::Cpu;
 }
 
+std::uint64_t keepGroups(GroupsKept& kept, AtomLab& L, render::IGroupCompute* gc, long cnt, long cap, unsigned char* grp) {
+    static std::uint64_t made = 0;                                          // (one counter for every keeper: an epoch is never reused)
+    if (L.jumpDrawn() || L.superOn()) {
+        kept = GroupsKept{};
+        fillGroups(L, gc, cnt, grp);
+        return 0;
+    }
+    const int wheel = L.usesWheel() ? 1 : 0;
+    const long k = L.s.k;
+    if (kept.epoch != 0 && kept.cloud == L.s.ptsEpoch && kept.wheel == wheel && kept.cap == cap && cap > 0 && k >= kept.k && k - kept.k < cap && cnt == std::min(k, cap)) {
+        if (k > kept.k) {                                                   // the new dots only, at kept.k .. k - 1 mod cap
+            const long lo = kept.k % cap, hi = k % cap;
+            const auto part = [&](long a, long b) { if (b > a) plainGroups(wheel != 0, L.s.ph.data() + a, L.s.sg.data() + a, b - a, grp + a); };
+            if (lo < hi) part(lo, hi); else { part(lo, cap); part(0, hi); }
+            kept.k = k;
+        }
+        return kept.epoch;
+    }
+    fillGroups(L, gc, cnt, grp);
+    kept.cloud = L.s.ptsEpoch; kept.k = k; kept.cap = cap; kept.wheel = wheel; kept.epoch = ++made;
+    return kept.epoch;
+}
+
 // ---- the picture of the cloud ----
 void projectCloud(const float* pts, long cnt, const CloudCamera& cam, double w, double h, std::vector<float>& PX, std::vector<float>& PY, std::vector<float>& PD) {
     PX.resize(std::size_t(cnt)); PY.resize(std::size_t(cnt)); PD.resize(std::size_t(cnt));

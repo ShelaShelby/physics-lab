@@ -384,6 +384,7 @@ static void vkMolCloud(render::MoleculeCard& vk, render::MoleculeCard* gl) {
 
 // the exposure's grid of the Glow dots (kCloudGridVS + kCloudGridFS) against the processor's sum of the same footprints in double: per cell within the
 // float sum's rounding (2^-24 for each footprint added, 6 operations for each footprint's own value)
+static void settle(render::VkCards& cards, render::IGroupCompute* g, render::IOutlineCompute* o, render::IRockCompute* r, render::VkGlow* w);
 static void vkGlowGrid(render::VkCards& cards) {
     std::string why;
     render::VkGlow* g = render::makeVkGlow(cards, why);
@@ -401,39 +402,61 @@ static void vkGlowGrid(render::VkCards& cards) {
     const int index = render::vkGlowRecord(g, d, VK_NULL_HANDLE, bytes);
     const bool ran = index >= 0 && cards.flush(true) != 0 && !cards.failed();
     check("Vulkan Glow grid: the run is made and read back", ran);
+    settle(cards, nullptr, nullptr, nullptr, g);
     if (!ran) { render::dropVkGlow(g); return; }
-    const int gw = int(d.w / 8) + 2, gh = int(d.h / 8) + 2;
-    std::vector<double> want(std::size_t(gw * gh), 0.0);
-    std::vector<long> count(want.size(), 0);
-    std::vector<double> slack(want.size(), 0.0);
-    for (long i = 0; i < d.cnt; i++) {                                          // kCloudGridVS's formulas, in double
-        if (grp[std::size_t(i)] == 255) continue;
-        const double x = pts[std::size_t(3 * i)], y = pts[std::size_t(3 * i + 1)], zz = pts[std::size_t(3 * i + 2)];
-        const double x1 = x * d.ca - y * d.sa, y1 = x * d.sa + y * d.ca, dep = y1 * d.cb - zz * d.sb, up = y1 * d.sb + zz * d.cb;
-        const double f = 1 / (1 + dep / (4 * double(d.ext))), X = d.cx + x1 * d.pxm * f, Y = d.cy - up * d.pxm * f, D = dep / d.ext;
-        if (X < 0 || X > d.w || Y < 0 || Y > d.h) continue;
-        const double t = std::max(-1.0, std::min(1.0, D)), nr = 0.5 - 0.5 * t, r = 4.6 * (0.8 + 0.4 * nr), wt = 0.3 + 0.9 * nr;
-        const int cx = std::max(0, std::min(gw - 1, int(X / 8))), cy = std::max(0, std::min(gh - 1, int(Y / 8)));
-        want[std::size_t(cy * gw + cx)] += wt * r * r * 0.785;
-        count[std::size_t(cy * gw + cx)]++;
-        // a dot within float rounding of a cell's edge may land in the next cell on the card: its footprint is slack for the cells round it
-        const double fx = X / 8 - std::floor(X / 8), fy = Y / 8 - std::floor(Y / 8);
-        if (fx < 1e-4 || fx > 1 - 1e-4 || fy < 1e-4 || fy > 1 - 1e-4)
-            for (int ax = -1; ax <= 1; ax++) for (int ay = -1; ay <= 1; ay++) {
-                const int qx = cx + ax, qy = cy + ay;
-                if (qx >= 0 && qx < gw && qy >= 0 && qy < gh) slack[std::size_t(qy * gw + qx)] += wt * r * r * 0.785;
-            }
+    // (0.65.0: three frames, the second with 300 dots of the ring replaced, their groups changed (atom/cloud_dots.h keepGroups: only the new dots'
+    // groups are sent while the groups' epoch stays), the third with nothing new: a group sent wrong or not sent changes the grid)
+    const auto compare = [&](int index, const char* label) {
+        const int gw = int(d.w / 8) + 2, gh = int(d.h / 8) + 2;
+        std::vector<double> want(std::size_t(gw * gh), 0.0);
+        std::vector<long> count(want.size(), 0);
+        std::vector<double> slack(want.size(), 0.0);
+        for (long i = 0; i < d.cnt; i++) {                                          // kCloudGridVS's formulas, in double
+            if (grp[std::size_t(i)] == 255) continue;
+            const double x = pts[std::size_t(3 * i)], y = pts[std::size_t(3 * i + 1)], zz = pts[std::size_t(3 * i + 2)];
+            const double x1 = x * d.ca - y * d.sa, y1 = x * d.sa + y * d.ca, dep = y1 * d.cb - zz * d.sb, up = y1 * d.sb + zz * d.cb;
+            const double f = 1 / (1 + dep / (4 * double(d.ext))), X = d.cx + x1 * d.pxm * f, Y = d.cy - up * d.pxm * f, D = dep / d.ext;
+            if (X < 0 || X > d.w || Y < 0 || Y > d.h) continue;
+            const double t = std::max(-1.0, std::min(1.0, D)), nr = 0.5 - 0.5 * t, r = 4.6 * (0.8 + 0.4 * nr), wt = 0.3 + 0.9 * nr;
+            const int cx = std::max(0, std::min(gw - 1, int(X / 8))), cy = std::max(0, std::min(gh - 1, int(Y / 8)));
+            want[std::size_t(cy * gw + cx)] += wt * r * r * 0.785;
+            count[std::size_t(cy * gw + cx)]++;
+            // a dot within float rounding of a cell's edge may land in the next cell on the card: its footprint is slack for the cells round it
+            const double fx = X / 8 - std::floor(X / 8), fy = Y / 8 - std::floor(Y / 8);
+            if (fx < 1e-4 || fx > 1 - 1e-4 || fy < 1e-4 || fy > 1 - 1e-4)
+                for (int ax = -1; ax <= 1; ax++) for (int ay = -1; ay <= 1; ay++) {
+                    const int qx = cx + ax, qy = cy + ay;
+                    if (qx >= 0 && qx < gw && qy >= 0 && qy < gh) slack[std::size_t(qy * gw + qx)] += wt * r * r * 0.785;
+                }
+        }
+        const float* cells = cards.cells(index);
+        if (!cells) { check(label + std::string(": the grid is read back"), false); return; }
+        long bad = 0; double worst = 0;
+        for (std::size_t c = 0; c < want.size(); c++) {
+            const double lim = want[c] * (double(count[c]) + 6) * 5.96e-8 * 4 + 1e-6 + slack[c];
+            const double e = std::fabs(cells[c] - want[c]);
+            worst = std::max(worst, want[c] > 0 ? e / want[c] : e);
+            if (e > lim) bad++;
+        }
+        std::printf("%s: %d cells, %ld beyond the float sum's rounding (the worst relative difference %.2e)\n", label, gw * gh, bad, worst);
+        check(label + std::string(": every cell equals the processor's sum within the float sum's rounding"), bad == 0);
+    };
+    compare(index, "Vulkan Glow grid");
+    d.grpEpoch = 11;
+    const int i1 = render::vkGlowRecord(g, d, VK_NULL_HANDLE, bytes);   // (the same frame again, its groups now with an epoch: sent whole)
+    check("Vulkan Glow grid, groups with an epoch: the run is made", i1 >= 0 && cards.flush(true) != 0 && !cards.failed());
+    if (i1 >= 0) compare(i1, "Vulkan Glow grid, groups with an epoch");
+    for (int i = 0; i < 300; i++) {                                     // dots 0 .. 299 replaced (the ring: k 50000 .. 50299)
+        for (int c = 0; c < 3; c++) pts[std::size_t(3 * i + c)] = float(2 * rnd() - 1);
+        grp[std::size_t(i)] = grp[std::size_t(i)] == 255 ? 3 : 255;
     }
-    const float* cells = cards.cells(index);
-    long bad = 0; double worst = 0;
-    for (std::size_t c = 0; c < want.size(); c++) {
-        const double lim = want[c] * (double(count[c]) + 6) * 5.96e-8 * 4 + 1e-6 + slack[c];
-        const double e = std::fabs(cells[c] - want[c]);
-        worst = std::max(worst, want[c] > 0 ? e / want[c] : e);
-        if (e > lim) bad++;
-    }
-    std::printf("Vulkan Glow grid: %d cells, %ld beyond the float sum's rounding (the worst relative difference %.2e)\n", gw * gh, bad, worst);
-    check("Vulkan Glow grid: every cell equals the processor's sum within the float sum's rounding", bad == 0);
+    d.k = 50300;
+    const int i2 = render::vkGlowRecord(g, d, VK_NULL_HANDLE, bytes);
+    check("Vulkan Glow grid, 300 new dots (only their groups sent): the run is made", i2 >= 0 && cards.flush(true) != 0 && !cards.failed());
+    if (i2 >= 0) compare(i2, "Vulkan Glow grid, 300 new dots (only their groups sent)");
+    const int i3 = render::vkGlowRecord(g, d, VK_NULL_HANDLE, bytes);
+    check("Vulkan Glow grid, nothing new (no groups sent): the run is made", i3 >= 0 && cards.flush(true) != 0 && !cards.failed());
+    if (i3 >= 0) compare(i3, "Vulkan Glow grid, nothing new (no groups sent)");
     render::dropVkGlow(g);
 }
 
@@ -525,16 +548,29 @@ static void vkRings(render::RingCard& vk) {
 static void vkClassic(render::ClassicCard& vk) {
     std::string why;
     check("Vulkan Classic dots: the program is made (" + why + ")", vk.build(why));
-    const atom::ClassicCase c = atom::classicCheckCase();
-    const long n = long(c.grp.size());
-    const int j = vk.beginCheck(atom::classicDraw(c.pts.data(), n, n, 1, n, c.grp.data(), c.cam, c.w, c.h, c.dc, c.weight));
-    std::vector<std::uint32_t> keys;
-    std::vector<float> sq;
-    long total = 0;
-    const bool done = j > 0 && vkt::poll([&] { return vk.pollCheck(j, keys, sq, total); }) == render::JobState::Done;
-    const atom::ClassicCompare cmp = atom::compareClassic(c, keys, sq, total);
-    std::printf("Vulkan Classic dots: %s\n", atom::classicCompareText(cmp).c_str());
-    check("Vulkan Classic dots: every dot's group, band and place, and the squares in the processor's order, within the start-up check's limits", done && cmp.ok());
+    // 0.65.0: and the side view with every electron: its Classic squares, and the Glow's soft dots with their cells (the exposure's grid)
+    const char* names[3] = {"Cloud 3D", "the side view, Classic", "the side view, Glow"};
+    for (int k = 0; k < 3; k++) {
+        const atom::ClassicCase c = k == 0 ? atom::classicCheckCase() : atom::classicSideCase(k == 2);
+        const int j = vk.beginCheck(atom::classicCaseDraw(c));
+        std::vector<std::uint32_t> keys;
+        std::vector<float> sq;
+        long total = 0;
+        const bool done = j > 0 && vkt::poll([&] { return vk.pollCheck(j, keys, sq, total); }) == render::JobState::Done;
+        const atom::ClassicCompare cmp = atom::compareClassic(c, keys, sq, total, vk.checkCells());
+        std::printf("Vulkan Classic dots, %s: %s\n", names[k], atom::classicCompareText(cmp).c_str());
+        check(std::string("Vulkan Classic dots, ") + names[k] + ": every dot's group, band and place, the squares in the processor's order (and the cells), within the start-up check's limits",
+              done && cmp.ok() && (k != 2 || cmp.cells > 0));
+    }
+}
+
+// 0.65.0: as the app's frame does (renderer2d_vk.cpp): a program's first full use ends once its batch has finished, which gives the guards' turn back
+// (0.63.0's one-step-at-a-time rule). Without it the next program's first use waited for the turn for ever here (the outline's, rocks' and Glow grid's steps).
+static void settle(render::VkCards& cards, render::IGroupCompute* g, render::IOutlineCompute* o, render::IRockCompute* r, render::VkGlow* w) {
+    cards.flush(true);
+    const int off = render::vkPollFirstUses(cards, g, o, r, w);
+    check("Vulkan: the first full use ends (its guard's turn given back)", off == 0 && app::gpuGuardTurn().empty());
+    if (!app::gpuGuardTurn().empty()) std::printf("Vulkan: the guards' turn is still held by %s\n", app::gpuGuardTurn().c_str());
 }
 
 static void vulkanTwins(render::Renderer2D& R) {
@@ -550,12 +586,15 @@ static void vulkanTwins(render::Renderer2D& R) {
         render::IGroupCompute* g = render::makeVkGroupCompute(cards, why);
         check("Vulkan: the groups' program passes its start-up steps (" + why + ")", g != nullptr);
         if (g) vkGroups(*g, R.compute());
+        settle(cards, g, nullptr, nullptr, nullptr);
         render::IOutlineCompute* o = render::makeVkOutlineCompute(cards, why);
         check("Vulkan: the outline's programs pass their start-up steps (" + why + ")", o != nullptr);
         if (o) vkOutline(*o, R.outlineCompute());
+        settle(cards, nullptr, o, nullptr, nullptr);
         render::IRockCompute* r = render::makeVkRockCompute(cards, why);
         check("Vulkan: the rocks' program passes its start-up steps (double precision here: " + std::string(h.f64 ? "yes" : "no") + "; " + why + ")", r != nullptr || !h.f64);
         if (r) vkRocks(*r, R.rockCompute());
+        settle(cards, nullptr, nullptr, r, nullptr);
         render::AtomCard* a = render::makeVkAtomCard(cards);
         vkSliceJump(*a, &R.atomCard());
         render::MoleculeCard* m = render::makeVkMoleculeCard(cards);

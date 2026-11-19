@@ -65,11 +65,16 @@ void AtomCardPaths::frame(render::Renderer2D& R, AtomLab& L) {
         if (P.state == 2) { advance(which, R, L); continue; }
         if (P.state != 1) continue;
         if (which == 0) {
-            if (!C.ready() && !P.firstDone && G.hold()) {                    // (0.63.0: the first full use waits for its turn)                                // ready for the lab: the first batch it asks for begins the step "the first full use" (its marker first)
+            // (0.65.0: the first full use is waited for only where the Slice's program makes the dots: a Slice of every electron or of a Dirac state held the
+            // guards' turn for ever, waiting for a first full use that never came, so every later card program's start-up waited: the Classic dots in the
+            // benchmark after atom.slice_all_drag)
+            const bool uses = L.sliceCardKind();
+            if (!C.ready() && !P.firstDone && uses && G.hold()) {                    // (0.63.0: the first full use waits for its turn)                                // ready for the lab: the first batch it asks for begins the step "the first full use" (its marker first)
                 Path* pp = &P;
                 C.beforeFirstUse = [pp] { app::gpuSliceGuard().begin(stepName(0, "first full use")); pp->firstUse = true; pp->stepAt = nowS(); };
                 C.setSliceReady(true);
             }
+            else if (C.ready() && !P.firstUse && !P.firstDone && !uses) { C.setSliceReady(false); G.rest(); }   // 0.65.0: left before its first use: the turn given back
             if (P.firstUse && !P.firstDone) {
                 if (L.sliceCardDots() > 0) {
                     char b[160];

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -16,12 +17,19 @@ struct ClassicDraw {
     const float* pts = nullptr; long cnt = 0, cap = 0;          // places (m, x y z), dots shown (0 .. cnt), the ring's size
     std::uint64_t epoch = 0; long k = 0;                        // which cloud and dots recorded so far (as Renderer2D::CloudGpuDraw)
     const unsigned char* grp = nullptr;                         // each dot's colour group (255: not shown)
+    std::uint64_t grpEpoch = 0;                                 // 0.65.0: the groups' epoch (atom/cloud_dots.h keepGroups): the same as the last frame's: not sent again; 0: sent
     float cx = 0, cy = 0, pxm = 0, ext = 1, ca = 1, sa = 0, cb = 1, sb = 0, w = 0, h = 0;
     float weight = 1;                                           // cloudDotWeight
     int ng = 2;                                                 // the number of groups (at most 24)
     float groupA[24] = {};                                      // each group colour's own opacity
     bool wheel = false, light = false;                          // the palette (Renderer2D::PhasePalette)
     float plus[4] = {}, minus[4] = {};
+    // 0.65.0: the side view with every electron (atom/cloud_dots.cpp sideDots: the reference): x across, z up, one band of opacity 1 and the square's half
+    // size `half` (Classic: 1, kind 5) or the soft dot's radius (Glow: 4.4, kind 6, soft). Glow: its dots counted per 8 x 8-point cell, `exposure` gets the
+    // counts (as floats, every cell) and returns the dots' light (cloud_light.h cloudDotLight; negative: draw nothing), used as `weight`; additive: dark pages.
+    bool side = false, soft = false, additive = false;
+    float half = 1;
+    std::function<double(const std::vector<float>&)> exposure;
 };
 
 class ClassicCard {
@@ -33,6 +41,8 @@ public:
     // or 0xFFFFFFFF) and its X, Y (as float bits), 3 words a dot; the squares, 20 floats each (cnt of them); the total
     virtual int beginCheck(const ClassicDraw& d) = 0;
     virtual JobState pollCheck(int job, std::vector<std::uint32_t>& keys, std::vector<float>& squares, long& total) = 0;
+    // 0.65.0: a side view's Glow check: its cells (the counts per 8 x 8-point cell, row by row) of the job just polled Done
+    virtual std::vector<std::uint32_t> checkCells() const = 0;
     bool ready = false;                                         // its start-up check passed: Renderer2D::cloudClassic draws with it
 };
 

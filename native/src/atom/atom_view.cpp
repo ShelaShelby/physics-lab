@@ -333,7 +333,12 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         // 0.57.0: a jump with every electron in the Glow Cloud 3D: drawn from the card's cloud buffer with its groups made on the card each frame
         // (atom_card_paths.h), once the card's check on this PC passed; until then, and on any other PC, the processor's path below
         const unsigned jumpBuf = jump && glow && d3 && lab.gpuCloud && dc.gpu && R.cloudGpuOk() ? atomCardPaths().jumpGroupsBuffer(R, lab) : 0;
-        if (!jumpBuf) fillGroups(lab, R.compute(), cnt, grp.data());
+        // 0.65.0: a cloud's groups kept from frame to frame (only the new dots' made; whole again when the cloud or the Phase colours change); grpEpoch tells
+        // the card programs whether the new dots' groups are enough (0: a jump or a superposition, sent whole each frame)
+        static GroupsKept grpKept;
+        std::uint64_t grpEpoch = 0;
+        if (!jumpBuf) grpEpoch = keepGroups(grpKept, lab, R.compute(), cnt, cap, grp.data());
+        else grpKept = GroupsKept{};
         const bool outlineOn = p.outline == "On" && !lab.superOn() && !lab.manyOn() && !lab.diracCloudOn() && lab.outlineAlpha() > 0.01;   // (0.49.3: not on a Dirac cloud: the outline is the non-relativistic shape)   // (0.39.1: not with many electrons: the outline is the one-electron orbital's)         // (the 90 % outline is of one orbital: not drawn for a superposition)
         const int fo = lab.outlineStateId();                                // the state on screen (a complex state's own id), not the real fallback fullOrb()
         const double olA = lab.outlineAlpha();                             // the outline fades out as a jump leaves its orbital and back in after landing
@@ -371,12 +376,39 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         } else if (!d3) {                                                  // side view: drop y, plot (x, z)
             // Sign: blue where the wave ψ is +, orange where it is −; Wheel: one colour per phase step. The dots are drawn group by group, each group in dot order:
             // the v0.12 scan (a pass over all dots for each colour) with GPU colours Off, a counting sort with them On: the same list.
+            // 0.65.0: on the card (Vulkan; kClassicCS's side view, atom/classic_check.h) once the Classic dots' start-up check passed, which checks the side
+            // view's Classic squares, Glow dots and Glow cells too: the dots put on the picture, counted, grouped and written there; the processor's path below
+            // is the reference and the fallback
             static std::vector<SideDot> side;
-            sideDots(PTS, cnt, grp.data(), ng, cx, cy, pxm, w, h, lab.gpuColours, side);
+            const bool sideCard = !jump && dc.gpu && lab.gpuCloud;
             if (glow) {
-                for (const SideDot& d : side) G.push_back({d.x, d.y, 4.4f, 1.f, d.g});
-                drawGlow(R, G, cap, css.light, dc, !wheel, 1.0, w, h, cloudExpo_);
-            } else {
+                DotColours dcl = dc;
+                if (css.light && !wheel) darkenForLightPage(dcl);         // (as glowBlobs does with darken = !wheel)
+                bool onCard = false;
+                R.beginCloudLayer();
+                if (sideCard) {
+                    render::ClassicDraw sd = withGroupsEpoch(sideDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), cx, cy, pxm, w, h, dcl, 1.0, true), grpEpoch);
+                    sd.additive = !css.light;
+                    double* ex = &cloudExpo_;
+                    const long capL = cap;
+                    const bool lightPage = css.light;
+                    sd.exposure = [ex, capL, lightPage](const std::vector<float>& counts) {
+                        static std::vector<float> grid;
+                        sideGlowGrid(counts, grid);
+                        if (!glowExposure(grid, capL, lightPage, 1.0, *ex)) return -1.0;
+                        return cloudDotLight(capL, *ex, 1.0, 1.0);
+                    };
+                    onCard = drawClassicOnCard(R, sd);
+                }
+                if (!onCard) {
+                    sideDots(PTS, cnt, grp.data(), ng, cx, cy, pxm, w, h, lab.gpuColours, side);
+                    for (const SideDot& d : side) G.push_back({d.x, d.y, 4.4f, 1.f, d.g});
+                    DotColours dcb = dc;
+                    if (glowBlobs(G, cap, css.light, dcb, !wheel, 1.0, w, h, cloudExpo_, B)) R.blobsPaletteTake(B, !css.light, dcb.palette());   // (drawGlow's, in the layer opened above)
+                }
+                R.endCloudLayer(!css.light);
+            } else if (!(sideCard && drawClassicOnCard(R, withGroupsEpoch(sideDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), cx, cy, pxm, w, h, dc, 0.3 * cloudDotWeight(cap), false), grpEpoch)))) {
+                sideDots(PTS, cnt, grp.data(), ng, cx, cy, pxm, w, h, lab.gpuColours, side);
                 sideBlobs(side, dc, 0.3 * cloudDotWeight(cap), B);               // one reserve, no regrowing (0.13 stage 4 part C)
                 R.blobsPaletteTake(B, false, dc.palette());
             }
@@ -392,7 +424,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             const bool gpuCloud = glow && lab.gpuCloud && dc.gpu && (!jump || jumpBuf) && R.cloudGpuOk();   // 0.46 (C4): the dots from the GPU buffer, projected and lit there; the same picture
             if (gpuCloud) {
                 render::Renderer2D::CloudGpuDraw cd;
-                cd.pts = PTS; cd.cnt = cnt; cd.cap = cap; cd.epoch = s.ptsEpoch; cd.k = s.k; cd.grp = grp.data();
+                cd.pts = PTS; cd.cnt = cnt; cd.cap = cap; cd.epoch = s.ptsEpoch; cd.k = s.k; cd.grp = grp.data(); cd.grpEpoch = grpEpoch;
                 if (jumpBuf) { cd.cap = cnt; cd.k = cnt; cd.epoch = s.jumpEpoch; cd.grp = nullptr; cd.grpBuf = jumpBuf; }   // 0.57.0: both populations, sent once per jump
                 cd.cx = float(cx); cd.cy = float(cy); cd.pxm = float(pxm); cd.ext = float(ext); cd.ca = float(ca); cd.sa = float(sa); cd.cb = float(cb); cd.sb = float(sb); cd.w = float(w); cd.h = float(h);
                 cd.additive = !css.light;
@@ -429,7 +461,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             }
             // 0.64.0: the Classic dots from the card (Vulkan; atom/classic_check.h) once its start-up check passed: projected, banded and put in the processor's order there
             const bool classicCard = !gpuCloud && !glow && !jump && dc.gpu && lab.gpuCloud &&
-                                     drawClassicOnCard(R, classicDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, w, h, dc, cloudDotWeight(cap)));
+                                     drawClassicOnCard(R, withGroupsEpoch(classicDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, w, h, dc, cloudDotWeight(cap)), grpEpoch));
             if (!gpuCloud && !classicCard)
             projectCloud(PTS, cnt, CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, w, h, PX, PY, PD);   // PD: the depth over the cloud's radius; NaN = off the picture
             if (gpuCloud || classicCard) {

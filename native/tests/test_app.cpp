@@ -35,6 +35,7 @@
 #include "orbit/today.h"
 #include "orbit/nbody.h"
 #include "atom/atom_bench.h"
+#include "atom/cloud_dots.h"
 #include "atom/cloud_light.h"
 #include "atom/outline.h"
 #include <chrono>
@@ -2209,6 +2210,42 @@ static void testGpuGuard() {
         checkTrue("graphics: an unknown value is ignored", app::loadPrefs("graphics=directx\n").graphics == "vulkan"); }
 }
 
+// 0.65.0: a standing cloud's colour groups kept between frames (atom/cloud_dots.h keepGroups) equal the groups made afresh (fillGroups) in every frame,
+// byte for byte, while the cloud fills, stands, and its Phase colours change; their epoch changes exactly when they were made again
+static void testKeptGroups() {
+    long differ = 0, frames = 0, made = 0, kept = 0, wrongEpoch = 0;
+    for (const int scene : {atom::kBenchAllClassic, atom::kBenchSideAll, atom::kBenchFirstRisk}) {   // (and one electron, Wheel: Sign and back)
+        atom::AtomLab L;
+        atom::benchSetup(L, scene, 1040, 713);
+        atom::GroupsKept K;
+        std::vector<unsigned char> a, b;
+        std::uint64_t last = 0;
+        long lastK = -1, lastCap = -1;
+        bool lastWheel = L.usesWheel();
+        for (int f = 0; f < 40; f++) {
+            if (f == 10) L.setParam("phase", std::string(L.p.phase == "Wheel" ? "Sign" : "Wheel"));
+            if (f == 20) { L.setParam("cdens", std::string("High")); }                 // a smaller cloud: made again, then filling
+            if (f == 30) L.setParam("phase", std::string(L.p.phase == "Wheel" ? "Sign" : "Wheel"));
+            L.step(1.0 / 60);
+            const long cap = std::min<long>(L.cloudCap(), long(L.s.sg.size())), cnt = std::min<long>(L.s.k, cap);
+            if (cnt <= 0) continue;
+            a.resize(std::size_t(cnt)); b.assign(std::size_t(cnt), 0);
+            const std::uint64_t e = atom::keepGroups(K, L, nullptr, cnt, cap, a.data());
+            atom::fillGroups(L, nullptr, cnt, b.data());
+            for (long i = 0; i < cnt; i++) if (a[std::size_t(i)] != b[std::size_t(i)]) differ++;
+            const bool remade = L.s.k < lastK || L.s.k - lastK >= cap || cap != lastCap || L.usesWheel() != lastWheel || f == 0;   // (a new cloud starts again at k = 0)
+            if (e == 0 || (e == last) == remade) wrongEpoch++;
+            (e == last ? kept : made)++;
+            if (remade) std::printf("  scene %d frame %d: groups made whole (k %ld, cap %ld, wheel %d)\n", scene, f, L.s.k, cap, int(L.usesWheel()));
+            last = e; lastK = L.s.k; lastCap = cap; lastWheel = L.usesWheel();
+            frames++;
+        }
+    }
+    std::printf("kept groups: %ld frames, made %ld times, kept %ld times, %ld groups differ from fillGroups', %ld wrong epochs\n", frames, made, kept, differ, wrongEpoch);
+    checkTrue("the kept groups equal fillGroups' in every frame (0 differ)", frames >= 60 && differ == 0);
+    checkTrue("the groups' epoch changes exactly when the cloud or the Phase colours changed (new dots alone keep it)", wrongEpoch == 0 && kept > 0 && made > 2);
+}
+
 int main() {
     testLookContrast();
     testRoundTrip();
@@ -2263,6 +2300,7 @@ int main() {
     testDisplayScale();
     testShell();
     testGpuGuard();
+    testKeptGroups();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

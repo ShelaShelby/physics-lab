@@ -2353,6 +2353,9 @@ void main() {
 // order of the groups (inside one band and group every square has the same colour, opacity and size, so their order does not change the blend). Three
 // steps: 0 each dot's key (band x groups + group, or none) counted; 1 the keys' starts; 2 each dot's square at its key's next place (the places after
 // the last square: none). uCounts: the counts, then the starts (used up as cursors), then the total.
+// 0.65.0: the side view with every electron too (uSide = 1; atom/cloud_dots.cpp sideDots + sideBlobs, or the Glow's glowBlobs: the reference): x across and
+// z up, no perspective, one band; the dots group by group; Classic squares (kind 5) or Glow's soft dots (kind 6), whose dots are also counted per 8 x 8-point
+// cell for the exposure (read back, then steps 1 and 2 with the dots' light in uWeight).
 static const char* const kClassicCS = R"(#version 430 core
 layout(local_size_x = 64) in;
 layout(std430, binding = 0) readonly buffer Pos { float pos[]; };
@@ -2360,6 +2363,7 @@ layout(std430, binding = 1) readonly buffer Grp { uint grp[]; };
 layout(std430, binding = 2) buffer Keys { uint keys[]; };
 layout(std430, binding = 3) buffer Counts { uint counts[]; };
 layout(std430, binding = 4) writeonly buffer Out { vec4 outb[]; };
+layout(std430, binding = 5) buffer Cells { uint cells[]; };   // 0.65.0: the side view's Glow: its dots counted per 8 x 8-point cell (the exposure's grid)
 uniform int uStep;
 uniform int uCnt;
 uniform int uNg;
@@ -2369,6 +2373,9 @@ uniform vec2 uView;                         // the picture (points)
 uniform float uWeight;                      // cloudDotWeight
 uniform vec4 uBand[3];                      // a band's opacity and size (cloud_dots.h kDepthBand)
 uniform vec4 uGroupA[24];                   // .x: a group colour's own opacity
+uniform int uSide;                          // 0.65.0: 1 = the side view (cloud_dots.cpp sideDots: x and z, no perspective, one band; uBand[0] its opacity and size)
+uniform float uKind;                        // the blob's kind: 5 a square (Classic), 6 a soft dot (Glow)
+uniform ivec2 uCells;                       // the side view's Glow: the grid's width and height in cells (0 0: no cells counted)
 
 void main() {
     int i = int(gl_GlobalInvocationID.x);
@@ -2381,6 +2388,21 @@ void main() {
         return;
     }
     if (i >= uCnt) return;
+    if (uStep == 0 && uSide == 1) {             // the side view: as sideDots, x across and z up, in view while X - 1 and Y - 1 are within (-2, w) and (-2, h)
+        float sx = uCam0.x + pos[3 * i] * uCam0.z - 1.0, sy = uCam0.y - pos[3 * i + 2] * uCam0.z - 1.0;
+        uint sg = (grp[i >> 2] >> (8u * uint(i & 3))) & 255u;
+        uint skey = 0xFFFFFFFFu;
+        if (sx > -2.0 && sx < uView.x && sy > -2.0 && sy < uView.y && int(sg) < uNg) {
+            skey = sg;
+            atomicAdd(counts[skey], 1u);
+            if (uCells.x > 0) {                     // (glowBlobs: the cell of int(x / 8), int(y / 8), clamped into the grid)
+                int cx = clamp(int((sx + 1.0) / 8.0), 0, uCells.x - 1), cy = clamp(int((sy + 1.0) / 8.0), 0, uCells.y - 1);
+                atomicAdd(cells[cy * uCells.x + cx], 1u);
+            }
+        }
+        keys[3 * i] = skey; keys[3 * i + 1] = floatBitsToUint(sx + 1.0); keys[3 * i + 2] = floatBitsToUint(sy + 1.0);
+        return;
+    }
     if (uStep == 0) {
         float x = pos[3 * i], y = pos[3 * i + 1], z = pos[3 * i + 2];
         float x1 = x * uCam1.x - y * uCam1.y, y1 = x * uCam1.y + y * uCam1.x;
@@ -2404,7 +2426,7 @@ void main() {
     uint p = atomicAdd(counts[nk + int(key)], 1u);
     int band = int(key) / uNg, g = int(key) - band * uNg;
     float a = clamp(uBand[band].x * uWeight, 0.0, 1.0) * uGroupA[g].x;
-    outb[5 * p] = vec4(uintBitsToFloat(keys[3 * i + 1]), uintBitsToFloat(keys[3 * i + 2]), 0.5 * uBand[band].y, 5.0);
+    outb[5 * p] = vec4(uintBitsToFloat(keys[3 * i + 1]), uintBitsToFloat(keys[3 * i + 2]), 0.5 * uBand[band].y, uKind);
     outb[5 * p + 1] = vec4(float(g), 0.0, 0.0, 0.0);
     outb[5 * p + 2] = vec4(0.0, 0.0, 0.0, a);
     outb[5 * p + 3] = vec4(0.0);
