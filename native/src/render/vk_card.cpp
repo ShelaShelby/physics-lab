@@ -1425,7 +1425,7 @@ public:
     bool finish(const ClassicDraw& d, float light) { return built() && c_.ok() && runFrom(d, frame_, kToVertexBit, 1, light); }
     VkBuffer squares() const { return frame_.out.b; }
     int beginCheck(const ClassicDraw& d) override {
-        if (!built() || !c_.ok() || d.cnt <= 0 || d.cnt > d.cap || !d.pts || !d.grp || jobs_.size() >= 4) return 0;
+        if (!built() || !c_.ok() || d.cnt <= 0 || d.cnt > d.cap || !d.pts || !d.grp || jobs_.size() >= 8) return 0;
         Job j;
         j.id = nextId_++; j.cnt = d.cnt; j.ng = d.ng;
         j.cells = d.soft ? (static_cast<int>(d.w / 8) + 2) * (static_cast<int>(d.h / 8) + 2) : 0;
@@ -1479,17 +1479,18 @@ private:
         return ok;
     }
     void uniforms(const ClassicDraw& d, float weight, int cellsW, int cellsH) {
-        const int ng = std::max(1, std::min(24, d.ng)), cnt = static_cast<int>(d.cnt), side = d.side ? 1 : 0;
+        const int ng = std::max(1, std::min(24, d.ng)), cnt = static_cast<int>(d.cnt), side = d.slice ? 2 : d.side ? 1 : 0;
         VkUniforms& u = k_.u;
         const float cam0[4] = {d.cx, d.cy, d.pxm, d.ext}, cam1[4] = {d.ca, d.sa, d.cb, d.sb}, view[2] = {d.w, d.h};
         float band[12] = {0.15f, 1.6f, 0, 0, 0.3f, 2.0f, 0, 0, 0.55f, 2.4f, 0, 0};   // (atom/cloud_dots.h kDepthBand, as floats)
-        if (d.side) { band[0] = 1.f; band[1] = 2.f * d.half; }                   // (the side view: one band, opacity 1, the dot's half size or radius)
+        if (d.side || d.slice) { band[0] = 1.f; band[1] = 2.f * d.half; }        // (the side view, the Slice: one band, opacity 1, the dot's half size or radius)
+        const float slice[4] = {d.sliceOff, d.sliceTh, d.slice == 2 ? 1.f : 0.f, d.soft ? 0.f : 0.25f};
         float ga[96] = {};
         for (int i = 0; i < 24; i++) ga[4 * i] = d.groupA[i];
         const float kind = d.soft ? 6.f : 5.f;
         const int cells[2] = {cellsW, cellsH};
         u.i("uCnt", &cnt, 1); u.i("uNg", &ng, 1); u.f("uCam0", cam0, 4); u.f("uCam1", cam1, 4); u.f("uView", view, 2); u.f("uWeight", &weight, 1);
-        u.f("uBand", band, 4, 3); u.f("uGroupA", ga, 4, 24); u.i("uSide", &side, 1); u.f("uKind", &kind, 1); u.i("uCells", cells, 2);
+        u.f("uBand", band, 4, 3); u.f("uGroupA", ga, 4, 24); u.i("uSide", &side, 1); u.f("uKind", &kind, 1); u.i("uCells", cells, 2); u.f("uSlice", slice, 4);
     }
     // steps `from` .. 2 (0: the keys and cells, 1: the starts, 2: the squares); `to` steps run (3: all)
     bool steps(const ClassicDraw& d, Bufs& b, unsigned consumer, int from, int to, float weight) {
@@ -1498,6 +1499,7 @@ private:
         uniforms(d, weight, gw, gh);
         VkUniforms& u = k_.u;
         for (int step = from; step < to; step++) {
+            if (d.slice && (step == 1 || (step == 0 && !d.soft))) continue;   // (the Slice: step 0 only for the Glow's cells, then step 2 alone)
             u.i("uStep", &step, 1);
             if (!c_.dispatch(k_, {&b.pos, &b.grp, &b.keys, &b.counts, &b.out, &b.cells}, step == 1 ? 1u : static_cast<std::uint32_t>((cnt + 63) / 64))) return false;
             const bool last = step == 2, cellsOut = step == 0 && d.soft && to == 1;

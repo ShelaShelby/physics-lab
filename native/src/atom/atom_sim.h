@@ -451,6 +451,11 @@ private:
     SliceJob sliceJob_;
     double sliceRate_ = 0.1;                              // the share of attempts kept in the last batch (sizes the next one)
     long sliceCardDots_ = 0;
+    // 0.65.0: worked out once per batch of dots (addDots), not per dot: the ring's size and the length unit (each searched the every-electron tables:
+    // manyOn); batchNow_ while a batch is being recorded
+    bool batchNow_ = false;
+    long capNow_ = 0;
+    double unitNow_ = 0;
     long addDotsCard(const PlaneSampler& ps, long want);   // the Slice's dots from the card (see addDots)
     long addDotsCardSuper(const PlaneSampler& pa, const PlaneSampler& pb, double wA, long want);   // 0.64.0: the same for a superposition (orthogonal pair)
     hf::Plane manyPlane_;                                 // 0.39.1, Slice with many electrons: every subshell's mass on the cut plane, worked out once per batch

@@ -737,7 +737,7 @@ void AtomLab::manyColour(const hf::Atom& a, int sub, int shell, double& x, doubl
 }
 
 void AtomLab::recordDot(double x, double y, double z) {
-    const long i = s.k % std::min<long>(cloudCap(), long(s.sg.size()));   // (the arrays are sized by restart(); never write outside them)
+    const long i = s.k % (batchNow_ ? capNow_ : std::min<long>(cloudCap(), long(s.sg.size())));   // (the arrays are sized by restart(); never write outside them)
     if (manyNow_) {
         double xx = x, yy = y, zz = z;
         manyColour(*manyNow_, manySubNow_, manyShell_, xx, yy, zz, s.sg[i], s.ph[i]);
@@ -762,7 +762,7 @@ void AtomLab::recordDot(double x, double y, double z) {
             s.ph[i] = pv >= 0 ? 0.f : float(kPi);              // the same as a phase: 0 or pi
         }
     }
-    const double u = aUnit();
+    const double u = batchNow_ ? unitNow_ : aUnit();
     s.pts[3 * i] = float(x * u); s.pts[3 * i + 1] = float(y * u); s.pts[3 * i + 2] = float(z * u);
     s.k++;
 }
@@ -774,6 +774,8 @@ void AtomLab::syncSlicePlane() {
 long AtomLab::addDots(long want) {
     if (want <= 0 || s.sg.empty()) return 0;
     manyNow_ = manyOn() ? manyAtom() : nullptr;                  // 0.39.1: once per batch (each call searched the tables and compared orbital names: about 0.2 s per 48,000 dots)
+    struct Batch { bool& on; ~Batch() { on = false; } } batch{batchNow_};   // 0.65.0: the ring's size and the length unit once per batch (recordDot)
+    capNow_ = std::min<long>(cloudCap(), long(s.sg.size())); unitNow_ = aUnit(); batchNow_ = true;
     manySubNow_ = manyNow_ ? manySub() : -1;
     valSubNow_ = manyNow_ ? valenceSub(*this, *manyNow_) : -1;   // 0.47 (the outer electron's subshell, for its shape)
     gNow_ = manyNow_ && (valenceOn() || levelOn()) ? graspOfAtom(manyNow_) : nullptr;   // 0.47.2 (the aligned state's shape; 0.47.3: and a level atom's)

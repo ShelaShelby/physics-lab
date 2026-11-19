@@ -37,8 +37,17 @@ render::ClassicDraw sideDraw(const float* pts, long cnt, long cap, std::uint64_t
     return d;
 }
 
-void sideGlowGrid(const std::vector<float>& counts, std::vector<float>& grid) {
-    const float wt = 1.f, r = 4.4f;
+render::ClassicDraw sliceDraw(const float* pts, long cnt, long cap, std::uint64_t epoch, long k, const unsigned char* grp, double cx, double cy, double pxm, double w, double h,
+                              const DotColours& dc, double weight, bool glow, bool hz, double off, double th) {
+    render::ClassicDraw d = classicDraw(pts, cnt, cap, epoch, k, grp, CloudCamera{cx, cy, pxm, 1, 0, 1, 0, 1}, w, h, dc, weight);
+    d.slice = hz ? 2 : 1; d.soft = glow; d.half = glow ? 4.2f : 1.25f; d.sliceOff = float(off); d.sliceTh = float(th);
+    return d;
+}
+
+void sideGlowGrid(const std::vector<float>& counts, std::vector<float>& grid) { glowGridOfCounts(counts, 4.4f, grid); }
+
+void glowGridOfCounts(const std::vector<float>& counts, float r, std::vector<float>& grid) {
+    const float wt = 1.f;
     const float v = wt * r * r * 0.785f;                                   // (glowBlobs: g += d.wt * d.r * d.r * 0.785f, in float)
     grid.assign(counts.size(), 0.f);
     for (std::size_t c = 0; c < counts.size(); c++) {
@@ -74,14 +83,80 @@ ClassicCase classicSideCase(bool glow) {
     return c;
 }
 
+ClassicCase classicSliceCase(bool glow, bool hz) {
+    ClassicCase c = classicCheckCase();
+    c.slice = hz ? 2 : 1; c.soft = glow;
+    c.cam = CloudCamera{150, 170, 160, 1, 0, 1, 0, 1};
+    c.off = 0.2; c.th = 0.9;                                                // (the slab 0.2 +- 0.9 of the cloud's radius 1.1: some dots beyond it)
+    if (glow) c.weight = 0.37; else c.weight = 0.6 * 1.3;
+    return c;
+}
+
 render::ClassicDraw classicCaseDraw(const ClassicCase& c) {
     const long n = long(c.grp.size());
+    if (c.slice) return sliceDraw(c.pts.data(), n, n, 1, n, c.grp.data(), c.cam.cx, c.cam.cy, c.cam.pxm, c.w, c.h, c.dc, c.weight, c.soft, c.slice == 2, c.off, c.th);
     if (c.side) return sideDraw(c.pts.data(), n, n, 1, n, c.grp.data(), c.cam.cx, c.cam.cy, c.cam.pxm, c.w, c.h, c.dc, c.weight, c.soft);
     return classicDraw(c.pts.data(), n, n, 1, n, c.grp.data(), c.cam, c.w, c.h, c.dc, c.weight);
 }
 
+// 0.65.0: the Slice: every dot's own place in the card's list (dot order), against atom_view.cpp's Slice loop in double: shown or not (a dot within the
+// float rounding of the slab's edge or within 2e-3 points of the picture's edge may differ: counted apart), its place within 2e-3 points, size, kind,
+// group and opacity; the Glow's cells as the side view's
+static ClassicCompare compareSlice(const ClassicCase& cs, const std::vector<float>& sq, const std::vector<std::uint32_t>& cells) {
+    ClassicCompare r;
+    const long cnt = long(cs.grp.size());
+    if (long(sq.size()) < 20 * cnt) return r;
+    const int ng = std::min(cs.dc.n, 24);
+    const bool hz = cs.slice == 2;
+    const int gw = int(cs.w / 8) + 2, gh = int(cs.h / 8) + 2;
+    std::vector<long> want(std::size_t(gw * gh), 0), slack(want.size(), 0);
+    const float half = cs.soft ? 4.2f : 1.25f, kind = cs.soft ? 6.f : 5.f;
+    for (long i = 0; i < cnt; i++) {
+        r.dots++;
+        const double x = cs.pts[std::size_t(3 * i)], u = cs.pts[std::size_t(3 * i + (hz ? 1 : 2))], dd = cs.pts[std::size_t(3 * i + (hz ? 2 : 1))];
+        const double dist = std::fabs(dd - cs.off), X = cs.cam.cx + x * cs.cam.pxm, Y = cs.cam.cy - u * cs.cam.pxm;
+        const int g = cs.grp[std::size_t(i)];
+        const bool cpuShown = !(dist > cs.th) && g != 255 && g < ng && !(X < -2 || X > cs.w || Y < -2 || Y > cs.h);
+        const float* b = &sq[std::size_t(20 * i)];
+        const bool cardShown = b[2] > 0;
+        const bool edge = std::fabs(dist - cs.th) <= 1e-6 * (std::fabs(dd) + std::fabs(cs.off) + cs.th) || std::fabs(X + 2) < 2e-3 || std::fabs(X - cs.w) < 2e-3 ||
+                          std::fabs(Y + 2) < 2e-3 || std::fabs(Y - cs.h) < 2e-3;
+        if (cpuShown != cardShown) { if (edge) r.bandFlip++; else r.bandBad++; continue; }
+        if (!cpuShown) { if (b[2] != 0.f || b[11] != 0.f) r.squareBad++; continue; }
+        r.shown++;
+        const double ex = cs.soft ? double(float(X)) : X - 1 + 1.25, ey = cs.soft ? double(float(Y)) : Y - 1 + 1.25;
+        const double e = std::max(std::fabs(double(b[0]) - ex), std::fabs(double(b[1]) - ey));
+        r.worstPlace = std::max(r.worstPlace, e);
+        if (!(e <= 2e-3)) r.placeBad++;
+        if (b[4] != float(g)) r.groupBad++;
+        const float alpha = float(std::max(0.0, std::min(1.0, cs.weight)) * cs.dc.c[g].a);
+        if (b[2] != half || b[3] != kind || !(std::fabs(b[11] - alpha) <= alpha * 2.4e-7f)) r.squareBad++;
+        if (cs.soft) {
+            const float fx = float(X), fy = float(Y);
+            const int cx = std::max(0, std::min(gw - 1, int(fx / 8))), cy = std::max(0, std::min(gh - 1, int(fy / 8)));
+            want[std::size_t(cy * gw + cx)]++;
+            const double qx = fx / 8.0 - std::floor(fx / 8.0), qy = fy / 8.0 - std::floor(fy / 8.0);
+            if (qx < 2.5e-4 || qx > 1 - 2.5e-4 || qy < 2.5e-4 || qy > 1 - 2.5e-4)
+                for (int ax = -1; ax <= 1; ax++) for (int ay = -1; ay <= 1; ay++) {
+                    const int px = cx + ax, py = cy + ay;
+                    if (px >= 0 && px < gw && py >= 0 && py < gh) slack[std::size_t(py * gw + px)]++;
+                }
+        }
+    }
+    if (cs.soft) {
+        r.cells = long(want.size());
+        if (cells.size() != want.size()) r.cellBad = r.cells;
+        else for (std::size_t c = 0; c < want.size(); c++) {
+            const long d = std::labs(long(cells[c]) - want[c]);
+            if (d > slack[c]) r.cellBad++; else if (d > 0) r.cellEdge++;
+        }
+    }
+    return r;
+}
+
 ClassicCompare compareClassic(const ClassicCase& cs, const std::vector<std::uint32_t>& keys, const std::vector<float>& sq, long total, const std::vector<std::uint32_t>& cells) {
     ClassicCompare r;
+    if (cs.slice) return compareSlice(cs, sq, cells);
     const long cnt = long(cs.grp.size());
     if (long(keys.size()) < 3 * cnt || long(sq.size()) < 20 * cnt) return r;
     std::vector<float> PX, PY, PD;
@@ -172,14 +247,17 @@ std::string classicCompareText(const ClassicCompare& c) {
 
 namespace {
 double nowS() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
-struct Path { int state = 0, step = 0, frames = 0, gen = -1, usedFrames = 0, job[3] = {0, 0, 0}; double stepAt = 0; bool firstUse = false, firstDone = false; std::string why, check; };
+struct Path { int state = 0, step = 0, frames = 0, gen = -1, usedFrames = 0, job[5] = {0, 0, 0, 0, 0}; double stepAt = 0; bool firstUse = false, firstDone = false; std::string why, check; };
 Path g_p;
 const char* kPipe = "the Classic dots' pipeline";
 const char* kCheck = "the Classic dots' check";
 const char* kFirst = "the Classic dots' first full use";
-// the check's three cases (0.65.0: the side view's Classic squares and Glow dots with their cells too)
+// the check's cases (0.65.0: the side view's Classic squares and Glow dots with their cells, the Slice's Classic squares (a vertical cut) and Glow dots (a
+// horizontal one) too)
+constexpr int kCases = 5;
+const char* const kCaseName[kCases] = {"Cloud 3D", "the side view, Classic", "the side view, Glow", "the Slice, Classic", "the Slice, Glow"};
 const ClassicCase& checkCase(int k) {
-    static const ClassicCase c[3] = {classicCheckCase(), classicSideCase(false), classicSideCase(true)};
+    static const ClassicCase c[kCases] = {classicCheckCase(), classicSideCase(false), classicSideCase(true), classicSliceCase(false, false), classicSliceCase(true, true)};
     return c[k];
 }
 
@@ -207,17 +285,18 @@ void advance(render::Renderer2D& R) {
     }
     if (g_p.step == 1) {
         G.begin(kCheck);
-        for (int k = 0; k < 3; k++) g_p.job[k] = C->beginCheck(classicCaseDraw(checkCase(k)));
-        if (!g_p.job[0] || !g_p.job[1] || !g_p.job[2]) { G.end(kCheck, "could not be started"); G.finished(false, "the Classic dots' check could not be started"); off("the Classic dots' check could not be started"); return; }
+        bool started = true;
+        for (int k = 0; k < kCases; k++) started = (g_p.job[k] = C->beginCheck(classicCaseDraw(checkCase(k)))) != 0 && started;
+        if (!started) { G.end(kCheck, "could not be started"); G.finished(false, "the Classic dots' check could not be started"); off("the Classic dots' check could not be started"); return; }
         g_p.stepAt = nowS(); g_p.step = 2;
         return;
     }
-    // (the three jobs come back in order: the first still pending means all are)
-    static ClassicCompare done[3];
+    // (the jobs come back in order: the first still pending means all are)
+    static ClassicCompare done[kCases];
     static int doneN = 0;
     static bool batchOk = true;
     if (doneN == 0) batchOk = true;
-    while (doneN < 3) {
+    while (doneN < kCases) {
         std::vector<std::uint32_t> keys;
         std::vector<float> sq;
         long total = 0;
@@ -228,11 +307,12 @@ void advance(render::Renderer2D& R) {
         doneN++;
     }
     doneN = 0;
-    bool ok = batchOk && done[0].ok() && done[1].ok() && done[2].ok();
+    bool ok = batchOk;
+    for (int k = 0; k < kCases; k++) ok = ok && done[k].ok();
     static const bool forced = std::getenv("PL_CLASSIC_CARDFAIL") != nullptr;   // (tests: as if the check had failed)
     if (forced) ok = false;
-    const std::string text = batchOk ? "Cloud 3D " + classicCompareText(done[0]) + " | the side view, Classic " + classicCompareText(done[1]) + " | the side view, Glow " + classicCompareText(done[2])
-                                     : std::string("the batch failed on the card");
+    std::string text = batchOk ? std::string() : std::string("the batch failed on the card");
+    for (int k = 0; k < kCases && batchOk; k++) text += std::string(k ? " | " : "") + kCaseName[k] + " " + classicCompareText(done[k]);
     char t[80];
     std::snprintf(t, sizeof t, "%s after %.0f ms: ", ok ? "passed" : "FAILED", 1000 * (nowS() - g_p.stepAt));
     G.end(kCheck, t + text);

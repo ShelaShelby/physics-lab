@@ -346,16 +346,48 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const double olUnit = lab.aUnit() / p.Z * pxm;                             // points per Bohr radius at Z = 1 in the outline's own units
         if (sl) {                                                          // slice: the dots made ON the cut plane (0.37; before, a slab 14 % of the view thick, which filled in nodes), seen face-on
             const double size = lab.cloudExtM(), off = lab.cutOffsetM(), th = 2 * size;   // (0.39.1: the many-electron atom's size; kExt / Z would hide its dots of the last planes during a drag)   // th: every dot made on a cut plane is drawn (during a drag some are from the last few planes, replaced within frames); a jump's dot with no place on the plane is put 10^4 a0 away and hidden
-            for (long i = 0; i < cnt; i++) {
-                const double dist = std::fabs((hz ? PTS[3 * i + 2] : PTS[3 * i + 1]) - off);
-                if (dist > th || grp[std::size_t(i)] == 255) continue;
-                const double X = cx + PTS[3 * i] * pxm, Y = cy - (hz ? PTS[3 * i + 1] : PTS[3 * i + 2]) * pxm;
-                if (X < -2 || X > w || Y < -2 || Y > h) continue;
-                if (glow) G.push_back({float(X), float(Y), 4.2f, 1.f, grp[std::size_t(i)]});
-                else B.push_back(squareDot(dc, X - 1 + 1.25, Y - 1 + 1.25, 1.25, grp[std::size_t(i)], 0.6 * cloudDotWeight(cap)));
+            const auto sliceDotsCpu = [&] {
+                for (long i = 0; i < cnt; i++) {
+                    const double dist = std::fabs((hz ? PTS[3 * i + 2] : PTS[3 * i + 1]) - off);
+                    if (dist > th || grp[std::size_t(i)] == 255) continue;
+                    const double X = cx + PTS[3 * i] * pxm, Y = cy - (hz ? PTS[3 * i + 1] : PTS[3 * i + 2]) * pxm;
+                    if (X < -2 || X > w || Y < -2 || Y > h) continue;
+                    if (glow) G.push_back({float(X), float(Y), 4.2f, 1.f, grp[std::size_t(i)]});
+                    else B.push_back(squareDot(dc, X - 1 + 1.25, Y - 1 + 1.25, 1.25, grp[std::size_t(i)], 0.6 * cloudDotWeight(cap)));
+                }
+            };
+            // 0.65.0: on the card (Vulkan; kClassicCS's Slice, atom/classic_check.h) once the Classic dots' start-up check passed (it checks the Slice's
+            // Classic squares and Glow dots too): every dot written at its own index, in the processor's dot order; the loop above is the reference and the fallback
+            const bool sliceCard = !jump && dc.gpu && lab.gpuCloud;
+            if (glow) {
+                DotColours dcl = dc;
+                if (css.light && !wheel) darkenForLightPage(dcl);         // (as glowBlobs does with darken = !wheel)
+                bool onCard = false;
+                R.beginCloudLayer();
+                if (sliceCard) {
+                    render::ClassicDraw sd = withGroupsEpoch(sliceDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), cx, cy, pxm, w, h, dcl, 1.0, true, hz, off, th), grpEpoch);
+                    sd.additive = !css.light;
+                    double* ex = &cloudExpo_;
+                    const long capL = cap;
+                    const bool lightPage = css.light;
+                    sd.exposure = [ex, capL, lightPage](const std::vector<float>& counts) {
+                        static std::vector<float> grid;
+                        glowGridOfCounts(counts, 4.2f, grid);
+                        if (!glowExposure(grid, capL, lightPage, 3.0, *ex)) return -1.0;
+                        return cloudDotLight(capL, *ex, 3.0, 1.0);
+                    };
+                    onCard = drawClassicOnCard(R, sd);
+                }
+                if (!onCard) {
+                    sliceDotsCpu();
+                    DotColours dcb = dc;
+                    if (glowBlobs(G, cap, css.light, dcb, !wheel, 3.0, w, h, cloudExpo_, B)) R.blobsPaletteTake(B, !css.light, dcb.palette());   // (drawGlow's, in the layer opened above)
+                }
+                R.endCloudLayer(!css.light);
+            } else if (!(sliceCard && drawClassicOnCard(R, withGroupsEpoch(sliceDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), cx, cy, pxm, w, h, dc, 0.6 * cloudDotWeight(cap), false, hz, off, th), grpEpoch)))) {
+                sliceDotsCpu();
+                R.blobsPaletteTake(B, false, dc.palette());
             }
-            if (glow) drawGlow(R, G, cap, css.light, dc, !wheel, 3.0, w, h, cloudExpo_);
-            else R.blobsPaletteTake(B, false, dc.palette());
             B.clear();
             if (outlineOn) {                                               // the contour |psi|^2 = c in the cut plane (cached until the orbital or the cut changes)
                 const Outline* O = outlineReady(fo, lab.gpuOutline);       // 0.13 stage 3: nullptr while the GPU is still making the outline (the first time): nothing is drawn yet, and the frame does not wait

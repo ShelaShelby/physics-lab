@@ -29,6 +29,10 @@ struct ClassicDraw {
     // counts (as floats, every cell) and returns the dots' light (cloud_light.h cloudDotLight; negative: draw nothing), used as `weight`; additive: dark pages.
     bool side = false, soft = false, additive = false;
     float half = 1;
+    // 0.65.0: the Slice (atom_view.cpp's Slice loop: the reference): 1 a vertical cut (x across, z up; the slab in y), 2 a horizontal one (x, y; the slab in z):
+    // each dot at its own index, in dot order; shown within sliceTh (m) of the cut at sliceOff (m); a square (half 1.25, moved 0.25 points) or a soft dot (4.2)
+    int slice = 0;
+    float sliceOff = 0, sliceTh = 0;
     std::function<double(const std::vector<float>&)> exposure;
 };
 

@@ -549,9 +549,10 @@ static void vkClassic(render::ClassicCard& vk) {
     std::string why;
     check("Vulkan Classic dots: the program is made (" + why + ")", vk.build(why));
     // 0.65.0: and the side view with every electron: its Classic squares, and the Glow's soft dots with their cells (the exposure's grid)
-    const char* names[3] = {"Cloud 3D", "the side view, Classic", "the side view, Glow"};
-    for (int k = 0; k < 3; k++) {
-        const atom::ClassicCase c = k == 0 ? atom::classicCheckCase() : atom::classicSideCase(k == 2);
+    // and the Slice's dots (Classic, a vertical cut; Glow, a horizontal one)
+    const char* names[5] = {"Cloud 3D", "the side view, Classic", "the side view, Glow", "the Slice, Classic", "the Slice, Glow"};
+    for (int k = 0; k < 5; k++) {
+        const atom::ClassicCase c = k == 0 ? atom::classicCheckCase() : k < 3 ? atom::classicSideCase(k == 2) : atom::classicSliceCase(k == 4, k == 4);
         const int j = vk.beginCheck(atom::classicCaseDraw(c));
         std::vector<std::uint32_t> keys;
         std::vector<float> sq;
@@ -560,7 +561,7 @@ static void vkClassic(render::ClassicCard& vk) {
         const atom::ClassicCompare cmp = atom::compareClassic(c, keys, sq, total, vk.checkCells());
         std::printf("Vulkan Classic dots, %s: %s\n", names[k], atom::classicCompareText(cmp).c_str());
         check(std::string("Vulkan Classic dots, ") + names[k] + ": every dot's group, band and place, the squares in the processor's order (and the cells), within the start-up check's limits",
-              done && cmp.ok() && (k != 2 || cmp.cells > 0));
+              done && cmp.ok() && (k != 2 && k != 4 ? true : cmp.cells > 0));
     }
 }
 

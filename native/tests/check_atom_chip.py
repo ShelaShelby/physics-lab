@@ -34,7 +34,8 @@ def classic_part(binary, work):
     # 0.64.0: the Classic Cloud 3D dots from the card (Vulkan): the start-up check passes here (every dot's group, band and place, the squares in the
     # processor's order), the benchmark's Path names the card; made to fail on purpose (PL_CLASSIC_CARDFAIL), the processor's squares are kept and the
     # Path says why. The two pictures (card, processor) of the same moment differ in under 1 % of the pixels by more than 8 levels.
-    # 0.65.0: the side view with every electron (Classic and Glow) from the same program: its Path names the card, the same picture rule.
+    # 0.65.0: the side view with every electron (Classic and Glow) and the Slice's dots (every electron, Classic; one state, Glow) from the same program:
+    # their Paths name the card, the same picture rule.
     os.makedirs(work, exist_ok=True)
     fails = checks = 0
     def check(ok, what):
@@ -43,7 +44,7 @@ def classic_part(binary, work):
         if not ok:
             fails += 1
             print("FAIL", what)
-    B = {"PL_GRAPHICS": "vulkan", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.all_classic,atom.side_all_classic,atom.side_all_glow",
+    B = {"PL_GRAPHICS": "vulkan", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.all_classic,atom.side_all_classic,atom.side_all_glow,atom.slice_all_drag,atom.slice_glow_ultra",
          "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
     runs = {}
     for tag, extra in (("card", {}), ("cpu", {"PL_CLASSIC_CARDFAIL": "1"})):
@@ -61,9 +62,11 @@ def classic_part(binary, work):
     check(any("the Classic dots: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)), f"classic: the benchmark's Path names the card ({paths(out)})")
     check(sum("the side view's dots: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)) == 2 and "| the side view, Glow " in case[0] and "0 beyond their limit" in case[0],
           f"classic: the side view's Path names the card in both scenes, and its check passed ({paths(out)})")
+    check(sum("drawn: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)) == 2 and "| the Slice, Glow " in case[0],
+          f"classic: the Slice's Path names the card in both scenes ({paths(out)})")
     out2 = runs["cpu"].out
     check("PLCLASSICCARD state=-1" in out2 and any("the Classic dots: the processor, because the check was made to fail" in p for p in paths(out2)), f"classic: a failed check keeps the processor's squares and says why ({paths(out2)})")
-    for scene in ("atom.all_classic", "atom.side_all_classic", "atom.side_all_glow"):
+    for scene in ("atom.all_classic", "atom.side_all_classic", "atom.side_all_glow", "atom.slice_all_drag", "atom.slice_glow_ultra"):
         try:
             a, b = Bmp(os.path.join(work, "classic_card", scene + ".bmp")), Bmp(os.path.join(work, "classic_cpu", scene + ".bmp"))
             n = over = 0

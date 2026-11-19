@@ -247,6 +247,7 @@ Plane planeOf(const Atom& a, double off) {
         const double start = e > 0 ? interpCdf(p.gx, p.pc, p.pd, std::fabs(off)) : 1;
         pl.mass.push_back(e > 0 ? e * 0.5 * (1 - start) * p.ptotal / p.total : 0);
         pl.start.push_back(std::min(1.0, std::max(0.0, start)));
+        pl.tables.push_back(&p);
         pl.total += pl.mass.back();
     }
     return pl;
@@ -269,7 +270,10 @@ bool samplePlane(const Atom& a, const Plane& pl, int one, orbit::Mulberry32& rng
         if (i < 0) return false;
     } else if (!(pl.mass[std::size_t(i)] > 0)) return false;
     shellOut = i;
-    radius = std::max(std::fabs(pl.off), samplePlaneRadius(a.sub[std::size_t(i)], pl.start[std::size_t(i)], rng));
+    // (0.65.0: the subshell's tables found by planeOf, not looked up for every dot; the same numbers as samplePlaneRadius)
+    const Prep& p = std::size_t(i) < pl.tables.size() && pl.tables[std::size_t(i)] ? *static_cast<const Prep*>(pl.tables[std::size_t(i)]) : prep(a.sub[std::size_t(i)]);
+    const double start = pl.start[std::size_t(i)];
+    radius = std::max(std::fabs(pl.off), invertTable(p.gx, p.pc, p.pd, start + rng.next() * (1 - start)));
     return true;
 }
 

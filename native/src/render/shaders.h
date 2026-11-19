@@ -2356,6 +2356,9 @@ void main() {
 // 0.65.0: the side view with every electron too (uSide = 1; atom/cloud_dots.cpp sideDots + sideBlobs, or the Glow's glowBlobs: the reference): x across and
 // z up, no perspective, one band; the dots group by group; Classic squares (kind 5) or Glow's soft dots (kind 6), whose dots are also counted per 8 x 8-point
 // cell for the exposure (read back, then steps 1 and 2 with the dots' light in uWeight).
+// The Slice (uSide = 2; atom_view.cpp's Slice loop: the reference): each dot's square or soft dot written at its own index (the processor draws them in dot
+// order, unsorted), a dot not shown (off the plane's slab, its group 255, or off the picture) as an empty one (size and opacity 0); step 0 counts the
+// Glow's cells, step 2 writes the dots.
 static const char* const kClassicCS = R"(#version 430 core
 layout(local_size_x = 64) in;
 layout(std430, binding = 0) readonly buffer Pos { float pos[]; };
@@ -2376,6 +2379,7 @@ uniform vec4 uGroupA[24];                   // .x: a group colour's own opacity
 uniform int uSide;                          // 0.65.0: 1 = the side view (cloud_dots.cpp sideDots: x and z, no perspective, one band; uBand[0] its opacity and size)
 uniform float uKind;                        // the blob's kind: 5 a square (Classic), 6 a soft dot (Glow)
 uniform ivec2 uCells;                       // the side view's Glow: the grid's width and height in cells (0 0: no cells counted)
+uniform vec4 uSlice;                        // the Slice (uSide 2): the cut's offset and the slab's half thickness (m), 1 for a horizontal cut, the dot's offset (points)
 
 void main() {
     int i = int(gl_GlobalInvocationID.x);
@@ -2388,6 +2392,27 @@ void main() {
         return;
     }
     if (i >= uCnt) return;
+    if (uSide == 2) {                           // the Slice: as atom_view.cpp, x across and z (a horizontal cut: y) up
+        bool hz = uSlice.z > 0.5;
+        float px = pos[3 * i], pu = hz ? pos[3 * i + 1] : pos[3 * i + 2], pd = hz ? pos[3 * i + 2] : pos[3 * i + 1];
+        float X = uCam0.x + px * uCam0.z, Y = uCam0.y - pu * uCam0.z;
+        uint g = (grp[i >> 2] >> (8u * uint(i & 3))) & 255u;
+        bool shown = !(abs(pd - uSlice.x) > uSlice.y) && g != 255u && int(g) < uNg && !(X < -2.0 || X > uView.x || Y < -2.0 || Y > uView.y);
+        if (uStep == 0) {
+            if (shown && uCells.x > 0) {            // (glowBlobs: the cell of int(x / 8), int(y / 8), clamped into the grid)
+                int cx = clamp(int(X / 8.0), 0, uCells.x - 1), cy = clamp(int(Y / 8.0), 0, uCells.y - 1);
+                atomicAdd(cells[cy * uCells.x + cx], 1u);
+            }
+            return;
+        }
+        float a = shown ? clamp(uBand[0].x * uWeight, 0.0, 1.0) * uGroupA[int(min(g, 23u))].x : 0.0;
+        outb[5 * i] = vec4(X + uSlice.w, Y + uSlice.w, shown ? 0.5 * uBand[0].y : 0.0, uKind);
+        outb[5 * i + 1] = vec4(shown ? float(g) : 0.0, 0.0, 0.0, 0.0);
+        outb[5 * i + 2] = vec4(0.0, 0.0, 0.0, a);
+        outb[5 * i + 3] = vec4(0.0);
+        outb[5 * i + 4] = vec4(0.0);
+        return;
+    }
     if (uStep == 0 && uSide == 1) {             // the side view: as sideDots, x across and z up, in view while X - 1 and Y - 1 are within (-2, w) and (-2, h)
         float sx = uCam0.x + pos[3 * i] * uCam0.z - 1.0, sy = uCam0.y - pos[3 * i + 2] * uCam0.z - 1.0;
         uint sg = (grp[i >> 2] >> (8u * uint(i & 3))) & 255u;

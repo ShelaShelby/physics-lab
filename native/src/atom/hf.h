@@ -71,7 +71,8 @@ int subshellIndex(const Atom& a, int n, int l);            // -1 when the atom h
 // (with the angle average 1 / 4 pi of a filled subshell). planeTail is that integral; planeOf works out every subshell's mass on the plane once; samplePlaneRadius draws r from the
 // plane's own table; samplePlane picks a subshell by its mass on the plane (one < 0) or takes `one`.
 double planeTail(const Subshell& s, double off);
-struct Plane { double off = 0, total = 0; std::vector<double> mass, start; };   // mass: per subshell; start: the plane radius's distribution function at |off|
+struct Plane { double off = 0, total = 0; std::vector<double> mass, start;   // mass: per subshell; start: the plane radius's distribution function at |off|
+               std::vector<const void*> tables; };                         // 0.65.0: each subshell's radius tables (hf.cpp), found once per plane, not per dot
 Plane planeOf(const Atom& a, double off);
 double samplePlaneRadius(const Subshell& s, double start, orbit::Mulberry32& r);
 bool samplePlane(const Atom& a, const Plane& pl, int one, orbit::Mulberry32& r, double& radius, int& shellOut);   // false: the plane holds (to double precision) none of it
