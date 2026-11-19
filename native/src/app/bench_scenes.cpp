@@ -39,8 +39,21 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "outline's contour are made again every frame (the contour on the graphics card where it can (Vulkan, or OpenGL 4.3 on the backup): new pictures are the contours that came back).");
         add(true, "atom.slice_super_drag", BenchKind::Atom, atom::kBenchSliceSuper, "Atom Lab, the Slice of a superposition with the cut dragged",
             "mendelevium-258 (one electron), Slice view, the superposition 2p + 5f (50 %), Relativity (Dirac levels) On, phase colours Wheel, Classic, Ultra: the cut moves "
-            "0.01 every frame from -0.90 to +0.90 and back, as atom.slice_drag. The owner's slowest view. The Slice's card program takes one plain state only, so "
-            "a superposition's dots are the processor's work on both APIs.");
+            "0.01 every frame from -0.90 to +0.90 and back, as atom.slice_drag. The Slice's card program makes both states' attempts; the processor picks "
+            "the state from the same random number.");
+        // 0.64.0: the heavy views the benchmark missed (each tried at the zooms -0.5, 0, 0.5, 1.0 on the session's box; the slowest kept: REPORT 0.64.0)
+        add(true, "atom.slice_all_drag", BenchKind::Atom, atom::kBenchSliceAll, "Atom Lab, the Slice with every electron, the cut dragged",
+            "oganesson-294, every electron, Whole atom, Slice view, Classic, Ultra (240,000 dots), zoom -0.5: the cut moves 0.01 every frame as atom.slice_drag.");
+        add(true, "atom.slice_dirac_drag", BenchKind::Atom, atom::kBenchSliceDirac, "Atom Lab, the Slice of a Dirac state, the cut dragged",
+            "uranium-238 (one electron), 4f, Relativity Dirac, Slice view, Classic, Ultra (48,000 dots), zoom 0: the cut moves 0.01 every frame as atom.slice_drag.");
+        add(true, "atom.side_all_glow", BenchKind::Atom, atom::kBenchSideAll, "Atom Lab, the side view with every electron, Glow",
+            "oganesson-294, every electron, Whole atom, Shells enlarged, Cloud (the side view), Glow, Ultra (240,000 dots), zoom -0.5, zoomed in to 0 and back as a wheel does.");
+        add(true, "atom.side_all_classic", BenchKind::Atom, atom::kBenchSideAllClassic, "Atom Lab, the side view with every electron, Classic",
+            "oganesson-294, every electron, Whole atom, Shells enlarged, Cloud (the side view), Classic, Ultra (240,000 dots), zoom -0.5, zoomed in to 0 and back as a wheel does.");
+        add(true, "atom.slice_glow_ultra", BenchKind::Atom, atom::kBenchSliceGlowUltra, "Atom Lab, the Slice of one state at Ultra, Glow, the cut dragged",
+            "uranium-238, 4f, Slice view, Glow, Ultra (48,000 dots), zoom -0.5: the cut moves 0.01 every frame as atom.slice_drag.");
+        add(true, "atom.slice_classic_ultra", BenchKind::Atom, atom::kBenchSliceClassicUltra, "Atom Lab, the Slice of one state at Ultra, Classic, the cut dragged",
+            "uranium-238, 4f, Slice view, Classic, Ultra (48,000 dots), zoom -0.5: the cut moves 0.01 every frame as atom.slice_drag.");
         add(true, "atom.all_enlarged", BenchKind::Atom, atom::kBenchAllEnlarged, "Atom Lab, every electron, Shells enlarged, Glow, Ultra, the camera turning",
             "The heaviest atom with every electron (oganesson-294, 118 electrons; its decay clock held), Cloud 3D, Whole atom, Radius Shells enlarged, Glow, Cloud density "
             "Ultra (240,000 dots: 48,000 per electron, at most 240,000), zoom 0.5 (log10; the cloud fills the picture), the camera turning 0.8 rad a second.");
@@ -129,8 +142,9 @@ double benchPlannedS() {
     return kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS;
 }
 
-// the default run takes about four minutes (the owner's decision in 0.56.1's job): 24 scenes of 6.5 s, 33 waits of about 1.6 s, 6 labs left alone about 4 s
-static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 4.25 * 60,
+// the default run takes about four minutes (the owner's decision in 0.56.1's job): 24 scenes of 6.5 s, 33 waits of about 1.6 s, 6 labs left alone about 4 s.
+// 0.64.0: 32 scenes (the six heavy views the benchmark missed, CLAUDE.md: a heavy view goes to the Hard list), so about four and three-quarter minutes (REPORT 0.64.0)
+static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 4.85 * 60,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,
               "the default benchmark run is planned at about four minutes");

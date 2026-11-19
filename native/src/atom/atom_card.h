@@ -13,7 +13,9 @@
 namespace atom {
 
 // the card's batch for a prepared plane: `tries` attempts from the generator's state `seed`
-render::SliceDotsJob sliceJobOf(const PlaneSampler& ps, std::uint32_t seed, int tries);
+// 0.64.0: stride, first: attempt t takes the numbers stride t + first ... (one state: 3, 0; one state of a superposition: 4, 1, the number 4 t is the choice
+// of the state, made by the processor: AtomLab::addDotsCardSuper)
+render::SliceDotsJob sliceJobOf(const PlaneSampler& ps, std::uint32_t seed, int tries, int stride = 3, int first = 0);
 // the generator's state after `numbers` numbers from `seed` (orbit::Mulberry32 adds 0x6D2B79F5 per number)
 inline std::uint32_t mulberryAfter(std::uint32_t seed, std::uint64_t numbers) { return seed + std::uint32_t(numbers * 0x6D2B79F5ull); }
 
@@ -29,12 +31,13 @@ struct SliceCompare {
     double worstAbs = 0;                      // the largest |difference| of a kept point, Bohr radii
     bool ok() const { return tries > 0 && pointBad == 0 && flagDiff == flagExplained; }
 };
-SliceCompare compareSlice(const PlaneSampler& ps, std::uint32_t seed, const std::vector<float>& res, int tries);
+SliceCompare compareSlice(const PlaneSampler& ps, std::uint32_t seed, const std::vector<float>& res, int tries, int stride = 3, int first = 0);
 std::string sliceCompareText(const SliceCompare& c);   // one line for the log and the benchmark
 
 // The planes of the start-up check: 4f z3 on the benchmark's planes at uranium, a complex 3d state on a horizontal plane, 6s far out (Z, state id, axis,
 // offset in Bohr radii); each is run with the same seed by the card and by the processor
-struct SliceCheckCase { int Z, id, axis; double off; std::uint32_t seed; int tries; };
+// 0.64.0: and the two states of the benchmark's superposition (mendelevium 2p z + 5f z3) with a superposition's numbering (stride 4, first 1)
+struct SliceCheckCase { int Z, id, axis; double off; std::uint32_t seed; int tries; int stride = 3, first = 0; };
 std::vector<SliceCheckCase> sliceCheckCases();
 
 // The jump's check: a pattern of fixed groups (a few not shown) for jn dots and the shares (old, new); the processor's answer is AtomLab::jumpGroups's rule,

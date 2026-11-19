@@ -2127,6 +2127,38 @@ static void testJumpSameDots() {
     }
 }
 
+// 0.64.0: the Slice of a superposition with the planes' parts worked out once per batch (AtomLab::addDots): a step's new dots = the processor's attempts one by
+// one as 0.63.1 made them (a number for the state with odds of the planes' masses, then tryStateOnPlane of that state), with their amplitudes, bit for bit
+static void testSliceSuper064() {
+    using namespace atom;
+    AtomLab lab; lab.nowMs = [] { return 0.0; };
+    seedRandom(64);
+    lab.p = oneParams(); lab.restart();
+    lab.gpuSlice = false;
+    lab.setParam("Z", 101.0); lab.setParam("N", 157.0); lab.setParam("view", std::string("Slice")); lab.setParam("orb", std::string("2p"));
+    lab.setParam("orb2", std::string("5f")); lab.setParam("mix", 50.0); lab.setParam("super", std::string("On")); lab.setParam("cut", 0.3);
+    checkTrue("Slice superposition: the lab is in the benchmark's superposition (2p z + 5f z3, Md)", lab.superOn() && lab.p.view == "Slice");
+    lab.s.k = 0;
+    orbit::Mulberry32 r(lab.s.crng);
+    const int idA = orbIndex("2p|z"), idB = orbIndex("5f|z3"), Z = 101;
+    const double u = lab.aUnit(), nA = normFactor(idA, Z), nB = normFactor(idB, Z);
+    lab.step(1.0 / 240);
+    const int axis = lab.s.sliceAxis;
+    const double off = lab.s.sliceOff, mA = planeMass(idA, Z, axis, off), mB = planeMass(idB, Z, axis, off), wA = mA / (mA + mB);
+    long same = 0, n = 0, fromA = 0;
+    for (long i = 0; i < std::min<long>(lab.s.k, 1500); i++) {
+        CloudPoint q;
+        int id = idA;
+        for (;;) { id = r.next() < wA ? idA : idB; if (tryStateOnPlane(id, Z, axis, off, r, q)) break; }
+        fromA += id == idA;
+        const float a = float(nA * psi(idA, Z, q.x, q.y, q.z)), b = float(nB * psi(idB, Z, q.x, q.y, q.z));
+        same += lab.s.pts[3 * i] == float(q.x * u) && lab.s.pts[3 * i + 1] == float(q.y * u) && lab.s.pts[3 * i + 2] == float(q.z * u) && lab.s.sa[4 * i] == a && lab.s.sa[4 * i + 2] == b;
+        n++;
+    }
+    checkTrue("Slice superposition: a step's " + std::to_string(n) + " new dots (" + std::to_string(fromA) + " of 2p) = the attempts one by one, with their amplitudes, bit for bit",
+              n == 1500 && same == n && fromA > 0 && fromA < n && lab.s.crng == r.seed);
+}
+
 // The new parts of the jump's speed work, each against the old way of getting the same numbers.
 // 0.57.0, the plain waste taken out of the Slice's dots, the jump with every electron and the Glow core's dots: each new way against the old one, exactly.
 static void testPlainWaste057() {
@@ -4416,6 +4448,7 @@ int main() {
     testJumpSameDots();
     testJumpBuild();
     testPlainWaste057();
+    testSliceSuper064();
     testCardReference057();
     testOrbitAccuracy(2.192e-4, 4.754e-8, 1.469e-4);
     testFixedExtent();

@@ -370,6 +370,7 @@ public:
     int jumpGroup(int pop, long i) const;                 // 255 = not shown, else the colour group (phase bin, or 0 / 1 for the sign)
     double outlineAlpha() const;                          // how strongly the 90 % outline is drawn (it fades out as the cloud leaves its orbital, and back in after landing)
     // ---- quantum beats ----
+    bool overlapPair() const { return superOn() && overlap_; }   // 0.64.0: the superposition's two states overlap (one energy): its Slice stays the processor's
     bool superOn() const { return p.super == "On" && p.view != "Orbit" && !manyOn(); }
     // ---- 0.49.3 (outside review): the Dirac cloud of the one-electron atom (atom/dirac_cloud.h) ----
     bool diracCloudOn() const;                            // Hydrogen-like, a cloud view (not Orbit or the chart), no superposition, and the model is Dirac (Auto: from kRelativityZ)
@@ -424,6 +425,7 @@ private:
     // 0.37: the dots are exact, independent samples of the density (cloud_sample.h), not a Metropolis chain. One attempt at a dot of the state on screen (one orbital, or a superposition's
     // time-independent mixture (|A|^2 + |B|^2) / 2, or an overlapping pair's |a A + b B|^2): in the whole space, or (Slice) on the cut plane. False: rejected, try again.
     bool tryDot(orbit::Mulberry32& r, double& x, double& y, double& z);
+    bool overlapKeep(orbit::Mulberry32& r, double x, double y, double z) const;   // 0.64.0 (tryDot's overlapping pair, shared with addDots)
     bool tryStatePoint(int id, orbit::Mulberry32& r, double& x, double& y, double& z, int diracJ2 = 0) const;   // 0.49.3: diracJ2 > 0 draws that Dirac state of id's n and l   // one attempt at a point of one state (always succeeds off the Slice view)
     void recordDot(double x, double y, double z);         // write a dot into the ring: its place, sign, phase (and a superposition's amplitudes)
     long addDots(long want);                              // up to `want` new dots (fewer only if the attempts run out: a plane with almost no probability); returns how many
@@ -441,11 +443,14 @@ private:
     std::vector<int> valSetNow_;                          // 0.47.3: a level atom: the subshells of its outer electrons in manyNow_ (drawn denser, as the alkalis' outer electron)
     int idNow_ = -1;                                      // 0.57.0: stateId() for the batch addDots is making (one electron, no superposition, not Dirac), else -1
     // 0.57.0: the card's batch of Slice attempts in flight (at most one): what it was made for, so its dots are taken only for that cloud and state
-    struct SliceJob { int job = 0; std::uint32_t seed = 0; int tries = 0; long want = 0; int id = -1, Z = 0, axis = 0; double off = 0; std::uint64_t epoch = 0; };
+    struct SliceJob { int job = 0; std::uint32_t seed = 0; int tries = 0; long want = 0; int id = -1, Z = 0, axis = 0; double off = 0; std::uint64_t epoch = 0;
+                      int job2 = 0, idB = -1; double wA = 0; };   // 0.64.0: a superposition's batch: job (state A) and job2 (state B), wA the odds of A
+    void cancelSliceJob();                                // a batch in flight forgotten (both of a superposition's)
     SliceJob sliceJob_;
     double sliceRate_ = 0.1;                              // the share of attempts kept in the last batch (sizes the next one)
     long sliceCardDots_ = 0;
     long addDotsCard(const PlaneSampler& ps, long want);   // the Slice's dots from the card (see addDots)
+    long addDotsCardSuper(const PlaneSampler& pa, const PlaneSampler& pb, double wA, long want);   // 0.64.0: the same for a superposition (orthogonal pair)
     hf::Plane manyPlane_;                                 // 0.39.1, Slice with many electrons: every subshell's mass on the cut plane, worked out once per batch
     bool overlap_ = false;                                // Superposition: the two states overlap (<A|B> != 0: the same n, l and a non-orthogonal angular part). They then share one energy, the state is static, and the walker samples its renormalised density directly (every dot is shown)
     void buildJump(long upTo);                            // build the jump's dots up to upTo (old and new dots with the same index)

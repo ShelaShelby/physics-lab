@@ -308,11 +308,11 @@ static void vkSliceJump(render::AtomCard& vk, render::AtomCard* gl) {
     bool allOk = true;
     for (const atom::SliceCheckCase& k : atom::sliceCheckCases()) {
         const atom::PlaneSampler ps = atom::planeSampler(k.id, k.Z, k.axis, k.off);
-        const render::SliceDotsJob job = atom::sliceJobOf(ps, k.seed, k.tries);
+        const render::SliceDotsJob job = atom::sliceJobOf(ps, k.seed, k.tries, k.stride, k.first);
         std::vector<float> res, gres;
         const int j = vk.beginSlice(job);
         if (!(j > 0 && vkt::poll([&] { return vk.pollSlice(j, res); }) == render::JobState::Done)) { allOk = false; continue; }
-        const atom::SliceCompare c = atom::compareSlice(ps, k.seed, res, k.tries);
+        const atom::SliceCompare c = atom::compareSlice(ps, k.seed, res, k.tries, k.stride, k.first);
         std::printf("Vulkan Slice Z=%d id=%d axis=%d off=%.4f: %s\n", k.Z, k.id, k.axis, k.off, atom::sliceCompareText(c).c_str());
         allOk = allOk && c.ok();
         tries += k.tries;

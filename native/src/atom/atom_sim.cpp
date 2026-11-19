@@ -694,13 +694,14 @@ bool AtomLab::tryDot(orbit::Mulberry32& r, double& x, double& y, double& z) {
     }
     const int id = r.next() < wA ? sup_.idA : sup_.idB;
     if (!tryStatePoint(id, r, x, y, z)) return false;
-    if (overlap_) {
-        const auto amp = [&](int s_, double nf) { return nf * (isComplexState(s_) ? psiComplex(s_, p.Z, x, y, z) : std::complex<double>(psi(s_, p.Z, x, y, z), 0)); };
-        const std::complex<double> A = amp(sup_.idA, nA_), B = amp(sup_.idB, nB_);
-        const double qq = std::norm(A) + std::norm(B);
-        if (!(qq > 0) || r.next() * qq > std::norm(sup_.a * A + sup_.b * B)) return false;
-    }
-    return true;
+    return !overlap_ || overlapKeep(r, x, y, z);
+}
+// an overlapping pair's point of q kept with probability |a A + b B|^2 / (|A|^2 + |B|^2) (one more random number; see tryDot)
+bool AtomLab::overlapKeep(orbit::Mulberry32& r, double x, double y, double z) const {
+    const auto amp = [&](int s_, double nf) { return nf * (isComplexState(s_) ? psiComplex(s_, p.Z, x, y, z) : std::complex<double>(psi(s_, p.Z, x, y, z), 0)); };
+    const std::complex<double> A = amp(sup_.idA, nA_), B = amp(sup_.idB, nB_);
+    const double qq = std::norm(A) + std::norm(B);
+    return !(!(qq > 0) || r.next() * qq > std::norm(sup_.a * A + sup_.b * B));
 }
 
 // Quantum beats: the dots are samples of the time-INDEPENDENT mixture q = (|A|^2 + |B|^2) / 2 (A and B normalised). The density at beat phase theta is |a A + b B e^(-i theta)|^2, and
@@ -789,16 +790,38 @@ long AtomLab::addDots(long want) {
             idNow_ = -1;
             return got;
         }
-        if (sliceJob_.job && sliceCard) sliceCard->cancelSlice(sliceJob_.job);   // (the processor again: a batch in flight is forgotten; it used no numbers)
-        sliceJob_ = SliceJob{};
+        cancelSliceJob();                                        // (the processor again: a batch in flight is forgotten; it used no numbers)
         for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {
             CloudPoint q;
             if (ps.tryPoint(r, q)) { recordDot(q.x, q.y, q.z); got++; }
         }
-    } else
+    } else if (superOn() && sliceDots()) {                       // 0.64.0: the Slice of a superposition: the planes' parts worked out once per batch, as for one state (the same dots, bit for bit)
+        const int ax = sliceAxisNow();
+        const double off = sliceOffNow(), mA = planeMass(sup_.idA, p.Z, ax, off), mB = planeMass(sup_.idB, p.Z, ax, off);
+        if (mA + mB > 0) {                                       // (else every attempt is rejected, using no numbers, as tryDot)
+            const double wA = mA / (mA + mB);
+            const PlaneSampler pa = planeSampler(sup_.idA, p.Z, ax, off), pb = planeSampler(sup_.idB, p.Z, ax, off);
+            // 0.64.0: on the card (the Slice's program, its start-up check passed with a superposition's states): an orthogonal pair only (an overlapping pair takes
+            // one more number for a kept point, so its attempts have no fixed numbering); every attempt then takes 4 numbers (3 where the radius comes out 0)
+            if (!overlap_ && gpuSlice && sliceCard && sliceCard->ready() && pa.g0 > 0 && pb.g0 > 0 && pa.tailPoly().size() <= 16 && pb.tailPoly().size() <= 16) {
+                got = addDotsCardSuper(pa, pb, wA, want);
+                idNow_ = -1;
+                return got;
+            }
+            cancelSliceJob();
+            for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {
+                CloudPoint q;
+                const PlaneSampler& ps = r.next() < wA ? pa : pb;
+                if (!ps.tryPoint(r, q) || (overlap_ && !overlapKeep(r, q.x, q.y, q.z))) continue;
+                recordDot(q.x, q.y, q.z); got++;
+            }
+        }
+    } else {
+    if (sliceJob_.job || sliceJob_.job2) cancelSliceJob();
     for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {     // (an attempt on a plane can be rejected; the cap only matters where the plane holds almost nothing)
         double x, y, z;
         if (tryDot(r, x, y, z)) { recordDot(x, y, z); got++; }
+    }
     }
     idNow_ = -1;
     s.crng = r.seed;
@@ -815,6 +838,7 @@ long AtomLab::addDots(long want) {
 long AtomLab::addDotsCard(const PlaneSampler& ps, long want) {
     static std::vector<float> res;
     long got = 0, need = want;
+    if (sliceJob_.idB >= 0) cancelSliceJob();                        // (a superposition's batch: not this state's)
     if (sliceJob_.job) {
         const render::JobState st = sliceCard->pollSlice(sliceJob_.job, res);
         if (st == render::JobState::Pending) return 0;
@@ -842,6 +866,61 @@ long AtomLab::addDotsCard(const PlaneSampler& ps, long want) {
         const int tries = int(std::min(262144.0, std::max(64.0, double(need) / sliceRate_ * 1.3 + 64)));
         const int job = sliceCard->beginSlice(sliceJobOf(ps, s.crng, tries));
         if (job) sliceJob_ = SliceJob{job, s.crng, tries, need, idNow_, p.Z, s.sliceAxis, s.sliceOff, s.ptsEpoch};
+    }
+    return got;
+}
+
+void AtomLab::cancelSliceJob() {
+    if (sliceCard) { if (sliceJob_.job) sliceCard->cancelSlice(sliceJob_.job); if (sliceJob_.job2) sliceCard->cancelSlice(sliceJob_.job2); }
+    sliceJob_ = SliceJob{};
+}
+
+// 0.64.0: the Slice of a superposition (an orthogonal pair) from the card: the processor's attempt t takes the number 4t to choose the state (A with odds wA:
+// the planes' masses) and 4t + 1 .. 4t + 3 for that state's attempt (tryDot). The card makes both states' attempts for every t with that numbering (two
+// batches of the Slice's own program, stride 4, first 1); here the choice is made from the same number in double precision, exactly as the processor makes
+// it, and the chosen state's answer is taken. The same dots as the processor's up to single-precision rounding (the start-up check has both states' cases).
+long AtomLab::addDotsCardSuper(const PlaneSampler& pa, const PlaneSampler& pb, double wA, long want) {
+    static std::vector<float> resA, resB;
+    long got = 0, need = want;
+    if ((sliceJob_.job || sliceJob_.job2) && sliceJob_.idB < 0) cancelSliceJob();   // (one state's batch: not this superposition's)
+    const auto pollOne = [&](int& job, std::vector<float>& res) {    // true while the batch is still on the card
+        if (!job) return false;
+        const render::JobState st = sliceCard->pollSlice(job, res);
+        if (st == render::JobState::Pending) return true;
+        job = 0;
+        if (st == render::JobState::Failed) res.clear();
+        return false;
+    };
+    const bool waitA = pollOne(sliceJob_.job, resA), waitB = pollOne(sliceJob_.job2, resB);
+    if (waitA || waitB) return 0;
+    if (sliceJob_.tries > 0) {                                       // both batches back
+        const SliceJob j = sliceJob_;
+        sliceJob_ = SliceJob{};
+        if (j.id == sup_.idA && j.idB == sup_.idB && j.Z == p.Z && j.epoch == s.ptsEpoch && j.seed == s.crng && int(resA.size()) >= 4 * j.tries && int(resB.size()) >= 4 * j.tries) {
+            std::uint64_t numbers = 4ull * std::uint64_t(j.tries);
+            long kept = 0;
+            for (int t = 0; t < j.tries; t++) {
+                orbit::Mulberry32 ch(mulberryAfter(j.seed, 4ull * std::uint64_t(t)));
+                const float* g = (ch.next() < j.wA ? resA.data() : resB.data()) + std::size_t(4 * t);
+                if (g[3] < -0.5f) { numbers = 4ull * std::uint64_t(t) + 3; break; }   // a radius of 0: the processor takes 3 numbers there; the rest is made again
+                if (g[3] > 0.5f) {
+                    kept++;
+                    recordDot(g[0], g[1], g[2]);
+                    if (++got == j.want) { numbers = 4ull * std::uint64_t(t + 1); break; }
+                }
+            }
+            s.crng = mulberryAfter(j.seed, numbers);
+            sliceRate_ = std::max(0.002, double(std::max<long>(kept, 1)) / double(std::max<std::uint64_t>(1, numbers / 4)));
+            sliceCardDots_ += got;
+            if (j.axis == s.sliceAxis && j.off == s.sliceOff) { s.sliceFresh += got; need = want - got; }
+        }
+    }
+    if (need > 0) {                                                  // the next two batches, for the plane of the moment
+        const int tries = int(std::min(262144.0, std::max(64.0, double(need) / sliceRate_ * 1.3 + 64)));
+        const int ja = sliceCard->beginSlice(sliceJobOf(pa, s.crng, tries, 4, 1));
+        const int jb = ja ? sliceCard->beginSlice(sliceJobOf(pb, s.crng, tries, 4, 1)) : 0;
+        if (ja && jb) sliceJob_ = SliceJob{ja, s.crng, tries, need, sup_.idA, p.Z, s.sliceAxis, s.sliceOff, s.ptsEpoch, jb, sup_.idB, wA};
+        else if (ja) sliceCard->cancelSlice(ja);
     }
     return got;
 }

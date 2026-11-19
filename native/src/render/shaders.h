@@ -2156,6 +2156,8 @@ uniform float uCIm;
 uniform int uNh;
 uniform float uH[16];
 uniform float uC[16];
+uniform int uStride;
+uniform int uFirst;
 
 uint mulberry(uint n) {
     uint s = uSeed + (n + 1u) * 0x6D2B79F5u;
@@ -2208,7 +2210,7 @@ float lnTail(float x) { return log(max(poly(0, x), 1e-37)) - x; }
 void main() {
     int t = int(gl_GlobalInvocationID.x);
     if (t >= uTries) return;
-    uint n0 = 3u * uint(t);
+    uint n0 = uint(uStride) * uint(t) + uint(uFirst);
     uint k1 = mulberry(n0), k2 = mulberry(n0 + 1u), k3 = mulberry(n0 + 2u);
     // 1 - k1 / 2^32, in (0, 1]
     float u = (float(~k1) + 1.0) * 2.3283064365386963e-10;

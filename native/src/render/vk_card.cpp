@@ -1197,7 +1197,7 @@ public:
         sliceReady_ = jumpReady_ = sliceUsed_ = false;
     }
     int beginSlice(const SliceDotsJob& s) override {
-        if (!built(kSlice) || !c_.ok() || s.tries <= 0 || s.tries > (1 << 20) || s.nh <= 0 || s.nh > 16 || jobs_.size() >= 8) return 0;
+        if (!built(kSlice) || !c_.ok() || s.tries <= 0 || s.tries > (1 << 20) || s.nh <= 0 || s.nh > 16 || s.stride < 3 || s.stride > 4 || s.first < 0 || s.first > s.stride - 3 || jobs_.size() >= 8) return 0;
         firstBatch();
         Job j;
         j.id = nextId_++;
@@ -1206,7 +1206,7 @@ public:
         VkUniforms& u = k_[kSlice].u;
         u.u("uSeed", &s.seed, 1); u.i("uTries", &s.tries, 1); u.i("uAxis", &s.axis, 1); u.f("uOff", &s.off, 1); u.f("uX0", &s.x0, 1); u.f("uLnG0", &s.lnG0, 1);
         u.f("uScale", &s.scale, 1); u.f("uBound", &s.bound, 1); u.i("uAng", &s.ang, 1); u.i("uAngIm", &s.angIm, 1); u.f("uCIm", &s.cIm, 1); u.i("uNh", &s.nh, 1);
-        u.f("uH", s.h, 1, 16); u.f("uC", s.c, 1, 16);
+        u.f("uH", s.h, 1, 16); u.f("uC", s.c, 1, 16); u.i("uStride", &s.stride, 1); u.i("uFirst", &s.first, 1);
         if (!c_.dispatch(k_[kSlice], {&j.out}, static_cast<std::uint32_t>((s.tries + 63) / 64))) { c_.dropBuffer(j.out); return 0; }
         c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
         j.ticket = c_.flush(false);

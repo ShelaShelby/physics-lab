@@ -25,6 +25,7 @@ struct SliceDotsJob {
     float cIm = 0;
     int nh = 0;                    // coefficients of H (the tail's polynomial) and of f (the density on the plane in x), at most 16
     float h[16] = {}, c[16] = {};
+    int stride = 3, first = 0;     // 0.64.0: attempt t takes the numbers stride t + first .. + 2 (one state: 3, 0; a superposition's state: 4, 1, after the choice)
 };
 
 // What the atom code asks of the card for the Slice (null or !ready(): the processor makes the dots). Never blocks: begin starts a batch and returns its

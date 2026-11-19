@@ -9,9 +9,9 @@
 
 namespace atom {
 
-render::SliceDotsJob sliceJobOf(const PlaneSampler& ps, std::uint32_t seed, int tries) {
+render::SliceDotsJob sliceJobOf(const PlaneSampler& ps, std::uint32_t seed, int tries, int stride, int first) {
     render::SliceDotsJob j;
-    j.seed = seed; j.tries = tries; j.axis = ps.axis;
+    j.seed = seed; j.tries = tries; j.axis = ps.axis; j.stride = stride; j.first = first;
     j.off = float(ps.off); j.x0 = float(ps.x0);
     j.lnG0 = float(ps.g0 > 0 ? std::log(ps.g0) : -1e30);
     j.scale = float(ps.n / (2.0 * ps.Z));
@@ -53,7 +53,7 @@ double polyAbs(const std::vector<double>& a, double x) { double v = 0; for (std:
 //     most 16 (atom_core.cpp angular), |u| <= 1, so its value errs at most 10 eps 16 = 160 eps (plus the unit vector's division, 3 eps a component, 3 x 16
 //     eps); |P|^2: dA = 2 sqrt(M) 208 eps + 2 eps M (a complex state: two such parts and c <= 2: four times that); r3 M: 2 eps M. A differing answer is
 //     explained when r3 M lies between the processor's |P|^2 and |P|^2 at the card's point (in double), widened by dA + 2 eps M on both sides.
-SliceCompare compareSlice(const PlaneSampler& ps, std::uint32_t seed, const std::vector<float>& res, int tries) {
+SliceCompare compareSlice(const PlaneSampler& ps, std::uint32_t seed, const std::vector<float>& res, int tries, int stride, int first) {
     constexpr double pi = 3.14159265358979323846;
     SliceCompare c;
     if (int(res.size()) < 4 * tries || !(ps.g0 > 0)) return c;
@@ -71,7 +71,7 @@ SliceCompare compareSlice(const PlaneSampler& ps, std::uint32_t seed, const std:
         return a * a;
     };
     for (int t = 0; t < tries; t++) {
-        orbit::Mulberry32 r(mulberryAfter(seed, 3ull * std::uint64_t(t)));
+        orbit::Mulberry32 r(mulberryAfter(seed, std::uint64_t(stride) * std::uint64_t(t) + std::uint64_t(first)));
         const PlaneSampler::Detail d = ps.tryDetail(r);
         const float* g = &res[std::size_t(4 * t)];
         const int gw = g[3] > 0.5f ? 1 : g[3] < -0.5f ? -1 : 0, cw = d.radiusZero ? -1 : d.kept ? 1 : 0;
@@ -117,7 +117,11 @@ std::vector<SliceCheckCase> sliceCheckCases() {
             {92, orbIndex("4f|z3"), 1, 0.0, 0x01234567u, 4096},
             {92, orbIndex("4f|z3"), 1, 0.4 * half4, 0xDEADBEEFu, 4096},
             {26, complexState(orbIndex("3d|z2"), -1), 2, 0.3, 0x5A5A5A5Au, 4096},
-            {1, orbIndex("6s"), 1, 25.0, 0x00C0FFEEu, 4096}};
+            {1, orbIndex("6s"), 1, 25.0, 0x00C0FFEEu, 4096},
+            // 0.64.0: the benchmark's superposition (atom.slice_super_drag: mendelevium, 2p z + 5f z3) on the plane of its cut at -0.5 (the view's size is the
+            // larger state's: kExt[5] / Z), each state with a superposition's numbering (the number 4t chooses the state, 4t + 1 .. 4t + 3 are the attempt's)
+            {101, orbIndex("2p|z"), 1, -0.5 * 0.5 * kExt[5] / 101.0, 0x13579BDFu, 4096, 4, 1},
+            {101, orbIndex("5f|z3"), 1, -0.5 * 0.5 * kExt[5] / 101.0, 0x13579BDFu, 4096, 4, 1}};
 }
 
 std::vector<JumpCheckCase> jumpCheckCases() { return {{20000, 0.5}, {20000, 0.0137}, {7, 0.9}}; }

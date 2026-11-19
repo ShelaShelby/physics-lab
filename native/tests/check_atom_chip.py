@@ -27,7 +27,7 @@ def states(r):
 
 CARD_STEPS = {"slice": ["compile the Slice's dots shader", "link the Slice's dots shader", "the Slice's first small run", "the Slice's check", "the Slice's first full use"],
               "jump": ["compile the jump's groups shader", "link the jump's groups shader", "the jump's first small run", "the jump's check", "the jump's first full use"]}
-CARD_BENCH = {"PL_GRAPHICS": "opengl", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all",
+CARD_BENCH = {"PL_GRAPHICS": "opengl", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all,atom.slice_super_drag",
               "PL_BENCH_WARMUP": "1.0", "PL_BENCH_MEASURE": "1.5"}
 
 def card_part(binary, work):
@@ -68,13 +68,15 @@ def card_part(binary, work):
     def slice_ok(ln):
         m = re.search(r"(\d+) answered differently \((\d+) within the rounding there\); points (\d+) beyond their limit", ln)
         return m and m.group(1) == m.group(2) and m.group(3) == "0"
-    check(len(sl) == 5 and all(slice_ok(ln) for ln in sl), f"card: the Slice's dots at 5 planes, the same seeds: every point within its derived limit, every differing answer within the rounding at its margin {sl}")
+    check(len(sl) == 7 and sum("(a superposition's state)" in ln for ln in sl) == 2 and all(slice_ok(ln) for ln in sl), f"card: the Slice's dots at 7 planes (0.64.0: two of a superposition's states), the same seeds: every point within its derived limit, every differing answer within the rounding at its margin {sl}")
     check(len(jp) == 3 and all(re.search(r": 0 of \d+ groups differ", ln) for ln in jp), f"card: the jump's groups equal the processor's exactly {jp}")
     # 2. the benchmark says which path ran and why
     rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
     paths = [ln.strip() for ln in rep.splitlines() if ln.strip().startswith("Path:")]
     check(any("the Slice's new dots: the graphics card (its start-up check passed" in p for p in paths) and any("drawn from a buffer on the graphics card; the jump's groups: the graphics card (its start-up check passed" in p for p in paths),
           f"card: the benchmark's report names the card for both scenes, with the check {paths}")
+    # 0.64.0: the Slice of a superposition (atom.slice_super_drag) from the card too
+    check(sum("the Slice's new dots: the graphics card (its start-up check passed" in p for p in paths) >= 2, f"card: atom.slice_super_drag's Path names the graphics card {paths}")
     # 3. the log: every step in order with its time, the whole path succeeded, kept "ok", no marker left
     log = read(os.path.join(dirs["ok"], "gpu-paths-log.txt"))
     st = read(os.path.join(dirs["ok"], "settings.txt"))
@@ -111,7 +113,7 @@ def card_part(binary, work):
             check(f"PLATOMCARD {which} state=-1" in r.out and not any(("begin " + x) in lg for x in steps) and said,
                   f"card: {which}: after '{s_}' nothing of the program runs, the processor is used, Settings names the step (said {bool(said)})")
             txt = read(os.path.join(d, "settings.txt"))
-            check(f"gpu{which}=off | {which} " in txt and f"| {s_}\n" in txt and not os.path.exists(os.path.join(d, f"gpu-{which}-step.txt")), f"card: {which}: the settings file keeps it off with the step '{s_}', the marker gone")
+            check(f"gpu{which}=off | {which} " in txt and (f"| {s_}\n" in txt or f"| {s_} | app " in txt) and not os.path.exists(os.path.join(d, f"gpu-{which}-step.txt")), f"card: {which}: the settings file keeps it off with the step '{s_}', the marker gone")
     # 5. a changed shader tries again (and passes here); Try again passes in the same run
     for which in CARD_STEPS:
         sf = os.path.join(dirs[(which, 0)], "settings.txt")

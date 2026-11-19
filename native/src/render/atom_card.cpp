@@ -105,7 +105,7 @@ JobState AtomCardGl::poll(Job& j) {
 
 int AtomCardGl::beginSlice(const SliceDotsJob& s) {
     const GLuint pr = prog_[kSlice];
-    if (!pr || s.tries <= 0 || s.tries > (1 << 20) || s.nh <= 0 || s.nh > 16 || jobs_.size() >= 8) return 0;
+    if (!pr || s.tries <= 0 || s.tries > (1 << 20) || s.nh <= 0 || s.nh > 16 || s.stride < 3 || s.stride > 4 || s.first < 0 || s.first > s.stride - 3 || jobs_.size() >= 8) return 0;
     firstBatch();                                                    // (the guard's marker before the first batch the lab asks for)
     Job j;
     j.id = nextId_++;
@@ -128,6 +128,8 @@ int AtomCardGl::beginSlice(const SliceDotsJob& s) {
     glUniform1i(glGetUniformLocation(pr, "uNh"), s.nh);
     glUniform1fv(glGetUniformLocation(pr, "uH"), 16, s.h);
     glUniform1fv(glGetUniformLocation(pr, "uC"), 16, s.c);
+    glUniform1i(glGetUniformLocation(pr, "uStride"), s.stride);
+    glUniform1i(glGetUniformLocation(pr, "uFirst"), s.first);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, j.buf);
     glDispatchCompute(static_cast<GLuint>((s.tries + 63) / 64), 1, 1);
     glMemoryBarrier(kAfterCompute);

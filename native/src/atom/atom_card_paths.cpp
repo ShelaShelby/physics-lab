@@ -141,7 +141,7 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
         G.begin(checkName);                                                  // the check: every case started now, compared when all have come back
         P.nJobs = 0; P.doneJobs = 0; P.allOk = true; P.check.clear(); P.worst.clear();
         if (which == 0) {
-            for (const SliceCheckCase& k : sliceCheckCases()) P.jobs[P.nJobs++] = C.beginSlice(sliceJobOf(planeSampler(k.id, k.Z, k.axis, k.off), k.seed, k.tries));
+            for (const SliceCheckCase& k : sliceCheckCases()) P.jobs[P.nJobs++] = C.beginSlice(sliceJobOf(planeSampler(k.id, k.Z, k.axis, k.off), k.seed, k.tries, k.stride, k.first));
         } else {
             g_jumpFixed.clear();
             for (const JumpCheckCase& k : jumpCheckCases()) {
@@ -169,9 +169,9 @@ void AtomCardPaths::advance(int which, render::Renderer2D& R, AtomLab& L) {
             if (st == render::JobState::Failed) { P.allOk = false; P.worst = "a batch failed on the card"; continue; }
             if (which == 0) {
                 const SliceCheckCase k = sliceCheckCases()[std::size_t(i)];
-                acc[i] = compareSlice(planeSampler(k.id, k.Z, k.axis, k.off), k.seed, res, k.tries);
+                acc[i] = compareSlice(planeSampler(k.id, k.Z, k.axis, k.off), k.seed, res, k.tries, k.stride, k.first);
                 if (!acc[i].ok()) P.allOk = false;
-                std::printf("PLATOMCARDCASE slice %d Z=%d id=%d axis=%d off=%.4f: %s\n", i, k.Z, k.id, k.axis, k.off, sliceCompareText(acc[i]).c_str());
+                std::printf("PLATOMCARDCASE slice %d Z=%d id=%d axis=%d off=%.4f%s: %s\n", i, k.Z, k.id, k.axis, k.off, k.stride == 4 ? " (a superposition's state)" : "", sliceCompareText(acc[i]).c_str());
             } else {
                 const JumpCheckCase k = jumpCheckCases()[std::size_t(i)];
                 std::vector<unsigned char> want;

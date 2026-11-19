@@ -33,8 +33,8 @@ struct BenchSceneText {
     bool hard = false;      // in the default run
 };
 
-constexpr int kBenchHardScenes = 26;      // 0.56.1: the default run (0.58.0: 25, blackhole.all_light; 0.63.0: 26, atom.slice_super_drag)
-constexpr int kBenchAllScenes = 42;       // ... and with "All scenes"
+constexpr int kBenchHardScenes = 32;      // 0.56.1: the default run (0.58.0: 25, blackhole.all_light; 0.63.0: 26, atom.slice_super_drag; 0.64.0: 32, six heavy views)
+constexpr int kBenchAllScenes = 48;       // ... and with "All scenes"
 
 const std::vector<BenchSceneText>& benchSceneTexts();   // the Hard scenes first, in the order they run, then the others of All
 int benchSceneIndex(const std::string& id);             // -1: no such scene

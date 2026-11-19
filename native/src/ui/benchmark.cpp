@@ -682,7 +682,8 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
                                                       !app.rocksOk ? (g_vk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (no OpenGL 4.3 rock compute on this PC)") : "the processor (GPU rocks switched off for this scene)");
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
-            if (t.atomWhich == atom::kBenchSliceSuper) return "the Slice's dots: the processor (a superposition: the Slice's card program takes one plain state only)";   // 0.63.0
+            if (t.atomWhich == atom::kBenchSliceSuper)                      // 0.64.0: the Slice's card program takes an orthogonal superposition too (an overlapping pair: the processor)
+                return L.overlapPair() ? "the Slice's dots: the processor (an overlapping pair: its attempts have no fixed numbering for the card)" : atom::atomCardPaths().pathText(0, L, app.computeOk);
             if (t.atomWhich == 14 || t.atomWhich == 27) return atom::atomCardPaths().pathText(0, L, app.computeOk) + "; the outline's contour: " + std::string(L.gpuOutline && app.computeOk ? (g_vk ? "the graphics card (Vulkan compute)" : "the graphics card (OpenGL 4.3 compute)") :
                                                                                                                                !app.computeOk ? (g_vk ? "the processor (no Vulkan compute on this PC)" : "the processor (no OpenGL 4.3 compute on this PC)") : "the processor (GPU outline switched off for this scene)");
             if (L.manyOn() && L.p.cstyle == "Glow" && L.s.trans) {         // 0.57.0: a jump: the card's buffer only with the card's groups
