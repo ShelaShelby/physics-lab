@@ -286,6 +286,20 @@ void orbitPath(const Body& b, double E0, double E1, int n, std::vector<Vec3>& ou
     Vec3 P = o.e > 1e-12 ? ev * (1 / o.e) : bp * (1 / o.r);   // towards the perihelion (a circle: any direction in the plane)
     const Vec3 Q = cross(W, P);
     const double bAx = o.a * std::sqrt(std::max(0.0, 1 - o.e * o.e));
+    // 0.66.0: the whole orbit's cos E and sin E (the same angles for every body, every frame: about 27,000 sines and cosines a frame in orbit.heaviest)
+    // from a table made once with the same expressions, so the same numbers bit for bit
+    if (E0 == 0 && E1 == 2 * kPi && n == 256) {
+        static const std::vector<double> tab = [] {
+            std::vector<double> t(2 * 257);
+            for (int i = 0; i <= 256; i++) { const double E = 0 + (2 * kPi - 0) * i / 256; t[std::size_t(2 * i)] = std::cos(E); t[std::size_t(2 * i + 1)] = std::sin(E); }
+            return t;
+        }();
+        for (int i = 0; i <= n; i++) {
+            const double x = o.a * (tab[std::size_t(2 * i)] - o.e), y = bAx * tab[std::size_t(2 * i + 1)];
+            out.push_back(P * x + Q * y);
+        }
+        return;
+    }
     for (int i = 0; i <= n; i++) {
         const double E = E0 + (E1 - E0) * i / n, x = o.a * (std::cos(E) - o.e), y = bAx * std::sin(E);
         out.push_back(P * x + Q * y);

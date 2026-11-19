@@ -1,8 +1,8 @@
 # Resume
 
 ## Current state
-- 0.65.0 (19 Nov 2026): speed batch 2: the side view with every electron (Glow, Classic) and every Slice's dots drawn on the card (Vulkan; kClassicCS, guard "classic", its check now 5 cases); the every-electron groups kept between frames (only new dots'); the Dirac Slice's sampler 4x faster and the every-electron Slice's per-dot searches cut (same dots bit for bit); the Slice guard's held turn fixed; gl_vulkan_cards in the suite. Before: 0.64.1 Vulkan fixes.
-- Last full UI run: 0.65.0 (the commit "native 0.65.0"), on Vulkan; see native/REPORT.md for the checks left failing.
+- 0.66.0 (19 Nov 2026): speed batch 3: the Slice's new dots on a 1.5 ms budget a frame (the same dots, later; every Slice), the Dirac sampler's exact early stop; the nucleus views' glows as one quad a nucleon (blob kind 10, glow stacks: atom.nucleus_zoom 66 -> 16 pictures of pixels a frame, the same picture); the Density surface's radix sort, the nucleus Density look's rays on 4 threads, the orbits' sines from a table. Before: 0.65.0 speed batch 2.
+- Last full UI run: 0.66.0 (the commit "native 0.66.0"), on Vulkan; see native/REPORT.md for the checks left failing.
 - Next: the owner's Vulkan benchmark (Hard) on his PC; then all the speed work on Vulkan, slowest scene first (DECISIONS 18 Nov 2026); OpenGL removed when the owner decides. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 

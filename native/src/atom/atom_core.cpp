@@ -9,6 +9,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <future>
 #include <random>
 #include <cstdlib>
 #include <cstring>
@@ -1202,19 +1203,28 @@ void projectChargeDensity(const NucleusChargeDensity& d, const double e1[3], con
         return (1 - fb) * ((1 - fa) * r0[0] + fa * r0[1]) + fb * ((1 - fa) * r0[nT] + fa * r0[nT + 1]);
     };
     std::vector<double> q(std::size_t(qn) * qn, 0.0);
-    for (int it = 0; it < qn; it++) for (int is = 0; is < qn; is++) {
-        const double s = is * hq, t = it * hq, q2 = s * s + t * t;
-        if (q2 >= rE2) continue;
-        const double L = std::sqrt(rE2 - q2), z0 = s * nperp;
-        const int K = std::max(2, int(std::ceil(2 * L / dl)));
-        const double h = 2 * L / K;
-        double sum = 0;
-        for (int k = 1; k < K; k++) {   // trapezoids (the ends are at rEff, where the density is 0)
-            const double l = -L + k * h, z = z0 + l * n3, r2 = q2 + l * l;
-            sum += rho(std::max(0.0, r2 - z * z), z);
+    const auto rows = [&](int it0, int step) {
+        for (int it = it0; it < qn; it += step) for (int is = 0; is < qn; is++) {
+            const double s = is * hq, t = it * hq, q2 = s * s + t * t;
+            if (q2 >= rE2) continue;
+            const double L = std::sqrt(rE2 - q2), z0 = s * nperp;
+            const int K = std::max(2, int(std::ceil(2 * L / dl)));
+            const double h = 2 * L / K;
+            double sum = 0;
+            for (int k = 1; k < K; k++) {   // trapezoids (the ends are at rEff, where the density is 0)
+                const double l = -L + k * h, z = z0 + l * n3, r2 = q2 + l * l;
+                sum += rho(std::max(0.0, r2 - z * z), z);
+            }
+            q[std::size_t(it) * qn + is] = sum * h;
         }
-        q[std::size_t(it) * qn + is] = sum * h;
-    }
+    };
+    // 0.66.0: the rays shared by four threads, every fourth row each (the frame's thread one of them; each ray is its own sum: the same numbers): about
+    // 1.1 ms a frame on the session box while the nucleus turns (atom.nucleus_density), made again every frame
+    if (qn >= 32) {
+        auto f1 = std::async(std::launch::async, rows, 1, 4), f2 = std::async(std::launch::async, rows, 2, 4), f3 = std::async(std::launch::async, rows, 3, 4);
+        rows(0, 4);
+        f1.get(); f2.get(); f3.get();
+    } else rows(0, 1);
     for (int row = 0; row < G; row++) for (int col = 0; col < G; col++) {
         const double x = -half + (col + 0.5) * cellFm, y = half - (row + 0.5) * cellFm;
         const double is = std::fabs(x * sx + y * sy) / hq, it = std::fabs(-x * sy + y * sx) / hq;

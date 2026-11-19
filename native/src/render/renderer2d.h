@@ -484,11 +484,11 @@ private:
     bool vkCardsFrame(bool forShot, int fbW, int fbH);
     bool vkMap_[static_cast<int>(Map::Count)] = {};
     enum DrawKind { kdRect, kdLine, kdTriangle, kdDisc, kdRing, kdSphere, kdSunDisc, kdFadeDisc, kdMaskedDisc, kdSquares, kdBlobs, kdSpheres, kdMesh, kdSoftLayer,
-                    kdCloudLayer, kdPlanet, kdPlanetMap, kdPlanetRings, kdPlanetEclipse, kdPlanetAir, kdSkyMap, kdGray, kdBlobKind0, kdKindCount = kdBlobKind0 + 10 };
+                    kdCloudLayer, kdPlanet, kdPlanetMap, kdPlanetRings, kdPlanetEclipse, kdPlanetAir, kdSkyMap, kdGray, kdBlobKind0, kdKindCount = kdBlobKind0 + 11 };   // (0.66.0: blob kinds 0 .. 10)
     mutable long kinds_[kdKindCount] = {};
     int (*vkMeshCreate_)(VkDraw2D*, const void*, std::size_t) = nullptr;   // 0.60.0: set by useVulkan (render/renderer2d_vk.cpp)
     void (*vkMeshDelete_)(VkDraw2D*, int) = nullptr;
-    void kindOf(const Blob& b) const { const int k = static_cast<int>(b.kind + 0.5f); if (k >= 0 && k < 10) kinds_[kdBlobKind0 + k]++; }
+    void kindOf(const Blob& b) const { const int k = static_cast<int>(b.kind + 0.5f); if (k >= 0 && k < 11) kinds_[kdBlobKind0 + k]++; }
 };
 
 }  // namespace render

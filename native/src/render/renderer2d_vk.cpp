@@ -175,7 +175,7 @@ bool Renderer2D::loadMapsVulkan(std::string& why) {
 std::string Renderer2D::drawKindsText() const {
     static const char* names[kdKindCount] = {"rect", "line", "triangle", "disc", "ring", "sphere", "sunDisc", "fadeDisc", "maskedDisc", "squares", "blobs", "spheres", "mesh",
                                              "softLayer", "cloudLayer", "planet", "planetMap", "planetRings", "planetEclipse", "planetAir", "skyMap", "gray",
-                                             "blob0", "blob1", "blob2", "blob3", "blob4", "blob5", "blob6", "blob7", "blob8", "blob9"};
+                                             "blob0", "blob1", "blob2", "blob3", "blob4", "blob5", "blob6", "blob7", "blob8", "blob9", "blob10"};
     std::string s;
     for (int i = 0; i < kdKindCount; i++) s += std::string(i ? " " : "") + names[i] + "=" + std::to_string(kinds_[i]);
     return s;

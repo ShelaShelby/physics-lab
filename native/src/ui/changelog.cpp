@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.66.0", "Speed: the Slice of a Dirac state without stalls; the nucleus close up draws a quarter of the pixels; less processor work in five heavy views",
+     "The Slice's new dots now get a time budget a frame (1.5 ms): the steps that make them only owe them, and they are made in order after the steps, until "
+     "the budget is spent. The same dots in the same order, spread over more frames: while the cut is dragged the cloud fills a little later, never coarser, and "
+     "no frame waits for the Dirac state's sampler any more (one rule for every Slice). The Dirac sampler's search stops where its interval no longer changes "
+     "(the same numbers). In the nucleus views each nucleon's soft glows (its rest profile and the Gaussians of its quarks) are drawn in one quad instead of a "
+     "quad each, and glows whose light on the picture is under half a level are left out: at full zoom the card fills about a quarter of the pixels it did, "
+     "with the same picture. The Density surface's triangles are sorted by a radix sort (equal depths now always in the same order), the nucleus' Density "
+     "look shares its line-of-sight sums among four threads, and the Orbit Lab's whole orbits take their sines from a table (the same numbers)."},
     {"0.65.0", "Speed: the every-electron views and the Slice's dots on the graphics card; the Slice of a Dirac state four times faster",
      "The side view with every electron (Glow and Classic) and the Slice's dots (every Slice, Glow and Classic) are now put on the picture on the graphics "
      "card (Vulkan), from the cloud's buffer, by the Classic dots' program; the processor's way stays the reference and the fallback, and the program's "

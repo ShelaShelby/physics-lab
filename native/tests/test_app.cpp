@@ -1,4 +1,5 @@
 // App-wide tests: the settings file (save, load, bad lines), the themes, the texts, the benchmark and the window rules.
+#include "molecule/depth_order.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -2236,6 +2237,31 @@ static void testDiracPlaneDots() {
     checkTrue("the Dirac Slice's dots made four at a time are tryDiracOnPlane's, bit for bit, and the generator ends in the same state", differ == 0 && dots > 2000);
 }
 
+// 0.66.0: the Density surface's order far to near (molecule/depth_order.h, a radix sort) is the order by (depth, triangle number), checked against
+// std::stable_sort on depths with ties, negative and positive values and zeros (-0, which the radix order puts before +0, is not drawn here)
+static void testDepthOrder() {
+    long cases = 0, differ = 0;
+    std::uint32_t seed = 12345;
+    auto rnd = [&seed] { seed = seed * 1664525u + 1013904223u; return seed; };
+    for (const int n : {1, 2, 7, 300, 14128, 50000}) {
+        std::vector<float> z(static_cast<std::size_t>(n));
+        for (int i = 0; i < n; i++) {
+            const std::uint32_t r = rnd();
+            z[std::size_t(i)] = (r % 5 == 0) ? float(int(r % 7) - 3) * 0.5f : (float(int(r >> 8) % 200001 - 100000) * 1e-4f);   // (a fifth on 7 shared values: ties)
+            if (r % 97 == 0) z[std::size_t(i)] = 0.0f;
+        }
+        std::vector<int> got, want(std::size_t(n), 0), tmp;
+        std::vector<std::uint32_t> k1, k2;
+        molecule::depthOrder(z, got, k1, k2, tmp);
+        for (int i = 0; i < n; i++) want[std::size_t(i)] = i;
+        std::stable_sort(want.begin(), want.end(), [&](int a, int b) { return z[std::size_t(a)] < z[std::size_t(b)]; });
+        if (got != want) differ++;
+        cases++;
+    }
+    std::printf("Density surface order: %ld sizes, %ld differ from std::stable_sort by depth\n", cases, differ);
+    checkTrue("the Density surface's radix order is the order by depth, equal depths by triangle number", differ == 0 && cases == 6);
+}
+
 // 0.66.0: the Slice's dots on a time budget (atom/atom_sim.h dotBudgetMs, makeOwedDots). A fake clock of 1 microsecond a dot made, so the 1.5 ms budget is
 // 1,500 dots: frames of 12 physics steps (the 0.05 s cap) right after the plane moved; no frame makes more than the budget and one check's 128 attempts
 // (the steps made at once: up to 18,000), and once the owed steps are made, the dots, their count and the generator equal the steps' made at once.
@@ -2357,6 +2383,7 @@ int main() {
     testKeptGroups();
     testDiracPlaneDots();
     testSliceBudget();
+    testDepthOrder();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

@@ -1,40 +1,35 @@
-# 0.65.0: speed batch 2 (based on 0.64.0; box: 4 cores, Mesa 25.2.8, lavapipe; "processor ms" = the benchmark's CPU work per frame, same box, same scene, a warm-up run first so the guards' checks are done)
-Bigger than described: Part B's Glow needs its cells read back before its dots are written (a second card batch a frame); Part C's drawing serves every Slice.
-## 0. The card-vs-processor comparison (tests/gl_vulkan.inc)
-- Cause: the test never ended a program's first full use (the app's frame does: vkPollFirstUses), so the guards' turn stayed held; now it does (settle),
-  and the Black Hole part's hang went too. New ctest gl_vulkan_cards (PL_VK_ONLY=1, pictures; PL_GL_TESTS on with PL_PICTURE_TESTS on Linux): 164/0.
-## A. The every-electron groups (atom/cloud_dots.h keepGroups; vk_card.cpp sendGroups)
-- The groups are kept between frames; only the dots recorded since the last frame get theirs (a standing cloud's dots are replaced a few a frame), and the
-  card programs send only those, as the places. app_tests testKeptGroups: 120 frames, 3 scenes, 0 groups differ from fillGroups'; gl_vulkan_cards: the Glow
-  grid with 300 new dots' groups only, then none: 0 cells beyond rounding (with the sending switched off on purpose: 283 cells wrong).
-- Bugs fixed: in a Slice of every electron or of a Dirac state the Slice's program held the guards' turn for ever (a first use that never comes), so the
-  Classic dots' check never ran in a benchmark after atom.slice_all_drag; the Classic program's start-up now waits while the Slice's program starts (the
-  full suite's vulkan2d "card slice" found it: 3.99 % of pixels against OpenGL, now 0.002 %).
-- processor ms: atom.all_classic 28.9 -> 4.1 (in the benchmark's order, so the bug's share; 0.64.0 measured it alone: 10.5-12.2), atom.all_enlarged 10.5 -> 4.7.
-## B. The side view with every electron (kClassicCS's side mode, render/classic_card.h, atom/classic_check.*)
-- Classic: places, groups and the counting sort on the card. Glow: the dots counted per 8-point cell on the card, the cells read back with the frame's
-  grids, the exposure on the processor (glowExposure, the same function), then the soft dots written with that light. Guard: the Classic dots' ("classic").
-- Check (limits set first: the Classic check's places 2e-3 points, exact groups and order; a cell off by a dot only for a dot within 2e-3 points of its
-  edge): side Classic 5502 dots, Glow 5502 dots, 2028 cells: 0 beyond. processor ms: side_all_glow 23.3 -> 17.6 (A) -> 5.7; side_all_classic 20.3 -> 14.5 -> 3.6.
-## C. The Slice with every electron
-- Plain waste: recordDot searched the every-electron tables per dot (cloudCap, aUnit -> manyOn); samplePlane looked up each subshell's tables per dot.
-  Now once a batch: the same dots bit for bit (0.64.0's atom_core against this one: Og's Slice, the Dirac Slice and a Dirac Cloud 3D, 40 steps, identical).
-- The dots drawn on the card (kClassicCS's Slice mode, every Slice, Classic and Glow): each dot at its own index in dot order (the processor draws them
-  unsorted). Check: Classic (vertical cut) 5020 dots, Glow (horizontal) 4996 dots and 2028 cells, 0 beyond the limits.
-- The many-electron sampler stays the processor's: 0.93 -> 0.62 ms per physics step (1,500 dots); this box's frames run up to 12 steps (0.05 s cap),
-  so processor ms 28.4 -> 12.2 here; its card version: ROADMAP (D's table question). slice_glow_ultra 5.0 -> 3.4, slice_classic_ultra 4.2 -> 3.2 (0.64.0's).
-## D. The Slice of a Dirac state (atom/dirac_cloud.cpp)
-- Where the time went (callgrind): invertTable 58 % (each of its 60 bisection steps searched the table again), the state looked up per attempt by name
-  (orbIndex, string compares) 33 %. Cut: the state and cut once a batch; the segment's cubic evaluated directly; four attempts' radii side by side
-  (diracPlaneDots): the same dots and numbers bit for bit (app_tests testDiracPlaneDots; the 0.64.0 comparison above); the Dirac maths unchanged.
-  7.14 -> 1.62 ms per step of 1,500 dots; processor ms 76.1 -> 24.3 here (up to 12 steps a frame).
-- Not on the card: u in single precision moves the radius by up to 3.5e-5 of it at the 99.99 % radius (U 4f: 1.9e-5 a0), 600 times a float place's own
-  rounding (5.96e-8): a card version needs the tail inverted from 1 - u and its own derived limits and check (ROADMAP).
+# 0.66.0: speed batch 3 (based on 0.65.0; box: 4 cores, Mesa 25.2.8, lavapipe; "processor ms" = the benchmark's CPU work per frame, same box, both builds in one session; its frames are slow (lavapipe), so each runs up to 12 physics steps)
+## A. The Slice of a Dirac state without stalls (atom/atom_sim.cpp oweOrMake, makeOwedDots; main.cpp)
+- One rule for every Slice (plain, superposition, every electron, Dirac): a physics step (or a paused frame) only owes its new dots; after the frame's steps
+  makeOwedDots makes them in order until 1.5 ms is spent (the clock read every 128 attempts; the Dirac sampler in batches of 128 dots). The same dots in the
+  same order (an attempt takes only its own numbers), spread over more frames; at most 240 steps owed. PL_FIXED_DT runs (the checks) make them at once, as before.
+- Test first (app_tests testSliceBudget; 0.65.0 has no budget: 18,000 dots a frame): a fake clock of 1 us a dot, 3 scenes (Dirac, every electron, one
+  electron), 10 frames of 12 steps after the cut moved: most dots a frame 1,536 (budget 1,500 + one check), 0 frames over, then dots, count and generator
+  identical to the steps made at once.
+- Plain waste: the Dirac sampler's bisection stops where its interval no longer changes (the same numbers: hashes of 240,000 dots equal); 1.12 -> 1.04 us a dot.
+- atom.slice_dirac_drag: processor ms 20.4 -> 3.1; its worst frames' frame thread 24.9 -> 3.2 ms. The sampler's card version stays on ROADMAP.
+## B. The nucleus views drawing less (atom/atom_view.cpp; blob kind 10 in shaders.h kBlobVS/kBlobFS, Renderer2D::glowStacks; both APIs)
+- Measured: almost all the pixels were the nucleons' glows in the float layer: per nucleon a kind-1 profile and up to 7 kind-4 Gaussians, each its own quad,
+  at full zoom each over the whole picture. Now one quad a nucleon (a glow stack: the shader sums the same glows; the table in uSph), a stack whose light on
+  the picture is under its share of half a level is left out, and a quad reaches only as far as its light is above that share.
+- Counts (PLDRAWSTAT ncover: quads' area on the picture, square points; 1280 x 800 = 1,024,000), before -> after: atom.nucleus_zoom 86 -> 16 blobs,
+  67,584,000 -> 16,384,000 (66 -> 16 pictures); atom.nucleon 5,800 -> 5,562 blobs, 46,068,407 -> 9,100,814 (45 -> 8.9); Og-294 large nucleons (scene 3)
+  20,400,314 -> 14,082,857. Draw calls (5, 7) and layers (2) unchanged.
+- Check (tests/check_6c.py nucglow, in ui_atom; limit set first: at most 1 % of pixels over 8 levels, Vulkan, multisampling off; cover at nucleus_zoom at
+  most 30 % of the old): 0 pixels over 8 levels in all three views (largest difference 1 level); 24 %. OpenGL (same shader text): 0 levels apart at scene 30.
+  VALIDATE_SYNC=true: 0 messages in 2 scenes. No new card program (the blob program's own start-up check stays its guard).
+## C. The processor-bound scenes (processor ms 0.65.0 -> 0.66.0, one session; this box's numbers move 5-15 % run to run)
+- atom.nucleus_density 4.29 -> 3.65: the line-of-sight sums, made again every frame while it turns, shared by 4 threads (the same numbers; 1.1 -> 0.75 ms here).
+- molecule.density 4.44 -> 4.04: the surface's triangles by a radix sort (molecule/depth_order.h; 0.81 -> 0.12 ms for 14,128; one order for equal depths;
+  app_tests testDepthOrder against std::stable_sort, 6 sizes, 0 differ). Left: projection, colours and 42,000 vertices a frame (ROADMAP).
+- orbit.heaviest 4.51 -> 4.27, orbit.real_fast 25.8 -> 21.9: the whole orbits' sines from a table (27,000 a frame, the same numbers), Renderer2D::line without
+  hypot; the draw 1.94 -> 1.80 ms (a driver of OrbitView::draw). Left: 13,000 lines a frame (ROADMAP). real_fast's frame thread waits for the integrator's
+  next stretch here (the software renderer takes the cores); the integrator keeps up with one free core (2 ms of its work a physics step).
+- molecule.vib_density 6.2 -> 7.2 (not changed; its first swing samples each level's 60,000 dots during the counted time): the surface made again each new
+  phase (blendVib + densitySurface) is its frame's work (callgrind: the shell's realisticControls); on ROADMAP.
+- New for measuring: PL_SECTSTAT=1 prints the frame thread's parts (physics, shell, picture, panels, draw, rest) every 60 frames.
 ## Checks
-- check.sh quick 18/18 after each part. By hand: check_atom_chip card 42/0, classic 10/0 (new: side view and Slice; card against processor, same
-  moment: 0 pixels over 8 levels in 5 scenes); gl_vulkan_cards after each part; VALIDATE_SYNC=true: 0 messages in 6 scenes.
-- Full UI suite (36 tests): 32 passed. ui_shell (vulkan2d's card slice, fixed above: the check 140/0 by hand; ui_shell again: card slice 0.002 %, but its Black Hole 'broken sky program' timed out, which passed in the full run). Left failing as in 0.64.0: ui_molecule
-  (check_molecule card: its settings-line test predates 0.63.1's app field), ui_blackhole (smooth), ui_popups (benchscenes film_tilt and all_light;
-  benchwaits capped under the suite's load, 10/0 alone).
-- For the owner's PC: run the Hard benchmark (32 scenes); send it and gpu-paths-log.txt. "[vulkan] [classic]" should say its check passed (five cases now: Cloud 3D, the side
-  view Classic and Glow, the Slice Classic and Glow); the Paths of atom.side_all_*, atom.slice_* name "the graphics card".
+- check.sh quick 18/18 after each part; app_tests 202,212 checks 0 failed; check_6c nucglow 10/0 and fullzoom 12/0 by hand.
+- Full UI suite (36 tests): 32 passed. ui_shell failed on check_shell vulkan2d (its draw-kind list wanted blob1, now drawn as kind 10): list fixed, the check
+  140/0 by hand, ui_shell again: passed. Left failing as in 0.65.0: ui_molecule (check_molecule card), ui_blackhole (smooth), ui_popups (benchscenes, benchwaits).
+- For the owner's PC: run the Hard benchmark with every other program closed (32 scenes); send it and gpu-paths-log.txt.

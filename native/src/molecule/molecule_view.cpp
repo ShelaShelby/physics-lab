@@ -1,5 +1,6 @@
 // Molecule Lab (0.18 stage 1): the picture (see molecule_view.h). Colours: CPK (PubChem periodic table, molecule.cpp); shading, outline and selection colours are drawing choices.
 #include "molecule/molecule_view.h"
+#include "molecule/depth_order.h"
 
 #include <algorithm>
 #include <chrono>
@@ -328,9 +329,9 @@ void MoleculeView::drawRealistic(render::Renderer2D& r, MoleculeLab& L, const ap
             sy_[v] = static_cast<float>(cy - (R[3] * x + R[4] * y + R[5] * z + py) * s);
             sz_[v] = static_cast<float>(R[6] * x + R[7] * y + R[8] * z);
         }
-        tz_.resize(nt); order_.resize(nt);
-        for (std::size_t t = 0; t < nt; t++) { tz_[t] = sz_[M.tri[3 * t]] + sz_[M.tri[3 * t + 1]] + sz_[M.tri[3 * t + 2]]; order_[t] = static_cast<int>(t); }
-        std::sort(order_.begin(), order_.end(), [&](int a, int b) { return tz_[a] < tz_[b]; });
+        tz_.resize(nt);
+        for (std::size_t t = 0; t < nt; t++) tz_[t] = sz_[M.tri[3 * t]] + sz_[M.tri[3 * t + 1]] + sz_[M.tri[3 * t + 2]];
+        depthOrder(tz_, order_, rkey_, rkey2_, rtmp_);         // 0.66.0: a radix sort, equal depths by triangle number (molecule/depth_order.h)
         for (int i = 0; i < 14; i++) lastCam_[i] = cam[i];
         lastRev_ = rc.revision;
         stats_.resorted = true;

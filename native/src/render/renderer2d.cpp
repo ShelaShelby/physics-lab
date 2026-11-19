@@ -1406,7 +1406,7 @@ void Renderer2D::blobsPalette(const Blob* b, int count, bool additive, const Pha
 }
 
 void Renderer2D::glowStacks(const Blob* b, int count, bool additive, const float* table, int n) {
-    PL_KIND(kdBlobs);
+    PL_KIND(kdBlobs); if (logKinds()) for (int i = 0; i < count; i++) kindOf(b[i]);
     if (count <= 0 || n <= 0) return;
     closeTriangles();
     Segment sg{};
@@ -1895,7 +1895,7 @@ void Renderer2D::triangle(double x0, double y0, Color c0, double x1, double y1, 
 
 void Renderer2D::line(double x0, double y0, double x1, double y1, double width, Color c) {
     PL_KIND(kdLine);
-    const double dx = x1 - x0, dy = y1 - y0, len = std::hypot(dx, dy);
+    const double dx = x1 - x0, dy = y1 - y0, len = std::sqrt(dx * dx + dy * dy);   // (0.66.0: not std::hypot, which guards against overflow at 1e154 points: 13,000 lines a frame in orbit.heaviest)
     if (len < 1e-9) return;
     // thin lines are drawn 1 point wide with lower alpha, so they do not flicker
     double w = width;

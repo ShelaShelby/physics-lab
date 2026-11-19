@@ -230,6 +230,8 @@ private:
     std::vector<render::Color> vc_;                  // each vertex's shaded colour (front face)
     std::vector<float> tz_;                          // each triangle's depth
     std::vector<int> order_;                         // the triangles far to near
+    std::vector<int> rtmp_;                          // 0.66.0: the radix sort's other buffer and its keys
+    std::vector<std::uint32_t> rkey_, rkey2_;
     double expo_ = 0;                                // the cloud's exposure, smoothed over frames (as the Atom Lab's)
     std::vector<std::vector<atom::GlowDot>> near_;   // 0.57.1: the card's cloud: the dots that can reach a nucleus, and the nuclei (for the exposure's cap; kept until the frame's end)
     std::vector<std::array<double, 2>> cores_;

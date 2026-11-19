@@ -259,7 +259,7 @@ VK2D_VIEWS = {   # name: (settings, the drawing calls the view must make)
     "orbit_earth": ({"PL_SELECT": "Earth", "PL_3D": "1", "PL_ZOOM": "5.5", "PL_DATE": "2026-08-12", "PL_TIME": "17:46", "PL_PAUSED": "1"}, "planet planetMap planetEclipse planetAir"),
     "orbit_saturn": ({"PL_SELECT": "Saturn", "PL_3D": "1", "PL_ZOOM": "4.1", "PL_PAUSED": "1"}, "planet planetMap planetRings"),
     "orbit_mono": ({"PL_SELECT": "Earth", "PL_THEME": "monochrome"}, "gray skyMap"),
-    "atom_nucleon": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;qstyle=Simple;detail=+ Sea", "PL_ATOM_DO": "nucleon"}, "softLayer cloudLayer blob0 blob1 blob3 blob4 blob6 blob7 blob8"),
+    "atom_nucleon": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;qstyle=Simple;detail=+ Sea", "PL_ATOM_DO": "nucleon"}, "softLayer cloudLayer blob0 blob3 blob4 blob6 blob7 blob8 blob10"),   # (0.66.0: the glows as kind 10, glow stacks; kind 1 is drawn no more)
     "atom_classic": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;view=Cloud 3D;orb=2p;cstyle=Classic"}, "blob5"),
     "atom_density": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;view=Orbit;style=Density", "PL_ATOM_DO": "nucleus"}, "blob2"),
     "atom_chart": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=92;N=146;view=Chart of nuclides"}, "mesh"),

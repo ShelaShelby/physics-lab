@@ -142,6 +142,27 @@ const char* const kDriverAdvice =
 
 static const std::chrono::steady_clock::time_point g_appStart = std::chrono::steady_clock::now();   // 0.56.1: the start of the app (static initialisation, before main), for the start-up time
 static double g_viewMs = 0;   // (PL_TIMESTAT)
+// 0.66.0 (PL_SECTSTAT, measuring in development): the frame thread's time in the frame's parts, averaged over 60 frames, printed as PLSECTSTAT
+namespace {
+const char* const kSectNames[] = {"physics", "shell", "picture", "panels", "draw", "rest"};
+double g_sectMs[6] = {}, g_sectT = 0;
+int g_sectFrames = 0;
+double sectNow() { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+void sectMark(int i) {   // the part i ends now (the next part starts)
+    static const bool on = SDL_getenv("PL_SECTSTAT") != nullptr;
+    if (!on) return;
+    const double t = sectNow();
+    if (i >= 0 && g_sectT > 0) g_sectMs[i] += t - g_sectT;
+    g_sectT = t;
+    if (i == 5 && ++g_sectFrames == 60) {
+        std::printf("PLSECTSTAT");
+        for (int k = 0; k < 6; k++) std::printf(" %s=%.3f", kSectNames[k], g_sectMs[k] / 60);
+        std::printf("\n"); std::fflush(stdout);
+        for (double& m : g_sectMs) m = 0;
+        g_sectFrames = 0;
+    }
+}
+}  // namespace
 // 0.55.5 (automatic checks and measuring): PL_BH_MOVE="kind:first:count" moves the Black Hole Lab's view every frame from frame first for count frames
 // (turn: round the axis; tilt: up; dist: closer by 1 % a frame; spin: +0.005 a frame); PL_BH_FRAMETIME prints, per frame, the frame thread's time in the lab
 static double g_bhDrawMs = 0;
@@ -700,6 +721,7 @@ int main(int, char**) {
         if (fixedDt > 0) { fixedClockMs += fixedDt * 1000; app.atom.nowMs = [] { return fixedClockMs; }; }
         const double dt = app::stepSeconds(frameDt, units::kMaxFrameDt);   // a slow frame counts as at most 0.05 s, a stall (window held by the system) as nothing: no jump, no catching up
         maxPhysicsDt = std::max(maxPhysicsDt, dt);
+        sectMark(5);                                    // (PL_SECTSTAT: the frame's parts from here)
         if (app.pane) {                                 // the Learn tab is open: the lab waits
         } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: nothing moves by itself (the camera hovers)
         } else if (app.lab == molecule::kLabIndex) {
@@ -723,6 +745,7 @@ int main(int, char**) {
             }
         }
         fpsFrames++; fpsTime += frameDt;
+        sectMark(0);
         if (fpsTime >= 0.5) { fps = fpsFrames / fpsTime; fpsFrames = 0; fpsTime = 0; }
 
         // ---- build the frame ----
@@ -744,6 +767,7 @@ int main(int, char**) {
         ImGui::NewFrame();
         app.atom.shellUi = true;                        // the picture's own "More / Less info" button is left out (the subject card has it)
         ui::shellFrame(app, winW, winH, app.prefs.fps == "on" ? fps : -1, frameDt);  // bars and panels over the full-window picture, in both labs
+        sectMark(1);
         headerH = 0.0f;
         pictureWinH = std::max(1.0f, float(winH));
         app.atom.insetTop = ui::shellTopBarH() / scale + 4; app.atom.insetBottom = app.set.reserveBottom; app.atom.insetRight = app.set.insetRight; app.atom.reserveRight = app.set.reserveRight;   // (points; after shellFrame, so the first frame already has the bars' size)
@@ -783,6 +807,7 @@ int main(int, char**) {
             app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH);
             text->PopClipRect();
         }
+        sectMark(2);
         ui::aboutWindow(app);
         ui::historyWindow(app);
         if (app.lab == 1) ui::atomLearnWindow(app);
@@ -805,6 +830,7 @@ int main(int, char**) {
         const int canvasFbW = static_cast<int>(std::lround(canvasWinW * fbW / std::max(1, winW)));
         const int pictureFbH = static_cast<int>(std::lround(pictureWinH * fbH / std::max(1, winH)));
         const int headerFbH = static_cast<int>(std::lround(headerH * fbH / std::max(1, winH)));
+        sectMark(3);
         const auto te0 = std::chrono::steady_clock::now();   // (0.63.0: before either API's drawing: the diagnostics below print on both)
         const long glareMade0 = renderer.glareStats().made;
         if (useVulkan) {                                // 0.59.0: cleared to the page colour, the picture area filled with it (step 2: the labs' pictures), the panels on top
@@ -827,6 +853,7 @@ int main(int, char**) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             ui::benchmarkGpuEnd(app);
         }
+        sectMark(4);
         {   // the checks' diagnostics (PL_BH_FRAMETIME, PL_TIMESTAT, PL_DRAWSTAT ...): 0.63.0: printed on Vulkan too (they were in the OpenGL branch)
         static const bool bhTime = SDL_getenv("PL_BH_FRAMETIME") != nullptr;
         if (bhTime && app.lab == blackhole::kLabIndex && !app.pane) {
