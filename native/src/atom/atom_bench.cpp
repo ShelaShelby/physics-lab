@@ -88,7 +88,7 @@ double benchZoom(int which) {
         case kBenchNucleusDensity: return 0.3;     // relative to zoomForNucleus(); tried 0, 0.3, 0.6, 0.9: from 0.6 the Density look gives way to the nucleons
         case kBenchSliceAll: return -0.5;          // 0.64.0: each tried at -0.5, 0, 0.5, 1.0 (1 % low here, REPORT 0.64.0): the slowest kept
         case kBenchSliceDirac: return 0.0;
-        case kBenchSideAll: case kBenchSideAllClassic: return -0.5;   // (zoomed from there to 0 and back while it runs: benchFrame)
+        case kBenchSideAll: case kBenchSideAllClassic: return -0.5;   // (zoomed from there to +0.5 and back while it runs: benchFrame)
         case kBenchSliceGlowUltra: case kBenchSliceClassicUltra: return -0.5;
         case kBenchSliceSuper: return 0.0;         // 0.63.0: tried -0.5, 0, 0.5, 1.0, 1.5 (1 % low 2.70, 2.70, 2.95, 3.35, 2.86 fps here): 0 and -0.5 the slowest
         default: return 0.0;
@@ -337,9 +337,9 @@ void benchFrame(AtomLab& L, int which, int sceneFrame, int measureFrame) {
     } else if (which == 14 || which == kBenchSliceSuper || which == kBenchSliceAll || which == kBenchSliceDirac || which == kBenchSliceGlowUltra || which == kBenchSliceClassicUltra) {   // (0.63.0: the superposition's Slice dragged the same way)
         const int k = sceneFrame % 360, tri = k <= 180 ? k : 360 - k;                                   // up from -0.90 to +0.90 and back, 0.01 a frame
         L.setParam("cut", std::round((-0.9 + 0.01 * tri) * 100) / 100);
-    } else if (which == kBenchSideAll || which == kBenchSideAllClassic) {   // 0.64.0: the side view zoomed in and out as a user's wheel does, -0.5 to 0 and back
-        const int k = sceneFrame % 200, tri = k <= 100 ? k : 200 - k;
-        L.setParam("zoom", -0.5 + 0.005 * tri);
+    } else if (which == kBenchSideAll || which == kBenchSideAllClassic) {   // 0.64.0: the side view zoomed in and out as a user's wheel does, -0.5 to +0.5 and back
+        const int k = sceneFrame % 50, tri = k <= 25 ? k : 50 - k;
+        L.setParam("zoom", -0.5 + 0.04 * tri);
     }
 }
 

@@ -2,7 +2,7 @@
 Bigger than described: Parts C and D each needed a new card program with its own guard, start-up check, test and UI check (as the rules ask); all done.
 ## A. The heavy views the benchmark missed (six new Hard scenes: app/bench_scenes.cpp, atom/atom_bench.*)
 - Measured here, each at the zooms -0.5, 0, 0.5, 1.0 (the slowest kept): atom.slice_dirac_drag 85 ms (zoom 0), atom.slice_all_drag 32 (-0.5), atom.side_all_glow 24
-  (-0.5, zoomed to 0 and back as a wheel), atom.side_all_classic 21 (-0.5, the same), atom.slice_glow_ultra 5.0 (-0.5), atom.slice_classic_ultra 4.2 (-0.5): all
+  (-0.5; while it runs zoomed to +0.5 and back as a wheel), atom.side_all_classic 21 (-0.5, the same), atom.slice_glow_ultra 5.0 (-0.5), atom.slice_classic_ultra 4.2 (-0.5): all
   over 3.9 ms, all Hard (ROADMAP, Atom Lab, slowest first). atom.slice_drag for comparison: 3.5 ms.
 - Checked, no scene: Saturn still (the same loop as orbit.saturn); the side view with GPU colours Off and the Density cloud with GPU Density cloud Off (switches for
   comparison, twins exist); the Black Hole Lab at rest, the chart, the molecules' surfaces (kept between frames).
@@ -32,6 +32,8 @@ Bigger than described: Parts C and D each needed a new card program with its own
   4/0; check_orbit_ui rings 4/0; gl_compare_tests (PL_VK_ONLY=1, new switch): Slice 7 planes and against OpenGL 0 differ, rings 3 views, Classic: pass, 0
   validation messages. Found (pre-existing since 0.63.0, not run by any ctest): its outline, rocks and Glow grid steps wait on the guards' turn, and the Black
   Hole part's end hangs on a thread join (ROADMAP). VK_KHRONOS_VALIDATION_VALIDATE_SYNC=true: 0 messages for slice_super_drag, saturn, all_classic.
-- Full UI suite: see below.
+- Full UI suite (check.sh full, 34 tests): 31 passed; failing as in 0.63.0/0.63.1: ui_popups (check_6b benchscenes: film_tilt's unchanged picture;
+  benchwaits: atom_density's 15 s cap), ui_molecule (check_molecule card), ui_blackhole (check_blackhole smooth). The side scenes' zoom was widened after it
+  (their picture did not change at 880 x 560 under the panels); benchscenes then by hand: 135 checks, only film_tilt failed.
 ## For the owner's PC
 - Run the Hard benchmark when you can (32 scenes); send it and gpu-paths-log.txt (look for "[vulkan] [rings]" and "[vulkan] [classic]" passing).

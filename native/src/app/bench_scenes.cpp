@@ -47,9 +47,9 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "atom.slice_dirac_drag", BenchKind::Atom, atom::kBenchSliceDirac, "Atom Lab, the Slice of a Dirac state, the cut dragged",
             "uranium-238 (one electron), 4f, Relativity Dirac, Slice view, Classic, Ultra (48,000 dots), zoom 0: the cut moves 0.01 every frame as atom.slice_drag.");
         add(true, "atom.side_all_glow", BenchKind::Atom, atom::kBenchSideAll, "Atom Lab, the side view with every electron, Glow",
-            "oganesson-294, every electron, Whole atom, Shells enlarged, Cloud (the side view), Glow, Ultra (240,000 dots), zoom -0.5, zoomed in to 0 and back as a wheel does.");
+            "oganesson-294, every electron, Whole atom, Shells enlarged, Cloud (the side view), Glow, Ultra (240,000 dots), zoom -0.5, zoomed in to +0.5 and back as a wheel does.");
         add(true, "atom.side_all_classic", BenchKind::Atom, atom::kBenchSideAllClassic, "Atom Lab, the side view with every electron, Classic",
-            "oganesson-294, every electron, Whole atom, Shells enlarged, Cloud (the side view), Classic, Ultra (240,000 dots), zoom -0.5, zoomed in to 0 and back as a wheel does.");
+            "oganesson-294, every electron, Whole atom, Shells enlarged, Cloud (the side view), Classic, Ultra (240,000 dots), zoom -0.5, zoomed in to +0.5 and back as a wheel does.");
         add(true, "atom.slice_glow_ultra", BenchKind::Atom, atom::kBenchSliceGlowUltra, "Atom Lab, the Slice of one state at Ultra, Glow, the cut dragged",
             "uranium-238, 4f, Slice view, Glow, Ultra (48,000 dots), zoom -0.5: the cut moves 0.01 every frame as atom.slice_drag.");
         add(true, "atom.slice_classic_ultra", BenchKind::Atom, atom::kBenchSliceClassicUltra, "Atom Lab, the Slice of one state at Ultra, Classic, the cut dragged",

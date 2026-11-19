@@ -2,7 +2,7 @@
 
 ## Current state
 - 0.64.0 (19 Nov 2026): speed batch 1: the Slice of a superposition on the card (the Slice's program, both states' attempts) and its processor path's waste cut; Saturn's rings per pixel on the card (Vulkan; guard "rings") and the processor's triangles' waste cut; the every-electron Classic dots on the card (Vulkan; guard "classic"); six heavy views added to the Hard list (32 scenes). Before: 0.63.1 Vulkan fixes.
-- Last full UI run: 0.63.0 (the commit "native 0.63.0"), on Vulkan; see native/REPORT.md for the checks left failing (check_6b benchscenes film_tilt, benchwaits, all_light).
+- Last full UI run: 0.64.0 (the commit "native 0.64.0"), on Vulkan; see native/REPORT.md for the checks left failing (check_6b benchscenes film_tilt, benchwaits atom_density, check_molecule card, check_blackhole smooth).
 - Next: the owner's Vulkan benchmark (Hard) on his PC; then all the speed work on Vulkan, slowest scene first (DECISIONS 18 Nov 2026); OpenGL removed when the owner decides. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 
