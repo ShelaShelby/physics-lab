@@ -32,6 +32,9 @@
 #include "render/outline_compute.h"
 #include "render/renderer2d.h"
 #include "orbit/belt_layer.h"
+#include "orbit/ring_check.h"
+#include "atom/classic_check.h"
+#include "app/gpu_guard.h"
 #include "orbit/solar_system.h"
 
 // ---- the GL functions, from EGL (the app gets them from SDL: render/gl_loader.cpp) ----
@@ -882,6 +885,8 @@ int main(int argc, char** argv) {
     std::printf("OpenGL: %s | %s | %s\n", plgl::glGetString(GL_VENDOR), plgl::glGetString(GL_RENDERER), plgl::glGetString(GL_VERSION));
     render::Renderer2D R;
     if (!R.init()) { std::printf("the renderer did not start (shader error above)\n"); return 2; }
+    const bool vkOnly = std::getenv("PL_VK_ONLY") != nullptr;          // 0.64.0: the Vulkan part alone (a quicker run by hand)
+    if (!vkOnly) {
     swatches(R, dir);
     scenes(R, dir);
     glowDots(R, dir);
@@ -897,11 +902,12 @@ int main(int argc, char** argv) {
     gpuRocksPictures(R, dir);
     chartPictures(R, dir);
     chartShaderRules(R);
+    }
 #ifdef PL_VK_TESTS
     vulkanTwins(R);
 #endif
     R.shutdown();
-    fallback33(dpy, cfg, surf, dir);
+    if (!vkOnly) fallback33(dpy, cfg, surf, dir);
     std::printf("%d GL checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

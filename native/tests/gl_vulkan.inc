@@ -501,7 +501,44 @@ static void vkBlackHole(render::VkCards& cards, render::Renderer2D& R, bool f64)
     bh.destroy();
 }
 
+// 0.64.0: Saturn's rings per pixel (kRingsPart through its probe kRingsProbeCS) against the processor's triangles: the app's start-up check, its three
+// views and limits (orbit/ring_check.h: at most 1 % of the ring pixels over 8 levels in a view)
+static void vkRings(render::RingCard& vk) {
+    std::string why;
+    check("Vulkan rings: the probe's program is made (" + why + ")", vk.build(why));
+    constexpr int w = 400, h = 250;
+    std::vector<float> xy;
+    for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) { xy.push_back(x + 0.5f); xy.push_back(y + 0.5f); }
+    for (const orbit::RingCheckView& v : orbit::ringCheckViews(w, h)) {
+        std::vector<float> back, front, cpu, card;
+        const int jb = vk.beginProbe(orbit::ringsDraw(v.f, v.bands, true, w, h), xy), jf = vk.beginProbe(orbit::ringsDraw(v.f, v.bands, false, w, h), xy);
+        const bool done = jb > 0 && jf > 0 && vkt::poll([&] { return vk.pollProbe(jb, back); }) == render::JobState::Done && vkt::poll([&] { return vk.pollProbe(jf, front); }) == render::JobState::Done;
+        orbit::ringPictureCpu(v.f, v.bands, w, h, cpu);
+        orbit::ringPictureCard(back, front, w, h, card);
+        const orbit::RingCompare c = orbit::compareRingPictures(cpu, card, w, h);
+        std::printf("Vulkan rings, %s: %ld of %ld ring pixels over 8 levels, the largest %d\n", v.name, c.over8, c.ringPixels, c.worst);
+        check(std::string("Vulkan rings, ") + v.name + ": at most 1 % of the ring pixels over 8 levels from the processor's triangles", done && c.ok() && c.ringPixels > 1000);
+    }
+}
+
+// 0.64.0: the Classic Cloud 3D dots (kClassicCS) against atom/cloud_dots.cpp projectCloud + buildClassic3D: the app's start-up check (atom/classic_check.h)
+static void vkClassic(render::ClassicCard& vk) {
+    std::string why;
+    check("Vulkan Classic dots: the program is made (" + why + ")", vk.build(why));
+    const atom::ClassicCase c = atom::classicCheckCase();
+    const long n = long(c.grp.size());
+    const int j = vk.beginCheck(atom::classicDraw(c.pts.data(), n, n, 1, n, c.grp.data(), c.cam, c.w, c.h, c.dc, c.weight));
+    std::vector<std::uint32_t> keys;
+    std::vector<float> sq;
+    long total = 0;
+    const bool done = j > 0 && vkt::poll([&] { return vk.pollCheck(j, keys, sq, total); }) == render::JobState::Done;
+    const atom::ClassicCompare cmp = atom::compareClassic(c, keys, sq, total);
+    std::printf("Vulkan Classic dots: %s\n", atom::classicCompareText(cmp).c_str());
+    check("Vulkan Classic dots: every dot's group, band and place, and the squares in the processor's order, within the start-up check's limits", done && cmp.ok());
+}
+
 static void vulkanTwins(render::Renderer2D& R) {
+    app::gpuGuardFrameThread();   // 0.64.0: this thread runs every program's steps in turn (0.63.0's one-step-at-a-time turn: a guard's open step made the next wait for ever)
     vkt::Ctx h;
     std::string why;
     const bool up = vkt::start(h, why);
@@ -524,6 +561,12 @@ static void vulkanTwins(render::Renderer2D& R) {
         render::MoleculeCard* m = render::makeVkMoleculeCard(cards);
         vkMolCloud(*m, &R.moleculeCard());
         vkGlowGrid(cards);
+        render::RingCard* rc = render::makeVkRingCard(cards);                   // 0.64.0 (before the Black Hole Lab's, whose end can wait: ROADMAP)
+        vkRings(*rc);
+        delete rc;
+        render::ClassicCard* cc = render::makeVkClassicCard(cards);             // 0.64.0
+        vkClassic(*cc);
+        delete cc;
         vkBlackHole(cards, R, h.f64);                                            // 0.62.0
         delete g; delete o; delete r; delete a; delete m;
         cards.collect();

@@ -610,12 +610,47 @@ def part_nightside(binary, work):
                 good += near(bmp.px(px_, py), sky)
     check(n >= 50 and good >= 0.95 * n, f"Jupiter's night side is the sky's colour: {good} of {n} pixels (sky {sky}; the axis line and the label may cross a few)")
 
+def part_rings(binary, work):
+    # 0.64.0: Saturn's rings per pixel on the card (Vulkan): the start-up check passes here (three views, each at most 1 % of the ring pixels over 8 levels
+    # from the processor's triangles), the benchmark's Path names the card; made to fail on purpose (PL_RINGS_CARDFAIL), the processor's triangles are kept
+    # and the Path says why. Then the two pictures (card, processor) of the same moment differ in under 2 % of the pixels by more than 8 levels.
+    import re
+    BENCH = {"PL_GRAPHICS": "vulkan", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "orbit.saturn",
+             "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
+    runs = {}
+    for tag, extra in (("card", {}), ("cpu", {"PL_RINGS_CARDFAIL": "1"})):
+        d = os.path.join(work, "rings_" + tag); os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d):
+            if f.endswith(".bmp"): os.remove(os.path.join(d, f))
+        runs[tag] = run_app(binary, d, "rings_" + tag, dict(BENCH, **extra), frames=100000, size="1280x800", timeout=900)
+    out = runs["card"].out
+    cases = [ln for ln in out.splitlines() if ln.startswith("PLRINGCARDCASE ")]
+    pct = [float(m.group(1)) for m in (re.search(r"\(([\d.]+) %, limit 1 %\)", ln) for ln in cases) if m]
+    check("PLRINGCARD state=1" in out and len(pct) == 3 and all(p <= 1.0 for p in pct), f"rings: the start-up check passes, three views within 1 % ({cases})")
+    rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
+    path = [ln.strip() for ln in rep.splitlines() if ln.strip().startswith("Path:")]
+    check(any("Saturn's rings: the graphics card (Vulkan; its start-up check passed" in p for p in path), f"rings: the benchmark's Path names the card ({path})")
+    out2 = runs["cpu"].out
+    rep2 = out2[out2.find("PLBENCH-RESULT-BEGIN"):out2.find("PLBENCH-RESULT-END")]
+    path2 = [ln.strip() for ln in rep2.splitlines() if ln.strip().startswith("Path:")]
+    check("PLRINGCARD state=-1" in out2 and any("Saturn's rings: the processor, because the check was made to fail" in p for p in path2), f"rings: a failed check keeps the processor's triangles and says why ({path2})")
+    try:
+        a, b = Bmp(os.path.join(work, "rings_card", "orbit.saturn.bmp")), Bmp(os.path.join(work, "rings_cpu", "orbit.saturn.bmp"))
+        n = over = 0
+        for y in range(0, a.h, 2):
+            for x in range(0, a.w, 2):
+                n += 1
+                over += max(abs(p - q) for p, q in zip(a.px(x, y)[:3], b.px(x, y)[:3])) > 8
+        check(n > 0 and over <= 0.02 * n, f"rings: the card's picture and the processor's of the same moment: {over} of {n} pixels over 8 levels")
+    except Exception as e:
+        check(False, f"rings: both pictures saved ({e})")
+
 def main():
     binary, work = sys.argv[1], sys.argv[2]
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
     want = lambda n: only is None or n in only
     os.makedirs(work, exist_ok=True)
-    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside)):
+    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings)):
         if want(name):
             fn(binary, work)
     print(f"{checks} checks, {fails} failed")

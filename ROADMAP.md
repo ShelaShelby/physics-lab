@@ -12,6 +12,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 
 ## Atom Lab
 - Heavy views on the processor (0.64.0 Part A, Hard scenes; processor ms per frame on the session's box), slowest first: atom.slice_dirac_drag 85 (the Slice of a Dirac state: its own sampler, not the Slice's card program); atom.slice_all_drag 31 (the Slice with every electron: the many-electron sampler, then 240,000 dots made into the picture); atom.side_all_glow 24 and atom.side_all_classic 21 (the side view with every electron: groups, sorting and blobs of 240,000 dots each frame); atom.slice_glow_ultra 5.0 and atom.slice_classic_ultra 4.2 (the Slice at Ultra: 48,000 dots made into the picture each frame).
+- The every-electron clouds (Glow and Classic, 0.64.0: the Classic dots on the card): each dot's colour group is still made and sent every frame (240,000 dots; the whole atom's never change while the cloud stands).
 - The Slice of an overlapping superposition (one energy) on the card: a kept point takes one more random number, so its attempts have no fixed numbering for the Slice's card program (0.64.0 moved the orthogonal pair).
 - **fix**: the jump's "first full use" fence is made again every frame until seen signalled (AtomCardPaths::jumpGroupsBuffer); on a card a frame behind it may never be seen and the step times out (0.57.1 found it in the Molecule Lab's copy: one fence, kept until signalled).
 - **source needed**: charge profiles for He-4, Li, Be, B, N-14 (de Vries 1987; drawn as Gaussians, the app says so); nucleus views: Ra pear shapes (Butler et al. PRL 124, 042503 (2020)), alpha clusters in Be-8, C-12, O-16 (save the papers first), the deuteron's two nucleon centres (Forest et al. 1996).
@@ -47,7 +48,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - **fix**: outside 1800-2100 the moons start at made-up angles (the card says so): run JPL's mean elements.
 - **source needed**, drawing choices with no named source: comet tails and the 4 AU switch-on, Haumea's egg shape, the belt cards' counts and masses, the Sun card's frost line and lifetime.
 - Colours: **source needed**: ring spectra, Pluto, the grey moons and their global maps, McEwen 1996's own lunar phase polynomial, the giants' limb darkening.
-- Saturn close up (belts; the rings as a GPU texture: the Cassini profile is cut into up to 700 bands on the CPU each frame); the night sky as a retained GPU mesh; Delta T after the last leap second and UT1 - UTC.
+- Saturn close up (belts); Saturn's rings on OpenGL stay the processor's triangles (0.64.0 moved them to the card on Vulkan only); the night sky as a retained GPU mesh; Delta T after the last leap second and UT1 - UTC.
 - Eclipses (0.51.2): **source needed** a dated check against a published eclipse catalogue (NASA's Five Millennium Canon); the red light Earth's air bends onto the eclipsed Moon; shadows on the grey moons, of moons on moons, and the giants' flattened shadows; the Sun's limb darkening (waits for Neckel & Labs).
 - Earth's air (0.51.2): multiple scattering, the glow beyond the disc's edge, twilight; **source needed** a measured ocean colour (Blue Marble paints deep oceans one uniform blue).
 - **fix**: Saturn's ring cards and saturn_rings.h use the fact sheet's optical depths, lower than Cassini's for the B ring (mean 3.3 against 0.4-2.5) and the Cassini Division (0.15 against 0-0.1): check against Colwell et al. 2010 and use Cassini's.
@@ -86,6 +87,8 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Data panel: the user's typed data kept between runs; a fit to the user's own formula (typed like a calculator line); a setup as a file, not only the clipboard.
 - Data panel (0.51.1 review): leave out a point by tapping it; asymmetric errors (profile likelihood or bootstrap) for nonlinear fits; a Poisson-likelihood fit for counts and half-lives; AIC/BIC between models; a Voigt profile; correlated x-y errors (York's r); a teaching mode that hides the expected answers; the sources as BibTeX.
 - Data panel physics (0.51.1 review): hydrogen's lines against Dirac's levels (and the Lamb shift), so the Rydberg fit's leftovers are explained; Birge-Sponer from measured band origins (the ladder is now made from the constants it fits).
+
+- **fix**: tests/gl_vulkan.inc (gl_compare_tests, PL_VK_ONLY=1; no ctest runs it): since 0.63.0's one-step-at-a-time guard turn the outline's, rocks' and Glow grid's steps wait for the turn and fail, and the Black Hole part's end hangs on a thread join (0.64.0 found it).
 
 ## Calculator
 - Matrices, what is left after 0.54.2: eigenvectors, the inverse, the matrix exponential (and sqrt, exp of a matrix), eigenvalues of non-Hermitian matrices, sizes above 4x4; a bare 0 beside entries with a unit ([[1 eV, 0], [0, 2 eV]] is refused now: the unit goes outside).

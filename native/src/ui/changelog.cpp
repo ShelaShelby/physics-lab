@@ -19,6 +19,17 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.64.0", "Speed: the Slice of a superposition, Saturn's rings and the Classic dots on the graphics card; six heavy views in the benchmark",
+     "The Slice of a superposition (two states of different energy) now makes its dots on the graphics card, with the plain Slice's program: the card makes "
+     "both states' attempts and the processor picks the state from the same random number, so the dots are the same up to single-precision rounding (the "
+     "start-up check has the superposition's states). The processor's own path, the reference, also lost its waste: the planes' parts are worked out once a "
+     "batch, not once an attempt (the same dots, bit for bit). Saturn's rings are drawn per pixel on the graphics card (Vulkan): the same 128 chords, bands "
+     "of Cassini's profile and the planet's shadow as the processor's triangles, which stay the reference and OpenGL's way; the processor's triangles lost "
+     "their waste too (bins kept while the view's angles stay the same, runs of steps drawn as one quad, nothing made beyond the picture). The every-electron "
+     "Classic Cloud 3D is put on the picture, banded and ordered on the graphics card (Vulkan) from the cloud's buffer. Each new program has its own guard, "
+     "its log lines and a start-up check against the processor. The benchmark's Hard list has six new scenes, the heavy views it missed: the Slice with "
+     "every electron, the Slice of a Dirac state, the side view with every electron (Glow and Classic) and the Slice at Ultra (Glow and Classic); the run "
+     "takes about 4 minutes 45 seconds."},
     {"0.63.1", "Vulkan fixes from the first Vulkan benchmark: the outline back on, the GPU timer, the worst frames",
      "Fixed: the Atom Lab's 90 % outline (and on some PCs the superposition groups and the Cloud 3D Glow dots) stayed switched off on Vulkan after 0.62.0: "
      "0.62.0 left a start-up marker on disk after a step that had passed (checked here: its outline marker stayed after a normal close), and the next start "

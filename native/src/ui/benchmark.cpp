@@ -37,6 +37,8 @@
 #include "molecule/molecule.h"
 #include "molecule/vibration.h"
 #include "orbit/belts.h"
+#include "orbit/ring_check.h"
+#include "atom/classic_check.h"
 #include "orbit/units.h"
 #include "render/gl_loader.h"
 #include "render/renderer2d.h"
@@ -680,6 +682,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
         case K::OrbitHeaviest: case K::OrbitRocks8: case K::OrbitHeaviestCpuRocks: case K::OrbitRocks8CpuRocks: case K::OrbitRealFast: case K::UiSettingsOpen:
             return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? (g_vk ? "the graphics card (Vulkan rock compute)" : "the graphics card (OpenGL 4.3 rock compute)") :   // (0.63.1: the API in use)
                                                       !app.rocksOk ? (g_vk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (no OpenGL 4.3 rock compute on this PC)") : "the processor (GPU rocks switched off for this scene)");
+        case K::OrbitSaturn: return orbit::ringCardPathText(g_vk);   // 0.64.0
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
             if (t.atomWhich == atom::kBenchSliceSuper)                      // 0.64.0: the Slice's card program takes an orthogonal superposition too (an overlapping pair: the processor)
@@ -691,6 +694,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
                 return std::string("the every-electron cloud: ") + (card ? "drawn from a buffer on the graphics card; " : !L.gpuCloud ? "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene); "
                                                                          : "the processor turns, sorts and sends every dot of both levels; ") + atom::atomCardPaths().pathText(1, L, app.computeOk);
             }
+            if (t.atomWhich == atom::kBenchAllClassic) return atom::classicCardPathText(g_vk != nullptr);   // 0.64.0
             if (L.manyOn() && L.p.cstyle == "Glow") return "the every-electron cloud: " + std::string(L.gpuCloud ? "drawn from a buffer on the graphics card" : "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene)");
             if (L.p.super == "On" || L.s.trans) return "the colour groups: " + app::computePathText(app.glMajor, app.glMinor, app.computeOk, L.gpuCompute);
             return "";

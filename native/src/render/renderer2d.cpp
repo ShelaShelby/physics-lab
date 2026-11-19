@@ -360,6 +360,8 @@ void Renderer2D::shutdown() {
     if (kerrProgram_) glDeleteProgram(kerrProgram_);
     sky_.reset();                                                          // 0.56.0
     if (atomCard_) { atomCard_->reset(); delete atomCard_; atomCard_ = nullptr; }   // 0.57.0
+    delete ringCard_; ringCard_ = nullptr;   // 0.64.0
+    delete classicCard_; classicCard_ = nullptr;
     if (molCard_) { molCard_->reset(); delete molCard_; molCard_ = nullptr; }      // 0.57.1
     for (GLuint* tx : {&maskTex_, &whiteTex_, &lowTex_[0], &lowTex_[1], &lowTex_[2], &lowTex_[3]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     for (GLuint& tx : expTex_) glDeleteTextures(1, &tx);
@@ -443,6 +445,8 @@ void Renderer2D::begin(double w, double h) {
     blobs_.clear();
     clouds_.clear();
     molClouds_.clear();
+    ringDraws_.clear();
+    classicDraws_.clear();
     lens_.clear();
     segments_.clear();
     triStart_ = 0;
@@ -1433,6 +1437,41 @@ MoleculeCard& Renderer2D::moleculeCard() {
     return *molCard_;
 }
 
+RingCard* Renderer2D::ringCard() {   // 0.64.0
+    if (!ringCard_ && vk_ && vkc_ && vkRingCard_) ringCard_ = vkRingCard_(*vkc_);
+    return ringCard_;
+}
+
+bool Renderer2D::ringsCard(const RingsDraw& d) {   // 0.64.0: a box over the rings, each pixel worked out by kRingsFS
+    if (!ringCard_ || !ringCard_->ready || d.bands.size() < 4 || !(d.x1 > d.x0) || !(d.y1 > d.y0)) return false;
+    closeTriangles();
+    const Color c{1, 1, 1, 1};
+    const auto corner = [&](float x, float y) { push(x, y, x, y, c, 0); };   // (the point itself as vUV)
+    corner(d.x0, d.y0); corner(d.x1, d.y0); corner(d.x1, d.y1);
+    corner(d.x0, d.y0); corner(d.x1, d.y1); corner(d.x0, d.y1);
+    Segment sg{};
+    sg.kind = Kind::Rings; sg.first = static_cast<int>(triStart_); sg.count = 6; sg.slot = static_cast<int>(ringDraws_.size());
+    segments_.push_back(sg);
+    ringDraws_.push_back(d);
+    triStart_ = verts_.size();
+    return true;
+}
+
+ClassicCard* Renderer2D::classicCard() {   // 0.64.0
+    if (!classicCard_ && vk_ && vkc_ && vkClassicCard_) classicCard_ = vkClassicCard_(*vkc_);
+    return classicCard_;
+}
+
+bool Renderer2D::cloudClassic(const ClassicDraw& d) {   // 0.64.0
+    if (!classicCard_ || !classicCard_->ready || d.cnt <= 0 || !d.pts || !d.grp) return false;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::CloudClassic; sg.slot = static_cast<int>(classicDraws_.size()); sg.count = static_cast<int>(d.cnt);
+    segments_.push_back(sg);
+    classicDraws_.push_back(d);
+    return true;
+}
+
 bool Renderer2D::molCloud(const MolCloudDraw& d) {
     if (!molCard_ || !molCard_->ready() || d.cnt <= 0 || !d.pts) return false;
     closeTriangles();
@@ -1515,7 +1554,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
     lastCalls_ = 0; lastInstances_ = 0; lastVerts_ = static_cast<long>(verts_.size());
     for (const Segment& sg : segments_) {
         if (sg.kind != Kind::LayerBegin) lastCalls_++;
-        if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu || sg.kind == Kind::CloudGpu || sg.kind == Kind::MolCloud) lastInstances_ += sg.count;
+        if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu || sg.kind == Kind::CloudGpu || sg.kind == Kind::MolCloud || sg.kind == Kind::CloudClassic) lastInstances_ += sg.count;
     }
     if (segments_.empty()) return;
     // Monochrome: draw into an offscreen picture first, then copy it over in grey (at the bottom of end())

@@ -17,7 +17,7 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "the fastest time (1 s = about 50 years), zoom x1, Simple planet physics. The rocks' places come from the graphics card where it can (Vulkan, or OpenGL 4.3 on the backup).");
         add(true, "orbit.saturn", BenchKind::OrbitSaturn, -1, "Orbit Lab, Saturn close up, the camera turning",
             "Saturn followed, true scale, 3D, zoom 4.1 (log10, the control goes to 5.5; the rings and part of the planet fill the picture), the camera turning 0.5 rad a "
-            "second and tilting, time stopped. The rings' Cassini profile is cut into bands on the processor every frame; the planet's map and its shadow on the rings.");
+            "second and tilting, time stopped. The rings from Cassini's profile, per pixel on the graphics card (Vulkan) once its check passed; the planet's map and its shadow on the rings.");
         add(true, "orbit.earth", BenchKind::OrbitEarth, -1, "Orbit Lab, Earth close up with its air and the Moon's shadow, the camera turning",
             "12 Aug 2026 17:46 UTC: the app's own Moon (ELP2000-82B) puts its shadow axis 0.90 Earth radii from Earth's centre (found with the app's geometry, app_tests "
             "checks it). Earth followed, true scale, 3D, zoom 5.5 (the control's top), the camera aimed at the shadow over Greenland and turning to and fro, time stopped.");

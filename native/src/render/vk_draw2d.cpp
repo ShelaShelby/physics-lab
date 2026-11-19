@@ -22,6 +22,7 @@
 #include "r2d_chart_vert.h"
 #include "r2d_cloud_vert.h"
 #include "r2d_moldot_vert.h"
+#include "r2d_rings_frag.h"
 #include "present_vert.h"
 #include "present_frag.h"
 
@@ -240,7 +241,7 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
     const auto at = [&](uint32_t loc, uint32_t bn, VkFormat f, uint32_t off) { attr.push_back({loc, bn, f, off}); };
     const VkFormat f2 = VK_FORMAT_R32G32_SFLOAT, f3 = VK_FORMAT_R32G32B32_SFLOAT, f4 = VK_FORMAT_R32G32B32A32_SFLOAT;
     switch (prog) {
-    case kTri: case kPlanet:                          // Renderer2D::Vertex: x, y, u, v, r, g, b, a, mode, p1, p2, p3
+    case kTri: case kPlanet: case kRings:             // Renderer2D::Vertex: x, y, u, v, r, g, b, a, mode, p1, p2, p3
         bind.push_back({0, 48, VK_VERTEX_INPUT_RATE_VERTEX});
         at(0, 0, f2, 0); at(1, 0, f2, 8); at(2, 0, f4, 16); at(3, 0, f4, 32);
         break;
@@ -871,7 +872,7 @@ void VkDraw2D::draw(Prog p, Blend b, VkDeviceSize vbOff, int first, int count, V
     vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, pl);
     vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, layout_, 0, 1, &set, 0, nullptr);
     const Slot& s = slots_[static_cast<std::size_t>(slot_)];
-    if (p == kTri || p == kPlanet) {
+    if (p == kTri || p == kPlanet || p == kRings) {
         vkCmdBindVertexBuffers(cmd_, 0, 1, &s.buf.b, &vbOff);
         vkCmdDraw(cmd_, static_cast<uint32_t>(count), 1, static_cast<uint32_t>(first), 0);
     } else if (p == kSquare || p == kBlob) {
@@ -888,13 +889,17 @@ void VkDraw2D::draw(Prog p, Blend b, VkDeviceSize vbOff, int first, int count, V
 
 // 0.61.0: kCloud or kMolDot with the blob fragment shader (kBlobFS), every pass, the normal and the added blend
 bool VkDraw2D::addProgram(Prog p, std::string& why) {
-    if (!ok_ || (p != kCloud && p != kMolDot)) { why = "renderer2d on Vulkan has not started"; return false; }
+    if (!ok_ || (p != kCloud && p != kMolDot && p != kRings)) { why = "renderer2d on Vulkan has not started"; return false; }
     if (hasProgram(p)) return true;
-    const Code vc = p == kCloud ? Code{k_r2d_cloud_vert, sizeof k_r2d_cloud_vert} : Code{k_r2d_moldot_vert, sizeof k_r2d_moldot_vert};
-    const Code fc{k_r2d_blob_frag, sizeof k_r2d_blob_frag};
+    const Code vc = p == kCloud ? Code{k_r2d_cloud_vert, sizeof k_r2d_cloud_vert} : p == kRings ? Code{k_r2d_tri_vert, sizeof k_r2d_tri_vert} : Code{k_r2d_moldot_vert, sizeof k_r2d_moldot_vert};
+    const Code fc = p == kRings ? Code{k_r2d_rings_frag, sizeof k_r2d_rings_frag} : Code{k_r2d_blob_frag, sizeof k_r2d_blob_frag};
     Shader vs, fs;
     if (!reflectSpirv(vc.w, vc.bytes / 4, vs, why) || !reflectSpirv(fc.w, fc.bytes / 4, fs, why)) return false;
     if (vs.blockBinding != 2) { why = "its vertex shader's uniform block is not at binding 2"; return false; }
+    if (p == kRings) {                                                       // 0.64.0: its fragment block (the bands) at binding 1, within this card's uniform range
+        if (fs.blockBinding != 1) { why = "the rings' fragment shader's uniform block is not at binding 1"; return false; }
+        if (fs.block.size > c_.limits.maxUniformBufferRange) { why = "the rings' uniform block (" + std::to_string(fs.block.size) + " bytes) is larger than this card's uniform range"; return false; }
+    }
     for (const auto& [name, loc] : fs.in) {
         const auto it = vs.out.find(name);
         if (it == vs.out.end() || it->second != loc) { why = "the blob fragment shader's input " + name + " does not meet the vertex shader at the same location"; return false; }
@@ -918,7 +923,7 @@ bool VkDraw2D::addProgram(Prog p, std::string& why) {
     for (const Pass ps : {kPassMs, kPass8, kPassF}) {
         if (!ok || (ps == kPassMs && samples_ == 1)) continue;
         for (const Blend b : {kNormal, kAdditive})
-            if (ok && !(prog_[p].pipe[ps][b] = makePipeline(p, b, ps, mod[0], mod[1]))) { ok = false; why = "vkCreateGraphicsPipelines failed"; }
+            if (ok && (p != kRings || b == kNormal) && !(prog_[p].pipe[ps][b] = makePipeline(p, b, ps, mod[0], mod[1]))) { ok = false; why = "vkCreateGraphicsPipelines failed"; }
     }
     for (VkShaderModule m : mod) if (m) vkDestroyShaderModule(c_.device, m, nullptr);
     if (!ok) for (auto& row : prog_[p].pipe) for (VkPipeline& pl : row) if (pl) { vkDestroyPipeline(c_.device, pl, nullptr); pl = VK_NULL_HANDLE; }

@@ -157,7 +157,11 @@ GpuGuard& gpuVkCloudGuard();
 // "[vulkan] [lightpaths] ", "vulkan lightpaths <hash>"; gpu-vksky-step.txt, "gpuvksky=", "[vulkan] [sky] "), and the Black Hole Lab's own passes on Vulkan
 // (the lens, the table pass, the exposure, the glow, the glare) have one: gpuVkLensGuard ("gpuvklens=", "[vulkan] [lens] ")
 GpuGuard& gpuVkLensGuard();
-std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the ten Vulkan guards by their settings name (gpuvk<name>=)
+// 0.64.0: Saturn's rings per pixel on Vulkan (render/ring_card.h, orbit/ring_check.h): gpuVkRingsGuard ("gpuvkrings=", "[vulkan] [rings] ")
+GpuGuard& gpuVkRingsGuard();
+// 0.64.0: the Classic Cloud 3D dots on Vulkan (render/classic_card.h, atom/classic_check.h): gpuVkClassicGuard ("gpuvkclassic=", "[vulkan] [classic] ")
+GpuGuard& gpuVkClassicGuard();
+std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the twelve Vulkan guards by their settings name (gpuvk<name>=)
 
 // 0.63.0: the frame's thread (main.cpp, at start): a guarded begin() there never waits for another guard's open step (every other thread does)
 void gpuGuardFrameThread();

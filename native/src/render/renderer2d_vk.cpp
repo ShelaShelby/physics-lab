@@ -36,6 +36,8 @@ void Renderer2D::useVulkan(VkDraw2D* d) {
 void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     if (atomCard_) { atomCard_->reset(); delete atomCard_; atomCard_ = nullptr; }
     if (molCard_) { molCard_->reset(); delete molCard_; molCard_ = nullptr; }
+    delete ringCard_; ringCard_ = nullptr;   // 0.64.0
+    delete classicCard_; classicCard_ = nullptr;
     if (vkc_ || !c) {
         delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr;
         dropVkGlow(vkGlow_); vkGlow_ = nullptr;
@@ -48,6 +50,8 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     vkc_ = c;
     vkAtomCard_ = c ? +[](VkCards& v) { return makeVkAtomCard(v); } : nullptr;
     vkMolCard_ = c ? +[](VkCards& v) { return makeVkMoleculeCard(v); } : nullptr;
+    vkRingCard_ = c ? +[](VkCards& v) { return makeVkRingCard(v); } : nullptr;
+    vkClassicCard_ = c ? +[](VkCards& v) { return makeVkClassicCard(v); } : nullptr;
     rocksWhy_.clear();
     if (!c) return;
     std::string w;
@@ -87,6 +91,7 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
     vkGrid_.assign(n, -1);
     vkLight_.assign(n, -1.0);
     vkRocks_.assign(n, 0);
+    classicOk_.assign(n, 0);
     if (!vkc_) return true;
     if (!forShot) {                                                            // each program's first full use (its guarded step), once a frame
         const int off = vkPollFirstUses(*vkc_, compute_, outline_, rocks_, vkGlow_);
@@ -104,6 +109,7 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
             const VkBuffer jump = d.grpBuf ? vkJumpGroups(atomCard_) : VK_NULL_HANDLE;
             if (!d.grpBuf || jump) vkGrid_[i] = vkGlowRecord(vkGlow_, d, jump, clBytes_);
         } else if (sg.kind == Kind::MolCloud && molCard_) vkGrid_[i] = vkMolCloudRecord(molCard_, molClouds_[std::size_t(sg.slot)]);
+        else if (sg.kind == Kind::CloudClassic) classicOk_[i] = vkClassicRecord(classicCard_, classicDraws_[std::size_t(sg.slot)], clBytes_) ? 1 : 0;   // 0.64.0
         else if (sg.kind == Kind::Lens && vkbh_) {                             // 0.62.0: the Black Hole Lab's passes, before the frame (render/vk_blackhole.h)
             vkbh_->lens(lens_[std::size_t(sg.slot)], width_, height_, texW_[static_cast<int>(Map::Sky)], fbW, fbH);
             skyStats_ = vkbh_->skyStats(); glareStats_ = vkbh_->glareStats(); lensRedraws_ = vkbh_->redraws(); vkGlareBusy_ = vkbh_->glareBusy();
@@ -265,6 +271,32 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             const int zero = 0;
             V.setI(VkDraw2D::kMesh, "uMaskOn", &zero, 1);                       // (OpenGL never sets it for the mesh program: 0, its default)
             V.drawMesh(m.vk, sg.first, sg.count);
+            break;
+        }
+        case Kind::CloudClassic: {                                             // 0.64.0: the squares kClassicCS wrote, in the processor's order (kBlob)
+            if (!classicOk_[si]) break;
+            const ClassicDraw& d = classicDraws_[std::size_t(sg.slot)];
+            const int one = 1, zero = 0;
+            V.setF(VkDraw2D::kBlob, "uSize", size, 2);
+            V.setF(VkDraw2D::kBlob, "uFuzz", fuzzTableVk(), 1, 17);
+            V.setI(VkDraw2D::kBlob, "uPalWheel", d.wheel ? &one : &zero, 1);
+            V.setI(VkDraw2D::kBlob, "uPalLight", d.light ? &one : &zero, 1);
+            V.setF(VkDraw2D::kBlob, "uPalPlus", d.plus, 4);
+            V.setF(VkDraw2D::kBlob, "uPalMinus", d.minus, 4);
+            V.setI(VkDraw2D::kBlob, "uSphN", &zero, 1);
+            V.drawInst(VkDraw2D::kBlob, VkDraw2D::kNormal, vkClassicSquares(classicCard_), VK_NULL_HANDLE, sg.count);
+            break;
+        }
+        case Kind::Rings: {                                                    // 0.64.0: Saturn's rings per pixel (kRingsFS)
+            const RingsDraw& d = ringDraws_[std::size_t(sg.slot)];
+            ringsUniforms(d, [&](const char* name, const float* v, int comps, int count) { V.setF(VkDraw2D::kRings, name, v, comps, count); },
+                             [&](const char* name, const int* v, int comps) { V.setI(VkDraw2D::kRings, name, v, comps); });
+            V.setF(VkDraw2D::kRings, "uSize", size, 2);
+            const int aa = gray_ || forShot || V.samples() <= 1 ? 0 : 1;           // (the picture's own multisampling: the 4 samples averaged in the shader)
+            const float px = fbW > 0 ? static_cast<float>(width_ / fbW) : 1.0f;
+            V.setI(VkDraw2D::kRings, "uAA", &aa, 1);
+            V.setF(VkDraw2D::kRings, "uPx", &px, 1);
+            V.draw(VkDraw2D::kRings, VkDraw2D::kNormal, vb, sg.first, sg.count);
             break;
         }
         case Kind::Planet: {

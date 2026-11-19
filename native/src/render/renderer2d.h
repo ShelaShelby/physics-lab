@@ -19,6 +19,8 @@
 
 #include "gl_loader.h"
 #include "group_compute.h"
+#include "ring_card.h"
+#include "classic_card.h"
 #include "mesh.h"
 #include "outline_compute.h"
 #include "rock_compute.h"
@@ -59,6 +61,14 @@ public:
     KerrSky& kerrSky() { return sky_; }
     AtomCard& atomCard();                                            // 0.57.0: the Atom Lab's Slice dots and jump groups on the card (made at the first call)
     MoleculeCard& moleculeCard();                                    // 0.57.1: the Molecule Lab's Density cloud on the card (made at the first call)
+    // 0.64.0: Saturn's rings per pixel on the card (Vulkan only: nullptr on OpenGL or without the card programs); ringsCard records one half of the rings
+    // once its check passed (ready): false: not drawn (the caller draws the processor's triangles)
+    RingCard* ringCard();
+    bool ringsCard(const RingsDraw& d);
+    // 0.64.0: the Classic Cloud 3D dots from the card (Vulkan only: nullptr otherwise); cloudClassic records them once its check passed (ready): false: not
+    // drawn (the caller makes the processor's squares)
+    ClassicCard* classicCard();
+    bool cloudClassic(const ClassicDraw& d);
     void skyMath(const std::vector<float>& in, std::vector<float>& out) { if (vk_) { out.assign(in.size() / 12 * 8, 0.0f); return; } sky_.math(in, out, cmpVao_); }   // (tests; OpenGL's only)
     // 0.56.0: the last sky pass: its time on the card (GL_TIMESTAMP pairs, read back without waiting: a few frames old) for the whole picture and at the
     // resolution drawn, the resolution's scale (1 = full), the passes drawn, the card's exposure (its brightest disc channel and Y, read back a frame or two
@@ -309,7 +319,7 @@ public:
     bool glareBusy() const { return vk_ ? vkGlareBusy_ : glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // (0.62.0: Vulkan's mirrored each frame)   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
 private:
-    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud };
+    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic };
     struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; bool hdr = false; bool lunar = false; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
@@ -452,6 +462,13 @@ private:
     bool vkGlareBusy_ = false;
     AtomCard* (*vkAtomCard_)(VkCards&) = nullptr;
     MoleculeCard* (*vkMolCard_)(VkCards&) = nullptr;
+    RingCard* (*vkRingCard_)(VkCards&) = nullptr;   // 0.64.0
+    RingCard* ringCard_ = nullptr;                  // 0.64.0: owned
+    ClassicCard* (*vkClassicCard_)(VkCards&) = nullptr;
+    ClassicCard* classicCard_ = nullptr;            // 0.64.0: owned
+    std::vector<ClassicDraw> classicDraws_;         // this frame's (Segment::slot)
+    std::vector<char> classicOk_;                   // recorded this frame
+    std::vector<RingsDraw> ringDraws_;              // this frame's (Segment::slot)
     void (*vkDropCards_)(Renderer2D&) = nullptr;
     bool noCompute_ = false;
     std::string rocksWhy_;

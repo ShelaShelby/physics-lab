@@ -70,7 +70,7 @@ inline void vkMemoryBarrier2(VkCommandBuffer cb, VkPipelineStageFlags2 ss, VkAcc
 
 class VkDraw2D {
 public:
-    enum Prog { kTri, kPlanet, kSquare, kBlob, kMesh, kComposite, kGray, kCloud, kMolDot, kProgCount };   // 0.61.0: kCloud (kCloudVS), kMolDot (kMolDotVS), with kBlobFS
+    enum Prog { kTri, kPlanet, kSquare, kBlob, kMesh, kComposite, kGray, kCloud, kMolDot, kRings, kProgCount };   // 0.61.0: kCloud (kCloudVS), kMolDot (kMolDotVS), with kBlobFS; 0.64.0: kRings (kVertexShader, kRingsFS)
     enum Blend { kNoBlend, kNormal, kAdditive, kPremul, kOneOne, kBlendCount };   // as Renderer2D::end: normalBlend; additive blobs; premultiplied over; GL_ONE, GL_ONE
     enum Pass { kPassMs, kPass8, kPassF, kPassCount };                        // the picture (S samples), an 8-bit picture of 1 sample, the cloud's float picture
 
@@ -115,6 +115,7 @@ public:
     // by kMolDotsCS (binding 1, 4 floats); the corners at binding 0
     void drawInst(Prog p, Blend b, VkBuffer inst1, VkBuffer inst2, int instances);
     // kCloud and kMolDot are made when their card program is first built (their own guarded steps, render/vk_card.cpp), not at init: false, why says it
+    // (0.64.0: kRings too, Saturn's rings per pixel, the normal blend only)
     bool addProgram(Prog p, std::string& why);
     bool hasProgram(Prog p) const { return prog_[p].pipe[kPass8][kNormal] != VK_NULL_HANDLE; }
     // a buffer or other object that a frame on the card may still use: f() is called once the frames up to this one are done

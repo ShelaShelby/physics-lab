@@ -2247,6 +2247,171 @@ void main() {
 }
 )";
 
+// 0.64.0: Saturn's rings per pixel on the graphics card (Vulkan), the processor's triangles (orbit/ring_draw.h ringTriangles) as the reference: the same
+// 128 angular steps with straight chords (a pixel's radius is measured along its step's middle direction and divided by cos(half a step), so the chords'
+// edges are the processor's), the same half (the step's middle towards you or away), the same drawn bands (inner and outer edge in planet radii, opacity,
+// light k: uBands, sorted) and the planet's shadow (F < 0, as ringShadowF, at the pixel's own point of the ring plane). The colour: the tint times k in
+// linear light, encoded (render/shading.h shadeEncoded); black in the shadow. kRingsFS draws it (kVertexShader's vUV holds the point); kRingsProbeCS gives
+// the same function at listed points (the start-up check and the tests: orbit/ring_check.h).
+static const char* const kRingsHeadFSPart = R"(#version 330 core
+in vec2 vUV;
+in vec4 vColor;
+in vec4 vParam;
+out vec4 fragColor;
+)";
+static const char* const kRingsHeadCSPart = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Pts { vec2 pts[]; };
+layout(std430, binding = 1) writeonly buffer Res { vec4 res[]; };
+uniform int uCount;
+)";
+static const char* const kRingsPart = R"(
+uniform vec2 uCen;          // the planet's middle (points)
+uniform float uR;           // its equatorial radius (points)
+uniform vec3 uE1;           // the ring plane's axes (screen frame: right, up, towards you)
+uniform vec3 uE2;
+uniform vec3 uK0;           // the screen frame to the planet's frame (rows), the pole axis then divided by uSz
+uniform vec3 uK1;
+uniform vec3 uK2;
+uniform float uSz;
+uniform vec3 uLb;           // the Sun in that frame
+uniform int uBack;          // 1: the half away from you
+uniform int uNb;
+uniform vec3 uTint;         // the drawn tint (sRGB)
+uniform vec4 uBands[768];   // a0, a1 (planet radii), opacity, k
+vec3 ringDecode(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)); }
+vec3 ringEncode(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }
+float ringShadow(vec3 q) {
+    vec3 qb = vec3(dot(uK0, q), dot(uK1, q), dot(uK2, q) / uSz);
+    float LL = dot(uLb, uLb);
+    float t = -dot(qb, uLb) / LL;
+    vec3 d = qb + t * uLb;
+    float f = dot(d, d) - 1.0;
+    return t <= 0.0 ? max(f, 1e-3) : f;
+}
+vec4 ringAt(vec2 p) {
+    vec2 q = vec2((p.x - uCen.x) / uR, -(p.y - uCen.y) / uR);
+    float det = uE1.x * uE2.y - uE2.x * uE1.y;
+    if (abs(det) < 1e-6 || uNb <= 0) return vec4(0.0);
+    float A = (q.x * uE2.y - uE2.x * q.y) / det;
+    float B = (uE1.x * q.y - q.x * uE1.y) / det;
+    float t = atan(B, A);
+    if (t < 0.0) t += 6.28318530717958648;
+    float seg = 6.28318530717958648 / 128.0;
+    int i = clamp(int(floor(t / seg)), 0, 127);
+    float tm = (float(i) + 0.5) * seg;
+    float cm = cos(tm), sm = sin(tm);
+    float zm = cm * uE1.z + sm * uE2.z;
+    if ((zm < 0.0) != (uBack != 0)) return vec4(0.0);
+    float re = (A * cm + B * sm) / cos(0.5 * seg);
+    if (re < uBands[0].x) return vec4(0.0);
+    int lo = 0;
+    int hi = uNb - 1;
+    for (int k = 0; k < 12; k++) {
+        if (lo >= hi) break;
+        int m = (lo + hi + 1) / 2;
+        if (uBands[m].x <= re) lo = m; else hi = m - 1;
+    }
+    vec4 b = uBands[lo];
+    if (re >= b.y) return vec4(0.0);
+    float F = ringShadow(A * uE1 + B * uE2);
+    vec3 col = F >= 0.0 ? ringEncode(ringDecode(uTint) * b.w) : vec3(0.0);
+    return vec4(col, b.z);
+}
+)";
+static const char* const kRingsMainFSPart = R"(
+uniform int uAA;            // 1: the picture with 4 samples: the function at the 4 sample places, averaged as their blend would be (the triangles' multisampling)
+uniform float uPx;          // points per pixel
+void main() {
+    vec4 c = ringAt(vUV);
+    if (uAA != 0) {
+        vec4 s0 = c * 0.0;
+        vec4 s1 = ringAt(vUV + vec2(-0.125, -0.375) * uPx), s2 = ringAt(vUV + vec2(0.375, -0.125) * uPx);
+        vec4 s3 = ringAt(vUV + vec2(-0.375, 0.125) * uPx), s4 = ringAt(vUV + vec2(0.125, 0.375) * uPx);
+        float a = 0.25 * (s1.a + s2.a + s3.a + s4.a);
+        if (a <= 0.0) discard;
+        s0.rgb = (s1.rgb * s1.a + s2.rgb * s2.a + s3.rgb * s3.a + s4.rgb * s4.a) / (4.0 * a);
+        s0.a = a;
+        fragColor = s0;
+        return;
+    }
+    if (c.a <= 0.0) discard;
+    fragColor = c;
+}
+)";
+static const char* const kRingsMainCSPart = R"(
+void main() {
+    int n = int(gl_GlobalInvocationID.x);
+    if (n >= uCount) return;
+    res[n] = ringAt(pts[n]);
+}
+)";
+
+// 0.64.0: the Classic Cloud 3D dots from the card's cloud buffer (atom/cloud_dots.cpp projectCloud + buildClassic3D are the reference): each dot put on the
+// picture (the same mild perspective), its depth band (far, middle, near: > 0.35, -0.35 .. 0.35, < -0.35 of the cloud's radius) and its colour group; then
+// the dots' squares (Renderer2D::Blob, kind 5: the shader picks the group's colour) written band by band, inside a band group by group: the processor's
+// order of the groups (inside one band and group every square has the same colour, opacity and size, so their order does not change the blend). Three
+// steps: 0 each dot's key (band x groups + group, or none) counted; 1 the keys' starts; 2 each dot's square at its key's next place (the places after
+// the last square: none). uCounts: the counts, then the starts (used up as cursors), then the total.
+static const char* const kClassicCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Pos { float pos[]; };
+layout(std430, binding = 1) readonly buffer Grp { uint grp[]; };
+layout(std430, binding = 2) buffer Keys { uint keys[]; };
+layout(std430, binding = 3) buffer Counts { uint counts[]; };
+layout(std430, binding = 4) writeonly buffer Out { vec4 outb[]; };
+uniform int uStep;
+uniform int uCnt;
+uniform int uNg;
+uniform vec4 uCam0;                         // cx, cy (points), pxm (points per metre), ext (the cloud's radius, m)
+uniform vec4 uCam1;                         // cos yaw, sin yaw, cos pitch, sin pitch
+uniform vec2 uView;                         // the picture (points)
+uniform float uWeight;                      // cloudDotWeight
+uniform vec4 uBand[3];                      // a band's opacity and size (cloud_dots.h kDepthBand)
+uniform vec4 uGroupA[24];                   // .x: a group colour's own opacity
+
+void main() {
+    int i = int(gl_GlobalInvocationID.x);
+    int nk = 3 * uNg;
+    if (uStep == 1) {
+        if (i != 0) return;
+        uint s = 0u;
+        for (int k = 0; k < nk; k++) { counts[nk + k] = s; s += counts[k]; }
+        counts[2 * nk] = s;
+        return;
+    }
+    if (i >= uCnt) return;
+    if (uStep == 0) {
+        float x = pos[3 * i], y = pos[3 * i + 1], z = pos[3 * i + 2];
+        float x1 = x * uCam1.x - y * uCam1.y, y1 = x * uCam1.y + y * uCam1.x;
+        float dep = y1 * uCam1.z - z * uCam1.w, up = y1 * uCam1.w + z * uCam1.z;
+        float f = 1.0 / (1.0 + dep / (4.0 * uCam0.w));
+        float X = uCam0.x + x1 * uCam0.z * f, Y = uCam0.y - up * uCam0.z * f, D = dep / uCam0.w;
+        uint g = (grp[i >> 2] >> (8u * uint(i & 3))) & 255u;
+        uint key = 0xFFFFFFFFu;
+        if (!(X < 0.0 || X > uView.x || Y < 0.0 || Y > uView.y) && int(g) < uNg) {
+            int band = D > 0.35 ? 0 : D >= -0.35 ? 1 : 2;
+            key = uint(band * uNg) + g;
+            atomicAdd(counts[key], 1u);
+        }
+        keys[3 * i] = key; keys[3 * i + 1] = floatBitsToUint(X); keys[3 * i + 2] = floatBitsToUint(Y);
+        return;
+    }
+    uint total = counts[2 * nk];
+    if (uint(i) >= total) { for (int k = 0; k < 5; k++) outb[5 * i + k] = vec4(0.0, 0.0, 0.0, k == 0 ? 5.0 : 0.0); }
+    uint key = keys[3 * i];
+    if (key == 0xFFFFFFFFu) return;
+    uint p = atomicAdd(counts[nk + int(key)], 1u);
+    int band = int(key) / uNg, g = int(key) - band * uNg;
+    float a = clamp(uBand[band].x * uWeight, 0.0, 1.0) * uGroupA[g].x;
+    outb[5 * p] = vec4(uintBitsToFloat(keys[3 * i + 1]), uintBitsToFloat(keys[3 * i + 2]), 0.5 * uBand[band].y, 5.0);
+    outb[5 * p + 1] = vec4(float(g), 0.0, 0.0, 0.0);
+    outb[5 * p + 2] = vec4(0.0, 0.0, 0.0, a);
+    outb[5 * p + 3] = vec4(0.0);
+    outb[5 * p + 4] = vec4(0.0);
+}
+)";
+
 // 0.57.0: a jump with every electron drawn from the card's cloud buffer: each dot's group for this frame (atom_sim.cpp AtomLab::jumpGroups is the reference):
 // its fixed group (its shell's colour, uploaded once per jump, 4 a word), shown when its fixed random number, the lab's splitmix64 of i + (pop << 40) as
 // z >> 11, is below the share times 2^53, an integer compare (uT0 for the old dots, uT1 for the new, each the 53-bit integer ceil(share 2^53) as (low, high)

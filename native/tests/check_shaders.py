@@ -18,11 +18,14 @@ PAIRS = [("kVertexShader", "kFragmentShader"), ("kSquareVS", "kSquareFS"), ("kBl
          ("kCompositeVS", "kLensFS"),
          ("kCompositeVS", "kKerrFS"),   # 0.55.0: the Black Hole Lab's bent sky
          ("kCompositeVS", "kKerrSkyTinyFS"), ("kCompositeVS", "kKerrSkyMathFS"), ("kCompositeVS", "kKerrSkyFS"), ("kCompositeVS", "kMaxDownFS"),   # 0.56.0: the spinning hole per pixel
-         ("kMolDotVS", "kBlobFS"), ("kMolGridVS", "kCloudGridFS")]   # 0.57.1: the Molecule Lab's Density cloud on the card
+         ("kMolDotVS", "kBlobFS"), ("kMolGridVS", "kCloudGridFS"),   # 0.57.1: the Molecule Lab's Density cloud on the card
+         ("kVertexShader", "kRingsFS")]   # 0.64.0: Saturn's rings per pixel   # 0.57.1: the Molecule Lab's Density cloud on the card
 
 # 0.56.0: shaders the renderer puts together from pieces (render/kerr_sky.cpp, the same order); a piece's name ends in "Part"
 ASSEMBLED = {"kKerrSkyMathFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyMathPart"],
-             "kKerrSkyFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyTracePart", "kKerrSkyMainPart"]}
+             "kKerrSkyFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyTracePart", "kKerrSkyMainPart"],
+             # 0.64.0: Saturn's rings per pixel (Vulkan) and their probe (the start-up check)
+             "kRingsFS": ["kRingsHeadFSPart", "kRingsPart", "kRingsMainFSPart"], "kRingsProbeCS": ["kRingsHeadCSPart", "kRingsPart", "kRingsMainCSPart"]}
 # 0.56.0, SIZE: every shader's SPIR-V for OpenGL is measured as glslang writes it and with its size optimiser (-Os: every function inlined, as a driver
 # does; the 0.55.6 compute shader kKerrTableCS, which died at link on the owner's card, is 61 KB plain and 251 KB inlined). The per-pixel spinning hole
 # (kKerrSkyFS) inlined may not exceed SPIRV_ROOM times the largest inlined shader known to run on the owner's card (every shader of the app but

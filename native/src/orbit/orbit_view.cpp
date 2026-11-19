@@ -15,6 +15,8 @@
 #include "marker_colors.h"
 #include "giant_rings.h"
 #include "saturn_rings.h"
+#include "ring_check.h"
+#include "ring_draw.h"
 #include "saturn_profile.h"
 #include "shapes.h"
 #include "moon_sats.h"
@@ -619,133 +621,46 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     const auto drawRings = [&](const RingSet& rs, const SpinCtx* c, double x, double y, double r, const Light3& sun, double sunElev, bool back) {
         if (rs.bands.empty() || r < 1) return;
         // the pole on the screen (right, up, towards you); without a spin model, a fixed tilt as before
-        double px = c ? c->px : std::sin(-0.22) * 0.94, py = c ? c->py : std::cos(-0.22) * 0.94, pz = c ? c->pz : 0.34;
-        const double pn = std::sqrt(px * px + py * py + pz * pz); px /= pn; py /= pn; pz /= pn;
-        double e1x = py, e1y = -px, e1z = 0; { const double n = std::hypot(e1x, e1y); if (n < 1e-6) { e1x = 1; e1y = 0; } else { e1x /= n; e1y /= n; } }
-        const double e2x = py * e1z - pz * e1y, e2y = pz * e1x - px * e1z, e2z = px * e1y - py * e1x;   // P x E1
+        const double px0 = c ? c->px : std::sin(-0.22) * 0.94, py0 = c ? c->py : std::cos(-0.22) * 0.94, pz0 = c ? c->pz : 0.34;
+        const double pz = pz0 / std::sqrt(px0 * px0 + py0 * py0 + pz0 * pz0);
         const double mu = std::max(std::fabs(pz), 0.004), mu0 = std::max(std::fabs(sunElev), 1e-3);
         const bool sunlitFace = (pz >= 0) == (sunElev >= 0);   // you see the face the Sun lights
         const auto slab = [&](double tau) { return rings::shine(tau, mu, mu0, sunlitFace); };   // orbit/saturn_rings.h, tested
-        const double Lx = sun.x, Ly = -sun.y, Lz = sun.z;   // 0.46.7: the real Sun (right, up, towards you), as the ball
-        // 0.27: the planet's real shape (orbit/shapes.h): in its own frame (K) with the pole axis stretched by eq / polar radius the body is a ball of radius 1
-        const double sz = c ? polarRatio(rs.name) : 1.0;
-        const auto toBody = [&](double x, double y, double z, double o[3]) {
-            if (!c) { o[0] = x; o[1] = y; o[2] = z; return; }
-            for (int i = 0; i < 3; i++) o[i] = c->K[3 * i] * x + c->K[3 * i + 1] * y + c->K[3 * i + 2] * z;
-            o[2] /= sz;
-        };
-        double Lb[3]; toBody(Lx, Ly, Lz, Lb);
-        const double LL = Lb[0] * Lb[0] + Lb[1] * Lb[1] + Lb[2] * Lb[2];
-        // 0.46.7: the shadow test as a smooth function, negative in the planet's shadow: (closest approach of the ray to the Sun to the body's middle)^2 - 1, in the frame
-        // where the body is a ball of radius 1. On the rings (all outside the ball) the ray's half away from the Sun never comes within 1 of the middle, so its value stays positive there.
-        // A quad the shadow's edge crosses is cut along the line where this function is 0 (linear between the corners of small sub-triangles), so the edge is sharp and smooth
-        // (until 0.46.6 each corner was 0 or 1 and the colours were blended across the quad: a staircase edge).
-        const auto shadowF = [&](double qx, double qy, double qz) {
-            double qb[3]; toBody(qx, qy, qz, qb);
-            const double t = -(qb[0] * Lb[0] + qb[1] * Lb[1] + qb[2] * Lb[2]) / LL;
-            const double dx = qb[0] + t * Lb[0], dy = qb[1] + t * Lb[1], dz = qb[2] + t * Lb[2], f = dx * dx + dy * dy + dz * dz - 1;
-            return t <= 0 ? std::max(f, 1e-3) : f;
-        };
-        const auto splitTri = [&](const double* X, const double* Y, const double* F, Color litC, Color darkC) {   // a triangle cut along F = 0: the lit part and the shadowed part
-            double lx[4], ly[4], sx[4], sy[4]; int nl = 0, ns = 0;
-            for (int a = 0; a < 3; a++) {
-                const int b2 = (a + 1) % 3;
-                if (F[a] >= 0) { lx[nl] = X[a]; ly[nl++] = Y[a]; } else { sx[ns] = X[a]; sy[ns++] = Y[a]; }
-                if ((F[a] >= 0) != (F[b2] >= 0)) {
-                    const double u = F[a] / (F[a] - F[b2]), ex = X[a] + u * (X[b2] - X[a]), ey = Y[a] + u * (Y[b2] - Y[a]);
-                    lx[nl] = ex; ly[nl++] = ey; sx[ns] = ex; sy[ns++] = ey;
-                }
-            }
-            for (int k2 = 1; k2 + 1 < nl; k2++) R.triangle(lx[0], ly[0], litC, lx[k2], ly[k2], litC, lx[k2 + 1], ly[k2 + 1], litC);
-            for (int k2 = 1; k2 + 1 < ns; k2++) R.triangle(sx[0], sy[0], darkC, sx[k2], sy[k2], darkC, sx[k2 + 1], sy[k2 + 1], darkC);
-        };
-        constexpr int kSeg = 128;
+        // 0.46.7: the real Sun (right, up, towards you), as the ball; 0.27: the planet's real shape (orbit/shapes.h): in its own frame (K) with the pole axis
+        // stretched by eq / polar radius the body is a ball of radius 1. 0.64.0: the geometry and the triangles in orbit/ring_draw.h (shared with the card's check)
+        const RingFrame fr = ringFrame(x, y, r, px0, py0, pz0, c ? c->K : nullptr, c ? polarRatio(rs.name) : 1.0, sun.x, -sun.y, sun.z);
         // 0.51.2: Saturn from Cassini's profile (UVIS, beta Cen 2008; orbit/saturn_profile.h): bins of at least a pixel (and at most 700 bins over the whole
-        // profile, for speed), each with the area-averaged blocked share and light of the 10 km measurements in it; neighbours that look the same are merged.
-        std::vector<rings::Band> profBands;
-        if (rs.profile) {
-            const double kmPx = rs.eqKm / r, span = rings::saturnProfileKm(rings::saturnProfileCount() - 1) - rings::saturnProfileKm(0);
-            // 0.64.0: the bins kept while their four inputs stay the same (the back and front halves of a frame ask for the same; a still view every frame)
-            static std::vector<rings::ProfileBin> bins;
-            static double kW = -1, kMu = -1, kMu0 = -1; static bool kSun = false;
-            const double wKm = std::max({10.0, kmPx, span / 700});
-            if (wKm != kW || mu != kMu || mu0 != kMu0 || sunlitFace != kSun) { bins = rings::saturnProfileBins(wKm, mu, mu0, sunlitFace); kW = wKm; kMu = mu; kMu0 = mu0; kSun = sunlitFace; }
-            for (const auto& pb : bins) {
-                rings::Band b{pb.innerKm, pb.outerKm, 0, 0};
-                b.blockedPre = pb.blocked; b.shinePre = pb.shine;
-                profBands.push_back(b);
+        // profile, for speed), each with the area-averaged blocked share and light of the 10 km measurements in it; neighbours that look the same are merged
+        // (0.64.0: orbit/ring_check.cpp saturnDrawnBands, kept while its inputs stay the same).
+        static std::vector<RingBand> drawnOther;
+        const std::vector<RingBand>* drawnP = &drawnOther;
+        if (rs.profile) drawnP = &saturnDrawnBands(rs.eqKm, r, mu, mu0, sunlitFace);
+        else {
+            drawnOther.clear();
+            for (const auto& bd : rs.bands) {
+                const double rin = bd.innerKm / rs.eqKm, rout = bd.outerKm / rs.eqKm, mid = 0.5 * (rin + rout);
+                const double wPx = (rout - rin) * r, drawPx = std::max(wPx, 1.0), cover = wPx / drawPx;
+                const float alpha = static_cast<float>(rings::blocked(bd.tau, mu) * cover);
+                const double shine = bd.albedo / 0.5 * slab(bd.tau) * cover;   // the light the ring sends you, 1 = the full tint
+                if (alpha < 0.002f && shine < 0.002) continue;      // too faint to show at all (Jupiter's main ring, Neptune's dusty rings)
+                const float k = static_cast<float>(alpha > 1e-6f ? std::min(1.0, shine / alpha) : 0.0);   // drawn colour x opacity = the light
+                drawnOther.push_back({mid - 0.5 * drawPx / r, mid + 0.5 * drawPx / r, alpha, k});
             }
         }
-        for (const auto& bd : rs.profile ? profBands : rs.bands) {
-            const double rin = bd.innerKm / rs.eqKm, rout = bd.outerKm / rs.eqKm, mid = 0.5 * (rin + rout);
-            const double wPx = (rout - rin) * r, drawPx = std::max(wPx, 1.0), cover = wPx / drawPx;
-            const double a0 = mid - 0.5 * drawPx / r, a1 = mid + 0.5 * drawPx / r;
-            const float alpha = static_cast<float>((bd.blockedPre >= 0 ? bd.blockedPre : rings::blocked(bd.tau, mu)) * cover);
-            const double shine = (bd.shinePre >= 0 ? bd.shinePre : bd.albedo / 0.5 * slab(bd.tau)) * cover;   // the light the ring sends you, 1 = the full tint
-            if (alpha < 0.002f && shine < 0.002) continue;      // too faint to show at all (Jupiter's main ring, Neptune's dusty rings)
-            const float k = static_cast<float>(alpha > 1e-6f ? std::min(1.0, shine / alpha) : 0.0);   // drawn colour x opacity = the light
-            const int nr = std::max(1, std::min(8, static_cast<int>(drawPx / 6)));   // radial steps, so the shadow's edge is smooth
+        const std::vector<RingBand>& drawn = *drawnP;
+        // 0.64.0: Saturn's rings on the graphics card (Vulkan; render/shaders.h kRingsFS: the same chords, bands and shadow per pixel) once its start-up check passed
+        if (rs.profile && drawRingsOnCard(R, fr, drawn, back, W, H)) return;
+        for (const RingBand& b : drawn) {
             // 0.50 (review item 7): ONE drawn tint (0.91, 0.83, 0.66) for every ring system (Saturn's, Jupiter's, Uranus's, Neptune's): not measured. The Cassini VIMS
             // papers found (Filacchione et al. 2012, arXiv:1203.6230; Hedman et al. 2013, arXiv:1210.4727) only plot the spectra; no table to compute a colour from.
             // Learn says so; ROADMAP: source needed.
             // 0.50 (review item 3): the ring's light k multiplies the tint in LINEAR light (the tint decoded with IEC 61966-2-1), then the result is encoded (render/shading.h)
-            const Color litTint{static_cast<float>(render::shadeEncoded(0.91, k)), static_cast<float>(render::shadeEncoded(0.83, k)), static_cast<float>(render::shadeEncoded(0.66, k)), 1.0f};
-            // 0.64.0 (plain waste, the same picture): the angles' cosines and sines once per call; per angular step the half test once; the shadow function
-            // at the nr + 1 radii of both edges once (shared by the radial steps); a run of radial steps the shadow's edge does not cross, all lit or all
-            // dark, drawn as ONE quad (the steps lie on the same two straight lines from the middle, so their union is that quad: the same pixels); a quad
-            // wholly beyond one side of the picture is not drawn (it covers none of its pixels)
-            const Color litC{litTint.r, litTint.g, litTint.b, alpha}, darkC{0, 0, 0, alpha};
-            double fe[2][9], xe[2][9], ye[2][9];
-            for (int i = 0; i < kSeg; i++) {
-                const double t0 = 2 * kPi * i / kSeg, t1 = 2 * kPi * (i + 1) / kSeg;
-                const double zm = std::cos(0.5 * (t0 + t1)) * e1z + std::sin(0.5 * (t0 + t1)) * e2z;
-                if ((zm < 0) != back) continue;                   // back pass: the half away from you
-                const auto at = [&](double rr, double tt, double& X, double& Y, double& F) {   // a point of the ring: screen position and shadow function
-                    const double ct = std::cos(tt), st = std::sin(tt);
-                    const double qx = rr * (ct * e1x + st * e2x), qy = rr * (ct * e1y + st * e2y), qz = rr * (ct * e1z + st * e2z);
-                    X = x + r * qx; Y = y - r * qy; F = shadowF(qx, qy, qz);
-                };
-                for (int j = 0; j <= nr; j++) {
-                    const double rj = a0 + (a1 - a0) * j / nr;
-                    at(rj, t0, xe[0][j], ye[0][j], fe[0][j]);
-                    at(rj, t1, xe[1][j], ye[1][j], fe[1][j]);
-                }
-                {   // the whole column beyond one side of the picture: nothing of it is drawn
-                    double mnx = 1e300, mxx = -1e300, mny = 1e300, mxy = -1e300;
-                    for (int e = 0; e < 2; e++) for (int j = 0; j <= nr; j += nr) { mnx = std::min(mnx, xe[e][j]); mxx = std::max(mxx, xe[e][j]); mny = std::min(mny, ye[e][j]); mxy = std::max(mxy, ye[e][j]); }
-                    if (mxx < -2 || mnx > W + 2 || mxy < -2 || mny > H + 2) continue;
-                }
-                const auto sideOf = [&](int j) { return fe[0][j] >= 0; };
-                const auto mixedAt = [&](int j) { const bool s0 = fe[0][j] >= 0; return !(s0 == (fe[0][j + 1] >= 0) && s0 == (fe[1][j + 1] >= 0) && s0 == (fe[1][j] >= 0)); };
-                int j = 0;
-                while (j < nr) {
-                    if (!mixedAt(j)) {                            // a run of whole steps on one side of the shadow's edge: one quad
-                        const bool lit = sideOf(j);
-                        int k = j + 1;
-                        while (k < nr && !mixedAt(k) && sideOf(k) == lit) k++;
-                        const double aX[3] = {xe[0][j], xe[0][k], xe[1][k]}, aY[3] = {ye[0][j], ye[0][k], ye[1][k]}, aF[3] = {fe[0][j], fe[0][k], fe[1][k]};
-                        const double bX[3] = {xe[0][j], xe[1][k], xe[1][j]}, bY[3] = {ye[0][j], ye[1][k], ye[1][j]}, bF[3] = {fe[0][j], fe[1][k], fe[1][j]};
-                        splitTri(aX, aY, aF, litC, darkC);
-                        splitTri(bX, bY, bF, litC, darkC);
-                        j = k;
-                        continue;
-                    }
-                    // the shadow's edge crosses this step: 4 x 4 smaller quads, each cut along it (as before)
-                    const double r0 = a0 + (a1 - a0) * j / nr, r1 = a0 + (a1 - a0) * (j + 1) / nr;
-                    constexpr int S = 4;
-                    for (int u = 0; u < S; u++)
-                        for (int w = 0; w < S; w++) {
-                            double sX[4], sY[4], sF[4];
-                            const double ra = r0 + (r1 - r0) * u / S, rb2 = r0 + (r1 - r0) * (u + 1) / S, ta = t0 + (t1 - t0) * w / S, tb = t0 + (t1 - t0) * (w + 1) / S;
-                            at(ra, ta, sX[0], sY[0], sF[0]); at(rb2, ta, sX[1], sY[1], sF[1]); at(rb2, tb, sX[2], sY[2], sF[2]); at(ra, tb, sX[3], sY[3], sF[3]);
-                            const double aX[3] = {sX[0], sX[1], sX[2]}, aY[3] = {sY[0], sY[1], sY[2]}, aF[3] = {sF[0], sF[1], sF[2]};
-                            const double bX[3] = {sX[0], sX[2], sX[3]}, bY[3] = {sY[0], sY[2], sY[3]}, bF[3] = {sF[0], sF[2], sF[3]};
-                            splitTri(aX, aY, aF, litC, darkC);
-                            splitTri(bX, bY, bF, litC, darkC);
-                        }
-                    j++;
-                }
-            }
+            const Color litC{static_cast<float>(render::shadeEncoded(kRingTint[0], b.k)), static_cast<float>(render::shadeEncoded(kRingTint[1], b.k)), static_cast<float>(render::shadeEncoded(kRingTint[2], b.k)), b.alpha};
+            const Color darkC{0, 0, 0, b.alpha};
+            ringTriangles(fr, b, back, W, H, [&](double x0, double y0, double x1, double y1, double x2, double y2, bool lit) {
+                const Color& cc = lit ? litC : darkC;
+                R.triangle(x0, y0, cc, x1, y1, cc, x2, y2, cc);
+            });
         }
     };
 

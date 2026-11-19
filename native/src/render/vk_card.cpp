@@ -23,6 +23,8 @@
 #include "r2d_outlevel_comp.h"
 #include "r2d_rocks_comp.h"
 #include "r2d_slice_comp.h"
+#include "r2d_ringprobe_comp.h"
+#include "r2d_classic_comp.h"
 #include "r2d_jump_comp.h"
 #include "r2d_moldots_comp.h"
 #include "r2d_cgrid_vert.h"
@@ -63,6 +65,8 @@ std::string vkCardVersion(const std::string& name) {
     if (name == "jump") return "vulkan " + jumpShaderId();
     if (name == "lightpaths") return vkCardId("lightpaths", {kKerrTableCS});                       // 0.62.0 (step 4): the Black Hole Lab's
     if (name == "sky") return vkCardId("sky", {kKerrSkyTinyFS, kKerrSkyHeadPart, kEllipticPart, kKerrSkyMathPart, kKerrSkyTracePart, kKerrSkyMainPart});
+    if (name == "rings") return vkCardId("rings", {kVertexShader, kRingsHeadFSPart, kRingsHeadCSPart, kRingsPart, kRingsMainFSPart, kRingsMainCSPart});   // 0.64.0
+    if (name == "classic") return vkCardId("classic", {kClassicCS, kBlobVS, kBlobFS});   // 0.64.0
     if (name == "lens") return vkCardId("lens", {kCompositeVS, kLensFS, kKerrFS, kMaxDownFS, kGlowDownFS, kGlowBlurFS, kGlowAddFS, kGlareDownFS, kGlareAddFS, kCompositeFS});
     return "vulkan " + molCloudShaderId();
 }
@@ -1304,6 +1308,179 @@ private:
 };
 
 AtomCard* makeVkAtomCard(VkCards& c) { return new AtomCardVk(c); }
+
+// =====================================================================================================================================================
+// 0.64.0: Saturn's rings per pixel (kRingsFS with kVertexShader, the renderer's program kRings) and the same function at listed points (kRingsProbeCS),
+// built and checked by orbit/ring_check.cpp under gpuVkRingsGuard
+// =====================================================================================================================================================
+class RingCardVk : public RingCard {
+public:
+    explicit RingCardVk(VkCards& c) : c_(c) {}
+    ~RingCardVk() override { while (!jobs_.empty()) release(jobs_.back().id); c_.dropKernel(k_); }
+    bool build(std::string& why) override {
+        if (k_.pipe) return true;
+        if (forcedFail("rings")) { why = "made to fail on purpose (PL_VK_CARDFAIL=rings)"; return false; }
+        if (c_.draw2d() && !c_.draw2d()->addProgram(VkDraw2D::kRings, why)) return false;   // (the tests have no renderer: the probe alone)
+        if (!c_.makeKernel(k_r2d_ringprobe_comp, sizeof k_r2d_ringprobe_comp, k_, why)) return false;
+        return true;
+    }
+    bool built() const override { return k_.pipe != VK_NULL_HANDLE; }
+    int beginProbe(const RingsDraw& d, const std::vector<float>& xy) override {
+        const int n = static_cast<int>(xy.size() / 2);
+        if (!built() || !c_.ok() || n <= 0 || jobs_.size() >= 8) return 0;
+        Job j;
+        j.id = nextId_++;
+        j.n = n;
+        if (!c_.makeBuffer(VkDeviceSize(8) * VkDeviceSize(n), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.pts, "the rings' probe points")) return 0;
+        if (!c_.makeBuffer(VkDeviceSize(16) * VkDeviceSize(n), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.out, "the rings' probe")) { c_.dropBuffer(j.pts); return 0; }
+        std::memcpy(j.pts.map, xy.data(), std::size_t(8) * std::size_t(n));
+        VkUniforms& u = k_.u;
+        ringsUniforms(d, [&](const char* name, const float* v, int comps, int count) { u.f(name, v, comps, count); },
+                         [&](const char* name, const int* v, int comps) { u.i(name, v, comps); });
+        u.i("uCount", &n, 1);
+        if (!c_.dispatch(k_, {&j.pts, &j.out}, static_cast<std::uint32_t>((n + 63) / 64))) { c_.dropBuffer(j.pts); c_.dropBuffer(j.out); return 0; }
+        c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
+        j.ticket = c_.flush(false);
+        if (!j.ticket) { c_.dropBuffer(j.pts); c_.dropBuffer(j.out); return 0; }
+        jobs_.push_back(j);
+        return j.id;
+    }
+    JobState pollProbe(int job, std::vector<float>& rgba) override {
+        Job* j = find(job);
+        if (!j) return JobState::Failed;
+        if (!c_.done(j->ticket)) return JobState::Pending;
+        const bool good = !c_.failed();
+        if (good) { rgba.resize(std::size_t(4) * std::size_t(j->n)); std::memcpy(rgba.data(), j->out.map, rgba.size() * sizeof(float)); }
+        release(job);
+        return good ? JobState::Done : JobState::Failed;
+    }
+    void cancel(int job) override { release(job); }
+private:
+    struct Job { int id = 0, n = 0; std::uint64_t ticket = 0; VkCards::Buf pts, out; };
+    Job* find(int id) { for (Job& j : jobs_) if (j.id == id) return &j; return nullptr; }
+    void release(int id) {
+        for (std::size_t i = 0; i < jobs_.size(); i++)
+            if (jobs_[i].id == id) { c_.dropBuffer(jobs_[i].pts); c_.dropBuffer(jobs_[i].out); jobs_.erase(jobs_.begin() + static_cast<std::ptrdiff_t>(i)); return; }
+    }
+    VkCards& c_;
+    VkCards::Kernel k_;
+    std::vector<Job> jobs_;
+    int nextId_ = 1;
+};
+
+RingCard* makeVkRingCard(VkCards& c) { return new RingCardVk(c); }
+
+// =====================================================================================================================================================
+// 0.64.0: the Classic Cloud 3D dots from the card (kClassicCS, three steps, then the renderer's blob program draws the squares it wrote), built and checked
+// by atom/classic_check.cpp under gpuVkClassicGuard
+// =====================================================================================================================================================
+class ClassicCardVk : public ClassicCard {
+public:
+    explicit ClassicCardVk(VkCards& c) : c_(c) {}
+    ~ClassicCardVk() override { for (Job& j : jobs_) drop(j.b); drop(frame_); c_.dropKernel(k_); }
+    bool build(std::string& why) override {
+        if (k_.pipe) return true;
+        if (forcedFail("classic")) { why = "made to fail on purpose (PL_VK_CARDFAIL=classic)"; return false; }
+        return c_.makeKernel(k_r2d_classic_comp, sizeof k_r2d_classic_comp, k_, why);
+    }
+    bool built() const override { return k_.pipe != VK_NULL_HANDLE; }
+    // the frame's: the squares of this frame into the device's buffer (in the open batch, before the picture's pass)
+    bool record(const ClassicDraw& d, long& bytes) {
+        if (!built() || !c_.ok() || d.cnt <= 0 || d.cnt > d.cap || !d.pts || !d.grp) return false;
+        if (!sized(frame_, d.cap, false)) return false;
+        if (d.epoch != epoch_ || d.cap != cap_ || d.k < k_n || d.k - k_n >= d.cap || fresh_) {
+            c_.copyIn(d.pts, static_cast<std::size_t>(d.cap) * 12u, frame_.pos, 0);
+            bytes += d.cap * 12;
+        } else if (d.k > k_n) {
+            const long lo = k_n % d.cap, hi = d.k % d.cap;
+            const auto send = [&](long a, long b) { if (b > a) { c_.copyIn(d.pts + 3 * a, static_cast<std::size_t>(b - a) * 12u, frame_.pos, VkDeviceSize(a) * 12u); bytes += (b - a) * 12; } };
+            if (lo < hi) send(lo, hi); else { send(lo, d.cap); send(0, hi); }
+        }
+        epoch_ = d.epoch; cap_ = d.cap; k_n = d.k; fresh_ = false;
+        return run(d, frame_, kToVertexBit);
+    }
+    VkBuffer squares() const { return frame_.out.b; }
+    int beginCheck(const ClassicDraw& d) override {
+        if (!built() || !c_.ok() || d.cnt <= 0 || d.cnt > d.cap || !d.pts || !d.grp || jobs_.size() >= 4) return 0;
+        Job j;
+        j.id = nextId_++; j.cnt = d.cnt; j.ng = d.ng;
+        if (!sized(j.b, d.cap, true)) { drop(j.b); return 0; }
+        c_.copyIn(d.pts, static_cast<std::size_t>(d.cap) * 12u, j.b.pos, 0);
+        if (!run(d, j.b, VkCards::kToHost)) { drop(j.b); return 0; }
+        j.ticket = c_.flush(false);
+        if (!j.ticket) { drop(j.b); return 0; }
+        jobs_.push_back(std::move(j));
+        return jobs_.back().id;
+    }
+    JobState pollCheck(int job, std::vector<std::uint32_t>& keys, std::vector<float>& squares, long& total) override {
+        for (std::size_t i = 0; i < jobs_.size(); i++) {
+            Job& j = jobs_[i];
+            if (j.id != job) continue;
+            if (!c_.done(j.ticket)) return JobState::Pending;
+            const bool good = !c_.failed();
+            if (good) {
+                keys.resize(std::size_t(3) * std::size_t(j.cnt)); std::memcpy(keys.data(), j.b.keys.map, keys.size() * 4);
+                squares.resize(std::size_t(20) * std::size_t(j.cnt)); std::memcpy(squares.data(), j.b.out.map, squares.size() * 4);
+                total = long(static_cast<const std::uint32_t*>(j.b.counts.map)[6 * j.ng]);
+            }
+            drop(j.b);
+            jobs_.erase(jobs_.begin() + static_cast<std::ptrdiff_t>(i));
+            return good ? JobState::Done : JobState::Failed;
+        }
+        return JobState::Failed;
+    }
+    bool fresh_ = true;                                          // (the frame's places sent whole at the next record)
+private:
+    static constexpr unsigned kToVertexBit = VkCards::kToVertex;
+    struct Bufs { VkCards::Buf pos, grp, keys, counts, out; long cap = 0; };
+    struct Job { int id = 0; long cnt = 0; int ng = 2; std::uint64_t ticket = 0; Bufs b; };
+    void drop(Bufs& b) { c_.dropBuffer(b.pos); c_.dropBuffer(b.grp); c_.dropBuffer(b.keys); c_.dropBuffer(b.counts); c_.dropBuffer(b.out); b.cap = 0; }
+    bool sized(Bufs& b, long cap, bool host) {
+        if (b.cap == cap && b.pos.b) return true;
+        drop(b);
+        const VkBufferUsageFlags st = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        const bool ok = c_.makeBuffer(VkDeviceSize(cap) * 12u, st, false, b.pos, "the Classic dots' places") &&
+                        c_.makeBuffer((VkDeviceSize(cap) + 3) / 4 * 4 + 4, st, false, b.grp, "the Classic dots' groups") &&
+                        c_.makeBuffer(VkDeviceSize(cap) * 12u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, host, b.keys, "the Classic dots' keys") &&
+                        c_.makeBuffer(4u * (6u * 24u + 4u), st, host, b.counts, "the Classic dots' counts") &&
+                        c_.makeBuffer(VkDeviceSize(cap) * 80u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, host, b.out, "the Classic dots' squares");
+        if (ok) b.cap = cap;
+        return ok;
+    }
+    bool run(const ClassicDraw& d, Bufs& b, unsigned consumer) {
+        const int ng = std::max(1, std::min(24, d.ng)), cnt = static_cast<int>(d.cnt);
+        std::vector<std::uint8_t> g((static_cast<std::size_t>(cnt) + 3) / 4 * 4, 255);
+        std::memcpy(g.data(), d.grp, static_cast<std::size_t>(cnt));
+        c_.copyIn(g.data(), g.size(), b.grp, 0);
+        static const std::uint32_t zeros[6 * 24 + 4] = {};
+        c_.copyIn(zeros, sizeof zeros, b.counts, 0);
+        c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToCompute);
+        VkUniforms& u = k_.u;
+        const float cam0[4] = {d.cx, d.cy, d.pxm, d.ext}, cam1[4] = {d.ca, d.sa, d.cb, d.sb}, view[2] = {d.w, d.h};
+        const float band[12] = {0.15f, 1.6f, 0, 0, 0.3f, 2.0f, 0, 0, 0.55f, 2.4f, 0, 0};   // (atom/cloud_dots.h kDepthBand, as floats)
+        float ga[96] = {};
+        for (int i = 0; i < 24; i++) ga[4 * i] = d.groupA[i];
+        u.i("uCnt", &cnt, 1); u.i("uNg", &ng, 1); u.f("uCam0", cam0, 4); u.f("uCam1", cam1, 4); u.f("uView", view, 2); u.f("uWeight", &d.weight, 1);
+        u.f("uBand", band, 4, 3); u.f("uGroupA", ga, 4, 24);
+        for (int step = 0; step < 3; step++) {
+            u.i("uStep", &step, 1);
+            if (!c_.dispatch(k_, {&b.pos, &b.grp, &b.keys, &b.counts, &b.out}, step == 1 ? 1u : static_cast<std::uint32_t>((cnt + 63) / 64))) return false;
+            c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, step < 2 ? unsigned(VkCards::kToCompute) : consumer);
+        }
+        return true;
+    }
+    VkCards& c_;
+    VkCards::Kernel k_;
+    Bufs frame_;
+    std::vector<Job> jobs_;
+    int nextId_ = 1;
+    std::uint64_t epoch_ = 0;
+    long cap_ = 0, k_n = -1;
+};
+
+ClassicCard* makeVkClassicCard(VkCards& c) { return new ClassicCardVk(c); }
+bool vkClassicRecord(ClassicCard* c, const ClassicDraw& d, long& bytes) { return c && static_cast<ClassicCardVk*>(c)->record(d, bytes); }
+VkBuffer vkClassicSquares(ClassicCard* c) { return c ? static_cast<ClassicCardVk*>(c)->squares() : VK_NULL_HANDLE; }
 VkBuffer vkJumpGroups(AtomCard* a) { const AtomCardVk* v = dynamic_cast<const AtomCardVk*>(a); return v ? v->vkJump() : VK_NULL_HANDLE; }
 
 // =====================================================================================================================================================

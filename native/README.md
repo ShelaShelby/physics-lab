@@ -1,7 +1,7 @@
 # Physics Lab — Windows app
 
-Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan 1.3 (1.4 used where present), Dear ImGui). Version **0.63.1 alpha**. The app draws with Vulkan; OpenGL 4.3 (3.3 core fallback) is the backup: Settings, Performance, Graphics, and by itself on a card without Vulkan 1.3 or when Vulkan cannot start (PLAN_VULKAN.md). Four labs:
-- **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini).
+Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan 1.3 (1.4 used where present), Dear ImGui). Version **0.64.0 alpha**. The app draws with Vulkan; OpenGL 4.3 (3.3 core fallback) is the backup: Settings, Performance, Graphics, and by itself on a card without Vulkan 1.3 or when Vulkan cannot start (PLAN_VULKAN.md). Four labs:
+- **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini, drawn per pixel by the graphics card on Vulkan with the processor's triangles as reference).
 - **Atom Lab**: any nucleus, down to quarks; one electron (exact, with Dirac's relativity) or every electron of the neutral atoms (Dirac-Hartree-Fock orbitals computed for the app);
   photon jumps along NIST's measured lines: one electron for every element, every electron shown for 16 atoms (Li, Na, K, Rb, Cs, Fr, He, Be, Mg, Ca, Zn, Sr, Cd, Ba, Hg, Ra;
   GRASP2018 clouds per level). The other atoms say why they have no jumps. Atoms in a magnetic field: the Zeeman effect from weak to strong field (Paschen-Back), the split lines

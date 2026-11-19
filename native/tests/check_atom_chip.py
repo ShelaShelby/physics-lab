@@ -10,7 +10,7 @@
 # gets its usual isotope (the unit test in atom_tests holds the textbook mass numbers). All 118 elements are clicked in the real app.
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from shell_lib import run_app, inside, overlap, prefetch
+from shell_lib import run_app, inside, overlap, prefetch, Bmp
 
 KEYS = ["view", "layer", "zoom", "zoomTo", "focus", "drag", "paused", "yaw", "pitch", "oyaw", "opitch", "ctilt", "czoom", "Z", "N", "usualN", "seed"]
 
@@ -29,6 +29,49 @@ CARD_STEPS = {"slice": ["compile the Slice's dots shader", "link the Slice's dot
               "jump": ["compile the jump's groups shader", "link the jump's groups shader", "the jump's first small run", "the jump's check", "the jump's first full use"]}
 CARD_BENCH = {"PL_GRAPHICS": "opengl", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all,atom.slice_super_drag",
               "PL_BENCH_WARMUP": "1.0", "PL_BENCH_MEASURE": "1.5"}
+
+def classic_part(binary, work):
+    # 0.64.0: the Classic Cloud 3D dots from the card (Vulkan): the start-up check passes here (every dot's group, band and place, the squares in the
+    # processor's order), the benchmark's Path names the card; made to fail on purpose (PL_CLASSIC_CARDFAIL), the processor's squares are kept and the
+    # Path says why. The two pictures (card, processor) of the same moment differ in under 1 % of the pixels by more than 8 levels.
+    os.makedirs(work, exist_ok=True)
+    fails = checks = 0
+    def check(ok, what):
+        nonlocal fails, checks
+        checks += 1
+        if not ok:
+            fails += 1
+            print("FAIL", what)
+    B = {"PL_GRAPHICS": "vulkan", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.all_classic",
+         "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
+    runs = {}
+    for tag, extra in (("card", {}), ("cpu", {"PL_CLASSIC_CARDFAIL": "1"})):
+        d = os.path.join(work, "classic_" + tag); os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d):
+            if f.endswith(".bmp"): os.remove(os.path.join(d, f))
+        runs[tag] = run_app(binary, d, "classic_" + tag, dict(B, **extra), frames=100000, size="1280x800", timeout=900)
+    def paths(out):
+        rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
+        return [ln.strip() for ln in rep.splitlines() if ln.strip().startswith("Path:")]
+    out = runs["card"].out
+    case = [ln for ln in out.splitlines() if ln.startswith("PLCLASSICCARDCASE ")]
+    check("PLCLASSICCARD state=1" in out and len(case) == 1 and re.search(r"0 in another group, \d+ in another band \((\d+) at", case[0]) and " 0 places beyond" in case[0] and "0 keys out of order, 0 squares wrong" in case[0],
+          f"classic: the start-up check passes ({case})")
+    check(any("the Classic dots: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)), f"classic: the benchmark's Path names the card ({paths(out)})")
+    out2 = runs["cpu"].out
+    check("PLCLASSICCARD state=-1" in out2 and any("the Classic dots: the processor, because the check was made to fail" in p for p in paths(out2)), f"classic: a failed check keeps the processor's squares and says why ({paths(out2)})")
+    try:
+        a, b = Bmp(os.path.join(work, "classic_card", "atom.all_classic.bmp")), Bmp(os.path.join(work, "classic_cpu", "atom.all_classic.bmp"))
+        n = over = 0
+        for y in range(0, a.h, 2):
+            for x in range(0, a.w, 2):
+                n += 1
+                over += max(abs(p - q) for p, q in zip(a.px(x, y)[:3], b.px(x, y)[:3])) > 8
+        check(n > 0 and over <= 0.01 * n, f"classic: the card's picture and the processor's of the same moment: {over} of {n} pixels over 8 levels")
+    except Exception as e:
+        check(False, f"classic: both pictures saved ({e})")
+    print(f"{checks} checks, {fails} failed")
+    return 1 if fails else 0
 
 def card_part(binary, work):
     os.makedirs(work, exist_ok=True)
@@ -135,6 +178,8 @@ def main():
     binary, work = sys.argv[1], sys.argv[2]
     if len(sys.argv) > 3 and sys.argv[3] == "card":
         return card_part(binary, work)
+    if len(sys.argv) > 3 and sys.argv[3] == "classic":
+        return classic_part(binary, work)
     os.makedirs(work, exist_ok=True)
     fails = checks = 0
     def check(ok, what):

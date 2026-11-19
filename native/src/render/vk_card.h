@@ -156,6 +156,11 @@ IGroupCompute* makeVkGroupCompute(VkCards& c, std::string& why);
 IOutlineCompute* makeVkOutlineCompute(VkCards& c, std::string& why);
 IRockCompute* makeVkRockCompute(VkCards& c, std::string& why);
 AtomCard* makeVkAtomCard(VkCards& c);
+RingCard* makeVkRingCard(VkCards& c);
+// 0.64.0: the Classic Cloud 3D dots (render/classic_card.h): made, recorded into the frame's batch, the squares' buffer the frame draws
+ClassicCard* makeVkClassicCard(VkCards& c);
+bool vkClassicRecord(ClassicCard* c, const ClassicDraw& d, long& bytes);
+VkBuffer vkClassicSquares(ClassicCard* c);   // 0.64.0: Saturn's rings per pixel (render/ring_card.h)
 MoleculeCard* makeVkMoleculeCard(VkCards& c);
 VkBuffer vkRockPositions(IRockCompute* r, int slot);         // the rocks' places on the card (VK_NULL_HANDLE: not a Vulkan object)
 VkBuffer vkJumpGroups(AtomCard* a);                          // the groups the jump's program made this frame

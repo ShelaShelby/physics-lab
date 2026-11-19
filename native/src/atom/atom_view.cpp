@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "chart_draw.h"
+#include "classic_check.h"
 #include "atom_card_paths.h"
 #include "cloud_dots.h"
 #include "cloud_light.h"
@@ -425,9 +426,13 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 R.cloudGpu(cd);
                 R.endCloudLayer(!css.light);
                 g_marks.cloudGpu = true;
-            } else
+            }
+            // 0.64.0: the Classic dots from the card (Vulkan; atom/classic_check.h) once its start-up check passed: projected, banded and put in the processor's order there
+            const bool classicCard = !gpuCloud && !glow && !jump && dc.gpu && lab.gpuCloud &&
+                                     drawClassicOnCard(R, classicDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, w, h, dc, cloudDotWeight(cap)));
+            if (!gpuCloud && !classicCard)
             projectCloud(PTS, cnt, CloudCamera{cx, cy, pxm, ca, sa, cb, sb, ext}, w, h, PX, PY, PD);   // PD: the depth over the cloud's radius; NaN = off the picture
-            if (gpuCloud) {
+            if (gpuCloud || classicCard) {
             } else if (glow) {
                 // one pass: size and brightness change smoothly with depth (far = smaller, fainter; near = bigger, brighter), no bands
                 for (long i = 0; i < cnt; i++) {

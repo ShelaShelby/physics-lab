@@ -413,7 +413,10 @@ if(PL_BUILD_APP)
                       # shader in double precision: shaderFloat64)
                       "lens_frag:kLensFS" "kerr_frag:kKerrFS" "skytiny_frag:kKerrSkyTinyFS" "skymath_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyMathPart"
                       "sky_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyTracePart+kKerrSkyMainPart" "maxdown_frag:kMaxDownFS" "glowdown_frag:kGlowDownFS"
-                      "glowblur_frag:kGlowBlurFS" "glowadd_frag:kGlowAddFS" "glaredown_frag:kGlareDownFS" "glareadd_frag:kGlareAddFS" "kerrtable_comp:kKerrTableCS")
+                      "glowblur_frag:kGlowBlurFS" "glowadd_frag:kGlowAddFS" "glaredown_frag:kGlareDownFS" "glareadd_frag:kGlareAddFS" "kerrtable_comp:kKerrTableCS"
+                      # 0.64.0: Saturn's rings per pixel and their probe (the start-up check)
+                      "rings_frag:kRingsHeadFSPart+kRingsPart+kRingsMainFSPart" "ringprobe_comp:kRingsHeadCSPart+kRingsPart+kRingsMainCSPart"
+                      "classic_comp:kClassicCS")   # 0.64.0: the Classic dots from the cloud buffer
   foreach(pair ${PL_VK2D_SHADERS})
     string(REPLACE ":" ";" parts ${pair})
     list(GET parts 0 shId)
@@ -459,6 +462,8 @@ if(PL_BUILD_APP)
     src/blackhole/sky_card.cpp
     src/orbit/belt_layer.cpp
     src/orbit/orbit_view.cpp
+    src/orbit/ring_check.cpp
+    src/atom/classic_check.cpp
     src/atom/atom_view.cpp
     src/atom/atom_card_paths.cpp
     src/molecule/molecule_card_paths.cpp
@@ -511,7 +516,7 @@ if(PL_BUILD_APP)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
   if(TARGET gl_compare_tests)                            # 0.61.0: the card programs on Vulkan in the same test program (tests/gl_vulkan.inc)
-    target_sources(gl_compare_tests PRIVATE src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp ${PL_VK_SHADER_HEADERS})
+    target_sources(gl_compare_tests PRIVATE src/orbit/ring_check.cpp src/atom/classic_check.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp ${PL_VK_SHADER_HEADERS})
     target_include_directories(gl_compare_tests PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
     target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core blackhole_core volk::volk)
     target_compile_definitions(gl_compare_tests PRIVATE PL_VK_TESTS=1)
@@ -571,7 +576,7 @@ if(PL_BUILD_APP)
       # ui_orbit: the Orbit Lab: every control of INVENTORY.md, the data sheet words, Time panel, chip, readability, links, Most realistic; 0.50: no rim of air, a dark night side
       add_test(NAME ui_orbit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit
                check_orbit_ui.py:coverage check_orbit_ui.py:card check_orbit_ui.py:time check_orbit_ui.py:chip check_orbit_ui.py:readable check_orbit_ui.py:links check_orbit_ui.py:journey check_orbit_ui.py:farnote check_orbit_ui.py:airedge check_orbit_ui.py:nightside
-               check_025.py:orbit)
+               check_orbit_ui.py:rings check_025.py:orbit)
       set_tests_properties(ui_orbit PROPERTIES TIMEOUT 3600)
       # ui_atom_panel: the Atom Lab Controls panel against the old panel's saved states
       add_test(NAME ui_atom_panel COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_panel
@@ -579,7 +584,7 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_atom_panel PROPERTIES TIMEOUT 3600)
       # ui_atom: the Atom Lab: element chip (0.57.0: and the card's Slice dots and jump groups with their guards), its old-panel features, view words, jump check, Most realistic, Monochrome key, honesty notes, density, nucleus controls and full zoom
       add_test(NAME ui_atom COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom
-               check_atom_chip.py check_atom_chip.py:card check_6a.py:gaps check_022.py:words check_022s7.py:jumpcheck check_025.py:atom
+               check_atom_chip.py check_atom_chip.py:card check_atom_chip.py:classic check_6a.py:gaps check_022.py:words check_022s7.py:jumpcheck check_025.py:atom
                check_022.py:honest check_022.py:spectrum check_022.py:density check_6b.py:nucleus check_6c.py:fullzoom check_6c.py:ds281sea)
       set_tests_properties(ui_atom PROPERTIES TIMEOUT 3600)
       # ui_atom_layout: the Atom Lab layout: centre, info text, card tabs, fit, rings, default view, U-238 info text
