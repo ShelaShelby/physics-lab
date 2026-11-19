@@ -269,7 +269,8 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
                 for (int k = 0; k < n; k++) { const Blob& o = blobs_[std::size_t(sg.first + k)]; sph[4 * k] = o.x; sph[4 * k + 1] = o.y; sph[4 * k + 2] = o.fy; sph[4 * k + 3] = o.r; }
                 V.setF(VkDraw2D::kBlob, "uSph", sph, 4, n);
                 V.setI(VkDraw2D::kBlob, "uSphN", &n, 1);
-            } else V.setI(VkDraw2D::kBlob, "uSphN", &zero, 1);
+            } else if (sg.glowN > 0) { V.setF(VkDraw2D::kBlob, "uSph", sg.glow, 4, sg.glowN); V.setI(VkDraw2D::kBlob, "uSphN", &sg.glowN, 1); }   // 0.66.0: kind 10's table
+            else V.setI(VkDraw2D::kBlob, "uSphN", &zero, 1);
             V.draw(VkDraw2D::kBlob, sg.additive ? VkDraw2D::kAdditive : VkDraw2D::kNormal, 0, 0, 6, bb, sg.count, sg.first);
             break;
         }

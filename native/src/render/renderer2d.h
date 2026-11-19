@@ -135,6 +135,11 @@ public:
         Color c0, c1, c2;
     };
     void blobs(const Blob* b, int count, bool additive = false);
+    // 0.66.0: blobs of kind 10, glow stacks: each is up to kMaxGlow glows round its centre, added up in one quad (a nucleon's soft glows were a blob each,
+    // every one a quad, at full zoom each over the whole picture). table: n x (radius / r, relative strength, 1 for kind 1's profile or 0 for kind 4's
+    // Gaussian, 0); a blob's c0 is the colour and the Gaussians' strength, fx the profile's strength, fy how far its quad reaches (units of r, at most 1).
+    static constexpr int kMaxGlow = 16;
+    void glowStacks(const Blob* b, int count, bool additive, const float* table, int n);
     static float fuzzAt(float d);   // 0.46.5: the fuzzy nucleon's profile (kind 1 blobs) at d = distance / blob radius, 0..1 (1 at the centre, 0 beyond the edge), as the shader draws it
     // 0.40: kind 9, spheres with a true depth at every pixel: x, y, r as a blob; fx = the sphere's index in this call (0, 1, ...), fy = its centre's depth in points (larger = nearer),
     // f0 = the outline's width in points; c0 the outline, c1 the lit colour, c2 the shadow. A pixel of one sphere is dropped where another of the same call is nearer, so the
@@ -321,7 +326,7 @@ public:
 
 private:
     enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic };
-    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; bool hdr = false; bool lunar = false; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
+    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
     std::vector<float> inst_;                 // square centres for all square draws of this frame

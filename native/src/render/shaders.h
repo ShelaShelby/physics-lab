@@ -133,6 +133,7 @@ void main() {
     }
     float r = aPosKind.z;
     float ext = kind > 1.5 && kind < 2.5 ? r : r + 1.0;   // squares are exact; round things get a pixel for the smooth edge
+    if (kind > 9.5 && kind < 10.5) ext = r * clamp(aFocal.y, 0.0, 1.0) + 1.0;   // 0.66.0, kind 10: the quad reaches only where its light is (fy, units of r)
     vec2 p = aPosKind.xy + aCorner * 2.0 * ext;
     vLocal = aCorner * 2.0 * ext / max(r, 1e-6);
     vPosKind = vec4(aPosKind.xyz, kind); vFocal = aFocal; vC0 = c0; vC1 = aC1; vC2 = aC2;
@@ -186,6 +187,21 @@ void main() {
         return;
     }
     if (kind == 2) { fragColor = vC0; return; }
+    if (kind == 10) {                                        // 0.66.0: a glow stack, one quad for several glows round one centre (a nucleon's), added up as their own blobs
+        float d = length(vLocal), fw = fwidth(d), a = 0.0;   // uSph[i] = (radius / r, relative strength, 1: kind 1's profile (strength vFocal.x) or 0: kind 4's
+        for (int i = 0; i < uSphN; i++) {                    // Gaussian (strength vC0.a), -)
+            vec4 S = uSph[i];
+            float di = d / S.x;
+            if (S.z > 0.5) {
+                float aa = max(fw / S.x, 1e-4);
+                float x = clamp(di, 0.0, 1.0) * 16.0;
+                int j = int(min(floor(x), 15.0));
+                a += vFocal.x * S.y * mix(uFuzz[j], uFuzz[j + 1], x - float(j)) * (1.0 - smoothstep(1.0 - aa, 1.0 + aa, di));
+            } else a += vC0.a * S.y * (exp(-4.0 * di * di) - 0.0183156) * 1.018657 * step(di, 1.0);
+        }
+        fragColor = vec4(vC0.rgb, a);
+        return;
+    }
     if (kind == 7) {                                         // a ring (0.16 stage 5): a hard-edged band, half width vFocal.z round the circle of radius vFocal.x (units of r), as Renderer2D::ring's line pieces
         if (abs(length(vLocal) - vFocal.x) > vFocal.z) discard;
         fragColor = vC0; return;

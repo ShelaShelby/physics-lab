@@ -84,6 +84,7 @@ void AtomLab::init() {
     s.t = 0; s.Zprev = p.Z; s.more = moreStored; s.pan = {}; s.panTo.reset(); s.dragMode = "rotate";
     s.x = r * std::cos(a); s.y = r * std::sin(a); s.vx = -v * std::sin(a); s.vy = v * std::cos(a); s.trail.clear();
     s.pts.assign(std::size_t(cloudCap()) * 3, 0.f); s.sg.assign(cloudCap(), 0); s.ph.assign(cloudCap(), 0.f); s.k = 0;
+    owed_.clear(); owedLeft_ = 0;                              // 0.66.0: steps owed to the cloud before this start are not this cloud's
     s.sa.clear(); s.beatT = 0; s.saEpoch = nextEpoch(); s.ptsEpoch = nextEpoch(); s.saDirtyLo = 0; s.saDirtyHi = 0;
     if (superOn()) { s.sa.assign(std::size_t(cloudCap()) * 4, 0.f); sup_ = superState(); nA_ = normFactor(sup_.idA, p.Z); nB_ = normFactor(sup_.idB, p.Z); overlap_ = overlapAB(sup_.idA, sup_.idB) != 0.0; } else overlap_ = false;
     s.yaw = 0.6; s.pitch = 0.35; s.oyaw = 0; s.opitch = kPi / 2; s.spin = !reducedMotion;   // Cloud 3D turns by itself, unless motion is reduced
@@ -777,6 +778,7 @@ void AtomLab::syncSlicePlane() {
 }
 
 long AtomLab::addDots(long want) {
+    cut_ = false;
     if (want <= 0 || s.sg.empty()) return 0;
     manyNow_ = manyOn() ? manyAtom() : nullptr;                  // 0.39.1: once per batch (each call searched the tables and compared orbital names: about 0.2 s per 48,000 dots)
     struct Batch { bool& on; ~Batch() { on = false; } } batch{batchNow_};   // 0.65.0: the ring's size and the length unit once per batch (recordDot)
@@ -801,6 +803,7 @@ long AtomLab::addDots(long want) {
         }
         cancelSliceJob();                                        // (the processor again: a batch in flight is forgotten; it used no numbers)
         for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {
+            if ((tries & 127) == 127 && pastDeadline()) { cut_ = true; break; }   // 0.66.0 (between attempts: the next call goes on with the same numbers)
             CloudPoint q;
             if (ps.tryPoint(r, q)) { recordDot(q.x, q.y, q.z); got++; }
         }
@@ -819,6 +822,7 @@ long AtomLab::addDots(long want) {
             }
             cancelSliceJob();
             for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {
+                if ((tries & 127) == 127 && pastDeadline()) { cut_ = true; break; }   // 0.66.0
                 CloudPoint q;
                 const PlaneSampler& ps = r.next() < wA ? pa : pb;
                 if (!ps.tryPoint(r, q) || (overlap_ && !overlapKeep(r, q.x, q.y, q.z))) continue;
@@ -827,10 +831,20 @@ long AtomLab::addDots(long want) {
         }
     } else {
     if (sliceJob_.job || sliceJob_.job2) cancelSliceJob();
-    if (diracJ2Now_ > 0 && sliceDots())                          // 0.65.0: the Slice of a Dirac state: the same attempts and numbers, four radii side by side (dirac_cloud.h)
-        got = diracPlaneDots(p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, axisNow_, offNow_, r, want, 64 * want + 64, [this](double x, double y, double z) { recordDot(x, y, z); });
-    else
+    if (diracJ2Now_ > 0 && sliceDots()) {                        // 0.65.0: the Slice of a Dirac state: the same attempts and numbers, four radii side by side (dirac_cloud.h)
+        const auto rec = [this](double x, double y, double z) { recordDot(x, y, z); };
+        if (deadline_ <= 0)
+            got = diracPlaneDots(p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, axisNow_, offNow_, r, want, 64 * want + 64, rec);
+        else                                                     // 0.66.0: 128 dots at a time, the budget checked between (an attempt's numbers are taken only by it: the same dots)
+            while (got < want) {
+                if (got > 0 && pastDeadline()) { cut_ = true; break; }
+                const long w = std::min<long>(128, want - got), g = diracPlaneDots(p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, axisNow_, offNow_, r, w, 64 * w + 64, rec);
+                got += g;
+                if (g < w) break;                                // (the attempts ran out: a plane with almost nothing)
+            }
+    } else
     for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {     // (an attempt on a plane can be rejected; the cap only matters where the plane holds almost nothing)
+        if ((tries & 127) == 127 && pastDeadline()) { cut_ = true; break; }   // 0.66.0
         double x, y, z;
         if (tryDot(r, x, y, z)) { recordDot(x, y, z); got++; }
     }
@@ -1607,9 +1621,47 @@ void AtomLab::tick(double dt) {                               // runs every fram
     s.fc.x += (tg.x - s.fc.x) * k; s.fc.y += (tg.y - s.fc.y) * k; s.fc.z += (tg.z - s.fc.z) * k;
     // Paused (and a lab that starts paused under Reduced motion): the cloud still fills once, so the picture is never empty. Nothing moves; the dots are the same kind of samples.
     if (paused && !s.trans) syncSlicePlane();
-    if (paused && sliceDots() && !s.trans && s.sliceFresh < cloudCap()) addDots(std::min<long>(cloudCap() - s.sliceFresh, kSliceDotsPerFrame));
+    if (paused && sliceDots() && !s.trans && s.sliceFresh < cloudCap()) oweOrMake(true);   // (0.66.0: owed on the frame's budget, as a step's)
     else if (paused && p.view != "Orbit" && !chartOn() && !s.trans && s.k < cloudCap())
         addDots(std::min<long>(4000, cloudCap() - s.k));
+}
+
+long AtomLab::stepWant() const {
+    if (sliceDots() && s.sliceFresh < cloudCap()) return std::min<long>(cloudCap() - s.sliceFresh, kSliceDotsPerFrame);
+    return (s.boost > 0 ? 48 : p.view == "Slice" ? 64 : 16) * (cloudCap() / kCap);
+}
+
+double AtomLab::workMs() const {
+    if (workClock) return workClock();
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+// 0.66.0: a step's (or a paused frame's) Slice dots: owed while the frame has a budget (makeOwedDots makes them, in order), else made now as before.
+// A paused frame only fills a plane that moved (its old rule). At most 240 steps (a second) are owed: beyond that a step's dots are left out (only while
+// the processor cannot keep up at all; a standing plane's dots are then replaced a little more slowly).
+void AtomLab::oweOrMake(bool pausedFrame) {
+    if (dotBudgetMs <= 0) {
+        if (!pausedFrame) addDots(stepWant());
+        else if (s.sliceFresh < cloudCap()) addDots(std::min<long>(cloudCap() - s.sliceFresh, kSliceDotsPerFrame));
+        return;
+    }
+    if (owed_.size() < 240) owed_.push_back(pausedFrame ? 1 : 0);
+}
+
+void AtomLab::makeOwedDots() {
+    if (dotBudgetMs <= 0 || owed_.empty()) return;
+    struct End { double& d; ~End() { d = 0; } } end{deadline_};
+    deadline_ = workMs() + dotBudgetMs;
+    while (!owed_.empty()) {
+        if (owedLeft_ == 0) {                                    // the oldest owed step starts: its dots by the rule of the moment, as the step would have
+            owedLeft_ = owed_.front() ? (sliceDots() && s.sliceFresh < cloudCap() ? std::min<long>(cloudCap() - s.sliceFresh, kSliceDotsPerFrame) : 0) : stepWant();
+            if (owedLeft_ <= 0) { owedLeft_ = 0; owed_.pop_front(); continue; }
+        }
+        const long got = addDots(owedLeft_);
+        if (cut_) { owedLeft_ = std::max<long>(0, owedLeft_ - got); if (owedLeft_ == 0) owed_.pop_front(); break; }
+        owedLeft_ = 0; owed_.pop_front();                        // (done, or fewer: the attempts ran out or the card's batch is on its way, as a step)
+        if (pastDeadline()) break;
+    }
 }
 
 void AtomLab::step(double dt) {
@@ -1624,8 +1676,8 @@ void AtomLab::step(double dt) {
             // Slice (0.37): the dots lie ON the cut plane. When the plane moves (a drag, the Cut slider, the axis), new dots are made on the new plane, at most kSliceDotsPerFrame a
             // frame, and replace the oldest: the picture never empties during a drag, and a few frames after it stops every dot lies on the plane again (8 frames at Normal).
             syncSlicePlane();
-            if (sliceDots() && s.sliceFresh < cloudCap()) addDots(std::min<long>(cloudCap() - s.sliceFresh, kSliceDotsPerFrame));
-            else addDots((s.boost > 0 ? 48 : p.view == "Slice" ? 64 : 16) * (cloudCap() / kCap));
+            if (sliceDots()) oweOrMake(false);                   // 0.66.0: every Slice by one rule (owed on the frame's budget, else made now)
+            else addDots(stepWant());
         }
         if (p.view == "Cloud 3D" && s.spin) s.yaw += 0.0015;   // slow auto-rotation
         return;

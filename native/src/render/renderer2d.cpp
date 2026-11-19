@@ -1405,6 +1405,18 @@ void Renderer2D::blobsPalette(const Blob* b, int count, bool additive, const Pha
     blobs_.insert(blobs_.end(), b, b + count);
 }
 
+void Renderer2D::glowStacks(const Blob* b, int count, bool additive, const float* table, int n) {
+    PL_KIND(kdBlobs);
+    if (count <= 0 || n <= 0) return;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::Blobs; sg.first = static_cast<int>(blobs_.size()); sg.count = count; sg.additive = additive;
+    sg.glowN = std::min(n, kMaxGlow);
+    std::copy(table, table + 4 * sg.glowN, sg.glow);
+    segments_.push_back(sg);
+    blobs_.insert(blobs_.end(), b, b + count);
+}
+
 void Renderer2D::spheres(const Blob* b, int count) {
     PL_KIND(kdSpheres);
     if (count <= 0) return;
@@ -1685,7 +1697,8 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
                 for (int k = 0; k < n; k++) { const Blob& o = blobs_[std::size_t(sg.first + k)]; sph[4 * k] = o.x; sph[4 * k + 1] = o.y; sph[4 * k + 2] = o.fy; sph[4 * k + 3] = o.r; }
                 glUniform4fv(blSph_, n, sph);
                 glUniform1i(blSphN_, n);
-            } else glUniform1i(blSphN_, 0);
+            } else if (sg.glowN > 0) { glUniform4fv(blSph_, sg.glowN, sg.glow); glUniform1i(blSphN_, sg.glowN); }   // 0.66.0: kind 10's table
+            else glUniform1i(blSphN_, 0);
             glBindVertexArray(blVao_);
             glBindBuffer(GL_ARRAY_BUFFER, blInstVbo_);
             const std::size_t base = static_cast<std::size_t>(sg.first) * sizeof(Blob);

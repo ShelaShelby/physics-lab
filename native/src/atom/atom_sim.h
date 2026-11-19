@@ -196,6 +196,15 @@ public:
     mutable int chainZ_ = 0, chainN_ = -1;
     double viewW = 1000, viewH = 700;    // the picture's size in points
     std::function<double()> nowMs;       // the wall clock in ms
+    // 0.66.0: the Slice's dots on a time budget. With dotBudgetMs > 0 (the app's frame sets it) a physics step (or a paused frame) of a Slice only owes its
+    // new dots; makeOwedDots() makes the owed steps' dots in order until the budget is spent (checked every 128 attempts), so no frame runs more than the
+    // budget plus one check's attempts. The same dots in the same order as the steps would have made them (the generator is only advanced by attempts),
+    // spread over more frames: the cloud fills a little later while the plane moves, never coarser. 0 (tests, the benchmark's fills): made at once.
+    double dotBudgetMs = 0;
+    static constexpr double kDotBudgetMs = 1.5;          // the app's budget: well inside a frame at 255 Hz (3.9 ms), the rest of the frame's work beside it
+    std::function<double()> workClock;                    // the clock the budget reads, ms (empty: the steady clock; tests set a fake one)
+    void makeOwedDots();
+    long owedSteps() const { return long(owed_.size()); }
     double chartTiltH = 0;                // 0.22 stage 6: the height of the chart's tilt bar above the toolbar, points (0: not shown)
     double legendBottom = 0;              // 0.22 stage 6: the bottom of the chart's Legend card, points from the top (0: none); the chart starts below it
     double insetTop = 0, insetBottom = 0; // new UI: how much of the picture the top bar and the toolbar cover, points (the readout lines and the chart keep clear of it)
@@ -454,6 +463,14 @@ private:
     // 0.65.0: worked out once per batch of dots (addDots), not per dot: the ring's size and the length unit (each searched the every-electron tables:
     // manyOn); batchNow_ while a batch is being recorded
     bool batchNow_ = false;
+    std::deque<char> owed_;                               // 0.66.0: the owed steps (1: a paused frame, which only fills a moved plane), oldest first
+    long owedLeft_ = 0;                                   // dots the oldest owed step still has to make (0: not started)
+    double deadline_ = 0;                                 // makeOwedDots' end, workMs() (0: none)
+    bool cut_ = false;                                    // addDots stopped at the deadline
+    double workMs() const;
+    bool pastDeadline() const { return deadline_ > 0 && workMs() >= deadline_; }
+    long stepWant() const;                                // the dots one physics step asks for (the rule of every view)
+    void oweOrMake(bool pausedFrame);
     long capNow_ = 0;
     double unitNow_ = 0;
     int diracJ2Now_ = 0, diracNNow_ = 0, diracLNow_ = 0, axisNow_ = 1;   // a Dirac state's cloud (diracJ2Now_ > 0): its n, l, 2j, the cut's axis and offset (the Slice)

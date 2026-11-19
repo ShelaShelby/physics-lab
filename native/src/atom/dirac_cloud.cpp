@@ -102,7 +102,9 @@ double invertTable(const std::vector<double>& gx, const std::vector<double>& gc,
         const double t = (r - x0) / h, t2 = t * t, t3 = t2 * t;
         return (2 * t3 - 3 * t2 + 1) * c0 + (t3 - 2 * t2 + t) * d0 * h + (-2 * t3 + 3 * t2) * c1 + (t3 - t2) * d1 * h;
     };
-    for (int it = 0; it < 60; it++) { const double m = 0.5 * (a + b); (cdf(m) < u ? a : b) = m; }
+    // 0.66.0: a step whose midpoint is a or b itself leaves [a, b] where no later step changes it (the next midpoint and its test are the same, or a == b):
+    // the loop stops there, the same number bit for bit as all 60 steps (about 45 steps here: the segment is 2^-7.5 of r wide)
+    for (int it = 0; it < 60; it++) { const double m = 0.5 * (a + b); const bool end = m == a || m == b; (cdf(m) < u ? a : b) = m; if (end) break; }
     return 0.5 * (a + b);
 }
 double factorial(int k) { double f = 1; for (int i = 2; i <= k; i++) f *= i; return f; }
@@ -170,9 +172,12 @@ void invertTable4(const std::vector<double>& gx, const std::vector<double>& gc, 
         lane[k] = true; uu[k] = u[k];
         a[k] = gx[lo]; b[k] = gx[hi]; x0[k] = gx[lo]; h[k] = gx[hi] - gx[lo]; c0[k] = gc[lo]; c1[k] = gc[hi]; d0[k] = gd[lo]; d1[k] = gd[hi];
     }
-    for (int it = 0; it < 60; it++)
+    bool run[4] = {lane[0], lane[1], lane[2], lane[3]};
+    for (int it = 0; it < 60 && (run[0] || run[1] || run[2] || run[3]); it++)   // 0.66.0: a lane stops where invertTable's loop stops (the same numbers)
         for (int k = 0; k < 4; k++) {
+            if (!run[k]) continue;
             const double mid = 0.5 * (a[k] + b[k]);
+            if (mid == a[k] || mid == b[k]) run[k] = false;
             double c;
             if (mid <= front) c = 0.0;
             else if (mid >= back) c = 1.0;

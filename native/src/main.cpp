@@ -706,11 +706,14 @@ int main(int, char**) {
             app.molecule.update(frameDt, ui::look().reduced, app.pane != 0);   // (0.23: not app.paused: this lab has no clock, and a pause made in another lab stopped its spin with no way to start it here; 0.56.1: not while the benchmark runs either: its molecule scenes play a vibration)
         } else if (app.lab == 1) {                      // Atom Lab: tick every frame (decay clock, glides), fixed steps while running
             app.atom.paused = app.paused;
+            app.atom.dotBudgetMs = fixedDt > 0 ? 0.0 : atom::AtomLab::kDotBudgetMs;   // 0.66.0: the Slice's new dots on a time budget a frame (owed by the steps, made after them); PL_FIXED_DT (checks that compare two runs): made at once, as before
             app.atom.tick(dt);
             if (!app.paused) {
                 acc += dt;
                 while (acc >= units::kPhysicsStep) { app.atom.step(units::kPhysicsStep); acc -= units::kPhysicsStep; }
             }
+            app.atom.makeOwedDots();
+            app.atom.dotBudgetMs = 0;
         } else {
             app.view.tick(dt, app.set);
             ui::journeyTick(app, dt);
@@ -870,8 +873,8 @@ int main(int, char**) {
             std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY);
         }
         if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
-                        std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
-                                    ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000)); }
+                        std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld ncover=%ld nlayers=%d\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
+                                    ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000), long(ns.cover), ns.layers); }
         }
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
             app.shot.requested = false;

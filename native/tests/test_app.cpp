@@ -2236,6 +2236,34 @@ static void testDiracPlaneDots() {
     checkTrue("the Dirac Slice's dots made four at a time are tryDiracOnPlane's, bit for bit, and the generator ends in the same state", differ == 0 && dots > 2000);
 }
 
+// 0.66.0: the Slice's dots on a time budget (atom/atom_sim.h dotBudgetMs, makeOwedDots). A fake clock of 1 microsecond a dot made, so the 1.5 ms budget is
+// 1,500 dots: frames of 12 physics steps (the 0.05 s cap) right after the plane moved; no frame makes more than the budget and one check's 128 attempts
+// (the steps made at once: up to 18,000), and once the owed steps are made, the dots, their count and the generator equal the steps' made at once.
+static void testSliceBudget() {
+    long scenes = 0, over = 0, differ = 0, worstBudget = 0, worstAtOnce = 0;
+    for (const int scene : {atom::kBenchSliceDirac, atom::kBenchSliceAll, 14}) {
+        atom::AtomLab A, B;
+        atom::benchSetup(A, scene, 1040, 713); atom::benchSetup(B, scene, 1040, 713);
+        A.setParam("cut", 0.3); B.setParam("cut", 0.3);           // the plane moves: every dot is made again
+        A.dotBudgetMs = atom::AtomLab::kDotBudgetMs;
+        A.workClock = [&A] { return double(A.s.k) * 0.001; };
+        int frame = 0;
+        for (; frame < 400 && (frame < 10 || A.owedSteps() > 0); frame++) {
+            const long a0 = A.s.k, b0 = B.s.k;
+            if (frame < 10) for (int i = 0; i < 12; i++) { A.step(1.0 / 240); B.step(1.0 / 240); }
+            A.makeOwedDots();
+            worstBudget = std::max(worstBudget, A.s.k - a0); worstAtOnce = std::max(worstAtOnce, B.s.k - b0);
+            if (A.s.k - a0 > 1500 + 128) over++;
+        }
+        if (A.owedSteps() > 0 || A.s.k != B.s.k || A.s.crng != B.s.crng || A.s.pts != B.s.pts || A.s.sg != B.s.sg || A.s.ph != B.s.ph) differ++;
+        std::printf("Slice budget, scene %d: %ld dots in %d frames (made at once: in 10), owed left %ld\n", scene, A.s.k, frame, A.owedSteps());
+        scenes++;
+    }
+    std::printf("Slice budget: %ld scenes, most dots a frame %ld (made at once: %ld), %ld frames over the budget, %ld scenes differ\n", scenes, worstBudget, worstAtOnce, over, differ);
+    checkTrue("the Slice's dots on a budget: no frame over 1.5 ms of dots, the same dots as the steps made at once (Dirac, every electron, one electron)",
+              over == 0 && differ == 0 && worstAtOnce > 1500 + 128 && worstBudget > 0);
+}
+
 // 0.65.0: a standing cloud's colour groups kept between frames (atom/cloud_dots.h keepGroups) equal the groups made afresh (fillGroups) in every frame,
 // byte for byte, while the cloud fills, stands, and its Phase colours change; their epoch changes exactly when they were made again
 static void testKeptGroups() {
@@ -2328,6 +2356,7 @@ int main() {
     testGpuGuard();
     testKeptGroups();
     testDiracPlaneDots();
+    testSliceBudget();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

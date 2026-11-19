@@ -43,7 +43,9 @@ struct MarksDrawn {
 };
 const MarksDrawn& marksDrawn();
 // 0.16 stage 5: what the nucleus part of the last frame cost, in counts and CPU time (for automatic checks and PL_DRAWSTAT; not GPU time)
-struct NucleusStats { long blobs = 0, lines = 0, ringCalls = 0, blobRuns = 0; double cpuMs = 0; };
+// 0.66.0: cover = the blobs' quads' area inside the picture, summed (square points: what the card's fragment shader runs on, each layer's own quads), layers = the
+// float or soft layers put on the picture (each a pass over the whole picture besides its quads)
+struct NucleusStats { long blobs = 0, lines = 0, ringCalls = 0, blobRuns = 0; double cpuMs = 0, cover = 0; int layers = 0; long culled = 0; };   // culled: glow stacks left out (0.66.0)
 const NucleusStats& nucleusStats();
 
 class AtomView {

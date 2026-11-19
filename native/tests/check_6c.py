@@ -6,7 +6,8 @@
 #             The limits below sit far between the two. The picture itself is unchanged (compared pixel for pixel in REPORT.md).
 #   ds281sea (0.16 stage 5): darmstadtium-281, Cloud view, x2,063, "+ Sea" (0.43: in Simple; Accurate draws no sea rings: its clouds are net densities), the camera turning every frame. Measured on this commit's parent (1280x800):
 #             449 draw calls and 33,323 triangle vertices a frame (each antiquark ring was 24+ line pieces plus a break of the blob batch); after: 5 calls, 30 vertices.
-#   check_6c.py <PhysicsLab binary> <work folder> fullzoom|ds281sea
+#   nucglow (0.66.0): see part_nucglow.
+#   check_6c.py <PhysicsLab binary> <work folder> fullzoom|ds281sea|nucglow
 import os, sys, re
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app
@@ -47,9 +48,38 @@ def part_ds281sea(binary, work):
     check(bool(ds) and max(v["calls"] for v in ds) <= 20, "Ds-281: at most 20 draw calls a frame (was 449)")
     check(bool(ds) and max(v["vertices"] for v in ds) <= 1000, "Ds-281: at most 1,000 triangle vertices a frame (was 33,323)")
 
+# 0.66.0: the nucleus views' glows as glow stacks (one quad a nucleon, kind 10; atom_view.cpp) against a blob for each glow (PL_NUC_OLDGLOW, the drawing until
+# 0.66.0), Vulkan, multisampling off, the benchmark's scenes still from frame 50: atom.nucleus_zoom (30), atom.nucleon (2) and Og-294 with every nucleon large (3).
+# The picture limit (set before looking): at most 1 % of the pixels more than 8 levels apart in a channel. The pixels the glows' quads cover (ncover): measured on
+# 0.65.0's drawing at atom.nucleus_zoom 67,584,000 square points a frame (66 pictures), with the stacks 16,384,000; the limit: at most 30 % of the old drawing's.
+def part_nucglow(binary, work):
+    from shell_lib import Bmp
+    for scene in (30, 2, 3):
+        runs = {}
+        for tag, extra in (("new", {}), ("old", {"PL_NUC_OLDGLOW": "1"})):
+            env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_GRAPHICS": "vulkan", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": str(scene), "PL_ATOM_BENCHSTOP": "50", "PL_DRAWSTAT": "1"}
+            env.update(extra)
+            runs[tag] = run_app(binary, work, f"c_ng{scene}_{tag}", env, frames=60)
+        cover = {}
+        for tag, r in runs.items():
+            ds = [ln for ln in r.out.splitlines() if ln.startswith("PLDRAWSTAT ")]
+            cover[tag] = int(re.search(r"ncover=(\d+)", ds[-1]).group(1)) if ds else -1
+        a, b = Bmp(runs["new"].bmp), Bmp(runs["old"].bmp)
+        pa, pb = a.pixels(), b.pixels()
+        n = min(len(pa), len(pb))
+        over = sum(1 for i in range(0, n - 2, 3) if max(abs(pa[i] - pb[i]), abs(pa[i + 1] - pb[i + 1]), abs(pa[i + 2] - pb[i + 2])) > 8) if a.bpp == 3 else \
+               sum(1 for i in range(0, n - 3, 4) if max(abs(pa[i] - pb[i]), abs(pa[i + 1] - pb[i + 1]), abs(pa[i + 2] - pb[i + 2])) > 8)
+        frac = over / max(1, a.w * a.h)
+        print(f"scene {scene}: pixels covered {cover['old']} -> {cover['new']} square points; {over} pixels ({100 * frac:.3f} %) over 8 levels")
+        check((a.w, a.h) == (b.w, b.h) and a.w > 0, f"scene {scene}: both pictures taken")
+        check(frac <= 0.01, f"scene {scene}: {100 * frac:.3f} % of the pixels over 8 levels (limit 1 %)")
+        check(cover["new"] > 0 and cover["old"] > 0 and cover["new"] <= cover["old"], f"scene {scene}: the stacks cover no more than the old blobs")
+        if scene == 30:
+            check(cover["new"] > 0 and cover["new"] <= 0.30 * cover["old"], f"atom.nucleus_zoom: the glows cover {cover['new']} square points, at most 30 % of the old {cover['old']}")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"fullzoom": part_fullzoom, "ds281sea": part_ds281sea}[part](binary, work)
+    {"fullzoom": part_fullzoom, "ds281sea": part_ds281sea, "nucglow": part_nucglow}[part](binary, work)
     print(f"check_6c {part}: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

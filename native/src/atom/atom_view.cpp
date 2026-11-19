@@ -1,6 +1,8 @@
 #include "atom_view.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 
 #include "chart_draw.h"
 #include "classic_check.h"
@@ -236,6 +238,16 @@ static NucleusStats g_nst;
 static long g_qDotsOnScreen = 0;   // 0.45: Accurate quark dots that landed in the window this frame (the legend is shown only when there are some)
 static double g_qViewFm = 0;      // 0.45: the window's width in fm at the quark zoom (for the note shown when no dot is in view)
 const NucleusStats& nucleusStats() { return g_nst; }
+// 0.66.0: the area of the blobs' quads inside a w x h picture (a blob's quad reaches r + 1 from its centre; a line's (kind 8) along its length)
+static double coverOf(const render::Renderer2D::Blob* b, int n, double w, double h) {
+    double a = 0;
+    for (int i = 0; i < n; i++) {
+        const double e = b[i].kind == 8 ? double(b[i].r) * (std::max(std::fabs(b[i].fx), std::fabs(b[i].fy)) + b[i].f0) + 1 : b[i].kind == 10 ? double(b[i].r) * std::clamp(double(b[i].fy), 0.0, 1.0) + 1 : double(b[i].r) + 1;
+        const double x0 = std::max(0.0, b[i].x - e), x1 = std::min(w, b[i].x + e), y0 = std::max(0.0, b[i].y - e), y1 = std::min(h, b[i].y + e);
+        if (x1 > x0 && y1 > y0) a += (x1 - x0) * (y1 - y0);
+    }
+    return a;
+}
 static void noteOutline(const char* kind, const Outline& O, int fo, std::size_t segs) { g_marks.outline = kind; g_marks.outlineOrb = fo; g_marks.outlineMass = O.mass; g_marks.outlineReach = O.rmax; g_marks.outlineSegs = segs; }
 
 void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy, double uiScale, AtomLab& lab, double w, double h, const app::ThemeColors& colours, double textScale) {
@@ -772,7 +784,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             softOps.push_back(std::move(softB));
             softB = Batch();
         };
-        auto flushMain = [&] { if (!mainB.b.empty()) { g_nst.blobs += long(mainB.b.size()); g_nst.blobRuns++; R.blobs(mainB.b.data(), int(mainB.b.size()), mainB.add); mainB.b.clear(); } };
+        auto flushMain = [&] { if (!mainB.b.empty()) { g_nst.blobs += long(mainB.b.size()); g_nst.blobRuns++; g_nst.cover += coverOf(mainB.b.data(), int(mainB.b.size()), w, h); R.blobs(mainB.b.data(), int(mainB.b.size()), mainB.add); mainB.b.clear(); } };
         struct Ctx { bool soft; };                                         // "a canvas": the main picture or the soft layer
         // 0.16 stage 3: a shape that lies wholly outside the picture is not made at all. The graphics card would clip it away anyway, so the picture is the same,
         // but at full zoom (x10,000,000) almost every blob, ring and line of the nucleons near the view is outside it. e: how far the shape reaches from (x, y),
@@ -909,6 +921,22 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             struct G { double X, Y, w; };
             std::vector<G> gl;
             std::vector<Blob> glowB;
+            // 0.66.0: a nucleon's glows (its rest profile, kind 1, and the Gaussians of its quarks' density, kind 4) in one quad, a glow stack (kind 10): until 0.66.0 a
+            // quad each, at full zoom each over the whole picture (atom.nucleus_zoom: 85 quads, 66 pictures' worth of pixels). The same sum, added up in the same layer.
+            static const bool oldGlow = std::getenv("PL_NUC_OLDGLOW") != nullptr;   // (the check's reference: tests/check_6c.py nucglow)
+            static const PkGlow glows[3] = {pkGlow(2), pkGlow(3), pkGlow(7)};
+            const PkGlow& Gl = glows[p.detail == "Valence" ? 0 : p.detail == "+ Gluons" ? 1 : 2];
+            double peak = 0;
+            for (int i = 0; i < Gl.n; i++) peak += Gl.weight[i] / Gl.w[i];
+            const double kf = rn / kNucleonR;                              // pixels per fm
+            double Rmax = 1.9 * rn;
+            for (int i = 0; i < Gl.n; i++) Rmax = std::max(Rmax, 2 * std::sqrt(Gl.w[i]) * kf);
+            float table[4 * render::Renderer2D::kMaxGlow] = {};            // (radius / Rmax, relative strength, 1: kind 1's profile, 0: a Gaussian)
+            int tn = 0;
+            table[0] = float(1.9 * rn / Rmax); table[1] = 1; table[2] = 1; tn = 1;
+            for (int i = 0; i < Gl.n && tn < render::Renderer2D::kMaxGlow; i++, tn++) { table[4 * tn] = float(2 * std::sqrt(Gl.w[i]) * kf / Rmax); table[4 * tn + 1] = float((Gl.weight[i] / Gl.w[i]) / peak); }
+            struct Stack { double X, Y; Color tint; double f, g; };       // f: the profile's strength, g: the Gaussians'
+            std::vector<Stack> stacks;
             for (const Item& q : list) {
                 const double X = cx + q.x * pxm, Y = cy - q.y * pxm;
                 if (X < -2 * rn || X > w + 2 * rn || Y < -2 * rn || Y > h + 2 * rn) continue;
@@ -918,6 +946,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                 const double gq = (p.qstyle == "Accurate" && q.q) ? std::min(1.0, std::max(0.0, qai)) : 0.0;
                 const Color tint = q.isP ? rgba(224, 80, 106) : rgba(150, 150, 146);
                 const double af = (0.93 - 0.45 * qai) * (1 - gq);
+                if (oldGlow) {                                             // (until 0.66.0, and the check's reference: a blob for each glow)
                 if (gq < 1) {
                     Blob b{};
                     b.x = float(X); b.y = float(Y); b.r = float(1.9 * rn); b.kind = 1;
@@ -925,11 +954,6 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     glowB.push_back(b);
                 }
                 if (gq > 0) {
-                    static const PkGlow glows[3] = {pkGlow(2), pkGlow(3), pkGlow(7)};
-                    const PkGlow& Gl = glows[p.detail == "Valence" ? 0 : p.detail == "+ Gluons" ? 1 : 2];
-                    double peak = 0;
-                    for (int i = 0; i < Gl.n; i++) peak += Gl.weight[i] / Gl.w[i];
-                    const double kf = rn / kNucleonR;                      // pixels per fm
                     for (int i = 0; i < Gl.n; i++) {                       // a Gaussian exp(-b^2 / w): the shader's soft dot (kind 4) of radius 2 sqrt(w)
                         Blob b{};
                         b.x = float(X); b.y = float(Y); b.r = float(2 * std::sqrt(Gl.w[i]) * kf); b.kind = 4;
@@ -937,6 +961,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                         glowB.push_back(b);
                     }
                 }
+                } else if (gq < 1 || gq > 0) stacks.push_back({X, Y, tint, gq < 1 ? af : 0.0, gq > 0 ? 0.55 * gq : 0.0});
                 gl.push_back({X, Y, af + 0.55 * gq});                       // its strength at its own centre (the kind 4 sum is close to the kind 1 profile there: the exposure only)
             }
             double top = 0;                                                // the summed strength at each nucleon's centre; the largest sets the exposure
@@ -948,10 +973,37 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             }
             const float k = top > 0.95 ? float(0.95 / top) : 1.f;
             for (Blob& b : glowB) b.c0.a *= k;
+            if (!stacks.empty()) {
+                // the light a stack adds at rho (units of Rmax) from its centre, as the shader sums it; it falls with rho. A stack whose light on the picture stays below
+                // its share of half a level (0.5 / 255 shared by all the stacks) is left out, and a stack's quad reaches only as far as its light is above that share:
+                // the left-out light is under half a level at every pixel together
+                const auto light = [&](const Stack& t, double rho) {
+                    double a = 0;
+                    for (int i = 0; i < tn; i++) {
+                        const double di = rho / table[4 * i];
+                        if (table[4 * i + 2] > 0.5) a += t.f * table[4 * i + 1] * render::Renderer2D::fuzzAt(float(di));
+                        else if (di <= 1) a += t.g * table[4 * i + 1] * (std::exp(-4 * di * di) - 0.0183156) * 1.018657;
+                    }
+                    return a * k;
+                };
+                const double share = 0.5 / 255 / double(stacks.size());
+                for (const Stack& t : stacks) {
+                    const double nx = std::max(0.0, std::max(-t.X, t.X - w)), ny = std::max(0.0, std::max(-t.Y, t.Y - h));   // the picture's nearest point
+                    if (light(t, std::hypot(nx, ny) / Rmax) <= share) { g_nst.culled++; continue; }
+                    double lo = 0, hi = 1;
+                    if (light(t, 1) > share) lo = 1;
+                    else for (int it = 0; it < 24; it++) { const double m = 0.5 * (lo + hi); (light(t, m) > share ? lo : hi) = m; }
+                    Blob b{};
+                    b.x = float(t.X); b.y = float(t.Y); b.r = float(Rmax); b.kind = 10;
+                    b.c0 = withA(t.tint, float(t.g) * k); b.fx = float(t.f) * k; b.fy = float(std::min(1.0, hi));
+                    glowB.push_back(b);
+                }
+            }
             if (!glowB.empty()) {
-                g_nst.blobs += long(glowB.size()); g_nst.blobRuns++;
+                g_nst.blobs += long(glowB.size()); g_nst.blobRuns++; g_nst.cover += coverOf(glowB.data(), int(glowB.size()), w, h); g_nst.layers++;
                 R.beginCloudLayer();
-                R.blobs(glowB.data(), int(glowB.size()), true);           // added up in the float layer (colour and coverage)
+                if (oldGlow) R.blobs(glowB.data(), int(glowB.size()), true);   // added up in the float layer (colour and coverage)
+                else R.glowStacks(glowB.data(), int(glowB.size()), true, table, tn);
                 R.endCloudLayer(!css.light);                               // dark page: the light is added; light page: laid over as one sheet
             }
         }
@@ -979,7 +1031,8 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             flushMain();
             closeSoft();
             R.beginSoftLayer(1.0f);                                     // (0.46.5: full resolution; 0.5 blurred what went in. The far quarks still fade with depth: fogOf)
-            for (const Batch& b : softOps) R.blobs(b.b.data(), int(b.b.size()), b.add);
+            for (const Batch& b : softOps) { g_nst.cover += coverOf(b.b.data(), int(b.b.size()), w, h); R.blobs(b.b.data(), int(b.b.size()), b.add); }
+            g_nst.layers++;
             R.endSoftLayer();
             for (const Sharp& sh : sharp) {
                 const double fg = fogOf(sh.it->dep);
