@@ -1,39 +1,40 @@
-# 0.64.0: speed batch 1 (based on 0.63.1; box: 4 cores, Mesa 25.2.8, lavapipe / llvmpipe; "processor ms" = the benchmark's CPU work per frame, same box, same scene)
-Bigger than described: Parts C and D each needed a new card program with its own guard, start-up check, test and UI check (as the rules ask); all done.
-## A. The heavy views the benchmark missed (six new Hard scenes: app/bench_scenes.cpp, atom/atom_bench.*)
-- Measured here, each at the zooms -0.5, 0, 0.5, 1.0 (the slowest kept): atom.slice_dirac_drag 85 ms (zoom 0), atom.slice_all_drag 32 (-0.5), atom.side_all_glow 24
-  (-0.5; while it runs zoomed to +0.5 and back as a wheel), atom.side_all_classic 21 (-0.5, the same), atom.slice_glow_ultra 5.0 (-0.5), atom.slice_classic_ultra 4.2 (-0.5): all
-  over 3.9 ms, all Hard (ROADMAP, Atom Lab, slowest first). atom.slice_drag for comparison: 3.5 ms.
-- Checked, no scene: Saturn still (the same loop as orbit.saturn); the side view with GPU colours Off and the Density cloud with GPU Density cloud Off (switches for
-  comparison, twins exist); the Black Hole Lab at rest, the chart, the molecules' surfaces (kept between frames).
-- For the owner: the Hard run is 32 scenes, about 4 min 45 s (was about 4 min; static_assert and app_tests changed on purpose).
-## B. The Slice of a superposition (atom/atom_sim.cpp, atom/atom_card.*, render/shaders.h kSliceDotsCS, render/atom_card.cpp, render/vk_card.cpp)
-- Where the time went (gdb samples): the inverse transform (radiusX) and, per attempt, planeMass twice and the plane's tail again, plus the option strings
-  (sliceOffNow -> sizeN -> orbIndex). Plain waste cut: both states' PlaneSamplers and the odds once per batch (test_atom: the same dots and amplitudes bit for bit).
-- Then on the card with the Slice's own program (no new pipeline, guard "[vulkan] [slice]", OpenGL's twin too): uStride/uFirst; the card makes both states' attempts
-  (numbers 4t+1..4t+3), the processor picks the state from number 4t in double, exactly as before. Overlapping pairs (one more number per kept dot) stay the
-  processor's (ROADMAP). Dirac state and many electrons: different samplers, not this program (ROADMAP).
-- Start-up check: 7 planes (2 new: Md 2p z and 5f z3 at the cut -0.5, stride 4), 28672 attempts, 0 answered differently, 0 beyond their limit (same limits).
-- processor ms: 268 -> 143 (plain waste) -> 4.4-6.8 (card; lavapipe's threads share the 4 cores, so runs vary).
-## C. Saturn's rings (orbit/ring_draw.h, orbit/ring_check.*, orbit/orbit_view.cpp, render/ring_card.h, kRingsFS/kRingsProbeCS, VkDraw2D kRings)
-- Plain waste: bins and the ring shadow's 32 bands kept while mu, mu0 and the pixel size stay; runs of radial steps one quad; nothing beyond the picture
-  (pictures: 0.001 % of pixels differ, edge rounding). processor ms 23.7 -> 15.9.
-- On the card (Vulkan; OpenGL keeps the triangles): per pixel, the same 128 chords, bands, half and shadow; 4 samples averaged in the shader where the picture is
-  multisampled. Guard "[vulkan] [rings]". Check (limits fixed first): 3 views of 400 x 250, one sample: 0.49 %, 0.87 % (edge-on), 0.60 % of ring pixels over
-  8 levels (limit 1 %). processor ms 15.9 -> 3.5-3.8. The whole picture against the processor's of the same moment: 0.68 % of pixels over 8 levels.
-## D. Every electron as Classic dots (render/classic_card.h, kClassicCS, atom/classic_check.*, atom/atom_view.cpp)
-- The time: fillGroups, projectCloud, the counting sort and 240,000 squares (80 bytes each) sent every frame. On the card (Vulkan): kClassicCS (count, starts,
-  scatter) writes the squares in the processor's order of (band, group) (inside one key every square is alike, so their order does not change the blend);
-  drawn with the blob program. Guard "[vulkan] [classic]". Check: 6000 dots, 0 in another group or band, places within 3.1e-5 points (limit 2e-3), 0 keys out
-  of order, 0 squares wrong. processor ms 21.7 -> 10.5-12.2, now the same as atom.all_enlarged (Glow, on the card since 0.46); the rest: the groups made and
-  sent every frame (ROADMAP).
+# 0.65.0: speed batch 2 (based on 0.64.0; box: 4 cores, Mesa 25.2.8, lavapipe; "processor ms" = the benchmark's CPU work per frame, same box, same scene, a warm-up run first so the guards' checks are done)
+Bigger than described: Part B's Glow needs its cells read back before its dots are written (a second card batch a frame); Part C's drawing serves every Slice.
+## 0. The card-vs-processor comparison (tests/gl_vulkan.inc)
+- Cause: the test never ended a program's first full use (the app's frame does: vkPollFirstUses), so the guards' turn stayed held; now it does (settle),
+  and the Black Hole part's hang went too. New ctest gl_vulkan_cards (PL_VK_ONLY=1, pictures; PL_GL_TESTS on with PL_PICTURE_TESTS on Linux): 164/0.
+## A. The every-electron groups (atom/cloud_dots.h keepGroups; vk_card.cpp sendGroups)
+- The groups are kept between frames; only the dots recorded since the last frame get theirs (a standing cloud's dots are replaced a few a frame), and the
+  card programs send only those, as the places. app_tests testKeptGroups: 120 frames, 3 scenes, 0 groups differ from fillGroups'; gl_vulkan_cards: the Glow
+  grid with 300 new dots' groups only, then none: 0 cells beyond rounding (with the sending switched off on purpose: 283 cells wrong).
+- Bugs fixed: in a Slice of every electron or of a Dirac state the Slice's program held the guards' turn for ever (a first use that never comes), so the
+  Classic dots' check never ran in a benchmark after atom.slice_all_drag; the Classic program's start-up now waits while the Slice's program starts (the
+  full suite's vulkan2d "card slice" found it: 3.99 % of pixels against OpenGL, now 0.002 %).
+- processor ms: atom.all_classic 28.9 -> 4.1 (in the benchmark's order, so the bug's share; 0.64.0 measured it alone: 10.5-12.2), atom.all_enlarged 10.5 -> 4.7.
+## B. The side view with every electron (kClassicCS's side mode, render/classic_card.h, atom/classic_check.*)
+- Classic: places, groups and the counting sort on the card. Glow: the dots counted per 8-point cell on the card, the cells read back with the frame's
+  grids, the exposure on the processor (glowExposure, the same function), then the soft dots written with that light. Guard: the Classic dots' ("classic").
+- Check (limits set first: the Classic check's places 2e-3 points, exact groups and order; a cell off by a dot only for a dot within 2e-3 points of its
+  edge): side Classic 5502 dots, Glow 5502 dots, 2028 cells: 0 beyond. processor ms: side_all_glow 23.3 -> 17.6 (A) -> 5.7; side_all_classic 20.3 -> 14.5 -> 3.6.
+## C. The Slice with every electron
+- Plain waste: recordDot searched the every-electron tables per dot (cloudCap, aUnit -> manyOn); samplePlane looked up each subshell's tables per dot.
+  Now once a batch: the same dots bit for bit (0.64.0's atom_core against this one: Og's Slice, the Dirac Slice and a Dirac Cloud 3D, 40 steps, identical).
+- The dots drawn on the card (kClassicCS's Slice mode, every Slice, Classic and Glow): each dot at its own index in dot order (the processor draws them
+  unsorted). Check: Classic (vertical cut) 5020 dots, Glow (horizontal) 4996 dots and 2028 cells, 0 beyond the limits.
+- The many-electron sampler stays the processor's: 0.93 -> 0.62 ms per physics step (1,500 dots); this box's frames run up to 12 steps (0.05 s cap),
+  so processor ms 28.4 -> 12.2 here; its card version: ROADMAP (D's table question). slice_glow_ultra 5.0 -> 3.4, slice_classic_ultra 4.2 -> 3.2 (0.64.0's).
+## D. The Slice of a Dirac state (atom/dirac_cloud.cpp)
+- Where the time went (callgrind): invertTable 58 % (each of its 60 bisection steps searched the table again), the state looked up per attempt by name
+  (orbIndex, string compares) 33 %. Cut: the state and cut once a batch; the segment's cubic evaluated directly; four attempts' radii side by side
+  (diracPlaneDots): the same dots and numbers bit for bit (app_tests testDiracPlaneDots; the 0.64.0 comparison above); the Dirac maths unchanged.
+  7.14 -> 1.62 ms per step of 1,500 dots; processor ms 76.1 -> 24.3 here (up to 12 steps a frame).
+- Not on the card: u in single precision moves the radius by up to 3.5e-5 of it at the 99.99 % radius (U 4f: 1.9e-5 a0), 600 times a float place's own
+  rounding (5.96e-8): a card version needs the tail inverted from 1 - u and its own derived limits and check (ROADMAP).
 ## Checks
-- check.sh quick 18 of 18. By hand: check_atom_chip card 42/0 (the settings line's test fixed for 0.63.1's app version field: it failed 10 on 0.63.1) and classic
-  4/0; check_orbit_ui rings 4/0; gl_compare_tests (PL_VK_ONLY=1, new switch): Slice 7 planes and against OpenGL 0 differ, rings 3 views, Classic: pass, 0
-  validation messages. Found (pre-existing since 0.63.0, not run by any ctest): its outline, rocks and Glow grid steps wait on the guards' turn, and the Black
-  Hole part's end hangs on a thread join (ROADMAP). VK_KHRONOS_VALIDATION_VALIDATE_SYNC=true: 0 messages for slice_super_drag, saturn, all_classic.
-- Full UI suite (check.sh full, 34 tests): 31 passed; failing as in 0.63.0/0.63.1: ui_popups (check_6b benchscenes: film_tilt's unchanged picture;
-  benchwaits: atom_density's 15 s cap), ui_molecule (check_molecule card), ui_blackhole (check_blackhole smooth). The side scenes' zoom was widened after it
-  (their picture did not change at 880 x 560 under the panels); benchscenes then by hand: 135 checks, only film_tilt failed.
-## For the owner's PC
-- Run the Hard benchmark when you can (32 scenes); send it and gpu-paths-log.txt (look for "[vulkan] [rings]" and "[vulkan] [classic]" passing).
+- check.sh quick 18/18 after each part. By hand: check_atom_chip card 42/0, classic 10/0 (new: side view and Slice; card against processor, same
+  moment: 0 pixels over 8 levels in 5 scenes); gl_vulkan_cards after each part; VALIDATE_SYNC=true: 0 messages in 6 scenes.
+- Full UI suite (36 tests): 32 passed. ui_shell (vulkan2d's card slice, fixed above: the check 140/0 by hand; ui_shell again: card slice 0.002 %, but its Black Hole 'broken sky program' timed out, which passed in the full run). Left failing as in 0.64.0: ui_molecule
+  (check_molecule card: its settings-line test predates 0.63.1's app field), ui_blackhole (smooth), ui_popups (benchscenes film_tilt and all_light;
+  benchwaits capped under the suite's load, 10/0 alone).
+- For the owner's PC: run the Hard benchmark (32 scenes); send it and gpu-paths-log.txt. "[vulkan] [classic]" should say its check passed (five cases now: Cloud 3D, the side
+  view Classic and Glow, the Slice Classic and Glow); the Paths of atom.side_all_*, atom.slice_* name "the graphics card".

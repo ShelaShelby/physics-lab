@@ -685,6 +685,11 @@ bool AtomLab::tryStatePoint(int id, orbit::Mulberry32& r, double& x, double& y, 
 // (Cauchy-Schwarz): a point of q is kept with probability |a A + b B|^2 / (|A|^2 + |B|^2).
 bool AtomLab::tryDot(orbit::Mulberry32& r, double& x, double& y, double& z) {
     if (manyNow_) return manyDot(*this, *manyNow_, manySubNow_, valSubNow_, gNow_, sliceDots() ? &manyPlane_ : nullptr, sliceAxisNow(), r, x, y, z, manyShell_, &valSetNow_);
+    if (batchNow_ && diracJ2Now_ > 0) {                           // 0.65.0: the Dirac state and the cut found once per batch (tryStatePoint's numbers, the same dots)
+        if (sliceDots()) return tryDiracOnPlane(p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, axisNow_, offNow_, r, x, y, z);
+        sampleDirac(p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, r, x, y, z);
+        return true;
+    }
     if (!superOn()) return tryStatePoint(stateId(), r, x, y, z, diracCloudOn() ? diracJ2() : 0);
     double wA = 0.5;
     if (sliceDots()) {
@@ -776,6 +781,8 @@ long AtomLab::addDots(long want) {
     manyNow_ = manyOn() ? manyAtom() : nullptr;                  // 0.39.1: once per batch (each call searched the tables and compared orbital names: about 0.2 s per 48,000 dots)
     struct Batch { bool& on; ~Batch() { on = false; } } batch{batchNow_};   // 0.65.0: the ring's size and the length unit once per batch (recordDot)
     capNow_ = std::min<long>(cloudCap(), long(s.sg.size())); unitNow_ = aUnit(); batchNow_ = true;
+    diracJ2Now_ = !manyNow_ && !superOn() && diracCloudOn() ? diracJ2() : 0;  // (0.65.0: a Dirac state looked up once per batch, not per attempt)
+    if (diracJ2Now_ > 0) { const Orbital& o = orbitals()[std::size_t(stateOrbital(stateId()))]; diracNNow_ = o.n; diracLNow_ = o.l; axisNow_ = sliceAxisNow(); offNow_ = sliceOffNow(); }
     manySubNow_ = manyNow_ ? manySub() : -1;
     valSubNow_ = manyNow_ ? valenceSub(*this, *manyNow_) : -1;   // 0.47 (the outer electron's subshell, for its shape)
     gNow_ = manyNow_ && (valenceOn() || levelOn()) ? graspOfAtom(manyNow_) : nullptr;   // 0.47.2 (the aligned state's shape; 0.47.3: and a level atom's)
@@ -820,6 +827,9 @@ long AtomLab::addDots(long want) {
         }
     } else {
     if (sliceJob_.job || sliceJob_.job2) cancelSliceJob();
+    if (diracJ2Now_ > 0 && sliceDots())                          // 0.65.0: the Slice of a Dirac state: the same attempts and numbers, four radii side by side (dirac_cloud.h)
+        got = diracPlaneDots(p.Z, diracNNow_, diracLNow_, diracJ2Now_, s.round, axisNow_, offNow_, r, want, 64 * want + 64, [this](double x, double y, double z) { recordDot(x, y, z); });
+    else
     for (long tries = 0; got < want && tries < 64 * want + 64; tries++) {     // (an attempt on a plane can be rejected; the cap only matters where the plane holds almost nothing)
         double x, y, z;
         if (tryDot(r, x, y, z)) { recordDot(x, y, z); got++; }

@@ -36,6 +36,7 @@
 #include "orbit/nbody.h"
 #include "atom/atom_bench.h"
 #include "atom/cloud_dots.h"
+#include "atom/dirac_cloud.h"
 #include "atom/cloud_light.h"
 #include "atom/outline.h"
 #include <chrono>
@@ -2210,6 +2211,31 @@ static void testGpuGuard() {
         checkTrue("graphics: an unknown value is ignored", app::loadPrefs("graphics=directx\n").graphics == "vulkan"); }
 }
 
+// 0.65.0: the Slice of a Dirac state made four attempts at a time (atom/dirac_cloud.h diracPlaneDots) gives the same dots and leaves the generator in the
+// same state as tryDiracOnPlane attempt by attempt (the reference): lined up and round, both cuts, a cut beyond the cloud, j = l - 1/2 and an s state
+static void testDiracPlaneDots() {
+    long cases = 0, differ = 0, dots = 0;
+    struct Case { int Z, n, l, j2; bool round; int axis; double off; long want; };
+    const Case cs[] = {{92, 4, 3, 7, false, 1, 0.05, 997}, {92, 4, 3, 7, false, 2, -0.21, 500}, {92, 4, 3, 5, true, 1, 0.1, 333}, {80, 3, 2, 3, false, 2, 0.0, 401},
+                       {80, 1, 0, 1, false, 1, 0.01, 250}, {92, 4, 3, 7, false, 1, 50.0, 20}, {92, 4, 3, 7, false, 1, 0.3, 7}};
+    for (const Case& c : cs) {
+        orbit::Mulberry32 a(0x1234567u + std::uint32_t(cases)), b = a;
+        std::vector<double> got, want;
+        const long maxTries = 64 * c.want + 64;
+        const long n = atom::diracPlaneDots(c.Z, c.n, c.l, c.j2, c.round, c.axis, c.off, a, c.want, maxTries, [&](double x, double y, double z) { got.push_back(x); got.push_back(y); got.push_back(z); });
+        long kept = 0;
+        for (long t = 0; kept < c.want && t < maxTries; t++) {
+            double x, y, z;
+            if (atom::tryDiracOnPlane(c.Z, c.n, c.l, c.j2, c.round, c.axis, c.off, b, x, y, z)) { want.push_back(x); want.push_back(y); want.push_back(z); kept++; }
+        }
+        if (n != kept || got != want || a.seed != b.seed) differ++;
+        dots += n;
+        cases++;
+    }
+    std::printf("Dirac Slice dots four at a time: %ld cases, %ld dots, %ld cases differ from tryDiracOnPlane's\n", cases, dots, differ);
+    checkTrue("the Dirac Slice's dots made four at a time are tryDiracOnPlane's, bit for bit, and the generator ends in the same state", differ == 0 && dots > 2000);
+}
+
 // 0.65.0: a standing cloud's colour groups kept between frames (atom/cloud_dots.h keepGroups) equal the groups made afresh (fillGroups) in every frame,
 // byte for byte, while the cloud fills, stands, and its Phase colours change; their epoch changes exactly when they were made again
 static void testKeptGroups() {
@@ -2301,6 +2327,7 @@ int main() {
     testShell();
     testGpuGuard();
     testKeptGroups();
+    testDiracPlaneDots();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

@@ -376,7 +376,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                         if (!glowExposure(grid, capL, lightPage, 3.0, *ex)) return -1.0;
                         return cloudDotLight(capL, *ex, 3.0, 1.0);
                     };
-                    onCard = drawClassicOnCard(R, sd);
+                    onCard = drawClassicOnCard(R, sd, !atomCardPaths().sliceStarting(lab));
                 }
                 if (!onCard) {
                     sliceDotsCpu();
@@ -384,7 +384,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     if (glowBlobs(G, cap, css.light, dcb, !wheel, 3.0, w, h, cloudExpo_, B)) R.blobsPaletteTake(B, !css.light, dcb.palette());   // (drawGlow's, in the layer opened above)
                 }
                 R.endCloudLayer(!css.light);
-            } else if (!(sliceCard && drawClassicOnCard(R, withGroupsEpoch(sliceDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), cx, cy, pxm, w, h, dc, 0.6 * cloudDotWeight(cap), false, hz, off, th), grpEpoch)))) {
+            } else if (!(sliceCard && drawClassicOnCard(R, withGroupsEpoch(sliceDraw(PTS, cnt, cap, s.ptsEpoch, s.k, grp.data(), cx, cy, pxm, w, h, dc, 0.6 * cloudDotWeight(cap), false, hz, off, th), grpEpoch), !atomCardPaths().sliceStarting(lab)))) {
                 sliceDotsCpu();
                 R.blobsPaletteTake(B, false, dc.palette());
             }

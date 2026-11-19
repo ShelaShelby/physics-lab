@@ -21,6 +21,9 @@ public:
     unsigned jumpGroupsBuffer(render::Renderer2D& R, AtomLab& L);
     // 1 the card (its check passed), 0 not decided yet, -1 the processor (why), for the Slice (which 0) and the jump (which 1)
     int state(int which) const { return p_[which & 1].state == 1 ? 1 : p_[which & 1].state == -1 ? -1 : 0; }
+    // 0.65.0: the Slice's program is still starting where the lab uses it (its steps, or its first full use not yet done): another program's start-up waits,
+    // so the Slice's dots come from the card at the same frame as without it (the Classic dots' program now starts in the Slice too)
+    bool sliceStarting(const AtomLab& L) const { const Path& P = p_[0]; return P.state == 2 || (P.state == 1 && !P.firstDone && L.sliceCardKind()); }
     const std::string& why(int which) const { return p_[which & 1].why; }
     const std::string& checkText(int which) const { return p_[which & 1].check; }
     std::string pathText(int which, const AtomLab& L, bool computeOk) const;   // one line: who does it and why (Settings, the benchmark)

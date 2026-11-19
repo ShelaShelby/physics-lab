@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.65.0", "Speed: the every-electron views and the Slice's dots on the graphics card; the Slice of a Dirac state four times faster",
+     "The side view with every electron (Glow and Classic) and the Slice's dots (every Slice, Glow and Classic) are now put on the picture on the graphics "
+     "card (Vulkan), from the cloud's buffer, by the Classic dots' program; the processor's way stays the reference and the fallback, and the program's "
+     "start-up check now compares all of them with it. The every-electron clouds' colour groups are kept between frames: only the new dots' are made and "
+     "sent, as their places are. The Slice of a Dirac state makes the same dots as before, bit for bit, about four times faster (its state and cut looked up "
+     "once a batch, the radius table searched once an attempt, four attempts worked out side by side); the Slice with every electron lost its per-dot "
+     "table searches too. Fixed: after a Slice of every electron or of a Dirac state the Slice's card program held the guards' turn for ever, so the card "
+     "programs started after it (the Classic dots in the benchmark) never started. The card-vs-processor comparison test runs again and is in the test suite."},
     {"0.64.0", "Speed: the Slice of a superposition, Saturn's rings and the Classic dots on the graphics card; six heavy views in the benchmark",
      "The Slice of a superposition (two states of different energy) now makes its dots on the graphics card, with the plain Slice's program: the card makes "
      "both states' attempts and the processor picks the state from the same random number, so the dots are the same up to single-precision rounding (the "

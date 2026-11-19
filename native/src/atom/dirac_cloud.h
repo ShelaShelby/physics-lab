@@ -15,6 +15,7 @@
 //   - Not included: the Lamb shift and the finite size of the nucleus in the WAVE (they are in the energies, dirac.h), hyperfine structure.
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,11 @@ void sampleDiracDirection(int j2, bool round, orbit::Mulberry32& r, double& ux, 
 void sampleDirac(int Z, int n, int l, int j2, bool round, orbit::Mulberry32& r, double& x, double& y, double& z);
 // The Slice view: a point ON the plane {x[axis] = off} (axis 1: y, 2: z), with exactly the density restricted to the plane; false: this attempt was rejected (try again)
 bool tryDiracOnPlane(int Z, int n, int l, int j2, bool round, int axis, double off, orbit::Mulberry32& r, double& x, double& y, double& z);
+// 0.65.0: the Slice's dots of a Dirac state in a row: attempts of tryDiracOnPlane until `want` dots are kept or maxTries attempts are made, each kept dot
+// given to `record`; the same dots and the same random numbers as calling it attempt by attempt (the radii of four attempts worked out side by side).
+// Returns the dots kept.
+long diracPlaneDots(int Z, int n, int l, int j2, bool round, int axis, double off, orbit::Mulberry32& r, long want, long maxTries,
+                    const std::function<void(double, double, double)>& record);
 
 // The radial graph's curve for a Dirac state (radial_graph.h's convention: P(r) = the radial probability density, area 1)
 struct DiracGraph { std::vector<double> r, D; double rEnd = 0, peak = 0, mean = 0; std::vector<double> maxima; };

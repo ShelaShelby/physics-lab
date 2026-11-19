@@ -326,7 +326,7 @@ void advance(render::Renderer2D& R) {
 }
 }  // namespace
 
-bool drawClassicOnCard(render::Renderer2D& R, const render::ClassicDraw& d) {
+bool drawClassicOnCard(render::Renderer2D& R, const render::ClassicDraw& d, bool mayStart) {
     if (!R.vulkan()) return false;                                   // (OpenGL: the processor's squares)
     app::GpuGuard& G = app::gpuVkClassicGuard();
     if (g_p.gen != G.generation()) {
@@ -336,7 +336,7 @@ bool drawClassicOnCard(render::Renderer2D& R, const render::ClassicDraw& d) {
     if (g_p.state == 0) {
         if (!R.computeShaders()) off("this Vulkan start has no compute programs on the card (or they are switched off)");
         else if (G.started() && !G.allowed()) off(G.offText().empty() ? std::string("its guard switched it off") : G.offText());
-        else if (++g_p.frames >= 3 && G.hold()) { g_p.state = 2; g_p.step = 0; }
+        else if (mayStart && ++g_p.frames >= 3 && G.hold()) { g_p.state = 2; g_p.step = 0; }
     }
     if (g_p.state == 2) advance(R);
     else if (g_p.state == 1 && g_p.firstUse && !g_p.firstDone && ++g_p.usedFrames >= 4) {

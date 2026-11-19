@@ -92,7 +92,17 @@ double invertTable(const std::vector<double>& gx, const std::vector<double>& gc,
     if (u >= 1) return gx.back();
     const std::size_t hi = std::size_t(std::upper_bound(gc.begin(), gc.end(), u) - gc.begin()), lo = hi - 1;
     double a = gx[lo], b = gx[std::min(hi, gx.size() - 1)];
-    for (int it = 0; it < 60; it++) { const double m = 0.5 * (a + b); (interpCdf(gx, gc, gd, m) < u ? a : b) = m; }
+    // 0.65.0: every midpoint lies in [gx[lo], gx[hi]], so interpCdf's own search would find this segment again (at its right end the next segment's left end
+    // gives gc[hi] too): the cubic of this segment evaluated directly, the same numbers bit for bit without a search of the table at each of the 60 steps
+    if (hi >= gx.size() || lo + 1 != hi) { for (int it = 0; it < 60; it++) { const double m = 0.5 * (a + b); (interpCdf(gx, gc, gd, m) < u ? a : b) = m; } return 0.5 * (a + b); }
+    const double x0 = gx[lo], x1 = gx[hi], h = x1 - x0, c0 = gc[lo], c1 = gc[hi], d0 = gd[lo], d1 = gd[hi], front = gx.front(), back = gx.back();
+    const auto cdf = [&](double r) {                                    // (interpCdf on [gx[lo], gx[hi]], term by term as there)
+        if (r <= front) return 0.0;
+        if (r >= back) return 1.0;
+        const double t = (r - x0) / h, t2 = t * t, t3 = t2 * t;
+        return (2 * t3 - 3 * t2 + 1) * c0 + (t3 - 2 * t2 + t) * d0 * h + (-2 * t3 + 3 * t2) * c1 + (t3 - t2) * d1 * h;
+    };
+    for (int it = 0; it < 60; it++) { const double m = 0.5 * (a + b); (cdf(m) < u ? a : b) = m; }
     return 0.5 * (a + b);
 }
 double factorial(int k) { double f = 1; for (int i = 2; i <= k; i++) f *= i; return f; }
@@ -144,6 +154,67 @@ bool tryDiracOnPlane(int Z, int n, int l, int j2, bool round, int axis, double o
     if (round || L == 0 || !(rad > 0)) return true;
     const double cz = z / rad;
     return r.next() < std::pow(std::max(0.0, 1 - cz * cz), L);
+}
+
+namespace {
+// four of invertTable side by side (the same numbers bit for bit: each lane's steps are invertTable's own, on its own segment); a lane whose segment
+// cannot be fixed is left to invertTable
+void invertTable4(const std::vector<double>& gx, const std::vector<double>& gc, const std::vector<double>& gd, const double* u, int m, double* out) {
+    double a[4] = {0, 0, 0, 0}, b[4] = {0, 0, 0, 0}, x0[4] = {0, 0, 0, 0}, h[4] = {1, 1, 1, 1}, c0[4] = {0, 0, 0, 0}, c1[4] = {0, 0, 0, 0}, d0[4] = {0, 0, 0, 0}, d1[4] = {0, 0, 0, 0}, uu[4] = {0, 0, 0, 0};
+    bool lane[4] = {false, false, false, false};
+    const double front = gx.front(), back = gx.back();
+    for (int k = 0; k < m; k++) {
+        if (u[k] <= 0 || u[k] >= 1) { out[k] = invertTable(gx, gc, gd, u[k]); continue; }
+        const std::size_t hi = std::size_t(std::upper_bound(gc.begin(), gc.end(), u[k]) - gc.begin()), lo = hi - 1;
+        if (hi >= gx.size()) { out[k] = invertTable(gx, gc, gd, u[k]); continue; }
+        lane[k] = true; uu[k] = u[k];
+        a[k] = gx[lo]; b[k] = gx[hi]; x0[k] = gx[lo]; h[k] = gx[hi] - gx[lo]; c0[k] = gc[lo]; c1[k] = gc[hi]; d0[k] = gd[lo]; d1[k] = gd[hi];
+    }
+    for (int it = 0; it < 60; it++)
+        for (int k = 0; k < 4; k++) {
+            const double mid = 0.5 * (a[k] + b[k]);
+            double c;
+            if (mid <= front) c = 0.0;
+            else if (mid >= back) c = 1.0;
+            else { const double t = (mid - x0[k]) / h[k], t2 = t * t, t3 = t2 * t; c = (2 * t3 - 3 * t2 + 1) * c0[k] + (t3 - 2 * t2 + t) * d0[k] * h[k] + (-2 * t3 + 3 * t2) * c1[k] + (t3 - t2) * d1[k] * h[k]; }
+            (c < uu[k] ? a[k] : b[k]) = mid;
+        }
+    for (int k = 0; k < m; k++) if (lane[k]) out[k] = 0.5 * (a[k] + b[k]);
+}
+}  // namespace
+
+long diracPlaneDots(int Z, int n, int l, int j2, bool round, int axis, double off, orbit::Mulberry32& r, long want, long maxTries,
+                    const std::function<void(double, double, double)>& record) {
+    const Prep& p = prep(Z, n, diracKappa(l, j2));
+    const double a = std::fabs(off), c0 = interpCdf(p.gx, p.pc, p.pd, a);
+    if (!(c0 < 1)) return 0;                                            // (every attempt kept nothing and took no number)
+    const int L = (j2 - 1) / 2;
+    const bool keepTest = !(round || L == 0);
+    long got = 0, tries = 0;
+    while (got < want && tries < maxTries) {
+        const int m = int(std::min<long>(4, maxTries - tries));
+        orbit::Mulberry32 q = r;                                        // (the next attempts' numbers, read ahead: 3 an attempt with the keep test, else 2)
+        double U[4] = {0, 0, 0, 0}, PH[4] = {0, 0, 0, 0}, K[4] = {0, 0, 0, 0}, rad[4] = {0, 0, 0, 0};
+        for (int k = 0; k < m; k++) { U[k] = c0 + q.next() * (1 - c0); PH[k] = q.next(); if (keepTest) K[k] = q.next(); }
+        invertTable4(p.gx, p.pc, p.pd, U, m, rad);
+        for (int k = 0; k < m && got < want; k++) {                     // attempt by attempt, as tryDiracOnPlane
+            tries++;
+            const double rk = std::max(a, rad[k]);
+            r.next(); r.next();
+            const double s = std::sqrt(std::max(0.0, rk * rk - a * a)), ph = 2 * kPi * PH[k], uu = s * std::cos(ph), vv = s * std::sin(ph);
+            double x, y, z;
+            if (axis == 2) { x = uu; y = vv; z = off; } else { x = uu; z = vv; y = off; }
+            if (!keepTest || !(rk > 0)) {
+                record(x, y, z); got++;
+                if (keepTest) break;                                    // (no keep number taken: the numbers read ahead for the next attempts are not theirs)
+                continue;
+            }
+            r.next();
+            const double cz = z / rk;
+            if (K[k] < std::pow(std::max(0.0, 1 - cz * cz), L)) { record(x, y, z); got++; }
+        }
+    }
+    return got;
 }
 
 DiracGraph diracGraph(int Z, int n, int kappa) {

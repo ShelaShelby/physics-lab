@@ -50,7 +50,7 @@ ClassicCompare compareClassic(const ClassicCase& c, const std::vector<std::uint3
 std::string classicCompareText(const ClassicCompare& c);
 
 // once per frame where the Classic Cloud 3D is drawn: true when the card drew this frame's dots (false: the caller makes the processor's squares)
-bool drawClassicOnCard(render::Renderer2D& R, const render::ClassicDraw& d);
+bool drawClassicOnCard(render::Renderer2D& R, const render::ClassicDraw& d, bool mayStart = true);   // (0.65.0: mayStart false: its start-up waits)
 int classicCardState();
 std::string classicCardPathText(bool vulkan, const std::string& what = "the Classic dots");   // (0.65.0: what: "the side view's dots" too)
 
