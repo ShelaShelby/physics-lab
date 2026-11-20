@@ -27,6 +27,7 @@
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl3.h"
+#include "orbit/lines_check.h"
 #include "orbit/format.h"
 #include "orbit/units.h"
 #include "render/gl_loader.h"
@@ -183,6 +184,10 @@ std::uint64_t orbitFrameKey(const ui::AppState& app, const render::Renderer2D& R
     const double extra[8] = {gray ? 1.0 : 0.0, double(reinterpret_cast<std::uintptr_t>(ImGui::GetFont())), ImGui::GetFontSize(), double(reinterpret_cast<std::uintptr_t>(fa->TexData)),
                              fa->TexData ? double(fa->TexData->Width) : 0.0, fa->TexData ? double(fa->TexData->Height) : 0.0, fa->TexUvScale.x, fa->TexUvScale.y};
     for (double e : extra) { std::uint64_t b = 0; std::memcpy(&b, &e, sizeof b); k = (k ^ b) * 1099511628211ull; }
+    // 0.68.0: while the card's lines are being made and checked (their steps run as the picture is drawn) a new key each frame; then their path is in the key
+    static std::uint64_t unsettled = 0;
+    if (!orbit::linesCardSettled(R.vulkan())) k = (k ^ ++unsettled) * 1099511628211ull;
+    k = (k ^ std::uint64_t(orbit::linesCardState() + 2)) * 1099511628211ull;
     return k;
 }
 }  // namespace

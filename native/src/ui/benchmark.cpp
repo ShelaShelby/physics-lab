@@ -1226,6 +1226,7 @@ bool benchLabFinished(AppState& app, render::Renderer2D& R) {
         return L.s.k >= L.cloudCap() && !L.s.trans;
     }
     if (app.lab == 0 && app.jumpWaiting) return false;     // 0.67.0: a far jump's walk under way (its picture is not drawn yet)
+    if (app.lab == 0 && !orbit::linesCardSettled(R.vulkan())) return false;   // 0.68.0: the card's lines still being made and checked (drawn anew each frame)
     if (app.lab == molecule::kLabIndex) {
         const molecule::MoleculeLab& M = app.molecule;
         if (!M.realOn()) return true;

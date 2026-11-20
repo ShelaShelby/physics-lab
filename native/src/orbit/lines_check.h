@@ -55,6 +55,9 @@ std::string linesCompareText(const LinesCompare& k);
 // once per frame where the Orbit Lab's lines are drawn: true when the card may draw them this frame (false: the caller's LinePen)
 bool linesOnCard(render::Renderer2D& R);
 int linesCardState();                                // 1 the card (its check passed), 0 not decided yet, -1 the processor
+// its steps are over (the card's with its first full use, or the processor's): the Orbit Lab may keep its picture at rest (main.cpp OrbitKeep). Until then
+// the picture is drawn every frame, so the steps (which run while it is drawn) go on and the kept picture is the one the lines end with
+bool linesCardSettled(bool vulkan);
 std::string linesCardPathText(bool vulkan);
 
 }  // namespace orbit

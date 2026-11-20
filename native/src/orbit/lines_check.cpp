@@ -288,6 +288,11 @@ bool linesOnCard(render::Renderer2D& R) {
 
 int linesCardState() { return g_p.state == 1 ? 1 : g_p.state == -1 ? -1 : 0; }
 
+bool linesCardSettled(bool vulkan) {
+    static const bool never = std::getenv("PL_NO_LINES_CARD") != nullptr;
+    return !vulkan || never || g_p.state == -1 || (g_p.state == 1 && g_p.firstDone);
+}
+
 std::string linesCardPathText(bool vulkan) {
     if (!vulkan) return "the trails' and orbits' lines: the processor (no card program for them on OpenGL)";
     if (std::getenv("PL_NO_LINES_CARD")) return "the trails' and orbits' lines: the processor (PL_NO_LINES_CARD)";
