@@ -45,4 +45,6 @@ bool surfaceOnCard(render::Renderer2D& R);
 int surfaceCardState();                              // 1 the card (its check passed), 0 not decided yet, -1 the processor
 std::string surfaceCardPathText(bool vulkan);
 
+void surfaceFrameEnd(render::Renderer2D& R);         // 0.68.0: once a frame (main.cpp), after the labs drew
+
 }  // namespace molecule

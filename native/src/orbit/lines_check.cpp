@@ -171,6 +171,7 @@ struct Path {
     std::vector<float> ends[3], pts[3];
     std::vector<std::uint32_t> offs[3];
     std::string why, check;
+    bool asked = false;            // (0.68.0: asked this frame)
 };
 Path g_p;
 const char* kPipe = "the lines' pipelines";
@@ -258,6 +259,7 @@ void advance(render::Renderer2D& R) {
 }  // namespace
 
 bool linesOnCard(render::Renderer2D& R) {
+    g_p.asked = true;
     if (!R.vulkan()) return false;                   // (OpenGL: the processor's lines; no card program for them there)
     static const bool never = std::getenv("PL_NO_LINES_CARD") != nullptr;   // (tests: the processor's lines on Vulkan, to compare)
     if (never) return false;
@@ -299,6 +301,23 @@ std::string linesCardPathText(bool vulkan) {
     if (g_p.state == 1) return "the trails' and orbits' lines: the graphics card (Vulkan; its start-up check passed: " + g_p.check + ")";
     if (g_p.state == -1) return "the trails' and orbits' lines: the processor, because " + g_p.why;
     return "the trails' and orbits' lines: the graphics card once its start-up check has passed (made when the Orbit Lab is first shown)";
+}
+
+
+// 0.68.0: once a frame (main.cpp): a frame that did not ask (its lab not shown) still runs the check's steps, and a first full use left unfinished is
+// ended and begun again when it is shown, so its guard never keeps the turn while another lab's card programs wait for it
+void linesFrameEnd(render::Renderer2D& R) {
+    const bool asked = g_p.asked;
+    g_p.asked = false;
+    if (asked || !R.vulkan()) return;
+    if (g_p.state == 2) { advance(R); return; }
+    if (g_p.state == 1 && g_p.firstUse && !g_p.firstDone) {
+        app::GpuGuard& G = app::gpuVkLinesGuard();
+        G.end(kFirst, "not finished: its lab was left before it was drawn 3 times (begun again when it is shown)");
+        G.rest();
+        g_p.firstUse = false; g_p.usedFrames = 0;
+        if (auto* C = R.linesCard()) C->ready = false;
+    }
 }
 
 }  // namespace orbit

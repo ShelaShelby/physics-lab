@@ -127,6 +127,7 @@ struct Path {
     std::vector<float> verts[3];
     std::vector<std::uint32_t> order[3];
     std::string why, check;
+    bool asked = false;            // (0.68.0: asked this frame)
 };
 Path g_p;
 const char* kPipe = "the surface's pipelines";
@@ -208,6 +209,7 @@ void advance(render::Renderer2D& R) {
 }  // namespace
 
 bool surfaceOnCard(render::Renderer2D& R) {
+    g_p.asked = true;
     if (!R.vulkan()) return false;                   // (OpenGL: the processor's triangles; no card program for them there)
     static const bool never = std::getenv("PL_NO_SURFACE_CARD") != nullptr;   // (tests: the processor's triangles on Vulkan, to compare)
     if (never) return false;
@@ -244,6 +246,23 @@ std::string surfaceCardPathText(bool vulkan) {
     if (g_p.state == 1) return "the surface: the graphics card (Vulkan; turned, coloured, sorted and drawn there, sent once for each new surface; its start-up check passed: " + g_p.check + ")";
     if (g_p.state == -1) return "the surface: the processor, because " + g_p.why;
     return "the surface: the graphics card once its start-up check has passed (made when the surface is first shown)";
+}
+
+
+// 0.68.0: once a frame (main.cpp): a frame that did not ask (its lab not shown) still runs the check's steps, and a first full use left unfinished is
+// ended and begun again when it is shown, so its guard never keeps the turn while another lab's card programs wait for it
+void surfaceFrameEnd(render::Renderer2D& R) {
+    const bool asked = g_p.asked;
+    g_p.asked = false;
+    if (asked || !R.vulkan()) return;
+    if (g_p.state == 2) { advance(R); return; }
+    if (g_p.state == 1 && g_p.firstUse && !g_p.firstDone) {
+        app::GpuGuard& G = app::gpuVkSurfaceGuard();
+        G.end(kFirst, "not finished: its lab was left before it was drawn 3 times (begun again when it is shown)");
+        G.rest();
+        g_p.firstUse = false; g_p.usedFrames = 0;
+        if (auto* C = R.surfaceCard()) C->ready = false;
+    }
 }
 
 }  // namespace molecule

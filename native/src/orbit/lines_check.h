@@ -60,4 +60,6 @@ int linesCardState();                                // 1 the card (its check pa
 bool linesCardSettled(bool vulkan);
 std::string linesCardPathText(bool vulkan);
 
+void linesFrameEnd(render::Renderer2D& R);         // 0.68.0: once a frame (main.cpp), after the labs drew
+
 }  // namespace orbit

@@ -28,6 +28,7 @@
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl3.h"
 #include "orbit/lines_check.h"
+#include "molecule/surface_check.h"
 #include "orbit/format.h"
 #include "orbit/units.h"
 #include "render/gl_loader.h"
@@ -745,6 +746,7 @@ int main(int argc, char** argv) {
         if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) { SDL_Delay(20); last = SDL_GetPerformanceCounter(); return; }
         struct Busy { bool& f; explicit Busy(bool& x) : f(x) { f = true; } ~Busy() { f = false; } } busyGuard(live.busy);
 
+        orbit::linesFrameEnd(renderer); molecule::surfaceFrameEnd(renderer);   // 0.68.0
         ui::benchmarkTestHook(app);
         if (frame == 0 && !useVulkan) if (const char* bc = SDL_getenv("PL_BH_COMPARE")) blackhole::compareHook(renderer, bc);   // 0.55.0: the Black Hole Lab's card against its reference (tests)
         if (const char* at = SDL_getenv("PL_SAVE_IMAGE")) { static int n = 0; if (++n == std::atoi(at)) app.shot.requested = true; }   // for automatic checks: press 📷 Save image at frame n
