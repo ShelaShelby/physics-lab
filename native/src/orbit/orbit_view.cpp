@@ -322,6 +322,37 @@ CaptionLayout layoutCaption(const TextPainter& T, const ViewSettings& set, const
     return c;
 }
 
+namespace {
+struct KeyHash {                                  // FNV-1a over the bytes of each value
+    std::uint64_t h = 1469598103934665603ull;
+    void bytes(const void* p, std::size_t n) { const unsigned char* c = static_cast<const unsigned char*>(p); for (std::size_t i = 0; i < n; i++) { h ^= c[i]; h *= 1099511628211ull; } }
+    template <class T> void add(const T& v) { bytes(&v, sizeof v); }
+    void add(const std::string& t) { add(t.size()); bytes(t.data(), t.size()); }
+    void add(const Vec3& v) { add(v.x); add(v.y); add(v.z); }
+    void add(const app::Rgb& c) { add(c.r); add(c.g); add(c.b); }
+};
+}  // namespace
+
+std::uint64_t OrbitView::pictureKey(const SolarSystem& sys, const ViewSettings& set, double originX, double originY, double uiScale, double width, double height) const {
+    KeyHash k;
+    k.add(sel.kind); k.add(sel.bodyId); k.add(sel.moon); k.add(follow); k.add(cardHidden); k.add(ox); k.add(oy); k.add(yaw); k.add(pitch); k.add(cdep); k.add(spin);
+    k.add(journey); k.add(caption); k.add(captionAlpha); k.add(panMode); k.add(fx); k.add(cx); k.add(cy);
+    k.add(set.view3D); k.add(set.zoom); k.add(set.tspeed); k.add(set.trueScale); k.add(set.fullTrails); k.add(set.moons); k.add(set.dwarfs); k.add(set.comets);
+    k.add(set.belts); k.add(set.gpuRocks); k.add(set.sky); k.add(set.cons); k.add(set.realPlanets); k.add(set.exaggerateWobble); k.add(set.relativity); k.add(set.far);
+    k.add(set.orbits); k.add(set.paused); k.add(set.lightTheme); k.add(set.theme.id); k.add(set.theme.light); k.add(set.theme.bg); k.add(set.theme.fg); k.add(set.theme.accent);
+    k.add(set.textScale); k.add(set.shell); k.add(set.minTextU); k.add(set.minTextPx); k.add(set.reserveBottom); k.add(set.reserveRight); k.add(set.insetTop);
+    k.add(set.insetRight); k.add(set.blocked.size()); for (const auto& b : set.blocked) k.bytes(b.data(), sizeof(double) * 4);
+    k.add(sys.t); k.add(sys.epochMs); k.add(sys.jumped); k.add(sys.crashed); k.add(sys.escaped); k.add(sys.realPlanets()); k.add(sys.relativity());
+    k.add(sys.bodies.size()); k.add(sys.sunTrail.size()); if (!sys.sunTrail.empty()) k.add(sys.sunTrail.back());
+    for (const Body& b : sys.bodies) {
+        k.add(b.id); k.add(b.pos); k.add(b.drawShift); k.add(b.moons.size()); k.add(b.trail.size());
+        if (!b.trail.empty()) { k.add(b.trail.front()); k.add(b.trail.back()); }
+    }
+    k.add(sys.belts.size());
+    k.add(originX); k.add(originY); k.add(uiScale); k.add(width); k.add(height);
+    return k.h;
+}
+
 void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, double originY, double uiScale,
                      const SolarSystem& sys, const ViewSettings& setIn, double W, double H) {
     TextPainter T{dl, ImGui::GetFont(), originX, originY, uiScale};

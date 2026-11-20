@@ -34,8 +34,10 @@ void journeyStart(AppState& app);
 void journeyStop(AppState& app);           // puts your settings and view back
 void journeyTick(AppState& app, double dt);
 
-// Jump to a date. Returns the note to show under the date.
-std::string jumpToDate(AppState& app, int64_t unixMs);
+// Jump to a date. Returns the note to show under the date. offFrame (0.67.0; the user's jumps): in Real, a date far from the N-body clock's kept states is
+// walked to on a worker first; the lab stays at the date shown and the note says "Going to <date> ..." until jumpTick (each frame) makes the jump.
+std::string jumpToDate(AppState& app, int64_t unixMs, bool offFrame = false);
+void jumpTick(AppState& app);
 // Reads "YYYY-MM-DD" and "HH:MM" (Greenwich time). False if it is not a real date and time.
 bool parseDateTime(const char* date, const char* time, int64_t& unixMs);
 

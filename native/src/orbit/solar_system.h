@@ -95,6 +95,12 @@ public:
     // In Real: the planets also feel the Sun's first-order (1PN) general-relativity potential (orbit/nbody.h). Changing it moves the planets to the other
     // clock's state for the date shown and clears the planets' trails. No effect in Simple (the value is kept for when Real is switched on).
     void setRelativity(bool on);
+    // 0.67.0: a jump in Real to a date far from the N-body clock's kept states (1850 from 2026: 1.8 s of steps on the owner's PC) is walked on a worker first:
+    // jumpNeedsWalk says so, prepareJump starts it, jumpPrepared (each frame) is true once it is taken in; then loadAt there costs the frame no walk.
+    // Meanwhile the system stays at the date shown (ui jumpToDate). The states are bit for bit the same (NBodyClock::prepare).
+    bool jumpNeedsWalk(int64_t unixMs) const;
+    void prepareJump(int64_t unixMs);
+    bool jumpPrepared() { return nb_.prepared(); }
     bool relativity() const { return gr_; }
 
     // The balance point of the Sun and every planet, m from the Sun's centre.

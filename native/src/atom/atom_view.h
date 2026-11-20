@@ -67,6 +67,9 @@ private:
     std::string densGridKey_;
     std::vector<float> densGrid_;
     std::vector<render::Renderer2D::Blob> densBlobs_;
+    std::string densBlobsKey_;             // 0.67.0: the grid and its place the squares were made for (a still picture makes them once)
+    std::vector<float> densTable_;         // 0.67.0: the card's copy of the model's table (render/nucdens_card.h), and the model's number
+    std::uint64_t densVersion_ = 0;
     std::vector<float> qf_;                // how far each nucleon's quarks have faded in
     double qNow_ = 0;
     ChartCache chartCache_;                // the chart's tiles / blocks and ground on the GPU (0.13 stage 4 part B); only used while lab.gpuChart is on

@@ -38,6 +38,7 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     if (molCard_) { molCard_->reset(); delete molCard_; molCard_ = nullptr; }
     delete ringCard_; ringCard_ = nullptr;   // 0.64.0
     delete classicCard_; classicCard_ = nullptr;
+    delete nucDensCard_; nucDensCard_ = nullptr;   // 0.67.0
     if (vkc_ || !c) {
         delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr;
         dropVkGlow(vkGlow_); vkGlow_ = nullptr;
@@ -52,6 +53,7 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     vkMolCard_ = c ? +[](VkCards& v) { return makeVkMoleculeCard(v); } : nullptr;
     vkRingCard_ = c ? +[](VkCards& v) { return makeVkRingCard(v); } : nullptr;
     vkClassicCard_ = c ? +[](VkCards& v) { return makeVkClassicCard(v); } : nullptr;
+    vkNucDensCard_ = c ? +[](VkCards& v) { return makeVkNucDensCard(v); } : nullptr;   // 0.67.0
     rocksWhy_.clear();
     if (!c) return;
     std::string w;
@@ -114,6 +116,7 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
             classicOk_[i] = vkClassicRecord(classicCard_, d, clBytes_) ? 1 : 0;
             if (classicOk_[i] && d.soft) { classicOk_[i] = 2; grids = true; }   // 0.65.0: the side view's Glow: its cells read back with the grids
         }
+        else if (sg.kind == Kind::NucDens) classicOk_[i] = vkNucDensRecord(nucDensCard_, nucDraws_[std::size_t(sg.slot)]) ? 1 : 0;   // 0.67.0
         else if (sg.kind == Kind::Lens && vkbh_) {                             // 0.62.0: the Black Hole Lab's passes, before the frame (render/vk_blackhole.h)
             vkbh_->lens(lens_[std::size_t(sg.slot)], width_, height_, texW_[static_cast<int>(Map::Sky)], fbW, fbH);
             skyStats_ = vkbh_->skyStats(); glareStats_ = vkbh_->glareStats(); lensRedraws_ = vkbh_->redraws(); vkGlareBusy_ = vkbh_->glareBusy();
@@ -190,6 +193,7 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
         if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu || sg.kind == Kind::CloudGpu || sg.kind == Kind::MolCloud) lastInstances_ += sg.count;
     }
     if (segments_.empty()) { V.noPicture(); return; }                         // (OpenGL: nothing drawn, the page shows)
+    if (keep_ && !forShot && V.keepPicture(fbW, fbH, gray_)) return;          // 0.67.0: the kept picture (keepLast)
     if (gray_ && logDrawKinds()) kinds_[kdGray]++;
     const float bg[4] = {grayBg_.r, grayBg_.g, grayBg_.b, 1.0f};               // Monochrome: the page behind the picture, so the grey copy is opaque (as end())
     const std::size_t bytes = verts_.size() * sizeof(Vertex) + inst_.size() * sizeof(float) + blobs_.size() * sizeof(Blob) + 64;
@@ -288,6 +292,17 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             const int zero = 0;
             V.setI(VkDraw2D::kMesh, "uMaskOn", &zero, 1);                       // (OpenGL never sets it for the mesh program: 0, its default)
             V.drawMesh(m.vk, sg.first, sg.count);
+            break;
+        }
+        case Kind::NucDens: {                                                  // 0.67.0: the nucleus' Density squares kNucDensCS wrote (kBlob, kind 2)
+            if (!classicOk_[si]) break;
+            const int zero = 0;
+            V.setF(VkDraw2D::kBlob, "uSize", size, 2);
+            V.setF(VkDraw2D::kBlob, "uFuzz", fuzzTableVk(), 1, 17);
+            V.setI(VkDraw2D::kBlob, "uPalWheel", &zero, 1);
+            V.setI(VkDraw2D::kBlob, "uPalLight", &zero, 1);
+            V.setI(VkDraw2D::kBlob, "uSphN", &zero, 1);
+            V.drawInst(VkDraw2D::kBlob, VkDraw2D::kNormal, vkNucDensSquares(nucDensCard_), VK_NULL_HANDLE, sg.count);
             break;
         }
         case Kind::CloudClassic: {                                             // 0.64.0: the squares kClassicCS wrote, in the processor's order (kBlob)

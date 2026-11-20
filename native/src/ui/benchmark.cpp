@@ -39,6 +39,7 @@
 #include "orbit/belts.h"
 #include "orbit/ring_check.h"
 #include "atom/classic_check.h"
+#include "atom/nucdens_check.h"
 #include "orbit/units.h"
 #include "render/gl_loader.h"
 #include "render/renderer2d.h"
@@ -695,6 +696,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
                                                                          : "the processor turns, sorts and sends every dot of both levels; ") + atom::atomCardPaths().pathText(1, L, app.computeOk);
             }
             if (t.atomWhich == atom::kBenchAllClassic) return atom::classicCardPathText(g_vk != nullptr);   // 0.64.0
+            if (t.atomWhich == atom::kBenchNucleusDensity) return atom::nucDensCardPathText(g_vk != nullptr);   // 0.67.0
             if (t.atomWhich == atom::kBenchSideAll || t.atomWhich == atom::kBenchSideAllClassic) return atom::classicCardPathText(g_vk != nullptr, "the side view's dots");   // 0.65.0
             if (t.atomWhich == atom::kBenchSliceAll)                        // 0.65.0
                 return "the Slice's dots: made by the processor (the many-electron sampler); " + atom::classicCardPathText(g_vk != nullptr, "drawn");
@@ -867,7 +869,7 @@ void waitAct(AppState& app, int w, int t) {
     else if (id == "response.blackhole_look_back") blackhole::setLook(app.blackhole, blackhole::Look::Real);
     else if (id == "response.orbit_date") {
         static const int64_t dates[3] = {-3773779200000LL, 3944678400000LL, -5201798400000LL};   // 1850-06-01, 2095-01-01, 1805-03-01 (00:00 UTC)
-        jumpToDate(app, dates[t]);
+        jumpToDate(app, dates[t], true);   // (as the Go button: 0.67.0 walks a far date on a worker)
     }
 }
 void restPrepare(AppState& app, int r) {
@@ -1184,8 +1186,9 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
             const bool fin = labFinishedNow(app, b);
             if ((fin && b.rStageS >= 0.5) || b.rStageS > app::kBenchIdleSettleCapS) {   // finished (or waited long enough): count from here
                 b.rNow = app::BenchIdle();
-                b.rNow.id = d.id; b.rNow.name = d.name; b.rNow.threads = b.env.threads; b.rNow.keepsPicture = bh; b.rNow.settled = fin;
-                b.rCpu0 = processCpuSeconds(); b.rT0 = SDL_GetPerformanceCounter(); b.rRedraw0 = b.R ? b.R->lensRedraws() : 0; b.rGpuSum = 0; b.rGpuN = 0;
+                // (0.67.0: the Orbit Lab keeps its picture too: its pictures drawn anew count as redraws)
+                b.rNow.id = d.id; b.rNow.name = d.name; b.rNow.threads = b.env.threads; b.rNow.keepsPicture = bh || app.lab == 0; b.rNow.settled = fin;
+                b.rCpu0 = processCpuSeconds(); b.rT0 = SDL_GetPerformanceCounter(); b.rRedraw0 = app.lab == 0 ? app.orbitPictures : b.R ? b.R->lensRedraws() : 0; b.rGpuSum = 0; b.rGpuN = 0;
                 b.rStage = 2; b.rStageS = 0;
             }
         } else if (b.rStage == 2) {
@@ -1194,7 +1197,7 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
             if (b.rStageS >= app::kBenchIdleS) {
                 const double wall = ticksMs(b.rT0) / 1000, cpu = processCpuSeconds();
                 b.rNow.cpuShare = b.rCpu0 >= 0 && cpu >= 0 && wall > 0 && b.env.threads > 0 ? (cpu - b.rCpu0) / wall / b.env.threads : -1;
-                b.rNow.redraws = b.R ? b.R->lensRedraws() - b.rRedraw0 : 0;
+                b.rNow.redraws = app.lab == 0 ? app.orbitPictures - b.rRedraw0 : b.R ? b.R->lensRedraws() - b.rRedraw0 : 0;
                 b.rNow.gpuMs = b.rGpuN > 0 && b.gpuChecked && b.gpuCheck.reliable ? b.rGpuSum / b.rGpuN : -1;
                 b.idle.push_back(b.rNow);
                 std::printf("PLBENCH-REST %s %s cpu=%.3f redraws=%ld worker=%d frames=%d\n", b.rNow.id.c_str(), app::benchIdleBusy(b.rNow) ? "busy" : "quiet", b.rNow.cpuShare, b.rNow.redraws, b.rNow.workerBusy ? 1 : 0, b.rNow.frames);
@@ -1217,6 +1220,7 @@ bool benchLabFinished(AppState& app, render::Renderer2D& R) {
         if (L.p.view == "Orbit" || L.chartOn()) return true;
         return L.s.k >= L.cloudCap() && !L.s.trans;
     }
+    if (app.lab == 0 && app.jumpWaiting) return false;     // 0.67.0: a far jump's walk under way (its picture is not drawn yet)
     if (app.lab == molecule::kLabIndex) {
         const molecule::MoleculeLab& M = app.molecule;
         if (!M.realOn()) return true;

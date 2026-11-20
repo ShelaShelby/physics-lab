@@ -1,5 +1,6 @@
 #include "nbody.h"
 
+#include <chrono>
 #include <cmath>
 
 #include "moon_elp.h"
@@ -413,6 +414,74 @@ const NBodyState* NBodyClock::knownCheckpoint(long j) const {
     return it == cp_.end() ? nullptr : &it->second;
 }
 
+void NBodyClock::addStretch(long j, Stretch&& sg) {
+    if (seg_.count(j)) return;
+    if (seg_.size() >= kStretches) {                                         // forget the stretch used longest ago
+        long oldest = seg_.begin()->first;
+        for (const auto& [q, t] : segUse_) if (t < segUse_[oldest]) oldest = q;
+        seg_.erase(oldest); segUse_.erase(oldest);
+    }
+    // both ends are checkpoints (made by the same steps as the walk): keep them, so the next stretch does not walk the same steps again
+    keep(j, sg.front().s);
+    keep(j + 1, sg.back().s);
+    segUse_[j] = ++useClock_;
+    seg_.emplace(j, std::move(sg));
+}
+
+bool NBodyClock::needsWalk(double tau) const {
+    const long j = stretchOf(stepOf(tau));
+    if (seg_.count(j) || (pending_.valid() && pendingJ_ == j)) return false;
+    const long a = j >= 0 ? j : j + 1;                                       // the stretch's anchor (checkpoint() walks to it)
+    if (knownCheckpoint(a)) return false;
+    // the walk from the nearest known checkpoint: at most one stretch's steps is not a walk worth a worker
+    const long dir = a > 0 ? 1 : -1;
+    long from = 0;
+    if (dir > 0) { auto f = cp_.lower_bound(a); if (f != cp_.begin()) { --f; if (f->first > 0) from = f->first; } }
+    else { auto f = cp_.upper_bound(a); if (f != cp_.end() && f->first < 0) from = f->first; }
+    return std::labs(a - from) > 1;
+}
+
+void NBodyClock::prepare(double tau) {
+    wantWalk_ = true; wantTau_ = tau;
+    if (walk_.valid()) return;                                              // (one at a time: started when the one under way is taken in)
+    wantWalk_ = false;
+    if (!needsWalk(tau)) return;
+    const long j = stretchOf(stepOf(tau)), a = j >= 0 ? j : j + 1, dir = a > 0 ? 1 : -1;
+    long from = 0;
+    NBodyState s = start_;
+    if (dir > 0) { auto f = cp_.lower_bound(a); if (f != cp_.begin()) { --f; if (f->first > 0) { from = f->first; s = f->second; } } }   // as checkpoint() chooses
+    else { auto f = cp_.upper_bound(a); if (f != cp_.end() && f->first < 0) { from = f->first; s = f->second; } }
+    const double h = h_; const bool gr = gr_;
+    walkJ_ = j;
+    walk_ = std::async(std::launch::async, [s, from, a, dir, j, h, gr]() mutable {
+        Walk w;
+        w.j = j;
+        for (long q = from + dir; ; q += dir) {                              // the same steps as checkpoint()'s walk (NBodyClock::step)
+            const long k0 = (q - dir) * kEvery;
+            for (long n = 0; n < kEvery; n++) nbodyStepAccurate(s, double(dir) * h, gr, kNBodyRefJD + double(k0 + dir * n) * h / 86400.0);
+            w.steps += kEvery;
+            w.cps.emplace_back(q, s);
+            if (q == a) break;
+        }
+        w.sg = makeStretch(s, j, kEvery, h, gr);
+        w.steps += kEvery;
+        return w;
+    }).share();
+}
+
+bool NBodyClock::prepared() {
+    if (walk_.valid()) {
+        if (walk_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return false;
+        Walk w = walk_.get();
+        walk_ = {};
+        for (const auto& [q, st] : w.cps) keep(q, st);
+        steps_ += w.steps;
+        addStretch(w.j, std::move(w.sg));
+    }
+    if (wantWalk_) { prepare(wantTau_); if (walk_.valid()) return false; }
+    return true;
+}
+
 void NBodyClock::ensure(long k) {
     if (have_ && k == k_) return;
     const int dir = !have_ || k >= k_ ? 1 : -1;                              // the direction time is going
@@ -420,20 +489,13 @@ void NBodyClock::ensure(long k) {
     const long i = k - j * kEvery;                                           // 0 .. kEvery - 1
     auto it = seg_.find(j);
     if (it == seg_.end()) {
-        if (seg_.size() >= kStretches) {                                     // forget the stretch used longest ago
-            long oldest = seg_.begin()->first;
-            for (const auto& [q, t] : segUse_) if (t < segUse_[oldest]) oldest = q;
-            seg_.erase(oldest); segUse_.erase(oldest);
-        }
         Stretch sg;
         if (pending_.valid() && pendingJ_ == j) sg = pending_.get();          // made in the background (waits if it is not finished yet)
         else sg = makeStretch(j >= 0 ? checkpoint(j) : checkpoint(j + 1), j, kEvery, h_, gr_);
         steps_ += kEvery;
         if (pending_.valid() && pendingJ_ == j) pending_ = {};
-        // both ends are checkpoints (made by the same steps as the walk): keep them, so the next stretch does not walk the same steps again
-        keep(j, sg.front().s);
-        keep(j + 1, sg.back().s);
-        it = seg_.emplace(j, std::move(sg)).first;
+        addStretch(j, std::move(sg));
+        it = seg_.find(j);
     }
     segUse_[j] = ++useClock_;
     const Stretch& sg = it->second;

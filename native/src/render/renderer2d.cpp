@@ -362,6 +362,7 @@ void Renderer2D::shutdown() {
     if (atomCard_) { atomCard_->reset(); delete atomCard_; atomCard_ = nullptr; }   // 0.57.0
     delete ringCard_; ringCard_ = nullptr;   // 0.64.0
     delete classicCard_; classicCard_ = nullptr;
+    delete nucDensCard_; nucDensCard_ = nullptr;   // 0.67.0
     if (molCard_) { molCard_->reset(); delete molCard_; molCard_ = nullptr; }      // 0.57.1
     for (GLuint* tx : {&maskTex_, &whiteTex_, &lowTex_[0], &lowTex_[1], &lowTex_[2], &lowTex_[3]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     for (GLuint& tx : expTex_) glDeleteTextures(1, &tx);
@@ -438,6 +439,7 @@ void Renderer2D::shutdown() {
 }
 
 void Renderer2D::begin(double w, double h) {
+    keep_ = false;
     width_ = w > 1 ? w : 1;
     height_ = h > 1 ? h : 1;
     verts_.clear();
@@ -447,6 +449,7 @@ void Renderer2D::begin(double w, double h) {
     molClouds_.clear();
     ringDraws_.clear();
     classicDraws_.clear();
+    nucDraws_.clear();
     lens_.clear();
     segments_.clear();
     triStart_ = 0;
@@ -1484,6 +1487,23 @@ bool Renderer2D::cloudClassic(const ClassicDraw& d) {   // 0.64.0
     return true;
 }
 
+NucDensCard* Renderer2D::nucDensCard() {   // 0.67.0
+    if (!nucDensCard_ && vk_ && vkc_ && vkNucDensCard_) nucDensCard_ = vkNucDensCard_(*vkc_);
+    return nucDensCard_;
+}
+
+long Renderer2D::nucDensRuns() const { return nucDensCard_ ? nucDensCard_->runs() : 0; }   // 0.67.0
+
+bool Renderer2D::nucDensity(const NucDensDraw& d) {   // 0.67.0
+    if (!nucDensCard_ || !nucDensCard_->ready || d.G <= 0 || !d.table || d.tableN == 0) return false;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::NucDens; sg.slot = static_cast<int>(nucDraws_.size()); sg.count = d.G * d.G;
+    segments_.push_back(sg);
+    nucDraws_.push_back(d);
+    return true;
+}
+
 bool Renderer2D::molCloud(const MolCloudDraw& d) {
     if (!molCard_ || !molCard_->ready() || d.cnt <= 0 || !d.pts) return false;
     closeTriangles();
@@ -1566,7 +1586,7 @@ void Renderer2D::end(int fbW, int fbH, int fbY, GLuint outFbo) {
     lastCalls_ = 0; lastInstances_ = 0; lastVerts_ = static_cast<long>(verts_.size());
     for (const Segment& sg : segments_) {
         if (sg.kind != Kind::LayerBegin) lastCalls_++;
-        if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu || sg.kind == Kind::CloudGpu || sg.kind == Kind::MolCloud || sg.kind == Kind::CloudClassic) lastInstances_ += sg.count;
+        if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu || sg.kind == Kind::CloudGpu || sg.kind == Kind::MolCloud || sg.kind == Kind::CloudClassic || sg.kind == Kind::NucDens) lastInstances_ += sg.count;
     }
     if (segments_.empty()) return;
     // Monochrome: draw into an offscreen picture first, then copy it over in grey (at the bottom of end())

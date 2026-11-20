@@ -164,6 +164,11 @@ VkBuffer vkClassicSquares(ClassicCard* c);
 bool vkClassicCells(ClassicCard* c, std::vector<float>& cells);                      // 0.65.0: the side view's Glow (the counts per 8 x 8-point cell)
 bool vkClassicFinish(ClassicCard* c, const ClassicDraw& d, float light);   // 0.64.0: Saturn's rings per pixel (render/ring_card.h)
 MoleculeCard* makeVkMoleculeCard(VkCards& c);
+// 0.67.0: the nucleus' Density look (render/nucdens_card.h): made, its steps recorded into the frame's batch when something changed, the squares' buffer
+class NucDensCard; struct NucDensDraw;
+NucDensCard* makeVkNucDensCard(VkCards& c);
+bool vkNucDensRecord(NucDensCard* c, const NucDensDraw& d);
+VkBuffer vkNucDensSquares(NucDensCard* c);
 VkBuffer vkRockPositions(IRockCompute* r, int slot);         // the rocks' places on the card (VK_NULL_HANDLE: not a Vulkan object)
 VkBuffer vkJumpGroups(AtomCard* a);                          // the groups the jump's program made this frame
 // the Density cloud's frame: the dots made and the grid summed in the open batch (record), then, after the batch, the dots drawn (draw)

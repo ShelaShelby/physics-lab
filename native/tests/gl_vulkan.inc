@@ -565,6 +565,22 @@ static void vkClassic(render::ClassicCard& vk) {
     }
 }
 
+// 0.67.0: the nucleus' Density look (kNucDensCS) against atom_core.cpp projectChargeDensity: the app's start-up check (atom/nucdens_check.h)
+static void vkNucDens(render::NucDensCard& vk) {
+    std::string why;
+    check("Vulkan nucleus density: the program is made (" + why + ")", vk.build(why));
+    const float col[4] = {1, 1, 1, 1};
+    for (const atom::NucDensCase& c : atom::nucDensCheckCases()) {
+        std::vector<float> table, grid, cpu;
+        const int j = vk.beginCheck(atom::nucDensDraw(c.d, c.e1, c.e2, c.e3, c.G, c.cellFm, table, 1, 0, 0, 1, col));
+        const bool done = j > 0 && vkt::poll([&] { return vk.pollCheck(j, grid); }) == render::JobState::Done;
+        atom::projectChargeDensity(c.d, c.e1, c.e2, c.e3, c.G, c.cellFm, cpu);
+        const atom::NucDensCompare k = atom::compareNucDens(cpu, grid);
+        std::printf("Vulkan nucleus density, %s: %ld of %ld cells over %.0e of the brightest, the largest %.2e\n", c.name, k.over, k.cells, atom::kNucDensLimit, k.worst);
+        check(std::string("Vulkan nucleus density, ") + c.name + ": every cell within the start-up check's limit of the processor's", done && k.ok());
+    }
+}
+
 // 0.65.0: as the app's frame does (renderer2d_vk.cpp): a program's first full use ends once its batch has finished, which gives the guards' turn back
 // (0.63.0's one-step-at-a-time rule). Without it the next program's first use waited for the turn for ever here (the outline's, rocks' and Glow grid's steps).
 static void settle(render::VkCards& cards, render::IGroupCompute* g, render::IOutlineCompute* o, render::IRockCompute* r, render::VkGlow* w) {
@@ -607,6 +623,9 @@ static void vulkanTwins(render::Renderer2D& R) {
         render::ClassicCard* cc = render::makeVkClassicCard(cards);             // 0.64.0
         vkClassic(*cc);
         delete cc;
+        render::NucDensCard* nd = render::makeVkNucDensCard(cards);             // 0.67.0
+        vkNucDens(*nd);
+        delete nd;
         vkBlackHole(cards, R, h.f64);                                            // 0.62.0
         delete g; delete o; delete r; delete a; delete m;
         cards.collect();

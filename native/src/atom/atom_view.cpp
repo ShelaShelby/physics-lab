@@ -6,6 +6,7 @@
 
 #include "chart_draw.h"
 #include "classic_check.h"
+#include "nucdens_check.h"
 #include "atom_card_paths.h"
 #include "cloud_dots.h"
 #include "cloud_light.h"
@@ -20,6 +21,7 @@
 #include <chrono>
 #include <array>
 #include <functional>
+#include <unordered_map>
 #include <memory>
 #include <cfloat>
 #include <cmath>
@@ -97,7 +99,20 @@ struct Text {
     double ox, oy, s;
     ImFont* font(bool bold) const { return bold ? ui::fonts().bold : ui::fonts().regular; }
     double width(const std::string& t, double size, bool bold = false) const {
-        return font(bold)->CalcTextSizeA(float(size * g_textScale * s), FLT_MAX, 0, t.c_str()).x / s;
+        // 0.67.0: kept by font, size and text (the same width: Dear ImGui's own sum), so the rows measured again each frame (the info plate's wrapping, every
+        // label's alignment) cost a look-up; dropped whole when it holds 8,192
+        static std::unordered_map<std::string, float> memo;
+        ImFont* f = font(bold);
+        const float px = float(size * g_textScale * s);
+        std::string key;
+        key.reserve(t.size() + sizeof f + sizeof px + sizeof f->FontId);
+        key.append(reinterpret_cast<const char*>(&f), sizeof f).append(reinterpret_cast<const char*>(&f->FontId), sizeof f->FontId).append(reinterpret_cast<const char*>(&px), sizeof px).append(t);
+        const auto it = memo.find(key);
+        if (it != memo.end()) return it->second / s;
+        if (memo.size() >= 8192) memo.clear();
+        const float wpx = f->CalcTextSizeA(px, FLT_MAX, 0, t.c_str()).x;
+        memo.emplace(std::move(key), wpx);
+        return wpx / s;
     }
     // align: 0 left, 0.5 centre, 1 right. middle: y is the text's middle instead of its baseline.
     void draw(const std::string& t0, double x, double y, double size, Color c, double align = 0, const Color* halo = nullptr, bool bold = false, bool middle = false) const {
@@ -240,6 +255,8 @@ static double g_qViewFm = 0;      // 0.45: the window's width in fm at the quark
 const NucleusStats& nucleusStats() { return g_nst; }
 // 0.66.0: the area of the blobs' quads inside a w x h picture (a blob's quad reaches r + 1 from its centre; a line's (kind 8) along its length)
 static double coverOf(const render::Renderer2D::Blob* b, int n, double w, double h) {
+    static const bool measuring = std::getenv("PL_DRAWSTAT") != nullptr;   // 0.67.0: a count for the checks (PLDRAWSTAT ncover) only: not worked out otherwise
+    if (!measuring) return 0;
     double a = 0;
     for (int i = 0; i < n; i++) {
         const double e = b[i].kind == 8 ? double(b[i].r) * (std::max(std::fabs(b[i].fx), std::fabs(b[i].fy)) + b[i].f0) + 1 : b[i].kind == 10 ? double(b[i].r) * std::clamp(double(b[i].fy), 0.0, 1.0) + 1 : double(b[i].r) + 1;
@@ -670,7 +687,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
     } else if ((s.densityDrawn = p.style == "Density" && rn < kDensityLookRn && s.focus < 0 && !(p.Z == 0 && p.N == 1))) {   // (0.46, review A5: a lone neutron has no net charge: no charge cloud, it is drawn as the neutron)   // 0.22: the whole nucleus as its measured charge density (no nucleons: zoom in further for a snapshot of them)
         char key[160];
         std::snprintf(key, sizeof key, "%s|%.6f,%.6f,%.6f|%d", s.nucKey.c_str(), s.nucAxis[0], s.nucAxis[1], s.nucAxis[2], deuteronSpinIndex(p.dspin));
-        if (densKey_ != key) { densKey_ = key; densModel_ = nucleusChargeDensity(p.Z, p.N, s.nucAxis[0], s.nucAxis[1], s.nucAxis[2], deuteronSpinIndex(p.dspin)); densGridKey_.clear(); }
+        if (densKey_ != key) { densKey_ = key; densModel_ = nucleusChargeDensity(p.Z, p.N, s.nucAxis[0], s.nucAxis[1], s.nucAxis[2], deuteronSpinIndex(p.dspin)); densGridKey_.clear(); densTable_.clear(); densVersion_++; }
         // 0.54.1: drawn as a picture of the projected density, now the exact line-of-sight integral of the same model the points came from (atom_core.h nucleusChargeDensity:
         // the same shape, axis and scaling; projectChargeDensity), no longer 60,000 random points counted on the grid. Each cell is one small square whose opacity is its
         // share of the brightest cell, in the protons' colour (as before). No smoothing any more: the Gaussian of 2.5 cells (about 0.3 fm) was there only to hide the
@@ -681,32 +698,43 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         const int G = std::clamp(int(std::ceil(2 * half / 2.5)), 128, 256);
         const double cell = 2 * half / G;
         const int mode = (d3 || isOrb) ? 0 : (cloud && !hz ? 1 : 2);
+        // the picture's axes in the lab frame (Proj above): x = (ca, -sa, 0), y = (sa sb, ca sb, cb), the line of sight (sa cb, ca cb, -sb); side view x, z; top view x, y
+        double e1[3] = {1, 0, 0}, e2[3] = {0, 0, 1}, e3[3] = {0, 1, 0};
+        if (mode == 0) { e1[0] = ca; e1[1] = -sa; e1[2] = 0; e2[0] = sa * sb; e2[1] = ca * sb; e2[2] = cb; e3[0] = sa * cb; e3[1] = ca * cb; e3[2] = -sb; }
+        else if (mode == 2) { e2[1] = 1; e2[2] = 0; e3[1] = 0; e3[2] = 1; }
+        const double cellFm = std::max(densModel_.ext997, 0.5) * 1.05 * 2 / G;
         char gk[200];
         std::snprintf(gk, sizeof gk, "%d|%d|%.9f,%.9f,%.9f,%.9f", G, mode, ca, sa, cb, sb);
-        if (densGridKey_ != gk) {
-            densGridKey_ = gk;
-            densGridsMade_++;
-            // the picture's axes in the lab frame (Proj above): x = (ca, -sa, 0), y = (sa sb, ca sb, cb), the line of sight (sa cb, ca cb, -sb); side view x, z; top view x, y
-            double e1[3] = {1, 0, 0}, e2[3] = {0, 0, 1}, e3[3] = {0, 1, 0};
-            if (mode == 0) { e1[0] = ca; e1[1] = -sa; e1[2] = 0; e2[0] = sa * sb; e2[1] = ca * sb; e2[2] = cb; e3[0] = sa * cb; e3[1] = ca * cb; e3[2] = -sb; }
-            else if (mode == 2) { e2[1] = 1; e2[2] = 0; e3[1] = 0; e3[2] = 1; }
-            projectChargeDensity(densModel_, e1, e2, e3, G, std::max(densModel_.ext997, 0.5) * 1.05 * 2 / G, densGrid_);
-        }
-        const std::vector<float>& grid = densGrid_;
-        float peak = 0;
-        for (float v : grid) peak = std::max(peak, v);
-        densBlobs_.clear();
+        const bool newGrid = densGridKey_ != gk;
+        if (newGrid) { densGridKey_ = gk; densGridsMade_++; }
         const Color col = css.light ? rgba(196, 52, 84) : rgba(255, 110, 135);   // the protons' colour of the other looks: this is their charge
-        for (int y = 0; y < G && peak > 0; y++)
-            for (int x = 0; x < G; x++) {
-                const float v = grid[y * G + x] / peak;
-                if (v < 0.01f) continue;
-                render::Renderer2D::Blob b{};
-                b.x = float(cx - half + (x + 0.5) * cell); b.y = float(cy - half + (y + 0.5) * cell); b.r = float(cell / 2); b.kind = 2;
-                b.c0 = col.withAlpha(0.95f * v);
-                densBlobs_.push_back(b);
+        // 0.67.0: on the card (Vulkan; atom/nucdens_check.h) once its start-up check passed: the sums and the squares made there (only when something changed),
+        // nothing sent by the processor; else the processor's sums and squares, the squares made again only when the grid or its place changed
+        const float colf[4] = {col.r, col.g, col.b, col.a};
+        const render::NucDensDraw nd = nucDensDraw(densModel_, e1, e2, e3, G, cellFm, densTable_, densVersion_, cx - half, cy - half, cell, colf);
+        if (drawNucDensOnCard(R, nd)) { densGrid_.clear(); densBlobsKey_.clear(); densGridKey_ = gk; }
+        else {
+            if (newGrid || densGrid_.empty()) projectChargeDensity(densModel_, e1, e2, e3, G, cellFm, densGrid_);
+            const std::vector<float>& grid = densGrid_;
+            char bk[160];
+            std::snprintf(bk, sizeof bk, "%s|%.9g,%.9g,%.9g|%g,%g,%g", gk, cx, cy, half, col.r, col.g, col.b);
+            if (newGrid || densBlobsKey_ != bk) {
+                densBlobsKey_ = bk;
+                float peak = 0;
+                for (float v : grid) peak = std::max(peak, v);
+                densBlobs_.clear();
+                for (int y = 0; y < G && peak > 0; y++)
+                    for (int x = 0; x < G; x++) {
+                        const float v = grid[y * G + x] / peak;
+                        if (v < 0.01f) continue;
+                        render::Renderer2D::Blob b{};
+                        b.x = float(cx - half + (x + 0.5) * cell); b.y = float(cy - half + (y + 0.5) * cell); b.r = float(cell / 2); b.kind = 2;
+                        b.c0 = col.withAlpha(0.95f * v);
+                        densBlobs_.push_back(b);
+                    }
             }
-        R.blobs(densBlobs_.data(), int(densBlobs_.size()), false);
+            R.blobs(densBlobs_.data(), int(densBlobs_.size()), false);
+        }
     } else {
         struct Item { double x, y, bx, by, dep; bool isP; int i; double ph; bool q = false; double qf = 0; };
         std::vector<Item> list;
@@ -890,15 +918,28 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             double cu[3], cd[3], cg[3];
             if (css.light) { lightQuarkColour(kUp, cu); lightQuarkColour(kDown, cd); cg[0] = 84; cg[1] = 88; cg[2] = 104; }
             else for (int i = 0; i < 3; i++) { cu[i] = kUp[i]; cd[i] = kDown[i]; cg[i] = kGlue[i]; }
+            // 0.67.0: a dot keeps its kind and place for its whole life (its seed sd is the same until its cycle ends, about 2 s): they are kept with the seed
+            // they came from and worked out again only for a new seed (a new cycle, another nucleon or detail); the same numbers, about 1 dot in 120 a frame
+            struct DotKept { double sd = -1, tot = -1; int nk = 0, ki = 0; double b = 0, ca = 0, sa = 0; };
+            static std::unordered_map<const Nucleon*, std::vector<DotKept>> kept;
+            if (kept.size() > 256) kept.clear();
+            std::vector<DotKept>& K = kept[&q];
+            if (int(K.size()) < qN) K.resize(std::size_t(qN));
             for (int j = 0; j < qN; j++) {
                 const double cc = t * 0.5 + j * 0.6180339887, cyc = std::floor(cc), ph = cc - cyc, env = std::pow(std::sin(kPi * ph), 2), sd = sd0 + j * 3.17 + cyc * 57.3;
-                const double u0 = rnd(sd) * tot;
-                int ki = 0;
-                while (ki < nk - 1 && u0 > cum[ki]) ki++;
-                const Pk kind = kKinds[ki];
-                const double x = pkSampleX(kind, rnd(sd + 1)), wb = pkMeanB2(kind, x);   // (wb, not w: w is the window's width)
-                const double b = std::min(2.4, std::sqrt(-wb * std::log(std::max(1e-12, 1 - rnd(sd + 2))))), an = 2 * kPi * rnd(sd + 3);   // a 2D Gaussian with <b^2> = w
-                const double px = X + b * k * std::cos(an), py = Y + b * k * std::sin(an);
+                DotKept& D = K[std::size_t(j)];
+                if (D.sd != sd || D.tot != tot || D.nk != nk) {
+                    const double u0 = rnd(sd) * tot;
+                    int ki = 0;
+                    while (ki < nk - 1 && u0 > cum[ki]) ki++;
+                    const Pk kind0 = kKinds[ki];
+                    const double x = pkSampleX(kind0, rnd(sd + 1)), wb = pkMeanB2(kind0, x);   // (wb, not w: w is the window's width)
+                    const double b = std::min(2.4, std::sqrt(-wb * std::log(std::max(1e-12, 1 - rnd(sd + 2))))), an = 2 * kPi * rnd(sd + 3);   // a 2D Gaussian with <b^2> = w
+                    D.sd = sd; D.tot = tot; D.nk = nk; D.ki = ki; D.b = b; D.ca = std::cos(an); D.sa = std::sin(an);
+                }
+                const Pk kind = kKinds[D.ki];
+                const double b = D.b;
+                const double px = X + b * k * D.ca, py = Y + b * k * D.sa;
                 if (px > -r && px < w + r && py > -r && py < h + r) g_qDotsOnScreen++;
                 // 0.45 (review, finding 10): the gluons, 40 % of the momentum, as bright as the quarks (they were dimmer); the antiquark rings, 7 %, thinner and fainter (they caught the eye most)
                 if (kind == Pk::G) { put(c, grad2(px, py, r, rgbaC(cg, 0.9 * env * Af), rgbaC(cg, 0))); continue; }
@@ -966,10 +1007,21 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
             }
             double top = 0;                                                // the summed strength at each nucleon's centre; the largest sets the exposure
             const double ext = 1.9 * rn;
-            for (const G& a : gl) {
-                double sum = 0;
-                for (const G& b : gl) { const double dx = a.X - b.X, dy = a.Y - b.Y; if (std::fabs(dx) < ext && std::fabs(dy) < ext) sum += b.w * render::Renderer2D::fuzzAt(float(std::hypot(dx, dy) / ext)); }
-                top = std::max(top, sum);
+            // 0.67.0: worked out again only when the nucleons' places, strengths or size on the picture changed (a still view: the same sum)
+            static std::vector<double> topKey;
+            static double topKept = 0;
+            std::vector<double> tk;
+            tk.reserve(3 * gl.size() + 1);
+            tk.push_back(ext);
+            for (const G& a : gl) { tk.push_back(a.X); tk.push_back(a.Y); tk.push_back(a.w); }
+            if (tk == topKey) top = topKept;
+            else {
+                for (const G& a : gl) {
+                    double sum = 0;
+                    for (const G& b : gl) { const double dx = a.X - b.X, dy = a.Y - b.Y; if (std::fabs(dx) < ext && std::fabs(dy) < ext) sum += b.w * render::Renderer2D::fuzzAt(float(std::hypot(dx, dy) / ext)); }
+                    top = std::max(top, sum);
+                }
+                topKey.swap(tk); topKept = top;
             }
             const float k = top > 0.95 ? float(0.95 / top) : 1.f;
             for (Blob& b : glowB) b.c0.a *= k;
@@ -987,17 +1039,39 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
                     return a * k;
                 };
                 const double share = 0.5 / 255 / double(stacks.size());
+                // 0.67.0: each stack's reach kept with what it was worked out from (its strengths, its distance from the picture, the share, the exposure and
+                // the table): a still view finds the same reach without the search
+                struct Reach { double f, g, d, share, k, Rmax; double hi; bool culled; };
+                static std::vector<Reach> reachKept;
+                static float tableKept[4 * render::Renderer2D::kMaxGlow] = {};
+                static int tnKept = -1;
+                if (tn != tnKept || !std::equal(table, table + 4 * tn, tableKept)) { reachKept.clear(); tnKept = tn; std::copy(table, table + 4 * render::Renderer2D::kMaxGlow, tableKept); }
+                std::vector<Reach> reachNow;
+                reachNow.reserve(stacks.size());
+                std::size_t ri = 0;
                 for (const Stack& t : stacks) {
                     const double nx = std::max(0.0, std::max(-t.X, t.X - w)), ny = std::max(0.0, std::max(-t.Y, t.Y - h));   // the picture's nearest point
-                    if (light(t, std::hypot(nx, ny) / Rmax) <= share) { g_nst.culled++; continue; }
+                    const double dn = std::hypot(nx, ny) / Rmax;
+                    Reach R0{t.f, t.g, dn, share, double(k), Rmax, 1, false};
+                    const Reach* was = ri < reachKept.size() ? &reachKept[ri] : nullptr;
+                    ri++;
+                    const bool same = was && was->f == R0.f && was->g == R0.g && was->d == R0.d && was->share == R0.share && was->k == R0.k && was->Rmax == R0.Rmax;
                     double lo = 0, hi = 1;
-                    if (light(t, 1) > share) lo = 1;
-                    else for (int it = 0; it < 24; it++) { const double m = 0.5 * (lo + hi); (light(t, m) > share ? lo : hi) = m; }
+                    if (same) { R0.culled = was->culled; hi = was->hi; }
+                    else if (light(t, dn) <= share) R0.culled = true;
+                    else {
+                        if (light(t, 1) > share) lo = 1;
+                        else for (int it = 0; it < 24; it++) { const double m = 0.5 * (lo + hi); (light(t, m) > share ? lo : hi) = m; }
+                    }
+                    R0.hi = hi;
+                    reachNow.push_back(R0);
+                    if (R0.culled) { g_nst.culled++; continue; }
                     Blob b{};
                     b.x = float(t.X); b.y = float(t.Y); b.r = float(Rmax); b.kind = 10;
                     b.c0 = withA(t.tint, float(t.g) * k); b.fx = float(t.f) * k; b.fy = float(std::min(1.0, hi));
                     glowB.push_back(b);
                 }
+                reachKept.swap(reachNow);
             }
             if (!glowB.empty()) {
                 g_nst.blobs += long(glowB.size()); g_nst.blobRuns++; g_nst.cover += coverOf(glowB.data(), int(glowB.size()), w, h); g_nst.layers++;

@@ -98,6 +98,13 @@ static constexpr double kRefUnixMs = (kNBodyRefJD - 2440587.5) * 86400000.0;
 // 0.32: the bodies the N-body clock moves in Real: the planets and the Pluto system (0.36: and every other dwarf planet, as test particles; nbody.h)
 static bool fromClock(const Body& b) { return b.type == BodyKind::Planet || b.type == BodyKind::Dwarf; }
 
+static double clockTau(int64_t unixMs) {                 // the clock's seconds for loadAt(unixMs) (as applyReal at t = 0, extra = 0)
+    const double jdUT = unixMs / 86400000.0 + 2440587.5;
+    return (double(unixMs) - kRefUnixMs) / 1000.0 + timescale::deltaTSeconds(jdUT);
+}
+bool SolarSystem::jumpNeedsWalk(int64_t unixMs) const { return real_ && nb_.needsWalk(clockTau(unixMs)); }
+void SolarSystem::prepareJump(int64_t unixMs) { if (real_) nb_.prepare(clockTau(unixMs)); }
+
 void SolarSystem::applyReal(double extra, bool withMoon) {
     Vec3 x[kNBodies], v[kNBodies], px, pv, tx[kNBodyTest], tv[kNBodyTest];
     const double jdUT = julianDay() + extra / kDay, dT = timescale::deltaTSeconds(jdUT);   // TDB - UT, s

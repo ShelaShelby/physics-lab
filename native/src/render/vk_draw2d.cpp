@@ -722,6 +722,7 @@ bool VkDraw2D::beginPicture(int w, int h, const float clear[4], bool oneSample, 
     if (!ok_ || failed_ || !cmd_ || w <= 0 || h <= 0) return false;
     oneSample_ = oneSample || samples_ == 1;
     Targets& t = forShot ? shot_ : screen_;
+    if (!forShot) screenKept_ = false;
     if (!targetsFor(t, w, h, oneSample_ ? 1 : samples_)) return false;
     cur_ = &t;
     Slot& s = slots_[static_cast<std::size_t>(slot_)];
@@ -1002,6 +1003,20 @@ void VkDraw2D::endPicture(bool gray) {
         usedGray_ = true;
     }
     drawn_ = !failed_;
+    if (cur_ == &screen_) { screenKept_ = drawn_; screenGray_ = usedGray_; }
+}
+
+bool VkDraw2D::keepPicture(int w, int h, bool gray) {
+    drawn_ = false;
+    if (!ok_ || failed_ || !cmd_ || !screenKept_ || screen_.w != w || screen_.h != h || screenGray_ != gray || !screen_.pic.img) return false;
+    Slot& s = slots_[static_cast<std::size_t>(slot_)];
+    if (!s.pool) return false;
+    if (!c_.check(vkResetDescriptorPool(c_.device, s.pool, 0), "vkResetDescriptorPool")) { failed_ = true; return false; }   // (present's set comes from it)
+    s.used = 0;
+    cur_ = &screen_;
+    usedGray_ = screenGray_;
+    drawn_ = true;
+    return true;
 }
 
 void VkDraw2D::present(VkCommandBuffer cmd, int x, int y, int w, int h) {

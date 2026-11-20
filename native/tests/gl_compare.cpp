@@ -34,6 +34,7 @@
 #include "orbit/belt_layer.h"
 #include "orbit/ring_check.h"
 #include "atom/classic_check.h"
+#include "atom/nucdens_check.h"
 #include "app/gpu_guard.h"
 #include "orbit/solar_system.h"
 

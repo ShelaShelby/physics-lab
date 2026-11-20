@@ -21,6 +21,7 @@
 #include "group_compute.h"
 #include "ring_card.h"
 #include "classic_card.h"
+#include "nucdens_card.h"
 #include "mesh.h"
 #include "outline_compute.h"
 #include "rock_compute.h"
@@ -69,6 +70,11 @@ public:
     // drawn (the caller makes the processor's squares)
     ClassicCard* classicCard();
     bool cloudClassic(const ClassicDraw& d);
+    // 0.67.0: the nucleus' Density look from the card (Vulkan only: nullptr otherwise); nucDensity records it once its check passed (ready): false: not drawn
+    // (the caller makes the processor's squares). nucDensRuns: how many times its steps ran (they run only when something changed)
+    NucDensCard* nucDensCard();
+    bool nucDensity(const NucDensDraw& d);
+    long nucDensRuns() const;
     void skyMath(const std::vector<float>& in, std::vector<float>& out) { if (vk_) { out.assign(in.size() / 12 * 8, 0.0f); return; } sky_.math(in, out, cmpVao_); }   // (tests; OpenGL's only)
     // 0.56.0: the last sky pass: its time on the card (GL_TIMESTAMP pairs, read back without waiting: a few frames old) for the whole picture and at the
     // resolution drawn, the resolution's scale (1 = full), the passes drawn, the card's exposure (its brightest disc channel and Y, read back a frame or two
@@ -100,6 +106,10 @@ public:
 
     // Start a frame for a picture `width` × `height` points.
     void begin(double width, double height);
+    // 0.67.0: instead of begin() and the drawing: the last frame's picture again (the Orbit Lab at rest). Its lists are drawn again as they are; on Vulkan the
+    // window's kept picture is shown with nothing drawn when it is whole and of the same size (Save image and the screenshot draw it from the lists).
+    void keepLast() { keep_ = true; }
+    bool keeping() const { return keep_; }
     // Draw everything that was added. The framebuffer is fbWidth × fbHeight pixels.
     // fbY: the picture's bottom edge, pixels from the window's bottom. outFbo: draw into this framebuffer
     // (fbWidth × fbHeight, from its bottom-left corner) instead of the window: used by 📷 Save image.
@@ -325,7 +335,7 @@ public:
     bool glareBusy() const { return vk_ ? vkGlareBusy_ : glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // (0.62.0: Vulkan's mirrored each frame)   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
 private:
-    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic };
+    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic, NucDens };
     struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
@@ -395,6 +405,7 @@ private:
     int lastCalls_ = 0, lastInstances_ = 0;
     long lastVerts_ = 0;
     bool gray_ = false;
+    bool keep_ = false;                            // 0.67.0: keepLast() this frame
     Color grayBg_{0, 0, 0, 1};
     GLuint grayFbo_ = 0, grayTex_ = 0, grayProgram_ = 0;
     GLint grayTexLoc_ = -1;
@@ -473,7 +484,10 @@ private:
     ClassicCard* (*vkClassicCard_)(VkCards&) = nullptr;
     ClassicCard* classicCard_ = nullptr;            // 0.64.0: owned
     std::vector<ClassicDraw> classicDraws_;         // this frame's (Segment::slot)
-    std::vector<char> classicOk_;                   // recorded this frame
+    std::vector<char> classicOk_;                   // recorded this frame (0.67.0: and the nucleus' Density look's)
+    NucDensCard* (*vkNucDensCard_)(VkCards&) = nullptr;   // 0.67.0
+    NucDensCard* nucDensCard_ = nullptr;            // 0.67.0: owned
+    std::vector<NucDensDraw> nucDraws_;             // this frame's (Segment::slot)
     std::vector<RingsDraw> ringDraws_;              // this frame's (Segment::slot)
     void (*vkDropCards_)(Renderer2D&) = nullptr;
     bool noCompute_ = false;

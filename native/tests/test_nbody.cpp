@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "au_legacy.h"
@@ -224,6 +225,33 @@ static void testClock() {
         const double t = edge + 17.3 * stretchS;
         far.stateAt(t, x, v); fresh.stateAt(t, xa, va);
         check("clock: a far state is bit for bit the same however the clock got there", std::memcmp(x, xa, sizeof xa) == 0 && std::memcmp(v, va, sizeof va) == 0);
+    }
+    // 0.67.0: a jump far from every kept checkpoint is walked on a worker (prepare), so the frame does not stop; afterwards stateAt there costs the drawing
+    // thread no steps, and the states are bit for bit those of the walk made on the drawing thread (both directions, across the epoch's sides)
+    {
+        const double far1 = -176.4 * kYearS, far2 = 69.0 * kYearS, near1 = 10.0 * 86400;
+        NBodyClock direct, worker;
+        Vec3 xa[kNBodies], va[kNBodies], xb[kNBodies], vb[kNBodies];
+        worker.stateAt(near1, xb, vb);
+        check("clock: a state near a kept checkpoint needs no walk", !worker.needsWalk(near1 + 30 * 86400.0));
+        bool same = true, cheap = true, flagged = true;
+        for (double tau : {far1, far2, far1 + 3000 * 86400.0}) {
+            // the first two are far from every kept checkpoint; the third lies between the epoch and far1, whose checkpoints the first walk kept
+            flagged = flagged && worker.needsWalk(tau) == (tau != far1 + 3000 * 86400.0);
+            worker.prepare(tau);
+            while (!worker.prepared()) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            check("clock: after the worker's walk the jump needs no walk", !worker.needsWalk(tau));
+            const long long before = worker.stepsTaken();
+            worker.stateAt(tau, xb, vb);
+            direct.stateAt(tau, xa, va);
+            if (tau != far1 + 3000 * 86400.0) cheap = cheap && worker.stepsTaken() == before;   // (the third is an ordinary jump: one stretch on the drawing thread)
+            std::printf("clock: jump to %.1f years: %lld steps on the drawing thread after the worker's walk\n", tau / kYearS, worker.stepsTaken() - before);
+            same = same && std::memcmp(xa, xb, sizeof xa) == 0 && std::memcmp(va, vb, sizeof va) == 0;
+            for (double d = 1; d < 400; d += 37) { worker.stateAt(tau + d * 86400.0, xb, vb); direct.stateAt(tau + d * 86400.0, xa, va); same = same && std::memcmp(xa, xb, sizeof xa) == 0 && std::memcmp(va, vb, sizeof va) == 0; }
+        }
+        check("clock: far jumps are said to need a walk, a jump inside the kept checkpoints not", flagged);
+        check("clock: a far jump walked on the worker costs the drawing thread no steps at the new date", cheap);
+        check("clock: a far jump walked on the worker gives bit for bit the states of the walk on the drawing thread", same);
     }
     // 0.29: the stretch made ahead on a background thread is bit for bit the one made on the drawing thread (forwards and backwards, across the epoch)
     {

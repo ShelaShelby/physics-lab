@@ -472,6 +472,11 @@ GpuGuard& gpuVkClassicGuard() {   // 0.64.0
     return g;
 }
 
+GpuGuard& gpuVkNucDensGuard() {   // 0.67.0
+    static GpuGuard g("gpu-vknucdensity-step.txt", GpuGuard::kLog, false, "[vulkan] [nucdensity] ", "The nucleus' Density look on Vulkan");
+    return g;
+}
+
 GpuGuard& gpuVulkanGuard() {
     static GpuGuard g("gpu-vulkan-step.txt", GpuGuard::kLog, true, "[vulkan] ", "Vulkan");
     return g;
@@ -489,7 +494,8 @@ std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards() {
     std::vector<std::pair<std::string, GpuGuard*>> v = {{"groups", &gpuVkGroupsGuard()}, {"outline", &gpuVkOutlineGuard()}, {"rocks", &gpuVkRocksGuard()}, {"cloud", &gpuVkCloudGuard()},
                                                        {"slice", &gpuSliceGuard()}, {"jump", &gpuJumpGuard()}, {"molcloud", &gpuMolCloudGuard()},
                                                        {"lightpaths", &gpuGuard()}, {"sky", &gpuSkyGuard()}, {"lens", &gpuVkLensGuard()},   // (0.62.0)
-                                                       {"rings", &gpuVkRingsGuard()}, {"classic", &gpuVkClassicGuard()}};   // (0.64.0)
+                                                       {"rings", &gpuVkRingsGuard()}, {"classic", &gpuVkClassicGuard()},   // (0.64.0)
+                                                       {"nucdensity", &gpuVkNucDensGuard()}};   // (0.67.0)
     g_vulkanGuards = was;
     return v;
 }

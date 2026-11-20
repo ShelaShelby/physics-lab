@@ -7,7 +7,8 @@
 #   ds281sea (0.16 stage 5): darmstadtium-281, Cloud view, x2,063, "+ Sea" (0.43: in Simple; Accurate draws no sea rings: its clouds are net densities), the camera turning every frame. Measured on this commit's parent (1280x800):
 #             449 draw calls and 33,323 triangle vertices a frame (each antiquark ring was 24+ line pieces plus a break of the blob batch); after: 5 calls, 30 vertices.
 #   nucglow (0.66.0): see part_nucglow.
-#   check_6c.py <PhysicsLab binary> <work folder> fullzoom|ds281sea|nucglow
+#   nucdens (0.67.0): see part_nucdens.
+#   check_6c.py <PhysicsLab binary> <work folder> fullzoom|ds281sea|nucglow|nucdens
 import os, sys, re
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app
@@ -77,9 +78,38 @@ def part_nucglow(binary, work):
         if scene == 30:
             check(cover["new"] > 0 and cover["new"] <= 0.30 * cover["old"], f"atom.nucleus_zoom: the glows cover {cover['new']} square points, at most 30 % of the old {cover['old']}")
 
+# 0.67.0: the nucleus' Density look on the card (Vulkan; atom/nucdens_check.h): its start-up check passes, the card's picture is the processor's within the
+# Vulkan picture limit (at most 1 % of the pixels over 8 levels, multisampling off), its steps run once while the view stands still and again for each
+# new view while it turns (PL_ATOM_SPIN), and a
+# failed check leaves the processor's picture (PL_NUCDENS_CARDFAIL)
+def part_nucdens(binary, work):
+    from shell_lib import Bmp
+    env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_GRAPHICS": "vulkan", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": "38", "PL_ATOM_BENCHSTOP": "45", "PL_DRAWSTAT": "1"}
+    card = run_app(binary, work, "c_nd_card", env, frames=60)
+    cpu = run_app(binary, work, "c_nd_cpu", dict(env, PL_VK_CARDFAIL="nucdensity"), frames=60)
+    bad = run_app(binary, work, "c_nd_fail", dict(env, PL_NUCDENS_CARDFAIL="1"), frames=60)
+    check("PLNUCDENSCARD state=1" in card.out, "the card's start-up check passed")
+    check("PLNUCDENSCARD state=-1" in cpu.out and "PLNUCDENSCARD state=-1" in bad.out, "a failed pipeline and a failed check leave the processor's squares")
+    a, b, c = Bmp(card.bmp), Bmp(cpu.bmp), Bmp(bad.bmp)
+    def over(x, y):
+        px, py = x.pixels(), y.pixels()
+        st = 3 if x.bpp == 3 else 4
+        return sum(1 for i in range(0, min(len(px), len(py)) - st + 1, st) if max(abs(px[i] - py[i]), abs(px[i + 1] - py[i + 1]), abs(px[i + 2] - py[i + 2])) > 8)
+    o, o2 = over(a, b), over(c, b)
+    print(f"  card against processor: {o} pixels over 8 levels ({100 * o / max(1, a.w * a.h):.3f} %); the failed check's picture: {o2}")
+    check((a.w, a.h) == (b.w, b.h) and a.w > 0 and o <= 0.01 * a.w * a.h, f"the card's picture is the processor's within the limit ({o} pixels over 8 levels)")
+    check(o2 == 0, f"the failed check's picture is the processor's ({o2} pixels over 8 levels)")
+    def runs(r):
+        return [int(m.group(1)) for m in (re.search(r"nucruns=(\d+)", ln) for ln in r.out.splitlines() if ln.startswith("PLDRAWSTAT ")) if m]
+    still = runs(card)
+    turn = runs(run_app(binary, work, "c_nd_turn", dict(env, PL_ATOM_SPIN="0.02"), frames=60))
+    print(f"  the card's runs: still {still[0] if still else '-'} .. {still[-1] if still else '-'}; turning {turn[0] if turn else '-'} .. {turn[-1] if turn else '-'}")
+    check(len(still) > 30 and still[-1] == 1, "still: the card's steps ran once (not again while nothing changed)")
+    check(len(turn) > 30 and turn[-1] - turn[-30] >= 25, "turning: the card's steps run again for nearly every new view")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"fullzoom": part_fullzoom, "ds281sea": part_ds281sea, "nucglow": part_nucglow}[part](binary, work)
+    {"fullzoom": part_fullzoom, "ds281sea": part_ds281sea, "nucglow": part_nucglow, "nucdens": part_nucdens}[part](binary, work)
     print(f"check_6c {part}: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

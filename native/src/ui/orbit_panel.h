@@ -61,6 +61,10 @@ struct AppState {
     char dateText[16] = "";                // Jump to a date: what is typed in
     char timeText[8] = "12:00";
     std::string dateNote;                  // the note under it
+    bool jumpWaiting = false;              // 0.67.0: a jump in Real waits for its walk on a worker (ui jumpToDate, jumpTick)
+    int64_t jumpWaitMs = 0;
+    std::string jumpWaitNote;              // (its clamp note)
+    long orbitPictures = 0;                // 0.67.0: how many times the Orbit Lab's picture was drawn (not kept; the benchmark's rest line)
     int learn = 0;                         // the open Learn guide: 0 none, 1 What am I looking at?, 2 seasons, 3 timeline
     std::string learnJump;                 // a section to scroll to in the open guide ("bar" = back to the list of headings)
     // ---- Atom Lab ----

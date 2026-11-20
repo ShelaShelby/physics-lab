@@ -2590,4 +2590,111 @@ void main() {
 }
 )";
 
+// 0.67.0: the nucleus' Density look on the card (Vulkan; render/nucdens_card.h, atom/nucdens_check.h): atom_core.cpp projectChargeDensity in single precision,
+// then the cells' squares for the blob program (kind 2, as atom_view.cpp makes them on the processor). uStep 0: the deformed shapes' rays on the quarter grid
+// (trapezoids of one surface thickness through the table over (across^2, |along|)); 1: each cell's column density (the rays read by interpolation, or the
+// round shapes' radial tables); 2: the brightest cell (one group); 3: each cell's square (r = 0, nothing drawn, under 1 % of the brightest), in the
+// processor's colour and opacity 0.95 v / peak.
+static const char* const kNucDensCS = R"(#version 430 core
+layout(local_size_x = 64) in;
+layout(std430, binding = 0) readonly buffer Tab { float tab[]; };   // deformed: the table T (nT x nT, row |z|); round: I0, K0, K2, I2 (nR each)
+layout(std430, binding = 1) buffer Rays { float rays[]; };          // the quarter grid's ray sums, qn x qn (row: across the axis)
+layout(std430, binding = 2) buffer Grid { float grid[]; };          // the cells' values, G x G (row 0 at the top), then the brightest at G * G
+layout(std430, binding = 3) writeonly buffer Out { vec4 outb[]; };  // the squares, 5 vec4 a cell (Renderer2D::Blob)
+uniform int uStep;
+uniform int uRadial;                        // 1: round (or the deuteron): the radial tables
+uniform ivec4 uN;                           // nT (round: nR), qn, G, the deuteron's P2 part (kk != 0)
+uniform vec4 uRay;                          // rE2 (fm^2), 1 / hT, 1 / hU, dl (fm)
+uniform vec4 uAxis;                         // n1, n2, n3 (the axis in the picture's frame), nperp
+uniform vec4 uCell;                         // half (fm), cell (fm), hq (fm), hR (fm)
+uniform vec2 uDir;                          // sx, sy: the projected axis
+uniform vec4 uScreen;                       // the grid's top left (points), a cell (points)
+uniform vec4 uColour;
+shared float sMax[64];
+
+float rho(float rp2, float z) {
+    int nT = uN.x;
+    float ip = rp2 * uRay.z, iz = abs(z) * uRay.y;
+    if (ip >= float(nT - 1) || iz >= float(nT - 1)) return 0.0;
+    int a = int(ip), b = int(iz);
+    float fa = ip - float(a), fb = iz - float(b);
+    int r0 = b * nT + a;
+    return (1.0 - fb) * ((1.0 - fa) * tab[r0] + fa * tab[r0 + 1]) + fb * ((1.0 - fa) * tab[r0 + nT] + fa * tab[r0 + nT + 1]);
+}
+float lerpT(int which, float i) {
+    int nR = uN.x, k = int(i);
+    if (k >= nR - 1) return 0.0;
+    int o = which * nR + k;
+    return tab[o] + (tab[o + 1] - tab[o]) * (i - float(k));
+}
+
+void main() {
+    int i = int(gl_GlobalInvocationID.x);
+    int qn = uN.y, G = uN.z;
+    if (uStep == 0) {
+        if (i >= qn * qn) return;
+        int it = i / qn, is = i - it * qn;
+        float s = float(is) * uCell.z, t = float(it) * uCell.z, q2 = s * s + t * t;
+        float sum = 0.0, h = 0.0;
+        if (q2 < uRay.x) {
+            float L = sqrt(uRay.x - q2), z0 = s * uAxis.w;
+            int K = max(2, int(ceil(2.0 * L / uRay.w)));
+            h = 2.0 * L / float(K);
+            for (int k = 1; k < K; k++) {
+                float l = -L + float(k) * h, z = z0 + l * uAxis.z, r2 = q2 + l * l;
+                sum += rho(max(0.0, r2 - z * z), z);
+            }
+        }
+        rays[i] = sum * h;
+        return;
+    }
+    if (uStep == 1) {
+        if (i >= G * G) return;
+        int row = i / G, col = i - row * G;
+        float x = -uCell.x + (float(col) + 0.5) * uCell.y, y = uCell.x - (float(row) + 0.5) * uCell.y;
+        float v = 0.0;
+        if (uRadial == 1) {
+            float R = sqrt(x * x + y * y), ri = R / uCell.w;
+            v = lerpT(0, ri);
+            if (uN.w != 0) { float nx = x * uAxis.x + y * uAxis.y; v += 1.5 * nx * nx * lerpT(1, ri) + 1.5 * uAxis.z * uAxis.z * lerpT(2, ri) - 0.5 * lerpT(3, ri); }
+            v = max(0.0, v);
+        } else {
+            float fs = abs(x * uDir.x + y * uDir.y) / uCell.z, ft = abs(-x * uDir.y + y * uDir.x) / uCell.z;
+            if (fs < float(qn - 1) && ft < float(qn - 1)) {
+                int a = int(fs), b = int(ft);
+                float fa = fs - float(a), fb = ft - float(b);
+                int r0 = b * qn + a;
+                v = (1.0 - fb) * ((1.0 - fa) * rays[r0] + fa * rays[r0 + 1]) + fb * ((1.0 - fa) * rays[r0 + qn] + fa * rays[r0 + qn + 1]);
+            }
+        }
+        grid[i] = v;
+        return;
+    }
+    if (uStep == 2) {
+        int l = int(gl_LocalInvocationID.x);
+        float m = 0.0;
+        for (int k = l; k < G * G; k += 64) m = max(m, grid[k]);
+        sMax[l] = m;
+        memoryBarrierShared();
+        barrier();
+        if (l == 0) {
+            float top = 0.0;
+            for (int k = 0; k < 64; k++) top = max(top, sMax[k]);
+            grid[G * G] = top;
+        }
+        return;
+    }
+    if (i >= G * G) return;
+    int row = i / G, col = i - row * G;
+    float peak = grid[G * G];
+    float v = peak > 0.0 ? grid[i] / peak : 0.0;
+    bool shown = peak > 0.0 && !(v < 0.01);
+    outb[5 * i] = vec4(uScreen.x + (float(col) + 0.5) * uScreen.z, uScreen.y + (float(row) + 0.5) * uScreen.z, shown ? uScreen.z / 2.0 : 0.0, 2.0);
+    outb[5 * i + 1] = vec4(0.0);
+    outb[5 * i + 2] = vec4(uColour.rgb, shown ? 0.95 * v : 0.0);
+    outb[5 * i + 3] = vec4(0.0);
+    outb[5 * i + 4] = vec4(0.0);
+}
+)";
+
 }  // namespace render

@@ -163,6 +163,28 @@ void sectMark(int i) {   // the part i ends now (the next part starts)
     }
 }
 }  // namespace
+// 0.67.0: the Orbit Lab at rest keeps its picture: while OrbitView::pictureKey (and the picture's place, scale, grey choice and the font's texture) stay the
+// same, the picture is not drawn again (Renderer2D::keepLast: Vulkan shows the window's kept picture; OpenGL draws the kept lists again, without the work of
+// making them) and its labels are the kept vertices of the last drawing. PL_ORBIT_NOKEEP=1 (checks): always drawn, to compare.
+namespace {
+struct OrbitKeep {
+    std::uint64_t key = 0;
+    bool have = false, textOk = false;
+    std::vector<ImDrawVert> vtx;
+    std::vector<ImDrawIdx> idx;                        // (from the slice's first vertex)
+    long kept = 0, drawn = 0;
+};
+OrbitKeep g_orbitKeep;
+std::uint64_t orbitFrameKey(const ui::AppState& app, const render::Renderer2D& R, double headerH, double scale, bool gray) {
+    std::uint64_t k = app.view.pictureKey(app.sys, app.set, 0, headerH, scale, app.canvasW, app.canvasH);
+    for (int m = 0; m < int(render::Map::Count); m++) k = (k ^ (R.hasMap(render::Map(m)) ? 2u * unsigned(m) + 1u : 2u * unsigned(m))) * 1099511628211ull;   // (a map loaded later)
+    const ImFontAtlas* fa = ImGui::GetIO().Fonts;
+    const double extra[8] = {gray ? 1.0 : 0.0, double(reinterpret_cast<std::uintptr_t>(ImGui::GetFont())), ImGui::GetFontSize(), double(reinterpret_cast<std::uintptr_t>(fa->TexData)),
+                             fa->TexData ? double(fa->TexData->Width) : 0.0, fa->TexData ? double(fa->TexData->Height) : 0.0, fa->TexUvScale.x, fa->TexUvScale.y};
+    for (double e : extra) { std::uint64_t b = 0; std::memcpy(&b, &e, sizeof b); k = (k ^ b) * 1099511628211ull; }
+    return k;
+}
+}  // namespace
 // 0.55.5 (automatic checks and measuring): PL_BH_MOVE="kind:first:count" moves the Black Hole Lab's view every frame from frame first for count frames
 // (turn: round the axis; tilt: up; dist: closer by 1 % a frame; spin: +0.005 a frame); PL_BH_FRAMETIME prints, per frame, the frame thread's time in the lab
 static double g_bhDrawMs = 0;
@@ -739,6 +761,7 @@ int main(int, char**) {
         } else {
             app.view.tick(dt, app.set);
             ui::journeyTick(app, dt);
+            ui::jumpTick(app);                          // 0.67.0: a far jump in Real, once its walk on a worker is taken in
             if (!app.paused) {
                 acc += dt;
                 while (acc >= units::kPhysicsStep) { app.sys.step(units::kPhysicsStep, app.set.tspeed); acc -= units::kPhysicsStep; }
@@ -777,7 +800,16 @@ int main(int, char**) {
         app.set.theme = ui::look().c;
         app.set.textScale = ui::look().textScale;
         if (app.pane) ui::paneWindow(app, ui::shellTopBarH());
-        if (!pictureOff) renderer.begin(app.canvasW, app.canvasH);
+        bool orbitKept = false;                         // 0.67.0: the Orbit Lab at rest keeps its picture (OrbitKeep above)
+        std::uint64_t orbitKey = 0;
+        if (!pictureOff && !app.pane && app.lab == 0) {
+            static const bool noKeep = SDL_getenv("PL_ORBIT_NOKEEP") != nullptr;
+            app.set.paused = app.paused;
+            orbitKey = orbitFrameKey(app, renderer, headerH, scale, ui::look().grayscale);
+            const OrbitKeep& K = g_orbitKeep;
+            orbitKept = !noKeep && K.have && K.textOk && K.key == orbitKey && frame > 0;
+        } else g_orbitKeep.have = false;
+        if (!pictureOff) { if (orbitKept) renderer.keepLast(); else renderer.begin(app.canvasW, app.canvasH); }
         ImDrawList* text = ImGui::GetBackgroundDrawList();
         text->PushClipRect(ImVec2(0, headerH), ImVec2(canvasWinW, headerH + pictureWinH));
         if (app.pane) text->PopClipRect();              // a tab page covers the lab: nothing to draw
@@ -804,7 +836,38 @@ int main(int, char**) {
         } else {
             app.set.paused = app.paused;
             if (SDL_getenv("PL_SKYOFF") && frame == 0) app.set.sky = orbit::SkyMode::Off;
-            app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH);
+            OrbitKeep& K = g_orbitKeep;
+            if (orbitKept) {                            // the kept labels (the same vertices, after this frame's own)
+                K.kept++;
+                const int nv = int(K.vtx.size()), ni = int(K.idx.size());
+                if (ni > 0) {
+                    text->PrimReserve(ni, nv);
+                    std::memcpy(text->_VtxWritePtr, K.vtx.data(), K.vtx.size() * sizeof(ImDrawVert));
+                    const unsigned base = text->_VtxCurrentIdx;
+                    for (int i = 0; i < ni; i++) text->_IdxWritePtr[i] = static_cast<ImDrawIdx>(base + K.idx[std::size_t(i)]);
+                    text->_VtxWritePtr += nv; text->_IdxWritePtr += ni; text->_VtxCurrentIdx += unsigned(nv);
+                }
+            } else {
+                const int v0 = text->VtxBuffer.Size, i0 = text->IdxBuffer.Size, c0 = std::max(0, text->CmdBuffer.Size - 1);
+                const unsigned base = text->_VtxCurrentIdx;
+                const ImDrawCmdHeader hdr = text->_CmdHeader;
+                app.view.draw(renderer, text, 0, headerH, scale, app.sys, app.set, app.canvasW, app.canvasH);
+                K.drawn++; app.orbitPictures++;
+                K.have = true; K.key = orbitKey;
+                // the labels are kept when they are one run of vertices with one clip and texture (the picture's own, as here), under 60,000 vertices
+                K.textOk = text->_CmdHeader.VtxOffset == hdr.VtxOffset && text->VtxBuffer.Size - v0 < 60000;
+                for (int c = c0; c < text->CmdBuffer.Size && K.textOk; c++) {
+                    const ImDrawCmd& cmd = text->CmdBuffer[c];
+                    if (cmd.ElemCount == 0) continue;
+                    K.textOk = std::memcmp(&cmd.ClipRect, &hdr.ClipRect, sizeof hdr.ClipRect) == 0 && std::memcmp(&cmd.TexRef, &hdr.TexRef, sizeof hdr.TexRef) == 0 &&
+                               cmd.VtxOffset == hdr.VtxOffset && cmd.UserCallback == nullptr;
+                }
+                if (K.textOk) {
+                    K.vtx.assign(text->VtxBuffer.Data + v0, text->VtxBuffer.Data + text->VtxBuffer.Size);
+                    K.idx.resize(std::size_t(text->IdxBuffer.Size - i0));
+                    for (int i = i0; i < text->IdxBuffer.Size; i++) K.idx[std::size_t(i - i0)] = static_cast<ImDrawIdx>(text->IdxBuffer[i] - base);
+                }
+            }
             text->PopClipRect();
         }
         sectMark(2);
@@ -900,8 +963,8 @@ int main(int, char**) {
             std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY);
         }
         if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
-                        std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld ncover=%ld nlayers=%d\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
-                                    ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000), long(ns.cover), ns.layers); }
+                        std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld ncover=%ld nlayers=%d nucruns=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
+                                    ns.blobs, ns.blobRuns, ns.lines, ns.ringCalls, long(ns.cpuMs * 1000), long(ns.cover), ns.layers, renderer.nucDensRuns()); }   // (0.67.0: nucruns, the nucleus density's card runs)
         }
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
             app.shot.requested = false;
@@ -971,6 +1034,7 @@ int main(int, char**) {
     live.draw = [&] { runFrame(true); };
     SDL_AddEventWatch(onLiveExpose, &live);
     while (running) runFrame(false);
+    if (g_orbitKeep.kept + g_orbitKeep.drawn > 0) std::printf("PLORBITKEEP kept=%ld drawn=%ld\n", g_orbitKeep.kept, g_orbitKeep.drawn);   // 0.67.0 (checks): the Orbit Lab's frames kept and drawn
     SDL_RemoveEventWatch(onLiveExpose, &live);
     ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);   // 0.21: a change in the last quarter second before closing was lost (seen in molecule_pictures on a fast run)
     ui::logFontAtlas();                              // PL_LOG_ATLAS=1 (stage 5j memory check): once, at the end

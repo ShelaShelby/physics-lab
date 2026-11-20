@@ -163,6 +163,28 @@ def part_benchrest(binary, work):
     t = report(r)
     check("AT REST" in t and "rest.molecule  busy" in t, "the report's rest table says busy")
 
+# 0.67.0: the Orbit Lab at rest keeps its picture: the kept one is the picture drawn afresh (PL_ORBIT_NOKEEP=1), pixel for pixel, on both APIs; a change at
+# rest (a Show switch clicked) is drawn; the benchmark's rest line says it was not drawn anew (this box's processor share is the software renderer's own)
+def part_orbitkeep(binary, work):
+    def keepline(r):
+        m = re.search(r"PLORBITKEEP kept=(\d+) drawn=(\d+)", r.out)
+        return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+    for api in ("vulkan", "opengl"):
+        for tag, extra in (("still", {}), ("click", {"PL_SCRIPT": "50:click=show.comets"})):
+            k = run_app(binary, work, f"okeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1"), frames=90)
+            n = run_app(binary, work, f"onokeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1", PL_ORBIT_NOKEEP="1"), frames=90)
+            kept, drawn = keepline(k)
+            a, b = Bmp(os.path.join(work, f"okeep_{api}_{tag}.bmp")), Bmp(os.path.join(work, f"onokeep_{api}_{tag}.bmp"))
+            diff = sum(1 for y in range(0, 800, 2) for x in range(0, 1280, 2) if a.px(x, y) != b.px(x, y))
+            print(f"  {api} {tag}: kept {kept}, drawn {drawn}; {diff} sampled pixels differ from the fresh picture")
+            check(diff == 0, f"{api} {tag}: the kept picture is the fresh one, pixel for pixel ({diff} differ)")
+            check(kept >= 70, f"{api} {tag}: the picture is kept at rest ({kept} of 90 frames)")
+            if tag == "click":
+                check(drawn >= 2, f"{api}: the click at rest drew the picture anew ({drawn} drawings)")
+    r = run_app(binary, work, "b_rest_orbit", dict(BENCH, PL_BENCH_ONLY="rest.orbit"), frames=100000, size="880x560", timeout=600)
+    ln = [l for l in r.out.splitlines() if l.startswith("PLBENCH-REST ")]
+    check(len(ln) == 1 and "redraws=0 " in ln[0], f"rest.orbit: the picture was not drawn anew at rest ({ln})")
+
 def part_benchrestore(binary, work):
     ids = "ui.settings_open,ui.data_plot,ui.guide_scroll,molecule.vib_density,atom.jump_all,orbit.journey,orbit.earth,blackhole.extreme,response.lab_switch.orbit_atom,rest.blackhole_glare"
     r = run_app(binary, work, "b_restore", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.2", PL_BENCH_MEASURE="0.4", PL_OPEN="settings"), frames=100000, size="880x560", timeout=1200)
@@ -175,7 +197,7 @@ def part_benchrestore(binary, work):
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"scrollbar": part_scrollbar, "bench": part_bench, "rail": part_rail, "nucleus": part_nucleus, "benchscenes": part_benchscenes, "benchwaits": part_benchwaits,
+    {"scrollbar": part_scrollbar, "bench": part_bench, "rail": part_rail, "nucleus": part_nucleus, "benchscenes": part_benchscenes, "benchwaits": part_benchwaits, "orbitkeep": part_orbitkeep,
      "benchrest": part_benchrest, "benchrestore": part_benchrestore}[part](binary, work)
     print(f"check_6b {part}: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

@@ -126,6 +126,9 @@ public:
     void drawMesh(int id, int first, int count);
     void endPicture(bool gray);                                             // the picture's last pass; gray: the grey pass (kGray) into its own image
     void noPicture() { drawn_ = false; }
+    // 0.67.0: the window's picture drawn last shown again, nothing drawn (the Orbit Lab at rest): true when that picture is whole and of this size and grey
+    // choice; false: it must be drawn
+    bool keepPicture(int w, int h, bool gray);
 
     // ---- used by the window's backend ----
     bool pictureDrawn() const { return drawn_; }
@@ -187,6 +190,7 @@ private:
     VkDeviceSize vbBound_ = ~VkDeviceSize(0);
     std::vector<Mesh> meshes_;
     bool usedGray_ = false;
+    bool screenKept_ = false, screenGray_ = false;   // 0.67.0: the window's picture is whole (its last pass ended), and whether it used the grey pass
     VkImageView ext_[2] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
 };
 

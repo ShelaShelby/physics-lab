@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <string>
 
 #include "imgui.h"
 #include "orbit/belts.h"
@@ -125,10 +127,20 @@ void journeyTick(AppState& app, double dt) {
 
 bool parseDateTime(const char* date, const char* time, int64_t& ms) { return orbit::parseDateTime(date, time, ms); }   // orbit/date_text.h, tested
 
-std::string jumpToDate(AppState& app, int64_t ms) {
+std::string jumpToDate(AppState& app, int64_t ms, bool offFrame) {
     journeyStop(app);
     std::string clampNote;
     ms = clampJumpDate(ms, clampNote);        // a date outside 1800-2100 is moved, and says so (orbit/date_text.h, tested)
+    // 0.67.0: in Real, a date far from the clock's kept states is walked to on a worker first (1.8 s of steps for 1850 on the owner's PC was one frozen frame):
+    // the lab stays at the date shown meanwhile (the right picture of that date), the note says where it is going, and jumpTick makes the jump once the walk
+    // is taken in. The automatic checks (PL_FIXED_DT) jump at once, as before (the same states either way).
+    static const bool fixedDt = std::getenv("PL_FIXED_DT") && std::atof(std::getenv("PL_FIXED_DT")) > 0;
+    app.jumpWaiting = false;
+    if (offFrame && !fixedDt && app.sys.jumpNeedsWalk(ms)) {
+        app.sys.prepareJump(ms);
+        app.jumpWaiting = true; app.jumpWaitMs = ms; app.jumpWaitNote = clampNote;
+        return "Going to " + fmt::dateUTC(ms) + " ...";
+    }
     // keep the selected planet or moon selected, by name
     std::string selName;
     int moonIdx = -1;
@@ -146,11 +158,18 @@ std::string jumpToDate(AppState& app, int64_t ms) {
     return jumpMessage(clampNote, ms, app.set.realPlanets, app.sys.realMoon());   // orbit/date_text.h, tested
 }
 
+void jumpTick(AppState& app) {
+    if (!app.jumpWaiting || !app.sys.jumpPrepared()) return;
+    const std::string clampNote = app.jumpWaitNote;
+    app.dateNote = jumpToDate(app, app.jumpWaitMs, true);
+    if (!clampNote.empty() && !app.jumpWaiting) app.dateNote = jumpMessage(clampNote, app.jumpWaitMs, app.set.realPlanets, app.sys.realMoon());
+}
+
 void jumpFromBoxes(AppState& app) {
     int64_t ms;
     if (!app.dateText[0]) app.dateNote = "Pick a date first.";
     else if (!parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = "That is not a date the lab can read: write it as YYYY-MM-DD (for example 2003-08-27), and the time as HH:MM.";
-    else app.dateNote = jumpToDate(app, ms);
+    else app.dateNote = jumpToDate(app, ms, true);
 }
 
 // The jumps, shared by the old panel's buttons and the new UI's Time panel (ui/orbit_actions.h)
@@ -173,11 +192,11 @@ void doDateJump(AppState& app, int i) {
     int n = 0;
     const DateJump* jumps = dateJumps(n);
     if (i < 0 || i >= n) return;
-    if (!jumps[i].date) { journeyStop(app); resetToToday(app); app.dateNote = "Back to today."; return; }
+    if (!jumps[i].date) { journeyStop(app); app.jumpWaiting = false; resetToToday(app); app.dateNote = "Back to today."; return; }
     std::snprintf(app.dateText, sizeof app.dateText, "%s", jumps[i].date);
     std::snprintf(app.timeText, sizeof app.timeText, "%s", jumps[i].time);
     int64_t ms;
-    if (parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = jumpToDate(app, ms);
+    if (parseDateTime(app.dateText, app.timeText, ms)) app.dateNote = jumpToDate(app, ms, true);
 }
 
 }  // namespace ui

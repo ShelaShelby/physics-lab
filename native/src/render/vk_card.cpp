@@ -13,6 +13,7 @@
 #include "atom_card.h"
 #include "group_compute.h"
 #include "molecule_card.h"
+#include "nucdens_card.h"
 #include "outline_compute.h"
 #include "renderer2d.h"
 #include "rock_compute.h"
@@ -25,6 +26,7 @@
 #include "r2d_slice_comp.h"
 #include "r2d_ringprobe_comp.h"
 #include "r2d_classic_comp.h"
+#include "r2d_nucdens_comp.h"
 #include "r2d_jump_comp.h"
 #include "r2d_moldots_comp.h"
 #include "r2d_cgrid_vert.h"
@@ -67,6 +69,7 @@ std::string vkCardVersion(const std::string& name) {
     if (name == "sky") return vkCardId("sky", {kKerrSkyTinyFS, kKerrSkyHeadPart, kEllipticPart, kKerrSkyMathPart, kKerrSkyTracePart, kKerrSkyMainPart});
     if (name == "rings") return vkCardId("rings", {kVertexShader, kRingsHeadFSPart, kRingsHeadCSPart, kRingsPart, kRingsMainFSPart, kRingsMainCSPart});   // 0.64.0
     if (name == "classic") return vkCardId("classic", {kClassicCS, kBlobVS, kBlobFS});   // 0.64.0
+    if (name == "nucdensity") return vkCardId("nucdensity", {kNucDensCS, kBlobVS, kBlobFS});   // 0.67.0
     if (name == "lens") return vkCardId("lens", {kCompositeVS, kLensFS, kKerrFS, kMaxDownFS, kGlowDownFS, kGlowBlurFS, kGlowAddFS, kGlareDownFS, kGlareAddFS, kCompositeFS});
     return "vulkan " + molCloudShaderId();
 }
@@ -1791,5 +1794,114 @@ int vkPollFirstUses(VkCards& c, IGroupCompute* g, IOutlineCompute* o, IRockCompu
     if (w && !c.pollFirstUse(w->use, kStepLimitS)) off |= 8;
     return off;
 }
+
+// =====================================================================================================================================================
+// 0.67.0: the nucleus' Density look (kNucDensCS, four steps; the renderer's blob program draws the squares it wrote), built and checked by
+// atom/nucdens_check.cpp under gpuVkNucDensGuard. The frame's steps run only when the model, the view or the grid's place changed; else the squares of
+// the last run are drawn again.
+// =====================================================================================================================================================
+class NucDensCardVk : public NucDensCard {
+public:
+    explicit NucDensCardVk(VkCards& c) : c_(c) {}
+    ~NucDensCardVk() override { while (!jobs_.empty()) release(jobs_.back().id); drop(frame_); c_.dropKernel(k_); }
+    bool build(std::string& why) override {
+        if (k_.pipe) return true;
+        if (forcedFail("nucdensity")) { why = "made to fail on purpose (PL_VK_CARDFAIL=nucdensity)"; return false; }
+        return c_.makeKernel(k_r2d_nucdens_comp, sizeof k_r2d_nucdens_comp, k_, why);
+    }
+    bool built() const override { return k_.pipe != VK_NULL_HANDLE; }
+    // the frame's: the steps (when something changed) in the open batch, before the picture's pass; false: nothing to draw from the card
+    bool record(const NucDensDraw& d) {
+        if (!built() || !c_.ok() || d.G <= 0 || !d.table || d.tableN == 0) return false;
+        const bool same = have_ && d.tableVersion == last_.tableVersion && sameView(d, last_);
+        if (same) return true;
+        if (!sized(frame_, d, false)) return false;
+        if (frame_.version != d.tableVersion) { c_.copyIn(d.table, d.tableN * sizeof(float), frame_.tab, 0); c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToCompute); frame_.version = d.tableVersion; }
+        if (!steps(d, frame_, 4, VkCards::kToVertex)) { have_ = false; return false; }
+        last_ = d; last_.table = nullptr; have_ = true; runs_++;
+        return true;
+    }
+    VkBuffer squares() const { return frame_.out.b; }
+    long runs() const override { return runs_; }
+    int beginCheck(const NucDensDraw& d) override {
+        if (!built() || !c_.ok() || d.G <= 0 || !d.table || d.tableN == 0 || jobs_.size() >= 8) return 0;
+        Job j;
+        j.id = nextId_++; j.n = d.G * d.G;
+        if (!sized(j.b, d, true)) { drop(j.b); return 0; }
+        c_.copyIn(d.table, d.tableN * sizeof(float), j.b.tab, 0);
+        c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToCompute);
+        if (!steps(d, j.b, 2, VkCards::kToHost)) { drop(j.b); return 0; }
+        j.ticket = c_.flush(false);
+        if (!j.ticket) { drop(j.b); return 0; }
+        jobs_.push_back(std::move(j));
+        return jobs_.back().id;
+    }
+    JobState pollCheck(int job, std::vector<float>& grid) override {
+        for (Job& j : jobs_) {
+            if (j.id != job) continue;
+            if (!c_.done(j.ticket)) return JobState::Pending;
+            const bool good = !c_.failed();
+            if (good) { grid.resize(std::size_t(j.n)); std::memcpy(grid.data(), j.b.grid.map, grid.size() * sizeof(float)); }
+            release(job);
+            return good ? JobState::Done : JobState::Failed;
+        }
+        return JobState::Failed;
+    }
+    void cancel(int job) override { release(job); }
+private:
+    struct Bufs { VkCards::Buf tab, rays, grid, out; std::size_t tabN = 0; int qn = 0, G = 0; std::uint64_t version = 0; };
+    struct Job { int id = 0, n = 0; std::uint64_t ticket = 0; Bufs b; };
+    static bool sameView(const NucDensDraw& a, const NucDensDraw& b) {
+        return a.radial == b.radial && a.kk == b.kk && a.nT == b.nT && a.qn == b.qn && a.tableN == b.tableN && a.rE2 == b.rE2 && a.invT == b.invT && a.invU == b.invU &&
+               a.dl == b.dl && a.n1 == b.n1 && a.n2 == b.n2 && a.n3 == b.n3 && a.nperp == b.nperp && a.sx == b.sx && a.sy == b.sy && a.hq == b.hq && a.hR == b.hR &&
+               a.G == b.G && a.halfFm == b.halfFm && a.cellFm == b.cellFm && a.x0 == b.x0 && a.y0 == b.y0 && a.cellPts == b.cellPts &&
+               std::equal(a.colour, a.colour + 4, b.colour);
+    }
+    void drop(Bufs& b) { c_.dropBuffer(b.tab); c_.dropBuffer(b.rays); c_.dropBuffer(b.grid); c_.dropBuffer(b.out); b = Bufs(); }
+    bool sized(Bufs& b, const NucDensDraw& d, bool host) {
+        if (b.tab.b && b.tabN >= d.tableN && b.qn >= d.qn && b.G == d.G) return true;
+        drop(b);
+        const VkBufferUsageFlags st = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        const VkDeviceSize cells = VkDeviceSize(d.G) * VkDeviceSize(d.G);
+        const bool ok = c_.makeBuffer(VkDeviceSize(d.tableN) * 4u, st, false, b.tab, "the nucleus' density table") &&
+                        c_.makeBuffer(VkDeviceSize(std::max(d.qn, 2)) * VkDeviceSize(std::max(d.qn, 2)) * 4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, false, b.rays, "the nucleus' rays") &&
+                        c_.makeBuffer((cells + 1) * 4u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, host, b.grid, "the nucleus' density grid") &&
+                        c_.makeBuffer(cells * 80u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, false, b.out, "the nucleus' density squares");
+        if (ok) { b.tabN = d.tableN; b.qn = d.qn; b.G = d.G; b.version = 0; }
+        return ok;
+    }
+    // steps 0 .. to - 1 (0 the rays, only for the deformed shapes; 1 the cells; 2 the brightest; 3 the squares)
+    bool steps(const NucDensDraw& d, Bufs& b, int to, unsigned consumer) {
+        VkUniforms& u = k_.u;
+        const int n[4] = {d.nT, d.qn, d.G, d.kk != 0 ? 1 : 0};
+        const float ray[4] = {d.rE2, d.invT, d.invU, d.dl}, axis[4] = {d.n1, d.n2, d.n3, d.nperp}, cell[4] = {d.halfFm, d.cellFm, d.hq, d.hR}, dir[2] = {d.sx, d.sy};
+        const float scr[4] = {d.x0, d.y0, d.cellPts, 0};
+        u.i("uRadial", &d.radial, 1); u.i("uN", n, 4); u.f("uRay", ray, 4); u.f("uAxis", axis, 4); u.f("uCell", cell, 4); u.f("uDir", dir, 2); u.f("uScreen", scr, 4);
+        u.f("uColour", d.colour, 4);
+        const std::uint32_t cells = static_cast<std::uint32_t>((d.G * d.G + 63) / 64), rays = static_cast<std::uint32_t>((d.qn * d.qn + 63) / 64);
+        for (int step = d.radial ? 1 : 0; step < to; step++) {
+            u.i("uStep", &step, 1);
+            if (!c_.dispatch(k_, {&b.tab, &b.rays, &b.grid, &b.out}, step == 0 ? rays : step == 2 ? 1u : cells)) return false;
+            c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, step + 1 == to ? consumer : unsigned(VkCards::kToCompute));
+        }
+        return true;
+    }
+    void release(int id) {
+        for (std::size_t i = 0; i < jobs_.size(); i++)
+            if (jobs_[i].id == id) { drop(jobs_[i].b); jobs_.erase(jobs_.begin() + static_cast<std::ptrdiff_t>(i)); return; }
+    }
+    VkCards& c_;
+    VkCards::Kernel k_;
+    Bufs frame_;
+    NucDensDraw last_;
+    bool have_ = false;
+    long runs_ = 0;
+    std::vector<Job> jobs_;
+    int nextId_ = 1;
+};
+
+NucDensCard* makeVkNucDensCard(VkCards& c) { return new NucDensCardVk(c); }
+bool vkNucDensRecord(NucDensCard* c, const NucDensDraw& d) { NucDensCardVk* v = dynamic_cast<NucDensCardVk*>(c); return v && v->record(d); }
+VkBuffer vkNucDensSquares(NucDensCard* c) { const NucDensCardVk* v = dynamic_cast<const NucDensCardVk*>(c); return v ? v->squares() : VK_NULL_HANDLE; }
 
 }  // namespace render

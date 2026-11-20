@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -76,6 +77,9 @@ public:
     void resetView();
     void tick(double dt, const ViewSettings& set) { if (set.view3D && spin) yaw += 0.15 * dt; }   // ⟳ Spin: the 3D view turns slowly
     void select(Selection s, bool follow);       // the Go to tiles: select and keep it in the middle
+    // 0.67.0: a key of everything the picture is drawn from (this view's camera and choices, the settings, the system's time, bodies, trails and moons, the
+    // picture's size and place): the same key, the same picture. The app keeps the last picture while the key stays the same (time stopped, nothing moving).
+    std::uint64_t pictureKey(const SolarSystem& sys, const ViewSettings& set, double originX, double originY, double uiScale, double width, double height) const;
 
     Selection sel;
     bool follow = false;

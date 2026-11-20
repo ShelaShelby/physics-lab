@@ -33,11 +33,13 @@
 // and shape (Lense-Thirring, J2) and all higher orders.
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <future>
 #include <deque>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "vec3.h"
@@ -157,6 +159,14 @@ public:
     long long stepsTaken() const { return steps_; }            // for tests: how many steps were computed so far (a background stretch counts when it is used)
     std::size_t checkpoints() const { return cp_.size(); }
     void setPrefetch(bool on) { prefetch_ = on; }              // for tests: the background stretch can be switched off (on by default)
+    // 0.67.0: a jump far from every kept checkpoint (1850 from 2026: about 64,000 steps, 1.8 s on the owner's PC) walked on a worker, so the frame does not stop.
+    // needsWalk: stateAt(tau) would walk from a checkpoint more than a stretch away. prepare(tau): start that walk and tau's stretch on a worker (one walk at a
+    // time; a later prepare waits its turn). prepared(): called on the drawing thread; true once the walk for the last prepare is finished and taken in (its
+    // checkpoints kept and its stretch stored as the drawing thread's own walk would have). The worker takes copies only, so stateAt may be used meanwhile; the
+    // states are bit for bit those of the walk on the drawing thread (the same steps from the same state; tests/test_nbody.cpp).
+    bool needsWalk(double tau) const;
+    void prepare(double tau);
+    bool prepared();
     static constexpr long kEvery = 256;                   // a checkpoint every 256 steps (0.29: was 2,000 with the cheaper step)
     static constexpr long kKeep = 1600;                   // checkpoints are kept for |index| <= 1,600 (about +-1,100 years); beyond that the state is only played on
     static constexpr std::size_t kFar = 64;               // 0.40: beyond kKeep, the most recent checkpoints kept (the walk on starts from the newest)
@@ -183,6 +193,13 @@ private:
     const NBodyState& checkpoint(long j);
     const NBodyState* knownCheckpoint(long j) const;      // a checkpoint already made, or nullptr
     void ensure(long k);
+    void addStretch(long j, Stretch&& sg);                // stores a made stretch (forgetting the one used longest ago) and keeps its two ends as checkpoints
+    struct Walk { std::vector<std::pair<long, NBodyState>> cps; long j = 0; Stretch sg; long long steps = 0; };
+    std::shared_future<Walk> walk_;                       // 0.67.0: the far walk under way, and the stretch it is for
+    long walkJ_ = 0;
+    bool wantWalk_ = false; double wantTau_ = 0;          // the last prepare's date (started when the walk before it is taken in)
+    static long stretchOf(long k) { return k >= 0 ? k / kEvery : -((-k + kEvery - 1) / kEvery); }
+    long stepOf(double tau) const { return long(std::floor(tau / h_)); }
 };
 
 }  // namespace orbit

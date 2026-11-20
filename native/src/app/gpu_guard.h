@@ -161,7 +161,9 @@ GpuGuard& gpuVkLensGuard();
 GpuGuard& gpuVkRingsGuard();
 // 0.64.0: the Classic Cloud 3D dots on Vulkan (render/classic_card.h, atom/classic_check.h): gpuVkClassicGuard ("gpuvkclassic=", "[vulkan] [classic] ")
 GpuGuard& gpuVkClassicGuard();
-std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the twelve Vulkan guards by their settings name (gpuvk<name>=)
+// 0.67.0: the nucleus' Density look on Vulkan (render/nucdens_card.h, atom/nucdens_check.h): gpuVkNucDensGuard ("gpuvknucdensity=", "[vulkan] [nucdensity] ")
+GpuGuard& gpuVkNucDensGuard();
+std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the thirteen Vulkan guards by their settings name (gpuvk<name>=)
 
 // 0.63.0: the frame's thread (main.cpp, at start): a guarded begin() there never waits for another guard's open step (every other thread does)
 void gpuGuardFrameThread();
