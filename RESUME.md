@@ -1,8 +1,8 @@
 # Resume
 
 ## Current state
-- 0.66.0 (19 Nov 2026): speed batch 3: the Slice's new dots on a 1.5 ms budget a frame (the same dots, later; every Slice), the Dirac sampler's exact early stop; the nucleus views' glows as one quad a nucleon (blob kind 10, glow stacks: atom.nucleus_zoom 66 -> 16 pictures of pixels a frame, the same picture); the Density surface's radix sort, the nucleus Density look's rays on 4 threads, the orbits' sines from a table. Before: 0.65.0 speed batch 2.
-- Last full UI run: 0.66.0 (the commit "native 0.66.0"), on Vulkan; see native/REPORT.md for the checks left failing.
+- 0.67.0 (20 Nov 2026): speed batch 4: the Orbit Lab keeps its picture at rest and walks to a far date on a worker; the nucleus' Density look on the card (Vulkan, kNucDensCS); atom.nucleon's dots keep their places for their life; the Black Hole panel's shadow size on a worker; the benchmark's new pictures a second over the moving time; a crash-safe helper process for the card programs' first pipelines (light paths, Classic, nucleus density) and the light paths' five kKerrTableCS variants. Before: 0.66.0 speed batch 3.
+- Last full UI run: 0.67.0 (the commit "native 0.67.0"), on Vulkan; see native/REPORT.md for the checks left failing.
 - Next: the owner's Vulkan benchmark (Hard) on his PC; then all the speed work on Vulkan, slowest scene first (DECISIONS 18 Nov 2026); OpenGL removed when the owner decides. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
 

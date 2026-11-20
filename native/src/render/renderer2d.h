@@ -72,7 +72,6 @@ public:
     bool cloudClassic(const ClassicDraw& d);
     // 0.67.0: the nucleus' Density look from the card (Vulkan only: nullptr otherwise); nucDensity records it once its check passed (ready): false: not drawn
     // (the caller makes the processor's squares). nucDensRuns: how many times its steps ran (they run only when something changed)
-    void vkMergeCache(const std::string& path);   // 0.67.0: the helper process's pipeline cache into the Black Hole Lab's (Vulkan; render/renderer2d_vk.cpp)
     NucDensCard* nucDensCard();
     bool nucDensity(const NucDensDraw& d);
     long nucDensRuns() const;

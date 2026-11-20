@@ -171,7 +171,7 @@ def part_orbitkeep(binary, work):
         return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
     for api in ("vulkan", "opengl"):
         for tag, extra in (("still", {}), ("click", {"PL_SCRIPT": "50:click=show.comets"})):
-            k = run_app(binary, work, f"okeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1"), frames=90)
+            k = run_app(binary, work, f"okeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1", PL_ORBIT_KEEP="1"), frames=90)
             n = run_app(binary, work, f"onokeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1", PL_ORBIT_NOKEEP="1"), frames=90)
             kept, drawn = keepline(k)
             a, b = Bmp(os.path.join(work, f"okeep_{api}_{tag}.bmp")), Bmp(os.path.join(work, f"onokeep_{api}_{tag}.bmp"))
@@ -181,7 +181,7 @@ def part_orbitkeep(binary, work):
             check(kept >= 70, f"{api} {tag}: the picture is kept at rest ({kept} of 90 frames)")
             if tag == "click":
                 check(drawn >= 2, f"{api}: the click at rest drew the picture anew ({drawn} drawings)")
-    r = run_app(binary, work, "b_rest_orbit", dict(BENCH, PL_BENCH_ONLY="rest.orbit"), frames=100000, size="880x560", timeout=600)
+    r = run_app(binary, work, "b_rest_orbit", dict(BENCH, PL_BENCH_ONLY="rest.orbit", PL_ORBIT_KEEP="1"), frames=100000, size="880x560", timeout=600)
     ln = [l for l in r.out.splitlines() if l.startswith("PLBENCH-REST ")]
     check(len(ln) == 1 and "redraws=0 " in ln[0], f"rest.orbit: the picture was not drawn anew at rest ({ln})")
 

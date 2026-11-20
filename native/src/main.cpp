@@ -559,10 +559,9 @@ int main(int argc, char** argv) {
     int atomBenchFrame = 0;
     const int atomBenchStop = SDL_getenv("PL_ATOM_BENCHSTOP") ? std::atoi(SDL_getenv("PL_ATOM_BENCHSTOP")) : 0;
     const auto runFrame = [&](bool isLive) {
-        if (useVulkan && app::gpuHelperPump()) {        // 0.67.0: a helper finished: its guard's record kept at once, its pipelines into the cache
-            ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
-            renderer.vkMergeCache(app::gpuHelperCacheFile(ui::settingsFolder()));
-        }
+        // 0.67.0: a helper finished: its guard's record kept at once (its pipelines reach the app's cache at the next start: render/vk_blackhole.cpp merges
+        // the helpers' cache file before any pipeline is made; merging now would race the Black Hole Lab's pipelines made on its threads)
+        if (useVulkan && app::gpuHelperPump()) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
         app.liveFrame = isLive;
         if (atomDoFrame > 0 && ++atomDoCount == atomDoFrame) doAtom();
         if (atomSpin != 0) app.atom.s.oyaw += atomSpin;   // PL_ATOM_SPIN=0.15: the camera turns every frame as a fast drag does (0.16 stage 5, automatic checks)
@@ -820,7 +819,8 @@ int main(int argc, char** argv) {
         bool orbitKept = false;                         // 0.67.0: the Orbit Lab at rest keeps its picture (OrbitKeep above)
         std::uint64_t orbitKey = 0;
         if (!pictureOff && !app.pane && app.lab == 0) {
-            static const bool noKeep = SDL_getenv("PL_ORBIT_NOKEEP") != nullptr;
+            // (the checks' shell log, PL_LOG_SHELL, reads what each drawing notes: kept only when a check asks for it, PL_ORBIT_KEEP=1)
+            static const bool noKeep = SDL_getenv("PL_ORBIT_NOKEEP") != nullptr || (ui::shellLogOn() && !SDL_getenv("PL_ORBIT_KEEP"));
             app.set.paused = app.paused;
             orbitKey = orbitFrameKey(app, renderer, headerH, scale, ui::look().grayscale);
             const OrbitKeep& K = g_orbitKeep;

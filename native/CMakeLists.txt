@@ -538,7 +538,7 @@ if(PL_BUILD_APP)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
   if(TARGET gl_compare_tests)                            # 0.61.0: the card programs on Vulkan in the same test program (tests/gl_vulkan.inc)
-    target_sources(gl_compare_tests PRIVATE src/orbit/ring_check.cpp src/atom/classic_check.cpp src/atom/nucdens_check.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp ${PL_VK_SHADER_HEADERS})
+    target_sources(gl_compare_tests PRIVATE src/orbit/ring_check.cpp src/atom/classic_check.cpp src/atom/nucdens_check.cpp src/render/vk_helper.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp ${PL_VK_SHADER_HEADERS})
     target_include_directories(gl_compare_tests PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
     target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core blackhole_core volk::volk)
     target_compile_definitions(gl_compare_tests PRIVATE PL_VK_TESTS=1)
@@ -575,7 +575,7 @@ if(PL_BUILD_APP)
       # ui_popups: windows and pop-ups: Settings, legend, pickers, menus, Benchmark
       add_test(NAME ui_popups COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_popups
                check_5m2.py:windows check_5m2.py:popups check_5l.py:popups check_5l.py:legend check_5p.py:picker check_5q.py:picker
-               check_5k.py:windows check_6b.py:bench check_6b.py:benchscenes check_6b.py:benchwaits check_6b.py:benchrest check_6b.py:benchrestore)
+               check_5k.py:windows check_6b.py:bench check_6b.py:benchscenes check_6b.py:benchwaits check_6b.py:benchrest check_6b.py:orbitkeep check_6b.py:benchrestore)
       set_tests_properties(ui_popups PROPERTIES TIMEOUT 3600)
       # ui_pages: the reading pages: wheel and keys, scrollbar, Contents menu and rail
       add_test(NAME ui_pages COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_pages

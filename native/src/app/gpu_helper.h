@@ -2,7 +2,7 @@
 // kKerrTableCS, 0.55.7 on) used to close the app. Now, at a Vulkan start, each guarded card program whose path has not passed with this driver and that
 // the helper knows (the light paths, the Classic dots, the nucleus' Density look) is made first by a helper: the same exe started with --gpu-helper, no
 // window, its own Vulkan device on the same card, one process per program, one after the other while the app shows its first pictures. It makes the
-// program's pipelines (into its own pipeline cache file, which the app then merges into its own) and exits. The program's guard holds its first step
+// program's pipelines (into its own pipeline cache file, which the app merges into its own at its next start, before it makes any pipeline) and exits. The program's guard holds its first step
 // (GpuGuard::hold says no) until its helper has finished: passed, the app runs its guarded steps as before; the driver said no, kept as "fail"; the
 // helper died, kept as "off" with "the helper died making <step>": the app never makes it (until Try again or a new driver).
 // The light paths' detective work: while they are off on this driver (and once per driver), helpers make five cut-down variants of kKerrTableCS

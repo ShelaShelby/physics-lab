@@ -88,8 +88,6 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
 
 // 0.61.0: the card programs' work of this frame in one batch before the picture: the rocks' places, the Glow and Density clouds' grids (and what the
 // lab recorded before: a jump's groups); the batch is waited for only when a grid must be read back (OpenGL reads it back at once too, glReadPixels)
-void Renderer2D::vkMergeCache(const std::string& path) { if (vkbh_) vkbh_->mergeCache(path); }   // 0.67.0
-
 bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
     const std::size_t n = segments_.size();
     vkGrid_.assign(n, -1);

@@ -19,6 +19,18 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.67.0", "Speed: the Orbit Lab quiet at rest and without the far-date freeze; the nucleus' Density look on the graphics card; a crash-safe helper for the card's first steps",
+     "The Orbit Lab keeps its picture while nothing in it changes (time stopped, nothing moving): it is no longer made again every frame, and anything that "
+     "changes it (a click, a setting, the window) draws it anew. A jump to a far date in Real physics (1850 from today) no longer freezes the window for "
+     "about two seconds: the planets' path there is worked out on a worker while the lab stays at the date shown and the note says \"Going to <date> ...\"; "
+     "the planets land where they did before, to the bit. On Vulkan the nucleus' Density look is worked out and drawn on the graphics card (checked against "
+     "the processor's sums when it starts: within 1e-4 of the brightest cell), and only when the view changes. The Atom Lab's nucleon close-up keeps each "
+     "quark dot's place for its life instead of working it out every frame (the same picture, about a third of the work). The Black Hole Lab's panel works "
+     "out a spinning hole's shadow size on a worker while you drag. The benchmark now counts the new pictures a second over the time the view moved (a "
+     "picture at rest needs no new one). New: a helper process (the same program, no window) makes the card programs' risky first pipelines (the light "
+     "paths, the Classic dots, the nucleus' Density look) before the app does; if the graphics driver crashes there, only the helper ends, the app runs on "
+     "and that program stays off (Settings, Performance: Try again). While the light paths are off, helpers try five cut-down versions of their shader once "
+     "per driver and the log says which the driver can make."},
     {"0.66.0", "Speed: the Slice of a Dirac state without stalls; the nucleus close up draws a quarter of the pixels; less processor work in five heavy views",
      "The Slice's new dots now get a time budget a frame (1.5 ms): the steps that make them only owe them, and they are made in order after the steps, until "
      "the budget is spent. The same dots in the same order, spread over more frames: while the cut is dragged the cloud fills a little later, never coarser, and "
