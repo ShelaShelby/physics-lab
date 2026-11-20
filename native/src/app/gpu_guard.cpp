@@ -62,6 +62,7 @@ const GpuGuard* g_turn = nullptr;
 std::string g_turnName, g_turnStep;
 std::thread::id g_frame;
 bool g_frameSet = false;
+bool g_endAll = false;                                           // 0.68.0: the app ends (gpuGuardEndAll): a worker waiting for the turn goes on
 int g_waiting = 0;                                                  // guards whose step waits for its turn
 }  // namespace
 
@@ -124,7 +125,8 @@ bool GpuGuard::takeTurn(const std::string& step, bool mayWait) {
         line("the step '" + step + "' waits for its turn: " + other + " is open", false); }
     const double w0 = nowMs();
     t.lock();
-    g_turnCv.wait(t, [] { return g_turn == nullptr; });
+    g_turnCv.wait(t, [] { return g_turn == nullptr || g_endAll; });
+    if (g_turn != nullptr) { setWaiting(false); return true; }      // (the app ends: on without the turn; its step ends with the device)
     g_turn = this; g_turnName = name(); g_turnStep = step;
     setWaiting(false);
     t.unlock();
@@ -295,6 +297,8 @@ void GpuGuard::line(const std::string& text, bool commit) {
 
 // 0.68.0: the helper process's observer (gpuGuardObserve): every guarded step begun, ended, failed or timed out in this process
 static void (*g_observer)(int what, const std::string& step, const std::string& result) = nullptr;
+void gpuGuardEndAll() { std::lock_guard<std::mutex> t(g_turnMx); g_endAll = true; g_turnCv.notify_all(); }
+
 void gpuGuardObserve(void (*f)(int what, const std::string& step, const std::string& result)) { g_observer = f; }
 
 void GpuGuard::begin(const std::string& step) {

@@ -283,7 +283,7 @@ int main(int argc, char** argv) {
         // 0.67.0: the programs whose first steps have not passed with this driver and that the helper knows are made first by helper processes (one at a
         // time, while the app shows its first pictures); their guards hold those steps until their helper has finished. While the light paths are off on
         // this driver, the helpers' detective work on kKerrTableCS (once per driver). PL_NO_GPU_HELPER=1 (tests): no helper, as before.
-        if (!SDL_getenv("PL_NO_GPU_HELPER")) {
+        if (!SDL_getenv("PL_NO_GPU_HELPER") || std::string(SDL_getenv("PL_NO_GPU_HELPER")) == "0") {
             std::vector<std::pair<std::string, app::GpuGuard*>> helped;
             for (const auto& [name, g] : app::vulkanCardGuards()) if (app::gpuHelperKnows(name) && g->allowed() && g->guarded()) helped.push_back({name, g});
             app::gpuHelperQueue(helped, ui::settingsFolder(), vk.deviceName(), vk.driverText());
@@ -1073,6 +1073,7 @@ int main(int argc, char** argv) {
     if (SDL_getenv("PL_LOG_DRAWKINDS")) std::printf("PLDRAWKINDS %s\n", renderer.drawKindsText().c_str());   // 0.60.0 (checks: which drawing calls this run made)
 
     app::gpuHelperStop();                               // 0.68.0: no more helpers (a worker waiting for one goes on, and is then stopped)
+    app::gpuGuardEndAll();                              //   nor for the guards' turn (a frame guard may hold it while the app ends)
     if (useVulkan) {
         if (SDL_getenv("PL_VK_VALIDATION")) std::printf("PLVK validation errors=%d warnings=%d\n", vk.validationErrors(), vk.validationWarnings());
         renderer.useVulkan(nullptr);                    // 0.60.0 (its Vulkan objects go with the backend)

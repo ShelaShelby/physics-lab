@@ -445,7 +445,7 @@ def part_guardturn(binary, work):
 # again (no helper for it, still off). The light paths killed the same way: the next start runs the five kKerrTableCS variants in helpers and logs each;
 # the start after that does not run them again (once per driver).
 def part_gpuhelper(binary, work):
-    nd = {"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "38", "PL_ATOM_BENCHSTOP": "40", "PL_GRAPHICS": "vulkan"}
+    nd = {"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "38", "PL_ATOM_BENCHSTOP": "40", "PL_GRAPHICS": "vulkan", "PL_NO_GPU_HELPER": "0"}   # (0.68.0: the helpers on: shell_lib turns them off)
     home = os.path.join(os.path.abspath(work), "home_gh"); subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
     a = run_app(binary, work, "gh_die", dict(nd, HOME=home, PL_GPU_DIE="the nucleus density's pipeline"), frames=150, timeout=1200)
     log1, cfg1 = _settings_files(home)
@@ -472,7 +472,7 @@ def part_gpuhelper(binary, work):
     # 0.68.0: every guarded program's pipelines and first small run made by a helper first; two programs whose helpers die (the lines' first small run, the
     # surface's pipelines): the app runs on, only those two off (the settings keep them, the log names their steps), the rest passed in their helpers
     home3 = os.path.join(os.path.abspath(work), "home_gh3"); subprocess.run(["rm", "-rf", home3]); os.makedirs(home3, exist_ok=True)
-    t = run_app(binary, work, "gh_two", {"HOME": home3, "PL_GRAPHICS": "vulkan", "PL_GPU_DIE": "the lines' first small run|the surface's pipelines"}, frames=300, timeout=1500)
+    t = run_app(binary, work, "gh_two", {"HOME": home3, "PL_GRAPHICS": "vulkan", "PL_NO_GPU_HELPER": "0", "PL_GPU_DIE": "the lines' first small run|the surface's pipelines"}, frames=300, timeout=1500)
     log5, cfg5 = _settings_files(home3)
     died = sorted(re.findall(r"PLGPUHELPER (\w+) died making ([^(]*) \(", t.out))
     passed = re.findall(r"PLGPUHELPER (\w+) passed", t.out)

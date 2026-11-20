@@ -184,6 +184,8 @@ bool gpuGuardBusy();
 // 0.68.0: the helper process (render/vk_helper.cpp): f is told of every guarded step of this process (what: 0 begun, 1 ended with result, 2 failed with
 // why, 3 timed out), before PL_GPU_DIE could end it; null: none
 void gpuGuardObserve(void (*f)(int what, const std::string& step, const std::string& result));
+// 0.68.0: the app ends: a worker waiting for the turn goes on (a frame guard may still hold it: VkBlackHole's destroy waits for its worker)
+void gpuGuardEndAll();
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);
