@@ -19,6 +19,15 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.68.0", "Speed: the Orbit Lab's trails and orbits and the Molecule Lab's Density surface on the graphics card; the crash-safe helper for every card program",
+     "On Vulkan the Orbit Lab's trails, the planets' and dwarf planets' orbits and the distance rings are drawn by the graphics card: their points stay on "
+     "the card (a trail only sends the points it gained, an orbit only when it changed) and the card turns, bends into curves near the picture, clips and "
+     "widens them exactly as the processor did (checked against the processor's lines when it starts, at the heavy view, the closest zoom and a 3D close-up). "
+     "The Molecule Lab's Density surface is turned, coloured by the potential, sorted far to near and drawn by the card; a vibration sends each new phase's "
+     "surface once (checked against the processor's at benzene, water and a vibrating water). The pictures are the processor's within a few pixels. The "
+     "helper process (the same program, no window) now makes the first pipelines and runs the first small run of every card program the app guards, not only "
+     "three: if the driver crashes in one, only that program goes back to the processor. The comets' dotted orbits, the Sun's path in Real physics and the "
+     "moons' orbits are still drawn by the processor, and the Black Hole Lab's stars still come from the processor (they need its tables)."},
     {"0.67.0", "Speed: the Orbit Lab quiet at rest and without the far-date freeze; the nucleus' Density look on the graphics card; a crash-safe helper for the card's first steps",
      "The Orbit Lab keeps its picture while nothing in it changes (time stopped, nothing moving): it is no longer made again every frame, and anything that "
      "changes it (a click, a setting, the window) draws it anew. A jump to a far date in Real physics (1850 from today) no longer freezes the window for "

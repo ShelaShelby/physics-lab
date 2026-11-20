@@ -1,7 +1,7 @@
 # Resume
 
 ## Current state
-- 0.67.0 (20 Nov 2026): speed batch 4: the Orbit Lab keeps its picture at rest and walks to a far date on a worker; the nucleus' Density look on the card (Vulkan, kNucDensCS); atom.nucleon's dots keep their places for their life; the Black Hole panel's shadow size on a worker; the benchmark's new pictures a second over the moving time; a crash-safe helper process for the card programs' first pipelines (light paths, Classic, nucleus density) and the light paths' five kKerrTableCS variants. Before: 0.66.0 speed batch 3.
+- 0.68.0 (20 Nov 2026): speed batch 5: on Vulkan the Orbit Lab's trails, orbits and distance rings (kLinesCS/kLinesVS) and the Molecule Lab's Density surface (kSurfaceCS/kSurfaceVS, sorted on the card) drawn by the card, each checked against the processor's at start; the crash-safe helper makes every guarded program's pipelines and first small run (sky, lens, light paths: pipelines only); the Black Hole Lab's stars not moved (they need the processor's tables: ROADMAP).
 - Last full UI run: 0.67.0 (the commit "native 0.67.0"), on Vulkan; see native/REPORT.md for the checks left failing.
 - Next: the owner's Vulkan benchmark (Hard) on his PC; then all the speed work on Vulkan, slowest scene first (DECISIONS 18 Nov 2026); OpenGL removed when the owner decides. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
