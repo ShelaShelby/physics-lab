@@ -158,6 +158,8 @@ struct Readout {
     Look look = Look::Real;
     double discEdgeIn = 0, discEdgeOut = 0, filmT = 0;
 };
-Readout readout(const Settings& s);
+// latest (0.67.0; the panels): a spinning hole's shadow size from a worker (the last finished one, a few frames behind while spin, distance or tilt move;
+// the same numbers once it has caught up); false: worked out at once (the tests, the Data panel)
+Readout readout(const Settings& s, bool latest = false);
 
 }  // namespace blackhole

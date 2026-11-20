@@ -360,6 +360,8 @@ struct BenchState {
     std::string text, note;
     std::vector<std::string> lines, paths;   // per scene: its own line (the Atom Lab's settings); the path that ran
     std::vector<long> pics;                  // per scene: new pictures while counted (-1: every frame is one)
+    std::vector<double> picsS;               // 0.67.0: per scene: the counted seconds the view moved (the Black Hole Lab's: its view settings changed that frame)
+    double bhViewKey[6] = {0, 0, 0, 0, 0, 0};
     std::vector<std::string> picsBy;
     std::vector<std::vector<std::string>> notes;
     long picLast = -1;
@@ -1022,7 +1024,7 @@ void begin(AppState& app) {
     for (int k = 0; k < int(restDefs().size()); k++) if (onlyHas(restDefs()[std::size_t(k)].id) || (SDL_getenv("PL_BENCH_ONLY") && onlyHas("rest"))) b.rests.push_back(k);
     b.phase = 0; b.wAt = b.wTry = b.wStage = 0; b.rAt = b.rStage = 0;
     b.lines.assign(b.list.size(), std::string()); b.paths.assign(b.list.size(), std::string());
-    b.pics.assign(b.list.size(), -1); b.picsBy.assign(b.list.size(), std::string()); b.notes.assign(b.list.size(), {});
+    b.pics.assign(b.list.size(), -1); b.picsS.assign(b.list.size(), -1.0); b.picsBy.assign(b.list.size(), std::string()); b.notes.assign(b.list.size(), {});
     b.results.clear(); b.responses.clear(); b.idle.clear(); b.text.clear(); b.note.clear(); b.cancelled = false; b.gpuChecked = false; b.gpuCheck = app::GpuVerdict(); b.gpuReady.clear();
     b.bhByScene.clear();
     b.gpu.make();
@@ -1078,7 +1080,7 @@ void finish(AppState& app, BenchState& b, bool cancelled) {
             const app::BenchSceneText& t = sceneText(b.list[std::size_t(i)]);
             app::BenchScene r = b.run->result(i);
             r.id = t.id; r.name = t.name; r.what = t.what;
-            r.line = b.lines[std::size_t(i)]; r.path = b.paths[std::size_t(i)]; r.pictures = b.pics[std::size_t(i)]; r.picturesBy = b.picsBy[std::size_t(i)];
+            r.line = b.lines[std::size_t(i)]; r.path = b.paths[std::size_t(i)]; r.pictures = b.pics[std::size_t(i)]; r.picturesS = b.picsS[std::size_t(i)]; r.picturesBy = b.picsBy[std::size_t(i)];
             r.notes = b.notes[std::size_t(i)];
             if (t.kind == app::BenchKind::BlackHoleFilmTilt && r.notes.empty())
                 r.notes.push_back("Film at rest against the last moving picture: not compared (the picture at rest was not finished within the counted time)");
@@ -1427,6 +1429,14 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::B
         const long c = pictureCounter(app, *b.R, idx);
         if (c >= 0) {
             if (b.run->measuring()) { if (b.pics[std::size_t(sc)] < 0) b.pics[std::size_t(sc)] = 0; if (b.picLast >= 0) b.pics[std::size_t(sc)] += std::clamp(c - b.picLast, 0L, 1L); }   // (at most one new picture a frame: the one shown)
+            // 0.67.0: the Black Hole Lab's scenes: the time of the frames whose view changed (they needed a new picture; a frame at rest does not)
+            if (app.lab == blackhole::kLabIndex) {
+                const blackhole::Settings v = blackhole::shown(app.blackhole);
+                const double key[6] = {v.yaw, v.pitch, v.dist, v.spin, v.fovDeg, double(static_cast<int>(v.look))};
+                const bool moved = !std::equal(key, key + 6, b.bhViewKey);
+                std::copy(key, key + 6, b.bhViewKey);
+                if (b.run->measuring() && moved) { double& m = b.picsS[std::size_t(sc)]; m = std::max(m, 0.0) + frameMs / 1000; }
+            }
             b.picLast = c;
             b.picsBy[std::size_t(sc)] = picturesBy(app, idx);
         }

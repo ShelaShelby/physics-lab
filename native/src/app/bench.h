@@ -48,6 +48,7 @@ struct BenchScene {
     std::string line;            // 0.56.1: one short line of its own (an Atom Lab scene: the settings it really ran with)
     std::string path;            // 0.56.1: which path ran (graphics card or processor) and why; "" where the scene has one path only
     long pictures = -1;          // 0.56.1: new pictures while counted (a picture made off the frame); -1: every frame draws a new picture
+    double picturesS = -1;       // 0.67.0: the counted seconds whose frames needed a new picture (the view changed); < 0: all of the counted time
     std::string picturesBy;      //   what makes those pictures: "processor" or "graphics card" (the summary's "limited by" when they are behind the frames)
     BenchStats frames;
     double cpuAvgMs = 0;         // work per frame on the CPU (the card's "Work per frame")
@@ -59,7 +60,9 @@ struct BenchScene {
     std::vector<std::string> notes;   // 0.55.5: lines of the scene's own (the Black Hole Lab's: benchBlackHoleLines), printed after its numbers
     double waitAvgMs = -1;       // 0.63.1: the frame thread's waits for the card a frame (fence, acquire, batches read back), not in cpuAvgMs; < 0 not measured
     std::vector<BenchFrameCost> worst;   // 0.63.1: the three worst counted frames, worst first, with where their time went
-    double picturesPerS() const { return pictures < 0 ? frames.avgFps : frames.totalS > 0 ? pictures / frames.totalS : 0; }
+    // 0.67.0: over the time the view moved (picturesS) where the scene has rests: a frame at rest needs no new picture (blackhole.film_tilt rests 40 % of its
+    // counted time, real_move about a third: until 0.67.0 their pictures were divided by the whole time, so they could never reach the frames' rate)
+    double picturesPerS() const { const double t = picturesS > 0 ? picturesS : frames.totalS; return pictures < 0 ? frames.avgFps : t > 0 ? pictures / t : 0; }
 };
 
 // 0.56.1: the summary table at the head of the report, slowest first. Rules (said in the report under the table):

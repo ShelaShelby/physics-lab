@@ -1183,6 +1183,13 @@ static void testBenchSummary() {
     checkTrue("report: the rules are stated under the table", t.find("Rules: \"reaches\" is yes when the 1 % low and the new pictures a second are both at least the display's refresh rate (144 Hz)") != std::string::npos &&
               t.find("processor when c >= 1.5 g, graphics card when g >= 1.5 c, else both") != std::string::npos);
     checkTrue("report: the details say the new pictures", t.find("  New pictures: 10 in 0.2 s (50.0 a second)\n") != std::string::npos && t.find("  New pictures: every frame\n") != std::string::npos);
+    {   // 0.67.0: a scene with rests: the new pictures a second over the time the view moved (a frame at rest needs none)
+        BenchScene rests = behind;
+        rests.id = "x.rests"; rests.pictures = 30; rests.picturesS = 0.12;
+        checkTrue("report: a scene with rests counts its new pictures over the time the view moved", std::fabs(rests.picturesPerS() - 250.0) < 1e-9 && std::fabs(behind.picturesPerS() - 50.0) < 1e-9);
+        const std::string tr = benchResultText(env, {rests});
+        checkTrue("report: the details say the time the view moved", tr.find("  New pictures: 30 in the 0.12 s the view moved (250.0 a second; 0.2 s counted)\n") != std::string::npos);
+    }
     const std::string none = benchResultText(BenchEnv(), {fast});
     checkTrue("report: what cannot be read says not available", none.find("Processor: not available, not available cores, not available threads\n") != std::string::npos &&
               none.find("Memory installed: not available; the app's peak during the run: not available\n") != std::string::npos && none.find("Start-up: not measured\n") != std::string::npos &&

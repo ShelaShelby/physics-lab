@@ -129,6 +129,10 @@ private:
     void compose(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH);
     void readCache(const std::string& dir);
     void writeCache();
+public:
+    // 0.67.0: the helper process's cache file (app/gpu_helper.h) merged into this one (its pipelines then come from the cache here too)
+    void mergeCache(const std::string& path);
+private:
 
     VkCards* c_ = nullptr;
     VkDevice dev_ = VK_NULL_HANDLE;

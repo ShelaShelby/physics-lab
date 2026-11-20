@@ -1,4 +1,5 @@
 #include "app/gpu_guard.h"
+#include "app/gpu_helper.h"
 #include "app/frame_cost.h"
 
 #include <chrono>
@@ -145,7 +146,11 @@ void GpuGuard::giveTurn() {
 bool GpuGuard::hold() {
     {   std::lock_guard<std::mutex> g(mx_);
         if (!d_.guarded) return true;
-        if (held_) return true; }
+        if (held_) return true;
+        if (!helper_.empty() && gpuHelperPending(helper_)) {         // 0.67.0: its helper has not finished: a later frame
+            if (helperLogged_ != helper_) { helperLogged_ = helper_; line("(its first steps wait for the helper process that makes them first)", false); }
+            return false;
+        } }
     if (!takeTurn(std::string(), false)) return false;
     std::lock_guard<std::mutex> g(mx_);
     held_ = true; waitLogged_.clear();
@@ -362,6 +367,17 @@ void GpuGuard::failed(const std::string& step, const std::string& why) {
     d_.allowed = false; d_.guarded = false; d_.crashed = false; d_.failed = true;
     }
     giveTurn();
+}
+
+void GpuGuard::setHelper(const std::string& name) { std::lock_guard<std::mutex> g(mx_); helper_ = name; }
+
+void GpuGuard::helperDied(const std::string& step, const std::string& how) {
+    {   std::lock_guard<std::mutex> g(mx_);
+    held_ = false;
+    line("the helper died making " + step + " (" + how + "): switched off, the app never makes it (kept; Settings, Performance: Try again)", true);
+    d_.keep = GpuGuardRecord{"off", version_, driver_, field("the helper died making " + step), app_};
+    d_.allowed = false; d_.guarded = false; d_.crashed = true; d_.failed = false;
+    }
 }
 
 void GpuGuard::tryAgain() {

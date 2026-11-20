@@ -116,7 +116,7 @@ bool typedNumber(const char* id, char* buf, std::size_t n, const char* hint, flo
 ChipInfo blackholeChip(const AppState& app) {
     ChipInfo c;
     const blackhole::Settings v = blackhole::shown(app.blackhole);         // 0.55.3: what the picture draws (the Film look's spin and disc)
-    const blackhole::Readout r = blackhole::readout(v);
+    const blackhole::Readout r = blackhole::readout(v, true);
     c.title = "Black hole  ·  " + (r.hasPreset ? r.presetName : massText(r.massSun));
     const std::string spin = v.spin > 0 ? "spin " + sig(v.spin, 3) : std::string("no spin");
     c.sub = "A calculated model: " + spin + ", no gas  ·  our sky, seen from Earth";   // the lab's one line of what kind of picture this is (the rest: the guide)
@@ -131,14 +131,14 @@ ChipInfo blackholeChip(const AppState& app) {
 }
 
 std::string blackholeSubject(const AppState& app) {
-    const blackhole::Readout r = blackhole::readout(blackhole::shown(app.blackhole));
+    const blackhole::Readout r = blackhole::readout(blackhole::shown(app.blackhole), true);
     return r.hasPreset ? r.presetName : "Black hole";
 }
 
 void blackholeCard(AppState& app, Panel& p) {
     const blackhole::Settings sv = blackhole::shown(app.blackhole);
     const bool film = sv.look == blackhole::Look::Film;
-    const blackhole::Readout r = blackhole::readout(sv);
+    const blackhole::Readout r = blackhole::readout(sv, true);
     pStat(p, "Mass", massText(r.massSun) + (r.realPreset ? " (measured)" : r.hasPreset ? " (the model's)" : " (your choice)"));
     if (film) pStat(p, "Spin", sig(r.spin, 3) + " of the largest possible (the film's, Film look)");
     else if (r.spin > 0) pStat(p, "Spin", sig(r.spin, 3) + " of the largest possible (your choice; not measured for any real hole here)");
@@ -329,7 +329,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         if (shownSpin > 0 && s.bend && !app.blackholeView.stats().spinFine) pCaption(p, "Working out the light paths: a coarse picture first, the fine one in a moment.", false);
     }
     if (section("camera", "Camera", true)) {
-        pStat(p, "Distance", distText(s.dist) + "  ·  " + kmText(blackhole::readout(s).distKm));
+        pStat(p, "Distance", distText(s.dist) + "  ·  " + kmText(blackhole::readout(s, true).distKm));
         float t = static_cast<float>(blackhole::distToSlider(s.dist));
         if (pSlider(p, "blackhole.dist", &t, 0.0f, 1.0f)) {
             const double v = blackhole::sliderToDist(t), q = std::pow(10.0, std::floor(std::log10(v)) - 2);
@@ -343,7 +343,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
         double v;
         if (typedNumber("##blackhole.dist.text", typed, sizeof typed, "e.g. 6", p.w, blackhole::kDistMin, blackhole::kDistMax, v)) blackhole::setDistance(s, v);
         p.y += m.control + m.s4;
-        {   const blackhole::Readout r = blackhole::readout(s);
+        {   const blackhole::Readout r = blackhole::readout(s, true);
             if (r.spin > 0) pCaption(p, "The horizon is at " + sig(r.horizonM, 3) + " GM/c² at this spin. The closest here, " + sig(blackhole::kDistMin, 3) + ", is the closest the lab's light paths are tested at.");
             else pCaption(p, "The horizon is at " + sig(r.horizonM, 3) + " GM/c², the photon orbit at " + sig(r.photonOrbitM, 3) + " (inside it the shadow covers more than half the sky). The closest here, " +
                         sig(blackhole::kDistMin, 3) + ", is the closest the lab's light paths are tested at."); }
@@ -357,7 +357,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             const blackhole::HoleView hv = blackhole::holeView(s, app.canvasW, app.canvasH, cx, cy);
             double far = 0;
             for (double x : {0.0, app.canvasW}) for (double y : {0.0, app.canvasH}) far = std::max(far, std::hypot(x - cx, y - cy));
-            if (s.bend && (s.spin > 0 ? blackhole::readout(s).shadowHighDeg / 2 * 3.14159265358979 / 180 : blackhole::shadowAngle(s.dist)) * hv.K > far) pCaption(p, "The shadow fills the whole picture: widen the field of view to see the sky round it.", false);
+            if (s.bend && (s.spin > 0 ? blackhole::readout(s, true).shadowHighDeg / 2 * 3.14159265358979 / 180 : blackhole::shadowAngle(s.dist)) * hv.K > far) pCaption(p, "The shadow fills the whole picture: widen the field of view to see the sky round it.", false);
         }
         if (pButton(p, "blackhole.reset", "Reset view", Face::Quiet)) blackhole::resetView(s);
         pCaption(p, "Drag to go round the hole (it stays in the middle; the sky behind it changes); the wheel or + − move you closer or farther; R resets the view; 1 2 3 4 switch lab. You hover in place.");
@@ -388,7 +388,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             pStat(p, "The film's disc", filmDiscText());
             pStat(p, "Feeding rate", "none: the film's disc is not feeding (James et al. 2015, section 4.1.1)");
         } else if (pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn)) s.disc = on == 1;
-        const blackhole::Readout r = blackhole::readout(s);
+        const blackhole::Readout r = blackhole::readout(s, true);
         if (s.disc && r.realPreset && !film) pCaption(p, kWhatIf, false);
         if (film) {
         } else if (!s.disc) pCaption(p, "The standard thin disc of gas (Novikov and Thorne; Page and Thorne 1974), as round quasars and round small black holes feeding from a star.");

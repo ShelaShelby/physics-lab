@@ -25,3 +25,54 @@ foreach(part ${parts})
 endforeach()
 string(REPLACE "\r" "" all "${all}")
 file(WRITE ${OUT} "${all}")
+# 0.67.0: VARIANT (the light paths' detective work, render/vk_helper.cpp): kKerrTableCS cut down, made only by the helper process while the light paths are
+# off (their real pipeline crashed the driver): its own main() takes the place of the real one, which stays as mainFull() (unused)
+if(DEFINED VARIANT)
+  file(READ ${OUT} all)
+  string(REPLACE "void main() {" "void mainFull() {" all "${all}")
+  if(VARIANT STREQUAL "math")          # the double-precision functions alone (sine and cosine, exp, log, arctangent, cube root)
+    string(APPEND all [=[
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(uN)) return;
+    double s, c;
+    dsincos(In[i], s, c);
+    Ou[i] = s + c + dexp(In[i]) + dlog(1.0LF + In[i] * In[i]) + datan2(In[i], 1.0LF + In[i]) + dcbrt(2.0LF + In[i]);
+}
+]=])
+  elseif(VARIANT STREQUAL "step")      # a ray's start and one Dormand-Prince step (the right-hand side), no loop
+    string(APPEND all [=[
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(uN)) return;
+    double y[5], dy[5], yn[5], k7[5], b, q;
+    launch(In[2u * i], In[2u * i + 1u], y, b, q);
+    rhs(b, q, y, dy);
+    double e = dpStep(b, q, y, dy, 0.01LF, yn, k7);
+    for (int k = 0; k < 5; k++) Ou[5u * i + uint(k)] = yn[k] + e;
+}
+]=])
+  elseif(VARIANT STREQUAL "edge")      # the shadow's edge alone (uMode 0)
+    string(APPEND all [=[
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(uN)) return;
+    Ed[i] = shadowEdge(In[i]);
+}
+]=])
+  elseif(VARIANT STREQUAL "ray")       # one whole ray with its end handling (uMode 1), nothing else
+    string(APPEND all [=[
+void main() {
+    int k = int(gl_GlobalInvocationID.x);
+    if (k >= uN) return;
+    ray(In[2 * k], In[2 * k + 1], 16 * k, true);
+}
+]=])
+  elseif(VARIANT STREQUAL "short")     # the whole shader with its step loops bounded at 64 instead of 200,000
+    string(REPLACE "void mainFull() {" "void main() {" all "${all}")
+    string(REPLACE "#define MAXSTEPS 200000" "#define MAXSTEPS 64" all "${all}")
+  else()
+    message(FATAL_ERROR "extract_glsl: no variant ${VARIANT}")
+  endif()
+  file(WRITE ${OUT} "${all}")
+endif()

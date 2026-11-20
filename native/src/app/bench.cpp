@@ -171,7 +171,8 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
         t += "  Frames counted: " + std::to_string(s.frames.frames) + "\n";
         t += "  Average: " + f("%.2f", s.frames.avgMs) + " ms per frame = " + f("%.1f", s.frames.avgFps) + " fps\n";
         t += "  1 % low: " + f("%.1f", s.frames.low1Fps) + " fps (average of the slowest 1 % of the frames)\n";
-        t += "  New pictures: " + (s.pictures < 0 ? std::string("every frame") : std::to_string(s.pictures) + " in " + f("%.1f", s.frames.totalS) + " s (" + f("%.1f", s.picturesPerS()) + " a second)") + "\n";
+        t += "  New pictures: " + (s.pictures < 0 ? std::string("every frame") : s.picturesS > 0 ? std::to_string(s.pictures) + " in the " + f("%.2f", s.picturesS) + " s the view moved (" +
+             f("%.1f", s.picturesPerS()) + " a second; " + f("%.1f", s.frames.totalS) + " s counted)" : std::to_string(s.pictures) + " in " + f("%.1f", s.frames.totalS) + " s (" + f("%.1f", s.picturesPerS()) + " a second)") + "\n";
         t += "  Worst frame: " + f("%.2f", s.frames.worstMs) + " ms\n";
         t += "  Frames slower than 16.7 ms: " + std::to_string(s.frames.slowFrames) + " of " + std::to_string(s.frames.frames) + "\n";   // 0.16 stage 3: 1 = a one-time hitch, many = a repeating one
         t += "  CPU work per frame: " + f("%.2f", s.cpuAvgMs) + " ms" + (s.waitAvgMs >= 0 ? std::string(" (the waits for the card taken out)") : std::string()) + "\n";

@@ -128,6 +128,7 @@ add_library(app_core STATIC
   src/app/calc.cpp
   src/app/calc_lab.cpp
   src/app/gpu_guard.cpp
+  src/app/gpu_helper.cpp
   src/app/frame_cost.cpp
 )
 target_include_directories(app_core PUBLIC src)
@@ -445,6 +446,18 @@ if(PL_BUILD_APP)
       COMMENT "SPIR-V (Vulkan, from shaders.h ${shVar}): r2d_${shId}")
     list(APPEND PL_VK_SHADER_HEADERS ${shOut})
   endforeach()
+  # 0.67.0: the light paths' detective work (render/vk_helper.cpp): kKerrTableCS cut down in five ways (cmake/extract_glsl.cmake VARIANT), made only by the
+  # helper process while the light paths are off on this driver
+  foreach(kv math step edge ray short)
+    set(shGlsl ${CMAKE_BINARY_DIR}/vk_shaders/r2d_kerrvar_${kv}.comp)
+    set(shOut ${CMAKE_BINARY_DIR}/vk_shaders/r2d_kerrvar_${kv}.h)
+    add_custom_command(OUTPUT ${shOut}
+      COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h -DNAME=kKerrTableCS -DVARIANT=${kv} -DOUT=${shGlsl} -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/extract_glsl.cmake
+      COMMAND $<TARGET_FILE:glslang-standalone> -V -R --aml --amb --sdub uDefault 0 7 --target-env vulkan1.0 -S comp --vn k_r2d_kerrvar_${kv} -o ${shOut} ${shGlsl}
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shaders.h ${CMAKE_CURRENT_SOURCE_DIR}/cmake/extract_glsl.cmake glslang-standalone
+      COMMENT "SPIR-V (Vulkan, kKerrTableCS variant ${kv}): r2d_kerrvar_${kv}")
+    list(APPEND PL_VK_SHADER_HEADERS ${shOut})
+  endforeach()
 
   add_executable(PhysicsLab WIN32
     ${CMAKE_BINARY_DIR}/embedded_fonts.cpp
@@ -455,6 +468,7 @@ if(PL_BUILD_APP)
     src/render/renderer2d_vk.cpp
     src/render/vk_card.cpp
     src/render/vk_blackhole.cpp
+    src/render/vk_helper.cpp
     src/render/gl_loader.cpp
     src/render/renderer2d.cpp
    
@@ -542,7 +556,7 @@ if(PL_BUILD_APP)
       # its own test before (99 tests became 15); a failure prints the name of its check. To run one check by hand: python3 tests/<script> <PhysicsLab> <folder> [part].
       # ui_shell: the shell: text sizes and floors, windows, keys, start view, date entry, panel toggles; 0.59.0: Vulkan (step 1) against OpenGL
       add_test(NAME ui_shell COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_shell
-               check_shell.py check_shell.py:vulkan check_shell.py:guardturn check_shell.py:openglbackup check_shell.py:vulkan2d check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
+               check_shell.py check_shell.py:vulkan check_shell.py:guardturn check_shell.py:gpuhelper check_shell.py:openglbackup check_shell.py:vulkan2d check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
       set_tests_properties(ui_shell PROPERTIES TIMEOUT 3600)
       # ui_controls: the Controls panel: layout, sections, sliders, End key, its scrollbar
       add_test(NAME ui_controls COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_controls

@@ -97,6 +97,10 @@ public:
     // 0.59.0: a step that returned an error (the driver said no; no crash): the path off for this run, kept as "fail" with the step and why; the marker removed
     void failed(const std::string& step, const std::string& why);
     void tryAgain();                                              // Settings, Performance: forget the kept "off", try the path again (guarded)
+    // 0.67.0 (app/gpu_helper.h): its first steps are made first by a helper process; hold() says no until that helper has finished
+    void setHelper(const std::string& name);
+    // the helper died inside step (the driver crashed there): the path off, kept as "off" with "the helper died making <step>" (as a crash in the app)
+    void helperDied(const std::string& step, const std::string& how);
     void closing();                                               // the app ends normally: a marker of this run's still open step is removed (logged)
     void settingsWritten();                                       // the settings file now holds saved(): a marker from the last run can go
     std::string folder() const { return folder_; }
@@ -114,6 +118,7 @@ private:
     int generation_ = 0, lines_ = 0;
     double t0_ = 0;
     bool held_ = false;
+    std::string helper_, helperLogged_;                           // 0.67.0: the helper it waits for, and its "waits" line once
     int open_ = 0;                                                // guarded steps of this guard open now (two workers of one guard may overlap)
     std::string waitLogged_;
     bool waiting_ = false;                                        // its last hold() / frame begin was told to wait (counted in gpuGuardBusy)

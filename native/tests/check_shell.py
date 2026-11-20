@@ -429,7 +429,7 @@ def part_vulkanbh(binary, work):
 def part_guardturn(binary, work):
     home = os.path.join(os.path.abspath(work), "home_gt")
     subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
-    d = run_app(binary, work, "gt_die", dict(PL_GRAPHICS="vulkan", HOME=home, PL_BLACKHOLE="1", PL_BH_SET=VK4_FEED, PL_GPU_DIE="the light paths' pipeline"), frames=600, timeout=1200)
+    d = run_app(binary, work, "gt_die", dict(PL_GRAPHICS="vulkan", HOME=home, PL_BLACKHOLE="1", PL_BH_SET=VK4_FEED, PL_GPU_DIE="the light paths' pipeline", PL_NO_GPU_HELPER="1"), frames=600, timeout=1200)   # (0.67.0: the app's own step, not the helper's)
     log1, _c = _settings_files(home)
     check("(test switch PL_GPU_DIE" in log1 and _logged(log1, "[vulkan] [lightpaths] ", "begin the light paths' pipeline"), "guard turn: the first start died inside the light paths' pipeline (PL_GPU_DIE)")
     check(_logged(log1, "[vulkan] [outline] ", "end the outline's first small run"), "guard turn: the outline's start-up steps ran before (its first full use not yet: it has not passed)")
@@ -439,6 +439,36 @@ def part_guardturn(binary, work):
           f"guard turn: the next start: the light paths off, their step named ({[l for l in cfg2.splitlines() if l.startswith('gpuvklightpaths')]})")
     check("gpuvkoutline=off" not in cfg2 and "The 90 % outline on Vulkan: allowed" in log2 and _logged(log2, "[vulkan] [outline] ", "end the outline's first full use"),
           f"guard turn: the outline still allowed and its steps run ({[l for l in cfg2.splitlines() if l.startswith('gpuvkoutline')]})")
+
+# 0.67.0: the crash-safe helper (app/gpu_helper.h). A fresh settings folder: the helper's step made to "crash" (PL_GPU_DIE in the helper process) -> the app runs
+# on to its last frame, that program off and the log names the step ("the helper died making ..."), the settings keep it; the next start does not try it
+# again (no helper for it, still off). The light paths killed the same way: the next start runs the five kKerrTableCS variants in helpers and logs each;
+# the start after that does not run them again (once per driver).
+def part_gpuhelper(binary, work):
+    nd = {"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "38", "PL_ATOM_BENCHSTOP": "40", "PL_GRAPHICS": "vulkan"}
+    home = os.path.join(os.path.abspath(work), "home_gh"); subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
+    a = run_app(binary, work, "gh_die", dict(nd, HOME=home, PL_GPU_DIE="the nucleus density's pipeline"), frames=150, timeout=1200)
+    log1, cfg1 = _settings_files(home)
+    check("Vulkan: " in a.out and os.path.exists(a.bmp), "helper: the app ran on to its last frame (its screenshot) while its helper died")
+    check("PLGPUHELPER nucdensity died making the nucleus density's pipeline" in a.out and "PLNUCDENSCARD state=-1" in a.out and "PLNUCDENSCARD state=1" not in a.out,
+          "helper: the nucleus density off, the processor's squares drawn")
+    check(_logged(log1, "[vulkan] [nucdensity] ", "the helper died making the nucleus density's pipeline"), "helper: the log names the step the helper died in")
+    check(re.search(r"gpuvknucdensity=off \| [^\n]*\| the helper died making the nucleus density's pipeline", cfg1) is not None, "helper: the settings keep it off, the step named")
+    b = run_app(binary, work, "gh_next", dict(nd, HOME=home), frames=100, timeout=1200)
+    log2, _c = _settings_files(home)
+    check("the helper starts (nucdensity)" not in log2 and "PLGPUHELPER nucdensity" not in b.out and "PLNUCDENSCARD state=1" not in b.out,
+          "helper: the next start does not try it again (no helper for it; still off)")
+    home2 = os.path.join(os.path.abspath(work), "home_gh2"); subprocess.run(["rm", "-rf", home2]); os.makedirs(home2, exist_ok=True)
+    c = run_app(binary, work, "gh_lp", dict(nd, HOME=home2, PL_GPU_DIE="the light paths' pipeline"), frames=60, timeout=1200)
+    check("PLGPUHELPER lightpaths died making the light paths' pipeline" in c.out and os.path.exists(c.bmp), "helper: the light paths' helper died, the app ran on")
+    d = run_app(binary, work, "gh_var", dict(nd, HOME=home2), frames=240, timeout=1200)
+    log4, _c = _settings_files(home2)
+    vs = re.findall(r"PLGPUHELPER variant (\w+): (.*)", d.out)
+    print(f"  the variants: {vs}")
+    check(len(vs) == 5 and all(v[1].startswith("made") for v in vs), f"helper: the five kKerrTableCS variants made by helpers on this driver ({len(vs)})")
+    check(sum(1 for l in log4.splitlines() if "the helper's detective work, kKerrTableCS variant" in l) == 5, "helper: each variant's line in the log")
+    e = run_app(binary, work, "gh_var2", dict(nd, HOME=home2), frames=60, timeout=1200)
+    check("PLGPUHELPER variant" not in e.out, "helper: the variants are not run again with the same driver")
 
 # 0.63.0 (Vulkan step 5): Vulkan the default, OpenGL the backup. A start with nothing chosen is on Vulkan; a settings file that chose OpenGL keeps it; each lab
 # opens on OpenGL and draws (a smoke check of the backup: the picture area is not empty).
@@ -578,6 +608,8 @@ def main():
         part_openglbackup(binary, work)
     if only is not None and "guardturn" in only:                           # (0.63.0: ui_shell lists check_shell.py:guardturn)
         part_guardturn(binary, work)
+    if only is not None and "gpuhelper" in only:                           # (0.67.0: ui_shell lists check_shell.py:gpuhelper)
+        part_gpuhelper(binary, work)
     if only is not None and "vulkan2d" in only:                            # (0.60.0: only when asked; ui_shell lists check_shell.py:vulkan2d)
         part_vulkan2d(binary, work)
         part_vulkancards(binary, work)                                     # (0.61.0: the card programs on Vulkan, in the same part)

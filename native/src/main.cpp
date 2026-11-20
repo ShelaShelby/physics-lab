@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "app/gpu_guard.h"
+#include "app/gpu_helper.h"
 #include "app/frame_cost.h"
 #include "app/app_data.h"
 #include "app/bench.h"
@@ -200,7 +201,9 @@ static void bhMoveStep(blackhole::Settings& s, const char* spec, int frame) {   
         else if (k == "spin") blackhole::setSpin(s, s.spin + 0.005);
     }
 }
-int main(int, char**) {
+int main(int argc, char** argv) {
+    // 0.67.0: the crash-safe helper (app/gpu_helper.h): the same exe, no window, makes one card program's pipelines and exits
+    if (argc > 5 && std::strcmp(argv[1], "--gpu-helper") == 0) return app::gpuHelperMain(argc, argv);
     app::gpuGuardFrameThread();                         // 0.63.0: the guards never make this thread wait (app/gpu_guard.h)
     if (!SDL_Init(SDL_INIT_VIDEO)) { fail("Could not start the window system", "Physics Lab could not start its window system, so it has nothing to draw on.", "Restart the computer and try again. If it still fails, please report it with your Windows version."); return 1; }
 
@@ -277,6 +280,16 @@ int main(int, char**) {
         }
         if (cardsChanged) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);   // kept at once (a crash later must not lose it)
         else for (const auto& [name, g] : app::vulkanCardGuards()) g->settingsWritten();
+        // 0.67.0: the programs whose first steps have not passed with this driver and that the helper knows are made first by helper processes (one at a
+        // time, while the app shows its first pictures); their guards hold those steps until their helper has finished. While the light paths are off on
+        // this driver, the helpers' detective work on kKerrTableCS (once per driver). PL_NO_GPU_HELPER=1 (tests): no helper, as before.
+        if (!SDL_getenv("PL_NO_GPU_HELPER")) {
+            std::vector<std::pair<std::string, app::GpuGuard*>> helped;
+            for (const auto& [name, g] : app::vulkanCardGuards()) if (app::gpuHelperKnows(name) && g->allowed() && g->guarded()) helped.push_back({name, g});
+            app::gpuHelperQueue(helped, ui::settingsFolder(), vk.deviceName(), vk.driverText());
+            app::GpuGuard& lp = app::gpuGuard();
+            if (lp.started() && !lp.allowed()) app::gpuHelperVariants(&lp, ui::settingsFolder(), vk.deviceName(), vk.driverText());
+        }
         std::vector<std::string> cardsWhy;
         vk.initCards(renderer, cardsWhy);
         for (const std::string& w : cardsWhy) { app::gpuVulkanGuard().log("card program on the processor: " + w); std::printf("Vulkan card program on the processor: %s\n", w.c_str()); }
@@ -546,6 +559,10 @@ int main(int, char**) {
     int atomBenchFrame = 0;
     const int atomBenchStop = SDL_getenv("PL_ATOM_BENCHSTOP") ? std::atoi(SDL_getenv("PL_ATOM_BENCHSTOP")) : 0;
     const auto runFrame = [&](bool isLive) {
+        if (useVulkan && app::gpuHelperPump()) {        // 0.67.0: a helper finished: its guard's record kept at once, its pipelines into the cache
+            ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+            renderer.vkMergeCache(app::gpuHelperCacheFile(ui::settingsFolder()));
+        }
         app.liveFrame = isLive;
         if (atomDoFrame > 0 && ++atomDoCount == atomDoFrame) doAtom();
         if (atomSpin != 0) app.atom.s.oyaw += atomSpin;   // PL_ATOM_SPIN=0.15: the camera turns every frame as a fast drag does (0.16 stage 5, automatic checks)

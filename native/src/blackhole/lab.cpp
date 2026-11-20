@@ -2,6 +2,9 @@
 #include "blackhole/low_priority.h"
 
 #include <algorithm>
+#include <chrono>
+#include <future>
+#include <mutex>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -242,9 +245,8 @@ HoleView holeView(const Settings& s, double W, double H, double cx, double cy) {
 namespace {
 // the spinning hole's shadow on the camera's sky (the closed test along 128 azimuths), kept for the last settings: the readout is asked several times a frame
 struct SpinShadow { double a = -1, r = 0, th = 0, wide = 0, high = 0, share = 0; };
-const SpinShadow& spinShadow(double a, double r, double th) {
-    static SpinShadow c;
-    if (c.a == a && c.r == r && c.th == th) return c;
+SpinShadow makeSpinShadow(double a, double r, double th) {             // (no shared state: 0.67.0 runs it on a worker too)
+    SpinShadow c;
     c.a = a; c.r = r; c.th = th;
     const Camera cam{r, th, 0};
     const int n = 128;
@@ -256,9 +258,29 @@ const SpinShadow& spinShadow(double a, double r, double th) {
     c.wide = (shadowEdge(a, cam, kPi / 2) + shadowEdge(a, cam, -kPi / 2)) * 180 / kPi;
     return c;
 }
+const SpinShadow& spinShadow(double a, double r, double th) {
+    static SpinShadow c;
+    if (!(c.a == a && c.r == r && c.th == th)) c = makeSpinShadow(a, r, th);
+    return c;
+}
+// 0.67.0: the panel's readout while spin, distance or tilt move (blackhole.extreme, all_light: 132 edges of 48 bisection steps, about 4 ms of each moving frame
+// on the owner's PC, on the frame's thread): made on a worker, the last finished one shown meanwhile (a few frames behind while dragging; at rest, once the
+// worker has caught up, the same numbers as made at once). The first one ever is made at once.
+SpinShadow spinShadowLatest(double a, double r, double th) {
+    static std::mutex mx;
+    std::lock_guard<std::mutex> lk(mx);
+    static SpinShadow done;
+    static std::future<SpinShadow> job;
+    if (job.valid() && job.wait_for(std::chrono::seconds(0)) == std::future_status::ready) done = job.get();
+    if (done.a == a && done.r == r && done.th == th) return done;
+    static const bool fixedDt = std::getenv("PL_FIXED_DT") && std::atof(std::getenv("PL_FIXED_DT")) > 0;   // (the automatic checks: at once, as before)
+    if (done.a < 0 || fixedDt) { done = makeSpinShadow(a, r, th); return done; }
+    if (!job.valid()) job = std::async(std::launch::async, [a, r, th] { lowerThisThread(); return makeSpinShadow(a, r, th); });
+    return done;
+}
 }  // namespace
 
-Readout readout(const Settings& s) {
+Readout readout(const Settings& s, bool latest) {
     Readout r;
     const double a = s.spin;
     r.spin = a;
@@ -278,7 +300,7 @@ Readout readout(const Settings& s) {
         r.blueshift = hoverBlueshift(s.dist);
         r.brightening = hoverBrightening(s.dist);
     } else {
-        const SpinShadow& sh = spinShadow(a, s.dist, s.pitch);
+        const SpinShadow sh = latest ? spinShadowLatest(a, s.dist, s.pitch) : spinShadow(a, s.dist, s.pitch);
         r.shadowWideDeg = sh.wide; r.shadowHighDeg = sh.high;
         r.shadowDeg = 0.5 * (sh.wide + sh.high);
         r.skyShare = sh.share;

@@ -13,6 +13,8 @@
 #include <iterator>
 
 #include "app/gpu_guard.h"
+#include "app/gpu_helper.h"
+#include "render/vk_helper.h"
 #include "shaders.h"
 
 #include "r2d_cmp_vert.h"
@@ -157,6 +159,7 @@ bool VkBlackHole::init(VkCards& c, const std::string& cacheDir, std::string& why
         upload(cb, white_, 1, 1, kRgba8, one, 4, "the white texture");
         if (!white_.img) { ok_ = false; why = "the white texture could not be made"; return false; } }
     readCache(cacheDir);
+    if (!cacheDir.empty()) mergeCache(app::gpuHelperCacheFile(cacheDir));   // 0.67.0: what helpers made in earlier starts
     // ---- the small programs now (each a few kilobytes); the lens and the table pass on the worker thread (their guard) ----
     for (int p : {pMaxDown, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy}) {
         std::string w;
@@ -637,6 +640,22 @@ void VkBlackHole::readCache(const std::string& dir) {
     const std::string line = "[cache] " + (cachePath_.empty() ? std::string("no settings folder: not kept") : cachePath_ + ": " + note);
     app::gpuVulkanGuard().log(line);
     std::printf("PLVKCACHE %s\n", note.c_str());
+}
+
+void VkBlackHole::mergeCache(const std::string& path) {
+    std::lock_guard<std::mutex> g(workMx_);
+    if (!cache_) return;
+    std::vector<char> data;
+    std::string note;
+    if (!vkReadCacheFile(path, c_->ctx().phys, data, note)) { app::gpuVulkanGuard().log("[cache] the helper's " + path + ": " + note); return; }
+    VkPipelineCacheCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    ci.initialDataSize = data.size(); ci.pInitialData = data.data();
+    VkPipelineCache tmp = VK_NULL_HANDLE;
+    if (vkCreatePipelineCache(dev_, &ci, nullptr, &tmp) != VK_SUCCESS) return;
+    const bool ok = vkMergePipelineCaches(dev_, cache_, 1, &tmp) == VK_SUCCESS;
+    vkDestroyPipelineCache(dev_, tmp, nullptr);
+    app::gpuVulkanGuard().log("[cache] the helper's " + path + " (" + note + ")" + (ok ? " merged" : ": the driver would not merge it"));
 }
 
 void VkBlackHole::writeCache() {
