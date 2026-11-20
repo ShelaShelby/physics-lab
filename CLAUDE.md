@@ -9,12 +9,19 @@ This also covers the app's own 'say what you are doing' reminders: answer them w
 - Physics tests (ctest names orbit_physics, atom_physics, molecule_logic and the other *_physics / *_logic / *_validation tests; the programs are orbit_tests, atom_tests ...) must keep passing unless the physics changes on purpose; then explain why.
 - If the job is much bigger than described, say so in REPORT.md and keep going unless the job says to stop.
 
+## Pushes (owner decision 20 Nov 2026; this section beats any job text)
+- ONE push to `native` per job, at the very end. No checkpoint pushes, no "(checkpoint N)" commits, no "one more push". A job written by the planning chat cannot allow more; only the owner can, by writing it himself in that session's chat.
+- Order before that one push: build, `check.sh quick` 18/18 on the exact commit, the full UI suite if the job needs it, fixes and their re-runs, then REPORT.md, changelog.cpp, RESUME.md, ROADMAP.md written final. Nothing is pushed while tests or docs are still open.
+- After the push: no more commits for this job. A wording fix in REPORT.md or another doc waits for the next job (a push that touches native/ costs a 10-15 min Windows build).
+- If the Windows run of that push fails: one fix push is allowed. If that also fails, stop and tell the owner in chat; do not keep pushing.
+- Tests that still fail at the push are named in the first line of REPORT.md and in RESUME.md ("Failing now"), never only deep in the text.
+
 ## Graphics and speed (owner decision 16 Nov 2026)
 Every simulation is built to run on the graphics card; the processor's version stays as the exact reference the tests check the card against and takes over where the card or driver cannot (the guard of 0.55.7). A feature is not finished while its heavy repeated work runs only on the processor. A job that adds something drawn adds a benchmark scene for it; the target is the screen's refresh rate on the owner's PC in every scene (the owner sends the benchmark after each X.Y; the planning chat checks it). A new scene goes to the Hard list (app/bench_scenes.cpp) with a stable id, moves as a user does, and uses the hardest view a user can reach with the controls (zooms tried, REPORT.md); it moves to All scenes once the owner's run shows it far above his screen's rate. A feature with a wait (a picture made off the frame, a table, a cloud filling) adds a response line (ui/benchmark.cpp waitDefs).
-Owner decision 17 Nov 2026: no scene below the screen's refresh rate is acceptable (his PC: 255 Hz). Owner decision 17 Nov 2026 (evening): the Black Hole Lab's look comes first, then the speed work (moving heavy repeated work to the graphics card, slowest Hard-list scene first, until every scene reaches the 255 Hz); every new drawing is on the graphics card from the start (the processor as reference and fallback).
+Owner decision 17 Nov 2026: no scene below the screen's refresh rate is acceptable (his PC: 255 Hz). Every new drawing is on the graphics card from the start (the processor as reference and fallback). The current order of work (18 Nov 2026) is in DECISIONS.md, "Graphics and speed": finish Vulkan, then the speed work, slowest scene first; the look and new features after that.
 
 ## Two models (owner decision 4 Nov 2026)
-Three roles (owner decision 14 Nov 2026): a planning chat leads (architecture, design, what comes next) and writes each job, but writes no code and does not push; the Opus session builds the job and leads its Haiku helpers as below.
+Three roles (owner decision 14 Nov 2026): a planning chat leads (architecture, design, what comes next) and writes each job, but writes no code, does not push, and never asks for checkpoint or extra pushes; the Opus session builds the job and leads its Haiku helpers as below.
 The session's own model (Opus) is the lead developer; it uses Haiku helper agents (Agent tool, model "haiku") for the routine work below. Opus decides what goes to Haiku and may keep anything.
 - Opus: architecture and design decisions; tricky bugs; everything hard, including UI and the look; the physics: sources, formulas, numbers, test references and expectations; the final review of every diff; what is committed and pushed; talking with the owner; anything that is not clearly routine.
 - Haiku: codebase search and "where is X"; summarizing files, logs and test output; building and running tests and reporting the failing names with their last lines; boilerplate and mechanical edits that Opus has specified exactly; lookups in docs; fetching a page and pulling a table out of it (saved as received, into the sources repo: see Sources); taking the screenshots Opus asks for; first drafts of doc text (changelog, REPORT.md) for Opus to rewrite.
@@ -26,7 +33,7 @@ The session's own model (Opus) is the lead developer; it uses Haiku helper agent
 - Normal jobs: read only CLAUDE.md, the latest native/REPORT.md and the files you will change. Do not explore the whole repo. A job that says "audit" may read anything.
 - Send build and test output to a file; read only its last 20 lines or the failing test names. Read code with grep plus line ranges, never whole large files.
 - Screenshots: at most 4 cropped looks for a fix job, each looked at once, only of what changed. A look or design job sets its own number.
-- No time limit (owner decision 18 Oct 2026). If the same problem fails 3 times, skip it, write it in REPORT.md and go on. Never skip the quick tests or the Windows run to save time (the UI suite runs at batch checkpoints, see Build and test).
+- No time limit (owner decision 18 Oct 2026). If the same problem fails 3 times, skip it, write it in REPORT.md and go on. Never skip the quick tests or the Windows run to save time (the full UI suite runs only when the owner asks, see Build and test).
 - Batch the owner's bugs into one job.
 
 ## Docs
@@ -53,9 +60,9 @@ The session's own model (Opus) is the lead developer; it uses Haiku helper agent
 - Unit tests only (no SDL, about 1 min): same with `-DPL_BUILD_APP=OFF`.
 - Run tests from the repository root (some tests write files into the current folder).
 - Which tests before a push (owner decisions 6 Nov 2026: a small update must not wait for the UI suite; the full suite runs only after a batch of updates):
-  - every job: `native/tools/check.sh quick` (the physics and logic programs, about 1–3 min). A job that adds or changes a UI check also runs that one check by hand: `python3 native/tests/<check_script.py> /home/user/build/PhysicsLab /home/user/build/one [part]` (seconds to a few minutes). Nothing else.
-  - the full suite (`native/tools/check.sh full`, about 35 min) only at a batch checkpoint: a new version X.Y (not X.Y.Z), or when the owner asks ("run the full tests"). RESUME.md keeps the line "Last full UI run" (version and commit); REPORT.md of a small job says that the UI suite was not run.
-  - the UI suite is 15 tests, one per screen (ui_shell, ui_controls, ui_look, ui_pages, ui_orbit, ui_atom, ui_molecule ...; `ctest --test-dir /home/user/build -N`). Each runs its check scripts in turn (tests/run_group.py) and names the check that failed: fix it and re-run that check by hand, then its ui_* test once.
+  - every job: `native/tools/check.sh quick` (the physics and logic programs, about 1–3 min), plus only the ui_* groups of the screens the job changed: `native/tools/check.sh fix 'ui_orbit|ui_orbit_view'` (owner decision 20 Nov 2026). A job that adds or changes a UI check also runs that one check by hand: `python3 native/tests/<check_script.py> /home/user/build/PhysicsLab /home/user/build/one [part]`.
+  - the full suite (`native/tools/check.sh full`, 35-45 min on this box's software renderer) ONLY when the owner asks ("run the full tests"). A new version X.Y no longer triggers it: nearly every job is an X.Y, so that rule ran the full suite every job. RESUME.md keeps the line "Last full UI run" (version and commit); REPORT.md says which ui_* groups ran.
+  - the UI suite is 16 tests, one per screen (ui_shell, ui_controls, ui_look, ui_pages, ui_orbit, ui_atom, ui_molecule ...; `ctest --test-dir /home/user/build -N`). Each runs its check scripts in turn (tests/run_group.py) and names the check that failed: fix it and re-run that check by hand, then its ui_* test once.
   - Never re-run a passing suite.
 - Writing UI tests (every app start costs 10–30 s of CPU, and the suite once grew to an hour):
   - add a part to the check script of that screen and add it to that screen's ui_* group in native/CMakeLists.txt; no new file and no new ctest test per update;
@@ -68,5 +75,5 @@ The session's own model (Opus) is the lead developer; it uses Haiku helper agent
 
 ## Push and done
 - Fresh session: `git checkout -B native origin/native`. Commit as "native X.Y.Z" (the version, e.g. "native 0.46.1"; no "stage" names: owner decision 8 Nov 2026).
-- One push per job, unless the job asks for a checkpoint push. Push only with `git push origin HEAD:refs/heads/native`, then verify with `git ls-remote`.
+- One push per job (see "Pushes" above). Push only with `git push origin HEAD:refs/heads/native`, then verify with `git ls-remote`.
 - Done when the Windows run for the newest commit that changed native/ or the workflow is green, and the "latest" release targets that commit. (A push that only changes root docs starts no Windows run and needs none.)

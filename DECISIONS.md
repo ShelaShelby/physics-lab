@@ -9,13 +9,14 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - Quiet chat (14 Nov 2026): a working session does not report progress. It writes in chat only when it cannot go on without the owner's answer, and once at
   the end (the outcome first); everything else goes in REPORT.md. Every message costs the owner's usage.
 - No time limit for a job; a problem that fails 3 times is skipped and written in REPORT.md (18 Oct 2026).
-- Tests in batches (6 Nov 2026): every job runs the quick tests and the UI check it adds or changes; the full UI suite only at a new version X.Y or when the owner asks.
+- Tests (20 Nov 2026, replaces 6 Nov 2026): every job runs the quick tests, the ui_* groups of the screens it changed and the UI check it adds or changes; the full UI suite (35-45 min) only when the owner asks.
+- One push per job (20 Nov 2026): one push to `native` at the end of a job, after the tests and the docs are final; no checkpoint pushes, whatever a job says; a doc-only fix after the push waits for the next job; a failed Windows run gets one fix push, then the session stops and asks the owner (CLAUDE.md, "Pushes").
 - Versions are named X.Y.Z only; commits are "native X.Y.Z"; no "stage" names (8 Nov 2026). No 1.0 milestone: the app keeps growing (7 Nov 2026).
 - No connectors, plugins or extra skills unless a job asks for one (they cost usage). No code signing (it costs money); the README and release text explain the warning.
 
 ## Project
 - The app (native/) is C++ for Windows and stays C++; Rust only for separate apps, never in this repo (18 Oct 2026). Four labs: Orbit, Atom, Molecule and the
-  Black Hole Lab (15 Nov 2026; this replaces "three labs"; the fourth is planned, not built yet).
+  Black Hole Lab (15 Nov 2026; this replaces "three labs").
 - The Defense Lab is removed (18 Oct 2026); an old settings file still loads and opens the Orbit Lab.
 - There is no other version of the app (3 Nov 2026): no copy, no tests against one, no mentions. The old web page (branch `main`) is deleted (14 Nov 2026; the session may not delete a branch, so the owner does it on GitHub).
 - This repo is public and stays public (15 Nov 2026). Papers, preprints, journal scans, saved web pages and downloads of unclear terms live only in the private repo ShelaShelby/physics-lab-sources (same relative paths under `data/`); this repo keeps the extracts the tests read and native/data/SOURCES.md. The old repo was renamed ShelaShelby/physics-lab-archive and made private (it keeps the full history); ShelaShelby/physics-lab is a fresh public repo with one commit and one branch `native` (15 Nov 2026).
@@ -82,10 +83,8 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   takes over on a PC whose card or driver cannot do it (through the guard of 0.55.7). A feature is not finished while its heavy repeated work runs only on the
   processor. A job that adds something drawn adds a benchmark scene for it; the target is the screen's refresh rate on the owner's PC for every scene. The owner
   sends the benchmark after each version X.Y and the planning chat checks every scene (16 Nov 2026; replaces the line of 5 Oct 2026).
-- No scene below the screen's refresh rate is acceptable (his PC: 255 Hz). Moving heavy repeated work to the graphics card comes before new features, slowest
-  benchmark scene first, until every scene of the Hard list reaches it; the Black Hole Lab's moving gas waits until then (17 Nov 2026).
-- The Black Hole Lab's look comes first, then the speed work; every new drawing on the graphics card from the start (the processor as reference and fallback).
-  Replaces the order of 17 Nov 2026 (speed before new features) for now; the 255 Hz target stays (17 Nov 2026, evening).
+- No scene below the screen's refresh rate is acceptable (his PC: 255 Hz); every new drawing on the graphics card from the start, the processor as reference
+  and fallback (17 Nov 2026). The order of work is the last line of this section (18 Nov 2026; it replaced the two orders of 17 Nov 2026).
 - 18 Nov 2026: the app moves to Vulkan in five steps (native/PLAN_VULKAN.md); OpenGL is the backup until every part works on Vulkan on the owner's PC, then removed.
 - Vulkan needs version 1.3 and uses 1.4 where the card has it (owner decision 18 Nov 2026).
 - Order: finish Vulkan fully, then all the speed work on Vulkan, slowest scene first; the outside review, the Black Hole Lab's look and new features are talked about after that (owner decision 18 Nov 2026).
