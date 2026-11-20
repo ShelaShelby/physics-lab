@@ -1,3 +1,5 @@
+Paused; last true at 0.56.3; not kept up to date until the owner restarts it.
+
 # Plan: the Black Hole Lab (0.54.2 research, 15 Nov 2026; no code yet)
 
 Every formula and number below is copied from a paper saved under native/data/blackhole/ (README.txt there lists them) and names its equation, table or page.

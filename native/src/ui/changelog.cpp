@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.68.1", "Fixes: the helper's time limit, the nucleus density benchmark scene, the benchmark's own work out of the counted frames",
+     "A graphics-card helper that never answers is now ended after 30 seconds (and every helper when the app closes), the log says which step hung, and the next one "
+     "starts; a helper that ends without writing its result is logged as that, and a crash code is no longer taken for \"still running\". The light paths' variants are "
+     "tried until all five have a line. The benchmark's nucleus density scene zooms by the nucleon's size, so it draws the Density look in a window as big as 2560 x 1369 "
+     "(it drew the nucleons there before); the card path's log names its reason. The benchmark's own picture comparison is left out of the counted frames and says so."},
     {"0.68.0", "Speed: the Orbit Lab's trails and orbits and the Molecule Lab's Density surface on the graphics card; the crash-safe helper for every card program",
      "On Vulkan the Orbit Lab's trails, the planets' and dwarf planets' orbits and the distance rings are drawn by the graphics card: their points stay on "
      "the card (a trail only sends the points it gained, an orbit only when it changed) and the card turns, bends into curves near the picture, clips and "

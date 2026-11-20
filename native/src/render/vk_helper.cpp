@@ -12,6 +12,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -300,6 +301,10 @@ int gpuHelperMain(int argc, char** argv) {
     g_result = folder + "gpu-helper-result.txt";
     const std::vector<Step> progs = programsOf(kind, name);
     g_die = std::getenv("PL_GPU_DIE");
+    if (const char* h = std::getenv("PL_GPU_HANG"))       // 0.68.1 (test switch): this helper (a variant's or a program's name, '|' between several) never answers: the app's time limit ends it
+        for (std::stringstream hs(h); hs.good();) { std::string one; std::getline(hs, one, '|'); if (one == name) for (;;) std::this_thread::sleep_for(std::chrono::seconds(1)); }
+    if (const char* q = std::getenv("PL_GPU_NORESULT"))   // 0.68.1 (test switch): this helper ends at once with exit code 7 and writes nothing
+        for (std::stringstream hs(q); hs.good();) { std::string one; std::getline(hs, one, '|'); if (one == name) return 7; }
     gpuGuardObserve(observe);
     if (progs.empty()) { put("no such program: " + name); return 2; }
     if (volkInitialize() != VK_SUCCESS) { put("no Vulkan loader"); return 2; }

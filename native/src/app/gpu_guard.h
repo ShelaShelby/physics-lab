@@ -100,7 +100,7 @@ public:
     // 0.67.0 (app/gpu_helper.h): its first steps are made first by a helper process; hold() says no until that helper has finished
     void setHelper(const std::string& name);
     // the helper died inside step (the driver crashed there): the path off, kept as "off" with "the helper died making <step>" (as a crash in the app)
-    void helperDied(const std::string& step, const std::string& how);
+    void helperDied(const std::string& step, const std::string& how, const char* verb = "died");
     void closing();                                               // the app ends normally: a marker of this run's still open step is removed (logged)
     void settingsWritten();                                       // the settings file now holds saved(): a marker from the last run can go
     std::string folder() const { return folder_; }

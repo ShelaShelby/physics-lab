@@ -1,6 +1,7 @@
 #include "app/gpu_helper.h"
 
 #include <cstdio>
+#include <chrono>
 #include <cstdlib>
 #include <deque>
 #include <fstream>
@@ -49,7 +50,16 @@ std::wstring quoted(const std::wstring& a) {          // one argument as Command
 #else
 pid_t g_pid = -1;
 #endif
-int g_exit = -1;
+long long g_exit = -1;                                // the exit code as an unsigned value (0.68.1: Windows' crash codes such as 0xC0000005 are above INT_MAX)
+// 0.68.1: a helper that never ends used to keep g_running true for the whole session (no other helper started, nothing logged). Each helper now has a time
+// limit: 30 s, a design choice of about 100 x the slowest helper seen on the owner's PC (the lines: about 320 ms from start to result in his 0.68.0 log).
+// PL_GPU_HELPER_LIMIT (seconds) sets another limit for the tests only; the app's value stays 30 s.
+double helperLimitSeconds() {
+    if (const char* e = std::getenv("PL_GPU_HELPER_LIMIT")) { const double v = std::atof(e); if (v > 0) return v; }
+    return 30.0;
+}
+std::chrono::steady_clock::time_point g_started;
+bool g_hung = false;                                  // the helper now being read was ended at the limit
 
 struct Job { std::string name; GpuGuard* guard = nullptr; bool variant = false; };
 std::deque<Job> g_queue;
@@ -83,13 +93,36 @@ void finish() {
         } else if (l == "done") done = true;
     }
     char code[48];
-    std::snprintf(code, sizeof code, "exit code %d", g_exit);
+    if (g_exit > 255) std::snprintf(code, sizeof code, "exit code 0x%llX", static_cast<unsigned long long>(g_exit));
+    else std::snprintf(code, sizeof code, "exit code %lld", g_exit);
+    const bool noResult = !done && !(g_exit == 2 && !begun);   // 0.68.1: ended without writing its result (code 2 with nothing begun is its own "could not start")
     GpuGuard* G = g_now.guard;
+    if (g_hung) {                                         // 0.68.1: ended at the time limit: the step it was in (else the program's or variant's name) is recorded
+        char lim[32];
+        std::snprintf(lim, sizeof lim, "%g s", helperLimitSeconds());
+        const std::string step = !open.empty() ? open : g_now.name;
+        const std::string how = std::string("no answer after ") + lim;
+        if (g_now.variant) {
+            const std::string line = "variant " + g_now.name + ": hung making it (" + how + ")";
+            std::ofstream(variantsFile(), std::ios::app) << line << "\n";
+            if (G) { G->log("the helper hung making " + step + " (" + how + ")"); G->log("the helper's detective work, kKerrTableCS " + line); }
+            std::printf("PLGPUHELPER %s\n", line.c_str());
+        } else {
+            if (G) G->helperDied(step, how, "hung");
+            std::printf("PLGPUHELPER %s hung making %s (%s)\n", g_now.name.c_str(), step.c_str(), how.c_str());
+            { std::lock_guard<std::mutex> l(g_pendMx); g_pending[g_now.name] = false; }
+        }
+        g_hung = false;
+        std::fflush(stdout);
+        g_finished++;
+        return;
+    }
     if (g_now.variant) {                                  // the light paths' detective work: one variant a helper, its line kept and logged
         std::string line = "variant " + g_now.name + ": ";
         if (!failedStep.empty()) line += "the driver said no: " + failedWhy;
         else if (!open.empty()) line += std::string("the helper died making it (") + code + ")";
         else if (done && !made.empty()) line += "made: " + made;
+        else if (noResult) line += std::string("ended without a result (") + code + ")";
         else line += std::string("not tried (the helper could not start its Vulkan device: ") + code + ")";
         std::ofstream(variantsFile(), std::ios::app) << line << "\n";
         if (G) G->log("the helper's detective work, kKerrTableCS " + line);
@@ -104,6 +137,9 @@ void finish() {
         } else if (done && begun) {
             if (G) G->log("the helper made it with this driver: " + made + "; the app makes it now, guarded as before");
             std::printf("PLGPUHELPER %s passed: %s\n", g_now.name.c_str(), made.c_str());
+        } else if (noResult) {
+            if (G) G->log(std::string("the helper ended without a result (") + code + "): the app makes it itself, guarded as before");
+            std::printf("PLGPUHELPER %s ended without a result (%s)\n", g_now.name.c_str(), code);
         } else {
             if (G) G->log(std::string("the helper could not start its Vulkan device (") + code + "): the app makes it itself, guarded as before");
             std::printf("PLGPUHELPER %s not tried (%s)\n", g_now.name.c_str(), code);
@@ -121,7 +157,7 @@ bool startNext() {
         std::remove(resultFile().c_str());
         std::vector<std::string> args = {"--gpu-helper", g_folder, g_device, g_now.variant ? "variant" : "program", g_now.name};
         if (g_now.guard) g_now.guard->log(std::string(g_now.variant ? "the helper starts (kKerrTableCS variant " : "the helper starts (") + g_now.name + ")");
-        if (gpuHelperSpawn(args)) { g_running = true; return true; }
+        if (gpuHelperSpawn(args)) { g_running = true; g_started = std::chrono::steady_clock::now(); return true; }
         if (g_now.guard) g_now.guard->log("the helper could not be started: the app makes it itself, guarded as before");
         if (!g_now.variant) { std::lock_guard<std::mutex> l(g_pendMx); g_pending[g_now.name] = false; }
     }
@@ -169,7 +205,7 @@ bool gpuHelperSpawn(const std::vector<std::string>& args) {
 #endif
 }
 
-int gpuHelperExitCode() {
+long long gpuHelperExitCode() {
 #ifdef _WIN32
     if (!g_proc) return g_exit;
     if (WaitForSingleObject(g_proc, 0) != WAIT_OBJECT_0) return -1;
@@ -177,7 +213,7 @@ int gpuHelperExitCode() {
     GetExitCodeProcess(g_proc, &c);
     CloseHandle(g_proc);
     g_proc = nullptr;
-    g_exit = static_cast<int>(c);
+    g_exit = static_cast<long long>(c);   // (unsigned: a crash's 0xC0000005 is not negative, so it is not taken for "still running")
     return g_exit;
 #else
     if (g_pid < 0) return g_exit;
@@ -187,6 +223,26 @@ int gpuHelperExitCode() {
     g_pid = -1;
     g_exit = r < 0 ? 255 : WIFEXITED(st) ? WEXITSTATUS(st) : 128 + (WIFSIGNALED(st) ? WTERMSIG(st) : 0);
     return g_exit;
+#endif
+}
+
+static void gpuHelperKill() {                                // ends the running helper (TerminateProcess / SIGKILL) and reaps it; g_exit is its code
+#ifdef _WIN32
+    if (!g_proc) return;
+    TerminateProcess(g_proc, 1);
+    WaitForSingleObject(g_proc, 5000);
+    DWORD c = 1;
+    GetExitCodeProcess(g_proc, &c);
+    CloseHandle(g_proc);
+    g_proc = nullptr;
+    g_exit = static_cast<long long>(c);
+#else
+    if (g_pid < 0) return;
+    kill(g_pid, SIGKILL);
+    int st = 0;
+    waitpid(g_pid, &st, 0);
+    g_pid = -1;
+    g_exit = 137;
 #endif
 }
 
@@ -203,19 +259,27 @@ void gpuHelperVariants(GpuGuard* lightpaths, const std::string& folder, const st
     g_folder = folder; g_device = device; g_driver = driver;
     const std::string head = "driver " + device + " / " + driver;
     const std::string kept = readAll(variantsFile());
-    if (kept.rfind(head + "\n", 0) == 0) {                   // tried with this driver already: its lines again in the log
+    const bool same = kept.rfind(head + "\n", 0) == 0;
+    std::vector<const char*> todo;                          // 0.68.1: done for a driver only when all five variants have a line (a file with the driver line and "math" alone tries the rest)
+    for (const char* v : {"math", "step", "edge", "ray", "short"})
+        if (!same || kept.find(std::string("\nvariant ") + v + ":") == std::string::npos) todo.push_back(v);
+    if (todo.empty()) {                                      // tried with this driver already: its lines again in the log
         if (lightpaths) lightpaths->log("the helper's detective work was done with this driver already (" + variantsFile() + ")");
         return;
     }
-    std::ofstream(variantsFile(), std::ios::trunc) << head << "\n";
-    for (const char* v : {"math", "step", "edge", "ray", "short"}) g_queue.push_back({v, lightpaths, true});
+    if (!same) std::ofstream(variantsFile(), std::ios::trunc) << head << "\n";
+    for (const char* v : todo) g_queue.push_back({v, lightpaths, true});
 }
 
 bool gpuHelperPump() {
     const long before = g_finished;
     if (g_running) {
-        const int c = gpuHelperExitCode();
+        const long long c = gpuHelperExitCode();
         if (c >= 0) { g_running = false; finish(); }
+        else if (std::chrono::duration<double>(std::chrono::steady_clock::now() - g_started).count() > helperLimitSeconds()) {
+            gpuHelperKill();
+            g_running = false; g_hung = true; finish();      // 0.68.1: the next helper starts below
+        }
     }
     if (!g_running) startNext();
     return g_finished != before;
@@ -227,7 +291,8 @@ void gpuHelperPrefer(const std::string& name) {   // 0.68.0: a program its lab a
     for (std::size_t i = 0; i < g_queue.size(); i++)
         if (!g_queue[i].variant && g_queue[i].name == name) { const Job j = g_queue[i]; g_queue.erase(g_queue.begin() + static_cast<std::ptrdiff_t>(i)); g_queue.push_front(j); return; }
 }
-void gpuHelperStop() { g_queue.clear(); std::lock_guard<std::mutex> l(g_pendMx); for (auto& [name, on] : g_pending) on = false; }
+void gpuHelperStop() { g_queue.clear(); if (g_running) { gpuHelperKill(); g_running = false; }   // 0.68.1: no helper outlives the app
+    std::lock_guard<std::mutex> l(g_pendMx); for (auto& [name, on] : g_pending) on = false; }
 std::string gpuHelperCacheFile(const std::string& folder) { return folder + "vulkan-pipeline-cache-helper.bin"; }
 long gpuHelperFinishedCount() { return g_finished; }
 

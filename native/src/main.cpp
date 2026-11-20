@@ -187,7 +187,11 @@ std::uint64_t orbitFrameKey(const ui::AppState& app, const render::Renderer2D& R
     for (double e : extra) { std::uint64_t b = 0; std::memcpy(&b, &e, sizeof b); k = (k ^ b) * 1099511628211ull; }
     // 0.68.0: while the card's lines are being made and checked (their steps run as the picture is drawn) a new key each frame; then their path is in the key
     static std::uint64_t unsettled = 0;
-    if (!orbit::linesCardSettled(R.vulkan())) k = (k ^ ++unsettled) * 1099511628211ull;
+    if (!orbit::linesCardSettled(R.vulkan())) {
+        k = (k ^ ++unsettled) * 1099511628211ull;
+        static bool said = false;                       // 0.68.1: the reason the picture is drawn anew each frame is in gpu-paths-log.txt, once
+        if (!said) { said = true; app::gpuVkLinesGuard().log("the Orbit Lab's picture is drawn anew each frame until the card's lines are decided: " + orbit::linesCardPathText(R.vulkan())); }
+    }
     k = (k ^ std::uint64_t(orbit::linesCardState() + 2)) * 1099511628211ull;
     return k;
 }

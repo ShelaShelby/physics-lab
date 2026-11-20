@@ -391,11 +391,11 @@ void GpuGuard::failed(const std::string& step, const std::string& why) {
 
 void GpuGuard::setHelper(const std::string& name) { std::lock_guard<std::mutex> g(mx_); helper_ = name; }
 
-void GpuGuard::helperDied(const std::string& step, const std::string& how) {
+void GpuGuard::helperDied(const std::string& step, const std::string& how, const char* verb) {   // 0.68.1: verb "hung" for the time limit
     {   std::lock_guard<std::mutex> g(mx_);
     held_ = false;
-    line("the helper died making " + step + " (" + how + "): switched off, the app never makes it (kept; Settings, Performance: Try again)", true);
-    d_.keep = GpuGuardRecord{"off", version_, driver_, field("the helper died making " + step), app_};
+    line("the helper " + std::string(verb) + " making " + step + " (" + how + "): switched off, the app never makes it (kept; Settings, Performance: Try again)", true);
+    d_.keep = GpuGuardRecord{"off", version_, driver_, field("the helper " + std::string(verb) + " making " + step), app_};
     d_.allowed = false; d_.guarded = false; d_.crashed = true; d_.failed = false;
     }
 }

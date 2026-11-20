@@ -15,8 +15,10 @@ the card; the target is the screen's rate (his PC: 255 Hz).
    dynamic rendering and synchronization2, the big pipelines on a worker thread with a pipeline cache; Vulkan 1.3 required, 1.4 used where present.
 5. **The benchmark, the picture tests and the UI suite on Vulkan; Vulkan the default** (0.63.0, done but for OpenGL's removal): OpenGL the backup
    (Settings; a card below 1.3 or a failed Vulkan start); the benchmark's card times from timestamp queries; one guarded step open at a time in the
-   whole process; steps 1-3's code (vk_draw2d, vk_card, the backend) on 1.3's dynamic rendering and synchronization2. Left: OpenGL removed once the
-   owner's PC shows every scene works (the owner decides: ROADMAP); the copy into the window (present.frag) goes with it (ROADMAP "Whole app").
+   whole process; steps 1-3's code (vk_draw2d, vk_card, the backend) on 1.3's dynamic rendering and synchronization2. Left (owner decision 20 Nov 2026, DECISIONS.md): OpenGL removed
+   completely, now that the owner's 0.68.0 run shows every scene works on Vulkan; no frozen OpenGL download; the app accepts Vulkan 1.2 with VK_KHR_dynamic_rendering and
+   VK_KHR_synchronization2 plus 1.3 and 1.4, chosen automatically (the removal job first checks vulkan.gpuinfo.org for what 1.2 adds, and leaves it out if almost nothing);
+   one drawing path, present.frag goes; a card that cannot run it gets a message naming what is needed.
 
 Rules for every step: zero validation errors in this box's test runs (lavapipe, PL_VK_VALIDATION=1); every VkResult checked; only features that are
 queried; no implicit int/float conversions in shaders, every variable initialised (AMD's compiler is stricter than Mesa's); the OpenGL path bit for bit

@@ -37,6 +37,6 @@ long gpuHelperFinishedCount();                     // helpers finished so far (t
 // the helper process (tests and the app): start the same exe with these arguments, no window, no handles inherited; poll: -1 running, else its exit code
 // (a crash: a code other than 0, 1 and 2; Windows gives the exception code)
 bool gpuHelperSpawn(const std::vector<std::string>& args);
-int gpuHelperExitCode();
+long long gpuHelperExitCode();   // (0.68.1: unsigned code in a long long: Windows' 0xC0000005 was a negative int, read as "still running" for ever)
 
 }  // namespace app

@@ -1,10 +1,10 @@
 # Resume
 
 ## Current state
-- 0.68.0 (20 Nov 2026): speed batch 5: on Vulkan the Orbit Lab's trails, orbits and distance rings (kLinesCS/kLinesVS) and the Molecule Lab's Density surface (kSurfaceCS/kSurfaceVS, sorted on the card) drawn by the card, each checked against the processor's at start; the crash-safe helper makes every guarded program's pipelines and first small run (sky, lens, light paths: pipelines only); the Black Hole Lab's stars not moved (they need the processor's tables: ROADMAP).
-- Last full UI run: 0.67.0 (the commit "native 0.67.0"), on Vulkan; see native/REPORT.md for the checks left failing.
-- Next: the owner's Vulkan benchmark (Hard) on his PC; then all the speed work on Vulkan, slowest scene first (DECISIONS 18 Nov 2026); OpenGL removed when the owner decides. Element jumps: paused (ROADMAP.md, "Waiting for the owner").
-- Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; `check.sh full` (about 35 min) only at a new version X.Y or when the owner asks.
+- 0.68.1 (20 Nov 2026): fixes: a helper that never answers is ended after 30 s (and at app exit), Windows' crash codes are read, the light paths' variants are tried until all five have a line; the nucleus density benchmark scene zooms by the nucleon's size (it drew the nucleons in big windows); the benchmark's own work leaves a counted frame out; the Orbit Lab keeps its picture once its lines' helper is decided; the three failing UI tests fixed or corrected (one card count in ui_blackhole smooth left failing: REPORT.md, ROADMAP.md).
+- Last full UI run: 0.68.0 (81f4604); failing in it: ui_molecule (card), ui_blackhole (smooth), ui_popups (benchscenes, benchwaits); 0.68.1 fixed them by the ui_* tests of the changed screens only (no full run), except smooth's card count.
+- Next steps: the owner's benchmark of 0.68.1 (with gpu-paths-log.txt and gpu-helper-variants.txt); then the OpenGL removal job (DECISIONS 20 Nov 2026); then 0.69.0, the Alpha Centauri system in the Orbit Lab (ROADMAP: its sources first). Idea agreed, not started: the Alpha Centauri switch.
+- Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; every job: `check.sh quick` plus the ui_* tests of the screens it changes; `check.sh full` (about 35 min) only when the owner asks. One push per job; PLANNER.md and this file kept true by every job.
 
 ## How work flows
 - Three roles: a planning chat (the lead: architecture, design, what comes next) writes each job; it writes no code and does not push. An Opus session builds the job and leads its Haiku helpers (CLAUDE.md, "Two models"); Haiku helps.

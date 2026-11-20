@@ -70,7 +70,7 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "The heaviest atom with level clouds (radium-226), Cloud 3D, every electron, Shells enlarged, Glow, Ultra: a jump between two measured levels held half way "
             "(the two levels' clouds cross-faded every frame), zoom 0 (the cloud fills the picture), the camera turning 0.8 rad a second.");
         add(true, "atom.nucleus_density", BenchKind::Atom, atom::kBenchNucleusDensity, "Atom Lab, the biggest nucleus in the Density look, still and then turning",
-            "oganesson-294, Orbit view, the nucleus's Density look, zoom 0.3 closer than the whole nucleus (it fills the picture): the first half of the counted time "
+            "oganesson-294, Orbit view, the nucleus's Density look, zoomed until a nucleon is 36 points across, just inside the Density look in any window size (0.68.1; 0.56.1-0.68.0 used a fixed zoom that left the look in a big window): the first half of the counted time "
             "standing still (is its density grid made again while nothing changes?), the second half turning 0.8 rad a second.");
         add(true, "molecule.density", BenchKind::MoleculeDensity, -1, "Molecule Lab, the Density style of the biggest molecule, the camera turning",
             "benzene (12 atoms, the most of the molecules with a density file), Density style, 100,000 dots (the most), cloud and surface both shown, the surface coloured "

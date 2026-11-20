@@ -107,9 +107,31 @@ def part_nucdens(binary, work):
     check(len(still) > 30 and still[-1] == 1, "still: the card's steps ran once (not again while nothing changed)")
     check(len(turn) > 30 and turn[-1] - turn[-30] >= 25, "turning: the card's steps run again for nearly every new view")
 
+# 0.68.1: the owner's 0.68.0 run showed the Density look's card path never started and "the density grid made 0 times" while turning. Cause: the benchmark scene's zoom
+# (0.3 closer than the whole nucleus) left the Density look in a window as big as his (2560 x 1369): nucleons drawn, the look's code never reached. Now the scene's zoom comes
+# from the nucleon's size in points. The check runs the scene at his window size with the helper on, from a fresh settings folder (as his first start): the log says the whole path
+# succeeded and the scene's turning half made new grids (a still half: one).
+def part_nucdenscard(binary, work):
+    import shutil
+    home = os.path.join(os.path.abspath(work), "home_ndc"); shutil.rmtree(home, ignore_errors=True); os.makedirs(home, exist_ok=True)
+    env = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.nucleus_density", "PL_BENCH_WARMUP": "0.5", "PL_BENCH_MEASURE": "6.0",
+           "PL_GRAPHICS": "vulkan", "PL_NO_GPU_HELPER": "0", "HOME": home}
+    r = run_app(binary, work, "c_ndcard", env, frames=100000, size="2560x1369", timeout=1800)
+    log = ""
+    for root, _d, files in os.walk(home):
+        if "gpu-paths-log.txt" in files: log = open(os.path.join(root, "gpu-paths-log.txt"), errors="replace").read()
+    check("[vulkan] [nucdensity]" in log and "The nucleus' Density look on Vulkan: the whole path succeeded" in log, "nucleus density card path: the log says the whole path succeeded (with the helper, at 2560 x 1369)")
+    check("the Density look reached the card path" in log, "nucleus density card path: the log says the Density look reached the card path")
+    out = r.out
+    still = re.search(r"Standing still: (\d+) frames.*the density grid made (\d+) times", out)
+    turn = re.search(r"Turning: (\d+) frames.*the density grid made (\d+) times", out)
+    print(f"  still {still.groups() if still else None}; turning {turn.groups() if turn else None}")
+    check(still and turn and int(turn.group(2)) >= 3 and int(still.group(2)) <= 1, f"nucleus density card path: the density grid is made while turning ({turn.group(2) if turn else None}) and once standing still ({still.group(2) if still else None})")
+    check("not the Density look" not in out, "nucleus density card path: the scene draws the Density look")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"fullzoom": part_fullzoom, "ds281sea": part_ds281sea, "nucglow": part_nucglow, "nucdens": part_nucdens}[part](binary, work)
+    {"fullzoom": part_fullzoom, "ds281sea": part_ds281sea, "nucglow": part_nucglow, "nucdens": part_nucdens, "nucdenscard": part_nucdenscard}[part](binary, work)
     print(f"check_6c {part}: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

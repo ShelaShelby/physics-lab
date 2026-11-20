@@ -413,6 +413,7 @@ public:
     double tUnit() const { return kAuTime * lenScale(); } // seconds per model time unit
     double zoomForNucleus() const;
     double zoomForNucleon() const;
+    double zoomForNucleonRadius(double points) const;   // 0.68.1: the zoom at which a nucleon is this many points across (its radius, rn): the picture's size is in it (zoomForNucleon: 0.42 of the span)
     double cutOffsetM() const;                            // position of the cut plane, m
     std::vector<int> targets(int dir) const;              // levels a photon can take the electron to
     static constexpr double kValenceDotShare = 0.25;      // 0.46.1: with valence jumps on, this share of the whole atom's 3D dots is the outer electron's (said in the readout)

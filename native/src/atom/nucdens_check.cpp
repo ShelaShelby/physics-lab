@@ -80,7 +80,7 @@ struct Path {
     int state = 0;                 // 0 waiting for the Density look on screen, 2 its steps under way, 1 ready, -1 off
     int step = 0, frames = 0, gen = -1, usedFrames = 0;
     double stepAt = 0;
-    bool firstUse = false, firstDone = false;
+    bool firstUse = false, firstDone = false, reachedLogged = false, holdLogged = false;
     int jobs[3] = {0, 0, 0};
     std::vector<float> res[3];
     std::vector<float> tables[3];
@@ -96,6 +96,7 @@ void off(const std::string& why) {
     g_p.why = why;
     std::printf("PLNUCDENSCARD state=-1 why=%s\n", why.c_str());
     std::fflush(stdout);
+    app::gpuVkNucDensGuard().log("the card path is off: " + why);   // 0.68.1: gpu-paths-log.txt names the reason too (0.68.0 wrote it to stdout only: the owner's log was silent)
 }
 
 void advance(render::Renderer2D& R) {
@@ -177,9 +178,13 @@ bool drawNucDensOnCard(render::Renderer2D& R, const render::NucDensDraw& d) {
         if (g_p.state == -1) { g_p = Path(); g_p.gen = G.generation(); }
     }
     if (g_p.state == 0) {
+        if (g_p.frames == 0 && !g_p.reachedLogged) { g_p.reachedLogged = true; G.log("the Density look reached the card path (it waits 3 frames, then for its guard's turn)"); }
         if (!R.computeShaders()) off("this Vulkan start has no compute programs on the card (or they are switched off)");
         else if (G.started() && !G.allowed()) off(G.offText().empty() ? std::string("its guard switched it off") : G.offText());
-        else if (++g_p.frames >= 3 && G.hold()) { g_p.state = 2; g_p.step = 0; }
+        else if (++g_p.frames >= 3) {
+            if (G.hold()) { g_p.state = 2; g_p.step = 0; }
+            else if (!g_p.holdLogged) { g_p.holdLogged = true; G.log("hold() said no: its helper is not finished, or another guard's step is open (the turn)"); }
+        }
     }
     if (g_p.state == 2) advance(R);
     else if (g_p.state == 1 && g_p.firstUse && !g_p.firstDone && ++g_p.usedFrames >= 4) {   // (3 frames drawn by the card, their batches long done)

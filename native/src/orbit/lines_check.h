@@ -16,8 +16,10 @@
 // differences d0, d1, d3 (up to twice the piece, L): the cubic's terms reach 0.5 (2 + 7 + 5) L = 7 L, each through about 8 roundings, about 4.2e-6
 // of L at worst (5e-6 of 2 L x the longest piece is used). An orbit's curve step is P a (cos E - cos E0) + Q b (sin E - sin E0) from the corner
 // before it, its float sines and cosines off by about 4 x 2^-24 of the step's size (at most dE (|P a| + |Q b|)): 2.4e-7, 1e-6 leaves 4 times that.
-// 0.01 point covers the processor's own double-precision sums. (0.68.0: the first limit left out the curve steps' own size: written again from this
-// derivation after the closest zoom's case failed on it, by up to 0.05 point at 10,000 points off the picture.)
+// 0.01 point covers the processor's own double-precision sums.
+// HOW THIS LIMIT WAS MADE (said plainly, 0.68.1): the FIRST limit of 0.68.0 left out the curve steps' own size (the S term) and FAILED the closest zoom's
+// case (up to 0.05 point at 10,000 points off the picture); it was derived AGAIN, after looking at that result, and the derivation above is the second one. It was
+// not tuned to the measured differences; 0.68.1 re-checked the cubic's terms in float without them (native/REPORT.md).
 // The drawing itself (each step clipped and widened as Renderer2D::line, in the vertex shader) is checked by the pictures (check_orbit_ui.py cardlines).
 #pragma once
 

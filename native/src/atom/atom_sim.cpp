@@ -262,6 +262,9 @@ double AtomLab::zoomForNucleon() const {
     const double m = fitSpan();
     return clampZoom(std::log10(0.42 * m * kFmPerA0 / kNucleonR / (pxPerM(m) * kA0)));
 }
+double AtomLab::zoomForNucleonRadius(double points) const {
+    return clampZoom(zoomForNucleon() + std::log10(points / (0.42 * fitSpan())));   // (the nucleon's radius grows as 10^zoom; at zoomForNucleon it is 0.42 of the span)
+}
 double AtomLab::sliceOffNow() const { return p.cut * 0.5 * (manyOn() ? manyExtM() / kA0 : kExt[sizeN()] / p.Z); }
 double AtomLab::cutOffsetM() const { return sliceOffNow() * aUnit(); }
 double AtomLab::lenScale() const { return manyOn() ? 1.0 : 1 + 1 / nuclearMassMe(p.Z, p.N); }   // m / mu = 1 + m / M

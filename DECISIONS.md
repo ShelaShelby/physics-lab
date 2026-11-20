@@ -87,7 +87,8 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - The Black Hole Lab's look comes first, then the speed work; every new drawing on the graphics card from the start (the processor as reference and fallback).
   Replaces the order of 17 Nov 2026 (speed before new features) for now; the 255 Hz target stays (17 Nov 2026, evening).
 - 18 Nov 2026: the app moves to Vulkan in five steps (native/PLAN_VULKAN.md); OpenGL is the backup until every part works on Vulkan on the owner's PC, then removed.
-- Vulkan needs version 1.3 and uses 1.4 where the card has it (owner decision 18 Nov 2026).
+- Vulkan needs version 1.3 and uses 1.4 where the card has it (owner decision 18 Nov 2026). Replaced on 20 Nov 2026 by the next decision.
+- 20 Nov 2026: OpenGL is removed completely, after the owner's benchmark showed every scene works on Vulkan (his 0.68.0 run did). No frozen OpenGL download for old cards. The app accepts Vulkan 1.2 when the driver offers VK_KHR_dynamic_rendering and VK_KHR_synchronization2, plus 1.3 and 1.4, chosen automatically; one drawing path (present.frag goes); a card that cannot run it gets a clear message naming what is needed. The removal job first checks vulkan.gpuinfo.org (saved in the sources repo) for which old Windows cards 1.2 plus the two extensions actually adds, and leaves the 1.2 part out if it adds almost nothing. Replaces "Vulkan needs version 1.3" (18 Nov).
 - Order: finish Vulkan fully, then all the speed work on Vulkan, slowest scene first; the outside review, the Black Hole Lab's look and new features are talked about after that (owner decision 18 Nov 2026).
 
 ## Look and interface
@@ -99,3 +100,11 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - Science colours (phase wheel, decay modes, elements, planets, spectra) do not follow the theme. The theme picker is a 3-column grid. Inter is the font of the look.
 - The choice closest to reality is marked with a dot, and each lab's Controls has a "Most realistic" button (5 Nov 2026).
 - The app asks Windows not to power-throttle it; the smallest window is 880 x 560 units.
+
+## Workflow (owner decisions 20 Nov 2026)
+- Exactly one push per job, at the end, after the tests and the docs are final; no checkpoint pushes; no doc-only push after it; a fix found after testing goes into that same push.
+- The full UI suite runs only when the owner asks. Every job runs check.sh quick plus the ui_* tests of the screens it changes.
+- No known failure carries over to the next version: fixed, or its test corrected with a written reason; never loosened.
+- The planning chat reads the processor's code (data, precision, calls) before planning any move to the card, and names in the job the files and lines it read.
+- Before any new job, the owner's benchmark of the previous version.
+- Who keeps each plan file true: the job that changes a plan's area updates it; the planning chat names the plan files in the job.

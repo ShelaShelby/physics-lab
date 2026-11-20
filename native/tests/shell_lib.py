@@ -16,6 +16,7 @@ def _run_app(binary, work, name, extra, frames=60, size="1280x800", theme="dark"
     env["PL_PANELS"] = "atom.card=o"   # 0.22 stage 6: the Atom Lab's card starts open in every check, as it did before it folded itself on narrow windows (a check can pass PL_PANELS="" for the app's own default)
     env["PL_NO_GPU_HELPER"] = "1"   # 0.68.0: no helper processes (every start with a fresh settings folder would run one for each card program); check_shell gpuhelper asks for them ("0")
     env.update(extra)
+    env = {k: v for k, v in env.items() if v is not None}   # 0.68.1: a value of None removes the variable (a check that runs as the owner does: no PL_LOG_SHELL)
     bmp = os.path.join(work, name + ".bmp")
     env["PL_SCREENSHOT"] = bmp
     r = subprocess.run([binary], env=env, cwd=work, capture_output=True, text=True, errors="replace", timeout=timeout)

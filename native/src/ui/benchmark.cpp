@@ -58,7 +58,9 @@
 
 namespace ui {
 
+// 0.68.1 (test switch): PL_BENCH_CAP seconds instead of the app's 15 s, for a software renderer that fills the clouds in more than 15 s; the app's own value stays 15 s
 namespace {
+double responseCapS() { static const double v = SDL_getenv("PL_BENCH_CAP") ? std::atof(SDL_getenv("PL_BENCH_CAP")) : app::kBenchResponseCapS; return v; }
 
 constexpr int kStressBeltScale = 8;      // orbit.rocks8: 8 times the rocks of orbit.heaviest
 constexpr double kPi = 3.14159265358979323846;
@@ -399,6 +401,8 @@ struct BenchState {
     double startT0 = -1, beginMs = -1, checkMs = -1, setupMs = -1, swapMs = 0, toSceneMs = -1;
     int prepFrames = 0, checkLoads = 0;
     bool grabPrev = false;                    // 0.63.1: the frame before read the picture back
+    std::vector<int> ownLeft;                 // 0.68.1: per scene, the counted-time frames left out because the benchmark's own numbers took over 1 ms of them
+    std::vector<double> ownLeftMs;            //   and those milliseconds
     bool allScenes = false;                   // the checkbox "All scenes"
     std::vector<int> list;                    // the scenes of this run (indexes into benchSceneTexts()), fixed when it starts
     int sceneFrame = 0, measFrame = -1;       // frames since the scene was set up; counted frames so far (-1: still warming up)
@@ -1085,6 +1089,11 @@ void finish(AppState& app, BenchState& b, bool cancelled) {
             r.id = t.id; r.name = t.name; r.what = t.what;
             r.line = b.lines[std::size_t(i)]; r.path = b.paths[std::size_t(i)]; r.pictures = b.pics[std::size_t(i)]; r.picturesS = b.picsS[std::size_t(i)]; r.picturesBy = b.picsBy[std::size_t(i)];
             r.notes = b.notes[std::size_t(i)];
+            if (std::size_t(i) < b.ownLeft.size() && b.ownLeft[std::size_t(i)] > 0) {
+                char lo[200];
+                std::snprintf(lo, sizeof lo, "%d frame%s left out of the counted frames: the benchmark's own numbers (a result read, a picture comparison) took %.1f ms of them", b.ownLeft[std::size_t(i)], b.ownLeft[std::size_t(i)] == 1 ? "" : "s", b.ownLeftMs[std::size_t(i)]);
+                r.notes.push_back(lo);
+            }
             if (t.kind == app::BenchKind::BlackHoleFilmTilt && r.notes.empty())
                 r.notes.push_back("Film at rest against the last moving picture: not compared (the picture at rest was not finished within the counted time)");
             const auto bh = b.bhByScene.find(i);
@@ -1161,11 +1170,11 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
     if (b.phase == 1 && b.wAt < int(b.waits.size())) {
         const int w = b.waits[std::size_t(b.wAt)];
         b.wStageS += frameMs / 1000;
-        if (b.wStage == 1 && ((labFinishedNow(app, b) && b.wStageS >= 0.3) || b.wStageS > app::kBenchResponseCapS)) b.wStage = 4;   // the state before is finished: act next frame
+        if (b.wStage == 1 && ((labFinishedNow(app, b) && b.wStageS >= 0.3) || b.wStageS > responseCapS())) b.wStage = 4;   // the state before is finished: act next frame
         else if (b.wStage == 2) {
             b.wWorst = std::max(b.wWorst, frameMs);
             b.wFrames++;
-            const bool done = labFinishedNow(app, b), capped = !done && b.wStageS > app::kBenchResponseCapS;
+            const bool done = labFinishedNow(app, b), capped = !done && b.wStageS > responseCapS();
             if (done || capped) {
                 if (b.responses.size() <= std::size_t(b.wAt)) {
                     const WaitDef& d = waitDefs()[std::size_t(w)];
@@ -1173,7 +1182,7 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
                     b.responses.push_back(r);
                 }
                 app::BenchResponse& r = b.responses[std::size_t(b.wAt)];
-                r.ms.push_back(capped ? app::kBenchResponseCapS * 1000 : ticksMs(b.wT0));
+                r.ms.push_back(capped ? responseCapS() * 1000 : ticksMs(b.wT0));
                 r.worstFrameMs.push_back(b.wWorst);
                 if (capped) r.capped++;
                 std::printf("PLBENCH-WAIT %s %.1f ms frames=%d%s\n", r.id.c_str(), r.ms.back(), b.wFrames, capped ? " (capped)" : "");
@@ -1438,7 +1447,15 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::B
     if (b.phase >= 1) { partsEndFrame(app, b, frameMs); return; }
     const int sc = b.run->scene();
     // (0.63.1: the frame after a read-back is not counted either: its time, from the frame before's start, holds the read-back; 0.63.0 counted it)
-    const bool grabbed = b.grabNext > 0 || b.grabSkip || b.grabPrev;
+    // 0.68.1: the benchmark's own measuring must not land in a counted frame (the owner's 0.68.0 run: 19.6 ms of "the benchmark's numbers" in a film_tilt frame, the picture
+    // comparison; this box: 220 ms of a result read). The frame whose time holds more than 1 ms of the benchmark's numbers is left out of the counted frames, and the report
+    // says how many and how long (no other special case)
+    const bool ownLeftOut = last && last->bookMs > 1.0 && b.run->measuring() && sc < int(b.list.size());
+    if (ownLeftOut) {
+        if (b.ownLeft.size() < b.list.size()) { b.ownLeft.assign(b.list.size(), 0); b.ownLeftMs.assign(b.list.size(), 0.0); }
+        b.ownLeft[std::size_t(sc)]++; b.ownLeftMs[std::size_t(sc)] += last->bookMs;
+    }
+    const bool grabbed = b.grabNext > 0 || b.grabSkip || b.grabPrev || ownLeftOut;
     b.grabPrev = b.grabNext > 0 || b.grabSkip;
     b.grabSkip = false;
     if (sc < int(b.list.size()) && b.run->sceneToSetUp() < 0 && b.R) {
@@ -1468,6 +1485,7 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::B
             char l[300];
             std::vector<std::string>& nt = b.notes[std::size_t(sc)];
             nt.clear();
+            if (!app.atom.s.densityDrawn) nt.push_back("WARNING: this frame is not the Density look (the nucleons are drawn): the numbers below are not the Density look's");   // 0.68.1 (0.66.0-0.68.0 measured the nucleons at the owner's window size)
             for (int k = 0; k < 2; k++) if (b.split[k][0] > 0) {
                 const long grids = (k == 0 ? (b.split[1][0] > 0 ? b.gridsAt[1] : made) : made) - b.gridsAt[k];
                 std::snprintf(l, sizeof l, "%s: %.0f frames, %.2f ms a frame (%.1f fps), CPU work %.2f ms; the density grid made %ld times", k == 0 ? "Standing still" : "Turning",

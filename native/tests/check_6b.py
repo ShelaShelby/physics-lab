@@ -102,15 +102,20 @@ SCENES = {
 }
 
 def part_benchscenes(binary, work):
-    ids = ",".join(SCENES) + ",rest.orbit,rest.molecule"   # (0.63.1: two rest lines: their GPU time)
-    # (0.57.0: 4 s counted and the second picture at 2.4 s, was 1.6 and 1.0: the Black Hole scenes draw a frame in 1.4 s or more here, so their second picture
-    # could fall after the counted time (film_tilt failed so with 0.56.4 too); the second picture stays in the second half, where nucleus_density turns)
+    # (0.68.1: the three Black Hole scenes in a run of their own, 40 s counted and the second picture at 24 s (9 s and 5.5 s passed by hand but failed in ctest, which runs with LP_NUM_THREADS=1: a frame takes several seconds there): they draw a frame in 1.4 s or more on this box and sometimes
+    # several seconds under load, so a second picture at 2.4 s fell after the counted time or showed the same view (film_tilt 0.0000, extreme and all_light no picture: failed
+    # here since 0.58.0). The other scenes keep 4 s and 2.4 s: at 5.5 s the two side views of the Atom Lab show the same picture. The second picture stays in the second half,
+    # where nucleus_density turns.)
+    bh = [i for i in SCENES if i.startswith("blackhole.")]
+    rb = run_app(binary, work, "b_scenes_bh", dict(BENCH, PL_BENCH_ONLY=",".join(bh), PL_BENCH_WARMUP="0.3", PL_BENCH_MEASURE="40.0", PL_BENCH_SHOT="0.1,24"), frames=100000, size="880x560", timeout=2400)
+    ids = ",".join(i for i in SCENES if i not in bh) + ",rest.orbit,rest.molecule"
     r = run_app(binary, work, "b_scenes", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.3", PL_BENCH_MEASURE="4.0", PL_BENCH_SHOT="0.1,2.4"), frames=100000, size="880x560", timeout=2400)
     t = report(r)
-    check(bool(t), "the benchmark ran the new scenes and gave its report")
+    tb = report(rb)
+    check(bool(t) and bool(tb), "the benchmark ran the new scenes and gave its report")
     w, h = 880, 560
     for sid, want in SCENES.items():
-        d = t[t.find("DETAILS"):]
+        d = t[t.find("DETAILS"):] + "\n" + tb[tb.find("DETAILS"):]
         sec = d[d.find("\n" + sid + "  "):] if ("\n" + sid + "  ") in d else ""
         sec = sec[:sec.find("  GPU time")] if "  GPU time" in sec else sec
         check(want in sec, f"{sid}: the report says it set up {want!r}")
@@ -121,7 +126,7 @@ def part_benchscenes(binary, work):
     # 0.63.1: a GPU time for every scene and rest line, below the frame's own time (the owner's 0.63.0 run on Vulkan: about 1e12 ms in most); each scene's
     # three worst frames with where their time went; the CPU work without the waits for the card; the benchmark's own start, part by part
     check("The benchmark's own start: " in t and "the GPU timer's check" in t, "the header has the benchmark's own start, part by part")
-    d = t[t.find("DETAILS"):]
+    d = t[t.find("DETAILS"):] + "\n" + tb[tb.find("DETAILS"):]
     for sid in SCENES:
         sec = d[d.find("\n" + sid + "  "):] if ("\n" + sid + "  ") in d else ""
         nxt = [sec.find("\n" + o + "  ", 1) for o in SCENES if o != sid and sec.find("\n" + o + "  ", 1) > 0]
@@ -132,6 +137,14 @@ def part_benchscenes(binary, work):
         check(bool(g) and bool(a_) and 0 < float(g.group(1)) < 1.25 * float(a_.group(1)), f"{sid}: a GPU time below the frame's own time ({g.group(0) if g else 'none'}; {a_.group(0) if a_ else ''})")
         check(sec.count("  Worst frame ") >= 2 and "Worst frame 1: " in sec and "frame thread" in sec, f"{sid}: its worst frames with where their time went")
         check("Waited for the card per frame: " in sec and "(the waits for the card taken out)" in sec, f"{sid}: the CPU work without the waits for the card, the waits on a line of their own")
+    # 0.68.1: the benchmark's own work is not in a counted frame: film_tilt's picture comparison (19.6 ms of a counted frame in the owner's 0.68.0 run) leaves its frame out
+    # and says so; none of the scene's worst frames holds more than 1 ms of the benchmark's numbers
+    fsec = d[d.find("\nblackhole.film_tilt  "):]
+    nxt = [fsec.find("\n" + o + "  ", 1) for o in SCENES if o != "blackhole.film_tilt" and fsec.find("\n" + o + "  ", 1) > 0]
+    fsec = fsec[:min(nxt)] if nxt else fsec
+    nums = [float(x) for x in re.findall(r"the benchmark's numbers ([\d.]+) ms", fsec)]
+    check(all(x <= 1.0 for x in nums), f"blackhole.film_tilt: no worst frame holds the benchmark's numbers above 1 ms ({nums})")
+    check(not nums or "left out of the counted frames: the benchmark's own numbers" in fsec or all(x <= 1.0 for x in nums), "blackhole.film_tilt: a frame holding the benchmark's own numbers is left out and the report says so")
     for rid in ("rest.orbit", "rest.molecule"):
         row = [l for l in t.splitlines() if l.startswith(rid + " ")]
         m = re.search(r"([\d.]+) ms", row[0]) if row else None
@@ -139,7 +152,8 @@ def part_benchscenes(binary, work):
 
 def part_benchwaits(binary, work):
     # (PL_FRAME_MS: frames paced as VSync paces them on a screen; the session box has none, and the frame loop would take the cores the workers need)
-    r = run_app(binary, work, "b_waits", dict(BENCH, PL_BENCH_ONLY="response.atom_density,response.blackhole_spin", PL_FRAME_MS="16"), frames=100000, size="880x560", timeout=1200)
+    # (0.68.1: with one thread the software renderer fills the Density cloud in over the app's 15 s cap; the test's own cap is 150 s (PL_BENCH_CAP), the app's stays 15 s)
+    r = run_app(binary, work, "b_waits", dict(BENCH, PL_BENCH_ONLY="response.atom_density,response.blackhole_spin", PL_FRAME_MS="16", PL_BENCH_CAP="150"), frames=100000, size="880x560", timeout=1200)
     ln = [l.split() for l in r.out.splitlines() if l.startswith("PLBENCH-WAIT ")]
     for wid in ("response.atom_density", "response.blackhole_spin"):
         tries = [l for l in ln if l[1] == wid]
@@ -171,7 +185,7 @@ def part_orbitkeep(binary, work):
         return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
     for api in ("vulkan", "opengl"):
         for tag, extra in (("still", {}), ("click", {"PL_SCRIPT": "50:click=show.comets"})):
-            k = run_app(binary, work, f"okeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1", PL_ORBIT_KEEP="1"), frames=90)
+            k = run_app(binary, work, f"okeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1", PL_LOG_SHELL=None), frames=90)
             n = run_app(binary, work, f"onokeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1", PL_ORBIT_NOKEEP="1"), frames=90)
             kept, drawn = keepline(k)
             a, b = Bmp(os.path.join(work, f"okeep_{api}_{tag}.bmp")), Bmp(os.path.join(work, f"onokeep_{api}_{tag}.bmp"))
@@ -181,9 +195,15 @@ def part_orbitkeep(binary, work):
             check(kept >= 70, f"{api} {tag}: the picture is kept at rest ({kept} of 90 frames)")
             if tag == "click":
                 check(drawn >= 2, f"{api}: the click at rest drew the picture anew ({drawn} drawings)")
-    r = run_app(binary, work, "b_rest_orbit", dict(BENCH, PL_BENCH_ONLY="rest.orbit", PL_ORBIT_KEEP="1"), frames=100000, size="880x560", timeout=600)
-    ln = [l for l in r.out.splitlines() if l.startswith("PLBENCH-REST ")]
-    check(len(ln) == 1 and "redraws=0 " in ln[0], f"rest.orbit: the picture was not drawn anew at rest ({ln})")
+    # 0.68.1: as the owner's PC runs it: no PL_ORBIT_KEEP and no PL_LOG_SHELL (the checks' shell log made the picture drawn anew each frame unless PL_ORBIT_KEEP=1 asked for
+    # keeping, so this box's earlier test forced it and could not see the owner's 765 drawings in 3 s), his picture size (2560 x 1369) and the helpers on. The cause of his
+    # run: the Orbit Lab's picture is kept only once the card's lines are decided (0.68.0) and their helper never started, queued behind the light paths' variant helper that
+    # never ended; the second run makes that happen (the lines' helper sleeps: PL_GPU_HANG, limit 2 s) and the picture must be kept once the limit ended it
+    for tag, extra in (("defaults", {}), ("lines_helper_hangs", {"PL_GPU_HANG": "lines", "PL_GPU_HELPER_LIMIT": "2"})):
+        r = run_app(binary, work, "b_rest_orbit_" + tag, dict(BENCH, PL_BENCH_ONLY="rest.orbit", PL_GRAPHICS="vulkan", PL_LOG_SHELL=None, PL_NO_GPU_HELPER="0", **extra), frames=100000, size="2560x1369", timeout=900)
+        ln = [l for l in r.out.splitlines() if l.startswith("PLBENCH-REST ")]
+        m = re.search(r"redraws=(\d+) .*frames=(\d+)", ln[0]) if ln else None
+        check(bool(m) and int(m.group(1)) <= 3 and int(m.group(2)) > 20, f"rest.orbit ({tag}, 2560 x 1369): the picture is not drawn anew at rest ({ln})")
 
 def part_benchrestore(binary, work):
     ids = "ui.settings_open,ui.data_plot,ui.guide_scroll,molecule.vib_density,atom.jump_all,orbit.journey,orbit.earth,blackhole.extreme,response.lab_switch.orbit_atom,rest.blackhole_glare"

@@ -1,3 +1,5 @@
+Paused; last true at 0.54.4; not kept up to date until the owner restarts it.
+
 **Paused by the owner, 14 Nov 2026, after 0.51.3.** No further jump parts are planned; what is done (jumps with every electron shown for 16 atoms; the one-electron jumps for every element) stays in the app. This file is kept as the record of the method.
 
 # Plan: every element jumps, with every electron shown (0.47.1 research; parts 0.47.2 .. 0.48)

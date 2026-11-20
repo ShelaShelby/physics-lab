@@ -1,3 +1,5 @@
+Paused; last true at 0.56.4; not kept up to date until the owner restarts it.
+
 # Plan: moving gas in the Black Hole Lab (0.56.3 research, 17 Nov 2026; no app code yet)
 Owner's choice (17 Nov 2026, DECISIONS.md): something must happen; moving gas before flying the camera. Pictures: native/docs/blackhole/moving_clump_strip.png,
 moving_clump_lightcurve.png, disc_structure_options.png (each with a .txt). Numbers: native/tools/movinggas (`--table`, `--check`, `--render`).

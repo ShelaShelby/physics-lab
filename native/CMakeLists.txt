@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.68.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.68.1 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -619,7 +619,7 @@ if(PL_BUILD_APP)
       # ui_atom: the Atom Lab: element chip (0.57.0: and the card's Slice dots and jump groups with their guards), its old-panel features, view words, jump check, Most realistic, Monochrome key, honesty notes, density, nucleus controls and full zoom
       add_test(NAME ui_atom COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom
                check_atom_chip.py check_atom_chip.py:card check_atom_chip.py:classic check_6a.py:gaps check_022.py:words check_022s7.py:jumpcheck check_025.py:atom
-               check_022.py:honest check_022.py:spectrum check_022.py:density check_6b.py:nucleus check_6c.py:fullzoom check_6c.py:ds281sea check_6c.py:nucglow check_6c.py:nucdens)
+               check_022.py:honest check_022.py:spectrum check_022.py:density check_6b.py:nucleus check_6c.py:fullzoom check_6c.py:ds281sea check_6c.py:nucglow check_6c.py:nucdens check_6c.py:nucdenscard)
       set_tests_properties(ui_atom PROPERTIES TIMEOUT 3600)
       # ui_atom_layout: the Atom Lab layout: centre, info text, card tabs, fit, rings, default view, U-238 info text
       add_test(NAME ui_atom_layout COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_layout

@@ -197,7 +197,10 @@ def card(binary, work):
         return "\n".join(ln for ln in log.splitlines() if ln.startswith("[molcloud] "))
     BIG = dict(frames=100000, size="880x560", timeout=1500)
     dirs = {"ok": folder("mc_ok")}
-    calls = [((binary, work, "mc_ok", dict(MOL_BENCH, PL_SETTINGS=os.path.join(dirs["ok"], "settings.txt"))), BIG)]
+    # (0.68.1: the first scene's warm-up is 8 s, not 1 s: on this box's software renderer the card's program takes about 2.5 s from its first shader to the end of its first full use
+    # (log: 3.9 s to 6.1 s of the run), so with a 1 s warm-up the first scene's path was read before the program was decided and said "once its start-up check has passed". The
+    # path is read in the counted time, so the warm-up must outlast the program's steps; milliseconds of the box's load decide a shorter one)
+    calls = [((binary, work, "mc_ok", dict(MOL_BENCH, PL_BENCH_WARMUP="8.0", PL_SETTINGS=os.path.join(dirs["ok"], "settings.txt"))), BIG)]
     for i, st in enumerate(MOL_STEPS):
         d = folder(f"mc_die{i}")
         dirs[i] = d
@@ -249,7 +252,8 @@ def card(binary, work):
         check("PLMOLCARD state=-1" in r.out and not any(("begin " + x) in lg for x in MOL_STEPS) and said and st_ and all(x.get("card") == "0" for x in st_) and int(st_[-1]["dots"]) > 50000,
               f"card: after '{s_}' nothing of the program runs, the processor draws the cloud, Settings names the step (said {bool(said)})")
         txt = read(os.path.join(dirs[i], "settings.txt"))
-        check("gpumolcloud=off | molcloud " in txt and f"| {s_}\n" in txt and not os.path.exists(os.path.join(dirs[i], "gpu-molcloud-step.txt")), f"card: the settings file keeps it off with the step '{s_}', the marker gone")
+        # (0.68.1: the line ends with "| app <version>" since 0.63.1 (the settings' fifth field): the step is followed by it, not by the end of the line)
+        check("gpumolcloud=off | molcloud " in txt and re.search(r"\| " + re.escape(s_) + r"( \| app [^\n|]*)?\n", txt) and not os.path.exists(os.path.join(dirs[i], "gpu-molcloud-step.txt")), f"card: the settings file keeps it off with the step '{s_}', the marker gone")
     # 5. a changed shader tries again (and passes here); Try again passes in the same run
     sf = os.path.join(dirs[0], "settings.txt")
     sf2 = os.path.join(dirs[0], "settings_shader.txt")

@@ -360,12 +360,15 @@ def part_vulkanbh(binary, work):
     for name, bh in VK4_VIEWS.items():
         calls.append(((binary, work, "v4_vk_" + name, dict(VK4_RUN, PL_BH_SET=bh, **VK3_SYNC)), dict(frames=1500, timeout=2400)))
         calls.append(((binary, work, "v4_gl_" + name, dict(VK4_RUN, PL_BH_SET=bh, PL_NO_MSAA="1", PL_GRAPHICS="opengl")), dict(frames=1500, timeout=2400)))
+    # (0.68.1: PL_BH_SETTLE 20:120, not 20:30. The run ends once the lab has been idle that many frames; the lens's first full picture waits for its turn behind the sky's last
+    # step and begins a few frames after it, so 30 idle frames could end the run first: it passed only in the prefetch's slower parallel runs and failed alone, 0.68.0's build too)
     fail_env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], PL_VK_CARDFAIL="sky", **VK3_SYNC)
-    calls.append(((binary, work, "v4_fail", fail_env), dict(frames=1500, timeout=2400)))
+    fail_env["PL_BH_SETTLE"] = "20:120"
     async_env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["glare"], **VK3_SYNC)
     del async_env["PL_BH_GLARENOW"]
     calls.append(((binary, work, "v4_async", async_env), dict(frames=1500, timeout=2400)))
     calls.append(((binary, work, "v4_old", dict(PL_GRAPHICS="vulkan", PL_VK_PRETEND_API="1.2", PL_OPEN="settings:graphics")), dict(frames=30)))
+    calls.insert(0, ((binary, work, "v4_fail", fail_env), dict(frames=1500, timeout=2400)))
     prefetch(calls)
     for name, bh in VK4_VIEWS.items():
         v = run_app(binary, work, "v4_vk_" + name, dict(VK4_RUN, PL_BH_SET=bh, **VK3_SYNC), frames=1500, timeout=2400)
@@ -469,6 +472,42 @@ def part_gpuhelper(binary, work):
     check(sum(1 for l in log4.splitlines() if "the helper's detective work, kKerrTableCS variant" in l) == 5, "helper: each variant's line in the log")
     e = run_app(binary, work, "gh_var2", dict(nd, HOME=home2), frames=60, timeout=1200)
     check("PLGPUHELPER variant" not in e.out, "helper: the variants are not run again with the same driver")
+    # 0.68.1: the helper's time limit. (1) the app ends while a variant's helper sleeps (the limit left at 30 s): no helper process is left; (2) a variant that
+    # never answers (PL_GPU_HANG, limit 3 s by PL_GPU_HELPER_LIMIT: the test's own value, the app's stays 30 s) is ended, logged "hung", the next variants are tried and
+    # the variants file ends with five lines; (3) a file with the driver line and "math" alone (the owner's 0.68.0 file) tries the other four.
+    vfile = None
+    for root, _dirs, files in os.walk(home2):
+        if "gpu-helper-variants.txt" in files: vfile = os.path.join(root, "gpu-helper-variants.txt")
+    check(vfile is not None, "helper: the variants file exists")
+    def vlines(): return [l.strip() for l in open(vfile, errors="replace").read().splitlines() if l.strip()]
+    def helpers_left(): return subprocess.run(["pgrep", "-f", "--", "--gpu-helper"], capture_output=True, text=True).stdout.split()
+    if vfile:
+        head = vlines()[0]
+        open(vfile, "w").write(head + "\n")
+        f = run_app(binary, work, "gh_hang_exit", dict(nd, HOME=home2, PL_GPU_HANG="math"), frames=40, timeout=1200)
+        check(os.path.exists(f.bmp) and not helpers_left(), f"helper: the app ended while a helper slept: no helper process left ({helpers_left()})")
+        open(vfile, "w").write(head + "\n")
+        g = run_app(binary, work, "gh_hang", dict(nd, HOME=home2, PL_GPU_HANG="step", PL_GPU_HELPER_LIMIT="3"), frames=900, timeout=1500)
+        logh, _c = _settings_files(home2)
+        vs2 = dict(re.findall(r"PLGPUHELPER variant (\w+): (.*)", g.out))
+        print(f"  the variants with step hanging: {vs2}")
+        check(vs2.get("step", "").startswith("hung making it (no answer after 3 s)"), f"helper: the hung variant is ended and named ({vs2.get('step')})")
+        check(all(vs2.get(v, "").startswith("made") for v in ("math", "edge", "ray", "short")), "helper: the next variants were tried after the hung one")
+        check(_logged(logh, "[vulkan] [lightpaths] ", "the helper hung making"), "helper: the log says the helper hung")
+        vl = vlines()
+        check(len(vl) == 6 and [l.split(":")[0] for l in vl[1:]].count("variant step") == 1 and "hung making it" in " ".join(vl), f"helper: the variants file holds the driver line and five variants ({len(vl)} lines)")
+        check(not helpers_left(), "helper: no helper process left")
+        open(vfile, "w").write("\n".join(vl[:2]) + "\n")                       # the driver line and the first variant (math) only: the owner's 0.68.0 file
+        h = run_app(binary, work, "gh_rest", dict(nd, HOME=home2), frames=500, timeout=1500)
+        vs3 = re.findall(r"PLGPUHELPER variant (\w+): ", h.out)
+        check(sorted(vs3) == ["edge", "ray", "short", "step"] and len(vlines()) == 6, f"helper: a file with math alone tries the other four ({vs3})")
+    # 0.68.1: a helper that ends without writing its result (exit code 7, PL_GPU_NORESULT): logged "ended without a result (exit code 7)", the app runs on. (On Windows a crash's
+    # exit code, 0xC0000005, was a negative int and was read as "still running" for ever: the owner's 0.68.0 log never noticed the light paths' variant helper ending.)
+    home4 = os.path.join(os.path.abspath(work), "home_gh4"); subprocess.run(["rm", "-rf", home4]); os.makedirs(home4, exist_ok=True)
+    q = run_app(binary, work, "gh_nores", dict(nd, HOME=home4, PL_GPU_NORESULT="nucdensity"), frames=150, timeout=1200)
+    logq, _c = _settings_files(home4)
+    check("PLGPUHELPER nucdensity ended without a result (exit code 7)" in q.out and _logged(logq, "[vulkan] [nucdensity] ", "the helper ended without a result (exit code 7)") and os.path.exists(q.bmp),
+          "helper: a helper that ends without a result is logged as such and the app runs on")
     # 0.68.0: every guarded program's pipelines and first small run made by a helper first; two programs whose helpers die (the lines' first small run, the
     # surface's pipelines): the app runs on, only those two off (the settings keep them, the log names their steps), the rest passed in their helpers
     home3 = os.path.join(os.path.abspath(work), "home_gh3"); subprocess.run(["rm", "-rf", home3]); os.makedirs(home3, exist_ok=True)

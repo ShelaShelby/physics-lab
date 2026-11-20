@@ -85,7 +85,7 @@ double benchZoom(int which) {
         case kBenchAllOneOrbital: return 0.3;      // tried 0, 0.3, 0.6, 0.9
         case kBenchAllClassic: return 0.5;         // tried 0, 0.5, 1.0, 1.5: 0 does not fill the picture
         case kBenchJumpAll: return 0.0;            // tried 0, 0.3, 0.6, 0.9 (Shells enlarged: at True scale the cloud is a dot at all four)
-        case kBenchNucleusDensity: return 0.3;     // relative to zoomForNucleus(); tried 0, 0.3, 0.6, 0.9: from 0.6 the Density look gives way to the nucleons
+        case kBenchNucleusDensity: return 0.3;     // (0.56.1-0.68.0, relative to zoomForNucleus(): 0.3; not used since 0.68.1, which sets the zoom from the nucleon's size in points, see the scene)
         case kBenchSliceAll: return -0.5;          // 0.64.0: each tried at -0.5, 0, 0.5, 1.0 (1 % low here, REPORT 0.64.0): the slowest kept
         case kBenchSliceDirac: return 0.0;
         case kBenchSideAll: case kBenchSideAllClassic: return -0.5;   // (zoomed from there to +0.5 and back while it runs: benchFrame)
@@ -163,7 +163,10 @@ void benchSetup(AtomLab& L, int which, double w, double h) {
         fresh(L, 118, 176, w, h);
         L.setParam("view", std::string("Orbit")); L.setParam("ostyle", std::string("Modern")); L.setParam("style", std::string("Density"));
         L.ensureNucleus();
-        L.setParam("zoom", L.zoomForNucleus() + benchZoom(which));
+        // 0.68.1: the Density look gives way to the nucleons at a nucleon radius of 40 points (atom_view kDensityLookRn). 0.56.1-0.68.0 zoomed 0.3 closer than the whole
+        // nucleus, which is 40 points only in a small window: at the owner's 2560 x 1369 the scene drew the nucleons and the density grid was made 0 times. The hardest view
+        // a user can reach in the Density look is just under that radius, in any window: 36 points (0.9 of 40)
+        L.setParam("zoom", L.zoomForNucleonRadius(36.0));
         still(L);
         return;
     }
