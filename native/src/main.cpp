@@ -289,6 +289,14 @@ int main(int argc, char** argv) {
             app::gpuHelperQueue(helped, ui::settingsFolder(), vk.deviceName(), vk.driverText());
             app::GpuGuard& lp = app::gpuGuard();
             if (lp.started() && !lp.allowed()) app::gpuHelperVariants(&lp, ui::settingsFolder(), vk.deviceName(), vk.driverText());
+            // 0.68.0: the four programs made at this start (the groups, the outline, the rocks, the Glow dots: their steps run in vk.initCards below, not
+            // through hold()) wait here for their helpers, which are first in the queue (only while not passed with this driver: a known driver waits for none)
+            const double helpT0 = SDL_GetTicks() / 1000.0;
+            while ((app::gpuHelperPending("groups") || app::gpuHelperPending("outline") || app::gpuHelperPending("rocks") || app::gpuHelperPending("cloud")) &&
+                   SDL_GetTicks() / 1000.0 - helpT0 < 60) {
+                app::gpuHelperPump();
+                SDL_Delay(5);
+            }
         }
         std::vector<std::string> cardsWhy;
         vk.initCards(renderer, cardsWhy);
@@ -1064,6 +1072,7 @@ int main(int argc, char** argv) {
         std::printf("Live frames: %ld in %d drags, worst gap %.1f ms, lead-in %.1f ms, biggest physics step %.4f s\n", app.live.frames, app.live.drags, app.live.worstGapMs, app.live.leadInMs, maxPhysicsDt);
     if (SDL_getenv("PL_LOG_DRAWKINDS")) std::printf("PLDRAWKINDS %s\n", renderer.drawKindsText().c_str());   // 0.60.0 (checks: which drawing calls this run made)
 
+    app::gpuHelperStop();                               // 0.68.0: no more helpers (a worker waiting for one goes on, and is then stopped)
     if (useVulkan) {
         if (SDL_getenv("PL_VK_VALIDATION")) std::printf("PLVK validation errors=%d warnings=%d\n", vk.validationErrors(), vk.validationWarnings());
         renderer.useVulkan(nullptr);                    // 0.60.0 (its Vulkan objects go with the backend)

@@ -35,16 +35,17 @@
 
 namespace render {
 
-namespace {
-double nowS() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
-std::string msText(double s) { char b[48]; std::snprintf(b, sizeof b, "%.0f ms", 1000 * s); return b; }
-// PL_VK_CARDFAIL=<name>[,<name>] (tests): that program's pipeline fails as a driver that says no would
+// PL_VK_CARDFAIL=<name>[,<name>] (tests): that program's pipeline fails as a driver that says no would (0.68.0: render/vk_lines.cpp too)
 bool forcedFail(const char* name) {
     const char* e = std::getenv("PL_VK_CARDFAIL");
     if (!e) return false;
     const std::string list = std::string(",") + e + ",";
     return list.find(std::string(",") + name + ",") != std::string::npos;
 }
+
+namespace {
+double nowS() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+std::string msText(double s) { char b[48]; std::snprintf(b, sizeof b, "%.0f ms", 1000 * s); return b; }
 constexpr std::uint32_t kUboBinding = 7;                     // the compute shaders' uniform block (CMakeLists.txt: --sdub uDefault 0 7)
 constexpr int kSlots = 8;                                    // batches in flight at most
 constexpr double kStepLimitS = 10.0;                         // a start-up step's time limit (as the Atom Lab's card steps)
@@ -70,6 +71,8 @@ std::string vkCardVersion(const std::string& name) {
     if (name == "rings") return vkCardId("rings", {kVertexShader, kRingsHeadFSPart, kRingsHeadCSPart, kRingsPart, kRingsMainFSPart, kRingsMainCSPart});   // 0.64.0
     if (name == "classic") return vkCardId("classic", {kClassicCS, kBlobVS, kBlobFS});   // 0.64.0
     if (name == "nucdensity") return vkCardId("nucdensity", {kNucDensCS, kBlobVS, kBlobFS});   // 0.67.0
+    if (name == "surface") return vkCardId("surface", {kSurfaceCS, kSurfaceVSHeadPart, kSurfaceVSMainPart, kFragmentShader});   // 0.68.0
+    if (name == "lines") return vkCardId("lines", {kLinesHeadCSPart, kLinesPart, kLinesMainCSPart, kLinesHeadVSPart, kLinesMainVSPart, kFragmentShader});   // 0.68.0
     if (name == "lens") return vkCardId("lens", {kCompositeVS, kLensFS, kKerrFS, kMaxDownFS, kGlowDownFS, kGlowBlurFS, kGlowAddFS, kGlareDownFS, kGlareAddFS, kCompositeFS});
     return "vulkan " + molCloudShaderId();
 }
@@ -245,7 +248,8 @@ bool VkCards::openSlot() {
     if (!c_.check(vkBeginCommandBuffer(s.cmd, &bi), "vkBeginCommandBuffer (card programs)")) { failed_ = true; return false; }
     // after everything submitted before it: the frames that drew from buffers this batch may write again (their vertex input and shaders, write after
     // read), the batches whose writes this one reads (compute, transfer)
-    vkMemoryBarrier2(s.cmd, VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+    vkMemoryBarrier2(s.cmd, VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT |
+                     VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,   // (0.68.0: the lines' draw count, read by a frame before)
                      VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
                      VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT,
                      VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT);   // (0.63.0: synchronization2)
@@ -354,6 +358,7 @@ void VkCards::barrier(VkPipelineStageFlags by, unsigned to) {
     if (to & kToVertex) { dst |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT; da |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_SHADER_READ_BIT; }
     if (to & kToHost) { dst |= VK_PIPELINE_STAGE_HOST_BIT; da |= VK_ACCESS_HOST_READ_BIT; }
     if (to & kToTransfer) { dst |= VK_PIPELINE_STAGE_TRANSFER_BIT; da |= VK_ACCESS_TRANSFER_READ_BIT; }
+    if (to & kToIndirect) { dst |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT; da |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT; }   // 0.68.0
     vkMemoryBarrier2(slots_[static_cast<std::size_t>(open_)].cmd, static_cast<VkPipelineStageFlags2>(by),        // (0.63.0: synchronization2; the legacy stage and
                      by == VK_PIPELINE_STAGE_TRANSFER_BIT ? VK_ACCESS_2_TRANSFER_WRITE_BIT : VK_ACCESS_2_SHADER_WRITE_BIT,    // access bits have the same values in it)
                      static_cast<VkPipelineStageFlags2>(dst), static_cast<VkAccessFlags2>(da));

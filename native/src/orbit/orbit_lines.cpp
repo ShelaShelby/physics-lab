@@ -1,0 +1,219 @@
+// 0.68.0: the Orbit Lab's lines for both paths (orbit/orbit_lines.h). The processor's functions are orbit_view.cpp's code of 0.67.0, moved here unchanged.
+#include "orbit/orbit_lines.h"
+
+#include <cmath>
+
+#include "orbit/solar_system.h"
+#include "orbit/units.h"
+
+namespace orbit {
+
+using namespace units;
+using render::Color;
+
+namespace {
+std::vector<double>* recNext(std::vector<std::vector<double>>* rec) { if (!rec) return nullptr; rec->emplace_back(); return &rec->back(); }
+// a point to the pen; the start-up check keeps it instead (on the picture, and where it is in space: x, y, X, Y, Z)
+inline void go(LinePen& pen, const Q& q, double x, double y, double z) {
+    if (pen.rec) { for (double v : {q.first, q.second, x, y, z}) pen.rec->push_back(v); return; }
+    pen.to(q.first, q.second);
+}
+}  // namespace
+
+// ---- the processor's ----
+void ringPointsXYZ(double Rm, std::vector<double>& xyz) {
+    xyz.clear();
+    for (int i = 0; i <= 96; i++) { const double t = i / 96.0 * 2 * kPi; xyz.push_back(Rm * std::cos(t)); xyz.push_back(Rm * std::sin(t)); xyz.push_back(0); }
+}
+
+void drawRingCpu(render::Renderer2D& R, const LineCam& cam, const std::vector<double>& xyz, Color col, std::vector<std::vector<double>>* rec) {
+    LinePen pen{R, cam.W, cam.H, 1.0, col};
+    pen.rec = recNext(rec);
+    for (std::size_t i = 0; i + 2 < xyz.size(); i += 3) { const Q q = cam.proj(xyz[i], xyz[i + 1], xyz[i + 2]); go(pen, q, xyz[i], xyz[i + 1], xyz[i + 2]); }
+}
+
+int trailStart(const std::deque<Vec3>& tr, const Vec3& pos, bool full) {
+    const int n = static_cast<int>(tr.size());
+    int st0 = 0;
+    if (!full && n > 1) {                                 // only the last stretch, about 0.6 of the distance to the Sun
+        const double lim = 0.6 * std::max(length(pos), kSimLength);
+        double acc = length(pos - tr[std::size_t(n - 1)]);
+        st0 = n - 1;
+        while (st0 > 0 && acc < lim) { acc += length(tr[std::size_t(st0)] - tr[std::size_t(st0 - 1)]); st0--; }
+    }
+    return st0;
+}
+
+void drawTrailCpu(render::Renderer2D& R, const LineCam& cam, const std::deque<Vec3>& tr, const Vec3& pos, int st0, double width, const Color cols[4],
+                  std::vector<std::vector<double>>* rec) {
+    const int n = static_cast<int>(tr.size());
+    if (n == 0) return;
+    const double W = cam.W, H = cam.H;
+    const int nn = n - st0;
+    // 0.46.6: the trail's points are about 2 % of the distance to the Sun apart, so straight pieces cut inside the curve by up to r (0.02)^2 / 8: 7,500 km at 1 AU,
+    // plain to see when zoomed in. A long piece that reaches the picture is drawn as a Catmull-Rom curve through its neighbours (off by about r (0.02)^4: tens of km).
+    const auto P = [&](int i) { return i >= n ? pos : tr[std::size_t(std::max(0, i))]; };   // (point n is the body itself: the trail always ends there)
+    const auto piece = [&](LinePen& pen, int i) {    // the curve from point i - 1 to point i, without its first point
+        const Vec3 a = P(i - 1), c = P(i);
+        const Q qa = cam.proj(a.x, a.y, a.z), qc = cam.proj(c.x, c.y, c.z);
+        const double L = std::hypot(qc.first - qa.first, qc.second - qa.second), mg = 20 + L / 4;
+        const bool near = std::max(qa.first, qc.first) > -mg && std::min(qa.first, qc.first) < W + mg && std::max(qa.second, qc.second) > -mg && std::min(qa.second, qc.second) < H + mg;
+        if (near && L > 6 && i >= 2 && i <= n) {
+            const Vec3 p0 = P(i - 2), p3 = i + 1 <= n ? P(i + 1) : c * 2.0 - a;
+            const int k = static_cast<int>(std::min(4096.0, std::ceil(L / 4)));
+            for (int j = 1; j < k; j++) {
+                const double t = double(j) / k, t2 = t * t, t3 = t2 * t;
+                const Vec3 v = (a * 2.0 + (c - p0) * t + (p0 * 2.0 - a * 5.0 + c * 4.0 - p3) * t2 + (a * 3.0 - p0 - c * 3.0 + p3) * t3) * 0.5;
+                const Q f = cam.proj(v.x, v.y, v.z); go(pen, f, v.x, v.y, v.z);
+            }
+        }
+        go(pen, qc, c.x, c.y, c.z);
+    };
+    for (int part = 0; part < 4; part++) {           // fades in 4 steps, oldest faintest
+        const int i0 = st0 + part * nn / 4, i1 = std::min(n, st0 + (part + 1) * nn / 4 + 1);
+        LinePen pen{R, W, H, width, cols[part]};
+        pen.rec = recNext(rec);
+        for (int i = i0; i < i1; i++) {
+            if (i == i0) { const Vec3& w = tr[std::size_t(i)]; const Q q = cam.proj(w.x, w.y, w.z); go(pen, q, w.x, w.y, w.z); }
+            else piece(pen, i);
+        }
+        if (part == 3) piece(pen, n);                // always end at the body itself
+    }
+}
+
+void drawOrbitCpu(render::Renderer2D& R, const LineCam& cam, const Body& b, double width, Color col, std::vector<Vec3>& cpts, std::vector<std::vector<double>>* rec) {
+    const double W = cam.W, H = cam.H;
+    orbitPath(b, 256, cpts);
+    LinePen pen{R, W, H, width, col};
+    pen.rec = recNext(rec);
+    // 0.46.6 (outside review: Earth zoomed in had two paths about 10,000 km apart): a 256-sided polygon of a 1 AU orbit is up to a(1 - cos(pi/256)) = 11,000 km
+    // inside the real ellipse. A piece that reaches the picture is drawn again from the ellipse itself, finely enough that it is off by under half a point.
+    std::vector<Vec3> fine;
+    for (std::size_t i = 0; i < cpts.size(); i++) {
+        const Q q = cam.proj(cpts[i].x, cpts[i].y, cpts[i].z);
+        if (i > 0) {
+            const Q q0 = cam.proj(cpts[i - 1].x, cpts[i - 1].y, cpts[i - 1].z);
+            const double L = std::hypot(q.first - q0.first, q.second - q0.second), mg = 20 + L / 4;   // (a piece's bulge is far under a quarter of its length)
+            const bool near = std::max(q.first, q0.first) > -mg && std::min(q.first, q0.first) < W + mg && std::max(q.second, q0.second) > -mg && std::min(q.second, q0.second) < H + mg;
+            if (near && L > 6) {
+                const int k = static_cast<int>(std::min(4096.0, std::ceil(L / 4)));
+                orbitPath(b, 2 * kPi * (i - 1) / 256.0, 2 * kPi * i / 256.0, k, fine);
+                for (std::size_t j = 1; j + 1 < fine.size(); j++) { const Q f = cam.proj(fine[j].x, fine[j].y, fine[j].z); go(pen, f, fine[j].x, fine[j].y, fine[j].z); }
+            }
+        }
+        go(pen, q, cpts[i].x, cpts[i].y, cpts[i].z);
+    }
+}
+
+// ---- the card's ----
+bool LinesPoints::ring(std::uint64_t key, const std::deque<Vec3>& tr, render::LinesRun& r) {
+    const int n = static_cast<int>(tr.size());
+    if (card) return card->ring(key, n, [&](int i, double* p) { const Vec3& v = tr[std::size_t(i)]; p[0] = v.x; p[1] = v.y; p[2] = v.z; }, r);
+    if (!check || n <= 0) return false;
+    r.slot = static_cast<std::uint32_t>(check->checkPts.size() / 3); r.cap = static_cast<std::uint32_t>(n); r.start = 0; r.n = static_cast<std::uint32_t>(n);
+    for (const Vec3& v : tr) { check->checkPts.push_back(v.x); check->checkPts.push_back(v.y); check->checkPts.push_back(v.z); }
+    return true;
+}
+
+bool LinesPoints::list(std::uint64_t key, const std::vector<double>& xyz, render::LinesRun& r) {
+    const int n = static_cast<int>(xyz.size() / 3);
+    if (card) return card->list(key, xyz.data(), n, r);
+    if (!check || n <= 0) return false;
+    r.slot = static_cast<std::uint32_t>(check->checkPts.size() / 3); r.cap = static_cast<std::uint32_t>(n); r.start = 0; r.n = static_cast<std::uint32_t>(n);
+    check->checkPts.insert(check->checkPts.end(), xyz.begin(), xyz.begin() + 3 * n);
+    return true;
+}
+
+bool LinesPoints::list(std::uint64_t key, const std::vector<Vec3>& pts, render::LinesRun& r) {
+    static_assert(sizeof(Vec3) == 3 * sizeof(double), "Vec3 is three doubles");
+    const int n = static_cast<int>(pts.size());
+    if (card) return card->list(key, pts.empty() ? nullptr : &pts[0].x, n, r);
+    if (!check || n <= 0) return false;
+    r.slot = static_cast<std::uint32_t>(check->checkPts.size() / 3); r.cap = static_cast<std::uint32_t>(n); r.start = 0; r.n = static_cast<std::uint32_t>(n);
+    for (const Vec3& v : pts) { check->checkPts.push_back(v.x); check->checkPts.push_back(v.y); check->checkPts.push_back(v.z); }
+    return true;
+}
+
+std::int32_t LinesPoints::circle() {
+    if (circleAt >= 0) return circleAt;
+    if (card) return circleAt = static_cast<std::int32_t>(card->circleSlot());
+    if (!check) return 0;
+    circleAt = static_cast<std::int32_t>(check->checkPts.size() / 3);
+    for (int i = 0; i <= 256; i++) { const double E = 0 + (2 * kPi - 0) * i / 256; check->checkPts.push_back(std::cos(E)); check->checkPts.push_back(std::sin(E)); check->checkPts.push_back(0); }
+    return circleAt;
+}
+
+namespace {
+void hiLo3(const Vec3& v, float hi[4], float lo[4]) {
+    const double p[3] = {v.x, v.y, v.z};
+    for (int k = 0; k < 3; k++) { hi[k] = static_cast<float>(p[k]); lo[k] = static_cast<float>(p[k] - static_cast<double>(hi[k])); }
+    hi[3] = lo[3] = 0;
+}
+void colourOf(render::LinesRun& r, Color c) { r.colour[0] = c.r; r.colour[1] = c.g; r.colour[2] = c.b; r.colour[3] = c.a; }
+}  // namespace
+
+render::LinesCamera linesCamera(const LineCam& c) {
+    render::LinesCamera k;
+    // C: the point at the picture's middle at the view's middle depth (orbit_view's base() turned back), so the points near the view are small numbers
+    const double x1 = -(c.fx + c.ox) / c.px, y2 = c.oy / c.px, dep = c.cd;
+    const double y1 = y2 * c.cb + dep * c.sb, z = -y2 * c.sb + dep * c.cb, x = x1 * c.ca + y1 * c.sa, y = -x1 * c.sa + y1 * c.ca;
+    const Vec3 C{x + c.bc.x, y + c.bc.y, z + c.bc.z};
+    hiLo3(C, k.cHi, k.cLo);
+    // C's own numbers as base() works them out, about the barycentre
+    const double qx = C.x - c.bc.x, qy = C.y - c.bc.y, qz = C.z - c.bc.z;
+    const double X1 = qx * c.ca - qy * c.sa, Y1 = qx * c.sa + qy * c.ca, Y2 = Y1 * c.cb - qz * c.sb, DEP = Y1 * c.sb + qz * c.cb;
+    k.rot[0] = static_cast<float>(c.ca); k.rot[1] = static_cast<float>(c.sa); k.rot[2] = static_cast<float>(c.cb); k.rot[3] = static_cast<float>(c.sb);
+    k.proj[0] = static_cast<float>(c.px); k.proj[1] = static_cast<float>(c.D); k.proj[2] = static_cast<float>(DEP - c.cd); k.proj[3] = c.d3 ? 1.0f : 0.0f;
+    k.scr[0] = static_cast<float>(c.W / 2 + c.fx + c.ox + c.px * X1); k.scr[1] = static_cast<float>(c.H / 2 + c.oy - c.px * Y2);
+    k.scr[2] = static_cast<float>(c.px * X1); k.scr[3] = static_cast<float>(c.px * Y2);
+    k.view[0] = static_cast<float>(c.W); k.view[1] = static_cast<float>(c.H); k.view[2] = 20; k.view[3] = 0;
+    return k;
+}
+
+bool addRingRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const std::vector<double>& xyz, Color col) {
+    render::LinesRun r;
+    if (!pts.list(key, xyz, r)) return false;
+    r.from = 1; r.to = static_cast<std::int32_t>(r.n) - 1; r.kind = 0;
+    colourOf(r, col); r.style[0] = 1.0f;
+    d.add(r);
+    return true;
+}
+
+bool addTrailRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const std::deque<Vec3>& tr, const Vec3& pos, int st0, double width, const Color cols[4]) {
+    const int n = static_cast<int>(tr.size());
+    if (n == 0) return true;
+    render::LinesRun r;
+    if (!pts.ring(key, tr, r)) return false;
+    r.kind = 1;
+    r.style[0] = static_cast<float>(width);
+    hiLo3(pos, r.tailHi, r.tailLo);
+    const int nn = n - st0;
+    for (int part = 0; part < 4; part++) {           // drawTrailCpu's parts: piece i joins point i - 1 to point i; the last part ends at the body (piece n)
+        const int i0 = st0 + part * nn / 4, i1 = std::min(n, st0 + (part + 1) * nn / 4 + 1);
+        r.from = i0 + 1; r.to = part == 3 ? n : i1 - 1;
+        colourOf(r, cols[part]);
+        d.add(r);
+    }
+    return true;
+}
+
+bool addOrbitRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const Body& b, double width, Color col, std::vector<Vec3>& cpts) {
+    orbitPath(b, 256, cpts);
+    if (cpts.size() != 257) return true;             // (not bound: no orbit, as drawOrbitCpu)
+    Vec3 P, Q;
+    double a = 0, e = 0, bAx = 0;
+    if (!orbitAxes(b, P, Q, a, e, bAx)) return true;
+    render::LinesRun r;
+    if (!pts.list(key, cpts, r)) return false;
+    r.from = 1; r.to = 256; r.kind = 2;
+    r.circle = pts.circle();
+    colourOf(r, col); r.style[0] = static_cast<float>(width);
+    const Vec3 pa = P * a, qb = Q * bAx;
+    r.pa[0] = static_cast<float>(pa.x); r.pa[1] = static_cast<float>(pa.y); r.pa[2] = static_cast<float>(pa.z);
+    r.qb[0] = static_cast<float>(qb.x); r.qb[1] = static_cast<float>(qb.y); r.qb[2] = static_cast<float>(qb.z);
+    r.qb[3] = static_cast<float>(2 * kPi / 256);
+    d.add(r);
+    return true;
+}
+
+}  // namespace orbit

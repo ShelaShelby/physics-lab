@@ -280,19 +280,28 @@ double SolarSystem::julianDayTDB() const { return timescale::tdbFromUT(julianDay
 int64_t SolarSystem::currentUnixMs() const { return epochMs + static_cast<int64_t>(std::llround(t * 1000.0)); }
 
 void orbitPath(const Body& b, int n, std::vector<Vec3>& out) { orbitPath(b, 0, 2 * kPi, n, out); }
-void orbitPath(const Body& b, double E0, double E1, int n, std::vector<Vec3>& out) {
-    out.clear();
+bool orbitAxes(const Body& b, Vec3& P, Vec3& Q, double& a, double& e, double& bAx) {
     const OrbitShape o = orbitOf(b);
-    if (!o.bound || n < 3) return;
+    if (!o.bound) return false;
     const Vec3 bp = b.pos - b.drawShift;                  // 0.52.1: the orbit's own point (Earth: the Earth-Moon barycentre)
     const double GM = kGMSun, v2 = dot(b.vel, b.vel), rv = dot(bp, b.vel);
     const Vec3 hv = cross(bp, b.vel), ev = (bp * (v2 - GM / o.r) - b.vel * rv) * (1.0 / GM);
     const double h = length(hv);
-    if (h <= 0) return;
+    if (h <= 0) return false;
     const Vec3 W = hv * (1 / h);
-    Vec3 P = o.e > 1e-12 ? ev * (1 / o.e) : bp * (1 / o.r);   // towards the perihelion (a circle: any direction in the plane)
-    const Vec3 Q = cross(W, P);
-    const double bAx = o.a * std::sqrt(std::max(0.0, 1 - o.e * o.e));
+    P = o.e > 1e-12 ? ev * (1 / o.e) : bp * (1 / o.r);   // towards the perihelion (a circle: any direction in the plane)
+    Q = cross(W, P);
+    a = o.a; e = o.e;
+    bAx = o.a * std::sqrt(std::max(0.0, 1 - o.e * o.e));
+    return true;
+}
+
+void orbitPath(const Body& b, double E0, double E1, int n, std::vector<Vec3>& out) {
+    out.clear();
+    Vec3 P, Q;
+    double oa = 0, oe = 0, bAx = 0;
+    if (n < 3 || !orbitAxes(b, P, Q, oa, oe, bAx)) return;
+    struct { double a, e; } o{oa, oe};
     // 0.66.0: the whole orbit's cos E and sin E (the same angles for every body, every frame: about 27,000 sines and cosines a frame in orbit.heaviest)
     // from a table made once with the same expressions, so the same numbers bit for bit
     if (E0 == 0 && E1 == 2 * kPi && n == 256) {

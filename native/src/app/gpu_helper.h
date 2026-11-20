@@ -18,7 +18,7 @@ class GpuGuard;
 
 // the helper's side (main.cpp, with --gpu-helper first): the program's exit code
 int gpuHelperMain(int argc, char** argv);               // (render/vk_helper.cpp)
-bool gpuHelperKnows(const std::string& name);           // the programs it can make: lightpaths, classic, nucdensity
+bool gpuHelperKnows(const std::string& name);           // the programs it can make (0.68.0: every guarded program)
 
 // the app's side. queue: the programs (by their guard's settings name) to make in helpers, with their guards; folder: the settings folder (the helpers'
 // result and cache files); device: the card's name as the app's Vulkan start chose it
@@ -28,6 +28,8 @@ void gpuHelperVariants(GpuGuard* lightpaths, const std::string& folder, const st
 // once a frame: starts the next helper, reads a finished one; true when a program's helper finished this frame (the settings then keep its guard's record)
 bool gpuHelperPump();
 bool gpuHelperPending(const std::string& name);   // its helper has not finished yet (queued or running)
+void gpuHelperStop();
+void gpuHelperPrefer(const std::string& name);     // 0.68.0: its helper next (a lab asks for that program now: its guard's hold() calls it; the frame's thread)                              // 0.68.0: the app ends: the queue emptied, nothing pending any more (a running helper finishes alone)
 bool gpuHelperBusy();                              // any helper queued or running
 std::string gpuHelperCacheFile(const std::string& folder);   // the helpers' pipeline cache (the app merges it into its own)
 long gpuHelperFinishedCount();                     // helpers finished so far (the app merges the cache when it grows)

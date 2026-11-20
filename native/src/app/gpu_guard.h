@@ -168,7 +168,11 @@ GpuGuard& gpuVkRingsGuard();
 GpuGuard& gpuVkClassicGuard();
 // 0.67.0: the nucleus' Density look on Vulkan (render/nucdens_card.h, atom/nucdens_check.h): gpuVkNucDensGuard ("gpuvknucdensity=", "[vulkan] [nucdensity] ")
 GpuGuard& gpuVkNucDensGuard();
-std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the thirteen Vulkan guards by their settings name (gpuvk<name>=)
+// 0.68.0: the Orbit Lab's lines on Vulkan (render/lines_card.h, orbit/lines_check.h): gpuVkLinesGuard ("gpuvklines=", "[vulkan] [lines] ")
+GpuGuard& gpuVkLinesGuard();
+// 0.68.0: the Molecule Lab's Density surface on Vulkan (render/surface_card.h, molecule/surface_check.h): gpuVkSurfaceGuard ("gpuvksurface=", "[vulkan] [surface] ")
+GpuGuard& gpuVkSurfaceGuard();
+std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards();   // the Vulkan guards by their settings name (gpuvk<name>=)
 
 // 0.63.0: the frame's thread (main.cpp, at start): a guarded begin() there never waits for another guard's open step (every other thread does)
 void gpuGuardFrameThread();
@@ -176,6 +180,10 @@ void gpuGuardFrameThread();
 std::string gpuGuardTurn();
 // a guarded step is open or waits for its turn (the start-up of a card program is under way: the labs are not settled; tests, the benchmark's waits)
 bool gpuGuardBusy();
+
+// 0.68.0: the helper process (render/vk_helper.cpp): f is told of every guarded step of this process (what: 0 begun, 1 ended with result, 2 failed with
+// why, 3 timed out), before PL_GPU_DIE could end it; null: none
+void gpuGuardObserve(void (*f)(int what, const std::string& step, const std::string& result));
 
 // the file helpers (tests): write a whole small file and commit it to disk (C runtime flush, then _commit on Windows, fsync elsewhere)
 bool writeCommitted(const std::string& path, const std::string& text);

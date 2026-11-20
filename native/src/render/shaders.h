@@ -2697,4 +2697,327 @@ void main() {
 }
 )";
 
+// 0.68.0: the Orbit Lab's trails, orbits and distance rings on the card (Vulkan; render/lines_card.h, orbit/orbit_lines.h). The processor's LinePen
+// (orbit/orbit_lines.cpp) is the reference: each polyline's points (a trail's points, an orbit's 257 corners, a ring's 97) are kept on the card as two
+// floats each (a high and a low part of the double, so a point minus the view's reference point C is exact to single precision of that difference); a
+// piece from point i - 1 to point i is projected as orbit_view's proj() (the same turn, mild perspective and offsets, worked out about C), and a piece
+// that is long on the picture and near it is drawn as the processor does: a trail as a Catmull-Rom curve through its neighbours, an orbit from its
+// ellipse, each in min(4096, ceil(L / 4)) steps. kLinesCS: step 0 each piece's ends on the picture and its number of steps; step 1 the offsets (one
+// workgroup's prefix sum) and the draw's vertex count; step 2 (the start-up check only) every step's point. kLinesVS: six corners a step, the step
+// clipped to the picture with a 20-point margin and widened as Renderer2D::line, drawn with kFragmentShader (mode 0).
+static const char* const kLinesHeadCSPart = R"(#version 430 core
+layout(local_size_x = 256) in;
+struct Run { uvec4 a; ivec4 b; ivec4 c; vec4 colour; vec4 style; vec4 tailHi; vec4 tailLo; vec4 pa; vec4 qb; };
+layout(std430, binding = 0) readonly buffer Pts { vec4 pts[]; };
+layout(std430, binding = 1) readonly buffer Runs { Run runs[]; };
+layout(std430, binding = 2) buffer Off { uint off[]; };
+layout(std430, binding = 3) buffer Scr { vec4 scr[]; };
+layout(std430, binding = 4) buffer Ind { uint ind[]; };
+layout(std430, binding = 5) buffer Chk { vec2 chk[]; };
+uniform int uStep;
+)";
+// run.a: the first slot of its points, the ring's size, the ring's start, the points (n); run.b: its first and last piece, its kind (0 straight, 1 a
+// trail: point n is the body itself, tail; 2 an orbit), its first piece among all; run.c.x: the slot of the unit circle's 257 corners (orbits);
+// style.x: the width; pa, qb: an orbit's P a and Q b (m) and (qb.w) the step of E between corners
+static const char* const kLinesPart = R"(
+uniform vec3 uCHi;
+uniform vec3 uCLo;
+uniform vec4 uRot;
+uniform vec4 uProj;
+uniform vec4 uScr;
+uniform vec4 uView;
+uniform ivec4 uN;
+int runOf(int g) {
+    int lo = 0, hi = uN.x - 1;
+    while (lo < hi) { int mid = (lo + hi + 1) / 2; if (runs[mid].b.w <= g) lo = mid; else hi = mid - 1; }
+    return lo;
+}
+void pointHL(int r, int i, out vec3 hi, out vec3 lo) {
+    uvec4 a = runs[r].a;
+    int n = int(a.w);
+    if (runs[r].b.z == 1 && i >= n) { hi = runs[r].tailHi.xyz; lo = runs[r].tailLo.xyz; return; }
+    int k = clamp(i, 0, n - 1);
+    uint s = a.x + (a.z + uint(k)) % a.y;
+    hi = pts[2u * s].xyz; lo = pts[2u * s + 1u].xyz;
+}
+vec3 pointOf(int r, int i) {
+    vec3 h = vec3(0.0), l = vec3(0.0);
+    pointHL(r, i, h, l);
+    precise vec3 d = (h - uCHi) + (l - uCLo);
+    return d;
+}
+vec2 project(vec3 v) {
+    float x1 = v.x * uRot.x - v.y * uRot.y;
+    float y1 = v.x * uRot.y + v.y * uRot.x;
+    float y2 = y1 * uRot.z - v.z * uRot.w;
+    float dep = y1 * uRot.w + v.z * uRot.z;
+    float fm1 = 0.0;
+    if (uProj.w > 0.5) { float x = uProj.z + dep; float den = uProj.y - x; fm1 = den > 0.05 * uProj.y ? x / den : 19.0; }
+    float f = 1.0 + fm1;
+    return vec2(uScr.x + uScr.z * fm1 + uProj.x * f * x1, uScr.y - uScr.w * fm1 - uProj.x * f * y2);
+}
+int steps(int r, int i, vec2 qa, vec2 qc) {
+    float L = length(qc - qa);
+    float mg = 20.0 + L / 4.0;
+    bool near = max(qa.x, qc.x) > -mg && min(qa.x, qc.x) < uView.x + mg && max(qa.y, qc.y) > -mg && min(qa.y, qc.y) < uView.y + mg;
+    if (!near || !(L > 6.0)) return 1;
+    int k = int(min(4096.0, ceil(L / 4.0)));
+    int kind = runs[r].b.z;
+    if (kind == 1 && i >= 2 && i <= int(runs[r].a.w)) return k;
+    if (kind == 2 && k >= 3) return k;
+    return 1;
+}
+vec2 stepPoint(int r, int i, vec2 qa, vec2 qc, int k, int j) {
+    if (j <= 0) return qa;
+    if (j >= k) return qc;
+    float t = float(j) / float(k);
+    if (runs[r].b.z == 1) {                      // the processor's Catmull-Rom curve, written from point a with the neighbours as steps from it (exact differences)
+        vec3 ah = vec3(0.0), al = vec3(0.0), ch = vec3(0.0), cl = vec3(0.0), h0 = vec3(0.0), l0 = vec3(0.0), h3 = vec3(0.0), l3 = vec3(0.0);
+        pointHL(r, i - 1, ah, al);
+        pointHL(r, i, ch, cl);
+        pointHL(r, i - 2, h0, l0);
+        precise vec3 A = (ah - uCHi) + (al - uCLo);
+        precise vec3 d1 = (ch - ah) + (cl - al);
+        precise vec3 d0 = (h0 - ah) + (l0 - al);
+        vec3 d3 = d1 * 2.0;                         // (p3 = c * 2 - a past the trail's end)
+        if (i + 1 <= int(runs[r].a.w)) { pointHL(r, i + 1, h3, l3); precise vec3 e3 = (h3 - ah) + (l3 - al); d3 = e3; }
+        float t2 = t * t;
+        float t3 = t2 * t;
+        vec3 v = A + ((d1 - d0) * t + (d0 * 2.0 + d1 * 4.0 - d3) * t2 + (d3 - d0 - d1 * 3.0) * t3) * 0.5;
+        return project(v);
+    }
+    uint cs = uint(runs[r].c.x) + uint(i - 1);
+    float cE = pts[2u * cs].x + pts[2u * cs + 1u].x;
+    float sE = pts[2u * cs].y + pts[2u * cs + 1u].y;
+    float h = runs[r].qb.w * float(j) / (2.0 * float(k));
+    float s = sin(h);
+    float ch = cos(h);
+    float sinM = sE * ch + cE * s;
+    float cosM = cE * ch - sE * s;
+    vec3 v = pointOf(r, i - 1) + runs[r].pa.xyz * (-2.0 * sinM * s) + runs[r].qb.xyz * (2.0 * cosM * s);
+    return project(v);
+}
+)";
+static const char* const kLinesMainCSPart = R"(
+shared uint part[256];
+void main() {
+    int N = uN.y;
+    if (uStep == 1) {
+        uint t = gl_LocalInvocationID.x;
+        uint n = uint(N);
+        uint per = (n + 255u) / 256u;
+        uint b0 = min(n, t * per);
+        uint b1 = min(n, b0 + per);
+        uint sum = 0u;
+        for (uint i = b0; i < b1; i++) sum += off[i];
+        part[t] = sum;
+        memoryBarrierShared();
+        barrier();
+        for (uint d = 1u; d < 256u; d <<= 1u) {
+            uint v = t >= d ? part[t - d] : 0u;
+            memoryBarrierShared();
+            barrier();
+            part[t] += v;
+            memoryBarrierShared();
+            barrier();
+        }
+        uint run = part[t] - sum;
+        for (uint i = b0; i < b1; i++) { uint c = off[i]; off[i] = run; run += c; }
+        if (t == 255u) { off[n] = part[255]; ind[0] = 6u * part[255]; ind[1] = 1u; ind[2] = 0u; ind[3] = 0u; }
+        return;
+    }
+    int g = int(gl_GlobalInvocationID.x);
+    if (g >= N) return;
+    int r = runOf(g);
+    int i = runs[r].b.x + (g - runs[r].b.w);
+    if (uStep == 0) {
+        vec2 qa = project(pointOf(r, i - 1));
+        vec2 qc = project(pointOf(r, i));
+        off[g] = uint(steps(r, i, qa, qc));
+        scr[g] = vec4(qa, qc);
+        return;
+    }
+    int k = int(off[g + 1] - off[g]);
+    for (int j = 1; j <= k; j++) { uint at = off[g] + uint(j - 1); if (at < uint(uN.z)) chk[at] = stepPoint(r, i, scr[g].xy, scr[g].zw, k, j); }
+}
+)";
+static const char* const kLinesHeadVSPart = R"(#version 450
+struct Run { uvec4 a; ivec4 b; ivec4 c; vec4 colour; vec4 style; vec4 tailHi; vec4 tailLo; vec4 pa; vec4 qb; };
+layout(std430, set = 1, binding = 0) readonly buffer Pts { vec4 pts[]; };
+layout(std430, set = 1, binding = 1) readonly buffer Runs { Run runs[]; };
+layout(std430, set = 1, binding = 2) readonly buffer Off { uint off[]; };
+layout(std430, set = 1, binding = 3) readonly buffer Scr { vec4 scr[]; };
+uniform vec2 uSize;
+out vec2 vUV;
+out vec4 vColor;
+out vec4 vParam;
+)";
+static const char* const kLinesMainVSPart = R"(
+bool clipSeg(vec2 a, vec2 b, out vec2 o0, out vec2 o1) {
+    float xa = -uView.z, ya = -uView.z, xb = uView.x + uView.z, yb = uView.y + uView.z;
+    vec2 d = b - a;
+    o0 = a; o1 = b;
+    if (a.x >= xa && a.x <= xb && b.x >= xa && b.x <= xb && a.y >= ya && a.y <= yb && b.y >= ya && b.y <= yb) return true;
+    float t0 = 0.0, t1 = 1.0;
+    for (int k = 0; k < 4; k++) {
+        float p = k == 0 ? -d.x : k == 1 ? d.x : k == 2 ? -d.y : d.y;
+        float q = k == 0 ? a.x - xa : k == 1 ? xb - a.x : k == 2 ? a.y - ya : yb - a.y;
+        if (p == 0.0) { if (q < 0.0) return false; }
+        else {
+            float r = q / p;
+            if (p < 0.0) { if (r > t1) return false; if (r > t0) t0 = r; }
+            else { if (r < t0) return false; if (r < t1) t1 = r; }
+        }
+    }
+    o0 = a + t0 * d; o1 = a + t1 * d;
+    return true;
+}
+void main() {
+    int v = gl_VertexIndex;
+    int s = v / 6;
+    int corner = v - s * 6;
+    int lo = 0, hi = uN.y;
+    while (hi - lo > 1) { int mid = (lo + hi) / 2; if (int(off[mid]) <= s) lo = mid; else hi = mid; }
+    int g = lo;
+    int k = int(off[g + 1] - off[g]);
+    int j = s - int(off[g]);
+    int r = runOf(g);
+    int i = runs[r].b.x + (g - runs[r].b.w);
+    vec2 qa = scr[g].xy, qc = scr[g].zw;
+    vec2 A = stepPoint(r, i, qa, qc, k, j);
+    vec2 B = stepPoint(r, i, qa, qc, k, j + 1);
+    vec2 P0 = A, P1 = B;
+    bool keep = clipSeg(A, B, P0, P1);
+    vec4 col = runs[r].colour;
+    float w = runs[r].style.x;
+    vec2 d = P1 - P0;
+    float len = length(d);
+    vec2 pos = vec2(-1.0e4, -1.0e4);
+    if (keep && len >= 1e-9) {
+        if (w < 1.0) { col.a *= w; w = 1.0; }
+        vec2 nrm = vec2(-d.y, d.x) / len * (w / 2.0);
+        bool end1 = corner == 1 || corner == 2 || corner == 4;
+        bool plus = corner == 0 || corner == 1 || corner == 3;
+        pos = (end1 ? P1 : P0) + (plus ? nrm : -nrm);
+    }
+    vUV = vec2(0.0); vColor = col; vParam = vec4(0.0);
+    gl_Position = vec4(pos.x / uSize.x * 2.0 - 1.0, 1.0 - pos.y / uSize.y * 2.0, 0.0, 1.0);
+}
+)";
+
+// 0.68.0: the Molecule Lab's Density surface on the card (Vulkan; render/surface_card.h, molecule/surface_draw.h). The surface's vertices (place, normal,
+// potential) and triangles stay on the card while the density stays (a vibration's new phase: sent once); kSurfaceCS turns and colours the vertices as
+// molecule_view.cpp did on the processor (step 0), keys each triangle by its depth as molecule/depth_order.h does (step 1: the float's bits made monotonic,
+// with the triangle's number) and sorts the keys far to near (steps 2 to 4: a bitonic sort by key, then number, so equal depths keep the processor's order
+// by number); kSurfaceVS draws the triangles in that order, each lit front or back by its winding on the picture, with kFragmentShader (mode 0).
+static const char* const kSurfaceCS = R"(#version 430 core
+layout(local_size_x = 256) in;
+layout(std430, binding = 0) readonly buffer Mesh { vec4 mesh[]; };
+layout(std430, binding = 1) readonly buffer Tri { uint tri[]; };
+layout(std430, binding = 2) buffer Vert { vec4 vert[]; };
+layout(std430, binding = 3) buffer Keys { uvec2 keys[]; };
+uniform int uStep;
+uniform ivec4 uN;
+uniform ivec2 uKJ;
+uniform vec4 uR0;
+uniform vec4 uR1;
+uniform vec4 uR2;
+uniform vec4 uCam;
+uniform vec4 uS;
+uniform vec4 uPlain;
+shared uvec2 sk[512];
+bool after(uvec2 a, uvec2 b) { return a.x > b.x || (a.x == b.x && a.y > b.y); }
+vec3 potColour(float t) {
+    float c = clamp(t, -1.0, 1.0);
+    vec3 e = c < 0.0 ? vec3(0.86, 0.16, 0.13) : vec3(0.15, 0.36, 0.90);
+    vec3 w = vec3(0.97, 0.97, 0.97);
+    return w + (e - w) * abs(c);
+}
+void localSort(int kFrom, int kTo, int jTop) {
+    uint t = gl_LocalInvocationID.x;
+    uint base = gl_WorkGroupID.x * 512u;
+    sk[t] = keys[base + t];
+    sk[t + 256u] = keys[base + t + 256u];
+    memoryBarrierShared();
+    barrier();
+    for (int k = kFrom; k <= kTo; k *= 2) {
+        for (int j = (jTop > 0 ? jTop : k / 2); j > 0; j /= 2) {
+            uint uj = uint(j);
+            uint i = (t / uj) * 2u * uj + (t % uj);
+            uint l = i + uj;
+            bool up = ((base + i) & uint(k)) == 0u;
+            uvec2 a = sk[i], b = sk[l];
+            if (up ? after(a, b) : after(b, a)) { sk[i] = b; sk[l] = a; }
+            memoryBarrierShared();
+            barrier();
+        }
+    }
+    keys[base + t] = sk[t];
+    keys[base + t + 256u] = sk[t + 256u];
+}
+void main() {
+    if (uStep == 2) { localSort(2, min(uN.z, 512), 0); return; }
+    if (uStep == 4) { localSort(uKJ.x, uKJ.x, 256); return; }
+    uint g = gl_GlobalInvocationID.x;
+    if (uStep == 0) {
+        if (g >= uint(uN.x)) return;
+        vec4 p = mesh[2u * g], n = mesh[2u * g + 1u];
+        float sx = uCam.z + (uR0.x * p.x + uR0.y * p.y + uR0.z * p.z + uCam.x) * uS.x;
+        float sy = uCam.w - (uR1.x * p.x + uR1.y * p.y + uR1.z * p.z + uCam.y) * uS.x;
+        float sz = uR2.x * p.x + uR2.y * p.y + uR2.z * p.z;
+        float vz = uR2.x * n.x + uR2.y * n.y + uR2.z * n.z;
+        float d = abs(vz);
+        float hl = pow(max(0.0, d), 24.0) * 0.15;
+        vec3 base = uS.z > 0.5 ? potColour(p.w / uS.y) : uPlain.rgb;
+        float k = 0.62 + 0.38 * d;
+        vert[2u * g] = vec4(sx, sy, sz, 0.0);
+        vert[2u * g + 1u] = vec4(min(vec3(1.0), base * k + vec3(hl)), 1.0);
+        return;
+    }
+    if (uStep == 1) {
+        if (g >= uint(uN.z)) return;
+        if (g < uint(uN.y)) {
+            float tz = vert[2u * tri[3u * g]].z + vert[2u * tri[3u * g + 1u]].z;
+            tz = tz + vert[2u * tri[3u * g + 2u]].z;
+            uint u = floatBitsToUint(tz);
+            keys[g] = uvec2((u & 0x80000000u) != 0u ? ~u : (u | 0x80000000u), g);
+        } else keys[g] = uvec2(0xFFFFFFFFu, g);
+        return;
+    }
+    if (g >= uint(uN.z)) return;
+    uint l = g ^ uint(uKJ.y);
+    if (l <= g) return;
+    bool up = (g & uint(uKJ.x)) == 0u;
+    uvec2 a = keys[g], b = keys[l];
+    if (up ? after(a, b) : after(b, a)) { keys[g] = b; keys[l] = a; }
+}
+)";
+static const char* const kSurfaceVSHeadPart = R"(#version 450
+layout(std430, set = 1, binding = 0) readonly buffer Vert { vec4 vert[]; };
+layout(std430, set = 1, binding = 1) readonly buffer Tri { uint tri[]; };
+layout(std430, set = 1, binding = 2) readonly buffer Keys { uvec2 keys[]; };
+uniform vec2 uSize;
+uniform vec2 uAlpha;
+out vec2 vUV;
+out vec4 vColor;
+out vec4 vParam;
+)";
+static const char* const kSurfaceVSMainPart = R"(
+void main() {
+    int v = gl_VertexIndex;
+    int k = v / 3;
+    int corner = v - 3 * k;
+    uint t = keys[k].y;
+    uint ia = tri[3u * t], ib = tri[3u * t + 1u], ic = tri[3u * t + 2u];
+    vec2 A = vert[2u * ia].xy, B = vert[2u * ib].xy, C = vert[2u * ic].xy;
+    float ex = (B.x - A.x) * (C.y - A.y) - (B.y - A.y) * (C.x - A.x);
+    uint me = corner == 0 ? ia : corner == 1 ? ib : ic;
+    vec4 col = vert[2u * me + 1u];
+    col.a = ex < 0.0 ? uAlpha.x : uAlpha.y;
+    vec2 pos = vert[2u * me].xy;
+    vUV = vec2(0.0); vColor = col; vParam = vec4(0.0);
+    gl_Position = vec4(pos.x / uSize.x * 2.0 - 1.0, 1.0 - pos.y / uSize.y * 2.0, 0.0, 1.0);
+}
+)";
+
 }  // namespace render

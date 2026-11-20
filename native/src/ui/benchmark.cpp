@@ -38,6 +38,8 @@
 #include "molecule/vibration.h"
 #include "orbit/belts.h"
 #include "orbit/ring_check.h"
+#include "orbit/lines_check.h"
+#include "molecule/surface_check.h"
 #include "atom/classic_check.h"
 #include "atom/nucdens_check.h"
 #include "orbit/units.h"
@@ -684,7 +686,8 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
     switch (t.kind) {
         case K::OrbitHeaviest: case K::OrbitRocks8: case K::OrbitHeaviestCpuRocks: case K::OrbitRocks8CpuRocks: case K::OrbitRealFast: case K::UiSettingsOpen:
             return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? (g_vk ? "the graphics card (Vulkan rock compute)" : "the graphics card (OpenGL 4.3 rock compute)") :   // (0.63.1: the API in use)
-                                                      !app.rocksOk ? (g_vk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (no OpenGL 4.3 rock compute on this PC)") : "the processor (GPU rocks switched off for this scene)");
+                                                      !app.rocksOk ? (g_vk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (no OpenGL 4.3 rock compute on this PC)") : "the processor (GPU rocks switched off for this scene)") +
+                   "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.68.0
         case K::OrbitSaturn: return orbit::ringCardPathText(g_vk);   // 0.64.0
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
@@ -711,8 +714,8 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
             return "";
         }
         case K::MoleculeDensity: case K::MoleculeVibDensity:          // 0.57.1
-            return molecule::molCardPaths().pathText(app.moleculeView.gpuCloud, app.computeOk) + "; the surface: the processor (its triangles " +
-                   (t.kind == K::MoleculeVibDensity ? "made again for each new phase of the swing, and sorted and coloured each frame)" : "sorted again and coloured each frame as the camera turns)");
+            return molecule::molCardPaths().pathText(app.moleculeView.gpuCloud, app.computeOk) + "; " + (molecule::surfaceCardState() == 1 || g_vk ? molecule::surfaceCardPathText(g_vk != nullptr) :   // 0.68.0
+                   std::string("the surface: the processor (its triangles ") + (t.kind == K::MoleculeVibDensity ? "made again for each new phase of the swing, and sorted and coloured each frame)" : "sorted again and coloured each frame as the camera turns)"));
         case K::BlackHole: case K::BlackHoleFilmTilt: case K::BlackHoleExtreme: case K::BlackHoleAllLight: {
             const auto it = b.bhByScene.find(runIdx);
             if (it != b.bhByScene.end() && !it->second.skyPath.empty()) return "the sky and disc: " + it->second.skyPath;
@@ -1245,8 +1248,22 @@ void benchmarkButton(AppState& app) {
 
 void benchmarkTestHook(AppState& app) {
     static int frames = 0;
+    // 0.68.0 (checks: the pictures of the card's programs against the processor's): PL_BENCH_SETUP=<id> sets up that scene as the benchmark does
+    // (orbit.heaviest, orbit.real_fast, orbit.earth, orbit.saturn, molecule.density, molecule.vib_density) at the third frame; the app then runs on as
+    // usual (PL_FIXED_DT: the same frames each run; the camera is not turned)
+    static const char* orbitScene = SDL_getenv("PL_BENCH_SETUP");
+    if (orbitScene && frames == 2) {
+        const std::string id = orbitScene;
+        if (id == "orbit.heaviest") orbitHeaviest(app);
+        else if (id == "orbit.real_fast") orbitRealFast(app);
+        else if (id == "orbit.earth") orbitClose(app, "Earth", kEarthZoom);
+        else if (id == "orbit.saturn") orbitClose(app, "Saturn", kSaturnZoom);
+        else if (id == "molecule.density") moleculeSetup(app, app::BenchKind::MoleculeDensity);
+        else if (id == "molecule.vib_density") moleculeSetup(app, app::BenchKind::MoleculeVibDensity);
+    }
     const char* v = SDL_getenv("PL_BENCH");
-    if (!v || ++frames != 5) return;
+    if (!v) { if (orbitScene) frames++; return; }
+    if (++frames != 5) return;
     st(app).allScenes = SDL_getenv("PL_BENCH_RISK") != nullptr || SDL_getenv("PL_BENCH_ALL") != nullptr;   // for automatic checks: ticks "All scenes"
     if (std::string(v) == "start") begin(app); else st(app).stage = BenchState::Stage::Ask;
 }

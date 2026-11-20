@@ -148,7 +148,7 @@ bool GpuGuard::hold() {
         if (!d_.guarded) return true;
         if (held_) return true;
         if (!helper_.empty() && gpuHelperPending(helper_)) {         // 0.67.0: its helper has not finished: a later frame
-            if (helperLogged_ != helper_) { helperLogged_ = helper_; line("(its first steps wait for the helper process that makes them first)", false); }
+            if (helperLogged_ != helper_) { helperLogged_ = helper_; line("(its first steps wait for the helper process that makes them first)", false); gpuHelperPrefer(helper_); }
             return false;
         } }
     if (!takeTurn(std::string(), false)) return false;
@@ -293,10 +293,22 @@ void GpuGuard::line(const std::string& text, bool commit) {
     std::fclose(f);
 }
 
+// 0.68.0: the helper process's observer (gpuGuardObserve): every guarded step begun, ended, failed or timed out in this process
+static void (*g_observer)(int what, const std::string& step, const std::string& result) = nullptr;
+void gpuGuardObserve(void (*f)(int what, const std::string& step, const std::string& result)) { g_observer = f; }
+
 void GpuGuard::begin(const std::string& step) {
     bool guarded = false;
+    std::string helper;
     {   std::lock_guard<std::mutex> g(mx_);
-        guarded = d_.guarded; }
+        guarded = d_.guarded; helper = helper_; }
+    if (guarded && !helper.empty()) {                                  // 0.68.0: a worker's step waits for the program's helper (the frame's steps begin with hold())
+        bool frame = false;
+        {   std::lock_guard<std::mutex> t(g_turnMx);
+            frame = g_frameSet && std::this_thread::get_id() == g_frame; }
+        const auto t0 = std::chrono::steady_clock::now();
+        while (!frame && gpuHelperPending(helper) && std::chrono::steady_clock::now() - t0 < std::chrono::seconds(120)) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
     if (guarded) {
         bool frame = false;
         {   std::lock_guard<std::mutex> t(g_turnMx);
@@ -311,6 +323,7 @@ void GpuGuard::begin(const std::string& step) {
     if (d_.guarded) open_++;
     if (d_.guarded) writeMarker(step);
     line("begin " + step, d_.guarded);
+    if (g_observer) g_observer(0, step, std::string());
     if (!die_.empty() && step.compare(0, die_.size(), die_) == 0) {
         line("(test switch PL_GPU_DIE: the process ends here, inside the step)", true);
         std::_Exit(3);
@@ -318,6 +331,7 @@ void GpuGuard::begin(const std::string& step) {
 }
 
 void GpuGuard::end(const std::string& step, const std::string& result) {
+    if (g_observer) g_observer(1, step, result);
     bool give = false;
     {   std::lock_guard<std::mutex> g(mx_);
         line("end " + step + (result.empty() ? std::string() : ": " + result), d_.guarded);
@@ -348,6 +362,7 @@ void GpuGuard::finished(bool ok, const std::string& why) {
 }
 
 void GpuGuard::timedOut(const std::string& step) {
+    if (g_observer) g_observer(3, step, std::string());
     {   std::lock_guard<std::mutex> g(mx_);
     held_ = false; open_ = 0;
     removeMarker();
@@ -359,6 +374,7 @@ void GpuGuard::timedOut(const std::string& step) {
 }
 
 void GpuGuard::failed(const std::string& step, const std::string& why) {
+    if (g_observer) g_observer(2, step, why);
     {   std::lock_guard<std::mutex> g(mx_);
     held_ = false; open_ = 0;
     removeMarker();
@@ -493,6 +509,16 @@ GpuGuard& gpuVkNucDensGuard() {   // 0.67.0
     return g;
 }
 
+GpuGuard& gpuVkLinesGuard() {   // 0.68.0
+    static GpuGuard g("gpu-vklines-step.txt", GpuGuard::kLog, false, "[vulkan] [lines] ", "The Orbit Lab's lines on Vulkan");
+    return g;
+}
+
+GpuGuard& gpuVkSurfaceGuard() {   // 0.68.0
+    static GpuGuard g("gpu-vksurface-step.txt", GpuGuard::kLog, false, "[vulkan] [surface] ", "The Density surface on Vulkan");
+    return g;
+}
+
 GpuGuard& gpuVulkanGuard() {
     static GpuGuard g("gpu-vulkan-step.txt", GpuGuard::kLog, true, "[vulkan] ", "Vulkan");
     return g;
@@ -511,7 +537,8 @@ std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards() {
                                                        {"slice", &gpuSliceGuard()}, {"jump", &gpuJumpGuard()}, {"molcloud", &gpuMolCloudGuard()},
                                                        {"lightpaths", &gpuGuard()}, {"sky", &gpuSkyGuard()}, {"lens", &gpuVkLensGuard()},   // (0.62.0)
                                                        {"rings", &gpuVkRingsGuard()}, {"classic", &gpuVkClassicGuard()},   // (0.64.0)
-                                                       {"nucdensity", &gpuVkNucDensGuard()}};   // (0.67.0)
+                                                       {"nucdensity", &gpuVkNucDensGuard()},   // (0.67.0)
+                                                       {"lines", &gpuVkLinesGuard()}, {"surface", &gpuVkSurfaceGuard()}};   // (0.68.0)
     g_vulkanGuards = was;
     return v;
 }

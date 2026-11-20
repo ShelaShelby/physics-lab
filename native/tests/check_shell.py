@@ -469,6 +469,21 @@ def part_gpuhelper(binary, work):
     check(sum(1 for l in log4.splitlines() if "the helper's detective work, kKerrTableCS variant" in l) == 5, "helper: each variant's line in the log")
     e = run_app(binary, work, "gh_var2", dict(nd, HOME=home2), frames=60, timeout=1200)
     check("PLGPUHELPER variant" not in e.out, "helper: the variants are not run again with the same driver")
+    # 0.68.0: every guarded program's pipelines and first small run made by a helper first; two programs whose helpers die (the lines' first small run, the
+    # surface's pipelines): the app runs on, only those two off (the settings keep them, the log names their steps), the rest passed in their helpers
+    home3 = os.path.join(os.path.abspath(work), "home_gh3"); subprocess.run(["rm", "-rf", home3]); os.makedirs(home3, exist_ok=True)
+    t = run_app(binary, work, "gh_two", {"HOME": home3, "PL_GRAPHICS": "vulkan", "PL_GPU_DIE": "the lines' first small run|the surface's pipelines"}, frames=300, timeout=1500)
+    log5, cfg5 = _settings_files(home3)
+    died = sorted(re.findall(r"PLGPUHELPER (\w+) died making ([^(]*) \(", t.out))
+    passed = re.findall(r"PLGPUHELPER (\w+) passed", t.out)
+    print(f"  died: {died}; passed: {passed}")
+    check(os.path.exists(t.bmp) and died == [("lines", "the lines' first small run"), ("surface", "the surface's pipelines")], f"helper: two helpers died, the app ran on to its last frame ({died})")
+    check(len(passed) == 13 and "lines" not in passed and "surface" not in passed, f"helper: the other 13 programs' helpers made their first steps ({len(passed)})")
+    check(_logged(log5, "[vulkan] [lines] ", "the helper died making the lines' first small run") and _logged(log5, "[vulkan] [surface] ", "the helper died making the surface's pipelines"),
+          "helper: the log names both programs and their steps")
+    offs = sorted(re.findall(r"gpuvk(\w+)=off ", cfg5))
+    check(offs == ["lines", "surface"], f"helper: only those two kept off in the settings ({offs})")
+    check("PLLINESCARD state=-1" in t.out, "helper: the Orbit Lab draws its lines on the processor")
 
 # 0.63.0 (Vulkan step 5): Vulkan the default, OpenGL the backup. A start with nothing chosen is on Vulkan; a settings file that chose OpenGL keeps it; each lab
 # opens on OpenGL and draws (a smoke check of the backup: the picture area is not empty).

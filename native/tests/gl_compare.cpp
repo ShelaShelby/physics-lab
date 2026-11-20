@@ -35,6 +35,10 @@
 #include "orbit/ring_check.h"
 #include "atom/classic_check.h"
 #include "atom/nucdens_check.h"
+#include "orbit/lines_check.h"
+#include "render/lines_card.h"
+#include "molecule/surface_check.h"
+#include "render/surface_card.h"
 #include "app/gpu_guard.h"
 #include "orbit/solar_system.h"
 

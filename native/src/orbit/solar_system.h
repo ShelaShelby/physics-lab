@@ -72,6 +72,8 @@ OrbitShape orbitOf(const Body& b);
 void orbitPath(const Body& b, int n, std::vector<Vec3>& out);
 // 0.46.6: the same ellipse from eccentric anomaly E0 to E1 only (n + 1 points), for drawing the visible stretch finely when zoomed in
 void orbitPath(const Body& b, double E0, double E1, int n, std::vector<Vec3>& out);
+// 0.68.0: that ellipse's axes (orbitPath's own numbers): towards the perihelion P, Q in its plane, a, e and b; false when it is not bound
+bool orbitAxes(const Body& b, Vec3& P, Vec3& Q, double& a, double& e, double& bAx);
 
 // Real planets: the Sun's own path (its position from the barycentre) is kept as a trail with a point every 0.05 Sun radii of travel, at most 1,000 points.
 constexpr double kSunTrailStep = 0.05 * units::kSunRadius;

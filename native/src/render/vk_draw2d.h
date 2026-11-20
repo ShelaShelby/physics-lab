@@ -70,7 +70,7 @@ inline void vkMemoryBarrier2(VkCommandBuffer cb, VkPipelineStageFlags2 ss, VkAcc
 
 class VkDraw2D {
 public:
-    enum Prog { kTri, kPlanet, kSquare, kBlob, kMesh, kComposite, kGray, kCloud, kMolDot, kRings, kProgCount };   // 0.61.0: kCloud (kCloudVS), kMolDot (kMolDotVS), with kBlobFS; 0.64.0: kRings (kVertexShader, kRingsFS)
+    enum Prog { kTri, kPlanet, kSquare, kBlob, kMesh, kComposite, kGray, kCloud, kMolDot, kRings, kLine, kSurf, kProgCount };   // 0.61.0: kCloud (kCloudVS), kMolDot (kMolDotVS), with kBlobFS; 0.64.0: kRings (kVertexShader, kRingsFS); 0.68.0: kLine (kLinesVS, kFragmentShader), kSurf (kSurfaceVS, kFragmentShader)
     enum Blend { kNoBlend, kNormal, kAdditive, kPremul, kOneOne, kBlendCount };   // as Renderer2D::end: normalBlend; additive blobs; premultiplied over; GL_ONE, GL_ONE
     enum Pass { kPassMs, kPass8, kPassF, kPassCount };                        // the picture (S samples), an 8-bit picture of 1 sample, the cloud's float picture
 
@@ -114,6 +114,9 @@ public:
     // with the dots' places (binding 1, 3 floats) and groups (binding 2, one byte, read as a float as OpenGL's GL_UNSIGNED_BYTE), kMolDot with the dots made
     // by kMolDotsCS (binding 1, 4 floats); the corners at binding 0
     void drawInst(Prog p, Blend b, VkBuffer inst1, VkBuffer inst2, int instances);
+    // 0.68.0: the programs whose vertex shader reads storage buffers (a second descriptor set, four buffers; a null one takes the first's place): the
+    // Orbit Lab's lines (kLine, its vertex count from the card: indirect) and the Molecule Lab's Density surface (kSurf, count vertices); the normal blend
+    void drawStorage(Prog p, const VkBuffer bufs[4], VkBuffer indirect, std::uint32_t count = 0);
     // kCloud and kMolDot are made when their card program is first built (their own guarded steps, render/vk_card.cpp), not at init: false, why says it
     // (0.64.0: kRings too, Saturn's rings per pixel, the normal blend only)
     bool addProgram(Prog p, std::string& why);
@@ -145,7 +148,8 @@ public:
 private:
     struct Targets { int w = 0, h = 0, s = 1; Img ms, pic, gray; };
     struct Layer { int w = 0, h = 0; Img img; };
-    struct Slot { Buf buf; VkDeviceSize used = 0; VkDescriptorPool pool = VK_NULL_HANDLE; std::uint32_t poolSets = 0; std::uint64_t frame = 0; };
+    struct Slot { Buf buf; VkDeviceSize used = 0; VkDescriptorPool pool = VK_NULL_HANDLE; std::uint32_t poolSets = 0; std::uint64_t frame = 0;
+                  VkDescriptorPool linesPool = VK_NULL_HANDLE; };   // (0.68.0: the lines' storage sets)
     struct Program { Block blk[2]; VkPipeline pipe[kPassCount][kBlendCount] = {}; };
     struct Mesh { Buf buf; bool used = false; };
 
@@ -172,6 +176,8 @@ private:
     VkFormat floatFormat_ = VK_FORMAT_R32G32B32A32_SFLOAT;
     VkDescriptorSetLayout setLayout_ = VK_NULL_HANDLE, presentSetLayout_ = VK_NULL_HANDLE;
     VkPipelineLayout layout_ = VK_NULL_HANDLE, presentLayout_ = VK_NULL_HANDLE;
+    VkDescriptorSetLayout linesSetLayout_ = VK_NULL_HANDLE;   // 0.68.0: kLine's set 1 (four storage buffers) and its pipeline layout
+    VkPipelineLayout linesLayout_ = VK_NULL_HANDLE;
     VkPipeline presentPipe_ = VK_NULL_HANDLE;
     VkSampler linearClamp_ = VK_NULL_HANDLE, nearestClamp_ = VK_NULL_HANDLE, mapSampler_ = VK_NULL_HANDLE;
     Program prog_[kProgCount];

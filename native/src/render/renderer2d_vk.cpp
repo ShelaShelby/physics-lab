@@ -23,12 +23,14 @@ bool logDrawKinds();
 
 static_assert(sizeof(MeshVertex) == 48, "the mesh's vertex input (render/vk_draw2d.cpp kMesh) is 48 bytes");
 static_assert(sizeof(Renderer2D::Blob) == 80, "the blobs' instance input (render/vk_draw2d.cpp kBlob) is 80 bytes");
+static_assert(VkDraw2D::kLine == 10 && VkDraw2D::kSurf == 11, "Renderer2D::linesProgram and surfaceProgram name kLine and kSurf by number (render/renderer2d.cpp)");
 
 void Renderer2D::useVulkan(VkDraw2D* d) {
     if (!d) useVulkanCards(nullptr);
     vk_ = d;
     vkMeshCreate_ = d ? +[](VkDraw2D* v, const void* p, std::size_t n) { return v->meshCreate(p, n); } : nullptr;
     vkMeshDelete_ = d ? +[](VkDraw2D* v, int id) { v->meshDelete(id); } : nullptr;
+    vkAddProgram_ = d ? +[](VkDraw2D* v, int p, std::string& why) { return v->addProgram(static_cast<VkDraw2D::Prog>(p), why); } : nullptr;   // 0.68.0
     if (!d) for (bool& m : vkMap_) m = false;
 }
 
@@ -39,6 +41,8 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     delete ringCard_; ringCard_ = nullptr;   // 0.64.0
     delete classicCard_; classicCard_ = nullptr;
     delete nucDensCard_; nucDensCard_ = nullptr;   // 0.67.0
+    delete linesCard_; linesCard_ = nullptr;   // 0.68.0
+    delete surfaceCard_; surfaceCard_ = nullptr;
     if (vkc_ || !c) {
         delete compute_; compute_ = nullptr; delete outline_; outline_ = nullptr; delete rocks_; rocks_ = nullptr;
         dropVkGlow(vkGlow_); vkGlow_ = nullptr;
@@ -54,6 +58,8 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
     vkRingCard_ = c ? +[](VkCards& v) { return makeVkRingCard(v); } : nullptr;
     vkClassicCard_ = c ? +[](VkCards& v) { return makeVkClassicCard(v); } : nullptr;
     vkNucDensCard_ = c ? +[](VkCards& v) { return makeVkNucDensCard(v); } : nullptr;   // 0.67.0
+    vkLinesCard_ = c ? +[](VkCards& v) { return makeVkLinesCard(v); } : nullptr;       // 0.68.0
+    vkSurfaceCard_ = c ? +[](VkCards& v) { return makeVkSurfaceCard(v); } : nullptr;
     rocksWhy_.clear();
     if (!c) return;
     std::string w;
@@ -117,6 +123,8 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
             if (classicOk_[i] && d.soft) { classicOk_[i] = 2; grids = true; }   // 0.65.0: the side view's Glow: its cells read back with the grids
         }
         else if (sg.kind == Kind::NucDens) classicOk_[i] = vkNucDensRecord(nucDensCard_, nucDraws_[std::size_t(sg.slot)]) ? 1 : 0;   // 0.67.0
+        else if (sg.kind == Kind::Lines) classicOk_[i] = vkLinesRecord(linesCard_, sg.slot, linesDraws_[std::size_t(sg.slot)]) ? 1 : 0;   // 0.68.0
+        else if (sg.kind == Kind::Surface) classicOk_[i] = vkSurfaceRecord(surfaceCard_, surfaceDraws_[std::size_t(sg.slot)]) ? 1 : 0;
         else if (sg.kind == Kind::Lens && vkbh_) {                             // 0.62.0: the Black Hole Lab's passes, before the frame (render/vk_blackhole.h)
             vkbh_->lens(lens_[std::size_t(sg.slot)], width_, height_, texW_[static_cast<int>(Map::Sky)], fbW, fbH);
             skyStats_ = vkbh_->skyStats(); glareStats_ = vkbh_->glareStats(); lensRedraws_ = vkbh_->redraws(); vkGlareBusy_ = vkbh_->glareBusy();
@@ -303,6 +311,35 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             V.setI(VkDraw2D::kBlob, "uPalLight", &zero, 1);
             V.setI(VkDraw2D::kBlob, "uSphN", &zero, 1);
             V.drawInst(VkDraw2D::kBlob, VkDraw2D::kNormal, vkNucDensSquares(nucDensCard_), VK_NULL_HANDLE, sg.count);
+            break;
+        }
+        case Kind::Lines: {                                                    // 0.68.0: the Orbit Lab's lines, as the card's steps laid them out (kLine)
+            VkBuffer bufs[4] = {};
+            VkBuffer ind = VK_NULL_HANDLE;
+            if (!classicOk_[si] || !vkLinesBuffers(linesCard_, sg.slot, bufs, ind)) break;
+            const LinesCamera& c = linesDraws_[std::size_t(sg.slot)].cam;
+            const int n[4] = {static_cast<int>(linesDraws_[std::size_t(sg.slot)].runs.size()), sg.count, 0, 0};
+            V.setF(VkDraw2D::kLine, "uSize", size, 2);
+            V.setF(VkDraw2D::kLine, "uCHi", c.cHi, 3); V.setF(VkDraw2D::kLine, "uCLo", c.cLo, 3); V.setF(VkDraw2D::kLine, "uRot", c.rot, 4);
+            V.setF(VkDraw2D::kLine, "uProj", c.proj, 4); V.setF(VkDraw2D::kLine, "uScr", c.scr, 4); V.setF(VkDraw2D::kLine, "uView", c.view, 4);
+            V.setI(VkDraw2D::kLine, "uN", n, 4);
+            const int zero = 0;
+            V.setI(VkDraw2D::kLine, "uMaskOn", &zero, 1);
+            V.setF(VkDraw2D::kLine, "uSpace", space, 3);
+            V.drawStorage(VkDraw2D::kLine, bufs, ind);
+            break;
+        }
+        case Kind::Surface: {                                                  // 0.68.0: the Density surface in the order the card sorted it (kSurf)
+            VkBuffer bufs[4] = {};
+            if (!classicOk_[si] || !vkSurfaceBuffers(surfaceCard_, bufs)) break;
+            const SurfaceView& sv = surfaceDraws_[std::size_t(sg.slot)].view;
+            const float alpha[2] = {sv.aFront, sv.aBack};
+            const int zero = 0;
+            V.setF(VkDraw2D::kSurf, "uSize", size, 2);
+            V.setF(VkDraw2D::kSurf, "uAlpha", alpha, 2);
+            V.setI(VkDraw2D::kSurf, "uMaskOn", &zero, 1);
+            V.setF(VkDraw2D::kSurf, "uSpace", space, 3);
+            V.drawStorage(VkDraw2D::kSurf, bufs, VK_NULL_HANDLE, static_cast<std::uint32_t>(3 * sg.count));
             break;
         }
         case Kind::CloudClassic: {                                             // 0.64.0: the squares kClassicCS wrote, in the processor's order (kBlob)

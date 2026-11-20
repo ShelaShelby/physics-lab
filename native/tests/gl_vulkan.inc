@@ -581,6 +581,44 @@ static void vkNucDens(render::NucDensCard& vk) {
     }
 }
 
+// 0.68.0: the Orbit Lab's lines (kLinesCS) against the processor's LinePen (orbit/orbit_lines.h): the app's start-up check (orbit/lines_check.h)
+static void vkLines(render::LinesCard& vk) {
+    std::string why;
+    check("Vulkan lines: the program is made (" + why + ")", vk.build(why));
+    for (const orbit::LinesCase& c : orbit::linesCheckCases()) {
+        std::vector<std::vector<double>> pens;
+        orbit::linesCpu(c, pens);
+        long total = 0;
+        for (const auto& p : pens) total += long(p.size() / 5);
+        render::LinesDraw d = orbit::linesDrawOf(c);
+        d.checkRoom = int(2 * total + 4096);
+        std::vector<float> ends, pts;
+        std::vector<std::uint32_t> offs;
+        const int j = vk.beginCheck(d);
+        const bool done = j > 0 && vkt::poll([&] { return vk.pollCheck(j, ends, offs, pts); }) == render::JobState::Done;
+        const orbit::LinesCompare k = orbit::compareLines(c, d, pens, ends, offs, pts);
+        std::printf("Vulkan lines, %s: %s\n", c.name, orbit::linesCompareText(k).c_str());
+        check(std::string("Vulkan lines, ") + c.name + ": every run's points, in the processor's number, within the start-up check's limits", done && k.ok());
+    }
+}
+
+// 0.68.0: the Density surface (kSurfaceCS) against the processor's (molecule/surface_draw.h): the app's start-up check (molecule/surface_check.h)
+static void vkSurface(render::SurfaceCard& vk) {
+    std::string why;
+    check("Vulkan surface: the program is made (" + why + ")", vk.build(why));
+    const std::vector<molecule::SurfaceCase> cases = molecule::surfaceCheckCases();
+    check("Vulkan surface: the check's three surfaces were made (the density files)", cases.size() == 3);
+    for (const molecule::SurfaceCase& c : cases) {
+        std::vector<float> verts;
+        std::vector<std::uint32_t> order;
+        const int j = vk.beginCheck(molecule::surfaceDrawOf(c));
+        const bool done = j > 0 && vkt::poll([&] { return vk.pollCheck(j, verts, order); }) == render::JobState::Done;
+        const molecule::SurfaceCompare k = molecule::compareSurface(c, verts, order);
+        std::printf("Vulkan surface, %s: %s\n", c.name.c_str(), molecule::surfaceCompareText(k).c_str());
+        check("Vulkan surface, " + c.name + ": every vertex's place and colour, and the order, within the start-up check's limits", done && k.ok());
+    }
+}
+
 // 0.65.0: as the app's frame does (renderer2d_vk.cpp): a program's first full use ends once its batch has finished, which gives the guards' turn back
 // (0.63.0's one-step-at-a-time rule). Without it the next program's first use waited for the turn for ever here (the outline's, rocks' and Glow grid's steps).
 static void settle(render::VkCards& cards, render::IGroupCompute* g, render::IOutlineCompute* o, render::IRockCompute* r, render::VkGlow* w) {
@@ -626,6 +664,12 @@ static void vulkanTwins(render::Renderer2D& R) {
         render::NucDensCard* nd = render::makeVkNucDensCard(cards);             // 0.67.0
         vkNucDens(*nd);
         delete nd;
+        render::LinesCard* ln = render::makeVkLinesCard(cards);                 // 0.68.0
+        vkLines(*ln);
+        delete ln;
+        render::SurfaceCard* sf = render::makeVkSurfaceCard(cards);             // 0.68.0
+        vkSurface(*sf);
+        delete sf;
         vkBlackHole(cards, R, h.f64);                                            // 0.62.0
         delete g; delete o; delete r; delete a; delete m;
         cards.collect();

@@ -424,7 +424,11 @@ if(PL_BUILD_APP)
                       # 0.64.0: Saturn's rings per pixel and their probe (the start-up check)
                       "rings_frag:kRingsHeadFSPart+kRingsPart+kRingsMainFSPart" "ringprobe_comp:kRingsHeadCSPart+kRingsPart+kRingsMainCSPart"
                       "classic_comp:kClassicCS"   # 0.64.0: the Classic dots from the cloud buffer
-                      "nucdens_comp:kNucDensCS")   # 0.67.0: the nucleus' Density look
+                      "nucdens_comp:kNucDensCS"   # 0.67.0: the nucleus' Density look
+                      # 0.68.0: the Orbit Lab's lines (the compute steps and the vertex shader that draws them, Vulkan only: storage buffers in set 1)
+                      "lines_comp:kLinesHeadCSPart+kLinesPart+kLinesMainCSPart" "lines_vert:kLinesHeadVSPart+kLinesPart+kLinesMainVSPart"
+                      # 0.68.0: the Molecule Lab's Density surface (turned, coloured and sorted on the card; its vertex shader Vulkan only)
+                      "surface_comp:kSurfaceCS" "surface_vert:kSurfaceVSHeadPart+kSurfaceVSMainPart")
   foreach(pair ${PL_VK2D_SHADERS})
     string(REPLACE ":" ";" parts ${pair})
     list(GET parts 0 shId)
@@ -467,6 +471,8 @@ if(PL_BUILD_APP)
     src/render/vk_draw2d.cpp
     src/render/renderer2d_vk.cpp
     src/render/vk_card.cpp
+    src/render/vk_lines.cpp
+    src/render/vk_surface.cpp
     src/render/vk_blackhole.cpp
     src/render/vk_helper.cpp
     src/render/gl_loader.cpp
@@ -483,6 +489,9 @@ if(PL_BUILD_APP)
     src/blackhole/sky_card.cpp
     src/orbit/belt_layer.cpp
     src/orbit/orbit_view.cpp
+    src/orbit/orbit_lines.cpp
+    src/orbit/lines_check.cpp
+    src/molecule/surface_check.cpp
     src/orbit/ring_check.cpp
     src/atom/classic_check.cpp
     src/atom/nucdens_check.cpp
@@ -538,9 +547,9 @@ if(PL_BUILD_APP)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
   if(TARGET gl_compare_tests)                            # 0.61.0: the card programs on Vulkan in the same test program (tests/gl_vulkan.inc)
-    target_sources(gl_compare_tests PRIVATE src/orbit/ring_check.cpp src/atom/classic_check.cpp src/atom/nucdens_check.cpp src/render/vk_helper.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp ${PL_VK_SHADER_HEADERS})
+    target_sources(gl_compare_tests PRIVATE src/orbit/ring_check.cpp src/atom/classic_check.cpp src/atom/nucdens_check.cpp src/orbit/orbit_lines.cpp src/orbit/lines_check.cpp src/render/vk_lines.cpp src/molecule/surface_check.cpp src/render/vk_surface.cpp src/render/vk_helper.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp ${PL_VK_SHADER_HEADERS})
     target_include_directories(gl_compare_tests PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
-    target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core blackhole_core volk::volk)
+    target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core blackhole_core orbit_core volk::volk)
     target_compile_definitions(gl_compare_tests PRIVATE PL_VK_TESTS=1)
     # 0.65.0: the card programs on Vulkan against the processor (PL_VK_ONLY=1: the Vulkan part alone), so it cannot silently break again
     add_test(NAME gl_vulkan_cards COMMAND gl_compare_tests ${CMAKE_BINARY_DIR}/gl_pictures)
@@ -601,7 +610,7 @@ if(PL_BUILD_APP)
       # ui_orbit: the Orbit Lab: every control of INVENTORY.md, the data sheet words, Time panel, chip, readability, links, Most realistic; 0.50: no rim of air, a dark night side
       add_test(NAME ui_orbit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit
                check_orbit_ui.py:coverage check_orbit_ui.py:card check_orbit_ui.py:time check_orbit_ui.py:chip check_orbit_ui.py:readable check_orbit_ui.py:links check_orbit_ui.py:journey check_orbit_ui.py:farnote check_orbit_ui.py:airedge check_orbit_ui.py:nightside
-               check_orbit_ui.py:rings check_025.py:orbit)
+               check_orbit_ui.py:rings check_orbit_ui.py:cardlines check_025.py:orbit)
       set_tests_properties(ui_orbit PROPERTIES TIMEOUT 3600)
       # ui_atom_panel: the Atom Lab Controls panel against the old panel's saved states
       add_test(NAME ui_atom_panel COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_panel
@@ -621,7 +630,7 @@ if(PL_BUILD_APP)
       add_test(NAME ui_molecule COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_molecule
                check_molecule.py check_realistic.py check_audit19.py:molbar check_022.py:molbar check_023.py:vib check_024.py:densvib
                check_024.py:densfit check_024.py:nobuild check_025.py:molecule check_025.py:guide check_layout020.py:molpan check_022s7.py:space
-               check_molecule.py:rotation check_molecule.py:anharm check_molecule.py:card)
+               check_molecule.py:rotation check_molecule.py:anharm check_molecule.py:card check_molecule.py:cardsurface)
       set_tests_properties(ui_molecule PROPERTIES TIMEOUT 3600)
       # ui_blackhole (0.55.0): the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, layout, look,
       # and the card's bent sky against the double-precision reference; 0.55.2: spin; 0.55.3: the looks; 0.55.4: truelight (the true exposure, the eye's glare);

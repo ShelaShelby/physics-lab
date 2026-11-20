@@ -363,6 +363,8 @@ void Renderer2D::shutdown() {
     delete ringCard_; ringCard_ = nullptr;   // 0.64.0
     delete classicCard_; classicCard_ = nullptr;
     delete nucDensCard_; nucDensCard_ = nullptr;   // 0.67.0
+    delete linesCard_; linesCard_ = nullptr;   // 0.68.0
+    delete surfaceCard_; surfaceCard_ = nullptr;
     if (molCard_) { molCard_->reset(); delete molCard_; molCard_ = nullptr; }      // 0.57.1
     for (GLuint* tx : {&maskTex_, &whiteTex_, &lowTex_[0], &lowTex_[1], &lowTex_[2], &lowTex_[3]}) if (*tx) { glDeleteTextures(1, tx); *tx = 0; }
     for (GLuint& tx : expTex_) glDeleteTextures(1, &tx);
@@ -450,6 +452,8 @@ void Renderer2D::begin(double w, double h) {
     ringDraws_.clear();
     classicDraws_.clear();
     nucDraws_.clear();
+    linesDraws_.clear();
+    surfaceDraws_.clear();
     lens_.clear();
     segments_.clear();
     triStart_ = 0;
@@ -1501,6 +1505,46 @@ bool Renderer2D::nucDensity(const NucDensDraw& d) {   // 0.67.0
     sg.kind = Kind::NucDens; sg.slot = static_cast<int>(nucDraws_.size()); sg.count = d.G * d.G;
     segments_.push_back(sg);
     nucDraws_.push_back(d);
+    return true;
+}
+
+LinesCard* Renderer2D::linesCard() {   // 0.68.0
+    if (!linesCard_ && vk_ && vkc_ && vkLinesCard_) linesCard_ = vkLinesCard_(*vkc_);
+    return linesCard_;
+}
+
+bool Renderer2D::lines(const LinesDraw& d) {   // 0.68.0
+    if (!linesCard_ || !linesCard_->ready || d.pieces <= 0 || d.runs.empty()) return false;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::Lines; sg.slot = static_cast<int>(linesDraws_.size()); sg.count = d.pieces;
+    segments_.push_back(sg);
+    linesDraws_.push_back(d);
+    return true;
+}
+
+// 0.68.0: the drawing programs of the lines and the surface (kLine, kSurf: render/vk_draw2d.h), made by their guards' pipeline steps with the card's steps
+bool Renderer2D::linesProgram(std::string& why) {
+    if (!vk_ || !vkAddProgram_) { why = "no Vulkan"; return false; }
+    return vkAddProgram_(vk_, 10, why);                  // (VkDraw2D::kLine)
+}
+bool Renderer2D::surfaceProgram(std::string& why) {
+    if (!vk_ || !vkAddProgram_) { why = "no Vulkan"; return false; }
+    return vkAddProgram_(vk_, 11, why);                  // (VkDraw2D::kSurf)
+}
+
+SurfaceCard* Renderer2D::surfaceCard() {   // 0.68.0
+    if (!surfaceCard_ && vk_ && vkc_ && vkSurfaceCard_) surfaceCard_ = vkSurfaceCard_(*vkc_);
+    return surfaceCard_;
+}
+
+bool Renderer2D::surface(const SurfaceDraw& d) {   // 0.68.0
+    if (!surfaceCard_ || !surfaceCard_->ready || d.mesh.nv <= 0 || d.mesh.nt <= 0) return false;
+    closeTriangles();
+    Segment sg{};
+    sg.kind = Kind::Surface; sg.slot = static_cast<int>(surfaceDraws_.size()); sg.count = d.mesh.nt;
+    segments_.push_back(sg);
+    surfaceDraws_.push_back(d);
     return true;
 }
 

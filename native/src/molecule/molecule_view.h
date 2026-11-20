@@ -3,6 +3,7 @@
 // so the whole molecule is ONE instanced draw call (ball: a lit sphere-like gradient disc; stick: a line blob). Nothing is allocated per frame once the buffers have grown.
 #pragma once
 
+#include "molecule/surface_draw.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -41,6 +42,7 @@ struct RealCache {
     double potRange = 0;                     // the symmetric colour scale: -potRange..+potRange au (max |V| on this surface)
     double dotsMs = 0, meshMs = 0;           // how long the last rebuilds took (for the report)
     unsigned revision = 0;                   // goes up whenever the mesh is rebuilt
+    std::uint64_t meshEpoch = 0;             // 0.68.0: a number no other mesh of this run has had (the card keeps the surface it was last sent by it)
     bool ensure(const std::string& id, int dotsN, int isoIdx, const Molecule& m, int vibMode = -1, double vibS = 0);   // false: no data for this molecule (or the molecule is not drawn in the stored frame)
     // 0.24: vibrating (vibMode >= 0 and a vibrating density for it): the surface from the density blended at vibS (dens::blendVib) every time vibS changes, the dots from
     // kVibLevels fixed moments of the swing (made once each, when first needed); the colour scale stays the still surface's
@@ -212,7 +214,7 @@ struct MoleculeLab {
 
 render::Color realPotColour(double t);       // 0.21: the surface's potential colours (t = V / range, -1 red .. 0 white .. +1 blue), also for the panel's colour bar
 
-struct ViewStats { int atoms = 0, sticks = 0, blobs = 0, labels = 0, stubs = 0, dots = 0, triangles = 0; double cpuMs = 0; bool resorted = false, cloudCard = false; const char* mode = "viewer"; };   // (0.57.1 cloudCard: the cloud was drawn by the card)   // (mode: viewer / realistic; stubs: open valences drawn. 0.21: mode realistic; dots and surface triangles drawn; resorted: the triangles were sorted again this frame)
+struct ViewStats { int atoms = 0, sticks = 0, blobs = 0, labels = 0, stubs = 0, dots = 0, triangles = 0; double cpuMs = 0; bool resorted = false, cloudCard = false, surfaceCard = false; const char* mode = "viewer"; };   // (0.57.1 cloudCard: the cloud was drawn by the card)   // (mode: viewer / realistic; stubs: open valences drawn. 0.21: mode realistic; dots and surface triangles drawn; resorted: the triangles were sorted again this frame)
 
 class MoleculeView {
 public:
@@ -226,12 +228,7 @@ private:
     void drawLabels(ImDrawList* text, double uiScale, const Molecule& m);
     // the Realistic picture's per-frame buffers (kept: nothing is allocated once they have grown)
     std::vector<atom::GlowDot> glow_;
-    std::vector<float> sx_, sy_, sz_;                // the surface's vertices on screen (points) and their depth (angstrom, bigger = nearer)
-    std::vector<render::Color> vc_;                  // each vertex's shaded colour (front face)
-    std::vector<float> tz_;                          // each triangle's depth
-    std::vector<int> order_;                         // the triangles far to near
-    std::vector<int> rtmp_;                          // 0.66.0: the radix sort's other buffer and its keys
-    std::vector<std::uint32_t> rkey_, rkey2_;
+    SurfaceCpu surf_;                                // 0.68.0 (molecule/surface_draw.h): the surface on the processor: its vertices on screen, depths, order, colours
     double expo_ = 0;                                // the cloud's exposure, smoothed over frames (as the Atom Lab's)
     std::vector<std::vector<atom::GlowDot>> near_;   // 0.57.1: the card's cloud: the dots that can reach a nucleus, and the nuclei (for the exposure's cap; kept until the frame's end)
     std::vector<std::array<double, 2>> cores_;

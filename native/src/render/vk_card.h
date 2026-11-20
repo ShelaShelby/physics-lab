@@ -52,7 +52,7 @@ public:
     struct Buf { VkBuffer b = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; void* map = nullptr; VkDeviceSize size = 0; };
     struct Kernel { VkShaderModule mod = VK_NULL_HANDLE; VkDescriptorSetLayout dsl = VK_NULL_HANDLE; VkPipelineLayout pl = VK_NULL_HANDLE; VkPipeline pipe = VK_NULL_HANDLE;
                     VkUniforms u; std::vector<int> storage; bool graphics = false; };
-    enum Consumer : unsigned { kToCompute = 1, kToVertex = 2, kToHost = 4, kToTransfer = 8 };
+    enum Consumer : unsigned { kToCompute = 1, kToVertex = 2, kToHost = 4, kToTransfer = 8, kToIndirect = 16 };   // (0.68.0: an indirect draw's count)
 
     ~VkCards();
     // the command pool and what every batch needs; d2: the renderer's Vulkan drawing (its frames keep replaced buffers alive), null in the tests.
@@ -169,6 +169,19 @@ class NucDensCard; struct NucDensDraw;
 NucDensCard* makeVkNucDensCard(VkCards& c);
 bool vkNucDensRecord(NucDensCard* c, const NucDensDraw& d);
 VkBuffer vkNucDensSquares(NucDensCard* c);
+// 0.68.0: the Orbit Lab's lines (render/lines_card.h): made, the store's new points and steps 0 and 1 recorded into the frame's batch for segment seg,
+// the buffers the frame's draw reads (the points, the runs, the offsets, the ends; the draw's count)
+class LinesCard; struct LinesDraw;
+LinesCard* makeVkLinesCard(VkCards& c);
+bool vkLinesRecord(LinesCard* c, int seg, const LinesDraw& d);
+bool vkLinesBuffers(LinesCard* c, int seg, VkBuffer bufs[4], VkBuffer& indirect);
+bool forcedFail(const char* name);                           // PL_VK_CARDFAIL=<name> (tests)
+// 0.68.0: the Molecule Lab's Density surface (render/surface_card.h): made, the surface (when new) and its steps recorded into the frame's batch, the
+// buffers the frame's draw reads (the vertices on the picture, the triangles, the order)
+class SurfaceCard; struct SurfaceDraw;
+SurfaceCard* makeVkSurfaceCard(VkCards& c);
+bool vkSurfaceRecord(SurfaceCard* c, const SurfaceDraw& d);
+bool vkSurfaceBuffers(SurfaceCard* c, VkBuffer bufs[4]);
 VkBuffer vkRockPositions(IRockCompute* r, int slot);         // the rocks' places on the card (VK_NULL_HANDLE: not a Vulkan object)
 VkBuffer vkJumpGroups(AtomCard* a);                          // the groups the jump's program made this frame
 // the Density cloud's frame: the dots made and the grid summed in the open batch (record), then, after the batch, the dots drawn (draw)

@@ -22,6 +22,8 @@
 #include "ring_card.h"
 #include "classic_card.h"
 #include "nucdens_card.h"
+#include "lines_card.h"
+#include "surface_card.h"
 #include "mesh.h"
 #include "outline_compute.h"
 #include "rock_compute.h"
@@ -74,6 +76,16 @@ public:
     // (the caller makes the processor's squares). nucDensRuns: how many times its steps ran (they run only when something changed)
     NucDensCard* nucDensCard();
     bool nucDensity(const NucDensDraw& d);
+    // 0.68.0: the Orbit Lab's trails, orbits and distance rings from the card (Vulkan only: nullptr otherwise); linesProgram makes the drawing program (the
+    // guard's pipeline step, with the card's steps); lines records one set of runs once its check passed (ready): false: not drawn (the caller's LinePen)
+    LinesCard* linesCard();
+    bool linesProgram(std::string& why);
+    bool lines(const LinesDraw& d);
+    // 0.68.0: the Molecule Lab's Density surface from the card (Vulkan only: nullptr otherwise); surfaceProgram makes its drawing program; surface records it
+    // once its check passed (ready): false: not drawn (the caller's triangles)
+    SurfaceCard* surfaceCard();
+    bool surfaceProgram(std::string& why);
+    bool surface(const SurfaceDraw& d);
     long nucDensRuns() const;
     void skyMath(const std::vector<float>& in, std::vector<float>& out) { if (vk_) { out.assign(in.size() / 12 * 8, 0.0f); return; } sky_.math(in, out, cmpVao_); }   // (tests; OpenGL's only)
     // 0.56.0: the last sky pass: its time on the card (GL_TIMESTAMP pairs, read back without waiting: a few frames old) for the whole picture and at the
@@ -335,7 +347,7 @@ public:
     bool glareBusy() const { return vk_ ? vkGlareBusy_ : glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // (0.62.0: Vulkan's mirrored each frame)   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
 private:
-    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic, NucDens };
+    enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic, NucDens, Lines, Surface };
     struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
@@ -488,6 +500,13 @@ private:
     NucDensCard* (*vkNucDensCard_)(VkCards&) = nullptr;   // 0.67.0
     NucDensCard* nucDensCard_ = nullptr;            // 0.67.0: owned
     std::vector<NucDensDraw> nucDraws_;             // this frame's (Segment::slot)
+    LinesCard* (*vkLinesCard_)(VkCards&) = nullptr;   // 0.68.0
+    bool (*vkAddProgram_)(VkDraw2D*, int, std::string&) = nullptr;   // 0.68.0: VkDraw2D::addProgram (render/renderer2d_vk.cpp)
+    LinesCard* linesCard_ = nullptr;                // 0.68.0: owned
+    std::vector<LinesDraw> linesDraws_;             // this frame's (Segment::slot: also the card's buffers of that draw)
+    SurfaceCard* (*vkSurfaceCard_)(VkCards&) = nullptr;   // 0.68.0
+    SurfaceCard* surfaceCard_ = nullptr;            // 0.68.0: owned
+    std::vector<SurfaceDraw> surfaceDraws_;         // this frame's (Segment::slot)
     std::vector<RingsDraw> ringDraws_;              // this frame's (Segment::slot)
     void (*vkDropCards_)(Renderer2D&) = nullptr;
     bool noCompute_ = false;

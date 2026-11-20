@@ -25,7 +25,10 @@ PAIRS = [("kVertexShader", "kFragmentShader"), ("kSquareVS", "kSquareFS"), ("kBl
 ASSEMBLED = {"kKerrSkyMathFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyMathPart"],
              "kKerrSkyFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyTracePart", "kKerrSkyMainPart"],
              # 0.64.0: Saturn's rings per pixel (Vulkan) and their probe (the start-up check)
-             "kRingsFS": ["kRingsHeadFSPart", "kRingsPart", "kRingsMainFSPart"], "kRingsProbeCS": ["kRingsHeadCSPart", "kRingsPart", "kRingsMainCSPart"]}
+             "kRingsFS": ["kRingsHeadFSPart", "kRingsPart", "kRingsMainFSPart"], "kRingsProbeCS": ["kRingsHeadCSPart", "kRingsPart", "kRingsMainCSPart"],
+             "kLinesCS": ["kLinesHeadCSPart", "kLinesPart", "kLinesMainCSPart"]}   # 0.68.0: the Orbit Lab's lines
+# 0.68.0: shaders written for Vulkan only (GLSL 450 with descriptor sets), compiled here as the build does (glslang -V, relaxed rules, the loose uniforms in a block)
+VULKAN_ONLY = {"kLinesVS": ["kLinesHeadVSPart", "kLinesPart", "kLinesMainVSPart"], "kSurfaceVS": ["kSurfaceVSHeadPart", "kSurfaceVSMainPart"]}
 # 0.56.0, SIZE: every shader's SPIR-V for OpenGL is measured as glslang writes it and with its size optimiser (-Os: every function inlined, as a driver
 # does; the 0.55.6 compute shader kKerrTableCS, which died at link on the owner's card, is 61 KB plain and 251 KB inlined). The per-pixel spinning hole
 # (kKerrSkyFS) inlined may not exceed SPIRV_ROOM times the largest inlined shader known to run on the owner's card (every shader of the app but
@@ -50,6 +53,12 @@ def main():
         if missing:
             print("FAIL %s: pieces missing: %s" % (name, missing)); return 1
         shaders[name] = "".join(shaders[q] for q in parts)
+    vk_only = {}
+    for name, parts in VULKAN_ONLY.items():
+        missing = [q for q in parts if q not in shaders]
+        if missing:
+            print("FAIL %s: pieces missing: %s" % (name, missing)); return 1
+        vk_only[name] = "".join(shaders[q] for q in parts)
     for q in [n for n in shaders if n.endswith("Part")]:
         del shaders[q]
     names = sorted(shaders)
@@ -90,6 +99,15 @@ def main():
                     print("FAIL %s as SPIR-V:\n%s%s%s" % (n, r.stdout, r.stderr, (v.stdout + v.stderr) if v else "")); failed += 1
                 else:
                     print("ok   %s as SPIR-V for OpenGL%s" % (n, ", validated by spirv-val" if v else " (spirv-val not installed)"))
+        for n, text in sorted(vk_only.items()):             # 0.68.0
+            p = os.path.join(d, n + ".vk.vert")
+            open(p, "w", encoding="utf-8").write(text)
+            spv = os.path.join(d, n + ".vk.spv")
+            r = subprocess.run([tool, "-V", "-R", "--aml", "--amb", "--sdub", "uDefault", "0", "2", "--target-env", "vulkan1.0", "-S", "vert", "-o", spv, p], capture_output=True, text=True)
+            if r.returncode != 0 or "WARNING" in r.stdout + r.stderr:
+                print("FAIL %s (Vulkan GLSL):\n%s%s" % (n, r.stdout, r.stderr)); failed += 1
+            else:
+                print("ok   %s (Vulkan GLSL 450, as SPIR-V)" % n)
         for v, f in PAIRS:
             r = subprocess.run([tool, "-l", paths[v], paths[f]], capture_output=True, text=True)
             if r.returncode != 0:

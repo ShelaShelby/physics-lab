@@ -11,6 +11,7 @@
 #include "atom/cloud_light.h"
 #include "molecule/mol_cloud.h"
 #include "molecule/molecule_card_paths.h"
+#include "molecule/surface_check.h"
 
 namespace molecule {
 namespace {
@@ -198,6 +199,7 @@ bool RealCache::ensure(const std::string& id, int nDots, int isoIdx, const Molec
         for (std::size_t v = 0; v + 2 < mesh.p.size(); v += 3) meshRadius = std::max(meshRadius, std::sqrt(double(mesh.p[v]) * mesh.p[v] + double(mesh.p[v + 1]) * mesh.p[v + 1] + double(mesh.p[v + 2]) * mesh.p[v + 2]));
         meshId = id; meshIso = isoIdx; meshVib = false;
         revision++;
+        meshEpoch = ++epochs;
         meshMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     }
     if (const dens::VibDensityMode* vm = vibMode >= 0 ? dens::vibDensity(id, vibMode) : nullptr) {   // 0.24: the density vibrating
@@ -211,6 +213,7 @@ bool RealCache::ensure(const std::string& id, int nDots, int isoIdx, const Molec
             potRange = keepRange;                                  // (the still surface's scale: the colours do not jump as the cloud moves)
             vibKeyS = vibS; vibKeyIso = isoIdx; meshVib = true;    // (back to still: the still surface is made again)
             revision++;
+            meshEpoch = ++epochs;
         }
         const int lv = std::clamp(static_cast<int>(std::lround((std::clamp(vibS, -1.0, 1.0) + 1) / 2 * (kVibLevels - 1))), 0, kVibLevels - 1);
         if (vibDots[lv].empty()) { dens::Data at; dens::blendVib(*data, *vm, -1 + 2.0 * lv / (kVibLevels - 1), at); dens::sampleDots(at, nDots, dens::kDotSeed, vibDots[lv], cdf); vibEpoch[lv] = ++epochs; }
@@ -223,14 +226,7 @@ bool RealCache::ensure(const std::string& id, int nDots, int isoIdx, const Molec
 }
 
 namespace {
-// the potential's colours: red = negative, white = zero, blue = positive (t = V / range, -1..1). The ends are drawing choices.
-render::Color potColour(double t) {
-    t = std::clamp(t, -1.0, 1.0);
-    const render::Color red{0.86f, 0.16f, 0.13f, 1}, blue{0.15f, 0.36f, 0.90f, 1}, white{0.97f, 0.97f, 0.97f, 1};
-    const render::Color& e = t < 0 ? red : blue;
-    const float a = static_cast<float>(std::fabs(t));
-    return {white.r + (e.r - white.r) * a, white.g + (e.g - white.g) * a, white.b + (e.b - white.b) * a, 1};
-}
+render::Color potColour(double t) { return surfacePotColour(t); }   // 0.68.0: molecule/surface_draw.h (the card's check uses it too)
 }  // namespace
 
 render::Color realPotColour(double t) { return potColour(t); }
@@ -317,49 +313,33 @@ void MoleculeView::drawRealistic(render::Renderer2D& r, MoleculeLab& L, const ap
     // 3. the density surface: translucent, lit, coloured by the potential; triangles far to near (painter's order: the renderer has no depth buffer). The order is
     // worked out again only when the view or the surface changed. Approximation: the surface as a whole is drawn over the cloud and the nuclei (they are not sorted together)
     const dens::Mesh& M = rc.mesh;
-    const std::size_t nv = M.p.size() / 3, nt = M.tri.size() / 3;
+    const std::size_t nt = M.tri.size() / 3;
+    const render::Color plain = light ? render::Color{0.62f, 0.68f, 0.78f, 1} : render::Color{0.80f, 0.84f, 0.90f, 1};
+    const float aFront = light ? 0.62f : 0.60f, aBack = light ? 0.15f : 0.15f;   // translucent, so the cloud shows through; the far (inner) side fainter, so the near side reads as the surface
+    stats_.surfaceCard = false;
+    if (surfaceOnCard(r)) {                                   // 0.68.0: turned, coloured, sorted and drawn by the card (molecule/surface_check.h); the surface sent once
+        render::SurfaceDraw d;
+        d.mesh.rev = rc.meshEpoch; d.mesh.p = M.p.data(); d.mesh.nrm = M.n.data(); d.mesh.value = M.value.data(); d.mesh.tri = M.tri.data();
+        d.mesh.nv = static_cast<int>(M.p.size() / 3); d.mesh.nt = static_cast<int>(nt);
+        d.view = surfaceView(R, px, py, cx, cy, s, L.set.realPot, rc.potRange, plain, aFront, aBack);
+        if (r.surface(d)) { stats_.surfaceCard = true; stats_.triangles = static_cast<int>(nt); return; }
+    }
     const double cam[14] = {R[0], R[1], R[2], R[3], R[4], R[5], R[6], R[7], R[8], px, py, cx, cy, s};
-    bool same = lastRev_ == rc.revision && sx_.size() == nv;
+    bool same = lastRev_ == rc.revision && surf_.sx.size() == M.p.size() / 3;
     for (int i = 0; i < 14 && same; i++) same = cam[i] == lastCam_[i];
     if (!same) {
-        sx_.resize(nv); sy_.resize(nv); sz_.resize(nv);
-        for (std::size_t v = 0; v < nv; v++) {
-            const double x = M.p[3 * v], y = M.p[3 * v + 1], z = M.p[3 * v + 2];
-            sx_[v] = static_cast<float>(cx + (R[0] * x + R[1] * y + R[2] * z + px) * s);
-            sy_[v] = static_cast<float>(cy - (R[3] * x + R[4] * y + R[5] * z + py) * s);
-            sz_[v] = static_cast<float>(R[6] * x + R[7] * y + R[8] * z);
-        }
-        tz_.resize(nt);
-        for (std::size_t t = 0; t < nt; t++) tz_[t] = sz_[M.tri[3 * t]] + sz_[M.tri[3 * t + 1]] + sz_[M.tri[3 * t + 2]];
-        depthOrder(tz_, order_, rkey_, rkey2_, rtmp_);         // 0.66.0: a radix sort, equal depths by triangle number (molecule/depth_order.h)
+        surfacePlace(M, R, px, py, cx, cy, s, surf_);
         for (int i = 0; i < 14; i++) lastCam_[i] = cam[i];
         lastRev_ = rc.revision;
         stats_.resorted = true;
     }
-    // colours: the vertex's base colour (potential or plain) times a light, with a little white highlight. 0.46.6 (outside review: CO2's two oxygens and water's two
-    // hydrogens came out in different colours): the light comes from the viewer (it was from the upper left), so two parts that are mirror images by symmetry are
-    // always lit the same, and the highlight no longer bleaches one side of the potential's colours
-    vc_.resize(nv);
-    const double lx = 0, ly = 0, lz = 1;                      // towards the light, view space
-    const double ll = std::sqrt(lx * lx + ly * ly + lz * lz);
-    const render::Color plain = light ? render::Color{0.62f, 0.68f, 0.78f, 1} : render::Color{0.80f, 0.84f, 0.90f, 1};
-    for (std::size_t v = 0; v < nv; v++) {
-        const double nx = M.n[3 * v], ny = M.n[3 * v + 1], nz = M.n[3 * v + 2];
-        const double vx = R[0] * nx + R[1] * ny + R[2] * nz, vy = R[3] * nx + R[4] * ny + R[5] * nz, vz = R[6] * nx + R[7] * ny + R[8] * nz;
-        const double d = std::fabs(vx * lx + vy * ly + vz * lz) / ll;   // (two-sided: the inner side is lit too)
-        const double hl = std::pow(std::max(0.0, d), 24) * 0.15;
-        const render::Color base = L.set.realPot ? potColour(M.value[v] / rc.potRange) : plain;
-        const float k = static_cast<float>(0.62 + 0.38 * d);   // (a soft light: the colours stay readable against the scale)
-        vc_[v] = {std::min(1.0f, base.r * k + static_cast<float>(hl)), std::min(1.0f, base.g * k + static_cast<float>(hl)), std::min(1.0f, base.b * k + static_cast<float>(hl)), 1};
-    }
-    const float aFront = light ? 0.62f : 0.60f, aBack = light ? 0.15f : 0.15f;   // translucent, so the cloud shows through; the far (inner) side fainter, so the near side reads as the surface
-    for (const int t : order_) {
+    surfaceColours(M, R, L.set.realPot, rc.potRange, plain, surf_);
+    for (const int t : surf_.order) {
         const int a = M.tri[3 * static_cast<std::size_t>(t)], b = M.tri[3 * static_cast<std::size_t>(t) + 1], c = M.tri[3 * static_cast<std::size_t>(t) + 2];
-        const double ex = (sx_[b] - sx_[a]) * (sy_[c] - sy_[a]) - (sy_[b] - sy_[a]) * (sx_[c] - sx_[a]);   // screen y points down: < 0 means the triangle faces the viewer
-        const float al = ex < 0 ? aFront : aBack;
-        render::Color ca = vc_[a], cb = vc_[b], cc = vc_[c];
+        const float al = surfaceAlpha(surf_, a, b, c, aFront, aBack);
+        render::Color ca = surf_.vc[std::size_t(a)], cb = surf_.vc[std::size_t(b)], cc = surf_.vc[std::size_t(c)];
         ca.a = cb.a = cc.a = al;
-        r.triangle(sx_[a], sy_[a], ca, sx_[b], sy_[b], cb, sx_[c], sy_[c], cc);
+        r.triangle(surf_.sx[std::size_t(a)], surf_.sy[std::size_t(a)], ca, surf_.sx[std::size_t(b)], surf_.sy[std::size_t(b)], cb, surf_.sx[std::size_t(c)], surf_.sy[std::size_t(c)], cc);
     }
     stats_.triangles = static_cast<int>(nt);
 }

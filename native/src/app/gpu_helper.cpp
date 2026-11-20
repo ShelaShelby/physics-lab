@@ -5,6 +5,7 @@
 #include <deque>
 #include <fstream>
 #include <map>
+#include <mutex>
 #include <sstream>
 
 #include "app/gpu_guard.h"
@@ -57,6 +58,7 @@ Job g_now;
 std::string g_folder, g_device, g_driver;
 long g_finished = 0;
 std::map<std::string, bool> g_pending;                // a program's helper not finished yet
+std::mutex g_pendMx;                                  // 0.68.0: workers ask too (a guarded step on a worker waits for its helper)
 
 std::string resultFile() { return g_folder + "gpu-helper-result.txt"; }
 std::string variantsFile() { return g_folder + "gpu-helper-variants.txt"; }
@@ -106,7 +108,7 @@ void finish() {
             if (G) G->log(std::string("the helper could not start its Vulkan device (") + code + "): the app makes it itself, guarded as before");
             std::printf("PLGPUHELPER %s not tried (%s)\n", g_now.name.c_str(), code);
         }
-        g_pending[g_now.name] = false;
+        { std::lock_guard<std::mutex> l(g_pendMx); g_pending[g_now.name] = false; }
     }
     std::fflush(stdout);
     g_finished++;
@@ -121,7 +123,7 @@ bool startNext() {
         if (g_now.guard) g_now.guard->log(std::string(g_now.variant ? "the helper starts (kKerrTableCS variant " : "the helper starts (") + g_now.name + ")");
         if (gpuHelperSpawn(args)) { g_running = true; return true; }
         if (g_now.guard) g_now.guard->log("the helper could not be started: the app makes it itself, guarded as before");
-        if (!g_now.variant) g_pending[g_now.name] = false;
+        if (!g_now.variant) { std::lock_guard<std::mutex> l(g_pendMx); g_pending[g_now.name] = false; }
     }
     return false;
 }
@@ -192,7 +194,7 @@ void gpuHelperQueue(const std::vector<std::pair<std::string, GpuGuard*>>& progra
     g_folder = folder; g_device = device; g_driver = driver;
     for (const auto& [name, g] : programs) {
         g_queue.push_back({name, g, false});
-        g_pending[name] = true;
+        { std::lock_guard<std::mutex> l(g_pendMx); g_pending[name] = true; }
         if (g) g->setHelper(name);
     }
 }
@@ -219,8 +221,13 @@ bool gpuHelperPump() {
     return g_finished != before;
 }
 
-bool gpuHelperPending(const std::string& name) { const auto it = g_pending.find(name); return it != g_pending.end() && it->second; }
+bool gpuHelperPending(const std::string& name) { std::lock_guard<std::mutex> l(g_pendMx); const auto it = g_pending.find(name); return it != g_pending.end() && it->second; }
 bool gpuHelperBusy() { return g_running || !g_queue.empty(); }
+void gpuHelperPrefer(const std::string& name) {   // 0.68.0: a program its lab asks for now goes first (its guard's hold() said no: it waits for it)
+    for (std::size_t i = 0; i < g_queue.size(); i++)
+        if (!g_queue[i].variant && g_queue[i].name == name) { const Job j = g_queue[i]; g_queue.erase(g_queue.begin() + static_cast<std::ptrdiff_t>(i)); g_queue.push_front(j); return; }
+}
+void gpuHelperStop() { g_queue.clear(); std::lock_guard<std::mutex> l(g_pendMx); for (auto& [name, on] : g_pending) on = false; }
 std::string gpuHelperCacheFile(const std::string& folder) { return folder + "vulkan-pipeline-cache-helper.bin"; }
 long gpuHelperFinishedCount() { return g_finished; }
 

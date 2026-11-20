@@ -645,12 +645,37 @@ def part_rings(binary, work):
     except Exception as e:
         check(False, f"rings: both pictures saved ({e})")
 
+def part_cardlines(binary, work):
+    # 0.68.0: the Orbit Lab's trails, orbits and distance rings on the card (Vulkan): its start-up check passes here (three cases against the processor's
+    # LinePen, orbit/lines_check.h), and the pictures of three views (the benchmark's orbit.heaviest, orbit.real_fast, and orbit.earth's close-up), card
+    # against processor (PL_NO_LINES_CARD), multisampling off, differ in at most 1 % of the pixels by more than 8 levels (the Vulkan picture limit). Made to
+    # fail on purpose (PL_LINES_CARDFAIL) the processor's lines are drawn: that picture is the processor's.
+    def over(x, y):
+        px, py = x.pixels(), y.pixels()
+        st = x.bpp
+        return sum(1 for i in range(0, min(len(px), len(py)) - st + 1, st) if max(abs(px[i] - py[i]), abs(px[i + 1] - py[i + 1]), abs(px[i + 2] - py[i + 2])) > 8)
+    for sc in ("orbit.heaviest", "orbit.real_fast", "orbit.earth"):
+        env = {"PL_GRAPHICS": "vulkan", "PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc}
+        card = run_app(binary, work, "lines_card_" + sc, env, frames=60)
+        cpu = run_app(binary, work, "lines_cpu_" + sc, dict(env, PL_NO_LINES_CARD="1"), frames=60)
+        if sc == "orbit.heaviest":
+            cases = [ln for ln in card.out.splitlines() if ln.startswith("PLLINESCASE ")]
+            check("PLLINESCARD state=1" in card.out and len(cases) == 3, f"lines: the start-up check passes, three cases ({cases})")
+            bad = run_app(binary, work, "lines_fail", dict(env, PL_LINES_CARDFAIL="1"), frames=60)
+            check("PLLINESCARD state=-1" in bad.out, "lines: a failed check leaves the processor's lines")
+            o2 = over(Bmp(bad.bmp), Bmp(cpu.bmp))
+            check(o2 == 0, f"lines: the failed check's picture is the processor's ({o2} pixels over 8 levels)")
+        a, b = Bmp(card.bmp), Bmp(cpu.bmp)
+        o = over(a, b)
+        print(f"  {sc}: card against processor, {o} pixels over 8 levels ({100 * o / max(1, a.w * a.h):.3f} %)")
+        check((a.w, a.h) == (b.w, b.h) and a.w > 0 and o <= 0.01 * a.w * a.h, f"lines, {sc}: the card's picture is the processor's within the limit ({o} pixels over 8 levels)")
+
 def main():
     binary, work = sys.argv[1], sys.argv[2]
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
     want = lambda n: only is None or n in only
     os.makedirs(work, exist_ok=True)
-    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings)):
+    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings), ("cardlines", part_cardlines)):
         if want(name):
             fn(binary, work)
     print(f"{checks} checks, {fails} failed")

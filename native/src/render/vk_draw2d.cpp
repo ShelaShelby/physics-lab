@@ -23,6 +23,8 @@
 #include "r2d_cloud_vert.h"
 #include "r2d_moldot_vert.h"
 #include "r2d_rings_frag.h"
+#include "r2d_lines_vert.h"
+#include "r2d_surface_vert.h"
 #include "present_vert.h"
 #include "present_frag.h"
 
@@ -261,6 +263,8 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
         bind.push_back({0, 8, VK_VERTEX_INPUT_RATE_VERTEX}); bind.push_back({1, 16, VK_VERTEX_INPUT_RATE_INSTANCE});
         at(0, 0, f2, 0); at(1, 1, f4, 0);
         break;
+    case kLine: case kSurf:                           // 0.68.0: no vertex input (the vertex shader reads storage buffers by gl_VertexIndex)
+        break;
     case kMesh:                                       // render/mesh.h MeshVertex: p0, p1, rgba, corner, height (48 bytes)
         bind.push_back({0, 48, VK_VERTEX_INPUT_RATE_VERTEX});
         at(0, 0, f3, 0); at(1, 0, f3, 12); at(2, 0, f4, 24); at(3, 0, f2, 40);
@@ -326,7 +330,7 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
     gi.pMultisampleState = &ms;
     gi.pColorBlendState = &cb;
     gi.pDynamicState = &ds;
-    gi.layout = layout_;
+    gi.layout = prog == kLine || prog == kSurf ? linesLayout_ : layout_;
     const VkFormat fmt = p == kPassF ? floatFormat_ : kRgba8;           // 0.63.0: dynamic rendering: the pass's format in place of a render pass
     VkPipelineRenderingCreateInfo ri{};
     ri.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -610,7 +614,7 @@ void VkDraw2D::destroy() {
     dropImage(white_);
     for (Mesh& m : meshes_) dropBuffer(m.buf);
     meshes_.clear();
-    for (Slot& s : slots_) { dropBuffer(s.buf); if (s.pool) vkDestroyDescriptorPool(c_.device, s.pool, nullptr); }
+    for (Slot& s : slots_) { dropBuffer(s.buf); if (s.pool) vkDestroyDescriptorPool(c_.device, s.pool, nullptr); if (s.linesPool) vkDestroyDescriptorPool(c_.device, s.linesPool, nullptr); }
     slots_.clear();
     dropBuffer(corners_);
     collect();
@@ -621,6 +625,9 @@ void VkDraw2D::destroy() {
     if (presentLayout_) vkDestroyPipelineLayout(c_.device, presentLayout_, nullptr);
     if (setLayout_) vkDestroyDescriptorSetLayout(c_.device, setLayout_, nullptr);
     if (presentSetLayout_) vkDestroyDescriptorSetLayout(c_.device, presentSetLayout_, nullptr);
+    if (linesLayout_) vkDestroyPipelineLayout(c_.device, linesLayout_, nullptr);
+    if (linesSetLayout_) vkDestroyDescriptorSetLayout(c_.device, linesSetLayout_, nullptr);
+    linesLayout_ = VK_NULL_HANDLE; linesSetLayout_ = VK_NULL_HANDLE;
     presentPipe_ = VK_NULL_HANDLE; linearClamp_ = nearestClamp_ = mapSampler_ = VK_NULL_HANDLE; layout_ = presentLayout_ = VK_NULL_HANDLE; setLayout_ = presentSetLayout_ = VK_NULL_HANDLE;
     c_ = VkDevCtx();
     ok_ = false;
@@ -748,6 +755,7 @@ bool VkDraw2D::beginPicture(int w, int h, const float clear[4], bool oneSample, 
         pi.pPoolSizes = ps;
         if (!c_.check(vkCreateDescriptorPool(c_.device, &pi, nullptr, &s.pool), "vkCreateDescriptorPool (renderer2d)")) { s.pool = VK_NULL_HANDLE; s.poolSets = 0; failed_ = true; return false; }
     } else if (!c_.check(vkResetDescriptorPool(c_.device, s.pool, 0), "vkResetDescriptorPool")) { failed_ = true; return false; }
+    if (s.linesPool && !c_.check(vkResetDescriptorPool(c_.device, s.linesPool, 0), "vkResetDescriptorPool (lines)")) { failed_ = true; return false; }
     beginPass(oneSample_ ? kPass8 : kPassMs, oneSample_ ? t.pic : t.ms, oneSample_ ? nullptr : &t.pic, w, h, true, clear);
     return true;
 }
@@ -890,10 +898,27 @@ void VkDraw2D::draw(Prog p, Blend b, VkDeviceSize vbOff, int first, int count, V
 
 // 0.61.0: kCloud or kMolDot with the blob fragment shader (kBlobFS), every pass, the normal and the added blend
 bool VkDraw2D::addProgram(Prog p, std::string& why) {
-    if (!ok_ || (p != kCloud && p != kMolDot && p != kRings)) { why = "renderer2d on Vulkan has not started"; return false; }
+    if (!ok_ || (p != kCloud && p != kMolDot && p != kRings && p != kLine && p != kSurf)) { why = "renderer2d on Vulkan has not started"; return false; }
     if (hasProgram(p)) return true;
-    const Code vc = p == kCloud ? Code{k_r2d_cloud_vert, sizeof k_r2d_cloud_vert} : p == kRings ? Code{k_r2d_tri_vert, sizeof k_r2d_tri_vert} : Code{k_r2d_moldot_vert, sizeof k_r2d_moldot_vert};
-    const Code fc = p == kRings ? Code{k_r2d_rings_frag, sizeof k_r2d_rings_frag} : Code{k_r2d_blob_frag, sizeof k_r2d_blob_frag};
+    const Code vc = p == kCloud ? Code{k_r2d_cloud_vert, sizeof k_r2d_cloud_vert} : p == kRings ? Code{k_r2d_tri_vert, sizeof k_r2d_tri_vert}
+                  : p == kLine ? Code{k_r2d_lines_vert, sizeof k_r2d_lines_vert} : p == kSurf ? Code{k_r2d_surface_vert, sizeof k_r2d_surface_vert} : Code{k_r2d_moldot_vert, sizeof k_r2d_moldot_vert};
+    const Code fc = p == kRings ? Code{k_r2d_rings_frag, sizeof k_r2d_rings_frag} : p == kLine || p == kSurf ? Code{k_r2d_tri_frag, sizeof k_r2d_tri_frag} : Code{k_r2d_blob_frag, sizeof k_r2d_blob_frag};
+    if ((p == kLine || p == kSurf) && !linesLayout_) {                                       // 0.68.0: set 0 as every program's, set 1 the four storage buffers of the vertex stage
+        if (c_.limits.maxPerStageDescriptorStorageBuffers < 4) { why = "this card gives the vertex stage fewer than 4 storage buffers"; return false; }
+        VkDescriptorSetLayoutBinding b[4]{};
+        for (std::uint32_t i = 0; i < 4; i++) b[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
+        VkDescriptorSetLayoutCreateInfo li{};
+        li.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        li.bindingCount = 4;
+        li.pBindings = b;
+        if (!c_.check(vkCreateDescriptorSetLayout(c_.device, &li, nullptr, &linesSetLayout_), "vkCreateDescriptorSetLayout (lines)")) { linesSetLayout_ = VK_NULL_HANDLE; why = "vkCreateDescriptorSetLayout failed"; return false; }
+        const VkDescriptorSetLayout sets[2] = {setLayout_, linesSetLayout_};
+        VkPipelineLayoutCreateInfo pli{};
+        pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pli.setLayoutCount = 2;
+        pli.pSetLayouts = sets;
+        if (!c_.check(vkCreatePipelineLayout(c_.device, &pli, nullptr, &linesLayout_), "vkCreatePipelineLayout (lines)")) { linesLayout_ = VK_NULL_HANDLE; why = "vkCreatePipelineLayout failed"; return false; }
+    }
     Shader vs, fs;
     if (!reflectSpirv(vc.w, vc.bytes / 4, vs, why) || !reflectSpirv(fc.w, fc.bytes / 4, fs, why)) return false;
     if (vs.blockBinding != 2) { why = "its vertex shader's uniform block is not at binding 2"; return false; }
@@ -924,7 +949,7 @@ bool VkDraw2D::addProgram(Prog p, std::string& why) {
     for (const Pass ps : {kPassMs, kPass8, kPassF}) {
         if (!ok || (ps == kPassMs && samples_ == 1)) continue;
         for (const Blend b : {kNormal, kAdditive})
-            if (ok && (p != kRings || b == kNormal) && !(prog_[p].pipe[ps][b] = makePipeline(p, b, ps, mod[0], mod[1]))) { ok = false; why = "vkCreateGraphicsPipelines failed"; }
+            if (ok && ((p != kRings && p != kLine && p != kSurf) || b == kNormal) && !((p == kLine || p == kSurf) && ps == kPassF) && !(prog_[p].pipe[ps][b] = makePipeline(p, b, ps, mod[0], mod[1]))) { ok = false; why = "vkCreateGraphicsPipelines failed"; }
     }
     for (VkShaderModule m : mod) if (m) vkDestroyShaderModule(c_.device, m, nullptr);
     if (!ok) for (auto& row : prog_[p].pipe) for (VkPipeline& pl : row) if (pl) { vkDestroyPipeline(c_.device, pl, nullptr); pl = VK_NULL_HANDLE; }
@@ -945,6 +970,53 @@ void VkDraw2D::drawInst(Prog p, Blend b, VkBuffer inst1, VkBuffer inst2, int ins
     const VkDeviceSize offs[3] = {0, 0, 0};
     vkCmdBindVertexBuffers(cmd_, 0, p == kCloud ? 3u : 2u, bufs, offs);
     vkCmdDraw(cmd_, 6, static_cast<uint32_t>(instances), 0, 0);
+}
+
+// 0.68.0: the Orbit Lab's lines and the Density surface: set 0 as every program's (the vertex and fragment blocks, the white texture), set 1 the storage
+// buffers; the lines' count from the card (kLinesCS step 1 wrote it, before this frame's picture), the surface's from the caller
+void VkDraw2D::drawStorage(Prog p, const VkBuffer b0[4], VkBuffer indirect, std::uint32_t count) {
+    if (!inPass_ || failed_ || (!indirect && count == 0) || !linesLayout_ || !b0[0]) return;
+    VkBuffer bufs[4];
+    for (int i = 0; i < 4; i++) bufs[i] = b0[i] ? b0[i] : b0[0];
+    const Program& pr = prog_[p];
+    const VkPipeline pl = pr.pipe[pass_][kNormal];
+    if (!pl) { if (!failed_) c_.check(VK_ERROR_FEATURE_NOT_PRESENT, "renderer2d: no pipeline for this storage program in this pass"); failed_ = true; return; }
+    Slot& s = slots_[static_cast<std::size_t>(slot_)];
+    if (!s.linesPool) {
+        const VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4 * 64};
+        VkDescriptorPoolCreateInfo pi{};
+        pi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        pi.maxSets = 64;
+        pi.poolSizeCount = 1;
+        pi.pPoolSizes = &ps;
+        if (!c_.check(vkCreateDescriptorPool(c_.device, &pi, nullptr, &s.linesPool), "vkCreateDescriptorPool (lines)")) { s.linesPool = VK_NULL_HANDLE; failed_ = true; return; }
+    }
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = s.linesPool;
+    ai.descriptorSetCount = 1;
+    ai.pSetLayouts = &linesSetLayout_;
+    VkDescriptorSet st = VK_NULL_HANDLE;
+    if (vkAllocateDescriptorSets(c_.device, &ai, &st) != VK_SUCCESS) return;   // (more than 64 line draws in one picture: the rest not drawn; never in this app)
+    VkDescriptorBufferInfo bi[4]{};
+    VkWriteDescriptorSet wr[4]{};
+    for (std::uint32_t i = 0; i < 4; i++) {
+        bi[i] = {bufs[i], 0, VK_WHOLE_SIZE};
+        wr[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        wr[i].dstSet = st;
+        wr[i].dstBinding = i;
+        wr[i].descriptorCount = 1;
+        wr[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        wr[i].pBufferInfo = &bi[i];
+    }
+    vkUpdateDescriptorSets(c_.device, 4, wr, 0, nullptr);
+    const VkDescriptorSet set = descriptors(pr, white_.view, nearestClamp_);
+    if (!set) return;
+    const VkDescriptorSet sets[2] = {set, st};
+    vkCmdBindPipeline(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, pl);
+    vkCmdBindDescriptorSets(cmd_, VK_PIPELINE_BIND_POINT_GRAPHICS, linesLayout_, 0, 2, sets, 0, nullptr);
+    if (indirect) vkCmdDrawIndirect(cmd_, indirect, 0, 1, 16);
+    else vkCmdDraw(cmd_, count, 1, 0, 0);
 }
 
 int VkDraw2D::meshCreate(const void* v, std::size_t bytes) {

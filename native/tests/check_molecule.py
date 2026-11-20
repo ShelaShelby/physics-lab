@@ -277,6 +277,31 @@ def card(binary, work):
                 tot += sum(abs(a[i] - b[i]) for i in range(3)); n += 3; big += dd > 8
         check(n and tot / n < 1.0 and big < 0.001 * n / 3, f"card: {m}: the card's picture is the processor's (mean difference {tot / max(n, 1):.3f} of 255 per channel, {big} pixels more than 8 levels off)")
 
+def cardsurface(binary, work):
+    # 0.68.0: the Density surface on the card (Vulkan): its start-up check passes (three surfaces against the processor's, molecule/surface_check.h); the
+    # pictures of molecule.density's and molecule.vib_density's set-ups (benzene; water vibrating), card against processor (PL_NO_SURFACE_CARD),
+    # multisampling off, differ in at most 1 % of the pixels by more than 8 levels; made to fail on purpose (PL_SURFACE_CARDFAIL) the processor's triangles
+    # are drawn
+    def over(x, y):
+        px, py = x.pixels(), y.pixels()
+        st = x.bpp
+        return sum(1 for i in range(0, min(len(px), len(py)) - st + 1, st) if max(abs(px[i] - py[i]), abs(px[i + 1] - py[i + 1]), abs(px[i + 2] - py[i + 2])) > 8)
+    for sc in ("molecule.density", "molecule.vib_density"):
+        env = {"PL_GRAPHICS": "vulkan", "PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc}
+        c = run_app(binary, work, "surf_card_" + sc, env, frames=60)
+        p = run_app(binary, work, "surf_cpu_" + sc, dict(env, PL_NO_SURFACE_CARD="1"), frames=60)
+        if sc == "molecule.density":
+            cases = [ln for ln in c.out.splitlines() if ln.startswith("PLSURFACECASE ")]
+            check("PLSURFACECARD state=1" in c.out and len(cases) == 3, f"surface: the start-up check passes, three cases ({cases})")
+            bad = run_app(binary, work, "surf_fail", dict(env, PL_SURFACE_CARDFAIL="1"), frames=60)
+            check("PLSURFACECARD state=-1" in bad.out, "surface: a failed check leaves the processor's triangles")
+            o2 = over(Bmp(bad.bmp), Bmp(p.bmp))
+            check(o2 == 0, f"surface: the failed check's picture is the processor's ({o2} pixels over 8 levels)")
+        a, b = Bmp(c.bmp), Bmp(p.bmp)
+        o = over(a, b)
+        print(f"  {sc}: card against processor, {o} pixels over 8 levels ({100 * o / max(1, a.w * a.h):.3f} %)")
+        check((a.w, a.h) == (b.w, b.h) and a.w > 0 and o <= 0.01 * a.w * a.h, f"surface, {sc}: the card's picture is the processor's within the limit ({o} pixels over 8 levels)")
+
 def differ_ok(a, b):
     A, B = Bmp(a.bmp), Bmp(b.bmp)
     return sum(1 for y in range(60, 740, 3) for x in range(0, 900, 3) if A.px(x, y) != B.px(x, y)) > 30
@@ -290,6 +315,8 @@ if __name__ == "__main__":
         anharm(binary, work)
     elif len(sys.argv) > 3 and sys.argv[3] == "card":
         card(binary, work)
+    elif len(sys.argv) > 3 and sys.argv[3] == "cardsurface":
+        cardsurface(binary, work)
     else:
         main(binary, work)
         spheres(binary, work)

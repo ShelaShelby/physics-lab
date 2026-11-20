@@ -11,6 +11,8 @@
 #include "format.h"
 #include "imgui.h"
 #include "kepler.h"
+#include "lines_check.h"
+#include "orbit_lines.h"
 #include "far_masses.h"
 #include "marker_colors.h"
 #include "giant_rings.h"
@@ -55,60 +57,6 @@ const Color kHL = hexColor(marks::kHighlight);   // the "look here" pink: nothin
 // 0.49.4: the Sun's colour comes from its measured spectrum (sun_facts.h kSunSrgb); the typed star-colour table with no source (5772 K gave (247, 207, 72)) is gone.
 static Color sunColour() { return rgba(sunfacts::kSunSrgb[0], sunfacts::kSunSrgb[1], sunfacts::kSunSrgb[2]); }
 
-// Liang–Barsky: the part of a segment inside a rectangle. Zoomed far in, pieces of a
-// trail or an orbit are millions of points long, so only the visible part is drawn.
-bool clipSeg(double x0, double y0, double x1, double y1, double xa, double ya, double xb, double yb, double out[4]) {
-    const double dx = x1 - x0, dy = y1 - y0;
-    if (x0 >= xa && x0 <= xb && x1 >= xa && x1 <= xb && y0 >= ya && y0 <= yb && y1 >= ya && y1 <= yb) {
-        out[0] = x0; out[1] = y0; out[2] = x1; out[3] = y1;
-        return true;
-    }
-    double t0 = 0, t1 = 1;
-    for (int k = 0; k < 4; k++) {
-        const double p = k == 0 ? -dx : k == 1 ? dx : k == 2 ? -dy : dy;
-        const double q = k == 0 ? x0 - xa : k == 1 ? xb - x0 : k == 2 ? y0 - ya : yb - y0;
-        if (p == 0) { if (q < 0) return false; }
-        else {
-            const double r = q / p;
-            if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
-            else { if (r < t0) return false; if (r < t1) t1 = r; }
-        }
-    }
-    out[0] = x0 + t0 * dx; out[1] = y0 + t0 * dy; out[2] = x0 + t1 * dx; out[3] = y0 + t1 * dy;
-    return true;
-}
-
-// Draws a polyline clipped to the picture (with a 20-point margin), optionally dashed.
-struct LinePen {
-    render::Renderer2D& r;
-    double W, H, width;
-    Color c;
-    double dashOn = 0, dashOff = 0;   // dash lengths in points (0 = solid)
-    bool havePrev = false;
-    double px = 0, py = 0, dashPos = 0;
-
-    void to(double x, double y) {
-        if (havePrev) {
-            double cl[4];
-            if (clipSeg(px, py, x, y, -20, -20, W + 20, H + 20, cl)) {
-                if (dashOn <= 0) r.line(cl[0], cl[1], cl[2], cl[3], width, c);
-                else dashed(cl[0], cl[1], cl[2], cl[3]);
-            }
-        }
-        px = x; py = y; havePrev = true;
-    }
-    void dashed(double x0, double y0, double x1, double y1) {
-        const double len = std::hypot(x1 - x0, y1 - y0), period = dashOn + dashOff;
-        double s = 0;
-        while (s < len) {
-            const double inPeriod = std::fmod(dashPos, period);
-            const double step = std::min(len - s, inPeriod < dashOn ? dashOn - inPeriod : period - inPeriod);
-            if (inPeriod < dashOn) r.line(x0 + (x1 - x0) * s / len, y0 + (y1 - y0) * s / len, x0 + (x1 - x0) * (s + step) / len, y0 + (y1 - y0) * (s + step) / len, width, c);
-            s += step; dashPos += step;
-        }
-    }
-};
-
 // A circle far bigger than the picture: is the picture inside it, outside it, or which
 // short stretch of angles (screen angles, y down) can be seen?
 enum class Win { All, In, Out, Arc };
@@ -124,8 +72,6 @@ std::string fmtLy(double v) { return v < 10 ? fmt::fixed(v, 2) : v < 100 ? fmt::
 
 bool bigR(double W, double H, double r) { return r > 6 * (1.5 * std::hypot(W, H) / 2 + 20); }
 
-// A point on screen: x, y (points), depth (m, > 0 towards the viewer) and perspective scale
-struct Q { double first, second, dep, f; };
 
 // Text drawn with Dear ImGui on top of the picture. Positions are in picture points with
 struct TextPainter {
@@ -402,6 +348,12 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         ox = W / 2 + fx + cx - q.first; oy = H / 2 + cy - q.second;
     }
     const auto proj = [&](double x, double y, double z) { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; };
+    // 0.68.0: the same camera as numbers (orbit/orbit_lines.h LineCam: base() and proj() as above), for the trails, orbits and distance rings on either path
+    LineCam lcam;
+    lcam.bc = bc; lcam.ca = ca; lcam.sa = sa; lcam.cb = cb; lcam.sb = sb; lcam.px = px; lcam.D = D; lcam.cd = cd; lcam.W = W; lcam.H = H; lcam.fx = fx; lcam.ox = ox; lcam.oy = oy; lcam.d3 = d3;
+    const bool cardLines = linesOnCard(R);                // their guarded steps advance here (orbit/lines_check.h); true: the card draws them this frame
+    LinesPoints linesPts;
+    linesPts.card = cardLines ? R.linesCard() : nullptr;
 
     setPictureColours(set.sky != SkyMode::Off, set.theme);
     g_textScale = set.textScale;
@@ -481,10 +433,19 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         double stepAU = 1e10;
         for (double v : steps) if (v * kAU * px >= 55) { stepAU = v; break; }
         const double diag = std::hypot(W, H);
+        render::LinesDraw ringsCard;                       // 0.68.0: on the card when its lines are on (one draw after the loop: nothing else is drawn between them)
+        ringsCard.cam = cardLines ? linesCamera(lcam) : render::LinesCamera{};
+        bool ringsOk = cardLines;
+        std::vector<double> ringXYZ;
         for (int k = 1; k * stepAU * kAU * px <= diag && k < 60; k++) {
             const double Rm = k * stepAU * kAU;
-            LinePen pen{R, W, H, 1.0, kMuted.withAlpha(0.22f)};
-            for (int i = 0; i <= 96; i++) { const double t = i / 96.0 * 2 * kPi; const Q q = proj(Rm * std::cos(t), Rm * std::sin(t), 0); pen.to(q.first, q.second); }
+            ringPointsXYZ(Rm, ringXYZ);
+            if (ringsOk && !addRingRuns(linesPts, ringsCard, (std::uint64_t(1) << 56) | std::uint64_t(k), ringXYZ, kMuted.withAlpha(0.22f))) {
+                ringsOk = false;                           // (no room on the card: the rings so far and the rest on the processor, in order)
+                std::vector<double> before;
+                for (int j = 1; j < k; j++) { ringPointsXYZ(j * stepAU * kAU, before); drawRingCpu(R, lcam, before, kMuted.withAlpha(0.22f)); }
+            }
+            if (!ringsOk) drawRingCpu(R, lcam, ringXYZ, kMuted.withAlpha(0.22f));
             const Q q = proj(Rm * std::cos(-0.8), Rm * std::sin(-0.8), 0);
             const double au = k * stepAU;
             const double v = std::round(au * 10) / 10;
@@ -502,6 +463,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             }
             T.text(label, q.first, q.second + 3, 10, kMuted.withAlpha(0.75f));
         }
+        if (ringsOk && !ringsCard.runs.empty() && !R.lines(ringsCard)) for (int k = 1; k * stepAU * kAU * px <= diag && k < 60; k++) { ringPointsXYZ(k * stepAU * kAU, ringXYZ); drawRingCpu(R, lcam, ringXYZ, kMuted.withAlpha(0.22f)); }
     }
 
     if (set.belts && !sys.belts.empty()) {   // belts: thousands of rocks on Kepler orbits, one instanced draw call per belt (the places: the CPU, or from 0.13 stage 4 the GPU, orbit/belt_layer.h)
@@ -513,72 +475,38 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     std::vector<const Body*> vis;
     for (const Body& b : sys.bodies) if (visible(b)) vis.push_back(&b);
 
-    for (const Body* bp : vis) {   // trails: a short tail behind each object (or every lap, with Full orbit trails)
-        const Body& b = *bp;
-        const auto& tr = b.trail;
-        const int n = static_cast<int>(tr.size());
-        if (n == 0) continue;
-        int st0 = 0;
-        if (!set.fullTrails && n > 1) {                   // only the last stretch, about 0.6 of the distance to the Sun
-            const double lim = 0.6 * std::max(length(b.pos), kSimLength);
-            double acc = length(b.pos - tr[n - 1]);
-            st0 = n - 1;
-            while (st0 > 0 && acc < lim) { acc += length(tr[st0] - tr[st0 - 1]); st0--; }
-        }
-        const int nn = n - st0;
-        const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
-        // 0.46.6: the trail's points are about 2 % of the distance to the Sun apart, so straight pieces cut inside the curve by up to r (0.02)^2 / 8: 7,500 km at 1 AU,
-        // plain to see when zoomed in. A long piece that reaches the picture is drawn as a Catmull-Rom curve through its neighbours (off by about r (0.02)^4: tens of km).
-        const auto P = [&](int i) { return i >= n ? b.pos : tr[std::max(0, i)]; };   // (point n is the body itself: the trail always ends there)
-        const auto piece = [&](LinePen& pen, int i) {    // the curve from point i - 1 to point i, without its first point
-            const Vec3 a = P(i - 1), c = P(i);
-            const Q qa = proj(a.x, a.y, a.z), qc = proj(c.x, c.y, c.z);
-            const double L = std::hypot(qc.first - qa.first, qc.second - qa.second), mg = 20 + L / 4;
-            const bool near = std::max(qa.first, qc.first) > -mg && std::min(qa.first, qc.first) < W + mg && std::max(qa.second, qc.second) > -mg && std::min(qa.second, qc.second) < H + mg;
-            if (near && L > 6 && i >= 2 && i <= n) {
-                const Vec3 p0 = P(i - 2), p3 = i + 1 <= n ? P(i + 1) : c * 2.0 - a;
-                const int k = static_cast<int>(std::min(4096.0, std::ceil(L / 4)));
-                for (int j = 1; j < k; j++) {
-                    const double t = double(j) / k, t2 = t * t, t3 = t2 * t;
-                    const Vec3 v = (a * 2.0 + (c - p0) * t + (p0 * 2.0 - a * 5.0 + c * 4.0 - p3) * t2 + (a * 3.0 - p0 - c * 3.0 + p3) * t3) * 0.5;
-                    const Q f = proj(v.x, v.y, v.z); pen.to(f.first, f.second);
-                }
-            }
-            pen.to(qc.first, qc.second);
-        };
-        for (int part = 0; part < 4; part++) {           // fades in 4 steps, oldest faintest
-            const int i0 = st0 + part * nn / 4, i1 = std::min(n, st0 + (part + 1) * nn / 4 + 1);
-            LinePen pen{R, W, H, on ? 2.0 : 1.5, hexColor(b.color, 0.15f + 0.2f * part)};
-            for (int i = i0; i < i1; i++) { if (i == i0) { const Q q = proj(tr[i].x, tr[i].y, tr[i].z); pen.to(q.first, q.second); } else piece(pen, i); }
-            if (part == 3) piece(pen, n);                // always end at the body itself
-        }
-    }
-
+    // trails: a short tail behind each object (or every lap, with Full orbit trails); then (0.23 stage 2) the planets' and dwarf planets' whole orbits, faint,
+    // in their colour (the selected one brighter). orbit/orbit_lines.h draws both on the processor; 0.68.0: on the card when its lines are on (one draw)
     std::vector<Vec3> cpts;
-    if (set.orbits)                                       // 0.23 stage 2: the planets' and dwarf planets' whole orbits, faint, in their colour (the selected one brighter)
-        for (const Body* bp : vis) {
-            if (bp->comet) continue;
-            const bool on = sel.kind == Selection::Body && sel.bodyId == bp->id;
-            orbitPath(*bp, 256, cpts);
-            LinePen pen{R, W, H, on ? 1.5 : 1.0, hexColor(bp->color, on ? 0.7f : bp->type == BodyKind::Planet ? 0.32f : 0.22f)};
-            // 0.46.6 (outside review: Earth zoomed in had two paths about 10,000 km apart): a 256-sided polygon of a 1 AU orbit is up to a(1 - cos(pi/256)) = 11,000 km
-            // inside the real ellipse. A piece that reaches the picture is drawn again from the ellipse itself, finely enough that it is off by under half a point.
-            std::vector<Vec3> fine;
-            for (std::size_t i = 0; i < cpts.size(); i++) {
-                const Q q = proj(cpts[i].x, cpts[i].y, cpts[i].z);
-                if (i > 0) {
-                    const Q q0 = proj(cpts[i - 1].x, cpts[i - 1].y, cpts[i - 1].z);
-                    const double L = std::hypot(q.first - q0.first, q.second - q0.second), mg = 20 + L / 4;   // (a piece's bulge is far under a quarter of its length)
-                    const bool near = std::max(q.first, q0.first) > -mg && std::min(q.first, q0.first) < W + mg && std::max(q.second, q0.second) > -mg && std::min(q.second, q0.second) < H + mg;
-                    if (near && L > 6) {
-                        const int k = static_cast<int>(std::min(4096.0, std::ceil(L / 4)));
-                        orbitPath(*bp, 2 * kPi * (i - 1) / 256.0, 2 * kPi * i / 256.0, k, fine);
-                        for (std::size_t j = 1; j + 1 < fine.size(); j++) { const Q f = proj(fine[j].x, fine[j].y, fine[j].z); pen.to(f.first, f.second); }
-                    }
-                }
-                pen.to(q.first, q.second);
-            }
+    {
+        render::LinesDraw tc;
+        tc.cam = cardLines ? linesCamera(lcam) : render::LinesCamera{};
+        bool onCard = cardLines;
+        const auto trailOf = [&](const Body& b, bool card) {
+            if (b.trail.empty()) return true;
+            const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
+            const int st0 = trailStart(b.trail, b.pos, set.fullTrails);
+            Color cols[4];
+            for (int part = 0; part < 4; part++) cols[part] = hexColor(b.color, 0.15f + 0.2f * part);
+            if (card) return addTrailRuns(linesPts, tc, (std::uint64_t(2) << 56) | std::uint64_t(std::uint32_t(b.id)), b.trail, b.pos, st0, on ? 2.0 : 1.5, cols);
+            drawTrailCpu(R, lcam, b.trail, b.pos, st0, on ? 2.0 : 1.5, cols);
+            return true;
+        };
+        const auto orbitOfBody = [&](const Body& b, bool card) {
+            const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
+            const Color col = hexColor(b.color, on ? 0.7f : b.type == BodyKind::Planet ? 0.32f : 0.22f);
+            if (card) return addOrbitRuns(linesPts, tc, (std::uint64_t(3) << 56) | std::uint64_t(std::uint32_t(b.id)), b, on ? 1.5 : 1.0, col, cpts);
+            drawOrbitCpu(R, lcam, b, on ? 1.5 : 1.0, col, cpts);
+            return true;
+        };
+        for (const Body* bp : vis) if (onCard && !trailOf(*bp, true)) onCard = false;
+        if (set.orbits) for (const Body* bp : vis) if (!bp->comet && onCard && !orbitOfBody(*bp, true)) onCard = false;
+        if (!(onCard && (tc.runs.empty() || R.lines(tc)))) {   // the processor's lines (OpenGL; the card's off, not ready or out of room)
+            for (const Body* bp : vis) trailOf(*bp, false);
+            if (set.orbits) for (const Body* bp : vis) if (!bp->comet) orbitOfBody(*bp, false);
         }
+        if (linesPts.card) linesPts.card->frameDone();
+    }
     for (const Body* bp : vis) if (bp->comet) {         // the comets' whole orbits, thin and dotted
         const bool on = sel.kind == Selection::Body && sel.bodyId == bp->id;
         cometLocalPath(*bp->comet, sys.julianDayTDB(), px, cpts);
