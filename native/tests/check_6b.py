@@ -86,7 +86,8 @@ def changed(p1, p2, w, h):
                 m += 1
     return m / max(1, n)
 
-# what each new scene's report must say it set up (its own line), and whether its picture moves
+# what each new scene's report must say it set up (its own line), and whether its picture moves (0.72.0: blackhole.extreme starts from the lab's starting view,
+# 50 GM/c^2 since 0.70.0: the reference said 20, the start until 0.69; a changed reference, failing since 0.70.0, REPORT 0.72.0)
 SCENES = {
     "atom.slice_all_drag": "Og-294, Slice, every electron, Whole atom, Shells enlarged, Classic, 240000 dots", "atom.slice_dirac_drag": "U-238, Slice, one electron, 4f, Classic, 48000 dots",
     "atom.side_all_glow": "Og-294, Cloud, every electron, Whole atom, Shells enlarged, Glow, 240000 dots", "atom.side_all_classic": "Og-294, Cloud, every electron, Whole atom, Shells enlarged, Classic, 240000 dots",
@@ -97,7 +98,8 @@ SCENES = {
     "atom.all_one_orbital": "Og-294, Cloud 3D, every electron, One orbital 5f", "atom.all_classic": "Og-294, Cloud 3D, every electron, Whole atom, Shells enlarged, Classic, 240000 dots",
     "atom.jump_all": "Ra-226, Cloud 3D, every electron, Whole atom, Shells enlarged, Glow, 240000 dots", "atom.nucleus_density": "Og-294, Orbit, Density",
     "molecule.density": "Molecule Lab: C6H6 (12 atoms)", "molecule.vib_density": "Molecule Lab: H2O (3 atoms), zoom x1.60, vibration mode 1",
-    "molecule.spacefill_vib": "Molecule Lab: C6H6 (12 atoms), zoom x4.00, vibration mode 1", "blackhole.film_tilt": "distance 74.1 GM/c², field of view 30", "blackhole.extreme": "Black Hole Lab: distance 20.0", "blackhole.all_light": "Black Hole Lab: distance 20.0",
+    "molecule.spacefill_vib": "Molecule Lab: C6H6 (12 atoms), zoom x4.00, vibration mode 1", "blackhole.film_tilt": "distance 74.1 GM/c², field of view 30", "blackhole.extreme": "Black Hole Lab: distance 50.0", "blackhole.all_light": "Black Hole Lab: distance 20.0",
+    "blackhole.moving_gas": "Black Hole Lab: distance 10.0",   # 0.72.0
     "ui.guide_scroll": "Learn guide 0:3", "ui.data_plot": "Data panel over the", "ui.settings_open": "the belts' rocks",
 }
 

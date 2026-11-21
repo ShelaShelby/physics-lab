@@ -72,7 +72,7 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   from the start.
 - Real and Film stay two separate looks (21 Nov 2026): Real keeps true colour (a disc this hot is blue-white); Film keeps the film's golden disc, labelled as
   the film's choice.
-- No benchmark scenes are added to find problems; the owner's usual benchmark after each version stays (21 Nov 2026).
+- No benchmark scenes are added to find problems; the owner's usual benchmark after each version stays (21 Nov 2026). Its second half is replaced by the benchmark rule of 21 Nov 2026 (Graphics and speed).
 
 ## Molecule Lab
 - The Molecule Lab is the 15 measured molecules; the builder is removed (4 Nov 2026). Density shows a DFT electron density at the measured shape (18 Oct 2026).
@@ -87,7 +87,8 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - Every simulation is built to run on the graphics card. The processor's version is kept: it is the exact reference the tests check the card against, and it
   takes over on a PC whose card or driver cannot do it (through the guard of 0.55.7). A feature is not finished while its heavy repeated work runs only on the
   processor. A job that adds something drawn adds a benchmark scene for it; the target is the screen's refresh rate on the owner's PC for every scene. The owner
-  sends the benchmark after each version X.Y and the planning chat checks every scene (16 Nov 2026; replaces the line of 5 Oct 2026).
+  sends the benchmark after each version X.Y and the planning chat checks every scene (16 Nov 2026; replaces the line of 5 Oct 2026). "The owner sends the
+  benchmark after each version X.Y" is replaced by the benchmark rule of 21 Nov 2026 below.
 - No scene below the screen's refresh rate is acceptable (his PC: 255 Hz). Moving heavy repeated work to the graphics card comes before new features, slowest
   benchmark scene first, until every scene of the Hard list reaches it; the Black Hole Lab's moving gas waits until then (17 Nov 2026).
 - The Black Hole Lab's look comes first, then the speed work; every new drawing on the graphics card from the start (the processor as reference and fallback).
@@ -99,6 +100,9 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   calculation and tables made once stay on the processor (the atoms' equations, the planets' motion, the light-path tables); a chain that slows a frame moves
   to a background thread. The processor keeps an exact reference and the fallback for everything on the card. Speed work is paused until the Black Hole
   Lab's look is done.
+- The benchmark rule (21 Nov 2026): the owner sends a benchmark only after a version that adds a new benchmark scene; the planning chat asks for one only
+  then (not after every X.Y, and not before every job). Replaces "the owner sends the benchmark after each version X.Y" (16 Nov) and "Before any new job,
+  the owner's benchmark of the previous version" (Workflow).
 - Order: finish Vulkan fully, then all the speed work on Vulkan, slowest scene first; the outside review, the Black Hole Lab's look and new features are talked about after that (owner decision 18 Nov 2026).
 
 ## Look and interface
@@ -116,5 +120,5 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - The full UI suite runs only when the owner asks. Every job runs check.sh quick plus the ui_* tests of the screens it changes.
 - No known failure carries over to the next version: fixed, or its test corrected with a written reason; never loosened.
 - The planning chat reads the processor's code (data, precision, calls) before planning any move to the card, and names in the job the files and lines it read.
-- Before any new job, the owner's benchmark of the previous version.
+- Before any new job, the owner's benchmark of the previous version. Replaced by the benchmark rule of 21 Nov 2026 (Graphics and speed).
 - Who keeps each plan file true: the job that changes a plan's area updates it; the planning chat names the plan files in the job.

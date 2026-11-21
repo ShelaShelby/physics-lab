@@ -187,16 +187,26 @@ std::array<double, 3> allLightLinear(double T) {
 namespace {
 struct Y2 { double u, w; };
 inline Y2 rhs(const Y2& y) { return {y.w, 3 * y.u * y.u - y.u}; }
-// one step of size h; err: the embedded error estimate, scaled
-Y2 dpStep(const Y2& y, double h, double* err) {
+// one step of size h; err: the embedded error estimate, scaled. 0.72.0: dt (when asked, ib = 1 / b): the far time over the step, dt/dphi = 1 / (b u^2 (1 - 2u))
+// (E = 1, L = b: dt/dlambda = 1 / (1 - 2/r), dphi/dlambda = b / r^2) by the same stages and the 5th-order weights (a quadrature riding on the step; not in err)
+Y2 dpStep(const Y2& y, double h, double* err, double ib = 0, double* dt = nullptr) {
     const Y2 k1 = rhs(y);
-    const Y2 k2 = rhs({y.u + h * (k1.u / 5), y.w + h * (k1.w / 5)});
-    const Y2 k3 = rhs({y.u + h * (3 * k1.u / 40 + 9 * k2.u / 40), y.w + h * (3 * k1.w / 40 + 9 * k2.w / 40)});
-    const Y2 k4 = rhs({y.u + h * (44 * k1.u / 45 - 56 * k2.u / 15 + 32 * k3.u / 9), y.w + h * (44 * k1.w / 45 - 56 * k2.w / 15 + 32 * k3.w / 9)});
-    const Y2 k5 = rhs({y.u + h * (19372 * k1.u / 6561 - 25360 * k2.u / 2187 + 64448 * k3.u / 6561 - 212 * k4.u / 729),
-                       y.w + h * (19372 * k1.w / 6561 - 25360 * k2.w / 2187 + 64448 * k3.w / 6561 - 212 * k4.w / 729)});
-    const Y2 k6 = rhs({y.u + h * (9017 * k1.u / 3168 - 355 * k2.u / 33 + 46732 * k3.u / 5247 + 49 * k4.u / 176 - 5103 * k5.u / 18656),
-                       y.w + h * (9017 * k1.w / 3168 - 355 * k2.w / 33 + 46732 * k3.w / 5247 + 49 * k4.w / 176 - 5103 * k5.w / 18656)});
+    const Y2 s2{y.u + h * (k1.u / 5), y.w + h * (k1.w / 5)};
+    const Y2 k2 = rhs(s2);
+    const Y2 s3{y.u + h * (3 * k1.u / 40 + 9 * k2.u / 40), y.w + h * (3 * k1.w / 40 + 9 * k2.w / 40)};
+    const Y2 k3 = rhs(s3);
+    const Y2 s4{y.u + h * (44 * k1.u / 45 - 56 * k2.u / 15 + 32 * k3.u / 9), y.w + h * (44 * k1.w / 45 - 56 * k2.w / 15 + 32 * k3.w / 9)};
+    const Y2 k4 = rhs(s4);
+    const Y2 s5{y.u + h * (19372 * k1.u / 6561 - 25360 * k2.u / 2187 + 64448 * k3.u / 6561 - 212 * k4.u / 729),
+                y.w + h * (19372 * k1.w / 6561 - 25360 * k2.w / 2187 + 64448 * k3.w / 6561 - 212 * k4.w / 729)};
+    const Y2 k5 = rhs(s5);
+    const Y2 s6{y.u + h * (9017 * k1.u / 3168 - 355 * k2.u / 33 + 46732 * k3.u / 5247 + 49 * k4.u / 176 - 5103 * k5.u / 18656),
+                y.w + h * (9017 * k1.w / 3168 - 355 * k2.w / 33 + 46732 * k3.w / 5247 + 49 * k4.w / 176 - 5103 * k5.w / 18656)};
+    const Y2 k6 = rhs(s6);
+    if (dt) {
+        const auto f = [ib](double u) { return ib / (u * u * (1 - 2 * u)); };
+        *dt = h * (35 * f(y.u) / 384 + 500 * f(s3.u) / 1113 + 125 * f(s4.u) / 192 - 2187 * f(s5.u) / 6784 + 11 * f(s6.u) / 84);
+    }
     const Y2 n{y.u + h * (35 * k1.u / 384 + 500 * k3.u / 1113 + 125 * k4.u / 192 - 2187 * k5.u / 6784 + 11 * k6.u / 84),
                y.w + h * (35 * k1.w / 384 + 500 * k3.w / 1113 + 125 * k4.w / 192 - 2187 * k5.w / 6784 + 11 * k6.w / 84)};
     if (err) {
@@ -215,11 +225,14 @@ Y2 start(double rO, double psi) {
 }
 // Integrates from phi = 0. Visits each target (increasing) and stops at the ray's end (u = 0 or 1/2). Returns the end angle; captured set.
 // targets may be null. At most maxSteps accepted steps.
-double integrate(double rO, double psi, const double* tg, int nt, double* out, bool& captured) {
+// 0.72.0: tout (if given): the far time the light takes from each target to the camera (M; the end's own target: not filled, the caller's)
+double integrate(double rO, double psi, const double* tg, int nt, double* out, bool& captured, double* tout = nullptr) {
     captured = psi > kPi / 2;
-    if (!(std::sin(psi) > 0)) { for (int i = 0; i < nt; i++) out[i] = 1 / rO; return 0; }
+    if (!(std::sin(psi) > 0)) { for (int i = 0; i < nt; i++) { out[i] = 1 / rO; if (tout) tout[i] = 0; } return 0; }
     Y2 y = start(rO, psi);
-    double phi = 0;
+    const double ib = 1 / cameraImpact(rO, psi);
+    double phi = 0, tt = 0, dtt = 0;
+    double* const dtp = tout ? &dtt : nullptr;
     double h = std::min(0.01, 0.01 * y.u / (std::fabs(y.w) + 1e-300));
     int ti = 0;
     for (int steps = 0; steps < 2000000; steps++) {
@@ -227,8 +240,8 @@ double integrate(double rO, double psi, const double* tg, int nt, double* out, b
         bool toTarget = false;
         double hs = h;
         if (ti < nt && phi + hs >= tg[ti]) { hs = tg[ti] - phi; toTarget = true; }
-        if (hs <= 0) { out[ti++] = y.u; continue; }
-        const Y2 n = dpStep(y, hs, &err);
+        if (hs <= 0) { if (tout) tout[ti] = tt; out[ti++] = y.u; continue; }
+        const Y2 n = dpStep(y, hs, &err, ib, dtp);
         if (err > 1) { h = hs * std::max(0.2, 0.9 * std::pow(err, -0.2)); continue; }
         // the end inside this step?
         const bool esc = n.u <= 0, hor = n.u >= 0.5;
@@ -243,14 +256,15 @@ double integrate(double rO, double psi, const double* tg, int nt, double* out, b
             }
             captured = hor;
             // targets beyond the end are not filled; a target within the step and before the end is
-            while (ti < nt && tg[ti] <= phi + hh) { out[ti] = dpStep(y, tg[ti] - phi, nullptr).u; ti++; }
-            for (; ti < nt; ti++) out[ti] = target;
+            while (ti < nt && tg[ti] <= phi + hh) { out[ti] = dpStep(y, tg[ti] - phi, nullptr, ib, dtp).u; if (tout) tout[ti] = tt + dtt; ti++; }
+            for (; ti < nt; ti++) { out[ti] = target; if (tout) tout[ti] = 0; }
             return phi + hh;
         }
         phi += hs; y = n;
-        if (toTarget) out[ti++] = y.u;
+        if (tout) tt += dtt;
+        if (toTarget) { if (tout) tout[ti] = tt; out[ti++] = y.u; }
         if (!toTarget || err > 0) h = hs * std::min(5.0, std::max(0.2, 0.9 * std::pow(std::max(err, 1e-30), -0.2)));
-        while (ti < nt && tg[ti] <= phi) out[ti++] = y.u;                         // (equal targets)
+        while (ti < nt && tg[ti] <= phi) { if (tout) tout[ti] = tt; out[ti++] = y.u; }   // (equal targets)
     }
     return phi;
 }
@@ -306,7 +320,8 @@ DiscTable::DiscTable(double rO, int nS, int nT) : rO_(rO), alpha_(shadowAngle(rO
         ds_[side] = (sOf(xmax[side]) - s0_[side]) / (nS - 1);
     }
     // every row on its own (all cores; each row writes only its own values)
-    const auto rowJob = [&](int side, int i, std::vector<double>& tg, std::vector<double>& out) {
+    t_.assign(static_cast<std::size_t>(2) * nS * nT, 0);
+    const auto rowJob = [&](int side, int i, std::vector<double>& tg, std::vector<double>& out, std::vector<double>& tout) {
         const double s = s0_[side] + i * ds_[side];
         double x = std::min(std::exp(s), xmax[side]);                         // invert s = ln x + x / xc by Newton
         for (int it = 0; it < 60; it++) { const double d = (sOf(x) - s) / (1 / x + 1 / kDiscXc); x = std::max(x - d, x / 4); if (std::fabs(d) < 1e-16 * x) break; }
@@ -318,15 +333,19 @@ DiscTable::DiscTable(double rO, int nS, int nT) : rO_(rO), alpha_(shadowAngle(rO
         else end = integrate(rO, psi, nullptr, 0, nullptr, cap);
         p_[static_cast<std::size_t>(side) * nS + i] = end;
         for (int j = 0; j < nT; j++) tg[j] = end * j / (nT - 1);
-        integrate(rO, psi, tg.data(), nT, out.data(), cap);
+        integrate(rO, psi, tg.data(), nT, out.data(), cap, tout.data());
         out[nT - 1] = side == 0 ? 0 : 0.5;                                    // (the end itself, exactly)
-        for (int j = 0; j < nT; j++) u_[(static_cast<std::size_t>(side) * nS + i) * nT + j] = out[j];
+        tout[nT - 1] = 2 * tout[nT - 2] - tout[nT - 3];                       // 0.72.0: (the end's time is infinite: carried on straight, for the cubic)
+        for (int j = 0; j < nT; j++) {
+            u_[(static_cast<std::size_t>(side) * nS + i) * nT + j] = out[j];
+            t_[(static_cast<std::size_t>(side) * nS + i) * nT + j] = tout[j];
+        }
     };
     const int nth = std::clamp(static_cast<int>(std::thread::hardware_concurrency()), 1, 16);
     std::atomic<int> next{0};
     const auto worker = [&] {
-        std::vector<double> tg(nT), out(nT);
-        for (int k; (k = next++) < 2 * nS;) rowJob(k / nS, k % nS, tg, out);
+        std::vector<double> tg(nT), out(nT), tout(nT);
+        for (int k; (k = next++) < 2 * nS;) rowJob(k / nS, k % nS, tg, out, tout);
     };
     std::vector<std::thread> pool;
     const bool low = thisThreadLow();                                         // 0.55.5 (low_priority.h)
@@ -334,6 +353,7 @@ DiscTable::DiscTable(double rO, int nS, int nT) : rO_(rO), alpha_(shadowAngle(rO
     worker();
     for (std::thread& th : pool) th.join();
     uf_.assign(u_.begin(), u_.end());
+    tf_.assign(t_.begin(), t_.end());
     pf_.assign(p_.begin(), p_.end());
     ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 }
@@ -380,6 +400,29 @@ bool DiscTable::lookup(double x, double phi, double& u) const {
     }
     u = v;
     return true;
+}
+
+bool DiscTable::lookupT(double x, double phi, double& t) const {
+    const int side = x > 0 ? 0 : 1;
+    const double P = phiEnd(x);
+    if (!(phi <= P)) return false;
+    const double q = (sOf(std::fabs(x)) - s0_[side]) / ds_[side];
+    double wr[4], wc[4];
+    const int i0 = stencil(q, nS_, wr);
+    const int j0 = stencil(phi / P * (nT_ - 1), nT_, wc);
+    double v = 0;
+    for (int a = 0; a < 4; a++) {
+        const double* row = &t_[(static_cast<std::size_t>(side) * nS_ + i0 + a) * nT_ + j0];
+        v += wr[a] * (wc[0] * row[0] + wc[1] * row[1] + wc[2] * row[2] + wc[3] * row[3]);
+    }
+    t = v;
+    return true;
+}
+double rayTime(double rO, double psi, double phi) {
+    double u, t;
+    bool c;
+    integrate(rO, psi, &phi, 1, &u, c, &t);
+    return t;
 }
 
 DiscHit discRayTable(const DiscTable& t, double x, double A, double B, double LzOverB, const DiscGeom& d) {

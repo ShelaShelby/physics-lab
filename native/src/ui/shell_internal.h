@@ -47,6 +47,7 @@ app::shell::Rect moleculeBar(AppState& app, const app::shell::Frame& fr, const a
 void blackholeControls(AppState& app, sh::Panel& p, const SectionFn& section);
 void blackholeCard(AppState& app, sh::Panel& p);                                // the readout card
 app::shell::Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const app::shell::Metrics& m);   // its bottom bar (Bending, Reset view)
+app::shell::Rect blackholeClocks(AppState& app, const app::shell::Frame& fr, const app::shell::Metrics& m);   // 0.72.0: the moving gas's clocks, on the picture
 bool controlsOpen();
 void controlsToggle();
 const char* controlsSectionOf(PanelId id);       // the section an old toolbar panel's contents moved to ("" if it did not move)

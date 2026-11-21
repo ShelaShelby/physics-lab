@@ -94,6 +94,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "A feeding hole spinning at 0.9 with its disc out to 2000 GM/c\xC2\xB2, Real look, Light: All light, from 20 GM/c\xC2\xB2 with a 90\xC2\xB0 view (the hardest of "
             "five views tried, REPORT 0.58.0): the camera turns round the axis and tilts through the disc's plane and back, as a drag does. The sky and disc per pixel on "
             "the graphics card where its check passed.");
+        add(true, "blackhole.moving_gas", BenchKind::BlackHoleMovingGas, -1, "Black Hole Lab, the moving gas at the fastest rate while the view turns",
+            "A feeding hole spinning at 0.9, Real look, the moving gas on (the clump and the patches, the light's travel time per pixel) at the fastest rate (10^7), "
+            "from 10 GM/c\xC2\xB2 with a 60\xC2\xB0 view, 10\xC2\xB0 above the disc (the hardest of five views tried, 2.2 to 20 GM/c\xC2\xB2): the camera turns slowly "
+            "round the axis. A new picture every frame; the sky and disc per pixel on the graphics card where its check passed.");
         add(true, "ui.guide_scroll", BenchKind::UiGuideScroll, -1, "Pages, the longest Learn guide scrolled",
             "The longest Learn guide (the Orbit Lab's timeline: 7,157 px of scrolling at 1280 x 800) open in the reading view over its lab, scrolled from top to bottom "
             "at a steady rate in the counted time (and back up in the warm-up).");
@@ -144,7 +148,9 @@ double benchPlannedS() {
 
 // the default run takes about four minutes (the owner's decision in 0.56.1's job): 24 scenes of 6.5 s, 33 waits of about 1.6 s, 6 labs left alone about 4 s.
 // 0.64.0: 32 scenes (the six heavy views the benchmark missed, CLAUDE.md: a heavy view goes to the Hard list), so about four and three-quarter minutes (REPORT 0.64.0)
-static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 4.85 * 60,
+// 0.72.0: 33 scenes (blackhole.moving_gas, CLAUDE.md: a new drawing adds its scene): 291.3 s planned, over 0.64.0's 4.85 minutes by 0.3 s; the limit is 4.9
+// minutes now (nothing shortened, REPORT 0.72.0)
+static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 4.9 * 60,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,
               "the default benchmark run is planned at about four minutes");

@@ -1096,15 +1096,15 @@ static void testBenchBlackHole() {
 // ---- 0.56.1: the two lists, the stable ids, the summary table's rules, the waits and the rest (made-up results), the run's length, the texts ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views): 32 Hard scenes first, 48 in All", app::kBenchHardScenes == 32 && app::kBenchAllScenes == 48 && int(v.size()) == 48);
+    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views, 0.72.0 blackhole.moving_gas): 33 Hard scenes first, 49 in All", app::kBenchHardScenes == 33 && app::kBenchAllScenes == 49 && int(v.size()) == 49);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[48] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
+    static const char* const ids[49] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
         "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.slice_super_drag",
         "atom.slice_all_drag", "atom.slice_dirac_drag", "atom.side_all_glow", "atom.side_all_classic", "atom.slice_glow_ultra", "atom.slice_classic_ultra", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
-        "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light",
+        "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas",
         "ui.guide_scroll", "ui.data_plot", "ui.settings_open",
         "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first", "atom.chart_chain", "atom.uranium_true",
         "atom.phase_wheel_cpu", "atom.jump_held_cpu", "atom.superposition_cpu", "atom.outline_first_cpu", "atom.slice_drag_cpu", "orbit.heaviest_cpu", "orbit.rocks8_cpu", "atom.uranium_true_cpu"};
@@ -1144,7 +1144,8 @@ static void testBenchSceneNumbers() {
               v[16].what.find("zoom 0.5") != std::string::npos && v[17].what.find("zoom 2.5") != std::string::npos && v[27].what.find("2.2 GM/c") != std::string::npos && v[27].what.find("360") != std::string::npos &&
               v[10].what.find("zoom -0.5") != std::string::npos && v[12].what.find("zoom -0.5") != std::string::npos);
     // the run's length: about four minutes (rule 8 of the job; a static_assert holds it too)
-    checkTrue("benchmark run: planned at about four and three-quarter minutes since 0.64.0 (" + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 291);
+    // 0.72.0: 33 scenes, 291.3 s planned: the upper limit 4.9 minutes (0.64.0: 4.85; bench_scenes.cpp's static_assert, REPORT 0.72.0)
+    checkTrue("benchmark run: planned at about four and three-quarter minutes since 0.64.0 (" + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 294);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
 }
 static void testBenchSummary() {

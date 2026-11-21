@@ -97,6 +97,24 @@ std::vector<BhLearnSection> blackholeLearnSections() {
                "draws the veil an average eye would see.");
         v.push_back({"film", "🎬 What the film changed", h});
     }
+    v.push_back({"moving", "⏱️ Moving gas",
+        p("With the disc on, the gas moves (Controls › Gas disc: <b>Moving gas</b>, <b>Pause</b> and the rate; the rest under More settings › Moving gas). "
+          "Each ring goes round at its true speed, Ω = 1 / (r^3/2 + a) in the hole's units (Bardeen, Press and Teukolsky 1972): near the hole more than half "
+          "the speed of light. One turn of the innermost gas takes about half an hour round Sagittarius A*, about a month round M87* and a few thousandths "
+          "of a second round a hole of 10 Suns; the rate sets how fast the film runs, from real time to much faster or slower.") +
+        p("<b>What is real.</b> The speeds; the clocks drawn on the picture: far away (the hole's own time), on the clump (a clock riding with the gas runs slow, "
+          "by α (1 − V²)^1/2, Cunningham 1975) and yours when it differs by more than 1 %; the bending of the light and its shifts of colour and brightness; the "
+          "time the light takes to reach you, worked out exactly for every pixel (Gralla and Lupsasca 2020): each part of the picture shows the gas as it was when "
+          "its light left, so the far side and the second image under the hole are older than the near side; and the shearing of the gas into trailing spirals, "
+          "because the inner rings go round faster.") +
+        p("<b>What is a model.</b> No telescope has seen the face of such a disc. The bright clump is the model astronomers fit to the flares of Sagittarius A* "
+          "(Broderick and Loeb 2006; GRAVITY Collaboration 2018; Wielgus et al. 2022): its place, size and brightness are the lab's choices, and it keeps its "
+          "shape as in that model, where real gas would shear it into an arc. The bright and dark patches follow a computer simulation of a magnetised disc "
+          "(Schnittman, Krolik and Hawley 2006): their size, lifetime and strength are from it, where they are is drawn at random. In the Film look both are "
+          "added by the lab: the film's own disc texture is not published and James et al. 2015 does not say how it moved.") +
+        p("<b>How it is drawn.</b> The graphics card works out, for every pixel, where on the disc its light left and when, from the same closed forms, then the "
+          "clump and the patches there; a patch smaller than a pixel is drawn as its average over the pixel. The processor keeps the same steps in double "
+          "precision: the lab checks the card against it when it first draws, and uses it where the card cannot.")});
     v.push_back({"soft", "〰️ What is soft",
         p("<b>The sky map.</b> Gaia's map has about 0.09° per map pixel. Near the Einstein ring the hole magnifies the sky many times, so the map's own blur "
           "shows there: that is the map's sharpness, not the physics. Close to the shadow's edge the whole sky is squeezed into rings thinner than a pixel; the "

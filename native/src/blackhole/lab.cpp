@@ -1,4 +1,5 @@
 #include "blackhole/lab.h"
+#include "blackhole/gas.h"
 #include "blackhole/low_priority.h"
 
 #include <algorithm>
@@ -40,7 +41,8 @@ double logV(double t, double lo, double hi) { return std::exp(std::log(lo) + std
 bool Settings::operator==(const Settings& o) const {
     return preset == o.preset && massSun == o.massSun && dist == o.dist && fovDeg == o.fovDeg && yaw == o.yaw && pitch == o.pitch && bend == o.bend && skyOurs == o.skyOurs &&
            disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expEV == o.expEV && spin == o.spin && look == o.look &&
-           trueSky == o.trueSky && glare == o.glare && allLight == o.allLight;
+           trueSky == o.trueSky && glare == o.glare && allLight == o.allLight && gasMoving == o.gasMoving && gasRun == o.gasRun && gasRateAuto == o.gasRateAuto &&
+           gasClump == o.gasClump && gasPattern == o.gasPattern && gasRate == o.gasRate && gasClumpR == o.gasClumpR;
 }
 
 Settings settingsDefaults() {
@@ -71,6 +73,7 @@ bool applyPreset(Settings& s, const std::string& key) {
         s.outer = kOuterDefault;                                        // 0.58.0: Goodman 2003's edge (lab.h)
         s.spin = 0;                                                     // (no invented spin: the model's start, as the real holes')
         s.expEV = 0;                                                    // 0.70.0: the manual exposure starts from automatic again
+        s.gasRateAuto = true;                                           // 0.72.0: the moving gas's automatic rate again
         resetView(s);                                                   // 0.70.0: the starting view (lab.h)
         return true;
     }
@@ -81,7 +84,27 @@ bool applyPreset(Settings& s, const std::string& key) {
     s.disc = false;                                                     // (owner's decision of 15 Nov 2026: the real holes open with no disc)
     s.spin = 0;                                                         // (owner's decision of 15 Nov 2026: spin not measured; it starts at 0)
     s.expEV = 0;                                                        // 0.70.0: the manual exposure starts from automatic again
+    s.gasRateAuto = true;                                               // 0.72.0: the moving gas's automatic rate again
     return true;
+}
+
+double gasRateOf(const Settings& s) {
+    if (!s.gasRateAuto) return s.gasRate;
+    const Settings v = shown(s);
+    const double rIn = discGeom(v).rIn;
+    return std::clamp(gasPeriod(rIn, v.spin) * massTimeSeconds(v.massSun) / kGasAutoSeconds, kGasRateMin, kGasRateMax);
+}
+void setGasRate(Settings& s, double r) { s.gasRate = std::clamp(r, kGasRateMin, kGasRateMax); s.gasRateAuto = false; }
+double gasRateToSlider(double r) { return logT(r, kGasRateMin, kGasRateMax); }
+double sliderToGasRate(double t) { return logV(t, kGasRateMin, kGasRateMax); }
+bool gasOn(const Settings& s) { const Settings v = shown(s); return v.disc && v.bend && v.gasMoving && (v.gasClump || v.gasPattern); }
+void gasTick(const Settings& s, double dt, double& T) {
+    if (!gasOn(s) || !s.gasRun || !(dt > 0)) return;
+    T += dt * gasRateOf(s) / massTimeSeconds(shown(s).massSun);
+}
+double gasClumpRadius(const Settings& s) {
+    const DiscGeom g = discGeom(shown(s));
+    return std::clamp(s.gasClumpR, g.rIn, std::max(g.rIn, g.rOut));
 }
 
 void setMass(Settings& s, double m) {
@@ -140,6 +163,12 @@ void saveSettings(const Settings& s, std::map<std::string, std::string>& out) {
     out["skybeside"] = s.trueSky ? "true" : "shown";                   // 0.55.4 (light.h)
     out["glare"] = s.glare ? "eye" : "off";
     out["light"] = s.allLight ? "all" : "eye";                         // 0.58.0
+    out["gas"] = s.gasMoving ? "on" : "off";                           // 0.72.0: the moving gas
+    out["gasrun"] = s.gasRun ? "on" : "off";
+    out["gasrate"] = s.gasRateAuto ? "auto" : text(s.gasRate);
+    out["gasclump"] = s.gasClump ? "on" : "off";
+    out["gaspattern"] = s.gasPattern ? "on" : "off";
+    out["gasclumpr"] = text(s.gasClumpR);
 }
 
 Settings loadSettings(const std::map<std::string, std::string>& in) {
@@ -165,6 +194,11 @@ Settings loadSettings(const std::map<std::string, std::string>& in) {
     if (const auto it = in.find("skybeside"); it != in.end() && (it->second == "true" || it->second == "shown")) s.trueSky = it->second == "true";   // 0.55.4: a file without it: Shown
     if (const auto it = in.find("glare"); it != in.end() && (it->second == "eye" || it->second == "off")) s.glare = it->second == "eye";            // (without it: the eye's, the default)
     if (const auto it = in.find("light"); it != in.end() && (it->second == "all" || it->second == "eye")) s.allLight = it->second == "all";          // 0.58.0 (without it: the eye's)
+    const auto onOff = [&](const char* key, bool& b) { if (const auto it = in.find(key); it != in.end() && (it->second == "on" || it->second == "off")) b = it->second == "on"; };
+    onOff("gas", s.gasMoving); onOff("gasrun", s.gasRun); onOff("gasclump", s.gasClump); onOff("gaspattern", s.gasPattern);   // 0.72.0 (without them: on)
+    if (const auto it = in.find("gasrate"); it != in.end() && it->second == "auto") s.gasRateAuto = true;
+    else if (num(in, "gasrate", kGasRateMin, kGasRateMax, v)) { s.gasRate = v; s.gasRateAuto = false; }
+    if (num(in, "gasclumpr", 1, kGasClumpRMax, v)) s.gasClumpR = v;
     return s;
 }
 

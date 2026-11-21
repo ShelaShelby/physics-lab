@@ -74,6 +74,12 @@ struct Settings {
     // 0.58.0, Real only: "Light": What an eye sees (false, the default: the visible light by the CIE observer) or All light (true: each point's brightness the
     // total light of all wavelengths, disc.h allLightLinear; its colour the eye's). All light is not an eye's picture: no glare, the sky beside the disc as Shown.
     bool allLight = false;
+    // 0.72.0 (gas.h; PLAN_MOVINGGAS.md; owner's choice of 17 Nov 2026: Real and Film both): the moving gas, while the disc is drawn. gasMoving off: 0.71's still
+    // disc. gasRun: Pause / play. gasRate: seconds of the far clock per second on the screen (1: real time); gasRateAuto: set so that one turn of the innermost
+    // gas takes kGasAutoSeconds on the screen at the hole shown (the start; any choice of the rate ends it, a preset starts it again). gasClump, gasPattern:
+    // the clump (BL06) and the disc's patches (SKH06), both labelled models; gasClumpR: the clump's orbit (GM/c^2, at least the disc's inner edge)
+    bool gasMoving = true, gasRun = true, gasRateAuto = true, gasClump = true, gasPattern = true;
+    double gasRate = 1, gasClumpR = 8;
     bool operator==(const Settings& o) const;
 };
 Settings settingsDefaults();               // Sagittarius A*, the starting view (kDistDefault, kFovDefault, kTiltDefaultDeg, towards the galactic centre), bending on, our sky
@@ -86,6 +92,16 @@ double exposureStops(const Settings& s);   // 0 when automatic, else expEV
 void setDisc(Settings& s, bool on);        // 0.70.0: the disc on or off; a change sets the manual exposure back to 0 stops
 void setSpin(Settings& s, double a);       // 0.55.2: clamps to 0 .. kSpinTop (the presets set 0: the real holes' spin is not measured)
 void setMass(Settings& s, double massSun); // clamps; the preset is dropped unless the mass is the preset's own
+// 0.72.0: the moving gas's rate (log slider kGasRateMin .. kGasRateMax: from 10^-6 of real time, for a 1-Sun hole whose innermost orbit is a tenth of a
+// millisecond, to 10^7, for 10^11 Suns whose takes a year); gasRateOf: the rate in use (the automatic one: one innermost turn in kGasAutoSeconds)
+constexpr double kGasRateMin = 1e-6, kGasRateMax = 1e7, kGasAutoSeconds = 20, kGasClumpRMax = 30;
+double gasRateOf(const Settings& s);
+void setGasRate(Settings& s, double rate); // clamps; the automatic rate ends
+double gasRateToSlider(double rate);
+double sliderToGasRate(double t);
+double gasClumpRadius(const Settings& s);  // gasClumpR, at least the shown disc's inner edge and at most its outer
+bool gasOn(const Settings& s);             // the moving gas is drawn: the shown disc on, bending on, gasMoving, the clump or the patches
+void gasTick(const Settings& s, double dt, double& T);   // T (GM/c^3) on by dt seconds of the screen at gasRateOf while gasOn and gasRun
 // 0.55.3, the looks (looks.h). shown: the settings the picture and the readout use: s itself for Real; for Film the film's spin and the disc on (J15, looks.h).
 // paperView: the camera where J15's Figure 13 has it (74.1 M, theta 1.511 rad from the spin axis; the turn round the axis and the field of view stay).
 void setLook(Settings& s, Look l);

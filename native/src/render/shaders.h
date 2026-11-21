@@ -508,7 +508,12 @@ void main() {
 // channel is over 1, laid over the sky in linear light and encoded (IEC 61966-2-1) at the end. Opaque: the crossings are laid front to back, each covering the part of the pixel whose radius range (r +- fwidth/2) overlaps the disc's
 // [rIn, rOut] (the anti-aliasing of the edges and of the thin rings); what is left shows the sky or the shadow behind. uSky 0: black behind.
 // uDebug 2 (tests): the first crossing whose pixel centre lies on the disc: (order, r, g, x_px); order -1 for none.
-static const char* const kLensFS = R"(#version 330 core
+// 0.72.0: kLensFS = kLensHeadPart + kGasPart + kLensMainPart (render/vk_blackhole.cpp; tests/check_shaders.py ASSEMBLED). The moving gas (uGas 1): each
+// crossing's swept angle psi_k gives its place n = (sin psi dn, cos psi) on the view frame (towards the camera = z), its phi = atan(n.uGasE2, n.uGasE1)
+// (uGasE1, uGasE2: the sky frame's x and y on the view frame: phi as the spinning hole's), and its light's travel time t from the processor's table uDTt
+// (the same rows and columns as uDU, the same cubic; blackhole/disc.h DiscTable::tValues). uDebug 3 (tests): (phi, t, gasLight with no footprint) at the
+// first crossing on the disc (t = -1: none).
+static const char* const kLensHeadPart = R"(#version 330 core
 in vec2 vUV;
 uniform sampler2D uTex;
 uniform sampler2D uTable;
@@ -560,6 +565,13 @@ vec3 toneRGB(vec3 c, float lw) {                      // eq. (4) on Y, each chan
 }
 
 const float PI = 3.14159265358979;
+)";
+static const char* const kLensMainPart = R"(
+uniform int uGas;
+uniform float uGasTau;
+uniform vec3 uGasE1;
+uniform vec3 uGasE2;
+uniform sampler2D uDTt;
 float tab(int i) { return texelFetch(uTable, ivec2(clamp(i, 0, uN - 1), 0), 0).r; }
 float bendAt(float xpx) {
     float t = (log(xpx) - uT.x) / uT.y;
@@ -577,6 +589,7 @@ vec2 mapUV(vec3 v) {
 vec4 cubicW(float u) { return vec4(-u * (u - 1.0) * (u - 2.0) / 6.0, (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0, -(u + 1.0) * u * (u - 2.0) / 2.0, (u + 1.0) * u * (u - 1.0) / 6.0); }
 int stencil(float q, int n, out vec4 w) { q = clamp(q, 0.0, float(n - 1)); int i = clamp(int(q), 1, n - 3); w = cubicW(q - float(i)); return i - 1; }
 float dU(int row, int j) { return texelFetch(uDU, ivec2(j, row), 0).r; }
+vec4 dT4(int row, int j) { return vec4(texelFetch(uDTt, ivec2(j, row), 0).r, texelFetch(uDTt, ivec2(j + 1, row), 0).r, texelFetch(uDTt, ivec2(j + 2, row), 0).r, texelFetch(uDTt, ivec2(j + 3, row), 0).r); }
 float dP(int k) { return texelFetch(uDP, ivec2(k, 0), 0).r; }
 vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
 vec3 decS(vec3 e) { return mix(e / 12.92, pow((e + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), e)); }
@@ -586,9 +599,9 @@ vec3 allLight(vec3 c, float s, float T) {             // the eye's colour c (tim
     q *= q;
     return y > 0.0 ? c * (q * q * s / y) : vec3(0.0);
 }
-vec3 discColourRaw(float r, float g) {
+vec3 discColourRaw(float r, float g, float gf) {
     float sr = sqrt(r), s3 = 1.7320508, s6 = 2.4494897;
-    float F = 3.0 / (8.0 * PI) / ((r - 3.0) * r * r * sr) * (sr - s6 + 0.8660254 * log((sr + s3) * (s6 - s3) / ((sr - s3) * (s6 + s3))));
+    float F = 3.0 / (8.0 * PI) / ((r - 3.0) * r * r * sr) * (sr - s6 + 0.8660254 * log((sr + s3) * (s6 - s3) / ((sr - s3) * (s6 + s3)))) * gf;
     float T = uDT.x * pow(max(F, 0.0), 0.25) * g;
     if (!(T > 0.0)) return vec3(0.0);
     float q = (log(T) * 0.43429448 - uDT.z) / uDT.w;
@@ -640,23 +653,33 @@ void main() {
     float phi0 = atan(-A, B);
     if (phi0 <= 0.0) phi0 += PI;
     float rk[4];
+    vec4 tk = vec4(-1.0), pk = vec4(0.0);
     for (int k = 0; k < 4; k++) {
         float phi = phi0 + float(k) * PI, rr = 1e9;
         if (phi <= P && th <= PI) {
             vec4 wc;
             int j0 = stencil(phi / P * float(uDN.y - 1), uDN.y, wc);
-            float u = 0.0;
-            for (int a = 0; a < 4; a++) u += wr[a] * dot(wc, vec4(dU(row0 + a, j0), dU(row0 + a, j0 + 1), dU(row0 + a, j0 + 2), dU(row0 + a, j0 + 3)));
+            float u = 0.0, tq = 0.0;
+            for (int a = 0; a < 4; a++) {
+                u += wr[a] * dot(wc, vec4(dU(row0 + a, j0), dU(row0 + a, j0 + 1), dU(row0 + a, j0 + 2), dU(row0 + a, j0 + 3)));
+                if (uGas == 1) tq += wr[a] * dot(wc, dT4(row0 + a, j0));
+            }
             if (u > 0.0) rr = 1.0 / u;
+            vec3 nk = vec3(sin(phi) * dn, cos(phi));
+            pk[k] = atan(dot(nk, uGasE2), dot(nk, uGasE1));
+            tk[k] = uGas == 1 ? tq : -1.0;
         }
         rk[k] = rr;
     }
     float fw[4] = float[4](fwidth(rk[0]), fwidth(rk[1]), fwidth(rk[2]), fwidth(rk[3]));
+    vec4 pdx = dFdx(pk), pdy = dFdy(pk);                 // 0.72.0: the footprint in phi (a whole turn between neighbours taken off)
+    pdx -= 2.0 * PI * floor(pdx / (2.0 * PI) + 0.5); pdy -= 2.0 * PI * floor(pdy / (2.0 * PI) + 0.5);
+    vec4 fph = 0.3 * (abs(pdx) + abs(pdy));
     float b = uDR.y * sin(th);
     if (uExp == 1) {
         for (int k = 0; k < 4; k++)
             if (rk[k] >= uDR.z && rk[k] <= uDR.w) {
-                vec3 c = discColourRaw(rk[k], sqrt(1.0 - 3.0 / rk[k]) / (1.0 - pow(rk[k], -1.5) * b * LzB));
+                vec3 c = discColourRaw(rk[k], sqrt(1.0 - 3.0 / rk[k]) / (1.0 - pow(rk[k], -1.5) * b * LzB), 1.0);
                 float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
                 fragColor = vec4(max(c.r, max(c.g, c.b)), y, y, 1.0);   // (0.70.0: Y again for the log-average, kExpSumFS)
                 return;
@@ -670,15 +693,26 @@ void main() {
         fragColor = vec4(-1.0, 0.0, 0.0, xpx);
         return;
     }
+    int first = -1;
+    for (int k = 0; k < 4; k++) if (first < 0 && rk[k] >= uDR.z && rk[k] <= uDR.w) first = k;
+    if (uDebug == 3 && first < 0) { fragColor = vec4(0.0, -1.0, 0.0, 0.0); return; }
     vec3 acc = vec3(0.0), accRaw = vec3(0.0);
     float tr = 1.0;
     for (int k = 0; k < 4; k++) {
         float w = max(fw[k], 1e-7);
         float cov = clamp((min(rk[k] + 0.5 * w, uDR.w) - max(rk[k] - 0.5 * w, uDR.z)) / w, 0.0, 1.0);
-        if (cov <= 0.0) continue;
+        if (uDebug == 3 ? k != first : cov <= 0.0) continue;
         float rc = clamp(rk[k], uDR.z, uDR.w);           // (a pixel that only partly covers the disc: its colour at the nearest radius on it)
-        float g = sqrt(1.0 - 3.0 / rc) / (1.0 - pow(rc, -1.5) * b * LzB);
-        vec3 cr = discColourRaw(rc, g);
+        float g = sqrt(1.0 - 3.0 / rc) / (1.0 - pow(rc, -1.5) * b * LzB), gf = 1.0;
+        if (uGas == 1 && tk[k] >= 0.0) {
+            bool fz = uDebug == 3;                        // (the tests' probe: no footprint, as gas.cpp's factor)
+            vec2 gl = gasLight(rc, pk[k], uGasTau - tk[k], fz ? 0.0 : 0.3 * fw[k] / rk[k], fz ? 0.0 : fph[k]);
+            if (fz) { fragColor = vec4(pk[k], tk[k], gl.x, gl.y); return; }
+            gf = gl.x * (1.0 + uGasT.w * gl.y);
+            if (isnan(gf) || isinf(gf)) gf = 1.0;
+        }
+        if (uDebug == 3) { fragColor = vec4(0.0, -1.0, 0.0, 0.0); return; }
+        vec3 cr = discColourRaw(rc, g, gf);
         acc += tr * cov * scaledColour(cr);
         accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
@@ -1787,13 +1821,14 @@ void main() {
 // kind: 1 sky, 2 horizon, 0 lost. f: a quantity that changes sign at the shadow's edge and is linear across it (the radial discriminant -A/2 - z^2 - B/(4z):
 // r3 = r4 = z on the edge's spherical orbits; GLa (95)), signed + on the sky's side, used only where its sign agrees with the ray's end (else +-1e30).
 static const char* const kKerrSkyTracePart = R"(
-struct SkyRay { int kind; vec3 dir; float b; float q; vec4 u; float f; int sub; };
+struct SkyRay { int kind; vec3 dir; float b; float q; vec4 u; float f; int sub; vec4 ph; vec4 tt; };
 uniform vec4 uCam;
 uniform vec4 uMet;
 uniform vec4 uMet2;
+uniform vec2 uTimeR;                                  // 0.72.0: the crossings at radii in [uTimeR.x, uTimeR.y] get their phi and t (the moving gas); (0, 0): none
 SkyRay traceRay(vec3 look) {
     SkyRay o;
-    o.kind = 0; o.dir = vec3(0.0); o.b = 0.0; o.q = 0.0; o.u = vec4(0.0); o.f = 1e30; o.sub = 0;
+    o.kind = 0; o.dir = vec3(0.0); o.b = 0.0; o.q = 0.0; o.u = vec4(0.0); o.f = 1e30; o.sub = 0; o.ph = vec4(0.0); o.tt = vec4(-1.0);
     float a = uCam.x, rc = uCam.y, cth = uCam.z, sth = uCam.w;
     float rp = uMet2.y, rm = uMet2.z, rEnd = uMet2.w;
     // the launch (KerrBL::launch: n_F = -N for the hovering camera; J15 (A.11), (A.12))
@@ -1940,9 +1975,17 @@ SkyRay traceRay(vec3 look) {
     float tau = 0.0, Kp = 1.0, PiFull = 0.0, F0 = 0.0, G0 = 0.0, Kr = 1.0, ps = 0.0;
     float taus[4];
     float rx[4];
+    float amc[4];                                     // 0.72.0: the radial amplitudes at the crossings, the polar half turns there, which get phi and t
+    int jh[4];
+    bool tOn[4];
+    for (int k = 0; k < 4; k++) { taus[k] = 0.0; rx[k] = 0.0; amc[k] = 0.0; jh[k] = 0; tOn[k] = false; }
+    bool tUse = false, skip7 = false;
+    float Dh = 0.0, D0 = 0.0, ca1 = 0.0, ca2 = 0.0, cap = 0.0, cam = 0.0;
+    vec2 jv[4];
+    for (int k = 0; k < 4; k++) jv[k] = vec2(0.0);
     int nx = 0;
     bool bad = false;
-    for (int k = 0; k < 8; k++) {
+    for (int k = 0; k < 32; k++) {
         if (k == 7) {
             // the set-up's results; the Mino time to the end (traceClosed) and the amplitudes at it
             F0 = jr[0].x; G0 = noG ? 0.0 : jr[0].y; Kp = jr[1].x; PiFull = jr[1].y; Kr = jr[2].x;
@@ -1955,7 +1998,7 @@ SkyRay traceRay(vec3 look) {
                 for (int j = 0; j < 8; j++) {
                     float tj = (2.0 * float(j) * Kp - F0) / sq;
                     if (tj >= tau || nx >= 4) break;
-                    if (tj > 0.0) { taus[nx] = tj; nx++; }
+                    if (tj > 0.0) { taus[nx] = tj; jh[nx] = j; nx++; }
                 }
             }
             float Fc = jr[3].x;
@@ -1965,6 +2008,7 @@ SkyRay traceRay(vec3 look) {
                 float uu = pol ? sq * tau + F0 : (sub == 4 ? nuR * taus[i - 1] / pref + Fc : taus[i - 1] / pref + nuR * Fc);
                 float am = amAny(uu, pol ? pk : rk);
                 if (pol) { ps = am; continue; }
+                amc[i - 1] = am;
                 float rr = 0.0;
                 if (sub == 4) rr = a2 * tan(am - atanS(g0)) - b1;
                 else if (sub == 3) { float cn = cos(am); rr = ((BB * r2 - AA * r1) + (BB * r2 + AA * r1) * cn) / ((BB - AA) + (BB + AA) * cn); }
@@ -1974,14 +2018,114 @@ SkyRay traceRay(vec3 look) {
             if (eq0) ps = 0.0;
             float jj = floor(ps / PI + 0.5), pp = ps - jj * PI;
             jn[7] = pn; jnc[7] = pnc; js[7] = sin(pp); jc[7] = cos(pp); jk[7] = pk;
-            if (eq0 || noG || !sky) break;
+            for (int i = 0; i < 4; i++) { tOn[i] = i < nx && rx[i] > 0.0 && rx[i] >= uTimeR.x && rx[i] <= uTimeR.y; tUse = tUse || tOn[i]; }
+            if (eq0 || noG || !sky) { if (!tUse) break; skip7 = true; }
         }
         // (0.56.2: not made where not used: K(mu) (job 2; the polar amplitude's AGM has it), the radial K but for case (1), and for a ray that ends at
         // the horizon the far direction's integrals: the I_+- terms (jobs 4, 6, the third kind of 3, 5) and the polar third kind (0, 1, 7))
-        if (k == 2 && sub != 1) continue;
-        if ((k == 0 || k == 1) && eq0) continue;
-        if (k >= 3 && k < 7 && (sub == 1 || !sky) && (k % 2) == 0) continue;
-        jr[k] = ellFP(jn[k], jnc[k], js[k], jc[k], jk[k], je[k], two && k >= 3 && k < 7, k == 2 || !sky);
+        // 0.72.0, the moving gas (kerr_closed.cpp phiTimeAt, Radial::timeInts, Polar::Gt): jobs 8, 9 the polar D(pi/2), D(Psi_0) (D = (F - E) / m as
+        // (Pi - F) / n at n = 0: dAny); 10, 11 G_phi's Pi(Psi_0) and the complete Pi for a ray that ends at the horizon (jobs 0 and 1 made them without
+        // their R_J); then four per amplitude, the camera's (12..15) and each timed crossing's: Pi of the substitution's own n (I1), E (I2), and the two of
+        // r+ and r- (I+-; case (3) near r2: E, as the sky's end)
+        if (k < 8) {
+            if (k == 2 && sub != 1) continue;
+            if ((k == 0 || k == 1) && eq0) continue;
+            if (k >= 3 && k < 7 && (sub == 1 || !sky) && (k % 2) == 0) continue;
+            if (k == 7 && skip7) continue;
+        } else if (!tUse) break;
+        float en = 0.0, enc = 1.0, es = 1.0, ec = 0.0, ek = rk;
+        bool eE = false, eD = false, eNo = false;
+        int q = k - 8, ia = 0, jb = 0;
+        float amp = 0.0;
+        if (k < 8) { en = jn[k]; enc = jnc[k]; es = js[k]; ec = jc[k]; ek = jk[k]; eE = je[k]; eD = two && k >= 3 && k < 7; eNo = k == 2 || !sky; }
+        else if (q < 2) { es = q == 0 ? 1.0 : ps0; ec = q == 0 ? 0.0 : pc0; ek = pk; eD = true; }
+        else if (q < 4) {                                 // (a ray that ends at the horizon: the polar third kind was not made above, jobs 0 and 1)
+            if (sky || noG) continue;
+            en = pn; enc = pnc; es = q == 2 ? ps0 : 1.0; ec = q == 2 ? pc0 : 0.0; ek = pk;
+        } else {
+            ia = (q - 4) / 4; jb = q - 4 - 4 * ia;
+            if (ia > 0 && !tOn[ia - 1]) continue;
+            amp = ia == 0 ? nuR : amc[ia - 1];              // (the camera's amplitude nuR phi_c: only its sign is used, kerr_closed.cpp camInts)
+            float p = sub == 4 ? amp : abs(amp);
+            es = ia == 0 ? as_[0] : sin(p); ec = ia == 0 ? ac_[0] : cos(p);
+            if (jb == 0) {
+                if (sub == 1) { en = r32 / r31; enc = r21 / r31; }
+                else if (two) { en = r41 / r31; enc = -r43 / r31; }
+                else if (sub == 3) { float l = (BB + AA) / (BB - AA), l2 = l * l; en = l2 / (l2 - 1.0); enc = -1.0 / (l2 - 1.0); }
+                else { en = 1.0 + g0 * g0; enc = -g0 * g0; }
+            } else if (jb == 1) eE = true;
+            else {
+                float rr = jb == 2 ? rp : rm;
+                if (two) { en = (rr - r3) * r41 / ((rr - r4) * r31); enc = -(rr - r1) * r43 / ((rr - r4) * r31); eD = true; }
+                else if (sub == 1) { float q1 = rr - r1, q2 = rr - r2; en = q1 * r32 / (q2 * r31); enc = (rr - r3) * r21 / (q2 * r31); }
+                else if (sub == 3) { float l = al[jb], l2 = l * l; eE = abs(l2 - 1.0) < 1e-3; en = l2 / (l2 - 1.0); enc = -1.0 / (l2 - 1.0); }
+                else { float l = al[jb], l2 = l * l; en = 1.0 + l2; enc = -l2; }
+            }
+        }
+        vec2 v = ellFP(en, enc, es, ec, ek, eE, eD, eNo);
+        if (k < 8) { jr[k] = v; continue; }
+        if (q == 0) { Dh = v.y; continue; }
+        if (q == 1) { D0 = v.y; continue; }
+        if (q == 2) { G0 = v.y; continue; }
+        if (q == 3) { PiFull = v.y; continue; }
+        jv[jb] = v;
+        if (jb < 3) continue;
+        // the amplitude's antiderivatives (Radial::timeInts): I1, I2, I+, I- at (s, c) = (es, ec)
+        float s = es, c = ec, Fu = jv[1].x, F = pref * Fu, E = jv[1].y, d = sqrt(c * c + rk * s * s), jm = 1.0 - rk;
+        float i1 = 0.0, i2 = 0.0, ipm[2];
+        ipm[0] = 0.0; ipm[1] = 0.0;
+        if (sub == 1 || two) {
+            float rA = sub == 1 ? r1 : r3, rB = sub == 1 ? r21 : r43, n = sub == 1 ? r32 / r31 : r41 / r31;
+            i1 = rA * F + rB * pref * jv[0].y;
+            i2 = 2.0 * n * s * c * d / (pref * (1.0 - n * s * s)) - (r1 * r4 + r2 * r3) * 0.5 * F - sqrt(r31 * r42) * E;
+        }
+        // R1 (case (3)) or S1 (case (4)) of the substitution's own alpha (u = 0: I1, I2) and of r+-'s (u = 1, 2: I+-), one stage
+        float sab = sqrt(AA * BB), W = 2.0 * r21 * sab / (BB * BB - AA * AA);
+        for (int u = 0; u < 3; u++) {
+            if (sub != 3 && sub != 4) break;
+            float rr = u == 1 ? rp : rm, l = u == 0 ? (sub == 3 ? (BB + AA) / (BB - AA) : g0) : al[u + 1], l2 = l * l, Pv = jv[u == 0 ? 0 : u + 1].y;
+            float q1 = rr - r1, q2 = rr - r2, x = (rr + b1) / a2, R = 0.0;
+            if (sub == 3) {
+                if (u > 0 && abs(l2 - 1.0) < 1e-3) {           // near r2 (kerr_closed.cpp nearR2): E in place of Pi
+                    float R1m = -d * (1.0 + c) / s + Fu - Pv;
+                    ipm[u - 1] = pref / (r21 * AA) * (-(BB + AA) * Fu + 2.0 * BB * R1m);
+                    continue;
+                }
+                float w = jm + (1.0 - jm) * l2, p1 = sqrt((l2 - 1.0) / w), pl = p1 * d + s;
+                R = (Pv - l * p1 * 0.5 * log(abs(pl * pl * w / (l2 * c * c - 1.0)))) / (1.0 - l2);
+                if (u > 0) { ipm[u - 1] = -1.0 / (BB * q2 + AA * q1) * ((BB + AA) * F + 2.0 * r21 * sab / (BB * q2 - AA * q1) * R); continue; }
+                float qq = (BB * r2 + AA * r1) / (BB + AA), P1 = W * R;
+                float R2 = (Fu - l2 / w * (E - l * s * d / (1.0 + l * c))) / (l2 - 1.0) + (2.0 * jm - l2 / (l2 - 1.0)) / w * R;
+                i1 = qq * F + P1;
+                i2 = qq * qq * F + 2.0 * qq * P1 + sab * W * W * R2;
+            } else {
+                float p2 = sqrt((1.0 + l2) / (rk + l2));
+                R = (Fu + l2 * Pv - l * p2 * 0.5 * log(abs((1.0 + p2 * d) * (1.0 + p2 * d) / ((1.0 + p2) * (1.0 + p2) * ((1.0 + l2) * s * s - 1.0))))) / (1.0 + l2);
+                if (u > 0) { ipm[u - 1] = g0 / (a2 * (1.0 - g0 * x)) * F - pref * (1.0 + g0 * g0) / (a2 * (1.0 - g0 * x) * (g0 + x)) * R; continue; }
+                float Qq = a2 / g0 - b1, Pq = a2 * (1.0 + g0 * g0) / g0, P1 = pref * Pq * R;
+                float S2 = -((1.0 - jm) * Fu + l2 * E + l2 * d * (l * c - s) / (c + l * s) - l2 * l) / ((1.0 + l2) * (1.0 - jm + l2)) + (1.0 / (1.0 + l2) + (1.0 - jm) / (1.0 - jm + l2)) * R;
+                i1 = Qq * F - P1;
+                i2 = Qq * Qq * F - 2.0 * Qq * P1 + pref * Pq * Pq * S2;
+            }
+        }
+        if (sub == 1 || two) for (int u = 0; u < 2; u++) {
+            float rr = u == 0 ? rp : rm, Pv = jv[2 + u].y;
+            if (two) { float r4_ = rr - r4; ipm[u] = -pref / r4_ * (Fu + r43 * r41 / (r4_ * r31) * Pv); }
+            else { float q1 = rr - r1, q2 = rr - r2; ipm[u] = -F / q1 - pref * r21 / (q1 * q2) * Pv; }
+        }
+        float sgn = sub != 4 && amp < 0.0 ? -1.0 : 1.0;
+        i1 *= sgn; i2 *= sgn; ipm[0] *= sgn; ipm[1] *= sgn;
+        if (ia == 0) { ca1 = i1; ca2 = i2; cap = ipm[0]; cam = ipm[1]; continue; }
+        // the crossing (kerr_closed.cpp phiTimeAt): GLa (11), (12), (B2), (B3); the polar parts at the crossing's half turn j: Psi = j pi
+        float sg4 = sub == 4 ? nuR : 1.0, I1 = sg4 * (i1 - ca1), I2 = sg4 * (i2 - ca2), Ip = sg4 * (ipm[0] - cap), Im = sg4 * (ipm[1] - cam);
+        float wp = rp - a * lam * 0.5, wm = rm - a * lam * 0.5, tc = taus[ia - 1], fj = float(jh[ia - 1]);
+        float Iphi = 2.0 * a / (rp - rm) * (wp * Ip - wm * Im);
+        float It = 4.0 / (rp - rm) * (rp * wp * Ip - rm * wm * Im) + 4.0 * tc + 2.0 * I1 + I2;
+        float Gc = noG ? 0.0 : (2.0 * fj * PiFull - G0) * gscale;
+        float npc = noG ? floor(fj - 0.5) - floor((ph0 - 0.5 * PI) / PI) : 0.0;
+        o.ph[ia - 1] = -Iphi - lam * Gc + PI * npc;
+        o.tt[ia - 1] = It + a * a * up / sq * (2.0 * fj * Dh - D0);
+        if (isnan(o.ph[ia - 1] + o.tt[ia - 1]) || isinf(o.ph[ia - 1] + o.tt[ia - 1])) o.tt[ia - 1] = -1.0;   // (none: the still disc's light there)
     }
     if (bad) return o;
 #if defined(SKY_STOP) && SKY_STOP == 3
@@ -2055,6 +2199,90 @@ SkyRay traceRay(vec3 look) {
 }
 )";
 
+static const char* const kGasPart = R"(
+// 0.72.0, the moving gas (blackhole/gas.h; the same steps as gas.cpp GasPattern::sumAt, factorAt and Clump::density, in single precision): gasLight(r, phi,
+// te, fe, fp) = (the pattern's factor, the clump's n) at a crossing at radius r and azimuth phi (Boyer-Lindquist) whose light left at te (far time since the
+// epoch E, M; the processor keeps E in double: no precision lost as the film runs), fe, fp the pixel's footprint (sigma) in ln r and phi. The pattern's bins
+// from uGasN.x on (uGasN.y of them), each (f, K div 65536, K mod 65536) with E / T_life = K + f; the slot's number K + k wraps in 32 bits as gas.cpp's uint32.
+// The hash is gas.cpp's gasHash (32-bit unsigned products wrap the same in GLSL and C++).
+uniform vec4 uGasT;                                   // (where the fade ends (lifetimes; the slots: its whole part + 1), c, 1 / norm, the clump's A (0: no clump))
+uniform vec4 uGasC;                                   // the clump: (r_c, phi0 + Omega_c E mod 2 pi, Omega_c, 1 / (2 R_S^2))
+uniform vec4 uGasG;                                   // (g_rr, g_phph + u_phi^2 at r_c, the spin a, the pattern's rIn)
+uniform ivec4 uGasN;                                  // (the first bin, the bins, 1: the pattern on, the phi cells (at most 28))
+uniform vec4 uGasBin[72];
+uniform float uGasW;                                  // the patches' reach in phi (sigmas; gas.h GasPattern::cutPhi)
+uint gasHash(uint a, uint b, uint c) {
+    uint h = (a * 0x9E3779B1u) ^ ((b + 0x7F4A7C15u) * 0x85EBCA77u) ^ ((c + 0x165667B1u) * 0xC2B2AE3Du);
+    h ^= h >> 15u; h *= 0x2C1B3C6Du; h ^= h >> 12u; h *= 0x297A2D39u; h ^= h >> 15u;
+    return h;
+}
+vec2 gasLight(float r, float phi, float te, float fe, float fp) {
+    float ga = uGasG.z, n = 0.0;
+    if (uGasT.w > 0.0) {
+        float dr = r - uGasC.x, dq = phi - uGasC.y - uGasC.z * te;
+        dq -= 2.0 * PI * floor(dq / (2.0 * PI) + 0.5);
+        n = exp(-(uGasG.x * dr * dr + uGasG.y * dq * dq) * uGasC.w);
+    }
+    float S = 0.0, V = 0.0;
+    if (uGasN.z == 1) {
+        int nCells = uGasN.w, nSlots = int(uGasT.x) + 1;
+        float fEnd = uGasT.x;
+        float eta = log(r), de = 0.13, dp = 2.0 * PI / float(nCells), se = 0.26 / 2.3548, sp = 25.0 * PI / 180.0 / 2.3548, w = uGasW * sp;
+        float se2 = se * se, sp2 = sp * sp, fe2 = fe * fe, fp2 = fp * fp;
+        float om = 1.0 / (r * sqrt(r) + ga), shr = 1.5 * r * sqrt(r) * om * om;
+        int ie = int(floor(eta / de));
+        for (int dj = -2; dj <= 2; dj++) {
+            int je = ie + dj, ib = je - uGasN.x;
+            if (ib < 0 || ib >= uGasN.y) continue;
+            float rb = exp((float(je) + 0.5) * de), rl = max(rb, uGasG.w);
+            float life = 0.3 * 2.0 * PI * (rl * sqrt(rl) + ga), omb = 1.0 / (rb * sqrt(rb) + ga);
+            vec4 B = uGasBin[ib];
+            float xs = B.x + te / life, k0 = floor(xs), del = life * (om - omb);
+            uint kb = uint(B.y) * 65536u + uint(B.z);
+            for (int sl = 0; sl < 9; sl++) {
+                if (sl >= nSlots) break;
+                float kd = k0 - float(sl), xm = xs - kd, c0 = phi - om * life * xm;
+                c0 -= 2.0 * PI * floor(c0 / (2.0 * PI) + 0.5);
+                int j0 = int(floor((c0 + min(0.0, del) - w) / dp));
+                int nc = min(int(floor((c0 + max(0.0, del) + w) / dp)) - j0 + 1, nCells);
+                uint kk = kb + uint(int(kd)) + 100000u;
+                for (int i = 0; i < 28; i++) {
+                    if (i >= nc) break;
+                    int jp = j0 + i;
+                    jp -= nCells * int(floor(float(jp) / float(nCells)));
+                    uint h = gasHash(uint(je + 1000), kk, uint(jp));
+                    float u1 = float(h & 0xFFFFFFu) / 16777216.0, x = xm - u1;
+                    if (x <= 0.0 || x >= fEnd) continue;
+                    float dE = eta - (float(je) + float((h * 747796405u + 1u) & 0xFFFFFFu) / 16777216.0) * de;
+                    if (abs(dE) >= 0.26) continue;
+                    float psi = (float(jp) + float((h * 2891336453u + 7u) & 0xFFFFFFu) / 16777216.0) * dp;
+                    float dP = c0 + u1 * del - psi;
+                    dP -= 2.0 * PI * floor(dP / (2.0 * PI) + 0.5);
+                    if (abs(dP) >= w) continue;
+                    float fq = x / fEnd, f2 = fq * fq, f4 = f2 * f2, fw = 1.0 - f4 * f4;
+                    float env = x * exp(1.0 - x) * fw * fw;
+                    float qe = dE / 0.26, qp = dP / w;
+                    qe *= qe; qp *= qp;
+                    float te4 = 1.0 - qe * qe, tp4 = 1.0 - qp * qp, tp = te4 * te4 * tp4 * tp4;
+                    float Sh = shr * life * x, yy = dP - Sh * dE, g = 0.0, g2 = 0.0;
+                    for (int m = 0; m < 2; m++) {             // the covariance h Sigma (h = 1: the patch, 1/2: its square) blurred by the footprint's
+                        float hh = m == 0 ? 1.0 : 0.5;
+                        float c11 = hh * se2 + fe2, c12 = -hh * Sh * se2, c22 = hh * (Sh * Sh * se2 + sp2) + fp2;
+                        float det = c11 * c22 - c12 * c12;
+                        float vq = sqrt(hh * hh * se2 * sp2 / det) * exp(-0.5 * (c22 * dE * dE - 2.0 * c12 * dE * yy + c11 * yy * yy) / det);
+                        if (m == 0) g = tp * vq; else g2 = tp * tp * vq;
+                    }
+                    S += ((h >> 31u) != 0u ? 1.0 : -1.0) * env * g;
+                    V += env * env * max(g2 - g * g, 0.0);
+                }
+            }
+        }
+    }
+    float cg = uGasT.y;
+    return vec2(uGasN.z == 1 ? exp(cg * S + 0.5 * cg * cg * V) * uGasT.z : 1.0, n);
+}
+)";
+
 // The pixel (kKerrFS's rules with the table replaced by traceRay): the ray at the pixel's angle th = |o| / uKpx from the middle and azimuth chi
 // (uKO: the screen directions of e_theta and e_phi), the shadow by its end, anti-aliased by f's distance in pixels (f / |grad f|) on the sky's side only
 // (a pixel just inside the shadow has no sky ray: its covered part is left black, at most half a pixel), the sky through uKs and the Gaia map, the disc's
@@ -2062,7 +2290,7 @@ SkyRay traceRay(vec3 look) {
 // reduction (uWhite, its .r the brightest channel; 0.56.0) or a set exposure (uWhiteSet). uDFix (Film): the film's colour before the white (rgb), on (w).
 // The fourth output (0.56.0): the share of the pixel where the far sky shows (the stars' dots are laid over the picture through it: a star image the
 // processor found for an older view never shows through the disc or the shadow). uMode: 0 the picture; 1 (dir, xpx); 2 (order, r, g, xpx); 3 (kind, b, q,
-// sub); 4 (u0..u3); 10 the exposure's sample at (uSamp.x + i uSamp.y, uSamp.z - j uSamp.w): (the first disc image's brightest channel, its Y, 0, 1) in
+// sub); 4 (u0..u3); 5 (0.72.0: the moving gas at the first disc image: phi, t, gasLight with no footprint; t = -1: none); 10 the exposure's sample at (uSamp.x + i uSamp.y, uSamp.z - j uSamp.w): (the first disc image's brightest channel, its Y, 0, 1) in
 // the disc's own light before the white (lab.h discLook's rule, its sample points).
 static const char* const kKerrSkyMainPart = R"(
 uniform sampler2D uTex;
@@ -2135,14 +2363,17 @@ vec3 lightOfT(float T) {                              // 0.58.0: the light of a 
     return col;
 }
 uniform vec4 uLP;                                     // 0.58.0, uMode 11 (the start-up check's light): the pass's corner (x, y), its width, its pixel count
-vec3 discLightRaw(float r, float g) {
-    if (uDFix.w > 0.0) return uDFix.rgb;
+uniform int uGas;                                     // 0.72.0: 1 the moving gas: each crossing's flux times gasLight's factor (1 + A n) (Real: T times its fourth
+uniform float uGasTau;                                // root, so the colour follows; Film: the one colour times it); uGasTau: the far time now since the epoch (M);
+uniform float uGasCam;                                // uGasCam: the camera's phi (the crossings' phi are from it)
+vec3 discLightRaw(float r, float g, float gf) {
+    if (uDFix.w > 0.0) return uDFix.rgb * gf;
     float q = (log(r) - uDR.z) / uDR.w;
     if (q < 0.0) return vec3(0.0);
     q = min(q, float(uDN.x - 1) - 0.001);
     int i = int(q);
     float f4 = mix(texelFetch(uDF, ivec2(i, 0), 0).r, texelFetch(uDF, ivec2(i + 1, 0), 0).r, q - float(i));
-    float T = uDT.x * f4 * g;
+    float T = uDT.x * f4 * g * sqrt(sqrt(gf));
     if (!(T > 0.0)) return vec3(0.0);
     return lightOfT(T);
 }
@@ -2179,13 +2410,16 @@ void main() {
     vec4 rk = vec4(1e9);
     for (int k = 0; k < 4; k++) rk[k] = (R.u[k] > 0.0 && th <= PI && R.kind != 0) ? 1.0 / R.u[k] : 1e9;
     vec4 fw = fwidth(rk);
+    vec4 pdx = dFdx(R.ph), pdy = dFdy(R.ph);              // 0.72.0: the footprint in phi (a whole turn between neighbours taken off)
+    pdx -= 2.0 * PI * floor(pdx / (2.0 * PI) + 0.5); pdy -= 2.0 * PI * floor(pdy / (2.0 * PI) + 0.5);
+    vec4 fph = 0.3 * (abs(pdx) + abs(pdy));
     if (uMode == 1) { fragColor = skyEnd ? vec4(R.dir, xpx) : vec4(0.0, 0.0, 0.0, xpx); return; }
     if (uMode == 3) { fragColor = vec4(float(R.kind), R.b, R.q, float(R.sub)); return; }
     if (uMode == 4) { fragColor = R.u; return; }
     int first = -1;
     for (int k = 0; k < 4; k++) if (first < 0 && rk[k] >= uDR.x && rk[k] <= uDR.y) first = k;
-    bool probe = uMode == 2 || uMode == 10;
-    if (probe && first < 0) { fragColor = uMode == 2 ? vec4(-1.0, 0.0, 0.0, xpx) : vec4(0.0); return; }
+    bool probe = uMode == 2 || uMode == 10 || uMode == 5;
+    if (probe && first < 0) { fragColor = uMode == 2 ? vec4(-1.0, 0.0, 0.0, xpx) : (uMode == 5 ? vec4(0.0, -1.0, 0.0, 0.0) : vec4(0.0)); return; }
     vec2 uv = mapUV(skyEnd ? R.dir : vec3(1.0, 0.0, 0.0));
     vec2 ux = dFdx(uv), uy = dFdy(uv);
     ux.x -= floor(ux.x + 0.5); uy.x -= floor(uy.x + 0.5);
@@ -2202,8 +2436,16 @@ void main() {
         float w = fw[k];
         float cov = w > 1e-5 * rk[k] ? clamp((min(rk[k] + 0.5 * w, uDR.y) - max(rk[k] - 0.5 * w, uDR.x)) / w, 0.0, 1.0) : ((rk[k] >= uDR.x && rk[k] <= uDR.y) ? 1.0 : 0.0);
         if (probe ? k != first : cov <= 0.0) continue;
-        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b);
-        vec3 raw = discLightRaw(rc, g);
+        float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b), gf = 1.0;
+        if (uGas == 1 && R.tt[k] >= 0.0 && (uMode == 0 || uMode == 5)) {
+            bool fz = uMode == 5;                         // (the probe: no footprint, as gas.cpp's factor)
+            vec2 gl = gasLight(rc, R.ph[k] + uGasCam, uGasTau - R.tt[k], fz ? 0.0 : 0.3 * fw[k] / rk[k], fz ? 0.0 : fph[k]);
+            if (uMode == 5) { fragColor = vec4(R.ph[k] + uGasCam, R.tt[k], gl.x, gl.y); return; }
+            gf = gl.x * (1.0 + uGasT.w * gl.y);
+            if (isnan(gf) || isinf(gf)) gf = 1.0;
+        }
+        if (uMode == 5) { fragColor = vec4(0.0, -1.0, 0.0, 0.0); return; }
+        vec3 raw = discLightRaw(rc, g, gf);
         if (uMode == 2) { fragColor = vec4(float(k), rk[k], g, xpx); return; }
         if (uMode == 10) { float y = dot(raw, vec3(0.2126, 0.7152, 0.0722)); fragColor = vec4(max(raw.r, max(raw.g, raw.b)), y, y, 1.0); return; }   // (0.70.0: Y again, kExpSumFS)
         vec3 cr = raw * inv;

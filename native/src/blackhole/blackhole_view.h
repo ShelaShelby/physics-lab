@@ -98,6 +98,7 @@ public:
     // check failed, or the guard switched it off: the processor's (or 0.55.6's card's) table draws them, as in 0.55.9. refreshHz: the screen's (the
     // resolution rule's budget: half its period)
     bool gpuSky = true;
+    double gasT = 0;                                           // 0.72.0: the moving gas's far time now (M; the app advances it: gasTick)
     double refreshHz = 60;
     // 0.56.2 (Settings, Performance, shown only on a slow card): "Lower resolution while moving", 0 Auto (0.56.0's rule, only where the card's whole
     // picture takes longer than kSkySharpMs), 1 Off (always every pixel). Not saved. skySlowMs: the card's time for the whole picture (> kSkySharpMs: slow)

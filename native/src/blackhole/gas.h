@@ -23,10 +23,11 @@
 //   each piece carried round at its own radius's Omega(r): phi = phi_birth + Omega(r) (t - t_birth) (it shears into a trailing spiral at the true speeds).
 //   Cells: eta = ln r in bins of 0.13 (half the width), phi in bins of 12.5 degrees at birth, birth slots of T_life of the bin; a point sees its eta bin and two
 //   on each side (5), the 9 slots up to its own (x e^(1 - x) < 2.5e-3 after 8 lifetimes) and the 28 phi cells. Brightness factor exp(c S) / norm, norm = the mean
-//   of exp(c S) weighted by the disc's light, over the disc and over time (the pattern moves light around without adding any; tested). c = 0.65 makes the face-on 6-10 M ring's light vary by
+//   of exp(c S) weighted by the disc's light, over the disc and over time (the pattern moves light around without adding any; tested). c = 0.8 (0.72.0; 0.56.4: 0.65 before the
+//   taper below made the patches a little smaller) makes the face-on 6-10 M ring's light vary by
 //   about SKH06 Table 2's 43.8 % rms (thermal model, power above 10 Hz; tested within the plan's 20 %).
-//   (For the card, step 2: per eta bin and slot only the phi cells whose patch can reach the point need a look; the birth time inside a slot is spread over 0.3
-//   of an orbit (108 degrees of turn), so more cells than the plan's estimate of 3 can reach it: step 2 counts them.)
+//   0.72.0 (the card's form, gas.cpp sumAt): a patch is born at its cell's place in the frame turning with its bin, so the cells that can reach a point are
+//   found from the point: at most 12 of the 28 per bin and slot over the disc (r_ms to 2000 M) and spins 0 to 0.998 (REPORT 0.72.0), about 350 looks a point.
 #pragma once
 
 #include <cstdint>
@@ -42,6 +43,8 @@ double gasSpeed(double r, double a);              // V, C75 (A7c)
 double gasClockRate(double r, double a);          // dtau/dt on the gas = alpha (1 - V^2)^(1/2), C75 (A7a)
 double cameraClockRate(double a, double r, double theta);   // dtau/dt of the hovering camera (FIDO) = alpha
 double massTimeSeconds(double massSun);           // one M of time, GM/c^3, in seconds (orbit/units.h: the Sun's GM, c)
+double gasShear(double r, double a);              // 0.72.0: -r dOmega/dr
+double gasFade(double x, double end = 8);         // 0.72.0: a patch's light at x = (t - t_birth) / T_life, its taper ending at end (gas.cpp)
 
 // ---- the reference integrator: KerrBL with the far time t as y[5] and the Mino time as y[6] (both 0 at the camera, decreasing into the ray's past) ----
 constexpr int kTState = 7;
@@ -67,16 +70,50 @@ struct Clump {
 std::uint32_t gasHash(std::uint32_t a, std::uint32_t b, std::uint32_t c);   // a small integer hash (the card does the same)
 double gasU01(std::uint32_t h);                                              // its low 24 bits as a number in [0, 1) (exact in single precision)
 struct GasPatch { double eta = 0, phi = 0, tBirth = 0, life = 1, sign = 1; };
+// 0.72.0: the lab's norm, one number: the pattern is self-similar (its patches' sizes in ln r and phi and their lives in orbits do not depend on r), so the mean
+// of exp(c S) is the same over any disc but for its inner edge. normalise(160000) here (c = 0.8): spin 0, outer edge 30 M: 3.137 (standard error 0.023); spin 0,
+// 2000 M: 3.124 (0.117); spin 0.9, 30 M: 3.200 (0.028); spin 0.9, 2000 M: 3.158 (0.186); their mean weighted by 1 / error^2: 3.16 (tested: testGas)
+constexpr double kGasNorm = 3.16;
+// 0.72.0: the same for the pattern the lab draws (reduced(), c = 1.1), normalise(160000): spin 0, 30 M: 2.573 (0.015); spin 0, 2000 M: 2.686 (0.076); spin 0.9,
+// 30 M: 2.557 (0.018); spin 0.9, 2000 M: 2.696 (0.126); weighted 2.57 (tested: testGasCard)
+constexpr double kGasNormCard = 2.57;
 struct GasPattern {
-    double a = 0, rIn = 6, rOut = 20, contrast = 0.65, norm = 1, normErr = 0;   // normErr: the norm's relative standard error (normalise)
+    double a = 0, rIn = 6, rOut = 20, contrast = 0.8, norm = kGasNorm, normErr = 0;   // normErr: the norm's relative standard error (normalise)
+    int cells = 28, slots = 9;                                                            // 0.72.0: phi cells per bin and slot, birth slots looked at, and
+    double fadeEnd = 8, cutPhi = kCutPhi;                                                 // where the fade ends (lifetimes), the reach in phi (sigmas): the full
+                                                                                          // pattern (below: reduced())
     static constexpr double kWidthEta = 0.26, kWidthPhi = 25 * 3.14159265358979323846 / 180;   // SKH06 section 5 (full widths)
     static constexpr double kLife = 0.3;                                                         // T_life / T_orb, SKH06 (36)
     static constexpr int kEtaSide = 2, kSlots = 9;                                                // eta bins on each side, birth slots looked at
+    static constexpr int kCells = 28;                                                             // 0.72.0: phi cells of 2 pi / 28 (0.56.4: 12.5 degrees, a 10 degree gap)
+    static constexpr double kCutEta = kWidthEta, kCutPhi = 3, kFadeEnd = 8;                       // 0.72.0: the tapers' reach (2 bins; 3 sigma; 8 lifetimes)
     // one patch's strength at (r, phi, t): its Gaussian at where this piece of gas was when the patch was born, times x e^(1 - x) (fade) or 1 (no fade, x > 0)
     static double patch(const GasPatch& p, double r, double phi, double t, double a, bool fade = true);
     double sum(double r, double phi, double t) const;                       // S: the sum of the patches that reach (r, phi) at t
+    // 0.72.0: S widened by the pixel's footprint (its sigma fe in ln r, fp in phi; 0: none) and the number of cells looked at (the card does the same);
+    // all (tests): every cell of every slot looked at
+    double sumAt(double r, double phi, double t, double fe, double fp, int* looked, bool all = false, double* var = nullptr) const;
+    double factorAt(double r, double phi, double t, double fe, double fp) const;   // the footprint's mean of the factor (gas.cpp)
+    int binLo() const;                                                      // the bins with patches: centre exp((je + 1/2) d_eta) in [0.8 rIn, 1.3 rOut]
+    int binHi() const;
+    double binLife(int je) const;                                           // T_life of bin je: kLife T_orb(max(r_bin, rIn))
+    double binOmega(int je) const;                                          // Omega at the bin's centre
     double factor(double r, double phi, double t) const;                    // exp(c S) / norm
     void normalise(int samples = 20000);                                    // norm = the mean of exp(c S) weighted by the disc's light, at independent samples
+    // 0.72.0, the pattern the lab draws (the job's stop rule: the full pattern per pixel took 7.7 times 0.71.0's sky pass on this box; this one 4.0 with the
+    // light's travel time and the clump, REPORT 0.72.0): half the patches (14 phi cells of 25.7 degrees per bin and slot, each patch still 25 degrees wide),
+    // their fade ending at 3.5 lifetimes (4 slots), their reach in phi 2.5 sigma, c = 1.1 so that the face-on 6-10 M ring still varies by SKH06 Table 2's
+    // 43.8 % rms (43.9 % here; tested), norm kGasNormCard. The full pattern above stays the processor's reference of the model (tests).
+    static GasPattern reduced();
 };
+
+// ---- 0.72.0: the numbers the graphics card needs (render/shaders.h kGasPart; renderer2d.h LensSky::gas) ----
+// The far time T runs without bound; the card works in single precision from an epoch E = 1024 M floor(T / 1024 M) kept here in double: tau = T - E
+// (below 1024 M), the clump's phase at E (phi0 + Omega_c E, mod 2 pi) and, per bin of the pattern, E / T_life = K + f (K as two exact halves of 16 bits,
+// mod 2^32 as gas.cpp's uint32 slot numbers). Bins past kGasCardBins are left out (the pattern's outer part; 2000 M needs 61).
+constexpr int kGasCardBins = 72;
+struct GasCard { float T[4] = {0, 0, 1, 0}, C[4] = {}, G[4] = {}; int N[4] = {}; float bin[4 * kGasCardBins] = {}; float tau = 0, cutPhi = 3; double epoch = 0; };
+double gasEpoch(double T);
+void gasCard(const GasPattern* pattern, const Clump* clump, double T, GasCard& out);
 
 }  // namespace blackhole

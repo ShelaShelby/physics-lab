@@ -33,6 +33,8 @@
 #              one; at rest the picture catches up with the settings (fine table, glare) and nothing is redone afterwards
 #   whiteout:  0.70.0, no white-outs: through preset, look, glare, disc and distance changes no frame is over 30 % pure white where the processor's settled
 #              picture is under 5 % (the async path, the owner's M87* view)
+#   gas:       0.72.0, the moving gas (on by default with the disc): the picture changes frame to frame with the camera still, Pause stops it and the clocks,
+#              the clump's clock / the far clock = (1 - 3M/r)^(1/2) at a = 0, the far clock moves by the frames' time x the rate
 #   check_blackhole.py <PhysicsLab binary> <work folder> [part]
 import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,7 +49,9 @@ def check(ok, what):
         print("FAIL", what)
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src")
-BASE = {"PL_NEWUI": "on", "PL_DRAWSTAT": "1", "PL_FACTS": "off"}
+# 0.72.0: the moving gas (on by default) makes a new picture every frame; the checks below compare still pictures (against references, between runs of different
+# lengths, at rest), so they run with it off (PL_BH_GAS=off: a changed reference, not a loosened one; REPORT 0.72.0). Part "gas" checks the moving gas itself.
+BASE = {"PL_NEWUI": "on", "PL_DRAWSTAT": "1", "PL_FACTS": "off", "PL_BH_GAS": "off"}
 # 0.70.0: the starting view until 0.69 (20 GM/c^2, 90 degrees, looking at the galactic centre: lab.cpp resetView then), for the checks whose drags and
 # points were laid out on it (the start is now 50 GM/c^2, 45 degrees, 100 degrees from the disc's axis)
 OLDVIEW = "dist=20;fov=90;pitch=1.474174899;yaw=0.055152404"
@@ -309,6 +313,12 @@ def precision_sky(binary, work):
         check(float(x["b"]) < 1e-4, f"{w}: b within 1e-4 ({x['b']})")
         check(int(x["discwrong"]) * 10000 <= disc and float(x["r"]) < 5e-3 and float(x["g"]) < 1e-3 and int(x["rbad"]) * 10000 <= disc,
               f"{w}: the disc's first image ({disc} px: {x['discwrong']} another image, r {x['r']}, g {x['g']}, {x['rbad']} over 1e-3)")
+        # 0.72.0, the moving gas at 10^6 M of running (uMode 5; limits fixed before looking, sky_card.h): phi within 2e-3 rad and t within 1e-3 of itself of
+        # traceClosed's (timed) at the first disc image 2 px or more from the edge, at all but 1 in 10000 of those pixels (the rule of the far direction
+        # above); the factor and the clump within 1e-3 of gas.cpp's at every disc pixel
+        tp, gp = int(x["timepx"]), int(x["gaspx"])
+        check(tp > 0 and int(x["timebad"]) * 10000 <= tp and gp > 0 and x["gasbad"] == "0",
+              f"{w}: the moving gas: phi {x['phi']}, t {x['t']} ({x['timebad']} of {tp} over), factor and clump {x['gas']} ({x['gasbad']} of {gp} over)")
     c = [ln for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECK ")]
     check(bool(c) and " ok=1 " in c[0], f"the sky's start-up check passes on this renderer ({c[:1]})")
     # 0.58.0: the start-up check's light, both Light modes (sky_card.h skyLightCompare: each pixel within its limit derived from the shader's operations)
@@ -433,6 +443,12 @@ def part_precision(binary, work):
         print(f"  glare {x['size']}: block {x['b']} px, grid {x['grid']}, read-back {x['readms']} ms, veil {x['veilms']} ms, picture {x['withoutms']} -> {x['withms']} ms")
     p = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHPLAIN ")]
     check(bool(p) and int(p[0]["maxdiff"]) <= 1, f"bending off = the Orbit Lab's sky projection, within one step of 255 ({p})")
+    # 0.72.0, the moving gas at spin 0 (kLensFS uDebug 3) after 10^6 M of running: every pixel of the first disc image has phi within 2e-3 rad of the geometry
+    # in double and t within 1e-3 of the double lookup (DiscTable::lookupT), every 16th pixel t within 1e-3 of Dormand-Prince on Binet's equation (disc.h
+    # rayTime), the pattern's factor and the clump within 1e-3 of gas.cpp's at the card's own r, phi, t (limits fixed before looking: sky_card.h kSky*Limit)
+    g0 = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHGAS0 ")]
+    check(len(g0) == 2 and all(int(x["px"]) > 1000 and int(x["refpx"]) > 100 and int(x["gaspx"]) > 1000 and x["bad"] == "0" for x in g0),
+          f"the moving gas at spin 0: the card's phi, t, factor and clump = the processor's within their limits ({g0})")
 
 def disc_note(r):
     return bh(r, "bhdisc ")
@@ -1273,7 +1289,38 @@ def part_short(binary, work):
     check(bh(b) is not None and bh(c) is not None and need(b) > need(c) + 300 and "ctlhead.more" in c.rects,
           f"runs 2 and 4: the lab opens with More settings as it was left (open: content {need(b):.0f} px; closed: {need(c):.0f} px)")
 
-PARTS = {"sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
+def part_gas(binary, work):
+    # 0.72.0, the moving gas (feeding preset, spin 0: the disc drawn by the card per pixel, kLensFS; 1280 x 800, Dark; limits fixed before looking):
+    # (a) with time running the picture changes between frame 30 and frame 40 while the camera is still: over 1 % of the picture's pixels differ;
+    # (b) Pause (a click on the panel's Pause at frame 20) stops it: frames 40 and 50 are the same picture to the byte and the clocks read the same;
+    # (c) the clocks advance at the ratio of gas.h's clock rate at the clump's radius, written here: a = 0, dtau/dt = (1 - 3M/r)^(1/2) (8 M: 0.790569...;
+    #     Cunningham 1975 (A7a) at a = 0), within 1e-7; and the far clock by 10 frames x 0.016 s x the rate shown between frames 30 and 40, within 1e-6
+    g = {k: v for k, v in BASE.items() if k != "PL_BH_GAS"}
+    e = dict(g, PL_BLACKHOLE="1", PL_BH_SET="preset=feeding")
+    a30, a40 = run_app(binary, work, "bh_gas_30", e, frames=30), run_app(binary, work, "bh_gas_40", e, frames=40)
+    ep = dict(e, PL_SCRIPT="20:click=blackhole.gas.play")
+    p40, p50 = run_app(binary, work, "bh_gas_p40", ep, frames=40), run_app(binary, work, "bh_gas_p50", ep, frames=50)
+    def gas(r):
+        n = r.note("bhgas ")
+        return dict(kv.split("=", 1) for kv in n[-1].split()[1:]) if n else None
+    ga, gb, gp, gq = gas(a30), gas(a40), gas(p40), gas(p50)
+    ok = all(x is not None and x.get("on") == "1" for x in (ga, gb, gp, gq))
+    check(ok, f"the moving gas is on by default with the disc ({ga}, {gp})")
+    if not ok:
+        return
+    A, B = Bmp(a30.bmp), Bmp(a40.bmp)
+    W, H = A.w, A.h
+    diff = sum(1 for y in range(0, H, 2) for x in range(0, W, 2) if A.px(x, y) != B.px(x, y)) * 4
+    check(diff > 0.01 * W * H, f"(a) running: frames 30 and 40 differ in {diff} of {W * H} pixels (the camera still)")
+    P, Q = Bmp(p40.bmp), Bmp(p50.bmp)
+    check(gp["run"] == "0" and P.pixels() == Q.pixels() and gp["far"] == gq["far"], f"(b) paused: frames 40 and 50 the same picture, the clocks still ({gp['far']} s, {gq['far']} s)")
+    qc = math.sqrt(1 - 3 / float(gb["rc"]))
+    check(abs(float(gb["clump"]) / float(gb["far"]) - qc) < 1e-7 * qc and abs(float(gb["qc"]) - qc) < 1e-7 * qc,
+          f"(c) the clump's clock / the far clock = {float(gb['clump']) / float(gb['far']):.9f} against (1 - 3/r)^(1/2) = {qc:.9f} at r = {gb['rc']}")
+    df = float(gb["far"]) - float(ga["far"]); want = 10 * 0.016 * float(gb["rate"])
+    check(abs(df - want) < 1e-6 * want, f"(c) the far clock moved {df:.6g} s in 10 frames of 0.016 s at {gb['rate']} s a second ({want:.6g})")
+
+PARTS = {"gas": part_gas, "sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
          "truelight": part_truelight, "alllight": part_alllight, "smooth": part_smooth, "whiteout": part_whiteout, "short": part_short,
          "smoothdisc": lambda b, w: smooth_disc(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_BH_GPUPATHS="0", PL_BH_GPUSKY="0")),

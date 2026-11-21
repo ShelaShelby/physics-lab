@@ -470,6 +470,7 @@ int main(int argc, char** argv) {
     // 0.55.5: the Black Hole Lab works out its pictures on worker threads (the frame never waits for the processor); the automatic checks keep the
     // synchronous path (PL_BH_SPINWAIT, or PL_DRAWSTAT without PL_BH_ASYNC): their pictures are of the settings of the frame they are taken in
     app.blackholeView.async = !SDL_getenv("PL_BH_SPINWAIT") && (!SDL_getenv("PL_DRAWSTAT") || SDL_getenv("PL_BH_ASYNC"));
+    if (const char* g = SDL_getenv("PL_BH_GAST")) app.bhGasT = std::atof(g);   // 0.72.0 (tests): the moving gas's far time at the start (GM/c^3)
     if (SDL_getenv("PL_BH_GLARENOW")) app.blackholeView.glareNow = true;   // 0.62.0 (checks): the eye's glare made at once in its frame, on both APIs
     if (const SDL_DisplayMode* dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window))) if (dm->refresh_rate > 0) app.blackholeView.refreshHz = dm->refresh_rate;   // 0.56.0
     if (SDL_getenv("PL_BLACKHOLE")) {                   // 0.55.0: PL_BLACKHOLE=1 opens the Black Hole Lab; PL_BH_SET="preset=m87;dist=3;bend=off;sky=black;fov=120;mass=1e6;yaw=..;pitch=..;disc=on;feed=0.1;outer=30;exposure=auto" (automatic checks)
@@ -756,7 +757,11 @@ int main(int argc, char** argv) {
         maxPhysicsDt = std::max(maxPhysicsDt, dt);
         sectMark(5);                                    // (PL_SECTSTAT: the frame's parts from here)
         if (app.pane) {                                 // the Learn tab is open: the lab waits
-        } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: nothing moves by itself (the camera hovers)
+        } else if (app.lab == blackhole::kLabIndex) {   // 0.55.0: the camera hovers; 0.72.0: the moving gas's clock runs (blackhole/lab.h gasTick)
+            static const char* gasEnv = SDL_getenv("PL_BH_GAS");       // (checks that need a still picture: PL_BH_GAS=off keeps the gas still)
+            if (gasEnv) app.blackhole.gasMoving = std::string(gasEnv) != "off";
+            blackhole::gasTick(app.blackhole, dt, app.bhGasT);
+            app.blackholeView.gasT = app.bhGasT;
         } else if (app.lab == molecule::kLabIndex) {
             app.molecule.update(frameDt, ui::look().reduced, app.pane != 0);   // (0.23: not app.paused: this lab has no clock, and a pause made in another lab stopped its spin with no way to start it here; 0.56.1: not while the benchmark runs either: its molecule scenes play a vibration)
         } else if (app.lab == 1) {                      // Atom Lab: tick every frame (decay clock, glides), fixed steps while running

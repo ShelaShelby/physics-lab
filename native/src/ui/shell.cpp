@@ -878,6 +878,7 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
     // ---- 0.18: the Molecule Lab's bar, bottom centre (where the other labs have their toolbar) ----
     if (!pane && app.lab == molecule::kLabIndex) { const Rect br = moleculeBar(app, fr, m); occ.push_back(br); auditRect("moleculebar", static_cast<float>(br.x), static_cast<float>(br.y), static_cast<float>(br.w), static_cast<float>(br.h)); }
     if (!pane && app.lab == blackhole::kLabIndex) { const Rect br = blackholeBar(app, fr, m); occ.push_back(br); auditRect("blackholebar", static_cast<float>(br.x), static_cast<float>(br.y), static_cast<float>(br.w), static_cast<float>(br.h)); }   // 0.55.0
+    if (!pane && app.lab == blackhole::kLabIndex) { const Rect cr = blackholeClocks(app, fr, m); if (cr.w > 0) { occ.push_back(cr); auditRect("blackholeclocks", static_cast<float>(cr.x), static_cast<float>(cr.y), static_cast<float>(cr.w), static_cast<float>(cr.h)); } }   // 0.72.0
 
     // ---- the readout, bottom right: Body size on a soft dark pill (stage 5c; before it was Caption with an outline and was hard to read over lines and stars). Its own window, so a saved picture does not carry it ----
     if (!pane && !ro.empty()) {

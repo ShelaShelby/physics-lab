@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 
+#include "blackhole/gas.h"
 #include "blackhole/kerr.h"
 #include "blackhole/lab.h"
 #include "blackhole/light.h"
@@ -51,6 +52,28 @@ std::string timeText(double sec) {
     return sig(sec / (365.25 * 86400), 3) + " years";
 }
 std::string distText(double d) { return sig(d, d < 10 ? 3 : 4) + " GM/c²"; }
+// 0.72.0: a clock's reading: "340 µs", "12.3 ms", "42.5 s", "12 min 03 s", "3 h 07 min", "12.3 days", "4.21 years"
+std::string clockText(double sec) {
+    char b[64];
+    if (sec < 1e-3) return sig(sec * 1e6, 3) + " µs";
+    if (sec < 1) return sig(sec * 1e3, 3) + " ms";
+    if (sec < 60) { std::snprintf(b, sizeof b, "%.1f s", sec); return b; }
+    if (sec < 3600) { const int m = static_cast<int>(sec / 60); std::snprintf(b, sizeof b, "%d min %02d s", m, static_cast<int>(sec - 60.0 * m)); return b; }
+    if (sec < 86400) { const int h = static_cast<int>(sec / 3600); std::snprintf(b, sizeof b, "%d h %02d min", h, static_cast<int>((sec - 3600.0 * h) / 60)); return b; }
+    if (sec < 365.25 * 86400) return sig(sec / 86400, 3) + " days";
+    return sig(sec / (365.25 * 86400), 3) + " years";
+}
+// 0.72.0: a span of time for the rate's words ("0.12 ms", "3.5 min", "2.1 h")
+std::string spanText(double sec) {
+    if (sec < 1e-3) return sig(sec * 1e6, 2) + " µs";
+    if (sec < 1) return sig(sec * 1e3, 2) + " ms";
+    return timeText(sec);
+}
+// 0.72.0: the moving gas's rate in words: "1 s here = 10 min there" (or "real time")
+std::string rateText(double rate) {
+    if (std::fabs(rate - 1) < 1e-9) return "real time: 1 s here = 1 s there";
+    return "1 s here = " + spanText(rate) + " there";
+}
 
 // the preset's one sentence (owner's decision of 15 Nov 2026: mass and distance only; spin not measured; its real gas is not shown)
 std::string presetSentence(const std::string& key) {
@@ -253,6 +276,40 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
     return r;
 }
 
+// 0.72.0: the moving gas's clocks, drawn on the picture (top left): the far clock (Boyer-Lindquist t, the hole's time), the clump's own (gas.h gasClockRate at
+// its orbit) and the camera's when it differs from the far one by over 1 % (cameraClockRate), all from the far time T (GM/c^3) the app runs
+Rect blackholeClocks(AppState& app, const app::shell::Frame& fr, const Metrics& m) {
+    const blackhole::Settings& s = app.blackhole;
+    const blackhole::Settings v = blackhole::shown(s);
+    if (!blackhole::gasOn(s)) { auditNote("bhgas on=0"); return Rect{0, 0, 0, 0}; }
+    const double mt = blackhole::massTimeSeconds(v.massSun), T = app.bhGasT, far = T * mt;
+    const double rc = blackhole::gasClumpRadius(s), qc = blackhole::gasClockRate(rc, v.spin), qa = blackhole::cameraClockRate(v.spin, v.dist, v.pitch);
+    const bool cam = std::fabs(qa - 1) > 0.01;
+    const std::string lines[3][2] = {{"Far away", clockText(far)}, {v.gasClump ? "On the clump" : "On the gas at " + sig(rc, 2) + " GM/c²", clockText(far * qc)}, {"Your clock", clockText(far * qa)}};
+    const int n = cam ? 3 : 2;
+    double lw = 0, vw = 0;
+    for (int i = 0; i < n; i++) { lw = std::max(lw, static_cast<double>(sh::width(Type::Body, false, lines[i][0]))); vw = std::max(vw, static_cast<double>(sh::width(Type::Body, false, "000 min 00 s"))); }
+    const double w = lw + vw + 3.0 * m.s12, h = n * static_cast<double>(m.row) + 2.0 * m.s8;
+    const Rect r{fr.topBar.x + m.s12, fr.topBar.y + fr.topBar.h + m.s12, w, h};
+    Panel p;
+    if (beginPanel("##blackholeClocks", r, p, Shape::Panel, false)) {
+        for (int i = 0; i < n; i++) {
+            const float y = p.origin.y + static_cast<float>(i * m.row + (m.row - sh::lineH(Type::Body)) / 2.0);
+            sh::text(p.dl, Type::Body, false, ImVec2(p.origin.x, y), cMuted(), lines[i][0]);
+            sh::text(p.dl, Type::Body, false, ImVec2(p.origin.x + static_cast<float>(lw + m.s12), y), cText(), lines[i][1]);
+        }
+        endPanel(p);
+    }
+    if (ImGui::IsMouseHoveringRect(ImVec2(static_cast<float>(r.x), static_cast<float>(r.y)), ImVec2(static_cast<float>(r.x + r.w), static_cast<float>(r.y + r.h))))
+        ui::SetTooltip("Clocks of the moving gas. Far away: the hole's own time. On the clump: a clock riding with the gas at %s GM/c² runs %s × as fast. "
+                       "%s", sig(rc, 3).c_str(), sig(qc, 4).c_str(), cam ? "Yours: the hovering camera's clock, slowed by the hole's gravity." : "Yours runs within 1 % of the far one (not shown).");
+    char b[300];
+    std::snprintf(b, sizeof b, "bhgas on=1 T=%.9g far=%.9g clump=%.9g cam=%.9g qc=%.9g qa=%.9g rate=%.9g run=%d rc=%.6g camshown=%d", T, far, far * qc, far * qa, qc, qa,
+                  blackhole::gasRateOf(s), s.gasRun ? 1 : 0, rc, cam ? 1 : 0);
+    auditNote(b);
+    return r;
+}
+
 // 0.71.0 (DECISIONS 21 Nov 2026: one short panel, the rest under one More settings): the short panel holds the controls people use and fits a 1280 x 800 window unscrolled
 // (Real with the disc on, and Film: check_blackhole.py:short); every other control and every long caption (each limit and source sentence of 0.70.0's panel, word for word) is in the one section "More settings", closed
 // by default and kept in prefs.shellPanels like every section. The closest-to-reality marks are set right before their own control, so a closed section marks nothing else.
@@ -330,6 +387,27 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 const double v = blackhole::sliderToFeed(f), q = std::pow(10.0, std::floor(std::log10(v)) - 1);   // two significant digits
                 blackhole::setFeed(s, std::round(v / q) * q);
             }
+        }
+        if (s.disc || film) {                                               // 0.72.0: the moving gas, one row: Moving gas (on / off), Pause / Play, the rate
+            const ImVec2 a = here(p);
+            const float ch = static_cast<float>(m.control), gap = static_cast<float>(m.s8);
+            const char* mv = "Moving gas";
+            const char* pl = s.gasRun ? "Pause" : "Play";
+            const float mw = static_cast<float>(sh::width(Type::Body, false, mv) + 2.0 * m.s12), pw = static_cast<float>(sh::width(Type::Body, false, "Pause") + 2.0 * m.s12);
+            if (toolToggle("blackhole.gas.moving", a, ImVec2(mw, ch), mv, s.gasMoving)) s.gasMoving = !s.gasMoving;
+            if (ImGui::IsItemHovered()) ui::SetTooltip("%s", s.gasMoving ? "The gas turns at its true speeds (on). Off: the still disc." : "Off: the still disc. Click to set the gas moving.");
+            if (!s.gasMoving) ImGui::BeginDisabled();
+            if (button("blackhole.gas.play", ImVec2(a.x + mw + gap, a.y), ImVec2(pw, ch), pl, Face::Quiet)) s.gasRun = !s.gasRun;
+            if (ImGui::IsItemHovered()) ui::SetTooltip("%s", s.gasRun ? "Pause the gas (the clocks stop too)" : "Let the gas move again");
+            const float sx = a.x + mw + pw + 2 * gap, sw = std::max(40.0f, a.x + p.w - sx);
+            float t = static_cast<float>(blackhole::gasRateToSlider(blackhole::gasRateOf(s)));
+            if (slider("blackhole.gas.rate", ImVec2(sx, a.y + (ch - static_cast<float>(m.row)) / 2), sw, &t, 0.0f, 1.0f) && s.gasMoving) {
+                const double v = blackhole::sliderToGasRate(t), q = std::pow(10.0, std::floor(std::log10(v)) - 1);   // two significant digits
+                blackhole::setGasRate(s, std::round(v / q) * q);
+            }
+            if (ImGui::IsItemHovered()) ui::SetTooltip("How fast the film runs: %s (More settings: real time, the clump, the patches)", rateText(blackhole::gasRateOf(s)).c_str());
+            if (!s.gasMoving) ImGui::EndDisabled();
+            p.y += ch + static_cast<float>(m.s4); p.gap = static_cast<float>(m.s4);
         }
     }
     if (section("more", "More settings", false)) {                         // 0.71.0: everything else, with its full explanations, grouped by what the user wants to do
@@ -425,7 +503,33 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                             "are believed to end: farther out the disc's own gravity breaks it up (Goodman 2003). The same physics all the way out: the disc fades by itself as it cools "
                             "outward; most of its light comes from inside 30 GM/c² (Luminet 1979). The inner edge is the innermost stable orbit, " + sig(r.rIn, 2) + " GM/c²: inside it the gas falls in and gives no light here.");
             }
-            if (s.disc || film) {
+            if (s.disc || film) {                                           // 0.72.0: the moving gas (blackhole/gas.h; PLAN_MOVINGGAS.md)
+                pHeading(p, "Moving gas");
+                pCaption(p, "Real: each ring of gas turns at its true speed (more than half the speed of light near the hole), the clocks (far away, on the clump, yours), "
+                            "the bending of the light, its shifts of colour and brightness, the time the light takes to reach you (each part of the picture shows the gas as it was "
+                            "when its light left: the second image under the hole is older than the first), and the shearing of the gas into trailing spirals.");
+                pCaption(p, "A model: where the patches and the clump are, their size, brightness and lifetime. No telescope has seen the face of such a disc.");
+                const double rate = blackhole::gasRateOf(s), turn = blackhole::gasPeriod(blackhole::discGeom(blackhole::shown(s)).rIn, blackhole::shown(s).spin) * blackhole::massTimeSeconds(blackhole::shown(s).massSun);
+                pStat(p, "Rate", rateText(rate) + (s.gasRateAuto ? " (automatic)" : ""));
+                pStat(p, "Innermost turn", spanText(turn) + " far away  ·  " + spanText(turn / rate) + " on the screen");
+                if (pButton(p, "blackhole.gas.realtime", "Real time", Face::Quiet)) blackhole::setGasRate(s, 1);
+                if (pButton(p, "blackhole.gas.auto", "Automatic: one innermost turn in 20 s", Face::Quiet)) s.gasRateAuto = true;
+                pCheck(p, "blackhole.gas.clump", "A bright clump (model)", &s.gasClump);
+                if (s.gasClump) {
+                    const double rc = blackhole::gasClumpRadius(s);
+                    pStat(p, "Its orbit", sig(rc, 3) + " GM/c²  ·  one turn " + spanText(blackhole::gasPeriod(rc, blackhole::shown(s).spin) * blackhole::massTimeSeconds(blackhole::shown(s).massSun)) + " far away");
+                    float c = static_cast<float>(s.gasClumpR);
+                    if (pSlider(p, "blackhole.gas.clumpr", &c, static_cast<float>(blackhole::discGeom(blackhole::shown(s)).rIn), static_cast<float>(blackhole::kGasClumpRMax))) s.gasClumpR = std::round(c * 10) / 10;
+                    pCaption(p, "The clump astronomers fit to the flares of Sagittarius A*: a spot of extra light, Gaussian in its own frame with R_S = 1.5 GM/c² (Broderick and Loeb 2006), "
+                                "its centre five times as bright as the gas round it (the lab's choice), on a circular orbit; GRAVITY (2018) saw flares circle at 6 to 10 GM/c² "
+                                "(33 to 65 minutes), Wielgus et al. (2022) a loop of 74 minutes. It keeps its shape, as in Broderick and Loeb's model: real gas would shear it into an arc.");
+                }
+                pCheck(p, "blackhole.gas.pattern", "Bright and dark patches (model)", &s.gasPattern);
+                if (s.gasPattern)
+                    pCaption(p, "Patches as in a computer simulation of a magnetised disc (Schnittman, Krolik and Hawley 2006): 25° by 0.3 of the radius when born, living 0.3 of an orbit, "
+                                "each piece carried round at its own radius's speed, so they stretch into spirals. Their strength is set so that the ring from 6 to 10 GM/c² flickers "
+                                "by the simulation's 43.8 % (its Table 2); the disc's total light is unchanged.");
+                if (film) pCaption(p, "Added by the lab: the film's own disc texture is not published and James et al. 2015 does not say how it moved.");
                 pHeading(p, "Exposure");
                 int ex = s.expAuto ? 0 : 1;
                 const std::vector<std::string> en{"blackhole.exp.auto", "blackhole.exp.manual"};

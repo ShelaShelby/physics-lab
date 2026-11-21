@@ -85,7 +85,8 @@ struct AppState {
     // ---- Black Hole Lab (0.55.0) ----
     blackhole::Settings blackhole = blackhole::settingsDefaults();
     blackhole::BlackHoleView blackholeView;
-    double bhFreeX = 0, bhFreeY = 0, bhFreeW = -1, bhFreeH = -1;   // the part of the picture the bars and the Controls panel leave free (points): the hole is at its middle
+    double bhFreeX = 0, bhFreeY = 0, bhFreeW = -1, bhFreeH = -1;
+    double bhGasT = 0;                                                // 0.72.0: the moving gas's far time (GM/c^3; blackhole/lab.h gasTick)   // the part of the picture the bars and the Controls panel leave free (points): the hole is at its middle
     int bhLearn = 0;                       // the open Black Hole Lab guide: 0 none, 1 What is real in this picture
     std::string bhLearnJump;
     int drawCalls = 0, drawInstances = 0;  // what the renderer drew last frame (the Atom Lab's Performance card)

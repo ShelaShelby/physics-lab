@@ -78,7 +78,8 @@ public:
     const Renderer2D::SkyStats& skyStats() const { return skyStats_; }
     const Renderer2D::GlareStats& glareStats() const { return glareStats_; }
     long redraws() const { return redraws_; }
-    bool glareBusy() const { return glareStage_ != 0 || (want_.gen != 0 && !glareValid_); }
+    // (0.72.0: a veil being made again only because the moving gas moved on, while a veil is shown, is not "under way": the picture is finished)
+    bool glareBusy() const { return (glareStage_ != 0 && !(want_.gasOnly && glareValid_)) || (want_.gen != 0 && !glareValid_); }
     VkPipelineCache cache() const { return cache_; }
     void stopGlareThread();
     // PL_VK_CARDFAIL=sky / lens (tests): that program's pipeline fails as a driver that says no would
@@ -159,9 +160,11 @@ private:
     // the textures (OpenGL's names in renderer2d.h)
     Tex lensTex_, layer_[2], mask_, out_, low_[4], glow_[2], glareSrc_, glareVeil_, probe_, debug_, args_, mathOut_;   // (0.69.0: the tests' three)
     void toneUniforms(VkUniforms& u, const LensSky& L);   // 0.70.0
+    void gasUniforms(VkUniforms& u, const LensSky& L);    // 0.72.0
     std::vector<Tex> exp_;
     std::vector<Tex> sum_;                 // 0.70.0: the log-average's chain (kExpSumFS); its last texel is the whole exposure
-    Tex table_, discU_, discP_, discC_, kA_, kB_, kE_, kT_, kF_;
+    Tex table_, discU_, discP_, discC_, kA_, kB_, kE_, kT_, kF_, discTt_;
+    bool discTtOk_ = false;                                // 0.72.0: discTt_ holds the travel times of the disc table now sent
     std::uint64_t tableVer_ = ~std::uint64_t(0), discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0), kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     int lensN_ = 0;
     std::vector<int> expW_, expH_;
@@ -184,9 +187,10 @@ private:
     Renderer2D::SkyStats skyStats_;
     Renderer2D::GlareStats glareStats_;
     // the glare (as Renderer2D's GlareJob; stage 0 idle, 3 the blocks read back under way, 2 the veil on its thread)
-    struct GlareJob { int fbW = 0, fbH = 0, b = 1, nx = 0, ny = 0; double cx = 0, cy = 0, K = 0; std::uint64_t gen = 0;
+    struct GlareJob { int fbW = 0, fbH = 0, b = 1, nx = 0, ny = 0; double cx = 0, cy = 0, K = 0; std::uint64_t gen = 0; bool gasOnly = false;
                       void (*veil)(int, int, double, double, double, const std::vector<float>&, std::vector<float>&, double[3]) = nullptr; void (*lower)() = nullptr; };
     GlareJob want_, job_;
+    std::chrono::steady_clock::time_point glareLastStart_{};   // 0.72.0
     std::uint64_t glareGen_ = 0;
     int glareStage_ = 0, glareNx_ = 0, glareNy_ = 0, glareB_ = 1;
     std::thread glareThread_;

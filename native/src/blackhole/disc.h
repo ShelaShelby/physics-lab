@@ -109,6 +109,7 @@ RayEnd2 rayEndAngle(double rO, double psi);
 // u at the increasing swept angles phis[0..n) (each below the end): one pass
 void rayU(double rO, double psi, const double* phis, int n, double* u);
 double rayRadius(double rO, double psi, double phi);
+double rayTime(double rO, double psi, double phi);   // 0.72.0: the far time from the point at swept angle phi to the camera (M)
 // the first crossing angle of the disc's plane: A = e_r . N, B = t . N; in (0, pi] (A = 0: pi, the camera is in the plane)
 double firstCrossing(double A, double B);
 // the photon's g from gas at r for a ray of axial angular momentum Lz (a = 0)
@@ -145,6 +146,9 @@ public:
     // values for the card: [side][row][col] u, then Phi per row (side 0 rows then side 1 rows)
     const std::vector<float>& uValues() const { return uf_; }
     const std::vector<float>& phiValues() const { return pf_; }
+    // 0.72.0 (the moving gas): the far time the light takes from each entry's point to the camera (M), as uValues (the last column carried on straight)
+    const std::vector<float>& tValues() const { return tf_; }
+    bool lookupT(double x, double phi, double& t) const;   // the same cubic as lookup
     // the same lookup the card does, in double; x = th - alpha_sh (radians)
     double phiEnd(double x) const;
     bool lookup(double x, double phi, double& u) const;   // false: phi beyond the row's Phi
@@ -153,8 +157,8 @@ private:
     double rO_, alpha_;
     int nS_, nT_;
     double s0_[2], ds_[2];
-    std::vector<double> u_, p_;
-    std::vector<float> uf_, pf_;
+    std::vector<double> u_, p_, t_;
+    std::vector<float> uf_, pf_, tf_;
     double ms_ = 0;
     double rowValue(const std::vector<double>& v, int side, double s, int col, int ncol) const;
 };

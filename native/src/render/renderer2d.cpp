@@ -77,7 +77,8 @@ bool Renderer2D::lensSameView(const LensSky& P, const LensSky& L, bool ksky, boo
                       P.kerrSky == L.kerrSky && (!L.kerrSky || (std::equal(L.skyCam, L.skyCam + 4, P.skyCam) && std::equal(L.skyMet, L.skyMet + 4, P.skyMet) &&
                       std::equal(L.skyMet2, L.skyMet2 + 4, P.skyMet2) && std::equal(L.filmRaw, L.filmRaw + 4, P.filmRaw) && std::equal(L.kM, L.kM + 9, P.kM) &&
                       std::equal(L.kO, L.kO + 4, P.kO) && P.whiteMode == L.whiteMode && P.expStep == L.expStep && P.moving == L.moving && P.spin == L.spin &&
-                      P.discFVersion == L.discFVersion && ksky == skyDrawn)) && (L.kerrSky || !skyDrawn) && P.whiteMode == L.whiteMode && P.expStep == L.expStep;
+                      P.discFVersion == L.discFVersion && ksky == skyDrawn)) && (L.kerrSky || !skyDrawn) && P.whiteMode == L.whiteMode && P.expStep == L.expStep &&
+                      P.gas == L.gas && (!L.gas || P.gasVer == L.gasVer);   // 0.72.0: the moving gas: a new picture whenever its time or settings change
 }
 
 void Renderer2D::skyProbe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out) {

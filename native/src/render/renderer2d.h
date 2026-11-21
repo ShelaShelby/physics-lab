@@ -255,6 +255,20 @@ public:
         // black body against log10 T in units of the Sun's surface). Drawn only with bend. debugDisc (tests): the first crossing's order, r and g, and x in pixels.
         bool sky = true;                    // false: nothing behind (black), the disc alone
         bool disc = false, debugDisc = false;
+        bool debugGas = false;              // 0.72.0 (tests): the first crossing's phi, t and the moving gas's (factor, n) with no footprint (kLensFS uDebug 3)
+        // 0.72.0: the moving gas (blackhole/gas.h; render/shaders.h kGasPart): gas on; gasT (unused, c, 1 / norm, the clump's A or 0), gasC (r_c, its phase
+        // at the epoch, Omega_c, 1 / (2 R_S^2)), gasG (g_rr, g_phph + u_phi^2 at r_c, the spin, the pattern's rIn), gasN (the first bin, the bins, the
+        // pattern on, 0), gasBin (4 floats a bin: f, K div 65536, K mod 65536, 0), gasTau (the far time now since the epoch, M), gasCam (the camera's phi),
+        // gasE1, gasE2 (the sky frame's x and y on the view frame: spin 0), timeR (the radii whose crossings get phi and t: the spinning hole), discTime (spin
+        // 0: the table's travel times, as discU; disc.h DiscTable::tValues), gasVer (a new number with any change of them: a new picture)
+        bool gas = false;
+        float gasT[4] = {0, 0, 1, 0}, gasC[4] = {0, 0, 0, 0}, gasG[4] = {0, 0, 0, 0};
+        int gasN[4] = {0, 0, 0, 0};
+        float gasBin[4 * 72] = {};
+        float gasW = 3;
+        float gasTau = 0, gasCam = 0, gasE1[3] = {1, 0, 0}, gasE2[3] = {0, 1, 0}, timeR[2] = {0, 0};
+        const std::vector<float>* discTime = nullptr;
+        std::uint64_t gasVer = 0;
         const std::vector<float>* discU = nullptr;   // nT x (2 nS): rows side 0 then side 1
         const std::vector<float>* discP = nullptr;   // 2 nS
         const std::vector<float>* discCol = nullptr; // 3 nC

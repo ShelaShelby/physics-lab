@@ -46,8 +46,20 @@ render::Renderer2D::LensSky skyProbeLens(const SkyCase& c) {
     L.colLog0 = l0; L.colDlog = dl; L.colVersion = 1;
     L.allInvTsun = 1 / sunTeff();
     L.toneLw = kSkyToneLw;                                                 // 0.70.0: the camera curve's check (skyToneCompare)
+    GasCard k;                                                             // 0.72.0: the moving gas at kSkyGasT (skyCompare: uMode 5)
+    const GasPattern p = skyGasPattern(c);
+    const Clump cl = skyGasClump(c);
+    gasCard(&p, &cl, kSkyGasT, k);
+    L.gas = true;
+    std::copy(k.T, k.T + 4, L.gasT); std::copy(k.C, k.C + 4, L.gasC); std::copy(k.G, k.G + 4, L.gasG); std::copy(k.N, k.N + 4, L.gasN);
+    std::copy(k.bin, k.bin + 4 * kGasCardBins, L.gasBin);
+    L.gasTau = k.tau; L.gasCam = 0; L.gasW = k.cutPhi;
+    L.timeR[0] = static_cast<float>(0.8 * c.rIn); L.timeR[1] = static_cast<float>(1.25 * c.rOut);
     return L;
 }
+
+GasPattern skyGasPattern(const SkyCase& c) { GasPattern p = GasPattern::reduced(); p.a = c.a; p.rIn = c.rIn; p.rOut = c.rOut; return p; }
+Clump skyGasClump(const SkyCase& c) { Clump k; k.a = c.a; k.rc = std::clamp(8.0, c.rIn, c.rOut); k.init(); return k; }
 
 const std::vector<float>& cardColourTable(int& n, double& log0, double& dlog) {
     static const int N = 512;
@@ -144,7 +156,7 @@ SkyRef skyReference(const SkyCase& c) {
         for (int i = 0; i < w; i++) {
             const double ox = i + 0.5 - cx, oy = j + 0.5 - cy, d = std::hypot(ox, oy), th = std::min(d / c.K, kPi);
             const double chi = std::atan2(d > 0 ? -ox / d : 0, d > 0 ? oy / d : 1);
-            const ClosedEnd e = traceClosed(c.a, cam, lookAt(th, chi), kClosedCross);
+            const ClosedEnd e = traceClosed(c.a, cam, lookAt(th, chi), kClosedCross, true);   // 0.72.0: with phi and t (the moving gas)
             ref[static_cast<std::size_t>(j * w + i)] = e;
             kind[static_cast<std::size_t>(j * w + i)] = static_cast<signed char>(e.kind == RayEnd::Sky ? 1 : e.kind == RayEnd::Horizon ? 2 : 0);
         }
@@ -245,6 +257,29 @@ SkyCompare skyCompare(const SkyCase& c, const SkyRef& R, const std::vector<float
                 m.discWrongEdge = std::min(m.discWrongEdge, rel);
                 continue;
             }
+            // 0.72.0: the moving gas (uMode 5, the probe's upper row, its fourth w columns): phi and t at the first disc image against traceClosed's (2 pixels
+            // or more from the edge), and the card's factor and clump at the card's own r, phi, t against gas.cpp's in double
+            if (P.size() >= static_cast<std::size_t>(32) * w * h) {
+                const float* p5 = &P[(static_cast<std::size_t>(h + j) * 4 * w + 3 * w + i) * 4];
+                if (p5[1] >= 0 && ro >= 0 && ed >= 2) {
+                    m.timePx++;
+                    const double dphi = std::fabs(std::remainder(p5[0] - e.phi[ro], 2 * kPi)), dt = std::fabs(p5[1] - e.t[ro]) / std::max(1.0, e.t[ro]);
+                    m.phi = std::max(m.phi, dphi); m.t = std::max(m.t, dt);
+                    if (dphi > kSkyPhiLimit || dt > kSkyTLimit) { m.timeBad++;
+                        if (dump) std::printf("SKYTIMEBAD %s i=%d j=%d dphi=%.3g dt=%.3g phi=%.6g t=%.6g gphi=%.6g gt=%.6g k=%d b=%.6g q=%.6g sub=%d\n", c.name, i, j, dphi, dt, e.phi[ro], e.t[ro], p5[0], p5[1], ro, e.b, e.q, e.radial); }
+                }
+                if (p5[1] >= 0) {
+                    const GasPattern gp = skyGasPattern(c);
+                    const Clump cl = skyGasClump(c);
+                    const double rc = std::clamp(static_cast<double>(p2[1]), c.rIn, c.rOut), te = kSkyGasT - static_cast<double>(p5[1]);
+                    const double f = gp.factor(rc, p5[0], te), n = cl.density(rc, p5[0], te);
+                    const double df = std::fabs(p5[2] - f) / f, dn = std::fabs(p5[3] - n);
+                    m.gasPx++;
+                    m.gas = std::max(m.gas, std::max(df, dn));
+                    if (df > kSkyGasLimit || dn > kSkyGasLimit) { m.gasBad++;
+                        if (dump) std::printf("SKYGASBAD %s i=%d j=%d df=%.3g dn=%.3g f=%.6g n=%.6g\n", c.name, i, j, df, dn, f, n); }
+                }
+            }
             const double dr = std::fabs(p2[1] - rr) / rr, dg = std::fabs(p2[2] - discShiftKerr(rr, e.b, c.a)) / discShiftKerr(rr, e.b, c.a);
             if (ed >= 2) { m.r = std::max(m.r, dr); m.g = std::max(m.g, dg); if (dr > rLimit || dg > rLimit) { m.rBad++;
                 if (dump) std::printf("SKYRBAD %s i=%d j=%d dr=%.3g dg=%.3g r=%.6g b=%.6g q=%.6g edge=%.1f\n", c.name, i, j, dr, dg, rr, e.b, e.q, ed); } }
@@ -254,11 +289,12 @@ SkyCompare skyCompare(const SkyCase& c, const SkyRef& R, const std::vector<float
 }
 
 std::string skyCompareText(const SkyCase& c, const SkyCompare& m) {
-    char b[900];
+    char b[1100];
     std::snprintf(b, sizeof b, "case=%s a=%g dist=%g th=%.5f px=%ld sky=%ld ends=%ld endsfar=%ld endsfarpx=%.1f lost=%ld reflost=%ld dir=%.2e dirnear=%.2e dirbad=%ld "
-                  "dirbadfar=%.1f b=%.2e discpx=%ld discwrong=%ld discwrongfar=%.1f discwrongedge=%.2e discwrongout=%ld r=%.2e g=%.2e rbad=%ld u=%.2e ubad=%ld",
+                  "dirbadfar=%.1f b=%.2e discpx=%ld discwrong=%ld discwrongfar=%.1f discwrongedge=%.2e discwrongout=%ld r=%.2e g=%.2e rbad=%ld u=%.2e ubad=%ld "
+                  "timepx=%ld phi=%.2e t=%.2e timebad=%ld gaspx=%ld gas=%.2e gasbad=%ld",
                   c.name, c.a, c.r, c.th, m.px, m.sky, m.ends, m.endsFar, m.endsFarPx, m.lost, m.refLost, m.dir, m.dirNear, m.dirBad, m.dirBadFar, m.b, m.discPx,
-                  m.discWrong, m.discWrongFar, m.discWrongEdge, m.discWrongOut, m.r, m.g, m.rBad, m.u, m.uBad);
+                  m.discWrong, m.discWrongFar, m.discWrongEdge, m.discWrongOut, m.r, m.g, m.rBad, m.u, m.uBad, m.timePx, m.phi, m.t, m.timeBad, m.gasPx, m.gas, m.gasBad);
     return b;
 }
 
@@ -286,6 +322,9 @@ SkyCheck skyCheckOf(const std::vector<float>* probes[2], const SkyRef* refs) {
         else if (m.dirBad > 0) bad = "the far direction off by " + std::to_string(m.dir) + " rad";
         else if (m.b > 1e-4) bad = "b off by " + std::to_string(m.b);
         else if (m.rBad > 0) bad = "the disc's radius or shift off by " + std::to_string(std::max(m.r, m.g));
+        else if (m.timePx == 0 || m.gasPx == 0) bad = "no moving-gas probe";                                   // 0.72.0
+        else if (m.timeBad > 0) bad = "the light's travel time or azimuth off (" + std::to_string(m.timeBad) + " pixels)";
+        else if (m.gasBad > 0) bad = "the moving gas's light off (" + std::to_string(m.gasBad) + " pixels)";
         SkyLight L[2];
         skyLightCompare(*probes[k], cs.w, cs.h, L);                        // 0.58.0: the light, both modes (summed over the two cases)
         for (int q = 0; q < 2; q++) { c.light[q].px += L[q].px; c.light[q].bad += L[q].bad; c.light[q].worst = std::max(c.light[q].worst, L[q].worst); }

@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.71.0 (21 Nov 2026): the Black Hole Lab's fewer settings: the Controls panel is three short sections (Black hole with the look, spin and guide; Camera; Gas disc with the feeding rate) and one "More settings" (key blackhole.ctl.more, closed by default, kept in shellpanels) holding every other control and every long caption word for word; it fits 1280 x 800 unscrolled in Real with the disc on and in Film (check_blackhole.py:short). No drawing or physics changed.
+- 0.72.0 (21 Nov 2026): the Black Hole Lab's moving gas (PLAN_MOVINGGAS.md steps 2 and 3), on the graphics card: every ring at its true speed, a clump (BL06) and patches (SKH06, the reduced pattern the job's stop rule asked for: gas.h GasPattern::reduced) at each crossing's exact phi and light travel time (the sky shader per pixel for spin > 0, kLensFS with the disc table's travel times at spin 0), clocks on the picture, Moving gas / Pause / rate on the short panel, the rest in More settings and the guide's page; start-up check of phi, t and the gas against the processor; benchmark scene blackhole.moving_gas. Not yet on the processor's table path for a spinning hole (the card's sky off): ROADMAP.
 - Last full UI run: 0.69.0 (the commit "native 0.69.0"); failing in it: ui_search (check_5l labels) and ui_atom_layout (check_5h cards: the radial card read before the card's outline came), both fixed and re-run; ui_blackhole smooth (the card count, ROADMAP: the one-in-two limit; its sky-guard checks fixed and re-run); ui_popups orbitkeep (rest.orbit at 2560 x 1369 drawn anew: fails on 0.68.1 too, the owner's bug, ROADMAP) and benchwaits (passes alone, on 0.68.1 too: the full run's load).
-- Next steps: the owner's benchmark of 0.70.0 and 0.71.0; then 0.72.0, moving gas (DECISIONS 21 Nov 2026).
+- Next steps: no benchmark of 0.70.0 / 0.71.0 is waited for (DECISIONS 21 Nov 2026, the benchmark rule); after 0.72.0 the owner sends one (it adds blackhole.moving_gas).
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; every job: `check.sh quick` plus the ui_* tests of the screens it changes; `check.sh full` (about 35 min) only when the owner asks. One push per job; PLANNER.md and this file kept true by every job.
 
 ## How work flows

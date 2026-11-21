@@ -20,14 +20,14 @@ Start a NEW planning chat for each round (check an update, talk, write one job).
 ## Each round
 1. git fetch origin native; read the files above.
 2. When an update is out: check the Windows run ("Native Windows build") of the newest commit is green, the "latest" release (pre-release, tag latest) targets it with its version in the name, and native/CMakeLists.txt VERSION was bumped. Say what went in, what was skipped, what the report found.
-3. Benchmark: compare scene by scene with the previous run (faster, SLOWER, below 255); check the guards list at its end; ask whether other programs were open.
+3. Benchmark (only after a version that added a benchmark scene; ask for it then, not after every X.Y and not before every job, owner decision 21 Nov 2026): compare scene by scene with the previous run (faster, SLOWER, below 255); check the guards list at its end; ask whether other programs were open.
 4. gpu-paths-log.txt (%APPDATA%\PhysicsLab\PhysicsLab): every [vulkan] [<name>] line: passed, switched off or not run; the helper's lines; gpu-helper-variants.txt.
 
 ## The owner's PC
 AMD Ryzen 5 7500X3D (6 cores / 12 threads), 32 GB; AMD Radeon RX 9060 XT (also an integrated AMD GPU, correctly not chosen); window 2560 x 1369; screen 255 Hz. Driver and Vulkan versions: see the newest benchmark.
 
 ## Decisions
-DECISIONS.md and CLAUDE.md hold them all; keep them. Before any new job: the owner's benchmark of the previous version.
+DECISIONS.md and CLAUDE.md hold them all; keep them. The owner's benchmark is asked for only after a version that added a benchmark scene (21 Nov 2026).
 
 ## Writing a job
 - One job = one session = ONE push at the end, "native X.Y.Z". First line "Job: native X.Y.Z: <what>". X.Y for real features, X.Y.Z for small things; prefer small jobs.

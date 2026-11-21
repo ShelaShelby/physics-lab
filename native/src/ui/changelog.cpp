@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.72.0", "The Black Hole Lab: the gas moves",
+     "With the disc on, the gas now moves, in the Real and Film looks: every ring turns at its true speed, a bright clump circles the hole and bright and dark "
+     "patches stretch into trailing spirals. Every pixel shows the gas as it was when its light left, worked out exactly from the light's path: the second image "
+     "of the clump under the hole is older than the first. Two clocks on the picture, far away and on the clump (and yours when it differs), and in the Gas disc "
+     "section Moving gas, Pause and the rate (from a millionth of real time to ten million times faster; it starts so that the innermost gas turns once in 20 s). "
+     "The speeds, clocks, bending, shifts, travel time and shearing are real; the clump and the patches are labelled models (Broderick and Loeb 2006, Schnittman, "
+     "Krolik and Hawley 2006), explained under More settings and in the guide's new page Moving gas. Drawn on the graphics card, checked against the processor "
+     "when the lab first draws. A new benchmark scene, blackhole.moving_gas."},
     {"0.71.0", "The Black Hole Lab's Controls panel: one short panel, the rest under More settings",
      "The Black Hole Lab's Controls panel now fits a 1280 x 800 window without scrolling (it was about four screens long). It has three short sections: Black hole "
      "(the presets with their measured mass, distance and source, the look Real or Film, the spin and the guide's button), Camera (distance, field of view, "

@@ -1,4 +1,4 @@
-Paused; last true at 0.56.4; not kept up to date until the owner restarts it.
+Steps 1-3 built (0.56.4: the processor's physics; 0.72.0: the card, the lab, the guide). True at 0.72.0. What is left: section 7 and ROADMAP (Black Hole Lab, Moving gas).
 
 # Plan: moving gas in the Black Hole Lab (0.56.3 research, 17 Nov 2026; no app code yet)
 Owner's choice (17 Nov 2026, DECISIONS.md): something must happen; moving gas before flying the camera. Pictures: native/docs/blackhole/moving_clump_strip.png,
@@ -62,7 +62,7 @@ moving_clump_lightcurve.png, disc_structure_options.png (each with a .txt). Numb
 - Classic models: Cunningham & Bardeen 1973 (a star round an a = 1 hole: direct and one-orbit images, light curves Figs 9-12); Broderick & Loeb 2005, 2006: a spot
   Gaussian in its own rest frame (2006 (5)), R_S = 1.5 M, on a Keplerian orbit, not sheared.
 - Defensible: the orbit and its period (exact); size R_S = 1.5 M (BL06) or about 6 r_g across (Wielgus); a life of about one orbit or less (GRAVITY's loops).
-  **Choices**: the brightness (here 5 times the gas at its centre), the radius (here 6 M), keeping its shape (as BL06; real gas would shear it: said in the app).
+  **Choices**: the brightness (here 5 times the gas at its centre), the radius (0.72.0: 8 M by default, inside GRAVITY's 6-10 Rg; a control under More settings), keeping its shape (as BL06; real gas would shear it: said in the app).
 - Computed by the processor reference (tools/movinggas: the app's KerrBL integrator, its crossings, discShiftKerr, discFlux): moving_clump_strip.png, moving_clump_lightcurve.png.
   Checked: the curve repeats after one orbit exactly and not after half (0.98 of its peak apart); the secondary image's peak comes before the direct one's,
   as Cunningham & Bardeen 1973 p. 254 say for an observer off the plane ("shifts to earlier times"; qualitative only: their a = 1 point star is not this setup;
@@ -75,8 +75,9 @@ moving_clump_lightcurve.png, disc_structure_options.png (each with a .txt). Numb
   (sect. 5), lifetime T_life = 0.3 T_orb ((36)), sheared into arcs by the differential rotation; Table 2: the 6-10 M ring's light varies by 43.8 % rms (thermal model).
 - **Proposed model** (tools/movinggas Structure): patches born at random places and times (an integer hash: the same on card and processor), Gaussian in
   (ln r, phi) with full widths 0.26 and 25 degrees, light x e^(1-x) with x = (t - t_birth)/T_life; every piece carried at its own Omega(r):
-  phi = phi_birth + Omega(r)(t - t_birth). Brightness factor exp(c S), divided by its mean (the disc's total light unchanged); c = 0.65 makes the face-on
-  6-10 M ring vary by 42 % rms (SKH06: 43.8 %); a single point varies by about 150 %. In Real the factor multiplies PT's flux, so colour follows (sigma T^4 = F).
+  phi = phi_birth + Omega(r)(t - t_birth). Brightness factor exp(c S), divided by its mean (the disc's total light unchanged); c = 0.65 made the face-on
+  6-10 M ring vary by 42 % rms (SKH06: 43.8 %) in 0.56.4; 0.72.0 tapers each patch (no seams at the bins' edges) and recalibrates: c = 0.8 (full pattern),
+  1.1 (the lab's reduced one, section 7). A single point varies by about 150 %. In Real the factor multiplies PT's flux, so colour follows (sigma T^4 = F).
 - Real: the shearing at the true speeds, the lifetime in orbits. Model: where the patches are, their exact shape and strength (calibrated, said in the app).
 
 ## 6. Film
@@ -85,18 +86,15 @@ moving_clump_lightcurve.png, disc_structure_options.png (each with a .txt). Numb
 - Recommended: Film gets the same moving pattern and clump, labelled "added by the lab: the film's own disc texture is not published and J15 does not say how it moved";
   Alternative B above keeps Film still.
 
-## 7. The build
-- **On the card** (owner's rule of 16 Nov 2026): per pixel the sky shader already has the crossing radius r and the shift g. It also needs, per crossing used,
-  the azimuth phi_k and the travel time t_k (closed forms, section 3). Then per pixel: the clump (one Gaussian, BL06 (5)) and the pattern at
-  (r, phi_k, T - t_k): per eta bin (5) and birth slot (9) only the 3 phi cells that can reach phi_k (invert phi = phi_birth + Omega (t - t_birth)): about
-  135 Gaussians, widened by the pixel's footprint (fwidth of ln r and phi: a Gaussian blurred by a Gaussian is a Gaussian) so the thin spirals do not shimmer.
-  The processor's table path (way (c)) stores phi and t per entry beside u; the processor reference = tools/movinggas's functions moved into src/blackhole/gas.h.
-- **Benchmark scene**: blackhole.moving_gas (Hard list): Real, spin 0.9, clump and pattern on, time at the fastest rate, the camera at the closest zoom a user
-  can reach with the disc in view, turning slowly (zooms tried: REPORT). A response line: none (no wait; the picture changes every frame).
-- **Tests, written first**: gas clock and speed (C75 (A7a) against J15 (A.1); BPT (2.12)); periods against Kepler and GRAVITY / Wielgus; travel time (GLb (72),
-  radial closed form, GLa's closed t against the integrator for each radial case at 1e-8); crossing azimuth closed against integrator; clump light curve period =
-  2 pi / Omega(r_c); pattern: a mark returns to its phi after T_orb(r) when it does not fade, its mean factor 1, the ring's rms against SKH06 within 20 %;
-  card against processor (clump and pattern per pixel within float rounding).
-- **Steps** (one session each; step 1 done in 0.56.4, REPORT.md): (1) physics: gas.h (clock, clump, pattern), the closed phi and t per crossing, tests; checkpoint push.
-  (2) card and lab: the shader's phi and t, clump, pattern, time control and clocks, the labels, benchmark scene, card-against-processor test.
-  (3) Film's labels, the guide's page "Moving gas", About's sources.
+## 7. The build (true at 0.72.0)
+- **On the card** (0.72.0): the sky shader (spin > 0) computes phi_k and t_k at the crossings with the disc (kerr_closed.cpp's closed forms in single precision:
+  four elliptic jobs per amplitude, the camera's and each timed crossing's; the polar parts at the crossing's half turn j pi), then render/shaders.h kGasPart:
+  the clump (BL06 (5)) and the pattern, widened by the pixel's footprint (fwidth of ln r and phi; the sheared patch's covariance plus the footprint's; the
+  mean of exp(c S) over the footprint with the patches' spread). Spin 0: kLensFS, phi from the geometry, t from the disc table's travel times (disc.h
+  DiscTable::tValues). The card's time: an epoch kept in double (gas.h gasCard). Start-up check: phi and t against traceClosed, the gas against gas.cpp.
+- **The pattern the lab draws** is GasPattern::reduced() (half the patches, ages to 3.5 lifetimes, reach 2.5 sigma, c = 1.1 recalibrated to SKH06's 43.8 %):
+  the full one per pixel took 7.7 times 0.71.0's sky pass on the working box, this one 4.0 with the travel time and the clump (the job's stop rule). The full
+  pattern (cells found from the point: at most 12 of 28 per bin and slot) stays the processor's reference.
+- **Benchmark scene**: blackhole.moving_gas (Hard list).
+- Left: the processor's table path for a spinning hole (kKerrFS, the fallback when the card's sky is off) does not draw the moving gas yet (SpinFill::timed
+  has phi and t); the full pattern per pixel; a figure-point check of the clump's light curve (ROADMAP).

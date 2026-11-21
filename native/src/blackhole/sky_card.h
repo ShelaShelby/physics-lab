@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "blackhole/gas.h"
 #include "blackhole/kerr_closed.h"
 #include "render/renderer2d.h"
 
@@ -19,6 +20,8 @@ void skyCamera(render::Renderer2D::LensSky& L, double a, double r, double theta)
 // spinPixel reads); the disc's edges for the first image in [rIn, rOut]
 struct SkyCase { const char* name; double a, r, th; int w, h; double K, rIn, rOut; };
 render::Renderer2D::LensSky skyProbeLens(const SkyCase& c);
+GasPattern skyGasPattern(const SkyCase& c);   // 0.72.0: the probe's moving gas: the pattern over the case's disc; the clump at 8 M (or the disc's nearest edge)
+Clump skyGasClump(const SkyCase& c);
 
 // The probe (16 floats per pixel, Renderer2D::skyProbe) against traceClosed in double at each pixel's centre. The reference's shadow (its ends) gives each
 // pixel its distance in pixels from the edge (to the nearest pixel that ends the other way, up to 12). Counted: pixels whose end differs (and the farthest of
@@ -30,6 +33,8 @@ render::Renderer2D::LensSky skyProbeLens(const SkyCase& c);
 struct SkyCompare {
     long px = 0, sky = 0, ends = 0, endsFar = 0, lost = 0, refLost = 0, dirBad = 0, discPx = 0, discWrong = 0, rBad = 0, discWrongOut = 0, uBad = 0;
     double endsFarPx = 0, dir = 0, dirNear = 0, dirBadFar = 0, b = 0, r = 0, g = 0, discWrongFar = 0, discWrongEdge = 1, u = 0, ms = 0;
+    long timePx = 0, timeBad = 0, gasPx = 0, gasBad = 0;   // 0.72.0: the moving gas (uMode 5): the first image's phi and t; its factor and clump
+    double phi = 0, t = 0, gas = 0;
 };
 SkyCompare skyCompare(const SkyCase& c, const std::vector<float>& probe, double dirLimit, double rLimit);
 // 0.57.2: the same in two parts: the reference (no probe needed: any thread, made ahead) and the comparison with it (the same numbers; ms counts both)
@@ -43,6 +48,11 @@ std::string skyCompareText(const SkyCase& c, const SkyCompare& m);   // one line
 // kSkyDirLimit 2 pixels or more from the edge, b within 1e-4, and the disc's radius within kSkyRLimit and g within kSkyRLimit where the image is the same.
 constexpr int kSkyCheckW = 48, kSkyCheckH = 40;
 constexpr double kSkyDirLimit = 2e-3, kSkyRLimit = 1e-3;
+// 0.72.0, the moving gas (fixed before any card result): at the first disc image 2 pixels or more from the edge, phi within kSkyPhiLimit rad and t within
+// kSkyTLimit of itself (the far direction's and the radius's limits) of traceClosed's (timed); the pattern's factor (relative) and the clump's n (absolute)
+// within kSkyGasLimit of gas.cpp's at the card's own r, phi and t (single precision: about 1e-5 expected; the epoch's split of the time tested at kSkyGasT,
+// 10^6 M of running: the card's tau below 1024 M, gas.h gasCard)
+constexpr double kSkyPhiLimit = 2e-3, kSkyTLimit = 1e-3, kSkyGasLimit = 1e-3, kSkyGasT = 1e6 + 345.6;
 const SkyCase& skyCheckCase(int k);   // k = 0, 1
 // 0.58.0, the light check (both "Light" modes): the probe's rows h..2h-1 (Renderer2D::skyProbe, kKerrSkyFS uMode 11): the card's light of black bodies at
 // w x h temperatures (10^3 to 10^7 K, even in log T; the card's own T in .a) from the card's colour table (cardColourTable), the eye's (columns 0..w-1) and

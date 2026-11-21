@@ -23,8 +23,8 @@
 #include "blackhole/low_priority.h"
 #include "blackhole/spin.h"
 #include "blackhole/kerr_closed.h"
+#include "blackhole/gas.h"
 #include "orbit/sky.h"
-#include <cstring>
 #include <thread>
 
 namespace blackhole {
@@ -318,6 +318,32 @@ void BlackHoleView::toneFields(render::Renderer2D::LensSky& L, const Settings& s
     L.toneKey = kToneKey; L.toneDelta = kToneDelta;
 }
 
+// 0.72.0: the moving gas's fields of a pass (renderer2d.h LensSky::gas; gas.h gasCard): the pattern (SKH06) and the clump (BL06) of the shown settings s at the
+// far time T; gasVer: a new number for a new T or a changed choice (the kept picture is drawn anew)
+namespace {
+bool g_gasHookOff = false;   // (the comparison hooks: their reference pictures are still; 2a turns the gas on for its own check)
+void gasFields(render::Renderer2D::LensSky& L, const Settings& s, double T) {
+    if (g_gasHookOff || !s.gasMoving || !(s.gasClump || s.gasPattern)) return;
+    const DiscGeom g = discGeom(s);
+    GasPattern p = GasPattern::reduced();                                   // (the pattern the lab draws: gas.h)
+    p.a = s.spin; p.rIn = g.rIn; p.rOut = g.rOut;
+    Clump c;
+    c.a = s.spin; c.rc = gasClumpRadius(s);
+    c.init();
+    GasCard k;
+    gasCard(s.gasPattern ? &p : nullptr, s.gasClump ? &c : nullptr, T, k);
+    L.gas = true;
+    std::copy(k.T, k.T + 4, L.gasT); std::copy(k.C, k.C + 4, L.gasC); std::copy(k.G, k.G + 4, L.gasG); std::copy(k.N, k.N + 4, L.gasN);
+    std::copy(k.bin, k.bin + 4 * kGasCardBins, L.gasBin);
+    L.gasTau = k.tau; L.gasW = k.cutPhi;
+    L.timeR[0] = static_cast<float>(0.8 * g.rIn); L.timeR[1] = static_cast<float>(1.25 * g.rOut);
+    std::uint64_t h = 1469598103934665603ULL;
+    const auto mix = [&h](double x) { std::uint64_t b; std::memcpy(&b, &x, sizeof b); h = (h ^ b) * 1099511628211ULL; };
+    for (double x : {T, s.spin, g.rIn, g.rOut, c.rc, s.gasClump ? 1.0 : 0.0, s.gasPattern ? 1.0 : 0.0}) mix(x);
+    L.gasVer = h | 1;
+}
+}  // namespace
+
 render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const HoleView& v) const {
     render::Renderer2D::LensSky L;
     L.cx = v.cx; L.cy = v.cy; L.kRad = v.K;
@@ -373,6 +399,8 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
             L.whiteMode = 1;                                                // (0.70.0: your choice too: stops from the card's automatic)
             toneFields(L, s);
             L.expStep = 4;
+            gasFields(L, s, gasT);                                          // 0.72.0: the moving gas (the crossings' phi from the camera's)
+            L.gasCam = static_cast<float>(std::remainder(cameraPhi(v), 2 * kPi));
             if (!lookRule(s.look).shifts) {                                 // Film: the one colour before the white (the card divides and scales it)
                 DiscPixel q;
                 discLight(s, g.rIn, 1, q);
@@ -450,6 +478,11 @@ render::Renderer2D::LensSky BlackHoleView::lensFor(const Settings& s, const Hole
         L.allInvTsun = allLightOn(s) ? 1 / sunTeff() : 0;               // 0.58.0
         toneFields(L, s);
         if (lookUse_) { L.whiteMode = 1; L.expStep = 4; }                   // 0.56.0: the card finds the exposure (spin 0 too; 0.70.0: your choice too)
+        gasFields(L, s, gasT);                                              // 0.72.0: the moving gas: the travel times, the sky frame's x and y on the view
+        L.discTime = &disc_->tValues();
+        {   Vec3 rows[3];
+            viewRows(v, rows);
+            for (int i = 0; i < 3; i++) { L.gasE1[i] = static_cast<float>(rows[i].x); L.gasE2[i] = static_cast<float>(rows[i].y); } }
         if (glareOn(s) && glareReady_) { L.glareKeep = static_cast<float>(1 - glareShare()); L.glareBlock = glareBlockFn; L.glareVeil = glareVeilFn; }   // 0.55.4
         L.glareAsync = async && !glareNow; L.glareThread = lowerThisThread;   // 0.55.5
     }
@@ -1440,6 +1473,7 @@ void toneCompare(render::Renderer2D& R) {
 
 void compareHook(render::Renderer2D& R, const char* spec) {
     if (!R.vulkan()) { std::printf("PLBHCOMPARE skipped: no Vulkan\n"); return; }   // 0.69.0: on Vulkan (until 0.68.1 OpenGL's)
+    g_gasHookOff = true;                                                    // 0.72.0: the hooks' pictures without the moving gas (but 2a's)
     if (spec && std::string(spec) == "card") { cardCompare(R); return; }
     if (spec && std::string(spec) == "sky") {                              // 0.56.0
         skyCompareHook(R);
@@ -1823,6 +1857,73 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         }
         std::printf("PLBHPLAIN maxdiff=%d over1=%ld mean=%.4f\n", maxd, nd, double(sum) / (W * H * 3.0));
     }
+    // 2a. 0.72.0, the moving gas at spin 0 (kLensFS uDebug 3) at 10^6 M of running (sky_card.h kSkyGasT): at every pixel where the card and the double lookup
+    //     see the same first image, its phi against the geometry in double and its t against the double lookup (DiscTable::lookupT); at every 16th pixel
+    //     in each direction t against the reference (Dormand-Prince on Binet's equation with t: disc.h rayTime); the factor and the clump at the card's own
+    //     r, phi, t against gas.cpp's (limits: sky_card.h kSkyPhiLimit, kSkyTLimit, kSkyGasLimit). Two cameras (27 M at 60 degrees from the disc, 50 M at 10).
+    struct GasCam { double dist, incl; };
+    for (const GasCam& gc : {GasCam{27.0, 60.0}, GasCam{50.0, 10.0}}) {
+        const double dc[2] = {gc.dist, gc.incl};
+        if (onlySpin) break;
+        Settings s = settingsDefaults();
+        applyPreset(s, kFeedingKey);
+        s.outer = 30;
+        setDistance(s, dc[0]);
+        s.pitch = (90 - dc[1]) * kPi / 180;
+        view.ensureTable(s.dist);
+        view.ensureDisc(s.dist);
+        view.gasT = kSkyGasT;
+        g_gasHookOff = false;
+        HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
+        view.st_.look = discLook(*view.discTable(), s, v, W, H);
+        render::Renderer2D::LensSky L = view.lensFor(s, v);
+        g_gasHookOff = true;
+        std::vector<float> po(static_cast<std::size_t>(W) * H * 4), pg(static_cast<std::size_t>(W) * H * 4);
+        L.debugDisc = true;
+        R.lensFloat(L, W, H, po);
+        L.debugDisc = false; L.debugGas = true;
+        R.lensFloat(L, W, H, pg);
+        po.resize(static_cast<std::size_t>(W) * H * 4); pg.resize(po.size());
+        const DiscTable& T = *view.discTable();
+        const Vec3 N = discAxisView(v);
+        Vec3 rows[3];
+        viewRows(v, rows);
+        GasPattern gp = GasPattern::reduced();
+        gp.a = 0; gp.rIn = discGeom(s).rIn; gp.rOut = discGeom(s).rOut;
+        Clump cl;
+        cl.a = 0; cl.rc = gasClumpRadius(s); cl.init();
+        double dphi = 0, dt = 0, dtr = 0, dgas = 0;
+        long n = 0, nRef = 0, nGas = 0, bad = 0;
+        for (int j = 0; j < H; j++)
+            for (int i = 0; i < W; i++) {
+                const std::size_t at = static_cast<std::size_t>(j) * W + i;
+                const float* o = &po[at * 4];
+                const float* q = &pg[at * 4];
+                if (!(q[1] >= 0) || o[0] < 0) continue;
+                const double X = i + 0.5, Y = H - 1 - j + 0.5, dx = X - v.cx, dy = v.cy - Y, d = std::hypot(dx, dy), th = d / v.K;
+                const DiscPixel dp = discPixel(T, s, v, X, Y, false);
+                const double rc = std::clamp(static_cast<double>(o[1]), gp.rIn, gp.rOut), te = kSkyGasT - static_cast<double>(q[1]);
+                const double f = gp.factor(rc, q[0], te), cn = cl.density(rc, q[0], te), eg = std::max(std::fabs(q[2] - f) / f, static_cast<double>(std::fabs(q[3] - cn)));
+                dgas = std::max(dgas, eg); nGas++;
+                if (eg > kSkyGasLimit) bad++;
+                if (dp.hit.order != static_cast<int>(std::lround(o[0])) || d <= 0) continue;
+                const double nx = dx / d, ny = dy / d, psi = firstCrossing(N.z, nx * N.x + ny * N.y) + dp.hit.order * kPi;
+                const Vec3 pos{std::sin(psi) * nx, std::sin(psi) * ny, std::cos(psi)};
+                const double phi = std::atan2(pos.x * rows[0].y + pos.y * rows[1].y + pos.z * rows[2].y, pos.x * rows[0].x + pos.y * rows[1].x + pos.z * rows[2].x);
+                double tl = 0;
+                if (!T.lookupT(th - T.alphaSh(), psi, tl)) continue;
+                const double ep = std::fabs(std::remainder(q[0] - phi, 2 * kPi)), et = std::fabs(q[1] - tl) / std::max(1.0, tl);
+                dphi = std::max(dphi, ep); dt = std::max(dt, et); n++;
+                if (ep > kSkyPhiLimit || et > kSkyTLimit) bad++;
+                if (i % 16 == 0 && j % 16 == 0) {
+                    const double tr = rayTime(s.dist, kPi - th, psi), er = std::fabs(tl - tr) / std::max(1.0, tr);
+                    dtr = std::max(dtr, er); nRef++;
+                    if (er > kSkyTLimit) bad++;
+                }
+            }
+        std::printf("PLBHGAS0 dist=%g incl=%g px=%ld phi=%.3g t=%.3g refpx=%ld tref=%.3g gaspx=%ld gas=%.3g bad=%ld\n", dc[0], dc[1], n, dphi, dt, nRef, dtr, nGas, dgas, bad);
+    }
+    view.gasT = 0;
     // 2b. 0.55.1, the disc: the card against the double-precision table lookup (DiscTable in double: lab.h discPixel) at every pixel, and against the reference
     //     (Binet by Dormand-Prince: disc.h discRay) at every 16th pixel in each direction; two distances, two inclinations (a disc of 6 to 30 M, the feeding preset)
     for (double dist : {27.0, 4.0})

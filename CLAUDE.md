@@ -10,7 +10,7 @@ This also covers the app's own 'say what you are doing' reminders: answer them w
 - If the job is much bigger than described, say so in REPORT.md and keep going unless the job says to stop.
 
 ## Graphics and speed (owner decision 16 Nov 2026)
-Every simulation is built to run on the graphics card; the processor's version stays as the exact reference the tests check the card against and takes over where the card or driver cannot (the guard of 0.55.7). A feature is not finished while its heavy repeated work runs only on the processor. A job that adds something drawn adds a benchmark scene for it; the target is the screen's refresh rate on the owner's PC in every scene (the owner sends the benchmark after each X.Y; the planning chat checks it). A new scene goes to the Hard list (app/bench_scenes.cpp) with a stable id, moves as a user does, and uses the hardest view a user can reach with the controls (zooms tried, REPORT.md); it moves to All scenes once the owner's run shows it far above his screen's rate. A feature with a wait (a picture made off the frame, a table, a cloud filling) adds a response line (ui/benchmark.cpp waitDefs).
+Every simulation is built to run on the graphics card; the processor's version stays as the exact reference the tests check the card against and takes over where the card or driver cannot (the guard of 0.55.7). A feature is not finished while its heavy repeated work runs only on the processor. A job that adds something drawn adds a benchmark scene for it; the target is the screen's refresh rate on the owner's PC in every scene (the owner sends a benchmark after a version that adds a benchmark scene; the planning chat checks it). A new scene goes to the Hard list (app/bench_scenes.cpp) with a stable id, moves as a user does, and uses the hardest view a user can reach with the controls (zooms tried, REPORT.md); it moves to All scenes once the owner's run shows it far above his screen's rate. A feature with a wait (a picture made off the frame, a table, a cloud filling) adds a response line (ui/benchmark.cpp waitDefs).
 Owner decision 17 Nov 2026: no scene below the screen's refresh rate is acceptable (his PC: 255 Hz). Owner decision 17 Nov 2026 (evening): the Black Hole Lab's look comes first, then the speed work (moving heavy repeated work to the graphics card, slowest Hard-list scene first, until every scene reaches the 255 Hz); every new drawing is on the graphics card from the start (the processor as reference and fallback).
 
 ## Two models (owner decision 4 Nov 2026)
@@ -74,7 +74,7 @@ The session's own model (Opus) is the lead developer; it uses Haiku helper agent
 
 ## Planning rules (owner decisions 20 Nov 2026)
 - The planning chat reads the processor's code (data, precision, calls) before it plans any move to the graphics card, and names in the job the files and lines it read.
-- Before any new job, the owner's benchmark of the previous version is in.
+- The owner's benchmark is asked for only after a version that added a benchmark scene (owner decision 21 Nov 2026).
 - Who keeps each plan file true: the job that changes a plan's area updates it; the planning chat names the plan files in the job.
 
 ## Done

@@ -2396,6 +2396,141 @@ static void testGas() {
     }
 }
 
+// 0.72.0: the moving gas as the lab draws it (written before the card's code; limits fixed before looking).
+//  1. the cells the card looks at (gas.cpp sumAt's window) hold every patch that reaches a point: the window's sum = the sum over every cell of every slot, to
+//     the bit, for the full pattern and the one the lab draws, at 4000 points over 1.2 M to 2000 M and spins 0 to 0.998; the most cells per bin and slot
+//  2. the norms: the full pattern's kGasNorm and the lab's kGasNormCard against normalise(40000) here (spin 0.6, 6-25 M: a disc not used for them) within
+//     3 standard errors; the lab's pattern averages 1 weighted by the disc's light at 20000 independent places and times (3 standard errors); its face-on
+//     6-10 M ring varies by SKH06 Table 2's rms within the plan's 20 %
+//  3. the time for the card (gas.h gasCard): after 10^6 M (and 10^9 M) of running, each bin's E / T_life = K + f and the card's tau (both as the card's
+//     floats) give back T / T_life, and the clump's phase at the epoch plus Omega tau = phi0 + Omega T (mod 2 pi), within 1e-5 (of a lifetime; rad): tau below
+//     1024 M is rounded to 6.1e-5 M as a float, over the shortest lifetime here (8.4 M) 7e-6, times Omega (0.2 at most at 8 M) 1.2e-5 rad, and the phase at the epoch as a float (2 pi x 6e-8): 2e-5 rad; the limits does not
+//     grow with the running time (the test's first limit, 1e-6, was below this float rounding: corrected with this derivation, REPORT 0.72.0)
+//  4. the light's travel time at spin 0 (disc.h rayTime, DiscTable::lookupT): against the radial quadrature t = Int dr / ((1 - 2/r) (1 - b^2 (1 - 2/r) / r^2)^(1/2))
+//     on the inward part of three rays (1e-8 relative); the table's lookup against rayTime at 200 points on the disc's first crossings (1e-3 relative)
+static void testGasCard() {
+    {   int worstCells = 0;
+        double worst = 0;
+        long n = 0;
+        for (int v = 0; v < 2; v++)
+            for (double a : {0.0, 0.5, 0.9, 0.998}) {
+                GasPattern p = v == 0 ? GasPattern() : GasPattern::reduced();
+                p.a = a; p.rIn = iscoPageThorne(a); p.rOut = 2000;
+                for (int i = 0; i < 500; i++) {
+                    const double fr = i * 0.618034 - std::floor(i * 0.618034), r = p.rIn * std::exp(std::log(p.rOut / p.rIn) * fr * fr);
+                    const double phi = 2 * kPi * (i * 0.7548777 - std::floor(i * 0.7548777)), t = 1e5 * (i * 0.5698403 - std::floor(i * 0.5698403));
+                    int looked = 0, all = 0;
+                    const double s = p.sumAt(r, phi, t, 0, 0, &looked), b = p.sumAt(r, phi, t, 0, 0, &all, true);
+                    worst = std::max(worst, std::fabs(s - b));
+                    n++;
+                }
+                const double dp = 2 * kPi / p.cells, w = p.cutPhi * GasPattern::kWidthPhi / 2.3548;
+                for (double eta = std::log(p.rIn); eta < std::log(p.rOut); eta += 0.01) {
+                    const double r = std::exp(eta);
+                    const int ie = static_cast<int>(std::floor(eta / 0.13));
+                    for (int je = ie - 2; je <= ie + 2; je++) {
+                        if (je < p.binLo() || je > p.binHi()) continue;
+                        const double del = std::fabs(p.binLife(je) * (gasOmega(r, a) - p.binOmega(je)));
+                        worstCells = std::max(worstCells, static_cast<int>(std::ceil((del + 2 * w) / dp)) + 1);
+                    }
+                }
+            }
+        check(worst == 0, "gas: the cells looked at hold every patch that reaches a point (" + f(static_cast<double>(n)) + " points, the window's sum - every cell's: " + f(worst) +
+              "); at most " + f(worstCells) + " cells per bin and slot");
+    }
+    {   GasPattern full;
+        full.a = 0.6; full.rIn = iscoPageThorne(0.6); full.rOut = 25;
+        GasPattern lab = GasPattern::reduced();
+        lab.a = full.a; lab.rIn = full.rIn; lab.rOut = full.rOut;
+        GasPattern fn = full, ln = lab;
+        fn.normalise(40000); ln.normalise(40000);
+        check(std::fabs(fn.norm - kGasNorm) < 3 * fn.normErr * fn.norm && std::fabs(ln.norm - kGasNormCard) < 3 * ln.normErr * ln.norm,
+              "gas: the norms kGasNorm " + f(kGasNorm) + " and kGasNormCard " + f(kGasNormCard) + " = normalise(40000) at spin 0.6, 6-25 M (" + f(fn.norm) + " +- " + f(fn.normErr * fn.norm) +
+              ", " + f(ln.norm) + " +- " + f(ln.normErr * ln.norm) + ") within 3 standard errors");
+        const double gap = 10 * GasPattern::kLife * gasPeriod(1.3 * lab.rOut * std::exp(GasPattern::kWidthEta), lab.a);
+        double sw = 0, sx = 0, sx2 = 0, sw2 = 0;
+        for (int i = 0; i < 20000; i++) {
+            const std::uint32_t h = gasHash(19u, 23u, static_cast<std::uint32_t>(i));
+            const double rr = lab.rIn + (lab.rOut - lab.rIn) * gasU01(h * 2891336453u + 7u), w = rr * discFlux(rr, lab.a);
+            const double x = lab.factor(rr, 2 * kPi * gasU01(h), 3e8 + gap * (i + gasU01(h * 747796405u + 1u)));
+            sw += w; sx += w * x; sx2 += w * x * x; sw2 += w * w;
+        }
+        const double mean = sx / sw, se = std::sqrt((sx2 / sw - mean * mean) * sw2) / sw, se2 = std::sqrt(se * se + std::pow(0.01124 / kGasNormCard, 2));
+        check(std::fabs(mean - 1) < 3 * se2, "gas: the lab's pattern averages " + f(mean) + " weighted by the disc's light (1 within 3 standard errors, " + f(3 * se2) + ")");
+        GasPattern ring = GasPattern::reduced();
+        ring.a = 0; ring.rIn = 6; ring.rOut = 25;
+        std::vector<double> Ls;
+        for (int i = 0; i < 400; i++) {
+            double s = 0;
+            for (double rr = 6.1; rr < 10; rr += 0.2)
+                for (int j = 0; j < 90; j++) s += discFlux(rr, 0) * rr * ring.factor(rr, 2 * kPi * j / 90, 2000 + i * 8.0);
+            Ls.push_back(s);
+        }
+        double m = 0, v = 0;
+        for (double x : Ls) m += x;
+        m /= static_cast<double>(Ls.size());
+        for (double x : Ls) v += (x - m) * (x - m);
+        const double rms = std::sqrt(v / static_cast<double>(Ls.size())) / m;
+        const std::vector<double> row = numbersAfter(readExtract("blackhole/arxiv/astro-ph_0606615_schnittman_krolik_hawley2006.extract.txt"), "   6-10 ", 1);
+        check(row.size() == 1 && std::fabs(rms / (row[0] / 100) - 1) < 0.2, "gas: the lab's pattern: the face-on 6-10 M ring varies by " + f(100 * rms) + " % rms against SKH06 Table 2's " +
+              (row.empty() ? std::string("?") : f(row[0])) + " % (the plan's 20 %)");
+    }
+    {   double worstT = 0, worstPhi = 0;
+        for (double T : {1e6 + 345.6, 1e9 + 77.7}) {
+            GasPattern p = GasPattern::reduced();
+            p.a = 0.9; p.rIn = iscoPageThorne(0.9); p.rOut = 2000;
+            Clump c;
+            c.a = 0.9; c.rc = 8; c.phi0 = 0.3;
+            c.init();
+            GasCard k;
+            gasCard(&p, &c, T, k);
+            for (int i = 0; i < k.N[1]; i++) {
+                const double life = p.binLife(k.N[0] + i);
+                const std::uint32_t K = static_cast<std::uint32_t>(k.bin[4 * i + 1]) * 65536u + static_cast<std::uint32_t>(k.bin[4 * i + 2]);
+                const double kd = std::floor(T / life);
+                const std::uint32_t want = static_cast<std::uint32_t>(static_cast<std::int64_t>(std::floor(k.epoch / life)));
+                const double back = static_cast<double>(k.bin[4 * i]) + static_cast<double>(k.tau) / life;   // T / T_life - K, as the card has it
+                worstT = std::max(worstT, K == want ? std::fabs(back - (T / life - std::floor(k.epoch / life))) : 1.0);
+                (void)kd;
+            }
+            worstPhi = std::max(worstPhi, std::fabs(std::remainder(static_cast<double>(k.C[1]) + c.omega * k.tau - (c.phi0 + c.omega * T), 2 * kPi)));
+        }
+        check(worstT < 1e-5 && worstPhi < 2e-5, "gas: the card's time after 10^6 and 10^9 M of running: T / T_life back to " + f(worstT) + " of a lifetime (limit 1e-5), the clump's phase to " + f(worstPhi) +
+              " rad (limit 2e-5: tau's float rounding times Omega, with the epoch's phase's own)");
+    }
+    {   double worstQ = 0, worstL = 0;
+        for (double psi : {2.0, 2.4, 2.8}) {
+            const double rO = 30, b = rO * std::sin(psi) / std::sqrt(1 - 2 / rO);
+            for (double ph : {0.05, 0.15}) {
+                const double r = rayRadius(rO, psi, ph), t = rayTime(rO, psi, ph);
+                double q = 0;                                                         // Gauss-Legendre, 64 pieces of 8 points from r to rO
+                static const double x8[8] = {-0.9602898564975363, -0.7966664774136267, -0.5255324099163290, -0.1834346424956498, 0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363};
+                static const double w8[8] = {0.1012285362903763, 0.2223810344533745, 0.3137066458778873, 0.3626837833783620, 0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763};
+                for (int s = 0; s < 64; s++) {
+                    const double lo = r + (rO - r) * s / 64, hi = r + (rO - r) * (s + 1) / 64;
+                    for (int j = 0; j < 8; j++) {
+                        const double rr = 0.5 * (lo + hi) + 0.5 * (hi - lo) * x8[j], fct = 1 - 2 / rr;
+                        q += 0.5 * (hi - lo) * w8[j] / (fct * std::sqrt(1 - b * b * fct / (rr * rr)));
+                    }
+                }
+                worstQ = std::max(worstQ, std::fabs(t - q) / q);
+            }
+        }
+        const DiscTable T(30, 256, 128);
+        for (int i = 0; i < 200; i++) {
+            const double x = (T.alphaSh() - 0.02) * (i + 0.5) / 200 - 0.01, psi = (kPi - T.alphaSh()) - x;
+            double tl = 0;
+            const double ph = 0.2 + 2.5 * (i * 0.618034 - std::floor(i * 0.618034));
+            if (!T.lookupT(x, ph, tl)) continue;
+            double u = 0;
+            T.lookup(x, ph, u);
+            if (!(u > 1.0 / 30 && u < 0.5)) continue;
+            worstL = std::max(worstL, std::fabs(tl - rayTime(30, psi, ph)) / rayTime(30, psi, ph));
+        }
+        check(worstQ < 1e-8 && worstL < 1e-3, "gas: the light's travel time at spin 0 against the radial quadrature (" + f(worstQ) + ", limit 1e-8) and the table's lookup against it (" + f(worstL) + ", limit 1e-3)");
+    }
+}
+
 // 0.56.4: the azimuth and the time the light took at each disc crossing, in closed form (kerr_closed.h "TIME AND AZIMUTH"), against GLb (72), radial light, and
 // the integrator with t added (gas.h KerrBLt)
 // the integrator's state over the axis: KerrBL lets theta run past 0 or pi; a point at -theta is the one at theta, phi + pi (the closed forms count the passage)
@@ -2866,6 +3001,7 @@ int main() {
     testTrueLight();
     testGlare();
     testGas();
+    testGasCard();
     testClosedTime();
     testTimedOnRequest();
     testAllLight();

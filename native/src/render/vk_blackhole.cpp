@@ -185,7 +185,7 @@ void VkBlackHole::destroy() {
     vkDeviceWaitIdle(dev_);
     writeCache();
     for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glow_[0], &glow_[1], &glareSrc_, &glareVeil_, &probe_,
-                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
+                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &discTt_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
     for (Tex& t : exp_) dropTex(t);
     exp_.clear();
     for (Tex& t : sum_) dropTex(t);
@@ -709,10 +709,11 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     u.f("uT", tt, 2);
     i1("uN", lensN_);
     i1("uBend", bend ? 1 : 0);
-    i1("uDebug", L.debugDisc ? 2 : L.debug ? 1 : 0);
+    i1("uDebug", L.debugGas ? 3 : L.debugDisc ? 2 : L.debug ? 1 : 0);
     i1("uSky", L.sky ? 1 : 0);
     i1("uDisc", disc ? 1 : 0);
     i1("uRaw", raw ? 1 : 0);
+    gasUniforms(u, L);
     const double st = L.expStep * ppp;                               // 0.56.0: the card's exposure (spin 0)
     const bool cw = L.whiteMode == 1 && disc && !sum_.empty() && !exp;
     i1("uExp", exp ? 1 : 0);
@@ -740,7 +741,8 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     const VkSampler skyS = d2 ? d2->mapSampler() : VK_NULL_HANDLE;
     const int vw = exp ? (exp_.empty() ? 0 : exp_[0].w) : fbW, vh = exp ? (exp_.empty() ? 0 : exp_[0].h) : fbH;
     draw(cb, p, variant, {{"uTex", sky, skyS}, {"uTable", table_.view, nearest_}, {"uDU", discU_.view, nearest_}, {"uDP", discP_.view, nearest_},
-                          {"uDC", discC_.view, nearest_}, {"uWhite", cw ? sum_.back().view : white_.view, nearest_}}, 0, 0, vw, vh);
+                          {"uDC", discC_.view, nearest_}, {"uWhite", cw ? sum_.back().view : white_.view, nearest_},
+                          {"uDTt", discTt_.img ? discTt_.view : discU_.view, nearest_}}, 0, 0, vw, vh);
 }
 
 void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool kdisc, bool raw, int variant) {
@@ -817,6 +819,7 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     const float samp[4] = {static_cast<float>(ox + 0.5 * st), static_cast<float>(st), static_cast<float>(oy + fbH - 0.5 * st), static_cast<float>(st)};
     u.f("uSamp", samp, 4);
     i1("uRaw", raw ? 1 : 0);
+    gasUniforms(u, L);
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
     draw(cb, p, variant, {{"uTex", sky, d2 ? d2->mapSampler() : VK_NULL_HANDLE}, {"uDC", discC_.view, nearest_}, {"uDF", kF_.view, nearest_},
@@ -875,6 +878,24 @@ void VkBlackHole::exposure(VkCommandBuffer cb, const LensSky& L, const std::func
     skyStats_.expN = nx * ny;
     if (!whiteBuf_.busy) readBack(cb, sum_.back(), 0, 0, 1, 1, whiteBuf_);   // (one read-back at a time; a newer one waits for it)
     use(cb, sum_.back(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+}
+
+// 0.72.0: the moving gas's uniforms (renderer2d.h LensSky::gas; render/shaders.h kGasPart); off: uGas 0 and no crossing timed
+void VkBlackHole::gasUniforms(VkUniforms& u, const LensSky& L) {
+    const int on = L.gas ? 1 : 0;
+    u.i("uGas", &on, 1);
+    u.f("uGasTau", &L.gasTau, 1);
+    u.f("uGasCam", &L.gasCam, 1);
+    const float none[2] = {0, 0};
+    u.f("uTimeR", L.gas ? L.timeR : none, 2);
+    u.f("uGasT", L.gasT, 4);
+    u.f("uGasC", L.gasC, 4);
+    u.f("uGasG", L.gasG, 4);
+    u.i("uGasN", L.gasN, 4);
+    u.f("uGasBin", L.gasBin, 4, 72);
+    u.f("uGasW", &L.gasW, 1);
+    u.f("uGasE1", L.gasE1, 3);
+    u.f("uGasE2", L.gasE2, 3);
 }
 
 // 0.70.0: the camera curve's uniforms (renderer2d.h LensSky::tone; render/shaders.h cardExposure, toneRGB)
@@ -1071,7 +1092,7 @@ void VkBlackHole::glarePump() {
     if (glareStage_ == 2 && glareDone_.load()) {
         glareThread_.join();
         glareStage_ = 0;
-        if (job_.gen == want_.gen) {
+        if (job_.gen == want_.gen || (job_.gasOnly && want_.gasOnly && job_.nx == want_.nx && job_.ny == want_.ny)) {
             if (glareVeilBuf_.size() != glareSrcBuf_.size()) glareVeilBuf_.assign(glareSrcBuf_.size(), 0.0f);
             glareUpload(c_->cmd(), job_.nx, job_.ny, glareVeilBuf_);
             glareStats_.b = job_.b; glareStats_.nx = job_.nx; glareStats_.ny = job_.ny; glareStats_.veilMs = glareOut_[0];
@@ -1084,7 +1105,7 @@ void VkBlackHole::glarePump() {
     if (glareStage_ == 3 && c_->done(glareBuf_.ticket)) {                // the blocks are back: the veil on its own thread
         glareStage_ = 0;
         glareBuf_.busy = false;
-        if (job_.gen == want_.gen && glareBuf_.b.map) {
+        if ((job_.gen == want_.gen || (job_.gasOnly && want_.gasOnly && job_.nx == want_.nx && job_.ny == want_.ny)) && glareBuf_.b.map) {
             const std::size_t n = static_cast<std::size_t>(job_.nx) * static_cast<std::size_t>(job_.ny);
             const float* rgba = static_cast<const float*>(glareBuf_.b.map);
             glareSrcBuf_.resize(n * 3);
@@ -1104,8 +1125,11 @@ void VkBlackHole::glarePump() {
             glareStage_ = 2;
         }
     }
-    if (glareStage_ == 0 && want_.gen != 0 && !glareValid_ && want_.gen != job_.gen && layer_[0].img) {   // the newest picture: its blocks, after it in the batch
+    // (0.72.0: while only the gas moves, a new veil at most every 0.25 s: the shown one is a few frames old anyway)
+    const bool gasDue = want_.gasOnly && glareValid_ && std::chrono::duration<double>(t0 - glareLastStart_).count() >= 0.25;
+    if (glareStage_ == 0 && want_.gen != 0 && (!glareValid_ || gasDue) && want_.gen != job_.gen && layer_[0].img) {   // the newest picture: its blocks, after it in the batch
         job_ = want_;
+        glareLastStart_ = t0;
         glareT0_ = t0;
         VkCommandBuffer cb = c_->cmd();
         if (cb) {
@@ -1188,6 +1212,11 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
         upload(cb, discU_, L.discT, 2 * L.discS, kR32, L.discU->data(), 1, "the disc's table");
         upload(cb, discP_, 2 * L.discS, 1, kR32, L.discP->data(), 1, "the disc's table");
         discVer_ = L.discVersion;
+        discTtOk_ = false;
+    }
+    if (disc && L.gas && L.discTime && !discTtOk_ && L.discTime->size() == L.discU->size()) {   // 0.72.0: the travel times, when the moving gas asks
+        upload(cb, discTt_, L.discT, 2 * L.discS, kR32, L.discTime->data(), 1, "the disc's travel times");
+        discTtOk_ = true;
     }
     if (disc && L.colVersion != colVer_) { upload(cb, discC_, L.discC, 1, kF32, L.discCol->data(), 3, "the colours"); colVer_ = L.colVersion; }
     const bool kerr = L.kerr && prog_[pKerr].state == 2 && L.bend && L.kA && L.kB && L.kEdge && L.kTau && L.kChi >= 4 && L.kS >= 4 && L.kEdgeN >= 4;
@@ -1214,6 +1243,10 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
     const bool same = lensValid_ && Renderer2D::lensSameView(last_, L, ksky, skyDrawn_, ptW, lastPtW_);
     const bool glow = L.glow[0] > 0 && prog_[pGlowDown].state == 2 && prog_[pGlowBlur].state == 2 && prog_[pGlowAdd].state == 2;
     const bool layers = glow || glareOn;
+    // 0.72.0: a new picture only because the moving gas moved on: the glare's veil of a picture a few frames old is kept over it (the view is the same; the
+    // gas changes the veil little) while the newest one's is made, and a veil that comes back is shown though newer pictures came meanwhile
+    bool gasOnly = false;
+    if (!same && lensValid_ && L.gas && last_.gas) { LensSky Lg = L; Lg.gasVer = last_.gasVer; gasOnly = Renderer2D::lensSameView(last_, Lg, ksky, skyDrawn_, ptW, lastPtW_); }
     if (!same) {
         if (ksky) skyPicture(cb, L, fbW, fbH, glareOn);
         else {
@@ -1227,17 +1260,17 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
         }
         skyDrawn_ = ksky;
         maskValid_ = ksky;
-        last_ = L; last_.table = nullptr; last_.discU = last_.discP = last_.discCol = nullptr;
+        last_ = L; last_.table = nullptr; last_.discU = last_.discP = last_.discCol = last_.discTime = nullptr;
         last_.kA = last_.kB = last_.kEdge = last_.kTau = last_.discF = nullptr; lastPtW_ = ptW; lensValid_ = true; redraws_++;
         // 0.63.0: its step begins once it has the guards' turn (one guarded step at a time); the picture is drawn meanwhile all the same: the frame never
         // waits, and the step open then (the sky's first full picture, say) is this same drawing
         if (guardState_ == 0 && prog_[pKerr].state == 2 && G.hold()) { G.begin("the first full picture"); firstTicket_ = c_->pending(); guardState_ = 1; }
         glowValid_ = false;
-        glareValid_ = false;
+        if (!(gasOnly && L.glareAsync)) glareValid_ = false;
         composed_ = false;
         if (glow) makeGlow(cb, L, fbW, fbH);
         if (glareOn && !L.glareAsync) makeGlare(L, fbW, fbH);
-        if (glareOn && L.glareAsync) glareWant(L, fbW, fbH);
+        if (glareOn && L.glareAsync) { glareWant(L, fbW, fbH); want_.gasOnly = gasOnly; }
         else want_.gen = 0;
         (void)layers;
     }
@@ -1279,6 +1312,7 @@ void VkBlackHole::probe(const LensSky& L, int w, int h, bool queue, std::vector<
     {   LensSky Lt = L;                                                 // 0.70.0: the camera curve at L.toneLw (blackhole/sky_card.h skyToneCompare), beside the light
         Lt.lp[0] = static_cast<float>(2 * w); Lt.lp[1] = static_cast<float>(h); Lt.lp[2] = static_cast<float>(w); Lt.lp[3] = static_cast<float>(w * h);
         skyPass(cb, Lt, w, h, 2 * w, h, 1, 12, false, 1, 2 * w, h, w, h); }
+    if (L.gas) skyPass(cb, L, w, h, 3 * w, h, 1, 5, false, 1, 3 * w, h, w, h);   // 0.72.0: the moving gas at the first disc image (uMode 5)
     end(cb);
     ptW_ = w0; ptH_ = h0;
     readBack(cb, probe_, 0, 0, 4 * w, 2 * h, probeBuf_);
