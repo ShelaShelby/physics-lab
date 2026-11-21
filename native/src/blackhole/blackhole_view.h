@@ -74,6 +74,7 @@ float catalogueBrightestMag();   // 0.55.4: the brightest catalogue star seen wi
 
 class BlackHoleView {
     friend void compareHook(render::Renderer2D& R, const char* spec);
+    friend void toneCompare(render::Renderer2D& R);
 // 0.69.0: the tests' 8-bit pictures (compareHook, PL_BH_COMPARE): what the renderer recorded, drawn off screen and read back, RGBA, rows from the bottom;
 // set by main.cpp (render/vk_backend.h renderToImage); false: not drawn
 using TestShot = std::function<bool(render::Renderer2D&, int, int, std::vector<unsigned char>&)>;
@@ -122,6 +123,7 @@ public:
     const Settings& shownSettings() const { return shownS_; }  // 0.55.5: the settings of the picture shown (async: may be behind the ones asked for)
     // the renderer's description of the bent sky for this view (also used by the tests and the benchmark)
     render::Renderer2D::LensSky lensFor(const Settings& s, const HoleView& v) const;
+    void toneFields(render::Renderer2D::LensSky& L, const Settings& s) const;   // 0.70.0
     void ensureTable(double dist);
     void ensureDisc(double dist, bool moving = false);         // 0.55.1: the disc's table for this distance (0.56.0: moving: kDiscMovingRows x kDiscMovingCols)
     // 0.56.0: the disc's table while the distance changes (spin 0): 256 x 128 rows and columns per side in place of 768 x 256 (a third of the time; at
@@ -225,7 +227,8 @@ private:
     double skyStepAt_ = 0;
     long skyTimed0_ = 0;
     bool skyFirst_ = false, skyUse_ = false, skyMoving_ = false, skyEngine_ = false;
-    double skyWhite_ = 0, skyChangedAt_ = 0;
+    DiscLook skyLook_;                     // 0.70.0: the card's exposure as last read back (its brightest channel, Y and log-average; 0: none yet)
+    double skyChangedAt_ = 0;
     long skyDrawn_ = 0, installs_ = 0;
     bool lookEngine_ = false, movingEngine_ = false, discCoarse_ = false, shownDiscCoarse_ = false, postedMoving_ = false, lookUse_ = false;
     std::shared_ptr<const std::vector<float>> skyF_;
@@ -266,6 +269,7 @@ private:
 // Tests (PL_BH_COMPARE): the card's picture against the double-precision reference (lensPixel) for the distances given, the plain sky against the Orbit
 // Lab's sky map, and the frame times; prints PLBHCMP / PLBHTIME lines. Needs the renderer's OpenGL context.
 void compareHook(render::Renderer2D& R, const char* spec);
+void toneCompare(render::Renderer2D& R);   // 0.70.0 (PL_BH_COMPARE=sky)
 // 0.69.0: the tests' 8-bit pictures (compareHook, PL_BH_COMPARE): what the renderer recorded, drawn off screen and read back, RGBA, rows from the bottom;
 // set by main.cpp (render/vk_backend.h renderToImage); false: not drawn
 using TestShot = std::function<bool(render::Renderer2D&, int, int, std::vector<unsigned char>&)>;

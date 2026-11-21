@@ -19,6 +19,16 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.70.0", "The Black Hole Lab's Real look: no white-outs, a camera-like picture, a better starting view",
+     "Real now draws the disc as a camera would: automatic exposure puts the disc's average brightness (its log-average) at middle grey and its brightest part "
+     "at white, through a camera's response curve that rolls off the highlights (Reinhard, Stark, Shirley and Ferwerda 2002, listed under Where the facts come "
+     "from), so the bright parts keep their shading and the side coming towards you stays brighter. The curve acts on brightness only: each pixel keeps the "
+     "colour the physics gives it. It is worked out on the graphics card, checked against the processor's exact version. Your choice of exposure is now "
+     "brighter or darker than automatic in stops, and goes back to 0 when the preset, the look or the disc changes: until now it was a fixed brightness kept "
+     "across presets, which could turn the whole picture white with the eye's glare (an old settings file's exposure is read as 0 stops). The lab opens at "
+     "50 GM/c², 45 degrees across, 80 degrees from the disc's axis: the shadow about a quarter of the picture, the disc below it and its image over the top; the "
+     "feeding preset opens there too. The grey ring next to the shadow with Sky beside the disc: Shown is the sky seen between the shadow and the disc's images. "
+     "The Film look is unchanged."},
     {"0.69.0", "OpenGL removed: Vulkan is the app's only drawing system",
      "Everything is drawn with Vulkan: the OpenGL path, its card programs and the Graphics choice in Settings are gone (an old settings file's graphics= line "
      "is read and ignored); nothing else you see changes. Vulkan 1.3 and 1.4 are used as before, and now also Vulkan 1.2 with the extensions "

@@ -31,6 +31,8 @@
 #              0.55.5, the frame never waits for the processor (1280 x 800, Dark; the app's asynchronous path, PL_BH_ASYNC): during a tilt drag and a spin drag
 #              the frame thread's worst time stays under SMOOTH_LIMIT_MS; every frame shows one view (sky, exposure and stars of the same settings), never an older
 #              one; at rest the picture catches up with the settings (fine table, glare) and nothing is redone afterwards
+#   whiteout:  0.70.0, no white-outs: through preset, look, glare, disc and distance changes no frame is over 30 % pure white where the processor's settled
+#              picture is under 5 % (the async path, the owner's M87* view)
 #   check_blackhole.py <PhysicsLab binary> <work folder> [part]
 import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -46,6 +48,9 @@ def check(ok, what):
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src")
 BASE = {"PL_NEWUI": "on", "PL_DRAWSTAT": "1", "PL_FACTS": "off"}
+# 0.70.0: the starting view until 0.69 (20 GM/c^2, 90 degrees, looking at the galactic centre: lab.cpp resetView then), for the checks whose drags and
+# points were laid out on it (the start is now 50 GM/c^2, 45 degrees, 100 degrees from the disc's axis)
+OLDVIEW = "dist=20;fov=90;pitch=1.474174899;yaw=0.055152404"
 GL = dict(BASE)   # (0.69.0: the precision checks and the guard records on Vulkan; until 0.68.1 they ran on OpenGL)
 
 def bh(r, prefix="blackhole "):
@@ -92,12 +97,12 @@ def part_open(binary, work):
         check(all(max(p) < 8 for p in dark), f"the middle of the picture is the black shadow {dark}")
         ring = max(lum(b.px(int(cx + dx), int(cy))) for dx in range(-400, -100) if 0 <= cx + dx < 1280)
         check(ring > 0.05, f"the sky round the shadow is lit (brightest {ring:.3f})")
-        check(int(st["images"]) > 300 and int(st["extra"]) > 50, f"the stars are drawn, many doubled ({st})")
+        check(int(st["images"]) > 150 and int(st["extra"]) > 50, f"the stars are drawn, many doubled ({st})")   # (0.70.0: the starting view 45 degrees across, not 90: a quarter of the sky's area; 300 until then)
 
     # dragging turns the camera round the hole (the yaw of the view), the hole stays in the middle
     d = run_app(binary, work, "bh_drag", dict(BASE, PL_BLACKHOLE="1", PL_SCRIPT="6:drag=300,400,400,400"), frames=20)
     s0, s1 = bh(r), bh(d)
-    check(s0 is not None and s1 is not None and float(s1["yaw"]) - float(s0["yaw"]) > 0.1 and s1["pitch"] == s0["pitch"] and s1["dist"] == s0["dist"], f"a drag to the right turns the view ({s0} -> {s1})")
+    check(s0 is not None and s1 is not None and float(s1["yaw"]) - float(s0["yaw"]) > 0.05 and s1["pitch"] == s0["pitch"] and s1["dist"] == s0["dist"], f"a drag to the right turns the view ({s0} -> {s1})")
 
 def part_presets(binary, work):
     P = presets()
@@ -307,6 +312,10 @@ def precision_sky(binary, work):
     lt = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECKLIGHT ")]
     check(bool(lt) and int(lt[0]["eyepx"]) == 2 * 48 * 40 and int(lt[0]["allpx"]) == 2 * 48 * 40 and lt[0]["eyebad"] == "0" and lt[0]["allbad"] == "0",
           f"the start-up check's light: every probe pixel within its limit, the eye's and All light ({lt[:1]})")
+    # 0.70.0: the start-up check's camera curve (sky_card.h skyToneCompare: every probe pixel within 1e-5 of the screen's white of tone.h's double curve, a limit
+    # fixed before looking)
+    tn = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYCHECKTONE ")]
+    check(bool(tn) and int(tn[0]["px"]) == 2 * 48 * 40 and tn[0]["bad"] == "0", f"the start-up check's camera curve: every probe pixel within its limit ({tn[:1]})")
     # 0.56.2: the owner's window (2560 x 1369), Film's hole (0.6, 74.1 M) at 30 deg across the height, the paper's view and 88, 90, 92 deg from the spin axis,
     # EVERY pixel against traceClosed in double, no allowance: no ray lost, none ending elsewhere more than 1.5 px from the edge, the far direction within
     # 2e-3 rad, the disc's first image the same (a radius within 1e-3 of rIn or rOut excepted: the radius's own limit), its r and g within 1e-3, and every
@@ -320,11 +329,20 @@ def precision_sky(binary, work):
     for x in full:
         bad = {k: x[k] for k in ("lost", "reflost", "endsfar", "dirbad", "discwrongout", "rbad", "ubad") if int(x[k]) != 0}
         check(not bad, f"every pixel of {x['case']} (2560 x 1369) within the limits ({bad or 'none over'}; dir {x['dir']}, r {x['r']}, u {x['u']})")
-    # the exposure found on the card against the processor's scan of the same points (at rest, 640 x 400): within 1e-3 (measured 4e-5, 3e-8, 1.2e-4)
+    # the exposure found on the card against the processor's scan of the same points (at rest, 640 x 400): within 1e-3 (measured 4e-5, 3e-8, 1.2e-4).
+    # 0.70.0: Real's exposure is the samples' log-average (tone.h): the card's against the processor's at spin 0 and against every sample traced exactly
+    # (traceClosed) at a spin (lrel; the spin table's own log-average is printed: its far disc is off by about 1 %, ROADMAP); Film: the brightest channel (rel)
     ex = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYEXP ")]
     check({x["case"] for x in ex} == {"benchmark", "film", "spin0", "all", "allspin0"}, f"the card's exposure compared at spin 0.9, Film, spin 0 and All light at 0.9 and 0 ({len(ex)})")
     for x in ex:
-        check(x["whitemode"] == "1" and float(x["rel"]) < 1e-3 and int(x["n"]) > 1000, f"the card's exposure ({x['case']}): {x['card']} against the processor's {x['cpu']} ({x['rel']}, {x['n']} points)")
+        e = float(x["rel"]) if x["case"] == "film" else float(x["lrel"])
+        check(x["whitemode"] == "1" and e < 1e-3 and int(x["n"]) > 1000, f"the card's exposure ({x['case']}): {x['card']} against the processor's {x['cpu']} "
+              f"(rel {x['rel']}; log-average {x['cardlogavg']} against {x['logavg']}, {x['lrel']}; {x['n']} points)")
+    # 0.70.0: the camera curve, the card's Real picture against the processor's (toneCompare): at most 1 % of the disc's inner pixels over 8 levels of 255
+    tc = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHTONE ")]
+    check({x["case"] for x in tc} == {"near", "far", "spin"}, f"the curve's picture compared at spin 0 near and far and at 0.9 ({len(tc)})")
+    for x in tc:
+        check(x["ok"] == "1" and int(x["pixels"]) > 50000 and float(x["share"]) <= 0.01, f"the curve's picture ({x['case']}): {x['over8']} of {x['pixels']} disc pixels over 8 levels (max {x['maxdiff']})")
     # the card's moving picture and its picture at rest at the same resolution: not one pixel differs (the same formulas), Film at the paper's view and
     # 3 degrees below the plane; at half the resolution the pixels more than 8 levels off are counted (printed)
     st = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHSKYSTOP ")]
@@ -466,7 +484,7 @@ def part_disc(binary, work):
         check(float(d["bright"]) > 1 and d["auto"] == "1" and float(d["white"]) > 0, f"{name}: brighter than the Sun's surface, automatic exposure ({d['bright']}, {d['white']})")
     # the feeding rate and the outer edge move the picture and the readout (a fixed exposure, so that brightness shows)
     runs = {}
-    for name, extra in (("f02", "feed=0.02;exposure=3.5"), ("f20", "feed=0.2;exposure=3.5"), ("o15", "outer=15;exposure=1"), ("o60", "outer=60;exposure=1")):
+    for name, extra in (("f02", "feed=0.02"), ("f20", "feed=0.2"), ("o15", "outer=15"), ("o60", "outer=60")):
         runs[name] = run_app(binary, work, f"bh_disc_{name}", dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_PANELS="blackhole.card=o", PL_BH_SET=f"preset=feeding;pitch=1.2;{extra}"), frames=12)
     a, b = disc_note(runs["f02"]), disc_note(runs["f20"])
     if a and b:
@@ -481,8 +499,10 @@ def part_disc(binary, work):
         Ba, Bb = Bmp(runs["f02"].bmp), Bmp(runs["f20"].bmp)
         la = sum(lum(Ba.px(int(x), int(y))) for x, y in pa[0])
         lb = sum(lum(Bb.px(int(x), int(y))) for x, y in pa[0])
-        # ten times the feeding rate: T x 10^(1/4) = 1.78; far above the visible a black body's visible light grows about like T (the same exposure)
-        check(lb > 1.5 * la, f"a higher feeding rate is brighter on the disc (linear light {la:.3g} -> {lb:.3g})")
+        # ten times the feeding rate: T x 10^(1/4) = 1.78; far above the visible a black body's visible light grows about like T. 0.70.0: the exposure is
+        # always tied to automatic (stops from it), so the picture is drawn at the disc's own key: the readout's brightest part carries the physics, the picture still changes
+        ba, bb = float(disc_note(runs["f02"])["bright"]), float(disc_note(runs["f20"])["bright"])
+        check(bb > 1.5 * ba and abs(lb - la) > 0.005 * la, f"a higher feeding rate is brighter on the disc (the readout's brightest part {ba:.4g} -> {bb:.4g}; the picture's light {la:.3g} -> {lb:.3g})")
     c15, c60 = disc_note(runs["o15"]), disc_note(runs["o60"])
     p15, p60 = disc_points(runs["o15"]), disc_points(runs["o60"])
     check(c15 is not None and c60 is not None and float(c15["outer"]) == 15 and float(c60["outer"]) == 60, f"outer edge in the readout ({c15}, {c60})")
@@ -500,7 +520,7 @@ def part_disc(binary, work):
     # a restart keeps the settings
     sf = os.path.join(work, "bh_disc_settings.txt")
     if os.path.exists(sf): os.remove(sf)
-    k1 = run_app(binary, work, "bh_disc_keep1", dict(BASE, PL_BLACKHOLE="1", PL_SETTINGS=sf, PL_BH_SET="feed=0.05;outer=40;exposure=1.5", PL_SCRIPT="6:click=blackhole.disc.on"), frames=14)
+    k1 = run_app(binary, work, "bh_disc_keep1", dict(BASE, PL_BLACKHOLE="1", PL_SETTINGS=sf, PL_BH_SET="disc=on;feed=0.05;outer=40;exposure=stops;exposurestops=1.5"), frames=14)   # (0.70.0: the disc switched on sets the stops back to 0)
     k2 = run_app(binary, work, "bh_disc_keep2", dict(BASE, PL_SETTINGS=sf), frames=10)
     s = bh(k2)
     check(not k1.scripted_missing() and s is not None and s["disc"] == "1" and float(s["feed"]) == 0.05 and float(s["outer"]) == 40 and s["exp"] == "1.5", f"a restart keeps the disc's settings ({s})")
@@ -550,7 +570,7 @@ def part_spin(binary, work):
     # at the top the drawn shadow's edge is the module's (the closed test through the table's edge samples), from the equator and from near the axis:
     # inside it black, just outside it lit (where the sky there is lit)
     for name, pitch in (("equator", 1.5707963), ("axis", 0.01)):
-        r = run_app(binary, work, f"bh_spin_edge_{name}", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SPINEDGE="1", PL_BH_SET=f"spin=0.99;pitch={pitch};dist=20"), frames=12)
+        r = run_app(binary, work, f"bh_spin_edge_{name}", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SPINEDGE="1", PL_BH_SET=f"spin=0.99;pitch={pitch};dist=20;fov=90"), frames=12)   # (0.70.0: the view until then; the start is 45 degrees)
         e = spin_edge(r)
         if e is None or not r.bmp: check(False, f"{name}: the module's edge was printed"); continue
         fine, pts = e
@@ -631,7 +651,7 @@ def part_looks(binary, work):
     check("film's choices (James et al. 2015)" in chip_sub(b) and chip_sub(b) != chip_sub(a), f"the chip line changes with the look ({chip_sub(b)[:90]})")
     check(s is not None and abs(float(s["dist"]) - film["camR"]) < 1e-9 and abs(float(s["pitch"]) - film["camThetaDeg"] * math.pi / 180) < 1e-6, f"The paper's view: 74.1 GM/c², 86.56° from the axis ({s and (s['dist'], s['pitch'])})")
     # switching to Film at the film's own spin makes no new table
-    c = run_app(binary, work, "bh_looks_notable", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET="preset=feeding;spin=0.6", PL_SCRIPT="6:click=blackhole.look.film"), frames=12)
+    c = run_app(binary, work, "bh_looks_notable", dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET="preset=feeding;spin=0.6;" + OLDVIEW, PL_SCRIPT="6:click=blackhole.look.film"), frames=12)
     st = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in c.out.splitlines() if ln.startswith("PLBHSTAT ")]
     check(len(st) > 8 and st[3]["spinfills"] == st[-1]["spinfills"] and bh(c)["look"] == "film", f"switching looks at the same spin refills no table ({st[3].get('spinfills') if st else None} -> {st[-1].get('spinfills') if st else None})")
     check(marks(c).get("blackhole.look") == "off", f"the dot stays on Real while Film is chosen ({marks(c).get('blackhole.look')})")
@@ -737,9 +757,10 @@ def part_truelight(binary, work):
         check(abs(float(tr["showsat"]) / (star / step) - 1) < 1e-4 and float(tr["below"]) > 1e6 and int(tr["shown"]) == 0, f"shows first at white {tr['showsat']} (written here {star / step:.6g}); now {tr['below']} x below the step, none drawn")
         miss = [w for r0, w in ((cd, "fainter than"), (cd, "faintest step"), (runs["true_off"], "there are no stars"), (runs["true_off"], "brightness is not")) if not texts_has(r0, w)]
         check(not miss, f"the readout's lines and the honest limits (missing: {miss})")
-        # turned down far enough the stars come back (the disc burns out): a thousand times below the readout's exposure (7.5 magnitudes: most of the catalogue)
-        e = math.log10(float(tr["showsat"])) - 3
-        u = run_app(binary, work, "bh_tl_low", dict(base, PL_BH_SET=f"{feed};skybeside=true;glare=off;exposure={e:.4f}"), frames=12)
+        # turned up far enough the stars come back (the disc burns out): a thousand times past the readout's exposure (7.5 magnitudes: most of the catalogue);
+        # 0.70.0: your choice is stops from automatic (the faint light is shown linearly, at 1 / k), so log2(below x 1000) stops
+        e = math.log2(float(tr["below"]) * 1000)
+        u = run_app(binary, work, "bh_tl_low", dict(base, PL_BH_SET=f"{feed};skybeside=true;glare=off;exposure=stops;exposurestops={e:.4f}"), frames=12)
         st = stat(u)
         U = Bmp(u.bmp)
         lit2 = sum(1 for x, y in offp if max(U.px(x, y)) > 0)
@@ -836,7 +857,7 @@ def part_smooth(binary, work):
     # Real look, disc on, the default glare, spin 0.6 (1280 x 800, Dark): a scripted tilt drag over the picture, then a spin drag on the slider, then rest
     # (PL_FRAME_MS=16: a frame takes at least 16 ms, as with VSync on a real screen; the rest is long enough for the fine table on this software renderer)
     # (0.55.6: this first run is the processor's path, GPU light paths off, as 0.55.5; the card's path follows below)
-    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding;spin=0.6",
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding;spin=0.6;" + OLDVIEW,
                 PL_BH_GPUPATHS="0", PL_BH_GPUSKY="0")   # (0.56.0: the processor's tables draw sky and disc here: the fallback; the card's sky below, smooth_sky)
     reach = "4:click=##blackhole.spin.text;10:key=escape"                # (the Spin row scrolled into the Controls panel's view)
     r0 = run_app(binary, work, "bh_smooth_where", dict(base, PL_SCRIPT=reach), frames=16)
@@ -1120,7 +1141,7 @@ def part_alllight(binary, work):
     # sets All light (the state line), which leaves out the eye's glare and the true sky; the disc's picture changes (its centre line brighter on the approaching
     # side against the other far more than in the eye's picture: the 4th power of the shift); the panel's sentence; a restart keeps it.
     base = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_BH_SPINWAIT="1", PL_PANELS="blackhole.card=c")
-    feed = "preset=feeding;pitch=1.2;glare=off"
+    feed = "preset=feeding;pitch=1.2;glare=off;exposure=stops;exposurestops=-4"   # (0.70.0: 4 stops darker: the camera curve nearly linear there, undone below)
     sf = os.path.join(work, "bh_al_settings.txt")
     if os.path.exists(sf): os.remove(sf)
     e = run_app(binary, work, "bh_al_eye", dict(base, PL_BH_SET=feed, PL_SCRIPT="4:click=blackhole.light.eye"), frames=12)
@@ -1138,14 +1159,55 @@ def part_alllight(binary, work):
     pts = disc_points(e)
     occ = [v for k, v in e.rects.items() if re.match(r"occ\d+$", k) or k in ("handle", "chip", "blackholebar") or k.startswith("card.")]
     onp = [(int(x), int(y)) for x, y in (pts[0] if pts else []) if y > 60 and not any(o[0] - 2 <= x <= o[0] + o[2] + 2 and o[1] - 2 <= y <= o[1] + o[3] + 2 for o in occ)]
-    def spread(B):                                                       # (over the disc's own sampled points, the panels left out)
-        v = [lum(B.px(x, y)) for x, y in onp] or [0.0]
+    def lw_of(r):                                                        # 0.70.0: Real's burn-out white (tone.h) of the run, from its PLBHDISCPT line
+        ln = [x for x in r.out.splitlines() if x.startswith("PLBHDISCPT ")]
+        return float(dict(kv.split("=", 1) for kv in ln[-1].split()[1:])["lw"]) if ln else 0.0
+    def unc(ld, w):                                                      # the curve undone (Reinhard et al. 2002 eq. (4) solved for L): L^2 / w^2 + L (1 - Ld) - Ld = 0
+        ld = min(ld, 0.999999)
+        return ld / (1 - ld) if w <= 0 else (-(1 - ld) + math.sqrt((1 - ld) ** 2 + 4 * ld / w ** 2)) * w ** 2 / 2
+    def spread(B, w):                                                    # (over the disc's own sampled points, the panels left out; 0.70.0: in the light before the
+        v = [unc(lum(B.px(x, y)), w) for x, y in onp] or [0.0]           #  camera curve, proportional to the light itself: the curve is a display choice)
         return sum(v) / len(v) / max(1e-9, max(v))
-    se_, sa_ = spread(E), spread(A)
+    se_, sa_ = spread(E, lw_of(e)), spread(A, lw_of(a))
     check(len(onp) >= 50 and sa_ < 0.5 * se_, f"All light: the light gathered in the hot, approaching part (disc points: mean over brightest {sa_:.3g} against the eye's {se_:.3g}; {len(onp)} points)")
     k = run_app(binary, work, "bh_al_restart", dict(base, PL_SETTINGS=sf), frames=6)
     sk = bh(k)
     check(sk is not None and sk.get("light") == "all", f"a restart keeps All light ({sk and sk.get('light')})")
+
+def whites(r):
+    return [float(m) for m in re.findall(r"PLBHWHITE f=\d+ share=([\d.]+)", r.out)]
+
+def part_whiteout(binary, work):
+    # 0.70.0: no white-outs (the owner's 0.69.0 screenshots: the whole picture white with a few stars on top). The limit, fixed before looking: no frame may
+    # have more than 30 % pure-white pixels (all three channels 255; the middle 60 % of the picture, PL_BH_WHITECOUNT) where the settled picture of the same
+    # view by the processor's exposure (PL_BH_GPUSKY=0, waited for) has under 5 %. The app's own asynchronous path (PL_BH_ASYNC), Real, Glare: As an eye sees it,
+    # Sky beside the disc: Shown, 1280 x 800. Fails on 0.69.0's build: a chosen exposure was an absolute screen's white kept across presets (M87* with a bright
+    # choice, then the feeding hole: 88 % white); since 0.70.0 the choice is stops from automatic, back to 0 on a new preset, look or disc.
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_WHITECOUNT="1", PL_PANELS="blackhole.card=c", PL_BH_SETTLE="64:6")   # (to the end: the glare at rest)
+    view = "dist=1000;fov=48;skybeside=shown;glare=eye"
+    m87 = f"preset=m87;disc=on;feed=0.11;outer=1800;{view}"
+    # (exposure=-2: 0.69.0's absolute white, 10^-2 of the Sun's surface; read since 0.70.0 as an old file's choice, at 0 stops; exposurestops: 0.70.0's +12 stops)
+    runs = [("bh_wo_m87feed", dict(base, PL_BH_SET=f"{m87};exposure=-2;exposurestops=12", PL_SCRIPT="20:click=blackhole.preset.feeding"), 600),
+            ("bh_wo_m87auto", dict(base, PL_BH_SET=f"{m87};exposure=auto", PL_SCRIPT="20:click=blackhole.look.film;32:click=blackhole.look.real;44:click=blackhole.glare.off;"
+                                                                                  "52:click=blackhole.glare.eye;60:wheel=3"), 600),
+            ("bh_wo_feedsw", dict(base, PL_BH_SET="preset=feeding;exposure=auto;skybeside=shown;glare=eye", PL_SCRIPT="16:click=blackhole.disc.off;24:click=blackhole.disc.on;"
+                                                                                  "34:click=blackhole.preset.m87;44:click=blackhole.disc.on;56:click=blackhole.preset.feeding"), 600)]
+    refs = [("bh_wo_ref_feed", f"preset=feeding;{view}"), ("bh_wo_ref_m87", m87), ("bh_wo_ref_feed20", "preset=feeding;skybeside=shown;glare=eye")]
+    calls = [((binary, work, n, e), dict(frames=f)) for n, e, f in runs]
+    calls += [((binary, work, n, dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_GLARENOW="1", PL_BH_GPUSKY="0", PL_BH_WHITECOUNT="1", PL_PANELS="blackhole.card=c",
+                                      PL_BH_SET=st)), dict(frames=16)) for n, st in refs]
+    prefetch(calls)
+    ref = {}
+    for (args, kw) in calls[len(runs):]:
+        w = whites(run_app(*args, **kw))
+        ref[args[2]] = w[-1] if w else 1.0
+    check(all(v < 0.05 for v in ref.values()), f"the processor's settled pictures of these views are not white ({ref})")
+    for (args, kw) in calls[:len(runs)]:
+        r = run_app(*args, **kw)
+        w = whites(r)
+        bad = [(i, v) for i, v in enumerate(w) if v > 0.30]
+        check(len(w) >= 64 and not r.scripted_missing() and not bad, f"{args[2]}: no frame over 30 % pure white ({len(w)} frames, worst {max(w or [1]):.3f}, "
+              f"over: {bad[:5]}, missing clicks: {r.scripted_missing()})")
 
 def blackhole_film():
     # the Film look's numbers as the module states them (src/blackhole/looks.h FilmChoices), to compare the labels with
@@ -1158,12 +1220,12 @@ def blackhole_film():
 
 PARTS = {"sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
-         "truelight": part_truelight, "alllight": part_alllight, "smooth": part_smooth,
+         "truelight": part_truelight, "alllight": part_alllight, "smooth": part_smooth, "whiteout": part_whiteout,
          "smoothdisc": lambda b, w: smooth_disc(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_BH_GPUPATHS="0", PL_BH_GPUSKY="0")),
          "skyguard": lambda b, w: sky_guard(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o",
-                                                       PL_BH_SET="preset=feeding;spin=0.6", PL_BH_GPUSKY="1")),
+                                                       PL_BH_SET="preset=feeding;spin=0.6;" + OLDVIEW, PL_BH_GPUSKY="1")),
          "smoothsky": lambda b, w: smooth_sky(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o",
-                                                         PL_BH_SET="preset=feeding;spin=0.6", PL_BH_GPUPATHS="0"),
+                                                         PL_BH_SET="preset=feeding;spin=0.6;" + OLDVIEW, PL_BH_GPUPATHS="0"),
                                               ["4:click=##blackhole.spin.text;10:key=escape"] + [f"{20 + 7 * k}:drag=300,{300 + 30 * k},300,{330 + 30 * k}" for k in range(4)])}
 
 if __name__ == "__main__":

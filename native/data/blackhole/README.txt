@@ -12,6 +12,9 @@ Luminet 1979, Bardeen, Press & Teukolsky 1972 and Cunningham 1975 were read from
 (2603.05810); their extracts in arxiv/ (<name>.extract.txt) hold the equations used. Found: (B100) of 1910.12881 as printed (v3 text) has g0 (g0 + x4(r+-))
 in a denominator where the integral needs a2 (1 - g0 x4(r+-)) (g0 + x4(r+-)) (REPORT 0.55.9).
 
+[0.70.0] The Real look's camera curve (src/blackhole/tone.h) reads Reinhard, Stark, Shirley & Ferwerda 2002 (University of Utah report UUCS-02-01 of the ACM TOG
+paper) through its extract tone/reinhard2002_uucs-02-01.extract.txt (section 3.1, Equations (1) to (4)); the PDF and its text are in the private sources repo.
+
 Sources for the Black Hole Lab (0.54.2 research job, 15 Nov 2026; the plan is native/PLAN_BLACKHOLE.md)
 =======================================================================================================
 Nothing here is used by the app yet. Every file was fetched on 2026-11-15 (UTC) and is kept as received, except where "text" is said:

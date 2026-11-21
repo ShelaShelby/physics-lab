@@ -73,7 +73,7 @@ std::string vkCardVersion(const std::string& name) {
     if (name == "nucdensity") return vkCardId("nucdensity", {kNucDensCS, kBlobVS, kBlobFS});   // 0.67.0
     if (name == "surface") return vkCardId("surface", {kSurfaceCS, kSurfaceVSHeadPart, kSurfaceVSMainPart, kFragmentShader});   // 0.68.0
     if (name == "lines") return vkCardId("lines", {kLinesHeadCSPart, kLinesPart, kLinesMainCSPart, kLinesHeadVSPart, kLinesMainVSPart, kFragmentShader});   // 0.68.0
-    if (name == "lens") return vkCardId("lens", {kCompositeVS, kLensFS, kKerrFS, kMaxDownFS, kGlowDownFS, kGlowBlurFS, kGlowAddFS, kGlareDownFS, kGlareAddFS, kCompositeFS});
+    if (name == "lens") return vkCardId("lens", {kCompositeVS, kLensFS, kKerrFS, kMaxDownFS, kExpSumFS, kGlowDownFS, kGlowBlurFS, kGlowAddFS, kGlareDownFS, kGlareAddFS, kCompositeFS});
     return "vulkan " + molCloudShaderId();
 }
 

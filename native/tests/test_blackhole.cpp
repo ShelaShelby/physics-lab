@@ -41,6 +41,7 @@
 #include "blackhole/lab.h"
 #include "blackhole/looks.h"
 #include "blackhole/light.h"
+#include "blackhole/tone.h"
 #include "orbit/sky.h"
 #include "orbit/units.h"
 
@@ -637,7 +638,13 @@ static void testLabSettings() {
     Settings d = settingsDefaults();
     check(d.preset == "sgra" && d.massSun == preset("sgra")->massSun && d.dist == kDistDefault && d.bend && d.skyOurs, "defaults: Sagittarius A*, bending on, our sky");
     Vec3 mid = viewMiddle(holeView(d, 1280, 800, 640, 400));
-    check(angleBetween(mid, orbit::skyData().galCentre) < 1e-12, "the default view looks at the galactic centre");
+    {   // 0.70.0 (a deliberate change of the starting view, lab.h kTiltDefaultDeg): turned towards the galactic centre, tilted to 100 degrees from the disc's
+        // axis (the camera south of the disc; the picture's middle 80 degrees from the axis, the galactic centre 95.6): the middle's angle from the galactic
+        // centre is the difference of the two directions' angles from the axis (the same azimuth), 15.5 degrees
+        const Vec3 gc = orbit::skyData().galCentre;
+        const double want = std::fabs(std::acos(gc.z) - std::acos(-std::cos(kTiltDefaultDeg * kPi / 180)));
+        check(std::fabs(angleBetween(mid, gc) - want) < 1e-12 && d.pitch == kTiltDefaultDeg * kPi / 180,
+              "the default view: towards the galactic centre, 100 degrees from the disc's axis (" + f(angleBetween(mid, gc) * 180 / kPi) + " degrees off it)"); }
     Settings s = d;
     applyPreset(s, "m87"); setDistance(s, 3.7); setFov(s, 133); turn(s, 0.3, -0.2); s.bend = false; s.skyOurs = false;
     std::map<std::string, std::string> m;
@@ -659,7 +666,7 @@ static void testLabSettings() {
     check(std::fabs(r.distKm - 27 * gravRadiusM(4.297e6) / 1000) < 1e-6 * r.distKm, "readout: distance in km");
     // the field of view: the height spans it, and no corner is ever past pi
     HoleView hv = holeView(q, 1280, 800, 640, 400);
-    check(std::fabs(400 / hv.K - 90 * kPi / 360) < 1e-12, "the field of view spans the height");
+    check(std::fabs(400 / hv.K - kFovDefault * kPi / 360) < 1e-12, "the field of view spans the height");
     setFov(q, 360); hv = holeView(q, 1280, 800, 640, 400);
     check(std::hypot(640.0, 400.0) / hv.K <= kPi + 1e-12, "a wide field of view keeps the corners within pi");
 }
@@ -1073,12 +1080,20 @@ static void testDiscSettings() {
     setFeed(s, 0.9); check(s.feed == kThinMax, "the feeding rate stops at 0.3 L_Edd");
     setFeed(s, 1e-4); check(s.feed == kThinMin, "and at 0.015");
     setOuter(s, 3); check(s.outer == kOuterMin, "the outer edge stays outside the inner one");
-    setExposure(s, 2.25); check(!s.expAuto && s.expLog == 2.25, "a chosen exposure");
+    setExposure(s, 2.25); check(!s.expAuto && s.expEV == 2.25 && exposureStops(s) == 2.25, "a chosen exposure (0.70.0: stops from automatic)");
+    {   Settings e = s;                                                 // 0.70.0: the chosen stops start from 0 again when the preset, the look or the disc changes
+        setExposure(e, 99); const bool top = e.expEV == kEvMax;
+        Settings a = e, l = e, d = e, same = e;
+        applyPreset(a, "m87"); setLook(l, Look::Film); setDisc(d, false); setDisc(same, true); setLook(same, Look::Real);
+        check(top && a.expEV == 0 && l.expEV == 0 && d.expEV == 0 && same.expEV == kEvMax && !a.expAuto, "the stops: clamped; back to 0 on a new preset, look or disc, kept otherwise");
+        std::map<std::string, std::string> old{{"exposure", "2.25"}};      // a 0.69 file: an absolute screen's white
+        const Settings o = loadSettings(old);
+        check(!o.expAuto && o.expEV == 0, "an old file's absolute exposure is read as your choice at 0 stops"); }
     std::map<std::string, std::string> m;
     s.feed = 0.05; s.outer = 44;
     saveSettings(s, m);
     const Settings b = loadSettings(m);
-    check(b == s && m["disc"] == "on" && m["exposure"] == "2.25", "the disc's settings round trip");
+    check(b == s && m["disc"] == "on" && m["exposure"] == "stops" && m["exposurestops"] == "2.25", "the disc's settings round trip");
     m["feed"] = "0.5"; m["outer"] = "abc"; m["exposure"] = "auto"; m["disc"] = "maybe";
     const Settings c = loadSettings(m);
     check(c.feed == kFeedDefault && c.outer == kOuterDefault && c.expAuto && !c.disc, "bad disc values keep the defaults");
@@ -2094,7 +2109,7 @@ static void testTrueLight() {
     check(std::fabs(t.starY - starLight(sirius) / (starDotArea() * pt)) < 1e-30 && std::fabs(t.fainter * t.starY / 100 - 1) < 1e-12, "the readout: the star's dot's luminance and the disc's over it (" + f(t.fainter) + " times)");
     check(std::fabs(t.belowStep - kScreenStep * 100 / t.starY) < 1e-9 * t.belowStep && t.belowStep > 1e6, "at a white of 100 Suns' surfaces Sirius is far below the screen's step (" + f(t.belowStep) + " times)");
     check(!starVisible(sirius, t.showsAtWhite * 1.001, pt) && starVisible(sirius, t.showsAtWhite * 0.999, pt), "the star shows exactly from the exposure the readout names (" + f(t.showsAtWhite) + ")");
-    check(t.showsAtWhite > std::pow(10.0, kExpLogMin) && t.showsAtWhite < std::pow(10.0, kExpLogMax), "that exposure is inside the slider's range (log " + f(std::log10(t.showsAtWhite)) + ")");
+    check(std::log2(t.belowStep) < kEvMax, "that exposure is inside the slider's range (0.70.0: " + f(std::log2(t.belowStep)) + " stops brighter)");
     check(starTrueLight(sirius, 1, pt) / starTrueLight(sirius, 10, pt) == 10, "ten times the white, a tenth of the light on the screen");
     // the settings
     Settings s = settingsDefaults();
@@ -2742,6 +2757,74 @@ static void testAllLight() {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// 0.70.0, the Real look's tone curve (tone.h): Reinhard, Stark, Shirley & Ferwerda 2002 (the extract; the saved original with PL_SOURCES_DIR): the key value
+// and the default burn-out white read from the paper's lines; eqs. (1), (2), (4) written here again at hand-picked inputs; monotonic; chromaticity kept
+static void testTone() {
+    const std::string w = checkedExtract("blackhole/tone/reinhard2002_uucs-02-01.extract.txt", "blackhole/tone/reinhard2002_uucs-02-01.txt.gz", "Reinhard et al. 2002");
+    check(numbersAfter(w, "is a scaled luminance and a = ", 1) == std::vector<double>{kToneKey}, "the key value a = 0.18 (eq. (2))");
+    check(w.find("By default we set Lwhite to the") != std::string::npos && w.find("maximum luminance in the scene. If this default") != std::string::npos,
+          "the burn-out white's default: the scene's largest luminance (eq. (4))");
+    check(w.find("is a small value to avoid") != std::string::npos && w.find("log (\xce\xb4 + Lw (x, y))") != std::string::npos, "eq. (1): log(delta + L_w), delta small");
+    // eq. (1): the log-average (delta 0: the geometric mean)
+    check(std::fabs(logAverage({1, 100, 10000}, 0) / 100 - 1) < 1e-14 && std::fabs(logAverage({2, 8}, 0) / 4 - 1) < 1e-14, "eq. (1): the log-average of 1, 100, 10^4 is 100");
+    check(std::fabs(logAverage({0, 3}, 1) / 2 - 1) < 1e-14, "eq. (1) with delta: exp((ln 1 + ln 4) / 2) = 2");
+    // eq. (4), written here: Ld = L (1 + L / Lw^2) / (1 + L)
+    bool same = true;
+    for (double L : {1e-6, 0.01, 0.18, 0.5, 1.0, 3.0, 47.0, 1e4})
+        for (double Lw : {0.3, 1.0, 5.0, 1e3}) {
+            const double want = L * (1 + L / (Lw * Lw)) / (1 + L);
+            same = same && std::fabs(toneCurve(L, Lw) / want - 1) < 1e-14;
+        }
+    check(same, "eq. (4) at 32 hand-picked (L, Lwhite)");
+    check(std::fabs(toneCurve(5, 5) - 1) < 1e-15 && std::fabs(toneCurve(0.4, 0.4) - 1) < 1e-15 && toneCurve(4.999, 5) < 1, "eq. (4): Lwhite is the smallest luminance mapped to white");
+    check(std::fabs(toneCurve(3, 0) - 0.75) < 1e-15, "eq. (3) when Lwhite is infinite: L / (1 + L)");
+    // eq. (2) through the exposure: the log-average is drawn at the key (middle grey), one stop doubles it; the brightest sample is the burn-out white
+    const std::vector<double> Y{0.5, 2, 30, 400, 0};
+    const ToneExposure e = toneFromSamples(Y, 0), e1 = toneFromSamples(Y, 1);
+    const double lb = logAverage(Y, 400 * kToneDelta);
+    check(e.ok && std::fabs(e.k * lb - kToneKey) < 1e-15 && std::fabs(e1.k / e.k - 2) < 1e-14 && std::fabs(e.lw - e.k * 400) < 1e-12 && e.logAvg == lb,
+          "eq. (2): k Lbar = a (" + f(e.k * lb) + "), +1 stop = twice, Lwhite = k Ymax");
+    check(!toneFromSamples({0, 0}, 0).ok && !toneFromSamples({}, 0).ok, "no light: no exposure (the caller keeps the last good one)");
+    // monotonic: a brighter input is never shown darker (each channel and the luminance), also where the colour is scaled down
+    bool mono = true;
+    for (double Lw : {0.4, 2.0, 50.0}) {
+        double prevL = -1;
+        std::array<double, 3> prev{-1, -1, -1};
+        for (int i = 0; i <= 4000; i++) {
+            const double t = std::pow(10.0, -6 + 10.0 * i / 4000);
+            const double L = toneCurve(t, Lw);
+            mono = mono && L >= prevL;
+            prevL = L;
+            const std::array<double, 3> o = toneScaled({0.6 * t, 0.9 * t, 1.3 * t}, Lw);
+            for (int k = 0; k < 3; k++) mono = mono && o[static_cast<std::size_t>(k)] >= prev[static_cast<std::size_t>(k)] - 1e-15;
+            prev = o;
+        }
+    }
+    check(mono, "monotonic: the curve and every channel never fall as the light grows");
+    // the approaching side stays brighter: the feeding hole's disc at r = 10 seen with shift 1.3 and 0.7, through the curve at the exposure of its brightest
+    {   Settings s = settingsDefaults();
+        applyPreset(s, kFeedingKey);
+        DiscPixel a, b;
+        discLight(s, 10, 1.3, a);
+        discLight(s, 10, 0.7, b);
+        const ToneExposure x = toneExposure(b.Y, a.Y * 1.2, 0);
+        const auto ta = toneRGB(a.rgb, x), tb = toneRGB(b.rgb, x);
+        check(lumaSrgb(ta) > lumaSrgb(tb) && a.Y > b.Y, "the approaching side (g = 1.3) is shown brighter than the receding one (g = 0.7): " + f(lumaSrgb(ta)) + " > " + f(lumaSrgb(tb)));
+    }
+    // chromaticity kept (before 8-bit rounding): x and y of the output = the input's within 1e-6
+    double worst = 0;
+    for (double T : {3000.0, 6500.0, 2e4, 1e5})
+        for (double sc : {1e-3, 1.0, 1e3, 1e6}) {
+            const auto c0 = blackBodyLinear(T);
+            const std::array<double, 3> c{c0[0] * sc, c0[1] * sc, c0[2] * sc};
+            const auto o = toneRGB(c, toneExposure(1.0, 1e3, 0));
+            const double si = c[0] + c[1] + c[2], so = o[0] + o[1] + o[2];
+            for (int k = 0; k < 2; k++) worst = std::max(worst, std::fabs(c[static_cast<std::size_t>(k)] / si - o[static_cast<std::size_t>(k)] / so));
+        }
+    check(worst < 1e-6, "chromaticity kept through the curve (" + f(worst) + ")");
+}
+
 int main() {
     testElliptic();
     testRadii();
@@ -2786,6 +2869,7 @@ int main() {
     testClosedTime();
     testTimedOnRequest();
     testAllLight();
+    testTone();
     std::printf("%d checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

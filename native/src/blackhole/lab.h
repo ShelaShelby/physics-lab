@@ -14,6 +14,7 @@
 #include "blackhole/disc.h"
 #include "blackhole/looks.h"
 #include "blackhole/schwarzschild.h"
+#include "blackhole/tone.h"
 
 namespace blackhole {
 
@@ -21,8 +22,12 @@ constexpr int kLabIndex = 3;               // AppState::lab (0.55.0: Orbit 0, At
 
 // The camera's distance, in GM/c^2. The closest is the closest distance the module's closed forms are tested at against the ray integrator
 // (tests/test_blackhole.cpp testIntegratorVsClosed: 2.2 M); the farthest is where the shadow is 0.6 degrees across.
-constexpr double kDistMin = 2.2, kDistMax = 1000, kDistDefault = 20;
-constexpr double kFovMin = 10, kFovMax = 360, kFovDefault = 90;     // degrees across the picture's height (above 180: a fisheye; the corners reach at most pi from the middle)
+// 0.70.0: the starting view, 50 GM/c^2 and 45 degrees, 80 degrees from the disc's axis (100 from its north: the disc below, its image over the top of
+// the shadow), turned towards the galactic centre: picked from 5 distances x 3 fields of view x 3 tilts rendered (REPORT 0.70.0): the shadow about a
+// quarter of the picture's height, the disc and its image over the shadow both in view. Until 0.69: 20 GM/c^2 and 90 degrees, inside the disc.
+constexpr double kDistMin = 2.2, kDistMax = 1000, kDistDefault = 50;
+constexpr double kTiltDefaultDeg = 100;    // the camera's angle from the disc's (the sky frame's z) axis
+constexpr double kFovMin = 10, kFovMax = 360, kFovDefault = 45;     // degrees across the picture's height (above 180: a fisheye; the corners reach at most pi from the middle)
 constexpr double kMassMin = 1, kMassMax = 1e11;                      // Suns: the range of the slider (the picture does not depend on it)
 
 // 0.55.1, the gas disc (disc.h). The feeding rate as L / L_Edd, inside the range where the thin-disc model applies (kThinMin..kThinMax, disc.h: YN 4.2.1, AF 6);
@@ -39,7 +44,6 @@ constexpr double kFeedDefault = 0.1;
 // Eddington rate" (beyond it the disc's own gravity breaks it up). Until 0.57 the default was 30 (L79's "living core", above): a cut, not the disc's end.
 // The same Page-Thorne flux all the way out: the disc fades by its own physics (T ~ r^-3/4 far out), no fade is added.
 constexpr double kOuterMin = 7, kOuterMax = 2000, kOuterDefault = 2000;
-constexpr double kExpLogMin = -10, kExpLogMax = 5, kExpLogDefault = 2;   // 0.55.4: down to 10^-10 (was 10^-1), so the true exposure can show the stars
 constexpr double kFeedingMass = 1e8;
 constexpr const char* kFeedingKey = "feeding";
 constexpr const char* kFeedingName = "A feeding black hole (model)";
@@ -57,8 +61,9 @@ struct Settings {
     bool disc = false;                     // 0.55.1: the gas disc (model)
     double feed = kFeedDefault;            // L / L_Edd
     double outer = kOuterDefault;          // the disc's outer edge, GM/c^2
-    bool expAuto = true;                   // exposure: automatic, or expLog
-    double expLog = kExpLogDefault;        // log10 of the screen's white in units of the Sun's surface (visible light)
+    bool expAuto = true;                   // exposure: automatic, or expEV
+    double expEV = 0;                      // 0.70.0: your choice, in photographic stops brighter (+) or darker (-) than automatic (tone.h kEvMin..kEvMax); back to 0
+                                           // when the preset, the look or the disc changes. (Until 0.69: an absolute screen's white, kept across presets.)
     double spin = 0;                       // 0.55.2: a / M, 0 .. kSpinTop (spin_sky.h); 0 is exactly the non-spinning hole of 0.55.1 (its closed forms)
     Look look = Look::Real;                // 0.55.3 (looks.h): Real (the dot) or Film. Film draws with the film's spin and disc (shown(), below); the user's own spin,
                                            // disc, feeding rate and outer edge stay as they were and come back with Real
@@ -71,12 +76,14 @@ struct Settings {
     bool allLight = false;
     bool operator==(const Settings& o) const;
 };
-Settings settingsDefaults();               // Sagittarius A*, 20 M, 90 degrees, looking at the galactic centre, bending on, our sky
+Settings settingsDefaults();               // Sagittarius A*, the starting view (kDistDefault, kFovDefault, kTiltDefaultDeg, towards the galactic centre), bending on, our sky
 void resetView(Settings& s);               // distance, field of view and turn back to the defaults (mass, preset, bending and sky stay)
-bool applyPreset(Settings& s, const std::string& key);   // mass from presets.h, the disc off; "feeding": kFeedingMass, the disc on; false if unknown
+bool applyPreset(Settings& s, const std::string& key);   // mass from presets.h, the disc off; "feeding": kFeedingMass, the disc on, the starting view (0.70.0); false if unknown
 void setFeed(Settings& s, double lEdd);    // clamps to kThinMin..kThinMax
 void setOuter(Settings& s, double r);      // clamps to kOuterMin..kOuterMax
-void setExposure(Settings& s, double expLog);   // manual: clamps, expAuto off
+void setExposure(Settings& s, double stops);    // manual (0.70.0: stops from automatic): clamps, expAuto off
+double exposureStops(const Settings& s);   // 0 when automatic, else expEV
+void setDisc(Settings& s, bool on);        // 0.70.0: the disc on or off; a change sets the manual exposure back to 0 stops
 void setSpin(Settings& s, double a);       // 0.55.2: clamps to 0 .. kSpinTop (the presets set 0: the real holes' spin is not measured)
 void setMass(Settings& s, double massSun); // clamps; the preset is dropped unless the mass is the preset's own
 // 0.55.3, the looks (looks.h). shown: the settings the picture and the readout use: s itself for Real; for Film the film's spin and the disc on (J15, looks.h).
@@ -122,8 +129,13 @@ DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, do
 void discLight(const Settings& s, double r, double g, DiscPixel& o);
 // The picture's brightest part of the disc (sampled every `step` pixels): its visible brightness Y and its largest linear sRGB channel, both in units of the Sun's surface
 // (0.58.0: in All light (allLightOn) both are the total light against the Sun's surface's total light, disc.h bolometricVsSun)
-struct DiscLook { double brightY = 0, brightMax = 0, white = 1; bool any = false; };
+// 0.70.0: logAvg, Reinhard et al.'s log-average of the samples' Y (tone.h, delta = kToneDelta x brightY); k and lw: Real's exposure (L = k Y, the burn-out white
+// lw = k brightY; tone.h toneExposure at exposureStops). white: the screen's white in units of the Sun's surface for the faint light, which the curve shows
+// linearly (Real: 1 / k, the stars' true exposure, light.h; Film: brightMax over 2^stops, as until 0.69 with automatic).
+struct DiscLook { double brightY = 0, brightMax = 0, white = 1; bool any = false; double logAvg = 0, k = 0, lw = 0; };
 DiscLook discLook(const DiscTable& t, const Settings& s, const HoleView& v, double W, double H, int step = 4);   // (the light from disc.h's tables: *Fast)
+// white, k and lw of L from its brightY, brightMax and logAvg (the card's read-back too); false: nothing to expose by (L keeps white, k and lw)
+bool finishLook(DiscLook& L, const Settings& s);
 
 // The view for a picture of W x H pixels with the hole at (cx, cy): K from the field of view (at most so that every corner is within pi of the middle)
 HoleView holeView(const Settings& s, double W, double H, double cx, double cy);

@@ -67,6 +67,12 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   control and two clocks, structure in the disc. Rule: as realistic as possible and researched; where the real look is unknown, a labelled model (native/PLAN_MOVINGGAS.md).
 - Moving gas, the recommended version (17 Nov 2026, PLAN_MOVINGGAS.md section 0): Real and Film both get the moving pattern and the clump (in Film labelled as
   the lab's own addition), a time control, two clocks (far away, on the clump) and the exact light travel time per pixel.
+- The order (21 Nov 2026): 0.70.0 the Real look (no white-outs, a camera-like picture, a good starting view, the ring round the shadow); 0.71.0 fewer
+  settings (one short panel, the rest under one "More settings"); 0.72.0 moving gas from real physics (PLAN_MOVINGGAS.md steps 2 and 3), on the graphics card
+  from the start.
+- Real and Film stay two separate looks (21 Nov 2026): Real keeps true colour (a disc this hot is blue-white); Film keeps the film's golden disc, labelled as
+  the film's choice.
+- No benchmark scenes are added to find problems; the owner's usual benchmark after each version stays (21 Nov 2026).
 
 ## Molecule Lab
 - The Molecule Lab is the 15 measured molecules; the builder is removed (4 Nov 2026). Density shows a DFT electron density at the measured shape (18 Oct 2026).
@@ -89,6 +95,10 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - 18 Nov 2026: the app moves to Vulkan in five steps (native/PLAN_VULKAN.md, finished in 0.69.0 and deleted: git keeps it); OpenGL is the backup until every part works on Vulkan on the owner's PC, then removed.
 - Vulkan needs version 1.3 and uses 1.4 where the card has it (owner decision 18 Nov 2026). Replaced on 20 Nov 2026 by the next decision.
 - 20 Nov 2026: OpenGL is removed completely, after the owner's benchmark showed every scene works on Vulkan (his 0.68.0 run did). No frozen OpenGL download for old cards. The app accepts Vulkan 1.2 when the driver offers VK_KHR_dynamic_rendering and VK_KHR_synchronization2, plus 1.3 and 1.4, chosen automatically; one drawing path (present.frag goes); a card that cannot run it gets a clear message naming what is needed. The removal job first checks vulkan.gpuinfo.org (saved in the sources repo) for which old Windows cards 1.2 plus the two extensions actually adds, and leaves the 1.2 part out if it adds almost nothing. Replaces "Vulkan needs version 1.3" (18 Nov).
+- The graphics card, every lab (21 Nov 2026): everything that fits the card goes there (work done for many dots, pixels or lines every frame). Chains of
+  calculation and tables made once stay on the processor (the atoms' equations, the planets' motion, the light-path tables); a chain that slows a frame moves
+  to a background thread. The processor keeps an exact reference and the fallback for everything on the card. Speed work is paused until the Black Hole
+  Lab's look is done.
 - Order: finish Vulkan fully, then all the speed work on Vulkan, slowest scene first; the outside review, the Black Hole Lab's look and new features are talked about after that (owner decision 18 Nov 2026).
 
 ## Look and interface

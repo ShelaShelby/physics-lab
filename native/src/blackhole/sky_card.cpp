@@ -1,4 +1,5 @@
 #include "blackhole/sky_card.h"
+#include "blackhole/tone.h"
 
 #include <algorithm>
 #include <chrono>
@@ -44,6 +45,7 @@ render::Renderer2D::LensSky skyProbeLens(const SkyCase& c) {
     L.discCol = &cardColourTable(L.discC, l0, dl);
     L.colLog0 = l0; L.colDlog = dl; L.colVersion = 1;
     L.allInvTsun = 1 / sunTeff();
+    L.toneLw = kSkyToneLw;                                                 // 0.70.0: the camera curve's check (skyToneCompare)
     return L;
 }
 
@@ -106,6 +108,24 @@ void skyLightCompare(const std::vector<float>& P, int w, int h, SkyLight out[2])
                 o.worst = std::max(o.worst, e / lim);
                 if (e > lim) o.bad++;
             }
+}
+
+SkyLight skyToneCompare(const std::vector<float>& P, int w, int h) {
+    SkyLight o;
+    if (P.size() < static_cast<std::size_t>(32) * w * h) return o;
+    for (int j = 0; j < h; j++)
+        for (int i = 0; i < w; i++) {
+            const float* p = &P[(static_cast<std::size_t>(h + j) * 4 * w + static_cast<std::size_t>(2 * w + i)) * 4];
+            const double x = p[3];                                          // (the card's own input: its pow's rounding is not the curve's)
+            o.px++;
+            if (!(x > 0)) { o.bad++; o.worst = 1e9; continue; }
+            const std::array<double, 3> ref = toneScaled({static_cast<double>(0.6f) * x, static_cast<double>(0.9f) * x, static_cast<double>(1.3f) * x}, kSkyToneLw);
+            double e = 0;
+            for (int q = 0; q < 3; q++) e = std::max(e, std::fabs(p[q] - ref[static_cast<std::size_t>(q)]));
+            o.worst = std::max(o.worst, e / kSkyToneLimit);
+            if (e > kSkyToneLimit) o.bad++;
+        }
+    return o;
 }
 
 // 0.57.2: the reference (traceClosed at every pixel's centre, the ends, each pixel's distance from the edge) apart from the comparison: it needs no probe, so
@@ -272,6 +292,10 @@ SkyCheck skyCheckOf(const std::vector<float>* probes[2], const SkyRef* refs) {
         if (bad.empty() && (L[0].px != static_cast<long>(cs.w) * cs.h || L[1].px != static_cast<long>(cs.w) * cs.h)) bad = "no light probe";
         else if (bad.empty() && (L[0].bad > 0 || L[1].bad > 0))
             bad = "the disc's light off (" + std::to_string(L[0].bad) + " eye, " + std::to_string(L[1].bad) + " all light pixels over their limit)";
+        const SkyLight T = skyToneCompare(*probes[k], cs.w, cs.h);         // 0.70.0: the camera curve
+        c.tone.px += T.px; c.tone.bad += T.bad; c.tone.worst = std::max(c.tone.worst, T.worst);
+        if (bad.empty() && T.px != static_cast<long>(cs.w) * cs.h) bad = "no curve probe";
+        else if (bad.empty() && T.bad > 0) bad = "the camera curve off (" + std::to_string(T.bad) + " pixels over its limit)";
         if (!bad.empty() && c.ok) { c.ok = false; c.why = std::string("the start-up check on this graphics card failed (") + cs.name + ": " + bad + ")"; }
     }
     c.ms = msSince(t0) + refMs;
@@ -397,6 +421,7 @@ void skyCompareHook(render::Renderer2D& R) {
         for (int k = 0; k < 2; k++) std::printf("PLBHSKYCHECKCASE %s\n", skyCompareText(skyCheckCase(k), c.m[k]).c_str());
         std::printf("PLBHSKYCHECKLIGHT eyepx=%ld eyebad=%ld eyeworst=%.3f allpx=%ld allbad=%ld allworst=%.3f\n", c.light[0].px, c.light[0].bad, c.light[0].worst,
                     c.light[1].px, c.light[1].bad, c.light[1].worst);
+        std::printf("PLBHSKYCHECKTONE px=%ld bad=%ld worst=%.3f\n", c.tone.px, c.tone.bad, c.tone.worst);   // 0.70.0: the camera curve
     }
     std::fflush(stdout);
 }

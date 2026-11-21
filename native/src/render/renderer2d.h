@@ -88,7 +88,7 @@ public:
     // 0.56.0: the last sky pass: its time on the card (timestamp pairs, read back without waiting: a few frames old) for the whole picture and at the
     // resolution drawn, the resolution's scale (1 = full), the passes drawn, the card's exposure (its brightest disc channel and Y, read back a frame or two
     // later; white the screen's white it gives, 0 none yet) and how many sample points it had
-    struct SkyStats { double fullMs = -1, lastMs = -1, scale = 1; long draws = 0, lowDraws = 0; double white = 0, whiteY = 0; long whiteReads = 0; int expN = 0; double expMs = -1; long timed = 0; };
+    struct SkyStats { double fullMs = -1, lastMs = -1, scale = 1; long draws = 0, lowDraws = 0; double white = 0, whiteY = 0, logAvg = 0; long whiteReads = 0; int expN = 0; double expMs = -1; long timed = 0; };
     const SkyStats& skyStats() const { return skyStats_; }
     // 0.56.0: one star image laid over the bent picture through its open-sky share (LensSky::kerrSky's fourth output): hidden where the disc or the shadow is
     void maskedDisc(double x, double y, double r, Color c);
@@ -314,6 +314,13 @@ public:
         float filmRaw[4] = {0, 0, 0, 0};
         int whiteMode = 0;
         double expStep = 4;
+        // 0.70.0 (blackhole/tone.h): tone 1: the Real look's camera curve (Reinhard et al. 2002 eq. (4)) on each pixel's luminance, its chromaticity kept, in
+        // place of the screen's white; 0: the screen's white (the Film look, as before). The disc's light is scaled by 1 / white (k: L = k Y); toneLw: the
+        // burn-out white in L. whiteMode 1 (the card's exposure, the same frame): k = toneKey 2^ev / the samples' log-average (delta = toneDelta x their
+        // largest Y), toneLw = k x their largest Y; Film: white = their brightest channel / 2^ev. Where the card's samples hold no light, white and toneLw
+        // (the processor's, or the last good) are used.
+        int tone = 0;
+        double ev = 0, toneLw = 0, toneKey = 0.18, toneDelta = 1.0 / 16384;
         bool moving = false;
         double frameBudgetMs = 8, slowMs = 0;
         bool lowRes = true;

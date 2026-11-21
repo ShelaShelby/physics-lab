@@ -39,7 +39,7 @@ double logV(double t, double lo, double hi) { return std::exp(std::log(lo) + std
 
 bool Settings::operator==(const Settings& o) const {
     return preset == o.preset && massSun == o.massSun && dist == o.dist && fovDeg == o.fovDeg && yaw == o.yaw && pitch == o.pitch && bend == o.bend && skyOurs == o.skyOurs &&
-           disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expLog == o.expLog && spin == o.spin && look == o.look &&
+           disc == o.disc && feed == o.feed && outer == o.outer && expAuto == o.expAuto && expEV == o.expEV && spin == o.spin && look == o.look &&
            trueSky == o.trueSky && glare == o.glare && allLight == o.allLight;
 }
 
@@ -57,8 +57,10 @@ void resetView(Settings& s) {
     // skyDirection at the middle is (-sb sa, -sb ca, -cb))
     const orbit::Vec3 g = orbit::skyData().galCentre;
     const double cb = -g.z, sb = std::sqrt(std::max(0.0, 1 - cb * cb));
-    s.pitch = std::atan2(sb, cb);
     s.yaw = std::atan2(-g.x / sb, -g.y / sb);
+    s.pitch = kTiltDefaultDeg * kPi / 180;                              // 0.70.0: the camera 100 degrees from the disc's axis (lab.h); the yaw still towards the
+                                                                        // galactic centre, now 15.5 degrees from the middle (until 0.69 the pitch, 84.4
+                                                                        // degrees, put it in the middle, the camera above the disc)
 }
 
 bool applyPreset(Settings& s, const std::string& key) {
@@ -68,6 +70,8 @@ bool applyPreset(Settings& s, const std::string& key) {
         s.disc = true;
         s.outer = kOuterDefault;                                        // 0.58.0: Goodman 2003's edge (lab.h)
         s.spin = 0;                                                     // (no invented spin: the model's start, as the real holes')
+        s.expEV = 0;                                                    // 0.70.0: the manual exposure starts from automatic again
+        resetView(s);                                                   // 0.70.0: the starting view (lab.h)
         return true;
     }
     const Preset* p = preset(key.c_str());
@@ -76,6 +80,7 @@ bool applyPreset(Settings& s, const std::string& key) {
     s.massSun = p->massSun;
     s.disc = false;                                                     // (owner's decision of 15 Nov 2026: the real holes open with no disc)
     s.spin = 0;                                                         // (owner's decision of 15 Nov 2026: spin not measured; it starts at 0)
+    s.expEV = 0;                                                        // 0.70.0: the manual exposure starts from automatic again
     return true;
 }
 
@@ -87,9 +92,11 @@ void setMass(Settings& s, double m) {
 }
 void setFeed(Settings& s, double l) { s.feed = std::clamp(l, kThinMin, kThinMax); }
 void setOuter(Settings& s, double r) { s.outer = std::clamp(r, kOuterMin, kOuterMax); }
-void setExposure(Settings& s, double e) { s.expLog = std::clamp(e, kExpLogMin, kExpLogMax); s.expAuto = false; }
+void setExposure(Settings& s, double e) { s.expEV = std::clamp(e, kEvMin, kEvMax); s.expAuto = false; }
+double exposureStops(const Settings& s) { return s.expAuto ? 0 : s.expEV; }
+void setDisc(Settings& s, bool on) { if (s.disc != on) s.expEV = 0; s.disc = on; }
 void setSpin(Settings& s, double a) { s.spin = std::clamp(a, 0.0, kSpinTop); }
-void setLook(Settings& s, Look l) { s.look = l; }
+void setLook(Settings& s, Look l) { if (s.look != l) s.expEV = 0; s.look = l; }
 bool allLightOn(const Settings& s) { return s.look == Look::Real && s.disc && s.allLight; }
 bool trueSkyOn(const Settings& s) { return s.look == Look::Real && s.disc && s.bend && s.skyOurs && s.trueSky && !s.allLight; }
 bool glareOn(const Settings& s) { return s.look == Look::Real && s.disc && s.bend && s.glare && !s.allLight; }
@@ -126,7 +133,8 @@ void saveSettings(const Settings& s, std::map<std::string, std::string>& out) {
     out["disc"] = s.disc ? "on" : "off";
     out["feed"] = text(s.feed);
     out["outer"] = text(s.outer);
-    out["exposure"] = s.expAuto ? "auto" : text(s.expLog);
+    out["exposure"] = s.expAuto ? "auto" : "stops";                    // 0.70.0: your choice in stops from automatic (exposurestops)
+    out["exposurestops"] = text(s.expEV);
     out["spin"] = text(s.spin);
     out["look"] = lookKey(s.look);
     out["skybeside"] = s.trueSky ? "true" : "shown";                   // 0.55.4 (light.h)
@@ -149,7 +157,9 @@ Settings loadSettings(const std::map<std::string, std::string>& in) {
     if (num(in, "feed", kThinMin, kThinMax, v)) s.feed = v;
     if (num(in, "outer", kOuterMin, kOuterMax, v)) s.outer = v;
     if (const auto it = in.find("exposure"); it != in.end() && it->second == "auto") s.expAuto = true;
-    else if (num(in, "exposure", kExpLogMin, kExpLogMax, v)) { s.expAuto = false; s.expLog = v; }
+    else if (it != in.end() && it->second == "stops") s.expAuto = false;
+    else if (num(in, "exposure", -1e300, 1e300, v)) { s.expAuto = false; s.expEV = 0; }   // 0.70.0: an old file's absolute screen white: your choice at 0 stops
+    if (num(in, "exposurestops", kEvMin, kEvMax, v)) s.expEV = v;
     if (num(in, "spin", 0, kSpinTop, v)) s.spin = v;
     if (const auto it = in.find("look"); it != in.end()) { Look l; if (lookFromKey(it->second, l)) s.look = l; }   // (a file without the line: Real)
     if (const auto it = in.find("skybeside"); it != in.end() && (it->second == "true" || it->second == "shown")) s.trueSky = it->second == "true";   // 0.55.4: a file without it: Shown
@@ -210,11 +220,13 @@ DiscPixel discPixel(const DiscTable& t, const Settings& s, const HoleView& v, do
 
 DiscLook discLook(const DiscTable& t, const Settings& s, const HoleView& v, double W, double H, int step) {
     DiscLook L;
-    // 0.55.6: the rows on all cores (only largest values are kept: the same result in any order)
+    // 0.55.6: the rows on all cores (only largest values are kept: the same result in any order); 0.70.0: each sample's Y kept in row order for the
+    // log-average (tone.h), which needs the largest first (its delta)
     std::vector<double> rows;
     for (double Y = step / 2.0; Y < H; Y += step) rows.push_back(Y);
     const int nJob = static_cast<int>((rows.size() + 15) / 16);
     std::vector<DiscLook> part(static_cast<std::size_t>(nJob));
+    std::vector<std::vector<double>> ys(static_cast<std::size_t>(nJob));
     parallelFor(nJob, [&](int k) {
         DiscLook& P = part[static_cast<std::size_t>(k)];
         for (std::size_t j = static_cast<std::size_t>(k) * 16; j < std::min(rows.size(), static_cast<std::size_t>(k + 1) * 16); j++)
@@ -224,11 +236,33 @@ DiscLook discLook(const DiscTable& t, const Settings& s, const HoleView& v, doub
                 P.any = true;
                 P.brightY = std::max(P.brightY, q.Y);
                 P.brightMax = std::max({P.brightMax, q.rgb[0], q.rgb[1], q.rgb[2]});
+                ys[static_cast<std::size_t>(k)].push_back(q.Y);
             }
     });
     for (const DiscLook& P : part) { L.any = L.any || P.any; L.brightY = std::max(L.brightY, P.brightY); L.brightMax = std::max(L.brightMax, P.brightMax); }
-    L.white = s.expAuto ? (L.brightMax > 0 ? L.brightMax : 1) : std::pow(10.0, s.expLog);
+    if (L.brightY > 0) {
+        const double delta = kToneDelta * L.brightY;
+        double sum = 0;
+        std::size_t n = 0;
+        for (const std::vector<double>& y : ys) { for (double q : y) sum += std::log(delta + q); n += y.size(); }
+        L.logAvg = std::exp(sum / static_cast<double>(n));
+    }
+    if (!finishLook(L, s)) L.white = 1;
     return L;
+}
+
+bool finishLook(DiscLook& L, const Settings& s) {
+    const double stops = exposureStops(s);
+    if (s.look == Look::Real) {
+        const ToneExposure e = toneExposure(L.logAvg, L.brightY, stops);
+        if (!e.ok) return false;
+        L.k = e.k; L.lw = e.lw; L.white = 1 / e.k;
+        return true;
+    }
+    if (!(L.brightMax > 0)) return false;
+    L.white = L.brightMax / std::exp2(stops);
+    L.k = 1 / L.white; L.lw = 0;
+    return true;
 }
 
 HoleView holeView(const Settings& s, double W, double H, double cx, double cy) {

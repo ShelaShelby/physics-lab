@@ -77,6 +77,12 @@ std::string powText(double v) {
     if (std::round(m * 100) >= 1000) { m /= 10; e++; }
     return sig(m, 3) + " × 10" + fmt::superscript(e);
 }
+std::string stopsText(double v) {                                      // 0.70.0: "+1.5 stops", "0 stops"
+    char b[40];
+    if (std::fabs(v) < 1e-9) return "0 stops";
+    std::snprintf(b, sizeof b, "%+.3g stop%s", v, std::fabs(std::fabs(v) - 1) < 1e-9 ? "" : "s");
+    return b;
+}
 std::string timesText(double v) { if (v > 0 && v < 1e-3) return powText(v); return v >= 100 ? fmt::commas(std::round(v)) : sig(v, v >= 1 ? 3 : 2); }
 
 // 0.55.3: the Film look's labels, each from the module (blackhole/looks.h: James et al. 2015 and the place of each choice); the UI holds no number of its own
@@ -89,7 +95,8 @@ const char* kFilmShifts = "None: no colour shift and no brightness shift from th
 std::string filmColourText() { return "The paper's white balance: a " + fmt::commas(blackhole::filmChoices().whiteT) + " K black body drawn white (appendix A.6), by the app's CIE 1931 eye in place of the film stock's colours"; }
 const char* kFilmGlow = "Our own glow, in place of the film's lens flare: a simple blur of the disc's bright parts, laid over the sky (the film's lens data is not published)";
 const char* kFilmHonest = "A copy of the film's stated choices, not of its pictures: the artists' textures, the real lens flare and the film's colour grading are not published and are not here.";
-const char* kRealCaption = "A calculated model: the standard thin disc. Real for quasars and for small black holes feeding from a star. A real disc is blinding: Glare draws the veil an average eye would see.";
+const char* kRealCaption = "A calculated model: the standard thin disc. Real for quasars and for small black holes feeding from a star. A real disc is blinding: Glare draws the veil an average eye would see. "
+                           "The picture uses a camera's response curve (Reinhard et al. 2002), our display choice; the colours and the light's ratios are the physics.";
 // 0.55.4 (blackhole/light.h): the two controls of real light, and their honest limits
 const char* kGlareWhat = "Glare happens in the eye, not at the hole: a very bright light scatters inside the eye and lays a veil of light round itself. Drawn by the CIE's general "
                          "disability glare equation for an average eye (35 years, brown eyes), from 0.1° to 100° round every bright point; it moves light, it does not make any.";
@@ -174,13 +181,16 @@ void blackholeCard(AppState& app, Panel& p) {
         if (!app.blackhole.bend) pCaption(p, "Gravity bends light: Off: the disc is not drawn (it needs the hole).");
         else if (L.any) {
             pStat(p, "Brightest part", timesText(L.brightY) + (blackhole::allLightOn(sv) ? " × the Sun's surface in all light (all wavelengths)" : " × the Sun's surface in visible light"));
-            pStat(p, "Exposure", std::string("screen white = ") + timesText(L.white) + " × the Sun's surface" + (app.blackhole.expAuto ? " (automatic)" : " (your choice)"));
+            const std::string how = app.blackhole.expAuto ? " (automatic)" : " (your choice: " + stopsText(app.blackhole.expEV) + ")";
+            if (sv.look == blackhole::Look::Real && L.k > 0)                // 0.70.0: the camera curve (blackhole/tone.h): what middle grey stands for
+                pStat(p, "Exposure", std::string("middle grey = ") + timesText(blackhole::kToneKey / L.k) + " × the Sun's surface" + how);
+            else pStat(p, "Exposure", std::string("screen white = ") + timesText(L.white) + " × the Sun's surface" + how);
         } else pCaption(p, "The disc is out of the picture from here.");
         if (L.any && blackhole::trueSkyOn(app.blackhole)) {                 // 0.55.4: the true exposure's numbers (blackhole/light.h, the view's trueNumbers)
             const blackhole::ViewStats& st = app.blackholeView.stats();
             const blackhole::TrueSkyNumbers& t = st.trueSky;
             pStat(p, "Brightest star", powText(t.fainter) + " × fainter than the disc's brightest part (V " + sig(st.brightMag, 3) + ", its light spread over its dot)");
-            pStat(p, "On the screen", t.belowStep > 1 ? powText(t.belowStep) + " × below the faintest step it can show; it would first show at screen white = " + powText(t.showsAtWhite) + " × the Sun's surface"
+            pStat(p, "On the screen", t.belowStep > 1 ? powText(t.belowStep) + " × below the faintest step it can show; it would first show " + stopsText(std::log2(t.belowStep)) + " brighter than now"
                                                       : std::string("bright enough to show at this exposure"));
             char tq[300];
             std::snprintf(tq, sizeof tq, "bhtrue fainter=%.6g below=%.6g showsat=%.6g starY=%.6g brightmag=%.6g shown=%d hidden=%d", t.fainter, t.belowStep, t.showsAtWhite, t.starY, st.brightMag, st.trueShown, st.trueHidden);
@@ -236,7 +246,7 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
     char b[560];
     const blackhole::Settings v = blackhole::shown(s);
     std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d behind=%d light=%s", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
-                  s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expLog, 6).c_str(), s.spin,
+                  s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expEV, 6).c_str(), s.spin,
                   app.blackholeView.stats().spinFine ? 1 : 0, blackhole::lookKey(s.look), v.spin, v.disc ? 1 : 0, s.trueSky ? "true" : "shown", s.glare ? "eye" : "off",
                   blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0, app.blackholeView.stats().behind ? 1 : 0, s.allLight ? "all" : "eye");
     auditNote(b);
@@ -387,7 +397,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             ImGui::EndDisabled();
             pStat(p, "The film's disc", filmDiscText());
             pStat(p, "Feeding rate", "none: the film's disc is not feeding (James et al. 2015, section 4.1.1)");
-        } else if (pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn)) s.disc = on == 1;
+        } else if (pSegmented(p, "blackhole.disc", {"Off", "On"}, &on, &dn)) blackhole::setDisc(s, on == 1);
         const blackhole::Readout r = blackhole::readout(s, true);
         if (s.disc && r.realPreset && !film) pCaption(p, kWhatIf, false);
         if (film) {
@@ -418,12 +428,17 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
             int ex = s.expAuto ? 0 : 1;
             const std::vector<std::string> en{"blackhole.exp.auto", "blackhole.exp.manual"};
             if (pSegmented(p, "blackhole.exp", {"Automatic", "Your choice"}, &ex, &en)) s.expAuto = ex == 0;
-            float e = static_cast<float>(s.expAuto ? std::log10(std::max(1e-9, app.blackholeView.stats().look.white)) : s.expLog);
-            e = std::clamp(e, static_cast<float>(blackhole::kExpLogMin), static_cast<float>(blackhole::kExpLogMax));
-            if (pSlider(p, "blackhole.exposure", &e, static_cast<float>(blackhole::kExpLogMin), static_cast<float>(blackhole::kExpLogMax))) blackhole::setExposure(s, std::round(e * 20) / 20);
-            pCaption(p, std::string("The screen's white stands for this many times the Sun's surface in ") + (s.allLight && !film ? "all light" : "visible light") + " (" + timesText(std::pow(10.0, e)) + " ×). Automatic: the brightest part of the disc "
-                        "in the picture is drawn at full brightness. A real disc is blinding: brighter than the Sun's surface everywhere, and blue-white. Here it is dimmed so the sky "
-                        "stays visible; a real disc this bright would drown out every star.");
+            float e = static_cast<float>(s.expAuto ? 0.0 : s.expEV);       // 0.70.0: stops brighter (+) or darker (-) than automatic
+            if (pSlider(p, "blackhole.exposure", &e, static_cast<float>(blackhole::kEvMin), static_cast<float>(blackhole::kEvMax))) blackhole::setExposure(s, std::round(e * 4) / 4);
+            if (!film)
+                pCaption(p, std::string("Your choice: ") + stopsText(s.expAuto ? 0.0 : s.expEV) + " from automatic (each stop doubles the light; it starts from 0 again when the "
+                            "preset, the look or the disc changes). Automatic: as a camera meters a scene, the disc's average brightness (its log-average, Reinhard et al. 2002) is "
+                            "drawn as middle grey and its brightest part as the screen's white, through a camera's response curve that rolls off the highlights (our display "
+                            "choice; the colours and the light's ratios are the physics). A real disc is blinding: brighter than the Sun's surface everywhere, and blue-white. "
+                            "Here it is dimmed so the sky stays visible; a real disc this bright would drown out every star.");
+            else
+                pCaption(p, std::string("Your choice: ") + stopsText(s.expAuto ? 0.0 : s.expEV) + " from automatic (each stop doubles the light). Automatic: the brightest part "
+                            "of the disc in the picture is drawn at full brightness.");
         }
         if (s.disc && !film) {                                              // 0.58.0: Light: what an eye sees or all light (blackhole/disc.h allLightLinear)
             pHeading(p, "Light");

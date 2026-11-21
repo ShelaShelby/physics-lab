@@ -961,7 +961,7 @@ int main(int argc, char** argv) {
             for (std::size_t q = 0; q + 1 < on.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", on[q] * scale, on[q + 1] * scale);
             std::printf(" off=");
             for (std::size_t q = 0; q + 1 < off.size(); q += 2) std::printf("%s%.1f,%.1f", q ? ";" : "", off[q] * scale, off[q + 1] * scale);
-            std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY);
+            std::printf(" grid=%d hidden=%d white=%.6g bright=%.6g lw=%.6g\n", app.blackholeView.discGridOn(), bs.hidden, bs.look.white, bs.look.brightY, bs.look.lw);   // (0.70.0: lw, Real's burn-out white)
         }
         if (drawStat) { const atom::NucleusStats& ns = atom::nucleusStats();
                         std::printf("PLDRAWSTAT calls=%d instances=%d vertices=%ld nblobs=%ld nruns=%ld nlines=%ld nrings=%ld nucus=%ld ncover=%ld nlayers=%d nucruns=%ld\n", renderer.lastDrawCalls(), renderer.lastInstances(), renderer.lastVertices(),
@@ -990,6 +990,20 @@ int main(int argc, char** argv) {
                     SDL_SaveBMP(shot, screenshot);
                     SDL_DestroySurface(shot);
                 } else SDL_Log("PL_SCREENSHOT: no picture (Vulkan: the swapchain could not be read)");
+            }
+        }
+        static const bool bhWhite = SDL_getenv("PL_BH_WHITECOUNT") != nullptr;   // 0.70.0 (checks: the white-outs): every frame's share of pure-white pixels
+        if (bhWhite && app.lab == blackhole::kLabIndex && !app.pane) {          // (all three channels 255) in the middle of the picture (60 % of its width
+            std::vector<uint8_t> px;                                             // and height: clear of the panels), read back from the swapchain's image
+            int sw = 0, sh = 0;
+            if (vk.readback(px, sw, sh) && sw > 0 && sh > 0) {
+                long n = 0, w = 0;
+                for (int y = sh / 5; y < sh - sh / 5; y++)
+                    for (int x = sw / 5; x < sw - sw / 5; x++, n++) {
+                        const uint8_t* q = px.data() + (std::size_t(y) * std::size_t(sw) + std::size_t(x)) * 4;
+                        w += q[0] == 255 && q[1] == 255 && q[2] == 255;
+                    }
+                std::printf("PLBHWHITE f=%d share=%.4f\n", frame, n ? double(w) / double(n) : 0.0);
             }
         }
         // 0.63.1: the frame thread's own work: its waits for the card (the swapchain image's fence, the acquire, batches waited for) counted apart

@@ -541,6 +541,24 @@ uniform vec4 uSamp;                                   // brightest channel, its 
 uniform sampler2D uWhite;
 uniform int uWhiteMode;
 float gInv = 1.0;
+uniform int uTone;                                    // 0.70.0 (blackhole/tone.h): 1 the Real look's camera curve (Reinhard et al. 2002 eq. (4)) on luminance,
+uniform float uEV;                                    // its chromaticity kept; 0 the screen's white (Film). uEV: stops from automatic; uKey: a of eq. (2); uLw: the
+uniform float uKey;                                   // burn-out white in L (the processor's, or the last good: used where the card's exposure has no light)
+uniform float uLw;
+// the card's exposure texel e = (brightest channel, brightest Y, sum of ln(delta Ymax + Y), samples) into the light's scale inv (L = inv Y) and Lw
+void cardExposure(vec4 e, inout float inv, inout float lw) {
+    if (uTone == 1) { if (e.a > 0.5 && e.g > 0.0) { inv = uKey * exp2(uEV) / exp(e.b / e.a); lw = inv * e.g; } }
+    else if (e.r > 0.0) inv = exp2(uEV) / e.r;
+}
+vec3 toneRGB(vec3 c, float lw) {                      // eq. (4) on Y, each channel scaled alike; a channel past the white scales all three down (hue kept)
+    float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    if (!(y > 0.0)) return vec3(0.0);
+    float d = lw > 0.0 ? y * (1.0 + y / (lw * lw)) / (1.0 + y) : y / (1.0 + y);
+    vec3 o = c * (d / y);
+    float m = max(o.r, max(o.g, o.b));
+    return m > 1.0 ? o / m : o;
+}
+
 const float PI = 3.14159265358979;
 float tab(int i) { return texelFetch(uTable, ivec2(clamp(i, 0, uN - 1), 0), 0).r; }
 float bendAt(float xpx) {
@@ -584,8 +602,10 @@ vec3 discColourRaw(float r, float g) {
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0);
-    float wt = texelFetch(uWhite, ivec2(0, 0), 0).r;
-    gInv = uExp == 1 ? 1.0 : (uWhiteMode == 1 ? (wt > 0.0 ? 1.0 / wt : 1.0) : uDT.y);
+    float gLw = uLw;                                     // 0.70.0: a card's exposure with no light keeps the processor's (uDT.y, uLw), never 1
+    gInv = uDT.y;
+    if (uExp == 1) gInv = 1.0;
+    else if (uWhiteMode == 1) cardExposure(texelFetch(uWhite, ivec2(0, 0), 0), gInv, gLw);
     vec2 o = (uExp == 1 ? vec2(uSamp.x + floor(gl_FragCoord.x) * uSamp.y, uSamp.z - floor(gl_FragCoord.y) * uSamp.w) : gl_FragCoord.xy) - uCentre;   // right, up, pixels
     float d2 = dot(o, o), r = sqrt(d2), th = r / uKpx;
     vec2 dn = r > 0.0 ? o / r : vec2(0.0);
@@ -637,7 +657,8 @@ void main() {
         for (int k = 0; k < 4; k++)
             if (rk[k] >= uDR.z && rk[k] <= uDR.w) {
                 vec3 c = discColourRaw(rk[k], sqrt(1.0 - 3.0 / rk[k]) / (1.0 - pow(rk[k], -1.5) * b * LzB));
-                fragColor = vec4(max(c.r, max(c.g, c.b)), dot(c, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+                float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+                fragColor = vec4(max(c.r, max(c.g, c.b)), y, y, 1.0);   // (0.70.0: Y again for the log-average, kExpSumFS)
                 return;
             }
         fragColor = vec4(0.0);
@@ -662,6 +683,7 @@ void main() {
         accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
     }
+    if (uTone == 1) acc = toneRGB(accRaw, gLw);         // 0.70.0: Real: the pixel's light through the curve (the crossings laid over each other first)
     fragColor = vec4(encS(acc + tr * decS(back)), 1.0);    // (laid over each other in linear light; the map's colours are sRGB-encoded)
     discOut = vec4(uRaw == 1 ? accRaw : acc, 1.0);
     skyOut = vec4(tr * decS(back), 1.0);
@@ -784,6 +806,23 @@ vec3 discColourRaw(float r, float g) {
     if (uAll > 0.0) col = allLight(col, uDT.y, T);
     return col;
 }
+uniform int uTone;                                    // 0.70.0 (blackhole/tone.h): 1 the Real look's camera curve (Reinhard et al. 2002 eq. (4)) on luminance,
+uniform float uEV;                                    // its chromaticity kept; 0 the screen's white (Film). uEV: stops from automatic; uKey: a of eq. (2); uLw: the
+uniform float uKey;                                   // burn-out white in L (the processor's, or the last good: used where the card's exposure has no light)
+uniform float uLw;
+// the card's exposure texel e = (brightest channel, brightest Y, sum of ln(delta Ymax + Y), samples) into the light's scale inv (L = inv Y) and Lw
+void cardExposure(vec4 e, inout float inv, inout float lw) {
+    if (uTone == 1) { if (e.a > 0.5 && e.g > 0.0) { inv = uKey * exp2(uEV) / exp(e.b / e.a); lw = inv * e.g; } }
+    else if (e.r > 0.0) inv = exp2(uEV) / e.r;
+}
+vec3 toneRGB(vec3 c, float lw) {                      // eq. (4) on Y, each channel scaled alike; a channel past the white scales all three down (hue kept)
+    float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    if (!(y > 0.0)) return vec3(0.0);
+    float d = lw > 0.0 ? y * (1.0 + y / (lw * lw)) / (1.0 + y) : y / (1.0 + y);
+    vec3 o = c * (d / y);
+    float m = max(o.r, max(o.g, o.b));
+    return m > 1.0 ? o / m : o;
+}
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }   // (a colour brighter than the screen: scaled down, its hue kept)
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0);
@@ -832,6 +871,7 @@ void main() {
         accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
     }
+    if (uTone == 1) acc = toneRGB(accRaw, uLw);          // 0.70.0: Real: the curve (uDT.y is k here: L = k Y)
     fragColor = vec4(encS(acc + tr * decS(back)), 1.0);
     discOut = vec4(uRaw == 1 ? accRaw : acc, 1.0);
     skyOut = vec4(tr * decS(back), 1.0);
@@ -933,7 +973,27 @@ uniform sampler2D uVeil;
 uniform ivec2 uN;
 uniform int uB;
 uniform float uKeep;
+uniform sampler2D uWhite;                                 // 0.70.0: the card's exposure (uWhiteMode 1), as the picture's pass read it
+uniform int uWhiteMode;
 out vec4 fragColor;
+uniform int uTone;                                    // 0.70.0 (blackhole/tone.h): 1 the Real look's camera curve (Reinhard et al. 2002 eq. (4)) on luminance,
+uniform float uEV;                                    // its chromaticity kept; 0 the screen's white (Film). uEV: stops from automatic; uKey: a of eq. (2); uLw: the
+uniform float uKey;                                   // burn-out white in L (the processor's, or the last good: used where the card's exposure has no light)
+uniform float uLw;
+// the card's exposure texel e = (brightest channel, brightest Y, sum of ln(delta Ymax + Y), samples) into the light's scale inv (L = inv Y) and Lw
+void cardExposure(vec4 e, inout float inv, inout float lw) {
+    if (uTone == 1) { if (e.a > 0.5 && e.g > 0.0) { inv = uKey * exp2(uEV) / exp(e.b / e.a); lw = inv * e.g; } }
+    else if (e.r > 0.0) inv = exp2(uEV) / e.r;
+}
+vec3 toneRGB(vec3 c, float lw) {                      // eq. (4) on Y, each channel scaled alike; a channel past the white scales all three down (hue kept)
+    float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    if (!(y > 0.0)) return vec3(0.0);
+    float d = lw > 0.0 ? y * (1.0 + y / (lw * lw)) / (1.0 + y) : y / (1.0 + y);
+    vec3 o = c * (d / y);
+    float m = max(o.r, max(o.g, o.b));
+    return m > 1.0 ? o / m : o;
+}
+
 vec3 encS(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }   // IEC 61966-2-1
 vec3 V(int x, int y) { return texelFetch(uVeil, ivec2(x, y), 0).rgb; }
 void main() {
@@ -941,12 +1001,18 @@ void main() {
     ivec2 px = clamp(ivec2(vUV * vec2(sz)), ivec2(0), sz - 1);
     vec3 d = uKeep * texelFetch(uDisc, px, 0).rgb;
     float m = max(d.r, max(d.g, d.b));
-    if (m > 1.0) d /= m;
+    if (uTone == 0 && m > 1.0) d /= m;
     vec2 q = (vec2(px) + 0.5) / float(uB) - 0.5;
     ivec2 i0 = ivec2(floor(q));
     vec2 f = clamp(q - vec2(i0), 0.0, 1.0);
     ivec2 a = clamp(i0, ivec2(0), uN - 1), b = clamp(i0 + 1, ivec2(0), uN - 1);
     vec3 g = mix(mix(V(a.x, a.y), V(b.x, a.y), f.x), mix(V(a.x, b.y), V(b.x, b.y), f.x), f.y);
+    if (uTone == 1) {                                     // 0.70.0, Real: the disc's light and the veil (both in L) through the curve, then the sky behind
+        float inv = 1.0, lw = uLw;
+        if (uWhiteMode == 1) cardExposure(texelFetch(uWhite, ivec2(0, 0), 0), inv, lw);
+        fragColor = vec4(encS(toneRGB(d + g, lw) + texelFetch(uSky, px, 0).rgb), 1.0);
+        return;
+    }
     fragColor = vec4(encS(d + texelFetch(uSky, px, 0).rgb + g), 1.0);
 }
 )";
@@ -2019,6 +2085,23 @@ uniform int uWhiteMode;
 uniform float uWhiteSet;
 uniform vec4 uSamp;
 uniform int uRaw;
+uniform int uTone;                                    // 0.70.0 (blackhole/tone.h): 1 the Real look's camera curve (Reinhard et al. 2002 eq. (4)) on luminance,
+uniform float uEV;                                    // its chromaticity kept; 0 the screen's white (Film). uEV: stops from automatic; uKey: a of eq. (2); uLw: the
+uniform float uKey;                                   // burn-out white in L (the processor's, or the last good: used where the card's exposure has no light)
+uniform float uLw;
+// the card's exposure texel e = (brightest channel, brightest Y, sum of ln(delta Ymax + Y), samples) into the light's scale inv (L = inv Y) and Lw
+void cardExposure(vec4 e, inout float inv, inout float lw) {
+    if (uTone == 1) { if (e.a > 0.5 && e.g > 0.0) { inv = uKey * exp2(uEV) / exp(e.b / e.a); lw = inv * e.g; } }
+    else if (e.r > 0.0) inv = exp2(uEV) / e.r;
+}
+vec3 toneRGB(vec3 c, float lw) {                      // eq. (4) on Y, each channel scaled alike; a channel past the white scales all three down (hue kept)
+    float y = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    if (!(y > 0.0)) return vec3(0.0);
+    float d = lw > 0.0 ? y * (1.0 + y / (lw * lw)) / (1.0 + y) : y / (1.0 + y);
+    vec3 o = c * (d / y);
+    float m = max(o.r, max(o.g, o.b));
+    return m > 1.0 ? o / m : o;
+}
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 discOut;
 layout(location = 2) out vec4 skyOut;
@@ -2066,6 +2149,12 @@ vec3 discLightRaw(float r, float g) {
 vec3 scaledColour(vec3 c) { float m = max(c.r, max(c.g, c.b)); return m > 1.0 ? c / m : c; }
 void main() {
     discOut = vec4(0.0); skyOut = vec4(0.0); maskOut = vec4(0.0);
+    if (uMode == 12) {                                // 0.70.0: the camera curve on one colour from 10^-3 to 10^4 of it, even in log over the pass's pixels, at uLw
+        float kk = (floor(gl_FragCoord.y) - uLP.y) * uLP.z + floor(gl_FragCoord.x) - uLP.x;
+        float x = pow(10.0, -3.0 + 7.0 * (kk + 0.5) / uLP.w);
+        fragColor = vec4(toneRGB(vec3(0.6, 0.9, 1.3) * x, uLw), x);
+        return;
+    }
     if (uMode == 11) {                                // 0.58.0: the light of black bodies at 10^3 to 10^7 K, even in log T over the pass's pixels: (light, T)
         float kk = (floor(gl_FragCoord.y) - uLP.y) * uLP.z + floor(gl_FragCoord.x) - uLP.x;
         float T = pow(10.0, 3.0 + 4.0 * (kk + 0.5) / uLP.w);
@@ -2105,8 +2194,8 @@ void main() {
     float cover = skyEnd && th <= PI ? clamp(xpx + 0.5, 0.0, 1.0) : 0.0;
     vec3 back = uSky == 0 ? vec3(0.0) : c * uBright * cover;
     if (uDisc == 0 && !probe) { fragColor = vec4(back, 1.0); skyOut = vec4(decS(back), 1.0); maskOut = vec4(cover); return; }
-    float white = uWhiteMode == 1 ? texelFetch(uWhite, ivec2(0, 0), 0).r : uWhiteSet;
-    float inv = uWhiteMode == 0 ? uDT.y : (white > 0.0 ? 1.0 / white : 1.0);
+    float inv = uDT.y, lw = uLw;                         // 0.70.0: a card's exposure with no light keeps the processor's (or the last good), never 1
+    if (uWhiteMode == 1) cardExposure(texelFetch(uWhite, ivec2(0, 0), 0), inv, lw);
     vec3 acc = vec3(0.0), accRaw = vec3(0.0);
     float tr = 1.0;
     for (int k = 0; k < 4; k++) {
@@ -2116,13 +2205,14 @@ void main() {
         float rc = clamp(rk[k], uDR.x, uDR.y), g = shiftKerr(rc, R.b);
         vec3 raw = discLightRaw(rc, g);
         if (uMode == 2) { fragColor = vec4(float(k), rk[k], g, xpx); return; }
-        if (uMode == 10) { fragColor = vec4(max(raw.r, max(raw.g, raw.b)), dot(raw, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0); return; }
+        if (uMode == 10) { float y = dot(raw, vec3(0.2126, 0.7152, 0.0722)); fragColor = vec4(max(raw.r, max(raw.g, raw.b)), y, y, 1.0); return; }   // (0.70.0: Y again, kExpSumFS)
         vec3 cr = raw * inv;
         if (uDFix.w > 0.0) cr = scaledColour(cr);
         acc += tr * cov * scaledColour(cr);
         accRaw += tr * cov * cr;
         tr *= 1.0 - cov;
     }
+    if (uTone == 1) acc = toneRGB(accRaw, lw);           // 0.70.0: Real: the pixel's light through the curve
     fragColor = vec4(encS(acc + tr * decS(back)), 1.0);
     discOut = vec4(uRaw == 1 ? accRaw : acc, 1.0);
     skyOut = vec4(tr * decS(back), 1.0);
@@ -2145,6 +2235,33 @@ void main() {
             if (q.x < uN.x && q.y < uN.y) m = max(m, texelFetch(uTex, q, 0));
         }
     fragColor = m;
+}
+)";
+
+// 0.70.0: the Real look's log-average (blackhole/tone.h, Reinhard et al. 2002 eq. (1)) on the card: each texel sums a 4 x 4 block of the texture below
+// (texels past uN left out). uFirst 1: the block is the exposure's samples (brightest channel, Y, Y, 1 on the disc): it adds ln(uDelta Ymax + Y) and counts
+// them, Ymax from uMax (the max chain's last texel); 0: it adds the sums and counts below. Every texel carries uMax's brightest channel and Y in .rg, so
+// the last one is the whole exposure: (brightest channel, brightest Y, sum of the logarithms, samples)
+static const char* const kExpSumFS = R"(#version 330 core
+uniform sampler2D uTex;
+uniform sampler2D uMax;
+uniform ivec2 uN;
+uniform int uFirst;
+uniform float uDelta;
+out vec4 fragColor;
+void main() {
+    ivec2 b = ivec2(gl_FragCoord.xy) * 4;
+    vec4 mx = texelFetch(uMax, ivec2(0, 0), 0);
+    float sum = 0.0, n = 0.0;
+    for (int j = 0; j < 4; j++)
+        for (int i = 0; i < 4; i++) {
+            ivec2 q = b + ivec2(i, j);
+            if (q.x >= uN.x || q.y >= uN.y) continue;
+            vec4 v = texelFetch(uTex, q, 0);
+            if (uFirst == 1) { if (v.a > 0.5 && mx.g > 0.0) { sum += log(uDelta * mx.g + v.b); n += 1.0; } }
+            else { sum += v.b; n += v.a; }
+        }
+    fragColor = vec4(mx.r, mx.g, sum, n);
 }
 )";
 

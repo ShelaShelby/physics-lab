@@ -40,7 +40,7 @@ class VkBlackHole {
 public:
     using LensSky = Renderer2D::LensSky;
     // the programs (each its SPIR-V from shaders.h's text); the first six are made on the worker thread
-    enum Prog { pLens, pKerr, pSkyTiny, pSkyMath, pSky, pMaxDown, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy, pProgCount };
+    enum Prog { pLens, pKerr, pSkyTiny, pSkyMath, pSky, pMaxDown, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy, pExpSum, pProgCount };
     static const char* progName(int p);
     static std::size_t spirvBytes(int p);
 
@@ -158,7 +158,9 @@ private:
     std::atomic<int> skyStage_[3] = {{0}, {0}, {0}};    // per KerrSky stage: as Program::state
     // the textures (OpenGL's names in renderer2d.h)
     Tex lensTex_, layer_[2], mask_, out_, low_[4], glow_[2], glareSrc_, glareVeil_, probe_, debug_, args_, mathOut_;   // (0.69.0: the tests' three)
+    void toneUniforms(VkUniforms& u, const LensSky& L);   // 0.70.0
     std::vector<Tex> exp_;
+    std::vector<Tex> sum_;                 // 0.70.0: the log-average's chain (kExpSumFS); its last texel is the whole exposure
     Tex table_, discU_, discP_, discC_, kA_, kB_, kE_, kT_, kF_;
     std::uint64_t tableVer_ = ~std::uint64_t(0), discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0), kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     int lensN_ = 0;

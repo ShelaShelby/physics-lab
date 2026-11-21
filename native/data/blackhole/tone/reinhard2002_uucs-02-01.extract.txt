@@ -1,0 +1,69 @@
+# EXTRACT of a saved original that is NOT in this repository (it is kept in the private repo ShelaShelby/physics-lab-sources, see native/data/SOURCES.md).
+# Original: data/blackhole/tone/reinhard2002_uucs-02-01.txt.gz
+# Reference: E. Reinhard, M. Stark, P. Shirley, J. Ferwerda, "Photographic Tone Reproduction for Digital Images", University of Utah technical report UUCS-02-01 (14 January 2002), the paper published as ACM Transactions on Graphics 21(3), 267-276 (2002), SIGGRAPH 2002 (the PDF: sha256 fd0da522616050364682fd2c1641e6d5be886106ca8765bfaadfb0760913b2f8; the original here is its pdftotext -layout text, gzip -9)
+# URL: https://www.cs.utah.edu/docs/techreports/2002/pdf/UUCS-02-001.pdf
+# Date read: 2026-11-21
+# sha256 of the original: fad8cbbe05e4e0e24eedb841ea808a1e3814a6f77db206275decb67679c64e2f
+# Place in the original: section 3 "Algorithm" and 3.1 "Initial luminance mapping" with Equations (1) to (4) (the paper's p. 3: two columns side by side, as pdftotext -layout
+#   sets them; the equations' fraction bars are lost: (1) Lbar_w = exp((1/N) sum_{x,y} log(delta + L_w(x,y))), (2) L = (a / Lbar_w) L_w, (3) L_d = L / (1 + L),
+#   (4) L_d = L (1 + L / L_white^2) / (1 + L)); section 3.2's sentence on clipping (p. 4)
+# Used by: src/blackhole/tone.h (the Real look's tone curve and its automatic exposure) and tests/test_blackhole.cpp testTone, which reads the key value 0.18 and
+#   the default burn-out white from these lines.
+# Every block between a "#--- begin" line and its "#--- end" line is copied exactly from the original (line ends as LF, trailing blanks dropped);
+# native/tools/check_sources.py looks each block up in the original. Lines that begin with "#---" or "# " are not part of the original.
+#--- begin section 3 and 3.1, Equations (1) to (4) (p. 3)
+3 Algorithm                                                                The dynamic range of the image is 7 zones.
+The Zone System summarized in the last section is used to develop
+a new tone mapping algorithm for digital images, such as those cre-        high luminances [Mitchell 1984; Stroebel et al. 2000]. A simple
+ated by rendering algorithms (e.g., [Ward Larson and Shakespeare           tone mapping operator with these characteristics is given by:
+1998]) or captured using high dynamic range photography [De-
+bevec and Malik 1997]. We are not trying to closely mimic the                                                   L(x, y)
+actual photographic process [Geigel and Musgrave 1997], but in-                                 Ld (x, y) =               .                  (3)
+                                                                                                              1 + L(x, y)
+stead use the basic conceptual framework of the Zone System to
+manage choices in tone reproduction. We first apply a scaling that         Note that high luminances are scaled by approximately 1/L, while
+is analogous to setting exposure in a camera. Then, if necessary,          low luminances are scaled by 1. The denominator causes a graceful
+we apply automatic dodging-and-burning to accomplish dynamic               blend between these two scalings. This formulation is guaranteed
+range compression.                                                         to bring all luminances with a displayable range. However, as men-
+                                                                           tioned in the previous section, this is not always desirable. Equa-
+3.1    Initial luminance mapping                                           tion 3 can be extended to allow high luminances to burn out in a
+                                                                           controllable fashion:
+We first show how to set the tonal range of the output image based                                                            
+on the scene’s key value. Like many tone reproduction meth-                                             L(x, y) 1 + L   L(x,y)
+                                                                                                                         2
+ods [Tumblin and Rushmeier 1993; Ward 1994; Holm 1996], we                                  Ld (x, y) =                  white
+                                                                                                                                           (4)
+view the log-average luminance as a useful approximation to the                                              1 + L(x, y)
+key of the scene. This quantity L̄w is computed by:
+                                                                         where Lwhite is the smallest luminance that will be mapped to pure
+                    1                                                     white. This function is a blend between Equation 3 and a linear
+             L̄w =     exp        log (δ + Lw (x, y))          (1)         mapping. It is shown for various values of Lwhite in Figure 6. If
+                   N          x,y                                          Lwhite value is set to the maximum luminance in the scene Lmax
+                                                                           or higher, no burn-out will occur. If it is set to infinity, then the
+where Lw (x, y) is the “world” luminance for pixel (x, y), N is the        function reverts to Equation 3. By default we set Lwhite to the
+total number of pixels in the image and δ is a small value to avoid        maximum luminance in the scene. If this default is applied to scenes
+the singularity that occurs if black pixels are present in the image. If   that have a low dynamic range (i.e., Lmax < 1), the effect is a subtle
+the scene has normal-key we would like to map this to middle-grey          contrast enhancement, as can be seen in Figure 7.
+of the displayed image, or 0.18 on a scale from zero to one. This             The results of this function for higher dynamic range images is
+suggests the equation:                                                     shown in the left images of Figure 8. For many high dynamic range
+                                    a                                      images, the compression provided by this technique appears to be
+                      L(x, y) =        Lw (x, y)                    (2)    sufficient to preserve detail in low contrast areas, while compress-
+                                   L̄w
+                                                                           ing high luminances to a displayable range. However, for very high
+where L(x, y) is a scaled luminance and a = 0.18. For low-key              dynamic range images important detail is still lost. For these im-
+or high-key images we allow the user to map the log average to             ages a local tone reproduction algorithm that applies dodging-and-
+different values of a. We typically vary a from 0.18 up to 0.36 and        burning is needed (right images of Figure 8).
+0.72 and vary it down to 0.09, and 0.045. An example of varying is
+given in Figure 5. In the remainder of this paper we call the value        3.2   Automatic dodging-and-burning
+of parameter a the “key value”, because it relates to the key of the
+image after applying the above scaling.                                    In traditional dodging-and-burning, all portions of the print poten-
+#--- end
+#--- begin section 3.2, the clip of the local operator (p. 4)
+                                                                           L for very bright pixels, our local operator is not guaranteed to keep
+      Scale too small       Right scale          Scale too large
+                                                                           the display luminance Ld below 1. Thus, for extremely bright areas
+                                                                           some burn-out may occur and this is the reason we clip the display
+                                                                           luminance to 1 afterwards. As noted in section 2, a small amount
+                                                                           of burn-out may be desirable to make light sources such as the sun
+                                                                           look very bright.
+#--- end

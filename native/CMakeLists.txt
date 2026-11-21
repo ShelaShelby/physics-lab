@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.69.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.70.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -181,6 +181,7 @@ add_library(blackhole_core STATIC
   src/blackhole/lab.cpp
   src/blackhole/looks.cpp
   src/blackhole/light.cpp
+  src/blackhole/tone.cpp
   src/blackhole/disc.cpp
   src/blackhole/spin.cpp
   src/blackhole/spin_sky.cpp
@@ -408,7 +409,7 @@ if(PL_BUILD_APP)
                       # 0.62.0 (Vulkan step 4): the Black Hole Lab's, the same way (kKerrSkyFS from its parts, as render/kerr_sky.cpp; the light paths' compute
                       # shader in double precision: shaderFloat64)
                       "lens_frag:kLensFS" "kerr_frag:kKerrFS" "skytiny_frag:kKerrSkyTinyFS" "skymath_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyMathPart"
-                      "sky_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyTracePart+kKerrSkyMainPart" "maxdown_frag:kMaxDownFS" "glowdown_frag:kGlowDownFS"
+                      "sky_frag:kKerrSkyHeadPart+kEllipticPart+kKerrSkyTracePart+kKerrSkyMainPart" "maxdown_frag:kMaxDownFS" "expsum_frag:kExpSumFS" "glowdown_frag:kGlowDownFS"
                       "glowblur_frag:kGlowBlurFS" "glowadd_frag:kGlowAddFS" "glaredown_frag:kGlareDownFS" "glareadd_frag:kGlareAddFS" "kerrtable_comp:kKerrTableCS"
                       # 0.64.0: Saturn's rings per pixel and their probe (the start-up check)
                       "rings_frag:kRingsHeadFSPart+kRingsPart+kRingsMainFSPart" "ringprobe_comp:kRingsHeadCSPart+kRingsPart+kRingsMainCSPart"
@@ -621,10 +622,10 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_molecule PROPERTIES TIMEOUT 3600)
       # ui_blackhole (0.55.0): the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, layout, look,
       # and the card's bent sky against the double-precision reference; 0.55.2: spin; 0.55.3: the looks; 0.55.4: truelight (the true exposure, the eye's glare);
-      # 0.55.5: smooth (the frame never waits for the processor)
+      # 0.55.5: smooth (the frame never waits for the processor); 0.70.0: whiteout
       add_test(NAME ui_blackhole COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole
                check_blackhole.py:open check_blackhole.py:presets check_blackhole.py:distance check_blackhole.py:light check_blackhole.py:disc check_blackhole.py:realest check_blackhole.py:orbitcard
-               check_blackhole.py:settings check_blackhole.py:layout check_blackhole.py:look check_blackhole.py:precision check_blackhole.py:spin check_blackhole.py:looks check_blackhole.py:truelight check_blackhole.py:alllight check_blackhole.py:smooth)
+               check_blackhole.py:settings check_blackhole.py:layout check_blackhole.py:look check_blackhole.py:precision check_blackhole.py:spin check_blackhole.py:looks check_blackhole.py:truelight check_blackhole.py:alllight check_blackhole.py:smooth check_blackhole.py:whiteout)
       set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 3600)
     endif()
   endif()

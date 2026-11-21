@@ -25,6 +25,7 @@
 #include "r2d_skymath_frag.h"
 #include "r2d_sky_frag.h"
 #include "r2d_maxdown_frag.h"
+#include "r2d_expsum_frag.h"
 #include "r2d_glowdown_frag.h"
 #include "r2d_glowblur_frag.h"
 #include "r2d_glowadd_frag.h"
@@ -45,6 +46,7 @@ Code codeOf(int p) {
     case VkBlackHole::pSkyMath: return {k_r2d_skymath_frag, sizeof k_r2d_skymath_frag};
     case VkBlackHole::pSky: return {k_r2d_sky_frag, sizeof k_r2d_sky_frag};
     case VkBlackHole::pMaxDown: return {k_r2d_maxdown_frag, sizeof k_r2d_maxdown_frag};
+    case VkBlackHole::pExpSum: return {k_r2d_expsum_frag, sizeof k_r2d_expsum_frag};
     case VkBlackHole::pGlowDown: return {k_r2d_glowdown_frag, sizeof k_r2d_glowdown_frag};
     case VkBlackHole::pGlowBlur: return {k_r2d_glowblur_frag, sizeof k_r2d_glowblur_frag};
     case VkBlackHole::pGlowAdd: return {k_r2d_glowadd_frag, sizeof k_r2d_glowadd_frag};
@@ -63,7 +65,7 @@ Variants variantsOf(int p) {
     case VkBlackHole::pLens: set(0, {kRgba8, kF32, kF32}); set(1, {kF32}); break;   // (1: the exposure's samples at spin 0)
     case VkBlackHole::pKerr: set(0, {kRgba8, kF32, kF32}); if (std::getenv("PL_BH_COMPARE")) set(1, {kF32}); break;   // (1: the tests' float outputs only)
     case VkBlackHole::pSky: set(0, {kRgba8, kF32, kF32, kR8}); set(1, {kF32}); break;   // (1: the exposure's samples, the probe)
-    case VkBlackHole::pSkyTiny: case VkBlackHole::pSkyMath: case VkBlackHole::pMaxDown: case VkBlackHole::pGlowDown: case VkBlackHole::pGlowBlur:
+    case VkBlackHole::pSkyTiny: case VkBlackHole::pSkyMath: case VkBlackHole::pMaxDown: case VkBlackHole::pExpSum: case VkBlackHole::pGlowDown: case VkBlackHole::pGlowBlur:
     case VkBlackHole::pGlareDown: set(1, {kF32}); break;
     case VkBlackHole::pGlowAdd: case VkBlackHole::pGlareAdd: set(0, {kRgba8}); break;
     default: set(0, {kRgba8}); set(1, {kF32}); set(2, {kR8}); break;               // pCopy: the low layers stretched over the picture's own
@@ -82,7 +84,8 @@ struct GuardSteps : KerrSteps {
 const char* VkBlackHole::progName(int p) {
     static const char* const n[pProgCount] = {"lens (kLensFS)", "spinning hole's table pass (kKerrFS)", "the tiny shader (kKerrSkyTinyFS)", "the elliptic functions alone",
                                               "the whole sky shader (kKerrSkyFS)", "exposure (kMaxDownFS)", "glow down (kGlowDownFS)", "glow blur (kGlowBlurFS)",
-                                              "glow add (kGlowAddFS)", "glare down (kGlareDownFS)", "glare add (kGlareAddFS)", "copy (kCompositeFS)"};
+                                              "glow add (kGlowAddFS)", "glare down (kGlareDownFS)", "glare add (kGlareAddFS)", "copy (kCompositeFS)",
+                                              "the log-average (kExpSumFS)"};
     return p >= 0 && p < pProgCount ? n[p] : "?";
 }
 std::size_t VkBlackHole::spirvBytes(int p) { return codeOf(p).bytes; }
@@ -161,7 +164,7 @@ bool VkBlackHole::init(VkCards& c, const std::string& cacheDir, std::string& why
     readCache(cacheDir);
     if (!cacheDir.empty()) mergeCache(app::gpuHelperCacheFile(cacheDir));   // 0.67.0: what helpers made in earlier starts
     // ---- the small programs now (each a few kilobytes); the lens and the table pass on the worker thread (their guard) ----
-    for (int p : {pMaxDown, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy}) {
+    for (int p : {pMaxDown, pExpSum, pGlowDown, pGlowBlur, pGlowAdd, pGlareDown, pGlareAdd, pCopy}) {
         std::string w;
         if (!prepare(p, w) || !makePipelines(p, w)) { ok_ = false; why = std::string(progName(p)) + ": " + w; return false; }
         prog_[p].state = 2;
@@ -185,6 +188,8 @@ void VkBlackHole::destroy() {
                    &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
     for (Tex& t : exp_) dropTex(t);
     exp_.clear();
+    for (Tex& t : sum_) dropTex(t);
+    sum_.clear();
     for (HostBuf* h : {&whiteBuf_, &probeBuf_, &glareBuf_, &debugBuf_}) { c_->dropBuffer(h->b); h->busy = false; }
     c_->dropBuffer(corners_);
     for (Program& p : prog_) {
@@ -709,7 +714,7 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     i1("uDisc", disc ? 1 : 0);
     i1("uRaw", raw ? 1 : 0);
     const double st = L.expStep * ppp;                               // 0.56.0: the card's exposure (spin 0)
-    const bool cw = L.whiteMode == 1 && disc && !exp_.empty() && !exp;
+    const bool cw = L.whiteMode == 1 && disc && !sum_.empty() && !exp;
     i1("uExp", exp ? 1 : 0);
     const float samp[4] = {static_cast<float>(ox + 0.5 * st), static_cast<float>(st), static_cast<float>(oy + fbH - 0.5 * st), static_cast<float>(st)};
     u.f("uSamp", samp, 4);
@@ -726,6 +731,7 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
         u.f("uDT", dt, 4);
         f1("uAll", L.allInvTsun);
     }
+    toneUniforms(u, L);
     f1("uBright", std::clamp(L.bright, 0.0, 1.0));
     const float tw = static_cast<float>(std::max(skyTexW_, 1));
     f1("uLod", std::max(0.0f, std::log2(tw / 6.2831853f / std::max(static_cast<float>(L.kRad), 1.0f))));
@@ -734,7 +740,7 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     const VkSampler skyS = d2 ? d2->mapSampler() : VK_NULL_HANDLE;
     const int vw = exp ? (exp_.empty() ? 0 : exp_[0].w) : fbW, vh = exp ? (exp_.empty() ? 0 : exp_[0].h) : fbH;
     draw(cb, p, variant, {{"uTex", sky, skyS}, {"uTable", table_.view, nearest_}, {"uDU", discU_.view, nearest_}, {"uDP", discP_.view, nearest_},
-                          {"uDC", discC_.view, nearest_}, {"uWhite", cw ? exp_.back().view : white_.view, nearest_}}, 0, 0, vw, vh);
+                          {"uDC", discC_.view, nearest_}, {"uWhite", cw ? sum_.back().view : white_.view, nearest_}}, 0, 0, vw, vh);
 }
 
 void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool kdisc, bool raw, int variant) {
@@ -762,6 +768,7 @@ void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     const float dt[4] = {static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog)};
     u.f("uDT", dt, 4);
     f1("uAll", L.allInvTsun);
+    toneUniforms(u, L);
     const int dn[3] = {L.discFN, L.discC, 0};
     u.i("uDN", dn, 3);
     u.f("uDFix", L.discFix, 4);
@@ -798,11 +805,12 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     const float dt[4] = {static_cast<float>(L.tScale), static_cast<float>(1 / L.white), static_cast<float>(L.colLog0), static_cast<float>(L.colDlog)};
     u.f("uDT", dt, 4);
     f1("uAll", L.allInvTsun);
+    toneUniforms(u, L);
     u.f("uLP", L.lp, 4);
     const int dn[3] = {L.discFN, L.discC, 0};
     u.i("uDN", dn, 3);
     u.f("uDFix", L.filmRaw, 4);
-    const bool cardWhite = L.whiteMode == 1 && disc && !exp_.empty() && mode == 0;
+    const bool cardWhite = L.whiteMode == 1 && disc && !sum_.empty() && mode == 0;
     i1("uWhiteMode", cardWhite ? 1 : 0);
     f1("uWhiteSet", L.white);
     const double st = L.expStep * ppp;
@@ -812,12 +820,12 @@ void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
     draw(cb, p, variant, {{"uTex", sky, d2 ? d2->mapSampler() : VK_NULL_HANDLE}, {"uDC", discC_.view, nearest_}, {"uDF", kF_.view, nearest_},
-                          {"uWhite", cardWhite ? exp_.back().view : white_.view, nearest_}}, vx, vy, vw, vh);
+                          {"uWhite", cardWhite ? sum_.back().view : white_.view, nearest_}}, vx, vy, vw, vh);
 }
 
 // 0.56.0's skyExposure: the samples into the chain's first level, 4 x 4 blocks to their largest down to one texel, read back without waiting
 void VkBlackHole::exposure(VkCommandBuffer cb, const LensSky& L, const std::function<void(int, int)>& sample) {
-    if (prog_[pMaxDown].state != 2) return;
+    if (prog_[pMaxDown].state != 2 || prog_[pExpSum].state != 2) return;
     int nx = 0, ny = 0;
     for (double X = L.expStep / 2; X < ptW_; X += L.expStep) nx++;
     for (double Y = L.expStep / 2; Y < ptH_; Y += L.expStep) ny++;
@@ -826,9 +834,14 @@ void VkBlackHole::exposure(VkCommandBuffer cb, const LensSky& L, const std::func
     while (w.back() > 1 || h.back() > 1) { w.push_back((w.back() + 3) / 4); h.push_back((h.back() + 3) / 4); }
     if (w != expW_ || h != expH_) {
         for (Tex& t : exp_) dropTex(t);
+        for (Tex& t : sum_) dropTex(t);
         exp_.assign(w.size(), Tex());
+        sum_.assign(std::max<std::size_t>(1, w.size() - 1), Tex());     // (0.70.0: the log-average's chain: the max chain's sizes after the first, at least one)
         for (std::size_t k = 0; k < w.size(); k++)
-            if (!makeTex(exp_[k], w[k], h[k], kF32, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "the exposure's chain")) { exp_.clear(); expW_.clear(); return; }
+            if (!makeTex(exp_[k], w[k], h[k], kF32, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "the exposure's chain")) { exp_.clear(); sum_.clear(); expW_.clear(); return; }
+        for (std::size_t k = 0; k < sum_.size(); k++)
+            if (!makeTex(sum_[k], w.size() > 1 ? w[k + 1] : 1, h.size() > 1 ? h[k + 1] : 1, kF32, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                         "the log-average's chain")) { exp_.clear(); sum_.clear(); expW_.clear(); return; }
         expW_ = w; expH_ = h;
     }
     begin(cb, {&exp_[0]}, 0, 0, nx, ny, false);
@@ -843,9 +856,35 @@ void VkBlackHole::exposure(VkCommandBuffer cb, const LensSky& L, const std::func
         draw(cb, pMaxDown, 1, {{"uTex", exp_[k - 1].view, nearest_}}, 0, 0, w[k], h[k]);
         end(cb);
     }
-    skyStats_.expN = nx * ny;
-    if (!whiteBuf_.busy) readBack(cb, exp_.back(), 0, 0, 1, 1, whiteBuf_);   // (one read-back at a time; a newer one waits for it)
+    // 0.70.0: the log-average (kExpSumFS): the samples (exp_[0]) with the brightest Y (exp_.back()) into ln(delta Ymax + Y), summed down to one texel
+    use(cb, exp_[0], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
     use(cb, exp_.back(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    VkUniforms& v = prog_[pExpSum].u;
+    const float delta = static_cast<float>(L.toneDelta);
+    v.f("uDelta", &delta, 1);
+    for (std::size_t k = 0; k < sum_.size(); k++) {
+        const Tex& from = k == 0 ? exp_[0] : sum_[k - 1];
+        if (k > 0) use(cb, sum_[k - 1], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+        const int n[2] = {from.w, from.h}, first = k == 0 ? 1 : 0;
+        v.i("uN", n, 2);
+        v.i("uFirst", &first, 1);
+        begin(cb, {&sum_[k]}, 0, 0, sum_[k].w, sum_[k].h, false);
+        draw(cb, pExpSum, 1, {{"uTex", from.view, nearest_}, {"uMax", exp_.back().view, nearest_}}, 0, 0, sum_[k].w, sum_[k].h);
+        end(cb);
+    }
+    skyStats_.expN = nx * ny;
+    if (!whiteBuf_.busy) readBack(cb, sum_.back(), 0, 0, 1, 1, whiteBuf_);   // (one read-back at a time; a newer one waits for it)
+    use(cb, sum_.back(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+}
+
+// 0.70.0: the camera curve's uniforms (renderer2d.h LensSky::tone; render/shaders.h cardExposure, toneRGB)
+void VkBlackHole::toneUniforms(VkUniforms& u, const LensSky& L) {
+    const int tone = L.tone;
+    const float ev = static_cast<float>(L.ev), key = static_cast<float>(L.toneKey), lw = static_cast<float>(L.toneLw);
+    u.i("uTone", &tone, 1);
+    u.f("uEV", &ev, 1);
+    u.f("uKey", &key, 1);
+    u.f("uLw", &lw, 1);
 }
 
 // 0.56.0's skyTimes: what has come back from the card without waiting: the pass's times and the exposure's texel
@@ -870,8 +909,9 @@ void VkBlackHole::times() {
         whiteBuf_.busy = false;
         const float* v = static_cast<const float*>(whiteBuf_.b.map);
         if (v) {
-            skyStats_.white = v[0] > 0 ? v[0] : 1;
+            skyStats_.white = v[0] > 0 ? v[0] : 0;                    // (0.70.0: 0 when the samples held no light, no longer 1: the view keeps its last good one)
             skyStats_.whiteY = v[1];
+            skyStats_.logAvg = v[3] > 0.5 ? std::exp(static_cast<double>(v[2]) / static_cast<double>(v[3])) : 0;
             skyStats_.whiteReads++;
         }
     }
@@ -1098,9 +1138,14 @@ void VkBlackHole::compose(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH
             u.i("uN", n, 2);
             u.i("uB", &glareB_, 1);
             u.f("uKeep", &L.glareKeep, 1);
+            toneUniforms(u, L);                                            // 0.70.0: the curve over the disc's light and the veil (Real)
+            const bool cw = L.whiteMode == 1 && !sum_.empty() && L.disc;
+            const int wm = cw ? 1 : 0;
+            u.i("uWhiteMode", &wm, 1);
             for (Tex* t : {&layer_[0], &layer_[1], &glareVeil_}) use(cb, *t, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
             begin(cb, {&out_}, 0, 0, fbW, fbH, false);
-            draw(cb, pGlareAdd, 0, {{"uDisc", layer_[0].view, nearest_}, {"uSky", layer_[1].view, nearest_}, {"uVeil", glareVeil_.view, nearest_}}, 0, 0, fbW, fbH);
+            draw(cb, pGlareAdd, 0, {{"uDisc", layer_[0].view, nearest_}, {"uSky", layer_[1].view, nearest_}, {"uVeil", glareVeil_.view, nearest_},
+                                    {"uWhite", cw ? sum_.back().view : white_.view, nearest_}}, 0, 0, fbW, fbH);
             end(cb);
         } else {
             VkUniforms& u = prog_[pGlowAdd].u;
@@ -1231,6 +1276,9 @@ void VkBlackHole::probe(const LensSky& L, int w, int h, bool queue, std::vector<
             skyPass(cb, Lm, w, h, m * w, h, 1, 11, false, 1, m * w, h, w, h);
         }
     }
+    {   LensSky Lt = L;                                                 // 0.70.0: the camera curve at L.toneLw (blackhole/sky_card.h skyToneCompare), beside the light
+        Lt.lp[0] = static_cast<float>(2 * w); Lt.lp[1] = static_cast<float>(h); Lt.lp[2] = static_cast<float>(w); Lt.lp[3] = static_cast<float>(w * h);
+        skyPass(cb, Lt, w, h, 2 * w, h, 1, 12, false, 1, 2 * w, h, w, h); }
     end(cb);
     ptW_ = w0; ptH_ = h0;
     readBack(cb, probe_, 0, 0, 4 * w, 2 * h, probeBuf_);

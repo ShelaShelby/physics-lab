@@ -56,7 +56,11 @@ const SkyCase& skyCheckCase(int k);   // k = 0, 1
 struct SkyLight { long px = 0, bad = 0; double worst = 0; };   // pixels per mode (eye, all); over the limit; the largest error over its limit
 const std::vector<float>& cardColourTable(int& n, double& log0, double& dlog);   // 512 colours, linear sRGB in the Sun's surface units, even in log10 T from kTmin to kTmax
 void skyLightCompare(const std::vector<float>& probe, int w, int h, SkyLight out[2]);
-struct SkyCheck { bool ok = false; std::string why; SkyCompare m[2]; SkyLight light[2]; double ms = 0; };
+// 0.70.0: the camera curve (tone.h) on the card against toneScaled in double: one colour (0.6, 0.9, 1.3) from 10^-3 to 10^4 times it at a burn-out white of
+// kSkyToneLw (the probe's upper row, its third w columns). Limit, fixed before looking: 1e-5 of the screen's white in any channel (float: a few 2^-24).
+constexpr double kSkyToneLw = 30, kSkyToneLimit = 1e-5;
+SkyLight skyToneCompare(const std::vector<float>& probe, int w, int h);
+struct SkyCheck { bool ok = false; std::string why; SkyCompare m[2]; SkyLight light[2]; SkyLight tone; double ms = 0; };
 // refs (0.57.2): the two cases' references made ahead (skyReference), or null: made here
 SkyCheck skyCheckOf(const std::vector<float>* probes[2], const SkyRef* refs = nullptr);
 

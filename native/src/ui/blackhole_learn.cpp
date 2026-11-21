@@ -66,11 +66,14 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "model does not set it. The <b>feeding rate</b> is shown as the disc's light over the Eddington limit, and only between 1.5 % and 30 %, where the thin-disc "
           "model applies (Yuan and Narayan 2014; Abramowicz and Fragile 2013).") +
         p("<b>Blinding.</b> A real disc like this is blue-white and far brighter than the Sun's surface everywhere: the card says how many times, in visible light. "
-          "The picture dims it (the exposure; automatic draws the brightest part at full brightness) so that the sky stays visible. A real disc this bright would "
-          "drown out every star.") +
+          "The picture dims it so that the sky stays visible. A real disc this bright would drown out every star. The Real look draws it as a camera would: "
+          "automatic exposure puts the disc's average brightness (its log-average) at middle grey and its brightest part at white, through a camera's "
+          "response curve that rolls off the highlights (Reinhard et al. 2002), so the bright parts keep their shading and the side coming towards you "
+          "stays brighter. The curve is our display choice; the colours and the light's ratios are the physics. Your choice moves the exposure in stops "
+          "(each doubles the light) from automatic.") +
         p("<b>Sky beside the disc: True brightness</b> (the Real look) puts the stars on the disc's own scale: each catalogue star's measured V magnitude against the "
           "Sun's (" + fmt::precision(blackhole::kSunV, 4) + ", Willmer 2018), the Sun's surface as the yardstick, its light spread over the dot the app draws. Beside a bright disc the sky is then black: "
-          "the sky cannot compete with the disc, not because there are no stars. Turn the exposure far down and the stars come back while the disc burns out. "
+          "the sky cannot compete with the disc, not because there are no stars. Turn the exposure up by many stops and the stars come back while the disc burns out. "
           "The sky map is not drawn then: it has no calibrated brightness, and its own pixels are fainter than the stars it contains. Approximate: the V band taken as "
           "the eye's visible light, the Sun's surface as a black body at " + fmt::commas(sunfacts::kSunTeffK) + " K, the Sun's disc evenly bright.") +
         p("<b>Glare: as an eye sees it.</b> A very bright light scatters inside the eye and lays a veil of light round itself: this happens in the eye, not at the "
