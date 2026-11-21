@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.70.0 (21 Nov 2026): the Black Hole Lab's Real look: a camera's tone curve (Reinhard et al. 2002) on luminance with the disc's log-average as middle grey, on the card (kExpSumFS, the curve in the lens, table and sky passes and the glare) with tone.h as the double reference; your exposure in stops from automatic, back to 0 on a new preset, look or disc (the white-outs: an absolute exposure kept across presets); the starting view 50 GM/c^2, 45 degrees, 100 degrees from the disc's axis; Film unchanged.
+- 0.71.0 (21 Nov 2026): the Black Hole Lab's fewer settings: the Controls panel is three short sections (Black hole with the look, spin and guide; Camera; Gas disc with the feeding rate) and one "More settings" (key blackhole.ctl.more, closed by default, kept in shellpanels) holding every other control and every long caption word for word; it fits 1280 x 800 unscrolled in Real with the disc on and in Film (check_blackhole.py:short). No drawing or physics changed.
 - Last full UI run: 0.69.0 (the commit "native 0.69.0"); failing in it: ui_search (check_5l labels) and ui_atom_layout (check_5h cards: the radial card read before the card's outline came), both fixed and re-run; ui_blackhole smooth (the card count, ROADMAP: the one-in-two limit; its sky-guard checks fixed and re-run); ui_popups orbitkeep (rest.orbit at 2560 x 1369 drawn anew: fails on 0.68.1 too, the owner's bug, ROADMAP) and benchwaits (passes alone, on 0.68.1 too: the full run's load).
-- Next steps: the owner's benchmark of 0.70.0; then 0.71.0, the Black Hole Lab's fewer settings, and 0.72.0, moving gas (DECISIONS 21 Nov 2026).
+- Next steps: the owner's benchmark of 0.70.0 and 0.71.0; then 0.72.0, moving gas (DECISIONS 21 Nov 2026).
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; every job: `check.sh quick` plus the ui_* tests of the screens it changes; `check.sh full` (about 35 min) only when the owner asks. One push per job; PLANNER.md and this file kept true by every job.
 
 ## How work flows

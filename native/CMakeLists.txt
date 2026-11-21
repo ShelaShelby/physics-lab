@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.70.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.71.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -625,7 +625,7 @@ if(PL_BUILD_APP)
       # 0.55.5: smooth (the frame never waits for the processor); 0.70.0: whiteout
       add_test(NAME ui_blackhole COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole
                check_blackhole.py:open check_blackhole.py:presets check_blackhole.py:distance check_blackhole.py:light check_blackhole.py:disc check_blackhole.py:realest check_blackhole.py:orbitcard
-               check_blackhole.py:settings check_blackhole.py:layout check_blackhole.py:look check_blackhole.py:precision check_blackhole.py:spin check_blackhole.py:looks check_blackhole.py:truelight check_blackhole.py:alllight check_blackhole.py:smooth check_blackhole.py:whiteout)
+               check_blackhole.py:settings check_blackhole.py:layout check_blackhole.py:look check_blackhole.py:precision check_blackhole.py:spin check_blackhole.py:looks check_blackhole.py:truelight check_blackhole.py:alllight check_blackhole.py:smooth check_blackhole.py:whiteout check_blackhole.py:short)
       set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 3600)
     endif()
   endif()

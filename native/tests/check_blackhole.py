@@ -51,6 +51,9 @@ BASE = {"PL_NEWUI": "on", "PL_DRAWSTAT": "1", "PL_FACTS": "off"}
 # 0.70.0: the starting view until 0.69 (20 GM/c^2, 90 degrees, looking at the galactic centre: lab.cpp resetView then), for the checks whose drags and
 # points were laid out on it (the start is now 50 GM/c^2, 45 degrees, 100 degrees from the disc's axis)
 OLDVIEW = "dist=20;fov=90;pitch=1.474174899;yaw=0.055152404"
+# 0.71.0: the controls that moved into More settings (DECISIONS 21 Nov 2026; mass, the typed boxes, field of view's twin texts, bend, sky, light, sky beside, glare,
+# exposure, outer edge, the paper's view, every long caption): a check that clicks or reads one opens the section first (changed reference, not loosened)
+MORE = "blackhole.ctl.more=o"
 GL = dict(BASE)   # (0.69.0: the precision checks and the guard records on Vulkan; until 0.68.1 they ran on OpenGL)
 
 def bh(r, prefix="blackhole "):
@@ -120,7 +123,7 @@ def part_distance(binary, work):
     runs = [("bh_d1000", {"PL_BH_SET": "dist=1000"}, ""), ("bh_d6", {}, "6:click=##blackhole.dist.text;8:text=6"), ("bh_d2_5", {"PL_BH_SET": "dist=2.5;fov=300"}, "")]
     last = None
     for name, env, script in runs:
-        e = dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=o", **env)
+        e = dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=o," + MORE, **env)
         if script: e["PL_SCRIPT"] = script
         r = run_app(binary, work, name, e, frames=16)
         c, st = card(r), stat(r)
@@ -141,9 +144,9 @@ def part_distance(binary, work):
     check(last is not None and last > 180, f"inside the photon orbit the shadow is more than half the sky ({last} deg)")
 
 def part_light(binary, work):
-    on = run_app(binary, work, "bh_light_on", dict(BASE, PL_BLACKHOLE="1"), frames=12)
-    off = run_app(binary, work, "bh_light_off", dict(BASE, PL_BLACKHOLE="1", PL_SCRIPT="6:click=blackhole.bend.off"), frames=14)
-    blk = run_app(binary, work, "bh_light_black", dict(BASE, PL_BLACKHOLE="1", PL_SCRIPT="6:click=blackhole.sky.black"), frames=14)
+    on = run_app(binary, work, "bh_light_on", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="atom.card=o," + MORE), frames=12)
+    off = run_app(binary, work, "bh_light_off", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="atom.card=o," + MORE, PL_SCRIPT="6:click=blackhole.bend.off"), frames=14)
+    blk = run_app(binary, work, "bh_light_black", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="atom.card=o," + MORE, PL_SCRIPT="6:click=blackhole.sky.black"), frames=14)
     check(not off.scripted_missing() and not blk.scripted_missing(), f"the two controls were there ({off.scripted_missing()} {blk.scripted_missing()})")
     s1, s2 = bh(off), bh(blk)
     check(s1 is not None and s1["bend"] == "0", f"Gravity bends light: Off ({s1})")
@@ -176,7 +179,7 @@ def part_orbitcard(binary, work):
 def part_settings(binary, work):
     sf = os.path.join(work, "bh_settings.txt")
     if os.path.exists(sf): os.remove(sf)
-    a = run_app(binary, work, "bh_keep1", dict(BASE, PL_BLACKHOLE="1", PL_SETTINGS=sf, PL_SCRIPT="6:click=blackhole.preset.m87;10:click=##blackhole.dist.text;12:text=7.5;16:click=blackhole.sky.black"), frames=24)
+    a = run_app(binary, work, "bh_keep1", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="atom.card=o," + MORE, PL_SETTINGS=sf, PL_SCRIPT="6:click=blackhole.preset.m87;10:click=##blackhole.dist.text;12:text=7.5;16:click=blackhole.sky.black"), frames=24)
     check(not a.scripted_missing(), f"run 1: the controls were there ({a.scripted_missing()})")
     txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
     check("lab=Black Hole Lab" in txt and "blackhole.preset=m87" in txt and "blackhole.dist=7.5" in txt and "blackhole.sky=black" in txt, "run 1: written to the settings file")
@@ -206,7 +209,7 @@ def part_layout(binary, work):
         if bar and cards: check(not overlap(bar, cards[0]), f"{size}: the bar is clear of the card")
         ctl = [v for k, v in r.rects.items() if k.startswith("ctlhead.")]
         if bar and ctl: check(all(not overlap(bar, c) for c in ctl), f"{size}: the bar is clear of the Controls panel")
-        check(any(n.startswith("ctlsections") and "preset look mass spin camera light disc honest" in n for n in r.notes), f"{size}: the Controls panel has its eight sections (0.55.1: the gas disc; 0.55.2: spin; 0.55.3: look)")
+        check(any(n.startswith("ctlsections") and "preset camera disc more" in n for n in r.notes), f"{size}: the Controls panel has its four sections (0.71.0: Black hole, Camera, Gas disc, More settings; was eight)")
 
 def part_look(binary, work):
     themes = ("dark", "light", "black", "paper", "monochrome", "contrast")
@@ -546,7 +549,7 @@ def spin_numbers(a, r, th):
 def part_spin(binary, work):
     # 0.55.2: the Spin control (one theme, 1280 x 800). It exists; spin 0 is exactly the picture of 0.55.1 (the closed-form path: the same pixels as a run with no spin
     # setting at all)
-    base = dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=o")
+    base = dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=o," + MORE)   # (0.71.0: the typed spin is in More settings)
     r0 = run_app(binary, work, "bh_spin_none", base, frames=12)
     r1 = run_app(binary, work, "bh_spin_zero", dict(base, PL_BH_SET="spin=0"), frames=12)
     check(r0.bmp and r1.bmp and Bmp(r0.bmp).d == Bmp(r1.bmp).d, "spin 0 draws exactly the picture of 0.55.1 (the same pixels)")
@@ -555,7 +558,7 @@ def part_spin(binary, work):
     # typed: 0.99 (the top) through the text field; the card's numbers are the module's (written here from the papers)
     rt = run_app(binary, work, "bh_spin_typed", dict(base, PL_BH_SPINWAIT="1", PL_SCRIPT="6:click=##blackhole.spin.text;8:text=0.99"), frames=20)
     s, n = bh(rt), spin_note(rt)
-    check(any(k.startswith("slider.blackhole.spin") for k in rt.rects), "the Spin slider is in the Controls panel, beside the typed value")
+    check(any(k.startswith("slider.blackhole.spin") for k in r1.rects), "the Spin slider is in the Controls panel (0.71.0: the typed value in More settings)")
     check(not rt.scripted_missing() and s is not None and float(s["spin"]) == 0.99, f"a typed spin of 0.99 is taken ({s}, {rt.scripted_missing()})")
     if n and s:
         hz, rms, eff, om = spin_numbers(0.99, float(s["dist"]), float(s["pitch"]))
@@ -609,7 +612,7 @@ def part_spin(binary, work):
     check(not rr.scripted_missing() and s is not None and float(s["spin"]) == 0.6 and s["bend"] == "1", f"Most realistic leaves the spin alone ({s})")
     sf = os.path.join(work, "bh_spin_settings.txt")
     if os.path.exists(sf): os.remove(sf)
-    k1 = run_app(binary, work, "bh_spin_keep1", dict(BASE, PL_BLACKHOLE="1", PL_SETTINGS=sf, PL_SCRIPT="6:click=##blackhole.spin.text;8:text=0.6"), frames=14)
+    k1 = run_app(binary, work, "bh_spin_keep1", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="atom.card=o," + MORE, PL_SETTINGS=sf, PL_SCRIPT="6:click=##blackhole.spin.text;8:text=0.6"), frames=14)
     k2 = run_app(binary, work, "bh_spin_keep2", dict(BASE, PL_SETTINGS=sf), frames=10)
     s = bh(k2)
     check(not k1.scripted_missing() and s is not None and float(s["spin"]) == 0.6, f"a restart keeps the spin ({s})")
@@ -637,9 +640,10 @@ def part_looks(binary, work):
     s, mk = bh(a), marks(a)
     check(s is not None and s["look"] == "real" and any(k.startswith("seg.blackhole.look") for k in a.rects), f"Look exists and opens on Real ({s and s['look']})")
     check(mk.get("blackhole.look") == "on", f"the closest-to-reality dot is on Real ({mk.get('blackhole.look')})")
-    check("standard thin disc" in chip_sub(a) and texts_has(a, "real for quasars"), f"Real's chip and caption ({chip_sub(a)[:90]})")
+    a2 = run_app(binary, work, "bh_looks_real_more", dict(base, PL_SCRIPT="4:click=ctl.sec.more"), frames=12)   # (0.71.0: Real's caption is in More settings)
+    check("standard thin disc" in chip_sub(a) and texts_has(a2, "real for quasars"), f"Real's chip and caption ({chip_sub(a)[:90]})")
     # Film: the film's values, the spin and disc locked (a typed spin and Off do nothing), its labels, the chip; then the paper's view
-    b = run_app(binary, work, "bh_looks_film", dict(base, PL_SCRIPT="6:click=blackhole.look.film;10:click=##blackhole.spin.text;12:text=0.8;16:click=blackhole.disc.off;20:click=blackhole.paperview"), frames=26)
+    b = run_app(binary, work, "bh_looks_film", dict(base, PL_PANELS="atom.card=o," + MORE, PL_SCRIPT="6:click=blackhole.look.film;10:click=##blackhole.spin.text;12:text=0.8;16:click=blackhole.disc.off;20:click=blackhole.paperview"), frames=26)
     s = bh(b)
     check(not b.scripted_missing() and s is not None and s["look"] == "film", f"Film chosen ({b.scripted_missing()}, {s and s['look']})")
     check(s is not None and float(s["shownspin"]) == film["spin"] and float(s["spin"]) == 0.3 and s["showndisc"] == "1", f"Film: the film's spin drawn, the disc on; the typed spin refused, yours kept ({s})")
@@ -691,7 +695,7 @@ def part_looks(binary, work):
                 check(max(wcag(lo, bg), wcag(hi, bg)) >= 4.5, f"{t}: Film: the card's text {max(wcag(lo, bg), wcag(hi, bg)):.1f}:1 over its glass")
             else: check(False, f"{t}: Film: the card drew {len(px)} pixels")
         else: check(False, f"{t}: Film: the card is open")
-        for name in ("chip", "ctlhead.look"):
+        for name in ("chip", "ctlhead.preset"):                          # (0.71.0: Look is in the Black hole section)
             r0 = o.rects.get(name)
             if not r0: check(False, f"{t}: Film: {name} is drawn"); continue
             x0, y0, w, h = (int(v) for v in r0)
@@ -718,7 +722,7 @@ def part_truelight(binary, work):
     # dot, written here); a lower exposure brings stars back; the glare changes the picture round the disc far more than far from it; Most realistic; a restart;
     # a 0.55.3 file; Film's glow leaves the sky alone (far sky pixels = Real's with Glare Off); the chip's and the panel's text 4.5:1 in six themes.
     sunv, rmin, rsun, au = light_module()
-    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_BH_SPINWAIT="1", PL_PANELS="blackhole.card=c")   # (the glare at once, not after the view rests)
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_BH_SPINWAIT="1", PL_PANELS="blackhole.card=c," + MORE)   # (the glare at once, not after the view rests; 0.71.0: More settings open)
     feed = "preset=feeding;pitch=1.2;outer=30"                          # (0.58.0: this part's disc, 6 to 30 M, the default until 0.57: sky beside it to compare)
     runs = {}
     calls = [((binary, work, f"bh_tl_{n}", dict(base, PL_BH_SET=f"{feed};{x}", PL_SCRIPT=f"4:click=blackhole.{g}")), dict(frames=12)) for n, x, g in
@@ -746,7 +750,7 @@ def part_truelight(binary, work):
     notb = [(x, y, T.px(x, y)) for x, y in offp if max(T.px(x, y)) != 0][:6]
     check(len(offp) >= 50 and lit >= 0.5 * len(offp) and black == len(offp), f"True brightness: the sky off the disc black ({black} of {len(offp)}; Shown: {lit} lit; not black: {notb})")
     # the readout's factor = the module's rule written here: the star's light Omega_Sun 10^(-0.4 (m - m_Sun)) over its dot pi r^2 square points of 1 / K^2 sr each
-    cd = run_app(binary, work, "bh_tl_card", dict(base, PL_PANELS="blackhole.card=o", PL_SCRIPT="4:click=blackhole.skybeside.true", PL_BH_SET=f"{feed};skybeside=true;glare=eye"), frames=10)
+    cd = run_app(binary, work, "bh_tl_card", dict(base, PL_PANELS="blackhole.card=o," + MORE, PL_SCRIPT="4:click=blackhole.skybeside.true", PL_BH_SET=f"{feed};skybeside=true;glare=eye"), frames=10)
     tr, d, s = bh(cd, "bhtrue "), disc_note(cd), bh(cd)   # (the card's notes: the card open)
     if tr and d and s:
         K = 400 / (float(s["fov"]) * math.pi / 360)
@@ -812,7 +816,7 @@ def part_truelight(binary, work):
     check(len(corner) > 500 and same == len(corner), f"Film: its glow no longer touches the far sky ({same} of {len(corner)} sky pixels = Real's)")
     # the chip's and the Controls panel's text over the new picture (True brightness with the glare), six themes at 1280 x 800
     themes = ("dark", "light", "black", "paper", "monochrome", "contrast")
-    tb = dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET=f"{feed};skybeside=true;glare=eye", PL_SCRIPT="4:click=blackhole.glare.eye")
+    tb = dict(BASE, PL_BLACKHOLE="1", PL_BH_SPINWAIT="1", PL_BH_SET=f"{feed};skybeside=true;glare=eye")   # (0.71.0: no click on Glare: it is deep in More settings, and scrolled to it no section header is in view; the settings line sets the same state)
     prefetch([((binary, work, f"bh_tl_{t}", tb), dict(frames=12, theme=t)) for t in themes])
     for t in themes:
         o = run_app(binary, work, f"bh_tl_{t}", tb, frames=12, theme=t)
@@ -859,7 +863,7 @@ def part_smooth(binary, work):
     # (0.55.6: this first run is the processor's path, GPU light paths off, as 0.55.5; the card's path follows below)
     base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o", PL_BH_SET="preset=feeding;spin=0.6;" + OLDVIEW,
                 PL_BH_GPUPATHS="0", PL_BH_GPUSKY="0")   # (0.56.0: the processor's tables draw sky and disc here: the fallback; the card's sky below, smooth_sky)
-    reach = "4:click=##blackhole.spin.text;10:key=escape"                # (the Spin row scrolled into the Controls panel's view)
+    reach = "4:move=300,300"                                             # (0.71.0: the Spin slider is in the short panel's view; the typed box, clicked until 0.70.0 to scroll it in, is in More settings)
     r0 = run_app(binary, work, "bh_smooth_where", dict(base, PL_SCRIPT=reach), frames=16)
     sl = r0.rects.get("slider.blackhole.spin.fill")
     kn = r0.rects.get("slider.blackhole.spin.knob")
@@ -1140,7 +1144,7 @@ def part_alllight(binary, work):
     # 0.58.0: Light: What an eye sees (the default, the dot) / All light, Real look with the disc on (1280 x 800, Dark): the control there and not for Film; a click
     # sets All light (the state line), which leaves out the eye's glare and the true sky; the disc's picture changes (its centre line brighter on the approaching
     # side against the other far more than in the eye's picture: the 4th power of the shift); the panel's sentence; a restart keeps it.
-    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_BH_SPINWAIT="1", PL_PANELS="blackhole.card=c")
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_DISCPTS="1", PL_BH_SPINWAIT="1", PL_PANELS="blackhole.card=c," + MORE)   # (0.71.0: More settings open)
     feed = "preset=feeding;pitch=1.2;glare=off;exposure=stops;exposurestops=-4"   # (0.70.0: 4 stops darker: the camera curve nearly linear there, undone below)
     sf = os.path.join(work, "bh_al_settings.txt")
     if os.path.exists(sf): os.remove(sf)
@@ -1183,7 +1187,7 @@ def part_whiteout(binary, work):
     # view by the processor's exposure (PL_BH_GPUSKY=0, waited for) has under 5 %. The app's own asynchronous path (PL_BH_ASYNC), Real, Glare: As an eye sees it,
     # Sky beside the disc: Shown, 1280 x 800. Fails on 0.69.0's build: a chosen exposure was an absolute screen's white kept across presets (M87* with a bright
     # choice, then the feeding hole: 88 % white); since 0.70.0 the choice is stops from automatic, back to 0 on a new preset, look or disc.
-    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_WHITECOUNT="1", PL_PANELS="blackhole.card=c", PL_BH_SETTLE="64:6")   # (to the end: the glare at rest)
+    base = dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_WHITECOUNT="1", PL_PANELS="blackhole.card=c," + MORE, PL_BH_SETTLE="64:6")   # (0.71.0: the glare's control in More settings)   # (to the end: the glare at rest)
     view = "dist=1000;fov=48;skybeside=shown;glare=eye"
     m87 = f"preset=m87;disc=on;feed=0.11;outer=1800;{view}"
     # (exposure=-2: 0.69.0's absolute white, 10^-2 of the Sun's surface; read since 0.70.0 as an old file's choice, at 0 stops; exposurestops: 0.70.0's +12 stops)
@@ -1218,15 +1222,66 @@ def blackhole_film():
         out[k] = float(m.group(1))
     return out
 
+# 0.71.0 (DECISIONS 21 Nov 2026: one short panel, the rest under one More settings). Limits fixed before looking: (a) at 1280x800 with More settings closed, in Real with the
+# feeding preset (disc on) and in Film, the Controls panel's whole content fits its height (the app's "panelneed controls need= have=" note: need <= have) and the More settings
+# header is in view; (b) at 880x560 and 1280x800, after one click on ctl.sec.more, every control 0.70.0's panel had can be clicked in its state (no PLSCRIPT "no control");
+# (c) More settings' open or closed state is kept across a restart (a settings file with Windows line ends; PL_PANELS=None: the file's own panel states).
+SHORT_REAL = ["ctl.sec.more", "blackhole.mass", "##blackhole.mass.text", "key=escape", "blackhole.spin", "##blackhole.spin.text", "key=escape", "blackhole.dist",
+              "##blackhole.dist.text", "key=escape", "blackhole.fov", "blackhole.reset", "blackhole.bend.on", "blackhole.sky.ours", "blackhole.disc.on", "blackhole.feed",
+              "blackhole.outer", "blackhole.exp.manual", "blackhole.exposure", "blackhole.exp.auto", "blackhole.light.eye", "blackhole.skybeside.shown", "blackhole.glare.eye",
+              "blackhole.look.real", "blackhole.preset.feeding", "blackhole.preset.sgra", "blackhole.preset.m87", "blackhole.guide"]
+SHORT_FILM = ["ctl.sec.more", "blackhole.paperview", "blackhole.exp.manual", "blackhole.exposure", "blackhole.look.film", "blackhole.guide"]
+def short_script(cmds, start=6):   # (the first click opens More settings; the rest wait 10 frames for it to open and scroll)
+    return ";".join(f"{start + 5 * i + (5 if i else 0)}:" + (c if c.startswith("key=") else "click=" + c) for i, c in enumerate(cmds))
+def part_short(binary, work):
+    fit = {n: ((binary, work, f"bh_short_fit_{n}", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=c", PL_BH_SET=x)), dict(frames=12)) for n, x in
+           (("real", "preset=feeding"), ("film", "preset=feeding;look=film"))}
+    reach = {}
+    for size in ("880x560", "1280x800"):
+        reach[("real", size)] = ((binary, work, f"bh_short_real_{size}", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=c", PL_BH_SET="preset=feeding", PL_SCRIPT=short_script(SHORT_REAL))),
+                                 dict(frames=6 + 5 * len(SHORT_REAL) + 13, size=size))
+        reach[("film", size)] = ((binary, work, f"bh_short_film_{size}", dict(BASE, PL_BLACKHOLE="1", PL_PANELS="blackhole.card=c", PL_BH_SET="preset=feeding;look=film", PL_SCRIPT=short_script(SHORT_FILM))),
+                                 dict(frames=6 + 5 * len(SHORT_FILM) + 13, size=size))
+    prefetch(list(fit.values()) + list(reach.values()))
+    for n, (a, k) in fit.items():
+        r = run_app(*a, **k)
+        pn = r.note("panelneed controls")
+        kv = dict(x.split("=") for x in pn[-1].split()[2:]) if pn else {}
+        need, have = float(kv.get("need", 1e9)), float(kv.get("have", 0))
+        check(need <= have, f"{n}, 1280x800, More settings closed: the Controls panel fits without scrolling (content {need:.0f} px, panel {have:.0f} px)")
+        check("ctlhead.more" in r.rects and any(x.startswith("ctlsections") and x.split()[1:] == ["preset", "camera", "disc", "more"] for x in r.notes),
+              f"{n}: the short panel's three sections, then More settings in view ({r.note('ctlsections')})")
+    for (n, size), (a, k) in reach.items():
+        r = run_app(*a, **k)
+        check(not r.scripted_missing(), f"{n}, {size}: every control of 0.70.0's panel can be clicked after opening More settings ({r.scripted_missing()})")
+        s = bh(r)
+        if n == "real": check(s is not None and s["preset"] == "m87", f"{size}: the clicks took effect (the last preset, M87*: {s and s['preset']})")
+    sf = os.path.join(work, "bh_short_more.txt")
+    if os.path.exists(sf): os.remove(sf)
+    run_app(binary, work, "bh_short_keep1", dict(BASE, PL_PANELS=None, PL_BLACKHOLE="1", PL_SETTINGS=sf, PL_SCRIPT="6:click=ctl.sec.more"), frames=12)
+    txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+    check("blackhole.ctl.more=o" in txt, "run 1: More settings opened, written to the settings file")
+    with open(sf, "w", encoding="utf-8", newline="\r\n") as fo: fo.write(txt.replace("\r", ""))   # (Windows line ends)
+    def need(r):
+        pn = r.note("panelneed controls")
+        return float(dict(x.split("=") for x in pn[-1].split()[2:])["need"]) if pn else 0.0
+    b = run_app(binary, work, "bh_short_keep2", dict(BASE, PL_PANELS=None, PL_SETTINGS=sf), frames=10)
+    run_app(binary, work, "bh_short_keep3", dict(BASE, PL_PANELS=None, PL_SETTINGS=sf, PL_SCRIPT="6:click=ctl.sec.more"), frames=12)
+    txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
+    check("blackhole.ctl.more=c" in txt, "run 3: closed again, written to the settings file")
+    c = run_app(binary, work, "bh_short_keep4", dict(BASE, PL_PANELS=None, PL_SETTINGS=sf), frames=10)
+    check(bh(b) is not None and bh(c) is not None and need(b) > need(c) + 300 and "ctlhead.more" in c.rects,
+          f"runs 2 and 4: the lab opens with More settings as it was left (open: content {need(b):.0f} px; closed: {need(c):.0f} px)")
+
 PARTS = {"sky": precision_sky, "open": part_open, "presets": part_presets, "distance": part_distance, "light": part_light, "realest": part_realest, "orbitcard": part_orbitcard,
          "settings": part_settings, "layout": part_layout, "look": part_look, "precision": part_precision, "disc": part_disc, "spin": part_spin, "looks": part_looks,
-         "truelight": part_truelight, "alllight": part_alllight, "smooth": part_smooth, "whiteout": part_whiteout,
+         "truelight": part_truelight, "alllight": part_alllight, "smooth": part_smooth, "whiteout": part_whiteout, "short": part_short,
          "smoothdisc": lambda b, w: smooth_disc(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_BH_GPUPATHS="0", PL_BH_GPUSKY="0")),
          "skyguard": lambda b, w: sky_guard(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o",
                                                        PL_BH_SET="preset=feeding;spin=0.6;" + OLDVIEW, PL_BH_GPUSKY="1")),
          "smoothsky": lambda b, w: smooth_sky(b, w, dict(BASE, PL_BLACKHOLE="1", PL_BH_ASYNC="1", PL_BH_FRAMETIME="1", PL_FRAME_MS="16", PL_PANELS="blackhole.card=o",
                                                          PL_BH_SET="preset=feeding;spin=0.6;" + OLDVIEW, PL_BH_GPUPATHS="0"),
-                                              ["4:click=##blackhole.spin.text;10:key=escape"] + [f"{20 + 7 * k}:drag=300,{300 + 30 * k},300,{330 + 30 * k}" for k in range(4)])}
+                                              ["4:move=300,300"] + [f"{20 + 7 * k}:drag=300,{300 + 30 * k},300,{330 + 30 * k}" for k in range(4)])}
 
 if __name__ == "__main__":
     binary, work = sys.argv[1], sys.argv[2]

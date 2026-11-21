@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.71.0", "The Black Hole Lab's Controls panel: one short panel, the rest under More settings",
+     "The Black Hole Lab's Controls panel now fits a 1280 x 800 window without scrolling (it was about four screens long). It has three short sections: Black hole "
+     "(the presets with their measured mass, distance and source, the look Real or Film, the spin and the guide's button), Camera (distance, field of view, "
+     "Reset view) and Gas disc (on or off, the feeding rate). Everything else is in one section, More settings, which starts closed and remembers whether you "
+     "opened it: the mass, the typed values, the exposure, the outer edge, Gravity bends light, Sky, Light, Sky beside the disc, Glare, the film's choices and "
+     "The paper's view, each with its full explanation, word for word as before, grouped by what you want to do. No drawing and no physics changed."},
     {"0.70.0", "The Black Hole Lab's Real look: no white-outs, a camera-like picture, a better starting view",
      "Real now draws the disc as a camera would: automatic exposure puts the disc's average brightness (its log-average) at middle grey and its brightest part "
      "at white, through a camera's response curve that rolls off the highlights (Reinhard, Stark, Shirley and Ferwerda 2002, listed under Where the facts come "
