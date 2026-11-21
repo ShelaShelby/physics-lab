@@ -1,4 +1,4 @@
-// 0.59.0: Vulkan, step 1 of 5 (native/PLAN_VULKAN.md): the window's Vulkan start and its frames. The instance (through volk: the PC's own Vulkan loader,
+// 0.59.0: Vulkan, step 1 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): the window's Vulkan start and its frames. The instance (through volk: the PC's own Vulkan loader,
 // found at run time), SDL3's surface, the device (a discrete card first), the swapchain (present mode by the same VSync rule as the OpenGL path: on =
 // wait for the screen, FIFO; off = do not wait: IMMEDIATE, else MAILBOX, else FIFO), Dear ImGui's own Vulkan backend (the same version as the OpenGL one)
 // and one small pipeline of our own (render/vk/fill.*: the picture area's background; the SPIR-V is made at build time). Every step is logged by the

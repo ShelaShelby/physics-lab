@@ -32,11 +32,11 @@ def diff_count(a, b, tol=24):
 # What each Settings row is called in search (the owner's words), per lab. The window's own list of drawn rows must be EXACTLY these (a row drawn but not listed here fails), and each one is typed
 # whole (the label) and by one word of it. These labels are written here by hand on purpose: they are the independent expectation, the app builds its list from its own table.
 ROWS_ALL = {"text": ("Text size (Settings)", "size"), "font": ("Font", "font"), "units": ("Units (metric or imperial)", "units"), "motion": ("Motion (reduced motion)", "motion"),
-            "facts": ("Did you know facts", "did"), "perf": ("Performance", "performance"), "vsync": ("VSync (wait for the screen)", "vsync"), "graphics": ("Graphics (Vulkan or OpenGL)", "vulkan"),   # 0.59.0 (0.63.0: Vulkan first, the default)
+            "facts": ("Did you know facts", "did"), "perf": ("Performance", "performance"), "vsync": ("VSync (wait for the screen)", "vsync"), "graphics": ("Graphics (Vulkan)", "vulkan"),   # 0.59.0 (0.63.0: Vulkan first, the default)
             "frames": ("Frame times (fps)", "frame"), "benchmark": ("Benchmark (speed test)", "benchmark")}
-ROWS_LAB = {0: {"gpurocks": ("GPU rocks (Vulkan or OpenGL 4.3)", "rocks")},
-            1: {"gpuspin": ("GPU superposition and jumps (Vulkan or OpenGL 4.3)", "superposition"), "gpuoutline": ("GPU outline (Vulkan or OpenGL 4.3)", "outline"), "gpucolours": ("GPU colours (Atom Lab cloud dots)", "colours"),
-                "gpuslice": ("GPU Slice dots (Atom Lab, Vulkan or OpenGL 4.3)", "slice"), "gpujump": ("GPU jump groups (Atom Lab, Vulkan or OpenGL 4.3)", "groups")}}   # 0.57.0
+ROWS_LAB = {0: {"gpurocks": ("GPU rocks", "rocks")},
+            1: {"gpuspin": ("GPU superposition and jumps", "superposition"), "gpuoutline": ("GPU outline", "outline"), "gpucolours": ("GPU colours (Atom Lab cloud dots)", "colours"),
+                "gpuslice": ("GPU Slice dots (Atom Lab)", "slice"), "gpujump": ("GPU jump groups (Atom Lab)", "groups")}}   # 0.57.0
 LAB_ENV = {0: {}, 1: {"PL_ATOM": "1", "PL_ATOM_SET": "view=Chart of nuclides"}}
 
 def searches(r):

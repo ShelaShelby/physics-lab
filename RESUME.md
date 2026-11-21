@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.68.1 (20 Nov 2026): fixes: a helper that never answers is ended after 30 s (and at app exit), Windows' crash codes are read, the light paths' variants are tried until all five have a line; the nucleus density benchmark scene zooms by the nucleon's size (it drew the nucleons in big windows); the benchmark's own work leaves a counted frame out; the Orbit Lab keeps its picture once its lines' helper is decided; the three failing UI tests fixed or corrected (one card count in ui_blackhole smooth left failing: REPORT.md, ROADMAP.md).
-- Last full UI run: 0.68.0 (81f4604); failing in it: ui_molecule (card), ui_blackhole (smooth), ui_popups (benchscenes, benchwaits); 0.68.1 fixed them by the ui_* tests of the changed screens only (no full run), except smooth's card count.
-- Next steps: the owner's benchmark of 0.68.1 (with gpu-paths-log.txt and gpu-helper-variants.txt); then the OpenGL removal job (DECISIONS 20 Nov 2026); then 0.69.0, the Alpha Centauri system in the Orbit Lab (ROADMAP: its sources first). Idea agreed, not started: the Alpha Centauri switch.
+- 0.69.0 (21 Nov 2026): OpenGL removed; Vulkan the only drawing system (1.3/1.4, or 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2: Boot Camp's Radeon Pro cards); no Graphics choice; a PC without Vulkan gets a message with Try again; the picture's copy is a blit (present.frag gone); gl_compare_tests became vk_compare_tests (ctest vk_cards) and the Black Hole precision checks run on Vulkan.
+- Last full UI run: 0.69.0 (the commit "native 0.69.0"); failing in it: ui_search (check_5l labels) and ui_atom_layout (check_5h cards: the radial card read before the card's outline came), both fixed and re-run; ui_blackhole smooth (the card count, ROADMAP: the one-in-two limit; its sky-guard checks fixed and re-run); ui_popups orbitkeep (rest.orbit at 2560 x 1369 drawn anew: fails on 0.68.1 too, the owner's bug, ROADMAP) and benchwaits (passes alone, on 0.68.1 too: the full run's load).
+- Next steps: the owner's benchmark of 0.69.0 (and the Windows run's dumpbin line: no opengl32); then 0.70.0, the Alpha Centauri system in the Orbit Lab (ROADMAP: its sources first).
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; every job: `check.sh quick` plus the ui_* tests of the screens it changes; `check.sh full` (about 35 min) only when the owner asks. One push per job; PLANNER.md and this file kept true by every job.
 
 ## How work flows

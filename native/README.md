@@ -1,6 +1,6 @@
 # Physics Lab — Windows app
 
-Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan 1.3 (1.4 used where present), Dear ImGui). Version **0.64.0 alpha**. The app draws with Vulkan; OpenGL 4.3 (3.3 core fallback) is the backup: Settings, Performance, Graphics, and by itself on a card without Vulkan 1.3 or when Vulkan cannot start (PLAN_VULKAN.md). Four labs:
+Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan, Dear ImGui). Version **0.69.0 alpha**. The app draws everything with Vulkan (1.3 or 1.4, or 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2); a PC whose Vulkan cannot start gets a message naming what is needed (OpenGL was removed in 0.69.0). Four labs:
 - **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini, drawn per pixel by the graphics card on Vulkan with the processor's triangles as reference).
 - **Atom Lab**: any nucleus, down to quarks; one electron (exact, with Dirac's relativity) or every electron of the neutral atoms (Dirac-Hartree-Fock orbitals computed for the app);
   photon jumps along NIST's measured lines: one electron for every element, every electron shown for 16 atoms (Li, Na, K, Rb, Cs, Fr, He, Be, Mg, Ca, Zn, Sr, Cd, Ba, Hg, Ra;
@@ -51,7 +51,7 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 | `src/molecule/` | The Molecule Lab: molecules (`molecule.*`), density (`density.*`), vibrations (`vibration.*`), rotation (`rotation.*`), the anharmonic bond (`morse.*`), the picture (`molecule_view.*`) |
 | `src/analysis/` | The Data panel's tables (`lab_tables.*`), text in and out (`table.*`) and fitting (`fit.*`); no graphics |
 | `src/app/` | App-wide logic without graphics: settings file (`prefs.*`), texts and About (`app_text.inc`), themes (`theme_style.*`), calculator (`calc*.*`), benchmark (`bench*.*`), the graphics card's light paths' guard and log (`gpu_guard.*`), the crash-safe helper process that makes the card programs' risky first pipelines and first small runs (`gpu_helper.*`; its Vulkan side `src/render/vk_helper.cpp`) |
-| `src/render/` | OpenGL loader, the Vulkan start and frames (`vk_backend.*`, shaders in `vk/`), 2D renderer (on Vulkan: `vk_draw2d.*`, `renderer2d_vk.cpp`; the card programs on Vulkan: `vk_card.*`; the Black Hole Lab's: `vk_blackhole.*`), shaders (`shaders.h`), the spinning hole's per-pixel shader's steps (`kerr_sky.*`), compute objects, planet maps, the CIE 1931 table (`cie1931.h`) |
+| `src/render/` | The Vulkan start and frames (`vk_backend.*`, shaders in `vk/`), 2D renderer (on Vulkan: `vk_draw2d.*`, `renderer2d_vk.cpp`; the card programs on Vulkan: `vk_card.*`; the Black Hole Lab's: `vk_blackhole.*`), shaders (`shaders.h`), the spinning hole's per-pixel shader's steps (`kerr_sky.*`), compute objects, planet maps, the CIE 1931 table (`cie1931.h`) |
 | `src/ui/` | The panels and pages: shell, Controls, Settings, Learn tab and facts (`app_tabs.*`), About and history (`app_pages.*`), guides, calculator and Data panels |
 | `data/` | The saved sources: data files and papers, most folders with a README (where it came from, when) |
 | `tools/` | The scripts that build the `.inc` tables from `data/`, the DHF and GRASP2018 pipelines, `check.sh` |

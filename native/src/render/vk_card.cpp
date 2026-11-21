@@ -1255,7 +1255,7 @@ public:
         c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToVertex);   // read by the cloud's grid and dots as their group attribute
         return true;
     }
-    GLuint jumpGroupsBuffer() const override { return out_.b ? 1u : 0u; }
+    unsigned jumpGroupsBuffer() const override { return out_.b ? 1u : 0u; }
     VkBuffer vkJump() const { return out_.b; }
     int beginJumpRead(const unsigned char* fixedGroups, long jn, std::uint64_t t0, std::uint64_t t1) override {
         if (!built(kJump) || !c_.ok() || jn <= 0 || !fixedGroups || jobs_.size() >= 8) return 0;

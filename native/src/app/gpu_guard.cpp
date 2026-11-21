@@ -328,7 +328,10 @@ void GpuGuard::begin(const std::string& step) {
     if (d_.guarded) writeMarker(step);
     line("begin " + step, d_.guarded);
     if (g_observer) g_observer(0, step, std::string());
-    if (!die_.empty() && step.compare(0, die_.size(), die_) == 0) {
+    // (0.69.0: "<prefix>step", e.g. "[vulkan] [sky] the first full picture", names one guard's step: the lens guard has a step of that name too)
+    const bool mine = !prefix_.empty() && die_.compare(0, prefix_.size(), prefix_) == 0;
+    const std::string dieStep = mine ? die_.substr(prefix_.size()) : die_;
+    if (!die_.empty() && (mine || die_[0] != '[') && step.compare(0, dieStep.size(), dieStep) == 0) {
         line("(test switch PL_GPU_DIE: the process ends here, inside the step)", true);
         std::_Exit(3);
     }
@@ -440,42 +443,35 @@ std::vector<std::string> GpuGuard::logTail(int n) const {
     return all;
 }
 
-// 0.61.0: on Vulkan (step 3) the card programs have guards of their own (their markers, settings lines and versions differ from OpenGL's, so a failure
-// on one API never switches the other off); the functions below give the guard of the API this start draws with
-static bool g_vulkanGuards = false;
+// 0.61.0: on Vulkan (step 3) the card programs have guards of their own (their markers, settings lines and versions differed from OpenGL's). 0.69.0:
+// OpenGL is gone with its guards; the functions below give Vulkan's (an old settings file's OpenGL lines are kept as they were, unused)
 
 // 0.62.0 (step 4): the Black Hole Lab's light paths and its sky per pixel have Vulkan twins too
 GpuGuard& gpuGuard() {
-    static GpuGuard g;
     static GpuGuard v("gpu-vklightpaths-step.txt", GpuGuard::kLog, false, "[vulkan] [lightpaths] ", "The light paths on Vulkan");
     static const bool keep = (v.keepOldMarkers(), true);              // 0.63.1: their crash is real (AMD's shader compiler, both APIs)
     (void)keep;
-    return g_vulkanGuards ? v : g;
+    return v;
 }
 
 GpuGuard& gpuSkyGuard() {
-    static GpuGuard g("gpu-sky-step.txt", GpuGuard::kLog, false, "[sky] ");
     static GpuGuard v("gpu-vksky-step.txt", GpuGuard::kLog, false, "[vulkan] [sky] ", "The spinning hole's sky per pixel on Vulkan");
-    return g_vulkanGuards ? v : g;
+    return v;
 }
 
 GpuGuard& gpuVkLensGuard() {
     static GpuGuard g("gpu-vklens-step.txt", GpuGuard::kLog, false, "[vulkan] [lens] ", "The Black Hole Lab's picture on Vulkan");
     return g;
 }
-void useVulkanGuards(bool on) { g_vulkanGuards = on; }
-bool vulkanGuards() { return g_vulkanGuards; }
 
 GpuGuard& gpuSliceGuard() {
-    static GpuGuard g("gpu-slice-step.txt", GpuGuard::kLog, false, "[slice] ");
     static GpuGuard v("gpu-vkslice-step.txt", GpuGuard::kLog, false, "[vulkan] [slice] ", "The Slice's dots on Vulkan");
-    return g_vulkanGuards ? v : g;
+    return v;
 }
 
 GpuGuard& gpuJumpGuard() {
-    static GpuGuard g("gpu-jump-step.txt", GpuGuard::kLog, false, "[jump] ");
     static GpuGuard v("gpu-vkjump-step.txt", GpuGuard::kLog, false, "[vulkan] [jump] ", "The jump's groups on Vulkan");
-    return g_vulkanGuards ? v : g;
+    return v;
 }
 
 GpuGuard& gpuVkGroupsGuard() {
@@ -529,21 +525,17 @@ GpuGuard& gpuVulkanGuard() {
 }
 
 GpuGuard& gpuMolCloudGuard() {
-    static GpuGuard g("gpu-molcloud-step.txt", GpuGuard::kLog, false, "[molcloud] ");
     static GpuGuard v("gpu-vkmolcloud-step.txt", GpuGuard::kLog, false, "[vulkan] [molcloud] ", "The Density cloud on Vulkan");
-    return g_vulkanGuards ? v : g;
+    return v;
 }
 
 std::vector<std::pair<std::string, GpuGuard*>> vulkanCardGuards() {
-    const bool was = g_vulkanGuards;
-    g_vulkanGuards = true;
     std::vector<std::pair<std::string, GpuGuard*>> v = {{"groups", &gpuVkGroupsGuard()}, {"outline", &gpuVkOutlineGuard()}, {"rocks", &gpuVkRocksGuard()}, {"cloud", &gpuVkCloudGuard()},
                                                        {"slice", &gpuSliceGuard()}, {"jump", &gpuJumpGuard()}, {"molcloud", &gpuMolCloudGuard()},
                                                        {"lightpaths", &gpuGuard()}, {"sky", &gpuSkyGuard()}, {"lens", &gpuVkLensGuard()},   // (0.62.0)
                                                        {"rings", &gpuVkRingsGuard()}, {"classic", &gpuVkClassicGuard()},   // (0.64.0)
                                                        {"nucdensity", &gpuVkNucDensGuard()},   // (0.67.0)
                                                        {"lines", &gpuVkLinesGuard()}, {"surface", &gpuVkSurfaceGuard()}};   // (0.68.0)
-    g_vulkanGuards = was;
     return v;
 }
 

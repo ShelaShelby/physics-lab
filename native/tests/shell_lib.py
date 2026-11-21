@@ -1,4 +1,4 @@
-# 0.15 stage 3: helpers for the tests of the new UI (check_shell.py, check_shell_state.py, check_shell_pictures.py): run the REAL app headless (SDL offscreen, Mesa llvmpipe)
+# 0.15 stage 3: helpers for the tests of the new UI (check_shell.py, check_shell_state.py, check_shell_pictures.py): run the REAL app headless (SDL offscreen; 0.69.0: Mesa's software Vulkan, lavapipe)
 # and read what it printed (PL_LOG_SHELL, PLSTATE) and the picture it saved (a BMP, bytes B G R A, rows bottom first).
 import os, re, struct, subprocess
 
@@ -20,11 +20,14 @@ def _run_app(binary, work, name, extra, frames=60, size="1280x800", theme="dark"
     bmp = os.path.join(work, name + ".bmp")
     env["PL_SCREENSHOT"] = bmp
     r = subprocess.run([binary], env=env, cwd=work, capture_output=True, text=True, errors="replace", timeout=timeout)
-    return Result(r.stdout, r.stderr, bmp)
+    res = Result(r.stdout, r.stderr, bmp)
+    res.code = r.returncode                                 # 0.69.0: the exit code (negative: ended by a signal, a crash)
+    return res
 
 class Result:
     def __init__(self, out, err, bmp):
         self.out, self.err, self.bmp = out, err, bmp
+        self.code = None
         self.rects, self.notes, self.texts, self.window = {}, [], [], None
         for ln in out.splitlines():
             if not ln.startswith("PLSHELL "):

@@ -8,7 +8,7 @@
 
 #include "app/gpu_guard.h"
 
-// SPIR-V made at build time from render/shaders.h (CMakeLists.txt PL_VK2D_SHADERS) and from render/vk/present.*
+// SPIR-V made at build time from render/shaders.h (CMakeLists.txt PL_VK2D_SHADERS) (0.69.0: render/vk/present.* are gone: the copy is a blit)
 #include "r2d_tri_vert.h"
 #include "r2d_tri_frag.h"
 #include "r2d_sq_vert.h"
@@ -25,8 +25,6 @@
 #include "r2d_rings_frag.h"
 #include "r2d_lines_vert.h"
 #include "r2d_surface_vert.h"
-#include "present_vert.h"
-#include "present_frag.h"
 
 namespace render {
 
@@ -420,15 +418,6 @@ bool VkDraw2D::init(const VkDevCtx& c, VkFormat windowFormat, int samples, std::
         pli.setLayoutCount = 1;
         pli.pSetLayouts = &setLayout_;
         if (ok) ok = c_.check(vkCreatePipelineLayout(c_.device, &pli, nullptr, &layout_), "vkCreatePipelineLayout (renderer2d)");
-        VkDescriptorSetLayoutBinding pb{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-        li.bindingCount = 1;
-        li.pBindings = &pb;
-        if (ok) ok = c_.check(vkCreateDescriptorSetLayout(c_.device, &li, nullptr, &presentSetLayout_), "vkCreateDescriptorSetLayout (present)");
-        VkPushConstantRange pc{VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4 * sizeof(int32_t)};
-        pli.pSetLayouts = &presentSetLayout_;
-        pli.pushConstantRangeCount = 1;
-        pli.pPushConstantRanges = &pc;
-        if (ok) ok = c_.check(vkCreatePipelineLayout(c_.device, &pli, nullptr, &presentLayout_), "vkCreatePipelineLayout (present)");
         if (!ok) why = "the pipeline layouts could not be made";
     }
     // ---- the pipelines: each program with the blends and passes it is drawn with ----
@@ -446,75 +435,16 @@ bool VkDraw2D::init(const VkDevCtx& c, VkFormat windowFormat, int samples, std::
         if (!ok) why = "a pipeline could not be made";
     }
     for (VkShaderModule m : mod) if (m) vkDestroyShaderModule(c_.device, m, nullptr);
-    // ---- the copy into the picture area (render/vk/present.*), in the window's pass ----
+    // ---- 0.69.0: the copy into the picture area is a blit (copyTo; present.frag is gone): the picture's format must be a blit's source and the
+    // window's its destination (both mandatory for these formats in the Vulkan spec; queried all the same) ----
     if (ok) {
-        VkShaderModule vs = VK_NULL_HANDLE, fs = VK_NULL_HANDLE;
-        VkShaderModuleCreateInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        si.codeSize = sizeof k_present_vert;
-        si.pCode = k_present_vert;
-        ok = c_.check(vkCreateShaderModule(c_.device, &si, nullptr, &vs), "vkCreateShaderModule (present.vert)");
-        si.codeSize = sizeof k_present_frag;
-        si.pCode = k_present_frag;
-        if (ok) ok = c_.check(vkCreateShaderModule(c_.device, &si, nullptr, &fs), "vkCreateShaderModule (present.frag)");
-        spirvBytes_ += sizeof k_present_vert + sizeof k_present_frag;
-        if (ok) {
-            VkPipelineShaderStageCreateInfo st[2]{};
-            st[0].sType = st[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            st[0].stage = VK_SHADER_STAGE_VERTEX_BIT; st[0].module = vs; st[0].pName = "main";
-            st[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; st[1].module = fs; st[1].pName = "main";
-            VkPipelineVertexInputStateCreateInfo vi{};
-            vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-            VkPipelineInputAssemblyStateCreateInfo ia{};
-            ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-            ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-            VkPipelineViewportStateCreateInfo vp{};
-            vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-            vp.viewportCount = 1;
-            vp.scissorCount = 1;
-            VkPipelineRasterizationStateCreateInfo rs{};
-            rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-            rs.polygonMode = VK_POLYGON_MODE_FILL;
-            rs.cullMode = VK_CULL_MODE_NONE;
-            rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-            rs.lineWidth = 1.0f;
-            VkPipelineMultisampleStateCreateInfo ms{};
-            ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-            ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-            VkPipelineColorBlendAttachmentState ba{};
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            VkPipelineColorBlendStateCreateInfo cb{};
-            cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-            cb.attachmentCount = 1;
-            cb.pAttachments = &ba;
-            const VkDynamicState dyn[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-            VkPipelineDynamicStateCreateInfo ds{};
-            ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-            ds.dynamicStateCount = 2;
-            ds.pDynamicStates = dyn;
-            VkGraphicsPipelineCreateInfo gi{};
-            gi.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-            gi.stageCount = 2;
-            gi.pStages = st;
-            gi.pVertexInputState = &vi;
-            gi.pInputAssemblyState = &ia;
-            gi.pViewportState = &vp;
-            gi.pRasterizationState = &rs;
-            gi.pMultisampleState = &ms;
-            gi.pColorBlendState = &cb;
-            gi.pDynamicState = &ds;
-            gi.layout = presentLayout_;
-            VkPipelineRenderingCreateInfo ri{};                              // 0.63.0: dynamic rendering into the window
-            ri.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-            ri.colorAttachmentCount = 1;
-            ri.pColorAttachmentFormats = &windowFormat;
-            gi.pNext = &ri;
-            ok = c_.check(vkCreateGraphicsPipelines(c_.device, VK_NULL_HANDLE, 1, &gi, nullptr, &presentPipe_), "vkCreateGraphicsPipelines (present)");
-            if (!ok) presentPipe_ = VK_NULL_HANDLE;
+        VkFormatProperties src{}, dst{};
+        vkGetPhysicalDeviceFormatProperties(c_.phys, kRgba8, &src);
+        vkGetPhysicalDeviceFormatProperties(c_.phys, windowFormat, &dst);
+        if (!(src.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) || !(dst.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT)) {
+            ok = false;
+            why = "the graphics card cannot copy the picture into the window (no blit for these formats)";
         }
-        if (vs) vkDestroyShaderModule(c_.device, vs, nullptr);
-        if (fs) vkDestroyShaderModule(c_.device, fs, nullptr);
-        if (!ok) why = "the picture area's copy could not be made";
     }
     // ---- the samplers: the soft layer and the grey pass GL_LINEAR, the cloud's float layer GL_NEAREST (both clamped), the maps as Renderer2D::init ----
     if (ok) {
@@ -619,16 +549,13 @@ void VkDraw2D::destroy() {
     dropBuffer(corners_);
     collect();
     for (Program& p : prog_) for (auto& row : p.pipe) for (VkPipeline& pl : row) if (pl) { vkDestroyPipeline(c_.device, pl, nullptr); pl = VK_NULL_HANDLE; }
-    if (presentPipe_) vkDestroyPipeline(c_.device, presentPipe_, nullptr);
     for (VkSampler s : {linearClamp_, nearestClamp_, mapSampler_}) if (s) vkDestroySampler(c_.device, s, nullptr);
     if (layout_) vkDestroyPipelineLayout(c_.device, layout_, nullptr);
-    if (presentLayout_) vkDestroyPipelineLayout(c_.device, presentLayout_, nullptr);
     if (setLayout_) vkDestroyDescriptorSetLayout(c_.device, setLayout_, nullptr);
-    if (presentSetLayout_) vkDestroyDescriptorSetLayout(c_.device, presentSetLayout_, nullptr);
     if (linesLayout_) vkDestroyPipelineLayout(c_.device, linesLayout_, nullptr);
     if (linesSetLayout_) vkDestroyDescriptorSetLayout(c_.device, linesSetLayout_, nullptr);
     linesLayout_ = VK_NULL_HANDLE; linesSetLayout_ = VK_NULL_HANDLE;
-    presentPipe_ = VK_NULL_HANDLE; linearClamp_ = nearestClamp_ = mapSampler_ = VK_NULL_HANDLE; layout_ = presentLayout_ = VK_NULL_HANDLE; setLayout_ = presentSetLayout_ = VK_NULL_HANDLE;
+    linearClamp_ = nearestClamp_ = mapSampler_ = VK_NULL_HANDLE; layout_ = VK_NULL_HANDLE; setLayout_ = VK_NULL_HANDLE;
     c_ = VkDevCtx();
     ok_ = false;
 }
@@ -648,8 +575,9 @@ bool VkDraw2D::targetsFor(Targets& t, int w, int h, int s) {
     if (t.w == w && t.h == h && t.s == s && t.pic.img) return true;
     dropImage(t.ms); dropImage(t.pic); dropImage(t.gray);
     t = Targets();
-    bool ok = makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, t.pic, "the picture") &&
-              makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1, t.gray, "the grey picture");
+    const VkImageUsageFlags use = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;   // (0.69.0: the copy's source)
+    bool ok = makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, use, 1, t.pic, "the picture") &&
+              makeImage(w, h, kRgba8, VK_SAMPLE_COUNT_1_BIT, use, 1, t.gray, "the grey picture");
     if (ok && s > 1) ok = makeImage(w, h, kRgba8, static_cast<VkSampleCountFlagBits>(s), VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, t.ms, "the multisampled picture");
     if (!ok) { failed_ = true; return false; }
     t.w = w; t.h = h; t.s = s;
@@ -1091,35 +1019,35 @@ bool VkDraw2D::keepPicture(int w, int h, bool gray) {
     return true;
 }
 
-void VkDraw2D::present(VkCommandBuffer cmd, int x, int y, int w, int h) {
-    if (!drawn_ || !cur_ || failed_ || w <= 0 || h <= 0) return;
-    Slot& s = slots_[static_cast<std::size_t>(slot_)];
-    VkDescriptorSetAllocateInfo ai{};
-    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    ai.descriptorPool = s.pool;
-    ai.descriptorSetCount = 1;
-    ai.pSetLayouts = &presentSetLayout_;
-    VkDescriptorSet set = VK_NULL_HANDLE;
-    if (!c_.check(vkAllocateDescriptorSets(c_.device, &ai, &set), "vkAllocateDescriptorSets (present)")) { failed_ = true; return; }
-    VkDescriptorImageInfo ii{nearestClamp_, usedGray_ ? cur_->gray.view : cur_->pic.view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    VkWriteDescriptorSet wr{};
-    wr.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    wr.dstSet = set;
-    wr.dstBinding = 0;
-    wr.descriptorCount = 1;
-    wr.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    wr.pImageInfo = &ii;
-    vkUpdateDescriptorSets(c_.device, 1, &wr, 0, nullptr);
-    const int ww = std::min(w, cur_->w), hh = std::min(h, cur_->h);
-    const VkViewport vp{static_cast<float>(x), static_cast<float>(y), static_cast<float>(ww), static_cast<float>(hh), 0.0f, 1.0f};
-    const VkRect2D sc{{x, y}, {static_cast<uint32_t>(ww), static_cast<uint32_t>(hh)}};
-    const int32_t area[4] = {x, y, cur_->h, 0};
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, presentPipe_);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, presentLayout_, 0, 1, &set, 0, nullptr);
-    vkCmdSetViewport(cmd, 0, 1, &vp);
-    vkCmdSetScissor(cmd, 0, 1, &sc);
-    vkCmdPushConstants(cmd, presentLayout_, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof area, area);
-    vkCmdDraw(cmd, 3, 1, 0, 0);
+// 0.69.0 (present.frag's place): the target cleared to clear[] and the picture copied into its area (x, y, w, h: pixels from the top left) by a blit,
+// its rows turned over (the picture has OpenGL's rows: its first row at the bottom) and nearest, one texel to one pixel: the same pixels the shader copied
+// (its target's row q took the picture's row h - 1 - q). The target goes from undefined to the colour attachment's layout, the picture back to sampled.
+void VkDraw2D::copyTo(VkCommandBuffer cmd, VkImage dst, const VkClearColorValue& clear, int x, int y, int w, int h) {
+    vkImageBarrier2(cmd, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_NONE,
+                    VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    const VkImageSubresourceRange all{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vkCmdClearColorImage(cmd, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &all);
+    const bool picture = drawn_ && cur_ && !failed_ && w > 0 && h > 0;
+    Img* src = picture ? (usedGray_ ? &cur_->gray : &cur_->pic) : nullptr;
+    if (src && src->img) {
+        vkMemoryBarrier2(cmd, VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);   // (the clear, then the copy over it)
+        vkImageBarrier2(cmd, src->img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                        VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+        const int ww = std::min(w, cur_->w), hh = std::min(h, cur_->h);
+        VkImageBlit b{};
+        b.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        b.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        b.srcOffsets[0] = {0, cur_->h, 0};
+        b.srcOffsets[1] = {ww, cur_->h - hh, 1};
+        b.dstOffsets[0] = {x, y, 0};
+        b.dstOffsets[1] = {x + ww, y + hh, 1};
+        vkCmdBlitImage(cmd, src->img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &b, VK_FILTER_NEAREST);
+        vkImageBarrier2(cmd, src->img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_NONE,
+                        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    }
+    vkImageBarrier2(cmd, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_CLEAR_BIT | VK_PIPELINE_STAGE_2_BLIT_BIT,
+                    VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
 }
 
 void VkDraw2D::dropShot() {

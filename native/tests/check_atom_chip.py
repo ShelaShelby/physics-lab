@@ -27,8 +27,8 @@ def states(r):
 
 CARD_STEPS = {"slice": ["compile the Slice's dots shader", "link the Slice's dots shader", "the Slice's first small run", "the Slice's check", "the Slice's first full use"],
               "jump": ["compile the jump's groups shader", "link the jump's groups shader", "the jump's first small run", "the jump's check", "the jump's first full use"]}
-CARD_BENCH = {"PL_GRAPHICS": "opengl", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all,atom.slice_super_drag",
-              "PL_BENCH_WARMUP": "1.0", "PL_BENCH_MEASURE": "1.5"}
+CARD_BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all,atom.slice_super_drag",
+              "PL_BENCH_WARMUP": "6.0", "PL_BENCH_MEASURE": "1.5"}   # (0.69.0: 6 s, was 1: on Vulkan the steps take their turns, one at a time, through the warm-up)
 
 def classic_part(binary, work):
     # 0.64.0: the Classic Cloud 3D dots from the card (Vulkan): the start-up check passes here (every dot's group, band and place, the squares in the
@@ -44,7 +44,7 @@ def classic_part(binary, work):
         if not ok:
             fails += 1
             print("FAIL", what)
-    B = {"PL_GRAPHICS": "vulkan", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.all_classic,atom.side_all_classic,atom.side_all_glow,atom.slice_all_drag,atom.slice_glow_ultra",
+    B = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.all_classic,atom.side_all_classic,atom.side_all_glow,atom.slice_all_drag,atom.slice_glow_ultra",
          "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
     runs = {}
     for tag, extra in (("card", {}), ("cpu", {"PL_CLASSIC_CARDFAIL": "1"})):
@@ -97,7 +97,7 @@ def card_part(binary, work):
     def read(path):
         return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
     def lines_of(log, which):
-        return "\n".join(ln for ln in log.splitlines() if ln.startswith(f"[{which}] "))
+        return "\n".join(ln for ln in log.splitlines() if ln.startswith(f"[vulkan] [{which}] "))   # (0.69.0: Vulkan's guards, OpenGL's are gone)
     # one normal run of both scenes, the steps of every die run and the runs after them, in parallel
     BIG = dict(frames=100000, size="880x560", timeout=1500)
     dirs = {"ok": folder("card_ok")}
@@ -140,19 +140,19 @@ def card_part(binary, work):
             else: at = k
         timed = all(re.search(r"end " + re.escape(s_) + r"[^\n]* in \d+ ms", part) for s_ in steps[:2])
         check(not missing and timed, f"card: {which}: the log names every step in order, the compile and link with their times (missing: {missing})")
-        check(f"gpu{which}=ok | {which} " in st and not os.path.exists(os.path.join(dirs["ok"], f"gpu-{which}-step.txt")), f"card: {which}: kept as ok in the settings file, no marker left")
+        check(f"gpuvk{which}=ok | vulkan {which} " in st and not os.path.exists(os.path.join(dirs["ok"], f"gpu-vk{which}-step.txt")), f"card: {which}: kept as ok in the settings file, no marker left")
     # 4. the process ended inside each step: the marker names it; the next start runs nothing of that program, the processor is used, Settings names the step
     after = []
     for which, steps in CARD_STEPS.items():
         for i, s_ in enumerate(steps):
             d = dirs[(which, i)]
-            after.append(((binary, work, f"card_after_{which}{i}", {"PL_GRAPHICS": "opengl", "PL_ATOM": "1", "PL_SETTINGS": os.path.join(d, "settings.txt"), "PL_OPEN": "settings", "PL_ATOM_SET": "Z=92;view=Slice" if which == "slice" else "Z=88"}),
+            after.append(((binary, work, f"card_after_{which}{i}", {"PL_ATOM": "1", "PL_SETTINGS": os.path.join(d, "settings.txt"), "PL_OPEN": "settings", "PL_ATOM_SET": "Z=92;view=Slice" if which == "slice" else "Z=88"}),
                           dict(frames=40, size="880x560", timeout=900)))
     for which, steps in CARD_STEPS.items():
         for i, s_ in enumerate(steps):
-            mk = os.path.join(dirs[(which, i)], f"gpu-{which}-step.txt")
+            mk = os.path.join(dirs[(which, i)], f"gpu-vk{which}-step.txt")
             marker = read(mk)
-            check(f"step={s_}\n" in marker and f"version={which} " in marker, f"card: {which}: the process ended inside '{s_}': the marker names the step ({marker!r})")
+            check(f"step={s_}\n" in marker and f"version=vulkan {which} " in marker, f"card: {which}: the process ended inside '{s_}': the marker names the step ({marker!r})")
     prefetch(after)
     for k, (which, steps) in enumerate(CARD_STEPS.items()):
         for i, s_ in enumerate(steps):
@@ -164,7 +164,7 @@ def card_part(binary, work):
             check(f"PLATOMCARD {which} state=-1" in r.out and not any(("begin " + x) in lg for x in steps) and said,
                   f"card: {which}: after '{s_}' nothing of the program runs, the processor is used, Settings names the step (said {bool(said)})")
             txt = read(os.path.join(d, "settings.txt"))
-            check(f"gpu{which}=off | {which} " in txt and (f"| {s_}\n" in txt or f"| {s_} | app " in txt) and not os.path.exists(os.path.join(d, f"gpu-{which}-step.txt")), f"card: {which}: the settings file keeps it off with the step '{s_}', the marker gone")
+            check(f"gpuvk{which}=off | vulkan {which} " in txt and (f"| {s_}\n" in txt or f"| {s_} | app " in txt) and not os.path.exists(os.path.join(d, f"gpu-vk{which}-step.txt")), f"card: {which}: the settings file keeps it off with the step '{s_}', the marker gone")
     # 5. a changed shader tries again (and passes here); Try again passes in the same run
     for which in CARD_STEPS:
         sf = os.path.join(dirs[(which, 0)], "settings.txt")
@@ -173,9 +173,9 @@ def card_part(binary, work):
         r5 = run_app(binary, work, f"card_shader_{which}", dict(CARD_BENCH, PL_SETTINGS=sf2, **{f"PL_GPU_{which.upper()}SHADER": f"{which} 0000000000000000"}), frames=100000, size="880x560", timeout=1500)
         check(f"PLATOMCARD {which} state=1" in r5.out, f"card: {which}: a changed shader tries again (and passes here)")
     sf = os.path.join(dirs[("slice", 1)], "settings.txt")
-    r4 = run_app(binary, work, "card_again", {"PL_GRAPHICS": "opengl", "PL_ATOM": "1", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpuslice", "PL_ATOM_SET": "Z=92;view=Slice", "PL_SCRIPT": "14:click=gpuslice.again"}, frames=90, size="880x560", timeout=900)
+    r4 = run_app(binary, work, "card_again", {"PL_ATOM": "1", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpuslice", "PL_ATOM_SET": "Z=92;view=Slice", "PL_SCRIPT": "14:click=gpuslice.again"}, frames=90, size="880x560", timeout=900)
     # (the cut does not move here, so no new dots are asked for: its first full use waits; the settings file no longer keeps it off)
-    check(not r4.scripted_missing() and "PLATOMCARD slice state=1" in r4.out and "gpuslice=off" not in read(sf), f"card: Try again: the Slice's program is made and checked again in the same run ({r4.scripted_missing()})")
+    check(not r4.scripted_missing() and "PLATOMCARD slice state=1" in r4.out and "gpuvkslice=off" not in read(sf), f"card: Try again: the Slice's program is made and checked again in the same run ({r4.scripted_missing()})")
     print(f"{checks} checks, {fails} failed")
     return 1 if fails else 0
 

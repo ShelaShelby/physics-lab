@@ -61,7 +61,7 @@ Variants variantsOf(int p) {
     const auto set = [&](int k, std::initializer_list<VkFormat> f) { int i = 0; for (VkFormat x : f) o.v[k][i++] = x; o.n[k] = i; };
     switch (p) {
     case VkBlackHole::pLens: set(0, {kRgba8, kF32, kF32}); set(1, {kF32}); break;   // (1: the exposure's samples at spin 0)
-    case VkBlackHole::pKerr: set(0, {kRgba8, kF32, kF32}); break;
+    case VkBlackHole::pKerr: set(0, {kRgba8, kF32, kF32}); if (std::getenv("PL_BH_COMPARE")) set(1, {kF32}); break;   // (1: the tests' float outputs only)
     case VkBlackHole::pSky: set(0, {kRgba8, kF32, kF32, kR8}); set(1, {kF32}); break;   // (1: the exposure's samples, the probe)
     case VkBlackHole::pSkyTiny: case VkBlackHole::pSkyMath: case VkBlackHole::pMaxDown: case VkBlackHole::pGlowDown: case VkBlackHole::pGlowBlur:
     case VkBlackHole::pGlareDown: set(1, {kF32}); break;
@@ -182,10 +182,10 @@ void VkBlackHole::destroy() {
     vkDeviceWaitIdle(dev_);
     writeCache();
     for (Tex* t : {&lensTex_, &layer_[0], &layer_[1], &mask_, &out_, &low_[0], &low_[1], &low_[2], &low_[3], &glow_[0], &glow_[1], &glareSrc_, &glareVeil_, &probe_,
-                   &table_, &discU_, &discP_, &discC_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
+                   &debug_, &args_, &mathOut_, &table_, &discU_, &discP_, &discC_, &kA_, &kB_, &kE_, &kT_, &kF_, &white_}) dropTex(*t);
     for (Tex& t : exp_) dropTex(t);
     exp_.clear();
-    for (HostBuf* h : {&whiteBuf_, &probeBuf_, &glareBuf_}) { c_->dropBuffer(h->b); h->busy = false; }
+    for (HostBuf* h : {&whiteBuf_, &probeBuf_, &glareBuf_, &debugBuf_}) { c_->dropBuffer(h->b); h->busy = false; }
     c_->dropBuffer(corners_);
     for (Program& p : prog_) {
         const VkDevice d = dev_;
@@ -737,7 +737,7 @@ void VkBlackHole::lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
                           {"uDC", discC_.view, nearest_}, {"uWhite", cw ? exp_.back().view : white_.view, nearest_}}, 0, 0, vw, vh);
 }
 
-void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool kdisc, bool raw) {
+void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool kdisc, bool raw, int variant) {
     const int p = pKerr;
     VkUniforms& u = prog_[p].u;
     const double ppp = fbW / ptW_;
@@ -768,7 +768,7 @@ void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
     i1("uRaw", raw ? 1 : 0);
     VkDraw2D* d2 = c_->draw2d();
     const VkImageView sky = d2 ? d2->mapView(static_cast<int>(Map::Sky)) : VK_NULL_HANDLE;
-    draw(cb, p, 0, {{"uTex", sky, d2 ? d2->mapSampler() : VK_NULL_HANDLE}, {"uKA", kA_.view, nearest_}, {"uKB", kB_.view, nearest_}, {"uKE", kE_.view, nearest_},
+    draw(cb, p, variant, {{"uTex", sky, d2 ? d2->mapSampler() : VK_NULL_HANDLE}, {"uKA", kA_.view, nearest_}, {"uKB", kB_.view, nearest_}, {"uKE", kE_.view, nearest_},
                     {"uKT", kT_.view, nearest_}, {"uDC", discC_.view, nearest_}, {"uDF", kF_.view, nearest_}}, 0, 0, fbW, fbH);
 }
 
@@ -1126,7 +1126,7 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
         G.failed(lensBad ? "the lens pass's pipeline" : "the spinning hole's table pass's pipeline", prog_[lensBad ? pLens : pKerr].why);
     }
     if (guardState_ == 1 && c_->done(firstTicket_)) { G.end("the first full picture", "drawn"); G.finished(true); guardState_ = 2; }
-    if (!ok_ || prog_[pLens].state != 2 || fbW <= 0 || fbH <= 0) return;   // (OpenGL: no lens program, nothing drawn)
+    if (!ok_ || prog_[pLens].state != 2 || fbW <= 0 || fbH <= 0) return;   // (no lens program: nothing drawn)
     VkCommandBuffer cb = c_->cmd();
     if (!cb) return;
     ptW_ = ptW; ptH_ = ptH; skyTexW_ = skyTexW;
@@ -1158,7 +1158,7 @@ void VkBlackHole::lens(const LensSky& L, double ptW, double ptH, int skyTexW, in
     const bool skdisc = ksky && L.disc && L.discF && L.discCol && L.discFN >= 2 && L.discC >= 2;
     if ((kdisc || skdisc) && L.discFVersion != kFVer_) { upload(cb, kF_, L.discFN, 1, kR32, L.discF->data(), 1, "the disc's flux"); kFVer_ = L.discFVersion; }
     if ((kdisc || skdisc) && L.colVersion != colVer_) { upload(cb, discC_, L.discC, 1, kF32, L.discCol->data(), 3, "the colours"); colVer_ = L.colVersion; }
-    if (L.debug || L.debugDisc || (ksky && L.skyMode > 0)) return;     // (the tests' float outputs: OpenGL's)
+    if (L.debug || L.debugDisc || (ksky && L.skyMode > 0)) return;     // (the tests' float outputs: debugPicture)
     times();
     if (fbW != lensTex_.w || fbH != lensTex_.h || !lensTex_.img) {
         lensValid_ = false;
@@ -1239,6 +1239,74 @@ void VkBlackHole::probe(const LensSky& L, int w, int h, bool queue, std::vector<
     probeBuf_.busy = false;
     const std::size_t nf = static_cast<std::size_t>(4 * w) * static_cast<std::size_t>(2 * h) * 4;
     if (out && probeBuf_.b.map) { const float* v = static_cast<const float*>(probeBuf_.b.map); out->assign(v, v + nf); }
+}
+
+// 0.69.0: the tests' float outputs (they were drawn by OpenGL into a float framebuffer): lens() sends the tables (it draws nothing for these outputs), then
+// the pass of lens()'s choice draws into a float image of its own, variant 1 (one float target), and is read back, waited for
+void VkBlackHole::debugPicture(const LensSky& L, double ptW, double ptH, int skyTexW, int fbW, int fbH, std::vector<float>& out) {
+    out.clear();
+    lens(L, ptW, ptH, skyTexW, fbW, fbH);
+    if (!ok_ || prog_[pLens].state != 2 || fbW <= 0 || fbH <= 0) return;
+    VkCommandBuffer cb = c_->cmd();
+    if (!cb) return;
+    if (debug_.w != fbW || debug_.h != fbH || !debug_.img) {
+        if (debug_.img) dropTex(debug_);
+        if (!makeTex(debug_, fbW, fbH, kF32, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "the tests' float picture")) return;
+    }
+    const int n = L.table ? static_cast<int>(L.table->size()) : 0;
+    const bool bend = L.bend && n >= 4;
+    const bool disc = bend && L.disc && L.discU && L.discP && L.discCol && L.discS >= 4 && L.discT >= 4 && L.discC >= 2;
+    const bool kerr = L.kerr && prog_[pKerr].state == 2 && prog_[pKerr].pipe[1] && L.bend && L.kA && L.kB && L.kEdge && L.kTau && L.kChi >= 4 && L.kS >= 4 && L.kEdgeN >= 4;
+    const bool kdisc = kerr && L.disc && L.discF && L.discCol && L.discFN >= 2 && L.discC >= 2;
+    const bool ksky = L.kerrSky && skyReady() && L.bend;
+    begin(cb, {&debug_}, 0, 0, fbW, fbH, true);
+    if (ksky) skyPass(cb, L, fbW, fbH, 0, 0, 1, L.skyMode, false, 1, 0, 0, fbW, fbH);
+    else if (kerr) kerrPass(cb, L, fbW, fbH, kdisc, false, 1);
+    else if (!L.kerr) lensPass(cb, L, fbW, fbH, 0, 0, disc, bend, false, false, 1);
+    end(cb);
+    readBack(cb, debug_, 0, 0, fbW, fbH, debugBuf_);
+    { app::FrameCostLabel l("the tests' float picture, read back"); c_->flush(true); }
+    debugBuf_.busy = false;
+    const std::size_t nf = static_cast<std::size_t>(fbW) * static_cast<std::size_t>(fbH) * 4;
+    if (debugBuf_.b.map && !c_->failed()) { const float* v = static_cast<const float*>(debugBuf_.b.map); out.assign(v, v + nf); }
+}
+
+// 0.69.0: the elliptic functions alone (as OpenGL's KerrSky::math was: the arguments three texels a set in one row, the 8 results in two rows of n texels)
+void VkBlackHole::math(const std::vector<float>& in, std::vector<float>& out) {
+    const int n = static_cast<int>(in.size() / 12);
+    out.assign(static_cast<std::size_t>(n) * 8, 0.0f);
+    if (!ok_ || prog_[pSkyMath].state != 2 || n <= 0) return;
+    VkCommandBuffer cb = c_->cmd();
+    if (!cb) return;
+    upload(cb, args_, 3 * n, 1, kF32, in.data(), 4, "the elliptic functions' arguments");
+    if (mathOut_.w != n || mathOut_.h != 2 || !mathOut_.img) {
+        if (mathOut_.img) dropTex(mathOut_);
+        if (!makeTex(mathOut_, n, 2, kF32, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, "the elliptic functions' results")) return;
+    }
+    use(cb, args_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
+    begin(cb, {&mathOut_}, 0, 0, n, 2, true);
+    draw(cb, pSkyMath, 1, {{"uArgs", args_.view, nearest_}}, 0, 0, n, 2);
+    end(cb);
+    readBack(cb, mathOut_, 0, 0, n, 2, debugBuf_);
+    c_->flush(true);
+    debugBuf_.busy = false;
+    const float* px = static_cast<const float*>(debugBuf_.b.map);
+    if (!px || c_->failed()) return;
+    for (int i = 0; i < n; i++)
+        for (int k = 0; k < 4; k++) {
+            out[static_cast<std::size_t>(8 * i + k)] = px[static_cast<std::size_t>(4 * i + k)];
+            out[static_cast<std::size_t>(8 * i + 4 + k)] = px[static_cast<std::size_t>(4 * (n + i) + k)];
+        }
+}
+
+double VkBlackHole::whiteWait() {
+    const long n = skyStats_.whiteReads;
+    if (whiteBuf_.busy) {
+        if (c_->pending() == whiteBuf_.ticket) c_->flush(true);
+        else c_->waitFor(whiteBuf_.ticket, 10);
+    }
+    times();
+    return skyStats_.whiteReads > n ? skyStats_.white : 0;
 }
 
 bool VkBlackHole::probeDone() {

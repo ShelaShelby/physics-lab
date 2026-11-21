@@ -1,4 +1,4 @@
-// 0.62.0: Vulkan, step 4 of 5 (native/PLAN_VULKAN.md): the Black Hole Lab's card programs on Vulkan, from the same shader text as OpenGL's (render/shaders.h,
+// 0.62.0: Vulkan, step 4 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): the Black Hole Lab's card programs on Vulkan, from the same shader text as OpenGL's (render/shaders.h,
 // made into SPIR-V at build time: CMakeLists.txt PL_VK2D_SHADERS; kKerrSkyFS assembled from its parts as render/kerr_sky.cpp does). Renderer2D's Black Hole
 // calls (lensSky, skyProbe, kerrSky's stages, the exposure, the glow and the glare) hand their work to this object on Vulkan, with the same rules as
 // render/renderer2d.cpp's OpenGL code: the picture drawn anew only when the view changed, the exposure reduced on the card, the lower resolution while
@@ -67,6 +67,13 @@ public:
     void probe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out);
     bool probeDone();
     void probeRead(std::vector<float>& out);
+    // 0.69.0 (the tests' hooks, PL_BH_COMPARE; until 0.68.1 they ran on OpenGL only): the float outputs of one picture (LensSky::debug, debugDisc, the
+    // sky's skyMode 1..4) drawn off screen into a float image, fbW x fbH x 4 floats, rows from the bottom, waited for (empty: not drawn); the elliptic
+    // functions alone (KerrSky stage 1, kKerrSkyMathPart) on argument sets of 12 floats, 8 numbers a set (render/kerr_sky.h), waited for; the exposure's
+    // last read-back, waited for (0: none since the last call)
+    void debugPicture(const LensSky& L, double ptW, double ptH, int skyTexW, int fbW, int fbH, std::vector<float>& out);
+    void math(const std::vector<float>& in, std::vector<float>& out);
+    double whiteWait();
 
     const Renderer2D::SkyStats& skyStats() const { return skyStats_; }
     const Renderer2D::GlareStats& glareStats() const { return glareStats_; }
@@ -115,7 +122,7 @@ private:
 
     // ---- the Black Hole Lab's passes (render/renderer2d.cpp's, ported) ----
     void lensPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, int ox, int oy, bool disc, bool bend, bool exp, bool raw, int variant);
-    void kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool kdisc, bool raw);
+    void kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, bool kdisc, bool raw, int variant = 0);
     void skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, int ox, int oy, double scale, int mode, bool raw, int variant, int vx, int vy, int vw, int vh);
     void exposure(VkCommandBuffer cb, const LensSky& L, const std::function<void(int nx, int ny)>& sample);
     void times();
@@ -150,13 +157,13 @@ private:
     std::vector<std::thread> workers_;
     std::atomic<int> skyStage_[3] = {{0}, {0}, {0}};    // per KerrSky stage: as Program::state
     // the textures (OpenGL's names in renderer2d.h)
-    Tex lensTex_, layer_[2], mask_, out_, low_[4], glow_[2], glareSrc_, glareVeil_, probe_;
+    Tex lensTex_, layer_[2], mask_, out_, low_[4], glow_[2], glareSrc_, glareVeil_, probe_, debug_, args_, mathOut_;   // (0.69.0: the tests' three)
     std::vector<Tex> exp_;
     Tex table_, discU_, discP_, discC_, kA_, kB_, kE_, kT_, kF_;
     std::uint64_t tableVer_ = ~std::uint64_t(0), discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0), kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
     int lensN_ = 0;
     std::vector<int> expW_, expH_;
-    HostBuf whiteBuf_, probeBuf_, glareBuf_;
+    HostBuf whiteBuf_, probeBuf_, glareBuf_, debugBuf_;
     int probeW_ = 0, probeH_ = 0;
     VkQueryPool queries_ = VK_NULL_HANDLE;
     std::uint64_t qTicket_[4] = {0, 0, 0, 0};

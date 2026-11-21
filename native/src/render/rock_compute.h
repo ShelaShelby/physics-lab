@@ -1,12 +1,12 @@
-// OpenGL 4.3 compute for the Orbit Lab's rocks (0.13 stage 4 part A): the position of every belt rock on its Kepler ellipse, and its place on the picture, worked out on the GPU.
+// Compute on the graphics card for the Orbit Lab's rocks (0.13 stage 4 part A; 0.61.0: on Vulkan, render/vk_card.cpp makeVkRockCompute): the position of every belt rock on its Kepler ellipse, and its place on the picture, worked out on the GPU.
 // Up to 0.13 stage 3 the CPU did it every frame for every rock (orbit::beltPoint, then the camera): 6,000 rocks in scene 1, 48,000 in scene 6 (the benchmark's measured cost, REPORT.md). The
-// CPU functions stay (orbit/belts.h: beltPoint, beltScreen) as the reference and as the path on a PC without OpenGL 4.3.
+// CPU functions stay (orbit/belts.h: beltPoint, beltScreen) as the reference and as the path where the card's program is not made.
 //
 // What goes to the GPU once (per set of rocks, found by BeltGroup::serial): 12 floats a rock (the Kepler elements) and the mean motion n of each rock as a DOUBLE.
 // What goes every frame: the simulated time t (a double, sent as two floats, hi and lo: t = hi + lo exactly), the Trojans' sway phase reduced to 0..2 pi in double, and the camera.
-// PRECISION RULE (DECISIONS.md): times and angles that grow without limit stay in DOUBLE: the shader forms the mean anomaly M = M0 + n t in double (GLSL 4.00 double precision, which every
-// OpenGL 4.3 context has) and reduces it to -pi..pi in double; only that small number goes into 32-bit float for Kepler's equation and the position. The types have no graphics calls, so the
-// Orbit code and its tests can use them; the OpenGL class is in rock_compute.cpp.
+// PRECISION RULE (DECISIONS.md): times and angles that grow without limit stay in DOUBLE: the shader forms the mean anomaly M = M0 + n t in double (double precision: Vulkan's shaderFloat64, queried;
+// a card without it draws the rocks by the CPU) and reduces it to -pi..pi in double; only that small number goes into 32-bit float for Kepler's equation and the position. The types have no graphics calls, so the
+// Orbit code and its tests can use them (0.69.0: OpenGL's class is gone with OpenGL).
 #pragma once
 
 #include <cstdint>
@@ -37,7 +37,7 @@ struct RockFrame {
 class IRockCompute {
 public:
     virtual ~IRockCompute() {}
-    virtual bool ok() const = 0;                                       // false: no OpenGL 4.3 (the CPU path is used)
+    virtual bool ok() const = 0;                                       // false: not on the card (the CPU path is used)
     // The sets of rocks that are alive now (the serials of the belts being drawn): every other set is dropped from the GPU. Called at the start of each frame's belts, so a slot number given out
     // during a frame stays valid until the next frame.
     virtual void keepOnly(const std::vector<std::uint64_t>& live) = 0;
@@ -45,12 +45,9 @@ public:
     virtual int slotFor(const RockSet& set) = 0;
     // Works out the screen position (x, y points, 2 floats a rock) of every rock of the slot into its buffer. Needs no CPU wait: the draw that follows uses the buffer.
     virtual bool dispatch(int slot, const RockFrame& f) = 0;
-    virtual unsigned positionsBuffer(int slot) const = 0;              // the OpenGL buffer of the last dispatch's positions
+    virtual unsigned positionsBuffer(int slot) const = 0;              // the card's buffer of the last dispatch's positions (Vulkan: not 0 once made)
     virtual bool readPositions(int slot, std::vector<float>& xy) = 0;  // for tests: waits for the GPU and copies the positions back
     virtual int uploads() const = 0;                                   // how many times a set of rocks was sent (for tests: a rebuild only when the rocks change)
 };
-
-// The OpenGL 4.3 implementation for the current context, or nullptr (a 3.3 context, a missing function, a shader that does not compile). The caller owns it.
-IRockCompute* makeRockCompute();
 
 }  // namespace render

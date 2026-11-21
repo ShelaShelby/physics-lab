@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
 
 #include "blackhole/disc.h"
 #include "blackhole/elliptic.h"
@@ -14,7 +15,6 @@
 #include "blackhole/low_priority.h"
 #include "blackhole/spin.h"
 #include "blackhole/spin_sky.h"
-#include "render/gl_loader.h"
 
 namespace blackhole {
 
@@ -293,26 +293,12 @@ void skyCompareHook(render::Renderer2D& R) {
     struct NoSteps : render::KerrSteps { void begin(const std::string&) override {} void end(const std::string&, const std::string&) override {} } steps;
     std::string why;
     for (int st = 0; st < render::KerrSky::kStages; st++)
-        if (!K.build(st, &steps, why)) { std::printf("PLBHSKYNONE why=%s\n", why.c_str()); return; }
+        for (int t = 0;; t++) {                                       // (0.69.0: on Vulkan a stage is made on a thread: asked again until made)
+            if (!K.build(st, &steps, why) || t > 6000) { std::printf("PLBHSKYNONE why=%s\n", why.c_str()); return; }
+            if (!K.building()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
     std::printf("PLBHSKYBUILD tinyms=%.1f mathms=%.1f wholems=%.1f id=%s\n", K.buildMs(0), K.buildMs(1), K.buildMs(2), render::kerrSkyShaderId().c_str());
-    // 0.56.2 (PL_BH_SKYTIME="w,h"): the pass's time at w x h, waited for (median of 5), uMode 1 (the ray and its far direction) and 2 (also the disc's first
-    // image and its shift), at the benchmark's view (0.9, 20 M, 80 deg, 90 deg across the height) and the Film's (30 deg); with PL_BH_SKYSTOP the parts
-    if (const char* tm = std::getenv("PL_BH_SKYTIME")) {
-        int w = 2560, h = 1369;
-        std::sscanf(tm, "%d,%d", &w, &h);
-        const FilmChoices film;
-        const SkyCase cases[2] = {{"benchmark", 0.9, 20, 80 * kPi / 180, w, h, (h / 2.0) / (90 * kPi / 360), 2.32, 30},
-                                  {"film", film.spin, film.camR, film.camTheta, w, h, (h / 2.0) / (30 * kPi / 360), film.rIn, film.rOut}};
-        for (const SkyCase& c : cases)
-            for (int mode : {1, 2}) {
-                double t[5];
-                for (double& x : t) x = R.skyTimePass(skyProbeLens(c), w, h, mode);
-                std::sort(t, t + 5);
-                std::printf("PLBHSKYTIME case=%s mode=%d stop=%s w=%d h=%d ms=%.1f\n", c.name, mode, std::getenv("PL_BH_SKYSTOP") ? std::getenv("PL_BH_SKYSTOP") : "-", w, h, t[2]);
-            }
-        std::fflush(stdout);
-        return;
-    }
     // 0.56.2 (PL_BH_SKYFULL="w,h,fov[,deg...]"): the Film's hole at a whole window's size, every pixel against traceClosed; the cameras at the given angles
     // from the spin axis (default: the paper's 86.56 and 88, 90, 92 degrees); only this part runs
     if (const char* full = std::getenv("PL_BH_SKYFULL")) {

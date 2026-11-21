@@ -1,4 +1,4 @@
-// 0.60.0: Vulkan, step 2 of 5 (native/PLAN_VULKAN.md): Renderer2D's end() on Vulkan. The shapes, blobs and segments are recorded by the same code as
+// 0.60.0: Vulkan, step 2 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): Renderer2D's end() on Vulkan. The shapes, blobs and segments are recorded by the same code as
 // for OpenGL (render/renderer2d.cpp); this file only draws them, segment by segment in their order, with the same shaders (render/shaders.h as SPIR-V),
 // the same uniforms and the same blend of each step as Renderer2D::end (render/vk_draw2d.h has the how).
 #include "app/frame_cost.h"
@@ -162,6 +162,17 @@ bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
     vkc_->collect();
     return !vkc_->failed();
 }
+
+// 0.69.0: the Black Hole Lab's test hooks on Vulkan (render/vk_blackhole.h)
+void Renderer2D::lensFloat(const LensSky& L, int w, int h, std::vector<float>& out) {
+    out.clear();
+    if (vkbh_) vkbh_->debugPicture(L, w, h, texW_[static_cast<int>(Map::Sky)], w, h, out);
+}
+void Renderer2D::skyMath(const std::vector<float>& in, std::vector<float>& out) {
+    if (vkbh_) vkbh_->math(in, out);
+    else out.assign(in.size() / 12 * 8, 0.0f);
+}
+double Renderer2D::skyWhiteWait() { return vkbh_ ? vkbh_->whiteWait() : 0; }
 
 bool Renderer2D::loadMapsVulkan(std::string& why) {
     if (!vk_) { why = "no Vulkan"; return false; }

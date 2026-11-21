@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.68.1 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.69.0 LANGUAGES C CXX)
 
-# Physics Lab, native Windows version (C++17, SDL3, OpenGL 3.3 core, Dear ImGui).
+# Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
 # uses exactly the same code.
 
@@ -21,13 +21,15 @@ endif()
 
 option(PL_BUILD_APP "Build the Physics Lab app (needs SDL3 and Dear ImGui)" ON)
 option(PL_BUILD_TESTS "Build the physics unit tests" ON)
-# 0.65.0: on by default with the picture tests on Linux, so the card-vs-processor comparison (gl_vulkan_cards) runs in the full suite
+# 0.65.0: on by default with the picture tests on Linux, so the card-vs-processor comparison (vk_cards) runs in the full suite
 if(PL_PICTURE_TESTS AND UNIX AND NOT APPLE)
-  set(PL_GL_TESTS_DEFAULT ON)
+  set(PL_VK_TESTS_DEFAULT ON)
 else()
-  set(PL_GL_TESTS_DEFAULT OFF)
+  set(PL_VK_TESTS_DEFAULT OFF)
 endif()
-option(PL_GL_TESTS "Also build gl_compare_tests: draws pictures with the real renderer on Mesa's software OpenGL (llvmpipe, through EGL) and compares them (Linux, needs libEGL)"  ${PL_GL_TESTS_DEFAULT})
+# 0.69.0 (OpenGL removed): vk_compare_tests (was gl_compare_tests on Mesa's OpenGL): the card programs and the real renderer's pictures on Vulkan (Mesa's
+# lavapipe here, no window) against the processor's references. Needs the app's dependencies (-DPL_BUILD_APP=ON).
+option(PL_VK_TESTS "Also build vk_compare_tests: the card programs and the renderer's pictures on Vulkan (lavapipe on Linux) against the processor" ${PL_VK_TESTS_DEFAULT})
 
 if(MSVC)
   add_compile_options(/utf-8 /W3)           # the source has UTF-8 text (°, ☉, ×, ...)
@@ -304,18 +306,6 @@ if(PL_BUILD_TESTS)
     target_link_libraries(stage2_timing PRIVATE atom_core)
     add_executable(stage3_timing tests/timing_stage3.cpp)
     target_link_libraries(stage3_timing PRIVATE atom_core)
-    add_executable(stage4_timing tests/timing_stage4.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp)
-    target_include_directories(stage4_timing PRIVATE src/render)
-    target_link_libraries(stage4_timing PRIVATE atom_core maps_core)
-  endif()
-  if(PL_GL_TESTS)
-    find_library(PL_EGL_LIBRARY EGL REQUIRED)
-    add_executable(gl_compare_tests tests/gl_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/group_compute.cpp src/render/outline_compute.cpp src/render/rock_compute.cpp src/render/kerr_compute.cpp src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp)
-    target_include_directories(gl_compare_tests PRIVATE src/render)
-    target_link_libraries(gl_compare_tests PRIVATE atom_core maps_core ${PL_EGL_LIBRARY})
-    target_compile_options(gl_compare_tests PRIVATE ${PL_WARNINGS})
-    add_test(NAME gl_phase_colours COMMAND gl_compare_tests ${CMAKE_BINARY_DIR}/gl_pictures)
-    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/gl_pictures)
   endif()
 endif()
 
@@ -324,7 +314,7 @@ if(PL_BUILD_APP)
   include(FetchContent)
   set(FETCHCONTENT_QUIET OFF)
 
-  # SDL3: window, OpenGL context, mouse and keyboard
+  # SDL3: window (Vulkan surface), mouse and keyboard
   set(SDL_SHARED OFF CACHE BOOL "" FORCE)
   set(SDL_STATIC ON CACHE BOOL "" FORCE)
   set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -338,8 +328,8 @@ if(PL_BUILD_APP)
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
     GIT_TAG v1.92.9b
     GIT_SHALLOW TRUE)
-  # 0.59.0: Vulkan, step 1 of 5 (PLAN_VULKAN.md). No Vulkan SDK on the build machines: the Khronos headers, volk (loads the Vulkan loader of the PC at run
-  # time; a PC without Vulkan still starts, on OpenGL) and glslang (the Khronos reference compiler, built here) to turn the GLSL into SPIR-V at build time.
+  # 0.59.0: Vulkan, step 1 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)). No Vulkan SDK on the build machines: the Khronos headers, volk (loads the Vulkan loader of the PC at run
+  # time; 0.69.0: a PC without Vulkan gets a message naming what is needed) and glslang (the Khronos reference compiler, built here) to turn the GLSL into SPIR-V at build time.
   # One SDK release for all three (tags checked to exist on 18 Nov 2026).
   FetchContent_Declare(VulkanHeaders
     GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
@@ -369,7 +359,6 @@ if(PL_BUILD_APP)
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)  # 0.59.0: the same version's Vulkan backend, through volk
   target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
   target_compile_definitions(imgui PUBLIC IMGUI_USE_WCHAR32 IMGUI_IMPL_VULKAN_USE_VOLK)   # characters beyond U+FFFF (e.g. 🌍 in the Learn headings); 0.59.0: Vulkan functions from volk
@@ -391,7 +380,7 @@ if(PL_BUILD_APP)
     COMMENT "Embedding fonts")
 
   # 0.59.0: the Vulkan shaders, GLSL to SPIR-V at build time by glslang (built above), each into a header with a uint32_t array (vk_shaders/<name>_<stage>.h)
-  set(PL_VK_SHADERS src/render/vk/fill.vert src/render/vk/fill.frag src/render/vk/present.vert src/render/vk/present.frag)
+  set(PL_VK_SHADERS src/render/vk/fill.vert src/render/vk/fill.frag)   # (0.69.0: present.* gone: the picture's copy is a blit)
   set(PL_VK_SHADER_HEADERS)
   file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/vk_shaders)
   foreach(sh ${PL_VK_SHADERS})
@@ -405,7 +394,7 @@ if(PL_BUILD_APP)
       COMMENT "SPIR-V: ${sh}")
     list(APPEND PL_VK_SHADER_HEADERS ${shOut})
   endforeach()
-  # 0.60.0 (Vulkan step 2): renderer2d's shaders for Vulkan, made from the same text as OpenGL's (src/render/shaders.h, taken out by cmake/extract_glsl.cmake):
+  # 0.60.0 (Vulkan step 2): renderer2d's shaders for Vulkan, made from shaders.h's GLSL text (until 0.68.1 OpenGL's too: src/render/shaders.h, taken out by cmake/extract_glsl.cmake):
   # glslang's relaxed Vulkan rules (-R) put the loose uniforms into one block per stage (vertex: set 0 binding 2; fragment: set 0 binding 1), the
   # fragment shader's texture at binding 0 (glslang's own choice); the in/out locations by declaration order (the app checks the bindings, and that the
   # locations match between the stages, from the SPIR-V itself: vk_draw2d.cpp).
@@ -475,12 +464,8 @@ if(PL_BUILD_APP)
     src/render/vk_surface.cpp
     src/render/vk_blackhole.cpp
     src/render/vk_helper.cpp
-    src/render/gl_loader.cpp
     src/render/renderer2d.cpp
    
-    src/render/group_compute.cpp
-    src/render/outline_compute.cpp
-    src/render/rock_compute.cpp
     src/render/kerr_compute.cpp
     src/render/kerr_sky.cpp
     src/render/atom_card.cpp
@@ -539,21 +524,23 @@ if(PL_BUILD_APP)
   target_compile_options(PhysicsLab PRIVATE ${PL_WARNINGS})
   target_include_directories(PhysicsLab PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
   if(WIN32)
-    target_link_libraries(PhysicsLab PRIVATE opengl32)
-  endif()
-  if(WIN32)
     enable_language(RC)                                  # the icon of PhysicsLab.exe
     target_sources(PhysicsLab PRIVATE assets/physics_lab.rc)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
-  if(TARGET gl_compare_tests)                            # 0.61.0: the card programs on Vulkan in the same test program (tests/gl_vulkan.inc)
-    target_sources(gl_compare_tests PRIVATE src/orbit/ring_check.cpp src/atom/classic_check.cpp src/atom/nucdens_check.cpp src/orbit/orbit_lines.cpp src/orbit/lines_check.cpp src/render/vk_lines.cpp src/molecule/surface_check.cpp src/render/vk_surface.cpp src/render/vk_helper.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp ${PL_VK_SHADER_HEADERS})
-    target_include_directories(gl_compare_tests PRIVATE ${CMAKE_BINARY_DIR}/vk_shaders)
-    target_link_libraries(gl_compare_tests PRIVATE app_core molecule_core blackhole_core orbit_core volk::volk)
-    target_compile_definitions(gl_compare_tests PRIVATE PL_VK_TESTS=1)
-    # 0.65.0: the card programs on Vulkan against the processor (PL_VK_ONLY=1: the Vulkan part alone), so it cannot silently break again
-    add_test(NAME gl_vulkan_cards COMMAND gl_compare_tests ${CMAKE_BINARY_DIR}/gl_pictures)
-    set_tests_properties(gl_vulkan_cards PROPERTIES ENVIRONMENT "PL_VK_ONLY=1" TIMEOUT 1500)
+  if(PL_VK_TESTS)                                      # 0.69.0: vk_compare_tests (OpenGL removed: it was gl_compare_tests, OpenGL against the processor and Vulkan)
+    add_executable(vk_compare_tests tests/vk_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/renderer2d_vk.cpp src/render/kerr_compute.cpp
+                   src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp src/orbit/ring_check.cpp src/atom/classic_check.cpp
+                   src/atom/nucdens_check.cpp src/orbit/orbit_lines.cpp src/orbit/lines_check.cpp src/render/vk_lines.cpp src/molecule/surface_check.cpp src/render/vk_surface.cpp
+                   src/render/vk_helper.cpp src/render/vk_card.cpp src/render/vk_draw2d.cpp src/render/vk_blackhole.cpp src/blackhole/spin_card.cpp src/blackhole/sky_card.cpp
+                   ${PL_VK_SHADER_HEADERS})
+    target_include_directories(vk_compare_tests PRIVATE src/render ${CMAKE_BINARY_DIR}/vk_shaders)
+    target_link_libraries(vk_compare_tests PRIVATE atom_core maps_core app_core molecule_core blackhole_core orbit_core volk::volk)
+    target_compile_options(vk_compare_tests PRIVATE ${PL_WARNINGS})
+    # the card programs and the renderer's pictures on Vulkan against the processor (lavapipe here; validation on where the layers are installed)
+    add_test(NAME vk_cards COMMAND vk_compare_tests ${CMAKE_BINARY_DIR}/vk_pictures)
+    set_tests_properties(vk_cards PROPERTIES TIMEOUT 2400)
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/vk_pictures)
   endif()
   # 0.16 stage 1b: theme_pictures and window_pictures (pictures of the OLD interface) were deleted with it. The New UI's picture tests are below. Linux only (the cloud session); the GitHub Windows build does not run them. Needs -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON.
   option(PL_PICTURE_TESTS "Register the theme picture test (needs a headless Mesa and the app built on Linux)" OFF)
@@ -563,9 +550,9 @@ if(PL_BUILD_APP)
     if(Python3_FOUND)
       # 0.38.1 stage 3 (the owner: "merge them"): ONE test per screen. tests/run_group.py runs the check scripts of the screen one after the other, each exactly as it ran as
       # its own test before (99 tests became 15); a failure prints the name of its check. To run one check by hand: python3 tests/<script> <PhysicsLab> <folder> [part].
-      # ui_shell: the shell: text sizes and floors, windows, keys, start view, date entry, panel toggles; 0.59.0: Vulkan (step 1) against OpenGL
+      # ui_shell: the shell: text sizes and floors, windows, keys, start view, date entry, panel toggles; 0.59.0: Vulkan's start
       add_test(NAME ui_shell COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_shell
-               check_shell.py check_shell.py:vulkan check_shell.py:guardturn check_shell.py:gpuhelper check_shell.py:openglbackup check_shell.py:vulkan2d check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
+               check_shell.py check_shell.py:vulkan check_shell.py:guardturn check_shell.py:gpuhelper check_shell.py:novulkan check_shell.py:vulkan2d check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
       set_tests_properties(ui_shell PROPERTIES TIMEOUT 3600)
       # ui_controls: the Controls panel: layout, sections, sliders, End key, its scrollbar
       add_test(NAME ui_controls COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_controls
@@ -644,7 +631,7 @@ if(PL_BUILD_APP)
 endif()
 
 # 0.15 stage 4.1: labels and a fast, identical environment for the tests. quick = the unit test programs, glsl and the source scan (about a minute, no app start);
-# pictures = everything that starts the real app under Mesa's software OpenGL. One llvmpipe thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
+# pictures = everything that starts the real app (0.69.0: on Mesa's software Vulkan, lavapipe; until 0.68.1 also its OpenGL, llvmpipe). One thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
 # all of them) and a shared Mesa shader cache (a start no longer rebuilds its shaders): the pictures are the same (the picture guards prove it).
 foreach(t orbit_physics atom_physics blackhole_physics movinggas_physics calc_logic analysis_logic molecule_logic vibration_logic rotation_logic density_logic app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
   if(TEST ${t})
@@ -657,7 +644,7 @@ get_property(pl_all_tests DIRECTORY PROPERTY TESTS)
 foreach(t ${pl_all_tests})
   get_test_property(${t} LABELS pl_lab)
   if(NOT pl_lab STREQUAL "quick")
-    get_test_property(${t} ENVIRONMENT pl_env)             # 0.65.0: a test's own settings kept (gl_vulkan_cards: PL_VK_ONLY=1)
+    get_test_property(${t} ENVIRONMENT pl_env)             # 0.65.0: a test's own settings kept
     if(NOT pl_env)
       set(pl_env "")
     endif()

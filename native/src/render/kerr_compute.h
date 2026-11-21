@@ -1,5 +1,5 @@
-// 0.55.6: the spinning hole's light paths on the graphics card (OpenGL 4.3 compute, double precision): the Black Hole Lab's table (blackhole/spin_sky.h SpinTable)
-// filled by the card instead of the processor. This file only runs the shader (render/shaders.h kKerrTableCS) and moves numbers; what they mean and how they
+// 0.55.6: the spinning hole's light paths on the graphics card (compute, double precision; 0.62.0: on Vulkan, render/vk_blackhole.cpp makeVkKerrCompute): the Black Hole Lab's table (blackhole/spin_sky.h SpinTable)
+// filled by the card instead of the processor. The interface below only runs the shader (render/shaders.h kKerrTableCS) and moves numbers; what they mean and how they
 // are checked is blackhole/spin_card.h. Nothing here waits for the card unless it says so: a pass is queued, done() looks whether it has finished.
 #pragma once
 
@@ -56,15 +56,11 @@ public:
     virtual void edges(const std::vector<double>& par, const std::vector<double>& chi, std::vector<double>& out) = 0;
     // tests: the shader's own double functions at x (8 numbers each: sin, cos, exp(x), log(|x|), atan2(x, 1 - x), acos(x / (1 + |x|)), cbrt(x), |x|^-0.2)
     virtual void math(const std::vector<double>& par, const std::vector<double>& x, std::vector<double>& out) = 0;
-    // 0.62.0 (Vulkan, render/vk_blackhole.h): its pipeline is still being made on a thread of its own (OpenGL's: never)
+    // 0.62.0 (Vulkan, render/vk_blackhole.h): its pipeline is still being made on a thread of its own
     virtual bool building() const { return false; }
 protected:
     int nodes_ = 0;
 };
 
-// The OpenGL 4.3 implementation for the current context, or nullptr (a 3.3 context, a missing function, a shader the driver does not compile); why says
-// which. The caller owns it. steps (0.55.7, may be null): told before and after the compile and the link, with the driver's info logs (also when it compiled).
-// PL_BH_CARDHANG (tests): its fences never signal.
-IKerrCompute* makeKerrCompute(const char** why, KerrSteps* steps = nullptr);
 
 }  // namespace render

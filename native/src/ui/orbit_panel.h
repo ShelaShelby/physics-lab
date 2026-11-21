@@ -45,13 +45,11 @@ struct AppState {
     double startupMs = -1;                 // 0.56.1: from the start of the app to its first finished picture (ms; the benchmark report's head), -1 not yet
     int fitStart = 2;                      // 0.24: the Orbit Lab opens fitted to Neptune's orbit, once per start, this many Orbit Lab frames after the start (the panels' sizes are known by then); 0 done, -1 never (PL_ZOOM)
     double canvasW = 800, canvasH = 600;   // picture size in points (for the Go to zoom levels)
-    int glMajor = 3, glMinor = 3;          // the OpenGL version the window got (0.13 stage 2)
-    bool rocksOk = false;                  // the renderer has the OpenGL 4.3 rock compute object (the Orbit Lab's GPU rocks, 0.13 stage 4); false: the CPU places the rocks
+    int glMajor = 0, glMinor = 0;          // 0 0: Vulkan (app/bench.h's path texts; 0.69.0: Vulkan is the only drawing system)
+    bool rocksOk = false;                  // the renderer has the card's rock compute object (the Orbit Lab's GPU rocks, 0.13 stage 4); false: the CPU places the rocks
     std::string rocksWhy;                  // 0.61.0: on Vulkan, why the rocks are not on the card (no double precision in its shaders, a failed step)
-    bool computeOk = false;                // the renderer has the OpenGL 4.3 compute path (the Atom Lab's GPU superposition and jumps); false: the CPU does that work
+    bool computeOk = false;                // the renderer has the card's compute path (the Atom Lab's GPU superposition and jumps); false: the CPU does that work
     bool vsync = true;                     // wait for the screen's refresh (off: draw as fast as possible, to measure headroom)
-    std::string graphicsInUse = "opengl";  // 0.59.0: what this start draws with ("opengl" / "vulkan"; Settings, Performance, Graphics)
-    std::string vulkanWhy;                 // 0.59.0: why this start uses OpenGL although Vulkan was chosen ("" when it does not)
     std::string vulkanDevice, vulkanDriver;   // 0.59.0: Vulkan's card and driver, as the driver names them
     FrameStats stats;
     std::string powerNote;                 // 0.15 stage 2: app::powerNote() (Windows power throttling asked off), printed in the benchmark report

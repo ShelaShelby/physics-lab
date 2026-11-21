@@ -1,9 +1,9 @@
-// OpenGL 4.3 compute for the 90 % outline (0.13 stage 3): the density grid and the 90 % level on the GPU, and the Slice's plane of density values.
+// Compute on the graphics card for the 90 % outline (0.13 stage 3; 0.61.0: on Vulkan, render/vk_card.cpp makeVkOutlineCompute): the density grid and the 90 % level on the GPU, and the Slice's plane of density values.
 // The first use of an outline (the 64 x 64 x 64 pass, once per orbital) cost about 30 ms on the CPU: 13 ms to evaluate the density in 262,144 cells and 17 ms to sort them to find the 90 % level
 // (measured in stage 3, REPORT.md). Both now run in compute shaders (shaders.h, kOutlineDensityCS and kOutlineLevelCS); the CPU asks, carries on, and takes the answer a frame or two later
-// WITHOUT waiting: a job is started, a fence marks its end, and each frame the CPU only asks "is it done?" (glClientWaitSync with a zero timeout). When it is, the grid is read back ONCE
+// WITHOUT waiting: a job is started, a fence marks its end, and each frame the CPU only asks "is it done?" (a fence looked at without waiting). When it is, the grid is read back ONCE
 // (1 MB, once per orbital) and the CPU builds the outline's lines from it with the same code as before. The Slice's 200 x 200 values are made the same way, one frame late.
-// The C++ functions (outline.cpp) are the reference and the fallback. The types here have no graphics calls, so the atom code and its tests can use them; the OpenGL class is in outline_compute.cpp.
+// The C++ functions (outline.cpp) are the reference and the fallback. The types here have no graphics calls, so the atom code and its tests can use them (0.69.0: OpenGL's class is gone with OpenGL).
 #pragma once
 
 #include <vector>
@@ -25,7 +25,7 @@ enum class JobState { Pending, Done, Failed };      // Failed: unknown job, or t
 class IOutlineCompute {
 public:
     virtual ~IOutlineCompute() {}
-    virtual bool ok() const = 0;                     // false: no OpenGL 4.3 (the CPU path is used)
+    virtual bool ok() const = 0;                     // false: not on the card (the CPU path is used)
     virtual bool waiting() const { return false; }   // 0.63.0: the last begin was 0 only because its guard waits for its turn (asked again next frame, not the CPU)
     // The density on an N x N x N grid over [-half, half]^3 (cell centres at -half + (i + 1/2) h, h = 2 half / N, index (k N + j) N + i for x = i, y = j, z = k), and the level c of the densest
     // cells that hold `target` of the probability: the largest cell value c such that the sum of (value * scale) over the cells with value >= c is >= target (scale = dV / norm).
@@ -38,8 +38,5 @@ public:
     virtual JobState pollPlane(int job, std::vector<float>& values) = 0;
     virtual void cancel(int job) = 0;                // forget a job (its results are never read)
 };
-
-// Makes the OpenGL 4.3 implementation for the current context, or nullptr when there is none (a 3.3 context, a missing function, a shader that does not compile). The caller owns the result.
-IOutlineCompute* makeOutlineCompute();
 
 }  // namespace render

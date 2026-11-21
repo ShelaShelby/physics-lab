@@ -177,16 +177,16 @@ def part_benchrest(binary, work):
     t = report(r)
     check("AT REST" in t and "rest.molecule  busy" in t, "the report's rest table says busy")
 
-# 0.67.0: the Orbit Lab at rest keeps its picture: the kept one is the picture drawn afresh (PL_ORBIT_NOKEEP=1), pixel for pixel, on both APIs; a change at
+# 0.67.0: the Orbit Lab at rest keeps its picture: the kept one is the picture drawn afresh (PL_ORBIT_NOKEEP=1), pixel for pixel (0.69.0: on Vulkan, the only API); a change at
 # rest (a Show switch clicked) is drawn; the benchmark's rest line says it was not drawn anew (this box's processor share is the software renderer's own)
 def part_orbitkeep(binary, work):
     def keepline(r):
         m = re.search(r"PLORBITKEEP kept=(\d+) drawn=(\d+)", r.out)
         return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
-    for api in ("vulkan", "opengl"):
+    for api in ("vulkan",):
         for tag, extra in (("still", {}), ("click", {"PL_SCRIPT": "50:click=show.comets"})):
-            k = run_app(binary, work, f"okeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1", PL_LOG_SHELL=None), frames=90)
-            n = run_app(binary, work, f"onokeep_{api}_{tag}", dict(extra, PL_GRAPHICS=api, PL_NO_MSAA="1", PL_ORBIT_NOKEEP="1"), frames=90)
+            k = run_app(binary, work, f"okeep_{api}_{tag}", dict(extra, PL_NO_MSAA="1", PL_LOG_SHELL=None), frames=90)
+            n = run_app(binary, work, f"onokeep_{api}_{tag}", dict(extra, PL_NO_MSAA="1", PL_ORBIT_NOKEEP="1"), frames=90)
             kept, drawn = keepline(k)
             a, b = Bmp(os.path.join(work, f"okeep_{api}_{tag}.bmp")), Bmp(os.path.join(work, f"onokeep_{api}_{tag}.bmp"))
             diff = sum(1 for y in range(0, 800, 2) for x in range(0, 1280, 2) if a.px(x, y) != b.px(x, y))
@@ -200,7 +200,7 @@ def part_orbitkeep(binary, work):
     # run: the Orbit Lab's picture is kept only once the card's lines are decided (0.68.0) and their helper never started, queued behind the light paths' variant helper that
     # never ended; the second run makes that happen (the lines' helper sleeps: PL_GPU_HANG, limit 2 s) and the picture must be kept once the limit ended it
     for tag, extra in (("defaults", {}), ("lines_helper_hangs", {"PL_GPU_HANG": "lines", "PL_GPU_HELPER_LIMIT": "2"})):
-        r = run_app(binary, work, "b_rest_orbit_" + tag, dict(BENCH, PL_BENCH_ONLY="rest.orbit", PL_GRAPHICS="vulkan", PL_LOG_SHELL=None, PL_NO_GPU_HELPER="0", **extra), frames=100000, size="2560x1369", timeout=900)
+        r = run_app(binary, work, "b_rest_orbit_" + tag, dict(BENCH, PL_BENCH_ONLY="rest.orbit", PL_LOG_SHELL=None, PL_NO_GPU_HELPER="0", **extra), frames=100000, size="2560x1369", timeout=900)
         ln = [l for l in r.out.splitlines() if l.startswith("PLBENCH-REST ")]
         m = re.search(r"redraws=(\d+) .*frames=(\d+)", ln[0]) if ln else None
         check(bool(m) and int(m.group(1)) <= 3 and int(m.group(2)) > 20, f"rest.orbit ({tag}, 2560 x 1369): the picture is not drawn anew at rest ({ln})")

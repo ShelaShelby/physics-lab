@@ -58,7 +58,7 @@ def part_nucglow(binary, work):
     for scene in (30, 2, 3):
         runs = {}
         for tag, extra in (("new", {}), ("old", {"PL_NUC_OLDGLOW": "1"})):
-            env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_GRAPHICS": "vulkan", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": str(scene), "PL_ATOM_BENCHSTOP": "50", "PL_DRAWSTAT": "1"}
+            env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": str(scene), "PL_ATOM_BENCHSTOP": "50", "PL_DRAWSTAT": "1"}
             env.update(extra)
             runs[tag] = run_app(binary, work, f"c_ng{scene}_{tag}", env, frames=60)
         cover = {}
@@ -84,7 +84,7 @@ def part_nucglow(binary, work):
 # failed check leaves the processor's picture (PL_NUCDENS_CARDFAIL)
 def part_nucdens(binary, work):
     from shell_lib import Bmp
-    env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_GRAPHICS": "vulkan", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": "38", "PL_ATOM_BENCHSTOP": "45", "PL_DRAWSTAT": "1"}
+    env = {"PL_NEWUI": "on", "PL_ATOM": "1", "PL_NO_MSAA": "1", "PL_ATOM_BENCHSCENE": "38", "PL_ATOM_BENCHSTOP": "45", "PL_DRAWSTAT": "1"}
     card = run_app(binary, work, "c_nd_card", env, frames=60)
     cpu = run_app(binary, work, "c_nd_cpu", dict(env, PL_VK_CARDFAIL="nucdensity"), frames=60)
     bad = run_app(binary, work, "c_nd_fail", dict(env, PL_NUCDENS_CARDFAIL="1"), frames=60)
@@ -115,7 +115,7 @@ def part_nucdenscard(binary, work):
     import shutil
     home = os.path.join(os.path.abspath(work), "home_ndc"); shutil.rmtree(home, ignore_errors=True); os.makedirs(home, exist_ok=True)
     env = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.nucleus_density", "PL_BENCH_WARMUP": "0.5", "PL_BENCH_MEASURE": "6.0",
-           "PL_GRAPHICS": "vulkan", "PL_NO_GPU_HELPER": "0", "HOME": home}
+           "PL_NO_GPU_HELPER": "0", "HOME": home}
     r = run_app(binary, work, "c_ndcard", env, frames=100000, size="2560x1369", timeout=1800)
     log = ""
     for root, _d, files in os.walk(home):

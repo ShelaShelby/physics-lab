@@ -21,11 +21,12 @@ permissions:
   contents: write
 
 jobs:
-  # 0.13 stage 1: the checks that need Linux tools. Every shader compiled by glslang (the Khronos reference compiler), and the old-way against new-way pictures of the cloud
-  # dots drawn by the real renderer on Mesa's software OpenGL (llvmpipe, through EGL). No Windows build, no release: it only says pass or fail.
+  # 0.13 stage 1: the checks that need Linux tools. Every shader compiled by glslang (the Khronos reference compiler); 0.69.0 (OpenGL removed): the card
+  # programs and the real renderer's pictures on Mesa's software Vulkan (lavapipe, with the validation layers) against the processor's references
+  # (vk_compare_tests; until 0.68.1 gl_compare_tests on Mesa's software OpenGL). No Windows build, no release: it only says pass or fail.
   linux-checks:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,19 +34,19 @@ jobs:
             native
             .github
 
-      - name: Install glslang and software OpenGL
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build glslang-tools libegl-dev libgl1-mesa-dri libegl-mesa0
+      - name: Install glslang and software Vulkan
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build glslang-tools mesa-vulkan-drivers libvulkan1 vulkan-validationlayers
 
-      - name: Configure (CMake, Ninja, no app, with the GL picture test)
-        run: cmake -S native -B build -G Ninja -DPL_BUILD_APP=OFF -DPL_GL_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+      - name: Configure (CMake, Ninja, with the Vulkan card and picture test)
+        run: cmake -S native -B build -G Ninja -DPL_BUILD_APP=ON -DPL_VK_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 
-      - name: Build the picture test
-        run: cmake --build build --target gl_compare_tests
+      - name: Build the card and picture test
+        run: cmake --build build --target vk_compare_tests
 
-      - name: Shader and picture checks
+      - name: Shader, card and picture checks
         env:
           PL_REQUIRE_GLSLANG: "1"
-        run: ctest --test-dir build -R "glsl_shaders|gl_phase_colours" --output-on-failure
+        run: ctest --test-dir build -R "glsl_shaders|vk_cards" --output-on-failure
 
   build:
     runs-on: windows-latest
@@ -62,6 +63,16 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release --parallel
+
+      # 0.69.0 (OpenGL removed): the exe's imported DLLs, printed; the run fails if opengl32.dll is still among them
+      - name: The exe imports no OpenGL
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -find "VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe" | Select-Object -First 1
+          if (-not $vs) { throw "dumpbin.exe not found" }
+          $deps = & $vs /nologo /dependents build/Release/PhysicsLab.exe
+          $deps | Write-Output
+          if ($deps -match "(?i)opengl32") { throw "PhysicsLab.exe still imports opengl32.dll" }
 
       - name: Physics unit tests
         run: ctest --test-dir build -C Release --output-on-failure

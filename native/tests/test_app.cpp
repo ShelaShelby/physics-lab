@@ -648,9 +648,9 @@ static void testBench() {
     BenchScene s2; s2.name = "2. Second"; s2.what = "other settings"; s2.frames = benchStats({20, 20}); s2.cpuAvgMs = 1; s2.gpuAvgMs = -1;
     const std::string t = benchResultText(env, {s1, s2});
     checkTrue("result text: the frames slower than 16.7 ms, for every scene (0.16 stage 3)", t.find("  Worst frame: 20.00 ms\n  Frames slower than 16.7 ms: 2 of 2\n") != std::string::npos);
-    const char* want[] = {"Physics Lab benchmark", "Version: 0.9", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "Graphics: OpenGL 3.3.0 Test", "Driver / vendor: Test Vendor",
+    const char* want[] = {"Physics Lab benchmark", "Version: 0.9", "Date: 2026-10-01 15:30:45", "GPU: Test GPU 9000", "Graphics: Vulkan 3.3.0 Test", "Driver / vendor: Test Vendor",
                           "Window: 1400 x 860 pixels, full screen", "Picture area: 1040 x 713 pixels", "Display refresh rate: 144 Hz", "Text size: xl, theme: paper",
-                          "VSync: off during the scenes, on during the waits and while the labs are left alone. Each scene: 1.3 s warm-up (not counted), then 5.2 s counted.", "GPU timer (GL_TIME_ELAPSED): available", "GPU timer check: reliable, self-check with a known load: timer 3.10 ms, clock 3.20 ms"};
+                          "VSync: off during the scenes, on during the waits and while the labs are left alone. Each scene: 1.3 s warm-up (not counted), then 5.2 s counted.", "GPU timer (Vulkan timestamp queries): available", "GPU timer check: reliable, self-check with a known load: timer 3.10 ms, clock 3.20 ms"};
     std::size_t at = 0;
     bool inOrder = true;
     for (const char* w : want) { const std::size_t p = t.find(w, at); if (p == std::string::npos) { inOrder = false; checkTrue(std::string("result text has: ") + w, false); break; } at = p; }
@@ -663,7 +663,7 @@ static void testBench() {
     BenchEnv none = env; none.gpuTimer = false; none.refreshHz = 0; none.vendor = ""; none.fullscreen = false; none.cancelled = true;
     const std::string t2 = benchResultText(none, {s1});
     checkTrue("unknown things are said to be unknown", t2.find("Display refresh rate: not available") != std::string::npos && t2.find("Driver / vendor: not available") != std::string::npos &&
-                                                      t2.find("GPU timer (GL_TIME_ELAPSED): not available") != std::string::npos && t2.find("not full screen") != std::string::npos && t2.find("THE TEST WAS CANCELLED") != std::string::npos);
+                                                      t2.find("GPU timer (Vulkan timestamp queries): not available") != std::string::npos && t2.find("not full screen") != std::string::npos && t2.find("THE TEST WAS CANCELLED") != std::string::npos);
     checkStr("benchmark file name", benchFileName({2026, 10, 1, 9, 5, 7}), "physics-lab-benchmark-2026-10-01-090507.txt");
 
     // giving everything back: the Atom Lab and the Solar System are copied before, put back after, and come back exactly
@@ -781,12 +781,12 @@ static void testLiveAndGpu() {
     BenchEnv okEnv = env; okEnv.gpuReliable = true;
     BenchScene bad = s; bad.gpuProblem = "only 1 of 4 frames gave a result";
     checkTrue("text: a reliable timer but a bad scene still says not reliable", benchResultText(okEnv, {bad}).find("not reliable (only 1 of 4 frames gave a result)") != std::string::npos);
-    checkTrue("text: it says what the GPU time covers", t.find("up to just before the buffer swap") != std::string::npos);
+    checkTrue("text: it says what the GPU time covers", t.find("up to just before the present") != std::string::npos);
     {   BenchEnv v = env; v.api = "Vulkan"; v.glVersion = "1.4.318, FIFO";   // 0.63.0 (Vulkan step 5): the report says which API ran and what its timer is
         const std::string tv = benchResultText(v, {s});
         checkTrue("text (Vulkan): the Graphics line names Vulkan and its version; the timer is Vulkan's timestamps; what it covers", tv.find("Graphics: Vulkan 1.4.318, FIFO\n") != std::string::npos &&
                   tv.find("GPU timer (Vulkan timestamp queries): ") != std::string::npos && tv.find("the card programs' batches submitted for it, summed; a worker thread's batches") != std::string::npos &&
-                  tv.find("GL_TIME_ELAPSED") == std::string::npos && t.find("Graphics: OpenGL ") != std::string::npos); }
+                  tv.find("GL_TIME_ELAPSED") == std::string::npos && t.find("Graphics: OpenGL") == std::string::npos); }   // (0.69.0: no OpenGL any more)
 
     // the stress belts: scale 1 is the app's normal belts; scale 8 has 8 times the rocks of the same kinds, always the same
     const int64_t day = 1790000000000LL;
@@ -2046,7 +2046,7 @@ static void testGpuGuard() {
         checkTrue("guard (molcloud): kept off with the same program and driver: stays off", !dec.allowed && dec.crashed);
         dec = app::gpuGuardDecide(GpuGuardRecord{"off", mv, d, "the Density cloud's check"}, none, "molcloud 99999999aabbccdd", d);
         checkTrue("guard (molcloud): a changed program: tried once more", dec.allowed && dec.guarded); }
-    {   // 0.59.0: the Vulkan guard (Vulkan step 1, PLAN_VULKAN.md): its own id form "vulkan <app version>" (not read as an older line), and the state "fail":
+    {   // 0.59.0: the Vulkan guard (Vulkan step 1, the Vulkan plan, done in 0.69.0 (git keeps it)): its own id form "vulkan <app version>" (not read as an older line), and the state "fail":
         // a step that returned an error (no crash): off for this id and driver, not called a crash, Try again clears it
         const std::string vv = "vulkan 0.59.0", vd = "any";
         dec = app::gpuGuardDecide(GpuGuardRecord{"ok", vv, vd, ""}, none, vv, vd);
@@ -2206,17 +2206,13 @@ static void testGpuGuard() {
     app::Prefs p; p.gpuPaths = "off | 0.55.7 | x / y | compile";
     checkStr("guard: the settings file's line goes through the settings file unchanged", app::loadPrefs(app::savePrefs(p)).gpuPaths, p.gpuPaths);
     checkTrue("guard: no line when nothing is kept", app::savePrefs(app::Prefs{}).find("gpupaths") == std::string::npos);
-    {   app::Prefs q; q.gpuVulkan = "fail | vulkan 0.59.0 | any | device: x"; q.graphics = "vulkan";   // 0.59.0: Graphics (Settings, Performance) and the Vulkan guard's line
+    {   app::Prefs q; q.gpuVulkan = "fail | vulkan 0.59.0 | any | device: x";   // 0.59.0: the Vulkan guard's line
         const app::Prefs r = app::loadPrefs(app::savePrefs(q));
-        checkTrue("graphics: the choice and the Vulkan guard's line go through the settings file", r.graphics == "vulkan" && r.gpuVulkan == q.gpuVulkan);
-        // 0.63.0 (Vulkan step 5): Vulkan the default, not written; OpenGL written when chosen; a file without the line starts on Vulkan, one with it keeps it
-        checkTrue("graphics: Vulkan is the default and is not written", app::Prefs{}.graphics == "vulkan" && app::savePrefs(app::Prefs{}).find("graphics") == std::string::npos &&
-                  app::savePrefs(app::Prefs{}).find("gpuvulkan") == std::string::npos);
-        app::Prefs o; o.graphics = "opengl";
-        checkTrue("graphics: OpenGL (the backup) is written when chosen and read back", app::savePrefs(o).find("graphics=opengl\n") != std::string::npos && app::loadPrefs(app::savePrefs(o)).graphics == "opengl");
-        checkTrue("graphics: a file without the line starts on Vulkan; graphics=vulkan and graphics=opengl are kept", app::loadPrefs("units=metric\n").graphics == "vulkan" &&
-                  app::loadPrefs("graphics=vulkan\n").graphics == "vulkan" && app::loadPrefs("graphics=opengl\n").graphics == "opengl");
-        checkTrue("graphics: an unknown value is ignored", app::loadPrefs("graphics=directx\n").graphics == "vulkan"); }
+        checkTrue("graphics: the Vulkan guard's line goes through the settings file", r.gpuVulkan == q.gpuVulkan);
+        // 0.69.0: OpenGL is gone: no graphics= line is written, and an old file's line (opengl or vulkan) is read and ignored, the rest of the file kept
+        checkTrue("graphics: no graphics line is written", app::savePrefs(app::Prefs{}).find("graphics") == std::string::npos && app::savePrefs(app::Prefs{}).find("gpuvulkan") == std::string::npos);
+        const app::Prefs old = app::loadPrefs("graphics=opengl\nunits=imperial\n");
+        checkTrue("graphics: an old file's graphics=opengl is read and ignored (the next line kept, nothing written back)", old.units == "imperial" && app::savePrefs(old).find("graphics") == std::string::npos); }
 }
 
 // 0.65.0: the Slice of a Dirac state made four attempts at a time (atom/dirac_cloud.h diracPlaneDots) gives the same dots and leaves the generator in the

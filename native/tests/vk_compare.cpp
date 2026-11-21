@@ -1,16 +1,16 @@
-// 0.13 stage 1: the pictures of the old and the new phase-colour path, drawn by the REAL renderer (src/render/renderer2d.cpp and its shaders) on Mesa's software OpenGL
-// (llvmpipe, through EGL, no window and no graphics card), and compared pixel by pixel. Built only with -DPL_GL_TESTS=ON (needs libEGL and Mesa's llvmpipe).
+// 0.13 stage 1: the pictures of the old and the new phase-colour path, drawn by the REAL renderer (src/render/renderer2d.cpp and its shaders), and compared
+// pixel by pixel; 0.69.0 (OpenGL removed): on Vulkan (Mesa's software Vulkan, lavapipe, no window: the app's renderer2d_vk.cpp and vk_draw2d.cpp with the
+// same shaders as SPIR-V, one sample), and the card programs as the renderer makes them on Vulkan (until 0.68.1 gl_compare_tests, on Mesa's OpenGL).
+// Built with -DPL_VK_TESTS=ON in a build that has the app (the Vulkan headers, volk and the SPIR-V come with it).
 //
 // What is compared: the dots layer of the cloud (the dots of the benchmark's scenes 8, 9 and 10, built by the very functions the app uses: cloud_dots.h), drawn
 // (a) the 0.12 way, every dot carrying its colour (GPU colours Off), and (b) the 0.13 way, every dot carrying its colour index and the vertex shader picking the colour
-// (GPU colours On). Also: the 24 wheel colours and the two Sign colours as flat squares, and soft (Glow) dots, on a dark and a light page.
+// (GPU colours On). Also: the 24 wheel colours and the two Sign colours as flat squares, and soft (Glow) dots, on a dark and a light page; the card
+// programs (groups, outline, rocks, the chart's mesh) against the processor's references, and a renderer without card programs (the processor's paths).
 // What is NOT in these pictures: the axes, the legend ring, the outline and the text (they are drawn the same way in both paths).
-// Not a speed test: llvmpipe is the CPU pretending to be a graphics card.
+// Not a speed test: lavapipe is the CPU pretending to be a graphics card. The validation layers are on whenever installed: any error fails the run.
 //
-// Usage: gl_compare_tests [output folder]   (writes cpu_*.png, gpu_*.png, diff_*.png, side_*.png there). Exit 0 if every comparison is within its limit.
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-
+// Usage: vk_compare_tests [output folder]   (writes cpu_*.png, gpu_*.png, diff_*.png, side_*.png there). Exit 0 if every comparison is within its limit.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -29,6 +29,8 @@
 #include "atom/cloud_light.h"
 #include "atom/outline.h"
 #include "render/group_compute.h"
+#include "render/vk_card.h"
+#include "render/vk_draw2d.h"
 #include "render/outline_compute.h"
 #include "render/renderer2d.h"
 #include "orbit/belt_layer.h"
@@ -42,29 +44,7 @@
 #include "app/gpu_guard.h"
 #include "orbit/solar_system.h"
 
-// ---- the GL functions, from EGL (the app gets them from SDL: render/gl_loader.cpp) ----
-namespace plgl {
-#define PL_GL_DEFINE(ret, name, args) PFN_##name name = nullptr;
-PL_GL_FUNCTIONS(PL_GL_DEFINE)
-PL_GL43_FUNCTIONS(PL_GL_DEFINE)
-#undef PL_GL_DEFINE
-bool loadGL43(const char** missing) {
-#define PL_GL_LOAD(ret, name, args)                                                  \
-    name = reinterpret_cast<PFN_##name>(eglGetProcAddress(#name));                    \
-    if (!name) { if (missing) *missing = #name; return false; }
-    PL_GL43_FUNCTIONS(PL_GL_LOAD)
-#undef PL_GL_LOAD
-    return true;
-}
-bool loadGL(const char** missing) {
-#define PL_GL_LOAD(ret, name, args)                                                  \
-    name = reinterpret_cast<PFN_##name>(eglGetProcAddress(#name));                    \
-    if (!name) { if (missing) *missing = #name; return false; }
-    PL_GL_FUNCTIONS(PL_GL_LOAD)
-#undef PL_GL_LOAD
-    return true;
-}
-}  // namespace plgl
+#include "vk_ctx.inc"   // 0.69.0: the Vulkan device (vkt::Ctx)
 
 using namespace atom;
 using render::Color;
@@ -115,34 +95,63 @@ struct Picture {
     int w, h;
     std::vector<unsigned char> px;      // RGBA, top row first
 };
-static GLuint g_fbo = 0, g_tex = 0;
-static int g_fw = 0, g_fh = 0;
-
+// 0.69.0: the picture drawn by Vulkan (the app's Renderer2D::endVulkan, one sample, as the window's frame) and copied out as the window gets it
+// (VkDraw2D::copyTo: its rows turned over), then read back: RGBA, top row first
+static vkt::Ctx g_vk;
+static render::VkDraw2D* g_d2 = nullptr;
 static Picture draw1(render::Renderer2D& R, int w, int h, Color bg, const std::function<void()>& draw) {
-    using namespace plgl;
-    if (!g_fbo || g_fw != w || g_fh != h) {
-        if (!g_fbo) { glGenFramebuffers(1, &g_fbo); glGenTextures(1, &g_tex); }
-        g_fw = w; g_fh = h;
-        glBindTexture(GL_TEXTURE_2D, g_tex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glBindFramebuffer(GL_FRAMEBUFFER, g_fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_tex, 0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
     R.begin(w, h);
     R.rect(0, 0, w, h, bg);
     draw();
-    glEnable(GL_BLEND);
-    R.end(w, h, 0, g_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, g_fbo);
-    Picture s{w, h, std::vector<unsigned char>(std::size_t(w) * h * 4)};
-    std::vector<unsigned char> bottomUp(s.px.size());
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, bottomUp.data());
-    for (int y = 0; y < h; y++) std::memcpy(&s.px[std::size_t(y) * w * 4], &bottomUp[std::size_t(h - 1 - y) * w * 4], std::size_t(w) * 4);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    Picture s{w, h, std::vector<unsigned char>(std::size_t(w) * h * 4, 0)};
+    if (!g_d2) { check("a Vulkan picture can be drawn", false); return s; }
+    const VkDevice dev = g_vk.dev;
+    VkImageCreateInfo ii{};
+    ii.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ii.imageType = VK_IMAGE_TYPE_2D;
+    ii.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ii.extent = {std::uint32_t(w), std::uint32_t(h), 1};
+    ii.mipLevels = 1; ii.arrayLayers = 1; ii.samples = VK_SAMPLE_COUNT_1_BIT; ii.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ii.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    VkImage img = VK_NULL_HANDLE;
+    VkDeviceMemory mem = VK_NULL_HANDLE, hmem = VK_NULL_HANDLE;
+    VkBuffer buf = VK_NULL_HANDLE;
+    const auto type = [&](std::uint32_t bits, VkMemoryPropertyFlags f) { for (std::uint32_t k = 0; k < g_vk.c.mem.memoryTypeCount; k++) if ((bits >> k & 1u) && (g_vk.c.mem.memoryTypes[k].propertyFlags & f) == f) return k; return ~0u; };
+    bool ok = vkCreateImage(dev, &ii, nullptr, &img) == VK_SUCCESS;
+    if (ok) {
+        VkMemoryRequirements r{}; vkGetImageMemoryRequirements(dev, img, &r);
+        VkMemoryAllocateInfo ai{}; ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; ai.allocationSize = r.size; ai.memoryTypeIndex = type(r.memoryTypeBits, 0);
+        ok = vkAllocateMemory(dev, &ai, nullptr, &mem) == VK_SUCCESS && vkBindImageMemory(dev, img, mem, 0) == VK_SUCCESS;
+    }
+    if (ok) {
+        VkBufferCreateInfo bi{}; bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO; bi.size = VkDeviceSize(w) * VkDeviceSize(h) * 4; bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        ok = vkCreateBuffer(dev, &bi, nullptr, &buf) == VK_SUCCESS;
+        VkMemoryRequirements r{}; if (ok) vkGetBufferMemoryRequirements(dev, buf, &r);
+        VkMemoryAllocateInfo ai{}; ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; ai.allocationSize = r.size;
+        ai.memoryTypeIndex = type(r.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        ok = ok && vkAllocateMemory(dev, &ai, nullptr, &hmem) == VK_SUCCESS && vkBindBufferMemory(dev, buf, hmem, 0) == VK_SUCCESS;
+    }
+    if (ok) ok = g_vk.c.once([&](VkCommandBuffer cmd) {
+        const float clear[4] = {0, 0, 0, 0};
+        g_d2->beginFrame(0, 1, cmd);
+        R.endVulkan(w, h, clear, false);
+        const VkClearColorValue cv{{0.0f, 0.0f, 0.0f, 0.0f}};
+        g_d2->copyTo(cmd, img, cv, 0, 0, w, h);
+        render::vkImageBarrier2(cmd, img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+        VkBufferImageCopy cp{};
+        cp.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+        cp.imageExtent = {std::uint32_t(w), std::uint32_t(h), 1};
+        vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buf, 1, &cp);
+        render::vkMemoryBarrier2(cmd, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
+    });
+    void* p = nullptr;
+    if (ok && !g_d2->failed() && vkMapMemory(dev, hmem, 0, VK_WHOLE_SIZE, 0, &p) == VK_SUCCESS) { std::memcpy(s.px.data(), p, s.px.size()); vkUnmapMemory(dev, hmem); }
+    else check("a Vulkan picture is drawn and read back", false);
+    if (buf) vkDestroyBuffer(dev, buf, nullptr);
+    if (hmem) vkFreeMemory(dev, hmem, nullptr);
+    if (img) vkDestroyImage(dev, img, nullptr);
+    if (mem) vkFreeMemory(dev, mem, nullptr);
     return s;
 }
 
@@ -320,7 +329,7 @@ static void glowDots(render::Renderer2D& R, const std::string& dir) {           
 }
 
 
-// ================= 0.13 stage 2: the superposition and the jump on the GPU (compute shaders, OpenGL 4.3) =================
+// ================= 0.13 stage 2: the superposition and the jump on the GPU (compute shaders; 0.69.0: Vulkan's) =================
 // The CPU functions (AtomLab::superGroup, AtomLab::jumpGroups) are the reference. Every dot's shown / hidden decision and its colour group come from the GPU in 32-bit floats; they may
 // differ from the 64-bit CPU numbers ONLY for a dot that is within float rounding of a threshold (its thinning odds against its fixed random number, or a colour-bin edge). Each differing
 // dot is checked against a bound worked out here from the dot's own numbers; any other difference is a failure.
@@ -427,11 +436,11 @@ static Picture groupPicture(render::Renderer2D& R, AtomLab& L, const std::vector
     return draw1(R, 1040, 713, light ? Color{1, 1, 1, 1} : render::hexColor("#1e1e21"), [&] { R.blobsPalette(B.data(), int(B.size()), false, dc.palette()); });
 }
 
-static Picture g_cpuSuper14;                                               // scene 14 at beat 0 drawn from CPU groups on the 4.3 context, for the fallback test
+static Picture g_cpuSuper14;                                               // scene 14 at beat 0 drawn from CPU groups by the card renderer, for the fallback test
 
 static void gpuSuperScenes(render::Renderer2D& R, const std::string& dir) {
     render::IGroupCompute* gc = R.compute();
-    check("OpenGL 4.3 context: the renderer made a compute object", gc != nullptr && gc->ok());
+    check("Vulkan: the renderer made a compute object", gc != nullptr && gc->ok());
     if (!gc) return;
     struct Sc { int which; const char* name; };
     const Sc list[] = {{10, "scene 13 2p z + 2p x"}, {11, "scene 14 2p x + 2p m+1 (overlap)"}, {12, "scene 15 2p z + 3d z2 (beats)"}};
@@ -535,7 +544,7 @@ static void gpuEdgeCases(render::Renderer2D& R) {
     }
 }
 
-// ================= 0.13 stage 3: the 90 % outline on the GPU (compute shaders, OpenGL 4.3) =================
+// ================= 0.13 stage 3: the 90 % outline on the GPU (compute shaders; 0.69.0: Vulkan's) =================
 // The CPU functions (outlineGridCpu, outlineLevelCpu, outlinePlaneCpu, outlineFromGrid) are the reference. The GPU's density grid may differ from the CPU's only within float rounding; the 90 % level it
 // finds must be the right level FOR ITS OWN GRID (the enclosed probability of the cells at or above it is 0.9 to the float sum's accuracy, and the next higher cell value encloses less), and must agree
 // with the CPU's level to 1e-4 relative; the Slice's plane likewise. Jobs are polled the way the app does it (never blocking); here the test just keeps asking, with a short sleep.
@@ -620,7 +629,7 @@ static AtomLab* outlineLab(AtomLab& L, const char* shell, const char* axKey, con
     return &L;
 }
 
-static Picture g_cpuOutline2p;                                              // 2p z, Cloud 3D, the CPU outline, on the 4.3 context: for the fallback test
+static Picture g_cpuOutline2p;                                              // 2p z, Cloud 3D, the CPU outline, by the card renderer: for the fallback test
 
 static void gpuOutlinePictures(render::Renderer2D& R, const std::string& dir) {
     render::IOutlineCompute* oc = R.outlineCompute();
@@ -664,7 +673,7 @@ static void gpuOutlinePictures(render::Renderer2D& R, const std::string& dir) {
 
 static void gpuOutlineGrids(render::Renderer2D& R) {
     render::IOutlineCompute* oc = R.outlineCompute();
-    check("OpenGL 4.3 context: the renderer made an outline compute object", oc != nullptr && oc->ok());
+    check("Vulkan: the renderer made an outline compute object", oc != nullptr && oc->ok());
     if (!oc) return;
     const int orbs[] = {orbIndex("4f|z3"), orbIndex("2p|z"), orbIndex("3d|z2"), complexState(orbIndex("4f"), 3), orbIndex("3s"), orbIndex("1s"), orbIndex("2p|x")};
     for (const int orb : orbs) {
@@ -801,32 +810,22 @@ static void gpuJumpScenes(render::Renderer2D& R, const std::string& dir) {
     }
 }
 
-// the PC without OpenGL 4.3: a context that says 3.3 (Mesa's version override); the renderer must start, have no compute object, and the CPU path must be what draws, with the same picture
 namespace rk {
 using namespace orbit;
 #include "rock_reference.h"
 }
-#include "gl_rocks.inc"   // 0.13 stage 4 part A: the Orbit Lab's rocks on the GPU
-#include "gl_chart.inc"   // 0.13 stage 4 part B: the chart of nuclides from the retained mesh
-#ifdef PL_VK_TESTS
-#include "gl_vulkan.inc"  // 0.61.0: the card programs on Vulkan (lavapipe) against the processor and against OpenGL's
-#endif
+#include "vk_rocks.inc"   // 0.13 stage 4 part A: the Orbit Lab's rocks on the GPU
+#include "vk_chart.inc"   // 0.13 stage 4 part B: the chart of nuclides from the retained mesh
+#include "vk_cards.inc"   // 0.61.0: the card programs on Vulkan (lavapipe) against the processor
 
-static void fallback33(EGLDisplay dpy, EGLConfig cfg, EGLSurface surf, const std::string& dir) {
-    setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 1); setenv("MESA_GLSL_VERSION_OVERRIDE", "330", 1);
-    const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE};
-    EGLContext ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctxAttr);
-    if (ctx == EGL_NO_CONTEXT || !eglMakeCurrent(dpy, surf, surf, ctx)) { check("a 3.3 context can be made", false); return; }
-    g_fbo = g_tex = 0; g_fw = g_fh = 0;                                     // the picture's framebuffer belonged to the other context
-    const char* missing = nullptr;
-    check("3.3 context: the 3.3 functions load", plgl::loadGL(&missing));
-    GLint maj = 0, min = 0;
-    plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
-    std::printf("fallback context: OpenGL %d.%d (%s)\n", maj, min, plgl::glGetString(GL_VERSION));
-    check("3.3 context: it really reports 3.3 (not 4.3 or more)", maj == 3 && min == 3);
+// 0.69.0 (was the OpenGL 3.3 context: a PC without OpenGL 4.3's compute shaders): a renderer on Vulkan without the card programs (a start whose card
+// programs could not be made, or PL_NO_COMPUTE): every card path is the processor's, the pictures the same as the card renderer's processor-path pictures
+static void fallback33(const std::string& dir) {
     render::Renderer2D R33;
-    check("3.3 context: the renderer starts (nothing crashes, no shader error)", R33.init());
-    check("3.3 context: there is no compute object, so the CPU path is used", R33.compute() == nullptr);
+    std::string why;
+    R33.useVulkan(g_d2);
+    check("no card programs: the renderer starts on Vulkan and has its maps (" + why + ")", g_d2 && R33.loadMapsVulkan(why));
+    check("no card programs: there is no compute object, so the CPU path is used", R33.compute() == nullptr);
     AtomLab L;
     benchSetup(L, 11, 1040, 713);
     L.s.beatT = 0;
@@ -835,22 +834,22 @@ static void fallback33(EGLDisplay dpy, EGLConfig cfg, EGLSurface surf, const std
     const GroupsBy used = fillGroups(L, R33.compute(), cnt, viaFill.data());
     const double theta = L.beatTheta();
     for (long i = 0; i < cnt; i++) cpu[std::size_t(i)] = (unsigned char)L.superGroup(i, theta);
-    check("3.3 context: fillGroups used the CPU path", used == GroupsBy::Cpu);
-    check("3.3 context: its groups are exactly the CPU reference's", viaFill == cpu);
+    check("no card programs: fillGroups used the CPU path", used == GroupsBy::Cpu);
+    check("no card programs: its groups are exactly the CPU reference's", viaFill == cpu);
     const Picture p33 = groupPicture(R33, L, viaFill, false);
-    if (g_cpuSuper14.px.empty()) check("scene 14 picture from the 4.3 context was kept", false);
-    else report(dir, "3.3 fallback scene 14 beat 0 against the 4.3 context's CPU-groups picture", g_cpuSuper14, p33, 0);
+    if (g_cpuSuper14.px.empty()) check("scene 14 picture from the card renderer was kept", false);
+    else report(dir, "no card programs: scene 14 beat 0 against the card renderer's CPU-groups picture", g_cpuSuper14, p33, 0);
     gpuRocksFallback33(R33, dir);
     chartFallback33(R33, dir);
-    // the switch: on a 4.3 context with gpuCompute off the CPU is used too (tested with a stand-in object that must not be called)
+    // the switch: with the card programs and gpuCompute off the CPU is used too (tested with a stand-in object that must not be called)
     struct Never : render::IGroupCompute { bool ok() const override { return true; } bool superGroups(const float*, long, std::uint64_t, long, long, const render::SuperGroupParams&, unsigned char*) override { called = true; return false; }
                                            bool jumpGroups(const float*, const float*, long, std::uint64_t, const render::JumpGroupParams&, unsigned char*) override { called = true; return false; } bool called = false; } never;
     L.gpuCompute = false;
     check("GPU superposition switch Off: the CPU path is used and the compute object is not called", fillGroups(L, &never, cnt, viaFill.data()) == GroupsBy::Cpu && !never.called && viaFill == cpu);
     L.gpuCompute = true;
     check("a compute object that fails (returns false) falls back to the CPU result", fillGroups(L, &never, cnt, viaFill.data()) == GroupsBy::Cpu && never.called && viaFill == cpu);
-    // 0.13 stage 3: the outline on the 3.3 context: no compute object, the CPU path at once (a picture with an outline on the first frame), the same outline and the same picture
-    check("3.3 context: there is no outline compute object either", R33.outlineCompute() == nullptr);
+    // 0.13 stage 3: the outline without the card programs: no compute object, the CPU path at once (a picture with an outline on the first frame), the same outline and the same picture
+    check("no card programs: there is no outline compute object either", R33.outlineCompute() == nullptr);
     setOutlineCompute(R33.outlineCompute());
     {
         AtomLab Lo;
@@ -858,40 +857,37 @@ static void fallback33(EGLDisplay dpy, EGLConfig cfg, EGLSurface surf, const std
         const int fo = Lo.outlineStateId();
         clearOutlineCache();
         const Outline* o = outlineReady(fo, true);
-        check("3.3 context: outlineReady returns the CPU outline at once (never blank)", o != nullptr);
+        check("no card programs: outlineReady returns the CPU outline at once (never blank)", o != nullptr);
         clearOutlineCache();
         const Outline ref = outlineOf(fo);
-        check("3.3 context: it is the CPU's outline", o != nullptr && o->c == ref.c && o->mass == ref.mass && o->rmax == ref.rmax && o->wire.size() == ref.wire.size());
-        if (o && !g_cpuOutline2p.px.empty()) report(dir, "3.3 fallback outline 2p z Cloud 3D against the 4.3 context's CPU-outline picture", g_cpuOutline2p, outlinePicture(R33, Lo, *o, nullptr, false), 0);
+        check("no card programs: it is the CPU's outline", o != nullptr && o->c == ref.c && o->mass == ref.mass && o->rmax == ref.rmax && o->wire.size() == ref.wire.size());
+        if (o && !g_cpuOutline2p.px.empty()) report(dir, "no card programs: outline 2p z Cloud 3D against the card renderer's CPU-outline picture", g_cpuOutline2p, outlinePicture(R33, Lo, *o, nullptr, false), 0);
         clearOutlineCache();
     }
     setOutlineCompute(nullptr);
-    R33.shutdown();
+    R33.useVulkan(nullptr);
 }
 
 int main(int argc, char** argv) {
     const std::string dir = argc > 1 ? argv[1] : "";
-    setenv("EGL_PLATFORM", "surfaceless", 0);
-    setenv("LIBGL_ALWAYS_SOFTWARE", "1", 0);
-    EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    EGLint maj = 0, min = 0;
-    if (!eglInitialize(dpy, &maj, &min)) { std::printf("cannot start EGL (is Mesa's llvmpipe installed?)\n"); return 2; }
-    eglBindAPI(EGL_OPENGL_API);
-    const EGLint cfgAttr[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8, EGL_NONE};
-    EGLConfig cfg; EGLint n = 0;
-    if (!eglChooseConfig(dpy, cfgAttr, &cfg, 1, &n) || n < 1) { std::printf("no EGL config\n"); return 2; }
-    const EGLint pbAttr[] = {EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE};
-    EGLSurface surf = eglCreatePbufferSurface(dpy, cfg, pbAttr);
-    const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 4, EGL_CONTEXT_MINOR_VERSION, 3, EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_NONE};   // 0.13 stage 2: ask for 4.3
-    EGLContext ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctxAttr);
-    if (ctx == EGL_NO_CONTEXT || !eglMakeCurrent(dpy, surf, surf, ctx)) { std::printf("no OpenGL 4.3 core context\n"); return 2; }
-    const char* missing = nullptr;
-    if (!plgl::loadGL(&missing)) { std::printf("missing GL function %s\n", missing); return 2; }
-    std::printf("OpenGL: %s | %s | %s\n", plgl::glGetString(GL_VENDOR), plgl::glGetString(GL_RENDERER), plgl::glGetString(GL_VERSION));
+    app::gpuGuardFrameThread();                                        // (the card programs' steps run on this thread, in turn)
+    std::string why;
+    const bool up = vkt::start(g_vk, why);
+    check("Vulkan: a device (Mesa's lavapipe here) with a graphics and compute queue (" + why + ")", up);
+    if (!up) { std::printf("%d Vulkan checks, %d failed\n", g_checks, g_failed); return 2; }
+    render::VkDraw2D d2;
+    render::VkCards cards;
     render::Renderer2D R;
-    if (!R.init()) { std::printf("the renderer did not start (shader error above)\n"); return 2; }
-    const bool vkOnly = std::getenv("PL_VK_ONLY") != nullptr;          // 0.64.0: the Vulkan part alone (a quicker run by hand)
-    if (!vkOnly) {
+    // the app's start (render/vk_backend.cpp initPicture, initCards), one sample (the pictures of the checks were OpenGL's one-sample framebuffers)
+    check("Vulkan: the renderer's pipelines are made (" + why + ")", d2.init(g_vk.c, VK_FORMAT_R8G8B8A8_UNORM, 1, why));
+    g_d2 = &d2;
+    R.useVulkan(&d2);
+    check("Vulkan: the renderer's maps are made (" + why + ")", R.loadMapsVulkan(why));
+    check("Vulkan: the card programs' engine starts (" + why + ")", cards.init(g_vk.c, &d2, g_vk.f64, why));
+    std::vector<std::string> cardsWhy;
+    R.useVulkanCards(&cards, &cardsWhy);
+    for (const std::string& w : cardsWhy) std::printf("card program not made: %s\n", w.c_str());
+    std::printf("Vulkan renderer: %s, double precision in shaders: %s\n", d2.samplesText().c_str(), g_vk.f64 ? "yes" : "no");
     swatches(R, dir);
     scenes(R, dir);
     glowDots(R, dir);
@@ -907,12 +903,17 @@ int main(int argc, char** argv) {
     gpuRocksPictures(R, dir);
     chartPictures(R, dir);
     chartShaderRules(R);
-    }
-#ifdef PL_VK_TESTS
-    vulkanTwins(R);
-#endif
-    R.shutdown();
-    if (!vkOnly) fallback33(dpy, cfg, surf, dir);
-    std::printf("%d GL checks, %d failed\n", g_checks, g_failed);
+    fallback33(dir);
+    vkDeviceWaitIdle(g_vk.dev);
+    R.useVulkan(nullptr);                                              // (the card programs' objects deleted before the device)
+    cards.collect();
+    cards.destroy();
+    d2.destroy();
+    g_d2 = nullptr;
+    vkt::stop(g_vk);
+    vulkanTwins();                                                     // the card programs made one by one on a device of their own, against the processor
+    std::printf("Vulkan validation: %d errors in all\n", vkt::g_errors);
+    check("Vulkan: zero validation errors in the whole run", vkt::g_errors == 0);
+    std::printf("%d Vulkan checks, %d failed\n", g_checks, g_failed);
     return g_failed ? 1 : 0;
 }

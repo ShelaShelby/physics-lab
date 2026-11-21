@@ -1,4 +1,4 @@
-// 0.59.0: Vulkan, step 1 of 5 (render/vk_backend.h, native/PLAN_VULKAN.md)
+// 0.59.0: Vulkan, step 1 of 5 (render/vk_backend.h, the Vulkan plan, done in 0.69.0 (git keeps it))
 #include "app/frame_cost.h"
 #include "render/vk_backend.h"
 
@@ -71,6 +71,7 @@ std::string driverVersionText(uint32_t vendor, uint32_t v) {
     else std::snprintf(b, sizeof b, "%u.%u.%u", VK_API_VERSION_MAJOR(v), VK_API_VERSION_MINOR(v), VK_API_VERSION_PATCH(v));
     return b;
 }
+const std::string kNeeded = "Vulkan 1.3, or 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2";   // 0.69.0 (owner decision 20 Nov 2026)
 std::string versionText(uint32_t v) { return std::to_string(VK_API_VERSION_MAJOR(v)) + "." + std::to_string(VK_API_VERSION_MINOR(v)) + "." + std::to_string(VK_API_VERSION_PATCH(v)); }
 const char* typeName(VkPhysicalDeviceType t) {
     switch (t) {
@@ -117,7 +118,7 @@ struct VkBackend::Impl {
     VkPhysicalDeviceMemoryProperties mem{};
     VkDraw2D* d2 = nullptr;                    // 0.60.0: the labs' pictures (initPicture)
     VkCards* cards = nullptr;                  // 0.61.0: the card programs (initCards)
-    bool float64 = false, computeQueue = false, sync2 = false;
+    bool float64 = false, computeQueue = false, sync2 = false, khr12 = false;   // (0.69.0: khr12: a Vulkan 1.2 card with the two extensions)
     VkDevCtx ctx;
     // 0.63.0: the benchmark's timer (benchTimer): kBenchSlots frames in flight, two timestamps each, then two for benchLoad
     static constexpr int kBenchSlots = 8;
@@ -217,12 +218,13 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     volkInitializeCustom(gipa);
     uint32_t loaderVersion = VK_API_VERSION_1_0;
     if (vkEnumerateInstanceVersion && vkEnumerateInstanceVersion(&loaderVersion) != VK_SUCCESS) loaderVersion = VK_API_VERSION_1_0;
-    // 0.62.0 (owner decision 18 Nov 2026): Vulkan 1.3 is needed (dynamic rendering, synchronization2: the Black Hole Lab's passes), 1.4 is asked for
-    // where the loader has it; a card below 1.3 is not used (the app starts on OpenGL and Settings says why)
+    // 0.62.0 (owner decision 18 Nov 2026): dynamic rendering and synchronization2 are needed (the Black Hole Lab's passes, and since 0.63.0 every pass);
+    // 0.69.0 (owner decision 20 Nov 2026): Vulkan 1.3 or 1.4 (asked for where the loader has it), or 1.2 with VK_KHR_dynamic_rendering and
+    // VK_KHR_synchronization2 (the card's extensions, queried below); below that the app says what is needed (main.cpp noVulkan)
     d.apiVersion = std::min<uint32_t>(VK_MAKE_API_VERSION(0, VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion), 0), VK_API_VERSION_1_4);
-    if (d.apiVersion < VK_API_VERSION_1_3)
+    if (d.apiVersion < VK_API_VERSION_1_2)
         return fail("instance", "this PC's Vulkan loader offers Vulkan " + std::to_string(VK_API_VERSION_MAJOR(loaderVersion)) + "." + std::to_string(VK_API_VERSION_MINOR(loaderVersion)) +
-                                "; Physics Lab needs 1.3");
+                                "; Physics Lab needs " + kNeeded);
     std::vector<const char*> exts;
     {
         Uint32 n = 0;
@@ -293,8 +295,10 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     // PL_VK_PRETEND_API=1.2 (tests): every card is taken to offer that version, as an older driver would
     uint32_t pretend = 0;
     if (const char* pa = std::getenv("PL_VK_PRETEND_API")) { unsigned ma = 0, mi = 0; if (std::sscanf(pa, "%u.%u", &ma, &mi) == 2) pretend = VK_MAKE_API_VERSION(0, ma, mi, 0); }
-    std::string oldCard;                                                  // the newest version a card below 1.3 offers (the reason when no card is left)
+    std::string oldCard;                                                  // the newest version a card that cannot be used offers (the reason when no card is left)
     uint32_t oldVersion = 0;
+    bool oldKhr[2] = {false, false};                                      // 0.69.0: that card's VK_KHR_dynamic_rendering, VK_KHR_synchronization2
+    bool bestKhr = false;                                                 // the chosen card is a 1.2 one, with the two extensions
     for (std::size_t i = 0; i < devs.size(); i++) {
         VkPhysicalDeviceProperties p{};
         vkGetPhysicalDeviceProperties(devs[i], &p);
@@ -308,25 +312,34 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
             if ((qf[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) && vkGetPhysicalDeviceSurfaceSupportKHR(devs[i], q, d.surface, &present) == VK_SUCCESS && present == VK_TRUE) family = static_cast<int>(q);
         }
         uint32_t ne = 0;
-        bool swap = false;
+        bool swap = false, khrDr = false, khrS2 = false;
         if (vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, nullptr) == VK_SUCCESS) {
             std::vector<VkExtensionProperties> de(ne);
             if (vkEnumerateDeviceExtensionProperties(devs[i], nullptr, &ne, de.data()) >= 0)
-                for (uint32_t k = 0; k < ne; k++) if (std::strcmp(de[k].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0) swap = true;
+                for (uint32_t k = 0; k < ne; k++) {
+                    if (std::strcmp(de[k].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0) swap = true;
+                    if (std::strcmp(de[k].extensionName, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) == 0) khrDr = true;
+                    if (std::strcmp(de[k].extensionName, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME) == 0) khrS2 = true;
+                }
         }
+        if (const char* nx = std::getenv("PL_VK_PRETEND_NOEXT")) { if (std::strstr(nx, "dynamic_rendering")) khrDr = false; if (std::strstr(nx, "synchronization2")) khrS2 = false; }   // (tests)
         const uint32_t api = pretend ? pretend : p.apiVersion;
-        const bool new13 = VK_MAKE_API_VERSION(0, VK_API_VERSION_MAJOR(api), VK_API_VERSION_MINOR(api), 0) >= VK_API_VERSION_1_3;
-        const bool usable = family >= 0 && swap && new13;
-        if (!new13 && family >= 0 && swap && api >= oldVersion) { oldVersion = api; oldCard = p.deviceName; }
+        const uint32_t apiMm = VK_MAKE_API_VERSION(0, VK_API_VERSION_MAJOR(api), VK_API_VERSION_MINOR(api), 0);
+        const bool new13 = apiMm >= VK_API_VERSION_1_3;
+        const bool khr12 = !new13 && apiMm >= VK_API_VERSION_1_2 && d.apiVersion >= VK_API_VERSION_1_2 && khrDr && khrS2;   // 0.69.0: 1.2 with the two extensions
+        const bool usable = family >= 0 && swap && (new13 || khr12);
+        if (!usable && family >= 0 && swap && api >= oldVersion) { oldVersion = api; oldCard = p.deviceName; oldKhr[0] = khrDr; oldKhr[1] = khrS2; }
         guard.log(std::string("card ") + std::to_string(i) + ": " + p.deviceName + " (" + typeName(p.deviceType) + ", Vulkan " + versionText(api) + (pretend ? " (PL_VK_PRETEND_API)" : "") +
-                  ", driver " + driverVersionText(p.vendorID, p.driverVersion) + ")" +
-                  (usable ? "" : family < 0 ? ": cannot draw on this window" : !swap ? ": no swapchain" : ": below Vulkan 1.3, not used"));
-        if (usable && typeScore(p.deviceType) > bestScore) { best = static_cast<int>(i); bestScore = typeScore(p.deviceType); bestFamily = static_cast<uint32_t>(family); }
+                  ", driver " + driverVersionText(p.vendorID, p.driverVersion) + (new13 ? "" : std::string(", VK_KHR_dynamic_rendering ") + (khrDr ? "yes" : "no") + ", VK_KHR_synchronization2 " + (khrS2 ? "yes" : "no")) + ")" +
+                  (usable ? (khr12 ? ": Vulkan 1.2 with the two extensions" : "") : family < 0 ? ": cannot draw on this window" : !swap ? ": no swapchain" : ": cannot be used (" + kNeeded + ")"));
+        if (usable && typeScore(p.deviceType) > bestScore) { best = static_cast<int>(i); bestScore = typeScore(p.deviceType); bestFamily = static_cast<uint32_t>(family); bestKhr = khr12; }
     }
     if (forced("device")) return fail("device", "made to fail on purpose (PL_VK_FAIL=device)");
     if (best < 0 && !oldCard.empty())
         return fail("device", "this graphics card offers Vulkan " + std::to_string(VK_API_VERSION_MAJOR(oldVersion)) + "." + std::to_string(VK_API_VERSION_MINOR(oldVersion)) +
-                              "; Physics Lab needs 1.3 (" + oldCard + ")");
+                              (VK_API_VERSION_MINOR(oldVersion) == 2 && VK_API_VERSION_MAJOR(oldVersion) == 1 ? std::string(oldKhr[0] ? "" : " without VK_KHR_dynamic_rendering") +
+                                   (oldKhr[1] ? "" : (oldKhr[0] ? " without" : " and") + std::string(" VK_KHR_synchronization2")) : std::string()) +
+                              "; Physics Lab needs " + kNeeded + " (" + oldCard + ")");
     if (best < 0) return fail("device", nDev ? "no graphics card here can draw on this window with Vulkan" : "the Vulkan driver lists no graphics card");
     d.phys = devs[static_cast<std::size_t>(best)];
     d.family = bestFamily;
@@ -353,7 +366,8 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     qi.queueFamilyIndex = d.family;
     qi.queueCount = 1;
     qi.pQueuePriorities = &prio;
-    const char* devExts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    const char* devExts[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME};
+    const uint32_t nDevExts = bestKhr ? 3u : 1u;                         // 0.69.0: the two extensions only on a 1.2 card (where they are present)
     // 0.61.0 (step 3): double precision in shaders where the card has it (the belts' rocks: kRocksCS); PL_VK_NO_FLOAT64 (tests) pretends it has not
     VkPhysicalDeviceFeatures feat{}, want{};
     vkGetPhysicalDeviceFeatures(d.phys, &feat);
@@ -366,32 +380,47 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
         vkGetPhysicalDeviceQueueFamilyProperties(d.phys, &nq, qf.data());
         d.computeQueue = d.family < nq && (qf[d.family].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
     }
-    // 0.62.0: Vulkan 1.3's dynamic rendering and synchronization2 (the Black Hole Lab's passes, render/vk_blackhole.cpp), as queried
-    VkPhysicalDeviceVulkan13Features have13{};
-    have13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    // 0.62.0: Vulkan 1.3's dynamic rendering and synchronization2 (the Black Hole Lab's passes, render/vk_blackhole.cpp), as queried; 0.69.0: on a 1.2
+    // card the same two features from their extensions (VK_KHR_dynamic_rendering, VK_KHR_synchronization2: their own feature structures, queried)
+    VkPhysicalDeviceVulkan13Features have13{}, want13{};
+    have13.sType = want13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+    VkPhysicalDeviceDynamicRenderingFeaturesKHR haveDr{}, wantDr{};
+    haveDr.sType = wantDr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+    VkPhysicalDeviceSynchronization2FeaturesKHR haveS2{}, wantS2{};
+    haveS2.sType = wantS2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
     VkPhysicalDeviceFeatures2 f2{};
     f2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    f2.pNext = &have13;
+    if (bestKhr) { haveDr.pNext = &haveS2; f2.pNext = &haveDr; }
+    else f2.pNext = &have13;
     vkGetPhysicalDeviceFeatures2(d.phys, &f2);
-    if (!have13.dynamicRendering || !have13.synchronization2) return fail("device", "this graphics card's Vulkan 1.3 lacks dynamic rendering or synchronization2");
-    VkPhysicalDeviceVulkan13Features want13{};
-    want13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-    want13.dynamicRendering = VK_TRUE;
-    want13.synchronization2 = VK_TRUE;
+    const bool dr = bestKhr ? haveDr.dynamicRendering == VK_TRUE : have13.dynamicRendering == VK_TRUE;
+    const bool s2 = bestKhr ? haveS2.synchronization2 == VK_TRUE : have13.synchronization2 == VK_TRUE;
+    if (!dr || !s2) return fail("device", std::string("this graphics card's Vulkan ") + (bestKhr ? "1.2 extensions do" : "1.3 does") + " not offer dynamic rendering or synchronization2");
+    void* featChain = nullptr;
+    if (bestKhr) { wantDr.dynamicRendering = VK_TRUE; wantS2.synchronization2 = VK_TRUE; wantDr.pNext = &wantS2; featChain = &wantDr; }
+    else { want13.dynamicRendering = VK_TRUE; want13.synchronization2 = VK_TRUE; featChain = &want13; }
     d.sync2 = true;
+    d.khr12 = bestKhr;
     VkDeviceCreateInfo di{};
-    di.pNext = &want13;
+    di.pNext = featChain;
     di.pEnabledFeatures = &want;
     di.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     di.queueCreateInfoCount = 1;
     di.pQueueCreateInfos = &qi;
-    di.enabledExtensionCount = 1;
+    di.enabledExtensionCount = nDevExts;
     di.ppEnabledExtensionNames = devExts;
     if (!d.check(vkCreateDevice(d.phys, &di, nullptr, &d.device), "vkCreateDevice")) { d.device = VK_NULL_HANDLE; return fail("device", d.lastFailure); }
     volkLoadDevice(d.device);
+    if (bestKhr) {                                     // 0.69.0: on 1.2 the extensions' functions (their KHR names) in the core names' places, which every pass calls
+        vkCmdBeginRendering = vkCmdBeginRenderingKHR; vkCmdEndRendering = vkCmdEndRenderingKHR;
+        vkCmdPipelineBarrier2 = vkCmdPipelineBarrier2KHR; vkQueueSubmit2 = vkQueueSubmit2KHR; vkCmdWriteTimestamp2 = vkCmdWriteTimestamp2KHR;
+        vkCmdSetEvent2 = vkCmdSetEvent2KHR; vkCmdResetEvent2 = vkCmdResetEvent2KHR; vkCmdWaitEvents2 = vkCmdWaitEvents2KHR;
+        if (!vkCmdBeginRendering || !vkCmdEndRendering || !vkCmdPipelineBarrier2 || !vkQueueSubmit2 || !vkCmdWriteTimestamp2)
+            return fail("device", "this graphics card's driver lists VK_KHR_dynamic_rendering and VK_KHR_synchronization2 but not their functions");
+    }
     vkGetDeviceQueue(d.device, d.family, 0, &d.queue);
     guard.end("device", deviceName_ + ", driver " + driverText_ + ", Vulkan " + apiText_ + " (the card's; asked for " + versionText(d.apiVersion) +
-                        ", dynamic rendering and synchronization2 on), queue family " + std::to_string(d.family) +
+                        (bestKhr ? ", dynamic rendering and synchronization2 on from VK_KHR_dynamic_rendering and VK_KHR_synchronization2" : ", dynamic rendering and synchronization2 on") + "), queue family " + std::to_string(d.family) +
                         (d.computeQueue ? " (graphics and compute)" : " (graphics; no compute)") + ", double precision in shaders (shaderFloat64): " +
                         (d.float64 ? "yes" : feat.shaderFloat64 ? "switched off (PL_VK_NO_FLOAT64)" : "no"));
 
@@ -399,8 +428,10 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     guard.begin("swapchain");
     VkSurfaceCapabilitiesKHR caps{};
     if (!d.check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(d.phys, d.surface, &caps), "vkGetPhysicalDeviceSurfaceCapabilitiesKHR")) return fail("swapchain", d.lastFailure);
-    d.extraUsage = (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0;
-    const VkFormat wantFormats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};   // not *_SRGB: the colours go to the screen as written, as the OpenGL path's
+    // 0.69.0: the lab's picture is copied in by a blit (its rows turned over; present.frag is gone), so the window's images take transfers: queried
+    if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) return fail("swapchain", "the window's images cannot be written by a copy (no TRANSFER_DST usage)");
+    d.extraUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | ((caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ? VK_IMAGE_USAGE_TRANSFER_SRC_BIT : 0);
+    const VkFormat wantFormats[] = {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};   // not *_SRGB: the colours go to the screen as written
     d.wd.Surface = d.surface;
     d.wd.SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(d.phys, d.surface, wantFormats, 2, VK_COLORSPACE_SRGB_NONLINEAR_KHR);
     if (d.wd.SurfaceFormat.format != VK_FORMAT_B8G8R8A8_UNORM && d.wd.SurfaceFormat.format != VK_FORMAT_R8G8B8A8_UNORM)
@@ -413,7 +444,7 @@ bool VkBackend::init(SDL_Window* window, app::GpuGuard& guard, const Options& o,
     presentText_ = Impl::presentName(d.wd.PresentMode);
     guard.end("swapchain", std::to_string(d.wd.Width) + " x " + std::to_string(d.wd.Height) + ", " + std::to_string(d.wd.ImageCount) + " images, " +
               (d.wd.SurfaceFormat.format == VK_FORMAT_B8G8R8A8_UNORM ? "B8G8R8A8_UNORM" : "R8G8B8A8_UNORM") + ", " + presentText_ +
-              (d.extraUsage ? ", can be read back" : ", cannot be read back (no screenshots)"));
+              ((d.extraUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ? ", can be read back" : ", cannot be read back (no screenshots)"));
 
     // ---- pipelines: Dear ImGui's (its own SPIR-V) and ours (render/vk/fill.*) ----
     guard.begin("pipelines");
@@ -626,14 +657,19 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     }
     VkClearValue cv{};
     for (int i = 0; i < 4; i++) cv.color.float32[i] = clear[i];
-    // 0.63.0 (step 5): dynamic rendering into the swapchain's image (synchronization2): from the acquire (its semaphore waits at the colour output stage)
-    vkImageBarrier2(fd.CommandBuffer, fd.Backbuffer, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
-                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
+    const int x0 = std::clamp(px, 0, wd.Width), y0 = std::clamp(py, 0, wd.Height), x1 = std::clamp(px + pw, 0, wd.Width), y1 = std::clamp(py + ph, 0, wd.Height);
+    static const bool noCopy = std::getenv("PL_VK_NOCOPY") != nullptr;   // 0.61.0 (measuring only): the picture is drawn but not copied into the window
+    const bool copy = pictured && x1 > x0 && y1 > y0 && !noCopy;
+    // 0.63.0 (step 5): dynamic rendering into the swapchain's image (synchronization2): from the acquire (its semaphore waits at the colour output stage).
+    // 0.69.0: with a picture: the image cleared and the picture copied in by transfers first (VkDraw2D::copyTo), then the pass loads them
+    if (copy) d.d2->copyTo(fd.CommandBuffer, fd.Backbuffer, cv.color, x0, y0, x1 - x0, y1 - y0);
+    else vkImageBarrier2(fd.CommandBuffer, fd.Backbuffer, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+                         VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT);
     VkRenderingAttachmentInfo at{};
     at.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
     at.imageView = fd.BackbufferView;
     at.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    at.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    at.loadOp = copy ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
     at.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     at.clearValue = cv;
     VkRenderingInfo rinfo{};
@@ -643,10 +679,7 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     rinfo.colorAttachmentCount = 1;
     rinfo.pColorAttachments = &at;
     vkCmdBeginRendering(fd.CommandBuffer, &rinfo);
-    const int x0 = std::clamp(px, 0, wd.Width), y0 = std::clamp(py, 0, wd.Height), x1 = std::clamp(px + pw, 0, wd.Width), y1 = std::clamp(py + ph, 0, wd.Height);
-    static const bool noCopy = std::getenv("PL_VK_NOCOPY") != nullptr;   // 0.61.0 (measuring only): the picture is drawn but not copied into the window
-    if (pictured && x1 > x0 && y1 > y0 && !noCopy) d.d2->present(fd.CommandBuffer, x0, y0, x1 - x0, y1 - y0);   // 0.60.0: the lab's picture
-    else if (d.fill && x1 > x0 && y1 > y0) {                              // the picture area without a picture (the theme's background)
+    if (!copy && !(pictured && noCopy) && d.fill && x1 > x0 && y1 > y0) {                              // the picture area without a picture (the theme's background)
         VkViewport vp{0.0f, 0.0f, static_cast<float>(wd.Width), static_cast<float>(wd.Height), 0.0f, 1.0f};
         VkRect2D sc{{x0, y0}, {static_cast<uint32_t>(x1 - x0), static_cast<uint32_t>(y1 - y0)}};
         vkCmdBindPipeline(fd.CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, d.fill);
@@ -873,7 +906,7 @@ static void unpack(const uint8_t* src, int w, int h, bool bgra, int channels, st
 
 bool VkBackend::readback(std::vector<uint8_t>& rgba, int& w, int& h) {
     Impl& d = *d_;
-    if (!d.drewFrame || !d.extraUsage) return false;
+    if (!d.drewFrame || !(d.extraUsage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) return false;
     w = d.wd.Width; h = d.wd.Height;
     app::FrameCostLabel label("the window's picture read back (a screenshot, the benchmark's own check)");
     app::FrameCostSpan span(app::FrameCostKind::Readback);   // (0.63.1: the frame read back: the benchmark's own checks)
@@ -920,7 +953,7 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
     ii.arrayLayers = 1;
     ii.samples = VK_SAMPLE_COUNT_1_BIT;
     ii.tiling = VK_IMAGE_TILING_OPTIMAL;
-    ii.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    ii.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;   // (0.69.0: DST: the picture's copy)
     ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     ok = d.check(vkCreateImage(d.device, &ii, nullptr, &image), "vkCreateImage (picture)");
     if (ok) {
@@ -960,13 +993,14 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         }
         VkClearValue cv{};
         for (int i = 0; i < 4; i++) cv.color.float32[i] = clear[i];
-        barrier(cmd, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        if (pictured) d.d2->copyTo(cmd, image, cv.color, 0, 0, w, h);    // 0.69.0: cleared and the picture copied in (as the window's frame), then loaded
+        else barrier(cmd, image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
         VkRenderingAttachmentInfo at{};
         at.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         at.imageView = view;
         at.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        at.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        at.loadOp = pictured ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
         at.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         at.clearValue = cv;
         VkRenderingInfo ri{};
@@ -976,7 +1010,6 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
         ri.colorAttachmentCount = 1;
         ri.pColorAttachments = &at;
         vkCmdBeginRendering(cmd, &ri);
-        if (pictured) d.d2->present(cmd, 0, 0, w, h);
         if (dd) ImGui_ImplVulkan_RenderDrawData(dd, cmd);
         vkCmdEndRendering(cmd);
         if (timeIt) vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, tq + 1);

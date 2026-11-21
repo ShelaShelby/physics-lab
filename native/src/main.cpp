@@ -1,7 +1,7 @@
 #include <chrono>
 // Physics Lab: the app's start, the window, the frame loop and the input.
 //
-// One window: the Orbit Lab picture on the left (drawn with OpenGL 3.3), the controls on
+// One window: the lab's picture (drawn with Vulkan: render/vk_backend.h, render/renderer2d.h), the controls on
 // the right (Dear ImGui). The physics runs in fixed steps of 1/240 s of real time, like
 
 #include <SDL3/SDL.h>
@@ -25,13 +25,11 @@
 #include "app/bench.h"
 #include "app/frame_time.h"
 #include "imgui.h"
-#include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl3.h"
 #include "orbit/lines_check.h"
 #include "molecule/surface_check.h"
 #include "orbit/format.h"
 #include "orbit/units.h"
-#include "render/gl_loader.h"
 #include "render/renderer2d.h"
 #include "render/vk_backend.h"
 #include "render/vk_card.h"
@@ -70,22 +68,13 @@ namespace {
 
 #include "ui/icon_data.inc"      // kIconRgba: the window icon (64 x 64)
 
-SDL_Window* createWindow(float scale, bool multisample, const app::WindowState& ws, bool gl43, bool vulkan) {   // gl43: ask for an OpenGL 4.3 core context (0.13 stage 2: compute shaders), else 3.3; 0.59.0: vulkan: a Vulkan window
-    if (!vulkan) {
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, gl43 ? 4 : 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, multisample ? 1 : 0);   // smooth edges on lines and dots
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, multisample ? 4 : 0);
-    }
+SDL_Window* createWindow(float scale, const app::WindowState& ws) {   // 0.59.0: a Vulkan window (0.69.0: the only kind)
     const std::string title = std::string("Physics Lab ") + ui::appVersion() + " — Orbit Lab";
     int w = static_cast<int>(1400 * scale), h = static_cast<int>(860 * scale);          // the first time: 1400 × 860 points
     if (ws.w > 0) { w = ws.w; h = ws.h; }                                              // later: where it was (window-system units)
     if (const char* wh = SDL_getenv("PL_WINDOW")) { int a = 0, b = 0; if (std::sscanf(wh, "%dx%d", &a, &b) == 2) { w = static_cast<int>(a * scale); h = static_cast<int>(b * scale); } }   // for automatic checks: PL_WINDOW=1000x640
     return SDL_CreateWindow(title.c_str(), w, h,
-                            (vulkan ? SDL_WINDOW_VULKAN : SDL_WINDOW_OPENGL) | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+                            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY);
 }
 
 // line breaks at about 70 characters (not every message box wraps long lines by itself)
@@ -143,6 +132,51 @@ const char* const kDriverAdvice =
 
 }  // namespace
 
+namespace {
+// 0.69.0: Vulkan could not start (a step failed now, or its guard switched it off after it stopped the app): one window names what Physics Lab needs and
+// what this PC has (why: the step's own words), with Try again (the guard's: its kept record forgotten, then the app starts anew) and Close. The app then
+// ends with exit code 1, its settings kept. PL_NOVULKAN_ANSWER=close / again (checks): no window; the text is printed (PLNOVULKAN) and the answer
+// taken as given (again: the record forgotten and saved, no new start).
+int noVulkan(ui::AppState& app, const std::string& why, char** argv) {
+    const std::string text =
+        "Physics Lab draws everything with Vulkan, and Vulkan could not start on this PC.\n\n"
+        "Needed: a graphics driver with Vulkan 1.3 or newer, or Vulkan 1.2 with the extensions VK_KHR_dynamic_rendering and VK_KHR_synchronization2.\n\n"
+        "This PC: " + (why.empty() ? std::string("no reason was given") : why) + "\n\nWhat to try:\n" + kDriverAdvice +
+        "\n\nTry again: Vulkan's start is tried once more (the app starts anew). The log of Vulkan's start, " + std::string(app::GpuGuard::kLog) +
+        ", is in the folder of the settings file.";
+    std::printf("PLNOVULKAN %s\n", why.c_str());
+    std::fflush(stdout);
+    int button = 0;                                     // 0 Close, 1 Try again
+    const char* answer = SDL_getenv("PL_NOVULKAN_ANSWER");
+    if (answer || SDL_getenv("PL_EXIT_AFTER_FRAMES") || SDL_getenv("PL_EXIT_AFTER_SECONDS")) {   // (an automatic check: no window waiting for a click)
+        button = answer && std::string(answer) == "again" ? 1 : 0;
+        std::string one = text;                         // (one line: the checks read it)
+        for (char& ch : one) if (ch == '\n') ch = ' ';
+        std::printf("PLNOVULKANTEXT %s\n", one.c_str());
+    } else {
+        const SDL_MessageBoxButtonData buttons[2] = {{SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Close"}, {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Try again"}};
+        SDL_MessageBoxData box{};
+        box.flags = SDL_MESSAGEBOX_ERROR;
+        box.title = "Physics Lab needs Vulkan";
+        const std::string wrapped = wrap70(text);
+        box.message = wrapped.c_str();
+        box.numbuttons = 2;
+        box.buttons = buttons;
+        if (!SDL_ShowMessageBox(&box, &button)) button = 0;
+    }
+    std::printf("PLNOVULKANANSWER %s\n", button == 1 ? "again" : "close");
+    if (button == 1) {
+        app::gpuVulkanGuard().tryAgain();
+        ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+        if (!answer && argv && argv[0]) {   // the app starts anew (its own path and arguments); this one ends
+            if (SDL_Process* p = SDL_CreateProcess(argv, false)) SDL_DestroyProcess(p);
+        }
+    }
+    SDL_Quit();
+    return 1;
+}
+}  // namespace
+
 static const std::chrono::steady_clock::time_point g_appStart = std::chrono::steady_clock::now();   // 0.56.1: the start of the app (static initialisation, before main), for the start-up time
 static double g_viewMs = 0;   // (PL_TIMESTAT)
 // 0.66.0 (PL_SECTSTAT, measuring in development): the frame thread's time in the frame's parts, averaged over 60 frames, printed as PLSECTSTAT
@@ -167,7 +201,7 @@ void sectMark(int i) {   // the part i ends now (the next part starts)
 }
 }  // namespace
 // 0.67.0: the Orbit Lab at rest keeps its picture: while OrbitView::pictureKey (and the picture's place, scale, grey choice and the font's texture) stay the
-// same, the picture is not drawn again (Renderer2D::keepLast: Vulkan shows the window's kept picture; OpenGL draws the kept lists again, without the work of
+// same, the picture is not drawn again (Renderer2D::keepLast: Vulkan shows the window's kept picture; Save image draws the kept lists again, without the work of
 // making them) and its labels are the kept vertices of the last drawing. PL_ORBIT_NOKEEP=1 (checks): always drawn, to compare.
 namespace {
 struct OrbitKeep {
@@ -241,51 +275,57 @@ int main(int argc, char** argv) {
     app::WindowState start;                             // size 0: the default
     if (app.prefs.window) start = app::fitWindow(*app.prefs.window, screens);
     IMGUI_CHECKVERSION();
-    ImGui::CreateContext();                             // (0.59.0: before the window: Vulkan's start makes Dear ImGui's Vulkan pipeline, and falls back to OpenGL if it cannot)
-    // 0.59.0: Vulkan, step 1 of 5 (PLAN_VULKAN.md): Settings, Performance, Graphics (the settings line "graphics="; PL_GRAPHICS=vulkan / opengl for tests).
-    // Each step of Vulkan's start is guarded (app/gpu_guard.h gpuVulkanGuard, log lines "[vulkan] ..."): a step that fails or crashes is kept, and the app
-    // starts on OpenGL (this start too, when a step fails). Vulkan never stops the app from starting.
-    if (const char* g = SDL_getenv("PL_GRAPHICS")) if (std::string(g) == "vulkan" || std::string(g) == "opengl") app.prefs.graphics = g;
+    ImGui::CreateContext();                             // (0.59.0: before the window: Vulkan's start makes Dear ImGui's Vulkan pipeline)
+    // 0.59.0: Vulkan's start, each step guarded (app/gpu_guard.h gpuVulkanGuard, log lines "[vulkan] ..."): a step that fails or crashes is kept.
+    // 0.69.0: Vulkan is the only drawing system (OpenGL is gone): when Vulkan cannot start, or its guard switched it off after a crash, one window says
+    // what is needed and what this PC has, with Try again (the guard's), and the app ends (noVulkan below). PL_VK_FAIL=<step> (checks): that step fails.
     SDL_Window* window = nullptr;
-    SDL_GLContext gl = nullptr;
     render::VkBackend vk;
     render::Renderer2D renderer;                        // (0.60.0: before Vulkan's start, whose last steps make the labs' pictures on Vulkan)
     bool useVulkan = false;
+    std::string vulkanWhy;
     app::gpuGuardSetApp(ui::appVersion());               // 0.63.1: each marker names the app version that wrote it
-    if (app.prefs.graphics == "vulkan") {
+    {
         app::GpuGuard& V = app::gpuVulkanGuard();
         V.start(ui::settingsFolder(), std::string("vulkan ") + ui::appVersion(), "any", app.prefs.gpuVulkan,
                 {std::string("Physics Lab ") + ui::appVersion() + ": the log of Vulkan's start and of the graphics card's paths; overwritten at each start",
-                 "Graphics: Vulkan (the default; OpenGL the backup): its own guard, its lines start [vulkan]"});
-        if (!V.allowed()) app.vulkanWhy = V.offText();
-        else if (!(window = createWindow(scale, false, start, false, true))) { V.failed("window", std::string("SDL_CreateWindow: ") + SDL_GetError()); app.vulkanWhy = V.offText(); }
+                 "Graphics: Vulkan (the only drawing system): its own guard, its lines start [vulkan]"});
+        if (!V.allowed()) vulkanWhy = V.offText();
+        else if (!(window = createWindow(scale, start))) { V.failed("window", std::string("SDL_CreateWindow: ") + SDL_GetError()); vulkanWhy = V.offText(); }
         else {
             render::VkBackend::Options o;
             o.validation = SDL_getenv("PL_VK_VALIDATION") != nullptr;
             if (const char* f = SDL_getenv("PL_VK_FAIL")) o.failAt = f;   // for automatic checks: that step fails, as on a PC whose driver says no
             std::string why;
             // 0.60.0 (step 2): then the labs' pictures (renderer2d on Vulkan: its pipelines, the maps, a start-up check of a tiny known picture), guarded too;
-            // PL_NO_MSAA (checks): one sample, on OpenGL too; PL_VK_CHECK=break (checks): the start-up check's picture drawn wrong on purpose
+            // PL_NO_MSAA (checks): one sample; PL_VK_CHECK=break (checks): the start-up check's picture drawn wrong on purpose
             const char* chk = SDL_getenv("PL_VK_CHECK");
             if (vk.init(window, V, o, why) && vk.initPicture(renderer, !SDL_getenv("PL_NO_MSAA"), chk && std::string(chk) == "break", why)) useVulkan = true;
-            else { renderer.useVulkan(nullptr); vk.shutdown(); SDL_DestroyWindow(window); window = nullptr; app.vulkanWhy = V.offText().empty() ? why : V.offText(); }
+            else { renderer.useVulkan(nullptr); vk.shutdown(); SDL_DestroyWindow(window); window = nullptr; vulkanWhy = why.empty() ? V.offText() : why; }
         }
-        if (!useVulkan) { V.log("This start uses OpenGL: " + app.vulkanWhy); app::gpuGuard().appendToLog(); }
+        if (!useVulkan) { V.log("Vulkan could not start: " + vulkanWhy); app::gpuGuard().appendToLog(); }
         if (V.saved() != app.prefs.gpuVulkan) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);   // kept at once (a crash later must not lose it)
         else V.settingsWritten();
     }
-    app.graphicsInUse = useVulkan ? "vulkan" : "opengl";
-    if (useVulkan) {
+    if (!useVulkan) return noVulkan(app, vulkanWhy, argv);
+    {
         app.vulkanDevice = vk.deviceName(); app.vulkanDriver = vk.driverText();
         std::printf("Vulkan: %s | driver %s | Vulkan %s | %s\n", vk.deviceName().c_str(), vk.driverText().c_str(), vk.apiText().c_str(), vk.presentText().c_str());
         std::printf("Vulkan picture: %s\n", vk.pictureText().c_str());   // 0.60.0
         // 0.61.0 (step 3): the card programs on Vulkan, each under a guard of its own (their markers, the settings lines "gpuvk<name>=", the log's lines
         // "[vulkan] [<name>] "): the groups, the outline, the rocks and the Glow dots are made now; the Slice, the jump and the Density cloud by their labs'
-        // paths when first shown, as on OpenGL. A program that fails takes the processor's path; the rest of Vulkan stays on.
-        app::useVulkanGuards(true);
+        // paths when first shown. A program that fails takes the processor's path; the rest of Vulkan stays on.
         bool cardsChanged = false;
+        // (0.69.0, checks: PL_GPU_DRIVER another driver's text, PL_GPU_SHADER / SKYSHADER / SLICESHADER / JUMPSHADER / MOLSHADER another program's text,
+        // as the OpenGL guards had them)
+        const std::map<std::string, const char*> fakeShader = {{"lightpaths", "PL_GPU_SHADER"}, {"sky", "PL_GPU_SKYSHADER"}, {"slice", "PL_GPU_SLICESHADER"},
+                                                              {"jump", "PL_GPU_JUMPSHADER"}, {"molcloud", "PL_GPU_MOLSHADER"}};
+        const char* fakeDriver = SDL_getenv("PL_GPU_DRIVER");
         for (const auto& [name, g] : app::vulkanCardGuards()) {
-            g->start(ui::settingsFolder(), render::vkCardVersion(name), vk.deviceName() + " / " + vk.driverText(), app.prefs.gpuVk[name], {});
+            const auto fs = fakeShader.find(name);
+            const char* fake = fs != fakeShader.end() ? SDL_getenv(fs->second) : nullptr;
+            g->start(ui::settingsFolder(), fake ? std::string("vulkan ") + fake : render::vkCardVersion(name), fakeDriver ? std::string(fakeDriver) : vk.deviceName() + " / " + vk.driverText(),
+                     app.prefs.gpuVk[name], {});
             cardsChanged = cardsChanged || g->saved() != app.prefs.gpuVk[name];
         }
         if (cardsChanged) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);   // kept at once (a crash later must not lose it)
@@ -311,28 +351,13 @@ int main(int argc, char** argv) {
         std::vector<std::string> cardsWhy;
         vk.initCards(renderer, cardsWhy);
         for (const std::string& w : cardsWhy) { app::gpuVulkanGuard().log("card program on the processor: " + w); std::printf("Vulkan card program on the processor: %s\n", w.c_str()); }
-        if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // (as on OpenGL: the processor's paths, to compare)
+        if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // (checks: the processor's paths, to compare)
         app.glMajor = 0; app.glMinor = 0;                             // (0: Vulkan, app/bench.h computePathText)
         app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr; app.rocksWhy = renderer.rocksWhy();
         atom::setOutlineCompute(renderer.outlineCompute());
         std::printf("Vulkan card programs: %zu bytes of SPIR-V; double precision in shaders: %s\n", vk.cardSpirvBytes(), vk.float64() ? "yes" : "no");
         std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(0, 0, app.computeOk, true).c_str());
         std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(0, 0, app.rocksOk, true, app.rocksWhy).c_str());
-    } else {
-        // 0.13 stage 2: first ask for OpenGL 4.3 (the Atom Lab's superposition and jumps then run on the GPU), with smooth edges, then without them; if the PC cannot give 4.3, the same two tries
-        // for 3.3 as before (and the CPU does that work).
-        for (const bool want43 : {true, false}) {
-            for (const bool multisample : {true, false}) {
-                if (multisample && SDL_getenv("PL_NO_MSAA")) continue;   // 0.60.0 (checks): one sample, to compare with Vulkan's pictures pixel for pixel
-                window = createWindow(scale, multisample, start, want43, false);
-                gl = window ? SDL_GL_CreateContext(window) : nullptr;
-                if (gl) break;
-                if (window) { SDL_DestroyWindow(window); window = nullptr; }
-            }
-            if (gl) break;
-        }
-        if (SDL_getenv("PL_FAKE_GLFAIL")) { if (gl) SDL_GL_DestroyContext(gl); gl = nullptr; if (window) SDL_DestroyWindow(window); window = nullptr; }   // for automatic checks: pretend OpenGL is missing
-        if (!window || !gl) { fail("Could not open an OpenGL 3.3 window", "Physics Lab draws with OpenGL 3.3 (3D graphics), and your computer did not give it a window to draw in. This usually means the graphics driver is too old, or missing.", kDriverAdvice); return 1; }
     }
     if (const char* c = SDL_getenv("PL_ATOM_CARD")) if (std::string(c) == "0") { app.atom.gpuSlice = false; app.atom.gpuJump = false; }   // 0.57.0 (tests: the processor for both, to compare)
     if (const char* c = SDL_getenv("PL_MOL_CARD")) if (std::string(c) == "0") app.moleculeView.gpuCloud = false;   // 0.57.1 (tests: the processor's Density cloud, to compare)
@@ -340,66 +365,11 @@ int main(int argc, char** argv) {
         SDL_SetWindowIcon(window, icon);
         SDL_DestroySurface(icon);
     }
-    if (!useVulkan) {
-        SDL_GL_MakeCurrent(window, gl);
-        SDL_GL_SetSwapInterval(1);                      // vsync: smooth, and no wasted work (Vulkan: FIFO, render/vk_backend.cpp)
-    }
     if (start.w > 0 && start.hasPos) SDL_SetWindowPosition(window, start.x, start.y);
     else SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);   // the first time, or the saved place is off every screen now
     SDL_ShowWindow(window);
     Uint64 maximizeUntil = 0;                           // the window system maximises a moment later: do not record the old state meanwhile
     if (start.w > 0 && start.maximized) { SDL_MaximizeWindow(window); maximizeUntil = SDL_GetTicks() + 1500; }
-
-    if (!useVulkan) {
-        const char* missing = nullptr;
-        if (!plgl::loadGL(&missing)) { std::fprintf(stderr, "OpenGL function missing: %s\n", missing); fail("OpenGL 3.3 is not available", "Physics Lab needs OpenGL 3.3 (3D graphics), and your graphics driver does not offer all of it.", kDriverAdvice); return 1; }
-        std::printf("OpenGL: %s | %s\n", plgl::glGetString(GL_VERSION), plgl::glGetString(GL_RENDERER));
-        if (!renderer.init()) { fail("Could not set up the OpenGL shaders", "Your graphics driver started, but would not accept the drawing programs Physics Lab sends it.", kDriverAdvice); return 1; }
-        if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // for the owner and automatic checks: run the CPU path even on a PC that has OpenGL 4.3
-        {   // 0.55.7: the guard round the graphics card's light paths and their log (app/gpu_guard.h), beside the settings file; a marker left by the last run
-            // switches the path off before anything of it runs; the settings file keeps that at once
-            const auto str = [](GLenum e) { const char* t = reinterpret_cast<const char*>(plgl::glGetString(e)); return std::string(t ? t : "?"); };
-            const std::string vendor = str(GL_VENDOR), gpu = str(GL_RENDERER), version = str(GL_VERSION), glsl = str(0x8B8C /* GL_SHADING_LANGUAGE_VERSION */);
-            const bool fp64 = SDL_GL_ExtensionSupported("GL_ARB_gpu_shader_fp64");
-            GLint maj = 0, min = 0;
-            plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
-            const std::vector<std::string> head = {
-                std::string("Physics Lab ") + ui::appVersion() + ": the log of the graphics card's light paths (the Black Hole Lab's spinning hole); overwritten at each start",
-                "GPU: " + gpu, "Vendor: " + vendor, "OpenGL: " + version + " (context " + std::to_string(maj) + "." + std::to_string(min) + ")", "GLSL: " + glsl,
-                std::string("Double precision (GL_ARB_gpu_shader_fp64): ") + (fp64 ? "reported" : "NOT reported") + (maj >= 4 ? " (core in OpenGL 4.0 and later)" : "")};
-            const char* fakeDriver = SDL_getenv("PL_GPU_DRIVER");          // (tests: another driver's version string)
-            // 0.55.9: the guard keeps the light-path shader's own text (its hash) in place of the app version: a new app version alone does not try again
-            const char* fakeShader = SDL_getenv("PL_GPU_SHADER");          // (tests: another shader's text)
-            app::gpuGuard().start(ui::settingsFolder(), fakeShader ? std::string(fakeShader) : render::kerrShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuPaths, head);
-            // 0.56.0: the spinning hole drawn per pixel: a guard of its own (its marker, the settings line "gpusky=", the same log); PL_GPU_SKYSHADER (tests)
-            const char* fakeSky = SDL_getenv("PL_GPU_SKYSHADER");
-            app::gpuSkyGuard().start(ui::settingsFolder(), fakeSky ? std::string(fakeSky) : render::kerrSkyShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSky,
-                                     {"The spinning hole drawn per pixel by the graphics card (closed forms, single precision): its own guard, its lines start [sky]"});
-            // 0.57.0: the Atom Lab's two card programs, a guard each (their markers, the settings lines "gpuslice=" and "gpujump=", the same log); PL_GPU_SLICESHADER,
-            // PL_GPU_JUMPSHADER (tests: another program's text)
-            const char* fakeSlice = SDL_getenv("PL_GPU_SLICESHADER");
-            const char* fakeJump = SDL_getenv("PL_GPU_JUMPSHADER");
-            app::gpuSliceGuard().start(ui::settingsFolder(), fakeSlice ? std::string(fakeSlice) : render::sliceShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuSlice,
-                                       {"The Atom Lab's Slice dots made by the graphics card (single precision): its own guard, its lines start [slice]"});
-            app::gpuJumpGuard().start(ui::settingsFolder(), fakeJump ? std::string(fakeJump) : render::jumpShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuJump,
-                                      {"The Atom Lab's jump groups (every electron) made by the graphics card: its own guard, its lines start [jump]"});
-            // 0.57.1: the Molecule Lab's Density cloud on the card (its marker, the settings line "gpumolcloud=", the same log); PL_GPU_MOLSHADER (tests)
-            const char* fakeMol = SDL_getenv("PL_GPU_MOLSHADER");
-            app::gpuMolCloudGuard().start(ui::settingsFolder(), fakeMol ? std::string(fakeMol) : render::molCloudShaderId(), fakeDriver ? std::string(fakeDriver) : vendor + " / " + gpu + " / " + version, app.prefs.gpuMolCloud,
-                                          {"The Molecule Lab's Density cloud made and drawn by the graphics card (single precision): its own guard, its lines start [molcloud]"});
-            if (app::gpuGuard().saved() != app.prefs.gpuPaths || app::gpuSkyGuard().saved() != app.prefs.gpuSky || app::gpuSliceGuard().saved() != app.prefs.gpuSlice ||
-                app::gpuJumpGuard().saved() != app.prefs.gpuJump || app::gpuMolCloudGuard().saved() != app.prefs.gpuMolCloud) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
-            else { app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); app::gpuMolCloudGuard().settingsWritten(); }
-        }
-        {   // what this PC gave us: shown in the Performance card and printed in the benchmark report (0.13 stage 2)
-            GLint maj = 0, min = 0;
-            plgl::glGetIntegerv(GL_MAJOR_VERSION, &maj); plgl::glGetIntegerv(GL_MINOR_VERSION, &min);
-            app.glMajor = maj; app.glMinor = min; app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr;
-            atom::setOutlineCompute(renderer.outlineCompute());           // the 90 % outline's compute object (null on a 3.3 PC or with PL_NO_COMPUTE: the CPU makes it)
-            std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(maj, min, app.computeOk, true).c_str());
-            std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(maj, min, app.rocksOk, true).c_str());
-        }
-    }
 
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;                           // nothing saved next to the .exe
@@ -412,11 +382,7 @@ int main(int argc, char** argv) {
     style.FontScaleDpi = scale;
     style.WindowRounding = 0;
     std::printf("Font: %s\n", ui::loadFonts(16.0f));
-    if (useVulkan) ImGui_ImplSDL3_InitForVulkan(window);   // (Dear ImGui's Vulkan backend was started with the device: render/vk_backend.cpp)
-    else {
-        ImGui_ImplSDL3_InitForOpenGL(window, gl);
-        ImGui_ImplOpenGL3_Init("#version 330 core");
-    }
+    ImGui_ImplSDL3_InitForVulkan(window);               // (Dear ImGui's Vulkan backend was started with the device: render/vk_backend.cpp)
 
     if (SDL_getenv("PL_IMPERIAL")) fmt::setImperial(true);   // for automatic checks
     if (const char* t = SDL_getenv("PL_THEME")) app.prefs.theme = t;   // for automatic checks
@@ -559,9 +525,19 @@ int main(int argc, char** argv) {
     if (const char* l = SDL_getenv("PL_ATOM_LEARN")) { app.atomLearn = std::atoi(l); if (const char* t = SDL_getenv("PL_ATOM_TAB")) { app.scaleTab = t; app.massTab = t; } }   // open an Atom Lab guide (1–4), on a tab
     if (const char* j = SDL_getenv("PL_ATOM_JUMP")) app.atomLearnJump = j;   // 0.19: ... scrolled to a section ("scale": the "monochrome" word)
     int frame = 0;
-    ui::benchmarkUse(window, useVulkan ? &vk : nullptr);   // 0.63.0 (Vulkan step 5): the benchmark runs on the API this start draws with
+    ui::benchmarkUse(window, &vk);                      // 0.63.0 (Vulkan step 5): the benchmark's timer and pictures on Vulkan
+    blackhole::testShot() = [&vk](render::Renderer2D& R, int W, int H, std::vector<unsigned char>& rgba) {   // 0.69.0: compareHook's pictures (tests)
+        std::vector<std::uint8_t> rgb;
+        const float clear[4] = {0, 0, 0, 1};
+        if (!vk.renderToImage(nullptr, W, H, clear, rgb, &R) || rgb.size() != std::size_t(W) * std::size_t(H) * 3) return false;
+        rgba.assign(std::size_t(W) * std::size_t(H) * 4, 255);
+        for (int y = 0; y < H; y++)                     // (rows from the bottom, as OpenGL's glReadPixels gave them; alpha 255)
+            for (int x = 0; x < W; x++)
+                for (int k = 0; k < 3; k++) rgba[(std::size_t(y) * std::size_t(W) + std::size_t(x)) * 4 + std::size_t(k)] = rgb[(std::size_t(H - 1 - y) * std::size_t(W) + std::size_t(x)) * 3 + std::size_t(k)];
+        return true;
+    };
     int vkFirst = 0;                                    // 0.59.0: Vulkan's first frame: 0 not begun, 1 begun (guarded), 2 shown, 3 a call failed (kept)
-    const bool pictureOff = SDL_getenv("PL_NO_PICTURE") != nullptr;   // 0.59.0: no lab picture (PL_NO_PICTURE, for the checks that compare OpenGL and Vulkan; 0.60.0: Vulkan draws the pictures)
+    const bool pictureOff = SDL_getenv("PL_NO_PICTURE") != nullptr;   // 0.59.0: no lab picture (PL_NO_PICTURE, for the checks)
     bool running = true;
 
     LiveWatch live;
@@ -579,7 +555,7 @@ int main(int argc, char** argv) {
     const auto runFrame = [&](bool isLive) {
         // 0.67.0: a helper finished: its guard's record kept at once (its pipelines reach the app's cache at the next start: render/vk_blackhole.cpp merges
         // the helpers' cache file before any pipeline is made; merging now would race the Black Hole Lab's pipelines made on its threads)
-        if (useVulkan && app::gpuHelperPump()) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
+        if (app::gpuHelperPump()) ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
         app.liveFrame = isLive;
         if (atomDoFrame > 0 && ++atomDoCount == atomDoFrame) doAtom();
         if (atomSpin != 0) app.atom.s.oyaw += atomSpin;   // PL_ATOM_SPIN=0.15: the camera turns every frame as a fast drag does (0.16 stage 5, automatic checks)
@@ -752,7 +728,7 @@ int main(int argc, char** argv) {
 
         orbit::linesFrameEnd(renderer); molecule::surfaceFrameEnd(renderer);   // 0.68.0
         ui::benchmarkTestHook(app);
-        if (frame == 0 && !useVulkan) if (const char* bc = SDL_getenv("PL_BH_COMPARE")) blackhole::compareHook(renderer, bc);   // 0.55.0: the Black Hole Lab's card against its reference (tests)
+        if (frame == 0) if (const char* bc = SDL_getenv("PL_BH_COMPARE")) blackhole::compareHook(renderer, bc);   // 0.55.0: the Black Hole Lab's card against its reference (tests; 0.69.0: on Vulkan)
         if (const char* at = SDL_getenv("PL_SAVE_IMAGE")) { static int n = 0; if (++n == std::atoi(at)) app.shot.requested = true; }   // for automatic checks: press 📷 Save image at frame n
         { app::FrameCostSpan step(app::FrameCostKind::BenchStep, false);   // (0.63.1: before the frame's clock)
           ui::benchmarkBeginFrame(app, renderer, fbW, fbH); }   // a benchmark scene is set up here, before the frame
@@ -814,8 +790,7 @@ int main(int argc, char** argv) {
             SDL_SetWindowTitle(window, (std::string("Physics Lab ") + ui::appVersion() + " — " + app::labName(app.lab)).c_str());
         }
         app.atom.reducedMotion = ui::look().reduced;
-        if (useVulkan) vk.newFrame();
-        else ImGui_ImplOpenGL3_NewFrame();
+        vk.newFrame();
         ImGui_ImplSDL3_NewFrame();
         {   // for automatic checks: PL_MOUSE=x,y puts the pointer there every frame (a hovered button, a tooltip); a mouse that is really used is not affected
             static const char* mouse = SDL_getenv("PL_MOUSE");
@@ -932,7 +907,7 @@ int main(int argc, char** argv) {
         sectMark(3);
         const auto te0 = std::chrono::steady_clock::now();   // (0.63.0: before either API's drawing: the diagnostics below print on both)
         const long glareMade0 = renderer.glareStats().made;
-        if (useVulkan) {                                // 0.59.0: cleared to the page colour, the picture area filled with it (step 2: the labs' pictures), the panels on top
+        {                                               // 0.59.0: cleared to the page colour, the picture area filled with it (step 2: the labs' pictures), the panels on top
             const float bgc[4] = {pageBg.r, pageBg.g, pageBg.b, 1.0f};
             if (vkFirst == 0 && app::gpuVulkanGuard().hold()) { app::gpuVulkanGuard().begin("first frame"); vkFirst = 1; }   // (0.63.0: its turn first)
             const bool drawPicture = !pictureOff && !app.pane;   // 0.60.0: the lab's picture (renderer2d on Vulkan; 0.62.0: the Black Hole Lab's too)
@@ -941,19 +916,9 @@ int main(int argc, char** argv) {
             vk.render(ImGui::GetDrawData(), bgc, bgc, 0, headerFbH, canvasFbW, pictureFbH, drawPicture ? &renderer : nullptr);
             ui::benchmarkGpuEnd(app);
             if (drawPicture) { app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances(); }
-        } else {
-            ui::benchmarkGpuBegin(app);                     // the GPU time of this frame (only while the benchmark runs)
-            plgl::glViewport(0, 0, fbW, fbH);
-            plgl::glClearColor(pageBg.r, pageBg.g, pageBg.b, 1);
-            plgl::glClear(GL_COLOR_BUFFER_BIT);
-            renderer.setGrayscale(ui::look().grayscale, {pageBg.r, pageBg.g, pageBg.b, 1});
-            renderer.end(canvasFbW, pictureFbH, fbH - headerFbH - pictureFbH);
-            app.drawCalls = renderer.lastDrawCalls(); app.drawInstances = renderer.lastInstances();
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-            ui::benchmarkGpuEnd(app);
         }
         sectMark(4);
-        {   // the checks' diagnostics (PL_BH_FRAMETIME, PL_TIMESTAT, PL_DRAWSTAT ...): 0.63.0: printed on Vulkan too (they were in the OpenGL branch)
+        {   // the checks' diagnostics (PL_BH_FRAMETIME, PL_TIMESTAT, PL_DRAWSTAT ...): 0.63.0: printed on Vulkan too
         static const bool bhTime = SDL_getenv("PL_BH_FRAMETIME") != nullptr;
         if (bhTime && app.lab == blackhole::kLabIndex && !app.pane) {
             const render::Renderer2D::GlareStats& g = renderer.glareStats();
@@ -1004,8 +969,7 @@ int main(int argc, char** argv) {
         }
         if (app.shot.requested) {                       // 📷 Save image: the picture area as it is on screen now, readout included
             app.shot.requested = false;
-            if (useVulkan) ui::takeShotVulkan(app, vk, !pictureOff && !app.pane ? &renderer : nullptr, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
-            else ui::takeShot(app, renderer, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
+            ui::takeShotVulkan(app, vk, !pictureOff && !app.pane ? &renderer : nullptr, {fbW, fbH, winW, winH, canvasFbW, pictureFbH, headerH});
         }
         static const double maxSeconds = SDL_getenv("PL_EXIT_AFTER_SECONDS") ? std::atof(SDL_getenv("PL_EXIT_AFTER_SECONDS")) : 0;   // for automatic checks
         static int bhSettleFrom = -1, bhSettleN = 0, bhSettled = 0;          // 0.55.5 (automatic checks): PL_BH_SETTLE="from:n": the run ends once the Black Hole Lab
@@ -1017,7 +981,7 @@ int main(int argc, char** argv) {
         bhSettled = bhSettleN > 0 && frame >= bhSettleFrom && app.lab == blackhole::kLabIndex && app.blackholeView.settled() && !renderer.glareBusy() && !app::gpuGuardBusy() ? bhSettled + 1 : 0;
         if ((maxFrames && ++frame >= maxFrames) || (maxSeconds > 0 && SDL_GetTicks() / 1000.0 >= maxSeconds) || (bhSettleN > 0 && bhSettled >= bhSettleN)) {
             running = false;
-            if (screenshot && useVulkan) {              // 0.59.0: read back from the swapchain's image (RGBA, top row first: the same bytes as below)
+            if (screenshot) {                           // 0.59.0: read back from the swapchain's image (RGBA, top row first)
                 std::vector<uint8_t> px;
                 int sw = 0, sh = 0;
                 SDL_Surface* shot = vk.readback(px, sw, sh) ? SDL_CreateSurface(sw, sh, SDL_PIXELFORMAT_ABGR8888) : nullptr;
@@ -1026,13 +990,6 @@ int main(int argc, char** argv) {
                     SDL_SaveBMP(shot, screenshot);
                     SDL_DestroySurface(shot);
                 } else SDL_Log("PL_SCREENSHOT: no picture (Vulkan: the swapchain could not be read)");
-            } else if (screenshot) {                    // read the finished frame back and save it
-                if (SDL_Surface* shot = fbW > 0 && fbH > 0 ? SDL_CreateSurface(fbW, fbH, SDL_PIXELFORMAT_ABGR8888) : nullptr) {   // 0.50.3 (outside review): no surface, no read
-                    plgl::glReadPixels(0, 0, fbW, fbH, GL_RGBA, GL_UNSIGNED_BYTE, shot->pixels);
-                    SDL_FlipSurface(shot, SDL_FLIP_VERTICAL);
-                    SDL_SaveBMP(shot, screenshot);
-                    SDL_DestroySurface(shot);
-                } else SDL_Log("PL_SCREENSHOT: no picture (framebuffer %d x %d)", fbW, fbH);
             }
         }
         // 0.63.1: the frame thread's own work: its waits for the card (the swapchain image's fence, the acquire, batches waited for) counted apart
@@ -1045,16 +1002,16 @@ int main(int argc, char** argv) {
         const double bk0 = app::frameCostNowMs();
         ui::benchmarkEndFrame(app, frameDt * 1000.0, workMs, &lastCost);
         app::frameCostAdd(app::FrameCostKind::Bookkeeping, app::frameCostNowMs() - bk0);
-        if (useVulkan) {
+        {
             vk.present();
             if (vkFirst == 1 && vk.ok()) { app::gpuVulkanGuard().end("first frame", "shown"); app::gpuVulkanGuard().finished(true); vkFirst = 2; }
-            if (!vk.ok() && vkFirst != 3) {             // a call failed after the start (the device lost, say): kept, so the next start uses OpenGL
+            if (!vk.ok() && vkFirst != 3) {             // a call failed after the start (the device lost, say): kept (the next start says so: noVulkan)
                 app::gpuVulkanGuard().failed(vkFirst == 1 ? "first frame" : "a frame", "a Vulkan call failed (the log has it)");
                 vkFirst = 3;
                 ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0, true);
             }
-        } else SDL_GL_SwapWindow(window);
-        if (app.startupMs < 0 && (useVulkan || ui::benchLabFinished(app, renderer)))      // 0.56.1: the start-up time for the benchmark report (to the first finished picture)
+        }
+        if (app.startupMs < 0)      // 0.56.1: the start-up time for the benchmark report (to the first finished picture)
             app.startupMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - g_appStart).count();
         static const double paceMs = SDL_getenv("PL_FRAME_MS") ? std::atof(SDL_getenv("PL_FRAME_MS")) : 0;   // 0.55.5 (automatic checks, measuring): a frame takes at
         if (paceMs > 0) {                                                                                       // least this long, as with VSync on a real screen
@@ -1064,7 +1021,7 @@ int main(int argc, char** argv) {
         {   const double sv0 = app::frameCostNowMs();
             ui::saveSettingsWhenChanged(app, SDL_GetTicks() / 1000.0);
             app::frameCostAdd(app::FrameCostKind::Settings, app::frameCostNowMs() - sv0); }
-        if (app.vsync != vsyncOn) { vsyncOn = app.vsync; if (useVulkan) vk.setVsync(vsyncOn); else SDL_GL_SetSwapInterval(vsyncOn ? 1 : 0); }
+        if (app.vsync != vsyncOn) { vsyncOn = app.vsync; vk.setVsync(vsyncOn); }
     };
 
     live.draw = [&] { runFrame(true); };
@@ -1085,11 +1042,9 @@ int main(int argc, char** argv) {
 
     app::gpuHelperStop();                               // 0.68.0: no more helpers (a worker waiting for one goes on, and is then stopped)
     app::gpuGuardEndAll();                              //   nor for the guards' turn (a frame guard may hold it while the app ends)
-    if (useVulkan) {
-        if (SDL_getenv("PL_VK_VALIDATION")) std::printf("PLVK validation errors=%d warnings=%d\n", vk.validationErrors(), vk.validationWarnings());
-        renderer.useVulkan(nullptr);                    // 0.60.0 (its Vulkan objects go with the backend)
-        vk.shutdown();                                  // (Dear ImGui's Vulkan backend too)
-    } else ImGui_ImplOpenGL3_Shutdown();
+    if (SDL_getenv("PL_VK_VALIDATION")) std::printf("PLVK validation errors=%d warnings=%d\n", vk.validationErrors(), vk.validationWarnings());
+    renderer.useVulkan(nullptr);                        // 0.60.0 (its Vulkan objects go with the backend)
+    vk.shutdown();                                      // (Dear ImGui's Vulkan backend too)
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
     atom::setOutlineCompute(nullptr);
@@ -1098,13 +1053,9 @@ int main(int argc, char** argv) {
     app::gpuSliceGuard().closing(); app::gpuJumpGuard().closing();   // 0.57.0
     app::gpuMolCloudGuard().closing();                               // 0.57.1
     app::gpuVulkanGuard().closing();                 // 0.59.0
-    if (useVulkan) for (const auto& [name, g] : app::vulkanCardGuards()) g->closing();   // 0.63.1: all ten (0.62.0 and 0.63.0 closed only the lens:
+    for (const auto& [name, g] : app::vulkanCardGuards()) g->closing();   // 0.63.1: all ten (0.62.0 and 0.63.0 closed only the lens:
                                                      // the outline's, groups', rocks' and cloud's markers of a step still open stayed after a normal end)
     app::gpuSkyGuard().closing();                    // 0.56.0                       // 0.55.7: the app ends normally: a marker of a step still open (the path not finished) is removed
-    if (!useVulkan) {
-        renderer.shutdown();
-        SDL_GL_DestroyContext(gl);
-    }
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;

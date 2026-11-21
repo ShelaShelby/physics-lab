@@ -43,7 +43,6 @@
 #include "atom/classic_check.h"
 #include "atom/nucdens_check.h"
 #include "orbit/units.h"
-#include "render/gl_loader.h"
 #include "render/renderer2d.h"
 #include "render/vk_backend.h"
 #include "ui/app_pages.h"
@@ -247,44 +246,36 @@ static_assert(kBhSlotEnd[5] <= app::kBenchMeasureS, "the Black Hole Lab's slots 
 struct PixelGrab { int w = 0, h = 0; std::vector<unsigned char> rgb; };
 
 // ---- the GPU timer ----
-// For every measured frame, from the first GL call of the drawing (the clear) to the last one before the buffer swap (the panels and text):
-//   q[0] GL_TIME_ELAPSED   the time the GPU was busy on it, all passes together (the picture, its soft layer, the instanced draws, ImGui)
-//   q[1] / q[2] GL_TIMESTAMP at the start and at the end: the span from the first to the last GPU command, waiting included
-// The results come a frame or two late; a ring of slots is used in turn, and read oldest first (app/gpu_timer.h).
-// 0.63.0 (Vulkan step 5): on Vulkan the same two numbers come from timestamp queries (render/vk_backend.h benchTimer): the frame's command buffer and the
-// card batches submitted for it, their times summed (busy), and the span from the first start to the last end.
+// For every measured frame two numbers: the time the card was busy on it and the span from its first to its last command, waiting included. They come
+// from timestamp queries (0.63.0, render/vk_backend.h benchTimer): the frame's command buffer and the card batches submitted for it, their times summed
+// (busy), and the span from the first start to the last end; a frame or two late. (0.69.0: OpenGL's GL_TIME_ELAPSED queries are gone with OpenGL.)
 SDL_Window* g_window = nullptr;
 render::VkBackend* g_vk = nullptr;
 int g_checkLoads = 0;                            // 0.63.1: the known loads the timer check drew (the report's start line)
 
 struct GpuTimer {
     static constexpr int kSlots = 8;
-    unsigned q[kSlots][3] = {};
-    app::QueryRing ring{kSlots};
     int active = -1;
     bool ok = false, made = false;
     long framesSkipped = 0;                      // frames whose slots were all still waiting (not measured)
     void make() {
         if (made) return;
-        made = true; ring.reset();
-        if (g_vk) { ok = g_vk->benchTimer(true); return; }   // (0.63.0)
-        ok = true;
-        for (auto& s : q) plgl::glGenQueries(3, s);
+        made = true;
+        ok = g_vk && g_vk->benchTimer(true);              // (0.63.0)
     }
     void destroy() {
         if (!made) return;
         made = false;
-        if (g_vk) { g_vk->benchTimer(false); return; }
-        for (auto& s : q) plgl::glDeleteQueries(3, s);
+        if (g_vk) g_vk->benchTimer(false);
     }
 };
 
 struct GpuSample { double busyMs, spanMs; };
 
-// Is GL_TIME_ELAPSED believable on this PC? A known heavy load (many see-through full-picture rectangles) is drawn a few times; the timer
-// and a clock (up to glFinish) must roughly agree. The load is doubled until it takes about 2 ms.
+// Is the card's timer believable on this PC? A known heavy load (many see-through full-picture rectangles) is drawn a few times; the timer
+// and a clock (up to the end of the wait) must roughly agree. The load is doubled until it takes about 2 ms.
 app::GpuVerdict checkGpuTimer(render::Renderer2D& r, double wPts, double hPts, int fbW, int fbH) {
-    if (g_vk) {                                          // 0.63.0: the same known load on Vulkan, drawn into an image of its own: timestamps against a clock
+    if (g_vk) {                                          // 0.63.0: a known load drawn into an image of its own: timestamps against a clock
         double qMed = 0, wMed = 0;
         for (int n = 16; n <= 16384; n *= 2) {
             std::vector<double> qs, ws;
@@ -302,33 +293,8 @@ app::GpuVerdict checkGpuTimer(render::Renderer2D& r, double wPts, double hPts, i
         }
         return app::judgeGpuTimer(qMed, wMed);
     }
-    unsigned q = 0;
-    plgl::glGenQueries(1, &q);
-    const double toMs = 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
-    double qMed = 0, wMed = 0;
-    for (int n = 16; n <= 16384; n *= 2) {
-        std::vector<double> qs, ws;
-        for (int rep = 0; rep < 9; rep++) {
-            r.begin(wPts, hPts);
-            for (int k = 0; k < n; k++) r.rect(0, 0, wPts, hPts, render::Color{0.5f, 0.5f, 0.5f, 0.02f});
-            plgl::glViewport(0, 0, fbW, fbH);
-            plgl::glFinish();
-            const Uint64 t0 = SDL_GetPerformanceCounter();
-            plgl::glBeginQuery(GL_TIME_ELAPSED, q);
-            r.end(fbW, fbH, 0);
-            plgl::glEndQuery(GL_TIME_ELAPSED);
-            plgl::glFinish();
-            const double wall = static_cast<double>(SDL_GetPerformanceCounter() - t0) * toMs;
-            unsigned long long ns = 0;
-            plgl::glGetQueryObjectui64v(q, GL_QUERY_RESULT, &ns);
-            if (rep >= 2) { qs.push_back(ns / 1e6); ws.push_back(wall); }      // the first two are warm-up (the GPU may still be raising its clock)
-        }
-        std::sort(qs.begin(), qs.end()); std::sort(ws.begin(), ws.end());
-        qMed = qs[qs.size() / 2]; wMed = ws[ws.size() / 2];
-        if (wMed >= 2.0) break;
-    }
-    plgl::glDeleteQueries(1, &q);
-    return app::judgeGpuTimer(qMed, wMed);
+    app::GpuVerdict v; v.why = "no Vulkan";
+    return v;
 }
 
 }  // namespace
@@ -689,16 +655,16 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
     using K = app::BenchKind;
     switch (t.kind) {
         case K::OrbitHeaviest: case K::OrbitRocks8: case K::OrbitHeaviestCpuRocks: case K::OrbitRocks8CpuRocks: case K::OrbitRealFast: case K::UiSettingsOpen:
-            return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? (g_vk ? "the graphics card (Vulkan rock compute)" : "the graphics card (OpenGL 4.3 rock compute)") :   // (0.63.1: the API in use)
-                                                      !app.rocksOk ? (g_vk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (no OpenGL 4.3 rock compute on this PC)") : "the processor (GPU rocks switched off for this scene)") +
+            return "the belts' rocks: " + std::string(app.rocksOk && app.set.gpuRocks ? "the graphics card (Vulkan rock compute)" :   // (0.63.1: the API in use)
+                                                      !app.rocksOk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (GPU rocks switched off for this scene)") +
                    "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.68.0
         case K::OrbitSaturn: return orbit::ringCardPathText(g_vk);   // 0.64.0
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
             if (t.atomWhich == atom::kBenchSliceSuper)                      // 0.64.0: the Slice's card program takes an orthogonal superposition too (an overlapping pair: the processor)
                 return L.overlapPair() ? "the Slice's dots: the processor (an overlapping pair: its attempts have no fixed numbering for the card)" : atom::atomCardPaths().pathText(0, L, app.computeOk);
-            if (t.atomWhich == 14 || t.atomWhich == 27) return atom::atomCardPaths().pathText(0, L, app.computeOk) + "; the outline's contour: " + std::string(L.gpuOutline && app.computeOk ? (g_vk ? "the graphics card (Vulkan compute)" : "the graphics card (OpenGL 4.3 compute)") :
-                                                                                                                               !app.computeOk ? (g_vk ? "the processor (no Vulkan compute on this PC)" : "the processor (no OpenGL 4.3 compute on this PC)") : "the processor (GPU outline switched off for this scene)");
+            if (t.atomWhich == 14 || t.atomWhich == 27) return atom::atomCardPaths().pathText(0, L, app.computeOk) + "; the outline's contour: " + std::string(L.gpuOutline && app.computeOk ? "the graphics card (Vulkan compute)" :
+                                                                                                                               !app.computeOk ? "the processor (no Vulkan compute on this PC)" : "the processor (GPU outline switched off for this scene)");
             if (L.manyOn() && L.p.cstyle == "Glow" && L.s.trans) {         // 0.57.0: a jump: the card's buffer only with the card's groups
                 const bool card = L.gpuCloud && L.gpuJump && atom::atomCardPaths().state(1) == 1;
                 return std::string("the every-electron cloud: ") + (card ? "drawn from a buffer on the graphics card; " : !L.gpuCloud ? "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene); "
@@ -973,14 +939,8 @@ void begin(AppState& app) {
     SDL_Time now = 0; SDL_DateTime dt{};
     SDL_GetCurrentTime(&now); SDL_TimeToDateTime(now, &dt, true);
     e.when = whenText(dt);
-    if (g_vk) {                                          // 0.63.0: the API that runs, in the report's "Graphics:" line
-        e.api = "Vulkan"; e.gpu = g_vk->deviceName(); e.glVersion = g_vk->apiText() + ", " + g_vk->presentText(); e.vendor = g_vk->driverText();
-    } else {
-        e.api = "OpenGL";
-        const char* s = reinterpret_cast<const char*>(plgl::glGetString(GL_RENDERER)); e.gpu = s ? s : "";
-        s = reinterpret_cast<const char*>(plgl::glGetString(GL_VERSION)); e.glVersion = s ? s : "";
-        s = reinterpret_cast<const char*>(plgl::glGetString(GL_VENDOR)); e.vendor = s ? s : "";
-    }
+    e.api = "Vulkan";                                    // 0.63.0: the report's "Graphics:" line (0.69.0: Vulkan is the only drawing system)
+    if (g_vk) { e.gpu = g_vk->deviceName(); e.glVersion = g_vk->apiText() + ", " + g_vk->presentText(); e.vendor = g_vk->driverText(); }
     e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, true);          // (the benchmark's own settings start from the defaults: On)
     e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, true);
     e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, true);
@@ -994,7 +954,7 @@ void begin(AppState& app) {
     const float sc = ImGui::GetStyle().FontScaleDpi;
     e.windowW = int(io.DisplaySize.x * io.DisplayFramebufferScale.x + 0.5f); e.windowH = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);
     e.pictureW = int(app.canvasW * sc * io.DisplayFramebufferScale.x + 0.5); e.pictureH = int(app.canvasH * sc * io.DisplayFramebufferScale.y + 0.5);
-    if (SDL_Window* w = g_window ? g_window : SDL_GL_GetCurrentWindow()) {
+    if (SDL_Window* w = g_window) {
         e.fullscreen = (SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) != 0;
         if (const SDL_DisplayMode* m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(w))) e.refreshHz = m->refresh_rate;
     }
@@ -1058,7 +1018,7 @@ void saveAndCopy(AppState& app, BenchState& b) {
         std::vector<std::pair<std::string, app::GpuGuard*>> gs;
         if (g_vk) { gs.push_back({"vulkan", &app::gpuVulkanGuard()}); for (const auto& x : app::vulkanCardGuards()) gs.push_back(x); }
         else gs = {{"lightpaths", &app::gpuGuard()}, {"sky", &app::gpuSkyGuard()}, {"slice", &app::gpuSliceGuard()}, {"jump", &app::gpuJumpGuard()}, {"molcloud", &app::gpuMolCloudGuard()}};
-        b.text += std::string("\nThe card programs' guards (") + (g_vk ? "Vulkan" : "OpenGL") + "):\n";
+        b.text += std::string("\nThe card programs' guards (") + "Vulkan" + "):\n";
         for (const auto& [name, g] : gs) b.text += "  " + name + ": " + state(*g) + "\n";
     }
     if (SDL_getenv("PL_BENCH")) std::printf("PLBENCH-RESULT-BEGIN\n%s\nPLBENCH-RESULT-END\n", b.text.c_str());   // (for automatic runs: the result on stdout)
@@ -1336,27 +1296,14 @@ void benchmarkGpuBegin(AppState& app) {
         const bool counted = (bs.phase == 0 && bs.run && bs.run->measuring()) || (bs.phase == 2 && bs.rStage == 2);
         if (!counted) return;
         if (!g_vk->benchMark()) g.framesSkipped++;
-        return;
     }
-    const int s = g.ring.acquire();
-    if (s < 0) { g.framesSkipped++; return; }            // every slot still waits for its result: this frame is not measured
-    plgl::glQueryCounter(g.q[s][1], GL_TIMESTAMP);
-    plgl::glBeginQuery(GL_TIME_ELAPSED, g.q[s][0]);
-    g.active = s;
 }
 
 void benchmarkGpuEnd(AppState& app) {
     if (!app.bench) return;
     BenchState& b = *app.bench;
     GpuTimer& g = b.gpu;
-    if (g.active >= 0) {
-        plgl::glEndQuery(GL_TIME_ELAPSED);
-        plgl::glQueryCounter(g.q[g.active][2], GL_TIMESTAMP);
-        g.ring.submitted(g.active);
-        g.active = -1;
-    }
-    static const bool finishEach = envHas("PL_BENCH_FINISH");     // (the session box's software renderer queues frames for seconds: the checks wait for each one)
-    if (finishEach && b.stage == BenchState::Stage::Running && !g_vk) plgl::glFinish();   // (Vulkan: each frame waits for its slot's fence anyway)
+    (void)g;                                             // (Vulkan: each frame waits for its slot's fence: PL_BENCH_FINISH needs nothing more)
     // (development and the checks: PL_BENCH_SHOT="a" or "a,b": each scene's picture saved as <id>.bmp a s into its counted time, and as <id>_2.bmp at b s)
     static double shotAt[2] = {-1, -1};
     static const bool shotRead = [] { if (const char* v = SDL_getenv("PL_BENCH_SHOT")) std::sscanf(v, "%lf,%lf", &shotAt[0], &shotAt[1]); return true; }();
@@ -1370,9 +1317,8 @@ void benchmarkGpuEnd(AppState& app) {
         std::vector<uint8_t> vpx;                       // 0.63.0: Vulkan: the frame just drawn, read back (RGBA, top row first)
         int vw = 0, vh = 0;
         const bool vok = g_vk && g_vk->readback(vpx, vw, vh) && vw == W && vh == H;
-        if (SDL_Surface* shot = W > 0 && H > 0 && (!g_vk || vok) ? SDL_CreateSurface(W, H, SDL_PIXELFORMAT_ABGR8888) : nullptr) {
-            if (g_vk) for (int y = 0; y < H; y++) std::memcpy(static_cast<uint8_t*>(shot->pixels) + std::size_t(y) * std::size_t(shot->pitch), vpx.data() + std::size_t(y) * std::size_t(W) * 4, std::size_t(W) * 4);
-            else { plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, shot->pixels); SDL_FlipSurface(shot, SDL_FLIP_VERTICAL); }
+        if (SDL_Surface* shot = W > 0 && H > 0 && vok ? SDL_CreateSurface(W, H, SDL_PIXELFORMAT_ABGR8888) : nullptr) {
+            for (int y = 0; y < H; y++) std::memcpy(static_cast<uint8_t*>(shot->pixels) + std::size_t(y) * std::size_t(shot->pitch), vpx.data() + std::size_t(y) * std::size_t(W) * 4, std::size_t(W) * 4);
             SDL_SaveBMP(shot, (sceneText(b.list[std::size_t(b.run->scene())]).id + (shotK ? "_2" : "") + ".bmp").c_str());
             SDL_DestroySurface(shot);
         }
@@ -1381,7 +1327,6 @@ void benchmarkGpuEnd(AppState& app) {
     if (scenesNow && b.grabNext > 0) {   // 0.56.1, film_tilt: read the free part of the picture back (this frame is not counted)
         const ImGuiIO& io = ImGui::GetIO();
         const double k = ImGui::GetStyle().FontScaleDpi * io.DisplayFramebufferScale.x;
-        const int fbH = int(io.DisplaySize.y * io.DisplayFramebufferScale.y + 0.5f);
         const int x0 = std::max(0, int(app.bhFreeX * k)), y0 = std::max(0, int(app.bhFreeY * k));
         const int w = std::max(0, int((app.bhFreeW > 0 ? app.bhFreeW : app.canvasW) * k)), h = std::max(0, int((app.bhFreeH > 0 ? app.bhFreeH : app.canvasH) * k));
         PixelGrab& p = b.grabNext == 1 ? b.grabMoving : b.grabRest;
@@ -1396,7 +1341,7 @@ void benchmarkGpuEnd(AppState& app) {
                     if (yt < 0 || yt >= fh) continue;
                     for (int i2 = 0; i2 < w && x0 + i2 < fw; i2++) std::memcpy(&rgba[(std::size_t(j) * w + i2) * 4], &all[(std::size_t(yt) * fw + std::size_t(x0 + i2)) * 4], 4);
                 }
-        } else if (w > 0 && h > 0) plgl::glReadPixels(x0, std::max(0, fbH - y0 - h), w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        }
         const double fx = io.DisplayFramebufferScale.x;
         const int bx0 = int(b.boxX * fx) - x0, by0 = int(b.boxY * fx) - y0, bx1 = int((b.boxX + b.boxW) * fx) - x0 + 2, by1 = int((b.boxY + b.boxH) * fx) - y0 + 2;
         for (int j = 0; j < h; j++) for (int i2 = 0; i2 < w; i2++) {
@@ -1413,30 +1358,17 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::B
     // the GPU results that are ready now (they come a frame or two late), oldest first
     GpuTimer& g = b.gpu;
     b.gpuReady.clear();
+    (void)g;
     if (g_vk) {                                          // 0.63.0: Vulkan's timestamps
         std::vector<std::pair<double, double>> v;
         g_vk->benchCollect(v);
         for (const auto& x : v) b.gpuReady.push_back(GpuSample{x.first, x.second});
-    } else g.ring.collect(
-        [&](int s) {
-            GLint a = 0, c = 0;
-            plgl::glGetQueryObjectiv(g.q[s][0], GL_QUERY_RESULT_AVAILABLE, &a);
-            plgl::glGetQueryObjectiv(g.q[s][2], GL_QUERY_RESULT_AVAILABLE, &c);
-            return a && c;
-        },
-        [&](int s) {
-            unsigned long long busy = 0, t0 = 0, t1 = 0;
-            plgl::glGetQueryObjectui64v(g.q[s][0], GL_QUERY_RESULT, &busy);
-            plgl::glGetQueryObjectui64v(g.q[s][1], GL_QUERY_RESULT, &t0);
-            plgl::glGetQueryObjectui64v(g.q[s][2], GL_QUERY_RESULT, &t1);
-            return GpuSample{busy / 1e6, (t1 >= t0 ? t1 - t0 : 0) / 1e6};
-        },
-        b.gpuReady);
+    }
     for (const GpuSample& r : b.gpuReady) {
         b.run->gpuSample(r.busyMs, r.spanMs);
         if (b.phase == 2 && b.rStage == 2) { b.rGpuSum += r.busyMs; b.rGpuN++; }
     }
-    if (SDL_Window* w = g_window ? g_window : SDL_GL_GetCurrentWindow()) {   // 0.15 stage 2: a scene during which the window lost focus or was minimised is flagged in the report
+    if (SDL_Window* w = g_window) {   // 0.15 stage 2: a scene during which the window lost focus or was minimised is flagged in the report
         const SDL_WindowFlags fl = SDL_GetWindowFlags(w);
         b.run->noteWindow((fl & SDL_WINDOW_INPUT_FOCUS) != 0, (fl & SDL_WINDOW_MINIMIZED) != 0);
     }
@@ -1616,7 +1548,7 @@ void benchmarkWindow(AppState& app) {
         popFloatStyle();
         if (resultShown) {
             panelDecor(app::PanelKind::Floating);
-            ImGui::TextWrapped("%s, %s, OpenGL %s; %s", b.env.gpu.c_str(), b.env.vendor.c_str(), b.env.glVersion.c_str(), b.env.cpu.empty() ? "processor not available" : b.env.cpu.c_str());
+            ImGui::TextWrapped("%s, %s, Vulkan %s; %s", b.env.gpu.c_str(), b.env.vendor.c_str(), b.env.glVersion.c_str(), b.env.cpu.empty() ? "processor not available" : b.env.cpu.c_str());
             ImGui::TextWrapped("Window %d x %d, picture %d x %d pixels%s, screen %.0f Hz", b.env.windowW, b.env.windowH, b.env.pictureW, b.env.pictureH, b.env.fullscreen ? ", full screen" : "", b.env.refreshHz);
             ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, vec(look().w.line));      // the header row in the theme's colours (the default is dark on every theme)
             if (ImGui::BeginTable("##benchtable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {   // 0.56.1: the summary, slowest first

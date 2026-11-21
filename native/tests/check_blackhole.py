@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.55.0: the Black Hole Lab in the REAL app (Linux, Mesa's software OpenGL; not a real graphics card; counts and pictures, no timing).
+# 0.55.0: the Black Hole Lab in the REAL app (Linux, Mesa's software Vulkan (0.69.0; until 0.68.1 its OpenGL); not a real graphics card; counts and pictures, no timing).
 #   open:      the top bar's Black Hole tab opens the lab: its picture (a black shadow in the middle, the bent sky round it), its card, its bar
 #   presets:   M87* and Sagittarius A* set the card's mass and measured ring to presets.h's numbers (read from src/blackhole/presets.cpp)
 #   distance:  three distances (one typed in the Controls panel): the card's shadow size is Synge's (Perlick & Tsupko 2022, eq. (7), written here in Python) and grows as
@@ -46,7 +46,7 @@ def check(ok, what):
 
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src")
 BASE = {"PL_NEWUI": "on", "PL_DRAWSTAT": "1", "PL_FACTS": "off"}
-GL = dict(BASE, PL_GRAPHICS="opengl")   # 0.63.0 (Vulkan the default): the checks of OpenGL-only things (PL_BH_COMPARE, OpenGL's guard records) run on OpenGL
+GL = dict(BASE)   # (0.69.0: the precision checks and the guard records on Vulkan; until 0.68.1 they ran on OpenGL)
 
 def bh(r, prefix="blackhole "):
     n = r.note(prefix)
@@ -384,9 +384,11 @@ def part_precision(binary, work):
     # case drawn with 0.55.8's rays (spin_sky.h kSpinFineFillMino) is still 0.55.8's picture to the pixel (0.55.8 showed that picture within one level of
     # 0.55.2's); the new picture differs from it by at most one level of 255 (measured: 1053 of 1,024,000 pixels by one level); its hash saved on purpose
     # (REPORT 0.55.9)
+    # 0.69.0: the two saved hashes (b37c532bb4916030 with 0.55.8's rays, e31a10335ce4dab6 with 0.55.9's) were of OpenGL's pictures on llvmpipe; OpenGL is
+    # gone, so they are printed, not compared: the check that stays is the physics one, the closed forms' picture within one level of Mino's form's
     rv = dict(kv.split("=") for kv in rl[0].split()[1:]) if rl else {}
-    check(rv.get("old") == "b37c532bb4916030", f"Real: drawn with 0.55.8's rays, the saved case is 0.55.8's picture to the pixel ({rl})")
-    check(rv.get("hash") == "e31a10335ce4dab6" and int(rv.get("maxdiff", 9)) <= 1, f"Real: the saved case with the fine table of 0.55.9, within one level of 255 of 0.55.8's picture ({rl})")
+    print(f"  Real on Vulkan: hash {rv.get('hash')} (0.55.9's rays), {rv.get('old')} (0.55.8's rays)")
+    check(int(rv.get("maxdiff", 9)) <= 1 and int(rv.get("pixels", 0)) == 1280 * 800, f"Real: the saved case with the fine table of 0.55.9, within one level of 255 of the same case drawn with 0.55.8's rays ({rl})")
     fl = [dict(kv.split("=") for kv in ln.split()[1:]) for ln in r.out.splitlines() if ln.startswith("PLBHFILM ")]
     check(len(fl) == 1, f"Film compared at the paper's view ({len(fl)})")
     for x in fl:
@@ -914,13 +916,11 @@ def part_smooth(binary, work):
     smooth_sky(binary, work, base, steps)
     sky_guard(binary, work, dict(base, PL_BH_GPUSKY="1"))
 
-SKY_STEPS = ["compile the tiny shader", "link the tiny shader", "compile the elliptic functions alone", "link the elliptic functions alone",
-             "compile the whole sky shader", "link the whole sky shader", "a first small draw", "the check", "the first full picture"]
+SKY_STEPS = ["the tiny shader's pipeline", "the elliptic functions' pipeline", "the whole sky shader's pipeline", "a first small draw", "the check", "the first full picture"]   # (0.69.0: Vulkan's)
 
 def sky_guard(binary, work, sb):
-    sb = dict(sb, PL_GRAPHICS="opengl")   # 0.63.0: OpenGL's guard records (Vulkan's twins: check_shell.py vulkanbh)
-    # 0.56.0, the card's sky has a guard of its own (app/gpu_guard.h gpuSkyGuard: its marker gpu-sky-step.txt, the settings line "gpusky=", the same log
-    # with its lines marked [sky]). A normal first run logs every step in order, each with its time, and keeps "ok". Then the process is ended inside each
+    # 0.56.0, the card's sky has a guard of its own (app/gpu_guard.h gpuSkyGuard: its marker gpu-vksky-step.txt, the settings line "gpuvksky=", the same log
+    # with its lines marked [vulkan] [sky]; 0.69.0: Vulkan's, OpenGL's guard is gone). A normal first run logs every step in order, each with its time, and keeps "ok". Then the process is ended inside each
     # step once (PL_GPU_DIE): the marker names the step; the next start compiles nothing of the sky's shaders, the processor's table draws, Settings,
     # Performance names the step, the settings file keeps it off; after the first: the same driver stays off, a changed sky shader tries again, and
     # "Try again" passes in the same run.
@@ -928,44 +928,45 @@ def sky_guard(binary, work, sb):
     gd = os.path.join(work, "skyguard_ok"); os.makedirs(gd, exist_ok=True)
     for f in os.listdir(gd): os.remove(os.path.join(gd, f))
     sf = os.path.join(gd, "settings.txt")
-    ok = run_app(binary, work, "bh_skyguard_ok", dict(sb, PL_SETTINGS=sf), frames=60, size="880x560", timeout=1200)
+    ok = run_app(binary, work, "bh_skyguard_ok", dict(sb, PL_SETTINGS=sf), frames=400, size="880x560", timeout=1800)
     log = open(os.path.join(gd, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(gd, "gpu-paths-log.txt")) else ""
-    sky = "\n".join(ln for ln in log.splitlines() if ln.startswith("[sky] "))
+    sky = "\n".join(ln for ln in log.splitlines() if ln.startswith("[vulkan] [sky] "))
     at, missing = 0, []
     for w in [x for st in SKY_STEPS for x in ("begin " + st, "end " + st)] + ["the whole path succeeded"]:
         k = sky.find(w, at)
         if k < 0: missing.append(w)
         else: at = k
-    timed = all(re.search(r"end " + re.escape(st) + r"[^\n]* in \d+ ms", sky) for st in SKY_STEPS[:6])
+    timed = all(re.search(r"end " + re.escape(st) + r"[^\n]* in \d+ ms", sky) for st in SKY_STEPS[:3])
     check("PLBHSKY state=1" in ok.out and not missing and timed, f"sky guard: the log names every step in order, the shaders' with their times (missing or out of order: {missing})")
     txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
-    check("gpusky=ok | sky " in txt and not os.path.exists(os.path.join(gd, "gpu-sky-step.txt")), "sky guard: the whole path succeeded: kept as ok, no marker left")
+    check("gpuvksky=ok | vulkan sky " in txt and not os.path.exists(os.path.join(gd, "gpu-vksky-step.txt")), "sky guard: the whole path succeeded: kept as ok, no marker left")
     for i, step in enumerate(SKY_STEPS):
         d = os.path.join(work, f"skyguard_die{i}"); os.makedirs(d, exist_ok=True)
         for f in os.listdir(d): os.remove(os.path.join(d, f))
         sf = os.path.join(d, "settings.txt")
-        run_app(binary, work, f"bh_skyguard_die{i}", dict(sb, PL_SETTINGS=sf, PL_GPU_DIE=step), frames=60, size="880x560", timeout=1200)
-        mk = os.path.join(d, "gpu-sky-step.txt")
+        run_app(binary, work, f"bh_skyguard_die{i}", dict(sb, PL_SETTINGS=sf, PL_GPU_DIE="[vulkan] [sky] " + step), frames=1500, size="880x560", timeout=3000)   # (a run ends at the step it dies in; 0.69.0: the step named with the sky guard's prefix: the lens guard has "the first full picture" too)
+        mk = os.path.join(d, "gpu-vksky-step.txt")
         marker = open(mk, encoding="utf-8").read() if os.path.exists(mk) else ""
-        check(f"step={step}\n" in marker and "version=sky " in marker, f"sky guard: the process ended inside '{step}': the marker names the step ({marker!r})")
+        check(f"step={step}\n" in marker and "version=vulkan sky " in marker, f"sky guard: the process ended inside '{step}': the marker names the step ({marker!r})")
         r = run_app(binary, work, f"bh_skyguard_after{i}", dict(sb, PL_SETTINGS=sf, PL_OPEN="settings"), frames=30, size="880x560", timeout=1200)
         fr = frames_of(r)
         lg = open(os.path.join(d, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(d, "gpu-paths-log.txt")) else ""
         said = [n for n in r.note("bhsky") if "stopped the app last time" in n and f"'{step}'" in n]
-        check("PLBHSKY state=-1" in r.out and "[sky]" in lg and not any(("begin " + x) in lg for x in SKY_STEPS) and fr and fr[-1]["skycard"] == "0" and fr[-1]["pic"] != "0" and said,
+        lgs = "\n".join(ln for ln in lg.splitlines() if ln.startswith("[vulkan] [sky] "))   # (0.69.0: the sky's own lines: the lens guard has a step "the first full picture" too)
+        check("PLBHSKY state=-1" in r.out and "[vulkan] [sky]" in lg and not any(("begin " + x) in lgs for x in SKY_STEPS) and fr and fr[-1]["skycard"] == "0" and fr[-1]["pic"] != "0" and said,
               f"sky guard: after '{step}' nothing of the sky's path runs, the processor's table draws, Settings names the step (said {bool(said)})")
         txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
-        check("gpusky=off | sky " in txt and re.search(r"\| " + re.escape(step) + r"( \| app [^\n|]*)?\n", txt) and not os.path.exists(mk), "sky guard: the settings file keeps it off with the step, the marker gone")
+        check("gpuvksky=off | vulkan sky " in txt and re.search(r"\| " + re.escape(step) + r"( \| app [^\n|]*)?\n", txt) and not os.path.exists(mk), "sky guard: the settings file keeps it off with the step, the marker gone")
         if i != 0: continue
         r2 = run_app(binary, work, "bh_skyguard_same", dict(sb, PL_SETTINGS=sf), frames=20, size="880x560", timeout=1200)
         check("PLBHSKY state=-1" in r2.out, "sky guard: a restart with the same sky shader and driver stays off")
         sf3 = os.path.join(d, "settings_shader.txt")
         with open(sf3, "w", encoding="utf-8") as f: f.write(open(sf, encoding="utf-8").read())
-        r5 = run_app(binary, work, "bh_skyguard_shader", dict(sb, PL_SETTINGS=sf3, PL_GPU_SKYSHADER="sky 0000000000000000"), frames=60, size="880x560", timeout=1200)
+        r5 = run_app(binary, work, "bh_skyguard_shader", dict(sb, PL_SETTINGS=sf3, PL_GPU_SKYSHADER="sky 0000000000000000"), frames=400, size="880x560", timeout=1800)
         check("PLBHSKY state=1" in r5.out, "sky guard: a changed sky shader tries again (and passes here)")
-        r4 = run_app(binary, work, "bh_skyguard_again", dict(sb, PL_SETTINGS=sf, PL_OPEN="settings:gpusky", PL_SCRIPT="14:click=gpusky.again"), frames=70, size="880x560", timeout=1200)
+        r4 = run_app(binary, work, "bh_skyguard_again", dict(sb, PL_SETTINGS=sf, PL_OPEN="settings:gpusky", PL_SCRIPT="14:click=gpusky.again"), frames=400, size="880x560", timeout=1800)
         txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
-        check(not r4.scripted_missing() and "PLBHSKY state=1" in r4.out and "gpusky=ok | " in txt, f"sky guard: Try again: the card's sky passes in the same run, kept ok ({r4.scripted_missing()})")
+        check(not r4.scripted_missing() and "PLBHSKY state=1" in r4.out and "gpuvksky=ok | " in txt, f"sky guard: Try again: the card's sky passes in the same run, kept ok ({r4.scripted_missing()})")
     # the start-up check made to fail (test switch): the processor's table, Settings says why
     rf = run_app(binary, work, "bh_skyguard_fail", dict(sb, PL_BH_SKYFAIL="1", PL_OPEN="settings"), frames=40, size="880x560", timeout=1200)
     said = any("the processor's table, because the check was made to fail" in n for n in rf.note("bhsky"))
@@ -973,7 +974,6 @@ def sky_guard(binary, work, sb):
     check("PLBHSKY state=-1" in rf.out and said and ff and ff[-1]["skycard"] == "0", f"sky guard: a failed start-up check: the processor's table draws and Settings says so (said {said})")
 
 def smooth_sky(binary, work, base, steps):
-    base = dict(base, PL_GRAPHICS="opengl")   # 0.63.0: OpenGL's guard records (Vulkan's twins: check_shell.py vulkanbh)
     # 0.56.0, the card draws sky and disc per pixel (render/shaders.h kKerrSkyFS; the processor's tables serve the stars). The same tilt drags at spin 0.6,
     # 880 x 560: the card's start-up check passes; in every frame in which the view moved a new picture of sky and disc is drawn in that frame (the stars'
     # pictures may come later); at rest the stars' picture is the settings' own and the sky is drawn at full resolution. 0.56.2 (the owner's decision: no
@@ -1041,15 +1041,15 @@ def smooth_disc(binary, work, base):
         check(last.get("behind") == "0" and last.get("sky") == last.get("want"), f"disc at rest, {name}: at rest the picture is the settings' own")
 
 def smooth_guard(binary, work, cb):
-    cb = dict(cb, PL_GRAPHICS="opengl")   # 0.63.0: OpenGL's guard records (Vulkan's twins: check_shell.py vulkanbh)
+    # (0.69.0: Vulkan's guard of the light paths: marker gpu-vklightpaths-step.txt, settings line "gpuvklightpaths=", log lines "[vulkan] [lightpaths] "; OpenGL's is gone)
     # 0.55.7, the guard round the card's path (app/gpu_guard.h) and its log, beside the settings file (here PL_SETTINGS in a folder of its own per case).
     # The log of a normal first run: the start's lines, then every step in order, the check's numbers, the first fill piece by piece, the verdict.
     gd = os.path.join(work, "guard_ok"); os.makedirs(gd, exist_ok=True)
     for f in os.listdir(gd): os.remove(os.path.join(gd, f))
     sf = os.path.join(gd, "settings.txt")
-    ok = run_app(binary, work, "bh_guard_ok", dict(cb, PL_SETTINGS=sf), frames=60, timeout=1200)
+    ok = run_app(binary, work, "bh_guard_ok", dict(cb, PL_SETTINGS=sf), frames=400, timeout=1800)
     log = open(os.path.join(gd, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(gd, "gpu-paths-log.txt")) else ""
-    order = ["GPU: ", "OpenGL: ", "Double precision", "begin compile", "end compile the light paths' shader: compiled", "begin link", "end link",
+    order = ["begin the light paths' pipeline", "end the light paths' pipeline: made",
              "begin check: dispatch 1", "begin check: fence wait, dispatch 1", "end check: fence wait", "begin check: read back dispatch 1", "double functions",
              "case 1 (spin 0.90, r 20, theta 1.3): dispatch the shadow's edge", "begin check: case 1 (spin 0.90, r 20, theta 1.3): dispatch 16 rays", "case 2 (spin 0.99",
              "32 rays: edge", "PASSED", "begin fill 1: dispatch pass A", "begin fill 1: fence wait, pass A", "begin fill 1: dispatch the rows' edges",
@@ -1062,47 +1062,47 @@ def smooth_guard(binary, work, cb):
         else: at = k
     check("PLBHCARD state=1" in ok.out and not missing and len(log.splitlines()) < 400, f"guard: the log names every step in order on the software renderer's run (missing or out of order: {missing})")
     txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
-    check("gpupaths=ok | " in txt and not os.path.exists(os.path.join(gd, "gpu-paths-step.txt")), "guard: the whole path succeeded: kept as ok, no marker left")
+    check("gpuvklightpaths=ok | " in txt and not os.path.exists(os.path.join(gd, "gpu-vklightpaths-step.txt")), "guard: the whole path succeeded: kept as ok, no marker left")
     # the process ended inside a named step (test switch PL_GPU_DIE): the marker names it; the next start compiles nothing, draws on the processor's path,
     # and Settings, Performance names the step; a restart with the same driver stays off, another driver string tries again; "Try again" clears it
-    for i, (die, want) in enumerate([("compile", "compile the light paths' shader"), ("check: fence wait, case 1", "check: fence wait, case 1 (spin 0.90, r 20, theta 1.3) edges"),
+    for i, (die, want) in enumerate([("the light paths' pipeline", "the light paths' pipeline"), ("check: fence wait, case 1", "check: fence wait, case 1 (spin 0.90, r 20, theta 1.3) edges"),
                                      ("dispatch fill 1: piece 2", "dispatch fill 1: piece 2 (rays 64 to 319 of 4096)")]):
         d = os.path.join(work, f"guard_die{i}"); os.makedirs(d, exist_ok=True)
         for f in os.listdir(d): os.remove(os.path.join(d, f))
         sf = os.path.join(d, "settings.txt")
-        run_app(binary, work, f"bh_guard_die{i}", dict(cb, PL_SETTINGS=sf, PL_GPU_DIE=die), frames=60, timeout=1200)
-        mk = os.path.join(d, "gpu-paths-step.txt")
+        run_app(binary, work, f"bh_guard_die{i}", dict(cb, PL_SETTINGS=sf, PL_GPU_DIE=die), frames=400, timeout=1800)
+        mk = os.path.join(d, "gpu-vklightpaths-step.txt")
         marker = open(mk, encoding="utf-8").read() if os.path.exists(mk) else ""
         check(f"step={want}\n" in marker and "driver=" in marker and "version=" in marker, f"guard: the process ended inside '{die}': the marker names the step ({marker!r})")
         r = run_app(binary, work, f"bh_guard_after{i}", dict(cb, PL_SETTINGS=sf, PL_OPEN="settings"), frames=30, timeout=1200)
         fr = frames_of(r)
         lg = open(os.path.join(d, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(d, "gpu-paths-log.txt")) else ""
         said = [n for n in r.note("bhpaths") if "stopped the app last time" in n and f"'{want}'" in n]
-        check("PLBHCARD state=-1" in r.out and "begin compile" not in lg and len(fr) > 0 and fr[-1]["cardstate"] == "-1" and fr[-1]["card"] == "0" and fr[-1]["pic"] != "0" and said,
+        check("PLBHCARD state=-1" in r.out and "begin the light paths' pipeline" not in lg and len(fr) > 0 and fr[-1]["cardstate"] == "-1" and fr[-1]["card"] == "0" and fr[-1]["pic"] != "0" and said,
               f"guard: after '{die}' the shader is not compiled, the processor's path draws, Settings names the step (said {bool(said)})")
         txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
-        check("gpupaths=off | " in txt and re.search(r"\| " + re.escape(want) + r"( \| app [^\n|]*)?\n", txt), "guard: the settings file keeps it off with the step")
+        check("gpuvklightpaths=off | " in txt and re.search(r"\| " + re.escape(want) + r"( \| app [^\n|]*)?\n", txt), "guard: the settings file keeps it off with the step")
         check(not os.path.exists(mk), "guard: the marker is gone once the settings file keeps it")
         if i != 0: continue
         r2 = run_app(binary, work, "bh_guard_same", dict(cb, PL_SETTINGS=sf), frames=20, timeout=1200)
         lg2 = open(os.path.join(d, "gpu-paths-log.txt"), encoding="utf-8").read() if os.path.exists(os.path.join(d, "gpu-paths-log.txt")) else ""
-        check("PLBHCARD state=-1" in r2.out and "stopped the app last time" in r2.out and "begin compile" not in lg2, "guard: a restart with the same driver stays off, nothing compiled")
+        check("PLBHCARD state=-1" in r2.out and "stopped the app last time" in r2.out and "begin the light paths' pipeline" not in lg2, "guard: a restart with the same driver stays off, nothing made")
         # 0.55.9: the settings file keeps the light-path shader's id, not the app version: a new app version with the same shader and driver stays off
         # (the kept line names no app version at all); a changed shader text tries again
         txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
-        kept = [ln for ln in txt.splitlines() if ln.startswith("gpupaths=")]
-        check(len(kept) == 1 and kept[0].startswith("gpupaths=off | shader ") and " | 0.55" not in kept[0], f"guard: the kept line holds the shader's id, no app version ({kept})")
+        kept = [ln for ln in txt.splitlines() if ln.startswith("gpuvklightpaths=")]
+        check(len(kept) == 1 and kept[0].startswith("gpuvklightpaths=off | vulkan lightpaths "), f"guard: the kept line holds the shader's id, not the app version ({kept})")
         sf3 = os.path.join(d, "settings_shader.txt")
         with open(sf3, "w", encoding="utf-8") as f: f.write(txt)
-        r5 = run_app(binary, work, "bh_guard_shader", dict(cb, PL_SETTINGS=sf3, PL_GPU_SHADER="shader 0000000000000000"), frames=60, timeout=1200)
+        r5 = run_app(binary, work, "bh_guard_shader", dict(cb, PL_SETTINGS=sf3, PL_GPU_SHADER="shader 0000000000000000"), frames=400, timeout=1800)
         check("PLBHCARD state=1" in r5.out, "guard: a changed light-path shader tries again (and passes here)")
         sf2 = os.path.join(d, "settings_other.txt")
         with open(sf2, "w", encoding="utf-8") as f: f.write(open(sf, encoding="utf-8").read())
-        r3 = run_app(binary, work, "bh_guard_other", dict(cb, PL_SETTINGS=sf2, PL_GPU_DRIVER="Another driver 1.2.3"), frames=60, timeout=1200)
+        r3 = run_app(binary, work, "bh_guard_other", dict(cb, PL_SETTINGS=sf2, PL_GPU_DRIVER="Another driver 1.2.3"), frames=400, timeout=1800)
         check("PLBHCARD state=1" in r3.out, "guard: another driver string tries again (and passes here)")
-        r4 = run_app(binary, work, "bh_guard_again", dict(cb, PL_SETTINGS=sf, PL_OPEN="settings:gpupaths", PL_SCRIPT="14:click=gpupaths.again"), frames=70, timeout=1200)
+        r4 = run_app(binary, work, "bh_guard_again", dict(cb, PL_SETTINGS=sf, PL_OPEN="settings:gpupaths", PL_SCRIPT="14:click=gpupaths.again"), frames=400, timeout=1800)
         txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
-        check(not r4.scripted_missing() and "PLBHCARD state=1" in r4.out and "gpupaths=ok | " in txt and "stopped the app" not in (r4.note("bhpaths") or [""])[-1],
+        check(not r4.scripted_missing() and "PLBHCARD state=1" in r4.out and "gpuvklightpaths=ok | " in txt and "stopped the app" not in (r4.note("bhpaths") or [""])[-1],
               f"guard: Try again clears it: the card's path passes in the same run and the settings file keeps ok ({r4.scripted_missing()})")
     # a fence that never signals (test switch PL_BH_CARDHANG; the step's limit 3 s here): the frames go on meanwhile, then the processor's path, kept as slow
     d = os.path.join(work, "guard_hang"); os.makedirs(d, exist_ok=True)
@@ -1113,7 +1113,7 @@ def smooth_guard(binary, work, cb):
     waiting = [x for x in fh if x["cardstate"] == "2"]
     txt = open(sf, encoding="utf-8").read() if os.path.exists(sf) else ""
     check("PLBHCARD state=-1" in rh.out and "did not finish in time (fence wait, dispatch 1)" in rh.out and len(waiting) >= 20 and fh and fh[-1]["card"] == "0" and fh[-1]["pic"] != "0"
-          and "gpupaths=slow | " in txt, f"guard: a fence that never signals: {len(waiting)} frames drawn while the check waited, then the processor's path, kept as slow")
+          and "gpuvklightpaths=slow | " in txt, f"guard: a fence that never signals: {len(waiting)} frames drawn while the check waited, then the processor's path, kept as slow")
 
 def part_alllight(binary, work):
     # 0.58.0: Light: What an eye sees (the default, the dot) / All light, Real look with the disc on (1280 x 800, Dark): the control there and not for Film; a click

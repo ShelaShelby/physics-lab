@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.69.0", "OpenGL removed: Vulkan is the app's only drawing system",
+     "Everything is drawn with Vulkan: the OpenGL path, its card programs and the Graphics choice in Settings are gone (an old settings file's graphics= line "
+     "is read and ignored); nothing else you see changes. Vulkan 1.3 and 1.4 are used as before, and now also Vulkan 1.2 with the extensions "
+     "VK_KHR_dynamic_rendering and VK_KHR_synchronization2 (the Radeon Pro cards of Apple's Boot Camp drivers, Polaris, Vega and Navi, stop at 1.2 with both: "
+     "vulkan.gpuinfo.org). A PC whose Vulkan cannot start, or whose Vulkan stopped the app last time, gets one window naming what is needed and what the PC has, "
+     "with Try again. The lab's picture reaches the window by a copy (a blit) instead of an extra shader pass; the pictures are the same. The checks that compared "
+     "the card's programs and pictures with the processor's now run on Vulkan (vk_compare_tests, the Black Hole Lab's precision checks)."},
     {"0.68.1", "Fixes: the helper's time limit, the nucleus density benchmark scene, the benchmark's own work out of the counted frames",
      "A graphics-card helper that never answers is now ended after 30 seconds (and every helper when the app closes), the log says which step hung, and the next one "
      "starts; a helper that ends without writing its result is logged as that, and a crash code is no longer taken for \"still running\". The light paths' variants are "

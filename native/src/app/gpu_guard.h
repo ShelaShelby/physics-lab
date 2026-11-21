@@ -142,18 +142,15 @@ GpuGuard& gpuJumpGuard();
 // 0.57.1: the Molecule Lab's Density cloud on the card (render/molecule_card.h): its own marker (gpu-molcloud-step.txt), the settings line "gpumolcloud=",
 // the same log (its lines start "[molcloud] "), its version field "molcloud <hash>"
 GpuGuard& gpuMolCloudGuard();
-// 0.59.0: Vulkan (step 1 of 5, native/PLAN_VULKAN.md): the window's Vulkan start (instance, surface, device, swapchain, first frame), its own marker
+// 0.59.0: Vulkan (step 1 of 5, the Vulkan plan, done in 0.69.0 (git keeps it)): the window's Vulkan start (instance, surface, device, swapchain, first frame), its own marker
 // (gpu-vulkan-step.txt), the settings line "gpuvulkan=", the same log (its lines start "[vulkan] "; it starts the log when Vulkan is tried), its version
 // field "vulkan <app version>" (the Vulkan code changes with each step, so a new version tries once more)
 GpuGuard& gpuVulkanGuard();
 
-// 0.61.0 (Vulkan step 3 of 5): useVulkanGuards(true) at a Vulkan start: gpuSliceGuard, gpuJumpGuard and gpuMolCloudGuard then give Vulkan's twins (markers
-// gpu-vk<name>-step.txt, settings lines "gpuvk<name>=", log lines "[vulkan] [<name>] ", versions "vulkan <name> <hash>"), so a failure on one API never switches
-// the other off. The four card programs that have no guard of their own on OpenGL (made with the renderer there) have one on Vulkan: the superposition and
-// jump groups (gpuVkGroupsGuard, "gpuvkgroups="), the 90 % outline (gpuVkOutlineGuard, "gpuvkoutline="), the belts' rocks (gpuVkRocksGuard, "gpuvkrocks=")
-// and the Cloud 3D Glow dots (gpuVkCloudGuard, "gpuvkcloud=").
-void useVulkanGuards(bool on);
-bool vulkanGuards();
+// 0.61.0 (Vulkan step 3 of 5): the card programs' guards on Vulkan (markers gpu-vk<name>-step.txt, settings lines "gpuvk<name>=", log lines
+// "[vulkan] [<name>] ", versions "vulkan <name> <hash>"): gpuSliceGuard, gpuJumpGuard, gpuMolCloudGuard, gpuGuard (the light paths) and gpuSkyGuard give
+// Vulkan's (0.69.0: their OpenGL twins are gone with OpenGL), and the superposition and jump groups (gpuVkGroupsGuard, "gpuvkgroups="), the 90 % outline
+// (gpuVkOutlineGuard, "gpuvkoutline="), the belts' rocks (gpuVkRocksGuard, "gpuvkrocks=") and the Cloud 3D Glow dots (gpuVkCloudGuard, "gpuvkcloud=").
 GpuGuard& gpuVkGroupsGuard();
 GpuGuard& gpuVkOutlineGuard();
 GpuGuard& gpuVkRocksGuard();

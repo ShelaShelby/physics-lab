@@ -183,8 +183,8 @@ def anharm(binary, work):
     check(wv is not None and wv["on"] == "1" and wv["anhbox"] == "0" and not any("Anharmonic (real bond)" in t[2] for t in w.texts) and not w.note("bondcard "), f"water: no tick box, no card ({wv})")
 
 MOL_STEPS = ["compile the Density cloud's shaders", "link the Density cloud's shaders", "the Density cloud's first small run", "the Density cloud's check", "the Density cloud's first full use"]
-MOL_BENCH = {"PL_GRAPHICS": "opengl", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "molecule.density,molecule.vib_density",
-             "PL_BENCH_WARMUP": "1.0", "PL_BENCH_MEASURE": "1.5"}
+MOL_BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "molecule.density,molecule.vib_density",
+             "PL_BENCH_WARMUP": "6.0", "PL_BENCH_MEASURE": "1.5"}   # (0.69.0: 6 s, was 1: on Vulkan the steps take their turns, one at a time, through the warm-up)
 
 def card(binary, work):
     def folder(name):
@@ -194,7 +194,7 @@ def card(binary, work):
     def read(path):
         return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
     def lines_of(log):
-        return "\n".join(ln for ln in log.splitlines() if ln.startswith("[molcloud] "))
+        return "\n".join(ln for ln in log.splitlines() if ln.startswith("[vulkan] [molcloud] "))   # (0.69.0: Vulkan's guard; OpenGL's is gone)
     BIG = dict(frames=100000, size="880x560", timeout=1500)
     dirs = {"ok": folder("mc_ok")}
     # (0.68.1: the first scene's warm-up is 8 s, not 1 s: on this box's software renderer the card's program takes about 2.5 s from its first shader to the end of its first full use
@@ -206,7 +206,7 @@ def card(binary, work):
         dirs[i] = d
         calls.append(((binary, work, f"mc_die{i}", dict(MOL_BENCH, PL_SETTINGS=os.path.join(d, "settings.txt"), PL_GPU_DIE=st)), BIG))
     # the picture: water and benzene in the Density style, cloud and surface, the card's cloud and the processor's (PL_MOL_CARD=0), the same frames
-    look = {"PL_MOLECULE_STYLE": "real", "PL_DRAWSTAT": "1", "PL_GRAPHICS": "opengl"}   # (0.63.0: OpenGL's card program and guard records)
+    look = {"PL_MOLECULE_STYLE": "real", "PL_DRAWSTAT": "1"}   # (0.69.0: Vulkan's card program and guard records; until 0.68.1 OpenGL's)
     PICS = [("H2O", "dark"), ("C6H6", "dark"), ("H2O", "light")]   # (the light page: the darker dot colour, drawn over instead of added)
     pics = [((binary, work, f"mc_pic_{m}_{th}_{w}", dict(look, PL_MOLECULE=m, PL_THEME=th, **({"PL_MOL_CARD": "0"} if w == "cpu" else {}))), dict(frames=90, theme=th)) for m, th in PICS for w in ("card", "cpu")]   # (90 frames: the steps take a frame each, the read-backs a few more on a busy PC)
     prefetch(calls + pics)
@@ -235,12 +235,12 @@ def card(binary, work):
         else: at = k
     timed = all(re.search(r"end " + re.escape(s_) + r"[^\n]* in \d+ ms", log) for s_ in MOL_STEPS[:2])
     check(not missing and timed, f"card: the log names every step in order, the compile and link with their times (missing: {missing})")
-    check("gpumolcloud=ok | molcloud " in st and not os.path.exists(os.path.join(dirs["ok"], "gpu-molcloud-step.txt")), "card: kept as ok in the settings file, no marker left")
+    check("gpuvkmolcloud=ok | vulkan molcloud " in st and not os.path.exists(os.path.join(dirs["ok"], "gpu-vkmolcloud-step.txt")), "card: kept as ok in the settings file, no marker left")
     # 4. the process ended inside each step: the marker names it; the next start runs nothing of it, the processor is used, Settings names the step
     for i, s_ in enumerate(MOL_STEPS):
-        marker = read(os.path.join(dirs[i], "gpu-molcloud-step.txt"))
-        check(f"step={s_}\n" in marker and "version=molcloud " in marker, f"card: the process ended inside '{s_}': the marker names the step ({marker!r})")
-    after = [((binary, work, f"mc_after{i}", {"PL_GRAPHICS": "opengl", "PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": os.path.join(dirs[i], "settings.txt"), "PL_OPEN": "settings", "PL_DRAWSTAT": "1"}),
+        marker = read(os.path.join(dirs[i], "gpu-vkmolcloud-step.txt"))
+        check(f"step={s_}\n" in marker and "version=vulkan molcloud " in marker, f"card: the process ended inside '{s_}': the marker names the step ({marker!r})")
+    after = [((binary, work, f"mc_after{i}", {"PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": os.path.join(dirs[i], "settings.txt"), "PL_OPEN": "settings", "PL_DRAWSTAT": "1"}),
               dict(frames=30, size="880x560", timeout=900)) for i in range(len(MOL_STEPS))]
     prefetch(after)
     for i, s_ in enumerate(MOL_STEPS):
@@ -253,7 +253,7 @@ def card(binary, work):
               f"card: after '{s_}' nothing of the program runs, the processor draws the cloud, Settings names the step (said {bool(said)})")
         txt = read(os.path.join(dirs[i], "settings.txt"))
         # (0.68.1: the line ends with "| app <version>" since 0.63.1 (the settings' fifth field): the step is followed by it, not by the end of the line)
-        check("gpumolcloud=off | molcloud " in txt and re.search(r"\| " + re.escape(s_) + r"( \| app [^\n|]*)?\n", txt) and not os.path.exists(os.path.join(dirs[i], "gpu-molcloud-step.txt")), f"card: the settings file keeps it off with the step '{s_}', the marker gone")
+        check("gpuvkmolcloud=off | vulkan molcloud " in txt and re.search(r"\| " + re.escape(s_) + r"( \| app [^\n|]*)?\n", txt) and not os.path.exists(os.path.join(dirs[i], "gpu-vkmolcloud-step.txt")), f"card: the settings file keeps it off with the step '{s_}', the marker gone")
     # 5. a changed shader tries again (and passes here); Try again passes in the same run
     sf = os.path.join(dirs[0], "settings.txt")
     sf2 = os.path.join(dirs[0], "settings_shader.txt")
@@ -261,8 +261,8 @@ def card(binary, work):
     r5 = run_app(binary, work, "mc_shader", dict(MOL_BENCH, PL_SETTINGS=sf2, PL_GPU_MOLSHADER="molcloud 0000000000000000"), frames=100000, size="880x560", timeout=1500)
     check("PLMOLCARD state=1" in r5.out, "card: a changed shader tries again (and passes here)")
     sf = os.path.join(dirs[1], "settings.txt")
-    r4 = run_app(binary, work, "mc_again", {"PL_GRAPHICS": "opengl", "PL_MOLECULE": "H2O", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpumolcloud", "PL_SCRIPT": "14:click=gpumolcloud.again"}, frames=60, size="880x560", timeout=900)
-    check(not r4.scripted_missing() and "PLMOLCARD state=1" in r4.out and "gpumolcloud=ok" in read(sf), f"card: Try again: the program is made, checked and used again in the same run ({r4.scripted_missing()})")
+    r4 = run_app(binary, work, "mc_again", {"PL_MOLECULE": "H2O", "PL_MOLECULE_STYLE": "real", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpumolcloud", "PL_SCRIPT": "14:click=gpumolcloud.again"}, frames=60, size="880x560", timeout=900)
+    check(not r4.scripted_missing() and "PLMOLCARD state=1" in r4.out and "gpuvkmolcloud=ok" in read(sf), f"card: Try again: the program is made, checked and used again in the same run ({r4.scripted_missing()})")
     # 6. the picture: the card's cloud against the processor's. The dots themselves are checked against their derived limits above; here a sanity bound on
     #    the whole picture (a wrong exposure, a missing or misplaced set of dots or the wrong colour gives tens of levels): every frame drawn by the card
     #    once its check passed, and the mean difference per channel under one level of 255
@@ -291,7 +291,7 @@ def cardsurface(binary, work):
         st = x.bpp
         return sum(1 for i in range(0, min(len(px), len(py)) - st + 1, st) if max(abs(px[i] - py[i]), abs(px[i + 1] - py[i + 1]), abs(px[i + 2] - py[i + 2])) > 8)
     for sc in ("molecule.density", "molecule.vib_density"):
-        env = {"PL_GRAPHICS": "vulkan", "PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc}
+        env = {"PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc}
         c = run_app(binary, work, "surf_card_" + sc, env, frames=60)
         p = run_app(binary, work, "surf_cpu_" + sc, dict(env, PL_NO_SURFACE_CARD="1"), frames=60)
         if sc == "molecule.density":

@@ -1,4 +1,4 @@
-// 0.61.0: Vulkan, step 3 of 5 (native/PLAN_VULKAN.md): the card programs of the Atom, Molecule and Orbit Labs on Vulkan, from the same shader text as
+// 0.61.0: Vulkan, step 3 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): the card programs of the Atom, Molecule and Orbit Labs on Vulkan, from the same shader text as
 // OpenGL's (render/shaders.h, made into SPIR-V at build time: CMakeLists.txt PL_VK2D_SHADERS). Each program implements the interface its OpenGL class does
 // (IGroupCompute, IOutlineCompute, IRockCompute, AtomCard, MoleculeCard; the Cloud 3D Glow dots of Renderer2D::cloudGpu), so the labs' code is the same;
 // Renderer2D gives these objects back on Vulkan (render/renderer2d_vk.cpp useVulkanCards).

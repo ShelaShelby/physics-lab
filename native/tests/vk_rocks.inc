@@ -1,4 +1,4 @@
-// 0.13 stage 4 part A: the Orbit Lab's rocks on the GPU against the CPU (included by gl_compare.cpp, llvmpipe with OpenGL 4.3+).
+// 0.13 stage 4 part A: the Orbit Lab's rocks on the GPU against the CPU (included by vk_compare.cpp; 0.69.0: on Vulkan, lavapipe).
 // REFERENCE: orbit::beltPoint + orbit::beltScreen (double), and for the physics the textbook of tests/rock_reference.h (Kepler's equation by bisection, JPL's formulas).
 // The harness was written before the GPU class was first run (the physics tests of tests/test_rocks.inc before any code).
 //
@@ -45,10 +45,10 @@ static RockDiff compareRocks(render::Renderer2D& R, orbit::BeltLayer& layer, con
     return d;
 }
 
-static Picture g_cpuRocks1;                                                     // scene 1's rocks, the CPU way, on the 4.3 context: for the fallback test
+static Picture g_cpuRocks1;                                                     // scene 1's rocks, the CPU way, by the card renderer: for the fallback test
 
 static void gpuRocks(render::Renderer2D& R, const std::string& /*dir*/) {
-    check("rocks: the 4.3 context has a rock compute object (double precision shader compiled)", R.rockCompute() != nullptr && R.rockCompute()->ok());
+    check("rocks: the Vulkan renderer has a rock compute object (double precision shader made)", R.rockCompute() != nullptr && R.rockCompute()->ok());
     if (!R.rockCompute()) return;
     const std::int64_t epoch = 1767268800000LL;                                  // 2026-01-01 12:00 UTC
     // ---- every rock of scenes 1 and 6, at several times, three cameras ----
@@ -219,18 +219,18 @@ static void gpuRocksPictures(render::Renderer2D& R, const std::string& dir) {
         orbit::BeltLayer nl;
         Rf.begin(1040, 713);
         nl.draw(Rf, sys, cam, -1, pink, true);
-        check("rocks logic: no compute object at all (a 3.3 PC): the CPU path", nl.lastPath() == orbit::BeltLayer::Path::Cpu && nl.cpuRocksPlaced() == 6000);
+        check("rocks logic: no compute object at all (no card programs): the CPU path", nl.lastPath() == orbit::BeltLayer::Path::Cpu && nl.cpuRocksPlaced() == 6000);
     }
 }
 
-// the 3.3 context (called from fallback33): no rock compute object, the CPU path, the picture the same as the 4.3 context's CPU picture
+// without the card programs (called from fallback33): no rock compute object, the CPU path, the picture the same as the card renderer's CPU picture
 static void gpuRocksFallback33(render::Renderer2D& R33, const std::string& dir) {
-    check("3.3 context: there is no rock compute object either", R33.rockCompute() == nullptr);
+    check("no card programs: there is no rock compute object either", R33.rockCompute() == nullptr);
     orbit::SolarSystem sys; sys.loadAt(1767268800000LL);
     orbit::BeltLayer layer;
     const orbit::BeltCamera cam = rockCamera(sys, 0.0, true, 0, 0, 0);
     const Picture p = draw1(R33, 1040, 713, render::hexColor("#05070d"), [&] { layer.draw(R33, sys, cam, -1, render::hexColor("#ff2bd6"), true); });
-    check("3.3 context: the rocks are drawn by the CPU path (with the switch On)", layer.lastPath() == orbit::BeltLayer::Path::Cpu && layer.cpuRocksPlaced() == 6000);
-    if (g_cpuRocks1.px.empty()) check("scene 1 rocks picture from the 4.3 context was kept", false);
-    else report(dir, "3.3 fallback scene 1 rocks against the 4.3 context's CPU picture", g_cpuRocks1, p, 0);
+    check("no card programs: the rocks are drawn by the CPU path (with the switch On)", layer.lastPath() == orbit::BeltLayer::Path::Cpu && layer.cpuRocksPlaced() == 6000);
+    if (g_cpuRocks1.px.empty()) check("scene 1 rocks picture from the card renderer was kept", false);
+    else report(dir, "no card programs: scene 1 rocks against the card renderer's CPU picture", g_cpuRocks1, p, 0);
 }

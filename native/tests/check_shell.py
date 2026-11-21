@@ -184,10 +184,8 @@ def part_old(binary, work):
     r = run_app(binary, work, "off", {"PL_NEWUI": "off"}, frames=30)
     check(r.window is not None and r.texts, "the New UI is always on (PL_NEWUI=off is ignored)")
 
-# 0.59.0 (Vulkan step 1 of 5, PLAN_VULKAN.md): PL_GRAPHICS=vulkan with the validation layers on: the app starts on Vulkan (lavapipe here), the log has every
-# [vulkan] step, zero validation errors; Settings and a page drawn by Vulkan against the same state drawn by OpenGL (PL_NO_PICTURE: OpenGL leaves the lab's
-# picture out too): at most 1 % of the pixels differ by more than 8 levels (the planner's limit: the same Dear ImGui triangles, only rasterisation may
-# differ); with a step made to fail (PL_VK_FAIL=device) the app starts on OpenGL and Settings says why. Only when asked (check_shell.py ... vulkan).
+# 0.59.0 (Vulkan step 1 of 5): the app with the validation layers on: it starts on Vulkan (lavapipe here), the log has every [vulkan] step, zero validation
+# errors (0.69.0: OpenGL is gone, and with it the comparison of these pictures with OpenGL's). Then the swapchain made again. Only when asked (check_shell.py ... vulkan).
 VK_STEPS = ["instance", "surface", "device", "swapchain", "pipelines", "renderer2d pipelines", "renderer2d textures", "renderer2d check", "first frame"]   # (0.60.0: + renderer2d)
 
 def _settings_files(home):
@@ -214,11 +212,10 @@ def _differ(a, b, limit=8):
     return big / float(A.w * A.h)
 
 def part_vulkan(binary, work):
-    vk_env = {"PL_GRAPHICS": "vulkan", "PL_VK_VALIDATION": "1"}
+    vk_env = {"PL_VK_VALIDATION": "1"}
     for name, opened in (("settings", "settings"), ("page", "about")):         # (Settings at its top: the Graphics row itself says which is in use)
-        v = run_app(binary, work, "vk_" + name, dict(vk_env, PL_OPEN=opened, PL_NO_PICTURE="1"), frames=40)   # (0.60.0: Vulkan draws the picture too: left out on both)
-        g = run_app(binary, work, "gl_" + name, {"PL_OPEN": opened, "PL_NO_PICTURE": "1", "PL_GRAPHICS": "opengl"}, frames=40)
-        check("Vulkan: " in v.out and "OpenGL: " not in v.out, f"{name}: the app started on Vulkan ({[l for l in v.out.splitlines() if l.startswith(('Vulkan', 'OpenGL'))]})")
+        v = run_app(binary, work, "vk_" + name, dict(vk_env, PL_OPEN=opened, PL_NO_PICTURE="1"), frames=40)
+        check("Vulkan: " in v.out and v.code == 0, f"{name}: the app started on Vulkan and ended normally (exit {v.code}; {[l for l in v.out.splitlines() if l.startswith('Vulkan')][:1]})")
         check("PLVKVALIDATION missing" not in v.err, f"{name}: the validation layers are installed and on")
         errs = [l for l in v.err.splitlines() if l.startswith("PLVKVALIDATION error")]
         warns = [l for l in v.err.splitlines() if l.startswith("PLVKVALIDATION warning")]
@@ -226,33 +223,45 @@ def part_vulkan(binary, work):
         log, _cfg = _settings_files(os.path.join(os.path.abspath(work), "home_vk_" + name))
         missing = [st for st in VK_STEPS if f"[vulkan] " not in log or f"begin {st}" not in log or f"end {st}" not in log]
         check(not missing and "Vulkan: the whole path succeeded" in log, f"{name}: the log has every [vulkan] step (missing: {missing})")
-        frac = _differ(v.bmp, g.bmp) if os.path.exists(v.bmp) and os.path.exists(g.bmp) else None
-        check(frac is not None and frac <= 0.01, f"{name}: Vulkan against OpenGL: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels (at most 1 %)")
+        check(os.path.exists(v.bmp), f"{name}: the window's picture was read back")
         if name == "settings":
             gl_note = [n for n in v.notes if n.startswith("graphics ")]
-            check(gl_note and "In use now: Vulkan, on " in gl_note[0], f"Settings says Vulkan is in use: {gl_note[:1]}")
+            check(gl_note and "Graphics: Vulkan, on " in gl_note[0], f"Settings says Vulkan is in use: {gl_note[:1]}")
     # the swapchain made again: the window resized twice and VSync switched off and on (other present modes), validation still silent
     m = run_app(binary, work, "vk_resize", dict(vk_env, PL_OPEN="settings:vsync", PL_SCRIPT="8:size=1000x700;14:click=vsync;20:size=1280x800;26:click=vsync"), frames=34)
     errs = [l for l in m.err.splitlines() if l.startswith("PLVKVALIDATION error")]
     check("Vulkan: " in m.out and "PLVK validation errors=0" in m.out and not errs and not m.scripted_missing(), f"resized and VSync switched: zero validation errors ({errs[:1]}, {m.scripted_missing()})")
     check(os.path.exists(m.bmp) and Bmp(m.bmp).w == 1280, "after the resize the swapchain has the window's new size (the last picture 1280 wide)")
-    f = run_app(binary, work, "vk_fail", dict(vk_env, PL_OPEN="settings:graphics", PL_VK_FAIL="device"), frames=30)
-    check("OpenGL: " in f.out and "Vulkan: " not in f.out, "a Vulkan step that fails: the app starts on OpenGL")
-    note = [n for n in f.notes if n.startswith("graphics ")]
-    check(note and "In use now: OpenGL, because Vulkan could not start" in note[0] and "device" in note[0] and "made to fail on purpose" in note[0],
-          f"Settings says why it is OpenGL: {note[:1]}")
-    log, cfg = _settings_files(os.path.join(os.path.abspath(work), "home_vk_fail"))
-    check("[vulkan]" in log and "failed: made to fail on purpose" in log and "This start uses OpenGL" in log and "Physics Lab" in log.splitlines()[0],
-          "the log keeps the [vulkan] lines and says this start uses OpenGL")
-    check("gpuvulkan=fail | vulkan " in cfg and "graphics=opengl" not in cfg, "the settings file keeps the failed step (the next start uses OpenGL until Try again; Vulkan stays the choice, 0.63.0: the default, not written)")
 
-# 0.60.0 (Vulkan step 2 of 5, PLAN_VULKAN.md): renderer2d on Vulkan. Each view of REPORT.md's coverage table (every drawing call of Renderer2D that is not a
+# 0.69.0 (OpenGL removed): a PC whose Vulkan cannot start. A step made to fail (PL_VK_FAIL=device, a test switch): the app shows its message (printed by the
+# checks: PLNOVULKAN, PLNOVULKANTEXT; no window waits for a click) naming what is needed and what this PC has, draws no frame and ends with exit code 1, not
+# a crash; the log and the settings keep the failed step. The next start (no switch): the guard keeps Vulkan off, the same message. Try again
+# (PL_NOVULKAN_ANSWER=again) forgets it; the start after that runs on Vulkan. (On 0.68.1 the first start went on to OpenGL: no message.)
+def part_novulkan(binary, work):
+    home = os.path.join(os.path.abspath(work), "home_nv")
+    subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
+    f = run_app(binary, work, "nv_fail", dict(HOME=home, PL_VK_FAIL="device"), frames=30)
+    text = [l for l in f.out.splitlines() if l.startswith("PLNOVULKANTEXT ")]
+    check(any(l.startswith("PLNOVULKAN ") and "made to fail on purpose" in l for l in f.out.splitlines()) and text and "Vulkan 1.3" in text[0] and "VK_KHR_dynamic_rendering" in text[0]
+          and "VK_KHR_synchronization2" in text[0] and "This PC: " in text[0], f"no Vulkan: the message names what is needed and what this PC has ({text[:1]})")
+    check(f.code == 1 and f.window is None and "PLNOVULKANANSWER close" in f.out, f"no Vulkan: no frame drawn, the app ends with exit code 1, no crash (exit {f.code})")
+    log, cfg = _settings_files(home)
+    check("[vulkan]" in log and "failed: made to fail on purpose" in log and "Vulkan could not start" in log, "no Vulkan: the log keeps the [vulkan] lines and says Vulkan could not start")
+    check("gpuvulkan=fail | vulkan " in cfg, "no Vulkan: the settings file keeps the failed step")
+    n = run_app(binary, work, "nv_next", dict(HOME=home, PL_NOVULKAN_ANSWER="again"), frames=30)
+    check(n.code == 1 and any(l.startswith("PLNOVULKAN ") and "could not start last time" in l for l in n.out.splitlines()) and "PLNOVULKANANSWER again" in n.out,
+          f"no Vulkan: the next start keeps it off and says so; Try again answered (exit {n.code})")
+    _log, cfg2 = _settings_files(home)
+    check("gpuvulkan=fail" not in cfg2, "no Vulkan: Try again forgets the failed step in the settings file")
+    a = run_app(binary, work, "nv_again", dict(HOME=home), frames=30)
+    check("Vulkan: " in a.out and a.code == 0 and a.window is not None and "PLNOVULKAN" not in a.out, f"no Vulkan: after Try again the app starts on Vulkan (exit {a.code})")
+
+# 0.60.0 (Vulkan step 2 of 5, the Vulkan plan, done in 0.69.0 (git keeps it)): renderer2d on Vulkan. Each view of REPORT.md's coverage table (every drawing call of Renderer2D that is not a
 # card program -> one view that makes it; PL_LOG_DRAWKINDS says which calls a run made, so a view that stops making its call fails here) drawn by Vulkan with
-# the validation layers on and by OpenGL, both with one sample (PL_NO_MSAA: the two cards' multisample patterns differ) and both on the processor's paths
-# (PL_NO_COMPUTE and the labs' card switches off: on Vulkan they are not there yet, step 3), so the pictures compare the drawing alone. The planner's limit
-# (fixed): at most 1 % of the pixels differ by more than 8 levels in a channel, per view. Then: every view with 4 samples on Vulkan (zero validation errors,
-# the log says 4 samples), one view with the synchronisation checks on and Save image (zero errors), Save image against OpenGL's saved file (same limit),
-# and the start-up check broken on purpose (PL_VK_CHECK=break: the app starts on OpenGL and Settings says why). Only when asked (check_shell.py ... vulkan2d).
+# the validation layers on, one sample (PL_NO_MSAA) and on the processor's paths (PL_NO_COMPUTE and the labs' card switches off), so the pictures show
+# the drawing alone (0.69.0: OpenGL is gone, and with it their comparison with OpenGL's). Then: every view with 4 samples (zero validation errors, the log
+# says 4 samples), one view with the synchronisation checks on and Save image (zero errors), Save image has the lab's picture, and the start-up check
+# broken on purpose (PL_VK_CHECK=break: the message, exit code 1). Only when asked (check_shell.py ... vulkan2d).
 VK2D_CPU = {"PL_NO_COMPUTE": "1", "PL_GPU_CLOUD": "off", "PL_MOL_CARD": "0", "PL_ATOM_CARD": "0", "PL_LOG_DRAWKINDS": "1"}
 VK2D_VIEWS = {   # name: (settings, the drawing calls the view must make)
     "orbit_2d": ({"PL_SELECT": "Earth"}, "rect line triangle disc ring sphere sunDisc fadeDisc squares skyMap"),
@@ -268,9 +277,9 @@ VK2D_VIEWS = {   # name: (settings, the drawing calls the view must make)
     "mol_ball": ({"PL_MOLECULE": "H2O"}, "blob0 blob3 blob8"),
 }
 
-# 0.61.0 (Vulkan step 3 of 5): the card views: each card program drawing on Vulkan against the same view drawn by OpenGL's card programs (one sample on both,
-# the validation layers with their synchronisation checks on; the planner's limit as above: at most 1 % of the pixels over 8 levels). The Vulkan log must
-# name the program's first full use (so the view really drew from the card). Then: one program broken on purpose (PL_VK_CARDFAIL=cloud: only it falls back,
+# 0.61.0 (Vulkan step 3 of 5): the card views: each card program drawing on Vulkan (one sample, the validation layers with their synchronisation checks
+# on; 0.69.0: their comparison with OpenGL's card programs went with OpenGL). The Vulkan log must name the program's first full use (so the view really
+# drew from the card). Then: one program broken on purpose (PL_VK_CARDFAIL=cloud: only it falls back,
 # the log says why, the picture is the processor's) and a card without double precision (PL_VK_NO_FLOAT64: the belts on the processor, Settings says so).
 VK3_VIEWS = {   # name: (settings, frames, the Vulkan log line of its first full use, OpenGL's log line or "")
     "glow": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=1;view=Cloud 3D;orb=3d;cstyle=Glow"}, 60, "[vulkan] [cloud] |end the Glow dots' first full use", ""),
@@ -283,7 +292,7 @@ VK3_VIEWS = {   # name: (settings, frames, the Vulkan log line of its first full
 }
 # (PL_VK_SYNC: a batch the app asks about is waited for, so the Slice's dots and the outline arrive at the frame that asks, every run, as OpenGL's software
 # driver gives them here: without it Vulkan's pictures of a moving Slice differ from run to run by when the batches finished)
-VK3_SYNC = {"PL_GRAPHICS": "vulkan", "PL_VK_VALIDATION": "1", "VK_KHRONOS_VALIDATION_VALIDATE_SYNC": "true", "PL_NO_MSAA": "1", "PL_VK_SYNC": "1"}
+VK3_SYNC = {"PL_VK_VALIDATION": "1", "VK_KHRONOS_VALIDATION_VALIDATE_SYNC": "true", "PL_NO_MSAA": "1", "PL_VK_SYNC": "1"}
 
 def _logged(log, prefix, text):   # a line of the guard's log: its prefix, its time, then the text
     return any(l.startswith(prefix) and re.search(r"\]\s*" + re.escape(text), l[len(prefix):]) for l in log.splitlines())
@@ -292,7 +301,6 @@ def part_vulkancards(binary, work):
     calls = []
     for name, (env, frames, _v, _g) in VK3_VIEWS.items():
         calls.append(((binary, work, "v3_vk_" + name, dict(env, **VK3_SYNC)), dict(frames=frames)))
-        calls.append(((binary, work, "v3_gl_" + name, dict(env, PL_NO_MSAA="1", PL_GRAPHICS="opengl")), dict(frames=frames)))
     glow = VK3_VIEWS["glow"][0]
     calls.append(((binary, work, "v3_fail", dict(glow, PL_VK_CARDFAIL="cloud", **VK3_SYNC)), dict(frames=60)))
     calls.append(((binary, work, "v3_cpuglow", dict(glow, PL_GPU_CLOUD="off", **VK3_SYNC)), dict(frames=60)))
@@ -300,18 +308,11 @@ def part_vulkancards(binary, work):
     prefetch(calls)
     for name, (env, frames, vline, gline) in VK3_VIEWS.items():
         v = run_app(binary, work, "v3_vk_" + name, dict(env, **VK3_SYNC), frames=frames)
-        g = run_app(binary, work, "v3_gl_" + name, dict(env, PL_NO_MSAA="1", PL_GRAPHICS="opengl"), frames=frames)
         vlog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v3_vk_" + name))
-        glog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v3_gl_" + name))
-        check("Vulkan: " in v.out and "OpenGL: " in g.out, f"card {name}: the app started on Vulkan (and the reference on OpenGL)")
+        check("Vulkan: " in v.out, f"card {name}: the app started on Vulkan")
         check(_logged(vlog, *vline.split("|")), f"card {name}: Vulkan drew it from the card program (the log: '{vline}')")
-        if gline:
-            check(_logged(glog, *gline.split("|")) and "[vulkan]" not in glog, f"card {name}: OpenGL drew it from its card program (the log: '{gline}')")
         errs = _vk_errors(v)
         check("PLVK validation errors=0" in v.out and not errs, f"card {name}: zero validation errors, synchronisation checks on ({len(errs)}; first: {errs[:1]})")
-        frac = _differ(v.bmp, g.bmp) if os.path.exists(v.bmp) and os.path.exists(g.bmp) else None
-        print(f"vulkancards {name}: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels")
-        check(frac is not None and frac <= 0.01, f"card {name}: Vulkan's card program against OpenGL's, one sample: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels (at most 1 %)")
     # one program broken on purpose: only it falls back, the log says why, the picture is the processor's
     f = run_app(binary, work, "v3_fail", dict(glow, PL_VK_CARDFAIL="cloud", **VK3_SYNC), frames=60)
     c = run_app(binary, work, "v3_cpuglow", dict(glow, PL_GPU_CLOUD="off", **VK3_SYNC), frames=60)
@@ -332,10 +333,11 @@ def part_vulkancards(binary, work):
     check("squares" in _kinds(n), "no double precision: the belts are still drawn (the processor's squares)")
     check(note and "The belts' rocks: the processor, because this card has no double precision in its shaders (shaderFloat64)" in note[0], f"no double precision: Settings' Graphics row says so: {note[:1]}")
 
-# 0.62.0 (Vulkan step 4 of 5): the Black Hole Lab on Vulkan. Each view drawn by Vulkan (one sample, the validation layers with their synchronisation checks)
-# and by OpenGL, both running until the lab has settled (its tables, the sky's check, the exposure and the glare done: PL_BH_SETTLE); the planner's limit
-# (unchanged since step 2): at most 1 % of the pixels over 8 levels per view. The Vulkan log must name the first full picture of the lab's passes (and of
-# the sky per pixel for the spinning hole). Then: Vulkan 1.3 required (a card that offers 1.2: OpenGL, and Settings says why), the pipeline cache (the
+# 0.62.0 (Vulkan step 4 of 5): the Black Hole Lab on Vulkan. Each view drawn by Vulkan (one sample, the validation layers with their synchronisation checks),
+# running until the lab has settled (its tables, the sky's check, the exposure and the glare done: PL_BH_SETTLE; 0.69.0: their comparison with OpenGL's
+# pictures went with OpenGL). The Vulkan log must name the first full picture of the lab's passes (and of the sky per pixel for the spinning hole). Then:
+# 0.69.0: a card that offers Vulkan 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2 (PL_VK_PRETEND_API=1.2 on lavapipe) draws the lab with zero
+# validation errors; without one of them (PL_VK_PRETEND_NOEXT) the message says what is missing. The pipeline cache (the
 # second start makes the sky's pipeline faster than the first; a damaged file is ignored), one program broken on purpose (PL_VK_CARDFAIL=sky: only the
 # sky per pixel falls back, to the processor's table, and the log says why).
 VK4_FEED = "preset=feeding;spin=0.6"
@@ -359,7 +361,6 @@ def part_vulkanbh(binary, work):
     calls = []
     for name, bh in VK4_VIEWS.items():
         calls.append(((binary, work, "v4_vk_" + name, dict(VK4_RUN, PL_BH_SET=bh, **VK3_SYNC)), dict(frames=1500, timeout=2400)))
-        calls.append(((binary, work, "v4_gl_" + name, dict(VK4_RUN, PL_BH_SET=bh, PL_NO_MSAA="1", PL_GRAPHICS="opengl")), dict(frames=1500, timeout=2400)))
     # (0.68.1: PL_BH_SETTLE 20:120, not 20:30. The run ends once the lab has been idle that many frames; the lens's first full picture waits for its turn behind the sky's last
     # step and begins a few frames after it, so 30 idle frames could end the run first: it passed only in the prefetch's slower parallel runs and failed alone, 0.68.0's build too)
     fail_env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], PL_VK_CARDFAIL="sky", **VK3_SYNC)
@@ -367,30 +368,28 @@ def part_vulkanbh(binary, work):
     async_env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["glare"], **VK3_SYNC)
     del async_env["PL_BH_GLARENOW"]
     calls.append(((binary, work, "v4_async", async_env), dict(frames=1500, timeout=2400)))
-    calls.append(((binary, work, "v4_old", dict(PL_GRAPHICS="vulkan", PL_VK_PRETEND_API="1.2", PL_OPEN="settings:graphics")), dict(frames=30)))
+    old_env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], PL_VK_PRETEND_API="1.2", **VK3_SYNC)
+    calls.append(((binary, work, "v4_old", old_env), dict(frames=1500, timeout=2400)))
+    calls.append(((binary, work, "v4_oldnoext", dict(PL_VK_PRETEND_API="1.2", PL_VK_PRETEND_NOEXT="synchronization2")), dict(frames=30)))
     calls.insert(0, ((binary, work, "v4_fail", fail_env), dict(frames=1500, timeout=2400)))
     prefetch(calls)
     for name, bh in VK4_VIEWS.items():
         v = run_app(binary, work, "v4_vk_" + name, dict(VK4_RUN, PL_BH_SET=bh, **VK3_SYNC), frames=1500, timeout=2400)
-        g = run_app(binary, work, "v4_gl_" + name, dict(VK4_RUN, PL_BH_SET=bh, PL_NO_MSAA="1", PL_GRAPHICS="opengl"), frames=1500, timeout=2400)
         vlog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v4_vk_" + name))
-        check("Vulkan: " in v.out and "OpenGL: " in g.out, f"black hole {name}: the app started on Vulkan (and the reference on OpenGL)")
+        check("Vulkan: " in v.out, f"black hole {name}: the app started on Vulkan")
         check(_logged(vlog, "[vulkan] [lens] ", "end the first full picture"), f"black hole {name}: Vulkan drew it with the lab's passes (the log: the lens guard's first full picture)")
         if name != "lens":
             check(_logged(vlog, "[vulkan] [sky] ", "end the first full picture") and "PLBHSKY state=1" in v.out,
                   f"black hole {name}: the spinning hole per pixel on Vulkan (its check passed, its first full picture)")
         errs = _vk_errors(v)
         check("PLVK validation errors=0" in v.out and not errs, f"black hole {name}: zero validation errors, synchronisation checks on ({len(errs)}; first: {errs[:1]})")
-        frac = _differ(v.bmp, g.bmp) if os.path.exists(v.bmp) and os.path.exists(g.bmp) else None
-        print(f"vulkanbh {name}: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels")
-        check(frac is not None and frac <= 0.01, f"black hole {name}: Vulkan against OpenGL, one sample: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels (at most 1 %)")
     # the glare made over the frames (the app's way: its blocks read back without waiting, the veil on a thread of its own): the same picture
     a = run_app(binary, work, "v4_async", async_env, frames=1500, timeout=2400)
     v = run_app(binary, work, "v4_vk_glare", dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["glare"], **VK3_SYNC), frames=1500, timeout=2400)
     frac = _differ(a.bmp, v.bmp) if os.path.exists(a.bmp) and os.path.exists(v.bmp) else None
     print(f"vulkanbh glare over the frames: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ from the glare made at once")
     check(frac is not None and frac <= 0.01 and not _vk_errors(a), "the glare made over the frames on Vulkan (read back without waiting, the veil on its thread) is the glare made at once")
-    # the light paths on Vulkan (gpuGuard's twin): their pipeline and the check against the processor (the same limits as OpenGL's)
+    # the light paths on Vulkan: their pipeline and the check against the processor (spin_card.h's limits)
     vlog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v4_vk_real"))
     v = run_app(binary, work, "v4_vk_real", dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], **VK3_SYNC), frames=1500, timeout=2400)
     check(_logged(vlog, "[vulkan] [lightpaths] ", "end the light paths' pipeline: made") and "PLBHCARD state=1" in v.out,
@@ -402,16 +401,22 @@ def part_vulkanbh(binary, work):
           "a broken sky program (PL_VK_CARDFAIL=sky): only it falls back, the log says why")
     check(_logged(flog, "[vulkan] [lens] ", "end the first full picture") and "PLBHCARD state=1" in f.out and not _vk_errors(f),
           "a broken sky program: the lab's passes and the light paths stay on Vulkan, zero validation errors")
-    # Vulkan 1.3 required: a card that offers 1.2 is not used
-    o = run_app(binary, work, "v4_old", dict(PL_GRAPHICS="vulkan", PL_VK_PRETEND_API="1.2", PL_OPEN="settings:graphics"), frames=30)
-    note = [n for n in o.notes if n.startswith("graphics ")]
-    check("OpenGL: " in o.out and note and "this graphics card offers Vulkan 1.2; Physics Lab needs 1.3" in note[0], f"a card with Vulkan 1.2: OpenGL, and Settings says why: {note[:1]}")
+    # 0.69.0: Vulkan 1.2 with the two extensions is used (their KHR functions); without one, the message says which is missing
+    o = run_app(binary, work, "v4_old", old_env, frames=1500, timeout=2400)
+    olog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v4_old"))
+    errs = _vk_errors(o)
+    check("Vulkan: " in o.out and "from VK_KHR_dynamic_rendering and VK_KHR_synchronization2" in olog and _logged(olog, "[vulkan] [lens] ", "end the first full picture")
+          and "PLVK validation errors=0" in o.out and not errs, f"a card with Vulkan 1.2 and the two extensions: the Black Hole Lab drawn, zero validation errors ({len(errs)}; {errs[:1]})")
+    x = run_app(binary, work, "v4_oldnoext", dict(PL_VK_PRETEND_API="1.2", PL_VK_PRETEND_NOEXT="synchronization2"), frames=30)
+    nv = [l for l in x.out.splitlines() if l.startswith("PLNOVULKAN ")]
+    check(x.code == 1 and nv and "offers Vulkan 1.2 without VK_KHR_synchronization2" in nv[0] and "needs Vulkan 1.3, or 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2" in nv[0],
+          f"a card with Vulkan 1.2 but no VK_KHR_synchronization2: the message says what is missing and what is needed ({nv[:1]}, exit {x.code})")
     log, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v4_vk_lens"))
     check(re.search(r"asked for 1\.[34]\.0", log) is not None and "the card's" in log, "the log keeps the version asked for and the card's own")
     # the pipeline cache: kept in the settings folder; the second start makes the sky's pipeline faster; a damaged file is ignored
     home = os.path.join(os.path.abspath(work), "home_v4_cache")
     subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
-    env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], PL_GRAPHICS="vulkan", HOME=home, PL_BH_SETTLE="20:5")
+    env = dict(VK4_RUN, PL_BH_SET=VK4_VIEWS["real"], HOME=home, PL_BH_SETTLE="20:5")
     c1 = run_app(binary, work, "v4_cache1", env, frames=600, timeout=2400)
     c2 = run_app(binary, work, "v4_cache2", env, frames=600, timeout=2400)
     c3 = run_app(binary, work, "v4_cache3", dict(env, PL_VK_CACHE_CORRUPT="1"), frames=600, timeout=2400)
@@ -432,11 +437,11 @@ def part_vulkanbh(binary, work):
 def part_guardturn(binary, work):
     home = os.path.join(os.path.abspath(work), "home_gt")
     subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
-    d = run_app(binary, work, "gt_die", dict(PL_GRAPHICS="vulkan", HOME=home, PL_BLACKHOLE="1", PL_BH_SET=VK4_FEED, PL_GPU_DIE="the light paths' pipeline", PL_NO_GPU_HELPER="1"), frames=600, timeout=1200)   # (0.67.0: the app's own step, not the helper's)
+    d = run_app(binary, work, "gt_die", dict(HOME=home, PL_BLACKHOLE="1", PL_BH_SET=VK4_FEED, PL_GPU_DIE="the light paths' pipeline", PL_NO_GPU_HELPER="1"), frames=600, timeout=1200)   # (0.67.0: the app's own step, not the helper's)
     log1, _c = _settings_files(home)
     check("(test switch PL_GPU_DIE" in log1 and _logged(log1, "[vulkan] [lightpaths] ", "begin the light paths' pipeline"), "guard turn: the first start died inside the light paths' pipeline (PL_GPU_DIE)")
     check(_logged(log1, "[vulkan] [outline] ", "end the outline's first small run"), "guard turn: the outline's start-up steps ran before (its first full use not yet: it has not passed)")
-    a = run_app(binary, work, "gt_next", dict(VK3_VIEWS["outline"][0], PL_GRAPHICS="vulkan", HOME=home), frames=90)
+    a = run_app(binary, work, "gt_next", dict(VK3_VIEWS["outline"][0], HOME=home), frames=90)
     log2, cfg2 = _settings_files(home)
     check("Vulkan: " in a.out and re.search(r"gpuvklightpaths=off \| [^\n]*\| the light paths' pipeline", cfg2) is not None,
           f"guard turn: the next start: the light paths off, their step named ({[l for l in cfg2.splitlines() if l.startswith('gpuvklightpaths')]})")
@@ -448,7 +453,7 @@ def part_guardturn(binary, work):
 # again (no helper for it, still off). The light paths killed the same way: the next start runs the five kKerrTableCS variants in helpers and logs each;
 # the start after that does not run them again (once per driver).
 def part_gpuhelper(binary, work):
-    nd = {"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "38", "PL_ATOM_BENCHSTOP": "40", "PL_GRAPHICS": "vulkan", "PL_NO_GPU_HELPER": "0"}   # (0.68.0: the helpers on: shell_lib turns them off)
+    nd = {"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "38", "PL_ATOM_BENCHSTOP": "40", "PL_NO_GPU_HELPER": "0"}   # (0.68.0: the helpers on: shell_lib turns them off)
     home = os.path.join(os.path.abspath(work), "home_gh"); subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
     a = run_app(binary, work, "gh_die", dict(nd, HOME=home, PL_GPU_DIE="the nucleus density's pipeline"), frames=150, timeout=1200)
     log1, cfg1 = _settings_files(home)
@@ -511,7 +516,7 @@ def part_gpuhelper(binary, work):
     # 0.68.0: every guarded program's pipelines and first small run made by a helper first; two programs whose helpers die (the lines' first small run, the
     # surface's pipelines): the app runs on, only those two off (the settings keep them, the log names their steps), the rest passed in their helpers
     home3 = os.path.join(os.path.abspath(work), "home_gh3"); subprocess.run(["rm", "-rf", home3]); os.makedirs(home3, exist_ok=True)
-    t = run_app(binary, work, "gh_two", {"HOME": home3, "PL_GRAPHICS": "vulkan", "PL_NO_GPU_HELPER": "0", "PL_GPU_DIE": "the lines' first small run|the surface's pipelines"}, frames=300, timeout=1500)
+    t = run_app(binary, work, "gh_two", {"HOME": home3, "PL_NO_GPU_HELPER": "0", "PL_GPU_DIE": "the lines' first small run|the surface's pipelines"}, frames=300, timeout=1500)
     log5, cfg5 = _settings_files(home3)
     died = sorted(re.findall(r"PLGPUHELPER (\w+) died making ([^(]*) \(", t.out))
     passed = re.findall(r"PLGPUHELPER (\w+) passed", t.out)
@@ -523,29 +528,6 @@ def part_gpuhelper(binary, work):
     offs = sorted(re.findall(r"gpuvk(\w+)=off ", cfg5))
     check(offs == ["lines", "surface"], f"helper: only those two kept off in the settings ({offs})")
     check("PLLINESCARD state=-1" in t.out, "helper: the Orbit Lab draws its lines on the processor")
-
-# 0.63.0 (Vulkan step 5): Vulkan the default, OpenGL the backup. A start with nothing chosen is on Vulkan; a settings file that chose OpenGL keeps it; each lab
-# opens on OpenGL and draws (a smoke check of the backup: the picture area is not empty).
-def part_openglbackup(binary, work):
-    d = run_app(binary, work, "ob_default", {"PL_OPEN": "settings:graphics"}, frames=30)
-    note = [n for n in d.notes if n.startswith("graphics ")]
-    check("Vulkan: " in d.out and "OpenGL: " not in d.out and note and "In use now: Vulkan, on " in note[0], f"no choice made: the app starts on Vulkan ({note[:1]})")
-    sdir = os.path.join(os.path.abspath(work), "ob_settings"); os.makedirs(sdir, exist_ok=True)
-    sf = os.path.join(sdir, "settings.txt")
-    open(sf, "w").write("graphics=opengl\n")
-    k = run_app(binary, work, "ob_file", {"PL_SETTINGS": sf}, frames=20)
-    check("OpenGL: " in k.out and "Vulkan: " not in k.out and "graphics=opengl" in open(sf).read(), "a settings file with graphics=opengl starts on OpenGL and keeps it")
-    for lab, env in (("orbit", {}), ("atom", {"PL_ATOM": "1"}), ("molecule", {"PL_MOLECULE": "C6H6"}), ("blackhole", {"PL_BLACKHOLE": "1", "PL_BH_SET": "preset=feeding;spin=0.6"})):
-        r = run_app(binary, work, "ob_" + lab, dict(env, PL_GRAPHICS="opengl"), frames=40, timeout=1200)
-        lit = 0
-        if os.path.exists(r.bmp):
-            b = Bmp(r.bmp)
-            base = b.px(b.w // 2, b.h - 4)
-            for y in range(b.h // 8, b.h, max(1, b.h // 40)):
-                for x in range(0, b.w, max(1, b.w // 60)):
-                    p = b.px(x, y)
-                    lit += max(abs(p[0] - base[0]), abs(p[1] - base[1]), abs(p[2] - base[2])) > 24
-        check("OpenGL: " in r.out and "Vulkan: " not in r.out and lit > 40, f"OpenGL (backup), the {lab} lab opens and draws ({lit} samples differ from the background)")
 
 def _kinds(r):
     line = [l for l in r.out.splitlines() if l.startswith("PLDRAWKINDS ")]
@@ -579,25 +561,20 @@ def _png_rgb(path):   # (8-bit RGB or RGBA PNG, as ui/shot.cpp writes it) -> (w,
     return w, h, rows
 
 def part_vulkan2d(binary, work):
-    vk = {"PL_GRAPHICS": "vulkan", "PL_VK_VALIDATION": "1"}
+    vk = {"PL_VK_VALIDATION": "1"}
     one = {"PL_NO_MSAA": "1"}
     calls = []
     for name, (env, _want) in VK2D_VIEWS.items():
         calls.append(((binary, work, "v2_vk_" + name, dict(VK2D_CPU, **one, **vk, **env)), dict(frames=40)))
-        calls.append(((binary, work, "v2_gl_" + name, dict(VK2D_CPU, **one, **env, PL_GRAPHICS="opengl")), dict(frames=40)))
         calls.append(((binary, work, "v2_ms_" + name, dict(VK2D_CPU, **vk, **env)), dict(frames=40)))
     prefetch(calls)
     for name, (env, want) in VK2D_VIEWS.items():
         v = run_app(binary, work, "v2_vk_" + name, dict(VK2D_CPU, **one, **vk, **env), frames=40)
-        g = run_app(binary, work, "v2_gl_" + name, dict(VK2D_CPU, **one, **env, PL_GRAPHICS="opengl"), frames=40)
-        check("Vulkan: " in v.out and "OpenGL: " not in v.out and "OpenGL: " in g.out, f"{name}: the app started on Vulkan (and the reference on OpenGL)")
+        check("Vulkan: " in v.out, f"{name}: the app started on Vulkan")
         missing = set(want.split()) - _kinds(v)
         check(not missing, f"{name}: the view makes its drawing calls on Vulkan (missing: {sorted(missing)})")
         errs = _vk_errors(v)
         check("PLVK validation errors=0" in v.out and not errs, f"{name}: zero validation errors, one sample ({len(errs)}; first: {errs[:1]})")
-        frac = _differ(v.bmp, g.bmp) if os.path.exists(v.bmp) and os.path.exists(g.bmp) else None
-        print(f"vulkan2d {name}: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels")
-        check(frac is not None and frac <= 0.01, f"{name}: Vulkan against OpenGL, one sample: {('%.3f %%' % (100 * frac)) if frac is not None else 'no pair of pictures'} of the pixels differ by more than 8 levels (at most 1 %)")
         m = run_app(binary, work, "v2_ms_" + name, dict(VK2D_CPU, **vk, **env), frames=40)
         errs = _vk_errors(m)
         check("Vulkan picture: 4 samples" in m.out and "PLVK validation errors=0" in m.out and not errs, f"{name}: 4 samples on Vulkan, zero validation errors ({len(errs)}; first: {errs[:1]})")
@@ -608,32 +585,24 @@ def part_vulkan2d(binary, work):
                                                 PL_SAVE_IMAGE="20", PL_SHOT_DIR=os.path.join(os.path.abspath(work), "v2_sync_shots")), frames=40)
     errs = _vk_errors(sv)
     check("Vulkan: " in sv.out and "PLVK validation errors=0" in sv.out and not errs, f"synchronisation checks on (layers, Save image): zero errors ({len(errs)}; first: {errs[:1]})")
-    # Save image: the saved file has the lab's picture, as OpenGL's
-    shots = {}
-    for gfx in ("vk", "gl"):
-        d = os.path.join(os.path.abspath(work), "v2_shots_" + gfx)
-        if os.path.isdir(d):
-            for f in os.listdir(d): os.remove(os.path.join(d, f))
-        env = dict(VK2D_CPU, **one, **VK2D_VIEWS["orbit_2d"][0], PL_SAVE_IMAGE="20", PL_SHOT_DIR=d)
-        env.update(vk if gfx == "vk" else {"PL_GRAPHICS": "opengl"})
-        run_app(binary, work, "v2_save_" + gfx, env, frames=40)
-        pngs = [f for f in os.listdir(d) if f.endswith(".png")] if os.path.isdir(d) else []
-        shots[gfx] = _png_rgb(os.path.join(d, pngs[0])) if pngs else None
-    ok = shots["vk"] and shots["gl"] and shots["vk"][:2] == shots["gl"][:2]
-    if ok:
-        (w, h, A), (_w, _h, B) = shots["vk"], shots["gl"]
-        big = sum(1 for y in range(h) for x in range(0, 3 * w, 3) if max(abs(A[y][x + k] - B[y][x + k]) for k in range(3)) > 8)
-        frac = big / float(w * h)
+    # Save image: the saved file has the lab's picture (0.69.0: its comparison with OpenGL's saved file went with OpenGL)
+    d = os.path.join(os.path.abspath(work), "v2_shots_vk")
+    if os.path.isdir(d):
+        for f in os.listdir(d): os.remove(os.path.join(d, f))
+    run_app(binary, work, "v2_save_vk", dict(VK2D_CPU, **one, **VK2D_VIEWS["orbit_2d"][0], **vk, PL_SAVE_IMAGE="20", PL_SHOT_DIR=d), frames=40)
+    pngs = [f for f in os.listdir(d) if f.endswith(".png")] if os.path.isdir(d) else []
+    shot = _png_rgb(os.path.join(d, pngs[0])) if pngs else None
+    if shot:
+        w, h, A = shot
         lit = sum(1 for y in range(0, h, 4) for x in range(0, 3 * w, 12) if max(A[y][x:x + 3]) > 90)   # (the picture is there: stars, paths, labels)
-        print(f"vulkan2d save image: {100 * frac:.3f} % of the pixels differ by more than 8 levels; {lit} bright samples")
-        check(frac <= 0.01 and lit > 50, f"Save image on Vulkan has the lab's picture: {100 * frac:.3f} % of the pixels differ from OpenGL's saved file (at most 1 %), {lit} bright samples")
+        print(f"vulkan2d save image: {w} x {h}, {lit} bright samples")
+        check(lit > 50, f"Save image on Vulkan has the lab's picture ({lit} bright samples)")
     else:
-        check(False, f"Save image wrote a PNG on both, of one size ({[None if s is None else s[:2] for s in shots.values()]})")
-    # the start-up check broken on purpose: OpenGL, and Settings says why
-    b = run_app(binary, work, "v2_break", dict(vk, PL_OPEN="settings:graphics", PL_VK_CHECK="break"), frames=30)
-    check("OpenGL: " in b.out and "Vulkan: " not in b.out, "the start-up check failed on purpose: the app starts on OpenGL")
-    note = [n for n in b.notes if n.startswith("graphics ")]
-    check(note and "In use now: OpenGL, because" in note[0] and "renderer2d check" in note[0] and "wrong" in note[0], f"Settings says why it is OpenGL: {note[:1]}")
+        check(False, "Save image wrote a PNG")
+    # the start-up check broken on purpose: the message (0.69.0: no OpenGL to start on), exit code 1
+    b = run_app(binary, work, "v2_break", dict(vk, PL_VK_CHECK="break"), frames=30)
+    nv = [l for l in b.out.splitlines() if l.startswith("PLNOVULKAN ")]
+    check(b.code == 1 and nv and "wrong" in nv[0] and b.window is None, f"the start-up check failed on purpose: the message says why, exit code 1 ({nv[:1]}, exit {b.code})")
 
 def main():
     binary, work = sys.argv[1], sys.argv[2]
@@ -658,8 +627,8 @@ def main():
         part_old(binary, work)
     if only is not None and "vulkan" in only:                              # (0.59.0: only when asked; ui_shell lists check_shell.py:vulkan)
         part_vulkan(binary, work)
-    if only is not None and "openglbackup" in only:                        # (0.63.0: ui_shell lists check_shell.py:openglbackup)
-        part_openglbackup(binary, work)
+    if only is not None and "novulkan" in only:                            # (0.69.0: ui_shell lists check_shell.py:novulkan)
+        part_novulkan(binary, work)
     if only is not None and "guardturn" in only:                           # (0.63.0: ui_shell lists check_shell.py:guardturn)
         part_guardturn(binary, work)
     if only is not None and "gpuhelper" in only:                           # (0.67.0: ui_shell lists check_shell.py:gpuhelper)

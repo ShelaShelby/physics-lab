@@ -66,9 +66,11 @@ TABS = ("spectrum", "lifetimes", "size", "temperature", "radial")
 SUBJECTS = (("hydrogen", "Z=1;N=0"), ("helium4", "Z=2;N=2"), ("uranium238", "Z=92;N=146"), ("iron56", "Z=26;N=30"))
 
 def card_lines(out, tag):
-    # every "PLATOMCARD card.<tag>\tstring\tstring ..." the app printed (it prints a card's strings once per change); the first one is the card as it first showed
+    # every "PLATOMCARD card.<tag>\tstring\tstring ..." the app printed (it prints a card's strings once per change). 0.69.0: the last one, the card once
+    # settled: on Vulkan (the only API now; until 0.68.1 this check ran on OpenGL) the 90 % outline comes from the card a frame or two later, so the radial
+    # card first shows reach90=0 and then the outline's reach
     got = [ln.split("\t")[1:] for ln in out.splitlines() if ln.startswith("PLATOMCARD card." + tag + "\t") or ln == "PLATOMCARD card." + tag]
-    return got[0] if got else None
+    return got[-1] if got else None
 
 # 0.47: the radial graph of the old recording with the reduced mass of 0.46.4: lengths (rEnd, sumR, peak, mean, reach90) times 1 + m_e / M; sumP (no length) as it was.
 # M in electron masses: hydrogen m_p / m_e = 1836.152673426, else A / (m_e in u, 5.485799090441e-4) - Z (CODATA 2022, as atom_core.h kMpOverMe, kMeInU; the binding energy and mass excess,
@@ -97,7 +99,7 @@ def part_cards(binary, work):
         for vn, view in (("cloud3d", "view=Cloud 3D;orb=2p"), ("orbit", "view=Orbit")):
             st = zn + ";" + view
             old = old_run("5h", f"cd_old_{nm}_{vn}", {"PL_ATOM": "1", "PL_ATOM_SET": st, "PL_LOG_CARD": "1"}, frames=40)   # (saved from the last build with the old panel: tests/reference/old_ui_runs.json)
-            new = run_app(binary, work, f"cd_new_{nm}_{vn}", {"PL_GRAPHICS": "opengl", "PL_ATOM": "1", "PL_NEWUI": "on", "PL_ATOM_SET": st + ";elec=Hydrogen-like", "PL_LOG_CARD": "1", "PL_SCRIPT": seq, "PL_LOG_SHELL": "1"}, frames=70)   # (0.46: the default became All; the recording is one electron)
+            new = run_app(binary, work, f"cd_new_{nm}_{vn}", {"PL_ATOM": "1", "PL_NEWUI": "on", "PL_ATOM_SET": st + ";elec=Hydrogen-like", "PL_LOG_CARD": "1", "PL_SCRIPT": seq, "PL_LOG_SHELL": "1"}, frames=70)   # (0.46: the default became All; the recording is one electron)
             for t in TABS:
                 tag = f"{nm} {vn} {t}"
                 if t == "radial" and vn == "orbit":

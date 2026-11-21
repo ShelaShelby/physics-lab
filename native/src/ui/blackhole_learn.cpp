@@ -44,7 +44,7 @@ std::vector<BhLearnSection> blackholeLearnSections() {
           "Lupsasca 2020; Berens et al. 2026 use it for every pixel of a far-away camera): the processor works each path out from it in double precision, "
           "with no stepping, into a table for your distance, latitude and spin; the graphics card looks it up. The step-by-step integrator of James et al. 2015 "
           "stays as the reference the tests check the closed forms against. Which directions lead to the horizon: James et al. give a test from the light's "
-          "constants alone, and the shadow's edge is drawn from it, within a thousandth of a pixel. On a graphics card with OpenGL 4.3 the card itself can follow "
+          "constants alone, and the shadow's edge is drawn from it, within a thousandth of a pixel. On a graphics card with double precision in its shaders the card itself can follow "
           "the paths step by step (in double precision, checked against the processor's own when the lab first draws a spinning hole); otherwise the "
           "processor does it: a coarser table at once while you change a setting, the fine one a moment after you stop. Turning round the "
           "spin axis needs no new table. The stars' images are found by turning the table round (where it sends their light), with their magnified brightness.") +

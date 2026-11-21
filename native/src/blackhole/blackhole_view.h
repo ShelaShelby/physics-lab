@@ -13,6 +13,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -73,6 +74,10 @@ float catalogueBrightestMag();   // 0.55.4: the brightest catalogue star seen wi
 
 class BlackHoleView {
     friend void compareHook(render::Renderer2D& R, const char* spec);
+// 0.69.0: the tests' 8-bit pictures (compareHook, PL_BH_COMPARE): what the renderer recorded, drawn off screen and read back, RGBA, rows from the bottom;
+// set by main.cpp (render/vk_backend.h renderToImage); false: not drawn
+using TestShot = std::function<bool(render::Renderer2D&, int, int, std::vector<unsigned char>&)>;
+TestShot& testShot();
 public:
     BlackHoleView();                                           // (0.55.5: in the .cpp, where Request and Picture are complete)
     BlackHoleView(const BlackHoleView&) = delete;
@@ -261,5 +266,9 @@ private:
 // Tests (PL_BH_COMPARE): the card's picture against the double-precision reference (lensPixel) for the distances given, the plain sky against the Orbit
 // Lab's sky map, and the frame times; prints PLBHCMP / PLBHTIME lines. Needs the renderer's OpenGL context.
 void compareHook(render::Renderer2D& R, const char* spec);
+// 0.69.0: the tests' 8-bit pictures (compareHook, PL_BH_COMPARE): what the renderer recorded, drawn off screen and read back, RGBA, rows from the bottom;
+// set by main.cpp (render/vk_backend.h renderToImage); false: not drawn
+using TestShot = std::function<bool(render::Renderer2D&, int, int, std::vector<unsigned char>&)>;
+TestShot& testShot();
 
 }  // namespace blackhole

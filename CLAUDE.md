@@ -48,7 +48,7 @@ The session's own model (Opus) is the lead developer; it uses Haiku helper agent
 - Be honest about limits: if a model is simplified (one electron, non-relativistic, test particles, approximate elements, fixed equilibrium molecule shapes), the app text must say so. If you find an error or doubtful value, do not hide or silently change it: report it in REPORT.md with the source for the correct value.
 
 ## Build and test
-- Fresh session, first build (about 6 min): `apt-get update && apt-get install -y --no-install-recommends cmake ninja-build ccache libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxfixes-dev libxss-dev libxtst-dev libxrender-dev libxinerama-dev libxkbcommon-dev libwayland-dev libegl-dev libgl-dev libgl1-mesa-dri libegl-mesa0 glslang-tools libdrm-dev libgbm-dev libasound2-dev libdecor-0-dev mesa-vulkan-drivers libvulkan1 vulkan-tools vulkan-validationlayers`
+- Fresh session, first build (about 6 min): `apt-get update && apt-get install -y --no-install-recommends cmake ninja-build ccache libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxfixes-dev libxss-dev libxtst-dev libxrender-dev libxinerama-dev libxkbcommon-dev libwayland-dev glslang-tools libdrm-dev libgbm-dev libasound2-dev libdecor-0-dev mesa-vulkan-drivers libvulkan1 vulkan-tools vulkan-validationlayers`
 - Full build: `cmake -S native -B /home/user/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON && ninja -C /home/user/build`
 - Unit tests only (no SDL, about 1 min): same with `-DPL_BUILD_APP=OFF`.
 - Run tests from the repository root (some tests write files into the current folder).

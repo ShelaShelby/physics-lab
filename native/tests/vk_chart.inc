@@ -12,7 +12,7 @@ static ChartColours chartPalette(bool light) {
                  : ChartColours{Color{0.92f, 0.92f, 0.95f, 1}, Color{0.62f, 0.62f, 0.68f, 1}, Color{0.42f, 0.61f, 1, 1}, Color{0.12f, 0.12f, 0.14f, 1}, Color{0.3f, 0.3f, 0.34f, 1}};
 }
 
-static Picture g_chartCpu19;                                                    // scene 19 (flat chart) drawn the per-frame way on the 4.3 context: for the 3.3 fallback test
+static Picture g_chartCpu19;                                                    // scene 19 (flat chart) drawn the per-frame way by the card renderer: for the 3.3 fallback test
 
 static void chartPictures(render::Renderer2D& R, const std::string& dir) {
     const ChartDummyText T;
@@ -59,17 +59,17 @@ static void chartPictures(render::Renderer2D& R, const std::string& dir) {
     check("the cache's release frees its GPU buffers", R.meshesAlive() == 0);
 }
 
-// the 3.3 context (called from fallback33): the retained mesh needs nothing newer than OpenGL 3.3, so the cached drawing works there too, with the same picture
+// without the card programs (called from fallback33): the retained mesh needs no card program, so the cached drawing works there too, with the same picture
 static void chartFallback33(render::Renderer2D& R33, const std::string& dir) {
     const ChartDummyText T;
     AtomLab L; benchSetup(L, 16, 1040, 713);
     const ChartColours C = chartPalette(false);
     ChartCache cache;
     const Picture p = draw1(R33, 1040, 713, C.card, [&] { drawChart(R33, T, C, 1040, 713, L.p.Z, L.p.N, 82, 126, nullptr, &cache); });
-    if (g_chartCpu19.px.empty()) { check("scene 19 picture from the 4.3 context was kept", false); return; }
+    if (g_chartCpu19.px.empty()) { check("scene 19 picture from the card renderer was kept", false); return; }
     const Diff d = compare(g_chartCpu19, p);
-    std::printf("3.3 context: the cached chart against the per-frame chart of the 4.3 context: %ld of %ld pixels differ\n", d.differing, d.total);
-    check("3.3 context: the cached flat chart is the per-frame chart (under 0.1 % of the pixels differ)", double(d.differing) / double(d.total) < 0.001);
+    std::printf("no card programs: the cached chart against the per-frame chart of the card renderer: %ld of %ld pixels differ\n", d.differing, d.total);
+    check("no card programs: the cached flat chart is the per-frame chart (under 0.1 % of the pixels differ)", double(d.differing) / double(d.total) < 0.001);
     save(dir, "chart_fallback33", g_chartCpu19, p);
     cache.release(R33);
 }

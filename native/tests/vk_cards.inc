@@ -1,11 +1,7 @@
 // 0.61.0 (Vulkan step 3 of 5): the card programs on Vulkan (src/render/vk_card.h), on Mesa's software Vulkan (lavapipe, no window), each against the
-// processor's reference with the limits the OpenGL checks above use, and against the OpenGL program's own output on the same input. The planner's limits
-// for Vulkan against OpenGL (fixed): integer outputs identical (groups, colour bins, kept / drawn flags, counts); float outputs within 1e-5 relative or the
-// limit of the processor check, whichever is larger; the rocks' places within the limit of the rocks' check (kRockPx near the picture, 3e-4 of the
-// coordinate farther out). The validation layers are on whenever they are installed: every message of severity error fails.
-// Built with -DPL_GL_TESTS=ON in a build that has the app (the Vulkan headers, volk and the SPIR-V come with it).
-#include <volk.h>
-
+// processor's reference with the limits of the picture checks above. 0.69.0: OpenGL is gone, and with it this file's checks of Vulkan against OpenGL's
+// output (their feature is gone); every check against the processor stays as it was. The validation layers are on whenever they are installed: every
+// message of severity error fails. (Until 0.68.1 tests/gl_vulkan.inc.)
 #include "atom/atom_card.h"
 #include "molecule/mol_cloud.h"
 #include "molecule/molecule_card_paths.h"
@@ -16,174 +12,23 @@
 #include "blackhole/sky_card.h"
 #include "blackhole/spin_card.h"
 
-namespace vkt {
-
-int g_errors = 0;
-VKAPI_ATTR VkBool32 VKAPI_CALL onMessage(VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDebugUtilsMessageTypeFlagsEXT, const VkDebugUtilsMessengerCallbackDataEXT* d, void*) {
-    if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) { g_errors++; if (g_errors <= 5) std::printf("VULKAN VALIDATION ERROR: %s\n", d && d->pMessage ? d->pMessage : "?"); }
-    return VK_FALSE;
-}
-
-struct Ctx {
-    VkInstance inst = VK_NULL_HANDLE;
-    VkDebugUtilsMessengerEXT msg = VK_NULL_HANDLE;
-    VkPhysicalDevice phys = VK_NULL_HANDLE;
-    VkDevice dev = VK_NULL_HANDLE;
-    VkQueue q = VK_NULL_HANDLE;
-    VkCommandPool pool = VK_NULL_HANDLE;
-    std::uint32_t fam = 0;
-    bool f64 = false, validation = false;
-    render::VkDevCtx c;
-};
-
-bool start(Ctx& h, std::string& why) {
-    if (volkInitialize() != VK_SUCCESS) { why = "no Vulkan loader"; return false; }
-    std::vector<const char*> layers, exts;
-    {                                                                            // the validation layers whenever they are installed (PL_VK_VALIDATION=0: off)
-        const char* v = std::getenv("PL_VK_VALIDATION");
-        std::uint32_t n = 0;
-        vkEnumerateInstanceLayerProperties(&n, nullptr);
-        std::vector<VkLayerProperties> lp(n);
-        vkEnumerateInstanceLayerProperties(&n, lp.data());
-        for (const VkLayerProperties& l : lp) if (std::strcmp(l.layerName, "VK_LAYER_KHRONOS_validation") == 0 && !(v && std::string(v) == "0")) layers.push_back("VK_LAYER_KHRONOS_validation");
-        h.validation = !layers.empty();
-        if (h.validation) exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-    VkApplicationInfo ai{};
-    ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    ai.pApplicationName = "gl_compare_tests";
-    ai.apiVersion = VK_API_VERSION_1_3;                                           // 0.62.0: Vulkan 1.3 (the Black Hole Lab's passes)
-    VkInstanceCreateInfo ii{};
-    ii.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    ii.pApplicationInfo = &ai;
-    ii.enabledLayerCount = static_cast<std::uint32_t>(layers.size());
-    ii.ppEnabledLayerNames = layers.data();
-    ii.enabledExtensionCount = static_cast<std::uint32_t>(exts.size());
-    ii.ppEnabledExtensionNames = exts.data();
-    if (vkCreateInstance(&ii, nullptr, &h.inst) != VK_SUCCESS) { why = "vkCreateInstance failed"; return false; }
-    volkLoadInstance(h.inst);
-    if (h.validation) {
-        VkDebugUtilsMessengerCreateInfoEXT mi{};
-        mi.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        mi.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-        mi.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        mi.pfnUserCallback = onMessage;
-        vkCreateDebugUtilsMessengerEXT(h.inst, &mi, nullptr, &h.msg);
-    }
-    std::uint32_t nd = 0;
-    vkEnumeratePhysicalDevices(h.inst, &nd, nullptr);
-    std::vector<VkPhysicalDevice> devs(nd);
-    vkEnumeratePhysicalDevices(h.inst, &nd, devs.data());
-    for (VkPhysicalDevice d : devs) {
-        std::uint32_t nq = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(d, &nq, nullptr);
-        std::vector<VkQueueFamilyProperties> qf(nq);
-        vkGetPhysicalDeviceQueueFamilyProperties(d, &nq, qf.data());
-        for (std::uint32_t q = 0; q < nq && !h.phys; q++)
-            if ((qf[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) && (qf[q].queueFlags & VK_QUEUE_COMPUTE_BIT)) { h.phys = d; h.fam = q; }
-    }
-    if (!h.phys) { why = "no Vulkan device with a graphics and compute queue"; return false; }
-    VkPhysicalDeviceFeatures have{}, want{};
-    vkGetPhysicalDeviceFeatures(h.phys, &have);
-    h.f64 = have.shaderFloat64 == VK_TRUE;
-    want.shaderFloat64 = have.shaderFloat64;
-    const float prio = 1.0f;
-    VkDeviceQueueCreateInfo qi{};
-    qi.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    qi.queueFamilyIndex = h.fam;
-    qi.queueCount = 1;
-    qi.pQueuePriorities = &prio;
-    VkDeviceCreateInfo di{};
-    di.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    di.queueCreateInfoCount = 1;
-    di.pQueueCreateInfos = &qi;
-    di.pEnabledFeatures = &want;
-    VkPhysicalDeviceVulkan13Features f13{};                                      // 0.62.0: dynamic rendering and synchronization2, as the app asks for them
-    f13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-    f13.dynamicRendering = VK_TRUE;
-    f13.synchronization2 = VK_TRUE;
-    di.pNext = &f13;
-    if (vkCreateDevice(h.phys, &di, nullptr, &h.dev) != VK_SUCCESS) { why = "vkCreateDevice failed"; return false; }
-    volkLoadDevice(h.dev);
-    vkGetDeviceQueue(h.dev, h.fam, 0, &h.q);
-    VkCommandPoolCreateInfo pi{};
-    pi.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    pi.queueFamilyIndex = h.fam;
-    vkCreateCommandPool(h.dev, &pi, nullptr, &h.pool);
-    VkPhysicalDeviceProperties p{};
-    vkGetPhysicalDeviceProperties(h.phys, &p);
-    std::printf("Vulkan: %s (Vulkan %u.%u), double precision in shaders: %s, validation %s\n", p.deviceName, VK_VERSION_MAJOR(p.apiVersion), VK_VERSION_MINOR(p.apiVersion), h.f64 ? "yes" : "no", h.validation ? "on" : "off");
-    h.c.phys = h.phys; h.c.device = h.dev; h.c.queue = h.q; h.c.limits = p.limits; h.c.family = h.fam; h.c.compute = true;
-    vkGetPhysicalDeviceMemoryProperties(h.phys, &h.c.mem);
-    h.c.check = [](VkResult r, const char* what) { if (r >= 0) return true; std::printf("Vulkan call failed: %s (%d)\n", what, static_cast<int>(r)); return false; };
-    Ctx* hp = &h;
-    h.c.once = [hp](const std::function<void(VkCommandBuffer)>& f) {
-        VkCommandBufferAllocateInfo a{};
-        a.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        a.commandPool = hp->pool;
-        a.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        a.commandBufferCount = 1;
-        VkCommandBuffer cb = VK_NULL_HANDLE;
-        if (vkAllocateCommandBuffers(hp->dev, &a, &cb) != VK_SUCCESS) return false;
-        VkCommandBufferBeginInfo bi{};
-        bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        vkBeginCommandBuffer(cb, &bi);
-        f(cb);
-        vkEndCommandBuffer(cb);
-        VkSubmitInfo si{};
-        si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.commandBufferCount = 1;
-        si.pCommandBuffers = &cb;
-        const bool ok = vkQueueSubmit(hp->q, 1, &si, VK_NULL_HANDLE) == VK_SUCCESS && vkQueueWaitIdle(hp->q) == VK_SUCCESS;
-        vkFreeCommandBuffers(hp->dev, hp->pool, 1, &cb);
-        return ok;
-    };
-    return true;
-}
-
-void stop(Ctx& h) {
-    if (h.dev) { vkDeviceWaitIdle(h.dev); if (h.pool) vkDestroyCommandPool(h.dev, h.pool, nullptr); vkDestroyDevice(h.dev, nullptr); }
-    if (h.msg) vkDestroyDebugUtilsMessengerEXT(h.inst, h.msg, nullptr);
-    if (h.inst) vkDestroyInstance(h.inst, nullptr);
-    h = Ctx();
-}
-
-// a polled job, as the app polls it (no wait in between but a millisecond's sleep), until it is done or 20 s have passed
-template <class F> render::JobState poll(F f) {
-    for (int i = 0; i < 20000; i++) { const render::JobState st = f(); if (st != render::JobState::Pending) return st; std::this_thread::sleep_for(std::chrono::milliseconds(1)); }
-    return render::JobState::Pending;
-}
-// the planner's limit for a float output against OpenGL's: 1e-5 relative, or the processor check's limit when that is larger
-bool closeTo(double v, double g, double processorLimit) { return std::fabs(v - g) <= std::max(1e-5 * std::fabs(g), processorLimit); }
-
-}  // namespace vkt
-
-static void vkGroups(render::IGroupCompute& vk, render::IGroupCompute* gl) {
-    // the superpositions of the benchmark's scenes 13 to 15, as gpuSuperScenes: against the processor (the same tolerances), and against OpenGL (identical)
+static void vkGroups(render::IGroupCompute& vk) {
+    // the superpositions of the benchmark's scenes 13 to 15, as gpuSuperScenes: against the processor (the same tolerances)
     struct Sc { int which; const char* name; };
     const Sc list[] = {{10, "scene 13 2p z + 2p x"}, {11, "scene 14 2p x + 2p m+1 (overlap)"}, {12, "scene 15 2p z + 3d z2 (beats)"}};
     for (const Sc& sc : list) {
         AtomLab L;
         benchSetup(L, sc.which, 1040, 713);
         GroupDiff total;
-        long glDiff = 0, dots = 0;
         for (const double beat : {0.0, 1.0, 2.0, 0.37, 3.1}) {
             L.s.beatT = beat;
             const double theta = L.beatTheta();
             addDiff(total, compareSuper(L, vk, theta, std::string("Vulkan ") + sc.name));
-            if (gl) {
-                const long cnt = std::min<long>(L.s.k, L.cloudCap());
-                std::vector<unsigned char> a(static_cast<std::size_t>(cnt)), b(a.size());
-                L.superGroupsGpu(vk, cnt, theta, a.data()); L.superGroupsGpu(*gl, cnt, theta, b.data());
-                for (std::size_t i = 0; i < a.size(); i++) glDiff += a[i] != b[i];
-                dots += cnt;
-            }
         }
-        std::printf("Vulkan %-27s %ld dot-frames: %ld shown/hidden and %ld bin differences from the processor (worst %.3g of its tolerance); %ld of %ld groups differ from OpenGL's\n",
-                    sc.name, total.dots, total.shownDiff, total.binDiff, total.worstRatio, glDiff, dots);
+        std::printf("Vulkan %-27s %ld dot-frames: %ld shown/hidden and %ld bin differences from the processor (worst %.3g of its tolerance)\n",
+                    sc.name, total.dots, total.shownDiff, total.binDiff, total.worstRatio);
         check(std::string("Vulkan ") + sc.name + ": every dot's group equals the processor's, except dots within float rounding of a threshold", total.bad == 0 && total.dots > 0);
         check(std::string("Vulkan ") + sc.name + ": differing dots are rare (under 0.05 % of the dot-frames)", double(total.shownDiff + total.binDiff) < 5e-4 * double(total.dots));
-        if (gl) check(std::string("Vulkan ") + sc.name + ": every group identical to OpenGL's on the same input", glDiff == 0 && dots > 0);
     }
     // a cloud jump (scenes 11 and 12), Sign and Wheel, as gpuJumpScenes
     for (const int which : {8, 9}) {
@@ -195,25 +40,18 @@ static void vkGroups(render::IGroupCompute& vk, render::IGroupCompute* gl) {
             for (int f = 0; f < 700 && !(L.s.trans && L.jumpDrawn()); f++) { benchFrame(L, which, f, f - 200); L.tick(1.0 / 240); L.step(1.0 / 240); }
             if (!(L.s.trans && L.jumpDrawn())) { check(name + ": a jump is in flight and built", false); continue; }
             GroupDiff total;
-            long glDiff = 0;
             for (const double t : {0.0, 0.3, 0.6, 0.9, 1.15}) {
                 L.s.trans->t = t;
                 addDiff(total, compareJump(L, vk, name + " at jump time " + std::to_string(t).substr(0, 4)));
-                if (gl) {
-                    std::vector<unsigned char> a(static_cast<std::size_t>(2 * L.jumpDots())), b(a.size());
-                    L.jumpGroupsGpu(vk, a.data()); L.jumpGroupsGpu(*gl, b.data());
-                    for (std::size_t i = 0; i < a.size(); i++) glDiff += a[i] != b[i];
-                }
             }
-            std::printf("%-40s %ld dot-frames: %ld shown/hidden and %ld colour differences from the processor; %ld differ from OpenGL's\n", name.c_str(), total.dots, total.shownDiff, total.binDiff, glDiff);
+            std::printf("%-40s %ld dot-frames: %ld shown/hidden and %ld colour differences from the processor\n", name.c_str(), total.dots, total.shownDiff, total.binDiff);
             check(name + ": every dot's group equals the processor's, except dots within float rounding of a threshold", total.bad == 0 && total.dots > 0);
             check(name + ": differing dots are rare (under 0.05 % of the dot-frames)", double(total.shownDiff + total.binDiff) < 5e-4 * double(total.dots));
-            if (gl) check(name + ": every group identical to OpenGL's", glDiff == 0);
         }
     }
 }
 
-static void vkOutline(render::IOutlineCompute& vk, render::IOutlineCompute* gl) {
+static void vkOutline(render::IOutlineCompute& vk) {
     const int orbs[] = {orbIndex("4f|z3"), orbIndex("2p|z"), orbIndex("3d|z2"), complexState(orbIndex("4f"), 3), orbIndex("3s"), orbIndex("1s"), orbIndex("2p|x")};
     for (const int orb : orbs) {
         const std::string tag = "Vulkan outline " + stateText(orb) + ": ";
@@ -221,7 +59,7 @@ static void vkOutline(render::IOutlineCompute& vk, render::IOutlineCompute* gl) 
         const double half = 1.15 * kExt[o.n], h = 2 * half / kOutlineGrid, dV = h * h * h, norm = orbitalNorm(orb), scale = dV / norm;
         const std::vector<float> cpuGrid = outlineGridCpu(orb);
         const float cpuLevel = outlineLevelCpu(cpuGrid, dV, norm);
-        std::vector<float> g, gg; float lv = 0, glv = 0;
+        std::vector<float> g; float lv = 0;
         const int job = vk.beginGrid(outlineDensityOf(orb), kOutlineGrid, float(half), float(scale), float(kOutlineProb));
         const bool done = job > 0 && vkt::poll([&] { return vk.pollGrid(job, g, lv); }) == render::JobState::Done && g.size() == cpuGrid.size();
         check(tag + "the grid job starts and finishes", done);
@@ -235,25 +73,15 @@ static void vkOutline(render::IOutlineCompute& vk, render::IOutlineCompute* gl) 
         check(tag + "its 90 % level agrees with the processor's to 1e-4 relative", std::fabs(double(lv) / double(cpuLevel) - 1) < 1e-4);
         // the Slice's plane of the same state, against the processor's
         const std::vector<float> cpuPlane = outlinePlaneCpu(orb, half, true, 0.37 * half, 200);
-        std::vector<float> pv, gpv;
+        std::vector<float> pv;
         const int pj = vk.beginPlane(outlineDensityOf(orb), 200, float(half), true, float(0.37 * half));
         const bool pdone = pj > 0 && vkt::poll([&] { return vk.pollPlane(pj, pv); }) == render::JobState::Done && pv.size() == cpuPlane.size();
         check(tag + "the plane job finishes and equals the processor's plane within float rounding", pdone && compareValues(pv, cpuPlane).over == 0);
-        if (!gl) continue;
-        const int gj = gl->beginGrid(outlineDensityOf(orb), kOutlineGrid, float(half), float(scale), float(kOutlineProb));
-        const bool gdone = gj > 0 && vkt::poll([&] { return gl->pollGrid(gj, gg, glv); }) == render::JobState::Done && gg.size() == g.size();
-        const int gp = gl->beginPlane(outlineDensityOf(orb), 200, float(half), true, float(0.37 * half));
-        const bool gpdone = gp > 0 && vkt::poll([&] { return gl->pollPlane(gp, gpv); }) == render::JobState::Done && gpv.size() == pv.size();
-        const ValDiff dg = gdone ? compareValues(g, gg) : ValDiff();
-        std::printf("Vulkan outline %-12s against the processor: worst relative %.2e, level ratio %.8f; against OpenGL: worst relative %.2e, level ratio %.8f\n",
-                    stateText(orb).c_str(), d.rel, double(lv) / double(cpuLevel), dg.rel, gdone ? double(lv) / double(glv) : 0.0);
-        check(tag + "the grid against OpenGL's: within the processor check's limits (larger than 1e-5 relative)", gdone && dg.over == 0);
-        check(tag + "the 90 % level against OpenGL's: within 1e-4 relative (the processor check's limit)", gdone && vkt::closeTo(lv, glv, 1e-4 * std::fabs(glv)));
-        check(tag + "the plane against OpenGL's: within the processor check's limits", gpdone && pdone && compareValues(pv, gpv).over == 0);
+        std::printf("Vulkan outline %-12s against the processor: worst relative %.2e, level ratio %.8f\n", stateText(orb).c_str(), d.rel, double(lv) / double(cpuLevel));
     }
 }
 
-static void vkRocks(render::IRockCompute& vk, render::IRockCompute* gl) {
+static void vkRocks(render::IRockCompute& vk) {
     const std::int64_t epoch = 1767268800000LL;                                  // 2026-01-01 12:00 UTC, as gpuRocks
     for (const int scale : {1, 8}) {
         orbit::SolarSystem sys;
@@ -261,7 +89,7 @@ static void vkRocks(render::IRockCompute& vk, render::IRockCompute* gl) {
         if (scale != 1) sys.belts = orbit::makeBelts(sys.epochMs, scale);
         orbit::BeltLayer layer;
         const std::string tag = std::string("Vulkan rocks, scene ") + (scale == 1 ? "1" : "6") + " (" + std::to_string(scale * 6000) + " rocks)";
-        double worstNear = 0, worstFar = 0, glNear = 0, glFar = 0;
+        double worstNear = 0, worstFar = 0;
         long rocks = 0;
         for (const double years : {0.0, 0.25, 1.0, 100.0, 10000.0, 1e5, 1e6, 1e7}) {
             sys.t = years * units::kYear;
@@ -275,64 +103,45 @@ static void vkRocks(render::IRockCompute& vk, render::IRockCompute* gl) {
                 for (const orbit::BeltGroup& g : sys.belts) {
                     const render::RockSet set = layer.gpuSet(g);
                     const int slot = vk.slotFor(set);
-                    std::vector<float> xy, gxy;
+                    std::vector<float> xy;
                     if (slot < 0 || !vk.dispatch(slot, f) || !vk.readPositions(slot, xy) || int(xy.size()) != 2 * g.n) { check(tag + ": the places of " + g.key + " can be made and read back", false); continue; }
-                    const int gs = gl ? gl->slotFor(set) : -1;
-                    const bool haveGl = gl && gs >= 0 && gl->dispatch(gs, f) && gl->readPositions(gs, gxy) && gxy.size() == xy.size();
                     for (int k = 0; k < g.n; k++) {
                         double X, Y;
                         orbit::beltScreen(cam, orbit::beltPoint(g, k, sys.t), X, Y);
                         const double vx = xy[std::size_t(2 * k)], vy = xy[std::size_t(2 * k + 1)], err = std::hypot(vx - X, vy - Y), mag = std::max(std::fabs(X), std::fabs(Y));
-                        const double gerr = haveGl ? std::hypot(vx - gxy[std::size_t(2 * k)], vy - gxy[std::size_t(2 * k + 1)]) : 0;
-                        if (mag < 3000) { worstNear = std::max(worstNear, err); glNear = std::max(glNear, gerr); }
-                        else { worstFar = std::max(worstFar, err / mag); glFar = std::max(glFar, gerr / mag); }
+                        if (mag < 3000) worstNear = std::max(worstNear, err);
+                        else worstFar = std::max(worstFar, err / mag);
                         rocks++;
                     }
                 }
             }
         }
         vk.keepOnly({});
-        if (gl) gl->keepOnly({});
-        std::printf("%s: %ld rock places; against the processor worst %.3g points near the picture, %.3g of the coordinate farther out; against OpenGL %.3g points, %.3g\n",
-                    tag.c_str(), rocks, worstNear, worstFar, glNear, glFar);
+        std::printf("%s: %ld rock places; against the processor worst %.3g points near the picture, %.3g of the coordinate farther out\n", tag.c_str(), rocks, worstNear, worstFar);
         check(tag + ": every rock within " + std::to_string(kRockPx) + " points of the processor's place near the picture, 3e-4 of its coordinate farther out", rocks > 0 && worstNear <= kRockPx && worstFar <= 3e-4);
-        if (gl) check(tag + ": every rock within the same limits of OpenGL's place", glNear <= kRockPx && glFar <= 3e-4);
     }
 }
 
-static void vkSliceJump(render::AtomCard& vk, render::AtomCard* gl) {
+static void vkSliceJump(render::AtomCard& vk) {
     std::string why;
     check("Vulkan: the Slice's and the jump's programs are made", vk.build(render::AtomCard::kSlice, nullptr, why) && vk.build(render::AtomCard::kJump, nullptr, why));
-    const bool haveGl = gl && gl->build(render::AtomCard::kSlice, nullptr, why) && gl->build(render::AtomCard::kJump, nullptr, why);
-    long tries = 0, flagGl = 0, pointGl = 0;
+    long tries = 0;
     bool allOk = true;
     for (const atom::SliceCheckCase& k : atom::sliceCheckCases()) {
         const atom::PlaneSampler ps = atom::planeSampler(k.id, k.Z, k.axis, k.off);
         const render::SliceDotsJob job = atom::sliceJobOf(ps, k.seed, k.tries, k.stride, k.first);
-        std::vector<float> res, gres;
+        std::vector<float> res;
         const int j = vk.beginSlice(job);
         if (!(j > 0 && vkt::poll([&] { return vk.pollSlice(j, res); }) == render::JobState::Done)) { allOk = false; continue; }
         const atom::SliceCompare c = atom::compareSlice(ps, k.seed, res, k.tries, k.stride, k.first);
         std::printf("Vulkan Slice Z=%d id=%d axis=%d off=%.4f: %s\n", k.Z, k.id, k.axis, k.off, atom::sliceCompareText(c).c_str());
         allOk = allOk && c.ok();
         tries += k.tries;
-        if (!haveGl) continue;
-        const int g = gl->beginSlice(job);
-        if (!(g > 0 && vkt::poll([&] { return gl->pollSlice(g, gres); }) == render::JobState::Done) || gres.size() != res.size()) { flagGl++; continue; }
-        for (std::size_t t = 0; t + 3 < res.size(); t += 4) {
-            if (res[t + 3] != gres[t + 3]) flagGl++;                             // kept / rejected / radius 0: identical
-            else for (int q = 0; q < 3; q++) if (!vkt::closeTo(res[t + q], gres[t + q], 1e-6)) pointGl++;   // (the points: 1e-5 relative; 1e-6 Bohr radii near 0)
-        }
     }
     check("Vulkan Slice: every case within the start-up check's limits against the processor (atom/atom_card.h compareSlice)", allOk && tries > 0);
-    if (haveGl) {
-        std::printf("Vulkan Slice against OpenGL: %ld attempts, %ld kept flags differ, %ld points beyond 1e-5 relative\n", tries, flagGl, pointGl);
-        check("Vulkan Slice: every attempt's kept flag identical to OpenGL's", flagGl == 0);
-        check("Vulkan Slice: every point within 1e-5 relative of OpenGL's (the larger of that and the processor check's limit)", pointGl == 0);
-    }
-    long wrong = 0, wrongGl = 0, dots = 0;
+    long wrong = 0, dots = 0;
     for (const atom::JumpCheckCase& k : atom::jumpCheckCases()) {
-        std::vector<unsigned char> fixedG, want, got, ggot;
+        std::vector<unsigned char> fixedG, want, got;
         atom::jumpCheckFixed(k.jn, fixedG);
         atom::jumpCheckExpected(k.jn, k.shareNew, fixedG, want);
         const std::uint64_t t0 = render::jumpShareThreshold(1 - k.shareNew), t1 = render::jumpShareThreshold(k.shareNew);
@@ -340,46 +149,29 @@ static void vkSliceJump(render::AtomCard& vk, render::AtomCard* gl) {
         if (!(j > 0 && vkt::poll([&] { return vk.pollJumpRead(j, got); }) == render::JobState::Done) || got.size() != want.size()) { wrong += long(want.size()); continue; }
         for (std::size_t i = 0; i < want.size(); i++) wrong += got[i] != want[i];
         dots += long(want.size());
-        if (!haveGl) continue;
-        const int g = gl->beginJumpRead(fixedG.data(), k.jn, t0, t1);
-        if (!(g > 0 && vkt::poll([&] { return gl->pollJumpRead(g, ggot); }) == render::JobState::Done) || ggot.size() != got.size()) { wrongGl += long(got.size()); continue; }
-        for (std::size_t i = 0; i < got.size(); i++) wrongGl += got[i] != ggot[i];
     }
-    std::printf("Vulkan jump groups: %ld dots, %ld differ from the processor's, %ld from OpenGL's\n", dots, wrong, wrongGl);
+    std::printf("Vulkan jump groups: %ld dots, %ld differ from the processor's\n", dots, wrong);
     check("Vulkan jump groups: every group exactly the processor's", dots > 0 && wrong == 0);
-    if (haveGl) check("Vulkan jump groups: every group identical to OpenGL's", wrongGl == 0);
 }
 
-static void vkMolCloud(render::MoleculeCard& vk, render::MoleculeCard* gl) {
+static void vkMolCloud(render::MoleculeCard& vk) {
     std::string why;
     check("Vulkan: the Density cloud's programs are made", vk.build(nullptr, why));
-    const bool haveGl = gl && gl->build(nullptr, why);
     std::vector<float> box;
     molecule::cloudCheckDots(4096, box);
-    long dots = 0, drawnGl = 0, valGl = 0;
+    long dots = 0;
     bool allOk = true;
     for (const molecule::CloudCam& cam : molecule::cloudCheckCams()) {
-        std::vector<float> res, gres;
+        std::vector<float> res;
         const long n = static_cast<long>(box.size() / 3);
         const int j = vk.beginProject(box.data(), n, molecule::cardCam(cam));
         if (!(j > 0 && vkt::poll([&] { return vk.pollProject(j, res); }) == render::JobState::Done)) { allOk = false; continue; }
         const molecule::CloudCompare c = molecule::compareCloud(cam, box.data(), n, res);
         allOk = allOk && c.ok();
         dots += n;
-        if (!haveGl) continue;
-        const int g = gl->beginProject(box.data(), n, molecule::cardCam(cam));
-        if (!(g > 0 && vkt::poll([&] { return gl->pollProject(g, gres); }) == render::JobState::Done) || gres.size() != res.size()) { drawnGl += n; continue; }
-        for (std::size_t t = 0; t + 3 < res.size(); t += 4) {
-            if ((res[t + 2] > 0) != (gres[t + 2] > 0)) { drawnGl++; continue; }     // drawn or not: identical
-            for (int q = 0; q < 4; q++) if (!vkt::closeTo(res[t + q], gres[t + q], 1e-6)) valGl++;
-        }
     }
-    std::printf("Vulkan Density cloud: %ld dots under %zu cameras; against OpenGL %ld drawn flags and %ld values (beyond 1e-5 relative) differ\n", dots, molecule::cloudCheckCams().size(), drawnGl, valGl);
+    std::printf("Vulkan Density cloud: %ld dots under %zu cameras\n", dots, molecule::cloudCheckCams().size());
     check("Vulkan Density cloud: every case within the start-up check's limits against the processor (molecule/mol_cloud.h compareCloud)", allOk && dots > 0);
-    if (haveGl) {
-        check("Vulkan Density cloud: every dot drawn or not as OpenGL's", drawnGl == 0);
-        check("Vulkan Density cloud: every value within 1e-5 relative of OpenGL's", valGl == 0);
-    }
 }
 
 // the exposure's grid of the Glow dots (kCloudGridVS + kCloudGridFS) against the processor's sum of the same footprints in double: per cell within the
@@ -461,11 +253,10 @@ static void vkGlowGrid(render::VkCards& cards) {
 }
 
 // 0.62.0 (Vulkan step 4): the Black Hole Lab's programs on Vulkan. The light paths (kKerrTableCS, double precision): the start-up check against the processor
-// with its own limits (spin_card.h cardSelfCheck: the same function and limits as on OpenGL), then rays at a grid of (psi, chi) against OpenGL's program on the
-// same input (the planner's limit for Vulkan against OpenGL, at the top of this file: within 1e-5 relative (to 1 + |value|) or the check's loosest limit,
-// kCardUTol, whichever is larger; the ends equal). The sky per pixel: its three stages made,
-// the start-up check's two probes and its light check (sky_card.h skyCheckOf: the same limits as on OpenGL).
-static void vkBlackHole(render::VkCards& cards, render::Renderer2D& R, bool f64) {
+// with its own limits (spin_card.h cardSelfCheck). (0.69.0: its rays against OpenGL's program went with OpenGL; the app's PL_BH_COMPARE=card, check_blackhole.py
+// precision, compares the card's whole fine tables with the processor's.) The sky per pixel: its three stages made, the start-up check's two probes and
+// its light check (sky_card.h skyCheckOf).
+static void vkBlackHole(render::VkCards& cards, bool f64) {
     std::string why;
     if (f64) {
         render::IKerrCompute* K = render::makeVkKerrCompute(cards, VK_NULL_HANDLE, nullptr, why);
@@ -479,24 +270,7 @@ static void vkBlackHole(render::VkCards& cards, render::Renderer2D& R, bool f64)
                 const blackhole::CardCheck c = blackhole::cardSelfCheck(*K);
                 std::printf("Vulkan light paths against the processor: %s; math %.1e, edges %d (%.1e), rays %d: dir %.1e b %.1e u %.1e, ends differ %d (%s)\n", c.ok ? "passed" : "FAILED",
                             c.math, c.edges, c.edge, c.rays, c.dir, c.b, c.u, c.endsDiffer, c.why.empty() ? "-" : c.why.c_str());
-                check("Vulkan light paths: the start-up check against the processor passes with OpenGL's limits", c.ok);
-                if (render::IKerrCompute* G = R.kerrCompute()) {
-                    std::vector<double> pc, a, b;
-                    for (int i = 0; i < 24; i++) for (int j = 0; j < 16; j++) { pc.push_back(0.02 + 0.011 * i); pc.push_back(-3.1 + 0.39 * j); }
-                    const std::vector<double> par = blackhole::cardParams(0.6, 20, 1.3);
-                    K->rays(par, pc, a);
-                    G->rays(par, pc, b);
-                    double worst = 0;
-                    long ends = 0;
-                    std::size_t at = 0;
-                    for (std::size_t k = 0; k < a.size() && k < b.size(); k++) {
-                        const double e = std::fabs(a[k] - b[k]) / (1 + std::fabs(b[k]));
-                        if (std::isnan(a[k]) != std::isnan(b[k])) ends++;
-                        else if (!std::isnan(e) && e > worst) { worst = e; at = k % 16; }
-                    }
-                    std::printf("Vulkan light paths against OpenGL's: %zu rays, every number within %.1e (relative to 1 + |value|; the largest at number %zu of 16), %ld NaN differ\n", pc.size() / 2, worst, at, ends);
-                    check("Vulkan light paths against OpenGL's: the same rays within max(1e-5, kCardUTol)", a.size() == b.size() && worst <= std::max(1e-5, blackhole::kCardUTol) && ends == 0);
-                } else check("OpenGL's light paths for the comparison (" + R.kerrWhy() + ")", false);
+                check("Vulkan light paths: the start-up check against the processor passes (spin_card.h's limits)", c.ok);
             }
             delete K;
         }
@@ -519,7 +293,7 @@ static void vkBlackHole(render::VkCards& cards, render::Renderer2D& R, bool f64)
         for (int k = 0; k < 2; k++) std::printf("Vulkan sky probe %s\n", blackhole::skyCompareText(blackhole::skyCheckCase(k), c.m[k]).c_str());
         std::printf("Vulkan sky light check: eye %ld pixels, %ld over, worst %.3f of its limit; all light %ld, %ld over, worst %.3f\n", c.light[0].px, c.light[0].bad, c.light[0].worst,
                     c.light[1].px, c.light[1].bad, c.light[1].worst);
-        check("Vulkan sky: the start-up check (both probes and the light check) passes with OpenGL's limits (" + c.why + ")", c.ok);
+        check("Vulkan sky: the start-up check (both probes and the light check) passes (sky_card.h's limits; " + c.why + ")", c.ok);
     }
     bh.destroy();
 }
@@ -628,7 +402,7 @@ static void settle(render::VkCards& cards, render::IGroupCompute* g, render::IOu
     if (!app::gpuGuardTurn().empty()) std::printf("Vulkan: the guards' turn is still held by %s\n", app::gpuGuardTurn().c_str());
 }
 
-static void vulkanTwins(render::Renderer2D& R) {
+static void vulkanTwins() {
     app::gpuGuardFrameThread();   // 0.64.0: this thread runs every program's steps in turn (0.63.0's one-step-at-a-time turn: a guard's open step made the next wait for ever)
     vkt::Ctx h;
     std::string why;
@@ -640,20 +414,20 @@ static void vulkanTwins(render::Renderer2D& R) {
         check("Vulkan: the card programs' engine starts (" + why + ")", cards.init(h.c, nullptr, h.f64, why));
         render::IGroupCompute* g = render::makeVkGroupCompute(cards, why);
         check("Vulkan: the groups' program passes its start-up steps (" + why + ")", g != nullptr);
-        if (g) vkGroups(*g, R.compute());
+        if (g) vkGroups(*g);
         settle(cards, g, nullptr, nullptr, nullptr);
         render::IOutlineCompute* o = render::makeVkOutlineCompute(cards, why);
         check("Vulkan: the outline's programs pass their start-up steps (" + why + ")", o != nullptr);
-        if (o) vkOutline(*o, R.outlineCompute());
+        if (o) vkOutline(*o);
         settle(cards, nullptr, o, nullptr, nullptr);
         render::IRockCompute* r = render::makeVkRockCompute(cards, why);
         check("Vulkan: the rocks' program passes its start-up steps (double precision here: " + std::string(h.f64 ? "yes" : "no") + "; " + why + ")", r != nullptr || !h.f64);
-        if (r) vkRocks(*r, R.rockCompute());
+        if (r) vkRocks(*r);
         settle(cards, nullptr, nullptr, r, nullptr);
         render::AtomCard* a = render::makeVkAtomCard(cards);
-        vkSliceJump(*a, &R.atomCard());
+        vkSliceJump(*a);
         render::MoleculeCard* m = render::makeVkMoleculeCard(cards);
-        vkMolCloud(*m, &R.moleculeCard());
+        vkMolCloud(*m);
         vkGlowGrid(cards);
         render::RingCard* rc = render::makeVkRingCard(cards);                   // 0.64.0 (before the Black Hole Lab's, whose end can wait: ROADMAP)
         vkRings(*rc);
@@ -670,7 +444,7 @@ static void vulkanTwins(render::Renderer2D& R) {
         render::SurfaceCard* sf = render::makeVkSurfaceCard(cards);             // 0.68.0
         vkSurface(*sf);
         delete sf;
-        vkBlackHole(cards, R, h.f64);                                            // 0.62.0
+        vkBlackHole(cards, h.f64);                                            // 0.62.0
         delete g; delete o; delete r; delete a; delete m;
         cards.collect();
     }

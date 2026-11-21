@@ -88,13 +88,9 @@ const char* const kSky[3] = {"soft", "full", "off"};
 const char* const kCons[3] = {"off", "lines", "names"};
 
 void labsToPrefs(const AppState& app, app::Prefs& p) {
-    if (!app::vulkanGuards() && app::gpuGuard().started()) p.gpuPaths = app::gpuGuard().saved();      // (0.62.0: on Vulkan these give Vulkan's twins,
-    if (!app::vulkanGuards() && app::gpuSkyGuard().started()) p.gpuSky = app::gpuSkyGuard().saved();  // kept in gpuVk below)
-    if (!app::vulkanGuards() && app::gpuSliceGuard().started()) p.gpuSlice = app::gpuSliceGuard().saved();   // 0.57.0
-    if (!app::vulkanGuards() && app::gpuMolCloudGuard().started()) p.gpuMolCloud = app::gpuMolCloudGuard().saved();   // 0.57.1
-    if (app::vulkanGuards()) for (const auto& [name, g] : app::vulkanCardGuards()) if (g->started()) p.gpuVk[name] = g->saved();   // 0.61.0 (Vulkan's own)
+    for (const auto& [name, g] : app::vulkanCardGuards()) if (g->started()) p.gpuVk[name] = g->saved();   // 0.61.0 (Vulkan's own; 0.69.0: the only ones)
     if (app::gpuVulkanGuard().started()) p.gpuVulkan = app::gpuVulkanGuard().saved();   // 0.59.0
-    if (!app::vulkanGuards() && app::gpuJumpGuard().started()) p.gpuJump = app::gpuJumpGuard().saved();   // 0.56.0   // 0.55.7: what the light paths' guard keeps (before it starts: the file's line as read)
+    // (0.69.0: an old file's OpenGL guard lines gpupaths=, gpusky=, gpuslice=, gpujump=, gpumolcloud= are kept as read, unused)
     const orbit::ViewSettings& v = app.set;
     p.orbit = {{"view3D", v.view3D ? "1" : "0"}, {"zoom", num(v.zoom)}, {"tspeed", num(v.tspeed)}, {"trueScale", v.trueScale ? "1" : "0"},
                {"fullTrails", v.fullTrails ? "1" : "0"}, {"moons", v.moons ? "1" : "0"}, {"dwarfs", v.dwarfs ? "1" : "0"}, {"comets", v.comets ? "1" : "0"},
@@ -263,7 +259,7 @@ void saveSettingsWhenChanged(AppState& app, double nowS, bool now) {
     const std::string path = settingsPath();
     if (path.empty()) return;
     if (app::writeSettingsFile(path, text)) { g_written = text; g_changedAt = -1; app::gpuGuard().settingsWritten(); app::gpuSkyGuard().settingsWritten(); app::gpuSliceGuard().settingsWritten(); app::gpuJumpGuard().settingsWritten(); app::gpuMolCloudGuard().settingsWritten(); app::gpuVulkanGuard().settingsWritten();
-                                                   if (app::vulkanGuards()) for (const auto& [name, g] : app::vulkanCardGuards()) g->settingsWritten(); }   // (0.55.7: a marker the file now keeps can go)
+                                                   for (const auto& [name, g] : app::vulkanCardGuards()) g->settingsWritten(); }   // (0.55.7: a marker the file now keeps can go)
     else g_changedAt = nowS + 5;                              // 0.19: not written (a full disk, a read-only folder): the old file stays; try again in about 5 s, not every frame
 }
 
@@ -277,15 +273,15 @@ const std::vector<SettingRow>& settingRows() {
         {"facts", "💡 Facts", "Did you know facts", -1},
         {"perf", "Performance", "Performance", -1},
         {"vsync", "VSync (wait for the screen)", "VSync (wait for the screen)", -1},
-        {"graphics", "Graphics: Vulkan / OpenGL (backup)", "Graphics (Vulkan or OpenGL)", -1},   // 0.59.0 (0.63.0: Vulkan the default)
-        {"gpurocks", "GPU rocks (Vulkan or OpenGL 4.3)", "GPU rocks (Vulkan or OpenGL 4.3)", 0},
-        {"gpuspin", "GPU superposition and jumps (Vulkan or OpenGL 4.3)", "GPU superposition and jumps (Vulkan or OpenGL 4.3)", 1},
-        {"gpuoutline", "GPU outline (Vulkan or OpenGL 4.3)", "GPU outline (Vulkan or OpenGL 4.3)", 1},
+        {"graphics", "Graphics: Vulkan", "Graphics (Vulkan)", -1},   // 0.59.0 (0.69.0: Vulkan only: the line, no choice)
+        {"gpurocks", "GPU rocks", "GPU rocks", 0},
+        {"gpuspin", "GPU superposition and jumps", "GPU superposition and jumps", 1},
+        {"gpuoutline", "GPU outline", "GPU outline", 1},
         {"gpucolours", "GPU colours (Atom Lab cloud dots)", "GPU colours (Atom Lab cloud dots)", 1},
-        {"gpuslice", "GPU Slice dots (Vulkan or OpenGL 4.3)", "GPU Slice dots (Atom Lab, Vulkan or OpenGL 4.3)", 1},     // 0.57.0
-        {"gpujump", "GPU jump groups (Vulkan or OpenGL 4.3)", "GPU jump groups (Atom Lab, Vulkan or OpenGL 4.3)", 1},     // 0.57.0
-        {"gpumolcloud", "GPU Density cloud (Vulkan or OpenGL 4.3)", "GPU Density cloud (Molecule Lab, Vulkan or OpenGL 4.3)", 2},   // 0.57.1
-        {"gpupaths", "GPU light paths (Vulkan or OpenGL 4.3)", "GPU light paths (Black Hole Lab, Vulkan or OpenGL 4.3)", 3},   // 0.55.6 (blackhole::kLabIndex)
+        {"gpuslice", "GPU Slice dots", "GPU Slice dots (Atom Lab)", 1},     // 0.57.0
+        {"gpujump", "GPU jump groups", "GPU jump groups (Atom Lab)", 1},     // 0.57.0
+        {"gpumolcloud", "GPU Density cloud", "GPU Density cloud (Molecule Lab)", 2},   // 0.57.1
+        {"gpupaths", "GPU light paths", "GPU light paths (Black Hole Lab)", 3},   // 0.55.6 (blackhole::kLabIndex)
         {"gpusky", "GPU sky per pixel (spinning hole)", "GPU sky per pixel (Black Hole Lab)", 3},   // 0.56.0
         {"frames", "Frame times", "Frame times (fps)", -1},
         {"benchmark", "Benchmark", "Benchmark (speed test)", -1},

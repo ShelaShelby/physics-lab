@@ -10,8 +10,6 @@
 #include "app/app_data.h"
 #include "app/shot.h"
 #include "imgui.h"
-#include "imgui_impl_opengl3.h"
-#include "render/gl_loader.h"
 #include "ui/fonts.h"
 #include "ui/look.h"
 #include "ui/shell_test.h"
@@ -65,63 +63,8 @@ static void saveShot(AppState& app, int w, int h, const std::vector<uint8_t>& rg
     std::fprintf(stderr, "Save image failed: %s\n", why.c_str());
 }
 
-void takeShot(AppState& app, render::Renderer2D& renderer, const ShotArea& a) {
-    using namespace plgl;
-    const int w = std::max(1, a.pictureFbW), h = std::max(1, a.pictureFbH);
-    // an offscreen image the size of the picture area
-    GLuint fbo = 0, tex = 0;
-    glGenFramebuffers(1, &fbo);
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
-    glViewport(0, 0, w, h);
-    const app::Rgb bg = look().c.card;
-    glClearColor(bg.r, bg.g, bg.b, 1);
-    glClear(GL_COLOR_BUFFER_BIT);
-    renderer.end(w, h, 0, fbo);                        // the shapes (Monochrome: grey, as on screen)
-
-    // the labels and the readout: the lab's text on the background list, nothing else (no panels, no windows)
-    ImDrawData* src = ImGui::GetDrawData();
-    ImDrawList* bgList = ImGui::GetBackgroundDrawList();
-    bool has = false;
-    for (ImDrawList* l : src->CmdLists) has = has || l == bgList;
-    if (has) {
-        const float sx = static_cast<float>(a.fbW) / std::max(1, a.winW), sy = static_cast<float>(a.fbH) / std::max(1, a.winH);
-        ImDrawData dd;
-        dd.Valid = true;
-        dd.CmdLists.push_back(bgList);
-        dd.CmdListsCount = 1;
-        dd.TotalVtxCount = bgList->VtxBuffer.Size;
-        dd.TotalIdxCount = bgList->IdxBuffer.Size;
-        dd.DisplayPos = ImVec2(0, a.headerH);
-        dd.DisplaySize = ImVec2((w + 0.01f) / sx, (h + 0.01f) / sy);
-        dd.FramebufferScale = ImVec2(sx, sy);
-        dd.OwnerViewport = src->OwnerViewport;
-        dd.Textures = src->Textures;
-        ImGui_ImplOpenGL3_RenderDrawData(&dd);
-        dd.CmdLists.clear();
-    }
-
-    // read it back (rows come bottom first) and write the PNG
-    std::vector<uint8_t> bottomUp(std::size_t(w) * h * 3), rgb(bottomUp.size());
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, bottomUp.data());
-    for (int y = 0; y < h; y++) std::copy_n(bottomUp.begin() + std::size_t(h - 1 - y) * w * 3, std::size_t(w) * 3, rgb.begin() + std::size_t(y) * w * 3);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDeleteFramebuffers(1, &fbo);
-    glDeleteTextures(1, &tex);
-    glViewport(0, 0, a.fbW, a.fbH);
-
-    saveShot(app, w, h, rgb);
-}
-
 // 0.59.0: the lab's text (the background list, the readout included; no panels) drawn by Vulkan into an image the size of the picture area, on the
-// card colour as the OpenGL path's; 0.60.0: over the lab's shapes (renderer2d on Vulkan, one sample as OpenGL's offscreen picture; Monochrome: grey)
+// card colour; 0.60.0: over the lab's shapes (renderer2d on Vulkan, one sample; Monochrome: grey)
 void takeShotVulkan(AppState& app, render::VkBackend& vk, render::Renderer2D* picture, const ShotArea& a) {
     const int w = std::max(1, a.pictureFbW), h = std::max(1, a.pictureFbH);
     ImDrawData* src = ImGui::GetDrawData();

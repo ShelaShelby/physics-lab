@@ -1,11 +1,11 @@
-// 0.60.0: Vulkan, step 2 of 5 (native/PLAN_VULKAN.md): renderer2d's drawing on Vulkan. The shapes are recorded by Renderer2D exactly as for OpenGL (one
+// 0.60.0: Vulkan, step 2 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): renderer2d's drawing on Vulkan. The shapes are recorded by Renderer2D exactly as for OpenGL (one
 // code path: the vertex and blob lists and the segments in order); only end() differs: Renderer2D::endVulkan (render/renderer2d_vk.cpp) hands the
 // segments to this object, which draws them with the SAME shader text as OpenGL (render/shaders.h, made into SPIR-V at build time: CMakeLists.txt
 // PL_VK2D_SHADERS), the same blend modes, texture filters, mip levels, the soft layer, the cloud's float layer and the grey pass.
 //
 // The picture is drawn with OpenGL's rows (its first row at the bottom, so the shaders, gl_FragCoord and the layers' texture coordinates are exactly
 // OpenGL's), into an image of its own (4x multisampled with a resolve, as OpenGL's window; 1 sample in the grey pass and for Save image, as OpenGL's
-// offscreen pictures), then copied into the window's picture area with its rows turned over (render/vk/present.*). Per frame in flight: one buffer the
+// offscreen pictures), then copied into the window's picture area with its rows turned over (0.69.0: a blit, VkDraw2D::copyTo). Per frame in flight: one buffer the
 // processor writes once (vertices, instances, the shaders' uniform blocks; persistently mapped) and one descriptor pool. The maps and the meshes are
 // uploaded once. Nothing waits for the card in a normal frame; an image or buffer that is replaced is kept until the frames that used it are done.
 #pragma once
@@ -135,8 +135,9 @@ public:
 
     // ---- used by the window's backend ----
     bool pictureDrawn() const { return drawn_; }
-    // inside the window's (or Save image's) render pass: the picture copied into the area (x, y, w, h: pixels from the top left)
-    void present(VkCommandBuffer cmd, int x, int y, int w, int h);
+    // before the window's (or Save image's) pass: dst cleared to clear and the picture copied into the area (x, y, w, h: pixels from the top left) by a
+    // blit, its rows turned over (0.69.0: present.frag's place); dst is then in the colour attachment's layout (the pass loads it)
+    void copyTo(VkCommandBuffer cmd, VkImage dst, const VkClearColorValue& clear, int x, int y, int w, int h);
     void dropShot();                                                        // Save image's own images (after its picture was used)
 
     struct Buf { VkBuffer b = VK_NULL_HANDLE; VkDeviceMemory m = VK_NULL_HANDLE; void* map = nullptr; VkDeviceSize size = 0; };
@@ -174,11 +175,10 @@ private:
     std::string floatText_, samplesText_;
     std::size_t spirvBytes_ = 0;
     VkFormat floatFormat_ = VK_FORMAT_R32G32B32A32_SFLOAT;
-    VkDescriptorSetLayout setLayout_ = VK_NULL_HANDLE, presentSetLayout_ = VK_NULL_HANDLE;
-    VkPipelineLayout layout_ = VK_NULL_HANDLE, presentLayout_ = VK_NULL_HANDLE;
+    VkDescriptorSetLayout setLayout_ = VK_NULL_HANDLE;
+    VkPipelineLayout layout_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout linesSetLayout_ = VK_NULL_HANDLE;   // 0.68.0: kLine's set 1 (four storage buffers) and its pipeline layout
     VkPipelineLayout linesLayout_ = VK_NULL_HANDLE;
-    VkPipeline presentPipe_ = VK_NULL_HANDLE;
     VkSampler linearClamp_ = VK_NULL_HANDLE, nearestClamp_ = VK_NULL_HANDLE, mapSampler_ = VK_NULL_HANDLE;
     Program prog_[kProgCount];
     Img white_, maps_[32];

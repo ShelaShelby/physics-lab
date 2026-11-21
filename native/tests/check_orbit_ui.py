@@ -615,7 +615,7 @@ def part_rings(binary, work):
     # from the processor's triangles), the benchmark's Path names the card; made to fail on purpose (PL_RINGS_CARDFAIL), the processor's triangles are kept
     # and the Path says why. Then the two pictures (card, processor) of the same moment differ in under 2 % of the pixels by more than 8 levels.
     import re
-    BENCH = {"PL_GRAPHICS": "vulkan", "PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "orbit.saturn",
+    BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "orbit.saturn",
              "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
     runs = {}
     for tag, extra in (("card", {}), ("cpu", {"PL_RINGS_CARDFAIL": "1"})):
@@ -655,7 +655,7 @@ def part_cardlines(binary, work):
         st = x.bpp
         return sum(1 for i in range(0, min(len(px), len(py)) - st + 1, st) if max(abs(px[i] - py[i]), abs(px[i + 1] - py[i + 1]), abs(px[i + 2] - py[i + 2])) > 8)
     for sc in ("orbit.heaviest", "orbit.real_fast", "orbit.earth"):
-        env = {"PL_GRAPHICS": "vulkan", "PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc}
+        env = {"PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc}
         card = run_app(binary, work, "lines_card_" + sc, env, frames=60)
         cpu = run_app(binary, work, "lines_cpu_" + sc, dict(env, PL_NO_LINES_CARD="1"), frames=60)
         if sc == "orbit.heaviest":

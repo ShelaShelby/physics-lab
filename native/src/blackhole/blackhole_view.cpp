@@ -23,7 +23,8 @@
 #include "blackhole/low_priority.h"
 #include "blackhole/spin.h"
 #include "orbit/sky.h"
-#include "render/gl_loader.h"
+#include <cstring>
+#include <thread>
 
 namespace blackhole {
 
@@ -908,7 +909,7 @@ void BlackHoleView::makeFineNow(const Settings& s) {
     spinFineStarted_ = true;
 }
 
-// 0.55.6: the card's path, decided once: OpenGL 4.3 with its shader compiled, and the start-up check on this card (spin_card.h CardStartup).
+// 0.55.6: the card's path, decided once: the card's program made (0.62.0: Vulkan's), and the start-up check on this card (spin_card.h CardStartup).
 // 0.55.7: within the guard (app/gpu_guard.h): off at once when a past run died inside the path (or a step ran out of time) with this app version and driver:
 // the shader is not compiled; nothing of it before the view's third frame (the first frames are on screen, the window usable); the check runs a step per
 // frame and a step that does not finish within cardStepLimitMs() switches the path off
@@ -1194,21 +1195,14 @@ void BlackHoleView::ensureSkyF(double spin) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // Tests: PL_BH_COMPARE=1
 namespace {
-struct Fbo { GLuint fbo = 0, tex = 0; };
-Fbo makeFbo(int w, int h, bool floats) {
-    Fbo f;
-    plgl::glGenFramebuffers(1, &f.fbo);
-    plgl::glGenTextures(1, &f.tex);
-    plgl::glBindTexture(GL_TEXTURE_2D, f.tex);
-    plgl::glTexImage2D(GL_TEXTURE_2D, 0, floats ? GL_RGBA32F : GL_RGBA8, w, h, 0, GL_RGBA, floats ? GL_FLOAT : GL_UNSIGNED_BYTE, nullptr);
-    plgl::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    plgl::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-    plgl::glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, f.tex, 0);
-    plgl::glBindTexture(GL_TEXTURE_2D, 0);
-    return f;
+// 0.69.0: the tests' pictures on Vulkan (until 0.68.1 OpenGL framebuffers): what R recorded, drawn off screen by the test shot (main.cpp: the backend's
+// renderToImage, one sample) and read back, RGBA, rows from the bottom as glReadPixels gave them; the float outputs come from R.lensFloat
+struct Fbo { std::vector<unsigned char> px; };
+Fbo makeFbo(int, int, bool) { return Fbo(); }
+void dropFbo(Fbo&) {}
+void endFbo(render::Renderer2D& R, int W, int H, Fbo& f) {
+    if (!testShot() || !testShot()(R, W, H, f.px)) f.px.assign(static_cast<std::size_t>(W) * static_cast<std::size_t>(H) * 4, 0);
 }
-void dropFbo(Fbo& f) { plgl::glDeleteFramebuffers(1, &f.fbo); plgl::glDeleteTextures(1, &f.tex); plgl::glBindFramebuffer(GL_FRAMEBUFFER, 0); }
 double angleBetween(const Vec3& a, const Vec3& b) { return std::atan2(length(cross(a, b)), dot(a, b)); }
 }  // namespace
 
@@ -1231,11 +1225,9 @@ std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H, const SpinFill& 
     Fbo f = makeFbo(W, H, false);
     R.begin(W, H);
     view.draw(R, s, W, H, W / 2.0, H / 2.0);
-    R.end(W, H, 0, f.fbo);
+    endFbo(R, W, H, f);
     std::vector<unsigned char> px(static_cast<std::size_t>(W) * H * 4);
-    plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-    plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+    std::memcpy(px.data(), f.px.data(), f.px.size());
     dropFbo(f);
     std::uint64_t h = 1469598103934665603ull;
     for (unsigned char c : px) { h ^= c; h *= 1099511628211ull; }
@@ -1253,6 +1245,7 @@ std::uint64_t realCaseHash(render::Renderer2D& R, int W, int H, const SpinFill& 
 namespace {
 void cardCompare(render::Renderer2D& R) {
     render::IKerrCompute* K = R.kerrCompute();
+    for (int t = 0; K && K->building() && t < 6000; t++) { std::this_thread::sleep_for(std::chrono::milliseconds(20)); K = R.kerrCompute(); }   // 0.69.0: Vulkan makes its pipeline on a thread
     if (!K) { std::printf("PLBHCARDNONE why=%s\n", R.kerrWhy().c_str()); return; }
     {   std::vector<double> x, out;
         for (int k = 0; k < 4000; k++) x.push_back(-40 + 80.0 * k / 3999 + 1e-3 * std::sin(k));   // -40 .. 40 (the angles, the exponents of the step's rule)
@@ -1344,8 +1337,10 @@ void cardCompare(render::Renderer2D& R) {
 }
 }  // namespace
 
+TestShot& testShot() { static TestShot s; return s; }
+
 void compareHook(render::Renderer2D& R, const char* spec) {
-    if (R.vulkan()) { std::printf("PLBHCOMPARE skipped: its pictures are read back with OpenGL (on Vulkan: gl_compare_tests' Vulkan twin)\n"); return; }   // 0.62.0
+    if (!R.vulkan()) { std::printf("PLBHCOMPARE skipped: no Vulkan\n"); return; }   // 0.69.0: on Vulkan (until 0.68.1 OpenGL's)
     if (spec && std::string(spec) == "card") { cardCompare(R); return; }
     if (spec && std::string(spec) == "sky") {                              // 0.56.0
         skyCompareHook(R);
@@ -1373,7 +1368,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
             render::Renderer2D::LensSky L = view.lensFor(s, v);
             L.glareKeep = 0;
             Fbo f = makeFbo(W, H, false);
-            R.begin(W, H); R.lensSky(L); R.end(W, H, 0, f.fbo);
+            R.begin(W, H); R.lensSky(L); endFbo(R, W, H, f);
             const double card = R.skyWhiteWait();
             dropFbo(f);
             std::printf("PLBHSKYEXP case=%s spin=%g whitemode=%d cpu=%.6g card=%.6g rel=%.2e n=%d\n", e.name, s.spin, L.whiteMode, cpu, card, card > 0 ? std::fabs(card / cpu - 1) : 1.0, R.skyStats().expN);
@@ -1395,10 +1390,9 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 render::Renderer2D::LensSky L = view.lensFor(s, v);
                 L.moving = k != 1; L.frameBudgetMs = k == 0 ? 1e9 : 8; L.slowMs = k == 2 ? 32 : 0; L.white = 1; L.whiteMode = 0;
                 Fbo f = makeFbo(W, H, false);
-                R.begin(W, H); R.lensSky(L); R.end(W, H, 0, f.fbo);
+                R.begin(W, H); R.lensSky(L); endFbo(R, W, H, f);
                 pic[k].resize(static_cast<std::size_t>(W) * H * 4);
-                plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-                plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, pic[k].data());
+                std::memcpy(pic[k].data(), f.px.data(), f.px.size());
                 dropFbo(f);
             }
             long same = 0, half = 0;
@@ -1444,24 +1438,17 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         const SpinTable& T = *view.spinTable();
         const HoleView v = holeView(s, W0, H0, W0 / 2.0, H0 / 2.0);
         {   Fbo f = makeFbo(W0, H0, false);                                     // a frame as the app draws it: the exposure (st_.look) for these settings
-            R.begin(W0, H0); view.draw(R, s, W0, H0, W0 / 2.0, H0 / 2.0); R.end(W0, H0, 0, f.fbo); dropFbo(f); }
+            R.begin(W0, H0); view.draw(R, s, W0, H0, W0 / 2.0, H0 / 2.0); endFbo(R, W0, H0, f); dropFbo(f); }
         const DiscGeom g = discGeom(s);
         const auto readF = [&](const render::Renderer2D::LensSky& L, std::vector<float>& out) {
-            Fbo f = makeFbo(W0, H0, true);
-            R.begin(W0, H0); R.lensSky(L); R.end(W0, H0, 0, f.fbo);
+            R.lensFloat(L, W0, H0, out);   // (0.69.0: the float outputs on Vulkan)
             out.resize(static_cast<std::size_t>(W0) * H0 * 4);
-            plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-            plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
-            plgl::glReadPixels(0, 0, W0, H0, GL_RGBA, GL_FLOAT, out.data());
-            dropFbo(f);
         };
         const auto read8 = [&](const render::Renderer2D::LensSky& L, std::vector<unsigned char>& out) {
             Fbo f = makeFbo(W0, H0, false);
-            R.begin(W0, H0); R.lensSky(L); R.end(W0, H0, 0, f.fbo);
+            R.begin(W0, H0); R.lensSky(L); endFbo(R, W0, H0, f);
             out.resize(static_cast<std::size_t>(W0) * H0 * 4);
-            plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-            plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
-            plgl::glReadPixels(0, 0, W0, H0, GL_RGBA, GL_UNSIGNED_BYTE, out.data());
+            std::memcpy(out.data(), f.px.data(), f.px.size());
             dropFbo(f);
         };
         render::Renderer2D::LensSky L = view.lensFor(s, v);
@@ -1589,8 +1576,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                     R.begin(sz[0], sz[1]);
                     R.lensSky(L2);
                     const auto t0 = std::chrono::steady_clock::now();
-                    R.end(sz[0], sz[1], 0, f.fbo);
-                    plgl::glFinish();
+                    endFbo(R, sz[0], sz[1], f);
                     best[withGlow] = std::min(best[withGlow], msSince(t0));
                 }
                 dropFbo(f);
@@ -1622,15 +1608,14 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                     s2.yaw += 0.001;
                     R.begin(sz[0], sz[1]);
                     view.draw(R, s2, sz[0], sz[1], sz[0] / 2.0, sz[1] / 2.0);   // (the exposure for this view first, as the app does)
-                    R.end(sz[0], sz[1], 0, f.fbo);
+                    endFbo(R, sz[0], sz[1], f);
                     const HoleView v2 = holeView(s2, sz[0], sz[1], sz[0] / 2.0, sz[1] / 2.0);
                     render::Renderer2D::LensSky L2 = view.lensFor(s2, v2);
                     L2.cx += 1e-9;                                              // (a new picture: drawn anew)
                     R.begin(sz[0], sz[1]);
                     R.lensSky(L2);
                     const auto t0 = std::chrono::steady_clock::now();
-                    R.end(sz[0], sz[1], 0, f.fbo);
-                    plgl::glFinish();
+                    endFbo(R, sz[0], sz[1], f);
                     best[withGlare] = std::min(best[withGlare], msSince(t0));
                     if (withGlare) gs = R.glareStats();
                 }
@@ -1654,15 +1639,9 @@ void compareHook(render::Renderer2D& R, const char* spec) {
         HoleView v = holeView(s, W, H, W / 2.0, H / 2.0);
         render::Renderer2D::LensSky L = view.lensFor(s, v);
         L.debug = true;
-        Fbo f = makeFbo(W, H, true);
-        R.begin(W, H);
-        R.lensSky(L);
-        R.end(W, H, 0, f.fbo);
         std::vector<float> px(static_cast<std::size_t>(W) * H * 4);
-        plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-        plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
-        plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_FLOAT, px.data());
-        dropFbo(f);
+        R.lensFloat(L, W, H, px);   // (0.69.0: the float outputs on Vulkan)
+        px.resize(static_cast<std::size_t>(W) * H * 4);
         const LensTable& T = *view.table();
         const double e = (kPi - T.edge()) * v.K;
         double edgeErr = 0, band[4] = {0, 0, 0, 0};                         // worst direction difference for x >= 1, 0.1..1, 0.01..0.1 pixel, and < 0.01
@@ -1704,9 +1683,8 @@ void compareHook(render::Renderer2D& R, const char* spec) {
             R.begin(W, H);
             R.rect(0, 0, W, H, render::Color{0, 0, 0, 1});
             if (pass == 0) R.skyMap(W, H, v.K, L.M, 1); else R.lensSky(L);
-            R.end(W, H, 0, f.fbo);
-            plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-            plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, (pass == 0 ? a : b).data());
+            endFbo(R, W, H, f);
+            std::memcpy((pass == 0 ? a : b).data(), f.px.data(), f.px.size());
             dropFbo(f);
         }
         int maxd = 0; long nd = 0, sum = 0;
@@ -1734,15 +1712,9 @@ void compareHook(render::Renderer2D& R, const char* spec) {
             view.st_.look = discLook(*view.discTable(), s, v, W, H);
             render::Renderer2D::LensSky L = view.lensFor(s, v);
             L.debugDisc = true;
-            Fbo f = makeFbo(W, H, true);
-            R.begin(W, H);
-            R.lensSky(L);
-            R.end(W, H, 0, f.fbo);
             std::vector<float> px(static_cast<std::size_t>(W) * H * 4);
-            plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-            plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
-            plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_FLOAT, px.data());
-            dropFbo(f);
+            R.lensFloat(L, W, H, px);   // (0.69.0: the float outputs on Vulkan)
+            px.resize(static_cast<std::size_t>(W) * H * 4);
             const DiscTable& T = *view.discTable();
             const DiscGeom g = discGeom(s);
             const Vec3 N = discAxisView(v);
@@ -1833,15 +1805,9 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 for (int mode = 0; mode < 2; mode++) {
                     render::Renderer2D::LensSky L = view.lensFor(s, v);
                     if (mode == 0) L.debug = true; else L.debugDisc = true;
-                    Fbo f = makeFbo(W, H, true);
-                    R.begin(W, H);
-                    R.lensSky(L);
-                    R.end(W, H, 0, f.fbo);
                     px[mode].resize(static_cast<std::size_t>(W) * H * 4);
-                    plgl::glBindFramebuffer(GL_FRAMEBUFFER, f.fbo);
-                    plgl::glPixelStorei(GL_PACK_ALIGNMENT, 4);
-                    plgl::glReadPixels(0, 0, W, H, GL_RGBA, GL_FLOAT, px[mode].data());
-                    dropFbo(f);
+                    R.lensFloat(L, W, H, px[mode]);   // (0.69.0: the float outputs on Vulkan)
+                    px[mode].resize(static_cast<std::size_t>(W) * H * 4);
                 }
                 const Camera cam{dist, pitch, 0};
                 const DiscGeom g = discGeom(s);
@@ -1941,8 +1907,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
             R.begin(sz[0], sz[1]);
             R.lensSky(view.lensFor(s, v));
             const auto t0 = std::chrono::steady_clock::now();
-            R.end(sz[0], sz[1], 0, f.fbo);
-            plgl::glFinish();
+            endFbo(R, sz[0], sz[1], f);
             best = std::min(best, msSince(t0));
         }
         dropFbo(f);
@@ -1959,8 +1924,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
             R.begin(sz[0], sz[1]);
             R.lensSky(view.lensFor(s, v));
             const auto t0 = std::chrono::steady_clock::now();
-            R.end(sz[0], sz[1], 0, f2.fbo);
-            plgl::glFinish();
+            endFbo(R, sz[0], sz[1], f2);
             best = std::min(best, msSince(t0));
         }
         dropFbo(f2);
@@ -1986,8 +1950,7 @@ void compareHook(render::Renderer2D& R, const char* spec) {
                 R.begin(sz[0], sz[1]);
                 R.lensSky(view.lensFor(s, v));
                 const auto t0 = std::chrono::steady_clock::now();
-                R.end(sz[0], sz[1], 0, f.fbo);
-                plgl::glFinish();
+                endFbo(R, sz[0], sz[1], f);
                 best = std::min(best, msSince(t0));
             }
             dropFbo(f);

@@ -19,7 +19,6 @@ struct ShotArea {
 // Draws this frame's picture again into an offscreen image (the renderer's shapes, then the text the lab drew
 // on the background list, the readout included, but no panels or windows), and writes it as a PNG into the
 // Pictures folder (Downloads if that fails). Sets the message on app.shot. Call after the frame was drawn.
-void takeShot(AppState& app, render::Renderer2D& renderer, const ShotArea& a);
 // 0.59.0 (Vulkan step 1): the same on the Vulkan path: the lab's text on the background list drawn by Vulkan into an image of its own (no lab picture yet)
 void takeShotVulkan(AppState& app, render::VkBackend& vk, render::Renderer2D* picture, const ShotArea& a);   // 0.60.0: picture: the lab's shapes under the text (nullptr: none)
 

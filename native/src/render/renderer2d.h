@@ -1,4 +1,4 @@
-// A small batched 2D renderer on OpenGL 3.3 core.
+// A small batched 2D renderer (0.69.0: drawn by Vulkan only: render/renderer2d_vk.cpp, render/vk_draw2d.h).
 //
 // Coordinates are "picture points" with (0, 0) at the top-left and y going down,
 // All shapes of a frame go into one vertex buffer
@@ -17,7 +17,6 @@
 #include <thread>
 #include <vector>
 
-#include "gl_loader.h"
 #include "group_compute.h"
 #include "ring_card.h"
 #include "classic_card.h"
@@ -49,13 +48,12 @@ Color rgba(int r, int g, int b, float a = 1);
 
 class Renderer2D {
 public:
-    bool init();
-    void shutdown();
-    // The OpenGL 4.3 compute path (0.13 stage 2), or nullptr when this context has no OpenGL 4.3 (then the CPU does that work, as before). Valid after init().
+    // The card's compute path (0.13 stage 2; 0.61.0: Vulkan's, render/vk_card.h), or nullptr when this start has none (then the processor does that work).
+    // Valid after useVulkanCards().
     IGroupCompute* compute() const { return compute_; }
     IOutlineCompute* outlineCompute() const { return outline_; }   // the same for the 90 % outline (0.13 stage 3)
     IRockCompute* rockCompute() const { return rocks_; }           // the same for the Orbit Lab's belt rocks (0.13 stage 4)
-    void useRockCompute(IRockCompute* r) { delete rocks_; rocks_ = r; }   // tests: put a stand-in (or nullptr) in place of the OpenGL object; the renderer owns it
+    void useRockCompute(IRockCompute* r) { delete rocks_; rocks_ = r; }   // tests: put a stand-in (or nullptr) in place of the card's object; the renderer owns it
     void disableCompute();                // forget the compute object: the CPU paths are used (PL_NO_COMPUTE; tests)
     // 0.55.6: the Black Hole Lab's light paths on the card (render/kerr_compute.h), made at the first call; nullptr when this PC cannot (kerrWhy() says why)
     IKerrCompute* kerrCompute(KerrSteps* steps = nullptr);   // 0.55.7: steps told of the compile and link (the guard: app/gpu_guard.h)
@@ -64,7 +62,7 @@ public:
     KerrSky& kerrSky() { return sky_; }
     AtomCard& atomCard();                                            // 0.57.0: the Atom Lab's Slice dots and jump groups on the card (made at the first call)
     MoleculeCard& moleculeCard();                                    // 0.57.1: the Molecule Lab's Density cloud on the card (made at the first call)
-    // 0.64.0: Saturn's rings per pixel on the card (Vulkan only: nullptr on OpenGL or without the card programs); ringsCard records one half of the rings
+    // 0.64.0: Saturn's rings per pixel on the card (nullptr without the card programs); ringsCard records one half of the rings
     // once its check passed (ready): false: not drawn (the caller draws the processor's triangles)
     RingCard* ringCard();
     bool ringsCard(const RingsDraw& d);
@@ -87,31 +85,29 @@ public:
     bool surfaceProgram(std::string& why);
     bool surface(const SurfaceDraw& d);
     long nucDensRuns() const;
-    void skyMath(const std::vector<float>& in, std::vector<float>& out) { if (vk_) { out.assign(in.size() / 12 * 8, 0.0f); return; } sky_.math(in, out, cmpVao_); }   // (tests; OpenGL's only)
-    // 0.56.0: the last sky pass: its time on the card (GL_TIMESTAMP pairs, read back without waiting: a few frames old) for the whole picture and at the
+    // 0.56.0: the last sky pass: its time on the card (timestamp pairs, read back without waiting: a few frames old) for the whole picture and at the
     // resolution drawn, the resolution's scale (1 = full), the passes drawn, the card's exposure (its brightest disc channel and Y, read back a frame or two
     // later; white the screen's white it gives, 0 none yet) and how many sample points it had
     struct SkyStats { double fullMs = -1, lastMs = -1, scale = 1; long draws = 0, lowDraws = 0; double white = 0, whiteY = 0; long whiteReads = 0; int expN = 0; double expMs = -1; long timed = 0; };
     const SkyStats& skyStats() const { return skyStats_; }
-    double skyWhiteWait();                         // (tests) the card's exposure of the last picture, waiting for its read-back; 0 none
     // 0.56.0: one star image laid over the bent picture through its open-sky share (LensSky::kerrSky's fourth output): hidden where the disc or the shadow is
     void maskedDisc(double x, double y, double r, Color c);
 
     // 0.60.0 (Vulkan, step 2 of 5): the same recording, drawn by Vulkan at the end (render/renderer2d_vk.cpp, render/vk_draw2d.h). useVulkan before
-    // anything is recorded (no init(): no OpenGL object is made, so every card program of OpenGL is absent and each lab takes its processor path);
-    // loadMapsVulkan: the picture maps as init() loads them; endVulkan: as end(), into Vulkan's picture (fbW x fbH pixels, cleared to clear[]; forShot:
-    // Save image's own picture, one sample as OpenGL's offscreen one). The frame's command buffer is the backend's (render/vk_backend.cpp).
+    // anything is recorded (without it every card program is absent and each lab takes its processor path); loadMapsVulkan: the picture maps;
+    // endVulkan: the frame's recording drawn into Vulkan's picture (fbW x fbH pixels, cleared to clear[]; forShot: Save image's own picture, one sample).
+    // The frame's command buffer is the backend's (render/vk_backend.cpp). 0.69.0: OpenGL is gone; Vulkan is the only drawing system.
     void useVulkan(VkDraw2D* d);                       // (render/renderer2d_vk.cpp: renderer2d.cpp itself needs no Vulkan to link)
     bool vulkan() const { return vk_ != nullptr; }
     bool loadMapsVulkan(std::string& why);
     // 0.61.0 (Vulkan, step 3 of 5): the card programs on Vulkan (render/vk_card.h), made here, each under its own guard (app/gpu_guard.h: groups,
-    // outline, rocks and the Glow dots at once; the Slice, the jump and the Density cloud by their labs' paths, as on OpenGL): compute(), outlineCompute(),
+    // outline, rocks and the Glow dots at once; the Slice, the jump and the Density cloud by their labs' paths): compute(), outlineCompute(),
     // rockCompute(), cloudGpuOk(), atomCard() and moleculeCard() then give Vulkan's objects. why: a line for each program that could not be made.
     // null: every Vulkan object of the card programs deleted (before the Vulkan device goes)
     void useVulkanCards(VkCards* c, std::vector<std::string>* why = nullptr);
-    // this start has the card's compute programs (OpenGL 4.3, or Vulkan's) and they are not switched off (PL_NO_COMPUTE): the labs' card paths ask this
-    bool computeShaders() const { return vk_ ? vkc_ != nullptr && !noCompute_ : outline_ != nullptr; }
-    const std::string& rocksWhy() const { return rocksWhy_; }   // 0.61.0: why the rocks are not on the card ("" when they are, or on OpenGL)
+    // this start has the card's compute programs (Vulkan's) and they are not switched off (PL_NO_COMPUTE): the labs' card paths ask this
+    bool computeShaders() const { return vk_ && vkc_ != nullptr && !noCompute_; }
+    const std::string& rocksWhy() const { return rocksWhy_; }   // 0.61.0: why the rocks are not on the card ("" when they are)
     void endVulkan(int fbW, int fbH, const float clear[4], bool forShot);
     // 0.60.0 (tests: the coverage of the views): how many times each drawing call was made since the start, "rect=12 line=40 ..." (PL_LOG_DRAWKINDS)
     std::string drawKindsText() const;
@@ -122,10 +118,6 @@ public:
     // window's kept picture is shown with nothing drawn when it is whole and of the same size (Save image and the screenshot draw it from the lists).
     void keepLast() { keep_ = true; }
     bool keeping() const { return keep_; }
-    // Draw everything that was added. The framebuffer is fbWidth × fbHeight pixels.
-    // fbY: the picture's bottom edge, pixels from the window's bottom. outFbo: draw into this framebuffer
-    // (fbWidth × fbHeight, from its bottom-left corner) instead of the window: used by 📷 Save image.
-    void end(int fbWidth, int fbHeight, int fbY = 0, GLuint outFbo = 0);
 
     void rect(double x, double y, double w, double h, Color c);
     void line(double x0, double y0, double x1, double y1, double width, Color c);
@@ -139,8 +131,8 @@ public:
     // Many small squares of one colour, drawn with ONE instanced draw call (used for the belts'
     // thousands of rocks). xy holds the squares' centres, 2 floats each, in picture points.
     void squares(const float* xy, int count, double size, Color c);
-    // The same squares, but their places are worked out on the GPU (0.13 stage 4 part A, render/rock_compute.h): sends the rocks if this set is not on the GPU yet, and in end() runs the compute
-    // shader for the camera `f` and draws from the buffer it wrote (no CPU wait, no per-rock CPU work). Returns false, adding nothing, when there is no OpenGL 4.3 (the caller then uses squares()).
+    // The same squares, but their places are worked out on the GPU (0.13 stage 4 part A, render/rock_compute.h): sends the rocks if this set is not on the GPU yet, and in endVulkan() runs the compute
+    // shader for the camera `f` and draws from the buffer it wrote (no CPU wait, no per-rock CPU work). Returns false, adding nothing, when the card cannot (the caller then uses squares()).
     bool rocksGpu(const RockSet& set, const RockFrame& f, double size, Color c);
 
     // Many round or square "blobs" with their own colours, drawn with ONE instanced draw call (the
@@ -175,9 +167,9 @@ public:
     // The same, but TAKES the caller's list (0.13 stage 4 part C): when no blobs are waiting yet this frame the two vectors are swapped, so the 48,000 blobs (3.8 MB) are not copied; the caller gets the
     // renderer's old, emptied buffer back (with its capacity) and keeps it for the next frame. Otherwise they are appended. `b` is empty afterwards. The picture is the same as blobsPalette's.
     void blobsPaletteTake(std::vector<Blob>& b, bool additive, const PhasePalette& pal);
-    const std::vector<Blob>& pendingBlobs() const { return blobs_; }          // what end() would draw as blobs (for tests)
+    const std::vector<Blob>& pendingBlobs() const { return blobs_; }          // what endVulkan() would draw as blobs (for tests)
     std::size_t pendingSegments() const { return segments_.size(); }          // the draw calls so far (the open run of triangles is not counted until it is closed)
-    // A retained mesh (0.13 stage 4 part B, render/mesh.h): uploaded once with meshCreate (needs the OpenGL context), drawn from the GPU buffer in every frame that asks for it with drawMesh, in the order
+    // A retained mesh (0.13 stage 4 part B, render/mesh.h): uploaded once with meshCreate (needs Vulkan: -1 without it), drawn from the GPU buffer in every frame that asks for it with drawMesh, in the order
     // of the other shapes of the frame. The projection P goes in as uniforms, so changing it costs nothing but the uniforms. meshDelete frees the buffer. Ids are small integers (>= 0).
     int meshCreate(const std::vector<MeshVertex>& v);
     void meshDelete(int id);
@@ -197,7 +189,7 @@ public:
     // few hundred a frame), the vertex shader projects, sizes and lights each dot from the camera (kCloudVS: the CPU path's formulas), and the exposure's 8 x 8-point grid is summed
     // on the GPU and read back (kCloudGridVS), so no CPU pass over the dots is left but the colour groups. Draw it between beginCloudLayer and endCloudLayer. The picture is the same
     // as glowBlobs + blobsPalette (tests/check_cloud_gpu.py compares them pixel by pixel). `exposure` gets the grid's cells (every cell, empty ones too) and returns uLight
-    // (base x exposure x 12,000 / dots), or a negative number for "draw nothing" (as glowBlobs returning false); it runs inside end().
+    // (base x exposure x 12,000 / dots), or a negative number for "draw nothing" (as glowBlobs returning false); it runs inside endVulkan().
     struct CloudGpuDraw {
         const float* pts = nullptr; long cnt = 0, cap = 0;          // places (m, x y z), dots shown (0 .. cnt), the ring's size
         std::uint64_t epoch = 0; long k = 0;                        // which cloud (a new number when its dots were changed other than by being added) and dots recorded so far
@@ -209,7 +201,7 @@ public:
         PhasePalette pal;
         std::function<double(const std::vector<float>&)> exposure;
     };
-    bool cloudGpuOk() const { return vk_ ? vkGlow_ != nullptr : (clProgram_ != 0 && grProgram_ != 0); }
+    bool cloudGpuOk() const { return vk_ && vkGlow_ != nullptr; }
     // 0.57.1: the Molecule Lab's Density cloud from the card (render/molecule_card.h): its dots made, summed into the exposure's grid and drawn there, in the
     // order of the other shapes; the same picture as glowBlobs + blobsPaletteTake up to float rounding. False (nothing added): the card's programs are not ready.
     bool molCloud(const MolCloudDraw& d);
@@ -219,11 +211,11 @@ public:
     // Monochrome theme: the whole picture in shades of grey
     void setGrayscale(bool on, Color bg) { gray_ = on; grayBg_ = bg; }   // bg: the page colour under the picture
 
-    // What the last end() drew: draw calls, and shapes drawn by the instanced calls (squares and blobs)
+    // What the last endVulkan() drew: draw calls, and shapes drawn by the instanced calls (squares and blobs)
     int lastDrawCalls() const { return lastCalls_; }
     int lastInstances() const { return lastInstances_; }
-    long lastVertices() const { return lastVerts_; }                          // the triangle vertices end() uploaded (lines, rings, discs, text-free shapes)
-    std::size_t pendingVertexBytes() const { return verts_.size() * sizeof(Vertex); }   // what end() would upload for the shapes added so far (a measuring aid for tests and tools)
+    long lastVertices() const { return lastVerts_; }                          // the triangle vertices endVulkan() uploaded (lines, rings, discs, text-free shapes)
+    std::size_t pendingVertexBytes() const { return verts_.size() * sizeof(Vertex); }   // what endVulkan() would upload for the shapes added so far (a measuring aid for tests and tools)
 
     // A turning planet. K turns screen directions into the planet's own frame (rows: its 0° meridian,
     // 90° east, north pole; columns: screen right, up, towards you). map: its picture map (planet_maps.h), or
@@ -244,7 +236,7 @@ public:
     // middle (the night sky's map, orbit/sky.cpp); M turns a direction in the view frame (right, up, depth) into
     // galactic coordinates (rows: towards l = 0, l = 90°, the north galactic pole); bright: 0..1.
     void skyMap(double W, double H, double kRad, const float M[9], double bright);
-    bool hasMap(Map m) const { return tex_[static_cast<int>(m)] != 0 || vkMap_[static_cast<int>(m)]; }
+    bool hasMap(Map m) const { return vkMap_[static_cast<int>(m)]; }
     // 0.55.0, the Black Hole Lab: the Gaia map seen past a non-spinning black hole at (cx, cy) points, kRad points per radian (the night sky's projection), every
     // pixel's ray bent by the lens table (its values of dphi at s = ln x, x = the angle in radians from the shadow's edge alphaSh: blackhole/schwarzschild.h
     // LensTable), the shadow black; bend false: the plain map by skyMap's own rule. The picture is drawn into a kept texture only when one of these
@@ -340,11 +332,16 @@ public:
     // of a w x h picture of L (cx, cy, kRad in pixels), 16 floats per pixel, rows from the bottom. queue: copied into a pixel buffer behind a fence, read by
     // skyProbeRead once skyProbeDone (the frame never waits); else read at once into out (waits)
     void skyProbe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out);
-    double skyTimePass(const LensSky& L, int w, int h, int mode);   // (tests, 0.56.2: one pass of w x h in the given uMode, waited for; ms)
     bool skyProbeDone();
+    // 0.69.0 (the Black Hole Lab's test hooks, PL_BH_COMPARE; until 0.68.1 OpenGL's): one picture's float outputs (LensSky::debug, debugDisc, skyMode) of
+    // w x h pixels (w x h points), 4 floats a pixel, rows from the bottom, waited for; the sky shader's elliptic functions alone (render/kerr_sky.h's sets
+    // of 12 floats in, 8 out, waited for); the exposure's read-back of the last picture, waited for (0: none). render/vk_blackhole.h has them.
+    void lensFloat(const LensSky& L, int w, int h, std::vector<float>& out);
+    void skyMath(const std::vector<float>& in, std::vector<float>& out);
+    double skyWhiteWait();
     void skyProbeRead(std::vector<float>& out);
     long lensRedraws() const { return lensRedraws_; }
-    bool glareBusy() const { return vk_ ? vkGlareBusy_ : glareStage_ != 0 || (glareWant_.gen != 0 && !glareValid_); }   // (0.62.0: Vulkan's mirrored each frame)   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
+    bool glareBusy() const { return vk_ && vkGlareBusy_; }   // (0.62.0: Vulkan's mirrored each frame)   // 0.55.5: an asynchronous glare is under way   // how many times the bent sky was drawn anew (the rest of the frames reused it)
 
 private:
     enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic, NucDens, Lines, Surface };
@@ -353,123 +350,37 @@ private:
     std::vector<Segment> segments_;
     std::vector<float> inst_;                 // square centres for all square draws of this frame
     std::size_t triStart_ = 0;
-    GLuint sqProgram_ = 0, sqVao_ = 0, sqCornerVbo_ = 0, sqInstVbo_ = 0;
-    GLint sqSize_ = -1, sqSide_ = -1, sqColor_ = -1;
-    GLuint plProgram_ = 0, tex_[static_cast<int>(Map::Count)] = {};
-    int texW_[static_cast<int>(Map::Count)] = {};
-    GLint plSize_ = -1, plK_ = -1, plMode_ = -1, plLod_ = -1, plTex_ = -1, plLon0_ = -1, plRingN_ = -1, plRingB_ = -1, plShape_ = -1;
-    GLint plOccN_ = -1, plOcc_ = -1, plSunAng_ = -1, plAir_ = -1, plAirT_ = -1, plAirK_ = -1;   // 0.51.2: eclipses and Earth's air
+    int texW_[static_cast<int>(Map::Count)] = {};    // the maps' widths (the sky's: the Black Hole Lab's lens)
 
     IGroupCompute* compute_ = nullptr;        // owned; see compute()
     IOutlineCompute* outline_ = nullptr;      // owned; see outlineCompute()
     IRockCompute* rocks_ = nullptr;           // owned; see rockCompute()
     IKerrCompute* kerr_ = nullptr;            // owned; see kerrCompute()
-    // 0.56.0: the spinning hole per pixel: the shaders, its open-sky mask (lensFbo_'s fourth output, kept with the picture), the exposure's chain of
-    // reductions, the lower-resolution layers while moving, the timer and the exposure's read-back
-    KerrSky sky_;
+    KerrSky sky_;                             // 0.56.0: the spinning hole per pixel (its stages made by Vulkan's side)
     AtomCard* atomCard_ = nullptr;           // owned (a pointer: the classes that hold a renderer without its code need no AtomCard)
     MoleculeCard* molCard_ = nullptr;        // 0.57.1: owned, the same way
     std::vector<MolCloudDraw> molClouds_;    // this frame's (Segment::slot)
-    std::vector<float> molCells_;
-    GLuint maskTex_ = 0, whiteTex_ = 0, maxDown_ = 0, expFbo_ = 0, lowFbo_ = 0, lowTex_[4] = {0, 0, 0, 0}, skyQ_[8] = {}, whitePbo_ = 0;
-    std::vector<GLuint> expTex_;
-    std::vector<int> expW_, expH_;
-    int lowW_ = 0, lowH_ = 0, maskW_ = 0, maskH_ = 0, skyQHead_ = 0, skyQTail_ = 0;
-    double skyQScale_[4] = {1, 1, 1, 1};
-    GLsync whiteFence_ = nullptr;
-    bool maskValid_ = false, maskUsed_ = false;
-    double skyScale_ = 1;
+    bool maskValid_ = false;
     SkyStats skyStats_;
-    GLint uMask_ = -1, uMaskOn_ = -1, uMaskOrigin_ = -1;
-    int maskOx_ = 0, maskOy_ = 0;
-    void skyPass(const LensSky& L, int fbW, int fbH, int ox, int oy, double scale, int mode, bool layers);
-    GLuint skyExposure(const LensSky& L, const std::function<void()>& sample);
-    void skyTimes();
-    void skyPicture(const LensSky& L, int fbW, int fbH, bool layers, bool raw);
-    bool lensSkyDrawn_ = false;                    // the kept picture was drawn by the sky pass
-    GLuint probeFbo_ = 0, probeTex_ = 0, probePbo_ = 0;
-    GLsync probeFence_ = nullptr;
-    int probeW_ = 0, probeH_ = 0;
     bool kerrTried_ = false;
     std::string kerrWhy_;
-    struct Mesh { GLuint vbo = 0, vao = 0; int count = 0; bool used = false; int vk = -1; };   // vk: its buffer on Vulkan (VkDraw2D's id)
+    struct Mesh { int count = 0; bool used = false; int vk = -1; };   // vk: its buffer on Vulkan (VkDraw2D's id)
     std::vector<Mesh> meshes_;
-    GLuint meshProgram_ = 0;
-    GLint mSize_ = -1, mRot_ = -1, mCen_ = -1, mFit_ = -1;
     long meshUploads_ = 0;
     std::vector<Blob> blobs_;                 // all blobs of this frame
-    GLuint blProgram_ = 0, blVao_ = 0, blInstVbo_ = 0;
-    GLint blSph_ = -1, blSphN_ = -1;
-    GLint blSize_ = -1, blFuzz_ = -1, blPalWheel_ = -1, blPalLight_ = -1, blPalPlus_ = -1, blPalMinus_ = -1;
-    GLuint layerFbo_ = 0, layerTex_ = 0, cmpProgram_ = 0, cmpVao_ = 0;
-    GLint cmpTex_ = -1;
-    int layerW_ = 0, layerH_ = 0;
     std::vector<CloudGpuDraw> clouds_;              // 0.46: this frame's GPU clouds (Segment::slot)
-    GLuint clProgram_ = 0, clVao_ = 0, clPosVbo_ = 0, clGrpVbo_ = 0, grProgram_ = 0, grVao_ = 0, grFbo_ = 0, grTex_ = 0;
-    GLint clSize_ = -1, clCam0_ = -1, clCam1_ = -1, clView_ = -1, clLight_ = -1, clPalWheel_ = -1, clPalLight_ = -1, clPalPlus_ = -1, clPalMinus_ = -1, clFuzz_ = -1, clSphN_ = -1;
-    GLint grCam0_ = -1, grCam1_ = -1, grView_ = -1, grGrid_ = -1;
-    std::uint64_t clEpoch_ = 0; long clK_ = -1, clCap_ = 0; long clBytes_ = 0;
-    int grW_ = 0, grH_ = 0;
-    std::vector<float> grCells_;
-    GLuint hdrFbo_ = 0, hdrTex_ = 0;                // 0.40: the cloud's float picture
-    int hdrW_ = 0, hdrH_ = 0;
+    long clBytes_ = 0;
     float layerScale_ = 0.5f;
     int lastCalls_ = 0, lastInstances_ = 0;
     long lastVerts_ = 0;
     bool gray_ = false;
     bool keep_ = false;                            // 0.67.0: keepLast() this frame
     Color grayBg_{0, 0, 0, 1};
-    GLuint grayFbo_ = 0, grayTex_ = 0, grayProgram_ = 0;
-    GLint grayTexLoc_ = -1;
-    int grayW_ = 0, grayH_ = 0;
 
     // 0.55.0: the bent sky (lensSky)
     std::vector<LensSky> lens_;                     // this frame's (Segment::slot)
-    GLuint lensProgram_ = 0, lensFbo_ = 0, lensTex_ = 0, lensTableTex_ = 0, discUTex_ = 0, discPTex_ = 0, discCTex_ = 0;
-    GLuint kerrProgram_ = 0, kATex_ = 0, kBTex_ = 0, kETex_ = 0, kTTex_ = 0, kFTex_ = 0;   // 0.55.2
-    GLint krTex_ = -1, krA_ = -1, krB_ = -1, krE_ = -1, krT_ = -1, krDC_ = -1, krDF_ = -1, krKs_ = -1, krCentre_ = -1, krKpx_ = -1, krKN_ = -1, krKS_ = -1, krKO_ = -1,
-          krDebug_ = -1, krBright_ = -1, krSky_ = -1, krDisc_ = -1, krDR_ = -1, krDT_ = -1, krDN_ = -1, krDFix_ = -1;
-    GLuint glowDown_ = 0, glowBlur_ = 0, glowAdd_ = 0, glowFbo_ = 0, glowTex_[2] = {0, 0};   // 0.55.3: the Film look's glow (LensSky::glow)
-    int glowW_ = 0, glowH_ = 0;
-    bool glowValid_ = false;
-    void makeGlow(const LensSky& L, int fbW, int fbH);
-    GLuint bhLayer_[2] = {0, 0};                   // 0.55.4: the disc's light and the sky behind it (float), lensFbo_'s attachments 1 and 2 while a glow or the glare is made
-    int layerTexW_ = 0, layerTexH_ = 0;
-    GLuint glareDown_ = 0, glareAdd_ = 0, glareFbo_ = 0, glareSrcTex_ = 0, glareVeilTex_ = 0;
-    int glareNx_ = 0, glareNy_ = 0, glareB_ = 1;
-    bool glareValid_ = false;
     GlareStats glareStats_;
-    void makeGlare(const LensSky& L, int fbW, int fbH);
-    // 0.55.5: the asynchronous glare (LensSky::glareAsync): the newest picture's request (gen 0: none), the stage (0 idle, 4 the picture, 1 its blocks, 3 read back under way,
-    // 2 the veil on its thread), the job under way, the pixel buffer and fence, the thread and its buffers
-    struct GlareJob { int fbW = 0, fbH = 0, b = 1, nx = 0, ny = 0; double cx = 0, cy = 0, K = 0; std::uint64_t gen = 0;
-                      void (*veil)(int, int, double, double, double, const std::vector<float>&, std::vector<float>&, double*) = nullptr; void (*lower)() = nullptr; };
-    void glareDownPass(int fbW, int fbH, int b, int nx, int ny);
-    void glareUpload(int nx, int ny, const std::vector<float>& veil);
-    void glareWant(const LensSky& L, int fbW, int fbH);
-    void glarePump();
-    void glareStopThread();
-    GlareJob glareWant_, glareJob_;
-    std::uint64_t glareGen_ = 0;
-    int glareStage_ = 0;
-    GLuint glarePbo_ = 0;
-    GLsync glareFence_ = nullptr;
-    std::thread glareThread_;
-    std::atomic<bool> glareThreadDone_{false};
-    std::vector<float> glareSrcBuf_, glareVeilBuf_;
-    double glareOut_[3] = {0, 0, 0};
-    std::chrono::steady_clock::time_point glareT0_;
-    std::uint64_t kVer_ = ~std::uint64_t(0), kFVer_ = ~std::uint64_t(0);
-    GLint lnDisc_ = -1, lnDU_ = -1, lnDP_ = -1, lnDC_ = -1, lnDN_ = -1, lnDS_ = -1, lnDA_ = -1, lnDR_ = -1, lnDT_ = -1, lnSky_ = -1;
-    std::uint64_t discVer_ = ~std::uint64_t(0), colVer_ = ~std::uint64_t(0);
-    GLint lnTex_ = -1, lnTable_ = -1, lnK_ = -1, lnCentre_ = -1, lnKpx_ = -1, lnEdge_ = -1, lnT_ = -1, lnN_ = -1, lnBend_ = -1, lnDebug_ = -1, lnBright_ = -1, lnLod_ = -1;
-    int lensW_ = 0, lensH_ = 0, lensN_ = 0;
-    std::uint64_t lensTableVer_ = ~std::uint64_t(0);
-    LensSky lensLast_{};
-    double lensPtW_ = 0;
-    bool lensValid_ = false;
     long lensRedraws_ = 0;
-    void drawLens(const LensSky& L, int fbW, int fbH, GLuint target, int vx, int vy);
 
     struct Vertex { float x, y, u, v, r, g, b, a, mode, p1, p2, p3; };
     void quad(double cx, double cy, double half, Color c, float mode, float p1, float p2, float uvScale, float p3 = 0);
@@ -477,8 +388,6 @@ private:
 
     std::vector<Vertex> verts_;
     double width_ = 1, height_ = 1;
-    GLuint program_ = 0, vao_ = 0, vbo_ = 0;
-    GLint uSize_ = -1, uSpace_ = -1, plSpace_ = -1, plLunar_ = -1;
     Color space_{0, 0, 0, 1};
     VkDraw2D* vk_ = nullptr;                        // 0.60.0: Vulkan draws the picture (not owned)
     VkCards* vkc_ = nullptr;                        // 0.61.0: the card programs on Vulkan (not owned; their objects below are)
