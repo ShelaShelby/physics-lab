@@ -34,8 +34,8 @@ jobs:
             native
             .github
 
-      - name: Install glslang and software Vulkan
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build glslang-tools mesa-vulkan-drivers libvulkan1 vulkan-validationlayers
+      - name: Install glslang, software Vulkan and SDL's build needs (the app's dependencies are configured)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build glslang-tools mesa-vulkan-drivers libvulkan1 vulkan-validationlayers libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxfixes-dev libxss-dev libxtst-dev libxrender-dev libxinerama-dev libxkbcommon-dev libwayland-dev libdrm-dev libgbm-dev libdecor-0-dev
 
       - name: Configure (CMake, Ninja, with the Vulkan card and picture test)
         run: cmake -S native -B build -G Ninja -DPL_BUILD_APP=ON -DPL_VK_TESTS=ON -DCMAKE_BUILD_TYPE=Release
