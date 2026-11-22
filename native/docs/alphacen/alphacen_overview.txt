@@ -1,0 +1,9 @@
+alphacen_overview.png (0.72.1 research, native/PLAN_ALPHACEN.md): drawn by native/tools/alphacen_numbers.py --picture from the plan's own numbers.
+1. A and B about their centre of mass, to scale in au, in the plane of their own orbit (seen face-on, not as from Earth): Akeson et al. 2021 Table 8
+   (a = 23.3 au from a = 17.4930" and parallax 750.81 mas, e = 0.519; each star's orbit scaled by the other's mass fraction). Green circles around each
+   star at periastron: its habitable zone (Kopparapu et al. 2014, 1 Earth mass, runaway and maximum greenhouse; computed here), tiny at this scale.
+2. Proxima about A+B, to scale in thousands of au, face-on in its own plane: Akeson et al. 2021 Table 10 (a 8.2 kau, e 0.497); "Proxima now" from
+   the time to periastron (+278 kyr) by Kepler's equation (computed here). The orientation angles are uncertain (the plan, sect. 4).
+3. Proxima's planets b and d, to scale in au, drawn face-on: their tilt is not known. Suarez Mascareno et al. 2025 (NIRPS) Table 3, circular orbits;
+   the dots' places on the orbits are arbitrary. Green: Proxima's habitable zone (Kopparapu 2014, conservative; computed here).
+Not drawn: Proxima c (disputed) and the candidate around A (unconfirmed). The three panels have different scales; no panel is a view from Earth.

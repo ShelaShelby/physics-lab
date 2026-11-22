@@ -22,6 +22,7 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - Serious work only, no games (13 Nov 2026). No game parts (14 Nov 2026): achievements, the surprise and the secret unlocking are removed; Journey (a scale tour) stays.
 
 ## Orbit Lab
+- Alpha Centauri is the next feature (22 Nov 2026): the system as a switch in the Orbit Lab (ROADMAP), with deep research first (native/PLAN_ALPHACEN.md, 0.72.1) so the build jobs never guess. The Black Hole Lab's look and speed work are paused for now.
 - Real planets start from the JPL Horizons state of 1 January 2026 12:00 TDB; the IAU astronomical unit, 149,597,870,700 m exactly (3 Oct 2026).
 - Planet physics Real stays an option (default Simple) until the owner has tried it on the PC (3 Oct 2026). In Real, relativity (1PN) is on by default (5 Nov 2026).
 - The Moon in Real mode comes from ELP2000-82B, checked against Horizons (3 Oct 2026).

@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.72.1", "Research: the Alpha Centauri system; no change to the app",
+     "Research: the Alpha Centauri system (PLAN_ALPHACEN.md); no change to what the app does. Everything known about A, B, Proxima and every planet ever "
+     "claimed around them, from 57 saved papers: the stars' orbit, masses, sizes and ages, Proxima's half-million-year orbit, Proxima b and d (confirmed), "
+     "Proxima c (disputed), the JWST candidate around A (unconfirmed), and what nobody knows yet. The app's masses and distance of A and B come from a 2016 "
+     "orbit; a 2021 orbit measured with ALMA gives 5 % smaller masses and 1 % less distance (to change in the first build step)."},
     {"0.72.0", "The Black Hole Lab: the gas moves",
      "With the disc on, the gas now moves, in the Real and Film looks: every ring turns at its true speed, a bright clump circles the hole and bright and dark "
      "patches stretch into trailing spirals. Every pixel shows the gas as it was when its light left, worked out exactly from the light's path: the second image "
