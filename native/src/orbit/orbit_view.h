@@ -72,12 +72,24 @@ public:
     void draw(render::Renderer2D& r, ImDrawList* text, double originX, double originY, double uiScale,
               const SolarSystem& sys, const ViewSettings& set, double width, double height);
 
-    void click(double x, double y);              // picture points
-    void drag(double dx, double dy, bool rotate); // moves the view, or (3D) turns it
+    // 0.74.0, the camera's rules: it always has a target (the followed thing, else the barycentre). Only a pick of something else (pick: the camera glides there),
+    // Reset view, Escape or picking the followed thing again let go. An empty click changes nothing; a moving drag slides the view and stays attached (ux, uy).
+    void click(double x, double y);              // picture points: a hit selects it (followed things: the camera glides to it); an empty click does nothing
+    void drag(double dx, double dy, bool rotate); // (3D) turns the view, or slides it: a followed thing keeps the new place on the screen (ux, uy)
     void zoomChanged(double oldZoom, double newZoom);   // keeps the middle of the picture in place
     void resetView();
-    void tick(double dt, const ViewSettings& set) { if (set.view3D && spin) yaw += 0.15 * dt; }   // ⟳ Spin: the 3D view turns slowly
-    void select(Selection s, bool follow);       // the Go to tiles: select and keep it in the middle
+    void tick(double dt, const ViewSettings& set);   // ⟳ Spin, a pick's glide and a released turn's momentum
+    void select(Selection s, bool follow);       // a direct set (benchmark, Learn, the Journey's stops): select and keep it in the middle at once; cancels a glide and momentum
+    void pick(Selection s);                      // 0.74.0: a user's pick: select and follow it, the camera gliding there over kGlideSeconds (Reduce motion: at once, as select)
+    void grab();                                 // 0.74.0: a press on the picture: a released turn's momentum stops
+    void release();                              // 0.74.0: the press ends: a turning drag keeps its last speed, fading (not with Reduce motion)
+    void letGo() { sel = Selection{}; follow = false; glide_ = glidePending_ = false; }   // Escape: nothing selected; the view stays where it is, on the barycentre
+    bool gliding() const { return glide_ || glidePending_; }
+    static constexpr double kGlideSeconds = 0.8;  // a pick's glide (eased in and out)
+    static constexpr double kMomentumFade = 7.5;  // a released turn's speed falls by e^-7.5 a second (5 % left after 0.4 s); it stops below kMomentumStop
+    static constexpr double kMomentumStop = 0.05; // rad/s
+    static constexpr double kMomentumMax = 2.5;   // rad/s: a fast flick coasts at most kMomentumMax / kMomentumFade = 0.33 rad
+    static constexpr double kPitchMax = 89.5 * 3.14159265358979323846 / 180;   // the Solar System's tilt reaches ±89.5° (Alpha Centauri: ±3.1 rad, turned right over)
     // 0.67.0: a key of everything the picture is drawn from (this view's camera and choices, the settings, the system's time, bodies, trails and moons, the
     // picture's size and place): the same key, the same picture. The app keeps the last picture while the key stays the same (time stopped, nothing moving).
     std::uint64_t pictureKey(const SolarSystem& sys, const ViewSettings& set, double originX, double originY, double uiScale, double width, double height) const;
@@ -95,6 +107,8 @@ public:
     bool panMode = false;                        // 3D: dragging moves the view instead of turning it
     double fx = 0;                               // 0.22: the scene's middle sits this far right of the window's middle, points (negative: left), so it is the middle of the part the Controls panel leaves free (set by the shell)
     double cx = 0, cy = 0;                       // 0.15 stage 3: where a followed thing sits, from the middle of the picture, points (the centre shift keeps it out from under a card)
+    double ux = 0, uy = 0;                       // 0.74.0: the user's slide (right drag, Shift-drag, a drag in 2D): where a followed thing sits, added to cx, cy; kept in the picture's free part; Reset view: 0
+    bool reduceMotion = false;                   // 0.74.0: Settings → Motion: Reduce (set each frame by the app): no glide and no momentum
     Card lastCard;                               // 0.15 stage 4, the new UI: the selected thing's card text as of the last frame (cardOk: there is one); the subject card and the data sheet use it
     bool cardOk = false;
     Selection cardSel;                           // the selection lastCard is for (the shell uses the card only when it is the current one)
@@ -108,6 +122,18 @@ public:
     const DrawnSel& drawnSel() const { return drawnSel_; }
 
 private:
+    // 0.74.0: a glide puts the followed thing at the held place minus (1 - e) of where it was on the screen when the glide began (dX0, dY0), and the view's depth from dep0 to the
+    // thing's; e = smoothstep of glideS_ (0..1, advanced in tick). It ends exactly (glide_ off at glideS_ >= 1). A select (direct set) or a change of the selection cancels it.
+    bool glide_ = false, glidePending_ = false;
+    double glideS_ = 0, glideDX_ = 0, glideDY_ = 0, glideDep0_ = 0;
+    Selection glideSel_;
+    double holdDepth(double dep);                // the view's depth for the followed thing at depth dep (a glide: on the way)
+    void holdAt(double qx, double qy, double W, double H, const ViewSettings& set);   // ox, oy so the thing projected at (qx, qy) without them sits at the held place
+    double spinYaw_ = 0, spinPitch_ = 0;         // 0.74.0: a released turn's speed, rad/s
+    double turnYaw_ = 0, turnPitch_ = 0;         // the turn the drag made since the last tick
+    double heldYaw_ = 0, heldPitch_ = 0;         // what the view had after the last tick (a change by someone else stops the momentum)
+    bool pressed_ = false, turned_ = false;
+    bool held_ = false;                          // the last drawing held a followed thing (a moving drag then slides it: ux, uy)
     DrawnSel drawnSel_;
     struct Hit { Selection sel; double x, y, r; };
     std::vector<Hit> hits_;

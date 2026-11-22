@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.73.1 (22 Nov 2026): a clicked moon is followed where it is drawn (orbit_view.cpp moonAt: one place for the drawing and the camera); "Slow time to watch moons" with a moon selected selects and follows its planet; the state line has moonoff / planetoff. (0.73.0: the Alpha Centauri system, see changelog.cpp.)
+- 0.74.0 (22 Nov 2026): the Orbit Lab's camera, part 1 of 3 (handling): it never lets go by accident (an empty click or a right drag keeps the follow; the drag slides the view: OrbitView ux, uy), a pick glides (0.8 s, OrbitView::pick / holdAt), the wheel and + / - ease the zoom (orbit_panel.cpp glideZoom), a released turn coasts and stops, tilt to 89.5 degrees; Esc lets go; Reduce motion jumps as before. About ends with "Free Palestine" and a drawn flag (html_view.cpp lrnFlagPS). Next: camera parts 2 and 3 (ROADMAP).
 - Last full UI run: 0.69.0 (the commit "native 0.69.0"); failing in it: ui_search (check_5l labels) and ui_atom_layout (check_5h cards: the radial card read before the card's outline came), both fixed and re-run; ui_blackhole smooth (the card count, ROADMAP: the one-in-two limit; its sky-guard checks fixed and re-run); ui_popups orbitkeep (rest.orbit at 2560 x 1369 drawn anew: fails on 0.68.1 too, the owner's bug, ROADMAP) and benchwaits (passes alone, on 0.68.1 too: the full run's load).
-- Next steps: the owner's benchmark of 0.73.0 (the new scene orbit.alphacen); ROADMAP's next Alpha Centauri line; the Black Hole Lab's look and speed work resume when the owner says.
+- Next steps: the owner's benchmark of 0.73.0 (the new scene orbit.alphacen); the camera's part 2 (0.75.0, ROADMAP); ROADMAP's next Alpha Centauri line; the Black Hole Lab's look and speed work resume when the owner says.
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; every job: `check.sh quick` plus the ui_* tests of the screens it changes; `check.sh full` (about 35 min) only when the owner asks. One push per job; PLANNER.md and this file kept true by every job.
 
 ## How work flows

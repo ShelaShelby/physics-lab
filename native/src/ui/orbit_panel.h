@@ -107,7 +107,12 @@ std::string zoomLabel(double v);
 void resetViewAction(AppState& app);
 
 // Changes the zoom, keeping the middle of the picture in place.
-void setZoom(AppState& app, double zoom);
+void setZoom(AppState& app, double zoom);        // at once (a direct set: the Journey, Learn, a benchmark scene, the Zoom slider); cancels a running zoom glide
+// 0.74.0: an eased zoom (the wheel and the + / − keys: kWheelZoomSeconds; a pick: OrbitView::kGlideSeconds). Reduce motion, a Journey or the benchmark: at once.
+void glideZoom(AppState& app, double zoom, double seconds);
+void zoomBy(AppState& app, double dz);            // a wheel notch or a key: from where a running glide is going
+void cameraTick(AppState& app, double dt);        // each frame: the zoom glide's step (it ends exactly on its value)
+constexpr double kWheelZoomSeconds = 0.15;
 
 // The Performance card: frame times (last, average, worst, a graph) and the VSync switch.
 void performanceCard(AppState& app);

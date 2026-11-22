@@ -634,7 +634,7 @@ int main(int argc, char** argv) {
                         if (reset) atom::pressTool(app.atom, atom::Tool::ResetView);
                     } else {
                         if ((dz || reset) && app.journey.active) ui::journeyStop(app);
-                        if (dz) ui::setZoom(app, app.set.zoom + dz * 0.14);   // two wheel notches
+                        if (dz) ui::zoomBy(app, dz * 0.14);       // two wheel notches (0.74.0: eased, as the wheel)
                         if (reset) ui::resetViewAction(app);
                     }
                 }
@@ -662,7 +662,7 @@ int main(int argc, char** argv) {
                 }
                 if (!io.WantCaptureMouse && !ui::readingShown() && e.wheel.mouse_x < canvasWinW && e.wheel.mouse_y >= headerH) {
                     if (app.journey.active) ui::journeyStop(app);   // touching the picture stops a Journey (and brings your settings back)
-                    else ui::setZoom(app, app.set.zoom + e.wheel.y * 0.07);
+                    else ui::zoomBy(app, e.wheel.y * 0.07);   // 0.74.0: eased over 0.15 s (Reduce motion: at once)
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -674,7 +674,7 @@ int main(int argc, char** argv) {
                     break;
                 }
                 if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH && app.journey.active) { ui::journeyStop(app); break; }
-                if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; }
+                if (!io.WantCaptureMouse && e.button.x < canvasWinW && e.button.y >= headerH) { mouseDown = true; dragging = false; rightDrag = e.button.button != SDL_BUTTON_LEFT; downX = lastX = e.button.x; downY = lastY = e.button.y; app.view.grab(); }   // (0.74.0: a press stops a coasting turn)
                 break;
             case SDL_EVENT_MOUSE_MOTION:
                 if (mouseDown && app::labInputAllowed(app.benchRunning)) {
@@ -703,6 +703,7 @@ int main(int argc, char** argv) {
                     }
                     else app.view.click(e.button.x / scale, (e.button.y - headerH) / scale);
                 }
+                if (mouseDown && app.lab == 0) app.view.release();   // 0.74.0: a turning drag keeps a little momentum (orbit_view.h)
                 mouseDown = dragging = false;
                 break;
             default: break;
@@ -775,8 +776,10 @@ int main(int argc, char** argv) {
             app.atom.makeOwedDots();
             app.atom.dotBudgetMs = 0;
         } else {
+            app.view.reduceMotion = ui::look().reduced;   // 0.74.0: no glide, no momentum
             app.view.tick(dt, app.set);
             ui::journeyTick(app, dt);
+            ui::cameraTick(app, dt);                    // 0.74.0: the wheel's and a pick's eased zoom
             ui::jumpTick(app);                          // 0.67.0: a far jump in Real, once its walk on a worker is taken in
             if (!app.paused) {
                 acc += dt;

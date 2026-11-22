@@ -25,9 +25,11 @@ NEW = ("10:click=top.play;14:click=top.play;18:click=top.today;22:click=top.chip
 # before the state is read (run 4)
 OLD2 = ("10:click=##view;14:click=3D (rotatable);18:click=⟲ Drag rotates the view;22:click=⟳ Spin: off;26:click=##sky;30:click=Full;34:click=##cons;38:click=Lines;42:click=Dwarf planets;"
         "46:click=Far-away things (zoom out to find them);50:click=Real;54:click=Exaggerate the Sun's wobble (×50);58:click=◉ Following;62:click=Slow time to watch moons;66:click=↺ Reset view;80:state")
-NEW2 = ("10:click=tool.view.3d;16:click=view.pan;22:click=view.spin;26:key=escape;30:key=escape;36:click=show.sky@0.5;42:click=show.cons@0.35;48:click=show.dwarfs;"
-        "54:click=show.far;60:click=show.physics@0.8;66:click=show.wobble;70:key=escape;76:click=view.follow;80:key=escape;86:click=card.slowmoons;90:key=escape;"
-        "96:click=view.reset;100:key=escape;120:state")
+# (0.74.0: NEW2's seven Esc presses are gone: these controls are all in the Controls panel, which Esc does not close, so the presses closed nothing (checked on 0.73.1's build: the
+# panel stayed open after each); since 0.74.0 an Esc with nothing to close lets go of what the Orbit Lab follows (the owner's rule), which would deselect Earth here)
+NEW2 = ("10:click=tool.view.3d;16:click=view.pan;22:click=view.spin;36:click=show.sky@0.5;42:click=show.cons@0.35;48:click=show.dwarfs;"
+        "54:click=show.far;60:click=show.physics@0.8;66:click=show.wobble;76:click=view.follow;86:click=card.slowmoons;"
+        "96:click=view.reset;120:state")
 OLD3 = "10:click=Slow time to watch it turn;30:state"
 NEW3 = "10:click=card.slowspin;30:state"
 OLD4 = "10:click=Journey: Earth to the galactic centre;30:state"
@@ -75,6 +77,8 @@ def main():
         print("old:", runs["old"].states[0]); print("new:", runs["new"].states[0])
         n.pop("acen", None)   # (0.73.0, on purpose: the state line names the System switch, which the old panel's saved run never had; the Solar System here)
         n.pop("moonoff", None); n.pop("planetoff", None)   # (0.73.1, on purpose: the state line says where the selected moon and its planet were drawn; the old panel's saved run never had them)
+        for k in ("cam", "selxy", "key"):   # (0.74.0, on purpose: the camera checks read the turn and tilt, where the selected thing was drawn and the view's picture key; the old panel's saved run never had them)
+            n.pop(k, None)
         check(set(o) == set(n), "the same fields")
         for k in sorted(o):
             if k == "zoom":

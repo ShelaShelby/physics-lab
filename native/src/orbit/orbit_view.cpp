@@ -240,23 +240,29 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
 }  // namespace
 
 void OrbitView::click(double x, double y) {
-    if (sel.kind != Selection::None && !cardHidden) { cardHidden = true; return; }   // the first click only closes the info box
+    if (sel.kind != Selection::None && !cardHidden) { cardHidden = true; return; }   // (the old UI's in-picture card: the first click only closes it; the new UI has none)
     const Hit* best = nullptr;
     double bd = 1e9;
     for (const Hit& h : hits_) {
         const double d = std::hypot(x - h.x, y - h.y);
         if (d < std::max(h.r + 6, 12.0) && d < bd) { best = &h; bd = d; }
     }
-    sel = best ? best->sel : Selection{};
+    if (!best) return;                                    // 0.74.0: a click on empty space changes nothing (before: it let go of what was followed, and time carried it off the picture)
+    if (follow && !(best->sel == sel)) { pick(best->sel); return; }   // followed: the camera glides to the clicked thing
+    sel = best->sel;
     cardHidden = false;
-    if (!best) follow = false;
 }
 
 void OrbitView::drag(double dx, double dy, bool rotate) {
     // 3D: drag turns the view (0.73.0: in the Alpha Centauri scene it may turn right over, so you can look back at our Sun, which is towards +z)
-    if (rotate) { yaw += dx * 0.01; pitch = std::clamp(pitch + dy * 0.01, acScene ? -3.1 : -1.5, acScene ? 3.1 : 1.5); return; }
-    ox += dx; oy += dy;
-    follow = false;
+    if (rotate) {
+        const double y0 = yaw, p0 = pitch;
+        yaw += dx * 0.01; pitch = std::clamp(pitch + dy * 0.01, acScene ? -3.1 : -kPitchMax, acScene ? 3.1 : kPitchMax);
+        turnYaw_ += yaw - y0; turnPitch_ += pitch - p0; turned_ = true;
+        return;
+    }
+    if (held_) { ux += dx; uy += dy; return; }            // 0.74.0: a followed thing stays followed; it is held where the slide put it (holdAt keeps that in the free part)
+    ox += dx; oy += dy;                                   // nothing followed: the barycentre moves with the pointer
 }
 
 void OrbitView::zoomChanged(double oldZoom, double newZoom) {   // zoom about the middle of the picture
@@ -264,7 +270,64 @@ void OrbitView::zoomChanged(double oldZoom, double newZoom) {   // zoom about th
     ox *= f; oy *= f;
 }
 
-void OrbitView::resetView() { ox = oy = 0; follow = false; yaw = 0.6; pitch = 1.0; cdep = 0; }
+void OrbitView::resetView() {
+    ox = oy = 0; ux = uy = 0; follow = false; yaw = 0.6; pitch = 1.0; cdep = 0;
+    glide_ = glidePending_ = false; spinYaw_ = spinPitch_ = 0;
+}
+
+void OrbitView::pick(Selection s) {
+    if (reduceMotion || journey) { select(s, true); return; }   // Reduce motion: at once
+    sel = s; follow = true; cardHidden = false; ux = uy = 0;
+    glidePending_ = true; glide_ = false; glideS_ = 0; glideSel_ = s;   // (the glide starts in the next drawing, from where the thing is on the screen then)
+}
+
+void OrbitView::grab() { pressed_ = true; spinYaw_ = spinPitch_ = 0; }
+
+void OrbitView::release() {
+    pressed_ = false;
+    const double v = std::hypot(spinYaw_, spinPitch_);
+    if (reduceMotion || v < kMomentumStop) { spinYaw_ = spinPitch_ = 0; return; }
+    if (v > kMomentumMax) { spinYaw_ *= kMomentumMax / v; spinPitch_ *= kMomentumMax / v; }
+}
+
+void OrbitView::tick(double dt, const ViewSettings& set) {
+    // a turn or tilt set by someone else since the last tick (Learn, the Journey, a benchmark scene, PL_TILT) stops the momentum
+    if ((!turned_ && (yaw != heldYaw_ || pitch != heldPitch_)) || reduceMotion || journey || !set.view3D) { if (!pressed_) spinYaw_ = spinPitch_ = 0; }
+    if (pressed_) {                                       // the drag's speed, smoothed over a few frames (a held, still pointer brings it to 0)
+        if (dt > 0) { spinYaw_ = 0.5 * spinYaw_ + 0.5 * turnYaw_ / dt; spinPitch_ = 0.5 * spinPitch_ + 0.5 * turnPitch_ / dt; }
+    } else if (spinYaw_ != 0 || spinPitch_ != 0) {        // a released turn coasts, fading; it ends exactly (0 below kMomentumStop)
+        yaw += spinYaw_ * dt;
+        pitch = std::clamp(pitch + spinPitch_ * dt, acScene ? -3.1 : -kPitchMax, acScene ? 3.1 : kPitchMax);
+        const double f = std::exp(-kMomentumFade * dt);
+        spinYaw_ *= f; spinPitch_ *= f;
+        if (std::hypot(spinYaw_, spinPitch_) < kMomentumStop) spinYaw_ = spinPitch_ = 0;
+    }
+    turnYaw_ = turnPitch_ = 0; turned_ = false;
+    if (set.view3D && spin) yaw += 0.15 * dt;             // ⟳ Spin: the 3D view turns slowly
+    if (glide_) { glideS_ += dt / kGlideSeconds; if (glideS_ >= 1) glide_ = false; }   // the glide ends exactly: then the plain follow
+    heldYaw_ = yaw; heldPitch_ = pitch;
+}
+
+namespace { double smooth01(double s) { s = std::clamp(s, 0.0, 1.0); return s * s * (3 - 2 * s); } }
+
+double OrbitView::holdDepth(double dep) {
+    if (glidePending_) glideDep0_ = cdep;
+    if (!glide_ && !glidePending_) return dep;
+    const double e = glidePending_ ? 0 : smooth01(glideS_);
+    return glideDep0_ + (dep - glideDep0_) * e;
+}
+
+void OrbitView::holdAt(double qx, double qy, double W, double H, const ViewSettings& set) {
+    held_ = true;
+    const double bx = W / 2 + fx + cx, by = H / 2 + cy, m = 24;   // the held place without the slide; the slide keeps it 24 points inside the free part
+    const double xl = m - bx, xh = W - set.insetRight - m - bx, yl = set.insetTop + m - by, yh = H - set.reserveBottom - m - by;
+    if (xl <= xh) ux = std::clamp(ux, xl, xh);
+    if (yl <= yh) uy = std::clamp(uy, yl, yh);
+    const double hx = bx + ux, hy = by + uy;
+    if (glidePending_) { glideDX_ = qx + ox - hx; glideDY_ = qy + oy - hy; glidePending_ = false; glide_ = true; glideS_ = 0; }   // where it is on the screen now
+    const double k = glide_ ? 1 - smooth01(glideS_) : 0;
+    ox = hx - qx + k * glideDX_; oy = hy - qy + k * glideDY_;
+}
 
 void sunColourBytes(int rgb[3]) { for (int k = 0; k < 3; k++) rgb[k] = sunfacts::kSunSrgb[k]; }
 
@@ -276,7 +339,8 @@ bool OrbitView::selectedScreen(double& x, double& y, double& r) const {
 
 void OrbitView::select(Selection s, bool f) {
     sel = s; follow = f; cardHidden = false;
-    ox = oy = 0; cdep = 0;
+    ox = oy = 0; ux = uy = 0; cdep = 0;
+    glide_ = glidePending_ = false; spinYaw_ = spinPitch_ = 0;   // 0.74.0: a direct set: at once
 }
 
 // The Journey's caption, top middle of the free part of the picture.
@@ -323,7 +387,7 @@ struct KeyHash {                                  // FNV-1a over the bytes of ea
 std::uint64_t OrbitView::pictureKey(const SolarSystem& sys, const ViewSettings& set, double originX, double originY, double uiScale, double width, double height) const {
     KeyHash k;
     k.add(sel.kind); k.add(sel.bodyId); k.add(sel.moon); k.add(follow); k.add(cardHidden); k.add(ox); k.add(oy); k.add(yaw); k.add(pitch); k.add(cdep); k.add(spin);
-    k.add(journey); k.add(caption); k.add(captionAlpha); k.add(panMode); k.add(fx); k.add(cx); k.add(cy);
+    k.add(journey); k.add(caption); k.add(captionAlpha); k.add(panMode); k.add(fx); k.add(cx); k.add(cy); k.add(ux); k.add(uy);
     k.add(set.view3D); k.add(set.zoom); k.add(set.tspeed); k.add(set.trueScale); k.add(set.fullTrails); k.add(set.moons); k.add(set.dwarfs); k.add(set.comets);
     k.add(set.belts); k.add(set.gpuRocks); k.add(set.sky); k.add(set.cons); k.add(set.realPlanets); k.add(set.exaggerateWobble); k.add(set.relativity); k.add(set.far);
     k.add(set.orbits); k.add(set.alphaCen); k.add(set.paused); k.add(set.lightTheme); k.add(set.theme.id); k.add(set.theme.light); k.add(set.theme.bg); k.add(set.theme.fg); k.add(set.theme.accent);
@@ -411,13 +475,15 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         r.pos = r.realP ? b.pos + r.rh * r.dW2 : Vec3{b.pos.x + r.dW * r.xr, b.pos.y + Y * r.ct, b.pos.z + Y * r.st};
         return r;
     };
+    held_ = false;
+    if (gliding() && (!(sel == glideSel_) || !follow || journey)) glide_ = glidePending_ = false;   // 0.74.0: the selection was set directly: the glide is dropped
     const bool followMoon = follow && set.moons && sel.kind == Selection::Moon;
     const auto moonKf = [&](const Body& b, double pcf) { return followMoon && b.id == sel.bodyId ? 1.0 : (d3 ? pcf : 1.0); };
     if (follow && sel.kind == Selection::Far) {           // keep a far-away thing in the middle
         FarItem f;
         if (farItem(sys, sel.moon, f)) {
-            if (f.kind != "probe") { cd = cdep = 0; const Q q = flat(f.pos.x, f.pos.y, f.pos.z); ox = W / 2 + fx + cx - q.first; oy = H / 2 + cy - q.second; }
-            else { cd = cdep = base(f.pos.x, f.pos.y, f.pos.z).dep; const Q q = base(f.pos.x, f.pos.y, f.pos.z); ox = W / 2 + fx + cx - q.first; oy = H / 2 + cy - q.second; }
+            if (f.kind != "probe") { cd = cdep = holdDepth(0); const Q q = flat(f.pos.x, f.pos.y, f.pos.z); holdAt(q.first, q.second, W, H, set); }
+            else { cd = cdep = holdDepth(base(f.pos.x, f.pos.y, f.pos.z).dep); const Q q = base(f.pos.x, f.pos.y, f.pos.z); holdAt(q.first, q.second, W, H, set); }
         }
     } else if (follow && sel.kind != Selection::None) {   // keep the followed object in the middle
         Vec3 t;
@@ -430,9 +496,9 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 if (followMoon && sel.moon >= 0 && sel.moon < static_cast<int>(b->moons.size())) t = moonAt(*b, static_cast<std::size_t>(sel.moon), 1.0).pos;
             }
         }
-        cd = cdep = base(t.x, t.y, t.z).dep;              // depth first, so the followed object sits in the middle with no perspective shift
+        cd = cdep = holdDepth(base(t.x, t.y, t.z).dep);   // depth first, so the followed object sits in the middle with no perspective shift (0.74.0: a glide: on the way)
         const Q q = base(t.x, t.y, t.z);
-        ox = W / 2 + fx + cx - q.first; oy = H / 2 + cy - q.second;
+        holdAt(q.first, q.second, W, H, set);             // 0.74.0: at the held place (the middle, the centre shift, the user's slide; a glide: on the way)
     }
     const auto proj = [&](double x, double y, double z) { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; };
     // 0.68.0: the same camera as numbers (orbit/orbit_lines.h LineCam: base() and proj() as above), for the trails, orbits and distance rings on either path

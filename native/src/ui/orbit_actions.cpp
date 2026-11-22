@@ -27,13 +27,12 @@ double easyZoom(const std::string& n) {
     return 0.4;
 }
 
-// select it, keep it in the middle, zoom to suit; the selected one again lets go
+// select it, keep it in the middle, zoom to suit; the selected one again lets go (0.74.0: the camera and the zoom glide there over OrbitView::kGlideSeconds; Reduce motion: at once)
 void fly(AppState& app, const Selection& s, double zoom) {
     OrbitView& v = app.view;
-    if (v.sel == s) { v.sel = Selection{}; v.follow = false; return; }
-    v.select(s, true);
-    setZoom(app, zoom);
-    v.ox = v.oy = 0;
+    if (v.sel == s) { v.letGo(); return; }
+    v.pick(s);
+    glideZoom(app, zoom, OrbitView::kGlideSeconds);
 }
 
 }  // namespace
@@ -103,11 +102,10 @@ void pickItem(AppState& app, const PickItem& it) {
     case Selection::Far: {
         app.set.far = true;
         FarItem fi;
-        if (v.sel == s) { v.sel = Selection{}; v.follow = false; }
+        if (v.sel == s) v.letGo();
         else if (farItem(app.sys, s.moon, fi)) {           // far enough out that the Sun and the target are both in the picture
-            v.select(s, true);
-            setZoom(app, std::log10(13.6 / (fi.au * kAU / kSimLength)));
-            v.ox = v.oy = 0;
+            v.pick(s);                                     // (0.74.0: a glide, as fly)
+            glideZoom(app, std::log10(13.6 / (fi.au * kAU / kSimLength)), OrbitView::kGlideSeconds);
         }
         break;
     }
@@ -230,14 +228,18 @@ void slowSpin(AppState& app) {
 std::string orbitStateLine(const AppState& app) {
     const ViewSettings& s = app.set;
     const Selection& sel = app.view.sel;
-    char b[768];
+    double sx = 9999, sy = 9999, sr = 0;                 // 0.74.0 (the camera checks): where the selected thing was drawn last frame (picture points; 9999: nothing), the turn and tilt, and the kept picture's key of the view
+    if (!app.view.selectedScreen(sx, sy, sr)) sx = sy = 9999;
+    const unsigned long long key = app.view.pictureKey(app.sys, app.set, 0, 0, 1, app.canvasW, app.canvasH);
+    char b[900];
     std::snprintf(b, sizeof b,
-                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d acen=%d moonoff=%.2f,%.2f planetoff=%.2f,%.2f",
+                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d acen=%d moonoff=%.2f,%.2f planetoff=%.2f,%.2f cam=%.6f,%.6f selxy=%.2f,%.2f key=%llu",
                   static_cast<long long>(app.sys.epochMs), app.sys.t, app.sys.jumped ? 1 : 0, app.paused ? 1 : 0, s.tspeed,
                   s.view3D ? 1 : 0, s.trueScale ? 1 : 0, s.fullTrails ? 1 : 0, s.moons ? 1 : 0, s.dwarfs ? 1 : 0, s.comets ? 1 : 0, s.belts ? 1 : 0, s.far ? 1 : 0,
                   static_cast<int>(s.sky), static_cast<int>(s.cons), s.realPlanets ? 1 : 0, s.relativity ? 1 : 0, s.exaggerateWobble ? 1 : 0, s.zoom,
                   static_cast<int>(sel.kind), sel.bodyId, sel.moon, app.view.follow ? 1 : 0, app.view.panMode ? 1 : 0, app.view.spin ? 1 : 0, app.journey.active ? 1 : 0, s.alphaCen ? 1 : 0,
-                  app.view.drawnSel().ok ? app.view.drawnSel().moonX : 9999.0, app.view.drawnSel().ok ? app.view.drawnSel().moonY : 9999.0, app.view.drawnSel().planetX, app.view.drawnSel().planetY);
+                  app.view.drawnSel().ok ? app.view.drawnSel().moonX : 9999.0, app.view.drawnSel().ok ? app.view.drawnSel().moonY : 9999.0, app.view.drawnSel().planetX, app.view.drawnSel().planetY,
+                  app.view.yaw, app.view.pitch, sx, sy, key);
     return b;
 }
 

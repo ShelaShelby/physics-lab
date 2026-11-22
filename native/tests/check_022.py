@@ -12,8 +12,10 @@
 #   honest   0.22 stage 1: the new names and captions are on screen (Density glow, the Molecule Lab's Density style, "not an electron", the molecule "never stops")
 #   followmoon  0.73.1: a clicked moon is FOLLOWED (the camera stays on the moon where it is drawn, not on its planet): Earth's Moon (the ELP place) and Io (the fitted place), 2D and 3D, with time
 #            running fast; and "Slow time to watch moons" with a moon selected selects and follows the planet (the point of it is to see the moons go round)
+#   camera   0.74.0: the Orbit Lab's camera never loses what it follows (an empty click, a right drag), a pick glides, a released turn coasts and stops, the wheel eases
+#            and ends exactly; Reduce motion: no glides (it jumps), still never lost
 #   check_022.py <PhysicsLab binary> <work folder> <part>
-import os, re, sys
+import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, overlap, Bmp
 
@@ -245,9 +247,86 @@ def followmoon(binary, work):
         check(a and b and a.group(1) == "4" and b.group(1) == "3" and a.group(2) == b.group(2) and b.group(4) == "1",
               f"slow moons with Io selected: the moon (kind 4) becomes its planet (Body, kind 3), followed ({a and a.group(0)} -> {b and b.group(0)})")
 
+def cam(line):
+    # the state line's camera fields (0.74.0): sel kind and id, follow, zoom, yaw, pitch, where the selected thing was drawn (picture points, 9999: nothing), the view's picture key
+    m = re.search(r"zoom=(-?[\d.e+-]+) \| sel=(\d+),(-?\d+),(-?\d+) follow=(\d)", line)
+    t = re.search(r"\bt=(-?[\d.e+-]+)", line)
+    c = re.search(r"cam=(-?[\d.]+),(-?[\d.]+) selxy=(-?[\d.]+),(-?[\d.]+) key=(\d+)", line)
+    if not m or not c:
+        return None
+    return {"zoom": float(m.group(1)), "sel": (int(m.group(2)), int(m.group(3))), "follow": m.group(5) == "1", "yaw": float(c.group(1)), "pitch": float(c.group(2)),
+            "x": float(c.group(3)), "y": float(c.group(4)), "key": c.group(5), "t": float(t.group(1)) if t else 0.0}
+
+def camera(binary, work):
+    # 1280x800, dark, 2D unless said (the camera's rules do not depend on the size or the theme). PL_FIXED_DT 0.016 (shell_lib): a glide of 0.8 s is 50 frames, 1 s is 62 frames.
+    # Time runs at the start speed (1 s = 7 days: Earth moves about 2 degrees of its orbit a second, many points at the picked zoom); (d) pauses it (space) to read the kept picture's key.
+    # Before 0.74.0 an empty click let go of Earth (sel None, selxy 9999), a right drag let go (Earth drifts away), a pick jumped in one frame and a released turn stopped dead.
+    for motion in ("off", "on"):                             # (PL_MOTION is Settings → Reduce motion: "off" moves, "on" jumps; shell_lib's default is "on")
+        reduced = motion == "on"
+        tag = " (Reduce motion)" if reduced else ""
+        pick = ("4:key=space;" if reduced else "") + "14:click=ctl.sec.pick;20:click=pick.Earth"   # (Reduce motion pauses the lab when it opens: space runs it; without, time runs from the start)
+        env = {"PL_NEWUI": "on", "PL_MOTION": motion}
+        # (a) following Earth, time running: a left click on empty space (the bottom left of the picture) changes nothing for the camera
+        r = run_app(binary, work, f"camera_a_{motion}", dict(env, PL_SCRIPT=pick + ";100:state;102:clickxy=60,600;" + ";".join(f"{f}:state" for f in range(106, 170, 2))), frames=176)
+        cs = [cam(x) for x in r.states]
+        check(len(cs) == 33 and all(cs), f"(a){tag}: 33 state lines with the camera fields ({len(cs)})")
+        if len(cs) == 33 and all(cs):
+            held, earth = cs[0], cs[0]["sel"]
+            check(cs[-1]["t"] > held["t"], f"(a){tag}: time runs ({held['t']} -> {cs[-1]['t']})")
+            check(held["follow"] and held["sel"][0] == 3, f"(a){tag}: Earth is picked and followed before the click ({held['sel']}, follow {held['follow']})")
+            gone = [c for c in cs[1:] if c["sel"] != earth or not c["follow"]]
+            worst = max(math.hypot(c["x"] - held["x"], c["y"] - held["y"]) for c in cs[1:])
+            check(not gone and worst <= 2.0, f"(a){tag}: after an empty click Earth stays selected, followed and within 2 points of where it was held for 64 frames (lost {len(gone)}, furthest {worst:.1f})")
+        # (b) a right drag by (100, 40) while following Earth: the view slides, Earth stays followed and keeps that offset while time runs
+        r = run_app(binary, work, f"camera_b_{motion}", dict(env, PL_SCRIPT=pick + ";100:state;102:rdrag=500,400,600,440;" + ";".join(f"{f}:state" for f in range(112, 176, 2))), frames=182)
+        cs = [cam(x) for x in r.states]
+        check(len(cs) == 33 and all(cs), f"(b){tag}: 33 state lines with the camera fields ({len(cs)})")
+        if len(cs) == 33 and all(cs):
+            held, at = cs[0], cs[1]
+            check(abs(at["x"] - held["x"] - 100) <= 2 and abs(at["y"] - held["y"] - 40) <= 2, f"(b){tag}: the drag moved Earth by (100, 40) ({at['x'] - held['x']:.1f}, {at['y'] - held['y']:.1f})")
+            worst = max(math.hypot(c["x"] - at["x"], c["y"] - at["y"]) for c in cs[1:])
+            check(all(c["follow"] and c["sel"] == held["sel"] for c in cs) and worst <= 2.0, f"(b){tag}: Earth stays followed at that offset for 64 frames (furthest {worst:.1f})")
+        # (c) from Earth, a pick of Mars: the frames after, Mars is on its way (not jumped); within 1 s it is held where Earth was
+        # (e) the wheel, one notch up at the middle: the zoom eases to +0.07 within 0.3 s (19 frames) and ends exactly there (Reduce motion: in one frame)
+        r = run_app(binary, work, f"camera_ce_{motion}", dict(env, PL_SCRIPT=pick + ";100:state;102:click=pick.Mars;" + ";".join(f"{f}:state" for f in range(103, 175)) +
+                                                                ";180:move=500,400;182:state;184:wheel=1;" + ";".join(f"{f}:state" for f in range(184, 214))), frames=220)
+        cs = [cam(x) for x in r.states]
+        check(len(cs) == 104 and all(cs), f"(c){tag}: 104 state lines with the camera fields ({len(cs)})")
+        if len(cs) == 104 and all(cs):
+            held = cs[0]
+            mars = [c for c in cs[1:73] if c["sel"] != held["sel"]]
+            check(len(mars) >= 60 and all(c["follow"] for c in mars), f"(c){tag}: Mars is picked and followed ({len(mars)} frames)")
+            if len(mars) >= 60:
+                d = [math.hypot(c["x"] - held["x"], c["y"] - held["y"]) for c in mars]
+                first = next((i for i, v in enumerate(d) if v <= 2.0), None)
+                if not reduced:
+                    check(d[0] > 20 and d[1] > 20 and d[2] > 20 and d[2] <= d[0], f"(c): the first frames Mars is on its way, not jumped ({d[0]:.1f}, {d[1]:.1f}, {d[2]:.1f} points from the held place)")
+                    check(first is not None and first <= 62 and max(d[first:]) <= 2.0, f"(c): Mars is held within 2 points after at most 1 s (from frame {first}, then furthest {max(d[first:]) if first is not None else -1:.1f})")
+                else:
+                    check(first is not None and first <= 2 and max(d[first:]) <= 2.0, f"(c){tag}: Mars is held within 2 points at once (from frame {first})")
+            z0, zs = cs[73]["zoom"], [c["zoom"] for c in cs[74:]]
+            want = z0 + 0.07
+            i0 = next((i for i, z in enumerate(zs) if z != z0), None)            # the first frame the wheel has changed the zoom
+            hit = next((i for i, z in enumerate(zs) if abs(z - want) < 1.1e-5), None)   # (the state line has 6 digits)
+            check(i0 is not None and i0 <= 3, f"(e){tag}: the wheel changes the zoom ({z0:.5f} -> {zs[-1]:.5f})")
+            if i0 is not None and not reduced:
+                check(z0 < zs[i0] < want - 0.001, f"(e): the zoom eases (the first changed frame is on the way: {z0:.5f} -> {zs[i0]:.5f}, want {want:.5f})")
+                check(hit is not None and hit - i0 <= 19 and all(z == zs[hit] for z in zs[hit:]), f"(e): the zoom reaches {want:.5f} within 0.3 s and stays exactly there ({hit} - {i0} frames, last {zs[-1]:.6f})")
+            elif i0 is not None:
+                check(hit == i0 and all(z == zs[hit] for z in zs[hit:]), f"(e){tag}: the zoom jumps to {want:.5f} in one frame (frame {hit}, first change {i0})")
+    # (d) 3D, paused, nothing selected, Reduce motion off: a turning drag; after the release the turn coasts a few frames, then stops; within 1 s the view's picture key stays the same for 30 frames
+    r = run_app(binary, work, "camera_d", {"PL_NEWUI": "on", "PL_MOTION": "off", "PL_3D": "1", "PL_SCRIPT": "4:key=space;60:drag=400,420,700,420;" + ";".join(f"{f}:state" for f in range(66, 140))}, frames=146)
+    cs = [cam(x) for x in r.states]
+    check(len(cs) == 74 and all(cs), f"(d): 74 state lines with the camera fields ({len(cs)})")
+    if len(cs) == 74 and all(cs):
+        yaws = [c["yaw"] for c in cs]                       # (the release is on frame 66, the first state line)
+        check(all(yaws[i + 1] > yaws[i] + 1e-4 for i in range(3)), f"(d): the turn keeps a little momentum after the release ({', '.join(f'{y:.4f}' for y in yaws[:5])})")
+        run = next((i for i in range(len(cs) - 29) if len({c["key"] for c in cs[i:i + 30]}) == 1), None)
+        check(run is not None and run <= 62, f"(d): the turn stops and the picture key stays the same for 30 frames, starting within 1 s (frame {run}; yaw {yaws[0]:.4f} -> {yaws[-1]:.4f})")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"molbar": molbar, "centre": centre, "axes": axes, "start": start, "words": words, "keys": keys, "facts": facts, "factsrc": factsrc, "spectrum": spectrum, "density": density, "honest": honest, "stage6": stage6, "followmoon": followmoon}[part](binary, work)
+    {"molbar": molbar, "centre": centre, "axes": axes, "start": start, "words": words, "keys": keys, "facts": facts, "factsrc": factsrc, "spectrum": spectrum, "density": density, "honest": honest, "stage6": stage6, "followmoon": followmoon, "camera": camera}[part](binary, work)
     print(f"{part}: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

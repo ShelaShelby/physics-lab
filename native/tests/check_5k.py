@@ -2,7 +2,7 @@
 # 0.15 stage 5k part 1: reading pages (New UI On) scroll by the wheel and the keys whichever window has the focus, have a slim scrollbar, and the Contents list works again and again.
 # Checked in the REAL app (Linux, software OpenGL, scripted events; NOT a real mouse, NOT Windows). The owner's PC showed a bug the cloud could not reproduce, so these cases copy what a real
 # mouse does differently: the pointer arrives in one frame and the wheel / click comes many frames later, and another window (Contents list, Controls panel, Legend) holds the focus.
-#   check_5k.py <PhysicsLab binary> <work folder> <part>      parts: pages, contents, log
+#   check_5k.py <PhysicsLab binary> <work folder> <part>      parts: pages, contents, log, about (0.74.0: the About page's last line, 'Free Palestine' and the drawn flag)
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, prefetch, Bmp
@@ -451,9 +451,18 @@ def part_data(binary, work):
     check(lines and " logx=1 logy=1 " in lines[-1] and " held1=" not in lines[-1] and " p1=1.5001" in lines[-1], f"log axes on, and n free again after Hold is unticked: {lines[-1:]}")
     check(not r.scripted_missing(), f"every scripted control was there ({r.scripted_missing()[:2]})")
 
+def part_about(binary, work):
+    # 0.74.0 (owner, 22 Nov 2026): the developer's paragraph of About ends with "Free Palestine" in bold and a small DRAWN flag of Palestine (html_view.cpp lrnFlagPS: 1:2, the height of the
+    # line's letters, right after the words). One run: the page as it opens (the paragraph is in the first card), the words drawn and the flag's box in view.
+    r = run(binary, work, "k_about_flag", {"PL_OPEN": "about", "PL_NEWUI": "on"}, "1280x800", "dark", 30)
+    words = [t for t in r.texts if t[2].startswith("Free Palestine")]
+    flag = r.rects.get("page.flagps")
+    check(bool(words), "About: the words 'Free Palestine' are drawn")
+    check(flag is not None and abs(flag[2] - 2 * flag[3]) < 0.5 and 8 <= flag[3] <= 30 and 0 <= flag[1] <= 800 - flag[3], f"About: the drawn flag is there, 1:2, about a line's letters high ({flag})")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"pages": part_pages, "contents": part_contents, "log": part_log, "windows": part_windows, "toggle": part_toggle, "calc": part_calc, "matrix": part_matrix, "data": part_data}[part](binary, work)
+    {"pages": part_pages, "contents": part_contents, "log": part_log, "windows": part_windows, "toggle": part_toggle, "calc": part_calc, "matrix": part_matrix, "data": part_data, "about": part_about}[part](binary, work)
     print(f"{checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

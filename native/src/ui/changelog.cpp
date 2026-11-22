@@ -19,6 +19,11 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.74.0", "The Orbit Lab's camera keeps what it follows, and moves smoothly",
+     "Following a planet, a click on empty space or a right drag no longer lets go of it (time used to carry it off the picture in a second). A right drag, Shift-drag or a drag "
+     "in 2D slides the view: the followed body stays followed where you put it. Only picking something else, Reset view (R or Home), Esc or picking the followed body again let go. "
+     "A pick glides there in about 0.8 s (a moving planet is reached where it is), the wheel and the + and - keys ease the zoom, a released turn coasts a little and stops, "
+     "and the 3D view tilts to 89.5 degrees. With Reduce motion on, everything moves at once, as before. About: the developer's paragraph ends with Free Palestine and a small drawn flag."},
     {"0.73.1", "A clicked moon is followed",
      "Clicking a moon (or picking it in Controls, Pick a body) kept its planet in the middle of the picture; now the moon stays in the middle, where it is drawn (the wider orbit in Easy to see, the real distance at True scale), "
      "in 2D and 3D, for Earth's Moon and every other moon. \"Slow time to watch moons\" with a moon selected selects and follows its planet, so the moons go round it."},

@@ -115,11 +115,12 @@ float S() { return ImGui::GetFontSize() / 16.0f; }
 const char* g_flowKind = nullptr;      // the reading view: the kind a heading reports to PL_LOG_SHELL ("h3"); null: body or caption by size
 
 // ---- inline text: runs laid out word by word ----
-struct Run { std::string text; bool bold, italic, small, sub, br; ImU32 dot; std::string href; };
+struct Run { std::string text; bool bold, italic, small, sub, br; ImU32 dot; std::string href; bool flagPS; };   // (flagPS, 0.74.0: the drawn flag of Palestine, <span class="lrnFlagPS">)
 void collect(const Node& n, bool bold, bool italic, bool small, bool sub, std::vector<Run>& out, const std::string& href = "") {
-    if (n.tag.empty()) { out.push_back({n.text, bold, italic, small, sub, false, 0, href}); return; }
-    if (n.tag == "br") { out.push_back({"", bold, italic, small, sub, true, 0, ""}); return; }
-    if (n.tag == "span" && n.has("lrnDot")) { out.push_back({"", bold, italic, small, sub, false, cssColor(n.style.count("background") ? n.style.at("background") : ""), ""}); return; }
+    if (n.tag.empty()) { out.push_back({n.text, bold, italic, small, sub, false, 0, href, false}); return; }
+    if (n.tag == "br") { out.push_back({"", bold, italic, small, sub, true, 0, "", false}); return; }
+    if (n.tag == "span" && n.has("lrnDot")) { out.push_back({"", bold, italic, small, sub, false, cssColor(n.style.count("background") ? n.style.at("background") : ""), "", false}); return; }
+    if (n.tag == "span" && n.has("lrnFlagPS")) { out.push_back({"", bold, italic, small, sub, false, 0, "", true}); return; }
     const bool b = bold || n.tag == "b", it = italic || n.tag == "i", sm = small || n.tag == "small", su = sub || n.tag == "sub";
     // a link
     const std::string h = n.tag == "a" ? n.href : href;
@@ -139,6 +140,22 @@ float flow(const std::vector<Run>& runs, float x0, float y, float right, float s
     float prevLinkEnd = 0, prevLinkY = -1;
     for (const Run& r : runs) {
         if (r.br) { x = x0; y += lineH; lineEmpty = true; chars = 0; continue; }
+        if (r.flagPS) {                                  // 0.74.0: the flag of Palestine, drawn (Windows has no flag emoji glyphs and the app's fonts do not shape regional indicators)
+            // The shape and colours of Wikimedia Commons' "Flag of Palestine.svg" (fetched 22 Nov 2026; viewBox 6 x 3): 1:2, three equal horizontal stripes black (top), white,
+            // green #009639, and a red #ED2E38 triangle at the hoist whose point is at one third of the length, half way down (M0,0 l2,1.5 L0,3 Z).
+            const float h = size * 0.8f, w = 2 * h;      // the height of the text line's letters
+            if (!lineEmpty && x + w > right) { x = x0; y += lineH; lineEmpty = true; chars = 0; }
+            const float fy = y + size * 0.55f - h / 2, s3 = h / 3;
+            dl->AddRectFilled(ImVec2(x, fy), ImVec2(x + w, fy + s3), IM_COL32(0, 0, 0, 255));
+            dl->AddRectFilled(ImVec2(x, fy + s3), ImVec2(x + w, fy + 2 * s3), IM_COL32(255, 255, 255, 255));
+            dl->AddRectFilled(ImVec2(x, fy + 2 * s3), ImVec2(x + w, fy + h), IM_COL32(0x00, 0x96, 0x39, 255));
+            dl->AddTriangleFilled(ImVec2(x, fy), ImVec2(x + w / 3, fy + h / 2), ImVec2(x, fy + h), IM_COL32(0xED, 0x2E, 0x38, 255));
+            dl->AddRect(ImVec2(x - 0.5f, fy - 0.5f), ImVec2(x + w + 0.5f, fy + h + 0.5f), IM_COL32(128, 128, 128, 110));   // a hairline, so the black and white stripes keep their edge on a dark or a light page
+            auditRect("page.flagps", x, fy, w, h);
+            x += w;
+            lineEmpty = false; any = true;
+            continue;
+        }
         if (r.dot) {
             const float d = 9 * S();
             dl->AddCircleFilled(ImVec2(x + d / 2, y + size * 0.55f), d / 2, r.dot);
@@ -205,7 +222,7 @@ void blocks(const Node& n, const Ctx& cx, float left, float right, float sizePt,
     std::vector<Run> runs;
     auto flushRuns = [&] {
         bool content = false;
-        for (const Run& r : runs) if (r.dot || r.br || r.text.find_first_not_of(' ') != std::string::npos) content = true;
+        for (const Run& r : runs) if (r.dot || r.br || r.flagPS || r.text.find_first_not_of(' ') != std::string::npos) content = true;
         if (content) {
             const ImVec2 c = ImGui::GetCursorScreenPos();
             const ImU32 fg = ImGui::GetColorU32(ImGuiCol_Text), mu = ImGui::GetColorU32(ImGuiCol_TextDisabled);

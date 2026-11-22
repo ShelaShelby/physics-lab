@@ -10,6 +10,8 @@ void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double origi
     const double jd = sys.julianDayTDB();
     const ac::Stars st = ac::stars(jd);
     if (sel.kind != Selection::None && sel.kind != Selection::ACen) { sel = Selection{}; follow = false; }
+    held_ = false;
+    if (gliding() && (!(sel == glideSel_) || !follow || journey)) glide_ = glidePending_ = false;
     const auto thingPos = [&](int k) {
         switch (k) {
         case ac::StarA: case ac::CandidateA: return st.A;
@@ -38,9 +40,9 @@ void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double origi
     };
     if (follow && sel.kind == Selection::ACen && sel.moon != ac::Sun) {
         const Vec3 t = thingPos(sel.moon);
-        cd = cdep = base(t.x, t.y, t.z).dep;
+        cd = cdep = holdDepth(base(t.x, t.y, t.z).dep);  // (0.74.0: orbit_view.cpp's hold: the user's slide, a pick's glide)
         const Q q = base(t.x, t.y, t.z);
-        ox = W / 2 + fx + cx - q.first; oy = H / 2 + cy - q.second;
+        holdAt(q.first, q.second, W, H, set);
     }
     const auto proj = [&](double x, double y, double z) { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; };
     const auto projV = [&](const Vec3& v) { return proj(v.x, v.y, v.z); };

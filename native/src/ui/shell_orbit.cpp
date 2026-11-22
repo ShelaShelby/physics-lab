@@ -449,7 +449,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
             if (pCheck(p, "view.pan", "Drag moves the view", &pan)) app.view.panMode = pan;
             bool spin = app.view.spin;
             if (pCheck(p, "view.spin", "Spin", &spin)) app.view.spin = spin;
-            pCaption(p, "Drag rotates the view unless this is ticked. Right-drag or Shift-drag always moves the view.");
+            pCaption(p, "Drag turns the view unless this is ticked. Right-drag or Shift-drag always slides it; a followed body stays followed. Esc or Reset view lets go.");
         }
         if (app.view.sel.kind != orbit::Selection::None && app.view.sel.kind != orbit::Selection::Belt) {
             bool fol = app.view.follow;

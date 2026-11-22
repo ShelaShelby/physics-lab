@@ -560,6 +560,9 @@ void shellFrame(AppState& app, int winW, int winH, double fps, double dt) {
             if (!S.ui.reading) { closePages(app); app.pane = 0; }
             io.ClearInputKeys();
         }
+        // 0.74.0: Escape with nothing else to close lets go of what the Orbit Lab's camera follows (the view stays where it is; nothing selected)
+        if (!escHandled && app.lab == 0 && !app.pane && !app.journey.active && !settingsOpenAtStart && !io.WantTextInput && !S.ui.search && S.ui.open == PanelId::None &&
+            !S.ui.reading && app.view.sel.kind != orbit::Selection::None && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) { app.view.letGo(); escHandled = true; }
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) { applyKey(S.ui, Key::CtrlK, io.WantTextInput, true); S.query[0] = 0; S.searchSel = 0; S.searchFocus = true; S.queryGen++; }   // (5l: ClearActiveID: Ctrl+K with the box already open cleared our text but not the text box's own copy, so the old words came back in front of the new ones)
     }
 

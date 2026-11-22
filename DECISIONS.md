@@ -34,6 +34,9 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - The Milky Way is ESA's Gaia all-sky colour map (5 Nov 2026). Planet maps: NASA/USGS where one exists, Hubble OPAL for Saturn, Uranus and Neptune (the owner
   downloads them), Venus a smooth ball in its measured colour; true colour, no grid, no made-up bands (5 Nov 2026).
 - The Orbit Lab opens fitted to the whole Solar System on every start (4 Nov 2026).
+- The Orbit Lab's camera (22 Nov 2026; the rework in three jobs: 0.74.0 handling, 0.75.0 depth, 0.76.0 free flight): it never lets go by accident; only a pick of
+  something else, Reset view, Escape or picking the followed thing again let go (an empty click changes nothing). A right drag (Shift-drag, a drag in 2D) slides the
+  view but stays attached: the followed thing keeps its new place on the screen.
 
 ## Atom Lab and chart of nuclides
 - Electron cloud defaults: style Glow, density High. The whole atom opens at True scale (Shells enlarged is a choice).
@@ -119,6 +122,7 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - Science colours (phase wheel, decay modes, elements, planets, spectra) do not follow the theme. The theme picker is a 3-column grid. Inter is the font of the look.
 - The choice closest to reality is marked with a dot, and each lab's Controls has a "Most realistic" button (5 Nov 2026).
 - The app asks Windows not to power-throttle it; the smallest window is 880 x 560 units.
+- About ends the developer's paragraph with "Free Palestine" and a small drawn flag of Palestine (22 Nov 2026).
 
 ## Workflow (owner decisions 20 Nov 2026)
 - Exactly one push per job, at the end, after the tests and the docs are final; no checkpoint pushes; no doc-only push after it; a fix found after testing goes into that same push.

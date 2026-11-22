@@ -44,6 +44,8 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Thermochemistry from partition functions (Cp, S, H, G against T; **source needed**: NIST-JANAF tables of the molecules), equilibrium constants; isotope substitution (Teller-Redlich rule); Franck-Condon factors.
 
 ## Orbit Lab
+- Camera part 2 (0.75.0): real depth: zoom moves the camera, stronger perspective (a field of view), things behind the camera clipped on every path (the card's lines, rocks, rings, sky, labels, Alpha Centauri), a close fly-past benchmark scene.
+- Camera part 3 (0.76.0): free flight: WASD or arrows, mouse look, speed that scales with the distance to the nearest body (said in the app: a viewer's trick, faster than light), stop at surfaces, a key back to the last picked body, an arrow to the nearest planet.
 - **fix**: the Orbit Lab at rest still draws its picture anew every frame on the owner's PC (0.68.1 benchmark: rest.orbit 765 drawings in 3 s, the lines' helper long finished): 0.68.1's fix (REPORT E) did not work there.
 - Alpha Centauri, next (PLAN_ALPHACEN.md): the Sun's pick from there could look back at it in 2D too (the 2D view looks away from the Sun); A and B seen from Proxima b (plan sect. 13 step 5's look); Fit planets in a small window with the card open leaves the planets near the edge.
 - Alpha Centauri, Proxima's card: its one turn (about half a million years) and how long that is at the fastest time; a faster time choice in the Alpha Centauri system to watch Proxima move.

@@ -1,5 +1,6 @@
 #include "orbit_panel.h"
 #include "orbit_actions.h"
+#include "look.h"
 #include "shell_test.h"
 #include "atom_panel.h"
 
@@ -44,10 +45,34 @@ static int64_t nowUnixMs() {
     return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-void setZoom(AppState& app, double zoom) {
+namespace {
+struct ZoomGlide { bool on = false; double from = 0, to = 0, s = 0, secs = kWheelZoomSeconds; };
+ZoomGlide g_zoomGlide;                                    // 0.74.0: the running zoom glide (one picture, one glide)
+void applyZoom(AppState& app, double zoom) {
     zoom = std::clamp(zoom, kZoomMin, kZoomMax);
     app.view.zoomChanged(app.set.zoom, zoom);
     app.set.zoom = zoom;
+}
+}  // namespace
+
+void setZoom(AppState& app, double zoom) { g_zoomGlide.on = false; applyZoom(app, zoom); }
+
+void glideZoom(AppState& app, double zoom, double seconds) {
+    zoom = std::clamp(zoom, kZoomMin, kZoomMax);
+    if (look().reduced || app.journey.active || app.benchRunning || seconds <= 0) { setZoom(app, zoom); return; }
+    g_zoomGlide = ZoomGlide{true, app.set.zoom, zoom, 0, seconds};
+}
+
+void zoomBy(AppState& app, double dz) { glideZoom(app, (g_zoomGlide.on ? g_zoomGlide.to : app.set.zoom) + dz, kWheelZoomSeconds); }
+
+void cameraTick(AppState& app, double dt) {
+    ZoomGlide& g = g_zoomGlide;
+    if (!g.on) return;
+    if (app.journey.active || app.benchRunning || app.lab != 0) { g.on = false; return; }   // a Journey or a benchmark scene sets the zoom itself
+    g.s += dt / g.secs;
+    const double s = std::min(g.s, 1.0), e = s * s * (3 - 2 * s);   // eased in and out
+    applyZoom(app, g.s >= 1 ? g.to : g.from + (g.to - g.from) * e);   // it ends exactly on its value: the picture is kept again at rest
+    if (g.s >= 1) g.on = false;
 }
 
 void resetViewAction(AppState& app) { app.view.resetView(); setZoom(app, 0); app.view.ox = app.view.oy = 0; }
