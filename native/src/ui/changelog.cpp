@@ -19,6 +19,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.73.1", "A clicked moon is followed",
+     "Clicking a moon (or picking it in Controls, Pick a body) kept its planet in the middle of the picture; now the moon stays in the middle, where it is drawn (the wider orbit in Easy to see, the real distance at True scale), "
+     "in 2D and 3D, for Earth's Moon and every other moon. \"Slow time to watch moons\" with a moon selected selects and follows its planet, so the moons go round it."},
     {"0.73.0", "The Alpha Centauri system in the Orbit Lab",
      "A new switch at the top of the Orbit Lab's Controls: Solar System or Alpha Centauri. A and B circle each other on their measured 80-year orbit (Akeson et al. 2021) "
      "with the lab's date and time; Proxima sits at its measured place 12,000 au out on its half-million-year orbit; its planets b and d circle it with their measured "

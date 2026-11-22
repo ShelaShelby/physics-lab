@@ -376,6 +376,43 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, y2 = y1 * cb - z * sb;
         return Q{W / 2 + fx + x1 * px, H / 2 - y2 * px, cd, 1};
     };
+    const double grow = !TRUE_SCALE && set.zoom > 0 ? std::min(3.2, std::pow(10.0, 0.5 * set.zoom)) : 1;   // Easy to see: a little bigger as you zoom in
+    const auto drawnRadius = [&](const Body& b) { return TRUE_SCALE ? b.radius * px : (3 + 1.6 * std::sqrt(b.radius / kEarthRadius)) * grow; };
+    // 0.73.1: ONE place for a moon: the drawing (the moons' loop) and the follow block below both call moonAt, so the camera is always on the moon where it is drawn.
+    // kf is the perspective scale of the planet; the camera cannot know it before it is centred on the moon, so for the followed moon's planet it is 1 (moonKf), in both.
+    struct MoonPlace { double dW, dW2, xr, yr, sgn, ct, st, aM; bool fast, realM, realS, realP; Vec3 rh, ph, sp, sv, pos; };
+    const auto moonDisp = [&](const Body& b, std::size_t j, double kf) { return drawnRadius(b) * kf + 7 + 13 * std::log(std::max(b.moons[j].data->aKm / (b.radius / kKm), 1.2)); };   // drawn distance, points
+    const auto moonAt = [&](const Body& b, std::size_t j, double kf) {
+        MoonPlace r;
+        const MoonData& m = *b.moons[j].data;
+        const double dps = kSimTime / kDay * std::pow(10.0, set.tspeed);   // simulated days per real second
+        r.aM = m.aKm * kKm;                           // real distance, m
+        r.dW = std::max(moonDisp(b, j, kf) / (px * kf), TRUE_SCALE ? r.aM : 0.0);   // drawn distance, m
+        const double tl = m.tiltDeg * kPi / 180;
+        r.ct = std::cos(tl); r.st = std::sin(tl);
+        r.fast = dps / m.periodDays > 8;              // a lap in under ~8 frames would flicker: the whole orbit is lit instead
+        // mean anomaly grows by 2π per period; Kepler's equation by 3 Newton steps (moon orbits are nearly round)
+        const double Mn = b.moons[j].phase + (r.fast ? 0 : (m.retrograde ? -1 : 1) * 2 * kPi * (sys.t / kDay) / m.periodDays);
+        double E = Mn + m.e * std::sin(Mn);
+        for (int i = 0; i < 3; i++) E += (Mn - (E - m.e * std::sin(E))) / (1 - m.e * std::cos(E));
+        r.xr = std::cos(E) - m.e; r.yr = std::sqrt(1 - m.e * m.e) * std::sin(E); r.sgn = m.retrograde ? -1 : 1;
+        // 0.10.4 stage 2 (0.46.3: in Simple too): Earth's Moon is at its real direction and phase (ELP2000-82B). It is drawn at the same exaggerated distance as any moon (dW, the label
+        // "Orbit drawn about N× too wide" is unchanged), scaled by the Moon's real distance over its mean one (so perigee and apogee show, and at true scale it is the real distance); the ring is the Moon's
+        // instantaneous orbit plane (geocentric position x velocity) through the Moon, so the Moon is always on it. Outside 1800-2100 it is on its Kepler ellipse, as moons without data are.
+        r.realM = sys.realMoon() && b.name == "Earth" && j == 0;
+        r.dW2 = r.dW;
+        if (r.realM) { const Vec3 g = sys.moonGeocentric(); r.rh = g * (1 / length(g)); r.ph = cross(sys.moonOrbitNormal(), r.rh); r.dW2 = r.dW * length(g) / r.aM; }
+        // 0.27: the 13 big moons at their real places (orbit/moon_sats.h, fitted to JPL Horizons), drawn as our real Moon: same direction, the drawn distance
+        // scaled by the real one over the mean one, on the ring of its present orbit plane. In both Simple and Real (they are not part of the planets' physics).
+        r.realS = !r.realM && !(b.name == "Earth" && j == 0) && satState(m.name, sys.julianDayTDB(), r.sp, r.sv);
+        if (r.realS) { r.rh = r.sp * (1 / length(r.sp)); Vec3 nn = cross(r.sp, r.sv); nn = nn * (1 / length(nn)); r.ph = cross(nn, r.rh); r.dW2 = r.dW * length(r.sp) / m.aKm; }
+        r.realP = r.realM || r.realS;
+        const double Y = r.dW * r.yr * r.sgn;
+        r.pos = r.realP ? b.pos + r.rh * r.dW2 : Vec3{b.pos.x + r.dW * r.xr, b.pos.y + Y * r.ct, b.pos.z + Y * r.st};
+        return r;
+    };
+    const bool followMoon = follow && set.moons && sel.kind == Selection::Moon;
+    const auto moonKf = [&](const Body& b, double pcf) { return followMoon && b.id == sel.bodyId ? 1.0 : (d3 ? pcf : 1.0); };
     if (follow && sel.kind == Selection::Far) {           // keep a far-away thing in the middle
         FarItem f;
         if (farItem(sys, sel.moon, f)) {
@@ -385,7 +422,14 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     } else if (follow && sel.kind != Selection::None) {   // keep the followed object in the middle
         Vec3 t;
         if (sel.kind == Selection::Bary) t = bc;
-        else if (sel.kind == Selection::Body || sel.kind == Selection::Moon) { const Body* b = findBody(sys, sel.bodyId); if (b) t = b->pos; }
+        else if (sel.kind == Selection::Body || sel.kind == Selection::Moon) {
+            const Body* b = findBody(sys, sel.bodyId);
+            if (b) {
+                t = b->pos;
+                // a clicked moon is followed where it is DRAWN (0.73.1)
+                if (followMoon && sel.moon >= 0 && sel.moon < static_cast<int>(b->moons.size())) t = moonAt(*b, static_cast<std::size_t>(sel.moon), 1.0).pos;
+            }
+        }
         cd = cdep = base(t.x, t.y, t.z).dep;              // depth first, so the followed object sits in the middle with no perspective shift
         const Q q = base(t.x, t.y, t.z);
         ox = W / 2 + fx + cx - q.first; oy = H / 2 + cy - q.second;
@@ -408,6 +452,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     // Stars Off) the page is not a picture of dark space: there the night side stays black.
     R.setSpace(0.2126f * kBg.r + 0.7152f * kBg.g + 0.0722f * kBg.b < 0.25f ? kBg : Color{0, 0, 0, 1});
     hits_.clear();
+    drawnSel_ = DrawnSel{};
     if (set.sky != SkyMode::Off) {                        // the night sky: dim close up, brighter as you zoom out
         const double zt = std::clamp(-set.zoom / 3.5, 0.0, 1.0), lv = set.sky == SkyMode::Full ? 0.45 + 0.55 * zt : 0.16 + 0.6 * zt;
         drawSky(R, T, W, H, ca, sa, cb, sb, set.cons, lv);
@@ -793,8 +838,6 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     // ---- planets, dwarf planets and comets (far ones first) ----
     std::vector<const Body*> order = vis;
     std::stable_sort(order.begin(), order.end(), [&](const Body* a, const Body* b) { return base(a->pos.x, a->pos.y, a->pos.z).dep < base(b->pos.x, b->pos.y, b->pos.z).dep; });   // far ones first
-    const double grow = !TRUE_SCALE && set.zoom > 0 ? std::min(3.2, std::pow(10.0, 0.5 * set.zoom)) : 1;   // Easy to see: a little bigger as you zoom in
-    const auto drawnRadius = [&](const Body& b) { return TRUE_SCALE ? b.radius * px : (3 + 1.6 * std::sqrt(b.radius / kEarthRadius)) * grow; };
     for (const Body* bp : order) {
         const Body& b = *bp;
         const Q q = proj(b.pos.x, b.pos.y, b.pos.z);
@@ -894,38 +937,19 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const Body& b = *bp;
         if (b.moons.empty()) continue;
         const Q pc = proj(b.pos.x, b.pos.y, b.pos.z);
-        const double kf = d3 ? pc.f : 1, rad = drawnRadius(b) * kf, rKm = b.radius / kKm, distPx = length(b.pos) * px;   // true distance from the Sun: the same from every viewing angle
+        const double kf = moonKf(b, pc.f), distPx = length(b.pos) * px;   // true distance from the Sun: the same from every viewing angle
         std::vector<double> disp;
         double maxDisp = 0;
-        for (const Moon& m : b.moons) { disp.push_back(rad + 7 + 13 * std::log(std::max(m.data->aKm / rKm, 1.2))); maxDisp = std::max(maxDisp, disp.back()); }
+        for (std::size_t j = 0; j < b.moons.size(); j++) { disp.push_back(moonDisp(b, j, kf)); maxDisp = std::max(maxDisp, disp.back()); }
         const bool here = (sel.kind == Selection::Body || sel.kind == Selection::Moon) && sel.bodyId == b.id;
         if (!here && maxDisp > 0.15 * distPx) continue;   // hidden while it would crowd the map: zoom in or click the planet (0.22 stage 6: 0.15, was 0.3: at the whole-system zoom Saturn's and Uranus's widened moon orbits drew rings a third of the way to the Sun)
-        const double dps = kSimTime / kDay * std::pow(10.0, set.tspeed);   // simulated days per real second
         for (std::size_t j = 0; j < b.moons.size(); j++) {
             const MoonData& m = *b.moons[j].data;
-            const double aM = m.aKm * kKm;                // real distance, m
-            const double dW = std::max(disp[j] / (px * kf), TRUE_SCALE ? aM : 0.0);   // drawn distance, m
-            const double tl = m.tiltDeg * kPi / 180, ct = std::cos(tl), st = std::sin(tl);
-            const bool fast = dps / m.periodDays > 8;     // a lap in under ~8 frames would flicker: the whole orbit is lit instead
+            const MoonPlace pl0 = moonAt(b, j, kf);        // the same place the follow block centres on
+            const double aM = pl0.aM, dW = pl0.dW, dW2 = pl0.dW2, ct = pl0.ct, st = pl0.st, xr = pl0.xr, yr = pl0.yr, sgn = pl0.sgn;
+            const bool fast = pl0.fast, realM = pl0.realM, realS = pl0.realS, realP = pl0.realP;
+            const Vec3 rh = pl0.rh, ph = pl0.ph, sp = pl0.sp;
             const bool on = sel.kind == Selection::Moon && sel.bodyId == b.id && sel.moon == static_cast<int>(j);
-            // mean anomaly grows by 2π per period; Kepler's equation by 3 Newton steps (moon orbits are nearly round)
-            const double Mn = b.moons[j].phase + (fast ? 0 : (m.retrograde ? -1 : 1) * 2 * kPi * (sys.t / kDay) / m.periodDays);
-            double E = Mn + m.e * std::sin(Mn);
-            for (int i = 0; i < 3; i++) E += (Mn - (E - m.e * std::sin(E))) / (1 - m.e * std::cos(E));
-            const double xr = std::cos(E) - m.e, yr = std::sqrt(1 - m.e * m.e) * std::sin(E), sgn = m.retrograde ? -1 : 1;
-            // 0.10.4 stage 2 (0.46.3: in Simple too): Earth's Moon is at its real direction and phase (ELP2000-82B). It is drawn at the same exaggerated distance as any moon (dW, the label
-            // "Orbit drawn about N× too wide" is unchanged), scaled by the Moon's real distance over its mean one (so perigee and apogee show, and at true scale it is the real distance); the ring is the Moon's
-            // instantaneous orbit plane (geocentric position x velocity) through the Moon, so the Moon is always on it. Outside 1800-2100 it is on its Kepler ellipse, as moons without data are.
-            const bool realM = sys.realMoon() && b.name == "Earth" && j == 0;
-            Vec3 rh, ph;
-            double dW2 = dW;
-            if (realM) { const Vec3 g = sys.moonGeocentric(); rh = g * (1 / length(g)); ph = cross(sys.moonOrbitNormal(), rh); dW2 = dW * length(g) / aM; }
-            // 0.27: the 13 big moons at their real places (orbit/moon_sats.h, fitted to JPL Horizons), drawn as our real Moon: same direction, the drawn distance
-            // scaled by the real one over the mean one, on the ring of its present orbit plane. In both Simple and Real (they are not part of the planets' physics).
-            Vec3 sp, sv;
-            const bool realS = !realM && !(b.name == "Earth" && j == 0) && satState(m.name, sys.julianDayTDB(), sp, sv);
-            if (realS) { rh = sp * (1 / length(sp)); Vec3 nn = cross(sp, sv); nn = nn * (1 / length(nn)); ph = cross(nn, rh); dW2 = dW * length(sp) / m.aKm; }
-            const bool realP = realM || realS;
             {   // the orbit (seen from above, the tilted circle looks like an ellipse)
                 const double rPx = dW2 * px;
                 double t0 = 0, t1 = 2 * kPi;
@@ -950,8 +974,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                     }
                 }
             }
-            const double Y = dW * yr * sgn;
-            const Q mp = realP ? proj(b.pos.x + dW2 * rh.x, b.pos.y + dW2 * rh.y, b.pos.z + dW2 * rh.z) : proj(b.pos.x + dW * xr, b.pos.y + Y * ct, b.pos.z + Y * st);
+            const Q mp = proj(pl0.pos.x, pl0.pos.y, pl0.pos.z);
             const double mr = TRUE_SCALE ? m.radiusKm * kKm * px : 1.6 + 0.9 * std::max(0.0, std::log10(m.radiusKm / 50));
             const bool mtiny = TRUE_SCALE && mr < 1.2;
             const double md = mtiny ? 3.5 : mr;
@@ -992,6 +1015,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 if (mtiny) { R.fadeDisc(mp.first, mp.second, 5.5, hexColor(marks::kMoon, 0.3f)); R.disc(mp.first, mp.second, 2.0, hexColor(marks::kMoon)); }   // 0.23 stage 2: a dot with a soft glow, as the tiny planets (was a faint grey ring)
                 if (on) hiRing(mp.first, mp.second, md + 5);
             }
+            if (on) drawnSel_ = {true, mp.first - (W / 2 + fx + cx), mp.second - (H / 2 + cy), pc.first - (W / 2 + fx + cx), pc.second - (H / 2 + cy)};
             exag_[{b.id, static_cast<int>(j)}] = dW / aM;
             hits_.push_back({{Selection::Moon, b.id, static_cast<int>(j)}, mp.first, mp.second, std::max(md, mtiny ? 9.0 : 0.0)});
             if (here) { labels.push_back({m.name, mp.first, mp.second - md - 4, on, true, false}); labels.back().prio = 4; }

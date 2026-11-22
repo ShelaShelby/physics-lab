@@ -41,7 +41,7 @@ std::string wobbleTip();
 
 // ---- the subject card's action links (the old side column's "Slow time to watch moons" / "Slow time to watch it turn") ----
 bool slowMoonsAvailable(const AppState& app);              // Moons is on and the selected planet (or the planet of the selected moon) has moons shown
-void slowMoons(AppState& app);                             // Time speed so that one lap of the moon (the fastest one of the planet) takes about 4 seconds, and follow
+void slowMoons(AppState& app);                             // Time speed so that one lap of the moon (the fastest one of the planet) takes about 4 seconds, and follow (a selected moon: its planet is selected and followed)
 bool slowSpinAvailable(const AppState& app);               // a planet with real spin data is selected
 void slowSpin(AppState& app);                              // Time speed so that one turn takes about 24 seconds, follow, and (True scale) zoom in close enough to see it
 

@@ -10,6 +10,8 @@
 #   density  0.22 stage 2: the Atom Lab draws the whole nucleus as its charge density by default (Nucleus look: Density), a smooth glow brightest in the middle; diving into a
 #            nucleon shows the nucleons again
 #   honest   0.22 stage 1: the new names and captions are on screen (Density glow, the Molecule Lab's Density style, "not an electron", the molecule "never stops")
+#   followmoon  0.73.1: a clicked moon is FOLLOWED (the camera stays on the moon where it is drawn, not on its planet): Earth's Moon (the ELP place) and Io (the fitted place), 2D and 3D, with time
+#            running fast; and "Slow time to watch moons" with a moon selected selects and follows the planet (the point of it is to see the moons go round)
 #   check_022.py <PhysicsLab binary> <work folder> <part>
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -210,9 +212,42 @@ def stage6(binary, work):
     check("topicon.swap" not in o.rects and "topicon.search" in o.rects, "the top bar has no swap button")
     check(not any(t.startswith("Zoom ×") for t in [x[2] for x in o.texts]), "the Orbit readout no longer repeats the zoom")
 
+def moonoff(line):
+    m = re.search(r"moonoff=(-?[\d.]+),(-?[\d.]+) planetoff=(-?[\d.]+),(-?[\d.]+)", line)
+    return tuple(float(v) for v in m.groups()) if m else None
+
+def followmoon(binary, work):
+    # 1280x800, dark: the result does not depend on the size or the theme. The moon is picked from Pick a body; moonoff / planetoff in the state line are where the moon and its planet were DRAWN last frame,
+    # in points from the middle the followed thing is held at (orbit_view.h drawnSel; 9999 = no moon drawn). Followed moon: moonoff stays at 0; its planet circles it (planetoff moves).
+    # (0.73.0's build: the planet was followed, moonoff went round the planet's circle: tests (a)-(c) fail there.)
+    cases = (("Moon", "", "Earth's Moon (the ELP place), 2D"), ("Moon", "1", "Earth's Moon, 3D"), ("Io", "1", "Io (the fitted place), 3D"), ("Io", "", "Io, 2D"))
+    for name, d3, what in cases:
+        parts = ["4:key=space", "14:click=ctl.sec.pick", "20:click=##pickfilter", f"26:text={name}", f"32:click=pick.{name}"] + [f"{f}:state" for f in range(44, 104, 3)]   # (space: the checks start paused; the lab then runs at its start speed, 7 days a second: Io goes round in 10 frames, the Moon in about 4 s)
+        env = {"PL_NEWUI": "on", "PL_SCRIPT": ";".join(parts)}
+        if d3:
+            env["PL_3D"] = "1"
+        r = run_app(binary, work, f"followmoon_{name}_{d3 or '2d'}", env, frames=112)
+        offs = [moonoff(x) for x in r.states[3:]]           # (the first states are while the flight settles)
+        check(len(r.states) >= 15 and all(offs), f"{what}: the state lines carry moonoff ({len(r.states)} lines)")
+        if not offs or not all(offs):
+            continue
+        tsp = state(r, "tspeed")
+        worst = max(max(abs(o[0]), abs(o[1])) for o in offs)
+        planet = max(max(abs(o[2]), abs(o[3])) for o in offs)
+        moved = max(abs(o[2] - offs[0][2]) + abs(o[3] - offs[0][3]) for o in offs)
+        check(worst <= 2.0, f"{what}: the moon stays within 2 points of the middle ({worst:.2f}, tspeed {tsp})")
+        check(planet > 10 and moved > 10, f"{what}: its planet moves away from the middle and round it (furthest {planet:.1f}, moved {moved:.1f} points)")
+    # (d) "Slow time to watch moons" with a moon selected: the planet is selected and followed
+    r = run_app(binary, work, "followmoon_slow", {"PL_NEWUI": "on", "PL_SCRIPT": "4:key=space;14:click=ctl.sec.pick;20:click=##pickfilter;26:text=Io;32:click=pick.Io;48:state;54:click=card.slowmoons;74:state"}, frames=84)
+    check(len(r.states) == 2, f"slow moons: two state lines ({len(r.states)})")
+    if len(r.states) == 2:
+        a, b = (re.search(r"sel=(\d+),(\d+),(\d+) follow=(\d)", x) for x in r.states)
+        check(a and b and a.group(1) == "4" and b.group(1) == "3" and a.group(2) == b.group(2) and b.group(4) == "1",
+              f"slow moons with Io selected: the moon (kind 4) becomes its planet (Body, kind 3), followed ({a and a.group(0)} -> {b and b.group(0)})")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"molbar": molbar, "centre": centre, "axes": axes, "start": start, "words": words, "keys": keys, "facts": facts, "factsrc": factsrc, "spectrum": spectrum, "density": density, "honest": honest, "stage6": stage6}[part](binary, work)
+    {"molbar": molbar, "centre": centre, "axes": axes, "start": start, "words": words, "keys": keys, "facts": facts, "factsrc": factsrc, "spectrum": spectrum, "density": density, "honest": honest, "stage6": stage6, "followmoon": followmoon}[part](binary, work)
     print(f"{part}: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

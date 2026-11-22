@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.73.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.73.1 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -562,7 +562,7 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_controls PROPERTIES TIMEOUT 3600)
       # ui_orbit_view: the Orbit picture: wheel zoom, scrolling, zoom out, centre, axes, orbit paths, scale bar
       add_test(NAME ui_orbit_view COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit_view
-               check_5p.py:wheel check_5p.py:scroll check_5p.py:zoomout check_022.py:centre check_022.py:axes check_023.py:orbits
+               check_5p.py:wheel check_5p.py:scroll check_5p.py:zoomout check_022.py:centre check_022.py:followmoon check_022.py:axes check_023.py:orbits
                check_022s7.py:scalebar)
       set_tests_properties(ui_orbit_view PROPERTIES TIMEOUT 3600)
       # ui_look: the look: chosen options, ticks, Settings tiles, solid pages, themes, lit buttons, pills, glass, layout tokens

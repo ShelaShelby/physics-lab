@@ -103,7 +103,12 @@ public:
     // The selected thing's place on the picture (points) and its radius, as last drawn. False: nothing is selected, or it has no round mark.
     bool selectedScreen(double& x, double& y, double& r) const;
 
+    // 0.73.1 (for the automatic checks): where the selected moon and its planet were DRAWN last frame, in points from the middle the followed thing is held at (ok: a moon was drawn)
+    struct DrawnSel { bool ok = false; double moonX = 0, moonY = 0, planetX = 0, planetY = 0; };
+    const DrawnSel& drawnSel() const { return drawnSel_; }
+
 private:
+    DrawnSel drawnSel_;
     struct Hit { Selection sel; double x, y, r; };
     std::vector<Hit> hits_;
     bool acScene = false;                        // 0.73.0: the last frame drew the Alpha Centauri scene (drag may turn the 3D view right over there)

@@ -207,7 +207,8 @@ void slowMoons(AppState& app) {
     if (app.view.sel.kind == Selection::Moon) P = b->moons[app.view.sel.moon].data->periodDays;
     else for (const Moon& m : b->moons) P = std::min(P, m.data->periodDays);
     app.set.tspeed = std::clamp(std::log10(P / 4 / (kSimTime / kDay)), kTspeedMin, kTspeedMax);   // one lap in 4 seconds
-    app.view.follow = true;
+    if (app.view.sel.kind == Selection::Moon) app.view.select(Selection{Selection::Body, b->id, 0}, true);   // 0.73.1: a selected moon is followed itself now, so the planet is selected and followed: the moons circle it
+    else app.view.follow = true;
 }
 
 static const Body* spinTarget(const AppState& app) {   // a selected planet with real spin data
@@ -229,13 +230,14 @@ void slowSpin(AppState& app) {
 std::string orbitStateLine(const AppState& app) {
     const ViewSettings& s = app.set;
     const Selection& sel = app.view.sel;
-    char b[640];
+    char b[768];
     std::snprintf(b, sizeof b,
-                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d acen=%d",
+                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d acen=%d moonoff=%.2f,%.2f planetoff=%.2f,%.2f",
                   static_cast<long long>(app.sys.epochMs), app.sys.t, app.sys.jumped ? 1 : 0, app.paused ? 1 : 0, s.tspeed,
                   s.view3D ? 1 : 0, s.trueScale ? 1 : 0, s.fullTrails ? 1 : 0, s.moons ? 1 : 0, s.dwarfs ? 1 : 0, s.comets ? 1 : 0, s.belts ? 1 : 0, s.far ? 1 : 0,
                   static_cast<int>(s.sky), static_cast<int>(s.cons), s.realPlanets ? 1 : 0, s.relativity ? 1 : 0, s.exaggerateWobble ? 1 : 0, s.zoom,
-                  static_cast<int>(sel.kind), sel.bodyId, sel.moon, app.view.follow ? 1 : 0, app.view.panMode ? 1 : 0, app.view.spin ? 1 : 0, app.journey.active ? 1 : 0, s.alphaCen ? 1 : 0);
+                  static_cast<int>(sel.kind), sel.bodyId, sel.moon, app.view.follow ? 1 : 0, app.view.panMode ? 1 : 0, app.view.spin ? 1 : 0, app.journey.active ? 1 : 0, s.alphaCen ? 1 : 0,
+                  app.view.drawnSel().ok ? app.view.drawnSel().moonX : 9999.0, app.view.drawnSel().ok ? app.view.drawnSel().moonY : 9999.0, app.view.drawnSel().planetX, app.view.drawnSel().planetY);
     return b;
 }
 

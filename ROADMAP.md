@@ -46,6 +46,8 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 ## Orbit Lab
 - **fix**: the Orbit Lab at rest still draws its picture anew every frame on the owner's PC (0.68.1 benchmark: rest.orbit 765 drawings in 3 s, the lines' helper long finished): 0.68.1's fix (REPORT E) did not work there.
 - Alpha Centauri, next (PLAN_ALPHACEN.md): the Sun's pick from there could look back at it in 2D too (the 2D view looks away from the Sun); A and B seen from Proxima b (plan sect. 13 step 5's look); Fit planets in a small window with the card open leaves the planets near the edge.
+- Alpha Centauri, Proxima's card: its one turn (about half a million years) and how long that is at the fastest time; a faster time choice in the Alpha Centauri system to watch Proxima move.
+- Alpha Centauri: A and B drawn as one point with one label when closer than a few pixels (B's label hides A).
 - **source needed**: Eris's size from its occultation, 2,326 +- 12 km (Sicardy et al., Nature 478, 493 (2011)); save the paper first (refused the cloud, 9 Nov 2026).
 - Real mode: the asteroids' and Kuiper belt's mass are not in the model (Neptune 1,436 km off; Ceres 9,324 km; Earth 14 km); Europa's orbit up to 17,700 km off (Laplace terms); belt asteroids ignore Jupiter far from 2026.
 - **fix**: outside 1800-2100 the moons start at made-up angles (the card says so): run JPL's mean elements.
