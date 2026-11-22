@@ -42,6 +42,7 @@ struct ViewSettings {
     bool exaggerateWobble = true;   // Real only: draw the Sun's path round the barycentre kSunWobbleScale times too big (on by default: the real path is under 2.3 Sun radii)
     bool relativity = true;     // Real only: "General relativity (1PN)" for the planets (0.29: on by default; with the accurate step it brings Mercury from 40,962 to 24 km of JPL; no effect in Simple)
     bool far = true;            // Far-away things (nearest stars, Voyagers, galactic centre)
+    bool alphaCen = false;      // 0.73.0: System: Solar System (false) / Alpha Centauri (true): the scene of orbit/alphacen.h (not saved)
     bool orbits = true;         // 0.23 stage 2: Orbit paths: each planet's and dwarf planet's whole orbit, a faint line in its colour (orbit/solar_system.h orbitPath)
     bool paused = false;        // time is stopped (a fast spin is only held still while time runs)
     bool lightTheme = false;    // the theme is a light one (the picture follows the theme when Stars are Off)
@@ -105,6 +106,9 @@ public:
 private:
     struct Hit { Selection sel; double x, y, r; };
     std::vector<Hit> hits_;
+    bool acScene = false;                        // 0.73.0: the last frame drew the Alpha Centauri scene (drag may turn the 3D view right over there)
+    // 0.73.0: the Alpha Centauri scene (orbit/alphacen_view.inc), drawn instead of the Solar System when ViewSettings::alphaCen is on
+    void drawAlphaCen(render::Renderer2D& r, ImDrawList* text, double originX, double originY, double uiScale, const SolarSystem& sys, const ViewSettings& set, double width, double height);
     std::map<std::pair<int, int>, double> exag_; // moon (body id, index) -> how many times too wide its orbit is drawn
     BeltLayer beltLayer_;                        // the belts' rocks: the CPU path (positions kept until the time moves) or the GPU path (orbit/belt_layer.h)
 };

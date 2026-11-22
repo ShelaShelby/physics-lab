@@ -1,4 +1,5 @@
 #include "card_text.h"
+#include "alphacen.h"
 #include "sun_facts.h"
 #include "shapes.h"
 #include "moon_sats.h"
@@ -87,6 +88,11 @@ static bool cardText0(const SolarSystem& sys, const Selection& sel, const CardOp
     switch (sel.kind) {
     case Selection::None:
         return false;
+
+    case Selection::ACen:                                  // 0.73.0: the Alpha Centauri scene (orbit/alphacen.cpp)
+        if (sel.moon < 0 || sel.moon >= acen::ThingCount) return false;
+        acen::acenCard(sel.moon, sys.julianDayTDB(), c);
+        return true;
 
     case Selection::Far: {
         FarItem f;
@@ -237,6 +243,7 @@ bool selectionStillValid(const SolarSystem& sys, const Selection& sel, const Sel
     }
     if (sel.kind == Selection::Far) { FarItem f; return sw.far && farItem(sys, sel.moon, f); }
     if (sel.kind == Selection::Belt) return sw.belts && sel.moon >= 0 && sel.moon < static_cast<int>(sys.belts.size());
+    if (sel.kind == Selection::ACen) return sel.moon >= 0 && sel.moon < acen::ThingCount;
     return true;
 }
 

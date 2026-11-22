@@ -85,6 +85,9 @@ SubjectCard subjectCard(const Selection& sel, const std::string& beltKey, const 
     };
     bool keyed = false;
     if (sel.kind == Selection::Star) keyed = keyFrom("Radius: ", true, "radius");
+    else if (sel.kind == Selection::ACen)                 // 0.73.0: Alpha Centauri: a star's mass, a planet's minimum mass, the rest their first fact
+        keyed = keyFrom("Mass: at least ", false, "minimum mass") || keyFrom("Mass: ", false, "mass") || keyFrom("Distance from the Sun: ", false, "from the Sun") ||
+                keyFrom("Distance: ", false, "from the Sun") || keyFrom("Status: ", false, "status");
     else if (sel.kind == Selection::Bary) {
         for (std::size_t i = 0; i < L.size() && !keyed; i++) if (startsWith(L[i], "Now ")) {
             const std::size_t e = L[i].find(" from the Sun");
@@ -120,6 +123,7 @@ SubjectCard subjectCard(const Selection& sel, const std::string& beltKey, const 
     else if (sel.kind == Selection::Body && dot == std::string::npos) want = {"Nucleus", "Speed now", "Closest to the Sun", "One trip round the Sun", "Last closest approach", "Next", "Closest approach"};
     else if (sel.kind == Selection::Body) want = {"Size", "Mass", "Speed", "Orbit", "One lap", "Temperature"};
     else if (sel.kind == Selection::Far) want = {"Speed"};
+    else if (sel.kind == Selection::ACen) want = {"Radius", "Surface", "Light", "Habitable zone", "Size", "Orbit", "A to B now", "Mass", "Tilt"};
     for (const char* w : want) {
         if (s.values.size() >= 6) break;
         for (std::size_t i = 0; i < L.size(); i++) {

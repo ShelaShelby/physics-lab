@@ -18,7 +18,9 @@
 #include "molecule/morse.h"
 #include "molecule/rotation.h"
 #include "molecule/vibration.h"
+#include "orbit/alphacen.h"
 #include "orbit/solar_data.h"
+#include "orbit/sun_facts.h"
 #include "orbit/units.h"
 #include "orbit/vec3.h"
 
@@ -652,6 +654,83 @@ Table rotLines(const LabContext& c) {
 }
 }  // namespace
 
+// ---- 0.73.0: the Alpha Centauri system (orbit/alphacen.h; native/PLAN_ALPHACEN.md names each paper's table) ----
+Table acenOrbit() {
+    Table t;
+    t.id = "acenorbit";
+    t.title = "Alpha Centauri A-B: the three published orbits";
+    t.about = "B's orbit about A from each paper (its own a, P, parallax and masses). They disagree by more than their error bars: the masses by about 5 %. "
+              "The Orbit Lab draws the newest (Akeson et al. 2021, with ALMA's positions). a in au = a\" / parallax.";
+    t.sources = {"Akeson et al. 2021, AJ 162, 14 (arXiv:2104.10086), Table 8", "Kervella et al. 2016, A&A 594, A107 (arXiv:1610.06079), Table 1, as Akeson et al. 2021 Table 8 quote it",
+                 "Pourbaix & Boffin 2016, A&A 586, A90 (arXiv:1601.01636), Table 1 (their own fit)"};
+    Column name = txt("orbit"), a = num("a", "arcsec", "each paper"), plx = num("parallax (mas)", "", "each paper, milliarcseconds"), aAU = num("a", "au", "computed: a / parallax"),
+           P = num("period", "yr", "each paper (Julian years)"), e = num("e", "", "each paper"), inc = num("i", "deg", "each paper"), node = num("Omega", "deg", "each paper"),
+           peri = num("omega", "deg", "each paper (B's)"), T0 = num("periastron", "yr", "each paper"), mA = num("mass A", "Msun", "each paper"), mB = num("mass B", "Msun", "each paper");
+    int n = 0;
+    const orbit::acen::AbSolution* k = orbit::acen::abSolutions(n);
+    for (int i = 0; i < n; i++) {
+        const orbit::acen::AbSolution& o = k[i];
+        name.text.push_back(o.name);
+        a.v.push_back(o.aArcsec); a.sigma.push_back(o.aErr); plx.v.push_back(o.plxMas); plx.sigma.push_back(o.plxErr);
+        aAU.v.push_back(o.aArcsec / (o.plxMas / 1000)); aAU.sigma.push_back(o.aArcsec / (o.plxMas / 1000) * std::hypot(o.aErr / o.aArcsec, o.plxErr / o.plxMas));
+        P.v.push_back(o.pYear); P.sigma.push_back(o.pErr); e.v.push_back(o.e); inc.v.push_back(o.iDeg); node.v.push_back(o.nodeDeg); peri.v.push_back(o.periDeg); T0.v.push_back(o.t0Year);
+        mA.v.push_back(o.mA); mA.sigma.push_back(o.mAErr); mB.v.push_back(o.mB); mB.sigma.push_back(o.mBErr);
+    }
+    t.cols = {name, a, plx, aAU, P, e, inc, node, peri, T0, mA, mB};
+    return t;
+}
+Table acenStars() {
+    Table t;
+    t.id = "acenstars";
+    t.title = "Alpha Centauri: the three stars";
+    t.about = "Proxima's mass is from its brightness by Mann et al. 2015's relation (Kervella et al. 2017); its only direct (lensing) mass is 0.150 +0.062 -0.051 (Zurlo et al. 2018). "
+              "The habitable zone is worked out here from L and Teff (Kopparapu et al. 2014, runaway to maximum greenhouse). The stars' age is disputed (5.3 or 7.2-7.8 billion years).";
+    t.sources = {"Akeson et al. 2021 Table 8 (A and B: mass, radius, light)", "Kervella et al. 2017, A&A 597, A137 (arXiv:1610.06185), eqs. 16-17 (A and B: Teff)",
+                 "Kervella, Thevenin & Lovis 2017 Table 1 (Proxima's mass)", "Rabus et al. 2019 Table 1 (Proxima's radius)",
+                 "Suarez Mascareno et al. 2025 Table 2 (Proxima: type M5.5 V, Bessell 1991; Teff 2900 K, Pavlenko et al. 2017; L 0.00151, Ribas et al. 2017; V 11.13, Jao et al. 2014)",
+                 "Pourbaix & Boffin 2016 (types G2 V, K1 V)", "HYG v4.1 (V of A and B)", "Kopparapu et al. 2014, ApJL 787, L29, eqs. 4-5"};
+    Column name = txt("star"), type = txt("type"), M = num("mass", "Msun", "as the sources"), R = num("radius", "Rsun", "as the sources"), T = num("Teff", "K", "as the sources"),
+           L = num("luminosity (Suns)", "", "as the sources, in units of the Sun's"), V = num("V", "", "seen from Earth"), hi = num("habitable zone in", "au", "computed: Kopparapu 2014"), ho = num("habitable zone out", "au", "computed: Kopparapu 2014");
+    for (int k = 0; k < 3; k++) {
+        const orbit::acen::StarFacts& f = orbit::acen::starFacts(k);
+        name.text.push_back(f.name); type.text.push_back(f.type);
+        M.v.push_back(f.mass); M.sigma.push_back(f.massErr); R.v.push_back(f.radius); R.sigma.push_back(f.radiusErr);
+        T.v.push_back(f.teff); T.sigma.push_back(f.teffErr); L.v.push_back(f.lum); L.sigma.push_back(f.lumErr); V.v.push_back(f.vMag);
+        double in = 0, out = 0;
+        orbit::acen::habitableZoneAU(k, in, out);
+        hi.v.push_back(in); ho.v.push_back(out);
+    }
+    t.cols = {name, type, M, R, T, L, V, hi, ho};
+    return t;
+}
+Table acenPlanets() {
+    Table t;
+    t.id = "acenplanets";
+    t.title = "Alpha Centauri: planets claimed, with their status";
+    t.about = "Only minimum masses are measured (m sin i: the orbits' tilt is unknown); the mass at 47° assumes the star's equator plane. No size is known. "
+              "Refuted claims: a planet of B (2012; Rajpaul et al. 2016) and a dust belt round Proxima (2017; MacGregor et al. 2018).";
+    t.sources = {"Suarez Mascareno et al. 2025 (NIRPS), Table 3 (b and d)", "Damasso et al. 2020 as Kervella et al. 2020 Tables 1-2 quote it (c)",
+                 "Beichman et al. 2025 Table 4 (the candidate around A: its orbit families)"};
+    Column name = txt("planet"), st = txt("status"), P = num("period", "d", "as the sources"), a = num("a", "au", "as the sources"), m = num("m sin i", "Mearth", "as the sources"),
+           m47 = num("mass at 47 deg", "Mearth", "Suarez Mascareno et al. 2025 (an assumed tilt)");
+    for (int k = 0; k < 3; k++) {
+        const orbit::acen::PlanetData& p = orbit::acen::planet(k);
+        name.text.push_back(p.name); st.text.push_back(p.status);
+        P.v.push_back(p.periodDays); a.v.push_back(p.aAU); m.v.push_back(p.msiniEarth); m.sigma.push_back(p.msiniErr);
+        m47.v.push_back(p.mass47 > 0 ? p.mass47 : kNaN); m47.sigma.push_back(p.mass47 > 0 ? p.mass47Err : kNaN);
+    }
+    name.text.push_back("candidate around A"); st.text.push_back("unconfirmed, seen once (JWST, Aug 2024)");
+    P.v.push_back(kNaN); a.v.push_back(0.5 * (orbit::acen::kCandInnerAU + orbit::acen::kCandOuterAU)); m.v.push_back(kNaN); m.sigma.push_back(kNaN); m47.v.push_back(kNaN); m47.sigma.push_back(kNaN);
+    a.source = "as the sources (the candidate: the middle of its 1.58-2.23 au orbit families)";
+    t.cols = {name, st, P, a, m, m47};
+    Preset k;
+    k.label = "Kepler's third law: period against a (b, d, c)";
+    k.x = 3; k.y = 2; k.model = Model::Power;
+    k.expect = "n = 3/2, and A = 2π √(au³ / (G M)) in days: about 1,045 days for Proxima's mass, 0.1221 Suns (the papers' own a come from P with this mass).";
+    t.presets.push_back(k);
+    return t;
+}
+
 double alkaliLimitCm(int Z, double* unc) {
     // NIST ASD, the first "Limit" row of each saved file (data/jumps/asd/<X>I_levels.tsv.gz, read 2026-11-13): the ion's ground level
     struct Lim { int Z; double cm, unc; };
@@ -666,7 +745,7 @@ std::vector<TableRef> labTables(const LabContext& c) {
     std::vector<TableRef> out;
     Table t;
     const auto add = [&](const std::string& id) { if (makeTable(id, c, t)) out.push_back({id, t.title}); };
-    if (c.lab == 0) for (const char* id : {"planets", "dwarfs", "moons", "comets"}) add(id);
+    if (c.lab == 0) for (const char* id : {"planets", "dwarfs", "moons", "comets", "acenorbit", "acenstars", "acenplanets"}) add(id);   // 0.73.0: Alpha Centauri
     else if (c.lab == 1) for (const char* id : {"ionlines", "atomlines", "defects", "levels", "isotopes", "binding", "zeeman", "zshift"}) add(id);
     else if (c.lab == 2) for (const char* id : {"modes", "modesall", "ladder", "rotation", "rotlevels", "rotlines"}) add(id);
     // (0.55.0: lab 3, the Black Hole Lab, has no tables yet; before, any lab that was not 0 or 1 got the Molecule Lab's)
@@ -678,6 +757,9 @@ bool makeTable(const std::string& id, const LabContext& c, Table& out) {
     else if (id == "dwarfs") out = dwarfs();
     else if (id == "moons") out = moons();
     else if (id == "comets") out = comets();
+    else if (id == "acenorbit") out = acenOrbit();
+    else if (id == "acenstars") out = acenStars();
+    else if (id == "acenplanets") out = acenPlanets();
     else if (id == "ionlines") { if (c.Z < 1 || c.Z > 118 || atom::asdIon(c.Z).count == 0) return false; out = ionLines(c.Z, c.N); }
     else if (id == "atomlines") { if (c.Z < 1 || c.Z > 118 || atom::asdAtom(c.Z).count == 0) return false; out = atomLines(c.Z); }
     else if (id == "defects") { if (!std::isfinite(alkaliLimitCm(c.Z)) || atom::alkaliLevels(c.Z).empty()) return false; out = quantumDefects(c.Z); }

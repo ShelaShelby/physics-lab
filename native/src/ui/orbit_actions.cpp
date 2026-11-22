@@ -4,11 +4,13 @@
 #include <cmath>
 #include <cstdio>
 
+#include "orbit/alphacen.h"
 #include "orbit/format.h"
 #include "orbit/real_errors.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
 #include "orbit/units.h"
+#include "ui/journey_dates.h"
 
 namespace ui {
 
@@ -38,6 +40,15 @@ void fly(AppState& app, const Selection& s, double zoom) {
 
 std::vector<PickGroup> pickGroups(const AppState& app) {
     std::vector<PickGroup> g;
+    if (app.set.alphaCen) {                                // 0.73.0: the Alpha Centauri scene's things (orbit/alphacen.h Thing)
+        const auto it = [](int k, const char* col) { return PickItem{acen::thingName(k), col, {Selection::ACen, 0, k}, "", 0}; };
+        PickGroup stars{"Alpha Centauri", {it(acen::StarA, "#fff1d8"), it(acen::StarB, "#ffd29a"), it(acen::Bary, "#9aa5b8"), it(acen::Proxima, "#ff8a70")}};
+        PickGroup planets{"Proxima's planets", {it(acen::PlanetB, "#8fc7ff"), it(acen::PlanetD, "#e8d890"), it(acen::PlanetC, "#c9a6ff")}};
+        PickGroup cand{"Unconfirmed", {it(acen::CandidateA, "#d1b0ff")}};
+        PickGroup far{"Far away", {it(acen::Sun, "#f0b020")}};
+        g.push_back(stars); g.push_back(planets); g.push_back(cand); g.push_back(far);
+        return g;
+    }
     PickGroup star{"Star and planets", {}}, dwarfs{"Dwarf planets", {}}, comets{"Famous comets", {}}, moons{"Moons", {}}, belts{"Belts and the far edge", {}}, far{"Far away", {}};
     star.items.push_back({"Sun", "#f0b020", {Selection::Star}, "", 0});
     star.items.push_back({"Barycentre", "#9aa5b8", {Selection::Bary}, "", 0});
@@ -100,8 +111,44 @@ void pickItem(AppState& app, const PickItem& it) {
         }
         break;
     }
+    case Selection::ACen: {                                // 0.73.0: fly to it, fitted (the radius of view each thing needs: its neighbourhood)
+        const int k = s.moon;
+        if (k == acen::Sun) {                              // the Sun is 4.3 light years towards +z: a 3D view far enough out to see it (in 2D it is behind you)
+            if (v.sel == s) { v.sel = Selection{}; v.follow = false; break; }
+            v.select(s, false);
+            app.set.view3D = true;
+            v.yaw = 0.6; v.pitch = 2.7;                    // turned over, looking back towards +z: the Sun's marker and the Sun among their stars (Cassiopeia) both in view
+            setZoom(app, std::log10(13.6 / (1000.0 / acen::kAbPlxMas * 3.26156 * kLightYearAU * kAU / kSimLength)));
+            v.ox = v.oy = 0;
+            break;
+        }
+        const double rAU = k == acen::Bary ? 36 : k == acen::StarA || k == acen::StarB || k == acen::CandidateA ? 3.0 : k == acen::PlanetC ? 2.0 : 0.11;
+        fly(app, s, zoomFor(app, rAU * kAU / kKm, 0.42 * std::min(app.canvasW, app.canvasH)));
+        break;
+    }
     case Selection::None: break;
     }
+}
+
+void setSystem(AppState& app, bool on) {
+    if (app.set.alphaCen == on) return;
+    if (app.journey.active) journeyStop(app);
+    app.set.alphaCen = on;
+    app.view.sel = Selection{}; app.view.follow = false;
+    app.view.ox = app.view.oy = 0; app.view.cdep = 0;
+    if (on) acenFit(app, AcFit::Pair);
+    else resetViewAction(app);
+}
+
+void acenFit(AppState& app, AcFit f) {
+    if (!app.set.alphaCen) setSystem(app, true);
+    OrbitView& v = app.view;
+    // the radius to fit (au): the pair's apastron (35.4 au) with room; Proxima's whole orbit about A-B (apastron 12,300 au, its focus 306 au off); Proxima's
+    // habitable zone (out to 0.081 au) round its planets
+    const double rAU = f == AcFit::Pair ? 36 : f == AcFit::System ? 13000 : 0.1;
+    v.select(Selection{Selection::ACen, 0, f == AcFit::Planets ? acen::Proxima : acen::Bary}, true);
+    setZoom(app, zoomFor(app, rAU * kAU / kKm, 0.42 * std::min(app.canvasW, app.canvasH)));
+    v.ox = v.oy = 0;
 }
 
 ChipText chipText(const AppState& app) {
@@ -184,11 +231,11 @@ std::string orbitStateLine(const AppState& app) {
     const Selection& sel = app.view.sel;
     char b[640];
     std::snprintf(b, sizeof b,
-                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d",
+                  "epochMs=%lld t=%.9g jumped=%d paused=%d tspeed=%.6g | 3D=%d trueScale=%d fullTrails=%d moons=%d dwarfs=%d comets=%d belts=%d far=%d sky=%d cons=%d real=%d gr=%d wobble=%d | zoom=%.6g | sel=%d,%d,%d follow=%d pan=%d spin=%d journey=%d acen=%d",
                   static_cast<long long>(app.sys.epochMs), app.sys.t, app.sys.jumped ? 1 : 0, app.paused ? 1 : 0, s.tspeed,
                   s.view3D ? 1 : 0, s.trueScale ? 1 : 0, s.fullTrails ? 1 : 0, s.moons ? 1 : 0, s.dwarfs ? 1 : 0, s.comets ? 1 : 0, s.belts ? 1 : 0, s.far ? 1 : 0,
                   static_cast<int>(s.sky), static_cast<int>(s.cons), s.realPlanets ? 1 : 0, s.relativity ? 1 : 0, s.exaggerateWobble ? 1 : 0, s.zoom,
-                  static_cast<int>(sel.kind), sel.bodyId, sel.moon, app.view.follow ? 1 : 0, app.view.panMode ? 1 : 0, app.view.spin ? 1 : 0, app.journey.active ? 1 : 0);
+                  static_cast<int>(sel.kind), sel.bodyId, sel.moon, app.view.follow ? 1 : 0, app.view.panMode ? 1 : 0, app.view.spin ? 1 : 0, app.journey.active ? 1 : 0, s.alphaCen ? 1 : 0);
     return b;
 }
 

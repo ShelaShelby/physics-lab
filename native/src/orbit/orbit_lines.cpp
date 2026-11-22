@@ -1,6 +1,7 @@
 // 0.68.0: the Orbit Lab's lines for both paths (orbit/orbit_lines.h). The processor's functions are orbit_view.cpp's code of 0.67.0, moved here unchanged.
 #include "orbit/orbit_lines.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "orbit/solar_system.h"
@@ -105,6 +106,48 @@ void drawOrbitCpu(render::Renderer2D& R, const LineCam& cam, const Body& b, doub
     }
 }
 
+// 0.73.0: an ellipse given directly (the Alpha Centauri scene), the same corners and fine pieces as drawOrbitCpu
+void ellipsePath(const LineEllipse& el, double E0, double E1, int n, std::vector<Vec3>& out) {
+    out.clear();
+    for (int i = 0; i <= n; i++) {
+        const double E = E0 + (E1 - E0) * i / n;
+        out.push_back(el.F + el.P * (el.a * (std::cos(E) - el.e)) + el.Q * (el.b * std::sin(E)));
+    }
+}
+void ellipseCorners(const LineEllipse& el, std::vector<Vec3>& out) { ellipsePath(el, 0, 2 * kPi, 256, out); }
+
+void drawEllipseCpu(render::Renderer2D& R, const LineCam& cam, const LineEllipse& el, double width, Color col, std::vector<Vec3>& cpts, std::vector<std::vector<double>>* rec) {
+    const double W = cam.W, H = cam.H;
+    ellipseCorners(el, cpts);
+    std::vector<Vec3> fine;
+    // piece i: from corner i - 1 to corner i, drawn again from the ellipse finely enough where it reaches the picture (drawOrbitCpu's rule), without its first point
+    const auto piece = [&](LinePen& pen, std::size_t i) {
+        const Q q0 = cam.proj(cpts[i - 1].x, cpts[i - 1].y, cpts[i - 1].z), q = cam.proj(cpts[i].x, cpts[i].y, cpts[i].z);
+        const double L = std::hypot(q.first - q0.first, q.second - q0.second), mg = 20 + L / 4;
+        const bool near = std::max(q.first, q0.first) > -mg && std::min(q.first, q0.first) < W + mg && std::max(q.second, q0.second) > -mg && std::min(q.second, q0.second) < H + mg;
+        if (near && L > 6) {
+            const int k = static_cast<int>(std::min(4096.0, std::ceil(L / 4)));
+            ellipsePath(el, 2 * kPi * (i - 1) / 256.0, 2 * kPi * i / 256.0, k, fine);
+            for (std::size_t j = 1; j + 1 < fine.size(); j++) { const Q f = cam.proj(fine[j].x, fine[j].y, fine[j].z); go(pen, f, fine[j].x, fine[j].y, fine[j].z); }
+        }
+        go(pen, q, cpts[i].x, cpts[i].y, cpts[i].z);
+    };
+    const auto start = [&](LinePen& pen, std::size_t i) { const Q q = cam.proj(cpts[i].x, cpts[i].y, cpts[i].z); go(pen, q, cpts[i].x, cpts[i].y, cpts[i].z); };
+    if (!el.dashed) {
+        LinePen pen{R, W, H, width, col};
+        pen.rec = recNext(rec);
+        start(pen, 0);
+        for (std::size_t i = 1; i < cpts.size(); i++) piece(pen, i);
+        return;
+    }
+    for (std::size_t i = 1; i < cpts.size(); i += 2) {    // dashed: the odd pieces, each its own line
+        LinePen pen{R, W, H, width, col};
+        pen.rec = recNext(rec);
+        start(pen, i - 1);
+        piece(pen, i);
+    }
+}
+
 // ---- the card's ----
 bool LinesPoints::ring(std::uint64_t key, const std::deque<Vec3>& tr, render::LinesRun& r) {
     const int n = static_cast<int>(tr.size());
@@ -158,7 +201,9 @@ render::LinesCamera linesCamera(const LineCam& c) {
     const double x1 = -(c.fx + c.ox) / c.px, y2 = c.oy / c.px, dep = c.cd;
     const double y1 = y2 * c.cb + dep * c.sb, z = -y2 * c.sb + dep * c.cb, x = x1 * c.ca + y1 * c.sa, y = -x1 * c.sa + y1 * c.ca;
     const Vec3 C{x + c.bc.x, y + c.bc.y, z + c.bc.z};
-    hiLo3(C, k.cHi, k.cLo);
+    // 0.73.0 (a bug since 0.68.0, found by the Alpha Centauri case of the start-up check): hiLo3 writes four floats, and cHi and cLo have three, so its hi[3] = 0
+    // was cLo[0]: the low part of C's x was always lost (an x error up to half a float step of C's x: 0.5 point at 1 AU zoomed fully in, 7 points 12,000 au out)
+    { float h4[4], l4[4]; hiLo3(C, h4, l4); for (int q = 0; q < 3; q++) { k.cHi[q] = h4[q]; k.cLo[q] = l4[q]; } }
     // C's own numbers as base() works them out, about the barycentre
     const double qx = C.x - c.bc.x, qy = C.y - c.bc.y, qz = C.z - c.bc.z;
     const double X1 = qx * c.ca - qy * c.sa, Y1 = qx * c.sa + qy * c.ca, Y2 = Y1 * c.cb - qz * c.sb, DEP = Y1 * c.sb + qz * c.cb;
@@ -213,6 +258,22 @@ bool addOrbitRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, con
     r.qb[0] = static_cast<float>(qb.x); r.qb[1] = static_cast<float>(qb.y); r.qb[2] = static_cast<float>(qb.z);
     r.qb[3] = static_cast<float>(2 * kPi / 256);
     d.add(r);
+    return true;
+}
+
+bool addEllipseRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const LineEllipse& el, double width, Color col, std::vector<Vec3>& cpts) {
+    ellipseCorners(el, cpts);
+    render::LinesRun r;
+    if (!pts.list(key, cpts, r)) return false;
+    r.kind = 2;
+    r.circle = pts.circle();
+    colourOf(r, col); r.style[0] = static_cast<float>(width);
+    const Vec3 pa = el.P * el.a, qb = el.Q * el.b;
+    r.pa[0] = static_cast<float>(pa.x); r.pa[1] = static_cast<float>(pa.y); r.pa[2] = static_cast<float>(pa.z);
+    r.qb[0] = static_cast<float>(qb.x); r.qb[1] = static_cast<float>(qb.y); r.qb[2] = static_cast<float>(qb.z);
+    r.qb[3] = static_cast<float>(2 * kPi / 256);
+    if (!el.dashed) { r.from = 1; r.to = 256; d.add(r); return true; }
+    for (int i = 1; i <= 256; i += 2) { r.from = i; r.to = i; d.add(r); }   // drawEllipseCpu's dashes: one run a piece
     return true;
 }
 

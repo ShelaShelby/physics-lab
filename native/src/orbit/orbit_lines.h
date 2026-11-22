@@ -62,6 +62,15 @@ void drawTrailCpu(render::Renderer2D& R, const LineCam& cam, const std::deque<Ve
 void drawOrbitCpu(render::Renderer2D& R, const LineCam& cam, const Body& b, double width, render::Color col, std::vector<Vec3>& cpts,
                   std::vector<std::vector<double>>* rec = nullptr);
 
+// 0.73.0 (the Alpha Centauri scene): an ellipse given by its focus F, the unit vectors P (towards periastron) and Q, a, e and b (m), drawn as the orbits above
+// (256 corners at E = 2 pi i / 256, each piece that reaches the picture drawn again from the ellipse finely enough). dashed: only the odd pieces, each its own
+// line (on the card: one run a piece), so a dashed orbit is as exact as a solid one at any zoom.
+struct LineEllipse { Vec3 F, P, Q; double a = 0, e = 0, b = 0; bool dashed = false; };
+void ellipseCorners(const LineEllipse& el, std::vector<Vec3>& out);                       // 257 points
+void ellipsePath(const LineEllipse& el, double E0, double E1, int n, std::vector<Vec3>& out);   // n + 1 points from E0 to E1
+void drawEllipseCpu(render::Renderer2D& R, const LineCam& cam, const LineEllipse& el, double width, render::Color col, std::vector<Vec3>& cpts,
+                    std::vector<std::vector<double>>* rec = nullptr);
+
 // ---- the card's runs ----
 // where a run's points go: the card's store (the frame) or the check's own list (LinesDraw::checkPts)
 struct LinesPoints {
@@ -78,6 +87,7 @@ render::LinesCamera linesCamera(const LineCam& cam);
 bool addRingRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const std::vector<double>& xyz, render::Color col);
 bool addTrailRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const std::deque<Vec3>& tr, const Vec3& pos, int st0, double width, const render::Color cols[4]);
 bool addOrbitRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const Body& b, double width, render::Color col, std::vector<Vec3>& cpts);
+bool addEllipseRuns(LinesPoints& pts, render::LinesDraw& d, std::uint64_t key, const LineEllipse& el, double width, render::Color col, std::vector<Vec3>& cpts);   // 0.73.0
 
 // ---- inline: the processor's per-point work ----
 inline bool clipSeg(double x0, double y0, double x1, double y1, double xa, double ya, double xb, double yb, double out[4]) {

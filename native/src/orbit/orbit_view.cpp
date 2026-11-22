@@ -10,6 +10,7 @@
 
 #include "format.h"
 #include "imgui.h"
+#include "alphacen.h"
 #include "kepler.h"
 #include "lines_check.h"
 #include "orbit_lines.h"
@@ -72,6 +73,27 @@ std::string fmtLy(double v) { return v < 10 ? fmt::fixed(v, 2) : v < 100 ? fmt::
 
 bool bigR(double W, double H, double r) { return r > 6 * (1.5 * std::hypot(W, H) / 2 + 20); }
 
+struct ScaleBar { double len = 0; std::string main, light; };
+// the scale bar: how long a round distance is at this zoom, and how long light takes to cross it (0.73.0: a function, the Alpha Centauri scene uses it too)
+ScaleBar scaleBarFor(double px, bool d3) {
+    const double kmPerPt = 1 / (px * kKm), uf = fmt::imperial() ? fmt::kMilesPerKm : 1;   // the bar's length is a round number in the chosen unit
+    const auto round125 = [](double raw) { const double pw = std::pow(10.0, std::floor(std::log10(raw))), mm = raw / pw; return pw * (mm >= 5 ? 5 : mm >= 2 ? 2 : 1); };
+    double ku = round125(100 * kmPerPt * uf), km = ku / uf;
+    // 0.22 stage 7: once the label is in AU, the bar is a round number of AU (before: a round number of km or miles written in AU, so 500 million km = 3.34 AU was labelled "3 AU")
+    const bool inAU = ku >= 1e6 && km * kKm / kAU >= 0.05;
+    if (inAU) { km = round125(100 * kmPerPt * kKm / kAU) * kAU / kKm; ku = km * uf; }
+    const double len = km / kmPerPt, au = km * kKm / kAU, sec = km * kKm / kLightSpeed;
+    const char* unm = fmt::imperial() ? "mi" : "km";
+    const auto nf = [](double v) { return v >= 1 ? fmt::commas(v) : fmt::precision(v, 1); };
+    // 0.39.2: a light time under 10 units keeps two figures (10 AU is 1.4 hours, 83 minutes; it said "1 hour", 28 % short); "1" alone is singular
+    const auto pl = [&](double v, const char* u) { const std::string n = v < 10 ? fmt::precision(v, 2) : nf(v); return n + " " + u + (n == "1" ? "" : "s"); };
+    const std::string main = std::string(d3 ? "≈ " : "") + (ku < 1e6 ? nf(ku) + " " + unm : !inAU ? nf(ku / 1e6) + " million " + unm : nf(au) + " AU");
+    const std::string lt = sec < 1 ? nf(sec * 1000) + " ms" : sec < 60 ? pl(sec, "second") : sec < 3600 ? pl(sec / 60, "minute")
+                 : sec < 86400 ? pl(sec / 3600, "hour") : sec < 86400 * 365.25 ? pl(sec / 86400, "day") : fmt::precision(sec / 86400 / 365.25, 2) + " years";
+    return {len, main, lt};
+}
+
+
 
 // Text drawn with Dear ImGui on top of the picture. Positions are in picture points with
 struct TextPainter {
@@ -104,11 +126,28 @@ struct TextPainter {
     }
 };
 
+// the axis gizmo at (gx, gy): which way x, y and z point on screen (0.73.0: a function, the Alpha Centauri scene uses it too)
+void drawAxesGizmo(render::Renderer2D& R, TextPainter& T, double gx, double gy, double ca, double sa, double cb, double sb, double originX, double originY, double uiScale) {
+    ui::auditRect("axes", static_cast<float>(originX + (gx - 40) * uiScale), static_cast<float>(originY + (gy - 40) * uiScale), static_cast<float>(80 * uiScale), static_cast<float>(80 * uiScale));   // 0.22: for the automatic checks (no ring label on it)
+    const auto axis = [&](double X, double Y, double Z, double& sx, double& sy) { const double x1 = X * ca - Y * sa, y1 = X * sa + Y * ca; sx = 24 * x1; sy = 24 * (y1 * cb - Z * sb); };
+    struct Ax { const char* n; double X, Y; Color c; } ax[] = {{"x", 0, 0, hexColor(marks::kAxisX)}, {"y", 0, 0, hexColor(marks::kAxisY)}, {"z", 0, 0, hexColor(marks::kAxisZ)}};
+    axis(1, 0, 0, ax[0].X, ax[0].Y); axis(0, 1, 0, ax[1].X, ax[1].Y); axis(0, 0, 1, ax[2].X, ax[2].Y);
+    for (const auto& a : ax) {
+        if (std::hypot(a.X, a.Y) < 5) {               // pointing at you: a dot
+            R.ring(gx, gy, 3.5, 1.5, a.c);
+            R.disc(gx, gy, 1.2, a.c);
+            T.text(a.n, gx + 11, gy + 4, 11, a.c, 0.5, false);
+            continue;
+        }
+        R.line(gx, gy, gx + a.X, gy - a.Y, 1.5, a.c);
+        T.text(a.n, gx + a.X * 1.35, gy - a.Y * 1.35 + 4, 11, a.c, 0.5, false);
+    }
+}
+
 // The night sky behind everything. It is so far away that it does not move
 // when you zoom or move the view, only when you turn the 3D view. Stars are grouped by colour and
 // size, and each group is one instanced draw call. lv = how bright the sky is drawn (0–1).
-void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double ca, double sa, double cb, double sb, ConsMode cons, double lv) {
-    const Sky& S = skyData();
+void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double ca, double sa, double cb, double sb, ConsMode cons, double lv, const Sky& S = skyData()) {   // 0.73.0: S, the sky seen from where the scene is
     const double cx = W / 2, cy = H / 2, diag = std::hypot(W, H) / 2, K = diag / 1.75;   // K: points per radian away from the middle (100° reaches the corner)
     // a direction -> screen: the angle from straight ahead becomes the distance from the middle (orbit/sky.cpp)
     const auto scr = [&](const Vec3& v, double& X, double& Y) { return skyScreen(v, W, H, ca, sa, cb, sb, X, Y); };
@@ -133,6 +172,7 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
     pos.assign(S.stars.size() * 2, -1e9f);
     for (std::size_t i = 0; i < S.stars.size(); i++) {
         double X, Y;
+        if (S.stars[i].mag > 30) continue;                // 0.73.0: a star left out of this sky (Alpha Centauri's own A and B, seen from there)
         if (!scr(S.stars[i].dir, X, Y)) continue;
         pos[i * 2] = static_cast<float>(X); pos[i * 2 + 1] = static_cast<float>(Y);
         if (X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
@@ -213,7 +253,8 @@ void OrbitView::click(double x, double y) {
 }
 
 void OrbitView::drag(double dx, double dy, bool rotate) {
-    if (rotate) { yaw += dx * 0.01; pitch = std::clamp(pitch + dy * 0.01, -1.5, 1.5); return; }   // 3D: drag turns the view
+    // 3D: drag turns the view (0.73.0: in the Alpha Centauri scene it may turn right over, so you can look back at our Sun, which is towards +z)
+    if (rotate) { yaw += dx * 0.01; pitch = std::clamp(pitch + dy * 0.01, acScene ? -3.1 : -1.5, acScene ? 3.1 : 1.5); return; }
     ox += dx; oy += dy;
     follow = false;
 }
@@ -285,7 +326,7 @@ std::uint64_t OrbitView::pictureKey(const SolarSystem& sys, const ViewSettings& 
     k.add(journey); k.add(caption); k.add(captionAlpha); k.add(panMode); k.add(fx); k.add(cx); k.add(cy);
     k.add(set.view3D); k.add(set.zoom); k.add(set.tspeed); k.add(set.trueScale); k.add(set.fullTrails); k.add(set.moons); k.add(set.dwarfs); k.add(set.comets);
     k.add(set.belts); k.add(set.gpuRocks); k.add(set.sky); k.add(set.cons); k.add(set.realPlanets); k.add(set.exaggerateWobble); k.add(set.relativity); k.add(set.far);
-    k.add(set.orbits); k.add(set.paused); k.add(set.lightTheme); k.add(set.theme.id); k.add(set.theme.light); k.add(set.theme.bg); k.add(set.theme.fg); k.add(set.theme.accent);
+    k.add(set.orbits); k.add(set.alphaCen); k.add(set.paused); k.add(set.lightTheme); k.add(set.theme.id); k.add(set.theme.light); k.add(set.theme.bg); k.add(set.theme.fg); k.add(set.theme.accent);
     k.add(set.textScale); k.add(set.shell); k.add(set.minTextU); k.add(set.minTextPx); k.add(set.reserveBottom); k.add(set.reserveRight); k.add(set.insetTop);
     k.add(set.insetRight); k.add(set.blocked.size()); for (const auto& b : set.blocked) k.bytes(b.data(), sizeof(double) * 4);
     k.add(sys.t); k.add(sys.epochMs); k.add(sys.jumped); k.add(sys.crashed); k.add(sys.escaped); k.add(sys.realPlanets()); k.add(sys.relativity());
@@ -301,6 +342,8 @@ std::uint64_t OrbitView::pictureKey(const SolarSystem& sys, const ViewSettings& 
 
 void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, double originY, double uiScale,
                      const SolarSystem& sys, const ViewSettings& setIn, double W, double H) {
+    acScene = setIn.alphaCen;
+    if (setIn.alphaCen) { drawAlphaCen(R, dl, originX, originY, uiScale, sys, setIn, W, H); return; }   // 0.73.0: the Alpha Centauri scene (alphacen_view.inc)
     TextPainter T{dl, ImGui::GetFont(), originX, originY, uiScale};
     const CaptionLayout cap = journey && captionAlpha > 0.01 && !caption.empty() ? layoutCaption(T, setIn, caption, W, H) : CaptionLayout{};
     // 0.39.3: the caption's box joins the boxes no label is drawn under (a star's "Mass:" line ran through it)
@@ -1150,20 +1193,10 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     {   // scale bar: how long a round distance is at this zoom, and how long light takes to cross it
-        const double kmPerPt = 1 / (px * kKm), uf = fmt::imperial() ? fmt::kMilesPerKm : 1;   // the bar's length is a round number in the chosen unit
-        const auto round125 = [](double raw) { const double pw = std::pow(10.0, std::floor(std::log10(raw))), mm = raw / pw; return pw * (mm >= 5 ? 5 : mm >= 2 ? 2 : 1); };
-        double ku = round125(100 * kmPerPt * uf), km = ku / uf;
-        // 0.22 stage 7: once the label is in AU, the bar is a round number of AU (before: a round number of km or miles written in AU, so 500 million km = 3.34 AU was labelled "3 AU")
-        const bool inAU = ku >= 1e6 && km * kKm / kAU >= 0.05;
-        if (inAU) { km = round125(100 * kmPerPt * kKm / kAU) * kAU / kKm; ku = km * uf; }
-        const double len = km / kmPerPt, au = km * kKm / kAU, sec = km * kKm / kLightSpeed;
-        const char* unm = fmt::imperial() ? "mi" : "km";
-        const auto nf = [](double v) { return v >= 1 ? fmt::commas(v) : fmt::precision(v, 1); };
-        // 0.39.2: a light time under 10 units keeps two figures (10 AU is 1.4 hours, 83 minutes; it said "1 hour", 28 % short); "1" alone is singular
-        const auto pl = [&](double v, const char* u) { const std::string n = v < 10 ? fmt::precision(v, 2) : nf(v); return n + " " + u + (n == "1" ? "" : "s"); };
-        const std::string main = std::string(d3 ? "≈ " : "") + (ku < 1e6 ? nf(ku) + " " + unm : !inAU ? nf(ku / 1e6) + " million " + unm : nf(au) + " AU");
-        const std::string lt = sec < 1 ? nf(sec * 1000) + " ms" : sec < 60 ? pl(sec, "second") : sec < 3600 ? pl(sec / 60, "minute")
-                             : sec < 86400 ? pl(sec / 3600, "hour") : sec < 86400 * 365.25 ? pl(sec / 86400, "day") : fmt::precision(sec / 86400 / 365.25, 2) + " years";
+        const ScaleBar sbar = scaleBarFor(px, d3);
+        const double len = sbar.len;
+        const std::string& main = sbar.main;
+        const std::string& lt = sbar.light;
         if (notes.total > 0) {             // the notes at the bottom left (laid out before the labels)
             double y = notes.top + (set.shell ? 0 : barY - (H - 24 - set.reserveBottom));
             ui::auditRect("farnote", static_cast<float>(originX + 14 * uiScale), static_cast<float>(originY + y * uiScale), static_cast<float>(notes.wMax * uiScale), static_cast<float>(notes.total * uiScale));
@@ -1188,23 +1221,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
     }
 
-    {   // axis gizmo: which way x, y and z point on screen
-        const double gx = W - 40 - set.insetRight, gy = gizY;
-        ui::auditRect("axes", static_cast<float>(originX + (gx - 40) * uiScale), static_cast<float>(originY + (gy - 40) * uiScale), static_cast<float>(80 * uiScale), static_cast<float>(80 * uiScale));   // 0.22: for the automatic checks (no ring label on it)
-        const auto axis = [&](double X, double Y, double Z, double& sx, double& sy) { const double x1 = X * ca - Y * sa, y1 = X * sa + Y * ca; sx = 24 * x1; sy = 24 * (y1 * cb - Z * sb); };
-        struct Ax { const char* n; double X, Y; Color c; } ax[] = {{"x", 0, 0, hexColor(marks::kAxisX)}, {"y", 0, 0, hexColor(marks::kAxisY)}, {"z", 0, 0, hexColor(marks::kAxisZ)}};
-        axis(1, 0, 0, ax[0].X, ax[0].Y); axis(0, 1, 0, ax[1].X, ax[1].Y); axis(0, 0, 1, ax[2].X, ax[2].Y);
-        for (const auto& a : ax) {
-            if (std::hypot(a.X, a.Y) < 5) {               // pointing at you: a dot
-                R.ring(gx, gy, 3.5, 1.5, a.c);
-                R.disc(gx, gy, 1.2, a.c);
-                T.text(a.n, gx + 11, gy + 4, 11, a.c, 0.5, false);
-                continue;
-            }
-            R.line(gx, gy, gx + a.X, gy - a.Y, 1.5, a.c);
-            T.text(a.n, gx + a.X * 1.35, gy - a.Y * 1.35 + 4, 11, a.c, 0.5, false);
-        }
-    }
+    drawAxesGizmo(R, T, W - 40 - set.insetRight, gizY, ca, sa, cb, sb, originX, originY, uiScale);   // axis gizmo: which way x, y and z point on screen
 
     if (cap.on) {   // the Journey's caption (laid out at the start of draw, so the labels keep clear of it)
         const double cx = cap.cx >= 0 ? cap.cx : W / 2 + fx;
@@ -1217,5 +1234,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         if (!set.shell) T.text(dateLine(sys), 12, 20, 13, kFg, 0, true);
     }
 }
+
+#include "alphacen_view.inc"
 
 }  // namespace orbit

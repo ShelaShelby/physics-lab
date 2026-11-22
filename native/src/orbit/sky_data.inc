@@ -280,14 +280,17 @@ static const double kGalCentre[2] = {266.84, -5.536};   // ecliptic lon, lat of 
 static const double kGalPole[2] = {180.023, 29.811};     // ecliptic lon, lat of the north galactic pole (deg)
 // Far-away things: real direction (ecliptic lon, lat, deg) and distance (light years)
 // Distances in light years (2026-11-05 audit, sources added; 1 pc = 3.26156 ly): the stars are the HYG v4.1 catalogue's distances (the same catalogue as the sky's
-// stars; Hipparcos parallaxes), rounded, except: Alpha Centauri 4.390 = Pourbaix & Boffin 2016 (arXiv:1601.01636), parallax 743 mas (it was 4.344, no source);
-// Proxima Centauri 4.2465 = Gaia DR3 parallax 768.0665 mas (source 5853498713190525696, Gaia archive, read 2026-11-05; it was 4.24); Pleiades 444 = Melis et al.
+// stars; Hipparcos parallaxes), rounded, except: Alpha Centauri 4.344 = Akeson et al. 2021 (AJ 162, 14, arXiv:2104.10086v2) Table 8, the orbital parallax
+// 750.81 +- 0.38 mas (0.73.0; it was 4.390 from Pourbaix & Boffin 2016's 743 mas, and before that 4.344 with no source); Proxima Centauri 4.2465 = Gaia DR3's
+// parallax 768.067 +- 0.050 mas as Libralato et al. 2025 (arXiv:2512.08533) Table 2 and Suarez Mascareno et al. 2025 (arXiv:2507.21751) Table 2 give it
+// (0.73.0: both saved in the sources repo, data/alphacen/; the Gaia archive page read on 2026-11-05 was never saved), and its type M5.5V (Bessell 1991, as
+// Suarez Mascareno et al. 2025 Table 2 quote it; HYG says M5Ve); Pleiades 444 = Melis et al.
 // 2014 (arXiv:1408.6544), 136.2 pc; Orion Nebula 1265 = Kounkel et al. 2017 (arXiv:1609.04041), 388 pc (it was 1267); Sagittarius A* 26996 = GRAVITY
 // Collaboration 2022 (arXiv:2112.07478), R0 = 8277 pc. Polaris, Betelgeuse and Rigel are rounded and called uncertain in their notes.
 static const FarData kFar[] = {
-    {"acen", "Alpha Centauri", "star", 239.48, -42.59, 4.390, "G2V", "Centaurus",
+    {"acen", "Alpha Centauri", "star", 239.48, -42.59, 4.344, "G2V", "Centaurus",
      "The nearest star system: two Sun-like stars circling each other."},
-    {"prox", "Proxima Centauri", "star", 239.12, -44.76, 4.2465, "M5Ve", "Centaurus",
+    {"prox", "Proxima Centauri", "star", 239.12, -44.76, 4.2465, "M5.5V", "Centaurus",
      "The closest star to the Sun: a small, dim red dwarf."},
     {"barn", "Barnard's Star", "star", 269.38, 28.13, 5.95, "sdM4", "Ophiuchus",
      "A dim red dwarf that crosses the sky faster than any other known star."},

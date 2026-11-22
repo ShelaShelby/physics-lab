@@ -73,6 +73,7 @@ def main():
     if all(runs[n].states for n in runs):
         o, n = parse(runs["old"].states[0]), parse(runs["new"].states[0])
         print("old:", runs["old"].states[0]); print("new:", runs["new"].states[0])
+        n.pop("acen", None)   # (0.73.0, on purpose: the state line names the System switch, which the old panel's saved run never had; the Solar System here)
         check(set(o) == set(n), "the same fields")
         for k in sorted(o):
             if k == "zoom":

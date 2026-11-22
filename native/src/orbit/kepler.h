@@ -23,6 +23,9 @@ struct State {
 //   peri   argument of perihelion ω, deg
 //   M      mean anomaly, deg
 State keplerState(double a, double e, double I, double node, double peri, double M);
+// 0.73.0: the same about any centre of mass GM (m^3/s^2): the Alpha Centauri system (orbit/alphacen.h). The Sun's call above is this with GM = kGMSun,
+// bit for bit (tests/test_orbit.cpp testAlphaCen073 checks both against 0.72.1's numbers). The frame is the elements' own: x, y, z of Rz(node) Rx(I) Rz(peri).
+State keplerState(double a, double e, double I, double node, double peri, double M, double GM);
 
 struct CometData;
 // Where a comet is on a given Julian day: its mean anomaly grows by 360° per period,

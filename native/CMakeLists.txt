@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.72.1 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.73.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -41,6 +41,7 @@ endif()
 add_library(orbit_core STATIC
   src/orbit/solar_data.cpp
   src/orbit/kepler.cpp
+  src/orbit/alphacen.cpp
   src/orbit/saturn_profile.cpp
   src/orbit/nbody.cpp
   src/orbit/moon_elp.cpp
@@ -595,10 +596,10 @@ if(PL_BUILD_APP)
       add_test(NAME ui_facts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_facts
                check_orbit_ui.py:facts check_orbit_ui.py:facts_long check_022.py:facts check_022.py:factsrc check_022s7.py:factmol)
       set_tests_properties(ui_facts PROPERTIES TIMEOUT 3600)
-      # ui_orbit: the Orbit Lab: every control of INVENTORY.md, the data sheet words, Time panel, chip, readability, links, Most realistic; 0.50: no rim of air, a dark night side
+      # ui_orbit: the Orbit Lab: every control of INVENTORY.md, the data sheet words, Time panel, chip, readability, links, Most realistic; 0.50: no rim of air, a dark night side; 0.73.0: the Alpha Centauri system
       add_test(NAME ui_orbit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit
                check_orbit_ui.py:coverage check_orbit_ui.py:card check_orbit_ui.py:time check_orbit_ui.py:chip check_orbit_ui.py:readable check_orbit_ui.py:links check_orbit_ui.py:journey check_orbit_ui.py:farnote check_orbit_ui.py:airedge check_orbit_ui.py:nightside
-               check_orbit_ui.py:rings check_orbit_ui.py:cardlines check_025.py:orbit)
+               check_orbit_ui.py:rings check_orbit_ui.py:cardlines check_orbit_ui.py:acen check_025.py:orbit)
       set_tests_properties(ui_orbit PROPERTIES TIMEOUT 3600)
       # ui_atom_panel: the Atom Lab Controls panel against the old panel's saved states
       add_test(NAME ui_atom_panel COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_panel

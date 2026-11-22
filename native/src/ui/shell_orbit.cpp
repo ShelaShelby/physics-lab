@@ -114,6 +114,18 @@ bool cardAction(AppState& app, CardAction& out) {
 std::vector<LegendEntry> legendEntries(const AppState& app) {
     std::vector<LegendEntry> v;
     const auto hex = [](const int c[3]) { char b[8]; std::snprintf(b, sizeof b, "#%02x%02x%02x", c[0], c[1], c[2]); return std::string(b); };
+    if (app.set.alphaCen) {                                     // 0.73.0: the Alpha Centauri scene (orbit/alphacen_view.inc)
+        v.push_back({LegendEntry::Disc, {"#fff1d8", "#ffd29a", "#ffb07a"}, "The stars A, B and Proxima, each in its own colour (at least a dot; true size when zoomed in)"});
+        v.push_back({LegendEntry::Dots, {"#8fc7ff", "#e8d890"}, "Proxima b and d: dots not to scale (their sizes are not known)"});
+        v.push_back({LegendEntry::Ring, {"#c9a6ff"}, "Proxima c: disputed, drawn dashed"});
+        v.push_back({LegendEntry::Band, {"#d1b0ff"}, "Around A: the possible orbits of an unconfirmed candidate, seen once (dashed)"});
+        v.push_back({LegendEntry::Line, {"#ff8a70"}, "An orbit: A and B about their centre of mass, Proxima about them, the planets about Proxima"});
+        v.push_back({LegendEntry::Cross, {"#ffffff"}, "The centre of mass of A and B"});
+        v.push_back({LegendEntry::Band, {hex(orbit::marks::kHabitable)}, "Habitable zones (Kopparapu et al. 2014, with each star's temperature)"});
+        v.push_back({LegendEntry::Ring, {orbit::marks::kHighlight}, "The thing you picked"});
+        v.push_back({LegendEntry::Dots, {orbit::marks::kAxisX, orbit::marks::kAxisY, orbit::marks::kAxisZ}, "The little axes: x west, y north (as we see it), z towards the Sun"});
+        return v;
+    }
     std::vector<std::string> planets, dwarfs;
     for (const PickGroup& g : pickGroups(app)) {
         const std::string t = g.title;
@@ -317,6 +329,18 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
     orbit::ViewSettings& set = app.set;
     bool closeAfter = false;                                   // (the Pick list used it to close its dropdown; the docked panel stays open)
     (void)closeAfter;
+    if (section("system", "System", true)) {                   // 0.73.0: which system the picture shows (orbit/alphacen.h)
+        int sysPick = set.alphaCen ? 1 : 0;
+        if (pSegmented(p, "system.pick", {"Solar System", "Alpha Centauri"}, &sysPick)) setSystem(app, sysPick == 1);
+        if (set.alphaCen) {
+            pCaption(p, "Three stars 4.34 light years away: A and B circle each other every 80 years; Proxima circles them both, about 12,000 au out.");
+            pHeading(p, "Fit in the picture");
+            if (pButton(p, "fit.pair", "A and B")) acenFit(app, AcFit::Pair);
+            if (pButton(p, "fit.system", "The whole system")) acenFit(app, AcFit::System);
+            if (pButton(p, "fit.planets", "Proxima's planets")) acenFit(app, AcFit::Planets);
+            pCaption(p, "Shown “now”: no light-travel time. The planets’ tilt is assumed (the star’s equator, 47°); their masses are minimums; their sizes are unknown (the dots are not to scale). Proxima c is disputed; the band round A is an unconfirmed candidate, seen once.");
+        }
+    }
     if (section("speed", "Time speed", true)) {
         pBody(p, tspeedText(set.tspeed));
         float ts = static_cast<float>(set.tspeed);
@@ -325,6 +349,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
     }
     if (section("show", "Show", true)) {
         static bool notes = false;
+        if (!set.alphaCen) {                                   // 0.73.0: Alpha Centauri has no moons, dwarf planets, comets, belts or far-away table: its orbits and the sky only
         real::markCheck("orbit", "moons");
         pCheck(p, "show.moons", "Moons", &set.moons);
         real::markCheck("orbit", "dwarfs");
@@ -335,6 +360,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         pCheck(p, "show.belts", "Belts and Oort cloud", &set.belts);
         real::markCheck("orbit", "far");
         pCheck(p, "show.far", "Far-away things (zoom out to find them)", &set.far);
+        }
         pCheck(p, "show.orbits", "Orbit paths", &set.orbits);   // 0.23 stage 2
         pGap(p, m.s8);
         pHeading(p, "Sky: stars in the background");
@@ -349,6 +375,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
             if (pSegmented(p, "show.cons", {"Off", "Lines", "Lines and names"}, &c)) set.cons = static_cast<orbit::ConsMode>(c);
         }
         pGap(p, m.s4);
+        if (!set.alphaCen) {
         pHeading(p, "Planet physics");
         int realPick = set.realPlanets ? 1 : 0;
         real::markLabels("orbit", "physics", {"Simple", "Real"});
@@ -363,6 +390,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         }
         if (pRow(p, "show.notes", notes ? "Hide notes" : "Show notes")) notes = !notes;
         if (notes) pCaption(p, set.realPlanets ? orbit::realNoteText(set.relativity) : orbit::simpleNoteText());
+        }
     }
     if (section("pick", "Pick a body", false)) {
         char* filter = g_pickFilter;
@@ -394,13 +422,15 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         if (firstRow && !q.empty()) { pGap(p, m.s4); pCaption(p, std::string("Nothing in the list matches “") + filter + "”.");   // 0.39.3: the list just went empty
             if (shellLogOn()) auditNote("picknone"); }
         pGap(p, m.s8);
-        pCaption(p, "Real orbits from NASA/JPL data. Moons show when you zoom in or click their planet (until you zoom in a lot, their orbits are drawn wider than real so they can be seen).");
+        pCaption(p, set.alphaCen ? "Orbits from Akeson et al. 2021 (A, B and Proxima) and NIRPS 2025 (Proxima b and d)."
+                                 : "Real orbits from NASA/JPL data. Moons show when you zoom in or click their planet (until you zoom in a lot, their orbits are drawn wider than real so they can be seen).");
     }
     if (section("scale", "Zoom, sizes and trails", true)) {
         pBody(p, "Zoom: " + zoomLabel(set.zoom));
         float z = static_cast<float>(set.zoom);
         if (pSlider(p, "scale.zoom", &z, static_cast<float>(units::kZoomMin), static_cast<float>(units::kZoomMax))) setZoom(app, z);
         pCaption(p, "Mouse wheel zooms, drag moves the view");
+        if (!set.alphaCen) {                                   // 0.73.0: Alpha Centauri: the stars at their true size (at least a dot); no trails
         pGap(p, m.s8);
         pHeading(p, "Sizes");
         int sizes = set.trueScale ? 0 : 1;
@@ -411,6 +441,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         int trails = set.fullTrails ? 1 : 0;
         if (pSegmented(p, "scale.trails", {"Short tail", "Full orbit trails"}, &trails)) set.fullTrails = trails == 1;
         pCaption(p, trails == 0 ? "a little tail behind each object" : "every object's whole path so far: it grows as time runs");   // (0.22 stage 7: a trail starts empty, so a new or reset picture shows no whole orbit yet)
+        }
     }
     if (section("view", "View options", true)) {
         if (set.view3D) {
@@ -447,6 +478,10 @@ void orbitSearch(AppState& app, const SearchAdd& add) {
     add("Dates", "Set the date and time by hand", "date:manual", [] { g_manual = true; shellOpenPanel(PanelId::Chip); });
     add("Dates", "Journey: Earth to the galactic centre", "date:journey", [&app] { if (!app.journey.active) journeyStart(app); });
     if (app.journey.active) add("Dates", "Stop the journey", "date:stopjourney", [&app] { journeyStop(app); });
+    add("View", app.set.alphaCen ? "System: back to the Solar System" : "System: Alpha Centauri", "set:system", [&app] { setSystem(app, !app.set.alphaCen); });   // 0.73.0
+    add("View", "Fit: Alpha Centauri A and B", "set:fit.pair", [&app] { acenFit(app, AcFit::Pair); });
+    add("View", "Fit: the whole Alpha Centauri system", "set:fit.system", [&app] { acenFit(app, AcFit::System); });
+    add("View", "Fit: Proxima's planets", "set:fit.planets", [&app] { acenFit(app, AcFit::Planets); });
     orbit::ViewSettings& s = app.set;
     const auto toggle = [&](const char* group, const char* name, const char* id, bool* v) {
         add(group, std::string(name) + (*v ? ": turn off" : ": turn on"), id, [v] { *v = !*v; });

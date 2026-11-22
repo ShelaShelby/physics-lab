@@ -48,9 +48,12 @@ struct PlaneToEcliptic {
 };
 
 State keplerState(double a, double e, double I, double node, double peri, double Mdeg) {
-    const double GM = units::kGMSun;                      // m³/s²
+    return keplerState(a, e, I, node, peri, Mdeg, units::kGMSun);
+}
+
+State keplerState(double a, double e, double I, double node, double peri, double Mdeg, double GM) {   // GM: m³/s² (0.73.0; the Sun's: kGMSun)
     const double E = keplerE(e, Mdeg);
-    const double r = a * (1 - e * std::cos(E));           // distance from the Sun, m
+    const double r = a * (1 - e * std::cos(E));           // distance from the centre (the Sun), m
     const double q = std::sqrt(1 - e * e);
     const double kv = std::sqrt(GM * a) / r;              // m/s
     // position and velocity in the orbit plane

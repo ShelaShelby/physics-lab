@@ -1,7 +1,7 @@
 # Physics Lab — Windows app
 
 Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan, Dear ImGui). Version **0.70.0 alpha**. The app draws everything with Vulkan (1.3 or 1.4, or 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2); a PC whose Vulkan cannot start gets a message naming what is needed (OpenGL was removed in 0.69.0). Four labs:
-- **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini, drawn per pixel by the graphics card on Vulkan with the processor's triangles as reference).
+- **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini, drawn per pixel by the graphics card on Vulkan with the processor's triangles as reference); and, with its System switch, the Alpha Centauri system (A and B on their measured orbit, Proxima and its planets b and d, the disputed Proxima c and an unconfirmed candidate dashed, the sky seen from there with our Sun; the planets' tilt assumed, their sizes unknown).
 - **Atom Lab**: any nucleus, down to quarks; one electron (exact, with Dirac's relativity) or every electron of the neutral atoms (Dirac-Hartree-Fock orbitals computed for the app);
   photon jumps along NIST's measured lines: one electron for every element, every electron shown for 16 atoms (Li, Na, K, Rb, Cs, Fr, He, Be, Mg, Ca, Zn, Sr, Cd, Ba, Hg, Ra;
   GRASP2018 clouds per level). The other atoms say why they have no jumps. Atoms in a magnetic field: the Zeeman effect from weak to strong field (Paschen-Back), the split lines
@@ -46,7 +46,7 @@ Or open the `native` folder in Visual Studio (File → Open → Folder) and pres
 
 | Folder or file | What is in it |
 | --- | --- |
-| `src/orbit/` | The Orbit Lab: units and constants (`units.h`), Solar System data, Kepler, the simulation, belts, moons, spin, sky, rings, the picture (`orbit_view.*`) |
+| `src/orbit/` | The Orbit Lab: units and constants (`units.h`), Solar System data, Kepler, the simulation, belts, moons, spin, sky, rings, the Alpha Centauri system (`alphacen.*`), the picture (`orbit_view.*`) |
 | `src/atom/` | The Atom Lab: elements and nuclides (`atom_core.*`), the simulation (`atom_sim.*`), NIST ASD lines (`asd.*`), Dirac (`dirac*.*`), every electron (`hf.*`), the outer electron (`alkali.*`), level jumps (`levels.*`), the magnetic field (`zeeman.*`, with the exact 3j symbols `threej.*`), nucleus size and shape (`radii.*`, `quadrupole.*`), the chart of nuclides (`chart*.*`, `decay_chain.*`), the picture (`atom_view.*`) |
 | `src/molecule/` | The Molecule Lab: molecules (`molecule.*`), density (`density.*`), vibrations (`vibration.*`), rotation (`rotation.*`), the anharmonic bond (`morse.*`), the picture (`molecule_view.*`) |
 | `src/analysis/` | The Data panel's tables (`lab_tables.*`), text in and out (`table.*`) and fitting (`fit.*`); no graphics |

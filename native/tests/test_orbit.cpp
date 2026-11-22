@@ -17,6 +17,7 @@
 #include <tuple>
 #include <vector>
 
+#include "orbit/alphacen.h"
 #include "orbit/belts.h"
 #include "orbit/card_text.h"
 #include "orbit/date_text.h"
@@ -772,7 +773,160 @@ static void testPointColour0521() {
     check(n == 8 && same, "a sub-pixel body's colour is its measured colour for all 8 planets that have one (the ball's), its marker colour for the rest (" + std::to_string(n) + " measured)");
 }
 
+// 0.73.0: the Alpha Centauri system (PLAN_ALPHACEN.md sect. 12, the eight tests, limits as the plan wrote them before any result was looked at).
+// WRITTEN BEFORE the code (on 0.72.1 none of it builds: orbit/alphacen.h did not exist). The references are typed HERE from the saved papers (sources repo,
+// data/alphacen/, native/data/alphacen/README.txt), not read from the app's own tables: Akeson et al. 2021 (A21) Tables 6, 8, 9, 10; Pourbaix & Boffin 2016
+// (PB16) Table 1; Kervella et al. 2016 (K16) as A21 Table 8 quotes it; Suarez Mascareno et al. 2025 (N25) Tables 2 and 3; Faria et al. 2022 Table 1;
+// Kopparapu et al. 2014 eq. 4-5; Willmer 2018 Table 3.
+static void testAlphaCen073() {
+    using namespace orbit;
+    const double PC_AU = 648000.0 / units::kPi, d2r = units::kPi / 180;
+    // 1. Kepler's third law: a^3 / P^2 (a = a" / parallax in au, P in Julian years, GM_sun DE440) against each paper's own mA + mB, within 3 x the propagated error
+    {
+        struct O { const char* n; double a, sa, P, sP, plx, splx, mA, mB; } os[] = {
+            {"A21", 17.4930, 0.0096, 79.762, 0.019, 750.81, 0.38, 1.0788, 0.9092},
+            {"K16", 17.592, 0.013, 79.929, 0.013, 747.17, 0.61, 1.1055, 0.9373},
+            {"PB16", 17.66, 0.026, 79.91, 0.013, 743.0, 1.3, 1.133, 0.972}};
+        for (const O& o : os) {
+            const double aAU = o.a / (o.plx / 1000), M = aAU * aAU * aAU / (o.P * o.P);   // (with GM_sun the unit: 4 pi^2 au^3 / yr^2 = GM_sun to 1e-4; the exact form below)
+            const double Mx = 4 * units::kPi * units::kPi * std::pow(aAU * units::kAU, 3) / (units::kGMSun * std::pow(o.P * units::kYear, 2));
+            const double rel = std::sqrt(std::pow(3 * o.sa / o.a, 2) + std::pow(3 * o.splx / o.plx, 2) + std::pow(2 * o.sP / o.P, 2));
+            (void)M;
+            check(std::fabs(Mx - (o.mA + o.mB)) <= 3 * rel * Mx, std::string("alpha Cen: Kepler's third law with ") + o.n + "'s own a, P, parallax gives its mA + mB within 3 sigma");
+        }
+        // the app's A-B orbit: GM = G (mA + mB) with A21's masses, so Kepler's law holds by construction
+        const double aM = acen::abSemiMajorAU() * units::kAU, P = acen::abPeriodYears() * units::kYear;
+        near(4 * units::kPi * units::kPi * aM * aM * aM / (P * P), acen::abGM(), acen::abGM(), 1e-12, "alpha Cen: the app's A-B orbit keeps Kepler's law (a, P from the app, GM from A21's masses)");
+        near(acen::abGM() / units::kGMSun, 1.0788 + 0.9092, 1, 1e-12, "alpha Cen: the app's GM of A + B is A21's 1.0788 + 0.9092 solar masses");
+        near(acen::abPeriodYears(), 79.762, 79.762, 3 * 0.019 / 79.762, "alpha Cen: the app's A-B period (from Kepler's law) is A21's 79.762 +- 0.019 yr within 3 sigma");
+        near(acen::abSemiMajorAU(), 17.4930 / 0.75081, 1, 1e-12, "alpha Cen: a = 17.4930 arcsec / 750.81 mas (A21)");
+    }
+    // 2. the orbit against ALMA (A21 Table 6): position angle and separation of B about A within 5 mas
+    {
+        const double alma[][3] = {{2018.7846, 336.2542, 4.80434}, {2019.5358, 342.8634, 5.21125}, {2019.6505, 343.7729, 5.27869}};
+        for (const auto& r : alma) {
+            const double jd = 2451545.0 + (r[0] - 2000.0) * 365.25;     // decimal Julian year -> JD (A21 use Julian years)
+            const Vec3 rel = acen::bAboutA(jd);                          // scene frame: x west, y north, z towards the Sun (m)
+            const double east = -rel.x, north = rel.y, sep = std::hypot(east, north) / units::kAU * 0.75081;   // arcsec at A21's parallax
+            const double pa = std::fmod(std::atan2(east, north) / d2r + 360, 360);
+            const double dpa = std::remainder(pa - r[1], 360.0);
+            check(std::fabs(dpa * d2r * r[2] * 1000) <= 5, "alpha Cen: B's position angle at the ALMA epoch " + std::to_string(r[0]) + " within 5 mas across (A21 Table 6)");
+            check(std::fabs((sep - r[2]) * 1000) <= 5, "alpha Cen: B's separation at the ALMA epoch " + std::to_string(r[0]) + " within 5 mas (A21 Table 6)");
+        }
+        // A and B about their centre of mass: A at -mB/(mA+mB), B at +mA/(mA+mB) of B's relative orbit
+        const double jd = 2461000.5;
+        const acen::Stars s = acen::stars(jd);
+        const Vec3 rel = acen::bAboutA(jd);
+        near(length(s.B - s.A - rel), 0, length(rel), 1e-12, "alpha Cen: B - A is the relative orbit");
+        near(length(s.A * 1.0788 + s.B * 0.9092), 0, length(rel), 1e-12, "alpha Cen: the centre of mass of A and B is the scene's origin");
+    }
+    // 3. RV semi-amplitude K = (2 pi G / P)^(1/3) m sin i / (M + m)^(2/3), M = 0.1221 (N25 Table 2): within 1 % of N25's K (Table 3)
+    {
+        const double Pb = 11.18465 * units::kDay, Pd = 5.12338 * units::kDay, mE = 398600.435507e9 / units::kGMSun;   // GM_Earth DE440 (nbody.h)
+        near(acen::rvSemiAmplitude(Pb, 1.055 * mE, 0.1221), 1.226, 1.226, 0.01, "Proxima b: K from m sin i within 1 % of N25's 1.226 m/s");
+        near(acen::rvSemiAmplitude(Pd, 0.260 * mE, 0.1221), 0.392, 0.392, 0.01, "Proxima d: K from m sin i within 1 % of N25's 0.392 m/s");
+        // 4. planet orbit size from Kepler's law with M = 0.1221 within 1 sigma of N25's a
+        check(std::fabs(acen::keplerAAU(Pb, 0.1221 + 1.055 * mE) - 0.04848) <= 0.00029, "Proxima b: a from Kepler's law within 1 sigma of N25's 0.04848 +- 0.00029 au");
+        check(std::fabs(acen::keplerAAU(Pd, 0.1221 + 0.260 * mE) - 0.02881) <= 0.00017, "Proxima d: a from Kepler's law within 1 sigma of N25's 0.02881 +- 0.00017 au");
+    }
+    // 5. habitable zone (Kopparapu 2014 eq. 4-5 with the Teff term): the Sun's edges unchanged; Proxima's early-Mars edge with F22's L = 0.0016 and 2900 K within 0.0005 au of N25's 0.088
+    {
+        near(sunfacts::hzEdgeAU(1.0, 5780, sunfacts::Hz::Runaway), 0.9504, 1, 1e-4, "habitable zone at 5780 K, L = 1: runaway greenhouse 0.9504 au");
+        near(sunfacts::hzEdgeAU(1.0, 5780, sunfacts::Hz::MaxGreenhouse), 1.6760, 1, 1e-4, "habitable zone at 5780 K, L = 1: maximum greenhouse 1.6760 au");
+        near(sunfacts::hzEdgeAU(1.0, 5780, sunfacts::Hz::Runaway), sunfacts::hzInnerAU(), 1, 1e-15, "habitable zone: the Teff form at 5780 K is the Sun's old one");
+        check(std::fabs(sunfacts::hzEdgeAU(0.0016, 2900, sunfacts::Hz::EarlyMars) - 0.088) <= 0.0005, "Proxima: early-Mars edge with L = 0.0016, 2900 K within 0.0005 au of N25's 0.088");
+        // and by hand from Table 1 for A (5795 K, 1.5059 L_sun): runaway greenhouse Seff = 1.107 + 1.332e-4 T + 1.58e-8 T^2 - 8.308e-12 T^3 - 1.931e-15 T^4, T = 15 K
+        const double T = 15, se = 1.107 + 1.332e-4 * T + 1.58e-8 * T * T - 8.308e-12 * T * T * T - 1.931e-15 * T * T * T * T;
+        near(sunfacts::hzEdgeAU(1.5059, 5795, sunfacts::Hz::Runaway), std::sqrt(1.5059 / se), 1, 1e-12, "alpha Cen A: runaway-greenhouse edge from Kopparapu's Table 1 by hand");
+    }
+    // 6. Proxima is bound: the drawn orbit's energy is negative; its periastron and apastron are A21's 4.1 and 12.3 kau within the table's rounding (0.05 kau)
+    {
+        const acen::Ellipse o = acen::proximaOrbit();
+        const State st = acen::proximaState(2461000.5);
+        const Vec3 r = st.pos - o.F;                                         // about the drawn orbit's focus
+        const double E = 0.5 * dot(st.vel, st.vel) - acen::proximaGM() / length(r);
+        check(E < 0, "Proxima: the orbit's energy about A-B is negative (bound)");
+        check(std::fabs(o.a * (1 - o.e) / units::kAU - 4100) <= 50 && std::fabs(o.a * (1 + o.e) / units::kAU - 12300) <= 50, "Proxima: periastron 4.1 and apastron 12.3 kau (A21 Table 10) within the rounding");
+        near(-acen::proximaGM() / (2 * E), o.a, o.a, 1e-9, "Proxima: the state's energy gives the drawn orbit's a");
+        near(acen::proximaGM() / units::kGMSun, 1.0788 + 0.9092 + 0.1221, 1, 1e-12, "Proxima's orbit: GM of all three stars (A21 masses, Proxima 0.1221)");
+        near(o.periodYears / 1000, 511, 511, 41.0 / 511, "Proxima's period from Kepler's law within A21's 511 +41 -30 kyr");
+        // its place: today's measured offset (A21 Table 9 barycentre at 2016.0, Gaia DR3 Proxima as Libralato 2025 Table 2, both parallaxes): 12,052 au (computed in
+        // tools/alphacen_numbers.py) at the epoch 2016.0
+        const Vec3 p16 = acen::proximaState(2457388.5).pos;   // 2016-01-01 0h (epoch 2016.0 = JD 2457389.0: half a day, 0.03 au)
+        near(length(p16) / units::kAU, 12052, 12052, 5.0 / 12052, "Proxima at its measured distance from A-B, 12,052 au (within 5 au)");
+        check(p16.z / units::kAU > 6300 && p16.z / units::kAU < 6440, "Proxima is about 6,368 au nearer to us than A-B (z towards the Sun)");
+    }
+    // 7. phase: at its N25 T0 (inferior conjunction) each planet is nearest us (towards the Sun: z largest); one period later it is back within 1e-9 of the orbit
+    {
+        const double T0[2] = {2460548.59, 2460557.55}, P[2] = {11.18465, 5.12338};
+        for (int k = 0; k < 2; k++) {
+            const Vec3 p0 = acen::planetOffset(k, T0[k]);
+            double zmax = -1e300;
+            for (int j = 0; j < 400; j++) zmax = std::max(zmax, acen::planetOffset(k, T0[k] + P[k] * j / 400.0).z);
+            check(p0.z >= zmax - 1e-9 * length(p0), std::string("Proxima ") + (k ? "d" : "b") + ": at its T0 (N25) it is at inferior conjunction (nearest us)");
+            near(length(acen::planetOffset(k, T0[k] + P[k]) - p0), 0, length(p0), 1e-9, std::string("Proxima ") + (k ? "d" : "b") + ": back after one period");
+            near(length(p0) / units::kAU, k ? 0.02881 : 0.04848, 1, 1e-12, std::string("Proxima ") + (k ? "d" : "b") + ": on N25's circle");
+        }
+    }
+    // 8. the sky: the Sun's V from A-B 0.43 +- 0.01 (Willmer 2018 M_V 4.81, A21's distance); its direction within 0.01 deg of the antipode of A21 Table 9
+    {
+        near(acen::sunVFromAB(), 0.43, 1, 0.01, "the Sun seen from Alpha Centauri: V = 0.43 +- 0.01");
+        const double ra = (219.85892215 + 180) * d2r, de = 60.83163195 * d2r;   // the antipode of A21 Table 9
+        const Vec3 want{std::cos(de) * std::cos(ra), std::cos(de) * std::sin(ra), std::sin(de)};
+        const Vec3 got = acen::sunDirectionEquatorial();                          // from the app's sky as seen from Alpha Centauri (the Sun's star)
+        check(std::acos(std::clamp(dot(got, want) / length(got), -1.0, 1.0)) / d2r <= 0.01, "the Sun in Alpha Centauri's sky: within 0.01 deg of the antipode of A21 Table 9");
+        (void)PC_AU;
+        // the sky's Sun star has that V; Sirius seen from there (HYG v4.1 row, data/stars/hyg_v41_far_stars_rows.csv: RA 6.752481 h, Dec -16.716116, 2.6371 pc, V -1.44)
+        // is where plain vector arithmetic puts it (the A-B barycentre at A21 Table 9's direction and 1000 / 750.81 pc), within the catalogue's 0.01 deg cut of its
+        // places (0.02 deg here), and its V is -1.44 + 5 log10(d' / d) within the catalogue's 0.1 cut of V (0.11 here)
+        const Sky& S = acen::acenSky();
+        double sunV = 99;
+        for (const auto& nm : S.names) if (nm.second == "Sun") sunV = S.stars[std::size_t(nm.first)].mag;
+        near(sunV, 0.43, 1, 0.01, "the Sun's star in Alpha Centauri's sky: V 0.43 +- 0.01");
+        const double ra2 = 6.752481 * 15 * d2r, de2 = -16.716116 * d2r, dS = 2.6371, dAB = 1000.0 / 750.81, raB = 219.85892215 * d2r, deB = -60.83163195 * d2r;
+        const Vec3 sir = Vec3{std::cos(de2) * std::cos(ra2), std::cos(de2) * std::sin(ra2), std::sin(de2)} * dS - Vec3{std::cos(deB) * std::cos(raB), std::cos(deB) * std::sin(raB), std::sin(deB)} * dAB;
+        const Vec3 sirDir = acen::equatorialToScene(sir * (1 / length(sir)));
+        double best = 1e9; float bestV = 99;
+        for (const SkyStar& st : S.stars) { const double a = std::acos(std::clamp(dot(st.dir, sirDir), -1.0, 1.0)) / d2r; if (a < best) { best = a; bestV = st.mag; } }
+        check(best <= 0.02, "Sirius seen from Alpha Centauri: in its parallax-shifted direction (within 0.02 deg; " + std::to_string(best) + ")");
+        near(bestV, -1.44 + 5 * std::log10(length(sir) / dS), 1, 0.11, "Sirius seen from Alpha Centauri: V by the inverse square of its new distance");
+        int bright = 0;
+        for (const SkyStar& st : S.stars) if (st.mag < 0.5 && st.mag > -30) bright++;
+        check(bright >= 1, "Alpha Centauri's sky: A and B are not in it, the Sun and the bright stars are");
+    }
+    // keplerState with GM = kGMSun is today's (0.72.1) to the last bit: the same call both ways, and five orbits against 0.72.1's numbers (printed with %a by
+    // 0.72.1's own build, GCC -O3 on x86-64; another compiler may round a last bit of its own differently, so there 4 units in the last place)
+    {
+        const double c[][6] = {{1.495978707e11, 0.0167, 0.0, -11.26, 114.2, 10.0}, {7.7834e11, 0.0484, 1.30, 100.46, 273.87, -170.0}, {5.9e12, 0.2488, 17.16, 110.30, 113.83, 33.3},
+                               {2.67e12, 0.967, 162.3, 58.42, 111.33, 179.0}, {5.79e10, 0.2056, 7.0, 48.33, 29.12, -45.0}};
+        const double ref[][6] = {
+            {-0x1.b142a33bf41p+35, 0x1.f782c8a10abf2p+36, 0x0p+0, -0x1.b3223c3b17f8cp+14, -0x1.7362c44a76b2cp+13, -0x0p+0},
+            {-0x1.5c5c5f4c2b69p+39, -0x1.2dd9eaadcf54ep+38, 0x1.0caabd3f984e2p+34, 0x1.3af142b54b883p+12, -0x1.63b8db190a7b7p+13, -0x1.063826237a964p+6},
+            {0x1.4d47d6f54606cp+39, -0x1.154bd95bdd20ep+42, 0x1.1a43541073efdp+38, 0x1.564e7060fd50ep+12, -0x1.11633e1939bp+8, -0x1.85376771c4e05p+10},
+            {-0x1.5a4ac8926b04bp+41, 0x1.d9263254d396ap+41, -0x1.5a74507554275p+40, 0x1.5c84b7e9e195fp+9, 0x1.23c887455d478p+9, 0x1.6fe988faf7d14p+6},
+            {0x1.71b3332198b4ap+35, 0x1.4ea25d4e0d7ddp+33, -0x1.b143e451491b8p+31, -0x1.3b3fdc3fe070dp+14, 0x1.8443d5322118ap+15, 0x1.713729c7993edp+12}};
+#if defined(__GNUC__) && !defined(__clang__) && defined(__x86_64__)
+        const double ulps = 0;
+#else
+        const double ulps = 4;
+#endif
+        for (int k = 0; k < 5; k++) {
+            const State a = keplerState(c[k][0], c[k][1], c[k][2], c[k][3], c[k][4], c[k][5]);
+            const State b = keplerState(c[k][0], c[k][1], c[k][2], c[k][3], c[k][4], c[k][5], units::kGMSun);
+            const double ga[6] = {a.pos.x, a.pos.y, a.pos.z, a.vel.x, a.vel.y, a.vel.z}, gb[6] = {b.pos.x, b.pos.y, b.pos.z, b.vel.x, b.vel.y, b.vel.z};
+            bool same = true, old = true;
+            for (int j = 0; j < 6; j++) {
+                same = same && std::memcmp(&ga[j], &gb[j], sizeof(double)) == 0;
+                old = old && std::fabs(ga[j] - ref[k][j]) <= ulps * std::fabs(std::nextafter(ref[k][j], 2 * ref[k][j] + 1) - ref[k][j]);
+            }
+            check(same, "keplerState with GM = kGMSun is the Sun's keplerState, bit for bit (orbit " + std::to_string(k) + ")");
+            check(old, "keplerState gives 0.72.1's numbers (orbit " + std::to_string(k) + ")");
+        }
+    }
+}
+
 int main() {
+    testAlphaCen073();
     testPointColour0521();
     testIauMoons050();
     testMoonOrientation050();

@@ -23,6 +23,10 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 
 ## Orbit Lab
 - Alpha Centauri is the next feature (22 Nov 2026): the system as a switch in the Orbit Lab (ROADMAP), with deep research first (native/PLAN_ALPHACEN.md, 0.72.1) so the build jobs never guess. The Black Hole Lab's look and speed work are paused for now.
+- Alpha Centauri, the owner's answers (22 Nov 2026, PLAN_ALPHACEN.md sect. 14): (1) Proxima c drawn dashed, labelled "disputed"; (2) the JWST candidate around A
+  as a faint dashed band, "unconfirmed, seen once"; (3) Proxima's mass 0.1221 (Kervella 2017) for the physics, the lensing 0.150 shown beside it; (4) A and B's
+  masses and distance from Akeson et al. 2021; (5) our Sun in their sky as the last build step; (6) the planets' unknown tilt drawn at the star's equator (47°,
+  Klein 2021), labelled "assumed".
 - Real planets start from the JPL Horizons state of 1 January 2026 12:00 TDB; the IAU astronomical unit, 149,597,870,700 m exactly (3 Oct 2026).
 - Planet physics Real stays an option (default Simple) until the owner has tried it on the PC (3 Oct 2026). In Real, relativity (1PN) is on by default (5 Nov 2026).
 - The Moon in Real mode comes from ELP2000-82B, checked against Horizons (3 Oct 2026).

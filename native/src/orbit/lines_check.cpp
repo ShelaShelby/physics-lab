@@ -76,6 +76,23 @@ std::vector<LinesCase> linesCheckCases() {
     c.cam = camera(1280, 800, 3.0, true, 2.0, 0.9, bc);
     follow(c.cam, base.bodies[2].pos);
     v.push_back(c);
+    // 0.73.0: the Alpha Centauri scene's ellipses (numbers of the size the scene draws: orbit/alphacen.h), far from the origin, solid and dashed
+    LinesCase ac;
+    ac.name = "the Alpha Centauri scene's ellipses (2D, zoom 2.5, following a planet 12,000 au out)";
+    const double d = kPi / 180;
+    const auto unit = [&](double incDeg, double nodeDeg, double angDeg) {   // a direction in a tilted plane
+        const double ci = std::cos(incDeg * d), si = std::sin(incDeg * d), cO = std::cos(nodeDeg * d), sO = std::sin(nodeDeg * d), ca = std::cos(angDeg * d), sa = std::sin(angDeg * d);
+        return Vec3{ca * cO - sa * ci * sO, ca * sO + sa * ci * cO, sa * si};
+    };
+    const Vec3 prox{5322 * kAU, -8740 * kAU, 6367 * kAU};
+    LineEllipse eA{{0, 0, 0}, unit(79.2, 205.1, 231.5), unit(79.2, 205.1, 321.5), 10.66 * kAU, 0.51947, 10.66 * kAU * 0.8545, false};
+    LineEllipse eP{{-120 * kAU, 230 * kAU, 150 * kAU}, unit(124.9, 165, 151), unit(124.9, 165, 241), 8200 * kAU, 0.497, 8200 * kAU * 0.8678, false};
+    LineEllipse eb{prox, unit(47, 90, 0), unit(47, 90, 90), 0.04848 * kAU, 0, 0.04848 * kAU, false};
+    LineEllipse ec{prox, unit(47, 90, 0), unit(47, 90, 90), 0.06 * kAU, 0, 0.06 * kAU, true};
+    ac.ellipses = {eA, eP, eb, ec};
+    ac.cam = camera(1280, 800, 2.5, false, 0, 0, Vec3{});
+    follow(ac.cam, prox + eb.P * eb.a);
+    v.push_back(ac);
     return v;
 }
 
@@ -87,6 +104,7 @@ void linesCpu(const LinesCase& c, std::vector<std::vector<double>>& pens) {
     for (std::size_t i = 0; i < c.trails.size(); i++) drawTrailCpu(none, c.cam, c.trails[i], c.bodies[i].pos, 0, 1.5, kCols, &pens);
     std::vector<Vec3> cpts;
     for (const Body& b : c.bodies) drawOrbitCpu(none, c.cam, b, 1.0, kOrbitCol, cpts, &pens);
+    for (const LineEllipse& el : c.ellipses) drawEllipseCpu(none, c.cam, el, 1.0, kOrbitCol, cpts, &pens);
 }
 
 render::LinesDraw linesDrawOf(const LinesCase& c) {
@@ -100,6 +118,7 @@ render::LinesDraw linesDrawOf(const LinesCase& c) {
     for (std::size_t i = 0; i < c.trails.size(); i++) addTrailRuns(pts, d, key++, c.trails[i], c.bodies[i].pos, 0, 1.5, kCols);
     std::vector<Vec3> cpts;
     for (const Body& b : c.bodies) addOrbitRuns(pts, d, key++, b, 1.0, kOrbitCol, cpts);
+    for (const LineEllipse& el : c.ellipses) addEllipseRuns(pts, d, key++, el, 1.0, kOrbitCol, cpts);
     return d;
 }
 
@@ -162,14 +181,15 @@ std::string linesCompareText(const LinesCompare& k) {
 
 namespace {
 double nowS() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+constexpr int kLinesCases = 4;
 struct Path {
     int state = 0;                 // 0 waiting for the lines on screen, 2 its steps under way, 1 ready, -1 off
     int step = 0, frames = 0, gen = -1, usedFrames = 0;
     double stepAt = 0;
     bool firstUse = false, firstDone = false;
-    int jobs[3] = {0, 0, 0};
-    std::vector<float> ends[3], pts[3];
-    std::vector<std::uint32_t> offs[3];
+    int jobs[kLinesCases] = {0, 0, 0, 0};          // 0.73.0: four cases (the Alpha Centauri scene's ellipses)
+    std::vector<float> ends[kLinesCases], pts[kLinesCases];
+    std::vector<std::uint32_t> offs[kLinesCases];
     std::string why, check;
     bool asked = false;            // (0.68.0: asked this frame)
 };
@@ -204,7 +224,7 @@ void advance(render::Renderer2D& R) {
     const std::vector<LinesCase> cases = linesCheckCases();
     if (g_p.step == 1) {
         G.begin(kCheck);
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < kLinesCases; i++) {
             render::LinesDraw d = linesDrawOf(cases[std::size_t(i)]);
             std::vector<std::vector<double>> pens;
             linesCpu(cases[std::size_t(i)], pens);
@@ -219,7 +239,7 @@ void advance(render::Renderer2D& R) {
     }
     if (g_p.step == 2) {
         bool pending = false;
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < kLinesCases; i++) {
             if (!g_p.jobs[i]) continue;
             const render::JobState st = C->pollCheck(g_p.jobs[i], g_p.ends[i], g_p.offs[i], g_p.pts[i]);
             if (st == render::JobState::Pending) { pending = true; continue; }
@@ -232,7 +252,7 @@ void advance(render::Renderer2D& R) {
         }
         bool ok = true;
         std::string text;
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < kLinesCases; i++) {
             const LinesCase& c = cases[std::size_t(i)];
             std::vector<std::vector<double>> pens;
             linesCpu(c, pens);
@@ -242,7 +262,7 @@ void advance(render::Renderer2D& R) {
             text += (i ? "; " : "") + t;
             std::printf("PLLINESCASE %d %s\n", i, t.c_str());
         }
-        for (int i = 0; i < 3; i++) { g_p.ends[i].clear(); g_p.offs[i].clear(); g_p.pts[i].clear(); g_p.pts[i].shrink_to_fit(); }
+        for (int i = 0; i < kLinesCases; i++) { g_p.ends[i].clear(); g_p.offs[i].clear(); g_p.pts[i].clear(); g_p.pts[i].shrink_to_fit(); }
         static const bool forced = std::getenv("PL_LINES_CARDFAIL") != nullptr;   // (tests: as if the check had failed)
         if (forced) ok = false;
         char t[96];

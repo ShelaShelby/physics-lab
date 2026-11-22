@@ -100,6 +100,7 @@ SCENES = {
     "molecule.density": "Molecule Lab: C6H6 (12 atoms)", "molecule.vib_density": "Molecule Lab: H2O (3 atoms), zoom x1.60, vibration mode 1",
     "molecule.spacefill_vib": "Molecule Lab: C6H6 (12 atoms), zoom x4.00, vibration mode 1", "blackhole.film_tilt": "distance 74.1 GM/c², field of view 30", "blackhole.extreme": "Black Hole Lab: distance 50.0", "blackhole.all_light": "Black Hole Lab: distance 20.0",
     "blackhole.moving_gas": "Black Hole Lab: distance 10.0",   # 0.72.0
+    "orbit.alphacen": "Orbit Lab, Alpha Centauri: zoom",       # 0.73.0
     "ui.guide_scroll": "Learn guide 0:3", "ui.data_plot": "Data panel over the", "ui.settings_open": "the belts' rocks",
 }
 

@@ -35,3 +35,9 @@ hyg_readme.md (0.55.4)
     Saved as received on 16 Nov 2026 from https://raw.githubusercontent.com/astronexus/HYG-Database/main/hyg/README.md (the HYG Database's description of
     its fields, CC BY-SA 4.0). Field 12: "mag: The star's apparent visual magnitude"; field 25: the variables' range "adjusted to the V magnitude scale to match
     the "mag" field". So the sky's magnitudes are V magnitudes: src/blackhole/light.h compares them with the Sun's V magnitude. Extract: hyg_readme.extract.txt.
+
+hygdata_v41.csv (0.73.0)
+    The whole HYG Database v4.1 file (the same as above: 33,932,548 bytes, sha256 d9f69fd86bbf90a4e4d52b4c5c53eacfa6dfc0bfdef85bfd94f095e0bebe4ebd), fetched again
+    on 22 Nov 2026 and now kept in the sources repo (data/stars/hygdata_v41.csv). Used by tools/acen_sky.py: the column "dist" (parsecs) of the row matching each
+    of the sky's 2,874 stars (src/orbit/sky_data.inc; matched by place within 0.03 degrees and V cut to 0.1: all 2,874 matched, 55 without a parallax), written to
+    src/orbit/sky_dist.inc, so the Orbit Lab can draw the sky seen from Alpha Centauri (src/orbit/alphacen.cpp acenSky).

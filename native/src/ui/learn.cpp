@@ -21,6 +21,7 @@
 #include "rich_text.h"
 #include "svg_icon.h"
 #include "ui/journey_dates.h"
+#include "ui/orbit_actions.h"
 #include "ui/orbit_panel.h"
 
 namespace ui {
@@ -32,7 +33,7 @@ namespace {
 
 #include "learn_data.inc"
 
-const char* const kTitles[4] = {"", "What am I even looking at?", "Why do we have seasons?", "Timeline of the Solar System"};
+const char* const kTitles[5] = {"", "What am I even looking at?", "Why do we have seasons?", "Timeline of the Solar System", "The Alpha Centauri system"};
 
 // put the live values into a guide's text
 std::string fillIn(std::string s, const char* marker, const std::string& value) {
@@ -152,6 +153,25 @@ void lookGuide(AppState& app) {
         h = fillIn(h, "{BARY}", bary);
         h = fillIn(h, "{PHYSICS}", physicsGuideText(app.sys.realPlanets()));   // 0.46.3
         richText(h);
+    }
+}
+
+// 0.73.0: "The Alpha Centauri system" (learn_data.inc kAcen)
+void acenGuide(AppState& app) {
+    richText(std::string("<p class=\"lrnP\">") + kAcenIntro + "</p>");
+    if (ImGui::SmallButton(app.set.alphaCen ? "▶ Shown in the Orbit Lab" : "▶ Show it in the Orbit Lab")) { setSystem(app, true); app.learn = 0; }
+    ImGui::Spacing();
+    jumpBar(app, kAcen, kAcenSectionCount);
+    for (int i = 0; i < kAcenSectionCount; i++) {
+        ImGui::Spacing();
+        if (app.learnJump == kAcen[i].key) { ImGui::SetScrollHereY(0); app.learnJump.clear(); }
+        richHeading(kAcen[i].title);
+        ImGui::SameLine();
+        ImGui::PushID(i);
+        if (ImGui::SmallButton("↑")) app.learnJump = "bar";
+        if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the list of headings");
+        ImGui::PopID();
+        richText(kAcen[i].html);
     }
 }
 
@@ -287,7 +307,7 @@ void timeline(AppState& app) {
 }  // namespace
 
 void learnWindow(AppState& app) {
-    if (app.learn <= 0 || app.learn > 3) return;
+    if (app.learn <= 0 || app.learn > 4) return;
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowSize(ImVec2(std::min(vp->WorkSize.x * 0.6f, 46 * ImGui::GetFontSize()), vp->WorkSize.y * 0.85f), ImGuiCond_Appearing);
     ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.4f, vp->WorkPos.y + vp->WorkSize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -300,6 +320,7 @@ void learnWindow(AppState& app) {
         ImGui::PushTextWrapPos(0);
         if (app.learn == 1) lookGuide(app);
         else if (app.learn == 2) seasonsGuide(app);
+        else if (app.learn == 4) acenGuide(app);
         else timeline(app);
         ImGui::PopTextWrapPos();
         if (ImGui::IsKeyPressed(ImGuiKey_Escape) && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) open = false;

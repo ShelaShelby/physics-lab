@@ -39,7 +39,7 @@ const Stop kStops[] = {
     {70, false, false, "All eight planets. Neptune is 30 AU out: sunlight takes 4 hours to reach it."},
     {420, false, false, nullptr},   // Voyager 1 (worked out for the date shown)
     {60000, false, false, nullptr},   // the Oort cloud: its travel time is worked out from Voyager 1's speed (orbit/belts.cpp)
-    {1.0e6, false, false, "The nearest star system, Alpha Centauri, is 4.4 light years away: the light we see from it is 4.4 years old."},
+    {1.0e6, false, false, "The nearest star system, Alpha Centauri, is 4.3 light years away: the light we see from it is 4.3 years old. Its third star, Proxima, is the nearest star of all (4.25 light years)."},
     {2.5e8, false, false, "Real stars at their real places: the Pleiades (444 light years) and the Orion Nebula (1,265 light years)."},   // 0.39.2: it said 1,267; the lab's table has 1,265 since the 2026-11-05 audit (Kounkel et al. 2017, 388 pc; orbit/sky_data.inc)
     {0, false, true, "The centre of our galaxy, 27,000 light years away, where a black hole of 4.3 million Suns sits (Sagittarius A*). Tap Reset view to come back."},
 };

@@ -579,6 +579,23 @@ static void testTables() {
         check(std::string(id) + ": the periods are Kepler's with Gauss's k (n = 3/2, A = 2π/k days, 1e-9): the fit is circular, and the text says so",
               r.ok && std::fabs(r.p[1] - 1.5) < 1e-9 && rel(r.p[0], Ak, 1e-9) && p.expect.find("circular") != std::string::npos);
     }
+    // 0.73.0: the Alpha Centauri tables (written before the tables): the A-B orbits' a^3 / P^2 equals each paper's mA + mB (Kepler's third law in au, Julian
+    // years and solar masses, to the 1e-4 of GM_sun x (1 yr)^2 / (4 pi^2 au^3) - 1); Proxima b, d and c follow Kepler's law about 0.1221 Suns (the papers' own a)
+    {
+        check("Alpha Centauri tables build (orbits, stars, planets)", makeTable("acenorbit", c, t) && t.rows() == 3);
+        for (std::size_t r = 0; r < t.rows(); r++) {
+            const double a = t.cols[std::size_t(t.find("a"))].v[r] / (t.cols[std::size_t(t.find("parallax (mas)"))].v[r] / 1000), P = t.cols[std::size_t(t.find("period"))].v[r];
+            const double M = t.cols[std::size_t(t.find("mass A"))].v[r] + t.cols[std::size_t(t.find("mass B"))].v[r];
+            check("Alpha Centauri orbit " + t.cols[0].text[r] + ": a^3 / P^2 = mA + mB within 0.6 % (its own numbers)", rel(a * a * a / (P * P), M, 0.006));
+        }
+        check("Alpha Centauri stars build", makeTable("acenstars", c, t) && t.rows() == 3 && t.cols[0].text[2] == "Proxima Centauri");
+        check("Alpha Centauri planets build, with status", makeTable("acenplanets", c, t) && t.rows() == 4 && t.cols[1].text[2] == "disputed" && t.cols[1].text[3].find("unconfirmed") == 0);
+        const Preset& p = t.presets[0];
+        std::vector<double> x, y;
+        for (std::size_t i = 0; i < t.rows(); i++) if (std::isfinite(t.cols[std::size_t(p.x)].v[i]) && std::isfinite(t.cols[std::size_t(p.y)].v[i])) { x.push_back(t.cols[std::size_t(p.x)].v[i]); y.push_back(t.cols[std::size_t(p.y)].v[i]); }
+        const FitResult r = fitModel(p.model, x, y);
+        check("Proxima's planets: period against a is Kepler's law about 0.1221 Suns (n = 3/2 within 0.01, A within 1 % of 365.25 / sqrt(0.1221) days)", x.size() == 3 && r.ok && std::fabs(r.p[1] - 1.5) < 0.01 && rel(r.p[0], 365.25 / std::sqrt(0.1221), 0.01));
+    }
     // the Rydberg constant from hydrogen's and He II's measured lines: R_M = R_inf / (1 + m_e / M) (CODATA 2022), within (Z alpha)^2 (the fine structure the Bohr levels leave out)
     for (int Z : {1, 2}) {
         c.lab = 1; c.Z = Z; c.N = Z == 1 ? 0 : 2;

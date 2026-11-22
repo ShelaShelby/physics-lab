@@ -10,14 +10,14 @@ namespace orbit {
 
 // What is selected in the picture.
 struct Selection {
-    enum Kind { None, Star, Bary, Body, Moon, Belt, Far } kind = None;
+    enum Kind { None, Star, Bary, Body, Moon, Belt, Far, ACen } kind = None;   // ACen (0.73.0): a thing of the Alpha Centauri scene (orbit/alphacen.h Thing)
     int bodyId = 0;     // Body and Moon: the body's id (for a moon: its planet)
-    int moon = 0;       // Moon: index into the planet's moons; Belt: index into SolarSystem::belts; Far: far-away thing number
+    int moon = 0;       // Moon: index into the planet's moons; Belt: index into SolarSystem::belts; Far: far-away thing number; ACen: acen::Thing
     bool operator==(const Selection& o) const {
         if (kind != o.kind) return false;
         if (kind == Body) return bodyId == o.bodyId;
         if (kind == Moon) return bodyId == o.bodyId && moon == o.moon;
-        if (kind == Belt || kind == Far) return moon == o.moon;
+        if (kind == Belt || kind == Far || kind == ACen) return moon == o.moon;
         return true;
     }
     bool operator!=(const Selection& o) const { return !(*this == o); }

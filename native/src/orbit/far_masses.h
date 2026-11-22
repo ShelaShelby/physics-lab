@@ -5,6 +5,7 @@
 //   "orbit"    from the motion of the star (or the stars around it): a dynamical mass
 //   "lensing"  from the bending of light by the star
 //   "models"   worked out with stellar models from the star's light and distance: an estimate, not a measurement
+//   "relation" (0.73.0) from the star's brightness by a relation calibrated on binary stars' measured masses: an estimate, not a measurement
 // low and high are the range the source gives (value minus / plus its stated uncertainty).
 //
 // IMPORTANT about how these were read: arXiv, ADS and the journals' own sites were blocked in the session that wrote this file, so the numbers were read
@@ -30,15 +31,18 @@ struct MassData {
 };
 
 static const MassData kFarMass[] = {
-    // Alpha Centauri A and B: D. Pourbaix & H. M. J. Boffin, "Parallax and masses of alpha Centauri revisited" (2016), arXiv:1601.01636.
-    // The abstract says "1.13 and 0.97 M_sun for A and B"; the paper's own uncertainties were not read, so low and high are only the rounding of the
-    // two digits quoted (+-0.005), NOT the paper's error bar.
-    {"acen", "A", 1.13, 1.125, 1.135, "orbit", "Pourbaix & Boffin 2016, arXiv:1601.01636"},
-    {"acen", "B", 0.97, 0.965, 0.975, "orbit", "Pourbaix & Boffin 2016, arXiv:1601.01636"},
-    // Proxima Centauri: Zurlo et al. 2018, "The gravitational mass of Proxima Centauri measured with SPHERE from a microlensing event", arXiv:1807.01318:
-    // 0.150 (+0.062, -0.051) M_sun, the only direct (gravitational) measurement. (Mann et al. 2015 give 0.12 +- 0.02 from a mass-luminosity relation:
-    // a model-based estimate, so it is not shown.)
-    {"prox", "", 0.150, 0.150 - 0.051, 0.150 + 0.062, "lensing", "Zurlo et al. 2018, arXiv:1807.01318"},
+    // Alpha Centauri A and B (0.73.0): R. L. Akeson et al., "Precision Millimeter Astrometry of the alpha Centauri AB System" (2021), AJ 162, 14
+    // (arXiv:2104.10086v2), Table 8, "present work": 1.0788 +- 0.0029 and 0.9092 +- 0.0025 M_sun (re-read in the saved PDF, sources repo data/alphacen/).
+    // Until 0.72.1: Pourbaix & Boffin 2016's 1.13 and 0.97 (their Table 1: 1.133 +- 0.0050, 0.972 +- 0.0045). The published orbits disagree by about 5 %,
+    // more than their error bars (native/PLAN_ALPHACEN.md sect. 2); A21 is the newest, with ALMA's positions, and reproduces them (tests/test_orbit.cpp).
+    {"acen", "A", 1.0788, 1.0788 - 0.0029, 1.0788 + 0.0029, "orbit", "Akeson et al. 2021, arXiv:2104.10086"},
+    {"acen", "B", 0.9092, 0.9092 - 0.0025, 0.9092 + 0.0025, "orbit", "Akeson et al. 2021, arXiv:2104.10086"},
+    // Proxima Centauri (0.73.0, owner's choice 22 Nov 2026: both shown). 0.1221 +- 0.0022 M_sun: Kervella, Thevenin & Lovis 2017 (A&A 598, L7, arXiv:1611.03495)
+    // Table 1, from Mann et al. 2015's mass - K-band brightness relation (calibrated on binary stars): the value the planet papers use, and the app's physics.
+    // (Until 0.72.1 this comment said "Mann et al. 2015 give 0.12 +- 0.02": Proxima is not in Mann 2015's tables; the number is Kervella 2017's.)
+    // 0.150 (+0.062, -0.051) M_sun: Zurlo et al. 2018 (arXiv:1807.01318), the only direct (gravitational) measurement, from a microlensing event.
+    {"prox", "", 0.1221, 0.1221 - 0.0022, 0.1221 + 0.0022, "relation", "Kervella et al. 2017, arXiv:1611.03495 (Mann et al. 2015 relation)"},
+    {"prox", "lensing", 0.150, 0.150 - 0.051, 0.150 + 0.062, "lensing", "Zurlo et al. 2018, arXiv:1807.01318"},
     // Sirius A and B: H. E. Bond et al., "The Sirius System and its Astrophysical Puzzles: Hubble Space Telescope and Ground-Based Astrometry" (2017),
     // arXiv:1703.10625: dynamical masses 2.063 +- 0.023 and 1.018 +- 0.011 M_sun.
     {"sirius", "A", 2.063, 2.063 - 0.023, 2.063 + 0.023, "orbit", "Bond et al. 2017, arXiv:1703.10625"},

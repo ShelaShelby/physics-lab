@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.73.0", "The Alpha Centauri system in the Orbit Lab",
+     "A new switch at the top of the Orbit Lab's Controls: Solar System or Alpha Centauri. A and B circle each other on their measured 80-year orbit (Akeson et al. 2021) "
+     "with the lab's date and time; Proxima sits at its measured place 12,000 au out on its half-million-year orbit; its planets b and d circle it with their measured "
+     "periods and phases, drawn in an assumed tilt (the star's equator), their masses shown as minimums and their sizes unknown. Proxima c (disputed) and the JWST "
+     "candidate around A (unconfirmed, seen once) are drawn dashed. Each star has its habitable zone, its card and its sources; Fit buttons frame the pair, the whole "
+     "system or Proxima's planets. The sky is the one seen from there, with our Sun as a bright star in Cassiopeia. A new guide tells the system's story (refuted "
+     "planets included), the Data panel has its tables, and the masses and distance of A and B everywhere are now Akeson et al. 2021's. Found on the way: the "
+     "Orbit Lab's lines on the graphics card lost part of the view's position (up to half a point zoomed fully in on a planet): fixed."},
     {"0.72.1", "Research: the Alpha Centauri system; no change to the app",
      "Research: the Alpha Centauri system (PLAN_ALPHACEN.md); no change to what the app does. Everything known about A, B, Proxima and every planet ever "
      "claimed around them, from 57 saved papers: the stars' orbit, masses, sizes and ages, Proxima's half-million-year orbit, Proxima b and d (confirmed), "

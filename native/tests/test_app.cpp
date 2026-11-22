@@ -1096,16 +1096,16 @@ static void testBenchBlackHole() {
 // ---- 0.56.1: the two lists, the stable ids, the summary table's rules, the waits and the rest (made-up results), the run's length, the texts ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views, 0.72.0 blackhole.moving_gas): 33 Hard scenes first, 49 in All", app::kBenchHardScenes == 33 && app::kBenchAllScenes == 49 && int(v.size()) == 49);
+    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views, 0.72.0 blackhole.moving_gas, 0.73.0 orbit.alphacen): 34 Hard scenes first, 50 in All", app::kBenchHardScenes == 34 && app::kBenchAllScenes == 50 && int(v.size()) == 50);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[49] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
+    static const char* const ids[50] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
         "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.slice_super_drag",
         "atom.slice_all_drag", "atom.slice_dirac_drag", "atom.side_all_glow", "atom.side_all_classic", "atom.slice_glow_ultra", "atom.slice_classic_ultra", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
         "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas",
-        "ui.guide_scroll", "ui.data_plot", "ui.settings_open",
+        "ui.guide_scroll", "ui.data_plot", "ui.settings_open", "orbit.alphacen",
         "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first", "atom.chart_chain", "atom.uranium_true",
         "atom.phase_wheel_cpu", "atom.jump_held_cpu", "atom.superposition_cpu", "atom.outline_first_cpu", "atom.slice_drag_cpu", "orbit.heaviest_cpu", "orbit.rocks8_cpu", "atom.uranium_true_cpu"};
     bool same = true, unique = true, form = true;
@@ -1145,7 +1145,8 @@ static void testBenchSceneNumbers() {
               v[10].what.find("zoom -0.5") != std::string::npos && v[12].what.find("zoom -0.5") != std::string::npos);
     // the run's length: about four minutes (rule 8 of the job; a static_assert holds it too)
     // 0.72.0: 33 scenes, 291.3 s planned: the upper limit 4.9 minutes (0.64.0: 4.85; bench_scenes.cpp's static_assert, REPORT 0.72.0)
-    checkTrue("benchmark run: planned at about four and three-quarter minutes since 0.64.0 (" + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 294);
+    // 0.73.0 (on purpose): 34 scenes (orbit.alphacen), 297.8 s planned: the upper limit 5.0 minutes (REPORT 0.73.0)
+    checkTrue("benchmark run: planned at about five minutes since 0.73.0 (" + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 300);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
 }
 static void testBenchSummary() {
@@ -1518,7 +1519,7 @@ static void testFarMasses() {
         for (int k = 0; k < nFar; k++) if (std::string(kFar[k].key) == m.key) known = true;
         checkTrue(w + "belongs to a far-away thing in the table", known);
         checkTrue(w + "has a named source", m.source && std::strlen(m.source) > 12);                  // e.g. "Bond et al. 2017, arXiv:1703.10625"
-        checkTrue(w + "says what kind of number it is", !std::strcmp(m.how, "orbit") || !std::strcmp(m.how, "lensing") || !std::strcmp(m.how, "models"));
+        checkTrue(w + "says what kind of number it is", !std::strcmp(m.how, "orbit") || !std::strcmp(m.how, "lensing") || !std::strcmp(m.how, "models") || !std::strcmp(m.how, "relation"));
         checkTrue(w + "value inside its stated range (low <= value <= high), range not empty", m.low <= m.value && m.value <= m.high && m.low < m.high && m.low > 0);
         if (std::find(keys.begin(), keys.end(), m.key) == keys.end()) keys.push_back(m.key);
     }
@@ -1534,8 +1535,10 @@ static void testFarMasses() {
     // the text
     checkStr("Sirius", orbit::farMassText("sirius"), "Mass: A 2.06 · B 1.02 M☉");
     checkStr("Procyon", orbit::farMassText("procyon"), "Mass: A 1.48 · B 0.592 M☉");
-    checkStr("Alpha Centauri", orbit::farMassText("acen"), "Mass: A 1.13 · B 0.97 M☉");
-    checkStr("Proxima is shown with its wide range and as uncertain", orbit::farMassText("prox"), "Mass: 0.15 (0.099 to 0.21) M☉, uncertain");
+    // 0.73.0 (deliberate change, REPORT.md): Akeson et al. 2021's masses (Table 8, 1.0788 and 0.9092) replace Pourbaix & Boffin 2016's 1.13 and 0.97; Proxima shows
+    // Kervella et al. 2017's 0.1221 (Table 1) with Zurlo et al. 2018's lensing mass beside it (the owner's choice of 22 Nov 2026)
+    checkStr("Alpha Centauri", orbit::farMassText("acen"), "Mass: A 1.08 · B 0.909 M☉");
+    checkStr("Proxima: the brightness-relation mass and the lensing mass with its wide range, as uncertain", orbit::farMassText("prox"), "Mass: 0.122 · lensing 0.15 (0.099 to 0.21) M☉, uncertain");
     checkStr("model-based masses say so", orbit::farMassText("fom"), "Mass: about 1.92 M☉ (from models)");
     checkStr("Arcturus", orbit::farMassText("arct"), "Mass: about 1.08 M☉ (from models)");
     checkStr("Sagittarius A*", orbit::farMassText("sgra"), "Mass: 4.3 million M☉");

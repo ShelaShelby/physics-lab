@@ -284,6 +284,7 @@ std::vector<SearchEntry> searchEntries(AppState& app) {
         add("Guides", "What am I even looking at?", "guide:look", [&app] { app.learn = 1; app.learnJump = "top"; });
         add("Guides", "Why do we have seasons?", "guide:seasons", [&app] { app.learn = 2; app.learnJump = "top"; });
         add("Guides", "Timeline: how we understood the Solar System", "guide:timeline", [&app] { app.learn = 3; app.learnJump = "top"; });
+        add("Guides", "The Alpha Centauri system", "guide:alphacen", [&app] { app.learn = 4; app.learnJump = "top"; });   // 0.73.0
     }
     add("Menu", "Save picture", "menu:save", [&app] { app.shot.requested = true; });
     add("Menu", "Settings", "menu:settings", [&app] { app.showSettings = true; });
@@ -412,9 +413,10 @@ std::vector<Crumb> crumbs(const AppState& app, int mode) {
     if (mode <= 1) for (int i = 0; i < app::kLabCount; i++) v.push_back({labTabText(i), 4 + i});
     if (mode == 1) return v;
     if (app.lab == 0) {
-        if (mode == 0) v.push_back({"Solar System", subj.empty() ? 3 : 2});
+        const char* place = app.set.alphaCen ? "Alpha Centauri" : "Solar System";   // 0.73.0: the System the picture shows
+        if (mode == 0) v.push_back({place, subj.empty() ? 3 : 2});
         if (!subj.empty()) v.push_back({subj, 3});
-        else if (mode == 1) v.push_back({"Solar System", 3});
+        else if (mode == 1) v.push_back({place, 3});
     }   // (0.22 stage 6: the Atom and Molecule Labs name their subject in the chip in the middle of the bar, so the breadcrumb does not repeat it)
     return v;
 }

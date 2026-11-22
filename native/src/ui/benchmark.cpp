@@ -1,4 +1,5 @@
 #include "ui/benchmark.h"
+#include "orbit/alphacen.h"
 #include "ui/reading.h"
 #include "ui/shell.h"
 #include "ui/shell_test.h"
@@ -140,6 +141,22 @@ void orbitSky(AppState& app) {
     app.view.spin = false;
     app.paused = true;
     setZoom(app, zoomOr(kSkyZoom));
+}
+// 0.73.0: the Alpha Centauri system (orbit.alphacen): the whole system to Proxima's planets and back, the camera turning (the zooms tried: REPORT 0.73.0)
+constexpr double kAcZoomFar = -3.6, kAcZoomNear = 4.0, kAcZoomPeriodS = 8.0;   // (4.0: Proxima fills the picture; the hardest of -3.6, -1, 2 and 4 on the box, REPORT 0.73.0)
+void orbitAlphaCen(AppState& app) {
+    commonSetup(app);
+    app.lab = 0;
+    resetToToday(app);
+    orbit::ViewSettings& s = app.set;
+    s = orbit::ViewSettings();
+    s.alphaCen = true;
+    s.view3D = true; s.sky = orbit::SkyMode::Full; s.cons = orbit::ConsMode::LinesAndNames;
+    s.tspeed = units::kTspeedMax;
+    app.view = orbit::OrbitView();
+    app.view.select(orbit::Selection{orbit::Selection::ACen, 0, orbit::acen::Proxima}, true);
+    app.paused = false;
+    setZoom(app, zoomOr(kAcZoomFar));
 }
 void orbitJourney(AppState& app) {
     commonSetup(app);
@@ -500,6 +517,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::OrbitRealFast: orbitRealFast(app); break;
         case K::OrbitSky: orbitSky(app); break;
         case K::OrbitJourney: orbitJourney(app); break;
+        case K::OrbitAlphaCen: orbitAlphaCen(app); break;
         case K::Atom:
             commonSetup(app);
             app.lab = 1;
@@ -553,6 +571,11 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
         case K::OrbitSaturn: case K::OrbitSky:
             app.view.yaw = 0.6 + 0.5 * u;                                        // turning 0.5 rad a second, tilting with it
             app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
+            break;
+        case K::OrbitAlphaCen:                                                   // 0.73.0: the whole system to Proxima's planets and back (log zoom), turning and tilting
+            app.view.yaw = 0.6 + 0.5 * u;
+            app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
+            if (!envHas("PL_BENCH_ZOOM")) setZoom(app, 0.5 * (kAcZoomFar + kAcZoomNear) - 0.5 * (kAcZoomNear - kAcZoomFar) * std::cos(2 * kPi * u / kAcZoomPeriodS));
             break;
         case K::OrbitEarth: {                                                    // turning back and forth round the sunlit side, where the Moon's shadow falls
             // the camera on the line from Earth's centre towards the Moon (the shadow falls near its foot): orbit_view.cpp's viewer sits along
@@ -682,6 +705,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
                                                       !app.rocksOk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (GPU rocks switched off for this scene)") +
                    "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.68.0
         case K::OrbitSaturn: return orbit::ringCardPathText(g_vk);   // 0.64.0
+        case K::OrbitAlphaCen: return "the Alpha Centauri orbits: " + orbit::linesCardPathText(g_vk != nullptr);   // 0.73.0
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
             if (t.atomWhich == atom::kBenchSliceSuper)                      // 0.64.0: the Slice's card program takes an orthogonal superposition too (an overlapping pair: the processor)
@@ -729,6 +753,9 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
         case K::Atom: return atom::benchShortText(app.atom);
         case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitSky:
             std::snprintf(z, sizeof z, "Orbit Lab: zoom %.2f (log10), picture %.0f x %.0f points", app.set.zoom, app.canvasW, app.canvasH);
+            return z;
+        case K::OrbitAlphaCen:
+            std::snprintf(z, sizeof z, "Orbit Lab, Alpha Centauri: zoom %.2f (log10) now, %.1f to %.1f every %.0f s, picture %.0f x %.0f points", app.set.zoom, kAcZoomFar, kAcZoomNear, kAcZoomPeriodS, app.canvasW, app.canvasH);
             return z;
         case K::MoleculeDensity: case K::MoleculeVibDensity: case K::MoleculeSpaceVib:
             std::snprintf(z, sizeof z, "Molecule Lab: %s (%zu atoms), zoom x%.2f%s", app.molecule.mol().id.c_str(), app.molecule.mol().atoms.size(), app.molecule.set.cam.zoom,

@@ -45,6 +45,11 @@ void slowMoons(AppState& app);                             // Time speed so that
 bool slowSpinAvailable(const AppState& app);               // a planet with real spin data is selected
 void slowSpin(AppState& app);                              // Time speed so that one turn takes about 24 seconds, follow, and (True scale) zoom in close enough to see it
 
+// ---- 0.73.0: the Alpha Centauri system (orbit/alphacen.h): the System switch and the Fit buttons ----
+void setSystem(AppState& app, bool alphaCen);              // switch the scene: the selection and the view start again (Alpha Centauri: the A-B pair fitted)
+enum class AcFit { Pair, System, Planets };
+void acenFit(AppState& app, AcFit f);                      // A and B / the whole system / Proxima's planets: picked, followed and fitted in the picture
+
 // One line of the lab's state, for the automatic checks (PL_SHELL_STATE): the date, time speed, pause, view, switches, selection, zoom. Plain text.
 std::string orbitStateLine(const AppState& app);
 

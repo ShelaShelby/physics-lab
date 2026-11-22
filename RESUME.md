@@ -1,9 +1,9 @@
 # Resume
 
 ## Current state
-- 0.72.1 (22 Nov 2026): research only, no change to what the app does: the Alpha Centauri system (native/PLAN_ALPHACEN.md: the stars, A-B's and Proxima's orbits, every planet claimed with its status, what is unknown, a proposal for drawing it, tests and build steps, questions for the owner); 57 papers in the sources repo (data/alphacen). Doubtful values found in the app (A and B's masses and distance): REPORT.md, ROADMAP. Black Hole look and speed work paused (DECISIONS 22 Nov 2026).
+- 0.73.0 (22 Nov 2026): the Alpha Centauri system in the Orbit Lab (PLAN_ALPHACEN.md sect. 13, all six build steps): a System switch; A and B on Akeson et al. 2021's orbit, Proxima at its measured place on its orbit, b and d (tilt assumed, minimum masses), Proxima c and the candidate around A dashed, habitable zones, cards, Fit buttons, a guide, three Data panel tables, the sky seen from there with our Sun; A and B's masses and distance now Akeson 2021's; the Hard-list scene orbit.alphacen (the owner's benchmark is asked for). Found and fixed: the Orbit Lab's card lines lost the low part of the view's x (since 0.68.0).
 - Last full UI run: 0.69.0 (the commit "native 0.69.0"); failing in it: ui_search (check_5l labels) and ui_atom_layout (check_5h cards: the radial card read before the card's outline came), both fixed and re-run; ui_blackhole smooth (the card count, ROADMAP: the one-in-two limit; its sky-guard checks fixed and re-run); ui_popups orbitkeep (rest.orbit at 2560 x 1369 drawn anew: fails on 0.68.1 too, the owner's bug, ROADMAP) and benchwaits (passes alone, on 0.68.1 too: the full run's load).
-- Next steps: the owner answers PLAN_ALPHACEN.md sect. 14; then its build steps (sect. 13), smallest first. The owner's benchmark of 0.72.0 (blackhole.moving_gas) is still welcome (no scene was added since).
+- Next steps: the owner's benchmark of 0.73.0 (the new scene orbit.alphacen); ROADMAP's next Alpha Centauri line; the Black Hole Lab's look and speed work resume when the owner says.
 - Workflow (details in CLAUDE.md): `native/tools/check.sh quick` for every job; every job: `check.sh quick` plus the ui_* tests of the screens it changes; `check.sh full` (about 35 min) only when the owner asks. One push per job; PLANNER.md and this file kept true by every job.
 
 ## How work flows

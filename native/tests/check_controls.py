@@ -97,7 +97,8 @@ def main():
         st = r.states[-1] if r.states else ""
         check("sel=" in st and "sel=0," not in st, f"{sz}: Pick a body: Titan was picked in the panel ({st[:80]})")
     # 0.39.3: a filter that matches nothing says so (the list just went empty)
-    r = go("c_picknone", "10:click=ctl.sec.pick;14:click=##pickfilter;18:text=zzz", frames=30)
+    # (0.73.0: the System section above it makes the panel scroll Pick a body into view after it opens: the filter is clicked once that scroll is done, frame 22, not 14)
+    r = go("c_picknone", "10:click=ctl.sec.pick;22:click=##pickfilter;26:text=zzz", frames=38)
     check(bool(r.note("picknone")) and not r.note("pickfirst"), f"Pick a body: a filter that matches nothing says so ({r.note('picknone')})")
     # 0.39.3: the search finds a far thing by its own name too ("sagittarius" found nothing: the list calls Sagittarius A* "Galactic centre")
     r = go("c_searchsgra", "10:key=ctrl+k;16:text=sagittarius", frames=30)
@@ -194,9 +195,10 @@ def main():
     THEMES = ("light", "dark", "black", "midnight", "solar", "paper", "sage", "contrast", "monochrome", "decay", "galactic")
     HOVER = "10:move=card.legend;16:move=tool.reset;22:move=show.moons;28:move=ctl.sec.view;34:move=view.reset"
     # (0.23 stage 2: 1160 high, was 1080: the Show section's new "Orbit paths" row pushed View › Reset view below the panel's bottom in the Monochrome theme, out of the pointer's reach)
-    prefetch([((binary, work, f"c_halo_{t}", dict(NEW, PL_SCRIPT=HOVER)), dict(frames=44, size="1280x1160", theme=t)) for t in THEMES])
+    # (0.73.0: 1260 high: the new System section at the panel's top did the same)
+    prefetch([((binary, work, f"c_halo_{t}", dict(NEW, PL_SCRIPT=HOVER)), dict(frames=44, size="1280x1260", theme=t)) for t in THEMES])
     for t in THEMES:
-        r = run_app(binary, work, f"c_halo_{t}", dict(NEW, PL_SCRIPT=HOVER), frames=44, size="1280x1160", theme=t)
+        r = run_app(binary, work, f"c_halo_{t}", dict(NEW, PL_SCRIPT=HOVER), frames=44, size="1280x1260", theme=t)
         halos = {}
         for n in r.note("halo "):
             kv = dict(p.split("=", 1) for p in n.split()[1:])

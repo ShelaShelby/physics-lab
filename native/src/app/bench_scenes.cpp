@@ -106,6 +106,9 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "worked analysis with one, else a straight line) and its band, over the Atom Lab turning 0.8 rad a second.");
         add(true, "ui.settings_open", BenchKind::UiSettingsOpen, -1, "Panels, Settings over the heaviest Orbit view, Pick a body open and scrolled",
             "The heaviest Orbit view (orbit.heaviest) with the Settings page open over it, and the Controls panel's Pick a body list open and scrolled down and up.");
+        add(true, "orbit.alphacen", BenchKind::OrbitAlphaCen, -1, "Orbit Lab, Alpha Centauri from the whole system to Proxima's planets, turning",
+            "System Alpha Centauri, 3D, Stars Full with constellation lines and names, orbit paths, Proxima followed, the fastest time: zoom -3.6 (the whole system) "
+            "through Proxima's planets to 4.0 (Proxima fills the picture) and back every 8 s, the camera turning 0.5 rad a second and tilting. The orbits are the card's lines where its check passed.");
         // ---- All scenes: the easy ones and the old processor twins ----
         add(false, "orbit.rocks8", BenchKind::OrbitRocks8, -1, "Orbit Lab, 8 times the rocks",
             "orbit.heaviest with 8 times the rocks in the belts and the Oort cloud (48,000, the same kinds of orbits, a fixed seed); the rocks do not pull on each other.");
@@ -150,7 +153,8 @@ double benchPlannedS() {
 // 0.64.0: 32 scenes (the six heavy views the benchmark missed, CLAUDE.md: a heavy view goes to the Hard list), so about four and three-quarter minutes (REPORT 0.64.0)
 // 0.72.0: 33 scenes (blackhole.moving_gas, CLAUDE.md: a new drawing adds its scene): 291.3 s planned, over 0.64.0's 4.85 minutes by 0.3 s; the limit is 4.9
 // minutes now (nothing shortened, REPORT 0.72.0)
-static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 4.9 * 60,
+// 0.73.0: 34 scenes (orbit.alphacen, CLAUDE.md: a new drawing adds its scene): 297.8 s planned; the limit is 5.0 minutes now (nothing shortened, REPORT 0.73.0)
+static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.0 * 60,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,
               "the default benchmark run is planned at about four minutes");

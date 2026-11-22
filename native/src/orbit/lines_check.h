@@ -20,6 +20,10 @@
 // HOW THIS LIMIT WAS MADE (said plainly, 0.68.1): the FIRST limit of 0.68.0 left out the curve steps' own size (the S term) and FAILED the closest zoom's
 // case (up to 0.05 point at 10,000 points off the picture); it was derived AGAIN, after looking at that result, and the derivation above is the second one. It was
 // not tuned to the measured differences; 0.68.1 re-checked the cubic's terms in float without them (native/REPORT.md).
+// 0.73.0: a FOURTH case, the Alpha Centauri scene's ellipses (orbit_lines.h LineEllipse: A's and B's orbits, Proxima's 8,200 au orbit with its focus 306 au off
+// the origin, and Proxima b's circle 12,000 au from the origin, solid and dashed: one run a piece), seen in 2D following the planet at zoom 2.5. The same limit
+// as above (S = 1e-6 x dE (|P a| + |Q b|) for each ellipse), written before this case's result was looked at; nothing in the card's program changed (the
+// ellipses are kind 2 runs with their own corners and P a, Q b).
 // The drawing itself (each step clipped and widened as Renderer2D::line, in the vertex shader) is checked by the pictures (check_orbit_ui.py cardlines).
 #pragma once
 
@@ -39,6 +43,7 @@ struct LinesCase {
     std::vector<Body> bodies;                        // the orbits (orbitPath of each)
     std::vector<std::deque<Vec3>> trails;            // a trail for each body, ending at its place (pos)
     std::vector<double> rings;                       // distance rings, m
+    std::vector<LineEllipse> ellipses;               // 0.73.0: ellipses given directly (the Alpha Centauri scene), solid or dashed
 };
 std::vector<LinesCase> linesCheckCases();
 // the processor's pens (drawn with rec: each pen's points, 5 numbers a point) and the card's draw of the same lines (its own points: LinesDraw::checkPts)

@@ -14,6 +14,7 @@
 #   links     in the reading view a link's underline is one line (no gap between two words of the same link)
 #   airedge   0.50: just outside Earth's limb the picture is the sky (no blue rim of air)
 #   nightside 0.50: Jupiter's night side is the sky's colour (no ambient light)
+#   acen      0.73.0: the Alpha Centauri system: the System switch both ways, the Fit buttons, the cards, the words disputed / unconfirmed / assumed
 import datetime, glob, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap, Bmp, prefetch, old_run
@@ -654,13 +655,16 @@ def part_cardlines(binary, work):
         px, py = x.pixels(), y.pixels()
         st = x.bpp
         return sum(1 for i in range(0, min(len(px), len(py)) - st + 1, st) if max(abs(px[i] - py[i]), abs(px[i + 1] - py[i + 1]), abs(px[i + 2] - py[i + 2])) > 8)
-    for sc in ("orbit.heaviest", "orbit.real_fast", "orbit.earth"):
+    for sc in ("orbit.heaviest", "orbit.real_fast", "orbit.earth", "orbit.alphacen"):   # (0.73.0: and the Alpha Centauri scene's ellipses, validation on)
         env = {"PL_NO_MSAA": "1", "PL_BENCH_SETUP": sc}
-        card = run_app(binary, work, "lines_card_" + sc, env, frames=60)
+        card = run_app(binary, work, "lines_card_" + sc, dict(env, PL_VK_VALIDATION="1") if sc == "orbit.alphacen" else env, frames=60)
+        if sc == "orbit.alphacen":
+            errs = [l for l in card.err.splitlines() if l.startswith("PLVKVALIDATION error")]
+            check("PLVKVALIDATION missing" not in card.err and not errs and "PLLINESCARD state=1" in card.out, f"lines, {sc}: the card drew it, validation on, no errors ({errs[:2]})")
         cpu = run_app(binary, work, "lines_cpu_" + sc, dict(env, PL_NO_LINES_CARD="1"), frames=60)
         if sc == "orbit.heaviest":
             cases = [ln for ln in card.out.splitlines() if ln.startswith("PLLINESCASE ")]
-            check("PLLINESCARD state=1" in card.out and len(cases) == 3, f"lines: the start-up check passes, three cases ({cases})")
+            check("PLLINESCARD state=1" in card.out and len(cases) == 4, f"lines: the start-up check passes, four cases ({cases})")   # (0.73.0, on purpose: a fourth case, the Alpha Centauri scene's ellipses, orbit/lines_check.h)
             bad = run_app(binary, work, "lines_fail", dict(env, PL_LINES_CARDFAIL="1"), frames=60)
             check("PLLINESCARD state=-1" in bad.out, "lines: a failed check leaves the processor's lines")
             o2 = over(Bmp(bad.bmp), Bmp(cpu.bmp))   # (two runs of the processor's own picture already differ in a pixel or two here: at most 0.01 %)
@@ -670,12 +674,55 @@ def part_cardlines(binary, work):
         print(f"  {sc}: card against processor, {o} pixels over 8 levels ({100 * o / max(1, a.w * a.h):.3f} %)")
         check((a.w, a.h) == (b.w, b.h) and a.w > 0 and o <= 0.01 * a.w * a.h, f"lines, {sc}: the card's picture is the processor's within the limit ({o} pixels over 8 levels)")
 
+# ------------------------------------------------------------------ 0.73.0: the Alpha Centauri system (orbit/alphacen.h; PLAN_ALPHACEN.md)
+def part_acen(binary, work):
+    # WRITTEN BEFORE it was run: the System switch both ways, the three Fit buttons (what they pick, follow and how far they zoom), the cards (A21's masses
+    # with their error bars, the disputed age, Proxima's two masses, a planet's minimum mass), the words "disputed", "unconfirmed" and "assumed" on the
+    # picture or its cards, and the honest-limits note clear of the bars. One theme (dark), the two window sizes where the layout differs.
+    for size in ("880x560", "1280x800"):
+        R = Runner(binary, work, size)
+        s = state(R.go(["click=system.pick@0.75"]))
+        check(s and s.get("acen") == "1" and s["sel"] == "7,0,0" and s["follow"] == "1", f"acen {size}: the switch shows Alpha Centauri, its centre of mass picked and followed ({s and s.get('sel')})")
+        s = state(R.go(["click=system.pick@0.75", "click=system.pick@0.25"]))
+        check(s and s.get("acen") == "0" and s["sel"] == "0,0,0", f"acen {size}: and back to the Solar System, nothing picked")
+        fits = {}
+        for name in ("pair", "system", "planets"):
+            r = R.go(["click=system.pick@0.75", f"click=fit.{name}"])
+            fits[name] = (state(r), r)
+            check(not missing(r), f"acen {size}: Fit {name} found {missing(r)[:1]}")
+        z = {k: float(v[0]["zoom"]) for k, v in fits.items() if v[0]}
+        check(len(z) == 3 and z["system"] < z["pair"] < z["planets"] and z["system"] < -3 and z["planets"] > 1, f"acen {size}: Fit zooms out to the whole system and in to the planets ({z})")
+        check(fits["planets"][0] and fits["planets"][0]["sel"] == "7,0,3" and fits["system"][0]["sel"] == "7,0,0", f"acen {size}: Fit planets follows Proxima, Fit system the centre of mass")
+        rp = fits["planets"][1]
+        labels = [k for k in rp.rects if k.startswith("aclabel.")]
+        check(any("Proxima_b" in k and "at_least" in k for k in labels), f"acen {size}: at Proxima's planets: b labelled with its minimum mass ({labels})")
+        if size == "1280x800":   # (at 880x560 the card and the panel leave no room for it: the Controls panel's caption says it there, checked below)
+            check(any("assumed" in k for k in labels), f"acen {size}: the planets' tilt is said to be assumed on the picture ({labels})")
+        check(any("assumed" in t for _, _, t in rp.texts), f"acen {size}: the Controls panel says the tilt is assumed")
+        note = rp.rects.get("acnote")
+        if size == "1280x800":
+            check(note is not None, f"acen {size}: the honest-limits note is drawn")
+        if note:
+            for nm, box in rp.rects.items():
+                if nm in ("topbar", "panel.controls", "toolbar", "readout") or nm.startswith("card."):
+                    check(not overlap(note, box), f"acen {size}: the note is clear of {nm}")
+    # the cards (the data sheet, All values), at 1280x800
+    want = {"Alpha Centauri A": ["Mass: 1.0788 ± 0.0029 Suns (Akeson et al. 2021)", "Age: disputed"], "Proxima Centauri": ["Mass: 0.1221 ± 0.0022 Suns", "0.150 +0.062 −0.051"],
+            "Proxima b": ["Mass: at least 1.055 ± 0.055 Earths", "Tilt: assumed"], "Proxima c": ["Status: disputed"], "Candidate around A": ["Status: unconfirmed"]}
+    for name, needs in want.items():
+        r = run_app(binary, work, "acen_card_" + name.replace(" ", "_"), {"PL_NEWUI": "on", "PL_SCRIPT": f"10:click=system.pick@0.75;16:click=ctl.sec.pick;22:click=##pickfilter;28:text={name};34:click=pick.{name}{' (disputed)' if name == 'Proxima c' else ' (unconfirmed)' if name.startswith('Candidate') else ''};46:click=card.all"}, frames=60)
+        sheets = [ln[8:].split("\t") for ln in r.out.splitlines() if ln.startswith("PLSHEET ")]
+        text = " | ".join(sheets[-1]) if sheets else ""
+        check(not missing(r) and all(w in text for w in needs), f"acen card {name}: {needs} ({missing(r)[:1]} {text[:160]})")
+    r = run_app(binary, work, "acen_cand_label", {"PL_NEWUI": "on", "PL_SCRIPT": "10:click=system.pick@0.75;16:click=ctl.sec.pick;22:click=##pickfilter;28:text=Candidate;34:click=pick.Candidate around A (unconfirmed)"}, frames=50)
+    check(any("unconfirmed" in k for k in r.rects if k.startswith("aclabel.")), "acen: the candidate's band is labelled unconfirmed when picked")
+
 def main():
     binary, work = sys.argv[1], sys.argv[2]
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
     want = lambda n: only is None or n in only
     os.makedirs(work, exist_ok=True)
-    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings), ("cardlines", part_cardlines)):
+    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings), ("cardlines", part_cardlines), ("acen", part_acen)):
         if want(name):
             fn(binary, work)
     print(f"{checks} checks, {fails} failed")
