@@ -48,8 +48,10 @@ static int64_t nowUnixMs() {
 namespace {
 struct ZoomGlide { bool on = false; double from = 0, to = 0, s = 0, secs = kWheelZoomSeconds; };
 ZoomGlide g_zoomGlide;                                    // 0.74.0: the running zoom glide (one picture, one glide)
+// 0.75.0: the top is the view's own cap where a followed body would otherwise have the camera inside it (OrbitView::zoomCapFor: 3D, True scale), for the picture's size
+double zoomTop(const AppState& app) { return std::max(kZoomMin, std::min(kZoomMax, app.view.zoomCapFor(app.sys, app.set, app.canvasW, app.canvasH))); }
 void applyZoom(AppState& app, double zoom) {
-    zoom = std::clamp(zoom, kZoomMin, kZoomMax);
+    zoom = std::clamp(zoom, kZoomMin, zoomTop(app));
     app.view.zoomChanged(app.set.zoom, zoom);
     app.set.zoom = zoom;
 }
@@ -58,7 +60,7 @@ void applyZoom(AppState& app, double zoom) {
 void setZoom(AppState& app, double zoom) { g_zoomGlide.on = false; applyZoom(app, zoom); }
 
 void glideZoom(AppState& app, double zoom, double seconds) {
-    zoom = std::clamp(zoom, kZoomMin, kZoomMax);
+    zoom = std::clamp(zoom, kZoomMin, zoomTop(app));
     if (look().reduced || app.journey.active || app.benchRunning || seconds <= 0) { setZoom(app, zoom); return; }
     g_zoomGlide = ZoomGlide{true, app.set.zoom, zoom, 0, seconds};
 }
@@ -67,6 +69,7 @@ void zoomBy(AppState& app, double dz) { glideZoom(app, (g_zoomGlide.on ? g_zoomG
 
 void cameraTick(AppState& app, double dt) {
     ZoomGlide& g = g_zoomGlide;
+    if (app.lab == 0 && app.set.zoom > zoomTop(app)) { if (g.on) g.to = std::min(g.to, zoomTop(app)); applyZoom(app, app.set.zoom); }   // 0.75.0: a pick of a closer body: the zoom comes down to its cap
     if (!g.on) return;
     if (app.journey.active || app.benchRunning || app.lab != 0) { g.on = false; return; }   // a Journey or a benchmark scene sets the zoom itself
     g.s += dt / g.secs;

@@ -1096,16 +1096,16 @@ static void testBenchBlackHole() {
 // ---- 0.56.1: the two lists, the stable ids, the summary table's rules, the waits and the rest (made-up results), the run's length, the texts ----
 static void testBenchSceneNumbers() {
     const std::vector<app::BenchSceneText>& v = app::benchSceneTexts();
-    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views, 0.72.0 blackhole.moving_gas, 0.73.0 orbit.alphacen): 34 Hard scenes first, 50 in All", app::kBenchHardScenes == 34 && app::kBenchAllScenes == 50 && int(v.size()) == 50);
+    checkTrue("benchmark lists (on purpose: 0.58.0 blackhole.all_light, 0.63.0 atom.slice_super_drag, 0.64.0 the six heavy views, 0.72.0 blackhole.moving_gas, 0.73.0 orbit.alphacen, 0.75.0 orbit.flyby): 35 Hard scenes first, 51 in All", app::kBenchHardScenes == 35 && app::kBenchAllScenes == 51 && int(v.size()) == 51);
     bool hardFirst = true;
     for (std::size_t i = 0; i < v.size(); i++) hardFirst = hardFirst && v[i].hard == (int(i) < app::kBenchHardScenes);
     checkTrue("benchmark lists: the Hard scenes come first and only they are in the default run", hardFirst);
     // the ids: stable strings, in this order (an id is never reused; a scene that moves between the lists keeps its id: change this list only on purpose)
-    static const char* const ids[50] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
+    static const char* const ids[51] = {"orbit.heaviest", "orbit.saturn", "orbit.earth", "orbit.real_fast", "orbit.sky", "orbit.journey",
         "atom.nucleus_zoom", "atom.nucleon", "atom.slice_drag", "atom.slice_super_drag",
         "atom.slice_all_drag", "atom.slice_dirac_drag", "atom.side_all_glow", "atom.side_all_classic", "atom.slice_glow_ultra", "atom.slice_classic_ultra", "atom.all_enlarged", "atom.all_true_zoomed", "atom.all_one_orbital", "atom.all_classic", "atom.jump_all", "atom.nucleus_density",
         "molecule.density", "molecule.vib_density", "molecule.spacefill_vib", "blackhole.real_move", "blackhole.film_tilt", "blackhole.extreme", "blackhole.all_light", "blackhole.moving_gas",
-        "ui.guide_scroll", "ui.data_plot", "ui.settings_open", "orbit.alphacen",
+        "ui.guide_scroll", "ui.data_plot", "ui.settings_open", "orbit.alphacen", "orbit.flyby",
         "orbit.rocks8", "atom.nucleus_whole", "atom.phase_wheel", "atom.jump_held", "atom.superposition", "atom.outline_first", "atom.chart_chain", "atom.uranium_true",
         "atom.phase_wheel_cpu", "atom.jump_held_cpu", "atom.superposition_cpu", "atom.outline_first_cpu", "atom.slice_drag_cpu", "orbit.heaviest_cpu", "orbit.rocks8_cpu", "atom.uranium_true_cpu"};
     bool same = true, unique = true, form = true;
@@ -1140,13 +1140,13 @@ static void testBenchSceneNumbers() {
     }
     checkTrue("benchmark texts: a name of at most 90 characters and two or three lines of what it tests (40 to 420 characters)", shortText);
     checkTrue("benchmark texts: no history (stage, up to, from version) and no scene numbers: the ids name the scenes", noHistory);
-    checkTrue("benchmark texts: the new scenes say their zoom, distance or field of view", v[1].what.find("zoom 4.1") != std::string::npos && v[2].what.find("zoom 5.5") != std::string::npos &&
+    checkTrue("benchmark texts: the new scenes say their zoom, distance or field of view", v[1].what.find("zoom 4.1") != std::string::npos && v[2].what.find("zoom 5.14") != std::string::npos && /* (0.75.0, on purpose: the cap, 1.5 Earth radii) */
               v[16].what.find("zoom 0.5") != std::string::npos && v[17].what.find("zoom 2.5") != std::string::npos && v[27].what.find("2.2 GM/c") != std::string::npos && v[27].what.find("360") != std::string::npos &&
               v[10].what.find("zoom -0.5") != std::string::npos && v[12].what.find("zoom -0.5") != std::string::npos);
     // the run's length: about four minutes (rule 8 of the job; a static_assert holds it too)
     // 0.72.0: 33 scenes, 291.3 s planned: the upper limit 4.9 minutes (0.64.0: 4.85; bench_scenes.cpp's static_assert, REPORT 0.72.0)
-    // 0.73.0 (on purpose): 34 scenes (orbit.alphacen), 297.8 s planned: the upper limit 5.0 minutes (REPORT 0.73.0)
-    checkTrue("benchmark run: planned at about five minutes since 0.73.0 (" + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 300);
+    // 0.73.0 (on purpose): 34 scenes (orbit.alphacen), 297.8 s planned: the upper limit 5.0 minutes (REPORT 0.73.0); 0.75.0 (on purpose): 35 (orbit.flyby), 304.3 s: 5.1 minutes
+    checkTrue("benchmark run: planned at about five minutes since 0.73.0 (" + std::to_string(app::benchPlannedS()) + " s)", app::benchPlannedS() >= 210 && app::benchPlannedS() <= 306);
     checkTrue("benchmark run: every scene's warm-up and counted time are 0.65 of 0.56.0's 2 s and 8 s", near(kBenchWarmupS, 1.3) && near(kBenchMeasureS, 5.2));
 }
 static void testBenchSummary() {

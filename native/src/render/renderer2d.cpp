@@ -148,6 +148,21 @@ void Renderer2D::skyMap(double W, double H, double kRad, const float M[9], doubl
     triStart_ = verts_.size();
 }
 
+void Renderer2D::skyMapPinhole(double W, double H, double ppx, double ppy, double F, const float M[9], double bright) {
+    PL_KIND(kdSkyMap);
+    if (!hasMap(Map::Sky) || bright <= 0 || F <= 0) return;
+    closeTriangles();
+    const float u0 = static_cast<float>(-ppx / F), u1 = static_cast<float>((W - ppx) / F), v0 = static_cast<float>(-ppy / F), v1 = static_cast<float>((H - ppy) / F);
+    const Color c{1, 1, 1, static_cast<float>(std::min(1.0, bright))};
+    push(0, 0, u0, v0, c, 2); push(W, 0, u1, v0, c, 2); push(W, H, u1, v1, c, 2);
+    push(0, 0, u0, v0, c, 2); push(W, H, u1, v1, c, 2); push(0, H, u0, v1, c, 2);
+    Segment sg{};
+    sg.kind = Kind::Planet; sg.first = static_cast<int>(triStart_); sg.count = 6; sg.map = static_cast<int>(Map::Sky); sg.mode = 3; sg.r = static_cast<float>(F);   // (mode 3: kPlanetFS's pinhole sky)
+    for (int i = 0; i < 9; i++) sg.K[i] = M[i];
+    segments_.push_back(sg);
+    triStart_ = verts_.size();
+}
+
 void Renderer2D::squares(const float* xy, int count, double size, Color c) {
     PL_KIND(kdSquares);
     if (count <= 0) return;

@@ -19,6 +19,14 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.75.0", "The Orbit Lab's 3D view has real depth",
+     "Zooming in 3D now flies the camera closer: it is a pinhole camera with a 45-degree field, like a phone camera, placed so that the zoom keeps its meaning at the "
+     "followed thing's distance (the scale bar says \"at Earth's distance\"). Near things loom: a moon between you and its planet is drawn bigger, a ball's outline is "
+     "focal x tan(asin(R / L)), lines that pass the camera are cut where they reach it, and nothing behind the camera is drawn. The stars, the constellations and the "
+     "Milky Way are drawn through the same lens, so a star and a far planet in the same direction stay together while the view turns. At True scale the closest zoom "
+     "keeps the camera 1.5 radii from a followed planet's middle. A click on a body flies to it even when nothing is followed, and ticking Follow glides there "
+     "(Reduce motion: at once). The card's lines, rocks and Saturn's rings use the same camera, checked against the processor at start-up; a new benchmark scene, "
+     "orbit.flyby, flies past Saturn's rings from the closest zoom. 2D stays the top-down map."},
     {"0.74.0", "The Orbit Lab's camera keeps what it follows, and moves smoothly",
      "Following a planet, a click on empty space or a right drag no longer lets go of it (time used to carry it off the picture in a second). A right drag, Shift-drag or a drag "
      "in 2D slides the view: the followed body stays followed where you put it. Only picking something else, Reset view (R or Home), Esc or picking the followed body again let go. "

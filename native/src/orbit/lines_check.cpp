@@ -35,14 +35,16 @@ LineCam camera(double W, double H, double zoom, bool d3, double yaw, double pitc
     const double yawA = d3 ? yaw + kPi : 0, pitchA = d3 ? -pitch : 0;   // (orbit_view.cpp)
     c.ca = std::cos(yawA); c.sa = std::sin(yawA); c.cb = std::cos(pitchA); c.sb = std::sin(pitchA);
     c.px = std::min(W, H) / 34 * std::pow(10.0, zoom) / kSimLength;
-    c.D = std::max(90.0, 3 * 34 / std::pow(10.0, zoom)) * kSimLength;
+    c.ppx = W / 2; c.ppy = H / 2;                       // (0.75.0: the pinhole's principal point: the middle, nothing held off it)
+    c.finish();
     return c;
 }
-void follow(LineCam& c, const Vec3& t) {              // orbit_view.cpp's follow: the target in the middle, at the view's middle depth
-    c.cd = 0; c.ox = 0; c.oy = 0;
-    c.cd = c.base(t.x, t.y, t.z).dep;
-    const Q q = c.base(t.x, t.y, t.z);
-    c.ox = c.W / 2 + c.fx - q.first; c.oy = c.H / 2 - q.second;
+void follow(LineCam& c, const Vec3& t) {              // orbit_view.cpp's follow: the target in the middle, at the look-at plane (0.75.0: the camera looks at it)
+    c.cd = c.depth(t.x, t.y, t.z);
+    double sx = 0, sy = 0;
+    c.plane(t.x, t.y, t.z, sx, sy);
+    c.ox = c.W / 2 + c.fx - sx; c.oy = c.H / 2 - sy;
+    c.finish();
 }
 const render::Color kCols[4] = {{0.3f, 0.6f, 1.0f, 0.15f}, {0.3f, 0.6f, 1.0f, 0.35f}, {0.3f, 0.6f, 1.0f, 0.55f}, {0.3f, 0.6f, 1.0f, 0.75f}};
 const render::Color kOrbitCol{0.9f, 0.7f, 0.3f, 0.32f}, kRingCol{0.6f, 0.65f, 0.74f, 0.22f};
@@ -93,6 +95,19 @@ std::vector<LinesCase> linesCheckCases() {
     ac.cam = camera(1280, 800, 2.5, false, 0, 0, Vec3{});
     follow(ac.cam, prox + eb.P * eb.a);
     v.push_back(ac);
+    // 0.75.0: two views from a camera 4,200 km from the 1 AU body (3D, zoom 5.5), 1.2 degrees above its orbit's plane and looking along the orbit, so the orbit
+    // (and in the second, the trail) passes about 90 km from the camera and goes on behind it: pieces cut at the near plane, points behind the camera.
+    // (Its tangent at perihelion is 102.9 + 90 degrees from x: yaw + pi = atan2(0.9748, 0.2233) puts the view's depth axis along it, pitch 1.55 tips it 1.2 degrees.)
+    LinesCase e = base;
+    e.name = "3D at zoom 5.5 following the 1 AU body, looking back along its orbit (the orbit passes the camera and goes behind it)";
+    e.cam = camera(1280, 800, 5.5, true, std::atan2(0.9748, 0.2233) - kPi, 1.55, bc);
+    follow(e.cam, base.bodies[0].pos);
+    v.push_back(e);
+    LinesCase f = base;
+    f.name = "3D at zoom 5.5 following the 1 AU body, looking ahead along its orbit (its trail passes the camera and goes behind it)";
+    f.cam = camera(1280, 800, 5.5, true, std::atan2(0.9748, 0.2233), 1.55, bc);
+    follow(f.cam, base.bodies[0].pos);
+    v.push_back(f);
     return v;
 }
 
@@ -135,10 +150,12 @@ LinesCompare compareLines(const LinesCase& c, const render::LinesDraw& d, const 
         if (r >= d.runs.size()) { k.runsBad++; continue; }
         const render::LinesRun& run = d.runs[r++];
         const int first = run.first, count = run.to - run.from + 1;
-        std::vector<double> card = {ends[4 * std::size_t(first)], ends[4 * std::size_t(first) + 1]};
+        // 0.75.0: the card's steps as segments (each cut at the near plane: 4 floats, or -1e9 when none of it is in front), the pen's as its points joined
+        std::vector<double> card;
         for (int g = first; g < first + count; g++)
-            for (std::uint32_t j = offsets[std::size_t(g)]; j < offsets[std::size_t(g) + 1] && 2 * std::size_t(j) + 1 < points.size(); j++) { card.push_back(points[2 * std::size_t(j)]); card.push_back(points[2 * std::size_t(j) + 1]); }
-        if (card.size() != 2 * n) { k.runsBad++; continue; }
+            for (std::uint32_t j = offsets[std::size_t(g)]; j < offsets[std::size_t(g) + 1] && 4 * std::size_t(j) + 3 < points.size(); j++)
+                for (int q = 0; q < 4; q++) card.push_back(points[4 * std::size_t(j) + std::size_t(q)]);
+        if (card.size() != 4 * (n - 1)) { k.runsBad++; continue; }
         // the length scale of the run's curve steps: an orbit's P a and Q b times the step of E; a trail's longest piece (times 2: the curve's neighbours)
         double scale = 0;
         if (run.kind == 2) scale = 1e-6 * (std::sqrt(double(run.pa[0]) * run.pa[0] + double(run.pa[1]) * run.pa[1] + double(run.pa[2]) * run.pa[2]) +
@@ -156,16 +173,63 @@ LinesCompare compareLines(const LinesCase& c, const render::LinesDraw& d, const 
             }
             scale = 5e-6 * 2 * L;
         }
-        for (std::size_t i = 0; i < n; i++) {
-            const double* p = &pen[5 * i];
-            const double f = c.cam.base(p[2], p[3], p[4]).f, s = c.cam.px * std::max(1.0, f);
-            const double dist = std::sqrt((p[2] - Cx) * (p[2] - Cx) + (p[3] - Cy) * (p[3] - Cy) + (p[4] - Cz) * (p[4] - Cz));
+        // an end of a segment: the processor's (cut at the near plane where it crosses: its place in space by the same fraction) against the card's
+        const auto endCheck = [&](const Q& q, const double* pa, const double* pb, double t, double cx, double cy) {   // t: where along a-b in space it is
+            const double X = pa[0] + t * (pb[0] - pa[0]), Y = pa[1] + t * (pb[1] - pa[1]), Z = pa[2] + t * (pb[2] - pa[2]);
+            const double s = c.cam.px * std::max(1.0, q.f);
+            const double dist = std::sqrt((X - Cx) * (X - Cx) + (Y - Cy) * (Y - Cy) + (Z - Cz) * (Z - Cz));
             const double lim = 0.01 + 4e-6 * s * dist + scale * s;
-            const double e = std::hypot(card[2 * i] - p[0], card[2 * i + 1] - p[1]);
+            const double e = std::hypot(cx - q.first, cy - q.second);
             k.points++;
             k.worstPt = std::max(k.worstPt, e);
             k.worst = std::max(k.worst, e / lim);
-            if (!(e <= lim)) { k.over++; if (std::getenv("PL_LINES_DEBUG") && k.over < 12) std::printf("PLLINESDBG run %zu kind %d pt %zu/%zu cpu %.3f %.3f card %.3f %.3f lim %.3g dist %.4g f %.6g\n", r - 1, run.kind, i, n, p[0], p[1], card[2 * i], card[2 * i + 1], lim, dist, f); }
+            if (!(e <= lim)) { k.over++; if (std::getenv("PL_LINES_DEBUG") && k.over < 12) std::printf("PLLINESDBG run %zu kind %d cpu %.3f %.3f card %.3f %.3f lim %.3g dist %.4g f %.6g\n", r - 1, run.kind, q.first, q.second, cx, cy, lim, dist, q.f); }
+        };
+        // 0.75.0, 3D: a raw end is compared where it lies within 8 focal lengths of the camera's axis on the picture (|x - ppx|, |y - ppy| <= 8 F); farther out the
+        // card's single-precision depth (rounded to about 2^-24 of the point's distance from C) is amplified by x / z, and such a point is never drawn: there the
+        // drawn part of the segment (cut to the picture with its 20-point margin, as LinePen and kLinesVS draw it) is compared instead, with the same limit at
+        // the cut end's own place. 2D: every end, as before.
+        const double win = 8 * c.cam.F;
+        const auto inWin = [&](const Q& q) { return !c.cam.d3 || (std::fabs(q.first - c.cam.ppx) <= win && std::fabs(q.second - c.cam.ppy) <= win); };
+        for (std::size_t i = 1; i < n; i++) {
+            const double* pa = &pen[5 * (i - 1) + 2];
+            const double* pb = &pen[5 * i + 2];
+            const Q qa = c.cam.proj(pa[0], pa[1], pa[2]), qb = c.cam.proj(pb[0], pb[1], pb[2]);
+            Q a2{0, 0, 0, 0}, b2{0, 0, 0, 0};
+            const bool cpuShown = clipNear(c.cam, qa, qb, a2, b2);
+            const double* cs = &card[4 * (i - 1)];
+            const bool cardShown = cs[0] > -1e37;           // (the card's -1e38: none of it in front)
+            if (cpuShown != cardShown) {               // one shows the segment and the other does not: over its limit
+                k.points++; k.over++; k.worst = std::max(k.worst, 1e9);
+                if (std::getenv("PL_LINES_DEBUG")) std::printf("PLLINESDBG run %zu seg %zu shown cpu %d card %d (Z %.6g %.6g near %.6g)\n", r - 1, i, int(cpuShown), int(cardShown), qa.Z, qb.Z, c.cam.zNear);
+                continue;
+            }
+            if (!cpuShown) { k.behind++; continue; }
+            if (c.cam.d3 && (qa.Z < c.cam.zNear || qb.Z < c.cam.zNear)) k.cut++;
+            const double tc = c.cam.d3 && qb.Z != qa.Z ? (c.cam.zNear - qa.Z) / (qb.Z - qa.Z) : 0;   // (where it crosses the near plane)
+            const double ta = c.cam.d3 && qa.Z < c.cam.zNear ? tc : 0.0, tb = c.cam.d3 && qb.Z < c.cam.zNear ? tc : 1.0;
+            if (inWin(a2)) endCheck(a2, pa, pb, ta, cs[0], cs[1]);
+            if (inWin(b2)) endCheck(b2, pa, pb, tb, cs[2], cs[3]);
+            if (inWin(a2) && inWin(b2)) continue;
+            // the drawn part: both cut to the picture; an end on the picture at screen fraction u of a2-b2 is at 3D fraction (1 / Z linear in u) of it
+            double cc[4], kc[4];
+            const bool cpuIn = clipSeg(a2.first, a2.second, b2.first, b2.second, -20, -20, c.cam.W + 20, c.cam.H + 20, cc);
+            const bool cardIn = clipSeg(cs[0], cs[1], cs[2], cs[3], -20, -20, c.cam.W + 20, c.cam.H + 20, kc);
+            if (cpuIn != cardIn) {                     // drawn by one only: over its limit
+                k.points++; k.over++; k.worst = std::max(k.worst, 1e9);
+                if (std::getenv("PL_LINES_DEBUG")) std::printf("PLLINESDBG run %zu seg %zu drawn cpu %d card %d\n", r - 1, i, int(cpuIn), int(cardIn));
+                continue;
+            }
+            if (!cpuIn) continue;
+            const double L = std::hypot(b2.first - a2.first, b2.second - a2.second);
+            for (int e = 0; e < 2; e++) {
+                const double u = L > 0 ? std::hypot(cc[2 * e] - a2.first, cc[2 * e + 1] - a2.second) / L : 0;
+                const double s3 = c.cam.d3 ? (1 / ((1 - u) / a2.Z + u / b2.Z) - a2.Z) / (b2.Z - a2.Z == 0 ? 1 : b2.Z - a2.Z) : u;   // its 3D fraction of a2-b2
+                const double t = ta + (b2.Z - a2.Z == 0 ? u : s3) * (tb - ta);
+                Q q = c.cam.d3 ? c.cam.fromCam(a2.X + (t - ta) / (tb - ta) * (b2.X - a2.X), 0, a2.Z + (t - ta) / (tb - ta) * (b2.Z - a2.Z), 0) : Q{0, 0, 0, 1};
+                q.first = cc[2 * e]; q.second = cc[2 * e + 1];
+                endCheck(q, pa, pb, t, kc[2 * e], kc[2 * e + 1]);
+            }
         }
     }
     if (r != d.runs.size()) k.runsBad++;
@@ -173,21 +237,21 @@ LinesCompare compareLines(const LinesCase& c, const render::LinesDraw& d, const 
 }
 
 std::string linesCompareText(const LinesCompare& k) {
-    char b[200];
-    std::snprintf(b, sizeof b, "%ld runs, %ld points: %ld over the limit, %ld runs with another number of points; the largest difference %.2g of its limit (%.2g point)",
-                  k.runs, k.points, k.over, k.runsBad, k.worst, k.worstPt);
+    char b[260];
+    std::snprintf(b, sizeof b, "%ld runs, %ld points: %ld over the limit, %ld runs with another number of points; the largest difference %.2g of its limit (%.2g point); %ld pieces cut at the near plane, %ld behind it",
+                  k.runs, k.points, k.over, k.runsBad, k.worst, k.worstPt, k.cut, k.behind);
     return b;
 }
 
 namespace {
 double nowS() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
-constexpr int kLinesCases = 4;
+constexpr int kLinesCases = 6;
 struct Path {
     int state = 0;                 // 0 waiting for the lines on screen, 2 its steps under way, 1 ready, -1 off
     int step = 0, frames = 0, gen = -1, usedFrames = 0;
     double stepAt = 0;
     bool firstUse = false, firstDone = false;
-    int jobs[kLinesCases] = {0, 0, 0, 0};          // 0.73.0: four cases (the Alpha Centauri scene's ellipses)
+    int jobs[kLinesCases] = {0, 0, 0, 0, 0, 0};    // 0.73.0: four cases (the Alpha Centauri scene's ellipses); 0.75.0: six (the camera by a line)
     std::vector<float> ends[kLinesCases], pts[kLinesCases];
     std::vector<std::uint32_t> offs[kLinesCases];
     std::string why, check;

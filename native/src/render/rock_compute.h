@@ -25,12 +25,15 @@ struct RockSet {
     const double* nn = nullptr;         // count mean motions, rad/s (null for still rocks)
 };
 
-// One frame's camera and time. The camera is orbit::BeltCamera's (orbit/belts.h) in plain doubles; t is the simulated time in seconds since the start date.
+// One frame's camera and time. The camera is orbit::BeltCamera's (orbit/belts.h, orbit/camera.h; orbit::rockFrameCamera) in plain doubles; t is the simulated
+// time in seconds since the start date. 2D: (sx, sy) is the barycentre's place on the picture. 0.75.0, 3D: the pinhole camera: (sx, sy) the principal point,
+// d its distance from the look-at plane at depth cd, (lx, ly) its axis, F the focal length (points), zNear the near plane (m).
 struct RockFrame {
     double t = 0;
     double libPhase = 0;                // t / year / 150 * 6.2832 brought into 0..2 pi, in double (the Trojans' sway)
     double bc[3] = {0, 0, 0};
-    double ca = 1, sa = 0, cb = 1, sb = 0, px = 1, W = 1, H = 1, D = 1, cd = 0, ox = 0, oy = 0;
+    double ca = 1, sa = 0, cb = 1, sb = 0, px = 1;
+    double sx = 0, sy = 0, d = 1, cd = 0, lx = 0, ly = 0, F = 1, zNear = 0;
     bool d3 = false;
 };
 

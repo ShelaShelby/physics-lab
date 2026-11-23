@@ -429,7 +429,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         pBody(p, "Zoom: " + zoomLabel(set.zoom));
         float z = static_cast<float>(set.zoom);
         if (pSlider(p, "scale.zoom", &z, static_cast<float>(units::kZoomMin), static_cast<float>(units::kZoomMax))) setZoom(app, z);
-        pCaption(p, "Mouse wheel zooms, drag moves the view");
+        pCaption(p, app.set.view3D ? "Mouse wheel zooms, drag moves the view. Zooming flies the camera closer; the view has a 45-degree field, like a phone camera." : "Mouse wheel zooms, drag moves the view");   // 0.75.0
         if (!set.alphaCen) {                                   // 0.73.0: Alpha Centauri: the stars at their true size (at least a dot); no trails
         pGap(p, m.s8);
         pHeading(p, "Sizes");
@@ -453,7 +453,7 @@ void orbitControls(AppState& app, Panel& p, const SectionFn& section) {
         }
         if (app.view.sel.kind != orbit::Selection::None && app.view.sel.kind != orbit::Selection::Belt) {
             bool fol = app.view.follow;
-            if (pCheck(p, "view.follow", "Follow the selected body", &fol)) app.view.follow = fol;
+            if (pCheck(p, "view.follow", "Follow the selected body", &fol)) { if (fol) app.view.pick(app.view.sel); else app.view.follow = false; }   // 0.75.0: turned on, the camera glides there (a pick)
         }
         if (pButton(p, "view.reset", "↺ Reset view")) resetViewAction(app);
     }
@@ -517,7 +517,7 @@ void orbitSearch(AppState& app, const SearchAdd& add) {
     // (0.25: offered only where they do something: in 2D a drag always moves the view, and Follow needs a selected body; each says what a click will do)
     if (s.view3D) add("View", std::string("Drag moves the view") + (app.view.panMode ? ": turn off" : ": turn on"), "set:pan", [&app] { app.view.panMode = !app.view.panMode; });
     if (app.view.sel.kind != orbit::Selection::None && app.view.sel.kind != orbit::Selection::Belt)
-        add("View", std::string("Follow the selected body") + (app.view.follow ? ": turn off" : ": turn on"), "set:follow", [&app] { app.view.follow = !app.view.follow; });
+        add("View", std::string("Follow the selected body") + (app.view.follow ? ": turn off" : ": turn on"), "set:follow", [&app] { if (!app.view.follow && app.view.sel.kind != orbit::Selection::None && app.view.sel.kind != orbit::Selection::Belt) app.view.pick(app.view.sel); else app.view.follow = false; });   // 0.75.0: on: a glide (a pick)
     add("View", "Reset view", "set:resetview", [&app] { resetViewAction(app); });
     add("View", "Pick a body: the list", "set:picklist", [] { shellOpenPanel(PanelId::Pick); });
     if (slowMoonsAvailable(app)) add("View", "Slow time to watch moons", "set:slowmoons", [&app] { slowMoons(app); });

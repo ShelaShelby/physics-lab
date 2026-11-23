@@ -23,6 +23,7 @@ struct RingsDraw {
     float tint[3] = {0.91f, 0.83f, 0.66f};               // the drawn tint (sRGB)
     std::vector<float> bands;                            // 4 floats a band, sorted: a0, a1 (planet radii), opacity, light k
     float x0 = 0, y0 = 0, x1 = 0, y1 = 0;                // the area to cover (points): the rings' box clipped to the picture
+    float pp[2] = {0, 0}, zr = 0, wn = 0;                // 0.75.0: the pinhole camera (orbit/ring_draw.h RingFrame; zr 0: the flat map)
 };
 
 // the uniforms of kRingsPart (the draw's and the probe's), set through f(name, values, comps, count) and i(name, values, comps)
@@ -32,6 +33,7 @@ void ringsUniforms(const RingsDraw& d, F&& f, I&& i) {
     f("uCen", cen, 2, 1); f("uR", &d.r, 1, 1); f("uE1", d.e1, 3, 1); f("uE2", d.e2, 3, 1);
     f("uK0", d.K, 3, 1); f("uK1", d.K + 3, 3, 1); f("uK2", d.K + 6, 3, 1); f("uSz", &d.sz, 1, 1); f("uLb", d.Lb, 3, 1);
     i("uBack", &d.back, 1); f("uTint", d.tint, 3, 1);
+    f("uPP", d.pp, 2, 1); f("uZr", &d.zr, 1, 1); f("uWn", &d.wn, 1, 1);
     const int nb = static_cast<int>(std::min<std::size_t>(d.bands.size() / 4, static_cast<std::size_t>(kRingCardBands)));
     i("uNb", &nb, 1);
     if (nb > 0) f("uBands", d.bands.data(), 4, nb);

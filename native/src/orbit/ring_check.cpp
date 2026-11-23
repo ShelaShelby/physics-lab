@@ -7,6 +7,7 @@
 #include <cstdlib>
 
 #include "app/gpu_guard.h"
+#include "orbit/camera.h"
 #include "orbit/saturn_profile.h"
 #include "orbit/saturn_rings.h"
 #include "render/shading.h"
@@ -29,6 +30,11 @@ const std::vector<RingBand>& saturnDrawnBands(double eqKm, double r, double mu, 
         const float k = static_cast<float>(alpha > 1e-6f ? std::min(1.0, shine / alpha) : 0.0);   // drawn colour x opacity = the light
         drawn.push_back({mid - 0.5 * drawPx / r, mid + 0.5 * drawPx / r, alpha, k});
     }
+    // 0.75.0: no two drawn bands overlap (the profile's bins could overlap by a few hundredths of a pixel at the planet's own scale; the pinhole camera close by
+    // magnifies the near part of the rings up to 100 times, and there the processor's triangles blended both bands twice in the overlap, a darker seam the
+    // card's per-pixel bands, one band a pixel, did not draw): each band starts where the one before it ends
+    for (std::size_t i = 1; i < drawn.size(); i++) drawn[i].a0 = std::max(drawn[i].a0, drawn[i - 1].a1);
+    drawn.erase(std::remove_if(drawn.begin(), drawn.end(), [](const RingBand& b) { return !(b.a1 > b.a0); }), drawn.end());
     return drawn;
 }
 
@@ -102,9 +108,19 @@ std::vector<RingCheckView> ringCheckViews(int w, int h) {
         v.bands = saturnDrawnBands(rings::kSaturnEqRadiusKm, r, mu, mu0, (pz >= 0) == (sunElev >= 0));
         return v;
     };
-    return {view("the orbit.saturn set-up's kind of view (the rings across the picture, lit from the front)", 0.30 * w, 0.62 * h, 0.22 * w, 0.25, 0.85, 0.46, 0.55, 0.35, 0.76),
+    std::vector<RingCheckView> v = {view("the orbit.saturn set-up's kind of view (the rings across the picture, lit from the front)", 0.30 * w, 0.62 * h, 0.22 * w, 0.25, 0.85, 0.46, 0.55, 0.35, 0.76),
             view("the rings almost edge-on", 0.5 * w, 0.5 * h, 0.2 * w, 0.06, 0.995, 0.08, 0.6, 0.3, 0.74),
             view("the planet's shadow across the rings (the Sun behind the planet)", 0.5 * w, 0.5 * h, 0.17 * w, 0.0, 0.85, 0.53, -0.35, 0.25, -0.90)};
+    // 0.75.0: the 3D pinhole camera close by: 1.5 equatorial radii from the middle (the closest zoom, orbit/camera.h), 4 degrees above the ring plane, so the
+    // rings' near part (out to 2.3 radii) passes beside and behind the camera and is cut at the near plane (orbit/ring_draw.h RingFrame zr, wn). The radius on the
+    // screen is focal x R / Zc for the picture's focal length (45 degrees across its height); the middle a little off the principal point, as a slide puts it.
+    {
+        const double sp = std::sin(4 * 3.14159265358979323846 / 180), cp = std::cos(4 * 3.14159265358979323846 / 180), F = focalFor(h), Zc = 1.5;
+        RingCheckView c = view("a close view from 1.5 radii, 4 degrees above the ring plane (the pinhole; the rings pass behind the camera)", 0.55 * w, 0.45 * h, F / Zc, 0.12, cp, sp, 0.5, 0.45, 0.74);
+        c.f.ppx = 0.5 * w; c.f.ppy = 0.5 * h; c.f.zr = 1 / Zc; c.f.wn = kNearFraction;   // (near / Zc: the camera's distance to the look-at plane is Zc for a followed Saturn)
+        v.push_back(c);
+    }
+    return v;
 }
 
 render::RingsDraw ringsDraw(const RingFrame& f, const std::vector<RingBand>& bands, bool back, double W, double H) {
@@ -117,9 +133,26 @@ render::RingsDraw ringsDraw(const RingFrame& f, const std::vector<RingBand>& ban
     d.bands.reserve(4 * bands.size());
     double amax = 0;
     for (const RingBand& b : bands) { d.bands.push_back(float(b.a0)); d.bands.push_back(float(b.a1)); d.bands.push_back(b.alpha); d.bands.push_back(b.k); amax = std::max(amax, b.a1); }
-    const double ex = f.r * amax * (std::fabs(f.e1[0]) + std::fabs(f.e2[0])) + 2, ey = f.r * amax * (std::fabs(f.e1[1]) + std::fabs(f.e2[1])) + 2;
-    d.x0 = float(std::max(-2.0, f.x - ex)); d.x1 = float(std::min(W + 2, f.x + ex));
-    d.y0 = float(std::max(-2.0, f.y - ey)); d.y1 = float(std::min(H + 2, f.y + ey));
+    d.pp[0] = float(f.ppx); d.pp[1] = float(f.ppy); d.zr = float(f.zr); d.wn = float(f.wn);
+    if (f.zr == 0) {
+        const double ex = f.r * amax * (std::fabs(f.e1[0]) + std::fabs(f.e2[0])) + 2, ey = f.r * amax * (std::fabs(f.e1[1]) + std::fabs(f.e2[1])) + 2;
+        d.x0 = float(std::max(-2.0, f.x - ex)); d.x1 = float(std::min(W + 2, f.x + ex));
+        d.y0 = float(std::max(-2.0, f.y - ey)); d.y1 = float(std::min(H + 2, f.y + ey));
+        return d;
+    }
+    // 0.75.0, the pinhole: the box of the outer edge's corners on the screen (the chords lie inside it); any corner nearer than the near plane: the whole picture
+    double mnx = 1e300, mxx = -1e300, mny = 1e300, mxy = -1e300;
+    bool all = true;
+    for (int i = 0; i < kRingSegments; i++) {
+        const double t = 2 * 3.14159265358979323846 * i / kRingSegments, c = std::cos(t), s = std::sin(t);
+        const double q[3] = {amax * (c * f.e1[0] + s * f.e2[0]), amax * (c * f.e1[1] + s * f.e2[1]), amax * (c * f.e1[2] + s * f.e2[2])};
+        double X = 0, Y = 0;
+        if (!ringOnScreen(f, q, X, Y)) { all = false; break; }
+        mnx = std::min(mnx, X); mxx = std::max(mxx, X); mny = std::min(mny, Y); mxy = std::max(mxy, Y);
+    }
+    if (!all) { mnx = -2; mxx = W + 2; mny = -2; mxy = H + 2; }
+    d.x0 = float(std::max(-2.0, mnx - 2)); d.x1 = float(std::min(W + 2, mxx + 2));
+    d.y0 = float(std::max(-2.0, mny - 2)); d.y1 = float(std::min(H + 2, mxy + 2));
     return d;
 }
 
@@ -131,8 +164,8 @@ struct Path {
     int step = 0, frames = 0, gen = -1, usedFrames = 0;
     double stepAt = 0;
     bool firstUse = false, firstDone = false;
-    int jobs[6] = {0, 0, 0, 0, 0, 0};
-    std::vector<float> res[6];
+    int jobs[8] = {0, 0, 0, 0, 0, 0, 0, 0};   // 0.75.0: four views (the pinhole's close one)
+    std::vector<float> res[8];
     std::string why, check;
 };
 Path g_p;
@@ -164,13 +197,13 @@ void advance(render::Renderer2D& R) {
         g_p.step = 1;
         return;
     }
-    if (g_p.step == 1) {                                             // the check: both halves of the three views asked for now, compared when all are back
+    if (g_p.step == 1) {                                             // the check: both halves of the four views asked for now, compared when all are back
         G.begin(kCheck);
         std::vector<float> xy;
         xy.reserve(std::size_t(2) * kCheckW * kCheckH);
         for (int y = 0; y < kCheckH; y++) for (int x = 0; x < kCheckW; x++) { xy.push_back(x + 0.5f); xy.push_back(y + 0.5f); }
         const std::vector<RingCheckView> views = ringCheckViews(kCheckW, kCheckH);
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 8; i++) {
             const RingCheckView& v = views[std::size_t(i / 2)];
             g_p.jobs[i] = C->beginProbe(ringsDraw(v.f, v.bands, i % 2 == 0, kCheckW, kCheckH), xy);
             if (!g_p.jobs[i]) { for (int k = 0; k < i; k++) C->cancel(g_p.jobs[k]); G.end(kCheck, "could not be started"); G.finished(false, "the rings' check could not be started"); off("the rings' check could not be started"); return; }
@@ -180,7 +213,7 @@ void advance(render::Renderer2D& R) {
     }
     if (g_p.step == 2) {
         bool pending = false;
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 8; i++) {
             if (!g_p.jobs[i]) continue;
             const render::JobState st = C->pollProbe(g_p.jobs[i], g_p.res[i]);
             if (st == render::JobState::Pending) { pending = true; continue; }
@@ -194,11 +227,22 @@ void advance(render::Renderer2D& R) {
         const std::vector<RingCheckView> views = ringCheckViews(kCheckW, kCheckH);
         bool ok = true;
         std::string text;
-        for (int v = 0; v < 3; v++) {
+        for (int v = 0; v < 4; v++) {
             std::vector<float> cpu, card;
             ringPictureCpu(views[std::size_t(v)].f, views[std::size_t(v)].bands, kCheckW, kCheckH, cpu);
             ringPictureCard(g_p.res[2 * v], g_p.res[2 * v + 1], kCheckW, kCheckH, card);
             const RingCompare c = compareRingPictures(cpu, card, kCheckW, kCheckH);
+            if (const char* dbg = std::getenv("PL_RINGS_DEBUG")) {   // (for looking at a failed view: both pictures as PPM files)
+                for (int k = 0; k < 2; k++) {
+                    char fn[300]; std::snprintf(fn, sizeof fn, "%s/ringview%d_%s.ppm", dbg, v, k ? "card" : "cpu");
+                    if (FILE* fp = std::fopen(fn, "wb")) {
+                        std::fprintf(fp, "P6 %d %d 255\n", kCheckW, kCheckH);
+                        const std::vector<float>& src = k ? card : cpu;
+                        for (std::size_t q = 0; q < src.size(); q++) std::fputc(int(std::clamp(src[q], 0.0f, 1.0f) * 255 + 0.5f), fp);
+                        std::fclose(fp);
+                    }
+                }
+            }
             ok = ok && c.ok();
             char b[200];
             std::snprintf(b, sizeof b, "%s%ld of %ld ring pixels over 8 levels (%.2f %%, limit 1 %%), the largest %d", v ? "; " : "", c.over8, c.ringPixels, c.ringPixels ? 100.0 * double(c.over8) / double(c.ringPixels) : 0.0, c.worst);
@@ -209,9 +253,9 @@ void advance(render::Renderer2D& R) {
         static const bool forced = std::getenv("PL_RINGS_CARDFAIL") != nullptr;   // (tests: as if the check had failed)
         if (forced) ok = false;
         char t[96];
-        std::snprintf(t, sizeof t, "%s after %.0f ms: 3 views of %d x %d, ", ok ? "passed" : "FAILED", 1000 * (now - g_p.stepAt), kCheckW, kCheckH);
+        std::snprintf(t, sizeof t, "%s after %.0f ms: 4 views of %d x %d, ", ok ? "passed" : "FAILED", 1000 * (now - g_p.stepAt), kCheckW, kCheckH);
         G.end(kCheck, t + text);
-        g_p.check = "3 views: " + text;
+        g_p.check = "4 views: " + text;
         if (!ok) { const std::string why = forced ? "the check was made to fail (test switch PL_RINGS_CARDFAIL)" : "its start-up check against the processor failed (" + text + ")"; G.finished(false, why); off(why); return; }
         g_p.state = 1;
         G.rest();                                                    // (the first full use comes when the rings are next drawn)

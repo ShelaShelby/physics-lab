@@ -29,14 +29,15 @@ struct LinesRun {
 static_assert(sizeof(LinesRun) == 144, "kLinesHeadCSPart's struct Run is 144 bytes");
 
 // the view, as the card's steps read it (orbit/orbit_lines.cpp linesCamera): C the reference point (m, high and low floats), the turn (cos and sin of the
-// yaw and the pitch), the scale (points per metre), the perspective's distance D and C's depth from the view's middle depth, 3D or not, C's place on
-// the picture (SX, SY) and its offsets from the perspective's centre (AX, AY), the picture's size (points)
+// yaw and the pitch), the scale (points per metre), 0.75.0: the pinhole camera (orbit/camera.h): its distance d from the look-at plane (0: 2D), C's depth
+// from that plane, the near plane; 2D: C's place on the picture (SX, SY); 3D: the principal point and C's offset from the camera's axis (AX, AY, m);
+// the picture's size and the focal length (points)
 struct LinesCamera {
     float cHi[3] = {0, 0, 0}, cLo[3] = {0, 0, 0};
     float rot[4] = {1, 0, 1, 0};
-    float proj[4] = {1, 1, 0, 0};                        // px, D, gC, d3
-    float scr[4] = {0, 0, 0, 0};                         // SX, SY, AX, AY
-    float view[4] = {1, 1, 20, 0};                       // W, H, the clipping margin (20 points)
+    float proj[4] = {1, 0, 0, 0};                        // px, d (0: 2D), gC, the near plane (m)
+    float scr[4] = {0, 0, 0, 0};                         // 2D: SX, SY, 0, 0; 3D: the principal point, AX, AY
+    float view[4] = {1, 1, 20, 1};                       // W, H, the clipping margin (20 points), the focal length (points)
 };
 
 struct LinesDraw {

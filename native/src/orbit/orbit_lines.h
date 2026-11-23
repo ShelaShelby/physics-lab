@@ -9,6 +9,7 @@
 #include <deque>
 #include <vector>
 
+#include "orbit/camera.h"
 #include "orbit/vec3.h"
 #include "render/renderer2d.h"
 
@@ -16,15 +17,16 @@ namespace orbit {
 
 struct Body;
 
-// A point on screen: x, y (points), depth (m, > 0 towards the viewer) and perspective scale
-struct Q { double first, second, dep, f; };
+// (Q, a point on the screen, and the camera: orbit/camera.h)
+using LineCam = ViewCam;
 
 // Liang-Barsky: the part of a segment inside a rectangle. Zoomed far in, pieces of a trail or an orbit are millions of points long, so only the visible
 // part is drawn.
 bool clipSeg(double x0, double y0, double x1, double y1, double xa, double ya, double xb, double yb, double out[4]);   // (inline, below)
 
 // Draws a polyline clipped to the picture (with a 20-point margin), optionally dashed. rec (the start-up check): the line functions below keep each
-// point there (x, y on the picture, then X, Y, Z in space) and draw nothing.
+// point there (x, y on the picture, then X, Y, Z in space) and draw nothing. 0.75.0: to(Q) with cam (3D): each piece is cut at the near plane in 3D
+// first (orbit/camera.h clipNear), so a line that passes the camera or goes behind it is drawn as far as the near plane.
 struct LinePen {
     render::Renderer2D& r;
     double W, H, width;
@@ -33,23 +35,18 @@ struct LinePen {
     bool havePrev = false;
     double px = 0, py = 0, dashPos = 0;
     std::vector<double>* rec = nullptr;
+    const ViewCam* cam = nullptr;     // 0.75.0: the camera (to(Q) cuts at its near plane in 3D)
+    Q prevQ{0, 0, 0, 0};
+    bool haveQ = false;
     void to(double x, double y);
+    void to(const Q& q);
+    void segment(double x0, double y0, double x1, double y1);
     void dashed(double x0, double y0, double x1, double y1);
 };
 
-// The picture's camera (orbit_view.cpp): turn by yaw about z, tilt by pitch towards the viewer, then a mild perspective; everything about the barycentre bc
-struct LineCam {
-    Vec3 bc;
-    double ca = 1, sa = 0, cb = 1, sb = 0, px = 1, D = 1, cd = 0, W = 1, H = 1, fx = 0, ox = 0, oy = 0;
-    bool d3 = false;
-    Q base(double x, double y, double z) const {
-        x -= bc.x; y -= bc.y; z -= bc.z;
-        const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, y2 = y1 * cb - z * sb, dep = y1 * sb + z * cb;
-        const double f = d3 ? D / std::max(D - (dep - cd), 0.05 * D) : 1;
-        return Q{W / 2 + fx + x1 * px * f, H / 2 - y2 * px * f, dep, f};
-    }
-    Q proj(double x, double y, double z) const { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; }
-};
+// 0.75.0: a piece's chord from qa to qc cut at the near plane (3D): its length on the picture (L) and whether it reaches the picture (with a margin of
+// 20 + L / 4 points). Both paths decide a piece's curve steps by it (kLinesCS steps()).
+bool chordNear(const ViewCam& cam, const Q& qa, const Q& qc, double& L);
 
 // ---- the processor's lines (rec: the start-up check's record of each pen's points, one list a pen) ----
 void ringPointsXYZ(double Rm, std::vector<double>& xyz);   // a distance ring of Rm metres round the Sun: 97 points (x, y, z)
@@ -111,15 +108,31 @@ inline bool clipSeg(double x0, double y0, double x1, double y1, double xa, doubl
     return true;
 }
 
-inline void LinePen::to(double x, double y) {
-    if (havePrev) {
-        double cl[4];
-        if (clipSeg(px, py, x, y, -20, -20, W + 20, H + 20, cl)) {
-            if (dashOn <= 0) r.line(cl[0], cl[1], cl[2], cl[3], width, c);
-            else dashed(cl[0], cl[1], cl[2], cl[3]);
-        }
+inline void LinePen::segment(double x0, double y0, double x1, double y1) {
+    double cl[4];
+    if (clipSeg(x0, y0, x1, y1, -20, -20, W + 20, H + 20, cl)) {
+        if (dashOn <= 0) r.line(cl[0], cl[1], cl[2], cl[3], width, c);
+        else dashed(cl[0], cl[1], cl[2], cl[3]);
     }
+}
+
+inline void LinePen::to(double x, double y) {
+    if (havePrev) segment(px, py, x, y);
     px = x; py = y; havePrev = true;
+}
+
+inline void LinePen::to(const Q& q) {
+    if (!cam || !cam->d3) { to(q.first, q.second); return; }
+    if (haveQ) { Q a{0, 0, 0, 0}, b{0, 0, 0, 0}; if (clipNear(*cam, prevQ, q, a, b)) segment(a.first, a.second, b.first, b.second); }
+    prevQ = q; haveQ = true;
+}
+
+inline bool chordNear(const ViewCam& cam, const Q& qa, const Q& qc, double& L) {
+    Q a{0, 0, 0, 0}, c{0, 0, 0, 0};
+    if (!clipNear(cam, qa, qc, a, c)) { L = 0; return false; }
+    L = std::hypot(c.first - a.first, c.second - a.second);
+    const double mg = 20 + L / 4;
+    return std::max(a.first, c.first) > -mg && std::min(a.first, c.first) < cam.W + mg && std::max(a.second, c.second) > -mg && std::min(a.second, c.second) < cam.H + mg;
 }
 
 inline void LinePen::dashed(double x0, double y0, double x1, double y1) {

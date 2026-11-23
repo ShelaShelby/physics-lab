@@ -17,7 +17,7 @@ std::vector<double>* recNext(std::vector<std::vector<double>>* rec) { if (!rec) 
 // a point to the pen; the start-up check keeps it instead (on the picture, and where it is in space: x, y, X, Y, Z)
 inline void go(LinePen& pen, const Q& q, double x, double y, double z) {
     if (pen.rec) { for (double v : {q.first, q.second, x, y, z}) pen.rec->push_back(v); return; }
-    pen.to(q.first, q.second);
+    pen.to(q);                                        // 0.75.0: cut at the near plane (3D)
 }
 }  // namespace
 
@@ -29,7 +29,7 @@ void ringPointsXYZ(double Rm, std::vector<double>& xyz) {
 
 void drawRingCpu(render::Renderer2D& R, const LineCam& cam, const std::vector<double>& xyz, Color col, std::vector<std::vector<double>>* rec) {
     LinePen pen{R, cam.W, cam.H, 1.0, col};
-    pen.rec = recNext(rec);
+    pen.rec = recNext(rec); pen.cam = &cam;
     for (std::size_t i = 0; i + 2 < xyz.size(); i += 3) { const Q q = cam.proj(xyz[i], xyz[i + 1], xyz[i + 2]); go(pen, q, xyz[i], xyz[i + 1], xyz[i + 2]); }
 }
 
@@ -57,8 +57,8 @@ void drawTrailCpu(render::Renderer2D& R, const LineCam& cam, const std::deque<Ve
     const auto piece = [&](LinePen& pen, int i) {    // the curve from point i - 1 to point i, without its first point
         const Vec3 a = P(i - 1), c = P(i);
         const Q qa = cam.proj(a.x, a.y, a.z), qc = cam.proj(c.x, c.y, c.z);
-        const double L = std::hypot(qc.first - qa.first, qc.second - qa.second), mg = 20 + L / 4;
-        const bool near = std::max(qa.first, qc.first) > -mg && std::min(qa.first, qc.first) < W + mg && std::max(qa.second, qc.second) > -mg && std::min(qa.second, qc.second) < H + mg;
+        double L = 0;
+        const bool near = chordNear(cam, qa, qc, L);      // 0.75.0: the chord cut at the near plane
         if (near && L > 6 && i >= 2 && i <= n) {
             const Vec3 p0 = P(i - 2), p3 = i + 1 <= n ? P(i + 1) : c * 2.0 - a;
             const int k = static_cast<int>(std::min(4096.0, std::ceil(L / 4)));
@@ -73,7 +73,7 @@ void drawTrailCpu(render::Renderer2D& R, const LineCam& cam, const std::deque<Ve
     for (int part = 0; part < 4; part++) {           // fades in 4 steps, oldest faintest
         const int i0 = st0 + part * nn / 4, i1 = std::min(n, st0 + (part + 1) * nn / 4 + 1);
         LinePen pen{R, W, H, width, cols[part]};
-        pen.rec = recNext(rec);
+        pen.rec = recNext(rec); pen.cam = &cam;
         for (int i = i0; i < i1; i++) {
             if (i == i0) { const Vec3& w = tr[std::size_t(i)]; const Q q = cam.proj(w.x, w.y, w.z); go(pen, q, w.x, w.y, w.z); }
             else piece(pen, i);
@@ -86,7 +86,7 @@ void drawOrbitCpu(render::Renderer2D& R, const LineCam& cam, const Body& b, doub
     const double W = cam.W, H = cam.H;
     orbitPath(b, 256, cpts);
     LinePen pen{R, W, H, width, col};
-    pen.rec = recNext(rec);
+    pen.rec = recNext(rec); pen.cam = &cam;
     // 0.46.6 (outside review: Earth zoomed in had two paths about 10,000 km apart): a 256-sided polygon of a 1 AU orbit is up to a(1 - cos(pi/256)) = 11,000 km
     // inside the real ellipse. A piece that reaches the picture is drawn again from the ellipse itself, finely enough that it is off by under half a point.
     std::vector<Vec3> fine;
@@ -94,8 +94,8 @@ void drawOrbitCpu(render::Renderer2D& R, const LineCam& cam, const Body& b, doub
         const Q q = cam.proj(cpts[i].x, cpts[i].y, cpts[i].z);
         if (i > 0) {
             const Q q0 = cam.proj(cpts[i - 1].x, cpts[i - 1].y, cpts[i - 1].z);
-            const double L = std::hypot(q.first - q0.first, q.second - q0.second), mg = 20 + L / 4;   // (a piece's bulge is far under a quarter of its length)
-            const bool near = std::max(q.first, q0.first) > -mg && std::min(q.first, q0.first) < W + mg && std::max(q.second, q0.second) > -mg && std::min(q.second, q0.second) < H + mg;
+            double L = 0;
+            const bool near = chordNear(cam, q0, q, L);   // (a piece's bulge is far under a quarter of its length; 0.75.0: the chord cut at the near plane)
             if (near && L > 6) {
                 const int k = static_cast<int>(std::min(4096.0, std::ceil(L / 4)));
                 orbitPath(b, 2 * kPi * (i - 1) / 256.0, 2 * kPi * i / 256.0, k, fine);
@@ -123,8 +123,8 @@ void drawEllipseCpu(render::Renderer2D& R, const LineCam& cam, const LineEllipse
     // piece i: from corner i - 1 to corner i, drawn again from the ellipse finely enough where it reaches the picture (drawOrbitCpu's rule), without its first point
     const auto piece = [&](LinePen& pen, std::size_t i) {
         const Q q0 = cam.proj(cpts[i - 1].x, cpts[i - 1].y, cpts[i - 1].z), q = cam.proj(cpts[i].x, cpts[i].y, cpts[i].z);
-        const double L = std::hypot(q.first - q0.first, q.second - q0.second), mg = 20 + L / 4;
-        const bool near = std::max(q.first, q0.first) > -mg && std::min(q.first, q0.first) < W + mg && std::max(q.second, q0.second) > -mg && std::min(q.second, q0.second) < H + mg;
+        double L = 0;
+        const bool near = chordNear(cam, q0, q, L);
         if (near && L > 6) {
             const int k = static_cast<int>(std::min(4096.0, std::ceil(L / 4)));
             ellipsePath(el, 2 * kPi * (i - 1) / 256.0, 2 * kPi * i / 256.0, k, fine);
@@ -135,14 +135,14 @@ void drawEllipseCpu(render::Renderer2D& R, const LineCam& cam, const LineEllipse
     const auto start = [&](LinePen& pen, std::size_t i) { const Q q = cam.proj(cpts[i].x, cpts[i].y, cpts[i].z); go(pen, q, cpts[i].x, cpts[i].y, cpts[i].z); };
     if (!el.dashed) {
         LinePen pen{R, W, H, width, col};
-        pen.rec = recNext(rec);
+        pen.rec = recNext(rec); pen.cam = &cam;
         start(pen, 0);
         for (std::size_t i = 1; i < cpts.size(); i++) piece(pen, i);
         return;
     }
     for (std::size_t i = 1; i < cpts.size(); i += 2) {    // dashed: the odd pieces, each its own line
         LinePen pen{R, W, H, width, col};
-        pen.rec = recNext(rec);
+        pen.rec = recNext(rec); pen.cam = &cam;
         start(pen, i - 1);
         piece(pen, i);
     }
@@ -197,21 +197,25 @@ void colourOf(render::LinesRun& r, Color c) { r.colour[0] = c.r; r.colour[1] = c
 
 render::LinesCamera linesCamera(const LineCam& c) {
     render::LinesCamera k;
-    // C: the point at the picture's middle at the view's middle depth (orbit_view's base() turned back), so the points near the view are small numbers
-    const double x1 = -(c.fx + c.ox) / c.px, y2 = c.oy / c.px, dep = c.cd;
+    // C: the reference point, so the points near the view are small numbers. 2D: the point at the picture's middle at the view's middle depth (orbit_view's
+    // map turned back); 0.75.0, 3D: the look-at point, on the camera's axis at the look-at plane's depth (orbit/camera.h)
+    const double x1 = c.d3 ? c.lx : -(c.fx + c.ox) / c.px, y2 = c.d3 ? c.ly : c.oy / c.px, dep = c.cd;
     const double y1 = y2 * c.cb + dep * c.sb, z = -y2 * c.sb + dep * c.cb, x = x1 * c.ca + y1 * c.sa, y = -x1 * c.sa + y1 * c.ca;
     const Vec3 C{x + c.bc.x, y + c.bc.y, z + c.bc.z};
     // 0.73.0 (a bug since 0.68.0, found by the Alpha Centauri case of the start-up check): hiLo3 writes four floats, and cHi and cLo have three, so its hi[3] = 0
     // was cLo[0]: the low part of C's x was always lost (an x error up to half a float step of C's x: 0.5 point at 1 AU zoomed fully in, 7 points 12,000 au out)
     { float h4[4], l4[4]; hiLo3(C, h4, l4); for (int q = 0; q < 3; q++) { k.cHi[q] = h4[q]; k.cLo[q] = l4[q]; } }
-    // C's own numbers as base() works them out, about the barycentre
-    const double qx = C.x - c.bc.x, qy = C.y - c.bc.y, qz = C.z - c.bc.z;
-    const double X1 = qx * c.ca - qy * c.sa, Y1 = qx * c.sa + qy * c.ca, Y2 = Y1 * c.cb - qz * c.sb, DEP = Y1 * c.sb + qz * c.cb;
+    // C's own numbers as the camera works them out, about the barycentre
+    double X1 = 0, Y2 = 0, DEP = 0;
+    c.turn(C.x, C.y, C.z, X1, Y2, DEP);
     k.rot[0] = static_cast<float>(c.ca); k.rot[1] = static_cast<float>(c.sa); k.rot[2] = static_cast<float>(c.cb); k.rot[3] = static_cast<float>(c.sb);
-    k.proj[0] = static_cast<float>(c.px); k.proj[1] = static_cast<float>(c.D); k.proj[2] = static_cast<float>(DEP - c.cd); k.proj[3] = c.d3 ? 1.0f : 0.0f;
-    k.scr[0] = static_cast<float>(c.W / 2 + c.fx + c.ox + c.px * X1); k.scr[1] = static_cast<float>(c.H / 2 + c.oy - c.px * Y2);
-    k.scr[2] = static_cast<float>(c.px * X1); k.scr[3] = static_cast<float>(c.px * Y2);
-    k.view[0] = static_cast<float>(c.W); k.view[1] = static_cast<float>(c.H); k.view[2] = 20; k.view[3] = 0;
+    k.proj[0] = static_cast<float>(c.px); k.proj[1] = c.d3 ? static_cast<float>(c.d) : 0.0f; k.proj[2] = static_cast<float>(DEP - c.cd); k.proj[3] = static_cast<float>(c.zNear);
+    if (c.d3) {   // 0.75.0: the pinhole: the principal point, C's offset from the camera's axis (m: rounding only), the focal length (points)
+        k.scr[0] = static_cast<float>(c.ppx); k.scr[1] = static_cast<float>(c.ppy); k.scr[2] = static_cast<float>(X1 - c.lx); k.scr[3] = static_cast<float>(Y2 - c.ly);
+    } else {
+        k.scr[0] = static_cast<float>(c.W / 2 + c.fx + c.ox + c.px * X1); k.scr[1] = static_cast<float>(c.H / 2 + c.oy - c.px * Y2); k.scr[2] = 0; k.scr[3] = 0;
+    }
+    k.view[0] = static_cast<float>(c.W); k.view[1] = static_cast<float>(c.H); k.view[2] = 20; k.view[3] = static_cast<float>(c.F);
     return k;
 }
 

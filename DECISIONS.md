@@ -123,6 +123,7 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - The choice closest to reality is marked with a dot, and each lab's Controls has a "Most realistic" button (5 Nov 2026).
 - The app asks Windows not to power-throttle it; the smallest window is 880 x 560 units.
 - About ends the developer's paragraph with "Free Palestine" and a small drawn flag of Palestine (22 Nov 2026).
+- The Orbit Lab's 3D view is a pinhole camera with a 45-degree vertical field (a phone camera's), and the zoom is the camera's distance at the target: the target's plane shows the zoom's span, so zooming flies the camera closer and the scale bar holds at the target's distance (the planning chat's design for 0.75.0, after the owner asked for "a better camera, less 2D", 22 Nov 2026).
 
 ## Workflow (owner decisions 20 Nov 2026)
 - Exactly one push per job, at the end, after the tests and the docs are final; no checkpoint pushes; no doc-only push after it; a fix found after testing goes into that same push.

@@ -236,6 +236,8 @@ public:
     // middle (the night sky's map, orbit/sky.cpp); M turns a direction in the view frame (right, up, depth) into
     // galactic coordinates (rows: towards l = 0, l = 90°, the north galactic pole); bright: 0..1.
     void skyMap(double W, double H, double kRad, const float M[9], double bright);
+    // 0.75.0: the same photo through the Orbit Lab's 3D pinhole camera (orbit/camera.h): the pixel's direction is (x - ppx, -(y - ppy), -F) in the view frame
+    void skyMapPinhole(double W, double H, double ppx, double ppy, double F, const float M[9], double bright);
     bool hasMap(Map m) const { return vkMap_[static_cast<int>(m)]; }
     // 0.55.0, the Black Hole Lab: the Gaia map seen past a non-spinning black hole at (cx, cy) points, kRad points per radian (the night sky's projection), every
     // pixel's ray bent by the lens table (its values of dphi at s = ln x, x = the angle in radians from the shadow's edge alphaSh: blackhole/schwarzschild.h

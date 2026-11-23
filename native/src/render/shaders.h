@@ -424,6 +424,14 @@ void main() {
         fragColor = vec4(c, vColor.a * fade);
         return;
     }
+    if (uMode == 3) {                                // 0.75.0: the sky photo through the Orbit Lab's 3D pinhole camera: vUV = (x - ppx, y - ppy) / focal
+        vec3 v = normalize(vec3(vUV.x, -vUV.y, -1.0));   // view frame: right, up, depth (the viewer looks towards -depth)
+        vec3 g = uK * v;
+        float l = atan(g.y, g.x), b = asin(clamp(g.z, -1.0, 1.0));
+        vec3 c = textureLod(uTex, vec2(0.5 - l / (2.0 * PI), 0.5 - b / PI), uLod).rgb;
+        fragColor = vec4(c, vColor.a);
+        return;
+    }
     // 0.27: the body is an ellipsoid with radii 1, uShape.x, uShape.y along its meridian, east and pole axes (a ball: 1, 1).
     // The pixel's line of sight, P0 + t D in the body frame, meets it where Q(t) = A t^2 + 2 B t + C = 0; the nearest point to you is the
     // larger root. d = sqrt(1 + min Q) is 1 on the outline and, for a ball, the distance from the middle. C++ twin: render/ellipsoid.h.
@@ -1312,10 +1320,11 @@ uniform vec2 uT;                                                               /
 uniform float uLibPhase;                                                       // t / year / 150 * 6.2832, brought into 0..2 pi on the CPU in double
 // 0.49.2: the camera in DOUBLE, and the projection below in double: in float, D - depth cancelled for dots far off the picture (the Oort cloud: depth up to 1.5e16 m),
 // which put them up to 4e-3 of their coordinate from the CPU's place. Now only the rock's own float position and the final float store round.
-uniform dvec4 uBc;                                                             // the barycentre, m
+// 0.75.0: the pinhole camera (orbit/camera.h ViewCam::proj): 2D (sx, sy) the barycentre's place; 3D (sx, sy) the principal point
+uniform dvec4 uBc;                                                             // the barycentre, m; w: the near plane (m)
 uniform dvec4 uCam;                                                            // ca, sa, cb, sb
-uniform dvec4 uView;                                                           // px (points per metre), W, H, D (m)
-uniform dvec4 uOff;                                                            // cd (m), ox, oy (points)
+uniform dvec4 uView;                                                           // px (points per metre), sx, sy (points), d (m)
+uniform dvec4 uOff;                                                            // cd (m), lx, ly (m: the camera's axis), F (points: the focal length)
 const float PI = 3.14159265358979;
 const float AU = 1.495978707e11;                                               // units::kAU, the IAU astronomical unit, m
 
@@ -1350,14 +1359,17 @@ vec3 rockPoint(uint i) {
     return xp * P + yp * Q;
 }
 
-// twin: orbit::beltScreen (belts.cpp), the camera of OrbitView::draw (base and proj)
+// twin: orbit::beltScreen (belts.cpp), the camera of OrbitView::draw (orbit/camera.h ViewCam::proj); behind the camera: -1e9, -1e9 (off the picture)
 vec2 screenOf(vec3 pf) {
     dvec3 p = dvec3(pf) - uBc.xyz;
     double ca = uCam.x, sa = uCam.y, cb = uCam.z, sb = uCam.w;
     double x1 = p.x * ca - p.y * sa, y1 = p.x * sa + p.y * ca, y2 = y1 * cb - p.z * sb, dep = y1 * sb + p.z * cb;
-    double D = uView.w;
-    double f = uD3 != 0 ? D / max(D - (dep - uOff.x), 0.05LF * D) : 1.0LF;
-    return vec2(float(uView.y * 0.5LF + x1 * uView.x * f + uOff.y), float(uView.z * 0.5LF - y2 * uView.x * f + uOff.z));
+    if (uD3 != 0) {
+        double Z = uOff.x + uView.w - dep;
+        if (!(Z >= uBc.w)) return vec2(-1.0e9, -1.0e9);
+        return vec2(float(uView.y + uOff.w * (x1 - uOff.y) / Z), float(uView.z - uOff.w * (y2 - uOff.z) / Z));
+    }
+    return vec2(float(uView.y + x1 * uView.x), float(uView.z - y2 * uView.x));
 }
 
 void main() {
@@ -2654,6 +2666,9 @@ uniform int uBack;          // 1: the half away from you
 uniform int uNb;
 uniform vec3 uTint;         // the drawn tint (sRGB)
 uniform vec4 uBands[768];   // a0, a1 (planet radii), opacity, k
+uniform vec2 uPP;           // 0.75.0: the pinhole camera (orbit/ring_draw.h RingFrame): the principal point (points), zr (the radius over the middle's distance
+uniform float uZr;          // in front of the camera; 0: the flat map) and the near plane over that distance
+uniform float uWn;
 vec3 ringDecode(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)); }
 vec3 ringEncode(vec3 l) { l = clamp(l, 0.0, 1.0); return mix(12.92 * l, 1.055 * pow(l, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), l)); }
 float ringShadow(vec3 q) {
@@ -2665,11 +2680,15 @@ float ringShadow(vec3 q) {
     return t <= 0.0 ? max(f, 1e-3) : f;
 }
 vec4 ringAt(vec2 p) {
-    vec2 q = vec2((p.x - uCen.x) / uR, -(p.y - uCen.y) / uR);
-    float det = uE1.x * uE2.y - uE2.x * uE1.y;
+    // 0.75.0: the pixel's line of sight meets the ring plane at A e1 + B e2 (planet radii): the pinhole's u (1 - zr qz) = cu + qx, v (1 - zr qz) = cv + qy
+    // solved for A and B (zr = 0: the flat map's inverse, as before); nearer than the near plane, or behind the camera: nothing
+    float u = (p.x - uPP.x) / uR, v = -(p.y - uPP.y) / uR, cu = (uCen.x - uPP.x) / uR, cv = -(uCen.y - uPP.y) / uR;
+    float m00 = uE1.x + u * uZr * uE1.z, m01 = uE2.x + u * uZr * uE2.z, m10 = uE1.y + v * uZr * uE1.z, m11 = uE2.y + v * uZr * uE2.z;
+    float det = m00 * m11 - m01 * m10;
     if (abs(det) < 1e-6 || uNb <= 0) return vec4(0.0);
-    float A = (q.x * uE2.y - uE2.x * q.y) / det;
-    float B = (uE1.x * q.y - q.x * uE1.y) / det;
+    float A = ((u - cu) * m11 - m01 * (v - cv)) / det;
+    float B = (m00 * (v - cv) - (u - cu) * m10) / det;
+    if (uZr != 0.0 && !(1.0 - uZr * (A * uE1.z + B * uE2.z) >= uWn)) return vec4(0.0);
     float t = atan(B, A);
     if (t < 0.0) t += 6.28318530717958648;
     float seg = 6.28318530717958648 / 128.0;
@@ -3072,7 +3091,7 @@ layout(std430, binding = 1) readonly buffer Runs { Run runs[]; };
 layout(std430, binding = 2) buffer Off { uint off[]; };
 layout(std430, binding = 3) buffer Scr { vec4 scr[]; };
 layout(std430, binding = 4) buffer Ind { uint ind[]; };
-layout(std430, binding = 5) buffer Chk { vec2 chk[]; };
+layout(std430, binding = 5) buffer Chk { vec4 chk[]; };
 uniform int uStep;
 )";
 // run.a: the first slot of its points, the ring's size, the ring's start, the points (n); run.b: its first and last piece, its kind (0 straight, 1 a
@@ -3105,15 +3124,32 @@ vec3 pointOf(int r, int i) {
     precise vec3 d = (h - uCHi) + (l - uCLo);
     return d;
 }
-vec2 project(vec3 v) {
+// 0.75.0: a point about C in the camera's space (orbit/camera.h ViewCam::proj): 3D x right, y up, z the distance in front (m); 2D x1, y2 and 1
+vec3 camOf(vec3 v) {
     float x1 = v.x * uRot.x - v.y * uRot.y;
     float y1 = v.x * uRot.y + v.y * uRot.x;
     float y2 = y1 * uRot.z - v.z * uRot.w;
     float dep = y1 * uRot.w + v.z * uRot.z;
-    float fm1 = 0.0;
-    if (uProj.w > 0.5) { float x = uProj.z + dep; float den = uProj.y - x; fm1 = den > 0.05 * uProj.y ? x / den : 19.0; }
-    float f = 1.0 + fm1;
-    return vec2(uScr.x + uScr.z * fm1 + uProj.x * f * x1, uScr.y - uScr.w * fm1 - uProj.x * f * y2);
+    if (uProj.y > 0.0) return vec3(x1 + uScr.z, y2 + uScr.w, uProj.y - (uProj.z + dep));
+    return vec3(x1, y2, 1.0);
+}
+// a camera-space point in front of the near plane on the picture
+vec2 onPic(vec3 c) {
+    if (uProj.y > 0.0) return vec2(uScr.x + uView.w * c.x / c.z, uScr.y - uView.w * c.y / c.z);
+    return vec2(uScr.x + uProj.x * c.x, uScr.y - uProj.x * c.y);
+}
+// the part of a-b in front of the near plane (orbit/camera.h clipNear): false when none of it is
+bool cutNear(vec3 a, vec3 b, out vec3 a2, out vec3 b2) {
+    a2 = a; b2 = b;
+    if (!(uProj.y > 0.0)) return true;
+    float zn = uProj.w;
+    bool ia = a.z >= zn, ib = b.z >= zn;
+    if (ia && ib) return true;
+    if (!ia && !ib) return false;
+    float t = (zn - a.z) / (b.z - a.z);
+    vec3 m = vec3(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y), zn);
+    if (ia) b2 = m; else a2 = m;
+    return true;
 }
 int steps(int r, int i, vec2 qa, vec2 qc) {
     float L = length(qc - qa);
@@ -3126,9 +3162,10 @@ int steps(int r, int i, vec2 qa, vec2 qc) {
     if (kind == 2 && k >= 3) return k;
     return 1;
 }
-vec2 stepPoint(int r, int i, vec2 qa, vec2 qc, int k, int j) {
-    if (j <= 0) return qa;
-    if (j >= k) return qc;
+// step j's point of piece i (k steps) in the camera's space: its ends (j 0 and k) or the curve between them
+vec3 stepPoint(int r, int i, int k, int j) {
+    if (j <= 0) return camOf(pointOf(r, i - 1));
+    if (j >= k) return camOf(pointOf(r, i));
     float t = float(j) / float(k);
     if (runs[r].b.z == 1) {                      // the processor's Catmull-Rom curve, written from point a with the neighbours as steps from it (exact differences)
         vec3 ah = vec3(0.0), al = vec3(0.0), ch = vec3(0.0), cl = vec3(0.0), h0 = vec3(0.0), l0 = vec3(0.0), h3 = vec3(0.0), l3 = vec3(0.0);
@@ -3143,7 +3180,7 @@ vec2 stepPoint(int r, int i, vec2 qa, vec2 qc, int k, int j) {
         float t2 = t * t;
         float t3 = t2 * t;
         vec3 v = A + ((d1 - d0) * t + (d0 * 2.0 + d1 * 4.0 - d3) * t2 + (d3 - d0 - d1 * 3.0) * t3) * 0.5;
-        return project(v);
+        return camOf(v);
     }
     uint cs = uint(runs[r].c.x) + uint(i - 1);
     float cE = pts[2u * cs].x + pts[2u * cs + 1u].x;
@@ -3154,7 +3191,15 @@ vec2 stepPoint(int r, int i, vec2 qa, vec2 qc, int k, int j) {
     float sinM = sE * ch + cE * s;
     float cosM = cE * ch - sE * s;
     vec3 v = pointOf(r, i - 1) + runs[r].pa.xyz * (-2.0 * sinM * s) + runs[r].qb.xyz * (2.0 * cosM * s);
-    return project(v);
+    return camOf(v);
+}
+// step j's segment (step j - 1 to step j) cut at the near plane, on the picture; false: none of it is in front
+bool stepSeg(int r, int i, int k, int j, out vec2 P0, out vec2 P1) {
+    vec3 a = vec3(0.0), b = vec3(0.0);
+    P0 = vec2(-1.0e9); P1 = vec2(-1.0e9);
+    if (!cutNear(stepPoint(r, i, k, j - 1), stepPoint(r, i, k, j), a, b)) return false;
+    P0 = onPic(a); P1 = onPic(b);
+    return true;
 }
 )";
 static const char* const kLinesMainCSPart = R"(
@@ -3189,15 +3234,21 @@ void main() {
     if (g >= N) return;
     int r = runOf(g);
     int i = runs[r].b.x + (g - runs[r].b.w);
-    if (uStep == 0) {
-        vec2 qa = project(pointOf(r, i - 1));
-        vec2 qc = project(pointOf(r, i));
-        off[g] = uint(steps(r, i, qa, qc));
+    if (uStep == 0) {                            // 0.75.0: the piece's chord cut at the near plane decides its steps (orbit/orbit_lines.h chordNear)
+        vec3 a = vec3(0.0), c = vec3(0.0);
+        vec2 qa = vec2(-1.0e9), qc = vec2(-1.0e9);
+        int k = 1;
+        if (cutNear(camOf(pointOf(r, i - 1)), camOf(pointOf(r, i)), a, c)) { qa = onPic(a); qc = onPic(c); k = steps(r, i, qa, qc); }
+        off[g] = uint(k);
         scr[g] = vec4(qa, qc);
         return;
     }
     int k = int(off[g + 1] - off[g]);
-    for (int j = 1; j <= k; j++) { uint at = off[g] + uint(j - 1); if (at < uint(uN.z)) chk[at] = stepPoint(r, i, scr[g].xy, scr[g].zw, k, j); }
+    for (int j = 1; j <= k; j++) {
+        uint at = off[g] + uint(j - 1);
+        vec2 P0 = vec2(0.0), P1 = vec2(0.0);
+        if (at < uint(uN.z)) chk[at] = stepSeg(r, i, k, j, P0, P1) ? vec4(P0, P1) : vec4(-1.0e38);   // (none of it in front: -1e38, beyond any place on the picture)
+    }
 }
 )";
 static const char* const kLinesHeadVSPart = R"(#version 450
@@ -3242,11 +3293,9 @@ void main() {
     int j = s - int(off[g]);
     int r = runOf(g);
     int i = runs[r].b.x + (g - runs[r].b.w);
-    vec2 qa = scr[g].xy, qc = scr[g].zw;
-    vec2 A = stepPoint(r, i, qa, qc, k, j);
-    vec2 B = stepPoint(r, i, qa, qc, k, j + 1);
+    vec2 A = vec2(0.0), B = vec2(0.0);
     vec2 P0 = A, P1 = B;
-    bool keep = clipSeg(A, B, P0, P1);
+    bool keep = stepSeg(r, i, k, j + 1, A, B) && clipSeg(A, B, P0, P1);   // 0.75.0: cut at the near plane first (3D), then to the picture
     vec4 col = runs[r].colour;
     float w = runs[r].style.x;
     vec2 d = P1 - P0;

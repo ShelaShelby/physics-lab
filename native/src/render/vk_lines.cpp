@@ -135,7 +135,7 @@ public:
         std::vector<float> pts(np * 8);
         for (std::size_t i = 0; i < np; i++) hiLo(&d.checkPts[3 * i], &pts[8 * i]);
         if (!c_.makeBuffer(VkDeviceSize(np) * kPointBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, j.store, "the lines' check points") ||
-            !sized(j.seg, d, true) || !c_.makeBuffer(VkDeviceSize(j.points) * 8u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.chk, "the lines' check steps")) { dropJob(j); return 0; }
+            !sized(j.seg, d, true) || !c_.makeBuffer(VkDeviceSize(j.points) * 16u, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, true, j.chk, "the lines' check steps")) { dropJob(j); return 0; }
         c_.copyIn(pts.data(), pts.size() * sizeof(float), j.store, 0);
         c_.copyIn(d.runs.data(), d.runs.size() * sizeof(LinesRun), j.seg.runs, 0);
         c_.barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VkCards::kToCompute);
@@ -154,7 +154,7 @@ public:
                 ends.assign(static_cast<const float*>(j.seg.scr.map), static_cast<const float*>(j.seg.scr.map) + 4 * std::size_t(j.pieces));
                 offsets.assign(static_cast<const std::uint32_t*>(j.seg.off.map), static_cast<const std::uint32_t*>(j.seg.off.map) + std::size_t(j.pieces) + 1);
                 const std::uint32_t n = std::min(offsets.back(), j.points);
-                points.assign(static_cast<const float*>(j.chk.map), static_cast<const float*>(j.chk.map) + 2 * std::size_t(n));
+                points.assign(static_cast<const float*>(j.chk.map), static_cast<const float*>(j.chk.map) + 4 * std::size_t(n));   // 0.75.0: a step's segment cut at the near plane (4 floats)
             }
             release(job);
             return good ? JobState::Done : JobState::Failed;
@@ -250,7 +250,7 @@ private:
     bool steps(const LinesDraw& d, VkCards::Buf& store, Seg& s, int to, unsigned consumer, VkCards::Buf* chk = nullptr) {
         VkUniforms& u = k_.u;
         const LinesCamera& c = d.cam;
-        const int n[4] = {int(d.runs.size()), d.pieces, chk ? int(chk->size / 8u) : 0, 0};
+        const int n[4] = {int(d.runs.size()), d.pieces, chk ? int(chk->size / 16u) : 0, 0};
         u.f("uCHi", c.cHi, 3); u.f("uCLo", c.cLo, 3); u.f("uRot", c.rot, 4); u.f("uProj", c.proj, 4); u.f("uScr", c.scr, 4); u.f("uView", c.view, 4); u.i("uN", n, 4);
         VkCards::Buf& out = chk ? *chk : s.ind;          // (step 2 writes into it only in the check)
         for (int step = 0; step < to; step++) {

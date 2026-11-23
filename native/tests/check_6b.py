@@ -92,7 +92,7 @@ SCENES = {
     "atom.slice_all_drag": "Og-294, Slice, every electron, Whole atom, Shells enlarged, Classic, 240000 dots", "atom.slice_dirac_drag": "U-238, Slice, one electron, 4f, Classic, 48000 dots",
     "atom.side_all_glow": "Og-294, Cloud, every electron, Whole atom, Shells enlarged, Glow, 240000 dots", "atom.side_all_classic": "Og-294, Cloud, every electron, Whole atom, Shells enlarged, Classic, 240000 dots",
     "atom.slice_glow_ultra": "U-238, Slice, one electron, 4f, Glow, 48000 dots", "atom.slice_classic_ultra": "U-238, Slice, one electron, 4f, Classic, 48000 dots",
-    "orbit.saturn": "Orbit Lab: zoom 4.10", "orbit.earth": "Orbit Lab: zoom 5.50", "orbit.real_fast": "the belts' rocks", "orbit.sky": "Orbit Lab: zoom 0.00",
+    "orbit.saturn": "Orbit Lab: zoom 4.10", "orbit.earth": "Orbit Lab: zoom 5.14",   # (0.75.0, on purpose: the closest zoom keeps the camera 1.5 Earth radii from its middle: 5.5 asked, 5.14 drawn) "orbit.real_fast": "the belts' rocks", "orbit.sky": "Orbit Lab: zoom 0.00",
     "orbit.journey": "Journey", "atom.all_enlarged": "Og-294, Cloud 3D, every electron, Whole atom, Shells enlarged, Glow, 240000 dots",
     "atom.all_true_zoomed": "Og-294, Cloud 3D, every electron, Whole atom, True scale, Glow, 240000 dots",
     "atom.all_one_orbital": "Og-294, Cloud 3D, every electron, One orbital 5f", "atom.all_classic": "Og-294, Cloud 3D, every electron, Whole atom, Shells enlarged, Classic, 240000 dots",
@@ -101,6 +101,7 @@ SCENES = {
     "molecule.spacefill_vib": "Molecule Lab: C6H6 (12 atoms), zoom x4.00, vibration mode 1", "blackhole.film_tilt": "distance 74.1 GM/c², field of view 30", "blackhole.extreme": "Black Hole Lab: distance 50.0", "blackhole.all_light": "Black Hole Lab: distance 20.0",
     "blackhole.moving_gas": "Black Hole Lab: distance 10.0",   # 0.72.0
     "orbit.alphacen": "Orbit Lab, Alpha Centauri: zoom",       # 0.73.0
+    "orbit.flyby": "Orbit Lab: zoom 4.1",                      # 0.75.0
     "ui.guide_scroll": "Learn guide 0:3", "ui.data_plot": "Data panel over the", "ui.settings_open": "the belts' rocks",
 }
 

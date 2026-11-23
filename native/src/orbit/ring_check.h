@@ -5,7 +5,8 @@
 // A step that does not finish within 10 s switches it off. OpenGL draws the processor's triangles always (no card program for the rings there).
 //
 // THE CHECK (limits written before any card's result was looked at): three views (the orbit.saturn set-up's kind of view, the rings almost edge-on, the
-// planet's shadow across the rings), each a 400 x 250 picture of one sample per pixel (multisampling off): the processor's triangles (orbit/ring_draw.h,
+// planet's shadow across the rings; 0.75.0: a fourth, the 3D pinhole camera 1.5 radii from the middle and 4 degrees above the ring plane, the rings' near
+// part cut at the near plane, with the same limit, written before its result was looked at), each a 400 x 250 picture of one sample per pixel (multisampling off): the processor's triangles (orbit/ring_draw.h,
 // rasterised here at the pixel centres and blended over black, back half then front half) against the card's function at the same pixel centres (the
 // probe), 8-bit values. A view passes when at most 1 % of its ring pixels (a pixel either side covers) differ by more than 8 levels in a channel.
 #pragma once
@@ -30,7 +31,7 @@ void ringPictureCpu(const RingFrame& f, const std::vector<RingBand>& bands, int 
 void ringPictureCard(const std::vector<float>& back, const std::vector<float>& front, int w, int h, std::vector<float>& rgb);
 struct RingCompare { long ringPixels = 0, over8 = 0; int worst = 0; bool ok() const { return ringPixels > 0 && over8 * 100 <= ringPixels; } };
 RingCompare compareRingPictures(const std::vector<float>& cpu, const std::vector<float>& card, int w, int h);
-// the check's three views (a picture of w x h points)
+// the check's four views (a picture of w x h points)
 struct RingCheckView { const char* name; RingFrame f; std::vector<RingBand> bands; };
 std::vector<RingCheckView> ringCheckViews(int w, int h);
 // what the card is given for one half

@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "camera.h"
 #include "vec3.h"
 
 namespace orbit {
@@ -54,7 +55,12 @@ struct BandPoint {
     double bright = 0;          // 0.4 (away from the galactic centre) to 1 (towards it)
     bool ok = false;
 };
-void milkyWayBand(const Sky& S, double W, double H, double ca, double sa, double cb, double sb, std::vector<BandPoint>& band);
+// 0.75.0: the lens the sky is drawn with. pinhole false: the map above (skyScreen: 2D, the Black Hole Lab); true: the Orbit Lab's 3D camera (orbit/camera.h:
+// principal point ppx, ppy, focal F points), the scene's own lens, so a star and a far planet in the same direction stay together while the view turns.
+struct SkyLens { bool pinhole = false; double ppx = 0, ppy = 0, F = 1; };
+bool skyScreenLens(const Vec3& v, double W, double H, double ca, double sa, double cb, double sb, const SkyLens& L, double& X, double& Y);
+bool skyDirectionLens(double X, double Y, double W, double H, double ca, double sa, double cb, double sb, const SkyLens& L, Vec3& v);
+void milkyWayBand(const Sky& S, double W, double H, double ca, double sa, double cb, double sb, std::vector<BandPoint>& band, const SkyLens& L = SkyLens{});
 
 Vec3 lonLat(double lonDeg, double latDeg);          // unit vector from ecliptic longitude and latitude
 std::array<int, 3> bvRGB(double bv);                // 0.50: a star's colour from its B−V: a black body at the Ballesteros (2012) temperature, CIE 1931, sRGB (sky.cpp)

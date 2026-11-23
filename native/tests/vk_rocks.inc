@@ -15,11 +15,13 @@ static orbit::BeltCamera rockCamera(const orbit::SolarSystem& sys, double zoom, 
     orbit::BeltCamera c;
     const orbit::Vec3 bc = sys.barycentre();
     const double yawA = d3 ? 0.6 + units::kPi : 0, pitchA = d3 ? -1.0 : 0;       // scene 1's camera: yaw 0.6, pitch 1.0, as OrbitView builds it
-    c.bx = bc.x; c.by = bc.y; c.bz = bc.z;
+    c.bc = bc;
     c.ca = std::cos(yawA); c.sa = std::sin(yawA); c.cb = std::cos(pitchA); c.sb = std::sin(pitchA);
     c.px = std::min(W, H) / 34 * std::pow(10.0, zoom) / units::kSimLength;
-    c.W = W; c.H = H; c.D = std::max(90.0, 3 * 34 / std::pow(10.0, zoom)) * units::kSimLength;
-    c.cd = cdFraction * c.D; c.ox = ox; c.oy = oy; c.d3 = d3;
+    c.W = W; c.H = H;
+    // 0.75.0: the pinhole camera (orbit/camera.h); the look-at plane cdFraction x 90 sim lengths deep (the old camera's distance, so the cases keep their depths)
+    c.cd = cdFraction * 90 * units::kSimLength; c.ox = ox; c.oy = oy; c.d3 = d3; c.ppx = W / 2; c.ppy = H / 2;
+    c.finish();
     return c;
 }
 
@@ -105,7 +107,7 @@ static void gpuRocks(render::Renderer2D& R, const std::string& /*dir*/) {
             orbit::SolarSystem one; one.belts.clear(); one.belts.push_back(g);
             orbit::BeltLayer layer;
             // a camera with the Sun in the middle and 300 points to the semi-major axis, looking straight down: screen = 300 x position / a, so an error in points / 300 is an error in a
-            orbit::BeltCamera cam; cam.W = cam.H = 1000; cam.px = 300.0 / (double(g.a[0]) * units::kAU); cam.D = 1; cam.d3 = false;
+            orbit::BeltCamera cam; cam.W = cam.H = 1000; cam.px = 300.0 / (double(g.a[0]) * units::kAU); cam.d3 = false; cam.finish();
             const double bound = 2e-7 + 4e-7 / (1 - o.e);
             double worst = 0;
             for (const double years : {0.0, 0.3, 1.0, 37.5, 1000.0, 10000.0, 1e6, 1e7}) {

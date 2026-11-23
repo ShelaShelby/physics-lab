@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "app/prefs.h"
+#include "camera.h"                              // 0.75.0: the camera (ViewCam) and its field of view, kFieldOfViewDeg (45 degrees: one constant, there)
 #include "belt_layer.h"
 #include "card_text.h"
 #include "render/renderer2d.h"
@@ -74,7 +75,7 @@ public:
 
     // 0.74.0, the camera's rules: it always has a target (the followed thing, else the barycentre). Only a pick of something else (pick: the camera glides there),
     // Reset view, Escape or picking the followed thing again let go. An empty click changes nothing; a moving drag slides the view and stays attached (ux, uy).
-    void click(double x, double y);              // picture points: a hit selects it (followed things: the camera glides to it); an empty click does nothing
+    void click(double x, double y);              // picture points: a hit picks it (0.75.0: the camera glides to it, followed or not; a belt is only selected); an empty click does nothing
     void drag(double dx, double dy, bool rotate); // (3D) turns the view, or slides it: a followed thing keeps the new place on the screen (ux, uy)
     void zoomChanged(double oldZoom, double newZoom);   // keeps the middle of the picture in place
     void resetView();
@@ -116,6 +117,11 @@ public:
     std::string scaleText, lightText;            // 0.15 stage 3: the scale bar's words ("1 AU" / "light takes 8.3 minutes"), kept for the readout
     // The selected thing's place on the picture (points) and its radius, as last drawn. False: nothing is selected, or it has no round mark.
     bool selectedScreen(double& x, double& y, double& r) const;
+    // 0.75.0: the highest zoom the last drawing allowed (3D, True scale, a followed body: the camera stays 1.5 of its radii from its middle; else kZoomMax)
+    double zoomCap() const { return zoomCap_; }
+    double zoomCapFor(const SolarSystem& sys, const ViewSettings& set, double W, double H) const;
+    // 0.75.0: what the scale bar's length holds for (3D: "at Earth's distance", the followed thing's; empty in 2D)
+    std::string scaleWhere;
 
     // 0.73.1 (for the automatic checks): where the selected moon and its planet were DRAWN last frame, in points from the middle the followed thing is held at (ok: a moon was drawn)
     struct DrawnSel { bool ok = false; double moonX = 0, moonY = 0, planetX = 0, planetY = 0; };
@@ -135,6 +141,7 @@ private:
     bool pressed_ = false, turned_ = false;
     bool held_ = false;                          // the last drawing held a followed thing (a moving drag then slides it: ux, uy)
     DrawnSel drawnSel_;
+    double zoomCap_ = 5.5;                       // (units.h kZoomMax)
     struct Hit { Selection sel; double x, y, r; };
     std::vector<Hit> hits_;
     bool acScene = false;                        // 0.73.0: the last frame drew the Alpha Centauri scene (drag may turn the 3D view right over there)

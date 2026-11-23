@@ -84,6 +84,19 @@ bool skyDirection(double X, double Y, double W, double H, double ca, double sa, 
     return true;
 }
 
+bool skyScreenLens(const Vec3& v, double W, double H, double ca, double sa, double cb, double sb, const SkyLens& L, double& X, double& Y) {
+    if (!L.pinhole) return skyScreen(v, W, H, ca, sa, cb, sb, X, Y);
+    return pinholeDirection(v, ca, sa, cb, sb, L.ppx, L.ppy, L.F, X, Y);   // (orbit/camera.h: the scene's own formula)
+}
+
+bool skyDirectionLens(double X, double Y, double W, double H, double ca, double sa, double cb, double sb, const SkyLens& L, Vec3& v) {
+    if (!L.pinhole) return skyDirection(X, Y, W, H, ca, sa, cb, sb, v);
+    const double x1 = (X - L.ppx) / L.F, y2 = -(Y - L.ppy) / L.F, dep = -1, n = std::sqrt(x1 * x1 + y2 * y2 + 1);   // the pinhole turned back: (x/z, y/z, 1)
+    const double y1 = (y2 * cb + dep * sb) / n, z = (-y2 * sb + dep * cb) / n, x = x1 / n;
+    v = {x * ca + y1 * sa, -x * sa + y1 * ca, z};
+    return true;
+}
+
 void skyViewToGalactic(const Sky& S, double ca, double sa, double cb, double sb, double M[9]) {
     // view = R * ecliptic with the rows of R below (as skyScreen), so ecliptic = R^T * view and galactic = G * R^T * view
     const double R[3][3] = {{ca, -sa, 0}, {sa * cb, ca * cb, -sb}, {sa * sb, ca * sb, cb}};
@@ -96,7 +109,7 @@ void skyViewToGalactic(const Sky& S, double ca, double sa, double cb, double sb,
 // there is taken from the neighbours on the map (both: the difference between them; one: the difference to it). The circle is closed, so sample 0 and sample
 // kBandPieces are the same point and the neighbours wrap round. (Before 0.10.1 the neighbour test read the flags of points that the same loop had just switched
 // off, so after the first gap in the visible stretch every later point was dropped: the band stopped, or was only a thin arc, or was missing.)
-void milkyWayBand(const Sky& S, double W, double H, double ca, double sa, double cb, double sb, std::vector<BandPoint>& band) {
+void milkyWayBand(const Sky& S, double W, double H, double ca, double sa, double cb, double sb, std::vector<BandPoint>& band, const SkyLens& L) {
     const double cx = W / 2, cy = H / 2, K = std::hypot(W, H) / 2 / 1.75;
     const Vec3 A = S.galCentre, P = S.galPole, B = cross(P, A);
     const int n = kBandPieces;
@@ -105,9 +118,10 @@ void milkyWayBand(const Sky& S, double W, double H, double ca, double sa, double
     for (int i = 0; i <= n; i++) {
         const double l = i / double(n) * 2 * kPi, c = std::cos(l);
         BandPoint& p = band[i];
-        onMap[i] = skyScreen(A * c + B * std::sin(l), W, H, ca, sa, cb, sb, p.X, p.Y);
+        onMap[i] = skyScreenLens(A * c + B * std::sin(l), W, H, ca, sa, cb, sb, L, p.X, p.Y);
         p.bright = 0.4 + 0.6 * (0.5 + 0.5 * c);
-        p.fade = onMap[i] ? std::clamp((1.75 - std::hypot(p.X - cx, p.Y - cy) / K) / 0.2, 0.0, 1.0) : 0.0;   // fades out where the map ends
+        // fades out where the map ends (0.75.0: the pinhole has no such edge on the picture: its field is 45 degrees high)
+        p.fade = onMap[i] ? (L.pinhole ? 1.0 : std::clamp((1.75 - std::hypot(p.X - cx, p.Y - cy) / K) / 0.2, 0.0, 1.0)) : 0.0;
     }
     const double diag = std::hypot(W, H) / 2;
     for (int i = 0; i <= n; i++) {                                                // the direction along the band on screen, from the neighbours on the map

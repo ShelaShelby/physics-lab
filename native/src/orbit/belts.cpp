@@ -120,11 +120,15 @@ Vec3 beltPoint(const BeltGroup& g, int k, double t) {
 }
 
 void beltScreen(const BeltCamera& c, const Vec3& p, double& X, double& Y) {
-    const double x = p.x - c.bx, y = p.y - c.by, z = p.z - c.bz;
-    const double x1 = x * c.ca - y * c.sa, y1 = x * c.sa + y * c.ca, y2 = y1 * c.cb - z * c.sb, dep = y1 * c.sb + z * c.cb;
-    const double f = c.d3 ? c.D / std::max(c.D - (dep - c.cd), 0.05 * c.D) : 1;
-    X = c.W / 2 + x1 * c.px * f + c.ox;
-    Y = c.H / 2 - y2 * c.px * f + c.oy;
+    const Q q = c.proj(p.x, p.y, p.z);                 // (behind the camera: -1e9, -1e9)
+    X = q.first; Y = q.second;
+}
+
+void rockFrameCamera(const BeltCamera& c, render::RockFrame& f) {
+    f.bc[0] = c.bc.x; f.bc[1] = c.bc.y; f.bc[2] = c.bc.z;
+    f.ca = c.ca; f.sa = c.sa; f.cb = c.cb; f.sb = c.sb; f.px = c.px; f.d3 = c.d3;
+    if (c.d3) { f.sx = c.ppx; f.sy = c.ppy; f.d = c.d; f.cd = c.cd; f.lx = c.lx; f.ly = c.ly; f.F = c.F; f.zNear = c.zNear; }
+    else { f.sx = c.W / 2 + c.fx + c.ox; f.sy = c.H / 2 + c.oy; }
 }
 
 const char* beltTitle(const std::string& key) {

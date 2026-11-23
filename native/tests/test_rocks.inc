@@ -95,24 +95,34 @@ static void testRockKepler() {
         near(worst, 0, 1, 1e-9, "the new beltPoint equals the old 3-step one for the app's rocks (worst " + std::to_string(worst) + " of a)");
     }
 
-    // 5) the camera: beltScreen against OrbitView's own formulas
+    // 5) the camera: beltScreen against the map's formula (2D) and, 0.75.0, a pinhole camera written from its position and axes (3D: screen = principal point
+    //    + focal (r . right, -(r . up)) / (r . forward) for r the point less the camera's place); behind the camera: off the picture
     {
-        BeltCamera c; c.bx = 3e9; c.by = -2e9; c.bz = 1e9; c.W = 1040; c.H = 713; c.px = 2.5e-10; c.D = 4e13; c.cd = 1.5e12; c.ox = 37; c.oy = -81; c.d3 = true;
+        BeltCamera c; c.bc = Vec3{3e9, -2e9, 1e9}; c.W = 1040; c.H = 713; c.px = 2.5e-10; c.cd = 1.5e12; c.ox = 37; c.oy = -81; c.ppx = 560; c.ppy = 340;
         const double yaw = 0.9 + units::kPi, pitch = -1.1;
         c.ca = std::cos(yaw); c.sa = std::sin(yaw); c.cb = std::cos(pitch); c.sb = std::sin(pitch);
         const Vec3 pts[] = {{1e11, 2e11, 3e10}, {-4e11, 1e12, -2e11}, {7e12, -3e12, 5e11}, {3e9, -2e9, 1e9}};
         for (bool d3 : {true, false}) {
             c.d3 = d3;
+            c.finish();
+            const Vec3 right{c.ca, -c.sa, 0}, up{c.sa * c.cb, c.ca * c.cb, -c.sb}, towards{c.sa * c.sb, c.ca * c.sb, c.cb};   // the turned frame's axes in space
+            const Vec3 cam = c.position();
             for (const Vec3& p : pts) {
-                double x = p.x - c.bx, y = p.y - c.by, z = p.z - c.bz;
-                const double x1 = x * c.ca - y * c.sa, y1 = x * c.sa + y * c.ca, y2 = y1 * c.cb - z * c.sb, dep = y1 * c.sb + z * c.cb;
-                const double f = d3 ? c.D / std::max(c.D - (dep - c.cd), 0.05 * c.D) : 1;
                 double X, Y; beltScreen(c, p, X, Y);
-                near(X, c.W / 2 + x1 * c.px * f + c.ox, 1000, 1e-13, "beltScreen x, " + std::string(d3 ? "3D" : "2D"));
-                near(Y, c.H / 2 - y2 * c.px * f + c.oy, 1000, 1e-13, "beltScreen y, " + std::string(d3 ? "3D" : "2D"));
+                if (!d3) {
+                    const Vec3 r = p - c.bc;
+                    near(X, c.W / 2 + dot(r, right) * c.px + c.ox, 1000, 1e-13, "beltScreen x, 2D");
+                    near(Y, c.H / 2 - dot(r, up) * c.px + c.oy, 1000, 1e-13, "beltScreen y, 2D");
+                    continue;
+                }
+                const Vec3 r = p - cam;
+                const double Z = -dot(r, towards);
+                if (Z < 0.01 * c.d) { check(X < -1e8 && Y < -1e8, "beltScreen: a point behind the camera is off the picture"); continue; }
+                near(X, c.ppx + c.F * dot(r, right) / Z, 1000, 1e-9, "beltScreen x, 3D (pinhole)");
+                near(Y, c.ppy - c.F * dot(r, up) / Z, 1000, 1e-9, "beltScreen y, 3D (pinhole)");
             }
         }
-        BeltCamera top; top.W = 800; top.H = 600; top.px = 1e-9; top.ox = 10; top.oy = 20;       // top-down, nothing turned: x to the right, y up the picture
+        BeltCamera top; top.W = 800; top.H = 600; top.px = 1e-9; top.ox = 10; top.oy = 20; top.finish();   // top-down, nothing turned: x to the right, y up the picture
         double X, Y; beltScreen(top, Vec3{1e11, 2e11, 5e11}, X, Y);
         near(X, 400 + 100 + 10, 1, 1e-12, "beltScreen top-down: x moves right by px x metres"); near(Y, 300 - 200 + 20, 1, 1e-12, "beltScreen top-down: y moves UP the picture (smaller Y), z does nothing");
     }

@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "camera.h"
+#include "render/rock_compute.h"
 #include "vec3.h"
 
 namespace orbit {
@@ -49,15 +51,13 @@ double beltMeanMotion(const BeltGroup& g, int k);
 // Where rock k of group g is, `t` seconds after the start date (m, Sun at the origin).
 Vec3 beltPoint(const BeltGroup& g, int k, double t);
 
-// The camera of the Orbit Lab picture, as OrbitView::draw has it: everything is drawn round the barycentre bc, turned by the yaw (ca, sa) about z and tipped by the pitch
-// (cb, sb), scaled by px (points per metre), and in the 3D view given a mild perspective (D: the camera distance, cd: the depth of the middle of the view); then moved by (ox, oy) points.
-struct BeltCamera {
-    double bx = 0, by = 0, bz = 0;
-    double ca = 1, sa = 0, cb = 1, sb = 0, px = 1, W = 1, H = 1, D = 1, cd = 0, ox = 0, oy = 0;
-    bool d3 = false;
-};
-// A point (m) on the picture (points). The CPU reference of the GPU's screenOf (render/shaders.h, kRocksCS).
+// The camera of the Orbit Lab picture, as OrbitView::draw has it (0.75.0: the one camera of orbit/camera.h: 2D the top-down map, 3D the pinhole camera).
+using BeltCamera = ViewCam;
+// A point (m) on the picture (points); behind the camera or nearer than its near plane (3D): -1e9, -1e9 (off the picture). The CPU reference of the GPU's
+// screenOf (render/shaders.h, kRocksCS).
 void beltScreen(const BeltCamera& c, const Vec3& p, double& X, double& Y);
+// the camera's numbers for the card's rocks program (kRocksCS uniforms), as orbit/belt_layer.cpp sends them
+void rockFrameCamera(const BeltCamera& c, render::RockFrame& f);
 
 // The Oort cloud's edges as the lab states them, AU (the card, the Journey caption and the travel times all read these).
 // 0.49 (outside review: 2,000 / 20,000 / 200,000 AU had no source): NASA Science, Oort Cloud Facts (data/oort/nasa_oort_cloud_facts_read_2026-11-11.html): "The inner

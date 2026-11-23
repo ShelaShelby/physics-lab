@@ -147,21 +147,24 @@ void drawAxesGizmo(render::Renderer2D& R, TextPainter& T, double gx, double gy, 
 // The night sky behind everything. It is so far away that it does not move
 // when you zoom or move the view, only when you turn the 3D view. Stars are grouped by colour and
 // size, and each group is one instanced draw call. lv = how bright the sky is drawn (0–1).
-void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double ca, double sa, double cb, double sb, ConsMode cons, double lv, const Sky& S = skyData()) {   // 0.73.0: S, the sky seen from where the scene is
+// 0.75.0: L, the lens: 2D the map of orbit/sky.cpp skyScreen (the angle from straight ahead becomes the distance from the middle, 100 degrees at the corner);
+// 3D the scene's own pinhole camera (orbit/camera.h), so the sky and the planets move together when the view turns.
+void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double ca, double sa, double cb, double sb, ConsMode cons, double lv, const Sky& S, const SkyLens& SL) {   // 0.73.0: S, the sky seen from where the scene is
     const double cx = W / 2, cy = H / 2, diag = std::hypot(W, H) / 2, K = diag / 1.75;   // K: points per radian away from the middle (100° reaches the corner)
-    // a direction -> screen: the angle from straight ahead becomes the distance from the middle (orbit/sky.cpp)
-    const auto scr = [&](const Vec3& v, double& X, double& Y) { return skyScreen(v, W, H, ca, sa, cb, sb, X, Y); };
+    // a direction -> screen (orbit/sky.cpp skyScreenLens)
+    const auto scr = [&](const Vec3& v, double& X, double& Y) { return skyScreenLens(v, W, H, ca, sa, cb, sb, SL, X, Y); };
     // The Milky Way (0.26): the Gaia photo of the whole sky.
     static std::vector<BandPoint> band;
     {
         // 0.26 (owner's choice, 5 Nov 2026): the smooth drawn band is replaced by ESA's Gaia all-sky colour map (render/planet_maps.h), drawn per pixel by the
         // renderer through the same map as the stars (orbit/sky.cpp skyViewToGalactic). The band's points are still worked out: its label goes on them.
-        milkyWayBand(S, W, H, ca, sa, cb, sb, band);
+        milkyWayBand(S, W, H, ca, sa, cb, sb, band, SL);
         double M[9];
         skyViewToGalactic(S, ca, sa, cb, sb, M);
         float Mf[9];
         for (int k = 0; k < 9; k++) Mf[k] = static_cast<float>(M[k]);
-        R.skyMap(W, H, K, Mf, lv);
+        if (SL.pinhole) R.skyMapPinhole(W, H, SL.ppx, SL.ppy, SL.F, Mf, lv);   // 0.75.0: each pixel's direction by the pinhole turned back
+        else R.skyMap(W, H, K, Mf, lv);
     }
     // stars: 0.50 (review item 5): every star by the one rule of sky.h starDraw (light ∝ 10^(-0.4 m), drawn light ∝ light^0.5), a disc in its colour bucket's colour.
     // Until 0.49.4: three size classes and opacities cut at m 3.4 and 4.6 and a hand-tuned glow below m 2.2, with no stated rule.
@@ -176,6 +179,8 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
         if (!scr(S.stars[i].dir, X, Y)) continue;
         pos[i * 2] = static_cast<float>(X); pos[i * 2 + 1] = static_cast<float>(Y);
         if (X < -10 || X > W + 10 || Y < -10 || Y > H + 10) continue;
+        static const bool logStars = std::getenv("PL_LOG_STARS") != nullptr;   // 0.75.0, for automatic checks only: where the stars brighter than 6 are drawn
+        if (logStars && S.stars[i].mag < 6) std::printf("PLSTARPX %zu %.3f %.3f\n", i, X, Y);
         const StarDraw d = starDraw(S.stars[i].mag);
         const auto& c = S.colours[S.stars[i].bucket];
         R.disc(X, Y, d.radius, rgba(c[0], c[1], c[2], static_cast<float>(d.alpha * lv)));
@@ -186,7 +191,13 @@ void drawSky(render::Renderer2D& R, TextPainter& T, double W, double H, double c
         for (const auto& L : S.lines)
             for (const auto& ab : L) {
                 const double xa = pos[ab.first * 2], ya = pos[ab.first * 2 + 1], xb = pos[ab.second * 2], yb = pos[ab.second * 2 + 1];
-                if (xa < -1e8 || xb < -1e8 || std::hypot(xa - xb, ya - yb) > 0.7 * diag) continue;
+                if (xa < -1e8 || xb < -1e8) continue;
+                if (SL.pinhole) {   // 0.75.0: a great circle is a straight line through the pinhole: the part on the picture
+                    double cl[4];
+                    if (clipSeg(xa, ya, xb, yb, -20, -20, W + 20, H + 20, cl)) R.line(cl[0], cl[1], cl[2], cl[3], 0.9, lc);
+                    continue;
+                }
+                if (std::hypot(xa - xb, ya - yb) > 0.7 * diag) continue;
                 R.line(xa, ya, xb, yb, 0.9, lc);
             }
         if (cons == ConsMode::LinesAndNames) {
@@ -249,6 +260,7 @@ void OrbitView::click(double x, double y) {
     }
     if (!best) return;                                    // 0.74.0: a click on empty space changes nothing (before: it let go of what was followed, and time carried it off the picture)
     if (follow && !(best->sel == sel)) { pick(best->sel); return; }   // followed: the camera glides to the clicked thing
+    if (!follow && best->sel.kind != Selection::Belt) { pick(best->sel); return; }   // 0.75.0: not following: the camera flies to it too (a pick; a belt is only selected)
     sel = best->sel;
     cardHidden = false;
 }
@@ -309,6 +321,28 @@ void OrbitView::tick(double dt, const ViewSettings& set) {
 }
 
 namespace { double smooth01(double s) { s = std::clamp(s, 0.0, 1.0); return s * s * (3 - 2 * s); } }
+
+// 0.75.0: the closest zoom on a followed body keeps the camera outside it: d = focal / px >= 1.5 R (3D at True scale; Easy to see draws no true size).
+// px = min(W, H) / 34 x 10^zoom / kSimLength, so 10^zoom <= focal / (1.5 R) x 34 kSimLength / min(W, H).
+double OrbitView::zoomCapFor(const SolarSystem& sys, const ViewSettings& set, double W, double H) const {
+    if (!set.view3D || !follow || W <= 0 || H <= 0) return kZoomMax;
+    double R = 0;
+    if (set.alphaCen) {                                   // the Alpha Centauri scene: its stars are drawn at their true size
+        if (sel.kind == Selection::ACen && (sel.moon == acen::StarA || sel.moon == acen::StarB || sel.moon == acen::Proxima)) R = acen::starFacts(sel.moon - acen::StarA).radius * kSunRadius;
+        return R > 0 ? std::min(kZoomMax, std::log10(focalFor(H) / (1.5 * R) * 34 * kSimLength / std::min(W, H))) : kZoomMax;
+    }
+    if (!set.trueScale) return kZoomMax;
+    if (sel.kind == Selection::Star) R = kSunRadius;
+    else if (sel.kind == Selection::Body || sel.kind == Selection::Moon) {
+        const Body* b = findBody(sys, sel.bodyId);
+        if (!b) return kZoomMax;
+        R = b->radius;
+        if (sel.kind == Selection::Moon) { if (!set.moons || sel.moon < 0 || sel.moon >= static_cast<int>(b->moons.size())) return kZoomMax; R = b->moons[std::size_t(sel.moon)].data->radiusKm * kKm; }
+    }
+    if (!(R > 0)) return kZoomMax;
+    const double cap = std::log10(focalFor(H) / (1.5 * R) * 34 * kSimLength / std::min(W, H));
+    return std::min(kZoomMax, cap);
+}
 
 double OrbitView::holdDepth(double dep) {
     if (glidePending_) glideDep0_ = cdep;
@@ -414,32 +448,25 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     ViewSettings setLocal = setIn;     // (a copy: the caption's box and the bottom-left notes' box are added to its blocked boxes below)
     if (cap.on && cap.cx >= 0) setLocal.blocked.push_back({cap.cx - cap.wMax / 2 - 4, cap.top - 2, cap.wMax + 8, cap.lines.size() * cap.lineH + 4});
     const ViewSettings& set = setLocal;
-    const double px = std::min(W, H) / 34 * std::pow(10.0, set.zoom) / kSimLength;   // points per metre
     const bool TRUE_SCALE = set.trueScale;
     const Vec3 bc = sys.barycentre();                     // everything is drawn around the barycentre, so the Sun is the one that wobbles
 
     // the selected thing may be gone (removed, or switched off): orbit/card_text.cpp, tested
     const auto visible = [&](const Body& b) { return (b.type != BodyKind::Dwarf || set.dwarfs) && (b.type != BodyKind::Comet || set.comets); };
     if (!selectionStillValid(sys, sel, SelectionSwitches{set.dwarfs, set.comets, set.moons, set.belts, set.far})) { sel = Selection{}; follow = false; }
+    // 0.75.0: the closest zoom keeps the camera outside a followed body (3D, True scale): d >= 1.5 of its radius (zoomCapFor); the panel keeps the zoom there too
+    zoomCap_ = zoomCapFor(sys, set, W, H);
+    const double px = std::min(W, H) / 34 * std::pow(10.0, std::min(set.zoom, zoomCap_)) / kSimLength;   // points per metre (at the target's distance, 3D)
 
-    // ---- the camera: turn by yaw about z, tilt by pitch towards the viewer, then a mild perspective ----
+    // ---- the camera (0.75.0: orbit/camera.h): turn by yaw about z, tilt by pitch towards the viewer; 3D: a pinhole camera with a kFieldOfViewDeg field,
+    // looking at the target from the distance that shows the zoom's span at the target (zooming in moves the camera closer). Until 0.74.0 the camera sat at
+    // max(90, 3 x 34 / zoom) sim lengths with its scale clamped at 0.05 of that distance: three times the span, nearly flat, and nothing loomed.
     const bool d3 = set.view3D;
     const double yawA = d3 ? yaw + kPi : 0, pitchA = d3 ? -pitch : 0;   // 3D the right way up: the ecliptic north pole points up the screen
     const double ca = std::cos(yawA), sa = std::sin(yawA), cb = std::cos(pitchA), sb = std::sin(pitchA);
-    const double D = std::max(90.0, 3 * 34 / std::pow(10.0, set.zoom)) * kSimLength;   // camera distance, m: grows with the visible span
-    double cd = cdep;                                     // depth of the middle of the view
-    // screen position of a point (m): x, y in points; dep > 0 is towards the viewer; f is the perspective scale
-    const auto base = [&](double x, double y, double z) {
-        x -= bc.x; y -= bc.y; z -= bc.z;
-        const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, y2 = y1 * cb - z * sb, dep = y1 * sb + z * cb;
-        const double f = d3 ? D / std::max(D - (dep - cd), 0.05 * D) : 1;
-        return Q{W / 2 + fx + x1 * px * f, H / 2 - y2 * px * f, dep, f};
-    };
-    const auto flat = [&](double x, double y, double z) {  // far-away stars are seen flat: too far for this little scene's perspective
-        x -= bc.x; y -= bc.y; z -= bc.z;
-        const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, y2 = y1 * cb - z * sb;
-        return Q{W / 2 + fx + x1 * px, H / 2 - y2 * px, cd, 1};
-    };
+    ViewCam cam;                                          // (cd, ox, oy and the principal point are set after the follow below: finish())
+    cam.bc = bc; cam.ca = ca; cam.sa = sa; cam.cb = cb; cam.sb = sb; cam.px = px; cam.W = W; cam.H = H; cam.fx = fx; cam.d3 = d3;
+    double cd = cdep;                                     // depth of the look-at plane (the followed thing's)
     const double grow = !TRUE_SCALE && set.zoom > 0 ? std::min(3.2, std::pow(10.0, 0.5 * set.zoom)) : 1;   // Easy to see: a little bigger as you zoom in
     const auto drawnRadius = [&](const Body& b) { return TRUE_SCALE ? b.radius * px : (3 + 1.6 * std::sqrt(b.radius / kEarthRadius)) * grow; };
     // 0.73.1: ONE place for a moon: the drawing (the moons' loop) and the follow block below both call moonAt, so the camera is always on the moon where it is drawn.
@@ -482,8 +509,11 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     if (follow && sel.kind == Selection::Far) {           // keep a far-away thing in the middle
         FarItem f;
         if (farItem(sys, sel.moon, f)) {
-            if (f.kind != "probe") { cd = cdep = holdDepth(0); const Q q = flat(f.pos.x, f.pos.y, f.pos.z); holdAt(q.first, q.second, W, H, set); }
-            else { cd = cdep = holdDepth(base(f.pos.x, f.pos.y, f.pos.z).dep); const Q q = base(f.pos.x, f.pos.y, f.pos.z); holdAt(q.first, q.second, W, H, set); }
+            // 0.75.0: any far thing as a probe: the camera looks at it from the zoom's distance (until 0.74.0 a star was held flat, at the barycentre's depth)
+            cd = cdep = holdDepth(cam.depth(f.pos.x, f.pos.y, f.pos.z));
+            double qx = 0, qy = 0;
+            cam.plane(f.pos.x, f.pos.y, f.pos.z, qx, qy);
+            holdAt(qx, qy, W, H, set);
         }
     } else if (follow && sel.kind != Selection::None) {   // keep the followed object in the middle
         Vec3 t;
@@ -496,14 +526,18 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 if (followMoon && sel.moon >= 0 && sel.moon < static_cast<int>(b->moons.size())) t = moonAt(*b, static_cast<std::size_t>(sel.moon), 1.0).pos;
             }
         }
-        cd = cdep = holdDepth(base(t.x, t.y, t.z).dep);   // depth first, so the followed object sits in the middle with no perspective shift (0.74.0: a glide: on the way)
-        const Q q = base(t.x, t.y, t.z);
-        holdAt(q.first, q.second, W, H, set);             // 0.74.0: at the held place (the middle, the centre shift, the user's slide; a glide: on the way)
+        cd = cdep = holdDepth(cam.depth(t.x, t.y, t.z));  // the look-at plane through it (0.74.0: a glide: on the way)
+        double qx = 0, qy = 0;
+        cam.plane(t.x, t.y, t.z, qx, qy);
+        holdAt(qx, qy, W, H, set);                        // 0.74.0: at the held place (the middle, the centre shift, the user's slide; a glide: on the way)
     }
-    const auto proj = [&](double x, double y, double z) { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; };
-    // 0.68.0: the same camera as numbers (orbit/orbit_lines.h LineCam: base() and proj() as above), for the trails, orbits and distance rings on either path
-    LineCam lcam;
-    lcam.bc = bc; lcam.ca = ca; lcam.sa = sa; lcam.cb = cb; lcam.sb = sb; lcam.px = px; lcam.D = D; lcam.cd = cd; lcam.W = W; lcam.H = H; lcam.fx = fx; lcam.ox = ox; lcam.oy = oy; lcam.d3 = d3;
+    // 0.75.0: the camera's axis goes through the held place (the principal point): a followed thing is looked at straight on; in the look-at plane the picture is
+    // the 0.74.0 map (ox, oy keep their meaning there: the slide, the glide and the zoom about the middle are unchanged)
+    cam.cd = cd; cam.ox = ox; cam.oy = oy; cam.ppx = W / 2 + fx + cx + ux; cam.ppy = H / 2 + cy + uy;
+    cam.finish();
+    const auto proj = [&](double x, double y, double z) { return cam.proj(x, y, z); };
+    // 0.68.0: the same camera for the trails, orbits and distance rings on either path (orbit/orbit_lines.h)
+    const LineCam& lcam = cam;
     const bool cardLines = linesOnCard(R);                // their guarded steps advance here (orbit/lines_check.h); true: the card draws them this frame
     LinesPoints linesPts;
     linesPts.card = cardLines ? R.linesCard() : nullptr;
@@ -521,7 +555,9 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     drawnSel_ = DrawnSel{};
     if (set.sky != SkyMode::Off) {                        // the night sky: dim close up, brighter as you zoom out
         const double zt = std::clamp(-set.zoom / 3.5, 0.0, 1.0), lv = set.sky == SkyMode::Full ? 0.45 + 0.55 * zt : 0.16 + 0.6 * zt;
-        drawSky(R, T, W, H, ca, sa, cb, sb, set.cons, lv);
+        SkyLens lens;                                     // 0.75.0: 3D the scene's pinhole camera; 2D the map as before
+        if (d3) { lens.pinhole = true; lens.ppx = cam.ppx; lens.ppy = cam.ppy; lens.F = cam.F; }
+        drawSky(R, T, W, H, ca, sa, cb, sb, set.cons, lv, skyData(), lens);
     }
 
     // the Sun as a star of 1 solar mass
@@ -549,11 +585,72 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
     };
 
+    struct Label { std::string name; double x, y; bool selected, small, force; bool gc = false; int prio = 5; };   // prio (0.23 stage 2): 1 planet, 2 dwarf planet, 3 comet, 4 moon, 5 the rest: who keeps its place when labels crowd
+    std::vector<Label> labels;
+    // ---- far-away things: real stars, clusters, the galactic centre and the Voyagers at their true direction and distance ----
+    // (0.75.0: drawn here, before the Sun, the orbits and the bodies: they are far beyond all of them, so with the sky's lens a star behind Saturn is hidden by it)
+    bool massShown = false;                               // a star's mass label is on screen: the note about masses is shown too
+    if (set.far) {
+        const auto fmtLyS = [](double v) { return fmtLy(v); };
+        // 0.75.0: in front of the camera and on the picture (until 0.74.0: depth - cd < 0.9 D, the old camera's distance)
+        const auto inView = [&](const Q& q) { return q.f > 0 && q.first > -30 && q.first < W + 30 && q.second > -30 && q.second < H + 30; };
+        const Color gold = hexColor(marks::kProbeRing);
+        for (int i = 0; i < farCount(); i++) {
+            FarItem f;
+            if (!farItem(sys, i, f)) continue;
+            const Selection s{Selection::Far, 0, i};
+            const bool on = sel == s, probe = f.kind == "probe";
+            if (probe && !(set.zoom <= -1.5 || on)) continue;   // the Voyagers are far beyond the planets: shown once you zoom out (or pick one)
+            if (probe) {                                  // its path since about Neptune (a straight line), and where it left the Sun's wind
+                const Vec3 a = f.dir * (40 * kAU), h = f.dir * (f.probe->cross * kAU);
+                const Q qa = proj(a.x, a.y, a.z), qb = proj(f.pos.x, f.pos.y, f.pos.z), hq = proj(h.x, h.y, h.z);
+                LinePen pen{R, W, H, 1.0, gold.withAlpha(0.5f)};
+                pen.cam = &cam;
+                pen.to(qa); pen.to(qb);
+                if (inView(hq)) {
+                    R.ring(hq.first, hq.second, 3.5, 1, gold.withAlpha(0.9f));
+                    if (f.probe->cross * kAU * px > 40)
+                        labels.push_back({f.name + " left the Sun’s wind here (" + std::to_string(f.probe->crossYear) + ")", hq.first, hq.second + 14, false, true, false});
+                }
+            }
+            const Q q = proj(f.pos.x, f.pos.y, f.pos.z);   // 0.75.0: every far thing by the one camera (3D: its direction from the camera, with the sky's stars)
+            if (!inView(q)) continue;
+            if (probe) { R.disc(q.first, q.second, 2.6, Color{1, 1, 1, 1}); R.ring(q.first, q.second, 6, 1, gold); }
+            else if (f.kind == "bh") { R.disc(q.first, q.second, 5.3, Color{1, 1, 1, 1}); R.disc(q.first, q.second, 4.5, Color{0, 0, 0, 1}); }
+            else if (f.kind == "object") { R.ring(q.first, q.second, 6, 1, hexColor(marks::kObject)); R.disc(q.first, q.second, 1.6, hexColor(marks::kObject)); }
+            else { const double bv = farBV(f.far->key); const std::array<int, 3> c = std::isnan(bv) ? std::array<int, 3>{255, 255, 255} : bvRGB(bv); R.disc(q.first, q.second, 2.8, rgba(c[0], c[1], c[2])); R.ring(q.first, q.second, 6, 1, Color{1, 1, 1, 0.45f}); }
+            if (on) hiRing(q.first, q.second, 11);
+            if (f.kind == "bh") {
+                labels.push_back({"Galactic centre · " + fmtLyS(f.ly) + " light years", q.first, q.second - 11, on, false, true, true});
+                labels.push_back({f.name + " (black hole)", q.first, q.second + 19, on, false, true, true});
+                const std::string mt = farMassText(f.key);                  // published mass (far_masses.h), under the name
+                if (!mt.empty()) { labels.push_back({mt, q.first, q.second + 32, on, true, false}); massShown = true; }
+            } else {
+                labels.push_back({f.name + " · " + (probe ? fmt::commas(f.au) + " AU" : fmtLyS(f.ly) + " light years"), q.first, q.second - 11, on, true, false});
+                const std::string mt = probe ? std::string() : farMassText(f.key);
+                if (!mt.empty()) { labels.push_back({mt, q.first, q.second + 19, on, true, false}); massShown = true; }
+            }
+            hits_.push_back({s, q.first, q.second, 10});
+        }
+    }
+
+
     {   // habitable zone: a faint green band
         // 0.23 stage 2: it fades out once the band is far wider than the picture (zoomed in on Earth the whole picture was green)
         const double bandPx = (hzOut - hzIn) * kAU * px, fade = std::clamp(1.0 - (bandPx / std::max(W, 1.0) - 1.5) / 3.0, 0.0, 1.0);
         const Color band = {marks::kHabitable[0] / 255.f, marks::kHabitable[1] / 255.f, marks::kHabitable[2] / 255.f, static_cast<float>(0.13 * fade)};
-        if (bigR(W, H, hzOut * kAU * px)) {               // zoomed far in: draw just the strip of it that crosses the picture
+        const auto quad = [&](const Q& a, const Q& b, const Q& c, const Q& e) {   // 0.75.0: cut at the near plane (3D)
+            const Q pq[4] = {a, b, c, e};
+            clipPolygonNear(cam, pq, 4, [&](const Q& u, const Q& v, const Q& w) { R.triangle(u.first, u.second, band, v.first, v.second, band, w.first, w.second, band); });
+        };
+        if (d3 && bigR(W, H, hzOut * kAU * px)) {         // 0.75.0, 3D zoomed far in: the strip of the band under the look-at point, as a flat quad in space (its edges the
+            // band's tangents there: over L they leave the arc by L^2 / (2 r), far under a point at a zoom where it is this big), cut at the near plane
+            double lx0 = 0, ly0 = 0;                      // the look-at point (the camera's axis at the look-at plane), turned back
+            { const double x1 = cam.lx, y2 = cam.ly, dep = cam.cd, y1 = y2 * cb + dep * sb; lx0 = x1 * ca + y1 * sa + bc.x; ly0 = -x1 * sa + y1 * ca + bc.y; }
+            const double r0 = std::max(std::hypot(lx0, ly0), 1e-9), ux0 = lx0 / r0, uy0 = ly0 / r0, tx = -uy0, ty = ux0, L = std::max(60 * cam.d, 6000 / px);
+            const double ri = hzIn * kAU, ro = hzOut * kAU;
+            quad(proj(ux0 * ri - tx * L, uy0 * ri - ty * L, 0), proj(ux0 * ri + tx * L, uy0 * ri + ty * L, 0), proj(ux0 * ro + tx * L, uy0 * ro + ty * L, 0), proj(ux0 * ro - tx * L, uy0 * ro - ty * L, 0));
+        } else if (bigR(W, H, hzOut * kAU * px)) {        // zoomed far in: draw just the strip of it that crosses the picture
             // the point of the ecliptic under the middle of the picture, and the band's direction there
             const double wx = -ox / px, wy = (oy / px) / std::max(std::fabs(cb), 0.05);
             const double X0 = wx * ca + wy * sa + bc.x, Y0 = -wx * sa + wy * ca + bc.y, r0 = std::max(std::hypot(X0, Y0), 1e-9), ux = X0 / r0, uy = Y0 / r0;
@@ -572,8 +669,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 const double t0 = i / 96.0 * 2 * kPi, t1 = (i + 1) / 96.0 * 2 * kPi;
                 const Q a = proj(ro * std::cos(t0), ro * std::sin(t0), 0), b = proj(ro * std::cos(t1), ro * std::sin(t1), 0);
                 const Q c = proj(ri * std::cos(t1), ri * std::sin(t1), 0), e = proj(ri * std::cos(t0), ri * std::sin(t0), 0);
-                R.triangle(a.first, a.second, band, b.first, b.second, band, c.first, c.second, band);
-                R.triangle(a.first, a.second, band, c.first, c.second, band, e.first, e.second, band);
+                quad(a, b, c, e);
             }
         }
         const Q q = proj(hzOut * kAU * std::cos(2.4), hzOut * kAU * std::sin(2.4), 0);
@@ -621,9 +717,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     if (set.belts && !sys.belts.empty()) {   // belts: thousands of rocks on Kepler orbits, one instanced draw call per belt (the places: the CPU, or from 0.13 stage 4 the GPU, orbit/belt_layer.h)
-        BeltCamera cam;
-        cam.bx = bc.x; cam.by = bc.y; cam.bz = bc.z; cam.ca = ca; cam.sa = sa; cam.cb = cb; cam.sb = sb; cam.px = px; cam.W = W; cam.H = H; cam.D = D; cam.cd = cd; cam.ox = ox + fx; cam.oy = oy; cam.d3 = d3;
-        beltLayer_.draw(R, sys, cam, sel.kind == Selection::Belt ? sel.moon : -1, kHL, set.gpuRocks);
+        const BeltCamera& bcam = cam;                     // 0.75.0: the same camera (orbit/camera.h)
+        beltLayer_.draw(R, sys, bcam, sel.kind == Selection::Belt ? sel.moon : -1, kHL, set.gpuRocks);
     }
 
     std::vector<const Body*> vis;
@@ -665,7 +760,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const bool on = sel.kind == Selection::Body && sel.bodyId == bp->id;
         cometLocalPath(*bp->comet, sys.julianDayTDB(), px, cpts);
         LinePen pen{R, W, H, on ? 1.6 : 1.0, hexColor(bp->color, on ? 0.85f : 0.35f), 2, 4};
-        for (const Vec3& p : cpts) { const Q q = proj(p.x, p.y, p.z); pen.to(q.first, q.second); }
+        pen.cam = &cam;                                   // 0.75.0: cut at the near plane
+        for (const Vec3& p : cpts) pen.to(proj(p.x, p.y, p.z));
     }
 
     // ---- spin: how each planet is turned right now, seen on this screen ----
@@ -731,7 +827,9 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     // face-on in full sunlight (formula value 0.5) is the full tint. So the thick B ring is bright from the sunlit side and dark from the other,
     // where the thin C ring and the Cassini Division glow, and every ring fades when the Sun is in the ring plane (Saturn's equinox, May 2025).
     // sunElev: sin of the real Sun's elevation above the ring plane (signed: + on the side the pole points to).
-    const auto drawRings = [&](const RingSet& rs, const SpinCtx* c, double x, double y, double r, const Light3& sun, double sunElev, bool back) {
+    // 0.75.0: pq, the planet's place (3D: the rings are put on the screen through the pinhole: ring_draw.h RingFrame zr, wn), r its rings' radius unit on the screen
+    const auto drawRings = [&](const RingSet& rs, const SpinCtx* c, const Q& pq, double r, const Light3& sun, double sunElev, bool back) {
+        const double x = pq.first, y = pq.second;
         if (rs.bands.empty() || r < 1) return;
         // the pole on the screen (right, up, towards you); without a spin model, a fixed tilt as before
         const double px0 = c ? c->px : std::sin(-0.22) * 0.94, py0 = c ? c->py : std::cos(-0.22) * 0.94, pz0 = c ? c->pz : 0.34;
@@ -741,7 +839,10 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         const auto slab = [&](double tau) { return rings::shine(tau, mu, mu0, sunlitFace); };   // orbit/saturn_rings.h, tested
         // 0.46.7: the real Sun (right, up, towards you), as the ball; 0.27: the planet's real shape (orbit/shapes.h): in its own frame (K) with the pole axis
         // stretched by eq / polar radius the body is a ball of radius 1. 0.64.0: the geometry and the triangles in orbit/ring_draw.h (shared with the card's check)
-        const RingFrame fr = ringFrame(x, y, r, px0, py0, pz0, c ? c->K : nullptr, c ? polarRatio(rs.name) : 1.0, sun.x, -sun.y, sun.z);
+        RingFrame fr = ringFrame(x, y, r, px0, py0, pz0, c ? c->K : nullptr, c ? polarRatio(rs.name) : 1.0, sun.x, -sun.y, sun.z);
+        // 0.75.0: the pinhole (3D): a ring point q is at depth Zc (1 - zr qz), zr = (the radius unit, m) / Zc = r / focal; the near plane over Zc. The rings' light and
+        // opacity stay those seen along the line to the planet's middle (mu), not each part's own slant: a simplification close up.
+        if (d3) { fr.ppx = cam.ppx; fr.ppy = cam.ppy; fr.zr = r / cam.F; fr.wn = cam.zNear / pq.Z; }
         // 0.51.2: Saturn from Cassini's profile (UVIS, beta Cen 2008; orbit/saturn_profile.h): bins of at least a pixel (and at most 700 bins over the whole
         // profile, for speed), each with the area-averaged blocked share and light of the 10 km measurements in it; neighbours that look the same are merged
         // (0.64.0: orbit/ring_check.cpp saturnDrawnBands, kept while its inputs stay the same).
@@ -778,9 +879,9 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     };
 
     // ---- the Sun ----
-    struct Label { std::string name; double x, y; bool selected, small, force; bool gc = false; int prio = 5; };   // prio (0.23 stage 2): 1 planet, 2 dwarf planet, 3 comet, 4 moon, 5 the rest: who keeps its place when labels crowd
-    std::vector<Label> labels;
-    const double sr = TRUE_SCALE ? kSunRadius * px : std::max(kCrashRadius * px, 3.5);
+    // 0.75.0, 3D: the Sun's outline from the camera (True scale; orbit/camera.h), its drawn size times d / Z (Easy to see); behind the camera: none (0, off the picture)
+    const double sr = d3 && !(star.f > 0) ? 0.0
+                    : TRUE_SCALE ? (d3 ? std::min(sphereScreenRadius(cam, star, kSunRadius), 8 * std::hypot(W, H)) : kSunRadius * px) : std::max(kCrashRadius * px, 3.5) * (d3 ? star.f : 1.0);
     const bool sunTiny = TRUE_SCALE && sr < 2.5;
     const double srd = TRUE_SCALE ? std::max(sr, 5.0) : sr;
     SpinCtx sunSpin;
@@ -831,7 +932,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     {   // the barycentre: a crosshair in a ring (hidden while it would sit on the Sun's centre)
         const Q bq = proj(bc.x, bc.y, bc.z);
         const bool on = sel.kind == Selection::Bary;
-        if (std::hypot(bq.first - star.first, bq.second - star.second) > 5 || on || (sys.realPlanets() && set.exaggerateWobble)) {
+        if ((!d3 || bq.f > 0) && (std::hypot(bq.first - star.first, bq.second - star.second) > 5 || on || (sys.realPlanets() && set.exaggerateWobble))) {
             for (int pass = 0; pass < 2; pass++) {
                 const Color c = pass ? (on ? kHL : Color{1, 1, 1, 1}) : Color{0, 0, 0, 0.6f};
                 const double w = pass ? 1.8 : 4;
@@ -852,7 +953,8 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         for (int part = 0; part < 4 && n > 1; part++) {   // fades in 4 steps, oldest faintest, like the planets' trails
             const int i0 = part * n / 4, i1 = std::min(n, (part + 1) * n / 4 + 1);
             LinePen pen{R, W, H, 1.5, sunCol.withAlpha(0.15f + 0.2f * part)};
-            for (int i = i0; i < i1; i++) { const Q q = proj(bc.x + k * tr[i].x, bc.y + k * tr[i].y, bc.z + k * tr[i].z); pen.to(q.first, q.second); }
+            pen.cam = &cam;
+            for (int i = i0; i < i1; i++) pen.to(proj(bc.x + k * tr[i].x, bc.y + k * tr[i].y, bc.z + k * tr[i].z));
         }
         if (set.exaggerateWobble) {                           // the Sun's place on the magnified path: a ring (the Sun itself is drawn at its true place)
             const Q sq = proj(bc.x * (1 - k), bc.y * (1 - k), bc.z * (1 - k));   // the Sun is at -bc from the barycentre: bc + k * (-bc)
@@ -903,11 +1005,18 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     };
     // ---- planets, dwarf planets and comets (far ones first) ----
     std::vector<const Body*> order = vis;
-    std::stable_sort(order.begin(), order.end(), [&](const Body* a, const Body* b) { return base(a->pos.x, a->pos.y, a->pos.z).dep < base(b->pos.x, b->pos.y, b->pos.z).dep; });   // far ones first
+    std::stable_sort(order.begin(), order.end(), [&](const Body* a, const Body* b) { return cam.depth(a->pos.x, a->pos.y, a->pos.z) < cam.depth(b->pos.x, b->pos.y, b->pos.z); });   // far ones first
     for (const Body* bp : order) {
         const Body& b = *bp;
         const Q q = proj(b.pos.x, b.pos.y, b.pos.z);
-        const double rad = drawnRadius(b) * (d3 ? q.f : 1);     // in 3D, nearer things look bigger
+        static const bool logBehind = std::getenv("PL_LOG_BODYPX") != nullptr;
+        if (d3 && !(q.f > 0)) {                           // 0.75.0: behind the camera (or nearer than the near plane): not drawn
+            if (logBehind) std::printf("PLBODYPX %s -1e9 -1e9 0 0 0 0 %.6g %.6g %.6g\n", b.name.c_str(), q.X, q.Y, q.Z);   // (for automatic checks: its camera-space place)
+            continue;
+        }
+        // in 3D, nearer things look bigger: 0.75.0, True scale: a ball's outline, focal tan(asin(R / L)) (orbit/camera.h); Easy to see: its drawn size times d / Z
+        const double rad = d3 && TRUE_SCALE ? sphereScreenRadius(cam, q, b.radius) : drawnRadius(b) * (d3 ? q.f : 1);
+        if (rad > 8 * std::hypot(W, H)) continue;         // (the camera is at or inside it: it would cover the whole picture many times over; left out)
         const bool tiny = TRUE_SCALE && rad < 2.5;
         const double rd = tiny ? 5 : rad;
         const bool on = sel.kind == Selection::Body && sel.bodyId == b.id;
@@ -944,13 +1053,16 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         if (d3 && std::fabs(b.pos.z) > 0.05 * kSimLength) {   // 3D: a dashed drop line to the ecliptic plane shows the height
             const Q g = proj(b.pos.x, b.pos.y, 0);
             LinePen pen{R, W, H, 1.0, hexColor(b.color, 0.35f), 3, 3};
-            pen.to(q.first, q.second); pen.to(g.first, g.second);
-            R.disc(g.first, g.second, 2, hexColor(b.color));
+            pen.cam = &cam;
+            pen.to(q); pen.to(g);
+            if (g.f > 0) R.disc(g.first, g.second, 2, hexColor(b.color));
         }
         const Light3 sun = sunLight(b.pos);                 // 0.46.7: the real Sun
         static const bool logPx = std::getenv("PL_LOG_BODYPX") != nullptr;   // 0.50, for automatic checks only: where each body is drawn (x, y, radius in pixels) and the light's direction
-        if (logPx) std::printf("PLBODYPX %s %.2f %.2f %.3f %.4f %.4f %.4f\n", b.name.c_str(), q.first, q.second, rad, sun.x, sun.y, sun.z);
-        if (q.first + rad > -12 && q.first - rad < W + 12 && q.second + rad > -12 && q.second - rad < H + 12) {
+        if (logPx) std::printf("PLBODYPX %s %.2f %.2f %.3f %.4f %.4f %.4f %.6g %.6g %.6g\n", b.name.c_str(), q.first, q.second, rad, sun.x, sun.y, sun.z, q.X, q.Y, q.Z);   // (0.75.0: + its camera-space place, m)
+        // (0.75.0: with the rings' reach, 2.4 radii; a camera close by, within 3 radii in 3D: always, its rings may pass beside it)
+        const double reach = std::max(rad, 2.4 * (d3 && TRUE_SCALE ? cam.F * b.radius / q.Z : rad));
+        if ((d3 && TRUE_SCALE && q.Z < 3 * b.radius) || (q.first + reach > -12 && q.first - reach < W + 12 && q.second + reach > -12 && q.second - reach < H + 12)) {
             SpinCtx sc;
             const bool spins = rad > 3 && spinCtx(b.name, sc);     // big enough to see it turn
             const RingSet ringsHere = ringSet(b.name);        // empty for a body without rings
@@ -962,7 +1074,9 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             // 0.50 (review item 2): no blue "edge of air" round Earth any more. It was a ring from 0.96 R to 1.16 R, 50 % blue, all the way round (about 1,100 - 1,300 km thick
             // on screen, and lit on the night side too), with no source. The air's scale height is 8.5 km (NSSDC Earth fact sheet, data/nssdc/earthfact.html): under a pixel at
             // every zoom the app has. Removed as 0.49.4 removed the Sun's glow; a computed limb (Rayleigh scattering, sunlit side only) is a ROADMAP line.
-            drawRings(ringsHere, spins ? &sc : nullptr, q.first, q.second, rad, sun, sunElev, true);
+            // 0.75.0: the rings' radius unit on the screen: at true scale in 3D focal R / Z (the ball's outline, rad, is focal tan(asin(R / L)): larger close up)
+            const double ringR = d3 && TRUE_SCALE ? cam.F * b.radius / q.Z : rad;
+            drawRings(ringsHere, spins ? &sc : nullptr, q, ringR, sun, sunElev, true);
             // 0.26: the ball's colour. A planet with a map uses the map (Saturn, Uranus and Neptune have OPAL maps since 0.26, assets/maps/README.md); one without (Venus) its measured colour (render::measuredColour,
             // Mallama et al. 2017); anything else its marker colour.
             int mc[3];
@@ -986,7 +1100,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                 spinAxis(b.name, sc, q.first, q.second, rad, false);
             } else
                 R.sphere(q.first, q.second, rad, ball, sun.x, sun.y, sun.z);   // lit from the Sun
-            drawRings(ringsHere, spins ? &sc : nullptr, q.first, q.second, rad, sun, sunElev, false);
+            drawRings(ringsHere, spins ? &sc : nullptr, q, ringR, sun, sunElev, false);
         }
         if (tiny) {   // 0.52.1: in its measured colour where it has one (render::pointColour), as its ball close up; it was the hand-picked marker colour
             int pc[3]; render::pointColour(b.name, b.color, pc);
@@ -999,6 +1113,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     }
 
     // ---- moons: drawn on their real Kepler ellipse, but much wider than real until you zoom far in ----
+    static const bool logPxM = std::getenv("PL_LOG_BODYPX") != nullptr;   // 0.75.0, for automatic checks only: each moon's place, radius and camera-space place
     if (set.moons) for (const Body* bp : order) {
         const Body& b = *bp;
         if (b.moons.empty()) continue;
@@ -1031,17 +1146,21 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                     for (int pass = 0; pass < (fast ? 2 : 1); pass++) {
                         const Color c = pass ? (on ? kHL : hexColor(b.color)).withAlpha(0.55f) : hexColor(b.color, on ? 0.55f : 0.28f);
                         LinePen pen{R, W, H, pass ? 3.0 : 1.0, c};
+                        pen.cam = &cam;                   // 0.75.0: cut at the near plane
                         for (int i = 0; i <= NN; i++) {
                             const double t = t0 + (t1 - t0) * i / NN, Y = dW * std::sin(t);
                             const Vec3 P = realP ? b.pos + (rh * std::cos(t) + ph * std::sin(t)) * dW2 : Vec3{b.pos.x + dW * std::cos(t), b.pos.y + Y * ct, b.pos.z + Y * st};
-                            const Q qq = proj(P.x, P.y, P.z);
-                            pen.to(qq.first, qq.second);
+                            pen.to(proj(P.x, P.y, P.z));
                         }
                     }
                 }
             }
             const Q mp = proj(pl0.pos.x, pl0.pos.y, pl0.pos.z);
-            const double mr = TRUE_SCALE ? m.radiusKm * kKm * px : 1.6 + 0.9 * std::max(0.0, std::log10(m.radiusKm / 50));
+            if (d3 && !(mp.f > 0)) continue;              // 0.75.0: behind the camera: not drawn
+            // 0.75.0: True scale in 3D: the ball's outline from the camera (orbit/camera.h sphereScreenRadius); until 0.74.0 its radius times px, the same at any depth
+            const double mr = TRUE_SCALE ? (d3 ? sphereScreenRadius(cam, mp, m.radiusKm * kKm) : m.radiusKm * kKm * px) : 1.6 + 0.9 * std::max(0.0, std::log10(m.radiusKm / 50));
+            if (mr > 8 * std::hypot(W, H)) continue;      // (the camera is at or inside it)
+            if (logPxM) std::printf("PLMOONPX %s %.3f %.3f %.4f %.6g %.6g %.6g %.6g %.6g %.6g %.6g\n", m.name, mp.first, mp.second, mr, mp.X, mp.Y, mp.Z, m.radiusKm * kKm, cam.F, cam.ppx, cam.ppy);
             const bool mtiny = TRUE_SCALE && mr < 1.2;
             const double md = mtiny ? 3.5 : mr;
             if (!fast) {
@@ -1085,51 +1204,6 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             exag_[{b.id, static_cast<int>(j)}] = dW / aM;
             hits_.push_back({{Selection::Moon, b.id, static_cast<int>(j)}, mp.first, mp.second, std::max(md, mtiny ? 9.0 : 0.0)});
             if (here) { labels.push_back({m.name, mp.first, mp.second - md - 4, on, true, false}); labels.back().prio = 4; }
-        }
-    }
-
-    // ---- far-away things: real stars, clusters, the galactic centre and the Voyagers at their true direction and distance ----
-    bool massShown = false;                               // a star's mass label is on screen: the note about masses is shown too
-    if (set.far) {
-        const auto fmtLyS = [](double v) { return fmtLy(v); };
-        const auto inView = [&](const Q& q) { return q.dep - cd < 0.9 * D && q.first > -30 && q.first < W + 30 && q.second > -30 && q.second < H + 30; };
-        const Color gold = hexColor(marks::kProbeRing);
-        for (int i = 0; i < farCount(); i++) {
-            FarItem f;
-            if (!farItem(sys, i, f)) continue;
-            const Selection s{Selection::Far, 0, i};
-            const bool on = sel == s, probe = f.kind == "probe";
-            if (probe && !(set.zoom <= -1.5 || on)) continue;   // the Voyagers are far beyond the planets: shown once you zoom out (or pick one)
-            if (probe) {                                  // its path since about Neptune (a straight line), and where it left the Sun's wind
-                const Vec3 a = f.dir * (40 * kAU), h = f.dir * (f.probe->cross * kAU);
-                const Q qa = proj(a.x, a.y, a.z), qb = proj(f.pos.x, f.pos.y, f.pos.z), hq = proj(h.x, h.y, h.z);
-                LinePen pen{R, W, H, 1.0, gold.withAlpha(0.5f)};
-                pen.to(qa.first, qa.second); pen.to(qb.first, qb.second);
-                if (inView(hq)) {
-                    R.ring(hq.first, hq.second, 3.5, 1, gold.withAlpha(0.9f));
-                    if (f.probe->cross * kAU * px > 40)
-                        labels.push_back({f.name + " left the Sun’s wind here (" + std::to_string(f.probe->crossYear) + ")", hq.first, hq.second + 14, false, true, false});
-                }
-            }
-            Q q = probe ? proj(f.pos.x, f.pos.y, f.pos.z) : flat(f.pos.x, f.pos.y, f.pos.z);
-            if (!probe) { q.first += ox; q.second += oy; }
-            if (!inView(q)) continue;
-            if (probe) { R.disc(q.first, q.second, 2.6, Color{1, 1, 1, 1}); R.ring(q.first, q.second, 6, 1, gold); }
-            else if (f.kind == "bh") { R.disc(q.first, q.second, 5.3, Color{1, 1, 1, 1}); R.disc(q.first, q.second, 4.5, Color{0, 0, 0, 1}); }
-            else if (f.kind == "object") { R.ring(q.first, q.second, 6, 1, hexColor(marks::kObject)); R.disc(q.first, q.second, 1.6, hexColor(marks::kObject)); }
-            else { const double bv = farBV(f.far->key); const std::array<int, 3> c = std::isnan(bv) ? std::array<int, 3>{255, 255, 255} : bvRGB(bv); R.disc(q.first, q.second, 2.8, rgba(c[0], c[1], c[2])); R.ring(q.first, q.second, 6, 1, Color{1, 1, 1, 0.45f}); }
-            if (on) hiRing(q.first, q.second, 11);
-            if (f.kind == "bh") {
-                labels.push_back({"Galactic centre · " + fmtLyS(f.ly) + " light years", q.first, q.second - 11, on, false, true, true});
-                labels.push_back({f.name + " (black hole)", q.first, q.second + 19, on, false, true, true});
-                const std::string mt = farMassText(f.key);                  // published mass (far_masses.h), under the name
-                if (!mt.empty()) { labels.push_back({mt, q.first, q.second + 32, on, true, false}); massShown = true; }
-            } else {
-                labels.push_back({f.name + " · " + (probe ? fmt::commas(f.au) + " AU" : fmtLyS(f.ly) + " light years"), q.first, q.second - 11, on, true, false});
-                const std::string mt = probe ? std::string() : farMassText(f.key);
-                if (!mt.empty()) { labels.push_back({mt, q.first, q.second + 19, on, true, false}); massShown = true; }
-            }
-            hits_.push_back({s, q.first, q.second, 10});
         }
     }
 
@@ -1284,6 +1358,18 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
 
     {   // scale bar: how long a round distance is at this zoom, and how long light takes to cross it
         const ScaleBar sbar = scaleBarFor(px, d3);
+        // 0.75.0, 3D: the zoom's span holds at the look-at plane: the followed thing's distance (until 0.74.0 the near-flat view made it about true everywhere)
+        std::string where;
+        if (d3) {
+            std::string who;
+            if (follow && sel.kind == Selection::Star) who = "the Sun";
+            else if (follow && sel.kind == Selection::Bary) who = "the barycentre";
+            else if (follow && (sel.kind == Selection::Body || sel.kind == Selection::Moon)) {
+                if (const Body* b = findBody(sys, sel.bodyId)) who = sel.kind == Selection::Moon && sel.moon >= 0 && sel.moon < static_cast<int>(b->moons.size()) ? b->moons[std::size_t(sel.moon)].data->name : b->name;
+            } else if (follow && sel.kind == Selection::Far) { FarItem fi; if (farItem(sys, sel.moon, fi)) who = fi.name; }
+            else if (cdep == 0) who = "the barycentre";
+            where = who.empty() ? "at the picture's middle distance" : "at " + who + "’s distance";
+        }
         const double len = sbar.len;
         const std::string& main = sbar.main;
         const std::string& lt = sbar.light;
@@ -1298,6 +1384,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         }
         const double x0 = 14, y = barY;
         scaleText = main; lightText = "light takes " + lt; scaleLen = len;     // the new UI shows these in its readout
+        scaleWhere = where;                                                    // 0.75.0 (3D): where the bar's length holds
         for (int pass = 0; pass < 2 && !set.shell; pass++) {
             const Color c = pass ? kFg : kCard;
             const double w = pass ? 1.6 : 5;
@@ -1308,6 +1395,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         if (!set.shell) {
             T.text(main, x0, y - 8, 11, kFg, 0, true, kCard);
             T.text("light takes " + lt, x0, y + 15, 10, kMuted, 0, true, kCard);
+            if (!where.empty()) T.text(where, x0, y + 28, 10, kMuted, 0, true, kCard);
         }
     }
 

@@ -6,10 +6,12 @@
 void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double originX, double originY, double uiScale, const SolarSystem& sys, const ViewSettings& set, double W, double H) {
     namespace ac = acen;
     TextPainter T{dl, ImGui::GetFont(), originX, originY, uiScale};
-    const double px = std::min(W, H) / 34 * std::pow(10.0, set.zoom) / kSimLength;   // points per metre (the Solar System's rule)
     const double jd = sys.julianDayTDB();
     const ac::Stars st = ac::stars(jd);
     if (sel.kind != Selection::None && sel.kind != Selection::ACen) { sel = Selection{}; follow = false; }
+    // 0.75.0: the closest zoom keeps the camera 1.5 radii from a followed star's middle (3D; the stars are drawn at their true size), as zoomCapFor
+    zoomCap_ = zoomCapFor(sys, set, W, H);
+    const double px = std::min(W, H) / 34 * std::pow(10.0, std::min(set.zoom, zoomCap_)) / kSimLength;   // points per metre (the Solar System's rule)
     held_ = false;
     if (gliding() && (!(sel == glideSel_) || !follow || journey)) glide_ = glidePending_ = false;
     const auto thingPos = [&](int k) {
@@ -23,31 +25,25 @@ void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double origi
     };
     const double sunDist = kLightYearAU * kAU * 1000.0 / ac::kAbPlxMas * 3.26156;   // the Sun, 4.344 light years towards +z (1 pc = 3.26156 ly, as sky_data.inc)
 
-    // ---- the camera: orbit_view.cpp's, about the A-B centre of mass ----
+    // ---- the camera: orbit_view.cpp's (0.75.0: the same ViewCam of orbit/camera.h, no copy of its formula), about the A-B centre of mass ----
     const bool d3 = set.view3D;
     const double yawA = d3 ? yaw + kPi : 0, pitchA = d3 ? -pitch : 0;
     const double ca = std::cos(yawA), sa = std::sin(yawA), cb = std::cos(pitchA), sb = std::sin(pitchA);
-    const double D = std::max(90.0, 3 * 34 / std::pow(10.0, set.zoom)) * kSimLength;
+    ViewCam cam;
+    cam.bc = Vec3{}; cam.ca = ca; cam.sa = sa; cam.cb = cb; cam.sb = sb; cam.px = px; cam.W = W; cam.H = H; cam.fx = fx; cam.d3 = d3;
     double cd = cdep;
-    const auto base = [&](double x, double y, double z) {
-        const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, y2 = y1 * cb - z * sb, dep = y1 * sb + z * cb;
-        const double f = d3 ? D / std::max(D - (dep - cd), 0.05 * D) : 1;
-        return Q{W / 2 + fx + x1 * px * f, H / 2 - y2 * px * f, dep, f};
-    };
-    const auto flat = [&](double x, double y, double z) {
-        const double x1 = x * ca - y * sa, y1 = x * sa + y * ca, y2 = y1 * cb - z * sb, dep = y1 * sb + z * cb;
-        return Q{W / 2 + fx + x1 * px + ox, H / 2 - y2 * px + oy, dep, 1};
-    };
     if (follow && sel.kind == Selection::ACen && sel.moon != ac::Sun) {
         const Vec3 t = thingPos(sel.moon);
-        cd = cdep = holdDepth(base(t.x, t.y, t.z).dep);  // (0.74.0: orbit_view.cpp's hold: the user's slide, a pick's glide)
-        const Q q = base(t.x, t.y, t.z);
-        holdAt(q.first, q.second, W, H, set);
+        cd = cdep = holdDepth(cam.depth(t.x, t.y, t.z));  // (0.74.0: orbit_view.cpp's hold: the user's slide, a pick's glide)
+        double qx = 0, qy = 0;
+        cam.plane(t.x, t.y, t.z, qx, qy);
+        holdAt(qx, qy, W, H, set);
     }
-    const auto proj = [&](double x, double y, double z) { Q q = base(x, y, z); q.first += ox; q.second += oy; return q; };
+    cam.cd = cd; cam.ox = ox; cam.oy = oy; cam.ppx = W / 2 + fx + cx + ux; cam.ppy = H / 2 + cy + uy;
+    cam.finish();
+    const auto proj = [&](double x, double y, double z) { return cam.proj(x, y, z); };
     const auto projV = [&](const Vec3& v) { return proj(v.x, v.y, v.z); };
-    LineCam lcam;
-    lcam.bc = Vec3{}; lcam.ca = ca; lcam.sa = sa; lcam.cb = cb; lcam.sb = sb; lcam.px = px; lcam.D = D; lcam.cd = cd; lcam.W = W; lcam.H = H; lcam.fx = fx; lcam.ox = ox; lcam.oy = oy; lcam.d3 = d3;
+    const LineCam& lcam = cam;
     const bool cardLines = linesOnCard(R);
     LinesPoints linesPts;
     linesPts.card = cardLines ? R.linesCard() : nullptr;
@@ -62,7 +58,9 @@ void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double origi
     hits_.clear();
     if (set.sky != SkyMode::Off) {                        // the night sky seen from Alpha Centauri (orbit/alphacen.h acenSky)
         const double zt = std::clamp(-set.zoom / 3.5, 0.0, 1.0), lv = set.sky == SkyMode::Full ? 0.45 + 0.55 * zt : 0.16 + 0.6 * zt;
-        drawSky(R, T, W, H, ca, sa, cb, sb, set.cons, lv, ac::acenSky());
+        SkyLens lens;                                     // 0.75.0: 3D the scene's pinhole camera
+        if (d3) { lens.pinhole = true; lens.ppx = cam.ppx; lens.ppy = cam.ppy; lens.F = cam.F; }
+        drawSky(R, T, W, H, ca, sa, cb, sb, set.cons, lv, ac::acenSky(), lens);
     }
 
     // ---- the habitable zones: a faint green band about each star (Kopparapu et al. 2014 with the star's Teff, sun_facts.h), in the A-B orbit's plane for A
@@ -77,8 +75,8 @@ void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double origi
             const double t0 = i / 96.0 * 2 * kPi, t1 = (i + 1) / 96.0 * 2 * kPi;
             const Q a = projV(c + P * (ro * std::cos(t0)) + Qv * (ro * std::sin(t0))), b = projV(c + P * (ro * std::cos(t1)) + Qv * (ro * std::sin(t1)));
             const Q e = projV(c + P * (ri * std::cos(t1)) + Qv * (ri * std::sin(t1))), f = projV(c + P * (ri * std::cos(t0)) + Qv * (ri * std::sin(t0)));
-            R.triangle(a.first, a.second, k, b.first, b.second, k, e.first, e.second, k);
-            R.triangle(a.first, a.second, k, e.first, e.second, k, f.first, f.second, k);
+            const Q pq[4] = {a, b, e, f};                 // 0.75.0: cut at the near plane (3D)
+            clipPolygonNear(cam, pq, 4, [&](const Q& u, const Q& v, const Q& w) { R.triangle(u.first, u.second, k, v.first, v.second, k, w.first, w.second, k); });
         }
     };
     const Color hzCol = {marks::kHabitable[0] / 255.f, marks::kHabitable[1] / 255.f, marks::kHabitable[2] / 255.f, 0.13f};
@@ -131,7 +129,7 @@ void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double origi
     // ---- the bodies ----
     struct Lab { std::string t; double x, y; bool on; int prio; Color c; double size; double dotR = -1; double dotY = 0; double ax = -1e300, ay = 0; };   // (ax, ay): another place for it   // dotR >= 0: a label of a dot at (x, dotY): it may also go left or right of it
     std::vector<Lab> labels;
-    const auto inPic = [&](const Q& q, double r) { return q.first > -r - 30 && q.first < W + r + 30 && q.second > -r - 30 && q.second < H + r + 30 && (!d3 || q.dep - cd < 0.9 * D); };
+    const auto inPic = [&](const Q& q, double r) { return q.first > -r - 30 && q.first < W + r + 30 && q.second > -r - 30 && q.second < H + r + 30 && (!d3 || q.f > 0); };   // (0.75.0: in front of the camera; was depth - cd < 0.9 D)
     const auto starCol = [](int s) { const std::array<int, 3> c = bvRGB(ac::starFacts(s).bv); return rgba(c[0], c[1], c[2]); };
     {   // the centre of mass: a crosshair in a ring
         const Q bq = proj(0, 0, 0);
@@ -148,7 +146,8 @@ void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double origi
     }
     const auto drawStar = [&](int k, int s, const Vec3& p, const char* name) {
         const Q q = projV(p);
-        const double rTrue = ac::starFacts(s).radius * kSunRadius * px * q.f, r = std::max(rTrue, 3.2);
+        // 0.75.0, 3D: the star's outline from the camera, focal tan(asin(R / L)) (orbit/camera.h)
+        const double Rm = ac::starFacts(s).radius * kSunRadius, rTrue = d3 ? (q.f > 0 ? std::min(sphereScreenRadius(cam, q, Rm), 8 * std::hypot(W, H)) : 0.0) : Rm * px, r = std::max(rTrue, 3.2);
         if (!inPic(q, r)) return;
         const Color c = starCol(s);
         if (bigR(W, H, r)) { R.rect(0, 0, W, H, c); return; }   // zoomed into the star itself: the picture is its surface
@@ -193,8 +192,8 @@ void OrbitView::drawAlphaCen(render::Renderer2D& R, ImDrawList* dl, double origi
         if (o0 * kAU * px > 70 && o0 * kAU * px < 4 * W) { const Q q = projV(st.P + pb.P * (-o0 * kAU)); labels.push_back({"Proxima's habitable zone", q.first, q.second + 12, false, 5, hexColor("#3d9a5c", 0.9f), 10}); }
     }
     {   // the Sun, 4.344 light years towards +z: a far-away star (seen when the view turns away from it)
-        const Q q = flat(0, 0, sunDist);
-        if (q.dep - cd < 0.9 * D && q.first > -30 && q.first < W + 30 && q.second > -30 && q.second < H + 30) {
+        const Q q = proj(0, 0, sunDist);                  // 0.75.0: by the one camera (3D: its direction from the camera, with the sky; was drawn flat)
+        if ((!d3 || q.f > 0) && q.first > -30 && q.first < W + 30 && q.second > -30 && q.second < H + 30) {
             R.disc(q.first, q.second, 2.8, sunColour()); R.ring(q.first, q.second, 6, 1, Color{1, 1, 1, 0.45f});
             if (isOn(ac::Sun)) hiRing(R, q.first, q.second, 11);
             hits_.push_back({{Selection::ACen, 0, ac::Sun}, q.first, q.second, 10});

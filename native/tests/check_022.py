@@ -14,6 +14,9 @@
 #            running fast; and "Slow time to watch moons" with a moon selected selects and follows the planet (the point of it is to see the moons go round)
 #   camera   0.74.0: the Orbit Lab's camera never loses what it follows (an empty click, a right drag), a pick glides, a released turn coasts and stops, the wheel eases
 #            and ends exactly; Reduce motion: no glides (it jumps), still never lost
+#   depth    0.75.0: the 3D camera has real depth (a pinhole with a 45-degree field, orbit/camera.h): the Moon between the camera and Earth is drawn bigger, its radius
+#            focal tan(asin(R / L)); a star and a far planet move together when the view turns (the sky through the same lens); the two gaps left by 0.74.0:
+#            a click on a body while not following flies to it, ticking Follow glides (Reduce motion: both jump)
 #   check_022.py <PhysicsLab binary> <work folder> <part>
 import math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -324,9 +327,140 @@ def camera(binary, work):
         run = next((i for i in range(len(cs) - 29) if len({c["key"] for c in cs[i:i + 30]}) == 1), None)
         check(run is not None and run <= 62, f"(d): the turn stops and the picture key stays the same for 30 frames, starting within 1 s (frame {run}; yaw {yaws[0]:.4f} -> {yaws[-1]:.4f})")
 
+# ---- 0.75.0: real depth ----
+KSIM = 1.495978707e11 / 100 ** (1 / 3)              # orbit/units.h kSimLength (1 AU over the cube root of 100)
+def axes3(yaw, pitch):
+    # the 3D view's axes in space (orbit_view.cpp's turn: yaw + pi about z, then -pitch): right, up, forward (the camera looks along forward)
+    ya, pa = yaw + math.pi, -pitch
+    ca, sa, cb, sb = math.cos(ya), math.sin(ya), math.cos(pa), math.sin(pa)
+    return (ca, -sa, 0.0), (sa * cb, ca * cb, -sb), (-sa * sb, -ca * sb, -cb)
+def turn_for(fwd):
+    # the yaw and pitch whose forward axis is fwd (a unit vector): towards the viewer t = -fwd = (sa sb, ca sb, cb), sb < 0 (pitch > 0)
+    t = [-v for v in fwd]
+    cb = t[2]; sb = -math.sqrt(max(0.0, 1 - cb * cb))
+    return math.atan2(t[0] / sb, t[1] / sb) - math.pi, -math.atan2(sb, cb)
+def comb(a, b, c, x, y, z):
+    return tuple(a[i] * x + b[i] * y + c[i] * z for i in range(3))
+def dotp(a, b):
+    return sum(a[i] * b[i] for i in range(3))
+def norm(v):
+    n = math.sqrt(dotp(v, v)); return tuple(x / n for x in v)
+def logged(r, tag, name):
+    return [l.split() for l in r.out.splitlines() if l.startswith(tag + " " + name + " ")]
+
+def depth(binary, work):
+    # 1280x800, dark, 3D, True scale (the start's). The geometry is worked out here from the 45-degree field (focal = 400 / tan 22.5 deg) and the zoom (points per metre at the
+    # target: min(W, H) / 34 x 10^zoom / kSimLength; the camera's distance d = focal / px), not from the app's camera code. PLMOONPX / PLBODYPX (PL_LOG_BODYPX) give each
+    # moon's and body's place, drawn radius and camera-space place; PLSTARPX (PL_LOG_STARS) the bright stars' places. Before 0.75.0 the camera sat 90 sim lengths away
+    # (nearly flat: a moon's radius at true scale was R px at any depth) and the sky had its own lens (100 degrees to the corner): (a) and (b) fail there.
+    F, W, H, Z = 400 / math.tan(math.radians(22.5)), 1280.0, 800.0, 3.3
+    px = min(W, H) / 34 * 10 ** Z / KSIM
+    d = F / px
+    pick = "14:click=ctl.sec.pick;20:click=pick.Earth"
+    env = {"PL_NEWUI": "on", "PL_3D": "1", "PL_LOG_BODYPX": "1"}
+    # (a) following Earth at zoom 3.3 (d = 6.6e8 m, beyond the Moon), paused: where the Moon is from Earth; then the camera put on the line from Earth through the Moon
+    r = run_app(binary, work, "depth_probe", dict(env, PL_SCRIPT=pick + ";40:view=3.3,0.6,1.0;46:state"), frames=50)
+    mo, ea = logged(r, "PLMOONPX", "Moon"), logged(r, "PLBODYPX", "Earth")
+    check(mo and ea and len(mo[-1]) >= 12 and len(ea[-1]) >= 11, f"(a) the probe logs the Moon's and Earth's places ({len(mo)}, {len(ea)})")
+    if mo and ea and len(mo[-1]) >= 12 and len(ea[-1]) >= 11:
+        X, Y, Zc, R = (float(v) for v in (mo[-1][5], mo[-1][6], mo[-1][7], mo[-1][8]))
+        eX, eY, eZ = (float(v) for v in ea[-1][8:11])
+        check(abs(eX) < 1e-3 * d and abs(eY) < 1e-3 * d and abs(eZ - d) < 1e-6 * d, f"(a) Earth is on the camera's axis at the zoom's distance d = focal / px ({eX:.4g}, {eY:.4g}, {eZ:.6g} against {d:.6g} m)")
+        right, up, fwd = axes3(0.6, 1.0)
+        m = comb(right, up, fwd, X - eX, Y - eY, Zc - eZ)    # the Moon from Earth, in space
+        dm = math.sqrt(dotp(m, m))
+        yaw2, pitch2 = turn_for(norm(tuple(-v for v in m)))  # looking back at Earth along the Moon's direction: the Moon between the camera and Earth
+        r2 = run_app(binary, work, "depth_moon", dict(env, PL_SCRIPT=pick + f";40:view=3.3,{yaw2:.9f},{pitch2:.9f};46:state"), frames=50)
+        mo2 = logged(r2, "PLMOONPX", "Moon")
+        check(mo2 and len(mo2[-1]) >= 12, f"(a) the Moon is drawn in front of Earth ({len(mo2)} lines)")
+        if mo2 and len(mo2[-1]) >= 12:
+            rad, Z2 = float(mo2[-1][4]), float(mo2[-1][7])
+            L = d - dm                                        # its distance from the camera, from the probe's geometry
+            want, atEarth = F * math.tan(math.asin(R / L)), F * R / d
+            check(abs(R - 1737.4e3) < 1e3 and dm > 3.5e8 and dm < 4.1e8, f"(a) the Moon (radius {R / 1e3:.1f} km) is {dm / 1e3:,.0f} km from Earth (its real distance at True scale)")
+            check(abs(Z2 - L) < 1e-6 * d, f"(a) the Moon is {L:.6g} m in front of the camera, between it and Earth at {d:.6g} m (logged {Z2:.6g})")
+            check(abs(rad - want) <= 1.0, f"(a) the Moon's radius on the picture is focal tan(asin(R / L)) within 1 point ({rad:.2f} against {want:.2f})")
+            check(rad > atEarth + 1.0, f"(a) the Moon is drawn bigger than it would be at Earth's distance ({rad:.2f} against {atEarth:.2f} points)")
+    # (b) a star and a far planet move together: aimed at Neptune from beside Earth, the view turns from 15 degrees one side of it to 15 degrees the other (30 degrees); the bright
+    #     star nearest Neptune and Neptune each land where the one pinhole camera puts their directions (from the first view, turned by the second view's axes) within 1 point
+    r = run_app(binary, work, "depth_nprobe", dict(env, PL_SCRIPT=pick + ";40:view=3.3,0.6,1.0;46:state"), frames=50)
+    ne, ea = logged(r, "PLBODYPX", "Neptune"), logged(r, "PLBODYPX", "Earth")
+    check(ne and ea and len(ne[-1]) >= 11 and len(ea[-1]) >= 11, f"(b) the probe logs Neptune's and Earth's places ({len(ne)})")
+    if ne and ea and len(ne[-1]) >= 11 and len(ea[-1]) >= 11:
+        right, up, fwd = axes3(0.6, 1.0)
+        v = norm(comb(right, up, fwd, *(float(x) - float(y) for x, y in zip(ne[-1][8:11], ea[-1][8:11]))))   # Neptune from Earth (the camera is 6.6e8 m from Earth)
+        yc, pc = turn_for(v)
+        ya, yb = yc - math.radians(15), yc + math.radians(15)
+        r2 = run_app(binary, work, "depth_turn", dict(env, PL_LOG_STARS="1", PL_SCRIPT=pick + f";40:view=3.3,{ya:.9f},{pc:.9f};46:state;50:view=3.3,{yb:.9f},{pc:.9f};56:state"), frames=60)
+        frames, cur = [], {"stars": {}, "nep": None, "pp": None}
+        for l in r2.out.splitlines():                         # one picture's lines: the stars (the sky is drawn first), the bodies, the moons; a state line ends the ones we want
+            f = l.split()
+            if l.startswith("PLSTARPX "):
+                if cur["nep"] is not None: cur = {"stars": {}, "nep": None, "pp": cur["pp"]}
+                cur["stars"][int(f[1])] = (float(f[2]), float(f[3]))
+            elif l.startswith("PLBODYPX Neptune "): cur["nep"] = (float(f[2]), float(f[3]))
+            elif l.startswith("PLMOONPX ") and len(f) >= 12: cur["pp"] = (float(f[10]), float(f[11])); cur["F"] = float(f[9])
+            elif l.startswith("PLSTATE "): frames.append(cur)
+        check(len(frames) == 2 and all(fr["nep"] and fr["pp"] and fr["stars"] for fr in frames), f"(b) both views logged Neptune, the stars and the camera ({len(frames)})")
+        if len(frames) == 2 and all(fr["nep"] and fr["pp"] and fr["stars"] for fr in frames):
+            A, B = frames
+            check(abs(A.get("F", 0) - F) < 1e-6 * F, f"(b) the focal length is 400 / tan(22.5 degrees) = {F:.4f} points ({A.get('F')})")
+            ra, ua, fa = axes3(ya, pc)
+            rb, ub, fb = axes3(yb, pc)
+            def moved(p):                                     # where a direction seen at p in view A is seen in view B (the camera's own turn only)
+                x, y = (p[0] - A["pp"][0]) / F, -(p[1] - A["pp"][1]) / F
+                w = comb(ra, ua, fa, x, y, 1.0)
+                zx, zy, zz = dotp(w, rb), dotp(w, ub), dotp(w, fb)
+                return (B["pp"][0] + F * zx / zz, B["pp"][1] - F * zy / zz)
+            near = sorted((math.hypot(p[0] - A["nep"][0], p[1] - A["nep"][1]), i) for i, p in A["stars"].items() if i in B["stars"])
+            check(near and near[0][0] < 100, f"(b) a star near Neptune (6 degrees or less) ({near[0][0]:.0f} points apart)" if near else "(b) a star near Neptune")
+            if near:
+                i = near[0][1]
+                ps, pn = moved(A["stars"][i]), moved(A["nep"])
+                es = math.hypot(B["stars"][i][0] - ps[0], B["stars"][i][1] - ps[1])
+                en = math.hypot(B["nep"][0] - pn[0], B["nep"][1] - pn[1])
+                sep0 = (A["stars"][i][0] - A["nep"][0], A["stars"][i][1] - A["nep"][1])
+                sep1 = (B["stars"][i][0] - B["nep"][0], B["stars"][i][1] - B["nep"][1])
+                want = (ps[0] - pn[0], ps[1] - pn[1])
+                print(f"  (b) star {i} {near[0][0]:.1f} points from Neptune; after the 30-degree turn: the star {es:.3f}, Neptune {en:.3f} points from the lens's places; separation off by {math.hypot(sep1[0] - want[0], sep1[1] - want[1]):.3f}")
+                check(es <= 1.0, f"(b) the star (number {i}) moves as the camera turns, within 1 point ({es:.2f})")
+                check(en <= 1.0, f"(b) Neptune moves as the camera turns, within 1 point ({en:.2f})")
+                check(math.hypot(sep1[0] - want[0], sep1[1] - want[1]) <= 1.0, f"(b) the star and Neptune move together: their separation ({sep0[0]:.1f}, {sep0[1]:.1f}) -> ({sep1[0]:.1f}, {sep1[1]:.1f}) points, the lens's ({want[0]:.1f}, {want[1]:.1f})")
+    # (c) the two gaps of 0.74.0, Reduce motion off (a glide) and on (at once). (c) nothing followed: a click on Neptune flies to it. (d) Earth selected, not followed, the
+    #     view moved off it: ticking Follow glides to it.
+    for motion in ("off", "on"):
+        reduced, tag = motion == "on", " (Reduce motion)" if motion == "on" else ""
+        e2 = {"PL_NEWUI": "on", "PL_MOTION": motion, "PL_LOG_BODYPX": "1"}
+        run0 = "" if not reduced else "4:key=space;"
+        pr = run_app(binary, work, f"depth_cprobe_{motion}", dict(e2, PL_SCRIPT=run0 + "40:state"), frames=44)
+        ma = logged(pr, "PLBODYPX", "Neptune")
+        check(bool(ma), f"(c){tag} Neptune is on the picture ({len(ma)})")
+        if not ma:
+            continue
+        mx, my = float(ma[-1][2]), float(ma[-1][3])
+        # (d): Earth selected and followed (PL_SELECT), Follow ticked off, the view moved away by a drag (200, 50), then Follow ticked on again
+        for case, script in (("c", run0 + f"40:state;42:clickxy={mx:.1f},{my:.1f}"), ("d", run0 + "24:click=view.follow;30:drag=500,400,700,450;40:state;42:click=view.follow")):
+            ee = dict(e2, PL_SELECT="Earth") if case == "d" else e2
+            rr = run_app(binary, work, f"depth_{case}_{motion}", dict(ee, PL_SCRIPT=script + ";" + ";".join(f"{f}:state" for f in range(44, 130))), frames=134)
+            cs = [cam(x) for x in rr.states]
+            ok = len(cs) == 87 and all(cs)
+            check(ok, f"({case}){tag}: 87 state lines with the camera fields ({len(cs)})")
+            if not ok:
+                continue
+            what = "a click on Neptune while nothing is followed" if case == "c" else "ticking Follow with Earth selected"
+            check(not cs[0]["follow"] and all(c["follow"] for c in cs[-40:]) and cs[-1]["sel"][0] == 3, f"({case}){tag}: {what}: it is followed after ({cs[0]['follow']} -> {cs[-1]['follow']}, sel {cs[-1]['sel']})")
+            held = (cs[-1]["x"], cs[-1]["y"])
+            dd = [math.hypot(c["x"] - held[0], c["y"] - held[1]) for c in cs[1:]]
+            first = next((i for i, v in enumerate(dd) if v <= 2.0), None)
+            if not reduced:
+                check(dd[1] > 20 and dd[2] > 20 and dd[3] <= dd[1], f"({case}): {what} glides: the first frames it is on its way ({dd[1]:.1f}, {dd[2]:.1f}, {dd[3]:.1f} points from the held place)")
+                check(first is not None and first <= 64 and max(dd[first:]) <= 2.0, f"({case}): ... and it is held within 2 points after at most 1 s (from frame {first})")
+            else:
+                check(first is not None and first <= 3 and max(dd[first:]) <= 2.0, f"({case}){tag}: {what} jumps: held within 2 points at once (from frame {first})")
+
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"molbar": molbar, "centre": centre, "axes": axes, "start": start, "words": words, "keys": keys, "facts": facts, "factsrc": factsrc, "spectrum": spectrum, "density": density, "honest": honest, "stage6": stage6, "followmoon": followmoon, "camera": camera}[part](binary, work)
+    {"molbar": molbar, "centre": centre, "axes": axes, "start": start, "words": words, "keys": keys, "facts": facts, "factsrc": factsrc, "spectrum": spectrum, "density": density, "honest": honest, "stage6": stage6, "followmoon": followmoon, "camera": camera, "depth": depth}[part](binary, work)
     print(f"{part}: {checks} checks, {fails} failed")
     sys.exit(1 if fails else 0)

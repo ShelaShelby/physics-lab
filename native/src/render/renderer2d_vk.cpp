@@ -388,19 +388,19 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             V.setI(VkDraw2D::kPlanet, "uLunar", &lunar, 1);
             const float tw = static_cast<float>(std::max(texW_[sg.map], 1));
             // the mipmap level: texels per pixel. A planet: across its middle; the sky: along the galactic equator (as end())
-            const float lod = sg.mode == 2 ? std::max(0.0f, std::log2(tw / 6.2831853f / std::max(sg.r, 1.0f))) : std::max(0.0f, std::log2(tw / (3.14159f * std::max(2.0f * sg.r, 1.0f))));
+            const float lod = (sg.mode == 2 || sg.mode == 3) ? std::max(0.0f, std::log2(tw / 6.2831853f / std::max(sg.r, 1.0f))) : std::max(0.0f, std::log2(tw / (3.14159f * std::max(2.0f * sg.r, 1.0f))));
             V.setF(VkDraw2D::kPlanet, "uLod", &lod, 1);
             const float lon0 = static_cast<float>(mapInfo(static_cast<Map>(sg.map)).lonCentreDeg * 3.14159265358979 / 180);
             V.setF(VkDraw2D::kPlanet, "uLon0", &lon0, 1);
-            const int ringN = sg.mode == 2 ? 0 : sg.nring;
+            const int ringN = (sg.mode == 2 || sg.mode == 3) ? 0 : sg.nring;
             V.setI(VkDraw2D::kPlanet, "uRingN", &ringN, 1);
-            if (sg.nring > 0 && sg.mode != 2) V.setF(VkDraw2D::kPlanet, "uRingB", sg.ring, 3, sg.nring);
-            const float shape[2] = {sg.mode == 2 || sg.shape[0] <= 0 ? 1.0f : sg.shape[0], sg.mode == 2 || sg.shape[1] <= 0 ? 1.0f : sg.shape[1]};
+            if (sg.nring > 0 && (sg.mode != 2 && sg.mode != 3)) V.setF(VkDraw2D::kPlanet, "uRingB", sg.ring, 3, sg.nring);
+            const float shape[2] = {(sg.mode == 2 || sg.mode == 3) || sg.shape[0] <= 0 ? 1.0f : sg.shape[0], (sg.mode == 2 || sg.mode == 3) || sg.shape[1] <= 0 ? 1.0f : sg.shape[1]};
             V.setF(VkDraw2D::kPlanet, "uShape", shape, 2);
-            const int occN = sg.mode == 2 ? 0 : sg.nocc;
+            const int occN = (sg.mode == 2 || sg.mode == 3) ? 0 : sg.nocc;
             V.setI(VkDraw2D::kPlanet, "uOccN", &occN, 1);
-            if (sg.nocc > 0 && sg.mode != 2) { V.setF(VkDraw2D::kPlanet, "uOcc", sg.occ, 4, sg.nocc); V.setF(VkDraw2D::kPlanet, "uSunAng", &sg.sunAng, 1); }
-            const int air = sg.mode != 2 && sg.air ? 1 : 0;
+            if (sg.nocc > 0 && (sg.mode != 2 && sg.mode != 3)) { V.setF(VkDraw2D::kPlanet, "uOcc", sg.occ, 4, sg.nocc); V.setF(VkDraw2D::kPlanet, "uSunAng", &sg.sunAng, 1); }
+            const int air = (sg.mode != 2 && sg.mode != 3) && sg.air ? 1 : 0;
             V.setI(VkDraw2D::kPlanet, "uAir", &air, 1);
             // (OpenGL binds tex_[sg.map]: 0, no texture, for a plain ball; the white one here: the shader does not read it then)
             V.draw(VkDraw2D::kPlanet, VkDraw2D::kNormal, vb, sg.first, sg.count, 0, 0, 0, vkMap_[sg.map] ? sg.map : 0);

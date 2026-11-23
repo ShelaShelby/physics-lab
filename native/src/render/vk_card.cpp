@@ -1077,7 +1077,8 @@ public:
         const float tHi = static_cast<float>(f.t), tLo = static_cast<float>(f.t - static_cast<double>(tHi));   // t = tHi + tLo exactly (24 + 24 bits), as OpenGL's
         const int st = sl.isStatic ? 1 : 0, d3 = f.d3 ? 1 : 0;
         const float tt[2] = {tHi, tLo}, lib = static_cast<float>(f.libPhase);
-        const double bc[4] = {f.bc[0], f.bc[1], f.bc[2], 0}, cam[4] = {f.ca, f.sa, f.cb, f.sb}, view[4] = {f.px, f.W, f.H, f.D}, off[4] = {f.cd, f.ox, f.oy, 0};
+        // 0.75.0: the pinhole camera (render/rock_compute.h RockFrame): uBc.w the near plane, uView (px, sx, sy, d), uOff (cd, lx, ly, F)
+        const double bc[4] = {f.bc[0], f.bc[1], f.bc[2], f.zNear}, cam[4] = {f.ca, f.sa, f.cb, f.sb}, view[4] = {f.px, f.sx, f.sy, f.d}, off[4] = {f.cd, f.lx, f.ly, f.F};
         k_.u.i("uCount", &sl.count, 1); k_.u.i("uStatic", &st, 1); k_.u.i("uD3", &d3, 1); k_.u.f("uT", tt, 2); k_.u.f("uLibPhase", &lib, 1);
         k_.u.d("uBc", bc, 4); k_.u.d("uCam", cam, 4); k_.u.d("uView", view, 4); k_.u.d("uOff", off, 4);
         if (!c_.dispatch(k_, {&sl.el, &sl.nn, &sl.pos}, static_cast<std::uint32_t>((sl.count + 63) / 64))) return false;
@@ -1146,7 +1147,7 @@ IRockCompute* makeVkRockCompute(VkCards& c, std::string& why) {
     still.serial = 1; still.count = 1; still.isStatic = true; still.el = el;
     moving.serial = 2; moving.count = 1; moving.el = m; moving.nn = nn;
     RockFrame f;
-    f.px = 1e-9; f.W = 800; f.H = 600; f.D = 1e12;
+    f.px = 1e-9; f.sx = 400; f.sy = 300;                         // (2D: the barycentre at the middle of an 800 x 600 picture)
     const double t0 = nowS();
     const int s0 = r->slotFor(still), s1 = r->slotFor(moving);
     std::vector<float> a, b;

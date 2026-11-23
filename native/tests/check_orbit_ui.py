@@ -627,7 +627,7 @@ def part_rings(binary, work):
     out = runs["card"].out
     cases = [ln for ln in out.splitlines() if ln.startswith("PLRINGCARDCASE ")]
     pct = [float(m.group(1)) for m in (re.search(r"\(([\d.]+) %, limit 1 %\)", ln) for ln in cases) if m]
-    check("PLRINGCARD state=1" in out and len(pct) == 3 and all(p <= 1.0 for p in pct), f"rings: the start-up check passes, three views within 1 % ({cases})")
+    check("PLRINGCARD state=1" in out and len(pct) == 4 and all(p <= 1.0 for p in pct), f"rings: the start-up check passes, four views within 1 % ({cases})")   # (0.75.0, on purpose: a fourth view, the pinhole camera close by, orbit/ring_check.h)
     rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
     path = [ln.strip() for ln in rep.splitlines() if ln.strip().startswith("Path:")]
     check(any("Saturn's rings: the graphics card (Vulkan; its start-up check passed" in p for p in path), f"rings: the benchmark's Path names the card ({path})")
@@ -645,6 +645,34 @@ def part_rings(binary, work):
         check(n > 0 and over <= 0.02 * n, f"rings: the card's picture and the processor's of the same moment: {over} of {n} pixels over 8 levels")
     except Exception as e:
         check(False, f"rings: both pictures saved ({e})")
+
+def part_flyby(binary, work):
+    # 0.75.0: the new benchmark scene orbit.flyby (Saturn from the closest zoom, the camera through the ring plane: lines, rings and rocks cut at the near plane on the
+    # card): the card's picture against the processor's (PL_NO_LINES_CARD, PL_RINGS_CARDFAIL; the rocks on the card in both: tests/vk_rocks.inc checks them) of the same moment, multisampling off, validation on, no
+    # errors: at most 1 % of the pixels over 8 levels (the Vulkan picture limit)
+    BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "orbit.flyby", "PL_NO_MSAA": "1",
+             "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
+    runs = {}
+    for tag, extra in (("card", {"PL_VK_VALIDATION": "1"}), ("cpu", {"PL_RINGS_CARDFAIL": "1", "PL_NO_LINES_CARD": "1"})):
+        d = os.path.join(work, "flyby_" + tag); os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d):
+            if f.endswith(".bmp"): os.remove(os.path.join(d, f))
+        runs[tag] = run_app(binary, d, "flyby_" + tag, dict(BENCH, **extra), frames=100000, size="1280x800", timeout=900)
+    card = runs["card"]
+    errs = [l for l in card.err.splitlines() if l.startswith("PLVKVALIDATION error")]
+    check("PLVKVALIDATION missing" not in card.err and not errs and "PLLINESCARD state=1" in card.out and "PLRINGCARD state=1" in card.out,
+          f"flyby: the card drew the lines and the rings, validation on, no errors ({errs[:2]})")
+    try:
+        a, b = Bmp(os.path.join(work, "flyby_card", "orbit.flyby.bmp")), Bmp(os.path.join(work, "flyby_cpu", "orbit.flyby.bmp"))
+        n = over = 0
+        for y in range(a.h):
+            for x in range(a.w):
+                n += 1
+                over += max(abs(p - q) for p, q in zip(a.px(x, y)[:3], b.px(x, y)[:3])) > 8
+        print(f"  flyby: card against processor, {over} of {n} pixels over 8 levels ({100 * over / max(1, n):.3f} %)")
+        check(n > 0 and over <= 0.01 * n, f"flyby: the card's picture and the processor's of the same moment: {over} of {n} pixels over 8 levels")
+    except Exception as e:
+        check(False, f"flyby: both pictures saved ({e})")
 
 def part_cardlines(binary, work):
     # 0.68.0: the Orbit Lab's trails, orbits and distance rings on the card (Vulkan): its start-up check passes here (three cases against the processor's
@@ -664,7 +692,7 @@ def part_cardlines(binary, work):
         cpu = run_app(binary, work, "lines_cpu_" + sc, dict(env, PL_NO_LINES_CARD="1"), frames=60)
         if sc == "orbit.heaviest":
             cases = [ln for ln in card.out.splitlines() if ln.startswith("PLLINESCASE ")]
-            check("PLLINESCARD state=1" in card.out and len(cases) == 4, f"lines: the start-up check passes, four cases ({cases})")   # (0.73.0, on purpose: a fourth case, the Alpha Centauri scene's ellipses, orbit/lines_check.h)
+            check("PLLINESCARD state=1" in card.out and len(cases) == 6, f"lines: the start-up check passes, six cases ({cases})")   # (0.73.0, on purpose: a fourth case, the Alpha Centauri scene's ellipses; 0.75.0: a fifth and sixth, the camera by a line that passes it and goes behind it, orbit/lines_check.h)
             bad = run_app(binary, work, "lines_fail", dict(env, PL_LINES_CARDFAIL="1"), frames=60)
             check("PLLINESCARD state=-1" in bad.out, "lines: a failed check leaves the processor's lines")
             o2 = over(Bmp(bad.bmp), Bmp(cpu.bmp))   # (two runs of the processor's own picture already differ in a pixel or two here: at most 0.01 %)
@@ -722,7 +750,7 @@ def main():
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
     want = lambda n: only is None or n in only
     os.makedirs(work, exist_ok=True)
-    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings), ("cardlines", part_cardlines), ("acen", part_acen)):
+    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings), ("flyby", part_flyby), ("cardlines", part_cardlines), ("acen", part_acen)):
         if want(name):
             fn(binary, work)
     print(f"{checks} checks, {fails} failed")

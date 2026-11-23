@@ -51,6 +51,7 @@ void linesCpu(const LinesCase& c, std::vector<std::vector<double>>& pens);
 render::LinesDraw linesDrawOf(const LinesCase& c);
 struct LinesCompare {
     long runs = 0, points = 0, over = 0, runsBad = 0;
+    long cut = 0, behind = 0;                        // 0.75.0: segments cut at the near plane, and wholly behind it (both paths agreeing)
     double worst = 0;                                // the largest difference over its limit (1 = at the limit)
     double worstPt = 0;                              // the largest difference, points
     bool ok() const { return runs > 0 && points > 0 && over == 0 && runsBad == 0; }

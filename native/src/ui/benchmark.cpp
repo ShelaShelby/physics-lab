@@ -125,6 +125,19 @@ void orbitClose(AppState& app, const char* body, double zoom) {
     app.view.ox = app.view.oy = 0;
     setZoom(app, zoomOr(zoom));
 }
+// 0.75.0: Saturn from the closest zoom the camera may come (1.5 radii: orbit_view.cpp zoomCapFor), every extra on, time stopped (orbit.flyby)
+void orbitFlyby(AppState& app) {
+    orbitClose(app, "Saturn", kSaturnZoom);
+    orbit::ViewSettings& s = app.set;
+    s.fullTrails = true; s.moons = s.dwarfs = s.comets = s.belts = s.far = s.orbits = true;
+    s.sky = orbit::SkyMode::Full; s.cons = orbit::ConsMode::LinesAndNames;
+    const int id = bodyId(app, "Saturn");
+    double R = 0;
+    for (const orbit::Body& b : app.sys.bodies) if (b.id == id) R = b.radius;
+    const double W = app.canvasW > 0 ? app.canvasW : 1280, H = app.canvasH > 0 ? app.canvasH : 800;
+    const double cap = R > 0 ? std::log10(orbit::focalFor(H) / (1.5 * R) * 34 * units::kSimLength / std::min(W, H)) : kSaturnZoom;
+    setZoom(app, zoomOr(cap - 1e-9));               // (PL_BENCH_ZOOM: another zoom, for the trials)
+}
 void orbitRealFast(AppState& app) {
     orbitHeaviest(app);
     app.set.realPlanets = true; app.set.relativity = true;   // the main loop switches the Solar System to Real (n-body) from this
@@ -518,6 +531,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::OrbitSky: orbitSky(app); break;
         case K::OrbitJourney: orbitJourney(app); break;
         case K::OrbitAlphaCen: orbitAlphaCen(app); break;
+        case K::OrbitFlyby: orbitFlyby(app); break;
         case K::Atom:
             commonSetup(app);
             app.lab = 1;
@@ -571,6 +585,10 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
         case K::OrbitSaturn: case K::OrbitSky:
             app.view.yaw = 0.6 + 0.5 * u;                                        // turning 0.5 rad a second, tilting with it
             app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
+            break;
+        case K::OrbitFlyby:                                                      // 0.75.0: turning, and tilting from 1 to 53 degrees above the ecliptic (through the ring plane)
+            app.view.yaw = 0.6 + 0.5 * u;
+            app.view.pitch = 1.1 + 0.45 * std::sin(0.9 * u);
             break;
         case K::OrbitAlphaCen:                                                   // 0.73.0: the whole system to Proxima's planets and back (log zoom), turning and tilting
             app.view.yaw = 0.6 + 0.5 * u;
@@ -705,6 +723,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
                                                       !app.rocksOk ? "the processor (no Vulkan rock compute on this PC)" : "the processor (GPU rocks switched off for this scene)") +
                    "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.68.0
         case K::OrbitSaturn: return orbit::ringCardPathText(g_vk);   // 0.64.0
+        case K::OrbitFlyby: return orbit::ringCardPathText(g_vk) + "; " + orbit::linesCardPathText(g_vk != nullptr);   // 0.75.0
         case K::OrbitAlphaCen: return "the Alpha Centauri orbits: " + orbit::linesCardPathText(g_vk != nullptr);   // 0.73.0
         case K::Atom: {
             const atom::AtomLab& L = app.atom;
@@ -751,7 +770,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
     char z[200];
     switch (t.kind) {
         case K::Atom: return atom::benchShortText(app.atom);
-        case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitSky:
+        case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitSky: case K::OrbitFlyby:
             std::snprintf(z, sizeof z, "Orbit Lab: zoom %.2f (log10), picture %.0f x %.0f points", app.set.zoom, app.canvasW, app.canvasH);
             return z;
         case K::OrbitAlphaCen:

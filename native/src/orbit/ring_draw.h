@@ -20,7 +20,19 @@ struct RingFrame {
     double sz = 1;                                       // equatorial / polar radius (the ball of radius 1 in the stretched frame)
     double Lb[3] = {0, 0, 1};                            // the direction to the Sun in that frame, and its square length
     double LL = 1;
+    // 0.75.0: the 3D view's pinhole camera (orbit/camera.h). A ring point q (planet radii, screen frame) is at depth Z = Zc (1 - zr qz) for Zc the
+    // middle's distance in front of the camera and zr = (radius, m) / Zc, so it is on the screen at pp + ((x, y) - pp + r (qx, -qy)) / (1 - zr qz); nearer
+    // than the near plane (1 - zr qz < wn = near / Zc) it is not drawn. zr = 0: the flat map of 0.74.0 (2D, and the tests' old views).
+    double ppx = 0, ppy = 0, zr = 0, wn = 0;
 };
+// a ring point q on the screen; false: nearer than the near plane (or behind the camera)
+inline bool ringOnScreen(const RingFrame& f, const double q[3], double& X, double& Y) {
+    const double w = 1 - f.zr * q[2];
+    if (f.zr != 0 && !(w >= f.wn)) return false;
+    if (f.zr == 0) { X = f.x + f.r * q[0]; Y = f.y - f.r * q[1]; return true; }
+    X = f.ppx + (f.x - f.ppx + f.r * q[0]) / w; Y = f.ppy + (f.y - f.ppy - f.r * q[1]) / w;
+    return true;
+}
 // a drawn band: inner and outer edge in planet radii (a narrow ring widened to a pixel), its opacity (coverage folded in) and its light k (the tint's factor)
 struct RingBand { double a0 = 0, a1 = 0; float alpha = 0, k = 0; };
 
@@ -65,38 +77,57 @@ void ringTriangles(const RingFrame& f, const RingBand& b, bool back, double W, d
     constexpr double pi = 3.14159265358979323846;
     const double drawPx = (b.a1 - b.a0) * f.r;
     const int nr = std::max(1, std::min(8, static_cast<int>(drawPx / 6)));
-    const auto at = [&](double rr, double tt, double& X, double& Y, double& F) {   // a point of the ring: screen position and shadow function
+    // 0.75.0: a corner keeps its place on the ring plane (q, planet radii) and its shadow function; the cuts (along F = 0, then at the near plane) are made
+    // there, in 3D, and only then put on the screen (ringOnScreen): with the pinhole a straight edge in space is a straight edge on the screen
+    struct RP { double q[3]; double F; };
+    const auto at = [&](double rr, double tt, double& X, double& Y, double& F, RP& p) {   // a point of the ring: screen position (in front or not), shadow function, place
         const double ct = std::cos(tt), st = std::sin(tt);
-        const double qx = rr * (ct * f.e1[0] + st * f.e2[0]), qy = rr * (ct * f.e1[1] + st * f.e2[1]), qz = rr * (ct * f.e1[2] + st * f.e2[2]);
-        X = f.x + f.r * qx; Y = f.y - f.r * qy; F = ringShadowF(f, qx, qy, qz);
+        p.q[0] = rr * (ct * f.e1[0] + st * f.e2[0]); p.q[1] = rr * (ct * f.e1[1] + st * f.e2[1]); p.q[2] = rr * (ct * f.e1[2] + st * f.e2[2]);
+        F = p.F = ringShadowF(f, p.q[0], p.q[1], p.q[2]);
+        if (!ringOnScreen(f, p.q, X, Y)) { X = std::nan(""); Y = X; }
     };
-    const auto splitTri = [&](const double* X, const double* Y, const double* F) {   // a triangle cut along F = 0
-        double lx[4], ly[4], sx[4], sy[4]; int nl = 0, ns = 0;
+    const auto mix = [](const RP& a, const RP& b, double u) { RP m; for (int k = 0; k < 3; k++) m.q[k] = a.q[k] + u * (b.q[k] - a.q[k]); m.F = a.F + u * (b.F - a.F); return m; };
+    const auto emit = [&](const RP* P, int n, bool lit) {   // a convex polygon: cut at the near plane (in 3D), then a fan of triangles on the screen
+        RP c[8]; int m = 0;
+        if (f.zr == 0) { for (int k = 0; k < n; k++) c[m++] = P[k]; }
+        else for (int k = 0; k < n; k++) {
+            const RP& a = P[k]; const RP& b = P[(k + 1) % n];
+            const double wa = 1 - f.zr * a.q[2] - f.wn, wb = 1 - f.zr * b.q[2] - f.wn;
+            if (wa >= 0) c[m++] = a;
+            if ((wa >= 0) != (wb >= 0)) { RP e = mix(a, b, wa / (wa - wb)); e.q[2] = (1 - f.wn) / f.zr; c[m++] = e; }
+        }
+        if (m < 3) return;
+        double X[8], Y[8];
+        for (int k = 0; k < m; k++) if (!ringOnScreen(f, c[k].q, X[k], Y[k])) { const double w = 1 - f.zr * c[k].q[2], s = 1 / std::max(w, f.wn);
+            X[k] = f.ppx + (f.x - f.ppx + f.r * c[k].q[0]) * s; Y[k] = f.ppy + (f.y - f.ppy - f.r * c[k].q[1]) * s; }   // (a cut corner exactly at the plane)
+        for (int k = 1; k + 1 < m; k++) tri(X[0], Y[0], X[k], Y[k], X[k + 1], Y[k + 1], lit);
+    };
+    const auto splitTri = [&](const RP* P) {             // a triangle cut along F = 0 (linear between its corners, in the ring plane)
+        RP L[4], S[4]; int nl = 0, ns = 0;
         for (int a = 0; a < 3; a++) {
             const int b2 = (a + 1) % 3;
-            if (F[a] >= 0) { lx[nl] = X[a]; ly[nl++] = Y[a]; } else { sx[ns] = X[a]; sy[ns++] = Y[a]; }
-            if ((F[a] >= 0) != (F[b2] >= 0)) {
-                const double u = F[a] / (F[a] - F[b2]), ex = X[a] + u * (X[b2] - X[a]), ey = Y[a] + u * (Y[b2] - Y[a]);
-                lx[nl] = ex; ly[nl++] = ey; sx[ns] = ex; sy[ns++] = ey;
-            }
+            if (P[a].F >= 0) L[nl++] = P[a]; else S[ns++] = P[a];
+            if ((P[a].F >= 0) != (P[b2].F >= 0)) { const RP e = mix(P[a], P[b2], P[a].F / (P[a].F - P[b2].F)); L[nl++] = e; S[ns++] = e; }
         }
-        for (int k = 1; k + 1 < nl; k++) tri(lx[0], ly[0], lx[k], ly[k], lx[k + 1], ly[k + 1], true);
-        for (int k = 1; k + 1 < ns; k++) tri(sx[0], sy[0], sx[k], sy[k], sx[k + 1], sy[k + 1], false);
+        if (nl >= 3) emit(L, nl, true);
+        if (ns >= 3) emit(S, ns, false);
     };
     double fe[2][9], xe[2][9], ye[2][9];
+    RP pe[2][9];
     for (int i = 0; i < kRingSegments; i++) {
         const double t0 = 2 * pi * i / kRingSegments, t1 = 2 * pi * (i + 1) / kRingSegments;
         const double zm = std::cos(0.5 * (t0 + t1)) * f.e1[2] + std::sin(0.5 * (t0 + t1)) * f.e2[2];
         if ((zm < 0) != back) continue;                   // back: the half away from you
         for (int j = 0; j <= nr; j++) {
             const double rj = b.a0 + (b.a1 - b.a0) * j / nr;
-            at(rj, t0, xe[0][j], ye[0][j], fe[0][j]);
-            at(rj, t1, xe[1][j], ye[1][j], fe[1][j]);
+            at(rj, t0, xe[0][j], ye[0][j], fe[0][j], pe[0][j]);
+            at(rj, t1, xe[1][j], ye[1][j], fe[1][j], pe[1][j]);
         }
-        {   // the whole step beyond one side of the picture: nothing of it is made
+        {   // the whole step beyond one side of the picture: nothing of it is made (0.75.0: only when all four corners are in front of the near plane)
             double mnx = 1e300, mxx = -1e300, mny = 1e300, mxy = -1e300;
-            for (int e = 0; e < 2; e++) for (int j = 0; j <= nr; j += nr) { mnx = std::min(mnx, xe[e][j]); mxx = std::max(mxx, xe[e][j]); mny = std::min(mny, ye[e][j]); mxy = std::max(mxy, ye[e][j]); }
-            if (mxx < -2 || mnx > W + 2 || mxy < -2 || mny > H + 2) continue;
+            bool front = true;
+            for (int e = 0; e < 2; e++) for (int j = 0; j <= nr; j += nr) { if (std::isnan(xe[e][j])) front = false; else { mnx = std::min(mnx, xe[e][j]); mxx = std::max(mxx, xe[e][j]); mny = std::min(mny, ye[e][j]); mxy = std::max(mxy, ye[e][j]); } }
+            if (front && (mxx < -2 || mnx > W + 2 || mxy < -2 || mny > H + 2)) continue;
         }
         const auto mixedAt = [&](int j) { const bool s0 = fe[0][j] >= 0; return !(s0 == (fe[0][j + 1] >= 0) && s0 == (fe[1][j + 1] >= 0) && s0 == (fe[1][j] >= 0)); };
         int j = 0;
@@ -105,10 +136,9 @@ void ringTriangles(const RingFrame& f, const RingBand& b, bool back, double W, d
                 const bool lit = fe[0][j] >= 0;
                 int k = j + 1;
                 while (k < nr && !mixedAt(k) && (fe[0][k] >= 0) == lit) k++;
-                const double aX[3] = {xe[0][j], xe[0][k], xe[1][k]}, aY[3] = {ye[0][j], ye[0][k], ye[1][k]}, aF[3] = {fe[0][j], fe[0][k], fe[1][k]};
-                const double bX[3] = {xe[0][j], xe[1][k], xe[1][j]}, bY[3] = {ye[0][j], ye[1][k], ye[1][j]}, bF[3] = {fe[0][j], fe[1][k], fe[1][j]};
-                splitTri(aX, aY, aF);
-                splitTri(bX, bY, bF);
+                const RP a3[3] = {pe[0][j], pe[0][k], pe[1][k]}, b3[3] = {pe[0][j], pe[1][k], pe[1][j]};
+                splitTri(a3);
+                splitTri(b3);
                 j = k;
                 continue;
             }
@@ -117,12 +147,12 @@ void ringTriangles(const RingFrame& f, const RingBand& b, bool back, double W, d
             for (int u = 0; u < S; u++)
                 for (int w = 0; w < S; w++) {
                     double sX[4], sY[4], sF[4];
+                    RP sp[4];
                     const double ra = r0 + (r1 - r0) * u / S, rb = r0 + (r1 - r0) * (u + 1) / S, ta = t0 + (t1 - t0) * w / S, tb = t0 + (t1 - t0) * (w + 1) / S;
-                    at(ra, ta, sX[0], sY[0], sF[0]); at(rb, ta, sX[1], sY[1], sF[1]); at(rb, tb, sX[2], sY[2], sF[2]); at(ra, tb, sX[3], sY[3], sF[3]);
-                    const double aX[3] = {sX[0], sX[1], sX[2]}, aY[3] = {sY[0], sY[1], sY[2]}, aF[3] = {sF[0], sF[1], sF[2]};
-                    const double bX[3] = {sX[0], sX[2], sX[3]}, bY[3] = {sY[0], sY[2], sY[3]}, bF[3] = {sF[0], sF[2], sF[3]};
-                    splitTri(aX, aY, aF);
-                    splitTri(bX, bY, bF);
+                    at(ra, ta, sX[0], sY[0], sF[0], sp[0]); at(rb, ta, sX[1], sY[1], sF[1], sp[1]); at(rb, tb, sX[2], sY[2], sF[2], sp[2]); at(ra, tb, sX[3], sY[3], sF[3], sp[3]);
+                    const RP a3[3] = {sp[0], sp[1], sp[2]}, b3[3] = {sp[0], sp[2], sp[3]};
+                    splitTri(a3);
+                    splitTri(b3);
                 }
             j++;
         }

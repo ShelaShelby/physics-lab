@@ -98,8 +98,7 @@ static void vkRocks(render::IRockCompute& vk) {
                 f.t = sys.t;
                 const double lp = sys.t / units::kYear / 150 * 6.2832;
                 f.libPhase = lp - 2 * units::kPi * std::floor(lp / (2 * units::kPi));
-                f.bc[0] = cam.bx; f.bc[1] = cam.by; f.bc[2] = cam.bz;
-                f.ca = cam.ca; f.sa = cam.sa; f.cb = cam.cb; f.sb = cam.sb; f.px = cam.px; f.W = cam.W; f.H = cam.H; f.D = cam.D; f.cd = cam.cd; f.ox = cam.ox; f.oy = cam.oy; f.d3 = cam.d3;
+                orbit::rockFrameCamera(cam, f);
                 for (const orbit::BeltGroup& g : sys.belts) {
                     const render::RockSet set = layer.gpuSet(g);
                     const int slot = vk.slotFor(set);

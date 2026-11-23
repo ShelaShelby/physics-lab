@@ -69,6 +69,7 @@ static void runSteps(SolarSystem& sys, double tspeed, int steps) {
 
 #include "rock_reference.h"
 #include "test_rocks.inc"   // 0.13 stage 4 part A: the belt rocks against Kepler's equation as the textbook has it
+#include "test_camera.inc"   // 0.75.0: the 3D pinhole camera against pinhole geometry
 
 // 0.15 stage 5c, bug fix A: which labels the picture may draw under the bars. WRITTEN BEFORE the code. References: plain geometry (a rectangle is clear when it lies wholly inside the free area)
 // and the owner's screenshot: at a far zoom-out the ring label "6,500,000,000 AU · 103,000 light years" sat on the breadcrumb in the top bar.
@@ -926,6 +927,7 @@ static void testAlphaCen073() {
 }
 
 int main() {
+    testCamera075();
     testAlphaCen073();
     testPointColour0521();
     testIauMoons050();

@@ -21,7 +21,8 @@ enum class BenchKind {
     MoleculeDensity, MoleculeVibDensity, MoleculeSpaceVib,                       // 0.56.1
     BlackHole, BlackHoleFilmTilt, BlackHoleExtreme, BlackHoleAllLight, BlackHoleMovingGas,                              // 0.56.1: the first is 0.55.0's scene (blackhole.real_move)
     UiGuideScroll, UiDataPlot, UiSettingsOpen,                                   // 0.56.1: the pages and panels the 0.50.3 review suspected
-    OrbitAlphaCen                                                                // 0.73.0: the Alpha Centauri system
+    OrbitAlphaCen,                                                               // 0.73.0: the Alpha Centauri system
+    OrbitFlyby                                                                   // 0.75.0: Saturn from the closest the camera may come, through the ring plane
 };
 
 struct BenchSceneText {
@@ -34,8 +35,8 @@ struct BenchSceneText {
     bool hard = false;      // in the default run
 };
 
-constexpr int kBenchHardScenes = 34;      // 0.56.1: the default run (0.58.0: 25, blackhole.all_light; 0.63.0: 26, atom.slice_super_drag; 0.64.0: 32, six heavy views; 0.72.0: 33, blackhole.moving_gas; 0.73.0: 34, orbit.alphacen)
-constexpr int kBenchAllScenes = 50;       // ... and with "All scenes"
+constexpr int kBenchHardScenes = 35;      // 0.56.1: the default run (0.58.0: 25, blackhole.all_light; 0.63.0: 26, atom.slice_super_drag; 0.64.0: 32, six heavy views; 0.72.0: 33, blackhole.moving_gas; 0.73.0: 34, orbit.alphacen; 0.75.0: 35, orbit.flyby)
+constexpr int kBenchAllScenes = 51;       // ... and with "All scenes"
 
 const std::vector<BenchSceneText>& benchSceneTexts();   // the Hard scenes first, in the order they run, then the others of All
 int benchSceneIndex(const std::string& id);             // -1: no such scene

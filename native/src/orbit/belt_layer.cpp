@@ -45,8 +45,7 @@ BeltLayer::Path BeltLayer::draw(render::Renderer2D& R, const SolarSystem& sys, c
         f.t = sys.t;
         const double lp = sys.t / units::kYear / 150 * 6.2832;             // the Trojans' sway phase (belts.cpp), brought into 0..2 pi in double
         f.libPhase = lp - 2 * units::kPi * std::floor(lp / (2 * units::kPi));
-        f.bc[0] = cam.bx; f.bc[1] = cam.by; f.bc[2] = cam.bz;
-        f.ca = cam.ca; f.sa = cam.sa; f.cb = cam.cb; f.sb = cam.sb; f.px = cam.px; f.W = cam.W; f.H = cam.H; f.D = cam.D; f.cd = cam.cd; f.ox = cam.ox; f.oy = cam.oy; f.d3 = cam.d3;
+        orbit::rockFrameCamera(cam, f);                                     // 0.75.0: the one camera (orbit/camera.h)
         std::vector<std::uint64_t> live;
         for (const BeltGroup& g : sys.belts) live.push_back(g.serial);
         R.rockCompute()->keepOnly(live);                                    // (sets of rocks that are gone leave the GPU first)

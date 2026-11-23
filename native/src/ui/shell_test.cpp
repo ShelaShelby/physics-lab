@@ -218,6 +218,9 @@ void runScript(AppState& app, int frame, SDL_Window* window) {
             SDL_zero(e);
             e.type = SDL_EVENT_MOUSE_WHEEL; e.wheel.windowID = SDL_GetWindowID(window); e.wheel.y = static_cast<float>(std::atof(arg.c_str())); e.wheel.mouse_x = ImGui::GetIO().MousePos.x; e.wheel.mouse_y = ImGui::GetIO().MousePos.y;
             SDL_PushEvent(&e);
+        } else if (verb == "view") {                       // 0.75.0: for automatic checks: view=zoom,yaw,pitch sets the zoom (at once) and the 3D turn, as PL_ZOOM and PL_TILT do
+            double z = 0, yw = 0, pt = 0;
+            if (std::sscanf(arg.c_str(), "%lf,%lf,%lf", &z, &yw, &pt) == 3) { setZoom(app, z); app.view.yaw = yw; app.view.pitch = pt; }
         } else if (verb == "drag" || verb == "rdrag") {   // press at x0,y0, move to x1,y1 over a few frames, release (the picture's drag; rdrag: with the right button, 0.20)
             float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
             const int right = verb == "rdrag" ? 2 : 0;

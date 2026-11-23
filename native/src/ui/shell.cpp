@@ -518,6 +518,7 @@ std::vector<std::string> readoutLines(const AppState& app, double fps) {
         // 0.22 stage 6: the scale as a drawn bar with its length ("\x01" marks the line: the readout draws the bar left of the words); the zoom factor is in Controls › Zoom.
         // (Before: "Zoom ×0.16" twice, and "Scale 3 AU" with no bar, a length that changed with the window size for the same zoom.)
         if (!app.view.scaleText.empty()) v.push_back("\x01" + app.view.scaleText);
+        if (!app.view.scaleWhere.empty()) v.push_back(app.view.scaleWhere);   // 0.75.0 (3D): the length holds at the target's distance ("at Earth's distance")
         if (!app.view.lightText.empty()) v.push_back(app.view.lightText);
     }
     if (fps > 0) { char b[24]; std::snprintf(b, sizeof b, "%.0f fps", fps); v.push_back(b); }

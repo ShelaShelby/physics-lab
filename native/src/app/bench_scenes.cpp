@@ -20,7 +20,7 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "second and tilting, time stopped. The rings from Cassini's profile, per pixel on the graphics card (Vulkan) once its check passed; the planet's map and its shadow on the rings.");
         add(true, "orbit.earth", BenchKind::OrbitEarth, -1, "Orbit Lab, Earth close up with its air and the Moon's shadow, the camera turning",
             "12 Aug 2026 17:46 UTC: the app's own Moon (ELP2000-82B) puts its shadow axis 0.90 Earth radii from Earth's centre (found with the app's geometry, app_tests "
-            "checks it). Earth followed, true scale, 3D, zoom 5.5 (the control's top), the camera aimed at the shadow over Greenland and turning to and fro, time stopped.");
+            "checks it). Earth followed, true scale, 3D, the closest zoom (5.5 asked; 0.75.0: the camera stays 1.5 Earth radii from its middle, zoom 5.14), the camera aimed at the shadow over Greenland and turning to and fro, time stopped.");
         add(true, "orbit.real_fast", BenchKind::OrbitRealFast, -1, "Orbit Lab, Real planet physics with relativity at the fastest time",
             "Planet physics Real (the n-body integration, general relativity 1PN on), moons on, 3D, every extra, zoom x1, the fastest time (1 s = about 50 years): "
             "the integrator walks about 50 years a second and makes its stretches ahead on a thread of its own.");
@@ -109,6 +109,10 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         add(true, "orbit.alphacen", BenchKind::OrbitAlphaCen, -1, "Orbit Lab, Alpha Centauri from the whole system to Proxima's planets, turning",
             "System Alpha Centauri, 3D, Stars Full with constellation lines and names, orbit paths, Proxima followed, the fastest time: zoom -3.6 (the whole system) "
             "through Proxima's planets to 4.0 (Proxima fills the picture) and back every 8 s, the camera turning 0.5 rad a second and tilting. The orbits are the card's lines where its check passed.");
+        add(true, "orbit.flyby", BenchKind::OrbitFlyby, -1, "Orbit Lab, a fly-by of Saturn from the closest zoom, through the ring plane",
+            "Saturn followed, true scale, 3D, the closest zoom (the camera 1.5 Saturn radii from its middle, zoom 4.17), every extra on, Stars Full with constellations, "
+            "time stopped; the camera turning 0.5 rad a second and tilting 1 to 53 degrees above the ecliptic, through the ring plane: rings, lines and moons pass "
+            "close to it and behind it (cut at the near plane, on the card).");
         // ---- All scenes: the easy ones and the old processor twins ----
         add(false, "orbit.rocks8", BenchKind::OrbitRocks8, -1, "Orbit Lab, 8 times the rocks",
             "orbit.heaviest with 8 times the rocks in the belts and the Oort cloud (48,000, the same kinds of orbits, a fixed seed); the rocks do not pull on each other.");
@@ -154,7 +158,8 @@ double benchPlannedS() {
 // 0.72.0: 33 scenes (blackhole.moving_gas, CLAUDE.md: a new drawing adds its scene): 291.3 s planned, over 0.64.0's 4.85 minutes by 0.3 s; the limit is 4.9
 // minutes now (nothing shortened, REPORT 0.72.0)
 // 0.73.0: 34 scenes (orbit.alphacen, CLAUDE.md: a new drawing adds its scene): 297.8 s planned; the limit is 5.0 minutes now (nothing shortened, REPORT 0.73.0)
-static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.0 * 60,
+// 0.75.0: 35 scenes (orbit.flyby, CLAUDE.md: a new drawing adds its scene): 304.3 s planned; the limit is 5.1 minutes now (nothing shortened, REPORT 0.75.0)
+static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.1 * 60,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,
               "the default benchmark run is planned at about four minutes");
