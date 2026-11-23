@@ -153,6 +153,8 @@ def part_realest(binary, work):
     r = run_app(binary, work, "bh_realest", dict(BASE, PL_BLACKHOLE="1", PL_BH_SET="bend=off;sky=black", PL_SCRIPT="6:click=blackhole.realest"), frames=14)
     s = bh(r)
     check(not r.scripted_missing() and s is not None and s["bend"] == "1" and s["sky"] == "ours", f"Most realistic: bending on, our sky ({s}, {r.scripted_missing()})")
+    # 0.77.0 (outside review item 5): the moving gas's clump and patches are models: Most realistic turns them off
+    check(s is not None and s.get("gasclump") == "0" and s.get("gaspattern") == "0", f"Most realistic: the clump and the patches (models) off ({s})")
 
 def part_orbitcard(binary, work):
     r = run_app(binary, work, "bh_orbitcard", dict(BASE, PL_SELECT="far:sgra", PL_PANELS="orbit.card=o", PL_SCRIPT="10:click=card.blackhole"), frames=22)

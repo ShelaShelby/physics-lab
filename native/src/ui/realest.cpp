@@ -31,8 +31,9 @@ const std::vector<Row>& table() {
         {"orbit", {"dwarfs", "on", "they are there in the real Solar System."}},
         {"orbit", {"comets", "on", "they are there in the real Solar System."}},
         {"orbit", {"belts", "on", "they are there in the real Solar System."}},
-        {"orbit", {"far", "on", "the nearest stars, the Voyager probes and the centre of the Galaxy are really there."}},
-        {"orbit", {"sky", "Full", "real stars do not get brighter as you zoom out; Soft dims them close up."}},
+        {"orbit", {"far", "on", "the nearest stars, the star clusters, the Voyager probes and the centre of the Galaxy are really there."}},
+        // 0.77.0 (outside review): was "real stars do not get brighter as you zoom out", but Full brightens too (orbit_view.cpp: 0.45 to 1 of the stars' level, Soft 0.16 to 0.76)
+        {"orbit", {"sky", "Full", "the stars nearest their real brightness close up; Soft dims them more. Both still brighten as you zoom out, which real stars do not."}},
         {"orbit", {"cons", "Off", "constellation lines and names are drawn by people; they are not in the sky."}},
         // ---- Atom Lab (the keys and values of ui/atom_panel.cpp atomChoices; "picture" is the View selector) ----
         {"atom", {"picture", "Cloud 3D", "the electron is a cloud of probability in three dimensions. The Orbit picture is Bohr's 1913 model (electrons on circles), which quantum mechanics replaced."}},
@@ -57,7 +58,12 @@ const std::vector<Row>& table() {
         {"molecule", {"vibsize", "Real size", "the swing as big as it really is in the lowest vibrational level."}},
         {"molecule", {"anharm", "on", "a real bond is not a perfect spring: its rungs close up as it stretches, and at the top it breaks."}},   // 0.53.1
         // ---- Black Hole Lab (0.55.0) ----
-        {"blackhole", {"bend", "On", "gravity really bends light: this is what a camera hovering there would see (calculated exactly for a hole that does not spin)."}},
+        // 0.77.0 (outside review): was "calculated exactly for a hole that does not spin". Since 0.55.9 a spinning hole's rays are closed forms too (blackhole/spin_sky.h kSpinFineFill, kerr_closed.h)
+        {"blackhole", {"bend", "On", "gravity really bends light: this is what a camera held there would see (beside a spinning hole, one carried round with the turning space). Every light path is "
+                                     "calculated exactly from Einstein's equations, by closed formulas for a hole that spins or not, on a fine table of rays the picture is read from."}},
+        // 0.77.0 (outside review): the moving gas's clump and patches are models (their place, size, strength and start are chosen, not measured): best left off
+        {"blackhole", {"gasclump", "off", "a model: its orbit, size, brightness and start are chosen, not measured. No telescope has seen the face of such a disc."}},
+        {"blackhole", {"gaspattern", "off", "a model from a computer simulation: where the patches are, their size, strength and life are chosen, not measured."}},
         {"blackhole", {"look", "Real", "the disc as the standard thin-disc model gives it, with the colour and brightness shifts of the gas's speed and gravity; Film copies the film's stated choices, made for the story, not for accuracy."}},   // 0.55.3
         {"blackhole", {"sky", "Our sky", "a real black hole has a sky of stars behind it; ours, seen from Earth, is the only whole sky we have a map of."}},
         {"blackhole", {"skybeside", "True brightness", "the stars at their measured brightness on the disc's own scale: beside a bright disc they are far too faint to show, as they would be."}},   // 0.55.4
@@ -110,6 +116,8 @@ void applyBlackHole(AppState& app) {
     app.blackhole.trueSky = true;                                        // 0.55.4: the stars at their true brightness beside the disc
     app.blackhole.glare = true;                                          //         and the eye's glare (both drawn only with the disc on)
     app.blackhole.allLight = false;                                      // 0.58.0: what an eye sees
+    app.blackhole.gasClump = false;                                      // 0.77.0: the clump and the patches are models, not measured
+    app.blackhole.gasPattern = false;
 }
 void applyLab(AppState& app) {
     if (app.lab == 0) applyOrbit(app);

@@ -55,6 +55,10 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Saturn close up, the night sky as a retained GPU mesh, Delta T after the last leap second and UT1 - UTC.
 - Eclipses: **source needed** a check against NASA's Five Millennium Canon. The red eclipsed Moon, shadows on and of moons, the giants' flattened shadows.
 - Earth's air: multiple scattering, the glow beyond the edge, twilight. **source needed**: a measured ocean colour.
+- **fix**: Earth fully lit is drawn at 0.21 of the measured 0.434 (0.77.0: the ground 0.06, clouds as white cover, single-scattering air). Missing: the clouds' own measured albedo and depth, multiple scattering. **source needed**: a cloud albedo or optical-depth map.
+- **source needed**: calibrated reflectance maps for the moons, Pluto and the Moon (the USGS mosaics and the Moon Kit are display pictures: only their mean brightness is measured since 0.77.0) and phase functions with the opposition surge (Europa, Rhea and Triton are brighter than any matte ball can be).
+- **fix**: Pluto's map bytes are a linear stretch of the measured values (its USGS page), decoded as sRGB: decode them linearly (its contrast changes).
+- The far markers are hidden by balls and rings since 0.77.0, but drawn over the orbit lines and trails in front of them.
 - Celestial mechanics in the Data panel: ephemeris tables, an integrator drift check, Lagrange points, Kirkwood gaps, a Lambert solver with porkchop plots.
 
 ## Black Hole Lab
@@ -73,6 +77,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - Next, after the moving gas: moving cameras (orbiting, falling in; **source needed** the ray equations in ingoing Kerr coordinates), the Data panel's tables, the skin. A "1979 paper" view of Luminet's figures.
 - **source needed**: L79 Fig. 10's 2.62 F_S max at 10 degrees (the lab gives 2.81). The disc's total light needs Thorne 1974 (ApJ 191, 507).
 - Spin, what is left: "Show special radii", spins above 0.99, a counter-rotating, tilted or warped disc, the sky's turning for the dragged camera.
+- The disc's atmosphere: limb darkening by electron scattering (Chandrasekhar 1950) and the colour-correction factor (Shimura & Takahara 1995), both named in the guide since 0.77.0. **source needed**: Chandrasekhar's table and the factor's value for the lab's discs (Li et al. 2005 is saved).
 - Idea, not planned: a "radio picture" look at 1.3 mm.
 
 ## Whole app

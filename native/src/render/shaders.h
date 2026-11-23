@@ -382,6 +382,8 @@ uniform vec3 uAirT[48];      // airTransmit at 48 path lengths, evenly spaced in
 uniform vec3 uAirK;          // (k = R / H, ln m of the first row, ln m of the last row)
 uniform vec2 uShape;         // 0.27: the radii along the 90° E axis and the pole over the equatorial radius (1, 1: a ball)
 uniform vec3 uSpace;         // 0.50: the colour of empty space (sRGB); a lit ball's zero light (render/shading.h)
+uniform int uClouds;         // 0.77.0: 1 = the map's alpha is Earth's cloud cover (render/shading.h cloudsOver)
+uniform float uAlbedoK;      // 0.77.0: the map's brightness factor (render/planet_maps.h mapAlbedo; 1 for a plain colour)
 uniform int uLunar;          // 0.50: 1 = the Moon: McEwen's lunar photometric function instead of Lambert (render/shading.h mcewenLunar)
 out vec4 fragColor;
 const float PI = 3.14159265358979;
@@ -457,7 +459,10 @@ void main() {
     vec3 n = normalize(transpose(uK) * (b * S));                  // its surface normal on the screen: right, up, towards you
     vec3 c;
     if (uMode == 1) {   // 0.50: the planet maps are GL_SRGB8_ALPHA8 textures: the GPU returns linear light
-        c = textureLod(uTex, uv, lodHere).rgb;
+        vec4 m = textureLod(uTex, uv, lodHere);
+        c = m.rgb * uAlbedoK;   // 0.77.0: scaled to the body's measured geometric albedo; a pixel above 1 keeps its hue (render/shading.h albedoScaled)
+        c /= max(1.0, max(c.r, max(c.g, c.b)));
+        if (uClouds == 1) c = c * (1.0 - m.a) + vec3(m.a);   // 0.77.0: Earth's clouds, white over the ground in linear light (render/shading.h cloudsOver)
     } else {
         c = srgbDecode(vColor.rgb);
     }

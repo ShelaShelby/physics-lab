@@ -266,12 +266,13 @@ Rect blackholeBar(AppState& app, const app::shell::Frame& fr, const Metrics& m) 
         if (ImGui::IsItemHovered()) ui::SetTooltip("Back to the first view: distance, field of view and direction (key R)");
         endPanel(p);
     }
-    char b[560];
+    char b[640];
     const blackhole::Settings v = blackhole::shown(s);
-    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d behind=%d light=%s", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
+    std::snprintf(b, sizeof b, "blackhole preset=%s dist=%.6g fov=%.6g yaw=%.6f pitch=%.6f bend=%d sky=%s disc=%d feed=%.6g outer=%.6g exp=%s spin=%.9g fine=%d look=%s shownspin=%.9g showndisc=%d skybeside=%s glare=%s trueon=%d glareon=%d behind=%d light=%s gasclump=%d gaspattern=%d", s.preset.empty() ? "none" : s.preset.c_str(), s.dist, s.fovDeg,
                   s.yaw, s.pitch, s.bend ? 1 : 0, s.skyOurs ? "ours" : "black", s.disc ? 1 : 0, s.feed, s.outer, s.expAuto ? "auto" : fmt::precision(s.expEV, 6).c_str(), s.spin,
                   app.blackholeView.stats().spinFine ? 1 : 0, blackhole::lookKey(s.look), v.spin, v.disc ? 1 : 0, s.trueSky ? "true" : "shown", s.glare ? "eye" : "off",
-                  blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0, app.blackholeView.stats().behind ? 1 : 0, s.allLight ? "all" : "eye");
+                  blackhole::trueSkyOn(s) ? 1 : 0, blackhole::glareOn(s) ? 1 : 0, app.blackholeView.stats().behind ? 1 : 0, s.allLight ? "all" : "eye",
+                  s.gasClump ? 1 : 0, s.gasPattern ? 1 : 0);   // (0.77.0: the moving gas's two models, for check_blackhole.py realest)
     auditNote(b);
     return r;
 }
@@ -514,6 +515,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                 pStat(p, "Innermost turn", spanText(turn) + " far away  ·  " + spanText(turn / rate) + " on the screen");
                 if (pButton(p, "blackhole.gas.realtime", "Real time", Face::Quiet)) blackhole::setGasRate(s, 1);
                 if (pButton(p, "blackhole.gas.auto", "Automatic: one innermost turn in 20 s", Face::Quiet)) s.gasRateAuto = true;
+                real::markCheck("blackhole", "gasclump");   // 0.77.0: a model, best left off
                 pCheck(p, "blackhole.gas.clump", "A bright clump (model)", &s.gasClump);
                 if (s.gasClump) {
                     const double rc = blackhole::gasClumpRadius(s);
@@ -524,6 +526,7 @@ void blackholeControls(AppState& app, Panel& p, const SectionFn& section) {
                                 "its centre five times as bright as the gas round it (the lab's choice), on a circular orbit; GRAVITY (2018) saw flares circle at 6 to 10 GM/c² "
                                 "(33 to 65 minutes), Wielgus et al. (2022) a loop of 74 minutes. It keeps its shape, as in Broderick and Loeb's model: real gas would shear it into an arc.");
                 }
+                real::markCheck("blackhole", "gaspattern");
                 pCheck(p, "blackhole.gas.pattern", "Bright and dark patches (model)", &s.gasPattern);
                 if (s.gasPattern)
                     pCaption(p, "Patches as in a computer simulation of a magnetised disc (Schnittman, Krolik and Hawley 2006): 25° by 0.3 of the radius when born, living 0.3 of an orbit, "

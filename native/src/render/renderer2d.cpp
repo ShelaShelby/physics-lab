@@ -123,10 +123,22 @@ void Renderer2D::planet(double x, double y, double r, Color base, double lx, dou
     sg.nring = rings ? std::min(nRings, kMaxRingBands) : 0;
     for (int i = 0; i < 3 * sg.nring; i++) sg.ring[i] = rings[i];
     sg.lunar = lunar;
+    if (has) { const MapAlbedo* ma = mapAlbedo(map); sg.albedoK = ma ? static_cast<float>(ma->factor) : 1.0f; }   // 0.77.0: the map's measured brightness
     if (light) {
         sg.nocc = std::clamp(light->nOcc, 0, 4);
         for (int i = 0; i < 4 * sg.nocc; i++) sg.occ[i] = light->occ[i];
         sg.sunAng = light->sunAng; sg.air = light->air;
+    }
+    static const bool logPlanet = std::getenv("PL_LOG_PLANET") != nullptr;   // 0.77.0, for the GPU-vs-CPU picture check only (tests/planet_picture.cpp reads these fields)
+    if (logPlanet && has)
+        std::printf("PLPLANET %d %.4f %.4f %.4f %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g %d %.7g %d %d %d %.6f %.6f %.6f\n", static_cast<int>(map), x, y, r,
+                    lx, ly, lz, K[0], K[1], K[2], K[3], K[4], K[5], K[6], K[7], K[8], shapeY, shapeZ, lunar ? 1 : 0, double(sg.albedoK), sg.nring, sg.nocc, sg.air ? 1 : 0,
+                    double(space_.r), double(space_.g), double(space_.b));
+    if (logPlanet && has) {   // then: the Sun's angular radius, the ring bands (3 each), the eclipsing bodies (4 each)
+        std::printf("PLPLANETX %.9g", double(sg.sunAng));
+        for (int i = 0; i < 3 * sg.nring; i++) std::printf(" %.9g", double(sg.ring[i]));
+        for (int i = 0; i < 4 * sg.nocc; i++) std::printf(" %.9g", double(sg.occ[i]));
+        std::printf("\n");
     }
     sg.shape[0] = static_cast<float>(shapeY); sg.shape[1] = static_cast<float>(shapeZ);   // (the quad of half side r + 1.5 holds it: no radius is over r)
     segments_.push_back(sg);

@@ -19,6 +19,13 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.77.0", "Planets as bright as measured, Earth's clouds, and fixes from a physics review",
+     "An outside physics professor reviewed the app. Every planet and moon with a map is now as bright as measured: fully lit, its ball reflects its measured share "
+     "of sunlight (Mallama and others 2017 for the planets, NASA's fact sheets for the moons). The Learn guide says the limits: a matte ball, no extra brightening "
+     "at full phase, and Europa, Rhea, Triton and Neptune drawn darker than measured, because no matte ball can be that bright. Earth has its clouds, NASA's map "
+     "of one moment, lit by the Sun under the air. A far-away star behind Saturn is now hidden by the planet and dimmed by its rings, as much as the rings block. "
+     "Most realistic turns off the moving gas's clump and patches, which are models, and its notes on bending and stars were corrected. The black hole's guide "
+     "names two simplifications of the disc's light."},
     {"0.76.0", "Faster tests, nothing changes in the app",
      "Nothing changes in how the app works. The automatic tests that start the app were cut to the ones that catch real breakage: the app starts, each lab opens "
      "and draws, the main controls respond, cards, pages and search work, settings are kept, and every picture the graphics card makes is still compared with the "

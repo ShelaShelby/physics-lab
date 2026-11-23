@@ -142,3 +142,7 @@ arxiv/astro-ph_0606615_schnittman_krolik_hawley2006 (...)  J. D. Schnittman, J. 
     (MHD, Schwarzschild) disc: 25 degrees by dr/r = 0.3, life 0.3 of an orbit ((36)); Table 2, light of the 6-10 M ring 43.8 % rms (thermal, > 10 Hz).
 scans/balbus_hawley_1991_ApJ376_214.pdf  S. A. Balbus, J. F. Hawley, ApJ 376, 214 (1991): the magnetic shear instability (abstract) that makes discs turbulent.
 Cunningham & Bardeen 1973 (scans/, saved 15 Nov) read again: p. 254, the one-orbit image's peak "shifts to earlier times" off the plane.
+
+[0.77.0] li2005_arxiv0411583.pdf (Li, Zimmerman, Narayan & McClintock 2005, ApJS 157, 335) and shimura_takahara1995_crossref_2026-11-23.json (the Crossref
+record of Shimura & Takahara 1995, ApJ 445, 780): the two simplifications of the disc's light named in What is real in this picture (limb darkening by
+electron scattering, Chandrasekhar 1950; the colour-correction factor). In the private sources repo (data/SOURCES.md).

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.76.0 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.77.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -246,6 +246,10 @@ if(PL_BUILD_TESTS)
   add_executable(blackhole_picture tests/blackhole_picture.cpp)
   target_link_libraries(blackhole_picture PRIVATE blackhole_core maps_core app_core)
   target_compile_options(blackhole_picture PRIVATE ${PL_WARNINGS})
+  # 0.77.0: the CPU picture of a planet with its map, for check_orbit_ui.py planets (the GPU against it)
+  add_executable(planet_picture tests/planet_picture.cpp)
+  target_link_libraries(planet_picture PRIVATE maps_core)
+  target_compile_options(planet_picture PRIVATE ${PL_WARNINGS})
   # 0.56.3: moving gas worked out on the processor (PLAN_MOVINGGAS.md; a tool run by hand, its self-checks a quick test)
   add_executable(movinggas tools/movinggas/movinggas.cpp)
   target_link_libraries(movinggas PRIVATE blackhole_core)
@@ -572,7 +576,7 @@ if(PL_BUILD_APP)
       set_tests_properties(ui_orbit PROPERTIES TIMEOUT 900 COST 312)
       # ui_orbit_card: the Orbit Lab on the card against the processor (Saturn's rings, the fly-by, the lines) and against the formulas (the rings' slant, the air's edge, the night side)
       add_test(NAME ui_orbit_card COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit_card
-               check_orbit_ui.py:rings check_orbit_ui.py:flyby check_orbit_ui.py:cardlines check_orbit_ui.py:ringslant check_orbit_ui.py:airedge check_orbit_ui.py:nightside)
+               check_orbit_ui.py:rings check_orbit_ui.py:flyby check_orbit_ui.py:cardlines check_orbit_ui.py:ringslant check_orbit_ui.py:airedge check_orbit_ui.py:nightside check_orbit_ui.py:planets)
       set_tests_properties(ui_orbit_card PROPERTIES TIMEOUT 900 COST 435)
       # ui_atom: the Atom Lab: the element chip, the toolbar, the honest captions; the Slice's Glow dots on the card against the processor
       add_test(NAME ui_atom COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom

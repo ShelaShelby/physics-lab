@@ -480,9 +480,14 @@ int main(int argc, char** argv) {
     if (const char* name = SDL_getenv("PL_SELECT")) {
         for (const auto& b : app.sys.bodies)
             if (b.name == name) app.view.select({orbit::Selection::Body, b.id}, true);
-        if (std::string(name) == "moon:Earth")    // for automatic checks: select Earth's Moon (its card)
+        if (std::string(name).rfind("moon:", 0) == 0) {   // for automatic checks: "moon:Earth" selects Earth's Moon (its card); 0.77.0: "moon:Jupiter:1" a planet's moon by its index
+            const std::string rest = std::string(name).substr(5);
+            const std::size_t colon = rest.find(':');
+            const std::string planet = rest.substr(0, colon);
+            const int idx = colon == std::string::npos ? 0 : std::atoi(rest.c_str() + colon + 1);
             for (const auto& b : app.sys.bodies)
-                if (b.name == "Earth") { app.set.moons = true; app.view.select({orbit::Selection::Moon, b.id, 0}, true); }
+                if (b.name == planet) { app.set.moons = true; app.view.select({orbit::Selection::Moon, b.id, idx}, true); }
+        }
         if (std::string(name).rfind("far:", 0) == 0) { app.set.far = true; app.view.select({orbit::Selection::Far, 0, orbit::farIndexOf(std::string(name).substr(4))}, true); }   // e.g. far:sgra
     }
     if (const char* z = SDL_getenv("PL_ZOOM")) { ui::setZoom(app, std::atof(z)); app.fitStart = -1; }

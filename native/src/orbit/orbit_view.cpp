@@ -11,6 +11,7 @@
 #include "format.h"
 #include "imgui.h"
 #include "alphacen.h"
+#include "far_occlusion.h"
 #include "kepler.h"
 #include "lines_check.h"
 #include "orbit_lines.h"
@@ -605,6 +606,10 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     // ---- far-away things: real stars, clusters, the galactic centre and the Voyagers at their true direction and distance ----
     // (0.75.0: drawn here, before the Sun, the orbits and the bodies: they are far beyond all of them, so with the sky's lens a star behind Saturn is hidden by it)
     bool massShown = false;                               // a star's mass label is on screen: the note about masses is shown too
+    // 0.77.0 (outside review item 4): drawn after the bodies (below, drawFar()), each marker hidden by a ball in front of it or dimmed by a ring's own transmission
+    // (orbit/far_occlusion.h). Until 0.76.0 they were drawn first and their labels last, so a marker and its name showed through Saturn's ball and rings.
+    FarOccluders farOcc;
+    const auto drawFar = [&]() {
     if (set.far) {
         const auto fmtLyS = [](double v) { return fmtLy(v); };
         // 0.75.0: in front of the camera and on the picture (until 0.74.0: depth - cd < 0.9 D, the old camera's distance)
@@ -630,10 +635,16 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             }
             const Q q = proj(f.pos.x, f.pos.y, f.pos.z);   // 0.75.0: every far thing by the one camera (3D: its direction from the camera, with the sky's stars)
             if (!inView(q)) continue;
-            if (probe) { R.disc(q.first, q.second, 2.6, Color{1, 1, 1, 1}); R.ring(q.first, q.second, 6, 1, gold); }
-            else if (f.kind == "bh") { R.disc(q.first, q.second, 5.3, Color{1, 1, 1, 1}); R.disc(q.first, q.second, 4.5, Color{0, 0, 0, 1}); }
-            else if (f.kind == "object") { R.ring(q.first, q.second, 6, 1, hexColor(marks::kObject)); R.disc(q.first, q.second, 1.6, hexColor(marks::kObject)); }
-            else { const double bv = farBV(f.far->key); const std::array<int, 3> c = std::isnan(bv) ? std::array<int, 3>{255, 255, 255} : bvRGB(bv); R.disc(q.first, q.second, 2.8, rgba(c[0], c[1], c[2])); R.ring(q.first, q.second, 6, 1, Color{1, 1, 1, 0.45f}); }
+            const double seenD = farSeen(farOcc, q.first, q.second);   // 0.77.0: behind a ball (0) or a ring (its transmission)
+            static const bool logFar = std::getenv("PL_LOG_FAR") != nullptr;   // (for automatic checks: each far marker's place and the share of it seen)
+            if (logFar) std::printf("PLFAR %s %.2f %.2f %.6f\n", f.key.c_str(), q.first, q.second, seenD);
+            if (seenD < 0.01) continue;                    // hidden: no marker, no name, no click
+            const float seen = static_cast<float>(seenD);
+            const auto dim = [seen](Color c) { return c.withAlpha(c.a * seen); };
+            if (probe) { R.disc(q.first, q.second, 2.6, dim(Color{1, 1, 1, 1})); R.ring(q.first, q.second, 6, 1, dim(gold)); }
+            else if (f.kind == "bh") { R.disc(q.first, q.second, 5.3, dim(Color{1, 1, 1, 1})); R.disc(q.first, q.second, 4.5, dim(Color{0, 0, 0, 1})); }
+            else if (f.kind == "object") { R.ring(q.first, q.second, 6, 1, dim(hexColor(marks::kObject))); R.disc(q.first, q.second, 1.6, dim(hexColor(marks::kObject))); }
+            else { const double bv = farBV(f.far->key); const std::array<int, 3> c = std::isnan(bv) ? std::array<int, 3>{255, 255, 255} : bvRGB(bv); R.disc(q.first, q.second, 2.8, dim(rgba(c[0], c[1], c[2]))); R.ring(q.first, q.second, 6, 1, dim(Color{1, 1, 1, 0.45f})); }
             if (on) hiRing(q.first, q.second, 11);
             if (f.kind == "bh") {
                 labels.push_back({"Galactic centre · " + fmtLyS(f.ly) + " light years", q.first, q.second - 11, on, false, true, true});
@@ -648,6 +659,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             hits_.push_back({s, q.first, q.second, 10});
         }
     }
+    };
 
 
     {   // habitable zone: a faint green band
@@ -877,6 +889,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             drawnOther = giantDrawnBands(rs.bands, rs.eqKm, r);   // 0.75.2: orbit/ring_bands.h
         }
         const std::vector<RingBand>& drawn = *drawnP;
+        if (back) farOcc.rings.push_back({fr, drawn});   // 0.77.0: what dims a far marker behind the rings
         // 0.64.0: Saturn's rings on the graphics card (Vulkan; render/shaders.h kRingsFS: the same chords, bands and shadow per pixel) once its start-up check passed
         if (rs.profile && drawRingsOnCard(R, fr, drawn, back, W, H)) return;
         for (const RingBand& b : drawn) {
@@ -957,6 +970,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
     if (sunTiny) R.ring(star.first, star.second, 7, 1.6, sunCol.withAlpha(0.9f));   // smaller than a pixel: a ring shows where it is
     if (sel.kind == Selection::Star) hiRing(star.first, star.second, srd + (sunTiny ? 8 : 6));
     hits_.push_back({{Selection::Star}, star.first, star.second, std::max(srd, sunTiny ? 10.0 : 0.0)});
+    if (srd > 1) { FarBall fb; fb.x = star.first; fb.y = star.second; fb.r = srd; farOcc.balls.push_back(fb); }   // 0.77.0: the Sun hides what is behind it
 
     bool baryShown = false; Q baryQ{};                    // 0.46.7: where the barycentre's crosshair is, so the Sun's label keeps off it
     {   // the barycentre: a crosshair in a ring (hidden while it would sit on the Sun's centre)
@@ -1126,10 +1140,13 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
                             if (nb < 8 && bd.tau >= 0.01 && (bd.outerKm - bd.innerKm) / ringsHere.eqKm >= 0.005) { rb[3 * nb] = float(bd.innerKm / ringsHere.eqKm); rb[3 * nb + 1] = float(bd.outerKm / ringsHere.eqKm); rb[3 * nb + 2] = float(bd.tau); nb++; }
                     const render::Renderer2D::PlanetLight pl = planetLight(b);
                     R.planet(q.first, q.second, rad, ball, sun.x, sun.y, sun.z, sc.K, render::mapForBody(b.name), nb ? rb : nullptr, nb, 1.0, polarRatio(b.name.c_str()), false, &pl);   // 0.27: its real shape (orbit/shapes.h)
+                    { FarBall fb; fb.x = q.first; fb.y = q.second; fb.r = rad; fb.hasK = true; std::copy(sc.K, sc.K + 9, fb.K); fb.sz = polarRatio(b.name.c_str()); farOcc.balls.push_back(fb); }   // 0.77.0
                 }
                 spinAxis(b.name, sc, q.first, q.second, rad, false);
-            } else
+            } else {
                 R.sphere(q.first, q.second, rad, ball, sun.x, sun.y, sun.z);   // lit from the Sun
+                if (rad > 1) { FarBall fb; fb.x = q.first; fb.y = q.second; fb.r = rad; farOcc.balls.push_back(fb); }   // 0.77.0: a ball drawn without its spin (a circle)
+            }
             drawRings(ringsHere, spins ? &sc : nullptr, q, ringR, sun, sunElev, false);
         }
         if (tiny) {   // 0.52.1: in its measured colour where it has one (render::pointColour), as its ball close up; it was the hand-picked marker colour
@@ -1233,9 +1250,12 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             if (on) drawnSel_ = {true, mp.first - (W / 2 + fx + cx), mp.second - (H / 2 + cy), pc.first - (W / 2 + fx + cx), pc.second - (H / 2 + cy)};
             exag_[{b.id, static_cast<int>(j)}] = dW / aM;
             hits_.push_back({{Selection::Moon, b.id, static_cast<int>(j)}, mp.first, mp.second, std::max(md, mtiny ? 9.0 : 0.0)});
+            if (!mtiny && md > 1) { FarBall fb; fb.x = mp.first; fb.y = mp.second; fb.r = md; farOcc.balls.push_back(fb); }   // 0.77.0
             if (here) { labels.push_back({m.name, mp.first, mp.second - md - 4, on, true, false}); labels.back().prio = 4; }
         }
     }
+
+    drawFar();   // 0.77.0: the far markers, after every ball and ring that can hide them
 
     // ---- belt names (clickable) ----
     struct BeltLabel { std::string name; double x, y; bool on; };

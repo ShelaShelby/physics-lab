@@ -386,6 +386,10 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             V.setMat3T(VkDraw2D::kPlanet, "uK", sg.K);
             V.setI(VkDraw2D::kPlanet, "uMode", &mode, 1);
             V.setI(VkDraw2D::kPlanet, "uLunar", &lunar, 1);
+            const float albedoK = sg.mode == 1 ? sg.albedoK : 1.0f;   // 0.77.0 (the sky, modes 2 and 3, does not read it)
+            V.setF(VkDraw2D::kPlanet, "uAlbedoK", &albedoK, 1);
+            const int clouds = sg.mode == 1 && sg.map == static_cast<int>(Map::Earth) ? 1 : 0;   // 0.77.0: Earth's map carries its clouds in alpha
+            V.setI(VkDraw2D::kPlanet, "uClouds", &clouds, 1);
             const float tw = static_cast<float>(std::max(texW_[sg.map], 1));
             // the mipmap level: texels per pixel. A planet: across its middle; the sky: along the galactic equator (as end())
             const float lod = (sg.mode == 2 || sg.mode == 3) ? std::max(0.0f, std::log2(tw / 6.2831853f / std::max(sg.r, 1.0f))) : std::max(0.0f, std::log2(tw / (3.14159f * std::max(2.0f * sg.r, 1.0f))));

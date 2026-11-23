@@ -34,6 +34,8 @@
 #include "orbit/iau_rotation.h"
 #include "render/ellipsoid.h"
 #include "render/shading.h"
+#include "orbit/far_occlusion.h"
+#include "orbit/saturn_profile.h"
 #include "render/shaders.h"
 #include "orbit/sky.h"
 #include "orbit/spin.h"
@@ -927,6 +929,133 @@ static void testAlphaCen073() {
         }
     }
 }
+// 0.77.0 (outside review, item 1): each body's ball, seen fully lit, has its measured geometric albedo. The CPU shading (render/shading.h: the map
+// decoded to linear light, albedoScaled by the app's factor, times the light factor) is averaged over the disc as a photometer sees it, and over
+// 160 directions spread evenly over the sphere (a Fibonacci set): one albedo per body, not one face. Brightness = luminance Y (linear sRGB, Rec. 709
+// weights) for the V band. Lambert: the light factor at phase 0 is mu = cos e (the Sun behind the viewer); the Moon: McEwen's law, 1 at phase 0.
+// The references are typed here from the sources: Mallama, Krobusek & Pavlov 2017 (Icarus 282, 19), Table 7, V column (checked against the saved
+// PDF, data/planets/mallama_2017_arxiv1609.05048.pdf); the NSSDC fact sheets saved on 23 Nov 2026 (data/nssdc/*_2026-11-23.html).
+static double fullPhaseAlbedo(render::Map m, double k, bool lunar, bool earth = false, int nDir = 160, int N = 96) {
+    render::MapImage im;
+    if (!render::decodeMap(m, im)) return -1;
+    double lut[256]; for (int i = 0; i < 256; i++) lut[i] = render::srgbDecode(i / 255.0);
+    const double kPi = 3.14159265358979323846;
+    double sum = 0;
+    for (int d = 0; d < nDir; d++) {
+        const double z = 1 - (d + 0.5) * 2.0 / nDir, rr = std::sqrt(1 - z * z), ph = d * kPi * (3 - std::sqrt(5.0));
+        const double v[3] = {rr * std::cos(ph), rr * std::sin(ph), z};
+        double a[3] = {std::fabs(v[2]) < 0.9 ? 0.0 : 1.0, 0, std::fabs(v[2]) < 0.9 ? 1.0 : 0.0};
+        double e1[3] = {a[1] * v[2] - a[2] * v[1], a[2] * v[0] - a[0] * v[2], a[0] * v[1] - a[1] * v[0]};
+        const double l1 = std::sqrt(e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]);
+        for (double& c : e1) c /= l1;
+        const double e2[3] = {v[1] * e1[2] - v[2] * e1[1], v[2] * e1[0] - v[0] * e1[2], v[0] * e1[1] - v[1] * e1[0]};
+        double disc = 0; int n = 0;
+        for (int j = 0; j < N; j++)
+            for (int i = 0; i < N; i++) {
+                const double x = (i + 0.5) * 2.0 / N - 1, y = (j + 0.5) * 2.0 / N - 1, r2 = x * x + y * y;
+                if (r2 >= 1) continue;
+                const double mu = std::sqrt(1 - r2);
+                const double b[3] = {x * e1[0] + y * e2[0] + mu * v[0], x * e1[1] + y * e2[1] + mu * v[1], x * e1[2] + y * e2[2] + mu * v[2]};
+                double u = 0, w = 0;
+                render::planetUV(m, std::atan2(b[1], b[0]), std::atan2(b[2], std::hypot(b[0], b[1])), u, w);
+                const int px = std::min(im.w - 1, int(u * im.w)), py = std::min(im.h - 1, std::max(0, int(w * im.h)));
+                const uint8_t* q = &im.rgba[4 * (std::size_t(py) * im.w + px)];
+                double c[3] = {lut[q[0]], lut[q[1]], lut[q[2]]};
+                render::albedoScaled(c, k);
+                if (earth) {   // Earth: its clouds (the map's alpha) and its air (earthAirLight; the Sun behind you: the scattering angle 180 degrees)
+                    render::cloudsOver(c, q[3] / 255.0);
+                    double e[3];
+                    for (int ch = 0; ch < 3; ch++) e[ch] = render::earthAirLight(ch, c[ch], mu, mu, -1.0);
+                    disc += 0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2];
+                    n++;
+                    continue;
+                }
+                const double f = lunar ? render::mcewenLunar(mu, mu, 0.0) : mu;
+                disc += (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) * f;
+                n++;
+            }
+        sum += disc / n;
+    }
+    return sum / nDir;
+}
+// 0.77.0 (outside review item 4): a far marker behind Saturn's ball is not drawn; one behind the B ring is dimmed by the ring's own transmission. The reference
+// for the ring: Cassini's measured normal optical depths (orbit/saturn_profile.h, UVIS beta Cen 2008) through exp(-tau / mu), averaged over the 10 km
+// measurements in the drawn band, mu the sine of the view's slant to the ring plane (on the flat map |pz| of the unit pole: ring_draw.h ringMu).
+static void testFarOcclusion077() {
+    namespace rg = orbit::rings;
+    const double eqKm = 60268, r = 150, x = 400, y = 300;
+    const double pl[3] = {0.0, 0.94, 0.34}, pn = std::sqrt(pl[0] * pl[0] + pl[1] * pl[1] + pl[2] * pl[2]);
+    orbit::RingFrame f = orbit::ringFrame(x, y, r, pl[0], pl[1], pl[2], nullptr, 1.0, 0, 0, 1);
+    f.mu0 = 0.3; f.sunlit = true;
+    orbit::FarOccluders occ;
+    orbit::FarBall ball; ball.x = x; ball.y = y; ball.r = r;
+    occ.balls.push_back(ball);
+    occ.rings.push_back({f, orbit::saturnDrawnBands(eqKm, r)});
+    check(orbit::farSeen(occ, x, y) == 0.0, "far marker exactly behind Saturn's ball: not drawn (seen 0)");
+    check(orbit::farSeen(occ, x + 0.6 * r, y - 0.3 * r) == 0.0, "far marker behind Saturn's ball off its middle: not drawn");
+    const double mu = std::fabs(pl[2] / pn);
+    for (double rho : {1.55, 1.60, 1.70}) {   // the B ring: 92,000 - 117,580 km (1.53 - 1.95 radii); its inner part is the least opaque
+        double q[3];
+        for (int k = 0; k < 3; k++) q[k] = rho * f.e1[k];
+        double sx = 0, sy = 0;
+        check(orbit::ringOnScreen(f, q, sx, sy), "B ring point on the screen");
+        check(std::hypot(sx - x, sy - y) > r, "the B ring point is outside the ball's disc");
+        near(orbit::ringMu(f, q), mu, 1.0, 1e-9, "flat map: the ring's slant is |pz| of the unit pole");
+        const orbit::RingBand* band = nullptr;
+        for (const auto& b : occ.rings[0].bands) if (rho >= b.a0 && rho <= b.a1) band = &b;
+        check(band != nullptr && band->cover > 0.9 && band->cover <= 1.0, "a drawn B ring band under the marker (its cover: the share of its drawn width that is its own)");
+        if (!band) continue;
+        double sum = 0; int n = 0;
+        for (int i = 0; i < rg::saturnProfileCount(); i++) {
+            const double km = rg::saturnProfileKm(i);
+            if (km >= band->a0 * eqKm && km <= band->a1 * eqKm) { sum += std::exp(-rg::saturnProfileTau(i) / mu); n++; }
+        }
+        check(n > 0, "Cassini measurements in the band");
+        const double want = n ? 1 - band->cover * (1 - sum / n) : -1, got = orbit::farSeen(occ, sx, sy);
+        check(got < 1, "far marker behind the B ring: dimmed (" + std::to_string(got) + ")");
+        near(got, want, 1.0, 1e-4, "far marker behind the B ring at " + std::to_string(rho) + " radii: seen share = 1 - cover (1 - mean exp(-tau / mu)) of Cassini's measurements there (" + std::to_string(want) + ")");
+    }
+    double q[3]; for (int k = 0; k < 3; k++) q[k] = 3.0 * f.e1[k];
+    double sx = 0, sy = 0; orbit::ringOnScreen(f, q, sx, sy);
+    near(orbit::farSeen(occ, sx, sy), 1.0, 1.0, 1e-12, "far marker beside Saturn, beyond its rings: fully seen");
+}
+
+static void testAlbedo077() {
+    using render::Map;
+    const struct { Map m; double p; bool lunar; const char* src; } ref[] = {
+        {Map::Mercury, 0.142, false, "Mallama 2017 Table 7 V"}, {Map::Mars, 0.170, false, "Mallama 2017 Table 7 V"}, {Map::Jupiter, 0.538, false, "Mallama 2017 Table 7 V"},
+        {Map::Saturn, 0.499, false, "Mallama 2017 Table 7 V"}, {Map::Uranus, 0.488, false, "Mallama 2017 Table 7 V"}, {Map::Neptune, 0.442, false, "Mallama 2017 Table 7 V"},
+        {Map::Moon, 0.12, true, "NSSDC Moon fact sheet"}, {Map::Pluto, 0.52, false, "NSSDC Pluto fact sheet"}, {Map::Charon, 0.42, false, "NSSDC Pluto fact sheet"},
+        {Map::Io, 0.62, false, "NSSDC Jovian satellites"}, {Map::Europa, 0.68, false, "NSSDC Jovian satellites"}, {Map::Ganymede, 0.44, false, "NSSDC Jovian satellites"},
+        {Map::Callisto, 0.19, false, "NSSDC Jovian satellites"}, {Map::Rhea, 0.7, false, "NSSDC Saturnian satellites"}, {Map::Triton, 0.72, false, "NSSDC Neptunian satellites"},
+        {Map::Phobos, 0.07, false, "NSSDC Mars fact sheet"},
+    };
+    // the shading law itself: a uniform white Lambert ball has p = 2/3 (Madhusudhan & Burrows 2012, ApJ 747, 25, Sec. 3.1: Ag = 2/3 omega)
+    { double c[3] = {0.6, 0.6, 0.6}; render::albedoScaled(c, 2.0); near(c[0], 1.0, 1.0, 1e-12, "albedoScaled: a grey pushed over 1 is clipped to 1"); }
+    { double c[3] = {0.5, 0.25, 0.1}; render::albedoScaled(c, 4.0); near(c[1] / c[0], 0.5, 1.0, 1e-12, "albedoScaled: a clipped pixel keeps its hue"); near(c[0], 1.0, 1.0, 1e-12, "albedoScaled: its largest channel is 1"); }
+    {   // 0.77.0 item 2: Earth's full disc with its clouds and air, against its measured geometric albedo (Mallama 2017 Table 7 V: 0.434). Reported, not a limit:
+        // the ground alone gives far less; clouds and air bring it up (printed for REPORT.md).
+        const double ground = fullPhaseAlbedo(Map::Earth, 1.0, false, false, 64, 48), full = fullPhaseAlbedo(Map::Earth, 1.0, false, true, 64, 48);
+        std::printf("  Earth fully lit: ground alone %.3f, with clouds and air %.3f (measured 0.434, Mallama 2017 Table 7 V)\n", ground, full);
+        check(full > ground + 0.05, "Earth: the clouds and the air brighten the fully lit disc");
+    }
+    for (const auto& r : ref) {
+        const render::MapAlbedo* a = render::mapAlbedo(r.m);
+        const std::string name = render::mapInfo(r.m).file;
+        check(a != nullptr, name + ": has a measured albedo");
+        if (!a) continue;
+        near(a->p, r.p, 1.0, 1e-9, name + ": the app's albedo is the source's (" + r.src + ")");
+        const double got = fullPhaseAlbedo(r.m, a->factor, r.lunar);
+        if (a->reached) near(got, r.p, 1.0, 0.01, name + ": the fully lit ball's geometric albedo " + std::to_string(got) + " = " + std::to_string(r.p) + " (" + r.src + ") within 1 %");
+        else {
+            // no factor can reach it (the clipped map's ceiling is lower): the plain factor p / (2/3 <Y>), the ball darker than measured, by the stated amount
+            check(got < r.p, name + ": not reachable, drawn darker than measured (" + std::to_string(got) + " < " + std::to_string(r.p) + ")");
+            near(got, a->drawnP, 1.0, 0.01, name + ": the drawn albedo is the one the app states (" + std::to_string(a->drawnP) + ")");
+            if (r.p > 2.0 / 3.0) check(got <= 2.0 / 3.0 + 1e-6, name + ": above 2/3, which no Lambert ball can reach");
+        }
+    }
+}
+
 
 int main() {
     testCamera075();
@@ -937,6 +1066,8 @@ int main() {
     testIauMoons050();
     testMoonOrientation050();
     testMapColours050();
+    testAlbedo077();
+    testFarOcclusion077();
     testStarBrightness050();
     testStarColours050();
     testShading050();

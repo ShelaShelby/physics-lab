@@ -529,6 +529,7 @@ void setupScene(AppState& app, BenchState& b, int idx) {
         case K::OrbitRocks8CpuRocks: orbitStress(app); app.set.gpuRocks = false; break;
         case K::OrbitSaturn: orbitClose(app, "Saturn", kSaturnZoom); break;
         case K::OrbitEarth: orbitClose(app, "Earth", kEarthZoom); break;
+        case K::OrbitEarthClouds: orbitClose(app, "Earth", kEarthZoom); break;   // 0.77.0
         case K::OrbitRealFast: orbitRealFast(app); break;
         case K::OrbitSky: orbitSky(app); break;
         case K::OrbitJourney: orbitJourney(app); break;
@@ -584,7 +585,7 @@ void frameScene(AppState& app, BenchState& b, int idx, double u, double dt) {
     using K = app::BenchKind;
     const double warm = b.run->warmupS(), meas = b.measure;
     switch (t.kind) {
-        case K::OrbitSaturn: case K::OrbitSky:
+        case K::OrbitSaturn: case K::OrbitSky: case K::OrbitEarthClouds:
             app.view.yaw = 0.6 + 0.5 * u;                                        // turning 0.5 rad a second, tilting with it
             app.view.pitch = 1.0 + 0.3 * std::sin(0.7 * u);
             break;
@@ -772,7 +773,7 @@ std::string sceneLine(AppState& app, BenchState& b, int idx) {
     char z[200];
     switch (t.kind) {
         case K::Atom: return atom::benchShortText(app.atom);
-        case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitSky: case K::OrbitFlyby:
+        case K::OrbitSaturn: case K::OrbitEarth: case K::OrbitEarthClouds: case K::OrbitSky: case K::OrbitFlyby:
             std::snprintf(z, sizeof z, "Orbit Lab: zoom %.2f (log10), picture %.0f x %.0f points", app.set.zoom, app.canvasW, app.canvasH);
             return z;
         case K::OrbitAlphaCen:

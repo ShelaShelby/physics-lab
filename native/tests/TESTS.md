@@ -18,6 +18,7 @@ Rules for new checks are in CLAUDE.md (Build and test). Git keeps every deleted 
 | check_molecule.py:cardpic, cardpiclight | 172, 86 | KEEP | ui_molecule* | GPU vs CPU: the Density cloud's pictures (split from card) |
 | check_blackhole.py:sky | 112 | KEEP | ui_blackhole_sky | GPU vs CPU: the bent sky per pixel against the double-precision reference (split from precision) |
 | check_blackhole.py:precisioncard | 74 | KEEP | ui_blackhole_sky | GPU vs CPU: the card's light paths against the double-precision reference (split from precision) |
+| check_orbit_ui.py:planets | 22 (new in 0.77.0) | KEEP | ui_orbit_card | GPU vs CPU: six balls with maps (measured brightness, Earth's clouds and air) against tests/planet_picture.cpp |
 
 ## The groups in 0.76.0 (seconds, build machine, 4 at a time)
 

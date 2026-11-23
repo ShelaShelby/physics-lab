@@ -85,6 +85,13 @@ std::vector<BhLearnSection> blackholeLearnSections() {
         p("<b>The model's limits.</b> Flat, thin, opaque, each face a perfect black body, steady. No turbulence, hot spots, jets or wind; no light from inside the inner "
           "edge; no light of the disc falling back on itself; each face shines the same in every direction. The gas orbits with the hole's spin, in its plane. The disc lies in a plane the lab chose (parallel to the Earth's orbit, the gas going round as the planets do): its direction against the sky "
           "is not something measured. Sagittarius A* and M87* do not have such a disc; on them the lab labels it as a what-if.") +
+        // 0.77.0 (outside review item 6): two choices the model makes and did not say. Both papers are named in Li et al. 2005 (ApJS 157, 335, arXiv:astro-ph/0411583,
+        // saved: data/blackhole/li2005_arxiv0411583.pdf): its Appendix D (limb-darkened emission, citing Chandrasekhar 1950) and Sec. 2 (f_col = T_col / T_eff, after
+        // Shimura & Takahara 1995, ApJ 445, 780). The disc is not changed (ROADMAP).
+        p("<b>Two simplifications in the light.</b> Each face shines as a perfect black body at its own temperature, equally in every direction. A real hot disc "
+          "has an atmosphere where electrons scatter the light. That darkens its face towards the edge, seen at a slant (the law for an atmosphere that scatters off "
+          "electrons is Chandrasekhar's, in his book Radiative Transfer, 1950). It also makes the light come out harder, bluer than a black body at the same "
+          "temperature (a colour-correction factor, Shimura and Takahara 1995). The lab draws neither.") +
         p("<b>Not drawn:</b> your own hovering shifts all the light you see, sky and disc alike, bluer and brighter; the card gives that as a number, as for the sky.")});
     {   // 0.55.3: the Film look, one row per choice (blackhole/looks.h filmRows: the physics, the film's choice, the paper's reason, where in the paper)
         std::string h = p("Controls › Look › <b>Film</b> draws the choices the makers of the film Interstellar made for its black hole, as James, von Tunzelmann, Franklin and "

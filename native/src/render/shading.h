@@ -29,6 +29,20 @@ inline double srgbEncode(double l) {
 // Returns the sRGB-encoded value drawn on the screen.
 inline double shadeEncoded(double srgb, double lit, double space = 0) { return srgbEncode(srgbDecode(space) + srgbDecode(srgb) * std::max(lit, 0.0)); }
 
+// 0.77.0: a map's linear colour scaled to the body's measured brightness (render/planet_maps.h mapAlbedo): each channel times the factor k, then a
+// pixel above 1 in any channel divided by its largest channel (its hue kept, its brightness clipped). The C++ twin of kPlanetFS's uAlbedoK step.
+inline void albedoScaled(double rgb[3], double k) {
+    for (int c = 0; c < 3; c++) rgb[c] *= k;
+    const double mx = std::max(1.0, std::max(rgb[0], std::max(rgb[1], rgb[2])));
+    for (int c = 0; c < 3; c++) rgb[c] /= mx;
+}
+
+// 0.77.0: Earth's clouds over its ground, in linear light: a cover a (0..1, the cloud map's byte / 255) of white cloud over the ground's colour,
+// rho' = rho (1 - a) + a. The rule that best rebuilds NASA's own composite of the same two layers (Blue Marble 2002, land_ocean_ice_cloud_2048.jpg,
+// from cloud_combined_2048.jpg: REPORT 0.77.0). Flat clouds of one moment: no height, no shadows; lit by the Sun and seen through the air like the ground.
+// The C++ twin of kPlanetFS's uClouds step.
+inline void cloudsOver(double rgb[3], double a) { for (int c = 0; c < 3; c++) rgb[c] = rgb[c] * (1 - a) + a; }
+
 // The light factor of a ball's pixel: n the unit surface normal, L the unit direction to the Sun (screen frame: right, up, towards you).
 inline double lambertLit(const double n[3], const double L[3]) { return std::max(0.0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]); }
 

@@ -3,6 +3,7 @@
 #   check_orbit_ui.py <PhysicsLab binary> <work folder> [part,part,...]
 #   airedge   0.50: just outside Earth's limb the picture is the sky (no blue rim of air)
 #   nightside 0.50: Jupiter's night side is the sky's colour (no ambient light)
+#   planets   0.77.0: the GPU picture of planets and moons with maps (their measured brightness) against the CPU twin (tests/planet_picture.cpp)
 #   rings, ringslant, flyby, cardlines: Saturn's rings, the fly-by and the lines on the card against the processor or the formulas (see the parts)
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -71,6 +72,59 @@ def body_shot(binary, work, name, sel, zoom, extra=None):
 
 def near(a, b, tol=4):
     return all(abs(p - q) <= tol for p, q in zip(a, b))
+
+def part_planets(binary, work):
+    # 0.77.0 (outside review item 1): each map is scaled to its body's measured geometric albedo (render/planet_maps.h mapAlbedo) in kPlanetFS. The GPU's
+    # picture of the ball against the CPU twin (render/shading.h albedoScaled, ellipsoid.h; tests/planet_picture.cpp): at most 1 % of the pixels inside
+    # 0.95 of the outline differ by more than 8 levels in a channel. Bodies without air (ring shadows and eclipses are in the twin): Jupiter (clipped bright zones), Mars, the Moon
+    # (McEwen's law, a factor below 1), Europa (a factor its ceiling cannot reach), Pluto, Earth (its clouds and air, 0.77.0 item 2). The axis line and the label may cross a few pixels.
+    import subprocess
+    tool = os.path.join(os.path.dirname(os.path.abspath(binary)), "planet_picture")
+    check(os.path.exists(tool), "the CPU twin planet_picture is built next to the app")
+    if not os.path.exists(tool):
+        return
+    for sel, zoom in (("Jupiter", "3.4"), ("Mars", "4.5"), ("moon:Earth", "6"), ("moon:Jupiter:1", "7"), ("Pluto", "6"), ("Earth", "4.5")):
+        env = {"PL_NEWUI": "on", "PL_SELECT": sel, "PL_ZOOM": zoom, "PL_LOG_PLANET": "1", "PL_LOG_BODYPX": "1", "PL_SKYOFF": "1"}
+        r = run_app(binary, work, "planets_" + sel.replace(":", "_"), env, frames=40)
+        rows = r.out.splitlines()
+        lines = [rows[i].split() + rows[i + 1].split()[1:] for i in range(len(rows) - 1) if rows[i].startswith("PLPLANET ") and rows[i + 1].startswith("PLPLANETX")]
+        # the selected body: the biggest ball drawn in the last frame with this body's map
+        want = {"Jupiter": 5, "Mars": 4, "moon:Earth": 3, "moon:Jupiter:1": 11, "Pluto": 9, "Earth": 2}[sel]
+        mine = [l for l in lines[len(lines) * 3 // 4:] if int(l[1]) == want and 0 <= float(l[2]) < 1280 and 0 <= float(l[3]) < 800]
+        mine.sort(key=lambda l: float(l[4]))
+        check(bool(mine), f"{sel}: the app logged its ball ({len(lines)} PLPLANET lines)")
+        if not mine:
+            continue
+        f = mine[-1][1:]
+        check(float(f[3]) > 60, f"{sel}: drawn big enough to compare ({f[3]} px)")
+        out = os.path.join(work, "planet_cpu_" + sel.replace(":", "_") + ".bin")
+        p = subprocess.run([tool, out] + f, capture_output=True, text=True)
+        check(p.returncode == 0, f"{sel}: planet_picture ran ({p.stderr.strip()})")
+        if p.returncode != 0:
+            continue
+        d = open(out, "rb").read()
+        nl = d.index(b"\n")
+        _, w, h, x0, y0 = d[:nl].split()
+        w, h, x0, y0 = int(w), int(h), int(x0), int(y0)
+        px = d[nl + 1:]
+        bmp = Bmp(r.bmp)
+        n = bad = 0
+        worst = 0
+        for j in range(h):
+            for i in range(w):
+                o = 4 * (j * w + i)
+                if px[o + 3] == 0:
+                    continue
+                x, y = x0 + i, y0 + j
+                if not (0 <= x < bmp.w and 0 <= y < bmp.h):
+                    continue
+                g = bmp.px(x, y)
+                dmax = max(abs(g[c] - px[o + c]) for c in range(3))
+                n += 1
+                worst = max(worst, dmax)
+                bad += dmax > 8
+        check(n > 5000 and bad <= 0.01 * n, f"{sel}: GPU against CPU, {bad} of {n} pixels differ by more than 8 levels (at most 1 %; largest {worst})")
+        print(f"planets {sel}: {bad} of {n} pixels over 8 levels, largest {worst}")
 
 def part_airedge(binary, work):
     # review item 2: the blue ring from 0.96 R to 1.16 R round Earth (about 1,100-1,300 km on screen, on the night side too) had no source; the air's scale height is 8.5 km
@@ -352,7 +406,7 @@ def main():
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
     want = lambda n: only is None or n in only
     os.makedirs(work, exist_ok=True)
-    for name, fn in (("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings), ("ringslant", part_ringslant), ("flyby", part_flyby), ("cardlines", part_cardlines)):
+    for name, fn in (("airedge", part_airedge), ("nightside", part_nightside), ("planets", part_planets), ("rings", part_rings), ("ringslant", part_ringslant), ("flyby", part_flyby), ("cardlines", part_cardlines)):
         if want(name):
             fn(binary, work)
     print(f"{checks} checks, {fails} failed")

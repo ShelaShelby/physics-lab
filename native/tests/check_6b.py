@@ -39,7 +39,7 @@ SCENES = {
     "atom.slice_all_drag": "Og-294, Slice, every electron, Whole atom, Shells enlarged, Classic, 240000 dots", "atom.slice_dirac_drag": "U-238, Slice, one electron, 4f, Classic, 48000 dots",
     "atom.side_all_glow": "Og-294, Cloud, every electron, Whole atom, Shells enlarged, Glow, 240000 dots", "atom.side_all_classic": "Og-294, Cloud, every electron, Whole atom, Shells enlarged, Classic, 240000 dots",
     "atom.slice_glow_ultra": "U-238, Slice, one electron, 4f, Glow, 48000 dots", "atom.slice_classic_ultra": "U-238, Slice, one electron, 4f, Classic, 48000 dots",
-    "orbit.saturn": "Orbit Lab: zoom 4.10", "orbit.earth": "Orbit Lab: zoom 5.14",   # (0.75.0, on purpose: the closest zoom keeps the camera 1.5 Earth radii from its middle: 5.5 asked, 5.14 drawn) "orbit.real_fast": "the belts' rocks", "orbit.sky": "Orbit Lab: zoom 0.00",
+    "orbit.saturn": "Orbit Lab: zoom 4.10", "orbit.earth": "Orbit Lab: zoom 5.14", "orbit.earth_clouds": "Orbit Lab: zoom 5.14",   # (0.75.0, on purpose: the closest zoom keeps the camera 1.5 Earth radii from its middle: 5.5 asked, 5.14 drawn) "orbit.real_fast": "the belts' rocks", "orbit.sky": "Orbit Lab: zoom 0.00",
     "orbit.journey": "Journey", "atom.all_enlarged": "Og-294, Cloud 3D, every electron, Whole atom, Shells enlarged, Glow, 240000 dots",
     "atom.all_true_zoomed": "Og-294, Cloud 3D, every electron, Whole atom, True scale, Glow, 240000 dots",
     "atom.all_one_orbital": "Og-294, Cloud 3D, every electron, One orbital 5f", "atom.all_classic": "Og-294, Cloud 3D, every electron, Whole atom, Shells enlarged, Classic, 240000 dots",

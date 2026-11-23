@@ -1,0 +1,18 @@
+body       map mean Y  albedo p  law      plain k  factor   drawn p  clipped px %  ceiling  source
+Mercury       0.1087     0.142  lambert   1.9590   1.9632   0.1420         0.40    0.574  Mallama et al. 2017 Table 7 V
+Earth         0.0932     0.434  lambert   6.9887   1.0000   0.0621         0.00    0.307  Mallama et al. 2017 Table 7 V
+Mars          0.1337     0.170  lambert   1.9074   1.9239   0.1700         3.20    0.448  Mallama et al. 2017 Table 7 V
+Jupiter       0.3662     0.538  lambert   2.2038   2.9245   0.5380        40.11    0.598  Mallama et al. 2017 Table 7 V
+Saturn        0.5586     0.499  lambert   1.3399   1.3606   0.4990        15.31    0.543  Mallama et al. 2017 Table 7 V
+Uranus        0.5729     0.488  lambert   1.2777   1.2779   0.4880         3.18    0.500  Mallama et al. 2017 Table 7 V
+Neptune       0.5141     0.442  lambert   1.2897   1.2897   0.4338        76.46    0.437  Mallama et al. 2017 Table 7 V
+Moon          0.4822     0.120  lunar     0.2488   0.2488   0.1200         0.00    0.950  NSSDC Moon fact sheet
+Pluto         0.1606     0.520  lambert   4.8558   7.6678   0.5200        75.93    0.666  NSSDC Pluto fact sheet
+Charon        0.2506     0.420  lambert   2.5135   2.7341   0.4200        10.46    0.666  NSSDC Pluto fact sheet (Charon)
+Io            0.1534     0.620  lambert   6.0620   7.5682   0.6200        58.07    0.667  NSSDC Jovian satellite fact sheet
+Europa        0.3126     0.680  lambert   3.2629   3.2629   0.5827        52.17    0.667  NSSDC Jovian satellite fact sheet
+Ganymede      0.0751     0.440  lambert   8.7939  10.4116   0.4400        32.39    0.667  NSSDC Jovian satellite fact sheet
+Callisto      0.0491     0.190  lambert   5.8066   6.0236   0.1900         2.02    0.667  NSSDC Jovian satellite fact sheet
+Rhea          0.1604     0.700  lambert   6.5450   6.5450   0.5869        52.15    0.667  NSSDC Saturnian satellite fact sheet
+Triton        0.3257     0.720  lambert   3.3163   3.3163   0.5904        80.36    0.667  NSSDC Neptunian satellite fact sheet
+Phobos        0.2764     0.070  lambert   0.3799   0.3799   0.0700         0.00    0.667  NSSDC Mars fact sheet (Phobos)

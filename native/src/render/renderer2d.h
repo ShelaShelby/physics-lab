@@ -368,7 +368,7 @@ public:
 
 private:
     enum class Kind { Triangles, Squares, Planet, Blobs, LayerBegin, LayerEnd, RocksGpu, Mesh, CloudGpu, Lens, MolCloud, Rings, CloudClassic, NucDens, Lines, Surface };
-    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
+    struct Segment { Kind kind; int first, count; float size; Color c; float K[9]; int map; int mode; float r; int nring; float ring[96]; float occ[16]; int nocc; float sunAng; bool air; float shape[2]; bool additive; PhasePalette pal; int slot; bool spheres = false; int glowN = 0; float glow[4 * kMaxGlow]; bool hdr = false; bool lunar = false; float albedoK = 1.0f; RockFrame rf; MeshProjection mp; };   // draw calls, in the order they were added
     void closeTriangles();
     std::vector<Segment> segments_;
     std::vector<float> inst_;                 // square centres for all square draws of this frame

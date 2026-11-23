@@ -64,6 +64,32 @@ Map mapForBody(const std::string& name) {
     return Map::None;
 }
 
+const MapAlbedo* mapAlbedo(Map m) {
+    // tools/map_albedo_scale.txt (0.77.0): p, factor, drawn p (the ball's albedo with the clip), reached
+    static const struct { Map m; MapAlbedo a; } kAlbedo[] = {
+        {Map::Mercury, {0.142, 1.9632, 0.1420, true, "Mallama et al. 2017, Table 7, V"}},
+        {Map::Earth, {0.434, 1.0, 0.208, false, "Mallama et al. 2017, Table 7, V (the whole planet: clouds and air)"}},   // drawn: 0.208 with its clouds and air (tests/test_orbit.cpp)
+        {Map::Mars, {0.170, 1.9239, 0.1700, true, "Mallama et al. 2017, Table 7, V"}},
+        {Map::Jupiter, {0.538, 2.9245, 0.5380, true, "Mallama et al. 2017, Table 7, V"}},
+        {Map::Saturn, {0.499, 1.3606, 0.4990, true, "Mallama et al. 2017, Table 7, V"}},
+        {Map::Uranus, {0.488, 1.2779, 0.4880, true, "Mallama et al. 2017, Table 7, V"}},
+        {Map::Neptune, {0.442, 1.2897, 0.4338, false, "Mallama et al. 2017, Table 7, V"}},
+        {Map::Moon, {0.12, 0.2488, 0.1200, true, "NSSDC Moon fact sheet"}},
+        {Map::Pluto, {0.52, 7.6678, 0.5200, true, "NSSDC Pluto fact sheet"}},
+        {Map::Charon, {0.42, 2.7341, 0.4200, true, "NSSDC Pluto fact sheet (Charon)"}},
+        {Map::Io, {0.62, 7.5682, 0.6200, true, "NSSDC Jovian satellite fact sheet"}},
+        {Map::Europa, {0.68, 3.2629, 0.5827, false, "NSSDC Jovian satellite fact sheet"}},
+        {Map::Ganymede, {0.44, 10.4116, 0.4400, true, "NSSDC Jovian satellite fact sheet"}},
+        {Map::Callisto, {0.19, 6.0236, 0.1900, true, "NSSDC Jovian satellite fact sheet"}},
+        {Map::Rhea, {0.7, 6.5450, 0.5869, false, "NSSDC Saturnian satellite fact sheet"}},
+        {Map::Triton, {0.72, 3.3163, 0.5904, false, "NSSDC Neptunian satellite fact sheet"}},
+        {Map::Phobos, {0.07, 0.3799, 0.0700, true, "NSSDC Mars fact sheet (Phobos)"}},
+    };
+    for (const auto& e : kAlbedo)
+        if (e.m == m) return &e.a;
+    return nullptr;
+}
+
 bool measuredColour(const std::string& body, int rgb[3]) {
     // tools/map_albedo_colour.py: the albedo spectrum of Table 7, all 12 bands (Johnson U B V R I, Cousins Rc Ic, Sloan u' g' r' i' z'),
     // linear between their effective wavelengths and flat outside them -> CIE 1931 XYZ under D65 -> sRGB. The Sun's light is taken as
@@ -96,6 +122,17 @@ bool decodeMap(Map m, MapImage& out) {
         if (!px) return false;
         if (w == mi.w && h == mi.h) { out.w = w; out.h = h; out.rgba.assign(px, px + static_cast<std::size_t>(w) * h * 4); }
         stbi_image_free(px);
+        if (out.w > 0 && m == Map::Earth) {   // 0.77.0: the clouds (assets/maps/earth_clouds.jpg, same grid) in the alpha channel: each byte / 255 is the cloud cover (render/shading.h cloudsOver)
+            bool found = false;
+            for (const EmbeddedMap* c = kEmbeddedMaps; c->name; c++) {
+                if (std::strcmp(c->name, "earth_clouds") != 0) continue;
+                int cw = 0, ch = 0, cn = 0;
+                unsigned char* cp = stbi_load_from_memory(c->data, static_cast<int>(c->size), &cw, &ch, &cn, 1);
+                if (cp && cw == w && ch == h) { for (std::size_t i = 0; i < static_cast<std::size_t>(w) * h; i++) out.rgba[4 * i + 3] = cp[i]; found = true; }
+                if (cp) stbi_image_free(cp);
+            }
+            if (!found) for (std::size_t i = 0; i < static_cast<std::size_t>(w) * h; i++) out.rgba[4 * i + 3] = 0;   // no clouds rather than a white Earth
+        }
         return out.w > 0;
     }
     return false;

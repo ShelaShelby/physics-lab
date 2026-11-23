@@ -17,3 +17,7 @@ colour-science_v0.4.7_illuminant_sds.py
 tools/planet_disc_colour.py (standard library only): albedos -> CIE 1931 XYZ under D65 (360-780 nm, 5 nm) -> linear sRGB. Mercury: r/g 1.1734,
 b/g 0.7921 (colour-science gives the same to 4 digits). tools/map_tint.py tinted the black-and-white MESSENGER map to these ratios (assets/maps/README.md).
 Pluto: no colour global mosaic (USGS has only the black-and-white LORRI/MVIC one) and no measured disc colour was saved: left black and white (ROADMAP).
+
+madhusudhan_burrows2012_arxiv1112.4476.pdf (0.77.0)
+    Saved as received on 23 Nov 2026 from https://arxiv.org/pdf/1112.4476 (ApJ 747, 25). Sec. 3.1: a Lambertian surface's geometric albedo is 2/3 of its
+    single-scattering albedo. Used for the maps' brightness factors (tools/map_albedo_scale.py).

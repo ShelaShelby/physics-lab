@@ -113,6 +113,9 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "Saturn followed, true scale, 3D, the closest zoom (the camera 1.5 Saturn radii from its middle, zoom 4.17), every extra on, Stars Full with constellations, "
             "time stopped; the camera turning 0.5 rad a second and tilting 1 to 53 degrees above the ecliptic, through the ring plane: rings, lines and moons pass "
             "close to it and behind it (cut at the near plane, on the card).");
+        add(true, "orbit.earth_clouds", BenchKind::OrbitEarthClouds, -1, "Orbit Lab, Earth close up with its clouds, the camera turning round it",
+            "0.77.0: Earth followed, true scale, 3D, the closest zoom (5.5 asked, 5.14 drawn), its map, clouds (one map, the planet shader reads them from the map's alpha) "
+            "and air on the graphics card, the camera turning 0.5 rad a second all round it and tilting, time stopped.");
         // ---- All scenes: the easy ones and the old processor twins ----
         add(false, "orbit.rocks8", BenchKind::OrbitRocks8, -1, "Orbit Lab, 8 times the rocks",
             "orbit.heaviest with 8 times the rocks in the belts and the Oort cloud (48,000, the same kinds of orbits, a fixed seed); the rocks do not pull on each other.");
@@ -159,7 +162,8 @@ double benchPlannedS() {
 // minutes now (nothing shortened, REPORT 0.72.0)
 // 0.73.0: 34 scenes (orbit.alphacen, CLAUDE.md: a new drawing adds its scene): 297.8 s planned; the limit is 5.0 minutes now (nothing shortened, REPORT 0.73.0)
 // 0.75.0: 35 scenes (orbit.flyby, CLAUDE.md: a new drawing adds its scene): 304.3 s planned; the limit is 5.1 minutes now (nothing shortened, REPORT 0.75.0)
-static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.1 * 60,
+// 0.77.0: 36 scenes (orbit.earth_clouds, CLAUDE.md: a new drawing adds its scene): 310.8 s planned; the limit is 5.2 minutes now (nothing shortened, REPORT 0.77.0)
+static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS <= 5.2 * 60,
               "the default benchmark run is planned at about four minutes");
 static_assert(kBenchHardScenes * (kBenchWarmupS + kBenchMeasureS) + kBenchResponseActions * kBenchResponsePlanS + kBenchIdleEntries * kBenchIdlePlanS >= 3.5 * 60,
               "the default benchmark run is planned at about four minutes");
