@@ -56,7 +56,7 @@ void AtomCardPaths::frame(render::Renderer2D& R, AtomLab& L) {
         }
         const bool shown = which == 0 ? L.p.view == "Slice" : (L.manyOn() && L.p.view == "Cloud 3D" && L.p.cstyle == "Glow" && L.s.trans);   // (the jump's: only once a jump is under way)
         if (P.state == 0) {
-            if (!R.computeShaders()) { off(which, R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "this PC has no OpenGL 4.3 compute shaders (or they are switched off)"); continue; }
+            if (!R.computeShaders()) { off(which, R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "no Vulkan renderer"); continue; }
             if (G.started() && !G.allowed()) { off(which, G.offText().empty() ? std::string("its guard switched it off") : G.offText()); continue; }
             if (!shown || ++P.frames < 3) continue;                          // (its picture on screen first)
             if (!G.hold()) continue;                                         // 0.63.0: its start-up steps wait for the guards' turn (a later frame)
@@ -236,7 +236,7 @@ unsigned AtomCardPaths::jumpGroupsBuffer(render::Renderer2D& R, AtomLab& L) {
 std::string AtomCardPaths::pathText(int which, const AtomLab& L, bool computeOk) const {
     const Path& P = p_[which & 1];
     const std::string what = which == 0 ? "the Slice's new dots: " : "the jump's groups: ";
-    if (!computeOk) return what + "the processor (no OpenGL 4.3 compute on this PC)";
+    if (!computeOk) return what + "the processor (no Vulkan compute on this PC)";
     if (which == 0 ? !L.gpuSlice : !L.gpuJump) return what + "the processor (" + (which == 0 ? "GPU Slice dots" : "GPU jump groups") + " switched off)";
     if (P.state == 1) return what + "the graphics card (its start-up check passed: " + P.check + ")";
     if (P.state == -1) return what + "the processor, because " + P.why;

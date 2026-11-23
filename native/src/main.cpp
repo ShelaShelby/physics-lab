@@ -323,7 +323,7 @@ int main(int argc, char** argv) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();                             // (0.59.0: before the window: Vulkan's start makes Dear ImGui's Vulkan pipeline)
     // 0.59.0: Vulkan's start, each step guarded (app/gpu_guard.h gpuVulkanGuard, log lines "[vulkan] ..."): a step that fails or crashes is kept.
-    // 0.69.0: Vulkan is the only drawing system (OpenGL is gone): when Vulkan cannot start, or its guard switched it off after a crash, one window says
+    // Vulkan is the only drawing system: when Vulkan cannot start, or its guard switched it off after a crash, one window says
     // what is needed and what this PC has, with Try again (the guard's), and the app ends (noVulkan below). PL_VK_FAIL=<step> (checks): that step fails.
     SDL_Window* window = nullptr;
     render::VkBackend vk;
@@ -362,8 +362,8 @@ int main(int argc, char** argv) {
         // "[vulkan] [<name>] "): the groups, the outline, the rocks and the Glow dots are made now; the Slice, the jump and the Density cloud by their labs'
         // paths when first shown. A program that fails takes the processor's path; the rest of Vulkan stays on.
         bool cardsChanged = false;
-        // (0.69.0, checks: PL_GPU_DRIVER another driver's text, PL_GPU_SHADER / SKYSHADER / SLICESHADER / JUMPSHADER / MOLSHADER another program's text,
-        // as the OpenGL guards had them)
+        // (checks: PL_GPU_DRIVER another driver's text, PL_GPU_SHADER / SKYSHADER / SLICESHADER / JUMPSHADER / MOLSHADER another program's text,
+        // as the guards had them)
         const std::map<std::string, const char*> fakeShader = {{"lightpaths", "PL_GPU_SHADER"}, {"sky", "PL_GPU_SKYSHADER"}, {"slice", "PL_GPU_SLICESHADER"},
                                                               {"jump", "PL_GPU_JUMPSHADER"}, {"molcloud", "PL_GPU_MOLSHADER"}};
         const char* fakeDriver = SDL_getenv("PL_GPU_DRIVER");
@@ -398,12 +398,11 @@ int main(int argc, char** argv) {
         vk.initCards(renderer, cardsWhy);
         for (const std::string& w : cardsWhy) { app::gpuVulkanGuard().log("card program on the processor: " + w); std::printf("Vulkan card program on the processor: %s\n", w.c_str()); }
         if (SDL_getenv("PL_NO_COMPUTE")) renderer.disableCompute();   // (checks: the processor's paths, to compare)
-        app.glMajor = 0; app.glMinor = 0;                             // (0: Vulkan, app/bench.h computePathText)
         app.computeOk = renderer.compute() != nullptr; app.rocksOk = renderer.rockCompute() != nullptr; app.rocksWhy = renderer.rocksWhy();
         atom::setOutlineCompute(renderer.outlineCompute());
         std::printf("Vulkan card programs: %zu bytes of SPIR-V; double precision in shaders: %s\n", vk.cardSpirvBytes(), vk.float64() ? "yes" : "no");
-        std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(0, 0, app.computeOk, true).c_str());
-        std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(0, 0, app.rocksOk, true, app.rocksWhy).c_str());
+        std::printf("Atom Lab superposition and jumps: %s\n", app::computePathText(app.computeOk, true).c_str());
+        std::printf("Orbit Lab rocks: %s\n", app::rocksPathText(app.rocksOk, true, app.rocksWhy).c_str());
     }
     if (const char* c = SDL_getenv("PL_ATOM_CARD")) if (std::string(c) == "0") { app.atom.gpuSlice = false; app.atom.gpuJump = false; }   // 0.57.0 (tests: the processor for both, to compare)
     if (const char* c = SDL_getenv("PL_MOL_CARD")) if (std::string(c) == "0") app.moleculeView.gpuCloud = false;   // 0.57.1 (tests: the processor's Density cloud, to compare)
@@ -578,7 +577,7 @@ int main(int argc, char** argv) {
         const float clear[4] = {0, 0, 0, 1};
         if (!vk.renderToImage(nullptr, W, H, clear, rgb, &R) || rgb.size() != std::size_t(W) * std::size_t(H) * 3) return false;
         rgba.assign(std::size_t(W) * std::size_t(H) * 4, 255);
-        for (int y = 0; y < H; y++)                     // (rows from the bottom, as OpenGL's glReadPixels gave them; alpha 255)
+        for (int y = 0; y < H; y++)                     // (rows from the bottom; alpha 255)
             for (int x = 0; x < W; x++)
                 for (int k = 0; k < 3; k++) rgba[(std::size_t(y) * std::size_t(W) + std::size_t(x)) * 4 + std::size_t(k)] = rgb[(std::size_t(H - 1 - y) * std::size_t(W) + std::size_t(x)) * 3 + std::size_t(k)];
         return true;

@@ -1,15 +1,25 @@
 # Decisions (made by the owner)
 
-Only the owner's decisions still in force, one or two lines each. Older wording, superseded entries and the session's own choices are in git history
-(0.52.0 cut this file to that; the dropped titles are listed in native/REPORT.md of 0.52.0).
+A record of the owner's decisions, one or two lines each. Sessions do not have to read it: CLAUDE.md holds the rules in force (23 Nov 2026).
+A line marked "Superseded" is kept for the record only. Older wording is in git history.
+
+## 23 Nov 2026
+- One short CLAUDE.md holds the rules. DECISIONS.md is a record only.
+- No fixed Opus/Haiku split. The session decides when a helper agent is worth it and checks what a helper reports.
+- Standard terms in developer files (GPU, CPU, shader, build machine).
+- The full UI suite runs automatically on GitHub on every push.
+- Small bug fixes may go straight to a working chat without the planning chat.
+- 255 Hz stays.
+- A job runs only check.sh quick and the ui_* test of the screen it changed. The full suite runs on GitHub after the push; its failures become the next job and do not block the current one. check.sh full by hand only when the owner asks.
+- Any single command running longer than 15 minutes is stopped, and the reason written in REPORT.md.
 
 ## How the work is done
-- Three roles (14 Nov 2026): a planning chat leads (architecture, design, what comes next) and writes each job; it writes no code and does not push. An Opus
+- Superseded on 23 Nov 2026 (no fixed Opus/Haiku split; small fixes may skip the planning chat). Three roles (14 Nov 2026): a planning chat leads (architecture, design, what comes next) and writes each job; it writes no code and does not push. An Opus
   session builds the job and leads its Haiku helpers (CLAUDE.md, "Two models", 4 Nov 2026); Haiku helps, and Opus spot-checks what Haiku reports.
 - Quiet chat (14 Nov 2026): a working session does not report progress. It writes in chat only when it cannot go on without the owner's answer, and once at
   the end (the outcome first); everything else goes in REPORT.md. Every message costs the owner's usage.
 - No time limit for a job; a problem that fails 3 times is skipped and written in REPORT.md (18 Oct 2026).
-- Tests in batches (6 Nov 2026): every job runs the quick tests and the UI check it adds or changes; the full UI suite only at a new version X.Y or when the owner asks.
+- Superseded on 20 Nov and 23 Nov 2026 (the full suite runs on GitHub on every push). Tests in batches (6 Nov 2026): every job runs the quick tests and the UI check it adds or changes; the full UI suite only at a new version X.Y or when the owner asks.
 - Versions are named X.Y.Z only; commits are "native X.Y.Z"; no "stage" names (8 Nov 2026). No 1.0 milestone: the app keeps growing (7 Nov 2026).
 - No connectors, plugins or extra skills unless a job asks for one (they cost usage). No code signing (it costs money); the README and release text explain the warning.
 
@@ -130,8 +140,8 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 
 ## Workflow (owner decisions 20 Nov 2026)
 - Exactly one push per job, at the end, after the tests and the docs are final; no checkpoint pushes; no doc-only push after it; a fix found after testing goes into that same push.
-- The full UI suite runs only when the owner asks. Every job runs check.sh quick plus the ui_* tests of the screens it changes.
+- Superseded on 23 Nov 2026 (the full suite runs on GitHub on every push; by hand only when the owner asks). The full UI suite runs only when the owner asks. Every job runs check.sh quick plus the ui_* tests of the screens it changes.
 - No known failure carries over to the next version: fixed, or its test corrected with a written reason; never loosened.
 - The planning chat reads the processor's code (data, precision, calls) before planning any move to the card, and names in the job the files and lines it read.
-- Before any new job, the owner's benchmark of the previous version. Replaced by the benchmark rule of 21 Nov 2026 (Graphics and speed).
+- Superseded. Before any new job, the owner's benchmark of the previous version. Replaced by the benchmark rule of 21 Nov 2026 (Graphics and speed).
 - Who keeps each plan file true: the job that changes a plan's area updates it; the planning chat names the plan files in the job.

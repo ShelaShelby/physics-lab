@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.21 stage 1: the Molecule Lab's Realistic style in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU, NO timing claims: counts and the CPU draw-list time only).
+# 0.21 stage 1: the Molecule Lab's Realistic style in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU, NO timing claims: counts and the CPU draw-list time only).
 #   Four pictures to look at (1280x800): water's cloud (Dark), water's surface coloured by the potential (Dark), benzene's surface + potential (Light), CO2's potential (Dark).
 #   Physics read from the pixels: water's surface is red (negative) beyond the O and blue (positive) beyond the H atoms; CO2 is red beyond both O atoms; benzene red over the ring's
 #   face, blue at its rim. The draw counts (the cloud one instanced call, the nuclei one, the surface one run of triangles), the triangles sorted again only when the view moves,

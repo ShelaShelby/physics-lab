@@ -1,4 +1,4 @@
-// The textbook Kepler reference for the belt rocks, shared by tests/test_rocks.inc (orbit_tests) and tests/gl_compare.cpp (the GPU against it). 0.13 stage 4 part A.
+// The textbook Kepler reference for the belt rocks, shared by tests/test_rocks.inc (orbit_tests) and tests/vk_compare.cpp (the GPU against it). 0.13 stage 4 part A.
 // SOURCE (already in the About page, "Space and orbits"): NASA/JPL, "Keplerian Elements for Approximate Positions of the Major Planets" (https://ssd.jpl.nasa.gov/planets/approx_pos.html, page read
 // 5 Oct 2026): Kepler's equation M = E - e sin E; x' = a (cos E - e), y' = a sqrt(1 - e^2) sin E (x' towards perihelion). n = sqrt(GM / a^3) is Kepler's third law. E comes from BISECTION: E - e sin E - M
 // rises with E for every e < 1, so there is exactly one root and halving cannot miss it, however close e is to 1. Nothing here calls the lab's own solver.

@@ -4241,7 +4241,7 @@ static void testQuadrupole(double guardMinSepDeformed) {
 #include "test_audit028.inc"   // 0.28: the 0.26 audit's small items
 #include "test_hfs.inc"        // 0.31: hyperfine structure
 #include "test_gpu_colours.inc"   // 0.13 stage 1: phase colours on the GPU
-#include "test_gpu_compute.inc"   // 0.13 stage 2: the superposition and the jump on the GPU (the physics check; the GPU comparison is tests/gl_compare.cpp)
+#include "test_gpu_compute.inc"   // 0.13 stage 2: the superposition and the jump on the GPU (the physics check; the GPU comparison is tests/vk_compare.cpp)
 #include "test_outline_norm.inc"   // 0.13 stage 3: the exact normalisation (part B) and the 90 % outline
 #include "test_stage4_cloud.inc"   // 0.13 stage 4 part C: the Cloud 2D view's buffers
 #include "test_chart_cache.inc"   // 0.13 stage 4 part B: the chart of nuclides kept on the GPU

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5g: the owner's bug list, checked in the REAL app (Linux, software OpenGL; not Windows, not a real mouse, not a GPU).
+# 0.15 stage 5g: the owner's bug list, checked in the REAL app (Linux, software Vulkan; not Windows, not a real mouse, not a GPU).
 #   check_5g.py <PhysicsLab binary> <work folder> <part>      parts: pages, contents (items 1, 2), toolbar (item 3, 4a)
 # pages: a wheel event (the same SDL event a mouse wheel makes, pushed by PL_SCRIPT "wheel=") over a Learn guide, the timeline, About and the history window moves the page
 #   (the app logs "pagescroll y= max=": the scroll offset), 3 sizes, New UI On and Off; the keys PageDown / End / Home / arrows scroll them too; in the New UI a wheel over the dimmed picture

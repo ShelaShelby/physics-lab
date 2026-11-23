@@ -1,5 +1,5 @@
 // The belts' rocks on the Orbit Lab picture (0.13 stage 4 part A): one square draw per belt, the places worked out either by the CPU (orbit::beltPoint and orbit::beltScreen for every rock,
-// the way it always was: the reference, and the path on an OpenGL 3.3 PC) or on the GPU (render/rock_compute.h, OpenGL 4.3: the rocks are sent once and every frame only the time and the camera).
+// the reference, and the fallback) or on the GPU (render/rock_compute.h, Vulkan: the rocks are sent once and every frame only the time and the camera).
 // No Dear ImGui in here, so the tests can drive it.
 #pragma once
 

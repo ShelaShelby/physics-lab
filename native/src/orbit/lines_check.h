@@ -1,7 +1,7 @@
 // 0.68.0: the Orbit Lab's lines on the graphics card (Vulkan; render/lines_card.h, render/shaders.h kLinesCS and kLinesVS), made and checked step by
 // step within its own guard (app/gpu_guard.h gpuVkLinesGuard, log lines "[vulkan] [lines] "), the pattern of the other card programs (atom/nucdens_check.h):
 // nothing before the Orbit Lab's lines are on screen for 3 frames; then a step a frame, logged and guarded: the pipelines (the card's steps and the
-// drawing program), the check against the processor, the first full use. OpenGL draws them on the processor always (no card program for them there).
+// drawing program), the check against the processor, the first full use.
 //
 // THE CHECK (the limits written before any card's result was looked at): one scene of four orbits (1, 1.52, 5.2 and 39.5 AU; e up to 0.25, tilted up to
 // 17 degrees), a trail of 150 points on each and six distance rings, seen three ways: the heavy view's camera (3D, zoom x1, 1280 x 800), the closest

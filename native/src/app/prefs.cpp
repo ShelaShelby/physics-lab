@@ -92,7 +92,7 @@ Prefs loadPrefs(const std::string& text) {
         else if (k == "gpuslice") p.gpuSlice = v;                              // 0.57.0
         else if (k == "gpujump") p.gpuJump = v;                                // 0.57.0
         else if (k == "gpumolcloud") p.gpuMolCloud = v;                        // 0.57.1
-        else if (k == "graphics") {}                     // 0.59.0 (0.69.0: OpenGL is gone: an old file's line is read and ignored)
+        else if (k == "graphics") {}                     // an old file's graphics= line is read and ignored
         else if (k == "gpuvulkan") p.gpuVulkan = v;                            // 0.59.0
         else if (k.rfind("gpuvk", 0) == 0 && k.size() > 5) p.gpuVk[k.substr(5)] = v;   // 0.61.0
         else if (k.rfind("calc.", 0) == 0) {                                   // 0.49: the calculator's history, calc.0 the newest; a bad number or an empty line is ignored

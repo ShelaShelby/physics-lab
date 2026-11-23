@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.75.2 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.75.3 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -27,7 +27,7 @@ if(PL_PICTURE_TESTS AND UNIX AND NOT APPLE)
 else()
   set(PL_VK_TESTS_DEFAULT OFF)
 endif()
-# 0.69.0 (OpenGL removed): vk_compare_tests (was gl_compare_tests on Mesa's OpenGL): the card programs and the real renderer's pictures on Vulkan (Mesa's
+# vk_compare_tests: the GPU programs and the real renderer's pictures on Vulkan (Mesa's
 # lavapipe here, no window) against the processor's references. Needs the app's dependencies (-DPL_BUILD_APP=ON).
 option(PL_VK_TESTS "Also build vk_compare_tests: the card programs and the renderer's pictures on Vulkan (lavapipe on Linux) against the processor" ${PL_VK_TESTS_DEFAULT})
 
@@ -397,7 +397,7 @@ if(PL_BUILD_APP)
       COMMENT "SPIR-V: ${sh}")
     list(APPEND PL_VK_SHADER_HEADERS ${shOut})
   endforeach()
-  # 0.60.0 (Vulkan step 2): renderer2d's shaders for Vulkan, made from shaders.h's GLSL text (until 0.68.1 OpenGL's too: src/render/shaders.h, taken out by cmake/extract_glsl.cmake):
+  # 0.60.0 (Vulkan step 2): renderer2d's shaders for Vulkan, made from shaders.h's GLSL text (src/render/shaders.h, taken out by cmake/extract_glsl.cmake):
   # glslang's relaxed Vulkan rules (-R) put the loose uniforms into one block per stage (vertex: set 0 binding 2; fragment: set 0 binding 1), the
   # fragment shader's texture at binding 0 (glslang's own choice); the in/out locations by declaration order (the app checks the bindings, and that the
   # locations match between the stages, from the SPIR-V itself: vk_draw2d.cpp).
@@ -531,7 +531,7 @@ if(PL_BUILD_APP)
     target_sources(PhysicsLab PRIVATE assets/physics_lab.rc)
   endif()
   target_compile_definitions(PhysicsLab PRIVATE PL_VERSION="${PROJECT_VERSION}")
-  if(PL_VK_TESTS)                                      # 0.69.0: vk_compare_tests (OpenGL removed: it was gl_compare_tests, OpenGL against the processor and Vulkan)
+  if(PL_VK_TESTS)                                      # vk_compare_tests: the GPU programs against the CPU
     add_executable(vk_compare_tests tests/vk_compare.cpp src/atom/chart_draw.cpp src/render/renderer2d.cpp src/render/renderer2d_vk.cpp src/render/kerr_compute.cpp
                    src/render/kerr_sky.cpp src/render/atom_card.cpp src/render/molecule_card.cpp src/orbit/belt_layer.cpp src/orbit/ring_check.cpp src/atom/classic_check.cpp
                    src/atom/nucdens_check.cpp src/orbit/orbit_lines.cpp src/orbit/lines_check.cpp src/render/vk_lines.cpp src/molecule/surface_check.cpp src/render/vk_surface.cpp
@@ -634,7 +634,7 @@ if(PL_BUILD_APP)
 endif()
 
 # 0.15 stage 4.1: labels and a fast, identical environment for the tests. quick = the unit test programs, glsl and the source scan (about a minute, no app start);
-# pictures = everything that starts the real app (0.69.0: on Mesa's software Vulkan, lavapipe; until 0.68.1 also its OpenGL, llvmpipe). One thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
+# pictures = everything that starts the real app (on Mesa's software Vulkan, lavapipe). One thread per app start (so `ctest -j<cores>` uses every core instead of every start fighting for
 # all of them) and a shared Mesa shader cache (a start no longer rebuilds its shaders): the pictures are the same (the picture guards prove it).
 foreach(t orbit_physics atom_physics blackhole_physics movinggas_physics calc_logic analysis_logic molecule_logic vibration_logic rotation_logic density_logic app_settings font_coverage nbody_physics jpl_validation moon_validation moon_real_validation glsl_shaders windows_decorated)
   if(TEST ${t})

@@ -90,7 +90,7 @@ const char* const kCons[3] = {"off", "lines", "names"};
 void labsToPrefs(const AppState& app, app::Prefs& p) {
     for (const auto& [name, g] : app::vulkanCardGuards()) if (g->started()) p.gpuVk[name] = g->saved();   // 0.61.0 (Vulkan's own; 0.69.0: the only ones)
     if (app::gpuVulkanGuard().started()) p.gpuVulkan = app::gpuVulkanGuard().saved();   // 0.59.0
-    // (0.69.0: an old file's OpenGL guard lines gpupaths=, gpusky=, gpuslice=, gpujump=, gpumolcloud= are kept as read, unused)
+    // (an old file's guard lines gpupaths=, gpusky=, gpuslice=, gpujump=, gpumolcloud= are kept as read, unused)
     const orbit::ViewSettings& v = app.set;
     p.orbit = {{"view3D", v.view3D ? "1" : "0"}, {"zoom", num(v.zoom)}, {"tspeed", num(v.tspeed)}, {"trueScale", v.trueScale ? "1" : "0"},
                {"fullTrails", v.fullTrails ? "1" : "0"}, {"moons", v.moons ? "1" : "0"}, {"dwarfs", v.dwarfs ? "1" : "0"}, {"comets", v.comets ? "1" : "0"},

@@ -96,7 +96,7 @@ public:
     // 0.60.0 (Vulkan, step 2 of 5): the same recording, drawn by Vulkan at the end (render/renderer2d_vk.cpp, render/vk_draw2d.h). useVulkan before
     // anything is recorded (without it every card program is absent and each lab takes its processor path); loadMapsVulkan: the picture maps;
     // endVulkan: the frame's recording drawn into Vulkan's picture (fbW x fbH pixels, cleared to clear[]; forShot: Save image's own picture, one sample).
-    // The frame's command buffer is the backend's (render/vk_backend.cpp). 0.69.0: OpenGL is gone; Vulkan is the only drawing system.
+    // The frame's command buffer is the backend's (render/vk_backend.cpp). Vulkan is the only drawing system.
     void useVulkan(VkDraw2D* d);                       // (render/renderer2d_vk.cpp: renderer2d.cpp itself needs no Vulkan to link)
     bool vulkan() const { return vk_ != nullptr; }
     bool loadMapsVulkan(std::string& why);
@@ -356,7 +356,7 @@ public:
     // skyProbeRead once skyProbeDone (the frame never waits); else read at once into out (waits)
     void skyProbe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out);
     bool skyProbeDone();
-    // 0.69.0 (the Black Hole Lab's test hooks, PL_BH_COMPARE; until 0.68.1 OpenGL's): one picture's float outputs (LensSky::debug, debugDisc, skyMode) of
+    // (the Black Hole Lab's test hooks, PL_BH_COMPARE): one picture's float outputs (LensSky::debug, debugDisc, skyMode) of
     // w x h pixels (w x h points), 4 floats a pixel, rows from the bottom, waited for; the sky shader's elliptic functions alone (render/kerr_sky.h's sets
     // of 12 floats in, 8 out, waited for); the exposure's read-back of the last picture, waited for (0: none). render/vk_blackhole.h has them.
     void lensFloat(const LensSky& L, int w, int h, std::vector<float>& out);

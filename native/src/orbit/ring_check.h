@@ -2,7 +2,7 @@
 // (app/gpu_guard.h gpuVkRingsGuard), the pattern of the Atom Lab's card programs (atom/atom_card_paths.h): nothing before Saturn's rings are on screen for 3
 // frames; then a step a frame, each logged with its time and guarded by a marker: the pipelines (the drawing's and the probe's), the check against the
 // processor (it must pass, or the processor's triangles are kept and Settings, Performance says why), the first full use (3 frames drawn by the card).
-// A step that does not finish within 10 s switches it off. OpenGL draws the processor's triangles always (no card program for the rings there).
+// A step that does not finish within 10 s switches it off.
 //
 // THE CHECK (limits written before any card's result was looked at): three views (the orbit.saturn set-up's kind of view, the rings almost edge-on, the
 // planet's shadow across the rings; 0.75.0: a fourth, the 3D pinhole camera 1.5 radii from the middle and 4 degrees above the ring plane, the rings' near

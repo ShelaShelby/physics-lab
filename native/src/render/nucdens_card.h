@@ -1,7 +1,7 @@
 // 0.67.0: the nucleus' Density look on the graphics card (Vulkan; render/shaders.h kNucDensCS): the line-of-sight sums of atom_core.cpp projectChargeDensity
 // in single precision and the cells' squares written on the card, drawn by the renderer's blob program from the card's buffer (no square sent by the
 // processor). Made and checked by atom/nucdens_check.cpp under its guard (app/gpu_guard.h gpuVkNucDensGuard); the processor's sums and squares stay the
-// reference and the fallback (OpenGL makes them always).
+// reference and the fallback.
 #pragma once
 
 #include <cstddef>

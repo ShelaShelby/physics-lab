@@ -279,7 +279,7 @@ void advance(render::Renderer2D& R) {
 }  // namespace
 
 bool drawRingsOnCard(render::Renderer2D& R, const RingFrame& f, const std::vector<RingBand>& bands, bool back, double W, double H) {
-    if (!R.vulkan()) return false;                                   // (OpenGL: the processor's triangles; no card program for the rings there)
+    if (!R.vulkan()) return false;                                   // (no Vulkan renderer, as in the unit tests: the CPU's triangles)
     app::GpuGuard& G = app::gpuVkRingsGuard();
     if (back) {                                                      // (once a frame: the back half comes first)
         if (g_p.gen != G.generation()) {                             // the first frame, and "Try again" (Settings, Performance)
@@ -312,7 +312,7 @@ bool drawRingsOnCard(render::Renderer2D& R, const RingFrame& f, const std::vecto
 int ringCardState() { return g_p.state == 1 ? 1 : g_p.state == -1 ? -1 : 0; }
 
 std::string ringCardPathText(bool vulkan) {
-    if (!vulkan) return "Saturn's rings: the processor (no card program for the rings on OpenGL)";
+    if (!vulkan) return "Saturn's rings: the processor (no Vulkan renderer)";
     if (g_p.state == 1) return "Saturn's rings: the graphics card (Vulkan; its start-up check passed: " + g_p.check + ")";
     if (g_p.state == -1) return "Saturn's rings: the processor, because " + g_p.why;
     return "Saturn's rings: the graphics card once its start-up check has passed (made when Saturn's rings are first shown)";

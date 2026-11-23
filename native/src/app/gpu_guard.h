@@ -60,7 +60,7 @@ public:
     GpuGuard(const char* marker, const char* log, bool truncateLog, const char* prefix) : markerName_(marker), logName_(log), prefix_(prefix), truncateLog_(truncateLog) {}
     // 0.59.0: what the guarded thing is called in its lines and in offText ("" = the light paths' own wording)
     GpuGuard(const char* marker, const char* log, bool truncateLog, const char* prefix, const char* what) : markerName_(marker), logName_(log), prefix_(prefix), what_(what), truncateLog_(truncateLog) {}
-    void appendToLog() { truncateLog_ = false; }                  // 0.59.0: another guard started the log in this run (the Vulkan guard, before OpenGL's)
+    void appendToLog() { truncateLog_ = false; }                  // another guard started the log in this run
     void keepOldMarkers() { keepOld_ = true; }                    // 0.63.1: the light paths' guards: a crash kept by an older version stays trusted
     static constexpr const char* kMarker = "gpu-paths-step.txt";   // plain ASCII names (Windows)
     static constexpr const char* kLog = "gpu-paths-log.txt";
@@ -149,7 +149,7 @@ GpuGuard& gpuVulkanGuard();
 
 // 0.61.0 (Vulkan step 3 of 5): the card programs' guards on Vulkan (markers gpu-vk<name>-step.txt, settings lines "gpuvk<name>=", log lines
 // "[vulkan] [<name>] ", versions "vulkan <name> <hash>"): gpuSliceGuard, gpuJumpGuard, gpuMolCloudGuard, gpuGuard (the light paths) and gpuSkyGuard give
-// Vulkan's (0.69.0: their OpenGL twins are gone with OpenGL), and the superposition and jump groups (gpuVkGroupsGuard, "gpuvkgroups="), the 90 % outline
+// Vulkan's, and the superposition and jump groups (gpuVkGroupsGuard, "gpuvkgroups="), the 90 % outline
 // (gpuVkOutlineGuard, "gpuvkoutline="), the belts' rocks (gpuVkRocksGuard, "gpuvkrocks=") and the Cloud 3D Glow dots (gpuVkCloudGuard, "gpuvkcloud=").
 GpuGuard& gpuVkGroupsGuard();
 GpuGuard& gpuVkOutlineGuard();

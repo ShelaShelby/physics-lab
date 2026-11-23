@@ -49,7 +49,7 @@ void MolCardPaths::frame(render::Renderer2D& R, const float* pts, long n) {
         }
     }
     if (state_ == 0) {
-        if (!R.computeShaders()) { off(R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "this PC has no OpenGL 4.3 compute shaders (or they are switched off)"); return; }
+        if (!R.computeShaders()) { off(R.vulkan() ? "this Vulkan start has no compute programs on the card (or they are switched off)" : "no Vulkan renderer"); return; }
         if (G.started() && !G.allowed()) { off(G.offText().empty() ? std::string("its guard switched it off") : G.offText()); return; }
         if (!pts || n <= 0 || ++frames_ < 3) return;                     // (its picture on screen first)
         if (!G.hold()) return;                                           // 0.63.0: its start-up steps wait for the guards' turn (a later frame)
@@ -162,7 +162,7 @@ void MolCardPaths::advance(render::Renderer2D& R, const float* pts, long n) {
 
 std::string MolCardPaths::pathText(bool switchOn, bool computeOk) const {
     const std::string what = "the Density cloud's dots: ";
-    if (!computeOk) return what + "the processor (no OpenGL 4.3 compute on this PC)";
+    if (!computeOk) return what + "the processor (no Vulkan compute on this PC)";
     if (!switchOn) return what + "the processor (GPU Density cloud switched off)";
     if (state_ == 1) return what + "the graphics card (its start-up check passed: " + check_ + ")";
     if (state_ == -1) return what + "the processor, because " + why_;

@@ -327,7 +327,7 @@ void advance(render::Renderer2D& R) {
 }  // namespace
 
 bool drawClassicOnCard(render::Renderer2D& R, const render::ClassicDraw& d, bool mayStart) {
-    if (!R.vulkan()) return false;                                   // (OpenGL: the processor's squares)
+    if (!R.vulkan()) return false;                                   // (no Vulkan renderer, as in the unit tests: the CPU's squares)
     app::GpuGuard& G = app::gpuVkClassicGuard();
     if (g_p.gen != G.generation()) {
         g_p.gen = G.generation();
@@ -357,7 +357,7 @@ bool drawClassicOnCard(render::Renderer2D& R, const render::ClassicDraw& d, bool
 int classicCardState() { return g_p.state == 1 ? 1 : g_p.state == -1 ? -1 : 0; }
 
 std::string classicCardPathText(bool vulkan, const std::string& what) {
-    if (!vulkan) return what + ": the processor (no card program for them on OpenGL)";
+    if (!vulkan) return what + ": the processor (no Vulkan renderer)";
     if (g_p.state == 1) return what + ": the graphics card (Vulkan; its start-up check passed: " + g_p.check + ")";
     if (g_p.state == -1) return what + ": the processor, because " + g_p.why;
     return what + ": the graphics card once its start-up check has passed (made when the Classic Cloud 3D or the side view with every electron is first shown)";

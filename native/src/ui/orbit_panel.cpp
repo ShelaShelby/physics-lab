@@ -109,7 +109,7 @@ void performanceCard(AppState& app) {
     wrappedCheckbox("VSync (wait for the screen)", &app.vsync);
     noteItem("vsync");                                    // (0.59.0: the checks switch it: Vulkan makes its swapchain again)
     if (ImGui::IsItemHovered()) ui::SetTooltip("Off: frames are drawn as fast as possible, so the frame time shows the real headroom. For this run only: the app always starts with VSync on.");
-    {   // 0.59.0: Graphics (0.69.0: Vulkan is the only drawing system; the choice of OpenGL is gone): what this start draws with, and the card programs
+    {   // Graphics (Vulkan): what this start draws with, and the card programs
         // that Vulkan's guards switched off on this PC, with Try again (a PC whose Vulkan cannot start gets a message at the start instead: main.cpp)
         settingMark("graphics");
         std::string gline = "Graphics: Vulkan, on " + app.vulkanDevice + " (driver " + app.vulkanDriver + "). All four labs are drawn, with the card's own programs.";   // 0.62.0 (step 4)
@@ -133,7 +133,7 @@ void performanceCard(AppState& app) {
         }
     }
     if (app.lab == 0) {                                   // 0.13 stage 4: who places the belts' rocks: the line says what this PC has, the switch compares the two ways
-        ImGui::TextWrapped("%s", app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, app.set.gpuRocks, app.rocksWhy).c_str());
+        ImGui::TextWrapped("%s", app::rocksPathText(app.rocksOk, app.set.gpuRocks, app.rocksWhy).c_str());
         ImGui::BeginDisabled(!app.rocksOk);
         settingMark("gpurocks");
         wrappedCheckbox("GPU rocks (Vulkan)", &app.set.gpuRocks);   // (0.62.0: the API in use)
@@ -145,7 +145,7 @@ void performanceCard(AppState& app) {
                                                       "Used for comparing on your PC with the benchmark's scenes 1, 6, 31 and 32. Not saved: it is On again at the next start.");
     }
     if (app.lab == 1) {                                   // 0.13 stage 2: which way the superposition and the jumps are worked out: the line says what this PC has, the switch compares the two ways
-        ImGui::TextWrapped("%s", app::computePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuCompute).c_str());
+        ImGui::TextWrapped("%s", app::computePathText(app.computeOk, app.atom.gpuCompute).c_str());
         ImGui::BeginDisabled(!app.computeOk);
         settingMark("gpuspin");
         wrappedCheckbox("GPU superposition and jumps (Vulkan)", &app.atom.gpuCompute);
@@ -154,7 +154,7 @@ void performanceCard(AppState& app) {
                                                       "Off, or where the card's program is not available: the processor does it dot by dot, as versions up to 0.13 stage 1 did.\n"
                                                       "The picture is the same either way (tested, except a rare dot within rounding of a threshold); only the speed differs, and it is expected, not yet measured, to be better On.\n"
                                                       "Used for comparing on your PC with the benchmark's scenes 11, 13, 14, 15 and 25 to 28. Not saved: it is On again at the next start.");
-        ImGui::TextWrapped("%s", app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, app.atom.gpuOutline).c_str());
+        ImGui::TextWrapped("%s", app::outlinePathText(app.computeOk, app.atom.gpuOutline).c_str());
         ImGui::BeginDisabled(!app.computeOk);
         settingMark("gpuoutline");
         wrappedCheckbox("GPU outline (Vulkan)", &app.atom.gpuOutline);

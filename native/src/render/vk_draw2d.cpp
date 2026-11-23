@@ -30,7 +30,7 @@ namespace render {
 
 namespace {
 
-constexpr VkFormat kRgba8 = VK_FORMAT_R8G8B8A8_UNORM;   // OpenGL's GL_RGBA8 (the window, the soft layer, the grey picture)
+constexpr VkFormat kRgba8 = VK_FORMAT_R8G8B8A8_UNORM;   // the window, the soft layer, the grey picture
 
 std::string readString(const std::uint32_t* w, std::size_t maxWords) {
     std::string s;
@@ -253,7 +253,7 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
         bind.push_back({0, 8, VK_VERTEX_INPUT_RATE_VERTEX}); bind.push_back({1, 80, VK_VERTEX_INPUT_RATE_INSTANCE});
         at(0, 0, f2, 0); for (uint32_t i = 0; i < 5; i++) at(1 + i, 1, f4, 16 * i);
         break;
-    case kCloud:                                      // 0.61.0: the corners; the dots' places (3 floats) and groups (a byte as a float: OpenGL's GL_UNSIGNED_BYTE, not normalised)
+    case kCloud:                                      // 0.61.0: the corners; the dots' places (3 floats) and groups (a byte as a float, not normalised)
         bind.push_back({0, 8, VK_VERTEX_INPUT_RATE_VERTEX}); bind.push_back({1, 12, VK_VERTEX_INPUT_RATE_INSTANCE}); bind.push_back({2, 1, VK_VERTEX_INPUT_RATE_INSTANCE});
         at(0, 0, f2, 0); at(1, 1, f3, 0); at(2, 2, VK_FORMAT_R8_USCALED, 0);
         break;
@@ -288,7 +288,7 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
     VkPipelineRasterizationStateCreateInfo rs{};
     rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rs.polygonMode = VK_POLYGON_MODE_FILL;
-    rs.cullMode = VK_CULL_MODE_NONE;                 // (OpenGL: GL_CULL_FACE off)
+    rs.cullMode = VK_CULL_MODE_NONE;                 // (no culling)
     rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rs.lineWidth = 1.0f;
     VkPipelineMultisampleStateCreateInfo ms{};
@@ -297,7 +297,7 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
     VkPipelineColorBlendAttachmentState ba{};
     ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     ba.colorBlendOp = ba.alphaBlendOp = VK_BLEND_OP_ADD;
-    switch (b) {                                      // OpenGL's glBlendFunc(Separate) of Renderer2D::end, factor for factor
+    switch (b) {                                      // the blend factors of each step
     case kNormal: ba.blendEnable = VK_TRUE; ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA; ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
                   ba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; ba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA; break;
     case kAdditive: ba.blendEnable = VK_TRUE; ba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA; ba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -343,7 +343,7 @@ VkPipeline VkDraw2D::makePipeline(int prog, Blend b, Pass p, VkShaderModule vs, 
 
 bool VkDraw2D::init(const VkDevCtx& c, VkFormat windowFormat, int samples, std::string& why) {
     c_ = c;
-    // ---- the shaders: OpenGL's text as SPIR-V; the stages' inputs and outputs must meet at the same locations, the blocks and the texture where expected ----
+    // ---- the shaders: shaders.h's text as SPIR-V; the stages' inputs and outputs must meet at the same locations, the blocks and the texture where expected ----
     const Code code[] = {{k_r2d_tri_vert, sizeof k_r2d_tri_vert}, {k_r2d_tri_frag, sizeof k_r2d_tri_frag}, {k_r2d_planet_frag, sizeof k_r2d_planet_frag},
                          {k_r2d_sq_vert, sizeof k_r2d_sq_vert}, {k_r2d_sq_frag, sizeof k_r2d_sq_frag}, {k_r2d_blob_vert, sizeof k_r2d_blob_vert},
                          {k_r2d_blob_frag, sizeof k_r2d_blob_frag}, {k_r2d_chart_vert, sizeof k_r2d_chart_vert}, {k_r2d_cmp_vert, sizeof k_r2d_cmp_vert},
@@ -385,7 +385,7 @@ bool VkDraw2D::init(const VkDevCtx& c, VkFormat windowFormat, int samples, std::
         VkImageFormatProperties ip{};
         const VkResult r = vkGetPhysicalDeviceImageFormatProperties(c_.phys, kRgba8, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 0, &ip);
         if (r == VK_SUCCESS && (ip.sampleCounts & VK_SAMPLE_COUNT_4_BIT) && (c_.limits.framebufferColorSampleCounts & VK_SAMPLE_COUNT_4_BIT)) samples_ = 4;
-        samplesText_ = samples_ == 4 ? "4 samples (multisampling, as OpenGL's window)" : "1 sample: this card offers no 4x multisampling for RGBA8 pictures";
+        samplesText_ = samples_ == 4 ? "4 samples (multisampling)" : "1 sample: this card offers no 4x multisampling for RGBA8 pictures";
     } else samplesText_ = "1 sample (multisampling off: PL_NO_MSAA)";
     if (ok) {
         VkFormatProperties fp{};
@@ -399,7 +399,7 @@ bool VkDraw2D::init(const VkDevCtx& c, VkFormat windowFormat, int samples, std::
             if (floatFormat_ == VK_FORMAT_UNDEFINED && (fp.optimalTilingFeatures & needF) == needF) floatFormat_ = f;
         }
         if (floatFormat_ == VK_FORMAT_UNDEFINED) { ok = false; why = "no float format can be drawn into with blending here (the electron cloud's layer)"; }
-        floatText_ = floatFormat_ == VK_FORMAT_R32G32B32A32_SFLOAT ? "R32G32B32A32_SFLOAT (as OpenGL's GL_RGBA32F)" : "R16G16B16A16_SFLOAT (32-bit float cannot blend on this card)";
+        floatText_ = floatFormat_ == VK_FORMAT_R32G32B32A32_SFLOAT ? "R32G32B32A32_SFLOAT" : "R16G16B16A16_SFLOAT (32-bit float cannot blend on this card)";
     }
     // (0.63.0: no render passes: dynamic rendering, beginPass)
     // ---- the layouts: binding 2 the vertex stage's block, 1 the fragment stage's, 0 its texture (the white one where it has none) ----
@@ -480,7 +480,7 @@ bool VkDraw2D::init(const VkDevCtx& c, VkFormat windowFormat, int samples, std::
 
 bool VkDraw2D::upload(int map, int w, int h, const std::vector<std::uint8_t>& rgba, bool srgb, std::string& why) {
     if (map < 0 || map >= 32 || w <= 0 || h <= 0 || rgba.size() < std::size_t(w) * std::size_t(h) * 4u) { why = "a map of the wrong size"; return false; }
-    const VkFormat f = srgb ? VK_FORMAT_R8G8B8A8_SRGB : kRgba8;              // OpenGL: GL_SRGB8_ALPHA8 (the planets: decoded to linear light), GL_RGBA8 (the sky)
+    const VkFormat f = srgb ? VK_FORMAT_R8G8B8A8_SRGB : kRgba8;              // sRGB for the planets (decoded to linear light), UNORM for the sky
     VkFormatProperties fp{};
     vkGetPhysicalDeviceFormatProperties(c_.phys, f, &fp);
     const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT;
@@ -507,7 +507,7 @@ bool VkDraw2D::upload(int map, int w, int h, const std::vector<std::uint8_t>& rg
         cp.imageExtent = {static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1};
         vkCmdCopyBufferToImage(cmd, stage.b, im.img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cp);
         int lw = w, lh = h;
-        for (int i = 1; i < mips; i++) {                                     // each level from the one above, filtered (the sRGB maps in linear light, as OpenGL's)
+        for (int i = 1; i < mips; i++) {                                     // each level from the one above, filtered (the sRGB maps in linear light)
             barrier(cmd, im.img, i - 1, 1, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_ACCESS_2_TRANSFER_READ_BIT,
                     VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT);
             const int nw = std::max(1, lw / 2), nh = std::max(1, lh / 2);
@@ -626,7 +626,7 @@ void VkDraw2D::beginPass(Pass p, Img& color, Img* resolve, int w, int h, bool cl
     ri.colorAttachmentCount = 1;
     ri.pColorAttachments = &at;
     vkCmdBeginRendering(cmd_, &ri);
-    const VkViewport vp{0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h), 0.0f, 1.0f};   // OpenGL's rows: NDC y = -1 is the image's first row
+    const VkViewport vp{0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h), 0.0f, 1.0f};   // bottom-up rows: NDC y = -1 is the image's first row
     const VkRect2D sc{{0, 0}, {static_cast<uint32_t>(w), static_cast<uint32_t>(h)}};
     vkCmdSetViewport(cmd_, 0, 1, &vp);
     vkCmdSetScissor(cmd_, 0, 1, &sc);
@@ -858,7 +858,7 @@ bool VkDraw2D::addProgram(Prog p, std::string& why) {
         const auto it = vs.out.find(name);
         if (it == vs.out.end() || it->second != loc) { why = "the blob fragment shader's input " + name + " does not meet the vertex shader at the same location"; return false; }
     }
-    if (p == kCloud) {                                                       // the groups' format, as queried (OpenGL's GL_UNSIGNED_BYTE attribute)
+    if (p == kCloud) {                                                       // the groups' format, as queried (one byte)
         VkFormatProperties fp{};
         vkGetPhysicalDeviceFormatProperties(c_.phys, VK_FORMAT_R8_USCALED, &fp);
         if (!(fp.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT)) { why = "this card cannot read R8_USCALED vertex data (the dots' colour groups)"; return false; }
@@ -957,7 +957,7 @@ int VkDraw2D::meshCreate(const void* v, std::size_t bytes) {
     if (!makeBuffer(bytes, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true, stage, "the mesh's upload buffer")) return -1;
     std::memcpy(stage.map, v, bytes);
     bool ok = makeBuffer(bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, false, m.buf, "the mesh's buffer");
-    if (ok) ok = c_.once([&](VkCommandBuffer cmd) {                          // once, as OpenGL's GL_STATIC_DRAW buffer (the mesh is then only drawn)
+    if (ok) ok = c_.once([&](VkCommandBuffer cmd) {                          // once (the mesh is then only drawn)
         const VkBufferCopy cp{0, 0, bytes};
         vkCmdCopyBuffer(cmd, stage.b, m.buf.b, 1, &cp);
         vkMemoryBarrier2(cmd, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT, VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT);   // (0.63.0)
@@ -992,11 +992,11 @@ void VkDraw2D::drawMesh(int id, int first, int count) {
 
 void VkDraw2D::endPicture(bool gray) {
     if (!cur_) return;
-    if (inLayer_) endLayer();                                                // (a layer left open: closed, as OpenGL's next segment would draw into it)
+    if (inLayer_) endLayer();                                                // (a layer left open: closed)
     endPass();
     usedGray_ = false;
     if (failed_) return;
-    if (gray) {                                                              // OpenGL: the picture drawn into its own image, then copied over in grey (kGrayFS)
+    if (gray) {                                                              // the picture drawn into its own image, then copied over in grey (kGrayFS)
         beginPass(kPass8, cur_->gray, nullptr, cur_->w, cur_->h, true, nullptr);
         draw(kGray, kNoBlend, 0, 0, 6, 0, 0, 0, -2);
         endPass();
@@ -1020,7 +1020,7 @@ bool VkDraw2D::keepPicture(int w, int h, bool gray) {
 }
 
 // 0.69.0 (present.frag's place): the target cleared to clear[] and the picture copied into its area (x, y, w, h: pixels from the top left) by a blit,
-// its rows turned over (the picture has OpenGL's rows: its first row at the bottom) and nearest, one texel to one pixel: the same pixels the shader copied
+// its rows turned over (the picture's first row is at the bottom) and nearest, one texel to one pixel: the same pixels the shader copied
 // (its target's row q took the picture's row h - 1 - q). The target goes from undefined to the colour attachment's layout, the picture back to sampled.
 void VkDraw2D::copyTo(VkCommandBuffer cmd, VkImage dst, const VkClearColorValue& clear, int x, int y, int w, int h) {
     vkImageBarrier2(cmd, dst, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_NONE,

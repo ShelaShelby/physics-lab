@@ -2,7 +2,7 @@
 // the card (a trail as a ring that grows at its head and loses its tail; an orbit's 257 corners and a distance ring's 97, sent again only when they
 // changed), each as a high and a low float of the processor's double; the card projects the pieces about a reference point near the view, makes the
 // long pieces near the picture into curves as the processor does (orbit/orbit_lines.h), clips and widens them, and draws them with kFragmentShader.
-// The processor's LinePen stays the reference and the fallback (OpenGL always). Made and checked by orbit/lines_check.cpp under its guard
+// The processor's LinePen stays the reference and the fallback. Made and checked by orbit/lines_check.cpp under its guard
 // (app/gpu_guard.h gpuVkLinesGuard, log lines "[vulkan] [lines] ").
 #pragma once
 

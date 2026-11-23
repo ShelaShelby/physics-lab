@@ -2,7 +2,7 @@
 # 0.15 stage 5r: pills (the Atom toolbar and the chart tilt pill) are a flat fill: no lighter block behind the buttons, no 1 px outline (except Monochrome / High contrast).
 # 0.38 (the owner's new look; references changed on purpose): they are 4 px boxes, still one flat fill, and now WITH the 1 px edge of every panel in every theme, which is
 # what tells them from the page (in Light the fill and the page are both white).
-# Checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU), on the picture's own pixels.
+# Checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU), on the picture's own pixels.
 #   check_5r.py <PhysicsLab binary> <work folder> pill
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

@@ -3,7 +3,7 @@
 // (measured in stage 3, REPORT.md). Both now run in compute shaders (shaders.h, kOutlineDensityCS and kOutlineLevelCS); the CPU asks, carries on, and takes the answer a frame or two later
 // WITHOUT waiting: a job is started, a fence marks its end, and each frame the CPU only asks "is it done?" (a fence looked at without waiting). When it is, the grid is read back ONCE
 // (1 MB, once per orbital) and the CPU builds the outline's lines from it with the same code as before. The Slice's 200 x 200 values are made the same way, one frame late.
-// The C++ functions (outline.cpp) are the reference and the fallback. The types here have no graphics calls, so the atom code and its tests can use them (0.69.0: OpenGL's class is gone with OpenGL).
+// The C++ functions (outline.cpp) are the reference and the fallback. The types here have no graphics calls, so the atom code and its tests can use them.
 #pragma once
 
 #include <vector>

@@ -97,7 +97,7 @@ def card_part(binary, work):
     def read(path):
         return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
     def lines_of(log, which):
-        return "\n".join(ln for ln in log.splitlines() if ln.startswith(f"[vulkan] [{which}] "))   # (0.69.0: Vulkan's guards, OpenGL's are gone)
+        return "\n".join(ln for ln in log.splitlines() if ln.startswith(f"[vulkan] [{which}] "))   # (Vulkan's guards)
     # one normal run of both scenes, the steps of every die run and the runs after them, in parallel
     BIG = dict(frames=100000, size="880x560", timeout=1500)
     dirs = {"ok": folder("card_ok")}

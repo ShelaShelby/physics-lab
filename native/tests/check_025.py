@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.25, checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real mouse): the "closest to reality" dots and each lab's "Most realistic" button (src/ui/realest.cpp).
+# 0.25, checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real mouse): the "closest to reality" dots and each lab's "Most realistic" button (src/ui/realest.cpp).
 #   orbit / atom / molecule: before the button, the lab's default picture shows dots and at least one of them is on a choice that is NOT the current one (so a dot follows the
 #   table, not the current value); after the button, every dot drawn sits on the current choice, and the lab's state is the realistic one.
 #   guide: the Molecule Lab's "What am I even looking at?" guide opens and follows the style: water in Density says how the cloud is made and that it moves with the atoms;

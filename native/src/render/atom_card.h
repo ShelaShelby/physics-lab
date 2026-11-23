@@ -19,7 +19,7 @@ std::string sliceShaderId();
 std::string jumpShaderId();
 
 // 0.61.0: the Atom Lab's card programs as the lab sees them; Vulkan's is made by render/vk_card.cpp (makeVkAtomCard), AtomCardNone stands in where it
-// cannot be made (every program absent: the processor's paths). 0.69.0: OpenGL's AtomCardGl is gone with OpenGL.
+// cannot be made (every program absent: the processor's paths).
 class AtomCard : public ISliceCompute {
 public:
     enum Program { kSlice = 0, kJump = 1 };

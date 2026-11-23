@@ -1,6 +1,6 @@
 # Physics Lab — Windows app
 
-Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan, Dear ImGui). Version **0.75.2 alpha**. The app draws everything with Vulkan (1.3 or 1.4, or 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2); a PC whose Vulkan cannot start gets a message naming what is needed (OpenGL was removed in 0.69.0). Four labs:
+Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan, Dear ImGui). Version **0.75.3 alpha**. The app draws everything with Vulkan (1.3 or 1.4, or 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2); a PC whose Vulkan cannot start gets a message naming what is needed. Four labs:
 - **Orbit Lab**: the real Solar System from JPL Horizons (Simple or Real physics, relativity, the Moon from ELP2000-82B, eclipse shadows, Earth's air, Saturn's rings from Cassini, each part at its own viewing angle, drawn per pixel by the graphics card on Vulkan with the processor's triangles as reference; the 3D view a pinhole camera with a 45-degree field that flies closer as you zoom, the sky through the same lens); and, with its System switch, the Alpha Centauri system (A and B on their measured orbit, Proxima and its planets b and d, the disputed Proxima c and an unconfirmed candidate dashed, the sky seen from there with our Sun; the planets' tilt assumed, their sizes unknown).
 - **Atom Lab**: any nucleus, down to quarks; one electron (exact, with Dirac's relativity) or every electron of the neutral atoms (Dirac-Hartree-Fock orbitals computed for the app);
   photon jumps along NIST's measured lines: one electron for every element, every electron shown for 16 atoms (Li, Na, K, Rb, Cs, Fr, He, Be, Mg, Ca, Zn, Sr, Cd, Ba, Hg, Ra;
@@ -12,6 +12,8 @@ Physics Lab for Windows, in C++ (C++17, SDL3, Vulkan, Dear ImGui). Version **0.7
 App-wide: a units-aware calculator (CODATA 2022), the Data panel (each lab's tables with units and sources, plots, fits, CSV), search (Ctrl+K), themes, the Learn guides,
 Journey (a scale tour), Save picture and a Benchmark. About lists every data source (*Where the facts come from*); 🕰 What's new has every version (`src/ui/changelog.cpp`).
 The app is in **alpha**: features are still being added. The design of the interface is in `docs/DESIGN-1.0.md`.
+
+Repositories: ShelaShelby/physics-lab (public, this app, one branch `native`), ShelaShelby/physics-lab-sources (private, the saved papers and pages) and ShelaShelby/physics-lab-archive (private, the history before 15 Nov 2026, read-only).
 
 The repository is public. `native/data` holds the project's own outputs, small tables with their reference, raw US-government datasets (NIST, NASA/JPL) and, for each test that needs numbers from a paper or saved page, a small extract (`*.extract.txt`). The papers, scans, preprints, saved web pages and downloads of unclear terms themselves are in the private repo `ShelaShelby/physics-lab-sources` (same paths under `data/`); `native/data/SOURCES.md` lists each with its reference, URL, date and sha256, and `native/tools/check_sources.py` checks them against a checkout of that repo.
 
@@ -65,6 +67,6 @@ All physics is in SI units. The Orbit Lab's Time speed and zoom are in "sim unit
 `native/tools/check.sh quick` runs the physics and logic programs (`ctest -L quick`): the Orbit Lab against JPL Horizons and Kepler's laws (`orbit_physics`, `jpl_validation`,
 `moon_validation`), the Atom Lab against NIST, NUBASE2020, AME2020, the IAEA tables and textbook formulas (`atom_physics`), the Molecule Lab against CCCBDB
 (`molecule_logic`, `vibration_logic`, `rotation_logic`, `density_logic`), the calculator against CODATA 2022 (`calc_logic`), the fits against NIST's StRD (`analysis_logic`), and the settings
-file, themes and About page (`app_settings`). `check.sh full` adds the 15 `ui_*` tests, one per screen, which start the real app on Linux (Mesa); `ctest -N` lists them.
+file, themes and About page (`app_settings`). `check.sh full` adds the 16 `ui_*` tests, one per screen, which start the real app headless on Linux (SDL's offscreen driver, Mesa's software Vulkan); `ctest -N` lists them. GitHub runs the full suite on every push to `native` (workflow **Native full tests**, separate from the Windows build).
 
 The `PL_*` environment variables read in `src/main.cpp` are for the automatic checks only (e.g. `PL_EXIT_AFTER_FRAMES=n`, `PL_SCREENSHOT=file.bmp`, `PL_ATOM=1`, `PL_THEME=paper`).

@@ -1,5 +1,5 @@
 // 0.13 stage 2: the superposition and the jump on the GPU (included by test_atom.cpp after test_gpu_colours.inc). This file: the INDEPENDENT physics check, which does not depend on
-// any GPU code and was written before it; the comparison of the GPU code with the CPU reference is in tests/gl_compare.cpp (it needs an OpenGL 4.3 context: Mesa's llvmpipe).
+// any GPU code and was written before it; the comparison of the GPU code with the CPU reference is in tests/vk_compare.cpp (on Mesa's software Vulkan, lavapipe).
 // REFERENCE: the textbook hydrogen-like wave functions, typed here (not the lab's):
 //   psi(2p, m = 0, z)  = Z^(3/2) / (4 sqrt(2 pi)) * rho exp(-rho/2) * z/r                      rho = Z r / a0, lengths in a0, psi in a0^(-3/2)
 //   psi(2p, x)         = the same with x/r
@@ -114,7 +114,7 @@ static void testGpuComputePhysics() {
     }
 }
 
-// ---- the logic around the kernels, with a stand-in for the GPU (so it runs on every machine, also without OpenGL) ----
+// ---- the logic around the kernels, with a stand-in for the GPU (so it runs on every machine, also without a GPU) ----
 namespace {
 struct GcFake : render::IGroupCompute {
     bool answer = true;                                  // what the calls return (false: pretend the kernel could not run)
@@ -161,7 +161,7 @@ static void testGpuComputeLogic() {
         GcFake off; L.gpuCompute = false;
         checkTrue(tag + "switch Off: the CPU path, the compute object is not called", fillGroups(L, &off, cnt, grp.data()) == GroupsBy::Cpu && off.superCalls == 0 && grp == ref);
         L.gpuCompute = true;
-        checkTrue(tag + "no compute object (OpenGL 3.3): the CPU path", fillGroups(L, nullptr, cnt, grp.data()) == GroupsBy::Cpu && grp == ref);
+        checkTrue(tag + "no compute object: the CPU path", fillGroups(L, nullptr, cnt, grp.data()) == GroupsBy::Cpu && grp == ref);
     }
     // a plain cloud (no jump, no superposition) never goes to the GPU
     {

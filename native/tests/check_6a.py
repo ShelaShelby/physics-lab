@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.16 stage 1a: the Atom Lab's old-panel features that had no New UI home now have one. Checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU).
+# 0.16 stage 1a: the Atom Lab's old-panel features that had no New UI home now have one. Checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU).
 # Atom Lab, New UI on, 3 themes, ONE size. References: the old panel's own words (atom_panel.cpp: the Dirac level rows only with Dirac On; "Picture: N draw calls" line).
 #   check_6a.py <PhysicsLab binary> <work folder> gaps
 import os, re, sys

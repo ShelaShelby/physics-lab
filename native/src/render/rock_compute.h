@@ -6,7 +6,7 @@
 // What goes every frame: the simulated time t (a double, sent as two floats, hi and lo: t = hi + lo exactly), the Trojans' sway phase reduced to 0..2 pi in double, and the camera.
 // PRECISION RULE (DECISIONS.md): times and angles that grow without limit stay in DOUBLE: the shader forms the mean anomaly M = M0 + n t in double (double precision: Vulkan's shaderFloat64, queried;
 // a card without it draws the rocks by the CPU) and reduces it to -pi..pi in double; only that small number goes into 32-bit float for Kepler's equation and the position. The types have no graphics calls, so the
-// Orbit code and its tests can use them (0.69.0: OpenGL's class is gone with OpenGL).
+// Orbit code and its tests can use them.
 #pragma once
 
 #include <cstdint>

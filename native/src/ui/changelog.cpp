@@ -19,6 +19,9 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.75.3", "Tidier code and tests that run on GitHub",
+     "Nothing changes in how the app works (a few benchmark descriptions no longer name OpenGL, which the app stopped using in 0.69.0). The project's rules were cut down to one short file, old notes about the graphics system the app used before Vulkan were taken out "
+     "of the code, and the whole test suite, including the tests that start the app and look at its pictures, now runs on GitHub after every update."},
     {"0.75.2", "Orbit Lab corrections from an outside review, and rings at their own angle for every giant",
      "An outside reviewer checked the Orbit Lab's numbers against published sources; what held up is fixed. Planet cards: the spin's outward push is now worked out as "
      "omega squared times the radius (Jupiter takes off 0.23 g, not 0.17) and the pull alone is what you feel plus that push; \"x Earth\" sizes compare like with like "

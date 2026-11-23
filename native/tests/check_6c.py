@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.16 stage 3: the nucleus view at full zoom, checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU, NO timing: counts only).
+# 0.16 stage 3: the nucleus view at full zoom, checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU, NO timing: counts only).
 #   fullzoom: lawrencium-266 at the largest zoom (x10,000,000) with "+ Sea": the picture uploads only what can reach the screen.
 #             Measured on this commit's parent (the same settings, 1280x800): Accurate 311,076 triangle vertices and 843 blobs a frame (the antiquark rings,
 #             up to 720 line pieces each, and blobs wholly off the picture), Cinematic on a light theme the same; after the fix 36 vertices and 24-25 blobs.

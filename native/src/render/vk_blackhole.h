@@ -1,15 +1,15 @@
-// 0.62.0: Vulkan, step 4 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): the Black Hole Lab's card programs on Vulkan, from the same shader text as OpenGL's (render/shaders.h,
+// The Black Hole Lab's GPU programs on Vulkan, from the shader text in render/shaders.h (
 // made into SPIR-V at build time: CMakeLists.txt PL_VK2D_SHADERS; kKerrSkyFS assembled from its parts as render/kerr_sky.cpp does). Renderer2D's Black Hole
-// calls (lensSky, skyProbe, kerrSky's stages, the exposure, the glow and the glare) hand their work to this object on Vulkan, with the same rules as
-// render/renderer2d.cpp's OpenGL code: the picture drawn anew only when the view changed, the exposure reduced on the card, the lower resolution while
+// calls (lensSky, skyProbe, kerrSky's stages, the exposure, the glow and the glare) hand their work to this object on Vulkan. The rules:
+// the picture drawn anew only when the view changed, the exposure reduced on the card, the lower resolution while
 // moving on a slow card, the open-sky mask kept with the picture, the Film glow and the eye's glare (its veil made on a thread of its own).
 //
 // The passes are recorded into the card programs' batch (render/vk_card.h VkCards) that is submitted before the frame that shows them; the frame then lays
-// the finished picture over the lab's picture (VkDraw2D kComposite, no blend, as OpenGL's drawLens). Vulkan 1.3 is used here from the start: dynamic
+// the finished picture over the lab's picture (VkDraw2D kComposite, no blend). Vulkan 1.3 is used here from the start: dynamic
 // rendering (no render passes or framebuffers) and synchronization2's barriers, each image's layout and last use tracked so every barrier names exactly the
 // stages and accesses before and after it. Read-backs (the exposure's white, the probe, the glare's blocks) go into host-visible buffers and are read once
-// their batch's fence has signalled: never a wait in a normal frame (OpenGL: a pixel buffer behind a fence). The card's time of the sky pass: timestamp
-// queries (timestampPeriod, timestampValidBits; none: no times), read back without waiting, as skyTimes does with GL_TIMESTAMP.
+// their batch's fence has signalled: never a wait in a normal frame. The card's time of the sky pass: timestamp
+// queries (timestampPeriod, timestampValidBits; none: no times), read back without waiting.
 //
 // The pipelines of the big shaders (the lens pass, the spinning hole's table pass, the three sky stages, the light paths' compute shader) are made on a
 // worker thread, never in a frame; a VkPipelineCache kept in the settings folder (vulkan-pipeline-cache.bin: our header with its size and FNV-1a hash, then
@@ -67,7 +67,7 @@ public:
     void probe(const LensSky& L, int w, int h, bool queue, std::vector<float>* out);
     bool probeDone();
     void probeRead(std::vector<float>& out);
-    // 0.69.0 (the tests' hooks, PL_BH_COMPARE; until 0.68.1 they ran on OpenGL only): the float outputs of one picture (LensSky::debug, debugDisc, the
+    // (the tests' hooks, PL_BH_COMPARE): the float outputs of one picture (LensSky::debug, debugDisc, the
     // sky's skyMode 1..4) drawn off screen into a float image, fbW x fbH x 4 floats, rows from the bottom, waited for (empty: not drawn); the elliptic
     // functions alone (KerrSky stage 1, kKerrSkyMathPart) on argument sets of 12 floats, 8 numbers a set (render/kerr_sky.h), waited for; the exposure's
     // last read-back, waited for (0: none since the last call)
@@ -157,7 +157,7 @@ private:
     std::mutex workMx_;
     std::vector<std::thread> workers_;
     std::atomic<int> skyStage_[3] = {{0}, {0}, {0}};    // per KerrSky stage: as Program::state
-    // the textures (OpenGL's names in renderer2d.h)
+    // the textures
     Tex lensTex_, layer_[2], mask_, out_, low_[4], glow_[2], glareSrc_, glareVeil_, probe_, debug_, args_, mathOut_;   // (0.69.0: the tests' three)
     void toneUniforms(VkUniforms& u, const LensSky& L);   // 0.70.0
     void gasUniforms(VkUniforms& u, const LensSky& L);    // 0.72.0
@@ -205,7 +205,7 @@ private:
     int passN_ = 0;
 };
 
-// ---- the light paths on Vulkan (kKerrTableCS, double precision: shaderFloat64), the same interface as OpenGL's (render/kerr_compute.h). The pipeline is
+// ---- the light paths on Vulkan (kKerrTableCS, double precision: shaderFloat64), the interface of render/kerr_compute.h. The pipeline is
 // made on a thread of its own (IKerrCompute::building() until then; its step told to steps from there); every queue* call submits its batch, done() asks
 // its fence. Null: this card has no double precision (why).
 IKerrCompute* makeVkKerrCompute(VkCards& c, VkPipelineCache cache, KerrSteps* steps, std::string& why);

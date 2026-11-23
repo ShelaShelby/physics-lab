@@ -167,11 +167,11 @@ struct VkBackend::Impl {
             modes.resize(n);
         }
         const auto has = [&](VkPresentModeKHR m) { return std::find(modes.begin(), modes.end(), m) != modes.end(); };
-        if (!on) {                             // as SDL_GL_SetSwapInterval(0): do not wait for the screen
+        if (!on) {                             // VSync off: do not wait for the screen
             if (has(VK_PRESENT_MODE_IMMEDIATE_KHR)) return VK_PRESENT_MODE_IMMEDIATE_KHR;
             if (has(VK_PRESENT_MODE_MAILBOX_KHR)) return VK_PRESENT_MODE_MAILBOX_KHR;
         }
-        return VK_PRESENT_MODE_FIFO_KHR;       // as SDL_GL_SetSwapInterval(1); every Vulkan driver has it
+        return VK_PRESENT_MODE_FIFO_KHR;       // VSync on; every Vulkan driver has it
     }
     static const char* presentName(VkPresentModeKHR m) {
         return m == VK_PRESENT_MODE_FIFO_KHR ? "FIFO (waits for the screen)" : m == VK_PRESENT_MODE_IMMEDIATE_KHR ? "IMMEDIATE (does not wait)" :
@@ -1033,7 +1033,7 @@ bool VkBackend::renderToImage(ImDrawData* dd, int w, int h, const float clear[4]
     const bool timeIt = d.benchImage && d.benchPool;
     if (ok) ok = runOnce(d, [&](VkCommandBuffer cmd) {
         if (timeIt) { vkCmdResetQueryPool(cmd, d.benchPool, tq, 2); vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, tq); }
-        if (pic && d.d2) {                                                // 0.60.0: the lab's picture (one sample, as OpenGL's offscreen picture)
+        if (pic && d.d2) {                                                // 0.60.0: the lab's picture (one sample)
             d.d2->beginFrame(static_cast<int>(d.wd.FrameIndex), std::max(1, static_cast<int>(d.wd.ImageCount)), cmd);
             pic->endVulkan(w, h, clear, true);
             pictured = d.d2->pictureDrawn() && !d.d2->failed();
@@ -1114,7 +1114,7 @@ bool VkBackend::initPicture(Renderer2D& r, bool msaa, bool breakCheck, std::stri
     d.d2 = new VkDraw2D();
     std::string w;
     if (!d.d2->init(c, d.wd.SurfaceFormat.format, msaa ? 4 : 1, w)) return fail("renderer2d pipelines", "renderer2d on Vulkan: " + w);
-    guard.end("renderer2d pipelines", "OpenGL's shaders as SPIR-V (" + std::to_string(d.d2->spirvBytes()) + " bytes; the picture area's fill: " +
+    guard.end("renderer2d pipelines", "shaders.h as SPIR-V (" + std::to_string(d.d2->spirvBytes()) + " bytes; the picture area's fill: " +
               std::to_string(sizeof k_fill_vert + sizeof k_fill_frag) + "), " + d.d2->samplesText() + ", the cloud's layer " + d.d2->floatFormatText());
     r.useVulkan(d.d2);
     guard.begin("renderer2d textures");

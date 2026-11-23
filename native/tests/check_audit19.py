@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.19 audit fixes checked in the REAL app (0.52.0: the monokey part went with the secret word it checked) (Linux, software OpenGL; NOT Windows, NOT a real mouse). One part per fix:
+# 0.19 audit fixes checked in the REAL app (0.52.0: the monokey part went with the secret word it checked) (Linux, software Vulkan; NOT Windows, NOT a real mouse). One part per fix:
 #   molsearch  search (Ctrl+K) in the Molecule Lab offered "Orbit Lab changelog", "Put this lab's settings back…" and "Legend", which do nothing there (the Molecule Lab has
 #              no changelog of its own, no Defaults and no legend; its menu already leaves them out): search must not list them.
 #   molbar     the Molecule Lab's bottom bar lit its on-buttons (style, Labels) with the ACCENT fill (blue in Light), unlike every other toolbar, which lights a button

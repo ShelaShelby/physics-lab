@@ -3,7 +3,7 @@
 #   quick: the unit test programs, the shader check and the source scan: about 1-3 min, no app start. EVERY job runs this (CLAUDE.md). All modes first run the guard against
 #          papers / saved pages in this public repo and tools/check_sources.py (skipped without PL_SOURCES_DIR, the checkout of ShelaShelby/physics-lab-sources).
 #   fix  : quick + the picture / UI tests whose names match the regex, e.g.  check.sh fix 'ui_atom|ui_look' (optional: re-running the failures of a full run)
-#   full : quick + every picture / UI test, all in parallel (one process per core), about 35 min on 4 cores (0.38.1). Only at a batch checkpoint: a new version X.Y or when the owner asks.
+#   full : quick + every picture / UI test, all in parallel (one process per core), about 35 min on 4 cores. GitHub runs it on every push (.github/workflows/native-full-tests.yml); by hand only when the owner asks.
 # A single test: ctest --test-dir <build dir> -R '^name$' --output-on-failure   (names: ctest -N)
 set -e
 mode=${1:-quick}

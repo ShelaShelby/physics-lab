@@ -1,6 +1,6 @@
 // 0.13 stage 1: the pictures of the old and the new phase-colour path, drawn by the REAL renderer (src/render/renderer2d.cpp and its shaders), and compared
-// pixel by pixel; 0.69.0 (OpenGL removed): on Vulkan (Mesa's software Vulkan, lavapipe, no window: the app's renderer2d_vk.cpp and vk_draw2d.cpp with the
-// same shaders as SPIR-V, one sample), and the card programs as the renderer makes them on Vulkan (until 0.68.1 gl_compare_tests, on Mesa's OpenGL).
+// pixel by pixel, on Vulkan (Mesa's software Vulkan, lavapipe, no window: the app's renderer2d_vk.cpp and vk_draw2d.cpp with the
+// same shaders as SPIR-V, one sample), and the card programs as the renderer makes them on Vulkan.
 // Built with -DPL_VK_TESTS=ON in a build that has the app (the Vulkan headers, volk and the SPIR-V come with it).
 //
 // What is compared: the dots layer of the cloud (the dots of the benchmark's scenes 8, 9 and 10, built by the very functions the app uses: cloud_dots.h), drawn
@@ -818,7 +818,7 @@ using namespace orbit;
 #include "vk_chart.inc"   // 0.13 stage 4 part B: the chart of nuclides from the retained mesh
 #include "vk_cards.inc"   // 0.61.0: the card programs on Vulkan (lavapipe) against the processor
 
-// 0.69.0 (was the OpenGL 3.3 context: a PC without OpenGL 4.3's compute shaders): a renderer on Vulkan without the card programs (a start whose card
+// A renderer on Vulkan without the card programs (a start whose card
 // programs could not be made, or PL_NO_COMPUTE): every card path is the processor's, the pictures the same as the card renderer's processor-path pictures
 static void fallback33(const std::string& dir) {
     render::Renderer2D R33;
@@ -878,7 +878,7 @@ int main(int argc, char** argv) {
     render::VkDraw2D d2;
     render::VkCards cards;
     render::Renderer2D R;
-    // the app's start (render/vk_backend.cpp initPicture, initCards), one sample (the pictures of the checks were OpenGL's one-sample framebuffers)
+    // the app's start (render/vk_backend.cpp initPicture, initCards), one sample
     check("Vulkan: the renderer's pipelines are made (" + why + ")", d2.init(g_vk.c, VK_FORMAT_R8G8B8A8_UNORM, 1, why));
     g_d2 = &d2;
     R.useVulkan(&d2);

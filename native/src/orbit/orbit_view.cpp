@@ -765,7 +765,7 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         };
         for (const Body* bp : vis) if (onCard && !trailOf(*bp, true)) onCard = false;
         if (set.orbits) for (const Body* bp : vis) if (!bp->comet && onCard && !orbitOfBody(*bp, true)) onCard = false;
-        if (!(onCard && (tc.runs.empty() || R.lines(tc)))) {   // the processor's lines (OpenGL; the card's off, not ready or out of room)
+        if (!(onCard && (tc.runs.empty() || R.lines(tc)))) {   // the CPU's lines (the GPU's are off, not ready or out of room)
             for (const Body* bp : vis) trailOf(*bp, false);
             if (set.orbits) for (const Body* bp : vis) if (!bp->comet) orbitOfBody(*bp, false);
         }

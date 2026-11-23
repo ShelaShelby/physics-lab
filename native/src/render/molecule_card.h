@@ -33,7 +33,6 @@ struct MolCloudDraw {                             // one frame's cloud (Renderer
 };
 
 // 0.61.0: as the lab sees it; Vulkan's is made by render/vk_card.cpp (makeVkMoleculeCard), and MoleculeCardNone stands in where it cannot be made
-// (0.69.0: OpenGL's MoleculeCardGl is gone with OpenGL)
 class MoleculeCard {
 public:
     virtual ~MoleculeCard() {}

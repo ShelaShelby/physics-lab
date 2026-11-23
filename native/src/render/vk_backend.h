@@ -1,8 +1,8 @@
-// 0.59.0: Vulkan, step 1 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): the window's Vulkan start and its frames. The instance (through volk: the PC's own Vulkan loader,
-// found at run time), SDL3's surface, the device (a discrete card first), the swapchain (present mode by the same VSync rule as the OpenGL path: on =
-// wait for the screen, FIFO; off = do not wait: IMMEDIATE, else MAILBOX, else FIFO), Dear ImGui's own Vulkan backend (the same version as the OpenGL one)
+// The window's Vulkan start and its frames. The instance (through volk: the PC's own Vulkan loader,
+// found at run time), SDL3's surface, the device (a discrete card first), the swapchain (present mode by the VSync setting: on =
+// wait for the screen, FIFO; off = do not wait: IMMEDIATE, else MAILBOX, else FIFO), Dear ImGui's own Vulkan backend
 // and one small pipeline of our own (render/vk/fill.*: the picture area's background; the SPIR-V is made at build time). Every step is logged by the
-// Vulkan guard (app/gpu_guard.h gpuVulkanGuard) and every VkResult is checked; a step that fails is kept by the guard and the app starts on OpenGL.
+// Vulkan guard (app/gpu_guard.h gpuVulkanGuard) and every VkResult is checked; a step that fails is kept by the guard and the app shows a message naming what is needed.
 // 0.60.0 (step 2): the labs' pictures: renderer2d drawn by render/vk_draw2d.* into the picture area (initPicture, render(..., pic)).
 #pragma once
 
@@ -36,10 +36,10 @@ public:
     // (the guard keeps it as "fail"); call shutdown() then.
     bool init(SDL_Window* window, app::GpuGuard& guard, const Options& o, std::string& why);
     void shutdown();                                         // everything made, in reverse (safe after a failed init)
-    // 0.60.0 (step 2): the labs' pictures (renderer2d on Vulkan, render/vk_draw2d.h), three guarded steps: "renderer2d pipelines" (OpenGL's shaders as
+    // 0.60.0 (step 2): the labs' pictures (renderer2d on Vulkan, render/vk_draw2d.h), three guarded steps: "renderer2d pipelines" (shaders.h's shaders as
     // SPIR-V, the passes and pipelines), "renderer2d textures" (the maps with their mip levels), "renderer2d check" (a tiny known picture drawn off screen
     // and read back against the values its shaders' formulas give; breakCheck: drawn wrong on purpose, PL_VK_CHECK=break). msaa: 4 samples where the card
-    // has them (PL_NO_MSAA: 1). False: why says it (kept by the guard as "fail"; call shutdown() then and start on OpenGL).
+    // has them (PL_NO_MSAA: 1). False: why says it (kept by the guard as "fail"; call shutdown() then).
     bool initPicture(Renderer2D& r, bool msaa, bool breakCheck, std::string& why);
     std::string pictureText() const;                         // the samples and the cloud layer's format ("" before initPicture)
     // 0.61.0 (step 3): the card programs on Vulkan (render/vk_card.h): the renderer then makes the superposition and jump groups, the outline, the
@@ -56,7 +56,7 @@ public:
     // the frame just drawn (after render, before present), RGBA bytes, top row first; false when it cannot be read
     bool readback(std::vector<uint8_t>& rgba, int& w, int& h);
     // Dear ImGui's draw data drawn into an image of its own (w x h, cleared to clear[]), RGB bytes, top row first (📷 Save image)
-    // 0.60.0: pic: the lab's picture under the text (one sample, as OpenGL's offscreen picture)
+    // 0.60.0: pic: the lab's picture under the text (one sample)
     bool renderToImage(ImDrawData* dd, int w, int h, const float clear[4], std::vector<uint8_t>& rgb, Renderer2D* pic = nullptr);
     void setVsync(bool on);                                  // takes effect at the next frame (the swapchain is made again)
     // 0.63.0 (step 5): the benchmark's timer on Vulkan: timestamp queries at the start and the end of the frame's command buffer and of each card batch
@@ -70,7 +70,7 @@ public:
     void benchCollect(std::vector<std::pair<double, double>>& busySpanMs, std::vector<long>* tags = nullptr);
     // 0.63.1: frames whose timestamps were thrown away (a zero, an end before its start, or over 10 s: the owner's 0.63.0 run gave about 1e12 ms a frame)
     int benchRejected() const;
-    // the timer's check (as OpenGL's GL_TIME_ELAPSED check): pic's picture drawn once into an image of its own, timed by the timestamps and by a clock
+    // the timer's check: pic's picture drawn once into an image of its own, timed by the timestamps and by a clock
     // from the submit to the end of the wait. False: not timed.
     bool benchLoad(Renderer2D& pic, int w, int h, double& gpuMs, double& wallMs);
 

@@ -185,7 +185,7 @@ def part_old(binary, work):
     check(r.window is not None and r.texts, "the New UI is always on (PL_NEWUI=off is ignored)")
 
 # 0.59.0 (Vulkan step 1 of 5): the app with the validation layers on: it starts on Vulkan (lavapipe here), the log has every [vulkan] step, zero validation
-# errors (0.69.0: OpenGL is gone, and with it the comparison of these pictures with OpenGL's). Then the swapchain made again. Only when asked (check_shell.py ... vulkan).
+# errors. Then the swapchain made again. Only when asked (check_shell.py ... vulkan).
 VK_STEPS = ["instance", "surface", "device", "swapchain", "pipelines", "renderer2d pipelines", "renderer2d textures", "renderer2d check", "first frame"]   # (0.60.0: + renderer2d)
 
 def _settings_files(home):
@@ -233,10 +233,10 @@ def part_vulkan(binary, work):
     check("Vulkan: " in m.out and "PLVK validation errors=0" in m.out and not errs and not m.scripted_missing(), f"resized and VSync switched: zero validation errors ({errs[:1]}, {m.scripted_missing()})")
     check(os.path.exists(m.bmp) and Bmp(m.bmp).w == 1280, "after the resize the swapchain has the window's new size (the last picture 1280 wide)")
 
-# 0.69.0 (OpenGL removed): a PC whose Vulkan cannot start. A step made to fail (PL_VK_FAIL=device, a test switch): the app shows its message (printed by the
+# A PC whose Vulkan cannot start. A step made to fail (PL_VK_FAIL=device, a test switch): the app shows its message (printed by the
 # checks: PLNOVULKAN, PLNOVULKANTEXT; no window waits for a click) naming what is needed and what this PC has, draws no frame and ends with exit code 1, not
 # a crash; the log and the settings keep the failed step. The next start (no switch): the guard keeps Vulkan off, the same message. Try again
-# (PL_NOVULKAN_ANSWER=again) forgets it; the start after that runs on Vulkan. (On 0.68.1 the first start went on to OpenGL: no message.)
+# (PL_NOVULKAN_ANSWER=again) forgets it; the start after that runs on Vulkan.
 def part_novulkan(binary, work):
     home = os.path.join(os.path.abspath(work), "home_nv")
     subprocess.run(["rm", "-rf", home]); os.makedirs(home, exist_ok=True)
@@ -259,7 +259,7 @@ def part_novulkan(binary, work):
 # 0.60.0 (Vulkan step 2 of 5, the Vulkan plan, done in 0.69.0 (git keeps it)): renderer2d on Vulkan. Each view of REPORT.md's coverage table (every drawing call of Renderer2D that is not a
 # card program -> one view that makes it; PL_LOG_DRAWKINDS says which calls a run made, so a view that stops making its call fails here) drawn by Vulkan with
 # the validation layers on, one sample (PL_NO_MSAA) and on the processor's paths (PL_NO_COMPUTE and the labs' card switches off), so the pictures show
-# the drawing alone (0.69.0: OpenGL is gone, and with it their comparison with OpenGL's). Then: every view with 4 samples (zero validation errors, the log
+# the drawing alone. Then: every view with 4 samples (zero validation errors, the log
 # says 4 samples), one view with the synchronisation checks on and Save image (zero errors), Save image has the lab's picture, and the start-up check
 # broken on purpose (PL_VK_CHECK=break: the message, exit code 1). Only when asked (check_shell.py ... vulkan2d).
 VK2D_CPU = {"PL_NO_COMPUTE": "1", "PL_GPU_CLOUD": "off", "PL_MOL_CARD": "0", "PL_ATOM_CARD": "0", "PL_LOG_DRAWKINDS": "1"}
@@ -278,19 +278,19 @@ VK2D_VIEWS = {   # name: (settings, the drawing calls the view must make)
 }
 
 # 0.61.0 (Vulkan step 3 of 5): the card views: each card program drawing on Vulkan (one sample, the validation layers with their synchronisation checks
-# on; 0.69.0: their comparison with OpenGL's card programs went with OpenGL). The Vulkan log must name the program's first full use (so the view really
+# on). The Vulkan log must name the program's first full use (so the view really
 # drew from the card). Then: one program broken on purpose (PL_VK_CARDFAIL=cloud: only it falls back,
 # the log says why, the picture is the processor's) and a card without double precision (PL_VK_NO_FLOAT64: the belts on the processor, Settings says so).
-VK3_VIEWS = {   # name: (settings, frames, the Vulkan log line of its first full use, OpenGL's log line or "")
-    "glow": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=1;view=Cloud 3D;orb=3d;cstyle=Glow"}, 60, "[vulkan] [cloud] |end the Glow dots' first full use", ""),
-    "super": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "12", "PL_MOTION": "off"}, 60, "[vulkan] [groups] |end the groups' first full use", ""),
-    "outline": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=1;view=Cloud 3D;orb=3d;outline=On"}, 60, "[vulkan] [outline] |end the outline's first full use", ""),
-    "slice": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "14", "PL_ATOM_BENCHSTOP": "60", "PL_MOTION": "off"}, 120, "[vulkan] [slice] |end the Slice's first full use", "[slice] |end the Slice's first full use"),
-    "jump": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "37", "PL_MOTION": "off"}, 150, "[vulkan] [jump] |end the jump's first full use", "[jump] |end the jump's first full use"),
-    "density": ({"PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "real"}, 90, "[vulkan] [molcloud] |end the Density cloud's first full use", "[molcloud] |end the Density cloud's first full use"),
-    "belts": ({"PL_SELECT": "Earth"}, 60, "[vulkan] [rocks] |end the rocks' first full use", ""),
+VK3_VIEWS = {   # name: (settings, frames, the Vulkan log line of its first full use)
+    "glow": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=1;view=Cloud 3D;orb=3d;cstyle=Glow"}, 60, "[vulkan] [cloud] |end the Glow dots' first full use"),
+    "super": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "12", "PL_MOTION": "off"}, 60, "[vulkan] [groups] |end the groups' first full use"),
+    "outline": ({"PL_ATOM": "1", "PL_ATOM_SET": "Z=1;view=Cloud 3D;orb=3d;outline=On"}, 60, "[vulkan] [outline] |end the outline's first full use"),
+    "slice": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "14", "PL_ATOM_BENCHSTOP": "60", "PL_MOTION": "off"}, 120, "[vulkan] [slice] |end the Slice's first full use"),
+    "jump": ({"PL_ATOM": "1", "PL_ATOM_BENCHSCENE": "37", "PL_MOTION": "off"}, 150, "[vulkan] [jump] |end the jump's first full use"),
+    "density": ({"PL_MOLECULE": "C6H6", "PL_MOLECULE_STYLE": "real"}, 90, "[vulkan] [molcloud] |end the Density cloud's first full use"),
+    "belts": ({"PL_SELECT": "Earth"}, 60, "[vulkan] [rocks] |end the rocks' first full use"),
 }
-# (PL_VK_SYNC: a batch the app asks about is waited for, so the Slice's dots and the outline arrive at the frame that asks, every run, as OpenGL's software
+# (PL_VK_SYNC: a batch the app asks about is waited for, so the Slice's dots and the outline arrive at the frame that asks, every run, as a software
 # driver gives them here: without it Vulkan's pictures of a moving Slice differ from run to run by when the batches finished)
 VK3_SYNC = {"PL_VK_VALIDATION": "1", "VK_KHRONOS_VALIDATION_VALIDATE_SYNC": "true", "PL_NO_MSAA": "1", "PL_VK_SYNC": "1"}
 
@@ -299,14 +299,14 @@ def _logged(log, prefix, text):   # a line of the guard's log: its prefix, its t
 
 def part_vulkancards(binary, work):
     calls = []
-    for name, (env, frames, _v, _g) in VK3_VIEWS.items():
+    for name, (env, frames, _v) in VK3_VIEWS.items():
         calls.append(((binary, work, "v3_vk_" + name, dict(env, **VK3_SYNC)), dict(frames=frames)))
     glow = VK3_VIEWS["glow"][0]
     calls.append(((binary, work, "v3_fail", dict(glow, PL_VK_CARDFAIL="cloud", **VK3_SYNC)), dict(frames=60)))
     calls.append(((binary, work, "v3_cpuglow", dict(glow, PL_GPU_CLOUD="off", **VK3_SYNC)), dict(frames=60)))
     calls.append(((binary, work, "v3_nof64", dict(PL_SELECT="Earth", PL_VK_NO_FLOAT64="1", PL_OPEN="settings:graphics", PL_LOG_DRAWKINDS="1", **VK3_SYNC)), dict(frames=40)))
     prefetch(calls)
-    for name, (env, frames, vline, gline) in VK3_VIEWS.items():
+    for name, (env, frames, vline) in VK3_VIEWS.items():
         v = run_app(binary, work, "v3_vk_" + name, dict(env, **VK3_SYNC), frames=frames)
         vlog, _c = _settings_files(os.path.join(os.path.abspath(work), "home_v3_vk_" + name))
         check("Vulkan: " in v.out, f"card {name}: the app started on Vulkan")
@@ -334,8 +334,7 @@ def part_vulkancards(binary, work):
     check(note and "The belts' rocks: the processor, because this card has no double precision in its shaders (shaderFloat64)" in note[0], f"no double precision: Settings' Graphics row says so: {note[:1]}")
 
 # 0.62.0 (Vulkan step 4 of 5): the Black Hole Lab on Vulkan. Each view drawn by Vulkan (one sample, the validation layers with their synchronisation checks),
-# running until the lab has settled (its tables, the sky's check, the exposure and the glare done: PL_BH_SETTLE; 0.69.0: their comparison with OpenGL's
-# pictures went with OpenGL). The Vulkan log must name the first full picture of the lab's passes (and of the sky per pixel for the spinning hole). Then:
+# running until the lab has settled (its tables, the sky's check, the exposure and the glare done: PL_BH_SETTLE). The Vulkan log must name the first full picture of the lab's passes (and of the sky per pixel for the spinning hole). Then:
 # 0.69.0: a card that offers Vulkan 1.2 with VK_KHR_dynamic_rendering and VK_KHR_synchronization2 (PL_VK_PRETEND_API=1.2 on lavapipe) draws the lab with zero
 # validation errors; without one of them (PL_VK_PRETEND_NOEXT) the message says what is missing. The pipeline cache (the
 # second start makes the sky's pipeline faster than the first; a damaged file is ignored), one program broken on purpose (PL_VK_CARDFAIL=sky: only the
@@ -350,7 +349,7 @@ VK4_VIEWS = {   # name: PL_BH_SET
     "skyblack": VK4_FEED + ";sky=black;glare=off",
     "truebright": VK4_FEED + ";skybeside=true;glare=off",
 }
-VK4_RUN = {"PL_BLACKHOLE": "1", "PL_BH_SETTLE": "20:30", "PL_BH_GLARENOW": "1"}   # (the glare at once, in its frame: OpenGL's thread of the veil, below normal
+VK4_RUN = {"PL_BLACKHOLE": "1", "PL_BH_SETTLE": "20:30", "PL_BH_GLARENOW": "1"}   # (the glare at once, in its frame: the veil's thread, below normal
                                                                                   # priority, can wait for minutes here behind llvmpipe's own threads)
 
 def _sky_ms(r):
@@ -585,7 +584,7 @@ def part_vulkan2d(binary, work):
                                                 PL_SAVE_IMAGE="20", PL_SHOT_DIR=os.path.join(os.path.abspath(work), "v2_sync_shots")), frames=40)
     errs = _vk_errors(sv)
     check("Vulkan: " in sv.out and "PLVK validation errors=0" in sv.out and not errs, f"synchronisation checks on (layers, Save image): zero errors ({len(errs)}; first: {errs[:1]})")
-    # Save image: the saved file has the lab's picture (0.69.0: its comparison with OpenGL's saved file went with OpenGL)
+    # Save image: the saved file has the lab's picture
     d = os.path.join(os.path.abspath(work), "v2_shots_vk")
     if os.path.isdir(d):
         for f in os.listdir(d): os.remove(os.path.join(d, f))
@@ -599,7 +598,7 @@ def part_vulkan2d(binary, work):
         check(lit > 50, f"Save image on Vulkan has the lab's picture ({lit} bright samples)")
     else:
         check(False, "Save image wrote a PNG")
-    # the start-up check broken on purpose: the message (0.69.0: no OpenGL to start on), exit code 1
+    # the start-up check broken on purpose: the message, exit code 1
     b = run_app(binary, work, "v2_break", dict(vk, PL_VK_CHECK="break"), frames=30)
     nv = [l for l in b.out.splitlines() if l.startswith("PLNOVULKAN ")]
     check(b.code == 1 and nv and "wrong" in nv[0] and b.window is None, f"the start-up check failed on purpose: the message says why, exit code 1 ({nv[:1]}, exit {b.code})")

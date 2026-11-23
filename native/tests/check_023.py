@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.23: the Molecule Lab's vibrations, checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real mouse). The physics of the modes is in tests/test_vibration.cpp.
+# 0.23: the Molecule Lab's vibrations, checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real mouse). The physics of the modes is in tests/test_vibration.cpp.
 #   vib   a click on a mode moves the atoms (the picture changes, the panel lists the mode as chosen); Real size draws a smaller swing than 3 times bigger;
 #         the swing runs at its slowed-down speed (its phase follows sin(2 pi t / T) with T = 2 s x 1000 / wavenumber), also when another lab was paused
 #         (this lab has no clock; before, a pause in another lab stopped the Molecule Lab's motion); Density shows no vibration; another molecule stands still again

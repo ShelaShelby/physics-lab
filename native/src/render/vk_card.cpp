@@ -538,7 +538,7 @@ std::uint64_t VkCards::flush(bool wait) {
 bool VkCards::done(std::uint64_t ticket) {
     if (ticket == 0 || ticket <= doneTicket_) return true;
     if (open_ >= 0 && ticket >= nextTicket_) return false;    // (the open batch: not submitted yet)
-    // PL_VK_SYNC (picture tests only): a batch asked about is waited for, so its results arrive at the first frame that asks, every run (as OpenGL's
+    // PL_VK_SYNC (picture tests only): a batch asked about is waited for, so its results arrive at the first frame that asks, every run (as
     // software driver does here); never in normal use
     static const bool sync = std::getenv("PL_VK_SYNC") != nullptr;
     for (const Slot& s : slots_)
@@ -572,7 +572,7 @@ bool VkCards::makeGrid(int which, std::string& why) {
         VkFormatProperties fp{};
         vkGetPhysicalDeviceFormatProperties(c_.phys, VK_FORMAT_R32_SFLOAT, &fp);
         const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
-        if ((fp.optimalTilingFeatures & need) != need) { why = "this card cannot add up into an R32_SFLOAT picture (the exposure's grid, OpenGL's GL_R32F)"; return false; }
+        if ((fp.optimalTilingFeatures & need) != need) { why = "this card cannot add up into an R32_SFLOAT picture (the exposure's grid)"; return false; }
         VkDescriptorSetLayoutBinding b{2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
         VkDescriptorSetLayoutCreateInfo li{};
         li.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -626,7 +626,7 @@ bool VkCards::makeGrid(int which, std::string& why) {
     vi.pVertexAttributeDescriptions = attr.data();
     VkPipelineInputAssemblyStateCreateInfo ia{};
     ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    ia.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;            // (OpenGL: GL_POINTS, gl_PointSize 1)
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;            // (points, gl_PointSize 1)
     VkPipelineViewportStateCreateInfo vp{};
     vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     vp.viewportCount = 1;
@@ -757,7 +757,7 @@ int VkCards::grid(int which, int gw, int gh, VkBuffer b0, VkBuffer b1, std::uint
     ri.colorAttachmentCount = 1;
     ri.pColorAttachments = &at;
     vkCmdBeginRendering(cb, &ri);
-    // OpenGL's glViewport(0, 0, gw, gh): y = -1 is its first row, and glReadPixels gives that row first; here y = -1 is the image's first row too
+    // the viewport (0, 0, gw, gh): y = -1 is the image's first row, read back first
     const VkViewport v{0.0f, 0.0f, static_cast<float>(gw), static_cast<float>(gh), 0.0f, 1.0f};
     const VkRect2D sc{{0, 0}, {static_cast<std::uint32_t>(gw), static_cast<std::uint32_t>(gh)}};
     vkCmdSetViewport(cb, 0, 1, &v);
@@ -808,7 +808,7 @@ bool VkCards::pollFirstUse(FirstUse& f, double limitS) {
 }
 
 // =====================================================================================================================================================
-// the start-up steps of the programs that OpenGL makes with the renderer (no guard there): a guard each on Vulkan
+// the start-up steps of the programs made with the renderer: a guard each
 // =====================================================================================================================================================
 namespace {
 struct Steps {
@@ -852,7 +852,7 @@ public:
     }
     VkCards::FirstUse use;
 private:
-    // as OpenGL's: all the dots when the array is new, else only [lo, hi)
+    // all the dots when the array is new, else only [lo, hi)
     bool upload(VkCards::Buf& b, const float* data, long dots, bool full, long lo, long hi) {
         if (full) {
             const VkDeviceSize bytes = VkDeviceSize(dots) * 16u;
@@ -876,7 +876,7 @@ private:
         c_.barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkCards::kToHost);
         c_.firstUse(use);
         app::FrameCostLabel l("the superposition or jump groups");
-        if (!c_.flush(true) || c_.failed()) return false;     // waits, as OpenGL's glGetBufferSubData: the processor needs the groups to order the dots
+        if (!c_.flush(true) || c_.failed()) return false;     // waits: the CPU needs the groups to order the dots
         std::memcpy(out, out_.map, static_cast<std::size_t>(count));
         return true;
     }
@@ -1074,7 +1074,7 @@ public:
     bool dispatch(int slot, const RockFrame& f) override {
         if (!ok() || slot < 0 || slot >= kSlotsR || !slots_[slot].used || (counting && !c_.firstUseTurn(use))) return false;
         const Slot& sl = slots_[slot];
-        const float tHi = static_cast<float>(f.t), tLo = static_cast<float>(f.t - static_cast<double>(tHi));   // t = tHi + tLo exactly (24 + 24 bits), as OpenGL's
+        const float tHi = static_cast<float>(f.t), tLo = static_cast<float>(f.t - static_cast<double>(tHi));   // t = tHi + tLo exactly (24 + 24 bits)
         const int st = sl.isStatic ? 1 : 0, d3 = f.d3 ? 1 : 0;
         const float tt[2] = {tHi, tLo}, lib = static_cast<float>(f.libPhase);
         // 0.75.0: the pinhole camera (render/rock_compute.h RockFrame): uBc.w the near plane, uView (px, sx, sy, d), uOff (cd, lx, ly, F)
@@ -1173,7 +1173,7 @@ VkBuffer vkRockPositions(IRockCompute* r, int slot) {
 }
 
 // =====================================================================================================================================================
-// the Atom Lab's Slice dots and jump groups (kSliceDotsCS, kJumpShowCS): built and checked by atom/atom_card_paths.cpp under their guards, as on OpenGL
+// the Atom Lab's Slice dots and jump groups (kSliceDotsCS, kJumpShowCS): built and checked by atom/atom_card_paths.cpp under their guards
 // =====================================================================================================================================================
 class AtomCardVk : public AtomCard {
 public:
@@ -1636,7 +1636,7 @@ public:
         Set* set = nullptr;
         for (Set& s : sets_) if (s.epoch == d.epoch && s.n == d.cnt) set = &s;
         if (!set) {
-            if (sets_.size() < 18) sets_.push_back(Set{});    // the still cloud and a vibration's 17 moments, as OpenGL's
+            if (sets_.size() < 18) sets_.push_back(Set{});    // the still cloud and a vibration's 17 moments
             Set* old = &sets_[0];
             for (Set& s : sets_) if (s.used < old->used) old = &s;
             set = old;
@@ -1658,7 +1658,7 @@ public:
         const float g[2] = {static_cast<float>(gw), static_cast<float>(gh)};
         c_.gridUniforms(1).f("uGrid", g, 2);
         const int index = c_.grid(1, gw, gh, out_.b, VK_NULL_HANDLE, static_cast<std::uint32_t>(d.cnt));
-        if (d.fenceAfter && !fenceTicket_) fenceTicket_ = c_.pending();   // (once, as OpenGL's)
+        if (d.fenceAfter && !fenceTicket_) fenceTicket_ = c_.pending();   // (once)
         return index;
     }
     VkBuffer dots() const { return out_.b; }

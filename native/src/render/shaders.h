@@ -1,4 +1,4 @@
-// The GLSL sources of the 2D renderer (OpenGL 3.3 core, "#version 330 core"). They live in their own header so the tests can compile every one of them with glslang
+// The GLSL sources of the 2D renderer ("#version 330 core" text; cmake/extract_glsl.cmake turns them into Vulkan SPIR-V). They live in their own header so the tests can compile every one of them with glslang
 // (tests/check_shaders.py) without a graphics card, and the renderer uses exactly the same text.
 #pragma once
 
@@ -1059,9 +1059,9 @@ void main() {
 }
 )";
 
-// ---- 0.13 stage 2: OpenGL 4.3 compute (GLSL 430 core) ----
+// ---- compute shaders (GLSL 430 core text, built for Vulkan) ----
 // The colour group of every dot of a superposition or of a cloud jump, worked out on the GPU from the amplitudes stored with each dot when it was made. One kernel, two modes (uMode).
-// Each function is a direct port of its C++ twin, named in its comment; the C++ functions stay the reference (tests/gl_compare.cpp counts every dot that differs, and each must be within
+// Each function is a direct port of its C++ twin, named in its comment; the C++ functions stay the reference (tests/vk_compare.cpp counts every dot that differs, and each must be within
 // float rounding of a threshold). The result is 8 bits per dot (255 = not shown, else the phase bin 0..23, or 0 / 1 for Sign), four dots to a 32-bit word, read back by the CPU.
 static const char* const kGroupsCS = R"(#version 430 core
 layout(local_size_x = 64) in;
@@ -1306,7 +1306,7 @@ void main() {
 
 // ---- the Orbit Lab's belt rocks (0.13 stage 4 part A) ----
 // One thread a rock: its place on its Kepler ellipse and on the picture. Each part is a direct port of its C++ twin (orbit/belts.cpp, orbit/belts.h), named in its comment; the C++ functions stay
-// the reference (tests/gl_compare.cpp compares every rock of scenes 1 and 6 with them). Times and angles that grow without limit are DOUBLE (GLSL 4.00 double precision): M = M0 + n t is formed and
+// the reference (tests/vk_compare.cpp compares every rock of scenes 1 and 6 with them). Times and angles that grow without limit are DOUBLE (GLSL 4.00 double precision): M = M0 + n t is formed and
 // brought into -pi..pi in double, and only that small angle goes into float. The Kepler equation and the position are float (a rock's place is then good to about 1e-7 of its distance).
 static const char* const kRocksCS = R"(#version 430 core
 layout(local_size_x = 64) in;

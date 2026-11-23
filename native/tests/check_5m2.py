@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5m part 2 / 5n. Checked in the REAL app (Linux, software OpenGL, scripted events; NOT a real mouse, NOT Windows).
+# 0.15 stage 5m part 2 / 5n. Checked in the REAL app (Linux, software Vulkan, scripted events; NOT a real mouse, NOT Windows).
 #   check_5m2.py <PhysicsLab binary> <work folder> <part>      parts: layout
 # The expected numbers are written here by hand (the owner's words), not read from the app's own code.
 import os, sys

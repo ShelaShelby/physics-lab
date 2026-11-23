@@ -1,5 +1,4 @@
-// 0.62.0: Vulkan, step 4 of 5: the Black Hole Lab's card programs on Vulkan (render/vk_blackhole.h has the how). Each pass below is renderer2d.cpp's OpenGL
-// pass of the same name with the same uniforms, the same textures and the same viewport; only the API differs.
+// The Black Hole Lab's GPU programs on Vulkan (render/vk_blackhole.h has the how).
 #include "app/frame_cost.h"
 #include "render/vk_blackhole.h"
 
@@ -138,7 +137,7 @@ bool VkBlackHole::init(VkCards& c, const std::string& cacheDir, std::string& why
                       bits, static_cast<double>(p.limits.timestampPeriod));
         cacheText_ = b;
     }
-    // ---- the samplers (nearest: OpenGL's GL_NEAREST textures; linear: the low layers, GL_LINEAR), the corners, the white texture, the shared vertex shader ----
+    // ---- the samplers (nearest: the tables; linear: the low layers), the corners, the white texture, the shared vertex shader ----
     VkSamplerCreateInfo s{};
     s.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     s.magFilter = s.minFilter = VK_FILTER_NEAREST;
@@ -366,7 +365,7 @@ bool VkBlackHole::makePipelines(int p, std::string& why) {
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
         VkPipelineColorBlendAttachmentState ba[4]{};
         for (VkPipelineColorBlendAttachmentState& a : ba) a.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        VkPipelineColorBlendStateCreateInfo cb{};                     // (the passes are opaque: OpenGL's drawLens disables blending)
+        VkPipelineColorBlendStateCreateInfo cb{};                     // (the passes are opaque: no blending)
         cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cb.attachmentCount = static_cast<std::uint32_t>(V.n[k]);
         cb.pAttachments = ba;
@@ -413,8 +412,8 @@ void VkBlackHole::startWorker(int p, KerrSteps* steps, const std::string& step) 
         std::string w;
         const bool ok = makePipelines(p, w);
         char b[300];
-        // (beside the sizes known to link on the owner's card on OpenGL, plain / inlined: kKerrSkyFS 103.5 / 64.7 KB, kKerrFS 28.4 / 20.1 KB)
-        const char* known = p == pSky ? "; on OpenGL kKerrSkyFS linked at 103.5 / 64.7 KB plain / inlined" : p == pKerr ? "; on OpenGL kKerrFS linked at 28.4 / 20.1 KB plain / inlined" : "";
+        // (beside the sizes known to link on the owner's card, plain / inlined: kKerrSkyFS 103.5 / 64.7 KB, kKerrFS 28.4 / 20.1 KB, measured in 0.55.9)
+        const char* known = p == pSky ? "; kKerrSkyFS linked at 103.5 / 64.7 KB plain / inlined on the owner's card (0.55.9)" : p == pKerr ? "; kKerrFS linked at 28.4 / 20.1 KB plain / inlined on the owner's card (0.55.9)" : "";
         std::snprintf(b, sizeof b, "%s in %.0f ms (SPIR-V %zu bytes%s%s)", ok ? "made" : "FAILED", Q.ms, codeOf(p).bytes, cache_ ? ", with the pipeline cache" : "", known);
         if (steps) steps->end(step, ok ? std::string(b) : std::string(b) + ": " + w);
         std::printf("PLVKBH pipeline %s %s ms=%.1f spirv=%zu\n", progName(p), ok ? "made" : "FAILED", Q.ms, codeOf(p).bytes);
@@ -464,7 +463,7 @@ void VkBlackHole::begin(VkCommandBuffer cb, std::initializer_list<Tex*> targets,
         at[n].sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         at[n].imageView = t->view;
         at[n].imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        at[n].loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;   // (OpenGL's textures keep what a pass does not cover)
+        at[n].loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;   // (a pass keeps what it does not cover)
         at[n].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         passFmt_[n] = t->fmt;
         if (n == 0) { w = t->w; h = t->h; }
@@ -521,7 +520,7 @@ void VkBlackHole::draw(VkCommandBuffer cb, int p, int variant, std::initializer_
     vkUpdateDescriptorSets(dev_, static_cast<std::uint32_t>(wr.size()), wr.data(), 0, nullptr);
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, P.pl, 0, 1, &set, 0, nullptr);
-    const VkViewport v{static_cast<float>(vx), static_cast<float>(vy), static_cast<float>(vw), static_cast<float>(vh), 0.0f, 1.0f};   // OpenGL's rows (as vk_draw2d)
+    const VkViewport v{static_cast<float>(vx), static_cast<float>(vy), static_cast<float>(vw), static_cast<float>(vh), 0.0f, 1.0f};   // bottom-up rows (as vk_draw2d)
     const VkRect2D sc{{vx, vy}, {static_cast<std::uint32_t>(vw), static_cast<std::uint32_t>(vh)}};
     vkCmdSetViewport(cb, 0, 1, &v);
     vkCmdSetScissor(cb, 0, 1, &sc);
@@ -530,7 +529,7 @@ void VkBlackHole::draw(VkCommandBuffer cb, int p, int variant, std::initializer_
     vkCmdDraw(cb, 6, 1, 0, 0);
 }
 
-// a table or picture from the processor: (re)made at its size, staged and copied, then ready to be sampled (RGB tables get alpha 1, as OpenGL's GL_RGB32F)
+// a table or picture from the processor: (re)made at its size, staged and copied, then ready to be sampled (RGB tables get alpha 1)
 void VkBlackHole::upload(VkCommandBuffer cb, Tex& t, int w, int h, VkFormat f, const float* data, int comps, const char* what) {
     if (w <= 0 || h <= 0 || !cb) return;
     if (!t.img || t.w != w || t.h != h || t.fmt != f)
@@ -781,7 +780,7 @@ void VkBlackHole::kerrPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fb
                     {"uKT", kT_.view, nearest_}, {"uDC", discC_.view, nearest_}, {"uDF", kF_.view, nearest_}}, 0, 0, fbW, fbH);
 }
 
-// 0.56.0's skyPass: one pass of the spinning hole per pixel; (vx, vy, vw, vh): the viewport in the bound targets' pixels (OpenGL's glViewport)
+// 0.56.0's skyPass: one pass of the spinning hole per pixel; (vx, vy, vw, vh): the viewport in the bound targets' pixels
 void VkBlackHole::skyPass(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH, int ox, int oy, double scale, int mode, bool raw, int variant, int vx, int vy, int vw, int vh) {
     const int p = pSky;
     VkUniforms& u = prog_[p].u;
@@ -973,7 +972,7 @@ void VkBlackHole::skyPicture(VkCommandBuffer cb, const LensSky& L, int fbW, int 
         begin(cb, {&low_[0], &low_[1], &low_[2], &low_[3]}, 0, 0, w, h, false);
         skyPass(cb, L, fbW, fbH, 0, 0, scale, 0, raw, 0, 0, 0, w, h);
         end(cb);
-        Tex* full[4] = {&lensTex_, &layer_[0], &layer_[1], &mask_};      // stretched over the picture's own layers (bilinear, as OpenGL's GL_LINEAR)
+        Tex* full[4] = {&lensTex_, &layer_[0], &layer_[1], &mask_};      // stretched over the picture's own layers (bilinear)
         const int variant[4] = {0, 1, 1, 2};
         for (int k = 0; k < 4; k++) {
             use(cb, low_[k], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_SAMPLED_READ_BIT);
@@ -1046,7 +1045,7 @@ void VkBlackHole::glareUpload(VkCommandBuffer cb, int nx, int ny, const std::vec
     glareNx_ = nx; glareNy_ = ny;
 }
 
-// 0.55.4's makeGlare, all in this frame (the automatic checks): the blocks drawn, read back (the batch waited for, as OpenGL's glReadPixels), the veil
+// 0.55.4's makeGlare, all in this frame (the automatic checks): the blocks drawn, read back (the batch waited for), the veil
 void VkBlackHole::makeGlare(const LensSky& L, int fbW, int fbH) {
     const auto t0 = std::chrono::steady_clock::now();
     const double ppp = fbW / ptW_;
@@ -1147,8 +1146,8 @@ void VkBlackHole::stopGlareThread() {
     if (glareStage_ == 2) glareStage_ = 0;
 }
 
-// the finished picture: with the eye's glare (kGlareAddFS) or the Film glow (kGlowAddFS) into out_, else the kept picture itself (OpenGL draws these
-// into the window each frame; here once, when one of them changed: the same 8-bit values)
+// the finished picture: with the eye's glare (kGlareAddFS) or the Film glow (kGlowAddFS) into out_, else the kept picture itself (made once,
+// when one of them changed)
 void VkBlackHole::compose(VkCommandBuffer cb, const LensSky& L, int fbW, int fbH) {
     const bool glareOn = L.glareKeep > 0 && L.glareBlock && L.glareVeil && prog_[pGlareAdd].state == 2;
     const bool glow = L.glow[0] > 0 && prog_[pGlowAdd].state == 2;
@@ -1323,7 +1322,7 @@ void VkBlackHole::probe(const LensSky& L, int w, int h, bool queue, std::vector<
     if (out && probeBuf_.b.map) { const float* v = static_cast<const float*>(probeBuf_.b.map); out->assign(v, v + nf); }
 }
 
-// 0.69.0: the tests' float outputs (they were drawn by OpenGL into a float framebuffer): lens() sends the tables (it draws nothing for these outputs), then
+// the tests' float outputs: lens() sends the tables (it draws nothing for these outputs), then
 // the pass of lens()'s choice draws into a float image of its own, variant 1 (one float target), and is read back, waited for
 void VkBlackHole::debugPicture(const LensSky& L, double ptW, double ptH, int skyTexW, int fbW, int fbH, std::vector<float>& out) {
     out.clear();
@@ -1353,7 +1352,7 @@ void VkBlackHole::debugPicture(const LensSky& L, double ptW, double ptH, int sky
     if (debugBuf_.b.map && !c_->failed()) { const float* v = static_cast<const float*>(debugBuf_.b.map); out.assign(v, v + nf); }
 }
 
-// 0.69.0: the elliptic functions alone (as OpenGL's KerrSky::math was: the arguments three texels a set in one row, the 8 results in two rows of n texels)
+// the elliptic functions alone (the arguments three texels a set in one row, the 8 results in two rows of n texels)
 void VkBlackHole::math(const std::vector<float>& in, std::vector<float>& out) {
     const int n = static_cast<int>(in.size() / 12);
     out.assign(static_cast<std::size_t>(n) * 8, 0.0f);

@@ -40,7 +40,7 @@ double orbitalNorm(int orb);               // integral of |psi|^2 over all space
 const Outline& outlineOf(int orb);         // cached; worked out on the CPU, now (the reference: the 64^3 pass takes about 30 ms)
 
 // ---- 0.13 stage 3: the same on the GPU, without waiting (render/outline_compute.h) ----
-// The app gives the outline code its compute object once (null: none, an OpenGL 3.3 PC, or PL_NO_COMPUTE); the CPU path is used when there is none.
+// The app gives the outline code its compute object once (null: none, no GPU compute, or PL_NO_COMPUTE); the CPU path is used when there is none.
 void setOutlineCompute(render::IOutlineCompute* gc);
 render::IOutlineCompute* outlineCompute();
 // The outline of `orb` if it is READY, else nullptr, and it never waits. Ready: cached; or just finished on the GPU; or no usable GPU (useGpu false, or no compute object, or the job failed): then it is

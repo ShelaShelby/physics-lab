@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.20: three layout fixes, in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real mouse). Moved here unchanged from check_molbuild.py in 0.24, when the
+# 0.20: three layout fixes, in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real mouse). Moved here unchanged from check_molbuild.py in 0.24, when the
 # Molecule Lab's builder (and the rest of that file) was removed (the owner's decision of 4 Nov 2026). One part per check:
 #   u238      layout fix a: the Atom Lab's info text no longer covers the nucleus in the Nucleus view (U-238, Th-232, Pb-208 at 1280x800); a click opens the folded text (nothing lost)
 #   sheet     layout fix b: the Orbit Lab's "All values" sheet does not cover the Legend chip (1280x800 and 1920x1080)

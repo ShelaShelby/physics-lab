@@ -1,5 +1,5 @@
 // 0.57.0: the Atom Lab's two heavy loops on the graphics card, the types the atom code needs (no graphics calls here, so atom_core and its tests can use them;
-// the OpenGL class is render/atom_card.h). The processor's code stays the exact reference and the fallback:
+// the GPU class is render/atom_card.h). The processor's code stays the exact reference and the fallback:
 //   the Slice view's new dots on the moved plane: atom/cloud_sample.cpp PlaneSampler::tryPoint (shaders.h kSliceDotsCS);
 //   the groups of a jump with every electron, drawn from the card's cloud buffer: atom_sim.cpp AtomLab::jumpGroups (shaders.h kJumpShowCS).
 #pragma once

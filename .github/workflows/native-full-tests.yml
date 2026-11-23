@@ -1,0 +1,96 @@
+# The full test suite of Physics Lab (native/): every unit test and every ui_* test, which start the real app headless
+# (SDL's offscreen video driver and Mesa's software Vulkan, lavapipe: no screen and no GPU needed).
+# It runs on every push to `native` that changes native/ or this file, and by hand (Actions tab, Run workflow).
+# It is separate from the Windows build: a failure here does not stop the Windows zip or the "latest" release.
+name: Native full tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [native]
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-full-tests.yml'
+
+# a newer push cancels an older run that is still going
+concurrency:
+  group: native-full-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  full-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the build and test packages (the list in CLAUDE.md)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build ccache libx11-dev libxext-dev libxcursor-dev libxi-dev libxrandr-dev libxfixes-dev libxss-dev libxtst-dev libxrender-dev libxinerama-dev libxkbcommon-dev libwayland-dev glslang-tools libdrm-dev libgbm-dev libasound2-dev libdecor-0-dev mesa-vulkan-drivers libvulkan1 vulkan-tools vulkan-validationlayers
+
+      - name: Show the software Vulkan device
+        run: vulkaninfo --summary || true
+
+      - name: Configure (the app and the picture tests)
+        run: cmake -S native -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON
+
+      - name: Build
+        run: ninja -C build
+
+      - name: Full test suite (check.sh full, from the repository root)
+        id: tests
+        env:
+          PL_REQUIRE_GLSLANG: "1"
+        run: |
+          set -o pipefail
+          native/tools/check.sh full build 2>&1 | tee full-tests.log
+
+      - name: Failing tests in the job summary
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import os, re
+          out = []
+          failed = []
+          p = "build/Testing/Temporary/LastTestsFailed.log"
+          if os.path.exists(p):
+              failed = [ln.strip().split(":", 1)[-1] for ln in open(p, encoding="utf-8", errors="replace") if ln.strip()]
+          logs = {}
+          lp = "build/Testing/Temporary/LastTest.log"
+          if os.path.exists(lp):
+              text = open(lp, encoding="utf-8", errors="replace").read()
+              for m in re.finditer(r"\d+/\d+ Testing: (\S+)\n.*?Output:\n-+\n(.*?)<end of output>", text, re.S):
+                  logs[m.group(1)] = m.group(2)
+          if not os.path.exists(lp):
+              out.append("## Full tests: no test log (the build or the setup failed; see the job's log)")
+          elif not failed:
+              out.append("## Full tests: all passed")
+          else:
+              out.append("## Full tests: %d failed" % len(failed))
+              out.append("")
+              out.append(", ".join("`%s`" % n for n in failed))
+              for n in failed:
+                  tail = logs.get(n, "(no output found)").rstrip().splitlines()[-20:]
+                  out.append("")
+                  out.append("### %s (last lines)" % n)
+                  out.append("```")
+                  out.extend(tail)
+                  out.append("```")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("\n".join(out) + "\n")
+          EOF
+
+      - name: Upload the test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-full-test-logs
+          path: |
+            full-tests.log
+            build/Testing/Temporary/
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,4 +1,4 @@
-// 0.13 stage 4 part B: the chart of nuclides drawn from the retained GPU mesh against drawn the per-frame way (included by gl_compare.cpp, llvmpipe). The mesh is made once and the real vertex
+// 0.13 stage 4 part B: the chart of nuclides drawn from the retained GPU mesh against drawn the per-frame way (included by vk_compare.cpp, lavapipe). The mesh is made once and the real vertex
 // shader (kChartVS) projects it; the reference is the per-frame builders of 0.13 stage 3 with ChartScene's own projection. The numbers of triangles and positions are compared in
 // tests/test_chart_cache.inc; here the PICTURES must agree. FLOAT RULE: the shader projects in 32-bit, the per-frame code in 64-bit with a float rounding of its own, so a hairline or an edge
 // may fall on the other side of a pixel centre: the pictures may differ in the pixels along edges, never in what is drawn.

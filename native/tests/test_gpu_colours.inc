@@ -1,7 +1,7 @@
 // 0.13 stage 1: phase colours on the GPU (included by test_atom.cpp after test_clean.inc).
 // REFERENCE: what 0.12 did, written out here as it was (the colour-by-colour scan over all dots, the band tests, the bin of a phase), and compared INSIDE ONE RUN with the new
 // way (cloud_dots.h). No stored numbers, no hashes. The colours of the wheel themselves are checked against scikit-image in testPhaseWheel; the GLSL port is checked in
-// tests/gl_compare.cpp (the llvmpipe pictures) and by glslang (tests/check_shaders.py); here only that its constants are the C++ function's.
+// tests/vk_compare.cpp (the lavapipe pictures) and by glslang (tests/check_shaders.py); here only that its constants are the C++ function's.
 
 // 48,000 dots of a fixed seed, as the benchmark's scene 8 builds them (orb: "4f" ..., ax: the orientation, e.g. "z3" real or "m+3" complex: all 24 bins get used).
 static void gcFill(AtomLab& L, const char* orb, const char* ax) {

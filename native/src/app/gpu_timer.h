@@ -1,4 +1,4 @@
-// The GPU timer of the benchmark, without any OpenGL calls in it, so it can be tested.
+// The GPU timer of the benchmark, without any graphics calls in it, so it can be tested.
 //  - QueryRing: a few query slots used in turn; results are collected oldest first, when they are ready.
 //  - judgeGpuTimer: compares what the timer says for a known load with a clock, and says whether the timer can be trusted.
 //  - the check of one scene's numbers.

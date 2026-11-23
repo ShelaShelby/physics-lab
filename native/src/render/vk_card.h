@@ -1,13 +1,13 @@
-// 0.61.0: Vulkan, step 3 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): the card programs of the Atom, Molecule and Orbit Labs on Vulkan, from the same shader text as
-// OpenGL's (render/shaders.h, made into SPIR-V at build time: CMakeLists.txt PL_VK2D_SHADERS). Each program implements the interface its OpenGL class does
+// The GPU programs of the Atom, Molecule and Orbit Labs on Vulkan, from the shader text in
+// render/shaders.h (made into SPIR-V at build time: CMakeLists.txt PL_VK2D_SHADERS). Each program implements its interface
 // (IGroupCompute, IOutlineCompute, IRockCompute, AtomCard, MoleculeCard; the Cloud 3D Glow dots of Renderer2D::cloudGpu), so the labs' code is the same;
 // Renderer2D gives these objects back on Vulkan (render/renderer2d_vk.cpp useVulkanCards).
 //
 // The work goes to the card in batches of its own (VkCards: a command buffer, a fence, its uniforms and its staging buffer), submitted on the window's
-// queue before the frame that uses their results. Nothing waits for the card in a normal frame where OpenGL does not wait either: a job is submitted,
-// its fence marks its end, later frames ask with a zero timeout (the outline, the Slice's dots, the start-up checks); where OpenGL reads back at once
+// queue before the frame that uses their results. Nothing waits for the GPU in a normal frame unless a read-back is needed: a job is submitted,
+// its fence marks its end, later frames ask with a zero timeout (the outline, the Slice's dots, the start-up checks). Where the CPU needs the result at once
 // (the superposition and jump groups the processor needs to order the dots; the exposure's grid of the Glow and Density clouds, glReadPixels) the batch
-// is waited for, as there. Buffers the frame draws from (the rocks' places, the dots, their groups) are kept on the card; one that is replaced is
+// is waited for. Buffers the frame draws from (the rocks' places, the dots, their groups) are kept on the card; one that is replaced is
 // destroyed only once the batches and the frames that may use it are done. Barriers name the stages exactly: transfer -> compute, compute -> vertex input,
 // compute -> host, colour output -> transfer -> host; every batch begins with one that orders it after the frames before it (they may still read
 // what it writes). The rocks' program needs double precision in its shader (shaderFloat64): without it the belts take the processor's path.
@@ -197,7 +197,7 @@ VkBuffer vkGlowGroups(VkGlow* g);
 int vkPollFirstUses(VkCards& c, IGroupCompute* g, IOutlineCompute* o, IRockCompute* r, VkGlow* w);
 // what each Vulkan guard keeps as its version (app/gpu_guard.h vulkanCardGuards' names): "vulkan <name> <hash of its programs' text>"
 std::string vkCardVersion(const std::string& name);
-// FNV-1a of a program's text, as the OpenGL guards' versions ("vulkan <name> <hash>")
+// FNV-1a of a program's text, the guards' versions ("vulkan <name> <hash>")
 std::string vkCardId(const char* name, std::initializer_list<const char*> texts);
 
 }  // namespace render

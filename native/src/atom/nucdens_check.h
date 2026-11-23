@@ -1,7 +1,7 @@
 // 0.67.0: the nucleus' Density look on the graphics card (Vulkan; render/nucdens_card.h, render/shaders.h kNucDensCS), made and checked step by step within
 // its own guard (app/gpu_guard.h gpuVkNucDensGuard, log lines "[vulkan] [nucdensity] "), the pattern of the Atom Lab's other card programs
 // (atom/classic_check.h): nothing before the Density look is on screen for 3 frames; then a step a frame, logged and guarded: the pipeline, the check
-// against the processor, the first full use. OpenGL makes the processor's squares always (no card program for them there).
+// against the processor, the first full use.
 //
 // THE CHECK (the limit written before any card's result was looked at): three nuclei, each on a grid of 128 x 128 cells through the card's first two steps,
 // read back, against atom_core.cpp projectChargeDensity (double precision): U-238 (deformed: the rays through the table) seen at a slant, Pb-208 (round:

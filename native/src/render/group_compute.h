@@ -3,7 +3,7 @@
 // (AtomLab::superGroup, AtomLab::jumpGroups: they stay, as the reference and as the path where the card's program is not made). The amplitudes of every dot are stored on the GPU once
 // (they are made when the dot is made); each frame the CPU sends the beat phase and the weights, a compute shader (shaders.h, kGroupsCS) writes one byte per dot, and the CPU reads
 // that back and draws exactly as before (the dots are projected, put in their draw order and drawn by the code of stage 1).
-// The types here have no graphics calls, so the atom code and its tests can use them (0.69.0: OpenGL's class is gone with OpenGL).
+// The types here have no graphics calls, so the atom code and its tests can use them.
 #pragma once
 
 #include <cstdint>

@@ -1254,8 +1254,8 @@ void BlackHoleView::ensureSkyF(double spin) {
 // ---------------------------------------------------------------------------------------------------------------------------------------------
 // Tests: PL_BH_COMPARE=1
 namespace {
-// 0.69.0: the tests' pictures on Vulkan (until 0.68.1 OpenGL framebuffers): what R recorded, drawn off screen by the test shot (main.cpp: the backend's
-// renderToImage, one sample) and read back, RGBA, rows from the bottom as glReadPixels gave them; the float outputs come from R.lensFloat
+// The tests' pictures on Vulkan: what R recorded, drawn off screen by the test shot (main.cpp: the backend's
+// renderToImage, one sample) and read back, RGBA, rows from the bottom; the float outputs come from R.lensFloat
 struct Fbo { std::vector<unsigned char> px; };
 Fbo makeFbo(int, int, bool) { return Fbo(); }
 void dropFbo(Fbo&) {}
@@ -1472,7 +1472,7 @@ void toneCompare(render::Renderer2D& R) {
 }
 
 void compareHook(render::Renderer2D& R, const char* spec) {
-    if (!R.vulkan()) { std::printf("PLBHCOMPARE skipped: no Vulkan\n"); return; }   // 0.69.0: on Vulkan (until 0.68.1 OpenGL's)
+    if (!R.vulkan()) { std::printf("PLBHCOMPARE skipped: no Vulkan\n"); return; }   // on Vulkan
     g_gasHookOff = true;                                                    // 0.72.0: the hooks' pictures without the moving gas (but 2a's)
     if (spec && std::string(spec) == "card") { cardCompare(R); return; }
     if (spec && std::string(spec) == "sky") {                              // 0.56.0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.24, checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real mouse). The physics of the vibrating density is in tests/test_density.cpp.
+# 0.24, checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real mouse). The physics of the vibrating density is in tests/test_density.cpp.
 #   densvib  the Density style vibrates for water: a picked mode moves the cloud and the surface (the picture differs from the still one), its two ends differ from each
 #            other, and the panel says how it is made; a molecule with no vibrating density says so and does not move
 #   densfit  the Density style's surface fits the picture: nothing of it under the top bar or off the free part (it ran off the top before), for water and benzene

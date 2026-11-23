@@ -357,7 +357,7 @@ void AtomView::draw(render::Renderer2D& R, ImDrawList* dl, double ox, double oy,
         g_marks.phaseGroups = ng; g_marks.wheel = wheel;
         static std::vector<unsigned char> grp;                             // each dot's colour group
         grp.resize(std::size_t(cnt));
-        // each dot's colour group: a jump in flight, a superposition (thinned and coloured from the CURRENT beat phase) or a plain cloud. 0.13 stage 2: on a PC with OpenGL 4.3 (and the
+        // each dot's colour group: a jump in flight, a superposition (thinned and coloured from the CURRENT beat phase) or a plain cloud. On a GPU with compute (and the
         // "GPU superposition and jumps" switch on) the first two come from a compute shader, else from the CPU functions, which are the reference (255 = not shown now)
         // 0.57.0: a jump with every electron in the Glow Cloud 3D: drawn from the card's cloud buffer with its groups made on the card each frame
         // (atom_card_paths.h), once the card's check on this PC passed; until then, and on any other PC, the processor's path below

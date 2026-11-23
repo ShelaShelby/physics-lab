@@ -1,5 +1,5 @@
 // 0.61.0 (Vulkan step 3 of 5): the card programs on Vulkan (src/render/vk_card.h), on Mesa's software Vulkan (lavapipe, no window), each against the
-// processor's reference with the limits of the picture checks above. 0.69.0: OpenGL is gone, and with it this file's checks of Vulkan against OpenGL's
+// processor's reference with the limits of the picture checks above.
 // output (their feature is gone); every check against the processor stays as it was. The validation layers are on whenever they are installed: every
 // message of severity error fails. (Until 0.68.1 tests/gl_vulkan.inc.)
 #include "atom/atom_card.h"
@@ -252,7 +252,7 @@ static void vkGlowGrid(render::VkCards& cards) {
 }
 
 // 0.62.0 (Vulkan step 4): the Black Hole Lab's programs on Vulkan. The light paths (kKerrTableCS, double precision): the start-up check against the processor
-// with its own limits (spin_card.h cardSelfCheck). (0.69.0: its rays against OpenGL's program went with OpenGL; the app's PL_BH_COMPARE=card, check_blackhole.py
+// with its own limits (spin_card.h cardSelfCheck). (the app's PL_BH_COMPARE=card, check_blackhole.py
 // precision, compares the card's whole fine tables with the processor's.) The sky per pixel: its three stages made, the start-up check's two probes and
 // its light check (sky_card.h skyCheckOf).
 static void vkBlackHole(render::VkCards& cards, bool f64) {

@@ -36,7 +36,7 @@ struct ViewSettings {
     bool dwarfs = true;
     bool comets = true;
     bool belts = true;          // Belts and Oort cloud
-    bool gpuRocks = true;       // 0.13 stage 4: the rocks' places are worked out on the GPU (OpenGL 4.3); off, or on a 3.3 PC: the CPU does it, as before (not saved)
+    bool gpuRocks = true;       // the rocks' places are worked out on the GPU; off, or a GPU without the rock program: the CPU does it (not saved)
     SkyMode sky = SkyMode::Soft;
     ConsMode cons = ConsMode::Off;
     bool realPlanets = false;   // Planet physics: Simple (false) / Real (true), see orbit/nbody.h

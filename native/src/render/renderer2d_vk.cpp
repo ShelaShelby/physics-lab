@@ -1,6 +1,6 @@
-// 0.60.0: Vulkan, step 2 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): Renderer2D's end() on Vulkan. The shapes, blobs and segments are recorded by the same code as
-// for OpenGL (render/renderer2d.cpp); this file only draws them, segment by segment in their order, with the same shaders (render/shaders.h as SPIR-V),
-// the same uniforms and the same blend of each step as Renderer2D::end (render/vk_draw2d.h has the how).
+// Renderer2D's end() on Vulkan. The shapes, blobs and segments are recorded by
+// render/renderer2d.cpp; this file only draws them, segment by segment in their order, with the same shaders (render/shaders.h as SPIR-V),
+// the uniforms and the blend of each step (render/vk_draw2d.h has the how).
 #include "app/frame_cost.h"
 #include "renderer2d.h"
 
@@ -93,7 +93,7 @@ void Renderer2D::useVulkanCards(VkCards* c, std::vector<std::string>* why) {
 }
 
 // 0.61.0: the card programs' work of this frame in one batch before the picture: the rocks' places, the Glow and Density clouds' grids (and what the
-// lab recorded before: a jump's groups); the batch is waited for only when a grid must be read back (OpenGL reads it back at once too, glReadPixels)
+// lab recorded before: a jump's groups); the batch is waited for only when a grid must be read back (the CPU needs it at once)
 bool Renderer2D::vkCardsFrame(bool forShot, int fbW, int fbH) {
     const std::size_t n = segments_.size();
     vkGrid_.assign(n, -1);
@@ -211,7 +211,7 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
         if (sg.kind != Kind::LayerBegin) lastCalls_++;
         if (sg.kind == Kind::Squares || sg.kind == Kind::Blobs || sg.kind == Kind::RocksGpu || sg.kind == Kind::CloudGpu || sg.kind == Kind::MolCloud) lastInstances_ += sg.count;
     }
-    if (segments_.empty()) { V.noPicture(); return; }                         // (OpenGL: nothing drawn, the page shows)
+    if (segments_.empty()) { V.noPicture(); return; }                         // (nothing drawn, the page shows)
     if (keep_ && !forShot && V.keepPicture(fbW, fbH, gray_)) return;          // 0.67.0: the kept picture (keepLast)
     if (gray_ && logDrawKinds()) kinds_[kdGray]++;
     const float bg[4] = {grayBg_.r, grayBg_.g, grayBg_.b, 1.0f};               // Monochrome: the page behind the picture, so the grey copy is opaque (as end())
@@ -227,7 +227,7 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
     for (std::size_t si = 0; si < segments_.size(); si++) {
         const Segment& sg = segments_[si];
         switch (sg.kind) {
-        case Kind::Lens:                                                       // 0.62.0: the bent picture laid over (opaque, as OpenGL's drawLens)
+        case Kind::Lens:                                                       // 0.62.0: the bent picture laid over (opaque)
             if (vkbh_ && vkbh_->picture()) {
                 V.setExternal(1, vkbh_->picture());
                 V.draw(VkDraw2D::kComposite, VkDraw2D::kNoBlend, 0, 0, 6, 0, 0, 0, -4);
@@ -309,7 +309,7 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             V.setF(VkDraw2D::kMesh, "uCen", cen, 4);
             V.setF(VkDraw2D::kMesh, "uFit", fit, 4);
             const int zero = 0;
-            V.setI(VkDraw2D::kMesh, "uMaskOn", &zero, 1);                       // (OpenGL never sets it for the mesh program: 0, its default)
+            V.setI(VkDraw2D::kMesh, "uMaskOn", &zero, 1);                       // (0 for the mesh program, its default)
             V.drawMesh(m.vk, sg.first, sg.count);
             break;
         }
@@ -402,7 +402,7 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             if (sg.nocc > 0 && (sg.mode != 2 && sg.mode != 3)) { V.setF(VkDraw2D::kPlanet, "uOcc", sg.occ, 4, sg.nocc); V.setF(VkDraw2D::kPlanet, "uSunAng", &sg.sunAng, 1); }
             const int air = (sg.mode != 2 && sg.mode != 3) && sg.air ? 1 : 0;
             V.setI(VkDraw2D::kPlanet, "uAir", &air, 1);
-            // (OpenGL binds tex_[sg.map]: 0, no texture, for a plain ball; the white one here: the shader does not read it then)
+            // (a plain ball binds the white texture: the shader does not read it then)
             V.draw(VkDraw2D::kPlanet, VkDraw2D::kNormal, vb, sg.first, sg.count, 0, 0, 0, vkMap_[sg.map] ? sg.map : 0);
             break;
         }
@@ -411,7 +411,7 @@ void Renderer2D::endVulkan(int fbW, int fbH, const float clear[4], bool forShot)
             const int origin[2] = {0, 0};
             V.setF(VkDraw2D::kTri, "uSize", size, 2);
             V.setF(VkDraw2D::kTri, "uSpace", space, 3);
-            const int maskOn = vkbh_ && maskValid_ && vkbh_->mask() ? 1 : 0;   // 0.62.0: the spinning hole's open-sky mask (maskedDisc), as OpenGL's
+            const int maskOn = vkbh_ && maskValid_ && vkbh_->mask() ? 1 : 0;   // 0.62.0: the spinning hole's open-sky mask (maskedDisc)
             V.setI(VkDraw2D::kTri, "uMaskOn", maskOn ? &maskOn : &zero, 1);
             V.setI(VkDraw2D::kTri, "uMaskOrigin", origin, 2);
             if (maskOn) V.setExternal(0, vkbh_->mask());

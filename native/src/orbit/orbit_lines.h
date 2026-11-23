@@ -1,5 +1,5 @@
 // 0.68.0: the Orbit Lab's lines (the trails, the planets' and dwarf planets' orbits, the distance rings) in one place for both paths: the processor's
-// LinePen (the reference, and the path on OpenGL or when the card's is off) and the runs the card draws them from (render/lines_card.h). OrbitView and
+// LinePen (the reference, and the path when the GPU's is off) and the runs the card draws them from (render/lines_card.h). OrbitView and
 // the start-up check (orbit/lines_check.h) both call these, so the check compares the card with the very code that draws on the processor.
 #pragma once
 

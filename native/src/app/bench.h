@@ -146,36 +146,36 @@ std::vector<std::string> benchBlackHoleLines(const BenchBlackHole& b);
 // the picture's wheel, drag, clicks and the keyboard shortcuts (Space, F11) ask this first; the panels are blocked by a modal box (ui/benchmark.cpp).
 inline bool labInputAllowed(bool benchRunning) { return !benchRunning; }
 
-// The sentence the Performance card and the benchmark report use for the Atom Lab's superposition and jumps (0.13 stage 2). computeOk: the renderer has the OpenGL 4.3 compute path;
+// The sentence the Performance card and the benchmark report use for the Atom Lab's superposition and jumps. computeOk: the renderer has Vulkan compute.
 // switchOn: the "GPU superposition and jumps" switch (AtomLab::gpuCompute).
-inline std::string computePathText(int major, int minor, bool computeOk, bool switchOn) {
-    const std::string v = major == 0 ? std::string("Vulkan") : "OpenGL " + std::to_string(major) + "." + std::to_string(minor);   // (0.61.0: major 0 is Vulkan)
+inline std::string computePathText(bool computeOk, bool switchOn) {
+    const std::string v = "Vulkan";
     if (!computeOk) return v + ": CPU path";
     return v + (switchOn ? ": GPU superposition on" : ": GPU superposition off (switched off, CPU path)");
 }
 
 // The same for the 90 % outline (0.13 stage 3).
-inline std::string outlinePathText(int major, int minor, bool computeOk, bool switchOn) {
-    const std::string v = major == 0 ? std::string("Vulkan") : "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
+inline std::string outlinePathText(bool computeOk, bool switchOn) {
+    const std::string v = "Vulkan";
     if (!computeOk) return v + ": CPU path";
     return v + (switchOn ? ": GPU outline on" : ": GPU outline off (switched off, CPU path)");
 }
 
-// The same for the Orbit Lab's rocks (0.13 stage 4). rocksOk: the renderer has the rock compute object (OpenGL 4.3 and a shader with double precision that compiled).
-// 0.61.0: why (Vulkan): why the card does not place them (no double precision in its shaders: the precision rule keeps the rocks' time in double)
-inline std::string rocksPathText(int major, int minor, bool rocksOk, bool switchOn, const std::string& why = std::string()) {
-    const std::string v = major == 0 ? std::string("Vulkan") : "OpenGL " + std::to_string(major) + "." + std::to_string(minor);
+// The same for the Orbit Lab's rocks. rocksOk: the renderer has the rock compute program (it needs double precision in shaders).
+// why: why the GPU does not place them. The precision rule keeps the rocks' time in double.
+inline std::string rocksPathText(bool rocksOk, bool switchOn, const std::string& why = std::string()) {
+    const std::string v = "Vulkan";
     if (!rocksOk) return v + ": CPU path" + (why.empty() ? std::string() : " (" + why + ")");
     return v + (switchOn ? ": GPU rocks on" : ": GPU rocks off (switched off, CPU path)");
 }
 
 struct BenchEnv {
     std::string version, when;                   // the app version; the local date and time
-    std::string gpu, glVersion, vendor;          // GL_RENDERER, GL_VERSION, GL_VENDOR (0.63.0, Vulkan: the device, its Vulkan version and present mode, the driver)
-    std::string api;                             // 0.63.0: "Vulkan" (0.69.0: the only drawing system)
+    std::string gpu, glVersion, vendor;          // the device, its Vulkan version and present mode, the driver
+    std::string api;                             // "Vulkan" (the only drawing system)
     std::string outlinePath;                     // outlinePathText() (0.13 stage 3)
     std::string rocksPath;                       // rocksPathText() (0.13 stage 4)
-    std::string computePath;                     // computePathText(): "OpenGL 4.3: GPU superposition on" or "OpenGL 3.3: CPU path" (0.13 stage 2)
+    std::string computePath;                     // computePathText(): "Vulkan: GPU superposition on" or "Vulkan: CPU path"
     int windowW = 0, windowH = 0;                // the window, in pixels
     int pictureW = 0, pictureH = 0;              // the picture area, in pixels
     double refreshHz = 0;                        // the display's refresh rate (0: unknown)

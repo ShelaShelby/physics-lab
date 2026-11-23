@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5l (bug-fix stage 2 of 2). Checked in the REAL app (Linux, software OpenGL, scripted events; NOT a real mouse, NOT Windows). The owner's PC showed bugs the cloud did not, so the cases copy the
+# 0.15 stage 5l (bug-fix stage 2 of 2). Checked in the REAL app (Linux, software Vulkan, scripted events; NOT a real mouse, NOT Windows). The owner's PC showed bugs the cloud did not, so the cases copy the
 # real order: the pointer arrives in one frame and the click comes many frames LATER; the text box is cleared by select-all + Backspace; results are also compared by PIXELS, not only by a logged number.
 #   check_5l.py <PhysicsLab binary> <work folder> <part>      parts: search, legend, toolbar, popups
 import os, re, sys

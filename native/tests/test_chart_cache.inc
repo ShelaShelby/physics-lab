@@ -1,7 +1,7 @@
 // 0.13 stage 4 part B: the chart of nuclides' tiles / blocks kept on the GPU (included by test_atom.cpp after test_stage4_cloud.inc). WRITTEN BEFORE the code (chart_mesh.*, ChartCache).
 // REFERENCE: the per-frame builders of 0.13 stage 3 (drawChartStaticFlat / Ground / Blocks in chart_draw.cpp, kept as they were), recorded by the stand-in renderer above, expanded into triangles in
 // the order they were made. The new mesh (chart_mesh.h), projected on the CPU by chartMeshReference (the twin of the shader), must give the SAME triangles: the same count, the same order, the
-// same colours, positions equal to within float rounding. The pictures the real shader makes are compared with the per-frame pictures in tests/gl_compare.cpp.
+// same colours, positions equal to within float rounding. The pictures the real shader makes are compared with the per-frame pictures in tests/vk_compare.cpp.
 struct CcTri { float xy[6]; render::Color c; };
 
 static void ccClear() { g_rec.clear(); g_tri.clear(); g_lines.clear(); g_discs.clear(); g_events.clear(); }

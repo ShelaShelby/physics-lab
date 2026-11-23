@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.22: the owner's look-through (13 findings) checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real mouse). One part per fix that the unit tests cannot see:
+# 0.22: the owner's look-through (13 findings) checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real mouse). One part per fix that the unit tests cannot see:
 #   molbar   the Molecule Lab's bottom bar has all three styles of the panel (Realistic too, in the Viewer only) and Reset view; Labels and Spin are in the panel only
 #   centre   the Orbit Lab's scene (the Sun, nothing selected) is centred in the part of the window the Controls panel leaves free, and in the window when the panel is closed
 #   axes     no ring label ("10 AU") is drawn on the x y z axes at the bottom right

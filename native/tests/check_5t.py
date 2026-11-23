@@ -3,7 +3,7 @@
 # 0.38 (the owner's decision of 6 Nov 2026, the new look; references changed on purpose): a selected segment is a soft accent TINT with a 1 px accent edge and the text colour on it
 # (Monochrome / High contrast: the solid accent fill); a checked box is the accent fill with its tick. Checked: the edge (the mark of the choice) against the unselected face at least 3:1
 # (WCAG 1.4.11), the label on the fill at least 4.5:1, the tick on the box at least 3:1, the tint is not grey (except Monochrome, whose accent is black).
-# Checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU), on the picture's own pixels. Orbit Lab, New UI on, ONE size.
+# Checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU), on the picture's own pixels. Orbit Lab, New UI on, ONE size.
 #   check_5t.py <PhysicsLab binary> <work folder> grey | tiles | solid   (0.38.1: tiles = Settings tile names inside their tiles and the dim behind Settings; solid = a guide page is solid)
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

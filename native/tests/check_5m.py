@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5m (look, parts 1 and 2). Checked in the REAL app (Linux, software OpenGL, scripted events; NOT a real mouse, NOT Windows, NOT a GPU).
+# 0.15 stage 5m (look, parts 1 and 2). Checked in the REAL app (Linux, software Vulkan, scripted events; NOT a real mouse, NOT Windows, NOT a GPU).
 #   check_5m.py <PhysicsLab binary> <work folder> <part>      parts: themes
 # themes (part 1):
 #   * the picker's theme list has none of the three archived themes (the app prints the list it really uses: PLSHELL look themes=...);

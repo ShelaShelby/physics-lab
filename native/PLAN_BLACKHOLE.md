@@ -157,7 +157,7 @@ Today: ESA's Gaia map drawn per pixel (render/planet_maps.h Map::Sky, Renderer2D
 | GPU against CPU | the shader or table picture against the double-precision reference: shadow edge within a stated fraction of a pixel, disc radius and g within float rounding (DECISIONS "Tests and precision") |
 
 ## 6. Speed and weak graphics cards
-**Today:** OpenGL 3.3 core shaders for everything drawn (render/shaders.h; the sky map and planets are already per-pixel fragment shaders), OpenGL 4.3 compute where the card has it,
+**Today:** Vulkan shaders for everything drawn (render/shaders.h made into SPIR-V; the sky map and planets are per-pixel fragment shaders), compute shaders on the GPU,
 CPU paths kept as the reference and as switches (DECISIONS "Graphics and speed"; target a 2013 Core i7-4770K). The UI tests run on Mesa's software renderer with one thread (CLAUDE.md), so anything heavy per pixel also slows the test suite.
 | Way | Correctness | Cost |
 |---|---|---|
@@ -169,7 +169,7 @@ CPU paths kept as the reference and as switches (DECISIONS "Graphics and speed";
 **Proposal.** Correctness lives in one CPU double-precision module (tested as in section 5). Drawing has levels:
 - **Basic** (default on unknown or weak cards and in the tests): way (c) + (e): the table at a modest size, filled on the CPU (all cores, coarse first, then finer while the view rests), the closed shadow test per pixel. Needs only what the app needs today.
 - **High:** way (b) for a = 0 and way (a) with the table as the starting guess for spin, at full resolution. **Ultra:** High with several rays per pixel near the shadow edge and the footprint filter.
-- **Weakest card to support: the same as the rest of the app** (OpenGL 3.3 core; the 2013 target PC of DECISIONS), because Basic uses only texture look-ups and a short closed formula. No new minimum is needed.
+- **Weakest card to support: the same as the rest of the app** (Vulkan 1.2 with dynamic rendering and synchronization2, or 1.3 / 1.4), because Basic uses only texture look-ups and a short closed formula. No new minimum is needed.
 - **The first build job must measure** (and put in REPORT.md): time to fill the table at three sizes for a = 0 and a near 1, one core and all cores; frame time of Basic and High at 1280 × 800 and at 4K
   on the owner's card and on the software renderer; the largest difference between the single-precision picture and the double reference at the shadow edge; table size needed for a sub-pixel shadow edge.
 

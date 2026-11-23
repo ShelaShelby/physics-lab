@@ -1,7 +1,6 @@
 // 0.64.0: the Classic Cloud 3D dots on the graphics card (Vulkan; render/classic_card.h, render/shaders.h kClassicCS), made and checked step by step within
 // their own guard (app/gpu_guard.h gpuVkClassicGuard), the pattern of the Atom Lab's other card programs (atom/atom_card_paths.h): nothing before the
 // Classic Cloud 3D is on screen for 3 frames; then a step a frame, logged and guarded: the pipeline, the check against the processor, the first full use.
-// OpenGL makes the processor's squares always (no card program for them there).
 //
 // THE CHECK (limits as the Glow dots' and the Slice's, written before any card's result was looked at): a cloud of 6,000 dots in 6 groups (a fixed
 // pattern) seen by a turned camera, the card's steps read back against atom/cloud_dots.cpp projectCloud + buildClassic3D. Per dot: the same group; the

@@ -210,7 +210,7 @@ void advance(render::Renderer2D& R) {
 
 bool surfaceOnCard(render::Renderer2D& R) {
     g_p.asked = true;
-    if (!R.vulkan()) return false;                   // (OpenGL: the processor's triangles; no card program for them there)
+    if (!R.vulkan()) return false;                   // (no Vulkan renderer, as in the unit tests: the CPU's triangles)
     static const bool never = std::getenv("PL_NO_SURFACE_CARD") != nullptr;   // (tests: the processor's triangles on Vulkan, to compare)
     if (never) return false;
     app::GpuGuard& G = app::gpuVkSurfaceGuard();
@@ -241,7 +241,7 @@ bool surfaceOnCard(render::Renderer2D& R) {
 int surfaceCardState() { return g_p.state == 1 ? 1 : g_p.state == -1 ? -1 : 0; }
 
 std::string surfaceCardPathText(bool vulkan) {
-    if (!vulkan) return "the surface: the processor (no card program for it on OpenGL)";
+    if (!vulkan) return "the surface: the processor (no Vulkan renderer)";
     if (std::getenv("PL_NO_SURFACE_CARD")) return "the surface: the processor (PL_NO_SURFACE_CARD)";
     if (g_p.state == 1) return "the surface: the graphics card (Vulkan; turned, coloured, sorted and drawn there, sent once for each new surface; its start-up check passed: " + g_p.check + ")";
     if (g_p.state == -1) return "the surface: the processor, because " + g_p.why;

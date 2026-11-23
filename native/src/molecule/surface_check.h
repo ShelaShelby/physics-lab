@@ -1,7 +1,7 @@
 // 0.68.0: the Molecule Lab's Density surface on the graphics card (Vulkan; render/surface_card.h, render/shaders.h kSurfaceCS and kSurfaceVS), made and
 // checked step by step within its own guard (app/gpu_guard.h gpuVkSurfaceGuard, log lines "[vulkan] [surface] "), the pattern of the other card programs
 // (orbit/lines_check.h): nothing before the surface is on screen for 3 frames; then a step a frame, logged and guarded: the pipelines, the check against
-// the processor, the first full use. OpenGL draws it on the processor always (no card program for it there).
+// the processor, the first full use.
 //
 // THE CHECK (the limits written before any card's result was looked at): three surfaces at the default isovalue (0.002 e/bohr^3) coloured by the potential,
 // turned at a slant and drawn 90 points to the bohr about (640, 400): benzene (C6H6, the most triangles), water (H2O) and water's first vibrating mode at

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.22 stage 7: the bug hunt of 4 Nov 2026, checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real mouse). One part per fix:
+# 0.22 stage 7: the bug hunt of 4 Nov 2026, checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real mouse). One part per fix:
 #   scalebar  the Orbit scale bar's label is its real length: the light time under it is that length divided by c (IAU 2012: 1 AU = 149,597,870.7 km exactly;
 #             SI: c = 299,792.458 km/s exactly; 1 mi = 1.609344 km exactly). Before: a round number of km or miles was labelled in rounded AU ("3 AU" over 3.34 AU, "light takes 28 minutes")
 #   jumpcheck the Atom Lab's "Check a jump": the same shell twice asks for two shells; two shells of one n say so once (the same-n note was written twice)

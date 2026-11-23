@@ -90,7 +90,7 @@ public:
     // all of one view, until a newer one is done (stats().behind). Off (the default; the automatic checks and the tests' own views): all of it in draw, as before.
     bool async = false;
     // 0.55.6 (Settings, Performance, "GPU light paths"): async only: the spinning hole's table filled by the graphics card (spin_card.h) once its start-up
-    // check has passed; the card's table is the picture while moving and at rest (no fine table on the processor). Off, or no OpenGL 4.3, or the check
+    // check has passed; the card's table is the picture while moving and at rest (no fine table on the processor). Off, or no Vulkan compute, or the check
     // failed: the processor's tables of 0.55.5.
     bool gpuPaths = true;
     // 0.56.0 (Settings, Performance): the spinning hole's sky and disc drawn per pixel by the graphics card from the closed forms (render/kerr_sky.h) once
@@ -268,7 +268,7 @@ private:
 };
 
 // Tests (PL_BH_COMPARE): the card's picture against the double-precision reference (lensPixel) for the distances given, the plain sky against the Orbit
-// Lab's sky map, and the frame times; prints PLBHCMP / PLBHTIME lines. Needs the renderer's OpenGL context.
+// Lab's sky map, and the frame times; prints PLBHCMP / PLBHTIME lines. Needs the renderer's Vulkan device.
 void compareHook(render::Renderer2D& R, const char* spec);
 void toneCompare(render::Renderer2D& R);   // 0.70.0 (PL_BH_COMPARE=sky)
 // 0.69.0: the tests' 8-bit pictures (compareHook, PL_BH_COMPARE): what the renderer recorded, drawn off screen and read back, RGBA, rows from the bottom;

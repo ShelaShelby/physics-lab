@@ -29,7 +29,7 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::B
 // 0.63.0 (Vulkan step 5): on Vulkan around vk.render(): timestamp queries (render/vk_backend.h benchTimer), the card's batches included.
 void benchmarkGpuBegin(AppState& app);
 void benchmarkGpuEnd(AppState& app);
-// 0.63.0: the window, and the Vulkan backend when this start draws with Vulkan (null: OpenGL); set once at start
+// the window and the Vulkan backend (null: none, as in tests); set once at start
 void benchmarkUse(SDL_Window* window, render::VkBackend* vk);
 
 // For automatic checks (PL_BENCH=ask opens the dialog, PL_BENCH=start starts at once; PL_BENCH_WARMUP / PL_BENCH_MEASURE shorten the times): call every frame.

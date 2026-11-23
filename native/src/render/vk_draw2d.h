@@ -1,11 +1,10 @@
-// 0.60.0: Vulkan, step 2 of 5 (the Vulkan plan, done in 0.69.0 (git keeps it)): renderer2d's drawing on Vulkan. The shapes are recorded by Renderer2D exactly as for OpenGL (one
+// renderer2d's drawing on Vulkan. The shapes are recorded by Renderer2D (one
 // code path: the vertex and blob lists and the segments in order); only end() differs: Renderer2D::endVulkan (render/renderer2d_vk.cpp) hands the
-// segments to this object, which draws them with the SAME shader text as OpenGL (render/shaders.h, made into SPIR-V at build time: CMakeLists.txt
+// segments to this object, which draws them with the shader text of render/shaders.h (made into SPIR-V at build time: CMakeLists.txt
 // PL_VK2D_SHADERS), the same blend modes, texture filters, mip levels, the soft layer, the cloud's float layer and the grey pass.
 //
-// The picture is drawn with OpenGL's rows (its first row at the bottom, so the shaders, gl_FragCoord and the layers' texture coordinates are exactly
-// OpenGL's), into an image of its own (4x multisampled with a resolve, as OpenGL's window; 1 sample in the grey pass and for Save image, as OpenGL's
-// offscreen pictures), then copied into the window's picture area with its rows turned over (0.69.0: a blit, VkDraw2D::copyTo). Per frame in flight: one buffer the
+// The picture is drawn with bottom-up rows (its first row at the bottom, as the shaders, gl_FragCoord and the layers' texture coordinates expect),
+// into an image of its own (4x multisampled with a resolve; 1 sample in the grey pass and for Save image), then copied into the window's picture area with its rows turned over (a blit, VkDraw2D::copyTo). Per frame in flight: one buffer the
 // processor writes once (vertices, instances, the shaders' uniform blocks; persistently mapped) and one descriptor pool. The maps and the meshes are
 // uploaded once. Nothing waits for the card in a normal frame; an image or buffer that is replaced is kept until the frames that used it are done.
 #pragma once
@@ -103,7 +102,7 @@ public:
     void beginLayer(bool hdr, int w, int h);                                // the soft layer (8 bits) or the cloud's float layer, cleared to 0
     void endLayer();                                                        // back to the picture (its pixels kept)
     void composite(bool hdr, Blend b);                                      // the layer laid over the picture (kComposite)
-    // uniforms by name, as glUniform* (kept per program until changed, as OpenGL's): a name the program does not use is ignored
+    // uniforms by name (kept per program until changed): a name the program does not use is ignored
     void setF(Prog p, const char* name, const float* v, int comps, int count = 1);
     void setI(Prog p, const char* name, const int* v, int comps, int count = 1);
     void setMat3T(Prog p, const char* name, const float K[9]);              // glUniformMatrix3fv(..., GL_TRUE, K)
@@ -111,7 +110,7 @@ public:
     // the instances at ibOff (binding 1) (vertex buffer bindings). tex: 0 the white texture, 1..31 a map, -1 the current layer (composite), -2 the picture (grey pass)
     void draw(Prog p, Blend b, VkDeviceSize vbOff, int first, int count, VkDeviceSize ibOff = 0, int instances = 0, int firstInstance = 0, int tex = 0);
     // 0.61.0 (Vulkan step 3): the card programs' draws, from buffers on the card: kSquare with the rocks' places (binding 1, 2 floats an instance), kCloud
-    // with the dots' places (binding 1, 3 floats) and groups (binding 2, one byte, read as a float as OpenGL's GL_UNSIGNED_BYTE), kMolDot with the dots made
+    // with the dots' places (binding 1, 3 floats) and groups (binding 2, one byte, read as a float, not normalised), kMolDot with the dots made
     // by kMolDotsCS (binding 1, 4 floats); the corners at binding 0
     void drawInst(Prog p, Blend b, VkBuffer inst1, VkBuffer inst2, int instances);
     // 0.68.0: the programs whose vertex shader reads storage buffers (a second descriptor set, four buffers; a null one takes the first's place): the

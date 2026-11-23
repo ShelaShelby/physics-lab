@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5p: the owner's bug list. Checked in the REAL app (Linux, software OpenGL, scripted events; NOT a real mouse, NOT Windows, NOT a real GPU).
+# 0.15 stage 5p: the owner's bug list. Checked in the REAL app (Linux, software Vulkan, scripted events; NOT a real mouse, NOT Windows, NOT a real GPU).
 #   check_5p.py <PhysicsLab binary> <work folder> <part>      parts: wheel, scroll, zoomout, lit, picker
 # part wheel (#6): after a window is opened and closed again, the mouse wheel over the canvas must zoom exactly like it does with no window ever opened (the baseline).
 # The reference is a scripted run with no window at all, not an earlier output of ours.

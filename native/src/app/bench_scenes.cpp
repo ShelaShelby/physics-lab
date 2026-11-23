@@ -14,7 +14,7 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
         // ---- Hard scenes: the default run, in the order they run ----
         add(true, "orbit.heaviest", BenchKind::OrbitHeaviest, -1, "Orbit Lab, the heaviest view",
             "3D, belts and Oort cloud (6,000 rocks), every extra, the full night sky with constellation lines and names, far-away things, full orbit trails, true scale, "
-            "the fastest time (1 s = about 50 years), zoom x1, Simple planet physics. The rocks' places come from the graphics card where it can (Vulkan, or OpenGL 4.3 on the backup).");
+            "the fastest time (1 s = about 50 years), zoom x1, Simple planet physics. The rocks' places come from the graphics card where it can (Vulkan).");
         add(true, "orbit.saturn", BenchKind::OrbitSaturn, -1, "Orbit Lab, Saturn close up, the camera turning",
             "Saturn followed, true scale, 3D, zoom 4.1 (log10, the control goes to 5.5; the rings and part of the planet fill the picture), the camera turning 0.5 rad a "
             "second and tilting, time stopped. The rings from Cassini's profile, per pixel on the graphics card (Vulkan) once its check passed; the planet's map and its shadow on the rings.");
@@ -36,7 +36,7 @@ const std::vector<BenchSceneText>& benchSceneTexts() {
             "uranium-238, Accurate quarks, + Sea detail, zoomed all the way into the first nucleon: its quarks and the sea, drawn every frame.");
         add(true, "atom.slice_drag", BenchKind::Atom, 14, "Atom Lab, the Slice view with the cut dragged",
             "uranium-238, Slice view, 4f, Classic, 12,000 dots, 90 % outline On: the cut moves 0.01 every frame from -0.90 to +0.90 and back, so the cut's dots and the "
-            "outline's contour are made again every frame (the contour on the graphics card where it can (Vulkan, or OpenGL 4.3 on the backup): new pictures are the contours that came back).");
+            "outline's contour are made again every frame (the contour on the graphics card where it can (Vulkan): new pictures are the contours that came back).");
         add(true, "atom.slice_super_drag", BenchKind::Atom, atom::kBenchSliceSuper, "Atom Lab, the Slice of a superposition with the cut dragged",
             "mendelevium-258 (one electron), Slice view, the superposition 2p + 5f (50 %), Relativity (Dirac levels) On, phase colours Wheel, Classic, Ultra: the cut moves "
             "0.01 every frame from -0.90 to +0.90 and back, as atom.slice_drag. The Slice's card program makes both states' attempts; the processor picks "

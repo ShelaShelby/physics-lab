@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.55.0: the Black Hole Lab in the REAL app (Linux, Mesa's software Vulkan (0.69.0; until 0.68.1 its OpenGL); not a real graphics card; counts and pictures, no timing).
+# 0.55.0: the Black Hole Lab in the REAL app (Linux, Mesa's software Vulkan; not a real graphics card; counts and pictures, no timing).
 #   open:      the top bar's Black Hole tab opens the lab: its picture (a black shadow in the middle, the bent sky round it), its card, its bar
 #   presets:   M87* and Sagittarius A* set the card's mass and measured ring to presets.h's numbers (read from src/blackhole/presets.cpp)
 #   distance:  three distances (one typed in the Controls panel): the card's shadow size is Synge's (Perlick & Tsupko 2022, eq. (7), written here in Python) and grows as
@@ -58,7 +58,7 @@ OLDVIEW = "dist=20;fov=90;pitch=1.474174899;yaw=0.055152404"
 # 0.71.0: the controls that moved into More settings (DECISIONS 21 Nov 2026; mass, the typed boxes, field of view's twin texts, bend, sky, light, sky beside, glare,
 # exposure, outer edge, the paper's view, every long caption): a check that clicks or reads one opens the section first (changed reference, not loosened)
 MORE = "blackhole.ctl.more=o"
-GL = dict(BASE)   # (0.69.0: the precision checks and the guard records on Vulkan; until 0.68.1 they ran on OpenGL)
+GL = dict(BASE)   # (the precision checks and the guard records on Vulkan)
 
 def bh(r, prefix="blackhole "):
     n = r.note(prefix)
@@ -415,8 +415,8 @@ def part_precision(binary, work):
     # case drawn with 0.55.8's rays (spin_sky.h kSpinFineFillMino) is still 0.55.8's picture to the pixel (0.55.8 showed that picture within one level of
     # 0.55.2's); the new picture differs from it by at most one level of 255 (measured: 1053 of 1,024,000 pixels by one level); its hash saved on purpose
     # (REPORT 0.55.9)
-    # 0.69.0: the two saved hashes (b37c532bb4916030 with 0.55.8's rays, e31a10335ce4dab6 with 0.55.9's) were of OpenGL's pictures on llvmpipe; OpenGL is
-    # gone, so they are printed, not compared: the check that stays is the physics one, the closed forms' picture within one level of Mino's form's
+    # the two saved hashes (b37c532bb4916030 with 0.55.8's rays, e31a10335ce4dab6 with 0.55.9's) came from a renderer the app no longer has,
+    # so they are printed, not compared: the check that stays is the physics one, the closed forms' picture within one level of Mino's form's
     rv = dict(kv.split("=") for kv in rl[0].split()[1:]) if rl else {}
     print(f"  Real on Vulkan: hash {rv.get('hash')} (0.55.9's rays), {rv.get('old')} (0.55.8's rays)")
     check(int(rv.get("maxdiff", 9)) <= 1 and int(rv.get("pixels", 0)) == 1280 * 800, f"Real: the saved case with the fine table of 0.55.9, within one level of 255 of the same case drawn with 0.55.8's rays ({rl})")
@@ -961,7 +961,7 @@ SKY_STEPS = ["the tiny shader's pipeline", "the elliptic functions' pipeline", "
 
 def sky_guard(binary, work, sb):
     # 0.56.0, the card's sky has a guard of its own (app/gpu_guard.h gpuSkyGuard: its marker gpu-vksky-step.txt, the settings line "gpuvksky=", the same log
-    # with its lines marked [vulkan] [sky]; 0.69.0: Vulkan's, OpenGL's guard is gone). A normal first run logs every step in order, each with its time, and keeps "ok". Then the process is ended inside each
+    # with its lines marked [vulkan] [sky]). A normal first run logs every step in order, each with its time, and keeps "ok". Then the process is ended inside each
     # step once (PL_GPU_DIE): the marker names the step; the next start compiles nothing of the sky's shaders, the processor's table draws, Settings,
     # Performance names the step, the settings file keeps it off; after the first: the same driver stays off, a changed sky shader tries again, and
     # "Try again" passes in the same run.
@@ -1082,7 +1082,7 @@ def smooth_disc(binary, work, base):
         check(last.get("behind") == "0" and last.get("sky") == last.get("want"), f"disc at rest, {name}: at rest the picture is the settings' own")
 
 def smooth_guard(binary, work, cb):
-    # (0.69.0: Vulkan's guard of the light paths: marker gpu-vklightpaths-step.txt, settings line "gpuvklightpaths=", log lines "[vulkan] [lightpaths] "; OpenGL's is gone)
+    # (Vulkan's guard of the light paths: marker gpu-vklightpaths-step.txt, settings line "gpuvklightpaths=", log lines "[vulkan] [lightpaths] ")
     # 0.55.7, the guard round the card's path (app/gpu_guard.h) and its log, beside the settings file (here PL_SETTINGS in a folder of its own per case).
     # The log of a normal first run: the start's lines, then every step in order, the check's numbers, the first fill piece by piece, the verdict.
     gd = os.path.join(work, "guard_ok"); os.makedirs(gd, exist_ok=True)

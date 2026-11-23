@@ -105,7 +105,7 @@ static void testOutlineLevelIndependent() {
     }
 }
 
-// ---- the logic around the GPU outline, with a stand-in for the GPU (so it runs on every machine, also without OpenGL) ----
+// ---- the logic around the GPU outline, with a stand-in for the GPU (so it runs on every machine, also without a GPU) ----
 namespace {
 struct OcFake : render::IOutlineCompute {
     // what the stand-in "GPU" answers: the CPU reference's own grid and level for the orbital the test is about (the test sets them), after `delay` polls that say Pending
@@ -217,7 +217,7 @@ static void testOutlineGpuLogic() {
         clearOutlineCache();
         setOutlineCompute(nullptr);
         const Outline* e = outlineReady(orb, true);
-        checkTrue("outline GPU: no compute object (OpenGL 3.3): the CPU path at once", e != nullptr && sameOutline(*e, cpu));
+        checkTrue("outline GPU: no compute object: the CPU path at once", e != nullptr && sameOutline(*e, cpu));
         // clearing the cache cancels a job in flight
         clearOutlineCache();
         OcFake fk; fk.delay = 100; setOutlineCompute(&fk);

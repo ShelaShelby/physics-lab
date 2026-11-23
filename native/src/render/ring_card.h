@@ -1,6 +1,6 @@
 // 0.64.0: Saturn's rings per pixel on the graphics card (Vulkan; render/shaders.h kRingsFS, its probe kRingsProbeCS). What the Orbit Lab gives the card for
 // one half of one ring system in one frame, and the card's program: built and checked by orbit/ring_check.cpp under its guard (app/gpu_guard.h
-// gpuVkRingsGuard), against the processor's triangles (orbit/ring_draw.h), which stay the reference and the fallback (OpenGL draws them always).
+// gpuVkRingsGuard), against the processor's triangles (orbit/ring_draw.h), which stay the reference and the fallback.
 #pragma once
 
 #include <algorithm>

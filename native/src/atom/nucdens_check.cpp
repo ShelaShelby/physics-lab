@@ -171,7 +171,7 @@ void advance(render::Renderer2D& R) {
 }  // namespace
 
 bool drawNucDensOnCard(render::Renderer2D& R, const render::NucDensDraw& d) {
-    if (!R.vulkan()) return false;                                   // (OpenGL: the processor's squares; no card program for them there)
+    if (!R.vulkan()) return false;                                   // (no Vulkan renderer, as in the unit tests: the CPU's squares)
     app::GpuGuard& G = app::gpuVkNucDensGuard();
     if (g_p.gen != G.generation()) {                                 // the first frame, and "Try again" (Settings, Performance)
         g_p.gen = G.generation();
@@ -204,7 +204,7 @@ bool drawNucDensOnCard(render::Renderer2D& R, const render::NucDensDraw& d) {
 int nucDensCardState() { return g_p.state == 1 ? 1 : g_p.state == -1 ? -1 : 0; }
 
 std::string nucDensCardPathText(bool vulkan) {
-    if (!vulkan) return "the nucleus' Density look: the processor (no card program for it on OpenGL)";
+    if (!vulkan) return "the nucleus' Density look: the processor (no Vulkan renderer)";
     if (g_p.state == 1) return "the nucleus' Density look: the graphics card (Vulkan; its start-up check passed: " + g_p.check + ")";
     if (g_p.state == -1) return "the nucleus' Density look: the processor, because " + g_p.why;
     return "the nucleus' Density look: the graphics card once its start-up check has passed (made when the Density look is first shown)";

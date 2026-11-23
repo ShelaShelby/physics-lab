@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5i: checked in the REAL app (Linux, software OpenGL; not Windows, not a real mouse, not a GPU).
+# 0.15 stage 5i: checked in the REAL app (Linux, software Vulkan; not Windows, not a real mouse, not a GPU).
 #   check_5i.py <PhysicsLab binary> <work folder> <part>      parts: sheet  (the look tests of stage 5j were removed in 0.38.1: the look is the only one)
 # sheet (Part 1): the data sheet ends above the bottom toolbar (>= 4 px gap), is inside the window, solid and clear of the Controls panel, at 3 window sizes,
 #   for the 3 normal tabs (Values / Decay / This view) and the 5 Atom card tabs, and for the Orbit Lab's sheet. The rects are the app's own (window pixels = points at scale 1).

@@ -786,7 +786,7 @@ static void testLiveAndGpu() {
         const std::string tv = benchResultText(v, {s});
         checkTrue("text (Vulkan): the Graphics line names Vulkan and its version; the timer is Vulkan's timestamps; what it covers", tv.find("Graphics: Vulkan 1.4.318, FIFO\n") != std::string::npos &&
                   tv.find("GPU timer (Vulkan timestamp queries): ") != std::string::npos && tv.find("the card programs' batches submitted for it, summed; a worker thread's batches") != std::string::npos &&
-                  tv.find("GL_TIME_ELAPSED") == std::string::npos && t.find("Graphics: OpenGL") == std::string::npos); }   // (0.69.0: no OpenGL any more)
+                  tv.find("GL_TIME_ELAPSED") == std::string::npos && t.find("Graphics: OpenGL") == std::string::npos); }   // (no OpenGL)
 
     // the stress belts: scale 1 is the app's normal belts; scale 8 has 8 times the rocks of the same kinds, always the same
     const int64_t day = 1790000000000LL;
@@ -1275,19 +1275,18 @@ static void testBenchGpuCompute() {
         checkTrue(w + "the name says OFF and the scene it compares with, the description says DIFFERENCE", n.find("GPU superposition OFF") != std::string::npos && n.find("scene " + std::to_string(pr[1] + 3)) != std::string::npos &&
                   d.find("DIFFERENCE") != std::string::npos);
         const std::string dg = info(pr[1]).what;
-        checkTrue(w + "the original scene keeps its name and points at its comparison scene", info(pr[1]).name.find("Risk 11") == 0 && dg.find("OpenGL 4.3") != std::string::npos);
+        checkTrue(w + "the original scene keeps its name and points at its comparison scene", info(pr[1]).name.find("Risk 11") == 0 && dg.find("Vulkan: GPU superposition on") != std::string::npos);
     }
     // the jump scene driven by its CPU twin: benchFrame does what the original does (a jump is held half way)
     atom::AtomLab J; atom::benchSetup(J, 22, 800, 600);
     for (int f = 0; f < 600; f++) { atom::benchFrame(J, 22, f, f < 200 ? -1 : f - 200); J.tick(1.0 / 240); J.step(1.0 / 240); }
     checkTrue("scene 25 (the CPU twin of scene 11): a jump is held half way, as in scene 11", J.s.trans && J.s.trans->t > 0.3 && J.s.trans->t < 0.7 && !J.gpuCompute);
     // the sentence for the Performance card and the benchmark report
-    checkStr("compute path text, 4.3 with the switch on", app::computePathText(4, 3, true, true), "OpenGL 4.3: GPU superposition on");
-    checkStr("compute path text, 3.3 (no compute)", app::computePathText(3, 3, false, true), "OpenGL 3.3: CPU path");
-    checkStr("compute path text, 4.6 with the switch off", app::computePathText(4, 6, true, false), "OpenGL 4.6: GPU superposition off (switched off, CPU path)");
-    checkStr("compute path text, no compute even with the switch on says CPU path", app::computePathText(4, 1, false, true), "OpenGL 4.1: CPU path");
-    BenchEnv env; env.version = "0.13"; env.computePath = "OpenGL 4.3: GPU superposition on";
-    checkTrue("the benchmark report prints the compute path (and says unknown when it was not given)", benchResultText(env, {}).find("Atom Lab superposition and jumps: OpenGL 4.3: GPU superposition on\n") != std::string::npos && benchResultText(BenchEnv(), {}).find("Atom Lab superposition and jumps: unknown\n") != std::string::npos);
+    checkStr("compute path text, the switch on", app::computePathText(true, true), "Vulkan: GPU superposition on");
+    checkStr("compute path text, no compute", app::computePathText(false, true), "Vulkan: CPU path");
+    checkStr("compute path text, the switch off", app::computePathText(true, false), "Vulkan: GPU superposition off (switched off, CPU path)");
+    BenchEnv env; env.version = "0.13"; env.computePath = "Vulkan: GPU superposition on";
+    checkTrue("the benchmark report prints the compute path (and says unknown when it was not given)", benchResultText(env, {}).find("Atom Lab superposition and jumps: Vulkan: GPU superposition on\n") != std::string::npos && benchResultText(BenchEnv(), {}).find("Atom Lab superposition and jumps: unknown\n") != std::string::npos);
 }
 // ---- 0.13 stage 3: the GPU outline switch and its two comparison scenes ----
 static void testBenchGpuChart() {
@@ -1328,12 +1327,11 @@ static void testBenchGpuRocks() {
     // 0.13 stage 4 part A: the Orbit Lab's GPU rocks switch, its sentence and the report line
     orbit::ViewSettings fresh;
     checkTrue("GPU rocks: a new view has the switch On (the default); it is not in the saved settings (settings.cpp writes and reads named keys only, none for it)", fresh.gpuRocks);
-    checkStr("rocks path text, 4.3 with the switch on", app::rocksPathText(4, 3, true, true), "OpenGL 4.3: GPU rocks on");
-    checkStr("rocks path text, 3.3 (no compute)", app::rocksPathText(3, 3, false, true), "OpenGL 3.3: CPU path");
-    checkStr("rocks path text, 4.3 but the shader did not compile (no double precision): the CPU path", app::rocksPathText(4, 3, false, true), "OpenGL 4.3: CPU path");
-    checkStr("rocks path text, 4.6 with the switch off", app::rocksPathText(4, 6, true, false), "OpenGL 4.6: GPU rocks off (switched off, CPU path)");
-    BenchEnv env; env.version = "0.13"; env.rocksPath = "OpenGL 4.3: GPU rocks on";
-    checkTrue("the benchmark report prints the rocks path (and says unknown when it was not given)", benchResultText(env, {}).find("Orbit Lab rocks: OpenGL 4.3: GPU rocks on\n") != std::string::npos && benchResultText(BenchEnv(), {}).find("Orbit Lab rocks: unknown\n") != std::string::npos);
+    checkStr("rocks path text, the switch on", app::rocksPathText(true, true), "Vulkan: GPU rocks on");
+    checkStr("rocks path text, no rock program (no double precision): the CPU path, with the reason", app::rocksPathText(false, true, "no shaderFloat64"), "Vulkan: CPU path (no shaderFloat64)");
+    checkStr("rocks path text, the switch off", app::rocksPathText(true, false), "Vulkan: GPU rocks off (switched off, CPU path)");
+    BenchEnv env; env.version = "0.13"; env.rocksPath = "Vulkan: GPU rocks on";
+    checkTrue("the benchmark report prints the rocks path (and says unknown when it was not given)", benchResultText(env, {}).find("Orbit Lab rocks: Vulkan: GPU rocks on\n") != std::string::npos && benchResultText(BenchEnv(), {}).find("Orbit Lab rocks: unknown\n") != std::string::npos);
 }
 
 static void testBenchGpuOutline() {
@@ -1361,11 +1359,11 @@ static void testBenchGpuOutline() {
     checkTrue("scene 29: the outline is Off at the start, as in scene 16", J.p.outline == "Off" && !J.gpuOutline);
     atom::benchFrame(J, 26, 200, 0);
     checkTrue("scene 29: the first counted frame switches the outline On, as scene 16 does", J.p.outline == "On");
-    checkStr("outline path text, 4.3 with the switch on", app::outlinePathText(4, 3, true, true), "OpenGL 4.3: GPU outline on");
-    checkStr("outline path text, 3.3 (no compute)", app::outlinePathText(3, 3, false, true), "OpenGL 3.3: CPU path");
-    checkStr("outline path text, 4.6 with the switch off", app::outlinePathText(4, 6, true, false), "OpenGL 4.6: GPU outline off (switched off, CPU path)");
-    BenchEnv env; env.version = "0.13"; env.outlinePath = "OpenGL 4.3: GPU outline on";
-    checkTrue("the benchmark report prints the outline path (and says unknown when it was not given)", benchResultText(env, {}).find("Atom Lab 90 % outline: OpenGL 4.3: GPU outline on\n") != std::string::npos && benchResultText(BenchEnv(), {}).find("Atom Lab 90 % outline: unknown\n") != std::string::npos);
+    checkStr("outline path text, the switch on", app::outlinePathText(true, true), "Vulkan: GPU outline on");
+    checkStr("outline path text, no compute", app::outlinePathText(false, true), "Vulkan: CPU path");
+    checkStr("outline path text, the switch off", app::outlinePathText(true, false), "Vulkan: GPU outline off (switched off, CPU path)");
+    BenchEnv env; env.version = "0.13"; env.outlinePath = "Vulkan: GPU outline on";
+    checkTrue("the benchmark report prints the outline path (and says unknown when it was not given)", benchResultText(env, {}).find("Atom Lab 90 % outline: Vulkan: GPU outline on\n") != std::string::npos && benchResultText(BenchEnv(), {}).find("Atom Lab 90 % outline: unknown\n") != std::string::npos);
 }
 static void testBenchInputLock() {
     checkTrue("input is allowed when no benchmark runs", labInputAllowed(false));
@@ -2214,7 +2212,7 @@ static void testGpuGuard() {
     {   app::Prefs q; q.gpuVulkan = "fail | vulkan 0.59.0 | any | device: x";   // 0.59.0: the Vulkan guard's line
         const app::Prefs r = app::loadPrefs(app::savePrefs(q));
         checkTrue("graphics: the Vulkan guard's line goes through the settings file", r.gpuVulkan == q.gpuVulkan);
-        // 0.69.0: OpenGL is gone: no graphics= line is written, and an old file's line (opengl or vulkan) is read and ignored, the rest of the file kept
+        // no graphics= line is written, and an old file's line (opengl or vulkan) is read and ignored, the rest of the file kept
         checkTrue("graphics: no graphics line is written", app::savePrefs(app::Prefs{}).find("graphics") == std::string::npos && app::savePrefs(app::Prefs{}).find("gpuvulkan") == std::string::npos);
         const app::Prefs old = app::loadPrefs("graphics=opengl\nunits=imperial\n");
         checkTrue("graphics: an old file's graphics=opengl is read and ignored (the next line kept, nothing written back)", old.units == "imperial" && app::savePrefs(old).find("graphics") == std::string::npos); }

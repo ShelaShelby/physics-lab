@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5q: the owner's PC findings, part 1. Checked in the REAL app (Linux, software OpenGL, scripted events; NOT a real mouse, NOT Windows, NOT a real GPU).
+# 0.15 stage 5q: the owner's PC findings, part 1. Checked in the REAL app (Linux, software Vulkan, scripted events; NOT a real mouse, NOT Windows, NOT a real GPU).
 #   check_5q.py <PhysicsLab binary> <work folder> <part>      parts: lit, theme, scrollbar, endkey
 # Everything is measured on the PICTURE (the app's own pixels) with formulas written here (WCAG contrast), not read back from our colour constants.
 import os, re, sys

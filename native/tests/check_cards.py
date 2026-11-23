@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5f part 2: the subject card, the legend and the data sheet (New UI On), checked in the REAL app (Linux, software OpenGL; not Windows, not a GPU).
+# 0.15 stage 5f part 2: the subject card, the legend and the data sheet (New UI On), checked in the REAL app (Linux, software Vulkan; not Windows, not a GPU).
 #   check_cards.py <PhysicsLab binary> <work folder> [orbit | atom | all]
 # What is checked, for each lab and each of 1280x800 and 880x560 (0.38.1: 1920x1080 dropped) (DESIGN.md section 5: the subject card top right, to the left of the panel and its handle, never under them):
 #   * the card exists, is inside the window, overlaps none of the top bar, toolbar, readout, fact line, Controls panel, handle, legend (and the Old panel);

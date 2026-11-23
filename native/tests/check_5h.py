@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.15 stage 5h: checked in the REAL app (Linux, software OpenGL; not Windows, not a real mouse, not a GPU).
+# 0.15 stage 5h: checked in the REAL app (Linux, software Vulkan; not Windows, not a real mouse, not a GPU).
 #   check_5h.py <PhysicsLab binary> <work folder> <part>      parts: centre, infosize, cards, fit
 # centre (Part 1, item 1): the Atom Lab's drawing centre and its nucleus label ("Uranium-238 · 92p, 146n") are never under the subject card, the Controls panel, the top bar, the toolbar or
 #   the fact line, at 3 window sizes, card open / collapsed, panel open / closed, in the views that draw the nucleus label (rects are the app's own, in window pixels = points at scale 1).
@@ -67,7 +67,7 @@ SUBJECTS = (("hydrogen", "Z=1;N=0"), ("helium4", "Z=2;N=2"), ("uranium238", "Z=9
 
 def card_lines(out, tag):
     # every "PLATOMCARD card.<tag>\tstring\tstring ..." the app printed (it prints a card's strings once per change). 0.69.0: the last one, the card once
-    # settled: on Vulkan (the only API now; until 0.68.1 this check ran on OpenGL) the 90 % outline comes from the card a frame or two later, so the radial
+    # settled: on Vulkan the 90 % outline comes from the card a frame or two later, so the radial
     # card first shows reach90=0 and then the outline's reach
     got = [ln.split("\t")[1:] for ln in out.splitlines() if ln.startswith("PLATOMCARD card." + tag + "\t") or ln == "PLATOMCARD card." + tag]
     return got[-1] if got else None

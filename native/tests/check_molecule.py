@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.18 stage 1: the Molecule Lab in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU, NO timing: counts only).
+# 0.18 stage 1: the Molecule Lab in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU, NO timing: counts only).
 #   Water, ball-and-stick, Dark theme, and benzene, space-filling, Light theme: pictures to look at (molecule_dark.bmp, molecule_light.bmp), the draw counts
 #   (the whole molecule ONE instanced draw call), the CPK colour at an atom's middle, the bottom bar where the other labs have their toolbar;
 #   a click on an atom and on a bond picks it (the panel shows it); the settings are saved when the app closes and read at the next start; a damaged settings line falls back.
@@ -194,7 +194,7 @@ def card(binary, work):
     def read(path):
         return open(path, encoding="utf-8").read() if os.path.exists(path) else ""
     def lines_of(log):
-        return "\n".join(ln for ln in log.splitlines() if ln.startswith("[vulkan] [molcloud] "))   # (0.69.0: Vulkan's guard; OpenGL's is gone)
+        return "\n".join(ln for ln in log.splitlines() if ln.startswith("[vulkan] [molcloud] "))   # (Vulkan's guard)
     BIG = dict(frames=100000, size="880x560", timeout=1500)
     dirs = {"ok": folder("mc_ok")}
     # (0.68.1: the first scene's warm-up is 8 s, not 1 s: on this box's software renderer the card's program takes about 2.5 s from its first shader to the end of its first full use
@@ -206,7 +206,7 @@ def card(binary, work):
         dirs[i] = d
         calls.append(((binary, work, f"mc_die{i}", dict(MOL_BENCH, PL_SETTINGS=os.path.join(d, "settings.txt"), PL_GPU_DIE=st)), BIG))
     # the picture: water and benzene in the Density style, cloud and surface, the card's cloud and the processor's (PL_MOL_CARD=0), the same frames
-    look = {"PL_MOLECULE_STYLE": "real", "PL_DRAWSTAT": "1"}   # (0.69.0: Vulkan's card program and guard records; until 0.68.1 OpenGL's)
+    look = {"PL_MOLECULE_STYLE": "real", "PL_DRAWSTAT": "1"}   # (Vulkan's GPU program and guard records)
     PICS = [("H2O", "dark"), ("C6H6", "dark"), ("H2O", "light")]   # (the light page: the darker dot colour, drawn over instead of added)
     pics = [((binary, work, f"mc_pic_{m}_{th}_{w}", dict(look, PL_MOLECULE=m, PL_THEME=th, **({"PL_MOL_CARD": "0"} if w == "cpu" else {}))), dict(frames=90, theme=th)) for m, th in PICS for w in ("card", "cpu")]   # (90 frames: the steps take a frame each, the read-backs a few more on a busy PC)
     prefetch(calls + pics)

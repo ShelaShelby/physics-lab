@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # 0.15 stage 5k part 1: reading pages (New UI On) scroll by the wheel and the keys whichever window has the focus, have a slim scrollbar, and the Contents list works again and again.
-# Checked in the REAL app (Linux, software OpenGL, scripted events; NOT a real mouse, NOT Windows). The owner's PC showed a bug the cloud could not reproduce, so these cases copy what a real
+# Checked in the REAL app (Linux, software Vulkan, scripted events; NOT a real mouse, NOT Windows). The owner's PC showed a bug the cloud could not reproduce, so these cases copy what a real
 # mouse does differently: the pointer arrives in one frame and the wheel / click comes many frames later, and another window (Contents list, Controls panel, Legend) holds the focus.
 #   check_5k.py <PhysicsLab binary> <work folder> <part>      parts: pages, contents, log, about (0.74.0: the About page's last line, 'Free Palestine' and the drawn flag)
 import os, re, sys

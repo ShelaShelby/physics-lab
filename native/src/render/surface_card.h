@@ -1,7 +1,7 @@
 // 0.68.0: the Molecule Lab's Density surface on the graphics card (Vulkan; render/shaders.h kSurfaceCS and kSurfaceVS). The surface's vertices (place,
 // normal, potential) and triangles are sent once while the density stays (a vibration's new phase: once per phase); the card turns and colours them,
 // keys the triangles by depth and sorts them far to near as the processor does (molecule/surface_draw.h), and draws them in that order. The processor's
-// way stays the reference and the fallback (OpenGL always). Made and checked by molecule/surface_check.cpp under its guard (app/gpu_guard.h
+// way stays the reference and the fallback. Made and checked by molecule/surface_check.cpp under its guard (app/gpu_guard.h
 // gpuVkSurfaceGuard, log lines "[vulkan] [surface] ").
 #pragma once
 

@@ -443,8 +443,7 @@ std::vector<std::string> GpuGuard::logTail(int n) const {
     return all;
 }
 
-// 0.61.0: on Vulkan (step 3) the card programs have guards of their own (their markers, settings lines and versions differed from OpenGL's). 0.69.0:
-// OpenGL is gone with its guards; the functions below give Vulkan's (an old settings file's OpenGL lines are kept as they were, unused)
+// The GPU programs' guards on Vulkan (an old settings file's lines of removed guards are kept as they were, unused)
 
 // 0.62.0 (step 4): the Black Hole Lab's light paths and its sky per pixel have Vulkan twins too
 GpuGuard& gpuGuard() {

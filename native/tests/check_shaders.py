@@ -2,7 +2,7 @@
 """Compiles every GLSL shader of the renderer (src/render/shaders.h) with glslang: the vertex and fragment shaders as GLSL 330 core, alone and linked in the pairs the renderer links,
 and (0.13 stage 2) the compute shaders (names ending in CS) as GLSL 430 core.
 
-A shader that does not compile (0.55.7: or gives a warning; a compute shader also as SPIR-V for OpenGL, validated by spirv-val when installed), or a pair
+A shader that does not compile (0.55.7: or gives a warning; a compute shader also as SPIR-V for glslang's OpenGL target (a deeper check of the code), validated by spirv-val when installed), or a pair
 whose outputs and inputs do not match, fails the test. glslang is the Khronos reference compiler: it needs no graphics card.
 (It checks the language; what a GPU's own driver does with the shader is only tested on a real PC.)
 
@@ -30,7 +30,7 @@ ASSEMBLED = {"kKerrSkyMathFS": ["kKerrSkyHeadPart", "kEllipticPart", "kKerrSkyMa
              "kLinesCS": ["kLinesHeadCSPart", "kLinesPart", "kLinesMainCSPart"]}   # 0.68.0: the Orbit Lab's lines
 # 0.68.0: shaders written for Vulkan only (GLSL 450 with descriptor sets), compiled here as the build does (glslang -V, relaxed rules, the loose uniforms in a block)
 VULKAN_ONLY = {"kLinesVS": ["kLinesHeadVSPart", "kLinesPart", "kLinesMainVSPart"], "kSurfaceVS": ["kSurfaceVSHeadPart", "kSurfaceVSMainPart"]}
-# 0.56.0, SIZE: every shader's SPIR-V for OpenGL is measured as glslang writes it and with its size optimiser (-Os: every function inlined, as a driver
+# 0.56.0, SIZE: every shader's SPIR-V (glslang's OpenGL target, the measure the limits below were set with) is measured as glslang writes it and with its size optimiser (-Os: every function inlined, as a driver
 # does; the 0.55.6 compute shader kKerrTableCS, which died at link on the owner's card, is 61 KB plain and 251 KB inlined). The per-pixel spinning hole
 # (kKerrSkyFS) inlined may not exceed SPIRV_ROOM times the largest inlined shader known to run on the owner's card (every shader of the app but
 # kKerrTableCS), nor a third of kKerrTableCS inlined. (Measured for 0.56.0: REPORT.md.)

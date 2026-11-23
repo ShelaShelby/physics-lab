@@ -344,7 +344,7 @@ void advance(render::Renderer2D& R) {
 
 bool linesOnCard(render::Renderer2D& R) {
     g_p.asked = true;
-    if (!R.vulkan()) return false;                   // (OpenGL: the processor's lines; no card program for them there)
+    if (!R.vulkan()) return false;                   // (no Vulkan renderer, as in the unit tests: the CPU's lines)
     static const bool never = std::getenv("PL_NO_LINES_CARD") != nullptr;   // (tests: the processor's lines on Vulkan, to compare)
     if (never) return false;
     app::GpuGuard& G = app::gpuVkLinesGuard();
@@ -380,7 +380,7 @@ bool linesCardSettled(bool vulkan) {
 }
 
 std::string linesCardPathText(bool vulkan) {
-    if (!vulkan) return "the trails' and orbits' lines: the processor (no card program for them on OpenGL)";
+    if (!vulkan) return "the trails' and orbits' lines: the processor (no Vulkan renderer)";
     if (std::getenv("PL_NO_LINES_CARD")) return "the trails' and orbits' lines: the processor (PL_NO_LINES_CARD)";
     if (g_p.state == 1) return "the trails' and orbits' lines: the graphics card (Vulkan; its start-up check passed: " + g_p.check + ")";
     if (g_p.state == -1) return "the trails' and orbits' lines: the processor, because " + g_p.why;

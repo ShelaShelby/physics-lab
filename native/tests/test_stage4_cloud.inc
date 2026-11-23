@@ -1,7 +1,7 @@
 // 0.13 stage 4, part C: the Cloud 2D view's cost (included by test_atom.cpp after test_outline_norm.inc). WRITTEN BEFORE the code (the functions and accessors used here did not exist yet).
 // MEASURED CAUSE (REPORT.md): the side view collected its 48,000 blobs (80 bytes each) in a vector that was made new every frame and grew by doubling (about 17 reallocations, each copying and
 // touching fresh memory), where the Cloud 3D path reserved once; and both views then copied the 3.8 MB again into the renderer. The fix must change NO blob: the checks compare with the old
-// loop written out here, and prove that a reused vector does not allocate. (That the renderer takes the blobs without copying is checked in tests/gl_compare.cpp: it needs the renderer.)
+// loop written out here, and prove that a reused vector does not allocate. (That the renderer takes the blobs without copying is checked in tests/vk_compare.cpp: it needs the renderer.)
 using BlobT = render::Renderer2D::Blob;
 
 static bool c4SameBlob(const BlobT& a, const BlobT& b) {

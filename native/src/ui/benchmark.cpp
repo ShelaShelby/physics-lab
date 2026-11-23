@@ -295,7 +295,7 @@ struct PixelGrab { int w = 0, h = 0; std::vector<unsigned char> rgb; };
 // ---- the GPU timer ----
 // For every measured frame two numbers: the time the card was busy on it and the span from its first to its last command, waiting included. They come
 // from timestamp queries (0.63.0, render/vk_backend.h benchTimer): the frame's command buffer and the card batches submitted for it, their times summed
-// (busy), and the span from the first start to the last end; a frame or two late. (0.69.0: OpenGL's GL_TIME_ELAPSED queries are gone with OpenGL.)
+// (busy), and the span from the first start to the last end; a frame or two late.
 SDL_Window* g_window = nullptr;
 render::VkBackend* g_vk = nullptr;
 int g_checkLoads = 0;                            // 0.63.1: the known loads the timer check drew (the report's start line)
@@ -748,7 +748,7 @@ std::string scenePath(AppState& app, BenchState& b, int idx, int runIdx) {
             if (t.atomWhich == atom::kBenchSliceGlowUltra || t.atomWhich == atom::kBenchSliceClassicUltra)
                 return atom::atomCardPaths().pathText(0, L, app.computeOk) + "; " + atom::classicCardPathText(g_vk != nullptr, "drawn");
             if (L.manyOn() && L.p.cstyle == "Glow") return "the every-electron cloud: " + std::string(L.gpuCloud ? "drawn from a buffer on the graphics card" : "the processor turns, sorts and sends every dot (GPU cloud switched off for this scene)");
-            if (L.p.super == "On" || L.s.trans) return "the colour groups: " + app::computePathText(app.glMajor, app.glMinor, app.computeOk, L.gpuCompute);
+            if (L.p.super == "On" || L.s.trans) return "the colour groups: " + app::computePathText(app.computeOk, L.gpuCompute);
             return "";
         }
         case K::MoleculeDensity: case K::MoleculeVibDensity:          // 0.57.1
@@ -1012,9 +1012,9 @@ void begin(AppState& app) {
     e.when = whenText(dt);
     e.api = "Vulkan";                                    // 0.63.0: the report's "Graphics:" line (0.69.0: Vulkan is the only drawing system)
     if (g_vk) { e.gpu = g_vk->deviceName(); e.glVersion = g_vk->apiText() + ", " + g_vk->presentText(); e.vendor = g_vk->driverText(); }
-    e.rocksPath = app::rocksPathText(app.glMajor, app.glMinor, app.rocksOk, true);          // (the benchmark's own settings start from the defaults: On)
-    e.outlinePath = app::outlinePathText(app.glMajor, app.glMinor, app.computeOk, true);
-    e.computePath = app::computePathText(app.glMajor, app.glMinor, app.computeOk, true);
+    e.rocksPath = app::rocksPathText(app.rocksOk, true);          // (the benchmark's own settings start from the defaults: On)
+    e.outlinePath = app::outlinePathText(app.computeOk, true);
+    e.computePath = app::computePathText(app.computeOk, true);
     if (g_vk) {                                          // 0.63.1: a card program its guard switched off says so (0.63.0 said "GPU outline on" with the outline off)
         const auto off = [](const app::GpuGuard& g) { return g.started() && !g.allowed() ? (g.offText().empty() ? std::string("switched off by its guard") : g.offText()) : std::string(); };
         if (const std::string w = off(app::gpuVkOutlineGuard()); !w.empty()) e.outlinePath = "Vulkan: GPU outline off by its guard: " + w;

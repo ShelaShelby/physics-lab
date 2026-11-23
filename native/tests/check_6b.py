@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 0.16 stage 2: four fixes, checked in the REAL app (Linux, software OpenGL; NOT Windows, NOT a real GPU).
+# 0.16 stage 2: four fixes, checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU).
 #   scrollbar: About closed and opened again still shows its scrollbar thumb (pixels, not the app's own rects) - was hidden behind the reopened page
 #   bench:     Benchmark window with both extra-scene boxes ticked stays inside 92 % of the window height, Start in view
 #   rail:      the About Contents rail is wide enough for its labels (>= 20 em)
