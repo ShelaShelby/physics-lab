@@ -418,24 +418,39 @@ struct KeyHash {                                  // FNV-1a over the bytes of ea
 };
 }  // namespace
 
-std::uint64_t OrbitView::pictureKey(const SolarSystem& sys, const ViewSettings& set, double originX, double originY, double uiScale, double width, double height) const {
+const char* const OrbitView::kPictureKeyParts[OrbitView::kKeyParts] = {"the selection, follow and camera (yaw, pitch, the held place, the glide)", "the view settings (zoom, switches, time speed)",
+    "the theme and the text and panel insets", "the system's time and state", "the bodies' places, trails and moons", "the picture's place and size"};
+
+std::uint64_t OrbitView::pictureKey(const SolarSystem& sys, const ViewSettings& set, double originX, double originY, double uiScale, double width, double height,
+                                    std::uint64_t* parts) const {
+    // 0.75.1: each group is hashed on its own (parts[i], named in kPictureKeyParts) and the key joins them, so the app can say which part changed from frame to frame
+    std::uint64_t part[kKeyParts] = {0, 0, 0, 0, 0, 0};
     KeyHash k;
     k.add(sel.kind); k.add(sel.bodyId); k.add(sel.moon); k.add(follow); k.add(cardHidden); k.add(ox); k.add(oy); k.add(yaw); k.add(pitch); k.add(cdep); k.add(spin);
     k.add(journey); k.add(caption); k.add(captionAlpha); k.add(panMode); k.add(fx); k.add(cx); k.add(cy); k.add(ux); k.add(uy);
+    part[0] = k.h; k = KeyHash();
     k.add(set.view3D); k.add(set.zoom); k.add(set.tspeed); k.add(set.trueScale); k.add(set.fullTrails); k.add(set.moons); k.add(set.dwarfs); k.add(set.comets);
     k.add(set.belts); k.add(set.gpuRocks); k.add(set.sky); k.add(set.cons); k.add(set.realPlanets); k.add(set.exaggerateWobble); k.add(set.relativity); k.add(set.far);
-    k.add(set.orbits); k.add(set.alphaCen); k.add(set.paused); k.add(set.lightTheme); k.add(set.theme.id); k.add(set.theme.light); k.add(set.theme.bg); k.add(set.theme.fg); k.add(set.theme.accent);
+    k.add(set.orbits); k.add(set.alphaCen); k.add(set.paused);
+    part[1] = k.h; k = KeyHash();
+    k.add(set.lightTheme); k.add(set.theme.id); k.add(set.theme.light); k.add(set.theme.bg); k.add(set.theme.fg); k.add(set.theme.accent);
     k.add(set.textScale); k.add(set.shell); k.add(set.minTextU); k.add(set.minTextPx); k.add(set.reserveBottom); k.add(set.reserveRight); k.add(set.insetTop);
     k.add(set.insetRight); k.add(set.blocked.size()); for (const auto& b : set.blocked) k.bytes(b.data(), sizeof(double) * 4);
+    part[2] = k.h; k = KeyHash();
     k.add(sys.t); k.add(sys.epochMs); k.add(sys.jumped); k.add(sys.crashed); k.add(sys.escaped); k.add(sys.realPlanets()); k.add(sys.relativity());
     k.add(sys.bodies.size()); k.add(sys.sunTrail.size()); if (!sys.sunTrail.empty()) k.add(sys.sunTrail.back());
+    part[3] = k.h; k = KeyHash();
     for (const Body& b : sys.bodies) {
         k.add(b.id); k.add(b.pos); k.add(b.drawShift); k.add(b.moons.size()); k.add(b.trail.size());
         if (!b.trail.empty()) { k.add(b.trail.front()); k.add(b.trail.back()); }
     }
     k.add(sys.belts.size());
+    part[4] = k.h; k = KeyHash();
     k.add(originX); k.add(originY); k.add(uiScale); k.add(width); k.add(height);
-    return k.h;
+    part[5] = k.h;
+    KeyHash all;
+    for (int i = 0; i < kKeyParts; i++) { all.add(part[i]); if (parts) parts[i] = part[i]; }
+    return all.h;
 }
 
 void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, double originY, double uiScale,
@@ -843,12 +858,24 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
         // 0.75.0: the pinhole (3D): a ring point q is at depth Zc (1 - zr qz), zr = (the radius unit, m) / Zc = r / focal; the near plane over Zc. The rings' light and
         // opacity stay those seen along the line to the planet's middle (mu), not each part's own slant: a simplification close up.
         if (d3) { fr.ppx = cam.ppx; fr.ppy = cam.ppy; fr.zr = r / cam.F; fr.wn = cam.zNear / pq.Z; }
+        // 0.75.1: Saturn's rings (from the profile) take each point's own slant ringMu(fr, q) and the face the camera sees (in 3D the camera's side of the plane; the map: pz);
+        // the other ring systems keep the one slant along the line to the middle
+        fr.mu0 = mu0; fr.sunlit = ringCameraOnPoleSide(fr) == (sunElev >= 0);
+        if (rs.profile && back) {                           // (the checks, PL_RINGS_LOG=1: this frame's ring plane, camera and Sun, for the ui check's own pinhole arithmetic)
+            static const bool logRings = std::getenv("PL_RINGS_LOG") != nullptr;
+            if (logRings) {
+                std::printf("PLRINGFRAME %.6f %.6f %.6f | %.9f %.9f %.9f | %.9f %.9f %.9f | %.6f %.6f %.9f %.9f | %.9f %.9f %.9f | %.9f %d | %.9f %.9f %.9f %.9f %.9f %.9f %.9f %.9f %.9f | %.9f | %.9f %.9f %.9f\n",
+                            fr.x, fr.y, fr.r, fr.e1[0], fr.e1[1], fr.e1[2], fr.e2[0], fr.e2[1], fr.e2[2], fr.ppx, fr.ppy, fr.zr, fr.wn, fr.pole[0], fr.pole[1], fr.pole[2], fr.mu0, fr.sunlit ? 1 : 0,
+                            fr.K[0], fr.K[1], fr.K[2], fr.K[3], fr.K[4], fr.K[5], fr.K[6], fr.K[7], fr.K[8], fr.sz, fr.Lb[0], fr.Lb[1], fr.Lb[2]);
+                std::fflush(stdout);
+            }
+        }
         // 0.51.2: Saturn from Cassini's profile (UVIS, beta Cen 2008; orbit/saturn_profile.h): bins of at least a pixel (and at most 700 bins over the whole
         // profile, for speed), each with the area-averaged blocked share and light of the 10 km measurements in it; neighbours that look the same are merged
         // (0.64.0: orbit/ring_check.cpp saturnDrawnBands, kept while its inputs stay the same).
         static std::vector<RingBand> drawnOther;
         const std::vector<RingBand>* drawnP = &drawnOther;
-        if (rs.profile) drawnP = &saturnDrawnBands(rs.eqKm, r, mu, mu0, sunlitFace);
+        if (rs.profile) drawnP = &saturnDrawnBands(rs.eqKm, r);
         else {
             drawnOther.clear();
             for (const auto& bd : rs.bands) {
@@ -871,7 +898,22 @@ void OrbitView::draw(render::Renderer2D& R, ImDrawList* dl, double originX, doub
             // 0.50 (review item 3): the ring's light k multiplies the tint in LINEAR light (the tint decoded with IEC 61966-2-1), then the result is encoded (render/shading.h)
             const Color litC{static_cast<float>(render::shadeEncoded(kRingTint[0], b.k)), static_cast<float>(render::shadeEncoded(kRingTint[1], b.k)), static_cast<float>(render::shadeEncoded(kRingTint[2], b.k)), b.alpha};
             const Color darkC{0, 0, 0, b.alpha};
-            ringTriangles(fr, b, back, W, H, [&](double x0, double y0, double x1, double y1, double x2, double y2, bool lit) {
+            if (b.i0 >= 0) {   // 0.75.1: a profile band on the processor's path: its opacity and light worked out at each corner's own slant, blended across the triangle
+                ringTriangles(fr, b, back, W, H, [&](double x0, double y0, double x1, double y1, double x2, double y2, bool lit, const double* q0, const double* q1, const double* q2) {
+                    const double* qs[3] = {q0, q1, q2};
+                    Color cc[3];
+                    bool faint = true;
+                    for (int c = 0; c < 3; c++) {
+                        const RingValue v = ringBandValue(fr, b, ringMu(fr, qs[c]));
+                        faint = faint && v.faint;
+                        cc[c] = lit ? Color{static_cast<float>(render::shadeEncoded(kRingTint[0], v.k)), static_cast<float>(render::shadeEncoded(kRingTint[1], v.k)), static_cast<float>(render::shadeEncoded(kRingTint[2], v.k)), v.alpha}
+                                    : Color{0, 0, 0, v.alpha};
+                    }
+                    if (!faint) R.triangle(x0, y0, cc[0], x1, y1, cc[1], x2, y2, cc[2]);
+                });
+                continue;
+            }
+            ringTriangles(fr, b, back, W, H, [&](double x0, double y0, double x1, double y1, double x2, double y2, bool lit, const double*, const double*, const double*) {
                 const Color& cc = lit ? litC : darkC;
                 R.triangle(x0, y0, cc, x1, y1, cc, x2, y2, cc);
             });

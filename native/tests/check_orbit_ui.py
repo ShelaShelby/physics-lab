@@ -612,7 +612,7 @@ def part_nightside(binary, work):
     check(n >= 50 and good >= 0.95 * n, f"Jupiter's night side is the sky's colour: {good} of {n} pixels (sky {sky}; the axis line and the label may cross a few)")
 
 def part_rings(binary, work):
-    # 0.64.0: Saturn's rings per pixel on the card (Vulkan): the start-up check passes here (three views, each at most 1 % of the ring pixels over 8 levels
+    # 0.64.0: Saturn's rings per pixel on the card (Vulkan): the start-up check passes here (five views, each at most 1 % of the ring pixels over 8 levels
     # from the processor's triangles), the benchmark's Path names the card; made to fail on purpose (PL_RINGS_CARDFAIL), the processor's triangles are kept
     # and the Path says why. Then the two pictures (card, processor) of the same moment differ in under 2 % of the pixels by more than 8 levels.
     import re
@@ -627,7 +627,7 @@ def part_rings(binary, work):
     out = runs["card"].out
     cases = [ln for ln in out.splitlines() if ln.startswith("PLRINGCARDCASE ")]
     pct = [float(m.group(1)) for m in (re.search(r"\(([\d.]+) %, limit 1 %\)", ln) for ln in cases) if m]
-    check("PLRINGCARD state=1" in out and len(pct) == 4 and all(p <= 1.0 for p in pct), f"rings: the start-up check passes, four views within 1 % ({cases})")   # (0.75.0, on purpose: a fourth view, the pinhole camera close by, orbit/ring_check.h)
+    check("PLRINGCARD state=1" in out and len(pct) == 5 and all(p <= 1.0 for p in pct), f"rings: the start-up check passes, five views within 1 % ({cases})")   # (0.75.0, on purpose: a fourth view, the pinhole camera close by; 0.75.1: a fifth, 30 degrees below the plane, orbit/ring_check.h)
     rep = out[out.find("PLBENCH-RESULT-BEGIN"):out.find("PLBENCH-RESULT-END")]
     path = [ln.strip() for ln in rep.splitlines() if ln.strip().startswith("Path:")]
     check(any("Saturn's rings: the graphics card (Vulkan; its start-up check passed" in p for p in path), f"rings: the benchmark's Path names the card ({path})")
@@ -645,6 +645,140 @@ def part_rings(binary, work):
         check(n > 0 and over <= 0.02 * n, f"rings: the card's picture and the processor's of the same moment: {over} of {n} pixels over 8 levels")
     except Exception as e:
         check(False, f"rings: both pictures saved ({e})")
+
+def part_ringslant(binary, work):
+    # 0.75.1: close up the rings' near and far parts are seen at very different slants, so their opacity and light differ as the formulas say. (Not from the closest zoom, 1.5 radii:
+    # there the camera sits at the B ring's inner edge, the B ring is past it or behind the planet's ball, and the picture holds only the D and C rings' edge; the closest camera's
+    # views are the card check's fifth and fourth views and part_flyby. Here: zoom 3.7, the camera 4.4 radii from the middle, 29 degrees above the ring plane, the Sun behind it.) The reference is written here from the logged plane (PL_RINGS_LOG: the ring plane's axes, the pole, the middle, the pinhole, the Sun) and the saved
+    # Cassini profile (src/orbit/saturn_profile.inc, the data the app reads), by the textbook pinhole and single-scattering arithmetic, not the app's functions: for a block of
+    # 9 x 9 pixels at the B ring's near-most and far-most lit points that are on the picture, each pixel's ray meets the ring plane (the plane's normal n, the camera at the origin:
+    # mu = |n . P| / |P|), its band's opacity is the mean of 1 - exp(-tau / mu) and its light the mean of albedo / 0.5 x the Chandrasekhar slab (blocked over the band's
+    # 10 km measurements), the colour the tint x light in linear light, the picture's black between. Limits (written before the first look): the mean of a block within 8 levels
+    # in each channel of the picture's (the card check's level), the two blocks' slants over 20 % apart, and the brighter of the two the one the formulas make brighter.
+    import math, re, bisect
+    inc = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "orbit", "saturn_profile.inc")).read()
+    arr = lambda name: [float(v) for v in re.search(name + r"\[kSatProfileN\] = \{([^}]*)\}", inc).group(1).split(",")]
+    km, tau = arr("kSatProfileKm"), arr("kSatProfileTau")
+    n = len(km)
+    elo = [km[0] - 0.5 * (km[1] - km[0])] + [0.5 * (km[i - 1] + km[i]) for i in range(1, n)]
+    ehi = [elo[i + 1] for i in range(n - 1)] + [km[-1] + 0.5 * (km[-1] - km[-2])]
+    EQ = 60268.0
+    def alb(k):                                    # NASA's fact sheet's middle albedo of each ring region (saturn_rings.h): C (and D) 0.21, B 0.5, Division 0.3, A 0.5, beyond 0.6
+        return 0.21 if k < 91975 else 0.5 if k < 117507 else 0.3 if k < 122340 else 0.5 if k < 136780 else 0.6
+    def dec(c): return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    def enc(l): l = min(max(l, 0.0), 1.0); return 12.92 * l if l <= 0.0031308 else 1.055 * l ** (1 / 2.4) - 0.055
+    TINT = (0.91, 0.83, 0.66)
+    env = {"PL_NEWUI": "on", "PL_SELECT": "Saturn", "PL_3D": "1", "PL_ZOOM": "3.7", "PL_SKYOFF": "1", "PL_RINGS_LOG": "1", "PL_NO_MSAA": "1", "PL_LOG_BODYPX": "1",
+           "PL_SCRIPT": "10:view=3.7,1.25,4.4"}   # (8.6 degrees above the ring plane, the Sun behind the camera: the lit face, the rings across the lower left)
+    r = run_app(binary, work, "ringslant", env, frames=50, size="1920x1080")   # (wide: the rings fall in the free part of the picture, left of the cards)
+    ln = [l for l in r.out.splitlines() if l.startswith("PLRINGFRAME ")]
+    check(bool(ln), "ringslant: the ring plane is logged")
+    if not ln:
+        return
+    v = [float(t) for t in ln[-1].replace("|", " ").split()[1:]]
+    x, y, rad, e1, e2 = v[0], v[1], v[2], v[3:6], v[6:9]
+    ppx, ppy, zr, wn, pole, mu0, sunlit = v[9], v[10], v[11], v[12], v[13:16], v[16], int(v[17])
+    K, sz, Lb = v[18:27], v[27], v[28:31]
+    F = rad / zr
+    ux, uy = (x - ppx) / F, -(y - ppy) / F                      # the middle over the focal length, in units of its distance
+    nd = (pole[0], pole[1], -pole[2])                           # the pole in (right, up, depth)
+    S = (ux, uy, 1.0)
+    h = sum(a * b for a, b in zip(nd, S))
+    def ray_point(sx, sy):                                      # the pixel's ray meets the plane: P (units of the middle's distance), its q (radii, screen frame), mu
+        d = ((sx - ppx) / F, -(sy - ppy) / F, 1.0)
+        den = sum(a * b for a, b in zip(nd, d))
+        if abs(den) < 1e-9: return None
+        t = h / den
+        if t <= 0: return None
+        P = (t * d[0], t * d[1], t * d[2])
+        q = ((P[0] - S[0]) / zr, (P[1] - S[1]) / zr, -(P[2] - S[2]) / zr)
+        if not (1 - zr * q[2] >= wn): return None
+        return q, abs(h) / math.sqrt(sum(c * c for c in P))
+    def shadow(q):
+        qb = [K[3 * i] * q[0] + K[3 * i + 1] * q[1] + K[3 * i + 2] * q[2] for i in range(3)]
+        qb[2] /= sz
+        LL = sum(c * c for c in Lb); t = -sum(a * b for a, b in zip(qb, Lb)) / LL
+        d = [qb[i] + t * Lb[i] for i in range(3)]; f = sum(c * c for c in d) - 1
+        return max(f, 1e-3) if t <= 0 else f
+    def stretch(vv):                                            # a vector from the middle (radii, screen frame) in the planet's own frame, the pole axis divided by sz: the ball is a unit ball there
+        return [K[0] * vv[0] + K[1] * vv[1] + K[2] * vv[2], K[3] * vv[0] + K[4] * vv[1] + K[5] * vv[2], (K[6] * vv[0] + K[7] * vv[1] + K[8] * vv[2]) / sz]
+    def hidden(q):                                              # the planet's ball is between the camera and the ring point (the ball hides the half of the rings behind it)
+        a, b = stretch((-ux / zr, -uy / zr, 1 / zr)), stretch(q)
+        dd = [b[i] - a[i] for i in range(3)]
+        u = min(max(-sum(a[i] * dd[i] for i in range(3)) / sum(c * c for c in dd), 0.0), 1.0)
+        return sum((a[i] + u * dd[i]) ** 2 for i in range(3)) < 1.0
+    # the drawn groups as the app cuts them (width: at least 10 km, a pixel, a 700th of the profile; each starting where the one before ends)
+    wkm = max(10.0, EQ / rad, (km[-1] - km[0]) / 700)
+    groups, i = [], 0
+    while i < n:
+        j = i
+        while j < n and (j == i or ehi[j] - elo[i] <= wkm): j += 1
+        groups.append((i, j)); i = j
+    bands, prev = [], 0.0
+    for i, j in groups:
+        a, b = elo[i] / EQ, ehi[j - 1] / EQ
+        wpx = (b - a) * rad; dpx = max(wpx, 1.0); mid = 0.5 * (a + b)
+        a0 = max(mid - 0.5 * dpx / rad, prev); a1 = mid + 0.5 * dpx / rad
+        if a1 > a0: bands.append((a0, a1, i, j, wpx / dpx)); prev = a1
+    starts = [b[0] for b in bands]
+    def pixel(sx, sy):                                          # the expected picture's value at a pixel centre (the picture's black between the rings), 0..255 a channel
+        rp = ray_point(sx, sy)
+        if rp is None: return (0.0, 0.0, 0.0), 0.0
+        q, mu = rp
+        if hidden(q): return (0.0, 0.0, 0.0), 0.0
+        mu = max(mu, 0.004)
+        rr = math.sqrt(sum(c * c for c in q))
+        bi = bisect.bisect_right(starts, rr) - 1
+        for a0, a1, i, j, cov in bands[bi:bi + 1] if bi >= 0 else []:
+            if a0 <= rr < a1:
+                sb = ss = 0.0
+                for m in range(i, j):
+                    t = tau[m]
+                    sb += 1 - math.exp(-t / mu)
+                    sh = (mu0 / (mu0 + mu) * (1 - math.exp(-t * (1 / mu + 1 / mu0))) if sunlit else
+                          (t / mu * math.exp(-t / mu) if abs(mu0 - mu) < 1e-9 else mu0 / (mu0 - mu) * (math.exp(-t / mu0) - math.exp(-t / mu)))) / 0.5
+                    ss += alb(km[m]) / 0.5 * sh
+                alpha, light = sb / (j - i) * cov, ss / (j - i) * cov
+                k = min(1.0, light / alpha) if alpha > 1e-6 else 0.0
+                lit = shadow(q) >= 0
+                return tuple(255 * alpha * (enc(dec(c) * k) if lit else 0.0) for c in TINT), alpha
+        return (0.0, 0.0, 0.0), 0.0
+    # the near-most and far-most points of the B ring (1.54 to 1.93 radii) that are on the picture clear of the panels and bars, lit, and (so the planet behind does not show
+    # through) opaque in every pixel of their 9 x 9 block (opacity over 0.95 by the formulas)
+    bmp = Bmp(r.bmp)
+    cand = []
+    for ri in range(14):
+        rr = 1.54 + 0.03 * ri
+        for deg in range(0, 360):
+            t = math.radians(deg)
+            q = [rr * (math.cos(t) * e1[k] + math.sin(t) * e2[k]) for k in range(3)]
+            w = 1 - zr * q[2]
+            if not (w >= wn): continue
+            X, Y = ppx + (x - ppx + rad * q[0]) / w, ppy + (y - ppy - rad * q[1]) / w
+            if not (14 <= X < bmp.w - 690 and 64 <= Y < bmp.h - 14) or shadow(q) < 0 or hidden(q): continue   # (the left of the picture: the Saturn card and the Controls panel stand over the right)
+            rp = ray_point(X, Y)
+            if rp and all(pixel(int(X) + dx + 0.5, int(Y) + dy + 0.5)[1] > 0.95 for dx in range(-4, 5, 2) for dy in range(-4, 5, 2)): cand.append((rp[1], X, Y))
+    check(len(cand) >= 2, f"ringslant: opaque lit B ring points are on the picture ({len(cand)})")
+    if len(cand) < 2:
+        return
+    cand.sort()
+    far, near = cand[0], cand[-1]
+    check(near[0] > 1.2 * far[0], f"ringslant: the near and far parts are seen at slants over 20 % apart (mu {near[0]:.3f} and {far[0]:.3f})")
+    got = {}
+    for tag, (mu, X, Y) in (("near", near), ("far", far)):
+        ex = [0.0, 0.0, 0.0]; ms = [0.0, 0.0, 0.0]; cnt = 0
+        for dy in range(-4, 5):
+            for dx in range(-4, 5):
+                sx, sy = int(X) + dx, int(Y) + dy
+                e = pixel(sx + 0.5, sy + 0.5)[0]; g = bmp.px(sx, sy)[:3]
+                for c in range(3): ex[c] += e[c]; ms[c] += g[c]
+                cnt += 1
+        ex = [c / cnt for c in ex]; ms = [c / cnt for c in ms]
+        got[tag] = (ex, ms)
+        print(f"  ringslant {tag}: mu {mu:.3f}, expected block mean {[round(c, 1) for c in ex]}, picture {[round(c, 1) for c in ms]}")
+        check(all(abs(a - b) <= 8 for a, b in zip(ex, ms)), f"ringslant: the {tag} part of the B ring is as bright as the formulas say (expected {[round(c, 1) for c in ex]}, picture {[round(c, 1) for c in ms]}; 8 levels)")
+    de = sum(got["near"][0]) - sum(got["far"][0]); dm = sum(got["near"][1]) - sum(got["far"][1])
+    check(abs(de) > 30 and (de > 0) == (dm > 0), f"ringslant: the near and far parts differ in brightness as the formulas say (formulas {de:+.0f}, picture {dm:+.0f}, summed over the channels)")
 
 def part_flyby(binary, work):
     # 0.75.0: the new benchmark scene orbit.flyby (Saturn from the closest zoom, the camera through the ring plane: lines, rings and rocks cut at the near plane on the
@@ -750,7 +884,7 @@ def main():
     only = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
     want = lambda n: only is None or n in only
     os.makedirs(work, exist_ok=True)
-    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings), ("flyby", part_flyby), ("cardlines", part_cardlines), ("acen", part_acen)):
+    for name, fn in (("coverage", part_coverage), ("card", part_card), ("time", part_time), ("chip", part_chip), ("facts", part_facts), ("facts_long", part_facts_long), ("readable", part_readable), ("search", part_search), ("links", part_links), ("journey", part_journey), ("farnote", part_farnote), ("airedge", part_airedge), ("nightside", part_nightside), ("rings", part_rings), ("ringslant", part_ringslant), ("flyby", part_flyby), ("cardlines", part_cardlines), ("acen", part_acen)):
         if want(name):
             fn(binary, work)
     print(f"{checks} checks, {fails} failed")

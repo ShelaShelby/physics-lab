@@ -19,6 +19,12 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.75.1", "Saturn's rings, each part at its own angle",
+     "Close up, the near and far parts of Saturn's rings are seen at very different angles, and now each part is drawn as it would look from there: how much light "
+     "it stops and how brightly it shines are worked out for every pixel from that pixel's own viewing angle (the camera is at one height above the ring plane, so the "
+     "angle is height / distance), and the face you see is the camera's side of the plane. The graphics card does it per pixel; the processor does the same "
+     "at the corners of its triangles. It is still the single-scattering light of a thin layer (no light scattered twice). The Orbit Lab can also say, in the "
+     "benchmark's rest line, why its picture was drawn again and again at rest; and the benchmark's card times no longer count frames it left out."},
     {"0.75.0", "The Orbit Lab's 3D view has real depth",
      "Zooming in 3D now flies the camera closer: it is a pinhole camera with a 45-degree field, like a phone camera, placed so that the zoom keeps its meaning at the "
      "followed thing's distance (the scale bar says \"at Earth's distance\"). Near things loom: a moon between you and its planet is drawn bigger, a ball's outline is "

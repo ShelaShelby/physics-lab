@@ -37,6 +37,7 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
 - The Orbit Lab's camera (22 Nov 2026; the rework in three jobs: 0.74.0 handling, 0.75.0 depth, 0.76.0 free flight): it never lets go by accident; only a pick of
   something else, Reset view, Escape or picking the followed thing again let go (an empty click changes nothing). A right drag (Shift-drag, a drag in 2D) slides the
   view but stays attached: the followed thing keeps its new place on the screen.
+- The Orbit Lab's camera, part 3, free flight (WASD or arrows, mouse look): not now (owner, 23 Nov 2026); the 0.76.0 slot is gone, the idea waits under "Waiting for the owner" in ROADMAP.md.
 
 ## Atom Lab and chart of nuclides
 - Electron cloud defaults: style Glow, density High. The whole atom opens at True scale (Shells enlarged is a choice).
@@ -69,6 +70,8 @@ Only the owner's decisions still in force, one or two lines each. Older wording,
   "A feeding black hole (model)"; automatic exposure with a slider and the readout "shown N times dimmer than real"; the Film look gets a simple soft glow
   labelled as the app's own; presets set mass and distance only, spin starts at 0 with "spin not measured"; no new minimum graphics card; the radio-picture
   look stays a roadmap idea; build order: the lab, the disc, spin, the looks.
+- The moving gas (owner, 23 Nov 2026): the owner does not like the current moving gas model of the Black Hole Lab. It will be replaced by a new model; the owner says what
+  he wants (ROADMAP, Waiting for the owner). No Black Hole look work until then.
 - No lower resolution while moving (17 Nov 2026): the picture stays sharp while the user drags. A lower resolution only on a card whose whole picture takes
   over 16.7 ms (fewer than 60 sharp pictures a second); Settings, Performance then says so, with the switch "Lower resolution while moving" (Auto / Off).
 - Something must happen in the lab (17 Nov 2026): moving gas comes before flying the camera. Wishes: true speeds, a bright clump circling the hole, a time

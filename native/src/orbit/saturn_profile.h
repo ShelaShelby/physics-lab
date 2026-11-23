@@ -21,6 +21,18 @@ double saturnAlbedoAt(double rKm);  // the NSSDC fact sheet's middle albedo of t
 struct ProfileBin { double innerKm, outerKm, blocked, shine; };
 std::vector<ProfileBin> saturnProfileBins(double wKm, double mu, double mu0, bool sunlitFace, double tol = 0.004);
 
+// 0.75.1: the profile cut into groups of whole 10 km measurements at least wKm wide (the same cut as saturnProfileBins before it merges): group g is the
+// measurements i0 .. i0 + n - 1, spanning innerKm .. outerKm. The groups do not depend on mu, so each pixel of a ring seen at its own slant (orbit/ring_draw.h
+// ringMu) takes the mean over its group's measurements at that slant: the card's loop (kRingsFS) and the processor's reference are this function.
+struct ProfileGroup { int i0, n; double innerKm, outerKm; };
+std::vector<ProfileGroup> saturnProfileGroups(double wKm);
+// The mean over measurements i0 .. i0 + n - 1 of the blocked share 1 - exp(-tau / mu) and of the light (albedo / 0.5 x shine(tau, mu, mu0, sunlitFace)): every
+// measurement counts alike (they are 10 km apart to within 0.04 km, so the area weights saturnProfileBins uses differ from these by under 0.4 % of a term).
+ProfileBin saturnGroupMeans(int i0, int n, double mu, double mu0, bool sunlitFace);
+// The measurement indices where the albedo's ring region changes (the first measurement of the B ring, the Cassini Division, the A ring and beyond it) and the
+// albedos of the five regions (C and D, B, Division, A, beyond), for the card: saturnAlbedoAt(km) = albedo[number of bounds the index has passed].
+void saturnAlbedoRegions(int bounds[4], double albedo[5]);
+
 // The rings' shadow on the ball: n equal bins from the C ring's inner edge to the A ring's outer edge, each with the optical depth that gives the
 // bin's mean transmission along the Sun's slanted path: tau_eff = -mu0 ln(mean exp(-tau / mu0)). Out: inner, outer (planet radii), tau_eff, 3 floats a bin.
 int saturnShadowBands(double mu0, double eqKm, int n, float* out);

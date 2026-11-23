@@ -24,7 +24,34 @@ struct RingFrame {
     // middle's distance in front of the camera and zr = (radius, m) / Zc, so it is on the screen at pp + ((x, y) - pp + r (qx, -qy)) / (1 - zr qz); nearer
     // than the near plane (1 - zr qz < wn = near / Zc) it is not drawn. zr = 0: the flat map of 0.74.0 (2D, and the tests' old views).
     double ppx = 0, ppy = 0, zr = 0, wn = 0;
+    // 0.75.1: each ring point's own slant. The pole (unit, screen frame) and the Sun's elevation: mu0 = |sin| of it, and whether the face you see is the one the
+    // Sun lights (the same for every point: the camera is on one side of the plane, the Sun far away). ringMu(f, q) is the point's mu.
+    double pole[3] = {0, 0, 1}, mu0 = 0.5;
+    bool sunlit = true;
 };
+constexpr double kRingMuMin = 0.004;                      // the smallest slant drawn (edge-on: opaque, no width); the card's shader has the same number
+// 0.75.1: the sine of the angle between the line of sight to a ring point q (planet radii, in the ring plane, screen frame) and the ring plane:
+// mu = |n . (P - C)| / |P - C| for the pole n, the camera C and the point P. In 3D (the pinhole) the camera is at one height h over the plane, so mu = h / |P - C|
+// = h / sqrt(h^2 + D^2) for D the distance along the plane from the camera's foot; worked out in the units of the middle's distance Zc (zr = radius / Zc), the vector
+// from the camera to P is (ux + zr qx, uy + zr qy, 1 - zr qz) for (ux, uy) the middle's place on the screen over the focal length, and its dot product with the pole,
+// (px ux + py uy - pz) + zr (n . q), loses the last term in the plane. In 2D (the flat map) the slant is |pz| at every point, as before.
+inline double ringHeight(const RingFrame& f) {              // signed: n . (the middle - the camera) / Zc (3D); the pole's z (2D, the map's sign)
+    if (f.zr == 0) return -f.pole[2];
+    const double F = f.r / f.zr, ux = (f.x - f.ppx) / F, uy = -(f.y - f.ppy) / F;
+    return f.pole[0] * ux + f.pole[1] * uy - f.pole[2];
+}
+inline double ringMu(const RingFrame& f, const double q[3]) {
+    double mu;
+    if (f.zr == 0) mu = std::fabs(f.pole[2]);
+    else {
+        const double F = f.r / f.zr, ux = (f.x - f.ppx) / F, uy = -(f.y - f.ppy) / F;
+        const double vx = ux + f.zr * q[0], vy = uy + f.zr * q[1], vz = 1 - f.zr * q[2];
+        mu = std::fabs(ringHeight(f)) / std::sqrt(vx * vx + vy * vy + vz * vz);
+    }
+    return std::max(mu, kRingMuMin);
+}
+// the camera is on the pole's side of the plane (it sees the face the pole points from): in 3D, n . (the camera - the middle) > 0
+inline bool ringCameraOnPoleSide(const RingFrame& f) { return ringHeight(f) <= 0; }
 // a ring point q on the screen; false: nearer than the near plane (or behind the camera)
 inline bool ringOnScreen(const RingFrame& f, const double q[3], double& X, double& Y) {
     const double w = 1 - f.zr * q[2];
@@ -33,8 +60,21 @@ inline bool ringOnScreen(const RingFrame& f, const double q[3], double& X, doubl
     X = f.ppx + (f.x - f.ppx + f.r * q[0]) / w; Y = f.ppy + (f.y - f.ppy - f.r * q[1]) / w;
     return true;
 }
+// 0.75.1: the ring point a pixel's line of sight meets (the inverse of ringOnScreen, as the card's ringAt does it): p = (px, py) in points; q in planet radii, in
+// the ring plane; false when the line is parallel to the plane or the point is nearer than the near plane
+inline bool ringPointAtPixel(const RingFrame& f, double px, double py, double q[3]) {
+    const double u = (px - f.ppx) / f.r, v = -(py - f.ppy) / f.r, cu = (f.x - f.ppx) / f.r, cv = -(f.y - f.ppy) / f.r;
+    const double m00 = f.e1[0] + u * f.zr * f.e1[2], m01 = f.e2[0] + u * f.zr * f.e2[2], m10 = f.e1[1] + v * f.zr * f.e1[2], m11 = f.e2[1] + v * f.zr * f.e2[2];
+    const double det = m00 * m11 - m01 * m10;
+    if (std::fabs(det) < 1e-6) return false;
+    const double A = ((u - cu) * m11 - m01 * (v - cv)) / det, B = (m00 * (v - cv) - (u - cu) * m10) / det;
+    for (int k = 0; k < 3; k++) q[k] = A * f.e1[k] + B * f.e2[k];
+    return !(f.zr != 0 && !(1 - f.zr * q[2] >= f.wn));
+}
 // a drawn band: inner and outer edge in planet radii (a narrow ring widened to a pixel), its opacity (coverage folded in) and its light k (the tint's factor)
-struct RingBand { double a0 = 0, a1 = 0; float alpha = 0, k = 0; };
+// 0.75.1: a band of Saturn's profile (i0 >= 0) has no fixed opacity and light: they are the means over its measurements i0 .. i0 + n - 1 at each point's own slant
+// (orbit/saturn_profile.h saturnGroupMeans), times cover (the share of the drawn width that is the band's own); alpha and k are then the values at the middle's slant.
+struct RingBand { double a0 = 0, a1 = 0; float alpha = 0, k = 0; int i0 = -1, n = 0; double cover = 1; };
 
 // The ring plane and the Sun for a pole (px, py, pz on the screen, not necessarily unit), the Sun's direction (Lx, Ly, Lz: right, up, towards you).
 // K: nullptr without a spin model (the Sun's direction is then used as it is).
@@ -45,6 +85,7 @@ inline RingFrame ringFrame(double x, double y, double r, double px, double py, d
     double e1x = py, e1y = -px, e1z = 0; { const double n = std::hypot(e1x, e1y); if (n < 1e-6) { e1x = 1; e1y = 0; } else { e1x /= n; e1y /= n; } }
     f.e1[0] = e1x; f.e1[1] = e1y; f.e1[2] = e1z;
     f.e2[0] = py * e1z - pz * e1y; f.e2[1] = pz * e1x - px * e1z; f.e2[2] = px * e1y - py * e1x;   // P x E1
+    f.pole[0] = px; f.pole[1] = py; f.pole[2] = pz;
     f.hasK = K != nullptr; f.sz = K ? sz : 1.0;
     if (K) for (int i = 0; i < 9; i++) f.K[i] = K[i];
     double Lb[3];
@@ -100,7 +141,7 @@ void ringTriangles(const RingFrame& f, const RingBand& b, bool back, double W, d
         double X[8], Y[8];
         for (int k = 0; k < m; k++) if (!ringOnScreen(f, c[k].q, X[k], Y[k])) { const double w = 1 - f.zr * c[k].q[2], s = 1 / std::max(w, f.wn);
             X[k] = f.ppx + (f.x - f.ppx + f.r * c[k].q[0]) * s; Y[k] = f.ppy + (f.y - f.ppy - f.r * c[k].q[1]) * s; }   // (a cut corner exactly at the plane)
-        for (int k = 1; k + 1 < m; k++) tri(X[0], Y[0], X[k], Y[k], X[k + 1], Y[k + 1], lit);
+        for (int k = 1; k + 1 < m; k++) tri(X[0], Y[0], X[k], Y[k], X[k + 1], Y[k + 1], lit, c[0].q, c[k].q, c[k + 1].q);   // (0.75.1: with each corner's place on the ring plane)
     };
     const auto splitTri = [&](const RP* P) {             // a triangle cut along F = 0 (linear between its corners, in the ring plane)
         RP L[4], S[4]; int nl = 0, ns = 0;

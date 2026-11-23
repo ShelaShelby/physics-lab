@@ -11,6 +11,7 @@
 
 namespace render {
 
+constexpr int kRingCardTauVec4 = 1971;                    // 0.75.1: the profile's 7,884 optical depths as vec4s (the shader's uTau; 31.5 KB of uniforms)
 constexpr int kRingCardBands = 768;                       // the shader's uBands (12 KB of uniforms; the profile gives at most about 700)
 
 struct RingsDraw {
@@ -21,9 +22,14 @@ struct RingsDraw {
     float Lb[3] = {0, 0, 1};                             // the Sun in the planet's frame
     int back = 0;                                        // 1: the half away from you (drawn before the ball)
     float tint[3] = {0.91f, 0.83f, 0.66f};               // the drawn tint (sRGB)
-    std::vector<float> bands;                            // 4 floats a band, sorted: a0, a1 (planet radii), opacity, light k
+    std::vector<float> bands;                            // 4 floats a band, sorted: a0, a1 (planet radii), i0 * 1024 + n (its profile measurements), cover (0.75.1: not opacity and light)
     float x0 = 0, y0 = 0, x1 = 0, y1 = 0;                // the area to cover (points): the rings' box clipped to the picture
     float pp[2] = {0, 0}, zr = 0, wn = 0;                // 0.75.0: the pinhole camera (orbit/ring_draw.h RingFrame; zr 0: the flat map)
+    float pole[3] = {0, 0, 1}, mu0 = 0.5f;               // 0.75.1: the pole (screen frame) and the Sun's slant: each pixel works out its own viewing slant
+    int sunlit = 1;                                      // ... and whether the face you see is the lit one
+    int albIdx[4] = {0, 0, 0, 0};                        // the measurement indices where the albedo's ring region changes, and the albedos of the five regions (saturn_profile.h)
+    float albVal[4] = {0, 0, 0, 0}, albF = 0;
+    const float* tau = nullptr;                          // the profile's optical depths (4 x kRingCardTauVec4 floats, owned by orbit/ring_check.cpp)
 };
 
 // the uniforms of kRingsPart (the draw's and the probe's), set through f(name, values, comps, count) and i(name, values, comps)
@@ -34,6 +40,9 @@ void ringsUniforms(const RingsDraw& d, F&& f, I&& i) {
     f("uK0", d.K, 3, 1); f("uK1", d.K + 3, 3, 1); f("uK2", d.K + 6, 3, 1); f("uSz", &d.sz, 1, 1); f("uLb", d.Lb, 3, 1);
     i("uBack", &d.back, 1); f("uTint", d.tint, 3, 1);
     f("uPP", d.pp, 2, 1); f("uZr", &d.zr, 1, 1); f("uWn", &d.wn, 1, 1);
+    f("uPole", d.pole, 3, 1); f("uMu0", &d.mu0, 1, 1); i("uSunlit", &d.sunlit, 1);
+    i("uAlbIdx", d.albIdx, 4); f("uAlbVal", d.albVal, 4, 1); f("uAlbF", &d.albF, 1, 1);
+    if (d.tau) f("uTau", d.tau, 4, kRingCardTauVec4);
     const int nb = static_cast<int>(std::min<std::size_t>(d.bands.size() / 4, static_cast<std::size_t>(kRingCardBands)));
     i("uNb", &nb, 1);
     if (nb > 0) f("uBands", d.bands.data(), 4, nb);

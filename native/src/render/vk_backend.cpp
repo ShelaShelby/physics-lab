@@ -128,7 +128,14 @@ struct VkBackend::Impl {
     double tsNs = 0, imageGpuMs = -1, imageWallMs = -1;
     std::uint64_t tsMask = ~std::uint64_t(0), benchTicket = 0;
     bool benchUsed[kBenchSlots] = {};
-    struct BenchFrame { int slot; std::uint64_t first, last, serial; int image; };
+    struct BenchFrame { int slot; std::uint64_t first, last, serial; int image; long tag; };
+    long benchTagNext = 0;                                 // 0.75.1: the benchmark's name for the frame benchMark() marked
+    // 0.75.1: a frame's two timestamps are copied into this host-visible buffer by the frame's own command buffer (16 bytes a slot) and read from its memory once the frame's
+    // fence has signalled: vkGetQueryPoolResults waited for every frame queued after it on Mesa's software renderer (lavapipe: 0.9 s a read in the benchmark under
+    // LP_NUM_THREADS=1, all of it counted as the benchmark's own numbers), reading memory never waits
+    VkBuffer benchBuf = VK_NULL_HANDLE;
+    VkDeviceMemory benchMem = VK_NULL_HANDLE;
+    std::uint64_t* benchMap = nullptr;
     // 0.63.1: a frame's timestamps are read only once its fence has signalled (serial <= doneSerial): availability alone gave nonsense on the owner's card
     std::uint64_t frameSerial = 0, doneSerial = 0;
     std::vector<std::uint64_t> fenceSerial;                // per swapchain image: the serial of the frame last submitted with its fence
@@ -571,6 +578,8 @@ void VkBackend::shutdown() {
     if (d.device) vkDeviceWaitIdle(d.device);
     if (d.cards) { delete d.cards; d.cards = nullptr; }   // 0.61.0 (the programs made from it are gone: Renderer2D::useVulkan(nullptr))
     if (d.benchPool && d.device) { vkDestroyQueryPool(d.device, d.benchPool, nullptr); d.benchPool = VK_NULL_HANDLE; }   // 0.63.0
+    if (d.benchBuf && d.device) { vkDestroyBuffer(d.device, d.benchBuf, nullptr); d.benchBuf = VK_NULL_HANDLE; }
+    if (d.benchMem && d.device) { vkFreeMemory(d.device, d.benchMem, nullptr); d.benchMem = VK_NULL_HANDLE; d.benchMap = nullptr; }
     d.benchOn = false; d.benchPending.clear();
     if (d.d2) { delete d.d2; d.d2 = nullptr; }  // 0.60.0 (its destructor frees what it made)
     if (d.imguiOn) { ImGui_ImplVulkan_Shutdown(); d.imguiOn = false; }
@@ -692,7 +701,12 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     vkCmdEndRendering(fd.CommandBuffer);
     vkImageBarrier2(fd.CommandBuffer, fd.Backbuffer, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
                     VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 0);   // (to the present: the semaphore signalled after it)
-    if (timed >= 0) vkCmdWriteTimestamp2(fd.CommandBuffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, static_cast<uint32_t>(2 * timed + 1));   // (its end)
+    if (timed >= 0) {
+        vkCmdWriteTimestamp2(fd.CommandBuffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, d.benchPool, static_cast<uint32_t>(2 * timed + 1));   // (its end)
+        if (d.benchBuf)                                                   // 0.75.1: both copied to the host-visible buffer (the copy waits for the two timestamps)
+            vkCmdCopyQueryPoolResults(fd.CommandBuffer, d.benchPool, static_cast<uint32_t>(2 * timed), 2, d.benchBuf, VkDeviceSize(16) * VkDeviceSize(timed), 8,
+                                      VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+    }
     if (!d.check(vkEndCommandBuffer(fd.CommandBuffer), "vkEndCommandBuffer")) { ok_ = false; return false; }
     const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo si{};
@@ -709,7 +723,7 @@ bool VkBackend::render(ImDrawData* dd, const float clear[4], const float fill[4]
     d.fenceSerial[static_cast<std::size_t>(wd.FrameIndex)] = ++d.frameSerial;   // (0.63.1)
     if (d.benchOn) {                                                      // (the card batches submitted since the frame before belong to this frame)
         const std::uint64_t last = d.cards ? d.cards->lastTicket() : 0;
-        if (timed >= 0) d.benchPending.push_back({timed, d.benchTicket + 1, last, d.frameSerial, static_cast<int>(wd.FrameIndex)});
+        if (timed >= 0) d.benchPending.push_back({timed, d.benchTicket + 1, last, d.frameSerial, static_cast<int>(wd.FrameIndex), d.benchTagNext});
         d.benchTicket = last;
     }
     return true;
@@ -741,6 +755,32 @@ bool VkBackend::benchTimer(bool on) {
         qi.queryCount = 2 * Impl::kBenchSlots + 2;
         if (!d.check(vkCreateQueryPool(d.device, &qi, nullptr, &d.benchPool), "vkCreateQueryPool (the benchmark's timer)")) { d.benchPool = VK_NULL_HANDLE; return false; }
     }
+    if (!d.benchBuf) {                                                    // 0.75.1: the host-visible copy of each slot's timestamps (a failure: the queries are read the old way)
+        VkBufferCreateInfo bi{};
+        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bi.size = VkDeviceSize(16) * VkDeviceSize(Impl::kBenchSlots);
+        bi.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VkMemoryRequirements req{};
+        bool ok = vkCreateBuffer(d.device, &bi, nullptr, &d.benchBuf) == VK_SUCCESS;
+        if (ok) { vkGetBufferMemoryRequirements(d.device, d.benchBuf, &req); }
+        const uint32_t type = ok ? d.memoryType(req.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) : UINT32_MAX;
+        if (ok && type != UINT32_MAX) {
+            VkMemoryAllocateInfo mi{};
+            mi.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+            mi.allocationSize = req.size;
+            mi.memoryTypeIndex = type;
+            void* map = nullptr;
+            ok = vkAllocateMemory(d.device, &mi, nullptr, &d.benchMem) == VK_SUCCESS && vkBindBufferMemory(d.device, d.benchBuf, d.benchMem, 0) == VK_SUCCESS &&
+                 vkMapMemory(d.device, d.benchMem, 0, VK_WHOLE_SIZE, 0, &map) == VK_SUCCESS;
+            if (ok) { d.benchMap = static_cast<std::uint64_t*>(map); std::memset(map, 0, std::size_t(bi.size)); }
+        } else ok = false;
+        if (!ok) {
+            if (d.benchMem) { vkFreeMemory(d.device, d.benchMem, nullptr); d.benchMem = VK_NULL_HANDLE; }
+            if (d.benchBuf) { vkDestroyBuffer(d.device, d.benchBuf, nullptr); d.benchBuf = VK_NULL_HANDLE; }
+            d.benchMap = nullptr;
+        }
+    }
     if (d.cards && !d.cards->setTiming(true)) return false;
     d.benchOn = true; d.benchNext = false; d.benchPending.clear(); d.benchRejected = 0;
     for (bool& u : d.benchUsed) u = false;
@@ -748,18 +788,20 @@ bool VkBackend::benchTimer(bool on) {
     return true;
 }
 
-bool VkBackend::benchMark() {
+bool VkBackend::benchMark(long tag) {
     Impl& d = *d_;
     if (!d.benchOn) return false;
+    d.benchTagNext = tag;
     if (d.benchNext) return true;
     for (int s = 0; s < Impl::kBenchSlots; s++)
         if (!d.benchUsed[s]) { d.benchUsed[s] = true; d.benchSlot = s; d.benchNext = true; return true; }
     return false;
 }
 
-void VkBackend::benchCollect(std::vector<std::pair<double, double>>& out) {
+void VkBackend::benchCollect(std::vector<std::pair<double, double>>& out, std::vector<long>* tags) {
     Impl& d = *d_;
     out.clear();
+    if (tags) tags->clear();
     if (!d.benchOn) return;
     while (!d.benchPending.empty()) {
         const Impl::BenchFrame f = d.benchPending.front();
@@ -770,8 +812,13 @@ void VkBackend::benchCollect(std::vector<std::pair<double, double>>& out) {
             d.doneSerial = f.serial;
         }
         std::uint64_t r[4] = {0, 0, 0, 0};                                // (value, available) twice; never waits
-        const VkResult res = vkGetQueryPoolResults(d.device, d.benchPool, static_cast<uint32_t>(2 * f.slot), 2, sizeof r, r, 2 * sizeof(std::uint64_t),
-                                                   VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+        VkResult res = VK_SUCCESS;
+        if (d.benchMap) {                                                 // 0.75.1: the frame's own copy, in memory (its fence has signalled: it is there)
+            r[0] = d.benchMap[2 * f.slot]; r[2] = d.benchMap[2 * f.slot + 1]; r[1] = r[3] = 1;
+        } else {
+            res = vkGetQueryPoolResults(d.device, d.benchPool, static_cast<uint32_t>(2 * f.slot), 2, sizeof r, r, 2 * sizeof(std::uint64_t),
+                                        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
+        }
         if (res == VK_NOT_READY || !r[1] || !r[3]) break;
         double cardsMs = 0, c0 = -1, c1 = -1;
         if (d.cards && !d.cards->batchTimes(f.first, f.last, cardsMs, c0, c1)) break;
@@ -781,7 +828,7 @@ void VkBackend::benchCollect(std::vector<std::pair<double, double>>& out) {
         const double first = c0 >= 0 && c0 < a ? c0 : a, last = c1 > b ? c1 : b;
         // 0.63.1: a zero, an end before its start or a frame over 10 s on the card is not a time (cardsMs < 0: a batch of the frame was thrown away)
         const bool sane = ra != 0 && rb >= ra && cardsMs >= 0 && busy < 1e4 && last >= first && (last - first) / 1e6 < 1e4;
-        if (res == VK_SUCCESS && sane) out.push_back({busy, (last - first) / 1e6});
+        if (res == VK_SUCCESS && sane) { out.push_back({busy, (last - first) / 1e6}); if (tags) tags->push_back(f.tag); }
         else if (res == VK_SUCCESS) d.benchRejected++;
         d.benchUsed[f.slot] = false;
         d.benchPending.erase(d.benchPending.begin());

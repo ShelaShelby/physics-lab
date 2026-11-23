@@ -2665,7 +2665,14 @@ uniform vec3 uLb;           // the Sun in that frame
 uniform int uBack;          // 1: the half away from you
 uniform int uNb;
 uniform vec3 uTint;         // the drawn tint (sRGB)
-uniform vec4 uBands[768];   // a0, a1 (planet radii), opacity, k
+uniform vec4 uBands[768];   // 0.75.1: a0, a1 (planet radii), i0 * 1024 + n (the band's measurements in the profile), cover
+uniform vec3 uPole;         // 0.75.1: the pole (screen frame); each pixel works out its own viewing slant mu (orbit/ring_draw.h ringMu)
+uniform float uMu0;         // the Sun's slant
+uniform int uSunlit;        // 1: the face you see is the lit one
+uniform vec4 uTau[1971];    // the profile's optical depths (render/ring_card.h kRingCardTauVec4), four to a vec4
+uniform ivec4 uAlbIdx;      // the measurement indices where the albedo's region changes (B, Division, A, beyond), and the albedos (C and D, B, Division, A; beyond)
+uniform vec4 uAlbVal;
+uniform float uAlbF;
 uniform vec2 uPP;           // 0.75.0: the pinhole camera (orbit/ring_draw.h RingFrame): the principal point (points), zr (the radius over the middle's distance
 uniform float uZr;          // in front of the camera; 0: the flat map) and the near plane over that distance
 uniform float uWn;
@@ -2708,9 +2715,41 @@ vec4 ringAt(vec2 p) {
     }
     vec4 b = uBands[lo];
     if (re >= b.y) return vec4(0.0);
-    float F = ringShadow(A * uE1 + B * uE2);
-    vec3 col = F >= 0.0 ? ringEncode(ringDecode(uTint) * b.w) : vec3(0.0);
-    return vec4(col, b.z);
+    vec3 q = A * uE1 + B * uE2;
+    float F = ringShadow(q);
+    // 0.75.1: this pixel's own slant: the camera is at one height over the plane, so mu = h / (the distance to the point) (orbit/ring_draw.h ringMu), in the middle's
+    // distance as the unit; the flat map: |pole.z|
+    float mu;
+    if (uZr == 0.0) mu = abs(uPole.z);
+    else {
+        float Fl = uR / uZr, ux = (uCen.x - uPP.x) / Fl, uy = -(uCen.y - uPP.y) / Fl;
+        vec3 vv = vec3(ux + uZr * q.x, uy + uZr * q.y, 1.0 - uZr * q.z);
+        mu = abs(uPole.x * ux + uPole.y * uy - uPole.z) / length(vv);
+    }
+    mu = max(mu, 0.004);
+    // the means over the band's measurements: the blocked share 1 - exp(-tau / mu) and the light (albedo / 0.5 x shine(tau, mu, mu0, face): orbit/saturn_rings.h),
+    // every measurement alike; the dark face's (exp(-tau/mu0) - exp(-tau/mu)) mu0 / (mu0 - mu) as tau / mu exp(-tau/mu) phi(tau (1/mu - 1/mu0)), phi(x) = (exp(x) - 1) / x
+    // (the same function without the difference of two nearly equal numbers, which single precision cannot hold when mu is near mu0)
+    int ni = int(b.z + 0.5);
+    int i0 = ni / 1024, n = ni - i0 * 1024;
+    float imu = 1.0 / mu, imu0 = 1.0 / max(uMu0, 1e-3), sb = 0.0, ss = 0.0;
+    for (int j = i0; j < i0 + n; j++) {
+        float tau = uTau[j >> 2][j & 3];
+        sb += 1.0 - exp(-tau * imu);
+        float alb = j < uAlbIdx.x ? uAlbVal.x : j < uAlbIdx.y ? uAlbVal.y : j < uAlbIdx.z ? uAlbVal.z : j < uAlbIdx.w ? uAlbVal.w : uAlbF;
+        float sh;
+        if (uSunlit != 0) sh = (1.0 / (1.0 + mu * imu0)) * (1.0 - exp(-tau * (imu + imu0)));
+        else {
+            float x = tau * (imu - imu0);
+            float phi = abs(x) < 1e-3 ? 1.0 + 0.5 * x + x * x * (1.0 / 6.0) : (exp(x) - 1.0) / x;
+            sh = tau * imu * exp(-tau * imu) * phi;
+        }
+        ss += alb * 4.0 * sh;                       // (albedo / 0.5 and the formula's / 0.5)
+    }
+    float alpha = sb / float(n) * b.w, shine = ss / float(n) * b.w;
+    float k = alpha > 1e-6 ? min(1.0, shine / alpha) : 0.0;
+    vec3 col = F >= 0.0 ? ringEncode(ringDecode(uTint) * k) : vec3(0.0);
+    return vec4(col, alpha);
 }
 )";
 static const char* const kRingsMainFSPart = R"(

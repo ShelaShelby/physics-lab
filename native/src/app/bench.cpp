@@ -153,7 +153,7 @@ std::string benchResultText(const BenchEnv& e, const std::vector<BenchScene>& sc
             const std::string cpu = i.cpuShare < 0 ? std::string("not available") : f("%.1f", 100 * i.cpuShare) + " % (" + (i.threads > 0 ? f("%.0f", 100 * i.cpuShare * i.threads) + " % of a thread)" : std::string("?)"));
             const std::string anew = i.keepsPicture ? (i.redraws > 0 ? std::to_string(i.redraws) + " times" : std::string("no")) : std::string("every frame (this lab)");
             t += pad(i.id, w) + "  " + pad(benchIdleBusy(i) ? "busy" : "quiet", 7) + "  " + pad(cpu, 22) + "  " + pad(i.gpuMs < 0 ? "not available" : f("%.2f", i.gpuMs) + " ms", 11) + "  " +
-                 pad(anew, 18) + "  " + pad(i.workerBusy ? "busy" : "idle", 6) + "  " + i.name + (i.settled ? "" : " (the picture was not finished in " + f("%.0f", kBenchIdleSettleCapS) + " s)") + "\n";
+                 pad(anew, 18) + "  " + pad(i.workerBusy ? "busy" : "idle", 6) + "  " + i.name + (i.settled ? "" : " (the picture was not finished in " + f("%.0f", kBenchIdleSettleCapS) + " s)") + (i.why.empty() ? "" : "\n    why drawn anew: " + i.why) + "\n";
         }
         t += "Rule: busy when a worker thread was busy, or a lab that keeps its picture drew it anew, or the app used more than " + f("%.0f", 100 * kBenchIdleBusyThread) +
              " % of one processor thread (all its threads together); else quiet. The processor share is of the whole processor (" +

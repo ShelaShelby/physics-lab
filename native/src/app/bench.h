@@ -105,6 +105,7 @@ struct BenchIdle {
     bool keepsPicture = false;                  // the lab keeps a finished picture (the Black Hole Lab); the others draw every frame
     long redraws = 0;                           // ... how many times it was drawn anew while left alone
     bool workerBusy = false;
+    std::string why;                            // 0.75.1: the Orbit Lab's picture drawn anew at rest: which parts of its key changed (main.cpp orbitFrameKey)
     bool settled = true;                        // the picture was finished before the 3 s (else the waiting hit kBenchIdleSettleCapS)
 };
 bool benchIdleBusy(const BenchIdle& i);

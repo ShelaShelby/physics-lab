@@ -212,21 +212,67 @@ struct OrbitKeep {
     long kept = 0, drawn = 0;
 };
 OrbitKeep g_orbitKeep;
-std::uint64_t orbitFrameKey(const ui::AppState& app, const render::Renderer2D& R, double headerH, double scale, bool gray) {
-    std::uint64_t k = app.view.pictureKey(app.sys, app.set, 0, headerH, scale, app.canvasW, app.canvasH);
-    for (int m = 0; m < int(render::Map::Count); m++) k = (k ^ (R.hasMap(render::Map(m)) ? 2u * unsigned(m) + 1u : 2u * unsigned(m))) * 1099511628211ull;   // (a map loaded later)
+// 0.75.1: the key's parts, each named: when the picture is drawn anew for kKeyRunFrames frames in a row with time stopped and no mouse button down (the Orbit Lab at
+// rest should keep its picture), the first frame of the run says which parts changed, once to gpu-paths-log.txt, and app.orbitKeyWhy keeps the latest note (the
+// benchmark's rest line reads it).
+std::uint64_t orbitFrameKey(ui::AppState& app, const render::Renderer2D& R, double headerH, double scale, bool gray) {
+    constexpr int kV = orbit::OrbitView::kKeyParts, kExtra = 6, kMore = 3, kN = kV + kExtra + kMore;
+    std::uint64_t part[kN] = {};
+    const char* name[kN];
+    for (int i = 0; i < kV; i++) name[i] = orbit::OrbitView::kPictureKeyParts[i];
+    std::uint64_t k = app.view.pictureKey(app.sys, app.set, 0, headerH, scale, app.canvasW, app.canvasH, part);
+    std::uint64_t maps = 1469598103934665603ull;
+    for (int m = 0; m < int(render::Map::Count); m++) maps = (maps ^ (R.hasMap(render::Map(m)) ? 2u * unsigned(m) + 1u : 2u * unsigned(m))) * 1099511628211ull;   // (a map loaded later)
+    k = (k ^ maps) * 1099511628211ull;
     const ImFontAtlas* fa = ImGui::GetIO().Fonts;
     const double extra[8] = {gray ? 1.0 : 0.0, double(reinterpret_cast<std::uintptr_t>(ImGui::GetFont())), ImGui::GetFontSize(), double(reinterpret_cast<std::uintptr_t>(fa->TexData)),
                              fa->TexData ? double(fa->TexData->Width) : 0.0, fa->TexData ? double(fa->TexData->Height) : 0.0, fa->TexUvScale.x, fa->TexUvScale.y};
-    for (double e : extra) { std::uint64_t b = 0; std::memcpy(&b, &e, sizeof b); k = (k ^ b) * 1099511628211ull; }
+    std::uint64_t ext[8];
+    for (int i = 0; i < 8; i++) { std::uint64_t b = 0; std::memcpy(&b, &extra[i], sizeof b); ext[i] = b; k = (k ^ b) * 1099511628211ull; }
     // 0.68.0: while the card's lines are being made and checked (their steps run as the picture is drawn) a new key each frame; then their path is in the key
     static std::uint64_t unsettled = 0;
+    std::uint64_t settling = 0;
     if (!orbit::linesCardSettled(R.vulkan())) {
         k = (k ^ ++unsettled) * 1099511628211ull;
+        settling = unsettled;
         static bool said = false;                       // 0.68.1: the reason the picture is drawn anew each frame is in gpu-paths-log.txt, once
         if (!said) { said = true; app::gpuVkLinesGuard().log("the Orbit Lab's picture is drawn anew each frame until the card's lines are decided: " + orbit::linesCardPathText(R.vulkan())); }
     }
-    k = (k ^ std::uint64_t(orbit::linesCardState() + 2)) * 1099511628211ull;
+    const std::uint64_t lstate = std::uint64_t(orbit::linesCardState() + 2);
+    k = (k ^ lstate) * 1099511628211ull;
+    // (the checks, PL_ORBIT_KEYNOISE=1: the system's time part changes every frame, so the note below must name it)
+    static const bool keyNoise = SDL_getenv("PL_ORBIT_KEYNOISE") != nullptr;
+    static std::uint64_t noise = 0;
+    if (keyNoise) { ++noise; part[3] ^= noise * 0x9E3779B97F4A7C15ull; k = (k ^ noise) * 1099511628211ull; }
+    // the named parts of this frame (the extra's eight values joined into three: the grey choice, the font, the atlas)
+    part[kV + 0] = maps; part[kV + 1] = ext[0]; part[kV + 2] = ext[1] ^ (ext[2] * 31);
+    part[kV + 3] = ext[3] ^ (ext[4] * 31) ^ (ext[5] * 131) ^ (ext[6] * 1031) ^ (ext[7] * 10031);
+    part[kV + 4] = settling; part[kV + 5] = lstate;
+    name[kV + 0] = "a map loaded"; name[kV + 1] = "the grey choice"; name[kV + 2] = "the font (its pointer or size)"; name[kV + 3] = "the font atlas (its texture, size or scale)";
+    name[kV + 4] = "the card's lines still being decided (a new number each frame)"; name[kV + 5] = "the card's lines state (card or processor)";
+    // the run of changing keys
+    static std::uint64_t prev[kN] = {}, prevKey = 0;
+    static int run = 0;
+    static long changedCount[kN] = {};
+    static bool have = false;
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool still = app.paused && !io.MouseDown[0] && !io.MouseDown[1] && !io.MouseDown[2] && io.MouseWheel == 0 && io.MouseDelta.x == 0 && io.MouseDelta.y == 0;
+    if (have && prevKey != k && still) {
+        run++;
+        for (int i = 0; i < kN; i++) if (prev[i] != part[i]) changedCount[i]++;
+        static const int kKeyRunFrames = SDL_getenv("PL_ORBIT_KEYRUN") ? std::atoi(SDL_getenv("PL_ORBIT_KEYRUN")) : 30;   // (30; the checks may ask for a shorter run)
+        if (run == kKeyRunFrames) {
+            std::string t = "the Orbit Lab's picture was drawn anew for " + std::to_string(kKeyRunFrames) + " frames in a row at rest; the key's parts that changed (frames of " + std::to_string(kKeyRunFrames) + "): ";
+            bool any = false;
+            for (int i = 0; i < kN; i++) if (changedCount[i] > 0) { t += (any ? "; " : "") + std::string(name[i]) + " " + std::to_string(changedCount[i]); any = true; }
+            if (!any) t += "none of the named parts (the labels' kept vertices were not kept: more than 60,000 vertices, or a second clip or texture)";
+            static bool logged = false;
+            if (!logged) { logged = true; app::gpuVkLinesGuard().log(t); }
+            app.orbitKeyWhy = t;
+        }
+    } else { run = 0; for (long& c : changedCount) c = 0; }
+    for (int i = 0; i < kN; i++) prev[i] = part[i];
+    prevKey = k; have = true;
     return k;
 }
 }  // namespace
@@ -827,6 +873,15 @@ int main(int argc, char** argv) {
             orbitKey = orbitFrameKey(app, renderer, headerH, scale, ui::look().grayscale);
             const OrbitKeep& K = g_orbitKeep;
             orbitKept = !noKeep && K.have && K.textOk && K.key == orbitKey && frame > 0;
+            // 0.75.1: the key held still but the labels could not be kept (more than 60,000 vertices, or a second clip or texture): drawn anew each frame, said once
+            static int notKept = 0;
+            if (!noKeep && K.have && !K.textOk && K.key == orbitKey && app.paused) {
+                if (++notKept == 30) {
+                    app.orbitKeyWhy = "the Orbit Lab's picture was drawn anew for 30 frames in a row at rest with its key unchanged: its labels could not be kept (more than 60,000 vertices, or a second clip or texture)";
+                    static bool logged = false;
+                    if (!logged) { logged = true; app::gpuVkLinesGuard().log(app.orbitKeyWhy); }
+                }
+            } else notKept = 0;
         } else g_orbitKeep.have = false;
         if (!pictureOff) { if (orbitKept) renderer.keepLast(); else renderer.begin(app.canvasW, app.canvasH); }
         ImDrawList* text = ImGui::GetBackgroundDrawList();

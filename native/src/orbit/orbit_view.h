@@ -93,7 +93,10 @@ public:
     static constexpr double kPitchMax = 89.5 * 3.14159265358979323846 / 180;   // the Solar System's tilt reaches ±89.5° (Alpha Centauri: ±3.1 rad, turned right over)
     // 0.67.0: a key of everything the picture is drawn from (this view's camera and choices, the settings, the system's time, bodies, trails and moons, the
     // picture's size and place): the same key, the same picture. The app keeps the last picture while the key stays the same (time stopped, nothing moving).
-    std::uint64_t pictureKey(const SolarSystem& sys, const ViewSettings& set, double originX, double originY, double uiScale, double width, double height) const;
+    static constexpr int kKeyParts = 6;                // 0.75.1: the key's groups, each hashed alone (kPictureKeyParts names them)
+    static const char* const kPictureKeyParts[kKeyParts];
+    std::uint64_t pictureKey(const SolarSystem& sys, const ViewSettings& set, double originX, double originY, double uiScale, double width, double height,
+                             std::uint64_t* parts = nullptr) const;
 
     Selection sel;
     bool follow = false;

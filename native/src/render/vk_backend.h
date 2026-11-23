@@ -64,8 +64,10 @@ public:
     // slot still waits for its result: that frame is not measured). benchCollect: the frames whose times have come back, oldest first: the card's busy
     // time (the frame's command buffer plus the batches submitted since the frame before, summed) and the span from the first start to the last end (ms).
     bool benchTimer(bool on);
-    bool benchMark();
-    void benchCollect(std::vector<std::pair<double, double>>& busySpanMs);
+    // 0.75.1: benchMark(tag) names the frame (the benchmark's own count); benchCollect gives each result's tag beside it (tags: one a result, same order), so a result that comes a
+    // frame or two late is the frame's own and a frame left out of the count can be left out of the card's times too
+    bool benchMark(long tag = 0);
+    void benchCollect(std::vector<std::pair<double, double>>& busySpanMs, std::vector<long>* tags = nullptr);
     // 0.63.1: frames whose timestamps were thrown away (a zero, an end before its start, or over 10 s: the owner's 0.63.0 run gave about 1e12 ms a frame)
     int benchRejected() const;
     // the timer's check (as OpenGL's GL_TIME_ELAPSED check): pic's picture drawn once into an image of its own, timed by the timestamps and by a clock

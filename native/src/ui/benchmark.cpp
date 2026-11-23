@@ -317,7 +317,7 @@ struct GpuTimer {
     }
 };
 
-struct GpuSample { double busyMs, spanMs; };
+struct GpuSample { double busyMs, spanMs; long tag; };   // 0.75.1: tag: the frame it timed (BenchState::gpuFrameNo), so a frame left out of the count is left out of the card's times too
 
 // Is the card's timer believable on this PC? A known heavy load (many see-through full-picture rectangles) is drawn a few times; the timer
 // and a clock (up to the end of the wait) must roughly agree. The load is doubled until it takes about 2 ms.
@@ -407,7 +407,9 @@ struct BenchState {
     render::Renderer2D* R = nullptr;
     bool noteFailed = false;
     GpuTimer gpu;
-    std::vector<GpuSample> gpuReady;
+    std::vector<GpuSample> gpuReady;          // the card's results that have come back and wait for their frame's decision (counted or left out)
+    long gpuFrameNo = 0, gpuFrameMarked = -1; // 0.75.1: the frames named so far, and the one marked this frame
+    std::vector<std::pair<long, bool>> frameCounted;   // the last frames' decisions (tag, counted)
     app::GpuVerdict gpuCheck;
     bool gpuChecked = false;
     // 0.63.1: the benchmark's own start (the owner's PC: 5-7 s that looked frozen): measured part by part for the report's header
@@ -925,7 +927,7 @@ void restPrepare(AppState& app, int r) {
     else {
         app.lab = blackhole::kLabIndex;
         if (id == "rest.blackhole_spin") blackhole::setSpin(app.blackhole, 0.9);
-        if (id == "rest.blackhole_glare") blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey);
+        if (id == "rest.blackhole_glare") { blackhole::applyPreset(app.blackhole, blackhole::kFeedingKey); if (SDL_getenv("PL_BH_REST_NOGAS")) app.blackhole.gasMoving = false; }   // (0.75.1, development: the moving gas off, to see what the rest line says without it)
     }
     app.vsync = true;                                     // as the user has it
 }
@@ -1227,11 +1229,15 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
         const bool bh = app.lab == blackhole::kLabIndex;
         if (b.rStage == 1) {
             const bool fin = labFinishedNow(app, b);
-            if ((fin && b.rStageS >= 0.5) || b.rStageS > app::kBenchIdleSettleCapS) {   // finished (or waited long enough): count from here
+            // 0.75.1: the Orbit Lab's card lines are decided by guarded steps, one a frame, behind the helper processes that make each card program first (about 8 s here with
+            // LP_NUM_THREADS=1 at 2560 x 1369): the cap is a minute for them, so the rest is not counted while the lab is still deciding how to draw (each frame of it is a new picture)
+            const double capS = app.lab == 0 && !orbit::linesCardSettled(b.R ? b.R->vulkan() : false) ? 60.0 : app::kBenchIdleSettleCapS;
+            if ((fin && b.rStageS >= 0.5) || b.rStageS > capS) {   // finished (or waited long enough): count from here
                 b.rNow = app::BenchIdle();
                 // (0.67.0: the Orbit Lab keeps its picture too: its pictures drawn anew count as redraws)
                 b.rNow.id = d.id; b.rNow.name = d.name; b.rNow.threads = b.env.threads; b.rNow.keepsPicture = bh || app.lab == 0; b.rNow.settled = fin;
                 b.rCpu0 = processCpuSeconds(); b.rT0 = SDL_GetPerformanceCounter(); b.rRedraw0 = app.lab == 0 ? app.orbitPictures : b.R ? b.R->lensRedraws() : 0; b.rGpuSum = 0; b.rGpuN = 0;
+                app.orbitKeyWhy.clear();
                 b.rStage = 2; b.rStageS = 0;
             }
         } else if (b.rStage == 2) {
@@ -1242,8 +1248,9 @@ void partsEndFrame(AppState& app, BenchState& b, double frameMs) {
                 b.rNow.cpuShare = b.rCpu0 >= 0 && cpu >= 0 && wall > 0 && b.env.threads > 0 ? (cpu - b.rCpu0) / wall / b.env.threads : -1;
                 b.rNow.redraws = app.lab == 0 ? app.orbitPictures - b.rRedraw0 : b.R ? b.R->lensRedraws() - b.rRedraw0 : 0;
                 b.rNow.gpuMs = b.rGpuN > 0 && b.gpuChecked && b.gpuCheck.reliable ? b.rGpuSum / b.rGpuN : -1;
+                if (app.lab == 0 && b.rNow.redraws > 3) b.rNow.why = app.orbitKeyWhy.empty() ? "no run of 30 frames in a row was seen" : app.orbitKeyWhy;
                 b.idle.push_back(b.rNow);
-                std::printf("PLBENCH-REST %s %s cpu=%.3f redraws=%ld worker=%d frames=%d\n", b.rNow.id.c_str(), app::benchIdleBusy(b.rNow) ? "busy" : "quiet", b.rNow.cpuShare, b.rNow.redraws, b.rNow.workerBusy ? 1 : 0, b.rNow.frames);
+                std::printf("PLBENCH-REST %s %s cpu=%.3f redraws=%ld worker=%d frames=%d%s%s\n", b.rNow.id.c_str(), app::benchIdleBusy(b.rNow) ? "busy" : "quiet", b.rNow.cpuShare, b.rNow.redraws, b.rNow.workerBusy ? 1 : 0, b.rNow.frames, b.rNow.why.empty() ? "" : " why: ", b.rNow.why.c_str());
                 b.rAt++; b.rStage = 0;
                 if (b.rAt >= int(b.rests.size())) nextPhase(app, b);
             }
@@ -1361,10 +1368,12 @@ void benchmarkGpuBegin(AppState& app) {
     if (g_vk) {                                          // 0.63.0: the next vk.render() is timed
         // 0.63.1: only frames that are counted (a scene's counted time, a lab at rest being counted): a warm-up frame's result, a frame or two late, was
         // counted in the scene before (here a slow scene's card time came out above its frame time)
-        const BenchState& bs = *app.bench;
+        BenchState& bs_ = *app.bench;
+        const BenchState& bs = bs_;
         const bool counted = (bs.phase == 0 && bs.run && bs.run->measuring()) || (bs.phase == 2 && bs.rStage == 2);
         if (!counted) return;
-        if (!g_vk->benchMark()) g.framesSkipped++;
+        bs_.gpuFrameNo++;
+        if (!g_vk->benchMark(bs_.gpuFrameNo)) g.framesSkipped++; else bs_.gpuFrameMarked = bs_.gpuFrameNo;
     }
 }
 
@@ -1424,19 +1433,33 @@ void benchmarkGpuEnd(AppState& app) {
 void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::BenchFrameCost* last) {
     if (!app.bench || app.bench->stage != BenchState::Stage::Running) return;
     BenchState& b = *app.bench;
-    // the GPU results that are ready now (they come a frame or two late), oldest first
+    // the GPU results that are ready now (they come a frame or two late), oldest first: kept with their frame's tag until the frame's decision is known (below)
     GpuTimer& g = b.gpu;
-    b.gpuReady.clear();
     (void)g;
     if (g_vk) {                                          // 0.63.0: Vulkan's timestamps
         std::vector<std::pair<double, double>> v;
-        g_vk->benchCollect(v);
-        for (const auto& x : v) b.gpuReady.push_back(GpuSample{x.first, x.second});
+        std::vector<long> tags;
+        g_vk->benchCollect(v, &tags);
+        for (std::size_t i = 0; i < v.size(); i++) b.gpuReady.push_back(GpuSample{v[i].first, v[i].second, i < tags.size() ? tags[i] : -1});
     }
-    for (const GpuSample& r : b.gpuReady) {
-        b.run->gpuSample(r.busyMs, r.spanMs);
-        if (b.phase == 2 && b.rStage == 2) { b.rGpuSum += r.busyMs; b.rGpuN++; }
-    }
+    // 0.75.1: a result goes to the run when its frame was counted and is dropped when the frame was left out of the count (a result comes back a frame or two after its
+    // frame, untagged until now: 0.75.0 counted the card's time of frames whose own time was left out: blackhole.moving_gas under LP_NUM_THREADS=1 read 1.25-1.45 x its frame time)
+    const auto settle = [&](bool counted) {
+        if (b.gpuFrameMarked >= 0) { b.frameCounted.push_back({b.gpuFrameMarked, counted}); b.gpuFrameMarked = -1; if (b.frameCounted.size() > 64) b.frameCounted.erase(b.frameCounted.begin()); }
+        for (std::size_t i = 0; i < b.gpuReady.size();) {
+            const GpuSample r = b.gpuReady[i];
+            const auto it = std::find_if(b.frameCounted.begin(), b.frameCounted.end(), [&](const std::pair<long, bool>& e) { return e.first == r.tag; });
+            if (it == b.frameCounted.end()) {            // (its frame is not decided yet, or too old to be known: waits, at most 64 frames)
+                if (r.tag < b.gpuFrameNo - 64) b.gpuReady.erase(b.gpuReady.begin() + std::ptrdiff_t(i)); else i++;
+                continue;
+            }
+            if (it->second) {
+                if (b.run) b.run->gpuSample(r.busyMs, r.spanMs);     // (the run may be gone: the last rest ended the benchmark in this frame)
+                if (b.phase == 2 && b.rStage == 2) { b.rGpuSum += r.busyMs; b.rGpuN++; }
+            }
+            b.gpuReady.erase(b.gpuReady.begin() + std::ptrdiff_t(i));
+        }
+    };
     if (SDL_Window* w = g_window) {   // 0.15 stage 2: a scene during which the window lost focus or was minimised is flagged in the report
         const SDL_WindowFlags fl = SDL_GetWindowFlags(w);
         b.run->noteWindow((fl & SDL_WINDOW_INPUT_FOCUS) != 0, (fl & SDL_WINDOW_MINIMIZED) != 0);
@@ -1445,7 +1468,7 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::B
         const double now = SDL_GetTicks() / 1000.0;
         if (now - b.lastMemS >= 0.25) { b.lastMemS = now; b.peakMB = std::max(b.peakMB, processMemoryMB()); }
     }
-    if (b.phase >= 1) { partsEndFrame(app, b, frameMs); return; }
+    if (b.phase >= 1) { partsEndFrame(app, b, frameMs); settle(true); return; }
     const int sc = b.run->scene();
     // (0.63.1: the frame after a read-back is not counted either: its time, from the frame before's start, holds the read-back; 0.63.0 counted it)
     // 0.68.1: the benchmark's own measuring must not land in a counted frame (the owner's 0.68.0 run: 19.6 ms of "the benchmark's numbers" in a film_tilt frame, the picture
@@ -1502,6 +1525,7 @@ void benchmarkEndFrame(AppState& app, double frameMs, double cpuMs, const app::B
     if (slowLog && frameMs > 250 && sc < int(b.list.size())) std::printf("PLBENCH-SLOW %s %.0f ms %s at %.2f s\n", sceneText(b.list[std::size_t(sc)]).id.c_str(), frameMs, b.run->measuring() ? "counted" : "warm-up", b.run->sceneElapsedS());
     if (last && sc == 0 && !b.run->measuring()) b.swapMs += last->swapchainMs;   // 0.63.1: the swapchain made again for VSync off (the first scene's warm-up)
     b.run->frame(frameMs, cpuMs, !grabbed, last);
+    settle(!grabbed);
     if (grabbed) b.grabNext = 0;
     if (b.run->finished()) nextPhase(app, b);
 }

@@ -209,6 +209,20 @@ def part_orbitkeep(binary, work):
         m = re.search(r"redraws=(\d+) .*frames=(\d+)", ln[0]) if ln else None
         check(bool(m) and int(m.group(1)) <= 3 and int(m.group(2)) > 20, f"rest.orbit ({tag}, 2560 x 1369): the picture is not drawn anew at rest ({ln})")
 
+    # 0.75.1: the owner's 0.75.0 run drew rest.orbit anew every frame (766 in 3 s) although his lines were decided; this box kept it (0 drawn anew) after the whole Hard
+    # list (0.75.1 REPORT: not reproduced), so this case runs the Orbit Lab's scenes and the interface's before rest.orbit, as his run orders them (short counted times), and
+    # the same limit; and the diagnostic: with the key made to change each frame on purpose (PL_ORBIT_KEYNOISE) the rest line says which part of it changed, by name
+    ids = ",".join(("orbit.alphacen,orbit.earth,orbit.flyby,orbit.heaviest,orbit.journey,orbit.real_fast,orbit.rocks8,orbit.saturn,orbit.sky,ui.data_plot,ui.guide_scroll,ui.settings_open,rest.orbit",))
+    r = run_app(binary, work, "b_rest_orbit_after", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.2", PL_BENCH_MEASURE="0.4", PL_LOG_SHELL=None, PL_NO_GPU_HELPER="0"), frames=100000, size="2560x1369", timeout=1500)
+    ln = [l for l in r.out.splitlines() if l.startswith("PLBENCH-REST rest.orbit")]
+    m = re.search(r"redraws=(\d+) .*frames=(\d+)", ln[0]) if ln else None
+    check(bool(m) and int(m.group(1)) <= 3 and int(m.group(2)) > 20, f"rest.orbit after the Orbit Lab's and the interface's scenes (2560 x 1369): the picture is not drawn anew at rest ({ln})")
+    r = run_app(binary, work, "b_rest_orbit_noise", dict(BENCH, PL_BENCH_ONLY="rest.orbit", PL_LOG_SHELL=None, PL_ORBIT_KEYNOISE="1"), frames=100000, size="880x560", timeout=600)
+    ln = [l for l in r.out.splitlines() if l.startswith("PLBENCH-REST rest.orbit")]
+    check(len(ln) == 1 and ln[0].split()[2] == "busy" and "why:" in ln[0] and "the system's time and state" in ln[0], f"rest.orbit, key changing every frame on purpose: the rest line names the part that changed ({ln})")
+    t = r.out[r.out.find("AT REST"):]                       # (the report's rest table; its end marker may come after the output the check keeps)
+    check("why drawn anew:" in t and "the system's time and state" in t, "the report's rest table says which part of the key changed")
+
 def part_benchrestore(binary, work):
     ids = "ui.settings_open,ui.data_plot,ui.guide_scroll,molecule.vib_density,atom.jump_all,orbit.journey,orbit.earth,blackhole.extreme,response.lab_switch.orbit_atom,rest.blackhole_glare"
     r = run_app(binary, work, "b_restore", dict(BENCH, PL_BENCH_ONLY=ids, PL_BENCH_WARMUP="0.2", PL_BENCH_MEASURE="0.4", PL_OPEN="settings"), frames=100000, size="880x560", timeout=1200)

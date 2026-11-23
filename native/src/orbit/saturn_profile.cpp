@@ -24,6 +24,41 @@ double saturnAlbedoAt(double rKm) {
     return kFRingAlbedo;
 }
 
+std::vector<ProfileGroup> saturnProfileGroups(double wKm) {
+    std::vector<ProfileGroup> out;
+    const int n = kSatProfileN;
+    int i = 0;
+    while (i < n) {
+        const double r0 = edgeLo(i);
+        int j = i;
+        while (j < n && (j == i || edgeHi(j) - r0 <= wKm)) j++;
+        out.push_back({i, j - i, r0, edgeHi(j - 1)});
+        i = j;
+    }
+    return out;
+}
+
+ProfileBin saturnGroupMeans(int i0, int n, double mu, double mu0, bool sunlitFace) {
+    double sb = 0, ss = 0;
+    for (int j = i0; j < i0 + n; j++) {
+        const double tau = kSatProfileTau[j];
+        sb += blocked(tau, mu);
+        ss += saturnAlbedoAt(kSatProfileKm[j]) / 0.5 * shine(tau, mu, mu0, sunlitFace);
+    }
+    return {edgeLo(i0), edgeHi(i0 + n - 1), sb / n, ss / n};
+}
+
+void saturnAlbedoRegions(int bounds[4], double albedo[5]) {
+    for (int k = 0; k < 4; k++) {
+        const double edge = k == 0 ? kRings[1].innerKm : k == 1 ? kRings[2].innerKm : k == 2 ? kRings[3].innerKm : kRings[3].outerKm;
+        int j = 0;
+        while (j < kSatProfileN && kSatProfileKm[j] < edge) j++;
+        bounds[k] = j;
+    }
+    albedo[0] = 0.5 * (kRings[0].albedoLo + kRings[0].albedoHi); albedo[1] = 0.5 * (kRings[1].albedoLo + kRings[1].albedoHi);
+    albedo[2] = 0.5 * (kRings[2].albedoLo + kRings[2].albedoHi); albedo[3] = 0.5 * (kRings[3].albedoLo + kRings[3].albedoHi); albedo[4] = kFRingAlbedo;
+}
+
 std::vector<ProfileBin> saturnProfileBins(double wKm, double mu, double mu0, bool sunlitFace, double tol) {
     std::vector<ProfileBin> out;
     const int n = kSatProfileN;

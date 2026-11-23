@@ -63,6 +63,7 @@ struct AppState {
     int64_t jumpWaitMs = 0;
     std::string jumpWaitNote;              // (its clamp note)
     long orbitPictures = 0;                // 0.67.0: how many times the Orbit Lab's picture was drawn (not kept; the benchmark's rest line)
+    std::string orbitKeyWhy;               // 0.75.1: why the picture was drawn anew frame after frame at rest (which parts of its key changed; main.cpp orbitFrameKey)
     int learn = 0;                         // the open Learn guide: 0 none, 1 What am I looking at?, 2 seasons, 3 timeline
     std::string learnJump;                 // a section to scroll to in the open guide ("bar" = back to the list of headings)
     // ---- Atom Lab ----

@@ -1336,7 +1336,7 @@ public:
     bool built() const override { return k_.pipe != VK_NULL_HANDLE; }
     int beginProbe(const RingsDraw& d, const std::vector<float>& xy) override {
         const int n = static_cast<int>(xy.size() / 2);
-        if (!built() || !c_.ok() || n <= 0 || jobs_.size() >= 8) return 0;
+        if (!built() || !c_.ok() || n <= 0 || jobs_.size() >= 12) return 0;   // (0.75.1: ten for the check's five views)
         Job j;
         j.id = nextId_++;
         j.n = n;

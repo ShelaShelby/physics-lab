@@ -14,16 +14,12 @@
 #include <string>
 #include <vector>
 
+#include "orbit/ring_bands.h"
 #include "orbit/ring_draw.h"
 #include "render/renderer2d.h"
 
 namespace orbit {
 
-constexpr double kRingTint[3] = {0.91, 0.83, 0.66};      // 0.50 (review item 7): ONE drawn tint for every ring system, not measured (orbit_view.cpp)
-
-// Saturn's drawn bands from Cassini's profile (orbit/saturn_profile.h) for a planet of r points: bins of at least a pixel (and at most 700 over the profile),
-// opacity and light at mu (the viewer's) and mu0 (the Sun's), the face you see lit or not; kept while the four inputs stay the same
-const std::vector<RingBand>& saturnDrawnBands(double eqKm, double r, double mu, double mu0, bool sunlitFace);
 
 // the processor's picture of one ring system over black (both halves), w x h pixels of one sample, RGB 0..1 (3 floats a pixel, rows from the top); and
 // the card's from its probe's answers (4 floats a pixel for the back half, then the front half). Shared by the start-up check and the tests.
