@@ -1,6 +1,6 @@
-# 0.15 stage 3: helpers for the tests of the new UI (check_shell.py, check_shell_state.py, check_shell_pictures.py): run the REAL app headless (SDL offscreen; 0.69.0: Mesa's software Vulkan, lavapipe)
+# 0.15 stage 3: helpers for the tests of the new UI (every check_*.py of tests/TESTS.md): run the REAL app headless (SDL offscreen; 0.69.0: Mesa's software Vulkan, lavapipe)
 # and read what it printed (PL_LOG_SHELL, PLSTATE) and the picture it saved (a BMP, bytes B G R A, rows bottom first).
-import os, re, struct, subprocess
+import os, re, struct, subprocess, time
 
 def _run_app(binary, work, name, extra, frames=60, size="1280x800", theme="dark", timeout=900):
     binary, work = os.path.abspath(binary), os.path.abspath(work)
@@ -19,7 +19,10 @@ def _run_app(binary, work, name, extra, frames=60, size="1280x800", theme="dark"
     env = {k: v for k, v in env.items() if v is not None}   # 0.68.1: a value of None removes the variable (a check that runs as the owner does: no PL_LOG_SHELL)
     bmp = os.path.join(work, name + ".bmp")
     env["PL_SCREENSHOT"] = bmp
+    t0 = time.time()
     r = subprocess.run([binary], env=env, cwd=work, capture_output=True, text=True, errors="replace", timeout=timeout)
+    if os.environ.get("PL_START_TIMES"):                    # 0.76.0: each app start's time, for tests/TESTS.md
+        print(f"PLSTARTTIME {time.time() - t0:.1f} s {name}", flush=True)
     res = Result(r.stdout, r.stderr, bmp)
     res.code = r.returncode                                 # 0.69.0: the exit code (negative: ended by a signal, a crash)
     return res

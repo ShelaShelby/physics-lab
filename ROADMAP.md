@@ -15,7 +15,7 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 - atom.nucleon on the GPU: its quark dots use a double-precision sine hash. A GPU version needs an integer hash on both sides (the dots then change).
 - The nucleus views at full zoom fill about 16 pictures of pixels a frame (one glow quad per nucleon). One pass over the picture for all glows would fill one.
 - The Slice of an overlapping superposition on the GPU: a kept point takes one more random number, so attempts have no fixed numbering.
-- **fix**: check_atom_chip classic (ui_atom): the GPU and CPU pictures of the same moment differ in more than 1 % of pixels in atom.side_all_classic, atom.side_all_glow and atom.slice_glow_ultra (0.4-6.7 %, varying run to run). 0.75.2 fails the same way. Find which dots differ.
+- **fix**: check_atom_chip classic (ui_atom, ui_atom_classic, ui_atom_classic2; one part per scene since 0.76.0): the GPU and CPU pictures of the same moment differ in more than 1 % of pixels in atom.side_all_classic, atom.slice_all_drag or atom.slice_glow_ultra (0.4-6.7 %, varying run to run; 0.75.2 too). The two runs are drawn at different zooms (side_all_classic: scale bar 5 Å on the card run, 2 Å on the CPU run). Not the benchmark's wall clock (a fixed scene clock changed nothing) and not the card's batch timing (PL_VK_SYNC fixed one scene once, not the others). Next: find why PL_CLASSIC_CARDFAIL's run reaches another zoom.
 - **fix**: the jump's "first full use" fence is made again every frame until seen signalled (AtomCardPaths::jumpGroupsBuffer). Keep one fence until signalled, as the Molecule Lab does.
 - **fix**: the Slice keeps the outer electron's true share of dots, so its shape is faint (Na 3d). Add a denser option there.
 - **fix**: levels with no cloud: Ca, Sr, Ba lowest d levels (6-10 % low), Hg 7s 7p 6d, Zn 5s, Cd 6d 7d, Ca 4p² ¹D, Ra 7s8s, 7s9s, 7s5f, 7s8p. Recompute the Ca, Sr, Ba, Hg clouds made before the 0.51.3 orthogonality fix.
@@ -59,13 +59,10 @@ What is planned or worth doing. No dates, no promises beyond this list. Done wor
 
 ## Black Hole Lab
 - **fix**: the GPU light paths crash the owner's Radeon driver when their pipeline is made (off there by the guard). The crash is in the "step" part of kKerrTableCS: split it into smaller parts.
-- **fix**: one new picture every second frame while the view moves (owner's 0.68.1 run, and check_blackhole smooth on the build machine). Find the limit in the app's request of a new picture.
 - rest.blackhole_glare is busy at rest on the owner's PC (45 % CPU). Suspected cause: the moving gas remakes the glare on the CPU. Check his next run with the gas off.
 - Scenes below 255 Hz in the owner's 0.68.1 run: film_tilt, real_move, extreme, all_light (1 % low 152-172). Their slow frames mostly wait for a swapchain image (6-9 ms, 2 images). Measure first.
 - **fix**: the CPU spin table (the fallback) is off on the far disc nearly edge on: the exposure's log-average 1.4 % at spin 0.9, up to 33 of 3871 pixels another image at spin 0.99.
 - **fix**: the CPU path seen nearly edge on still changes the disc at the stop (largest patch up to 132 px). Next try: more columns inside the shadow only.
-- **fix**: check_shell vulkan2d (ui_shell) flickers on the build machine on Black Hole checks (glare 1.6-4.0 % against 1 %). 0.75.3 full run, check_shell.py:vulkan2d: "FAIL a broken sky program: the lab's passes and the light paths stay on Vulkan, zero validation errors" (the lens never logged "end the first full picture"; 112 checks, 1 failed). Run alone: "FAIL the glare made over the frames on Vulkan ... is the glare made at once" (2.209 % of pixels); that run was stopped as stuck after the glare check.
-- **fix**: check_blackhole short (ui_blackhole) failed once in the 0.75.3 full run (Film, 1280x800: paperview, exp.manual, exposure not found after More settings). It passes alone: find what the suite's load changes.
 - The ring round the shadow: the sky in the gap is drawn at the map's brightness beside a disc on its exposure. Say so in the guide, or dim that sky by the disc's exposure.
 - The Milky Way looks grainy close in (Gaia's map is 4000 x 2000). **source needed**: ESA's larger Gaia map and its terms.
 - The stars' images on the GPU (they trail the sky while moving). Needs the tables sent per picture, analytic derivatives and its own limits.

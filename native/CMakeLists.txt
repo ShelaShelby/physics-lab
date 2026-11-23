@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(PhysicsLabNative VERSION 0.75.3 LANGUAGES C CXX)
+project(PhysicsLabNative VERSION 0.76.0 LANGUAGES C CXX)
 
 # Physics Lab, native Windows version (C++17, SDL3, Vulkan, Dear ImGui).
 # The dependencies are downloaded at fixed versions by FetchContent, so every build
@@ -551,84 +551,62 @@ if(PL_BUILD_APP)
     enable_testing()
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_FOUND)
-      # 0.38.1 stage 3 (the owner: "merge them"): ONE test per screen. tests/run_group.py runs the check scripts of the screen one after the other, each exactly as it ran as
-      # its own test before (99 tests became 15); a failure prints the name of its check. To run one check by hand: python3 tests/<script> <PhysicsLab> <folder> [part].
-      # ui_shell: the shell: text sizes and floors, windows, keys, start view, date entry, panel toggles; 0.59.0: Vulkan's start
+      # 0.76.0: the UI suite cut to what catches real breakage (DECISIONS 23 Nov 2026). tests/TESTS.md lists every part, its time and why it is kept.
+      # tests/run_group.py runs the parts of a group one after the other and stops a part after 5 minutes. To run one part by hand:
+      # python3 tests/<script> <PhysicsLab> <folder> [part]. COST: the measured seconds, so ctest starts the longest groups first.
+      # ui_smoke: the app starts, each of the four labs draws a frame that is not empty with zero Vulkan validation errors, the app ends cleanly (every job runs it: check.sh job)
+      add_test(NAME ui_smoke COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_smoke
+               check_shell.py:smoke)
+      set_tests_properties(ui_smoke PROPERTIES TIMEOUT 900 COST 30)
+      # ui_shell: the app's start on Vulkan, the message without Vulkan, the GPU guards and the crash-safe helper; the calculator, the Data panel, About and the changelog
       add_test(NAME ui_shell COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_shell
-               check_shell.py check_shell.py:vulkan check_shell.py:guardturn check_shell.py:gpuhelper check_shell.py:novulkan check_shell.py:vulkan2d check_shell_state.py check_022.py:keys check_022.py:start check_022s7.py:dateenter check_5k.py:toggle check_5k.py:calc check_5k.py:matrix check_5k.py:data)
-      set_tests_properties(ui_shell PROPERTIES TIMEOUT 3600)
-      # ui_controls: the Controls panel: layout, sections, sliders, End key, its scrollbar
-      add_test(NAME ui_controls COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_controls
-               check_controls.py check_5g.py:panel check_5q.py:sliders check_5q.py:endkey check_5q.py:scrollbar)
-      set_tests_properties(ui_controls PROPERTIES TIMEOUT 3600)
-      # ui_orbit_view: the Orbit picture: wheel zoom, scrolling, zoom out, centre, the camera (0.74.0), its depth (0.75.0), axes, orbit paths, scale bar
-      add_test(NAME ui_orbit_view COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit_view
-               check_5p.py:wheel check_5p.py:scroll check_5p.py:zoomout check_022.py:centre check_022.py:followmoon check_022.py:camera check_022.py:depth check_022.py:axes check_023.py:orbits
-               check_022s7.py:scalebar)
-      set_tests_properties(ui_orbit_view PROPERTIES TIMEOUT 3600)
-      # ui_look: the look: chosen options, ticks, Settings tiles, solid pages, themes, lit buttons, pills, glass, layout tokens
-      add_test(NAME ui_look COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_look
-               check_5t.py:grey check_5t.py:tiles check_5t.py:solid check_5m.py:themes check_5q.py:theme check_5q.py:lit
-               check_5p.py:lit check_5r.py:pill check_shell_pictures.py check_5m2.py:layout check_5m2.py:tilt)
-      set_tests_properties(ui_look PROPERTIES TIMEOUT 3600)
-      # ui_popups: windows and pop-ups: Settings, legend, pickers, menus, Benchmark
-      add_test(NAME ui_popups COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_popups
-               check_5m2.py:windows check_5m2.py:popups check_5l.py:popups check_5l.py:legend check_5p.py:picker check_5q.py:picker
-               check_5k.py:windows check_6b.py:bench check_6b.py:benchscenes check_6b.py:benchwaits check_6b.py:benchrest check_6b.py:orbitkeep check_6b.py:benchrestore)
-      set_tests_properties(ui_popups PROPERTIES TIMEOUT 3600)
-      # ui_pages: the reading pages: wheel and keys, scrollbar, Contents menu and rail
-      add_test(NAME ui_pages COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_pages
-               check_5k.py:pages check_5k.py:log check_5g.py:pages check_6b.py:scrollbar check_5k.py:contents check_5g.py:contents
-               check_6b.py:rail check_5k.py:about)
-      set_tests_properties(ui_pages PROPERTIES TIMEOUT 3600)
-      # ui_search: search (Ctrl+K) in every lab
-      add_test(NAME ui_search COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_search
-               check_5l.py:search check_022s7.py:search check_audit19.py:molsearch check_orbit_ui.py:search)
-      set_tests_properties(ui_search PROPERTIES TIMEOUT 3600)
-      # ui_toolbar: the bottom toolbars
-      add_test(NAME ui_toolbar COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_toolbar
-               check_5l.py:toolbar check_5g.py:toolbar check_atom_toolbar.py)
-      set_tests_properties(ui_toolbar PROPERTIES TIMEOUT 3600)
-      # ui_cards: the subject cards and data sheets
-      add_test(NAME ui_cards COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_cards
-               check_cards.py:orbit check_cards.py:atom check_5i.py:sheet check_layout020.py:sheet check_022.py:stage6)
-      set_tests_properties(ui_cards PROPERTIES TIMEOUT 3600)
-      # ui_facts: the fact line
-      add_test(NAME ui_facts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_facts
-               check_orbit_ui.py:facts check_orbit_ui.py:facts_long check_022.py:facts check_022.py:factsrc check_022s7.py:factmol)
-      set_tests_properties(ui_facts PROPERTIES TIMEOUT 3600)
-      # ui_orbit: the Orbit Lab: every control of INVENTORY.md, the data sheet words, Time panel, chip, readability, links, Most realistic; 0.50: no rim of air, a dark night side; 0.73.0: the Alpha Centauri system; 0.75.0: the fly-by scene card against processor
+               check_shell.py:vulkan check_shell.py:novulkan check_shell.py:guardturn check_shell.py:gpuhelper check_5k.py:calc check_5k.py:data check_5k.py:about check_5k.py:log)
+      set_tests_properties(ui_shell PROPERTIES TIMEOUT 900 COST 232)
+      # ui_screens: Settings, the Benchmark window, search in every lab, the look of the themes
+      add_test(NAME ui_screens COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_screens
+               check_5t.py:grey check_5t.py:tiles check_6b.py:bench check_6b.py:benchrest check_6b.py:benchrestore check_022s7.py:search check_audit19.py:molsearch)
+      set_tests_properties(ui_screens PROPERTIES TIMEOUT 900 COST 112)
+      # ui_orbit: the Orbit Lab's controls against the old panel's states, its card, keys, orbit paths, Most realistic, the fact line
       add_test(NAME ui_orbit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit
-               check_orbit_ui.py:coverage check_orbit_ui.py:card check_orbit_ui.py:time check_orbit_ui.py:chip check_orbit_ui.py:readable check_orbit_ui.py:links check_orbit_ui.py:journey check_orbit_ui.py:farnote check_orbit_ui.py:airedge check_orbit_ui.py:nightside
-               check_orbit_ui.py:rings check_orbit_ui.py:ringslant check_orbit_ui.py:flyby check_orbit_ui.py:cardlines check_orbit_ui.py:acen check_025.py:orbit)
-      set_tests_properties(ui_orbit PROPERTIES TIMEOUT 3600)
-      # ui_atom_panel: the Atom Lab Controls panel against the old panel's saved states
-      add_test(NAME ui_atom_panel COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_panel
-               check_atom_panel.py)
-      set_tests_properties(ui_atom_panel PROPERTIES TIMEOUT 3600)
-      # ui_atom: the Atom Lab: element chip (0.57.0: and the card's Slice dots and jump groups with their guards), its old-panel features, view words, jump check, Most realistic, Monochrome key, honesty notes, density, nucleus controls and full zoom
+               check_shell_state.py check_cards.py:orbit check_022.py:keys check_023.py:orbits check_025.py:orbit check_022.py:facts check_022.py:factsrc)
+      set_tests_properties(ui_orbit PROPERTIES TIMEOUT 900 COST 312)
+      # ui_orbit_card: the Orbit Lab on the card against the processor (Saturn's rings, the fly-by, the lines) and against the formulas (the rings' slant, the air's edge, the night side)
+      add_test(NAME ui_orbit_card COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_orbit_card
+               check_orbit_ui.py:rings check_orbit_ui.py:flyby check_orbit_ui.py:cardlines check_orbit_ui.py:ringslant check_orbit_ui.py:airedge check_orbit_ui.py:nightside)
+      set_tests_properties(ui_orbit_card PROPERTIES TIMEOUT 900 COST 435)
+      # ui_atom: the Atom Lab: the element chip, the toolbar, the honest captions; the Slice's Glow dots on the card against the processor
       add_test(NAME ui_atom COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom
-               check_atom_chip.py check_atom_chip.py:card check_atom_chip.py:classic check_6a.py:gaps check_022.py:words check_022s7.py:jumpcheck check_025.py:atom
-               check_022.py:honest check_022.py:spectrum check_022.py:density check_6b.py:nucleus check_6c.py:fullzoom check_6c.py:ds281sea check_6c.py:nucglow check_6c.py:nucdens check_6c.py:nucdenscard)
-      set_tests_properties(ui_atom PROPERTIES TIMEOUT 3600)
-      # ui_atom_layout: the Atom Lab layout: centre, info text, card tabs, fit, rings, default view, U-238 info text
-      add_test(NAME ui_atom_layout COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_layout
-               check_5h.py:centre check_5h.py:infosize check_5h.py:cards check_5h.py:fit check_5g.py:ring check_5g.py:atomtext
-               check_5g.py:default check_layout020.py:u238)
-      set_tests_properties(ui_atom_layout PROPERTIES TIMEOUT 3600)
-      # ui_molecule: the Molecule Lab: pictures, Realistic, its bar, vibrations, density, no builder, Most realistic, guide, pan, Space, rotation (0.53), the anharmonic bond (0.53.1)
+               check_atom_chip.py check_atom_toolbar.py check_022.py:honest check_atom_chip.py:classicsliceglow)
+      set_tests_properties(ui_atom PROPERTIES TIMEOUT 900 COST 249)
+      # ui_atom_card: the Atom Lab's card programs against the processor (the Slice's dots, the jump's groups, the nucleus' Density look) and their guards
+      add_test(NAME ui_atom_card COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_card
+               check_atom_chip.py:card check_6c.py:nucdens check_6c.py:nucdenscard)
+      set_tests_properties(ui_atom_card PROPERTIES TIMEOUT 900 COST 183)
+      # ui_atom_classic: the Classic dots on the card against the processor: Cloud 3D and the side view
+      add_test(NAME ui_atom_classic COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_classic
+               check_atom_chip.py:classic check_atom_chip.py:classicside)
+      set_tests_properties(ui_atom_classic PROPERTIES TIMEOUT 900 COST 356)
+      # ui_atom_classic2: the Classic dots on the card against the processor: the side view in Glow and the Slice
+      add_test(NAME ui_atom_classic2 COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_atom_classic2
+               check_atom_chip.py:classicsideglow check_atom_chip.py:classicslice)
+      set_tests_properties(ui_atom_classic2 PROPERTIES TIMEOUT 900 COST 414)
+      # ui_molecule: the Molecule Lab: pictures, picking, settings, rotation, the anharmonic bond; the Density cloud's program against the processor and its guard
       add_test(NAME ui_molecule COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_molecule
-               check_molecule.py check_realistic.py check_audit19.py:molbar check_022.py:molbar check_023.py:vib check_024.py:densvib
-               check_024.py:densfit check_024.py:nobuild check_025.py:molecule check_025.py:guide check_layout020.py:molpan check_022s7.py:space
-               check_molecule.py:rotation check_molecule.py:anharm check_molecule.py:card check_molecule.py:cardsurface)
-      set_tests_properties(ui_molecule PROPERTIES TIMEOUT 3600)
-      # ui_blackhole (0.55.0): the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, layout, look,
-      # and the card's bent sky against the double-precision reference; 0.55.2: spin; 0.55.3: the looks; 0.55.4: truelight (the true exposure, the eye's glare);
-      # 0.55.5: smooth (the frame never waits for the processor); 0.70.0: whiteout; 0.72.0: gas (the moving gas)
+               check_molecule.py check_molecule.py:rotation check_molecule.py:anharm check_molecule.py:card check_molecule.py:cardpiclight)
+      set_tests_properties(ui_molecule PROPERTIES TIMEOUT 900 COST 207)
+      # ui_molecule_card: the Molecule Lab's Density cloud and surface on the card against the processor's pictures
+      add_test(NAME ui_molecule_card COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_molecule_card
+               check_molecule.py:cardpic check_molecule.py:cardsurface)
+      set_tests_properties(ui_molecule_card PROPERTIES TIMEOUT 900 COST 288)
+      # ui_blackhole: the Black Hole Lab: its tab, presets, distances against Synge, bending and sky, Most realistic, the Orbit Lab's card, settings, the disc, spin, all light; the card's bent sky against the double-precision reference
       add_test(NAME ui_blackhole COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole
-               check_blackhole.py:open check_blackhole.py:presets check_blackhole.py:distance check_blackhole.py:light check_blackhole.py:disc check_blackhole.py:realest check_blackhole.py:orbitcard
-               check_blackhole.py:settings check_blackhole.py:layout check_blackhole.py:look check_blackhole.py:precision check_blackhole.py:spin check_blackhole.py:looks check_blackhole.py:truelight check_blackhole.py:alllight check_blackhole.py:smooth check_blackhole.py:whiteout check_blackhole.py:short check_blackhole.py:gas)
-      set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 3600)
+               check_blackhole.py:open check_blackhole.py:presets check_blackhole.py:distance check_blackhole.py:light check_blackhole.py:realest check_blackhole.py:orbitcard
+               check_blackhole.py:settings check_blackhole.py:disc check_blackhole.py:spin check_blackhole.py:alllight check_blackhole.py:precision)
+      set_tests_properties(ui_blackhole PROPERTIES TIMEOUT 900 COST 243)
+      # ui_blackhole_sky: the Black Hole Lab's sky per pixel and the card's light paths against the double-precision reference, and no white-outs against the processor's settled picture
+      add_test(NAME ui_blackhole_sky COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_group.py $<TARGET_FILE:PhysicsLab> ${CMAKE_BINARY_DIR}/ui_blackhole_sky
+               check_blackhole.py:sky check_blackhole.py:precisioncard check_blackhole.py:whiteout)
+      set_tests_properties(ui_blackhole_sky PROPERTIES TIMEOUT 900 COST 371)
     endif()
   endif()
 endif()
@@ -641,6 +619,10 @@ foreach(t orbit_physics atom_physics blackhole_physics movinggas_physics calc_lo
     set_tests_properties(${t} PROPERTIES LABELS "quick")
   endif()
 endforeach()
+# 0.76.0: the longest unit test starts first in a parallel run (its measured seconds), so it does not end the full suite alone
+if(TEST atom_physics)
+  set_tests_properties(atom_physics PROPERTIES COST 270)
+endif()
 # 0.38.1: every test that is not "quick" starts the real app, so it gets the pictures label and settings automatically (the hand-written list of 0.15 had missed the 5m2, 5p,
 # 5q, 5r, 5t and 6c tests, about 25, which then ran with every llvmpipe thread each and fought over the cores)
 get_property(pl_all_tests DIRECTORY PROPERTY TESTS)
@@ -651,6 +633,10 @@ foreach(t ${pl_all_tests})
     if(NOT pl_env)
       set(pl_env "")
     endif()
-    set_tests_properties(${t} PROPERTIES LABELS "pictures" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache;${pl_env}")
+    set(pl_labels "pictures")
+    if(t STREQUAL "ui_smoke")
+      set(pl_labels "pictures;smoke")                      # 0.76.0: check.sh job runs it with quick
+    endif()
+    set_tests_properties(${t} PROPERTIES LABELS "${pl_labels}" ENVIRONMENT "LP_NUM_THREADS=1;MESA_SHADER_CACHE_DIR=${CMAKE_BINARY_DIR}/mesa_cache;${pl_env}")
   endif()
 endforeach()

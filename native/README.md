@@ -67,6 +67,6 @@ All physics is in SI units. The Orbit Lab's Time speed and zoom are in "sim unit
 `native/tools/check.sh quick` runs the physics and logic programs (`ctest -L quick`): the Orbit Lab against JPL Horizons and Kepler's laws (`orbit_physics`, `jpl_validation`,
 `moon_validation`), the Atom Lab against NIST, NUBASE2020, AME2020, the IAEA tables and textbook formulas (`atom_physics`), the Molecule Lab against CCCBDB
 (`molecule_logic`, `vibration_logic`, `rotation_logic`, `density_logic`), the calculator against CODATA 2022 (`calc_logic`), the fits against NIST's StRD (`analysis_logic`), and the settings
-file, themes and About page (`app_settings`). `check.sh full` adds the 16 `ui_*` tests, one per screen, which start the real app headless on Linux (SDL's offscreen driver, Mesa's software Vulkan); `ctest -N` lists them. GitHub runs the full suite on every push to `native` (workflow **Native full tests**, separate from the Windows build).
+file, themes and About page (`app_settings`). `check.sh job` (every job) adds `ui_smoke`: the app starts and each lab draws. `check.sh full` adds the 13 `ui_*` tests, which start the real app headless on Linux (SDL's offscreen driver, Mesa's software Vulkan); `native/tests/TESTS.md` lists every part and why it is kept. GitHub runs the full suite on every push to `native` (workflow **Native full tests**, separate from the Windows build).
 
 The `PL_*` environment variables read in `src/main.cpp` are for the automatic checks only (e.g. `PL_EXIT_AFTER_FRAMES=n`, `PL_SCREENSHOT=file.bmp`, `PL_ATOM=1`, `PL_THEME=paper`).

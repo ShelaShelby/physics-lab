@@ -31,11 +31,14 @@ These are the rules in force. DECISIONS.md is a record of the owner's decisions;
 - Full build: `cmake -S native -B /home/user/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPL_BUILD_APP=ON -DPL_PICTURE_TESTS=ON && ninja -C /home/user/build`. Unit tests only: `-DPL_BUILD_APP=OFF`.
 - Run tests from the repository root.
 - Save usage: send build and test output to a file and read only its end; read code with grep and line ranges; never re-run a passing suite.
-- The ui_* groups are in native/CMakeLists.txt. A changed UI check is also run by hand: `python3 native/tests/<script.py> /home/user/build/PhysicsLab /home/user/build/one [part]`.
-- A job runs only `check.sh quick` and the ui_* test of the screen it changed. The full suite runs on GitHub after the push (workflow "Native full tests"). Its failures become the next job and do not block the current one. Run `check.sh full` by hand only when the owner asks.
+- Every job runs `check.sh job`: quick plus ui_smoke (the app starts, each lab draws, the app ends cleanly), about 5 minutes together.
+- The full suite runs on GitHub after the push (workflow "Native full tests"). Its failures become a later job and do not block the current one. Run `check.sh full` by hand only when the owner asks.
+- The ui_* groups are in native/CMakeLists.txt. native/tests/TESTS.md lists every UI part, its time and why it is kept. A changed UI check is also run by hand: `python3 native/tests/<script.py> /home/user/build/PhysicsLab /home/user/build/one [part]`.
+- A new UI check only for a new screen or a bug the owner has seen. It goes into an existing script, its ui_* group and TESTS.md, and the full suite stays under 10 minutes. If not, an older check goes.
+- run_group.py stops a UI part after 5 minutes. A ui_* test stops after 15 minutes.
 - Any single command that runs longer than 15 minutes is stopped, and the reason is written in REPORT.md.
 - A failing check in a ui_* test the job runs is fixed, or its test is corrected with the reason in the test and in REPORT.md. Never loosened.
-- Writing UI tests: add a part to that screen's check script and its ui_* group. No new file or ctest test per job. Behaviour tests: one theme, only the window sizes where the result can differ (880x560, 1280x800). Look tests: all themes at one size. At most one new test per fix. When a feature is removed, its tests go too.
+- When a feature is removed, its tests go too.
 - A problem that fails 3 times is skipped and written in REPORT.md and ROADMAP.md.
 
 ## Writing

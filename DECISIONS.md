@@ -10,8 +10,9 @@ A line marked "Superseded" is kept for the record only. Older wording is in git 
 - The full UI suite runs automatically on GitHub on every push.
 - Small bug fixes may go straight to a working chat without the planning chat.
 - 255 Hz stays.
-- A job runs only check.sh quick and the ui_* test of the screen it changed. The full suite runs on GitHub after the push; its failures become the next job and do not block the current one. check.sh full by hand only when the owner asks.
+- Superseded later on 23 Nov 2026 (every job runs quick plus ui_smoke). A job runs only check.sh quick and the ui_* test of the screen it changed. The full suite runs on GitHub after the push; its failures become the next job and do not block the current one. check.sh full by hand only when the owner asks.
 - Any single command running longer than 15 minutes is stopped, and the reason written in REPORT.md.
+- The UI suite is cut to what catches real breakage; target 10 minutes; every job runs quick plus ui_smoke.
 
 ## How the work is done
 - Superseded on 23 Nov 2026 (no fixed Opus/Haiku split; small fixes may skip the planning chat). Three roles (14 Nov 2026): a planning chat leads (architecture, design, what comes next) and writes each job; it writes no code and does not push. An Opus

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# 0.15 stage 5t: in the Controls panel a selected segment and a checked box were GREY like the sliders (no accent colour).
-# 0.38 (the owner's decision of 6 Nov 2026, the new look; references changed on purpose): a selected segment is a soft accent TINT with a 1 px accent edge and the text colour on it
-# (Monochrome / High contrast: the solid accent fill); a checked box is the accent fill with its tick. Checked: the edge (the mark of the choice) against the unselected face at least 3:1
-# (WCAG 1.4.11), the label on the fill at least 4.5:1, the tick on the box at least 3:1, the tint is not grey (except Monochrome, whose accent is black).
-# Checked in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU), on the picture's own pixels. Orbit Lab, New UI on, ONE size.
-#   check_5t.py <PhysicsLab binary> <work folder> grey | tiles | solid   (0.38.1: tiles = Settings tile names inside their tiles and the dim behind Settings; solid = a guide page is solid)
+# 0.15 stage 5t, 0.38: the Controls panel's look, in the REAL app (Linux, software Vulkan; NOT Windows, NOT a real GPU), on the picture's own pixels. tests/TESTS.md lists the parts kept and why.
+#   grey   a selected segment is a soft accent tint with a 1 px accent edge (Monochrome / High contrast: the solid accent fill); a checked box is the accent fill
+#          with its tick. Checked in four themes: the edge against the unselected face at least 3:1 (WCAG 1.4.11), the label on the fill at least 4.5:1, the tick
+#          on the box at least 3:1, the tint is not grey (except Monochrome). The suite's one look test of the themes.
+#   tiles  the Settings tile names are inside their tiles and the picture dims behind Settings
+#   check_5t.py <PhysicsLab binary> <work folder> grey | tiles
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, Bmp
@@ -127,28 +127,8 @@ def part_tiles(binary, work):
             check(False, f"{t}: Settings is open with picture to its left {win}")
     print(f"check_5t tiles: {checks} checks, {fails} failed")
 
-def part_solid(binary, work):
-    """0.38.1: a guide page (the reading view) is solid: where it lies over the Controls panel, its pixels are the same whether that panel is open or closed
-    (High contrast, Light and Paper showed the panel's text through the page: two texts on top of each other)"""
-    for t in ("contrast", "light", "paper", "dark"):
-        a = run_app(binary, work, f"t_solid_{t}", {"PL_NEWUI": "on", "PL_LEARN": "1", "PL_PANELS": "orbit.controls=o"}, frames=40, theme=t, size="1000x640")
-        b = run_app(binary, work, f"t_solid_closed_{t}", {"PL_NEWUI": "on", "PL_LEARN": "1", "PL_PANELS": "orbit.controls=c"}, frames=40, theme=t, size="1000x640")
-        page, pc = halo_rect(a, "panel##reading"), a.rects.get("panel.controls")
-        check(page is not None and pc is not None and "panel.controls" not in b.rects, f"{t}: the page {page} is open over the Controls panel {pc}; closed in the second run: {'panel.controls' not in b.rects}")
-        if not (page and pc):
-            continue
-        x0, x1 = int(max(page[0], pc[0])) + 2, int(min(page[0] + page[2], pc[0] + pc[2])) - 2
-        y0, y1 = int(max(page[1], pc[1])) + 2, int(min(page[1] + page[3], pc[1] + pc[3])) - 2
-        check(x1 - x0 >= 20 and y1 - y0 >= 100, f"{t}: the page overlaps the panel ({x1 - x0} x {y1 - y0} px)")
-        ba, bb = Bmp(a.bmp), Bmp(b.bmp)
-        diff = sum(1 for yy in range(y0, y1) for xx in range(x0, x1) if ba.px(xx, yy) != bb.px(xx, yy))
-        # 0.55.0: at most 10, not 0: a few pixels of one glyph's anti-aliasing change with the order Dear ImGui bakes glyphs into its atlas (0.55.0: 4 pixels of the "y" of
-        # "why the tails?", by up to 17 of 255, open against closed); a page the panel shows through differs in hundreds (its text over the page's)
-        check(diff <= 10, f"{t}: {diff} pixels of the page over the panel change when the panel closes (a solid page: at most a glyph's few anti-aliased pixels)")
-    print(f"check_5t solid: {checks} checks, {fails} failed")
-
 if __name__ == "__main__":
     binary, work, part = sys.argv[1], sys.argv[2], sys.argv[3]
     os.makedirs(work, exist_ok=True)
-    {"grey": part_grey, "tiles": part_tiles, "solid": part_solid}[part](binary, work)
+    {"grey": part_grey, "tiles": part_tiles}[part](binary, work)
     sys.exit(1 if fails else 0)

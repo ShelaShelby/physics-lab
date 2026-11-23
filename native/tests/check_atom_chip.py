@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # 0.15 stage 5b: the Atom Lab's element chip and its dropdown (New UI On) in the real app.
-#   check_atom_chip.py <PhysicsLab binary> <work folder> [card]
+#   check_atom_chip.py <PhysicsLab binary> <work folder> [card | classic | classicside | classicsideglow | classicslice | classicsliceglow]   (tests/TESTS.md)
 #   card (0.57.0): the Atom Lab's two card programs (render/atom_card.h) on this PC's renderer (Mesa llvmpipe here, NOT the owner's card): their start-up
 #   checks against the processor at the same seeds within the derived single-precision limits (atom/atom_card.h), the benchmark's paths, and their guards:
-#   the process ended once inside each step (PL_GPU_DIE), the next start runs nothing of that program and Settings, Performance names the step; a changed
+#   the process ended inside the first step (PL_GPU_DIE; 0.76.0: one step, git keeps the run of all five), the next start runs nothing of that program and Settings, Performance names the step; a changed
 #   shader tries again; Try again works in the same run.
 # References (nothing here is an earlier output of ours): the standard periodic table's places (H in column 1, He in 18, Fe in row 4 column 8, B in row 2 column 13; the lanthanides and
 # actinides in two rows below), the spec's words ("1 proton", "0 neutrons"), the element names written in the famous list's own labels, and the app's own old setParam rule that a new element
-# gets its usual isotope (the unit test in atom_tests holds the textbook mass numbers). All 118 elements are clicked in the real app.
+# gets its usual isotope (the unit test in atom_tests holds the textbook mass numbers). Twelve elements across the table are clicked in the real app (0.76.0; git keeps the run of all 118).
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from shell_lib import run_app, inside, overlap, prefetch, Bmp
@@ -30,7 +30,11 @@ CARD_STEPS = {"slice": ["compile the Slice's dots shader", "link the Slice's dot
 CARD_BENCH = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.slice_drag,atom.jump_all,atom.slice_super_drag",
               "PL_BENCH_WARMUP": "6.0", "PL_BENCH_MEASURE": "1.5"}   # (0.69.0: 6 s, was 1: on Vulkan the steps take their turns, one at a time, through the warm-up)
 
-def classic_part(binary, work):
+# 0.76.0: one part per scene (a run of all five took 12 min, over the 5-minute part limit). Each part runs the scene on the card and on the processor.
+CLASSIC_SCENES = {"classic": "atom.all_classic", "classicside": "atom.side_all_classic", "classicsideglow": "atom.side_all_glow",
+                  "classicslice": "atom.slice_all_drag", "classicsliceglow": "atom.slice_glow_ultra"}
+
+def classic_part(binary, work, scene):
     # 0.64.0: the Classic Cloud 3D dots from the card (Vulkan): the start-up check passes here (every dot's group, band and place, the squares in the
     # processor's order), the benchmark's Path names the card; made to fail on purpose (PL_CLASSIC_CARDFAIL), the processor's squares are kept and the
     # Path says why. The two pictures (card, processor) of the same moment differ in under 1 % of the pixels by more than 8 levels.
@@ -44,7 +48,7 @@ def classic_part(binary, work):
         if not ok:
             fails += 1
             print("FAIL", what)
-    B = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": "atom.all_classic,atom.side_all_classic,atom.side_all_glow,atom.slice_all_drag,atom.slice_glow_ultra",
+    B = {"PL_BENCH": "start", "PL_BENCH_QUIT": "1", "PL_FIXED_DT": "0.016", "PL_BENCH_FINISH": "1", "PL_BENCH_ONLY": scene,
          "PL_BENCH_WARMUP": "0.3", "PL_BENCH_MEASURE": "2.0", "PL_BENCH_SHOT": "1.5"}
     runs = {}
     for tag, extra in (("card", {}), ("cpu", {"PL_CLASSIC_CARDFAIL": "1"})):
@@ -59,14 +63,16 @@ def classic_part(binary, work):
     case = [ln for ln in out.splitlines() if ln.startswith("PLCLASSICCARDCASE ")]
     check("PLCLASSICCARD state=1" in out and len(case) == 1 and re.search(r"0 in another group, \d+ in another band \((\d+) at", case[0]) and " 0 places beyond" in case[0] and "0 keys out of order, 0 squares wrong" in case[0],
           f"classic: the start-up check passes ({case})")
-    check(any("the Classic dots: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)), f"classic: the benchmark's Path names the card ({paths(out)})")
-    check(sum("the side view's dots: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)) == 2 and "| the side view, Glow " in case[0] and "0 beyond their limit" in case[0],
-          f"classic: the side view's Path names the card in both scenes, and its check passed ({paths(out)})")
-    check(sum("drawn: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)) == 2 and "| the Slice, Glow " in case[0],
-          f"classic: the Slice's Path names the card in both scenes ({paths(out)})")
-    out2 = runs["cpu"].out
-    check("PLCLASSICCARD state=-1" in out2 and any("the Classic dots: the processor, because the check was made to fail" in p for p in paths(out2)), f"classic: a failed check keeps the processor's squares and says why ({paths(out2)})")
-    for scene in ("atom.all_classic", "atom.side_all_classic", "atom.side_all_glow", "atom.slice_all_drag", "atom.slice_glow_ultra"):
+    check(not case or ("| the side view, Glow " in case[0] and "0 beyond their limit" in case[0] and "| the Slice, Glow " in case[0]), f"classic: the side view's and the Slice's checks passed ({case})")
+    if scene == "atom.all_classic":
+        check(any("the Classic dots: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)), f"classic: the benchmark's Path names the card ({paths(out)})")
+        out2 = runs["cpu"].out
+        check("PLCLASSICCARD state=-1" in out2 and any("the Classic dots: the processor, because the check was made to fail" in p for p in paths(out2)), f"classic: a failed check keeps the processor's squares and says why ({paths(out2)})")
+    elif scene.startswith("atom.side"):
+        check(sum("the side view's dots: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)) == 1, f"classic: the side view's Path names the card ({paths(out)})")
+    else:
+        check(sum("drawn: the graphics card (Vulkan; its start-up check passed" in p for p in paths(out)) == 1, f"classic: the Slice's Path names the card ({paths(out)})")
+    for scene in (scene,):
         try:
             a, b = Bmp(os.path.join(work, "classic_card", scene + ".bmp")), Bmp(os.path.join(work, "classic_cpu", scene + ".bmp"))
             n = over = 0
@@ -103,7 +109,7 @@ def card_part(binary, work):
     dirs = {"ok": folder("card_ok")}
     calls = [((binary, work, "card_ok", dict(CARD_BENCH, PL_SETTINGS=os.path.join(dirs["ok"], "settings.txt"))), BIG)]
     for which, steps in CARD_STEPS.items():
-        for i, st in enumerate(steps):
+        for i, st in enumerate(steps[:1]):   # (0.76.0: one step per program: the guard is the same for every step; git keeps the runs of all five)
             d = folder(f"card_die_{which}{i}")
             dirs[(which, i)] = d
             calls.append(((binary, work, f"card_die_{which}{i}", dict(CARD_BENCH, PL_SETTINGS=os.path.join(d, "settings.txt"), PL_GPU_DIE=st)), BIG))
@@ -144,19 +150,19 @@ def card_part(binary, work):
     # 4. the process ended inside each step: the marker names it; the next start runs nothing of that program, the processor is used, Settings names the step
     after = []
     for which, steps in CARD_STEPS.items():
-        for i, s_ in enumerate(steps):
+        for i, s_ in enumerate(steps[:1]):
             d = dirs[(which, i)]
             after.append(((binary, work, f"card_after_{which}{i}", {"PL_ATOM": "1", "PL_SETTINGS": os.path.join(d, "settings.txt"), "PL_OPEN": "settings", "PL_ATOM_SET": "Z=92;view=Slice" if which == "slice" else "Z=88"}),
                           dict(frames=40, size="880x560", timeout=900)))
     for which, steps in CARD_STEPS.items():
-        for i, s_ in enumerate(steps):
+        for i, s_ in enumerate(steps[:1]):
             mk = os.path.join(dirs[(which, i)], f"gpu-vk{which}-step.txt")
             marker = read(mk)
             check(f"step={s_}\n" in marker and f"version=vulkan {which} " in marker, f"card: {which}: the process ended inside '{s_}': the marker names the step ({marker!r})")
     prefetch(after)
     for k, (which, steps) in enumerate(CARD_STEPS.items()):
-        for i, s_ in enumerate(steps):
-            a, kw = after[k * 5 + i]
+        for i, s_ in enumerate(steps[:1]):
+            a, kw = after[k]
             r = run_app(*a, **kw)
             d = dirs[(which, i)]
             lg = lines_of(read(os.path.join(d, "gpu-paths-log.txt")), which)
@@ -172,7 +178,7 @@ def card_part(binary, work):
         with open(sf2, "w", encoding="utf-8") as f: f.write(read(sf))
         r5 = run_app(binary, work, f"card_shader_{which}", dict(CARD_BENCH, PL_SETTINGS=sf2, **{f"PL_GPU_{which.upper()}SHADER": f"{which} 0000000000000000"}), frames=100000, size="880x560", timeout=1500)
         check(f"PLATOMCARD {which} state=1" in r5.out, f"card: {which}: a changed shader tries again (and passes here)")
-    sf = os.path.join(dirs[("slice", 1)], "settings.txt")
+    sf = os.path.join(dirs[("slice", 0)], "settings.txt")
     r4 = run_app(binary, work, "card_again", {"PL_ATOM": "1", "PL_SETTINGS": sf, "PL_OPEN": "settings:gpuslice", "PL_ATOM_SET": "Z=92;view=Slice", "PL_SCRIPT": "14:click=gpuslice.again"}, frames=90, size="880x560", timeout=900)
     # (the cut does not move here, so no new dots are asked for: its first full use waits; the settings file no longer keeps it off)
     check(not r4.scripted_missing() and "PLATOMCARD slice state=1" in r4.out and "gpuvkslice=off" not in read(sf), f"card: Try again: the Slice's program is made and checked again in the same run ({r4.scripted_missing()})")
@@ -186,8 +192,8 @@ def main():
     binary, work = sys.argv[1], sys.argv[2]
     if len(sys.argv) > 3 and sys.argv[3] == "card":
         return card_part(binary, work)
-    if len(sys.argv) > 3 and sys.argv[3] == "classic":
-        return classic_part(binary, work)
+    if len(sys.argv) > 3 and sys.argv[3] in CLASSIC_SCENES:
+        return classic_part(binary, work, CLASSIC_SCENES[sys.argv[3]])
     os.makedirs(work, exist_ok=True)
     fails = checks = 0
     def check(ok, what):
@@ -232,18 +238,19 @@ def main():
     # 0.38 (the owner's new look): the symbol moved into the element's tile at the chip's left, so the words are "Uranium-238" (they were "U · Uranium-238"); reference changed on purpose
     check("Uranium-238" in chip_texts and "U" in chip_texts and "92 protons · 146 neutrons" in chip_texts, f"A: the chip shows the tile U and says Uranium-238 / 92 protons · 146 neutrons")
 
-    # ---- B: every one of the 118 elements can be reached by a click ----
+    # ---- B: elements in every part of the table can be reached by a click (0.76.0: 12 of the 118, the corners, each block and both rows below; git keeps the run of all) ----
     step = 5
-    script = ";".join(f"{10 + step * (z - 1)}:click=pt.{z};{14 + step * (z - 1)}:state" for z in range(1, 119))
+    ZS = (1, 2, 3, 10, 21, 26, 36, 57, 71, 89, 103, 118)
+    script = ";".join(f"{10 + step * k}:click=pt.{z};{14 + step * k}:state" for k, z in enumerate(ZS))
     script = "6:click=top.chip;" + script
-    rb = go("chip_b", script, frames=10 + step * 119 + 10)
+    rb = go("chip_b", script, frames=10 + step * (len(ZS) + 1) + 10)
     sb = states(rb)
     check(not rb.scripted_missing(), f"B: every scripted click found its cell {rb.scripted_missing()[:3]}")
-    check(len(sb) == 118, f"B: 118 states ({len(sb)})")
-    if len(sb) == 118:
-        wrong = [z + 1 for z in range(118) if sb[z]["Z"] != str(z + 1)]
+    check(len(sb) == len(ZS), f"B: {len(ZS)} states ({len(sb)})")
+    if len(sb) == len(ZS):
+        wrong = [z for k, z in enumerate(ZS) if sb[k]["Z"] != str(z)]
         check(not wrong, f"B: clicking element Z gives Z (wrong: {wrong[:5]})")
-        wrongN = [z + 1 for z in range(118) if sb[z]["N"] != sb[z]["usualN"]]
+        wrongN = [z for k, z in enumerate(ZS) if sb[k]["N"] != sb[k]["usualN"]]
         check(not wrongN, f"B: the neutrons are the usual isotope's (wrong: {wrongN[:5]})")
 
     # ---- C: the steppers, the sliders, usual and the famous isotopes ----

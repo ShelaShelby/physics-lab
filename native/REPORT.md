@@ -1,23 +1,22 @@
-# 0.75.3: simpler rules, OpenGL leftovers removed, full UI tests on GitHub
+# 0.76.0: lean tests (the UI suite cut to what catches real breakage)
 
 ## What changed
-- Rules: CLAUDE.md rewritten (54 lines, the rules in force, standard terms). DECISIONS.md is a record (the owner's 23 Nov decisions added, superseded lines marked). PLANNER.md cut to 25 lines. RESUME.md deleted (its repo list moved to README.md). ROADMAP.md shortened, in the new terms.
-- OpenGL dead code: app/bench.h's path texts lost their OpenGL branch and the glMajor/glMinor fields. check_shell.py's VK3_VIEWS lost its unused OpenGL log line.
-- OpenGL comments: about 150 wrong or history comments in native/src, tests, CMakeLists.txt and cmake fixed or deleted. Benchmark scene descriptions no longer name OpenGL 4.3.
-- Kept on purpose: gpuRocks (orbit_view.h) and the CPU path in belt_layer.h are live (the Settings switch and the CPU benchmark scenes), so only their comments changed. check_shaders.py still measures SPIR-V with glslang's OpenGL target, because its size limits were set with it. About and changelog.cpp keep their true history lines. test_app.cpp keeps its check that an old settings file's graphics=opengl is ignored.
-- New workflow .github/workflows/native-full-tests.yml: full build and check.sh full on ubuntu-24.04, failing tests with their last 20 lines in the job summary, logs as an artifact. It is separate from the Windows build.
-- Feasibility: the UI tests need no X server. tests/shell_lib.py starts the app with SDL_VIDEODRIVER=offscreen on Mesa's lavapipe (mesa-vulkan-drivers). CMake gives every picture test LP_NUM_THREADS=1 and a shared shader cache. So the runner needs only the packages of the first-build line.
+- Measured first: 0.75.3's full suite took 83 min on GitHub (4,981 s, 290 core-min of UI tests). On the build machine its 154 UI parts took at least 228 core-min. The 10 slowest: check_atom_chip classic 872 s (GitHub), check_blackhole smooth 596 s (GitHub), check_molecule card 465 s, check_atom_chip card 319 s, check_blackhole precision 300 s, and over 300 s each: check_shell vulkan2d (2 h once), check_shell gpuhelper, check_shell (no part), check_controls, check_atom_panel.
+- Sorted every part (native/tests/TESTS.md): 52 kept, 0 merged (no two parts could share one start without rewriting their checks), 102 deleted. 16 scripts with no kept part deleted. Every GPU-vs-CPU comparison is kept and unchanged.
+- Split for the new 5-minute part limit: classic into 5 parts (one scene each), molecule card into card, cardpic and cardpiclight, black hole precision into precision, sky and precisioncard. The atom and molecule card guards now die in one step, not all five. The element chip clicks 12 of 118 elements.
+- New ui_smoke (check_shell.py smoke, label smoke): each lab draws a frame that is not empty, zero validation errors, exit code 0. It fails when the labs draw no picture (PL_SMOKE_EMPTY=1). check.sh job = quick + ui_smoke.
+- run_group.py stops a part after 5 minutes with its last 20 lines and prints each part's time. Each ui_* test has a 900 s ctest timeout and a COST (longest first). The GitHub job's limit is 45 min.
+- Rules: CLAUDE.md (every job runs check.sh job; new UI checks only for a new screen or a bug the owner saw), DECISIONS.md, ROADMAP.md, README, changelog, VERSION 0.76.0.
 
 ## Tests run
-- glsl_shaders and vk_cards before and after Part B: both passed. The outputs are the same apart from timings (same SPIR-V sizes, same pixel counts).
-- check.sh quick after the last change: passed (18 tests).
-- check.sh full on the build machine (the first full run since 0.69.0): 32 of 35 passed. Failed: ui_shell (check_shell vulkan2d, "a broken sky program"), ui_atom (check_atom_chip classic, 2 scenes over 1 %), ui_blackhole (check_blackhole smooth, 8 of 16 frames; short, 3 controls not found).
-- Pre-existing, not caused by this job: classic fails the same way on 0.75.2 (built and run beside it). short passes when run alone. smooth is the known one-in-two limit. All are **fix** lines in ROADMAP.md.
-- ui_shell run alone was stopped after about 2 hours as stuck (the owner's rule: a command over 15 minutes is stopped). Its last lines: "FAIL the glare made over the frames on Vulkan ... is the glare made at once" (2.209 %). ROADMAP.md has it.
+- check.sh job: passed, 228 s (quick 18 of 18, ui_smoke 6 s).
+- check.sh full (final): stopped at 15 min by the rule, 18 of 32 done, 17 passed. ui_atom failed only in classicsliceglow (known). ui_shell and ui_screens, run after: passed, 232 s and 112 s. Estimated full run here: about 17 min (64 core-min).
+- Before: at least 57 min here, 83 min on GitHub. check.sh job did not exist (quick alone 223 s).
 
 ## Not done
-- No Part B removal had to be put back.
-- ui_shell was not investigated further (the owner's instruction). The GitHub workflow has not run yet. Its result is in the final chat message.
+- Stop rule: the full suite is not under 15 min. The GPU-vs-CPU parts take about 40 core-min and the unit tests 8, so 10 min needs deleting a comparison.
+- check_atom_chip classic: 3 tries (PL_VK_SYNC, the pictures, a fixed scene clock). The two runs are drawn at different zooms. Not fixed, reverted, ROADMAP line updated. It fails in one or two of its 5 scenes per run.
+- ui_shell vulkan2d deleted: its glare check compares the GPU with the GPU. smooth and short deleted. Their ROADMAP lines removed.
 
 ## References changed on purpose
-- test_app.cpp: the path-text checks now expect "Vulkan: ..." (the OpenGL versions they tested are gone). Scene 11's description check looks for "Vulkan: GPU superposition on" instead of "OpenGL 4.3". The two "no compute object" check names lost "(OpenGL 3.3)".
+- None. No limit or expected value changed.

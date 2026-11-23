@@ -1,9 +1,11 @@
 #!/bin/sh
-# check.sh quick|fix '<regex>'|full [build dir]   (0.15 stage 4.1; fix: 0.22)
-#   quick: the unit test programs, the shader check and the source scan: about 1-3 min, no app start. EVERY job runs this (CLAUDE.md). All modes first run the guard against
+# check.sh quick|job|fix '<regex>'|full [build dir]
+#   quick: the unit test programs, the shader check and the source scan: about 1-3 min, no app start. All modes first run the guard against
 #          papers / saved pages in this public repo and tools/check_sources.py (skipped without PL_SOURCES_DIR, the checkout of ShelaShelby/physics-lab-sources).
+#   job  : quick + ui_smoke (the app starts, each lab draws a frame, the app ends cleanly). EVERY job runs this (CLAUDE.md), about 5 min.
 #   fix  : quick + the picture / UI tests whose names match the regex, e.g.  check.sh fix 'ui_atom|ui_look' (optional: re-running the failures of a full run)
-#   full : quick + every picture / UI test, all in parallel (one process per core), about 35 min on 4 cores. GitHub runs it on every push (.github/workflows/native-full-tests.yml); by hand only when the owner asks.
+#   full : quick + every picture / UI test, all in parallel (one process per core), at most 10 min on 4 cores (0.76.0; tests/TESTS.md lists every part and its time).
+#          GitHub runs it on every push (.github/workflows/native-full-tests.yml); by hand only when the owner asks.
 # A single test: ctest --test-dir <build dir> -R '^name$' --output-on-failure   (names: ctest -N)
 set -e
 mode=${1:-quick}
@@ -26,7 +28,8 @@ mkdir -p "$b/mesa_cache"
 export PL_JOBS=1   # ctest already runs one test per core; a single test run by hand uses every core instead
 case $mode in
   quick) exec ctest --test-dir "$b" -L quick -j"$n" --output-on-failure --timeout 600 ;;
-  fix)   ctest --test-dir "$b" -L quick -j"$n" --output-on-failure --timeout 600 && exec ctest --test-dir "$b" -R "$pat" -LE quick -j"$n" --output-on-failure --timeout 3000 ;;
-  full)  exec ctest --test-dir "$b" -j"$n" --output-on-failure --timeout 3000 ;;
-  *) echo "usage: check.sh quick|fix <regex>|full [build dir]"; exit 2 ;;
+  job)   ctest --test-dir "$b" -L quick -j"$n" --output-on-failure --timeout 600 && PL_JOBS=$n exec ctest --test-dir "$b" -L smoke --output-on-failure --timeout 300 ;;
+  fix)   ctest --test-dir "$b" -L quick -j"$n" --output-on-failure --timeout 600 && exec ctest --test-dir "$b" -R "$pat" -LE quick -j"$n" --output-on-failure --timeout 900 ;;
+  full)  exec ctest --test-dir "$b" -j"$n" --output-on-failure --timeout 900 ;;
+  *) echo "usage: check.sh quick|job|fix <regex>|full [build dir]"; exit 2 ;;
 esac

@@ -19,6 +19,10 @@ struct Entry { const char* version; const char* title; const char* text; };
 
 // The app's own history. Newest first.
 const Entry kNative[] = {
+    {"0.76.0", "Faster tests, nothing changes in the app",
+     "Nothing changes in how the app works. The automatic tests that start the app were cut to the ones that catch real breakage: the app starts, each lab opens "
+     "and draws, the main controls respond, cards, pages and search work, settings are kept, and every picture the graphics card makes is still compared with the "
+     "processor's. Checks of old fixed bugs, exact pixel layouts and repeats at every size and theme were removed, so a full test run takes minutes, not hours."},
     {"0.75.3", "Tidier code and tests that run on GitHub",
      "Nothing changes in how the app works (a few benchmark descriptions no longer name OpenGL, which the app stopped using in 0.69.0). The project's rules were cut down to one short file, old notes about the graphics system the app used before Vulkan were taken out "
      "of the code, and the whole test suite, including the tests that start the app and look at its pictures, now runs on GitHub after every update."},
